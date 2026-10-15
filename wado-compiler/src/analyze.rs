@@ -119,6 +119,7 @@ fn takes_names_from_elsewhere(module_source: &ModuleSource) -> bool {
         | ModuleSource::Remote { .. }
         | ModuleSource::EntryPoint { .. }
         | ModuleSource::Redirected { .. } => false,
+        ModuleSource::Effect(head) => takes_names_from_elsewhere(head.module()),
     }
 }
 

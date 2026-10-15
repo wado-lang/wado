@@ -1318,12 +1318,13 @@ impl LocalMethodName {
         self.trait_name.as_ref().map(FqTraitName::base_name)
     }
 
-    /// The declaring module of the trait this method implements. Two modules
-    /// can each declare `interface Logger`; this is what tells their handler
-    /// impls apart.
+    /// The trait this method implements. Two modules can each declare
+    /// `interface Logger`; this is what tells their handler impls apart.
     #[must_use]
-    pub fn base_trait_module(&self) -> Option<&ModuleSource> {
-        self.trait_name.as_ref().and_then(FqTraitName::module)
+    pub fn base_trait_head(&self) -> Option<&DeclaredHead> {
+        self.trait_name
+            .as_ref()
+            .and_then(FqTraitName::declared_head)
     }
 
     /// Create a new `LocalMethodName` with all components including method type args.
@@ -2273,10 +2274,12 @@ fn fn_keyword(is_mut: bool) -> &'static str {
 /// declaring module, since two modules may declare one name.
 fn mangle_effect_ref(effect: &tir::EffectRef) -> String {
     match effect {
-        tir::EffectRef::Concrete {
-            name,
-            module_source,
-        } => format!("{module_source}/{name}"),
+        tir::EffectRef::Concrete(_) | tir::EffectRef::Undeclared { .. } => {
+            let module = effect
+                .module()
+                .expect("a ground effect is named in a module");
+            effect_namespace(module, effect.name())
+        }
         tir::EffectRef::Param { name } | tir::EffectRef::Var { name, .. } => name.clone(),
     }
 }
@@ -2376,14 +2379,23 @@ pub fn mangle_local_trait_method(struct_name: &str, trait_name: &str, method_nam
     format!("{struct_name}^{trait_name}::{method_name}")
 }
 
+/// The namespace an `E::op()` call is rendered in, and the dispatch triple of
+/// `E` is named after: the interface qualified by its declaring module, as two
+/// modules may each declare an interface of one name.
+///
+/// Examples:
+/// - `effect_namespace(./a.wado, "Base")` → `"./a.wado/Base"`
+pub fn effect_namespace(module: &ModuleSource, interface: &str) -> String {
+    format!("{module}/{interface}")
+}
+
 /// Build the per-instantiation effect-dispatch struct name.
 ///
 /// `label` is the dispatch instantiation label produced by the
-/// effect-dispatch synthesis (`Counter`, `Stream<u8>`, …).
+/// effect-dispatch synthesis (`./c.wado/Counter`, `./io.wado/Stream<u8>`, …).
 ///
 /// Examples:
-/// - `dispatch_struct_name("Counter")` → `"$Dispatch_Counter"`
-/// - `dispatch_struct_name("Stream<u8>")` → `"$Dispatch_Stream<u8>"`
+/// - `dispatch_struct_name("./c.wado/Counter")` → `"$Dispatch_./c.wado/Counter"`
 pub fn dispatch_struct_name(label: &str) -> String {
     format!("$Dispatch_{label}")
 }
@@ -2391,8 +2403,7 @@ pub fn dispatch_struct_name(label: &str) -> String {
 /// Build the per-instantiation effect-dispatch global name.
 ///
 /// Examples:
-/// - `dispatch_global_name("Counter")` → `"$effect_Counter"`
-/// - `dispatch_global_name("Stream<u8>")` → `"$effect_Stream<u8>"`
+/// - `dispatch_global_name("./c.wado/Counter")` → `"$effect_./c.wado/Counter"`
 pub fn dispatch_global_name(label: &str) -> String {
     format!("$effect_{label}")
 }
@@ -2400,8 +2411,8 @@ pub fn dispatch_global_name(label: &str) -> String {
 /// Build the per-operation effect-dispatch wrapper function name.
 ///
 /// Examples:
-/// - `dispatch_wrapper_name("Counter", "next")` → `"$effect_dispatch__Counter__next"`
-/// - `dispatch_wrapper_name("Stream<u8>", "read")` → `"$effect_dispatch__Stream<u8>__read"`
+/// - `dispatch_wrapper_name("./c.wado/Counter", "next")` →
+///   `"$effect_dispatch__./c.wado/Counter__next"`
 pub fn dispatch_wrapper_name(label: &str, op_name: &str) -> String {
     format!("$effect_dispatch__{label}__{op_name}")
 }
@@ -3899,6 +3910,15 @@ impl FqTraitName {
     pub fn module(&self) -> Option<&ModuleSource> {
         match &self.head {
             TraitHead::Declared(head) => Some(head.module()),
+            TraitHead::Binder(_) => None,
+        }
+    }
+
+    /// The declaration this names, or `None` for a binder.
+    #[must_use]
+    pub fn declared_head(&self) -> Option<&DeclaredHead> {
+        match &self.head {
+            TraitHead::Declared(head) => Some(head),
             TraitHead::Binder(_) => None,
         }
     }

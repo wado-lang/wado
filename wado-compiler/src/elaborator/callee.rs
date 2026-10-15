@@ -2,8 +2,8 @@
 //! it names (WEP 2026-08-12), a static method callee what dispatch picked.
 
 use crate::defs::{DefId, DefTable};
-use crate::module_source::{ModuleSource, ModuleSourceInterner};
-use crate::name::FqTraitName;
+use crate::module_source::ModuleSource;
+use crate::name::{DeclaredHead, FqTraitName};
 use crate::tir::DeclarationLookup;
 
 /// Identity of a free function callee. `Declared` carries the module and name
@@ -39,14 +39,13 @@ impl CalleeRef {
         }
     }
 
-    /// A callee reached through `Prefix::name` where `Prefix` names an effect
-    /// or resource rather than a module, so the prefix itself is the namespace.
-    pub fn local_namespace(
-        interner: &mut ModuleSourceInterner,
-        prefix: &str,
-        name: impl Into<String>,
-    ) -> Self {
-        Self::rendered(interner.local(prefix), name)
+    /// An operation of the interface `interface` declares, rendered in the
+    /// interface's own namespace.
+    pub fn effect_operation(defs: &DefTable, interface: DefId, name: impl Into<String>) -> Self {
+        Self::rendered(
+            ModuleSource::effect(&DeclaredHead::new(defs, interface)),
+            name,
+        )
     }
 
     /// The declaration this names, or `None` for a [`Self::Rendered`] callee.

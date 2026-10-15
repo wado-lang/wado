@@ -11,8 +11,8 @@ struct core:prelude/string.wado//String {  // TypeId(2)
     mut used: i32,
 }
 
-struct effect_handler_self_delegation.wado//$Dispatch_Counter {  // TypeId(3)
-    mut outer: ref null "effect_handler_self_delegation.wado//$Dispatch_Counter",
+struct effect_handler_self_delegation.wado//$Dispatch_effect_handler_self_delegation.wado/Counter {  // TypeId(3)
+    mut outer: ref null "effect_handler_self_delegation.wado//$Dispatch_effect_handler_self_delegation.wado/Counter",
     mut op_next: ref struct,
 }
 
@@ -101,7 +101,7 @@ import fn wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code 
 import fn wasi/task-return from "wasi/task-return";
 import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 
-global mut global:effect_handler_self_delegation.wado::$effect_Counter: ref null "effect_handler_self_delegation.wado//$Dispatch_Counter" = ref.null none;
+global mut global:effect_handler_self_delegation.wado::$effect_effect_handler_self_delegation.wado/Counter: ref null "effect_handler_self_delegation.wado//$Dispatch_effect_handler_self_delegation.wado/Counter" = ref.null none;
 global global:effect_handler_self_delegation.wado::$const_obj_3: ref Array<u8> = array.new_fixed<u8>(102, 105, 110, 97, 108, 61);
 global global:effect_handler_self_delegation.wado::$const_obj_4: ref Array<u8> = array.new_fixed<u8>(44);
 
@@ -109,10 +109,10 @@ fn "effect_handler_self_delegation.wado/run"() with Stdout {
     let base: ref "effect_handler_self_delegation.wado//BaseCounter";
     let offset_1: ref "effect_handler_self_delegation.wado//OffsetCounter";
     let $local_4_4: ref "core:prelude/string.wado//String";
-    let $save_Counter_9: ref null "effect_handler_self_delegation.wado//$Dispatch_Counter";
-    let $save_Counter_12: ref null "effect_handler_self_delegation.wado//$Dispatch_Counter";
-    let $d_Counter_13: ref "effect_handler_self_delegation.wado//$Dispatch_Counter";
-    let $local_0_14: ref null "effect_handler_self_delegation.wado//$Dispatch_Counter";
+    let $save_effect_handler_self_delegation.wado/Counter_9: ref null "effect_handler_self_delegation.wado//$Dispatch_effect_handler_self_delegation.wado/Counter";
+    let $save_effect_handler_self_delegation.wado/Counter_12: ref null "effect_handler_self_delegation.wado//$Dispatch_effect_handler_self_delegation.wado/Counter";
+    let $d_effect_handler_self_delegation.wado/Counter_13: ref "effect_handler_self_delegation.wado//$Dispatch_effect_handler_self_delegation.wado/Counter";
+    let $local_0_14: ref null "effect_handler_self_delegation.wado//$Dispatch_effect_handler_self_delegation.wado/Counter";
     let $local_2_16: i32;
     let $local_2_19: i32;
     let is_negative_33: bool;
@@ -120,31 +120,31 @@ fn "effect_handler_self_delegation.wado/run"() with Stdout {
     let $sroa_$f_buf_127: ref "core:prelude/string.wado//String";
     base = struct.new "effect_handler_self_delegation.wado//BaseCounter" { value: 0 };
     offset_1 = struct.new "effect_handler_self_delegation.wado//OffsetCounter" { offset: 1000 };
-    global:effect_handler_self_delegation.wado::$effect_Counter = local.tee $d_Counter_13(struct.new "effect_handler_self_delegation.wado//$Dispatch_Counter" { outer: local.tee $save_Counter_12(global:effect_handler_self_delegation.wado::$effect_Counter), op_next: struct.new "canonical//CanonicalClosure_0" { env: struct.new "effect_handler_self_delegation.wado//$Closure_0" { $capture_0: base }, func: ref.func "closure/effect_handler_self_delegation.wado/$closure_wrapper_0" } });
-    global:effect_handler_self_delegation.wado::$effect_Counter = local.tee $d_Counter_13(struct.new "effect_handler_self_delegation.wado//$Dispatch_Counter" { outer: local.tee $save_Counter_9(global:effect_handler_self_delegation.wado::$effect_Counter), op_next: struct.new "canonical//CanonicalClosure_0" { env: struct.new "effect_handler_self_delegation.wado//$Closure_1" { $capture_0: offset_1 }, func: ref.func "closure/effect_handler_self_delegation.wado/$closure_wrapper_1" } });
-    $local_2_16 = $inline__effect_dispatch__Counter__next_1: block -> i32 {
-        if @likely(ref.is_null(local.tee $local_0_14(global:effect_handler_self_delegation.wado::$effect_Counter)) == 0) {
-            global:effect_handler_self_delegation.wado::$effect_Counter = local.tee $d_Counter_13(ref.as_non_null($local_0_14)).outer;
+    global:effect_handler_self_delegation.wado::$effect_effect_handler_self_delegation.wado/Counter = local.tee $d_effect_handler_self_delegation.wado/Counter_13(struct.new "effect_handler_self_delegation.wado//$Dispatch_effect_handler_self_delegation.wado/Counter" { outer: local.tee $save_effect_handler_self_delegation.wado/Counter_12(global:effect_handler_self_delegation.wado::$effect_effect_handler_self_delegation.wado/Counter), op_next: struct.new "canonical//CanonicalClosure_0" { env: struct.new "effect_handler_self_delegation.wado//$Closure_0" { $capture_0: base }, func: ref.func "closure/effect_handler_self_delegation.wado/$closure_wrapper_0" } });
+    global:effect_handler_self_delegation.wado::$effect_effect_handler_self_delegation.wado/Counter = local.tee $d_effect_handler_self_delegation.wado/Counter_13(struct.new "effect_handler_self_delegation.wado//$Dispatch_effect_handler_self_delegation.wado/Counter" { outer: local.tee $save_effect_handler_self_delegation.wado/Counter_9(global:effect_handler_self_delegation.wado::$effect_effect_handler_self_delegation.wado/Counter), op_next: struct.new "canonical//CanonicalClosure_0" { env: struct.new "effect_handler_self_delegation.wado//$Closure_1" { $capture_0: offset_1 }, func: ref.func "closure/effect_handler_self_delegation.wado/$closure_wrapper_1" } });
+    $local_2_16 = $inline__effect_dispatch__effect_handler_self_delegation_wado_Counter__next_1: block -> i32 {
+        if @likely(ref.is_null(local.tee $local_0_14(global:effect_handler_self_delegation.wado::$effect_effect_handler_self_delegation.wado/Counter)) == 0) {
+            global:effect_handler_self_delegation.wado::$effect_effect_handler_self_delegation.wado/Counter = local.tee $d_effect_handler_self_delegation.wado/Counter_13(ref.as_non_null($local_0_14)).outer;
             $local_2_16 = block -> i32 {
                 let $indirect_call_1: ref "canonical//CanonicalClosure_0";
-                call_ref "functype/$canonical_closure_fn_0"($indirect_call_1.func, local.tee $indirect_call_1(ref.cast "canonical//CanonicalClosure_0"($d_Counter_13.op_next)).env);
+                call_ref "functype/$canonical_closure_fn_0"($indirect_call_1.func, local.tee $indirect_call_1(ref.cast "canonical//CanonicalClosure_0"($d_effect_handler_self_delegation.wado/Counter_13.op_next)).env);
             };
-            global:effect_handler_self_delegation.wado::$effect_Counter = $local_0_14;
-            break $inline__effect_dispatch__Counter__next_1: $local_2_16;
+            global:effect_handler_self_delegation.wado::$effect_effect_handler_self_delegation.wado/Counter = $local_0_14;
+            break $inline__effect_dispatch__effect_handler_self_delegation_wado_Counter__next_1: $local_2_16;
         } else {
             "core:rt/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("no handler installed for `Counter::next`"), used: 40 });
             unreachable;
         }
         unreachable;
     };
-    $local_2_19 = $inline__effect_dispatch__Counter__next_2: block -> i32 {
-        if @likely(ref.is_null(local.tee $local_0_14(global:effect_handler_self_delegation.wado::$effect_Counter)) == 0) {
-            global:effect_handler_self_delegation.wado::$effect_Counter = local.tee $d_Counter_13(ref.as_non_null($local_0_14)).outer;
+    $local_2_19 = $inline__effect_dispatch__effect_handler_self_delegation_wado_Counter__next_2: block -> i32 {
+        if @likely(ref.is_null(local.tee $local_0_14(global:effect_handler_self_delegation.wado::$effect_effect_handler_self_delegation.wado/Counter)) == 0) {
+            global:effect_handler_self_delegation.wado::$effect_effect_handler_self_delegation.wado/Counter = local.tee $d_effect_handler_self_delegation.wado/Counter_13(ref.as_non_null($local_0_14)).outer;
             $local_2_19 = block -> i32 {
-                call_ref "functype/$canonical_closure_fn_0"($indirect_call_1.func, local.tee $indirect_call_1(ref.cast "canonical//CanonicalClosure_0"($d_Counter_13.op_next)).env);
+                call_ref "functype/$canonical_closure_fn_0"($indirect_call_1.func, local.tee $indirect_call_1(ref.cast "canonical//CanonicalClosure_0"($d_effect_handler_self_delegation.wado/Counter_13.op_next)).env);
             };
-            global:effect_handler_self_delegation.wado::$effect_Counter = $local_0_14;
-            break $inline__effect_dispatch__Counter__next_2: $local_2_19;
+            global:effect_handler_self_delegation.wado::$effect_effect_handler_self_delegation.wado/Counter = $local_0_14;
+            break $inline__effect_dispatch__effect_handler_self_delegation_wado_Counter__next_2: $local_2_19;
         } else {
             "core:rt/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("no handler installed for `Counter::next`"), used: 40 });
             unreachable;
@@ -173,8 +173,8 @@ fn "effect_handler_self_delegation.wado/run"() with Stdout {
     $local_2_19 = "effect_handler_self_delegation.wado/$cm_binding__Stdout_write_via_stream"($local_2_19);
     "core:rt/write_string_to_stream$dae[add_newline]"(is_negative_33, $local_4_4.repr, $local_4_4.used);
     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"($local_2_19);
-    global:effect_handler_self_delegation.wado::$effect_Counter = $save_Counter_9;
-    global:effect_handler_self_delegation.wado::$effect_Counter = $save_Counter_12;
+    global:effect_handler_self_delegation.wado::$effect_effect_handler_self_delegation.wado/Counter = $save_effect_handler_self_delegation.wado/Counter_9;
+    global:effect_handler_self_delegation.wado::$effect_effect_handler_self_delegation.wado/Counter = $save_effect_handler_self_delegation.wado/Counter_12;
     $local_4_4 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(22), used: 0 };
     if @unlikely(local.tee $local_2_19(0 + 6) > builtin::array_len($local_4_4.repr)) {
         cold_path;
@@ -385,19 +385,19 @@ fn "effect_handler_self_delegation.wado/effect_handler_self_delegation.wado/$Clo
 
 fn "effect_handler_self_delegation.wado/effect_handler_self_delegation.wado/$Closure_1::$call"(self) {
     let self_1: ref "effect_handler_self_delegation.wado//OffsetCounter";
-    let $local_0: ref null "effect_handler_self_delegation.wado//$Dispatch_Counter";
-    let $local_1: ref "effect_handler_self_delegation.wado//$Dispatch_Counter";
+    let $local_0: ref null "effect_handler_self_delegation.wado//$Dispatch_effect_handler_self_delegation.wado/Counter";
+    let $local_1: ref "effect_handler_self_delegation.wado//$Dispatch_effect_handler_self_delegation.wado/Counter";
     let $local_2: i32;
     self_1 = self.$capture_0;
-    return $inline__effect_dispatch__Counter__next_1: block -> i32 {
-        if @likely(ref.is_null(local.tee $local_0(global:effect_handler_self_delegation.wado::$effect_Counter)) == 0) {
-            global:effect_handler_self_delegation.wado::$effect_Counter = local.tee $local_1(ref.as_non_null($local_0)).outer;
+    return $inline__effect_dispatch__effect_handler_self_delegation_wado_Counter__next_1: block -> i32 {
+        if @likely(ref.is_null(local.tee $local_0(global:effect_handler_self_delegation.wado::$effect_effect_handler_self_delegation.wado/Counter)) == 0) {
+            global:effect_handler_self_delegation.wado::$effect_effect_handler_self_delegation.wado/Counter = local.tee $local_1(ref.as_non_null($local_0)).outer;
             $local_2 = block -> i32 {
                 let $indirect_call_1: ref "canonical//CanonicalClosure_0";
                 call_ref "functype/$canonical_closure_fn_0"($indirect_call_1.func, local.tee $indirect_call_1(ref.cast "canonical//CanonicalClosure_0"($local_1.op_next)).env);
             };
-            global:effect_handler_self_delegation.wado::$effect_Counter = $local_0;
-            break $inline__effect_dispatch__Counter__next_1: $local_2;
+            global:effect_handler_self_delegation.wado::$effect_effect_handler_self_delegation.wado/Counter = $local_0;
+            break $inline__effect_dispatch__effect_handler_self_delegation_wado_Counter__next_1: $local_2;
         } else {
             "core:rt/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("no handler installed for `Counter::next`"), used: 40 });
             unreachable;

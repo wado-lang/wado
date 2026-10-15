@@ -362,6 +362,7 @@ fn should_check(source: &ModuleSource) -> bool {
         ModuleSource::Core { .. } | ModuleSource::Binding { .. } | ModuleSource::Wasm { .. } => {
             false
         }
+        ModuleSource::Effect(head) => should_check(head.module()),
     }
 }
 

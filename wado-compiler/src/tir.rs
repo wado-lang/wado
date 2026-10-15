@@ -23,9 +23,10 @@ use crate::compiler_item::CompilerItems;
 use crate::defs::{DefId, DefKind, DefTable};
 use crate::module_source::{CmNamespace, ModuleSource};
 use crate::name::{
-    FqTraitName, FqTypeName, INTERNAL_PREFIX, LocalMethodName, NEVER_TYPE_NAME, Receiver, RefKind,
-    TEMPLATE_SHAPE_PREFIX, TypeHead, TypeNameInfo, UNIT_TYPE_NAME, format_type_name,
-    mangle_builtin_array_type, mangle_generic_name, mangle_local_item_name, mangle_tuple_type,
+    DeclaredHead, FqTraitName, FqTypeName, INTERNAL_PREFIX, LocalMethodName, NEVER_TYPE_NAME,
+    Receiver, RefKind, TEMPLATE_SHAPE_PREFIX, TypeHead, TypeNameInfo, UNIT_TYPE_NAME,
+    format_type_name, mangle_builtin_array_type, mangle_generic_name, mangle_local_item_name,
+    mangle_tuple_type,
 };
 use crate::primitive::PrimitiveType;
 use crate::symbol_notation::render;
@@ -48,14 +49,16 @@ pub enum TypeParamScope {
     Function,
 }
 
-/// A resolved effect reference — a bare string in the AST, carrying its defining
-/// module here. Identity is `(module_source, name)` for `Concrete` and `name`
-/// alone for `Param`. The elaborator canonicalises the module, so `with Stdout`
-/// imported from `wasi:cli` and from `core:cli` compare equal.
+/// A resolved effect reference — a bare string in the AST. `Concrete` is
+/// identified by its declaration, so `with Stdout` imported from `wasi:cli` and
+/// from `core:cli` compare equal; `Param` by its name alone.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum EffectRef {
-    /// A concrete effect resolved to a module source (e.g., `Stdout` from `wasi:cli`)
-    Concrete {
+    /// The effect (or resource) a name resolved to.
+    Concrete(DeclaredHead),
+    /// A `with`-clause name written in `module_source` that reaches no effect,
+    /// already reported: there is no declaration to identify it by.
+    Undeclared {
         name: String,
         module_source: ModuleSource,
     },
@@ -70,23 +73,28 @@ pub enum EffectRef {
 impl EffectRef {
     pub fn name(&self) -> &str {
         match self {
-            EffectRef::Concrete { name, .. }
+            EffectRef::Concrete(head) => head.name(),
+            EffectRef::Undeclared { name, .. }
             | EffectRef::Param { name }
             | EffectRef::Var { name, .. } => name,
+        }
+    }
+
+    /// The module a concrete or undeclared effect is named in.
+    pub fn module(&self) -> Option<&ModuleSource> {
+        match self {
+            EffectRef::Concrete(head) => Some(head.module()),
+            EffectRef::Undeclared { module_source, .. } => Some(module_source),
+            EffectRef::Param { .. } | EffectRef::Var { .. } => None,
         }
     }
 
     /// The name a message prints: in `MODULE#SYMBOL` notation when `qualified`,
     /// for a concrete effect that another of its name would otherwise print as.
     pub fn display_name(&self, qualified: bool) -> String {
-        match self {
-            EffectRef::Concrete {
-                name,
-                module_source,
-            } if qualified => render(&module_source.to_string(), name),
-            EffectRef::Concrete { name, .. }
-            | EffectRef::Param { name }
-            | EffectRef::Var { name, .. } => name.clone(),
+        match self.module() {
+            Some(module) if qualified => render(&module.to_string(), self.name()),
+            _ => self.name().to_string(),
         }
     }
 
@@ -99,10 +107,9 @@ impl EffectRef {
         matches!(self, EffectRef::Var { .. })
     }
 
-    /// A `with`-clause name written in `module` that reaches no effect; it
-    /// stands as a concrete effect of its spelling, already reported.
+    /// A `with`-clause name written in `module` that reaches no effect.
     pub fn unresolved(name: &str, module: &ModuleSource) -> Self {
-        EffectRef::Concrete {
+        EffectRef::Undeclared {
             name: name.to_string(),
             module_source: module.clone(),
         }
@@ -1413,6 +1420,12 @@ impl TypeTable {
                 .and_then(|ty| self.intern_map.get(ty).copied())
                 .unwrap_or(resolved),
         )
+    }
+
+    /// [`Self::type_key`] of each id, in order.
+    #[must_use]
+    pub fn type_keys(&self, ids: &[TypeId]) -> Vec<TypeKey> {
+        ids.iter().map(|&id| self.type_key(id)).collect()
     }
 
     /// `ty` without its references and newtypes: the object a handle names.
@@ -6982,20 +6995,16 @@ pub enum TirExprKind {
 /// One `Effect => handler` binding inside a `with ... do` block.
 #[derive(Debug, Clone)]
 pub struct TirHandlerBinding {
-    /// The effect being handled. The elaborator always fills this in with a
-    /// concrete effect reference — the bundled `with &mut h do` form is
-    /// expanded to one binding per implemented effect, each carrying a
-    /// concrete `EffectRef`. `None` only appears transiently when an
-    /// upstream diagnostic prevented resolution.
-    pub effect: Option<EffectRef>,
+    /// The effect (or resource) being handled. The bundled `with &mut h do`
+    /// form is expanded to one binding per implemented effect.
+    pub effect: DeclaredHead,
     /// Concrete `TypeId`s of the trait / resource type arguments at this
     /// installation site (e.g. `[u8]` for `with Stream<u8> => &mut s do`,
     /// or as derived from the impl block in a bundled `with &mut s do`
     /// where `MockCM` implements `Stream<u8>`). Empty for non-generic
     /// effects / resources. The dispatch synthesis projects this together
-    /// with `effect.module_source` and `effect.name` into the
-    /// `InstantiationKey` it uses to look up the per-monomorphisation
-    /// dispatch infrastructure.
+    /// with `effect` into the `InstantiationKey` it uses to look up the
+    /// per-monomorphisation dispatch infrastructure.
     pub trait_type_args: Vec<TypeId>,
     /// Handler value expression (e.g., `&mut mock`).
     pub handler: TirExpr,
@@ -7753,7 +7762,7 @@ impl Leaves<'_> {
         for effect in effects {
             let replaced = match effect {
                 EffectRef::Param { name } | EffectRef::Var { name, .. } => self.rows.get(name),
-                EffectRef::Concrete { .. } => None,
+                EffectRef::Concrete(_) | EffectRef::Undeclared { .. } => None,
             };
             for e in replaced.map_or(std::slice::from_ref(effect), Vec::as_slice) {
                 if !out.contains(e) {
@@ -9751,7 +9760,8 @@ pub struct TirTest {
 
 #[derive(Debug, Clone)]
 pub struct TirEffect {
-    pub name: String,
+    /// The declaration this was reified from.
+    pub head: DeclaredHead,
     pub visibility: Visibility,
     pub operations: Vec<TirEffectOp>,
     pub span: Span,
@@ -9783,8 +9793,7 @@ pub struct TirEffectOp {
 #[derive(Debug, Clone)]
 pub struct TirResource {
     /// The declaration this was reified from.
-    pub def: DefId,
-    pub name: String,
+    pub head: DeclaredHead,
     pub visibility: Visibility,
     pub operations: Vec<TirEffectOp>,
     pub is_generic: bool,
@@ -9831,10 +9840,10 @@ pub enum SynthTrait {
 /// impl block.
 #[derive(Debug, Clone)]
 pub struct TirImpl {
-    /// Canonical `(declaring_module, base_trait_name)`; `None` for an inherent
-    /// impl. Matches `LocalMethodName::{base_trait_module, base_trait_name}`,
-    /// so a block and its methods agree on which declaration they target.
-    pub trait_canonical: Option<(ModuleSource, String)>,
+    /// The trait this block implements; `None` for an inherent impl. Matches
+    /// `LocalMethodName::base_trait_head`, so a block and its methods agree on
+    /// which declaration they target.
+    pub trait_canonical: Option<DeclaredHead>,
     /// Trait / resource type arguments at the impl site (`impl Stream<u8>` →
     /// `[u8]`). Matches `LocalMethodName::trait_type_args`.
     pub trait_type_args: Vec<TypeId>,

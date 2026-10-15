@@ -2032,6 +2032,7 @@ pub(super) fn is_user_local(ms: &ModuleSource) -> bool {
         ModuleSource::Core { .. } | ModuleSource::Binding { .. } | ModuleSource::Wasm { .. } => {
             false
         }
+        ModuleSource::Effect(head) => is_user_local(head.module()),
     }
 }
 

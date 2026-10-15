@@ -37,28 +37,28 @@ struct core:prelude/format.wado//Formatter {  // TypeId(6)
 
 struct spec_effects_install.wado//$Closure_4 {  // TypeId(7)}
 
-struct spec_effects_install.wado//$Dispatch_B {  // TypeId(8)
-    mut outer: ref null "spec_effects_install.wado//$Dispatch_B",
+struct spec_effects_install.wado//$Dispatch_spec_effects_install.wado/B {  // TypeId(8)
+    mut outer: ref null "spec_effects_install.wado//$Dispatch_spec_effects_install.wado/B",
     mut op_b: ref struct,
 }
 
-struct spec_effects_install.wado//$Dispatch_A {  // TypeId(9)
-    mut outer: ref null "spec_effects_install.wado//$Dispatch_A",
+struct spec_effects_install.wado//$Dispatch_spec_effects_install.wado/A {  // TypeId(9)
+    mut outer: ref null "spec_effects_install.wado//$Dispatch_spec_effects_install.wado/A",
     mut op_a: ref struct,
 }
 
-struct spec_effects_install.wado//$Dispatch_Stdout {  // TypeId(10)
-    mut outer: ref null "spec_effects_install.wado//$Dispatch_Stdout",
+struct spec_effects_install.wado//$Dispatch_spec_effects_install.wado/Stdout {  // TypeId(10)
+    mut outer: ref null "spec_effects_install.wado//$Dispatch_spec_effects_install.wado/Stdout",
     mut op_write: ref struct,
 }
 
-struct spec_effects_install.wado//$Dispatch_Stdin {  // TypeId(11)
-    mut outer: ref null "spec_effects_install.wado//$Dispatch_Stdin",
+struct spec_effects_install.wado//$Dispatch_spec_effects_install.wado/Stdin {  // TypeId(11)
+    mut outer: ref null "spec_effects_install.wado//$Dispatch_spec_effects_install.wado/Stdin",
     mut op_read_line: ref struct,
 }
 
-struct spec_effects_install.wado//$Dispatch_Random {  // TypeId(12)
-    mut outer: ref null "spec_effects_install.wado//$Dispatch_Random",
+struct spec_effects_install.wado//$Dispatch_wasi:random/random.wado/Random {  // TypeId(12)
+    mut outer: ref null "spec_effects_install.wado//$Dispatch_wasi:random/random.wado/Random",
     mut op_get_random_bytes: ref struct,
     mut op_get_random_u64: ref struct,
 }
@@ -310,11 +310,11 @@ import fn wasi/stream-new from "wasi/stream-new";
 import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 import fn wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code from "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code";
 
-global mut global:spec_effects_install.wado::$effect_Random: ref null "spec_effects_install.wado//$Dispatch_Random" = ref.null none;
-global mut global:spec_effects_install.wado::$effect_Stdin: ref null "spec_effects_install.wado//$Dispatch_Stdin" = ref.null none;
-global mut global:spec_effects_install.wado::$effect_Stdout: ref null "spec_effects_install.wado//$Dispatch_Stdout" = ref.null none;
-global mut global:spec_effects_install.wado::$effect_A: ref null "spec_effects_install.wado//$Dispatch_A" = ref.null none;
-global mut global:spec_effects_install.wado::$effect_B: ref null "spec_effects_install.wado//$Dispatch_B" = ref.null none;
+global mut global:spec_effects_install.wado::$effect_wasi:random/random.wado/Random: ref null "spec_effects_install.wado//$Dispatch_wasi:random/random.wado/Random" = ref.null none;
+global mut global:spec_effects_install.wado::$effect_spec_effects_install.wado/Stdin: ref null "spec_effects_install.wado//$Dispatch_spec_effects_install.wado/Stdin" = ref.null none;
+global mut global:spec_effects_install.wado::$effect_spec_effects_install.wado/Stdout: ref null "spec_effects_install.wado//$Dispatch_spec_effects_install.wado/Stdout" = ref.null none;
+global mut global:spec_effects_install.wado::$effect_spec_effects_install.wado/A: ref null "spec_effects_install.wado//$Dispatch_spec_effects_install.wado/A" = ref.null none;
+global mut global:spec_effects_install.wado::$effect_spec_effects_install.wado/B: ref null "spec_effects_install.wado//$Dispatch_spec_effects_install.wado/B" = ref.null none;
 global global:core:secure_random::$const_obj_12: ref "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 };
 global global:spec_effects_install.wado::$const_obj_14: ref "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(110, 111, 32, 104, 97, 110, 100, 108, 101, 114, 32, 105, 110, 115, 116, 97, 108, 108, 101, 100, 32, 102, 111, 114, 32, 96, 83, 116, 100, 111, 117, 116, 58, 58, 119, 114, 105, 116, 101, 96), used: 40 };
 global global:spec_effects_install.wado::$const_obj_15: ref "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(110, 111, 32, 104, 97, 110, 100, 108, 101, 114, 32, 105, 110, 115, 116, 97, 108, 108, 101, 100, 32, 102, 111, 114, 32, 96, 83, 116, 100, 105, 110, 58, 58, 114, 101, 97, 100, 95, 108, 105, 110, 101, 96), used: 43 };
@@ -375,31 +375,31 @@ fn "spec_effects_install.wado/$test_0_installing_handlers"() {
     let s: ref "spec_effects_install.wado//Script";
     let o: ref "spec_effects_install.wado//Capture";
     let $local_8: ref "core:prelude/format.wado//Formatter";
-    let $save_Stdin_12: ref null "spec_effects_install.wado//$Dispatch_Stdin";
-    let $d_Stdin_13: ref "spec_effects_install.wado//$Dispatch_Stdin";
-    let $save_Stdout: ref null "spec_effects_install.wado//$Dispatch_Stdout";
-    let $d_Stdout: ref "spec_effects_install.wado//$Dispatch_Stdout";
+    let $save_spec_effects_install.wado/Stdin_12: ref null "spec_effects_install.wado//$Dispatch_spec_effects_install.wado/Stdin";
+    let $d_spec_effects_install.wado/Stdin_13: ref "spec_effects_install.wado//$Dispatch_spec_effects_install.wado/Stdin";
+    let $save_spec_effects_install.wado/Stdout: ref null "spec_effects_install.wado//$Dispatch_spec_effects_install.wado/Stdout";
+    let $d_spec_effects_install.wado/Stdout: ref "spec_effects_install.wado//$Dispatch_spec_effects_install.wado/Stdout";
     let elements_24: ref "Array<core:prelude/string.wado/String>";
-    let $local_0_26: ref null "spec_effects_install.wado//$Dispatch_Stdin";
+    let $local_0_26: ref null "spec_effects_install.wado//$Dispatch_spec_effects_install.wado/Stdin";
     let v_29: ref "core:prelude/string.wado//String";
     let i: i32;
-    let $local_1_41: ref null "spec_effects_install.wado//$Dispatch_Stdout";
+    let $local_1_41: ref null "spec_effects_install.wado//$Dispatch_spec_effects_install.wado/Stdout";
     let v_48: ref "core:prelude//List<core:prelude/string.wado/String>";
     let $av_58: i32;
     mock = struct.new "spec_effects_install.wado//Script" { line: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(97), used: 1 } };
     s = struct.new "spec_effects_install.wado//Script" { line: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(98), used: 1 } };
     o = struct.new "spec_effects_install.wado//Capture" { lines: struct.new "core:prelude//List<core:prelude/string.wado/String>" { repr: local.tee elements_24(array.new_fixed<ref "core:prelude/string.wado//String">()), used: 0 } };
-    global:spec_effects_install.wado::$effect_Stdin = local.tee $d_Stdin_13(struct.new "spec_effects_install.wado//$Dispatch_Stdin" { outer: local.tee $save_Stdin_12(global:spec_effects_install.wado::$effect_Stdin), op_read_line: struct.new "canonical//CanonicalClosure_2" { env: struct.new "spec_effects_install.wado//$Closure_0" { $capture_0: mock }, func: ref.func "closure/spec_effects_install.wado/$closure_wrapper_0" } });
-    $array_clone_dst_4 = local.tee v_29($inline__effect_dispatch__Stdin__read_line_2: block -> ref "core:prelude/string.wado//String" {
-        if @likely(ref.is_null(local.tee $local_0_26(global:spec_effects_install.wado::$effect_Stdin)) == 0) {
-            global:spec_effects_install.wado::$effect_Stdin = local.tee $d_Stdin_13(ref.as_non_null($local_0_26)).outer;
+    global:spec_effects_install.wado::$effect_spec_effects_install.wado/Stdin = local.tee $d_spec_effects_install.wado/Stdin_13(struct.new "spec_effects_install.wado//$Dispatch_spec_effects_install.wado/Stdin" { outer: local.tee $save_spec_effects_install.wado/Stdin_12(global:spec_effects_install.wado::$effect_spec_effects_install.wado/Stdin), op_read_line: struct.new "canonical//CanonicalClosure_2" { env: struct.new "spec_effects_install.wado//$Closure_0" { $capture_0: mock }, func: ref.func "closure/spec_effects_install.wado/$closure_wrapper_0" } });
+    $array_clone_dst_4 = local.tee v_29($inline__effect_dispatch__spec_effects_install_wado_Stdin__read_line_2: block -> ref "core:prelude/string.wado//String" {
+        if @likely(ref.is_null(local.tee $local_0_26(global:spec_effects_install.wado::$effect_spec_effects_install.wado/Stdin)) == 0) {
+            global:spec_effects_install.wado::$effect_spec_effects_install.wado/Stdin = local.tee $d_spec_effects_install.wado/Stdin_13(ref.as_non_null($local_0_26)).outer;
             $av_58 = local.tee v_29(block -> ref "core:prelude/string.wado//String" {
                 let $indirect_call_2: ref "canonical//CanonicalClosure_2";
-                call_ref "functype/$canonical_closure_fn_2"($indirect_call_2.func, local.tee $indirect_call_2(ref.cast "canonical//CanonicalClosure_2"($d_Stdin_13.op_read_line)).env);
+                call_ref "functype/$canonical_closure_fn_2"($indirect_call_2.func, local.tee $indirect_call_2(ref.cast "canonical//CanonicalClosure_2"($d_spec_effects_install.wado/Stdin_13.op_read_line)).env);
             }).used;
             v_29 = struct.new "core:prelude/string.wado//String" { repr: let $array_clone_src_3: ref Array<u8>; $array_clone_src_3 = v_29.repr; let $array_clone_dst_4: ref Array<u8>; builtin::array_copy<u8>(local.tee $array_clone_dst_4(builtin::array_new<u8>($av_58)), 0, $array_clone_src_3, 0, $av_58); $array_clone_dst_4, used: $av_58 };
-            global:spec_effects_install.wado::$effect_Stdin = $local_0_26;
-            break $inline__effect_dispatch__Stdin__read_line_2: v_29;
+            global:spec_effects_install.wado::$effect_spec_effects_install.wado/Stdin = $local_0_26;
+            break $inline__effect_dispatch__spec_effects_install_wado_Stdin__read_line_2: v_29;
         } else {
             "core:rt/panic"(local.tee v_29(global:spec_effects_install.wado::$const_obj_15).repr, v_29.used);
             unreachable;
@@ -447,19 +447,19 @@ condition: Stdin::read_line() == \"a\"
         "core:rt/panic"(v_29.repr, v_29.used);
         unreachable;
     }
-    global:spec_effects_install.wado::$effect_Stdin = $save_Stdin_12;
-    global:spec_effects_install.wado::$effect_Stdin = local.tee $d_Stdin_13(struct.new "spec_effects_install.wado//$Dispatch_Stdin" { outer: local.tee $save_Stdin_12(global:spec_effects_install.wado::$effect_Stdin), op_read_line: struct.new "canonical//CanonicalClosure_2" { env: struct.new "spec_effects_install.wado//$Closure_1" { $capture_0: s }, func: ref.func "closure/spec_effects_install.wado/$closure_wrapper_1" } });
-    global:spec_effects_install.wado::$effect_Stdout = local.tee $d_Stdout(struct.new "spec_effects_install.wado//$Dispatch_Stdout" { outer: local.tee $save_Stdout(global:spec_effects_install.wado::$effect_Stdout), op_write: struct.new "canonical//CanonicalClosure_3" { env: struct.new "spec_effects_install.wado//$Closure_2" { $capture_0: o }, func: ref.func "closure/spec_effects_install.wado/$closure_wrapper_2" } });
-    $inline__effect_dispatch__Stdout__write_6: block {
-        $av_58 = local.tee v_29($inline__effect_dispatch__Stdin__read_line_8: block -> ref "core:prelude/string.wado//String" {
-            if @likely(ref.is_null(local.tee $local_0_26(global:spec_effects_install.wado::$effect_Stdin)) == 0) {
-                global:spec_effects_install.wado::$effect_Stdin = local.tee $d_Stdin_13(ref.as_non_null($local_0_26)).outer;
+    global:spec_effects_install.wado::$effect_spec_effects_install.wado/Stdin = $save_spec_effects_install.wado/Stdin_12;
+    global:spec_effects_install.wado::$effect_spec_effects_install.wado/Stdin = local.tee $d_spec_effects_install.wado/Stdin_13(struct.new "spec_effects_install.wado//$Dispatch_spec_effects_install.wado/Stdin" { outer: local.tee $save_spec_effects_install.wado/Stdin_12(global:spec_effects_install.wado::$effect_spec_effects_install.wado/Stdin), op_read_line: struct.new "canonical//CanonicalClosure_2" { env: struct.new "spec_effects_install.wado//$Closure_1" { $capture_0: s }, func: ref.func "closure/spec_effects_install.wado/$closure_wrapper_1" } });
+    global:spec_effects_install.wado::$effect_spec_effects_install.wado/Stdout = local.tee $d_spec_effects_install.wado/Stdout(struct.new "spec_effects_install.wado//$Dispatch_spec_effects_install.wado/Stdout" { outer: local.tee $save_spec_effects_install.wado/Stdout(global:spec_effects_install.wado::$effect_spec_effects_install.wado/Stdout), op_write: struct.new "canonical//CanonicalClosure_3" { env: struct.new "spec_effects_install.wado//$Closure_2" { $capture_0: o }, func: ref.func "closure/spec_effects_install.wado/$closure_wrapper_2" } });
+    $inline__effect_dispatch__spec_effects_install_wado_Stdout__write_6: block {
+        $av_58 = local.tee v_29($inline__effect_dispatch__spec_effects_install_wado_Stdin__read_line_8: block -> ref "core:prelude/string.wado//String" {
+            if @likely(ref.is_null(local.tee $local_0_26(global:spec_effects_install.wado::$effect_spec_effects_install.wado/Stdin)) == 0) {
+                global:spec_effects_install.wado::$effect_spec_effects_install.wado/Stdin = local.tee $d_spec_effects_install.wado/Stdin_13(ref.as_non_null($local_0_26)).outer;
                 $av_58 = local.tee v_29(block -> ref "core:prelude/string.wado//String" {
-                    call_ref "functype/$canonical_closure_fn_2"($indirect_call_2.func, local.tee $indirect_call_2(ref.cast "canonical//CanonicalClosure_2"($d_Stdin_13.op_read_line)).env);
+                    call_ref "functype/$canonical_closure_fn_2"($indirect_call_2.func, local.tee $indirect_call_2(ref.cast "canonical//CanonicalClosure_2"($d_spec_effects_install.wado/Stdin_13.op_read_line)).env);
                 }).used;
                 v_29 = struct.new "core:prelude/string.wado//String" { repr: $array_clone_src_3 = v_29.repr; builtin::array_copy<u8>(local.tee $array_clone_dst_4(builtin::array_new<u8>($av_58)), 0, $array_clone_src_3, 0, $av_58); $array_clone_dst_4, used: $av_58 };
-                global:spec_effects_install.wado::$effect_Stdin = $local_0_26;
-                break $inline__effect_dispatch__Stdin__read_line_8: v_29;
+                global:spec_effects_install.wado::$effect_spec_effects_install.wado/Stdin = $local_0_26;
+                break $inline__effect_dispatch__spec_effects_install_wado_Stdin__read_line_8: v_29;
             } else {
                 "core:rt/panic"(local.tee v_29(global:spec_effects_install.wado::$const_obj_15).repr, v_29.used);
                 unreachable;
@@ -467,18 +467,18 @@ condition: Stdin::read_line() == \"a\"
             unreachable;
         }).used;
         v_29 = struct.new "core:prelude/string.wado//String" { repr: $array_clone_dst_4 = v_29.repr; builtin::array_copy<u8>(local.tee $array_clone_src_3(builtin::array_new<u8>($av_58)), 0, $array_clone_dst_4, 0, $av_58); $array_clone_src_3, used: $av_58 };
-        if @likely(ref.is_null(local.tee $local_1_41(global:spec_effects_install.wado::$effect_Stdout)) == 0) {
-            global:spec_effects_install.wado::$effect_Stdout = local.tee $d_Stdout(ref.as_non_null($local_1_41)).outer;
+        if @likely(ref.is_null(local.tee $local_1_41(global:spec_effects_install.wado::$effect_spec_effects_install.wado/Stdout)) == 0) {
+            global:spec_effects_install.wado::$effect_spec_effects_install.wado/Stdout = local.tee $d_spec_effects_install.wado/Stdout(ref.as_non_null($local_1_41)).outer;
             let $indirect_call_21: ref "canonical//CanonicalClosure_3";
-            call_ref "functype/$canonical_closure_fn_3"($indirect_call_21.func, local.tee $indirect_call_21(ref.cast "canonical//CanonicalClosure_3"($d_Stdout.op_write)).env, v_29);
-            break $inline__effect_dispatch__Stdout__write_6: global:spec_effects_install.wado::$effect_Stdout = $local_1_41;
+            call_ref "functype/$canonical_closure_fn_3"($indirect_call_21.func, local.tee $indirect_call_21(ref.cast "canonical//CanonicalClosure_3"($d_spec_effects_install.wado/Stdout.op_write)).env, v_29);
+            break $inline__effect_dispatch__spec_effects_install_wado_Stdout__write_6: global:spec_effects_install.wado::$effect_spec_effects_install.wado/Stdout = $local_1_41;
         } else {
             "core:rt/panic"(local.tee v_29(global:spec_effects_install.wado::$const_obj_14).repr, v_29.used);
             unreachable;
         }
     };
-    global:spec_effects_install.wado::$effect_Stdout = $save_Stdout;
-    global:spec_effects_install.wado::$effect_Stdin = $save_Stdin_12;
+    global:spec_effects_install.wado::$effect_spec_effects_install.wado/Stdout = $save_spec_effects_install.wado/Stdout;
+    global:spec_effects_install.wado::$effect_spec_effects_install.wado/Stdin = $save_spec_effects_install.wado/Stdin_12;
     elements_24 = local.tee v_48(o.lines).repr;
     $av_58 = v_48.used;
     let $array_clone_dst_23: ref "Array<core:prelude/string.wado/String>";
@@ -528,7 +528,7 @@ fn "spec_effects_install.wado/$test_1_a__with__is_an_expression"() {
     let rng: ref "spec_effects_install.wado//Zeros";
     let $local_4: ref "core:prelude/string.wado//String";
     let $local_5: ref "core:prelude/format.wado//Formatter";
-    let $local_7: ref null "spec_effects_install.wado//$Dispatch_Random";
+    let $local_7: ref null "spec_effects_install.wado//$Dispatch_wasi:random/random.wado/Random";
     let $local_9: ref "core:uuid//Uuid";
     let self_13: v128;
     let s: ref "core:prelude/string.wado//String";
@@ -537,9 +537,9 @@ fn "spec_effects_install.wado/$test_1_a__with__is_an_expression"() {
     let b: ref Array<u8>;
     let i: i32;
     rng = struct.new "spec_effects_install.wado//Zeros" {  };
-    global:spec_effects_install.wado::$effect_Random = struct.new "spec_effects_install.wado//$Dispatch_Random" { outer: local.tee $local_7(global:spec_effects_install.wado::$effect_Random), op_get_random_bytes: struct.new "canonical//CanonicalClosure_0" { env: struct.new "spec_effects_install.wado//$Closure_3" { $capture_0: rng }, func: ref.func "closure/spec_effects_install.wado/$closure_wrapper_3" }, op_get_random_u64: struct.new "canonical//CanonicalClosure_1" { env: struct.new "spec_effects_install.wado//$Closure_4" {  }, func: ref.func "closure/spec_effects_install.wado/$closure_wrapper_4" } };
+    global:spec_effects_install.wado::$effect_wasi:random/random.wado/Random = struct.new "spec_effects_install.wado//$Dispatch_wasi:random/random.wado/Random" { outer: local.tee $local_7(global:spec_effects_install.wado::$effect_wasi:random/random.wado/Random), op_get_random_bytes: struct.new "canonical//CanonicalClosure_0" { env: struct.new "spec_effects_install.wado//$Closure_3" { $capture_0: rng }, func: ref.func "closure/spec_effects_install.wado/$closure_wrapper_3" }, op_get_random_u64: struct.new "canonical//CanonicalClosure_1" { env: struct.new "spec_effects_install.wado//$Closure_4" {  }, func: ref.func "closure/spec_effects_install.wado/$closure_wrapper_4" } };
     $local_9 = "core:uuid/core:uuid/Uuid::v4"();
-    global:spec_effects_install.wado::$effect_Random = $local_7;
+    global:spec_effects_install.wado::$effect_wasi:random/random.wado/Random = $local_7;
     self_13 = $local_9.bytes;
     s = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(36), used: 0 };
     "core:uuid/core:uuid/Uuid::write_to$sroa[self.bytes]"(self_13, s);
@@ -594,44 +594,44 @@ condition: id.to_string() == \"00000000-0000-4000-8000-000000000000\"
 fn "spec_effects_install.wado/mocked"() {
     let a: ref "spec_effects_install.wado//Both";
     let b: ref "spec_effects_install.wado//Both";
-    let $local_3: ref null "spec_effects_install.wado//$Dispatch_A";
-    let $local_4: ref "spec_effects_install.wado//$Dispatch_A";
-    let $local_6: ref null "spec_effects_install.wado//$Dispatch_B";
-    let $local_7: ref "spec_effects_install.wado//$Dispatch_B";
-    let $local_0_9: ref null "spec_effects_install.wado//$Dispatch_A";
+    let $local_3: ref null "spec_effects_install.wado//$Dispatch_spec_effects_install.wado/A";
+    let $local_4: ref "spec_effects_install.wado//$Dispatch_spec_effects_install.wado/A";
+    let $local_6: ref null "spec_effects_install.wado//$Dispatch_spec_effects_install.wado/B";
+    let $local_7: ref "spec_effects_install.wado//$Dispatch_spec_effects_install.wado/B";
+    let $local_0_9: ref null "spec_effects_install.wado//$Dispatch_spec_effects_install.wado/A";
     let $local_2_11: i32;
-    let $local_0_12: ref null "spec_effects_install.wado//$Dispatch_B";
+    let $local_0_12: ref null "spec_effects_install.wado//$Dispatch_spec_effects_install.wado/B";
     a = struct.new "spec_effects_install.wado//Both" {  };
     b = struct.new "spec_effects_install.wado//Both" {  };
-    return global:spec_effects_install.wado::$effect_A = local.tee $local_4(struct.new "spec_effects_install.wado//$Dispatch_A" { outer: local.tee $local_3(global:spec_effects_install.wado::$effect_A), op_a: struct.new "canonical//CanonicalClosure_4" { env: struct.new "spec_effects_install.wado//$Closure_5" { $capture_0: a }, func: ref.func "closure/spec_effects_install.wado/$closure_wrapper_5" } }), global:spec_effects_install.wado::$effect_B = local.tee $local_7(struct.new "spec_effects_install.wado//$Dispatch_B" { outer: local.tee $local_6(global:spec_effects_install.wado::$effect_B), op_b: struct.new "canonical//CanonicalClosure_4" { env: struct.new "spec_effects_install.wado//$Closure_6" { $capture_0: b }, func: ref.func "closure/spec_effects_install.wado/$closure_wrapper_6" } }), $local_2_11 = $inline__effect_dispatch__A__a_1: block -> i32 {
-        if @likely(ref.is_null(local.tee $local_0_9(global:spec_effects_install.wado::$effect_A)) == 0) {
-            global:spec_effects_install.wado::$effect_A = local.tee $local_4(ref.as_non_null($local_0_9)).outer;
+    return global:spec_effects_install.wado::$effect_spec_effects_install.wado/A = local.tee $local_4(struct.new "spec_effects_install.wado//$Dispatch_spec_effects_install.wado/A" { outer: local.tee $local_3(global:spec_effects_install.wado::$effect_spec_effects_install.wado/A), op_a: struct.new "canonical//CanonicalClosure_4" { env: struct.new "spec_effects_install.wado//$Closure_5" { $capture_0: a }, func: ref.func "closure/spec_effects_install.wado/$closure_wrapper_5" } }), global:spec_effects_install.wado::$effect_spec_effects_install.wado/B = local.tee $local_7(struct.new "spec_effects_install.wado//$Dispatch_spec_effects_install.wado/B" { outer: local.tee $local_6(global:spec_effects_install.wado::$effect_spec_effects_install.wado/B), op_b: struct.new "canonical//CanonicalClosure_4" { env: struct.new "spec_effects_install.wado//$Closure_6" { $capture_0: b }, func: ref.func "closure/spec_effects_install.wado/$closure_wrapper_6" } }), $local_2_11 = $inline__effect_dispatch__spec_effects_install_wado_A__a_1: block -> i32 {
+        if @likely(ref.is_null(local.tee $local_0_9(global:spec_effects_install.wado::$effect_spec_effects_install.wado/A)) == 0) {
+            global:spec_effects_install.wado::$effect_spec_effects_install.wado/A = local.tee $local_4(ref.as_non_null($local_0_9)).outer;
             $local_2_11 = block -> i32 {
                 let $indirect_call_2: ref "canonical//CanonicalClosure_4";
                 call_ref "functype/$canonical_closure_fn_4"($indirect_call_2.func, local.tee $indirect_call_2(ref.cast "canonical//CanonicalClosure_4"($local_4.op_a)).env);
             };
-            global:spec_effects_install.wado::$effect_A = $local_0_9;
-            break $inline__effect_dispatch__A__a_1: $local_2_11;
+            global:spec_effects_install.wado::$effect_spec_effects_install.wado/A = $local_0_9;
+            break $inline__effect_dispatch__spec_effects_install_wado_A__a_1: $local_2_11;
         } else {
             let $mv_arg_1: ref "core:prelude/string.wado//String";
             "core:rt/panic"(local.tee $mv_arg_1(global:spec_effects_install.wado::$const_obj_24).repr, $mv_arg_1.used);
             unreachable;
         }
         unreachable;
-    } + $inline__effect_dispatch__B__b_2: block -> i32 {
-        if @likely(ref.is_null(local.tee $local_0_12(global:spec_effects_install.wado::$effect_B)) == 0) {
-            global:spec_effects_install.wado::$effect_B = local.tee $local_7(ref.as_non_null($local_0_12)).outer;
+    } + $inline__effect_dispatch__spec_effects_install_wado_B__b_2: block -> i32 {
+        if @likely(ref.is_null(local.tee $local_0_12(global:spec_effects_install.wado::$effect_spec_effects_install.wado/B)) == 0) {
+            global:spec_effects_install.wado::$effect_spec_effects_install.wado/B = local.tee $local_7(ref.as_non_null($local_0_12)).outer;
             $local_2_11 = block -> i32 {
                 call_ref "functype/$canonical_closure_fn_4"($indirect_call_2.func, local.tee $indirect_call_2(ref.cast "canonical//CanonicalClosure_4"($local_7.op_b)).env);
             };
-            global:spec_effects_install.wado::$effect_B = $local_0_12;
-            break $inline__effect_dispatch__B__b_2: $local_2_11;
+            global:spec_effects_install.wado::$effect_spec_effects_install.wado/B = $local_0_12;
+            break $inline__effect_dispatch__spec_effects_install_wado_B__b_2: $local_2_11;
         } else {
             "core:rt/panic"(local.tee $mv_arg_1(global:spec_effects_install.wado::$const_obj_23).repr, $mv_arg_1.used);
             unreachable;
         }
         unreachable;
-    }, global:spec_effects_install.wado::$effect_B = $local_6, global:spec_effects_install.wado::$effect_A = $local_3, $local_2_11;
+    }, global:spec_effects_install.wado::$effect_spec_effects_install.wado/B = $local_6, global:spec_effects_install.wado::$effect_spec_effects_install.wado/A = $local_3, $local_2_11;
 }
 
 fn "spec_effects_install.wado/$cm_binding__Random_get_random_bytes"(max_len) with Random {
@@ -940,24 +940,24 @@ fn "core:secure_random/bytes$dae[n]"() with Random {
     let $fuse_at_10: i32;
     let $fuse_at_11: i32;
     let $fuse_at_12: i32;
-    let $local_1_14: ref null "spec_effects_install.wado//$Dispatch_Random";
-    let $local_2_15: ref "spec_effects_install.wado//$Dispatch_Random";
+    let $local_1_14: ref null "spec_effects_install.wado//$Dispatch_wasi:random/random.wado/Random";
+    let $local_2_15: ref "spec_effects_install.wado//$Dispatch_wasi:random/random.wado/Random";
     let $local_3_16: ref "core:prelude//List<u8>";
     let v_18: ref "core:prelude//List<u8>";
     let max_len_19: u64;
     let $local_3_22: ref "core:prelude//List<u8>";
     let new_used: i32;
-    $local_3_16 = $inline__effect_dispatch__Random__get_random_bytes_1: block -> ref "core:prelude//List<u8>" {
-        if ref.is_null(local.tee $local_1_14(global:spec_effects_install.wado::$effect_Random)) == 0 {
-            global:spec_effects_install.wado::$effect_Random = local.tee $local_2_15(ref.as_non_null($local_1_14)).outer;
+    $local_3_16 = $inline__effect_dispatch__wasi_random_random_wado_Random__get_random_bytes_1: block -> ref "core:prelude//List<u8>" {
+        if ref.is_null(local.tee $local_1_14(global:spec_effects_install.wado::$effect_wasi:random/random.wado/Random)) == 0 {
+            global:spec_effects_install.wado::$effect_wasi:random/random.wado/Random = local.tee $local_2_15(ref.as_non_null($local_1_14)).outer;
             $local_3_16 = block -> ref "core:prelude//List<u8>" {
                 let $indirect_call_1: ref "canonical//CanonicalClosure_0";
                 call_ref "functype/$canonical_closure_fn_0"($indirect_call_1.func, local.tee $indirect_call_1(ref.cast "canonical//CanonicalClosure_0"($local_2_15.op_get_random_bytes)).env, 16_i64);
             };
-            global:spec_effects_install.wado::$effect_Random = $local_1_14;
-            break $inline__effect_dispatch__Random__get_random_bytes_1: $local_3_16;
+            global:spec_effects_install.wado::$effect_wasi:random/random.wado/Random = $local_1_14;
+            break $inline__effect_dispatch__wasi_random_random_wado_Random__get_random_bytes_1: $local_3_16;
         } else {
-            break $inline__effect_dispatch__Random__get_random_bytes_1: "spec_effects_install.wado/$cm_binding__Random_get_random_bytes$spec0"(16_i64);
+            break $inline__effect_dispatch__wasi_random_random_wado_Random__get_random_bytes_1: "spec_effects_install.wado/$cm_binding__Random_get_random_bytes$spec0"(16_i64);
         }
         unreachable;
     };
@@ -965,17 +965,17 @@ fn "core:secure_random/bytes$dae[n]"() with Random {
     b68: block {
         l69: loop {
             break_if b68 local.tee $load_5($local_3_16.used) >= 16;
-            $array_clone_dst_3 = local.tee v_18($inline__effect_dispatch__Random__get_random_bytes_4: block -> ref "core:prelude//List<u8>" {
+            $array_clone_dst_3 = local.tee v_18($inline__effect_dispatch__wasi_random_random_wado_Random__get_random_bytes_4: block -> ref "core:prelude//List<u8>" {
                 max_len_19 = builtin::i64_extend_i32_s(16 - $load_5);
-                if ref.is_null(local.tee $local_1_14(global:spec_effects_install.wado::$effect_Random)) == 0 {
-                    global:spec_effects_install.wado::$effect_Random = local.tee $local_2_15(ref.as_non_null($local_1_14)).outer;
+                if ref.is_null(local.tee $local_1_14(global:spec_effects_install.wado::$effect_wasi:random/random.wado/Random)) == 0 {
+                    global:spec_effects_install.wado::$effect_wasi:random/random.wado/Random = local.tee $local_2_15(ref.as_non_null($local_1_14)).outer;
                     $local_3_22 = block -> ref "core:prelude//List<u8>" {
                         call_ref "functype/$canonical_closure_fn_0"($indirect_call_1.func, local.tee $indirect_call_1(ref.cast "canonical//CanonicalClosure_0"($local_2_15.op_get_random_bytes)).env, max_len_19);
                     };
-                    global:spec_effects_install.wado::$effect_Random = $local_1_14;
-                    break $inline__effect_dispatch__Random__get_random_bytes_4: $local_3_22;
+                    global:spec_effects_install.wado::$effect_wasi:random/random.wado/Random = $local_1_14;
+                    break $inline__effect_dispatch__wasi_random_random_wado_Random__get_random_bytes_4: $local_3_22;
                 } else {
-                    break $inline__effect_dispatch__Random__get_random_bytes_4: "spec_effects_install.wado/$cm_binding__Random_get_random_bytes"(max_len_19);
+                    break $inline__effect_dispatch__wasi_random_random_wado_Random__get_random_bytes_4: "spec_effects_install.wado/$cm_binding__Random_get_random_bytes"(max_len_19);
                 }
                 unreachable;
             }).repr;

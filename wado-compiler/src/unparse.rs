@@ -5578,10 +5578,8 @@ impl<'a> TirUnparser<'a> {
             TirExprKind::WithHandler { bindings, body, .. } => {
                 self.output.push_str("with ");
                 self.comma_sep(bindings, |s, binding| {
-                    if let Some(eff) = &binding.effect {
-                        s.output.push_str(eff.name());
-                        s.output.push_str(" => ");
-                    }
+                    s.output.push_str(binding.effect.name());
+                    s.output.push_str(" => ");
                     s.unparse_expr(&binding.handler);
                 });
                 self.output.push_str(" do ");
