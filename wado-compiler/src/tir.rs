@@ -1373,17 +1373,17 @@ impl TypeTable {
             .unwrap_or_else(|| panic!("TypeId {id:?} not found in TypeTable"))
     }
 
-    /// Where [`Self::redefine_to`] pointed `id`, when `id` is a borrow it
+    /// Where [`Self::redefine_to`] pointed `id`, when `id` is a reference it
     /// redefined. Erasure's redirect is not one, and the spelling tells them
-    /// apart: only a borrow is ever redefined.
+    /// apart: only a reference is ever redefined.
     fn box_redefinition(&self, id: TypeId) -> Option<TypeId> {
         let target = self.redirects.get(id).copied()?;
-        self.spelled_borrow(id).map(|_| target)
+        self.spelled_ref(id).map(|_| target)
     }
 
     /// [`Self::get`] before the newtype / flags erasure, which runs once
     /// monomorphize is done. A boxing redefinition is no part of that, so a
-    /// redefined borrow reads as the `Box<T>` here too.
+    /// redefined reference reads as the `Box<T>` here too.
     ///
     /// Erasure is a representation choice — a `flags` value is a `u32` at
     /// runtime — but `impl Trait for Perms` is still keyed under `Perms`. A
@@ -2485,9 +2485,9 @@ impl TypeTable {
         self.struct_name_index.clear();
         self.decl_name_index.clear();
         for (id, ty) in self.types.iter() {
-            // A redefined borrow keeps its spelling in the slot alone.
+            // A redefined reference keeps its spelling in the slot alone.
             // Re-interning it would hand a later `intern(&T)` an id that no
-            // longer resolves as a borrow.
+            // longer resolves as a reference.
             if self.box_redefinition(id).is_none() {
                 self.intern_map.insert(ty.clone(), id);
             }
@@ -3338,7 +3338,7 @@ impl TypeTable {
     /// Redefine `id` to resolve as `target`, retiring its own spelling so a
     /// later [`Self::intern`] of that spelling mints a fresh id instead.
     ///
-    /// The boxing pass's `&T` → `Box<T>`. The slot keeps the borrow, which is
+    /// The boxing pass's `&T` → `Box<T>`. The slot keeps the reference, which is
     /// how [`Self::is_mut_box`] still tells `&T` from `&mut T`.
     pub fn redefine_to(&mut self, id: TypeId, target: TypeId) {
         assert!(
@@ -3352,7 +3352,7 @@ impl TypeTable {
             .unwrap_or_else(|| panic!("TypeId {id:?} not found in TypeTable"));
         assert!(
             matches!(spelling, ResolvedType::Ref(_) | ResolvedType::MutRef(_)),
-            "only a borrow is redefined: `box_redefinition` tells one by that shape"
+            "only a reference is redefined: `box_redefinition` tells one by that shape"
         );
         if self.intern_map.get(&spelling) == Some(&id) {
             self.intern_map.shift_remove(&spelling);
@@ -3471,10 +3471,10 @@ impl TypeTable {
     /// Whether `type_id` may name storage rather than hold a value: a `&T` /
     /// `&mut T`, or the `Box<T>` the boxing pass redefines one into. Both
     /// spellings answer yes, since after `prepare_types` no signature test
-    /// tells a boxed borrow from a by-value parameter of the same shape.
+    /// tells a boxed reference from a by-value parameter of the same shape.
     ///
     /// [`RefKind::from_resolved`] alone sees only what is still spelled as a
-    /// borrow, so a caller reasoning about values asks this instead.
+    /// reference, so a caller reasoning about values asks this instead.
     pub fn is_reference_shaped(&self, type_id: TypeId) -> bool {
         RefKind::from_resolved(self.get(type_id)).is_some()
             || self.box_payload_of(type_id).is_some()
@@ -3486,12 +3486,12 @@ impl TypeTable {
     /// `false`, so an unclassified wrapper stays writable.
     pub fn is_mut_box(&self, wrapper: TypeId) -> bool {
         self.box_payload_types.get(wrapper).is_some()
-            && !matches!(self.spelled_borrow(wrapper), Some((_, RefKind::Shared)))
+            && !matches!(self.spelled_ref(wrapper), Some((_, RefKind::Shared)))
     }
 
-    /// How `id`'s own slot spells a borrow, or `None` when it is not one. The
-    /// sole reader of a redefined borrow; every other view answers `Box<T>`.
-    fn spelled_borrow(&self, id: TypeId) -> Option<(TypeId, RefKind)> {
+    /// How `id`'s own slot spells a reference, or `None` when it is not one.
+    /// The sole reader of a redefined reference; every other view answers `Box<T>`.
+    fn spelled_ref(&self, id: TypeId) -> Option<(TypeId, RefKind)> {
         match *self.types.get(id)? {
             ResolvedType::Ref(payload) => Some((payload, RefKind::Shared)),
             ResolvedType::MutRef(payload) => Some((payload, RefKind::Mut)),
@@ -5778,10 +5778,10 @@ impl TypeTable {
     }
 
     /// [`Self::type_name`] as the type read before `boxing::prepare_types`
-    /// redefined a borrow into `Box<T>`: what the source wrote, `&i32`.
+    /// redefined a reference into `Box<T>`: what the source wrote, `&i32`.
     #[must_use]
     pub fn type_name_unboxed(&self, id: TypeId) -> String {
-        match self.spelled_borrow(id) {
+        match self.spelled_ref(id) {
             Some((payload, RefKind::Shared)) => format!("&{}", self.type_name_unboxed(payload)),
             Some((payload, RefKind::Mut)) => format!("&mut {}", self.type_name_unboxed(payload)),
             None => self.type_name(id),
@@ -6106,7 +6106,7 @@ impl TypeTable {
     }
 
     /// [`Self::mangle_type_arg_rowless`] as the type read *before*
-    /// `boxing::prepare_types` redefined every borrowed `TypeId` into `Box<T>`,
+    /// `boxing::prepare_types` redefined every reference `TypeId` into `Box<T>`,
     /// so a post-boxing call site names the bridge pre-boxing synthesis minted.
     /// A bridge is keyed by a type its struct takes as an argument, which no
     /// row tells apart.
@@ -6175,7 +6175,7 @@ impl TypeTable {
         match self.get_unerased(id) {
             ResolvedType::Ref(_) | ResolvedType::MutRef(_) => {
                 Receiver::Ref(RefKind::from_resolved(self.get(id)).expect(
-                    "a borrow unerased is a borrow erased: `get_unerased` resolves the \
+                    "a reference unerased is a reference erased: `get_unerased` resolves the \
                      box redefinition, the one rewrite that makes the two views differ",
                 ))
             }
@@ -6283,8 +6283,8 @@ impl TypeTable {
     }
 
     /// [`Self::fq_type_name`] as the type read *before* `boxing::prepare_types`
-    /// redefined every borrowed `TypeId` into `Box<T>`. Every shape recurses,
-    /// so a borrow nested anywhere in the spelling comes back as one.
+    /// redefined every reference `TypeId` into `Box<T>`. Every shape recurses,
+    /// so a reference nested anywhere in the spelling comes back as one.
     pub fn fq_type_name_unboxed(&self, id: TypeId) -> FqTypeName {
         self.fq_type_name_spelled(id, true)
     }
@@ -6314,10 +6314,10 @@ impl TypeTable {
             RowSpelling::Everywhere => RowSpelling::Everywhere,
             RowSpelling::OutsideArgs | RowSpelling::Nowhere => RowSpelling::Nowhere,
         };
-        // Only a borrow is read off the slot's own type. Every other shape
+        // Only a reference is read off the slot's own type. Every other shape
         // keeps the erased view below, where ids that erase together must
         // answer one name.
-        if unboxed && let Some((payload, kind)) = self.spelled_borrow(id) {
+        if unboxed && let Some((payload, kind)) = self.spelled_ref(id) {
             return self
                 .fq_type_name_spelled_in(payload, unboxed, rows)
                 .with_reference(kind);
@@ -8917,7 +8917,7 @@ pub struct BuiltinDeclaration {
     pub returns: Option<ReturnConvention>,
     /// What the call keeps beyond it, as the storage implies.
     pub retains: Vec<RetainSpec<usize>>,
-    /// Positions the declaration takes through a reference, which lend it the
+    /// Positions the declaration takes through a reference, which hand it the
     /// argument's storage.
     pub reference_params: IndexSet<usize>,
     /// Positions the declaration takes by `&mut`, the only ones it can write
@@ -9540,7 +9540,7 @@ pub struct TirParam {
     pub type_id: TypeId,
     pub local_index: u32,
     pub is_mut: bool,
-    /// The parameter is a `&mut T` borrow (captured here before the boxing
+    /// The parameter is a `&mut T` (captured here before the boxing
     /// plan rewrites `&mut T` and `&T` to the same `Box<T>` type, erasing the
     /// distinction). A `&T` cannot be written through, so only a `&mut`
     /// parameter can mutate the caller's argument storage.
@@ -10161,8 +10161,8 @@ mod tests {
     }
 
     /// A redefinition reaches every view of the type: only `is_mut_box` reads
-    /// the borrow left in the slot. The spelling also leaves `intern`, so a
-    /// later ask for it mints a live borrow.
+    /// the reference left in the slot. The spelling also leaves `intern`, so a
+    /// later ask for it mints a live reference.
     #[test]
     fn a_redefinition_reaches_every_view_of_the_type() {
         let mut table = TypeTable::new();
@@ -10180,10 +10180,10 @@ mod tests {
         assert_matches!(table.get(minted), ResolvedType::MutRef(TypeTable::I32));
     }
 
-    /// `&T` and `&mut T` share one `Box<T>`, so the borrow left in the slot is
-    /// the only thing that still tells a writable box from a shared one.
+    /// `&T` and `&mut T` share one `Box<T>`, so the reference left in the slot
+    /// is the only thing that still tells a writable box from a shared one.
     #[test]
-    fn a_redefined_borrow_still_says_whether_it_was_mut() {
+    fn a_redefined_ref_still_says_whether_it_was_mut() {
         let mut table = TypeTable::new();
         let shared = table.intern(ResolvedType::Ref(TypeTable::I32));
         let mutable = table.intern(ResolvedType::MutRef(TypeTable::I32));
@@ -10197,7 +10197,7 @@ mod tests {
     }
 
     /// `retain` rebuilds the intern map from the surviving slots, and a
-    /// retired borrow is still spelled as one there.
+    /// retired reference is still spelled as one there.
     #[test]
     fn retain_leaves_a_retired_spelling_retired() {
         let mut table = TypeTable::new();

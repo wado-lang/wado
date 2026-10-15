@@ -948,7 +948,7 @@ fn method_call_info_for_type(
     let tt = ctx.tt;
     let resolved = tt.borrow().get(type_id).clone();
     match resolved {
-        // In generic code `&T` and `&X::Item` borrow a value of the pointee, so
+        // In generic code `&T` and `&X::Item` refer to a value of the pointee, so
         // they format as it. A reference over any other type keeps the ref
         // blanket (`${&x:?}` → `&42`), whether or not it mentions a parameter.
         ResolvedType::Ref(inner) | ResolvedType::MutRef(inner)

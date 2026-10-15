@@ -103,7 +103,7 @@ pub fn synthesize(project: Package) -> Result<Package, SynthesisError> {
 
     // Insert `resource.drop` for every owned Component Model resource that is
     // never transferred. Runs before CM-binding synthesis, whose rewrite of
-    // resource method calls would obscure the borrow-vs-transfer distinction.
+    // resource method calls would obscure the reference-vs-transfer distinction.
     let mut project = project;
     resource_cleanup::elaborate_resource_drops(&mut project);
 

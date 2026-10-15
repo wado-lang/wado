@@ -2,8 +2,8 @@
 //! `resource.drop` exactly once and Wado has no destructors, so this inserts a
 //! drop wherever a value is still owned at the end of its scope. A resource is
 //! *transferred* when passed by value, returned, or placed in an aggregate — not
-//! by a borrowing receiver or a `&` — so the drop cannot double-free. A
-//! temporary that is only borrowed has no other owner, so it is spilled into a
+//! by a `&self` receiver or a `&` — so the drop cannot double-free. A
+//! temporary that is only referenced has no other owner, so it is spilled into a
 //! local that drops when its statement ends.
 
 use crate::canonical::{CanonicalIntrinsic, CmDecl};
@@ -30,7 +30,7 @@ struct Live {
     local: u32,
     name: String,
     type_id: TypeId,
-    /// A borrowed temporary spilled by [`spill_temporary`], owned by its
+    /// A referenced temporary spilled by [`spill_temporary`], owned by its
     /// statement rather than by the enclosing block.
     temporary: bool,
 }
@@ -182,7 +182,7 @@ impl<'a> Resources<'a> {
     ///
     /// `GenericResource` (`Future` / `Stream`) is opaque: those handles have
     /// their own explicit drop discipline and must not be touched here. So is
-    /// a reference — a borrowed place owns nothing — and an unrestricted
+    /// a reference — a referenced place owns nothing — and an unrestricted
     /// resource, which is never dropped.
     fn layout(&self, type_id: TypeId) -> Layout<'a> {
         let tt = self.tt;
@@ -279,10 +279,11 @@ struct CalleeFacts {
     /// ownership of the receiver (e.g. `Result::unwrap`, which moves the
     /// wrapped value out).
     owned_self: IndexSet<String>,
-    /// Functions that borrow a parameter and return a type parameter, such as
-    /// `List::index_value`. The move check cannot see a generic body return a
-    /// resource out of its borrow, so the result may alias the borrowed
-    /// storage (WEP 2026-05-21, "No move out of a borrow"), and it is no
+    /// Functions that take a parameter by reference and return a type
+    /// parameter, such as `List::index_value`. The move check cannot see a
+    /// generic body return a resource out of its reference, so the result may
+    /// alias the referenced storage (WEP 2026-05-21, "No move out of a
+    /// reference"), and it is no
     /// temporary of the caller's.
     alias_returning: IndexSet<String>,
 }
@@ -947,7 +948,7 @@ fn elab_stmt(
 }
 
 /// Emit `drops`, then the statement `leave` builds around `value`. With drops
-/// to run, `value` is spilled ahead of them: it may borrow a resource they
+/// to run, `value` is spilled ahead of them: it may refer to a resource they
 /// release.
 fn leave_after_drops(
     value: Option<TirExpr>,
@@ -1063,15 +1064,15 @@ fn elab_value_expr(mut expr: TirExpr, owned: &mut Owned, cx: &mut Cx) -> TirExpr
 }
 
 /// Elaborate `expr` in place, in evaluation order: clear the slot of every
-/// owned resource it transfers, spill every temporary it only borrows (see
+/// owned resource it transfers, spill every temporary it only references (see
 /// [`spill_temporary`]), and elaborate each nested scope.
 ///
 /// `consuming` is `true` when the position transfers ownership of the value
-/// placed in it. A borrowing position (`&x`, a `&self` receiver, a field read,
+/// placed in it. A referencing position (`&x`, a `&self` receiver, a field read,
 /// an operator operand, a `matches` test) transfers nothing.
 ///
 /// The match is exhaustive so a new `TirExprKind` cannot silently escape
-/// ownership accounting: a missed transfer drops twice, a missed borrow leaks.
+/// ownership accounting: a missed transfer drops twice, a missed reference leaks.
 fn elab_expr(expr: &mut TirExpr, consuming: bool, owned: &mut Owned, cx: &mut Cx) {
     if !consuming && is_temporary(&expr.kind, cx) && cx.carries_resource(expr.type_id) {
         elab_expr(expr, true, owned, cx);
@@ -1092,7 +1093,7 @@ fn elab_expr(expr: &mut TirExpr, consuming: bool, owned: &mut Owned, cx: &mut Cx
             expr: inner,
         } => elab_expr(inner, false, owned, cx),
         // Casts and projections keep the surrounding ownership context:
-        // `&(h as Fields)` must still see `h` as borrowed.
+        // `&(h as Fields)` must still see `h` as referenced.
         TirExprKind::Unary { expr: inner, .. }
         | TirExprKind::Cast { expr: inner, .. }
         | TirExprKind::TupleSpread { expr: inner }
@@ -1101,7 +1102,7 @@ fn elab_expr(expr: &mut TirExpr, consuming: bool, owned: &mut Owned, cx: &mut Cx
         | TirExprKind::VariantPayload { expr: inner, .. } => {
             elab_expr(inner, consuming, owned, cx);
         }
-        // Reading a field that owns nothing only borrows the aggregate.
+        // Reading a field that owns nothing only reads the aggregate.
         TirExprKind::FieldAccess { expr: inner, .. } => {
             let moves_out = consuming && cx.carries_resource(type_id);
             elab_expr(inner, moves_out, owned, cx);
@@ -1244,7 +1245,7 @@ fn elab_expr(expr: &mut TirExpr, consuming: bool, owned: &mut Owned, cx: &mut Cx
 }
 
 /// Whether evaluating `kind` produces a fresh value rather than reading a
-/// place. Borrowing such a value leaves it with no owner but the statement.
+/// place. Referencing such a value leaves it with no owner but the statement.
 fn is_temporary(kind: &TirExprKind, cx: &Cx) -> bool {
     if let TirExprKind::Call { func, .. } = kind {
         return !cx.callees.alias_returning.contains(&callee_key(func));
@@ -1265,7 +1266,7 @@ fn is_temporary(kind: &TirExprKind, cx: &Cx) -> bool {
     )
 }
 
-/// Move the borrowed temporary `expr` into a fresh local, in place and so in
+/// Move the referenced temporary `expr` into a fresh local, in place and so in
 /// evaluation order (`{ let $temp = expr; $temp }`), owned until the statement
 /// holding it ends.
 fn spill_temporary(expr: &mut TirExpr, owned: &mut Owned, cx: &mut Cx) {
