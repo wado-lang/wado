@@ -26,8 +26,12 @@ pub(super) struct StructInstState {
     pub type_substitutions: IndexMap<TypeId, TypeId>,
     /// Map from `GenericInstance` `TypeId` to mangled struct name
     pub type_to_mangled_name: IndexMap<TypeId, String>,
-    /// Each anonymous shape the module holds a struct for, at its site.
+    /// Each written anonymous shape's site, which a shape substituted from it
+    /// reports too.
     pub anon_sites: IndexMap<AnonStructId, Span>,
+    /// How many anonymous shapes the type table held when the last batch was
+    /// read for substituted ones.
+    pub anon_scanned: usize,
 }
 
 /// Tracks function monomorphization state
@@ -127,6 +131,7 @@ impl Monomorphizer {
                 type_substitutions: IndexMap::default(),
                 type_to_mangled_name: IndexMap::default(),
                 anon_sites: IndexMap::default(),
+                anon_scanned: 0,
             },
             functions: FuncInstState {
                 instantiated: IndexMap::default(),

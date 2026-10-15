@@ -1922,6 +1922,21 @@ impl TypeTable {
         }
     }
 
+    /// The closed shapes a substitution interned at registry index `from` or
+    /// later, and the index the registry ends at, to ask from next time.
+    #[must_use]
+    pub fn closed_substituted_shapes_since(&self, from: usize) -> (Vec<AnonStructId>, usize) {
+        let end = self.anon_structs.len();
+        let shapes = (from..end)
+            .map(|i| AnonStructId(u32::try_from(i).expect("anon struct space")))
+            .filter(|&id| {
+                self.anon_structs[id.0 as usize].substituted_from.is_some()
+                    && !self.anon_shape_is_open(id)
+            })
+            .collect();
+        (shapes, end)
+    }
+
     /// The fields a struct of shape `id` holds: a literal's as written, a
     /// template's one per hole typed by [`Self::hole_field_type`].
     pub fn anon_shape_struct_fields(&mut self, id: AnonStructId) -> Vec<(String, TypeId)> {

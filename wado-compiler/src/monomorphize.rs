@@ -22,8 +22,8 @@ use crate::hashmap::IndexMap;
 use crate::module_source::ModuleSource;
 use crate::name::FreeFunctionName;
 use crate::tir::{
-    AnonStructId, MonomorphInfo, ResolvedType, StructDef, TemplateId, TirFunction, TirModule,
-    TirStruct, TypeId, TypeTable,
+    MonomorphInfo, ResolvedType, StructDef, TemplateId, TirFunction, TirModule, TirStruct, TypeId,
+    TypeTable,
 };
 use crate::tir_visitor::TirRefVisitor;
 
@@ -243,29 +243,15 @@ impl Monomorphizer {
         new_structs
     }
 
-    /// A struct for each closed anonymous shape the module lacks one for:
-    /// substituting into an open shape interns one no literal wrote.
+    /// A struct for each closed anonymous shape substitution interned since the
+    /// last call: substituting into an open shape interns one no literal wrote.
     fn substituted_anon_structs(&mut self, tt: &mut TypeTable) -> Vec<TirStruct> {
-        let shapes: Vec<AnonStructId> = tt
-            .iter_type_ids()
-            .filter_map(|id| match tt.get(id) {
-                ResolvedType::Struct {
-                    def: StructDef::Anon(shape),
-                    ..
-                } if !self.structs.anon_sites.contains_key(shape)
-                    && !tt.anon_struct_is_synthetic(*shape)
-                    && !tt.anon_shape_is_open(*shape) =>
-                {
-                    Some(*shape)
-                }
-                _ => None,
-            })
-            .collect();
+        let (shapes, end) = tt.closed_substituted_shapes_since(self.structs.anon_scanned);
+        self.structs.anon_scanned = end;
         shapes
             .into_iter()
             .map(|shape| {
                 let span = self.structs.anon_sites[&tt.anon_struct_written_origin(shape)];
-                self.structs.anon_sites.insert(shape, span);
                 let fields = tt.anon_shape_struct_fields(shape);
                 TirStruct::anonymous(
                     shape,
