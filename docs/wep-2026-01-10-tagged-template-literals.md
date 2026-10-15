@@ -559,10 +559,8 @@ serial advances on read, so a template nested inside a hole mints its own
   threshold refuses.
 - `lower/translate.rs` folds `builtin::hole_get` / `hole_fmt` calls to the
   bridge names beside its `struct_field_get` arm; `name.rs` owns both names.
-- A template shape is not yet generic, so `reflect_bridge`'s
-  post-monomorphization minting is not involved. The roadmap's generic holes
-  change that: a shape generic over a type parameter needs its bridges minted
-  per instantiation.
+- A template shape is not yet open, so nothing mints bridges after
+  monomorphization. The roadmap's generic template shapes change that.
 
 ### Fixtures
 
@@ -610,15 +608,44 @@ a path of its own that renders each hole before it evaluates the next, and a
 hole's specifier is checked only where something renders the hole. The items
 below close that, in this order.
 
-- [ ] Each hole checked against its specifier's trait at the template, a
-  generic hole through the declared bounds, as the Decision states. Done when
-  `` format`${x}` `` and `` `${x}` `` over `x: X` each compile under
+- [ ] Open anonymous shapes. A shape whose types mention a type parameter of
+  the enclosing item is open. An anonymous shape's identity is its types, so
+  substituting into an open shape interns the substituted shape: `{ a: X }` at
+  `X = i32` is the `{ a: i32 }` a concrete body writes. `TypeTable::subst_rec`
+  re-interns, and `any_constituent` looks into the shape, so
+  `contains_type_param` reports it open. An open shape emits no `TirStruct`.
+  Monomorphization emits one for each concrete shape it interns, through the
+  builder `mint_anonymous_struct` uses.
+
+  A generic struct per shape was the alternative. It would need a `DefId`, and
+  the `DefTable` is fixed before elaboration mints a shape. It would also make
+  `{ a: X }` at `X = i32` a type apart from `{ a: i32 }`.
+
+  Done when a struct literal whose field mentions a type parameter compiles and
+  runs at two instantiations. Today WIR build panics on it with
+  `unsubstituted TypeParam`.
+
+- [ ] The specifier's trait checked at the template. `resolve_template_parts`
+  asks `type_implements_trait` for each hole's trait, so the check reads the
+  declared bounds and runs under either form and every tag. Today WIR build
+  catches a concrete hole that lacks the trait only when it finds the call it
+  cannot resolve, and a generic hole only once instantiated.
+
+  Done when `` format`${x}` `` and `` `${x}` `` over `x: X` each compile under
   `X: Display` and report the same missing-bound error without it, `${x:x}`
-  reports a missing `LowerHex` under `X: Display` alone, a tag's pack bound is
-  checked against the declared bounds, a tag that never calls `fmt` rejects a
-  hole lacking its specifier's trait, `TemplateHoleGeneric` is gone with the
-  `$hole_fmt` and reflect bridges minted per instantiation, and every package
-  in the repository, the stdlib included, compiles under the new check.
+  reports a missing `LowerHex` under `X: Display` alone, a tag that never calls
+  `fmt` rejects a hole lacking its specifier's trait, and every package in the
+  repository, the stdlib included, compiles under the new check.
+
+- [ ] Generic template shapes. `TemplateHoleGeneric` goes, and a template shape
+  is open as the first item makes any shape. Each concrete template shape that
+  monomorphization interns gets its `ReflectTemplate` impl, `$hole_get` and
+  `$hole_fmt` from the builders synthesis runs for a written shape. They run
+  inside the fixpoint, so what their bodies call is instantiated in turn.
+
+  Done when `` tag`${x}` `` over `x: X` reaches the tag at each instantiation,
+  and a tag's pack bound is checked against the declared bounds.
+
 - [ ] `format` at the direct lowering's cost. Read off `wado dump -O2`, the
   direct lowering does four things a `format` site does not:
   - It sizes the buffer from the segment lengths (`String::with_capacity`).
