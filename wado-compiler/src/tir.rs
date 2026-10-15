@@ -1964,6 +1964,11 @@ impl TypeTable {
         id: AnonStructId,
         leaves: &Leaves<'_>,
     ) -> TypeId {
+        // A row erased or an effect parameter answered changes no layout, and
+        // re-interning a closed shape over one would part a value from its type.
+        if !self.anon_shape_is_open(id) {
+            return type_id;
+        }
         let entry = &self.anon_structs[id.0 as usize];
         let module = entry.module.clone();
         let shape = match entry.shape.clone() {
