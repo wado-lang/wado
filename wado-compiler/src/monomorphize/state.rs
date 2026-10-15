@@ -60,7 +60,9 @@ pub(super) struct FuncInstState {
     /// emitted as written.
     pub templates: Rc<Templates>,
     /// Per module, the names written impls define; one for a single instance
-    /// wins over the template's (coherence Rule 1, WEP 2026-03-14 §5).
+    /// wins over the template's (coherence Rule 1, WEP 2026-03-14 §5). A
+    /// shape method instantiated at a concrete shape joins them, so a second
+    /// origin reaching the shape does not define it again.
     pub concrete_names: IndexMap<ModuleSource, IndexSet<String>>,
 }
 

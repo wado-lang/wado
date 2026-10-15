@@ -655,7 +655,7 @@ below close that, in this order.
 
 - [ ] Generic template shapes. `TemplateHoleGeneric` goes, and a template shape
   is open as the first item makes any shape. Each concrete template shape that
-  monomorphization interns instantiates its origin's `ReflectTemplate` impl as
+  monomorphization reaches instantiates each origin's `ReflectTemplate` impl as
   the first item instantiates any shape's methods. `$hole_get` and `$hole_fmt`
   are named after the shape rather than filed under it as methods, so they are
   instantiated the same way by name. Both happen inside the fixpoint, so what
