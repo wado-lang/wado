@@ -16,7 +16,7 @@ use crate::name::{
 };
 use crate::tir::{
     EffectRef, FunctionRef, InstancePattern, REFLECT_NEWTYPE_BASE, ResolvedType,
-    SubstitutionContext, TirField, TirLiteralPattern, TirStruct, TypeId, TypeKey, TypeTable,
+    SubstitutionContext, TirLiteralPattern, TirStruct, TypeId, TypeKey, TypeTable,
 };
 use crate::token::Span;
 
@@ -4638,26 +4638,16 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         };
         self.sem.decls.anon_struct_fields.insert(shape, field_info);
 
-        let tir_fields: Vec<TirField> = fields
-            .iter()
-            .enumerate()
-            .map(|(i, (fname, fty))| {
-                TirField::plain(fname.clone(), Visibility::Public, *fty, i as u32, span)
-            })
-            .collect();
-
-        self.sem.decls.pending_anonymous_structs.push(TirStruct {
-            def: head,
-            type_args: Vec::new(),
-            name: anon_name.to_string(),
-            module_source: self.current_module_source.clone(),
-            visibility: Visibility::Private,
-            type_params: Vec::new(),
-            monomorph_info: None,
-            fields: tir_fields,
-            span,
-            wire_name_policy: None,
-        });
+        self.sem
+            .decls
+            .pending_anonymous_structs
+            .push(TirStruct::anonymous(
+                shape,
+                anon_name.to_string(),
+                self.current_module_source.clone(),
+                fields,
+                span,
+            ));
 
         struct_type
     }
