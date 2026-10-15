@@ -513,7 +513,9 @@ impl WebGpuBackend {
             let commands = encoder.finish(Option::Some(GpuCommandBufferDescriptor { label: null }));
             self.queue.submit([&commands]);
         }
-        while let Some(_) = self.bound.pop() {
+        // Bound, since a popped value nothing binds is not dropped: the
+        // resource ownership WEP's known gap.
+        while let Some(bound) = self.bound.pop() {
         }
     }
 
