@@ -1330,7 +1330,13 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::new"(buf) {
 }
 
 fn "core:prelude/format.wado/core:prelude/string.wado/String^core:prelude/traits.wado/Inspect::inspect"(self, f) {
-    "core:prelude/format.wado/core/prelude/format.wado/inspect_text<core:prelude/string.wado/String>"(f, self.repr, self.used);
+    let $av_3: i32;
+    $av_3 = self.used;
+    let $array_clone_src_2: ref Array<u8>;
+    $array_clone_src_2 = self.repr;
+    let $array_clone_dst_3: ref Array<u8>;
+    builtin::array_copy<u8>(local.tee $array_clone_dst_3(builtin::array_new<u8>($av_3)), 0, $array_clone_src_2, 0, $av_3);
+    "core:prelude/format.wado/core/prelude/format.wado/inspect_text<core:prelude/string.wado/String>"(f, $array_clone_dst_3, $av_3);
 }
 
 fn "core:prelude/string.wado/core:prelude/string.wado/String::with_capacity"(capacity) {

@@ -1253,18 +1253,28 @@ impl FunctionTranslator<'_, '_> {
             }
         }
 
-        let struct_type = self.ref_type_id(self.operand_type_id(op));
         let (prelude, read_whole) = self.spill_operand(op, "$mv_arg");
-        let reads = fields
+        let reads = self.field_reads(op, &read_whole, fields);
+        (prelude, reads)
+    }
+
+    /// A read of each of `fields` off `whole`, the value `op` evaluates to.
+    fn field_reads(
+        &self,
+        op: Operand,
+        whole: &WirInstr,
+        fields: &[(String, TypeId)],
+    ) -> Vec<WirInstr> {
+        let struct_type = self.ref_type_id(self.operand_type_id(op));
+        fields
             .iter()
             .map(|(field_name, field_type)| WirInstr::StructGet {
                 type_id: struct_type.clone(),
                 field_name: field_name.clone(),
-                expr: Box::new(read_whole.clone()),
+                expr: Box::new(whole.clone()),
                 result_ty: self.ctx.type_id_to_wir_type(self.type_table, *field_type),
             })
-            .collect();
-        (prelude, reads)
+            .collect()
     }
 
     /// A struct literal's initialisers as the callee's N arguments, so the
@@ -2228,13 +2238,15 @@ impl FunctionTranslator<'_, '_> {
         split: &IndexMap<usize, SplitParam>,
         value_block: bool,
     ) -> (Vec<WirInstr>, Vec<WirInstr>) {
+        let local_read: Vec<bool> = ordered.iter().map(|&op| self.reads_a_local(op)).collect();
         // Whether evaluating each argument runs code: a local read runs none,
         // and a promoted value none unless its tree names an extraction source.
         let runs_code: Vec<bool> = ordered
             .iter()
-            .map(|&op| match op {
+            .zip(&local_read)
+            .map(|(&op, &local)| match op {
                 Operand::Value(v) => self.body.values.names_extraction_source(v),
-                Operand::Expr(e) => !matches!(self.body.exprs[e].kind, ExprKind::Local { .. }),
+                Operand::Expr(_) => !local,
             })
             .collect();
         // A diverging argument stays in its place: the call after it is dead
@@ -2244,18 +2256,20 @@ impl FunctionTranslator<'_, '_> {
             this.is_stackless_type(ty) && !this.type_table.is_never(ty)
         };
         // A split `&S` reads its referent's fields at the call, as the callee
-        // would have, so every argument after it that runs code runs before
+        // would have, so every argument after it that may write runs before
         // those reads.
         let first_borrowed = (0..ordered.len()).find(|i| split.get(i).is_some_and(|p| p.borrowed));
+        let may_write: Vec<bool> = ordered.iter().map(|&op| !self.writes_nothing(op)).collect();
         let runs_before_split_reads =
-            |i: usize| first_borrowed.is_some_and(|r| i > r) && runs_code[i];
+            |i: usize| first_borrowed.is_some_and(|r| i > r) && may_write[i];
+        // A local read stays cheap to repeat, so a split parameter takes its
+        // fields off one at the call, with nothing evaluated ahead.
+        let split_ahead = |i: usize| split.contains_key(&i) && !local_read[i];
         // An argument evaluated into the prelude runs ahead of every argument
         // left on the stack, so each one to its left is spilled to hold source
         // order.
         let evaluated_early = |this: &Self, i: usize, op: Operand| {
-            split.contains_key(&i)
-                || runs_before_split_reads(i)
-                || (erased(this, op) && runs_code[i])
+            split_ahead(i) || runs_before_split_reads(i) || (erased(this, op) && runs_code[i])
         };
         let last_early = ordered
             .iter()
@@ -2271,21 +2285,31 @@ impl FunctionTranslator<'_, '_> {
         let mut prelude = Vec::new();
         let mut call_args = Vec::new();
         for (i, &op) in ordered.iter().enumerate() {
-            if let Some(param) = split.get(&i) {
-                let (p, reads) = self.split_argument(op, &param.fields);
-                prelude.extend(p);
-                call_args.extend(reads);
+            let spilled = last_early.is_some_and(|last| i < last) || runs_before_split_reads(i);
+            if (spilled || split_ahead(i)) && self.type_table.is_never(self.operand_type_id(op)) {
+                // It diverges where it stands, in source order, and leaves no
+                // value, nor fields for a split parameter: the call after it
+                // is dead at any arity.
+                prelude.push(self.translate_operand(op));
+            } else if let Some(param) = split.get(&i) {
+                // A local read where nothing after it runs ahead of the call
+                // reads its fields there; otherwise the value is taken where
+                // it stands, as a later argument may rebind the local, and a
+                // split `&S` still reads its fields at the call, after every
+                // write.
+                if local_read[i] && !spilled {
+                    let whole = self.translate_operand(op);
+                    call_args.extend(self.field_reads(op, &whole, &param.fields));
+                } else {
+                    let (p, reads) = self.split_argument(op, &param.fields);
+                    prelude.extend(p);
+                    call_args.extend(reads);
+                }
             } else if erased(self, op) {
                 if runs_code[i] {
                     prelude.push(self.translate_operand(op));
                 }
-            } else if last_early.is_some_and(|last| i < last) || runs_before_split_reads(i) {
-                if self.type_table.is_never(self.operand_type_id(op)) {
-                    // It diverges where it stands, in source order, and leaves
-                    // no value: the call after it is dead at any arity.
-                    prelude.push(self.translate_operand(op));
-                    continue;
-                }
+            } else if spilled {
                 let (p, read) = self.spill_operand(op, "$arg_spill");
                 prelude.extend(p);
                 call_args.push(read);
@@ -2298,6 +2322,44 @@ impl FunctionTranslator<'_, '_> {
         }
         assert_eq!(last_early.is_some(), !prelude.is_empty());
         (prelude, call_args)
+    }
+
+    /// Whether `op` reads a local, or borrows one: what translates to a
+    /// `local.get` alone.
+    fn reads_a_local(&self, op: Operand) -> bool {
+        let Operand::Expr(e) = op else {
+            return false;
+        };
+        match &self.body.exprs[e].kind {
+            ExprKind::Local { .. } => true,
+            ExprKind::Unary {
+                op: NirUnaryOp::Ref | NirUnaryOp::MutRef,
+                expr,
+            } => self.reads_a_local(*expr),
+            _ => false,
+        }
+    }
+
+    /// Whether evaluating `op` stores nothing: reads and arithmetic alone.
+    fn writes_nothing(&self, op: Operand) -> bool {
+        let e = match op {
+            Operand::Value(v) => return !self.body.values.names_extraction_source(v),
+            Operand::Expr(e) => e,
+        };
+        match &self.body.exprs[e].kind {
+            ExprKind::Local { .. } | ExprKind::GlobalVarGet { .. } | ExprKind::PackedArray(_) => {
+                true
+            }
+            ExprKind::Unary { expr, .. }
+            | ExprKind::Cast { expr, .. }
+            | ExprKind::FieldAccess { expr, .. } => self.writes_nothing(*expr),
+            ExprKind::Binary { left, right, .. }
+            | ExprKind::Index {
+                expr: left,
+                index: right,
+            } => self.writes_nothing(*left) && self.writes_nothing(*right),
+            _ => false,
+        }
     }
 
     /// Whether [`Self::wrap_call_with_prelude`] holds a prelude and the call's

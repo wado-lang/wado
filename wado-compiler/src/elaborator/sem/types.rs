@@ -9,7 +9,7 @@ use crate::defs::DefId;
 use crate::elaborator::sig;
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::module_source::ModuleSource;
-use crate::name::{FqTraitName, FqTypeName, LocalMethodName, Receiver};
+use crate::name::{DeclaredHead, FqTraitName, FqTypeName, LocalMethodName, Receiver};
 use crate::tir;
 use crate::tir::{EffectRef, FunctionRef, TirEffectOp, TirTypeParam, TypeId, TypeTable};
 use crate::token::Span;
@@ -973,8 +973,7 @@ pub(crate) struct HandlerEffectEntry {
     /// The `impl <effect> for <handler>` block this binding installs — the only
     /// thing naming the methods dispatch synthesis routes operations to.
     pub(crate) impl_def: Option<DefId>,
-    pub(crate) name: String,
-    pub(crate) module_source: ModuleSource,
+    pub(crate) effect: DeclaredHead,
     pub(crate) trait_type_args: Vec<TypeId>,
 }
 

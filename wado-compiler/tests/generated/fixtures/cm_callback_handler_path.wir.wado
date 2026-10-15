@@ -29,14 +29,14 @@ struct cm_callback_handler_path.wado//$Closure_3 {  // TypeId(5)
     mut $capture_0: ref "core:prelude//List<i32>",
 }
 
-struct cm_callback_handler_path.wado//$Dispatch_Target {  // TypeId(6)
-    mut outer: ref null "cm_callback_handler_path.wado//$Dispatch_Target",
+struct cm_callback_handler_path.wado//$Dispatch_cm_callback_handler_path.wado/Target {  // TypeId(6)
+    mut outer: ref null "cm_callback_handler_path.wado//$Dispatch_cm_callback_handler_path.wado/Target",
     mut op_listen: ref struct,
     mut op_fire: ref struct,
 }
 
-struct cm_callback_handler_path.wado//$Dispatch_Demo {  // TypeId(7)
-    mut outer: ref null "cm_callback_handler_path.wado//$Dispatch_Demo",
+struct cm_callback_handler_path.wado//$Dispatch_cm_callback_handler_path.wado/Demo {  // TypeId(7)
+    mut outer: ref null "cm_callback_handler_path.wado//$Dispatch_cm_callback_handler_path.wado/Demo",
     mut op_target: ref struct,
 }
 
@@ -204,8 +204,8 @@ import fn wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code 
 import fn wasi/task-return from "wasi/task-return";
 import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 
-global mut global:cm_callback_handler_path.wado::$effect_Demo: ref null "cm_callback_handler_path.wado//$Dispatch_Demo" = ref.null none;
-global mut global:cm_callback_handler_path.wado::$effect_Target: ref null "cm_callback_handler_path.wado//$Dispatch_Target" = ref.null none;
+global mut global:cm_callback_handler_path.wado::$effect_cm_callback_handler_path.wado/Demo: ref null "cm_callback_handler_path.wado//$Dispatch_cm_callback_handler_path.wado/Demo" = ref.null none;
+global mut global:cm_callback_handler_path.wado::$effect_cm_callback_handler_path.wado/Target: ref null "cm_callback_handler_path.wado//$Dispatch_cm_callback_handler_path.wado/Target" = ref.null none;
 global mut global:core:rt::CM_CALLBACKS: ref null "core:prelude//List<fn()->()>" = ref.null none;
 global mut global:cm_callback_handler_path.wado::$modules_initialized: bool = 0;
 global global:cm_callback_handler_path.wado::$const_obj_0: ref Array<u8> = array.new_fixed<u8>(115, 101, 101, 110, 61);
@@ -227,14 +227,14 @@ fn "cm_callback_handler_path.wado/run"() with Stdout {
     let seen: ref "core:prelude//List<i32>";
     let $local_4_4: ref "core:prelude/string.wado//String";
     let $local_5: ref "core:prelude/format.wado//Formatter";
-    let $save_Demo: ref null "cm_callback_handler_path.wado//$Dispatch_Demo";
-    let $d_Demo: ref "cm_callback_handler_path.wado//$Dispatch_Demo";
-    let $save_Target: ref null "cm_callback_handler_path.wado//$Dispatch_Target";
-    let $d_Target: ref "cm_callback_handler_path.wado//$Dispatch_Target";
-    let $local_0: ref null "cm_callback_handler_path.wado//$Dispatch_Demo";
+    let $save_cm_callback_handler_path.wado/Demo: ref null "cm_callback_handler_path.wado//$Dispatch_cm_callback_handler_path.wado/Demo";
+    let $d_cm_callback_handler_path.wado/Demo: ref "cm_callback_handler_path.wado//$Dispatch_cm_callback_handler_path.wado/Demo";
+    let $save_cm_callback_handler_path.wado/Target: ref null "cm_callback_handler_path.wado//$Dispatch_cm_callback_handler_path.wado/Target";
+    let $d_cm_callback_handler_path.wado/Target: ref "cm_callback_handler_path.wado//$Dispatch_cm_callback_handler_path.wado/Target";
+    let $local_0: ref null "cm_callback_handler_path.wado//$Dispatch_cm_callback_handler_path.wado/Demo";
     let $local_2_15: u64;
     let listener: ref struct;
-    let $local_2_18: ref null "cm_callback_handler_path.wado//$Dispatch_Target";
+    let $local_2_18: ref null "cm_callback_handler_path.wado//$Dispatch_cm_callback_handler_path.wado/Target";
     let rx_52: i32;
     let tx_53: i32;
     $inline__initialize_modules_0: block {
@@ -244,54 +244,54 @@ fn "cm_callback_handler_path.wado/run"() with Stdout {
     };
     mock = struct.new "cm_callback_handler_path.wado//Mock" { listeners: struct.new "core:prelude//List<fn mut(i32)->()>" { repr: array.new_fixed<ref struct>(), used: 0 } };
     seen = struct.new "core:prelude//List<i32>" { repr: array.new_fixed<i32>(), used: 0 };
-    global:cm_callback_handler_path.wado::$effect_Demo = local.tee $d_Demo(struct.new "cm_callback_handler_path.wado//$Dispatch_Demo" { outer: local.tee $save_Demo(global:cm_callback_handler_path.wado::$effect_Demo), op_target: struct.new "canonical//CanonicalClosure_2" { env: struct.new "cm_callback_handler_path.wado//$Closure_0" { $capture_0: mock }, func: ref.func "closure/cm_callback_handler_path.wado/$closure_wrapper_0" } });
-    global:cm_callback_handler_path.wado::$effect_Target = local.tee $d_Target(struct.new "cm_callback_handler_path.wado//$Dispatch_Target" { outer: local.tee $save_Target(global:cm_callback_handler_path.wado::$effect_Target), op_listen: struct.new "canonical//CanonicalClosure_3" { env: struct.new "cm_callback_handler_path.wado//$Closure_1" { $capture_0: mock }, func: ref.func "closure/cm_callback_handler_path.wado/$closure_wrapper_1" }, op_fire: struct.new "canonical//CanonicalClosure_4" { env: struct.new "cm_callback_handler_path.wado//$Closure_2" { $capture_0: mock }, func: ref.func "closure/cm_callback_handler_path.wado/$closure_wrapper_2" } });
-    $local_2_15 = $inline__effect_dispatch__Demo__target_3: block -> u64 {
-        if ref.is_null(local.tee $local_0(global:cm_callback_handler_path.wado::$effect_Demo)) == 0 {
-            global:cm_callback_handler_path.wado::$effect_Demo = local.tee $d_Demo(ref.as_non_null($local_0)).outer;
+    global:cm_callback_handler_path.wado::$effect_cm_callback_handler_path.wado/Demo = local.tee $d_cm_callback_handler_path.wado/Demo(struct.new "cm_callback_handler_path.wado//$Dispatch_cm_callback_handler_path.wado/Demo" { outer: local.tee $save_cm_callback_handler_path.wado/Demo(global:cm_callback_handler_path.wado::$effect_cm_callback_handler_path.wado/Demo), op_target: struct.new "canonical//CanonicalClosure_2" { env: struct.new "cm_callback_handler_path.wado//$Closure_0" { $capture_0: mock }, func: ref.func "closure/cm_callback_handler_path.wado/$closure_wrapper_0" } });
+    global:cm_callback_handler_path.wado::$effect_cm_callback_handler_path.wado/Target = local.tee $d_cm_callback_handler_path.wado/Target(struct.new "cm_callback_handler_path.wado//$Dispatch_cm_callback_handler_path.wado/Target" { outer: local.tee $save_cm_callback_handler_path.wado/Target(global:cm_callback_handler_path.wado::$effect_cm_callback_handler_path.wado/Target), op_listen: struct.new "canonical//CanonicalClosure_3" { env: struct.new "cm_callback_handler_path.wado//$Closure_1" { $capture_0: mock }, func: ref.func "closure/cm_callback_handler_path.wado/$closure_wrapper_1" }, op_fire: struct.new "canonical//CanonicalClosure_4" { env: struct.new "cm_callback_handler_path.wado//$Closure_2" { $capture_0: mock }, func: ref.func "closure/cm_callback_handler_path.wado/$closure_wrapper_2" } });
+    $local_2_15 = $inline__effect_dispatch__cm_callback_handler_path_wado_Demo__target_3: block -> u64 {
+        if ref.is_null(local.tee $local_0(global:cm_callback_handler_path.wado::$effect_cm_callback_handler_path.wado/Demo)) == 0 {
+            global:cm_callback_handler_path.wado::$effect_cm_callback_handler_path.wado/Demo = local.tee $d_cm_callback_handler_path.wado/Demo(ref.as_non_null($local_0)).outer;
             $local_2_15 = block -> u64 {
                 let $indirect_call_1: ref "canonical//CanonicalClosure_2";
-                call_ref "functype/$canonical_closure_fn_2"($indirect_call_1.func, local.tee $indirect_call_1(ref.cast "canonical//CanonicalClosure_2"($d_Demo.op_target)).env);
+                call_ref "functype/$canonical_closure_fn_2"($indirect_call_1.func, local.tee $indirect_call_1(ref.cast "canonical//CanonicalClosure_2"($d_cm_callback_handler_path.wado/Demo.op_target)).env);
             };
-            global:cm_callback_handler_path.wado::$effect_Demo = $local_0;
-            break $inline__effect_dispatch__Demo__target_3: $local_2_15;
+            global:cm_callback_handler_path.wado::$effect_cm_callback_handler_path.wado/Demo = $local_0;
+            break $inline__effect_dispatch__cm_callback_handler_path_wado_Demo__target_3: $local_2_15;
         } else {
-            break $inline__effect_dispatch__Demo__target_3: "cm_callback_handler_path.wado/$cm_binding__Demo_target"();
+            break $inline__effect_dispatch__cm_callback_handler_path_wado_Demo__target_3: "cm_callback_handler_path.wado/$cm_binding__Demo_target"();
         }
         unreachable;
     };
-    $inline__effect_dispatch__Target__listen_4: block {
+    $inline__effect_dispatch__cm_callback_handler_path_wado_Target__listen_4: block {
         listener = struct.new "canonical//CanonicalClosure_1" { env: struct.new "cm_callback_handler_path.wado//$Closure_3" { $capture_0: seen }, func: ref.func "closure/cm_callback_handler_path.wado/$closure_wrapper_3" };
-        if ref.is_null(local.tee $local_2_18(global:cm_callback_handler_path.wado::$effect_Target)) == 0 {
-            global:cm_callback_handler_path.wado::$effect_Target = local.tee $d_Target(ref.as_non_null($local_2_18)).outer;
+        if ref.is_null(local.tee $local_2_18(global:cm_callback_handler_path.wado::$effect_cm_callback_handler_path.wado/Target)) == 0 {
+            global:cm_callback_handler_path.wado::$effect_cm_callback_handler_path.wado/Target = local.tee $d_cm_callback_handler_path.wado/Target(ref.as_non_null($local_2_18)).outer;
             let $indirect_call_2: ref "canonical//CanonicalClosure_3";
-            call_ref "functype/$canonical_closure_fn_3"($indirect_call_2.func, local.tee $indirect_call_2(ref.cast "canonical//CanonicalClosure_3"($d_Target.op_listen)).env, $local_2_15, listener);
-            break $inline__effect_dispatch__Target__listen_4: global:cm_callback_handler_path.wado::$effect_Target = $local_2_18;
+            call_ref "functype/$canonical_closure_fn_3"($indirect_call_2.func, local.tee $indirect_call_2(ref.cast "canonical//CanonicalClosure_3"($d_cm_callback_handler_path.wado/Target.op_listen)).env, $local_2_15, listener);
+            break $inline__effect_dispatch__cm_callback_handler_path_wado_Target__listen_4: global:cm_callback_handler_path.wado::$effect_cm_callback_handler_path.wado/Target = $local_2_18;
         } else {
-            break $inline__effect_dispatch__Target__listen_4: "cm_callback_handler_path.wado/$cm_binding__Target_listen"($local_2_15, "core:rt/cm_callback_key"(listener));
+            break $inline__effect_dispatch__cm_callback_handler_path_wado_Target__listen_4: "cm_callback_handler_path.wado/$cm_binding__Target_listen"($local_2_15, "core:rt/cm_callback_key"(listener));
         }
     };
-    $inline__effect_dispatch__Target__fire_5: block {
-        if ref.is_null(local.tee $local_2_18(global:cm_callback_handler_path.wado::$effect_Target)) == 0 {
-            global:cm_callback_handler_path.wado::$effect_Target = local.tee $d_Target(ref.as_non_null($local_2_18)).outer;
+    $inline__effect_dispatch__cm_callback_handler_path_wado_Target__fire_5: block {
+        if ref.is_null(local.tee $local_2_18(global:cm_callback_handler_path.wado::$effect_cm_callback_handler_path.wado/Target)) == 0 {
+            global:cm_callback_handler_path.wado::$effect_cm_callback_handler_path.wado/Target = local.tee $d_cm_callback_handler_path.wado/Target(ref.as_non_null($local_2_18)).outer;
             let $indirect_call_3: ref "canonical//CanonicalClosure_4";
-            call_ref "functype/$canonical_closure_fn_4"($indirect_call_3.func, local.tee $indirect_call_3(ref.cast "canonical//CanonicalClosure_4"($d_Target.op_fire)).env, $local_2_15, 1);
-            break $inline__effect_dispatch__Target__fire_5: global:cm_callback_handler_path.wado::$effect_Target = $local_2_18;
+            call_ref "functype/$canonical_closure_fn_4"($indirect_call_3.func, local.tee $indirect_call_3(ref.cast "canonical//CanonicalClosure_4"($d_cm_callback_handler_path.wado/Target.op_fire)).env, $local_2_15, 1);
+            break $inline__effect_dispatch__cm_callback_handler_path_wado_Target__fire_5: global:cm_callback_handler_path.wado::$effect_cm_callback_handler_path.wado/Target = $local_2_18;
         } else {
-            break $inline__effect_dispatch__Target__fire_5: "cm_callback_handler_path.wado/$cm_binding__Target_fire$spec0"($local_2_15, 1);
+            break $inline__effect_dispatch__cm_callback_handler_path_wado_Target__fire_5: "cm_callback_handler_path.wado/$cm_binding__Target_fire$spec0"($local_2_15, 1);
         }
     };
-    $inline__effect_dispatch__Target__fire_6: block {
-        if ref.is_null(local.tee $local_2_18(global:cm_callback_handler_path.wado::$effect_Target)) == 0 {
-            global:cm_callback_handler_path.wado::$effect_Target = local.tee $d_Target(ref.as_non_null($local_2_18)).outer;
-            call_ref "functype/$canonical_closure_fn_4"($indirect_call_3.func, local.tee $indirect_call_3(ref.cast "canonical//CanonicalClosure_4"($d_Target.op_fire)).env, $local_2_15, 2);
-            break $inline__effect_dispatch__Target__fire_6: global:cm_callback_handler_path.wado::$effect_Target = $local_2_18;
+    $inline__effect_dispatch__cm_callback_handler_path_wado_Target__fire_6: block {
+        if ref.is_null(local.tee $local_2_18(global:cm_callback_handler_path.wado::$effect_cm_callback_handler_path.wado/Target)) == 0 {
+            global:cm_callback_handler_path.wado::$effect_cm_callback_handler_path.wado/Target = local.tee $d_cm_callback_handler_path.wado/Target(ref.as_non_null($local_2_18)).outer;
+            call_ref "functype/$canonical_closure_fn_4"($indirect_call_3.func, local.tee $indirect_call_3(ref.cast "canonical//CanonicalClosure_4"($d_cm_callback_handler_path.wado/Target.op_fire)).env, $local_2_15, 2);
+            break $inline__effect_dispatch__cm_callback_handler_path_wado_Target__fire_6: global:cm_callback_handler_path.wado::$effect_cm_callback_handler_path.wado/Target = $local_2_18;
         } else {
-            break $inline__effect_dispatch__Target__fire_6: "cm_callback_handler_path.wado/$cm_binding__Target_fire$spec1"($local_2_15, 2);
+            break $inline__effect_dispatch__cm_callback_handler_path_wado_Target__fire_6: "cm_callback_handler_path.wado/$cm_binding__Target_fire$spec1"($local_2_15, 2);
         }
     };
-    global:cm_callback_handler_path.wado::$effect_Target = $save_Target;
-    global:cm_callback_handler_path.wado::$effect_Demo = $save_Demo;
+    global:cm_callback_handler_path.wado::$effect_cm_callback_handler_path.wado/Target = $save_cm_callback_handler_path.wado/Target;
+    global:cm_callback_handler_path.wado::$effect_cm_callback_handler_path.wado/Demo = $save_cm_callback_handler_path.wado/Demo;
     local.tee $local_4_4(struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(21), used: 0 }).used = 5;
     builtin::array_copy<u8>($local_4_4.repr, 0, global:cm_callback_handler_path.wado::$const_obj_0, 0, 5);
     $local_5 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: $local_4_4 };

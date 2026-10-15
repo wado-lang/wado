@@ -2944,6 +2944,44 @@ fn foo(c: char) -> bool {
     assert_eq!(formatted, formatted2, "format should be idempotent");
 }
 
+/// A comment after a match's `{` stays before the first arm, not inside its
+/// body, and one before the `}` stays inside the match.
+#[test]
+fn test_format_match_comments_around_arms() {
+    let source = concat!(
+        "fn f(n: i32) -> i32 {\n",
+        "    let a = match n { // first\n",
+        "        _ => 0,\n",
+        "    };\n",
+        "    return match n {\n",
+        "        0 => 1,\n",
+        "        _ => 2,\n",
+        "        // last\n",
+        "    };\n",
+        "}\n",
+    );
+    let expected = concat!(
+        "fn f(n: i32) -> i32 {\n",
+        "    let a = match n {\n",
+        "        // first\n",
+        "        _ => 0,\n",
+        "    };\n",
+        "    return match n {\n",
+        "        0 => 1,\n",
+        "        _ => 2,\n",
+        "        // last\n",
+        "    };\n",
+        "}\n",
+    );
+    let formatted = wado_compiler::format(source).expect("format failed");
+    assert_eq!(formatted, expected);
+    assert_eq!(
+        wado_compiler::format(&formatted).expect("format failed"),
+        expected
+    );
+    assert_format_preserves_ast(source);
+}
+
 #[test]
 fn test_format_if_else_chain_all_multiline() {
     // When the first branch of an if-else chain is multiline, all branches should be multiline
@@ -3456,6 +3494,20 @@ fn test() {
 ",
     );
 
+    // An assignment nested in a comparison, inside a chain and outside one
+    assert_format_preserves_ast(
+        r"
+fn test() {
+    let y: Option<i32> = null;
+    let mut z = 0;
+    if let Some(v) = y && (z = 3) == () {
+        println(`${v}`);
+    }
+    let b = (z += 1) == ();
+}
+",
+    );
+
     // while let with && guard containing &&
     assert_format_preserves_ast(
         r"
@@ -3477,6 +3529,25 @@ fn test() {
     let opt = Option::<i32>::Some(5);
     if let Some(x) = opt && (x > 10 || x < 0) {
         println(`${x}`);
+    }
+}
+",
+    );
+
+    // A `let`'s scrutinee is a chain operand too, as is a loose operand of a
+    // `while` chain that starts with a boolean.
+    assert_format_preserves_ast(
+        r"
+fn test() {
+    let mut n = 0;
+    if let true = (n > 1 || n < 0) && let r = (0..<n) {
+        println(`${r}`);
+    }
+    while (n < 2 || n > 9) && let Some(v) = (a && b) {
+        n += 1;
+    }
+    if let f = (|y: i32| y > 0) && f(n) {
+        n = 0;
     }
 }
 ",
@@ -4005,6 +4076,439 @@ fn test_format_contract_clause_comments() {
     );
     let formatted = wado_compiler::format(source).expect("format failed");
     assert_eq!(formatted, source);
+    assert_format_preserves_ast(source);
+}
+
+/// A comment between a head and its body's `{` stays before the brace, which
+/// then opens a line of its own, as it does after a `contract` clause (#2331).
+#[test]
+fn test_format_comment_before_body_brace_every_construct() {
+    let source = concat!(
+        "struct S // struct\n",
+        "{\n",
+        "    x: i32,\n",
+        "}\n",
+        "\n",
+        "enum E /* enum */ {\n",
+        "    A,\n",
+        "}\n",
+        "\n",
+        "trait T // trait\n",
+        "{\n",
+        "    fn t(&self);\n",
+        "}\n",
+        "\n",
+        "impl S // impl\n",
+        "{\n",
+        "    fn m(&self) {\n",
+        "        return;\n",
+        "    }\n",
+        "}\n",
+        "\n",
+        "fn main() {\n",
+        "    if true // if\n",
+        "    {\n",
+        "        return;\n",
+        "    } else // else\n",
+        "    {\n",
+        "        return;\n",
+        "    }\n",
+        "    while false // while\n",
+        "    {\n",
+        "        return;\n",
+        "    }\n",
+        "    for let i of 0..<3 // for\n",
+        "    {\n",
+        "        return;\n",
+        "    }\n",
+        "    loop // loop\n",
+        "    {\n",
+        "        break;\n",
+        "    }\n",
+        "    found: // label\n",
+        "    {\n",
+        "        break found;\n",
+        "    }\n",
+        "    let n = match 1 // match\n",
+        "    {\n",
+        "        _ => 0,\n",
+        "    };\n",
+        "    let f = |x: i32| // closure\n",
+        "    {\n",
+        "        return x;\n",
+        "    };\n",
+        "    let t = [for let v of [1, 2] // comprehension\n",
+        "    { v }];\n",
+        "}\n",
+        "\n",
+        "test \"t\" // test\n",
+        "{\n",
+        "    assert true;\n",
+        "}\n",
+    );
+    let expected = concat!(
+        "struct S\n",
+        "    // struct\n",
+        "{\n",
+        "    x: i32,\n",
+        "}\n",
+        "\n",
+        "enum E\n",
+        "    /* enum */\n",
+        "{\n",
+        "    A,\n",
+        "}\n",
+        "\n",
+        "trait T\n",
+        "    // trait\n",
+        "{\n",
+        "    fn t(&self);\n",
+        "}\n",
+        "\n",
+        "impl S\n",
+        "    // impl\n",
+        "{\n",
+        "    fn m(&self) {\n",
+        "        return;\n",
+        "    }\n",
+        "}\n",
+        "\n",
+        "fn main() {\n",
+        "    if true\n",
+        "        // if\n",
+        "    {\n",
+        "        return;\n",
+        "    } else\n",
+        "        // else\n",
+        "    {\n",
+        "        return;\n",
+        "    }\n",
+        "    while false\n",
+        "        // while\n",
+        "    {\n",
+        "        return;\n",
+        "    }\n",
+        "    for let i of 0..<3\n",
+        "        // for\n",
+        "    {\n",
+        "        return;\n",
+        "    }\n",
+        "    loop\n",
+        "        // loop\n",
+        "    {\n",
+        "        break;\n",
+        "    }\n",
+        "    found:\n",
+        "        // label\n",
+        "    {\n",
+        "        break found;\n",
+        "    }\n",
+        "    let n = match 1\n",
+        "        // match\n",
+        "    {\n",
+        "        _ => 0,\n",
+        "    };\n",
+        "    let f = |x: i32|\n",
+        "        // closure\n",
+        "    {\n",
+        "        return x;\n",
+        "    };\n",
+        "    let t = [for let v of [1, 2]\n",
+        "        // comprehension\n",
+        "    {\n",
+        "        v\n",
+        "    }];\n",
+        "}\n",
+        "\n",
+        "test \"t\"\n",
+        "    // test\n",
+        "{\n",
+        "    assert true;\n",
+        "}\n",
+    );
+    let formatted = wado_compiler::format(source).expect("format failed");
+    assert_eq!(formatted, expected);
+    assert_eq!(
+        wado_compiler::format(&formatted).expect("format failed"),
+        expected
+    );
+    assert_format_preserves_ast(source);
+}
+
+/// Only a body with a `{` of its own takes a comment ahead of it. One between
+/// `else` and `if` keeps the `else` block's braces and leads the `if`; one
+/// ahead of a bare `return` arm, which has no brace, stays in the body; an
+/// if expression with a comment takes its multi-line form.
+#[test]
+fn test_format_comment_near_body_brace_stays_put() {
+    let source = concat!(
+        "fn f(a: bool, n: i32) -> i32 {\n",
+        "    if a {\n",
+        "        return 0;\n",
+        "    } else /* e */ if n > 0 {\n",
+        "        return 1;\n",
+        "    }\n",
+        "    let x = if a // why\n",
+        "    { 1 } else { 2 };\n",
+        "    return match n {\n",
+        "        0 => /* c */ return 1,\n",
+        "        _ => x,\n",
+        "    };\n",
+        "}\n",
+    );
+    let expected = concat!(
+        "fn f(a: bool, n: i32) -> i32 {\n",
+        "    if a {\n",
+        "        return 0;\n",
+        "    } else {\n",
+        "        /* e */\n",
+        "        if n > 0 {\n",
+        "            return 1;\n",
+        "        }\n",
+        "    }\n",
+        "    let x = if a\n",
+        "        // why\n",
+        "    {\n",
+        "        1;\n",
+        "    } else {\n",
+        "        2;\n",
+        "    };\n",
+        "    return match n {\n",
+        "        0 => {\n",
+        "            /* c */\n",
+        "            return 1;\n",
+        "        },\n",
+        "        _ => x,\n",
+        "    };\n",
+        "}\n",
+    );
+    let formatted = wado_compiler::format(source).expect("format failed");
+    assert_eq!(formatted, expected);
+    assert_eq!(
+        wado_compiler::format(&formatted).expect("format failed"),
+        expected
+    );
+    assert_format_preserves_ast(source);
+}
+
+/// A comment the head leaves unplaced goes before the brace with one written
+/// there, and one written before the construct stays out of its body.
+#[test]
+fn test_format_comment_in_head_before_body_brace() {
+    let source = concat!(
+        "fn f(n: i32, b: i32) -> i32 {\n",
+        "    let m = match /* scrut */ n {\n",
+        "        0 /* pat */ => {\n",
+        "            return 1;\n",
+        "        },\n",
+        "        _ => 2,\n",
+        "    };\n",
+        "    let t = [for let v /* head */ of [1, 2] { v }];\n",
+        "    let y = b /* a */ + found: {\n",
+        "        break found: 1;\n",
+        "    };\n",
+        "    return m;\n",
+        "}\n",
+    );
+    let expected = concat!(
+        "fn f(n: i32, b: i32) -> i32 {\n",
+        "    let m = match n\n",
+        "        /* scrut */\n",
+        "    {\n",
+        "        0 =>\n",
+        "            /* pat */\n",
+        "        {\n",
+        "            return 1;\n",
+        "        },\n",
+        "        _ => 2,\n",
+        "    };\n",
+        "    let t = [for let v of [1, 2]\n",
+        "        /* head */\n",
+        "    {\n",
+        "        v\n",
+        "    }];\n",
+        "    let y = b + found: {\n",
+        "        break found: 1;\n",
+        "    };\n",
+        "    /* a */\n",
+        "    return m;\n",
+        "}\n",
+    );
+    let formatted = wado_compiler::format(source).expect("format failed");
+    assert_eq!(formatted, expected);
+    assert_eq!(
+        wado_compiler::format(&formatted).expect("format failed"),
+        expected
+    );
+    assert_format_preserves_ast(source);
+}
+
+/// A comment between a declaration's attributes stays among them, rather than
+/// moving above the first and counting the attribute's line as a blank one.
+#[test]
+fn test_format_comment_among_attributes_stays_put() {
+    let source = concat!(
+        "fn a() {\n",
+        "}\n",
+        "\n",
+        "#[inline(never)]\n",
+        "// after attr\n",
+        "fn g() {\n",
+        "}\n",
+        "\n",
+        "struct S {\n",
+        "    a: i32,\n",
+        "\n",
+        "    #[wire(name = \"b\")]\n",
+        "    // field\n",
+        "    b: i32,\n",
+        "}\n",
+        "\n",
+        "impl S {\n",
+        "    fn x(&self) {\n",
+        "    }\n",
+        "\n",
+        "    #[inline(never)]\n",
+        "    // between\n",
+        "    #[allow(shadowed_name)]\n",
+        "    fn y(&self) {\n",
+        "        let a = 1;\n",
+        "\n",
+        "        #[allow(shadowed_name)]\n",
+        "        // binder\n",
+        "        let b = 2;\n",
+        "    }\n",
+        "}\n",
+    );
+    let formatted = wado_compiler::format(source).expect("format failed");
+    assert_eq!(formatted, source);
+    assert_format_preserves_ast(source);
+}
+
+/// A form that would place a comment inside it never collapses to the one-line
+/// form, which has no slot for one.
+#[test]
+fn test_format_comment_keeps_the_multiline_form() {
+    let source = concat!(
+        "fn f(n: i32, b: bool) -> i32 {\n",
+        "    let c = match n { _ /* z */ => 0 };\n",
+        "    let d = match n {\n",
+        "        _ => 0,\n",
+        "        // last\n",
+        "    };\n",
+        "    if b {\n",
+        "        return 0;\n",
+        "    } else {\n",
+        "        if n > 0 {\n",
+        "            return 1;\n",
+        "        }\n",
+        "        // tail of else\n",
+        "    }\n",
+        "    return c + d;\n",
+        "}\n",
+    );
+    let expected = concat!(
+        "fn f(n: i32, b: bool) -> i32 {\n",
+        "    let c = match n {\n",
+        "        _ => 0,\n",
+        "        /* z */\n",
+        "    };\n",
+        "    let d = match n {\n",
+        "        _ => 0,\n",
+        "        // last\n",
+        "    };\n",
+        "    if b {\n",
+        "        return 0;\n",
+        "    } else {\n",
+        "        if n > 0 {\n",
+        "            return 1;\n",
+        "        }\n",
+        "        // tail of else\n",
+        "    }\n",
+        "    return c + d;\n",
+        "}\n",
+    );
+    let formatted = wado_compiler::format(source).expect("format failed");
+    assert_eq!(formatted, expected);
+    assert_eq!(
+        wado_compiler::format(&formatted).expect("format failed"),
+        expected
+    );
+    assert_format_preserves_ast(source);
+}
+
+/// A comment among attributes keeps its blank lines, and one on an attribute's
+/// line stays on it.
+#[test]
+fn test_format_comment_among_attributes_keeps_its_line() {
+    let source = concat!(
+        "#[inline(never)]  // same line\n",
+        "#[allow(shadowed_name)]\n",
+        "\n",
+        "// spaced\n",
+        "fn g() {\n",
+        "}\n",
+    );
+    assert_eq!(
+        wado_compiler::format(source).expect("format failed"),
+        source
+    );
+    assert_format_preserves_ast(source);
+}
+
+/// A resource keeps the blank line between its methods, as an interface does.
+#[test]
+fn test_format_keeps_blank_line_between_resource_methods() {
+    let source = concat!(
+        "resource R {\n",
+        "    fn a(&self);\n",
+        "\n",
+        "    fn b(&self);\n",
+        "}\n",
+    );
+    assert_eq!(
+        wado_compiler::format(source).expect("format failed"),
+        source
+    );
+}
+
+/// A function's body is one of those braces.
+#[test]
+fn test_format_comment_before_body_brace() {
+    let source = concat!(
+        "fn f() -> i32\n",
+        "    // before body\n",
+        "{\n",
+        "    return 1;\n",
+        "}\n",
+        "\n",
+        "impl S {\n",
+        "    fn g(&self) /* why */ {\n",
+        "        return;\n",
+        "    }\n",
+        "}\n",
+    );
+    let expected = concat!(
+        "fn f() -> i32\n",
+        "    // before body\n",
+        "{\n",
+        "    return 1;\n",
+        "}\n",
+        "\n",
+        "impl S {\n",
+        "    fn g(&self)\n",
+        "        /* why */\n",
+        "    {\n",
+        "        return;\n",
+        "    }\n",
+        "}\n",
+    );
+    let formatted = wado_compiler::format(source).expect("format failed");
+    assert_eq!(formatted, expected);
+    assert_eq!(
+        wado_compiler::format(&formatted).expect("format failed"),
+        expected
+    );
     assert_format_preserves_ast(source);
 }
 

@@ -6,6 +6,7 @@ use super::analyze::is_owned_value;
 use super::funcset::FuncKeySet;
 use super::observed::ObservedFields;
 use super::ownership::OwnedCalls;
+use super::points_to::{LocSet, PointsTo};
 use super::reach::StorageReach;
 use super::retention::{CallRetention, FunctorRows, RESULT, Retained};
 use super::{is_reference_type, is_scalar_type, needs_value_copy};
@@ -19,103 +20,7 @@ use crate::tir::{
 };
 use crate::tir_visitor::TirRefVisitor;
 use crate::token::Span;
-
-/// May-alias union-find over a function's locals, joining each binding to the
-/// root it was read out of. Read by the confinement check's `no_mut_alias`.
-pub struct AliasComponents {
-    parent: IndexMap<u32, u32>,
-}
-
-impl AliasComponents {
-    pub fn empty() -> Self {
-        AliasComponents {
-            parent: IndexMap::default(),
-        }
-    }
-
-    pub fn build(func: &TirFunction) -> Self {
-        let mut ac = AliasComponents {
-            parent: IndexMap::default(),
-        };
-        if let Some(body) = &func.body {
-            let mut collector = AliasEdgeCollector { edges: Vec::new() };
-            collector.visit_block(body);
-            for (a, b) in collector.edges {
-                ac.union(a, b);
-            }
-        }
-        ac
-    }
-
-    /// Whether locals `a` and `b` may share storage.
-    pub fn may_alias(&self, a: u32, b: u32) -> bool {
-        a == b || self.find(a) == self.find(b)
-    }
-
-    fn find(&self, mut x: u32) -> u32 {
-        while let Some(&p) = self.parent.get(&x) {
-            if p == x {
-                return x;
-            }
-            x = p;
-        }
-        x
-    }
-
-    fn union(&mut self, a: u32, b: u32) {
-        let ra = self.find(a);
-        let rb = self.find(b);
-        self.parent.entry(ra).or_insert(ra);
-        self.parent.entry(rb).or_insert(rb);
-        if ra != rb {
-            self.parent.insert(ra, rb);
-        }
-    }
-}
-
-/// Collects `(local, alias-root)` edges: a `let` / whole-local assign bound from
-/// a projection, and a match-arm binding rooted at its scrutinee.
-struct AliasEdgeCollector {
-    edges: Vec<(u32, u32)>,
-}
-
-impl TirRefVisitor for AliasEdgeCollector {
-    fn visit_stmt(&mut self, stmt: &TirStmt) {
-        if let TirStmtKind::Let {
-            local_index, value, ..
-        } = &stmt.kind
-            && let Some(root) = alias_root(value)
-        {
-            self.edges.push((*local_index, root));
-        }
-        self.walk_stmt(stmt);
-    }
-
-    fn visit_expr(&mut self, expr: &TirExpr) {
-        match &expr.kind {
-            TirExprKind::Assign { target, value } => {
-                if let TirExprKind::Local { index, .. } = &target.kind
-                    && let Some(root) = alias_root(value)
-                {
-                    self.edges.push((*index, root));
-                }
-            }
-            TirExprKind::Match { expr: scrut, arms } => {
-                if let Some(root) = alias_root(scrut) {
-                    for arm in arms {
-                        let mut binds: IndexSet<u32> = IndexSet::default();
-                        analyze::collect_pattern_bindings(&arm.pattern, &mut binds);
-                        for b in binds {
-                            self.edges.push((b, root));
-                        }
-                    }
-                }
-            }
-            _ => {}
-        }
-        self.walk_expr(expr);
-    }
-}
+use std::rc::Rc;
 
 /// What a move can retire in one body.
 #[derive(Default)]
@@ -143,6 +48,9 @@ pub struct Ownership {
     /// the place holds, by the assignment's span: a holder of that storage may
     /// be read afterwards (WEP 2026-10-13).
     pub in_place_assigns: IndexSet<Span>,
+    /// By-value call arguments, by span, whose storage may be written before
+    /// the callee is done with them: a confined parameter still copies these.
+    pub written_args: IndexSet<Span>,
 }
 
 /// Decide `func`'s moves and shares together, both being readings of the one
@@ -156,6 +64,7 @@ pub fn analyze_ownership(
     type_table: &TypeTable,
     resolver: &Resolver<'_>,
     plan: &ValueCopyPlan,
+    points_to: &PointsTo,
     final_reads: &IndexSet<Span>,
     reach: &StorageReach<'_>,
 ) -> Ownership {
@@ -199,8 +108,13 @@ pub fn analyze_ownership(
         written_through_escape: IndexSet::default(),
         let_sources: IndexMap::default(),
         match_sources: Vec::new(),
-        pending_mut_alias: Vec::new(),
-        mut_aliased_reads: IndexSet::default(),
+        pending_writes: Vec::new(),
+        handed: Vec::new(),
+        points_to,
+        frame: points_to
+            .frame(&func.module_source, &func.name)
+            .expect("the fold computes points-to over every body it analyzes"),
+        written_args: IndexSet::default(),
         exits: Vec::new(),
         all_locals,
         place_cands: Vec::new(),
@@ -219,7 +133,7 @@ pub fn analyze_ownership(
     let paths = a.alias_paths();
     let released = released_edges(&a.alias_sites);
     a.resolve_alias_chains(&paths, &released);
-    a.resolve_pending_mut_aliases(&paths, &released);
+    a.resolve_write_checks(func, &paths, &released);
     let reference_copies = a.reference_copies(func, type_table);
     let move_reach = a.move_reach(&paths);
     // Each step either settles a bounded retention against a destination the
@@ -261,7 +175,7 @@ pub fn analyze_ownership(
             final_reads.contains(*span)
                 && !borrowed_params.contains(*local)
                 && !a.place_escaped(**local, None)
-                && !a.mut_aliased_reads.contains(*span)
+                && !a.written_args.contains(*span)
         })
         .map(|(span, _)| *span)
         .collect();
@@ -274,19 +188,50 @@ pub fn analyze_ownership(
         },
         share_eligible: a.share_eligible(body, &paths, &place_move_bases),
         in_place_assigns,
+        written_args: a.written_args,
     }
 }
 
 use super::place::{Names, Place as AccessPath, Resolver, Selector};
 
+/// Where a by-value argument's storage lives, for the write check.
+enum Storage {
+    Local(u32),
+    /// Storage the reference in this local lends it.
+    Lent(u32),
+    /// Storage this frame cannot name, which anyone may write.
+    Unnamed,
+}
+
+/// A by-value argument rooted at `root`, read at `span`, checked once the
+/// alias chains are whole.
+struct WriteCheck {
+    root: u32,
+    span: Span,
+    /// The locations written while the callee holds the argument, beyond
+    /// [`PointsTo::global_reach`].
+    written: Rc<IndexSet<u32>>,
+}
+
 /// A write this body makes, and the locals live where it runs. A binding absent
 /// from `live` cannot observe the write: nothing reads it afterwards.
-struct Mutation {
+struct Mutation<'a> {
     path: AccessPath,
+    lands: Lands<'a>,
     /// `p = x` repoints `p`; the value an earlier binding took out of `p` keeps
     /// the storage it already had. Only a write *inside* that value disturbs it.
     rebinds_place: bool,
     live: IndexSet<u32>,
+}
+
+/// The storage a write lands in, as points-to resolves it: `path` alone names
+/// a reference's own slot where the write goes through it.
+#[derive(Clone, Copy)]
+enum Lands<'a> {
+    /// The local's own location.
+    Local(u32),
+    /// What a place, or a handle a call writes through, denotes.
+    Place(&'a LocSet),
 }
 
 /// A materialization that may take its aggregate's storage rather than copy it,
@@ -464,7 +409,7 @@ fn disjoint(mutated: &AccessPath, read: &AccessPath) -> bool {
     false
 }
 
-impl Analyzer<'_> {
+impl<'a> Analyzer<'a> {
     /// The locals holding storage of their own, however often read. A greatest
     /// fixpoint: every sourced local, less those whose source is not owned.
     fn owned_locals(
@@ -630,23 +575,26 @@ impl Analyzer<'_> {
         }
     }
 
-    /// Record what a call writes through one `&mut` handle, receiver or not: the
-    /// fields the callee names, re-rooted at the handle's own path.
+    /// Record what a call writes through `handle`, the place its argument `arg`
+    /// lends, receiver or not: the fields the callee names, re-rooted at the
+    /// handle's own path.
     fn record_call_mutation(
         &mut self,
         func: &tir::FunctionRef,
+        arg: &TirExpr,
         handle: &TirExpr,
         position: u32,
         live: &IndexSet<u32>,
     ) {
+        let lands = Lands::Place(self.points_to.handed(arg));
         let writes = self.mod_ref.writes(&func.module_source, &func.name);
         let owner = field_owner(handle.type_id, self.type_table);
         let Names::Place(path) = self.resolver.names(handle) else {
-            self.record_mutation(handle, live);
+            self.record_write(handle, lands, false, live);
             return;
         };
         if writes.is_opaque() || !writes.re_rootable_at(position, owner) {
-            self.record_mutation(handle, live);
+            self.record_write(handle, lands, false, live);
             return;
         }
         for field in writes.fields_of(position, owner) {
@@ -657,6 +605,7 @@ impl Analyzer<'_> {
             });
             self.mutations.push(Mutation {
                 path: written,
+                lands,
                 rebinds_place: false,
                 live: live.clone(),
             });
@@ -670,7 +619,8 @@ impl Analyzer<'_> {
     /// Record a write through `place`. One the resolver cannot name mutates every
     /// local it mentions, whole.
     fn record_mutation(&mut self, place: &TirExpr, live: &IndexSet<u32>) {
-        self.record_write(place, false, live);
+        let lands = Lands::Place(self.points_to.written(place));
+        self.record_write(place, lands, false, live);
     }
 
     /// Note `assign`, writing `target`, for `in_place_assigns` when the place
@@ -772,7 +722,8 @@ impl Analyzer<'_> {
 
     fn record_assign(&mut self, place: &TirExpr, live: &IndexSet<u32>) {
         let rebinds = self.rebinds_place(place);
-        self.record_write(place, rebinds, live);
+        let lands = Lands::Place(self.points_to.written(place));
+        self.record_write(place, lands, rebinds, live);
     }
 
     /// Whether assigning to `place` repoints a slot instead of writing the
@@ -788,10 +739,17 @@ impl Analyzer<'_> {
         self.type_table.box_payload_of(inner.type_id).is_some()
     }
 
-    fn record_write(&mut self, place: &TirExpr, rebinds_place: bool, live: &IndexSet<u32>) {
+    fn record_write(
+        &mut self,
+        place: &TirExpr,
+        lands: Lands<'a>,
+        rebinds_place: bool,
+        live: &IndexSet<u32>,
+    ) {
         if let Names::Place(path) = self.resolver.names(place) {
             self.mutations.push(Mutation {
                 path,
+                lands,
                 rebinds_place,
                 live: live.clone(),
             });
@@ -807,6 +765,7 @@ impl Analyzer<'_> {
                 };
                 self.mutations.push(Mutation {
                     path,
+                    lands,
                     rebinds_place: false,
                     live: live.clone(),
                 });
@@ -817,6 +776,7 @@ impl Analyzer<'_> {
     fn mark_local_mutated(&mut self, index: u32, rebinds_place: bool, live: &IndexSet<u32>) {
         self.mutations.push(Mutation {
             path: AccessPath::local(index),
+            lands: Lands::Local(index),
             rebinds_place,
             live: live.clone(),
         });
@@ -1187,11 +1147,16 @@ struct Analyzer<'a> {
     written_through_escape: IndexSet<u32>,
     let_sources: IndexMap<u32, Vec<TirExpr>>,
     match_sources: Vec<(u32, TirExpr)>,
-    /// `(by-value arg root, arg span, storage the call mutates)`, resolved once
-    /// the alias chains are complete.
-    pending_mut_alias: Vec<(u32, Span, Vec<u32>)>,
-    /// The by-value arguments found aliasing storage their own call mutates.
-    mut_aliased_reads: IndexSet<Span>,
+    /// Resolved once the alias chains are complete.
+    pending_writes: Vec<WriteCheck>,
+    /// What every value handed to a call reaches, in walk order, so a check
+    /// reads what the later arguments handed on.
+    handed: Vec<&'a LocSet>,
+    points_to: &'a PointsTo,
+    /// This body's frame in `points_to`.
+    frame: u32,
+    /// [`Ownership::written_args`].
+    written_args: IndexSet<Span>,
     exits: Vec<Exit>,
     all_locals: IndexSet<u32>,
     /// Place-level move sites `(root, top-level field, span)` found at literals,
@@ -1210,7 +1175,7 @@ struct Analyzer<'a> {
     /// it moves nothing.
     value_reads: IndexMap<Span, u32>,
     /// Every write this body makes, with the locals live where it runs.
-    mutations: Vec<Mutation>,
+    mutations: Vec<Mutation<'a>>,
     /// Assignments to a place of an in-place type, decided once every borrow
     /// this body makes is known.
     assign_sites: Vec<AssignSite>,
@@ -1892,7 +1857,7 @@ impl Analyzer<'_> {
             return;
         };
         if record && !borrowing_receiver && *op == TirUnaryOp::MutRef {
-            self.record_call_mutation(c, place, position, live);
+            self.record_call_mutation(c, arg, place, position, live);
         }
         // A call handing its receiver back as its result keeps the borrow in
         // that result, which the walk follows as a place.
@@ -2018,54 +1983,173 @@ impl Analyzer<'_> {
         }
     }
 
-    /// Resolve the deferred sibling-alias checks: a by-value argument aliasing
-    /// storage its own call mutates keeps its copy.
-    fn resolve_pending_mut_aliases(
+    /// Resolve the deferred write checks: a by-value argument whose storage the
+    /// call's evaluation may write keeps its copy. A local's storage is
+    /// reached through the alias chains as well as its own location; storage a
+    /// reference lends, through what the reference names.
+    fn resolve_write_checks(
         &mut self,
+        func: &TirFunction,
         paths: &IndexMap<u32, Vec<AccessPath>>,
         released: &IndexSet<(u32, u32)>,
     ) {
-        for (arg, span, mut_roots) in std::mem::take(&mut self.pending_mut_alias) {
-            let targets: IndexSet<u32> = mut_roots.into_iter().collect();
-            if storage_shared(paths, released, arg, None, None, &targets) {
-                self.aliases_live.insert(arg);
-                self.mut_aliased_reads.insert(span);
+        let checks = std::mem::take(&mut self.pending_writes);
+        if checks.is_empty() {
+            return;
+        }
+        let frame = self.frame;
+        let pt = self.points_to;
+        let global = pt.global_reach();
+        let references: Vec<(u32, IndexSet<u32>)> = self
+            .all_locals
+            .iter()
+            .filter(|&&l| is_reference_local(func, l, self.type_table))
+            .map(|&l| (l, pt.local_targets(frame, l)))
+            .collect();
+        // What any call may write, whatever it is handed.
+        let always: IndexSet<u32> = self
+            .all_locals
+            .iter()
+            .copied()
+            .filter(|&l| pt.location(frame, l).is_some_and(|n| global.contains(&n)))
+            .chain(
+                references
+                    .iter()
+                    .filter(|(_, named)| named.iter().any(|n| global.contains(n)))
+                    .map(|(l, _)| *l),
+            )
+            .collect();
+        for check in checks {
+            let written = if is_reference_local(func, check.root, self.type_table) {
+                pt.reaches_written(frame, check.root, &check.written)
+            } else {
+                let targets: IndexSet<u32> = always
+                    .iter()
+                    .copied()
+                    .chain(check.written.iter().filter_map(|&n| pt.local_of(frame, n)))
+                    .chain(
+                        references
+                            .iter()
+                            .filter(|(_, named)| named.iter().any(|n| check.written.contains(n)))
+                            .map(|(l, _)| *l),
+                    )
+                    .collect();
+                storage_shared(paths, released, check.root, None, None, &targets)
+            };
+            if written {
+                self.aliases_live.insert(check.root);
+                self.written_args.insert(check.span);
             }
         }
     }
 
-    /// Keep the copy of a by-value argument aliasing storage the same call
-    /// mutates (wado-lang/wado#1544), once the alias chains are whole.
-    fn mark_sibling_mut_aliases(&mut self, args: &[&TirExpr], extra_mut_root: Option<u32>) {
-        let mut mut_roots: Vec<u32> = args
-            .iter()
-            .filter_map(|a| match &a.kind {
-                TirExprKind::Unary {
-                    op: TirUnaryOp::MutRef,
-                    expr: place,
-                } => alias_root(place),
-                _ => None,
-            })
-            .collect();
-        mut_roots.extend(extra_mut_root);
-        if mut_roots.is_empty() {
+    /// Defer the check of call argument `arg` against what the call's
+    /// evaluation may write while the callee holds it (wado-lang/wado#1544):
+    /// whatever the values handed to a call since `handed_from` reach, `own`
+    /// aside, and the writes recorded since `call_writes`, which the later
+    /// arguments make after `arg` is taken.
+    fn defer_write_check(
+        &mut self,
+        arg: &TirExpr,
+        call_writes: usize,
+        handed_from: usize,
+        own: usize,
+    ) {
+        let is_borrow = matches!(
+            &arg.kind,
+            TirExprKind::Unary {
+                op: TirUnaryOp::Ref | TirUnaryOp::MutRef,
+                ..
+            }
+        );
+        // Only a value a copy would wrap has a copy to keep.
+        if is_borrow || !needs_value_copy(arg.type_id, self.type_table) {
             return;
         }
-        for a in args {
-            if matches!(
-                &a.kind,
-                TirExprKind::Unary {
-                    op: TirUnaryOp::Ref | TirUnaryOp::MutRef,
-                    ..
+        let span = strip_casts(arg).span;
+        let mut storages = Vec::new();
+        self.storage_roots(arg, &mut storages);
+        if storages.is_empty() {
+            return;
+        }
+        let written = Rc::new(self.written_since(call_writes, handed_from, own));
+        for storage in storages {
+            match storage {
+                Storage::Local(root) => self.pending_writes.push(WriteCheck {
+                    root,
+                    span,
+                    written: Rc::clone(&written),
+                }),
+                Storage::Lent(reference) => {
+                    if self
+                        .points_to
+                        .reaches_written(self.frame, reference, &written)
+                    {
+                        self.written_args.insert(span);
+                    }
                 }
-            ) {
-                continue;
-            }
-            if let Some(t) = alias_root(a) {
-                self.pending_mut_alias
-                    .push((t, strip_casts(a).span, mut_roots.clone()));
+                Storage::Unnamed => {
+                    self.written_args.insert(span);
+                }
             }
         }
+    }
+
+    /// The locations a call's evaluation may write beyond
+    /// [`PointsTo::global_reach`].
+    fn written_since(&self, call_writes: usize, handed_from: usize, own: usize) -> IndexSet<u32> {
+        let frame = self.frame;
+        let pt = self.points_to;
+        let mut sources: Vec<u32> = Vec::new();
+        for (i, handed) in self.handed[handed_from..].iter().enumerate() {
+            if handed_from + i != own {
+                sources.extend(handed.iter());
+            }
+        }
+        let mut written = pt.reach_beyond_global(sources);
+        for m in &self.mutations[call_writes..] {
+            match m.lands {
+                Lands::Local(local) => {
+                    written.insert(
+                        pt.location(frame, local)
+                            .expect("the analysis gives every local a body writes a location"),
+                    );
+                }
+                Lands::Place(set) => written.extend(set.iter()),
+            }
+        }
+        written
+    }
+
+    /// Note what `args` hand a call.
+    fn hand(&mut self, args: &[&TirExpr]) {
+        for arg in args {
+            self.handed.push(self.points_to.handed(arg));
+        }
+    }
+
+    /// The storage each value `expr` may hand on.
+    fn storage_roots(&self, expr: &TirExpr, out: &mut Vec<Storage>) {
+        yielded_leaves(
+            expr,
+            self.type_table,
+            &mut |leaf| match self.resolver.names(leaf) {
+                Names::Value => {}
+                Names::Place(place) if place.through_borrow => out.push(Storage::Lent(place.root)),
+                Names::Place(place) => out.push(Storage::Local(place.root)),
+                Names::Unknown => match (alias_root(leaf), &projected_from(leaf).kind) {
+                    (Some(root), _) => out.push(Storage::Local(root)),
+                    // A named call hands back storage of its own or reached
+                    // through its arguments, and so does a part of it.
+                    (None, TirExprKind::Call { args, .. }) => {
+                        for a in args {
+                            self.storage_roots(place::unwrap_borrow(&a.expr), out);
+                        }
+                    }
+                    (None, _) => out.push(Storage::Unnamed),
+                },
+            },
+        );
     }
 
     fn kill_pattern(&self, pat: &TirPattern, live: &mut IndexSet<u32>) {
@@ -2590,18 +2674,16 @@ impl Analyzer<'_> {
             }
             TirExprKind::Call { func, args, .. } => {
                 let result = self.result_kept.take().unwrap_or(Kept::Frame);
-                let (receiver, siblings) = args.split();
-                let receiver = receiver.map(|r| &r.expr);
+                let receiver = args.receiver().map(|r| &r.expr);
                 let mutated_receiver = receiver.filter(|_| self.mutates_receiver(func));
+                let exprs: Vec<&TirExpr> = args.iter().map(|a| &a.expr).collect();
+                let call_writes = self.mutations.len();
+                let handed_from = self.handed.len();
                 if record {
-                    // A `&mut self` receiver mutates for the whole call, so it is
-                    // what the other arguments are checked against, not one of
-                    // them.
-                    let exprs: Vec<&TirExpr> = siblings.iter().map(|a| &a.expr).collect();
-                    self.mark_sibling_mut_aliases(&exprs, mutated_receiver.and_then(alias_root));
+                    self.hand(&exprs);
                     if let Some(receiver) = mutated_receiver {
                         let start = self.mutations.len();
-                        self.record_call_mutation(func, receiver, 0, live);
+                        self.record_call_mutation(func, receiver, receiver, 0, live);
                         self.note_element_site(expr, func, receiver, start, live);
                     }
                 }
@@ -2612,7 +2694,6 @@ impl Analyzer<'_> {
                         .ref_receiver_methods
                         .contains(&func.module_source, &func.name);
                 let kept = if record {
-                    let exprs: Vec<&TirExpr> = args.iter().map(|a| &a.expr).collect();
                     let fresh = self.returns_owned.contains(&func.module_source, &func.name);
                     self.kept_through(
                         &self.retained_by(func, args.len(), expr),
@@ -2624,6 +2705,17 @@ impl Analyzer<'_> {
                     Vec::new()
                 };
                 for (pos, arg) in args.iter().enumerate().rev() {
+                    // A `&mut self` receiver mutates for the whole call, so it is
+                    // what the other arguments are checked against, not one of
+                    // them.
+                    if record && !(pos == 0 && mutated_receiver.is_some()) {
+                        self.defer_write_check(
+                            &arg.expr,
+                            call_writes,
+                            handed_from,
+                            handed_from + pos,
+                        );
+                    }
                     self.walk_call_arg(
                         &arg.expr,
                         Some((func, pos as u32)),
@@ -2641,15 +2733,28 @@ impl Analyzer<'_> {
             }
             TirExprKind::IndirectCall { callee, args } => {
                 let result = self.result_kept.take().unwrap_or(Kept::Frame);
+                let call_writes = self.mutations.len();
+                let exprs: Vec<&TirExpr> = args.iter().collect();
+                let handed_from = self.handed.len();
                 let kept = if record {
-                    let exprs: Vec<&TirExpr> = args.iter().collect();
-                    self.mark_sibling_mut_aliases(&exprs, None);
+                    // The closure called hands on what it captured.
+                    self.hand(&[&**callee]);
+                    self.hand(&exprs);
                     let retained = self.functor_rows.retained(callee, args.len());
                     self.kept_through(&retained, &exprs, &result, None)
                 } else {
                     Vec::new()
                 };
                 for (pos, arg) in args.iter().enumerate().rev() {
+                    if record {
+                        // The callee is noted first, then each argument.
+                        self.defer_write_check(
+                            arg,
+                            call_writes,
+                            handed_from,
+                            handed_from + 1 + pos,
+                        );
+                    }
                     self.walk_indirect_arg(
                         arg,
                         kept.get(pos).unwrap_or(&Kept::Transient),
@@ -2769,15 +2874,26 @@ struct Yielded {
     root: Option<u32>,
 }
 
-/// What a form hands to a position outliving it: its own value, or the arm,
-/// tail and `break` values of a control form — whichever one runs — past the
-/// casts and spreads that pass a value through unchanged.
+/// What a form hands to a position outliving it, one [`Yielded`] per
+/// [`yielded_leaves`] leaf.
 fn yielded_values(expr: &TirExpr, type_table: &TypeTable, out: &mut Vec<Yielded>) {
+    yielded_leaves(expr, type_table, &mut |leaf| {
+        out.push(Yielded {
+            reference: reference_escape(leaf, type_table),
+            root: alias_root(leaf),
+        });
+    });
+}
+
+/// Hand `leaf` each expression whose value a form hands on: its own, or the
+/// arm, tail and `break` values of a control form — whichever one runs — past
+/// the casts and spreads that pass a value through unchanged.
+fn yielded_leaves(expr: &TirExpr, type_table: &TypeTable, leaf: &mut dyn FnMut(&TirExpr)) {
     let expr = strip_casts(expr);
     match &expr.kind {
         TirExprKind::Match { arms, .. } => {
             for arm in arms {
-                yielded_values(&arm.body, type_table, out);
+                yielded_leaves(&arm.body, type_table, leaf);
             }
         }
         TirExprKind::If {
@@ -2785,30 +2901,27 @@ fn yielded_values(expr: &TirExpr, type_table: &TypeTable, out: &mut Vec<Yielded>
             else_branch,
             ..
         } => {
-            block_yielded_values(then_branch, type_table, out);
+            block_yielded_leaves(then_branch, type_table, leaf);
             if let Some(eb) = else_branch {
-                block_yielded_values(eb, type_table, out);
+                block_yielded_leaves(eb, type_table, leaf);
             }
         }
-        TirExprKind::Block(block) => block_yielded_values(block, type_table, out),
+        TirExprKind::Block(block) => block_yielded_leaves(block, type_table, leaf),
         TirExprKind::LabeledBlock { block, .. } => {
-            block_yielded_values(block, type_table, out);
-            BreakValues { type_table, out }.visit_block(block);
+            block_yielded_leaves(block, type_table, leaf);
+            BreakValues { type_table, leaf }.visit_block(block);
         }
-        TirExprKind::TupleSpread { expr: inner } => yielded_values(inner, type_table, out),
+        TirExprKind::TupleSpread { expr: inner } => yielded_leaves(inner, type_table, leaf),
         // A scalar read out of a local carries none of its storage.
         _ if is_scalar_type(expr.type_id, type_table) => {}
-        _ => out.push(Yielded {
-            reference: reference_escape(expr, type_table),
-            root: alias_root(expr),
-        }),
+        _ => leaf(expr),
     }
 }
 
 /// A block hands on its final statement's value.
-fn block_yielded_values(block: &TirBlock, type_table: &TypeTable, out: &mut Vec<Yielded>) {
+fn block_yielded_leaves(block: &TirBlock, type_table: &TypeTable, leaf: &mut dyn FnMut(&TirExpr)) {
     if let Some(e) = block.tail_expr() {
-        yielded_values(e, type_table, out);
+        yielded_leaves(e, type_table, leaf);
     }
 }
 
@@ -2816,16 +2929,24 @@ fn block_yielded_values(block: &TirBlock, type_table: &TypeTable, out: &mut Vec<
 /// label one targets is not distinguished; an outer one only over-counts.
 struct BreakValues<'a> {
     type_table: &'a TypeTable,
-    out: &'a mut Vec<Yielded>,
+    leaf: &'a mut dyn FnMut(&TirExpr),
 }
 
 impl TirRefVisitor for BreakValues<'_> {
     fn visit_stmt(&mut self, stmt: &TirStmt) {
         if let TirStmtKind::Break { value: Some(v), .. } = &stmt.kind {
-            yielded_values(v, self.type_table, self.out);
+            yielded_leaves(v, self.type_table, self.leaf);
         }
         self.walk_stmt(stmt);
     }
+}
+
+/// What a chain of projections is taken over.
+fn projected_from(mut expr: &TirExpr) -> &TirExpr {
+    while let Some(base) = place::projection_base(expr) {
+        expr = base;
+    }
+    expr
 }
 
 /// The borrow a place chain bottoms out in, the shape a match takes on a
@@ -2948,7 +3069,7 @@ fn is_call(expr: &TirExpr) -> bool {
 
 /// The immediate operand sub-expressions of `expr`, in evaluation order. The
 /// control forms are the walker's own and never routed here.
-fn collect_child_exprs<'e>(expr: &'e TirExpr, out: &mut Vec<&'e TirExpr>) {
+pub(super) fn collect_child_exprs<'e>(expr: &'e TirExpr, out: &mut Vec<&'e TirExpr>) {
     use TirExprKind as K;
     match &expr.kind {
         K::Binary { left, right, .. } => {

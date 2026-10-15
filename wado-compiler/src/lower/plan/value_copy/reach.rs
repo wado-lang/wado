@@ -77,7 +77,7 @@ fn fn_shape(ty: TypeId, type_table: &TypeTable) -> Option<FnShape> {
             return_type,
             ..
         } => Some((
-            params.iter().map(|&p| type_table.type_key(p)).collect(),
+            type_table.type_keys(params),
             type_table.type_key(*return_type),
         )),
         _ => None,

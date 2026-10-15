@@ -1,0 +1,23 @@
+// A let chain stops at the first operand that fails, so the operands after it
+// are reported as not evaluated, the bindings they read included.
+
+fn f(n: i32) -> bool {
+    return n > 100;
+}
+
+export fn run() {
+    let o = builtin::black_box(Option::<i32>::None);
+    let k = 3;
+    assert (if let Some(x) = o && f(x + k) { 1 } else { 2 }) == 1;
+}
+
+__DATA__
+{
+    "trapped": true,
+    "stderr_contains": [
+        "o: Option::None",
+        "x: <not evaluated>",
+        "x + k: <not evaluated>",
+        "f(x + k): <not evaluated>"
+    ]
+}

@@ -34,6 +34,15 @@ pub(super) enum TypeCheckResult {
 /// structural comparison for function types, and argument by argument for two
 /// instances of one generic struct, resource or newtype; anything else
 /// incompatible.
+/// Whether a value of `type_id` may stand where a condition is read: a `bool`,
+/// a `!` that never yields one, or a type already diagnosed or yet unknown.
+pub(super) fn admits_condition(type_table: &TypeTable, type_id: TypeId) -> bool {
+    matches!(
+        type_id,
+        TypeTable::NEVER | TypeTable::UNKNOWN | TypeTable::ERROR
+    ) || type_table.type_key(type_id) == type_table.type_key(TypeTable::BOOL)
+}
+
 pub(super) fn check_assignable(
     actual: TypeId,
     expected: TypeId,

@@ -43,6 +43,10 @@ pub struct TriviaMap {
     trailing: BTreeMap<AstId, Vec<Comment>>,
     inner_tail: BTreeMap<AstId, Vec<Comment>>,
     dangling: Vec<Comment>,
+    /// Every `{` token, in source order. No node records where its body's
+    /// brace sits, and a comment before it is the head's while one after it is
+    /// the body's.
+    open_braces: Vec<Span>,
 }
 
 impl TriviaMap {
@@ -67,6 +71,30 @@ impl TriviaMap {
     /// after the last AST node's end. Called once at parse end.
     pub fn set_dangling(&mut self, comments: Vec<Comment>) {
         self.dangling = comments;
+    }
+
+    /// Record the `{` tokens. Called once at parse end.
+    pub fn set_open_braces(&mut self, open_braces: Vec<Span>) {
+        assert!(open_braces.is_sorted_by_key(|b| b.start));
+        self.open_braces = open_braces;
+    }
+
+    /// The one `{` token in `lo..hi`.
+    pub fn only_open_brace_in(&self, lo: usize, hi: usize) -> Span {
+        let first = self.open_braces.partition_point(|b| b.start < lo);
+        let end = self.open_braces.partition_point(|b| b.start < hi);
+        match self.open_braces[first..end] {
+            [brace] => brace,
+            ref braces => panic!("{} `{{` tokens in {lo}..{hi}, not one", braces.len()),
+        }
+    }
+
+    /// Whether a `{` token is at `pos`. A block the parser builds around an
+    /// `else if` or a bare `return` starts at none.
+    pub fn is_open_brace(&self, pos: usize) -> bool {
+        self.open_braces
+            .binary_search_by_key(&pos, |b| b.start)
+            .is_ok()
     }
 
     /// Leading trivia for `id`, or an empty slice if none.

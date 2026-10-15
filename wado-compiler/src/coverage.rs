@@ -12,8 +12,8 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::ops::Range;
 
 use crate::ast::{
-    self, AstId, AstVisitor, BinaryOp, Block, Expr, Function, Item, MatchExpr, Stmt, walk_expr,
-    walk_stmt,
+    self, AstId, AstVisitor, Block, Condition, ConditionElement, Expr, Function, Item, MatchExpr,
+    Stmt, walk_condition, walk_expr, walk_stmt,
 };
 use crate::attribute;
 use crate::hashmap::{IndexMap, IndexSet};
@@ -45,6 +45,7 @@ impl CoverageScope {
             ModuleSource::Binding { .. }
             | ModuleSource::Redirected { .. }
             | ModuleSource::Wasm { .. } => false,
+            ModuleSource::Effect(head) => self.measures(head.module()),
         }
     }
 }
@@ -684,6 +685,20 @@ impl Planner<'_> {
         self.last_choice = then_region.into_iter().chain(else_region).collect();
     }
 
+    /// An operand that runs only when the ones before it allow, counted in a
+    /// region of its own. It is keyed at its own start, which no other operand
+    /// shares: `a && b && c` nests `a && b` inside, starting where it does.
+    fn conditional_operand(&mut self, operand: &Expr) {
+        if self.is_unreachable_call(operand) {
+            return self.visit_expr(operand);
+        }
+        let span = operand.span();
+        let start = Pos::start(span);
+        let region = self.new_region(RegionKind::Rhs, start, Pos::end(span), Some((start, 0)));
+        self.sites.push((ProbeSite::Around, operand.id(), region));
+        self.in_region(region, |p| p.visit_expr(operand));
+    }
+
     fn if_stmt(&mut self, s: &ast::IfStmt, after: bool) {
         self.visit_condition(&s.condition);
         self.if_branches(s.id, s.span, &s.then_block, s.else_block.as_ref(), after);
@@ -866,22 +881,29 @@ impl AstVisitor for Planner<'_> {
         }
     }
 
+    /// A let chain's operands after the first may not run, as the right side
+    /// of `&&` may not.
+    fn visit_condition(&mut self, cond: &Condition) {
+        let Condition::LetChain { elements, .. } = cond else {
+            return walk_condition(self, cond);
+        };
+        for (index, element) in elements.iter().enumerate() {
+            if index == 0 {
+                self.visit_expr(element.expr());
+            } else {
+                self.conditional_operand(element.expr());
+            }
+            if let ConditionElement::Let { pattern, .. } = element {
+                self.visit_pattern(pattern);
+            }
+        }
+    }
+
     fn visit_expr(&mut self, expr: &Expr) {
         match expr {
-            Expr::Binary(b)
-                if matches!(b.op, BinaryOp::And | BinaryOp::Or)
-                    && !self.is_unreachable_call(&b.right) =>
-            {
+            Expr::Binary(b) if b.op.is_short_circuit() => {
                 self.visit_expr(&b.left);
-                let right = b.right.span();
-                let region = self.new_region(
-                    RegionKind::Rhs,
-                    Pos::start(right),
-                    Pos::end(right),
-                    Some((Pos::start(b.span), 0)),
-                );
-                self.sites.push((ProbeSite::Around, b.right.id(), region));
-                self.in_region(region, |p| p.visit_expr(&b.right));
+                self.conditional_operand(&b.right);
             }
             Expr::If(e) => {
                 self.visit_condition(&e.condition);

@@ -27,8 +27,8 @@ struct core:prelude/format.wado//Formatter {  // TypeId(4)
 
 struct effect_handler_forward_install_held.wado//$Closure_1 {  // TypeId(5)}
 
-struct effect_handler_forward_install_held.wado//$Dispatch_Random {  // TypeId(6)
-    mut outer: ref null "effect_handler_forward_install_held.wado//$Dispatch_Random",
+struct effect_handler_forward_install_held.wado//$Dispatch_wasi:random/random.wado/Random {  // TypeId(6)
+    mut outer: ref null "effect_handler_forward_install_held.wado//$Dispatch_wasi:random/random.wado/Random",
     mut op_get_random_bytes: ref struct,
     mut op_get_random_u64: ref struct,
 }
@@ -167,7 +167,7 @@ import fn wasi/stream-new from "wasi/stream-new";
 import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 import fn wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code from "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code";
 
-global mut global:effect_handler_forward_install_held.wado::$effect_Random: ref null "effect_handler_forward_install_held.wado//$Dispatch_Random" = ref.null none;
+global mut global:effect_handler_forward_install_held.wado::$effect_wasi:random/random.wado/Random: ref null "effect_handler_forward_install_held.wado//$Dispatch_wasi:random/random.wado/Random" = ref.null none;
 global global:effect_handler_forward_install_held.wado::$const_obj_8: ref "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 };
 global global:effect_handler_forward_install_held.wado::$const_obj_9: ref Array<u8> = array.new_fixed<u8>(7);
 global global:core:prelude/traits.wado::$const_obj_12: ref Array<u8> = array.new_fixed<u8>(66, 121, 116, 101, 76, 105, 115, 116);
@@ -194,29 +194,29 @@ fn "effect_handler_forward_install_held.wado/run"() with Random {
     let counting: ref "effect_handler_forward_install_held.wado//Counting";
     let $local_7: ref "core:prelude/string.wado//String";
     let $local_8: ref "core:prelude/format.wado//Formatter";
-    let $h_Random_17: ref "effect_handler_forward_install_held.wado//OnlyBytes";
-    let $save_Random_18: ref null "effect_handler_forward_install_held.wado//$Dispatch_Random";
-    let $d_Random_19: ref "effect_handler_forward_install_held.wado//$Dispatch_Random";
-    let $local_1_27: ref null "effect_handler_forward_install_held.wado//$Dispatch_Random";
+    let $h_wasi:random/random.wado/Random_17: ref "effect_handler_forward_install_held.wado//OnlyBytes";
+    let $save_wasi:random/random.wado/Random_18: ref null "effect_handler_forward_install_held.wado//$Dispatch_wasi:random/random.wado/Random";
+    let $d_wasi:random/random.wado/Random_19: ref "effect_handler_forward_install_held.wado//$Dispatch_wasi:random/random.wado/Random";
+    let $local_1_27: ref null "effect_handler_forward_install_held.wado//$Dispatch_wasi:random/random.wado/Random";
     let v_30: ref "core:prelude//List<u8>";
     let i_41: i32;
-    let $local_1_44: ref null "effect_handler_forward_install_held.wado//$Dispatch_Random";
+    let $local_1_44: ref null "effect_handler_forward_install_held.wado//$Dispatch_wasi:random/random.wado/Random";
     let $local_2_61: u64;
     counting = struct.new "effect_handler_forward_install_held.wado//Counting" { calls: 0 };
-    $h_Random_17 = struct.new "effect_handler_forward_install_held.wado//OnlyBytes" {  };
-    global:effect_handler_forward_install_held.wado::$effect_Random = local.tee $d_Random_19(struct.new "effect_handler_forward_install_held.wado//$Dispatch_Random" { outer: local.tee $save_Random_18(global:effect_handler_forward_install_held.wado::$effect_Random), op_get_random_bytes: struct.new "canonical//CanonicalClosure_0" { env: struct.new "effect_handler_forward_install_held.wado//$Closure_0" { $capture_0: $h_Random_17 }, func: ref.func "closure/effect_handler_forward_install_held.wado/$closure_wrapper_0" }, op_get_random_u64: struct.new "canonical//CanonicalClosure_1" { env: struct.new "effect_handler_forward_install_held.wado//$Closure_1" {  }, func: ref.func "closure/effect_handler_forward_install_held.wado/$closure_wrapper_1" } });
-    $array_clone_dst_3 = local.tee v_30($inline__effect_dispatch__Random__get_random_bytes_2: block -> ref "core:prelude//List<u8>" {
-        if ref.is_null(local.tee $local_1_27(global:effect_handler_forward_install_held.wado::$effect_Random)) == 0 {
-            global:effect_handler_forward_install_held.wado::$effect_Random = local.tee $d_Random_19(ref.as_non_null($local_1_27)).outer;
+    $h_wasi:random/random.wado/Random_17 = struct.new "effect_handler_forward_install_held.wado//OnlyBytes" {  };
+    global:effect_handler_forward_install_held.wado::$effect_wasi:random/random.wado/Random = local.tee $d_wasi:random/random.wado/Random_19(struct.new "effect_handler_forward_install_held.wado//$Dispatch_wasi:random/random.wado/Random" { outer: local.tee $save_wasi:random/random.wado/Random_18(global:effect_handler_forward_install_held.wado::$effect_wasi:random/random.wado/Random), op_get_random_bytes: struct.new "canonical//CanonicalClosure_0" { env: struct.new "effect_handler_forward_install_held.wado//$Closure_0" { $capture_0: $h_wasi:random/random.wado/Random_17 }, func: ref.func "closure/effect_handler_forward_install_held.wado/$closure_wrapper_0" }, op_get_random_u64: struct.new "canonical//CanonicalClosure_1" { env: struct.new "effect_handler_forward_install_held.wado//$Closure_1" {  }, func: ref.func "closure/effect_handler_forward_install_held.wado/$closure_wrapper_1" } });
+    $array_clone_dst_3 = local.tee v_30($inline__effect_dispatch__wasi_random_random_wado_Random__get_random_bytes_2: block -> ref "core:prelude//List<u8>" {
+        if ref.is_null(local.tee $local_1_27(global:effect_handler_forward_install_held.wado::$effect_wasi:random/random.wado/Random)) == 0 {
+            global:effect_handler_forward_install_held.wado::$effect_wasi:random/random.wado/Random = local.tee $d_wasi:random/random.wado/Random_19(ref.as_non_null($local_1_27)).outer;
             v_30 = block -> ref "core:prelude//List<u8>" {
                 let $indirect_call_1: ref "canonical//CanonicalClosure_0";
-                call_ref "functype/$canonical_closure_fn_0"($indirect_call_1.func, local.tee $indirect_call_1(ref.cast "canonical//CanonicalClosure_0"($d_Random_19.op_get_random_bytes)).env, 1_i64);
+                call_ref "functype/$canonical_closure_fn_0"($indirect_call_1.func, local.tee $indirect_call_1(ref.cast "canonical//CanonicalClosure_0"($d_wasi:random/random.wado/Random_19.op_get_random_bytes)).env, 1_i64);
             };
             v_30 = struct.new "core:prelude//List<u8>" { repr: let $array_clone_src_2: ref Array<u8>; $array_clone_src_2 = v_30.repr; $load_5 = v_30.used; let $array_clone_dst_3: ref Array<u8>; builtin::array_copy<u8>(local.tee $array_clone_dst_3(builtin::array_new<u8>($load_5)), 0, $array_clone_src_2, 0, $load_5); $array_clone_dst_3, used: $load_5 };
-            global:effect_handler_forward_install_held.wado::$effect_Random = $local_1_27;
-            break $inline__effect_dispatch__Random__get_random_bytes_2: v_30;
+            global:effect_handler_forward_install_held.wado::$effect_wasi:random/random.wado/Random = $local_1_27;
+            break $inline__effect_dispatch__wasi_random_random_wado_Random__get_random_bytes_2: v_30;
         } else {
-            break $inline__effect_dispatch__Random__get_random_bytes_2: "effect_handler_forward_install_held.wado/$cm_binding__Random_get_random_bytes$spec0"(1_i64);
+            break $inline__effect_dispatch__wasi_random_random_wado_Random__get_random_bytes_2: "effect_handler_forward_install_held.wado/$cm_binding__Random_get_random_bytes$spec0"(1_i64);
         }
         unreachable;
     }).repr;
@@ -261,17 +261,17 @@ condition: Random::get_random_bytes(1) == [7]
         "core:rt/panic"($local_7.repr, $local_7.used);
         unreachable;
     }
-    global:effect_handler_forward_install_held.wado::$effect_Random = local.tee $d_Random_19(struct.new "effect_handler_forward_install_held.wado//$Dispatch_Random" { outer: local.tee $local_1_27(global:effect_handler_forward_install_held.wado::$effect_Random), op_get_random_bytes: struct.new "canonical//CanonicalClosure_0" { env: struct.new "effect_handler_forward_install_held.wado//$Closure_2" { $capture_0: counting }, func: ref.func "closure/effect_handler_forward_install_held.wado/$closure_wrapper_2" }, op_get_random_u64: struct.new "canonical//CanonicalClosure_1" { env: struct.new "effect_handler_forward_install_held.wado//$Closure_3" { $capture_0: counting }, func: ref.func "closure/effect_handler_forward_install_held.wado/$closure_wrapper_3" } });
-    $array_clone_dst_3 = local.tee v_30($inline__effect_dispatch__Random__get_random_bytes_8: block -> ref "core:prelude//List<u8>" {
-        if ref.is_null(local.tee $local_1_44(global:effect_handler_forward_install_held.wado::$effect_Random)) == 0 {
-            global:effect_handler_forward_install_held.wado::$effect_Random = local.tee $d_Random_19(ref.as_non_null($local_1_44)).outer;
+    global:effect_handler_forward_install_held.wado::$effect_wasi:random/random.wado/Random = local.tee $d_wasi:random/random.wado/Random_19(struct.new "effect_handler_forward_install_held.wado//$Dispatch_wasi:random/random.wado/Random" { outer: local.tee $local_1_27(global:effect_handler_forward_install_held.wado::$effect_wasi:random/random.wado/Random), op_get_random_bytes: struct.new "canonical//CanonicalClosure_0" { env: struct.new "effect_handler_forward_install_held.wado//$Closure_2" { $capture_0: counting }, func: ref.func "closure/effect_handler_forward_install_held.wado/$closure_wrapper_2" }, op_get_random_u64: struct.new "canonical//CanonicalClosure_1" { env: struct.new "effect_handler_forward_install_held.wado//$Closure_3" { $capture_0: counting }, func: ref.func "closure/effect_handler_forward_install_held.wado/$closure_wrapper_3" } });
+    $array_clone_dst_3 = local.tee v_30($inline__effect_dispatch__wasi_random_random_wado_Random__get_random_bytes_8: block -> ref "core:prelude//List<u8>" {
+        if ref.is_null(local.tee $local_1_44(global:effect_handler_forward_install_held.wado::$effect_wasi:random/random.wado/Random)) == 0 {
+            global:effect_handler_forward_install_held.wado::$effect_wasi:random/random.wado/Random = local.tee $d_wasi:random/random.wado/Random_19(ref.as_non_null($local_1_44)).outer;
             v_30 = struct.new "core:prelude//List<u8>" { repr: $array_clone_src_2 = local.tee v_30(block -> ref "core:prelude//List<u8>" {
-                call_ref "functype/$canonical_closure_fn_0"($indirect_call_1.func, local.tee $indirect_call_1(ref.cast "canonical//CanonicalClosure_0"($d_Random_19.op_get_random_bytes)).env, 1_i64);
+                call_ref "functype/$canonical_closure_fn_0"($indirect_call_1.func, local.tee $indirect_call_1(ref.cast "canonical//CanonicalClosure_0"($d_wasi:random/random.wado/Random_19.op_get_random_bytes)).env, 1_i64);
             }).repr; builtin::array_copy<u8>(local.tee $array_clone_dst_3(builtin::array_new<u8>(local.tee $load_5(v_30.used))), 0, $array_clone_src_2, 0, $load_5); $array_clone_dst_3, used: $load_5 };
-            global:effect_handler_forward_install_held.wado::$effect_Random = $local_1_44;
-            break $inline__effect_dispatch__Random__get_random_bytes_8: v_30;
+            global:effect_handler_forward_install_held.wado::$effect_wasi:random/random.wado/Random = $local_1_44;
+            break $inline__effect_dispatch__wasi_random_random_wado_Random__get_random_bytes_8: v_30;
         } else {
-            break $inline__effect_dispatch__Random__get_random_bytes_8: "effect_handler_forward_install_held.wado/$cm_binding__Random_get_random_bytes$spec0"(1_i64);
+            break $inline__effect_dispatch__wasi_random_random_wado_Random__get_random_bytes_8: "effect_handler_forward_install_held.wado/$cm_binding__Random_get_random_bytes$spec0"(1_i64);
         }
         unreachable;
     }).repr;
@@ -315,22 +315,22 @@ condition: Random::get_random_bytes(1) == [7]
         "core:rt/panic"($local_7.repr, $local_7.used);
         unreachable;
     }
-    drop($inline__effect_dispatch__Random__get_random_u64_13: block -> u64 {
-        if ref.is_null(local.tee $local_1_44(global:effect_handler_forward_install_held.wado::$effect_Random)) == 0 {
-            global:effect_handler_forward_install_held.wado::$effect_Random = local.tee $d_Random_19(ref.as_non_null($local_1_44)).outer;
+    drop($inline__effect_dispatch__wasi_random_random_wado_Random__get_random_u64_13: block -> u64 {
+        if ref.is_null(local.tee $local_1_44(global:effect_handler_forward_install_held.wado::$effect_wasi:random/random.wado/Random)) == 0 {
+            global:effect_handler_forward_install_held.wado::$effect_wasi:random/random.wado/Random = local.tee $d_wasi:random/random.wado/Random_19(ref.as_non_null($local_1_44)).outer;
             $local_2_61 = block -> u64 {
                 let $indirect_call_21: ref "canonical//CanonicalClosure_1";
-                call_ref "functype/$canonical_closure_fn_1"($indirect_call_21.func, local.tee $indirect_call_21(ref.cast "canonical//CanonicalClosure_1"($d_Random_19.op_get_random_u64)).env);
+                call_ref "functype/$canonical_closure_fn_1"($indirect_call_21.func, local.tee $indirect_call_21(ref.cast "canonical//CanonicalClosure_1"($d_wasi:random/random.wado/Random_19.op_get_random_u64)).env);
             };
-            global:effect_handler_forward_install_held.wado::$effect_Random = $local_1_44;
-            break $inline__effect_dispatch__Random__get_random_u64_13: $local_2_61;
+            global:effect_handler_forward_install_held.wado::$effect_wasi:random/random.wado/Random = $local_1_44;
+            break $inline__effect_dispatch__wasi_random_random_wado_Random__get_random_u64_13: $local_2_61;
         } else {
-            break $inline__effect_dispatch__Random__get_random_u64_13: "effect_handler_forward_install_held.wado/$cm_binding__Random_get_random_u64"();
+            break $inline__effect_dispatch__wasi_random_random_wado_Random__get_random_u64_13: "effect_handler_forward_install_held.wado/$cm_binding__Random_get_random_u64"();
         }
         unreachable;
     });
-    global:effect_handler_forward_install_held.wado::$effect_Random = $local_1_27;
-    global:effect_handler_forward_install_held.wado::$effect_Random = $save_Random_18;
+    global:effect_handler_forward_install_held.wado::$effect_wasi:random/random.wado/Random = $local_1_27;
+    global:effect_handler_forward_install_held.wado::$effect_wasi:random/random.wado/Random = $save_wasi:random/random.wado/Random_18;
     if @unlikely(local.tee $load_5(counting.calls) != 2) {
         cold_path;
         "effect_handler_forward_install_held.wado/run$cold0"($load_5);
@@ -1421,20 +1421,20 @@ fn "effect_handler_forward_install_held.wado/effect_handler_forward_install_held
 }
 
 fn "effect_handler_forward_install_held.wado/effect_handler_forward_install_held.wado/$Closure_1::$call$dae[self]"() {
-    let $local_0: ref null "effect_handler_forward_install_held.wado//$Dispatch_Random";
-    let $local_1: ref "effect_handler_forward_install_held.wado//$Dispatch_Random";
+    let $local_0: ref null "effect_handler_forward_install_held.wado//$Dispatch_wasi:random/random.wado/Random";
+    let $local_1: ref "effect_handler_forward_install_held.wado//$Dispatch_wasi:random/random.wado/Random";
     let $local_2: u64;
-    return $inline__effect_dispatch__Random__get_random_u64_0: block -> u64 {
-        if ref.is_null(local.tee $local_0(global:effect_handler_forward_install_held.wado::$effect_Random)) == 0 {
-            global:effect_handler_forward_install_held.wado::$effect_Random = local.tee $local_1(ref.as_non_null($local_0)).outer;
+    return $inline__effect_dispatch__wasi_random_random_wado_Random__get_random_u64_0: block -> u64 {
+        if ref.is_null(local.tee $local_0(global:effect_handler_forward_install_held.wado::$effect_wasi:random/random.wado/Random)) == 0 {
+            global:effect_handler_forward_install_held.wado::$effect_wasi:random/random.wado/Random = local.tee $local_1(ref.as_non_null($local_0)).outer;
             $local_2 = block -> u64 {
                 let $indirect_call_1: ref "canonical//CanonicalClosure_1";
                 call_ref "functype/$canonical_closure_fn_1"($indirect_call_1.func, local.tee $indirect_call_1(ref.cast "canonical//CanonicalClosure_1"($local_1.op_get_random_u64)).env);
             };
-            global:effect_handler_forward_install_held.wado::$effect_Random = $local_0;
-            break $inline__effect_dispatch__Random__get_random_u64_0: $local_2;
+            global:effect_handler_forward_install_held.wado::$effect_wasi:random/random.wado/Random = $local_0;
+            break $inline__effect_dispatch__wasi_random_random_wado_Random__get_random_u64_0: $local_2;
         } else {
-            break $inline__effect_dispatch__Random__get_random_u64_0: "effect_handler_forward_install_held.wado/$cm_binding__Random_get_random_u64"();
+            break $inline__effect_dispatch__wasi_random_random_wado_Random__get_random_u64_0: "effect_handler_forward_install_held.wado/$cm_binding__Random_get_random_u64"();
         }
         unreachable;
     };
@@ -1443,22 +1443,22 @@ fn "effect_handler_forward_install_held.wado/effect_handler_forward_install_held
 fn "effect_handler_forward_install_held.wado/effect_handler_forward_install_held.wado/$Closure_2::$call"(self, max_len) {
     let $load_7: i32;
     let self_2: ref "effect_handler_forward_install_held.wado//Counting";
-    let $local_1: ref null "effect_handler_forward_install_held.wado//$Dispatch_Random";
-    let $local_2: ref "effect_handler_forward_install_held.wado//$Dispatch_Random";
+    let $local_1: ref null "effect_handler_forward_install_held.wado//$Dispatch_wasi:random/random.wado/Random";
+    let $local_2: ref "effect_handler_forward_install_held.wado//$Dispatch_wasi:random/random.wado/Random";
     let v: ref "core:prelude//List<u8>";
     local.tee self_2(self.$capture_0).calls = self_2.calls + 1;
-    return $inline__effect_dispatch__Random__get_random_bytes_1: block -> ref "core:prelude//List<u8>" {
-        if ref.is_null(local.tee $local_1(global:effect_handler_forward_install_held.wado::$effect_Random)) == 0 {
-            global:effect_handler_forward_install_held.wado::$effect_Random = local.tee $local_2(ref.as_non_null($local_1)).outer;
+    return $inline__effect_dispatch__wasi_random_random_wado_Random__get_random_bytes_1: block -> ref "core:prelude//List<u8>" {
+        if ref.is_null(local.tee $local_1(global:effect_handler_forward_install_held.wado::$effect_wasi:random/random.wado/Random)) == 0 {
+            global:effect_handler_forward_install_held.wado::$effect_wasi:random/random.wado/Random = local.tee $local_2(ref.as_non_null($local_1)).outer;
             v = block -> ref "core:prelude//List<u8>" {
                 let $indirect_call_1: ref "canonical//CanonicalClosure_0";
                 call_ref "functype/$canonical_closure_fn_0"($indirect_call_1.func, local.tee $indirect_call_1(ref.cast "canonical//CanonicalClosure_0"($local_2.op_get_random_bytes)).env, max_len);
             };
             v = struct.new "core:prelude//List<u8>" { repr: let $array_clone_src_2: ref Array<u8>; $array_clone_src_2 = v.repr; $load_7 = v.used; let $array_clone_dst_3: ref Array<u8>; builtin::array_copy<u8>(local.tee $array_clone_dst_3(builtin::array_new<u8>($load_7)), 0, $array_clone_src_2, 0, $load_7); $array_clone_dst_3, used: $load_7 };
-            global:effect_handler_forward_install_held.wado::$effect_Random = $local_1;
-            break $inline__effect_dispatch__Random__get_random_bytes_1: v;
+            global:effect_handler_forward_install_held.wado::$effect_wasi:random/random.wado/Random = $local_1;
+            break $inline__effect_dispatch__wasi_random_random_wado_Random__get_random_bytes_1: v;
         } else {
-            break $inline__effect_dispatch__Random__get_random_bytes_1: "effect_handler_forward_install_held.wado/$cm_binding__Random_get_random_bytes"(max_len);
+            break $inline__effect_dispatch__wasi_random_random_wado_Random__get_random_bytes_1: "effect_handler_forward_install_held.wado/$cm_binding__Random_get_random_bytes"(max_len);
         }
         unreachable;
     };
@@ -1466,21 +1466,21 @@ fn "effect_handler_forward_install_held.wado/effect_handler_forward_install_held
 
 fn "effect_handler_forward_install_held.wado/effect_handler_forward_install_held.wado/$Closure_3::$call"(self) {
     let self_1: ref "effect_handler_forward_install_held.wado//Counting";
-    let $local_0: ref null "effect_handler_forward_install_held.wado//$Dispatch_Random";
-    let $local_1: ref "effect_handler_forward_install_held.wado//$Dispatch_Random";
+    let $local_0: ref null "effect_handler_forward_install_held.wado//$Dispatch_wasi:random/random.wado/Random";
+    let $local_1: ref "effect_handler_forward_install_held.wado//$Dispatch_wasi:random/random.wado/Random";
     let $local_2: u64;
     local.tee self_1(self.$capture_0).calls = self_1.calls + 1;
-    return $inline__effect_dispatch__Random__get_random_u64_1: block -> u64 {
-        if ref.is_null(local.tee $local_0(global:effect_handler_forward_install_held.wado::$effect_Random)) == 0 {
-            global:effect_handler_forward_install_held.wado::$effect_Random = local.tee $local_1(ref.as_non_null($local_0)).outer;
+    return $inline__effect_dispatch__wasi_random_random_wado_Random__get_random_u64_1: block -> u64 {
+        if ref.is_null(local.tee $local_0(global:effect_handler_forward_install_held.wado::$effect_wasi:random/random.wado/Random)) == 0 {
+            global:effect_handler_forward_install_held.wado::$effect_wasi:random/random.wado/Random = local.tee $local_1(ref.as_non_null($local_0)).outer;
             $local_2 = block -> u64 {
                 let $indirect_call_1: ref "canonical//CanonicalClosure_1";
                 call_ref "functype/$canonical_closure_fn_1"($indirect_call_1.func, local.tee $indirect_call_1(ref.cast "canonical//CanonicalClosure_1"($local_1.op_get_random_u64)).env);
             };
-            global:effect_handler_forward_install_held.wado::$effect_Random = $local_0;
-            break $inline__effect_dispatch__Random__get_random_u64_1: $local_2;
+            global:effect_handler_forward_install_held.wado::$effect_wasi:random/random.wado/Random = $local_0;
+            break $inline__effect_dispatch__wasi_random_random_wado_Random__get_random_u64_1: $local_2;
         } else {
-            break $inline__effect_dispatch__Random__get_random_u64_1: "effect_handler_forward_install_held.wado/$cm_binding__Random_get_random_u64"();
+            break $inline__effect_dispatch__wasi_random_random_wado_Random__get_random_u64_1: "effect_handler_forward_install_held.wado/$cm_binding__Random_get_random_u64"();
         }
         unreachable;
     };

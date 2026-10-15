@@ -11,13 +11,13 @@ struct core:prelude/string.wado//String {  // TypeId(2)
     mut used: i32,
 }
 
-struct cm_callback_diverging_arg.wado//$Dispatch_Target {  // TypeId(3)
-    mut outer: ref null "cm_callback_diverging_arg.wado//$Dispatch_Target",
+struct cm_callback_diverging_arg.wado//$Dispatch_cm_callback_diverging_arg.wado/Target {  // TypeId(3)
+    mut outer: ref null "cm_callback_diverging_arg.wado//$Dispatch_cm_callback_diverging_arg.wado/Target",
     mut op_listen: ref struct,
 }
 
-struct cm_callback_diverging_arg.wado//$Dispatch_Demo {  // TypeId(4)
-    mut outer: ref null "cm_callback_diverging_arg.wado//$Dispatch_Demo",
+struct cm_callback_diverging_arg.wado//$Dispatch_cm_callback_diverging_arg.wado/Demo {  // TypeId(4)
+    mut outer: ref null "cm_callback_diverging_arg.wado//$Dispatch_cm_callback_diverging_arg.wado/Demo",
     mut op_target: ref struct,
 }
 
@@ -139,8 +139,8 @@ import fn wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code 
 import fn wasi/task-return from "wasi/task-return";
 import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 
-global mut global:cm_callback_diverging_arg.wado::$effect_Demo: ref null "cm_callback_diverging_arg.wado//$Dispatch_Demo" = ref.null none;
-global mut global:cm_callback_diverging_arg.wado::$effect_Target: ref null "cm_callback_diverging_arg.wado//$Dispatch_Target" = ref.null none;
+global mut global:cm_callback_diverging_arg.wado::$effect_cm_callback_diverging_arg.wado/Demo: ref null "cm_callback_diverging_arg.wado//$Dispatch_cm_callback_diverging_arg.wado/Demo" = ref.null none;
+global mut global:cm_callback_diverging_arg.wado::$effect_cm_callback_diverging_arg.wado/Target: ref null "cm_callback_diverging_arg.wado//$Dispatch_cm_callback_diverging_arg.wado/Target" = ref.null none;
 global mut global:core:rt::CM_CALLBACKS: ref null "core:prelude//List<fn()->()>" = ref.null none;
 global mut global:cm_callback_diverging_arg.wado::$modules_initialized: bool = 0;
 global global:cm_callback_diverging_arg.wado::$const_obj_0: ref "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(100, 111, 110, 101), used: 4 };
@@ -156,13 +156,13 @@ global global:core:prelude/list.wado::$const_obj_14: ref Array<u8> = array.new_f
 
 fn "cm_callback_diverging_arg.wado/run"() with Stdout {
     let mock: ref "cm_callback_diverging_arg.wado//Mock";
-    let $save_Demo: ref null "cm_callback_diverging_arg.wado//$Dispatch_Demo";
-    let $d_Demo: ref "cm_callback_diverging_arg.wado//$Dispatch_Demo";
-    let $save_Target: ref null "cm_callback_diverging_arg.wado//$Dispatch_Target";
-    let $d_Target: ref "cm_callback_diverging_arg.wado//$Dispatch_Target";
+    let $save_cm_callback_diverging_arg.wado/Demo: ref null "cm_callback_diverging_arg.wado//$Dispatch_cm_callback_diverging_arg.wado/Demo";
+    let $d_cm_callback_diverging_arg.wado/Demo: ref "cm_callback_diverging_arg.wado//$Dispatch_cm_callback_diverging_arg.wado/Demo";
+    let $save_cm_callback_diverging_arg.wado/Target: ref null "cm_callback_diverging_arg.wado//$Dispatch_cm_callback_diverging_arg.wado/Target";
+    let $d_cm_callback_diverging_arg.wado/Target: ref "cm_callback_diverging_arg.wado//$Dispatch_cm_callback_diverging_arg.wado/Target";
     let listener: ref null struct;
-    let $local_2_8: ref null "cm_callback_diverging_arg.wado//$Dispatch_Target";
-    let $local_0: ref null "cm_callback_diverging_arg.wado//$Dispatch_Demo";
+    let $local_2_8: ref null "cm_callback_diverging_arg.wado//$Dispatch_cm_callback_diverging_arg.wado/Target";
+    let $local_0: ref null "cm_callback_diverging_arg.wado//$Dispatch_cm_callback_diverging_arg.wado/Demo";
     let $local_2_12: u64;
     let rx_19: i32;
     let tx_20: i32;
@@ -172,38 +172,38 @@ fn "cm_callback_diverging_arg.wado/run"() with Stdout {
         "cm_callback_diverging_arg.wado/$initialize_modules$cold0"();
     };
     mock = struct.new "cm_callback_diverging_arg.wado//Mock" {  };
-    global:cm_callback_diverging_arg.wado::$effect_Demo = local.tee $d_Demo(struct.new "cm_callback_diverging_arg.wado//$Dispatch_Demo" { outer: local.tee $save_Demo(global:cm_callback_diverging_arg.wado::$effect_Demo), op_target: struct.new "canonical//CanonicalClosure_2" { env: struct.new "cm_callback_diverging_arg.wado//$Closure_0" { $capture_0: mock }, func: ref.func "closure/cm_callback_diverging_arg.wado/$closure_wrapper_0" } });
-    global:cm_callback_diverging_arg.wado::$effect_Target = local.tee $d_Target(struct.new "cm_callback_diverging_arg.wado//$Dispatch_Target" { outer: local.tee $save_Target(global:cm_callback_diverging_arg.wado::$effect_Target), op_listen: struct.new "canonical//CanonicalClosure_3" { env: struct.new "cm_callback_diverging_arg.wado//$Closure_1" { $capture_0: mock }, func: ref.func "closure/cm_callback_diverging_arg.wado/$closure_wrapper_1" } });
+    global:cm_callback_diverging_arg.wado::$effect_cm_callback_diverging_arg.wado/Demo = local.tee $d_cm_callback_diverging_arg.wado/Demo(struct.new "cm_callback_diverging_arg.wado//$Dispatch_cm_callback_diverging_arg.wado/Demo" { outer: local.tee $save_cm_callback_diverging_arg.wado/Demo(global:cm_callback_diverging_arg.wado::$effect_cm_callback_diverging_arg.wado/Demo), op_target: struct.new "canonical//CanonicalClosure_2" { env: struct.new "cm_callback_diverging_arg.wado//$Closure_0" { $capture_0: mock }, func: ref.func "closure/cm_callback_diverging_arg.wado/$closure_wrapper_0" } });
+    global:cm_callback_diverging_arg.wado::$effect_cm_callback_diverging_arg.wado/Target = local.tee $d_cm_callback_diverging_arg.wado/Target(struct.new "cm_callback_diverging_arg.wado//$Dispatch_cm_callback_diverging_arg.wado/Target" { outer: local.tee $save_cm_callback_diverging_arg.wado/Target(global:cm_callback_diverging_arg.wado::$effect_cm_callback_diverging_arg.wado/Target), op_listen: struct.new "canonical//CanonicalClosure_3" { env: struct.new "cm_callback_diverging_arg.wado//$Closure_1" { $capture_0: mock }, func: ref.func "closure/cm_callback_diverging_arg.wado/$closure_wrapper_1" } });
     if @unlikely(black_box(0)) {
-        $inline__effect_dispatch__Target__listen_1: block {
-            $local_2_12 = $inline__effect_dispatch__Demo__target_2: block -> u64 {
-                if ref.is_null(local.tee $local_0(global:cm_callback_diverging_arg.wado::$effect_Demo)) == 0 {
-                    global:cm_callback_diverging_arg.wado::$effect_Demo = local.tee $d_Demo(ref.as_non_null($local_0)).outer;
+        $inline__effect_dispatch__cm_callback_diverging_arg_wado_Target__listen_1: block {
+            $local_2_12 = $inline__effect_dispatch__cm_callback_diverging_arg_wado_Demo__target_2: block -> u64 {
+                if ref.is_null(local.tee $local_0(global:cm_callback_diverging_arg.wado::$effect_cm_callback_diverging_arg.wado/Demo)) == 0 {
+                    global:cm_callback_diverging_arg.wado::$effect_cm_callback_diverging_arg.wado/Demo = local.tee $d_cm_callback_diverging_arg.wado/Demo(ref.as_non_null($local_0)).outer;
                     $local_2_12 = block -> u64 {
                         let $indirect_call_1: ref "canonical//CanonicalClosure_2";
-                        call_ref "functype/$canonical_closure_fn_2"($indirect_call_1.func, local.tee $indirect_call_1(ref.cast "canonical//CanonicalClosure_2"($d_Demo.op_target)).env);
+                        call_ref "functype/$canonical_closure_fn_2"($indirect_call_1.func, local.tee $indirect_call_1(ref.cast "canonical//CanonicalClosure_2"($d_cm_callback_diverging_arg.wado/Demo.op_target)).env);
                     };
-                    global:cm_callback_diverging_arg.wado::$effect_Demo = $local_0;
-                    break $inline__effect_dispatch__Demo__target_2: $local_2_12;
+                    global:cm_callback_diverging_arg.wado::$effect_cm_callback_diverging_arg.wado/Demo = $local_0;
+                    break $inline__effect_dispatch__cm_callback_diverging_arg_wado_Demo__target_2: $local_2_12;
                 } else {
-                    break $inline__effect_dispatch__Demo__target_2: "cm_callback_diverging_arg.wado/$cm_binding__Demo_target"();
+                    break $inline__effect_dispatch__cm_callback_diverging_arg_wado_Demo__target_2: "cm_callback_diverging_arg.wado/$cm_binding__Demo_target"();
                 }
                 unreachable;
             };
             "core:rt/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("unset"), used: 5 });
             unreachable;
-            if ref.is_null(local.tee $local_2_8(global:cm_callback_diverging_arg.wado::$effect_Target)) == 0 {
-                global:cm_callback_diverging_arg.wado::$effect_Target = local.tee $d_Target(ref.as_non_null($local_2_8)).outer;
+            if ref.is_null(local.tee $local_2_8(global:cm_callback_diverging_arg.wado::$effect_cm_callback_diverging_arg.wado/Target)) == 0 {
+                global:cm_callback_diverging_arg.wado::$effect_cm_callback_diverging_arg.wado/Target = local.tee $d_cm_callback_diverging_arg.wado/Target(ref.as_non_null($local_2_8)).outer;
                 let $indirect_call_2: ref "canonical//CanonicalClosure_3";
-                call_ref "functype/$canonical_closure_fn_3"($indirect_call_2.func, local.tee $indirect_call_2(ref.cast "canonical//CanonicalClosure_3"($d_Target.op_listen)).env, $local_2_12, ref.as_non_null(listener));
-                break $inline__effect_dispatch__Target__listen_1: global:cm_callback_diverging_arg.wado::$effect_Target = $local_2_8;
+                call_ref "functype/$canonical_closure_fn_3"($indirect_call_2.func, local.tee $indirect_call_2(ref.cast "canonical//CanonicalClosure_3"($d_cm_callback_diverging_arg.wado/Target.op_listen)).env, $local_2_12, ref.as_non_null(listener));
+                break $inline__effect_dispatch__cm_callback_diverging_arg_wado_Target__listen_1: global:cm_callback_diverging_arg.wado::$effect_cm_callback_diverging_arg.wado/Target = $local_2_8;
             } else {
-                break $inline__effect_dispatch__Target__listen_1: "cm_callback_diverging_arg.wado/$cm_binding__Target_listen"($local_2_12, "core:rt/cm_callback_key"(ref.as_non_null(listener)));
+                break $inline__effect_dispatch__cm_callback_diverging_arg_wado_Target__listen_1: "cm_callback_diverging_arg.wado/$cm_binding__Target_listen"($local_2_12, "core:rt/cm_callback_key"(ref.as_non_null(listener)));
             }
         };
     }
-    global:cm_callback_diverging_arg.wado::$effect_Target = $save_Target;
-    global:cm_callback_diverging_arg.wado::$effect_Demo = $save_Demo;
+    global:cm_callback_diverging_arg.wado::$effect_cm_callback_diverging_arg.wado/Target = $save_cm_callback_diverging_arg.wado/Target;
+    global:cm_callback_diverging_arg.wado::$effect_cm_callback_diverging_arg.wado/Demo = $save_cm_callback_diverging_arg.wado/Demo;
     rx_19 = builtin::i32_wrap_i64(local.tee $local_2_12("wasi/stream-new"()));
     tx_20 = builtin::i32_wrap_i64($local_2_12 >> 32_i64);
     rx_19 = "cm_callback_diverging_arg.wado/$cm_binding__Stdout_write_via_stream"(rx_19);

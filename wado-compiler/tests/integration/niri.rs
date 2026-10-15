@@ -5531,10 +5531,9 @@ fn non_pure_call_with_effect_left_intact() {
     // CalleeMap excludes it, so the call stays a Call.
     let body = return_stmt(int_lit(42, TypeTable::I32, "42"));
     let mut greet = make_pure_fn("greet", vec![], TypeTable::I32, body);
-    greet.effects.push(EffectRef::Concrete {
-        name: "Stdout".to_string(),
-        module_source: ModuleSource::default(),
-    });
+    greet
+        .effects
+        .push(EffectRef::unresolved("Stdout", &ModuleSource::default()));
     assert!(!is_ctfe_eligible(&greet));
     let callees = build_callee_map_test(&[]); // greet not admitted
 

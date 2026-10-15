@@ -42,6 +42,7 @@ use super::coercion::{
 };
 use super::expr::UnionSource;
 use super::sem::{ModuleSemantics, TypeAnnotations};
+use super::typecheck::admits_condition;
 use super::types::{FunctionContext, TypeLookup, VariantInfo};
 use super::tysys::TypeSystem;
 use super::util;
@@ -82,7 +83,7 @@ use crate::escape::{
 use crate::format_spec::{FormatKind, TemplateFormatSpec};
 use crate::lexer::defaults_to_float;
 use crate::name::{
-    LocalMethodName, MethodName, constant_pattern_local_name, deref_capture_name,
+    DeclaredHead, LocalMethodName, MethodName, constant_pattern_local_name, deref_capture_name,
     display_function_name, effect_default_impl_name, for_body_label, mangle_local_item_name,
     minted_name, range_local_name, test_function_name, widened_half_local_name,
 };
@@ -1117,7 +1118,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             .ann_effect_ops(decl.id)
             .expect("`record_effect_ops` records op signatures for every effect reify emits");
         tir::TirEffect {
-            name: decl.name.clone(),
+            head: DeclaredHead::new(self.tysys.resolutions.defs(), self.tysys.def_at(decl.id)),
             visibility: decl.visibility,
             operations,
             span: decl.span,
@@ -1134,8 +1135,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             .ann_effect_ops(decl.id)
             .expect("`record_effect_ops` records op signatures for every resource reify emits");
         tir::TirResource {
-            def: self.tysys.def_at(decl.id),
-            name: decl.name.clone(),
+            head: DeclaredHead::new(self.tysys.resolutions.defs(), self.tysys.def_at(decl.id)),
             visibility: decl.visibility,
             operations,
             is_generic: !decl.type_params.is_empty(),
@@ -1295,7 +1295,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             trait_canonical: facts
                 .trait_name
                 .as_ref()
-                .and_then(|fq| Some((fq.module()?.clone(), fq.base_name().to_string()))),
+                .and_then(|fq| fq.declared_head().cloned()),
             trait_type_args: facts.trait_type_args.clone(),
             struct_name: naming.struct_name(),
             rest: impl_block.rest.map(|r| r.kind),
@@ -2794,16 +2794,15 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
     }
 
     /// Reify an expression in condition position, the walk
-    /// `resolve_condition_expr` made: a `Bool` expectation would reach the
-    /// operands and propagate into `If`/`Match` branches, where it is wrong.
+    /// `resolve_condition_expr` made.
     fn reify_condition_expr(&mut self, expr: &ast::Expr, ctx: &mut FunctionContext) -> TirExpr {
-        let cond = self.reify_expr(expr, ctx, None);
-        match cond.type_id {
-            TypeTable::BOOL | TypeTable::UNKNOWN | TypeTable::ERROR => cond,
-            type_id => unreachable!(
-                "`resolve_condition_expr` rejects a non-`bool` condition, and a module holding one is never reified; got {type_id}"
-            ),
-        }
+        let cond = self.reify_expr(expr, ctx, Some(TypeTable::BOOL));
+        assert!(
+            admits_condition(&self.tysys.type_table.borrow(), cond.type_id),
+            "`resolve_condition_expr` rejects a non-`bool` condition, and a module holding one is never reified; got {}",
+            cond.type_id
+        );
+        cond
     }
 
     /// Reify a `while cond { body }` statement as `Loop { if !cond { break; } body }`,
@@ -2833,11 +2832,9 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 let else_block = TirBlock::new(vec![bare_break(span)], *cond_span);
                 self.reify_let_chain_stmts(
                     elements,
-                    &w.body,
+                    |r, ctx| r.reify_block_with_position(&w.body, ctx, None, false).stmts,
                     Some(&else_block),
                     &mut ctx.enter_scope(),
-                    None,
-                    false,
                     *cond_span,
                 )
             }
@@ -3979,7 +3976,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             }
             Some(ast::Condition::Expr(cond_expr)) => {
                 let cond_span = cond_expr.span();
-                let cond_tir = self.reify_expr(cond_expr, ctx, Some(TypeTable::BOOL));
+                let cond_tir = self.reify_condition_expr(cond_expr, ctx);
                 let if_break = break_unless(cond_tir, cond_span, span);
                 let labeled_body = self.reify_for_labeled_body(&body_label, &f.body, ctx);
                 let mut s = vec![if_break, labeled_body];
@@ -3990,76 +3987,18 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 elements,
                 span: cond_span,
             }) => {
-                // For-let-chain is restricted to a single Let
-                // element (the parser enforces this; mirror
-                // `Elaborator::resolve_for`). The
-                // expansion shape is a single Match: the pattern
-                // arm's body is the labeled-body + update; the
-                // wildcard arm breaks.
-                let single_let = if elements.len() == 1 {
-                    match &elements[0] {
-                        ast::ConditionElement::Let {
-                            pattern,
-                            expr,
-                            span: elem_span,
-                        } => Some((pattern, expr, *elem_span)),
-                        _ => None,
-                    }
-                } else {
-                    None
-                };
-                let Some((pattern, expr, elem_span)) = single_let else {
-                    // Annotate already diagnosed multi-element
-                    // for-let-chain as `InvalidPattern`; emit
-                    // empty to mirror.
-                    return vec![];
-                };
-
-                let scrutinee = self.reify_expr(expr, ctx, None);
-                let scrutinee_type = scrutinee.type_id;
-                let mut scope = ctx.enter_scope();
-                let tir_pattern =
-                    self.reify_pattern(pattern, scrutinee_type, elem_span, &mut scope);
-                let labeled_body = self.reify_for_labeled_body(&body_label, &f.body, &mut scope);
-                let update_stmts = self.reify_for_update(f.update.as_ref(), &mut scope);
-
-                let mut then_stmts = vec![labeled_body];
-                then_stmts.extend(update_stmts);
-                let then_body = TirExpr::new(
-                    TirExprKind::Block(TirBlock::new(then_stmts, *cond_span)),
-                    TypeTable::UNIT,
-                    *cond_span,
-                );
-                let else_body = TirExpr::new(
-                    TirExprKind::Block(TirBlock::new(vec![bare_break(span)], *cond_span)),
-                    TypeTable::NEVER,
-                    *cond_span,
-                );
-                let arms = vec![
-                    TirMatchArm {
-                        pattern: tir_pattern,
-                        guard: None,
-                        body: then_body,
-                        span: elem_span,
+                let else_block = TirBlock::new(vec![bare_break(span)], *cond_span);
+                self.reify_let_chain_stmts(
+                    elements,
+                    |r, ctx| {
+                        let mut s = vec![r.reify_for_labeled_body(&body_label, &f.body, ctx)];
+                        s.extend(r.reify_for_update(f.update.as_ref(), ctx));
+                        s
                     },
-                    TirMatchArm {
-                        pattern: TirPattern::Wildcard,
-                        guard: None,
-                        body: else_body,
-                        span: *cond_span,
-                    },
-                ];
-                vec![TirStmt::new(
-                    TirStmtKind::Expr(TirExpr::new(
-                        TirExprKind::Match {
-                            expr: Box::new(scrutinee),
-                            arms,
-                        },
-                        TypeTable::UNIT,
-                        *cond_span,
-                    )),
+                    Some(&else_block),
+                    &mut ctx.enter_scope(),
                     *cond_span,
-                )]
+                )
             }
         };
 
@@ -4114,25 +4053,22 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             .unwrap_or_default()
     }
 
-    /// Reify a let-chain (`if let PAT = e [&& BOOL]* { … }`) into nested Match /
-    /// If stmts, shared by `reify_if_expr` / `reify_if_stmt` / `reify_while`.
-    /// A `Let` element becomes a two-arm Match (pattern arm recurses, wildcard
-    /// falls back to `else_block`), an `Expr` element a single-branch `If`; the
-    /// recursion bottoms out on the empty list by reifying `then_block`.
+    /// Reify a let chain into nested Match / If stmts, shared by
+    /// `reify_if_expr` / `reify_if_stmt` / `reify_while` / `reify_for`. A `Let`
+    /// element becomes a two-arm Match (pattern arm recurses, wildcard falls
+    /// back to `else_block`), an `Expr` element a single-branch `If`; the
+    /// recursion bottoms out on the empty list by reifying the success path
+    /// with `then`.
     fn reify_let_chain_stmts(
         &mut self,
         elements: &[ast::ConditionElement],
-        then_block_ast: &ast::Block,
+        then: impl FnOnce(&mut Self, &mut FunctionContext) -> Vec<TirStmt>,
         else_block: Option<&TirBlock>,
         ctx: &mut FunctionContext,
-        expected_type: Option<TypeId>,
-        tail_value: bool,
         span: Span,
     ) -> Vec<TirStmt> {
         if elements.is_empty() {
-            return self
-                .reify_block_with_position(then_block_ast, ctx, expected_type, tail_value)
-                .stmts;
+            return then(self, ctx);
         }
 
         match &elements[0] {
@@ -4142,20 +4078,13 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 span: elem_span,
             } => {
                 let scrutinee = self.reify_expr(expr, ctx, None);
+                let scrutinee = self.probe_expr(ProbeSite::Around, expr.id(), scrutinee);
                 let scrutinee_type = scrutinee.type_id;
                 let tir_pattern = self.reify_pattern(pattern, scrutinee_type, *elem_span, ctx);
-                let inner_stmts = self.reify_let_chain_stmts(
-                    &elements[1..],
-                    then_block_ast,
-                    else_block,
-                    ctx,
-                    expected_type,
-                    tail_value,
-                    span,
-                );
+                let inner_stmts =
+                    self.reify_let_chain_stmts(&elements[1..], then, else_block, ctx, span);
                 let inner_block = TirBlock::new(inner_stmts, span);
-                // Use the shared `block_result_type` (mirroring
-                // `resolve_let_chain_stmts`) so a then/else
+                // Use the shared `block_result_type` so a then/else
                 // block ending in a value `If` / `Match` / nested chain
                 // contributes its real result type. A hand-rolled
                 // "last stmt is Expr" check would mis-classify those
@@ -4206,16 +4135,10 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 )]
             }
             ast::ConditionElement::Expr(expr) => {
-                let condition = self.reify_expr(expr, ctx, Some(TypeTable::BOOL));
-                let inner_stmts = self.reify_let_chain_stmts(
-                    &elements[1..],
-                    then_block_ast,
-                    else_block,
-                    ctx,
-                    expected_type,
-                    tail_value,
-                    span,
-                );
+                let condition = self.reify_condition_expr(expr, ctx);
+                let condition = self.probe_expr(ProbeSite::Around, expr.id(), condition);
+                let inner_stmts =
+                    self.reify_let_chain_stmts(&elements[1..], then, else_block, ctx, span);
                 let inner_block = TirBlock::new(inner_stmts, span);
                 vec![TirStmt::new(
                     TirStmtKind::If {
@@ -4254,11 +4177,17 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 );
                 self.reify_let_chain_stmts(
                     elements,
-                    &if_stmt.then_block,
+                    |r, ctx| {
+                        r.reify_block_with_position(
+                            &if_stmt.then_block,
+                            ctx,
+                            expected_type,
+                            tail_value,
+                        )
+                        .stmts
+                    },
                     else_block.as_ref(),
                     &mut ctx.enter_scope(),
-                    expected_type,
-                    tail_value,
                     if_stmt.span,
                 )
             }
@@ -4340,11 +4269,9 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 );
                 self.reify_let_chain_stmts(
                     elements,
-                    &if_stmt.then_block,
+                    |r, ctx| r.reify_block(&if_stmt.then_block, ctx, None).stmts,
                     else_block.as_ref(),
                     &mut ctx.enter_scope(),
-                    None,
-                    false,
                     if_stmt.span,
                 )
             }
@@ -4385,11 +4312,12 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 );
                 let stmts = self.reify_let_chain_stmts(
                     elements,
-                    &if_expr.then_block,
+                    |r, ctx| {
+                        r.reify_block_with_position(&if_expr.then_block, ctx, branch_expected, true)
+                            .stmts
+                    },
                     else_block.as_ref(),
                     &mut ctx.enter_scope(),
-                    branch_expected,
-                    true,
                     if_expr.span,
                 );
                 let chain_block = TirBlock::new(stmts, if_expr.span);
@@ -6445,10 +6373,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             let handler = self.reify_expr(&binding.handler, ctx, None);
             for entry in &facts.effects {
                 bindings.push(TirHandlerBinding {
-                    effect: Some(EffectRef::Concrete {
-                        name: entry.name.clone(),
-                        module_source: entry.module_source.clone(),
-                    }),
+                    effect: entry.effect.clone(),
                     trait_type_args: entry.trait_type_args.clone(),
                     handler: handler.clone(),
                     handler_type: facts.handler_type,
@@ -6486,7 +6411,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         let ctx = &mut ctx.enter_scope();
         let pattern_tir = self.reify_pattern(&m.pattern, scrutinee_type, m.span, ctx);
         let arm_body = match &m.guard {
-            Some(guard) => self.reify_expr(guard, ctx, Some(TypeTable::BOOL)),
+            Some(guard) => self.reify_condition_expr(guard, ctx),
             None => bool_lit(true, m.span),
         };
 
@@ -6757,7 +6682,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 let guard = arm
                     .guard
                     .as_ref()
-                    .map(|g| self.reify_expr(g, ctx, Some(TypeTable::BOOL)));
+                    .map(|g| self.reify_condition_expr(g, ctx));
                 let body = self.reify_expr(&arm.body, ctx, branch_expected);
                 let body = self.probe_expr(ProbeSite::Around, arm.body.id(), body);
                 TirMatchArm {

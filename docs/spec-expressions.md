@@ -103,9 +103,10 @@ or repeats:
 - A `while`, a `for` with a condition, a `for-of` and a tuple comprehension may
   run their body zero times, whatever the condition says, so an assignment in
   the body never counts after them.
-- The right side of `&&` and `||`, a guard, and each element of a `let` chain
-  after the first may not run, so what they assign counts only on the paths
-  that ran them. A guard that fails passes its assignments on to the next arm.
+- The right side of `&&` and `||`, a guard, and each operand of a
+  [let chain](./spec-control-flow.md#let-chains) after the first may not run,
+  so what they assign counts only on the paths that ran them. A guard that
+  fails passes its assignments on to the next arm.
 - A `let ... else` block diverges, so it never reaches the statement after the
   `let`.
 

@@ -1036,7 +1036,7 @@ impl<'a, H: CompilerHost> Binder<'a, H> {
                 self.bind_expr(&compound.value)?;
             }
 
-            Expr::Binary(binary) if matches!(binary.op, BinaryOp::And | BinaryOp::Or) => {
+            Expr::Binary(binary) if binary.op.is_short_circuit() => {
                 let fails = self.bind_test(expr)?;
                 self.flow = std::mem::take(&mut self.flow).join(fails);
             }

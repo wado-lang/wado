@@ -151,11 +151,7 @@ fn "opt_lbf_exit_in_if_condition.wado/run"() with Stdout {
             rx_33 = local.tee $pattern_temp_0(struct.new "tuple//[core:prelude/types.wado/Stream<u8>, core:prelude/types.wado/StreamWritable<u8>]" { 0: builtin::i32_wrap_i64(local.tee packed_37("wasi/stream-new"())), 1: builtin::i32_wrap_i64(packed_37 >> 32_i64) }).0;
             tx_34 = $pattern_temp_0.1;
             handle = "opt_lbf_exit_in_if_condition.wado/$cm_binding__Stdout_write_via_stream"(rx_33);
-            let $arg_spill_4: i32;
-            $arg_spill_4 = tx_34;
-            let $mv_arg_5: ref "core:prelude/string.wado//String";
-            $mv_arg_5 = message_32;
-            "core:rt/write_string_to_stream$spec0$dae[add_newline]"($arg_spill_4, $mv_arg_5.repr, $mv_arg_5.used);
+            "core:rt/write_string_to_stream$spec0$dae[add_newline]"(tx_34, message_32.repr, message_32.used);
             "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle);
             break $fused_check;
         }

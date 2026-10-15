@@ -736,9 +736,7 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::utf8_valid_prefix"
                     continue l67;
                 }
             }
-            if @unlikely(local.tee b0(block -> i32 {
-                "core:prelude/string.wado/core:prelude/string.wado/String::utf8_sequence_len"(bytes.repr, bytes.start, i, len);
-            }) <= 0) {
+            if @unlikely(local.tee b0("core:prelude/string.wado/core:prelude/string.wado/String::utf8_sequence_len"(bytes.repr, bytes.start, i, len)) <= 0) {
                 cold_path;
                 return select i32(b0 < 0, i, -1 - i);
             }
@@ -932,8 +930,16 @@ fn "core:prelude/types.wado/core:prelude/types.wado/AsyncCall<core:prelude/types
     if local.tee handle_1(self.__cm_packed >>u 4) != 0 {
         ws_3 = "wasi/waitable-set-new"();
         "wasi/waitable-join"(handle_1, ws_3);
+<<<<<<< HEAD
         b123: block {
             l124: loop {
+||||||| b04b4ab5f
+        b171: block {
+            l172: loop {
+=======
+        b170: block {
+            l171: loop {
+>>>>>>> origin/main
                 out_ptr = "mem/realloc"(0, 0, 4, 8);
                 code = "wasi/waitable-set-wait"(ws_3, out_ptr);
                 drop(builtin::load_i32(out_ptr));
@@ -944,8 +950,16 @@ fn "core:prelude/types.wado/core:prelude/types.wado/AsyncCall<core:prelude/types
                     "core:prelude/types.wado/cm_subtask_settled$cold0$dae[event]"(code);
                     unreachable;
                 }
+<<<<<<< HEAD
                 break_if b123 payload >u 1;
                 continue l124;
+||||||| b04b4ab5f
+                break_if b171 payload >u 1;
+                continue l172;
+=======
+                break_if b170 payload >u 1;
+                continue l171;
+>>>>>>> origin/main
             };
         };
         "wasi/subtask-drop"(handle_1);

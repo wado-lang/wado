@@ -7,6 +7,7 @@
 use crate::compiler_host::{DependencyIndex, DependencyManifest};
 use crate::hashmap;
 use crate::intern::{InternedStr, StringInterner};
+use crate::name::{DeclaredHead, effect_namespace};
 use crate::path::is_cwd_relative;
 use crate::primitive::PrimitiveType;
 use crate::stdlib::{ALL_CORE_WASM_ASSETS, BINDING_MODULE_PATHS, CORE_MODULE_PATHS};
@@ -244,6 +245,7 @@ impl ModuleSourceInterner {
             package: self.root_package.clone(),
         }
     }
+
     /// A remote package's entry module: it is its own package root.
     pub fn remote(&mut self, url: &str) -> ModuleSource {
         self.remote_module(url, url)
@@ -454,6 +456,9 @@ pub enum ModuleSource {
         /// `wat` or `wasm` source format.
         kind: WasmAssetKind,
     },
+    /// The namespace an `E::op()` call is rendered in: the interface (or
+    /// resource) it names, which has no module of its own.
+    Effect(Box<DeclaredHead>),
 }
 
 /// The package a [`ModuleSource`] belongs to. Visibility enforcement keys on
@@ -484,6 +489,7 @@ impl ModuleSource {
             Self::Redirected { package, .. } => package.clone(),
             Self::Dependency { pkg, .. } => PackageId::Dependency(pkg.clone()),
             Self::Remote { pkg, .. } => PackageId::Remote(pkg.clone()),
+            Self::Effect(head) => head.module().package_id(),
         }
     }
 
@@ -522,6 +528,7 @@ impl PartialEq for ModuleSource {
                     kind: kind_b,
                 },
             ) => a == b && kind_a == kind_b,
+            (Self::Effect(a), Self::Effect(b)) => a == b,
             // Entry points are equal regardless of filename
             (Self::EntryPoint { .. }, Self::EntryPoint { .. }) => true,
             _ => false,
@@ -552,6 +559,7 @@ impl std::hash::Hash for ModuleSource {
                 path.hash(state);
                 kind.hash(state);
             }
+            Self::Effect(head) => head.hash(state),
             // Entry points hash the same regardless of filename
             Self::EntryPoint { .. } => {}
         }
@@ -698,6 +706,7 @@ impl ModuleSource {
             Self::EntryPoint { filename, .. } => vec![entry_basename(filename).to_string()],
             Self::Redirected { uri, .. } => vec![uri.to_string()],
             Self::Wasm { path, .. } => vec![path.to_string()],
+            Self::Effect { .. } => vec![self.to_string()],
         }
     }
 
@@ -788,31 +797,24 @@ impl ModuleSource {
         matches!(self, Self::EntryPoint { .. })
     }
 
-    /// Check if this looks like an effect module (single `PascalCase` name).
-    /// Effects are represented as Local paths with a single element like "Stdout".
-    #[must_use]
-    pub fn is_effect_like(&self) -> bool {
-        if self.is_entry_point() {
-            return false;
-        }
-        let path = self.to_path();
-        path.len() == 1
-            && path[0]
-                .chars()
-                .next()
-                .is_some_and(|c| c.is_ascii_uppercase())
-            && !path[0].contains('/')
-            && !path[0].contains('.')
-    }
-
-    /// Get the interface name if this is an interface-like module.
+    /// The interface an `E::op()` call's namespace names, by its bare name.
     #[must_use]
     pub fn interface_name(&self) -> Option<String> {
-        if self.is_effect_like() {
-            let path = self.to_path();
-            path.into_iter().next()
-        } else {
-            None
+        self.effect_interface().map(|head| head.name().to_string())
+    }
+
+    /// The namespace of an operation of `effect`.
+    #[must_use]
+    pub fn effect(effect: &DeclaredHead) -> Self {
+        Self::Effect(Box::new(effect.clone()))
+    }
+
+    /// The interface an `E::op()` call's namespace names.
+    #[must_use]
+    pub fn effect_interface(&self) -> Option<&DeclaredHead> {
+        match self {
+            Self::Effect(head) => Some(head),
+            _ => None,
         }
     }
 
@@ -911,6 +913,7 @@ impl fmt::Display for ModuleSource {
             Self::EntryPoint { filename, .. } => write!(f, "{}", entry_basename(filename)),
             Self::Redirected { uri, .. } => write!(f, "{uri}"),
             Self::Wasm { path, .. } => write!(f, "{path}"),
+            Self::Effect(head) => write!(f, "{}", effect_namespace(head.module(), head.rendered())),
         }
     }
 }

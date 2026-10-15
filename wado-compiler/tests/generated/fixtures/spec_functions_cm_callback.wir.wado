@@ -29,8 +29,8 @@ struct spec_functions_cm_callback.wado//$Closure_1 {  // TypeId(5)
     mut $capture_0: ref "core:prelude//List<i32>",
 }
 
-struct spec_functions_cm_callback.wado//$Dispatch_Target {  // TypeId(6)
-    mut outer: ref null "spec_functions_cm_callback.wado//$Dispatch_Target",
+struct spec_functions_cm_callback.wado//$Dispatch_spec_functions_cm_callback.wado/Target {  // TypeId(6)
+    mut outer: ref null "spec_functions_cm_callback.wado//$Dispatch_spec_functions_cm_callback.wado/Target",
     mut op_listen: ref struct,
 }
 
@@ -165,7 +165,7 @@ import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 import fn wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code from "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code";
 
 global mut global:core:rt::CM_CALLBACKS: ref null "core:prelude//List<fn()->()>" = ref.null none;
-global mut global:spec_functions_cm_callback.wado::$effect_Target: ref null "spec_functions_cm_callback.wado//$Dispatch_Target" = ref.null none;
+global mut global:spec_functions_cm_callback.wado::$effect_spec_functions_cm_callback.wado/Target: ref null "spec_functions_cm_callback.wado//$Dispatch_spec_functions_cm_callback.wado/Target" = ref.null none;
 global mut global:spec_functions_cm_callback.wado::$modules_initialized: bool = 0;
 global global:spec_functions_cm_callback.wado::$const_obj_6: ref "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 };
 global global:spec_functions_cm_callback.wado::$const_obj_7: ref Array<i32> = array.new_fixed<i32>(7);
@@ -195,32 +195,40 @@ fn "spec_functions_cm_callback.wado/$test_0"() {
     let seen: ref "core:prelude//List<i32>";
     let $local_4: ref "core:prelude/string.wado//String";
     let $local_5: ref "core:prelude/format.wado//Formatter";
-    let $h_Target: ref "spec_functions_cm_callback.wado//EchoTarget";
-    let $save_Target: ref null "spec_functions_cm_callback.wado//$Dispatch_Target";
-    let $d_Target: ref "spec_functions_cm_callback.wado//$Dispatch_Target";
+    let $h_spec_functions_cm_callback.wado/Target: ref "spec_functions_cm_callback.wado//EchoTarget";
+    let $save_spec_functions_cm_callback.wado/Target: ref null "spec_functions_cm_callback.wado//$Dispatch_spec_functions_cm_callback.wado/Target";
+    let $d_spec_functions_cm_callback.wado/Target: ref "spec_functions_cm_callback.wado//$Dispatch_spec_functions_cm_callback.wado/Target";
     let elements_11: ref Array<i32>;
     let listener: ref struct;
-    let $local_2: ref null "spec_functions_cm_callback.wado//$Dispatch_Target";
+    let $local_2: ref null "spec_functions_cm_callback.wado//$Dispatch_spec_functions_cm_callback.wado/Target";
     let a_end: i32;
     let i: i32;
     let $licm_repr_29: ref Array<i32>;
     target = builtin::i64_reinterpret_f64(0);
     seen = struct.new "core:prelude//List<i32>" { repr: local.tee elements_11(array.new_fixed<i32>()), used: 0 };
-    $h_Target = struct.new "spec_functions_cm_callback.wado//EchoTarget" {  };
-    global:spec_functions_cm_callback.wado::$effect_Target = local.tee $d_Target(struct.new "spec_functions_cm_callback.wado//$Dispatch_Target" { outer: local.tee $save_Target(global:spec_functions_cm_callback.wado::$effect_Target), op_listen: struct.new "canonical//CanonicalClosure_2" { env: struct.new "spec_functions_cm_callback.wado//$Closure_0" { $capture_0: $h_Target }, func: ref.func "closure/spec_functions_cm_callback.wado/$closure_wrapper_0" } });
-    $inline__effect_dispatch__Target__listen_2: block {
+    $h_spec_functions_cm_callback.wado/Target = struct.new "spec_functions_cm_callback.wado//EchoTarget" {  };
+    global:spec_functions_cm_callback.wado::$effect_spec_functions_cm_callback.wado/Target = local.tee $d_spec_functions_cm_callback.wado/Target(struct.new "spec_functions_cm_callback.wado//$Dispatch_spec_functions_cm_callback.wado/Target" { outer: local.tee $save_spec_functions_cm_callback.wado/Target(global:spec_functions_cm_callback.wado::$effect_spec_functions_cm_callback.wado/Target), op_listen: struct.new "canonical//CanonicalClosure_2" { env: struct.new "spec_functions_cm_callback.wado//$Closure_0" { $capture_0: $h_spec_functions_cm_callback.wado/Target }, func: ref.func "closure/spec_functions_cm_callback.wado/$closure_wrapper_0" } });
+    $inline__effect_dispatch__spec_functions_cm_callback_wado_Target__listen_2: block {
         listener = struct.new "canonical//CanonicalClosure_1" { env: struct.new "spec_functions_cm_callback.wado//$Closure_1" { $capture_0: seen }, func: ref.func "closure/spec_functions_cm_callback.wado/$closure_wrapper_1" };
-        if ref.is_null(local.tee $local_2(global:spec_functions_cm_callback.wado::$effect_Target)) == 0 {
-            global:spec_functions_cm_callback.wado::$effect_Target = local.tee $d_Target(ref.as_non_null($local_2)).outer;
+        if ref.is_null(local.tee $local_2(global:spec_functions_cm_callback.wado::$effect_spec_functions_cm_callback.wado/Target)) == 0 {
+            global:spec_functions_cm_callback.wado::$effect_spec_functions_cm_callback.wado/Target = local.tee $d_spec_functions_cm_callback.wado/Target(ref.as_non_null($local_2)).outer;
             let $indirect_call_1: ref "canonical//CanonicalClosure_2";
-            call_ref "functype/$canonical_closure_fn_2"($indirect_call_1.func, local.tee $indirect_call_1(ref.cast "canonical//CanonicalClosure_2"($d_Target.op_listen)).env, target, listener);
-            break $inline__effect_dispatch__Target__listen_2: global:spec_functions_cm_callback.wado::$effect_Target = $local_2;
+            call_ref "functype/$canonical_closure_fn_2"($indirect_call_1.func, local.tee $indirect_call_1(ref.cast "canonical//CanonicalClosure_2"($d_spec_functions_cm_callback.wado/Target.op_listen)).env, target, listener);
+            break $inline__effect_dispatch__spec_functions_cm_callback_wado_Target__listen_2: global:spec_functions_cm_callback.wado::$effect_spec_functions_cm_callback.wado/Target = $local_2;
         } else {
-            break $inline__effect_dispatch__Target__listen_2: "spec_functions_cm_callback.wado/$cm_binding__Target_listen"(target, "core:rt/cm_callback_key"(listener));
+            break $inline__effect_dispatch__spec_functions_cm_callback_wado_Target__listen_2: "spec_functions_cm_callback.wado/$cm_binding__Target_listen"(target, "core:rt/cm_callback_key"(listener));
         }
     };
+<<<<<<< HEAD
     global:spec_functions_cm_callback.wado::$effect_Target = $save_Target;
     elements_11 = global:spec_functions_cm_callback.wado::$const_obj_7;
+||||||| b04b4ab5f
+    global:spec_functions_cm_callback.wado::$effect_Target = $save_Target;
+    elements_11 = global:spec_functions_cm_callback.wado::$const_obj_9;
+=======
+    global:spec_functions_cm_callback.wado::$effect_spec_functions_cm_callback.wado/Target = $save_spec_functions_cm_callback.wado/Target;
+    elements_11 = global:spec_functions_cm_callback.wado::$const_obj_9;
+>>>>>>> origin/main
     if @unlikely(local.tee i($inline_core_prelude_array_wado_seq_eq_i32__5: block -> bool {
         if local.tee a_end(seen.used) != 1 {
             break $inline_core_prelude_array_wado_seq_eq_i32__5: 0;

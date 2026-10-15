@@ -11,8 +11,8 @@ struct core:prelude/string.wado//String {  // TypeId(2)
     mut used: i32,
 }
 
-struct effect_op_no_impl_mixed_cm.wado//$Dispatch_Log {  // TypeId(3)
-    mut outer: ref null "effect_op_no_impl_mixed_cm.wado//$Dispatch_Log",
+struct effect_op_no_impl_mixed_cm.wado//$Dispatch_effect_op_no_impl_mixed_cm.wado/Log {  // TypeId(3)
+    mut outer: ref null "effect_op_no_impl_mixed_cm.wado//$Dispatch_effect_op_no_impl_mixed_cm.wado/Log",
     mut op_sink: ref struct,
     mut op_enabled: ref struct,
 }
@@ -72,7 +72,7 @@ import fn wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code 
 import fn wasi/task-return from "wasi/task-return";
 import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 
-global mut global:effect_op_no_impl_mixed_cm.wado::$effect_Log: ref null "effect_op_no_impl_mixed_cm.wado//$Dispatch_Log" = ref.null none;
+global mut global:effect_op_no_impl_mixed_cm.wado::$effect_effect_op_no_impl_mixed_cm.wado/Log: ref null "effect_op_no_impl_mixed_cm.wado//$Dispatch_effect_op_no_impl_mixed_cm.wado/Log" = ref.null none;
 
 fn "effect_op_no_impl_mixed_cm.wado/$cm_binding__Stdout_write_via_stream"(data) with Stdout {
     return "wasi/wasi:cli/Stdout::write_via_stream"(data);
@@ -82,8 +82,8 @@ fn "effect_op_no_impl_mixed_cm.wado/$cm_export__run"() {
     let packed_5: i64;
     let rx_6: i32;
     let tx_7: i32;
-    let $local_1: ref null "effect_op_no_impl_mixed_cm.wado//$Dispatch_Log";
-    let $local_2: ref "effect_op_no_impl_mixed_cm.wado//$Dispatch_Log";
+    let $local_1: ref null "effect_op_no_impl_mixed_cm.wado//$Dispatch_effect_op_no_impl_mixed_cm.wado/Log";
+    let $local_2: ref "effect_op_no_impl_mixed_cm.wado//$Dispatch_effect_op_no_impl_mixed_cm.wado/Log";
     rx_6 = builtin::i32_wrap_i64(local.tee packed_5("wasi/stream-new"()));
     tx_7 = builtin::i32_wrap_i64(packed_5 >> 32_i64);
     rx_6 = "effect_op_no_impl_mixed_cm.wado/$cm_binding__Stdout_write_via_stream"(rx_6);
@@ -91,15 +91,15 @@ fn "effect_op_no_impl_mixed_cm.wado/$cm_export__run"() {
     $mv_field_2 = array.new_data<u8>("before");
     "core:rt/write_string_to_stream$dae[add_newline]"(tx_7, $mv_field_2, 6);
     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(rx_6);
-    if $inline__effect_dispatch__Log__enabled_0: block -> bool {
-        if @likely(ref.is_null(local.tee $local_1(global:effect_op_no_impl_mixed_cm.wado::$effect_Log)) == 0) {
-            global:effect_op_no_impl_mixed_cm.wado::$effect_Log = local.tee $local_2(ref.as_non_null($local_1)).outer;
+    if $inline__effect_dispatch__effect_op_no_impl_mixed_cm_wado_Log__enabled_0: block -> bool {
+        if @likely(ref.is_null(local.tee $local_1(global:effect_op_no_impl_mixed_cm.wado::$effect_effect_op_no_impl_mixed_cm.wado/Log)) == 0) {
+            global:effect_op_no_impl_mixed_cm.wado::$effect_effect_op_no_impl_mixed_cm.wado/Log = local.tee $local_2(ref.as_non_null($local_1)).outer;
             rx_6 = block -> bool {
                 let $indirect_call_4: ref "canonical//CanonicalClosure_1";
                 call_ref "functype/$canonical_closure_fn_1"($indirect_call_4.func, local.tee $indirect_call_4(ref.cast "canonical//CanonicalClosure_1"($local_2.op_enabled)).env, 2);
             };
-            global:effect_op_no_impl_mixed_cm.wado::$effect_Log = $local_1;
-            break $inline__effect_dispatch__Log__enabled_0: rx_6;
+            global:effect_op_no_impl_mixed_cm.wado::$effect_effect_op_no_impl_mixed_cm.wado/Log = $local_1;
+            break $inline__effect_dispatch__effect_op_no_impl_mixed_cm_wado_Log__enabled_0: rx_6;
         } else {
             "core:rt/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("no handler installed for `Log::enabled`"), used: 39 });
             unreachable;

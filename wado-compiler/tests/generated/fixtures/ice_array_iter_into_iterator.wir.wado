@@ -437,9 +437,7 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::utf8_valid_prefix"
                     continue l44;
                 }
             }
-            if @unlikely(local.tee b0(block -> i32 {
-                "core:prelude/string.wado/core:prelude/string.wado/String::utf8_sequence_len"(bytes.repr, bytes.start, i, len);
-            }) <= 0) {
+            if @unlikely(local.tee b0("core:prelude/string.wado/core:prelude/string.wado/String::utf8_sequence_len"(bytes.repr, bytes.start, i, len)) <= 0) {
                 cold_path;
                 return select i32(b0 < 0, i, -1 - i);
             }
@@ -627,11 +625,25 @@ fn "core:prelude/list.wado/core:prelude/list.wado/List<u8>^core:prelude/traits.w
     $licm_end_15 = iter.end;
     elements = iter.repr;
     $hfs_index_17 = iter.index;
+<<<<<<< HEAD
     b98: block {
         l99: loop {
+||||||| b04b4ab5f
+    b146: block {
+        l147: loop {
+=======
+    b145: block {
+        l146: loop {
+>>>>>>> origin/main
             if $hfs_index_17 >= $licm_end_15 {
                 iter.index = $hfs_index_17;
+<<<<<<< HEAD
                 break b98;
+||||||| b04b4ab5f
+                break b146;
+=======
+                break b145;
+>>>>>>> origin/main
             }
             item_6 = builtin::array_get_value<u8>(elements, $hfs_index_17);
             $hfs_index_17 = $hfs_index_17 + 1;
@@ -641,7 +653,13 @@ fn "core:prelude/list.wado/core:prelude/list.wado/List<u8>^core:prelude/traits.w
             }
             builtin::array_set_u8(result.repr, used, item_6);
             result.used = used + 1;
+<<<<<<< HEAD
             continue l99;
+||||||| b04b4ab5f
+            continue l147;
+=======
+            continue l146;
+>>>>>>> origin/main
         };
     };
     return result;

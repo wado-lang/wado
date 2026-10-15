@@ -185,7 +185,11 @@ test "a boolean may precede the let in a chain" {
     if flag && let Some(x) = opt {
         seen.push(`flag and x=${x}`);
     }
-    assert seen == ["flag and x=5"];
+    // Braces in an operand do not end the condition.
+    if opt matches { Some(_) } && let Some(x) = opt {
+        seen.push(`matched x=${x}`);
+    }
+    assert seen == ["flag and x=5", "matched x=5"];
 }
 
 test "if let chain over nested options" {
@@ -216,7 +220,59 @@ test "a parenthesised boolean in an if let chain" {
     } else {
         seen.push("paren false");
     }
-    assert seen == ["paren: x=5", "paren false"];
+    // A parenthesized `||` is one operand, and with no `let` the condition is
+    // a plain expression where `||` is allowed.
+    if let true = (flag1 || false) && (false || flag2) {
+        seen.push("paren or");
+    }
+    if false || flag1 && flag2 {
+        seen.push("plain or");
+    }
+    assert seen == ["paren: x=5", "paren false", "paren or", "plain or"];
+}
+
+test "a diverging condition or guard stands for a bool" {
+    let none: Option<i32> = null;
+    let mut seen: List<String> = [];
+    if let Some(_) = none && unreachable() {
+        seen.push("unreachable");
+    }
+    if builtin::black_box(false) && panic("never") {
+        seen.push("unreachable");
+    }
+    let matched = none matches { Some(_) && unreachable() };
+    let picked = match none {
+        Some(v) && panic("never") => v,
+        _ => 0,
+    };
+    assert seen.is_empty() && !matched && picked == 0;
+}
+
+fn fallback<T: Default>() -> T {
+    return T::default();
+}
+
+test "a condition's type parameter is inferred as bool" {
+    let some: Option<i32> = Option::Some(1);
+    let mut seen: List<String> = [];
+    if fallback() {
+        seen.push("if");
+    }
+    if let Some(_) = some && fallback() {
+        seen.push("chain");
+    }
+    while fallback() {
+        seen.push("while");
+    }
+    for ; fallback(); {
+        seen.push("for");
+    }
+    let matched = some matches { Some(_) && fallback() };
+    let picked = match some {
+        Some(v) && fallback() => v,
+        _ => 0,
+    };
+    assert seen.is_empty() && !matched && picked == 0;
 }
 
 test "if let as an expression" {
