@@ -1164,6 +1164,23 @@ impl Backend for WebGpuBackend {
         return self.product::<[..Bs, M, K], [K, N], [..Bs, M, N]>(a, &transposed, &then);
     }
 
+    fn matmul_by_rhs_transposed<..Bs, M, K, N>(
+        &mut self,
+        a: &Placed<f32, [..Bs, M, K]>,
+        b: &Placed<f32, [N, K]>,
+        then: Option<Epilogue<PlacedRead<[..Bs, M, N]>>>,
+    ) -> Placed<f32, [..Bs, M, N]> with (GpuDevice, GpuQueue, GpuCommandEncoder, GpuCommandBuffer, GpuBuffer, GpuBindGroupLayout, GpuBindGroup, GpuShaderModule, GpuComputePipeline, GpuComputePassEncoder) {
+        return self.matmul_by_transposed(a, b, then);
+    }
+
+    fn gather_rhs_rows<Row, Col, ..Ix>(
+        &mut self,
+        rows: &Placed<f32, [Row, Col]>,
+        indices: &Placed<i64, [..Ix]>,
+    ) -> Placed<f32, [..Ix, Col]> with (GpuDevice, GpuQueue, GpuCommandEncoder, GpuCommandBuffer, GpuBuffer, GpuBindGroupLayout, GpuBindGroup, GpuShaderModule, GpuComputePipeline, GpuComputePassEncoder) {
+        return self.gather_rows::<f32, Row, [Col], [..Ix]>(rows, indices);
+    }
+
     fn matmul_broadcast<A, B, Out>(
         &mut self,
         a: &Placed<f32, A>,

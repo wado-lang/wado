@@ -1396,18 +1396,20 @@ test "an embedding lookup is a row gather, and a folded index tensor is a litera
         rule("P", ["Seq", "Hidden"]),
     ];
     let out = generate(source, layout).unwrap();
-    assert out.contains("let E = backend.gather_rows(&weights.W, &I);");
+    assert out.contains("W: backend.keep_rhs(&self.W),");
+    assert out.contains("let E = backend.gather_rhs_rows(&weights.W, &I);");
     assert out.contains(
         "Q: backend.keep(&Tensor::<i64, [Batch, Seq]> { data: [0, 1, 2, 3], extents: [1, 4] }),",
     );
-    assert out.contains("let F = backend.gather_rows(&weights.P, &weights.Q);");
+    assert out.contains("let F = backend.gather_rhs_rows(&weights.P, &weights.Q);");
 }
 
-test "a weight read past a product is kept whole, one read only by products as their right operand" {
-    // `W` is gathered, as an embedding is; `V` only multiplied.
-    let source = `g (int64[1, 4] I) => (float[1, 4, 8] Y) <float[16, 8] W, float[8, 8] V> {
+test "a weight read past a product and a gather is kept whole, one read only by products as their right operand" {
+    // `W` is gathered, as an embedding is, and read whole; `V` only multiplied.
+    let source = `g (int64[1, 4] I) => (float[1, 4, 8] Y, float[16, 8] Z) <float[16, 8] W, float[8, 8] V> {
         E = Gather(W, I)
         Y = MatMul(E, V)
+        Z = Relu(W)
     }`;
     let layout: List<LayoutRule> = [
         rule("I", ["Batch", "Seq"]),
@@ -1418,6 +1420,22 @@ test "a weight read past a product is kept whole, one read only by products as t
     assert out.contains("W: backend.keep(&self.W),");
     assert out.contains("V: backend.keep_rhs(&self.V),");
     assert out.contains("let Y = backend.matmul_rhs(&E, &weights.V, null);");
+}
+
+test "an embedding the head multiplies by its transpose is held once, as rows both read" {
+    let source = `g (int64[1, 4] I) => (float[1, 4, 16] Y) <float[16, 8] W> {
+        E = Gather(W, I)
+        T = Transpose<perm = [1, 0]>(W)
+        Y = MatMul(E, T)
+    }`;
+    let layout: List<LayoutRule> = [
+        rule("I", ["Batch", "Seq"]),
+        rule("W", ["Vocab", "Hidden"]),
+    ];
+    let out = generate(source, layout).unwrap();
+    assert out.contains("W: backend.keep_rhs(&self.W),");
+    assert out.contains("let E = backend.gather_rhs_rows(&weights.W, &I);");
+    assert out.contains("let Y = backend.matmul_by_rhs_transposed(&E, &weights.W, null);");
 }
 
 test "a Gemm's transposed weight is prepared transposed, so no pass transposes it" {
@@ -1630,7 +1648,7 @@ test "a folded tensor a Cast names again under its own type is spelled once" {
     let out = generate(source, layout).unwrap();
     assert out.contains("Q: backend.keep(&Tensor::<i64, [Seq]> { data: [0, 1, 2, 3], extents: [4] }),");
     assert !out.contains("C: backend.keep");
-    assert out.contains("let F = backend.gather_rows(&weights.W, &weights.Q);");
+    assert out.contains("let F = backend.gather_rhs_rows(&weights.W, &weights.Q);");
 }
 
 test "a constant both branches read is held once, where the weights are" {

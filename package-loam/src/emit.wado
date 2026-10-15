@@ -152,7 +152,7 @@ pub fn emit(graph: &Graph, checked: &Checked, runtime: &String, fuse: bool = tru
     }
 
     let kept = kept_literals(&literals, checked);
-    let rhs = rhs_weights(graph, checked);
+    let rhs = rhs_weights(graph, checked, fuse);
     emit_weights(&mut w, graph, checked, &names, &held, &kept, &rhs);
     let symbols = Symbols::of(&carriers, &names);
     let exprs = Operands {
@@ -550,13 +550,14 @@ fn weight_type(checked: &Checked, rhs: &TreeMap<String, bool>, tensor: &String) 
 /// operand, in one orientation, in the graph and every branch it carries, and
 /// that are not an output. Each maps to whether the product reads it
 /// transposed, as a `Gemm` with `transB` does. A backend holds such a weight
-/// in the layout the product reads, which no other kernel reads.
-fn rhs_weights(graph: &Graph, checked: &Checked) -> TreeMap<String, bool> {
+/// in the layout the product reads, which only a product, a product by its
+/// viewed transpose, and a row gather read.
+fn rhs_weights(graph: &Graph, checked: &Checked, fuse: bool) -> TreeMap<String, bool> {
     let mut uses = OperandUses {
         right: TreeMap::new(),
         elsewhere: TreeSet::new(),
     };
-    uses.note(graph, checked);
+    uses.note(graph, checked, fuse);
     let mut out = TreeMap::<String, bool>::new();
     for let vi of &graph.initializers {
         if let Some(transposed) = uses.right.get(vi.name) && !uses.elsewhere.contains(vi.name) && checked.shapes[vi.name].rank(
@@ -579,27 +580,61 @@ impl OperandUses {
     /// they carry, a branch's outputs being values it yields as tensors. A
     /// tensor read in both orientations is read elsewhere, as no one layout
     /// serves.
-    fn note(&mut self, graph: &Graph, checked: &Checked) {
+    ///
+    /// A product by a viewed transpose reads the weight itself, in the
+    /// orientation its rows are stored in, and so does a row gather of it.
+    fn note(&mut self, graph: &Graph, checked: &Checked, fuse: bool) {
         for let vi of &graph.outputs {
             self.elsewhere.insert(vi.name);
         }
-        for let node of &graph.nodes {
-            let orientation = rhs_orientation(node, &checked.shapes);
+        let decided = plan(graph, checked, fuse);
+        let mut viewed = TreeMap::<String, String>::new();
+        for let [at, node] of graph.nodes.into_iter().enumerate() {
+            if decided.lowering(at) matches { Transposed } {
+                viewed[node.outputs[0]] = node.inputs[0];
+            }
+        }
+        for let [at, node] of graph.nodes.into_iter().enumerate() {
+            if viewed.contains_key(node.outputs[0]) {
+                continue;
+            }
+            let orientation = rhs_orientation(&node, &checked.shapes);
+            let gathers = decided.lowering(at) matches { Kernel } && gathers_float_rows(&node, checked);
             for let [i, input] of node.inputs.into_iter().enumerate() {
-                if i == 1 && let Some(transposed) = orientation {
-                    if self.right.get(input) matches { Some(t) && t != transposed } {
-                        self.elsewhere.insert(input);
-                    }
-                    self.right[input] = transposed;
+                if i == 1 && let Some(weight) = viewed.get(input) {
+                    self.right_operand(weight, false);
+                } else if i == 1 && let Some(transposed) = orientation {
+                    self.right_operand(input, transposed);
+                } else if i == 0 && gathers {
+                    self.right_operand(input, false);
                 } else {
                     self.elsewhere.insert(input);
                 }
             }
         }
         for let [branch_graph, branch] of branches_of(graph, checked) {
-            self.note(&branch_graph, &branch);
+            self.note(&branch_graph, &branch, fuse);
         }
     }
+
+    fn right_operand(&mut self, tensor: String, transposed: bool) {
+        if self.right.get(tensor) matches { Some(t) && t != transposed } {
+            self.elsewhere.insert(tensor);
+        }
+        self.right[tensor] = transposed;
+    }
+}
+
+/// Whether `node` gathers whole rows of a float matrix, as an embedding
+/// lookup does.
+fn gathers_float_rows(node: &Node, checked: &Checked) -> bool {
+    if node.op != "Gather" {
+        return false;
+    }
+    let data = checked.shapes[node.inputs[0]];
+    return data.rank() == 2
+        && settled(gather_axis(node, data.rank())) == 0
+        && checked.primitives[node.inputs[0]] == "f32";
 }
 
 /// Whether `node` reads its operand 1 as the right operand of a matrix
@@ -1502,6 +1537,9 @@ fn node_call(
         let axis = settled(gather_axis(node, data.rank()));
         let operand = exprs.reference(&node.inputs[0]);
         let indices = exprs.reference(&node.inputs[1]);
+        if axis == 0 && exprs.rhs.contains_key(node.inputs[0]) {
+            return Result::Ok(`backend.gather_rhs_rows(${operand}, ${indices})`);
+        }
         if axis == 0 {
             return Result::Ok(`backend.gather_rows(${operand}, ${indices})`);
         }
@@ -1597,7 +1635,8 @@ fn node_term(
     if op == "MatMul" {
         if let Some(weight) = exprs.transposed.get(node.inputs[1]) {
             let a = exprs.reference(&node.inputs[0]);
-            let head = `backend.matmul_by_transposed(${a}, ${exprs.reference(&weight)}`;
+            let kernel = if exprs.rhs.contains_key(weight) { "matmul_by_rhs_transposed" } else { "matmul_by_transposed" };
+            let head = `backend.${kernel}(${a}, ${exprs.reference(&weight)}`;
             return Result::Ok(Option::Some(Term::after(head, out)));
         }
         let [a, b, left, right] = binary_call(node, shapes, exprs);

@@ -236,6 +236,66 @@ pub fn matmul_by_transposed<..Bs, M, K, N>(
     return Tensor { data: out, extents };
 }
 
+/// `matmul_by_transposed` by a `[N, K]` matrix held as [`Packed`] rows: each
+/// row of `a` is packed into vectors once, then dotted with each row of `b`
+/// four lanes at a time.
+pub fn matmul_by_packed_transposed<..Bs, M, K, N>(
+    a: &Tensor<f32, [..Bs, M, K]>,
+    b: &Packed<N, K>,
+    then: &Option<Epilogue<Read<[..Bs, M, N]>>>,
+) -> Tensor<f32, [..Bs, M, N]> {
+    let rank = a.extents.len();
+    let inner = a.extents[rank - 1];
+    assert inner == b.cols;
+    let cols = b.rows;
+    let mut extents = a.extents;
+    extents[rank - 1] = cols;
+    let mut out = List::<f32>::filled(element_count(&extents), 0.0);
+    let finishing = finish(then, &extents);
+    let rows = element_count(&a.extents) / i32::max(inner, 1);
+    let per_row = b.per_row;
+    for let r of 0..<rows {
+        let row: Packed<M, K> = packed_matrix(1, inner, |_, c| a.data[r * inner + c]);
+        for let c of 0..<cols {
+            let at = c * per_row;
+            let [mut even, mut odd] = [f32x4::splat(0.0), f32x4::splat(0.0)];
+            for let mut v = 0; v + 1 < per_row; v += 2 {
+                even = even + row.vectors[v] * b.vectors[at + v];
+                odd = odd + row.vectors[v + 1] * b.vectors[at + v + 1];
+            }
+            if per_row % 2 == 1 {
+                even = even + row.vectors[per_row - 1] * b.vectors[at + per_row - 1];
+            }
+            let sum = even + odd;
+            out[r * cols + c] = sum.extract_lane(0) + sum.extract_lane(1) + (sum.extract_lane(2) + sum.extract_lane(3));
+        }
+    }
+    if let Some(f) = &finishing {
+        f.apply(&mut out, 0, out.len());
+    }
+    return Tensor { data: out, extents };
+}
+
+/// `gather_rows` from a matrix held as [`Packed`] rows.
+pub fn gather_packed_rows<Row, Col, ..Ix>(
+    rows: &Packed<Row, Col>,
+    indices: &Tensor<i64, [..Ix]>,
+) -> Tensor<f32, [..Ix, Col]> {
+    let cols = rows.cols;
+    let mut extents = indices.extents;
+    extents.push(cols);
+    let mut out = List::<f32>::with_capacity(element_count(&extents));
+    for let index of indices.data {
+        let at = from_end(index, rows.rows as i64);
+        assert 0 <= at < rows.rows as i64;
+        let base = at as i32 * rows.per_row;
+        for let c of 0..<cols {
+            out.push(rows.vectors[base + c / 4].extract_lane(c % 4));
+        }
+    }
+    return Tensor { data: out, extents };
+}
+
 /// The dot product of `n` contiguous elements of `a` from `a_at` and of `b`
 /// from `b_at`, over four running sums so that no addition waits on the last.
 fn row_dot(a: &List<f32>, a_at: i32, b: &List<f32>, b_at: i32, n: i32) -> f32
@@ -2057,6 +2117,19 @@ pub trait Backend with _ {
         b: &Self::Tensor<f32, [N, K]>,
         then: Option<Epilogue<Self::Operand<[..Bs, M, N]>>>,
     ) -> Self::Tensor<f32, [..Bs, M, N]>;
+    /// `matmul_by_transposed` by a matrix [`Self::keep_rhs`] prepared.
+    fn matmul_by_rhs_transposed<..Bs, M, K, N>(
+        &mut self,
+        a: &Self::Tensor<f32, [..Bs, M, K]>,
+        b: &Self::Rhs<N, K>,
+        then: Option<Epilogue<Self::Operand<[..Bs, M, N]>>>,
+    ) -> Self::Tensor<f32, [..Bs, M, N]>;
+    /// `gather_rows` from a matrix [`Self::keep_rhs`] prepared.
+    fn gather_rhs_rows<Row, Col, ..Ix>(
+        &mut self,
+        rows: &Self::Rhs<Row, Col>,
+        indices: &Self::Tensor<i64, [..Ix]>,
+    ) -> Self::Tensor<f32, [..Ix, Col]>;
     fn matmul_broadcast<A, B, Out>(
         &mut self,
         a: &Self::Tensor<f32, A>,
@@ -2261,6 +2334,19 @@ impl Backend for Cpu {
         then: Option<Epilogue<Read<[..Bs, M, N]>>>,
     ) -> Tensor<f32, [..Bs, M, N]> {
         return matmul_by_transposed(a, b, &then);
+    }
+
+    fn matmul_by_rhs_transposed<..Bs, M, K, N>(
+        &mut self,
+        a: &Tensor<f32, [..Bs, M, K]>,
+        b: &Packed<N, K>,
+        then: Option<Epilogue<Read<[..Bs, M, N]>>>,
+    ) -> Tensor<f32, [..Bs, M, N]> {
+        return matmul_by_packed_transposed(a, b, &then);
+    }
+
+    fn gather_rhs_rows<Row, Col, ..Ix>(&mut self, rows: &Packed<Row, Col>, indices: &Tensor<i64, [..Ix]>) -> Tensor<f32, [..Ix, Col]> {
+        return gather_packed_rows(rows, indices);
     }
 
     fn matmul_broadcast<A, B, Out>(
