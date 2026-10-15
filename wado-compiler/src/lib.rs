@@ -567,6 +567,48 @@ pub struct PackageSources {
     pub entries: Vec<String>,
 }
 
+impl PackageSources {
+    /// The name of the module that imports every member.
+    fn entry_name(&self) -> String {
+        format!("{}/{}package.wado", self.root, name::INTERNAL_PREFIX)
+    }
+
+    fn entry_source(&self) -> String {
+        self.members
+            .iter()
+            .map(|member| format!("use _ from \"./{member}\";\n"))
+            .collect()
+    }
+
+    /// The identity the package's load gives `member`.
+    pub fn member_identity(&self, member: &str) -> String {
+        name::resolve_local_identity(&self.root, None, &format!("./{member}"))
+    }
+
+    /// Fold `index`, what a Kiln pipeline run with `member` as its entry
+    /// produced, into `into`, keyed as the package's load names its modules.
+    /// The run names `member` by [`Self::member_identity`] and every other
+    /// module relative to `member`'s directory. Members run apart because two
+    /// of them may generate one schema under different options, which one run
+    /// rejects as a conflict.
+    pub fn adopt_member_invocations(
+        &self,
+        member: &str,
+        index: &kiln::InvocationIndex,
+        into: &mut kiln::InvocationIndex,
+    ) {
+        let member_identity = self.member_identity(member);
+        for (decl, from, uri) in index.entries() {
+            let decl = if decl == member_identity || decl.contains(':') {
+                decl.to_string()
+            } else {
+                name::resolve_local_identity(&self.root, Some(&member_identity), decl)
+            };
+            into.insert(&decl, from, uri);
+        }
+    }
+}
+
 /// The unused diagnostics of a whole package, decided over all its members at
 /// once. `None` when the package does not elaborate; its errors reach `host`.
 pub async fn package_unused_diagnostics<H: CompilerHost>(
@@ -576,15 +618,9 @@ pub async fn package_unused_diagnostics<H: CompilerHost>(
     log_level: LogLevel,
 ) -> Option<Vec<Diagnostic>> {
     let logger = Logger::new(host, log_level);
-    let source: String = package
-        .members
-        .iter()
-        .map(|member| format!("use _ from \"./{member}\";\n"))
-        .collect();
-    let entry_name = format!("{}/{}package.wado", package.root, name::INTERNAL_PREFIX);
     let mut load = loader::ModuleLoader::new(host, log_level)
         .with_invocations(invocations)
-        .load_all(&source, Some(&entry_name))
+        .load_all(&package.entry_source(), Some(&package.entry_name()))
         .await
         .map_err(|e| {
             let _ = logger.error(e);

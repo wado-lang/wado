@@ -731,9 +731,20 @@ pub(crate) async fn maybe_run_pipeline(
     no_cache: bool,
     project: Option<manifest::ProjectManifest>,
 ) -> Result<PipelineOutcome, PipelineError> {
-    let Some(mut kiln) =
-        prepare_kiln(entry_file, None, host, &KilnRun::entry(project, no_cache)).await?
-    else {
+    maybe_run_pipeline_for(entry_file, None, host, no_cache, project).await
+}
+
+/// [`maybe_run_pipeline`] for an entry the compile that follows names
+/// `entry_identity` rather than by its path.
+pub(crate) async fn maybe_run_pipeline_for(
+    entry_file: &Path,
+    entry_identity: Option<&str>,
+    host: &FilesystemCompilerHost,
+    no_cache: bool,
+    project: Option<manifest::ProjectManifest>,
+) -> Result<PipelineOutcome, PipelineError> {
+    let run = KilnRun::entry(project, no_cache);
+    let Some(mut kiln) = prepare_kiln(entry_file, entry_identity, host, &run).await? else {
         return Ok(PipelineOutcome::default());
     };
     let mut outcome = kiln.run().await?;

@@ -179,10 +179,13 @@ pub(crate) fn compute(
                 Item::Function(func) => {
                     let key = func.id;
                     graph.add_function_edges(func, references, &key);
-                    // `export` implies `Visibility::Public`, so this subsumes
-                    // `is_export`; the other two catch roots with no visibility
-                    // modifier (a misdeclared entry point, or a compiler item).
+                    // The last two catch roots with no visibility modifier (a
+                    // misdeclared entry point, or a compiler item).
+                    // Any module may be compiled as an entry of its own (a
+                    // script `wado run` runs), so an `export` is a root
+                    // wherever it is written.
                     if roots.offers(func.visibility)
+                        || func.is_export
                         || (roots.offers_pub && world_export_names.contains(&func.name))
                         || compiler_named.names_function(source, &func.name)
                     {

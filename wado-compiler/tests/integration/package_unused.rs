@@ -60,11 +60,17 @@ test "impl" {
 }
 "#;
 
+const SCRIPT: &str = r#"
+export fn run() { step(); }
+fn step() { }
+"#;
+
 fn diagnostics() -> Vec<(Code, String)> {
     package_unused(&[
         ("lib.wado", LIB),
         ("impl.wado", IMPL),
         ("impl_test.wado", IMPL_TEST),
+        ("scripts/script.wado", SCRIPT),
     ])
 }
 
@@ -127,6 +133,17 @@ fn what_an_entry_offers_is_a_root() {
         !diags
             .iter()
             .any(|(_, m)| m.contains("`offered`") || m.contains("`api`")),
+        "{diags:?}"
+    );
+}
+
+#[test]
+fn a_program_beside_the_entries_is_its_own_root() {
+    let diags = diagnostics();
+    assert!(
+        !diags
+            .iter()
+            .any(|(_, m)| m.contains("`run`") || m.contains("`step`")),
         "{diags:?}"
     );
 }

@@ -217,11 +217,20 @@ nothing.
 ## The `dead_code` Lint
 
 The `dead_code` lint warns about a free function or a global that its package
-does not use, from any of its modules. An item is used when one of these roots
-reaches it:
+does not use, from any of its modules.
 
-- A `pub` or `export` item. An `internal` item is not a root, because nothing
-  outside the package can reach it.
+The package's entries are the modules its `wado.toml` declares: `lib` and each
+`[world]` entry. Its production code is what the entries reach by `use`. Every
+other module of the package is test code: test files, and helpers only they
+import.
+
+An item is used when one of these roots reaches it:
+
+- What an entry offers: its `pub` and `export` items, and what it re-exports
+  with `pub use`. A `pub` item of any other module is not a root, since only an
+  entry's are offered beyond the package. Neither is an `internal` item.
+- An `export` function in any module, since any module may be compiled as an
+  entry of its own, as `wado run` runs a script.
 - A function whose name a world export names.
 - A method. A method is not itself reported, and a free function that only a
   method calls counts as used.
@@ -233,16 +242,18 @@ function that only an unreached default body calls is unused.
 
 An item the roots do not reach is reported one of two ways:
 
-- Reached from a `test` block: "only used by tests". Compiling for the test
-  world omits this warning, since there those tests are what the item is for.
+- Reached from a `test` block: "only used by tests", for production code. Test
+  code exists to be reached from tests, so it reports nothing. Compiling for
+  the test world omits this warning too, since there those tests are what the
+  item is for.
 - Reached from nothing: "never used".
 
 An item in a `#![generated]` module is never reported.
 
-> Not yet implemented: reachability is decided over the modules one
-> compilation loads, not over the package. A module the compilation does not
-> load may use an `internal` item, so the item counts as used, and an unused
-> `internal` item is not reported.
+`wado check` given a package, or given nothing inside one, decides the lint
+over the whole package. A compilation of one file loads only what that file
+reaches, so it decides what it can see: every `pub` item counts as used, and
+so does every `internal` one, since a module it did not load may use it.
 
 Rationale: [WEP: Unused Diagnostics](./wep-2026-05-16-unused-diagnostics.md).
 

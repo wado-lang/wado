@@ -620,6 +620,53 @@ fn test_check_with_no_file_checks_every_declared_world() {
     wado().current_dir(dir).arg("check").assert().success();
 }
 
+/// Checking a package decides unused items over all its files: a test file's
+/// helper is test code, and an `internal` item another file calls is used.
+#[test]
+fn test_check_decides_unused_items_over_the_package() {
+    let tmp = tempfile::tempdir().unwrap();
+    let dir = tmp.path();
+    std::fs::write(
+        dir.join("wado.toml"),
+        "[package]\n\
+         name = \"unused\"\n\
+         namespace = \"wado\"\n\
+         version = \"0.1.0\"\n\
+         lib = \"lib.wado\"\n",
+    )
+    .unwrap();
+    std::fs::write(
+        dir.join("lib.wado"),
+        "use { helper } from \"./impl.wado\";\n\
+         pub fn api() -> i32 { return helper(); }\n",
+    )
+    .unwrap();
+    std::fs::write(
+        dir.join("impl.wado"),
+        "internal fn helper() -> i32 { return 1; }\n\
+         internal fn tested_only() -> i32 { return 2; }\n",
+    )
+    .unwrap();
+    std::fs::write(
+        dir.join("impl_test.wado"),
+        "use { tested_only } from \"./impl.wado\";\n\
+         fn check(n: i32) -> bool { return n > 0; }\n\
+         test { assert check(tested_only()); }\n",
+    )
+    .unwrap();
+
+    wado()
+        .current_dir(dir)
+        .arg("check")
+        .assert()
+        .success()
+        .stderr(predicate::str::contains(
+            "function `tested_only` is only used by tests",
+        ))
+        .stderr(predicate::str::contains("`helper`").not())
+        .stderr(predicate::str::contains("`check`").not());
+}
+
 /// A directory names the project to check, so a workspace member is reachable
 /// without changing directory first.
 #[test]

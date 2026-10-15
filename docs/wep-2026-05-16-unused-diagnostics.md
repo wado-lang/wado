@@ -147,11 +147,40 @@ metadata) is deferred.
 `internal` (`Visibility::Internal`) is not a root of the package: it is
 package-internal visibility only, so an unreferenced `internal fn` is dead code
 regardless of entry-point kind. Deciding that takes every module of the
-package, and a compilation loads only the modules its entry reaches. Until the
-analysis spans the package, an `internal` item is seeded into `E` (not into
-what reify emits): a module the compilation did not load may use it, so a
-report would be a guess. A private item stays decided, since all its users are
-in its own file.
+package, and a compilation loads only the modules its entry reaches. So a
+compilation seeds an `internal` item into `E` (not into what reify emits): a
+module the compilation did not load may use it, so a report would be a guess.
+A private item stays decided, since all its users are in its own file.
+
+### Package analysis
+
+`wado check` over a package loads every member at once, through a synthetic
+entry that imports each one (`LivenessScope::Package`). With the whole package
+in view, the roots narrow to what the package offers:
+
+- The entries are the members `wado.toml` declares (`lib` and each `[world]`
+  entry). Their `pub` / `export` items and their `pub use` re-exports seed `E`.
+- A `pub` item of any other member is not a root. It is reachable from another
+  package only if an entry re-exports it.
+- An `export` function seeds `E` in every member: a member with one is a
+  program of its own (a script, an example, a benchmark), compiled as its own
+  entry by `wado run`.
+- An `internal` item is decided, like a private one.
+
+Production code is what the entries reach by `use`; every other member is test
+code. An item of production code in `T \ E` is "only used by tests", the case
+Rust's test build hides. An item of test code in `T` reports nothing, since
+reaching it from a test is its purpose. Either side reports "never used"
+outside `E ∪ T`.
+
+The CLI runs each member's Kiln pipeline apart and folds the indexes into one
+keyed by the package's module identities
+(`PackageSources::adopt_member_invocations`). One pipeline over the whole
+package would reject two members that generate one schema under different
+options, which Gale's descriptor corpus does.
+
+A single-file compile and the editor keep the compilation rules above, so
+`pub` and `internal` items stay roots there.
 
 A declared method carrying a default body is an edge rather than a root, so a
 free function that only an unreached default body calls is dead.
@@ -352,10 +381,9 @@ land with stage 6 of the rearchitecture (see
 - [x] E2E warning assertions: `warnings_contains` / `warnings_not_contains`
   fixture-spec fields (`compile_capturing_warnings` in the harness);
   `dead_fn_*` / `dead_global_*` fixtures cover dead and test-only.
-- [ ] Package-wide analysis so `T` is populated outside the entry module
-  (load the whole package via `wado test` discovery; `wado check`
-  package mode). Until then `test-only` only surfaces for `test` blocks
-  in the compiled entry's own module graph.
+- [x] Package-wide analysis in `wado check` package mode (see Package
+  analysis); members come from `wado test` discovery. Tests in
+  `tests/integration/package_unused.rs`.
 - [x] LSP wiring: the pure `lint_diagnostics(&Semantics, unused, is_test_world)`
   builder is shared by the batch path and `Engine::diagnostics`, which
   applies it at query time (toggle stays live via
@@ -598,7 +626,11 @@ through the diagnostics path.
 
 ## Known gaps
 
-- An `internal` item is never reported, neither "never used" nor "only used by
-  tests", and neither is what only it reaches. The specification decides its
-  reachability over the whole package, and no compilation loads the whole
-  package.
+- Outside `wado check` package mode, an `internal` item is never reported,
+  neither "never used" nor "only used by tests", and neither is what only it
+  reaches. A single-file compile and the editor do not load the whole package.
+- A namespace re-export (`pub use ns from "./m.wado"`) seeds nothing in package
+  mode, so what it offers reports as unused.
+- Package mode elaborates every member on one thread, generated parsers
+  included, and runs every member's Kiln pipeline one at a time. On Gale it
+  takes about four times as long as checking the declared entries alone.

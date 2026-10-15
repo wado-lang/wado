@@ -9,11 +9,17 @@ use std::path::{Path, PathBuf};
 
 use lexopt::Arg::Value;
 use wado_compiler::Code;
+use wado_compiler::kiln::InvocationIndex;
 
 use crate::args::{self, CliExit};
 use crate::build;
-use crate::compile::{build_load, load_nearest_manifest};
+use crate::compile::{
+    attach_manifest_and_component_deps, build_load, load_nearest_manifest, maybe_run_pipeline_for,
+};
 use crate::compiler_host::FilesystemCompilerHost;
+use crate::dep_component::Acquisition;
+use crate::discover;
+use crate::kiln_driver::PipelineError;
 use crate::knobs::{CompileKnobOpt, CompileKnobs};
 use crate::manifest;
 
@@ -145,7 +151,7 @@ pub async fn run(opts: CheckOptions) -> Result<(), CliExit> {
     }
     let project = load_nearest_manifest(&path).map_err(CliExit::error)?;
     let world = check_world(opts.target_world.as_deref(), &path, project.as_ref());
-    check_entry(&path, world, project, &opts).await
+    check_entry(&path, world, project, true, &opts).await
 }
 
 const NO_PROJECT: &str = "no wado.toml found; name a file to check \
@@ -166,23 +172,108 @@ async fn check_declared_worlds(
             "no world to check; declare [package].lib or a [world] entry in wado.toml",
         ));
     }
-    for target in targets {
+    // Unused is a question about the package, which one entry cannot answer:
+    // its siblings and its tests use what it leaves alone. With `--world`
+    // narrowing the entries, the package's production code is unknown, so each
+    // entry answers alone.
+    let whole_package = opts.target_world.is_none();
+    for target in &targets {
         let world = match (&target.lib_world, &target.target_world) {
             (Some(fq), _) => CheckWorld::Lib(fq.clone()),
             (_, Some(fq)) => CheckWorld::Target(fq.clone()),
             _ => unreachable!("a build target names exactly one world"),
         };
         let entry_project = load_nearest_manifest(&target.entry).map_err(CliExit::error)?;
-        check_entry(&target.entry, world, entry_project, opts).await?;
+        check_entry(&target.entry, world, entry_project, !whole_package, opts).await?;
+    }
+    if whole_package {
+        check_package_unused(project, &targets, opts).await?;
+    }
+    Ok(())
+}
+
+/// Report the unused items of the package rooted at `project`, decided over
+/// every member at once: what `targets` reach is production code, the rest of
+/// the members are its tests.
+async fn check_package_unused(
+    project: &manifest::ProjectManifest,
+    targets: &[build::BuildTarget],
+    opts: &CheckOptions,
+) -> Result<(), CliExit> {
+    let root = &project.root;
+    let filters =
+        |pkg: &Path| discover::filters_at::<&str>(pkg, |m| (&m.test.exclude, &m.test.include), &[]);
+    let files = discover::discover_tree(root, &filters)?
+        .into_iter()
+        .next()
+        .map(|pkg| pkg.files)
+        .unwrap_or_default();
+    let relative = |path: &Path| {
+        let rel = path
+            .strip_prefix(root)
+            .expect("a package's members lie under its root");
+        rel.to_string_lossy().replace('\\', "/")
+    };
+    let package = wado_compiler::PackageSources {
+        root: root.to_string_lossy().into_owned(),
+        members: files.iter().map(|f| relative(f)).collect(),
+        entries: targets.iter().map(|t| relative(&t.entry)).collect(),
+    };
+    // Component dependencies are named in the members' own `use` clauses.
+    let sources: String = files
+        .iter()
+        .filter_map(|f| std::fs::read_to_string(f).ok())
+        .collect();
+    let host = attach_manifest_and_component_deps(
+        FilesystemCompilerHost::with_log_level(root.clone(), opts.knobs.log_level),
+        Some(project),
+        root,
+        &sources,
+        Acquisition::Build,
+    )
+    .await
+    .map_err(CliExit::error)?;
+    let mut invocations = InvocationIndex::default();
+    for (file, member) in files.iter().zip(&package.members) {
+        let outcome = maybe_run_pipeline_for(
+            file,
+            Some(&package.member_identity(member)),
+            &host,
+            opts.knobs.no_cache,
+            Some(project.clone()),
+        )
+        .await
+        .map_err(|e| match e {
+            PipelineError::InlineClause(_) | PipelineError::RedirectConflict(_) => {
+                CliExit::silent_failure(1)
+            }
+            other => CliExit::error(format!("wado check: {other}")),
+        })?;
+        package.adopt_member_invocations(member, &outcome.invocations, &mut invocations);
+    }
+    let lints = wado_compiler::package_unused_diagnostics(
+        &host,
+        &package,
+        invocations,
+        opts.knobs.log_level,
+    )
+    .await;
+    for lint in lints.into_iter().flatten() {
+        wado_compiler::CompilerHost::emit_diagnostic(&host, lint);
+    }
+    if host.has_errors() {
+        return Err(CliExit::silent_failure(1));
     }
     Ok(())
 }
 
 /// Check `path` against `world`, under `manifest_pair`, the manifest nearest it.
+/// `unused` reports the items this entry alone leaves unused.
 async fn check_entry(
     path: &Path,
     world: CheckWorld,
     manifest_pair: Option<manifest::ProjectManifest>,
+    unused: bool,
     opts: &CheckOptions,
 ) -> Result<(), CliExit> {
     let base_path = path
@@ -214,6 +305,7 @@ async fn check_entry(
         lib_world,
         opt_level: wado_compiler::OptLevel::O0,
         analysis_only: true,
+        unused_diagnostics: unused,
         invocations,
         ..Default::default()
     };
