@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1792068564472,
+  "lastUpdate": 1792069781204,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -67333,6 +67333,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/5e3b10b2a4d292d8d1995ad9b39e04a5fff51e43"
         },
         "date": 1792068563735,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 2940,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 7317,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 21705,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 340396,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "0ee505dce8cbcf89760c84b4429ffe607a43d3e8",
+          "message": "Merge pull request #2358 from wado-lang/claude/project-thread-9t3336\n\nfix(globals)!: reject every global initializer cycle an execution may take",
+          "timestamp": "2026-10-15T21:38:38+09:00",
+          "tree_id": "5907abe917854c16af2e2c5aefe76260287b0f5d",
+          "url": "https://github.com/wado-lang/wado/commit/0ee505dce8cbcf89760c84b4429ffe607a43d3e8"
+        },
+        "date": 1792069780443,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
