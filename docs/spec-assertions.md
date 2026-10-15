@@ -97,6 +97,20 @@ fn half(n: i32) -> i32
 }
 ```
 
+The clauses are checked in the order written, and the first that fails traps,
+so a later clause may rely on the earlier ones.
+
+<!-- {"fixture":"contract_clause_order.wado", "assert": false} -->
+
+```wado
+fn non_negative_at(xs: &List<i32>, i: i32) -> i32
+    contract 0 <= i < xs.len(), "i must be in range"
+    contract xs[i] >= 0
+{
+    return xs[i];
+}
+```
+
 A call traps when it is outside the contract, as a failed assertion does,
 message included. A caller that guarantees the contract itself marks the call
 with the prefix operator `unchecked`, and a marked call is checked only where
