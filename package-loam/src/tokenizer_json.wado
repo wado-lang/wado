@@ -106,7 +106,7 @@ pub fn read(text: &String) -> Result<BpePipeline, TokenizerError> {
         }
         pipeline.prefix = prefix_of(&root, &ids)?;
     } else {
-        spelled_in_bytes(&pipeline)?;
+        spelled_in_bytes(&pipeline, &ids)?;
     }
     return Result::Ok(pipeline);
 }
@@ -159,16 +159,10 @@ fn is_space_replacement(stage: &Value, pattern: String, content: String) -> bool
 
 /// That the vocabulary spells every byte and every token but an added one is
 /// written in the byte alphabet: what `ByteLevel` encodes and decodes by.
-fn spelled_in_bytes(pipeline: &BpePipeline) -> Result<(), TokenizerError> {
+fn spelled_in_bytes(pipeline: &BpePipeline, ids: &TreeMap<String, i32>) -> Result<(), TokenizerError> {
     let alphabet = byte_chars();
-    let mut seen = TreeMap::<String, bool>::new();
-    for let token of pipeline.tokens {
-        seen[token] = true;
-    }
     for let c of alphabet {
-        let mut token = String::new();
-        token.push(c);
-        if !seen.contains_key(token) {
+        if !ids.contains_key(String::from(c)) {
             return refused(`model: the vocabulary has no token for the byte ${c}`);
         }
     }

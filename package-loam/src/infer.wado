@@ -1314,10 +1314,10 @@ pub struct AttentionOptions {
 
 /// The operands `GroupQueryAttention` reads past its first seven: the rotary
 /// caches, then the position ids, then the bias.
-global ROTARY_COS: i32 = 7;
-global ROTARY_SIN: i32 = 8;
+pub global ROTARY_COS: i32 = 7;
+pub global ROTARY_SIN: i32 = 8;
 global POSITION_IDS: i32 = 9;
-global ATTENTION_BIAS: i32 = 10;
+pub global ATTENTION_BIAS: i32 = 10;
 
 /// A `GroupQueryAttention`'s options, refusing an attribute that asks for what
 /// the kernel does not compute.
@@ -1361,8 +1361,14 @@ pub fn attention_options(node: &Node) -> Result<AttentionOptions, InferError> {
 }
 
 /// Whether `node` was given its operand `index`.
-fn has_operand(node: &Node, index: i32) -> bool {
+pub fn has_operand(node: &Node, index: i32) -> bool {
     return index < node.inputs.len() && node.inputs[index] != "";
+}
+
+/// The first present cache a `GroupQueryAttention` names, whose layout names
+/// the positions both caches hold.
+pub fn named_present(node: &Node) -> Option<String> {
+    return node.outputs.into_iter().skip(1).find(|o| o != "");
 }
 
 /// A `GroupQueryAttention`'s outputs: the attended queries, of the queries'
@@ -1471,7 +1477,7 @@ fn attention(
     let Some(total_extent) = Extent::of(total) else {
         return Result::Err(refusal(node, "the past and the sequence are more than a list holds"));
     };
-    let Some(present) = node.outputs[1..<node.outputs.len()].to_list().into_iter().find(|o| o != "") else {
+    let Some(present) = named_present(node) else {
         return Result::Err(refusal(node, "neither present output is named, so no layout names the positions"));
     };
     let positions = output_layout_axis(

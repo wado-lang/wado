@@ -25,14 +25,19 @@ use { Expected } from "./runtime/checkpoint.wado";
 use { BinaryOp, Expr, Step, UnaryOp, constant as constant_expr, operand as operand_expr } from "./runtime/tensor.wado";
 use { expected } from "./safetensors.wado";
 use {
+    ATTENTION_BIAS,
     Checked,
+    ROTARY_COS,
+    ROTARY_SIN,
     attention_options,
     concat_axis,
     conv_group,
     gather_axis,
     gemm_options,
     has_bias,
+    has_operand,
     is_reduction,
+    named_present,
     range_bounds,
     reduced_axes,
     slice_cuts,
@@ -1073,22 +1078,20 @@ fn attention_call(node: &Node, checked: &Checked, exprs: &Operands) -> String {
     let q = shapes[node.inputs[0]];
     let k = shapes[node.inputs[1]];
     let past = shapes[node.inputs[3]];
-    let present = node.outputs[1..<node.outputs.len()].to_list().into_iter().find(|o| o != "").unwrap();
-    let total = shapes[present].axes[2].name;
-    let given = |index: i32| index < node.inputs.len() && node.inputs[index] != "";
-    let optional = |index: i32| if given(index) {
+    let total = shapes[named_present(node).unwrap()].axes[2].name;
+    let optional = |index: i32| if has_operand(node, index) {
         `Option::Some(${exprs.reference(&node.inputs[index])})`;
     } else {
         "null";
     };
-    let [pos, half] = if given(7) {
-        let cache = shapes[node.inputs[7]];
+    let [pos, half] = if has_operand(node, ROTARY_COS) {
+        let cache = shapes[node.inputs[ROTARY_COS]];
         [cache.axes[0].name, cache.axes[1].name];
     } else {
         [q.axes[1].name, past.axes[3].name];
     };
-    let [bias_batch, bias_heads] = if given(10) {
-        let bias = shapes[node.inputs[10]];
+    let [bias_batch, bias_heads] = if has_operand(node, ATTENTION_BIAS) {
+        let bias = shapes[node.inputs[ATTENTION_BIAS]];
         [bias.axes[0].name, bias.axes[1].name];
     } else {
         [q.axes[0].name, past.axes[1].name];
@@ -1106,10 +1109,11 @@ fn attention_call(node: &Node, checked: &Checked, exprs: &Operands) -> String {
     for let i of 0..<5 {
         operands.push(exprs.reference(&node.inputs[i]));
     }
-    for let index of [7, 8, 10] {
-        // The caches are read only where the attribute asks for rotation.
-        operands.push(if index < 10 && !options.rotary { "null" } else { optional(index) });
+    // The caches are read only where the attribute asks for rotation.
+    for let index of [ROTARY_COS, ROTARY_SIN] {
+        operands.push(if options.rotary { optional(index) } else { "null" });
     }
+    operands.push(optional(ATTENTION_BIAS));
     operands.push(attention);
     return `backend.group_query_attention::<${turbofish.join(", ")}>(${operands.join(", ")})`;
 }

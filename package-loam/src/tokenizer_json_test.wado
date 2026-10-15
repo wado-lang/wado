@@ -13,9 +13,7 @@ global SPECIAL_ID: i32 = 256;
 fn vocab(extra: List<String>) -> String {
     let mut tokens = TreeMap::<String, i32>::new();
     for let c of byte_chars() {
-        let mut spelled = String::new();
-        spelled.push(c);
-        tokens[spelled] = tokens.len();
+        tokens[String::from(c)] = tokens.len();
     }
     tokens["<|endoftext|>"] = tokens.len();
     for let token of extra {

@@ -707,19 +707,16 @@ pub fn lift<E, In, Out>(t: &Tensor<E, In>, rank: i32) -> Tensor<E, Out>
 /// `t` broadcast to `extents`, which it must broadcast to, as `Expand` does.
 pub fn expand<E, In, Out>(t: &Tensor<E, In>, extents: List<i32>) -> Tensor<E, Out> {
     assert broadcast_extents(&t.extents, &extents) == Option::Some(extents), "the operand broadcasts to the extents";
-    let strides = stretched_strides(&t.extents, extents.len());
-    let mut data = List::<E>::with_capacity(element_count(&extents));
+    let steps = stretched_carries(&t.extents, &extents);
+    let count = element_count(&extents);
+    let mut data = List::<E>::with_capacity(count);
     let mut index = List::<i32>::filled(extents.len(), 0);
-    if element_count(&extents) > 0 {
-        loop {
-            let mut at = 0;
-            for let a of 0..<extents.len() {
-                at += index[a] * strides[a];
-            }
-            data.push(t.data[at]);
-            if advance(&mut index, &extents) < 0 {
-                break;
-            }
+    let mut at = 0;
+    for let _ of 0..<count {
+        data.push(t.data[at]);
+        let axis = advance(&mut index, &extents);
+        if axis >= 0 {
+            at += steps[axis];
         }
     }
     return Tensor { data, extents };

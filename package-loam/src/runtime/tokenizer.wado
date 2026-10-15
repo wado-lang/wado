@@ -88,7 +88,7 @@ impl BpeTokenizer {
         match spelling {
             ByteLevel => {
                 for let [b, c] of byte_chars().into_iter().enumerate() {
-                    byte_ids[b] = ids.get(char_string(c)).unwrap();
+                    byte_ids[b] = ids.get(String::from(c)).unwrap();
                     while bytes_of.len() <= c as i32 {
                         bytes_of.push(-1);
                     }
@@ -163,7 +163,7 @@ impl BpeTokenizer {
                         if c == SPACE_PIECE {
                             bytes.push(b' ');
                         } else {
-                            push_utf8(&mut bytes, c);
+                            bytes.extend(&c.encode_utf8());
                         }
                     }
                 },
@@ -209,9 +209,7 @@ impl BpeTokenizer {
             let end = self.piece_end(&chars, at);
             let mut parts: List<i32> = [];
             for let k of at..<end {
-                let mut utf8: ByteList = [];
-                push_utf8(&mut utf8, chars[k]);
-                for let b of utf8 {
+                for let b of chars[k].encode_utf8() {
                     parts.push(self.byte_ids[b as i32]);
                 }
             }
@@ -223,12 +221,11 @@ impl BpeTokenizer {
     /// `c` as `Pieces` spells it before merging: its own token, else its
     /// bytes', else the unknown token, one for a run of them.
     fn spell_piece(&self, c: char, parts: &mut List<i32>) {
-        if let Some(id) = self.ids.get(char_string(c)) {
+        if let Some(id) = self.ids.get(String::from(c)) {
             parts.push(id);
             return;
         }
-        let mut utf8: ByteList = [];
-        push_utf8(&mut utf8, c);
+        let utf8 = c.encode_utf8();
         if utf8.into_iter().all(|b| self.byte_ids[b as i32] >= 0) {
             for let b of utf8 {
                 parts.push(self.byte_ids[b as i32]);
@@ -344,16 +341,6 @@ fn entries_of(bytes: &ByteList) -> List<String> {
         return [];
     }
     return text.split("\0").map(|entry| entry.to_string()).collect();
-}
-
-fn char_string(c: char) -> String {
-    let mut s = String::new();
-    s.push(c);
-    return s;
-}
-
-fn push_utf8(bytes: &mut ByteList, c: char) {
-    bytes.extend_from_slice(char_string(c).as_bytes() as Slice<u8>);
 }
 
 /// The token SentencePiece spells the byte `b` as.
