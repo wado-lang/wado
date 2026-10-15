@@ -438,9 +438,24 @@ pub struct Program {
     pub not_inherited: IndexSet<ImplId>,
 }
 
-/// Two id lists in one, in the order the ids were added.
-fn merged(a: Option<&Vec<ImplId>>, b: Option<&Vec<ImplId>>) -> Vec<ImplId> {
-    let mut ids: Vec<ImplId> = a.into_iter().chain(b).flatten().copied().collect();
+/// The ids whose target could match `ty`, in the order they were added: what
+/// `by_head` files under no declaration and under `ty`'s, or `all` for an open
+/// row.
+fn matching<'p>(
+    ty: &SolverType,
+    all: impl FnOnce() -> Vec<ImplId>,
+    by_head: impl Fn(Option<TypeDeclId>) -> Option<&'p Vec<ImplId>>,
+) -> Vec<ImplId> {
+    if matches!(ty, SolverType::AnyRow) {
+        return all();
+    }
+    let named = target_head(ty).and_then(|head| by_head(Some(head)));
+    let mut ids: Vec<ImplId> = by_head(None)
+        .into_iter()
+        .chain(named)
+        .flatten()
+        .copied()
+        .collect();
     ids.sort_unstable();
     ids
 }
@@ -538,25 +553,25 @@ impl Program {
         trait_: TraitDeclId,
         ty: &SolverType,
     ) -> impl Iterator<Item = (ImplId, &ImplDef)> {
-        let ids: Vec<ImplId> = if matches!(ty, SolverType::AnyRow) {
-            self.impls_of(trait_).map(|(id, _)| id).collect()
-        } else {
-            let at = |head| self.impls_by_target.get(&(trait_, head));
-            merged(at(None), target_head(ty).and_then(|head| at(Some(head))))
-        };
+        let ids = matching(
+            ty,
+            || self.impls_of(trait_).map(|(id, _)| id).collect(),
+            |head| self.impls_by_target.get(&(trait_, head)),
+        );
         ids.into_iter().map(|id| (id, &self.impls[&id]))
     }
 
     /// The trait impls whose target could match `ty`, of any trait, in the
     /// order they were added.
     pub fn trait_impls_for(&self, ty: &SolverType) -> impl Iterator<Item = (ImplId, &ImplDef)> {
-        let ids: Vec<ImplId> = if matches!(ty, SolverType::AnyRow) {
-            let trait_impls = self.impls.iter().filter(|(_, def)| def.trait_.is_some());
-            trait_impls.map(|(&id, _)| id).collect()
-        } else {
-            let at = |head| self.trait_impls_by_head.get(&head);
-            merged(at(None), target_head(ty).and_then(|head| at(Some(head))))
-        };
+        let ids = matching(
+            ty,
+            || {
+                let trait_impls = self.impls.iter().filter(|(_, def)| def.trait_.is_some());
+                trait_impls.map(|(&id, _)| id).collect()
+            },
+            |head| self.trait_impls_by_head.get(&head),
+        );
         ids.into_iter().map(|id| (id, &self.impls[&id]))
     }
 

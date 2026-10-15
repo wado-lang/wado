@@ -695,25 +695,18 @@ fn reach<'a>(
 
 /// The loaded modules `from` names in its `use` declarations, in order.
 fn imports_of(load: &mut loader::LoadResult, from: &ModuleSource) -> Vec<ModuleSource> {
-    let entry = load.entry_module_source.clone();
-    let decls: Vec<UseDecl> = load.modules[from]
+    load.modules[from]
         .items
         .iter()
         .filter_map(|item| match item {
-            Item::Use(decl) => Some(decl.clone()),
-            _ => None,
-        })
-        .collect();
-    decls
-        .iter()
-        .filter_map(|decl| {
-            loader::resolve_use_decl_source(
+            Item::Use(decl) => loader::resolve_use_decl_source(
                 &mut load.interner,
                 from,
                 decl,
-                Some(&entry),
+                Some(&load.entry_module_source),
                 &load.invocations,
-            )
+            ),
+            _ => None,
         })
         .filter(|source| load.modules.contains_key(source))
         .collect()

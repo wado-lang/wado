@@ -1459,8 +1459,9 @@ impl<'a, H: CompilerHost> ModuleLoader<'a, H> {
             // Collect its imports (before bind)
             let queued = pending.len();
             self.collect_imports(&ast, &module_source, &mut pending, &mut wasm_imports)?;
-            // Only the standard library imported, nothing the module reaches
-            // is user code, so no caller walks its bodies. Past it, one might.
+            // A module importing only the standard library reaches no user
+            // code, so no caller walks its bodies. One importing user code
+            // may be walked, and keeps them.
             if skipped {
                 if pending
                     .range(queued..)

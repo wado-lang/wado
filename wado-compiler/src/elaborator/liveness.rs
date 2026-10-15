@@ -108,24 +108,26 @@ impl LivenessScope {
         }
     }
 
-    fn module_roots(&self, source: &ModuleSource, user_authored: bool) -> ModuleRoots {
+    fn module_roots(&self, source: &ModuleSource) -> ModuleRoots {
+        let compilation = ModuleRoots {
+            reported: source.is_user_authored(),
+            offers_pub: true,
+            internal_undecided: true,
+            test_code: false,
+        };
         match self {
-            Self::Compilation => ModuleRoots {
-                reported: user_authored,
-                offers_pub: true,
-                internal_undecided: true,
-                test_code: false,
-            },
+            Self::Compilation => compilation,
             // Another package's modules keep the compilation rules: they are
             // not reported, and only their own package decides their roots.
-            Self::Package(package) if !package.members.contains(source) => {
-                Self::Compilation.module_roots(source, false)
-            }
+            Self::Package(package) if !package.members.contains(source) => ModuleRoots {
+                reported: false,
+                ..compilation
+            },
             Self::Package(package) => ModuleRoots {
-                reported: user_authored,
                 offers_pub: package.entries.contains(source),
                 internal_undecided: false,
                 test_code: !package.production.contains(source),
+                ..compilation
             },
         }
     }
@@ -177,7 +179,7 @@ pub(crate) fn compute(
     }
 
     for (source, module) in modules {
-        let roots = scope.module_roots(source, source.is_user_authored());
+        let roots = scope.module_roots(source);
         // `#![generated]` modules are machine-emitted (e.g. Gale's parser
         // output), not hand-edited source — linting them is pure noise, so they
         // are never report candidates. They still seed exports / edges below, so
