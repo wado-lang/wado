@@ -1004,9 +1004,58 @@ struct BodyScan {
     loopy: bool,
 }
 
-/// The [`BodyScan`]s, kept across rounds.
+/// The [`BodyScan`]s, and what the last sweep read about each function, kept
+/// across rounds.
 #[derive(Default)]
-pub(super) struct InlineScans(BodyMemo<BodyScan>);
+pub(super) struct InlineScans {
+    bodies: BodyMemo<BodyScan>,
+    /// Indexed by store position.
+    read: Vec<SweepRead>,
+}
+
+/// What a sweep reads about a function that its own body does not decide:
+/// as a callee, whether a site admits it; as a caller, whether its sites are
+/// cold. Each moves with call sites anywhere in the program.
+#[derive(Clone, Copy, PartialEq, Eq)]
+struct SweepRead {
+    reach: Reach,
+    shrinks: bool,
+    cold: bool,
+}
+
+/// Have the inliner revisit each function whose sweep would read something
+/// new: a caller of a callee whose admission moved, and a function that turned
+/// cold or hot. The gate re-dirties only a changed body's neighbours, so a
+/// callee left with one site after a splice elsewhere would otherwise wait on
+/// an unrelated change to reach its last caller. A function new this round is
+/// dirty already.
+fn revisit_moved_reads(
+    before: &[SweepRead],
+    after: &[SweepRead],
+    scans: &[BodyScan],
+    gate: &mut FunctionGate,
+) {
+    let moved = |i: usize, admission: bool| {
+        before.get(i).is_some_and(|b| {
+            let a = &after[i];
+            if admission {
+                (b.reach, b.shrinks) != (a.reach, a.shrinks)
+            } else {
+                b.cold != a.cold
+            }
+        })
+    };
+    for (caller, scan) in scans.iter().enumerate() {
+        if moved(caller, false)
+            || scan
+                .calls
+                .iter()
+                .any(|(callee, _)| moved(callee.index(), true))
+        {
+            gate.revisit(GatedPass::Inline, FuncId::new(caller));
+        }
+    }
+}
 
 fn scan_body(func: &NirFunction, cold_path: Option<FuncId>) -> BodyScan {
     // A site's arguments are keyed by position and the callee's writes by
@@ -2029,9 +2078,8 @@ pub fn inline_functions(
     // call node's `FunctionRef`. Indexed by `func_id.index()` (== store position).
     let descriptors = descriptor_cache.descriptors(project);
     let cold_path = cold_path_id(descriptors);
-    let scans = scans
-        .0
-        .refresh(project, gate.exec(), |f| scan_body(f, cold_path));
+    let InlineScans { bodies, read } = scans;
+    let scans = bodies.refresh(project, gate.exec(), |f| scan_body(f, cold_path));
     // Taken every round, unlike the prices below: a callee's only site is one
     // where its splice pays back.
     let call_sites = call_site_counts(scans);
@@ -2297,6 +2345,19 @@ pub fn inline_functions(
     let carried = carried_calls(&inline_candidates);
     let functions = &project.functions;
     let held = &holds.held;
+
+    let now: Vec<SweepRead> = (0..functions.len())
+        .map(|i| {
+            let id = FuncId::new(i);
+            SweepRead {
+                reach: reach.get(&id).copied().unwrap_or(Reach::Nowhere),
+                shrinks: shrinking.contains(&id),
+                cold: cold[i],
+            }
+        })
+        .collect();
+    revisit_moved_reads(read, &now, scans, gate);
+    *read = now;
 
     // Inline at call sites. A caller splices copies of the candidates, so no
     // visit reads what another writes.
