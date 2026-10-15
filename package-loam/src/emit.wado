@@ -2072,7 +2072,11 @@ fn gemm_term(node: &Node, shapes: &TreeMap<String, Shape>, exprs: &Operands, spr
     let [a, left, product_axes] = match spread {
         Some(s) => [s.reference, s.shape, s.product],
         None => {
-            let [a, left] = transposed(&exprs.reference(&node.inputs[0]), &shapes.get(node.inputs[0]).unwrap(), trans_a);
+            let [a, left] = gemm_operand(
+                &exprs.reference(&node.inputs[0]),
+                &shapes.get(node.inputs[0]).unwrap(),
+                trans_a,
+            );
             [a, left, gemm_product(node, shapes)];
         },
     };
@@ -2080,7 +2084,7 @@ fn gemm_term(node: &Node, shapes: &TreeMap<String, Shape>, exprs: &Operands, spr
     let head = if exprs.rhs.contains_key(node.inputs[1]) {
         rhs_product_head(&a, &b_operand);
     } else {
-        let [b, right] = transposed(&b_operand, &shapes.get(node.inputs[1]).unwrap(), trans_b);
+        let [b, right] = gemm_operand(&b_operand, &shapes.get(node.inputs[1]).unwrap(), trans_b);
         product_head(&a, &b, &left, &right, &product_axes);
     };
     let mut term = Term::after(head, product_axes);
@@ -2115,7 +2119,7 @@ fn gemm_product(node: &Node, shapes: &TreeMap<String, Shape>) -> Shape {
 }
 
 /// A `Gemm` operand of axes `shape`, and those axes, transposed where `flag` says.
-fn transposed(operand: &String, shape: &Shape, flag: bool) -> [String, Shape] {
+fn gemm_operand(operand: &String, shape: &Shape, flag: bool) -> [String, Shape] {
     if flag {
         return [
             `&backend.transpose2(${operand})`,
@@ -2169,8 +2173,9 @@ fn same_axis(left: &Axis, right: &Axis) -> bool {
 
 /// Whether two `MatMul` operands' batch axes are one list, which is what the
 /// kernel's single `..Bs` says.
-fn batch_axes_agree(left: &Shape, right: &Shape) -> bool {
-    assert left.rank() == right.rank();
+fn batch_axes_agree(left: &Shape, right: &Shape) -> bool
+    contract left.rank() == right.rank()
+{
     for let mut i = 0; i < left.rank() - 2; i += 1 {
         if !same_axis(&left.axes[i], &right.axes[i]) {
             return false;

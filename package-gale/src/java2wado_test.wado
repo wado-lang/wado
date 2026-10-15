@@ -60,28 +60,28 @@ ${rule_src}
 
 test "java predicate: this.field with arithmetic and comparison" {
     let out = java_pred("this.i % 2 == 0", "a : ID ;", false);
-    assert out == "p.i % 2 == 0", `out: '${out}'`;
+    assert out == "p.i % 2 == 0";
 }
 
 test "java predicate: rule arg reference" {
     let out = java_pred("$i == 1", "a[i32 i] : ID ;", true);
-    assert out == "vals.i == 1", `out: '${out}'`;
+    assert out == "vals.i == 1";
 }
 
 test "java predicate: negation with parens" {
     // The field declaration is snake_cased, so every read of it is too.
     let out = java_pred("!(this.enumKeyword)", "a : ID ;", false);
-    assert out == "!(p.enum_keyword)", `out: '${out}'`;
+    assert out == "!(p.enum_keyword)";
 }
 
 test "java predicate: input lookahead vs token constant" {
     let out = java_pred("_input.LA(1) != TParser.ELSE", "a : ID ;", false);
-    assert out == "p.la(1) != TK_ELSE", `out: '${out}'`;
+    assert out == "p.la(1) != TK_ELSE";
 }
 
 test "java predicate: token text equals" {
     let out = java_pred("_input.LT(1).getText().equals(\"x\")", "a : ID ;", false);
-    assert out == "(p.token_text(p.lt(1)) == \"x\")", `out: '${out}'`;
+    assert out == "(p.token_text(p.lt(1)) == \"x\")";
 }
 
 test "java predicate: member method call snake-cases" {
@@ -89,7 +89,7 @@ test "java predicate: member method call snake-cases" {
         methods: ["pred"],
     };
     let out = java_pred_m("this.pred($i == 99)", "a[i32 i] : ID ;", true, &members);
-    assert out == "p.pred(vals.i == 99)", `out: '${out}'`;
+    assert out == "p.pred(vals.i == 99)";
 }
 
 test "java action: a bare @members field reads through the recognizer" {
@@ -98,13 +98,13 @@ test "java action: a bare @members field reads through the recognizer" {
         fields: ["calls"],
     };
     let out = java_action_m("calls = calls + 1;", "a : ID ;", false, &members);
-    assert out == "p.calls = p.calls + 1;", `out: '${out}'`;
+    assert out == "p.calls = p.calls + 1;";
 
     // A rule argument shadows the field, as it does in ANTLR's own output — and
     // it is `$calls` under another spelling, so both land on the one storage a
     // write has to be visible through.
     let shadowed = java_action_m("calls = calls + 1;", "a[i32 calls] : ID ;", true, &members);
-    assert shadowed == "vals.calls = vals.calls + 1;", `shadowed: '${shadowed}'`;
+    assert shadowed == "vals.calls = vals.calls + 1;";
 }
 
 test "java action: a bare rule argument is `$arg` under another spelling" {
@@ -117,11 +117,11 @@ test "java action: a bare rule argument is `$arg` under another spelling" {
         true,
         &NO_MEMBERS,
     );
-    assert out == "vals.maxDepth = vals.maxDepth + 1;", `out: '${out}'`;
+    assert out == "vals.maxDepth = vals.maxDepth + 1;";
 
     // A body-declared local of the same name shadows the argument.
     let local = java_action_m("int maxDepth = 2; maxDepth = 3;", "a[i32 maxDepth] : ID ;", true, &NO_MEMBERS);
-    assert local == "let mut maxDepth: i32 = 2; maxDepth = 3;", `local: '${local}'`;
+    assert local == "let mut maxDepth: i32 = 2; maxDepth = 3;";
 }
 
 test "java: an undeclared recognizer method is a loud error" {
@@ -143,7 +143,7 @@ test "java: a declared @members method resolves; an undeclared sibling does not"
         methods: ["is_keyword"],
     };
     let ok = java_pred_m("this.isKeyword()", "a : ID ;", false, &members);
-    assert ok == "p.is_keyword()", `out: '${ok}'`;
+    assert ok == "p.is_keyword()";
 
     let res = java_pred_res("this.isKeyword()", "a : ID ;", false);
     assert res.is_err(), "an undeclared method must be a loud error even qualified by this";
@@ -157,26 +157,26 @@ test "java: a call resolves in Java's method namespace, not against the variable
         fields: ["depth"],
     };
     let bare = java_action_m("depth();", "a : ID ;", false, &members);
-    assert bare == "p.depth();", `bare: '${bare}'`;
+    assert bare == "p.depth();";
 
     let qualified = java_action_m("this.depth();", "a : ID ;", false, &members);
-    assert qualified == "p.depth();", `qualified: '${qualified}'`;
+    assert qualified == "p.depth();";
 
     // A rule argument shares the name too, and shadows only the read.
     let arg = java_action_m("depth(); depth = 1;", "a[i32 depth] : ID ;", true, &members);
-    assert arg == "p.depth(); vals.depth = 1;", `arg: '${arg}'`;
+    assert arg == "p.depth(); vals.depth = 1;";
 }
 
 test "java predicate: negated equals is parenthesized" {
     let out = java_pred("!getText().equals(\"+\")", "a : ID ;", false);
-    assert out == "!(p.rule_text(_rule_start_tok) == \"+\")", `out: '${out}'`;
+    assert out == "!(p.rule_text(_rule_start_tok) == \"+\")";
 }
 
 test "java members: method name is snake_cased at definition to match calls" {
     let lang = ActionLanguage::Java;
     let m = translate_members(&lang, "boolean isKeyword() { return true; }", "T").unwrap();
-    assert m.methods.len() == 1, `methods: ${m.methods.len()}`;
-    assert m.methods[0].source == "fn is_keyword(&self) -> bool { return true; }", `method: '${m.methods[0].source}'`;
+    assert m.methods.len() == 1;
+    assert m.methods[0].source == "fn is_keyword(&self) -> bool { return true; }";
 }
 
 test "java members: the receiver follows what the body does" {
@@ -192,11 +192,11 @@ test "java members: the receiver follows what the body does" {
           void indirect() { this.writes(); }",
         "T",
     ).unwrap();
-    assert m.methods.len() == 4, `methods: ${m.methods.len()}`;
-    assert !m.methods[0].mutates && m.methods[0].source.contains("fn reads(&self)"), `reads: '${m.methods[0].source}'`;
-    assert m.methods[1].mutates && m.methods[1].source.contains("fn writes(&mut self)"), `writes: '${m.methods[1].source}'`;
-    assert !m.methods[2].mutates, `delegates: '${m.methods[2].source}'`;
-    assert m.methods[3].mutates, `indirect: '${m.methods[3].source}'`;
+    assert m.methods.len() == 4;
+    assert !m.methods[0].mutates && m.methods[0].source.contains("fn reads(&self)");
+    assert m.methods[1].mutates && m.methods[1].source.contains("fn writes(&mut self)");
+    assert !m.methods[2].mutates;
+    assert m.methods[3].mutates;
 }
 
 test "java members: a write one receiver down still counts" {
@@ -209,7 +209,7 @@ test "java members: a write one receiver down still counts" {
           boolean hidden() { return this.writes().equals(\"x\"); }",
         "T",
     ).unwrap();
-    assert m.methods[1].mutates, `hidden: '${m.methods[1].source}'`;
+    assert m.methods[1].mutates;
 }
 
 test "java members: a method body reads a field of its own block, bare or qualified" {
@@ -223,9 +223,9 @@ test "java members: a method body reads a field of its own block, bare or qualif
           int qualified() { return this.nestLevel + 1; }",
         "T",
     ).unwrap();
-    assert m.fields[0].name == "nest_level", `field: '${m.fields[0].name}'`;
-    assert m.methods[0].source.contains("return self.nest_level + 1;"), `bare: '${m.methods[0].source}'`;
-    assert m.methods[1].source.contains("return self.nest_level + 1;"), `qualified: '${m.methods[1].source}'`;
+    assert m.fields[0].name == "nest_level";
+    assert m.methods[0].source.contains("return self.nest_level + 1;");
+    assert m.methods[1].source.contains("return self.nest_level + 1;");
 }
 
 test "java members: a local or parameter shadows a field of the same name" {
@@ -237,8 +237,8 @@ test "java members: a local or parameter shadows a field of the same name" {
           int local() { int n = 2; return n; }",
         "T",
     ).unwrap();
-    assert m.methods[0].source.contains("return n;"), `param: '${m.methods[0].source}'`;
-    assert m.methods[1].source.contains("return n;"), `local: '${m.methods[1].source}'`;
+    assert m.methods[0].source.contains("return n;");
+    assert m.methods[1].source.contains("return n;");
 }
 
 test "java members: a call on something other than the recognizer is not a member call" {
@@ -253,19 +253,19 @@ test "java members: a call on something other than the recognizer is not a membe
           boolean reads(String s) { return s.trim().equals(\"x\"); }",
         "T",
     ).unwrap();
-    assert m.methods[0].mutates, `trim: '${m.methods[0].source}'`;
-    assert !m.methods[1].mutates && m.methods[1].source.contains("fn reads(&self"), `reads: '${m.methods[1].source}'`;
+    assert m.methods[0].mutates;
+    assert !m.methods[1].mutates && m.methods[1].source.contains("fn reads(&self");
 }
 
 test "java members: printing writes the output sink, so its method takes &mut self" {
     let lang = ActionLanguage::Java;
     let m = translate_members(&lang, "void say() { System.out.println(\"x\"); }", "T").unwrap();
-    assert m.methods[0].mutates && m.methods[0].source.contains("fn say(&mut self)"), `say: '${m.methods[0].source}'`;
+    assert m.methods[0].mutates && m.methods[0].source.contains("fn say(&mut self)");
 }
 
 test "java predicate: boolean literal" {
     let out = java_pred("false", "a : ID ;", false);
-    assert out == "false", `out: '${out}'`;
+    assert out == "false";
 }
 
 test "java expr: numeric plus is not string concat" {
@@ -284,7 +284,7 @@ e returns [i32 v] : ID ;
         &g.name,
         &NO_MEMBERS,
     ).unwrap();
-    assert out == "x.v + 1", `out: '${out}'`;
+    assert out == "x.v + 1";
 }
 
 test "java expr: string concat becomes a template literal" {
@@ -302,7 +302,7 @@ r : ID ;
         &g.name,
         &NO_MEMBERS,
     ).unwrap();
-    assert out == "`ID ${p.token_text(id)}`", `out: '${out}'`;
+    assert out == "`ID ${p.token_text(id)}`";
 }
 
 test "dispatcher routes language = Wado through the identity translator" {
@@ -320,7 +320,7 @@ r returns [i32 v] : ID { $v = 1; } ;
         &g.name,
         &NO_MEMBERS,
     ).unwrap();
-    assert out == " vals.v = 1; ", `out: '${out}'`;
+    assert out == " vals.v = 1; ";
 }
 
 fn java_action<S: AsStrSlice, S1: AsStrSlice>(src: S, rule_src: S1, vals_in_scope: bool) -> String {
@@ -385,7 +385,7 @@ ${rule}
         &NO_MEMBERS,
         "{'a'}",
     );
-    assert vocab matches { Ok(code) && code.contains("{'a'}") }, `${vocab:?}`;
+    assert vocab matches { Ok(code) && code.contains("{'a'}") };
 
     for let body of &[
         "System.out.println(getExpectedTokens().toString());", "System.out.println(getExpectedTokens().toString(true));",
@@ -405,47 +405,47 @@ ${rule}
             &NO_MEMBERS,
             "{'a'}",
         );
-        assert out matches { Err(_) }, `${*body} must not fold: ${out:?}`;
+        assert out matches { Err(_) };
     }
 }
 
 test "java action: an assert message carries over only as a literal" {
     let rule = "r : ID ;";
     let plain = java_action("assert 1 == 1;", rule, false);
-    assert plain == "assert 1 == 1;", `out: '${plain}'`;
+    assert plain == "assert 1 == 1;";
 
     let literal = java_action("assert 1 == 1 : \"nope\";", rule, false);
-    assert literal == "assert 1 == 1, \"nope\";", `out: '${literal}'`;
+    assert literal == "assert 1 == 1, \"nope\";";
 
     // Java stringifies any expression there; dropping it would weaken the
     // assertion with nothing said.
     let expr = java_action_res("assert 1 == 1 : someValue;", rule, false);
-    assert expr matches { Err(_) }, `a non-literal message must be refused: ${expr:?}`;
+    assert expr matches { Err(_) }, "a non-literal message must be refused";
 }
 
 test "java action: println appends a newline" {
     let out = java_action("System.out.println(\"enum\");", "a : ID ;", false);
-    assert out == "p.emit(`enum\\n`);", `out: '${out}'`;
+    assert out == "p.emit(`enum\\n`);";
 }
 
 test "java action: print omits the newline" {
     let out = java_action("System.out.print(\"a\");", "a : ID ;", false);
-    assert out == "p.emit(`a`);", `out: '${out}'`;
+    assert out == "p.emit(`a`);";
 }
 
 test "java action: println stringifies a value arg" {
     let out = java_action("System.out.println($x.v);", "r : x=e ; e returns [i32 v] : ID ;", false);
-    assert out == "p.emit(`${x.v}\\n`);", `out: '${out}'`;
+    assert out == "p.emit(`${x.v}\\n`);";
 }
 
 test "java action: println with a concat arg" {
     let out = java_action("System.out.println(\"ID \" + $ID.text);", "r : ID ;", false);
-    assert out == "p.emit(`ID ${p.token_text(id)}\\n`);", `out: '${out}'`;
+    assert out == "p.emit(`ID ${p.token_text(id)}\\n`);";
 }
 
 test "java action: ctx.toStringTree(this) drops the redundant parser arg" {
     let out = java_action("System.out.println($ctx.toStringTree(this));", "s : e EOF ; e : ID ;", false);
-    assert out == "p.emit(`${p.rule_string_tree()}\\n`);", `out: '${out}'`;
+    assert out == "p.emit(`${p.rule_string_tree()}\\n`);";
 }
 
 test "java action: assignment to the value channel" {
@@ -454,22 +454,22 @@ test "java action: assignment to the value channel" {
         "r returns [i32 v] : a=e b=e ; e returns [i32 v] : ID ;",
         true,
     );
-    assert out == "vals.v = a.v + b.v;", `out: '${out}'`;
+    assert out == "vals.v = a.v + b.v;";
 }
 
 test "java action: compound assignment on this.field" {
     let out = java_action("this.i += 1;", "a : ID ;", false);
-    assert out == "p.i += 1;", `out: '${out}'`;
+    assert out == "p.i += 1;";
 }
 
 test "java action: local declaration maps the type" {
     let out = java_action("int x = 0;", "a : ID ;", false);
-    assert out == "let mut x: i32 = 0;", `out: '${out}'`;
+    assert out == "let mut x: i32 = 0;";
 }
 
 test "java action: multiple statements space-join" {
     let out = java_action("this.i += 1; System.out.print(\"i=\");", "a : ID ;", false);
-    assert out == "p.i += 1; p.emit(`i=`);", `out: '${out}'`;
+    assert out == "p.i += 1; p.emit(`i=`);";
 }
 
 test "java action: ctx-cast LR-binary value idiom" {
@@ -490,7 +490,7 @@ e returns [i32 v] : e '+' e | INT ;
         &g.name,
         &NO_MEMBERS,
     ).unwrap();
-    assert out == "vals.v = _lr_acc.v + e.v;", `out: '${out}'`;
+    assert out == "vals.v = _lr_acc.v + e.v;";
 }
 
 test "java predicate: ctx-cast child access maps to the LR accumulator" {
@@ -508,7 +508,7 @@ e returns [i32 v] : e '+' e | INT ;
         &g.name,
         &NO_MEMBERS,
     ).unwrap();
-    assert out == "_lr_acc.v > 0", `out: '${out}'`;
+    assert out == "_lr_acc.v > 0";
 }
 
 test "java: ctx-cast in a non-left-recursive rule is a loud error" {
@@ -532,28 +532,28 @@ r returns [i32 v] : INT ;
 test "java members: field declarations become struct fields" {
     let lang = ActionLanguage::Java;
     let m = translate_members(&lang, "boolean enumKeyword = true; int i = 0;", "T").unwrap();
-    assert m.fields.len() == 2, `fields: ${m.fields.len()}`;
-    assert m.fields[0].name == "enum_keyword" && m.fields[0].ty == "bool" && m.fields[0].init == "true", `f0: ${m.fields[0].name}:${m.fields[0].ty}=${m.fields[0].init}`;
-    assert m.fields[1].name == "i" && m.fields[1].ty == "i32" && m.fields[1].init == "0", `f1: ${m.fields[1].name}:${m.fields[1].ty}=${m.fields[1].init}`;
+    assert m.fields.len() == 2;
+    assert m.fields[0].name == "enum_keyword" && m.fields[0].ty == "bool" && m.fields[0].init == "true";
+    assert m.fields[1].name == "i" && m.fields[1].ty == "i32" && m.fields[1].init == "0";
     assert m.methods.is_empty(), "no methods expected";
 }
 
 test "java members: integer types map by exact Java width (byte=i8, short=i16, long=i64)" {
     let lang = ActionLanguage::Java;
     let m = translate_members(&lang, "byte b = 0; short s = 0; long l = 0;", "T").unwrap();
-    assert m.fields.len() == 3, `fields: ${m.fields.len()}`;
-    assert m.fields[0].ty == "i8", `byte: ${m.fields[0].ty}`;
-    assert m.fields[1].ty == "i16", `short: ${m.fields[1].ty}`;
-    assert m.fields[2].ty == "i64", `long: ${m.fields[2].ty}`;
+    assert m.fields.len() == 3;
+    assert m.fields[0].ty == "i8";
+    assert m.fields[1].ty == "i16";
+    assert m.fields[2].ty == "i64";
 }
 
 test "java: a floating-point declaration is refused, wherever it is declared" {
     let lang = ActionLanguage::Java;
     for let ty of ["float", "double"] {
-        assert translate_members(&lang, `${ty} d = 0;`, "T").is_err(), `${ty} field`;
-        assert translate_members(&lang, `${ty} f() { return 0; }`, "T").is_err(), `${ty} return`;
-        assert translate_members(&lang, `int f(${ty} x) { return 0; }`, "T").is_err(), `${ty} parameter`;
-        assert java_action_res(`${ty} x = 0;`, "a : ID ;", false).is_err(), `${ty} local`;
+        assert translate_members(&lang, `${ty} d = 0;`, "T").is_err();
+        assert translate_members(&lang, `${ty} f() { return 0; }`, "T").is_err();
+        assert translate_members(&lang, `int f(${ty} x) { return 0; }`, "T").is_err();
+        assert java_action_res(`${ty} x = 0;`, "a : ID ;", false).is_err();
     }
 }
 
@@ -565,15 +565,15 @@ test "java members: method with a param, print, and return" {
         "T",
     ).unwrap();
     assert m.fields.is_empty(), "no fields expected";
-    assert m.methods.len() == 1, `methods: ${m.methods.len()}`;
-    assert m.methods[0].source == "fn pred(&mut self, v: bool) -> bool { self.emit(`eval=${v}\\n`); return v; }", `method: '${m.methods[0].source}'`;
+    assert m.methods.len() == 1;
+    assert m.methods[0].source == "fn pred(&mut self, v: bool) -> bool { self.emit(`eval=${v}\\n`); return v; }";
 }
 
 test "java members: void method, no params" {
     let lang = ActionLanguage::Java;
     let m = translate_members(&lang, "public void foo() { System.out.println(\"foo\"); }", "T").unwrap();
-    assert m.methods.len() == 1, `methods: ${m.methods.len()}`;
-    assert m.methods[0].source == "fn foo(&mut self) { self.emit(`foo\\n`); }", `method: '${m.methods[0].source}'`;
+    assert m.methods.len() == 1;
+    assert m.methods[0].source == "fn foo(&mut self) { self.emit(`foo\\n`); }";
 }
 
 test "java members: a member method stands outside every match" {
@@ -585,7 +585,7 @@ test "java members: a member method stands outside every match" {
         "boolean head() { return getText(); }", "int col() { return getCharPositionInLine(); }",
         "int col() { return _tokenStartCharPositionInLine; }", "boolean head() { return $text; }",
     ] {
-        assert translate_members(&lang, body, "T", /*lexer=*/ true).is_err(), `must refuse: '${*body}'`;
+        assert translate_members(&lang, body, "T", /*lexer=*/ true).is_err();
     }
     assert translate_members(&lang, "boolean head() { return getText(); }", "T").is_err(), "parser side too";
 }
@@ -599,8 +599,8 @@ test "java members: a lexer member resolves against the lexer's own surface" {
 
     let src = "int n = 0; boolean deep() { return this.n > 1; }";
     let ok = translate_members(&lang, &src, "T", /*lexer=*/ true).unwrap();
-    assert ok.methods.len() == 1, `methods: ${ok.methods.len()}`;
-    assert ok.methods[0].source == "fn deep(&self) -> bool { return self.n > 1; }", `method: '${ok.methods[0].source}'`;
+    assert ok.methods.len() == 1;
+    assert ok.methods[0].source == "fn deep(&self) -> bool { return self.n > 1; }";
 }
 
 test "the parser's token-stream API is refused in a lexer body" {
@@ -618,12 +618,12 @@ test "the parser's token-stream API is refused in a lexer body" {
 A : 'a' { ${body} }? ;
 `).unwrap();
         let msgs = stage_lexer_bodies(&mut g, &lang, &NO_MEMBERS);
-        assert msgs.len() == 1 && msgs[0].contains(`'${api}' reads the parser's token stream`), `'${body}': ${msgs:?}`;
+        assert msgs.len() == 1 && msgs[0].contains(`'${api}' reads the parser's token stream`);
     }
 
     // The same call in a parser body is the API it belongs to.
     let ok = java_pred("_input.LA(1) == 0", "a : ID ;", false);
-    assert ok == "p.la(1) == 0", `out: '${ok}'`;
+    assert ok == "p.la(1) == 0";
 }
 
 test "a recognizer call resolves the same bare and through `this`" {
@@ -636,15 +636,15 @@ test "a recognizer call resolves the same bare and through `this`" {
 A : 'a' { System.out.println(${*body}); } ;
 `).unwrap();
         let msgs = stage_lexer_bodies(&mut g, &lang, &NO_MEMBERS);
-        assert msgs.is_empty(), `must resolve '${*body}': ${msgs.len()} diagnostics`;
+        assert msgs.is_empty();
         let staged = g.lexer_rules[0].body[0].actions[0].source.text;
-        assert staged.contains("chars_text(chars, start, pos)"), `staged: '${staged}'`;
+        assert staged.contains("chars_text(chars, start, pos)");
     }
 
     // And in a parser body both are the rule's own consumed span.
     let bare = java_action("System.out.println(getText());", "a : ID ;", false);
     let qualified = java_action("System.out.println(this.getText());", "a : ID ;", false);
-    assert bare == qualified, `bare '${bare}' vs qualified '${qualified}'`;
+    assert bare == qualified;
 }
 
 test "grammar_has_superclass keys the Phase 4 carve-out" {
@@ -683,7 +683,7 @@ A : '!' ;
         &NO_MEMBERS,
         true,
     );
-    assert mandatory matches { Ok(code) && code == "true" }, `${mandatory:?}`;
+    assert mandatory matches { Ok(code) && code == "true" };
 
     // Before the alternative's last element the token may not have matched
     // yet — ANTLR answers null there, so the constant is not this one.
@@ -697,7 +697,7 @@ A : '!' ;
         &g.name,
         &NO_MEMBERS,
     );
-    assert mid_alt matches { Err(_) }, `a mid-alternative position must not fold: ${mid_alt:?}`;
+    assert mid_alt matches { Err(_) }, "a mid-alternative position must not fold";
 
     let optional = translate_predicate(
         &lang,
@@ -709,25 +709,25 @@ A : '!' ;
         &g.name,
         &NO_MEMBERS,
     );
-    assert optional matches { Err(_) }, `an unbound token must not fold: ${optional:?}`;
+    assert optional matches { Err(_) }, "an unbound token must not fold";
 }
 
 test "java action: a labeled rule's ctx renders through its captured node" {
     // `ParseTrees/RuleRef`: `$r.ctx` is the node, so the call on it is dropped.
     let out = java_action("System.out.println($r.ctx.toStringTree(this));", "s : r=a ;\na : 'x' ;", false);
-    assert out == "p.emit(`${p.rule_tree_at(vals._node_r)}\\n`);", `out: '${out}'`;
+    assert out == "p.emit(`${p.rule_tree_at(vals._node_r)}\\n`);";
 }
 
 test "java action: getRuleInvocationStack() reads the parser's rule stack" {
     let out = java_action("System.out.println(getRuleInvocationStack());", "a : ID ;", false);
-    assert out == "p.emit(`${p.rule_stack()}\\n`);", `out: '${out}'`;
+    assert out == "p.emit(`${p.rule_stack()}\\n`);";
 }
 
 test "java predicate: && binds tighter than ||, as in Java" {
     let flat = java_pred("$i == 1 || $i == 2 && this.b", "a[i32 i] : ID ;", true);
-    assert flat == "vals.i == 1 || vals.i == 2 && p.b", `flat: '${flat}'`;
+    assert flat == "vals.i == 1 || vals.i == 2 && p.b";
     let grouped = java_pred("($i == 1 || $i == 2) && this.b", "a[i32 i] : ID ;", true);
-    assert grouped == "(vals.i == 1 || vals.i == 2) && p.b", `grouped: '${grouped}'`;
+    assert grouped == "(vals.i == 1 || vals.i == 2) && p.b";
 }
 
 test "java print: a string concat interpolates each operand that is not a string" {
@@ -737,12 +737,12 @@ test "java print: a string concat interpolates each operand that is not a string
         "a[i32 i] : ID ;",
         true,
     );
-    assert out == "p.emit(`${(vals.i + 1)} y=${vals.i * 2}!?\\n`);", `out: '${out}'`;
+    assert out == "p.emit(`${(vals.i + 1)} y=${vals.i * 2}!?\\n`);";
 }
 
 test "java print: `$` and backticks in a string literal stay text" {
     let out = java_action("System.out.println(\"cost ${n} `q`\");", "a : ID ;", false);
-    assert out == "p.emit(`cost \\${n} \\`q\\`\\n`);", `out: '${out}'`;
+    assert out == "p.emit(`cost \\${n} \\`q\\`\\n`);";
 }
 
 test "java predicate: at an alternative's end only the ctx-token presence test folds" {
@@ -776,7 +776,7 @@ s : ID A ;
             &members,
             true,
         );
-        assert out matches { Ok(code) && code == want }, `'${body}': ${out:?}`;
+        assert out matches { Ok(code) && code == want };
     }
 }
 
@@ -802,14 +802,14 @@ test "java members: a method's receiver follows every way its body can write" {
         }
     }
     let want: List<String> = ["bump", "take", "next", "checked", "reset", "argued", "widened"];
-    assert mutating == want, `${mutating:?}`;
-    assert m.methods[0].source == "fn bump(&mut self) { self.n = self.n + 1; }", m.methods[0].source;
-    assert m.methods[4].source == "fn negated(&self) -> bool { return !(self.n > 0); }", m.methods[4].source;
-    assert m.methods[5].source == "fn same(&self, a: i32, b: i32) -> bool { return a == b; }", m.methods[5].source;
-    assert m.methods[6].source == "fn reset(&mut self) { self.n = 0; return; }", m.methods[6].source;
+    assert mutating == want;
+    assert m.methods[0].source == "fn bump(&mut self) { self.n = self.n + 1; }";
+    assert m.methods[4].source == "fn negated(&self) -> bool { return !(self.n > 0); }";
+    assert m.methods[5].source == "fn same(&self, a: i32, b: i32) -> bool { return a == b; }";
+    assert m.methods[6].source == "fn reset(&mut self) { self.n = 0; return; }";
 
     let call = java_pred_m("this.same(1, 2)", "a : ID ;", false, &member_names(&m));
-    assert call == "p.same(1, 2)", `call: '${call}'`;
+    assert call == "p.same(1, 2)";
 }
 
 test "java attribute types map to Wado; one outside the subset passes through" {
@@ -818,8 +818,8 @@ r[int a] returns [boolean ok, List<String> xs] locals [long n] : ID ;
 ").unwrap();
     translate_attr_types(&mut g);
     let r = &g.parser_rules[0];
-    assert r.args[0].type_text == "i32" && r.returns_decls[0].type_text == "bool", `${r.args:?} ${r.returns_decls:?}`;
-    assert r.returns_decls[1].type_text == "List<String>" && r.locals_decls[0].type_text == "i64", `${r.locals_decls:?}`;
+    assert r.args[0].type_text == "i32" && r.returns_decls[0].type_text == "bool";
+    assert r.returns_decls[1].type_text == "List<String>" && r.locals_decls[0].type_text == "i64";
 }
 
 test "an action language without a translator is refused at every entry" {
@@ -837,7 +837,7 @@ a : ID ;
         "T",
         &NO_MEMBERS,
     );
-    assert action matches { Err(m) && m.contains("unsupported action language 'Cpp'") }, `${action:?}`;
+    assert action matches { Err(m) && m.contains("unsupported action language 'Cpp'") };
     let pred = translate_predicate(
         &cpp,
         &g.parser_rules[0],
@@ -848,13 +848,13 @@ a : ID ;
         "T",
         &NO_MEMBERS,
     );
-    assert pred matches { Err(m) && m.contains("unsupported action language 'Cpp'") }, `${pred:?}`;
+    assert pred matches { Err(m) && m.contains("unsupported action language 'Cpp'") };
     assert translate_members(&cpp, "int n = 0;", "T") matches { Err(m) && m.contains("'Cpp'") };
     let mut lexer = parse("lexer grammar L;
 A : 'a' { x(); } ;
 ").unwrap();
     let msgs = stage_lexer_bodies(&mut lexer, &cpp, &NO_MEMBERS);
-    assert msgs.len() == 1 && msgs[0].contains("'Cpp'"), `${msgs:?}`;
+    assert msgs.len() == 1 && msgs[0].contains("'Cpp'");
 }
 
 test "a value channel alone turns the action machinery on" {
@@ -874,13 +874,13 @@ r : ID ;
 test "java: an integer cast is dropped and its operand kept" {
     // Wado infers the operand's type from the comparison, so the cast adds nothing.
     let out = java_pred("(int)this.n > (long)3", "a : ID ;", false);
-    assert out == "p.n > 3", `out: '${out}'`;
+    assert out == "p.n > 3";
 }
 
 test "java: a floating cast is a loud error" {
     for let java of ["(double)this.n / 2 > 1", "(float)(this.n) / this.n > 1"] {
         let res = java_pred_res(java, "a : ID ;", false);
-        assert res.is_err(), `${java}: ${res:?}`;
+        assert res.is_err();
     }
 }
 
@@ -893,7 +893,7 @@ test "java: a parenthesized name is a cast only when an operand follows it" {
     ];
     for let [java, wado] of cases {
         let out = java_pred(&java, "a : ID ;", false);
-        assert out == wado, `${java}: '${out}'`;
+        assert out == wado;
     }
 }
 
@@ -911,7 +911,7 @@ test "java action: an increment statement is a compound assignment" {
     ];
     for let [java, wado] of cases {
         let out = java_action_m(&java, "a : ID ;", false, &members);
-        assert out == wado, `${java}: '${out}'`;
+        assert out == wado;
     }
 }
 
@@ -919,19 +919,19 @@ test "java action: an increment inside an expression is refused" {
     // Its value differs between the prefix and postfix forms, which a compound
     // assignment cannot carry.
     let res = java_action_res("System.out.print(this.ids++);", "a : ID ;", false);
-    assert res == Result::Err("java2wado: `++` and `--` are supported only as a statement"), `${res:?}`;
+    assert res == Result::Err("java2wado: `++` and `--` are supported only as a statement");
 }
 
 test "java action: an increment of anything but a variable or field is refused" {
     let res = java_action_res("getText()++;", "a : ID ;", false);
-    assert res == Result::Err("java2wado: `++` and `--` step a variable or a field"), `${res:?}`;
+    assert res == Result::Err("java2wado: `++` and `--` step a variable or a field");
 }
 
 test "java members: a field without an initializer takes its type's default" {
     let lang = ActionLanguage::Java;
     let m = translate_members(&lang, "int n; boolean b; long l;", "T").unwrap();
     let inits: List<String> = m.fields.iter_ref().map(|f: &MemberField| f.init).collect();
-    assert inits == ["0", "false", "0"], `${inits:?}`;
+    assert inits == ["0", "false", "0"];
 }
 
 test "java members: a String field without an initializer is refused" {
@@ -963,7 +963,7 @@ test "java: `+` with a String-typed operand concatenates" {
     ];
     for let [java, wado] of cases {
         let out = java_action_m(&java, rule, true, &members);
-        assert out == wado, `${java}: '${out}'`;
+        assert out == wado;
     }
 }
 
@@ -974,6 +974,6 @@ test "java members: a String field or parameter makes `+` concatenate in a metho
         "String label = \"x\"; void show(int n) { System.out.print(label + n); } void tag(String s, int n) { System.out.print(s + n); }",
         "T",
     ).unwrap();
-    assert m.methods[0].source == "fn show(&mut self, n: i32) { self.emit(`${self.label}${n}`); }", m.methods[0].source;
-    assert m.methods[1].source == "fn tag(&mut self, s: String, n: i32) { self.emit(`${s}${n}`); }", m.methods[1].source;
+    assert m.methods[0].source == "fn show(&mut self, n: i32) { self.emit(`${self.label}${n}`); }";
+    assert m.methods[1].source == "fn tag(&mut self, s: String, n: i32) { self.emit(`${s}${n}`); }";
 }

@@ -518,8 +518,9 @@ pub fn rule_input_end(
 /// have between them: one kind set each.
 global SLOTS: i32 = INPUT_END_MAX_LEN * (INPUT_END_MAX_LEN + 1) / 2;
 
-fn slot(n: i32, d: i32) -> i32 {
-    assert 0 <= d && d < n && n <= INPUT_END_MAX_LEN;
+fn slot(n: i32, d: i32) -> i32
+    contract 0 <= d < n <= INPUT_END_MAX_LEN
+{
     return n * (n - 1) / 2 + d;
 }
 
@@ -547,8 +548,9 @@ fn strs_empty() -> Strings {
     return Strings { lens: 1 as u32, at: [] };
 }
 
-fn strs_token(ids: &List<i32>) -> Strings {
-    assert !ids.is_empty(), "a token reference names a kind";
+fn strs_token(ids: &List<i32>) -> Strings
+    contract !ids.is_empty(), "a token reference names a kind"
+{
     let mut s = Strings { lens: 2 as u32, at: [] };
     for let id of ids {
         let _ = or_word(&mut s.at, *id / 64 * SLOTS + slot(1, 0), 1 as u64 << (*id % 64) as u64);

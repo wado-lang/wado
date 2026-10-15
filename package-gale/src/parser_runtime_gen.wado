@@ -162,7 +162,7 @@ fn gen_run_parse_entry(w: &mut CodeWriter, ctx: &EmitContext) {
     // `max_errors` caps recovery; 1 is the fail-fast minimum. 0 (or negative)
     // would suppress every diagnostic and let a broken parse report `ok()`, so
     // reject it up front.
-    w.line("assert max_errors >= 1, `max_errors must be >= 1, got ${max_errors}`;");
+    w.line("assert max_errors >= 1;");
     w.line("let tokens = tokenize(input);");
     w.line("let mut p = Parser::new(tokens);");
     w.line("p.max_errors = max_errors;");

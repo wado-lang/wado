@@ -290,8 +290,9 @@ fn create_granted<S: AsStrSlice>(path: S) -> Result<Descriptor, String> with Pre
 
 /// Why absolute `path` opens nowhere, and the `wado run` invocation that
 /// would grant its own directory and name the file relative to it.
-fn absolute_path_hint<S: AsStrSlice>(path: S) -> String {
-    assert path.starts_with("/"), "open_granted and create_granted ask only for an absolute path";
+fn absolute_path_hint<S: AsStrSlice>(path: S) -> String
+    contract path.starts_with("/"), "open_granted and create_granted ask only for an absolute path"
+{
     let because = "gale: a path opens inside a granted directory, so an absolute path never does";
     let Some(name) = fs::file_name(path) else {
         return `${because}: wado run --dir ${path} ...`;

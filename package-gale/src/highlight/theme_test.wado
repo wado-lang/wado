@@ -38,7 +38,7 @@ test "unstyled names the vocabulary classes a theme leaves without a color" {
     t.set("keyword", "#111");
     t.set("constant.builtin", "#222");
     let vocabulary: List<String> = ["comment", "constant.builtin", "keyword"];
-    assert t.unstyled(&vocabulary) == ["comment"], `${t.unstyled(&vocabulary):?}`;
+    assert t.unstyled(&vocabulary) == ["comment"];
 }
 
 test "unstyled is empty when the theme covers the vocabulary" {
@@ -53,7 +53,7 @@ test "unknown is sorted, not in the order the theme was built" {
     t.set("zeta", "#111");
     t.set("alpha", "#222");
     let vocabulary: List<String> = [];
-    assert t.unknown(&vocabulary) == ["alpha", "zeta"], `${t.unknown(&vocabulary):?}`;
+    assert t.unknown(&vocabulary) == ["alpha", "zeta"];
 }
 
 test "unknown names the theme classes no grammar emits" {
@@ -61,5 +61,5 @@ test "unknown names the theme classes no grammar emits" {
     t.set("keyword", "#111");
     t.set("kyeword", "#222");
     let vocabulary: List<String> = ["keyword"];
-    assert t.unknown(&vocabulary) == ["kyeword"], `${t.unknown(&vocabulary):?}`;
+    assert t.unknown(&vocabulary) == ["kyeword"];
 }

@@ -21,6 +21,10 @@ use crate::tir::{
 use crate::tir_visitor::{TirRefVisitor, shift_locals};
 use crate::token::Span;
 
+/// A global, by the module declaring it and its name: two modules may each
+/// declare one of the same name.
+type GlobalKey = (ModuleSource, String);
+
 /// One global initializer, taken out of the `$init$` function reify put it in.
 /// It lives only in `functions` until here, so no pass between reify and this
 /// one can walk the functions and miss an initializer.
@@ -67,45 +71,44 @@ pub fn extract(flat: &mut FlatPackage, errors: &dyn ErrorSink) -> Result<(), Bai
         }
     }
 
-    // Insertion order is preserved so cross-module sibling ordering matches the
-    // original global declaration order, which the aggregator then walks in
-    // entry-last order (see `build_initialize_modules`).
-    let mut by_module: IndexMap<ModuleSource, Vec<LazyInit>> = IndexMap::default();
+    // In declaration order, which the sort keeps wherever no dependency decides.
+    let mut inits: Vec<LazyInit> = Vec::new();
     flat.functions.retain(|func_rc| {
         let mut func = func_rc.borrow_mut();
         let Some(global) = global_init_target(&func.name).map(str::to_string) else {
             return true;
         };
-        let init = LazyInit {
+        inits.push(LazyInit {
             global,
             module_source: func.module_source.clone(),
             value: returned_value(func.body.take().expect("$init$ carries a body")),
             frame: func.take_frame(),
-        };
-        by_module
-            .entry(init.module_source.clone())
-            .or_default()
-            .push(init);
+        });
         false
     });
-    if by_module.is_empty() {
+    if inits.is_empty() {
         return Ok(());
     }
 
-    // An initializer depends on every global the functions it calls read.
-    let reads_by_function = global_reads_by_function(&flat.functions);
+    // One sort over every module, so a cycle through a module boundary is
+    // found like any other.
+    let deps = init_dependencies(&inits, &global_refs_by_function(&flat.functions));
+    let order = topological_order(&deps)
+        .map_err(|in_degree| report_init_cycle(&inits, &deps, &in_degree, errors))?;
+    let modules = module_order(&inits, &deps, errors)?;
+
+    let mut by_module: IndexMap<ModuleSource, Vec<LazyInit>> =
+        modules.into_iter().map(|ms| (ms, Vec::new())).collect();
+    let mut taken: Vec<Option<LazyInit>> = inits.into_iter().map(Some).collect();
+    for i in order {
+        let init = taken[i]
+            .take()
+            .expect("the order names each initializer once");
+        by_module[&init.module_source].push(init);
+    }
+    // `build_initialize_modules` calls them in the order they are pushed here.
     let span = Span::new(0, 0, 1, 1);
-    for (module_source, module_inits) in by_module {
-        let order = topological_sort_global_inits(&module_inits, &reads_by_function, errors)?;
-        let mut taken: Vec<Option<LazyInit>> = module_inits.into_iter().map(Some).collect();
-        let sorted_inits = order
-            .into_iter()
-            .map(|i| {
-                taken[i]
-                    .take()
-                    .expect("the order names each initializer once")
-            })
-            .collect();
+    for (module_source, sorted_inits) in by_module {
         let init_func = build_module_init_function(module_source, sorted_inits, span);
         flat.functions.push(Rc::new(RefCell::new(init_func)));
     }
@@ -129,16 +132,7 @@ fn build_module_init_function(
             frame,
         } = init;
         merged.absorb(frame, |offset| shift_locals(&mut value, offset));
-        let global_set = TirExpr::new(
-            TirExprKind::GlobalVarSet {
-                module_source,
-                name: global,
-                value: Box::new(value),
-            },
-            TypeTable::UNIT,
-            span,
-        );
-        init_stmts.push(TirStmt::new(TirStmtKind::Expr(global_set), span));
+        init_stmts.push(set_global(module_source, global, value, span));
     }
 
     TirFunction::synthesized(
@@ -154,23 +148,42 @@ fn build_module_init_function(
     )
 }
 
-/// What a function body reads and calls, in one walk.
+fn set_global(module_source: ModuleSource, name: String, value: TirExpr, span: Span) -> TirStmt {
+    let global_set = TirExpr::new(
+        TirExprKind::GlobalVarSet {
+            module_source,
+            name,
+            value: Box::new(value),
+        },
+        TypeTable::UNIT,
+        span,
+    );
+    TirStmt::new(TirStmtKind::Expr(global_set), span)
+}
+
+/// The globals a function body reads or writes, and what it calls, in one walk.
 ///
-/// Globals are keyed by `(module_source, name)` so two modules each declaring a
-/// global with the same name don't collide in the dependency graph; callees by
-/// [`FunctionRef::full_name`], the same key [`global_reads_by_function`] maps.
+/// Callees are keyed by [`FunctionRef::full_name`], the same key
+/// [`global_refs_by_function`] maps.
 #[derive(Default)]
-struct BodyReads {
-    globals: IndexSet<(ModuleSource, String)>,
+struct BodyRefs {
+    globals: IndexSet<GlobalKey>,
     callees: IndexSet<String>,
 }
 
-impl TirRefVisitor for BodyReads {
+impl TirRefVisitor for BodyRefs {
     fn visit_expr(&mut self, expr: &TirExpr) {
         match &expr.kind {
+            // A write is as much a dependency as a read: the global's own
+            // initializer, run later, would replace what was stored.
             TirExprKind::GlobalVarGet {
                 name,
                 module_source,
+            }
+            | TirExprKind::GlobalVarSet {
+                name,
+                module_source,
+                ..
             } => {
                 self.globals.insert((module_source.clone(), name.clone()));
             }
@@ -194,7 +207,7 @@ impl TirRefVisitor for BodyReads {
     }
 }
 
-/// The key [`global_reads_by_function`] maps a function under: the same string
+/// The key [`global_refs_by_function`] maps a function under: the same string
 /// [`FunctionRef::full_name`] produces for a free function, so a call and a
 /// bare mention of the same function land on one entry.
 fn function_key(module_source: &ModuleSource, name: &str) -> String {
@@ -208,277 +221,249 @@ fn function_key(module_source: &ModuleSource, name: &str) -> String {
     .full_name()
 }
 
-/// Every global each function reads, closed over the call graph.
+/// Every global each function reads or writes, closed over the call graph.
 ///
 /// An initializer's dependency is not always written in it: a call reads
-/// globals the caller never names, and ordering on the directly-written
-/// references alone leaves such a global still holding its placeholder when the
+/// globals the caller never names, and ordering on the references the caller
+/// names alone leaves such a global still holding its placeholder when the
 /// caller runs. Computed as a least fixpoint, so a recursive cycle contributes
-/// each member's own reads and terminates.
-fn global_reads_by_function(
+/// each member's own references and terminates.
+fn global_refs_by_function(
     functions: &[Rc<RefCell<TirFunction>>],
-) -> IndexMap<String, IndexSet<(ModuleSource, String)>> {
-    let mut reads: IndexMap<String, IndexSet<(ModuleSource, String)>> = IndexMap::default();
+) -> IndexMap<String, IndexSet<GlobalKey>> {
+    let mut refs: IndexMap<String, IndexSet<GlobalKey>> = IndexMap::default();
     let mut callees: IndexMap<String, IndexSet<String>> = IndexMap::default();
     for func_rc in functions {
         let func = func_rc.borrow();
         let Some(body) = func.body.as_ref() else {
             continue;
         };
-        let mut scan = BodyReads::default();
+        let mut scan = BodyRefs::default();
         scan.visit_block(body);
         let key = FunctionRef::from_resolved(&func, func.module_source.clone()).full_name();
-        reads.entry(key.clone()).or_default().extend(scan.globals);
+        refs.entry(key.clone()).or_default().extend(scan.globals);
         callees.entry(key).or_default().extend(scan.callees);
     }
 
     loop {
-        let mut grown: Vec<(String, IndexSet<(ModuleSource, String)>)> = Vec::new();
+        let mut grown: Vec<(String, IndexSet<GlobalKey>)> = Vec::new();
         for (name, called) in &callees {
-            let known = reads.get(name);
-            let mut fresh = IndexSet::default();
-            for callee in called {
-                let Some(callee_reads) = reads.get(callee) else {
-                    continue;
-                };
-                for global in callee_reads {
-                    if known.is_none_or(|k| !k.contains(global)) {
-                        fresh.insert(global.clone());
-                    }
-                }
-            }
+            let known = &refs[name];
+            let fresh: IndexSet<GlobalKey> = called
+                .iter()
+                .filter_map(|callee| refs.get(callee))
+                .flatten()
+                .filter(|global| !known.contains(*global))
+                .cloned()
+                .collect();
             if !fresh.is_empty() {
                 grown.push((name.clone(), fresh));
             }
         }
         if grown.is_empty() {
-            return reads;
+            return refs;
         }
         for (name, fresh) in grown {
-            reads.entry(name).or_default().extend(fresh);
+            refs[&name].extend(fresh);
         }
     }
 }
 
-/// The globals an initializer depends on, kept apart by how certainly: those it
-/// names, and those the functions it reaches read.
-#[derive(Default)]
-struct InitRefs {
-    direct: IndexSet<(ModuleSource, String)>,
-    via_calls: IndexSet<(ModuleSource, String)>,
-}
-
-fn collect_global_refs(
-    value: &TirExpr,
-    reads_by_function: &IndexMap<String, IndexSet<(ModuleSource, String)>>,
-) -> InitRefs {
-    let mut scan = BodyReads::default();
-    scan.visit_expr(value);
-    let mut refs = InitRefs {
-        direct: scan.globals,
-        via_calls: IndexSet::default(),
-    };
-    for callee in &scan.callees {
-        let Some(callee_reads) = reads_by_function.get(callee) else {
-            continue;
-        };
-        for global in callee_reads {
-            if !refs.direct.contains(global) {
-                refs.via_calls.insert(global.clone());
-            }
-        }
-    }
-    refs
-}
-
-/// Whether `from` already depends on `to`, directly or transitively — so an
-/// edge `to → from` would close a cycle.
-fn depends_on(deps: &[IndexSet<usize>], from: usize, to: usize) -> bool {
-    let mut seen = vec![false; deps.len()];
-    let mut stack = vec![from];
-    while let Some(node) = stack.pop() {
-        if node == to {
-            return true;
-        }
-        if std::mem::replace(&mut seen[node], true) {
-            continue;
-        }
-        stack.extend(deps[node].iter().copied());
-    }
-    false
-}
-
-/// The order to run `lazy_inits` in, as indices into it, each initializer after
-/// every one it depends on.
-fn topological_sort_global_inits(
-    lazy_inits: &[LazyInit],
-    reads_by_function: &IndexMap<String, IndexSet<(ModuleSource, String)>>,
-    errors: &dyn ErrorSink,
-) -> Result<Vec<usize>, Bail> {
-    if lazy_inits.len() <= 1 {
-        return Ok((0..lazy_inits.len()).collect());
-    }
-
-    // Build a map from `(module_source, name)` to its index in
-    // lazy_inits. The compound key keeps cross-module same-named
-    // globals separated when both happen to share a topo-sort input
-    // (today the planner partitions by module, but the keying is
-    // defensive against any future re-merge).
-    let key_to_idx: IndexMap<(ModuleSource, String), usize> = lazy_inits
+/// What each initializer depends on, as indices into `inits`.
+///
+/// An initializer depends on every global it refers to, and every global a
+/// function it calls or names refers to, on any path. The rule is
+/// path-insensitive, as Go's is: a reference only some executions take orders the
+/// initializer the same as one they all take, and a cycle among them is an
+/// error even where no execution would close it.
+fn init_dependencies(
+    inits: &[LazyInit],
+    refs_by_function: &IndexMap<String, IndexSet<GlobalKey>>,
+) -> Vec<IndexSet<usize>> {
+    let key_to_idx: IndexMap<GlobalKey, usize> = inits
         .iter()
         .enumerate()
         .map(|(i, init)| ((init.module_source.clone(), init.global.clone()), i))
         .collect();
-
-    // Build dependency graph: deps[i] = set of indices that i depends on.
-    let mut deps: Vec<IndexSet<usize>> = vec![IndexSet::default(); lazy_inits.len()];
-    let edges = |refs: IndexSet<(ModuleSource, String)>, i: usize| -> Vec<usize> {
-        refs.into_iter()
-            .filter_map(|key| key_to_idx.get(&key).copied())
-            .filter(|&dep| dep != i)
-            .collect()
-    };
-
-    let scanned: Vec<InitRefs> = lazy_inits
+    inits
         .iter()
-        .map(|init| collect_global_refs(&init.value, reads_by_function))
-        .collect();
+        .map(|init| {
+            let mut scan = BodyRefs::default();
+            scan.visit_expr(&init.value);
+            let via_calls = scan
+                .callees
+                .iter()
+                .filter_map(|callee| refs_by_function.get(callee))
+                .flatten();
+            scan.globals
+                .iter()
+                .chain(via_calls)
+                .filter_map(|key| key_to_idx.get(key).copied())
+                .collect()
+        })
+        .collect()
+}
 
-    // A reference written in the initializer is a definite dependency.
-    for (i, refs) in scanned.iter().enumerate() {
-        for dep in edges(refs.direct.clone(), i) {
-            deps[i].insert(dep);
-        }
-    }
-    // What a callee reads is inferred, and the inference is path-insensitive: a
-    // helper that reads two globals makes each initializer calling it look
-    // dependent on the other, even when no execution reads both. Such an edge
-    // yields rather than manufacturing a cycle out of a program that has none —
-    // the definite edges above already fix every order that is really required.
-    for (i, refs) in scanned.iter().enumerate() {
-        for dep in edges(refs.via_calls.clone(), i) {
-            if !depends_on(&deps, dep, i) {
-                deps[i].insert(dep);
-            }
-        }
-    }
-
-    // Kahn's algorithm for topological sort
+/// Kahn's algorithm: each node after every one in its `deps`, ties in index
+/// order. On a cycle, the in-degrees left, nonzero on every node it could not
+/// place.
+fn topological_order(deps: &[IndexSet<usize>]) -> Result<Vec<usize>, Vec<usize>> {
     let mut in_degree: Vec<usize> = deps.iter().map(IndexSet::len).collect();
-    let mut queue: VecDeque<usize> = in_degree
-        .iter()
-        .enumerate()
-        .filter(|(_, d)| **d == 0)
-        .map(|(i, _)| i)
-        .collect();
-
-    let mut sorted: Vec<usize> = Vec::with_capacity(lazy_inits.len());
-
-    while let Some(idx) = queue.pop_front() {
-        sorted.push(idx);
-
-        // Update dependents
-        for (i, dep_set) in deps.iter().enumerate() {
-            if dep_set.contains(&idx) {
-                in_degree[i] -= 1;
-                if in_degree[i] == 0 {
-                    queue.push_back(i);
+    let mut queue: VecDeque<usize> = (0..deps.len()).filter(|&i| in_degree[i] == 0).collect();
+    let mut sorted: Vec<usize> = Vec::with_capacity(deps.len());
+    while let Some(node) = queue.pop_front() {
+        sorted.push(node);
+        for (dependent, dep_set) in deps.iter().enumerate() {
+            if dep_set.contains(&node) {
+                in_degree[dependent] -= 1;
+                if in_degree[dependent] == 0 {
+                    queue.push_back(dependent);
                 }
             }
         }
     }
-
-    if sorted.len() < lazy_inits.len() {
-        let cycle: Vec<&LazyInit> = lazy_inits
-            .iter()
-            .enumerate()
-            .filter(|(i, _)| in_degree[*i] > 0)
-            .map(|(_, init)| init)
-            .collect();
-        let names: Vec<&str> = cycle.iter().map(|init| init.global.as_str()).collect();
-        let LazyInit {
-            module_source,
-            value,
-            ..
-        } = cycle[0];
-        return Err(errors.fatal_in(
-            module_source,
-            Diagnostic {
-                severity: Severity::Error,
-                code: Code::CircularDependency,
-                message: format!(
-                    "global initializers form a cycle: {}. Each waits for a value \
-                     another has not been given yet, so none can go first.",
-                    names.join(", ")
-                ),
-                span: Some(DiagnosticSpan::from_span(&value.span, None)),
-            },
-        ));
+    if sorted.len() < deps.len() {
+        return Err(in_degree);
     }
-
     Ok(sorted)
 }
 
-/// Order the per-module initializers so each runs after the modules whose
-/// globals it reads, entry last.
-///
-/// [`topological_sort_global_inits`] settles the order within a module; a
-/// global read across a module boundary needs the same treatment one level up,
-/// or the reader finds a placeholder. Discovery order is no substitute: it
-/// tracks how the loader happened to reach the modules.
-fn sort_modules_by_dependency(
-    modules: &mut Vec<ModuleSource>,
-    entry_source: &ModuleSource,
-    functions: &[Rc<RefCell<TirFunction>>],
-) {
-    let reads = global_reads_by_function(functions);
-    let module_deps = |module: &ModuleSource| -> IndexSet<ModuleSource> {
-        let key = function_key(module, MODULE_INIT_FUNCTION);
-        reads
-            .get(&key)
-            .into_iter()
-            .flatten()
-            .map(|(source, _)| source.clone())
-            .filter(|source| source != module)
-            .collect()
-    };
+fn report_init_cycle(
+    inits: &[LazyInit],
+    deps: &[IndexSet<usize>],
+    in_degree: &[usize],
+    errors: &dyn ErrorSink,
+) -> Bail {
+    let cycle = blocking_cycle(deps, in_degree);
+    let names: Vec<&str> = cycle.iter().map(|&i| inits[i].global.as_str()).collect();
+    let LazyInit {
+        module_source,
+        value,
+        ..
+    } = &inits[cycle[0]];
+    errors.fatal_in(
+        module_source,
+        Diagnostic {
+            severity: Severity::Error,
+            code: Code::CircularDependency,
+            message: if let [name] = names[..] {
+                format!(
+                    "the initializer of `{name}` may use `{name}` before it has been given \
+                     a value."
+                )
+            } else {
+                format!(
+                    "global initializers form a cycle: {}. Each may use a global another has \
+                     not given a value yet, so none can go first.",
+                    names.join(", ")
+                )
+            },
+            span: Some(DiagnosticSpan::from_span(&value.span, None)),
+        },
+    )
+}
 
-    let mut ordered: Vec<ModuleSource> = Vec::with_capacity(modules.len());
-    let mut placed: IndexSet<ModuleSource> = IndexSet::default();
-    // Entry last: it is the one module every other is linked into, and a cycle
-    // among the rest — which imports cannot form — would otherwise strand it.
-    let mut pending: Vec<ModuleSource> = modules
+/// One cycle among the nodes the sort left unplaced, in dependency order,
+/// leading with the lowest index. Those include nodes that merely wait on a
+/// cycle, so it follows unplaced dependencies until one repeats.
+fn blocking_cycle(deps: &[IndexSet<usize>], in_degree: &[usize]) -> Vec<usize> {
+    let mut path: Vec<usize> = Vec::new();
+    let mut node = in_degree
         .iter()
-        .filter(|ms| *ms != entry_source)
-        .cloned()
-        .collect();
-
-    while !pending.is_empty() {
-        let ready = pending
+        .position(|&d| d > 0)
+        .expect("a node is unplaced");
+    while !path.contains(&node) {
+        path.push(node);
+        node = *deps[node]
             .iter()
-            .position(|ms| module_deps(ms).iter().all(|dep| placed.contains(dep)));
-        // No module is ready only if the remainder depends on each other, which
-        // the import graph cannot express. Take one so the loop terminates.
-        let next = pending.remove(ready.unwrap_or(0));
-        placed.insert(next.clone());
-        ordered.push(next);
+            .find(|&&dep| in_degree[dep] > 0)
+            .expect("an unplaced node waits on another unplaced one");
     }
-    if modules.iter().any(|ms| ms == entry_source) {
-        ordered.push(entry_source.clone());
+    let mut cycle = path.split_off(path.iter().position(|&n| n == node).expect("node repeats"));
+    let lowest = cycle.iter().min().copied().expect("a cycle has a member");
+    let first = cycle
+        .iter()
+        .position(|&n| n == lowest)
+        .expect("lowest is a member");
+    cycle.rotate_left(first);
+    cycle
+}
+
+/// The order to call the modules' `$initialize_module` in, each after the
+/// modules whose globals its initializers depend on.
+///
+/// A module's initializers run together, so two modules whose initializers
+/// depend on each other's have no order, even where the initializers alone
+/// would: `A1` needing `B1` and `B2` needing `A2` puts each module first.
+fn module_order(
+    inits: &[LazyInit],
+    deps: &[IndexSet<usize>],
+    errors: &dyn ErrorSink,
+) -> Result<Vec<ModuleSource>, Bail> {
+    let modules: IndexSet<&ModuleSource> = inits.iter().map(|init| &init.module_source).collect();
+    let module_of = |i: usize| -> usize {
+        modules
+            .get_index_of(&inits[i].module_source)
+            .expect("every initializer's module is listed")
+    };
+    // For each module dependency, one initializer edge that makes it.
+    let mut witness: IndexMap<(usize, usize), (usize, usize)> = IndexMap::default();
+    let mut module_deps: Vec<IndexSet<usize>> = vec![IndexSet::default(); modules.len()];
+    for (i, dep_set) in deps.iter().enumerate() {
+        for &dep in dep_set {
+            let [from, to] = [module_of(i), module_of(dep)];
+            if from != to {
+                module_deps[from].insert(to);
+                witness.entry((from, to)).or_insert((i, dep));
+            }
+        }
     }
-    *modules = ordered;
+    match topological_order(&module_deps) {
+        Ok(order) => Ok(order.into_iter().map(|m| modules[m].clone()).collect()),
+        Err(in_degree) => {
+            let cycle = blocking_cycle(&module_deps, &in_degree);
+            let edges: Vec<(usize, usize)> = cycle
+                .iter()
+                .zip(cycle.iter().cycle().skip(1))
+                .map(|(&from, &to)| witness[&(from, to)])
+                .collect();
+            let first = &inits[edges[0].0];
+            let edges: Vec<String> = edges
+                .into_iter()
+                .map(|(i, dep)| format!("`{}` needs `{}`", inits[i].global, inits[dep].global))
+                .collect();
+            Err(errors.fatal_in(
+                &first.module_source,
+                Diagnostic {
+                    severity: Severity::Error,
+                    code: Code::CircularDependency,
+                    message: format!(
+                        "the global initializers of these modules depend on each other: {}. \
+                         A module's globals are initialized together, so none of these \
+                         modules can go first.",
+                        edges.join(", ")
+                    ),
+                    span: Some(DiagnosticSpan::from_span(&first.value.span, None)),
+                },
+            ))
+        }
+    }
 }
 
 /// Build the top-level aggregator calling every module's
-/// `$initialize_module`. Must run after [`extract`] has created them.
+/// `$initialize_module`, in the order [`extract`] pushed them, which is their
+/// dependency order. Must run after [`extract`] has created them.
 pub fn build_initialize_modules(flat: &mut FlatPackage) {
     let entry_source = flat.entry_module_source.clone();
 
     let mut modules_with_init: Vec<ModuleSource> = Vec::new();
-    let mut seen = IndexSet::default();
     for func_rc in &flat.functions {
         let func = func_rc.borrow();
-        if func.name == MODULE_INIT_FUNCTION && seen.insert(func.module_source.clone()) {
+        if func.name == MODULE_INIT_FUNCTION {
+            assert!(
+                !modules_with_init.contains(&func.module_source),
+                "extract builds one initializer per module"
+            );
             modules_with_init.push(func.module_source.clone());
         }
     }
@@ -487,11 +472,9 @@ pub fn build_initialize_modules(flat: &mut FlatPackage) {
         return;
     }
 
-    sort_modules_by_dependency(&mut modules_with_init, &entry_source, &flat.functions);
-
     let span = Span::new(0, 0, 1, 1);
 
-    let init_flag_global = TirGlobal {
+    flat.globals.push(TirGlobal {
         name: MODULES_INIT_FLAG.to_string(),
         ty: TypeTable::BOOL,
         init: GlobalInit::Direct(TirExpr::new(
@@ -504,8 +487,7 @@ pub fn build_initialize_modules(flat: &mut FlatPackage) {
         visibility: Visibility::Private,
         module_source: entry_source.clone(),
         span,
-    };
-    flat.globals.push(init_flag_global);
+    });
 
     let mut init_stmts: Vec<TirStmt> = Vec::new();
 
@@ -560,20 +542,13 @@ pub fn build_initialize_modules(flat: &mut FlatPackage) {
         init_stmts.push(TirStmt::new(TirStmtKind::Expr(call), span));
     }
 
-    let set_flag = TirExpr::new(
-        TirExprKind::GlobalVarSet {
-            module_source: entry_source.clone(),
-            name: MODULES_INIT_FLAG.to_string(),
-            value: Box::new(TirExpr::new(
-                TirExprKind::BoolLiteral(true),
-                TypeTable::BOOL,
-                span,
-            )),
-        },
-        TypeTable::UNIT,
+    let initialized = TirExpr::new(TirExprKind::BoolLiteral(true), TypeTable::BOOL, span);
+    init_stmts.push(set_global(
+        entry_source.clone(),
+        MODULES_INIT_FLAG.to_string(),
+        initialized,
         span,
-    );
-    init_stmts.push(TirStmt::new(TirStmtKind::Expr(set_flag), span));
+    ));
 
     let init_body = TirBlock {
         stmts: init_stmts,

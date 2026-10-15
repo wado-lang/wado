@@ -18,8 +18,9 @@ use { push_range } from "./text.wado";
 /// with the corresponding entry in `replacements`. `refs` must be in
 /// ascending, non-overlapping span order (as `attr_resolve` produces them)
 /// and the same length as `replacements`.
-pub fn splice_attrs<S: AsStrSlice>(body: S, refs: &List<ResolvedAttr>, replacements: &List<String>) -> String {
-    assert refs.len() == replacements.len(), "splice_attrs: refs / replacements length mismatch";
+pub fn splice_attrs<S: AsStrSlice>(body: S, refs: &List<ResolvedAttr>, replacements: &List<String>) -> String
+    contract refs.len() == replacements.len(), "one replacement per attribute reference"
+{
     let chars: List<char> = body.chars().collect();
     let n = chars.len();
     let mut out = String::with_capacity(body.len());

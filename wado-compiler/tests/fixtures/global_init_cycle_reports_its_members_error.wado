@@ -1,0 +1,17 @@
+// The report names the initializers on the cycle and no other. `B` only waits
+// on `A`, which reads itself, so it is left out, and the message says what `A`
+// does rather than calling the pair a cycle.
+
+use { println, Stdout } from "core:cli";
+
+global B: String = A;
+global A: String = `${A.len()}`;
+
+export fn run() with Stdout {
+    println(B);
+}
+
+__DATA__
+{
+    "compile_error": "the initializer of `A` may use `A` before it has been given a value."
+}

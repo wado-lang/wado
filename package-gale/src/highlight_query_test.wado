@@ -85,24 +85,24 @@ test "hyphenated and dotted capture names" {
 
 test "reject nesting deeper than one rule context" {
     let msg = parse_err("(a (b (c) @x))");
-    assert msg.contains("deeper than one"), msg;
+    assert msg.contains("deeper than one");
 }
 
 test "reject a pattern with no capture" {
     let msg = parse_err("(STRING)");
-    assert msg.contains("@capture"), msg;
+    assert msg.contains("@capture");
 }
 
 test "reject an unterminated string literal" {
     let msg = parse_err("\"oops @string");
-    assert msg.contains("unterminated"), msg;
+    assert msg.contains("unterminated");
 }
 
 test "reject an unsupported escape rather than corrupting it" {
     // \u must not be silently dropped to `u0041`; non-ASCII text can be
     // written literally in the UTF-8 file instead.
     let msg = parse_err("\"\\u0041\" @string");
-    assert msg.contains("unsupported escape"), msg;
+    assert msg.contains("unsupported escape");
 }
 
 test "known escapes are decoded" {
@@ -116,13 +116,13 @@ test "known escapes are decoded" {
     for let [written, text] of cases {
         let rules = parse_ok(`"${written}" @string`);
         assert rules.len() == 1;
-        assert is_literal(&rules[0].selector, &text), written;
+        assert is_literal(&rules[0].selector, &text);
     }
 }
 
 test "a backslash ending the query leaves the literal unterminated" {
     let msg = parse_err("\"a\\");
-    assert msg.contains("unterminated"), msg;
+    assert msg.contains("unterminated");
 }
 
 test "empty query parses to no rules" {

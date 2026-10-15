@@ -211,10 +211,23 @@ impl CodeWriter {
         self.fresh_line = true;
     }
 
+    /// How many blocks are open.
+    pub fn depth(&self) -> i32 {
+        return self.indent_level;
+    }
+
+    /// Whether the innermost open block is a function body `FnSpec::emit_begin`
+    /// opened.
+    pub fn innermost_is_fn_body(&self) -> bool {
+        return self.fn_blocks.last().unwrap_or(false);
+    }
+
     /// End a block with a trailing suffix, e.g. "," or "\n".
-    pub fn end_with<S: AsStrSlice>(&mut self, suffix: S) {
+    pub fn end_with<S: AsStrSlice>(&mut self, suffix: S)
+        contract !self.innermost_is_fn_body(), "CodeWriter: a function body closes with `end`"
+    {
         self.indent_level -= 1;
-        assert !self.fn_blocks.pop().unwrap_or(false), "CodeWriter: a function body closes with `end`";
+        self.fn_blocks.pop();
         self.write_indent();
         self.buf.push('}');
         self.buf.push_str(suffix);
@@ -225,8 +238,9 @@ impl CodeWriter {
 
     /// Close the current block and open a new one: "} opener {".
     /// Useful for else-if chains: `w.else_begin("else if cond")`.
-    pub fn else_begin<S: AsStrSlice>(&mut self, opener: S) {
-        assert !self.fn_blocks.last().unwrap_or(false), "CodeWriter: a function body has no else";
+    pub fn else_begin<S: AsStrSlice>(&mut self, opener: S)
+        contract !self.innermost_is_fn_body(), "CodeWriter: a function body has no else"
+    {
         self.indent_level -= 1;
         self.write_indent();
         self.buf.push_str("} ");
@@ -284,9 +298,10 @@ impl CodeWriter {
     }
 
     /// Splice in what `other` wrote, indented to the current depth.
-    pub fn append(&mut self, other: &CodeWriter) {
-        assert other.indent_level == 0, `CodeWriter: appending an unbalanced writer (level=${other.indent_level})`;
-        assert other.hoisted.is_empty(), "CodeWriter: an appended writer holds a hoisted definition never written";
+    pub fn append(&mut self, other: &CodeWriter)
+        contract other.depth() == 0
+        contract !other.has_pending_hoisted(), "CodeWriter: an appended writer holds a hoisted definition never written"
+    {
         self.flush_text();
         let text_base = self.buf.len();
         let names_base = self.names.len();
@@ -332,7 +347,7 @@ impl CodeWriter {
         seg.defaults_start = self.buf.len();
         for let p of &spec.params {
             if let Some(d) = &p.default_value {
-                assert !d.contains("\n"), `CodeWriter: a default spanning lines: ${*d}`;
+                assert !d.contains("\n"), "CodeWriter: a default spanning lines";
                 self.buf.push_str(d);
             }
             self.buf.push('\n');
@@ -410,6 +425,12 @@ impl CodeWriter {
         return name;
     }
 
+    /// Whether `hoist_fn` has queued a definition `write_hoisted` has not
+    /// written yet.
+    pub fn has_pending_hoisted(&self) -> bool {
+        return !self.hoisted.is_empty();
+    }
+
     /// Write every definition `hoist_fn` has queued since the last call.
     pub fn write_hoisted(&mut self) {
         let text = self.hoisted;
@@ -426,10 +447,11 @@ impl CodeWriter {
         }
     }
 
-    /// Return the generated code. Asserts that indentation is balanced.
-    pub fn to_string(&self) -> String {
-        assert self.indent_level == 0, `CodeWriter: unbalanced indentation (level=${self.indent_level})`;
-        assert self.hoisted.is_empty(), "CodeWriter: a hoisted definition was never written";
+    /// Return the generated code.
+    pub fn to_string(&self) -> String
+        contract self.depth() == 0
+        contract !self.has_pending_hoisted(), "CodeWriter: a hoisted definition was never written"
+    {
         if self.segs.is_empty() && self.cur.text_start == 0 {
             return self.buf;
         }
@@ -706,8 +728,9 @@ impl CodeWriter {
     }
 
     /// The default of the function `head` opens' parameter `i`; empty for none.
-    fn default_of(&self, head: &Seg, i: i32) -> StrSlice {
-        assert i < head.param_count, `default_of: parameter ${i} of ${head.param_count}`;
+    fn default_of(&self, head: &Seg, i: i32) -> StrSlice
+        contract i < head.param_count
+    {
         let mut start = head.defaults_start;
         let mut n = 0;
         for let mut j = start; j < head.defaults_end; j += 1 {
@@ -1059,8 +1082,9 @@ fn needs_escape(b: u8, quote: u8) -> bool {
 /// Append `b` in the form a Wado literal delimited by `quote` reads back. The
 /// control-char policy mirrors `Inspect for String` in core's `format.wado`;
 /// keep the two in lockstep (see WEP: Inspect).
-fn write_escaped(out: &mut String, b: u8, quote: u8) {
-    assert needs_escape(b, quote);
+fn write_escaped(out: &mut String, b: u8, quote: u8)
+    contract needs_escape(b, quote)
+{
     if b == quote || b == b'\\' || b == b'$' {
         out.push('\\');
         unchecked out.push_ascii(b);

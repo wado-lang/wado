@@ -24,7 +24,7 @@ fn visible_text<S: AsStrSlice>(html: S) -> String {
 /// merging the languages dropped, duplicated and reordered nothing.
 fn highlighted<S: AsStrSlice>(src: S) -> String {
     let html = highlight(src.to_string());
-    assert visible_text(&html) == src.to_string(), `not text-preserving:\n${html}`;
+    assert visible_text(&html) == src.to_string();
     return html;
 }
 
@@ -34,8 +34,8 @@ fn span<S: AsStrSlice, S1: AsStrSlice>(class: S, text: S1) -> String {
 
 test "a script body is JavaScript and a style body is CSS" {
     let html = highlighted("<style>p { color: red; }</style><script>let p = 1;</script>");
-    assert html.contains(`${span("tag", "p")} ${span("punctuation bracket", "{")} ${span("property", "color")}`), html;
-    assert html.contains(`${span("keyword", "let")} p ${span("operator", "=")} ${span("number", "1")}`), html;
+    assert html.contains(`${span("tag", "p")} ${span("punctuation bracket", "{")} ${span("property", "color")}`);
+    assert html.contains(`${span("keyword", "let")} p ${span("operator", "=")} ${span("number", "1")}`);
 }
 
 test "a closing tag is markup again" {
@@ -43,7 +43,7 @@ test "a closing tag is markup again" {
     assert html.ends_with(`${span("punctuation bracket", "&lt;/")}${span("tag", "script")}${span(
         "punctuation bracket",
         "&gt;",
-    )}`), html;
+    )}`);
 }
 
 test "an opening script or style tag carries ordinary attributes" {
@@ -53,57 +53,57 @@ test "an opening script or style tag carries ordinary attributes" {
             "operator",
             "=",
         )}${span("string", "&quot;print&quot;")}`,
-    ), html;
+    );
 }
 
 test "the script type picks the language" {
     // A JSON number takes its sign; JavaScript reads it as an operator.
     let json = highlighted("<script type=\"application/ld+json\">{\"n\": -1}</script>");
-    assert json.contains(span("number", "-1")), json;
+    assert json.contains(span("number", "-1"));
     let js = highlighted("<script type=\"module\">x = -1</script>");
-    assert js.contains(`${span("operator", "-")}${span("number", "1")}`), js;
+    assert js.contains(`${span("operator", "-")}${span("number", "1")}`);
     let opaque = highlighted("<script type=\"text/template\"><b>hi</b></script>");
-    assert opaque.contains("</span>&lt;b&gt;hi&lt;/b&gt;<span"), opaque;
+    assert opaque.contains("</span>&lt;b&gt;hi&lt;/b&gt;<span");
 }
 
 test "a style or event handler attribute holds its language" {
     let html = highlighted("<p style=\"color: red; padding: 4px\" onclick='return f(1)'>x</p>");
-    assert html.contains(`${span("string", "&quot;")}${span("property", "color")}`), html;
-    assert html.contains(span("property", "padding")), html;
-    assert html.contains(`${span("string", "'")}${span("keyword", "return")} f`), html;
+    assert html.contains(`${span("string", "&quot;")}${span("property", "color")}`);
+    assert html.contains(span("property", "padding"));
+    assert html.contains(`${span("string", "'")}${span("keyword", "return")} f`);
 }
 
 test "a strict block leaves the file's mode as it was after its brace" {
     // `interface` is a keyword only in strict code.
     let inner = highlighted("<script>function f() { \"use strict\"; interface; }</script>");
-    assert inner.contains(span("keyword", "interface")), inner;
+    assert inner.contains(span("keyword", "interface"));
     let after = highlighted("<script>function f() { \"use strict\"; } var interface = 1;</script>");
-    assert !after.contains(span("keyword", "interface")), after;
+    assert !after.contains(span("keyword", "interface"));
 }
 
 test "every name an import binds is a variable" {
     let html = highlighted("<script type=\"module\">import React, { useState } from \"react\";</script>");
-    assert html.contains(span("variable", "React")), html;
-    assert html.contains(span("variable", "useState")), html;
+    assert html.contains(span("variable", "React"));
+    assert html.contains(span("variable", "useState"));
 }
 
 test "the lexer base tells a division from a regular expression" {
     let html = highlighted("<script>let q = a / b / c, r = /b+/g;</script>");
-    assert html.contains(`a ${span("operator", "/")} b ${span("operator", "/")} c`), html;
-    assert html.contains(span("string regexp", "/b+/g")), html;
+    assert html.contains(`a ${span("operator", "/")} b ${span("operator", "/")} c`);
+    assert html.contains(span("string regexp", "/b+/g"));
 }
 
 test "the lexer base closes a template interpolation at its own brace" {
     // The object literal inside the interpolation opens and closes a brace of
     // its own; only the outer `}` returns to the template text.
     let html = highlighted("<script>let s = `a${ {x: 1}.x }b`;</script>");
-    assert html.contains(`${span("string", "`a")}${span("punctuation special", "${")}`), html;
-    assert html.contains(`${span("property", "x")} ${span("punctuation special", "}")}${span("string", "b`")}`), html;
+    assert html.contains(`${span("string", "`a")}${span("punctuation special", "${")}`);
+    assert html.contains(`${span("property", "x")} ${span("punctuation special", "}")}${span("string", "b`")}`);
 }
 
 test "positions count characters, not bytes" {
     let html = highlighted("<p>日本</p><script>let a = \"é\";</script>");
-    assert html.contains(span("string", "&quot;é&quot;")), html;
+    assert html.contains(span("string", "&quot;é&quot;"));
 }
 
 test "broken and empty bodies still highlight" {

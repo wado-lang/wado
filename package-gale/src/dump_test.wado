@@ -78,8 +78,8 @@ test "the dump lowers through the emitter's primed context" {
 // a table that knows none of the stamped ids.
 test "the ATN dump builds off the lowering the dump already has" {
     let report = atn_dump_source("grammar G; a : B c ; c : C ; B : 'b' ; C : 'c' ;");
-    assert report.contains("rule 0 'a'"), report;
-    assert report.contains("rule 1 'c'"), report;
+    assert report.contains("rule 0 'a'");
+    assert report.contains("rule 1 'c'");
 }
 
 /// Render a hand-built `Grammar` as is. Not `cmd_dump`'s pipeline —
@@ -133,10 +133,10 @@ test "render_dump shows simple rule name and shape" {
 
     let report = dump_grammar(&g);
 
-    assert report.contains("value"), report;
-    assert report.contains("Simple"), report;
+    assert report.contains("value");
+    assert report.contains("Simple");
     // No diagnostics: the summary reports none.
-    assert report.contains("warnings: none"), report;
+    assert report.contains("warnings: none");
 }
 
 test "render_dump shows Direct dispatch for disjoint multi-alt" {
@@ -155,12 +155,12 @@ test "render_dump shows Direct dispatch for disjoint multi-alt" {
 
     let report = dump_grammar(&g);
 
-    assert report.contains("expr"), report;
-    assert report.contains("Direct"), report;
+    assert report.contains("expr");
+    assert report.contains("Direct");
     // Each disjoint alt's first set appears.
-    assert report.contains("TK_INT"), report;
-    assert report.contains("TK_STRING"), report;
-    assert report.contains("warnings: none"), report;
+    assert report.contains("TK_INT");
+    assert report.contains("TK_STRING");
+    assert report.contains("warnings: none");
 }
 
 test "render_dump shows Tournament and overlap warning" {
@@ -188,14 +188,14 @@ test "render_dump shows Tournament and overlap warning" {
 
     let report = dump_grammar(&g);
 
-    assert report.contains("Tournament"), report;
+    assert report.contains("Tournament");
     // The diagnostic is inlined on the rule and listed in the summary.
-    assert report.contains("warning"), report;
+    assert report.contains("warning");
     // The diagnostic names the rule and the shared lookahead token.
-    assert report.contains("'r'"), report;
-    assert report.contains("TK_ID"), report;
+    assert report.contains("'r'");
+    assert report.contains("TK_ID");
     // Summary shows a non-empty warnings section.
-    assert report.contains("warnings ("), report;
+    assert report.contains("warnings (");
 }
 
 test "render_dump shows prediction tree for overlap group" {
@@ -224,15 +224,15 @@ test "render_dump shows prediction tree for overlap group" {
     let report = dump_grammar(&g);
 
     // The overlap-group prediction tree is rendered as its own section.
-    assert report.contains("prediction"), report;
+    assert report.contains("prediction");
     // The Consume on the shared ID prefix is named.
-    assert report.contains("Consume"), report;
+    assert report.contains("Consume");
     // The disambiguating Dispatch at depth 1 surfaces both branch
     // tokens and Leaf alt indices.
-    assert report.contains("Dispatch"), report;
-    assert report.contains("Leaf"), report;
-    assert report.contains("TK_INT"), report;
-    assert report.contains("TK_STRING"), report;
+    assert report.contains("Dispatch");
+    assert report.contains("Leaf");
+    assert report.contains("TK_INT");
+    assert report.contains("TK_STRING");
 }
 
 test "render_dump shows prediction tree for LR atom overlap" {
@@ -265,11 +265,11 @@ test "render_dump shows prediction tree for LR atom overlap" {
 
     let report = dump_grammar(&g);
 
-    assert report.contains("LeftRecursive"), report;
-    assert report.contains("prediction"), report;
-    assert report.contains("Consume"), report;
-    assert report.contains("TK_INT"), report;
-    assert report.contains("TK_STRING"), report;
+    assert report.contains("LeftRecursive");
+    assert report.contains("prediction");
+    assert report.contains("Consume");
+    assert report.contains("TK_INT");
+    assert report.contains("TK_STRING");
 }
 
 test "render_dump annotates an Ambiguous leaf with its halt reason" {
@@ -316,13 +316,13 @@ test "render_dump annotates an Ambiguous leaf with its halt reason" {
     let report = dump_grammar(&g);
 
     // The Ambiguous leaf still lists its alts ...
-    assert report.contains("Ambiguous(["), report;
+    assert report.contains("Ambiguous([");
     // ... and now carries a halt reason after the em dash.
-    assert report.contains("Ambiguous([alt 0, alt 1]) — "), report;
+    assert report.contains("Ambiguous([alt 0, alt 1]) — ");
     // `r`'s shared `expr` prefix is an opaque-rule-ref halt.
-    assert report.contains("opaque rule-ref prefix"), report;
+    assert report.contains("opaque rule-ref prefix");
     // `expr`'s `ID` vs `ID PLUS ID` is an at-end-vs-branch conflict.
-    assert report.contains("at-end vs branch conflict"), report;
+    assert report.contains("at-end vs branch conflict");
 }
 
 test "render_dump inlines a group-scoped diagnostic under its owning rule" {
@@ -339,10 +339,10 @@ STR : '\"' ;";
     let report = dump_source(&g);
 
     let head = section_of(&report, "r");
-    assert head.contains("warning: overlap-tournament"), report;
-    assert head.contains("TK_ID"), report;
+    assert head.contains("warning: overlap-tournament");
+    assert head.contains("TK_ID");
     // And it is still listed once in the summary, under the group's label.
-    assert report.contains("General group rGroup0:"), report;
+    assert report.contains("General group rGroup0:");
 }
 
 /// The `rule <name>` section of a dump report: from its header line to the
@@ -368,7 +368,7 @@ fn section_of<S: AsStrSlice, S1: AsStrSlice>(report: S, rule_name: S1) -> String
             out.push('\n');
         }
     }
-    assert !out.is_empty(), `no '${header}' section in:\n${report}`;
+    assert !out.is_empty();
     return out;
 }
 
@@ -384,16 +384,16 @@ STR : '\"' ;";
     let report = dump_source(&g);
 
     let r = section_of(&report, "r");
-    assert r.contains("rule r — "), r;
-    assert !r.contains("rule r2 — "), r;
-    assert !r.contains("warnings ("), r;
+    assert r.contains("rule r — ");
+    assert !r.contains("rule r2 — ");
+    assert !r.contains("warnings (");
 
     // The last rule's section still stops before the summary.
     let r2 = section_of(&report, "r2");
-    assert r2.contains("rule r2 — "), r2;
-    assert !r2.contains("warnings ("), r2;
+    assert r2.contains("rule r2 — ");
+    assert !r2.contains("warnings (");
     // ... which is where the group-scoped diagnostic is also listed.
-    assert report.contains("General group rGroup0:"), report;
+    assert report.contains("General group rGroup0:");
 }
 
 test "render_dump keeps an at-end alt out of an expanded opaque dispatch" {
@@ -412,8 +412,8 @@ Y : 'Y' ;
 Z : 'Z' ;";
     let report = dump_source(&g);
 
-    assert report.contains("Ambiguous([alt 2, alt 0, alt 1]) — at-end vs branch conflict"), report;
-    assert !report.contains("Leaf(alt "), report;
+    assert report.contains("Ambiguous([alt 2, alt 0, alt 1]) — at-end vs branch conflict");
+    assert !report.contains("Leaf(alt ");
 }
 
 test "render_dump offers an open-ended alt on a token it does not name" {
@@ -429,11 +429,11 @@ D : 'd' ;
 E : 'e' ;";
     let r = section_of(&dump_source(&g), "r");
 
-    assert r.contains("overlap group [alt 0, alt 1, alt 2]"), r;
-    assert r.contains("Dispatch[d=1]"), r;
-    assert r.contains("[TK_C] →"), r;
-    assert r.contains("Leaf(alt 1)"), r;
-    assert r.contains("Leaf(alt 2)"), r;
+    assert r.contains("overlap group [alt 0, alt 1, alt 2]");
+    assert r.contains("Dispatch[d=1]");
+    assert r.contains("[TK_C] →");
+    assert r.contains("Leaf(alt 1)");
+    assert r.contains("Leaf(alt 2)");
 }
 
 test "render_dump shows LR loop-entry dispatch with conflict-min" {
@@ -448,12 +448,12 @@ ID : [a-z]+ ;";
     let report = dump_source(&g);
 
     // Per-LR-alt precedence loop-entry bound.
-    assert report.contains("conflict-min="), report;
+    assert report.contains("conflict-min=");
     // The loop-entry section itself.
-    assert report.contains("loop-entry:"), report;
+    assert report.contains("loop-entry:");
     // Both '.'-led suffixes land in one overlap group, flagged as
     // precedence-disambiguated (not token-led).
-    assert report.contains("overlapping suffix first-sets"), report;
+    assert report.contains("overlapping suffix first-sets");
 }
 
 test "render_dump renders a multi-token tail-greedy repeat rule" {
@@ -466,9 +466,9 @@ X : 'x' ;
 Y : 'y' ;";
     let report = dump_source(&g);
 
-    assert report.contains("prog"), report;
-    assert report.contains("item"), report;
-    assert !report.contains("follow-variants:"), report;
+    assert report.contains("prog");
+    assert report.contains("item");
+    assert !report.contains("follow-variants:");
 }
 
 test "render_dump keeps a lossy repeat-body entry off the common-terminal path" {
@@ -482,7 +482,7 @@ a : ('x' 'y' | 'x' 'z')? 'p'
   ;";
     let report = dump_source(&g);
 
-    assert !report.contains("Consume(TK_LIT_y)"), report;
+    assert !report.contains("Consume(TK_LIT_y)");
 }
 
 test "render_dump walks a multi-token repeat body reached through an opaque rule-ref" {
@@ -497,9 +497,9 @@ q : ID ('::' ID)* ;
 ID : [a-z]+ ;";
     let p = section_of(&dump_source(&g), "p");
 
-    assert !p.contains("Leaf(alt 0)"), p;
-    assert !p.contains("Leaf(alt 1)"), p;
-    assert p.contains("Ambiguous([alt 0, alt 1]) — opaque rule-ref prefix"), p;
+    assert !p.contains("Leaf(alt 0)");
+    assert !p.contains("Leaf(alt 1)");
+    assert p.contains("Ambiguous([alt 0, alt 1]) — opaque rule-ref prefix");
 }
 
 test "render_dump names each repeat's kind and the strategy that decides it" {
@@ -514,7 +514,7 @@ A : 'a' ; B : 'b' ; C : 'c' ; D : 'd' ; E : 'e' ; F : 'f' ; G : 'g' ;"), "r");
     * → Plain
     + → Plain
     * → NonGreedy
-"), r;
+");
 }
 
 test "render_dump marks a right-associative LR alt" {
@@ -522,7 +522,7 @@ test "render_dump marks a right-associative LR alt" {
 e : <assoc=right> e '^' e | ID ;
 ID : [a-z]+ ;"), "e");
 
-    assert e.contains("alt 0 (Alt0) prec=1 conflict-min=1 right-assoc suffix-first=[TK_LIT_CARET]"), e;
+    assert e.contains("alt 0 (Alt0) prec=1 conflict-min=1 right-assoc suffix-first=[TK_LIT_CARET]");
 }
 
 test "render_dump names a shared literal prefix by its token constant" {
@@ -530,7 +530,7 @@ test "render_dump names a shared literal prefix by its token constant" {
 k : 'k' A | 'k' B ;
 A : 'a' ; B : 'b' ;"), "k");
 
-    assert k.contains("Consume(TK_LIT_k)"), k;
+    assert k.contains("Consume(TK_LIT_k)");
 }
 
 test "render_dump says why prediction halted: identical alts, the depth limit, an open-ended alt" {
@@ -541,11 +541,11 @@ v : A ~B C | A ~B D ;
 A : 'a' ; B : 'b' ; C : 'c' ; D : 'd' ; E : 'e' ;");
 
     let dd = section_of(&report, "dd");
-    assert dd.contains("Ambiguous([alt 0, alt 1]) — multiple alts end together: true ambiguity"), dd;
+    assert dd.contains("Ambiguous([alt 0, alt 1]) — multiple alts end together: true ambiguity");
     let deep = section_of(&report, "deep");
-    assert deep.contains("Ambiguous([alt 0, alt 1]) — branch-depth limit (5) reached: needs unbounded lookahead"), deep;
+    assert deep.contains("Ambiguous([alt 0, alt 1]) — branch-depth limit (5) reached: needs unbounded lookahead");
     let v = section_of(&report, "v");
-    assert v.contains("Ambiguous([alt 0, alt 1]) — no token named: an alt admits every one (`.` / `~X`)"), v;
+    assert v.contains("Ambiguous([alt 0, alt 1]) — no token named: an alt admits every one (`.` / `~X`)");
 }
 
 test "the ATN dump names every state and transition kind a grammar builds" {
@@ -553,9 +553,9 @@ test "the ATN dump names every state and transition kind a grammar builds" {
 e : e '+' e | A* B+ ~C . ;
 A : 'a' ; B : 'b' ; C : 'c' ;");
     for let kind of ["StarLoopEntry", "StarLoopBack", "PlusLoopBack", "LoopEnd", "BlockStart", "BlockEnd"] {
-        assert report.contains(` ${kind} rule=0`), report;
+        assert report.contains(` ${kind} rule=0`);
     }
     for let arrow of ["-notatom->", "-wild->", "-prec->", "-atom->", "-rule->", "-eps->"] {
-        assert report.contains(arrow), report;
+        assert report.contains(arrow);
     }
 }

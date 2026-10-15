@@ -8,6 +8,6 @@ use g from "./grammars/lit_name_clash.g4"
 
 test "each colliding literal parses as itself" {
     let r = g::parse("self Self < LT");
-    assert r.ok(), `tree: '${g::to_string_tree(&r)}'`;
+    assert r.ok();
     assert g::to_string_tree(&r) == "(prog (atom self) (atom Self) (atom <) (atom LT))";
 }

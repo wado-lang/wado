@@ -612,8 +612,9 @@ impl TreeBuilder {
         return self.tag.len();
     }
 
-    internal fn start_node_at(&mut self, checkpoint: i32, kind: NodeKind, start: i32) {
-        assert self.innermost_open() < checkpoint, "a node wraps only rows finished before it";
+    internal fn start_node_at(&mut self, checkpoint: i32, kind: NodeKind, start: i32)
+        contract self.innermost_open() < checkpoint, "a node wraps only rows finished before it"
+    {
         self.tag.insert(checkpoint, EventTag::Open);
         self.id.insert(checkpoint, kind as i32);
         self.offset.insert(checkpoint, start);
@@ -1529,7 +1530,7 @@ fn _parse_assign(p: &mut Parser) -> () {
 }
 
 fn _run_parse_entry<S: AsStrSlice>(input: S, max_errors: i32, entry: fn(&mut Parser)) -> ParseResult {
-    assert max_errors >= 1, `max_errors must be >= 1, got ${max_errors}`;
+    assert max_errors >= 1;
     let tokens = tokenize(input);
     let mut p = Parser::new(tokens);
     p.max_errors = max_errors;

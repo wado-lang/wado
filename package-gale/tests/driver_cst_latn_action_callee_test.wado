@@ -8,12 +8,12 @@ use g from "./grammars/latn_action_callee.g4"
 
 test "an escaped quote stays inside the action-carrying string" {
     let result = g::parse("\"a\\\"b\"");
-    assert result.ok(), `${result.diagnostics:?}`;
+    assert result.ok();
     assert g::to_string_tree(&result) == "(start \"a\\\"b\")";
 }
 
 test "a nested bracket stays inside the action-carrying token" {
     let result = g::parse("<x<<>>z>");
-    assert result.ok(), `${result.diagnostics:?}`;
+    assert result.ok();
     assert g::to_string_tree(&result) == "(start <x<<>>z>)";
 }

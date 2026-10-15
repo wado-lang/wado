@@ -329,8 +329,9 @@ fn vector_band<K, N>(
     v0: i32,
     v1: i32,
     out_at: i32,
-) {
-    assert 2 <= height <= TILE;
+)
+    contract 2 <= height <= TILE
+{
     let zero = f32x4::splat(0.0);
     let [mut s00, mut s01, mut s10, mut s11] = [zero, zero, zero, zero];
     let [mut s20, mut s21, mut s30, mut s31] = [zero, zero, zero, zero];
@@ -434,8 +435,9 @@ fn tile_4x4(
     a_at: i32,
     b_at: i32,
     out_at: i32,
-) {
-    assert 2 <= height <= TILE;
+)
+    contract 2 <= height <= TILE
+{
     let [mut s00, mut s01, mut s02, mut s03] = [0.0 as f32, 0.0 as f32, 0.0 as f32, 0.0 as f32];
     let [mut s10, mut s11, mut s12, mut s13] = [0.0 as f32, 0.0 as f32, 0.0 as f32, 0.0 as f32];
     let [mut s20, mut s21, mut s22, mut s23] = [0.0 as f32, 0.0 as f32, 0.0 as f32, 0.0 as f32];
@@ -694,8 +696,9 @@ pub fn concat<E, ..Pre, A, B, Out, ..Post>(
 
 /// The same elements under `rank` axes, the ones added leading at extent 1, so
 /// a lower-rank operand stretches as one of the output's rank does.
-pub fn lift<E, In, Out>(t: &Tensor<E, In>, rank: i32) -> Tensor<E, Out> {
-    assert rank >= t.extents.len();
+pub fn lift<E, In, Out>(t: &Tensor<E, In>, rank: i32) -> Tensor<E, Out>
+    contract rank >= t.extents.len()
+{
     let mut extents = List::<i32>::filled(rank - t.extents.len(), 1);
     extents.extend(&t.extents);
     return Tensor { data: t.data, extents };
@@ -774,8 +777,9 @@ pub struct Merged<Parts> {
 
 /// The same elements under another axis list. A regrouping keeps row-major
 /// order, so no element moves.
-pub fn reshape<E, In, Out>(t: &Tensor<E, In>, extents: List<i32>) -> Tensor<E, Out> {
-    assert element_count(&extents) == t.data.len();
+pub fn reshape<E, In, Out>(t: &Tensor<E, In>, extents: List<i32>) -> Tensor<E, Out>
+    contract element_count(&extents) == t.data.len()
+{
     return Tensor { data: t.data, extents };
 }
 
@@ -1414,15 +1418,17 @@ impl Expr {
     /// `operands[i]`. Each holds a run of elements the output repeats, so
     /// output element `j` reads its element `j % len`: all `count` of them,
     /// one, or the output's trailing axes.
-    pub fn over(&self, count: i32, operands: &List<&List<f32>>) -> List<f32> {
-        assert !self.folds_rows();
+    pub fn over(&self, count: i32, operands: &List<&List<f32>>) -> List<f32>
+        contract !self.folds_rows()
+    {
         return self.in_passes(count, CHUNK, operands);
     }
 
     /// `over`, one pass per row of `row` elements, so a `Fold` step folds
     /// exactly one row.
-    pub fn over_rows(&self, count: i32, row: i32, operands: &List<&List<f32>>) -> List<f32> {
-        assert row > 0 && count % row == 0;
+    pub fn over_rows(&self, count: i32, row: i32, operands: &List<&List<f32>>) -> List<f32>
+        contract row > 0 && count % row == 0
+    {
         return self.in_passes(count, row, operands);
     }
 
@@ -1650,8 +1656,9 @@ fn over_no_elements<Axes>(operands: &List<Read<Axes>>, op: &Expr, out: &List<i32
 }
 
 /// The extents `operands` broadcast to.
-fn broadcast_reads<Axes>(operands: &List<Read<Axes>>) -> List<i32> {
-    assert !operands.is_empty();
+fn broadcast_reads<Axes>(operands: &List<Read<Axes>>) -> List<i32>
+    contract !operands.is_empty()
+{
     let mut extents: List<i32> = [];
     for let o of *operands {
         extents = broadcast_extents(&extents, &o.extents).unwrap();

@@ -705,7 +705,7 @@ fn gen_runtime_fragment<S: AsStrSlice>(rt: &mut InlinedRuntime, src: S) {
     for let line of src.lines() {
         if line.starts_with("#![") || after_attr && line.is_empty() {
             after_attr = line.starts_with("#![");
-            assert !after_attr || line.starts_with("#![allow("), `a runtime fragment's attribute would be lost: ${line}`;
+            assert !after_attr || line.starts_with("#![allow("), "a runtime fragment's attribute would be lost";
             continue;
         }
         after_attr = false;

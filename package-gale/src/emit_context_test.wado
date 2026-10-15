@@ -52,7 +52,7 @@ test "a non-empty set renders the same either way" {
     let toks = ids(&mut ctx, ["TK_FOO"]);
     let narrows = ctx.admits_check_str(&admits_or_everything(&toks), "k");
     let selects = ctx.admits_check_str(&admits_or_untestable(&toks), "k");
-    assert narrows == "k == TK_FOO", `expected "k == TK_FOO", got "${narrows}"`;
+    assert narrows == "k == TK_FOO", "expected \"k == TK_FOO\"";
     assert selects == narrows, "which reading an empty set takes cannot change a non-empty one";
 }
 
@@ -60,7 +60,7 @@ test "kind_check_str: single token uses '==' not 'matches'" {
     let mut ctx = mk_ctx();
     let toks = ids(&mut ctx, ["TK_FOO"]);
     let s = ctx.kind_check_str(&toks, "kind");
-    assert s == "kind == TK_FOO", `expected "kind == TK_FOO", got "${s}"`;
+    assert s == "kind == TK_FOO", "expected \"kind == TK_FOO\"";
     // Single-token check must NOT intern (no helper would be emitted).
     assert ctx.tables.kind_sets().is_empty(), "single-token check should not intern";
 }
@@ -69,7 +69,7 @@ test "kind_check_str: multi-token uses helper call" {
     let mut ctx = mk_ctx();
     let toks = ids(&mut ctx, ["TK_FOO", "TK_BAR"]);
     let s = ctx.kind_check_str(&toks, "k");
-    assert s == "_kind_set_0(k)", `expected helper call, got "${s}"`;
+    assert s == "_kind_set_0(k)", "expected helper call";
     assert ctx.tables.kind_sets().len() == 1;
 }
 
@@ -82,7 +82,7 @@ test "intern_kind_set: same set returns same id (insertion order)" {
     let id1_again = ctx.intern_kind_set(&ab);
     assert id1 == 0;
     assert id2 == 1;
-    assert id1_again == id1, `expected reuse of id ${id1}, got ${id1_again}`;
+    assert id1_again == id1;
 }
 
 test "intern_kind_set: order-independent (sets are unordered)" {
@@ -93,7 +93,7 @@ test "intern_kind_set: order-independent (sets are unordered)" {
     let id1 = ctx.intern_kind_set(&abc);
     let id2 = ctx.intern_kind_set(&cab);
     let id3 = ctx.intern_kind_set(&bca);
-    assert id1 == id2 && id2 == id3, `permutations must collapse: ${id1} ${id2} ${id3}`;
+    assert id1 == id2 && id2 == id3, "permutations must collapse";
     assert ctx.tables.kind_sets().len() == 1;
 }
 
@@ -106,7 +106,7 @@ test "intern_kind_set: duplicates within a set are deduplicated" {
     assert id1 == id2, "duplicate-tolerant interning";
     let entries = ctx.tables.kind_sets();
     assert entries.len() == 1;
-    assert entries[0].tokens.len() == 2, `expected 2 unique tokens, got ${entries[0].tokens.len()}`;
+    assert entries[0].tokens.len() == 2, "expected 2 unique tokens";
 }
 
 test "intern_kind_set: stored tokens are sorted by name" {
@@ -160,7 +160,7 @@ test "kind_negate_check_str: single token uses '!='" {
     let mut ctx = mk_ctx();
     let toks = ids(&mut ctx, ["TK_FOO"]);
     let s = ctx.kind_negate_check_str(&toks, "k");
-    assert s == "k != TK_FOO", `expected "k != TK_FOO", got "${s}"`;
+    assert s == "k != TK_FOO", "expected \"k != TK_FOO\"";
     assert ctx.tables.kind_sets().is_empty();
 }
 
@@ -168,7 +168,7 @@ test "kind_negate_check_str: multi-token uses negated helper" {
     let mut ctx = mk_ctx();
     let toks = ids(&mut ctx, ["TK_A", "TK_B"]);
     let s = ctx.kind_negate_check_str(&toks, "k");
-    assert s == "!_kind_set_0(k)", `expected negated helper, got "${s}"`;
+    assert s == "!_kind_set_0(k)", "expected negated helper";
     assert ctx.tables.kind_sets().len() == 1;
 }
 

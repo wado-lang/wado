@@ -100,8 +100,9 @@ pub fn plan_parser(
     settings: &GenSettings,
     marks: &LowerMarks,
     atn: &Atn,
-) -> ParserPlan {
-    assert lowered.parser_rules.len() == grammar.parser_rules.len(), "`lower` lowers each parser rule in order";
+) -> ParserPlan
+    contract lowered.parser_rules.len() == grammar.parser_rules.len(), "`lower` lowers each parser rule in order"
+{
     let rule_count = grammar.parser_rules.len();
     let needs_atn = marks.needs_atn();
     let rescanned = analysis.rule_rescans();
@@ -234,7 +235,7 @@ impl ParserPlan {
     /// and whether the rule may end after it.
     pub fn leaf_follow(&self, leaf_site: i32) -> [List<i32>, bool] {
         let r = &self.recovery;
-        assert leaf_site >= 0 && leaf_site < r.leaf_follow.len(), `terminal ${leaf_site} has an ATN state`;
+        assert leaf_site >= 0 && leaf_site < r.leaf_follow.len();
         return [r.leaf_follow[leaf_site], r.leaf_follow_ends[leaf_site]];
     }
 
@@ -250,8 +251,9 @@ impl ParserPlan {
     }
 
     /// What a rule's own alternative block expects on entry.
-    pub fn rule_entry_expect(&self, rule: i32) -> Option<List<i32>> {
-        assert rule >= 0 && rule < self.recovery.rule_entry.len(), `rule_entry_expect: rule ${rule} has no entry set`;
+    pub fn rule_entry_expect(&self, rule: i32) -> Option<List<i32>>
+        contract 0 <= rule < self.recovery_sets().rule_entry.len()
+    {
         return expect_ids(&self.recovery.rule_entry, rule);
     }
 
@@ -263,9 +265,16 @@ impl ParserPlan {
         return &NO_CAPTURES;
     }
 
+    /// Whether the plan records which bindings each rule's actions read: only
+    /// a plan made with actions on does.
+    pub fn tracks_bindings(&self) -> bool {
+        return !self.binding_reads.is_empty();
+    }
+
     /// Whether an action of rule `rule` reads the binding `base`.
-    pub fn reads_binding<S: AsStrSlice>(&self, rule: i32, base: S) -> bool {
-        assert rule < self.binding_reads.len(), "an emit that reads bindings runs with actions on";
+    pub fn reads_binding<S: AsStrSlice>(&self, rule: i32, base: S) -> bool
+        contract self.tracks_bindings(), "an emit that reads bindings runs with actions on"
+    {
         return match &self.binding_reads[rule] {
             Some(reads) => reads.contains_str(base),
             None => true,

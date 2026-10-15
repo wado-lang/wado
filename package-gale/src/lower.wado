@@ -654,8 +654,8 @@ fn lower_lr_rule(rule: &ParserRule, ctx: &mut LowerContext) -> LeftRecursiveRule
             non_lr_indices.push(i);
         }
     }
-    assert !non_lr_indices.is_empty(), `LR rule '${rule.name}' has no non-LR alt — ANTLR4 requires at least one atom alt`;
-    assert !lr_indices.is_empty(), `LR rule '${rule.name}' has no LR alt — should not have reached lower_lr_rule`;
+    assert !non_lr_indices.is_empty();
+    assert !lr_indices.is_empty();
 
     let total_lr: i32 = lr_indices.len();
     let mut atom = lower_lr_atom(rule, &non_lr_indices, ctx);
@@ -847,7 +847,7 @@ fn stamp_lr_self_ref_min_prec<S: AsStrSlice, S1: AsStrSlice>(
         let conflict_min = lr_alts[i].conflict_min;
 
         let scan_len = lr_alts[i].scan_suffix.elements.len();
-        assert scan_len == suffix_len, `LR suffix walk length mismatch: parse-side ${suffix_len}, scan-side ${scan_len}`;
+        assert scan_len == suffix_len, "LR suffix walk length mismatch";
 
         let mut alt_gated = false;
         for let mut k = 0; k < suffix_len; k += 1 {
@@ -917,7 +917,7 @@ fn stamp_lr_atom_mid_operands(
         let elements = &rule.alternatives[non_lr_indices[a]].elements;
         let ops_len = atom.alts[a].ops.len();
         let scan_len = atom.scan_alts[a].elements.len();
-        assert scan_len == ops_len, `LR atom walk length mismatch: parse-side ${ops_len}, scan-side ${scan_len}`;
+        assert scan_len == ops_len, "LR atom walk length mismatch";
         for let mut k = 0; k + 1 < ops_len; k += 1 {
             if find_self_ref_rule_call(&atom.alts[a].ops[k], &rule.name) matches { None } {
                 continue;
@@ -1306,7 +1306,7 @@ fn lower_lr_alt(
     alt_gc_starts: &List<i32>,
 ) -> LrAlt {
     let alt = &rule.alternatives[alt_index];
-    assert !alt.elements.is_empty(), `LR alt ${alt_index} of '${rule.name}' is empty — should not be classified LR`;
+    assert !alt.elements.is_empty();
 
     // Build per-alt CST identifiers. `case_name` mirrors
     // `case_names_for_rule`, and `struct_name` follows the
@@ -1580,8 +1580,9 @@ fn build_direct_dispatch(
 
 /// The token-led chain itself: one branch per class, in `indices` order. Emit
 /// translates it into `if / else if` and an error fallback.
-fn direct_dispatch(classes: &List<AltClass>, indices: &List<i32>) -> MultiAltDispatch {
-    assert classes.len() == indices.len(), "one alternative index per class";
+fn direct_dispatch(classes: &List<AltClass>, indices: &List<i32>) -> MultiAltDispatch
+    contract classes.len() == indices.len(), "one alternative index per class"
+{
     let mut branches: List<DispatchBranch> = [];
     for let mut k = 0; k < indices.len(); k += 1 {
         branches.push(DispatchBranch { alt_class: classes[k], alt_index: indices[k] });
@@ -1607,7 +1608,7 @@ fn build_overlap_dispatch(
 ) -> MultiAltDispatch {
     let n_classes = classes.len();
     let n_indices = indices.len();
-    assert n_classes == n_indices, `${owner.label()}: classes is parallel to indices, not to alts (${n_classes} vs ${n_indices})`;
+    assert n_classes == n_indices, "classes is parallel to indices";
 
     // A lone alternative overlaps nothing, whatever it admits, so there is no
     // tournament to run and none to report.
@@ -1626,7 +1627,7 @@ fn build_overlap_dispatch(
 
     for let idx of indices {
         let mut visiting: List<String> = [];
-        assert ctx.analysis.is_alt_scannable(&alts[*idx].elements, &mut visiting), `${owner.label()}: alt ${*idx} is not fully scannable; Tournament dispatch needs all alts scannable`;
+        assert ctx.analysis.is_alt_scannable(&alts[*idx].elements, &mut visiting), "Tournament dispatch needs all alts scannable";
     }
 
     // Surface the overlap as an advisory diagnostic.
@@ -2025,8 +2026,9 @@ fn group_op_scan_group(
     alts: &List<Alternative>,
     empty_alt_admits: &Option<EmptyAltAdmits>,
     ctx: &mut LowerContext,
-) -> ScanGroupElement {
-    assert bodies.len() == alts.len(), "one scan body per alternative";
+) -> ScanGroupElement
+    contract bodies.len() == alts.len(), "one scan body per alternative"
+{
     // Strict, not `scan_group_lenient`'s answer: this copy is scanned only by
     // the optional's entry guard, which cannot rewind and call it a match.
     let lenient = false;

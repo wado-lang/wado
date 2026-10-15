@@ -519,7 +519,7 @@ test "warn dedupes diagnostics with the same owner and message" {
     diagnostics.warn(&owner, DiagnosticKind::OverlapTournament, String::from("alts 0, 1 share lookahead {TK_ID}"));
     diagnostics.warn(&owner, DiagnosticKind::OverlapTournament, String::from("alts 0, 1 share lookahead {TK_ID}"));
     let diags = diagnostics.to_list();
-    assert diags.len() == 1, `expected 1 deduped diagnostic, got ${diags.len()}`;
+    assert diags.len() == 1, "expected 1 deduped diagnostic";
     assert diags[0].owner == owner;
 }
 
@@ -543,5 +543,5 @@ test "warn keeps distinct diagnostics" {
         String::from("alts 0, 1 share lookahead {TK_ID}"),
     );
     let diags = diagnostics.to_list();
-    assert diags.len() == 4, `expected 4 distinct diagnostics, got ${diags.len()}`;
+    assert diags.len() == 4, "expected 4 distinct diagnostics";
 }

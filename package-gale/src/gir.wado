@@ -529,8 +529,9 @@ pub fn admits_kinds(admits: &Admits) -> List<i32> {
 /// readings of an empty set are `admits_or_everything` and
 /// `admits_or_untestable`; construct through one of the three, never the
 /// variant, so the invariant is checked where it can still be attributed.
-pub fn admits_kinds_of(kinds: &List<i32>) -> Admits {
-    assert !kinds.is_empty(), "an empty set is `Everything` or `Untestable`, and which one is not a property of the set";
+pub fn admits_kinds_of(kinds: &List<i32>) -> Admits
+    contract !kinds.is_empty(), "an empty set is `Everything` or `Untestable`, and which one is not a property of the set"
+{
     return Admits::Kinds(*kinds);
 }
 

@@ -21,9 +21,9 @@ use fe_off from "./grammars/fragment_entry_off.g4"
 fn assert_clean_identical<S: AsStrSlice, S1: AsStrSlice>(input: S, expected: S1) {
     let on = fe_on::to_string_tree(&fe_on::parse(input));
     let off = fe_off::to_string_tree(&fe_off::parse(input));
-    assert on == expected.to_string(), `on:\n  expected: ${expected}\n  actual:   ${on}`;
-    assert on == off, `option changed a clean parse:\n  on:  ${on}\n  off: ${off}`;
-    assert fe_on::parse(input).ok(), `clean input should parse cleanly: ${input}`;
+    assert on == expected.to_string();
+    assert on == off, "option changed a clean parse: on: off";
+    assert fe_on::parse(input).ok(), "clean input should parse cleanly";
 }
 
 test "clean parse unchanged: bare item" {
@@ -38,28 +38,28 @@ test "fragment recovers a statement sequence under root" {
     let r = fe_on::parse("do x ; do y ;");
     assert !r.ok(), "fragment should report a diagnostic";
     let tree = fe_on::to_string_tree(&r);
-    assert tree == "(prog (<error> (stmt do x ;) (stmt do y ;)))", `unexpected tree: ${tree}`;
+    assert tree == "(prog (<error> (stmt do x ;) (stmt do y ;)))";
 }
 
 test "fragment without the option builds no subtree" {
     let r = fe_off::parse("do x ; do y ;");
     assert !r.ok(), "fragment should report a diagnostic";
     let tree = fe_off::to_string_tree(&r);
-    assert tree == "(prog <skip do> <skip x> <skip ;> <skip do> <skip y> <skip ;>)", `unexpected tree: ${tree}`;
+    assert tree == "(prog <skip do> <skip x> <skip ;> <skip do> <skip y> <skip ;>)";
 }
 
 test "fragment with trailing junk terminates" {
     let r = fe_on::parse("do x ; zzz");
     assert !r.ok(), "fragment should report a diagnostic";
     let tree = fe_on::to_string_tree(&r);
-    assert tree.contains("(stmt do x ;)"), `island missing: ${tree}`;
+    assert tree.contains("(stmt do x ;)");
 }
 
 test "truncated trailing entry does not trap" {
     let r = fe_on::parse("do x ; do");
     assert !r.ok(), "fragment should report a diagnostic";
     let tree = fe_on::to_string_tree(&r);
-    assert tree.contains("(stmt do x ;)"), `first island missing: ${tree}`;
+    assert tree.contains("(stmt do x ;)"), "first island missing";
 }
 
 // A fragment is what the start rule cannot derive, so the option acts only
@@ -70,10 +70,10 @@ fn assert_nested_recovery_unchanged<S: AsStrSlice>(input: S) {
     let off = fe_off::parse(input);
     let on_tree = fe_on::to_string_tree(&on);
     let off_tree = fe_off::to_string_tree(&off);
-    assert on_tree == off_tree, `option changed a nested recovery:\n  on:  ${on_tree}\n  off: ${off_tree}`;
+    assert on_tree == off_tree, "option changed a nested recovery: on: off";
     let on_diags = `${on.diagnostics:?}`;
     let off_diags = `${off.diagnostics:?}`;
-    assert on_diags == off_diags, `option changed a nested diagnostic:\n  on:  ${on_diags}\n  off: ${off_diags}`;
+    assert on_diags == off_diags, "option changed a nested diagnostic: on: off";
 }
 
 test "a nested recovery is the same with the option" {
@@ -98,8 +98,8 @@ fn assert_balanced<S: AsStrSlice>(input: S) {
             min_depth = depth;
         }
     }
-    assert depth == 0, `unbalanced (Open-Close=${depth}) for: ${input}`;
-    assert min_depth >= 0, `Close before Open for: ${input}`;
+    assert depth == 0;
+    assert min_depth >= 0, "Close before Open";
 }
 
 test "recovered fragments keep a balanced CST" {

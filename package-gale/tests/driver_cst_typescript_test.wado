@@ -31,7 +31,7 @@ fn assert_tree<S: AsStrSlice, S1: AsStrSlice>(input: S, expected: S1) {
     let result = ts_parse(input);
     let actual = ts::to_string_tree(&result);
     let norm = normalize_tree(expected);
-    assert actual == norm, `\ninput:    ${input}\nexpected: ${norm}\nactual:   ${actual}`;
+    assert actual == norm;
 }
 
 fn assert_parses<S: AsStrSlice>(input: S) {
@@ -43,64 +43,64 @@ fn assert_parses<S: AsStrSlice>(input: S) {
 
 test "tokenize variable declaration" {
     let tokens = ts_tokenize("let x = 42;");
-    assert tokens.len() >= 4, `expected at least 4 tokens, got ${tokens.len()}`;
+    assert tokens.len() >= 4, "expected at least 4 tokens";
     let first = ts::token_kind_name(tokens.kinds[0]);
-    assert first == "Let", `expected Let, got ${first}`;
+    assert first == "Let";
 }
 
 test "tokenize const declaration" {
     let tokens = ts_tokenize("const name = \"hello\";");
-    assert tokens.len() >= 4, `expected at least 4 tokens, got ${tokens.len()}`;
+    assert tokens.len() >= 4, "expected at least 4 tokens";
     let first = ts::token_kind_name(tokens.kinds[0]);
-    assert first == "Const", `expected Const, got ${first}`;
+    assert first == "Const";
 }
 
 test "tokenize function declaration" {
     let tokens = ts_tokenize("function add(a, b) { return a + b; }");
-    assert tokens.len() >= 10, `expected at least 10 tokens, got ${tokens.len()}`;
+    assert tokens.len() >= 10, "expected at least 10 tokens";
     let first = ts::token_kind_name(tokens.kinds[0]);
-    assert first == "Function_", `expected Function_, got ${first}`;
+    assert first == "Function_";
 }
 
 test "tokenize class declaration" {
     let tokens = ts_tokenize("class Foo extends Bar { constructor() {} }");
-    assert tokens.len() >= 8, `expected at least 8 tokens, got ${tokens.len()}`;
+    assert tokens.len() >= 8, "expected at least 8 tokens";
     let first = ts::token_kind_name(tokens.kinds[0]);
-    assert first == "Class", `expected Class, got ${first}`;
+    assert first == "Class";
 }
 
 test "tokenize arrow function" {
     let tokens = ts_tokenize("const f = (x) => x + 1;");
-    assert tokens.len() >= 8, `expected at least 8 tokens, got ${tokens.len()}`;
+    assert tokens.len() >= 8, "expected at least 8 tokens";
 }
 
 test "tokenize import statement" {
     let tokens = ts_tokenize("import { foo } from 'bar';");
-    assert tokens.len() >= 6, `expected at least 6 tokens, got ${tokens.len()}`;
+    assert tokens.len() >= 6, "expected at least 6 tokens";
     let first = ts::token_kind_name(tokens.kinds[0]);
-    assert first == "Import", `expected Import, got ${first}`;
+    assert first == "Import";
 }
 
 test "tokenize template literal" {
     let tokens = ts_tokenize("let s = `hello ${name}`;");
-    assert tokens.len() >= 4, `expected at least 4 tokens, got ${tokens.len()}`;
+    assert tokens.len() >= 4, "expected at least 4 tokens";
 }
 
 test "tokenize operators" {
     let tokens = ts_tokenize("a === b && c !== d || e > f");
-    assert tokens.len() >= 9, `expected at least 9 tokens, got ${tokens.len()}`;
+    assert tokens.len() >= 9, "expected at least 9 tokens";
 }
 
 test "tokenize interface" {
     let tokens = ts_tokenize("interface Foo { x: number; }");
-    assert tokens.len() >= 6, `expected at least 6 tokens, got ${tokens.len()}`;
+    assert tokens.len() >= 6, "expected at least 6 tokens";
 }
 
 test "tokenize enum" {
     let tokens = ts_tokenize("enum Color { Red, Green, Blue }");
-    assert tokens.len() >= 8, `expected at least 8 tokens, got ${tokens.len()}`;
+    assert tokens.len() >= 8, "expected at least 8 tokens";
     let first = ts::token_kind_name(tokens.kinds[0]);
-    assert first == "Enum", `expected Enum, got ${first}`;
+    assert first == "Enum";
 }
 
 // The TypeScript grammar's generated entry rule is `initializer: '=' singleExpression`,
@@ -343,7 +343,7 @@ test "type override: BackTickInside rewrites kind to BackTick" {
             backtick_count += 1;
         }
     }
-    assert backtick_count == 2, `expected 2 BackTick tokens (open + close), got ${backtick_count}`;
+    assert backtick_count == 2, "expected 2 BackTick tokens (open + close)";
 }
 
 test "HIDDEN channel: TypeScript WhiteSpaces routed to trivia" {
@@ -357,13 +357,13 @@ test "HIDDEN channel: TypeScript WhiteSpaces routed to trivia" {
         assert tokens.kinds[i] != TK_WhiteSpaces, "WhiteSpaces leaked into main stream — HIDDEN routing dropped";
     }
     // `let` must be the first main-channel token.
-    assert tokens.kinds[0] == TK_Let, `expected first token = Let, got kind ${tokens.kinds[0]}`;
+    assert tokens.kinds[0] == TK_Let, "expected first token = Let";
     // The second token (the `x` identifier) must carry the HIDDEN
     // whitespace as leading trivia on channel 1.
     let mut found_hidden = false;
     for let mut j = tokens.triv_lo[1]; j < tokens.triv_hi[1]; j += 1 {
         if tokens.triv_kinds[j] == TK_WhiteSpaces {
-            assert tokens.triv_chans[j] == 1, `expected HIDDEN channel 1, got ${tokens.triv_chans[j]}`;
+            assert tokens.triv_chans[j] == 1, "expected HIDDEN channel 1";
             found_hidden = true;
         }
     }
@@ -385,7 +385,7 @@ test "regex vs division: a slash after an operand is a division" {
             divides += 1;
         }
     }
-    assert divides == 2, `expected 2 Divide tokens, got ${divides}`;
+    assert divides == 2, "expected 2 Divide tokens";
 }
 
 test "regex vs division: a slash after an operator starts a regex" {
@@ -396,7 +396,7 @@ test "regex vs division: a slash after an operator starts a regex" {
             regexes += 1;
         }
     }
-    assert regexes == 1, `expected 1 RegularExpressionLiteral, got ${regexes}`;
+    assert regexes == 1;
 }
 
 test "regex vs division: a slash after a keyword starts a regex" {
@@ -410,7 +410,7 @@ test "regex vs division: a slash after a keyword starts a regex" {
             regexes += 1;
         }
     }
-    assert regexes == 1, `expected 1 RegularExpressionLiteral, got ${regexes}`;
+    assert regexes == 1;
 }
 
 test "regex vs division: a comment between the operand and the slash is skipped" {
@@ -424,7 +424,7 @@ test "regex vs division: a comment between the operand and the slash is skipped"
             divides += 1;
         }
     }
-    assert divides == 1, `expected 1 Divide token, got ${divides}`;
+    assert divides == 1, "expected 1 Divide token";
 }
 
 test "template interpolation: the base tracks which brace closes the hole" {
@@ -439,5 +439,5 @@ test "template interpolation: the base tracks which brace closes the hole" {
             backticks += 1;
         }
     }
-    assert backticks == 2, `expected 2 BackTick tokens (open + close), got ${backticks}`;
+    assert backticks == 2, "expected 2 BackTick tokens (open + close)";
 }

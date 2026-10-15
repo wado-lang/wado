@@ -12,8 +12,8 @@ use rec from "./grammars/antlr_recovery.g4"
 
 fn assert_tree(result: &rec::ParseResult, expected: String) {
     let actual = strip_skip_markers(&rec::to_string_tree(result));
-    assert actual == expected, `\nexpected: ${expected}\nactual:   ${actual}`;
-    assert !result.ok(), `a recovered parse still reports: ${expected}`;
+    assert actual == expected;
+    assert !result.ok(), "a recovered parse still reports";
 }
 
 test "a loop entry deletes one extraneous token" {
@@ -92,8 +92,8 @@ test "a terminal missing at the end of a trailing group is inserted against the 
 test "no error is reported again until a token matches" {
     let r = rec::parse_quiet("a z end");
     assert_tree(&r, "(quiet (mid (pair a z) <missing ';'>) end)");
-    assert r.diagnostics.len() == 1, `${r.diagnostics.len()} diagnostics`;
+    assert r.diagnostics.len() == 1;
     let t = rec::parse_trail("x y");
     assert_tree(&t, "(trail (grpend x y) <missing 'end'>)");
-    assert t.diagnostics.len() == 1, `${t.diagnostics.len()} diagnostics`;
+    assert t.diagnostics.len() == 1;
 }

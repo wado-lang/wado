@@ -126,7 +126,7 @@ test "parse HTMLLexer.g4" {
     assert g.lexer_rules[0].name == "HTML_COMMENT";
     assert g.lexer_rules[0].mode == 0;
     // Check mode names table
-    assert g.mode_names.len() >= 3, `expected at least 3 modes, got ${g.mode_names.len()}`;
+    assert g.mode_names.len() >= 3, "expected at least 3 modes";
     assert g.mode_names[0] == "DEFAULT_MODE";
     // TAG_CLOSE is in TAG mode
     let mut found_tag_close = false;
@@ -256,7 +256,7 @@ test "parse TypeScriptLexer.g4" {
     for let rule of g.lexer_rules {
         if rule.name == "BackTickInside" {
             if let Some(t) = &rule.type_override {
-                assert *t == "BackTick", `expected type_override BackTick, got ${*t}`;
+                assert *t == "BackTick", "expected type_override BackTick";
             } else {
                 panic("BackTickInside should have type_override");
             }
@@ -293,10 +293,10 @@ test "parse TypeScriptParser.g4" {
                     continue;
                 }
                 found_power = true;
-                assert alt.options.len() == 1, `expected 1 option on PowerExpression, got ${alt.options.len()}`;
+                assert alt.options.len() == 1, "expected 1 option on PowerExpression";
                 assert alt.options[0].name == "assoc";
                 if let Ident(v) = &alt.options[0].value {
-                    assert *v == "right", `expected assoc=right, got assoc=${*v}`;
+                    assert *v == "right", "expected assoc=right";
                 } else {
                     panic("expected Ident for assoc value");
                 }
@@ -609,11 +609,11 @@ test "pipeline: assemble_grammar composes a master with its imported delegate" {
         ["S.g4", "parser grammar S;\na : B ;"],
     ];
     let g = assemble_grammar(&inputs).unwrap();
-    assert g.name == "M", `name=${g.name}`;
+    assert g.name == "M";
     assert g.parser_rules.len() == 2;
     assert g.parser_rules[0].name == "s";
     assert g.parser_rules[1].name == "a";
-    assert g.source_files == ["M.g4", "S.g4"], `${g.source_files:?}`;
+    assert g.source_files == ["M.g4", "S.g4"];
 }
 
 test "pipeline: assemble_grammar rejects an import naming no supplied input" {
@@ -630,7 +630,7 @@ test "pipeline: assemble_grammar names the input that failed to parse" {
         ["S.g4", "parser grammar S;\na : B"],
     ];
     let result = assemble_grammar(&inputs);
-    assert result matches { Err(Parse([file, m])) && file == "S.g4" && m.starts_with("expected ;") }, `${result:?}`;
+    assert result matches { Err(Parse([file, m])) && file == "S.g4" && m.starts_with("expected ;") };
 }
 
 test "pipeline: assemble_grammar checks references across the composite" {
@@ -640,7 +640,7 @@ test "pipeline: assemble_grammar checks references across the composite" {
         ["S.g4", "parser grammar S;\nb : a ;"],
     ];
     let result = assemble_grammar(&inputs);
-    assert result matches { Err(Check(m)) && m.contains("reference to undefined rule \"a\" in \"b\"") }, `${result:?}`;
+    assert result matches { Err(Check(m)) && m.contains("reference to undefined rule \"a\" in \"b\"") };
 }
 
 // LL(*) regression-suite grammars (`tests/grammars/ll_*.g4`). Each is a
