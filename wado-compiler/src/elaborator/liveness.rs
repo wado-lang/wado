@@ -116,6 +116,8 @@ pub(crate) fn compute(
                         || compiler_named.names_function(source, &func.name)
                     {
                         graph.seed_world(key);
+                    } else if func.visibility.is_internal() {
+                        graph.seed_package_use(key);
                     }
                     // Bodyless functions are compiler builtins / imports, not
                     // user-authored code that could be "dead". `#[allow(dead_code)]`
@@ -132,14 +134,18 @@ pub(crate) fn compute(
                 Item::Global(global) => {
                     // Reify emits every global, read or not, so its
                     // initializer is a call site whatever the visibility. Only
-                    // a `pub` one is a *use*, so an unread private global still
-                    // reports dead without masking its callees.
+                    // one visible beyond its file is a *use*, so an unread
+                    // private global still reports dead without masking its
+                    // callees.
                     let key = global.id;
                     graph.add_expr_edges(&global.initializer, references, &key);
                     if global.visibility.is_public() {
                         graph.seed_world(key);
                     } else {
                         graph.seed_emit(key);
+                        if global.visibility.is_internal() {
+                            graph.seed_package_use(key);
+                        }
                     }
                     if user
                         && !module_allows_dead
@@ -967,8 +973,8 @@ fn union(a: &IndexSet<AstId>, b: &IndexSet<AstId>) -> IndexSet<AstId> {
 struct Graph {
     /// `owner -> called items`.
     edges: IndexMap<AstId, Vec<AstId>>,
-    /// Production roots (world exports, `pub` / `export` items, methods,
-    /// struct-field defaults) — seeds of the `E` closure.
+    /// Production roots (world exports, `pub` / `export` / `internal` items,
+    /// methods, struct-field defaults) — seeds of the `E` closure.
     export_seeds: Vec<AstId>,
     /// `test` block roots — seeds of the `T` closure.
     test_seeds: Vec<AstId>,
@@ -994,6 +1000,13 @@ impl Graph {
     /// anything reaches it. Not itself a use, so the `E` closure is unmoved.
     fn seed_emit(&mut self, key: AstId) {
         self.emit_seeds.push(key);
+    }
+
+    /// Seed an `internal` item as used without emitting it. A compilation loads
+    /// the modules its entry reaches, not its whole package, so another module
+    /// of the package may use the item unseen: reporting it would be a guess.
+    fn seed_package_use(&mut self, key: AstId) {
+        self.seed_export(key);
     }
 
     /// Seed a root of both closures: it is emitted, and so counts as used.

@@ -370,24 +370,29 @@ export fn run() {}
 }
 
 #[test]
-fn internal_function_with_no_caller_is_reported_dead() {
-    // `internal` is package-internal-only visibility, not a liveness root:
-    // an unreferenced `internal fn` is still dead code.
+fn internal_function_with_no_caller_is_not_reported() {
+    // A module of the package this compilation does not load may call it.
     let diags = unused_for(
         r#"
 internal fn helper() -> i32 { return 1; }
+fn callee() -> i32 { return 2; }
+internal fn test_helper() -> i32 { return callee(); }
 
 export fn run() {}
+
+test "uses test_helper" {
+    assert test_helper() == 2;
+}
 "#,
     );
     assert!(
-        has_dead_function(&diags, "helper"),
-        "`internal fn` with no caller must still be reported, got {diags:?}"
+        diags.is_empty(),
+        "an `internal` item, and what it calls, are undecidable here, got {diags:?}"
     );
 }
 
 #[test]
-fn internal_global_with_no_caller_is_reported_dead() {
+fn internal_global_with_no_caller_is_not_reported() {
     let diags = unused_for(
         r#"
 internal global UNUSED: i32 = 42;
@@ -396,7 +401,7 @@ export fn run() {}
 "#,
     );
     assert!(
-        has_dead_global(&diags, "UNUSED"),
-        "`internal global` with no caller must still be reported, got {diags:?}"
+        !has_dead_global(&diags, "UNUSED"),
+        "an `internal global` is undecidable here, got {diags:?}"
     );
 }

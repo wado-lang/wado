@@ -1,0 +1,24 @@
+// A compilation loads the modules its entry reaches, not its whole package, so
+// whether another module calls an `internal` item is undecidable here: it is a
+// root. What only it calls stays unreported, while a private item, whose
+// callers are all in its own file, is still decided.
+internal fn helper() -> i32 {
+    return callee();
+}
+
+fn callee() -> i32 {
+    return 1;
+}
+
+fn private_helper() -> i32 {
+    return 2;
+}
+
+export fn run() {}
+
+__DATA__
+{
+    "stdout": "",
+    "warnings_contains": ["function `private_helper` is never used"],
+    "warnings_not_contains": ["function `helper` is never used", "function `callee` is never used"]
+}

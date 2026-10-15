@@ -52,7 +52,7 @@ fn dead_code_diagnostics_carry_unnecessary_tag() {
 #[test]
 fn imported_module_dead_code_stays_off_the_importer() {
     futures::executor::block_on(async {
-        let bar = "pub fn helper() -> i32 {\n    return 1;\n}\n\ninternal fn dead_in_bar() -> i32 {\n    return 2;\n}\n";
+        let bar = "pub fn helper() -> i32 {\n    return 1;\n}\n\nfn dead_in_bar() -> i32 {\n    return 2;\n}\n";
         let foo =
             "use { helper } from \"./bar.wado\";\n\nexport fn run() {\n    let _ = helper();\n}\n";
         let host = in_memory_host(&[("/work/bar.wado", bar)]);

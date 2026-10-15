@@ -144,9 +144,14 @@ root `pub` yet — the consumer's own build supplies real reachability from
 its own roots. Preserving `pub` for a standalone published `.wasm` (provider
 metadata) is deferred.
 
-`internal` (`Visibility::Internal`) is never a root: it is package-internal
-visibility only, so an unreferenced `internal fn` is dead code regardless of
-entry-point kind.
+`internal` (`Visibility::Internal`) is not a root of the package: it is
+package-internal visibility only, so an unreferenced `internal fn` is dead code
+regardless of entry-point kind. Deciding that takes every module of the
+package, and a compilation loads only the modules its entry reaches. Until the
+analysis spans the package, an `internal` item is seeded into `E` (not into
+what reify emits): a module the compilation did not load may use it, so a
+report would be a guess. A private item stays decided, since all its users are
+in its own file.
 
 A declared method carrying a default body is an edge rather than a root, so a
 free function that only an unreached default body calls is dead.
@@ -537,7 +542,7 @@ E2E fixtures (under `tests/fixtures/`):
 - `dead_fn_generic.wado`
 - `dead_fn_test_world.wado`
 - `dead_fn_pub_is_root.wado` (a `pub fn` with no in-package caller is not dead)
-- `dead_fn_internal_no_caller.wado` (an `internal fn` with no in-package caller is dead)
+- `dead_fn_internal_is_root.wado` (an `internal fn` with no caller in the compilation is not reported)
 - `dead_fn_cascade_via_global.wado` (function reachable until a dead global is removed)
 - `dead_global_basic.wado`
 - `dead_global_used_by_dead_fn.wado` (cascade across iterations)
@@ -593,10 +598,7 @@ through the diagnostics path.
 
 ## Known gaps
 
-- The `dead_code` lint sees only the `test` blocks of the modules the
-  compilation loads. A function whose only user is a test in a file the
-  compilation does not load, such as a test file that imports it, is reported
-  "never used" rather than "only used by tests".
-- The same holds outside tests. An `internal` item whose only user is a module
-  of the package the compilation does not load is reported "never used",
-  though the specification decides reachability over the whole package.
+- An `internal` item is never reported, neither "never used" nor "only used by
+  tests", and neither is what only it reaches. The specification decides its
+  reachability over the whole package, and no compilation loads the whole
+  package.

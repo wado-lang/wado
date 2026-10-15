@@ -240,9 +240,9 @@ An item the roots do not reach is reported one of two ways:
 An item in a `#![generated]` module is never reported.
 
 > Not yet implemented: reachability is decided over the modules one
-> compilation loads. `wado test` compiles each test file as its own program, so
-> an `internal` item that only another module of the package uses is reported
-> "never used".
+> compilation loads, not over the package. A module the compilation does not
+> load may use an `internal` item, so the item counts as used, and an unused
+> `internal` item is not reported.
 
 Rationale: [WEP: Unused Diagnostics](./wep-2026-05-16-unused-diagnostics.md).
 
