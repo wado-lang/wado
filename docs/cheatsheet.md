@@ -905,6 +905,16 @@ trait Pick {
 }
 ```
 
+Mark a call `unchecked` where the code around it plainly keeps the contract,
+not where the call is hot. A hot call that nothing around it proves keeps its
+check.
+
+```wado
+for let i of 0..<xs.len() {
+    sum += unchecked xs[i];   // the loop bound keeps i in range
+}
+```
+
 ## Functions, Methods, and Closures
 
 ### Functions
