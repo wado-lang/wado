@@ -11,13 +11,13 @@ struct core:prelude/string.wado//String {  // TypeId(2)
     mut used: i32,
 }
 
-struct effect_handler_bundled_value.wado//$Dispatch_Counter {  // TypeId(3)
-    mut outer: ref null "effect_handler_bundled_value.wado//$Dispatch_Counter",
+struct effect_handler_bundled_value.wado//$Dispatch_effect_handler_bundled_value.wado/Counter {  // TypeId(3)
+    mut outer: ref null "effect_handler_bundled_value.wado//$Dispatch_effect_handler_bundled_value.wado/Counter",
     mut op_tick: ref struct,
 }
 
-struct effect_handler_bundled_value.wado//$Dispatch_Greeting {  // TypeId(4)
-    mut outer: ref null "effect_handler_bundled_value.wado//$Dispatch_Greeting",
+struct effect_handler_bundled_value.wado//$Dispatch_effect_handler_bundled_value.wado/Greeting {  // TypeId(4)
+    mut outer: ref null "effect_handler_bundled_value.wado//$Dispatch_effect_handler_bundled_value.wado/Greeting",
     mut op_hello: ref struct,
 }
 
@@ -113,8 +113,8 @@ import fn wasi/task-return from "wasi/task-return";
 import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 
 global mut global:effect_handler_bundled_value.wado::handler_built: i32 = 0;
-global mut global:effect_handler_bundled_value.wado::$effect_Greeting: ref null "effect_handler_bundled_value.wado//$Dispatch_Greeting" = ref.null none;
-global mut global:effect_handler_bundled_value.wado::$effect_Counter: ref null "effect_handler_bundled_value.wado//$Dispatch_Counter" = ref.null none;
+global mut global:effect_handler_bundled_value.wado::$effect_effect_handler_bundled_value.wado/Greeting: ref null "effect_handler_bundled_value.wado//$Dispatch_effect_handler_bundled_value.wado/Greeting" = ref.null none;
+global mut global:effect_handler_bundled_value.wado::$effect_effect_handler_bundled_value.wado/Counter: ref null "effect_handler_bundled_value.wado//$Dispatch_effect_handler_bundled_value.wado/Counter" = ref.null none;
 global global:effect_handler_bundled_value.wado::$const_obj_3: ref Array<u8> = array.new_fixed<u8>(41);
 global global:effect_handler_bundled_value.wado::$const_obj_4: ref Array<u8> = array.new_fixed<u8>(32, 40, 99, 111, 117, 110, 116, 61);
 global global:effect_handler_bundled_value.wado::$const_obj_5: ref Array<u8> = array.new_fixed<u8>(104, 101, 108, 108, 111, 44, 32);
@@ -126,13 +126,13 @@ global global:effect_handler_bundled_value.wado::$const_obj_9: ref Array<u8> = a
 fn "effect_handler_bundled_value.wado/run"() with Stdout {
     let $load_5: i32;
     let $h_bundle_0: ref "effect_handler_bundled_value.wado//MultiMock";
-    let $save_Greeting: ref null "effect_handler_bundled_value.wado//$Dispatch_Greeting";
-    let $d_Greeting: ref "effect_handler_bundled_value.wado//$Dispatch_Greeting";
-    let $save_Counter: ref null "effect_handler_bundled_value.wado//$Dispatch_Counter";
-    let $d_Counter: ref "effect_handler_bundled_value.wado//$Dispatch_Counter";
-    let $local_0_15: ref null "effect_handler_bundled_value.wado//$Dispatch_Greeting";
+    let $save_effect_handler_bundled_value.wado/Greeting: ref null "effect_handler_bundled_value.wado//$Dispatch_effect_handler_bundled_value.wado/Greeting";
+    let $d_effect_handler_bundled_value.wado/Greeting: ref "effect_handler_bundled_value.wado//$Dispatch_effect_handler_bundled_value.wado/Greeting";
+    let $save_effect_handler_bundled_value.wado/Counter: ref null "effect_handler_bundled_value.wado//$Dispatch_effect_handler_bundled_value.wado/Counter";
+    let $d_effect_handler_bundled_value.wado/Counter: ref "effect_handler_bundled_value.wado//$Dispatch_effect_handler_bundled_value.wado/Counter";
+    let $local_0_15: ref null "effect_handler_bundled_value.wado//$Dispatch_effect_handler_bundled_value.wado/Greeting";
     let $local_2_17: ref "core:prelude/string.wado//String";
-    let $local_0_18: ref null "effect_handler_bundled_value.wado//$Dispatch_Counter";
+    let $local_0_18: ref null "effect_handler_bundled_value.wado//$Dispatch_effect_handler_bundled_value.wado/Counter";
     let $local_2_20: i32;
     let $local_2_23: i32;
     let new_used_33: i32;
@@ -141,17 +141,17 @@ fn "effect_handler_bundled_value.wado/run"() with Stdout {
     let $sroa_$f_buf_177: ref "core:prelude/string.wado//String";
     global:effect_handler_bundled_value.wado::handler_built = global:effect_handler_bundled_value.wado::handler_built + 1;
     $h_bundle_0 = struct.new "effect_handler_bundled_value.wado//MultiMock" { name: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("value"), used: 5 }, count: 0 };
-    global:effect_handler_bundled_value.wado::$effect_Greeting = local.tee $d_Greeting(struct.new "effect_handler_bundled_value.wado//$Dispatch_Greeting" { outer: local.tee $save_Greeting(global:effect_handler_bundled_value.wado::$effect_Greeting), op_hello: struct.new "canonical//CanonicalClosure_0" { env: struct.new "effect_handler_bundled_value.wado//$Closure_0" { $capture_0: $h_bundle_0 }, func: ref.func "closure/effect_handler_bundled_value.wado/$closure_wrapper_0" } });
-    global:effect_handler_bundled_value.wado::$effect_Counter = local.tee $d_Counter(struct.new "effect_handler_bundled_value.wado//$Dispatch_Counter" { outer: local.tee $save_Counter(global:effect_handler_bundled_value.wado::$effect_Counter), op_tick: struct.new "canonical//CanonicalClosure_1" { env: struct.new "effect_handler_bundled_value.wado//$Closure_1" { $capture_0: $h_bundle_0 }, func: ref.func "closure/effect_handler_bundled_value.wado/$closure_wrapper_1" } });
-    $local_2_17 = $inline__effect_dispatch__Greeting__hello_3: block -> ref "core:prelude/string.wado//String" {
-        if @likely(ref.is_null(local.tee $local_0_15(global:effect_handler_bundled_value.wado::$effect_Greeting)) == 0) {
-            global:effect_handler_bundled_value.wado::$effect_Greeting = local.tee $d_Greeting(ref.as_non_null($local_0_15)).outer;
+    global:effect_handler_bundled_value.wado::$effect_effect_handler_bundled_value.wado/Greeting = local.tee $d_effect_handler_bundled_value.wado/Greeting(struct.new "effect_handler_bundled_value.wado//$Dispatch_effect_handler_bundled_value.wado/Greeting" { outer: local.tee $save_effect_handler_bundled_value.wado/Greeting(global:effect_handler_bundled_value.wado::$effect_effect_handler_bundled_value.wado/Greeting), op_hello: struct.new "canonical//CanonicalClosure_0" { env: struct.new "effect_handler_bundled_value.wado//$Closure_0" { $capture_0: $h_bundle_0 }, func: ref.func "closure/effect_handler_bundled_value.wado/$closure_wrapper_0" } });
+    global:effect_handler_bundled_value.wado::$effect_effect_handler_bundled_value.wado/Counter = local.tee $d_effect_handler_bundled_value.wado/Counter(struct.new "effect_handler_bundled_value.wado//$Dispatch_effect_handler_bundled_value.wado/Counter" { outer: local.tee $save_effect_handler_bundled_value.wado/Counter(global:effect_handler_bundled_value.wado::$effect_effect_handler_bundled_value.wado/Counter), op_tick: struct.new "canonical//CanonicalClosure_1" { env: struct.new "effect_handler_bundled_value.wado//$Closure_1" { $capture_0: $h_bundle_0 }, func: ref.func "closure/effect_handler_bundled_value.wado/$closure_wrapper_1" } });
+    $local_2_17 = $inline__effect_dispatch__effect_handler_bundled_value_wado_Greeting__hello_3: block -> ref "core:prelude/string.wado//String" {
+        if @likely(ref.is_null(local.tee $local_0_15(global:effect_handler_bundled_value.wado::$effect_effect_handler_bundled_value.wado/Greeting)) == 0) {
+            global:effect_handler_bundled_value.wado::$effect_effect_handler_bundled_value.wado/Greeting = local.tee $d_effect_handler_bundled_value.wado/Greeting(ref.as_non_null($local_0_15)).outer;
             $local_2_17 = block -> ref "core:prelude/string.wado//String" {
                 let $indirect_call_1: ref "canonical//CanonicalClosure_0";
-                call_ref "functype/$canonical_closure_fn_0"($indirect_call_1.func, local.tee $indirect_call_1(ref.cast "canonical//CanonicalClosure_0"($d_Greeting.op_hello)).env);
+                call_ref "functype/$canonical_closure_fn_0"($indirect_call_1.func, local.tee $indirect_call_1(ref.cast "canonical//CanonicalClosure_0"($d_effect_handler_bundled_value.wado/Greeting.op_hello)).env);
             };
-            global:effect_handler_bundled_value.wado::$effect_Greeting = $local_0_15;
-            break $inline__effect_dispatch__Greeting__hello_3: $local_2_17;
+            global:effect_handler_bundled_value.wado::$effect_effect_handler_bundled_value.wado/Greeting = $local_0_15;
+            break $inline__effect_dispatch__effect_handler_bundled_value_wado_Greeting__hello_3: $local_2_17;
         } else {
             "core:rt/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("no handler installed for `Greeting::hello`"), used: 42 });
             unreachable;
@@ -163,29 +163,29 @@ fn "effect_handler_bundled_value.wado/run"() with Stdout {
     $load_5 = $local_2_17.used;
     let $array_clone_dst_3: ref Array<u8>;
     builtin::array_copy<u8>(local.tee $array_clone_dst_3(builtin::array_new<u8>($load_5)), 0, $array_clone_src_2, 0, $load_5);
-    $local_2_20 = $inline__effect_dispatch__Counter__tick_4: block -> i32 {
-        if @likely(ref.is_null(local.tee $local_0_18(global:effect_handler_bundled_value.wado::$effect_Counter)) == 0) {
-            global:effect_handler_bundled_value.wado::$effect_Counter = local.tee $d_Counter(ref.as_non_null($local_0_18)).outer;
+    $local_2_20 = $inline__effect_dispatch__effect_handler_bundled_value_wado_Counter__tick_4: block -> i32 {
+        if @likely(ref.is_null(local.tee $local_0_18(global:effect_handler_bundled_value.wado::$effect_effect_handler_bundled_value.wado/Counter)) == 0) {
+            global:effect_handler_bundled_value.wado::$effect_effect_handler_bundled_value.wado/Counter = local.tee $d_effect_handler_bundled_value.wado/Counter(ref.as_non_null($local_0_18)).outer;
             $local_2_20 = block -> i32 {
                 let $indirect_call_5: ref "canonical//CanonicalClosure_1";
-                call_ref "functype/$canonical_closure_fn_1"($indirect_call_5.func, local.tee $indirect_call_5(ref.cast "canonical//CanonicalClosure_1"($d_Counter.op_tick)).env);
+                call_ref "functype/$canonical_closure_fn_1"($indirect_call_5.func, local.tee $indirect_call_5(ref.cast "canonical//CanonicalClosure_1"($d_effect_handler_bundled_value.wado/Counter.op_tick)).env);
             };
-            global:effect_handler_bundled_value.wado::$effect_Counter = $local_0_18;
-            break $inline__effect_dispatch__Counter__tick_4: $local_2_20;
+            global:effect_handler_bundled_value.wado::$effect_effect_handler_bundled_value.wado/Counter = $local_0_18;
+            break $inline__effect_dispatch__effect_handler_bundled_value_wado_Counter__tick_4: $local_2_20;
         } else {
             "core:rt/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("no handler installed for `Counter::tick`"), used: 40 });
             unreachable;
         }
         unreachable;
     };
-    $local_2_23 = $inline__effect_dispatch__Counter__tick_5: block -> i32 {
-        if @likely(ref.is_null(local.tee $local_0_18(global:effect_handler_bundled_value.wado::$effect_Counter)) == 0) {
-            global:effect_handler_bundled_value.wado::$effect_Counter = local.tee $d_Counter(ref.as_non_null($local_0_18)).outer;
+    $local_2_23 = $inline__effect_dispatch__effect_handler_bundled_value_wado_Counter__tick_5: block -> i32 {
+        if @likely(ref.is_null(local.tee $local_0_18(global:effect_handler_bundled_value.wado::$effect_effect_handler_bundled_value.wado/Counter)) == 0) {
+            global:effect_handler_bundled_value.wado::$effect_effect_handler_bundled_value.wado/Counter = local.tee $d_effect_handler_bundled_value.wado/Counter(ref.as_non_null($local_0_18)).outer;
             $local_2_23 = block -> i32 {
-                call_ref "functype/$canonical_closure_fn_1"($indirect_call_5.func, local.tee $indirect_call_5(ref.cast "canonical//CanonicalClosure_1"($d_Counter.op_tick)).env);
+                call_ref "functype/$canonical_closure_fn_1"($indirect_call_5.func, local.tee $indirect_call_5(ref.cast "canonical//CanonicalClosure_1"($d_effect_handler_bundled_value.wado/Counter.op_tick)).env);
             };
-            global:effect_handler_bundled_value.wado::$effect_Counter = $local_0_18;
-            break $inline__effect_dispatch__Counter__tick_5: $local_2_23;
+            global:effect_handler_bundled_value.wado::$effect_effect_handler_bundled_value.wado/Counter = $local_0_18;
+            break $inline__effect_dispatch__effect_handler_bundled_value_wado_Counter__tick_5: $local_2_23;
         } else {
             "core:rt/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("no handler installed for `Counter::tick`"), used: 40 });
             unreachable;
@@ -236,8 +236,8 @@ fn "effect_handler_bundled_value.wado/run"() with Stdout {
     $load_5 = "effect_handler_bundled_value.wado/$cm_binding__Stdout_write_via_stream"($load_5);
     "core:rt/write_string_to_stream$dae[add_newline]"($local_2_23, $local_2_17.repr, $local_2_17.used);
     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"($load_5);
-    global:effect_handler_bundled_value.wado::$effect_Counter = $save_Counter;
-    global:effect_handler_bundled_value.wado::$effect_Greeting = $save_Greeting;
+    global:effect_handler_bundled_value.wado::$effect_effect_handler_bundled_value.wado/Counter = $save_effect_handler_bundled_value.wado/Counter;
+    global:effect_handler_bundled_value.wado::$effect_effect_handler_bundled_value.wado/Greeting = $save_effect_handler_bundled_value.wado/Greeting;
     $local_2_17 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(22), used: 0 };
     if @unlikely(local.tee $load_5(0 + 6) > builtin::array_len($local_2_17.repr)) {
         cold_path;
@@ -443,22 +443,31 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self, min_ca
 fn "effect_handler_bundled_value.wado/effect_handler_bundled_value.wado/MultiMock^effect_handler_bundled_value.wado/Greeting::hello"(self) {
     let $load_3: ref Array<u8>;
     let $local_1: ref "core:prelude/string.wado//String";
-    let new_used_16: i32;
-    let start_17: i32;
-    let start_23: i32;
-    let s_27: ref "core:prelude/string.wado//String";
+    let new_used_14: i32;
+    let start_15: i32;
+    let v: ref "core:prelude/string.wado//String";
+    let start_29: i32;
     let x: i64;
     self.count = self.count + 1;
-    return $local_1 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(48), used: 0 }, if @unlikely(local.tee new_used_16(0 + 7) > builtin::array_len($local_1.repr)) {
+    return $local_1 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(48), used: 0 }, if @unlikely(local.tee new_used_14(0 + 7) > builtin::array_len($local_1.repr)) {
         cold_path;
-        "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_1, new_used_16);
-    }, start_17 = $local_1.used, $local_1.used = new_used_16, builtin::array_copy<u8>(local.tee $load_3($local_1.repr), start_17, global:effect_handler_bundled_value.wado::$const_obj_5, 0, 7), start_17 = self.name.used, if @unlikely(local.tee new_used_16($local_1.used + (8 + start_17)) > builtin::array_len($load_3)) {
+        "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_1, new_used_14);
+    }, start_15 = $local_1.used, $local_1.used = new_used_14, builtin::array_copy<u8>(local.tee $load_3($local_1.repr), start_15, global:effect_handler_bundled_value.wado::$const_obj_5, 0, 7), v = self.name, let $array_clone_src_1: ref Array<u8>, $array_clone_src_1 = v.repr, start_15 = v.used, let $array_clone_dst_2: ref Array<u8>, builtin::array_copy<u8>(local.tee $array_clone_dst_2(builtin::array_new<u8>(start_15)), 0, $array_clone_src_1, 0, start_15), $inline_core_prelude_string_wado_String__internal_push_string_9: block {
+        break_if $inline_core_prelude_string_wado_String__internal_push_string_9 start_15 == 0;
+        if @unlikely(local.tee new_used_14($local_1.used + start_15) > builtin::array_len($load_3)) {
+            cold_path;
+            "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_1, new_used_14);
+        }
+        start_29 = $local_1.used;
+        $local_1.used = new_used_14;
+        builtin::array_copy<u8>($local_1.repr, start_29, $array_clone_dst_2, 0, start_15);
+    }, if @unlikely(local.tee start_15($local_1.used + 8) > builtin::array_len($local_1.repr)) {
         cold_path;
-        "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_1, new_used_16);
-    }, start_23 = $local_1.used, $local_1.used = new_used_16, $load_3 = $local_1.repr, s_27 = self.name, builtin::array_copy<u8>($load_3, start_23, s_27.repr, 0, start_17), start_17 = start_23 + start_17, builtin::array_copy<u8>($load_3, start_17, global:effect_handler_bundled_value.wado::$const_obj_4, 0, 8), start_23 = local.tee start_17(self.count) < 0, start_17 = "core:prelude/primitive.wado/count_digits_u64"(local.tee x(x = builtin::i64_extend_i32_s(start_17); select i64(x < 0_i64, 0_i64 - x, x))), start_23 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$sroa[self.buf]$dae[alt_prefix]"($local_1, start_23, start_17), "core:prelude/primitive.wado/write_decimal_digits"($local_1.repr, start_23, x, start_17), if @unlikely(local.tee start_17($local_1.used + 1) > builtin::array_len($local_1.repr)) {
+        "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_1, start_15);
+    }, start_29 = $local_1.used, $local_1.used = start_15, builtin::array_copy<u8>($local_1.repr, start_29, global:effect_handler_bundled_value.wado::$const_obj_4, 0, 8), start_15 = local.tee start_29(self.count) < 0, start_29 = "core:prelude/primitive.wado/count_digits_u64"(local.tee x(x = builtin::i64_extend_i32_s(start_29); select i64(x < 0_i64, 0_i64 - x, x))), start_15 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$sroa[self.buf]$dae[alt_prefix]"($local_1, start_15, start_29), "core:prelude/primitive.wado/write_decimal_digits"($local_1.repr, start_15, x, start_29), if @unlikely(local.tee start_29($local_1.used + 1) > builtin::array_len($local_1.repr)) {
         cold_path;
-        "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_1, start_17);
-    }, start_23 = $local_1.used, $local_1.used = start_17, builtin::array_copy<u8>($local_1.repr, start_23, global:effect_handler_bundled_value.wado::$const_obj_3, 0, 1), $local_1;
+        "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_1, start_29);
+    }, start_15 = $local_1.used, $local_1.used = start_29, builtin::array_copy<u8>($local_1.repr, start_15, global:effect_handler_bundled_value.wado::$const_obj_3, 0, 1), $local_1;
 }
 
 fn "effect_handler_bundled_value.wado/effect_handler_bundled_value.wado/$Closure_0::$call"(self) {
@@ -472,24 +481,24 @@ fn "effect_handler_bundled_value.wado/effect_handler_bundled_value.wado/$Closure
 }
 
 fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$sroa[self.buf]$dae[alt_prefix]"(self, is_negative, digit_count) {
-    let start_29: i32;
+    let start_26: i32;
     if is_negative {
         if @unlikely(local.tee is_negative(self.used + 1) > builtin::array_len(self.repr)) {
             cold_path;
             "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self, is_negative);
         }
-        start_29 = self.used;
+        start_26 = self.used;
         self.used = is_negative;
-        builtin::array_set_u8(self.repr, start_29, 45);
+        builtin::array_set_u8(self.repr, start_26, 45);
     } else {
     }
     if @unlikely(local.tee digit_count(self.used + digit_count) > builtin::array_len(self.repr)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self, digit_count);
     }
-    start_29 = self.used;
+    start_26 = self.used;
     self.used = digit_count;
-    return start_29;
+    return start_26;
 }
 
 fn "closure/effect_handler_bundled_value.wado/$closure_wrapper_0"($env) {

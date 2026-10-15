@@ -13,6 +13,7 @@ pub mod modref;
 pub mod observed;
 pub mod ownership;
 pub mod place;
+pub mod points_to;
 pub mod reach;
 pub mod retention;
 pub mod synthesize;
@@ -184,6 +185,8 @@ pub fn plan(
     // in `flat.functions`, and shared: every summary below is a monotone
     // backward fixpoint over the same edges.
     let call_graph = callgraph::CallGraph::build(flat);
+    let closure_captures = reach::ClosureCaptures::collect(flat);
+    let retained = retention::compute_retention(flat, &call_graph, &builtins, &closure_captures);
     // Three passes, because the paths gate the conventions
     // ([`hands_out_payload`]) and the conventions place the paths: a seed pass
     // without the gate breaks the knot.
@@ -192,6 +195,7 @@ pub fn plan(
         &call_graph,
         &place::ReturnPaths::default(),
         &builtins,
+        &retained.calls,
         &confined_params,
     );
     let return_paths = place::compute_return_paths(
@@ -206,10 +210,9 @@ pub fn plan(
         &call_graph,
         &return_paths,
         &builtins,
+        &retained.calls,
         &confined_params,
     );
-    let closure_captures = reach::ClosureCaptures::collect(flat);
-    let retained = retention::compute_retention(flat, &call_graph, &builtins, &closure_captures);
     let list_index_assign = match flat
         .type_table
         .borrow()

@@ -64,7 +64,7 @@ impl RadixRouter {
         // against root.handler_id directly before falling back to walk —
         // walk still handles a wildcard registered at root (`/*x`).
         if plen == 1
-            && path.get_byte_unchecked(0) == b'/'
+            && unchecked path.byte_at(0) == b'/'
             && self.nodes[0].handler_id >= 0
             && self.nodes[0].method == method {
             return MatchResult { handler_id: self.nodes[0].handler_id, params };
@@ -126,9 +126,9 @@ impl RadixRouter {
         loop {
             let nedges = self.nodes[current].edges.len();
             let mut found_idx = -1;
-            let first = remaining.get_byte_unchecked(0);
+            let first = unchecked remaining.byte_at(0);
             for let mut i = 0; i < nedges; i += 1 {
-                if self.nodes[current].edges[i].label.get_byte_unchecked(0) == first {
+                if unchecked self.nodes[current].edges[i].label.byte_at(0) == first {
                     found_idx = i;
                     break;
                 }
@@ -144,9 +144,7 @@ impl RadixRouter {
             let mut cp = 0;
             while cp < elen
                 && cp < llen
-                && self.nodes[current].edges[found_idx].label.get_byte_unchecked(
-                    cp,
-                ) == remaining.get_byte_unchecked(cp) {
+                && unchecked self.nodes[current].edges[found_idx].label.byte_at(cp) == unchecked remaining.byte_at(cp) {
                 cp += 1;
             }
             if cp == elen {
@@ -195,10 +193,10 @@ impl RadixRouter {
         // At most one literal edge can share each first byte (radix
         // invariant), so the loop becomes "find that one candidate, then
         // either descend or fall through to param/wildcard".
-        let first = path.get_byte_unchecked(pos);
+        let first = unchecked path.byte_at(pos);
         let nedges = self.nodes[node_id].edges.len();
         for let mut i = 0; i < nedges; i += 1 {
-            if self.nodes[node_id].edges[i].label.get_byte_unchecked(0) != first {
+            if unchecked self.nodes[node_id].edges[i].label.byte_at(0) != first {
                 continue;
             }
             let elen = self.nodes[node_id].edges[i].label.len();
@@ -208,7 +206,7 @@ impl RadixRouter {
             let mut k = 1;
             let mut ok = true;
             while k < elen {
-                if path.get_byte_unchecked(pos + k) != self.nodes[node_id].edges[i].label.get_byte_unchecked(k) {
+                if unchecked path.byte_at(pos + k) != unchecked self.nodes[node_id].edges[i].label.byte_at(k) {
                     ok = false;
                     break;
                 }
@@ -232,7 +230,7 @@ impl RadixRouter {
         // allocation-free, unlike a full keys() snapshot.
         if self.nodes[node_id].param_target >= 0 {
             let mut end = pos;
-            while end < plen && path.get_byte_unchecked(end) != b'/' {
+            while end < plen && unchecked path.byte_at(end) != b'/' {
                 end += 1;
             }
             if end > pos {

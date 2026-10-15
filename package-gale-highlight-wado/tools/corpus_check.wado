@@ -48,11 +48,11 @@ fn snippet<S: AsStrSlice>(src: S, at: i32) -> String {
     if start > src.len() {
         start = src.len();
     }
-    while start > 0 && src.get_byte_unchecked(start - 1) != b'\n' {
+    while start > 0 && unchecked src.byte_at(start - 1) != b'\n' {
         start -= 1;
     }
     let mut end = at;
-    while end < src.len() && src.get_byte_unchecked(end) != b'\n' {
+    while end < src.len() && unchecked src.byte_at(end) != b'\n' {
         end += 1;
     }
     return src.substr_bytes(start, end).trim().to_string();

@@ -14,7 +14,7 @@ use crate::build::build_for_driver;
 use crate::compile::CompileFlags;
 use crate::knobs::{CompileKnobOpt, CompileKnobs, RuntimeKnobOpt, RuntimeKnobs};
 use crate::manifest;
-use crate::runtime::{self, ProfileMode};
+use crate::runtime::{self, ProfileMode, Ticker};
 use crate::sync::lock;
 
 pub struct RunOptions {
@@ -235,24 +235,20 @@ async fn run_cli_component(
         });
         store.set_epoch_deadline(1);
 
-        let stop = Arc::new(AtomicBool::new(false));
-        let stop_clone = stop.clone();
-        let deadline_thread = deadline;
-        let engine_clone = engine.clone();
-        std::thread::spawn(move || {
-            let start = std::time::Instant::now();
-            while !stop_clone.load(Ordering::Relaxed) {
-                std::thread::sleep(interval);
+        let start = std::time::Instant::now();
+        let ticker = Ticker::start(interval, {
+            let engine = engine.clone();
+            move || {
                 if let Some(secs) = max_secs
                     && start.elapsed().as_secs() >= secs
                 {
-                    deadline_thread.store(true, Ordering::Relaxed);
+                    deadline.store(true, Ordering::Relaxed);
                 }
-                engine_clone.increment_epoch();
+                engine.increment_epoch();
             }
         });
 
-        Some((profiler, stop, file))
+        Some((profiler, ticker, file))
     } else {
         None
     };
@@ -281,8 +277,8 @@ async fn run_cli_component(
     })();
 
     let mut profiled = Ok(());
-    if let Some((profiler_arc, stop, file)) = profiler {
-        stop.store(true, Ordering::Relaxed);
+    if let Some((profiler_arc, ticker, file)) = profiler {
+        drop(ticker);
 
         if let ProfileMode::Guest { path, .. } = profile {
             let guest_profiler = lock(&profiler_arc).take().unwrap();

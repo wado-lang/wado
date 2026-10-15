@@ -10,7 +10,7 @@ use crate::attribute::{AMBIENT, BENIGN};
 use crate::hashmap::{IndexMap, IndexSet};
 
 use crate::module_source::ModuleSource;
-use crate::name::{FqTraitName, FqTypeName, TypeHead, is_test_function};
+use crate::name::{DeclaredHead, FqTraitName, FqTypeName, TypeHead, is_test_function};
 use crate::resolve::{Resolution, Resolutions};
 use crate::tir::{
     EffectRef, EffectRows, FunctionRef, ResolvedType, RowFlow, TemplateId, TypeId, TypeSet,
@@ -1066,8 +1066,8 @@ fn binding_performed_effects(
     annotations: Option<&TypeAnnotations>,
     index: &EffectIndex,
     binding: &EffectHandlerBinding,
-) -> IndexMap<String, Vec<EffectRef>> {
-    let mut performed: IndexMap<String, Vec<EffectRef>> = IndexMap::default();
+) -> IndexMap<DeclaredHead, Vec<EffectRef>> {
+    let mut performed: IndexMap<DeclaredHead, Vec<EffectRef>> = IndexMap::default();
     for entry in annotations
         .into_iter()
         .flat_map(|a| a.all(|f| &f.handler_bindings, binding.id))
@@ -1079,11 +1079,8 @@ fn binding_performed_effects(
         let forwarded = index
             .forwarding_blocks
             .contains(&def)
-            .then(|| EffectRef::Concrete {
-                name: entry.name.clone(),
-                module_source: entry.module_source.clone(),
-            });
-        let effects = performed.entry(entry.name.clone()).or_default();
+            .then(|| EffectRef::Concrete(entry.effect.clone()));
+        let effects = performed.entry(entry.effect.clone()).or_default();
         for effect in index.block_effects[&def].iter().cloned().chain(forwarded) {
             if !effects.contains(&effect) {
                 effects.push(effect);
@@ -1111,10 +1108,7 @@ fn binding_granted_effects(
         let walk: Vec<EffectRef> = facts
             .effects
             .iter()
-            .map(|entry| EffectRef::Concrete {
-                name: entry.name.clone(),
-                module_source: entry.module_source.clone(),
-            })
+            .map(|entry| EffectRef::Concrete(entry.effect.clone()))
             .filter(|effect| index.closure.contains_key(effect))
             .collect();
         granted = Some(match granted {
@@ -1374,7 +1368,7 @@ fn build_propagation_closure_sem(
             let cur = direct.get(key).cloned().unwrap_or_default();
             let mut merged = cur.clone();
             for eff in &cur {
-                if matches!(eff, EffectRef::Concrete { .. })
+                if matches!(eff, EffectRef::Concrete(_))
                     && let Some(child) = direct.get(eff).cloned()
                 {
                     for e in &child {
@@ -1410,7 +1404,7 @@ fn expand_through_closure(
     let mut out: IndexSet<EffectRef> = IndexSet::default();
     for effect in effects {
         out.insert(effect.clone());
-        if matches!(effect, EffectRef::Concrete { .. })
+        if matches!(effect, EffectRef::Concrete(_))
             && let Some(extra) = closure.get(effect)
         {
             for e in extra {
@@ -2295,7 +2289,9 @@ fn resolve_effect_params(
                     resolved.push(effect.clone());
                 }
             }
-            EffectRef::Concrete { .. } | EffectRef::Var { .. } => resolved.push(effect.clone()),
+            EffectRef::Concrete(_) | EffectRef::Undeclared { .. } | EffectRef::Var { .. } => {
+                resolved.push(effect.clone());
+            }
         }
     }
     Resolved {
@@ -2574,7 +2570,7 @@ impl AstVisitor for SemEffectWalker<'_> {
                             .collect();
                         self.report_missing_as(
                             &effects,
-                            &handled,
+                            handled.name(),
                             binding.handler.span(),
                             EffectFault::MissingForHandler,
                         );
@@ -3216,7 +3212,10 @@ impl AstVisitor for PurityWalker<'_> {
                         binding_performed_effects(self.annotations, self.index, binding)
                     {
                         if self.unanswered(&effects) {
-                            self.flag(Impurity::Install(handled), binding.handler.span());
+                            self.flag(
+                                Impurity::Install(handled.name().to_string()),
+                                binding.handler.span(),
+                            );
                         }
                     }
                     added.extend(

@@ -169,19 +169,19 @@ pub variant Segment {
 pub fn parse_pattern<S: AsStrSlice>(path: S) -> List<Segment> {
     let mut out: List<Segment> = [];
     let bytes = path.len();
-    if bytes == 0 || path.get_byte_unchecked(0) != b'/' {
+    if bytes == 0 || path.byte_at(0) != b'/' {
         panic("route pattern must start with '/'");
     }
     let mut i = 1;
     while i < bytes {
         let mut j = i;
-        while j < bytes && path.get_byte_unchecked(j) != b'/' {
+        while j < bytes && unchecked path.byte_at(j) != b'/' {
             j += 1;
         }
         let seg = path.substr_bytes(i, j);
         if seg.len() > 0 {
             // First byte tags the segment kind.
-            let item = match seg.get_byte_unchecked(0) as char {
+            let item = match unchecked seg.byte_at(0) as char {
                 ':' => Segment::Param(seg.substr_bytes(1, seg.len())),
                 '*' => Segment::Wildcard(seg.substr_bytes(1, seg.len())),
                 _ => Segment::Literal(seg),

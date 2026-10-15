@@ -146,7 +146,7 @@ test "generate header" {
     // empty sources list rather than fabricating a nonexistent `{name}.g4`.
     let header = `#![generated(by = "gale", sources = [])]`;
     for let mut i = 0; i < header.len(); i += 1 {
-        assert output.get_byte_unchecked(i) == header.get_byte_unchecked(i);
+        assert output.byte_at(i) == header.byte_at(i);
     }
 }
 
@@ -166,7 +166,7 @@ test "generate header with multiple source files" {
     let output = generate(&mut grammar, &DEFAULT_OPTIONS).source;
     let header = `#![generated(by = "gale", sources = ["HtmlLexer.g4", "HtmlParser.g4"])]`;
     for let mut i = 0; i < header.len(); i += 1 {
-        assert output.get_byte_unchecked(i) == header.get_byte_unchecked(i);
+        assert output.byte_at(i) == header.byte_at(i);
     }
 }
 
@@ -186,7 +186,7 @@ test "generate header escapes a source file name" {
     let output = generate(&mut grammar, &DEFAULT_OPTIONS).source;
     let header = "#![generated(by = \"gale\", sources = [\"a\\\"b\\\\c.g4\"])]";
     for let mut i = 0; i < header.len(); i += 1 {
-        assert output.get_byte_unchecked(i) == header.get_byte_unchecked(i);
+        assert output.byte_at(i) == header.byte_at(i);
     }
 }
 

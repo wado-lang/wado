@@ -1,5 +1,6 @@
 // A failed `assert` reports each operand, and `<not evaluated>` for one a
-// short-circuit skipped.
+// short-circuit skipped. A receiver, of a method call or a subscript, is not
+// an operand: what the call answered is.
 
 export fn run() {
     let list: List<i32> = [1, 2, 3];
@@ -7,7 +8,6 @@ export fn run() {
     assert i < list.len() && list[i] == 1;
     // condition: i < list.len() && list[i] == 1
     // i: 99
-    // list: [1, 2, 3]
     // list.len(): 3
     // i < list.len(): false
     // i: <not evaluated>
@@ -19,6 +19,6 @@ __DATA__
 {
     "trapped": true,
     "stderr_contains": [
-        "condition: i < list.len() && list[i] == 1\ni: 99\nlist: [1, 2, 3]\nlist.len(): 3\ni < list.len(): false\ni: <not evaluated>\nlist[i]: <not evaluated>\nlist[i] == 1: <not evaluated>\n"
+        "condition: i < list.len() && list[i] == 1\ni: 99\nlist.len(): 3\ni < list.len(): false\ni: <not evaluated>\nlist[i]: <not evaluated>\nlist[i] == 1: <not evaluated>\n"
     ]
 }

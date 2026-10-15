@@ -1083,8 +1083,9 @@ impl u8x16 {
     }
 
     /// Load 16 bytes from a String at the given byte offset into a u8x16.
-    /// The caller must ensure `offset + 16 <= s.len()`.
-    pub fn from_string<S: AsStrSlice>(s: S, offset: i32) -> u8x16 {
+    pub fn from_string<S: AsStrSlice>(s: S, offset: i32) -> u8x16
+        contract 0 <= offset && offset + 16 <= s.len()
+    {
         let view = s.as_str_slice();
         let arr = view.internal_raw_bytes();
         let offset = offset + view.internal_byte_offset();

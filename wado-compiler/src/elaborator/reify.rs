@@ -23,7 +23,10 @@ use crate::logger::{Bail, Logger};
 use crate::lower::plan::value_copy::place::{is_source_place, source_place_subscripts_mut};
 use crate::lower::wide_int_literal::{create_conversion, create_literal, method_ref};
 use crate::module_source::ModuleSource;
-use crate::name::{FqTypeName, Receiver, global_init_function, global_name, unchecked_twin_name};
+use crate::name::{
+    CONTRACT_CHECKS_INTRINSIC, FqTypeName, Receiver, global_init_function, global_name,
+    unchecked_twin_name,
+};
 use crate::symbol::SymbolTable;
 use crate::tir::{
     self as tir, CallArg, GlobalInit, InstancePattern, LetStorage, LocalFrame, ResolvedType,
@@ -46,7 +49,7 @@ use super::util;
 use crate::ast::RangeKind;
 use crate::ast::{AttrArg, Attribute, InterfaceDecl, NamePolicy, Visibility};
 use crate::compiler_item::{CompilerItem, Resolved};
-use crate::coverage::{CoverageMap, ProbeSite, contract_check_call};
+use crate::coverage::{CoverageMap, ProbeSite};
 use crate::defs::DefId;
 use crate::elaborator::Elaborator;
 use crate::elaborator::assert::{NOT_EVALUATED, render_local_name, seen_local_name};
@@ -80,7 +83,7 @@ use crate::escape::{
 use crate::format_spec::{FormatKind, TemplateFormatSpec};
 use crate::lexer::defaults_to_float;
 use crate::name::{
-    LocalMethodName, MethodName, constant_pattern_local_name, deref_capture_name,
+    DeclaredHead, LocalMethodName, MethodName, constant_pattern_local_name, deref_capture_name,
     display_function_name, effect_default_impl_name, for_body_label, mangle_local_item_name,
     minted_name, range_local_name, test_function_name, widened_half_local_name,
 };
@@ -461,9 +464,6 @@ pub(crate) struct Reify<'a, H: CompilerHost> {
     /// The probe ids of code reify emits no instance of: a tuple `for-of` body
     /// over no elements.
     pub(crate) probes_without_instance: IndexSet<u32>,
-    /// The `builtin::contract_checks()` call heading the contract check whose
-    /// condition reify is in. See [`contract_check_call`].
-    pub(crate) contract_check_call: Option<AstId>,
 }
 
 /// Call site captured for location literals in defaults.
@@ -525,7 +525,6 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             coverage: None,
             probes_emitted: IndexSet::default(),
             probes_without_instance: IndexSet::default(),
-            contract_check_call: None,
         }
     }
 
@@ -1119,7 +1118,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             .ann_effect_ops(decl.id)
             .expect("`record_effect_ops` records op signatures for every effect reify emits");
         tir::TirEffect {
-            name: decl.name.clone(),
+            head: DeclaredHead::new(self.tysys.resolutions.defs(), self.tysys.def_at(decl.id)),
             visibility: decl.visibility,
             operations,
             span: decl.span,
@@ -1136,8 +1135,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             .ann_effect_ops(decl.id)
             .expect("`record_effect_ops` records op signatures for every resource reify emits");
         tir::TirResource {
-            def: self.tysys.def_at(decl.id),
-            name: decl.name.clone(),
+            head: DeclaredHead::new(self.tysys.resolutions.defs(), self.tysys.def_at(decl.id)),
             visibility: decl.visibility,
             operations,
             is_generic: !decl.type_params.is_empty(),
@@ -1297,7 +1295,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             trait_canonical: facts
                 .trait_name
                 .as_ref()
-                .and_then(|fq| Some((fq.module()?.clone(), fq.base_name().to_string()))),
+                .and_then(|fq| fq.declared_head().cloned()),
             trait_type_args: facts.trait_type_args.clone(),
             struct_name: naming.struct_name(),
             rest: impl_block.rest.map(|r| r.kind),
@@ -1710,25 +1708,6 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
     /// Report a malformed attribute at the attribute's own span.
     fn attr_error(&self, code: Code, attr: &ast::Attribute, message: String) {
         self.error_at(code, attr.span, message);
-    }
-
-    /// Report `call` when it reified to `builtin::contract_checks()` anywhere
-    /// but at the head of a contract check: `lower::contract_checks` keeps or
-    /// deletes a check whole and knows no other shape.
-    fn reject_misplaced_contract_checks(&self, call: &ast::CallExpr, expr: &TirExpr) {
-        let TirExprKind::Call { func, .. } = &expr.kind else {
-            return;
-        };
-        if !func.is_builtin_named("contract_checks") || self.contract_check_call == Some(call.id) {
-            return;
-        }
-        self.error_at(
-            Code::UnsupportedFeature,
-            call.span,
-            "`builtin::contract_checks()` stands only as the whole condition of \
-             `if builtin::contract_checks() { … }`, with no `else`"
-                .to_string(),
-        );
     }
 
     /// Report each attribute that describes a declaration with no body, written
@@ -2671,11 +2650,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 self.reify_method_call(method_call, ctx, recorded_type)
             }
             ast::Expr::Binary(binary) => self.reify_binary(binary, ctx, recorded_type),
-            ast::Expr::Call(call) => {
-                let expr = self.reify_call(call, ctx, recorded_type);
-                self.reject_misplaced_contract_checks(call, &expr);
-                expr
-            }
+            ast::Expr::Call(call) => self.reify_call(call, ctx, recorded_type),
             ast::Expr::Match(match_expr) => {
                 self.reify_match_expr(match_expr, ctx, expected_type, recorded_type)
             }
@@ -2816,20 +2791,6 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 unreachable!("reify does not run on modules with syntax errors")
             }
         }
-    }
-
-    /// Reify the condition of the `if` statement `if_stmt`, where a contract
-    /// check's `builtin::contract_checks()` stands.
-    fn reify_if_stmt_condition(
-        &mut self,
-        if_stmt: &ast::IfStmt,
-        cond_expr: &ast::Expr,
-        ctx: &mut FunctionContext,
-    ) -> TirExpr {
-        let saved = std::mem::replace(&mut self.contract_check_call, contract_check_call(if_stmt));
-        let condition = self.reify_condition_expr(cond_expr, ctx);
-        self.contract_check_call = saved;
-        condition
     }
 
     /// Reify an expression in condition position, the walk
@@ -4231,7 +4192,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 )
             }
             ast::Condition::Expr(cond_expr) => {
-                let condition = self.reify_if_stmt_condition(if_stmt, cond_expr, ctx);
+                let condition = self.reify_condition_expr(cond_expr, ctx);
                 let then_branch = self.reify_block_with_position(
                     &if_stmt.then_block,
                     ctx,
@@ -4275,7 +4236,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
     fn reify_if_stmt(&mut self, if_stmt: &ast::IfStmt, ctx: &mut FunctionContext) -> Vec<TirStmt> {
         match &if_stmt.condition {
             ast::Condition::Expr(cond_expr) => {
-                let condition = self.reify_if_stmt_condition(if_stmt, cond_expr, ctx);
+                let condition = self.reify_condition_expr(cond_expr, ctx);
                 let then_block = self.reify_block(&if_stmt.then_block, ctx, None);
                 let else_block = self.else_branch(
                     if_stmt.else_block.as_ref(),
@@ -5141,6 +5102,12 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         }
     }
 
+    /// The method the subscript `index` reads its element through.
+    fn index_read_dispatch(&self, index: &ast::IndexExpr) -> Option<OperatorDispatch> {
+        self.ann_operator_dispatch(index.id)
+            .map(|dispatch| unchecked_subscript(index, dispatch))
+    }
+
     /// The compound-assign read side of `recv[idx]`, reusing the same
     /// once-evaluated receiver / subscript the write side gets.
     fn build_index_trait_read(
@@ -5150,7 +5117,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         index_expr: &ast::IndexExpr,
         span: Span,
     ) -> TirExpr {
-        let Some(dispatch) = self.ann_operator_dispatch(index_expr.id) else {
+        let Some(dispatch) = self.index_read_dispatch(index_expr) else {
             // Write-only `IndexAssign` type — annotate diagnosed the missing
             // read; match its recovery shape.
             return TirExpr::new(TirExprKind::Unit, TypeTable::ERROR, span);
@@ -5707,7 +5674,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         // Operator-dispatch path: `operator_dispatch[index.id]` carries the
         // resolved Index / IndexValue method and `needs_deref`. Shared with the
         // compound-assign read via `build_index_read_from_dispatch`.
-        if let Some(dispatch) = self.ann_operator_dispatch(index.id) {
+        if let Some(dispatch) = self.index_read_dispatch(index) {
             let idx_expr = self.reify_expr(&index.index, ctx, None);
             let deref_type = self.tysys.index_deref_type(Some(recorded_type), &dispatch);
             return self.tysys.build_index_read_from_dispatch(
@@ -6406,10 +6373,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             let handler = self.reify_expr(&binding.handler, ctx, None);
             for entry in &facts.effects {
                 bindings.push(TirHandlerBinding {
-                    effect: Some(EffectRef::Concrete {
-                        name: entry.name.clone(),
-                        module_source: entry.module_source.clone(),
-                    }),
+                    effect: entry.effect.clone(),
                     trait_type_args: entry.trait_type_args.clone(),
                     handler: handler.clone(),
                     handler_type: facts.handler_type,
@@ -7545,7 +7509,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         };
 
         let inner_dispatch = self
-            .ann_operator_dispatch(index_expr.id)
+            .index_read_dispatch(index_expr)
             .expect(
                 "reify_index_mut_method_call: inner IndexMut dispatch missing — annotate should have recorded it alongside the IndexMutMethodCall desugar tag",
             );
@@ -10211,13 +10175,13 @@ fn bind_to_local(
     TirExpr::new(TirExprKind::Local { index, name }, type_id, span)
 }
 
-/// `if builtin::contract_checks() { check }`: one `contract` clause as the
+/// `if $contract_checks() { check }`: one `contract` clause as the
 /// `unchecked` twin runs it. [`split_unchecked_twin`] unwraps it again for the
 /// checked function.
 fn contract_check(check: Vec<TirStmt>, span: Span) -> TirStmt {
     TirStmt::new(
         TirStmtKind::If {
-            condition: builtin_call("contract_checks", Vec::new(), TypeTable::BOOL),
+            condition: builtin_call(CONTRACT_CHECKS_INTRINSIC, Vec::new(), TypeTable::BOOL),
             then_block: TirBlock::new(check, span),
             else_block: None,
         },
@@ -10226,7 +10190,8 @@ fn contract_check(check: Vec<TirStmt>, span: Span) -> TirStmt {
 }
 
 /// Retarget the call `unchecked` marks, spanning `call_span`, to its callee's
-/// twin, which the check of `unchecked`'s operand established it has.
+/// twin, which the check of `unchecked`'s operand established it has. A
+/// marked subscript goes through [`unchecked_subscript`] instead.
 /// Reify may wrap that call (a default argument naming another parameter
 /// hoists the arguments into a block around it), so the call is found by the
 /// span of the operand it was reified from.
@@ -10242,7 +10207,7 @@ fn retarget_to_unchecked_twin(expr: &mut TirExpr, call_span: Span) {
             }
             match &mut expr.kind {
                 TirExprKind::Call { func, .. } if expr.span == self.call_span => {
-                    retarget_call(func);
+                    func.retarget_to_unchecked_twin();
                     self.found = true;
                 }
                 _ => self.walk_expr(expr),
@@ -10257,15 +10222,13 @@ fn retarget_to_unchecked_twin(expr: &mut TirExpr, call_span: Span) {
     assert!(marked.found, "`unchecked` marks a call: {:?}", expr.kind);
 }
 
-fn retarget_call(func: &mut FunctionRef) {
-    func.name = unchecked_twin_name(&func.name);
-    if let Some(info) = &mut func.method_info {
-        info.mark_unchecked();
+/// `dispatch`, aimed at its callee's `unchecked` twin where `index` is marked,
+/// which the check of the mark established it has.
+fn unchecked_subscript(index: &ast::IndexExpr, mut dispatch: OperatorDispatch) -> OperatorDispatch {
+    if index.unchecked.is_some() {
+        dispatch.function_ref.retarget_to_unchecked_twin();
     }
-    if let Some(mono) = &mut func.monomorph_info {
-        mono.generic_name = unchecked_twin_name(&mono.generic_name);
-    }
-    func.template = func.template.as_ref().map(TemplateId::unchecked_twin);
+    dispatch
 }
 
 /// The `unchecked` twin of `func`, reified from `decl`, where `decl` writes a

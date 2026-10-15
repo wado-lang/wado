@@ -1,0 +1,29 @@
+// Through a bound, `unchecked` vouches for the trait's clauses alone. This
+// trait declares none, so whatever an impl states is no clause the caller
+// can see.
+trait Get with () {
+    fn get(&self, i: i32) -> i32;
+}
+
+struct Small { value: i32 }
+
+impl Get for Small {
+    fn get(&self, i: i32) -> i32
+        contract i < 10
+    {
+        return self.value + i;
+    }
+}
+
+fn through<T: Get>(t: &T, i: i32) -> i32 {
+    return unchecked t.get(i);
+}
+
+export fn run() {
+    let _ = through(&Small { value: 1 }, 2);
+}
+
+__DATA__
+{
+  "compile_error": ":19:12: analysis error: this trait method declares no `contract` clause, and `unchecked` on a call to it vouches for the trait's alone"
+}

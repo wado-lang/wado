@@ -7,7 +7,7 @@
 
 use crate::ast;
 use crate::compiler_host::CompilerHost;
-use crate::tir::{EffectRef, ResolvedType, TypeId};
+use crate::tir::{EffectRef, ResolvedType, TypeId, TypeKey};
 
 use super::Elaborator;
 use super::types::{FunctionContext, TypeError};
@@ -16,7 +16,7 @@ use crate::defs::DefId;
 use crate::elaborator::sem::types::{HandlerBindingFacts, HandlerEffectEntry};
 use crate::elaborator::trait_env::ImplTargetKey;
 use crate::hashmap;
-use crate::name::{DeclName, FqTraitName};
+use crate::name::{DeclName, DeclaredHead, FqTraitName};
 
 impl<H: CompilerHost> Elaborator<'_, H> {
     /// Annotate `with E1 => h1, ... do { body }`. Walks each handler
@@ -136,11 +136,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         };
 
         // Verify the underlying struct type has `impl <Effect> for <Type>`.
-        if let Some(EffectRef::Concrete {
-            name: interface_name,
-            ..
-        }) = &effect
-        {
+        if let Some(EffectRef::Concrete(head)) = &effect {
+            let interface_name = head.name();
             // Skip the check for an unresolved handler (`Unknown` / `Error`):
             // an earlier diagnostic already covered it. Query by `TypeId` (via
             // `type_implements_trait`) so a generic-instance handler like
@@ -171,7 +168,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 let type_name = self.tysys.type_table.borrow().type_name(handler_type);
                 let _ = self.emit(TypeError::HandlerEffectNotImplemented {
                     type_name,
-                    interface_name: interface_name.clone(),
+                    interface_name: interface_name.to_string(),
                     span: binding.span,
                 });
             } else if is_real_type
@@ -197,11 +194,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // Record this explicit binding so
         // reify_with_handler reads the single-effect entry without
         // re-resolving the effect reference.
-        if let Some(EffectRef::Concrete {
-            name: eff_name,
-            module_source: eff_module,
-        }) = &effect
-        {
+        if let Some(EffectRef::Concrete(head)) = &effect {
             self.record_handler_binding_facts(
                 binding.id,
                 HandlerBindingFacts {
@@ -209,8 +202,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         impl_def: effect_decl.and_then(|trait_| {
                             self.effect_impl_block(handler_type, trait_, &trait_type_args)
                         }),
-                        name: eff_name.clone(),
-                        module_source: eff_module.clone(),
+                        effect: head.clone(),
                         trait_type_args,
                     }],
                     bundle_group: None,
@@ -304,14 +296,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
     /// One entry per in-scope `impl` whose trait resolves to an effect or a
     /// resource — both are installable, so a bundled `with h do` expands to one
-    /// binding each. Dedup by `(module, name, type args)` keeps `Stream<u8>`
-    /// and `Stream<i32>` separate.
+    /// binding each. Dedup by the effect's declaration and the type args' keys
+    /// keeps `Stream<u8>` and `Stream<i32>` separate, two modules' same-named
+    /// effects too.
     fn collect_effect_impls_for_type(&self, handler_type: TypeId) -> Vec<HandlerEffectEntry> {
         let defs = self.tysys.resolutions.defs();
         let mut out: Vec<HandlerEffectEntry> = Vec::new();
-        // Keyed by the effect's declaration, not its spelling: `Stream<u8>` and
-        // `Stream<i32>` stay separate, two modules' same-named effects too.
-        let mut seen: hashmap::IndexSet<(DefId, Vec<TypeId>)> = hashmap::IndexSet::default();
+        let mut seen: hashmap::IndexSet<(DefId, Vec<TypeKey>)> = hashmap::IndexSet::default();
 
         let Some(entries) = self
             .tysys
@@ -337,13 +328,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 .impl_sig(impl_def)
                 .trait_type_args
                 .clone();
-            if seen.insert((trait_ref, type_args.clone())) {
+            let type_keys = self.tysys.type_table.borrow().type_keys(&type_args);
+            if seen.insert((trait_ref, type_keys)) {
                 out.push(HandlerEffectEntry {
                     impl_def: Some(impl_def),
-                    name: FqTraitName::declared(defs, trait_ref)
-                        .base_name()
-                        .to_string(),
-                    module_source: defs.module(trait_ref).clone(),
+                    effect: DeclaredHead::new(defs, trait_ref),
                     trait_type_args: type_args,
                 });
             }
@@ -372,11 +361,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // or where the block left a slot for monomorphization to fill —
         // `impl<T> Stream<T> for Ctx<T>` installed as `with Stream<u8>`. A
         // block written for other arguments answers for nothing.
+        let tt = self.tysys.type_table.borrow();
         let fills = |key: &DefId| {
             let written = &self.tysys.signatures.impl_sig(*key).trait_type_args;
             written.len() == trait_type_args.len()
-                && std::iter::zip(written, trait_type_args)
-                    .all(|(slot, arg)| slot == arg || self.tysys.is_open_slot(*slot))
+                && std::iter::zip(written, trait_type_args).all(|(&slot, &arg)| {
+                    tt.type_key(slot) == tt.type_key(arg) || self.tysys.is_open_slot(slot)
+                })
         };
         keys.iter()
             .find(|key| implements(key) && fills(key))

@@ -62,8 +62,8 @@ fn "opt_deref_of_taken_struct_reference_is_the_struct.wado/run"() with Stdout {
     let s: ref "core:prelude/string.wado//String";
     let a: i32;
     let out_2: ref "core:prelude/string.wado//String";
-    let n_41: i32;
-    let start_47: i32;
+    let n_37: i32;
+    let start_43: i32;
     let packed: i64;
     let repr: ref Array<u8>;
     s = black_box(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("abcdef"), used: 6 });
@@ -71,20 +71,20 @@ fn "opt_deref_of_taken_struct_reference_is_the_struct.wado/run"() with Stdout {
     out_2 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(8), used: 0 };
     repr = s.repr;
     $inline_core_prelude_string_wado_String__internal_push_view_7: block {
-        break_if $inline_core_prelude_string_wado_String__internal_push_view_7 local.tee n_41(4 - a) == 0;
-        if @unlikely(n_41 > 8) {
+        break_if $inline_core_prelude_string_wado_String__internal_push_view_7 local.tee n_37(4 - a) == 0;
+        if @unlikely(n_37 > 8) {
             cold_path;
-            "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out_2, n_41);
+            "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out_2, n_37);
         }
-        start_47 = out_2.used;
-        out_2.used = n_41;
-        builtin::array_copy<u8>(out_2.repr, start_47, repr, a, n_41);
+        start_43 = out_2.used;
+        out_2.used = n_37;
+        builtin::array_copy<u8>(out_2.repr, start_43, repr, a, n_37);
     };
-    n_41 = builtin::i32_wrap_i64(local.tee packed("wasi/stream-new"()));
+    n_37 = builtin::i32_wrap_i64(local.tee packed("wasi/stream-new"()));
     a = builtin::i32_wrap_i64(packed >> 32_i64);
-    n_41 = "opt_deref_of_taken_struct_reference_is_the_struct.wado/$cm_binding__Stdout_write_via_stream"(n_41);
+    n_37 = "opt_deref_of_taken_struct_reference_is_the_struct.wado/$cm_binding__Stdout_write_via_stream"(n_37);
     "core:rt/write_string_to_stream$dae[add_newline]"(a, out_2.repr, out_2.used);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(n_41);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(n_37);
 }
 
 fn "opt_deref_of_taken_struct_reference_is_the_struct.wado/$cm_binding__Stdout_write_via_stream"(data) with Stdout {

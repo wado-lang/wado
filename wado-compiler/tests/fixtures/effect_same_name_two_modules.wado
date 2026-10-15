@@ -1,0 +1,42 @@
+// Two modules each declare an interface named `Base`. Each dispatches to the
+// handler installed for its own, so neither shadows the other.
+
+use a from "./sub/effect_same_name_two_modules_a.wado";
+use b from "./sub/effect_same_name_two_modules_b.wado";
+use { Base } from "./sub/effect_same_name_two_modules_a.wado";
+use { Base as OtherBase } from "./sub/effect_same_name_two_modules_b.wado";
+
+struct Yes {}
+
+impl a::Base for Yes {
+    fn enabled() -> bool {
+        resume true
+    }
+}
+
+struct No {}
+
+impl b::Base for No {
+    fn enabled() -> bool {
+        resume false
+    }
+}
+
+fn both() -> bool with (Base, OtherBase) {
+    return Base::enabled() && !OtherBase::enabled();
+}
+
+export fn run() {
+    let mut y = Yes {};
+    let mut n = No {};
+    with a::Base => &mut y, b::Base => &mut n do {
+        assert a::ask_a();
+        assert !b::ask_b();
+        assert both();
+    }
+}
+
+__DATA__
+{
+    "stdout": ""
+}

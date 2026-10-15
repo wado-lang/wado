@@ -450,7 +450,7 @@ impl Parser {
         let end = self.pos;
         let mut num_str = String::with_capacity(end - start);
         for let mut i = start; i < end; i += 1 {
-            num_str.push(char::from_u32_unchecked(self.bytes[i] as u32));
+            num_str.push(unchecked char::from_u32(self.bytes[i] as u32));
         }
 
         if let Ok(n) = f64::from_str(&num_str) {
@@ -572,9 +572,9 @@ impl Parser {
                 } else if esc == b'/' {
                     result.push('/');
                 } else if esc == b'b' {
-                    result.push(char::from_u32_unchecked(0x08 as u32));
+                    result.push(unchecked char::from_u32(0x08 as u32));
                 } else if esc == b'f' {
-                    result.push(char::from_u32_unchecked(0x0C as u32));
+                    result.push(unchecked char::from_u32(0x0C as u32));
                 } else if esc == b'n' {
                     result.push('\n');
                 } else if esc == b'r' {
@@ -600,14 +600,14 @@ impl Parser {
                             return null;
                         }
                         let full_cp = surrogate_to_codepoint(cp, low);
-                        if let Some(c) = char::from_i32(full_cp) {
+                        if let Ok(c) = char::try_from(full_cp as u32) {
                             result.push(c);
                         } else {
                             return null;
                         }
                     } else if is_low_surrogate(cp) {
                         return null;
-                    } else if let Some(c) = char::from_i32(cp) {
+                    } else if let Ok(c) = char::try_from(cp as u32) {
                         result.push(c);
                     } else {
                         return null;
@@ -621,7 +621,7 @@ impl Parser {
                 if cp < 0 {
                     return null;
                 }
-                result.push(char::from_u32_unchecked(cp as u32));
+                result.push(unchecked char::from_u32(cp as u32));
             }
         }
     }
@@ -1261,14 +1261,14 @@ fn escape_json_string(s: &String) -> String {
             let hi = code >> 4 & 0x0F;
             let lo = code & 0x0F;
             if hi < 10 {
-                result.push(char::from_u32_unchecked('0' as u32 + hi));
+                result.push(unchecked char::from_u32('0' as u32 + hi));
             } else {
-                result.push(char::from_u32_unchecked('a' as u32 + hi - 10));
+                result.push(unchecked char::from_u32('a' as u32 + hi - 10));
             }
             if lo < 10 {
-                result.push(char::from_u32_unchecked('0' as u32 + lo));
+                result.push(unchecked char::from_u32('0' as u32 + lo));
             } else {
-                result.push(char::from_u32_unchecked('a' as u32 + lo - 10));
+                result.push(unchecked char::from_u32('a' as u32 + lo - 10));
             }
         } else {
             result.push(c);

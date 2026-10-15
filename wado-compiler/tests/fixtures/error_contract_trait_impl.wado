@@ -1,6 +1,8 @@
-// An impl writes no clause: the trait's clauses bind every impl.
+// An impl writes no clause on a method its trait binds: the trait's clauses
+// bind every impl, so a caller through a bound vouches for those alone.
 trait Get with () {
-    fn get(&self, i: i32) -> i32;
+    fn get(&self, i: i32) -> i32
+        contract i < 100;
 }
 
 struct Box { value: i32 }
@@ -20,5 +22,5 @@ export fn run() {
 
 __DATA__
 {
-  "compile_error": ":10:9: parse error: an impl writes no `contract`: the trait's clauses bind it"
+  "compile_error": ":12:9: analysis error: an impl writes no `contract` on a method its trait's clauses bind"
 }

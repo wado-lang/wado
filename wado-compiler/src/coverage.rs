@@ -45,18 +45,9 @@ impl CoverageScope {
             ModuleSource::Binding { .. }
             | ModuleSource::Redirected { .. }
             | ModuleSource::Wasm { .. } => false,
+            ModuleSource::Effect(head) => self.measures(head.module()),
         }
     }
-}
-
-/// What `wado test --coverage` asks of one compile.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct CoverageRequest {
-    /// The modules it measures.
-    pub scope: CoverageScope,
-    /// Whether the compile keeps its contract checks (`-f contract-checks`).
-    /// Where it does not, a check's body is deleted and holds no line.
-    pub contract_checks: bool,
 }
 
 /// What starts a region.
@@ -227,13 +218,11 @@ impl CoverageMap {
     /// Plan `modules` in the order given, which fixes the global ids.
     pub fn build<'a>(
         modules: impl IntoIterator<Item = (&'a ModuleSource, &'a ast::Module)>,
-        contract_checks: bool,
         rt_unreachable_calls: &IndexSet<AstId>,
     ) -> Self {
         let mut map = Self::default();
         for (source, module) in modules {
-            let (plan, sites, for_of_bodies) =
-                plan_module(source, module, contract_checks, rt_unreachable_calls);
+            let (plan, sites, for_of_bodies) = plan_module(source, module, rt_unreachable_calls);
             let base = map.modules.iter().map(|m| m.regions.len() as u32).sum();
             let first_function = map.function_probes.len();
             map.function_probes
@@ -466,15 +455,13 @@ fn plan_path(source: &ModuleSource) -> String {
 /// The regions each `for-of` body holds, by the loop's node.
 type ForOfBodies = Vec<(AstId, Range<u32>)>;
 
-/// Plan one module, compiled with or without its `contract_checks`: its
-/// regions, the site each region's probe goes at, and the regions of each
-/// `for-of` body. `rt_unreachable_calls` holds the callee sites that name
-/// `core:rt`'s `unreachable`.
+/// Plan one module: its regions, the site each region's probe goes at, and
+/// the regions of each `for-of` body. `rt_unreachable_calls` holds the callee
+/// sites that name `core:rt`'s `unreachable`.
 #[must_use]
 pub(crate) fn plan_module(
     source: &ModuleSource,
     module: &ast::Module,
-    contract_checks: bool,
     rt_unreachable_calls: &IndexSet<AstId>,
 ) -> (ModulePlan, Sites, ForOfBodies) {
     let mut planner = Planner {
@@ -482,7 +469,6 @@ pub(crate) fn plan_module(
             path: plan_path(source),
             ..ModulePlan::default()
         },
-        contract_checks,
         rt_unreachable_calls,
         sites: Vec::new(),
         function: 0,
@@ -510,8 +496,6 @@ pub(crate) fn plan_module(
 
 struct Planner<'a> {
     plan: ModulePlan,
-    /// Whether a contract check's body is compiled, and so holds lines.
-    contract_checks: bool,
     rt_unreachable_calls: &'a IndexSet<AstId>,
     sites: Sites,
     function: u32,
@@ -806,13 +790,12 @@ impl Planner<'_> {
                 self.region = Some(region);
                 open = Some(region);
             }
-            let deleted_check = !self.contract_checks && is_contract_check(stmt);
-            if !matches!(stmt, Stmt::Item(_) | Stmt::Error(_)) && !deleted_check {
+            if !matches!(stmt, Stmt::Item(_) | Stmt::Error(_)) {
                 self.line(stmt.span());
             }
             let rest = self.reaches_only_unreachable(&block.stmts[index + 1..], after);
             match stmt {
-                Stmt::If(s) if !is_contract_check(stmt) => self.if_stmt(s, rest),
+                Stmt::If(s) => self.if_stmt(s, rest),
                 Stmt::Match(m) => self.match_arms(m, rest),
                 _ => self.visit_stmt(stmt),
             }
@@ -863,11 +846,6 @@ impl AstVisitor for Planner<'_> {
                     );
                     self.sites.push((ProbeSite::BlockStart, block.id, region));
                     self.block_of(region, block, false);
-                }
-            }
-            Stmt::If(s) if is_contract_check(stmt) => {
-                if self.contract_checks {
-                    self.statements(&s.then_block, None, false);
                 }
             }
             Stmt::If(s) => self.if_stmt(s, false),
@@ -974,7 +952,6 @@ fn may_leave(expr: &Expr) -> bool {
 /// whose condition, scrutinee and guards cannot leave first.
 fn enters_choice(stmt: &Stmt) -> bool {
     let choice = match stmt {
-        Stmt::If(_) if is_contract_check(stmt) => return false,
         Stmt::If(s) => return !Leaves::find(|l| l.visit_condition(&s.condition)),
         Stmt::Match(m) => return !match_head_may_leave(m),
         Stmt::Expr(s) => &s.expr,
@@ -995,21 +972,6 @@ fn enters_choice(stmt: &Stmt) -> bool {
     }
 }
 
-/// The call heading `s` when `s` is a contract check,
-/// `if builtin::contract_checks() { … }`, the only place that call may stand:
-/// reify reports any other. `builtin::` names `core:builtin` whatever the
-/// module declares, so the spelling identifies the callee.
-///
-/// The condition is a build constant, not a choice a run makes: where the
-/// build keeps the check, its body runs wherever the enclosing region runs,
-/// and where it does not, the check is deleted and holds no line.
-pub(crate) fn contract_check_call(s: &ast::IfStmt) -> Option<AstId> {
-    let ast::Condition::Expr(Expr::Call(call)) = &s.condition else {
-        return None;
-    };
-    (s.else_block.is_none() && is_builtin_call(call, "contract_checks")).then_some(call.id)
-}
-
 /// Whether `call` is `builtin::<name>()`, with no argument and no turbofish.
 /// `builtin::` names `core:builtin` whatever the module declares, so the
 /// spelling identifies the callee.
@@ -1018,10 +980,6 @@ fn is_builtin_call(call: &ast::CallExpr, name: &str) -> bool {
         && call.type_args.is_empty()
         && matches!(&call.callee, Expr::Ident(ident)
             if ident.name.strip_prefix("builtin::") == Some(name))
-}
-
-fn is_contract_check(stmt: &Stmt) -> bool {
-    matches!(stmt, Stmt::If(s) if contract_check_call(s).is_some())
 }
 
 fn match_head_may_leave(m: &MatchExpr) -> bool {
@@ -1399,62 +1357,6 @@ mod tests {
         Parser::new(lexed.tokens).parse_strict().expect("parse")
     }
 
-    /// `fn f` whose second statement is a contract check, planned with or
-    /// without `contract_checks`.
-    fn plan_check(contract_checks: bool) -> (ModulePlan, Sites) {
-        let module = parse(
-            "fn f(i: i32) {\n    let j = i;\n    if builtin::contract_checks() {\n        assert j > 0;\n    }\n}\n",
-        );
-        let (plan, sites, _) = plan_module(
-            &ModuleSource::builtin(),
-            &module,
-            contract_checks,
-            &IndexSet::default(),
-        );
-        (plan, sites)
-    }
-
-    #[test]
-    fn a_contract_check_is_no_branch() {
-        let (plan, sites) = plan_check(true);
-        assert_eq!(plan.regions.len(), 1);
-        assert_eq!(plan.lines, vec![(2, 0), (3, 0), (4, 0)]);
-        assert!(
-            sites
-                .iter()
-                .all(|&(site, _, _)| site == ProbeSite::BlockStart)
-        );
-    }
-
-    #[test]
-    fn only_the_canonical_shape_is_a_contract_check() {
-        let shapes = [
-            ("if builtin::contract_checks() { }", true),
-            ("if (builtin::contract_checks()) { }", true),
-            ("if builtin::contract_checks() { } else { }", false),
-            ("if !builtin::contract_checks() { }", false),
-            ("if contract_checks() { }", false),
-            ("if builtin::contract_checks::<i32>() { }", false),
-        ];
-        for (shape, is_check) in shapes {
-            let module = parse(&format!("fn f() {{\n    {shape}\n}}\n"));
-            let Item::Function(f) = &module.items[0] else {
-                unreachable!("the source declares one function");
-            };
-            let Stmt::If(s) = &f.body.as_ref().expect("a body").stmts[0] else {
-                unreachable!("the body is one `if`");
-            };
-            assert_eq!(contract_check_call(s).is_some(), is_check, "{shape}");
-        }
-    }
-
-    #[test]
-    fn a_deleted_contract_check_holds_no_line() {
-        let (plan, _) = plan_check(false);
-        assert_eq!(plan.regions.len(), 1);
-        assert_eq!(plan.lines, vec![(2, 0)]);
-    }
-
     /// The kinds of the regions `body` plans as `fn f`'s, with every callee
     /// spelled `unreachable` standing for `core:rt`'s, as resolution says of
     /// the prelude's.
@@ -1475,7 +1377,7 @@ mod tests {
         for item in &module.items {
             spelled.visit_item(item);
         }
-        let (plan, _, _) = plan_module(&ModuleSource::builtin(), &module, true, &spelled.0);
+        let (plan, _, _) = plan_module(&ModuleSource::builtin(), &module, &spelled.0);
         plan.regions.iter().map(|r| r.kind).collect()
     }
 

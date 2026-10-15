@@ -1698,7 +1698,7 @@ pub fn apply_case<S: AsStrSlice>(style: CaseStyle, s: S) -> String {
     let mut at_head = true;
     let mut prev: u8 = 0;
     for let mut i = 0; i < n; i += 1 {
-        let b = s.get_byte_unchecked(i);
+        let b = unchecked s.byte_at(i);
         if is_separator_byte(b) {
             at_head = true;
             prev = b;
@@ -1709,20 +1709,20 @@ pub fn apply_case<S: AsStrSlice>(style: CaseStyle, s: S) -> String {
             let closes_upper_run = is_upper_byte(prev)
                 && is_upper_byte(b)
                 && i + 1 < n
-                && is_lower_byte(s.get_byte_unchecked(i + 1));
+                && is_lower_byte(unchecked s.byte_at(i + 1));
             at_head = opens_upper_run || closes_upper_run;
         }
         if at_head {
             word += 1;
             if word > 0 && separator != 0 {
-                out.push_ascii_unchecked(separator);
+                unchecked out.push_ascii(separator);
             }
         }
         let head_of_capitalized_word = at_head && upper_word_head && !(lower_first_word && word == 0);
         if upper_all || head_of_capitalized_word {
-            out.push_ascii_unchecked(to_upper_byte(b));
+            unchecked out.push_ascii(to_upper_byte(b));
         } else {
-            out.push_ascii_unchecked(to_lower_byte(b));
+            unchecked out.push_ascii(to_lower_byte(b));
         }
         at_head = false;
         prev = b;

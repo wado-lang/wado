@@ -3595,12 +3595,13 @@ fn eq_targets(
         }));
     }
     for r in &module.resources {
-        if !tt.is_unrestricted_resource(r.def) {
+        let def = r.head.def();
+        if !tt.is_unrestricted_resource(def) {
             continue;
         }
-        let receiver = FqTypeName::declared(tt.defs(), r.def);
+        let receiver = FqTypeName::declared(tt.defs(), def);
         targets.extend(eq_target(&requested, receiver, Vec::new(), r.span, || {
-            EqMembers::Scalar(tt.make_resource(r.def), common::handle_bits)
+            EqMembers::Scalar(tt.make_resource(def), common::handle_bits)
         }));
     }
     for (_name, fields, span, def) in collect_struct_fields(module) {
@@ -4062,7 +4063,7 @@ fn generate_inspect_impls(module: &mut TirModule, ctx: &mut SynthesisCtx<'_, '_,
         .resources
         .iter()
         .filter(|r| !r.is_generic)
-        .map(|r| (r.name.clone(), r.span, r.def))
+        .map(|r| (r.head.name().to_string(), r.span, r.head.def()))
         .collect();
 
     let mut tt = module.type_table.borrow_mut();

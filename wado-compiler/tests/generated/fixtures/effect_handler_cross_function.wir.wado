@@ -11,8 +11,8 @@ struct core:prelude/string.wado//String {  // TypeId(2)
     mut used: i32,
 }
 
-struct effect_handler_cross_function.wado//$Dispatch_Counter {  // TypeId(3)
-    mut outer: ref null "effect_handler_cross_function.wado//$Dispatch_Counter",
+struct effect_handler_cross_function.wado//$Dispatch_effect_handler_cross_function.wado/Counter {  // TypeId(3)
+    mut outer: ref null "effect_handler_cross_function.wado//$Dispatch_effect_handler_cross_function.wado/Counter",
     mut op_next: ref struct,
 }
 
@@ -91,60 +91,60 @@ import fn wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code 
 import fn wasi/task-return from "wasi/task-return";
 import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 
-global mut global:effect_handler_cross_function.wado::$effect_Counter: ref null "effect_handler_cross_function.wado//$Dispatch_Counter" = ref.null none;
+global mut global:effect_handler_cross_function.wado::$effect_effect_handler_cross_function.wado/Counter: ref null "effect_handler_cross_function.wado//$Dispatch_effect_handler_cross_function.wado/Counter" = ref.null none;
 global global:effect_handler_cross_function.wado::$const_obj_3: ref Array<u8> = array.new_fixed<u8>(44, 32, 102, 105, 110, 97, 108, 61);
 global global:effect_handler_cross_function.wado::$const_obj_4: ref Array<u8> = array.new_fixed<u8>(116, 111, 116, 97, 108, 61);
 
 fn "effect_handler_cross_function.wado/run"() with Stdout {
     let c_0: ref "effect_handler_cross_function.wado//CounterState";
     let $local_2_2: ref "core:prelude/string.wado//String";
-    let $save_Counter: ref null "effect_handler_cross_function.wado//$Dispatch_Counter";
-    let $d_Counter: ref "effect_handler_cross_function.wado//$Dispatch_Counter";
-    let $local_0_10: ref null "effect_handler_cross_function.wado//$Dispatch_Counter";
+    let $save_effect_handler_cross_function.wado/Counter: ref null "effect_handler_cross_function.wado//$Dispatch_effect_handler_cross_function.wado/Counter";
+    let $d_effect_handler_cross_function.wado/Counter: ref "effect_handler_cross_function.wado//$Dispatch_effect_handler_cross_function.wado/Counter";
+    let $local_0_10: ref null "effect_handler_cross_function.wado//$Dispatch_effect_handler_cross_function.wado/Counter";
     let $local_2_12: i32;
     let $local_2_15: i32;
     let $local_2_18: i32;
     let x_49: i64;
     let $sroa_$f_buf_98: ref "core:prelude/string.wado//String";
     c_0 = struct.new "effect_handler_cross_function.wado//CounterState" { value: 0 };
-    global:effect_handler_cross_function.wado::$effect_Counter = local.tee $d_Counter(struct.new "effect_handler_cross_function.wado//$Dispatch_Counter" { outer: local.tee $save_Counter(global:effect_handler_cross_function.wado::$effect_Counter), op_next: struct.new "canonical//CanonicalClosure_0" { env: struct.new "effect_handler_cross_function.wado//$Closure_0" { $capture_0: c_0 }, func: ref.func "closure/effect_handler_cross_function.wado/$closure_wrapper_0" } });
-    $local_2_12 = $inline__effect_dispatch__Counter__next_2: block -> i32 {
-        if @likely(ref.is_null(local.tee $local_0_10(global:effect_handler_cross_function.wado::$effect_Counter)) == 0) {
-            global:effect_handler_cross_function.wado::$effect_Counter = local.tee $d_Counter(ref.as_non_null($local_0_10)).outer;
+    global:effect_handler_cross_function.wado::$effect_effect_handler_cross_function.wado/Counter = local.tee $d_effect_handler_cross_function.wado/Counter(struct.new "effect_handler_cross_function.wado//$Dispatch_effect_handler_cross_function.wado/Counter" { outer: local.tee $save_effect_handler_cross_function.wado/Counter(global:effect_handler_cross_function.wado::$effect_effect_handler_cross_function.wado/Counter), op_next: struct.new "canonical//CanonicalClosure_0" { env: struct.new "effect_handler_cross_function.wado//$Closure_0" { $capture_0: c_0 }, func: ref.func "closure/effect_handler_cross_function.wado/$closure_wrapper_0" } });
+    $local_2_12 = $inline__effect_dispatch__effect_handler_cross_function_wado_Counter__next_2: block -> i32 {
+        if @likely(ref.is_null(local.tee $local_0_10(global:effect_handler_cross_function.wado::$effect_effect_handler_cross_function.wado/Counter)) == 0) {
+            global:effect_handler_cross_function.wado::$effect_effect_handler_cross_function.wado/Counter = local.tee $d_effect_handler_cross_function.wado/Counter(ref.as_non_null($local_0_10)).outer;
             $local_2_12 = block -> i32 {
                 let $indirect_call_1: ref "canonical//CanonicalClosure_0";
-                call_ref "functype/$canonical_closure_fn_0"($indirect_call_1.func, local.tee $indirect_call_1(ref.cast "canonical//CanonicalClosure_0"($d_Counter.op_next)).env);
+                call_ref "functype/$canonical_closure_fn_0"($indirect_call_1.func, local.tee $indirect_call_1(ref.cast "canonical//CanonicalClosure_0"($d_effect_handler_cross_function.wado/Counter.op_next)).env);
             };
-            global:effect_handler_cross_function.wado::$effect_Counter = $local_0_10;
-            break $inline__effect_dispatch__Counter__next_2: $local_2_12;
+            global:effect_handler_cross_function.wado::$effect_effect_handler_cross_function.wado/Counter = $local_0_10;
+            break $inline__effect_dispatch__effect_handler_cross_function_wado_Counter__next_2: $local_2_12;
         } else {
             "core:rt/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("no handler installed for `Counter::next`"), used: 40 });
             unreachable;
         }
         unreachable;
     };
-    $local_2_15 = $inline__effect_dispatch__Counter__next_3: block -> i32 {
-        if @likely(ref.is_null(local.tee $local_0_10(global:effect_handler_cross_function.wado::$effect_Counter)) == 0) {
-            global:effect_handler_cross_function.wado::$effect_Counter = local.tee $d_Counter(ref.as_non_null($local_0_10)).outer;
+    $local_2_15 = $inline__effect_dispatch__effect_handler_cross_function_wado_Counter__next_3: block -> i32 {
+        if @likely(ref.is_null(local.tee $local_0_10(global:effect_handler_cross_function.wado::$effect_effect_handler_cross_function.wado/Counter)) == 0) {
+            global:effect_handler_cross_function.wado::$effect_effect_handler_cross_function.wado/Counter = local.tee $d_effect_handler_cross_function.wado/Counter(ref.as_non_null($local_0_10)).outer;
             $local_2_15 = block -> i32 {
-                call_ref "functype/$canonical_closure_fn_0"($indirect_call_1.func, local.tee $indirect_call_1(ref.cast "canonical//CanonicalClosure_0"($d_Counter.op_next)).env);
+                call_ref "functype/$canonical_closure_fn_0"($indirect_call_1.func, local.tee $indirect_call_1(ref.cast "canonical//CanonicalClosure_0"($d_effect_handler_cross_function.wado/Counter.op_next)).env);
             };
-            global:effect_handler_cross_function.wado::$effect_Counter = $local_0_10;
-            break $inline__effect_dispatch__Counter__next_3: $local_2_15;
+            global:effect_handler_cross_function.wado::$effect_effect_handler_cross_function.wado/Counter = $local_0_10;
+            break $inline__effect_dispatch__effect_handler_cross_function_wado_Counter__next_3: $local_2_15;
         } else {
             "core:rt/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("no handler installed for `Counter::next`"), used: 40 });
             unreachable;
         }
         unreachable;
     };
-    $local_2_18 = $inline__effect_dispatch__Counter__next_4: block -> i32 {
-        if @likely(ref.is_null(local.tee $local_0_10(global:effect_handler_cross_function.wado::$effect_Counter)) == 0) {
-            global:effect_handler_cross_function.wado::$effect_Counter = local.tee $d_Counter(ref.as_non_null($local_0_10)).outer;
+    $local_2_18 = $inline__effect_dispatch__effect_handler_cross_function_wado_Counter__next_4: block -> i32 {
+        if @likely(ref.is_null(local.tee $local_0_10(global:effect_handler_cross_function.wado::$effect_effect_handler_cross_function.wado/Counter)) == 0) {
+            global:effect_handler_cross_function.wado::$effect_effect_handler_cross_function.wado/Counter = local.tee $d_effect_handler_cross_function.wado/Counter(ref.as_non_null($local_0_10)).outer;
             $local_2_18 = block -> i32 {
-                call_ref "functype/$canonical_closure_fn_0"($indirect_call_1.func, local.tee $indirect_call_1(ref.cast "canonical//CanonicalClosure_0"($d_Counter.op_next)).env);
+                call_ref "functype/$canonical_closure_fn_0"($indirect_call_1.func, local.tee $indirect_call_1(ref.cast "canonical//CanonicalClosure_0"($d_effect_handler_cross_function.wado/Counter.op_next)).env);
             };
-            global:effect_handler_cross_function.wado::$effect_Counter = $local_0_10;
-            break $inline__effect_dispatch__Counter__next_4: $local_2_18;
+            global:effect_handler_cross_function.wado::$effect_effect_handler_cross_function.wado/Counter = $local_0_10;
+            break $inline__effect_dispatch__effect_handler_cross_function_wado_Counter__next_4: $local_2_18;
         } else {
             "core:rt/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("no handler installed for `Counter::next`"), used: 40 });
             unreachable;
@@ -182,7 +182,7 @@ fn "effect_handler_cross_function.wado/run"() with Stdout {
     $local_2_12 = "effect_handler_cross_function.wado/$cm_binding__Stdout_write_via_stream"($local_2_12);
     "core:rt/write_string_to_stream$dae[add_newline]"($local_2_18, $local_2_2.repr, $local_2_2.used);
     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"($local_2_12);
-    global:effect_handler_cross_function.wado::$effect_Counter = $save_Counter;
+    global:effect_handler_cross_function.wado::$effect_effect_handler_cross_function.wado/Counter = $save_effect_handler_cross_function.wado/Counter;
 }
 
 fn "effect_handler_cross_function.wado/$cm_binding__Stdout_write_via_stream"(data) with Stdout {
@@ -375,24 +375,24 @@ fn "effect_handler_cross_function.wado/effect_handler_cross_function.wado/$Closu
 }
 
 fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$sroa[self.buf]$dae[alt_prefix]"(self, is_negative, digit_count) {
-    let start_29: i32;
+    let start_26: i32;
     if is_negative {
         if @unlikely(local.tee is_negative(self.used + 1) > builtin::array_len(self.repr)) {
             cold_path;
             "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self, is_negative);
         }
-        start_29 = self.used;
+        start_26 = self.used;
         self.used = is_negative;
-        builtin::array_set_u8(self.repr, start_29, 45);
+        builtin::array_set_u8(self.repr, start_26, 45);
     } else {
     }
     if @unlikely(local.tee digit_count(self.used + digit_count) > builtin::array_len(self.repr)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self, digit_count);
     }
-    start_29 = self.used;
+    start_26 = self.used;
     self.used = digit_count;
-    return start_29;
+    return start_26;
 }
 
 fn "closure/effect_handler_cross_function.wado/$closure_wrapper_0"($env) {

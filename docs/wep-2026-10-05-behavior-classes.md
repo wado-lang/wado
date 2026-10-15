@@ -88,7 +88,7 @@ may assume the contract holds, and what follows from that reaches other
 functions, later in time.
 
 ```wado
-let c = char::from_u32_unchecked(0xD800);   // a surrogate is not a char
+let c = unchecked char::from_u32(0xD800);   // a surrogate is not a char
 let kind = match c {
     '\0'..='\u{D7FF}' => 0,
     '\u{E000}'..='\u{10FFFF}' => 1,          // exhaustive for every valid char
@@ -103,11 +103,12 @@ UTF-8 may skip a closing quote, and a map lookup on the string may miss.
 ```wado
 let buf = "user=alice;token=XYZ";
 let name = buf.as_str_slice().slice(5, 10);
-let bad = name.slice_unchecked(0, 11);       // past the end of `name`
+let bad = unchecked name.slice(0, 11);       // past the end of `name`
 ```
 
-`bad` reads `"alice;token"`. The read stays inside the backing array, so the
-instance is memory-safe, but the application has leaked data.
+In a build that does not check contracts, `bad` reads `"alice;token"`. The read
+stays inside the backing array, so the instance is memory-safe, but the
+application has leaked data.
 
 ### Contract violation: a second axis
 
@@ -115,14 +116,14 @@ Whether reaching a behavior is a bug is independent of its class:
 
 | Class         | Not a bug                                     | Contract violation                                                         |
 | ------------- | --------------------------------------------- | -------------------------------------------------------------------------- |
-| Unspecified   | initialization order, ambient calls, `ref_eq` | `get_unchecked` out of range                                               |
+| Unspecified   | initialization order, ambient calls, `ref_eq` | `unchecked xs[i]` out of range                                             |
 | Host-defined  | NaN bits, relaxed SIMD, `InsecureSeed`        | none                                                                       |
-| Unconstrained | none                                          | `char::from_u32_unchecked` on a non-scalar, `slice_unchecked` off the view |
+| Unconstrained | none                                          | `unchecked char::from_u32` on a non-scalar, `unchecked slice` off the view |
 
 The axis earns its term by what a build may do. A contract violation may be
-detected and trapped, so the test world can keep the checks an `_unchecked`
-function elides. Trapping on an initialization order that differs from what a
-reader expected would be wrong.
+detected and trapped, so the test world can keep the checks a call marked
+`unchecked` skips elsewhere. Trapping on an initialization order that differs
+from what a reader expected would be wrong.
 
 Unconstrained behavior arises only from a contract violation. This keeps any
 legitimate undefined behavior out of the language.
@@ -132,7 +133,7 @@ legitimate undefined behavior out of the language.
 The suffix does not decide the class. What decides it is whether a violation
 breaks a type's invariant.
 
-- A violation that breaks none is unspecified. `get_unchecked` out of range
+- A violation that breaks none is unspecified. `unchecked xs[i]` out of range
   returns an element of the backing array, which is a valid `T`.
 - A violation that breaks one is unconstrained: a `char` that is not a scalar
   value, a `String` that is not UTF-8, a `StrSlice` whose ends are not

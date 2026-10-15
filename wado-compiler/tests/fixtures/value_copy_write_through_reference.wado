@@ -1,0 +1,73 @@
+// A by-value argument keeps its copy when a later argument writes its storage
+// through a reference: one no binding names, one a call returned, or one held
+// in what another reference names.
+
+struct Point {
+    x: i32,
+}
+
+struct Holder {
+    p: &Point,
+}
+
+struct MutHolder {
+    p: &mut Point,
+}
+
+#[inline("never")]
+fn read_x(a: Point, b: i32) -> i32 {
+    return a.x * 100 + b;
+}
+
+#[inline("never")]
+fn set(q: &mut Point) -> i32 {
+    q.x = 5;
+    return 1;
+}
+
+#[inline("never")]
+fn through_param(r: &mut Point) -> i32 {
+    return read_x(*r, then: { r.x = 5; 1 });
+}
+
+#[inline("never")]
+fn pick(a: &mut Point, c: &mut Point, first: bool) -> &mut Point {
+    if first {
+        return a;
+    }
+    return c;
+}
+
+#[inline("never")]
+fn read_two_hops(r: &Holder, q: &mut Point) -> i32 {
+    return read_x(*r.p, set(q));
+}
+
+#[inline("never")]
+fn write_two_hops(r: &MutHolder, q: &Point) -> i32 {
+    return read_x(*q, then: { r.p.x = 5; 1 });
+}
+
+fn point() -> Point {
+    return Point { x: builtin::black_box(1) };
+}
+
+export fn run() {
+    let mut pt = point();
+    assert through_param(&mut pt) == 101;
+    let mut a = point();
+    let mut c = point();
+    let s = pick(&mut a, &mut c, builtin::black_box(true));
+    assert read_x(a, then: { s.x = 6; 1 }) == 101;
+    let mut t = point();
+    let h = Holder { p: &t };
+    assert read_two_hops(&h, &mut t) == 101;
+    let mut u = point();
+    let mh = MutHolder { p: &mut u };
+    assert write_two_hops(&mh, &u) == 101;
+}
+
+__DATA__
+{
+    "stdout": ""
+}

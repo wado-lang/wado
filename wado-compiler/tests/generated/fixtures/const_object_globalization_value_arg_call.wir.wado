@@ -74,7 +74,7 @@ global mut global:const_object_globalization_value_arg_call.wado::$const_obj_1: 
 fn "const_object_globalization_value_arg_call.wado/encode_key"(name) {
     let $load_3: ref Array<u8>;
     let s_1: ref "core:prelude/string.wado//String";
-    let start_15: i32;
+    let start_12: i32;
     let new_used_32: i32;
     let start_33: i32;
     s_1 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(name.used + 2000), used: 0 };
@@ -82,18 +82,18 @@ fn "const_object_globalization_value_arg_call.wado/encode_key"(name) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"(s_1, 1);
     }
-    start_15 = s_1.used;
+    start_12 = s_1.used;
     s_1.used = 1;
-    builtin::array_set_u8(local.tee $load_3(s_1.repr), start_15, 34);
-    start_15 = name.used;
-    if @unlikely(local.tee new_used_32(1 + (2 + start_15)) > builtin::array_len($load_3)) {
+    builtin::array_set_u8(local.tee $load_3(s_1.repr), start_12, 34);
+    start_12 = name.used;
+    if @unlikely(local.tee new_used_32(1 + (2 + start_12)) > builtin::array_len($load_3)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"(s_1, new_used_32);
     }
     start_33 = s_1.used;
     s_1.used = new_used_32;
-    builtin::array_copy<u8>(local.tee $load_3(s_1.repr), start_33, name.repr, 0, start_15);
-    builtin::array_copy<u8>($load_3, start_33 + start_15, global:const_object_globalization_value_arg_call.wado::$const_obj_0, 0, 2);
+    builtin::array_copy<u8>(local.tee $load_3(s_1.repr), start_33, name.repr, 0, start_12);
+    builtin::array_copy<u8>($load_3, start_33 + start_12, global:const_object_globalization_value_arg_call.wado::$const_obj_0, 0, 2);
     return s_1;
 }
 

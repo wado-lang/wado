@@ -325,9 +325,9 @@ fn build_seq(
     let n = toks.len();
     let mut i = start;
     while i < n {
-        match toks.get_unchecked(i) {
+        match unchecked toks[i] {
             InlineTok::Node(idx) => {
-                current.push(nodes.get_unchecked(idx));
+                current.push(unchecked nodes[idx]);
                 i += 1;
             },
             InlineTok::Delim(d) => {
@@ -367,10 +367,10 @@ fn flatten_construct(toks: &List<InlineTok>, nodes: &List<Node>, start: i32, cur
     let mut i = start;
     let mut nesting = 1;
     while i < n && nesting > 0 {
-        match toks.get_unchecked(i) {
+        match unchecked toks[i] {
             InlineTok::Open(_) => nesting += 1,
             InlineTok::Close => nesting -= 1,
-            InlineTok::Node(idx) => current.push(nodes.get_unchecked(idx)),
+            InlineTok::Node(idx) => current.push(unchecked nodes[idx]),
             InlineTok::Delim(d) => {
                 if d.count > 0 {
                     current.push(Node::Text(repeat_char(d.ch, d.count)));

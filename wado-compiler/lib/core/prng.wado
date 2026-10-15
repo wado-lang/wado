@@ -245,24 +245,28 @@ fn sample_span<R: Rng>(rng: &mut R, span: u64) -> u64 {
 
 // The distance between two signed bounds is unsigned, and stays exact at the
 // full width where `high - low` would overflow.
-fn sample_i64_inclusive<R: Rng>(rng: &mut R, low: i64, high: i64) -> i64 {
-    assert low <= high, "random_range: the range is empty";
+fn sample_i64_inclusive<R: Rng>(rng: &mut R, low: i64, high: i64) -> i64
+    contract low <= high, "the range given random_range must not be empty"
+{
     return (low as u64 + sample_span(rng, high as u64 - low as u64)) as i64;
 }
 
-fn sample_u64_inclusive<R: Rng>(rng: &mut R, low: u64, high: u64) -> u64 {
-    assert low <= high, "random_range: the range is empty";
+fn sample_u64_inclusive<R: Rng>(rng: &mut R, low: u64, high: u64) -> u64
+    contract low <= high, "the range given random_range must not be empty"
+{
     return low + sample_span(rng, high - low);
 }
 
-fn sample_i64_exclusive<R: Rng>(rng: &mut R, low: i64, high: i64) -> i64 {
-    assert low < high, "random_range: the range is empty";
-    return sample_i64_inclusive(rng, low, high - 1);
+fn sample_i64_exclusive<R: Rng>(rng: &mut R, low: i64, high: i64) -> i64
+    contract low < high, "the range given random_range must not be empty"
+{
+    return unchecked sample_i64_inclusive(rng, low, high - 1);
 }
 
-fn sample_u64_exclusive<R: Rng>(rng: &mut R, low: u64, high: u64) -> u64 {
-    assert low < high, "random_range: the range is empty";
-    return sample_u64_inclusive(rng, low, high - 1);
+fn sample_u64_exclusive<R: Rng>(rng: &mut R, low: u64, high: u64) -> u64
+    contract low < high, "the range given random_range must not be empty"
+{
+    return unchecked sample_u64_inclusive(rng, low, high - 1);
 }
 
 impl SampleUniform for i8 {

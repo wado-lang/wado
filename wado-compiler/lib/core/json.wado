@@ -164,7 +164,7 @@ test "json_plain_quad agrees with json_plain_byte on every adjacent pair" {
 fn json_escape_free<S: AsStrSlice>(s: S) -> bool {
     let n = s.len();
     for let mut i = 0; i < n; i += 1 {
-        if json_plain_byte(s.get_byte_unchecked(i)) {
+        if json_plain_byte(unchecked s.byte_at(i)) {
             continue;
         }
         return false;
@@ -181,15 +181,15 @@ pub fn write_escaped_string<S: AsStrSlice>(buf: &mut String, s: S) {
     let n = s.len();
     let mut i = 0;
     while i + 4 <= n {
-        let lo = s.get_byte_unchecked(i) as u32 | s.get_byte_unchecked(i + 1) as u32 << 8;
-        let hi = s.get_byte_unchecked(i + 2) as u32 | s.get_byte_unchecked(i + 3) as u32 << 8;
+        let lo = unchecked s.byte_at(i) as u32 | unchecked s.byte_at(i + 1) as u32 << 8;
+        let hi = unchecked s.byte_at(i + 2) as u32 | unchecked s.byte_at(i + 3) as u32 << 8;
         if !json_plain_quad(lo | hi << 16) {
             break;
         }
         i += 4;
     }
     while i < n {
-        if json_plain_byte(s.get_byte_unchecked(i)) {
+        if json_plain_byte(unchecked s.byte_at(i)) {
             i += 1;
             continue;
         }
@@ -205,7 +205,7 @@ pub fn write_escaped_string<S: AsStrSlice>(buf: &mut String, s: S) {
 /// its caller, a byte scan whose escape arm is taken rarely, so the scan carries
 /// a call instead of a range append and a six-arm match with a format in it.
 fn flush_run_and_escape<S: AsStrSlice>(buf: &mut String, s: S, run_start: i32, i: i32, b: u8) {
-    buf.push_str_range_unchecked(s, run_start, i);
+    buf.push_str(unchecked s.slice(run_start, i));
     match b {
         0x22 => buf.push_str("\\\""),
         0x5C => buf.push_str("\\\\"),
@@ -228,7 +228,7 @@ fn write_escaped_string_from<S: AsStrSlice>(buf: &mut String, s: S, first: i32) 
     let n = s.len();
     let mut run_start = 0;
     for let mut i = first; i < n; i += 1 {
-        let b = s.get_byte_unchecked(i);
+        let b = unchecked s.byte_at(i);
         if json_plain_byte(b) {
             continue;
         }
@@ -236,7 +236,7 @@ fn write_escaped_string_from<S: AsStrSlice>(buf: &mut String, s: S, first: i32) 
         flush_run_and_escape(buf, s, run_start, i, b);
         run_start = i + 1;
     }
-    buf.push_str_range_unchecked(s, run_start, n);
+    buf.push_str(unchecked s.slice(run_start, n));
     buf.push('"');
 }
 
@@ -1075,8 +1075,9 @@ fn scanned_to_bits(n: &ScannedNumber, input: &ByteSlice, format: &BinaryFormat) 
 
 /// True when `b` is one of JSON's four whitespace bytes. `json_ws_end` is the
 /// only caller, and the `b > b' '` it tests first is what bounds `b` here.
-fn is_json_ws(b: i32) -> bool {
-    assert b < 64;
+fn is_json_ws(b: i32) -> bool
+    contract b < 64
+{
     let ws_set = 1 as u64 << b' ' | 1 as u64 << b'\t' | 1 as u64 << b'\n' | 1 as u64 << b'\r';
     return ws_set >> b as u64 & 1 != 0;
 }
@@ -1138,7 +1139,7 @@ fn integral_digits(
     let mut significant: i64 = 0;
     for let mut k: i64 = 0; k < mantissa_len; k += 1 {
         let at = n.mantissa_start + k as i32 + if k >= n.int_digits as i64 { 1 } else { 0 };
-        let b = input.get_unchecked(at);
+        let b = unchecked input[at];
         if k >= kept {
             if b as i32 != b'0' {
                 builtin::cold_path();
@@ -1239,7 +1240,7 @@ impl JsonDeserializer {
         if self.pos >= self.input.len() {
             return -1;
         }
-        return self.input.get_unchecked(self.pos) as i32;
+        return unchecked self.input[self.pos] as i32;
     }
 
     pub fn advance(&mut self) {
@@ -1255,7 +1256,7 @@ impl JsonDeserializer {
         if pos >= len {
             return -1;
         }
-        let b = self.input.get_unchecked(pos) as i32;
+        let b = unchecked self.input[pos] as i32;
         if json_ws_end(b) {
             return b;
         }
@@ -1265,7 +1266,7 @@ impl JsonDeserializer {
         }
         // A lone space separates a key from its value, a large share of the
         // runs on indented input. Settling it here spares the call.
-        let next = self.input.get_unchecked(pos + 1) as i32;
+        let next = unchecked self.input[pos + 1] as i32;
         if json_ws_end(next) {
             self.pos = pos + 1;
             return next;
@@ -1284,10 +1285,10 @@ impl JsonDeserializer {
         let len = self.input.len();
         let mut pos = from;
         while pos + 4 <= len {
-            let b0 = self.input.get_unchecked(pos) as i32;
-            let b1 = self.input.get_unchecked(pos + 1) as i32;
-            let b2 = self.input.get_unchecked(pos + 2) as i32;
-            let b3 = self.input.get_unchecked(pos + 3) as i32;
+            let b0 = unchecked self.input[pos] as i32;
+            let b1 = unchecked self.input[pos + 1] as i32;
+            let b2 = unchecked self.input[pos + 2] as i32;
+            let b3 = unchecked self.input[pos + 3] as i32;
             if json_ws_end(b0) {
                 self.pos = pos;
                 return b0;
@@ -1307,7 +1308,7 @@ impl JsonDeserializer {
             pos += 4;
         }
         while pos < len {
-            let b = self.input.get_unchecked(pos) as i32;
+            let b = unchecked self.input[pos] as i32;
             if json_ws_end(b) {
                 self.pos = pos;
                 return b;
@@ -1381,7 +1382,7 @@ impl JsonDeserializer {
         if self.pos >= self.input.len() {
             return DeserializeError::eof(self.pos as i64);
         }
-        let b = self.input.get_unchecked(self.pos) as i32;
+        let b = unchecked self.input[self.pos] as i32;
         return DeserializeError::malformed(
             `expected '${c as u8 as char}', found '${b as u8 as char}'`,
             self.pos as i64,
@@ -1405,7 +1406,7 @@ impl JsonDeserializer {
         let mut valid = true;
         let mut stop = -1;
         while pos < len {
-            let b = self.input.get_unchecked(pos) as i32;
+            let b = unchecked self.input[pos] as i32;
             // Printable ASCII in one unsigned compare, so a plain byte pays one
             // subtract for the control check and controls take the rarer
             // branch below. Testing `json_plain_byte` here instead measured 3%
@@ -1516,7 +1517,7 @@ impl JsonDeserializer {
             builtin::cold_path();
             return Result::Err(DeserializeError::eof(self.pos as i64));
         }
-        let esc = self.input.get_unchecked(self.pos);
+        let esc = unchecked self.input[self.pos];
         let decoded: u8 = match esc {
             b'"' | b'\\' | b'/' => esc,
             b'n' => b'\n',
@@ -1548,7 +1549,7 @@ impl JsonDeserializer {
         }
         let mut code: u32 = 0;
         for let mut i = 0; i < 4; i += 1 {
-            let c = self.input.get_unchecked(self.pos + i) as u8 as char;
+            let c = unchecked self.input[self.pos + i] as u8 as char;
             if !c.is_hexdigit() {
                 builtin::cold_path();
                 return Result::Err(DeserializeError::malformed(
@@ -1556,7 +1557,7 @@ impl JsonDeserializer {
                     start as i64,
                 ));
             }
-            code = code * 16 + c.hex_digit_value() as u32;
+            code = code * 16 + unchecked c.hex_digit_value() as u32;
         }
         self.pos += 4;
         return Result::Ok(code);
@@ -1581,8 +1582,8 @@ impl JsonDeserializer {
             // `read_hex4`; only a *valid* non-low-surrogate is "unpaired".)
             let mut lo: u32 = 0;
             let paired = if self.pos + 2 <= self.input.len()
-                && self.input.get_unchecked(self.pos) as i32 == b'\\'
-                && self.input.get_unchecked(self.pos + 1) as i32 == b'u' {
+                && unchecked self.input[self.pos] as i32 == b'\\'
+                && unchecked self.input[self.pos + 1] as i32 == b'u' {
                 self.pos += 2;
                 lo = self.read_hex4()?;
                 0xDC00 <= lo <= 0xDFFF;
@@ -1595,9 +1596,7 @@ impl JsonDeserializer {
             }
             code = 0x10000 + (hi - 0xD800 << 10) + (lo - 0xDC00);
         }
-        return Result::Ok(
-            char::from_u32(code).expect("a lone surrogate is rejected above, so `code` is a scalar value"),
-        );
+        return Result::Ok(unchecked char::from_u32(code));
     }
 
     /// Advances past the JSON number at `pos` without allocating a String,
@@ -1627,7 +1626,7 @@ impl JsonDeserializer {
                 self.pos = pos;
                 return Result::Err(DeserializeError::eof(pos as i64));
             }
-            first = input.get_unchecked(pos) as i32;
+            first = unchecked input[pos] as i32;
         }
         if digit_value(first) > 9 {
             builtin::cold_path();
@@ -1644,7 +1643,7 @@ impl JsonDeserializer {
         let mut inexact = false;
         if first == b'0' {
             pos += 1;
-            if pos < len && digit_value(input.get_unchecked(pos) as i32) <= 9 {
+            if pos < len && digit_value(unchecked input[pos] as i32) <= 9 {
                 builtin::cold_path();
                 self.pos = int_start;
                 return Result::Err(DeserializeError::malformed("leading zero in number", int_start as i64));
@@ -1657,7 +1656,7 @@ impl JsonDeserializer {
         }
         let mut digits: u64 = 0;
         while pos < cap {
-            let d = digit_value(input.get_unchecked(pos) as i32);
+            let d = digit_value(unchecked input[pos] as i32);
             if d > 9 {
                 break;
             }
@@ -1666,8 +1665,8 @@ impl JsonDeserializer {
         }
         let mut acc_digits = pos - sig_start;
         if pos == cap {
-            while pos < len && digit_value(input.get_unchecked(pos) as i32) <= 9 {
-                inexact = inexact || input.get_unchecked(pos) as i32 != b'0';
+            while pos < len && digit_value(unchecked input[pos] as i32) <= 9 {
+                inexact = inexact || unchecked input[pos] as i32 != b'0';
                 pos += 1;
             }
         }
@@ -1675,14 +1674,14 @@ impl JsonDeserializer {
         let mut frac_digits = 0;
         let mut frac_lead_zeros = 0;
         let mut has_frac_or_exp = false;
-        if pos < len && input.get_unchecked(pos) as i32 == b'.' {
+        if pos < len && unchecked input[pos] as i32 == b'.' {
             has_frac_or_exp = true;
             pos += 1;
             let point_end = pos;
             if digits == 0 {
                 // Leading fraction zeros shift the scale, not the mantissa.
                 let lead_start = pos;
-                while pos < len && input.get_unchecked(pos) as i32 == b'0' {
+                while pos < len && unchecked input[pos] as i32 == b'0' {
                     pos += 1;
                 }
                 frac_lead_zeros = pos - lead_start;
@@ -1693,7 +1692,7 @@ impl JsonDeserializer {
             }
             let frac_start = pos;
             while pos < frac_cap {
-                let d = digit_value(input.get_unchecked(pos) as i32);
+                let d = digit_value(unchecked input[pos] as i32);
                 if d > 9 {
                     break;
                 }
@@ -1703,8 +1702,8 @@ impl JsonDeserializer {
             frac_digits = pos - frac_start;
             acc_digits += frac_digits;
             if pos == frac_cap {
-                while pos < len && digit_value(input.get_unchecked(pos) as i32) <= 9 {
-                    inexact = inexact || input.get_unchecked(pos) as i32 != b'0';
+                while pos < len && digit_value(unchecked input[pos] as i32) <= 9 {
+                    inexact = inexact || unchecked input[pos] as i32 != b'0';
                     pos += 1;
                 }
             }
@@ -1717,13 +1716,13 @@ impl JsonDeserializer {
         let mantissa_end = pos;
         let mut exp: i64 = 0;
         if pos < len {
-            let eb = input.get_unchecked(pos) as i32;
+            let eb = unchecked input[pos] as i32;
             if eb == b'e' || eb == b'E' {
                 has_frac_or_exp = true;
                 pos += 1;
                 let mut exp_neg = false;
                 if pos < len {
-                    match input.get_unchecked(pos) as u8 as char {
+                    match unchecked input[pos] as u8 as char {
                         '-' => {
                             exp_neg = true;
                             pos += 1;
@@ -1737,7 +1736,7 @@ impl JsonDeserializer {
                 }
                 let exp_start = pos;
                 while pos < len {
-                    let d = digit_value(input.get_unchecked(pos) as i32);
+                    let d = digit_value(unchecked input[pos] as i32);
                     if d > 9 {
                         break;
                     }
@@ -1820,7 +1819,7 @@ impl JsonDeserializer {
             }
             let mut v: u64 = 0;
             while pos < cap {
-                let d = digit_value(input.get_unchecked(pos) as i32);
+                let d = digit_value(unchecked input[pos] as i32);
                 if d > 9 {
                     break;
                 }
@@ -1831,11 +1830,11 @@ impl JsonDeserializer {
                 break fast;
             }
             // A leading zero stands only for the whole integer part.
-            if pos - digits_start > 1 && input.get_unchecked(digits_start) as i32 == b'0' {
+            if pos - digits_start > 1 && unchecked input[digits_start] as i32 == b'0' {
                 break fast;
             }
             if pos < len {
-                let tail = input.get_unchecked(pos) as i32;
+                let tail = unchecked input[pos] as i32;
                 if tail == b'.' || tail == b'e' || tail == b'E' || digit_value(tail) <= 9 {
                     break fast;
                 }
@@ -1919,7 +1918,7 @@ impl JsonDeserializer {
                 // digit appended. Append it with an overflow check — no String
                 // round-trip (the token is `[pos - int_digits, pos)`, so the
                 // final digit is the byte just before `pos`).
-                let last = (self.input.get_unchecked(self.pos - 1) - b'0') as u64;
+                let last = (unchecked self.input[self.pos - 1] - b'0') as u64;
                 if n.digits > (u64::MAX - last) / 10 {
                     builtin::cold_path();
                     return Result::Err(DeserializeError::overflow(
@@ -1993,36 +1992,42 @@ impl JsonDeserializer {
         }
     }
 
-    /// Inline check for "true" / "false" / "null". Assumes first byte already matched.
-    /// Returns Ok if the literal matches and advances pos past it.
-    fn expect_true(&mut self) -> Result<(), DeserializeError> {
+    /// Inline check for "true" / "false" / "null", whose first byte the caller
+    /// matched. Returns Ok if the literal matches and advances pos past it.
+    fn expect_true(&mut self) -> Result<(), DeserializeError>
+        contract self.pos < self.input.len() && unchecked self.input[self.pos] == b't'
+    {
         if self.pos + 4 <= self.input.len()
-            && self.input.get_unchecked(self.pos + 1) as i32 == b'r'
-            && self.input.get_unchecked(self.pos + 2) as i32 == b'u'
-            && self.input.get_unchecked(self.pos + 3) as i32 == b'e' {
+            && unchecked self.input[self.pos + 1] as i32 == b'r'
+            && unchecked self.input[self.pos + 2] as i32 == b'u'
+            && unchecked self.input[self.pos + 3] as i32 == b'e' {
             self.pos += 4;
             return Result::Ok(());
         }
         return Result::Err(DeserializeError::malformed("expected 'true'", self.pos as i64));
     }
 
-    fn expect_false(&mut self) -> Result<(), DeserializeError> {
+    fn expect_false(&mut self) -> Result<(), DeserializeError>
+        contract self.pos < self.input.len() && unchecked self.input[self.pos] == b'f'
+    {
         if self.pos + 5 <= self.input.len()
-            && self.input.get_unchecked(self.pos + 1) as i32 == b'a'
-            && self.input.get_unchecked(self.pos + 2) as i32 == b'l'
-            && self.input.get_unchecked(self.pos + 3) as i32 == b's'
-            && self.input.get_unchecked(self.pos + 4) as i32 == b'e' {
+            && unchecked self.input[self.pos + 1] as i32 == b'a'
+            && unchecked self.input[self.pos + 2] as i32 == b'l'
+            && unchecked self.input[self.pos + 3] as i32 == b's'
+            && unchecked self.input[self.pos + 4] as i32 == b'e' {
             self.pos += 5;
             return Result::Ok(());
         }
         return Result::Err(DeserializeError::malformed("expected 'false'", self.pos as i64));
     }
 
-    fn expect_null(&mut self) -> Result<(), DeserializeError> {
+    fn expect_null(&mut self) -> Result<(), DeserializeError>
+        contract self.pos < self.input.len() && unchecked self.input[self.pos] == b'n'
+    {
         if self.pos + 4 <= self.input.len()
-            && self.input.get_unchecked(self.pos + 1) as i32 == b'u'
-            && self.input.get_unchecked(self.pos + 2) as i32 == b'l'
-            && self.input.get_unchecked(self.pos + 3) as i32 == b'l' {
+            && unchecked self.input[self.pos + 1] as i32 == b'u'
+            && unchecked self.input[self.pos + 2] as i32 == b'l'
+            && unchecked self.input[self.pos + 3] as i32 == b'l' {
             self.pos += 4;
             return Result::Ok(());
         }
@@ -2113,13 +2118,13 @@ impl JsonDeserializer {
                 return self.skip_string();
             },
             't' => {
-                return self.expect_true();
+                return unchecked self.expect_true();
             },
             'f' => {
-                return self.expect_false();
+                return unchecked self.expect_false();
             },
             'n' => {
-                return self.expect_null();
+                return unchecked self.expect_null();
             },
             '[' => {
                 self.pos += 1;
@@ -2526,11 +2531,11 @@ impl Deserializer for JsonDeserializer {
         let b = lead as u8 as char;
         match b {
             't' => {
-                self.expect_true()?;
+                (unchecked self.expect_true())?;
                 return Result::Ok(true);
             },
             'f' => {
-                self.expect_false()?;
+                (unchecked self.expect_false())?;
                 return Result::Ok(false);
             },
             _ => {
@@ -2585,7 +2590,7 @@ impl Deserializer for JsonDeserializer {
         // In JSON, only the `null` literal starts with 'n', so a mismatch
         // after it is malformed input rather than "not null".
         if self.peek_after_whitespace() == b'n' {
-            self.expect_null()?;
+            (unchecked self.expect_null())?;
             return Result::Ok(true);
         }
         return Result::Ok(false);
@@ -2762,8 +2767,8 @@ fn write_canonical_f32(buf: &mut String, v: f32) -> Result<(), SerializeError> {
 fn utf16_cmp(a: &String, b: &String) -> Ordering {
     let n = i32::min(a.len(), b.len());
     for let mut i = 0; i < n; i += 1 {
-        let x = a.get_byte_unchecked(i);
-        let y = b.get_byte_unchecked(i);
+        let x = unchecked a.byte_at(i);
+        let y = unchecked b.byte_at(i);
         if x == y {
             continue;
         }

@@ -102,6 +102,8 @@ belongs to a caller's own claims struct until this module carries both.
 
 #### `pub fn validate_time(&self, now: i64, leeway: i64 = 0) -> Result<(), JwtError>`
 
+- `contract leeway >= 0, "leeway must widen the window, never narrow it"`
+
 Check `exp` and `nbf` against `now` (seconds since the Unix epoch),
 tolerating `leeway` seconds of clock skew on either side. An absent
 claim is not checked. `leeway` widens the window, so it is never

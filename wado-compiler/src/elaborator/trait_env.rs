@@ -446,6 +446,8 @@ pub(super) struct ImplMethodHeader {
     pub(super) has_body: bool,
     /// Declared `#[unavailable]`: a name reserved, not a method.
     pub(super) is_reserved: bool,
+    /// The span of the first `contract` clause the method writes.
+    pub(super) contract: Option<Span>,
 }
 
 impl ImplMethodHeader {
@@ -475,6 +477,7 @@ fn method_headers(defs: &DefTable, methods: &[ast::Function]) -> Vec<ImplMethodH
             visibility: m.visibility,
             has_body: m.body.is_some(),
             is_reserved: m.unavailable_attr().is_some(),
+            contract: m.contracts().next().map(|clause| clause.span),
         })
         .collect()
 }
@@ -2032,6 +2035,7 @@ pub(super) fn is_user_local(ms: &ModuleSource) -> bool {
         ModuleSource::Core { .. } | ModuleSource::Binding { .. } | ModuleSource::Wasm { .. } => {
             false
         }
+        ModuleSource::Effect(head) => is_user_local(head.module()),
     }
 }
 

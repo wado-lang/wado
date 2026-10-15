@@ -664,6 +664,14 @@ test "char::from_str takes exactly one scalar" {
     assert `${char::from_str("ab").unwrap_err()}` == "too many characters in string";
 }
 
+test "char::try_from takes a scalar value" {
+    assert char::try_from(0x41 as u32) matches { Ok(c) && c == 'A' };
+    assert char::try_from(0x10FFFF as u32) matches { Ok(c) && c == '\u{10FFFF}' };
+    assert `${char::try_from(0xD800 as u32).unwrap_err()}` == "0xd800 is not a Unicode scalar value";
+    assert char::try_from(0x110000 as u32) matches { Err(_) };
+    assert char::try_from(0x3042) matches { Ok(c) && c == 'あ' };
+}
+
 test "from_str reads a view without copying out of it" {
     let view = "id=42,on=true,k=x".as_str_slice();
     assert bool::from_str(view.slice(9, 13)) matches { Ok(v) && v == true };

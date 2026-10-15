@@ -11,7 +11,8 @@
 use super::callgraph::CallGraph;
 use super::confine::ConfinedParams;
 use super::funcset::{FuncKeyMap, FuncKeySet};
-use super::place::{arg_at, carries_storage, is_reference, param_position};
+use super::place::{arg_at, carries_storage, is_reference, param_position, unwrap_borrow};
+use super::retention::CallRetention;
 use crate::flat_package::FlatPackage;
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::lower::plan::value_copy::analyze::{is_owned_value, returned_value};
@@ -28,6 +29,7 @@ pub struct OwnedCalls<'a> {
     returns_owned: &'a FuncKeySet,
     returns_projection: &'a FuncKeyMap<Vec<usize>>,
     builtins: &'a BuiltinDeclarations,
+    retention: &'a CallRetention,
     indirect_owned_returns: Option<&'a IndexSet<TypeId>>,
 }
 
@@ -36,11 +38,13 @@ impl<'a> OwnedCalls<'a> {
         returns_owned: &'a FuncKeySet,
         returns_projection: &'a FuncKeyMap<Vec<usize>>,
         builtins: &'a BuiltinDeclarations,
+        retention: &'a CallRetention,
     ) -> Self {
         Self {
             returns_owned,
             returns_projection,
             builtins,
+            retention,
             indirect_owned_returns: None,
         }
     }
@@ -96,6 +100,32 @@ impl<'a> OwnedCalls<'a> {
     ) -> Option<impl Iterator<Item = &'e TirExpr>> {
         let params = self.projected_params(func)?;
         Some(params.iter().map(move |&p| arg_at(func, args, p)))
+    }
+
+    /// [`Self::projected_args`], each `&` of a call result the callee keeps
+    /// nowhere replaced by that result: storage nothing else reaches, so what
+    /// the callee projects back is as fresh as the result
+    /// (`f().into_iter()`, whose `into_iter(&self)` returns `*self`). A
+    /// borrowed place, or a borrow the callee keeps, stays reachable after the
+    /// call.
+    pub fn handed_back<'e>(
+        &self,
+        func: &'e FunctionRef,
+        args: &'e [CallArg],
+    ) -> Option<impl Iterator<Item = &'e TirExpr>> {
+        let params = self.projected_params(func)?;
+        let retained = self.retention.of_call(func, args.len(), false);
+        Some(params.iter().map(move |&p| {
+            let arg = arg_at(func, args, p);
+            let inner = unwrap_borrow(arg);
+            if matches!(inner.kind, TirExprKind::Call { .. })
+                && !retained.keeps(u32::try_from(p).unwrap())
+            {
+                inner
+            } else {
+                arg
+            }
+        }))
     }
 }
 
@@ -240,6 +270,7 @@ pub fn compute_return_conventions(
     call_graph: &CallGraph,
     return_paths: &ReturnPaths,
     builtins: &BuiltinDeclarations,
+    retention: &CallRetention,
     confined: &ConfinedParams,
 ) -> ReturnConventions {
     let type_table = project.type_table.borrow();
@@ -262,6 +293,7 @@ pub fn compute_return_conventions(
             return_paths,
             &type_table,
             builtins,
+            retention,
             confined,
             &mut owned,
             &mut projection,
@@ -285,6 +317,7 @@ fn settle_component(
     return_paths: &ReturnPaths,
     type_table: &TypeTable,
     builtins: &BuiltinDeclarations,
+    retention: &CallRetention,
     confined: &ConfinedParams,
     owned: &mut FuncKeySet,
     projection: &mut FuncKeyMap<Vec<usize>>,
@@ -317,7 +350,7 @@ fn settle_component(
             continue;
         }
         let (ret_owned, ret_projection) = {
-            let oracle = OwnedCalls::new(owned, projection, builtins);
+            let oracle = OwnedCalls::new(owned, projection, builtins, retention);
             let hands_out_payload = hands_out_payload(&func, return_paths);
             function_return_convention(
                 &func,

@@ -13,7 +13,7 @@ struct Style {
 #[inline(never)]
 fn upper_marker(out: &mut String, b: u8) {
     out.push_str(&"UPPER");
-    out.push_ascii_unchecked(b);
+    unchecked out.push_ascii(b);
 }
 
 #[inline(never)]
@@ -23,11 +23,11 @@ fn inner(st: &Style, out: &mut String, word: &String) {
     }
     let mut i = 0;
     while i < word.len() {
-        let b = word.get_byte_unchecked(i);
+        let b = unchecked word.byte_at(i);
         if st.upper {
             upper_marker(out, b);
         } else {
-            out.push_ascii_unchecked(b);
+            unchecked out.push_ascii(b);
         }
         i = i + 1;
     }

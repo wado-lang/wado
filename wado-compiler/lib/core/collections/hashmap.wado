@@ -85,18 +85,14 @@ impl Hasher for SeededHasher {
         let mut s = folded_multiply(self.state ^ len as u64, self.key);
         let mut i = 0;
         while i + 8 <= len {
-            let w = bytes.get_unchecked(i) as u64 | bytes.get_unchecked(i + 1) as u64 << 8 | bytes.get_unchecked(i + 2) as u64 << 16 | bytes.get_unchecked(
-                i + 3,
-            ) as u64 << 24 | bytes.get_unchecked(i + 4) as u64 << 32 | bytes.get_unchecked(i + 5) as u64 << 40 | bytes.get_unchecked(
-                i + 6,
-            ) as u64 << 48 | bytes.get_unchecked(i + 7) as u64 << 56;
+            let w = unchecked bytes[i] as u64 | unchecked bytes[i + 1] as u64 << 8 | unchecked bytes[i + 2] as u64 << 16 | unchecked bytes[i + 3] as u64 << 24 | unchecked bytes[i + 4] as u64 << 32 | unchecked bytes[i + 5] as u64 << 40 | unchecked bytes[i + 6] as u64 << 48 | unchecked bytes[i + 7] as u64 << 56;
             s = folded_multiply(s ^ w, self.key);
             i += 8;
         }
         if i < len {
             let mut w: u64 = 0;
             for let mut j = len - 1; j >= i; j -= 1 {
-                w = w << 8 | bytes.get_unchecked(j) as u64;
+                w = w << 8 | unchecked bytes[j] as u64;
             }
             s = folded_multiply(s ^ w, self.key);
         }
@@ -219,8 +215,9 @@ impl<K: Hash, V> HashMap<K, V> {
     /// A table of `slots`, a power of two, over the live entries. A dead entry
     /// left out is only missed by a later insert of its key, which appends
     /// anyway.
-    fn rebuild_table(&mut self, slots: i32) {
-        assert slots & slots - 1 == 0;
+    fn rebuild_table(&mut self, slots: i32)
+        contract slots & slots - 1 == 0, "slots must be a power of two"
+    {
         self.table = Array::<i32>::filled(slots, NO_ENTRY);
         self.shift = 32 - i32::ctz(slots);
         let mask = slots - 1;

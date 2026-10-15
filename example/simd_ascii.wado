@@ -19,7 +19,7 @@ fn to_lowercase_simd(input: String) -> String {
 
     let mut i = 0;
     while i + 16 <= len {
-        let chunk = u8x16::from_string(&input, i);
+        let chunk = unchecked u8x16::from_string(&input, i);
 
         // Build mask: bytes >= 'A' && bytes <= 'Z'
         let ge_a = chunk.ge(&upper_a);
@@ -37,11 +37,11 @@ fn to_lowercase_simd(input: String) -> String {
 
     // Handle remaining bytes
     while i < len {
-        let b = input.get_byte_unchecked(i);
+        let b = unchecked input.byte_at(i);
         if b >= b'A' && b <= b'Z' {
-            result.push(char::from_u32_unchecked((b + 0x20 as u8) as u32));
+            result.push((b + 0x20 as u8) as char);
         } else {
-            result.push(char::from_u32_unchecked(b as u32));
+            result.push(b as char);
         }
         i += 1;
     }
@@ -59,7 +59,7 @@ fn count_byte_simd(input: String, target: u8) -> i32 {
 
     let mut i = 0;
     while i + 16 <= len {
-        let chunk = u8x16::from_string(&input, i);
+        let chunk = unchecked u8x16::from_string(&input, i);
         let mask = chunk.eq(&target_vec);
 
         // bitmask: one bit per lane (high bit), then popcount to count matches
@@ -69,7 +69,7 @@ fn count_byte_simd(input: String, target: u8) -> i32 {
 
     // Remaining bytes
     while i < len {
-        if input.get_byte_unchecked(i) == target {
+        if unchecked input.byte_at(i) == target {
             count += 1;
         }
         i += 1;
@@ -88,7 +88,7 @@ fn is_ascii_printable_simd(input: String) -> bool {
 
     let mut i = 0;
     while i + 16 <= len {
-        let chunk = u8x16::from_string(&input, i);
+        let chunk = unchecked u8x16::from_string(&input, i);
 
         let ge_lo = chunk.ge(&lo);
         let le_hi = chunk.le(&hi);
@@ -102,7 +102,7 @@ fn is_ascii_printable_simd(input: String) -> bool {
     }
 
     while i < len {
-        let b = input.get_byte_unchecked(i);
+        let b = unchecked input.byte_at(i);
         if b < 0x20 as u8 || b > 0x7E as u8 {
             return false;
         }
@@ -123,7 +123,7 @@ fn count_digits_simd(input: String) -> i32 {
 
     let mut i = 0;
     while i + 16 <= len {
-        let chunk = u8x16::from_string(&input, i);
+        let chunk = unchecked u8x16::from_string(&input, i);
 
         let ge_0 = chunk.ge(&zero);
         let le_9 = chunk.le(&nine);
@@ -135,7 +135,7 @@ fn count_digits_simd(input: String) -> i32 {
     }
 
     while i < len {
-        let b = input.get_byte_unchecked(i);
+        let b = unchecked input.byte_at(i);
         if b >= b'0' && b <= b'9' {
             count += 1;
         }

@@ -6,7 +6,7 @@ struct Digits { items: List<i32> }
 impl Sequence for Digits {
     type Elem = i32;
     fn len(&self) -> i32 { return self.items.len(); }
-    fn get_unchecked(&self, index: i32) -> i32 { return self.items[index]; }
+    fn at(&self, index: i32) -> i32 { return unchecked self.items[index]; }
 }
 
 impl AsSlice for Digits {
@@ -17,18 +17,19 @@ pub trait Sequence with () {
     type Elem;
 
     fn len(&self) -> i32;
-    fn get_unchecked(&self, index: i32) -> Self::Elem;
+    fn at(&self, index: i32) -> Self::Elem
+        contract 0 <= index < self.len();
 
-    // default bodies, written against `len` and `get_unchecked`
+    // default bodies, written against `len` and `at`
     fn is_empty(&self) -> bool { return self.len() == 0; }
     fn get(&self, index: i32) -> Option<Self::Elem> {
-        return if index < 0 || index >= self.len() { null } else { Option::Some(self.get_unchecked(index)) };
+        return if index < 0 || index >= self.len() { null } else { Option::Some(unchecked self.at(index)) };
     }
     fn first(&self) -> Option<Self::Elem> { return self.get(0); }
     fn last(&self) -> Option<Self::Elem> { return self.get(self.len() - 1); }
     fn position(&self, mut pred: fn mut(Self::Elem) -> bool) -> Option<i32> {
         for let mut i = 0; i < self.len(); i += 1 {
-            if pred(self.get_unchecked(i)) { return Option::Some(i); }
+            if pred(unchecked self.at(i)) { return Option::Some(i); }
         }
         return null;
     }

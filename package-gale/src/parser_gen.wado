@@ -3689,7 +3689,9 @@ fn gen_op_leaf(
     ctx: &mut EmitContext,
     name_counts: &mut List<[String, i32]>,
     proven: &List<i32> = &NO_KINDS,
-) {
+)
+    contract op_is_leaf(op)
+{
     if leaf_is_proven(op, proven) {
         gen_op_leaf_taken(w, op, ctx, name_counts);
         return;
@@ -3735,10 +3737,7 @@ fn gen_op_leaf(
         },
         Wildcard(wop) => emit_leaf(w, &leaf_binding(ctx, &wop.dedup_base, &wop.field), "p.any()"),
         Excluded(eop) => emit_leaf(w, &leaf_binding(ctx, &eop.dedup_base, &eop.field), gen_op_excluded_call(&eop, ctx)),
-        // Non-leaf ops (Repeat / Group / ListLabel) are routed to
-        // their own dispatchers by the caller; reaching here means
-        // the caller's `op_is_leaf` gate was bypassed.
-        Repeat(_) | Group(_) | ListLabel(_) => panic("gen_op_leaf: non-leaf op; caller must guard with op_is_leaf"),
+        Repeat(_) | Group(_) | ListLabel(_) => unreachable(),
     };
 }
 
@@ -5280,18 +5279,17 @@ fn sync_name_counts_for_op_leaf(op: &Op, name_counts: &mut List<[String, i32]>) 
     let _ = dedup_name(&op_leaf_dedup_base(op), name_counts);
 }
 
-/// Read the `dedup_base` slot from any leaf op variant. Panics on
-/// non-leaf ops because callers (`gen_op_leaf`, the list-label sync)
-/// already gate with `op_is_leaf`.
-fn op_leaf_dedup_base(op: &Op) -> String {
+/// Read the `dedup_base` slot from any leaf op variant.
+fn op_leaf_dedup_base(op: &Op) -> String
+    contract op_is_leaf(op)
+{
     return match op {
         Token(t) => t.dedup_base,
         Literal(l) => l.dedup_base,
         RuleCall(r) => r.dedup_base,
         Wildcard(w) => w.dedup_base,
         Excluded(e) => e.dedup_base,
-        // Non-leaf ops have no `dedup_base` to read.
-        Repeat(_) | Group(_) | ListLabel(_) => panic("op_leaf_dedup_base: caller must guard with op_is_leaf"),
+        Repeat(_) | Group(_) | ListLabel(_) => unreachable(),
     };
 }
 

@@ -682,16 +682,16 @@ let y: i8 = 65;
 let d = y as char;  // compile error (i8 can be negative)
 ```
 
-The checked conversions take their place. They answer `None` for a value that
-is not a scalar value. [`core:prelude`](./stdlib-core-prelude.md) has the full
-`char` API.
+Conversions take their place. `char::from_u32` takes a scalar value and traps on
+any other, and `char::try_from` answers an `Err` for a value that is not one.
+[`core:prelude`](./stdlib-core-prelude.md) has the full `char` API.
 
 <!-- {"fixture":"spec_literals_primitives.wado"} -->
 
 ```wado
-let from_u32 = char::from_u32(65 as u32);
-let from_i32 = char::from_i32(65);
-assert from_u32 == Option::Some('A') && from_i32 == Option::Some('A');
+let scalar = char::from_u32(65 as u32);   // traps on a non-scalar value
+let checked = char::try_from(0xD800 as u32);
+assert scalar == 'A' && checked matches { Err(_) };
 ```
 
 A `char` casts to no type but an integer:
@@ -878,6 +878,7 @@ assert steps == [0, 3, 6, 9];
 ```
 
 Iteration never steps past `T`'s maximum. `0 as u8..=255` yields all 256 values
-and stops. A float range does not iterate, but `contains` still works on it.
+and stops. A `char` range steps from `'\u{D7FF}'` straight to `'\u{E000}'`,
+since the surrogates between are no `char`. A float range does not iterate, but `contains` still works on it.
 
 Rationale: [WEP: Range Object](./wep-2026-03-03-range-object.md).

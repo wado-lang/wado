@@ -28,9 +28,9 @@ struct Antlr4Base {
 /// `NameStartChar` admits `\u00C0` upwards, so a rule named `ÀBC` diverges.
 /// `core:icu` answers it, through the classifier the `.g4` parser reads.
 fn is_token_ref_name(view: &LexerView) -> bool {
-    return match char::from_u32(view.char_at(view.start()) as u32) {
-        Some(c) => is_rule_name_upper(c),
-        None => false,
+    return match char::try_from(view.char_at(view.start()) as u32) {
+        Ok(c) => is_rule_name_upper(c),
+        Err(_) => false,
     };
 }
 

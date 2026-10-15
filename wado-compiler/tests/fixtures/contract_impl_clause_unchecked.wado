@@ -1,0 +1,29 @@
+// `unchecked` on a call whose callee is a known impl vouches for that impl's
+// own clauses: a build without contract checks (a CLI program above -O0) runs
+// the twin that leaves them unchecked.
+use { println, Stdout } from "core:cli";
+
+trait Get with () {
+    fn get(&self, i: i32) -> i32;
+}
+
+struct Small { value: i32 }
+
+impl Get for Small {
+    fn get(&self, i: i32) -> i32
+        contract i < 10
+    {
+        return self.value + i;
+    }
+}
+
+export fn run() with Stdout {
+    let s = Small { value: 1 };
+    println(`${unchecked s.get(builtin::black_box(20))}`);
+}
+
+__DATA__
+{
+    "only_opt": ["O1", "O2", "O3", "Os"],
+    "stdout": "21\n"
+}

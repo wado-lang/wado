@@ -1,0 +1,28 @@
+// The clause an impl writes under its trait's is an error of the impl head,
+// so a fault in a body beside it does not hide it.
+trait Get with () {
+    fn get(&self, i: i32) -> i32
+        contract i < 100;
+}
+
+struct Box { value: i32 }
+
+impl Get for Box {
+    fn get(&self, i: i32) -> i32
+        contract i >= 0
+    {
+        return self.value + i;
+    }
+}
+
+export fn run() {
+    let _ = missing;
+}
+
+__DATA__
+{
+  "compile_error": "unknown identifier 'missing'",
+  "compile_errors_contains": [
+    "an impl writes no `contract` on a method its trait's clauses bind"
+  ]
+}

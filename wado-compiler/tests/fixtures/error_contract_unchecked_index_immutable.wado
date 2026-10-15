@@ -1,0 +1,16 @@
+// A marked subscript of an immutable binding is as immutable as the
+// subscript: neither a `&mut` of it nor a write through it compiles.
+struct P { x: i32 }
+
+export fn run() {
+    let ps: List<P> = [P { x: 1 }, P { x: 2 }];
+    let s = &mut (unchecked ps[0]);
+    s.x = 9;
+    (unchecked ps[1]).x = 7;
+}
+
+__DATA__
+{
+  "compile_error": ":7:13: analysis error: cannot take &mut of immutable variable 'ps'",
+  "compile_errors_contains": ["immutable"]
+}

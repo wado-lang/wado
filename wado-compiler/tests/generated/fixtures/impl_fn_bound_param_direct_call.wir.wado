@@ -79,7 +79,7 @@ fn "impl_fn_bound_param_direct_call.wado/run"() with Stdout {
     let self_11: i32;
     let is_negative_18: bool;
     let x: i64;
-    let start_73: i32;
+    let start_70: i32;
     b = struct.new "canonical//CanonicalClosure_0" { env: struct.new "impl_fn_bound_param_direct_call.wado//$Closure_0" {  }, func: ref.func "closure/impl_fn_bound_param_direct_call.wado/$closure_wrapper_0" };
     $local_2 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
     is_negative_18 = local.tee self_11(block -> i32 {
@@ -92,17 +92,17 @@ fn "impl_fn_bound_param_direct_call.wado/run"() with Stdout {
             cold_path;
             "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_2, is_negative_18);
         }
-        start_73 = $local_2.used;
+        start_70 = $local_2.used;
         $local_2.used = is_negative_18;
-        builtin::array_set_u8($local_2.repr, start_73, 45);
+        builtin::array_set_u8($local_2.repr, start_70, 45);
     } else {
     }
-    if @unlikely(local.tee start_73($local_2.used + self_11) > builtin::array_len($local_2.repr)) {
+    if @unlikely(local.tee start_70($local_2.used + self_11) > builtin::array_len($local_2.repr)) {
         cold_path;
-        "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_2, start_73);
+        "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_2, start_70);
     }
     is_negative_18 = $local_2.used;
-    $local_2.used = start_73;
+    $local_2.used = start_70;
     "core:prelude/primitive.wado/write_decimal_digits"($local_2.repr, is_negative_18, x, self_11);
     self_11 = builtin::i32_wrap_i64(local.tee x("wasi/stream-new"()));
     is_negative_18 = builtin::i32_wrap_i64(x >> 32_i64);

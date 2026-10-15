@@ -565,6 +565,24 @@ test "DeflateStream reset" {
     assert c1.len() == c2.len(), "reset should produce same-size output";
 }
 
+test "DeflateStream is_finished follows finish and reset" {
+    let mut ds = DeflateStream::new(Z_DEFAULT_COMPRESSION);
+    assert !ds.is_finished();
+    ds.update(&make_pattern_data(10));
+    assert !ds.is_finished();
+    let _ = ds.finish();
+    assert ds.is_finished();
+    ds.reset();
+    assert !ds.is_finished();
+}
+
+#[expect_trap]
+test "DeflateStream update after finish breaks the contract" {
+    let mut ds = DeflateStream::new(Z_DEFAULT_COMPRESSION);
+    let _ = ds.finish();
+    ds.update(&make_pattern_data(10));
+}
+
 test "DeflateStream copy" {
     let data = make_pattern_data(200);
     let mut ds = DeflateStream::new(Z_DEFAULT_COMPRESSION);

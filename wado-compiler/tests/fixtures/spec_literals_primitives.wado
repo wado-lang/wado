@@ -49,9 +49,9 @@ test "char casts" {
     assert b as char == 'A';
     assert 97 as char == 'a';
 
-    let from_u32 = char::from_u32(65 as u32);
-    let from_i32 = char::from_i32(65);
-    assert from_u32 == Option::Some('A') && from_i32 == Option::Some('A');
+    let scalar = char::from_u32(65 as u32);   // traps on a non-scalar value
+    let checked = char::try_from(0xD800 as u32);
+    assert scalar == 'A' && checked matches { Err(_) };
 }
 
 test "integer" {

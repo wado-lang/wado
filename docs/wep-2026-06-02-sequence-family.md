@@ -73,9 +73,10 @@ internal trait Sequence {
     type Elem;
 
     fn len(&self) -> i32;
-    fn get_unchecked(&self, index: i32) -> Self::Elem;
+    fn at(&self, index: i32) -> Self::Elem
+        contract 0 <= index < self.len();
 
-    // default bodies, written against `len` + `get_unchecked` only
+    // default bodies, written against `len` + `at` only
     fn is_empty(&self) -> bool;
     fn get(&self, index: i32) -> Option<Self::Elem>;
     fn first(&self) -> Option<Self::Elem>;
@@ -99,7 +100,7 @@ internal trait AsSlice: Sequence {
 All three types implement both. Inherent methods shadow trait methods
 ([Overload Resolution](./wep-2026-07-31-overload-resolution.md)), so `Slice`'s
 own bodies win and the defaults do not recurse. Those defaults go through
-`len` / `get_unchecked`, never `as_slice()`, so `first()` stays an `array.get`
+`len` / `at`, never `as_slice()`, so `first()` stays an `array.get`
 instead of a struct the optimizer has to remove again.
 
 Only methods with no element bound can be defaults, since an associated type
@@ -118,7 +119,7 @@ need a mutable backing `Slice` lacks, and length-changing operations belong to
 `String` implements neither; its byte view stays on `AsByteSlice`. A future
 `String: Sequence` with `Elem = char` is left expressible — which is why
 `as_slice()` sits on `AsSlice`, UTF-8 having no contiguous `char` backing — but
-`len()` and `get_unchecked()` over UTF-8 are O(n), making every default O(n²).
+`len()` and `at()` over UTF-8 are O(n), making every default O(n²).
 
 ### Naming
 
@@ -237,16 +238,18 @@ which today renders no operand values
 bounds-check elimination from collapsing an index-write loop into `array.fill`
 ([#1856](https://github.com/wado-lang/wado/issues/1856)).
 
-`get_unchecked` carries this contract:
+A read marked `unchecked` (`unchecked xs.at(i)`, `unchecked xs[i]`) leaves
+this contract to the caller:
 
 > The caller must guarantee `0 <= index < len()`. Violating it yields an
 > unspecified value of `T` or traps. It is never undefined behavior and never
 > compromises memory safety.
 
 That is structural, not aspirational: every path bottoms out in `array.get`,
-which Wasm GC always bounds-checks. Wado's `_unchecked` elides a semantic check,
-not a memory check — categorically weaker than Rust's, and why Wado needs no
-`unsafe`. The name is borrowed from Rust; the contract is not.
+which Wasm GC always bounds-checks. `unchecked` elides a semantic check, not a
+memory check — categorically weaker than Rust's `get_unchecked`, and why Wado
+needs no `unsafe`. The read began as `get_unchecked`, borrowed from Rust, and
+became `at` under [Contract Checks](./wep-2026-10-06-contract-checks.md).
 
 ### Component Model boundary
 
