@@ -285,7 +285,7 @@ then means one thing to its type checker whichever tag reads it.
 
 A hole's type may mention a type parameter of the enclosing item. The shape is
 then generic over that parameter, and the item's instantiation instantiates the
-tag with it. That trait, and any bound the tag places on its pack, is met
+tag with it. The specifier's trait, and any bound the tag places on its pack, is met
 through the bounds the item declares, as for any call: `` `${x}` `` over `x: X`
 asks for `X: Display`, as a call of `push_display(&x)` would. A generic body
 that cannot name the bound passes its tag a concrete value instead.
@@ -607,8 +607,8 @@ renders the hole. The items below close that, in this order.
 
 - [ ] Each hole checked against its specifier's trait at the template, a
   generic hole through the declared bounds, as the Decision states. Done when
-  `` format`${x}` `` and `` `${x}` `` over `x: X` each compile under `X: Display` and report the same missing-bound error without
-  it, `${x:x}` reports a missing `LowerHex` under `X: Display` alone, a tag's
+  `` format`${x}` `` and `` `${x}` `` over `x: X` each compile under
+  `X: Display` and report the same missing-bound error without it, `${x:x}` reports a missing `LowerHex` under `X: Display` alone, a tag's
   pack bound is checked against the declared bounds, a tag that never calls
   `fmt` rejects a hole lacking its specifier's trait, and every package in the
   repository, the stdlib included, compiles under the new check.

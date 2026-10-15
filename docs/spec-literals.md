@@ -1077,13 +1077,13 @@ empty tuple (`[]`, for a tag that reads only `tail()`). A concrete tuple
 (`..V: ToSqlParam`) makes a hole whose type lacks it an error at the call,
 naming that type.
 
-A hole's type implements the trait its specifier selects (see
-[Format Traits](./spec-traits.md#format-traits)), under any tag, whether or not
-the tag renders it.
+A hole's specifier binds under any tag: a hole whose type lacks the trait it
+selects ([Format Types](#format-types)) is an error, whether or not the tag
+renders the hole.
 
 A hole's type may mention a type parameter of the enclosing item. The shape is
 then generic over that parameter, and each instantiation of the item
-instantiates the tag with it. That trait, and any bound the tag places on its
+instantiates the tag with it. The specifier's trait, and any bound the tag places on its
 pack, is met only through the bounds the item declares, as for any call.
 
 > Not yet implemented: a hole whose type mentions a type parameter is rejected
