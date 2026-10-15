@@ -277,13 +277,18 @@ fn regex<T: ReflectTemplate<Holes = []>>(t: T) -> Regex {
 under. A concrete tuple (`Holes = [List<i32>]`) binds no pack, and the call is
 an error naming the binding it needs.
 
+A hole's specifier is part of the template, not of the tag, so every hole's
+type implements the trait its specifier selects (`Display` when it names none)
+under any tag, whether or not the tag renders it. A tag counting its holes
+rejects `${pt}` over a `Pt` with no `Display`, as `format` does. A template
+then means one thing to its type checker whichever tag reads it.
+
 A hole's type may mention a type parameter of the enclosing item. The shape is
 then generic over that parameter, and the item's instantiation instantiates the
-tag with it. A bound the tag places on its pack is met through the bounds the
-item declares, as for any call. Under `format`, so is the trait each hole's
-specifier selects: `` `${x}` `` over `x: X` asks for `X: Display`, as a call of
-`push_display(&x)` would. A generic body that cannot name the bound passes its
-tag a concrete value instead.
+tag with it. That trait, and any bound the tag places on its pack, is met
+through the bounds the item declares, as for any call: `` `${x}` `` over `x: X`
+asks for `X: Display`, as a call of `push_display(&x)` would. A generic body
+that cannot name the bound passes its tag a concrete value instead.
 
 ### The untagged template is a tag
 
@@ -597,14 +602,15 @@ synthesis and the fold; then the prelude tags and fixtures.
 ## Roadmap
 
 An untagged template is sugar for `format`, but the compiler still lowers it on
-a path of its own, and three differences between the two forms remain. Each
-item below closes one, in this order.
+a path of its own, and a hole's specifier is checked only where something
+renders the hole. The items below close that, in this order.
 
-- [ ] Generic holes, checked against the declared bounds as the Decision
-  states. Done when `` format`${x}` `` and `` `${x}` `` over `x: X` each
-  compile under `X: Display` and report the same missing-bound error without
+- [ ] Each hole checked against its specifier's trait at the template, a
+  generic hole through the declared bounds, as the Decision states. Done when
+  `` format`${x}` `` and `` `${x}` `` over `x: X` each compile under `X: Display` and report the same missing-bound error without
   it, `${x:x}` reports a missing `LowerHex` under `X: Display` alone, a tag's
-  pack bound is checked against the declared bounds, and every package in the
+  pack bound is checked against the declared bounds, a tag that never calls
+  `fmt` rejects a hole lacking its specifier's trait, and every package in the
   repository, the stdlib included, compiles under the new check.
 - [ ] `format` at the direct lowering's cost. Read off `wado dump -O2`, the
   direct lowering does four things a `format` site does not:
@@ -668,10 +674,6 @@ Three runs:
 
 ## Known gaps
 
-- A tag that never calls `fmt` on a hole asks nothing of the hole's type
-  through its specifier: a tag counting its holes accepts `${pt}` over a `Pt`
-  with no `Display`. Whether a generic hole under such a tag still needs the
-  specifier's bound is open.
 - A tag that carries a state across holes by scanning the literal segments
   folds to the per-hole decision only while that scan fits the inliner's
   budget. That is the `html` example's shape, and the one a code generator
