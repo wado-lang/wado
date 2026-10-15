@@ -278,16 +278,13 @@ impl Query<'_> {
                 ..Holds::default()
             });
         }
+        // Only an impl of `trait_` itself answers. One of a subtrait owes an
+        // impl of `trait_` beside it, and where that is missing the subtrait's
+        // impl is the error, not this answer.
         program
-            .impls
-            .iter()
-            .find_map(|(&id, def)| {
-                // Only an impl of `trait_` itself answers. One of a subtrait
-                // owes an impl of `trait_` beside it, and where that is missing
-                // the subtrait's impl is the error, not this answer.
-                if def.trait_ != Some(trait_)
-                    || (subject.is_some() && program.not_inherited.contains(&id))
-                {
+            .impls_for(trait_, ty)
+            .find_map(|(id, def)| {
+                if subject.is_some() && program.not_inherited.contains(&id) {
                     return None;
                 }
                 let answer = self.impl_answers(id, def, ty)?;
@@ -495,9 +492,8 @@ fn reached_by(
 ) -> bool {
     !origins.is_empty()
         && program
-            .impls
-            .values()
-            .any(|def| at_self(program, def, trait_, origins) && reaches_target(def, ty))
+            .impls_for(trait_, ty)
+            .any(|(_, def)| at_self(program, def, trait_, origins) && reaches_target(def, ty))
 }
 
 /// Whether `def` is an impl of `trait_` at its defaults from one of `origins`,
@@ -549,13 +545,12 @@ pub fn comparison_row(program: &Program, ty: &SolverType) -> Option<(TraitDeclId
     let (eq, ord) = program.comparisons?;
     let written = |trait_| {
         program
-            .impls
-            .iter()
+            .impls_for(trait_, ty)
             .filter(|(_, def)| {
                 at_self(program, def, trait_, &[ImplOrigin::Written]) && reaches_target(def, ty)
             })
             .min_by_key(|(_, def)| !def.params.is_empty())
-            .map(|(&id, _)| id)
+            .map(|(id, _)| id)
     };
     match (written(eq), written(ord)) {
         (Some(id), None) => Some((eq, id)),

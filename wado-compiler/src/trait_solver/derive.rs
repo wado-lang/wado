@@ -60,7 +60,7 @@ pub fn derive(program: &mut Program, trait_: TraitDeclId, declarations: &[Declar
                 .iter()
                 .all(|member| holds(program, env, member, trait_, decl.module).is_some());
             if !satisfied {
-                program.impls.shift_remove(id);
+                program.remove_impl(*id);
             }
             satisfied
         });
@@ -106,8 +106,8 @@ fn covers_every_instance(def: &ImplDef) -> bool {
 pub fn pair_comparisons(program: &mut Program, eq: TraitDeclId, ord: TraitDeclId) {
     program.comparisons = Some((eq, ord));
     let written_ords: Vec<ImplDef> = program
-        .impls
-        .values()
+        .impls_of(ord)
+        .map(|(_, def)| def)
         .filter(|def| at_self(program, def, ord, &[ImplOrigin::Written]))
         .cloned()
         .collect();
@@ -119,14 +119,9 @@ pub fn pair_comparisons(program: &mut Program, eq: TraitDeclId, ord: TraitDeclId
             ..written_ord.clone()
         };
         let markers: Vec<ImplId> = program
-            .impls
-            .iter()
-            .filter(|(_, def)| {
-                def.trait_ == Some(eq)
-                    && def.origin == ImplOrigin::Marker
-                    && def.target == written_ord.target
-            })
-            .map(|(&marker, _)| marker)
+            .impls_of(eq)
+            .filter(|(_, def)| def.origin == ImplOrigin::Marker && def.target == written_ord.target)
+            .map(|(marker, _)| marker)
             .collect();
         if markers.is_empty() {
             program.push_impl(paired(ImplOrigin::Paired));

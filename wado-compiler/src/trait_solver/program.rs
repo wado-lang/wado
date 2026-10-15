@@ -394,6 +394,13 @@ pub struct Program {
     /// Insertion order is the order every answer is reported in, so a caller
     /// that builds it deterministically gets deterministic diagnostics.
     pub impls: IndexMap<ImplId, ImplDef>,
+    /// Each trait's impls, in `impls` order, keyed as well by the declaration
+    /// the target names (`None` for any other target). A question names its
+    /// trait and its type, and a scan of every impl per question is quadratic
+    /// in a whole package.
+    impls_by_trait: IndexMap<TraitDeclId, Vec<ImplId>>,
+    impls_by_target: IndexMap<(TraitDeclId, Option<TypeDeclId>), Vec<ImplId>>,
+    trait_impls_by_head: IndexMap<Option<TypeDeclId>, Vec<ImplId>>,
     pub traits: IndexMap<TraitDeclId, TraitDef>,
     pub types: IndexMap<TypeDeclId, TypeDef>,
     /// The non-recursive ways a bound holds, keyed by the declaration and the
@@ -429,6 +436,20 @@ pub struct Program {
     /// `From<Meters> for i64` would make every newtype of `i64` convert from
     /// `Meters`.
     pub not_inherited: IndexSet<ImplId>,
+}
+
+/// Two id lists in one, in the order the ids were added.
+fn merged(a: Option<&Vec<ImplId>>, b: Option<&Vec<ImplId>>) -> Vec<ImplId> {
+    let mut ids: Vec<ImplId> = a.into_iter().chain(b).flatten().copied().collect();
+    ids.sort_unstable();
+    ids
+}
+
+fn target_head(ty: &SolverType) -> Option<TypeDeclId> {
+    match ty {
+        SolverType::Decl(head, _) => Some(*head),
+        _ => None,
+    }
 }
 
 /// The bounds in force where a question was asked: a generic body's `T: Tr`
@@ -473,8 +494,70 @@ impl Program {
                     .any(|pin| undeclared(&pin.ty)),
             "{id:?} mentions a parameter it does not declare: {def:?}"
         );
+        if let Some(trait_) = def.trait_ {
+            self.impls_by_trait.entry(trait_).or_default().push(id);
+            let head = target_head(&def.target);
+            self.impls_by_target
+                .entry((trait_, head))
+                .or_default()
+                .push(id);
+            self.trait_impls_by_head.entry(head).or_default().push(id);
+        }
         assert!(self.impls.insert(id, def).is_none());
         id
+    }
+
+    /// Take out the impl at `id`.
+    pub fn remove_impl(&mut self, id: ImplId) {
+        let def = self
+            .impls
+            .shift_remove(&id)
+            .expect("only an added impl is removed");
+        if let Some(trait_) = def.trait_ {
+            self.impls_by_trait[&trait_].retain(|&other| other != id);
+            let head = target_head(&def.target);
+            self.impls_by_target[&(trait_, head)].retain(|&other| other != id);
+            self.trait_impls_by_head[&head].retain(|&other| other != id);
+        }
+    }
+
+    /// The impls of `trait_`, in the order they were added.
+    pub fn impls_of(&self, trait_: TraitDeclId) -> impl Iterator<Item = (ImplId, &ImplDef)> {
+        self.impls_by_trait
+            .get(&trait_)
+            .into_iter()
+            .flatten()
+            .map(|&id| (id, &self.impls[&id]))
+    }
+
+    /// The impls of `trait_` whose target could match `ty`, in the order they
+    /// were added: a target naming a declaration matches only that one, or an
+    /// open row.
+    pub fn impls_for(
+        &self,
+        trait_: TraitDeclId,
+        ty: &SolverType,
+    ) -> impl Iterator<Item = (ImplId, &ImplDef)> {
+        let ids: Vec<ImplId> = if matches!(ty, SolverType::AnyRow) {
+            self.impls_of(trait_).map(|(id, _)| id).collect()
+        } else {
+            let at = |head| self.impls_by_target.get(&(trait_, head));
+            merged(at(None), target_head(ty).and_then(|head| at(Some(head))))
+        };
+        ids.into_iter().map(|id| (id, &self.impls[&id]))
+    }
+
+    /// The trait impls whose target could match `ty`, of any trait, in the
+    /// order they were added.
+    pub fn trait_impls_for(&self, ty: &SolverType) -> impl Iterator<Item = (ImplId, &ImplDef)> {
+        let ids: Vec<ImplId> = if matches!(ty, SolverType::AnyRow) {
+            let trait_impls = self.impls.iter().filter(|(_, def)| def.trait_.is_some());
+            trait_impls.map(|(&id, _)| id).collect()
+        } else {
+            let at = |head| self.trait_impls_by_head.get(&head);
+            merged(at(None), target_head(ty).and_then(|head| at(Some(head))))
+        };
+        ids.into_iter().map(|id| (id, &self.impls[&id]))
     }
 
     /// The default `def`'s trait declares for its argument at `index`, at

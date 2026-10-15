@@ -115,7 +115,7 @@ fn collect(
     for (depth, ty) in chain(program, receiver).iter().enumerate() {
         let depth = u32::try_from(depth).expect("a chain shorter than 2^32");
         withheld.extend(withheld_at(program, ty));
-        for (&impl_, def) in &program.impls {
+        for (impl_, def) in program.trait_impls_for(ty) {
             let Some(trait_) = def.trait_ else {
                 continue;
             };
