@@ -23,21 +23,10 @@ use crate::compiler_item::CompilerItems;
 use crate::defs::{DefId, DefKind, DefTable};
 use crate::module_source::{CmNamespace, ModuleSource};
 use crate::name::{
-<<<<<<< HEAD
-    FqTraitName, FqTypeName, INTERNAL_PREFIX, LocalMethodName, NEVER_TYPE_NAME, Receiver, RefKind,
-    TEMPLATE_SHAPE_PREFIX, TypeHead, TypeNameInfo, UNIT_TYPE_NAME, format_type_name,
-    mangle_builtin_array_type, mangle_generic_name, mangle_local_item_name, mangle_tuple_type,
-    unchecked_twin_name,
-||||||| b04b4ab5f
-    FqTraitName, FqTypeName, INTERNAL_PREFIX, LocalMethodName, NEVER_TYPE_NAME, Receiver, RefKind,
-    TEMPLATE_SHAPE_PREFIX, TypeHead, TypeNameInfo, UNIT_TYPE_NAME, format_type_name,
-    mangle_builtin_array_type, mangle_generic_name, mangle_local_item_name, mangle_tuple_type,
-=======
     DeclaredHead, FqTraitName, FqTypeName, INTERNAL_PREFIX, LocalMethodName, NEVER_TYPE_NAME,
     Receiver, RefKind, TEMPLATE_SHAPE_PREFIX, TypeHead, TypeNameInfo, UNIT_TYPE_NAME,
     format_type_name, mangle_builtin_array_type, mangle_generic_name, mangle_local_item_name,
-    mangle_tuple_type,
->>>>>>> origin/main
+    mangle_tuple_type, unchecked_twin_name,
 };
 use crate::primitive::PrimitiveType;
 use crate::symbol_notation::render;
