@@ -227,6 +227,25 @@ test "a list of subgraphs is refused as one" {
     assert read(grog::encode(&model)).unwrap_err().reason == "bodies: a list of subgraphs is not read";
 }
 
+test "an operator outside the default domain is named with its domain, as the textual format writes it" {
+    let node = |domain: String| onnx::NodeProto {
+        input: ["X"],
+        output: ["Y"],
+        op_type: Option::Some("Gelu"),
+        domain: Option::Some(domain),
+    };
+    let model = onnx::ModelProto {
+        graph: Option::Some(onnx::GraphProto {
+            node: [node("com.microsoft"), node("ai.onnx"), node("")],
+        }),
+    };
+    let g = read(grog::encode(&model)).unwrap();
+
+    assert g.nodes[0].op == "com.microsoft.Gelu";
+    assert g.nodes[1].op == "Gelu";
+    assert g.nodes[2].op == "Gelu";
+}
+
 fn dimension(value: onnx::TensorShapeProtoDimensionValue) -> onnx::TensorShapeProtoDimension {
     return onnx::TensorShapeProtoDimension { value: Option::Some(value) };
 }

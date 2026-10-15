@@ -326,7 +326,18 @@ fn read_node(n: &onnx::NodeProto) -> Result<Node, String> {
     for let a of n.attribute {
         attrs.push(read_attr(&a)?);
     }
-    return Result::Ok(Node { op: n.op_type.unwrap_or(""), outputs: n.output, inputs: n.input, attrs });
+    return Result::Ok(Node { op: qualified_op(n), outputs: n.output, inputs: n.input, attrs });
+}
+
+/// The operator's name as the textual format writes it: qualified by its
+/// domain, unless that is the default one. Two domains may each define an
+/// operator of one name, such as `Gelu`, and they need not agree on it.
+fn qualified_op(n: &onnx::NodeProto) -> String {
+    let op = n.op_type.unwrap_or("");
+    return match n.domain {
+        Some(domain) && domain != "" && domain != "ai.onnx" => `${domain}.${op}`,
+        _ => op,
+    };
 }
 
 /// Read a graph out of a serialized `ModelProto`. What the subset does not
