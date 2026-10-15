@@ -580,14 +580,16 @@ fn ref_args_that_escape(body: &Body, gate: &Gate<'_>) -> IndexSet<ExprId> {
     };
     for node in reachable_nodes(body) {
         match node {
-            // `let r = &LIT;` — the borrow reaches a call through `r`.
+            // `let r = &LIT;` — the borrow reaches a call through `r`, or `*r`
+            // hands the referent's storage to a binding that may advance it.
             NodeRef::Stmt(st) => {
                 if let StmtKind::Let {
                     local_index, value, ..
                 } = &body.stmts[st].kind
                     && let Some(e) = value.as_expr()
                     && is_ref(body, e)
-                    && local_leaks_through_call(body, *local_index, gate)
+                    && (local_leaks_through_call(body, *local_index, gate)
+                        || !is_readonly_body(body, *local_index, gate))
                 {
                     out.insert(e);
                 }
