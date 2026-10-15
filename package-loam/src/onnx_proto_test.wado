@@ -3,8 +3,9 @@ use onnx from "./onnx.proto"
     with {
         generator: { module: "lib:grog" },
     };
+use { TreeMap } from "core:collections";
 use { Elements, Graph, Known, ReadError } from "./graph.wado";
-use { read, read_tensor } from "./onnx_proto.wado";
+use { external_locations, read, read_tensor, read_with_external } from "./onnx_proto.wado";
 
 /// A `data_type` or `elem_type` field naming `t`.
 fn typed(t: onnx::TensorProtoDataType) -> Option<i32> {
@@ -280,6 +281,70 @@ test "an initializer carrying no data is left to the checkpoint" {
     }).unwrap();
 
     assert g.initializers[0].data matches { None };
+}
+
+fn external_weight(entries: List<[String, String]>) -> onnx::TensorProto {
+    return onnx::TensorProto {
+        dims: [2],
+        data_type: typed(Float),
+        name: Option::Some("W"),
+        external_data: entries.into_iter().map(|kv| onnx::StringStringEntryProto {
+            key: Option::Some(kv.0),
+            value: Option::Some(kv.1),
+        }).collect(),
+        data_location: Option::Some(onnx::TensorProtoDataLocation::External),
+    };
+}
+
+fn read_external(weight: onnx::TensorProto, files: &TreeMap<String, ByteList>) -> Result<Graph, ReadError> {
+    let model = onnx::ModelProto {
+        graph: Option::Some(onnx::GraphProto {
+            name: Option::Some("weights"),
+            initializer: [weight],
+        }),
+    };
+    return read_with_external(grog::encode(&model), files);
+}
+
+test "an initializer's external data comes out of the file its location names" {
+    let weight = external_weight([
+        ["location", "model.onnx_data"],
+        ["offset", "4"],
+        ["length", "8"],
+    ]);
+    let model = onnx::ModelProto {
+        graph: Option::Some(onnx::GraphProto { initializer: [weight] }),
+    };
+    assert external_locations(grog::encode(&model)).unwrap() == ["model.onnx_data"];
+    let mut files = TreeMap::<String, ByteList>::new();
+    files["model.onnx_data"] = b"\xff\xff\xff\xff\x00\x00\x80\x3f\x00\x00\x00\x40\xff";
+    let g = read_external(weight, &files).unwrap();
+
+    assert g.initializers[0].data == Option::Some(b"\x00\x00\x80\x3f\x00\x00\x00\x40");
+}
+
+test "external data without an offset or length is the whole file" {
+    let mut files = TreeMap::<String, ByteList>::new();
+    files["w.bin"] = b"\x00\x00\x80\x3f\x00\x00\x00\x40";
+    let g = read_external(external_weight([["location", "w.bin"]]), &files).unwrap();
+
+    assert g.initializers[0].data == Option::Some(b"\x00\x00\x80\x3f\x00\x00\x00\x40");
+}
+
+test "external data the reader was not given names its location" {
+    let e = read(grog::encode(&onnx::ModelProto {
+        graph: Option::Some(onnx::GraphProto { initializer: [external_weight([["location", "w.bin"]])] }),
+    })).unwrap_err().reason;
+
+    assert e == "W: external data in w.bin, which the reader was not given";
+}
+
+test "external data past its file's end names its range" {
+    let mut files = TreeMap::<String, ByteList>::new();
+    files["w.bin"] = b"\x00\x00\x80\x3f";
+    let e = read_external(external_weight([["location", "w.bin"], ["offset", "2"], ["length", "8"]]), &files).unwrap_err().reason;
+
+    assert e == "W: external data at 2 for 8 bytes, past the end of w.bin's 4";
 }
 
 test "an initializer whose data disagrees with its shape names itself" {
