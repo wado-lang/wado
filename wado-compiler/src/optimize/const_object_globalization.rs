@@ -383,7 +383,7 @@ fn collect_candidates(
                 && !leaked_ref_args.contains(&id)
                 && !immediate_args.contains(&id)
                 && is_globalizable_const(body, inner, gate, &mut siblings.set.clone())
-                // A borrow that survives the call is in `leaked_ref_args`, so
+                // A reference that survives the call is in `leaked_ref_args`, so
                 // what reaches here is read and dropped.
                 && worth_hoisting(body, inner, gate, Reach::Transient)
                 && let Some(sibling_lets) =
@@ -476,7 +476,7 @@ fn local_leaks_through_call(body: &Body, idx: u32, gate: &Gate<'_>) -> bool {
         };
         match &body.exprs[e].kind {
             ExprKind::Call { func_id, args, .. } => args.iter().enumerate().any(|(pos, arg)| {
-                match operand_borrows_local(body, arg.expr, idx, gate) {
+                match operand_refs_local(body, arg.expr, idx, gate) {
                     // An element read hands back the element and writes
                     // nothing through the spine, exactly as the subscript node
                     // it lowers from did; the element handle's own uses decide.
@@ -484,21 +484,21 @@ fn local_leaks_through_call(body: &Body, idx: u32, gate: &Gate<'_>) -> bool {
                     // a raw `Array<T>` (WEP 2026-08-24) — or a field of it.
                     Some(_) if gate.reads_element(*func_id) => false,
                     None => false,
-                    Some(BorrowShape::Direct) => gate.callee_ref_param_leaks(*func_id, pos),
-                    Some(BorrowShape::Derived(arg_ty)) => {
+                    Some(RefShape::Direct) => gate.callee_ref_param_leaks(*func_id, pos),
+                    Some(RefShape::Derived(arg_ty)) => {
                         !gate.instruction_passes_through(*func_id, pos, arg_ty)
                             && (gate.callee_ref_param_leaks(*func_id, pos)
                                 || gate.callee_param_writes_through(*func_id, pos))
                     }
                 }
             }),
-            // No callee body to ask, so the borrow is assumed to escape.
+            // No callee body to ask, so the reference is assumed to escape.
             ExprKind::IndirectCall { args, .. } => args
                 .iter()
-                .any(|&a| operand_borrows_local(body, a, idx, gate).is_some()),
+                .any(|&a| operand_refs_local(body, a, idx, gate).is_some()),
             ExprKind::CmRawCall { args, .. } => args
                 .iter()
-                .any(|&a| operand_borrows_local(body, a, idx, gate).is_some()),
+                .any(|&a| operand_refs_local(body, a, idx, gate).is_some()),
             _ => false,
         }
     })
@@ -506,7 +506,7 @@ fn local_leaks_through_call(body: &Body, idx: u32, gate: &Gate<'_>) -> bool {
 
 /// How an argument names local `idx`'s storage.
 #[derive(Clone, Copy, PartialEq, Eq)]
-enum BorrowShape {
+enum RefShape {
     /// The local itself, or an explicit `&` / `&mut` / `*` of it. A write
     /// through one is spelled in the caller, so [`is_readonly_body`] sees it.
     Direct,
@@ -516,36 +516,36 @@ enum BorrowShape {
     Derived(TypeId),
 }
 
-/// [`borrows_local`] over an operand. A promoted argument is still an argument.
-fn operand_borrows_local(
+/// [`refs_local`] over an operand. A promoted argument is still an argument.
+fn operand_refs_local(
     body: &Body,
     op: Operand,
     idx: u32,
     gate: &Gate<'_>,
-) -> Option<BorrowShape> {
+) -> Option<RefShape> {
     match op.as_expr() {
-        Some(e) => borrows_local(body, e, idx, gate),
+        Some(e) => refs_local(body, e, idx, gate),
         // Only the shape that fills the slot whole: a value that merely reads
         // the local (`f(x.len())`) computes from it rather than handing it over.
-        None => (bare_promoted_local(body, op) == Some(idx)).then_some(BorrowShape::Direct),
+        None => (bare_promoted_local(body, op) == Some(idx)).then_some(RefShape::Direct),
     }
 }
 
 /// Whether `expr` hands over a handle into local `idx`. A step is followed only
 /// while the value stays reference-typed: `xs[0]` on a list of structs yields
 /// the element's handle, while `xs.len()` computes a scalar and hands over none.
-fn borrows_local(body: &Body, expr: ExprId, idx: u32, gate: &Gate<'_>) -> Option<BorrowShape> {
+fn refs_local(body: &Body, expr: ExprId, idx: u32, gate: &Gate<'_>) -> Option<RefShape> {
     match &body.exprs[expr].kind {
-        ExprKind::Local { index, .. } => (*index == idx).then_some(BorrowShape::Direct),
+        ExprKind::Local { index, .. } => (*index == idx).then_some(RefShape::Direct),
         ExprKind::Unary {
             op: NirUnaryOp::Ref | NirUnaryOp::MutRef | NirUnaryOp::Deref,
             expr: inner,
-        } => operand_borrows_local(body, *inner, idx, gate),
+        } => operand_refs_local(body, *inner, idx, gate),
         ExprKind::FieldAccess { expr: base, .. }
         | ExprKind::Index { expr: base, .. }
         | ExprKind::Cast { expr: base, .. } => (gate.is_reference_type(body.exprs[expr].type_id)
-            && operand_borrows_local(body, *base, idx, gate).is_some())
-        .then_some(BorrowShape::Derived(body.exprs[expr].type_id)),
+            && operand_refs_local(body, *base, idx, gate).is_some())
+        .then_some(RefShape::Derived(body.exprs[expr].type_id)),
         // `xs[i]` reaches this pass as a receiverless `array_get_value(&xs.repr,
         // i)` once `container_sroa` has run, so the receiver is not the only
         // argument that can carry the handle out. Which of them does is the
@@ -553,20 +553,20 @@ fn borrows_local(body: &Body, expr: ExprId, idx: u32, gate: &Gate<'_>) -> Option
         // parameter holding it delivers its referent's storage back out.
         ExprKind::Call { func_id, args, .. } => (gate.is_reference_type(body.exprs[expr].type_id)
             && args.iter().enumerate().any(|(pos, arg)| {
-                operand_borrows_local(body, arg.expr, idx, gate).is_some()
+                operand_refs_local(body, arg.expr, idx, gate).is_some()
                     && gate.callee_ref_param_leaks(*func_id, pos)
             }))
-        .then_some(BorrowShape::Derived(body.exprs[expr].type_id)),
+        .then_some(RefShape::Derived(body.exprs[expr].type_id)),
         _ => None,
     }
 }
 
-/// The `&<literal>` nodes whose referent escapes the borrow, reached either
+/// The `&<literal>` nodes whose referent escapes the reference, reached either
 /// directly or through a local bound to it (`let r = &LIT; f(r)`).
 ///
-/// A borrow only reads while the callee keeps it one: `List::from(elements)`
+/// A reference only reads while the callee keeps it one: `List::from(elements)`
 /// keeps the array as the list's spine, so hoisting the fresh literal it
-/// borrowed hands every caller the same object to mutate.
+/// referenced hands every caller the same object to mutate.
 fn ref_args_that_escape(body: &Body, gate: &Gate<'_>) -> IndexSet<ExprId> {
     let mut out: IndexSet<ExprId> = IndexSet::default();
     let is_ref = |body: &Body, e: ExprId| {
@@ -610,7 +610,7 @@ fn ref_args_that_escape(body: &Body, gate: &Gate<'_>) -> IndexSet<ExprId> {
                     }
                 }
                 // An indirect call names no callee, so there is no body to ask
-                // and every borrow handed over is assumed to escape.
+                // and every reference handed over is assumed to escape.
                 ExprKind::IndirectCall { args, .. } => {
                     for &arg in args {
                         if let Some(a) = arg.as_expr()
@@ -1119,7 +1119,7 @@ fn stmts_within_operand(body: &Body, value: Operand) -> IndexSet<StmtId> {
 }
 
 /// Sibling bindings a candidate initializer may read: declared once, never
-/// mutated (assigned, `&mut`-borrowed, `mut`-argument, or mutating-method
+/// mutated (assigned, `&mut`-referenced, `mut`-argument, or mutating-method
 /// receiver), reference-typed, and bound to a closed constant aggregate.
 /// Seeded to a fixpoint so a sibling may itself read an earlier sibling.
 #[derive(Default)]
@@ -1166,7 +1166,7 @@ fn sibling_const_locals(
 }
 
 /// Locals that may be mutated anywhere in `body`: an `Assign` target root, a
-/// `&mut` borrow root, a `mut` call argument root, or the receiver root of a
+/// `&mut` root, a `mut` call argument root, or the receiver root of a
 /// method not proven non-mutating. The complement is safe to share behind an
 /// immutable global.
 fn mutated_locals(body: &Body, gate: &Gate<'_>) -> IndexSet<u32> {
@@ -1581,25 +1581,25 @@ impl Gate<'_> {
     /// declares no parameter at all, which is no receiver to answer about.
     fn callee_mutates_self(&self, func_id: FuncId) -> Option<bool> {
         let f = self.func(func_id);
-        Some(self.param_borrows_mutably(f.params.first()?))
+        Some(self.param_refs_mutably(f.params.first()?))
     }
 
     /// Whether `param` writes the caller's argument storage.
     ///
     /// The type alone does not answer this. `sroa_param` rewrites a `&mut S`
     /// parameter whose struct has a single field into that field, leaving a
-    /// parameter that reads as by-value and still borrows what the caller
+    /// parameter that reads as by-value and still references what the caller
     /// passed — the write that used to travel through `&mut S` travels through
     /// the field. [`NirParam::is_mut_ref`] is captured before that rewrite (and
     /// before boxing) and outlives it, so it is the reliable half of the test.
-    fn param_borrows_mutably(&self, param: &NirParam) -> bool {
+    fn param_refs_mutably(&self, param: &NirParam) -> bool {
         param.is_mut_ref || matches!(self.type_table.get(param.type_id), ResolvedType::MutRef(_))
     }
 
     /// Whether the callee takes its receiver by `&self` — the only receiver
     /// convention that neither writes the caller's storage (`&mut self`) nor
     /// takes it over (a by-value `self`).
-    fn callee_borrows_self(&self, func_id: FuncId) -> bool {
+    fn callee_refs_self(&self, func_id: FuncId) -> bool {
         self.func(func_id)
             .params
             .first()
@@ -1637,7 +1637,7 @@ impl Gate<'_> {
             .func(func_id)
             .params
             .get(param_pos)
-            .is_some_and(|p| self.param_borrows_mutably(p));
+            .is_some_and(|p| self.param_refs_mutably(p));
         !declared_mut && !self.instruction_arg_captures(func_id, arg_ty)
     }
 
@@ -1662,7 +1662,7 @@ impl Gate<'_> {
         let Some(param) = f.params.get(param_pos) else {
             return true;
         };
-        if self.param_borrows_mutably(param) {
+        if self.param_refs_mutably(param) {
             return true;
         }
         f.body
@@ -1692,10 +1692,10 @@ impl Gate<'_> {
         verdict
     }
 
-    /// Whether the callee's parameter at `param_pos` — a borrow — delivers its
+    /// Whether the callee's parameter at `param_pos` — a reference — delivers its
     /// referent's storage out of the callee. A bodyless one counts as leaking.
     ///
-    /// The walk asks the same question of the callees it hands the borrow on
+    /// The walk asks the same question of the callees it hands the reference on
     /// to, so a recursive helper re-enters this query for a key already in
     /// flight. Seeding the memo with the leaking verdict cuts the cycle the
     /// conservative way.
@@ -1710,24 +1710,24 @@ impl Gate<'_> {
         verdict
     }
 
-    /// Whether handing a borrow to `func_id`'s parameter at `pos` keeps it a
-    /// borrow: the callee takes it by shared reference and does not deliver it
+    /// Whether handing a reference to `func_id`'s parameter at `pos` keeps it a
+    /// read: the callee takes it by shared reference and does not deliver it
     /// anywhere its own caller can reach.
     ///
-    /// This is the argument-position dual of [`Self::callee_borrows_self`]. A
+    /// This is the argument-position dual of [`Self::callee_refs_self`]. A
     /// `&mut` parameter is excluded — the callee may write through it, which
     /// the shared global must never see.
-    fn callee_only_borrows_arg(&self, func_id: FuncId, pos: usize) -> bool {
-        let borrows = {
+    fn callee_only_refs_arg(&self, func_id: FuncId, pos: usize) -> bool {
+        let shared_ref = {
             let f = self.func(func_id);
             let Some(param) = f.params.get(pos) else {
                 return false;
             };
             f.body.is_some()
-                && !self.param_borrows_mutably(param)
+                && !self.param_refs_mutably(param)
                 && matches!(self.type_table.get(param.type_id), ResolvedType::Ref(_))
         };
-        borrows && !self.callee_ref_param_leaks(func_id, pos)
+        shared_ref && !self.callee_ref_param_leaks(func_id, pos)
     }
 
     /// Whether passing a value of `arg_ty` to a Wasm-instruction callee lets a
@@ -1863,7 +1863,7 @@ fn written_through(body: &Body, roots: &[u32], gate: &Gate<'_>) -> bool {
 /// by returning a projection of it, stashing it, or passing it on by value.
 /// [`is_readonly_body`] does not cover this: returning a field of the callee's
 /// own copy is legitimate and even counts as owned, a premise hoisting
-/// invalidates. A borrow or a scalar projection is not an escape.
+/// invalidates. A reference or a scalar projection is not an escape.
 fn param_storage_escapes(body: &Body, idx: u32, gate: &Gate<'_>) -> bool {
     let roots = projection_alias_roots(body, idx, gate);
     storage_leaves_body(body, &roots, gate) || storage_passed_on(body, &roots, gate)
@@ -1897,7 +1897,7 @@ fn storage_leaves_body(body: &Body, roots: &[u32], gate: &Gate<'_>) -> bool {
                     // Assigning into a local is naming, not escaping: that
                     // local is already one of `roots`, so its own uses are
                     // walked too. Any other target is a place that outlives
-                    // the borrow.
+                    // the reference.
                     NodeRef::Expr(e) => match &body.exprs[e].kind {
                         ExprKind::Assign { target, value } => {
                             delivers(*value)
@@ -1924,7 +1924,7 @@ fn storage_passed_on(body: &Body, roots: &[u32], gate: &Gate<'_>) -> bool {
                 // which may return or store it in turn; `&self` only reads it.
                 ExprKind::Call { func_id, args, .. } => {
                     let (receiver, _) = args.split();
-                    // Handing the storage on as a read-only borrow is not an
+                    // Handing the storage on as a `&` reference is not an
                     // escape when the callee keeps it one — the same question
                     // this walk answers, asked of the callee. A Wasm
                     // instruction has no way to keep it at all.
@@ -1934,7 +1934,7 @@ fn storage_passed_on(body: &Body, roots: &[u32], gate: &Gate<'_>) -> bool {
                         }
                         let arg_ty = body.operand_type(a.expr);
                         if !a.is_mut
-                            && (gate.callee_only_borrows_arg(*func_id, pos)
+                            && (gate.callee_only_refs_arg(*func_id, pos)
                                 || !gate.instruction_arg_captures(*func_id, arg_ty))
                         {
                             continue;
@@ -1943,7 +1943,7 @@ fn storage_passed_on(body: &Body, roots: &[u32], gate: &Gate<'_>) -> bool {
                     }
                     if let Some(receiver) = receiver
                         && escapes(receiver.expr)
-                        && !gate.callee_borrows_self(*func_id)
+                        && !gate.callee_refs_self(*func_id)
                     {
                         return Some(());
                     }
@@ -2169,7 +2169,7 @@ fn projection_root_of(body: &Body, expr: ExprId, gate: &Gate<'_>) -> Option<u32>
         | ExprKind::Cast { expr: base, .. } => base
             .as_expr()
             .and_then(|e| projection_root_of(body, e, gate)),
-        // A borrow and a deref both name the referent's storage, not a copy of
+        // A reference and a deref both name the referent's storage, not a copy of
         // it: whether the caller keeps a copy is the ownership analysis's call,
         // and for a fresh literal it elides one.
         ExprKind::Unary {
@@ -2237,7 +2237,7 @@ fn expr_readonly_operand(body: &Body, op: Operand, idx: u32, gate: &Gate<'_>) ->
 
 fn expr_readonly(body: &Body, expr: ExprId, idx: u32, gate: &Gate<'_>) -> bool {
     match &body.exprs[expr].kind {
-        // A bare whole-value read not intercepted by a borrowing parent is a
+        // A bare whole-value read not intercepted by a `&` parent is a
         // consuming use. Reject.
         ExprKind::Local { index, .. } => *index != idx,
 
@@ -2301,7 +2301,7 @@ fn expr_readonly(body: &Body, expr: ExprId, idx: u32, gate: &Gate<'_>) -> bool {
             .as_expr()
             .is_some_and(|e| expr_mentions_local(body, e, idx)),
 
-        // `&<…xs…>` — a shared borrow reads. What the borrow is then bound to
+        // `&<…xs…>` — a `&` reference reads. What the reference is then bound to
         // is an alias [`is_readonly_body`] follows through
         // [`projection_alias_roots`], so a write through it is still caught.
         ExprKind::Unary {
@@ -2420,7 +2420,7 @@ fn call_arg_readonly_operand(
         .is_none_or(|e| call_arg_readonly(body, e, idx, gate, arg_use))
 }
 
-/// A binding handed to a call as an argument. `&` borrow is a read; `&mut`
+/// A binding handed to a call as an argument. `&` is a read; `&mut`
 /// escapes; passing the binding itself by value is a read only where the
 /// parameter only reads it.
 fn call_arg_readonly(body: &Body, arg: ExprId, idx: u32, gate: &Gate<'_>, arg_use: ArgUse) -> bool {
@@ -2445,7 +2445,7 @@ fn call_arg_readonly(body: &Body, arg: ExprId, idx: u32, gate: &Gate<'_>, arg_us
         }
         // A *projection* of the binding — `writer.buf` — reads it, which
         // `expr_readonly` rightly allows. Handing that read to a parameter that
-        // borrows mutably is not a read: `sroa_param` rewrites a `&mut S`
+        // takes `&mut` is not a read: `sroa_param` rewrites a `&mut S`
         // parameter whose struct has a single field into that field, so the
         // write that used to travel through `&mut S` travels through the
         // projection and lands in the shared global. Any other parameter
