@@ -411,7 +411,7 @@ struct FunctionTranslator<'a, 'p> {
     /// The reads whose copy is elided because they hand their storage over.
     moves: value_copy::last_use::MoveEligible,
     /// Whether this function hands a returned variant's payload out uncopied,
-    /// so `return Some(place)` delivers the borrow exactly as `return place`
+    /// so `return Some(place)` delivers the place uncopied exactly as `return place`
     /// does ([`value_copy::hands_out_payload`]).
     hands_out_payload: bool,
     /// Locals whose binding copy is elided by sharing the source storage
@@ -469,7 +469,7 @@ impl<'a, 'p> FunctionTranslator<'a, 'p> {
         // The move/share/alias analyses only ever mark copyable-value locals; a
         // function with none has nothing to elide, so all three are empty. Skip
         // them — running them is otherwise pure per-function allocation, and most
-        // functions (scalar/reference-only) hit this path. A borrowed local is
+        // functions (scalar/reference-only) hit this path. A referenced local is
         // already retyped to its box, and the value it holds is what counts, as
         // is what a reference leads to, which `*r` hands to a call.
         let needs_copy_analysis = {

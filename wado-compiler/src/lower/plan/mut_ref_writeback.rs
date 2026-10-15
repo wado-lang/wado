@@ -1,4 +1,4 @@
-//! Borrow a temp for a `&mut` to a variant field and store it back after the
+//! Take a `&mut` to a variant field through a temp and store it back after the
 //! call. See `docs/wep-2026-06-13-reference-representation.md`.
 
 use super::value_copy::callgraph::CallGraph;
@@ -56,8 +56,8 @@ pub fn insert_write_backs(
             local_base: 0,
             locals,
             detached_locals: IndexSet::default(),
-            borrowed_locals: func.address_taken_locals.clone(),
-            borrowed_temps: Vec::new(),
+            referenced_locals: func.address_taken_locals.clone(),
+            ref_temps: Vec::new(),
             refused: None,
         };
         if let Some(body) = func.body.as_mut() {
@@ -66,8 +66,8 @@ pub fn insert_write_backs(
         func.local_count = pass.local_count;
         func.locals = pass.locals;
         // `reify` marks the address-taken locals before this pass runs, and that
-        // mark is what makes `boxing` promote a slot to the box a borrow needs.
-        for temp in pass.borrowed_temps {
+        // mark is what makes `boxing` promote a slot to the box a reference needs.
+        for temp in pass.ref_temps {
             func.address_taken_locals.insert(temp);
         }
         if let Some((span, reason)) = &pass.refused {
@@ -107,14 +107,14 @@ struct WriteBack<'a> {
     /// so its base is 0; a closure keeps parameters outside `body_locals`.
     local_base: u32,
     locals: Vec<TirLocal>,
-    /// Local slots this body bound a detached borrow to. Reading one yields
-    /// that borrow, so a sink reached through the variable is the same escape
-    /// as spelling the borrow there.
+    /// Local slots this body bound a detached reference to. Reading one yields
+    /// that reference, so a sink reached through the variable is the same escape
+    /// as spelling the reference there.
     detached_locals: IndexSet<u32>,
-    /// Locals this body borrows somewhere, which a reference value may name.
-    borrowed_locals: IndexSet<u32>,
-    borrowed_temps: Vec<u32>,
-    /// The first detached borrow with no write-back point, and why.
+    /// Locals this body references somewhere, which a reference value may name.
+    referenced_locals: IndexSet<u32>,
+    ref_temps: Vec<u32>,
+    /// The first detached reference with no write-back point, and why.
     refused: Option<(Span, String)>,
 }
 
@@ -141,7 +141,7 @@ impl Temp {
 
 impl WriteBack<'_> {
     /// Bind `value` to a fresh local. A temp standing in for storage the
-    /// caller still owns — a place, or a borrow of one — is `Aliased`. A
+    /// caller still owns — a place, or a reference to one — is `Aliased`. A
     /// by-value argument and a call's result are `Planned`: value semantics
     /// still owe the one its copy, and the other may be a projection of the
     /// temp.
@@ -185,19 +185,19 @@ impl WriteBack<'_> {
         self.refused.get_or_insert((span, reason));
     }
 
-    /// Refuse a detached borrow put into storage outliving the expression that
-    /// took it, which no point in this body is late enough to write back.
+    /// Refuse a detached reference put into storage outliving the expression
+    /// that took it, which no point in this body is late enough to write back.
     fn refuse_stored(&mut self, expr: &TirExpr, sink: &str) {
         if let Some(place) = self.detached_in_value_position(expr) {
-            self.refuse(place, format!("{sink} holds it past the borrow"));
+            self.refuse(place, format!("{sink} holds it past the reference"));
         }
     }
 
-    /// A detached borrow `expr` can yield, following the value positions one
+    /// A detached reference `expr` can yield, following the value positions one
     /// reaches storage through. The first is the whole answer, since only the
     /// first refusal is reported.
     fn detached_in_value_position(&self, expr: &TirExpr) -> Option<Span> {
-        if let Some(place) = self.detached_borrow(expr) {
+        if let Some(place) = self.detached_ref(expr) {
             return Some(place.span);
         }
         match &expr.kind {
@@ -249,8 +249,8 @@ impl WriteBack<'_> {
             local_base,
             locals: std::mem::take(body_locals),
             detached_locals: IndexSet::default(),
-            borrowed_locals: address_taken_locals.clone(),
-            borrowed_temps: Vec::new(),
+            referenced_locals: address_taken_locals.clone(),
+            ref_temps: Vec::new(),
             refused: None,
         };
         // An expression-bodied closure yields its body; a block-bodied one must
@@ -258,7 +258,7 @@ impl WriteBack<'_> {
         inner.refuse_stored(body, "the returned value");
         let changed = inner.visit_expr(body);
         *body_locals = inner.locals;
-        address_taken_locals.extend(inner.borrowed_temps);
+        address_taken_locals.extend(inner.ref_temps);
         if let Some((span, reason)) = inner.refused {
             self.refuse(span, reason);
         }
@@ -278,21 +278,21 @@ impl WriteBack<'_> {
         }
     }
 
-    /// Whether `arg` *takes* a detached borrow, by any route. Forwarding one it
+    /// Whether `arg` *takes* a detached reference, by any route. Forwarding one it
     /// was already handed is not taking one — the box is the caller's, and
     /// whether that detached is the caller's question. This is the safety test;
     /// the shape tests below only decide whether a write-back can be emitted.
-    fn takes_a_detached_borrow(&self, arg: &TirExpr) -> bool {
+    fn takes_a_detached_ref(&self, arg: &TirExpr) -> bool {
         self.detached_in_value_position(arg).is_some()
     }
 
-    /// The place a detached `&mut` borrows, if `arg` is one. Of the places only
+    /// The place a detached `&mut` references, if `arg` is one. Of the places only
     /// `&mut local` is undetached — [`super::boxing`] collapses it to the
     /// local's own slot, so that box *is* the storage. Every other one, a
     /// capture and a deref alike, is wrapped in a fresh box nothing else can
     /// see: `&mut *p` re-boxes what `p` points at, whatever `p` is. `&mut xs[i]`
     /// arrives here as `&mut *xs.index_ref(i)`, hence the deref.
-    fn detached_borrow<'e>(&self, arg: &'e TirExpr) -> Option<&'e TirExpr> {
+    fn detached_ref<'e>(&self, arg: &'e TirExpr) -> Option<&'e TirExpr> {
         let TirExprKind::Unary {
             op: TirUnaryOp::MutRef,
             expr: place,
@@ -326,7 +326,7 @@ impl WriteBack<'_> {
     /// pass ran, so the store would be silently dropped. A projection *through*
     /// a capture stays in — it lands on the object the capture copied.
     fn detached_place<'e>(&self, arg: &'e TirExpr) -> Option<&'e TirExpr> {
-        let place = self.detached_borrow(arg)?;
+        let place = self.detached_ref(arg)?;
         match &place.kind {
             TirExprKind::FieldAccess { .. } | TirExprKind::Index { .. } => Some(place),
             TirExprKind::Unary {
@@ -338,16 +338,16 @@ impl WriteBack<'_> {
     }
 
     /// Whether the callee can reach the storage `place` names through `sibling`,
-    /// a borrow on its root or a reference that may alias that root.
+    /// a reference to its root or a reference that may alias that root.
     fn reaches(&self, sibling: &TirExpr, place: &TirExpr) -> bool {
         let Some(root) = place_root(place) else {
             return false;
         };
         if let TirExprKind::Unary {
             op: TirUnaryOp::Ref | TirUnaryOp::MutRef,
-            expr: borrowed,
+            expr: referent,
         } = &sibling.kind
-            && place_root(borrowed) == Some(root)
+            && place_root(referent) == Some(root)
         {
             return true;
         }
@@ -358,7 +358,7 @@ impl WriteBack<'_> {
             return false;
         }
         place_root(sibling) == Some(root)
-            || matches!(root, Root::Local(index) if self.borrowed_locals.contains(&index))
+            || matches!(root, Root::Local(index) if self.referenced_locals.contains(&index))
     }
 
     /// Read every step of `place` that is not already a slot into a temp, so
@@ -429,9 +429,9 @@ impl WriteBack<'_> {
         let touched = match &call.kind {
             TirExprKind::Call { args, .. } => args
                 .iter()
-                .any(|arg| self.takes_a_detached_borrow(&arg.expr)),
+                .any(|arg| self.takes_a_detached_ref(&arg.expr)),
             TirExprKind::IndirectCall { args, .. } => {
-                args.iter().any(|arg| self.takes_a_detached_borrow(arg))
+                args.iter().any(|arg| self.takes_a_detached_ref(arg))
             }
             _ => return,
         };
@@ -449,7 +449,7 @@ impl WriteBack<'_> {
         {
             self.hoist_argument(callee, &mut prefix, LetStorage::Aliased);
         }
-        // A direct callee declares the positions it keeps a borrow past the
+        // A direct callee declares the positions it keeps a reference past the
         // call; an indirect one carries them on its function type.
         let (callee, escaping, replaced, has_receiver, args): (_, _, _, _, Vec<&mut TirExpr>) =
             match &mut call.kind {
@@ -490,7 +490,7 @@ impl WriteBack<'_> {
             .iter()
             .enumerate()
             .map(|(position, arg)| {
-                self.takes_a_detached_borrow(arg)
+                self.takes_a_detached_ref(arg)
                     && (escaping.contains(&u32::try_from(position).unwrap())
                         || replaced.contains(&u32::try_from(position).unwrap()))
             })
@@ -534,7 +534,7 @@ impl WriteBack<'_> {
                 // No write-back is possible for this shape. It only matters if
                 // the callee would actually replace what it names.
                 if at_risk[position] {
-                    // Why there is no write-back point differs: a stored borrow
+                    // Why there is no write-back point differs: a stored reference
                     // outlives every point in this body, where a replaced one
                     // has a point but no place this pass can spell.
                     let why = if escaping.contains(&u32::try_from(position).unwrap()) {
@@ -589,7 +589,7 @@ impl WriteBack<'_> {
             // The temp aliases the place, so payload mutation through it lands
             // without any store back.
             let temp = self.bind(&mut prefix, "", place.clone(), true, LetStorage::Aliased);
-            self.borrowed_temps.push(temp.index);
+            self.ref_temps.push(temp.index);
             // An identity witness, never a copy: a copy would make every call
             // look like a whole-value write.
             let before = self.bind(
@@ -701,7 +701,7 @@ impl TirOptVisitor for WriteBack<'_> {
     fn visit_stmt(&mut self, stmt: &mut TirStmt) -> bool {
         match &stmt.kind {
             // A TIR `Let` is a single binding; a destructuring `let` lowered to
-            // a pattern, which binds through the borrow rather than keeping it.
+            // a pattern, which binds through the reference rather than keeping it.
             // Only a binding something replaces through loses a write — one used
             // to mutate a payload lands through the box either way.
             TirStmtKind::Let {
@@ -712,7 +712,7 @@ impl TirOptVisitor for WriteBack<'_> {
                     if self.replaced_locals.contains(&local_index) {
                         self.refuse_stored(value, "a variable");
                     }
-                    // Reading the binding hands the same detached borrow on, so
+                    // Reading the binding hands the same detached reference on, so
                     // a later sink is the same escape.
                     self.detached_locals.insert(local_index);
                 }
@@ -760,8 +760,8 @@ impl TirOptVisitor for WriteBack<'_> {
             _ => {}
         }
         let changed = opt_walk_expr(self, expr);
-        let planted = self.borrowed_temps.len();
+        let planted = self.ref_temps.len();
         self.wrap(expr);
-        changed || self.borrowed_temps.len() != planted
+        changed || self.ref_temps.len() != planted
     }
 }
