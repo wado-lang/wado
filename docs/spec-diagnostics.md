@@ -217,8 +217,7 @@ nothing.
 ## The `dead_code` Lint
 
 The `dead_code` lint warns about a free function or a global that its package
-does not use. Reachability is decided over every module of the package, not
-over one program built from it. An item is used when one of these roots
+does not use, from any of its modules. An item is used when one of these roots
 reaches it:
 
 - A `pub` or `export` item. An `internal` item is not a root, because nothing
