@@ -7,7 +7,7 @@ struct Pair {
 }
 
 #[inline("never")]
-fn borrowed_sum(p: &Pair) -> i32 {
+fn ref_sum(p: &Pair) -> i32 {
     return p.a + p.b;
 }
 
@@ -18,10 +18,10 @@ fn owned_sum(p: Pair) -> i32 {
 
 export fn run() {
     let p = Pair { a: builtin::black_box(1), b: builtin::black_box(2) };
-    assert borrowed_sum(&p) == 3;
+    assert ref_sum(&p) == 3;
     assert owned_sum(p) == 3;
     if builtin::black_box(false) {
-        let _ = borrowed_sum(panic("borrowed"));
+        let _ = ref_sum(panic("referenced"));
         let _ = owned_sum(panic("owned"));
     }
 }
@@ -30,7 +30,7 @@ __DATA__
 {
     "stdout": "",
     "wir_expect:O2": [
-        "borrowed_sum\" = fn(i32, i32) -> i32",
+        "ref_sum\" = fn(i32, i32) -> i32",
         "owned_sum\" = fn(i32, i32) -> i32"
     ]
 }

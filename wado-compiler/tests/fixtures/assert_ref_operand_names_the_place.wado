@@ -1,5 +1,5 @@
 // `&place` in an assert condition names the place, as it does anywhere else.
-// The capture used to bind the place's value first and borrow the binding, so
+// The capture used to bind the place's value first and take `&` of the binding, so
 // `ref_eq` compared a copy and failed where the same expression outside an
 // assert held.
 
@@ -11,20 +11,20 @@ struct H {
     p: P,
 }
 
-test "a borrow of an element" {
+test "a reference to an element" {
     let xs: List<P> = [P { a: 1 }];
     let r = &xs[0];
     assert ref_eq(r, &xs[0]);
 }
 
-test "a borrow of a field" {
+test "a reference to a field" {
     let h = H { p: P { a: 1 } };
     let r = &h.p;
     assert ref_eq(r, &h.p);
 }
 
 #[expect_trap]
-test "a failing borrow still renders" {
+test "a failing reference still renders" {
     let xs: List<P> = [P { a: 1 }, P { a: 1 }];
     let r = &xs[0];
     assert ref_eq(r, &xs[1]);

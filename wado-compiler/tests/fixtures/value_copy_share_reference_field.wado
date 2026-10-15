@@ -1,9 +1,9 @@
 // Value-copy soundness around a reference-typed field, which ends a path at
-// storage its holder only borrows (wado-lang/wado#1998). The share rule keys a
-// write to a read by their root, and the holder's root is not the referent's.
-// A borrow on either side therefore defeats that comparison: a read taken
+// storage its holder only references (wado-lang/wado#1998). The share rule keys
+// a write to a read by their root, and the holder's root is not the referent's.
+// A reference on either side therefore defeats that comparison: a read taken
 // through one copies, and a write made through one is seen by every binding
-// live at it. Behind a callee the read resolves to the same borrowed path and
+// live at it. Behind a callee the read resolves to the same referenced path and
 // copies alike.
 
 struct Cell {

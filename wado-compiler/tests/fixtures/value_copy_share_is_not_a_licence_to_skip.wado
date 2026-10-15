@@ -84,10 +84,10 @@ test "a release does not travel to a chain whose root is read again" {
     assert h.xs.len() == 0;
 }
 
-// A borrow of `b` read after `b = []` sees the assignment, which therefore
+// A reference to `b` read after `b = []` sees the assignment, which therefore
 // writes into `b`'s storage (WEP 2026-10-13). A binding read out of `b` before
 // it cannot share that storage, or the write would empty it too.
-test "a share does not outlive an in-place assignment under a stored borrow" {
+test "a share does not outlive an in-place assignment under a stored reference" {
     let h = Holder { xs: [1, 2] };
     let mut b = h.peek();
     let w = watch(&b);

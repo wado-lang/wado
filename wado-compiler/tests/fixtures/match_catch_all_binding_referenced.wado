@@ -1,5 +1,5 @@
 // A catch-all arm binds the whole scrutinee after an arm that destructured a
-// payload. Borrowing that binding (`&other`) must borrow a value of the
+// payload. Referencing that binding (`&other`) must refer to a value of the
 // variant's own type, whichever case it holds.
 
 variant Shape {
@@ -28,7 +28,7 @@ fn name_of_value(shape: Shape) -> String {
     };
 }
 
-test "a borrowed catch-all binding is the variant itself" {
+test "a referenced catch-all binding is the variant itself" {
     assert name_of(&Shape::Circle(2)) == "circle 2";
     assert name_of(&Shape::Label("x")) == "x";
     assert name_of_value(Shape::Circle(3)) == "circle 3";

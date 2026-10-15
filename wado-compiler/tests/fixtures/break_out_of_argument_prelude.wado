@@ -18,7 +18,7 @@ fn pair_of(n: i32) -> Result<Pair, String> {
 
 // A `&Pair` read only by field takes its fields, loaded in the prelude.
 #[inline("never")]
-fn borrowed_sum(p: &Pair) -> i32 {
+fn ref_sum(p: &Pair) -> i32 {
     return p.a + p.b;
 }
 
@@ -28,8 +28,8 @@ fn owned_sum(p: Pair) -> i32 {
     return p.a + p.b;
 }
 
-fn through_borrowed(n: i32) -> Result<i32, String> {
-    return Ok(borrowed_sum(&pair_of(n)?));
+fn through_ref(n: i32) -> Result<i32, String> {
+    return Ok(ref_sum(&pair_of(n)?));
 }
 
 fn through_owned(n: i32) -> Result<i32, String> {
@@ -43,8 +43,8 @@ fn through_closure(n: i32, f: fn(Pair) -> i32) -> Result<i32, String> {
 export fn run() {
     let n = builtin::black_box(1);
     let m = builtin::black_box(-1);
-    assert through_borrowed(n) matches { Ok(3) };
-    assert through_borrowed(m) matches { Err(_) };
+    assert through_ref(n) matches { Ok(3) };
+    assert through_ref(m) matches { Err(_) };
     assert through_owned(n) matches { Ok(3) };
     assert through_owned(m) matches { Err(_) };
     let f = |p: Pair| p.a * p.b;

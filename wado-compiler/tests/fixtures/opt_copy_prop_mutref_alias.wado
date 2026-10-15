@@ -1,7 +1,7 @@
-// Regression: copy_prop's scope-stability check recorded a `&mut y` borrow as
-// a point event at the borrow's statement index; a later write through the
+// Regression: copy_prop's scope-stability check recorded a `&mut y` reference as
+// a point event at the reference's statement index; a later write through the
 // alias (`r.f = 5`) was attributed to `r` only. A `let x = y` binding sitting
-// between the borrow and the write then looked "scope stable" and the copy was
+// between the reference and the write then looked "scope stable" and the copy was
 // propagated, making `x` observe the write. The `&mut`-alias map
 // (`arena_query::MutRefAliases`) now attributes through-alias writes back to
 // `y` at the write's own index.

@@ -213,7 +213,7 @@ pub struct TokenStream {
 }
 
 impl TokenStream {
-    /// Empty stream over `chars` (a borrow of the source char list, like
+    /// Empty stream over `chars` (a reference to the source char list, like
     /// `LexerSlice`). Pre-size every array — trivia included — to ~one token
     /// per four chars; trivia tracks token count, so `[]` would re-grow from
     /// zero every parse.
@@ -556,7 +556,7 @@ pub fn line_col(chars: &List<char>, pos: i32) -> [i32, i32] {
 //!
 //! `CstNode` is a pure value tree: it holds no reference to the token stream,
 //! so it composes and stores freely and `ParseResult` can own both the tree and
-//! the stream it indexes without a self-referential borrow. Methods that need
+//! the stream it indexes without a self-referential reference. Methods that need
 //! terminal text or kinds take a `&TokenStream` argument.
 //!
 //! Error tokens are first-class and lossless: `Missing` (an inserted synthetic
@@ -692,7 +692,7 @@ fn cst_to_string_tree_impl(
 
 /// What a parse returns: the root, the token stream its terminal
 /// indices point into, and any diagnostics. A clean parse leaves `diagnostics`
-/// empty. Owns both `root` and `tokens` outright (the tree borrows nothing), so
+/// empty. Owns both `root` and `tokens` outright (the tree references nothing), so
 /// the result is a freely movable value.
 pub struct ParseResult {
     pub root: CstNode,

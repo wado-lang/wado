@@ -3,7 +3,7 @@
 // where the parameter is `&mut List<T>`.
 //
 // Wado parses `&mut x as T` as `(&mut x) as T` — `&mut` binds tighter
-// than `as` — so without a special-case the cast applies to a borrow
+// than `as` — so without a special-case the cast applies to a reference
 // of an unrelated `tuple<>` struct. The Wado frontend accepted it but
 // the WIR pipeline emitted `struct.new tuple//[]` for the empty array
 // literal, and Wasm validation failed with
@@ -12,7 +12,7 @@
 //
 // Fix: `try_coerce_tuple_to_sequence` looks through one `&` / `&mut`
 // wrapper, so the inner literal is coerced via `From<Array<T>>`
-// and the call site auto-borrows the resulting `List<T>`.
+// and the call site takes `&mut` of the resulting `List<T>`.
 
 use { println, Stdout } from "core:cli";
 

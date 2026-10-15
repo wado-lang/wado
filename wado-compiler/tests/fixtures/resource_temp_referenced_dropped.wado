@@ -1,5 +1,6 @@
-// Every temporary owned resource that is only borrowed is dropped at the end of
-// its statement, whatever borrows it and however conditionally it is evaluated.
+// Every temporary owned resource that is only referenced is dropped at the end
+// of its statement, whatever refers to it and however conditionally it is
+// evaluated.
 
 use { Request, Response, ErrorCode, Fields, Headers, Trailers, FieldName } from "wasi:http";
 
@@ -77,7 +78,7 @@ export async fn handle(request: Request) -> Result<Response, ErrorCode> {
         }
     }
 
-    // A resource bound by a `match` arm that only borrows it.
+    // A resource bound by a `match` arm that only references it.
     let has = match Fields::from_list([]) {
         Ok(f) => f.has("a" as FieldName),
         Err(_) => false,

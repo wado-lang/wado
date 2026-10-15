@@ -1,5 +1,5 @@
-// A call handed two borrows of one local may compare them, so scalar
-// replacement leaves the local whole rather than rebuild it once per borrow:
+// A call handed two references to one local may compare them, so scalar
+// replacement leaves the local whole rather than rebuild it once per reference:
 // two rebuilt literals are two objects, and `ref_eq` then answers false.
 struct P {
     a: i32,
@@ -28,7 +28,7 @@ test "a callee comparing what it was handed" {
     assert same_place;
 }
 
-test "a borrow reaching the comparison through a binding" {
+test "a reference reaching the comparison through a binding" {
     let mut x = P { a: 1, b: 2 };
     let r = &x;
     x = P { a: 7, b: builtin::black_box(8) };

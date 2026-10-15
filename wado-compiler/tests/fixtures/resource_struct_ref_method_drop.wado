@@ -1,6 +1,6 @@
 // Regression: a `&self` method that returns a freshly-produced resource must
 // NOT be treated as extracting the receiver's resource (WEP 2026-05-21). The
-// receiver `h` is only borrowed, so `h.headers` stays owned and must be dropped
+// receiver `h` is only referenced, so `h.headers` stays owned and must be dropped
 // at scope exit. The returned Fields is transferred into the Response, so the
 // only owned Fields left to release is `h.headers` — if the extraction
 // heuristic wrongly fired on the struct receiver, that drop would vanish.

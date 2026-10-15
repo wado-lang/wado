@@ -1,4 +1,4 @@
-// Every name a write can travel to a field through: a borrow of it, a pattern
+// Every name a write can travel to a field through: a reference to it, a pattern
 // that binds it, an element inside it. A read taken before the call must not
 // alias what the call then writes.
 struct Inner {
@@ -13,7 +13,7 @@ struct Holder {
 
 impl Holder {
     #[inline("never")]
-    fn via_borrow(&mut self) {
+    fn via_ref(&mut self) {
         let p = &mut self.inner;
         p.x = [9, 9];
     }
@@ -34,9 +34,9 @@ impl Holder {
     }
 
     #[inline("never")]
-    fn borrow_read(&mut self) -> i32 {
+    fn ref_read(&mut self) -> i32 {
         let raw = self.inner.x;
-        self.via_borrow();
+        self.via_ref();
         return raw.len();
     }
 
@@ -63,9 +63,9 @@ fn fresh() -> Holder {
     };
 }
 
-test "a write through a borrowed field reaches it" {
+test "a write through a referenced field reaches it" {
     let mut h = fresh();
-    assert h.borrow_read() == 3;
+    assert h.ref_read() == 3;
 }
 
 test "a write through a pattern-bound field reaches it" {
@@ -73,7 +73,7 @@ test "a write through a pattern-bound field reaches it" {
     assert h.pattern_read() == 3;
 }
 
-test "a write through a borrowed element reaches it" {
+test "a write through a referenced element reaches it" {
     let mut h = fresh();
     assert h.element_read() == 3;
 }
