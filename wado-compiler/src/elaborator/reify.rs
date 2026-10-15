@@ -23,7 +23,10 @@ use crate::logger::{Bail, Logger};
 use crate::lower::plan::value_copy::place::{is_source_place, source_place_subscripts_mut};
 use crate::lower::wide_int_literal::{create_conversion, create_literal, method_ref};
 use crate::module_source::ModuleSource;
-use crate::name::{FqTypeName, Receiver, global_init_function, global_name, unchecked_twin_name};
+use crate::name::{
+    CONTRACT_CHECKS_INTRINSIC, FqTypeName, Receiver, global_init_function, global_name,
+    unchecked_twin_name,
+};
 use crate::symbol::SymbolTable;
 use crate::tir::{
     self as tir, CallArg, GlobalInit, InstancePattern, LetStorage, LocalFrame, ResolvedType,
@@ -46,7 +49,7 @@ use super::util;
 use crate::ast::RangeKind;
 use crate::ast::{AttrArg, Attribute, InterfaceDecl, NamePolicy, Visibility};
 use crate::compiler_item::{CompilerItem, Resolved};
-use crate::coverage::{CoverageMap, ProbeSite, contract_check_call};
+use crate::coverage::{CoverageMap, ProbeSite};
 use crate::defs::DefId;
 use crate::elaborator::Elaborator;
 use crate::elaborator::assert::{NOT_EVALUATED, render_local_name, seen_local_name};
@@ -80,7 +83,7 @@ use crate::escape::{
 use crate::format_spec::{FormatKind, TemplateFormatSpec};
 use crate::lexer::defaults_to_float;
 use crate::name::{
-    LocalMethodName, MethodName, constant_pattern_local_name, deref_capture_name,
+    DeclaredHead, LocalMethodName, MethodName, constant_pattern_local_name, deref_capture_name,
     display_function_name, effect_default_impl_name, for_body_label, mangle_local_item_name,
     minted_name, range_local_name, test_function_name, widened_half_local_name,
 };
@@ -353,14 +356,13 @@ fn break_unless(cond: TirExpr, cond_span: Span, span: Span) -> TirStmt {
 
 /// `target = value;` as a statement.
 fn assign_stmt(target: TirExpr, value: TirExpr, span: Span) -> TirStmt {
-    let type_id = value.type_id;
     TirStmt::new(
         TirStmtKind::Expr(TirExpr::new(
             TirExprKind::Assign {
                 target: Box::new(target),
                 value: Box::new(value),
             },
-            type_id,
+            TypeTable::UNIT,
             span,
         )),
         span,
@@ -461,9 +463,6 @@ pub(crate) struct Reify<'a, H: CompilerHost> {
     /// The probe ids of code reify emits no instance of: a tuple `for-of` body
     /// over no elements.
     pub(crate) probes_without_instance: IndexSet<u32>,
-    /// The `builtin::contract_checks()` call heading the contract check whose
-    /// condition reify is in. See [`contract_check_call`].
-    pub(crate) contract_check_call: Option<AstId>,
 }
 
 /// Call site captured for location literals in defaults.
@@ -525,7 +524,6 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             coverage: None,
             probes_emitted: IndexSet::default(),
             probes_without_instance: IndexSet::default(),
-            contract_check_call: None,
         }
     }
 
@@ -1119,7 +1117,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             .ann_effect_ops(decl.id)
             .expect("`record_effect_ops` records op signatures for every effect reify emits");
         tir::TirEffect {
-            name: decl.name.clone(),
+            head: DeclaredHead::new(self.tysys.resolutions.defs(), self.tysys.def_at(decl.id)),
             visibility: decl.visibility,
             operations,
             span: decl.span,
@@ -1136,8 +1134,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             .ann_effect_ops(decl.id)
             .expect("`record_effect_ops` records op signatures for every resource reify emits");
         tir::TirResource {
-            def: self.tysys.def_at(decl.id),
-            name: decl.name.clone(),
+            head: DeclaredHead::new(self.tysys.resolutions.defs(), self.tysys.def_at(decl.id)),
             visibility: decl.visibility,
             operations,
             is_generic: !decl.type_params.is_empty(),
@@ -1297,7 +1294,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             trait_canonical: facts
                 .trait_name
                 .as_ref()
-                .and_then(|fq| Some((fq.module()?.clone(), fq.base_name().to_string()))),
+                .and_then(|fq| fq.declared_head().cloned()),
             trait_type_args: facts.trait_type_args.clone(),
             struct_name: naming.struct_name(),
             rest: impl_block.rest.map(|r| r.kind),
@@ -1710,25 +1707,6 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
     /// Report a malformed attribute at the attribute's own span.
     fn attr_error(&self, code: Code, attr: &ast::Attribute, message: String) {
         self.error_at(code, attr.span, message);
-    }
-
-    /// Report `call` when it reified to `builtin::contract_checks()` anywhere
-    /// but at the head of a contract check: `lower::contract_checks` keeps or
-    /// deletes a check whole and knows no other shape.
-    fn reject_misplaced_contract_checks(&self, call: &ast::CallExpr, expr: &TirExpr) {
-        let TirExprKind::Call { func, .. } = &expr.kind else {
-            return;
-        };
-        if !func.is_builtin_named("contract_checks") || self.contract_check_call == Some(call.id) {
-            return;
-        }
-        self.error_at(
-            Code::UnsupportedFeature,
-            call.span,
-            "`builtin::contract_checks()` stands only as the whole condition of \
-             `if builtin::contract_checks() { … }`, with no `else`"
-                .to_string(),
-        );
     }
 
     /// Report each attribute that describes a declaration with no body, written
@@ -2541,9 +2519,9 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             }
             ast::Expr::Unary(unary) => {
                 // `&mut [1, 2] as List<i32>` parses as `(&mut [1, 2]) as …`,
-                // and annotate coerced the literal through the borrow and typed
-                // the whole unary as the target. Reify drops the wrapper to
-                // match: the call site auto-borrows the `List<i32>`, where a
+                // and annotate coerced the literal through the reference and
+                // typed the whole unary as the target. Reify drops the wrapper
+                // to match: the call site takes a reference to the `List<i32>`, where a
                 // `&mut` around it would name the referent instead.
                 if matches!(unary.op, ast::UnaryOp::Ref | ast::UnaryOp::MutRef)
                     && let ast::Expr::TupleLiteral(inner) = &unary.expr
@@ -2636,7 +2614,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 // Track address-taken locals for `&x` / `&mut x`, mirroring
                 // `Elaborator::resolve_unary`. The
                 // boxing pass (`lower::plan::boxing`) reads
-                // `TirFunction::address_taken_locals` to retag a borrowed
+                // `TirFunction::address_taken_locals` to retag a referenced
                 // local's declaration to its box type, so that mutation
                 // through the reference (e.g. `*slot = other_fn`) writes
                 // back to the original slot. Without this the local stays
@@ -2646,8 +2624,8 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 {
                     ctx.address_taken_locals.insert(*index);
                 }
-                // A reborrow names the storage its operand already references;
-                // borrowing the deref would box a copy of a scalar.
+                // `&*r` / `&mut *r` names the storage `r` already refers to;
+                // taking `&` of the deref would box a copy of a scalar.
                 if matches!(op, TirUnaryOp::Ref | TirUnaryOp::MutRef)
                     && let TirExprKind::Unary {
                         op: TirUnaryOp::Deref,
@@ -2671,11 +2649,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 self.reify_method_call(method_call, ctx, recorded_type)
             }
             ast::Expr::Binary(binary) => self.reify_binary(binary, ctx, recorded_type),
-            ast::Expr::Call(call) => {
-                let expr = self.reify_call(call, ctx, recorded_type);
-                self.reject_misplaced_contract_checks(call, &expr);
-                expr
-            }
+            ast::Expr::Call(call) => self.reify_call(call, ctx, recorded_type),
             ast::Expr::Match(match_expr) => {
                 self.reify_match_expr(match_expr, ctx, expected_type, recorded_type)
             }
@@ -2816,20 +2790,6 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 unreachable!("reify does not run on modules with syntax errors")
             }
         }
-    }
-
-    /// Reify the condition of the `if` statement `if_stmt`, where a contract
-    /// check's `builtin::contract_checks()` stands.
-    fn reify_if_stmt_condition(
-        &mut self,
-        if_stmt: &ast::IfStmt,
-        cond_expr: &ast::Expr,
-        ctx: &mut FunctionContext,
-    ) -> TirExpr {
-        let saved = std::mem::replace(&mut self.contract_check_call, contract_check_call(if_stmt));
-        let condition = self.reify_condition_expr(cond_expr, ctx);
-        self.contract_check_call = saved;
-        condition
     }
 
     /// Reify an expression in condition position, the walk
@@ -4231,7 +4191,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 )
             }
             ast::Condition::Expr(cond_expr) => {
-                let condition = self.reify_if_stmt_condition(if_stmt, cond_expr, ctx);
+                let condition = self.reify_condition_expr(cond_expr, ctx);
                 let then_branch = self.reify_block_with_position(
                     &if_stmt.then_block,
                     ctx,
@@ -4275,7 +4235,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
     fn reify_if_stmt(&mut self, if_stmt: &ast::IfStmt, ctx: &mut FunctionContext) -> Vec<TirStmt> {
         match &if_stmt.condition {
             ast::Condition::Expr(cond_expr) => {
-                let condition = self.reify_if_stmt_condition(if_stmt, cond_expr, ctx);
+                let condition = self.reify_condition_expr(cond_expr, ctx);
                 let then_block = self.reify_block(&if_stmt.then_block, ctx, None);
                 let else_block = self.else_branch(
                     if_stmt.else_block.as_ref(),
@@ -4615,7 +4575,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
 
     /// Reify a tagged template as the call annotate resolved it: the tag on a
     /// literal of the template's anonymous type, one field per hole. A hole
-    /// that is a place is read or borrowed where it stands; any other is
+    /// that is a place is read or referenced where it stands; any other is
     /// evaluated once, in source order, into a local of the block the call
     /// then sits in (WEP 2026-01-10).
     fn reify_tagged_template(
@@ -4760,7 +4720,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
     }
 
     /// Whether a reified hole names storage the template literal can read or
-    /// borrow in situ: a local, a parameter, a global, or a field or element
+    /// reference in situ: a local, a parameter, a global, or a field or element
     /// chain rooted at one. Anything else computes a value, which the literal
     /// reads once from a temporary instead.
     ///
@@ -5141,6 +5101,12 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         }
     }
 
+    /// The method the subscript `index` reads its element through.
+    fn index_read_dispatch(&self, index: &ast::IndexExpr) -> Option<OperatorDispatch> {
+        self.ann_operator_dispatch(index.id)
+            .map(|dispatch| unchecked_subscript(index, dispatch))
+    }
+
     /// The compound-assign read side of `recv[idx]`, reusing the same
     /// once-evaluated receiver / subscript the write side gets.
     fn build_index_trait_read(
@@ -5150,7 +5116,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         index_expr: &ast::IndexExpr,
         span: Span,
     ) -> TirExpr {
-        let Some(dispatch) = self.ann_operator_dispatch(index_expr.id) else {
+        let Some(dispatch) = self.index_read_dispatch(index_expr) else {
             // Write-only `IndexAssign` type — annotate diagnosed the missing
             // read; match its recovery shape.
             return TirExpr::new(TirExprKind::Unit, TypeTable::ERROR, span);
@@ -5707,7 +5673,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         // Operator-dispatch path: `operator_dispatch[index.id]` carries the
         // resolved Index / IndexValue method and `needs_deref`. Shared with the
         // compound-assign read via `build_index_read_from_dispatch`.
-        if let Some(dispatch) = self.ann_operator_dispatch(index.id) {
+        if let Some(dispatch) = self.index_read_dispatch(index) {
             let idx_expr = self.reify_expr(&index.index, ctx, None);
             let deref_type = self.tysys.index_deref_type(Some(recorded_type), &dispatch);
             return self.tysys.build_index_read_from_dispatch(
@@ -6406,10 +6372,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             let handler = self.reify_expr(&binding.handler, ctx, None);
             for entry in &facts.effects {
                 bindings.push(TirHandlerBinding {
-                    effect: Some(EffectRef::Concrete {
-                        name: entry.name.clone(),
-                        module_source: entry.module_source.clone(),
-                    }),
+                    effect: entry.effect.clone(),
                     trait_type_args: entry.trait_type_args.clone(),
                     handler: handler.clone(),
                     handler_type: facts.handler_type,
@@ -6997,7 +6960,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         let named = slots_named_by_defaults(args.len(), func_params);
         let captured = names_captured_by_defaults(args.len(), func_params);
         let mut prelude = Vec::new();
-        let mut borrows = BorrowedPlaces::default();
+        let mut mut_refs = MutRefPlaces::default();
         let walk = |this: &mut Self| {
             util::replaced(
                 this,
@@ -7006,8 +6969,9 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 |this| {
                     this.with_module_perspective(callee_module, |this| {
                         ctx.with_caller_bindings_hidden(|ctx| {
-                            // Every argument binds ahead of the defaults, in call order. A `&mut`
-                            // place stays in the call, and a default re-borrows it unless captured.
+                            // Every argument binds ahead of the defaults, in call order. A
+                            // `&mut` place stays in the call, and a default takes `&mut` of it
+                            // again unless captured.
                             if named.contains(&true) {
                                 for ((arg, (name, _)), named) in
                                     args.iter_mut().zip(func_params).zip(&named)
@@ -7020,11 +6984,11 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                                     let value = std::mem::replace(&mut arg.expr, unbound);
                                     arg.expr = if name == RECEIVER {
                                         this.bind_receiver_ahead(ctx, value, &mut prelude)
-                                    } else if is_mut_borrow(&value)
+                                    } else if is_mut_ref(&value)
                                         && this.tysys.is_source_place(&value)
                                         && !captured.contains(name)
                                     {
-                                        let borrow = this.bind_subscripts_ahead(
+                                        let mut_ref = this.bind_subscripts_ahead(
                                             ctx,
                                             value,
                                             "arg_index",
@@ -7033,11 +6997,11 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                                         if *named {
                                             let what = minted_name(name, ctx.fresh_serial());
                                             let stand_in =
-                                                ctx.add_local(what, borrow.type_id, false, None);
+                                                ctx.add_local(what, mut_ref.type_id, false, None);
                                             ctx.name_local(name.clone(), stand_in);
-                                            borrows.0.push((stand_in, borrow.clone()));
+                                            mut_refs.0.push((stand_in, mut_ref.clone()));
                                         }
-                                        borrow
+                                        mut_ref
                                     } else {
                                         bind_param_to_local(ctx, name, value, &mut prelude)
                                     };
@@ -7054,7 +7018,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                                 if let Some(expected) = expected {
                                     this.settle_packs_in_default(&mut resolved, expected);
                                 }
-                                borrows.visit_expr(&mut resolved);
+                                mut_refs.visit_expr(&mut resolved);
                                 if *named {
                                     resolved =
                                         bind_param_to_local(ctx, name, resolved, &mut prelude);
@@ -7545,7 +7509,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         };
 
         let inner_dispatch = self
-            .ann_operator_dispatch(index_expr.id)
+            .index_read_dispatch(index_expr)
             .expect(
                 "reify_index_mut_method_call: inner IndexMut dispatch missing — annotate should have recorded it alongside the IndexMutMethodCall desugar tag",
             );
@@ -7764,10 +7728,10 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
 
         // A receiver the callee can replace rather than write into is boxed, or
         // the mutation has no slot to land in and `x.bump()` mutates a copy.
-        let needs_implicit_mut_borrow = !dispatch.is_ref_impl
+        let needs_implicit_mut_ref = !dispatch.is_ref_impl
             && matches!(dispatch.self_kind, ast::SelfKind::MutRef)
             && self.tysys.mut_self_receiver_needs_box(raw_receiver.type_id);
-        if needs_implicit_mut_borrow && let TirExprKind::Local { index, .. } = &raw_receiver.kind {
+        if needs_implicit_mut_ref && let TirExprKind::Local { index, .. } = &raw_receiver.kind {
             ctx.address_taken_locals.insert(*index);
         }
 
@@ -10136,7 +10100,7 @@ impl AstVisitor for ClosureSpelledNames {
     }
 }
 
-fn is_mut_borrow(expr: &TirExpr) -> bool {
+fn is_mut_ref(expr: &TirExpr) -> bool {
     matches!(
         expr.kind,
         TirExprKind::Unary {
@@ -10146,23 +10110,23 @@ fn is_mut_borrow(expr: &TirExpr) -> bool {
     )
 }
 
-/// The `&mut` borrows a call keeps in place, each with the local a default
-/// reads it through; [`TirMutVisitor::visit_expr`] reads the place again there.
+/// The `&mut`s a call keeps in place, each with the local a default reads it
+/// through; [`TirMutVisitor::visit_expr`] reads the place again there.
 #[derive(Default)]
-struct BorrowedPlaces(Vec<(u32, TirExpr)>);
+struct MutRefPlaces(Vec<(u32, TirExpr)>);
 
-impl TirMutVisitor for BorrowedPlaces {
+impl TirMutVisitor for MutRefPlaces {
     fn visit_expr(&mut self, expr: &mut TirExpr) {
         if let TirExprKind::Local { index, .. } = &expr.kind
-            && let Some((_, borrow)) = self.0.iter().find(|(local, _)| local == index)
+            && let Some((_, mut_ref)) = self.0.iter().find(|(local, _)| local == index)
         {
             let span = expr.span;
-            *expr = borrow.clone();
+            *expr = mut_ref.clone();
             expr.span = span;
             return;
         }
         // A closure body numbers its own locals, and none captures a stand-in:
-        // `names_captured_by_defaults` keeps those borrows bound.
+        // `names_captured_by_defaults` keeps those `&mut`s bound.
         if matches!(expr.kind, TirExprKind::Closure { .. }) {
             return;
         }
@@ -10211,13 +10175,13 @@ fn bind_to_local(
     TirExpr::new(TirExprKind::Local { index, name }, type_id, span)
 }
 
-/// `if builtin::contract_checks() { check }`: one `contract` clause as the
+/// `if $contract_checks() { check }`: one `contract` clause as the
 /// `unchecked` twin runs it. [`split_unchecked_twin`] unwraps it again for the
 /// checked function.
 fn contract_check(check: Vec<TirStmt>, span: Span) -> TirStmt {
     TirStmt::new(
         TirStmtKind::If {
-            condition: builtin_call("contract_checks", Vec::new(), TypeTable::BOOL),
+            condition: builtin_call(CONTRACT_CHECKS_INTRINSIC, Vec::new(), TypeTable::BOOL),
             then_block: TirBlock::new(check, span),
             else_block: None,
         },
@@ -10226,7 +10190,8 @@ fn contract_check(check: Vec<TirStmt>, span: Span) -> TirStmt {
 }
 
 /// Retarget the call `unchecked` marks, spanning `call_span`, to its callee's
-/// twin, which the check of `unchecked`'s operand established it has.
+/// twin, which the check of `unchecked`'s operand established it has. A
+/// marked subscript goes through [`unchecked_subscript`] instead.
 /// Reify may wrap that call (a default argument naming another parameter
 /// hoists the arguments into a block around it), so the call is found by the
 /// span of the operand it was reified from.
@@ -10242,7 +10207,7 @@ fn retarget_to_unchecked_twin(expr: &mut TirExpr, call_span: Span) {
             }
             match &mut expr.kind {
                 TirExprKind::Call { func, .. } if expr.span == self.call_span => {
-                    retarget_call(func);
+                    func.retarget_to_unchecked_twin();
                     self.found = true;
                 }
                 _ => self.walk_expr(expr),
@@ -10257,15 +10222,13 @@ fn retarget_to_unchecked_twin(expr: &mut TirExpr, call_span: Span) {
     assert!(marked.found, "`unchecked` marks a call: {:?}", expr.kind);
 }
 
-fn retarget_call(func: &mut FunctionRef) {
-    func.name = unchecked_twin_name(&func.name);
-    if let Some(info) = &mut func.method_info {
-        info.mark_unchecked();
+/// `dispatch`, aimed at its callee's `unchecked` twin where `index` is marked,
+/// which the check of the mark established it has.
+fn unchecked_subscript(index: &ast::IndexExpr, mut dispatch: OperatorDispatch) -> OperatorDispatch {
+    if index.unchecked.is_some() {
+        dispatch.function_ref.retarget_to_unchecked_twin();
     }
-    if let Some(mono) = &mut func.monomorph_info {
-        mono.generic_name = unchecked_twin_name(&mono.generic_name);
-    }
-    func.template = func.template.as_ref().map(TemplateId::unchecked_twin);
+    dispatch
 }
 
 /// The `unchecked` twin of `func`, reified from `decl`, where `decl` writes a

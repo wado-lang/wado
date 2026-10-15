@@ -435,7 +435,7 @@ pub enum CompilerItem {
     /// lower walks.
     ListIndexValue,
     /// `List`'s `IndexAssign<i32>::index_assign` — `xs[i] = v`, which writes
-    /// into the element's storage where a borrow of it may be read after
+    /// into the element's storage where a reference to it may be read after
     /// (WEP 2026-10-13).
     ListIndexAssign,
     /// `List::from_tuple` — collects a homogeneous tuple into a `List<T>`;
@@ -507,7 +507,7 @@ pub enum CompilerItem {
     /// `String::push_char` — recognised by the WIR optimiser for
     /// string-building inlining.
     StringPushChar,
-    /// `String::push_ascii_unchecked` — the single-byte append the NIR
+    /// `String::push_ascii_byte` — the single-byte append the NIR
     /// `const_ascii_push` rewrite retargets constant-ASCII `push` calls to,
     /// skipping `encode_char`'s width dispatch.
     StringPushAscii,
@@ -523,20 +523,16 @@ pub enum CompilerItem {
     /// `String::internal_write_str_at` — the raw string write `append_fuse`
     /// emits into space `internal_reserve_uninit` already claimed.
     StringWriteStrAt,
-    /// `String::get_byte_unchecked` — the unchecked byte read helper
-    /// used by synthesised deserializers (`serde_synth`). Routed
-    /// through this item so renames in the stdlib do not silently
-    /// break code generation. See issue #1077.
-    StringGetByteUnchecked,
-    /// `ByteSlice::get_unchecked` (`Slice<u8>`) — the unchecked byte
-    /// read used by synthesised deserializers (`serde_synth`) when comparing
-    /// a wire key against a struct's `FieldSchema`. Routed through this item
-    /// for the same rename-safety reason as [`Self::StringGetByteUnchecked`].
-    ByteSliceGetUnchecked,
+    /// `Slice<u8>`'s `IndexValue<i32>::index_value` — the byte read
+    /// synthesised deserializers (`serde_synth`) make, through its `unchecked`
+    /// twin, when comparing a wire key against a struct's `FieldSchema`.
+    /// Routed through this item so renames in the stdlib do not silently break
+    /// code generation. See issue #1077.
+    ByteSliceIndexValue,
     /// `ByteSlice::len` (`Slice<u8>`) — the byte-length accessor the
     /// synthesised `FieldSchema::lookup` uses to size the wire key. Routed
     /// through a compiler item for the same rename-safety reason as
-    /// [`Self::ByteSliceGetUnchecked`].
+    /// [`Self::ByteSliceIndexValue`].
     ByteSliceLen,
     /// `i128::from_i64` — sign-extending constructor used by the
     /// wide-int literal lowering pass.
@@ -893,8 +889,7 @@ impl CompilerItem {
         Self::StringReserveUninit,
         Self::StringSetByteUnchecked,
         Self::StringWriteStrAt,
-        Self::StringGetByteUnchecked,
-        Self::ByteSliceGetUnchecked,
+        Self::ByteSliceIndexValue,
         Self::ByteSliceLen,
         Self::I128FromI64,
         Self::I128FromU64,
@@ -1178,8 +1173,7 @@ impl CompilerItem {
             Self::StringReserveUninit => "string_reserve_uninit",
             Self::StringSetByteUnchecked => "string_set_byte_unchecked",
             Self::StringWriteStrAt => "string_write_str_at",
-            Self::StringGetByteUnchecked => "string_get_byte_unchecked",
-            Self::ByteSliceGetUnchecked => "byte_slice_get_unchecked",
+            Self::ByteSliceIndexValue => "byte_slice_index_value",
             Self::ByteSliceLen => "byte_slice_len",
             Self::I128FromI64 => "i128_from_i64",
             Self::I128FromU64 => "i128_from_u64",
@@ -1380,8 +1374,7 @@ impl CompilerItem {
             | Self::StringReserveUninit
             | Self::StringSetByteUnchecked
             | Self::StringWriteStrAt
-            | Self::StringGetByteUnchecked
-            | Self::ByteSliceGetUnchecked
+            | Self::ByteSliceIndexValue
             | Self::ByteSliceLen
             | Self::I128FromI64
             | Self::I128FromU64
@@ -1683,8 +1676,7 @@ impl CompilerItem {
             | Self::StringReserveUninit
             | Self::StringSetByteUnchecked
             | Self::StringWriteStrAt
-            | Self::StringGetByteUnchecked
-            | Self::ByteSliceGetUnchecked
+            | Self::ByteSliceIndexValue
             | Self::ByteSliceLen
             | Self::I128FromI64
             | Self::I128FromU64

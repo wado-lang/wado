@@ -1,5 +1,5 @@
 // CTFE evaluates `builtin::i32_as_char`, the bodyless builtin
-// `char::from_u32_unchecked` wraps; without it any constant call reaching a
+// `char::from_u32` wraps; without it any constant call reaching a
 // char conversion bails and never folds. `#[inline(never)]` keeps the inliner
 // away, so the fold is attributable to niri. The `eq_ignore_ascii_case` call
 // pins the real-world shape: its inlined body splices `to_ascii_lowercase('Q')`

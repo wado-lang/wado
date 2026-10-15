@@ -9,9 +9,9 @@ use g from "./grammars/lexer_ref_rule_non_greedy.g4"
 
 fn assert_tree<S: AsStrSlice, S1: AsStrSlice>(input: S, expected: S1) {
     let result = g::parse(input);
-    assert result.ok(), `unexpected diagnostics for ${input}: ${result.diagnostics:?}`;
+    assert result.ok();
     let actual = g::to_string_tree(&result);
-    assert actual == expected.to_string(), `\ninput:    ${input}\nexpected: ${expected}\nactual:   ${actual}`;
+    assert actual == expected.to_string();
 }
 
 test "the referenced rule's non-greedy repeat ends the token at its first accept" {

@@ -24,7 +24,7 @@ ${items}
 export fn run() with Stdout {
 ${body}
 }`).unwrap();
-    assert out.status matches { Exited(0) }, `${out.status}\n${out.stderr}`;
+    assert out.status matches { Exited(0) };
     return out.stdout;
 }
 
@@ -61,7 +61,7 @@ test "begin/end block" {
     w.line("y: i32,");
     w.end();
     let expected = "struct Foo {\n    x: i32,\n    y: i32,\n}\n";
-    assert w.to_string() == expected, `got: ${w.to_string()}`;
+    assert w.to_string() == expected;
 }
 
 test "nested blocks" {
@@ -72,7 +72,7 @@ test "nested blocks" {
     w.end();
     w.end();
     let expected = "impl Foo {\n    fn bar(&self) -> i32 {\n        return self.x;\n    }\n}\n";
-    assert w.to_string() == expected, `got: ${w.to_string()}`;
+    assert w.to_string() == expected;
 }
 
 test "end_with suffix" {
@@ -83,7 +83,7 @@ test "end_with suffix" {
     w.end_with(",");
     w.end();
     let expected = "variant Shape {\n    Circle {\n        radius: f64,\n    },\n}\n";
-    assert w.to_string() == expected, `got: ${w.to_string()}`;
+    assert w.to_string() == expected;
 }
 
 test "write with embedded newlines" {
@@ -92,7 +92,7 @@ test "write with embedded newlines" {
     w.write("let x = 1;\nlet y = 2;\n");
     w.end();
     let expected = "fn foo() {\n    let x = 1;\n    let y = 2;\n}\n";
-    assert w.to_string() == expected, `got: ${w.to_string()}`;
+    assert w.to_string() == expected;
 }
 
 test "raw bypasses indentation" {
@@ -102,7 +102,7 @@ test "raw bypasses indentation" {
     w.line("return 1;");
     w.end();
     let expected = "// raw header\nfn foo() {\n    return 1;\n}\n";
-    assert w.to_string() == expected, `got: ${w.to_string()}`;
+    assert w.to_string() == expected;
 }
 
 test "next_id generates unique ids" {
@@ -124,7 +124,7 @@ test "hoist_fn defines each distinct key once, where write_hoisted is" {
     w.line("// body");
     w.write_hoisted();
     assert a == "f0" && b == "f1" && again == "f0";
-    assert w.to_string() == "// body\nfn f0() {}\nfn f1() {}\n", `got: ${w.to_string()}`;
+    assert w.to_string() == "// body\nfn f0() {}\nfn f1() {}\n";
 }
 
 #[expect_trap]
@@ -144,7 +144,7 @@ test "else_begin for if/else-if chain" {
     w.line("zero();");
     w.end();
     let expected = "if x > 0 {\n    positive();\n} else if x < 0 {\n    negative();\n} else {\n    zero();\n}\n";
-    assert w.to_string() == expected, `got: ${w.to_string()}`;
+    assert w.to_string() == expected;
 }
 
 test "manual indent/dedent" {
@@ -184,7 +184,7 @@ test "append indents what it splices to the current depth" {
     w.append(&inner);
     w.ret();
     w.end();
-    assert w.to_string() == "fn g(p: i32) {\n    if c {\n        f(p);\n    }\n    return;\n}\n", `got: ${w.to_string()}`;
+    assert w.to_string() == "fn g(p: i32) {\n    if c {\n        f(p);\n    }\n    return;\n}\n";
 }
 
 test "prune drops a prunable function nothing kept calls, and what only it references" {
@@ -197,8 +197,7 @@ test "prune drops a prunable function nothing kept calls, and what only it refer
     unit_fn(&mut w, "dead", true, |b| b.call(call_of("dead_callee", ["p"])));
     unit_fn(&mut w, "dead_callee", true, |b| b.ret());
     w.prune();
-    assert w.to_string() == "fn kept(p: i32) {\n    used(p);\n}\n\nfn used(p: i32) {\n    return;\n}\n\n", `got: ${w.to_string(
-    )}`;
+    assert w.to_string() == "fn kept(p: i32) {\n    used(p);\n}\n\nfn used(p: i32) {\n    return;\n}\n\n";
 }
 
 test "prune inlines a one-statement body where its parameters are passed" {
@@ -210,7 +209,7 @@ test "prune inlines a one-statement body where its parameters are passed" {
         b.ret();
     });
     w.prune();
-    assert w.to_string() == "fn outer(p: i32) {\n    take(p);\n}\n\n", `got: ${w.to_string()}`;
+    assert w.to_string() == "fn outer(p: i32) {\n    take(p);\n}\n\n";
     assert w.references().contains("TABLE");
 }
 
@@ -222,8 +221,8 @@ test "prune keeps a one-line body the generator did not write as a movable state
         b.ret();
     });
     w.prune();
-    assert w.to_string().contains("    guard(p);\n"), `got: ${w.to_string()}`;
-    assert w.to_string().contains("fn guard("), `got: ${w.to_string()}`;
+    assert w.to_string().contains("    guard(p);\n");
+    assert w.to_string().contains("fn guard(");
 }
 
 test "prune prints the joined pre-statements of a forwarded call once" {
@@ -246,7 +245,7 @@ test "prune prints the joined pre-statements of a forwarded call once" {
     unit_fn(&mut w, "target", false, |b| b.ret());
     w.prune();
     let expected = "fn outer(p: i32) {\n    a(p);\n    b(p);\n    target(p);\n}\n\nfn target(p: i32) {\n    return;\n}\n\n";
-    assert w.to_string() == expected, `got: ${w.to_string()}`;
+    assert w.to_string() == expected;
 }
 
 test "prune leaves only the names kept code references" {
@@ -269,7 +268,7 @@ test "prune leaves only the names kept code references" {
     w.prune();
     let refs = w.references();
     assert refs.contains("TABLE_KEPT");
-    assert !refs.contains("TABLE_A") && !refs.contains("TABLE_B"), `got: ${refs:?}`;
+    assert !refs.contains("TABLE_A") && !refs.contains("TABLE_B");
 }
 
 test "every blank line after a function body is written" {
@@ -277,14 +276,14 @@ test "every blank line after a function body is written" {
     unit_fn(&mut w, "f", false, |b| b.ret());
     w.blank();
     w.line("global G: i32 = 0;");
-    assert w.to_string() == "fn f(p: i32) {\n    return;\n}\n\n\nglobal G: i32 = 0;\n", `got: ${w.to_string()}`;
+    assert w.to_string() == "fn f(p: i32) {\n    return;\n}\n\n\nglobal G: i32 = 0;\n";
 }
 
 test "prune can leave a writer empty" {
     let mut w = CodeWriter::new();
     unit_fn(&mut w, "dead", true, |b| b.ret());
     w.prune();
-    assert w.to_string() == "", `got: ${w.to_string()}`;
+    assert w.to_string() == "";
 }
 
 test "prune forwards a call through a body that only calls, with its pre-statements" {
@@ -301,7 +300,7 @@ test "prune forwards a call through a body that only calls, with its pre-stateme
     unit_fn(&mut w, "target", false, |b| b.ret());
     w.prune();
     let expected = "fn outer(p: i32) {\n    p.site = 3;\n    return target(p, 7);\n}\n\nfn target(p: i32) {\n    return;\n}\n\n";
-    assert w.to_string() == expected, `got: ${w.to_string()}`;
+    assert w.to_string() == expected;
 }
 
 test "prune renames a call to a function returning another's result on its own parameters" {
@@ -311,7 +310,7 @@ test "prune renames a call to a function returning another's result on its own p
     unit_fn(&mut w, "target", false, |b| b.ret());
     w.prune();
     let expected = "fn outer(p: i32) {\n    let r = target(q);\n}\n\nfn target(p: i32) {\n    return;\n}\n\n";
-    assert w.to_string() == expected, `got: ${w.to_string()}`;
+    assert w.to_string() == expected;
 }
 
 test "prune keeps a call whose arguments a forwarded body cannot take" {
@@ -346,8 +345,7 @@ test "a call forwarded through a chain keeps what each forwarder notes" {
     });
     unit_fn(&mut w, "target", false, |b| b.ret());
     w.prune();
-    assert w.to_string() == "fn outer(p: i32) {\n    target(p);\n}\n\nfn target(p: i32) {\n    return;\n}\n\n", `got: ${w.to_string(
-    )}`;
+    assert w.to_string() == "fn outer(p: i32) {\n    target(p);\n}\n\nfn target(p: i32) {\n    return;\n}\n\n";
     let refs = w.references();
     assert refs.contains("TABLE_A") && refs.contains("TABLE_B");
 }
@@ -372,7 +370,7 @@ test "StructSpec basic" {
     let mut w = CodeWriter::new();
     s.emit(&mut w);
     let expected = "struct Point {\n    x: i32,\n    y: i32,\n}\n";
-    assert w.to_string() == expected, `got: ${w.to_string()}`;
+    assert w.to_string() == expected;
 }
 
 test "StructSpec pub with pub fields" {
@@ -383,7 +381,7 @@ test "StructSpec pub with pub fields" {
     let mut w = CodeWriter::new();
     s.emit(&mut w);
     let expected = "pub struct Token {\n    pub kind: i32,\n    pub text: String,\n}\n";
-    assert w.to_string() == expected, `got: ${w.to_string()}`;
+    assert w.to_string() == expected;
 }
 
 test "StructSpec mixed visibility fields" {
@@ -394,7 +392,7 @@ test "StructSpec mixed visibility fields" {
     let mut w = CodeWriter::new();
     s.emit(&mut w);
     let expected = "pub struct Config {\n    pub name: String,\n    secret: i32,\n}\n";
-    assert w.to_string() == expected, `got: ${w.to_string()}`;
+    assert w.to_string() == expected;
 }
 
 test "StructSpec with FieldSpec" {
@@ -441,7 +439,7 @@ test "VariantSpec unit cases" {
     let mut w = CodeWriter::new();
     v.emit(&mut w);
     let expected = "pub variant TokenKind {\n    Number,\n    String,\n    Eof,\n}\n";
-    assert w.to_string() == expected, `got: ${w.to_string()}`;
+    assert w.to_string() == expected;
 }
 
 test "VariantSpec with payloads" {
@@ -453,7 +451,7 @@ test "VariantSpec with payloads" {
     let mut w = CodeWriter::new();
     v.emit(&mut w);
     let expected = "variant Shape {\n    Circle(f64),\n    Rect([f64, f64]),\n    Point,\n}\n";
-    assert w.to_string() == expected, `got: ${w.to_string()}`;
+    assert w.to_string() == expected;
 }
 
 
@@ -466,7 +464,7 @@ test "EnumSpec basic" {
     let mut w = CodeWriter::new();
     e.emit(&mut w);
     let expected = "pub enum Color {\n    Red,\n    Green,\n    Blue,\n}\n";
-    assert w.to_string() == expected, `got: ${w.to_string()}`;
+    assert w.to_string() == expected;
 }
 
 
@@ -481,7 +479,7 @@ test "FnSpec simple" {
     w.line("return a + b;");
     w.end();
     let expected = "fn add(a: i32, b: i32) -> i32 {\n    return a + b;\n}\n";
-    assert w.to_string() == expected, `got: ${w.to_string()}`;
+    assert w.to_string() == expected;
 }
 
 test "FnSpec with receiver" {
@@ -514,7 +512,7 @@ test "FnSpec no return type" {
     w.line("self.x = 0;");
     w.end();
     let expected = "fn reset(&mut self) {\n    self.x = 0;\n}\n";
-    assert w.to_string() == expected, `got: ${w.to_string()}`;
+    assert w.to_string() == expected;
 }
 
 test "FnSpec signature string" {
@@ -525,7 +523,7 @@ test "FnSpec signature string" {
     f.set_return_type("String");
 
     let sig = f.signature();
-    assert sig == "pub fn transform(&self, input: &String, scale: f64) -> String", `got: ${sig}`;
+    assert sig == "pub fn transform(&self, input: &String, scale: f64) -> String";
 }
 
 test "FnSpec export with effects" {
@@ -536,7 +534,7 @@ test "FnSpec export with effects" {
     f.add_effect("Environment");
 
     let sig = f.signature();
-    assert sig == "export fn run() with (Stdout, Stderr, Environment)", `got: ${sig}`;
+    assert sig == "export fn run() with (Stdout, Stderr, Environment)";
 }
 
 // A row of one goes bare; only a row of more than one takes parentheses.
@@ -546,7 +544,7 @@ test "FnSpec with a single effect" {
     f.add_effect("Stdout");
 
     let sig = f.signature();
-    assert sig == "export fn run() with Stdout", `got: ${sig}`;
+    assert sig == "export fn run() with Stdout";
 }
 
 test "FnSpec generic type parameter" {
@@ -556,7 +554,7 @@ test "FnSpec generic type parameter" {
     f.add_param("node", "&StmtNode");
 
     let sig = f.signature();
-    assert sig == "pub fn walk_stmt<V: Visitor>(v: &mut V, node: &StmtNode)", `got: ${sig}`;
+    assert sig == "pub fn walk_stmt<V: Visitor>(v: &mut V, node: &StmtNode)";
 }
 
 test "FnSpec multiple generics" {
@@ -568,7 +566,7 @@ test "FnSpec multiple generics" {
     f.set_return_type("[A, B]");
 
     let sig = f.signature();
-    assert sig == "fn zip<A, B>(a: A, b: B) -> [A, B]", `got: ${sig}`;
+    assert sig == "fn zip<A, B>(a: A, b: B) -> [A, B]";
 }
 
 
@@ -649,7 +647,7 @@ test "chaining builder methods" {
     let mut w = CodeWriter::new();
     s.emit(&mut w);
     let expected = "pub struct Pair {\n    pub first: i32,\n    pub second: i32,\n}\n";
-    assert w.to_string() == expected, `got: ${w.to_string()}`;
+    assert w.to_string() == expected;
 }
 
 
@@ -709,13 +707,13 @@ test "wado reads a quote in a line comment as text" {
     let text = "x\"y";
     let got = wado`// ${comment}
 let s = "${text}";`;
-    assert got == "// don't\nlet s = \"x\\\"y\";", `got: ${got}`;
+    assert got == "// don't\nlet s = \"x\\\"y\";";
 }
 
 test "wado reads a lone slash as division, not a comment" {
     let text = "x\"y";
     let got = wado`let n = a / b; let s = "${text}";`;
-    assert got == "let n = a / b; let s = \"x\\\"y\";", `got: ${got}`;
+    assert got == "let n = a / b; let s = \"x\\\"y\";";
 }
 
 test "wado reads an escaped quote as text inside a string literal" {
@@ -723,7 +721,7 @@ test "wado reads an escaped quote as text inside a string literal" {
     // backslash and the string stays open.
     let text = "x\"y";
     let got = wado`let s = "a\\"${text}";`;
-    assert got == "let s = \"a\\\"x\\\"y\";", `got: ${got}`;
+    assert got == "let s = \"a\\\"x\\\"y\";";
 }
 
 test "wado applies a format specifier" {
@@ -749,7 +747,7 @@ test "char_range_pat matches its range and nothing past either end" {
     let tabs = char_range_pat('\t'..='\n');
     let under = char_range_pat('_'..='_');
     let run = wado`for let n of [8, 9, 10, 11, 94, 95, 96] as List<u32> {
-    print(match char::from_u32_unchecked(n) { ${tabs} => "t", ${under} => "u", _ => "-" });
+    print(match unchecked char::from_u32(n) { ${tabs} => "t", ${under} => "u", _ => "-" });
 }`;
     assert printed(run) == "-tt--u-";
 }
@@ -782,7 +780,7 @@ test "ImplSpec basic" {
     w.end();
     w.end();
     let expected = "impl Point {\n    fn origin() -> Point {\n        return Point { x: 0, y: 0 };\n    }\n}\n";
-    assert w.to_string() == expected, `got: ${w.to_string()}`;
+    assert w.to_string() == expected;
 }
 
 test "ImplSpec trait impl" {
@@ -798,7 +796,7 @@ test "ImplSpec trait impl" {
     w.end();
     w.end();
     let expected = "impl Eq for Point {\n    fn eq(&self, other: &Self) -> bool {\n        return self.x == other.x && self.y == other.y;\n    }\n}\n";
-    assert w.to_string() == expected, `got: ${w.to_string()}`;
+    assert w.to_string() == expected;
 }
 
 test "a generic struct and its impl compile" {
@@ -816,8 +814,8 @@ test "a generic struct and its impl compile" {
     w.end();
     w.end();
     let source = w.to_string();
-    assert source.starts_with("pub struct Holder<T: Default> {\n"), source;
-    assert source.contains("impl<T: Default> Holder<T> {\n"), source;
+    assert source.starts_with("pub struct Holder<T: Default> {\n");
+    assert source.contains("impl<T: Default> Holder<T> {\n");
     assert printed("print(`${Holder::<i32>::fresh().value}`);", source) == "0";
 }
 

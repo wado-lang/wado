@@ -43,16 +43,20 @@ every later slot is captured where it sits; a receiver and a callee clear it for
 the operands under them, though the node containing them may still bind ahead,
 since that moves the whole group and nothing within it. A place passes the fact
 through — the failure branch re-reads it — save against an operand that may
-write through it: a `&mut` borrow, a method call (`&mut self` is not knowable
+write through it: a `&mut` reference, a method call (`&mut self` is not knowable
 this early), or a subtree the scan does not enter.
 
-That is also what lets a receiver render. Binding one copies, and value
-semantics would leave the call's own mutation on the copy; re-reading a place
-copies nothing, so a place receiver is captured as any other place. An argument
-is the same: a bare identifier there is a function-reference coercion site the
-scan cannot recognise and a binding would lose, while a place leaves it as
-written. Only `&<ident>` keeps the `&` itself unbound, the place under it
-rendering instead.
+A receiver, of a method call or a subscript, is not captured at all; the
+call's result is, and so is what computes the receiver's place, such as `i` in
+`rows[i].len()`. A receiver may be a whole container: rendering it costs more
+than the check, and a failure branch holding it keeps the optimizer from taking
+the container apart (container SROA), for a message only a failure prints.
+`assert` runs in shipping code, so its cost on the passing path decides.
+
+A place argument is captured by re-reading it, as a place operand is. A bare
+identifier there is a function-reference coercion site the scan cannot
+recognise and a binding would lose, while a place leaves it as written. Only
+`&<ident>` keeps the `&` itself unbound, the place under it rendering instead.
 
 A capture may not copy. Value semantics deep-copy on binding, so a captured
 receiver would take the copy's mutation and leave the original untouched; the
@@ -82,8 +86,8 @@ nothing for it.
 
 ### 3. No silent degradation
 
-Every operand position is captured, save what _Known gaps_ lists as not yet
-reached. A literal needs no slot: its value is its source text, which the
+Every operand position is captured, save a receiver (rule 1 says why) and what
+_Known gaps_ lists as not yet reached. A literal needs no slot: its value is its source text, which the
 `condition:` line already shows, and a cast or negation of one renders that text
 back. `&<ident>` earns none for the `&` itself, the place under it rendering
 instead. Nor is there a second outcome to report for a type: `Inspect` is total
@@ -101,12 +105,11 @@ short-circuit can skip each one:
 ```
 6: assert i < list.len() && list[i] == 1
   $v0  always       re-read   i
-  $v1  always       re-read   list
-  $v2  always       hoisted   list.len()
-  $v3  always       hoisted   i < list.len()
-  $v4  conditional  in-place  i
-  $v5  conditional  in-place  list[i]
-  $v6  conditional  in-place  list[i] == 1
+  $v1  always       hoisted   list.len()
+  $v2  always       hoisted   i < list.len()
+  $v3  conditional  in-place  i
+  $v4  conditional  in-place  list[i]
+  $v5  conditional  in-place  list[i] == 1
 ```
 
 `tests/integration/assert_capture_plan.rs` reads that back for one `assert` per
@@ -125,15 +128,6 @@ operand — both spellings parse to the same tree, so no fidelity is lost.
 
 Each entry is the mechanism failing rule 1, or an operand position rule 3 does
 not yet reach — a defect or an open question, never a boundary.
-
-### Rule 1: the mechanism changes evaluation
-
-- [ ] **Capture a receiver that is not a place.** A place receiver renders
-  today, the failure branch re-reading it. Every other receiver — `f().m()`,
-  `(a..<b).contains(&a)` — renders nothing, and needs the value kept without
-  a copy. Unpinned; the fixtures that pinned it now pin the place half:
-  `assert_method_receiver`, `assert_subscript_receiver`,
-  `assert_matches_scrutinee`.
 
 ### Rule 3: operand positions that render nothing
 

@@ -341,7 +341,10 @@ fn char_cast_hint(tt: &TypeTable, source: TypeId, target: TypeId) -> Option<Stri
         tt.representation_head(target),
     );
     if target == TypeTable::CHAR && source != TypeTable::CHAR && source != TypeTable::U8 {
-        return Some("use char::from_u32() or char::from_i32() for checked conversion".to_string());
+        return Some(
+            "convert to u32, then use char::from_u32() for a scalar value, or char::try_from() for one that may not be"
+                .to_string(),
+        );
     }
     let integer_target = tt.is_integer(target) || tt.is_wide_int(target);
     (source == TypeTable::CHAR && target != TypeTable::CHAR && !integer_target)
@@ -5760,9 +5763,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 #[derive(Default)]
 pub(super) struct CaptureWrites {
     pub(super) assigned: IndexSet<String>,
-    /// Borrowed `&mut` or a method's receiver: a write only where the walk
-    /// finds a `&mut` borrow of this storage.
-    pub(super) borrowed: IndexSet<String>,
+    /// Taken `&mut` or a method's receiver: a write only where the walk
+    /// finds a `&mut` of this storage.
+    pub(super) mut_referenced: IndexSet<String>,
 }
 
 /// Records the outer bindings a closure body may write, walking it under its
@@ -5789,9 +5792,9 @@ impl CaptureWritesCollector {
         }
     }
 
-    fn record_borrow(&mut self, place: &ast::Expr) {
+    fn record_mut_ref(&mut self, place: &ast::Expr) {
         if let Some(name) = self.outer_root(place) {
-            self.writes.borrowed.insert(name.to_string());
+            self.writes.mut_referenced.insert(name.to_string());
         }
     }
 
@@ -5838,11 +5841,11 @@ impl AstVisitor for CaptureWritesCollector {
                 ast::walk_expr(self, expr);
             }
             ast::Expr::Unary(u) if u.op == ast::UnaryOp::MutRef => {
-                self.record_borrow(&u.expr);
+                self.record_mut_ref(&u.expr);
                 ast::walk_expr(self, expr);
             }
             ast::Expr::MethodCall(call) => {
-                self.record_borrow(&call.receiver);
+                self.record_mut_ref(&call.receiver);
                 ast::walk_expr(self, expr);
             }
             ast::Expr::Closure(c) => self.closure_body(c),

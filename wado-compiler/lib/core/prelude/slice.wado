@@ -27,19 +27,22 @@ use { panic } from "core:rt";
 
 /// Read-only random-access sequence: `Array<T>`, `List<T>`, and `Slice<T>`.
 ///
-/// Implementors supply `len` and `get_unchecked`; everything else is a default
-/// body over those two, so no default constructs a `Slice`. Methods needing an
-/// `Elem` bound (`contains`, `binary_search`, …) cannot live here — an
-/// associated type carries no bound — and stay bounded inherent impls.
+/// Implementors supply `len` and `at`; everything else is a default body over
+/// those two, so no default constructs a `Slice`. Methods needing an `Elem`
+/// bound (`contains`, `binary_search`, …) cannot live here — an associated
+/// type carries no bound — and stay bounded inherent impls.
 pub trait Sequence with () {
     type Elem;
 
     fn len(&self) -> i32;
 
-    /// The caller must guarantee `0 <= index < len()`. Any other `index` is a
-    /// contract violation, and the result is unspecified: some valid `Elem`,
-    /// or a trap.
-    fn get_unchecked(&self, index: i32) -> Self::Elem;
+    /// The element at `index`. `get` answers for an index that may be out of
+    /// range.
+    fn at(&self, index: i32) -> Self::Elem
+        contract 0 <= index < self.len();
+
+    #[unavailable("write `unchecked xs.at(i)`")]
+    fn get_unchecked(&self);
 
     fn is_empty(&self) -> bool {
         return self.len() == 0;
@@ -49,7 +52,7 @@ pub trait Sequence with () {
         if index < 0 || index >= self.len() {
             return null;
         }
-        return Option::Some(self.get_unchecked(index));
+        return Option::Some(unchecked self.at(index));
     }
 
     fn first(&self) -> Option<Self::Elem> {
@@ -62,7 +65,7 @@ pub trait Sequence with () {
 
     fn position(&self, mut pred: fn mut(Self::Elem) -> bool with _) -> Option<i32> with _ {
         for let mut i = 0; i < self.len(); i += 1 {
-            if pred(self.get_unchecked(i)) {
+            if pred(unchecked self.at(i)) {
                 return Option::Some(i);
             }
         }
@@ -96,18 +99,6 @@ impl<T> Slice<T> {
         return self.end - self.start;
     }
 
-    /// The caller must guarantee `0 <= index < len()`. Any other `index` is a
-    /// contract violation, and the result is unspecified: an element of the
-    /// backing array outside the view, or a trap. Also the byte-read
-    /// anchor for `FieldSchema::lookup`, as `len` is for byte length.
-    #[compiler_item("byte_slice_get_unchecked")]
-    pub fn get_unchecked(&self, index: i32) -> T {
-        if builtin::contract_checks() {
-            assert 0 <= index < self.end - self.start, "index out of bounds";
-        }
-        return builtin::array_get_value(self.repr, self.start + index);
-    }
-
     /// Sub-slice over `[start, end)` relative to this one, clamped to its
     /// bounds.
     pub fn slice(&self, start: i32, end: i32) -> Slice<T> {
@@ -129,16 +120,19 @@ impl<T> Slice<T> {
         return SliceRefIter::internal_new(self.repr, self.start, self.end);
     }
 
-    /// Overlapping windows of `size` consecutive elements. Panics if `size` is
-    /// not positive.
-    pub fn windows(&self, size: i32) -> SliceWindows<T> {
-        return SliceWindows::internal_new(self.repr, self.start, self.end, size);
+    /// Overlapping windows of `size` consecutive elements.
+    pub fn windows(&self, size: i32) -> SliceWindows<T>
+        contract size > 0
+    {
+        return SliceWindows { repr: self.repr, index: self.start, end: self.end, size };
     }
 
     /// Non-overlapping chunks of up to `size` elements; the last may be
-    /// shorter. Panics if `size` is not positive.
-    pub fn chunks(&self, size: i32) -> SliceChunks<T> {
-        return SliceChunks::internal_new(self.repr, self.start, self.end, size);
+    /// shorter.
+    pub fn chunks(&self, size: i32) -> SliceChunks<T>
+        contract size > 0
+    {
+        return SliceChunks { repr: self.repr, index: self.start, end: self.end, size };
     }
 
     pub fn to_array(&self) -> Array<T> {
@@ -173,8 +167,8 @@ impl<T> Sequence for Slice<T> {
         return self.end - self.start;
     }
 
-    fn get_unchecked(&self, index: i32) -> T {
-        return Slice::get_unchecked(self, index);
+    fn at(&self, index: i32) -> T {
+        return unchecked self[index];
     }
 }
 
@@ -199,9 +193,12 @@ impl<T: Eq> Slice<T> {
 impl<T> IndexValue<i32> for Slice<T> {
     type Output = T;
 
-    fn index_value(&self, index: i32) -> Self::Output {
-        assert index >= 0, "index out of bounds";
-        assert index < self.end - self.start, "index out of bounds";
+    /// Also the byte-read anchor for the synthesised `FieldSchema::lookup`
+    /// (on `Slice<u8>`), as `len` is for byte length.
+    #[compiler_item("byte_slice_index_value")]
+    fn index_value(&self, index: i32) -> Self::Output
+        contract 0 <= index < self.len()
+    {
         return builtin::array_get_value(self.repr, self.start + index);
     }
 }
@@ -211,9 +208,9 @@ impl<T> IndexValue<i32> for Slice<T> {
 impl<T: Ref> IndexRef<i32> for Slice<T> {
     type Output = T;
 
-    fn index_ref(&self, index: i32) -> &T {
-        assert index >= 0, "index out of bounds";
-        assert index < self.end - self.start, "index out of bounds";
+    fn index_ref(&self, index: i32) -> &T
+        contract 0 <= index < self.len()
+    {
         return builtin::array_get_ref(self.repr, self.start + index);
     }
 }
@@ -385,13 +382,6 @@ pub struct SliceWindows<T> {
     size: i32,
 }
 
-impl<T> SliceWindows<T> {
-    internal fn internal_new(repr: &Array<T>, index: i32, end: i32, size: i32) -> SliceWindows<T> {
-        assert size > 0, "window size must be positive";
-        return SliceWindows { repr, index, end, size };
-    }
-}
-
 impl<T> Iterator for SliceWindows<T> {
     type Item = Slice<T>;
 
@@ -424,13 +414,6 @@ pub struct SliceChunks<T> {
     index: i32,
     end: i32,
     size: i32,
-}
-
-impl<T> SliceChunks<T> {
-    internal fn internal_new(repr: &Array<T>, index: i32, end: i32, size: i32) -> SliceChunks<T> {
-        assert size > 0, "chunk size must be positive";
-        return SliceChunks { repr, index, end, size };
-    }
 }
 
 impl<T> Iterator for SliceChunks<T> {
@@ -479,15 +462,18 @@ pub trait AsSlice: Sequence with () {
         return self.as_slice().iter_ref();
     }
 
-    /// Overlapping windows of `size` consecutive elements. Panics if `size` is
-    /// not positive.
-    fn windows(&self, size: i32) -> SliceWindows<Self::Elem> {
-        return self.as_slice().windows(size);
+    /// Overlapping windows of `size` consecutive elements.
+    fn windows(&self, size: i32) -> SliceWindows<Self::Elem>
+        contract size > 0
+    {
+        return unchecked self.as_slice().windows(size);
     }
 
     /// Non-overlapping chunks of up to `size` elements; the last may be
-    /// shorter. Panics if `size` is not positive.
-    fn chunks(&self, size: i32) -> SliceChunks<Self::Elem> {
-        return self.as_slice().chunks(size);
+    /// shorter.
+    fn chunks(&self, size: i32) -> SliceChunks<Self::Elem>
+        contract size > 0
+    {
+        return unchecked self.as_slice().chunks(size);
     }
 }

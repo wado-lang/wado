@@ -267,7 +267,7 @@ arity zero, and answers for itself.
 ### Cost and shape
 
 `type_args()` hands back an owned `List`, not a view. A `Slice<T>` holds an
-`&Array<T>`, so handing one out borrow-escapes the array it views, and the
+`&Array<T>`, so handing one out lets a reference to the array it views escape, and the
 array a constant tree would view is a static global no parameter names. The copy
 a view would save is the one [Constant Object Globalization](./wep-2026-05-31-const-object-globalization.md) already removes
 for `members()`: the tree is a closed constant expression, so the call is hoisted

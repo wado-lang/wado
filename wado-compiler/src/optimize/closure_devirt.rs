@@ -18,7 +18,7 @@ use crate::nir_visitor::exprs_under;
 
 use super::arena_query::{is_addressed, is_pure_nontrapping_operand_typed, strip_refs};
 
-/// How far a callee walk follows bindings, borrows, blocks and fields, so a
+/// How far a callee walk follows bindings, references, blocks and fields, so a
 /// long chain costs a fixed amount. Well past what the adaptor shapes need.
 const MAX_DEPTH: u32 = 12;
 
@@ -68,7 +68,7 @@ fn past_transparent(engine: &Engine, op: Operand, depth: u32) -> Option<(ExprId,
 }
 
 /// The `ClosureToCanonical` the operand's value was built by, following the
-/// bindings, borrows, blocks and struct fields between the two.
+/// bindings, references, blocks and struct fields between the two.
 fn resolve_canonical(engine: &mut Engine, op: Operand, depth: u32) -> Option<ExprId> {
     let (expr, depth) = past_transparent(engine, op, depth)?;
     match &engine.body.exprs[expr].kind {
@@ -141,7 +141,7 @@ fn struct_literal_field(
 }
 
 /// Whether every mention of `local` is a plain field read: nothing writes
-/// through it, borrows a field off it, or hands it to a callee.
+/// through it, references a field of it, or hands it to a callee.
 fn field_read_only_local(engine: &mut Engine, local: u32) -> bool {
     if engine.promoted_read_count(local) > 0 || engine.body_address_taken().contains(&local) {
         return false;

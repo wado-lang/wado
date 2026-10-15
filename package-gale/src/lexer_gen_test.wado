@@ -45,15 +45,15 @@ test "collect_literal_tokens: plain top-level literals" {
     let g = parse_grammar("grammar T; a : 'x' 'y' ;");
     let lits = collect_literal_tokens(&g.parser_rules);
     let names = const_names(&lits);
-    assert names.len() == 2, `len=${names.len()}`;
-    assert names[0] == "TK_LIT_x", names[0];
-    assert names[1] == "TK_LIT_y", names[1];
+    assert names.len() == 2;
+    assert names[0] == "TK_LIT_x";
+    assert names[1] == "TK_LIT_y";
 }
 
 test "collect_literal_tokens: a symbol word spelling a literal is disambiguated" {
     let g = parse_grammar("grammar T; a : '<' 'LT' ;");
     let names = const_names(&collect_literal_tokens(&g.parser_rules));
-    assert names == ["TK_LIT_LT", "TK_LIT_LT_2"] as List<String>, `${names:?}`;
+    assert names == ["TK_LIT_LT", "TK_LIT_LT_2"] as List<String>;
 }
 
 test "collect_literal_tokens: literals inside Group alternatives" {
@@ -62,10 +62,10 @@ test "collect_literal_tokens: literals inside Group alternatives" {
     let g = parse_grammar("grammar T; a : ('x' | 'y') 'z' ;");
     let lits = collect_literal_tokens(&g.parser_rules);
     let names = const_names(&lits);
-    assert names.len() == 3, `len=${names.len()}`;
-    assert names[0] == "TK_LIT_x", names[0];
-    assert names[1] == "TK_LIT_y", names[1];
-    assert names[2] == "TK_LIT_z", names[2];
+    assert names.len() == 3;
+    assert names[0] == "TK_LIT_x";
+    assert names[1] == "TK_LIT_y";
+    assert names[2] == "TK_LIT_z";
 }
 
 test "collect_literal_tokens: literal inside Not — single token" {
@@ -77,9 +77,9 @@ test "collect_literal_tokens: literal inside Not — single token" {
     let g = parse_grammar("grammar T; a : ~'x' 'z' ;");
     let lits = collect_literal_tokens(&g.parser_rules);
     let names = const_names(&lits);
-    assert names.len() == 2, `expected ['TK_LIT_x', 'TK_LIT_z'], got len=${names.len()}`;
-    assert names[0] == "TK_LIT_x", names[0];
-    assert names[1] == "TK_LIT_z", names[1];
+    assert names.len() == 2, "expected ['TK_LIT_x', 'TK_LIT_z']";
+    assert names[0] == "TK_LIT_x";
+    assert names[1] == "TK_LIT_z";
 }
 
 test "collect_literal_tokens: literals inside Not(Group(...)) — multi-alt set" {
@@ -88,10 +88,10 @@ test "collect_literal_tokens: literals inside Not(Group(...)) — multi-alt set"
     let g = parse_grammar("grammar T; a : ~('x' | 'y') 'z' ;");
     let lits = collect_literal_tokens(&g.parser_rules);
     let names = const_names(&lits);
-    assert names.len() == 3, `len=${names.len()}`;
-    assert names[0] == "TK_LIT_x", names[0];
-    assert names[1] == "TK_LIT_y", names[1];
-    assert names[2] == "TK_LIT_z", names[2];
+    assert names.len() == 3;
+    assert names[0] == "TK_LIT_x";
+    assert names[1] == "TK_LIT_y";
+    assert names[2] == "TK_LIT_z";
 }
 
 test "collect_literal_tokens: literal inside Label(Not(Literal)) — labeled complement" {
@@ -100,9 +100,9 @@ test "collect_literal_tokens: literal inside Label(Not(Literal)) — labeled com
     let g = parse_grammar("grammar T; a : t=~'x' 'z' ;");
     let lits = collect_literal_tokens(&g.parser_rules);
     let names = const_names(&lits);
-    assert names.len() == 2, `len=${names.len()}`;
-    assert names[0] == "TK_LIT_x", names[0];
-    assert names[1] == "TK_LIT_z", names[1];
+    assert names.len() == 2;
+    assert names[0] == "TK_LIT_x";
+    assert names[1] == "TK_LIT_z";
 }
 
 test "collect_literal_tokens: literal inside Wildcard is ignored" {
@@ -111,8 +111,8 @@ test "collect_literal_tokens: literal inside Wildcard is ignored" {
     let g = parse_grammar("grammar T; a : 'x' . ;");
     let lits = collect_literal_tokens(&g.parser_rules);
     let names = const_names(&lits);
-    assert names.len() == 1, `len=${names.len()}`;
-    assert names[0] == "TK_LIT_x", names[0];
+    assert names.len() == 1;
+    assert names[0] == "TK_LIT_x";
 }
 
 fn token_globals_for<S: AsStrSlice>(input: S) -> String {
@@ -142,8 +142,8 @@ test "gen_lexer: case-colliding rule names emit distinct try fns" {
     let no_ops: List<SuperOp> = [];
     gen_lexer(&mut w, &g, &lits, &atn_class, &members, false, "", &no_ops, &lexer_mode_attr_use(&g));
     let out = w.to_string();
-    assert out.contains("fn try_ID("), out;
-    assert out.contains("fn try_Id("), out;
+    assert out.contains("fn try_ID(");
+    assert out.contains("fn try_Id(");
 }
 
 fn lexer_source<S: AsStrSlice>(src: S) -> String {
@@ -161,8 +161,8 @@ fn lexer_source<S: AsStrSlice>(src: S) -> String {
 
 test "gen_lexer: the first-char dispatch is one match, not an else-if chain" {
     let out = lexer_source("lexer grammar L; A : 'a' ; B : 'b' ; N : [0-9]+ ;");
-    assert out.contains("match first_char {"), out;
-    assert !out.contains("if first_char matches"), out;
+    assert out.contains("match first_char {");
+    assert !out.contains("if first_char matches");
 }
 
 test "gen_lexer: dispatch arms follow char order, not grammar order" {
@@ -170,81 +170,81 @@ test "gen_lexer: dispatch arms follow char order, not grammar order" {
     let a = out.find("'a' => {").unwrap();
     let b = out.find("'b' => {").unwrap();
     let c = out.find("'c' => {").unwrap();
-    assert a < b < c, out;
+    assert a < b < c;
 }
 
 test "gen_lexer: a dispatch with no wildcard rule still covers every char" {
     let out = lexer_source("lexer grammar L; A : 'a' ; B : 'b' ;");
-    assert out.contains("_ => {},"), out;
+    assert out.contains("_ => {},");
 }
 
 test "gen_lexer: a catch-all declared last runs once, after the dispatch" {
     let out = lexer_source("lexer grammar L; A : [a-f] '1' ; D : [h] [0-9] ; ANY : . ;");
-    assert count_occurrences(&out, "= try_ANY(") == 1, out;
-    assert out.find("if best_end <= start {").unwrap() < out.find("= try_ANY(").unwrap(), out;
+    assert count_occurrences(&out, "= try_ANY(") == 1;
+    assert out.find("if best_end <= start {").unwrap() < out.find("= try_ANY(").unwrap();
 }
 
 test "gen_lexer: a catch-all declared first stays in the arms it ties in" {
     let out = lexer_source("lexer grammar L; ANY : . ; A : [a-f] '1' ; D : [h] [0-9] ;");
-    assert count_occurrences(&out, "= try_ANY(") == 3, out;
+    assert count_occurrences(&out, "= try_ANY(") == 3;
 }
 
 test "gen_lexer: an alternation of single chars is one class test" {
     let out = lexer_source("lexer grammar L; fragment D : [0-9] ; A : ('_' | D | 'a'..'c' | 'b') 'z' ;");
-    assert out.contains("matches { '0'..='9' | '_' | 'a'..='c' }"), out;
-    assert !out.contains("alts_"), out;
+    assert out.contains("matches { '0'..='9' | '_' | 'a'..='c' }");
+    assert !out.contains("alts_");
 }
 
 test "gen_lexer: a large class is one shared function, however many sites test it" {
     let set = "[a\\u00e0b\\u00e1c\\u00e2d\\u00e3e\\u00e4f\\u00e5g\\u00e6h\\u00e7i\\u00e8]";
     let out = lexer_source(`lexer grammar L; A : ${set} '1' ; B : ${set} '2' ; C : ${set}+ ;`);
-    assert count_occurrences(&out, "fn in_char_set_0(c: char) -> bool {") == 1, out;
-    assert count_occurrences(&out, "in_char_set_0(chars[pos])") == 4, out;
-    assert !out.contains("in_char_set_1"), out;
+    assert count_occurrences(&out, "fn in_char_set_0(c: char) -> bool {") == 1;
+    assert count_occurrences(&out, "in_char_set_0(chars[pos])") == 4;
+    assert !out.contains("in_char_set_1");
 }
 
 test "gen_lexer: arm scoring matches the suffix at one site, whatever the arm count" {
     let out = lexer_source("lexer grammar L; I : ('a' | 'ab' | 'abc') 'bcd' ;");
-    assert count_occurrences(&out, "chars[pos] != 'd'") == 1, out;
+    assert count_occurrences(&out, "chars[pos] != 'd'") == 1;
 }
 
 test "gen_lexer: an optional element's block is labelled as one, not as a loop" {
     let out = lexer_source("lexer grammar L; A : 'a' 'bc'? ;");
-    assert out.contains("opt_0: {"), out;
-    assert !out.contains("rep_"), out;
+    assert out.contains("opt_0: {");
+    assert !out.contains("rep_");
 }
 
 test "gen_lexer: a char that prints as nothing is spelled as its escape" {
     let out = lexer_source("lexer grammar L; WS : [\\u00A0\\u2000-\\u200A] ; BOM : '\\uFEFF' 'é' ;");
-    assert out.contains("matches { '\\u{a0}' | '\\u{2000}'..='\\u{200a}' }"), out;
-    assert out.contains("chars[pos] != '\\u{feff}'"), out;
-    assert out.contains("chars[pos] != 'é'"), out;
+    assert out.contains("matches { '\\u{a0}' | '\\u{2000}'..='\\u{200a}' }");
+    assert out.contains("chars[pos] != '\\u{feff}'");
+    assert out.contains("chars[pos] != 'é'");
 }
 
 test "gen_lexer: a negated single char is one class test" {
     let out = lexer_source("lexer grammar L; S : '\"' ~'\"'* '\"' ;");
-    assert out.contains("if (chars[pos] matches { '\"' }) { break"), out;
-    assert !out.contains("not_"), out;
+    assert out.contains("if (chars[pos] matches { '\"' }) { break");
+    assert !out.contains("not_");
 }
 
 test "gen_lexer: tail alternation of unequal length uses the longest-match emit" {
     // ANTLR4's lexer takes the longest arm (`I` matches `ab`, not `a`).
     let out = lexer_source("lexer grammar L; I : ('a' | 'ab') ; J : . ;");
-    assert out.contains("alts_best_"), out;
+    assert out.contains("alts_best_");
 }
 
 test "gen_lexer: tail alternation of equal length keeps the first-match emit" {
     // Every arm consumes the same fixed count, so longest and first-match
     // coincide; the cheaper emit stays byte-identical for the common shape.
     let out = lexer_source("lexer grammar L; WS : ('  ' | '\n\n') ;");
-    assert !out.contains("alts_best_"), out;
-    assert out.contains("alts_done_"), out;
+    assert !out.contains("alts_best_");
+    assert out.contains("alts_done_");
 }
 
 test "gen_lexer: first-match arms are siblings, not a cascade" {
     let two = lexer_source("lexer grammar L; K : ('a' | 'b') 'z' ;");
     let five = lexer_source("lexer grammar L; K : ('a' | 'b' | 'c' | 'd' | 'e') 'z' ;");
-    assert max_indent(&five) == max_indent(&two), five;
+    assert max_indent(&five) == max_indent(&two);
 }
 
 fn max_indent<S: AsStrSlice>(source: S) -> i32 {
@@ -261,7 +261,7 @@ fn max_indent<S: AsStrSlice>(source: S) -> i32 {
 test "gen_lexer: alternation followed by a suffix keeps the first-match emit" {
     // A longer arm could strand the suffix, and Gale never backtracks.
     let out = lexer_source("lexer grammar L; K : ('x' | 'xy') 'yz' ;");
-    assert !out.contains("alts_best_"), out;
+    assert !out.contains("alts_best_");
 }
 
 test "gen_lexer: tail alternation with a predicate is still scored by length" {
@@ -271,7 +271,7 @@ test "gen_lexer: tail alternation with a predicate is still scored by length" {
     // disqualifying because `latn_match` cannot run one; the emit runs it while
     // scoring.
     let out = lexer_source("lexer grammar L; options { language = Wado; } I : ('a' | 'ab' { false }?) ;");
-    assert out.contains("alts_best_"), out;
+    assert out.contains("alts_best_");
 }
 
 test "gen_token_constants: more rules numbered after non-more rules (ANTLR4 order)" {
@@ -280,43 +280,43 @@ test "gen_token_constants: more rules numbered after non-more rules (ANTLR4 orde
     // declaration order, then numbers the remaining `more` / `type` rules.
     // A `more` rule declared first must therefore receive the highest type.
     let out = token_globals_for("lexer grammar L; A: 'a' -> more; B: 'b'; C: 'c';");
-    assert out.contains("global TK_B: i32 = 0"), out;
-    assert out.contains("global TK_C: i32 = 1"), out;
-    assert out.contains("global TK_A: i32 = 2"), out;
+    assert out.contains("global TK_B: i32 = 0");
+    assert out.contains("global TK_C: i32 = 1");
+    assert out.contains("global TK_A: i32 = 2");
 }
 
 test "gen_token_constants: numeric type(N) override emits TK_<N> = N - 1" {
     let out = token_globals_for("lexer grammar L; T_FFFF: 'FFFF' -> type(65535);");
-    assert out.contains("global TK_T_FFFF: i32 = 0"), out;
-    assert out.contains("global TK_EOF: i32 = 1"), out;
-    assert out.contains("global TK_ERROR: i32 = 2"), out;
-    assert out.contains("global TK_65535: i32 = 65534"), out;
+    assert out.contains("global TK_T_FFFF: i32 = 0");
+    assert out.contains("global TK_EOF: i32 = 1");
+    assert out.contains("global TK_ERROR: i32 = 2");
+    assert out.contains("global TK_65535: i32 = 65534");
 }
 
 test "gen_token_constants: duplicate type(N) overrides emit one global" {
     let out = token_globals_for("lexer grammar L; A: 'a' -> type(99); B: 'b' -> type(99);");
-    assert count_occurrences(&out, "global TK_99:") == 1, out;
+    assert count_occurrences(&out, "global TK_99:") == 1;
 }
 
 test "gen_token_constants: type(0) is skipped" {
     let out = token_globals_for("lexer grammar L; A: 'a' -> type(0);");
-    assert !out.contains("TK_0:"), out;
+    assert !out.contains("TK_0:");
 }
 
 test "gen_token_constants: named type(X) override emits no extra global" {
     let out = token_globals_for("lexer grammar L; A: 'a' -> type(B); B: 'b';");
     // Expected globals: TK_A, TK_B, TK_EOF, TK_ERROR.
-    assert count_occurrences(&out, "global TK_") == 4, out;
+    assert count_occurrences(&out, "global TK_") == 4;
 }
 
 test "gen_token_constants: user ERROR rule suppresses sentinel emit" {
     let out = token_globals_for("grammar T; a : ID; ID: [a-z]+; ERROR: .;");
-    assert count_occurrences(&out, "global TK_ERROR:") == 1, out;
+    assert count_occurrences(&out, "global TK_ERROR:") == 1;
 }
 
 test "gen_token_constants: TK_EOF sentinel is always emitted" {
     let out = token_globals_for("grammar T; a : ID; ID: [a-z]+;");
-    assert count_occurrences(&out, "global TK_EOF:") == 1, out;
+    assert count_occurrences(&out, "global TK_EOF:") == 1;
 }
 
 fn ranges_contain(ranges: &List<[char, char]>, c: char) -> bool {
@@ -454,7 +454,7 @@ test "folded_range_contains agrees with the ranges fold_range_ci builds" {
         let mut folded: List<CharRange> = [];
         fold_range_ci(start, end, &mut folded);
         for let code of 0..<0x100 {
-            let c = char::from_u32(code as u32).unwrap();
+            let c = char::from_u32(code as u32);
             let built = folded.iter_ref().any(|r| r.start <= c <= r.end);
             assert folded_range_contains(start, end, true, c) == built;
             assert folded_range_contains(start, end, false, c) == (start <= c <= end);

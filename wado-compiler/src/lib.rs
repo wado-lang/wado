@@ -79,7 +79,6 @@ use crate::component_model::{
     CmInterfaceRegistry, bind_type_names, cm_bound_defs, try_for_each_operation_type,
     try_for_each_signed_type,
 };
-use crate::coverage::CoverageRequest;
 use crate::defs::DefId;
 use crate::elaborator::liveness::is_user_authored;
 use crate::elaborator::trait_env::TraitEnv;
@@ -1304,11 +1303,7 @@ fn compile_after_load<H: CompilerHost>(
         is_test_world,
         logger,
     )?;
-    let coverage = options.coverage.map(|scope| CoverageRequest {
-        scope,
-        contract_checks: codegen_flags.contract_checks,
-    });
-    let mut sem = semantics::semantics_with_logger(load_result, logger, true, coverage);
+    let mut sem = semantics::semantics_with_logger(load_result, logger, true, options.coverage);
     if !sem.is_complete() {
         return Err(Bail);
     }
@@ -2230,10 +2225,7 @@ pub async fn dump_with_host_and_world<H: CompilerHost>(
     let tir_modules_by_source: Option<IndexMap<ModuleSource, tir::TirModule>> =
         sem.is_complete().then(|| sem.tir_modules.clone());
     let assert_plan_text = sem.assert_plan_text();
-    // What `wado test --coverage` plans: the test world's flags, whatever world
-    // this dump compiles.
-    let test_flags = parse_codegen_flags(codegen_flags, opt_level, true, &logger)?;
-    let coverage_plan_text = sem.coverage_plan_text(test_flags.contract_checks);
+    let coverage_plan_text = sem.coverage_plan_text();
     let export_mappings = sem.export_mappings.clone();
 
     // === Phase 7b+8+9+10: Build Package and run remaining phases ===

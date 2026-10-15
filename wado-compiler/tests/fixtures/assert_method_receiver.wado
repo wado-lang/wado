@@ -1,6 +1,5 @@
-// A method call's receiver is a place, so it renders without being bound: the
-// failure branch re-reads it, which copies nothing and so cannot hide the
-// call's own mutation.
+// A method call's receiver is not captured: the line for the call follows the
+// condition with nothing between them.
 
 struct Counter {
     n: i32,
@@ -20,5 +19,5 @@ export fn run() {
 __DATA__
 {
     "trapped": true,
-    "stderr_contains": ["p.get(): 7", "p: Counter"]
+    "stderr_contains": ["condition: p.get() == 99\np.get(): 7\n"]
 }

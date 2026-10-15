@@ -47,7 +47,7 @@ export fn run() with Stdout {
     let mut outside = 0;
     for let e of &EDGES {
         for let d of -1..=1 {
-            let Some(c) = char::from_u32((*e + d) as u32) else { continue; };
+            let Ok(c) = char::try_from((*e + d) as u32) else { continue; };
             if is_letter(builtin::black_box(c)) {
                 inside += 1;
             } else {

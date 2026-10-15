@@ -164,10 +164,10 @@ impl TokenStream {
                 && self.triv_ends.capacity() == self.triv_kinds.capacity()
                 && self.triv_chans.capacity() == self.triv_kinds.capacity(), "TokenStream trivia columns must grow in lockstep";
         }
-        self.triv_kinds.push_within_capacity(kind);
-        self.triv_starts.push_within_capacity(start);
-        self.triv_ends.push_within_capacity(end);
-        self.triv_chans.push_within_capacity(channel);
+        unchecked self.triv_kinds.push_within_capacity(kind);
+        unchecked self.triv_starts.push_within_capacity(start);
+        unchecked self.triv_ends.push_within_capacity(end);
+        unchecked self.triv_chans.push_within_capacity(channel);
     }
 
     internal fn push_token(&mut self, kind: i32, start: i32, end: i32, triv_lo: i32, triv_hi: i32) {
@@ -198,12 +198,12 @@ impl TokenStream {
                 && self.triv_hi.capacity() == self.kinds.capacity()
                 && self.flags.capacity() == self.kinds.capacity(), "TokenStream token columns must grow in lockstep";
         }
-        self.kinds.push_within_capacity(kind);
-        self.starts.push_within_capacity(start);
-        self.ends.push_within_capacity(end);
-        self.triv_lo.push_within_capacity(triv_lo);
-        self.triv_hi.push_within_capacity(triv_hi);
-        self.flags.push_within_capacity(flags);
+        unchecked self.kinds.push_within_capacity(kind);
+        unchecked self.starts.push_within_capacity(start);
+        unchecked self.ends.push_within_capacity(end);
+        unchecked self.triv_lo.push_within_capacity(triv_lo);
+        unchecked self.triv_hi.push_within_capacity(triv_hi);
+        unchecked self.flags.push_within_capacity(flags);
         return idx;
     }
 
@@ -589,10 +589,10 @@ impl TreeBuilder {
                 && self.offset.capacity() == self.tag.capacity()
                 && self.alt.capacity() == self.tag.capacity(), "TreeBuilder event columns must grow in lockstep";
         }
-        self.tag.push_within_capacity(tag);
-        self.id.push_within_capacity(id);
-        self.offset.push_within_capacity(offset);
-        self.alt.push_within_capacity(-1);
+        unchecked self.tag.push_within_capacity(tag);
+        unchecked self.id.push_within_capacity(id);
+        unchecked self.offset.push_within_capacity(offset);
+        unchecked self.alt.push_within_capacity(-1);
     }
 
     internal fn start_node(&mut self, kind: NodeKind, start: i32) {
@@ -615,8 +615,9 @@ impl TreeBuilder {
         return self.tag.len();
     }
 
-    internal fn start_node_at(&mut self, checkpoint: i32, kind: NodeKind, start: i32) {
-        assert self.innermost_open() < checkpoint, "a node wraps only rows finished before it";
+    internal fn start_node_at(&mut self, checkpoint: i32, kind: NodeKind, start: i32)
+        contract self.innermost_open() < checkpoint, "a node wraps only rows finished before it"
+    {
         self.tag.insert(checkpoint, EventTag::Open);
         self.id.insert(checkpoint, kind as i32);
         self.offset.insert(checkpoint, start);
@@ -981,19 +982,19 @@ internal struct AtnSim {
 }
 
 fn atn_read_u8(bytes: &ByteList, pos: i32) -> i32 {
-    return bytes.get_byte_unchecked(pos) as i32;
+    return unchecked bytes[pos] as i32;
 }
 
 fn atn_read_u16(bytes: &ByteList, pos: i32) -> i32 {
-    let b0 = bytes.get_byte_unchecked(pos) as i32;
-    let b1 = bytes.get_byte_unchecked(pos + 1) as i32;
+    let b0 = unchecked bytes[pos] as i32;
+    let b1 = unchecked bytes[pos + 1] as i32;
     return b0 | b1 << 8;
 }
 
 fn atn_read_u24(bytes: &ByteList, pos: i32) -> i32 {
-    let b0 = bytes.get_byte_unchecked(pos) as i32;
-    let b1 = bytes.get_byte_unchecked(pos + 1) as i32;
-    let b2 = bytes.get_byte_unchecked(pos + 2) as i32;
+    let b0 = unchecked bytes[pos] as i32;
+    let b1 = unchecked bytes[pos + 1] as i32;
+    let b2 = unchecked bytes[pos + 2] as i32;
     return b0 | b1 << 8 | b2 << 16;
 }
 
@@ -1175,8 +1176,9 @@ impl AtnPredictor {
         eof: i32,
         min_prec: i32,
         disabled_alts: &List<i32>,
-    ) -> [i32, i32] {
-        assert self.stack.len() >= self.floor, "a scan returns before its caller pops the frames below its floor";
+    ) -> [i32, i32]
+        contract self.stack.len() >= self.floor, "a scan returns before its caller pops the frames below its floor"
+    {
         if self.floor > 0 {
             let alt = atn_predict_above(
                 sim,
@@ -1263,8 +1265,9 @@ impl AtnKeyMap {
         return AtnKeyMap::with_slots(64);
     }
 
-    fn with_slots(slots: i32) -> AtnKeyMap {
-        assert slots & slots - 1 == 0, "slot count is a power of two";
+    fn with_slots(slots: i32) -> AtnKeyMap
+        contract slots & slots - 1 == 0, "slot count is a power of two"
+    {
         return AtnKeyMap {
             keys: List::filled(slots, -1 as i64),
             vals: List::filled(slots, -1),
@@ -1281,8 +1284,9 @@ impl AtnKeyMap {
         self.used.clear();
     }
 
-    fn slot_of(&self, k: i64) -> i32 {
-        assert k >= 0, "keys are non-negative";
+    fn slot_of(&self, k: i64) -> i32
+        contract k >= 0, "keys are non-negative"
+    {
         let mask = self.keys.len() - 1;
         let mut i = ((k ^ k >> 29) * 0x5851F42D4C957F2D >> 32) as i32 & mask;
         while self.keys[i] >= 0 && self.keys[i] != k {
@@ -1540,9 +1544,10 @@ fn atn_node_pair_key(a: i32, b: i32) -> i64 {
     return a as i64 * ATN_NODE_PAIR_STRIDE + b as i64;
 }
 
-fn atn_state_pr_key(state: i32, pr: i32) -> i64 {
-    assert pr + 2 < CFG_KEY_PR_SLOT, `ATN config precedence ${pr} exceeds packed-key slot`;
-    assert state + 2 < CFG_KEY_STATE_SLOT, `ATN config state ${state} exceeds packed-key slot`;
+fn atn_state_pr_key(state: i32, pr: i32) -> i64
+    contract pr + 2 < CFG_KEY_PR_SLOT
+    contract state + 2 < CFG_KEY_STATE_SLOT
+{
     return (state + 2) as i64 * CFG_KEY_PR_SLOT as i64 + (pr + 2) as i64;
 }
 
@@ -1589,8 +1594,9 @@ impl CfgSet {
         self.index.clear();
     }
 
-    fn add(&mut self, arena: &mut CtxArena, state: i32, alt: i32, pr: i32, pctx: i32) -> [i32, bool] {
-        assert alt + 1 < CFG_KEY_ALT_SLOT, `ATN config alt ${alt} exceeds packed-key slot`;
+    fn add(&mut self, arena: &mut CtxArena, state: i32, alt: i32, pr: i32, pctx: i32) -> [i32, bool]
+        contract alt + 1 < CFG_KEY_ALT_SLOT
+    {
         let k = atn_state_pr_key(state, pr) * CFG_KEY_ALT_SLOT as i64 + (alt + 1) as i64;
         let found = self.index.get(k);
         if found >= 0 {
@@ -2647,7 +2653,7 @@ fn _parse_e(p: &mut Parser) -> () {
 }
 
 fn _run_parse_entry<S: AsStrSlice>(input: S, max_errors: i32, entry: fn(&mut Parser)) -> ParseResult {
-    assert max_errors >= 1, `max_errors must be >= 1, got ${max_errors}`;
+    assert max_errors >= 1;
     let tokens = tokenize(input);
     let mut p = Parser::new(tokens);
     p.max_errors = max_errors;

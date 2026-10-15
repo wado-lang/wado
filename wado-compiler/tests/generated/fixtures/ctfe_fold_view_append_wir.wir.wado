@@ -35,15 +35,17 @@ type "functype//core:rt/write_string_to_stream$dae[add_newline]" = fn(i32, ref A
 
 type "functype//core:rt/cm_stream_write_raw_all_u8" = fn(i32, ref Array<u8>, i32, i32) -> "core:prelude/types.wado//enum:CopyResult";  // TypeId(14)
 
-type "functype//core:prelude/string.wado/core:prelude/string.wado/String::grow" = fn(ref "core:prelude/string.wado//String", i32);  // TypeId(15)
+type "functype//core:prelude/string.wado/core:prelude/string.wado/String::realloc_to" = fn(ref "core:prelude/string.wado//String", i32);  // TypeId(15)
 
-type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(16)
+type "functype//core:prelude/string.wado/core:prelude/string.wado/String::grow" = fn(ref "core:prelude/string.wado//String", i32);  // TypeId(16)
 
-type "functype//wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code" = fn(i32);  // TypeId(17)
+type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(17)
 
-type "functype//wasi/task-return" = fn(i32);  // TypeId(18)
+type "functype//wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code" = fn(i32);  // TypeId(18)
 
-type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(19)
+type "functype//wasi/task-return" = fn(i32);  // TypeId(19)
+
+type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(20)
 
 import fn mem/realloc from "mem/realloc";
 import fn wasi/stream-write from "wasi/stream-write";
@@ -65,38 +67,38 @@ global global:ctfe_fold_view_append_wir.wado::$const_obj_5: ref Array<u8> = arra
 fn "ctfe_fold_view_append_wir.wado/run"() with Stdout {
     let built: ref "core:prelude/string.wado//String";
     let $local_1: ref "core:prelude/string.wado//String";
-    let self_71: i32;
-    let new_used_74: i32;
-    let start_75: i32;
-    let packed_85: i64;
-    let repr_177: ref Array<u8>;
+    let self_67: i32;
+    let new_used_70: i32;
+    let start_71: i32;
+    let packed_81: i64;
+    let repr_169: ref Array<u8>;
     built = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(8), used: 0 };
-    repr_177 = global:ctfe_fold_view_append_wir.wado::$const_obj_5;
+    repr_169 = global:ctfe_fold_view_append_wir.wado::$const_obj_5;
     built.used = 3;
-    builtin::array_copy<u8>(built.repr, 0, repr_177, 0, 3);
+    builtin::array_copy<u8>(built.repr, 0, repr_169, 0, 3);
     local.tee $local_1(struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(18), used: 0 }).used = 1;
     builtin::array_copy<u8>($local_1.repr, 0, global:ctfe_fold_view_append_wir.wado::$const_obj_4, 0, 1);
-    self_71 = built.used;
-    if @unlikely(local.tee new_used_74(1 + (1 + self_71)) > 18) {
+    self_67 = built.used;
+    if @unlikely(local.tee new_used_70(1 + (1 + self_67)) > 18) {
         cold_path;
-        "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_1, new_used_74);
+        "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_1, new_used_70);
     }
-    start_75 = $local_1.used;
-    $local_1.used = new_used_74;
-    builtin::array_copy<u8>(local.tee repr_177($local_1.repr), start_75, built.repr, 0, self_71);
-    self_71 = start_75 + self_71;
-    builtin::array_copy<u8>(repr_177, self_71, global:ctfe_fold_view_append_wir.wado::$const_obj_3, 0, 1);
-    self_71 = builtin::i32_wrap_i64(local.tee packed_85("wasi/stream-new"()));
-    start_75 = builtin::i32_wrap_i64(packed_85 >> 32_i64);
-    self_71 = "ctfe_fold_view_append_wir.wado/$cm_binding__Stdout_write_via_stream"(self_71);
-    "core:rt/write_string_to_stream$dae[add_newline]"(start_75, $local_1.repr, $local_1.used);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(self_71);
-    self_71 = builtin::i32_wrap_i64(local.tee packed_85("wasi/stream-new"()));
-    start_75 = builtin::i32_wrap_i64(packed_85 >> 32_i64);
-    self_71 = "ctfe_fold_view_append_wir.wado/$cm_binding__Stdout_write_via_stream"(self_71);
-    repr_177 = array.new_data<u8>("[abc]");
-    "core:rt/write_string_to_stream$dae[add_newline]"(start_75, repr_177, 5);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(self_71);
+    start_71 = $local_1.used;
+    $local_1.used = new_used_70;
+    builtin::array_copy<u8>(local.tee repr_169($local_1.repr), start_71, built.repr, 0, self_67);
+    self_67 = start_71 + self_67;
+    builtin::array_copy<u8>(repr_169, self_67, global:ctfe_fold_view_append_wir.wado::$const_obj_3, 0, 1);
+    self_67 = builtin::i32_wrap_i64(local.tee packed_81("wasi/stream-new"()));
+    start_71 = builtin::i32_wrap_i64(packed_81 >> 32_i64);
+    self_67 = "ctfe_fold_view_append_wir.wado/$cm_binding__Stdout_write_via_stream"(self_67);
+    "core:rt/write_string_to_stream$dae[add_newline]"(start_71, $local_1.repr, $local_1.used);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(self_67);
+    self_67 = builtin::i32_wrap_i64(local.tee packed_81("wasi/stream-new"()));
+    start_71 = builtin::i32_wrap_i64(packed_81 >> 32_i64);
+    self_67 = "ctfe_fold_view_append_wir.wado/$cm_binding__Stdout_write_via_stream"(self_67);
+    repr_169 = array.new_data<u8>("[abc]");
+    "core:rt/write_string_to_stream$dae[add_newline]"(start_71, repr_169, 5);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(self_67);
 }
 
 fn "ctfe_fold_view_append_wir.wado/$cm_binding__Stdout_write_via_stream"(data) with Stdout {
@@ -174,16 +176,19 @@ fn "core:rt/cm_stream_write_raw_all_u8"(handle, $mv$data$repr, $mv$data$start, $
     };
 }
 
-fn "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self, min_capacity) {
-    let $load_0: ref Array<u8>;
-    let capacity: i32;
+fn "core:prelude/string.wado/core:prelude/string.wado/String::realloc_to"(self, new_capacity) {
     let new_repr: ref Array<u8>;
-    capacity = builtin::array_len(local.tee $load_0(self.repr));
+    builtin::array_copy<u8>(local.tee new_repr(builtin::array_new<u8>(new_capacity)), 0, self.repr, 0, self.used);
+    self.repr = new_repr;
+}
+
+fn "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self, min_capacity) {
+    let capacity: i32;
+    capacity = builtin::array_len(self.repr);
     if min_capacity <= capacity {
         return;
     }
-    builtin::array_copy<u8>(local.tee new_repr(builtin::array_new<u8>(select i32(min_capacity > 8, local.tee min_capacity(select i32(capacity > min_capacity, local.tee capacity(capacity * 2), min_capacity)), 8))), 0, $load_0, 0, self.used);
-    self.repr = new_repr;
+    "core:prelude/string.wado/core:prelude/string.wado/String::realloc_to"(self, select i32(min_capacity > 8, local.tee min_capacity(select i32(capacity > min_capacity, local.tee capacity(capacity * 2), min_capacity)), 8));
 }
 
 export fn "ctfe_fold_view_append_wir.wado/$cm_export__run" as "run"

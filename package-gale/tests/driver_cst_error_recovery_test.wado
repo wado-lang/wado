@@ -11,7 +11,7 @@ use errrec from "./grammars/error_recovery.g4"
 
 fn first_diag_col<S: AsStrSlice>(input: S) -> i32 {
     let r = errrec::parse(input);
-    assert !r.ok(), `expected a diagnostic for ${input}`;
+    assert !r.ok();
     return r.diagnostics[0].col;
 }
 
@@ -33,7 +33,7 @@ test "error position: non-item token stays put" {
 fn assert_single<S: AsStrSlice, S1: AsStrSlice>(input: S, expected: S1) {
     let r = errrec::parse_single(input);
     let actual = errrec::to_string_tree(&r);
-    assert actual == expected.to_string(), `\ninput:    ${input}\nexpected: ${expected}\nactual:   ${actual}`;
+    assert actual == expected.to_string();
 }
 
 // `item : 'let' ID '=' ID ';'`; the second ID is absent. The current token (`;`)
@@ -46,19 +46,19 @@ test "tree: insert missing terminal" {
 test "an insertion names the wanted kind, the token found, and the edit" {
     let r = errrec::parse_single("let x = ;");
     let d = &r.diagnostics[0];
-    assert d.code matches { MissingToken }, `${d}`;
-    assert d.recovery matches { Inserted }, `${d}`;
-    assert d.expected == [errrec::TK_ID], `${d}`;
-    assert d.found == r.tokens.kind_at(3), `${d}`;
+    assert d.code matches { MissingToken };
+    assert d.recovery matches { Inserted };
+    assert d.expected == [errrec::TK_ID];
+    assert d.found == r.tokens.kind_at(3);
 }
 
 test "a deletion and a skipped run name their edits" {
     let del = errrec::parse_single("let x y = z ;");
-    assert del.diagnostics[0].code matches { ExtraToken }, `${del.diagnostics[0]}`;
-    assert del.diagnostics[0].recovery matches { Deleted }, `${del.diagnostics[0]}`;
-    assert del.diagnostics[0].found == errrec::TK_ID, `${del.diagnostics[0]}`;
+    assert del.diagnostics[0].code matches { ExtraToken };
+    assert del.diagnostics[0].recovery matches { Deleted };
+    assert del.diagnostics[0].found == errrec::TK_ID;
     let skip = errrec::parse_single("let x = } } ;");
-    assert skip.diagnostics[0].recovery matches { SkippedTo }, `${skip.diagnostics[0]}`;
+    assert skip.diagnostics[0].recovery matches { SkippedTo };
 }
 
 // A spurious extra ID before `=`; peek(1) is the expected `=`, so the extra
@@ -83,7 +83,7 @@ test "tree: error region resyncs to FOLLOW" {
 // first and folds.
 test "max_errors caps recovery diagnostics" {
     let full = errrec::parse_double("let x = ; let y = ;");
-    assert full.diagnostics.len() == 2, `expected 2, got ${full.diagnostics.len()}`;
+    assert full.diagnostics.len() == 2;
     let capped = errrec::parse_double("let x = ; let y = ;", 1);
-    assert capped.diagnostics.len() == 1, `expected 1, got ${capped.diagnostics.len()}`;
+    assert capped.diagnostics.len() == 1;
 }

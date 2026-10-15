@@ -162,7 +162,7 @@ fn gen_run_parse_entry(w: &mut CodeWriter, ctx: &EmitContext) {
     // `max_errors` caps recovery; 1 is the fail-fast minimum. 0 (or negative)
     // would suppress every diagnostic and let a broken parse report `ok()`, so
     // reject it up front.
-    w.line("assert max_errors >= 1, `max_errors must be >= 1, got ${max_errors}`;");
+    w.line("assert max_errors >= 1;");
     w.line("let tokens = tokenize(input);");
     w.line("let mut p = Parser::new(tokens);");
     w.line("p.max_errors = max_errors;");
@@ -508,7 +508,7 @@ pub fn gen_parser_struct<S: AsStrSlice>(
     // Runtime ATN simulator state (only when a non-greedy / LR decision needs
     // it); the decoded ATN is shared via the module-level `ATN_SIM`.
     // `atn.stack` is the caller stack of ATN return states for full-context
-    // prediction, which a simulating scan borrows so it continues the parse's
+    // prediction, which a simulating scan takes by `&mut` so it continues the parse's
     // frames. `atn_ret_pending` passes a call site's return state to the
     // callee's entry wrapper, which pushes it and resets to -1 (an unstamped
     // call pushes -1 = unknown caller, handled as SLL).

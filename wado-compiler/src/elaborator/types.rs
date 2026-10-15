@@ -508,7 +508,7 @@ pub enum TypeError {
     },
 
     /// A by-value `self` receiver on a non-resource type. Only resources are
-    /// move-only (WEP 2026-05-21); value types borrow with `&self`.
+    /// move-only (WEP 2026-05-21); value types take `&self`.
     SelfByValueOnNonResource {
         type_name: String,
         span: Span,
@@ -1205,6 +1205,12 @@ pub enum TypeError {
         span: Span,
     },
 
+    /// An impl writes a `contract` clause on a method its trait's clauses
+    /// bind: a caller through a bound vouches for the trait's alone.
+    ImplContractUnderTraitContract {
+        span: Span,
+    },
+
     /// `impl X for T` where `X` resolves to no trait, effect or resource in
     /// the impl's frame.
     UnknownTraitImpl {
@@ -1347,11 +1353,11 @@ pub enum TypeError {
 
     /// A reference or a view has no Component Model representation. Triggered
     /// when an `export` (or imported) function's parameter or return type is
-    /// or holds one; `borrow` is the type that makes it one.
-    BorrowAtCmBoundary {
+    /// or holds one; `reference` is the type that makes it one.
+    RefAtCmBoundary {
         function: String,
         position: String,
-        borrow: String,
+        reference: String,
         span: Span,
     },
 
@@ -2588,6 +2594,11 @@ impl TypeError {
                 format!("impl of trait '{trait_name}' does not define method '{method_name}'"),
                 *span,
             ),
+            TypeError::ImplContractUnderTraitContract { span } => (
+                Code::TraitDeclInvalid,
+                "an impl writes no `contract` on a method its trait's clauses bind".to_string(),
+                *span,
+            ),
             TypeError::UnknownTraitImpl { name, span } => (
                 Code::UnknownType,
                 format!(
@@ -2799,15 +2810,15 @@ impl TypeError {
                 ),
                 *span,
             ),
-            TypeError::BorrowAtCmBoundary {
+            TypeError::RefAtCmBoundary {
                 function,
                 position,
-                borrow,
+                reference,
                 span,
             } => (
                 Code::CmBoundaryType,
                 format!(
-                    "`{borrow}` in {position} of `{function}` is not allowed: a reference or a view points into storage it does not own and has no Component Model representation; pass an owned value such as a `List<T>` or a `String`"
+                    "`{reference}` in {position} of `{function}` is not allowed: a reference or a view points into storage it does not own and has no Component Model representation; pass an owned value such as a `List<T>` or a `String`"
                 ),
                 *span,
             ),
@@ -3259,9 +3270,9 @@ pub(super) struct FunctionContext {
     /// Deref overrides for mutable closures: maps original var name -> (ref var name, inner type)
     /// When a variable is in this map, lookups return `*$ref_name` instead of the value.
     pub(super) deref_overrides: IndexMap<String, (String, TypeId)>,
-    /// Bindings of an enclosing frame this frame borrows `&mut`, which the
+    /// Bindings of an enclosing frame this frame takes `&mut`, which the
     /// closure owning it captures `&mut`.
-    pub(super) borrowed_captures: IndexSet<String>,
+    pub(super) mut_ref_captures: IndexSet<String>,
     /// Box types for outer address-taken locals: maps outer var name -> `&mut T` type.
     /// When capturing such a variable, use `DerefCapture` to read through the box.
     pub(super) outer_box_types: IndexMap<String, TypeId>,
@@ -3532,7 +3543,7 @@ impl FunctionContext {
             active_labels: Vec::new(),
             function_name,
             deref_overrides: IndexMap::default(),
-            borrowed_captures: IndexSet::default(),
+            mut_ref_captures: IndexSet::default(),
             outer_box_types: IndexMap::default(),
             closure_defaults: IndexMap::default(),
             in_handler_method: false,
@@ -3615,7 +3626,7 @@ impl FunctionContext {
             active_labels: Vec::new(),
             function_name,
             deref_overrides: IndexMap::default(),
-            borrowed_captures: IndexSet::default(),
+            mut_ref_captures: IndexSet::default(),
             outer_box_types,
             closure_defaults: IndexMap::default(),
             // Closures inside a handler method body are NOT themselves

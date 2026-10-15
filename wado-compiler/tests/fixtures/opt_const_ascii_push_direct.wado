@@ -1,6 +1,6 @@
 // Regression test: the `const_ascii_push` NIR rule retargets a *direct*
 // `buf.push(<const char < 0x80>)` (not one synthesized by the short-`push_str`
-// expansion) to `push_ascii_unchecked`, which inlines to
+// expansion) to `push_ascii_byte`, which inlines to
 // `internal_reserve_uninit(1)` + `array_set_u8`. A non-ASCII constant char
 // must be left on the general `push`/`encode_char` path — retargeting it would
 // write a raw code point where a UTF-8 sequence belongs.

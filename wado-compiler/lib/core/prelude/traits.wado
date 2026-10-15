@@ -1207,11 +1207,9 @@ pub trait Iterator with _ {
     }
 
     /// Returns an adapter that yields the first element, then every `step`-th after it.
-    /// Panics unless `step` is positive.
-    fn step_by(&self, step: i32) -> IterStepBy<Self> with () {
-        if step <= 0 {
-            panic("step_by: step must be positive");
-        }
+    fn step_by(&self, step: i32) -> IterStepBy<Self> with ()
+        contract step > 0
+    {
         return IterStepBy { inner: *self, gap: step - 1, started: false };
     }
 

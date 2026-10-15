@@ -168,43 +168,43 @@ pub fn adler32(adler: u32, buf: &ByteList, offset: i32, len: i32) -> u32 {
         remaining -= k;
         let mut n = k;
         while n >= 16 {
-            s1 += buf.get_byte_unchecked(pos) as u32;
+            s1 += unchecked buf[pos] as u32;
             s2 += s1;
-            s1 += buf.get_byte_unchecked(pos + 1) as u32;
+            s1 += unchecked buf[pos + 1] as u32;
             s2 += s1;
-            s1 += buf.get_byte_unchecked(pos + 2) as u32;
+            s1 += unchecked buf[pos + 2] as u32;
             s2 += s1;
-            s1 += buf.get_byte_unchecked(pos + 3) as u32;
+            s1 += unchecked buf[pos + 3] as u32;
             s2 += s1;
-            s1 += buf.get_byte_unchecked(pos + 4) as u32;
+            s1 += unchecked buf[pos + 4] as u32;
             s2 += s1;
-            s1 += buf.get_byte_unchecked(pos + 5) as u32;
+            s1 += unchecked buf[pos + 5] as u32;
             s2 += s1;
-            s1 += buf.get_byte_unchecked(pos + 6) as u32;
+            s1 += unchecked buf[pos + 6] as u32;
             s2 += s1;
-            s1 += buf.get_byte_unchecked(pos + 7) as u32;
+            s1 += unchecked buf[pos + 7] as u32;
             s2 += s1;
-            s1 += buf.get_byte_unchecked(pos + 8) as u32;
+            s1 += unchecked buf[pos + 8] as u32;
             s2 += s1;
-            s1 += buf.get_byte_unchecked(pos + 9) as u32;
+            s1 += unchecked buf[pos + 9] as u32;
             s2 += s1;
-            s1 += buf.get_byte_unchecked(pos + 10) as u32;
+            s1 += unchecked buf[pos + 10] as u32;
             s2 += s1;
-            s1 += buf.get_byte_unchecked(pos + 11) as u32;
+            s1 += unchecked buf[pos + 11] as u32;
             s2 += s1;
-            s1 += buf.get_byte_unchecked(pos + 12) as u32;
+            s1 += unchecked buf[pos + 12] as u32;
             s2 += s1;
-            s1 += buf.get_byte_unchecked(pos + 13) as u32;
+            s1 += unchecked buf[pos + 13] as u32;
             s2 += s1;
-            s1 += buf.get_byte_unchecked(pos + 14) as u32;
+            s1 += unchecked buf[pos + 14] as u32;
             s2 += s1;
-            s1 += buf.get_byte_unchecked(pos + 15) as u32;
+            s1 += unchecked buf[pos + 15] as u32;
             s2 += s1;
             pos += 16;
             n -= 16;
         }
         while n > 0 {
-            s1 += buf.get_byte_unchecked(pos) as u32;
+            s1 += unchecked buf[pos] as u32;
             s2 += s1;
             pos += 1;
             n -= 1;
@@ -758,8 +758,9 @@ impl InflateState {
     // Pulls input bytes until at least `n` bits are held. The whole stream is at
     // hand, so input that ends first is a stream cut short. The buffer holds 64
     // bits, and a pull adds up to 7 past `n`.
-    fn need_bits(&mut self, input: &ByteList, n: i32) -> Result<(), ZlibError> {
-        assert n <= 57;
+    fn need_bits(&mut self, input: &ByteList, n: i32) -> Result<(), ZlibError>
+        contract n <= 57
+    {
         while self.bits < n {
             if self.next == self.end {
                 builtin::cold_path();
@@ -807,10 +808,10 @@ impl InflateState {
 global FAST_INPUT_MIN: i32 = 8;
 
 fn read_u32_le(input: &ByteList, pos: i32) -> u64 {
-    let b0 = input.get_byte_unchecked(pos) as u64;
-    let b1 = input.get_byte_unchecked(pos + 1) as u64;
-    let b2 = input.get_byte_unchecked(pos + 2) as u64;
-    let b3 = input.get_byte_unchecked(pos + 3) as u64;
+    let b0 = unchecked input[pos] as u64;
+    let b1 = unchecked input[pos + 1] as u64;
+    let b2 = unchecked input[pos + 2] as u64;
+    let b3 = unchecked input[pos + 3] as u64;
     return b0 | b1 << 8 | b2 << 16 | b3 << 24;
 }
 
@@ -949,8 +950,9 @@ fn inflate_raw_ex(
     input_offset: i32,
     input_length: i32,
     max_output: i32,
-) -> Result<[ByteList, i32], ZlibError> {
-    assert max_output >= 0, "max_output must not be negative";
+) -> Result<[ByteList, i32], ZlibError>
+    contract max_output >= 0
+{
     let mut state = InflateState::new(input_offset, input_offset + input_length);
     let mut output: ByteList = [];
 
@@ -1458,7 +1460,7 @@ pub fn deflate_huffman(input: &ByteList) -> ByteList {
         // Try to find a match (need at least 3 bytes remaining for hash)
         if pos + 2 < input_len {
             let h = hash3(input[pos], input[pos + 1], input[pos + 2]);
-            let mut chain = head.get_unchecked(h);
+            let mut chain = unchecked head[h];
             let mut chain_count = 0;
 
             let max_len = i32::min(input_len - pos, 258);
@@ -1470,7 +1472,7 @@ pub fn deflate_huffman(input: &ByteList) -> ByteList {
 
                 // Early termination: skip if can't beat current best
                 if best_len >= 3 && best_len < max_len && input[chain + best_len] != input[pos + best_len] {
-                    chain = prev.get_unchecked(chain & 32767);
+                    chain = unchecked prev[chain & 32767];
                     chain_count += 1;
                     continue;
                 }
@@ -1489,12 +1491,12 @@ pub fn deflate_huffman(input: &ByteList) -> ByteList {
                     }
                 }
 
-                chain = prev.get_unchecked(chain & 32767);
+                chain = unchecked prev[chain & 32767];
                 chain_count += 1;
             }
 
             // Update hash table
-            prev[pos & 32767] = head.get_unchecked(h);
+            prev[pos & 32767] = unchecked head[h];
             head[h] = pos;
         }
 
@@ -3016,18 +3018,24 @@ impl DeflateStream {
         return *self;
     }
 
-    /// Appends `chunk` to the input buffer. Panics if the stream has already
-    /// been finished.
-    pub fn update(&mut self, chunk: &ByteList) {
-        assert !self.finished, "DeflateStream already finished";
+    /// Whether `finish` or `compress` has run since the stream was made or
+    /// last `reset`.
+    pub fn is_finished(&self) -> bool {
+        return self.finished;
+    }
+
+    /// Appends `chunk` to the input buffer.
+    pub fn update(&mut self, chunk: &ByteList)
+        contract !self.is_finished()
+    {
         self.buffer.extend(chunk);
     }
 
     /// Compresses all buffered input and returns the wrapped output. Marks
-    /// the stream as finished; further `update`/`finish`/`compress` calls
-    /// panic until `reset` is invoked.
-    pub fn finish(&mut self) -> ByteList {
-        assert !self.finished, "DeflateStream already finished";
+    /// the stream as finished until `reset` is invoked.
+    pub fn finish(&mut self) -> ByteList
+        contract !self.is_finished()
+    {
         self.finished = true;
         let result = self.compress_internal(&self.buffer);
         self.total_in += self.buffer.len();
@@ -3037,8 +3045,9 @@ impl DeflateStream {
 
     /// Compresses `input` in one shot, bypassing the internal buffer. Marks
     /// the stream as finished.
-    pub fn compress(&mut self, input: &ByteList) -> ByteList {
-        assert !self.finished, "DeflateStream already finished";
+    pub fn compress(&mut self, input: &ByteList) -> ByteList
+        contract !self.is_finished()
+    {
         self.finished = true;
         let result = self.compress_internal(input);
         self.total_in += input.len();

@@ -560,8 +560,9 @@ pub fn case_named<E: ReflectEnum + Display>(name: &String) -> Option<E> {
 
 /// How many of A's axes follow B's where arithmetic aligns B at A's `axis`, or
 /// 0 where it aligns B at A's end, as numpy does.
-pub fn trailing_axes(node: &Node, a_rank: i32, b_rank: i32) -> Result<i32, String> {
-    assert is_binary_elementwise(&node.op);
+pub fn trailing_axes(node: &Node, a_rank: i32, b_rank: i32) -> Result<i32, String>
+    contract is_binary_elementwise(&node.op)
+{
     if node.attr("axis") matches { None } {
         return Result::Ok(0);
     }

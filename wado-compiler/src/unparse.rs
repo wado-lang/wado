@@ -185,14 +185,6 @@ fn emit_kw_if_into(cond: bool, kw: &str, output: &mut String) {
     }
 }
 
-/// Wrap what `emit` appends in `( ... )` if `cond` is true. Free-function
-/// counterpart of `Unparser::with_parens_if`.
-fn with_parens_if_into<F: FnOnce(&mut String)>(cond: bool, output: &mut String, emit: F) {
-    emit_kw_if_into(cond, "(", output);
-    emit(output);
-    emit_kw_if_into(cond, ")", output);
-}
-
 fn emit_visibility_into(visibility: Visibility, output: &mut String) {
     output.push_str(visibility.keyword());
 }
@@ -1867,7 +1859,7 @@ impl<'a> Unparser<'a> {
             Expr::TupleComprehension(c) => self.unparse_tuple_comprehension(c),
             Expr::LabeledBlock(lb) => self.unparse_labeled_block_expr(lb),
             Expr::TryOp(qm) => {
-                self.unparse_expr(&qm.expr);
+                self.unparse_postfix_base(&qm.expr);
                 self.output.push('?');
             }
             Expr::Spread(inner, _) => {
@@ -2286,6 +2278,9 @@ impl<'a> Unparser<'a> {
     }
 
     fn unparse_index(&mut self, i: &IndexExpr) {
+        if i.unchecked.is_some() {
+            self.output.push_str(unary_op_str(UnaryOp::Unchecked));
+        }
         self.unparse_postfix_base(&i.expr);
         self.output.push('[');
         self.unparse_expr(&i.index);
@@ -3327,7 +3322,6 @@ fn closure_body_needs_parens(expr: &Expr) -> bool {
         Expr::Matches(m) => {
             !matches_scrutinee_needs_parens(&m.expr) && closure_body_needs_parens(&m.expr)
         }
-        Expr::TryOp(t) => closure_body_needs_parens(&t.expr),
         Expr::Assign(a) => closure_body_needs_parens(&a.target),
         Expr::CompoundAssign(c) => closure_body_needs_parens(&c.target),
         Expr::TaggedTemplate(t) => closure_body_needs_parens(&t.tag),
@@ -3341,6 +3335,7 @@ fn closure_body_needs_parens(expr: &Expr) -> bool {
         | Expr::StaticMethodCall(_)
         | Expr::FieldAccess(_)
         | Expr::Index(_)
+        | Expr::TryOp(_)
         | Expr::Block(_)
         | Expr::If(_)
         | Expr::Match(_)
@@ -3420,23 +3415,26 @@ enum OperandSlot {
 /// `(p as Point).x` lost its parens and re-parsed the field access into the
 /// cast's type, and `(a < b < c).to_string()` read the call off `c`.
 fn binds_tighter_than(expr: &Expr, slot: OperandSlot) -> bool {
-    let postfix = matches!(
-        expr,
-        Expr::Ident(_)
-            | Expr::Literal(_)
-            | Expr::Call(_)
-            | Expr::MethodCall(_)
-            | Expr::StaticMethodCall(_)
-            | Expr::FieldAccess(_)
-            | Expr::Index(_)
-            | Expr::TryOp(_)
-            | Expr::TemplateString(_)
-            | Expr::TaggedTemplate(_)
-            | Expr::StructLiteral(_)
-            | Expr::TupleLiteral(_)
-            | Expr::TupleComprehension(_)
-            | Expr::Error(_)
-    );
+    // A marked subscript opens with the prefix `unchecked`.
+    let marked = matches!(expr, Expr::Index(i) if i.unchecked.is_some());
+    let postfix = !marked
+        && matches!(
+            expr,
+            Expr::Ident(_)
+                | Expr::Literal(_)
+                | Expr::Call(_)
+                | Expr::MethodCall(_)
+                | Expr::StaticMethodCall(_)
+                | Expr::FieldAccess(_)
+                | Expr::Index(_)
+                | Expr::TryOp(_)
+                | Expr::TemplateString(_)
+                | Expr::TaggedTemplate(_)
+                | Expr::StructLiteral(_)
+                | Expr::TupleLiteral(_)
+                | Expr::TupleComprehension(_)
+                | Expr::Error(_)
+        );
     // A block form — `{…}`, `LABEL: {…}`, `if`, `match` — is off that list by
     // its *opening*, not its closing `}`: starting a statement, the keyword or
     // brace reads as the statement itself and the postfix behind it has nothing
@@ -3450,6 +3448,7 @@ fn binds_tighter_than(expr: &Expr, slot: OperandSlot) -> bool {
         // `!x as i32` reads as `!(x as i32)` and the operand keeps its parens.
         OperandSlot::Cast => {
             postfix
+                || marked
                 || matches!(expr, Expr::Cast(_))
                 || matches!(expr, Expr::Unary(u) if u.op != UnaryOp::Not)
         }
@@ -3519,8 +3518,7 @@ fn format_field_name(name: &str) -> String {
 }
 
 /// Unparse one expression as a single line of source, keeping the parentheses
-/// the parse needs. Quotes the condition on an `assert` failure, where
-/// [`unparse_expr_simple`] would print a different expression.
+/// the parse needs.
 pub fn unparse_expr_source(expr: &Expr) -> String {
     unparse_one_line(|u| u.unparse_expr(expr))
 }
@@ -3570,12 +3568,6 @@ fn unparse_one_line_with<'a>(
     out
 }
 
-pub fn unparse_expr_simple(expr: &Expr) -> String {
-    let mut output = String::new();
-    unparse_expr_into(expr, &mut output);
-    output
-}
-
 /// A case path's turbofish sits on the prefix, so split at the last `::` and
 /// answer `(prefix, case)`. On the whole name it re-parses as the ident's own.
 fn prefix_turbofish_split(ident: &IdentExpr) -> Option<(&str, &str)> {
@@ -3585,394 +3577,8 @@ fn prefix_turbofish_split(ident: &IdentExpr) -> Option<(&str, &str)> {
         .flatten()
 }
 
-/// Emit `::<T1, T2, ...>` turbofish into `output`.
-fn unparse_turbofish_into(type_args: &[Type], output: &mut String) {
-    if type_args.is_empty() {
-        return;
-    }
-    output.push_str("::<");
-    for (idx, ty) in type_args.iter().enumerate() {
-        if idx > 0 {
-            output.push_str(", ");
-        }
-        unparse_type_into(ty, output);
-    }
-    output.push('>');
-}
-
-/// Unparse an expression to a string without preserving comments. The output
-/// drops disambiguating parentheses around nested binary expressions: callers
-/// (error messages, simple symbol previews) prioritise readability over
-/// round-trip fidelity.
 fn unparse_expr_into(expr: &Expr, output: &mut String) {
-    match expr {
-        Expr::Ident(i) => {
-            if let Some((prefix, suffix)) = prefix_turbofish_split(i) {
-                output.push_str(prefix);
-                unparse_turbofish_into(&i.type_args, output);
-                output.push_str("::");
-                output.push_str(suffix);
-            } else {
-                output.push_str(&i.name);
-                unparse_turbofish_into(&i.type_args, output);
-            }
-        }
-        Expr::Literal(l) => unparse_literal_into(&l.value, output),
-        Expr::Binary(b) => {
-            unparse_expr_into(&b.left, output);
-            output.push(' ');
-            output.push_str(binary_op_str(b.op));
-            output.push(' ');
-            unparse_expr_into(&b.right, output);
-        }
-        Expr::Unary(u) => {
-            output.push_str(unary_op_str(u.op));
-            unparse_expr_into(&u.expr, output);
-        }
-        Expr::Call(c) => {
-            unparse_expr_into(&c.callee, output);
-            delimited_into("(", ")", &c.args, output, unparse_expr_into);
-        }
-        Expr::MethodCall(m) => {
-            unparse_expr_into(&m.receiver, output);
-            output.push('.');
-            output.push_str(&m.method);
-            delimited_into("(", ")", &m.args, output, unparse_expr_into);
-        }
-        Expr::FieldAccess(f) => {
-            unparse_expr_into(&f.expr, output);
-            output.push('.');
-            output.push_str(&f.field);
-        }
-        Expr::Index(i) => {
-            unparse_expr_into(&i.expr, output);
-            output.push('[');
-            unparse_expr_into(&i.index, output);
-            output.push(']');
-        }
-        Expr::Cast(c) => {
-            unparse_expr_into(&c.expr, output);
-            output.push_str(" as ");
-            unparse_type_into(&c.target_type, output);
-        }
-        Expr::StaticMethodCall(s) => {
-            unparse_type_into(&s.target_type, output);
-            output.push_str("::");
-            output.push_str(&s.method);
-            if !s.type_args.is_empty() {
-                delimited_into("::<", ">", &s.type_args, output, unparse_type_into);
-            }
-            delimited_into("(", ")", &s.args, output, unparse_expr_into);
-        }
-        Expr::Closure(c) => unparse_closure_into(c, output),
-        Expr::TemplateString(t) => unparse_template_string_into(t, output),
-        Expr::TaggedTemplate(t) => {
-            unparse_expr_into(&t.tag, output);
-            unparse_template_string_into(&t.template, output);
-        }
-        Expr::Block(b) => unparse_block_expr_into(b, output),
-        Expr::If(i) => unparse_if_expr_into(i, output),
-        Expr::Match(m) => unparse_match_into(m, output),
-        Expr::Matches(m) => {
-            unparse_expr_into(&m.expr, output);
-            output.push_str(" matches { ");
-            unparse_pattern_into(&m.pattern, output);
-            if let Some(guard) = &m.guard {
-                output.push_str(" && ");
-                unparse_expr_into(guard, output);
-            }
-            output.push_str(" }");
-        }
-        Expr::Assign(a) => {
-            unparse_expr_into(&a.target, output);
-            output.push_str(" = ");
-            unparse_expr_into(&a.value, output);
-        }
-        Expr::CompoundAssign(ca) => {
-            unparse_expr_into(&ca.target, output);
-            output.push_str(match ca.op {
-                CompoundAssignOp::Add => " += ",
-                CompoundAssignOp::Sub => " -= ",
-                CompoundAssignOp::Mul => " *= ",
-                CompoundAssignOp::Div => " /= ",
-                CompoundAssignOp::Mod => " %= ",
-                CompoundAssignOp::BitAnd => " &= ",
-                CompoundAssignOp::BitOr => " |= ",
-                CompoundAssignOp::BitXor => " ^= ",
-                CompoundAssignOp::Shl => " <<= ",
-                CompoundAssignOp::Shr => " >>= ",
-            });
-            unparse_expr_into(&ca.value, output);
-        }
-        Expr::ComparisonChain(chain) => {
-            unparse_expr_into(&chain.first, output);
-            for cmp in &chain.comparisons {
-                output.push(' ');
-                output.push_str(binary_op_str(cmp.op));
-                output.push(' ');
-                unparse_expr_into(&cmp.right, output);
-            }
-        }
-        Expr::StructLiteral(s) => {
-            if let Some(name) = &s.name {
-                output.push_str(name);
-                unparse_turbofish_into(&s.type_args, output);
-                output.push(' ');
-            }
-            if s.fields.is_empty() {
-                output.push_str("{}");
-            } else {
-                output.push_str("{ ");
-                comma_sep_into(&s.fields, output, |f, o| {
-                    o.push_str(&f.name);
-                    if !f.is_shorthand {
-                        o.push_str(": ");
-                        unparse_expr_into(&f.value, o);
-                    }
-                });
-                output.push_str(" }");
-            }
-        }
-        Expr::TupleLiteral(t) => {
-            delimited_into("[", "]", &t.elements, output, unparse_expr_into);
-        }
-        Expr::TupleComprehension(c) => {
-            output.push_str("[for let ");
-            unparse_pattern_into(&c.binding, output);
-            output.push_str(" of ");
-            unparse_expr_into(&c.iterable, output);
-            output.push_str(" { ");
-            unparse_expr_into(&c.body, output);
-            output.push_str(" }]");
-        }
-        Expr::LabeledBlock(_) => output.push_str("<labeled-block>"),
-        Expr::TryOp(qm) => {
-            unparse_expr_into(&qm.expr, output);
-            output.push('?');
-        }
-        Expr::Spread(inner, _) => {
-            output.push_str("..");
-            unparse_expr_into(inner, output);
-        }
-        Expr::Range(range) => {
-            unparse_expr_into(&range.start, output);
-            output.push_str(range.kind.operator());
-            unparse_expr_into(&range.end, output);
-        }
-        Expr::WithHandler(w) => {
-            output.push_str("with ");
-            comma_sep_into(&w.handlers, output, |binding, o| {
-                if let Some(effect) = &binding.effect {
-                    unparse_type_into(effect, o);
-                    o.push_str(" => ");
-                }
-                unparse_expr_into(&binding.handler, o);
-            });
-            output.push_str(" do ");
-            unparse_block_expr_into(&w.body, output);
-        }
-        // Parser error-recovery placeholder; rendered as an empty marker for
-        // the readability-first preview paths that use this helper.
-        Expr::Error(_) => output.push_str("<error>"),
-    }
-}
-
-fn unparse_closure_into(c: &ClosureExpr, output: &mut String) {
-    delimited_into("|", "| ", &c.params, output, |param, o| {
-        if param.is_mut {
-            o.push_str("mut ");
-        }
-        o.push_str(&param.name);
-        if let Some(ty) = &param.ty {
-            o.push_str(": ");
-            unparse_type_into(ty, o);
-        }
-    });
-    if let Some(ty) = &c.return_type {
-        output.push_str("-> ");
-        unparse_type_into(ty, output);
-        output.push(' ');
-    }
-    with_parens_if_into(closure_body_needs_parens(&c.body), output, |o| {
-        unparse_expr_into(&c.body, o);
-    });
-}
-
-/// Twin of [`Unparser::unparse_template_string`]; keep the two in step.
-fn unparse_template_string_into(t: &TemplateStringExpr, output: &mut String) {
-    output.push('`');
-    for part in &t.parts {
-        match part {
-            // Literal segments are stored raw, escapes and all.
-            TemplatePart::String(s) => output.push_str(s),
-            TemplatePart::Interpolation { expr, format, .. } => {
-                output.push_str("${");
-                unparse_expr_into(expr, output);
-                if let Some(fmt) = format {
-                    output.push(':');
-                    output.push_str(&fmt.spec);
-                }
-                output.push('}');
-            }
-        }
-    }
-    output.push('`');
-}
-
-fn unparse_block_expr_into(b: &Block, output: &mut String) {
-    if b.stmts.is_empty() {
-        output.push_str("{}");
-        return;
-    }
-    output.push_str("{ ");
-    for (i, stmt) in b.stmts.iter().enumerate() {
-        if i > 0 {
-            // Stmt::Let etc. terminate with `;`, so this single space keeps the
-            // single-line debug form readable: `{ let x = 1; foo(x) }`.
-            output.push(' ');
-        }
-        unparse_stmt_into(stmt, output);
-    }
-    output.push_str(" }");
-}
-
-fn unparse_stmt_into(stmt: &Stmt, output: &mut String) {
-    match stmt {
-        Stmt::Let(l) => {
-            output.push_str("let ");
-            if l.is_mut {
-                output.push_str("mut ");
-            }
-            unparse_pattern_into(&l.pattern, output);
-            if let Some(ty) = &l.ty {
-                output.push_str(": ");
-                unparse_type_into(ty, output);
-            }
-            if let Some(ref v) = l.value {
-                output.push_str(" = ");
-                unparse_expr_into(v, output);
-            }
-            if let Some(else_block) = &l.else_block {
-                output.push_str(" else {");
-                for stmt in &else_block.stmts {
-                    output.push(' ');
-                    unparse_stmt_into(stmt, output);
-                }
-                output.push_str(" }");
-            }
-            output.push(';');
-        }
-        Stmt::Expr(e) => {
-            unparse_expr_into(&e.expr, output);
-            output.push(';');
-        }
-        Stmt::Return(r) => {
-            output.push_str(r.keyword.as_str());
-            if let Some(v) = &r.value {
-                output.push(' ');
-                unparse_expr_into(v, output);
-            }
-            output.push(';');
-        }
-        Stmt::If(i) => {
-            output.push_str("if ");
-            unparse_condition_into(&i.condition, output);
-            output.push(' ');
-            unparse_block_expr_into(&i.then_block, output);
-            if let Some(else_block) = &i.else_block {
-                output.push_str(" else ");
-                unparse_block_expr_into(else_block, output);
-            }
-        }
-        Stmt::While(w) => {
-            output.push_str("while ");
-            unparse_condition_into(&w.condition, output);
-            output.push(' ');
-            unparse_block_expr_into(&w.body, output);
-        }
-        Stmt::For(f) => {
-            output.push_str("for ");
-            if let Some(init) = &f.init {
-                unparse_stmt_into(init, output);
-            }
-            output.push(' ');
-            if let Some(cond) = &f.condition {
-                unparse_condition_into(cond, output);
-            }
-            output.push_str("; ");
-            if let Some(update) = &f.update {
-                unparse_expr_into(update, output);
-            }
-            output.push(' ');
-            unparse_block_expr_into(&f.body, output);
-        }
-        Stmt::ForOf(f) => {
-            output.push_str("for let ");
-            if f.is_mut {
-                output.push_str("mut ");
-            }
-            unparse_pattern_into(&f.binding, output);
-            output.push_str(" of ");
-            unparse_expr_into(&f.iterable, output);
-            output.push(' ');
-            unparse_block_expr_into(&f.body, output);
-        }
-        Stmt::Loop(l) => {
-            output.push_str("loop ");
-            unparse_block_expr_into(&l.body, output);
-        }
-        Stmt::Match(m) => {
-            unparse_match_into(m, output);
-        }
-        Stmt::Break(_) => output.push_str("break;"),
-        Stmt::Continue(_) => output.push_str("continue;"),
-        Stmt::Assert(a) => {
-            output.push_str("assert ");
-            unparse_expr_into(&a.condition, output);
-            if let Some(msg) = &a.message {
-                output.push_str(", ");
-                unparse_expr_into(msg, output);
-            }
-            output.push(';');
-        }
-        Stmt::TaskReturn(tr) => {
-            output.push_str("task return ");
-            unparse_expr_into(&tr.value, output);
-            output.push(';');
-        }
-        Stmt::LabeledBlock(lb) => {
-            output.push_str(&lb.label);
-            output.push_str(": ");
-            unparse_block_expr_into(&lb.block, output);
-        }
-        // A local type/impl declaration: this helper is a single-line,
-        // readability-first preview (used by diagnostics), not the real
-        // formatter (`unparse_stmt` / `Unparser::unparse_item` is), so a
-        // short marker is enough.
-        Stmt::Item(_) => output.push_str("<local item>;"),
-        // Parser error-recovery placeholder; rendered as an empty marker for the
-        // readability-first preview paths that use this helper.
-        Stmt::Error(_) => output.push_str("<error>;"),
-    }
-}
-
-fn unparse_condition_into(cond: &Condition, output: &mut String) {
-    match cond {
-        Condition::Expr(e) => unparse_expr_into(e, output),
-        Condition::LetChain { elements, .. } => {
-            comma_sep_with_into(" && ", elements, output, |elem, output| {
-                if let ConditionElement::Let { pattern, .. } = elem {
-                    output.push_str("let ");
-                    unparse_pattern_into(pattern, output);
-                    output.push_str(" = ");
-                }
-                let expr = elem.expr();
-                with_parens_if_into(chain_operand_needs_parens(expr), output, |o| {
-                    unparse_expr_into(expr, o);
-                });
-            });
-        }
-    }
+    output.push_str(&unparse_expr_source(expr));
 }
 
 /// A let-chain operand, a `let`'s scrutinee included, is parenthesized as the
@@ -3985,119 +3591,7 @@ fn chain_operand_needs_parens(expr: &Expr) -> bool {
 /// One pattern as source.
 #[must_use]
 pub fn unparse_pattern_source(pattern: &Pattern) -> String {
-    let mut output = String::new();
-    unparse_pattern_into(pattern, &mut output);
-    output
-}
-
-fn unparse_pattern_into(pattern: &Pattern, output: &mut String) {
-    match pattern {
-        Pattern::Ident { name, .. } => output.push_str(name),
-        Pattern::MutIdent { name, .. } => {
-            output.push_str("mut ");
-            output.push_str(name);
-        }
-        Pattern::Literal(lit) => unparse_literal_into(lit, output),
-        Pattern::Wildcard => output.push('_'),
-        Pattern::Tuple(pats, has_rest) => {
-            output.push('[');
-            comma_sep_into(pats, output, unparse_pattern_into);
-            if *has_rest {
-                if !pats.is_empty() {
-                    output.push_str(", ");
-                }
-                output.push_str("..");
-            }
-            output.push(']');
-        }
-        Pattern::Variant {
-            variant_name,
-            variant_qualifier,
-            bindings,
-            ..
-        } => {
-            if let Some(qualifier) = variant_qualifier {
-                unparse_type_into(qualifier, output);
-                output.push_str("::");
-            }
-            output.push_str(variant_name);
-            if !bindings.is_empty() {
-                delimited_into("(", ")", bindings, output, unparse_pattern_into);
-            }
-        }
-        Pattern::Struct {
-            type_name,
-            fields,
-            has_rest,
-            ..
-        } => {
-            if let Some(name) = type_name {
-                output.push_str(name);
-                output.push(' ');
-            }
-            output.push_str("{ ");
-            comma_sep_into(fields, output, |field, o| {
-                let bare_name = is_valid_ident(&field.field_name);
-                o.push_str(&format_field_name(&field.field_name));
-                let is_shorthand = bare_name
-                    && matches!(&field.pattern, Pattern::Ident { name: n, .. } if n == &field.field_name);
-                if !is_shorthand {
-                    o.push_str(": ");
-                    unparse_pattern_into(&field.pattern, o);
-                }
-            });
-            if *has_rest {
-                if !fields.is_empty() {
-                    output.push_str(", ");
-                }
-                output.push_str("..");
-            }
-            output.push_str(" }");
-        }
-        Pattern::Or(alternatives) => {
-            comma_sep_with_into(" | ", alternatives, output, unparse_pattern_into);
-        }
-        Pattern::Range {
-            start, end, kind, ..
-        } => {
-            unparse_pattern_into(start, output);
-            output.push_str(kind.operator());
-            unparse_pattern_into(end, output);
-        }
-        Pattern::Typed { pattern, ty, .. } => {
-            unparse_pattern_into(pattern, output);
-            output.push_str(": ");
-            unparse_type_into(ty, output);
-        }
-        Pattern::Error(_) => output.push_str("<error>"),
-    }
-}
-
-fn unparse_if_expr_into(i: &IfExpr, output: &mut String) {
-    output.push_str("if ");
-    unparse_condition_into(&i.condition, output);
-    output.push(' ');
-    unparse_block_expr_into(&i.then_block, output);
-    if let Some(else_block) = &i.else_block {
-        output.push_str(" else ");
-        unparse_block_expr_into(else_block, output);
-    }
-}
-
-fn unparse_match_into(m: &MatchExpr, output: &mut String) {
-    output.push_str("match ");
-    unparse_expr_into(&m.expr, output);
-    output.push_str(" { ");
-    comma_sep_into(&m.arms, output, |arm, o| {
-        unparse_pattern_into(&arm.pattern, o);
-        if let Some(guard) = &arm.guard {
-            o.push_str(" && ");
-            unparse_expr_into(guard, o);
-        }
-        o.push_str(" => ");
-        unparse_expr_into(&arm.body, o);
-    });
-    output.push_str(" }");
+    unparse_one_line(|u| u.unparse_pattern(pattern))
 }
 
 pub fn unparse_type_into(ty: &Type, output: &mut String) {
@@ -4138,49 +3632,6 @@ pub fn unparse_type_into(ty: &Type, output: &mut String) {
         }
         Type::Infer(_) => output.push('_'),
         Type::Error(_) => output.push_str("<error>"),
-    }
-}
-
-fn unparse_literal_into(lit: &Literal, output: &mut String) {
-    match lit {
-        Literal::Number(repr) => output.push_str(repr),
-        Literal::String(raw) => {
-            output.push('"');
-            output.push_str(raw);
-            output.push('"');
-        }
-        Literal::Bytes(raw) => {
-            output.push_str("b\"");
-            output.push_str(raw);
-            output.push('"');
-        }
-        Literal::Byte(raw) => {
-            output.push_str("b'");
-            output.push_str(raw);
-            output.push('\'');
-        }
-        Literal::Char(raw) => {
-            output.push('\'');
-            output.push_str(raw);
-            output.push('\'');
-        }
-        Literal::Bool(b) => output.push_str(if *b { "true" } else { "false" }),
-        Literal::Null => output.push_str("null"),
-        Literal::Unit => output.push_str("()"),
-        Literal::LocationFile => output.push_str("#file"),
-        Literal::LocationLine => output.push_str("#line"),
-        Literal::LocationFunction => output.push_str("#function"),
-        Literal::DataSection => output.push_str("#data"),
-        Literal::IncludeStr(path) => {
-            output.push_str("#include_str(\"");
-            output.push_str(path);
-            output.push_str("\")");
-        }
-        Literal::IncludeBytes(path) => {
-            output.push_str("#include_bytes(\"");
-            output.push_str(path);
-            output.push_str("\")");
-        }
     }
 }
 
@@ -5578,10 +5029,8 @@ impl<'a> TirUnparser<'a> {
             TirExprKind::WithHandler { bindings, body, .. } => {
                 self.output.push_str("with ");
                 self.comma_sep(bindings, |s, binding| {
-                    if let Some(eff) = &binding.effect {
-                        s.output.push_str(eff.name());
-                        s.output.push_str(" => ");
-                    }
+                    s.output.push_str(binding.effect.name());
+                    s.output.push_str(" => ");
                     s.unparse_expr(&binding.handler);
                 });
                 self.output.push_str(" do ");

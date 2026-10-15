@@ -22,13 +22,13 @@ use { sets_overlap } from "./token_kinds.wado";
 use { HashMap, HashSet } from "core:collections";
 use { GALE_SEED } from "./hash_seed.wado";
 
-/// The parser's ATN predictor (`AtnPredictor`): its field, and the name a scan
-/// function's `&mut` parameter borrows it under.
+/// The parser's ATN predictor (`AtnPredictor`): its field, and the name of the
+/// `&mut` parameter a scan function takes it through.
 pub global ATN_HANDLE: String = "atn";
 pub global ATN_PREDICTOR_TYPE: String = "AtnPredictor";
 
-/// The parser's scan memo (`ScanMemo`): its field, and the name a scan
-/// function's `&mut` parameter borrows it under.
+/// The parser's scan memo (`ScanMemo`): its field, and the name of the `&mut`
+/// parameter a scan function takes it through.
 pub global SCAN_MEMO_HANDLE: String = "memo";
 
 /// `scan_<snake>`, the name of the rule `snake`'s scan function where it is
@@ -106,9 +106,15 @@ impl EmitCursor {
         self.current_rule_index = idx;
     }
 
+    /// Whether a rule is being emitted.
+    pub fn has_current_rule(&self) -> bool {
+        return self.current_rule_index >= 0;
+    }
+
     /// The index of the rule being emitted.
-    pub fn current_rule_index(&self) -> i32 {
-        assert self.current_rule_index >= 0, "the parse and scan emit loops make each rule current before walking its body";
+    pub fn current_rule_index(&self) -> i32
+        contract self.has_current_rule(), "the parse and scan emit loops make each rule current before walking its body"
+    {
         return self.current_rule_index;
     }
 
@@ -258,7 +264,7 @@ impl EmitCursor {
     /// rule being emitted.
     pub fn record_alt_scan_fn<S: AsStrSlice>(&mut self, alt: i32, name: S) {
         let key = [self.current_rule_index(), alt];
-        assert !self.alt_scan_fns.contains_key(key), `alt ${alt} of rule ${key.0} already has a scan function`;
+        assert !self.alt_scan_fns.contains_key(key);
         self.alt_scan_fns[key] = name.to_string();
     }
 
@@ -541,7 +547,7 @@ impl EmitContext {
     }
 
     /// The caller stack pushed and predicted with, as this code reaches it. A
-    /// scan borrows the parser's, so one launched mid-parse has full context.
+    /// scan refers to the parser's, so one launched mid-parse has full context.
     pub fn atn_stack_place(&self) -> String {
         return `${self.atn_path()}.stack`;
     }
@@ -556,7 +562,7 @@ impl EmitContext {
         return self.state_arg(ATN_HANDLE, ATN_HANDLE);
     }
 
-    /// Parser state a scan borrows, as a place: the scan's parameter `handle`,
+    /// Parser state a scan refers to, as a place: the scan's parameter `handle`,
     /// or the parser's `field` anywhere else.
     fn state_path<S: AsStrSlice, S1: AsStrSlice>(&self, handle: S, field: S1) -> String {
         if self.cursor.in_scan_fn() {
@@ -565,15 +571,15 @@ impl EmitContext {
         return `${PARSER_HANDLE}.${field}`;
     }
 
-    /// Parser state a scan borrows, as an argument: the scan's borrow passed
-    /// on, or a fresh borrow of the parser's field.
+    /// Parser state a scan refers to, as an argument: the scan's reference
+    /// passed on, or a fresh `&mut` of the parser's field.
     fn state_arg<S: AsStrSlice, S1: AsStrSlice>(&self, handle: S, field: S1) -> String {
         let path = self.state_path(handle, field);
         return if self.cursor.in_scan_fn() { path } else { `&mut ${path}` };
     }
 
-    /// The trailing arguments of a scan call for the parser state it borrows:
-    /// the gate, the ATN state, then the memo. Empty where the scan borrows
+    /// The trailing arguments of a scan call for the parser state it refers to:
+    /// the gate, the ATN state, then the memo. Empty where the scan refers to
     /// none of them.
     pub fn scan_state_args(&self) -> List<String> {
         let mut args: List<String> = [];
@@ -640,8 +646,9 @@ impl EmitContext {
     ///
     /// An empty set is not a condition: which of the two it means is `Admits`'s
     /// to say at the site that knows, so pass a real set here.
-    pub fn kind_check_str<S: AsStrSlice>(&mut self, tokens: &List<i32>, expr: S) -> String {
-        assert !tokens.is_empty(), "an empty token set is not a condition; say what it admits with `Admits`";
+    pub fn kind_check_str<S: AsStrSlice>(&mut self, tokens: &List<i32>, expr: S) -> String
+        contract !tokens.is_empty(), "an empty token set is not a condition; say what it admits with `Admits`"
+    {
         if tokens.len() == 1 {
             return `${expr} == ${self.analysis.token_name(tokens[0])}`;
         }
@@ -651,8 +658,9 @@ impl EmitContext {
     /// Render the negation of a token-set membership check —
     /// `!_kind_set_<id>(<expr>)` for ≥2 tokens, else
     /// `<expr> != TK_X`. Used by non-greedy emit sites.
-    pub fn kind_negate_check_str<S: AsStrSlice>(&mut self, tokens: &List<i32>, expr: S) -> String {
-        assert !tokens.is_empty(), "an empty exclusion set is not a condition; say what it admits with `Admits`";
+    pub fn kind_negate_check_str<S: AsStrSlice>(&mut self, tokens: &List<i32>, expr: S) -> String
+        contract !tokens.is_empty(), "an empty exclusion set is not a condition; say what it admits with `Admits`"
+    {
         if tokens.len() == 1 {
             return `${expr} != ${self.analysis.token_name(tokens[0])}`;
         }

@@ -61,8 +61,9 @@ impl<K, V> EntryLog<K, V> {
     /// Marks the live entry `e` dead, and reports whether the dead now
     /// outnumber the live enough to `compact`. Nothing reads a dead entry's
     /// value again, so it is released; its key stays for a lookup to compare.
-    internal fn kill(&mut self, e: i32) -> bool {
-        assert self.alive[e];
+    internal fn kill(&mut self, e: i32) -> bool
+        contract self.alive[e]
+    {
         self.alive[e] = false;
         builtin::array_release(&mut self.values, e, 1);
         self.deleted_count += 1;
@@ -185,7 +186,7 @@ impl<K: Inspect, V: Inspect> EntryLog<K, V> {
 }
 
 impl<K, V: Ref> EntryLog<K, V> {
-    /// `value_at`, borrowing the value.
+    /// `value_at`, returning a reference to the value instead of a copy.
     internal fn value_ref_at(&self, e: i32) -> Option<&V> {
         if e < 0 {
             return null;

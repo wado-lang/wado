@@ -328,6 +328,23 @@ fn test_format_double_ampersand_roundtrips() {
     assert_format_preserves_ast(source);
 }
 
+/// `?` binds tighter than every prefix and binary operator, so an operand
+/// built from one keeps its parens: `unchecked f()?` marks the `?`, an error.
+#[test]
+fn test_format_try_operand_keeps_its_parens() {
+    let source = concat!(
+        "fn f() -> Result<i32, E> {\n",
+        "    let a = (unchecked g())?;\n",
+        "    let b = (-h())?;\n",
+        "    let c = (x + y)?;\n",
+        "    return Result::Ok(a);\n",
+        "}\n",
+    );
+    let formatted = wado_compiler::format(source).expect("format failed");
+    assert_eq!(formatted, source);
+    assert_format_preserves_ast(source);
+}
+
 /// A `_` inference placeholder inside a turbofish must round-trip through the
 /// formatter as `_` (issue #1106), not get dropped or rewritten to a name.
 #[test]
@@ -4531,6 +4548,9 @@ fn test_format_unchecked_operator() {
         "    let a = unchecked s.get_byte(0);\n",
         "    let b = (unchecked s.slice(0, 1)).len();\n",
         "    let c = unchecked xs[0] + 1;\n",
+        "    let d = (unchecked xs[0]).to_string();\n",
+        "    let e = unchecked xs[0] as i64;\n",
+        "    let f = &mut unchecked ps[0];\n",
         "}\n",
     );
     let formatted = wado_compiler::format(source).expect("format failed");

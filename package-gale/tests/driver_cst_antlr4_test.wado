@@ -28,9 +28,9 @@ struct Antlr4Base {
 /// `NameStartChar` admits `\u00C0` upwards, so a rule named `ÀBC` diverges.
 /// `core:icu` answers it, through the classifier the `.g4` parser reads.
 fn is_token_ref_name(view: &LexerView) -> bool {
-    return match char::from_u32(view.char_at(view.start()) as u32) {
-        Some(c) => is_rule_name_upper(c),
-        None => false,
+    return match char::try_from(view.char_at(view.start()) as u32) {
+        Ok(c) => is_rule_name_upper(c),
+        Err(_) => false,
     };
 }
 
@@ -119,64 +119,64 @@ fn a4_parse<S: AsStrSlice>(input: S) -> antlr4::ParseResult {
 
 test "tokenize grammar declaration" {
     let tokens = a4_tokenize("grammar Foo;");
-    assert tokens.len() >= 3, `expected at least 3 tokens, got ${tokens.len()}`;
+    assert tokens.len() >= 3, "expected at least 3 tokens";
     // Verify the first token is GRAMMAR keyword
     let first_name = antlr4::token_kind_name(tokens.kinds[0]);
-    assert first_name == "GRAMMAR", `expected GRAMMAR, got ${first_name}`;
+    assert first_name == "GRAMMAR";
 }
 
 test "tokenize rule with string literal" {
     let tokens = a4_tokenize("bar : 'hello' ;");
-    assert tokens.len() >= 4, `expected at least 4 tokens, got ${tokens.len()}`;
+    assert tokens.len() >= 4, "expected at least 4 tokens";
 }
 
 test "tokenize alternatives" {
     let tokens = a4_tokenize("expr : expr '+' expr | INT ;");
     // Should have: identifier, colon, identifier, string, identifier, pipe, identifier, semi
-    assert tokens.len() >= 7, `expected at least 7 tokens, got ${tokens.len()}`;
+    assert tokens.len() >= 7, "expected at least 7 tokens";
 }
 
 test "tokenize character set" {
     let tokens = a4_tokenize("ID : [a-zA-Z_]+ ;");
-    assert tokens.len() >= 4, `expected at least 4 tokens, got ${tokens.len()}`;
+    assert tokens.len() >= 4, "expected at least 4 tokens";
 }
 
 test "tokenize action block" {
     let tokens = a4_tokenize("rule_ : 'a' { doSomething(); } ;");
-    assert tokens.len() >= 4, `expected at least 4 tokens, got ${tokens.len()}`;
+    assert tokens.len() >= 4, "expected at least 4 tokens";
 }
 
 test "tokenize options block" {
     let tokens = a4_tokenize("options { tokenVocab = FooLexer; }");
-    assert tokens.len() >= 5, `expected at least 5 tokens, got ${tokens.len()}`;
+    assert tokens.len() >= 5, "expected at least 5 tokens";
 }
 
 test "tokenize fragment" {
     let tokens = a4_tokenize("fragment DIGIT : [0-9] ;");
-    assert tokens.len() >= 4, `expected at least 4 tokens, got ${tokens.len()}`;
+    assert tokens.len() >= 4, "expected at least 4 tokens";
     let first_name = antlr4::token_kind_name(tokens.kinds[0]);
-    assert first_name == "FRAGMENT", `expected FRAGMENT, got ${first_name}`;
+    assert first_name == "FRAGMENT";
 }
 
 test "tokenize labels" {
     let tokens = a4_tokenize("expr : INT # NumExpr ;");
-    assert tokens.len() >= 5, `expected at least 5 tokens, got ${tokens.len()}`;
+    assert tokens.len() >= 5, "expected at least 5 tokens";
 }
 
 test "tokenize lexer commands" {
     let tokens = a4_tokenize("WS : [ \\t\\n]+ -> skip ;");
-    assert tokens.len() >= 5, `expected at least 5 tokens, got ${tokens.len()}`;
+    assert tokens.len() >= 5, "expected at least 5 tokens";
 }
 
 
 test "parse minimal grammar" {
     let r = a4_parse("grammar Foo;");
-    assert r.ok(), `expected a clean parse, got ${r.diagnostics.len()} diagnostic(s)`;
+    assert r.ok(), "expected a clean parse";
 }
 
 test "parse a grammar with a parser rule and a lexer rule" {
     let r = a4_parse("grammar Foo;\nexpr : expr '+' expr | INT ;\nINT : [0-9]+ ;\n");
-    assert r.ok(), `expected a clean parse, got ${r.diagnostics.len()} diagnostic(s)`;
+    assert r.ok(), "expected a clean parse";
 }
 
 test "the emit hook retypes ID by the case of its first character" {
@@ -185,15 +185,15 @@ test "the emit hook retypes ID by the case of its first character" {
     for let mut i = 0; i < tokens.len(); i += 1 {
         names.push(antlr4::token_kind_name(tokens.kinds[i]));
     }
-    assert names.contains(&"RULE_REF"), `expected a RULE_REF, got ${names:?}`;
-    assert names.contains(&"TOKEN_REF"), `expected a TOKEN_REF, got ${names:?}`;
-    assert !names.contains(&"ID"), `no ID may survive the hook, got ${names:?}`;
+    assert names.contains(&"RULE_REF"), "expected a RULE_REF";
+    assert names.contains(&"TOKEN_REF"), "expected a TOKEN_REF";
+    assert !names.contains(&"ID"), "no ID may survive the hook";
 }
 
 test "a non-ASCII uppercase rule name is a TOKEN_REF" {
     let tokens = a4_tokenize("ÀBC : [0-9]+ ;");
     let name = antlr4::token_kind_name(tokens.kinds[0]);
-    assert name == "TOKEN_REF", `expected TOKEN_REF, got ${name}`;
+    assert name == "TOKEN_REF", "expected TOKEN_REF";
 }
 
 test "a lexer rule's bracket opens a char set, not an argument list" {
@@ -204,7 +204,7 @@ test "a lexer rule's bracket opens a char set, not an argument list" {
             assert tokens.kinds[i] != TK_ARGUMENT_CONTENT, "a char set must not lex as argument content";
         }
     };
-    assert base.begins == 1, `expected 1 handleBeginArgument, got ${base.begins}`;
+    assert base.begins == 1;
     assert base.ends == 0, "a char set is closed by the mode, not by handleEndArgument";
 }
 
@@ -228,7 +228,7 @@ test "user channel: LINE_COMMENT routed to COMMENT channel" {
         if tokens.kinds[i] == TK_INT {
             for let mut j = tokens.triv_lo[i]; j < tokens.triv_hi[i]; j += 1 {
                 if tokens.triv_kinds[j] == TK_LINE_COMMENT {
-                    assert tokens.triv_chans[j] == 3, `expected COMMENT channel 3, got ${tokens.triv_chans[j]}`;
+                    assert tokens.triv_chans[j] == 3, "expected COMMENT channel 3";
                     found = true;
                 }
             }
@@ -247,7 +247,7 @@ test "user channel: BLOCK_COMMENT routed to COMMENT channel" {
         if tokens.kinds[i] == TK_INT {
             for let mut j = tokens.triv_lo[i]; j < tokens.triv_hi[i]; j += 1 {
                 if tokens.triv_kinds[j] == TK_BLOCK_COMMENT {
-                    assert tokens.triv_chans[j] == 3, `expected COMMENT channel 3, got ${tokens.triv_chans[j]}`;
+                    assert tokens.triv_chans[j] == 3, "expected COMMENT channel 3";
                     found = true;
                 }
             }
@@ -263,10 +263,10 @@ test "the base's argument-bracket ops run on the winning tokens" {
     let mut base = new_antlr4_base();
     with LexerAdaptor => &mut base do {
         let tokens = antlr4::tokenize("r[int x] : 'a' ;");
-        assert tokens.len() >= 6, `expected at least 6 tokens, got ${tokens.len()}`;
+        assert tokens.len() >= 6, "expected at least 6 tokens";
     };
-    assert base.begins == 1, `expected 1 handleBeginArgument, got ${base.begins}`;
-    assert base.ends == 1, `expected 1 handleEndArgument, got ${base.ends}`;
+    assert base.begins == 1;
+    assert base.ends == 1;
 }
 
 test "the base drives the Argument mode from handleBeginArgument" {
@@ -282,7 +282,7 @@ test "the base drives the Argument mode from handleBeginArgument" {
         }
     }
     assert content > 0, "the argument body must lex as ARGUMENT_CONTENT";
-    assert ends == 1, `expected 1 END_ARGUMENT, got ${ends}`;
+    assert ends == 1, "expected 1 END_ARGUMENT";
 }
 
 test "a nested bracket retypes its closing bracket as content" {
@@ -293,5 +293,5 @@ test "a nested bracket retypes its closing bracket as content" {
             ends += 1;
         }
     }
-    assert ends == 1, `expected 1 END_ARGUMENT, got ${ends}`;
+    assert ends == 1, "expected 1 END_ARGUMENT";
 }

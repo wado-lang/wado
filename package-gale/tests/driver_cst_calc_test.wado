@@ -9,9 +9,9 @@ use calc from "./grammars/calc_ll.g4"
     };
 fn assert_tree<S: AsStrSlice, S1: AsStrSlice>(input: S, expected: S1) {
     let result = calc::parse(input);
-    assert result.ok(), `unexpected diagnostics for ${input}`;
+    assert result.ok();
     let actual = calc::to_string_tree(&result);
-    assert actual == expected.to_string(), `\ninput:    ${input}\nexpected: ${expected}\nactual:   ${actual}`;
+    assert actual == expected.to_string();
 }
 
 test "tree: single integer" {
@@ -39,7 +39,7 @@ test "fail-soft: a syntax error yields a tree plus one diagnostic" {
     assert result.has_errors();
     assert result.diagnostics.len() == 1;
     let d = &result.diagnostics[0];
-    assert d.line == 1 && d.col == 3, `${d.line}:${d.col}`;
+    assert d.line == 1 && d.col == 3;
     assert d.is_error();
 }
 

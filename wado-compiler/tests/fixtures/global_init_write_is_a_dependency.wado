@@ -1,0 +1,17 @@
+// A global an initializer writes is a dependency as much as one it reads: `X`
+// must run after `REG`'s own initializer, or that initializer replaces what `X`
+// stored.
+
+use { println, Stdout } from "core:cli";
+
+global X: i32 = if builtin::black_box(true) { REG = [9]; 1 } else { 0 };
+global mut REG: List<i32> = [1, 2, 3];
+
+export fn run() with Stdout {
+    println(`${X} ${REG.len()}`);
+}
+
+__DATA__
+{
+    "stdout": "1 1\n"
+}

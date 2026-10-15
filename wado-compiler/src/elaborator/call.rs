@@ -799,11 +799,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// namespace the call wrote.
     fn effect_operation_callee(&self, op: &EffectOperation) -> CalleeRef {
         let defs = self.tysys.resolutions.defs();
-        CalleeRef::local_namespace(
-            &mut self.interner.borrow_mut(),
-            defs.name(op.decl),
-            defs.name(op.op),
-        )
+        CalleeRef::effect_operation(defs, op.decl, defs.name(op.op))
     }
 
     /// The variant a `Variant::name(...)` callee's prefix names: the one the
@@ -3607,14 +3603,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         args: &[TypeId],
         call_span: Span,
     ) -> bool {
-        let is_borrow = |this: &Self, t| {
+        let is_ref = |this: &Self, t| {
             RefKind::from_resolved(this.tysys.type_table.borrow().get(t)).is_some()
         };
         let mismatched: Vec<usize> = (0..param_types.len().min(args.len()))
             .filter(|&i| {
-                is_borrow(self, param_types[i])
+                is_ref(self, param_types[i])
                     && !matches!(args[i], TypeTable::ERROR | TypeTable::UNKNOWN)
-                    && !is_borrow(self, args[i])
+                    && !is_ref(self, args[i])
                     && !self.type_has_infer_hole(args[i])
             })
             .collect();

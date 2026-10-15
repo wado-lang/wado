@@ -7,15 +7,15 @@ export fn run() with Stdout {
     println("before");
     panic("boom");
 }`).unwrap();
-    assert out.status matches { Trapped(Unreachable) }, `${out.status}`;
+    assert out.status matches { Trapped(Unreachable) };
     assert out.stdout == "before\n";
-    assert out.stderr.contains("boom"), out.stderr;
+    assert out.stderr.contains("boom");
 }
 
 test "exit carries its code" {
     let out = eval(`use { exit, Exit } from "core:cli";
 export fn run() with Exit { exit(3); }`).unwrap();
-    assert out.status matches { Exited(3) }, `${out.status}`;
+    assert out.status matches { Exited(3) };
 }
 
 test "bytes that are not UTF-8 decode lossily" {
@@ -29,14 +29,14 @@ test "a compile error names its codes" {
     let Err(CompileFailed(failure)) = result else {
         panic(`expected a compile failure, got ${result:?}`);
     };
-    assert failure.codes == ["TYPE_MISMATCH"], `${failure.codes:?}`;
-    assert failure.rendered.starts_with("eval.wado:1:"), failure.rendered;
+    assert failure.codes == ["TYPE_MISMATCH"];
+    assert failure.rendered.starts_with("eval.wado:1:");
 }
 
 test "a relative import resolves to nothing" {
     let result = eval(`use { f } from "./f.wado";
 export fn run() { f(); }`);
-    assert result matches { Err(CompileFailed(_)) }, `${result:?}`;
+    assert result matches { Err(CompileFailed(_)) };
 }
 
 test "an unlinked import is unavailable" {
@@ -45,12 +45,12 @@ export fn run() with Environment { let _ = args(); }`);
     let Err(Unavailable(name)) = result else {
         panic(`expected an unavailable import, got ${result:?}`);
     };
-    assert name.starts_with("wasi:cli/environment@"), name;
+    assert name.starts_with("wasi:cli/environment@");
 }
 
 test "fuel bounds the run" {
     let out = eval(`export fn run() { let mut i = 0; loop { i += 1; } }`, 10_000).unwrap();
-    assert out.status matches { OutOfFuel }, `${out.status}`;
+    assert out.status matches { OutOfFuel };
 }
 
 test "the memory ceiling bounds the run" {
@@ -59,7 +59,7 @@ test "the memory ceiling bounds the run" {
     let big = builtin::black_box(List::<u8>::with_capacity(2_000_000_000));
     assert big.is_empty();
 }`).unwrap();
-    assert out.status matches { OutOfMemory }, `${out.status}`;
+    assert out.status matches { OutOfMemory };
 }
 
 test "Display renders each outcome" {

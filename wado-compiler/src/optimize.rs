@@ -61,11 +61,13 @@ mod value_copy_demote;
 
 use std::sync::Arc;
 
-// The promoted-read audit is the only reader, and it is debug-only.
+// The NIR audits are the only readers, and they are debug-only.
 #[cfg(debug_assertions)]
 use crate::hashmap::IndexSet;
 #[cfg(debug_assertions)]
-use crate::nir_arena::{NodeRef, PatKind, StmtKind};
+use crate::nir_arena::{ExprKind, NodeRef, PatKind, StmtKind};
+#[cfg(debug_assertions)]
+use crate::tir::TypeTable;
 #[cfg(debug_assertions)]
 use crate::trace::filter;
 
@@ -383,7 +385,7 @@ pub fn optimize(
 
     census::report(&project, "end-of-optimize");
     #[cfg(debug_assertions)]
-    audit_promoted_reads(&project, "end-of-optimize");
+    audit_nir(&project, "end-of-optimize");
     project
 }
 
@@ -506,16 +508,42 @@ fn run_pass(
     // The always-on check runs once, at the end of `optimize`; this one earns
     // its cost only when a developer wants the pass named.
     #[cfg(debug_assertions)]
-    if filter().enabled(PROMOTED_READ_AUDIT) {
-        audit_promoted_reads(project, name);
+    if filter().enabled(NIR_AUDIT) {
+        audit_nir(project, name);
     }
     changed
 }
 
-/// `WADO_TRACE` target that puts [`audit_promoted_reads`] at every pass
+#[cfg(debug_assertions)]
+fn audit_nir(project: &NirPackage, pass: &str) {
+    audit_promoted_reads(project, pass);
+    audit_assign_types(project, pass);
+}
+
+/// Every assignment is typed `()`. Codegen reads an expression's value from its
+/// type, so an assignment typed as its field binds a value that no Wasm
+/// instruction left on the stack.
+#[cfg(debug_assertions)]
+fn audit_assign_types(project: &NirPackage, pass: &str) {
+    for func in &project.functions {
+        let func = func.borrow();
+        let Some(body) = &func.body else {
+            continue;
+        };
+        for (e, node) in body.exprs.iter() {
+            assert!(
+                !matches!(node.kind, ExprKind::Assign { .. }) || node.type_id == TypeTable::UNIT,
+                "[NIR] {pass}: assignment {e:?} of `{}` must be typed `()`",
+                func.name
+            );
+        }
+    }
+}
+
+/// `WADO_TRACE` target that puts [`audit_nir`] at every pass
 /// boundary, so a break names the pass that caused it.
 #[cfg(debug_assertions)]
-const PROMOTED_READ_AUDIT: &str = "promoted_reads";
+const NIR_AUDIT: &str = "promoted_reads";
 
 /// Every local a promoted operand reads still has a definition. A pooled read
 /// is invisible to a skeleton walk, so a pass that drops the binding leaves the

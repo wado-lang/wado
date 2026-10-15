@@ -329,6 +329,19 @@ fn hover_type_lists_impls_as_the_page_does() {
     });
 }
 
+/// A default argument keeps the parens its parse needs.
+#[test]
+fn hover_keeps_parens_in_a_default_argument() {
+    futures::executor::block_on(async {
+        let lib = "pub fn scaled(n: i32 = (1 + 2) * 3) -> i32 { return n; }\n";
+        let result = hover("./s.wado", lib, "./s.wado", "./s.wado#scaled")
+            .await
+            .expect("resolves hover");
+        let v = &result.contents.value;
+        assert!(v.contains("n: i32 = (1 + 2) * 3"), "got: {v}");
+    });
+}
+
 #[test]
 fn hover_renders_enum_definition_with_cases() {
     futures::executor::block_on(async {

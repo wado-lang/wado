@@ -8,28 +8,28 @@ use gge from "./grammars/wado_group_gate_entry.g4"
 
 test "an optional group whose only viable alternative is gated matches nothing" {
     let r = gge::parse_opt("a");
-    assert r.ok(), `the optional matches nothing and A takes the token: ${r.diagnostics.len()} diagnostics`;
+    assert r.ok(), "the optional matches nothing and A takes the token";
 }
 
 test "a repeat whose only viable alternative is gated exits the loop" {
     let star = gge::parse_star("a");
-    assert star.ok(), `star: ${star.diagnostics.len()} diagnostics`;
+    assert star.ok();
 
     let nongreedy = gge::parse_nongreedy("a");
-    assert nongreedy.ok(), `non-greedy: ${nongreedy.diagnostics.len()} diagnostics`;
+    assert nongreedy.ok();
 
     let labelled = gge::parse_list_label("a");
-    assert labelled.ok(), `list label: ${labelled.diagnostics.len()} diagnostics`;
+    assert labelled.ok();
 }
 
 test "a single-alternative group under a repeat gates the loop" {
     // The predicate is the loop's own enter/exit decision, so it is emitted
     // once as the loop's gate — not left referencing an undefined `pred_N`.
     let star = gge::parse_solo_star("a");
-    assert star.ok(), `star: ${star.diagnostics.len()} diagnostics`;
+    assert star.ok();
 
     let opt = gge::parse_solo_opt("a");
-    assert opt.ok(), `optional: ${opt.diagnostics.len()} diagnostics`;
+    assert opt.ok();
 }
 
 test "a shape-enumerated optional's entry carries its body's gate" {
@@ -39,7 +39,7 @@ test "a shape-enumerated optional's entry carries its body's gate" {
     assert bad.has_errors(), "the gated body must not be entered";
 
     let other = gge::parse_shape_opt("c");
-    assert other.ok(), `the other alternative is untouched: ${other.diagnostics.len()} diagnostics`;
+    assert other.ok(), "the other alternative is untouched";
 }
 
 test "a predicate in a single-alternative group guards rather than selects" {
@@ -49,5 +49,5 @@ test "a predicate in a single-alternative group guards rather than selects" {
     assert bad.has_errors(), "a false guard fails the alternative it sits in";
 
     let other = gge::parse_nested("c");
-    assert other.ok(), `the other alternative is untouched: ${other.diagnostics.len()} diagnostics`;
+    assert other.ok(), "the other alternative is untouched";
 }

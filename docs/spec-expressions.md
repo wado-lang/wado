@@ -65,7 +65,7 @@ inside a labeled block, which `break LABEL: expr` leaves with the result.
 ## Variable Mutability
 
 `mut` governs every write reaching the binding's storage, not just
-reassignment. A `&mut self` method, a mutable borrow, and a store to a field or
+reassignment. A `&mut self` method, a `&mut` of it, and a store to a field or
 element all require it.
 
 <!-- {"fixture":"spec_lexical_mut_method.wado"} -->
@@ -374,9 +374,19 @@ fn example() {
 
 Initializers run in dependency order, so one may read another global whatever
 the declaration order. This holds across modules, and whether the initializer
-names the global or reaches it through a call. A cycle among them is an error.
-The order between two initializers that do not depend on each other is
+names the global or reaches it through a call. The order between two
+initializers that do not depend on each other is
 [unspecified](./spec-overview.md#behavior-classes).
+
+An initializer depends on every global it reads or writes, and every global a
+function it calls or names reads or writes, on any path. A closure body counts
+where it is written, though it runs only when called, and a use only some
+executions take counts as one they all take. A cycle among them is an error,
+an initializer that refers to its own global included.
+
+A module's initializers run together, so two modules whose initializers depend
+on each other's globals are an error too, even where the initializers alone
+form no cycle.
 
 ## Operators
 
@@ -672,16 +682,16 @@ let y: i8 = 65;
 let d = y as char;  // compile error (i8 can be negative)
 ```
 
-The checked conversions take their place. They answer `None` for a value that
-is not a scalar value. [`core:prelude`](./stdlib-core-prelude.md) has the full
-`char` API.
+Conversions take their place. `char::from_u32` takes a scalar value and traps on
+any other, and `char::try_from` answers an `Err` for a value that is not one.
+[`core:prelude`](./stdlib-core-prelude.md) has the full `char` API.
 
 <!-- {"fixture":"spec_literals_primitives.wado"} -->
 
 ```wado
-let from_u32 = char::from_u32(65 as u32);
-let from_i32 = char::from_i32(65);
-assert from_u32 == Option::Some('A') && from_i32 == Option::Some('A');
+let scalar = char::from_u32(65 as u32);   // traps on a non-scalar value
+let checked = char::try_from(0xD800 as u32);
+assert scalar == 'A' && checked matches { Err(_) };
 ```
 
 A `char` casts to no type but an integer:
@@ -868,6 +878,7 @@ assert steps == [0, 3, 6, 9];
 ```
 
 Iteration never steps past `T`'s maximum. `0 as u8..=255` yields all 256 values
-and stops. A float range does not iterate, but `contains` still works on it.
+and stops. A `char` range steps from `'\u{D7FF}'` straight to `'\u{E000}'`,
+since the surrogates between are no `char`. A float range does not iterate, but `contains` still works on it.
 
 Rationale: [WEP: Range Object](./wep-2026-03-03-range-object.md).

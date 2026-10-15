@@ -13,11 +13,11 @@ test "a lookahead-aware repeat runs its action once per kept iteration" {
     // of the match, so the action runs twice.
     let two = rr::parse_s("azzcm");
     assert two.ok(), "clean parse";
-    assert two.output == "a-ok", `two kept iterations, got '${two.output}'`;
+    assert two.output == "a-ok", "two kept iterations";
 
     let one = rr::parse_s("azcm");
     assert one.ok(), "clean parse";
-    assert one.output == "a-bad", `one kept iteration, got '${one.output}'`;
+    assert one.output == "a-bad", "one kept iteration";
 }
 
 test "a non-greedy repeat runs the rest's action only from the iteration that exits" {
@@ -25,11 +25,11 @@ test "a non-greedy repeat runs the rest's action only from the iteration that ex
     // the first position must not have run the rest's action.
     let exact = rr::parse_t("dzcm");
     assert exact.ok(), "clean parse";
-    assert exact.output == "d-ok", `one iteration and one rest run, got '${exact.output}'`;
+    assert exact.output == "d-ok", "one iteration and one rest run";
 
     let none = rr::parse_t("dcm");
     assert none.ok(), "clean parse";
-    assert none.output == "d-bad", `no iteration, one rest run, got '${none.output}'`;
+    assert none.output == "d-bad", "no iteration, one rest run";
 }
 
 test "the replay's exit try keeps the predicate that decided the loop" {
@@ -37,7 +37,7 @@ test "the replay's exit try keeps the predicate that decided the loop" {
     // dropped it would exit two chars early and run the action there.
     let out = rr::parse_v("gcxcm");
     assert out.ok(), "clean parse";
-    assert out.output == "g-ok", `the loop ends where the match ended it, got '${out.output}'`;
+    assert out.output == "g-ok", "the loop ends where the match ended it";
 }
 
 test "an action after a restructured repeat reads the cursor it was written at" {
@@ -45,5 +45,5 @@ test "an action after a restructured repeat reads the cursor it was written at" 
     // the match, which is where the flat emit used to run it.
     let mid = rr::parse_u("ezcm");
     assert mid.ok(), "clean parse";
-    assert mid.output == "e-ok", `the action reads the repeat's stop, got '${mid.output}'`;
+    assert mid.output == "e-ok", "the action reads the repeat's stop";
 }

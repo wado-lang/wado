@@ -347,7 +347,7 @@ fn extend_reachable_for_optimizer_passes(
     // reads a run out of a block rather than a single recognisable call, and a
     // later DCE drops the four again when no run fused.
     //
-    // `push_ascii_unchecked` needs no root: both rules only recognise it, and
+    // `push_ascii_byte` needs no root: both rules only recognise it, and
     // `Ctx::resolve` reads the compiler item off an entry this pass leaves in
     // place.
     if append_ids.iter().any(|id| reachable.contains(id)) {
@@ -1904,7 +1904,7 @@ fn reachable_stmt_ids(body: &Body) -> Vec<StmtId> {
 }
 
 /// Locals some reachable node mentions, skeleton and value pool alike. A
-/// binding absent here is never read: an assignment target, a borrow and a
+/// binding absent here is never read: an assignment target, a reference and a
 /// capture all mention their local, so the census over-approximates and only
 /// ever keeps a statement alive.
 fn mentioned_locals(body: &Body) -> IndexSet<u32> {

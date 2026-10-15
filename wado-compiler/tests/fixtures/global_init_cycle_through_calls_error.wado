@@ -1,0 +1,28 @@
+// A cycle whose every edge runs through a call is still a cycle. It used to
+// compile: the edges through calls yielded to whichever closed the cycle, so
+// `-O0` trapped on `B`'s empty slot and `-O2` dropped the unused read and
+// printed `A` (issue #2245).
+
+use { println, Stdout } from "core:cli";
+
+global A: String = make_a();
+global B: String = make_b();
+
+fn make_a() -> String {
+    let _ = B.len();
+    return "a long enough string to stay lazy";
+}
+
+fn make_b() -> String {
+    let _ = A.len();
+    return "b long enough string to stay lazy";
+}
+
+export fn run() with Stdout {
+    println(A);
+}
+
+__DATA__
+{
+    "compile_error": "global initializers form a cycle: A, B"
+}

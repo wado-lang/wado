@@ -38,7 +38,7 @@ struct Census {
 
 /// Whether `lower` could intern this expression as a value with the flow
 /// resolved into it, needing no reference out of the pool: arithmetic whose
-/// leaves are constants or reads of a local no borrow can write through. A
+/// leaves are constants or reads of a local no reference can write through. A
 /// field read or a call result is excluded — those need the heap versions and
 /// the alias facts that only exist over the whole lowered package.
 fn flow_resolvable(body: &Body, id: ExprId) -> bool {

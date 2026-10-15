@@ -1,5 +1,6 @@
 // `Slice<u8>` holds its reference in a field, not in a type argument, so a call
-// handing one back is a borrow into the result rather than an external store.
+// handing one back puts the reference into its result rather than storing it
+// elsewhere.
 // A view that stays local is retained by nothing.
 use { println, Stdout } from "core:cli";
 
@@ -7,7 +8,7 @@ fn count_bytes(s: &String, needle: u8) -> i32 {
     let view = s.as_byte_slice();
     let mut n = 0;
     for let mut i = 0; i < view.len(); i += 1 {
-        if view.get_unchecked(i) == needle {
+        if unchecked view[i] == needle {
             n += 1;
         }
     }

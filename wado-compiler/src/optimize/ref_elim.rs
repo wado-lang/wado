@@ -224,8 +224,8 @@ fn resolve_via_engine(engine: &mut Engine, e: ExprId, refs: &IndexMap<u32, RefIn
 
 /// A pure inline aggregate (`StructLiteral`) referent: substitutable at each
 /// `r.field` use because it has no observable effect and projecting a field off
-/// it (`project_struct_literal`) drops the rest. Restricted to `&` (shared)
-/// borrows by the caller.
+/// it (`project_struct_literal`) drops the rest. Restricted to `&` references
+/// by the caller.
 fn is_inline_pure_aggregate(body: &Body, id: ExprId) -> bool {
     matches!(&body.exprs[id].kind, ExprKind::StructLiteral { .. }) && is_pure_expr(body, id)
 }
@@ -267,8 +267,8 @@ fn find_rebound_locals(body: &Body) -> IndexSet<u32> {
 struct Replacement {
     place: Place,
     pos: usize,
-    /// `true` for a `&mut` borrow (strict-prefix), `false` for a direct `Assign`.
-    via_borrow: bool,
+    /// `true` for a `&mut` (strict-prefix), `false` for a direct `Assign`.
+    via_mut_ref: bool,
 }
 
 /// Per-body positional facts for the capture-at-binding guard: each tracked ref's
@@ -293,7 +293,7 @@ struct CaptureFacts {
 
 /// Walk the body in pre-order, numbering statements, and collect the
 /// [`CaptureFacts`]. An in-place mutation (method call, index / element write)
-/// leaves the handle and is recorded in neither replacement form; a borrow or
+/// leaves the handle and is recorded in neither replacement form; a `&mut` or
 /// write of a place deeper than a referent is never a prefix and never counts.
 fn collect_capture_facts(body: &Body, refs: &IndexMap<u32, RefInfo>) -> CaptureFacts {
     let mut facts = CaptureFacts {
@@ -347,7 +347,7 @@ fn capture_walk(
                     facts.replacements.push(Replacement {
                         place,
                         pos: here,
-                        via_borrow: false,
+                        via_mut_ref: false,
                     });
                 }
             }
@@ -359,7 +359,7 @@ fn capture_walk(
                     facts.replacements.push(Replacement {
                         place,
                         pos: here,
-                        via_borrow: true,
+                        via_mut_ref: true,
                     });
                 }
             }
@@ -384,7 +384,7 @@ fn capture_walk(
 /// `*m = …` / `m.f = …` can reassign it (`q ⊏ referent`). `&mut referent` itself
 /// is in-place mutation (`arr[i] = …`), which the shared handle folds soundly.
 fn replaces_capture(r: &Replacement, referent: &Place) -> bool {
-    if r.via_borrow {
+    if r.via_mut_ref {
         &r.place != referent && is_place_prefix(&r.place, referent)
     } else {
         is_place_prefix(&r.place, referent)
@@ -472,7 +472,7 @@ fn invalidates_capture(r: &Replacement, local: u32, facts: &CaptureFacts) -> boo
     };
     let binding = facts.binding_pos.get(&local).copied().unwrap_or(0);
     let end = extended_live_end(binding, last_use, &facts.loops);
-    if r.via_borrow {
+    if r.via_mut_ref {
         r.pos <= end
     } else {
         binding < r.pos && r.pos <= end

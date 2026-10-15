@@ -84,7 +84,7 @@ pub struct PlacedRead<Axes> {
     view: DeviceTensor,
 }
 
-/// A buffer the backend owns. A struct, so a list lends one by reference,
+/// A buffer the backend owns. A struct, so a list hands one out by reference,
 /// which it cannot do for a resource held bare.
 struct Slot {
     buffer: GpuBuffer,
@@ -208,10 +208,17 @@ impl WebGpuBackend {
         });
     }
 
+    /// The device's storage buffer offset alignment, in f32 elements: where a
+    /// binding may start.
+    pub fn alignment(&self) -> i32 {
+        return self.alignment;
+    }
+
     /// Binds at most `elements` f32 elements to one shader, as a device with a
     /// smaller limit would: a kernel past it splits, or runs on the CPU.
-    pub fn limit_binding(&mut self, elements: i32) {
-        assert elements >= self.alignment;
+    pub fn limit_binding(&mut self, elements: i32)
+        contract elements >= self.alignment()
+    {
         self.max_binding = i32::min(self.max_binding, elements);
     }
 
@@ -498,8 +505,9 @@ impl WebGpuBackend {
         operands: &List<DeviceTensor>,
         extents: List<i32>,
         op: &Expr,
-    ) -> Option<DeviceTensor> with (GpuDevice, GpuQueue, GpuCommandEncoder, GpuCommandBuffer, GpuBuffer, GpuBindGroupLayout, GpuBindGroup, GpuShaderModule, GpuComputePipeline, GpuComputePassEncoder) {
-        assert !op.folds_rows();
+    ) -> Option<DeviceTensor> with (GpuDevice, GpuQueue, GpuCommandEncoder, GpuCommandBuffer, GpuBuffer, GpuBindGroupLayout, GpuBindGroup, GpuShaderModule, GpuComputePipeline, GpuComputePassEncoder)
+        contract !op.folds_rows()
+    {
         let count = element_count(&extents);
         if count > self.max_binding {
             return null;
@@ -657,8 +665,9 @@ impl WebGpuBackend {
         &mut self,
         from: &DeviceTensor,
         to: &DeviceTensor,
-    ) with (GpuDevice, GpuQueue, GpuCommandEncoder, GpuCommandBuffer, GpuBuffer, GpuBindGroupLayout, GpuBindGroup, GpuShaderModule, GpuComputePipeline, GpuComputePassEncoder) {
-        assert from.extents == to.extents;
+    ) with (GpuDevice, GpuQueue, GpuCommandEncoder, GpuCommandBuffer, GpuBuffer, GpuBindGroupLayout, GpuBindGroup, GpuShaderModule, GpuComputePipeline, GpuComputePassEncoder)
+        contract from.extents == to.extents
+    {
         let count = element_count(&to.extents);
         if count == 0 {
             return;
@@ -1459,8 +1468,9 @@ fn packed_count(operands: &List<DeviceTensor>) -> i32 {
 }
 
 /// The whole of `t`, a buffer just allocated for it.
-fn fresh(t: &DeviceTensor) -> Span {
-    assert t.offset == 0;
+fn fresh(t: &DeviceTensor) -> Span
+    contract t.offset == 0
+{
     return Span { slot: t.slot, first: 0, count: i32::max(element_count(&t.extents), 1) };
 }
 

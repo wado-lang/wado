@@ -14,9 +14,9 @@ use g from "./grammars/reserve_yields_to_another_iteration.g4"
 
 fn assert_tree<S: AsStrSlice, S1: AsStrSlice>(input: S, expected: S1) {
     let result = g::parse(input);
-    assert result.ok(), `unexpected diagnostics for ${input}: ${result.diagnostics:?}`;
+    assert result.ok();
     let actual = g::to_string_tree(&result);
-    assert actual == expected.to_string(), `\ninput:    ${input}\nexpected: ${expected}\nactual:   ${actual}`;
+    assert actual == expected.to_string();
 }
 
 // The hit cases: the iteration that fails the reserve is followed by one that
@@ -37,5 +37,5 @@ test "the loop takes nothing where the tail is all there is" {
 
 test "a body the tail cannot follow is rejected" {
     let result = g::parse("b b");
-    assert !result.ok(), `expected a diagnostic: ${g::to_string_tree(&result)}`;
+    assert !result.ok();
 }

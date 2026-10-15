@@ -1,6 +1,6 @@
 //! Two string-append rewrites over the shared peephole session:
 //! [`ConstAsciiPushRule`] retargets a constant-ASCII `push` to
-//! `push_ascii_unchecked`, and [`AppendFuseRule`] collapses a run of adjacent
+//! `push_ascii_byte`, and [`AppendFuseRule`] collapses a run of adjacent
 //! appends into one reservation. Both must run *before* `inline`, which
 //! replaces the call node they match.
 
@@ -27,7 +27,7 @@ pub(super) struct Ctx {
     push_str_ids: IndexSet<FuncId>,
     /// `FuncId` of `push_char`, the call [`ConstAsciiPushRule`] retargets.
     push_char_id: FuncId,
-    /// `FuncId` of `push_ascii_unchecked`: what [`ConstAsciiPushRule`] retargets
+    /// `FuncId` of `push_ascii_byte`: what [`ConstAsciiPushRule`] retargets
     /// a constant-ASCII `push` to, and the byte piece [`AppendFuseRule`]
     /// recognises. Absent (`None`) disables both.
     push_ascii_id: Option<FuncId>,
@@ -108,7 +108,7 @@ impl Ctx {
 }
 
 /// Retarget `buf.push(<const char < 0x80>)` to
-/// `buf.push_ascii_unchecked(<byte>)`, skipping `encode_char`'s UTF-8 width
+/// `buf.push_ascii_byte(<byte>)`, skipping `encode_char`'s UTF-8 width
 /// dispatch: a constant ASCII scalar is always one byte. The rewrite is an
 /// in-place call edit — swap the callee, coerce the `char` to its `u8`.
 pub(super) struct ConstAsciiPushRule {
@@ -117,7 +117,7 @@ pub(super) struct ConstAsciiPushRule {
 }
 
 impl ConstAsciiPushRule {
-    /// `None` when the `push_ascii_unchecked` marker is absent — the rule has no
+    /// `None` when the `push_ascii_byte` marker is absent — the rule has no
     /// retarget to point at, so it is simply not built.
     pub(super) fn new(ctx: &Ctx) -> Option<Self> {
         Some(Self {
@@ -201,7 +201,7 @@ const MAX_FUSED_PIECES: usize = 16;
 
 /// One append in a fused run.
 enum Piece {
-    /// A constant ASCII byte, from `push_ascii_unchecked`.
+    /// A constant ASCII byte, from `push_ascii_byte`.
     Byte(u8),
     /// A `push_str` argument, with its length when the argument is a literal.
     Str { arg: ExprId, const_len: Option<i32> },

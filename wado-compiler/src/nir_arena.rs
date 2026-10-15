@@ -846,9 +846,9 @@ impl Body {
         }
     }
 
-    /// The local `&x` / `&mut x` borrows, with the node reading it. `None` for
-    /// anything else.
-    pub fn borrowed_local(&self, op: Operand) -> Option<(u32, ExprId)> {
+    /// The local `&x` / `&mut x` refers to, with the node reading it. `None`
+    /// for anything else.
+    pub fn referenced_local(&self, op: Operand) -> Option<(u32, ExprId)> {
         let ExprKind::Unary {
             op: NirUnaryOp::Ref | NirUnaryOp::MutRef,
             expr: inner,
@@ -859,7 +859,7 @@ impl Body {
         self.local_read(*inner)
     }
 
-    /// The storage a shared borrow names, where that is storage a `&` alone
+    /// The storage a `&` reference names, where that is storage a `&` alone
     /// reaches: a literal, or a global. `&G.repr` answers the `G` as much as
     /// `&G` does. Whether *that* global holds one value is the caller's
     /// question, and only the caller knows the program.
@@ -871,10 +871,10 @@ impl Body {
         else {
             return None;
         };
-        self.borrow_root(*inner)
+        self.referent_root(*inner)
     }
 
-    fn borrow_root(&self, op: Operand) -> Option<ExprId> {
+    fn referent_root(&self, op: Operand) -> Option<ExprId> {
         let e = op.as_expr()?;
         match &self.exprs[e].kind {
             ExprKind::GlobalVarGet { .. } | ExprKind::PackedArray(_) => Some(e),
@@ -884,11 +884,11 @@ impl Body {
             | ExprKind::Unary {
                 op: NirUnaryOp::Ref | NirUnaryOp::Deref,
                 expr: inner,
-            } => self.borrow_root(*inner),
+            } => self.referent_root(*inner),
             // The `{ G = v; G }` a globalized constant is read through.
-            ExprKind::LabeledBlock { .. } => {
-                self.block_yield(e).and_then(|tail| self.borrow_root(tail))
-            }
+            ExprKind::LabeledBlock { .. } => self
+                .block_yield(e)
+                .and_then(|tail| self.referent_root(tail)),
             _ => None,
         }
     }
@@ -2001,6 +2001,23 @@ impl Body {
             .stmts
             .last()
             .is_some_and(|s| self.terminates(*s))
+    }
+
+    /// Whether `block`, jumping nowhere on the way, ends in a call typed `!`
+    /// (a failed check's panic), which traps or runs forever: nothing after it
+    /// runs, so nothing it reads or writes is seen by what follows.
+    pub fn ends_unseen(&self, block: BlockId, types: &TypeTable) -> bool {
+        let ends_in_never = self.blocks[block].stmts.last().is_some_and(|&last| {
+            matches!(&self.stmts[last].kind, StmtKind::Expr(op)
+                if op.as_expr().is_some_and(|e| types.is_never(self.exprs[e].type_id)))
+        });
+        ends_in_never
+            && self
+                .find_in_nodes_under(NodeRef::Block(block), |node| match node {
+                    NodeRef::Stmt(inner) => self.terminates(inner).then_some(()),
+                    NodeRef::Expr(_) | NodeRef::Block(_) | NodeRef::Pat(_) => None,
+                })
+                .is_none()
     }
 
     /// Every point that produces the value of the labeled block at `e`: what

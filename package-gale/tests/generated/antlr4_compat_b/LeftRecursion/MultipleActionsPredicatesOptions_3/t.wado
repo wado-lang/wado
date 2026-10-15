@@ -161,10 +161,10 @@ impl TokenStream {
                 && self.triv_ends.capacity() == self.triv_kinds.capacity()
                 && self.triv_chans.capacity() == self.triv_kinds.capacity(), "TokenStream trivia columns must grow in lockstep";
         }
-        self.triv_kinds.push_within_capacity(kind);
-        self.triv_starts.push_within_capacity(start);
-        self.triv_ends.push_within_capacity(end);
-        self.triv_chans.push_within_capacity(channel);
+        unchecked self.triv_kinds.push_within_capacity(kind);
+        unchecked self.triv_starts.push_within_capacity(start);
+        unchecked self.triv_ends.push_within_capacity(end);
+        unchecked self.triv_chans.push_within_capacity(channel);
     }
 
     internal fn push_token(&mut self, kind: i32, start: i32, end: i32, triv_lo: i32, triv_hi: i32) {
@@ -195,12 +195,12 @@ impl TokenStream {
                 && self.triv_hi.capacity() == self.kinds.capacity()
                 && self.flags.capacity() == self.kinds.capacity(), "TokenStream token columns must grow in lockstep";
         }
-        self.kinds.push_within_capacity(kind);
-        self.starts.push_within_capacity(start);
-        self.ends.push_within_capacity(end);
-        self.triv_lo.push_within_capacity(triv_lo);
-        self.triv_hi.push_within_capacity(triv_hi);
-        self.flags.push_within_capacity(flags);
+        unchecked self.kinds.push_within_capacity(kind);
+        unchecked self.starts.push_within_capacity(start);
+        unchecked self.ends.push_within_capacity(end);
+        unchecked self.triv_lo.push_within_capacity(triv_lo);
+        unchecked self.triv_hi.push_within_capacity(triv_hi);
+        unchecked self.flags.push_within_capacity(flags);
         return idx;
     }
 
@@ -586,10 +586,10 @@ impl TreeBuilder {
                 && self.offset.capacity() == self.tag.capacity()
                 && self.alt.capacity() == self.tag.capacity(), "TreeBuilder event columns must grow in lockstep";
         }
-        self.tag.push_within_capacity(tag);
-        self.id.push_within_capacity(id);
-        self.offset.push_within_capacity(offset);
-        self.alt.push_within_capacity(-1);
+        unchecked self.tag.push_within_capacity(tag);
+        unchecked self.id.push_within_capacity(id);
+        unchecked self.offset.push_within_capacity(offset);
+        unchecked self.alt.push_within_capacity(-1);
     }
 
     internal fn start_node(&mut self, kind: NodeKind, start: i32) {
@@ -612,8 +612,9 @@ impl TreeBuilder {
         return self.tag.len();
     }
 
-    internal fn start_node_at(&mut self, checkpoint: i32, kind: NodeKind, start: i32) {
-        assert self.innermost_open() < checkpoint, "a node wraps only rows finished before it";
+    internal fn start_node_at(&mut self, checkpoint: i32, kind: NodeKind, start: i32)
+        contract self.innermost_open() < checkpoint, "a node wraps only rows finished before it"
+    {
         self.tag.insert(checkpoint, EventTag::Open);
         self.id.insert(checkpoint, kind as i32);
         self.offset.insert(checkpoint, start);
@@ -1805,7 +1806,7 @@ fn _parse_e(p: &mut Parser, min_prec: i32 = 0) -> () {
 }
 
 fn _run_parse_entry<S: AsStrSlice>(input: S, max_errors: i32, entry: fn(&mut Parser)) -> ParseResult {
-    assert max_errors >= 1, `max_errors must be >= 1, got ${max_errors}`;
+    assert max_errors >= 1;
     let tokens = tokenize(input);
     let mut p = Parser::new(tokens);
     p.max_errors = max_errors;

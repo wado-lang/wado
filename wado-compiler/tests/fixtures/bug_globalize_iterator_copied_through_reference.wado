@@ -1,0 +1,32 @@
+// A cold function keeps `names.into_iter().enumerate()` as calls, which
+// `const_object_globalization` hoisted into a global because no call took a
+// reference to it. The loop reads the iterator out of that reference uncopied,
+// so `next` advanced the global, and the second call found it exhausted.
+
+use { println, Stdout } from "core:cli";
+
+#[inline(never)]
+fn weigh(i: i32, name: String) -> i32 {
+    return builtin::black_box(i) + name.len();
+}
+
+fn count() -> i32 {
+    let names: List<String> = ["a", "b", "c"];
+    let mut n = 0;
+    for let [i, name] of names.into_iter().enumerate() {
+        n += weigh(i, name);
+    }
+    return n;
+}
+
+export fn run() with Stdout {
+    if builtin::black_box(true) {
+        builtin::cold_path();
+        println(`${count()} ${count()}`);
+    }
+}
+
+__DATA__
+{
+    "stdout": "6 6\n"
+}

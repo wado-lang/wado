@@ -351,7 +351,7 @@ test "a match deep in the hash chain is still found" {
     // to the end of a bucket and ~17.9 KB when it stops at the head.
     let data = make_wordy(60000);
     let compressed = deflate_raw(&data, 6);
-    assert compressed.len() < 17000, `hash chain walk degraded: ${compressed.len()} bytes`;
+    assert compressed.len() < 17000, "hash chain walk degraded";
     assert inflate_raw(&compressed).unwrap() == data;
 }
 
@@ -563,6 +563,24 @@ test "DeflateStream reset" {
     ds.reset();
     let c2 = ds.compress(&data);
     assert c1.len() == c2.len(), "reset should produce same-size output";
+}
+
+test "DeflateStream is_finished follows finish and reset" {
+    let mut ds = DeflateStream::new(Z_DEFAULT_COMPRESSION);
+    assert !ds.is_finished();
+    ds.update(&make_pattern_data(10));
+    assert !ds.is_finished();
+    let _ = ds.finish();
+    assert ds.is_finished();
+    ds.reset();
+    assert !ds.is_finished();
+}
+
+#[expect_trap]
+test "DeflateStream update after finish breaks the contract" {
+    let mut ds = DeflateStream::new(Z_DEFAULT_COMPRESSION);
+    let _ = ds.finish();
+    ds.update(&make_pattern_data(10));
 }
 
 test "DeflateStream copy" {
@@ -790,7 +808,7 @@ test "a stream cut at any length is rejected" {
     let raw = deflate_raw(&make_wordy(2000));
     for let mut n = 0; n < raw.len(); n += 1 {
         let cut = raw[0..<n].to_list() as ByteList;
-        assert inflate_raw(&cut) matches { Err(ZlibError::InvalidDeflateData) }, `cut at ${n}`;
+        assert inflate_raw(&cut) matches { Err(ZlibError::InvalidDeflateData) };
     }
 }
 
@@ -798,7 +816,7 @@ test "max_output holds at every limit" {
     let data = make_wordy(600);
     let raw = deflate_raw(&data);
     for let mut limit = 0; limit < data.len(); limit += 1 {
-        assert inflate_raw(&raw, limit) matches { Err(ZlibError::OutputExceedsMax) }, `limit ${limit}`;
+        assert inflate_raw(&raw, limit) matches { Err(ZlibError::OutputExceedsMax) };
     }
     assert inflate_raw(&raw, data.len()) matches { Ok(out) && out == data };
 }
@@ -879,8 +897,8 @@ test "literal/length codes 286 and 287 are rejected" {
         let mut w = BitWriter::new();
         open_fixed_block(&mut w);
         huffman(&mut w, 0b11000000 + symbol - 280, 8);
-        assert rejects(&w, 0), `${symbol} unpadded`;
-        assert rejects(&w, 8), `${symbol} padded`;
+        assert rejects(&w, 0);
+        assert rejects(&w, 8);
     }
 }
 
@@ -893,8 +911,8 @@ test "distance codes 30 and 31 are rejected" {
         open_fixed_block(&mut w);
         huffman(&mut w, 1, 7);
         huffman(&mut w, symbol, 5);
-        assert rejects(&w, 0), `${symbol} unpadded`;
-        assert rejects(&w, 8), `${symbol} padded`;
+        assert rejects(&w, 0);
+        assert rejects(&w, 8);
     }
 }
 
@@ -1110,7 +1128,7 @@ test "every ZlibError renders a distinct reason" {
     let mut reasons: List<String> = [];
     for let error of errors {
         let reason = `${error}`;
-        assert reason.len() > 0 && !reasons.contains(&reason), reason;
+        assert reason.len() > 0 && !reasons.contains(&reason);
         reasons.push(reason);
     }
 }
@@ -1124,10 +1142,10 @@ test "combined checksums match the whole at every split" {
         let rest = data.len() - split;
         let adler_head = adler32(adler32_init(), &data, 0, split);
         let adler_tail = adler32(adler32_init(), &data, split, rest);
-        assert adler32_combine(adler_head, adler_tail, rest) == whole_adler, `Adler-32 split at ${split}`;
+        assert adler32_combine(adler_head, adler_tail, rest) == whole_adler;
         let crc_head = crc32(crc32_init(), &data, 0, split);
         let crc_tail = crc32(crc32_init(), &data, split, rest);
-        assert crc32_combine(crc_head, crc_tail, rest) == whole_crc, `CRC-32 split at ${split}`;
+        assert crc32_combine(crc_head, crc_tail, rest) == whole_crc;
     }
 
     // Bytes summing to 65520 leave Adler-32's low sum at 1 + 65520 = 0 mod 65521.
@@ -1154,9 +1172,9 @@ test "every level and strategy round-trips input longer than the window" {
     for let mut level = 0; level <= 9; level += 1 {
         for let mut strategy = 0; strategy <= 4; strategy += 1 {
             let raw = deflate_raw(&data, level, strategy);
-            assert inflate_raw(&raw) matches { Ok(out) && out == data }, `level ${level} strategy ${strategy}`;
+            assert inflate_raw(&raw) matches { Ok(out) && out == data };
         }
-        assert uncompress(&zlib_compress(&data, level)) matches { Ok(out) && out == data }, `zlib level ${level}`;
+        assert uncompress(&zlib_compress(&data, level)) matches { Ok(out) && out == data };
     }
 }
 
@@ -1199,11 +1217,11 @@ test "every gzip header field round-trips" {
     for let level of levels {
         let member = gzip_compress(&data, level, Z_DEFAULT_STRATEGY, &header);
         let parsed = inflate_get_gzip_header(&member).unwrap();
-        assert parsed.text() && parsed.hcrc(), `level ${level}`;
-        assert parsed.time() == 1700000000 && parsed.os() == 3, `level ${level}`;
-        assert parsed.extra() == extra, `level ${level}`;
-        assert parsed.name() == "data.json" && parsed.comment() == "fixture", `level ${level}`;
-        assert inflate_gzip(&member) matches { Ok(out) && out == data }, `level ${level}`;
+        assert parsed.text() && parsed.hcrc();
+        assert parsed.time() == 1700000000 && parsed.os() == 3;
+        assert parsed.extra() == extra;
+        assert parsed.name() == "data.json" && parsed.comment() == "fixture";
+        assert inflate_gzip(&member) matches { Ok(out) && out == data };
     }
 
     let mut stream = DeflateStream::new(Z_DEFAULT_COMPRESSION, Z_DEFAULT_STRATEGY, GZIP_FORMAT);

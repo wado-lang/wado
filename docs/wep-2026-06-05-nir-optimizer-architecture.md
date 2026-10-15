@@ -546,16 +546,16 @@ invariant.
 - [ ] Induction-variable recognition, as a tagged opaque carrying base and step.
   Not needed yet. A post-increment read already appears as the addition it
   is, so this lands when a rule first wants it.
-- [ ] Stop a borrow of a local that flows only into callees which cannot retain
+- [ ] Stop a reference to a local that flows only into callees which cannot retain
   it from marking the local aliased. Plumbing the callee's escape summary
   into the ref-argument check is not the way. The aliased set is seeded from
-  the address-taken locals the elaborator records for every borrow of a
+  the address-taken locals the elaborator records for every reference to a
   local, so the `(&self).field` shape this was written for is already
   aliased before the call site is looked at. Measured, 3.7 % of ref-arg
-  marks are the sole reason their local is aliased: borrows of a projection,
+  marks are the sole reason their local is aliased: references to a projection,
   which the elaborator does not record. Narrowing the rest means narrowing
   the seed. That is a whole-function question, whether all uses of the
-  borrow flow into callees that cannot retain it, over an annotation several
+  reference flow into callees that cannot retain it, over an annotation several
   other passes also read. The mutable-escape set is built by filtering the
   aliased set, so dropping a local from one silently drops it from the
   other, and a callee that cannot retain a reference can still mutate

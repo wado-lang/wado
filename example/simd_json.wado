@@ -29,7 +29,7 @@ global INPUT_BYTES: i32 = 65536;
 fn scan_scalar(s: &String, from: i32, len: i32) -> i32 {
     let mut i = from;
     while i < len {
-        let b = s.get_byte_unchecked(i);
+        let b = unchecked s.byte_at(i);
         if b == b'"' || b == b'\\' || b >= 0x80 as u8 {
             return i;
         }
@@ -51,7 +51,7 @@ fn scan_gathered(s: &String, from: i32, len: i32) -> i32 {
 
     let mut i = from;
     while i + 16 <= len {
-        let m = delimiters(&u8x16::from_string(s, i), &quote, &escape);
+        let m = delimiters(&unchecked u8x16::from_string(s, i), &quote, &escape);
         if m != 0 {
             return i + i32::ctz(m);
         }
@@ -71,7 +71,7 @@ fn scan_packed(chunks: &Array<u8x16>, from: i32, len: i32) -> i32 {
     let mut chunk = from >> 4;
     let mut skip = from & 15;
     while chunk << 4 < len {
-        let m = delimiters(&chunks.get_unchecked(chunk), &quote, &escape) >> skip << skip;
+        let m = delimiters(&chunks[chunk], &quote, &escape) >> skip << skip;
         if m != 0 {
             return (chunk << 4) + i32::ctz(m);
         }
@@ -89,7 +89,7 @@ fn pack(s: &String) -> Array<u8x16> {
     let mut out = Array::<u8x16>::new(len / 16);
     let mut i = 0;
     while i < len {
-        out.set(i >> 4, u8x16::from_string(s, i));
+        out.set(i >> 4, unchecked u8x16::from_string(s, i));
         i += 16;
     }
     return out;
@@ -99,7 +99,7 @@ fn pack(s: &String) -> Array<u8x16> {
 // vector load, a swizzle to bring the byte to lane 0, and a lane read, where
 // today it reads one `array.get_u`.
 fn byte_at_packed(chunks: &Array<u8x16>, i: i32) -> u8 {
-    let v = chunks.get_unchecked(i >> 4).swizzle(&u8x16::splat(i & 15));
+    let v = chunks[i >> 4].swizzle(&u8x16::splat(i & 15));
     return v.extract_lane(0) as u8;
 }
 
@@ -111,7 +111,7 @@ fn sum_bytes_scalar(s: &String, len: i32) -> i32 {
     let mut total = 0;
     let mut i = 0;
     while i < len {
-        total += s.get_byte_unchecked(i) as i32;
+        total += unchecked s.byte_at(i) as i32;
         i += 1;
     }
     return total;
@@ -162,7 +162,7 @@ fn make_input(total: i32, run_len: i32) -> String {
         if i % (run_len + 1) == run_len {
             s.push('"');
         } else {
-            s.push(char::from_u32_unchecked((b'a' + (i % 26) as u8) as u32));
+            s.push((b'a' + (i % 26) as u8) as char);
         }
         i += 1;
     }
@@ -194,7 +194,7 @@ test "the two byte reads agree" {
     let chunks = pack(&s);
     let len = s.len();
     for let i of 0..<len {
-        assert byte_at_packed(&chunks, i) == s.get_byte_unchecked(i);
+        assert byte_at_packed(&chunks, i) == s.byte_at(i);
     }
     assert sum_bytes_packed(&chunks, len) == sum_bytes_scalar(&s, len);
 }

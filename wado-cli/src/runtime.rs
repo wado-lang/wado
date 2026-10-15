@@ -3,7 +3,9 @@ use std::fs::File;
 use std::future::Future;
 use std::io::{BufWriter, Write};
 use std::pin::Pin;
-use std::sync::{Arc, LazyLock};
+use std::sync::{Arc, Condvar, LazyLock, Mutex, PoisonError};
+use std::thread::JoinHandle;
+use std::time::Duration;
 use wasmtime::component::{Component, Linker, ResourceTable};
 use wasmtime::{
     AsContext, Collector, Config, Engine, GuestProfiler, InstanceAllocationStrategy, OptLevel,
@@ -23,6 +25,7 @@ use crate::coverage_host::{CoverageHits, add_to_linker as add_coverage_to_linker
 use crate::eval_host::{EvalSession, add_to_linker as add_eval_to_linker};
 use crate::http_hooks::WadoHttpHooks;
 use crate::knobs::RuntimeKnobs;
+use crate::sync::lock;
 use wado_host::timezone::add_to_linker;
 use wado_host::tls_trust::{build_root_cert_store, install_default_crypto_provider};
 
@@ -663,4 +666,65 @@ fn host_linker(component: &Component) -> Result<Linker<WasiState>> {
     wasmtime_wasi_tls::p3::add_to_linker(&mut linker)?;
     add_to_linker(&mut linker)?;
     Ok(linker)
+}
+
+/// An OS thread calling `tick` every `interval` until the ticker drops.
+/// Dropping wakes the thread, so it never waits out the interval in flight.
+pub struct Ticker {
+    stop: Arc<(Mutex<bool>, Condvar)>,
+    handle: Option<JoinHandle<()>>,
+}
+
+impl Ticker {
+    pub fn start(interval: Duration, mut tick: impl FnMut() + Send + 'static) -> Self {
+        let stop = Arc::new((Mutex::new(false), Condvar::new()));
+        let handle = std::thread::spawn({
+            let stop = Arc::clone(&stop);
+            move || {
+                let (stopped, wake) = &*stop;
+                let mut stopped = lock(stopped);
+                while !*stopped {
+                    let (guard, wait) = wake
+                        .wait_timeout_while(stopped, interval, |stopped| !*stopped)
+                        .unwrap_or_else(PoisonError::into_inner);
+                    stopped = guard;
+                    if wait.timed_out() {
+                        tick();
+                    }
+                }
+            }
+        });
+        Self {
+            stop,
+            handle: Some(handle),
+        }
+    }
+}
+
+impl Drop for Ticker {
+    fn drop(&mut self) {
+        let (stopped, wake) = &*self.stop;
+        *lock(stopped) = true;
+        wake.notify_all();
+        if let Some(handle) = self.handle.take() {
+            let _ = handle.join();
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::time::Instant;
+
+    #[test]
+    fn dropping_a_ticker_does_not_wait_out_its_interval() {
+        let ticker = Ticker::start(Duration::from_secs(60), || {});
+        // Dropped before its thread first runs, a ticker stops at the loop
+        // head and the wait is never exercised.
+        std::thread::sleep(Duration::from_millis(200));
+        let started = Instant::now();
+        drop(ticker);
+        assert!(started.elapsed() < Duration::from_secs(10));
+    }
 }

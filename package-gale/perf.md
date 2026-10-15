@@ -281,7 +281,7 @@ used to re-resolve a fully static mapping on every call: ~170 `capture_id_of`
 scans plus the `class_text` rewrites, about 2.5% of the profile. The
 compile-time engine could not fold it, because its 10K-step budget is far below
 the string compares that takes. `highlight_gen` now emits the resolved tables as
-the `HIGHLIGHT_MAPPING` global, and the visitor borrows it.
+the `HIGHLIGHT_MAPPING` global, and the visitor reads it by reference.
 
 ### Live profile (`syntax_highlight`, 2999 leaf samples @1 ms, 2026-09-02)
 
@@ -480,7 +480,7 @@ an hour. Measured findings, `wado run … gen` (`cargo run` host):
   newtype-valued `TreeMap` coexists with its `i32` base in a value-copied struct
   (minimal repro saved). A compiler P0; use plain `i32` until it is fixed.)
 
-- **Borrow the IR the generator only reads (2026-08-25, landed).** A
+- **Reference the IR the generator only reads (2026-08-25, landed).** A
   release-host guest profile of `benchmark/gale_gen` (4026 leaf samples) put
   **23%** of the run in `$value_copy$` helpers — `RuleRefElement` 5.2%,
   `TokenRefElement` 3.5%, `Alternative` 2.8% — prediction paying 10.1% of it and
@@ -489,7 +489,7 @@ an hour. Measured findings, `wado run … gen` (`cargo run` host):
 - `SllConfig.elements` / `SllReturn.elements` are now `&List<Element>`.
   Prediction rebuilds a config per token per alternative (`SllConfig { ..*c, pos }`) and deep-copied the element list — every `String` of every
   `RuleRefElement` — per rebuild. `push_return` / `build_prediction` hand the
-  borrow out rather than copying it.
+  reference out rather than copying the list.
 - Five by-value `for` bindings became `for … of &…` (`lexer_elem_refs_rule`,
   `collect_literal_tokens`, `merge_grammars`, `sll_advance`,
   `try_expand_opaque`). A by-value binding deep-copies each element inside
@@ -503,7 +503,7 @@ probing (`String^Ord::cmp` 8.8%, `Eq::eq` 4.3%, `find_index` 3.1%,
 rebalancing ~5%) — the id-carrying lever above, applied to the name-keyed maps
 that are left.
 
-This borrows a list that is already a root, so it adds nothing to the live set
+This references a list that is already a root, so it adds nothing to the live set
 — unlike sharing its _elements_, which cost 3× ([`dead-ends.md`](../.claude/skills/wado-performance/dead-ends.md)).
 
 #### Work the generator repeated or copied (2026-10-06, landed)
@@ -519,7 +519,7 @@ Release-host profiles of `benchmark/gale_gen` found seven levers:
   pair. It now reads them only for arms whose first chars overlap.
 - `lower_alt_scan_element` deep-copied the alt once per position it lowered.
 - `try_expand_opaque` and `repeat_entry_alts` copied elements and alternative
-  lists they only inspect. They borrow them now.
+  lists they only inspect. They take them by reference now.
 - The kind, sync and follow-mask registries formatted id lists into string
   keys. The id list is the key now.
 - `rule_takes_min_prec_arg` and `rule_reads_follow` scanned a list of names.

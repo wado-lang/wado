@@ -1,5 +1,5 @@
-// A subscript renders the sequence it read from alongside the index and the
-// element, its receiver being a place the failure branch re-reads.
+// A subscript renders its index and the element, but not the sequence it
+// read from: a subscript is a call, and its receiver is not captured.
 
 export fn run() {
     let list: List<i32> = [10, 20];
@@ -10,5 +10,5 @@ export fn run() {
 __DATA__
 {
     "trapped": true,
-    "stderr_contains": ["list[i]: 20", "list: ["]
+    "stderr_contains": ["condition: list[i] == 99\ni: 1\nlist[i]: 20\n"]
 }

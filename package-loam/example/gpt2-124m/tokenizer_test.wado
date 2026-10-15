@@ -17,7 +17,7 @@ test "each text encodes to the ids Hugging Face's tokenizer gives it, and back" 
     let oracle = from_string::<Oracle>(#include_str("./tokenize.json")).unwrap();
     for let case of oracle.tokenize {
         let ids = Tokenizer::encode(&case.text);
-        assert ids == case.ids, case.text;
+        assert ids == case.ids;
         assert Tokenizer::decode(&ids) == case.text;
     }
 }

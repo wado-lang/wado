@@ -52,7 +52,7 @@ export fn run() {
     assert a < b && b < 3;
     assert a > b || b > 0;
     assert apply(|y: i32| -> i32 { return y; }, a) == 1;
-    assert list[a] + list[b] == 99;
+    assert a + b + a == 99;
 }
 "#;
 
@@ -62,9 +62,9 @@ const EXPECTED: &[(&str, &[&str])] = &[
     ("a < b", &["a", "b"]),
     ("!(a > b)", &["a", "b", "a > b"]),
     ("twice(a) == b", &["a", "twice(a)", "b"]),
-    ("s.len() == 5", &["s", "s.len()"]),
+    ("s.len() == 5", &["s.len()"]),
     ("o.inner.v == 1", &["o.inner.v"]),
-    ("list[a] == 20", &["list", "a", "list[a]"]),
+    ("list[a] == 20", &["a", "list[a]"]),
     ("a as i64 == 1", &["a", "a as i64"]),
     ("0 <= a < b", &["a", "b"]),
     ("[a, b] == [1, 2]", &["a", "b"]),
@@ -77,7 +77,8 @@ const EXPECTED: &[(&str, &[&str])] = &[
         "match a { 1 => a, _ => b, } == 1",
         &["a", "match a { 1 => a, _ => b, }"],
     ),
-    ("(a..<b).contains(&a)", &["(a..<b).contains(&a)"]),
+    // The root is false whenever the message prints, so only its operands are.
+    ("(a..<b).contains(&a)", &["a"]),
     ("shape matches { Point }", &["shape"]),
     (
         "apply(|y: i32| -> i32 { return y; }, a) == 1",
@@ -161,16 +162,27 @@ fn some_plan_line_has(block: &str, label: &str, column: &str) -> bool {
 #[test]
 fn a_place_named_twice_is_captured_once() {
     let plan = entry_plan();
-    let block = plan_of(&plan, "list[a] + list[b] == 99");
+    let block = plan_of(&plan, "a + b + a == 99");
 
-    let occurrences = block
-        .lines()
-        .filter(|line| line.ends_with("  list"))
-        .count();
-    assert_eq!(
-        occurrences, 1,
-        "`list` should be captured once, got:\n{block}"
-    );
+    let occurrences = block.lines().filter(|line| line.ends_with("  a")).count();
+    assert_eq!(occurrences, 1, "`a` should be captured once, got:\n{block}");
+}
+
+/// A receiver may be a whole container, so it renders nothing; the call's
+/// result does.
+#[test]
+fn a_receiver_is_not_captured() {
+    let plan = entry_plan();
+
+    for (condition, receiver) in [("s.len() == 5", "s"), ("list[a] == 20", "list")] {
+        let block = plan_of(&plan, condition);
+        assert!(
+            !block
+                .lines()
+                .any(|line| line.ends_with(&format!("  {receiver}"))),
+            "`{condition}` should not capture `{receiver}`, got:\n{block}"
+        );
+    }
 }
 
 #[test]
@@ -230,16 +242,9 @@ const EXPECTED_BINDING: &[(&str, &[(&str, &str)])] = &[
         &[("twice(a)", "hoisted"), ("b", "re-read")],
     ),
     ("o.inner.v == 1", &[("o.inner.v", "hoisted")]),
-    // A subscript's receiver runs first and is re-read rather than bound, and
-    // the index after it stays where it sits; the subscript moves as one group.
-    (
-        "list[a] == 20",
-        &[
-            ("list", "re-read"),
-            ("a", "re-read"),
-            ("list[a]", "hoisted"),
-        ],
-    ),
+    // A subscript's receiver runs first and is not captured, and the index
+    // after it stays where it sits; the subscript moves as one group.
+    ("list[a] == 20", &[("a", "re-read"), ("list[a]", "hoisted")]),
     // Past a short-circuit nothing binds ahead: the operand may not run.
     (
         "a < b && b < 3",

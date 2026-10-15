@@ -187,7 +187,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let mut mut_captures: Vec<MutCapture> = Vec::new();
         let mut any_mutating_capture = false;
 
-        for var_name in writes.assigned.union(&writes.borrowed) {
+        for var_name in writes.assigned.union(&writes.mut_referenced) {
             let written = writes.assigned.contains(var_name);
             let Some(local) = ctx.lookup(var_name) else {
                 // A binding `ctx` only reaches by capture is boxed where it is
@@ -265,8 +265,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
         let body_type = self.resolve_expr(&closure.body, &mut closure_ctx, body_expected);
 
-        // Only the walk knows which borrows reach a capture's own storage.
-        for var_name in std::mem::take(&mut closure_ctx.borrowed_captures) {
+        // Only the walk knows which `&mut`s reach a capture's own storage.
+        for var_name in std::mem::take(&mut closure_ctx.mut_ref_captures) {
             if closure_ctx.deref_overrides.contains_key(&var_name) {
                 any_mutating_capture = true;
             } else if let Some(local) = ctx.lookup(&var_name) {
@@ -276,7 +276,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 );
             } else {
                 any_mutating_capture |= ctx.binding(&var_name).is_some_and(|b| b.is_mut);
-                ctx.borrowed_captures.insert(var_name);
+                ctx.mut_ref_captures.insert(var_name);
             }
         }
 

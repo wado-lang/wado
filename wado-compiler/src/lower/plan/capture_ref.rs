@@ -259,7 +259,7 @@ impl TirRefVisitor for ForHeaders<'_, '_> {
 }
 
 /// `let mut header = header;`: the next iteration's binding, so what this one
-/// captured or borrowed keeps its own box (ECMA-262 `CreatePerIterationEnvironment`).
+/// captured or referenced keeps its own box (ECMA-262 `CreatePerIterationEnvironment`).
 fn redeclaration(locals: &FrameLocals, header: u32) -> TirStmt {
     let Some((name, type_id)) = locals.local(header) else {
         unreachable!("`ForHeaders` takes only locals the frame declares");
@@ -567,7 +567,7 @@ impl TirMutVisitor for Rewriter<'_, '_> {
             let proxy_name = capture_ref_name(&name);
             let proxy = self.locals.alloc(proxy_name.clone(), ref_type);
             self.address_taken.insert(local);
-            let borrow = TirExpr::new(
+            let reference = TirExpr::new(
                 TirExprKind::Unary {
                     op: TirUnaryOp::Ref,
                     expr: Box::new(TirExpr::new(
@@ -585,7 +585,7 @@ impl TirMutVisitor for Rewriter<'_, '_> {
                     local_index: proxy,
                     is_mut: false,
                     type_id: ref_type,
-                    value: borrow,
+                    value: reference,
                     storage: LetStorage::Planned,
                 },
                 span,

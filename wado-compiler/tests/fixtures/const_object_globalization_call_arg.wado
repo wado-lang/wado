@@ -13,7 +13,7 @@
 // survives to `const_object_globalization`, instead of the literal getting
 // substituted into an inlined copy and constant-folded away entirely. The
 // opaque `extra` keeps the call itself off the constant path, so what the pass
-// has to hoist is the borrowed literal rather than the whole result.
+// has to hoist is the referenced literal rather than the whole result.
 
 use { println, Stdout } from "core:cli";
 
@@ -21,7 +21,7 @@ use { println, Stdout } from "core:cli";
 fn byte_sum(s: &String, extra: i32) -> i32 {
     let mut total = extra;
     for let i of 0..<s.len() {
-        total = total + s.get_byte_unchecked(i) as i32;
+        total = total + unchecked s.byte_at(i) as i32;
     }
     return total;
 }

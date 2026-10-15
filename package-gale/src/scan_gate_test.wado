@@ -18,10 +18,10 @@ fn gate_fields(g: &Grammar) -> List<String> {
 // reaches the member through the parser handle under its declared name.
 test "gate_assignment: a constant assignment" {
     let hit = gate_assignment("p.no_struct = 1;");
-    assert hit matches { Some(_) }, `${hit:?}`;
+    assert hit matches { Some(_) };
     if let Some(h) = hit {
-        assert h.0 == "no_struct", &h.0;
-        assert h.1 == 1, `${h.1}`;
+        assert h.0 == "no_struct";
+        assert h.1 == 1;
     }
 }
 
@@ -29,27 +29,27 @@ test "gate_assignment: a constant assignment" {
 // grammar without a simulable gate.
 test "gate_assignment: a member the translator did not rename" {
     let hit = gate_assignment("p.noBrace = 1;");
-    assert hit matches { Some(_) }, `${hit:?}`;
+    assert hit matches { Some(_) };
     if let Some(h) = hit {
-        assert h.0 == "noBrace", &h.0;
-        assert h.1 == 1, `${h.1}`;
+        assert h.0 == "noBrace";
+        assert h.1 == 1;
     }
 }
 
 test "gate_assignment: whitespace and a missing semicolon" {
     let hit = gate_assignment("  p.no_struct   =   0  ");
-    assert hit matches { Some(_) }, `${hit:?}`;
+    assert hit matches { Some(_) };
     if let Some(h) = hit {
-        assert h.0 == "no_struct", &h.0;
-        assert h.1 == 0, `${h.1}`;
+        assert h.0 == "no_struct";
+        assert h.1 == 0;
     }
 }
 
 test "gate_assignment: a negative constant" {
     let hit = gate_assignment("p.depth = -1;");
-    assert hit matches { Some(_) }, `${hit:?}`;
+    assert hit matches { Some(_) };
     if let Some(h) = hit {
-        assert h.1 == -1, `${h.1}`;
+        assert h.1 == -1;
     }
 }
 
@@ -86,18 +86,18 @@ test "gate_assignment: a subscript is not a member" {
 // keeps its own saved value. `$L` arrives as the rule's own value channel.
 test "gate_scope: the @init / @after pair" {
     let s = gate_scope_of("vals.sv = p.no_struct; p.no_struct = 0;", "p.no_struct = vals.sv;");
-    assert s matches { Some(_) }, `${s:?}`;
+    assert s matches { Some(_) };
     if let Some(g) = s {
-        assert g.field == "no_struct", &g.field;
-        assert g.value == 0, `${g.value}`;
+        assert g.field == "no_struct";
+        assert g.value == 0;
     }
 }
 
 test "gate_scope: a member the translator did not rename" {
     let s = gate_scope_of("vals.sv = p.noBrace; p.noBrace = 0;", "p.noBrace = vals.sv;");
-    assert s matches { Some(_) }, `${s:?}`;
+    assert s matches { Some(_) };
     if let Some(g) = s {
-        assert g.field == "noBrace", &g.field;
+        assert g.field == "noBrace";
     }
 }
 
@@ -159,19 +159,19 @@ global GATE_SCOPE_AFTER: String = "noStruct = $sv;";
 
 test "scan_gate_fields: the recognised scope pair leaves its field simulable" {
     let f = gate_fields_of(&gate_source(&GATE_SCOPE_INIT, &GATE_SCOPE_AFTER));
-    assert f == ["no_struct"], `${f:?}`;
+    assert f == ["no_struct"];
 }
 
 // A left-recursive scan carries `min_prec`, so it takes no scope wrapper. The field
 // goes everywhere, or other scans would restore a ban this one never lifts.
 test "scan_gate_fields: a left-recursive rule's scope disqualifies its field" {
     let f = gate_fields_of(&gate_source(&GATE_SCOPE_INIT, &GATE_SCOPE_AFTER, "scope A | A"));
-    assert f.is_empty(), `${f:?}`;
+    assert f.is_empty();
 }
 
 test "scan_gate_fields: an unrunnable rule-level write disqualifies the field" {
     let f = gate_fields_of(&gate_source("noStruct = depth();"));
-    assert f.is_empty(), `${f:?}`;
+    assert f.is_empty();
 }
 
 // Every name in a body the scan cannot run is disqualified, not a list of write
@@ -179,7 +179,7 @@ test "scan_gate_fields: an unrunnable rule-level write disqualifies the field" {
 test "scan_gate_fields: a compound assignment disqualifies the field" {
     for let op of ["+=", "|=", "&=", "^=", "%=", "<<=", ">>="] as List<String> {
         let f = gate_fields_of(&gate_source(`noStruct ${op} 1;`));
-        assert f.is_empty(), `${op} left the field simulable`;
+        assert f.is_empty();
     }
 }
 
@@ -188,14 +188,14 @@ test "scan_gate_fields: a compound assignment disqualifies the field" {
 test "scan_gate_fields: a conditional write disqualifies the field" {
     for let body of ["if (c) noStruct = 0;", "while (c) noStruct = 0;", "for (;;) noStruct = 0;"] as List<String> {
         let f = gate_fields_of(&gate_source(&body));
-        assert f.is_empty(), `${body} left the field simulable`;
+        assert f.is_empty();
     }
 }
 
 test "scan_gate_fields: an increment disqualifies the field" {
     for let body of ["noStruct++;", "--noStruct;", "noStruct--;"] as List<String> {
         let f = gate_fields_of(&gate_source(&body));
-        assert f.is_empty(), `${body} left the field simulable`;
+        assert f.is_empty();
     }
 }
 
@@ -203,26 +203,26 @@ test "scan_gate_fields: an increment disqualifies the field" {
 // gate unsimulated.
 test "scan_gate_fields: a body that merely names the field disqualifies it" {
     let f = gate_fields_of(&gate_source("noStruct;"));
-    assert f.is_empty(), `${f:?}`;
+    assert f.is_empty();
 }
 
 // A call names the method, not the field it writes, so no reading of the body
 // says which fields it leaves alone. The whole set goes.
 test "scan_gate_fields: a body that can call disqualifies every field" {
     let f = gate_fields_of(&gate_source("ban();"));
-    assert f.is_empty(), `${f:?}`;
+    assert f.is_empty();
 }
 
 // The rejection case for both rules above: a body that names something else and
 // cannot call leaves the field alone, so the set is not simply always empty.
 test "scan_gate_fields: a body naming other things leaves the field simulable" {
     let f = gate_fields_of(&gate_source("depth = depth + 1;"));
-    assert f == ["no_struct"], `${f:?}`;
+    assert f == ["no_struct"];
 }
 
 test "scan_gate_fields: a write through a receiver disqualifies the field" {
     let f = gate_fields_of(&gate_source("this.noStruct = depth();"));
-    assert f.is_empty(), `${f:?}`;
+    assert f.is_empty();
 }
 
 // Lowering puts no gates on a group alternative's scan body, so the scan cannot
@@ -234,7 +234,7 @@ test "scan_gate_fields: a write inside a group disqualifies the field" {
         &SCOPE_BODY,
         "A ( { noStruct = 0; } A | A ) A",
     ));
-    assert f.is_empty(), `${f:?}`;
+    assert f.is_empty();
 }
 
 // A condition the scan may evaluate reads simulated fields and nothing else.

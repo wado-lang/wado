@@ -161,10 +161,10 @@ impl TokenStream {
                 && self.triv_ends.capacity() == self.triv_kinds.capacity()
                 && self.triv_chans.capacity() == self.triv_kinds.capacity(), "TokenStream trivia columns must grow in lockstep";
         }
-        self.triv_kinds.push_within_capacity(kind);
-        self.triv_starts.push_within_capacity(start);
-        self.triv_ends.push_within_capacity(end);
-        self.triv_chans.push_within_capacity(channel);
+        unchecked self.triv_kinds.push_within_capacity(kind);
+        unchecked self.triv_starts.push_within_capacity(start);
+        unchecked self.triv_ends.push_within_capacity(end);
+        unchecked self.triv_chans.push_within_capacity(channel);
     }
 
     internal fn push_token(&mut self, kind: i32, start: i32, end: i32, triv_lo: i32, triv_hi: i32) {
@@ -195,12 +195,12 @@ impl TokenStream {
                 && self.triv_hi.capacity() == self.kinds.capacity()
                 && self.flags.capacity() == self.kinds.capacity(), "TokenStream token columns must grow in lockstep";
         }
-        self.kinds.push_within_capacity(kind);
-        self.starts.push_within_capacity(start);
-        self.ends.push_within_capacity(end);
-        self.triv_lo.push_within_capacity(triv_lo);
-        self.triv_hi.push_within_capacity(triv_hi);
-        self.flags.push_within_capacity(flags);
+        unchecked self.kinds.push_within_capacity(kind);
+        unchecked self.starts.push_within_capacity(start);
+        unchecked self.ends.push_within_capacity(end);
+        unchecked self.triv_lo.push_within_capacity(triv_lo);
+        unchecked self.triv_hi.push_within_capacity(triv_hi);
+        unchecked self.flags.push_within_capacity(flags);
         return idx;
     }
 

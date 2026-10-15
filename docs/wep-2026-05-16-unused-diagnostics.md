@@ -597,3 +597,6 @@ through the diagnostics path.
   compilation loads. A function whose only user is a test in a file the
   compilation does not load, such as a test file that imports it, is reported
   "never used" rather than "only used by tests".
+- The same holds outside tests. An `internal` item whose only user is a module
+  of the package the compilation does not load is reported "never used",
+  though the specification decides reachability over the whole package.

@@ -1113,8 +1113,8 @@ test "replacen" {
 
 test "replacen copies the tail from a character boundary" {
     // The scan stops one byte into `é`; the tail after it must not be a view
-    // starting inside the character, which the test world's contract check
-    // on `slice_unchecked` rejects.
+    // starting inside the character, which the test world's check of the
+    // contract on `slice` rejects.
     assert "é".replacen("xy", "z", -1) == "é";
     assert "aé".replacen("a", "b", 1) == "bé";
     assert "日本".replacen("本本", "x", -1) == "日本";
@@ -1285,16 +1285,58 @@ test "is_char_boundary out of range" {
     assert !s.is_char_boundary(3);
 }
 
-test "char_at_byte_unchecked ASCII" {
+test "char_at_byte ASCII" {
     let s = "hi";
-    assert s.char_at_byte_unchecked(0) == 'h';
-    assert s.char_at_byte_unchecked(1) == 'i';
+    assert s.char_at_byte(0) == 'h';
+    assert s.char_at_byte(1) == 'i';
 }
 
-test "char_at_byte_unchecked multibyte" {
+test "char_at_byte multibyte" {
     let s = "日本";
-    assert s.char_at_byte_unchecked(0) == '日';
-    assert s.char_at_byte_unchecked(3) == '本';
+    assert s.char_at_byte(0) == '日';
+    assert unchecked s.char_at_byte(3) == '本';
+}
+
+fn first_char<S: AsStrSlice>(s: S) -> char {
+    return s.char_at_byte(0);
+}
+
+test "char_at_byte through a reference" {
+    assert first_char(&"日本") == '日';
+}
+
+#[expect_trap]
+test "char_at_byte off a character boundary" {
+    let _ = "日本".char_at_byte(builtin::black_box(1));
+}
+
+#[expect_trap]
+test "char_at_byte at the length" {
+    let _ = "hi".char_at_byte(builtin::black_box(2));
+}
+
+test "byte_at reads a byte" {
+    let s = "héllo";
+    assert s.byte_at(0) == b'h';
+    assert unchecked s.byte_at(2) == 0xA9;
+}
+
+#[expect_trap]
+test "byte_at at the length" {
+    let _ = "hi".byte_at(builtin::black_box(2));
+}
+
+test "push_ascii appends a byte" {
+    let mut s = "a";
+    s.push_ascii(b'b');
+    unchecked s.push_ascii(b'c');
+    assert s == "abc";
+}
+
+#[expect_trap]
+test "push_ascii with a non-ASCII byte" {
+    let mut s = "a";
+    s.push_ascii(builtin::black_box(0xC3));
 }
 
 test "push_bytes ASCII" {
@@ -1325,59 +1367,40 @@ test "push_bytes with half a character" {
     s.push_bytes(&bytes);
 }
 
-test "push_str_range_unchecked ASCII" {
-    let mut dst = "[";
-    let src = "hello";
-    dst.push_str_range_unchecked(&src, 1, 4);
-    dst.push_str("]");
-    assert dst == "[ell]";
-}
-
-test "push_str_range_unchecked full range" {
-    let mut dst = String::with_capacity(0);
-    dst.push_str_range_unchecked("abcd", 0, 4);
-    assert dst == "abcd";
-}
-
-test "push_str_range_unchecked empty range" {
-    let mut dst = "x";
-    dst.push_str_range_unchecked("hello", 2, 2);
-    assert dst == "x";
-}
-
-test "push_str_range_unchecked multibyte" {
-    let mut dst = String::with_capacity(0);
+test "unchecked slice" {
     let src = "日本語";
-    dst.push_str_range_unchecked(&src, 3, 6);  // "本"
-    assert dst == "本";
+    assert unchecked src.slice(3, 6) == "本";
+    assert unchecked src.as_str_slice().slice(0, 3) == "日";
+    assert unchecked "hello".slice(2, 2) == "";
 }
 
-test "substr_bytes_unchecked basic" {
+test "unchecked substr_bytes" {
     let s = "hello";
-    assert s.substr_bytes_unchecked(1, 4) == "ell";
+    assert unchecked s.substr_bytes(1, 4) == "ell";
+    assert unchecked s.as_str_slice().substr_bytes(0, 2) == "he";
 }
 
-test "truncate_unchecked basic" {
+test "unchecked truncate" {
     let mut s = "hello";
-    s.truncate_unchecked(3);
+    unchecked s.truncate(3);
     assert s == "hel";
 }
 
-test "insert_unchecked ASCII" {
+test "unchecked insert" {
     let mut s = "ac";
-    s.insert_unchecked(1, 'b');
+    unchecked s.insert(1, 'b');
     assert s == "abc";
 }
 
-test "insert_str_unchecked ASCII" {
+test "unchecked insert_str" {
     let mut s = "<>";
-    s.insert_str_unchecked(1, "x");
+    unchecked s.insert_str(1, "x");
     assert s == "<x>";
 }
 
-test "remove_unchecked ASCII" {
+test "unchecked remove" {
     let mut s = "abc";
-    let c = s.remove_unchecked(1);
+    let c = unchecked s.remove(1);
     assert c == 'b';
     assert s == "ac";
 }
@@ -1405,7 +1428,7 @@ test "the two UTF-8 validity tables agree" {
     for let bytes of cases {
         let accepted = String::try_from_utf8(bytes) matches { Ok(_) };
         let lossy = String::from_utf8_lossy(bytes);
-        assert accepted == !lossy.contains("\uFFFD"), `${bytes:?}`;
+        assert accepted == !lossy.contains("\uFFFD");
     }
 }
 

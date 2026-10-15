@@ -59,7 +59,7 @@ decides only what the optimizer may skip costs a copy when it is wrong.
 
 A reference parameter leaves a call in two ways, and they are different claims:
 
-- Borrow-out — the result aliases the parameter's storage, as `StrSlice::sub`
+- Hand-back — the result aliases the parameter's storage, as `StrSlice::sub`
   and `List::as_slice` do. The caller already owns the referent.
 - Retain — the reference reaches a global, or is written through a `&mut` the
   caller still holds, as `array_set` does.
@@ -83,7 +83,7 @@ A fact is one of three, by where the reference lands:
 | Channel       | Where it lands                     | Example          |
 | ------------- | ---------------------------------- | ---------------- |
 | `escapes`     | Somewhere the caller cannot see    | a global         |
-| `into_result` | The return value — borrow-out      | `List::as_slice` |
+| `into_result` | The return value — hand-back       | `List::as_slice` |
 | `into_param`  | A named parameter the caller holds | `List::push`     |
 
 Retain is two channels rather than one because a destination the caller can name
@@ -139,7 +139,7 @@ pub fn array_get_ref<T>(arr: &Array<T>, idx: i32) -> &T;
 pub fn array_set<T>(arr: &mut Array<T>, idx: i32, value: T);
 ```
 
-`#[result(owned)]` and `#[result(part_of = p)]` state borrow-out.
+`#[result(owned)]` and `#[result(part_of = p)]` state hand-back.
 `#[retain(...)]` states retain, naming one retained thing per attribute and
 repeating where there is more than one, so each carries its own destination
 without the attribute grammar growing a way to group them:
@@ -233,7 +233,7 @@ the compiler may stop doing to the argument:
   Where the retention names a destination the caller owns, the pin lasts as long
   as that destination is readable and no longer, so a move past its last read
   still stands.
-- A `&mut` argument is not written back at a call that retains it: the borrow
+- A `&mut` argument is not written back at a call that retains it: the reference
   outlives the call, so the call is no place to write it. Where no place in the
   body can be written back to, the call is refused — which is why an indirect
   call must read the same answer as a direct one, or the same program is
@@ -423,7 +423,7 @@ the claim does not read.
 
 The write-back reads the union where the move reads the destination. Refusing a
 write-back is a correctness rule rather than a precision one — a `&mut` to a
-detached place cannot be stored back where anything can still read the borrow —
+detached place cannot be stored back where anything can still read the reference —
 and the destination would sharpen it as it sharpens a move. What it would take
 is the reading the move has and this pass does not: whether the destination
 leaves the frame. A parameter does, a local assigned from one does, and a local

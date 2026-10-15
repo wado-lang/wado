@@ -102,45 +102,37 @@ test "a float literal cast to an integer converts, not re-types" {
     assert -9e15 as i64 == -9000000000000000 as i64;
 }
 
-test "char::from_u32 accepts exactly the unicode scalars" {
-    assert char::from_u32(65 as u32) == Option::Some('A');
-    assert char::from_i32(65) == Option::Some('A');
-    if let Some(c) = char::from_u32(0x1F600 as u32) {
-        assert c as i32 == 0x1F600;
-    } else {
-        panic("expected Some");
-    }
+test "char::try_from accepts exactly the unicode scalars" {
+    assert char::try_from(65 as u32) matches { Ok('A') };
+    assert char::try_from(65) matches { Ok('A') };
+    assert char::try_from(0x1F600 as u32) matches { Ok('😀') };
 
     // Surrogates and anything past U+10FFFF are not scalars.
-    assert char::from_u32(0xD800 as u32) matches { None };
-    assert char::from_u32(0xDFFF as u32) matches { None };
-    assert char::from_u32(0x110000 as u32) matches { None };
-    assert char::from_i32(-1) matches { None };
+    assert char::try_from(0xD800 as u32) matches { Err(_) };
+    assert char::try_from(0xDFFF as u32) matches { Err(_) };
+    assert char::try_from(0x110000 as u32) matches { Err(_) };
 
     // Boundaries of the valid ranges.
-    if let Some(c) = char::from_u32(0 as u32) {
-        assert c as i32 == 0;
-    } else {
-        panic("expected Some for U+0000");
-    }
-    if let Some(c) = char::from_u32(0xD7FF as u32) {
-        assert c as i32 == 0xD7FF;
-    } else {
-        panic("expected Some for U+D7FF");
-    }
-    if let Some(c) = char::from_u32(0xE000 as u32) {
-        assert c as i32 == 0xE000;
-    } else {
-        panic("expected Some for U+E000");
-    }
-    if let Some(c) = char::from_u32(0x10FFFF as u32) {
-        assert c as i32 == 0x10FFFF;
-    } else {
-        panic("expected Some for U+10FFFF");
-    }
+    assert char::try_from(0 as u32) matches { Ok('\u{0}') };
+    assert char::try_from(0xD7FF as u32) matches { Ok('\u{D7FF}') };
+    assert char::try_from(0xE000 as u32) matches { Ok('\u{E000}') };
+    assert char::try_from(0x10FFFF as u32) matches { Ok('\u{10FFFF}') };
+}
 
-    assert char::from_u32_unchecked(65 as u32) == 'A';
-    assert char::from_u32_unchecked(0x1F600 as u32) as i32 == 0x1F600;
+test "char::from_u32 takes a scalar value" {
+    assert char::from_u32(65 as u32) == 'A';
+    assert char::from_i32(65) == 'A';
+    assert unchecked char::from_u32(0x1F600 as u32) as i32 == 0x1F600;
+}
+
+#[expect_trap]
+test "char::from_u32 on a surrogate" {
+    let _ = char::from_u32(builtin::black_box(0xD800 as u32));
+}
+
+#[expect_trap]
+test "char::from_i32 on a negative value" {
+    let _ = char::from_i32(builtin::black_box(-1));
 }
 
 test "u8 as char is always a scalar" {

@@ -2693,8 +2693,9 @@ fn gen_lexer_alt_seq<S: AsStrSlice>(
     fail_action: S,
     ea: bool,
     replay: bool,
-) {
-    assert !replay || !ea, "the replay pass never re-evaluates a predicate the selection pass already answered";
+)
+    contract !replay || !ea, "the replay pass never re-evaluates a predicate the selection pass already answered"
+{
     for let mut i = from; i < plan.steps.len(); i += 1 {
         // Every `before_index == i` predicate; the trailing one is post-loop.
         // Placed here rather than in the caller so a single-alt inlined group or
@@ -4521,7 +4522,7 @@ fn keyword_accepts(kw: &KeywordInfo, pos: i32) -> List<char> {
 }
 
 fn keyword_char_at(kw: &KeywordInfo, pos: i32) -> char {
-    return char::from_u32_unchecked(kw.text.get_byte_unchecked(pos) as u32);
+    return unchecked kw.text.byte_at(pos) as char;
 }
 
 fn keyword_char_access(pos: i32) -> String {

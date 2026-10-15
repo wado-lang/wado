@@ -13,28 +13,28 @@ test "push_mode / pop_mode from actions switch the lexer mode" {
     // "ab" -> W, '<' pushes INNER, "12" -> N (digits only lex in INNER),
     // '>' pops, "cd" -> W again.
     let r = m::parse("ab<12>cd");
-    assert r.ok(), `clean parse of 'ab<12>cd': ${r.diagnostics.len()} diagnostics`;
-    assert r.output == "w<n>w", `output: '${r.output}'`;
+    assert r.ok(), "clean parse of 'ab<12>cd'";
+    assert r.output == "w<n>w";
 }
 
 test "$mode reads the mode the token is matched in, and assigns the switch" {
     // The guard only holds if the read answers the current mode; the assignment
     // is what puts the lexer in INNER, where the digits lex as `N`.
     let r = m::parse("m12");
-    assert r.ok(), `clean parse of 'm12': ${r.diagnostics.len()} diagnostics`;
-    assert r.output == "mn", `output: '${r.output}'`;
+    assert r.ok(), "clean parse of 'm12'";
+    assert r.output == "mn";
 }
 
 test "$mode is seeded per token, not carried from the one before" {
     // `>` is matched in INNER and pops, so `m` is matched in the default mode. A
     // read that kept INNER from the token before would leave the guard false.
     let r = m::parse("<1>m12");
-    assert r.ok(), `clean parse of '<1>m12': ${r.diagnostics.len()} diagnostics`;
-    assert r.output == "<n>mn", `output: '${r.output}'`;
+    assert r.ok(), "clean parse of '<1>m12'";
+    assert r.output == "<n>mn";
 }
 
 test "a mode grammar with no mode switch round-trips in the default mode" {
     let r = m::parse("ab cd");
     assert r.ok(), "two default-mode words";
-    assert r.output == "ww", `output: '${r.output}'`;
+    assert r.output == "ww";
 }

@@ -1216,20 +1216,20 @@ fn collect_aliased_node(body: &Body, node: NodeRef, type_table: &TypeTable, out:
                     }
                 }
             }
-            // Locals stored as field values of a fresh aggregate become
-            // reachable through that aggregate; future reads through the
-            // aggregate (including via captured-closure access or stored
-            // references) may modify them. Mark aliased.
+            // A local holding a reference, stored as a field of a fresh
+            // aggregate, shares its pointee with that aggregate, through which
+            // later code (a captured closure, a stored reference) may modify
+            // it. One holding none is copied in.
             ExprKind::StructLiteral { fields, .. } => {
                 for field in fields {
-                    if let Some(index) = field.value.as_expr().and_then(local) {
+                    if let Some(index) = field.value.as_expr().and_then(shared_local) {
                         out.insert(index);
                     }
                 }
             }
             ExprKind::TupleLiteral { elements } | ExprKind::ArrayLiteral { elements } => {
                 for &elem in elements {
-                    if let Some(index) = elem.as_expr().and_then(local) {
+                    if let Some(index) = elem.as_expr().and_then(shared_local) {
                         out.insert(index);
                     }
                 }
@@ -1237,7 +1237,7 @@ fn collect_aliased_node(body: &Body, node: NodeRef, type_table: &TypeTable, out:
             ExprKind::VariantConstruct {
                 payload: Some(p), ..
             } => {
-                if let Some(index) = p.as_expr().and_then(local) {
+                if let Some(index) = p.as_expr().and_then(shared_local) {
                     out.insert(index);
                 }
             }

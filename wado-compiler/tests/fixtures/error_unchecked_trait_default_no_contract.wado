@@ -1,0 +1,21 @@
+// A call on a concrete type that reaches a trait's default body names the
+// trait's declaration, so the trait's clauses are the ones `unchecked` vouches
+// for, and this trait declares none.
+trait Get with () {
+    fn get(&self, i: i32) -> i32 {
+        return i;
+    }
+}
+
+struct Small { value: i32 }
+
+impl Get for Small {}
+
+export fn run() {
+    let _ = unchecked Small { value: 1 }.get(2);
+}
+
+__DATA__
+{
+  "compile_error": ":15:13: analysis error: this trait method declares no `contract` clause, and `unchecked` on a call to it vouches for the trait's alone"
+}

@@ -23,9 +23,10 @@ use crate::compiler_item::CompilerItems;
 use crate::defs::{DefId, DefKind, DefTable};
 use crate::module_source::{CmNamespace, ModuleSource};
 use crate::name::{
-    FqTraitName, FqTypeName, INTERNAL_PREFIX, LocalMethodName, NEVER_TYPE_NAME, Receiver, RefKind,
-    TEMPLATE_SHAPE_PREFIX, TypeHead, TypeNameInfo, UNIT_TYPE_NAME, format_type_name,
-    mangle_builtin_array_type, mangle_generic_name, mangle_local_item_name, mangle_tuple_type,
+    DeclaredHead, FqTraitName, FqTypeName, INTERNAL_PREFIX, LocalMethodName, NEVER_TYPE_NAME,
+    Receiver, RefKind, TEMPLATE_SHAPE_PREFIX, TypeHead, TypeNameInfo, UNIT_TYPE_NAME,
+    format_type_name, mangle_builtin_array_type, mangle_generic_name, mangle_local_item_name,
+    mangle_tuple_type, unchecked_twin_name,
 };
 use crate::primitive::PrimitiveType;
 use crate::symbol_notation::render;
@@ -48,14 +49,16 @@ pub enum TypeParamScope {
     Function,
 }
 
-/// A resolved effect reference — a bare string in the AST, carrying its defining
-/// module here. Identity is `(module_source, name)` for `Concrete` and `name`
-/// alone for `Param`. The elaborator canonicalises the module, so `with Stdout`
-/// imported from `wasi:cli` and from `core:cli` compare equal.
+/// A resolved effect reference — a bare string in the AST. `Concrete` is
+/// identified by its declaration, so `with Stdout` imported from `wasi:cli` and
+/// from `core:cli` compare equal; `Param` by its name alone.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum EffectRef {
-    /// A concrete effect resolved to a module source (e.g., `Stdout` from `wasi:cli`)
-    Concrete {
+    /// The effect (or resource) a name resolved to.
+    Concrete(DeclaredHead),
+    /// A `with`-clause name written in `module_source` that reaches no effect,
+    /// already reported: there is no declaration to identify it by.
+    Undeclared {
         name: String,
         module_source: ModuleSource,
     },
@@ -70,23 +73,28 @@ pub enum EffectRef {
 impl EffectRef {
     pub fn name(&self) -> &str {
         match self {
-            EffectRef::Concrete { name, .. }
+            EffectRef::Concrete(head) => head.name(),
+            EffectRef::Undeclared { name, .. }
             | EffectRef::Param { name }
             | EffectRef::Var { name, .. } => name,
+        }
+    }
+
+    /// The module a concrete or undeclared effect is named in.
+    pub fn module(&self) -> Option<&ModuleSource> {
+        match self {
+            EffectRef::Concrete(head) => Some(head.module()),
+            EffectRef::Undeclared { module_source, .. } => Some(module_source),
+            EffectRef::Param { .. } | EffectRef::Var { .. } => None,
         }
     }
 
     /// The name a message prints: in `MODULE#SYMBOL` notation when `qualified`,
     /// for a concrete effect that another of its name would otherwise print as.
     pub fn display_name(&self, qualified: bool) -> String {
-        match self {
-            EffectRef::Concrete {
-                name,
-                module_source,
-            } if qualified => render(&module_source.to_string(), name),
-            EffectRef::Concrete { name, .. }
-            | EffectRef::Param { name }
-            | EffectRef::Var { name, .. } => name.clone(),
+        match self.module() {
+            Some(module) if qualified => render(&module.to_string(), self.name()),
+            _ => self.name().to_string(),
         }
     }
 
@@ -99,10 +107,9 @@ impl EffectRef {
         matches!(self, EffectRef::Var { .. })
     }
 
-    /// A `with`-clause name written in `module` that reaches no effect; it
-    /// stands as a concrete effect of its spelling, already reported.
+    /// A `with`-clause name written in `module` that reaches no effect.
     pub fn unresolved(name: &str, module: &ModuleSource) -> Self {
-        EffectRef::Concrete {
+        EffectRef::Undeclared {
             name: name.to_string(),
             module_source: module.clone(),
         }
@@ -1392,17 +1399,17 @@ impl TypeTable {
             .unwrap_or_else(|| panic!("TypeId {id:?} not found in TypeTable"))
     }
 
-    /// Where [`Self::redefine_to`] pointed `id`, when `id` is a borrow it
+    /// Where [`Self::redefine_to`] pointed `id`, when `id` is a reference it
     /// redefined. Erasure's redirect is not one, and the spelling tells them
-    /// apart: only a borrow is ever redefined.
+    /// apart: only a reference is ever redefined.
     fn box_redefinition(&self, id: TypeId) -> Option<TypeId> {
         let target = self.redirects.get(id).copied()?;
-        self.spelled_borrow(id).map(|_| target)
+        self.spelled_ref(id).map(|_| target)
     }
 
     /// [`Self::get`] before the newtype / flags erasure, which runs once
     /// monomorphize is done. A boxing redefinition is no part of that, so a
-    /// redefined borrow reads as the `Box<T>` here too.
+    /// redefined reference reads as the `Box<T>` here too.
     ///
     /// Erasure is a representation choice — a `flags` value is a `u32` at
     /// runtime — but `impl Trait for Perms` is still keyed under `Perms`. A
@@ -1439,6 +1446,12 @@ impl TypeTable {
                 .and_then(|ty| self.intern_map.get(ty).copied())
                 .unwrap_or(resolved),
         )
+    }
+
+    /// [`Self::type_key`] of each id, in order.
+    #[must_use]
+    pub fn type_keys(&self, ids: &[TypeId]) -> Vec<TypeKey> {
+        ids.iter().map(|&id| self.type_key(id)).collect()
     }
 
     /// `ty` without its references and newtypes: the object a handle names.
@@ -2725,9 +2738,9 @@ impl TypeTable {
         self.struct_name_index.clear();
         self.decl_name_index.clear();
         for (id, ty) in self.types.iter() {
-            // A redefined borrow keeps its spelling in the slot alone.
+            // A redefined reference keeps its spelling in the slot alone.
             // Re-interning it would hand a later `intern(&T)` an id that no
-            // longer resolves as a borrow.
+            // longer resolves as a reference.
             if self.box_redefinition(id).is_none() {
                 self.intern_map.insert(ty.clone(), id);
             }
@@ -3578,7 +3591,7 @@ impl TypeTable {
     /// Redefine `id` to resolve as `target`, retiring its own spelling so a
     /// later [`Self::intern`] of that spelling mints a fresh id instead.
     ///
-    /// The boxing pass's `&T` → `Box<T>`. The slot keeps the borrow, which is
+    /// The boxing pass's `&T` → `Box<T>`. The slot keeps the reference, which is
     /// how [`Self::is_mut_box`] still tells `&T` from `&mut T`.
     pub fn redefine_to(&mut self, id: TypeId, target: TypeId) {
         assert!(
@@ -3592,7 +3605,7 @@ impl TypeTable {
             .unwrap_or_else(|| panic!("TypeId {id:?} not found in TypeTable"));
         assert!(
             matches!(spelling, ResolvedType::Ref(_) | ResolvedType::MutRef(_)),
-            "only a borrow is redefined: `box_redefinition` tells one by that shape"
+            "only a reference is redefined: `box_redefinition` tells one by that shape"
         );
         if self.intern_map.get(&spelling) == Some(&id) {
             self.intern_map.shift_remove(&spelling);
@@ -3711,10 +3724,10 @@ impl TypeTable {
     /// Whether `type_id` may name storage rather than hold a value: a `&T` /
     /// `&mut T`, or the `Box<T>` the boxing pass redefines one into. Both
     /// spellings answer yes, since after `prepare_types` no signature test
-    /// tells a boxed borrow from a by-value parameter of the same shape.
+    /// tells a boxed reference from a by-value parameter of the same shape.
     ///
     /// [`RefKind::from_resolved`] alone sees only what is still spelled as a
-    /// borrow, so a caller reasoning about values asks this instead.
+    /// reference, so a caller reasoning about values asks this instead.
     pub fn is_reference_shaped(&self, type_id: TypeId) -> bool {
         RefKind::from_resolved(self.get(type_id)).is_some()
             || self.box_payload_of(type_id).is_some()
@@ -3726,12 +3739,12 @@ impl TypeTable {
     /// `false`, so an unclassified wrapper stays writable.
     pub fn is_mut_box(&self, wrapper: TypeId) -> bool {
         self.box_payload_types.get(wrapper).is_some()
-            && !matches!(self.spelled_borrow(wrapper), Some((_, RefKind::Shared)))
+            && !matches!(self.spelled_ref(wrapper), Some((_, RefKind::Shared)))
     }
 
-    /// How `id`'s own slot spells a borrow, or `None` when it is not one. The
-    /// sole reader of a redefined borrow; every other view answers `Box<T>`.
-    fn spelled_borrow(&self, id: TypeId) -> Option<(TypeId, RefKind)> {
+    /// How `id`'s own slot spells a reference, or `None` when it is not one.
+    /// The sole reader of a redefined reference; every other view answers `Box<T>`.
+    fn spelled_ref(&self, id: TypeId) -> Option<(TypeId, RefKind)> {
         match *self.types.get(id)? {
             ResolvedType::Ref(payload) => Some((payload, RefKind::Shared)),
             ResolvedType::MutRef(payload) => Some((payload, RefKind::Mut)),
@@ -6073,10 +6086,10 @@ impl TypeTable {
     }
 
     /// [`Self::type_name`] as the type read before `boxing::prepare_types`
-    /// redefined a borrow into `Box<T>`: what the source wrote, `&i32`.
+    /// redefined a reference into `Box<T>`: what the source wrote, `&i32`.
     #[must_use]
     pub fn type_name_unboxed(&self, id: TypeId) -> String {
-        match self.spelled_borrow(id) {
+        match self.spelled_ref(id) {
             Some((payload, RefKind::Shared)) => format!("&{}", self.type_name_unboxed(payload)),
             Some((payload, RefKind::Mut)) => format!("&mut {}", self.type_name_unboxed(payload)),
             None => self.type_name(id),
@@ -6401,7 +6414,7 @@ impl TypeTable {
     }
 
     /// [`Self::mangle_type_arg_rowless`] as the type read *before*
-    /// `boxing::prepare_types` redefined every borrowed `TypeId` into `Box<T>`,
+    /// `boxing::prepare_types` redefined every reference `TypeId` into `Box<T>`,
     /// so a post-boxing call site names the bridge pre-boxing synthesis minted.
     /// A bridge is keyed by a type its struct takes as an argument, which no
     /// row tells apart.
@@ -6470,7 +6483,7 @@ impl TypeTable {
         match self.get_unerased(id) {
             ResolvedType::Ref(_) | ResolvedType::MutRef(_) => {
                 Receiver::Ref(RefKind::from_resolved(self.get(id)).expect(
-                    "a borrow unerased is a borrow erased: `get_unerased` resolves the \
+                    "a reference unerased is a reference erased: `get_unerased` resolves the \
                      box redefinition, the one rewrite that makes the two views differ",
                 ))
             }
@@ -6578,8 +6591,8 @@ impl TypeTable {
     }
 
     /// [`Self::fq_type_name`] as the type read *before* `boxing::prepare_types`
-    /// redefined every borrowed `TypeId` into `Box<T>`. Every shape recurses,
-    /// so a borrow nested anywhere in the spelling comes back as one.
+    /// redefined every reference `TypeId` into `Box<T>`. Every shape recurses,
+    /// so a reference nested anywhere in the spelling comes back as one.
     pub fn fq_type_name_unboxed(&self, id: TypeId) -> FqTypeName {
         self.fq_type_name_spelled(id, true)
     }
@@ -6609,10 +6622,10 @@ impl TypeTable {
             RowSpelling::Everywhere => RowSpelling::Everywhere,
             RowSpelling::OutsideArgs | RowSpelling::Nowhere => RowSpelling::Nowhere,
         };
-        // Only a borrow is read off the slot's own type. Every other shape
+        // Only a reference is read off the slot's own type. Every other shape
         // keeps the erased view below, where ids that erase together must
         // answer one name.
-        if unboxed && let Some((payload, kind)) = self.spelled_borrow(id) {
+        if unboxed && let Some((payload, kind)) = self.spelled_ref(id) {
             return self
                 .fq_type_name_spelled_in(payload, unboxed, rows)
                 .with_reference(kind);
@@ -6858,6 +6871,18 @@ impl FunctionRef {
             monomorph_info: func.monomorph_info.clone(),
             method_info: func.method_info.clone(),
         }
+    }
+
+    /// Point this call at its callee's `unchecked` twin.
+    pub fn retarget_to_unchecked_twin(&mut self) {
+        self.name = unchecked_twin_name(&self.name);
+        if let Some(info) = &mut self.method_info {
+            info.mark_unchecked();
+        }
+        if let Some(mono) = &mut self.monomorph_info {
+            mono.generic_name = unchecked_twin_name(&mono.generic_name);
+        }
+        self.template = self.template.as_ref().map(TemplateId::unchecked_twin);
     }
 
     /// Get the module path (for backwards compatibility)
@@ -7290,20 +7315,16 @@ pub enum TirExprKind {
 /// One `Effect => handler` binding inside a `with ... do` block.
 #[derive(Debug, Clone)]
 pub struct TirHandlerBinding {
-    /// The effect being handled. The elaborator always fills this in with a
-    /// concrete effect reference — the bundled `with &mut h do` form is
-    /// expanded to one binding per implemented effect, each carrying a
-    /// concrete `EffectRef`. `None` only appears transiently when an
-    /// upstream diagnostic prevented resolution.
-    pub effect: Option<EffectRef>,
+    /// The effect (or resource) being handled. The bundled `with &mut h do`
+    /// form is expanded to one binding per implemented effect.
+    pub effect: DeclaredHead,
     /// Concrete `TypeId`s of the trait / resource type arguments at this
     /// installation site (e.g. `[u8]` for `with Stream<u8> => &mut s do`,
     /// or as derived from the impl block in a bundled `with &mut s do`
     /// where `MockCM` implements `Stream<u8>`). Empty for non-generic
     /// effects / resources. The dispatch synthesis projects this together
-    /// with `effect.module_source` and `effect.name` into the
-    /// `InstantiationKey` it uses to look up the per-monomorphisation
-    /// dispatch infrastructure.
+    /// with `effect` into the `InstantiationKey` it uses to look up the
+    /// per-monomorphisation dispatch infrastructure.
     pub trait_type_args: Vec<TypeId>,
     /// Handler value expression (e.g., `&mut mock`).
     pub handler: TirExpr,
@@ -8061,7 +8082,7 @@ impl Leaves<'_> {
         for effect in effects {
             let replaced = match effect {
                 EffectRef::Param { name } | EffectRef::Var { name, .. } => self.rows.get(name),
-                EffectRef::Concrete { .. } => None,
+                EffectRef::Concrete(_) | EffectRef::Undeclared { .. } => None,
             };
             for e in replaced.map_or(std::slice::from_ref(effect), Vec::as_slice) {
                 if !out.contains(e) {
@@ -9204,7 +9225,7 @@ pub struct BuiltinDeclaration {
     pub returns: Option<ReturnConvention>,
     /// What the call keeps beyond it, as the storage implies.
     pub retains: Vec<RetainSpec<usize>>,
-    /// Positions the declaration takes through a reference, which lend it the
+    /// Positions the declaration takes through a reference, which hand it the
     /// argument's storage.
     pub reference_params: IndexSet<usize>,
     /// Positions the declaration takes by `&mut`, the only ones it can write
@@ -9827,7 +9848,7 @@ pub struct TirParam {
     pub type_id: TypeId,
     pub local_index: u32,
     pub is_mut: bool,
-    /// The parameter is a `&mut T` borrow (captured here before the boxing
+    /// The parameter is a `&mut T` (captured here before the boxing
     /// plan rewrites `&mut T` and `&T` to the same `Box<T>` type, erasing the
     /// distinction). A `&T` cannot be written through, so only a `&mut`
     /// parameter can mutate the caller's argument storage.
@@ -10089,7 +10110,8 @@ pub struct TirTest {
 
 #[derive(Debug, Clone)]
 pub struct TirEffect {
-    pub name: String,
+    /// The declaration this was reified from.
+    pub head: DeclaredHead,
     pub visibility: Visibility,
     pub operations: Vec<TirEffectOp>,
     pub span: Span,
@@ -10121,8 +10143,7 @@ pub struct TirEffectOp {
 #[derive(Debug, Clone)]
 pub struct TirResource {
     /// The declaration this was reified from.
-    pub def: DefId,
-    pub name: String,
+    pub head: DeclaredHead,
     pub visibility: Visibility,
     pub operations: Vec<TirEffectOp>,
     pub is_generic: bool,
@@ -10169,10 +10190,10 @@ pub enum SynthTrait {
 /// impl block.
 #[derive(Debug, Clone)]
 pub struct TirImpl {
-    /// Canonical `(declaring_module, base_trait_name)`; `None` for an inherent
-    /// impl. Matches `LocalMethodName::{base_trait_module, base_trait_name}`,
-    /// so a block and its methods agree on which declaration they target.
-    pub trait_canonical: Option<(ModuleSource, String)>,
+    /// The trait this block implements; `None` for an inherent impl. Matches
+    /// `LocalMethodName::base_trait_head`, so a block and its methods agree on
+    /// which declaration they target.
+    pub trait_canonical: Option<DeclaredHead>,
     /// Trait / resource type arguments at the impl site (`impl Stream<u8>` →
     /// `[u8]`). Matches `LocalMethodName::trait_type_args`.
     pub trait_type_args: Vec<TypeId>,
@@ -10479,8 +10500,8 @@ mod tests {
     }
 
     /// A redefinition reaches every view of the type: only `is_mut_box` reads
-    /// the borrow left in the slot. The spelling also leaves `intern`, so a
-    /// later ask for it mints a live borrow.
+    /// the reference left in the slot. The spelling also leaves `intern`, so a
+    /// later ask for it mints a live reference.
     #[test]
     fn a_redefinition_reaches_every_view_of_the_type() {
         let mut table = TypeTable::new();
@@ -10498,10 +10519,10 @@ mod tests {
         assert_matches!(table.get(minted), ResolvedType::MutRef(TypeTable::I32));
     }
 
-    /// `&T` and `&mut T` share one `Box<T>`, so the borrow left in the slot is
-    /// the only thing that still tells a writable box from a shared one.
+    /// `&T` and `&mut T` share one `Box<T>`, so the reference left in the slot
+    /// is the only thing that still tells a writable box from a shared one.
     #[test]
-    fn a_redefined_borrow_still_says_whether_it_was_mut() {
+    fn a_redefined_ref_still_says_whether_it_was_mut() {
         let mut table = TypeTable::new();
         let shared = table.intern(ResolvedType::Ref(TypeTable::I32));
         let mutable = table.intern(ResolvedType::MutRef(TypeTable::I32));
@@ -10515,7 +10536,7 @@ mod tests {
     }
 
     /// `retain` rebuilds the intern map from the surviving slots, and a
-    /// retired borrow is still spelled as one there.
+    /// retired reference is still spelled as one there.
     #[test]
     fn retain_leaves_a_retired_spelling_retired() {
         let mut table = TypeTable::new();

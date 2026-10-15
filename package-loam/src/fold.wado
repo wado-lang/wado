@@ -572,8 +572,9 @@ fn as_int(elements: &Elements, i: i32) -> i64 {
 /// count them: the last may fall short, and a span running against the step
 /// holds none. Wide, since the span and the count of any two `i64` do not fit
 /// one.
-fn steps_over(from: i64, to: i64, step: i64) -> i128 {
-    assert step != 0;
+fn steps_over(from: i64, to: i64, step: i64) -> i128
+    contract step != 0
+{
     let span = to as i128 - from as i128;
     return i128::max(span.div_ceil(step as i128), 0);
 }

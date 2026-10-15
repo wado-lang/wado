@@ -80,7 +80,7 @@ fn collect_candidates(
             if param.is_mut || param.is_mut_ref {
                 continue;
             }
-            let (aggregate, borrowed) = match type_table.get(param.type_id) {
+            let (aggregate, through_ref) = match type_table.get(param.type_id) {
                 ResolvedType::Ref(referent) => (*referent, true),
                 _ => (param.type_id, false),
             };
@@ -91,7 +91,7 @@ fn collect_candidates(
             };
             // A by-value argument is often a literal or a multi-value result,
             // which hands over every field, so it takes them all.
-            if !borrowed && !splittable(&all_types, type_table) {
+            if !through_ref && !splittable(&all_types, type_table) {
                 continue;
             }
             let scope = ParamScope {
@@ -104,19 +104,19 @@ fn collect_candidates(
             if reads.whole {
                 continue;
             }
-            // A borrow's fields are loaded at every call, so it takes those the
+            // A reference's fields are loaded at every call, so it takes those the
             // callee reads and no other, and only where it reads each on every
             // path: one read past an early exit costs a load where it is not.
-            if borrowed && !reads.fields.is_subset(&scope.read_on_entry()) {
+            if through_ref && !reads.fields.is_subset(&scope.read_on_entry()) {
                 continue;
             }
             let (field_types, field_names): (Vec<TypeId>, Vec<String>) = all_types
                 .into_iter()
                 .zip(&all_names)
-                .filter(|(_, name)| !borrowed || reads.fields.contains(name.as_str()))
+                .filter(|(_, name)| !through_ref || reads.fields.contains(name.as_str()))
                 .map(|(ty, name)| (ty, name.clone()))
                 .unzip();
-            if borrowed && !splittable(&field_types, type_table) {
+            if through_ref && !splittable(&field_types, type_table) {
                 continue;
             }
             out.insert(
@@ -125,9 +125,9 @@ fn collect_candidates(
                     abi: ParamAbi::MultiValue {
                         field_types,
                         field_names,
-                        borrowed,
+                        through_ref,
                     },
-                    referent: borrowed.then_some(aggregate),
+                    referent: through_ref.then_some(aggregate),
                 },
             );
         }
@@ -191,30 +191,17 @@ impl<'a> ParamScope<'_, 'a> {
     }
 
     /// Whether the `if` at `s` leaves one way on: it has no `else`, and its
-    /// branch, jumping nowhere on the way, ends in a call typed `!` (a bounds
-    /// check's panic), which traps or runs forever, so whatever it reads goes
-    /// unseen by what follows.
+    /// branch ends unseen ([`Body::ends_unseen`]).
     fn only_one_way_on(&self, s: StmtId) -> bool {
-        let body = self.body;
         let StmtKind::If {
             then_block,
             else_block: None,
             ..
-        } = body.stmts[s].kind
+        } = self.body.stmts[s].kind
         else {
             return false;
         };
-        let ends_in_never = body.blocks[then_block].stmts.last().is_some_and(|&last| {
-            matches!(&body.stmts[last].kind, StmtKind::Expr(op)
-                if op.as_expr().is_some_and(|e| self.type_table.is_never(body.exprs[e].type_id)))
-        });
-        let jumps = body
-            .find_in_nodes_under(NodeRef::Block(then_block), |node| match node {
-                NodeRef::Stmt(inner) => body.terminates(inner).then_some(()),
-                NodeRef::Expr(_) | NodeRef::Block(_) | NodeRef::Pat(_) => None,
-            })
-            .is_some();
-        ends_in_never && !jumps
+        self.body.ends_unseen(then_block, self.type_table)
     }
 
     /// Every read of the parameter anywhere in the body.

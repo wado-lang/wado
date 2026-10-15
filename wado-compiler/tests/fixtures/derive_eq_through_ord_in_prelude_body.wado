@@ -1,0 +1,23 @@
+// `Ord` is derived for `P` where the range literal needs it, and `Eq` comes
+// with it as its supertrait. `RangeInclusive::next`, a prelude body bound by
+// `T: Ord`, compares with `==`, so the derived `Eq` must be there for it even
+// when nothing in this module compares two `P`s.
+
+struct P {
+    n: i32,
+}
+
+impl Step for P {
+    fn next_step(&self) -> Option<P> {
+        return null;
+    }
+}
+
+export fn run() {
+    let mut r = P { n: 0 }..=P { n: 1 };
+    assert r.next().unwrap().n == 0;
+    assert r.next() matches { None };
+}
+
+__DATA__
+{}

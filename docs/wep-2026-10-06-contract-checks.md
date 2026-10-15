@@ -38,47 +38,33 @@ them off. The default depends on the world and the optimization level:
 The test world defaults on whatever the level, because finding bugs is what it
 is for. It already pays for that with the `debug` allocator.
 
-### `builtin::contract_checks()`
+### No program writes a removable check
 
-`builtin::contract_checks()` answers whether the build checks contracts. A
-function checks its contract with it, and this is the only shape it takes: the
-whole condition of an `if` statement with no `else`. A call anywhere else is a
-compile error.
-
-```text
-if builtin::contract_checks() {
-    assert 0 <= index < self.len(), "index out of bounds";
-}
-```
-
-It is the mechanism, not a stopgap. A contract syntax, once one is designed,
-lowers to it.
-
-Before NIR, the compiler keeps such an `if` where checks are on and deletes it
-outright where they are off, so a disabled check costs nothing at any
-optimization level. Folding the condition to `false` was not enough: the
-inliner sized the `if false` body before any pass pruned it, and
-`Formatter::prepare_int_write` stopped being inlined at `-O2`. For the same
-reason each site writes its check out rather than calling a shared helper: the
-call to a helper a disabled check left empty would remain.
-
-Coverage does not count a check as a branch, because its condition is a build
-constant. Where the build keeps the check, its body is part of the enclosing
-region. Where the build deletes it, under `-f no-contract-checks`, it holds no
-line.
-
-It is `pub`, since contracts are open to every program and this is what they
-lower to. Written by hand, it is a removable `assert`. Every language that
+The flag reaches only the code the compiler writes for a marked call. No
+program can ask whether the build checks contracts. A check a program could
+make conditional on the flag would be a removable `assert`. Every language that
 offers one reports it used for checks that must hold in production, and
 removed with them (`assert` under Python's `-O`, Rust's `debug_assert!` in
-RUSTSEC-2025-0137). The `contract` syntax below is the form that keeps a check
-unless the call is marked.
+RUSTSEC-2025-0137). The `contract` syntax below is the only way to make a check
+removable, and only a marker at the call removes it.
+
+The first implementation offered `builtin::contract_checks()` as that
+question, and the standard library's `_unchecked` functions wrapped their
+checks in it. It was removed once the `contract` syntax could state every one
+of those checks.
+
+Before NIR, the compiler keeps the checks of a marked call where checks are on
+and deletes them outright where they are off, so a disabled check costs
+nothing at any optimization level. Folding a condition to `false` was not
+enough: the inliner sized the `if false` body before any pass pruned it, and
+`Formatter::prepare_int_write` stopped being inlined at `-O2`.
 
 ### A skipped check is not an assumption
 
 A disabled check is not evaluated, and the compiler does not assume its
 condition holds. Assuming it would turn a violation the specification calls
-unspecified, such as `get_unchecked` out of range, into unconstrained behavior.
+unspecified, such as `unchecked xs.at(i)` out of range, into unconstrained
+behavior.
 Zig's `std.debug.assert` and Swift's `-Ounchecked` do that, and their users
 report the damage as worse than removing the check.
 
@@ -94,9 +80,6 @@ Each `_unchecked` function checks the clauses of its contract that cost
 constant time: an index in range, an end on a character boundary, a value that
 is a Unicode scalar, a byte below `0x80`. A function that forwards to another
 `_unchecked` function relies on that one's check.
-
-`Sequence::get_unchecked` on an `Array` checks nothing: the array access
-already traps out of range.
 
 ### The caller decides whether a check can be removed
 
@@ -186,7 +169,7 @@ and a function may have any number of them:
 
 ```text
 pub fn slice(&self, start: i32, end: i32) -> StrSlice
-    contract 0 <= start <= end <= self.len(), "byte range out of bounds"
+    contract 0 <= start <= end <= self.len()
     contract self.is_char_boundary(start) && self.is_char_boundary(end)
 {
     …
@@ -220,9 +203,11 @@ let x = unchecked xs[i];    // an index read with no range check
 ```
 
 `xs[i]` is a call to an indexing trait's method, so `unchecked xs[i]` is an
-index read whose range check the caller vouches for. An index assignment takes
-no marker. `unchecked xs[i] = v` would put the operator on an assignment's
-target, outside what a unary operator is, and is a compile error.
+index read whose range check the caller vouches for. It is still the place
+`xs[i]` names, so `&mut (unchecked xs[i])` references through `IndexRefMut` where
+`xs` is mutable and is an error where it is not. An index assignment takes no
+marker: `unchecked xs[i] = v` and `unchecked xs[i] += v` are compile errors,
+whatever contract `IndexAssign` declares.
 
 `contract` is a contextual keyword: no identifier can follow a signature, so
 code that names something `contract` keeps working. `unchecked` is reserved.
@@ -247,46 +232,77 @@ only where Rust has a method of that name, such as `get_unchecked` or
 `from_utf8_unchecked`, since that is the name a reader from Rust reaches for.
 Any other public `_unchecked` name is removed.
 
+`Sequence::get_unchecked` has no checked twin to mark: a generic body over
+`Sequence` has no index operator. It becomes `Sequence::at`, which returns the
+element under `contract 0 <= index < self.len()`, written on the trait. A
+concrete `List`, `Slice` or `ByteList` reads with `unchecked xs[i]`, so
+`ByteList::get_byte_unchecked`, a name Rust lacks, is removed. `at` is a
+prelude name, so a program's own trait method `at` on one of these types makes
+a call ambiguous until the call names the trait. That cost was accepted for the
+short name.
+
+No name carries `_unchecked`, so each operation has one name per shape:
+
+| Shape                                | Name                 | Example                          |
+| ------------------------------------ | -------------------- | -------------------------------- |
+| Returns the value, under a contract  | the plain name       | `from_utf8`, `byte_at`, `xs[i]`  |
+| Returns `Option` or `Result` instead | `try_`, or `get`     | `try_from_utf8`, `xs.get(i)`     |
+| Skips the contract's check           | `unchecked` the call | `unchecked String::from_utf8(b)` |
+
+Where the plain name returned an `Option`, the contract form takes it over:
+`char::from_u32` returns a `char`, and the `Option` moves to
+`char::try_from`. A reader from Rust who writes
+`if let Some(c) = char::from_u32(v)` gets a type error rather than a different
+behavior.
+`String::byte_at` is a method of its own rather than `as_bytes()[i]`, which a
+marked call would spell `unchecked s.as_bytes()[i]` at every byte scan.
+
 `unchecked` means that the caller does not ask for the check in a shipping
 build. A build under `-f contract-checks` still checks a marked call. The word
 was kept despite that because it continues the `_unchecked` names it replaces.
 
-### A trait method's contract belongs to the trait
+### Who states a trait method's contract
 
 A trait method's clauses are written on the trait's declaration, a signature
 without a body included, and bind every impl, as its default arguments do. An
-impl writes none: it neither restates them nor adds one. Trait dispatch is
-static, so a call through a bound reaches a known impl, and each impl checks the
-trait's clauses at its head.
+impl of such a method writes none: it neither restates them nor adds one.
+Trait dispatch is static, so a call through a bound reaches a known impl, and
+each impl checks the trait's clauses at its head.
 
-An impl that added a clause would make `unchecked` remove a check its caller
-never saw: generic code marks a call vouching for the trait's clauses, not for
-those of whichever impl it reaches. Removing a check takes a marker at the
-call, and that marker means only what the call site can read.
+An impl that added a clause to the trait's would make `unchecked` remove a
+check its caller never saw: generic code marks a call vouching for the trait's
+clauses, not for those of whichever impl it reaches. Removing a check takes a
+marker at the call, and that marker means only what the call site can read.
 
-Where what an impl accepts differs between impls, the trait declares a
-predicate method and its clause calls it. The indexing traits are the case:
-a list takes an index in range, a range index takes ends in range, and a map
-takes a key it holds, so `len` would not do. Each declares `contains_index`,
-and `index_value` and its siblings require it:
+A trait method that declares no clause leaves its impls free to state their
+own. An unmarked call checks them however it reaches the impl, since static
+dispatch reaches the impl's body after monomorphization. `unchecked` vouches
+for them only where the call names the impl itself. Through a bound the
+caller reads the trait's declaration, which states nothing, so `unchecked`
+there is a compile error, for the reason above.
 
-```text
-trait IndexValue<I> {
-    type Output;
-    fn contains_index(&self, index: &I) -> bool;
-    fn index_value(&self, index: I) -> Self::Output
-        contract self.contains_index(&index), "index out of range";
-}
-```
+The indexing traits are the case. What an index must satisfy differs by
+container: a list takes an index in range, a range index takes any ends since
+it clamps them, and a map takes a key it holds. A trait clause would have to
+call a predicate each impl defines, such as `contains_index`, and that
+predicate is exactly the clause a caller cannot read: it says only "whatever
+this impl accepts". A map would also look the key up twice on a checked read,
+once for the predicate and once to read. So the indexing traits declare no
+clause. `List` states `contract index < self.len()` on its index methods,
+leaving a negative index to the array access's own trap, which keeps a guard
+that proves only the upper end enough to remove the check. `Slice` states
+`contract 0 <= index < self.len()`, since a negative index would read before
+its view. `Array` states none, since the Wasm array access traps on its
+own, and a map states none, since a missing key panics as it always did.
 
-An impl whose type cannot take every input its trait admits is a design error
-in that impl, not a contract to add.
+An impl whose type cannot take every input its trait admits, where the trait
+states a clause, is a design error in that impl, not a contract to add.
 
 ### A clause may cost as much as the function
 
 The first checks covered only the clauses that cost constant time, because a
 check written with `builtin::contract_checks()` ran in every checking build at
-every call. A clause is checked on two paths: an unmarked call, whose caller
+every call, marked or not. A clause is checked on two paths: an unmarked call, whose caller
 asked for the check, and a marked call in a build that checks contracts. A
 clause that costs the same order as the function's own work, such as
 validating the bytes a function copies, is therefore written and checked. It
@@ -337,8 +353,8 @@ API waits for a program outside the standard library that needs one.
    it appended could start inside a character.
 2. `contract` clauses and the `unchecked` operator. Done. A function with a
    contract is reified twice: itself, which always checks, and a twin named
-   with an `$unchecked` suffix that checks under `builtin::contract_checks()`.
-   A marked call reaches the twin. The parser puts each clause at the head of
+   with an `$unchecked` suffix whose checks the flag keeps or deletes before
+   NIR. A marked call reaches the twin. The parser puts each clause at the head of
    the body as an `assert` marked as a contract, so every pass over a body
    sees it, and the formatter prints it back as a clause.
 3. A trait method's contract: written on the trait, checked in every impl and
@@ -355,12 +371,28 @@ API waits for a program outside the standard library that needs one.
 5. An `interface` operation's contract: written on the operation, checked in
    its default body and in every handler of it, and held to the purity check.
    Until then the parser rejects one.
-6. The indexing traits declare `contains_index` and require it, so
-   `unchecked xs[i]` is an index read with no range check.
+6. An impl states its own clauses on a trait method that declares none, and
+   `List` and `Slice` state the range on their index methods, so
+   `unchecked xs[i]` is an index read with no range check. Done. The
+   operand's dispatch already names the impl method, so the marker reaches its
+   twin as it does for a call. `unchecked` through a bound whose trait method
+   declares no clause is a compile error.
 7. Migrate `core:*`'s `_unchecked` functions to contracts, keeping an
-   `#[unavailable]` declaration where Rust has a method of the same name. The
-   UTF-8 functions are done, in the shapes
-   [UTF-8 in the standard library](#utf-8-in-the-standard-library) gives them.
+   `#[unavailable]` declaration where Rust has a method of the same name.
+   - [x] The UTF-8 functions, in the shapes
+     [UTF-8 in the standard library](#utf-8-in-the-standard-library) gives
+     them.
+   - [x] The functions with a checked twin: `slice`, `substr_bytes`,
+     `truncate`, `insert`, `insert_str` and `remove` declare the contract,
+     and `push_str_range_unchecked` becomes `push_str` of a marked `slice`.
+   - [x] `builtin::contract_checks()` is removed. Each `_unchecked` function
+     that still has no checked twin forwards to a private function that
+     declares its contract.
+   - [x] The functions with no checked twin, or one returning an `Option`:
+     `String::push_ascii`, `char_at_byte`, `char::from_u32` and
+     `String::byte_at` take a contract, and the `_unchecked` names go.
+   - [x] `Sequence::get_unchecked` becomes `unchecked xs.at(i)`, and
+     `ByteList::get_byte_unchecked` becomes `unchecked xs[i]`.
 8. The generated WIT carries an `export fn`'s contract as a comment.
 
 ## Known gaps

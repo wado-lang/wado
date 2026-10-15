@@ -1,0 +1,19 @@
+// A marked subscript is the place the subscript names: it is taken `&mut`
+// and written through only where the subscript itself could be.
+use { println, Stdout } from "core:cli";
+
+struct P { x: i32 }
+
+export fn run() with Stdout {
+    let mut ps: List<P> = [P { x: 1 }, P { x: 2 }];
+    let s = &mut (unchecked ps[0]);
+    s.x = 9;
+    (unchecked ps[1]).x = 7;
+    println(`${ps[0].x} ${ps[1].x}`);
+    println(`${(unchecked ps[0]).x}`);
+}
+
+__DATA__
+{
+  "stdout": "9 7\n9\n"
+}

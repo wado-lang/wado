@@ -21,7 +21,7 @@ use crate::builtin_registry::BuiltinRegistry;
 use crate::compiler_host::{Code, CompilerHost};
 use crate::compiler_item::CompilerItem;
 use crate::component_model::CmInterfaceRegistry;
-use crate::coverage::{CoverageMap, CoverageRequest};
+use crate::coverage::{CoverageMap, CoverageScope};
 use crate::logger::{Bail, Logger, ModuleDiag};
 use crate::module_source::{ModuleSource, ModuleSourceInterner};
 use crate::symbol::SymbolTable;
@@ -58,7 +58,8 @@ use crate::elaborator::{build_func_index, collect_unavailable, liveness, scope, 
 use crate::hashmap;
 use crate::kiln::InvocationIndex;
 use crate::name::{
-    NEVER_TYPE_NAME, UNIT_TYPE_NAME, namespace_member_alias, resolve_import_with_invocations,
+    NEVER_TYPE_NAME, UNIT_TYPE_NAME, contract_holder_name, namespace_member_alias,
+    resolve_import_with_invocations,
 };
 use crate::primitive::PrimitiveType;
 use crate::resolve::{Resolution, Resolutions, head_site};
@@ -1047,6 +1048,15 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                 let Some(declared) = decl.methods.iter().find(|m| m.name == method.name) else {
                     continue;
                 };
+                if let Some(span) = method.contract {
+                    let holder = contract_holder_name(&method.name);
+                    if decl.methods.iter().any(|m| m.name == holder) {
+                        let _ = logger.error_in(
+                            &header.module,
+                            TypeError::ImplContractUnderTraitContract { span },
+                        );
+                    }
+                }
                 // `with _` mints a parameter the source never wrote, and the
                 // trait head mints its own, so only written ones are compared.
                 for (list, expected, found) in [
@@ -1299,7 +1309,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         logger: &'a Logger<'a, H>,
         snapshot: Option<&Semantics>,
         build_tir: bool,
-        coverage: Option<CoverageRequest>,
+        coverage: Option<CoverageScope>,
     ) -> Result<IndexMap<ModuleSource, TirModule>, Bail> {
         let mut result = IndexMap::default();
         // Per-rehydration memo: maps each cached function `Rc`'s pointer
@@ -1602,12 +1612,9 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
 
         // The plan reads which callee names `core:rt`'s `unreachable`, so it
         // waits for the bodies to resolve.
-        state.coverage = coverage.map(|request| {
+        state.coverage = coverage.map(|scope| {
             CoverageMap::build(
-                modules
-                    .iter()
-                    .filter(|(source, _)| request.scope.measures(source)),
-                request.contract_checks,
+                modules.iter().filter(|(source, _)| scope.measures(source)),
                 &rt_unreachable_calls(state, symbols),
             )
         });

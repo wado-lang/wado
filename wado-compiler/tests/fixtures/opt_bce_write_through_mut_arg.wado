@@ -1,5 +1,5 @@
-// A callee handed a reborrow of `arr` shrinks `arr` itself, so the second
-// `arr[i]` must check again and panic.
+// A callee handed `&mut *arr` shrinks `arr` itself, so the second `arr[i]`
+// must check again and panic.
 
 use { println, Stdout } from "core:cli";
 
@@ -27,4 +27,4 @@ export fn run() with Stdout {
 }
 
 __DATA__
-{"stderr_contains": ["index out of bounds"], "trapped": true}
+{"stderr_contains": ["index < self."], "trapped": true}

@@ -11,8 +11,8 @@ struct core:prelude/string.wado//String {  // TypeId(2)
     mut used: i32,
 }
 
-struct effect_handler_install_held.wado//$Dispatch_Log {  // TypeId(3)
-    mut outer: ref null "effect_handler_install_held.wado//$Dispatch_Log",
+struct effect_handler_install_held.wado//$Dispatch_effect_handler_install_held.wado/Log {  // TypeId(3)
+    mut outer: ref null "effect_handler_install_held.wado//$Dispatch_effect_handler_install_held.wado/Log",
     mut op_emit: ref struct,
 }
 
@@ -61,19 +61,21 @@ type "functype//core:rt/panic" = fn(ref "core:prelude/string.wado//String");  //
 
 type "functype//core:rt/cm_stream_write_raw_all_u8" = fn(i32, ref Array<u8>, i32, i32) -> "core:prelude/types.wado//enum:CopyResult";  // TypeId(22)
 
-type "functype//core:prelude/string.wado/core:prelude/string.wado/String::grow" = fn(ref "core:prelude/string.wado//String", i32);  // TypeId(23)
+type "functype//core:prelude/string.wado/core:prelude/string.wado/String::realloc_to" = fn(ref "core:prelude/string.wado//String", i32);  // TypeId(23)
 
-type "functype//effect_handler_install_held.wado/effect_handler_install_held.wado/$Closure_0::$call$dae[self]" = fn(ref "core:prelude/string.wado//String");  // TypeId(24)
+type "functype//core:prelude/string.wado/core:prelude/string.wado/String::grow" = fn(ref "core:prelude/string.wado//String", i32);  // TypeId(24)
 
-type "functype//effect_handler_install_held.wado/effect_handler_install_held.wado/$Closure_1::$call$dae[self]" = fn(ref "core:prelude/string.wado//String");  // TypeId(25)
+type "functype//effect_handler_install_held.wado/effect_handler_install_held.wado/$Closure_0::$call$dae[self]" = fn(ref "core:prelude/string.wado//String");  // TypeId(25)
 
-type "functype//wasi/task-return" = fn(i32);  // TypeId(26)
+type "functype//effect_handler_install_held.wado/effect_handler_install_held.wado/$Closure_1::$call$dae[self]" = fn(ref "core:prelude/string.wado//String");  // TypeId(26)
 
-type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(27)
+type "functype//wasi/task-return" = fn(i32);  // TypeId(27)
 
-type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(28)
+type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(28)
 
-type "functype//wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code" = fn(i32);  // TypeId(29)
+type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(29)
+
+type "functype//wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code" = fn(i32);  // TypeId(30)
 
 import fn mem/realloc from "mem/realloc";
 import fn wasi/stream-write from "wasi/stream-write";
@@ -89,44 +91,44 @@ import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 import fn wasi/stream-new from "wasi/stream-new";
 import fn wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code from "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code";
 
-global mut global:effect_handler_install_held.wado::$effect_Log: ref null "effect_handler_install_held.wado//$Dispatch_Log" = ref.null none;
+global mut global:effect_handler_install_held.wado::$effect_effect_handler_install_held.wado/Log: ref null "effect_handler_install_held.wado//$Dispatch_effect_handler_install_held.wado/Log" = ref.null none;
 global global:effect_handler_install_held.wado::$const_obj_1: ref Array<u8> = array.new_fixed<u8>(91, 108, 111, 103, 93, 32);
 
 fn "effect_handler_install_held.wado/run"() with Stdout {
-    let $h_Log: ref "effect_handler_install_held.wado//StdoutLog";
-    let $save_Log_1: ref null "effect_handler_install_held.wado//$Dispatch_Log";
-    let $d_Log_2: ref "effect_handler_install_held.wado//$Dispatch_Log";
+    let $h_effect_handler_install_held.wado/Log: ref "effect_handler_install_held.wado//StdoutLog";
+    let $save_effect_handler_install_held.wado/Log_1: ref null "effect_handler_install_held.wado//$Dispatch_effect_handler_install_held.wado/Log";
+    let $d_effect_handler_install_held.wado/Log_2: ref "effect_handler_install_held.wado//$Dispatch_effect_handler_install_held.wado/Log";
     let message_8: ref "core:prelude/string.wado//String";
-    let $local_1_9: ref null "effect_handler_install_held.wado//$Dispatch_Log";
-    $h_Log = struct.new "effect_handler_install_held.wado//StdoutLog" {  };
-    global:effect_handler_install_held.wado::$effect_Log = local.tee $d_Log_2(struct.new "effect_handler_install_held.wado//$Dispatch_Log" { outer: local.tee $save_Log_1(global:effect_handler_install_held.wado::$effect_Log), op_emit: struct.new "canonical//CanonicalClosure_0" { env: struct.new "effect_handler_install_held.wado//$Closure_0" { $capture_0: $h_Log }, func: ref.func "closure/effect_handler_install_held.wado/$closure_wrapper_0" } });
-    $inline__effect_dispatch__Log__emit_2: block {
+    let $local_1_9: ref null "effect_handler_install_held.wado//$Dispatch_effect_handler_install_held.wado/Log";
+    $h_effect_handler_install_held.wado/Log = struct.new "effect_handler_install_held.wado//StdoutLog" {  };
+    global:effect_handler_install_held.wado::$effect_effect_handler_install_held.wado/Log = local.tee $d_effect_handler_install_held.wado/Log_2(struct.new "effect_handler_install_held.wado//$Dispatch_effect_handler_install_held.wado/Log" { outer: local.tee $save_effect_handler_install_held.wado/Log_1(global:effect_handler_install_held.wado::$effect_effect_handler_install_held.wado/Log), op_emit: struct.new "canonical//CanonicalClosure_0" { env: struct.new "effect_handler_install_held.wado//$Closure_0" { $capture_0: $h_effect_handler_install_held.wado/Log }, func: ref.func "closure/effect_handler_install_held.wado/$closure_wrapper_0" } });
+    $inline__effect_dispatch__effect_handler_install_held_wado_Log__emit_2: block {
         message_8 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("quiet"), used: 5 };
-        if @likely(ref.is_null(local.tee $local_1_9(global:effect_handler_install_held.wado::$effect_Log)) == 0) {
-            global:effect_handler_install_held.wado::$effect_Log = local.tee $d_Log_2(ref.as_non_null($local_1_9)).outer;
+        if @likely(ref.is_null(local.tee $local_1_9(global:effect_handler_install_held.wado::$effect_effect_handler_install_held.wado/Log)) == 0) {
+            global:effect_handler_install_held.wado::$effect_effect_handler_install_held.wado/Log = local.tee $d_effect_handler_install_held.wado/Log_2(ref.as_non_null($local_1_9)).outer;
             let $indirect_call_1: ref "canonical//CanonicalClosure_0";
-            call_ref "functype/$canonical_closure_fn_0"($indirect_call_1.func, local.tee $indirect_call_1(ref.cast "canonical//CanonicalClosure_0"($d_Log_2.op_emit)).env, message_8);
-            break $inline__effect_dispatch__Log__emit_2: global:effect_handler_install_held.wado::$effect_Log = $local_1_9;
+            call_ref "functype/$canonical_closure_fn_0"($indirect_call_1.func, local.tee $indirect_call_1(ref.cast "canonical//CanonicalClosure_0"($d_effect_handler_install_held.wado/Log_2.op_emit)).env, message_8);
+            break $inline__effect_dispatch__effect_handler_install_held_wado_Log__emit_2: global:effect_handler_install_held.wado::$effect_effect_handler_install_held.wado/Log = $local_1_9;
         } else {
             "core:rt/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("no handler installed for `Log::emit`"), used: 36 });
             unreachable;
         }
     };
-    global:effect_handler_install_held.wado::$effect_Log = $save_Log_1;
-    $h_Log = struct.new "effect_handler_install_held.wado//StdoutLog" {  };
-    global:effect_handler_install_held.wado::$effect_Log = local.tee $d_Log_2(struct.new "effect_handler_install_held.wado//$Dispatch_Log" { outer: local.tee $save_Log_1(global:effect_handler_install_held.wado::$effect_Log), op_emit: struct.new "canonical//CanonicalClosure_0" { env: struct.new "effect_handler_install_held.wado//$Closure_1" { $capture_0: $h_Log }, func: ref.func "closure/effect_handler_install_held.wado/$closure_wrapper_1" } });
-    $inline__effect_dispatch__Log__emit_4: block {
+    global:effect_handler_install_held.wado::$effect_effect_handler_install_held.wado/Log = $save_effect_handler_install_held.wado/Log_1;
+    $h_effect_handler_install_held.wado/Log = struct.new "effect_handler_install_held.wado//StdoutLog" {  };
+    global:effect_handler_install_held.wado::$effect_effect_handler_install_held.wado/Log = local.tee $d_effect_handler_install_held.wado/Log_2(struct.new "effect_handler_install_held.wado//$Dispatch_effect_handler_install_held.wado/Log" { outer: local.tee $save_effect_handler_install_held.wado/Log_1(global:effect_handler_install_held.wado::$effect_effect_handler_install_held.wado/Log), op_emit: struct.new "canonical//CanonicalClosure_0" { env: struct.new "effect_handler_install_held.wado//$Closure_1" { $capture_0: $h_effect_handler_install_held.wado/Log }, func: ref.func "closure/effect_handler_install_held.wado/$closure_wrapper_1" } });
+    $inline__effect_dispatch__effect_handler_install_held_wado_Log__emit_4: block {
         message_8 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("quiet"), used: 5 };
-        if @likely(ref.is_null(local.tee $local_1_9(global:effect_handler_install_held.wado::$effect_Log)) == 0) {
-            global:effect_handler_install_held.wado::$effect_Log = local.tee $d_Log_2(ref.as_non_null($local_1_9)).outer;
-            call_ref "functype/$canonical_closure_fn_0"($indirect_call_1.func, local.tee $indirect_call_1(ref.cast "canonical//CanonicalClosure_0"($d_Log_2.op_emit)).env, message_8);
-            break $inline__effect_dispatch__Log__emit_4: global:effect_handler_install_held.wado::$effect_Log = $local_1_9;
+        if @likely(ref.is_null(local.tee $local_1_9(global:effect_handler_install_held.wado::$effect_effect_handler_install_held.wado/Log)) == 0) {
+            global:effect_handler_install_held.wado::$effect_effect_handler_install_held.wado/Log = local.tee $d_effect_handler_install_held.wado/Log_2(ref.as_non_null($local_1_9)).outer;
+            call_ref "functype/$canonical_closure_fn_0"($indirect_call_1.func, local.tee $indirect_call_1(ref.cast "canonical//CanonicalClosure_0"($d_effect_handler_install_held.wado/Log_2.op_emit)).env, message_8);
+            break $inline__effect_dispatch__effect_handler_install_held_wado_Log__emit_4: global:effect_handler_install_held.wado::$effect_effect_handler_install_held.wado/Log = $local_1_9;
         } else {
             "core:rt/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("no handler installed for `Log::emit`"), used: 36 });
             unreachable;
         }
     };
-    global:effect_handler_install_held.wado::$effect_Log = $save_Log_1;
+    global:effect_handler_install_held.wado::$effect_effect_handler_install_held.wado/Log = $save_effect_handler_install_held.wado/Log_1;
 }
 
 fn "effect_handler_install_held.wado/$cm_binding__Stdout_write_via_stream"(data) with Stdout {
@@ -217,16 +219,19 @@ fn "core:rt/cm_stream_write_raw_all_u8"(handle, $mv$data$repr, $mv$data$start, $
     };
 }
 
-fn "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self, min_capacity) {
-    let $load_0: ref Array<u8>;
-    let capacity: i32;
+fn "core:prelude/string.wado/core:prelude/string.wado/String::realloc_to"(self, new_capacity) {
     let new_repr: ref Array<u8>;
-    capacity = builtin::array_len(local.tee $load_0(self.repr));
+    builtin::array_copy<u8>(local.tee new_repr(builtin::array_new<u8>(new_capacity)), 0, self.repr, 0, self.used);
+    self.repr = new_repr;
+}
+
+fn "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self, min_capacity) {
+    let capacity: i32;
+    capacity = builtin::array_len(self.repr);
     if min_capacity <= capacity {
         return;
     }
-    builtin::array_copy<u8>(local.tee new_repr(builtin::array_new<u8>(select i32(min_capacity > 8, local.tee min_capacity(select i32(capacity > min_capacity, local.tee capacity(capacity * 2), min_capacity)), 8))), 0, $load_0, 0, self.used);
-    self.repr = new_repr;
+    "core:prelude/string.wado/core:prelude/string.wado/String::realloc_to"(self, select i32(min_capacity > 8, local.tee min_capacity(select i32(capacity > min_capacity, local.tee capacity(capacity * 2), min_capacity)), 8));
 }
 
 fn "effect_handler_install_held.wado/effect_handler_install_held.wado/$Closure_0::$call$dae[self]"(message) {

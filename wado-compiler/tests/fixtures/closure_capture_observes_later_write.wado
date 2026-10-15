@@ -64,11 +64,11 @@ export fn run() {
     }
     assert total == 3;
 
-    let mut lent = 0;
-    let read_lent = || lent;
-    let r = &mut lent;
+    let mut referenced = 0;
+    let read_referenced = || referenced;
+    let r = &mut referenced;
     *r = 4;
-    assert read_lent() == 4;
+    assert read_referenced() == 4;
 
     // A `for` header's update acts on the next iteration's binding.
     let mut firsts: List<fn() -> i32> = [];

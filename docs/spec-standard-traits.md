@@ -278,18 +278,19 @@ pub trait Sequence with () {
     type Elem;
 
     fn len(&self) -> i32;
-    fn get_unchecked(&self, index: i32) -> Self::Elem;
+    fn at(&self, index: i32) -> Self::Elem
+        contract 0 <= index < self.len();
 
-    // default bodies, written against `len` and `get_unchecked`
+    // default bodies, written against `len` and `at`
     fn is_empty(&self) -> bool { return self.len() == 0; }
     fn get(&self, index: i32) -> Option<Self::Elem> {
-        return if index < 0 || index >= self.len() { null } else { Option::Some(self.get_unchecked(index)) };
+        return if index < 0 || index >= self.len() { null } else { Option::Some(unchecked self.at(index)) };
     }
     fn first(&self) -> Option<Self::Elem> { return self.get(0); }
     fn last(&self) -> Option<Self::Elem> { return self.get(self.len() - 1); }
     fn position(&self, mut pred: fn mut(Self::Elem) -> bool) -> Option<i32> {
         for let mut i = 0; i < self.len(); i += 1 {
-            if pred(self.get_unchecked(i)) { return Option::Some(i); }
+            if pred(unchecked self.at(i)) { return Option::Some(i); }
         }
         return null;
     }
@@ -1080,6 +1081,18 @@ a copy, on which the write would be lost.
 The four traits are independent: a container implements only the ones it
 supports. A subscript names the prelude's declarations, as an operator does, so
 a user trait spelled `IndexValue` does not answer `c[i]`.
+
+The traits state no [contract](./spec-assertions.md#contract-checks): what an
+index must satisfy differs by container, so each impl states its own. A
+single-index read of a `List` requires `index < self.len()`, since a negative
+index traps in the array access anyway, and one of a `Slice` requires
+`0 <= index < self.len()`, since the view's start would otherwise move. `c[i]`
+checks the clause before reading, and `unchecked c[i]` on one of them vouches
+for it. The read then runs with no check outside a `-f contract-checks` build.
+`Array` states none, since the Wasm array access traps on its own; a map states
+none, and a missing key panics; a range index clamps rather than fails.
+`IndexAssign` states none either: a list assignment past the end traps, and a
+map's inserts the key.
 
 `Ref` and `RefMut` are sealed marker traits the compiler provides for every
 eligible type, and a user `impl Ref` or `impl RefMut` is a compile error:

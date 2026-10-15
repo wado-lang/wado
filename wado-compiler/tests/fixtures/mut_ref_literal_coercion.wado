@@ -1,5 +1,5 @@
 // `&mut [...] as List<T>` parses as `(&mut [...]) as List<T>` — `&mut` binds
-// tighter than `as` — so the coercion looks through the borrow. It must record
+// tighter than `as` — so the coercion looks through the reference. It must record
 // its facts on the literal's own AstId, which is what reify looks up, and reify
 // must drop the wrapper annotate already absorbed. Keyed on the outer unary
 // instead, the literal reified as a bare tuple: `type mismatch: expected
@@ -21,7 +21,7 @@ export fn run() with Stdout {
     assert ys.len() == 2;
     assert ys[1] == 20;
 
-    // The parenthesized form casts first and borrows the result.
+    // The parenthesized form casts first and takes `&mut` of the result.
     assert grow(&mut ([1, 2, 3] as List<i32>)) == 4;
 
     println("mut ref literal coercion: ok");

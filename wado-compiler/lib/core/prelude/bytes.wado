@@ -55,23 +55,12 @@ impl AsByteSlice for ByteArray {
 /// they are what make a byte list first-class rather than an incidental
 /// `List<u8>`.
 impl ByteList {
-    /// Byte at `index` without bounds checking — the `ByteList` parallel to
-    /// `String::get_byte_unchecked`.
-    ///
-    /// The caller must guarantee `0 <= index < len()`. Any other `index` is a
-    /// contract violation, and the result is unspecified: a byte of the
-    /// backing array past the buffer, or a trap. Intended for hot byte-scanning loops
-    /// that have already range-checked `index`.
-    pub fn get_byte_unchecked(&self, index: i32) -> u8 {
-        return self.get_unchecked(index);
-    }
-
     /// Renders the bytes as a lowercase hexadecimal string, two digits per
     /// byte (e.g. `[0x0f, 0xa0]` -> `"0fa0"`).
     pub fn to_hex(&self) -> String {
         let mut s = String::with_capacity(self.len() * 2);
         for let mut i = 0; i < self.len(); i += 1 {
-            let byte = self.get_unchecked(i);
+            let byte = unchecked self[i];
             s.push_str(`${byte:02x}`);
         }
         return s;
@@ -123,11 +112,12 @@ pub trait FromLeBytes with () {
     fn from_le_at(bytes: ByteSlice, at: i32) -> Self;
 }
 
-fn le_bits(bytes: ByteSlice, at: i32, width: i32) -> u64 {
-    assert 0 <= at && at <= bytes.len() - width;
+fn le_bits(bytes: ByteSlice, at: i32, width: i32) -> u64
+    contract 0 <= at && at <= bytes.len() - width
+{
     let mut bits: u64 = 0;
     for let mut i = width - 1; i >= 0; i -= 1 {
-        bits = bits << 8 | bytes.get_unchecked(at + i) as u64;
+        bits = bits << 8 | unchecked bytes[at + i] as u64;
     }
     return bits;
 }

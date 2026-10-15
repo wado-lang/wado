@@ -1346,7 +1346,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
 
     /// A by-value `self` transfers ownership, so it is legal on a resource
     /// and on a concrete aggregate that transitively owns one (the consuming
-    /// method hands that resource off). A plain value type must borrow with
+    /// method hands that resource off). A plain value type's method must take
     /// `&self`. Generic aggregates resolve to `GenericInstance` rather than a
     /// concrete value type, so they are already permitted.
     fn check_self_by_value(&mut self, self_ty: TypeId, span: Span) {
@@ -1490,12 +1490,12 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         .is_some()
     }
 
-    /// The first borrow `type_id` is or holds anywhere within it, as the program
-    /// names it: a reference, or a view (`ByteSlice`, not the `Slice<u8>` it
-    /// wraps). A borrow points into storage it does not own, which has no
-    /// Component Model representation. A borrowed resource is exempt: it
+    /// The first reference `type_id` is or holds anywhere within it, as the
+    /// program names it: a `&T`, or a view (`ByteSlice`, not the `Slice<u8>` it
+    /// wraps). Either points into storage it does not own, which has no
+    /// Component Model representation. A reference to a resource is exempt: it
     /// crosses as a `borrow<R>` handle.
-    pub(super) fn cm_borrow_within(&self, type_id: TypeId) -> Option<TypeId> {
+    pub(super) fn cm_ref_within(&self, type_id: TypeId) -> Option<TypeId> {
         self.first_type_within(type_id, true, &|scope: &Self, t| {
             scope.is_cm_view(t) || scope.is_storage_reference(t)
         })
@@ -2713,11 +2713,11 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             // A reference or a view has no CM representation. Rejecting it here keeps the
             // static "an `export` appears in WIT" guarantee: reaching
             // `wit_emit` instead drops the component-type section wholesale.
-            if crosses_cm_boundary && let Some(borrow) = scope.cm_borrow_within(type_id) {
-                let _ = scope.emit(TypeError::BorrowAtCmBoundary {
+            if crosses_cm_boundary && let Some(reference) = scope.cm_ref_within(type_id) {
+                let _ = scope.emit(TypeError::RefAtCmBoundary {
                     function: func.name.clone(),
                     position: format!("parameter '{}'", param.name),
-                    borrow: scope.tysys.type_table.borrow().type_name(borrow),
+                    reference: scope.tysys.type_table.borrow().type_name(reference),
                     span: param.span,
                 });
             }
@@ -2745,11 +2745,11 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         if func.is_export {
             scope.check_published(func, "return type", declared_return_type, func.span);
         }
-        if crosses_cm_boundary && let Some(borrow) = scope.cm_borrow_within(declared_return_type) {
-            let _ = scope.emit(TypeError::BorrowAtCmBoundary {
+        if crosses_cm_boundary && let Some(reference) = scope.cm_ref_within(declared_return_type) {
+            let _ = scope.emit(TypeError::RefAtCmBoundary {
                 function: func.name.clone(),
                 position: "return type".to_string(),
-                borrow: scope.tysys.type_table.borrow().type_name(borrow),
+                reference: scope.tysys.type_table.borrow().type_name(reference),
                 span: func.span,
             });
         }

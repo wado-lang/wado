@@ -2,14 +2,14 @@
 //!
 //! A by-value parameter is *confined* when the callee keeps nothing of it past
 //! the call, so a caller passing a still-live value into it needs no defensive
-//! copy. The callee then holds it borrowed, not owned, and copies before any
+//! copy. The callee then holds it shared, not owned, and copies before any
 //! write. One it returns is confined too where the callee never takes it over:
 //! the result is then a projection of the argument, and the caller copies it
-//! only where it takes the result over itself, as it would any borrowed value.
+//! only where it takes the result over itself, as it would any shared value.
 //!
 //! Three channels per parameter reach a least fixpoint: `ret` (flows into a
 //! returned value), `side` (written to lasting storage) and `taken` (bound to
-//! an owner the body holds, where borrowing it would move the copy into the
+//! an owner the body holds, where sharing it would move the copy into the
 //! callee rather than save it). A parameter is confined iff it is not declared
 //! `mut`, `side` is not raised, and `ret` and `taken` are not both. The
 //! analysis over-approximates escape: unmodelled constructs, a closure's
@@ -43,8 +43,8 @@ impl ConfinedParams {
     }
 
     /// The locals of `func`'s confined parameters, which its callers pass
-    /// uncopied and it therefore holds borrowed.
-    pub fn borrowed_locals(&self, func: &TirFunction) -> IndexSet<u32> {
+    /// uncopied and it therefore holds shared.
+    pub fn shared_locals(&self, func: &TirFunction) -> IndexSet<u32> {
         let Some(bits) = self.map.get(&func.module_source, &func.name) else {
             return IndexSet::default();
         };
@@ -226,7 +226,7 @@ impl Ctx<'_> {
 
     /// Whether the argument at `param_index` reaches the callee uncopied, so
     /// passing a parameter there does not take it over.
-    fn callee_borrows(&self, func: &FunctionRef, param_index: usize) -> bool {
+    fn callee_shares(&self, func: &FunctionRef, param_index: usize) -> bool {
         match self.kind(func) {
             Kind::ValueCopy => true,
             Kind::Declared => passes_through(self.builtins, func, param_index),
@@ -332,7 +332,7 @@ impl TirRefVisitor for SinkWalker<'_> {
                 // costs nothing that matters.
                 if !self.ctx.type_table.is_never(expr.type_id) {
                     for (i, op) in operands.iter().enumerate() {
-                        if !self.ctx.callee_borrows(func, i) {
+                        if !self.ctx.callee_shares(func, i) {
                             self.raise_taken(op);
                         }
                     }

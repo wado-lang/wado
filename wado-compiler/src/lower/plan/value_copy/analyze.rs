@@ -118,7 +118,7 @@ pub fn passes_through(builtins: &BuiltinDeclarations, func: &FunctionRef, pos: u
 }
 
 /// What a `return` actually delivers. `return` is no wrap site, so
-/// `return place` hands a borrow out for the caller to materialize, and
+/// `return place` hands the place out uncopied for the caller to materialize, and
 /// `hands_out_payload` ([`super::hands_out_payload`]) makes
 /// `return Some(place)` do the same.
 ///
@@ -164,7 +164,7 @@ pub fn carries_no_storage(expr: &TirExpr) -> bool {
 /// so consuming it into an owner is a move. A call is owned iff its callee
 /// returns owned (`oracle`), the caller-side, single-phase replacement for the
 /// old interprocedural escape recovery: the accessor `index_value(self: &List,
-/// i) -> T { return self.repr[i] }` returns a borrowed projection of `&self`
+/// i) -> T { return self.repr[i] }` returns a shared projection of `&self`
 /// (wado-lang/wado#1527), so it is *not* owned and its result is copied at a
 /// materialization — but never at a mutable-place use, which is not a
 /// materialization, so `arr[i].field.push(x)` keeps its element aliased.
@@ -199,7 +199,7 @@ pub(crate) fn is_owned_value(
         // copied.
         TirExprKind::Call { func, args, .. } => {
             oracle.is_owned(func)
-                || oracle.projected_args(func, args).is_some_and(|mut handed_back| {
+                || oracle.handed_back(func, args).is_some_and(|mut handed_back| {
                     handed_back.all(|a| is_owned_value(a, fresh_locals, oracle, type_table))
                 })
         }
@@ -207,7 +207,7 @@ pub(crate) fn is_owned_value(
         // Every callable value is a closure functor by lowering time, so an
         // indirect call is owned when every `$call` of this return type is
         // (`compute_indirect_owned_returns`). Without that verdict — inside the
-        // fixpoint the verdict is derived from — it stays borrowed.
+        // fixpoint the verdict is derived from — it stays shared.
         TirExprKind::IndirectCall { .. } => oracle.indirect_is_owned(expr.type_id),
         TirExprKind::VariantConstruct { .. } | TirExprKind::EnumConstruct { .. } => true,
         TirExprKind::Local { index, .. } => fresh_locals.contains(index),
@@ -228,7 +228,7 @@ pub(crate) fn is_owned_value(
         // whichever branch runs — owned exactly when those tails are, the same
         // rule `Match` follows. `let resp = if let … { handler(…) } else { … }`
         // is the shape that needs it: without this the binding is classified
-        // borrowed and every later field read is deep-copied.
+        // shared and every later field read is deep-copied.
         TirExprKind::Block(block) => block_tail_is_owned(block, fresh_locals, oracle, type_table),
         TirExprKind::If {
             then_branch,
@@ -336,7 +336,7 @@ pub(crate) fn for_each_pattern_binding(pattern: &TirPattern, visit: &mut impl Fn
 /// The value is the block's tail expression statement; `let`s ahead of it seed
 /// the fresh set exactly as they do inside a labeled block. A block that
 /// diverges instead (`return` / `break` as the last statement) delivers no
-/// value, so it cannot make the result borrowed — the caller's other branch, or
+/// value, so it cannot make the result shared — the caller's other branch, or
 /// the enclosing `Match` arm rule, decides.
 fn block_tail_is_owned(
     block: &TirBlock,
@@ -508,7 +508,7 @@ pub fn is_source_immutable(
 /// The local an immutable-source chain is rooted at, or `None` for a shape
 /// [`is_source_immutable`] does not accept.
 ///
-/// A projection through a reference continues at the place it borrows: the root
+/// A projection through a reference continues at the place it references: the root
 /// local's immutability binds the reference, not the storage behind it. An
 /// unresolvable one names storage this body does not own, and answers nothing.
 pub fn source_root(

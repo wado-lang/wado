@@ -253,8 +253,8 @@ fn rule_of_three(opener: &DelimTok, closer: &DelimTok) -> bool {
 }
 
 fn resolve_pair(toks: &mut List<InlineTok>, oi: i32, ci: i32) -> i32 {
-    let opener = get_delim_unchecked(toks, oi);
-    let closer = get_delim_unchecked(toks, ci);
+    let opener = delim_at(toks, oi);
+    let closer = delim_at(toks, ci);
     let strong = opener.count >= 2 && closer.count >= 2;
     let use_n = if strong { 2 } else { 1 };
     let strike = closer.ch == '~';
@@ -277,20 +277,22 @@ fn resolve_pair(toks: &mut List<InlineTok>, oi: i32, ci: i32) -> i32 {
     toks.insert(oi + 1, InlineTok::Open(OpenTok { strong, strike, keep_asterisk }));
     let closer_idx = ci + 2;
 
-    let mut op = get_delim_unchecked(toks, oi);
+    let mut op = delim_at(toks, oi);
     op.count -= use_n;
     toks[oi] = InlineTok::Delim(op);
-    let mut cl = get_delim_unchecked(toks, closer_idx);
+    let mut cl = delim_at(toks, closer_idx);
     cl.count -= use_n;
     toks[closer_idx] = InlineTok::Delim(cl);
 
     return closer_idx;
 }
 
-fn get_delim_unchecked(toks: &List<InlineTok>, idx: i32) -> DelimTok {
+fn delim_at(toks: &List<InlineTok>, idx: i32) -> DelimTok
+    contract 0 <= idx < toks.len() && toks[idx] matches { InlineTok::Delim(_) }
+{
     return match toks[idx] {
         InlineTok::Delim(d) => d,
-        _ => panic("marl-format: expected a delimiter token"),
+        _ => unreachable(),
     };
 }
 
@@ -325,9 +327,9 @@ fn build_seq(
     let n = toks.len();
     let mut i = start;
     while i < n {
-        match toks.get_unchecked(i) {
+        match unchecked toks[i] {
             InlineTok::Node(idx) => {
-                current.push(nodes.get_unchecked(idx));
+                current.push(unchecked nodes[idx]);
                 i += 1;
             },
             InlineTok::Delim(d) => {
@@ -367,10 +369,10 @@ fn flatten_construct(toks: &List<InlineTok>, nodes: &List<Node>, start: i32, cur
     let mut i = start;
     let mut nesting = 1;
     while i < n && nesting > 0 {
-        match toks.get_unchecked(i) {
+        match unchecked toks[i] {
             InlineTok::Open(_) => nesting += 1,
             InlineTok::Close => nesting -= 1,
-            InlineTok::Node(idx) => current.push(nodes.get_unchecked(idx)),
+            InlineTok::Node(idx) => current.push(unchecked nodes[idx]),
             InlineTok::Delim(d) => {
                 if d.count > 0 {
                     current.push(Node::Text(repeat_char(d.ch, d.count)));

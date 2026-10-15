@@ -14,7 +14,7 @@ use crate::hashmap;
 use crate::hashmap::IndexMap;
 use crate::lexer::WILDCARD;
 use crate::module_source::ModuleSource;
-use crate::name::{NAMESPACE_MEMBER_SEP, namespace_member_alias};
+use crate::name::{DeclaredHead, NAMESPACE_MEMBER_SEP, namespace_member_alias};
 use crate::symbol::{GlobalSymbol, SymbolKind, SymbolTable};
 use crate::tir::EffectRef;
 use crate::token::Span;
@@ -421,10 +421,9 @@ impl Resolutions {
     #[must_use]
     pub fn effect_decl(&self, def: DefId) -> Option<EffectRef> {
         let defs = self.defs();
-        defs.kind(def).is_effect().then(|| EffectRef::Concrete {
-            name: defs.name(def).to_string(),
-            module_source: defs.module(def).clone(),
-        })
+        defs.kind(def)
+            .is_effect()
+            .then(|| EffectRef::Concrete(DeclaredHead::new(defs, def)))
     }
 
     /// Every declaration `module` may name — what each name it can write

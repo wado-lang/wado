@@ -206,6 +206,14 @@ impl FunctionGate {
         }
     }
 
+    /// Make `pass` revisit `func` although its body did not change: something
+    /// `pass` reads about the rest of the program did. No other pass, and no
+    /// neighbour, is touched.
+    pub fn revisit(&mut self, pass: GatedPass, func: FuncId) {
+        self.ensure(func.index() + 1);
+        self.watermarks[pass as usize][func.index()] = 0;
+    }
+
     /// Mark every function in `0..len` seen by `pass`: a whole-program pass that
     /// ran to its own fixed point leaves nothing pending behind it.
     pub fn catch_up(&mut self, pass: GatedPass, len: usize) {
