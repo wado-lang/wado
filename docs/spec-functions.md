@@ -1047,7 +1047,7 @@ and the callee's writes still reach it:
 ```wado
 fn put(o: &mut Option<i32>, v: i32 = peek(o) + 1) { *o = Option::Some(v); }
 
-test "a default references a `&mut` parameter's place again" {
+test "a default takes `&mut` of a `&mut` parameter's place again" {
     let mut s = S { o: Option::Some(1) };
     put(&mut s.o);                   // → put(&mut s.o, peek(&mut s.o) + 1)
     assert s.o == Option::Some(2);
