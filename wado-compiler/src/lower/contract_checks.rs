@@ -21,7 +21,7 @@ use crate::name::{
 };
 use crate::tir::{
     CallArg, LetStorage, TemplateId, TirBlock, TirExpr, TirExprKind, TirFunction, TirLocal,
-    TirStmt, TirStmtKind, TirUnaryOp, TypeId, TypeTable,
+    TirStmt, TirStmtKind, TirUnaryOp, TypeId, TypeTable, assign_stmt,
 };
 use crate::tir_visitor::{TirMutVisitor, TirRefVisitor, shift_locals};
 
@@ -326,7 +326,7 @@ impl Expander<'_> {
         let value = take(&mut last.expr);
         let (type_id, value_span) = (value.type_id, value.span);
         let checked = match value.kind {
-            // An argument bound in place: its `let`, then the clauses, then its read.
+            // An argument bound in place: its assignment, then the clauses, then its read.
             TirExprKind::Block(TirBlock { mut stmts, .. }) if self.binds(&stmts) => {
                 let read = stmts.pop().expect("a binding ends in its read");
                 stmts.extend(copied.stmts);
@@ -397,15 +397,18 @@ impl Expander<'_> {
     }
 
     /// Bind what `slot` evaluates to a new local of the function, where `sink`
-    /// says, and answer the read of it.
+    /// says, and answer the read of it. In place it is assigned where it is
+    /// evaluated, as a power-assert capture is: a `let` there would scope the
+    /// local to that argument, out of reach of the clauses after it.
     fn bind(&mut self, slot: &mut TirExpr, sink: Sink<'_>) -> TirExpr {
         let index = self.func.locals.len() as u32;
         let name = minted_name("contract_arg", index);
         let (type_id, span) = (slot.type_id, slot.span);
+        let in_place = matches!(sink, Sink::InPlace);
         self.func.locals.push(TirLocal {
             name: name.clone(),
             type_id,
-            is_mut: false,
+            is_mut: in_place,
             span,
         });
         self.func.local_count = self.func.locals.len() as u32;
@@ -418,25 +421,28 @@ impl Expander<'_> {
             type_id,
             span,
         );
-        let binding = TirStmt::new(
-            TirStmtKind::Let {
-                name,
-                local_index: index,
-                is_mut: false,
-                type_id,
-                value: take(slot),
-                storage: LetStorage::Planned,
-            },
-            span,
-        );
+        let value = take(slot);
         *slot = match sink {
             Sink::Ahead(stmts) => {
-                stmts.push(binding);
+                stmts.push(TirStmt::new(
+                    TirStmtKind::Let {
+                        name,
+                        local_index: index,
+                        is_mut: false,
+                        type_id,
+                        value,
+                        storage: LetStorage::Planned,
+                    },
+                    span,
+                ));
                 read.clone()
             }
             Sink::InPlace => TirExpr::new(
                 TirExprKind::Block(TirBlock::new(
-                    vec![binding, TirStmt::new(TirStmtKind::Expr(read.clone()), span)],
+                    vec![
+                        assign_stmt(read.clone(), value, span),
+                        TirStmt::new(TirStmtKind::Expr(read.clone()), span),
+                    ],
                     span,
                 )),
                 type_id,
@@ -448,13 +454,24 @@ impl Expander<'_> {
 
     /// Whether `stmts` is a binding [`Self::bind`] made in place.
     fn binds(&self, stmts: &[TirStmt]) -> bool {
-        matches!(
-            stmts,
-            [
-                TirStmt { kind: TirStmtKind::Let { local_index, .. }, .. },
-                TirStmt { kind: TirStmtKind::Expr(TirExpr { kind: TirExprKind::Local { index, .. }, .. }), .. },
-            ] if local_index == index && self.bound.contains(index)
-        )
+        let [assign, read] = stmts else {
+            return false;
+        };
+        let (
+            TirStmtKind::Expr(TirExpr {
+                kind: TirExprKind::Assign { target, .. },
+                ..
+            }),
+            TirStmtKind::Expr(TirExpr {
+                kind: TirExprKind::Local { index, .. },
+                ..
+            }),
+        ) = (&assign.kind, &read.kind)
+        else {
+            return false;
+        };
+        matches!(target.kind, TirExprKind::Local { index: assigned, .. } if assigned == *index)
+            && self.bound.contains(index)
     }
 
     /// `expr` read again: each binding made in place in it is its local.

@@ -33,7 +33,7 @@ use crate::tir::{
     self as tir, CallArg, GlobalInit, InstancePattern, LetStorage, LocalFrame, ResolvedType,
     TirBinaryOp, TirBlock, TirEnum, TirEnumCase, TirExpr, TirExprKind, TirFlags, TirFlagsMember,
     TirFunction, TirGlobal, TirModule, TirNewtype, TirPattern, TirStmt, TirStmtKind, TirStruct,
-    TirTest, TirUnaryOp, TirVariantDecl, TypeId, TypeTable, transpose_tuple_expr,
+    TirTest, TirUnaryOp, TirVariantDecl, TypeId, TypeTable, assign_stmt, transpose_tuple_expr,
 };
 
 use super::coercion::{
@@ -356,21 +356,6 @@ fn break_unless(cond: TirExpr, cond_span: Span, span: Span) -> TirStmt {
 }
 
 /// `target = value;` as a statement.
-fn assign_stmt(target: TirExpr, value: TirExpr, span: Span) -> TirStmt {
-    let type_id = value.type_id;
-    TirStmt::new(
-        TirStmtKind::Expr(TirExpr::new(
-            TirExprKind::Assign {
-                target: Box::new(target),
-                value: Box::new(value),
-            },
-            type_id,
-            span,
-        )),
-        span,
-    )
-}
-
 pub(super) struct ReifyAssertCaptureContext {
     pub(super) slots: Vec<ReifyAssertSlot>,
     pub(super) ast_id_to_slot: IndexMap<AstId, usize>,
