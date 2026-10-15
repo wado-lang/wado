@@ -1892,7 +1892,7 @@ fn _parse_expr(p: &mut Parser, min_prec: i32 = 0) -> () {
 }
 
 fn _run_parse_entry<S: AsStrSlice>(input: S, max_errors: i32, entry: fn(&mut Parser)) -> ParseResult {
-    assert max_errors >= 1, `max_errors must be >= 1, got ${max_errors}`;
+    assert max_errors >= 1;
     let tokens = tokenize(input);
     let mut p = Parser::new(tokens);
     p.max_errors = max_errors;
