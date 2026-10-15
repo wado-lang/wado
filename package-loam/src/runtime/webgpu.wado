@@ -101,11 +101,24 @@ struct Carried {
 /// A compiled shader, held as `Slot` holds a buffer.
 struct Pipeline {
     compiled: GpuComputePipeline,
+    layout: GpuBindGroupLayout,
 }
 
-/// The encoder recording a pass's commands until they are submitted.
+/// The encoder recording a pass's commands until they are submitted, and the
+/// one compute pass every dispatch goes into. A compute pass makes each
+/// dispatch see what the ones before it wrote.
 struct Recording {
     encoder: GpuCommandEncoder,
+    pass: GpuComputePassEncoder,
+}
+
+/// The buffer the pass's dispatches read their parameters from, each at a
+/// span of its own, so none is overwritten before the encoder runs.
+struct Parameters {
+    slot: i32,
+    words: List<u32>,
+    /// How many of `words` are on the device.
+    written: i32,
 }
 
 /// A bind group of a recorded dispatch, held until the dispatch is submitted.
@@ -135,6 +148,8 @@ pub struct WebGpuBackend {
     /// The commands recorded and not yet submitted: none, or one encoder.
     recording: List<Recording>,
     bound: List<Bound>,
+    /// The parameters of this pass's dispatches: none before the first.
+    parameters: Option<Parameters>,
     /// The storage buffers one shader binds, less its output and parameters.
     max_operands: i32,
     /// The f32 elements one storage binding holds.
@@ -155,6 +170,9 @@ global MAX_GROUPS: i32 = 65535;
 
 /// The bytes one write to the device copies at most.
 global WRITE_BYTES: i32 = 16_777_216;
+
+/// The words one buffer of dispatch parameters holds.
+global PARAMETER_WORDS: i32 = 65536;
 
 /// The slot of a buffer not allocated yet, which `binds` reads a view of
 /// before the buffer exists. No buffer is ever at it.
@@ -218,6 +236,7 @@ impl WebGpuBackend {
             carried: [],
             recording: [],
             bound: [],
+            parameters: null,
             max_operands: saturated(buffers as u64) - 2,
             max_binding: saturated(bytes),
             alignment,
@@ -291,11 +310,18 @@ impl WebGpuBackend {
     /// a second copy whole on the host.
     fn written(&mut self, count: i32, word: fn(i32) -> u32, kept: bool) -> i32 with (GpuDevice, GpuQueue, GpuBuffer) {
         let slot = self.allocated(count, kept);
+        self.write(slot, 0, count, word);
+        return slot;
+    }
+
+    /// Writes the words `word(i)` for `i` in `from..<to` to the buffer at
+    /// `slot`, each at its index.
+    fn write(&self, slot: i32, from: i32, to: i32, word: fn(i32) -> u32) with (GpuQueue, GpuBuffer) {
         // A host bounds what one call copies, and a model's embedding is past
         // what wasmtime lets through at once.
         let per_write = WRITE_BYTES / 4;
-        for let mut at = 0; at < count; at += per_write {
-            let end = i32::min(at + per_write, count);
+        for let mut at = from; at < to; at += per_write {
+            let end = i32::min(at + per_write, to);
             let mut bytes = ByteList::with_capacity((end - at) * 4);
             for let i of at..<end {
                 let bits = word(i);
@@ -314,7 +340,41 @@ impl WebGpuBackend {
                 panic("loam: a host tensor did not write to the device");
             };
         }
-        return slot;
+    }
+
+    /// The span `params` is at in the pass's parameter buffer. The words reach
+    /// the device when the pass is submitted.
+    fn parameter_span(&mut self, params: &List<u32>) -> Span with (GpuDevice, GpuQueue, GpuBuffer)
+        contract params.len() <= PARAMETER_WORDS
+    {
+        let at = match &self.parameters {
+            Some(p) => (p.words.len() + self.alignment - 1) / self.alignment * self.alignment,
+            None => PARAMETER_WORDS,
+        };
+        if at + params.len() > PARAMETER_WORDS {
+            self.write_parameters();
+            let slot = self.allocated(PARAMETER_WORDS, false);
+            self.parameters = Option::Some(Parameters { slot, words: [], written: 0 });
+            return self.parameter_span(params);
+        }
+        let Some(p) = &mut self.parameters else {
+            unreachable();
+        };
+        while p.words.len() < at {
+            p.words.push(0);
+        }
+        p.words.extend(params);
+        return Span { slot: p.slot, first: at, count: params.len() };
+    }
+
+    /// Writes the parameters not yet on the device.
+    fn write_parameters(&mut self) with (GpuQueue, GpuBuffer) {
+        let Some(p) = &mut self.parameters else {
+            return;
+        };
+        let words = &p.words;
+        self.write(p.slot, p.written, words.len(), |i| words[i]);
+        p.written = words.len();
     }
 
     /// `t` written to a buffer of its own, as a view over its extents.
@@ -432,9 +492,12 @@ impl WebGpuBackend {
     }
 
     /// Submits every command recorded, and lets their bind groups go.
-    fn flush(&mut self) with (GpuQueue, GpuCommandEncoder, GpuCommandBuffer, GpuBindGroup) {
+    fn flush(&mut self) with (GpuQueue, GpuCommandEncoder, GpuCommandBuffer, GpuBindGroup, GpuBuffer, GpuComputePassEncoder) {
+        self.write_parameters();
         if let Some(r) = self.recording.pop() {
-            let commands = r.encoder.finish(Option::Some(GpuCommandBufferDescriptor { label: null }));
+            let Recording { encoder, pass } = r;
+            pass.end();
+            let commands = encoder.finish(Option::Some(GpuCommandBufferDescriptor { label: null }));
             self.queue.submit([&commands]);
         }
         while let Some(_) = self.bound.pop() {
@@ -472,7 +535,8 @@ impl WebGpuBackend {
             label: null,
         });
         let at = self.pipelines.len();
-        self.pipelines.push(Pipeline { compiled: pipeline });
+        let layout = pipeline.get_bind_group_layout(0);
+        self.pipelines.push(Pipeline { compiled: pipeline, layout });
         self.compiled[*key] = at;
         return at;
     }
@@ -491,13 +555,13 @@ impl WebGpuBackend {
             return;
         }
         self.dispatches += 1;
-        let params_slot = self.written(params.len(), |i| params[i], false);
         let found = match self.compiled.get(key) {
             Some(at) => at,
             None => self.compile(&key),
         };
         let mut all = spans;
-        all.push(Span { slot: params_slot, first: 0, count: params.len() });        let mut entries: List<GpuBindGroupEntry> = [];
+        all.push(self.parameter_span(&params));
+        let mut entries: List<GpuBindGroupEntry> = [];
         for let [i, s] of all.into_iter().enumerate() {
             assert s.first % self.alignment == 0 && s.count <= self.max_binding;
             entries.push(GpuBindGroupEntry {
@@ -509,18 +573,22 @@ impl WebGpuBackend {
                 }),
             });
         }
-        let pipeline = &self.pipelines[found].compiled;
-        let layout = pipeline.get_bind_group_layout(0);
-        let group = self.device.create_bind_group(GpuBindGroupDescriptor { layout: &layout, entries, label: null });
+        let pipeline = &self.pipelines[found];
+        let group = self.device.create_bind_group(GpuBindGroupDescriptor {
+            layout: &pipeline.layout,
+            entries,
+            label: null,
+        });
         if self.recording.is_empty() {
             let encoder = self.device.create_command_encoder(Option::Some(GpuCommandEncoderDescriptor { label: null }));
-            self.recording.push(Recording { encoder });
+            let pass = encoder.begin_compute_pass(Option::Some(GpuComputePassDescriptor {
+                timestamp_writes: null,
+                label: null,
+            }));
+            self.recording.push(Recording { encoder, pass });
         }
-        let pass = self.recording[0].encoder.begin_compute_pass(Option::Some(GpuComputePassDescriptor {
-            timestamp_writes: null,
-            label: null,
-        }));
-        pass.set_pipeline(pipeline);
+        let pass = &self.recording[0].pass;
+        pass.set_pipeline(&pipeline.compiled);
         let Ok(_) = pass.set_bind_group(0, Option::Some(&group), null, null, null) else {
             panic("loam: a kernel's buffers did not bind");
         };
@@ -529,7 +597,6 @@ impl WebGpuBackend {
             Option::Some(y as u32 as GpuSize32),
             Option::Some(z as u32 as GpuSize32),
         );
-        pass.end();
         self.bound.push(Bound { group });
     }
 
@@ -1163,6 +1230,7 @@ impl Backend for WebGpuBackend {
     /// retained, which live through this pass.
     fn begin(&mut self) with (GpuQueue, GpuCommandEncoder, GpuCommandBuffer, GpuBindGroup, GpuBuffer) {
         self.flush();
+        self.parameters = null;
         let mut carried: List<Carried> = [];
         let start = self.pass_start;
         self.pass_start += self.pass.len();

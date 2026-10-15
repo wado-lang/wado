@@ -18,6 +18,14 @@ redundant_clone = "warn"
 # `Args::program_args` is what `wado run` calls it, and parity is the point.
 struct_field_names = "allow"
 
+# What the repository's workspace gives its dependencies, for the same reason:
+# a guest's dispatches cross wasmtime and wgpu-core, and unoptimized they cost
+# a token on Gemma 3 270M more than the guest does.
+[profile.dev.package."*"]
+opt-level = 2
+debug-assertions = false
+overflow-checks = false
+
 [dependencies]
 anyhow = "1"
 lexopt = "0.3"

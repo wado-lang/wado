@@ -79,9 +79,11 @@ runs.
   axis, whole tiles each, every chunk continuing the sums the one before left,
   so it adds what one dispatch would, in the same order.
 
-Every dispatch of one `forward` goes into one command encoder, which is
-submitted when a tensor is read back. A dispatch's parameters are written to a
-buffer of its own, so none is overwritten before the encoder runs.
+Every dispatch of one `forward` goes into one compute pass of one command
+encoder, which is submitted when a tensor is read back. Each dispatch's
+parameters take a span of their own in one buffer of the pass, so none is
+overwritten before the encoder runs, and they reach the device in one write
+when the encoder is submitted.
 
 A resource is move-only in Wado, so views cannot share a `GpuBuffer` by value.
 The backend owns its buffers and a view names one by its place. `keep`, which
