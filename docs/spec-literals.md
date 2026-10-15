@@ -670,14 +670,13 @@ type does not implement that trait is a compile error.
 
 A value whose type mentions a type parameter of the enclosing item implements
 the trait only through a bound that item declares, as for any call. `${x}` over
-`x: X` needs `X: Display`, and `${x:x}` needs `X: LowerHex`; `X: Display` does
-not stand in for it. `Inspect` is implemented for every type, so `${x:?}` needs
-no bound.
+`x: X` needs `X: Display`, and `${x:x}` needs `X: LowerHex`, which `X: Display`
+does not supply. `Inspect` is implemented for every type, so `${x:?}` needs no
+bound.
 
 > Not yet implemented: an untagged template checks the trait only once the
 > item is instantiated, so it asks for no bound, and the error names the
-> instantiated type at the hole. A tagged template rejects such a hole outright
-> (see [Tagged Template Literals](#tagged-template-literals)).
+> instantiated type at the hole.
 
 | Type   | Trait      | Applies to             | Example                   |
 | ------ | ---------- | ---------------------- | ------------------------- |
@@ -1100,7 +1099,7 @@ declares (see [Format Types](#format-types)).
 Holes are evaluated once, left to right, before the tag runs. Each hole's value
 is the one it had at its own position, so a later hole that writes to its
 storage changes nothing the tag sees: `` format`${a} ${bump(&mut a)}` ``
-renders what `` `${a} ${bump(&mut a)}` `` renders. A tag may carry effects,
+renders `a` as it was before `bump` ran. A tag may carry effects,
 which the caller declares as for any call, and return any type.
 
 The prelude's `format` tag renders each hole through its specifier into one
