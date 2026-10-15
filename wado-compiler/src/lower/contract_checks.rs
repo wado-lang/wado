@@ -13,7 +13,9 @@ use crate::compiler_item::CompilerItems;
 use crate::defs::DefId;
 use crate::flat_package::FlatPackage;
 use crate::hashmap::{IndexMap, IndexSet};
-use crate::lower::plan::value_copy::place::{is_source_place, source_place_subscripts_mut};
+use crate::lower::plan::value_copy::place::{
+    is_index_accessor, is_source_place, source_place_subscripts_mut,
+};
 use crate::lower::translate::{convert_function_ref, tir_function_key};
 use crate::name::{
     CONTRACT_CLAUSE_INTRINSIC, CONTRACT_SITE_INTRINSIC, FunctionId, LocalMethodName, RefKind,
@@ -306,6 +308,7 @@ impl Expander<'_> {
         param_type: TypeId,
         stmts: &mut Vec<TirStmt>,
     ) -> TirExpr {
+        self.bind_expanded(&mut arg.expr, stmts);
         let borrowed_place = matches!(
             &arg.expr.kind,
             TirExprKind::Unary { op: TirUnaryOp::Ref | TirUnaryOp::MutRef, expr } if is_source_place(expr, self.items)
@@ -349,6 +352,32 @@ impl Expander<'_> {
                 )
             }
             _ => arg.expr.clone(),
+        }
+    }
+
+    /// Bind the reference each call already expanded inside the place `expr`
+    /// hands out, so the clauses read the place without copying that call's
+    /// clauses again: `m[i][j]` reads `*m.index_ref_mut(i)`.
+    fn bind_expanded(&mut self, expr: &mut TirExpr, stmts: &mut Vec<TirStmt>) {
+        match &mut expr.kind {
+            TirExprKind::Unary {
+                op: TirUnaryOp::Deref,
+                expr: inner,
+            } if matches!(inner.kind, TirExprKind::Block(_)) => {
+                let reference = take(inner);
+                **inner = self.bind(reference, stmts);
+            }
+            TirExprKind::FieldAccess { expr: inner, .. }
+            | TirExprKind::VariantPayload { expr: inner, .. }
+            | TirExprKind::Index { expr: inner, .. }
+            | TirExprKind::Cast { expr: inner, .. }
+            | TirExprKind::Unary { expr: inner, .. } => self.bind_expanded(inner, stmts),
+            TirExprKind::Call { func, args, .. } if is_index_accessor(func, self.items) => {
+                if let Some(container) = args.iter_mut().next() {
+                    self.bind_expanded(&mut container.expr, stmts);
+                }
+            }
+            _ => {}
         }
     }
 
