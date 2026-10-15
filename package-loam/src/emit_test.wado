@@ -159,7 +159,8 @@ test "the weights become the backend's for every pass where they are prepared" {
 test "the pass checks each input against the graph before any kernel, and forward its data first" {
     let out = generate(MLP, mlp_layout()).unwrap();
 
-    let held = out.find("refuse(extents_mismatch(&backend.extents_of(X), \"X\", [\"Batch\", \"In\"], [-1, 4]));").unwrap();
+    let held = out.find("refuse(extents_mismatch(&backend.extents_of(X), \"X\", [\"Batch\", \"In\"], [-1, 4]));").unwrap(
+    );
     assert held < out.find("matmul_rhs(").unwrap();
     let forward = out.find("pub fn forward").unwrap();
     let host = out.find("refuse(input_mismatch(X, \"X\", [\"Batch\", \"In\"], [-1, 4]));").unwrap();

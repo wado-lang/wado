@@ -168,8 +168,9 @@ fn loams_webgpu_backend_computes_what_its_cpu_backend_does() {
     assert!(output.status.success(), "stderr: {stderr}");
     let lines: Vec<&str> = stdout.lines().collect();
     // Thirteen outputs, from a device's own binding limit and from one
-    // smaller than a weight, which splits the kernels reading it.
-    assert_eq!(lines.len(), 26, "stdout: {stdout}");
+    // smaller than a weight, which splits the kernels reading it, then three
+    // `arg_max`es.
+    assert_eq!(lines.len(), 29, "stdout: {stdout}");
     for line in lines {
         let deviation: f32 = line
             .rsplit(' ')

@@ -151,7 +151,11 @@ export fn run() with (Stdout, Webgpu, Gpu, GpuAdapter, GpuDevice, GpuQueue, GpuC
             &c.options,
         );
         let reads = gpu.read_backs();
-        let [out, present_k, present_v] = [gpu.download(&on_gpu.0), gpu.download(&on_gpu.1), gpu.download(&on_gpu.2)];
+        let [out, present_k, present_v] = [
+            gpu.download(&on_gpu.0),
+            gpu.download(&on_gpu.1),
+            gpu.download(&on_gpu.2),
+        ];
         // Only the three downloads read back: the kernel ran on the device.
         assert gpu.read_backs() - reads == 3, "the attention reads nothing back";
         let worst = f32::max(

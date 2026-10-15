@@ -208,7 +208,11 @@ impl Backend for Opaque {
         return handle(self.cpu.matmul_by_rhs_transposed(&a.held, b, read));
     }
 
-    fn gather_rhs_rows<Row, Col, ..Ix>(&mut self, rows: &Packed<Row, Col>, indices: &Handle<i64, [..Ix]>) -> Handle<f32, [..Ix, Col]> {
+    fn gather_rhs_rows<Row, Col, ..Ix>(
+        &mut self,
+        rows: &Packed<Row, Col>,
+        indices: &Handle<i64, [..Ix]>,
+    ) -> Handle<f32, [..Ix, Col]> {
         return handle(self.cpu.gather_rhs_rows(rows, &indices.held));
     }
 
@@ -402,5 +406,9 @@ impl Backend for Opaque {
 
     fn reduce_mean<Axes>(&mut self, t: &Handle<f32, Axes>, axes: List<i32>) -> Handle<f32, Axes> {
         return handle(self.cpu.reduce_mean(&t.held, axes));
+    }
+
+    fn arg_max<Axes>(&mut self, t: &Handle<f32, Axes>, axis: i32) -> Handle<i64, Axes> {
+        return handle(self.cpu.arg_max(&t.held, axis));
     }
 }

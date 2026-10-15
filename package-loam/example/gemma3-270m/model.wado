@@ -237,8 +237,8 @@ impl<Bk: Backend> Model<Bk> {
             &c[35],
             &self.weights,
         );
-        // Only the last position ranks the next token, so only its row is read
-        // back.
+        // Only the last position ranks the next token, and the backend ranks
+        // it, so one index is read back rather than the vocabulary's logits.
         let last = self.backend.slice_axis::<f32, [gemma::Batch], gemma::Seq, Last, [gemma::Vocab]>(
             &passed.logits,
             1,
@@ -246,7 +246,7 @@ impl<Bk: Backend> Model<Bk> {
             1,
             1,
         );
-        let row = self.backend.download(&last);
+        let best = self.backend.download(&self.backend.arg_max(&last, 2)).data[0] as i32;
         let p = passed;
         let presents = [
             p.present_0_key, p.present_0_value, p.present_1_key, p.present_1_value, p.present_2_key, p.present_2_value,
@@ -260,16 +260,13 @@ impl<Bk: Backend> Model<Bk> {
         // Each present becomes the next call's past where the backend holds it.
         for let i of 0..<presents.len() {
             let extents = self.backend.extents_of(&presents[i]);
-            self.caches[i] = self.backend.reshape::<f32, [gemma::Batch, gemma::KvHead, gemma::Total, gemma::Dim], [gemma::Batch, gemma::KvHead, gemma::Past, gemma::Dim]>(&presents[i], extents);
+            self.caches[i] = self.backend.reshape::<f32, [gemma::Batch, gemma::KvHead, gemma::Total, gemma::Dim], [gemma::Batch, gemma::KvHead, gemma::Past, gemma::Dim]>(
+                &presents[i],
+                extents,
+            );
             self.backend.retain(&self.caches[i]);
         }
         self.seen = *ids;
-        let mut best = 0;
-        for let v of 1..<vocab {
-            if row.data[v] > row.data[best] {
-                best = v;
-            }
-        }
         return best;
     }
 

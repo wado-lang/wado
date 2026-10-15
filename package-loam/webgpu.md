@@ -71,6 +71,10 @@ runs.
   keys turned by the rotary tables. The other attends each query row in a
   workgroup of its own: the turned query, its scores, their softmax and the
   values they weigh. `conformance/webgpu_attention.wado` holds it to `Cpu`.
+- `arg_max` ranks each lane in a workgroup of its own and reads back one index
+  per lane, as an f32, which holds a vocabulary's indices exactly. A language
+  model picking its next token then reads back one index, not the vocabulary's
+  logits.
 - The device's limits are requested at the adapter's own, and a dispatch binds
   only the span of a buffer its views reach. GPT-2's token embedding is 154 MB,
   past WebGPU's default binding of 128 MiB, which is all llvmpipe offers. A
@@ -222,17 +226,26 @@ measurement that shows allocation matters.
 
 `example/gpt2-124m/webgpu.wado` continues "Hello, my name is" with eight
 greedy tokens on each backend, and picks the tokens onnxruntime picks on the
-device. The device is llvmpipe, a software rasterizer, which is all this
-machine offers. Its times say how many synchronizations and dispatches a pass
-makes, not how a GPU runs it. `Cpu` runs under `wado run-webgpu`'s wasmtime,
-and onnxruntime is `generate.mjs` on `onnxruntime-node`.
+device. It runs the whole sequence each token, having no attention cache.
+`example/gemma3-270m/webgpu.wado` continues two prompts with eight greedy
+tokens each, one token a pass against the attention cache, and picks
+onnxruntime's tokens. The device is an RTX 4060 Ti under Vulkan. `Cpu` runs
+under `wado run-webgpu`'s wasmtime, and onnxruntime is each example's
+`generate.mjs` on `onnxruntime-node`, on the CPU.
 
-| Backend                    | Time a token, onnxruntime's as 1 | Dispatches a token | Read backs a token |
-| -------------------------- | -------------------------------- | ------------------ | ------------------ |
-| `WebGpuBackend` (llvmpipe) | 106                              | 127                | 1                  |
-| `Cpu`                      | 217                              |                    |                    |
-| onnxruntime, CPU           | 1                                |                    |                    |
+| Model        | Backend         | Time a token, onnxruntime's as 1 | Dispatches a token | Read backs a token |
+| ------------ | --------------- | -------------------------------- | ------------------ | ------------------ |
+| GPT-2 (124M) | `WebGpuBackend` | 5.3                              | 127                | 1                  |
+| GPT-2 (124M) | `Cpu`           | 19                               |                    |                    |
+| Gemma 3 270M | `WebGpuBackend` | 0.65                             | 275                | 1                  |
+| Gemma 3 270M | `Cpu`           | 5.0                              |                    |                    |
+| either       | onnxruntime     | 1                                |                    |                    |
 
-The 127 dispatches are the 126 the layer table predicts and one more: llvmpipe
-binds 128 MiB at most, so the head's product, whose weight is the 154 MB
-embedding, runs in two chunks.
+Each pass's dispatches are the kernels the layer table predicts and one
+`arg_max`. On llvmpipe, which binds 128 MiB at most, GPT-2's head runs in two
+chunks, its weight being the 154 MB embedding.
+
+Gemma's token cost the host more than the device until the dispatches shared
+one compute pass and one parameter buffer, `wado run-webgpu` built wasmtime and
+wgpu-core optimized, and `arg_max` replaced reading back the logits. Each
+roughly halved it.

@@ -63,7 +63,10 @@ export fn run() with (Stdout, Stderr, Preopens, MonotonicClock, Webgpu, Gpu, Gpu
         let started = MonotonicClock::now();
         all.push(model.next_token(&all));
         let prompted = MonotonicClock::now();
-        let [read, dispatched] = [model.backend().read_backs(), model.backend().dispatches()];
+        let [read, dispatched] = [
+            model.backend().read_backs(),
+            model.backend().dispatches(),
+        ];
         let steps = g.generated.len();
         for let _ of 1..<steps {
             all.push(model.next_token(&all));

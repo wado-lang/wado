@@ -126,6 +126,17 @@ test "a row kernel folds each row, as reduce_mean and softmax do, bit for bit" {
     assert normalized.data == softmax(&x, 1).data;
 }
 
+test "arg_max takes the first greatest along an axis, a NaN greatest of all" {
+    let mut cpu = Cpu {};
+    let x = tensor::<[Row, Col]>([2, 3], [1.0, 3.0, 3.0, 2.0, f32::NAN, 9.0]);
+    let along_cols = cpu.arg_max(&x, 1);
+    assert along_cols.extents == [2, 1] as List<i32>;
+    assert along_cols.data == [1, 1] as List<i64>;
+    let along_rows = cpu.arg_max(&x, 0);
+    assert along_rows.extents == [1, 3] as List<i32>;
+    assert along_rows.data == [1, 1, 1] as List<i64>;
+}
+
 test "a row kernel over empty rows writes each row's fold of nothing" {
     let mut cpu = Cpu {};
     let x = cpu.upload(&tensor::<[Row, Col]>([3, 0], []));

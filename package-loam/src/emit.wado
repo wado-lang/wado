@@ -1656,7 +1656,11 @@ fn node_term(
     if op == "MatMul" {
         if let Some(weight) = exprs.transposed.get(node.inputs[1]) {
             let a = exprs.reference(&node.inputs[0]);
-            let kernel = if exprs.rhs.contains_key(weight) { "matmul_by_rhs_transposed" } else { "matmul_by_transposed" };
+            let kernel = if exprs.rhs.contains_key(weight) {
+                "matmul_by_rhs_transposed";
+            } else {
+                "matmul_by_transposed";
+            };
             let head = `backend.${kernel}(${a}, ${exprs.reference(&weight)}`;
             return Result::Ok(Option::Some(Term::after(head, out)));
         }

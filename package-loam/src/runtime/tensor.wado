@@ -266,7 +266,10 @@ pub fn matmul_by_packed_transposed<..Bs, M, K, N>(
         let row: Packed<M, K> = packed_matrix(1, inner, |_, c| a.data[r * inner + c]);
         for let c of 0..<cols {
             let at = c * per_row;
-            let [mut even, mut odd] = [f32x4::splat(0.0), f32x4::splat(0.0)];
+            let [mut even, mut odd] = [
+                f32x4::splat(0.0),
+                f32x4::splat(0.0),
+            ];
             for let mut v = 0; v + 1 < per_row; v += 2 {
                 even = even + row.vectors[v] * b.vectors[at + v];
                 odd = odd + row.vectors[v + 1] * b.vectors[at + v + 1];
@@ -1330,6 +1333,30 @@ pub fn reduce_mean<Axes>(t: &Tensor<f32, Axes>, axes: List<i32>) -> Tensor<f32, 
     return map(&sum, |v| v / count);
 }
 
+/// ONNX's `ArgMax` keeping its axis: the index along `axis` of each lane's
+/// first greatest element, in the order `>` reads, so a NaN is greatest.
+pub fn arg_max<Axes>(t: &Tensor<f32, Axes>, axis: i32) -> Tensor<i64, Axes>
+    contract t.extents[axis] > 0, "ArgMax needs an element along its axis"
+{
+    let extent = t.extents[axis];
+    let inner = element_count(&t.extents[axis + 1..<t.extents.len()].to_list());
+    let lanes = t.data.len() / extent;
+    let mut out = List::<i64>::with_capacity(lanes);
+    for let lane of 0..<lanes {
+        let base = lane / inner * extent * inner + lane % inner;
+        let mut best = 0;
+        for let k of 1..<extent {
+            if t.data[base + k * inner] > t.data[base + best * inner] {
+                best = k;
+            }
+        }
+        out.push(best as i64);
+    }
+    let mut extents = t.extents;
+    extents[axis] = 1;
+    return Tensor { data: out, extents };
+}
+
 /// Each element through `op`.
 pub fn map<A, B, Axes>(t: &Tensor<A, Axes>, op: fn(A) -> B) -> Tensor<B, Axes> {
     let mut out = List::<B>::with_capacity(t.data.len());
@@ -2249,6 +2276,9 @@ pub trait Backend with _ {
     fn softmax_flattened<Axes>(&mut self, t: &Self::Tensor<f32, Axes>, axis: i32) -> Self::Tensor<f32, Axes>;
     fn reduce_sum<Axes>(&mut self, t: &Self::Tensor<f32, Axes>, axes: List<i32>) -> Self::Tensor<f32, Axes>;
     fn reduce_mean<Axes>(&mut self, t: &Self::Tensor<f32, Axes>, axes: List<i32>) -> Self::Tensor<f32, Axes>;
+    /// [`arg_max`]: a model picking its next token reads one index per lane
+    /// rather than the lane.
+    fn arg_max<Axes>(&mut self, t: &Self::Tensor<f32, Axes>, axis: i32) -> Self::Tensor<i64, Axes>;
 }
 
 /// The kernels above, run where the module runs.
@@ -2367,7 +2397,11 @@ impl Backend for Cpu {
         return matmul_by_packed_transposed(a, b, &then);
     }
 
-    fn gather_rhs_rows<Row, Col, ..Ix>(&mut self, rows: &Packed<Row, Col>, indices: &Tensor<i64, [..Ix]>) -> Tensor<f32, [..Ix, Col]> {
+    fn gather_rhs_rows<Row, Col, ..Ix>(
+        &mut self,
+        rows: &Packed<Row, Col>,
+        indices: &Tensor<i64, [..Ix]>,
+    ) -> Tensor<f32, [..Ix, Col]> {
         return gather_packed_rows(rows, indices);
     }
 
@@ -2527,5 +2561,9 @@ impl Backend for Cpu {
 
     fn reduce_mean<Axes>(&mut self, t: &Tensor<f32, Axes>, axes: List<i32>) -> Tensor<f32, Axes> {
         return reduce_mean(t, axes);
+    }
+
+    fn arg_max<Axes>(&mut self, t: &Tensor<f32, Axes>, axis: i32) -> Tensor<i64, Axes> {
+        return arg_max(t, axis);
     }
 }
