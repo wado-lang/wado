@@ -33,25 +33,13 @@ type "functype//core:rt/write_string_to_stream$dae[add_newline]" = fn(i32, ref A
 
 type "functype//core:rt/cm_stream_write_raw_all_u8" = fn(i32, ref Array<u8>, i32, i32) -> "core:prelude/types.wado//enum:CopyResult";  // TypeId(13)
 
-type "functype//core:prelude/primitive.wado/i32::max" = fn(i32, i32) -> i32;  // TypeId(14)
+type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(14)
 
-type "functype//core:prelude/string.wado/core:prelude/string.wado/String::realloc_to" = fn(ref "core:prelude/string.wado//String", i32);  // TypeId(15)
+type "functype//wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code" = fn(i32);  // TypeId(15)
 
-type "functype//core:prelude/string.wado/core:prelude/string.wado/String::grow" = fn(ref "core:prelude/string.wado//String", i32);  // TypeId(16)
+type "functype//wasi/task-return" = fn(i32);  // TypeId(16)
 
-type "functype//./sub/tagged_template_qualified_tag_lib.wado/./sub/tagged_template_qualified_tag_lib.wado/Sql::q<tagged_template_qualified_tag.wado/$tmpl$d6dc43748e8d8d11,[i32,core:prelude/string.wado/String]>$dae[t]" = fn() -> ref "core:prelude/string.wado//String";  // TypeId(17)
-
-type "functype//core:prelude/array.wado/Array<u8>::len" = fn(ref Array<u8>) -> i32;  // TypeId(18)
-
-type "functype//core:prelude/primitive.wado/i32::max$spec0$dae[b]" = fn(i32) -> i32;  // TypeId(19)
-
-type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(20)
-
-type "functype//wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code" = fn(i32);  // TypeId(21)
-
-type "functype//wasi/task-return" = fn(i32);  // TypeId(22)
-
-type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(23)
+type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(17)
 
 import fn mem/realloc from "mem/realloc";
 import fn wasi/stream-write from "wasi/stream-write";
@@ -66,26 +54,22 @@ import fn wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code 
 import fn wasi/task-return from "wasi/task-return";
 import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 
-global global:./sub/tagged_template_qualified_tag_lib.wado::$const_obj_2: ref Array<u8> = array.new_fixed<u8>(63);
-global global:./sub/tagged_template_qualified_tag_lib.wado::$const_obj_3: ref Array<u8> = array.new_fixed<u8>(32, 65, 78, 68, 32, 110, 97, 109, 101, 32, 61, 32);
-global global:./sub/tagged_template_qualified_tag_lib.wado::$const_obj_5: ref Array<u8> = array.new_fixed<u8>(105, 100, 32, 61, 32);
-
 fn "tagged_template_qualified_tag.wado/$cm_binding__Stdout_write_via_stream"(data) with Stdout {
     return "wasi/wasi:cli/Stdout::write_via_stream"(data);
 }
 
 fn "tagged_template_qualified_tag.wado/$cm_export__run"() {
-    let message_2: ref "core:prelude/string.wado//String";
     let packed: i64;
     let rx_8: i32;
     let tx_9: i32;
     drop(black_box(7));
     drop(black_box(struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(97, 100, 97), used: 3 }));
-    message_2 = "./sub/tagged_template_qualified_tag_lib.wado/./sub/tagged_template_qualified_tag_lib.wado/Sql::q<tagged_template_qualified_tag.wado/$tmpl$d6dc43748e8d8d11,[i32,core:prelude/string.wado/String]>$dae[t]"();
     rx_8 = builtin::i32_wrap_i64(local.tee packed("wasi/stream-new"()));
     tx_9 = builtin::i32_wrap_i64(packed >> 32_i64);
     rx_8 = "tagged_template_qualified_tag.wado/$cm_binding__Stdout_write_via_stream"(rx_8);
-    "core:rt/write_string_to_stream$dae[add_newline]"(tx_9, message_2.repr, message_2.used);
+    let $mv_field_2: ref Array<u8>;
+    $mv_field_2 = array.new_data<u8>("id = ? AND name = ?");
+    "core:rt/write_string_to_stream$dae[add_newline]"(tx_9, $mv_field_2, 19);
     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(rx_8);
     "wasi/task-return"(0);
 }
@@ -154,72 +138,6 @@ fn "core:rt/cm_stream_write_raw_all_u8"(handle, $mv$data$repr, $mv$data$start, $
             continue l5;
         };
     };
-}
-
-fn "core:prelude/primitive.wado/i32::max"(a, b) {
-    return select i32(a > b, a, b);
-}
-
-fn "core:prelude/string.wado/core:prelude/string.wado/String::realloc_to"(self, new_capacity) {
-    let new_repr: ref Array<u8>;
-    builtin::array_copy<u8>(local.tee new_repr(builtin::array_new<u8>(new_capacity)), 0, self.repr, 0, self.used);
-    self.repr = new_repr;
-}
-
-fn "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self, min_capacity) {
-    let capacity: i32;
-    capacity = "core:prelude/array.wado/Array<u8>::len"(self.repr);
-    if min_capacity <= capacity {
-        return;
-    }
-    "core:prelude/string.wado/core:prelude/string.wado/String::realloc_to"(self, "core:prelude/primitive.wado/i32::max$spec0$dae[b]"("core:prelude/primitive.wado/i32::max"(capacity * 2, min_capacity)));
-}
-
-fn "./sub/tagged_template_qualified_tag_lib.wado/./sub/tagged_template_qualified_tag_lib.wado/Sql::q<tagged_template_qualified_tag.wado/$tmpl$d6dc43748e8d8d11,[i32,core:prelude/string.wado/String]>$dae[t]"() {
-    let $load_2: ref Array<u8>;
-    let out_0: ref "core:prelude/string.wado//String";
-    let start_19: i32;
-    out_0 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 };
-    if @unlikely(5 > builtin::array_len(out_0.repr)) {
-        cold_path;
-        "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out_0, 5);
-    }
-    start_19 = out_0.used;
-    out_0.used = 5;
-    builtin::array_copy<u8>(local.tee $load_2(out_0.repr), start_19, global:./sub/tagged_template_qualified_tag_lib.wado::$const_obj_5, 0, 5);
-    if @unlikely(6 > builtin::array_len($load_2)) {
-        cold_path;
-        "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out_0, 6);
-    }
-    start_19 = out_0.used;
-    out_0.used = 6;
-    builtin::array_copy<u8>(local.tee $load_2(out_0.repr), start_19, global:./sub/tagged_template_qualified_tag_lib.wado::$const_obj_2, 0, 1);
-    if @unlikely(18 > builtin::array_len($load_2)) {
-        cold_path;
-        "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out_0, 18);
-    }
-    start_19 = out_0.used;
-    out_0.used = 18;
-    builtin::array_copy<u8>(local.tee $load_2(out_0.repr), start_19, global:./sub/tagged_template_qualified_tag_lib.wado::$const_obj_3, 0, 12);
-    if @unlikely(19 > builtin::array_len($load_2)) {
-        cold_path;
-        "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out_0, 19);
-    }
-    start_19 = out_0.used;
-    out_0.used = 19;
-    builtin::array_copy<u8>(out_0.repr, start_19, global:./sub/tagged_template_qualified_tag_lib.wado::$const_obj_2, 0, 1);
-    $inline_core_prelude_string_wado_String__internal_push_string_30: block {
-        break $inline_core_prelude_string_wado_String__internal_push_string_30;
-    };
-    return out_0;
-}
-
-fn "core:prelude/array.wado/Array<u8>::len"(self) {
-    return builtin::array_len(self);
-}
-
-fn "core:prelude/primitive.wado/i32::max$spec0$dae[b]"(a) {
-    return select i32(a > 8, a, 8);
 }
 
 export fn "tagged_template_qualified_tag.wado/$cm_export__run" as "run"
