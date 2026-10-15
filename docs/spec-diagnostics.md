@@ -216,8 +216,10 @@ nothing.
 
 ## The `dead_code` Lint
 
-The `dead_code` lint warns about a free function or a global that the program
-does not use. An item is used when one of these roots reaches it:
+The `dead_code` lint warns about a free function or a global that its package
+does not use. Reachability is decided over every module of the package, not
+over one program built from it. An item is used when one of these roots
+reaches it:
 
 - A `pub` or `export` item. An `internal` item is not a root, because nothing
   outside the package can reach it.
@@ -237,6 +239,11 @@ An item the roots do not reach is reported one of two ways:
 - Reached from nothing: "never used".
 
 An item in a `#![generated]` module is never reported.
+
+> Not yet implemented: reachability is decided over the modules one
+> compilation loads. `wado test` compiles each test file as its own program, so
+> an `internal` item that only another module of the package uses is reported
+> "never used".
 
 Rationale: [WEP: Unused Diagnostics](./wep-2026-05-16-unused-diagnostics.md).
 
