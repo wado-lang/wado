@@ -224,8 +224,8 @@ fn function_key(module_source: &ModuleSource, name: &str) -> String {
 /// Every global each function reads or writes, closed over the call graph.
 ///
 /// An initializer's dependency is not always written in it: a call reads
-/// globals the caller never names, and ordering on the directly-written
-/// references alone leaves such a global still holding its placeholder when the
+/// globals the caller never names, and ordering on the references the caller
+/// names alone leaves such a global still holding its placeholder when the
 /// caller runs. Computed as a least fixpoint, so a recursive cycle contributes
 /// each member's own references and terminates.
 fn global_refs_by_function(
@@ -273,7 +273,7 @@ fn global_refs_by_function(
 ///
 /// An initializer depends on every global it refers to, and every global a
 /// function it calls or names refers to, on any path. The rule is
-/// path-insensitive, as Go's is: a read only some executions take orders the
+/// path-insensitive, as Go's is: a reference only some executions take orders the
 /// initializer the same as one they all take, and a cycle among them is an
 /// error even where no execution would close it.
 fn init_dependencies(

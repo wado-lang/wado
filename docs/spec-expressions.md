@@ -380,7 +380,7 @@ initializers that do not depend on each other is
 
 An initializer depends on every global it reads or writes, and every global a
 function it calls or names reads or writes, on any path. A closure body counts
-where it is written, though it runs only when called, and a read only some
+where it is written, though it runs only when called, and a use only some
 executions take counts as one they all take. A cycle among them is an error,
 an initializer that refers to its own global included.
 
