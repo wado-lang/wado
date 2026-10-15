@@ -34,7 +34,7 @@ use crate::tir::{BuiltinDeclaration, ResolvedType, TypeId, TypeTable};
 
 use cranelift_entity::EntityRef;
 
-use super::arena_query;
+use super::arena_query::{self, cold_exprs, cold_path_id};
 use super::body_memo::BodyMemo;
 use super::dce::callee_descriptor;
 use super::gate::{FunctionGate, GatedPass};
@@ -997,6 +997,9 @@ struct BodyScan {
     /// Every call, with its by-value arguments keyed by position: an
     /// [`ArgSite`] before the callee's own writes rule any out.
     calls: Vec<ArgSite>,
+    /// The callees called from at least one site no `cold_path()` marker
+    /// covers.
+    hot_callees: IndexSet<FuncId>,
     /// Whether the body holds a `loop`.
     loopy: bool,
 }
@@ -1005,7 +1008,7 @@ struct BodyScan {
 #[derive(Default)]
 pub(super) struct InlineScans(BodyMemo<BodyScan>);
 
-fn scan_body(func: &NirFunction) -> BodyScan {
+fn scan_body(func: &NirFunction, cold_path: Option<FuncId>) -> BodyScan {
     // A site's arguments are keyed by position and the callee's writes by
     // local index.
     assert!(
@@ -1019,6 +1022,7 @@ fn scan_body(func: &NirFunction) -> BodyScan {
     let Some(body) = &func.body else {
         return scan;
     };
+    let cold = cold_path.map(|id| cold_exprs(body, id)).unwrap_or_default();
     body.for_each_reachable_node(|node| match node {
         NodeRef::Stmt(st) => match &body.stmts[st].kind {
             StmtKind::Let {
@@ -1054,6 +1058,9 @@ fn scan_body(func: &NirFunction) -> BodyScan {
                     .map(|(pos, a)| (pos as u32, a.expr))
                     .collect();
                 scan.calls.push((*func_id, by_value));
+                if !cold.contains(&e) {
+                    scan.hot_callees.insert(*func_id);
+                }
             }
             _ => {}
         },
@@ -1738,6 +1745,37 @@ fn collect_callees(body: &Body, callees: &mut IndexSet<usize>) {
 /// store position. This is the multiplier on what one splice adds, so a callee
 /// reached twice from one body counts twice — unlike [`collect_callees`], whose
 /// answer is a set because the recursion graph only asks whether an edge exists.
+/// The functions no hot site reaches, indexed by store position: every path
+/// into one passes a `cold_path()` marker, so whatever is spliced into it runs
+/// at most once on the way out. A function no call site reaches is reached some
+/// other way (an export, a global initializer, a function reference), so it
+/// counts as hot.
+fn cold_functions(project: &NirPackage, scans: &[BodyScan]) -> Vec<bool> {
+    let mut called = vec![false; scans.len()];
+    for (callee, _) in scans.iter().flat_map(|s| &s.calls) {
+        called[callee.index()] = true;
+    }
+    let mut hot: Vec<bool> = project
+        .functions
+        .iter()
+        .zip(&called)
+        .map(|(f, &called)| {
+            let f = f.borrow();
+            !called || f.is_export || f.is_cm_export
+        })
+        .collect();
+    let mut work: Vec<usize> = (0..hot.len()).filter(|&i| hot[i]).collect();
+    while let Some(caller) = work.pop() {
+        for callee in &scans[caller].hot_callees {
+            if !hot[callee.index()] {
+                hot[callee.index()] = true;
+                work.push(callee.index());
+            }
+        }
+    }
+    hot.into_iter().map(|hot| !hot).collect()
+}
+
 fn call_site_counts(scans: &[BodyScan]) -> Vec<usize> {
     let mut counts = vec![0usize; scans.len()];
     for (callee, _) in scans.iter().flat_map(|s| &s.calls) {
@@ -1990,7 +2028,11 @@ pub fn inline_functions(
     // borrow-safe), so a call site is recognized by its stamped id rather than the
     // call node's `FunctionRef`. Indexed by `func_id.index()` (== store position).
     let descriptors = descriptor_cache.descriptors(project);
-    let scans = scans.0.refresh(project, gate.exec(), scan_body);
+    let cold_path = cold_path_id(descriptors);
+    let scans = scans
+        .0
+        .refresh(project, gate.exec(), |f| scan_body(f, cold_path));
+    let cold = cold_functions(project, scans);
     let never: Vec<bool> = {
         let type_table = project.type_table.borrow();
         project
@@ -2313,7 +2355,11 @@ pub fn inline_functions(
                 &mut inlined_funcs,
                 &mut labels,
                 &mut reval,
-                Site::Plain,
+                if cold[fid.index()] {
+                    Site::Cold
+                } else {
+                    Site::Plain
+                },
             );
         }
         func.address_taken_locals = frame.address_taken;
