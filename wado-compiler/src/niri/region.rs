@@ -194,8 +194,8 @@ impl RegionRefusal {
 }
 
 /// What a frame would need to run `block`: the outer locals it only reads, and
-/// the first fact that disqualifies it. A write is an `Assign` target, a `&mut`
-/// borrow, or a `&mut` parameter per the callee's signature, the signature being
+/// the first fact that disqualifies it. A write is an `Assign` target, a `&mut`,
+/// or a `&mut` parameter per the callee's signature, the signature being
 /// the only reliable witness.
 ///
 /// The walk finishes past a refusal, since the two answers are independent:
@@ -351,7 +351,7 @@ pub(super) struct FreeRead {
 }
 
 /// Whether `ty` is a reference something can write through: `&mut`, or a box
-/// not known to stand for a shared borrow. A shared borrow only reads.
+/// not known to stand for a `&`. A `&` only reads.
 fn writable_reference(ty: TypeId, type_table: &TypeTable) -> bool {
     matches!(
         RefKind::from_resolved(type_table.get(ty)),

@@ -24,7 +24,7 @@ use crate::nir_engine::{Engine, EngineBuffers, Rule};
 use crate::nir_package::NirPackage;
 use crate::nir_value_graph::{ValueId, ValueKind};
 use crate::niri::{
-    AggregateShapes, BorrowRoot, CalleeMap, CtfeBuiltinMap, EditSink, GlobalEnv, GlobalFieldEnv,
+    AggregateShapes, RefRoot, CalleeMap, CtfeBuiltinMap, EditSink, GlobalEnv, GlobalFieldEnv,
     GlobalKey, Interpreter, Lattice, MaterializingGlobals, build_callee_map,
     build_ctfe_builtin_map, guard_declares_locals, materializing_globals,
 };
@@ -543,7 +543,7 @@ impl GlobalStoreCollector<'_> {
     /// `G.repr` out of a loop that writes through it is the shape that bites.
     ///
     /// Only a binding that can alias a write path: a scalar is copied into its
-    /// local, and a shared borrow reaches the global read-only, whether it names
+    /// local, and a `&` reference reaches the global read-only, whether it names
     /// the whole of one or a part.
     /// A non-scalar `let x = G` is a deep copy by value semantics yet counts
     /// here, because `value_copy_demote` elides that copy once it proves the
@@ -586,7 +586,7 @@ impl GlobalStoreCollector<'_> {
     }
 
     /// Mark the global a place roots at as one nothing may be read off, through
-    /// the projection and borrow chain leading to it.
+    /// the projection and reference chain leading to it.
     fn record_escape(&mut self, body: &Body, place: Operand) {
         let Some(e) = place.as_expr() else {
             return;
@@ -724,8 +724,8 @@ impl ConstFoldVisitor<'_> {
 
         match &engine.body.stmts[s].kind {
             StmtKind::Loop { body: lb } => {
-                // Loop back-edge: every local the body may reassign or mutably
-                // borrow is dropped to `NonConst` before and after the body
+                // Loop back-edge: every local the body may reassign or take
+                // `&mut` is dropped to `NonConst` before and after the body
                 // walk (`apply_loop_invalidations`), a conservative fixpoint
                 // approximation — only facts unaffected by the body hold at
                 // entry and post-loop. Struct-field heap effects across the
@@ -944,7 +944,7 @@ impl ConstFoldVisitor<'_> {
         }
         // A bare `local = …` reassignment drops the local's lattice to unknown;
         // a field / deref / index store drops what the frame knows about the
-        // storage written, which a borrow reaches under another name.
+        // storage written, which a reference reaches under another name.
         match &engine.body.exprs[target].kind {
             ExprKind::Local { index, .. } => {
                 let index = *index;
@@ -983,7 +983,7 @@ impl ConstFoldVisitor<'_> {
                     {
                         self.interpreter.invalidate_local(*local_index);
                         self.interpreter
-                            .record_ref_root(*local_index, BorrowRoot::NotABorrow);
+                            .record_ref_root(*local_index, RefRoot::NotARef);
                     }
                 });
                 return;
@@ -994,59 +994,59 @@ impl ConstFoldVisitor<'_> {
         // A mutable binding carries its value forward only while that value is a
         // scalar. An aggregate is mutated in place — through an element `&mut`,
         // an iterator, a captured reference — none of which reassigns the local
-        // or borrows it by name, so no write summary here would drop the stale
+        // or references it by name, so no write summary here would drop the stale
         // constant.
         let lat = if is_mut { scalar_only(lat) } else { lat };
         // A same-index reuse would otherwise keep the earlier `let`'s constant
         // and its field entries.
         self.interpreter.invalidate_local(local_index);
         self.interpreter
-            .record_ref_root(local_index, Self::borrowed_root(body, value));
+            .record_ref_root(local_index, Self::ref_root_of(body, value));
         self.interpreter.bind_local(local_index, lat);
     }
 
-    /// What a `let r = &place` binding borrows into.
-    fn borrowed_root(body: &Body, op: Operand) -> BorrowRoot {
+    /// What a `let r = &place` binding refers into.
+    fn ref_root_of(body: &Body, op: Operand) -> RefRoot {
         let Some(e) = op.as_expr() else {
-            return BorrowRoot::NotABorrow;
+            return RefRoot::NotARef;
         };
         let e = body.strip_casts(e);
         match &body.exprs[e].kind {
             ExprKind::Unary {
                 op: NirUnaryOp::Ref | NirUnaryOp::MutRef,
                 expr: inner,
-            } => match Self::borrowed_root_impl(body, *inner) {
-                Some(root) => BorrowRoot::Local(root),
-                None => BorrowRoot::Unrooted,
+            } => match Self::referent_local(body, *inner) {
+                Some(root) => RefRoot::Local(root),
+                None => RefRoot::Unrooted,
             },
             ExprKind::LabeledBlock { .. } => Self::joined_exit_root(body, e),
-            _ => BorrowRoot::NotABorrow,
+            _ => RefRoot::NotARef,
         }
     }
 
-    /// What every exit of the labeled block at `e` agrees its value borrows
+    /// What every exit of the labeled block at `e` agrees its value refers
     /// into, joined: the write lands wherever the exit that ran pointed.
-    fn joined_exit_root(body: &Body, e: ExprId) -> BorrowRoot {
+    fn joined_exit_root(body: &Body, e: ExprId) -> RefRoot {
         let Some(exits) = body.block_exits(e) else {
-            return BorrowRoot::NotABorrow;
+            return RefRoot::NotARef;
         };
-        let mut joined: Option<BorrowRoot> = None;
+        let mut joined: Option<RefRoot> = None;
         for exit in exits {
-            // A value-less exit carries no borrow.
-            let one = exit.map_or(BorrowRoot::NotABorrow, |op| Self::borrowed_root(body, op));
+            // A value-less exit carries no reference.
+            let one = exit.map_or(RefRoot::NotARef, |op| Self::ref_root_of(body, op));
             joined = Some(match joined {
                 None => one,
                 Some(prev) if prev == one => prev,
-                Some(_) => BorrowRoot::Unrooted,
+                Some(_) => RefRoot::Unrooted,
             });
         }
-        // A block that produces no value borrows nothing.
-        joined.unwrap_or(BorrowRoot::NotABorrow)
+        // A block that produces no value refers to nothing.
+        joined.unwrap_or(RefRoot::NotARef)
     }
 
-    /// The local a borrow bottoms out at, following the accessor calls that
+    /// The local a reference bottoms out at, following the accessor calls that
     /// `&mut xs[i]` reduces to.
-    fn borrowed_root_impl(body: &Body, op: Operand) -> Option<u32> {
+    fn referent_local(body: &Body, op: Operand) -> Option<u32> {
         let e = op.as_expr()?;
         match &body.exprs[e].kind {
             ExprKind::Unary {
@@ -1056,16 +1056,16 @@ impl ConstFoldVisitor<'_> {
             | ExprKind::Cast { expr: inner, .. }
             | ExprKind::FieldAccess { expr: inner, .. }
             | ExprKind::VariantPayload { expr: inner, .. }
-            | ExprKind::Index { expr: inner, .. } => Self::borrowed_root_impl(body, *inner),
+            | ExprKind::Index { expr: inner, .. } => Self::referent_local(body, *inner),
             ExprKind::Local { index, .. } => Some(*index),
             ExprKind::LabeledBlock { .. } => match Self::joined_exit_root(body, e) {
-                BorrowRoot::Local(root) => Some(root),
-                BorrowRoot::NotABorrow | BorrowRoot::Unrooted => None,
+                RefRoot::Local(root) => Some(root),
+                RefRoot::NotARef | RefRoot::Unrooted => None,
             },
             ExprKind::Call { args, .. } => {
                 let mut found = None;
                 for arg in args {
-                    match Self::borrowed_root_impl(body, arg.expr) {
+                    match Self::referent_local(body, arg.expr) {
                         Some(r) if found.is_none_or(|f| f == r) => found = Some(r),
                         Some(_) => return None,
                         None => {}
@@ -1119,14 +1119,14 @@ impl ConstFoldVisitor<'_> {
     }
 
     /// Apply a [`LoopWriteEffects`] summary to the interpreter,
-    /// dropping every local the body could reassign or mutably borrow to
+    /// dropping every local the body could reassign or take `&mut` to
     /// `NonConst`, so the pre-body and post-body local env is a sound
     /// abstraction of any iteration count.
     fn apply_loop_invalidations(&mut self, writes: &LoopWriteEffects) {
         for idx in &writes.reassigned_locals {
             self.interpreter.invalidate_local(*idx);
         }
-        for idx in &writes.mut_borrowed {
+        for idx in &writes.mut_referenced {
             // A `&mut local` (or `is_mut` call arg) escapes a mutable
             // reference the callee can store and mutate; drop the local.
             self.interpreter.invalidate_local(*idx);
@@ -1163,7 +1163,7 @@ struct LoopWriteEffects {
     reassigned_locals: IndexSet<u32>,
     /// `&mut local` or `is_mut` call argument — callee may store and
     /// mutate through the reference, so drop the local fully.
-    mut_borrowed: IndexSet<u32>,
+    mut_referenced: IndexSet<u32>,
 }
 
 /// Walk a loop body and collect every write effect that must be
@@ -1201,7 +1201,7 @@ fn record_loop_write(body: &Body, e: ExprId, effects: &mut LoopWriteEffects) {
             if let Some(ie) = inner.as_expr()
                 && let ExprKind::Local { index, .. } = &body.exprs[ie].kind
             {
-                effects.mut_borrowed.insert(*index);
+                effects.mut_referenced.insert(*index);
             }
         }
         ExprKind::Call { args, .. } => {
@@ -1210,7 +1210,7 @@ fn record_loop_write(body: &Body, e: ExprId, effects: &mut LoopWriteEffects) {
                     && let Some(ae) = arg.expr.as_expr()
                     && let ExprKind::Local { index, .. } = &body.exprs[ae].kind
                 {
-                    effects.mut_borrowed.insert(*index);
+                    effects.mut_referenced.insert(*index);
                 }
             }
         }

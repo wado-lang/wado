@@ -1,4 +1,4 @@
-//! What a borrow or lvalue chain names.
+//! What a reference or lvalue chain names.
 //!
 //! One walk answers it. [`named_place`] resolves an operand to the local it
 //! roots at and the steps between, and every question here is a predicate over
@@ -10,11 +10,11 @@ use crate::nir_arena::{Body, ExprId, ExprKind, Operand};
 
 /// One layer between a local and the storage an operand names. A cast is not a
 /// step: it converts no storage, so it names exactly its operand, which is how
-/// a borrow reaches a builtin after monomorphization.
+/// a reference reaches a builtin after monomorphization.
 #[derive(Clone, Copy)]
 enum Step {
     /// `&x` or `&mut x`.
-    Borrow { is_mut: bool },
+    Ref { is_mut: bool },
     /// `*x`.
     Deref,
     /// `x.f`.
@@ -27,7 +27,7 @@ impl Step {
     /// Whether the step names the same storage as the expression under it. A
     /// projection names storage inside it instead.
     fn is_wrapper(self) -> bool {
-        matches!(self, Self::Borrow { .. } | Self::Deref)
+        matches!(self, Self::Ref { .. } | Self::Deref)
     }
 }
 
@@ -88,8 +88,8 @@ fn named_place(body: &Body, op: Operand) -> Option<NamedPlace> {
 /// The step a unary operator spells, or `None` for one that computes a value.
 fn unary_step(op: NirUnaryOp) -> Option<Step> {
     match op {
-        NirUnaryOp::Ref => Some(Step::Borrow { is_mut: false }),
-        NirUnaryOp::MutRef => Some(Step::Borrow { is_mut: true }),
+        NirUnaryOp::Ref => Some(Step::Ref { is_mut: false }),
+        NirUnaryOp::MutRef => Some(Step::Ref { is_mut: true }),
         NirUnaryOp::Deref => Some(Step::Deref),
         _ => None,
     }
@@ -104,7 +104,7 @@ impl NamedPlace {
         for (step, _) in self.steps.iter().rev() {
             match step {
                 Step::Field(index) => path.push(*index),
-                Step::Borrow { .. } | Step::Deref => {}
+                Step::Ref { .. } | Step::Deref => {}
                 Step::Element => return None,
             }
         }
@@ -124,18 +124,18 @@ pub(super) fn named_local(body: &Body, op: Operand) -> Option<u32> {
     place.steps.is_empty().then_some(place.root)?
 }
 
-/// The local an lvalue chain roots at, or `None` for a borrow: a handle is a
+/// The local an lvalue chain roots at, or `None` for a reference: a handle is a
 /// value naming storage, not that storage.
 pub(super) fn lvalue_root_local(body: &Body, op: Operand) -> Option<u32> {
     let place = named_place(body, op)?;
     place
         .steps
         .iter()
-        .all(|(step, _)| !matches!(step, Step::Borrow { .. }))
+        .all(|(step, _)| !matches!(step, Step::Ref { .. }))
         .then_some(place.root)?
 }
 
-/// The local a borrow or lvalue chain roots at, and the field path reaching
+/// The local a reference or lvalue chain roots at, and the field path reaching
 /// into its value. A write needs both: which local it touches, and where
 /// inside it the write lands.
 pub(super) fn place_of(body: &Body, op: Operand) -> Option<(u32, Vec<u32>)> {
@@ -148,13 +148,13 @@ pub(super) fn write_root_local(body: &Body, op: Operand) -> Option<u32> {
     named_place(body, op)?.root
 }
 
-/// The borrow `op` spells over a place: whether it is mutable, and the operand
-/// borrowed. `None` unless a borrow is the outermost step over a place
-/// [`place_of`] can spell — `&GLOBAL` and a borrow of an rvalue name no local
-/// place.
-pub(super) fn borrowed_place_operand(body: &Body, op: Operand) -> Option<(bool, Operand)> {
+/// The reference `op` spells over a place: whether it is mutable, and the
+/// operand referenced. `None` unless a reference is the outermost step over a
+/// place [`place_of`] can spell — `&GLOBAL` and a reference to an rvalue name
+/// no local place.
+pub(super) fn referenced_place_operand(body: &Body, op: Operand) -> Option<(bool, Operand)> {
     let place = named_place(body, op)?;
-    let &(Step::Borrow { is_mut }, inner) = place.steps.first()? else {
+    let &(Step::Ref { is_mut }, inner) = place.steps.first()? else {
         return None;
     };
     place.root?;

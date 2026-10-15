@@ -5038,7 +5038,7 @@ fn a_sequence_without_the_builtin_map_stays_a_call() {
 
 #[test]
 fn a_shared_reference_reduces_to_what_it_points_at() {
-    // A borrow is not an operation over a value. Evaluating it as one reports
+    // A reference is not an operation over a value. Evaluating it as one reports
     // the referent's own constant as non-constant, and `let r = &CONST` then
     // carries nothing for the reads through `r` to project out of.
     let Lattice::Const(v) = lattice_of(&shared_ref(
@@ -6167,7 +6167,7 @@ fn multi_stmt_labeled_block_break_is_caught() {
 }
 
 #[test]
-fn multi_stmt_mut_borrowed_local_blocks_fold() {
+fn multi_stmt_mut_referenced_local_blocks_fold() {
     // fn f() { let mut y = 1; sink(&mut y); return y; }
     let sink = make_pure_fn(
         "sink",
@@ -7212,13 +7212,13 @@ fn aggregate_binding_needs_a_read_only_local() {
     interp.bind_local(0, Lattice::Const(point_value(point)));
     assert_eq!(reduce_lat(&mut interp, &read), Lattice::Const(int(10)));
 
-    // A body that also borrows the local mutably does not.
-    let borrowed = unary(NirUnaryOp::MutRef, local_expr(0, point), point);
-    let read_then_borrow: Build = Rc::new(move |b| {
+    // A body that also takes `&mut` of the local does not.
+    let mut_ref = unary(NirUnaryOp::MutRef, local_expr(0, point), point);
+    let read_then_mut_ref: Build = Rc::new(move |b| {
         read(b);
-        borrowed(b)
+        mut_ref(b)
     });
-    let (body, _) = into_body(&read_then_borrow);
+    let (body, _) = into_body(&read_then_mut_ref);
     interp.enter_function();
     interp.record_aggregate_locals(&body);
     interp.bind_local(0, Lattice::Const(point_value(point)));
@@ -7474,10 +7474,10 @@ fn a_closed_region_folds_to_the_value_it_builds() {
 }
 
 #[test]
-fn a_region_write_through_an_alias_lands_in_the_borrowed_local() {
+fn a_region_write_through_an_alias_lands_in_the_referenced_local() {
     // The template shape: the buffer is written through a `let p = &mut c`
-    // binding, so the write must reach `c`'s value rather than a copy bound at
-    // borrow time.
+    // binding, so the write must reach `c`'s value rather than a copy bound
+    // when the reference was taken.
     let mut table = TypeTable::new();
     let list_ty = fixture_struct(&mut table, "List<u8>", ModuleSource::default());
     let set_id = next_test_func_id();
@@ -7614,7 +7614,7 @@ fn a_region_writing_a_global_is_refused() {
 
 #[test]
 fn a_region_write_behind_a_cast_still_lands() {
-    // Monomorphization wraps builtin borrows in reference-shaped casts
+    // Monomorphization wraps builtin references in reference-shaped casts
     // (`&mut c.repr as &mut Array<u8>`). Place naming reads through them, so
     // the region still folds — refusing it would cost exactly the shape the
     // inlined stdlib append path has.
@@ -8291,7 +8291,7 @@ fn a_ref_global_alias_rebound_by_a_later_let_does_not_vouch_for_it() {
     assert_ne!(
         interp.reduce_to_lattice(&body, read),
         Lattice::Const(int(7)),
-        "a rebound index must keep no alias to the global it once borrowed",
+        "a rebound index must keep no alias to the global it once referenced",
     );
 }
 

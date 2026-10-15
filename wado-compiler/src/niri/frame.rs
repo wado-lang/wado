@@ -15,7 +15,8 @@ use crate::tir::TypeTable;
 
 use super::callee::{CallSite, CalleeKey};
 use super::place::{
-    borrowed_place_operand, named_local, place_aliased_by_another, place_of, write_root_local,
+    named_local, place_aliased_by_another, place_of, referenced_place_operand,
+    write_root_local,
 };
 use super::region::{block_shape, region_needs, region_shape, value_block_shape};
 use super::rewrite::is_discardable_operand;
@@ -169,7 +170,7 @@ impl LoopSnapshot {
 /// parameter binds its own snapshot and each write-back replays whole, so a
 /// second handle either reads a value the program never had or loses its own
 /// write. Whether it could actually observe the write is not asked: after
-/// `prepare_types` a shared borrow of a primitive is the same `Box<T>` a
+/// `prepare_types` a `&` reference to a primitive is the same `Box<T>` a
 /// by-value parameter carries. Wado has no borrow checker, so this is ordinary
 /// source — the frame declines the call rather than mis-running it.
 fn aliased_write_targets(targets: &[(u32, u32, Vec<u32>)], places: &[(u32, Vec<u32>)]) -> bool {
@@ -271,7 +272,7 @@ impl Interpreter<'_> {
                 {
                     return Flow::Bail;
                 }
-                // What makes an immutable binding of a borrow an alias is that
+                // What makes an immutable binding of a reference an alias is that
                 // nothing displaces it, which is equally true of a mutable
                 // local nothing reassigns.
                 if (!is_mut || !self.frame.reassigned.contains(index))
@@ -698,14 +699,14 @@ impl Interpreter<'_> {
         self.bind_local(index, lattice);
     }
 
-    /// The operand a `let` binds as a place rather than a value: a borrow names
+    /// The operand a `let` binds as a place rather than a value: a reference names
     /// the place it was taken over, and a bare local already naming one rebinds
     /// the same place. Nothing else qualifies — a projection out of an alias
     /// reads *through* it — hence matching the RHS as a local. Boxing rewrites
     /// `&x` into a bare read, so the type test accepts any reference shape.
     fn aliased_operand(&self, body: &Body, value: Operand) -> Option<Operand> {
-        if let Some((_, borrowed)) = borrowed_place_operand(body, value) {
-            return Some(borrowed);
+        if let Some((_, referenced)) = referenced_place_operand(body, value) {
+            return Some(referenced);
         }
         let index = named_local(body, value)?;
         if self.frame.place_aliases.contains_key(&index) {
@@ -717,8 +718,8 @@ impl Interpreter<'_> {
             .then_some(value)
     }
 
-    /// Resolve `index` to the place `inner` borrows, so later reads and writes
-    /// through it reach the borrowed storage rather than a copy. Recorded
+    /// Resolve `index` to the place `inner` refers to, so later reads and writes
+    /// through it reach the referenced storage rather than a copy. Recorded
     /// pre-flattened through the aliases already in effect, so a chain never
     /// needs chasing. An alias over its own storage — an index reuse this
     /// frame cannot express — refuses instead.
@@ -732,7 +733,7 @@ impl Interpreter<'_> {
         Some(())
     }
 
-    /// [`place_of`] with the frame's borrow aliases applied: a chain rooted at
+    /// [`place_of`] with the frame's reference aliases applied: a chain rooted at
     /// an alias re-roots at the place the alias was taken over.
     pub(super) fn frame_place_of(&self, body: &Body, op: Operand) -> Option<(u32, Vec<u32>)> {
         let (root, mut path) = place_of(body, op)?;
@@ -894,10 +895,10 @@ impl Interpreter<'_> {
             return self.decline(&key, "two arguments reach one place");
         }
         // A result may embed a parameter's storage — `Formatter::new(&mut buf)`
-        // returns a `Formatter` holding that borrow, and a retained shared one
+        // returns a `Formatter` holding that reference, and a retained `&` one
         // does the same. The engine has no reference values, so it would stand
         // as a snapshot the next write to that storage leaves stale. A scalar
-        // embeds nothing, and so does a retained borrow of a place this frame
+        // embeds nothing, and so does a retained reference to a place this frame
         // settles: `"abc".as_str_slice()` views a literal no write reaches.
         let may_embed_caller_storage = !targets.is_empty() || retains_unsettled_storage;
 
