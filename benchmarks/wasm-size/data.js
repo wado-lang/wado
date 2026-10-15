@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1792041234959,
+  "lastUpdate": 1792042272112,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -67245,6 +67245,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/ecc264bfe3e123f58bd9371e2231988e7e6775d5"
         },
         "date": 1792041234325,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 2940,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 7317,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 21705,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 340396,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "feeff18dada363dc3f4011822cdde7642c08db15",
+          "message": "Merge pull request #2357 from wado-lang/fix-epoch-ticker-exit-wait\n\nfix(cli): wado test exits when its last test does, not on the next epoch tick",
+          "timestamp": "2026-10-15T14:01:43+09:00",
+          "tree_id": "130e42669a0551822e74769c4be8da286ef811d4",
+          "url": "https://github.com/wado-lang/wado/commit/feeff18dada363dc3f4011822cdde7642c08db15"
+        },
+        "date": 1792042271459,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
