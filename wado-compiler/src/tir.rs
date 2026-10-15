@@ -1939,6 +1939,13 @@ impl TypeTable {
         }
     }
 
+    /// Whether shape `id` mentions a type parameter, so that only a
+    /// substitution into it reaches a struct codegen can lay out.
+    #[must_use]
+    pub fn anon_shape_is_open(&self, id: AnonStructId) -> bool {
+        self.any_anon_shape_type(id, &mut |ty| self.contains_type_param(ty))
+    }
+
     /// Whether `f` holds of a type shape `id` is built over.
     fn any_anon_shape_type(&self, id: AnonStructId, f: &mut dyn FnMut(TypeId) -> bool) -> bool {
         match &self.anon_structs[id.0 as usize].shape {

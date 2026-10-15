@@ -254,7 +254,7 @@ impl Monomorphizer {
                     ..
                 } if !self.structs.anon_sites.contains_key(shape)
                     && !tt.anon_struct_is_synthetic(*shape)
-                    && !tt.contains_type_param(id) =>
+                    && !tt.anon_shape_is_open(*shape) =>
                 {
                     Some(*shape)
                 }
@@ -322,7 +322,7 @@ impl Monomorphizer {
         {
             let tt = module.type_table.borrow();
             module.structs.retain(|s| match s.def {
-                StructDef::Anon(_) => !s.fields.iter().any(|f| tt.contains_type_param(f.type_id)),
+                StructDef::Anon(shape) => !tt.anon_shape_is_open(shape),
                 StructDef::Decl(_) => s.type_params.is_empty() || s.monomorph_info.is_some(),
             });
         }
