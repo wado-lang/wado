@@ -1301,8 +1301,7 @@ needs `T: LowerHex`, which `T: Display` does not supply.
 
 > Not yet implemented: a template string checks a hole of a generic type only
 > once the item is instantiated, so it asks for no bound, and the error names
-> the instantiated type at the hole. A `format` call rejects such a hole
-> outright.
+> the instantiated type at the hole.
 
 <!-- {"fixture":"spec_traits_format_bounds.wado"} -->
 
