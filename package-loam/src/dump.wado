@@ -163,7 +163,8 @@ fn node_report(
     fuse: bool,
 ) -> NodeReport {
     // An optional output left unnamed is not computed.
-    let outputs: List<TensorReport> = node.outputs.into_iter().filter(|o| o != "").map(|o| tensor(checked, &o)).collect();
+    let outputs: List<TensorReport> = node.outputs.into_iter().filter(|o| o != "").map(|o| tensor(checked, &o)).collect(
+    );
     let inputs: List<String> = node.inputs.into_iter().map(|i| if i == "" { "_" } else { i }).collect();
     let mut r = NodeReport { lowering: lowered(lowering), op: node.op, inputs, outputs };
     match lowering {

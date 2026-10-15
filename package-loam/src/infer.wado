@@ -1404,7 +1404,10 @@ fn attention(
     let Static(dim) = past_k.axes[3].extent else {
         return Result::Err(refusal(node, "the head's extent must be a number"));
     };
-    let stated = |axis: &Axis, extent: i32, into: &mut List<Condition>| agree_at(node, axis, &Axis { ..*axis, extent: Extent::Static(extent) }, into);
+    let stated = |axis: &Axis, extent: i32, into: &mut List<Condition>| agree_at(node, axis, &Axis {
+        ..*axis,
+        extent: Extent::Static(extent),
+    }, into);
     stated(&q.axes[2], options.heads * dim, owed)?;
     stated(&k.axes[2], options.kv_heads * dim, owed)?;
     stated(&past_k.axes[1], options.kv_heads, owed)?;
@@ -1471,8 +1474,18 @@ fn attention(
     let Some(present) = node.outputs[1..<node.outputs.len()].to_list().into_iter().find(|o| o != "") else {
         return Result::Err(refusal(node, "neither present output is named, so no layout names the positions"));
     };
-    let positions = output_layout_axis(node, &present, schema, 2, 4, total_extent, "holds the past and the new positions")?;
-    let cache = Shape { axes: [past_k.axes[0], past_k.axes[1], positions, past_k.axes[3]] };
+    let positions = output_layout_axis(
+        node,
+        &present,
+        schema,
+        2,
+        4,
+        total_extent,
+        "holds the past and the new positions",
+    )?;
+    let cache = Shape {
+        axes: [past_k.axes[0], past_k.axes[1], positions, past_k.axes[3]],
+    };
     return Result::Ok([q, cache, cache]);
 }
 

@@ -568,7 +568,13 @@ fn function_body(node: &Node) -> Result<Option<List<Node>>, String> {
         let [x, scale] = [node.inputs[0], node.inputs[1]];
         let epsilon = node.float_attr("epsilon", 1e-5).map_err(attr_error)?;
         let square = body.binary("Mul", &x, &x);
-        let mean = body.node("ReduceMean", [square], [Attr { name: "axes", values: ["-1"], is_list: true }]);
+        let mean = body.node("ReduceMean", [square], [
+            Attr {
+                name: "axes",
+                values: ["-1"],
+                is_list: true,
+            },
+        ]);
         let root = body.unary("Sqrt", &body.binary("Add", &mean, &body.constant(epsilon)));
         body.output("Mul", [body.binary("Div", &x, &root), scale], node);
         return Result::Ok(Option::Some(body.nodes));
@@ -586,12 +592,23 @@ impl FunctionBody {
     /// A node of the body, and the tensor it computes.
     fn node(&mut self, op: String, inputs: List<String>, attrs: List<Attr>) -> String {
         let out = `${self.prefix}/${op}_${self.nodes.len()}`;
-        self.nodes.push(Node { op, outputs: [out], inputs, attrs });
+        self.nodes.push(Node {
+            op,
+            outputs: [out],
+            inputs,
+            attrs,
+        });
         return out;
     }
 
     fn constant(&mut self, value: f32) -> String {
-        return self.node("Constant", [], [Attr { name: "value_float", values: [`${value}`], is_list: false }]);
+        return self.node("Constant", [], [
+            Attr {
+                name: "value_float",
+                values: [`${value}`],
+                is_list: false,
+            },
+        ]);
     }
 
     fn unary(&mut self, op: String, x: &String) -> String {
@@ -604,7 +621,12 @@ impl FunctionBody {
 
     /// The body's last node, which computes the function's output.
     fn output(&mut self, op: String, inputs: List<String>, function: &Node) {
-        self.nodes.push(Node { op, outputs: [function.outputs[0]], inputs, attrs: [] });
+        self.nodes.push(Node {
+            op,
+            outputs: [function.outputs[0]],
+            inputs,
+            attrs: [],
+        });
     }
 }
 

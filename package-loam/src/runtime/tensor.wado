@@ -849,13 +849,7 @@ pub fn group_query_attention<B, S, Q, K, H, P, T, D, Pos, Half, BB, BH>(
     bias: Option<&Tensor<f32, [BB, BH, S, T]>>,
     options: &Attention,
 ) -> [Tensor<f32, [B, S, Q]>, Tensor<f32, [B, H, T, D]>, Tensor<f32, [B, H, T, D]>] {
-    let [batch, s, kv, past, d] = [
-        q.extents[0],
-        q.extents[1],
-        options.kv_heads,
-        past_k.extents[2],
-        past_k.extents[3],
-    ];
+    let [batch, s, kv, past, d] = [q.extents[0], q.extents[1], options.kv_heads, past_k.extents[2], past_k.extents[3]];
     let heads = options.heads;
     let total = past + s;
     let group = heads / kv;
@@ -887,7 +881,10 @@ pub fn group_query_attention<B, S, Q, K, H, P, T, D, Pos, Half, BB, BH>(
                 }
             }
         }
-        return Tensor { data, extents: [batch, kv, total, d] };
+        return Tensor {
+            data,
+            extents: [batch, kv, total, d],
+        };
     };
     let present_k = cached(past_k, k, true);
     let present_v = cached(past_v, v, false);
@@ -920,10 +917,7 @@ pub fn group_query_attention<B, S, Q, K, H, P, T, D, Pos, Half, BB, BH>(
                         score = options.softcap * f32::tanh(score / options.softcap);
                     }
                     if let Some(b) = bias {
-                        let [bb, bh] = [
-                            if b.extents[0] == 1 { 0 } else { bi },
-                            if b.extents[1] == 1 { 0 } else { h },
-                        ];
+                        let [bb, bh] = [if b.extents[0] == 1 { 0 } else { bi }, if b.extents[1] == 1 { 0 } else { h }];
                         score += b.data[((bb * b.extents[1] + bh) * s + i) * total + j];
                     }
                     weights[j] = score;

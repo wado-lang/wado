@@ -236,7 +236,11 @@ test "an operator outside the default domain is named with its domain, as the te
     };
     let model = onnx::ModelProto {
         graph: Option::Some(onnx::GraphProto {
-            node: [node("com.microsoft"), node("ai.onnx"), node("")],
+            node: [
+                node("com.microsoft"),
+                node("ai.onnx"),
+                node(""),
+            ],
         }),
     };
     let g = read(grog::encode(&model)).unwrap();
@@ -332,7 +336,9 @@ test "an initializer's external data comes out of the file its location names" {
         ["length", "8"],
     ]);
     let model = onnx::ModelProto {
-        graph: Option::Some(onnx::GraphProto { initializer: [weight] }),
+        graph: Option::Some(onnx::GraphProto {
+            initializer: [weight],
+        }),
     };
     assert external_locations(grog::encode(&model)).unwrap() == ["model.onnx_data"];
     let mut files = TreeMap::<String, ByteList>::new();
@@ -345,14 +351,22 @@ test "an initializer's external data comes out of the file its location names" {
 test "external data without an offset or length is the whole file" {
     let mut files = TreeMap::<String, ByteList>::new();
     files["w.bin"] = b"\x00\x00\x80\x3f\x00\x00\x00\x40";
-    let g = read_external(external_weight([["location", "w.bin"]]), &files).unwrap();
+    let g = read_external(external_weight([
+        ["location", "w.bin"],
+    ]), &files).unwrap();
 
     assert g.initializers[0].data == Option::Some(b"\x00\x00\x80\x3f\x00\x00\x00\x40");
 }
 
 test "external data the reader was not given names its location" {
     let e = read(grog::encode(&onnx::ModelProto {
-        graph: Option::Some(onnx::GraphProto { initializer: [external_weight([["location", "w.bin"]])] }),
+        graph: Option::Some(onnx::GraphProto {
+            initializer: [
+                external_weight([
+                    ["location", "w.bin"],
+                ]),
+            ],
+        }),
     })).unwrap_err().reason;
 
     assert e == "W: external data in w.bin, which the reader was not given";
@@ -361,7 +375,11 @@ test "external data the reader was not given names its location" {
 test "external data past its file's end names its range" {
     let mut files = TreeMap::<String, ByteList>::new();
     files["w.bin"] = b"\x00\x00\x80\x3f";
-    let e = read_external(external_weight([["location", "w.bin"], ["offset", "2"], ["length", "8"]]), &files).unwrap_err().reason;
+    let e = read_external(external_weight([
+        ["location", "w.bin"],
+        ["offset", "2"],
+        ["length", "8"],
+    ]), &files).unwrap_err().reason;
 
     assert e == "W: external data at 2 for 8 bytes, past the end of w.bin's 4";
 }

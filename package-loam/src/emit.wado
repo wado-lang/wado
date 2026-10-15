@@ -314,9 +314,9 @@ fn scope_tensors(tensors: &mut List<String>, graph: &Graph, checked: &Checked, l
 /// What the generated module imports from the runtime: every name its code
 /// spells, whether or not one graph's code reads it.
 global RUNTIME_NAMES: List<String> = [
-    "Attention", "Backend", "BinaryOp", "Epilogue", "Expected", "Expr", "LoadError", "Merged", "RowOp", "Step", "Tensor", "UnaryOp",
-    "Window", "axis_mismatch", "extent_mismatch", "from_end", "input_mismatch", "narrow", "read_checkpoint", "refuse",
-    "to_extent", "unmet",
+    "Attention", "Backend", "BinaryOp", "Epilogue", "Expected", "Expr", "LoadError", "Merged", "RowOp", "Step", "Tensor",
+    "UnaryOp", "Window", "axis_mismatch", "extent_mismatch", "from_end", "input_mismatch", "narrow", "read_checkpoint",
+    "refuse", "to_extent", "unmet",
 ];
 
 /// Whether `name` already means something in the generated module.
@@ -1076,7 +1076,11 @@ fn attention_call(node: &Node, checked: &Checked, exprs: &Operands) -> String {
     let present = node.outputs[1..<node.outputs.len()].to_list().into_iter().find(|o| o != "").unwrap();
     let total = shapes[present].axes[2].name;
     let given = |index: i32| index < node.inputs.len() && node.inputs[index] != "";
-    let optional = |index: i32| if given(index) { `Option::Some(${exprs.reference(&node.inputs[index])})` } else { "null" };
+    let optional = |index: i32| if given(index) {
+        `Option::Some(${exprs.reference(&node.inputs[index])})`;
+    } else {
+        "null";
+    };
     let [pos, half] = if given(7) {
         let cache = shapes[node.inputs[7]];
         [cache.axes[0].name, cache.axes[1].name];
@@ -1090,18 +1094,8 @@ fn attention_call(node: &Node, checked: &Checked, exprs: &Operands) -> String {
         [q.axes[0].name, past.axes[1].name];
     };
     let turbofish = [
-        q.axes[0].name,
-        q.axes[1].name,
-        q.axes[2].name,
-        k.axes[2].name,
-        past.axes[1].name,
-        past.axes[2].name,
-        total,
-        past.axes[3].name,
-        pos,
-        half,
-        bias_batch,
-        bias_heads,
+        q.axes[0].name, q.axes[1].name, q.axes[2].name, k.axes[2].name, past.axes[1].name, past.axes[2].name, total,
+        past.axes[3].name, pos, half, bias_batch, bias_heads,
     ] as List<String>;
     let head = past.axes[3].static_extent();
     let scale = options.scale.unwrap_or(1.0 / f32::sqrt(head as f32));
