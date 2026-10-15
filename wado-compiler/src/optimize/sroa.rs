@@ -953,21 +953,18 @@ impl SoftCtx<'_> {
                 let mut lent: IndexSet<u32> = IndexSet::default();
                 // The rebuilt literal is taken where the borrow stands, while
                 // the callee reads its referent after every argument has run.
-                let written_by_later: Vec<IndexSet<u32>> = (0..arg_ops.len())
-                    .map(|i| {
-                        let mut written = IndexSet::default();
-                        for (later, _) in &arg_ops[i + 1..] {
-                            if let Some(e) = later.as_expr() {
-                                written.extend(candidates_written_under(
-                                    body,
-                                    NodeRef::Expr(e),
-                                    self.candidates,
-                                ));
-                            }
-                        }
-                        written
-                    })
-                    .collect();
+                let mut written_by_later = vec![IndexSet::default(); arg_ops.len()];
+                for i in (1..arg_ops.len()).rev() {
+                    let mut written = written_by_later[i].clone();
+                    if let Some(e) = arg_ops[i].0.as_expr() {
+                        written.extend(candidates_written_under(
+                            body,
+                            NodeRef::Expr(e),
+                            self.candidates,
+                        ));
+                    }
+                    written_by_later[i - 1] = written;
+                }
                 for (i, (arg, is_mut)) in arg_ops.into_iter().enumerate() {
                     let Some(arg) = arg.as_expr() else { continue };
                     let lent_candidate = immut_ref_to_candidate(body, arg, self.candidates)

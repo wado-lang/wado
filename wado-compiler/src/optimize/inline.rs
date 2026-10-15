@@ -2039,8 +2039,8 @@ struct Candidates<'a> {
     carried: &'a IndexMap<FuncId, IndexMap<FuncId, usize>>,
     /// Each candidate's written price, net of the call site it replaces.
     net_price: &'a IndexMap<FuncId, usize>,
-    /// The candidates no bigger than the call site they replace, cold paths
-    /// included: splicing one shrinks the caller, cold or not.
+    /// The candidates a cold site calls that are no bigger than the call they
+    /// replace: splicing one shrinks the caller, so [`Site::Cold`] admits it.
     shrinking: &'a IndexSet<FuncId>,
     rescan_cap: usize,
     /// What the re-scan under way may still splice, or `None` outside one.
