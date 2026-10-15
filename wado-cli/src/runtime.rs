@@ -685,7 +685,7 @@ impl Ticker {
                 let mut stopped = lock(stopped);
                 while !*stopped {
                     let (guard, wait) = wake
-                        .wait_timeout(stopped, interval)
+                        .wait_timeout_while(stopped, interval, |stopped| !*stopped)
                         .unwrap_or_else(PoisonError::into_inner);
                     stopped = guard;
                     if wait.timed_out() {
