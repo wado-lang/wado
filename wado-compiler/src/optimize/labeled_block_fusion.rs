@@ -113,8 +113,11 @@ fn yields_match_value(body: &Body, consumer: StmtId) -> bool {
 /// block `let x = { let t = LB; match t.0 { … } }` before a later inline round
 /// can give `LB` its exits.
 fn consumer_match(body: &Body, consumer: StmtId) -> Option<ExprId> {
-    let (StmtKind::Expr(Operand::Expr(e)) | StmtKind::Let { value: Operand::Expr(e), .. }) =
-        body.stmts[consumer].kind
+    let (StmtKind::Expr(Operand::Expr(e))
+    | StmtKind::Let {
+        value: Operand::Expr(e),
+        ..
+    }) = body.stmts[consumer].kind
     else {
         return None;
     };
@@ -304,7 +307,8 @@ fn check_fusion_preconditions_match(
     }
 
     // --- Stmt 2: Expr(Match { scrut: Local(temp), arms: [Variant, Wildcard] }) ---
-    let ExprKind::Match { expr: scrut, arms } = &body.exprs[consumer_match(body, if_s)?].kind else {
+    let ExprKind::Match { expr: scrut, arms } = &body.exprs[consumer_match(body, if_s)?].kind
+    else {
         return None;
     };
     if arms.len() != 2 {
@@ -422,7 +426,8 @@ fn check_fusion_preconditions_slot_match(
         return None;
     }
 
-    let ExprKind::Match { expr: scrut, arms } = &body.exprs[consumer_match(body, if_s)?].kind else {
+    let ExprKind::Match { expr: scrut, arms } = &body.exprs[consumer_match(body, if_s)?].kind
+    else {
         return None;
     };
     if tag_slot_of(body, scrut.as_expr()?) != Some((temp_local, TAG_SLOT)) {

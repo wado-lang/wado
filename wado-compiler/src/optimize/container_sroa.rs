@@ -2018,9 +2018,7 @@ impl Rewriter<'_, '_> {
                 let sig = sig_key_of_id(ctx.sig, func_id)?;
                 let (idx, per_field) =
                     if self.elements_observe_writes(engine, rec_local, &per_field) {
-                        let idx_type = engine.body.operand_type(idx);
-                        let idx = clone_or_dup(engine, idx);
-                        let idx = spill(engine, idx, idx_type, span, &mut out);
+                        let idx = self.spill_index(engine, idx, span, &mut out);
                         let per_field =
                             self.spill_elements(engine, rec_local, per_field, span, &mut out);
                         (idx, per_field)

@@ -3,8 +3,8 @@
 //! A function `F` writing `contract` clauses reifies as two: its twin
 //! `F$unchecked`, holding the body, and `F` itself, holding only the clauses,
 //! each as `if $contract_clause() { … }`, and a call to the twin. Here each
-//! call to `F` becomes a copy of the clauses, reading the call's arguments,
-//! and a call to the twin, so a failed clause reports the call's position as
+//! call to `F` becomes a call to the twin carrying a copy of the clauses,
+//! reading the call's arguments, so a failed clause reports the call's position as
 //! `$contract_site`. A call `unchecked` marks already names the twin, unless
 //! `-f contract-checks` turned it back (see [`check_marked_calls`]). `F` itself
 //! is left to the calls that reach it as a value, which check at the clause.

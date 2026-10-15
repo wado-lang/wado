@@ -18,7 +18,7 @@ use crate::tir::{
     FunctionRef, LetStorage, TirBlock, TirExpr, TirExprKind, TirFunction, TirMatchArm, TirPattern,
     TirStmt, TirStmtKind, TirTemplatePart, TirUnaryOp, TypeId, TypeTable, capture_source_locals,
 };
-use crate::tir_visitor::TirRefVisitor;
+use crate::tir_visitor::{TirRefVisitor, for_each_block_result};
 use crate::token::Span;
 use std::rc::Rc;
 
@@ -2906,10 +2906,8 @@ fn yielded_leaves(expr: &TirExpr, type_table: &TypeTable, leaf: &mut dyn FnMut(&
                 block_yielded_leaves(eb, type_table, leaf);
             }
         }
-        TirExprKind::Block(block) => block_yielded_leaves(block, type_table, leaf),
-        TirExprKind::LabeledBlock { block, .. } => {
-            block_yielded_leaves(block, type_table, leaf);
-            BreakValues { type_table, leaf }.visit_block(block);
+        TirExprKind::Block(_) | TirExprKind::LabeledBlock { .. } => {
+            for_each_block_result(expr, &mut |result| yielded_leaves(result, type_table, leaf));
         }
         TirExprKind::TupleSpread { expr: inner } => yielded_leaves(inner, type_table, leaf),
         // A scalar read out of a local carries none of its storage.
@@ -2922,22 +2920,6 @@ fn yielded_leaves(expr: &TirExpr, type_table: &TypeTable, leaf: &mut dyn FnMut(&
 fn block_yielded_leaves(block: &TirBlock, type_table: &TypeTable, leaf: &mut dyn FnMut(&TirExpr)) {
     if let Some(e) = block.tail_expr() {
         yielded_leaves(e, type_table, leaf);
-    }
-}
-
-/// What a labeled block's `break`s hand out of it, from anywhere inside. Which
-/// label one targets is not distinguished; an outer one only over-counts.
-struct BreakValues<'a> {
-    type_table: &'a TypeTable,
-    leaf: &'a mut dyn FnMut(&TirExpr),
-}
-
-impl TirRefVisitor for BreakValues<'_> {
-    fn visit_stmt(&mut self, stmt: &TirStmt) {
-        if let TirStmtKind::Break { value: Some(v), .. } = &stmt.kind {
-            yielded_leaves(v, self.type_table, self.leaf);
-        }
-        self.walk_stmt(stmt);
     }
 }
 

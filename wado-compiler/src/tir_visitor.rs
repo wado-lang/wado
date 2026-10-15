@@ -885,12 +885,12 @@ pub fn expr_has_break_to(label: &str, expr: &TirExpr) -> bool {
 }
 
 /// Call `f` on each value the block `expr` evaluates to: its tail, and for a
-/// labeled block each `break` naming it. `false` where `expr` is no block.
-pub fn for_each_block_result(expr: &TirExpr, f: &mut dyn FnMut(&TirExpr)) -> bool {
+/// labeled block each `break` naming it.
+pub fn for_each_block_result(expr: &TirExpr, f: &mut dyn FnMut(&TirExpr)) {
     let (block, label) = match &expr.kind {
         TirExprKind::Block(block) => (block, None),
         TirExprKind::LabeledBlock { label, block, .. } => (block, Some(label.as_str())),
-        _ => return false,
+        _ => unreachable!("only a block has results"),
     };
     if let Some(tail) = block.tail_expr() {
         f(tail);
@@ -898,7 +898,6 @@ pub fn for_each_block_result(expr: &TirExpr, f: &mut dyn FnMut(&TirExpr)) -> boo
     if let Some(label) = label {
         BreakValues { label, f }.visit_block(block);
     }
-    true
 }
 
 struct BreakValues<'a> {
