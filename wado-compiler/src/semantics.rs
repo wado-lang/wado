@@ -17,7 +17,7 @@ use crate::coverage::{CoverageMap, CoverageScope, plan_module, render_plan};
 use crate::defs::DefId;
 use crate::elaborator::Elaborator;
 use crate::elaborator::assert::render_plans;
-use crate::elaborator::liveness::Liveness;
+use crate::elaborator::liveness::{Liveness, LivenessScope};
 use crate::elaborator::orchestration::{AnnotateState, rt_unreachable_calls};
 use crate::elaborator::sem::types::{CoercionKind, DesugarKind, MethodDispatch};
 use crate::elaborator::sem::{Fact, FactKind, ModuleSemantics};
@@ -1249,7 +1249,13 @@ pub fn semantics_of<H: CompilerHost>(
     build_tir: bool,
 ) -> Semantics {
     let logger = Logger::new(host, log_level);
-    semantics_with_logger(loaded, &logger, build_tir, None)
+    semantics_with_logger(
+        loaded,
+        &logger,
+        build_tir,
+        None,
+        &LivenessScope::Compilation,
+    )
 }
 
 /// Logger-sharing variant. Internal: lets callers that already maintain a
@@ -1260,6 +1266,7 @@ pub(crate) fn semantics_with_logger<H: CompilerHost>(
     logger: &Logger<'_, H>,
     build_tir: bool,
     coverage: Option<CoverageScope>,
+    liveness_scope: &LivenessScope,
 ) -> Semantics {
     // Before any phase reports: a diagnostic's span names the file it indexes
     // by looking its parse up here.
@@ -1376,6 +1383,7 @@ pub(crate) fn semantics_with_logger<H: CompilerHost>(
             snapshot.as_deref(),
             build_tir,
             coverage,
+            liveness_scope,
         ) {
             Ok(m) => (m, true),
             Err(_) => (IndexMap::default(), false),

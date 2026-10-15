@@ -9,7 +9,7 @@
 //! emitted only when a call reaches it.
 
 use crate::ast::{
-    self, AstId, AstVisitor, Block, Expr, Function, IdCollector, Item, Module,
+    self, AstId, AstVisitor, Block, Expr, Function, IdCollector, Item, Module, UseItem, Visibility,
     for_each_pattern_binding, type_head_name,
 };
 use crate::hashmap::{IndexMap, IndexSet};
@@ -48,6 +48,75 @@ pub(crate) struct Liveness {
     pub(crate) moved_spans: IndexSet<Span>,
 }
 
+/// Which modules a liveness run sees, and so which roots it can trust.
+#[derive(Default)]
+pub(crate) enum LivenessScope {
+    /// One compilation: the modules its entry reaches. Another module of the
+    /// package may use an `internal` item unseen, so one counts as used.
+    #[default]
+    Compilation,
+    /// A whole package, loaded together.
+    Package(PackageScope),
+}
+
+/// One package's modules, sorted by what they are for.
+pub(crate) struct PackageScope {
+    /// The package's own modules, the only ones reported.
+    pub(crate) members: IndexSet<ModuleSource>,
+    /// The modules its manifest declares. Their `pub` items, and what they
+    /// re-export, are what the package offers.
+    pub(crate) entries: IndexSet<ModuleSource>,
+    /// What the entries reach by `use`: production code. A member outside it
+    /// is test code.
+    pub(crate) production: IndexSet<ModuleSource>,
+}
+
+/// What one module's visibility modifiers mean for liveness, under a scope.
+struct ModuleRoots {
+    /// Its items are report candidates.
+    reported: bool,
+    /// Its `pub` items are offered beyond the package, and so are roots.
+    offers_pub: bool,
+    /// Whether another module uses its `internal` items is unknown here.
+    internal_undecided: bool,
+    /// It is test code: reaching an item from a test is its purpose.
+    test_code: bool,
+}
+
+impl ModuleRoots {
+    fn offers(&self, visibility: Visibility) -> bool {
+        self.offers_pub && visibility.is_public()
+    }
+
+    fn undecided(&self, visibility: Visibility) -> bool {
+        self.internal_undecided && visibility.is_internal()
+    }
+}
+
+impl LivenessScope {
+    fn module_roots(&self, source: &ModuleSource, user_authored: bool) -> ModuleRoots {
+        match self {
+            Self::Compilation => ModuleRoots {
+                reported: user_authored,
+                offers_pub: true,
+                internal_undecided: true,
+                test_code: false,
+            },
+            // Another package's modules keep the compilation rules: they are
+            // not reported, and only their own package decides their roots.
+            Self::Package(package) if !package.members.contains(source) => {
+                Self::Compilation.module_roots(source, false)
+            }
+            Self::Package(package) => ModuleRoots {
+                reported: user_authored,
+                offers_pub: package.entries.contains(source),
+                internal_undecided: false,
+                test_code: !package.production.contains(source),
+            },
+        }
+    }
+}
+
 /// Compute liveness over every loaded module.
 ///
 /// `world_export_names` holds every export name across all registered worlds; a
@@ -60,6 +129,7 @@ pub(crate) fn compute(
     world_export_names: &IndexSet<String>,
     compiler_named: &CompilerNamed,
     trait_method_impls: &IndexMap<AstId, IndexSet<AstId>>,
+    scope: &LivenessScope,
 ) -> Liveness {
     let mut graph = Graph::default();
 
@@ -93,11 +163,12 @@ pub(crate) fn compute(
     }
 
     for (source, module) in modules {
+        let roots = scope.module_roots(source, is_user_authored(source));
         // `#![generated]` modules are machine-emitted (e.g. Gale's parser
         // output), not hand-edited source — linting them is pure noise, so they
         // are never report candidates. They still seed exports / edges below, so
         // they keep the items they call live.
-        let user = is_user_authored(source) && !module.has_generated();
+        let user = roots.reported && !module.has_generated();
         // A file-level `#![allow(dead_code)]` waives the lint for every item in
         // the module — the idiom for test-helper files whose functions exist
         // only to back `test` blocks.
@@ -111,13 +182,13 @@ pub(crate) fn compute(
                     // `export` implies `Visibility::Public`, so this subsumes
                     // `is_export`; the other two catch roots with no visibility
                     // modifier (a misdeclared entry point, or a compiler item).
-                    if func.visibility.is_public()
-                        || world_export_names.contains(&func.name)
+                    if roots.offers(func.visibility)
+                        || (roots.offers_pub && world_export_names.contains(&func.name))
                         || compiler_named.names_function(source, &func.name)
                     {
                         graph.seed_world(key);
-                    } else if func.visibility.is_internal() {
-                        graph.seed_package_use(key);
+                    } else if roots.undecided(func.visibility) {
+                        graph.seed_export(key);
                     }
                     // Bodyless functions are compiler builtins / imports, not
                     // user-authored code that could be "dead". `#[allow(dead_code)]`
@@ -128,7 +199,7 @@ pub(crate) fn compute(
                         && !module_allows_dead
                         && !ast::attrs_allow(&func.attrs, ast::lint::DEAD_CODE)
                     {
-                        graph.report_candidates.push(key);
+                        graph.add_candidate(key, roots.test_code);
                     }
                 }
                 Item::Global(global) => {
@@ -139,19 +210,19 @@ pub(crate) fn compute(
                     // callees.
                     let key = global.id;
                     graph.add_expr_edges(&global.initializer, references, &key);
-                    if global.visibility.is_public() {
+                    if roots.offers(global.visibility) {
                         graph.seed_world(key);
                     } else {
                         graph.seed_emit(key);
-                        if global.visibility.is_internal() {
-                            graph.seed_package_use(key);
+                        if roots.undecided(global.visibility) {
+                            graph.seed_export(key);
                         }
                     }
                     if user
                         && !module_allows_dead
                         && !ast::attrs_allow(&global.attributes, ast::lint::DEAD_CODE)
                     {
-                        graph.report_candidates.push(key);
+                        graph.add_candidate(key, roots.test_code);
                     }
                 }
                 Item::Struct(struct_decl) => {
@@ -232,6 +303,22 @@ pub(crate) fn compute(
                     let key = test.id;
                     graph.add_block_edges(&test.body, references, &key);
                     graph.seed_test(key);
+                }
+                // What an offering module re-exports is offered too. Elsewhere
+                // a `pub` item is a root of its own, so only this case needs it.
+                Item::Use(use_decl) if roots.offers_pub && use_decl.visibility.is_public() => {
+                    let sites = use_decl.items.iter().flat_map(|item| match item {
+                        UseItem::Simple { id, .. } => vec![*id],
+                        UseItem::InterfaceFunctions { id, functions, .. } => std::iter::once(*id)
+                            .chain(functions.iter().map(|f| f.id))
+                            .collect(),
+                        UseItem::Wildcard | UseItem::Namespace { .. } => Vec::new(),
+                    });
+                    for site in sites {
+                        if let Some(def) = references.direct.get(&site) {
+                            graph.seed_export(*def);
+                        }
+                    }
                 }
                 _ => {}
             }
@@ -985,9 +1072,19 @@ struct Graph {
     /// User-authored free functions / globals eligible for dead reporting,
     /// in source order.
     report_candidates: Vec<AstId>,
+    /// The candidates declared in test code, which a test may be alone in
+    /// reaching.
+    test_code: IndexSet<AstId>,
 }
 
 impl Graph {
+    fn add_candidate(&mut self, key: AstId, test_code: bool) {
+        self.report_candidates.push(key);
+        if test_code {
+            self.test_code.insert(key);
+        }
+    }
+
     fn seed_export(&mut self, key: AstId) {
         self.export_seeds.push(key);
     }
@@ -1000,13 +1097,6 @@ impl Graph {
     /// anything reaches it. Not itself a use, so the `E` closure is unmoved.
     fn seed_emit(&mut self, key: AstId) {
         self.emit_seeds.push(key);
-    }
-
-    /// Seed an `internal` item as used without emitting it. A compilation loads
-    /// the modules its entry reaches, not its whole package, so another module
-    /// of the package may use the item unseen: reporting it would be a guess.
-    fn seed_package_use(&mut self, key: AstId) {
-        self.seed_export(key);
     }
 
     /// Seed a root of both closures: it is emitted, and so counts as used.
@@ -1070,7 +1160,9 @@ impl Graph {
                 continue;
             }
             if tests.contains(key) {
-                test_only_items.push(*key);
+                if !self.test_code.contains(key) {
+                    test_only_items.push(*key);
+                }
             } else {
                 dead_items.push(*key);
             }

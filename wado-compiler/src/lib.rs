@@ -80,7 +80,7 @@ use crate::component_model::{
     try_for_each_signed_type,
 };
 use crate::defs::DefId;
-use crate::elaborator::liveness::is_user_authored;
+use crate::elaborator::liveness::{LivenessScope, PackageScope, is_user_authored};
 use crate::elaborator::trait_env::TraitEnv;
 use crate::name::entry_dir_of;
 use crate::resolve::Shadowed;
@@ -204,7 +204,7 @@ fn trait_bound_violation_message(
 use std::cell::RefCell;
 use std::rc::Rc;
 
-use crate::hashmap::IndexMap;
+use crate::hashmap::{IndexMap, IndexSet};
 
 /// Result of compiling a Wado source file
 #[derive(Debug)]
@@ -556,6 +556,94 @@ fn unused_diagnostics(sem: &semantics::Semantics, is_test_world: bool) -> Vec<Di
     }
 
     out
+}
+
+/// One package's source files, for [`package_unused_diagnostics`]. Each member
+/// is a path relative to `root`, `/`-separated.
+pub struct PackageSources {
+    pub root: String,
+    pub members: Vec<String>,
+    /// The members the manifest declares: the `lib` entry and each world's.
+    pub entries: Vec<String>,
+}
+
+/// The unused diagnostics of a whole package, decided over all its members at
+/// once. `None` when the package does not elaborate; its errors reach `host`.
+pub async fn package_unused_diagnostics<H: CompilerHost>(
+    host: &H,
+    package: &PackageSources,
+    invocations: kiln::InvocationIndex,
+    log_level: LogLevel,
+) -> Option<Vec<Diagnostic>> {
+    let logger = Logger::new(host, log_level);
+    let source: String = package
+        .members
+        .iter()
+        .map(|member| format!("use _ from \"./{member}\";\n"))
+        .collect();
+    let entry_name = format!("{}/{}package.wado", package.root, name::INTERNAL_PREFIX);
+    let mut load = loader::ModuleLoader::new(host, log_level)
+        .with_invocations(invocations)
+        .load_all(&source, Some(&entry_name))
+        .await
+        .map_err(|e| {
+            let _ = logger.error(e);
+        })
+        .ok()?;
+
+    let synthetic = load.entry_module_source.clone();
+    let members = imports_of(&mut load, &synthetic);
+    assert_eq!(
+        members.len(),
+        package.members.len(),
+        "one module per member"
+    );
+    let entries: IndexSet<ModuleSource> = members
+        .iter()
+        .zip(&package.members)
+        .filter(|(_, path)| package.entries.contains(path))
+        .map(|(source, _)| source.clone())
+        .collect();
+    let mut production = IndexSet::default();
+    let mut work: Vec<ModuleSource> = entries.iter().cloned().collect();
+    while let Some(source) = work.pop() {
+        if production.insert(source.clone()) {
+            work.extend(imports_of(&mut load, &source));
+        }
+    }
+    let scope = LivenessScope::Package(PackageScope {
+        members: members.into_iter().collect(),
+        entries,
+        production,
+    });
+    let sem = semantics::semantics_with_logger(load, &logger, false, None, &scope);
+    sem.is_complete().then(|| unused_diagnostics(&sem, false))
+}
+
+/// The loaded modules `from` names in its `use` declarations, in order.
+fn imports_of(load: &mut loader::LoadResult, from: &ModuleSource) -> Vec<ModuleSource> {
+    let entry = load.entry_module_source.clone();
+    let decls: Vec<UseDecl> = load.modules[from]
+        .items
+        .iter()
+        .filter_map(|item| match item {
+            Item::Use(decl) => Some(decl.clone()),
+            _ => None,
+        })
+        .collect();
+    decls
+        .iter()
+        .filter_map(|decl| {
+            loader::resolve_use_decl_source(
+                &mut load.interner,
+                from,
+                decl,
+                Some(&entry),
+                &load.invocations,
+            )
+        })
+        .filter(|source| load.modules.contains_key(source))
+        .collect()
 }
 
 /// Every source-level lint. `unused` gates the unused lints alone, as
@@ -1303,7 +1391,13 @@ fn compile_after_load<H: CompilerHost>(
         is_test_world,
         logger,
     )?;
-    let mut sem = semantics::semantics_with_logger(load_result, logger, true, options.coverage);
+    let mut sem = semantics::semantics_with_logger(
+        load_result,
+        logger,
+        true,
+        options.coverage,
+        &LivenessScope::Compilation,
+    );
     if !sem.is_complete() {
         return Err(Bail);
     }
@@ -2215,7 +2309,13 @@ pub async fn dump_with_host_and_world<H: CompilerHost>(
     // into `TypeId`s the cached `TirModule`s do not carry, and left an
     // `Iterator::Item` projection to reach WIR build and panic on programs
     // `compile` handled fine.
-    let sem = semantics::semantics_with_logger(load_result, &logger, true, None);
+    let sem = semantics::semantics_with_logger(
+        load_result,
+        &logger,
+        true,
+        None,
+        &LivenessScope::Compilation,
+    );
     let symbols = sem.symbols.clone();
     let interner = sem.interner.clone();
     let entry_module_source_out = sem.entry_module_source.clone();
