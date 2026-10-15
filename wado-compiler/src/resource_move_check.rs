@@ -1,6 +1,6 @@
 use crate::ast::{
-    self, AssignExpr, AstId, Block, Condition, Expr, Function, IdentExpr, Item, Pattern, Stmt,
-    for_each_pattern_binding,
+    self, AssignExpr, AstId, Block, Condition, ConditionElement, Expr, Function, IdentExpr, Item,
+    Pattern, Stmt, for_each_pattern_binding,
 };
 use crate::compiler_host::{Code, Diagnostic, DiagnosticSpan, Severity};
 use crate::elaborator::liveness::is_user_authored;
@@ -387,6 +387,15 @@ fn check_block(
     walker.visit_block(body);
 }
 
+/// What a loop evaluates at the start of each iteration.
+enum LoopHead<'a> {
+    None,
+    /// `while` and C-style `for`: a `let` in it binds afresh each time.
+    Condition(&'a Condition),
+    /// `for ... of`: the binding takes the next element.
+    Binding(&'a Pattern),
+}
+
 struct MoveWalker<'a> {
     sem: &'a Semantics,
     module: &'a ModuleSource,
@@ -603,30 +612,27 @@ impl MoveWalker<'_> {
                 self.merge_if(&s.then_block, s.else_block.as_ref())
             }
             Stmt::While(s) => {
-                self.visit_condition(&s.condition);
-                self.visit_loop_body(&s.body, None);
+                self.visit_loop(&LoopHead::Condition(&s.condition), &s.body, None);
                 false
             }
             Stmt::Loop(s) => {
-                self.visit_loop_body(&s.body, None);
+                self.visit_loop(&LoopHead::None, &s.body, None);
                 false
             }
             Stmt::For(s) => {
                 if let Some(init) = &s.init {
                     self.visit_stmt(init);
                 }
-                if let Some(cond) = &s.condition {
-                    self.visit_condition(cond);
-                }
-                if let Some(update) = &s.update {
-                    self.visit_expr(update);
-                }
-                self.visit_loop_body(&s.body, None);
+                let head = match &s.condition {
+                    Some(cond) => LoopHead::Condition(cond),
+                    None => LoopHead::None,
+                };
+                self.visit_loop(&head, &s.body, s.update.as_ref());
                 false
             }
             Stmt::ForOf(s) => {
                 self.visit_expr(&s.iterable);
-                self.visit_loop_body(&s.body, Some(&s.binding));
+                self.visit_loop(&LoopHead::Binding(&s.binding), &s.body, None);
                 false
             }
             Stmt::Match(m) => self.visit_match(&m.expr, &m.arms),
@@ -653,46 +659,33 @@ impl MoveWalker<'_> {
         }
     }
 
-    fn visit_loop_body(&mut self, body: &Block, rebind: Option<&Pattern>) {
-        if let Some(pattern) = rebind {
-            self.clear_pattern(pattern);
-        }
+    /// A loop as two iterations: the first records what it moves, and the
+    /// second reports what reads a value the first moved. Each iteration runs
+    /// the head, the body, then `update`, as a C-style `for` does.
+    fn visit_loop(&mut self, head: &LoopHead, body: &Block, update: Option<&Expr>) {
         self.suppress += 1;
-        self.visit_block(body);
+        self.visit_iteration(head, body, update);
         self.suppress -= 1;
-        if let Some(pattern) = rebind {
-            self.clear_pattern(pattern);
-        }
-        self.visit_block(body);
+        self.visit_iteration(head, body, update);
     }
 
-    fn clear_pattern(&mut self, pattern: &Pattern) {
-        match pattern {
-            Pattern::Ident { id, .. } | Pattern::MutIdent { id, .. } => {
-                self.moved.swap_remove(id);
-            }
-            Pattern::Tuple(subs, _) => {
-                for sub in subs {
-                    self.clear_pattern(sub);
-                }
-            }
-            Pattern::Variant { bindings, .. } => {
-                for sub in bindings {
-                    self.clear_pattern(sub);
-                }
-            }
-            Pattern::Struct { fields, .. } => {
-                for field in fields {
-                    self.clear_pattern(&field.pattern);
-                }
-            }
-            Pattern::Or(alts) => {
-                for alt in alts {
-                    self.clear_pattern(alt);
-                }
-            }
-            _ => {}
+    fn visit_iteration(&mut self, head: &LoopHead, body: &Block, update: Option<&Expr>) {
+        match head {
+            LoopHead::None => {}
+            LoopHead::Condition(condition) => self.visit_condition(condition),
+            LoopHead::Binding(pattern) => self.clear_pattern(pattern),
         }
+        self.visit_block(body);
+        if let Some(update) = update {
+            self.visit_expr(update);
+        }
+    }
+
+    /// The bindings `pattern` makes hold new values, none of them moved.
+    fn clear_pattern(&mut self, pattern: &Pattern) {
+        for_each_pattern_binding(pattern, &mut |id| {
+            self.moved.swap_remove(&id);
+        });
     }
 
     fn merge_if(&mut self, then_block: &Block, else_block: Option<&Block>) -> bool {
@@ -716,6 +709,7 @@ impl MoveWalker<'_> {
         let mut all_diverge = true;
         for arm in arms {
             self.moved.clone_from(&base);
+            self.clear_pattern(&arm.pattern);
             if let Some(guard) = &arm.guard {
                 self.visit_expr(guard);
             }
@@ -743,12 +737,17 @@ impl MoveWalker<'_> {
         }
     }
 
+    /// A `let` in the chain binds its pattern afresh, so a value an earlier
+    /// iteration moved out of that binding is not the one it now holds.
     fn visit_condition(&mut self, condition: &Condition) {
         match condition {
             Condition::Expr(e) => self.visit_expr(e),
             Condition::LetChain { elements, .. } => {
                 for element in elements {
                     self.visit_expr(element.expr());
+                    if let ConditionElement::Let { pattern, .. } = element {
+                        self.clear_pattern(pattern);
+                    }
                 }
             }
         }
