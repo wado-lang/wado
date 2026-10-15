@@ -394,10 +394,10 @@ pub struct Program {
     /// Insertion order is the order every answer is reported in, so a caller
     /// that builds it deterministically gets deterministic diagnostics.
     pub impls: IndexMap<ImplId, ImplDef>,
-    /// Each trait's impls, in `impls` order, keyed as well by the declaration
-    /// the target names (`None` for any other target). A question names its
-    /// trait and its type, and a scan of every impl per question is quadratic
-    /// in a whole package.
+    /// The trait impls in `impls` order: by trait, by trait and the
+    /// declaration the target names (`None` for any other target), and by that
+    /// declaration alone. A question names its trait and its type, and a scan
+    /// of every impl per question is quadratic in a whole package.
     impls_by_trait: IndexMap<TraitDeclId, Vec<ImplId>>,
     impls_by_target: IndexMap<(TraitDeclId, Option<TypeDeclId>), Vec<ImplId>>,
     trait_impls_by_head: IndexMap<Option<TypeDeclId>, Vec<ImplId>>,

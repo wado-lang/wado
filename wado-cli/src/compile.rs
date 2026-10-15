@@ -731,7 +731,10 @@ pub(crate) async fn maybe_run_pipeline(
     no_cache: bool,
     project: Option<manifest::ProjectManifest>,
 ) -> Result<PipelineOutcome, PipelineError> {
-    maybe_run_pipeline_for(entry_file, None, host, no_cache, project).await
+    Box::pin(maybe_run_pipeline_for(
+        entry_file, None, host, no_cache, project,
+    ))
+    .await
 }
 
 /// [`maybe_run_pipeline`] for an entry the compile that follows names
@@ -775,15 +778,20 @@ pub(crate) async fn build_load(
     .map_err(CliExit::error)?;
     let outcome = maybe_run_pipeline(path, &host, no_cache, project)
         .await
-        .map_err(|e| match e {
-            // A malformed inline clause and a redirect conflict are reported
-            // as diagnostics already.
-            PipelineError::InlineClause(_) | PipelineError::RedirectConflict(_) => {
-                CliExit::silent_failure(1)
-            }
-            other => CliExit::error(format!("wado {subcommand}: {other}")),
-        })?;
+        .map_err(|e| pipeline_exit(e, subcommand))?;
     Ok((host, outcome.invocations))
+}
+
+/// How `wado <subcommand>` exits on a Kiln pipeline failure.
+pub(crate) fn pipeline_exit(error: PipelineError, subcommand: &str) -> CliExit {
+    match error {
+        // A malformed inline clause and a redirect conflict are reported as
+        // diagnostics already.
+        PipelineError::InlineClause(_) | PipelineError::RedirectConflict(_) => {
+            CliExit::silent_failure(1)
+        }
+        other => CliExit::error(format!("wado {subcommand}: {other}")),
+    }
 }
 
 /// Resolve the Kiln invocations a generator's own source carries, so the

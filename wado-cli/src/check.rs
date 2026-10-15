@@ -15,13 +15,14 @@ use crate::args::{self, CliExit};
 use crate::build;
 use crate::compile::{
     attach_manifest_and_component_deps, build_load, load_nearest_manifest, maybe_run_pipeline_for,
+    pipeline_exit,
 };
 use crate::compiler_host::FilesystemCompilerHost;
 use crate::dep_component::Acquisition;
 use crate::discover;
-use crate::kiln_driver::PipelineError;
 use crate::knobs::{CompileKnobOpt, CompileKnobs};
 use crate::manifest;
+use crate::test::test_filters;
 
 #[derive(Debug)]
 pub struct CheckOptions {
@@ -201,9 +202,8 @@ async fn check_package_unused(
     opts: &CheckOptions,
 ) -> Result<(), CliExit> {
     let root = &project.root;
-    let filters =
-        |pkg: &Path| discover::filters_at::<&str>(pkg, |m| (&m.test.exclude, &m.test.include), &[]);
-    let files = discover::discover_tree(root, &filters)?
+    // The members are the files `wado test` runs.
+    let files = discover::discover_tree(root, &|pkg| test_filters(pkg, &[]))?
         .into_iter()
         .next()
         .map(|pkg| pkg.files)
@@ -243,12 +243,7 @@ async fn check_package_unused(
             Some(project.clone()),
         )
         .await
-        .map_err(|e| match e {
-            PipelineError::InlineClause(_) | PipelineError::RedirectConflict(_) => {
-                CliExit::silent_failure(1)
-            }
-            other => CliExit::error(format!("wado check: {other}")),
-        })?;
+        .map_err(|e| pipeline_exit(e, "check"))?;
         package.adopt_member_invocations(member, &outcome.invocations, &mut invocations);
     }
     let lints = wado_compiler::package_unused_diagnostics(

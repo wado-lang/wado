@@ -202,6 +202,7 @@ fn trait_bound_violation_message(
 }
 
 use std::cell::RefCell;
+use std::fmt::Write as _;
 use std::rc::Rc;
 
 use crate::hashmap::{IndexMap, IndexSet};
@@ -574,10 +575,11 @@ impl PackageSources {
     }
 
     fn entry_source(&self) -> String {
-        self.members
-            .iter()
-            .map(|member| format!("use _ from \"./{member}\";\n"))
-            .collect()
+        let mut source = String::new();
+        for member in &self.members {
+            writeln!(source, "use _ from \"./{member}\";").unwrap();
+        }
+        source
     }
 
     /// The identity the package's load gives `member`.
@@ -599,7 +601,7 @@ impl PackageSources {
     ) {
         let member_identity = self.member_identity(member);
         for (decl, from, uri) in index.entries() {
-            let decl = if decl == member_identity || decl.contains(':') {
+            let decl = if decl == member_identity {
                 decl.to_string()
             } else {
                 name::resolve_local_identity(&self.root, Some(&member_identity), decl)
