@@ -1745,23 +1745,27 @@ fn collect_callees(body: &Body, callees: &mut IndexSet<usize>) {
 /// store position. This is the multiplier on what one splice adds, so a callee
 /// reached twice from one body counts twice — unlike [`collect_callees`], whose
 /// answer is a set because the recursion graph only asks whether an edge exists.
+fn call_site_counts(scans: &[BodyScan]) -> Vec<usize> {
+    let mut counts = vec![0usize; scans.len()];
+    for (callee, _) in scans.iter().flat_map(|s| &s.calls) {
+        counts[callee.index()] += 1;
+    }
+    counts
+}
+
 /// The functions no hot site reaches, indexed by store position: every path
 /// into one passes a `cold_path()` marker, so whatever is spliced into it runs
 /// at most once on the way out. A function no call site reaches is reached some
 /// other way (an export, a global initializer, a function reference), so it
 /// counts as hot.
-fn cold_functions(project: &NirPackage, scans: &[BodyScan]) -> Vec<bool> {
-    let mut called = vec![false; scans.len()];
-    for (callee, _) in scans.iter().flat_map(|s| &s.calls) {
-        called[callee.index()] = true;
-    }
+fn cold_functions(project: &NirPackage, scans: &[BodyScan], call_sites: &[usize]) -> Vec<bool> {
     let mut hot: Vec<bool> = project
         .functions
         .iter()
-        .zip(&called)
-        .map(|(f, &called)| {
+        .zip(call_sites)
+        .map(|(f, &sites)| {
             let f = f.borrow();
-            !called || f.is_export || f.is_cm_export
+            sites == 0 || f.is_export || f.is_cm_export
         })
         .collect();
     let mut work: Vec<usize> = (0..hot.len()).filter(|&i| hot[i]).collect();
@@ -1774,14 +1778,6 @@ fn cold_functions(project: &NirPackage, scans: &[BodyScan]) -> Vec<bool> {
         }
     }
     hot.into_iter().map(|hot| !hot).collect()
-}
-
-fn call_site_counts(scans: &[BodyScan]) -> Vec<usize> {
-    let mut counts = vec![0usize; scans.len()];
-    for (callee, _) in scans.iter().flat_map(|s| &s.calls) {
-        counts[callee.index()] += 1;
-    }
-    counts
 }
 
 /// A callee the heuristic admitted, priced for the budget.
@@ -2032,7 +2028,10 @@ pub fn inline_functions(
     let scans = scans
         .0
         .refresh(project, gate.exec(), |f| scan_body(f, cold_path));
-    let cold = cold_functions(project, scans);
+    // Taken every round, unlike the prices below: a callee's only site is one
+    // where its splice pays back.
+    let call_sites = call_site_counts(scans);
+    let cold = cold_functions(project, scans, &call_sites);
     let never: Vec<bool> = {
         let type_table = project.type_table.borrow();
         project
@@ -2091,11 +2090,8 @@ pub fn inline_functions(
     // What the unit holds right now, and what each admitted candidate would add
     // to it. `Candidate::forced` marks the ones the budget may not turn down.
     // Both prices cost a walk over the whole unit per round and no level sets a
-    // growth cap, so they are taken only where something reads them. The site
-    // counts are taken every round, since a callee's only site is one where its
-    // splice pays back.
+    // growth cap, so they are taken only where something reads them.
     let pricing = budget.prices_read();
-    let call_sites = call_site_counts(scans);
     let hopeful_params = hopeful_params(project, scans, &sites, gate.exec());
     let mut unit_size = 0usize;
     let mut priced: Vec<Candidate> = Vec::new();
