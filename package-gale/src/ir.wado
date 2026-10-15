@@ -2130,7 +2130,7 @@ pub fn assert_canonical_shape(grammar: &Grammar) {
 fn assert_canonical_element<S: AsStrSlice>(elem: &Element, rule: S) {
     match elem {
         Repeat(rep) => {
-            assert !peel_nested_repeat(&rep.element) matches { Some(_) }, `rule "${rule}": a repeat over a repeat reached lowering — every Repeat canonicalization mints must go through canon_repeat, which collapses the pair`;
+            assert !peel_nested_repeat(&rep.element) matches { Some(_) }, "a repeat over a repeat reached lowering — every Repeat canonicalization mints must go through canon_repeat, which collapses the pair";
             assert_canonical_element(&rep.element, rule);
         },
         Group(g) => {

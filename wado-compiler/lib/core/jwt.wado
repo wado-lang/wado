@@ -212,7 +212,7 @@ impl Hs256Key {
     /// shorter secret is brute-forcible, so it is refused rather than accepted.
     pub fn new<S: AsByteSlice>(secret: &S) -> Hs256Key {
         let bytes = secret.as_byte_slice().to_list() as ByteList;
-        assert bytes.len() >= 32, `an HS256 secret is at least 32 bytes, got ${bytes.len()}`;
+        assert bytes.len() >= 32, "an HS256 secret is at least 32 bytes";
         return Hs256Key { secret: bytes };
     }
 }

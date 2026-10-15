@@ -236,7 +236,7 @@ test "gen prints the parser the Kiln generator builds for the same grammar" {
     let dir = scratch(SUITE, "gen");
     put(&dir, "Expr.g4", EXPR);
     let outcome = gale_in(&dir, ["gen", "Expr.g4"]);
-    assert outcome.result matches { Ok(_) }, outcome.failure();
+    assert outcome.result matches { Ok(_) };
     let built = kiln(["Expr.g4", bytes_of(EXPR)], [], no_options());
     assert outcome.stdout() == built.source();
     assert outcome.console.stderr() == "";
@@ -247,7 +247,7 @@ test "gen --output writes the parser into the first grant and prints nothing" {
     let src = scratch(SUITE, "gen-output/src");
     put(&src, "Expr.g4", EXPR);
     let outcome = gale_with([out, src], ["gen", "--output", "expr.wado", "Expr.g4"]);
-    assert outcome.result matches { Ok(_) }, outcome.failure();
+    assert outcome.result matches { Ok(_) };
     assert outcome.stdout() == "";
     let printed = gale_in(&src, ["gen", "Expr.g4"]).stdout();
     assert fs::read_to_string(`${out}/expr.wado`).unwrap() == printed;
@@ -259,7 +259,7 @@ test "gen with a .scm query adds the highlighter" {
     put(&dir, "expr.scm", EXPR_QUERY);
     let plain = gale_in(&dir, ["gen", "Expr.g4"]);
     let highlighted = gale_in(&dir, ["gen", "--highlights", "expr.scm", "Expr.g4"]);
-    assert highlighted.result matches { Ok(_) }, highlighted.failure();
+    assert highlighted.result matches { Ok(_) };
     assert !plain.stdout().contains("pub fn highlight<");
     assert highlighted.stdout().contains("pub fn highlight<");
 }
@@ -280,7 +280,7 @@ test "a warning is logged by default and silenced by --log-level error" {
     put(&dir, "Expr.g4", EXPR);
     put(&dir, "bad.scm", "(FLOAT) @number\n");
     let default_level = gale_in(&dir, ["gen", "--highlights", "bad.scm", "Expr.g4"]);
-    assert default_level.result matches { Ok(_) }, default_level.failure();
+    assert default_level.result matches { Ok(_) };
     assert default_level.console.events == ["Warn: highlight query: unknown token 'FLOAT'"];
     let quiet = gale_in(&dir, ["gen", "--log-level", "error", "--highlights", "bad.scm", "Expr.g4"]);
     assert quiet.console.events == [];
@@ -291,7 +291,7 @@ test "a grammar read from the second grant is found" {
     let src = scratch(SUITE, "second-grant/src");
     put(&src, "Expr.g4", EXPR);
     let outcome = gale_with([empty, src], ["dump", "Expr.g4"]);
-    assert outcome.result matches { Ok(_) }, outcome.failure();
+    assert outcome.result matches { Ok(_) };
     assert outcome.stdout().starts_with("grammar Expr\n");
 }
 
@@ -316,7 +316,7 @@ test "run prints what a successful command prints, and does not exit" {
     with &mut console, Environment => &line, Preopens => &dirs, Exit => &NoExit {} do {
         run();
     };
-    assert console.stdout().contains("rule 0 'expr'"), console.stdout();
+    assert console.stdout().contains("rule 0 'expr'");
     assert console.stderr() == "";
 }
 
@@ -328,26 +328,26 @@ test "dump prints the per-rule prediction report" {
     let dir = scratch(SUITE, "dump");
     put(&dir, "Expr.g4", EXPR);
     let outcome = gale_in(&dir, ["dump", "Expr.g4"]);
-    assert outcome.result matches { Ok(_) }, outcome.failure();
-    assert outcome.stdout().starts_with("grammar Expr\n\n"), outcome.stdout();
-    assert outcome.stdout().contains("expr"), outcome.stdout();
+    assert outcome.result matches { Ok(_) };
+    assert outcome.stdout().starts_with("grammar Expr\n\n");
+    assert outcome.stdout().contains("expr");
 }
 
 test "dump --atn prints the ATN" {
     let dir = scratch(SUITE, "dump-atn");
     put(&dir, "Expr.g4", EXPR);
     let outcome = gale_in(&dir, ["dump", "--atn", "Expr.g4"]);
-    assert outcome.result matches { Ok(_) }, outcome.failure();
-    assert outcome.stdout().contains("rule 0 'expr'"), outcome.stdout();
+    assert outcome.result matches { Ok(_) };
+    assert outcome.stdout().contains("rule 0 'expr'");
 }
 
 test "dump --lexer prints the lexer report" {
     let dir = scratch(SUITE, "dump-lexer");
     put(&dir, "Expr.g4", EXPR);
     let outcome = gale_in(&dir, ["dump", "--lexer", "Expr.g4"]);
-    assert outcome.result matches { Ok(_) }, outcome.failure();
-    assert outcome.stdout().contains("grammar Expr (lexer)"), outcome.stdout();
-    assert outcome.stdout().contains("rule INT"), outcome.stdout();
+    assert outcome.result matches { Ok(_) };
+    assert outcome.stdout().contains("grammar Expr (lexer)");
+    assert outcome.stdout().contains("rule INT");
 }
 
 test "every grammar file given is read and merged" {
@@ -355,8 +355,8 @@ test "every grammar file given is read and merged" {
     put(&dir, "SplitLexer.g4", SPLIT_LEXER);
     put(&dir, "SplitParser.g4", SPLIT_PARSER);
     let both = gale_in(&dir, ["dump", "--lexer", "SplitParser.g4", "SplitLexer.g4"]);
-    assert both.result matches { Ok(_) }, both.failure();
-    assert both.stdout().contains("rule NUM"), both.stdout();
+    assert both.result matches { Ok(_) };
+    assert both.stdout().contains("rule NUM");
 }
 
 test "a reference to a rule no grammar defines is reported" {
@@ -377,13 +377,13 @@ global USAGE: String = "Usage: gale gen [--trace] [--log-level <level>] [--outpu
 test "an argument error names the subcommand and shows the usage" {
     let dir = scratch(SUITE, "usage");
     let unknown = gale_in(&dir, ["gen", "--frobnicate", "Expr.g4"]);
-    assert unknown.failure().starts_with("gale gen: "), unknown.failure();
-    assert unknown.failure().ends_with(`\n${USAGE}`), unknown.failure();
+    assert unknown.failure().starts_with("gale gen: ");
+    assert unknown.failure().ends_with(`\n${USAGE}`);
     let dump = gale_in(&dir, ["dump", "--frobnicate"]);
-    assert dump.failure().starts_with("gale dump: "), dump.failure();
+    assert dump.failure().starts_with("gale dump: ");
     let none = gale_in(&dir, []);
-    assert none.failure().starts_with("gale: "), none.failure();
-    assert none.failure().ends_with(`\n${USAGE}`), none.failure();
+    assert none.failure().starts_with("gale: ");
+    assert none.failure().ends_with(`\n${USAGE}`);
 }
 
 test "a subcommand given no grammar says so" {
@@ -412,7 +412,7 @@ test "a grammar that does not parse is reported with its path" {
     let dir = scratch(SUITE, "parse-error");
     put(&dir, "Broken.g4", "grammar Broken;\nr : ;;\n");
     let outcome = gale_in(&dir, ["gen", "Broken.g4"]);
-    assert outcome.failure().starts_with("gale: Broken.g4: parse error: "), outcome.failure();
+    assert outcome.failure().starts_with("gale: Broken.g4: parse error: ");
 }
 
 test "a highlight query that does not parse is reported with its path and position" {
@@ -506,7 +506,7 @@ test "a .scm input to the Kiln generator adds the highlighter" {
 test "the primary input is a grammar, antlr4 by default" {
     for let grammar_type of [null, Option::Some("antlr4")] as List<Option<String>> {
         let built = kiln(["Expr.g4", bytes_of(EXPR)], [], no_options(), grammar_type);
-        assert built.error() == "", built.error();
+        assert built.error() == "";
     }
     let other = kiln(["Expr.g4", bytes_of(EXPR)], [], no_options(), Option::Some("onnx"));
     assert other.error() == "unsupported: gale: 'Expr.g4' is given `type: \"onnx\"`; a grammar is `type: \"antlr4\"`";
@@ -556,7 +556,7 @@ test "Gale's diagnostics reach the Kiln host at their own level" {
     let informed = kiln(["Pick.g4", bytes_of(OVERLAP)], [], no_options());
     assert informed.diagnostics.len() > 0;
     for let d of &informed.diagnostics {
-        assert d.starts_with("Info: gale: "), d;
+        assert d.starts_with("Info: gale: ");
     }
 }
 
@@ -575,14 +575,13 @@ test "a Kiln input that is not UTF-8 is an invalid schema" {
 test "a Kiln parse error says which input it is in" {
     let broken = bytes_of("grammar Broken;\nr : ;;\n");
     let primary = kiln(["Broken.g4", broken], [], no_options());
-    assert primary.error().starts_with("invalid schema: gale: failed to parse primary grammar 'Broken.g4': "), primary.error(
-    );
+    assert primary.error().starts_with("invalid schema: gale: failed to parse primary grammar 'Broken.g4': ");
     let supplementary = kiln(["Expr.g4", bytes_of(EXPR)], [
         ["Broken.g4", broken, null],
     ], no_options());
     assert supplementary.error().starts_with(
         "invalid schema: gale: failed to parse supplementary grammar 'Broken.g4': ",
-    ), supplementary.error();
+    );
 }
 
 test "a Kiln grammar with unresolved references names the primary input" {

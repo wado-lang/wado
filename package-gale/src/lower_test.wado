@@ -501,11 +501,11 @@ test "lower single-alt Group with two leaves produces SingleAlt shape" {
             if let SingleAlt(sa) = &go.shape {
                 // Struct name comes from `single_alt_group_type_name`.
                 // `=` lowers to `eq` (per `symbol_char_names`).
-                assert sa.struct_name == "IdEqIntItem", sa.struct_name;
+                assert sa.struct_name == "IdEqIntItem";
                 // Field name comes from `single_alt_group_field_name`.
-                assert sa.field == "id_eq_int", sa.field;
+                assert sa.field == "id_eq_int";
                 // owner_rule threads the surrounding rule through.
-                assert sa.owner_rule == "assignment", sa.owner_rule;
+                assert sa.owner_rule == "assignment";
             } else {
                 panic("expected GroupShape::SingleAlt");
             }
@@ -562,12 +562,12 @@ test "lower single-alt Group uses fresh name table for inner ops" {
             // Inner ops live in a fresh name table — the inner ID
             // is `id` not `id_2`.
             if let Token(t) = &go.alts[0].ops[0] {
-                assert t.field == "id", t.field;
+                assert t.field == "id";
             } else {
                 panic("expected inner Token ID");
             }
             if let Token(t) = &go.alts[0].ops[1] {
-                assert t.field == "int", t.field;
+                assert t.field == "int";
             } else {
                 panic("expected inner Token INT");
             }
@@ -612,7 +612,7 @@ test "lower single-alt Group field name dedupes against outer scope" {
     if let Simple(s) = &lowered.parser_rules[0] {
         if let Group(go) = &s.body.ops[1] {
             if let SingleAlt(sa) = &go.shape {
-                assert sa.field == "id_int_2", sa.field;
+                assert sa.field == "id_int_2";
             } else {
                 panic("expected GroupShape::SingleAlt");
             }
@@ -649,7 +649,7 @@ test "lower token-only Group produces TokenOnly shape with single field" {
         if let Group(go) = &s.body.ops[0] {
             if let TokenOnly(to) = &go.shape {
                 // Field name comes from `token_group_field_name`.
-                assert to.field == "k_insert_or_k_replace", to.field;
+                assert to.field == "k_insert_or_k_replace";
             } else {
                 panic("expected GroupShape::TokenOnly");
             }
@@ -699,7 +699,7 @@ test "lower token-only Group accepts Literal alts" {
     if let Simple(s) = &lowered.parser_rules[0] {
         if let Group(go) = &s.body.ops[0] {
             if let TokenOnly(to) = &go.shape {
-                assert to.field == "plus_or_minus", to.field;
+                assert to.field == "plus_or_minus";
             } else {
                 panic("expected GroupShape::TokenOnly");
             }
@@ -750,7 +750,7 @@ test "lower token-only Group field dedupes against outer scope" {
             if let TokenOnly(to) = &go.shape {
                 // Outer label took the base name; the group dedups
                 // to `_2`.
-                assert to.field == "k_a_or_k_b_2", to.field;
+                assert to.field == "k_a_or_k_b_2";
             } else {
                 panic("expected GroupShape::TokenOnly");
             }
@@ -800,14 +800,14 @@ test "lower SimpleCst Group with single-RuleRef alts produces SimpleCst shape" {
         assert s.body.ops.len() == 1;
         if let Group(go) = &s.body.ops[0] {
             if let SimpleCst(scst) = &go.shape {
-                assert scst.type_name == "StmtOrExprGroup", scst.type_name;
-                assert scst.field == "stmt_or_expr", scst.field;
+                assert scst.type_name == "StmtOrExprGroup";
+                assert scst.field == "stmt_or_expr";
             } else {
                 panic("expected GroupShape::SimpleCst");
             }
             assert go.alts.len() == 2;
-            assert go.alts[0].case_name == "Stmt", go.alts[0].case_name;
-            assert go.alts[1].case_name == "Expr", go.alts[1].case_name;
+            assert go.alts[0].case_name == "Stmt";
+            assert go.alts[1].case_name == "Expr";
             // Each body op is the matched RuleCall.
             if let RuleCall(rc) = &go.alts[0].ops[0] {
                 assert rc.target_name == "stmt";
@@ -874,7 +874,7 @@ test "lower SimpleCst Group field dedupes against outer scope" {
     if let Simple(s) = &lowered.parser_rules[0] {
         if let Group(go) = &s.body.ops[1] {
             if let SimpleCst(scst) = &go.shape {
-                assert scst.field == "stmt_or_expr_2", scst.field;
+                assert scst.field == "stmt_or_expr_2";
             } else {
                 panic("expected GroupShape::SimpleCst");
             }
@@ -922,19 +922,19 @@ test "lower General Group with disjoint multi-shape alts produces General shape"
         assert s.body.ops.len() == 1;
         if let Group(go) = &s.body.ops[0] {
             if let General(gen) = &go.shape {
-                assert gen.variant_type == "RGroup0", gen.variant_type;
-                assert gen.field == "group_0", gen.field;
+                assert gen.variant_type == "RGroup0";
+                assert gen.field == "group_0";
                 assert gen.group_index == 0;
                 assert gen.alt_struct_names.len() == 2;
-                assert gen.alt_struct_names[0] == "RGroup0Alt0", gen.alt_struct_names[0];
-                assert gen.alt_struct_names[1] == "RGroup0Alt1", gen.alt_struct_names[1];
+                assert gen.alt_struct_names[0] == "RGroup0Alt0";
+                assert gen.alt_struct_names[1] == "RGroup0Alt1";
             } else {
                 panic("expected GroupShape::General");
             }
             assert go.alts.len() == 2;
-            assert go.alts[0].case_name == "Alt0", go.alts[0].case_name;
-            assert go.alts[0].struct_name == "RGroup0Alt0", go.alts[0].struct_name;
-            assert go.alts[1].case_name == "Alt1", go.alts[1].case_name;
+            assert go.alts[0].case_name == "Alt0";
+            assert go.alts[0].struct_name == "RGroup0Alt0";
+            assert go.alts[1].case_name == "Alt1";
             assert go.alts[1].ops.len() == 2;
             // Direct dispatch on each alt's first set.
             if let Direct(dd) = &go.dispatch {
@@ -1001,8 +1001,8 @@ test "lower General Group group_index is per-rule cumulative" {
         if let Group(go0) = &s.body.ops[0] {
             if let General(gen) = &go0.shape {
                 assert gen.group_index == 0;
-                assert gen.variant_type == "RGroup0", gen.variant_type;
-                assert gen.field == "group_0", gen.field;
+                assert gen.variant_type == "RGroup0";
+                assert gen.field == "group_0";
             } else {
                 panic("expected first group General");
             }
@@ -1012,8 +1012,8 @@ test "lower General Group group_index is per-rule cumulative" {
         if let Group(go1) = &s.body.ops[1] {
             if let General(gen) = &go1.shape {
                 assert gen.group_index == 1;
-                assert gen.variant_type == "RGroup1", gen.variant_type;
-                assert gen.field == "group_1", gen.field;
+                assert gen.variant_type == "RGroup1";
+                assert gen.field == "group_1";
             } else {
                 panic("expected second group General");
             }
@@ -1599,7 +1599,7 @@ test "lower enumerates leaf field decls with span and Plain kinds" {
 
     let lowered = lower(&g, &[]);
     if let Simple(s) = &lowered.parser_rules[0] {
-        assert s.body.fields.len() == 4, `expected 4 fields, got ${s.body.fields.len()}`;
+        assert s.body.fields.len() == 4;
         assert s.body.fields[0].name == "span";
         if let Span = &s.body.fields[0].kind {
             assert true;
@@ -1611,7 +1611,7 @@ test "lower enumerates leaf field decls with span and Plain kinds" {
         assert s.body.fields[2].name == "colon";
         assert s.body.fields[2].type_str == "i32";
         assert s.body.fields[3].name == "expr";
-        assert s.body.fields[3].type_str == "ExprNode", s.body.fields[3].type_str;
+        assert s.body.fields[3].type_str == "ExprNode";
         if let Plain = &s.body.fields[3].kind {
             assert true;
         } else {
@@ -1651,7 +1651,7 @@ test "lower enumerates Repeat field decls with List/Optional kinds" {
     let lowered = lower(&g, &[]);
     if let Simple(s) = &lowered.parser_rules[0] {
         // [span, int_list, int]
-        assert s.body.fields.len() == 3, `expected 3 fields, got ${s.body.fields.len()}`;
+        assert s.body.fields.len() == 3;
         assert s.body.fields[1].name == "int_list";
         assert s.body.fields[1].type_str == "List<i32>";
         if let List = &s.body.fields[1].kind {
@@ -1710,10 +1710,10 @@ test "lower SingleAlt Group body enumerates list-label inner as List field" {
             if let Group(go) = &rep.body {
                 if let SingleAlt(_) = &go.shape {
                     let inner_ops = &go.alts[0].ops;
-                    assert inner_ops.len() == 2, `expected 2 inner ops, got ${inner_ops.len()}`;
+                    assert inner_ops.len() == 2, "expected 2 inner ops";
                     // ops[1] must be Op::ListLabel for `b+=ID`.
                     if let ListLabel(ll) = &inner_ops[1] {
-                        assert ll.field == "b", ll.field;
+                        assert ll.field == "b";
                     } else if let Token(t) = &inner_ops[1] {
                         panic(`ops[1] is Token(field=${t.field}); ListLabel expected`);
                     } else if let RuleCall(r) = &inner_ops[1] {
@@ -1724,10 +1724,10 @@ test "lower SingleAlt Group body enumerates list-label inner as List field" {
                         panic(`ops[1] is some other variant; ListLabel expected`);
                     }
                     let inner_fields = &go.alts[0].fields;
-                    assert inner_fields.len() == 2, `expected 2 inner fields, got ${inner_fields.len()}`;
+                    assert inner_fields.len() == 2, "expected 2 inner fields";
                     assert inner_fields[0].type_str == "i32";
-                    assert inner_fields[1].name == "b", inner_fields[1].name;
-                    assert inner_fields[1].type_str == "List<i32>", inner_fields[1].type_str;
+                    assert inner_fields[1].name == "b";
+                    assert inner_fields[1].type_str == "List<i32>";
                 } else {
                     panic("expected GroupShape::SingleAlt");
                 }
@@ -1771,7 +1771,7 @@ test "lower SingleAlt Group body enumerates inner FieldDecls without span" {
         if let Group(go) = &s.body.ops[0] {
             if let SingleAlt(_) = &go.shape {
                 let inner_fields = &go.alts[0].fields;
-                assert inner_fields.len() == 3, `expected 3 inner fields, got ${inner_fields.len()}`;
+                assert inner_fields.len() == 3, "expected 3 inner fields";
                 assert inner_fields[0].name == "id";
                 assert inner_fields[0].type_str == "i32";
                 assert inner_fields[1].name == "eq";
@@ -1840,12 +1840,12 @@ test "lower General Group inner alts enumerate per-alt FieldDecls without span" 
                 assert go.alts.len() == 2;
                 // Alt 0: single RuleRef `stmt` → `stmt` field.
                 let alt0_fields = &go.alts[0].fields;
-                assert alt0_fields.len() == 1, `alt 0 expected 1 field, got ${alt0_fields.len()}`;
+                assert alt0_fields.len() == 1, "alt 0 expected 1 field";
                 assert alt0_fields[0].name == "stmt";
-                assert alt0_fields[0].type_str == "StmtNode", alt0_fields[0].type_str;
+                assert alt0_fields[0].type_str == "StmtNode";
                 // Alt 1: literal `'go'` + `expr` → two fields.
                 let alt1_fields = &go.alts[1].fields;
-                assert alt1_fields.len() == 2, `alt 1 expected 2 fields, got ${alt1_fields.len()}`;
+                assert alt1_fields.len() == 2, "alt 1 expected 2 fields";
                 assert alt1_fields[0].name == "lit_go";
                 assert alt1_fields[0].type_str == "i32";
                 assert alt1_fields[1].name == "expr";
@@ -1893,10 +1893,10 @@ test "lower Repeat field name dedupes against outer scope" {
         // [span, int_list (label), int_list_2 (Repeat dedup)]
         assert s.body.fields.len() == 3;
         assert s.body.fields[1].name == "int_list";
-        assert s.body.fields[2].name == "int_list_2", s.body.fields[2].name;
+        assert s.body.fields[2].name == "int_list_2";
         // Op.field on the Repeat carries the same deduped name.
         if let Repeat(rep) = &s.body.ops[1] {
-            assert rep.field == "int_list_2", rep.field;
+            assert rep.field == "int_list_2";
         } else {
             panic("expected Op::Repeat at index 1");
         }
@@ -1954,13 +1954,13 @@ test "lower Group field decls match shape's outer field/type" {
         // [span, k_a_or_k_b: Token, stmt_or_expr: Option<StmtOrExprGroup>, a_b: ABItem]
         // Standalone SimpleCst groups surface as `Option<>` to match
         // parser_gen's `gen_consume_group_store_optional` storage pattern.
-        assert s.body.fields.len() == 4, `expected 4 fields, got ${s.body.fields.len()}`;
+        assert s.body.fields.len() == 4;
         assert s.body.fields[1].name == "k_a_or_k_b";
         assert s.body.fields[1].type_str == "i32";
         assert s.body.fields[2].name == "stmt_or_expr";
-        assert s.body.fields[2].type_str == "Option<StmtOrExprGroup>", s.body.fields[2].type_str;
+        assert s.body.fields[2].type_str == "Option<StmtOrExprGroup>";
         assert s.body.fields[3].name == "a_b";
-        assert s.body.fields[3].type_str == "ABItem", s.body.fields[3].type_str;
+        assert s.body.fields[3].type_str == "ABItem";
     } else {
         panic("expected Rule::Simple");
     }
@@ -2063,7 +2063,7 @@ test "lower LR rule respects right-associative conflict_min" {
         assert l.lr_alts[0].right_associative;
         assert l.lr_alts[0].own_prec == 1;
         // Right-assoc floor: conflict_min == own_prec.
-        assert l.lr_alts[0].conflict_min == 1, `expected 1, got ${l.lr_alts[0].conflict_min}`;
+        assert l.lr_alts[0].conflict_min == 1;
     } else {
         panic("expected Rule::LeftRecursive");
     }
@@ -2125,7 +2125,7 @@ test "lower non-greedy Wildcard Repeat carries outer_follow as exit_first" {
         if let Repeat(rep) = &s.body.ops[1] {
             if let NonGreedy(ng) = &rep.strategy {
                 // exit_first carries the trailing `*/` literal kind.
-                assert ng.exit_first.len() == 1, `expected 1, got ${ng.exit_first.len()}`;
+                assert ng.exit_first.len() == 1;
                 assert an.token_name(ng.exit_first[0]) == "TK_LIT_STARSLASH";
                 assert ng.exit_second.is_empty();
             } else {
@@ -2178,7 +2178,7 @@ test "lower non-greedy single-element Group Repeat lowers body to TransparentGro
             // none of them — the two facts the class carries at once.
             assert admits_is_everything(&rep.body_admits), "expected the wildcard body to admit everything";
             let enumerated = admits_enumerated(&rep.body_admits);
-            assert enumerated.is_empty(), `expected no enumerated kinds, got len=${enumerated.len()}`;
+            assert enumerated.is_empty(), "expected no enumerated kinds";
             if let NonGreedy(ng) = &rep.strategy {
                 assert ng.exit_first.len() == 1;
                 assert an.token_name(ng.exit_first[0]) == "TK_LIT_EQ";
@@ -2269,7 +2269,7 @@ test "lower non-greedy Group Repeat fills exit_second from inner suffix" {
                 assert ng.exit_first.len() == 1;
                 assert an.token_name(ng.exit_first[0]) == "TK_LIT_COMMA";
                 // exit_second = first of inner-after-first = { TK_INT }.
-                assert ng.exit_second.len() == 1, `expected 1, got ${ng.exit_second.len()}`;
+                assert ng.exit_second.len() == 1;
                 assert an.token_name(ng.exit_second[0]) == "TK_INT";
             } else {
                 panic("expected RepeatStrategy::NonGreedy");
@@ -2277,7 +2277,7 @@ test "lower non-greedy Group Repeat fills exit_second from inner suffix" {
             // body_second_position_first = first of inner-Group's
             // elements from index 1 = { TK_INT }. Consumed by emit's
             // `compute_non_greedy_condition` 2-token disambiguation arm.
-            assert rep.body_second_position_first.len() == 1, `expected 1, got ${rep.body_second_position_first.len()}`;
+            assert rep.body_second_position_first.len() == 1;
             assert an.token_name(rep.body_second_position_first[0]) == "TK_INT";
             // body_shape classifies the body op for emit's exhaustive
             // dispatch. The inner is a single-alt Group of two leaves
@@ -2357,17 +2357,17 @@ test "lower warns once when overlapping alts fall back to a tournament" {
     ];
 
     let lowered = lower(&g, &[]);
-    assert lowered.diagnostics.len() == 1, `expected 1 diagnostic, got ${lowered.diagnostics.len()}`;
+    assert lowered.diagnostics.len() == 1;
     let d = &lowered.diagnostics[0];
     // The owner names the rule structurally, so tooling matches by equality.
-    assert d.owner == DiagnosticOwner::rule_dispatch("r"), `unexpected owner: ${d.owner.label()}`;
+    assert d.owner == DiagnosticOwner::rule_dispatch("r");
     if let OverlapTournament = &d.kind {
     } else {
         panic("expected DiagnosticKind::OverlapTournament");
     }
     // The message should name the shared lookahead token so a grammar
     // author can see why the alts overlapped.
-    assert d.message.contains("TK_ID"), `message lacks shared token: ${d.message}`;
+    assert d.message.contains("TK_ID"), "message lacks shared token";
 }
 
 test "lower raises no diagnostics for disjoint alts" {
@@ -2387,7 +2387,7 @@ test "lower raises no diagnostics for disjoint alts" {
     ];
 
     let lowered = lower(&g, &[]);
-    assert lowered.diagnostics.is_empty(), `expected no diagnostics, got ${lowered.diagnostics.len()}`;
+    assert lowered.diagnostics.is_empty(), "expected no diagnostics";
 }
 
 test "lower warns when an optional falls back to a scan guard" {
@@ -2403,11 +2403,11 @@ test "lower warns when an optional falls back to a scan guard" {
     for let d of &lowered.diagnostics {
         if d.kind matches { OptionalScanGuardFallback } {
             found += 1;
-            assert d.owner.rule == "r", `expected the warning to name rule 'r', got '${d.owner.rule}'`;
-            assert d.owner.site matches { Optional(_) }, `unexpected site: ${d.owner.label()}`;
+            assert d.owner.rule == "r", "expected the warning to name rule 'r'";
+            assert d.owner.site matches { Optional(_) };
         }
     }
-    assert found == 1, `expected 1 scan-guard warning, got ${found}`;
+    assert found == 1, "expected 1 scan-guard warning";
 }
 
 test "lower raises no scan-guard warning for a token-led optional" {
@@ -2419,7 +2419,7 @@ test "lower raises no scan-guard warning for a token-led optional" {
     let lowered = lower(&g, &lit);
 
     for let d of &lowered.diagnostics {
-        assert !d.kind matches { OptionalScanGuardFallback }, `unexpected warning: ${d.message}`;
+        assert !d.kind matches { OptionalScanGuardFallback };
     }
 }
 
@@ -2451,7 +2451,7 @@ test "lower Tournament sorts longer alt first" {
     if let MultiAlt(m) = &lowered.parser_rules[0] {
         if let Tournament(td) = &m.dispatch {
             // alt 0 has 3 elements, alt 1 has 2; alt 0 sorts first.
-            assert td.alts[0] == 0, `expected alt 0 first, got ${td.alts[0]}`;
+            assert td.alts[0] == 0, "expected alt 0 first";
             assert td.alts[1] == 1;
         } else {
             panic("expected MultiAltDispatch::Tournament");
@@ -2577,7 +2577,7 @@ test "lower Optional Repeat over multi-token Group uses OptionalLookahead strate
         if let Repeat(rep) = &s.body.ops[0] {
             if let OptionalLookahead(ol) = &rep.strategy {
                 // Per-position signature: [[TK_LIT_MINUS], [TK_LIT_GT]].
-                assert ol.sig.len() == 2, `expected 2 positions, got ${ol.sig.len()}`;
+                assert ol.sig.len() == 2;
                 assert an.token_name(ol.sig[0][0]) == "TK_LIT_MINUS";
                 assert an.token_name(ol.sig[1][0]) == "TK_LIT_GT";
             } else {
@@ -2611,7 +2611,7 @@ test "lower drops the empty shape from a scan-side optional lookahead" {
         assert !ole.sigs.is_empty(), "expected at least one shape to survive";
         assert ole.sigs.len() == ole.bodies.len(), "sigs and bodies must stay parallel";
         for let mut i = 0; i < ole.sigs.len(); i += 1 {
-            assert !ole.sigs[i].is_empty(), `shape ${i} kept an empty signature`;
+            assert !ole.sigs[i].is_empty();
         }
     } else {
         panic("expected ScanElement::OptionalLookahead");
@@ -2743,7 +2743,7 @@ test "canonicalizing collapses nested optionals through a bare wrapper" {
 
         if let Simple(s) = &lowered.parser_rules[0] {
             if let Repeat(rep) = &s.body.ops[0] {
-                assert !rep.body matches { Repeat(_) }, `nested Repeat survived: ${*src}`;
+                assert !rep.body matches { Repeat(_) }, "nested Repeat survived";
             } else {
                 panic(`expected Op::Repeat for: ${*src}`);
             }
@@ -2773,7 +2773,7 @@ test "lower Optional Repeat over a token-only Group inner stays Plain" {
         panic("expected Rule::Simple");
     }
     for let d of &lowered.diagnostics {
-        assert !d.kind matches { OptionalScanGuardFallback }, `unexpected warning: ${d.message}`;
+        assert !d.kind matches { OptionalScanGuardFallback };
     }
 }
 
@@ -2884,7 +2884,7 @@ test "lower Repeat over General Group inner uses speculative group_counter id" {
     if let Simple(s) = &lowered.parser_rules[0] {
         if let Repeat(rep) = &s.body.ops[0] {
             // Outer field uses speculative counter id 0.
-            assert rep.field == "group_0_list", rep.field;
+            assert rep.field == "group_0_list";
             // The inner Op is the General-Group, with the SAME id
             // (the inner lowering consumed the same counter value).
             if let Group(go) = &rep.body {
@@ -2935,7 +2935,7 @@ test "lower Repeat with list-label inner uses label name as outer field" {
     if let Simple(s) = &lowered.parser_rules[0] {
         if let Repeat(rep) = &s.body.ops[0] {
             // The Repeat's outer field is `names`, not `id_list`.
-            assert rep.field == "names", rep.field;
+            assert rep.field == "names";
         } else {
             panic("expected Op::Repeat");
         }
@@ -2962,7 +2962,7 @@ test "lower Transparent Group does not contribute a CST field" {
     let lowered = lower(&g, &[]);
     if let Simple(s) = &lowered.parser_rules[0] {
         // [span] — the Transparent group does not surface a field.
-        assert s.body.fields.len() == 1, `expected 1 field (span only), got ${s.body.fields.len()}`;
+        assert s.body.fields.len() == 1, "expected 1 field (span only)";
         if let Span = &s.body.fields[0].kind {
             assert true;
         } else {
@@ -2991,7 +2991,7 @@ test "atn_call_site threads from surface RuleRef to lowered RuleCallOp" {
     // `a : b c` lowers to Simple with two top-level RuleCalls; the
     // depth-first call-site numbering gives a->b = 0, a->c = 1.
     if let Simple(s) = &lowered.parser_rules[0] {
-        assert s.body.ops.len() == 2, `rule a should have 2 ops, got ${s.body.ops.len()}`;
+        assert s.body.ops.len() == 2, "rule a should have 2 ops";
         assert rule_call_site(&s.body.ops[0]) == 0, "a's call to b is call site 0";
         assert rule_call_site(&s.body.ops[1]) == 1, "a's call to c is call site 1";
     } else {
@@ -3012,7 +3012,7 @@ test "a wildcard alt keeps the group off the Direct dispatch" {
         if let Group(go) = &s.body.ops[0] {
             if let Direct(dd) = &go.dispatch {
                 for let b of &dd.branches {
-                    assert !alt_class_first_set(&b.alt_class).is_empty(), `alt ${b.alt_index} got an empty-token branch`;
+                    assert !alt_class_first_set(&b.alt_class).is_empty();
                 }
                 panic("expected a scan Tournament for a group holding a wildcard alt");
             }
@@ -3033,13 +3033,13 @@ test "a prefix alt's scan operand climbs from the parse operand's precedence" {
         panic("rule e should lower to LeftRecursive");
     };
     let prefix = &l.atom.alts[0];
-    assert prefix.prefix_self_ref_min_prec == 2, `got ${prefix.prefix_self_ref_min_prec}`;
+    assert prefix.prefix_self_ref_min_prec == 2;
     let RuleCall(parse_rc) = &prefix.ops[1] else {
         panic("parse operand should be a RuleCall");
     };
     let RuleCall(scan_rc) = &l.atom.scan_alts[0].elements[1] else {
         panic("scan operand should be a RuleCall");
     };
-    assert parse_rc.min_prec_arg == Option::Some(2), `parse operand: ${parse_rc.min_prec_arg:?}`;
-    assert scan_rc.min_prec_arg == parse_rc.min_prec_arg, `scan operand: ${scan_rc.min_prec_arg:?}`;
+    assert parse_rc.min_prec_arg == Option::Some(2);
+    assert scan_rc.min_prec_arg == parse_rc.min_prec_arg;
 }

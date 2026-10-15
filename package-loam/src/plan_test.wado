@@ -141,8 +141,8 @@ test "a Gemm whose flattened operand or product the scope returns is no spread" 
     for let returned of ["float[8, 8] F", "float[8, 6] G"] {
         let source = LINEAR.replace("=> (float[2, 4, 6] Y)", `=> (float[2, 4, 6] Y, ${returned})`);
         let p = plan_of(source, LINEAR_LAYOUT);
-        assert p.lowering(0) matches { Kernel }, returned;
-        assert p.spread_of(&"G") matches { None }, returned;
+        assert p.lowering(0) matches { Kernel };
+        assert p.spread_of(&"G") matches { None };
     }
 }
 
@@ -246,7 +246,7 @@ g (float[N, 4] A, float[4, 8] B, float[N, 1] V) => (float[N, 8] Z)
 test "with fusion off, every kernel writes its output" {
     let p = plan_of(MLP, mlp_layout(), false);
     for let tensor of ["H", "HB", "A", "T", "Y"] {
-        assert p.of(&tensor) == written(Reason::Unfused), tensor;
+        assert p.of(&tensor) == written(Reason::Unfused);
     }
 }
 
@@ -440,7 +440,7 @@ g (float[N, 4] X, float[4] G, float[4] B) => (float[N, 4] Y)
         ],
     ]);
     for let tensor of ["M", "C", "P", "V", "A", "D", "Q", "R"] {
-        assert p.of(&tensor) == fused("Y"), tensor;
+        assert p.of(&tensor) == fused("Y");
     }
     assert p.rows_of(&"Y") matches { Some(_) };
 }

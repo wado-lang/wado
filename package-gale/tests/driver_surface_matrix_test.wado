@@ -24,25 +24,25 @@ test "the action surface compiles and runs" {
     // `bump` through the value channel and `label` across the second members
     // block, plus the lexer action's own print.
     let r = acts::parse("( x");
-    assert r.ok(), `clean parse: ${r.diagnostics.len()} diagnostics`;
-    assert r.output == "open\nn=1\n", `output: '${r.output}'`;
+    assert r.ok();
+    assert r.output == "open\nn=1\n";
 }
 
 test "elements named after generated locals compile and parse" {
     let one = names::parse("p k");
-    assert one.ok(), `clean parse: ${one.diagnostics.len()} diagnostics`;
-    assert one.output == "one", `output: '${one.output}'`;
+    assert one.ok();
+    assert one.output == "one";
 
     let two = names::parse("v f m");
-    assert two.ok(), `clean parse: ${two.diagnostics.len()} diagnostics`;
-    assert two.output == "two", `output: '${two.output}'`;
+    assert two.ok();
+    assert two.output == "two";
 
     let three = names::parse("m + m");
-    assert three.ok(), `clean parse: ${three.diagnostics.len()} diagnostics`;
-    assert three.output == "three", `output: '${three.output}'`;
+    assert three.ok();
+    assert three.output == "three";
 }
 
 test "a members-only lexer compiles and tokenizes" {
     let ts = lexmem::tokenize("a b");
-    assert ts.len() == 3, `tokens: ${ts.len()}`;
+    assert ts.len() == 3;
 }

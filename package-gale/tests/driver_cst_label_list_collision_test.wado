@@ -12,9 +12,9 @@ use g from "./grammars/label_list_collision.g4"
     };
 
 fn assert_tree_of<S: AsStrSlice, S1: AsStrSlice>(result: &g::ParseResult, input: S, expected: S1) {
-    assert result.ok(), `unexpected diagnostics for ${input}`;
+    assert result.ok();
     let actual = g::to_string_tree(result);
-    assert actual == expected.to_string(), `\ninput:    ${input}\nexpected: ${expected}\nactual:   ${actual}`;
+    assert actual == expected.to_string();
 }
 
 fn assert_tree<S: AsStrSlice, S1: AsStrSlice>(input: S, expected: S1) {

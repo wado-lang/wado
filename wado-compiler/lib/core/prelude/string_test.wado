@@ -1428,7 +1428,7 @@ test "the two UTF-8 validity tables agree" {
     for let bytes of cases {
         let accepted = String::try_from_utf8(bytes) matches { Ok(_) };
         let lossy = String::from_utf8_lossy(bytes);
-        assert accepted == !lossy.contains("\uFFFD"), `${bytes:?}`;
+        assert accepted == !lossy.contains("\uFFFD");
     }
 }
 

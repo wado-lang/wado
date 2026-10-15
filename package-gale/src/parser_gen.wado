@@ -381,7 +381,7 @@ fn ensure_alt_scan_fn(w: &mut CodeWriter, rule: &ParserRule, lowered_rule: &Rule
     if ctx.cursor.alt_scan_fn(alt_index) matches { Some(_) } {
         return;
     }
-    assert alt_scan_is_full(&rule.alternatives[alt_index].elements, ctx), `a picked alternative ${alt_index} scans in full`;
+    assert alt_scan_is_full(&rule.alternatives[alt_index].elements, ctx);
     let Some(scan_body) = rule_alt_scan_body(lowered_rule, alt_index) else {
         panic(`ensure_alt_scan_fn: no scan body for alt ${alt_index}`);
     };
@@ -1776,7 +1776,7 @@ fn scan_rule_call(rc: &ScanRuleCallElement, ctx: &mut EmitContext, form: CallFor
         args.push(`${rc.min_prec_arg.unwrap_or(0)}`);
     }
     if let Some(cont) = lr_cont_expr(rc.lr_cont_mask, ctx) {
-        assert takes_min_prec, `scan call to '${rc.target_snake}' passes an LR continuation mask but the callee takes no min_prec — the mask would land in min_prec's slot`;
+        assert takes_min_prec;
         args.push(cont);
     }
     return CallStmt { form, callee: ctx.scan_fn_of(ctx.scan_alias(&rc.target_snake)), args };
@@ -2528,7 +2528,7 @@ fn gen_scan_op_optional_lookahead(w: &mut CodeWriter, ole: &ScanOptionalLookahea
     w.begin(`${chain_done}:`);
     for let mut si = 0; si < ole.sigs.len(); si += 1 {
         let sig = &ole.sigs[si];
-        assert !sig.is_empty(), `gen_scan_op_optional_lookahead: shape ${si} has an empty lookahead signature; lower drops those`;
+        assert !sig.is_empty(), "gen_scan_op_optional_lookahead: lower drops those";
         w.begin(`if ${gen_scan_lookahead_condition(ctx, sig)}`);
         // A failed shape rewinds: leaving a callee's `-1` in `pos` mis-scans
         // the elements after it and traps their `pos < tokens.len()` guard.
@@ -7080,7 +7080,7 @@ fn gen_group_dispatch(
         let mut order: List<i32> = [];
         for let b of branches {
             let branch_order = branch_emit_order(&b.alts, alts, ctx);
-            assert b.alts.len() == 1 || group_all_scannable(&branch_order, alts, ctx), UNSCANNABLE_ALT;
+            assert b.alts.len() == 1 || group_all_scannable(&branch_order, alts, ctx);
             for let idx of branch_order {
                 order.push(idx);
             }
@@ -7272,7 +7272,7 @@ fn gen_group_branch_body(
         ));
         return;
     }
-    assert group_all_scannable(&sorted_group, alts, ctx), UNSCANNABLE_ALT;
+    assert group_all_scannable(&sorted_group, alts, ctx);
     gen_group_scan_dispatch(w, alts, g_op_alts, g_op_scan_alts, &sorted_group, kind, ctx, name_counts);
 }
 
@@ -7959,9 +7959,9 @@ fn gen_prediction_code_inner<S: AsStrSlice, S1: AsStrSlice>(
             // is not a parser rule, which `ir.wado` rejects first. Assert
             // that rather than keep the try-fail-retry lowerings only
             // breaking it could reach.
-            assert sorted_indices.len() >= 2, `Ambiguous node for ${rule_display} carries ${sorted_indices.len()} alt(s), expected 2 or more`;
+            assert sorted_indices.len() >= 2, "expected 2 or more";
             let all_scan_full = alts_all_scan_full(&sorted_indices, alts, ctx);
-            assert all_scan_full, `an alternative of ${rule_display} is not fully scannable`;
+            assert all_scan_full;
             match side {
                 Parse => emit_scan_tournament(w, &sorted_indices, fn_name, rule_display, ctx),
                 Scan => emit_scan_side_tournament(w, &sorted_indices, ctx, false),
