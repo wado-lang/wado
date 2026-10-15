@@ -1424,8 +1424,9 @@ enum Site {
     Plain,
     /// Inside a loop of the caller.
     Loop,
-    /// After a `cold_path()` marker: only `#[inline(always)]` splices here,
-    /// since anything else only bloats the hot caller.
+    /// After a `cold_path()` marker, or anywhere in a function only such sites
+    /// reach: only `#[inline(always)]` and a splice no bigger than the call
+    /// happen here, since anything else only bloats code that rarely runs.
     Cold,
 }
 
@@ -1973,6 +1974,9 @@ struct Candidates<'a> {
     carried: &'a IndexMap<FuncId, IndexMap<FuncId, usize>>,
     /// Each candidate's written price, net of the call site it replaces.
     net_price: &'a IndexMap<FuncId, usize>,
+    /// The candidates no bigger than the call site they replace, cold paths
+    /// included: splicing one shrinks the caller, cold or not.
+    shrinking: &'a IndexSet<FuncId>,
     rescan_cap: usize,
     /// What the re-scan under way may still splice, or `None` outside one.
     rescan_left: Option<&'a Cell<usize>>,
@@ -2066,6 +2070,7 @@ pub fn inline_functions(
     let mut inline_candidates: IndexMap<FuncId, NirFunction> = IndexMap::default();
     let mut reach: IndexMap<FuncId, Reach> = IndexMap::default();
     let mut net_price: IndexMap<FuncId, usize> = IndexMap::default();
+    let mut shrinking: IndexSet<FuncId> = IndexSet::default();
 
     // Also collect function_strings for each candidate (to update caller's
     // strings after inlining). `function_strings` is keyed by `(module, name)`;
@@ -2174,16 +2179,16 @@ pub fn inline_functions(
             verdict.reach
         );
         let candidate = (verdict.reach != Reach::Nowhere).then(|| {
+            let body = func.body.as_ref().expect("a candidate has a body");
             let hot = match func.inline_hint {
-                InlineHint::Always => inline_cost(
-                    func.body.as_ref().expect("a candidate has a body"),
-                    type_table,
-                    descriptors,
-                    &spliced,
-                ),
+                InlineHint::Always => inline_cost(body, type_table, descriptors, &spliced),
                 InlineHint::Auto | InlineHint::Hint | InlineHint::Never => verdict.hot,
             };
-            (net_cost(hot, func.params.len()), func.clone())
+            let shrinks = net_cost(
+                inline_size(body, type_table, descriptors),
+                func.params.len(),
+            ) == 0;
+            (net_cost(hot, func.params.len()), shrinks, func.clone())
         });
         (func.id, size, verdict, candidate)
     });
@@ -2192,7 +2197,7 @@ pub fn inline_functions(
         if let Some(id) = id {
             holds.settle(id, verdict.hold, gate);
         }
-        let Some((net, func)) = candidate else {
+        let Some((net, shrinks, func)) = candidate else {
             continue;
         };
         let id = id.expect("func_id assigned at lower");
@@ -2213,6 +2218,9 @@ pub fn inline_functions(
             });
         }
         net_price.insert(id, net);
+        if shrinks {
+            shrinking.insert(id);
+        }
         inline_candidates.insert(id, func);
     }
     drop(types);
@@ -2299,6 +2307,7 @@ pub fn inline_functions(
             reach: &reach,
             carried: &carried,
             net_price: &net_price,
+            shrinking: &shrinking,
             // A threshold's worth of threshold-sized callees: a call tree that
             // doubles per level exceeds it within a few levels.
             rescan_cap: inline_threshold * inline_threshold,
@@ -2984,7 +2993,9 @@ fn try_inline_call_expr(
     // candidate up directly (no `(module, name)` resolution).
     let candidate = candidates.bodies.get(&func_id)?;
     let admitted = match (site, candidates.reach[&func_id]) {
-        (Site::Cold, _) => candidate.inline_hint == InlineHint::Always,
+        (Site::Cold, _) => {
+            candidate.inline_hint == InlineHint::Always || candidates.shrinking.contains(&func_id)
+        }
         (Site::Plain | Site::Loop, Reach::Everywhere) => true,
         (Site::Plain | Site::Loop, Reach::Sole) => frame.original_site(call_id),
         (Site::Loop, Reach::Loops) => frame.sole_loop_site(func_id),
