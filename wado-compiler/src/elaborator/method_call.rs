@@ -343,7 +343,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // receiver has to be that element. The desugar above owns every element
         // a `&mut` writes through; for the rest a by-value copy would take the
         // mutation and be thrown away. Record the aliasing subscript instead,
-        // which is the borrow `&mut xs[i]` takes, and leave the write-back pass
+        // which is the reference `&mut xs[i]` takes, and leave the write-back pass
         // to write it back or refuse it.
         if let ast::Expr::Index(index_expr) = &method_call.receiver
             && dispatch.is_some_and(|dispatch| {
@@ -887,7 +887,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
         self.verify_arg_synthesis(&synthesized, args_ast, ctx, &args, span);
 
-        // Address-taken tracking for an implicit `&mut self` borrow on a
+        // Address-taken tracking for an implicit `&mut self` on a
         // primitive local receiver is owned by reify (`reify.rs` method-call
         // arm marks `address_taken_locals` on the TIR it emits); the body walk
         // has no node to mark, since `resolve_ident` answers with a type.

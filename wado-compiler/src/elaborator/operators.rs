@@ -835,7 +835,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         };
         // `&mut xs[i]` is the one position that reaches an element mutably, so the
         // subscript resolves through `IndexRefMut` and carries the mutability in
-        // the accessor's signature rather than upgrading a shared borrow.
+        // the accessor's signature rather than upgrading a `&` reference.
         let expr_type = match (&unary.op, &unary.expr) {
             (UnaryOp::MutRef, ast::Expr::Index(index)) => {
                 self.resolve_index_access(index, ctx, IndexAccess::Mutable)
@@ -860,7 +860,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         };
 
         if unary.op == UnaryOp::MutRef {
-            self.record_mut_borrow(&unary.expr, ctx);
+            self.record_mut_ref(&unary.expr, ctx);
             if let Some(binding) = self.place_roots_at_immutable_binding(&unary.expr, ctx) {
                 let _ = self.emit(TypeError::CannotMutate {
                     message: format!("cannot take &mut of immutable variable '{binding}'"),
