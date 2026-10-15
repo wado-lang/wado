@@ -690,7 +690,7 @@ fn make_write_back_stmt(body: &mut Body, c: &ScalarizeCandidate, span: Span) -> 
             target,
             value: value.into(),
         },
-        c.type_id,
+        TypeTable::UNIT,
         span,
     );
     push_stmt(body, StmtKind::Expr(assign.into()), span)
@@ -706,7 +706,7 @@ fn make_re_read_stmt(body: &mut Body, c: &ScalarizeCandidate, span: Span) -> Stm
             target,
             value: value.into(),
         },
-        c.type_id,
+        TypeTable::UNIT,
         span,
     );
     push_stmt(body, StmtKind::Expr(assign.into()), span)

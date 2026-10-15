@@ -1360,13 +1360,12 @@ impl FunctionTranslator<'_, '_> {
             })
             .collect();
         for (path, value) in leaves.iter().zip(values) {
-            let leaf_type = path.last().expect("a leaf path names a field").2;
             let assign = self.alloc_expr(
                 ExprKind::Assign {
                     target: chain(handle, "$deref_ref", handle_type, path),
                     value,
                 },
-                leaf_type,
+                TypeTable::UNIT,
                 span,
             );
             out.push(self.alloc_stmt(StmtKind::Expr(assign.into()), span));

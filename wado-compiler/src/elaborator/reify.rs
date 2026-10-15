@@ -356,14 +356,13 @@ fn break_unless(cond: TirExpr, cond_span: Span, span: Span) -> TirStmt {
 
 /// `target = value;` as a statement.
 fn assign_stmt(target: TirExpr, value: TirExpr, span: Span) -> TirStmt {
-    let type_id = value.type_id;
     TirStmt::new(
         TirStmtKind::Expr(TirExpr::new(
             TirExprKind::Assign {
                 target: Box::new(target),
                 value: Box::new(value),
             },
-            type_id,
+            TypeTable::UNIT,
             span,
         )),
         span,
