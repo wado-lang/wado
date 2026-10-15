@@ -207,9 +207,8 @@ global global:core:prelude/string.wado::$const_obj_86: ref Array<u8> = array.new
 global global:core:prelude/string.wado::$const_obj_87: ref Array<u8> = array.new_fixed<u8>(65, 115, 115, 101, 114, 116, 105, 111, 110, 32, 102, 97, 105, 108, 101, 100, 32, 105, 110, 32);
 global global:core:prelude/primitive.wado::$const_obj_96: ref "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 };
 global global:core:prelude/traits.wado::$const_obj_99: ref "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(58, 58), used: 2 };
-global global:core:prelude/traits.wado::$const_obj_100: ref "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(82, 101, 115, 117, 108, 116), used: 6 };
-global mut global:core:prelude/traits.wado::$const_obj_103: ref null "tuple//[core:prelude/traits.wado/VariantCase<core:prelude/types.wado/Result<i32,()>,i32>, core:prelude/traits.wado/VariantCase<core:prelude/types.wado/Result<i32,()>,()>]" = ref.null none;
-global mut global:core:prelude/traits.wado::$const_obj_110: ref null "tuple//[core:prelude/traits.wado/VariantCase<core:prelude/types.wado/Result<i32,!>,i32>, core:prelude/traits.wado/VariantCase<core:prelude/types.wado/Result<i32,!>,!>]" = ref.null none;
+global mut global:core:prelude/traits.wado::$const_obj_101: ref null "tuple//[core:prelude/traits.wado/VariantCase<core:prelude/types.wado/Result<i32,()>,i32>, core:prelude/traits.wado/VariantCase<core:prelude/types.wado/Result<i32,()>,()>]" = ref.null none;
+global mut global:core:prelude/traits.wado::$const_obj_106: ref null "tuple//[core:prelude/traits.wado/VariantCase<core:prelude/types.wado/Result<i32,!>,i32>, core:prelude/traits.wado/VariantCase<core:prelude/types.wado/Result<i32,!>,!>]" = ref.null none;
 
 fn "newtype_over_unit_and_never.wado/$cm_export__$test_0_a_unit_newtype"() {
     let $load_0: ref Array<u8>;
@@ -1303,24 +1302,24 @@ fn "core:prelude/primitive.wado/i32::fmt_decimal$sroa[self.value]"(self, f) {
 
 fn "core:prelude/traits.wado/core:prelude/types.wado/Result<i32,newtype_over_unit_and_never.wado/Marker>^core:prelude/traits.wado/Inspect::inspect$sroa[self.value]"(self, f) {
     let s_9: ref "core:prelude/string.wado//String";
-    if ref.is_null(global:core:prelude/traits.wado::$const_obj_103) {
+    if ref.is_null(global:core:prelude/traits.wado::$const_obj_101) {
         let $mv_0_1: ref "core:prelude/traits.wado//VariantCase<core:prelude/types.wado/Result<i32,newtype_over_unit_and_never.wado/Marker>,i32>";
         let $mv_1_2: ref "core:prelude/traits.wado//VariantCase<core:prelude/types.wado/Result<i32,newtype_over_unit_and_never.wado/Marker>,newtype_over_unit_and_never.wado/Marker>";
         multivalue_bind [$mv_0_1, $mv_1_2] = "core:prelude/types.wado/core:prelude/types.wado/Result<i32,newtype_over_unit_and_never.wado/Marker>^core:prelude/traits.wado/ReflectVariant::members"();
-        global:core:prelude/traits.wado::$const_obj_103 = struct.new "tuple//[core:prelude/traits.wado/VariantCase<core:prelude/types.wado/Result<i32,()>,i32>, core:prelude/traits.wado/VariantCase<core:prelude/types.wado/Result<i32,()>,()>]" { 0: $mv_0_1, 1: $mv_1_2 };
+        global:core:prelude/traits.wado::$const_obj_101 = struct.new "tuple//[core:prelude/traits.wado/VariantCase<core:prelude/types.wado/Result<i32,()>,i32>, core:prelude/traits.wado/VariantCase<core:prelude/types.wado/Result<i32,()>,()>]" { 0: $mv_0_1, 1: $mv_1_2 };
     }
-    $mv_0_1 = global:core:prelude/traits.wado::$const_obj_103.0;
+    $mv_0_1 = global:core:prelude/traits.wado::$const_obj_101.0;
     if self.discriminant == 0 {
-        s_9 = global:core:prelude/traits.wado::$const_obj_100;
+        s_9 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Result"), used: 6 };
         "core:prelude/string.wado/core:prelude/string.wado/String::push_str<&core:prelude/string.wado/String>"(f.buf, s_9);
         s_9 = f.buf;
         "core:prelude/string.wado/core:prelude/string.wado/String^core:prelude/string.wado/AsStrSlice::internal_append_to$spec1"(global:core:prelude/traits.wado::$const_obj_99, s_9);
         "core:prelude/string.wado/core:prelude/string.wado/String::push_str<&core:prelude/string.wado/String>"(f.buf, $mv_0_1.case_name);
         "core:prelude/traits.wado/core/prelude/traits.wado/inspect_variant_payload<i32>$sroa[payload.value]"("core:prelude/types.wado/$case_extract$core:prelude/types.wado/Result<i32,()>$i32$sroa[v.value]"(self, 0), f);
     }
-    $mv_1_2 = global:core:prelude/traits.wado::$const_obj_103.1;
+    $mv_1_2 = global:core:prelude/traits.wado::$const_obj_101.1;
     if self.discriminant == 1 {
-        s_9 = global:core:prelude/traits.wado::$const_obj_100;
+        s_9 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Result"), used: 6 };
         "core:prelude/string.wado/core:prelude/string.wado/String::push_str<&core:prelude/string.wado/String>"(f.buf, s_9);
         s_9 = f.buf;
         "core:prelude/string.wado/core:prelude/string.wado/String^core:prelude/string.wado/AsStrSlice::internal_append_to$spec1"(global:core:prelude/traits.wado::$const_obj_99, s_9);
@@ -1332,24 +1331,24 @@ fn "core:prelude/traits.wado/core:prelude/types.wado/Result<i32,newtype_over_uni
 
 fn "core:prelude/traits.wado/core:prelude/types.wado/Result<i32,newtype_over_unit_and_never.wado/Void>^core:prelude/traits.wado/Inspect::inspect$sroa[self.value]"(self, f) {
     let s_9: ref "core:prelude/string.wado//String";
-    if ref.is_null(global:core:prelude/traits.wado::$const_obj_110) {
+    if ref.is_null(global:core:prelude/traits.wado::$const_obj_106) {
         let $mv_0_1: ref "core:prelude/traits.wado//VariantCase<core:prelude/types.wado/Result<i32,newtype_over_unit_and_never.wado/Void>,i32>";
         let $mv_1_2: ref "core:prelude/traits.wado//VariantCase<core:prelude/types.wado/Result<i32,newtype_over_unit_and_never.wado/Void>,newtype_over_unit_and_never.wado/Void>";
         multivalue_bind [$mv_0_1, $mv_1_2] = "core:prelude/types.wado/core:prelude/types.wado/Result<i32,newtype_over_unit_and_never.wado/Void>^core:prelude/traits.wado/ReflectVariant::members"();
-        global:core:prelude/traits.wado::$const_obj_110 = struct.new "tuple//[core:prelude/traits.wado/VariantCase<core:prelude/types.wado/Result<i32,!>,i32>, core:prelude/traits.wado/VariantCase<core:prelude/types.wado/Result<i32,!>,!>]" { 0: $mv_0_1, 1: $mv_1_2 };
+        global:core:prelude/traits.wado::$const_obj_106 = struct.new "tuple//[core:prelude/traits.wado/VariantCase<core:prelude/types.wado/Result<i32,!>,i32>, core:prelude/traits.wado/VariantCase<core:prelude/types.wado/Result<i32,!>,!>]" { 0: $mv_0_1, 1: $mv_1_2 };
     }
-    $mv_0_1 = global:core:prelude/traits.wado::$const_obj_110.0;
+    $mv_0_1 = global:core:prelude/traits.wado::$const_obj_106.0;
     if self.discriminant == 0 {
-        s_9 = global:core:prelude/traits.wado::$const_obj_100;
+        s_9 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Result"), used: 6 };
         "core:prelude/string.wado/core:prelude/string.wado/String::push_str<&core:prelude/string.wado/String>"(f.buf, s_9);
         s_9 = f.buf;
         "core:prelude/string.wado/core:prelude/string.wado/String^core:prelude/string.wado/AsStrSlice::internal_append_to$spec1"(global:core:prelude/traits.wado::$const_obj_99, s_9);
         "core:prelude/string.wado/core:prelude/string.wado/String::push_str<&core:prelude/string.wado/String>"(f.buf, $mv_0_1.case_name);
         "core:prelude/traits.wado/core/prelude/traits.wado/inspect_variant_payload<i32>$sroa[payload.value]"("core:prelude/types.wado/$case_extract$core:prelude/types.wado/Result<i32,!>$i32$sroa[v.value]"(self, 0), f);
     }
-    $mv_1_2 = global:core:prelude/traits.wado::$const_obj_110.1;
+    $mv_1_2 = global:core:prelude/traits.wado::$const_obj_106.1;
     if self.discriminant == 1 {
-        s_9 = global:core:prelude/traits.wado::$const_obj_100;
+        s_9 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Result"), used: 6 };
         "core:prelude/string.wado/core:prelude/string.wado/String::push_str<&core:prelude/string.wado/String>"(f.buf, s_9);
         s_9 = f.buf;
         "core:prelude/string.wado/core:prelude/string.wado/String^core:prelude/string.wado/AsStrSlice::internal_append_to$spec1"(global:core:prelude/traits.wado::$const_obj_99, s_9);
