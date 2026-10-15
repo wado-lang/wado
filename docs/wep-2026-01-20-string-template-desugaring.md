@@ -36,8 +36,8 @@ one per interpolation for readability.
 
 An untagged template is sugar for the prelude's `format` tag. This lowering
 computes what that call computes, written out by the compiler rather than
-reached through `ReflectTemplate`, and the fixtures hold the two to the same
-output. It stands until a `format` call costs what this lowering costs. The
+reached through `ReflectTemplate`, except that it renders each hole before it
+evaluates the next. It stands until a `format` call costs what this lowering costs. The
 [Tagged Template Literals](./wep-2026-01-10-tagged-template-literals.md#roadmap)
 roadmap carries that work, and then deletes this lowering.
 

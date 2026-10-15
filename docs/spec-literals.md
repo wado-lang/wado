@@ -1084,8 +1084,7 @@ renders the hole.
 A hole's type may mention a type parameter of the enclosing item. The shape is
 then generic over that parameter, and each instantiation of the item
 instantiates the tag with it. A bound the tag places on its pack is met only
-through the bounds the item declares, as for any call, and so is the
-specifier's trait ([Format Traits](./spec-traits.md#format-traits)).
+through the bounds the item declares, as for any call.
 
 > Not yet implemented: a hole whose type mentions a type parameter is rejected
 > as a tag's argument, and a tag that never calls `fmt` on a hole accepts a type
@@ -1096,6 +1095,11 @@ is the one it had at its own position, so a later hole that writes to its
 storage changes nothing the tag sees: `` format`${a} ${bump(&mut a)}` ``
 renders `a` as it was before `bump` ran. A tag may carry effects,
 which the caller declares as for any call, and return any type.
+
+> Not yet implemented: an untagged template renders each hole before it
+> evaluates the next. `` `${r} ${bump(&mut a)}` `` over `r = &a` renders `r`
+> before `bump` writes `a`, and a hole whose rendering traps stops the holes
+> after it from running.
 
 The prelude's `format` tag renders each hole through its specifier into one
 buffer, and returns it. An untagged template is sugar for it (see

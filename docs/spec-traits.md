@@ -1297,9 +1297,9 @@ So a `T: Display` bound certifies a real string representation, and
 [alternate form](./spec-literals.md#alternate-form).
 
 A hole of a generic type meets the trait its specifier selects only through the
-bounds its item declares. A type character asks for its own
-trait the same way: `${x:x}` over `x: T` needs `T: LowerHex`, which
-`T: Display` does not supply.
+bounds its item declares. A type character asks for its own trait the same
+way: `${x:x}` over `x: T` needs `T: LowerHex`, which `T: Display` does not
+supply.
 
 <!-- {"fixture":"spec_traits_format_bounds.wado"} -->
 

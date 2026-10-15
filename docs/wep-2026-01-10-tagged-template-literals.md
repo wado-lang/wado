@@ -315,7 +315,9 @@ Wado, where a reader can see it, and the per-hole rendering is the one piece
 the compiler synthesizes (`TemplateHole::fmt`). Until then the compiler keeps a
 direct lowering for the untagged case
 ([String Template Desugaring](./wep-2026-01-20-string-template-desugaring.md)),
-and the fixtures hold the two forms to the same output.
+and the fixtures hold the two forms to the same output over the specifier
+matrix. They part where a hole's rendering reads what a later hole writes, which
+the direct lowering renders before that hole runs.
 
 ### Cost
 
@@ -604,16 +606,19 @@ synthesis and the fold; then the prelude tags and fixtures.
 ## Roadmap
 
 An untagged template is sugar for `format`, but the compiler still lowers it on
-a path of its own, and a hole's specifier is checked only where something
-renders the hole. The items below close that, in this order.
+a path of its own that renders each hole before it evaluates the next, and a
+hole's specifier is checked only where something renders the hole. The items
+below close that, in this order.
 
 - [ ] Each hole checked against its specifier's trait at the template, a
   generic hole through the declared bounds, as the Decision states. Done when
   `` format`${x}` `` and `` `${x}` `` over `x: X` each compile under
-  `X: Display` and report the same missing-bound error without it, `${x:x}` reports a missing `LowerHex` under `X: Display` alone, a tag's
-  pack bound is checked against the declared bounds, a tag that never calls
-  `fmt` rejects a hole lacking its specifier's trait, and every package in the
-  repository, the stdlib included, compiles under the new check.
+  `X: Display` and report the same missing-bound error without it, `${x:x}`
+  reports a missing `LowerHex` under `X: Display` alone, a tag's pack bound is
+  checked against the declared bounds, a tag that never calls `fmt` rejects a
+  hole lacking its specifier's trait, `TemplateHoleGeneric` is gone with the
+  `$hole_fmt` and reflect bridges minted per instantiation, and every package
+  in the repository, the stdlib included, compiles under the new check.
 - [ ] `format` at the direct lowering's cost. Read off `wado dump -O2`, the
   direct lowering does four things a `format` site does not:
   - It sizes the buffer from the segment lengths (`String::with_capacity`).
@@ -631,7 +636,8 @@ renders the hole. The items below close that, in this order.
 
 - [ ] One path. An untagged template reifies as the `format` call, and the
   direct lowering (`synthesis::template::build_template_block`) is deleted.
-  Done when no code path builds a `$tmpl` block.
+  Done when no code path builds a `$tmpl` block, and
+  `` `${r} ${bump(&mut a)}` `` over `r = &a` renders what `format` renders.
 
 The cost gap is measured inside the guest by this program, so the runner's
 start-up stays out of it. Run it with `wado run -O2 bench.wado`; each phase
