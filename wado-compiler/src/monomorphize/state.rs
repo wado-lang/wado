@@ -12,7 +12,8 @@ use crate::monomorphize::Templates;
 use crate::name::{FqTraitName, FqTypeName, LocalMethodName, MethodName, mangle_generic_name};
 use crate::synthesis::template::{eq_from_written_cmp, written_impl_reaches};
 use crate::tir::{
-    AnonStructId, InstantiationKey, ResolvedType, TemplateId, TirTypeParam, TypeId, TypeTable,
+    AnonStructId, InstantiationKey, ReceiverAssocTypes, ResolvedType, TemplateId, TirFunction,
+    TirTypeParam, TypeId, TypeTable,
 };
 use crate::token::Span;
 
@@ -29,14 +30,18 @@ pub(super) struct StructInstState {
     /// Each written anonymous shape's site, which a shape substituted from it
     /// reports too.
     pub anon_sites: IndexMap<AnonStructId, Span>,
-    /// How many anonymous shapes the type table held when the last batch was
-    /// read for substituted ones.
+    /// How long the type table's shape substitution log was when the last
+    /// batch was read from it.
     pub anon_scanned: usize,
-    /// Substituted shapes whose origin's methods are yet to be instantiated.
-    pub pending_shapes: Vec<AnonStructId>,
-    /// Each open shape by the receiver its synthesized methods name. Kept
-    /// across runs: a run drops the open shapes' structs, not their methods.
+    /// Substitutions into closed shapes, as the shape and the substitution's
+    /// index, whose origin's methods are yet to be instantiated.
+    pub pending_shapes: Vec<(AnonStructId, usize)>,
+    /// Each open shape by the receiver its synthesized methods name, and the
+    /// methods and associated types each substitution from it instantiates.
+    /// Kept across runs: a run drops the open shapes and their methods.
     pub open_shape_heads: IndexMap<FqTypeName, AnonStructId>,
+    pub shape_methods: IndexMap<AnonStructId, Vec<Rc<RefCell<TirFunction>>>>,
+    pub shape_assoc_types: IndexMap<AnonStructId, ReceiverAssocTypes>,
 }
 
 /// Tracks function monomorphization state
@@ -139,6 +144,8 @@ impl Monomorphizer {
                 anon_scanned: 0,
                 pending_shapes: Vec::new(),
                 open_shape_heads: IndexMap::default(),
+                shape_methods: IndexMap::default(),
+                shape_assoc_types: IndexMap::default(),
             },
             functions: FuncInstState {
                 instantiated: IndexMap::default(),

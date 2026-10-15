@@ -42,6 +42,7 @@ pub(super) fn relink_recorded_captures(
 
 /// Expected function-type info extracted from an `expected_type` hint.
 struct ExpectedFn {
+    ty: TypeId,
     params: Vec<TypeId>,
     return_type: TypeId,
     effects: Vec<EffectRef>,
@@ -106,6 +107,7 @@ impl TypeSystem {
                 effects,
                 ..
             } => Some(ExpectedFn {
+                ty: tid,
                 params: params.clone(),
                 return_type: *return_type,
                 effects: effects.clone(),
@@ -128,10 +130,23 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             self.reject_unresolved_annotation(ty);
             return self.resolve_type(ty);
         }
-        if let Some(ef) = expected_fn
-            && let Some(t) = ef.params.get(index)
-        {
-            return *t;
+        if let Some(ef) = expected_fn {
+            if let Some(&t) = ef.params.get(index) {
+                return t;
+            }
+            // The fn-type check passes an unknown parameter, so the arity is
+            // reported here.
+            let (expected, _) = self
+                .tysys
+                .type_table
+                .borrow()
+                .type_names_for_mismatch(ef.ty, ef.ty);
+            let _ = self.emit(TypeError::TypeMismatch {
+                expected,
+                found: format!("a closure of {} or more parameters", index + 1),
+                span: param.name_span,
+            });
+            return TypeTable::UNKNOWN;
         }
         let _ = self.emit(TypeError::CannotInferType {
             message: format!(

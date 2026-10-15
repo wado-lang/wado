@@ -619,14 +619,17 @@ below close that, in this order.
   `TirStruct::anonymous`, as elaboration does for a written shape.
 
   Synthesis derives a shape's impls before monomorphization, so a substituted
-  shape has none of its own. It instantiates the methods synthesis gave its
-  open origin under the substitution that made it, which `subst_rec` records
-  on the shape (composed when a substituted shape is substituted again), and
-  copies the origin's associated types the same way. Binding the origin
-  against the shape cannot recover it: a pack field or a projection binds no
-  parameter
-  (`Monomorphizer::instantiate_shape_methods`). Its field bridges are minted
-  after monomorphization, as for an instantiated generic struct.
+  shape has none of its own. One concrete shape is where any number of open
+  origins, and a literal, meet: `{ a: X }` at `X = i32`, `{ a: Y }` at
+  `Y = i32` and a written `{ a: 3 }` are one type. `subst_rec` records, per
+  origin, the substitution that reaches the shape, over every parameter the
+  origin mentions, and composes the records when a substituted shape is
+  substituted again. Binding the origin against the shape cannot recover a
+  record: a pack field or a projection binds no parameter. Monomorphization
+  instantiates each origin's methods and associated types under its record
+  (`Monomorphizer::instantiate_shape_substitution`), one method of a name per
+  shape. As with a generic struct, an open shape's methods leave the module and
+  its field bridges are minted after monomorphization, per concrete shape.
 
   A generic struct per shape was the alternative. It would need a `DefId`, and
   the `DefTable` is fixed before elaboration mints a shape. It would also make

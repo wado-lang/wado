@@ -39,7 +39,7 @@ fn collect_struct_bridges(flat: &FlatPackage, generated: &mut Vec<Rc<RefCell<Tir
             .enumerate()
             .filter(|(_, s)| match s.def {
                 StructDef::Anon(shape) => {
-                    tt.anon_struct_is_substituted(shape) && tt.template_shape(shape).is_none()
+                    !tt.anon_struct_is_written(shape) && tt.template_shape(shape).is_none()
                 }
                 StructDef::Decl(decl) => {
                     s.monomorph_info.is_some()

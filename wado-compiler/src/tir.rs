@@ -517,18 +517,23 @@ struct AnonEntry {
     module: ModuleSource,
     shape: AnonShape,
     mangle: String,
-    /// How a substitution made this shape, which no literal wrote.
-    substituted: Option<ShapeSubstitution>,
+    /// Whether the shape mentions a type parameter, which its types fix.
+    open: bool,
+    /// Whether a literal wrote the shape, so elaboration emitted its struct.
+    written: bool,
+    /// The substitutions that make this shape, one per written origin: a
+    /// concrete shape is where any number of open ones, and a literal, meet.
+    substitutions: Vec<ShapeSubstitution>,
 }
 
-/// The written shape a substituted one was made from, and the substitution
-/// that makes it: what instantiating the written shape's methods applies.
-/// Binding the two shapes again cannot recover it where a field is a pack or a
-/// projection.
+/// A written shape a substituted one is made from, and the substitution that
+/// makes it, over every parameter the origin mentions: what instantiating the
+/// origin's methods applies. Binding the two shapes again cannot recover it
+/// where a field is a pack or a projection.
 #[derive(Debug, Clone)]
-struct ShapeSubstitution {
-    origin: AnonStructId,
-    params: IndexMap<u32, TypeId>,
+pub struct ShapeSubstitution {
+    pub origin: AnonStructId,
+    pub params: IndexMap<u32, TypeId>,
 }
 
 /// What a struct type's head is.
@@ -913,6 +918,11 @@ pub enum InstanceKey {
 #[derive(Debug, Clone, Default)]
 struct AssocAnswers(Vec<AssocAnswer>);
 
+/// The associated types one receiver answers, from
+/// [`TypeTable::assoc_types_of`].
+#[derive(Debug, Clone)]
+pub struct ReceiverAssocTypes(Vec<(AssocTypeKey, AssocAnswers)>);
+
 /// One impl's answer: the trait arguments its header writes, which a bare
 /// bound tells apart by their absence, and those with the trait's defaults
 /// filled, which a projection reached at full arguments compares. A generic
@@ -1164,6 +1174,9 @@ pub struct TypeTable {
     anon_struct_index: IndexMap<(ModuleSource, AnonShape), AnonStructId>,
     /// Every mangle handed out, so a template shape's hash cannot name two.
     anon_struct_mangles: IndexSet<(ModuleSource, String)>,
+    /// Each shape substitution recorded, in order, by the shape and its index
+    /// among the shape's substitutions: what monomorphization instantiates.
+    shape_substitution_log: Vec<(AnonStructId, usize)>,
     /// `(WIT name, generated module)` of each type declaration, for
     /// [`Self::cm_decl_in`]. Built with [`Self::attach_defs`], so it answers at
     /// any point in the pipeline rather than only after a declaration's type is
@@ -1311,6 +1324,7 @@ impl TypeTable {
             anon_structs: Vec::new(),
             anon_struct_index: IndexMap::default(),
             anon_struct_mangles: IndexSet::default(),
+            shape_substitution_log: Vec::new(),
             decl_index: IndexMap::default(),
             cm_decl_index: IndexMap::default(),
             unrestricted_resources: IndexMap::default(),
@@ -1886,15 +1900,17 @@ impl TypeTable {
         }
     }
 
+    /// Intern a shape a literal writes.
     fn intern_shape(&mut self, module_source: ModuleSource, shape: AnonShape) -> AnonStructId {
-        self.intern_shape_from(module_source, shape, None)
+        let id = self.intern_shape_entry(module_source, shape);
+        self.anon_structs[id.0 as usize].written = true;
+        id
     }
 
-    fn intern_shape_from(
+    fn intern_shape_entry(
         &mut self,
         module_source: ModuleSource,
         shape: AnonShape,
-        substituted: Option<ShapeSubstitution>,
     ) -> AnonStructId {
         let key = (module_source, shape);
         if let Some(&id) = self.anon_struct_index.get(&key) {
@@ -1911,51 +1927,62 @@ impl TypeTable {
         {
             mangle.push('_');
         }
+        let open = Self::any_shape_type(&key.1, &mut |ty| self.mentions_rigid_param(ty));
         self.anon_structs.push(AnonEntry {
             module: key.0.clone(),
             shape: key.1.clone(),
             mangle,
-            substituted,
+            open,
+            written: false,
+            substitutions: Vec::new(),
         });
         self.anon_struct_index.insert(key, id);
         id
     }
 
-    /// The written shape `id` was substituted from; `id` itself where a
-    /// literal wrote it.
-    #[must_use]
-    pub fn anon_struct_written_origin(&self, id: AnonStructId) -> AnonStructId {
-        self.anon_structs[id.0 as usize]
-            .substituted
-            .as_ref()
-            .map_or(id, |s| s.origin)
+    /// Record that `substitution` makes `shape`, unless its origin already
+    /// reached it: an origin's methods are instantiated at a shape once.
+    fn record_shape_substitution(&mut self, shape: AnonStructId, substitution: ShapeSubstitution) {
+        let entry = &mut self.anon_structs[shape.0 as usize];
+        if entry
+            .substitutions
+            .iter()
+            .any(|s| s.origin == substitution.origin)
+        {
+            return;
+        }
+        entry.substitutions.push(substitution);
+        self.shape_substitution_log
+            .push((shape, entry.substitutions.len() - 1));
     }
 
-    /// The substitution that makes shape `id` from its written origin.
+    /// The substitution recorded at `index` among those making `shape`.
     #[must_use]
-    pub fn anon_struct_substitution(&self, id: AnonStructId) -> Option<&IndexMap<u32, TypeId>> {
-        self.anon_structs[id.0 as usize]
-            .substituted
-            .as_ref()
-            .map(|s| &s.params)
+    pub fn shape_substitution(&self, shape: AnonStructId, index: usize) -> &ShapeSubstitution {
+        &self.anon_structs[shape.0 as usize].substitutions[index]
     }
 
-    /// Whether a substitution, not a literal, made shape `id`.
+    /// Whether a literal wrote shape `id`, rather than only a substitution.
     #[must_use]
-    pub fn anon_struct_is_substituted(&self, id: AnonStructId) -> bool {
-        self.anon_structs[id.0 as usize].substituted.is_some()
+    pub fn anon_struct_is_written(&self, id: AnonStructId) -> bool {
+        self.anon_structs[id.0 as usize].written
     }
 
-    /// The closed shapes a substitution interned at registry index `from` or
-    /// later, and the index the registry ends at, to ask from next time.
+    /// The substitutions into a closed shape recorded at log index `from` or
+    /// later, as the shape and the substitution's index among its own, and the
+    /// index the log ends at, to ask from next time.
     #[must_use]
-    pub fn closed_substituted_shapes_since(&self, from: usize) -> (Vec<AnonStructId>, usize) {
-        let end = self.anon_structs.len();
-        let shapes = (from..end)
-            .map(|i| AnonStructId(u32::try_from(i).expect("anon struct space")))
-            .filter(|&id| self.anon_struct_is_substituted(id) && !self.anon_shape_is_open(id))
+    pub fn closed_shape_substitutions_since(
+        &self,
+        from: usize,
+    ) -> (Vec<(AnonStructId, usize)>, usize) {
+        let log = &self.shape_substitution_log[from..];
+        let closed = log
+            .iter()
+            .copied()
+            .filter(|&(shape, _)| !self.anon_shape_is_open(shape))
             .collect();
-        (shapes, end)
+        (closed, self.shape_substitution_log.len())
     }
 
     /// The fields a struct of shape `id` holds: a literal's as written, a
@@ -1979,7 +2006,7 @@ impl TypeTable {
     /// substitution into it reaches a struct codegen can lay out.
     #[must_use]
     pub fn anon_shape_is_open(&self, id: AnonStructId) -> bool {
-        self.any_anon_shape_type(id, &mut |ty| self.mentions_rigid_param(ty))
+        self.anon_structs[id.0 as usize].open
     }
 
     /// Whether `id` mentions a type parameter or pack: what a substitution
@@ -1995,6 +2022,19 @@ impl TypeTable {
     /// synthesized methods are instantiated in at a substituted shape.
     #[must_use]
     pub fn anon_shape_type_params(&self, id: AnonStructId) -> IndexMap<String, u32> {
+        self.anon_shape_params(id)
+            .into_iter()
+            .map(|(index, ty)| match self.get(ty) {
+                ResolvedType::TypeParam { name, .. } | ResolvedType::TypePack { name, .. } => {
+                    (name.clone(), index)
+                }
+                other => unreachable!("collected a parameter that is not one: {other:?}"),
+            })
+            .collect()
+    }
+
+    /// The type parameters and packs shape `id` mentions, by index.
+    fn anon_shape_params(&self, id: AnonStructId) -> IndexMap<u32, TypeId> {
         let mut found = IndexMap::default();
         self.any_anon_shape_type(id, &mut |ty| {
             self.collect_type_params(ty, &mut found);
@@ -2003,11 +2043,10 @@ impl TypeTable {
         found
     }
 
-    fn collect_type_params(&self, id: TypeId, found: &mut IndexMap<String, u32>) {
+    fn collect_type_params(&self, id: TypeId, found: &mut IndexMap<u32, TypeId>) {
         match self.get(id) {
-            ResolvedType::TypeParam { name, index }
-            | ResolvedType::TypePack { name, index, .. } => {
-                found.insert(name.clone(), *index);
+            ResolvedType::TypeParam { index, .. } | ResolvedType::TypePack { index, .. } => {
+                found.insert(*index, id);
             }
             _ => {
                 self.any_constituent(id, &mut |t| {
@@ -2020,7 +2059,12 @@ impl TypeTable {
 
     /// Whether `f` holds of a type shape `id` is built over.
     fn any_anon_shape_type(&self, id: AnonStructId, f: &mut dyn FnMut(TypeId) -> bool) -> bool {
-        match &self.anon_structs[id.0 as usize].shape {
+        Self::any_shape_type(&self.anon_structs[id.0 as usize].shape, f)
+    }
+
+    /// Whether `f` holds of a type `shape` is built over.
+    fn any_shape_type(shape: &AnonShape, f: &mut dyn FnMut(TypeId) -> bool) -> bool {
+        match shape {
             AnonShape::Fields(fields) => fields.iter().any(|&(_, ty)| f(ty)),
             AnonShape::Template(shape) => shape.holes.iter().any(|hole| f(hole.ty)),
             AnonShape::Synthetic(_) => false,
@@ -2066,23 +2110,36 @@ impl TypeTable {
         if shape == self.anon_structs[id.0 as usize].shape {
             return type_id;
         }
-        // A shape substituted again composes: the origin's parameters map to
-        // what this substitution makes of their earlier answers.
-        let substitution = match self.anon_structs[id.0 as usize].substituted.clone() {
-            Some(earlier) => ShapeSubstitution {
-                origin: earlier.origin,
-                params: earlier
-                    .params
-                    .into_iter()
-                    .map(|(slot, ty)| (slot, self.subst_rec(ty, leaves)))
-                    .collect(),
-            },
-            None => ShapeSubstitution {
+        // Each origin of this shape reaches the result, its parameters mapped
+        // to what this substitution makes of their answers here. A literal
+        // makes the shape its own origin, every parameter answering itself.
+        let entry = &self.anon_structs[id.0 as usize];
+        let mut origins = entry.substitutions.clone();
+        if entry.written {
+            origins.push(ShapeSubstitution {
                 origin: id,
-                params: leaves.params.clone(),
-            },
-        };
-        let substituted = self.intern_shape_from(module, shape, Some(substitution));
+                params: self.anon_shape_params(id),
+            });
+        }
+        assert!(
+            !origins.is_empty(),
+            "an open shape is written or substituted"
+        );
+        let substituted = self.intern_shape_entry(module, shape);
+        for earlier in origins {
+            let params = earlier
+                .params
+                .into_iter()
+                .map(|(slot, ty)| (slot, self.subst_rec(ty, leaves)))
+                .collect();
+            self.record_shape_substitution(
+                substituted,
+                ShapeSubstitution {
+                    origin: earlier.origin,
+                    params,
+                },
+            );
+        }
         self.make_struct(StructDef::Anon(substituted))
     }
 
@@ -4128,40 +4185,49 @@ impl TypeTable {
             .insert(trait_ref.args, filled, resolved_id, None);
     }
 
-    /// Register for `instance` each associated type `origin` answers, under
-    /// `substitution`: what synthesis registered for an open shape, at the
-    /// closed shape a substitution interned from it.
+    /// Each associated type `receiver` answers: what synthesis registered for
+    /// an open shape, for [`Self::instantiate_assoc_types`] to instantiate at
+    /// every shape substituted from it.
+    #[must_use]
+    pub fn assoc_types_of(&self, receiver: TypeId) -> ReceiverAssocTypes {
+        let from = self.instance_key(receiver);
+        ReceiverAssocTypes(
+            self.assoc_type_resolutions
+                .iter()
+                .filter(|(key, _)| key.receiver == from)
+                .map(|(key, answers)| (key.clone(), answers.clone()))
+                .collect(),
+        )
+    }
+
+    /// Register for `instance` each of `origin`'s associated types under
+    /// `substitution`, where `instance` answers none of its own: a literal
+    /// writing `instance` gave it its own.
     pub fn instantiate_assoc_types(
         &mut self,
-        origin: TypeId,
+        origin: &ReceiverAssocTypes,
         instance: TypeId,
         substitution: &IndexMap<u32, TypeId>,
     ) {
-        let from = self.instance_key(origin);
         let to = self.instance_key(instance);
-        let entries: Vec<(AssocTypeKey, AssocAnswers)> = self
-            .assoc_type_resolutions
-            .iter()
-            .filter(|(key, _)| key.receiver == from)
-            .map(|(key, answers)| (key.clone(), answers.clone()))
-            .collect();
-        for (key, answers) in entries {
+        for (key, answers) in &origin.0 {
+            let key = AssocTypeKey {
+                receiver: to.clone(),
+                ..key.clone()
+            };
+            if self.assoc_type_resolutions.contains_key(&key) {
+                continue;
+            }
             let mut subst = |ty: TypeId| self.substitute_type_params(ty, substitution);
             let mut instantiated = AssocAnswers::default();
-            for entry in answers.0 {
+            for entry in answers.0.iter().cloned() {
                 let written = entry.written.into_iter().map(&mut subst).collect();
                 let filled = entry
                     .filled
                     .map(|args| args.into_iter().map(&mut subst).collect());
                 instantiated.insert(written, filled, subst(entry.answer), entry.impl_def);
             }
-            self.assoc_type_resolutions.insert(
-                AssocTypeKey {
-                    receiver: to.clone(),
-                    ..key
-                },
-                instantiated,
-            );
+            self.assoc_type_resolutions.insert(key, instantiated);
         }
     }
 

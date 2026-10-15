@@ -12,9 +12,9 @@ use crate::module_source::ModuleSource;
 use crate::name::{FqTypeName, LocalMethodName, Projected, RefKind, mangle_generic_name};
 use crate::tir::{
     AnonStructId, CallArg, FunctionKind, FunctionRef, InstantiationKey, LetStorage, MonomorphInfo,
-    ResolvedType, StructDef, TemplateId, TirBinaryOp, TirBlock, TirExpr, TirExprKind, TirFunction,
-    TirLocal, TirModule, TirParam, TirPattern, TirStmt, TirStmtKind, TirTemplatePart, TirUnaryOp,
-    TypeId, TypeTable, method_param_offset, transpose_tuple_expr,
+    ResolvedType, ShapeSubstitution, StructDef, TemplateId, TirBinaryOp, TirBlock, TirExpr,
+    TirExprKind, TirFunction, TirLocal, TirModule, TirParam, TirPattern, TirStmt, TirStmtKind,
+    TirTemplatePart, TirUnaryOp, TypeId, TypeTable, method_param_offset, transpose_tuple_expr,
 };
 use crate::tir_visitor::{TirMutVisitor, TirRefVisitor};
 
@@ -948,49 +948,64 @@ impl Monomorphizer {
         .is_some()
     }
 
-    /// The methods synthesized for open shape `origin`, instantiated at the
-    /// closed shape `shape` a substitution interned from it: the impls a
-    /// written shape gets from synthesis, which no literal wrote for `shape`.
-    pub(super) fn instantiate_shape_methods(
+    /// What synthesis gave open shape `origin` — its associated types and
+    /// methods — instantiated at the closed shape the substitution recorded at
+    /// `index` among `shape`'s makes from it. A method `shape` already has,
+    /// from its own literal or another origin, is not made twice.
+    pub(super) fn instantiate_shape_substitution(
         &mut self,
         shape: AnonStructId,
-        methods: &[Rc<RefCell<TirFunction>>],
+        index: usize,
         type_table: &mut TypeTable,
     ) -> Vec<TirFunction> {
-        let origin = type_table.anon_struct_written_origin(shape);
+        let ShapeSubstitution { origin, params } =
+            type_table.shape_substitution(shape, index).clone();
         let written = type_table.make_struct(StructDef::Anon(origin));
         let concrete = type_table.make_struct(StructDef::Anon(shape));
-        let substitution = type_table
-            .anon_struct_substitution(shape)
-            .expect("a substituted shape records its substitution")
-            .clone();
-        type_table.instantiate_assoc_types(written, concrete, &substitution);
+        let assoc_types = self
+            .structs
+            .shape_assoc_types
+            .entry(origin)
+            .or_insert_with(|| type_table.assoc_types_of(written));
+        type_table.instantiate_assoc_types(assoc_types, concrete, &params);
+        let Some(methods) = self.structs.shape_methods.get(&origin).cloned() else {
+            return Vec::new();
+        };
         let param_key_by_name = type_table.anon_shape_type_params(origin);
         let subject = type_table.fq_struct_head(StructDef::Anon(shape));
-        methods
-            .iter()
-            .map(|method| {
-                let method = method.borrow();
-                let info = method
-                    .method_info
-                    .as_ref()
-                    .expect("a shape's synthesized method names its receiver")
-                    .with_substituted_struct_name(&subject);
-                let identity = InstanceIdentity {
-                    name: info.to_mangled_name(),
-                    module_source: method.module_source.clone(),
-                    monomorph_info: None,
-                    method_info: Some(info),
-                };
-                self.instantiate_with(
-                    &method,
-                    &substitution,
-                    param_key_by_name.clone(),
-                    identity,
-                    type_table,
-                )
-            })
-            .collect()
+        let mut instances = Vec::new();
+        for method in &methods {
+            let method = method.borrow();
+            let info = method
+                .method_info
+                .as_ref()
+                .expect("a shape's synthesized method names its receiver")
+                .with_substituted_struct_name(&subject);
+            let name = info.to_mangled_name();
+            if !self
+                .functions
+                .concrete_names
+                .entry(method.module_source.clone())
+                .or_default()
+                .insert(name.clone())
+            {
+                continue;
+            }
+            let identity = InstanceIdentity {
+                name,
+                module_source: method.module_source.clone(),
+                monomorph_info: None,
+                method_info: Some(info),
+            };
+            instances.push(self.instantiate_with(
+                &method,
+                &params,
+                param_key_by_name.clone(),
+                identity,
+                type_table,
+            ));
+        }
+        instances
     }
 
     /// Instantiate a generic function with concrete type arguments
@@ -1130,7 +1145,7 @@ impl Monomorphizer {
     /// `generic` with `substitution` applied throughout, under the identity the
     /// caller gives the instance. `param_key_by_name` resolves a
     /// `T^Trait::method` receiver to its slot by the parameter's name.
-    pub fn instantiate_with(
+    fn instantiate_with(
         &mut self,
         generic: &TirFunction,
         substitution: &IndexMap<u32, TypeId>,
