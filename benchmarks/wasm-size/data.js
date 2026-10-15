@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1792005577769,
+  "lastUpdate": 1792033169113,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -67157,6 +67157,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/777c240d1212d007b9bc454b9df7d107edd15a26"
         },
         "date": 1792005577265,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 2940,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 7317,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 21697,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 339761,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "cf59f56913b697b36ad1109e71c96b562d92d4db",
+          "message": "Merge pull request #2355 from wado-lang/fix-effect-same-name-modules\n\nfix(compiler): two interfaces of one name from different modules dispatch apart",
+          "timestamp": "2026-10-15T11:42:10+09:00",
+          "tree_id": "94737b68f052c034700c90f6973e457641a1d591",
+          "url": "https://github.com/wado-lang/wado/commit/cf59f56913b697b36ad1109e71c96b562d92d4db"
+        },
+        "date": 1792033168079,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
