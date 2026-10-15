@@ -88,8 +88,9 @@ runs.
   axis, whole tiles each, every chunk continuing the sums the one before left.
   A tiled product so adds what one dispatch would, in the same order.
 
-Every dispatch of one `forward` goes into one compute pass of one command
-encoder, which is submitted when a tensor is read back. Each dispatch's
+Dispatches go into one compute pass of one command encoder, which is
+submitted when a tensor is read back or after every 32 dispatches, so the
+device runs the first while the host records the rest. Each dispatch's
 parameters take a span of their own in one buffer of the pass, so none is
 overwritten before the encoder runs, and they reach the device in one write
 when the encoder is submitted.
@@ -241,9 +242,9 @@ example's `generate.mjs` on `onnxruntime-node`, on the CPU.
 
 | Model        | Backend         | Time a token, onnxruntime's as 1 | Dispatches a token | Read backs a token |
 | ------------ | --------------- | -------------------------------- | ------------------ | ------------------ |
-| GPT-2 (124M) | `WebGpuBackend` | 4.1                              | 127                | 1                  |
+| GPT-2 (124M) | `WebGpuBackend` | 3.3                              | 127                | 1                  |
 | GPT-2 (124M) | `Cpu`           | 18                               |                    |                    |
-| Gemma 3 270M | `WebGpuBackend` | 0.45                             | 275                | 1                  |
+| Gemma 3 270M | `WebGpuBackend` | 0.34                             | 275                | 1                  |
 | Gemma 3 270M | `Cpu`           | 5.0                              |                    |                    |
 | either       | onnxruntime     | 1                                |                    |                    |
 
@@ -254,4 +255,5 @@ chunks, its weight being the 154 MB embedding.
 Gemma's token cost the host more than the device until the dispatches shared
 one compute pass and one parameter buffer, `wado run-webgpu` built wasmtime and
 wgpu-core optimized, and `arg_max` replaced reading back the logits. Each
-roughly halved it. The products of a few rows then took it from 0.65 to 0.45.
+roughly halved it. The products of a few rows then took it from 0.65 to 0.45,
+and submitting every 32 dispatches to 0.34.
