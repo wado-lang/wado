@@ -168,8 +168,9 @@ fn rule_token_kinds(
     parser_rules: &List<ParserRule>,
     idx: &KindIndex,
     visiting: &mut List<String>,
-) -> Option<List<i32>> {
-    assert visiting.contains(&rule.name);
+) -> Option<List<i32>>
+    contract visiting.contains(&rule.name)
+{
     let mut kinds: List<i32> = [];
     for let alt of &rule.alternatives {
         if alt.elements.len() != 1 {

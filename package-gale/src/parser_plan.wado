@@ -100,8 +100,9 @@ pub fn plan_parser(
     settings: &GenSettings,
     marks: &LowerMarks,
     atn: &Atn,
-) -> ParserPlan {
-    assert lowered.parser_rules.len() == grammar.parser_rules.len(), "`lower` lowers each parser rule in order";
+) -> ParserPlan
+    contract lowered.parser_rules.len() == grammar.parser_rules.len(), "`lower` lowers each parser rule in order"
+{
     let rule_count = grammar.parser_rules.len();
     let needs_atn = marks.needs_atn();
     let rescanned = analysis.rule_rescans();

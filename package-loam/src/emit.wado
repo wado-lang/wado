@@ -2169,8 +2169,9 @@ fn same_axis(left: &Axis, right: &Axis) -> bool {
 
 /// Whether two `MatMul` operands' batch axes are one list, which is what the
 /// kernel's single `..Bs` says.
-fn batch_axes_agree(left: &Shape, right: &Shape) -> bool {
-    assert left.rank() == right.rank();
+fn batch_axes_agree(left: &Shape, right: &Shape) -> bool
+    contract left.rank() == right.rank()
+{
     for let mut i = 0; i < left.rank() - 2; i += 1 {
         if !same_axis(&left.axes[i], &right.axes[i]) {
             return false;

@@ -640,8 +640,9 @@ impl EmitContext {
     ///
     /// An empty set is not a condition: which of the two it means is `Admits`'s
     /// to say at the site that knows, so pass a real set here.
-    pub fn kind_check_str<S: AsStrSlice>(&mut self, tokens: &List<i32>, expr: S) -> String {
-        assert !tokens.is_empty(), "an empty token set is not a condition; say what it admits with `Admits`";
+    pub fn kind_check_str<S: AsStrSlice>(&mut self, tokens: &List<i32>, expr: S) -> String
+        contract !tokens.is_empty(), "an empty token set is not a condition; say what it admits with `Admits`"
+    {
         if tokens.len() == 1 {
             return `${expr} == ${self.analysis.token_name(tokens[0])}`;
         }
@@ -651,8 +652,9 @@ impl EmitContext {
     /// Render the negation of a token-set membership check —
     /// `!_kind_set_<id>(<expr>)` for ≥2 tokens, else
     /// `<expr> != TK_X`. Used by non-greedy emit sites.
-    pub fn kind_negate_check_str<S: AsStrSlice>(&mut self, tokens: &List<i32>, expr: S) -> String {
-        assert !tokens.is_empty(), "an empty exclusion set is not a condition; say what it admits with `Admits`";
+    pub fn kind_negate_check_str<S: AsStrSlice>(&mut self, tokens: &List<i32>, expr: S) -> String
+        contract !tokens.is_empty(), "an empty exclusion set is not a condition; say what it admits with `Admits`"
+    {
         if tokens.len() == 1 {
             return `${expr} != ${self.analysis.token_name(tokens[0])}`;
         }

@@ -108,8 +108,9 @@ pub enum GroupClass {
     General,
 }
 
-pub fn classify_group(alts: &List<Alternative>) -> GroupClass {
-    assert alts.len() > 0, "Group with no alts is not a valid lowering input";
+pub fn classify_group(alts: &List<Alternative>) -> GroupClass
+    contract alts.len() > 0, "Group with no alts is not a valid lowering input"
+{
     if alts.len() == 1 {
         assert alts[0].elements.len() > 0, "Group with empty alt is not a valid lowering input";
         if alts[0].elements.len() == 1 {

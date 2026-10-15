@@ -1580,8 +1580,9 @@ fn build_direct_dispatch(
 
 /// The token-led chain itself: one branch per class, in `indices` order. Emit
 /// translates it into `if / else if` and an error fallback.
-fn direct_dispatch(classes: &List<AltClass>, indices: &List<i32>) -> MultiAltDispatch {
-    assert classes.len() == indices.len(), "one alternative index per class";
+fn direct_dispatch(classes: &List<AltClass>, indices: &List<i32>) -> MultiAltDispatch
+    contract classes.len() == indices.len(), "one alternative index per class"
+{
     let mut branches: List<DispatchBranch> = [];
     for let mut k = 0; k < indices.len(); k += 1 {
         branches.push(DispatchBranch { alt_class: classes[k], alt_index: indices[k] });
@@ -2025,8 +2026,9 @@ fn group_op_scan_group(
     alts: &List<Alternative>,
     empty_alt_admits: &Option<EmptyAltAdmits>,
     ctx: &mut LowerContext,
-) -> ScanGroupElement {
-    assert bodies.len() == alts.len(), "one scan body per alternative";
+) -> ScanGroupElement
+    contract bodies.len() == alts.len(), "one scan body per alternative"
+{
     // Strict, not `scan_group_lenient`'s answer: this copy is scanned only by
     // the optional's entry guard, which cannot rewind and call it a match.
     let lenient = false;

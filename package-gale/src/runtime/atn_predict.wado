@@ -104,8 +104,9 @@ impl AtnPredictor {
         eof: i32,
         min_prec: i32,
         disabled_alts: &List<i32>,
-    ) -> [i32, i32] {
-        assert self.stack.len() >= self.floor, "a scan returns before its caller pops the frames below its floor";
+    ) -> [i32, i32]
+        contract self.stack.len() >= self.floor, "a scan returns before its caller pops the frames below its floor"
+    {
         if self.floor > 0 {
             let alt = atn_predict_above(
                 sim,
@@ -192,8 +193,9 @@ impl AtnKeyMap {
         return AtnKeyMap::with_slots(64);
     }
 
-    fn with_slots(slots: i32) -> AtnKeyMap {
-        assert slots & slots - 1 == 0, "slot count is a power of two";
+    fn with_slots(slots: i32) -> AtnKeyMap
+        contract slots & slots - 1 == 0, "slot count is a power of two"
+    {
         return AtnKeyMap {
             keys: List::filled(slots, -1 as i64),
             vals: List::filled(slots, -1),
@@ -210,8 +212,9 @@ impl AtnKeyMap {
         self.used.clear();
     }
 
-    fn slot_of(&self, k: i64) -> i32 {
-        assert k >= 0, "keys are non-negative";
+    fn slot_of(&self, k: i64) -> i32
+        contract k >= 0, "keys are non-negative"
+    {
         let mask = self.keys.len() - 1;
         let mut i = ((k ^ k >> 29) * 0x5851F42D4C957F2D >> 32) as i32 & mask;
         while self.keys[i] >= 0 && self.keys[i] != k {
@@ -469,9 +472,10 @@ fn atn_node_pair_key(a: i32, b: i32) -> i64 {
     return a as i64 * ATN_NODE_PAIR_STRIDE + b as i64;
 }
 
-fn atn_state_pr_key(state: i32, pr: i32) -> i64 {
-    assert pr + 2 < CFG_KEY_PR_SLOT, `ATN config precedence ${pr} exceeds packed-key slot`;
-    assert state + 2 < CFG_KEY_STATE_SLOT, `ATN config state ${state} exceeds packed-key slot`;
+fn atn_state_pr_key(state: i32, pr: i32) -> i64
+    contract pr + 2 < CFG_KEY_PR_SLOT, `ATN config precedence ${pr} exceeds packed-key slot`
+    contract state + 2 < CFG_KEY_STATE_SLOT, `ATN config state ${state} exceeds packed-key slot`
+{
     return (state + 2) as i64 * CFG_KEY_PR_SLOT as i64 + (pr + 2) as i64;
 }
 
@@ -518,8 +522,9 @@ impl CfgSet {
         self.index.clear();
     }
 
-    fn add(&mut self, arena: &mut CtxArena, state: i32, alt: i32, pr: i32, pctx: i32) -> [i32, bool] {
-        assert alt + 1 < CFG_KEY_ALT_SLOT, `ATN config alt ${alt} exceeds packed-key slot`;
+    fn add(&mut self, arena: &mut CtxArena, state: i32, alt: i32, pr: i32, pctx: i32) -> [i32, bool]
+        contract alt + 1 < CFG_KEY_ALT_SLOT, `ATN config alt ${alt} exceeds packed-key slot`
+    {
         let k = atn_state_pr_key(state, pr) * CFG_KEY_ALT_SLOT as i64 + (alt + 1) as i64;
         let found = self.index.get(k);
         if found >= 0 {

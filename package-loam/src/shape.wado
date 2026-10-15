@@ -36,8 +36,9 @@ pub struct Axis {
 impl Axis {
     /// One axis standing for `parts`, named as the generated module spells it.
     /// See WEP 2026-09-20 § "A Regrouped Axis Is Named by Its Parts".
-    pub fn merged(parts: List<Axis>, extent: Extent) -> Axis {
-        assert parts.len() >= 2;
+    pub fn merged(parts: List<Axis>, extent: Extent) -> Axis
+        contract parts.len() >= 2
+    {
         let mut names: List<String> = [];
         for let p of parts {
             names.push(p.name);
@@ -145,8 +146,9 @@ impl Shape {
     }
 
     /// The same axes in the order `perm` names, as `Transpose` does.
-    pub fn permute(&self, perm: &List<i32>) -> Shape {
-        assert perm.len() == self.rank();
+    pub fn permute(&self, perm: &List<i32>) -> Shape
+        contract perm.len() == self.rank()
+    {
         let mut axes: List<Axis> = [];
         for let p of *perm {
             axes.push(self.axes[p]);
@@ -215,8 +217,9 @@ impl Shape {
     }
 
     /// The axis `back` positions from the end, `0` being the last.
-    pub fn from_end(&self, back: i32) -> &Axis {
-        assert 0 <= back < self.rank();
+    pub fn from_end(&self, back: i32) -> &Axis
+        contract 0 <= back < self.rank()
+    {
         return &self.axes[self.rank() - 1 - back];
     }
 
@@ -241,8 +244,9 @@ impl Shape {
     /// `MatMul` as ONNX defines it, which is numpy's: the batch axes broadcast,
     /// and a rank-1 operand is a matrix whose missing axis the result drops.
     /// `owed` gains what the inputs owe for the operands' axes to meet.
-    pub fn matmul(&self, rhs: &Shape, op: String, owed: &mut List<Condition>) -> Result<Shape, AxisConflict> {
-        assert self.rank() >= 1 && rhs.rank() >= 1;
+    pub fn matmul(&self, rhs: &Shape, op: String, owed: &mut List<Condition>) -> Result<Shape, AxisConflict>
+        contract self.rank() >= 1 && rhs.rank() >= 1
+    {
 
         let right_k = if rhs.rank() == 1 { rhs.from_end(0) } else { rhs.from_end(1) };
         Shape::agree(self.from_end(0), right_k, &op, owed)?;

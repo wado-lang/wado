@@ -706,8 +706,9 @@ impl CodeWriter {
     }
 
     /// The default of the function `head` opens' parameter `i`; empty for none.
-    fn default_of(&self, head: &Seg, i: i32) -> StrSlice {
-        assert i < head.param_count, `default_of: parameter ${i} of ${head.param_count}`;
+    fn default_of(&self, head: &Seg, i: i32) -> StrSlice
+        contract i < head.param_count, `parameter ${i} of ${head.param_count}`
+    {
         let mut start = head.defaults_start;
         let mut n = 0;
         for let mut j = start; j < head.defaults_end; j += 1 {
@@ -1059,8 +1060,9 @@ fn needs_escape(b: u8, quote: u8) -> bool {
 /// Append `b` in the form a Wado literal delimited by `quote` reads back. The
 /// control-char policy mirrors `Inspect for String` in core's `format.wado`;
 /// keep the two in lockstep (see WEP: Inspect).
-fn write_escaped(out: &mut String, b: u8, quote: u8) {
-    assert needs_escape(b, quote);
+fn write_escaped(out: &mut String, b: u8, quote: u8)
+    contract needs_escape(b, quote)
+{
     if b == quote || b == b'\\' || b == b'$' {
         out.push('\\');
         unchecked out.push_ascii(b);

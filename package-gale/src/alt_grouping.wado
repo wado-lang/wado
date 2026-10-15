@@ -232,8 +232,9 @@ pub fn alt_classes(
     alts: &List<Alternative>,
     first_sets: &List<List<i32>>,
     analysis: &mut GrammarAnalysis,
-) -> List<AltClass> {
-    assert alt_of.len() == first_sets.len(), "one alternative per first set";
+) -> List<AltClass>
+    contract alt_of.len() == first_sets.len(), "one alternative per first set"
+{
     let mut out: List<AltClass> = [];
     for let mut slot = 0; slot < alt_of.len(); slot += 1 {
         out.push(alt_class(&alts[alt_of[slot]], &first_sets[slot], analysis));

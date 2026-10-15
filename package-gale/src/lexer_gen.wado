@@ -2693,8 +2693,9 @@ fn gen_lexer_alt_seq<S: AsStrSlice>(
     fail_action: S,
     ea: bool,
     replay: bool,
-) {
-    assert !replay || !ea, "the replay pass never re-evaluates a predicate the selection pass already answered";
+)
+    contract !replay || !ea, "the replay pass never re-evaluates a predicate the selection pass already answered"
+{
     for let mut i = from; i < plan.steps.len(); i += 1 {
         // Every `before_index == i` predicate; the trailing one is post-loop.
         // Placed here rather than in the caller so a single-alt inlined group or
