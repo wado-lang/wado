@@ -97,7 +97,8 @@ Allocation and aggregates:
 - `inline` — replace a call to a small, non-recursive function with its body.
   `#[inline]`, `#[inline(always)]`, and `#[inline(never)]` adjust the decision,
   and a cold call site opts out, as does every site in a function only cold
-  sites reach. A callee that reaches no safepoint (no call,
+  sites reach, unless the body is no bigger than the call. A callee that
+  reaches no safepoint (no call,
   no allocation) is admitted at four times the threshold where the splice pays
   back: at its only call site, or at its only site in a loop.
 - `cold_outline` — move the region a `cold_path()` marks into a function of its

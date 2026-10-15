@@ -2184,10 +2184,12 @@ pub fn inline_functions(
                 InlineHint::Always => inline_cost(body, type_table, descriptors, &spliced),
                 InlineHint::Auto | InlineHint::Hint | InlineHint::Never => verdict.hot,
             };
-            let shrinks = net_cost(
-                inline_size(body, type_table, descriptors),
-                func.params.len(),
-            ) == 0;
+            let written = if pricing {
+                size
+            } else {
+                inline_size(body, type_table, descriptors)
+            };
+            let shrinks = net_cost(written, func.params.len()) == 0;
             (net_cost(hot, func.params.len()), shrinks, func.clone())
         });
         (func.id, size, verdict, candidate)

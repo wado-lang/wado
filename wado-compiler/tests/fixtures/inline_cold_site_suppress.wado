@@ -3,8 +3,8 @@
 // code that rarely runs. An explicit `#[inline(always)]` still wins, as does a
 // body no bigger than the call. A callee referenced only from cold sites
 // therefore survives as a standalone function (`cold_helper` below), while
-// hot-site and forced callees inline and DCE away (`hot_helper`,
-// `forced_helper`).
+// hot-site, forced and tiny callees inline and DCE away (`hot_helper`,
+// `forced_helper`, `tiny_helper`).
 
 fn cold_helper(x: i32) -> i32 {
     let mut h = x ^ 0x5bd1e995;
@@ -20,6 +20,19 @@ fn hot_helper(x: i32) -> i32 {
 #[inline(always)]
 fn forced_helper(x: i32) -> i32 {
     return x + 3000;
+}
+
+fn tiny_helper(x: i32) -> i32 {
+    return x + 4000;
+}
+
+#[inline(never)]
+fn h(x: i32) -> i32 {
+    if x < 0 {
+        builtin::cold_path();
+        return tiny_helper(x);
+    }
+    return x;
 }
 
 #[inline(never)]
@@ -46,11 +59,12 @@ export fn run() {
     assert f(builtin::black_box(-5)) == 1389461265;
     assert g(builtin::black_box(-5)) == 2995;
     assert g(builtin::black_box(7)) == 7;
+    assert h(builtin::black_box(-5)) == 3995;
 }
 
 __DATA__
 {
     "stdout": "",
     "wir_expect:O2": ["cold_helper"],
-    "wir_not_expect:O2": ["hot_helper", "forced_helper"]
+    "wir_not_expect:O2": ["hot_helper", "forced_helper", "tiny_helper"]
 }

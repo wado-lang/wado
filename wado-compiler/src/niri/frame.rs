@@ -429,18 +429,13 @@ impl Interpreter<'_> {
     /// right, so a by-value argument ahead of a block is taken before the block
     /// writes what it reads. A reference argument is read through at the call,
     /// as the callee reads it. `None` when an argument the call needs reaches
-    /// no constant.
+    /// no constant. An arity mismatch is left to `run_call`, which declines it.
     fn exec_block_args(
         &mut self,
         body: &mut Body,
         args: &[Operand],
         by_value: &[bool],
     ) -> Option<()> {
-        assert_eq!(
-            args.len(),
-            by_value.len(),
-            "a call binds one operand per parameter"
-        );
         let is_block = |body: &Body, arg: &Operand| {
             arg.as_expr()
                 .is_some_and(|e| matches!(body.exprs[e].kind, ExprKind::LabeledBlock { .. }))
