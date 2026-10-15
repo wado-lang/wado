@@ -1,12 +1,25 @@
-use { BpeTokenizer, byte_chars } from "./runtime/tokenizer.wado";
+use { BpeTokenizer, TokenSpelling, byte_chars, byte_token } from "./runtime/tokenizer.wado";
 
-/// One entry to a line, as `BpeTokenizer::new` reads them.
-fn lines(entries: List<String>) -> ByteList {
-    return entries.join("\n").bytes().collect();
+/// The tokens as `BpeTokenizer::new` reads them, separated by NUL.
+fn entries(tokens: &List<String>) -> ByteList {
+    return tokens.join("\0").bytes().collect();
 }
 
-/// A tokenizer over every byte's character, the merge `a b`, and `specials`,
-/// which take the ids after `ab`.
+/// The merges as `BpeTokenizer::new` reads them, three little-endian `i32`s each.
+fn triples(merges: List<[i32, i32, i32]>) -> ByteList {
+    let mut bytes: ByteList = [];
+    for let [left, right, joined] of merges {
+        for let id of [left, right, joined] {
+            for let shift of [0, 8, 16, 24] {
+                bytes.push((id >> shift & 0xff) as u8);
+            }
+        }
+    }
+    return bytes;
+}
+
+/// A byte-level tokenizer over every byte's character, the merge `a b`, and
+/// `specials`, which take the ids after `ab`.
 fn tokenizer(specials: List<String>) -> BpeTokenizer {
     let mut tokens: List<String> = [];
     for let c of byte_chars() {
@@ -16,7 +29,25 @@ fn tokenizer(specials: List<String>) -> BpeTokenizer {
     }
     tokens.push("ab");
     tokens.extend(&specials);
-    return BpeTokenizer::new(&lines(tokens), &lines(["a b"]), specials);
+    return BpeTokenizer::new(&entries(&tokens), &triples([
+        [97, 98, 256],
+    ]), specials, TokenSpelling::ByteLevel, -1, []);
+}
+
+/// A SentencePiece tokenizer: `<unk>`, `<bos>`, every byte's `<0xXX>` token,
+/// then `▁`, `a`, `b`, `▁a`, `▁ab` and `é`, with `▁ a` merging before `▁a b`.
+/// Every encoding starts with `<bos>`.
+fn pieces() -> BpeTokenizer {
+    let mut tokens: List<String> = ["<unk>", "<bos>"];
+    for let b of 0..<256 {
+        tokens.push(byte_token(b));
+    }
+    tokens.extend(&(["▁", "a", "b", "▁a", "▁ab", "é"] as List<String>));
+    let merges = triples([
+        [258, 259, 261],
+        [261, 260, 262],
+    ]);
+    return BpeTokenizer::new(&entries(&tokens), &merges, ["<bos>"], TokenSpelling::Pieces, 0, [1]);
 }
 
 test "a pair the merges rank merges, and the rest stay bytes" {
@@ -36,4 +67,31 @@ test "of the special tokens starting at one place, the longest is taken" {
     let t = tokenizer(["<|im", "<|im_start|>"]);
     assert t.encode(&"<|im_start|>") == [258] as List<i32>;
     assert t.encode(&"<|im end") == [257, 32, 101, 110, 100] as List<i32>;
+}
+
+test "SentencePiece's spelling merges spaces as ▁ after the prefix" {
+    let t = pieces();
+    assert t.encode(&" ab b") == [1, 262, 258, 260] as List<i32>;
+    assert t.decode(&[262, 258, 260]) == " ab b";
+}
+
+test "a character the vocabulary lacks falls back to its bytes' tokens" {
+    let t = pieces();
+    assert t.encode(&"é日") == [1, 263, 232, 153, 167] as List<i32>;
+    assert t.decode(&[263, 232, 153, 167]) == "é日";
+}
+
+test "an added token in the prefix decodes as its own text" {
+    assert pieces().decode(&[1, 259]) == "<bos>a";
+}
+
+test "SentencePiece's spelling decodes an added token's ▁ as a space" {
+    let mut tokens: List<String> = ["<unk>"];
+    for let b of 0..<256 {
+        tokens.push(byte_token(b));
+    }
+    tokens.push("▁▁");
+    let t = BpeTokenizer::new(&entries(&tokens), &triples([]), ["▁▁"], TokenSpelling::Pieces, 0, []);
+    assert t.encode(&"▁▁") == [257] as List<i32>;
+    assert t.decode(&[257]) == "  ";
 }

@@ -1,7 +1,7 @@
 use { TreeMap } from "core:collections";
 use { to_string } from "core:json";
-use { ByteLevelBpe, read } from "./tokenizer_json.wado";
-use { byte_chars } from "./runtime/tokenizer.wado";
+use { BpePipeline, read } from "./tokenizer_json.wado";
+use { byte_chars, byte_token } from "./runtime/tokenizer.wado";
 
 global TINY: String = #include_str("../tests/models/tiny-gpt2/tokenizer.json");
 
@@ -69,15 +69,18 @@ fn refusal(stage: String, json: String) -> String {
 }
 
 test "GPT-2's pipeline reads as byte-level BPE" {
-    let Ok(ByteLevelBpe { tokens, merges, specials }) = read(&pipeline("", "")) else {
+    let Ok(BpePipeline { tokens, merges, specials, spelling, .. }) = read(&pipeline("", "")) else {
         panic("the pipeline is GPT-2's");
     };
     assert tokens.len() == 258;
     assert tokens[97] == "a";
     assert tokens[SPECIAL_ID] == "<|endoftext|>";
     assert tokens[257] == "ab";
-    assert merges == ["a b"] as List<String>;
+    assert merges == [
+        [97, 98, 257],
+    ] as List<[i32, i32, i32]>;
     assert specials == ["<|endoftext|>"] as List<String>;
+    assert spelling matches { ByteLevel };
 }
 
 test "the tiny GPT-2's tokenizer.json reads whole" {
@@ -87,7 +90,8 @@ test "the tiny GPT-2's tokenizer.json reads whole" {
     assert bpe.tokens.len() == 1024;
     assert bpe.tokens[0] == "<|endoftext|>";
     assert bpe.merges.len() == 767;
-    assert bpe.merges[0] == "Ġ t";
+    let [left, right, joined] = bpe.merges[0];
+    assert [bpe.tokens[left], bpe.tokens[right], bpe.tokens[joined]] == ["Ġ", "t", "Ġt"];
     assert bpe.specials == ["<|endoftext|>"] as List<String>;
 }
 
@@ -101,6 +105,7 @@ test "a stage Loam does not generate names itself" {
     assert refusal("decoder", "{\"type\": \"WordPiece\"}") == "decoder: WordPiece is not supported";
     assert refusal("model", "{\"type\": \"Unigram\"}") == "model: Unigram is not supported";
     assert refusal("post_processor", "{\"type\": \"TemplateProcessing\"}") == "post_processor: TemplateProcessing is not supported";
+    assert refusal("normalizer", "{\"type\": \"Replace\", \"pattern\": {\"String\": \" \"}, \"content\": \"_\"}") == "normalizer: Replace is not supported";
 }
 
 test "a setting that changes the ids Loam computes names itself" {
@@ -125,7 +130,9 @@ test "merges as pairs read as the strings the older files write" {
     let Ok(bpe) = read(&pipeline("model", pairs)) else {
         panic("a pair is a merge");
     };
-    assert bpe.merges == ["a b"] as List<String>;
+    assert bpe.merges == [
+        [97, 98, 257],
+    ] as List<[i32, i32, i32]>;
 }
 
 test "a vocabulary that does not spell what BpeTokenizer reads is malformed" {
@@ -146,6 +153,58 @@ test "a special token may hold what no byte is spelled as" {
         panic("a special token is text as it stands");
     };
     assert bpe.specials == ["<|endoftext|>", "<|im start|>"] as List<String>;
+}
+
+/// Gemma's pipeline over `<unk>`, `<bos>`, every byte's token, `▁`, `a` and
+/// `▁a`. `<bos>` is added at its own id, and `<eot>` extends the vocabulary.
+/// `byte_fallback` is `fallback`.
+fn gemma(fallback: String) -> String {
+    let mut tokens = TreeMap::<String, i32>::new();
+    tokens["<unk>"] = 0;
+    tokens["<bos>"] = 1;
+    for let b of 0..<256 {
+        tokens[byte_token(b)] = tokens.len();
+    }
+    for let token of ["▁", "a", "▁a"] {
+        tokens[token] = tokens.len();
+    }
+    let space = "{\"type\": \"Replace\", \"pattern\": {\"String\": \" \"}, \"content\": \"▁\"}";
+    let unspace = "{\"type\": \"Replace\", \"pattern\": {\"String\": \"▁\"}, \"content\": \" \"}";
+    let decoder = `{"type": "Sequence", "decoders": [${unspace}, {"type": "ByteFallback"}, {"type": "Fuse"}]}`;
+    let template = "{\"type\": \"TemplateProcessing\", \"single\": [{\"SpecialToken\": {\"id\": \"<bos>\", \"type_id\": 0}}, {\"Sequence\": {\"id\": \"A\", \"type_id\": 0}}], \"pair\": [], \"special_tokens\": {}}";
+    let added = "[{\"id\": 1, \"content\": \"<bos>\", \"special\": true}, {\"id\": 261, \"content\": \"<eot>\", \"special\": true}]";
+    let bpe = `{"type": "BPE", "vocab": ${to_string(&tokens).unwrap()}, "merges": [["▁", "a"]], "unk_token": "<unk>", "fuse_unk": true, "byte_fallback": ${fallback}}`;
+    return `{"added_tokens": ${added}, "normalizer": ${space}, "pre_tokenizer": null, "post_processor": ${template}, "decoder": ${decoder}, "model": ${bpe}}`;
+}
+
+test "Gemma's pipeline reads as SentencePiece's spelling, with its prefix" {
+    let Ok(bpe) = read(&gemma("true")) else {
+        panic("the pipeline is Gemma's");
+    };
+    assert bpe.spelling matches { Pieces };
+    assert bpe.tokens.len() == 262;
+    assert bpe.tokens[261] == "<eot>";
+    assert bpe.merges == [
+        [258, 259, 260],
+    ] as List<[i32, i32, i32]>;
+    assert bpe.specials == ["<bos>", "<eot>"] as List<String>;
+    assert bpe.unknown == 0;
+    assert bpe.prefix == [1] as List<i32>;
+}
+
+test "SentencePiece's spelling without byte tokens names itself" {
+    assert match read(&gemma("false")) {
+        Ok(_) => "",
+        Err(e) => `${e}`,
+    } == "model: SentencePiece's spelling without byte_fallback is not supported";
+}
+
+test "an added token matched only after the normalizer names itself" {
+    let json = gemma("true").replace("\"content\": \"<eot>\"", "\"content\": \"<eot>\", \"normalized\": true");
+    assert match read(&json) {
+        Ok(_) => "",
+        Err(e) => `${e}`,
+    } == "added_tokens: <eot>: normalized true is not supported";
 }
 
 test "text that is not JSON is malformed" {
