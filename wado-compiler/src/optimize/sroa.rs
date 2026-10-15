@@ -951,7 +951,7 @@ impl SoftCtx<'_> {
                 // Each borrow is rebuilt as its own literal, so a callee handed
                 // one candidate twice could tell the two apart (`ref_eq`).
                 let mut lent: IndexSet<u32> = IndexSet::default();
-                // The rebuilt literal is taken where the borrow stands, while
+                // The rebuilt literal is taken where the `&` stands, while
                 // the callee reads its referent after every argument has run.
                 let mut written_by_later = vec![IndexSet::default(); arg_ops.len()];
                 for i in (1..arg_ops.len()).rev() {

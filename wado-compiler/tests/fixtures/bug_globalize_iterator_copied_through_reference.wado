@@ -1,6 +1,6 @@
 // A cold function keeps `names.into_iter().enumerate()` as calls, which
-// `const_object_globalization` hoisted into a global because its borrow
-// reached no call. The loop copies the iterator out of that borrow uncopied,
+// `const_object_globalization` hoisted into a global because no call took a
+// reference to it. The loop reads the iterator out of that reference uncopied,
 // so `next` advanced the global, and the second call found it exhausted.
 
 use { println, Stdout } from "core:cli";

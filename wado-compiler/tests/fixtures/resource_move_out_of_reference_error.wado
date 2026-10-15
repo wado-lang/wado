@@ -1,4 +1,4 @@
-// Moving a resource out of a borrowed place is rejected (WEP 2026-05-21). A
+// Moving a resource out of a referenced place is rejected (WEP 2026-05-21). A
 // `&self` method keeps the receiver owned, so returning the interior `Fields`
 // would hand out a second owner of one move-only handle — a double-free. The
 // fix is to take `self` by value (consume) or return a freshly built resource.
@@ -20,4 +20,4 @@ export fn run() {
 }
 
 __DATA__
-{"compile_error": "cannot move resource `Fields` out of a borrow"}
+{"compile_error": "cannot move resource `Fields` out of a reference"}

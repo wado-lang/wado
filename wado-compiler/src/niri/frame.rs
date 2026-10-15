@@ -179,7 +179,7 @@ fn aliased_write_targets(targets: &[(u32, u32, Vec<u32>)], places: &[(u32, Vec<u
 }
 
 /// The locals something under `e` writes, through the channels
-/// [`clobbered_locals`] reads: an assignment, a mutable borrow, an argument
+/// [`clobbered_locals`] reads: an assignment, a `&mut`, an argument
 /// reaching storage.
 ///
 /// [`clobbered_locals`]: super::trackability::clobbered_locals
@@ -474,7 +474,7 @@ impl Interpreter<'_> {
     /// The program runs each argument in turn, while the frame runs the blocks
     /// first and reads the rest at the call. The two agree only where no block
     /// writes a local an argument ahead of it mentions, so a call that breaks
-    /// this is declined: a borrow of a boxed primitive reads as a value, so the
+    /// this is declined: a reference to a boxed primitive reads as a value, so the
     /// operand's shape cannot say which earlier argument would see the write.
     /// `None` on a decline, or when a block reaches no constant.
     fn exec_block_args(&mut self, body: &mut Body, args: &[Operand]) -> Option<()> {

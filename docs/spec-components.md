@@ -46,11 +46,11 @@ boundary:
   `List<u16>`.
 - `Array<T>` and the newtypes over it (`ByteArray`). A `List<T>` crosses in its
   place.
-- A reference to anything but a resource, such as `&List<i32>`. A borrowed
-  resource crosses as a `borrow` handle
+- A reference to anything but a resource, such as `&List<i32>`. A reference to
+  a resource crosses as a `borrow` handle
   ([Handles at the Boundary](#handles-at-the-boundary)).
 - A view: `Slice<T>`, `StrSlice`, the newtypes over them (`ByteSlice`), and any
-  struct with a field borrowing what is not a resource.
+  struct with a field referencing what is not a resource.
 
 A reference and a view both point into storage they do not own; pass an owned
 value such as a `List<T>` or a `String` instead.
@@ -315,20 +315,20 @@ The check follows control flow. A move on one branch of an `if` or `match` count
 
 A value that holds an affine resource, directly or through a field, element or payload, is move-only in the same way. It moves as a whole: a resource is not moved out of it on its own, so a consuming method (below) is how one is taken out.
 
-A method consumes a resource through a bare `self` receiver, and borrows it through `&self` or `&mut self` (see [Method Receiver: `self` by Value](./spec-memory.md#method-receiver-self-by-value)). `Option` and `Result` take `self` by value in `unwrap`, `expect`, `unwrap_or`, `unwrap_err` and `expect_err`, so extracting a resource consumes the container and leaves the resource with one owner.
+A method consumes a resource through a bare `self` receiver, and takes a reference to it through `&self` or `&mut self` (see [Method Receiver: `self` by Value](./spec-memory.md#method-receiver-self-by-value)). `Option` and `Result` take `self` by value in `unwrap`, `expect`, `unwrap_or`, `unwrap_err` and `expect_err`, so extracting a resource consumes the container and leaves the resource with one owner.
 
-#### No Move Out of a Borrow
+#### No Move Out of a Reference
 
-Returning a resource reached through a `&` or `&mut` parameter, `&self` included, is a compile error. A borrow leaves its referent with its owner, so the returned resource would have a second owner. The rule covers a field read, a dereference, a `match` binding over the borrowed value, and a `let` bound from any of these. A resource the function produces itself may be returned.
+Returning a resource reached through a `&` or `&mut` parameter, `&self` included, is a compile error. A reference leaves its referent with its owner, so the returned resource would have a second owner. The rule covers a field read, a dereference, a `match` binding over the referenced value, and a `let` bound from any of these. A resource the function produces itself may be returned.
 
-<!-- {"fixture":"spec_components_move_out_of_borrow.wado"} -->
+<!-- {"fixture":"spec_components_move_out_of_reference.wado"} -->
 
 ```wado
 struct Holder { f: Fields }
 
 impl Holder {
     fn peek(&self) -> Fields {
-        return self.f;       // ERROR: cannot move resource `Fields` out of a borrow
+        return self.f;       // ERROR: cannot move resource `Fields` out of a reference
     }
 }
 ```
