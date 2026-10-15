@@ -580,8 +580,8 @@ fn ref_args_that_escape(body: &Body, gate: &Gate<'_>) -> IndexSet<ExprId> {
     };
     for node in reachable_nodes(body) {
         match node {
-            // `let r = &LIT;` — the borrow reaches a call through `r`, or `*r`
-            // hands the referent's storage to a binding that may advance it.
+            // `let r = &LIT;` — the borrow reaches a call through `r`, or `r` is
+            // used other than to read: `let mut it = *r` shares the referent.
             NodeRef::Stmt(st) => {
                 if let StmtKind::Let {
                     local_index, value, ..

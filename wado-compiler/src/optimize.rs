@@ -508,7 +508,7 @@ fn run_pass(
     // The always-on check runs once, at the end of `optimize`; this one earns
     // its cost only when a developer wants the pass named.
     #[cfg(debug_assertions)]
-    if filter().enabled(PROMOTED_READ_AUDIT) {
+    if filter().enabled(NIR_AUDIT) {
         audit_nir(project, name);
     }
     changed
@@ -543,7 +543,7 @@ fn audit_assign_types(project: &NirPackage, pass: &str) {
 /// `WADO_TRACE` target that puts [`audit_nir`] at every pass
 /// boundary, so a break names the pass that caused it.
 #[cfg(debug_assertions)]
-const PROMOTED_READ_AUDIT: &str = "promoted_reads";
+const NIR_AUDIT: &str = "promoted_reads";
 
 /// Every local a promoted operand reads still has a definition. A pooled read
 /// is invisible to a skeleton walk, so a pass that drops the binding leaves the
