@@ -1202,9 +1202,13 @@ fn structural_loop_guard(
             if modifies_any_root(engine, NodeRef::Stmt(s), &[floor.var]) {
                 break;
             }
-            changed |= refute_panic_checks(engine, NodeRef::Stmt(s), binds, Some(floor), |_, _, _, _| {
-                false
-            });
+            changed |= refute_panic_checks(
+                engine,
+                NodeRef::Stmt(s),
+                binds,
+                Some(floor),
+                |_, _, _, _| false,
+            );
         }
         return changed;
     }
@@ -1382,8 +1386,9 @@ fn part_holds(
 ) -> bool {
     match part {
         Conjunct::Lt(left, right) => refute(engine, binds, left, right),
-        Conjunct::AtLeast(v, off, f) => floor
-            .is_some_and(|floor| floor.var == v && floor.lo.checked_add(off).is_some_and(|l| l >= f)),
+        Conjunct::AtLeast(v, off, f) => floor.is_some_and(|floor| {
+            floor.var == v && floor.lo.checked_add(off).is_some_and(|l| l >= f)
+        }),
     }
 }
 
@@ -1414,22 +1419,16 @@ fn written_conjuncts(engine: &Engine, cond: Operand) -> Vec<ConjunctSlot> {
         return Vec::new();
     };
     let mut out = Vec::new();
-    collect_written_conjuncts(engine, inner, &mut out);
+    if is_conjunction(engine, inner) {
+        collect_written_conjuncts(engine, inner, &mut out);
+    }
     out
 }
 
 fn collect_written_conjuncts(engine: &Engine, e: ExprId, out: &mut Vec<ConjunctSlot>) {
-    let ExprKind::Binary {
-        left,
-        op: NirBinaryOp::And | NirBinaryOp::BitAnd,
-        right,
-    } = engine.body.exprs[e].kind
-    else {
-        return;
+    let ExprKind::Binary { left, right, .. } = engine.body.exprs[e].kind else {
+        unreachable!("only a conjunction is walked");
     };
-    if engine.body.exprs[e].type_id != TypeTable::BOOL {
-        return;
-    }
     for (operand, is_left) in [(left, true), (right, false)] {
         match operand {
             Operand::Expr(child) if is_conjunction(engine, child) => {
@@ -1555,10 +1554,13 @@ fn apply_dominating_if(engine: &mut Engine, s: StmtId, binds: &Binds) -> bool {
     collect_and_operands(engine, binds, cond, &mut conjuncts);
     // `<` proves `var + k < bound`; a later `var + j >= bound` is refuted only
     // for `j == k`, since Wado add wraps (`j < k` need not shrink the index).
-    let Some((var, k, bound)) = conjuncts.iter().find_map(|&c| match parse_cmp(engine, binds, c) {
-        Some((var, k, bound, NirBinaryOp::Lt)) if k >= 0 => Some((var, k, bound)),
-        _ => None,
-    }) else {
+    let Some((var, k, bound)) = conjuncts
+        .iter()
+        .find_map(|&c| match parse_cmp(engine, binds, c) {
+            Some((var, k, bound, NirBinaryOp::Lt)) if k >= 0 => Some((var, k, bound)),
+            _ => None,
+        })
+    else {
         return false;
     };
     let floor = conjuncts
