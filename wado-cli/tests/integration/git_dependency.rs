@@ -381,3 +381,66 @@ fn inline_git_source_in_a_package_member_after_a_data_section() {
         .assert()
         .success();
 }
+
+/// Two members naming one inline git specifier at two refs bind it to two
+/// packages, which one package check cannot load both of.
+#[test]
+fn inline_git_specifier_at_two_refs_across_members_is_an_error() {
+    let tmp = tempfile::tempdir().unwrap();
+    let root = tmp.path();
+    let cache = root.join("wado-cache");
+
+    let greet = root.join("greet");
+    fs::create_dir_all(greet.join("src")).unwrap();
+    fs::write(
+        greet.join("src/lib.wado"),
+        "export fn hello() -> i32 {\n    return 1;\n}\n",
+    )
+    .unwrap();
+    git(&greet, &["init", "-q", "-b", "main"]);
+    for version in ["0.1.0", "0.2.0"] {
+        fs::write(
+            greet.join("wado.toml"),
+            format!(
+                "[package]\nname = \"greet\"\nversion = \"{version}\"\nlib = \"src/lib.wado\"\n"
+            ),
+        )
+        .unwrap();
+        git(&greet, &["add", "-A"]);
+        git(&greet, &["commit", "-q", "-m", version]);
+        git(&greet, &["tag", &format!("v{version}")]);
+    }
+    let url = format!("file://{}", greet.display());
+
+    let app = root.join("app");
+    fs::create_dir_all(&app).unwrap();
+    fs::write(
+        app.join("wado.toml"),
+        "[package]\nname = \"app\"\nnamespace = \"wado\"\nversion = \"0.1.0\"\nlib = \"lib.wado\"\n",
+    )
+    .unwrap();
+    let member = |git_ref: &str, body: &str| {
+        format!(
+            "use {{ hello }} from \"greet\" with {{ git: \"{url}\", ref: \"{git_ref}\" }};\n\n{body}"
+        )
+    };
+    fs::write(
+        app.join("lib.wado"),
+        member("v0.1.0", "pub fn one() -> i32 {\n    return hello();\n}\n"),
+    )
+    .unwrap();
+    fs::write(
+        app.join("b_test.wado"),
+        member("v0.2.0", "test { assert hello() == 1; }\n"),
+    )
+    .unwrap();
+
+    wado_in(&app)
+        .env("WADO_ROOT", &cache)
+        .arg("check")
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains(
+            "dependency \"greet\" names two sources",
+        ));
+}

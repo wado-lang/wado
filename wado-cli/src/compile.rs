@@ -531,6 +531,14 @@ async fn manifest_and_component_index(
         let inline_git = resolve_inline_git_dependencies(source, tier).await?;
         for (name, path) in inline_git.resolved {
             index.unresolved.swap_remove(&name);
+            if let Some(bound) = index.resolved.get(&name)
+                && *bound != path
+            {
+                return Err(format!(
+                    "dependency {name:?} names two sources: {bound} and {path}; \
+                     one specifier resolves to one package"
+                ));
+            }
             index.resolved.insert(name, path);
         }
         for (name, reason) in inline_git.unresolved {
