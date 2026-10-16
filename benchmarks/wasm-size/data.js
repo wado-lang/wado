@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1792096395670,
+  "lastUpdate": 1792131235987,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -67465,6 +67465,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/ad991424a4eb7ead6e13b7d1d93758747ed57dd4"
         },
         "date": 1792096395215,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 2955,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 7350,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 19942,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 337123,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "79a01ff9e30acf0172516401ad297443fb48fefa",
+          "message": "Merge pull request #2362 from wado-lang/claude/variant-inherent-impl-ubyilu\n\nrefactor(core:value): render Value's Inspect through its payloads' own impls",
+          "timestamp": "2026-10-16T14:54:10+09:00",
+          "tree_id": "f719065e157748bbfecac9fa4bc46a0928f648e8",
+          "url": "https://github.com/wado-lang/wado/commit/79a01ff9e30acf0172516401ad297443fb48fefa"
+        },
+        "date": 1792131234952,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
