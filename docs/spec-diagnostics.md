@@ -243,7 +243,9 @@ An item is used when one of these roots reaches it:
   entry's are offered beyond the package. Neither is an `internal` item.
 - An `export` function in any module, since any module may be compiled as an
   entry of its own, as `wado run` runs a script.
-- A function whose name a world export names.
+- A function of an entry whose name a world export names, so a misdeclared
+  entry point (`fn run()` without `export`) reaches the world's check rather
+  than this lint.
 - A method. A method is not itself reported, and a free function that only a
   method calls counts as used.
 - A struct field default, an associated constant's value, and the default body
