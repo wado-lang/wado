@@ -1249,33 +1249,33 @@ fn perform_fusion(
     let (lb_block, role) = (*lb_block, *role);
 
     // Extract the arm blocks from the consumer statement.
-    let (arms, result_type) = match &engine.body.stmts[if_s].kind {
-        StmtKind::If {
-            then_block,
-            else_block,
-            ..
-        } => (vec![Some(*then_block), *else_block], TypeTable::UNIT),
-        _ => {
-            let match_expr =
-                consumer_match(engine.body, if_s).expect("guarded by check_fusion_preconditions");
-            let ExprKind::Match { arms, .. } = &engine.body.exprs[match_expr].kind else {
-                unreachable!()
-            };
-            let bodies: Vec<Operand> = arms.iter().map(|arm| arm.body).collect();
-            let result_type = engine.body.exprs[match_expr].type_id;
-            let arms = bodies
-                .into_iter()
-                .map(|arm_body| {
-                    // A unit-valued arm whose value nothing reads (the `None`
-                    // case) contributes no block.
-                    let unit = arm_body
-                        .as_value()
-                        .is_some_and(|v| matches!(engine.body.values.kind(v), ValueKind::Unit));
-                    (yields || !unit).then(|| arm_body_operand_into_block(engine, arm_body, span))
-                })
-                .collect();
-            (arms, result_type)
-        }
+    let (arms, result_type) = if let StmtKind::If {
+        then_block,
+        else_block,
+        ..
+    } = &engine.body.stmts[if_s].kind
+    {
+        (vec![Some(*then_block), *else_block], TypeTable::UNIT)
+    } else {
+        let match_expr =
+            consumer_match(engine.body, if_s).expect("guarded by check_fusion_preconditions");
+        let ExprKind::Match { arms, .. } = &engine.body.exprs[match_expr].kind else {
+            unreachable!()
+        };
+        let bodies: Vec<Operand> = arms.iter().map(|arm| arm.body).collect();
+        let result_type = engine.body.exprs[match_expr].type_id;
+        let arms = bodies
+            .into_iter()
+            .map(|arm_body| {
+                // A unit-valued arm whose value nothing reads (the `None`
+                // case) contributes no block.
+                let unit = arm_body
+                    .as_value()
+                    .is_some_and(|v| matches!(engine.body.values.kind(v), ValueKind::Unit));
+                (yields || !unit).then(|| arm_body_operand_into_block(engine, arm_body, span))
+            })
+            .collect();
+        (arms, result_type)
     };
 
     let value = bind_value(engine, info.value);

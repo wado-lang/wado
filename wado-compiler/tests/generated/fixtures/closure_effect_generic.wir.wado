@@ -133,7 +133,7 @@ fn "closure_effect_generic.wado/run"() with Stdout {
     let $sroa_$iter_0_repr_82: ref Array<i32>;
     let $sroa_$iter_0_index_83: i32;
     let start_126: i32;
-    let start_185: i32;
+    let start_181: i32;
     total = struct.new "core:prelude/types.wado//Box<i32>" { value: 0 };
     $sroa_$iter_0_repr_82 = global:closure_effect_generic.wado::$const_obj_0;
     $sroa_$iter_0_index_83 = 0;
@@ -237,13 +237,13 @@ fn "closure_effect_generic.wado/run"() with Stdout {
                 cold_path;
                 "core:prelude/string.wado/core:prelude/string.wado/String::grow"($tmpl_buf_77, is_negative_46);
             }
-            start_185 = $tmpl_buf_77.used;
+            start_181 = $tmpl_buf_77.used;
             $tmpl_buf_77.used = is_negative_46;
             arr = $tmpl_buf_77.repr;
-            item_28 = start_185 + item_28;
+            item_28 = start_181 + item_28;
             b27: block {
                 l28: loop {
-                    break_if b27 (item_28 - start_185) < 2;
+                    break_if b27 (item_28 - start_181) < 2;
                     q = x_50 /u 100_i64;
                     tens = local.tee pair(builtin::i32_wrap_i64(x_50 - (q * 100_i64))) / 10;
                     builtin::array_set_u8(arr, item_28 - 1, ((48 + pair) - (tens * 10)) & 255);
@@ -253,14 +253,14 @@ fn "closure_effect_generic.wado/run"() with Stdout {
                     continue l28;
                 };
             };
-            if item_28 > start_185 {
-                builtin::array_set_u8(arr, start_185, (48 + builtin::i32_wrap_i64(x_50 %u 10_i64)) & 255);
+            if item_28 > start_181 {
+                builtin::array_set_u8(arr, start_181, (48 + builtin::i32_wrap_i64(x_50 %u 10_i64)) & 255);
             }
-            start_185 = builtin::i32_wrap_i64(local.tee packed("wasi/stream-new"()));
+            start_181 = builtin::i32_wrap_i64(local.tee packed("wasi/stream-new"()));
             item_28 = builtin::i32_wrap_i64(packed >> 32_i64);
-            start_185 = "closure_effect_generic.wado/$cm_binding__Stdout_write_via_stream"(start_185);
+            start_181 = "closure_effect_generic.wado/$cm_binding__Stdout_write_via_stream"(start_181);
             "core:rt/write_string_to_stream$dae[add_newline]"(item_28, $tmpl_buf_77.repr, $tmpl_buf_77.used);
-            "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(start_185);
+            "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(start_181);
             continue l4;
         };
     };

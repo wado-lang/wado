@@ -73,7 +73,7 @@ fn "const_global_scalar_read.wado/run"() with Stdout {
     let j: i32;
     let $local_2: ref "core:prelude/string.wado//String";
     let x: i64;
-    let start_79: i32;
+    let start_84: i32;
     total = 0;
     j = 0;
     b0: block {
@@ -92,17 +92,17 @@ fn "const_global_scalar_read.wado/run"() with Stdout {
             cold_path;
             "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_2, j);
         }
-        start_79 = $local_2.used;
+        start_84 = $local_2.used;
         $local_2.used = j;
-        builtin::array_set_u8($local_2.repr, start_79, 45);
+        builtin::array_set_u8($local_2.repr, start_84, 45);
     } else {
     }
-    if @unlikely(local.tee start_79($local_2.used + total) > builtin::array_len($local_2.repr)) {
+    if @unlikely(local.tee start_84($local_2.used + total) > builtin::array_len($local_2.repr)) {
         cold_path;
-        "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_2, start_79);
+        "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_2, start_84);
     }
     j = $local_2.used;
-    $local_2.used = start_79;
+    $local_2.used = start_84;
     "core:prelude/primitive.wado/write_decimal_digits"($local_2.repr, j, x, total);
     total = builtin::i32_wrap_i64(local.tee x("wasi/stream-new"()));
     j = builtin::i32_wrap_i64(x >> 32_i64);

@@ -1639,12 +1639,11 @@ pub(super) fn break_guard_cmp(
     binds: &Binds,
     cond: Operand,
 ) -> Option<(u32, i64, BoundKey, NirBinaryOp)> {
-    match negated_operand(engine, binds, cond) {
-        Some(inner) => parse_cmp(engine, binds, inner),
-        None => {
-            let (var, off, bound, op) = parse_cmp(engine, binds, cond)?;
-            Some((var, off, bound, op.opposite()?))
-        }
+    if let Some(inner) = negated_operand(engine, binds, cond) {
+        parse_cmp(engine, binds, inner)
+    } else {
+        let (var, off, bound, op) = parse_cmp(engine, binds, cond)?;
+        Some((var, off, bound, op.opposite()?))
     }
 }
 

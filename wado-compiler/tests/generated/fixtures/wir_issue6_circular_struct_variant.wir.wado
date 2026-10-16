@@ -136,7 +136,7 @@ global global:core:prelude/primitive.wado::$const_obj_13: ref "core:prelude/stri
 
 fn "wir_issue6_circular_struct_variant.wado/run"() with Stdout {
     let total: i32;
-    let $local_8_8: ref "core:prelude/string.wado//String";
+    let $local_8: ref "core:prelude/string.wado//String";
     let is_negative_23: bool;
     let x: i64;
     let start_75: i32;
@@ -145,30 +145,30 @@ fn "wir_issue6_circular_struct_variant.wado/run"() with Stdout {
         "wir_issue6_circular_struct_variant.wado/run$cold0"(total);
         unreachable;
     }
-    $local_8_8 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
+    $local_8 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
     is_negative_23 = total < 0;
     total = "core:prelude/primitive.wado/count_digits_u64"(local.tee x(x = builtin::i64_extend_i32_s(total); select i64(x < 0_i64, 0_i64 - x, x)));
     if is_negative_23 {
-        if @unlikely(local.tee is_negative_23(0 + 1) > builtin::array_len($local_8_8.repr)) {
+        if @unlikely(local.tee is_negative_23(0 + 1) > builtin::array_len($local_8.repr)) {
             cold_path;
-            "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_8_8, is_negative_23);
+            "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_8, is_negative_23);
         }
-        start_75 = $local_8_8.used;
-        $local_8_8.used = is_negative_23;
-        builtin::array_set_u8($local_8_8.repr, start_75, 45);
+        start_75 = $local_8.used;
+        $local_8.used = is_negative_23;
+        builtin::array_set_u8($local_8.repr, start_75, 45);
     } else {
     }
-    if @unlikely(local.tee start_75($local_8_8.used + total) > builtin::array_len($local_8_8.repr)) {
+    if @unlikely(local.tee start_75($local_8.used + total) > builtin::array_len($local_8.repr)) {
         cold_path;
-        "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_8_8, start_75);
+        "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_8, start_75);
     }
-    is_negative_23 = $local_8_8.used;
-    $local_8_8.used = start_75;
-    "core:prelude/primitive.wado/write_decimal_digits"($local_8_8.repr, is_negative_23, x, total);
+    is_negative_23 = $local_8.used;
+    $local_8.used = start_75;
+    "core:prelude/primitive.wado/write_decimal_digits"($local_8.repr, is_negative_23, x, total);
     total = builtin::i32_wrap_i64(local.tee x("wasi/stream-new"()));
     is_negative_23 = builtin::i32_wrap_i64(x >> 32_i64);
     total = "wir_issue6_circular_struct_variant.wado/$cm_binding__Stdout_write_via_stream"(total);
-    "core:rt/write_string_to_stream$dae[add_newline]"(is_negative_23, $local_8_8.repr, $local_8_8.used);
+    "core:rt/write_string_to_stream$dae[add_newline]"(is_negative_23, $local_8.repr, $local_8.used);
     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(total);
 }
 

@@ -137,21 +137,21 @@ fn "licm_hoist_through_ref_forwarding.wado/licm_hoist_through_ref_forwarding.wad
     let self_5: i32;
     let new_used: i32;
     let start_21: i32;
-    let $licm_repr_37: ref Array<u8>;
+    let $licm_repr_35: ref Array<u8>;
     self_5 = s.used;
     i = 0;
-    $licm_repr_37 = s.repr;
+    $licm_repr_35 = s.repr;
     b2: block {
         l3: loop {
             break_if b2 i >= self_5;
-            if builtin::array_get_value<u8>($licm_repr_37, i) != 34 {
+            if builtin::array_get_value<u8>($licm_repr_35, i) != 34 {
                 i = i + 1;
                 continue l3;
             }
             if @unlikely(local.tee new_used(buf.used + 3) > builtin::array_len(buf.repr)) {
                 cold_path;
                 "core:prelude/string.wado/core:prelude/string.wado/String::grow"(buf, new_used);
-                $licm_repr_37 = s.repr;
+                $licm_repr_35 = s.repr;
             }
             start_21 = buf.used;
             buf.used = new_used;
