@@ -40,15 +40,19 @@ pub fn unused_import_diagnostics(sem: &Semantics) -> Vec<Diagnostic> {
                 && !decl.is_export
                 && !attrs_allow(&decl.attrs, lint::UNUSED_IMPORTS)
             {
-                out.extend(uses.unused_in(decl).into_iter().map(|(name, span)| Diagnostic {
-                    severity: Severity::Warning,
-                    code: Code::UnusedImport,
-                    message: format!("import `{name}` is never used"),
-                    span: Some(DiagnosticSpan::from_span(
-                        &span,
-                        Some(src.source_path().as_str()),
-                    )),
-                }));
+                out.extend(
+                    uses.unused_in(decl)
+                        .into_iter()
+                        .map(|(name, span)| Diagnostic {
+                            severity: Severity::Warning,
+                            code: Code::UnusedImport,
+                            message: format!("import `{name}` is never used"),
+                            span: Some(DiagnosticSpan::from_span(
+                                &span,
+                                Some(src.source_path().as_str()),
+                            )),
+                        }),
+                );
             }
         }
     }
@@ -59,7 +63,8 @@ pub fn unused_import_diagnostics(sem: &Semantics) -> Vec<Diagnostic> {
 struct Uses<'a> {
     resolutions: &'a Resolutions,
     module: &'a ModuleSource,
-    /// Every method name the module calls. A trait's methods are candidates
+    /// Every method name the module calls, and every last segment of a
+    /// qualified path (`T::method`). A trait's methods are candidates
     /// only where the trait is in scope, so importing one for its methods
     /// uses it without naming it.
     method_names: IndexSet<String>,
@@ -96,8 +101,7 @@ impl Uses<'_> {
                         .collect();
                     // Naming the interface is what imports its functions, so it
                     // is unused only with all of them.
-                    if unused_functions.len() == functions.len()
-                        && !self.uses_local(interface_name)
+                    if unused_functions.len() == functions.len() && !self.uses_local(interface_name)
                     {
                         unused.push((interface_name.clone(), *name_span));
                     } else {
