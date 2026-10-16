@@ -17,7 +17,6 @@ use {
 } from "./ir.wado";
 use {
     group_field_base_name,
-    single_alt_group_type_name,
     single_alt_group_field_name,
     token_group_field_name,
     general_group_field_name,
@@ -49,7 +48,6 @@ use {
 use { bits_set, bits_test, sets_overlap, subtract_sets, union_kind_arrays } from "./token_kinds.wado";
 use { PARSER_HANDLE, DISPATCH_KIND_LOCAL, FOLLOW_PARAM } from "./ident.wado";
 use { GateScope, SCAN_GATE_HANDLE, SCAN_GATE_TYPE, runnable_gate_scope } from "./scan_gate.wado";
-use { DiagnosticKind, DiagnosticOwner, DiagnosticSite } from "./gir.wado";
 use { ATN_HANDLE, ATN_PREDICTOR_TYPE, EmitContext, SCAN_MEMO_HANDLE, scan_fn_name } from "./emit_context.wado";
 use { is_nullable } from "./grammar_analysis.wado";
 use { RuleOverlap } from "./rule_overlap.wado";
@@ -110,7 +108,6 @@ use {
     EmptyAltAdmits,
     GroupOp,
     TokenOnlyShape,
-    GeneralShape,
     ListLabelOp,
     ScanBody,
     ScanElement,
@@ -189,7 +186,7 @@ use {
     expect_set_call,
     kind_bitset_words,
 } from "./kind_set_gen.wado";
-use { group_alt_classes, non_greedy_exit_by_atn, non_greedy_static_undecided, rebind_op_field } from "./lower.wado";
+use { group_alt_classes, non_greedy_exit_by_atn, non_greedy_static_undecided } from "./lower.wado";
 
 /// Append the defaulted runtime FOLLOW-continuation argument to a
 /// parse/scan/LR function signature, BEFORE any `min_prec` so a

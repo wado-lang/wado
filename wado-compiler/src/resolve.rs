@@ -92,6 +92,8 @@ pub struct Resolutions {
     /// render it.
     defs: Arc<DefTable>,
     refs: IndexMap<AstId, Resolution>,
+    /// The declarations each module's reference sites reach.
+    referenced: IndexMap<ModuleSource, hashmap::IndexSet<DefId>>,
     /// The module scopes, layered. Held here rather than recomputed, so the
     /// site walk and a name-only caller run one implementation and cannot
     /// answer differently.
@@ -274,6 +276,7 @@ impl Resolutions {
     ) -> Self {
         let scopes = Scopes::build(modules, symbols, &defs);
         let mut refs = IndexMap::default();
+        let mut referenced = IndexMap::default();
         let mut shadowings = Vec::new();
         let mut redeclarations = Vec::new();
         let mut effect_binders = hashmap::IndexSet::default();
@@ -288,6 +291,7 @@ impl Resolutions {
                 bindings: Vec::new(),
                 scopes: &scopes,
                 refs: &mut refs,
+                referenced: hashmap::IndexSet::default(),
                 shadowings: &mut shadowings,
                 redeclarations: &mut redeclarations,
                 effect_binders: &mut effect_binders,
@@ -302,10 +306,12 @@ impl Resolutions {
             for item in &module.items {
                 resolver.visit_item(item);
             }
+            referenced.insert(module_source.clone(), resolver.referenced);
         }
         Self {
             defs,
             refs,
+            referenced,
             scopes,
             shadowings,
             redeclarations,
@@ -319,6 +325,14 @@ impl Resolutions {
     #[must_use]
     pub fn fn_bound_signature(&self, binder: AstId) -> Option<&ast::FunctionType> {
         self.fn_bound_binders.get(&binder)
+    }
+
+    /// Whether a reference site `module` wrote reaches `def`.
+    #[must_use]
+    pub fn references_from(&self, module: &ModuleSource, def: DefId) -> bool {
+        self.referenced
+            .get(module)
+            .is_some_and(|reached| reached.contains(&def))
     }
 
     /// Every binder that took a name already in scope.
@@ -652,6 +666,8 @@ struct Resolver<'a> {
     bindings: Vec<IndexMap<String, Span>>,
     scopes: &'a Scopes,
     refs: &'a mut IndexMap<AstId, Resolution>,
+    /// The declarations this module's sites have reached so far.
+    referenced: hashmap::IndexSet<DefId>,
     shadowings: &'a mut Vec<Shadowing>,
     redeclarations: &'a mut Vec<Redeclaration>,
     /// Off under an `#[allow(shadowed_name)]` on any enclosing node, the module
@@ -724,6 +740,9 @@ impl Resolver<'_> {
     }
 
     fn record(&mut self, site: AstId, answer: Resolution) {
+        if let Resolution::Def(def) = answer {
+            self.referenced.insert(def);
+        }
         self.refs.insert(site, answer);
     }
 

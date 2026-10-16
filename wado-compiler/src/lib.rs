@@ -100,6 +100,7 @@ pub mod trace;
 pub mod trait_solver;
 pub mod unparse;
 pub mod unresolved_types;
+pub mod unused_import;
 pub mod wasm_module_calls;
 pub mod wir;
 pub mod wir_build;
@@ -499,8 +500,9 @@ pub async fn compile_with_host<H: CompilerHost>(
 
 /// Build unused-item warnings from the liveness classification: `DeadFunction`
 /// / `DeadGlobal` (reached by neither production nor tests) and
-/// `TestOnlyFunction` / `TestOnlyGlobal` (reached only by `test` blocks).
-/// Pure over `Semantics`; `is_test_world` suppresses the `TestOnly*` warnings.
+/// `TestOnlyFunction` / `TestOnlyGlobal` (reached only by `test` blocks), then
+/// `UnusedImport`. Pure over `Semantics`; `is_test_world` suppresses the
+/// `TestOnly*` warnings.
 fn unused_diagnostics(sem: &semantics::Semantics, is_test_world: bool) -> Vec<Diagnostic> {
     let mut out = Vec::new();
     let mut collect = |ids: &[AstId], fn_code: Code, global_code: Code, reason: &str| {
@@ -556,6 +558,7 @@ fn unused_diagnostics(sem: &semantics::Semantics, is_test_world: bool) -> Vec<Di
         );
     }
 
+    out.extend(unused_import::unused_import_diagnostics(sem));
     out
 }
 

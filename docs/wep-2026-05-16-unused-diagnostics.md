@@ -49,10 +49,11 @@ analysis, producing `Severity::Warning` diagnostics through the
 existing `CompilerHost`. Two passes contribute, both consuming
 `&Semantics` and running before `reify`:
 
-1. Reference pass — walks `ModuleSemantics.bindings` (use→def edges)
-   for every user-authored module. Emits `UnusedImport`,
-   `UnusedVariable`, `UnusedParameter`. A binding is reported when
-   no edge has it as the def-side.
+1. Reference pass — for every user-authored module, reports a binding
+   no reference resolves to. Emits `UnusedImport`, `UnusedVariable`,
+   `UnusedParameter`. Imports read the resolver's per-module
+   referenced-definition set (`Resolutions::references_from`), since
+   the resolver is what decides which tier a name lands on.
 2. Liveness pass — the elaborate-time DCE pass introduced by
    [elaborator rearchitecture](./wep-2026-05-26-elaborator-rearchitecture.md).
    Computes source-level reachability from world-export roots over
@@ -92,8 +93,6 @@ optimize-time and silent.
 - `dead_type`, `dead_trait_impl`, `unreachable_pattern`, `dead_closure_functor`
 - The `unused` lint group and `#[deny(...)]` (only `#[allow(dead_code)]`,
   item- and module-level, is implemented — see Suppression)
-- Per-`UseItem::InterfaceFunctions` granularity (function-level inside
-  an interface import)
 - Workspace-aware multi-package root computation
 - Preserving `pub`-only items in `optimize/dce.rs` for the not-yet-implemented
   provider-metadata standalone-`.wasm` publish path (see Reachability roots)
@@ -220,6 +219,8 @@ attribute is baked into every emitted file.
   `wado format` is expected to produce when auto-fixing.
 - `Wildcard` imports (`use _ from "..."`) are silent — they exist for
   side effects.
+- `#[allow(unused_imports)]` on a `use`, or `#![allow(unused_imports)]`
+  on the module, waives `UnusedImport`.
 - `#[allow(dead_code)]` on a function or global waives its
   `DeadFunction` / `DeadGlobal` / `TestOnlyFunction` / `TestOnlyGlobal`
   lint — for unavoidable unused items (e.g. a library module being built
@@ -251,23 +252,27 @@ attribute is baked into every emitted file.
 
 #### Unused imports
 
-Walk every `UseDecl` in user-authored modules. For each `UseItem`:
+`unused_import.rs` walks every file-private `use` in a user-authored
+module. The resolver records, per module, every definition a
+reference resolved to; an import is used when its import-tier
+`DefId` (`Resolutions::imported_as`) is in that set. For each `UseItem`:
 
-- `Simple { id, .. }` and `Namespace { name, .. }`: report
-  `UnusedImport` when no entry in `Semantics::references` has the
-  item's use-site `SymbolKey` as its `use_key` and no entry resolves to
-  the item's imported `def_key`.
+- `Simple`: reported when its local name (the alias, or the name) is
+  unused.
+- `Namespace`: used when any `ns$member` it offers is referenced.
+- `InterfaceFunctions`: the interface is reported only when it and every
+  function listed with it are unused; otherwise each unused function is.
 - `Wildcard`: skipped (side-effect imports).
-- `InterfaceFunctions`: reported only at the whole-`UseDecl` level for
-  MVP; per-function granularity is deferred.
 
-If every item in a single `UseDecl` is unused, emit one diagnostic at
-`UseDecl.span`; otherwise emit per-item diagnostics at
-`AstIndex::name_span_of(item.id)`.
+A trait has no reference site when only its methods are called: the
+import puts the methods in scope. A trait import therefore counts as
+used when the module calls a method, or names a path segment, sharing
+a name with one of the trait's members.
 
-Prerequisite check: confirm `elaborator` records `UseItem::Simple.id` as
-a use-site in `references` during use-decl resolution. If not, add the
-single `record_reference_to_decl` call there.
+An import the resolver did not resolve counts as used, since its error
+is reported already. `pub`, `internal` and `export` uses are
+re-exports and never reported. Each diagnostic sits at the item's
+name.
 
 #### Unused variables and parameters
 
@@ -367,10 +372,10 @@ land with stage 6 of the rearchitecture (see
 
 #### Phase 2 — reference pass
 
-- [ ] Confirm the elaborator records `UseItem::Simple.id` as a use-site; patch if missing.
-- [ ] Implement the reference-pass emitter (imports, locals, params) against `Semantics`.
-- [ ] Wire into `compile_with_options` and `Engine::diagnostics`.
-- [ ] Add fixtures under `tests/fixtures/unused_*.wado`; touch `tests/e2e.rs`.
+- [x] Record each module's referenced definitions in the resolver.
+- [x] Implement the import emitter (`unused_import.rs`), wired through
+  `unused_diagnostics`, with `unused_import.wado`.
+- [ ] Implement the locals and params emitter.
 
 #### Phase 3 — liveness pass and DeadFunction / DeadGlobal
 
@@ -559,16 +564,15 @@ the ref-parameter detection (`ResolvedType::Ref` / `MutRef` over
 #### Phase 4 — CLI wiring and reference pass
 
 - [ ] `wado-cli`: add `--no-unused` flag for `compile` / `run` / `serve` / `dump`.
-- [ ] Reference pass: `UnusedImport` / `UnusedVariable` / `UnusedParameter`.
+- [x] Reference pass: `UnusedImport`.
+- [ ] Reference pass: `UnusedVariable` / `UnusedParameter`.
 - [ ] Method-level dead detection (the dispatch edges; stop seeding every method live).
 
 ### Test plan
 
 E2E fixtures (under `tests/fixtures/`):
 
-- `unused_import_basic.wado`
-- `unused_import_partial.wado`
-- `unused_import_wildcard_silent.wado`
+- `unused_import.wado`
 - `unused_var_basic.wado`
 - `unused_var_underscore_silent.wado`
 - `unused_param_basic.wado`
@@ -639,6 +643,9 @@ through the diagnostics path.
   reaches. A single-file compile and the editor do not load the whole package.
 - A namespace re-export (`pub use ns from "./m.wado"`) seeds nothing in package
   mode, so what it offers reports as unused.
+- A trait import counts as used by name alone: calling another type's method
+  that shares a name with one of the trait's members keeps an unused trait
+  import silent.
 - Package mode elaborates every member on one thread, and runs every member's
   Kiln pipeline one at a time. On Gale it takes under twice as long as
   checking the declared entries alone.

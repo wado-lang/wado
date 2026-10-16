@@ -186,6 +186,8 @@ pub enum Code {
     TestOnlyFunction,
     /// A global is reached only from `test` blocks, never from production.
     TestOnlyGlobal,
+    /// A `use` brings in a name its module never refers to.
+    UnusedImport,
     /// A binder takes a name that already reaches a declaration or an enclosing
     /// binding.
     ShadowedName,
@@ -270,7 +272,11 @@ impl Code {
     pub fn is_unused_lint(&self) -> bool {
         matches!(
             self,
-            Code::DeadFunction | Code::DeadGlobal | Code::TestOnlyFunction | Code::TestOnlyGlobal
+            Code::DeadFunction
+                | Code::DeadGlobal
+                | Code::TestOnlyFunction
+                | Code::TestOnlyGlobal
+                | Code::UnusedImport
         )
     }
 }
@@ -324,6 +330,7 @@ impl std::fmt::Display for Code {
             Code::DeadGlobal => "DEAD_GLOBAL",
             Code::TestOnlyFunction => "TEST_ONLY_FUNCTION",
             Code::TestOnlyGlobal => "TEST_ONLY_GLOBAL",
+            Code::UnusedImport => "UNUSED_IMPORT",
             Code::ShadowedName => "SHADOWED_NAME",
             Code::UndecidedEffects => "UNDECIDED_EFFECTS",
             Code::SelfComparison => "SELF_COMPARISON",
@@ -906,6 +913,7 @@ mod tests {
             Code::DeadGlobal,
             Code::TestOnlyFunction,
             Code::TestOnlyGlobal,
+            Code::UnusedImport,
         ] {
             assert!(code.is_unused_lint(), "{code} should be an unused lint");
         }

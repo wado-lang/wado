@@ -1,0 +1,36 @@
+// A `use` whose name no site of its module reaches is reported, at the name it
+// binds. A trait imported for its methods is used by calling one, a namespace
+// by naming a member through it, and a re-export by whoever imports it.
+use { println, eprintln, Stdout } from "core:cli";
+use { TreeMap as Map, TreeSet } from "core:collections";
+use json from "core:json";
+use base64 from "core:base64";
+use { Doubled, Halved } from "./sub/unused_import_traits.wado";
+pub use { to_string } from "core:json";
+#[allow(unused_imports)]
+use { from_string } from "core:json";
+
+export fn run() with Stdout {
+    let m = Map::<i32, i32>::new();
+    println(`${m.len()} ${json::to_string(&21.doubled()).unwrap()}`);
+}
+
+__DATA__
+{
+    "stdout": "0 42\n",
+    "warnings_contains": [
+        "import `eprintln` is never used",
+        "import `TreeSet` is never used",
+        "import `base64` is never used",
+        "import `Halved` is never used"
+    ],
+    "warnings_not_contains": [
+        "import `println`",
+        "import `Stdout`",
+        "import `Map`",
+        "import `json`",
+        "import `Doubled`",
+        "import `to_string`",
+        "import `from_string`"
+    ]
+}

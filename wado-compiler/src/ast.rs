@@ -1758,6 +1758,8 @@ pub mod lint {
     pub const SHADOWED_NAME: &str = "shadowed_name";
     /// An item nothing reaches from the export boundary.
     pub const DEAD_CODE: &str = "dead_code";
+    /// A `use` bringing in a name its module never refers to.
+    pub const UNUSED_IMPORTS: &str = "unused_imports";
     /// A trait head that says nothing about what its impls may do.
     pub const UNDECIDED_EFFECTS: &str = "undecided_effects";
     /// A comparison of an expression with itself: `x == x`.

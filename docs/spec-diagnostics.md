@@ -21,6 +21,7 @@ The lints are:
 | [`hex_suffix_lookalike`](#the-hex_suffix_lookalike-lint)   | a hex literal ending in `_f16`, `_bf16`, `_f32` or `_f64`                       |
 | [`undecided_effects`](#the-undecided_effects-lint)         | a trait head that writes no `with` clause                                       |
 | [`dead_code`](#the-dead_code-lint)                         | an unused or test-only free function or global                                  |
+| [`unused_imports`](#the-unused_imports-lint)               | a `use` bringing in a name its module never refers to                           |
 
 ## The `shadowed_name` Lint
 
@@ -254,6 +255,45 @@ An item in a `#![generated]` module is never reported.
 over the whole package. A compilation of one file loads only what that file
 reaches, so it decides what it can see: every `pub` item counts as used, and
 so does every `internal` one, since a module it did not load may use it.
+
+Rationale: [WEP: Unused Diagnostics](./wep-2026-05-16-unused-diagnostics.md).
+
+## The `unused_imports` Lint
+
+The `unused_imports` lint warns about a name a `use` brings in that its module
+never refers to. One `use` can bring in several names, and each is reported on
+its own, where the `use` binds it.
+
+<!-- {"fixture": "unused_import.wado"} -->
+
+```wado
+use { println, eprintln, Stdout } from "core:cli";
+use { TreeMap as Map, TreeSet } from "core:collections";
+use json from "core:json";
+use base64 from "core:base64";
+use { Doubled, Halved } from "./sub/unused_import_traits.wado";
+pub use { to_string } from "core:json";
+#[allow(unused_imports)]
+use { from_string } from "core:json";
+
+export fn run() with Stdout {
+    let m = Map::<i32, i32>::new();
+    println(`${m.len()} ${json::to_string(&21.doubled()).unwrap()}`);
+}
+```
+
+A name is used when a reference written in the module reaches it, with three
+kinds of use beyond that:
+
+- A trait's methods are candidates only where the trait is in scope, so a trait
+  is used where the module calls a method of the same name, here `doubled`.
+- A namespace import is used where the module names a member through it.
+- An interface import with functions (`use { Stdout::{write_via_stream} }`) is
+  used where any of the names it brings in is. One that goes unused is
+  reported alone.
+
+A `pub` or `internal` `use` re-exports what it names, and an `export use`
+publishes it, so neither is reported: its users are the modules that import it.
 
 Rationale: [WEP: Unused Diagnostics](./wep-2026-05-16-unused-diagnostics.md).
 
