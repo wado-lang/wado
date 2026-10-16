@@ -37,13 +37,13 @@ pub(super) fn eliminate_at_root(engine: &mut Engine) -> bool {
     // Built once and threaded down: sound because eliminations never add
     // reassignments, so the snapshot only omits bindings, never holds a stale one.
     let binds = build_copy_bindings(engine);
-    // The three flow-insensitive eliminators recognise self-contained shapes
-    // (bitmask-bounded, const-bound index, short-circuit `||`), so one subtree
-    // walk from the root refutes every nesting depth once — rather than a full
-    // walk per top-level statement of every enclosing block.
+    // The flow-insensitive eliminators recognise self-contained shapes (a value
+    // bounded by its own range, short-circuit `||`), so one subtree walk from
+    // the root refutes every nesting depth once — rather than a full walk per
+    // top-level statement of every enclosing block.
     let mut frames = Frames::new();
-    let mut changed = BitmaskEliminator { binds: &binds }.visit_block(engine, root, &mut frames);
-    changed |= ConstBoundIndexEliminator { binds: &binds }.visit_block(engine, root, &mut frames);
+    let mut changed =
+        refute_panic_checks(engine, NodeRef::Block(root), &binds, None, lt_by_own_range);
     changed |= ShortCircuitEliminator { binds: &binds }.visit_block(engine, root, &mut frames);
     // Flow-sensitive elimination: loop guards, dominating-ifs, and early-exit
     // facts, threaded through the block structure.
@@ -954,24 +954,6 @@ fn lt_operands(engine: &Engine, binds: &Binds, op: Operand) -> Option<(Operand, 
     }
 }
 
-/// Structural bitmask-bounded check (value_of-free): the failing predicate is
-/// `(x & MASK) >= BOUND` with `MASK` and `BOUND` constants and `BOUND > MASK >=
-/// 0`, so `x & MASK ∈ [0, MASK]` can never reach `BOUND`. The masked value is
-/// read through copy temps (`let idx = i & MASK`) and decomposed via the value
-/// **pool** when promoted — never the `value_of` side-table.
-fn is_bitmask_bounded_structural(engine: &Engine, binds: &Binds, cond: Operand) -> bool {
-    let Some((left, right)) = ge_check_operands(engine, binds, cond) else {
-        return false;
-    };
-    let Some(bound) = parse_const_i64(engine, binds, right) else {
-        return false;
-    };
-    let Some(mask) = bitand_mask(engine, binds, left) else {
-        return false;
-    };
-    mask >= 0 && bound > mask
-}
-
 /// The constant `MASK` of a `value & MASK` (through copy temps / value pool), if
 /// either operand is a constant.
 fn bitand_mask(engine: &Engine, binds: &Binds, op: Operand) -> Option<i64> {
@@ -1406,7 +1388,7 @@ fn check_refuted(
 }
 
 /// Whether one conjunct of a check holds: an upper half by `refute`, a constant
-/// floor by the caller's proven `floor` on that variable.
+/// floor by the caller's proven `floor` on that variable or by its own.
 fn part_holds(
     engine: &Engine,
     binds: &Binds,
@@ -1418,7 +1400,7 @@ fn part_holds(
         Conjunct::Lt(left, right) => refute(engine, binds, left, right),
         // `var >= lo` bounds `var + off` only while the add cannot wrap: a
         // positive `off` needs a cap on `var` that keeps the sum in its type.
-        Conjunct::AtLeast(v, off, f) => floor.is_some_and(|floor| {
+        Conjunct::AtLeast(v, off, f) => floor.into_iter().chain(own_floor(engine, binds, v)).any(|floor| {
             let no_wrap = off <= 0
                 || floor
                     .hi
@@ -1881,31 +1863,27 @@ fn is_panic_call(engine: &Engine, e: ExprId) -> bool {
     }
 }
 
-/// Eliminates bitmask-bounded false bounds checks:
-/// `if (x & MASK) >= BOUND { panic(...) }` with `BOUND > MASK >= 0`.
-struct BitmaskEliminator<'a> {
-    binds: &'a Binds,
+/// Whether `left < right` holds by `left`'s own range against a constant
+/// `right`: an `x & MASK` lies in `[0, MASK]`, and [`index_upper_bound`] caps a
+/// clamped index.
+fn lt_by_own_range(engine: &Engine, binds: &Binds, left: Operand, right: Operand) -> bool {
+    let Some(bound) = parse_const_i64(engine, binds, right) else {
+        return false;
+    };
+    bitand_mask(engine, binds, left).is_some_and(|mask| (0..bound).contains(&mask))
+        || index_upper_bound(engine, binds, left).is_some_and(|ub| ub < bound)
 }
 
-impl ArenaOptVisitor for BitmaskEliminator<'_> {
-    fn visit_stmt(&mut self, engine: &mut Engine, s: StmtId, frames: &mut Frames) -> bool {
-        let if_ids = match &engine.body.stmts[s].kind {
-            StmtKind::If {
-                condition,
-                then_block,
-                else_block: None,
-            } => Some((*condition, *then_block)),
-            _ => None,
-        };
-        if let Some((condition, then_block)) = if_ids
-            && is_panic_block(engine, then_block)
-            && is_bitmask_bounded_structural(engine, self.binds, condition)
-        {
-            eliminate_condition(engine, NodeRef::Stmt(s), condition);
-            return true;
-        }
-        arena_opt_walk(self, engine, NodeRef::Stmt(s), frames)
-    }
+/// The floor `var`'s own value gives it: `let var = x & MASK` with `MASK >= 0`
+/// lies in `[0, MASK]` wherever it is read.
+fn own_floor(engine: &Engine, binds: &Binds, var: u32) -> Option<Floor> {
+    let mask = bitand_mask(engine, binds, *binds.get(&var)?)?;
+    (mask >= 0).then_some(Floor {
+        var,
+        lo: 0,
+        alone: true,
+        hi: Some(mask),
+    })
 }
 
 /// Eliminates redundant bounds checks inside short-circuit `||` expressions
@@ -2030,34 +2008,6 @@ fn operand_same(engine: &Engine, binds: &Binds, a: Operand, b: Operand) -> bool 
         }
         (Operand::Value(va), Operand::Value(vb)) => va == vb,
         _ => false,
-    }
-}
-
-struct ConstBoundIndexEliminator<'a> {
-    binds: &'a Binds,
-}
-
-impl ArenaOptVisitor for ConstBoundIndexEliminator<'_> {
-    fn visit_stmt(&mut self, engine: &mut Engine, s: StmtId, frames: &mut Frames) -> bool {
-        let if_ids = match &engine.body.stmts[s].kind {
-            StmtKind::If {
-                condition,
-                then_block,
-                else_block: None,
-            } => Some((*condition, *then_block)),
-            _ => None,
-        };
-        if let Some((condition, then_block)) = if_ids
-            && is_panic_block(engine, then_block)
-            && let Some((idx, bound)) = ge_check_operands(engine, self.binds, condition)
-            && let Some(b) = parse_const_i64(engine, self.binds, bound)
-            && let Some(ub) = index_upper_bound(engine, self.binds, idx)
-            && ub < b
-        {
-            eliminate_condition(engine, NodeRef::Stmt(s), condition);
-            return true;
-        }
-        arena_opt_walk(self, engine, NodeRef::Stmt(s), frames)
     }
 }
 

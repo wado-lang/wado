@@ -1,7 +1,9 @@
 // BCE: an index clamped below an immutable global sequence's length needs no
-// bounds check. `const_folding` folds `(&TABLE).used` to a literal (through the
-// `&TABLE` receiver), `ConstBoundIndexEliminator` proves `min(x,18) < 20`, and
-// `const_branch_prune` drops the dead panic. Mirrors fpfmt's `POW10[n]`.
+// upper bounds check. `const_folding` folds `(&TABLE).used` to a literal
+// (through the `&TABLE` receiver), and `condition_implication` proves
+// `min(x,18) < 20` by the index's own range and drops that half of the index
+// contract. The lower half, `0 <= x`, stays: nothing proves it. Mirrors
+// fpfmt's `POW10[n]`.
 // Regression guard: a builder block's length is dynamic, so `TABLE.used` must
 // not fold to the initial `used: 0` (which would make the check always panic).
 
@@ -32,6 +34,6 @@ __DATA__
         "array_get_value<u64>"
     ],
     "wir_not_expect:O2": [
-        "List::index_value"
+        "x < 20"
     ]
 }

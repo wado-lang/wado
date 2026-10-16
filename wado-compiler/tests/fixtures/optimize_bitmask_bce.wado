@@ -1,4 +1,5 @@
-// Bitmask bounds check elimination: (x & MASK) >= BOUND is false when BOUND > MASK
+// Bitmask bounds check elimination: `x & MASK` lies in `[0, MASK]`, so both
+// halves of the index contract `0 <= index < len` hold when `len > MASK >= 0`.
 export fn run() {
     let mut arr: List<i32> = List::<i32>::filled(32768, -1);
     let mut sum = 0;
@@ -13,5 +14,5 @@ export fn run() {
 __DATA__
 {
     "stdout": "",
-    "wir_not_expect:O2": ["index < self.len()"]
+    "wir_not_expect:O2": ["contract_report"]
 }
