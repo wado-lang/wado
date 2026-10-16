@@ -490,7 +490,7 @@ test "index access panics for missing key" {
 }
 
 #[expect_trap]
-test "borrowing a missing key panics" {
+test "`&map[key]` on a missing key panics" {
     let map: TreeMap<String, List<i32>> = TreeMap::new();
     let _ = &map["missing"];
 }
@@ -916,7 +916,7 @@ test "get_str sees a removed key as absent" {
     assert map.get_str("alpha".as_str_slice()) matches { None };
 }
 
-test "get_ref_str borrows the stored value" {
+test "get_ref_str refers to the stored value" {
     let mut map: TreeMap<String, List<i32>> = TreeMap::new();
     map["alpha"] = [1, 2];
 

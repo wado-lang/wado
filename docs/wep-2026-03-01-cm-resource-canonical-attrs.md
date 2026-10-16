@@ -138,7 +138,7 @@ declarations above show the corrected form.
 
 Under the affine resource ownership model
 ([Resource Ownership](./wep-2026-05-21-resource-ownership.md)), a `&self`
-receiver is a non-consuming borrow. A `fn drop(&self)` would leave the binding
+receiver is a non-consuming reference. A `fn drop(&self)` would leave the binding
 usable after its CM handle is already dead (a use-after-free), and would also
 double-drop against the automatic scope-exit drop that the ownership model
 inserts. A consuming `self` receiver invalidates the binding at the call site,

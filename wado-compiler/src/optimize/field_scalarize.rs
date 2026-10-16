@@ -690,7 +690,7 @@ fn make_write_back_stmt(body: &mut Body, c: &ScalarizeCandidate, span: Span) -> 
             target,
             value: value.into(),
         },
-        c.type_id,
+        TypeTable::UNIT,
         span,
     );
     push_stmt(body, StmtKind::Expr(assign.into()), span)
@@ -706,7 +706,7 @@ fn make_re_read_stmt(body: &mut Body, c: &ScalarizeCandidate, span: Span) -> Stm
             target,
             value: value.into(),
         },
-        c.type_id,
+        TypeTable::UNIT,
         span,
     );
     push_stmt(body, StmtKind::Expr(assign.into()), span)
@@ -908,7 +908,7 @@ fn mark_gc_alias_pair(
     out.extend(dst);
 }
 
-/// The local `value` reads as a whole GC object, directly or through one borrow.
+/// The local `value` reads as a whole GC object, directly or through one reference.
 fn gc_alias_source(body: &Body, value: ExprId, type_table: &TypeTable) -> Option<u32> {
     let (place, index) = local_place(body, value)?;
     is_gc_heap_type(body.exprs[place].type_id, type_table).then_some(index)

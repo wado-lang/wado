@@ -100,7 +100,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     }
 
     /// Whether `ty` can be a hole of a shape: decided, and free of the
-    /// enclosing item's type parameters (a known gap of the WEP).
+    /// enclosing item's type parameters, until WEP 2026-01-10's roadmap opens a
+    /// template shape.
     fn hole_type_admissible(&mut self, ty: TypeId, span: Span) -> bool {
         if ty == TypeTable::ERROR || ty == TypeTable::UNKNOWN {
             return false;
@@ -129,20 +130,16 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         defined_at: ast::AstId,
         span: Span,
     ) -> TypeId {
-        let fields: Vec<(String, TypeId)> = {
-            let mut tt = self.tysys.type_table.borrow_mut();
-            shape
-                .holes
-                .iter()
-                .enumerate()
-                .map(|(k, hole)| (TemplateShape::field_name(k), tt.hole_field_type(hole.ty)))
-                .collect()
-        };
-        let (id, name, existing) = {
+        let (id, name, fields, existing) = {
             let mut tt = self.tysys.type_table.borrow_mut();
             let id = tt.intern_template_shape(self.current_module_source.clone(), shape);
             let existing = tt.find_struct_type(StructDef::Anon(id));
-            (id, tt.anon_struct_mangle(id), existing)
+            (
+                id,
+                tt.anon_struct_mangle(id),
+                tt.anon_shape_struct_fields(id),
+                existing,
+            )
         };
         match existing {
             Some(ty) => ty,

@@ -446,16 +446,16 @@ impl<T, V> TemplateHole<T, V> {
         return builtin::hole_get(t, self.index);
     }
 
-    /// Renders the value as the untagged template would: the trait method
-    /// the specifier's type selects (`Display::fmt` when it names none), on a
-    /// `Formatter` carrying the specifier's settings over `f`'s buffer.
+    /// Renders the value through the trait method the specifier's type
+    /// selects (`Display::fmt` when it names none), on a `Formatter` carrying
+    /// the specifier's settings over `f`'s buffer.
     pub fn fmt(&self, t: &T, f: &mut Formatter) {
         builtin::hole_fmt(t, self.index, f);
     }
 }
 
-/// The tag an untagged template means: every hole rendered through its
-/// specifier into one buffer. `` format`x=${x}` `` is `` `x=${x}` ``.
+/// The tag an untagged template is sugar for: every hole rendered through its
+/// specifier into one buffer. `` `x=${x}` `` is `` format`x=${x}` ``.
 /// See WEP 2026-01-10.
 pub fn format<T: ReflectTemplate<Holes = [..V]>, ..V>(t: T) -> String {
     let mut out = "";

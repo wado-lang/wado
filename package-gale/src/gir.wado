@@ -51,7 +51,7 @@ use { LitToken } from "./lexer_gen.wado";
 ///
 /// Construction is the responsibility of `lower(Grammar)`; consumers
 /// treat all fields as read-only. The struct is plain data so a
-/// `LoweredGrammar` value can be borrowed across emit functions
+/// `LoweredGrammar` value can be passed by `&` across emit functions
 /// without a `&mut` ceremony.
 pub struct LoweredGrammar {
     /// Grammar name (`grammar Foo;`). Drives generated identifiers
@@ -1398,8 +1398,8 @@ pub variant FieldKind {
 // Header-extraction helper
 // ==========================================================================
 
-/// Borrow the rule header regardless of variant, so traversals don't
-/// repeat the match.
+/// The rule header of either variant, by reference, so traversals don't repeat
+/// the match.
 pub fn rule_header(rule: &Rule) -> &RuleHeader {
     return match rule {
         Simple(s) => &s.header,

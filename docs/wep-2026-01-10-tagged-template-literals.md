@@ -152,10 +152,10 @@ impl<T, V> TemplateHole<T, V> {
     /// Whether the hole wrote a `:spec`.
     pub fn has_spec(&self) -> bool;
 
-    /// Renders the value as the untagged template would: the trait method the
-    /// specifier's type selects (`Display::fmt` when it names none), on a
-    /// `Formatter` carrying the specifier's fill, alignment, sign, width and
-    /// precision over `f`'s buffer.
+    /// Renders the value through the trait method the specifier's type
+    /// selects (`Display::fmt` when it names none), on a `Formatter` carrying
+    /// the specifier's fill, alignment, sign, width and precision over `f`'s
+    /// buffer.
     pub fn fmt(&self, t: &T, f: &mut Formatter);
 }
 ```
@@ -189,10 +189,10 @@ $tagged: {
 ```
 
 `id` is an `i32`, so its hole holds the value; `user.name` is a `String`, so
-its hole holds the handle. A hole that names storage is read or borrowed where
-it stands: a local, a global, or a field or element path rooted at one. Any
+its hole holds the handle. A hole that names storage is read or referenced
+where it stands: a local, a global, or a field or element path rooted at one. Any
 other hole expression is evaluated once into a local of the block, which the
-literal then reads or borrows.
+literal then reads or references.
 
 The holes are evaluated in source order, the order an untagged template
 evaluates them, and the literal is built after the last of them. So a hole is
@@ -203,8 +203,8 @@ too, and the tag then sees the value the storage held there. That is what holds
 
 The struct literal is the only place the synthesized type is built. Passing it
 by value copies scalars and handles, never the storage a handle points at.
-Borrowing a local of a handle type marks nothing on that local: only a
-box-target type's local is retagged by a borrow, and those holes are held by
+Referencing a local of a handle type marks nothing on that local: only a
+box-target type's local is retagged by a reference, and those holes are held by
 value.
 
 The synthesized `impl ReflectTemplate` carries the segments, specifiers and
@@ -277,15 +277,26 @@ fn regex<T: ReflectTemplate<Holes = []>>(t: T) -> Regex {
 under. A concrete tuple (`Holes = [List<i32>]`) binds no pack, and the call is
 an error naming the binding it needs.
 
-A hole's type may not mention a type parameter of the enclosing item: the shape
-would have to be generic over it, and a shape is minted once. A generic body
-reaches a tag by taking the rendered value, or a concrete one, from its caller.
-The untagged template has no shape, so `` `${v}` `` over a `v: X` is fine where
-`` format`${v}` `` is not.
+A hole's specifier is part of the template, not of the tag, so every hole's
+type implements the trait its specifier selects (`Display` when it names none)
+under any tag, whether or not the tag renders it. A tag counting its holes
+rejects `${pt}` over a `Pt` with no `Display`, as `format` does. A template
+then means one thing to its type checker whichever tag reads it. The cost falls
+on a tag that reads only `get`, such as `sql`: a hole whose type has no
+`Display` is written `${pt:?}` there.
+
+A hole's type may mention a type parameter of the enclosing item. The shape is
+then generic over that parameter, and the item's instantiation instantiates the
+tag with it. The specifier's trait, and any bound the tag places on its pack,
+is met through the bounds the item declares, as for any call: `` `${x}` `` over `x: X`
+asks for `X: Display`, as a call of `push_display(&x)` would. A generic body
+that cannot name the bound passes its tag a concrete value instead.
 
 ### The untagged template is a tag
 
-An untagged template means what the prelude's `format` tag means:
+An untagged template is sugar for a call of the prelude's `format` tag, which a
+program may also call by name. It names the prelude's `format` wherever it
+stands, even where another `format` is in scope or the module has no prelude:
 
 ```wado
 fn format<T: ReflectTemplate<Holes = [..V]>, ..V>(t: T) -> String {
@@ -299,9 +310,14 @@ fn format<T: ReflectTemplate<Holes = [..V]>, ..V>(t: T) -> String {
 }
 ```
 
-The compiler keeps its direct lowering for the untagged case
-([String Template Desugaring](./wep-2026-01-20-string-template-desugaring.md));
-the equivalence is a property the fixtures hold it to, not a path it takes.
+Once the roadmap below lands, what a template string compiles to is written in
+Wado, where a reader can see it, and the per-hole rendering is the one piece
+the compiler synthesizes (`TemplateHole::fmt`). Until then the compiler keeps a
+direct lowering for the untagged case
+([String Template Desugaring](./wep-2026-01-20-string-template-desugaring.md)),
+and the fixtures hold the two forms to the same output over the specifier
+matrix. They part where a hole's rendering reads what a later hole writes, which
+the direct lowering renders before that hole runs.
 
 ### Cost
 
@@ -381,7 +397,8 @@ solved better. Kept as an optimization opportunity, dropped as a promise.
 ## Consequences
 
 - A tagged template costs what an untagged one costs: constant appends and
-  typed operations, no runtime segment table, no value copies.
+  typed operations, no runtime segment table, no value copies. `format` does
+  not hold to this yet; the [roadmap](#roadmap) carries it.
 - Tag authors write one generic function, in Wado, against traits the language
   already has. SQL, HTML with contextual escaping, structured logging, URL
   building and raw strings are library code.
@@ -492,7 +509,7 @@ the tag's result type:
 
 `reify_tagged_template` reifies each hole in order, binding one that is not a
 place to a `let $hole_{n}_{k}` local, and builds the `Call` the dispatch fact
-names over a `StructLiteral` whose field `k` is the place or local, borrowed
+names over a `StructLiteral` whose field `k` is the place or local, referenced
 when the field type is `&V_k`. With locals the call sits in a labeled block that
 breaks with its value. The `TirStruct` reaches the module through the pending
 list `reify` already drains.
@@ -542,8 +559,8 @@ serial advances on read, so a template nested inside a hole mints its own
   threshold refuses.
 - `lower/translate.rs` folds `builtin::hole_get` / `hole_fmt` calls to the
   bridge names beside its `struct_field_get` arm; `name.rs` owns both names.
-- A template shape is never generic, so `reflect_bridge`'s post-monomorphization
-  minting is not involved.
+- A template shape is not yet open, so nothing mints bridges after
+  monomorphization. The roadmap's generic template shapes change that.
 
 ### Fixtures
 
@@ -584,6 +601,130 @@ then the reflect resolution, since the call-site bound check needs the kind
 before any tag call can be typed; then parser, annotate and reify; then
 synthesis and the fold; then the prelude tags and fixtures.
 
+## Roadmap
+
+An untagged template is sugar for `format`, but the compiler still lowers it on
+a path of its own that renders each hole before it evaluates the next, and a
+hole's specifier is checked only where something renders the hole. The items
+below close that, in this order.
+
+- [x] Open anonymous shapes. A shape whose types mention a type parameter of
+  the enclosing item is open. An anonymous shape's identity is its types, so
+  substituting into an open shape interns the substituted shape: `{ a: X }` at
+  `X = i32` is the `{ a: i32 }` a concrete body writes. `TypeTable::subst_rec`
+  re-interns, and `any_constituent` looks into the shape, so
+  `contains_type_param` reports it open. A closed shape is never re-interned:
+  erasing an effect row changes no layout. An open shape emits no `TirStruct`.
+  Monomorphization emits one for each concrete shape it interns, through
+  `TirStruct::anonymous`, as elaboration does for a written shape.
+
+  Synthesis derives a shape's impls before monomorphization, so a substituted
+  shape has none of its own. One concrete shape is where any number of open
+  origins, and a literal, meet: `{ a: X }` at `X = i32`, `{ a: Y }` at
+  `Y = i32` and a written `{ a: 3 }` are one type. `subst_rec` records, per
+  origin, the substitution that reaches the shape, over every parameter the
+  origin mentions, and composes the records when a substituted shape is
+  substituted again. Binding the origin against the shape cannot recover a
+  record: a pack field or a projection binds no parameter. Monomorphization
+  instantiates each origin's methods and associated types under its record
+  (`Monomorphizer::instantiate_shape_substitution`), one method of a name per
+  shape. As with a generic struct, an open shape's methods leave the module and
+  its field bridges are minted after monomorphization, per concrete shape.
+
+  A generic struct per shape was the alternative. It would need a `DefId`, and
+  the `DefTable` is fixed before elaboration mints a shape. It would also make
+  `{ a: X }` at `X = i32` a type apart from `{ a: i32 }`.
+
+  Done: a struct literal whose field mentions a type parameter compiles and
+  runs at each instantiation, and its derived `Inspect`, `Eq`, `Ord`,
+  `Serialize`, `Deserialize` and `ReflectStruct` serve each one
+  (`anon_struct_type_param_field.wado`). WIR build used to panic on one with
+  `unsubstituted TypeParam`.
+
+- [ ] The specifier's trait checked at the template. `resolve_template_parts`
+  asks `type_implements_trait` for each hole's trait, so the check reads the
+  declared bounds and runs under either form and every tag. Today WIR build
+  catches a concrete hole that lacks the trait only when it finds the call it
+  cannot resolve, and a generic hole only once instantiated.
+
+  Done when `` format`${x}` `` and `` `${x}` `` over `x: X` each compile under
+  `X: Display` and report the same missing-bound error without it, `${x:x}`
+  reports a missing `LowerHex` under `X: Display` alone, a tag that never calls
+  `fmt` rejects a hole lacking its specifier's trait, and every package in the
+  repository, the stdlib included, compiles under the new check.
+
+- [ ] Generic template shapes. `TemplateHoleGeneric` goes, and a template shape
+  is open as the first item makes any shape. Each concrete template shape that
+  monomorphization reaches instantiates each origin's `ReflectTemplate` impl as
+  the first item instantiates any shape's methods. `$hole_get` and `$hole_fmt`
+  are named after the shape rather than filed under it as methods, so they are
+  instantiated the same way by name. Both happen inside the fixpoint, so what
+  their bodies call is instantiated in turn.
+
+  Done when `` tag`${x}` `` over `x: X` reaches the tag at each instantiation,
+  and a tag's pack bound is checked against the declared bounds.
+
+- [ ] `format` at the direct lowering's cost. Read off `wado dump -O2`, the
+  direct lowering does four things a `format` site does not:
+  - It sizes the buffer from the segment lengths (`String::with_capacity`).
+    `format` starts from `""` and grows.
+  - It appends a `String` hole with no specifier directly. `format` goes
+    through `Display::fmt` and `Formatter::pad`.
+  - It inlines a radix renderer (`${i:#x}`) at the site. `format` calls
+    `u64::fmt_base`, building the radix prefix as a `String` on each call.
+  - `optimize::tmpl_hoist` reuses its buffer across loop iterations, and
+    recognizes only the direct lowering's `$tmpl` block.
+
+  Done when a `wir_expect` fixture holds a `format` site to what the direct
+  lowering emits for the same template, and the measurement below shows no
+  gap.
+
+- [ ] One path. An untagged template reifies as the `format` call, and the
+  direct lowering (`synthesis::template::build_template_block`) is deleted.
+  Done when no code path builds a `$tmpl` block, and
+  `` `${r} ${bump(&mut a)}` `` over `r = &a` renders what `format` renders.
+
+The cost gap is measured inside the guest by this program, so the runner's
+start-up stays out of it. Run it with `wado run -O2 bench.wado`; each phase
+reports the time one iteration of its loop took.
+
+```wado
+use { Stdout } from "core:cli";
+use { Benchmark } from "core:benchmark";
+use { MonotonicClock } from "wasi:clocks";
+
+struct Pt { x: i32, y: i32 }
+
+export fn run() with (Stdout, MonotonicClock) {
+    let mut bench = Benchmark { name: "template" };
+    bench.work_per_iter = Option::Some(100000.0);
+    bench.unit = "templates";
+    bench.run("untagged", || {
+        let mut total = 0;
+        for let i of 0..<100000 {
+            let p = Pt { x: i, y: i * 2 };
+            total += `i=${i:05} f=${(i as f64) / 3.0:.2} h=${i:#x} p=${p:?} end`.len();
+        }
+        return total;
+    });
+    bench.run("format", || {
+        let mut total = 0;
+        for let i of 0..<100000 {
+            let p = Pt { x: i, y: i * 2 };
+            total += format`i=${i:05} f=${(i as f64) / 3.0:.2} h=${i:#x} p=${p:?} end`.len();
+        }
+        return total;
+    });
+}
+```
+
+Three runs:
+
+| Phase           | Time per iteration, untagged = 1 |
+| --------------- | -------------------------------- |
+| untagged        | 1                                |
+| `` format`…` `` | 1.2 to 1.3                       |
+
 ## Known gaps
 
 - A tag that carries a state across holes by scanning the literal segments
@@ -594,10 +735,6 @@ synthesis and the fold; then the prelude tags and fixtures.
   any state count, so the tag author has a shape to know. The gap is the
   optimizer's, and [the optimizer guide](./optimizer.md#not-yet-implemented)
   carries it.
-- A hole whose type mentions the enclosing function's type parameter. The
-  shape would have to be generic over that parameter and instantiated with the
-  function, which an anonymous struct is not today; until then the site is a
-  diagnostic, and a generic body reaches a tag by passing a concrete value.
 - A shape is interned per module, as struct literals are, so two modules
   writing one template instantiate the tag twice. Cross-module sharing is a
   size optimization the interner's key can take later.

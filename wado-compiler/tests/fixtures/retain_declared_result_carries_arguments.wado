@@ -1,7 +1,7 @@
 // A bodyless declaration's result carries what its declaration says it is made
 // of: `#[storage(part_of_args)]` is every argument that can carry storage.
 // `select` hands back an operand, and so does `black_box`. Read as carrying
-// nothing, the borrow of `x` returned through either was not seen, so
+// nothing, the reference to `x` returned through either was not seen, so
 // `let mut y = x` moved `x` and the write through `y` reached what the
 // result points at.
 
@@ -15,7 +15,7 @@ fn through_black_box(r: &S) -> Option<&S> {
     return builtin::black_box(Option::Some(r));
 }
 
-test "a borrow returned through select" {
+test "a reference returned through select" {
     let mut x = S { v: 1 };
     let got = through_select(builtin::black_box(true), &x);
     let mut y = x;
@@ -24,7 +24,7 @@ test "a borrow returned through select" {
     assert y.v == 2;
 }
 
-test "a borrow returned through black_box" {
+test "a reference returned through black_box" {
     let mut x = S { v: 1 };
     let got = through_black_box(&x);
     let mut y = x;

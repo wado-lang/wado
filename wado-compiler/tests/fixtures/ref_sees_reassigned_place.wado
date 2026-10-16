@@ -38,7 +38,7 @@ fn make_reader(p: &P) -> fn() -> i32 {
 }
 
 // Each of these takes its new values from `n`, so no call in the body is
-// what keeps the borrow observable.
+// what keeps the reference observable.
 
 fn nested_under_local(n: i32) -> i32 {
     let mut g = G { h: H { p: P { a: 1, b: 1 }, tag: "a" } };
@@ -141,7 +141,7 @@ test "a value made of the place's own parts" {
     assert swap_under_a_field_ref(3) == 62;
 }
 
-test "a borrow a closure captured" {
+test "a reference a closure captured" {
     assert reassigned_under_a_closure(3) == 7;
 }
 

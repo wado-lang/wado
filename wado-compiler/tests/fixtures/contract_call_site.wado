@@ -1,0 +1,42 @@
+// A failed clause blames the call, so it reports the call's position, not the
+// clause's. A call through a trait bound reports its own the same way.
+use { println, Stdout } from "core:cli";
+
+fn half(n: i32) -> i32
+    contract n % 2 == 0, "n must be even"
+{
+    return n / 2;
+}
+
+trait Pick with () {
+    fn pick(&self, i: i32) -> i32
+        contract i >= 0;
+}
+
+struct Same {}
+
+impl Pick for Same {
+    fn pick(&self, i: i32) -> i32 {
+        return i;
+    }
+}
+
+fn pick_through<P: Pick>(p: &P, i: i32) -> i32 {
+    return p.pick(i);   // a failure reports this line
+}
+
+export fn run() with Stdout {
+    println(`${half(4)}`);
+    println(`${pick_through(&Same {}, builtin::black_box(-1))}`);
+}
+
+__DATA__
+{
+    "stdout": "2\n",
+    "stderr_contains": [
+        "Contract of Same::pick failed at contract_call_site.wado:25",
+        "condition: i >= 0",
+        "i: -1"
+    ],
+    "trapped": true
+}

@@ -1,5 +1,5 @@
-// A borrow bound to a local lasts only as long as that local is readable. Where
-// every local holding the borrow is dead, a whole-value read of the referent is
+// A reference bound to a local lasts only as long as that local is readable.
+// Where every local holding the reference is dead, a whole-value read of the referent is
 // its final use and moves, however the moved value flows on afterwards.
 //
 // `value_copy_live_ref_holder_keeps_copy` is the counterpart: the same shapes
@@ -24,7 +24,7 @@ fn ref_local() -> i32 {
     return total;
 }
 
-// A call result holding the borrow, dead at the move.
+// A call result holding the reference, dead at the move.
 fn call_result() -> i32 {
     let a: List<i32> = [1, 2];
     let mut b: List<i32> = [];

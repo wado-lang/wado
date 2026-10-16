@@ -29,7 +29,7 @@ use super::types::{FunctionContext, TypeError};
 use super::tysys::TypeSystem;
 use super::util;
 use super::{AbstractSelections, Elaborator};
-use crate::ast::{AssociatedTypeDecl, AstId, Attribute, GenericParam};
+use crate::ast::{AssociatedTypeDecl, AstId, Attribute};
 use crate::compiler_item::TraitAssocType;
 use crate::defs::{DefId, DefKind};
 use crate::elaborator::method_lookup::{ImplParamSlots, impl_target_args, impl_target_head_args};
@@ -1346,7 +1346,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
 
     /// A by-value `self` transfers ownership, so it is legal on a resource
     /// and on a concrete aggregate that transitively owns one (the consuming
-    /// method hands that resource off). A plain value type must borrow with
+    /// method hands that resource off). A plain value type's method must take
     /// `&self`. Generic aggregates resolve to `GenericInstance` rather than a
     /// concrete value type, so they are already permitted.
     fn check_self_by_value(&mut self, self_ty: TypeId, span: Span) {
@@ -1490,12 +1490,12 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         .is_some()
     }
 
-    /// The first borrow `type_id` is or holds anywhere within it, as the program
-    /// names it: a reference, or a view (`ByteSlice`, not the `Slice<u8>` it
-    /// wraps). A borrow points into storage it does not own, which has no
-    /// Component Model representation. A borrowed resource is exempt: it
+    /// The first reference `type_id` is or holds anywhere within it, as the
+    /// program names it: a `&T`, or a view (`ByteSlice`, not the `Slice<u8>` it
+    /// wraps). Either points into storage it does not own, which has no
+    /// Component Model representation. A reference to a resource is exempt: it
     /// crosses as a `borrow<R>` handle.
-    pub(super) fn cm_borrow_within(&self, type_id: TypeId) -> Option<TypeId> {
+    pub(super) fn cm_ref_within(&self, type_id: TypeId) -> Option<TypeId> {
         self.first_type_within(type_id, true, &|scope: &Self, t| {
             scope.is_cm_view(t) || scope.is_storage_reference(t)
         })
@@ -2515,25 +2515,6 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             .insert(variant_decl.id, type_params);
     }
 
-    /// Populate `func`'s generic-inference caches without resolving its body, so
-    /// a same-module forward reference — `outer<T>` written before `inner<T>` —
-    /// can still run argument-derived inference at the call site. Idempotent, and
-    /// mints fresh `TypeId`s each time; `resolve_function`'s later overwrite is
-    /// what keeps the cache consistent with the body's own ids.
-    pub(super) fn precompute_generic_function_cache(&mut self, func: &Function) {
-        // Mirrors `resolve_function`'s guard: fn-bound params are realised
-        // eagerly, so a function whose only non-effect params are fn-bound
-        // has nothing to cache.
-        let has_real_type_params = func
-            .type_params
-            .iter()
-            .any(GenericParam::is_real_type_param);
-        if !has_real_type_params {
-            return;
-        }
-        self.populate_generic_function_cache(func);
-    }
-
     /// Resolve `func`'s canonical signature (see
     /// [`super::sem::decls::FunctionSig`]) and record its declared return
     /// type on `function_return_types`. The one signature resolution per
@@ -2541,13 +2522,6 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
     /// record per-node facts.
     pub(super) fn record_function_sig(&mut self, func: &Function) -> FunctionSig {
         let mut scope = self.enter_decl_params_scope(&func.type_params);
-        let type_param_ids: Vec<(String, TypeId)> = scope
-            .annotate_ctx
-            .trait_ctx
-            .type_params
-            .iter()
-            .map(|(name, b)| (name.clone(), b.type_id))
-            .collect();
         let real_type_params: Vec<(String, TypeId)> = func
             .type_params
             .iter()
@@ -2583,7 +2557,6 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                 return_type,
                 own_effects: own_effect_params(&func.type_params),
             },
-            type_param_ids,
             params: func
                 .params
                 .iter()
@@ -2597,34 +2570,14 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         }
     }
 
-    /// Populate the three generic-function inference caches for `func`
-    /// from its recorded [`super::sem::decls::FunctionSig`] — no
-    /// re-resolution. Returns the declared return type for callers that
-    /// need it (`resolve_function`'s `task_return_type`).
-    fn populate_generic_function_cache(&mut self, func: &Function) -> TypeId {
-        let def = self.tysys.def_at(func.id);
-        let sig = self
-            .sem
-            .decls
-            .function_sigs
-            .get(&def)
-            .expect("decl pass records every free function's canonical signature");
-        let type_param_list = sig.decl.type_params.clone();
-        let resolved_param_types = sig.decl.param_types.clone();
-        let declared_return_type = sig.decl.return_type.unwrap_or(TypeTable::UNIT);
-        self.sem
-            .decls
-            .generic_function_params
-            .insert(func.name.clone(), type_param_list);
-        self.sem
-            .decls
-            .generic_function_resolved_param_types
-            .insert(func.name.clone(), resolved_param_types);
-        self.sem
-            .decls
-            .generic_function_resolved_return_types
-            .insert(func.name.clone(), declared_return_type);
-        declared_return_type
+    /// The return type `func`'s recorded [`super::sem::decls::FunctionSig`]
+    /// declares, resolved in the signature's frame so a generic one's
+    /// `TypeParam` ids match the body's. The decl pass records one for every
+    /// free function.
+    fn recorded_return_type(&self, func: &Function) -> Option<TypeId> {
+        let def = self.tysys.resolutions.defs().of_ast_id(func.id)?;
+        let sig = self.sem.decls.function_sigs.get(&def)?;
+        Some(sig.decl.return_type.unwrap_or(TypeTable::UNIT))
     }
 
     /// Resolve a function for its facts.
@@ -2638,25 +2591,17 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
 
         scope.register_generic_params(&func.type_params, 0);
 
-        // Populate the generic-inference caches before the `function_return_types`
-        // update below, which shares its map with non-generic callers and can be
-        // overwritten by an external registration. A `<F: fn(…)>` bound is
-        // eagerly realised to its function type and consumes no `TypeParam` slot,
-        // being nothing monomorphisation needs to substitute.
-        let has_real_type_params = func
-            .type_params
-            .iter()
-            .any(GenericParam::is_real_type_param);
-        let declared_return_type = if has_real_type_params {
-            scope.populate_generic_function_cache(func)
-        } else {
-            func.return_type
+        // An interface operation's default body is walked as a function but
+        // records no signature of its own; it declares no type parameters, so
+        // resolving its return type here gives the ids the signature would.
+        let return_type = match scope.recorded_return_type(func) {
+            Some(return_type) => return_type,
+            None => func
+                .return_type
                 .as_ref()
                 .map(|t| scope.resolve_type(t))
-                .unwrap_or(TypeTable::UNIT)
+                .unwrap_or(TypeTable::UNIT),
         };
-
-        let return_type = declared_return_type;
 
         scope
             .sem
@@ -2667,7 +2612,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         let mut ctx = FunctionContext::new(return_type, func.name.clone());
         if func.is_async {
             ctx.is_async = true;
-            ctx.task_return_type = Some(declared_return_type);
+            ctx.task_return_type = Some(return_type);
         }
 
         // Resolve parameters. A default expression resolves in the callee's
@@ -2713,11 +2658,11 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             // A reference or a view has no CM representation. Rejecting it here keeps the
             // static "an `export` appears in WIT" guarantee: reaching
             // `wit_emit` instead drops the component-type section wholesale.
-            if crosses_cm_boundary && let Some(borrow) = scope.cm_borrow_within(type_id) {
-                let _ = scope.emit(TypeError::BorrowAtCmBoundary {
+            if crosses_cm_boundary && let Some(reference) = scope.cm_ref_within(type_id) {
+                let _ = scope.emit(TypeError::RefAtCmBoundary {
                     function: func.name.clone(),
                     position: format!("parameter '{}'", param.name),
-                    borrow: scope.tysys.type_table.borrow().type_name(borrow),
+                    reference: scope.tysys.type_table.borrow().type_name(reference),
                     span: param.span,
                 });
             }
@@ -2743,13 +2688,13 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             });
         }
         if func.is_export {
-            scope.check_published(func, "return type", declared_return_type, func.span);
+            scope.check_published(func, "return type", return_type, func.span);
         }
-        if crosses_cm_boundary && let Some(borrow) = scope.cm_borrow_within(declared_return_type) {
-            let _ = scope.emit(TypeError::BorrowAtCmBoundary {
+        if crosses_cm_boundary && let Some(reference) = scope.cm_ref_within(return_type) {
+            let _ = scope.emit(TypeError::RefAtCmBoundary {
                 function: func.name.clone(),
                 position: "return type".to_string(),
-                borrow: scope.tysys.type_table.borrow().type_name(borrow),
+                reference: scope.tysys.type_table.borrow().type_name(reference),
                 span: func.span,
             });
         }
@@ -2769,7 +2714,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                 .sem
                 .types
                 .function_task_returns
-                .insert(func.id, declared_return_type);
+                .insert(func.id, return_type);
         }
 
         drop(scope);

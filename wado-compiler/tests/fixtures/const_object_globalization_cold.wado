@@ -1,0 +1,44 @@
+// Constant Object Globalization leaves a cold literal where it is. A global is
+// built at instantiation by the start function, which wasmtime compiles as one
+// body whose cost grows faster than its length, while a cold literal is built
+// only when its rare path runs.
+//
+// `&"hello"` is hot and becomes the one `$const_obj_0`. `&"cold"` sits past a
+// `cold_path()` marker, and `&"rare"` in `rare`, which only that path calls;
+// neither becomes a global.
+
+use { println, Stdout } from "core:cli";
+
+#[inline(never)]
+fn byte_sum(s: &String, extra: i32) -> i32 {
+    let mut total = extra;
+    for let i of 0..<s.len() {
+        total = total + unchecked s.byte_at(i) as i32;
+    }
+    return total;
+}
+
+#[inline(never)]
+fn rare() with Stdout {
+    println(`${byte_sum(&"rare", builtin::black_box(0))}`);
+}
+
+export fn run() with Stdout {
+    println(`${byte_sum(&"hello", builtin::black_box(0))}`);
+    if builtin::black_box(true) {
+        builtin::cold_path();
+        println(`${byte_sum(&"cold", builtin::black_box(0))}`);
+        rare();
+    }
+}
+
+__DATA__
+{
+    "stdout": "532\n418\n426\n",
+    "wir_expect:O2": [
+        "global global:const_object_globalization_cold.wado::$const_obj_0"
+    ],
+    "wir_not_expect:O2": [
+        "$const_obj_1"
+    ]
+}

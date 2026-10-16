@@ -387,6 +387,7 @@ pub fn grow(seed: i32) -> i32 {
 fn a_gate_on_a_param_derived_global_is_remarked() {
     // `core:log`'s shape: the gate reads a global derived from the parameter,
     // never the parameter itself, so nothing at the branch names `log.level`.
+    // `black_box` keeps the fold from settling the global and the gate with it.
     let remarks = remarks_for_params(
         r#"
 use { println, Stdout } from "core:cli";
@@ -394,7 +395,7 @@ use { println, Stdout } from "core:cli";
 #[param(name = "log.level")]
 global LOG_LEVEL: String = "trace";
 
-global STATIC_LEVEL: i32 = level_from_str(LOG_LEVEL);
+global STATIC_LEVEL: i32 = level_from_str(builtin::black_box(LOG_LEVEL));
 
 fn level_from_str(s: String) -> i32 {
     if s == "trace" {

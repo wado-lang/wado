@@ -34,7 +34,7 @@ use crate::tir::{BuiltinDeclaration, ResolvedType, TypeId, TypeTable};
 
 use cranelift_entity::EntityRef;
 
-use super::arena_query;
+use super::arena_query::{self, cold_exprs, cold_functions, cold_path_id};
 use super::body_memo::BodyMemo;
 use super::dce::callee_descriptor;
 use super::gate::{FunctionGate, GatedPass};
@@ -398,6 +398,27 @@ impl<'a> CostWalk<'a> {
         cost
     }
 
+    /// What an `if` costs over its operands. A guard, an arm-less `if` whose
+    /// arm opens with `cold_path()`, is laid out of line and never merges back,
+    /// so running it costs the test and a jump and splits no region: one
+    /// [`weight::OP`]. Pricing it as a [`weight::BRANCH`] held `Slice::slice`
+    /// back once the `contract` checks of its two `i32::clamp` calls were
+    /// copied into it, and with it every fold of a constant slice.
+    fn branch_weight(&self, then_block: BlockId, else_block: Option<BlockId>) -> usize {
+        let guard = self.price == Price::Hot
+            && else_block.is_none()
+            && self.body.blocks[then_block]
+                .stmts
+                .first()
+                .is_some_and(|&s| {
+                    matches!(
+                        block_cut(self.body, s, self.type_table, self.descriptors),
+                        BlockCut::Cold
+                    )
+                });
+        if guard { weight::OP } else { weight::BRANCH }
+    }
+
     /// Cost of a NIR block, stopping once the rest of it becomes cold or
     /// unreachable. The walk ends at the first statement [`block_cut`] flags: a
     /// `cold_path()` marker drops the marker and, at [`Price::Hot`], everything
@@ -447,7 +468,7 @@ impl<'a> CostWalk<'a> {
                     });
                     return self.decided_arms(arms, seen);
                 }
-                weight::BRANCH
+                self.branch_weight(*then_block, *else_block)
                     + self.operand(*condition, seen)
                     + self.block(*then_block, seen)
                     + else_block.map_or(0, |b| self.block(b, seen))
@@ -628,7 +649,7 @@ impl<'a> CostWalk<'a> {
                     });
                     return self.decided_arms(arms, seen);
                 }
-                weight::BRANCH
+                self.branch_weight(*then_branch, *else_branch)
                     + self.operand(*condition, seen)
                     + self.block(*then_branch, seen)
                     + else_branch.map_or(0, |b| self.block(b, seen))
@@ -997,15 +1018,63 @@ struct BodyScan {
     /// Every call, with its by-value arguments keyed by position: an
     /// [`ArgSite`] before the callee's own writes rule any out.
     calls: Vec<ArgSite>,
+    /// The callees called from at least one site no `cold_path()` marker
+    /// covers.
+    hot_callees: IndexSet<FuncId>,
+    /// The callees called from at least one site a `cold_path()` marker covers.
+    cold_callees: IndexSet<FuncId>,
     /// Whether the body holds a `loop`.
     loopy: bool,
 }
 
-/// The [`BodyScan`]s, kept across rounds.
+/// The [`BodyScan`]s, and what the last sweep read about each function, kept
+/// across rounds.
 #[derive(Default)]
-pub(super) struct InlineScans(BodyMemo<BodyScan>);
+pub(super) struct InlineScans {
+    bodies: BodyMemo<BodyScan>,
+    /// Indexed by store position.
+    read: Vec<SweepRead>,
+}
 
-fn scan_body(func: &NirFunction) -> BodyScan {
+/// What a sweep reads about a function that its own body does not decide:
+/// as a callee, whether a site admits it; as a caller, whether its sites are
+/// cold. Each moves with call sites anywhere in the program.
+#[derive(Clone, Copy, PartialEq, Eq)]
+struct SweepRead {
+    reach: Reach,
+    shrinks: bool,
+    cold: bool,
+}
+
+/// Have the inliner revisit each function whose sweep would read something
+/// new: a caller of a callee whose admission moved, and a function that turned
+/// cold or hot. The gate re-dirties only a changed body's neighbours, so a
+/// callee left with one site after a splice elsewhere would otherwise wait on
+/// an unrelated change to reach its last caller. A function new this round is
+/// dirty already.
+fn revisit_moved_reads(
+    before: &[SweepRead],
+    after: &[SweepRead],
+    scans: &[BodyScan],
+    gate: &mut FunctionGate,
+) {
+    let pair = |i: usize| before.get(i).map(|b| (b, &after[i]));
+    let turned = |i: usize| pair(i).is_some_and(|(b, a)| b.cold != a.cold);
+    let readmitted =
+        |i: usize| pair(i).is_some_and(|(b, a)| (b.reach, b.shrinks) != (a.reach, a.shrinks));
+    for (caller, scan) in scans.iter().enumerate() {
+        if turned(caller)
+            || scan
+                .calls
+                .iter()
+                .any(|(callee, _)| readmitted(callee.index()))
+        {
+            gate.revisit(GatedPass::Inline, FuncId::new(caller));
+        }
+    }
+}
+
+fn scan_body(func: &NirFunction, cold_path: Option<FuncId>) -> BodyScan {
     // A site's arguments are keyed by position and the callee's writes by
     // local index.
     assert!(
@@ -1019,6 +1088,7 @@ fn scan_body(func: &NirFunction) -> BodyScan {
     let Some(body) = &func.body else {
         return scan;
     };
+    let cold = cold_path.map(|id| cold_exprs(body, id)).unwrap_or_default();
     body.for_each_reachable_node(|node| match node {
         NodeRef::Stmt(st) => match &body.stmts[st].kind {
             StmtKind::Let {
@@ -1054,6 +1124,11 @@ fn scan_body(func: &NirFunction) -> BodyScan {
                     .map(|(pos, a)| (pos as u32, a.expr))
                     .collect();
                 scan.calls.push((*func_id, by_value));
+                if cold.contains(&e) {
+                    scan.cold_callees.insert(*func_id);
+                } else {
+                    scan.hot_callees.insert(*func_id);
+                }
             }
             _ => {}
         },
@@ -1104,7 +1179,7 @@ fn place_root_local(body: &Body, expr: ExprId) -> Option<u32> {
 }
 
 /// Whether an argument reaches the callee as a compile-time constant — the
-/// shapes `const_folding` reads as one, plus the `&` a borrowed literal wears
+/// shapes `const_folding` reads as one, plus the `&` a referenced literal wears
 /// and the local it may be bound to first.
 fn is_constant_arg(body: &Body, op: Operand, const_locals: &IndexSet<u32>) -> bool {
     match op {
@@ -1417,8 +1492,9 @@ enum Site {
     Plain,
     /// Inside a loop of the caller.
     Loop,
-    /// After a `cold_path()` marker: only `#[inline(always)]` splices here,
-    /// since anything else only bloats the hot caller.
+    /// After a `cold_path()` marker, or anywhere in a function only such sites
+    /// reach: only `#[inline(always)]` and a splice no bigger than the call
+    /// happen here, since anything else only bloats code that rarely runs.
     Cold,
 }
 
@@ -1746,6 +1822,24 @@ fn call_site_counts(scans: &[BodyScan]) -> Vec<usize> {
     counts
 }
 
+/// The functions some cold site calls, indexed by store position: the ones a
+/// [`Site::Cold`] admission asks whether they shrink.
+fn called_cold(scans: &[BodyScan], cold: &[bool]) -> Vec<bool> {
+    let mut called = vec![false; scans.len()];
+    for (caller, scan) in scans.iter().enumerate() {
+        if cold[caller] {
+            for (callee, _) in &scan.calls {
+                called[callee.index()] = true;
+            }
+        } else {
+            for callee in &scan.cold_callees {
+                called[callee.index()] = true;
+            }
+        }
+    }
+    called
+}
+
 /// A callee the heuristic admitted, priced for the budget.
 struct Candidate {
     id: FuncId,
@@ -1939,6 +2033,9 @@ struct Candidates<'a> {
     carried: &'a IndexMap<FuncId, IndexMap<FuncId, usize>>,
     /// Each candidate's written price, net of the call site it replaces.
     net_price: &'a IndexMap<FuncId, usize>,
+    /// The candidates a cold site calls that are no bigger than the call they
+    /// replace: splicing one shrinks the caller, so [`Site::Cold`] admits it.
+    shrinking: &'a IndexSet<FuncId>,
     rescan_cap: usize,
     /// What the re-scan under way may still splice, or `None` outside one.
     rescan_left: Option<&'a Cell<usize>>,
@@ -1990,7 +2087,14 @@ pub fn inline_functions(
     // borrow-safe), so a call site is recognized by its stamped id rather than the
     // call node's `FunctionRef`. Indexed by `func_id.index()` (== store position).
     let descriptors = descriptor_cache.descriptors(project);
-    let scans = scans.0.refresh(project, gate.exec(), scan_body);
+    let cold_path = cold_path_id(descriptors);
+    let InlineScans { bodies, read } = scans;
+    let scans = bodies.refresh(project, gate.exec(), |f| scan_body(f, cold_path));
+    // Taken every round, unlike the prices below: a callee's only site is one
+    // where its splice pays back.
+    let call_sites = call_site_counts(scans);
+    let cold = cold_functions(project, &call_sites, |caller| &scans[caller].hot_callees);
+    let called_cold = called_cold(scans, &cold);
     let never: Vec<bool> = {
         let type_table = project.type_table.borrow();
         project
@@ -2025,6 +2129,7 @@ pub fn inline_functions(
     let mut inline_candidates: IndexMap<FuncId, NirFunction> = IndexMap::default();
     let mut reach: IndexMap<FuncId, Reach> = IndexMap::default();
     let mut net_price: IndexMap<FuncId, usize> = IndexMap::default();
+    let mut shrinking: IndexSet<FuncId> = IndexSet::default();
 
     // Also collect function_strings for each candidate (to update caller's
     // strings after inlining). `function_strings` is keyed by `(module, name)`;
@@ -2049,11 +2154,8 @@ pub fn inline_functions(
     // What the unit holds right now, and what each admitted candidate would add
     // to it. `Candidate::forced` marks the ones the budget may not turn down.
     // Both prices cost a walk over the whole unit per round and no level sets a
-    // growth cap, so they are taken only where something reads them. The site
-    // counts are taken every round, since a callee's only site is one where its
-    // splice pays back.
+    // growth cap, so they are taken only where something reads them.
     let pricing = budget.prices_read();
-    let call_sites = call_site_counts(scans);
     let hopeful_params = hopeful_params(project, scans, &sites, gate.exec());
     let mut unit_size = 0usize;
     let mut priced: Vec<Candidate> = Vec::new();
@@ -2136,16 +2238,20 @@ pub fn inline_functions(
             verdict.reach
         );
         let candidate = (verdict.reach != Reach::Nowhere).then(|| {
+            let body = func.body.as_ref().expect("a candidate has a body");
             let hot = match func.inline_hint {
-                InlineHint::Always => inline_cost(
-                    func.body.as_ref().expect("a candidate has a body"),
-                    type_table,
-                    descriptors,
-                    &spliced,
-                ),
+                InlineHint::Always => inline_cost(body, type_table, descriptors, &spliced),
                 InlineHint::Auto | InlineHint::Hint | InlineHint::Never => verdict.hot,
             };
-            (net_cost(hot, func.params.len()), func.clone())
+            let shrinks = called_cold[i] && {
+                let written = if pricing {
+                    size
+                } else {
+                    inline_size(body, type_table, descriptors)
+                };
+                net_cost(written, func.params.len()) == 0
+            };
+            (net_cost(hot, func.params.len()), shrinks, func.clone())
         });
         (func.id, size, verdict, candidate)
     });
@@ -2154,7 +2260,7 @@ pub fn inline_functions(
         if let Some(id) = id {
             holds.settle(id, verdict.hold, gate);
         }
-        let Some((net, func)) = candidate else {
+        let Some((net, shrinks, func)) = candidate else {
             continue;
         };
         let id = id.expect("func_id assigned at lower");
@@ -2175,6 +2281,9 @@ pub fn inline_functions(
             });
         }
         net_price.insert(id, net);
+        if shrinks {
+            shrinking.insert(id);
+        }
         inline_candidates.insert(id, func);
     }
     drop(types);
@@ -2223,6 +2332,9 @@ pub fn inline_functions(
     for id in &over_budget {
         inline_candidates.shift_remove(id);
         candidate_strings.shift_remove(id);
+        reach.shift_remove(id);
+        net_price.shift_remove(id);
+        shrinking.shift_remove(id);
     }
 
     compiler_trace!(
@@ -2250,6 +2362,19 @@ pub fn inline_functions(
     let functions = &project.functions;
     let held = &holds.held;
 
+    let now: Vec<SweepRead> = (0..functions.len())
+        .map(|i| {
+            let id = FuncId::new(i);
+            SweepRead {
+                reach: reach.get(&id).copied().unwrap_or(Reach::Nowhere),
+                shrinks: shrinking.contains(&id),
+                cold: cold[i],
+            }
+        })
+        .collect();
+    revisit_moved_reads(read, &now, scans, gate);
+    *read = now;
+
     // Inline at call sites. A caller splices copies of the candidates, so no
     // visit reads what another writes.
     let spliced_into = gate.sweep_par(GatedPass::Inline, functions.len(), |fid| {
@@ -2261,6 +2386,7 @@ pub fn inline_functions(
             reach: &reach,
             carried: &carried,
             net_price: &net_price,
+            shrinking: &shrinking,
             // A threshold's worth of threshold-sized callees: a call tree that
             // doubles per level exceeds it within a few levels.
             rescan_cap: inline_threshold * inline_threshold,
@@ -2313,7 +2439,11 @@ pub fn inline_functions(
                 &mut inlined_funcs,
                 &mut labels,
                 &mut reval,
-                Site::Plain,
+                if cold[fid.index()] {
+                    Site::Cold
+                } else {
+                    Site::Plain
+                },
             );
         }
         func.address_taken_locals = frame.address_taken;
@@ -2942,7 +3072,9 @@ fn try_inline_call_expr(
     // candidate up directly (no `(module, name)` resolution).
     let candidate = candidates.bodies.get(&func_id)?;
     let admitted = match (site, candidates.reach[&func_id]) {
-        (Site::Cold, _) => candidate.inline_hint == InlineHint::Always,
+        (Site::Cold, _) => {
+            candidate.inline_hint == InlineHint::Always || candidates.shrinking.contains(&func_id)
+        }
         (Site::Plain | Site::Loop, Reach::Everywhere) => true,
         (Site::Plain | Site::Loop, Reach::Sole) => frame.original_site(call_id),
         (Site::Loop, Reach::Loops) => frame.sole_loop_site(func_id),

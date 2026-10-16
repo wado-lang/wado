@@ -18,7 +18,7 @@ use crate::tir::{
     FunctionRef, LetStorage, TirBlock, TirExpr, TirExprKind, TirFunction, TirMatchArm, TirPattern,
     TirStmt, TirStmtKind, TirTemplatePart, TirUnaryOp, TypeId, TypeTable, capture_source_locals,
 };
-use crate::tir_visitor::TirRefVisitor;
+use crate::tir_visitor::{TirRefVisitor, for_each_block_result};
 use crate::token::Span;
 use std::rc::Rc;
 
@@ -31,7 +31,7 @@ pub struct MoveEligible {
     /// at a literal, keyed by the materialized expression's span.
     pub place_spans: IndexSet<Span>,
     /// Whole-local value reads the elaborator found final (`moved_local_spans`),
-    /// of locals no kept borrow pins, and not reaching storage the same call
+    /// of locals no kept reference pins, and not reaching storage the same call
     /// mutates, keyed by the read's span.
     pub read_spans: IndexSet<Span>,
 }
@@ -55,7 +55,7 @@ pub struct Ownership {
 
 /// Decide `func`'s moves and shares together, both being readings of the one
 /// liveness this walk computes. `final_reads` are the elaborator's final-use
-/// spans, which read names only: a borrow a call takes of its receiver without
+/// spans, which read names only: a reference a call takes to its receiver without
 /// a `&` is out of their sight, so this walk's pins veto them, and so is a
 /// parameter the callers pass uncopied.
 pub fn analyze_ownership(
@@ -75,7 +75,7 @@ pub fn analyze_ownership(
         return Ownership::default();
     }
     let mut_receiver_methods = &plan.mut_receiver_methods;
-    let borrowed_params = plan.confined_params.borrowed_locals(func);
+    let shared_params = plan.confined_params.shared_locals(func);
 
     let mut all_locals: IndexSet<u32> = (0..func.local_count).collect();
     // Guard against a local_count that lags a grown local set.
@@ -88,7 +88,7 @@ pub fn analyze_ownership(
     let mut a = Analyzer {
         calls: &plan.retention,
         params: func.params.iter().map(|p| p.local_index).collect(),
-        borrowed_params: &borrowed_params,
+        shared_params: &shared_params,
         pending_bounded: Vec::new(),
         value_holds: Vec::new(),
         handed_away: IndexSet::default(),
@@ -104,7 +104,7 @@ pub fn analyze_ownership(
         non_final: IndexSet::default(),
         aliases_live: IndexSet::default(),
         alias_sites: Vec::new(),
-        borrow_escaped: IndexMap::default(),
+        ref_escaped: IndexMap::default(),
         written_through_escape: IndexSet::default(),
         let_sources: IndexMap::default(),
         match_sources: Vec::new(),
@@ -173,7 +173,7 @@ pub fn analyze_ownership(
         .iter()
         .filter(|(span, local)| {
             final_reads.contains(*span)
-                && !borrowed_params.contains(*local)
+                && !shared_params.contains(*local)
                 && !a.place_escaped(**local, None)
                 && !a.written_args.contains(*span)
         })
@@ -197,8 +197,8 @@ use super::place::{Names, Place as AccessPath, Resolver, Selector};
 /// Where a by-value argument's storage lives, for the write check.
 enum Storage {
     Local(u32),
-    /// Storage the reference in this local lends it.
-    Lent(u32),
+    /// Storage the reference in this local points to.
+    Referent(u32),
     /// Storage this frame cannot name, which anyone may write.
     Unnamed,
 }
@@ -251,7 +251,7 @@ struct PlaceMove {
 struct AssignSite {
     span: Span,
     /// The local the place is rooted at, `None` where no local roots it (a
-    /// field of a call's result, `xs[i].f`), so no borrow of it can be ruled
+    /// field of a call's result, `xs[i].f`), so no reference to it can be ruled
     /// out.
     root: Option<u32>,
     /// The first field the place reaches through, `None` for the whole root.
@@ -259,7 +259,7 @@ struct AssignSite {
     /// The last field the place names, as `(owner, index)`, `None` for a root.
     last: Option<(TypeId, u32)>,
     /// Whether the place lies past a reference, so its storage is the caller's.
-    through_borrow: bool,
+    through_ref: bool,
     /// Whether the site assigns an element of the `List` the place names
     /// (`xs[i] = v`) rather than the place itself.
     element: bool,
@@ -321,9 +321,9 @@ fn paths_overlap(source: &AccessPath, top: Option<u32>, reader: &AccessPath) -> 
 /// Whether `m` can never change the value read at `read`. Establishes the
 /// common root [`disjoint`] assumes.
 fn write_cannot_reach(m: &Mutation, read: &AccessPath) -> bool {
-    // A borrowed path ends in storage its root only lends, so `m` may be
+    // A path through a reference ends in storage its root only points to, so `m` may be
     // `read`'s own storage under another name.
-    if m.path.through_borrow {
+    if m.path.through_ref {
         return false;
     }
     if m.path.root != read.root {
@@ -379,11 +379,11 @@ impl RefTargets {
 pub fn compute_ref_targets(func: &TirFunction, resolver: &Resolver<'_>) -> RefTargets {
     let mut roots = IndexMap::default();
     for local in 0..func.local_count {
-        // A borrowed path names the slot holding the reference, not what it
+        // A path through a reference names the slot holding the reference, not what it
         // points at, so it yields no referent.
         if let Some(Names::Place(place)) = resolver.binding(local)
             && place.root != local
-            && !place.through_borrow
+            && !place.through_ref
         {
             roots.insert(local, place.root);
         }
@@ -424,7 +424,7 @@ impl<'a> Analyzer<'a> {
             .params
             .iter()
             .map(|p| p.local_index)
-            .filter(|l| !self.borrowed_params.contains(l));
+            .filter(|l| !self.shared_params.contains(l));
         let mut fresh: IndexSet<u32> = self
             .let_sources
             .keys()
@@ -457,7 +457,7 @@ impl<'a> Analyzer<'a> {
     fn hands_on_storage(&self, local: u32) -> bool {
         !self.non_final.contains(&local)
             && !self.aliases_live.contains(&local)
-            && !self.borrow_escaped.contains_key(&local)
+            && !self.ref_escaped.contains_key(&local)
     }
 
     /// The read-only bindings that may alias the storage they were read out of.
@@ -524,13 +524,14 @@ impl<'a> Analyzer<'a> {
         let moved_out =
             self.consumed.contains_key(&local) || inputs.place_move_bases.contains(&local);
         path.root != local
-            // A borrowed source is written through whoever lent it, at a root the
-            // scan above never sees, as is a root a `&mut` outlives.
-            && !path.through_borrow
+            // A source reached through a reference is written by whatever owns
+            // its referent, at a root the scan above never sees, as is a root a
+            // `&mut` outlives.
+            && !path.through_ref
             && !self.written_through_escape.contains(&path.root)
             // A reference to the binding kept out of this body's sight reads its
             // storage after any write the scan above weighs.
-            && !self.borrow_escaped.contains_key(&local)
+            && !self.ref_escaped.contains_key(&local)
             // A share skips a copy's right-sizing: a binding whose capacity is read keeps its copy.
             && !inputs.capacity_observed.contains(&local)
             && !moved_out
@@ -565,18 +566,18 @@ impl<'a> Analyzer<'a> {
     }
 
     /// The place an alias edge reads, as far as the selectors can be trusted: a
-    /// chain through a borrow ends in storage its root only lends, so it names
+    /// chain through a reference ends in storage its root only points to, so it names
     /// the whole root instead.
     fn read_place(&self, source: &TirExpr) -> Option<AccessPath> {
         match self.source_path(source) {
-            Some(path) if !path.through_borrow => Some(path),
+            Some(path) if !path.through_ref => Some(path),
             Some(path) => Some(AccessPath::local(path.root)),
             None => alias_root(source).map(AccessPath::local),
         }
     }
 
     /// Record what a call writes through `handle`, the place its argument `arg`
-    /// lends, receiver or not: the fields the callee names, re-rooted at the
+    /// refers to, receiver or not: the fields the callee names, re-rooted at the
     /// handle's own path.
     fn record_call_mutation(
         &mut self,
@@ -659,14 +660,14 @@ impl<'a> Analyzer<'a> {
             // A list reached through a reference (`*capture` in a closure) is
             // the referent's, which no field of this body owns.
             if matches!(
-                place::unwrap_borrow(receiver).kind,
+                place::unwrap_ref(receiver).kind,
                 TirExprKind::Unary {
                     op: TirUnaryOp::Deref,
                     ..
                 }
             ) && let Some(site) = self.assign_sites.last_mut()
             {
-                site.through_borrow = true;
+                site.through_ref = true;
                 site.last = None;
             }
         }
@@ -692,7 +693,7 @@ impl<'a> Analyzer<'a> {
                     Some(Selector::Field { owner, index }) => Some((*owner, *index)),
                     _ => None,
                 },
-                through_borrow: path.through_borrow,
+                through_ref: path.through_ref,
                 element,
                 mutations: start..self.mutations.len(),
                 live: live.clone(),
@@ -710,7 +711,7 @@ impl<'a> Analyzer<'a> {
                     root: place::place_root(target),
                     top: None,
                     last,
-                    through_borrow: true,
+                    through_ref: true,
                     element,
                     mutations: start..self.mutations.len(),
                     live: live.clone(),
@@ -786,8 +787,8 @@ impl<'a> Analyzer<'a> {
     /// receiver-aliasing accessor call whose receiver / first arg is a place.
     fn source_path(&self, value: &TirExpr) -> Option<AccessPath> {
         // Sharing storage a call named rests on the argument it named being
-        // borrowed: `through_borrow` is what makes a write through the lender
-        // refuse the share. A by-value argument is lent by nobody, so its path
+        // a reference: `through_ref` is what makes a write through the referent's
+        // owner refuse the share. A by-value argument is referenced by nobody, so its path
         // carries no such flag and a later write would go unseen —
         // `let s = black_box(y); y.a = …` must copy, as `let s = y` does.
         if self.resolver.hands_back_by_value(value) {
@@ -912,8 +913,8 @@ fn collect_local_roots(expr: &TirExpr, out: &mut IndexSet<u32>) {
 
 /// The assignments that write in place in a body the ownership walk does not
 /// read, answered without liveness: every one but to a place rooted at a local
-/// of this frame that nothing borrows or captures, and to that a field some
-/// borrow anywhere may observe.
+/// of this frame that nothing references or captures, and to that a field some
+/// reference anywhere may observe.
 #[must_use]
 pub fn unanalyzed_in_place_assigns(
     func: &TirFunction,
@@ -930,7 +931,7 @@ pub fn unanalyzed_in_place_assigns(
     }
     impl Scan<'_> {
         /// Whether assigning `place` writes in place, as the walk decides it
-        /// without liveness. Past a reference, the caller's borrows decide,
+        /// without liveness. Past a reference, the caller's references decide,
         /// through the field `owner` holding the place's storage, and with no
         /// such field anything may hold it.
         fn writes_in_place(&self, place: &TirExpr, owner: Option<(TypeId, u32)>) -> bool {
@@ -971,7 +972,7 @@ pub fn unanalyzed_in_place_assigns(
                         .type_table
                         .as_list(receiver.type_id)
                         .is_some_and(|element| self.type_table.is_in_place_aggregate(element));
-                    let list = place::unwrap_borrow(receiver);
+                    let list = place::unwrap_ref(receiver);
                     if in_place_elements && self.writes_in_place(list, self.owning_field(list)) {
                         self.out.insert(expr.span);
                     }
@@ -987,13 +988,13 @@ pub fn unanalyzed_in_place_assigns(
             self.walk_expr(expr);
         }
     }
-    /// Every local the body borrows: by `&`, as the receiver of a `&self`
+    /// Every local the body references: by `&`, as the receiver of a `&self`
     /// method, or by a closure's capture.
-    struct Borrowed<'a> {
+    struct Referenced<'a> {
         ref_receiver_methods: &'a FuncKeySet,
         locals: IndexSet<u32>,
     }
-    impl TirRefVisitor for Borrowed<'_> {
+    impl TirRefVisitor for Referenced<'_> {
         fn visit_expr(&mut self, expr: &TirExpr) {
             match &expr.kind {
                 TirExprKind::Closure { captures, .. } => {
@@ -1021,17 +1022,17 @@ pub fn unanalyzed_in_place_assigns(
     let Some(body) = &func.body else {
         return IndexSet::default();
     };
-    let mut borrowed = Borrowed {
+    let mut referenced = Referenced {
         ref_receiver_methods: &plan.ref_receiver_methods,
         locals: func.address_taken_locals.clone(),
     };
-    borrowed.visit_block(body);
+    referenced.visit_block(body);
     let mut scan = Scan {
         func,
         type_table,
         observed: &plan.observed_fields,
         list_element_assigns: &plan.list_element_assigns,
-        held: borrowed.locals,
+        held: referenced.locals,
         out: IndexSet::default(),
     };
     scan.visit_block(body);
@@ -1102,7 +1103,7 @@ struct Analyzer<'a> {
     /// frame, whatever the callee does with it.
     params: IndexSet<u32>,
     /// The by-value parameter locals this body's callers pass uncopied.
-    borrowed_params: &'a IndexSet<u32>,
+    shared_params: &'a IndexSet<u32>,
     /// `(referent root, field, destination roots)` for each bounded retention,
     /// answered once every escape this body makes is known.
     pending_bounded: Vec<(u32, Option<u32>, Vec<u32>)>,
@@ -1114,11 +1115,11 @@ struct Analyzer<'a> {
     /// readable anywhere.
     handed_away: IndexSet<u32>,
     /// Locals what whose references lead to went out of sight, and not their
-    /// own storage: a call keeping a borrow's referent's references, not the
-    /// borrow ([`Kept::Contents`]).
+    /// own storage: a call keeping a reference's referent's references, not the
+    /// reference ([`Kept::Contents`]).
     contents_escaped: IndexSet<u32>,
     /// What keeps the value being walked, taken by the call that produces it:
-    /// where that call hands a borrow back, the borrow is kept the same way.
+    /// where that call hands a reference back, the reference is kept the same way.
     result_kept: Option<Kept>,
     /// What a call through a function value of each functor type keeps — the
     /// answer an indirect call reads, where no callee name is available.
@@ -1141,9 +1142,9 @@ struct Analyzer<'a> {
     alias_sites: Vec<(u32, u32, IndexSet<u32>)>,
     /// Locals a reference outlives, by the fields it reaches. Such a local may
     /// be read through that reference after a move, so it stays copied.
-    borrow_escaped: IndexMap<u32, FieldEscape>,
+    ref_escaped: IndexMap<u32, FieldEscape>,
     /// Locals a `&mut` outlives. The write through it is recorded where the
-    /// borrow is taken, but lands wherever the holder runs it.
+    /// `&mut` is taken, but lands wherever the holder runs it.
     written_through_escape: IndexSet<u32>,
     let_sources: IndexMap<u32, Vec<TirExpr>>,
     match_sources: Vec<(u32, TirExpr)>,
@@ -1168,18 +1169,18 @@ struct Analyzer<'a> {
     /// The place each `let` reads its value out of, for the share rule.
     share_sources: IndexMap<u32, AccessPath>,
     /// Locals read in a value position, each with the locals live where that
-    /// happens. A projection base and a borrow referent consume nothing.
+    /// happens. A projection base and a reference's referent consume nothing.
     consumed: IndexMap<u32, IndexSet<u32>>,
     /// Each of those reads by span, with the local it reads. A final read
-    /// elsewhere — a borrow's referent, a projection base — takes no value, so
+    /// elsewhere — a reference's referent, a projection base — takes no value, so
     /// it moves nothing.
     value_reads: IndexMap<Span, u32>,
     /// Every write this body makes, with the locals live where it runs.
     mutations: Vec<Mutation<'a>>,
-    /// Assignments to a place of an in-place type, decided once every borrow
-    /// this body makes is known.
+    /// Assignments to a place of an in-place type, decided once every reference
+    /// this body takes is known.
     assign_sites: Vec<AssignSite>,
-    /// Whether a call's result can hold the storage an argument lends.
+    /// Whether a call's result can hold the storage an argument refers to.
     reach: &'a StorageReach<'a>,
     returns_owned: &'a FuncKeySet,
     list_element_assigns: &'a FuncKeySet,
@@ -1188,7 +1189,7 @@ struct Analyzer<'a> {
 /// What a call does with a reference handed at one argument position.
 #[derive(Clone)]
 enum Kept {
-    /// Nothing: the borrow ends with the call.
+    /// Nothing: the reference ends with the call.
     Transient,
     /// Something the caller cannot name, so the referent is pinned for the rest
     /// of the frame.
@@ -1242,8 +1243,8 @@ fn merge_contents(a: Option<Vec<TypeId>>, b: Option<Vec<TypeId>>) -> Option<Vec<
     Some(a)
 }
 
-/// Which fields of a local an escaped borrow reaches. A whole-local or imprecise
-/// borrow covers every field; a clean projection names the ones it takes.
+/// Which fields of a local an escaped reference reaches. A whole-local or imprecise
+/// reference covers every field; a clean projection names the ones it takes.
 enum FieldEscape {
     Whole,
     Fields(IndexSet<u32>),
@@ -1290,11 +1291,11 @@ impl Analyzer<'_> {
         }
     }
 
-    /// Record that a persisting borrow reaches `field` of `root`. `None` is the
+    /// Record that a persisting reference reaches `field` of `root`. `None` is the
     /// whole local or an imprecise projection, escaping every field.
     fn mark_escaped(&mut self, root: u32, field: Option<u32>) {
         let entry = self
-            .borrow_escaped
+            .ref_escaped
             .entry(root)
             .or_insert_with(|| FieldEscape::Fields(IndexSet::default()));
         match field {
@@ -1307,10 +1308,10 @@ impl Analyzer<'_> {
         }
     }
 
-    /// Whether a persisting borrow reaches the place `root.field` (`None` field =
+    /// Whether a persisting reference reaches the place `root.field` (`None` field =
     /// a whole-value move, blocked by any escaped field).
     fn place_escaped(&self, root: u32, field: Option<u32>) -> bool {
-        match self.borrow_escaped.get(&root) {
+        match self.ref_escaped.get(&root) {
             None => false,
             Some(FieldEscape::Whole) => true,
             Some(FieldEscape::Fields(fs)) => match field {
@@ -1320,14 +1321,9 @@ impl Analyzer<'_> {
         }
     }
 
-    /// A `&place` / `&mut place`. The referent stays live, but a borrow takes no
+    /// A `&place` / `&mut place`. The referent stays live, but a reference takes no
     /// value, so it never ends the local's final use. Returns the referent.
-    fn borrow_read(
-        &mut self,
-        place: &TirExpr,
-        live: &mut IndexSet<u32>,
-        record: bool,
-    ) -> Option<u32> {
+    fn ref_read(&mut self, place: &TirExpr, live: &mut IndexSet<u32>, record: bool) -> Option<u32> {
         match &place.kind {
             TirExprKind::Local { index, .. } => {
                 live.insert(*index);
@@ -1336,10 +1332,10 @@ impl Analyzer<'_> {
             TirExprKind::FieldAccess { expr: inner, .. }
             | TirExprKind::VariantPayload { expr: inner, .. }
             | TirExprKind::Cast { expr: inner, .. }
-            | TirExprKind::Unary { expr: inner, .. } => self.borrow_read(inner, live, record),
+            | TirExprKind::Unary { expr: inner, .. } => self.ref_read(inner, live, record),
             TirExprKind::Index { expr: inner, index } => {
                 self.walk_expr(index, live, record);
-                self.borrow_read(inner, live, record)
+                self.ref_read(inner, live, record)
             }
             // A call handing back a projection of an argument (`index_value`)
             // is a place of that argument's root.
@@ -1350,7 +1346,7 @@ impl Analyzer<'_> {
                 live.insert(projected.root);
                 Some(projected.root)
             }
-            // A borrow of a non-place (a fresh temporary) escapes nothing.
+            // A reference to a non-place (a fresh temporary) escapes nothing.
             _ => {
                 self.walk_expr(place, live, record);
                 None
@@ -1438,7 +1434,7 @@ impl Analyzer<'_> {
                 into_result,
             )
         };
-        // What a borrow lends is the storage it names; any other value lands
+        // What a reference hands over is the storage it names; any other value lands
         // in the result whole.
         let Some((ty, fresh)) =
             result_type.filter(|_| is_reference_type(arg.type_id, self.type_table))
@@ -1451,8 +1447,8 @@ impl Analyzer<'_> {
         if !self.reach.reaches_through(ty, arg.type_id, !fresh) {
             return landing(false);
         }
-        // The result holds none of what the borrow names, only what that
-        // storage's references lead to. Kept anywhere else too, the borrow pins
+        // The result holds none of what the reference names, only what that
+        // storage's references lead to. Kept anywhere else too, the reference pins
         // as a whole.
         match (landing(false), landing(true)) {
             (Kept::Transient, Kept::Into(locals)) => Kept::Through(locals),
@@ -1571,7 +1567,7 @@ impl Analyzer<'_> {
     }
 
     /// [`Self::pin`] for a `&place` / `&mut place` argument naming `root`.
-    fn pin_borrow(&mut self, op: TirUnaryOp, root: u32, place: &TirExpr, kept: &Kept) {
+    fn pin_ref(&mut self, op: TirUnaryOp, root: u32, place: &TirExpr, kept: &Kept) {
         if op == TirUnaryOp::MutRef
             && !matches!(kept, Kept::Transient | Kept::Through(_) | Kept::Contents(_))
         {
@@ -1619,7 +1615,7 @@ impl Analyzer<'_> {
         let anywhere: IndexSet<u32> = self
             .handed_away
             .iter()
-            .chain(self.borrow_escaped.keys())
+            .chain(self.ref_escaped.keys())
             .chain(&self.contents_escaped)
             .copied()
             .collect();
@@ -1628,9 +1624,9 @@ impl Analyzer<'_> {
 
     /// The assignments that write in place, each turning the writes it recorded
     /// from a repoint into a write inside the storage. Every place asks the
-    /// borrows this body makes of it: one a reference outlives, or one whose
+    /// references this body takes to it: one a holder outlives, or one whose
     /// holder is readable after the assignment. A place past a reference is the
-    /// caller's as well, so it also asks the borrows other bodies may hold
+    /// caller's as well, so it also asks the references other bodies may hold
     /// across the call that reaches this one.
     fn in_place_assigns(
         &mut self,
@@ -1649,10 +1645,10 @@ impl Analyzer<'_> {
                 }
                 continue;
             };
-            let external = site.through_borrow || is_reference_local(func, root, self.type_table);
+            let external = site.through_ref || is_reference_local(func, root, self.type_table);
             let readable = readable_storage(paths, &site.live);
-            // Which of the root's fields a borrow still holds after the site:
-            // `None` stands for the whole root, or a borrow too imprecise to
+            // Which of the root's fields a reference still holds after the site:
+            // `None` stands for the whole root, or a reference too imprecise to
             // name a field.
             let held: IndexSet<Option<u32>> = self
                 .pending_bounded
@@ -1666,10 +1662,10 @@ impl Analyzer<'_> {
                 .map(|(_, field, _)| *field)
                 .chain(self.escaped_fields(root))
                 .collect();
-            // A borrow naming no field may be one taken through a call
+            // A reference naming no field may be one taken through a call
             // (`&hs[0].p`, an iterator) that holds any field, so it counts for
-            // every place under the root. An element of a `List` the caller
-            // lends may be held by the caller.
+            // every place under the root. An element of a `List` this body
+            // received by reference may be held by its caller.
             let in_place = match site.top {
                 None => !held.is_empty(),
                 Some(top) => held.contains(&Some(top)) || held.contains(&None),
@@ -1687,10 +1683,10 @@ impl Analyzer<'_> {
         out
     }
 
-    /// The fields of `root` a borrow that outlives the frame reaches, `None`
+    /// The fields of `root` a reference that outlives the frame reaches, `None`
     /// for the whole root.
     fn escaped_fields(&self, root: u32) -> Vec<Option<u32>> {
-        match self.borrow_escaped.get(&root) {
+        match self.ref_escaped.get(&root) {
             None => Vec::new(),
             Some(FieldEscape::Whole) => vec![None],
             Some(FieldEscape::Fields(fields)) => fields.iter().map(|f| Some(*f)).collect(),
@@ -1770,7 +1766,7 @@ impl Analyzer<'_> {
 
     /// An indirect-call argument. Nothing here names the body that will run, so
     /// the row the call site resolved says what this position leaves behind:
-    /// through a functor nothing mints a retaining value for, a borrow is as
+    /// through a functor nothing mints a retaining value for, a reference is as
     /// transient as it is through a named callee that keeps nothing.
     fn walk_indirect_arg(
         &mut self,
@@ -1784,15 +1780,15 @@ impl Analyzer<'_> {
             expr: place,
         } = &arg.kind
         {
-            self.walk_borrow(*op, place, kept, live, record);
+            self.walk_ref(*op, place, kept, live, record);
         } else {
             self.walk_kept(arg, kept, false, live, record);
         }
     }
 
-    /// A `&place` / `&mut place` whose borrow is kept as `kept` says. The write
+    /// A `&place` / `&mut place` whose reference is kept as `kept` says. The write
     /// a `&mut` makes is recorded here, wherever its holder runs it.
-    fn walk_borrow(
+    fn walk_ref(
         &mut self,
         op: TirUnaryOp,
         place: &TirExpr,
@@ -1803,12 +1799,12 @@ impl Analyzer<'_> {
         if record && op == TirUnaryOp::MutRef {
             self.record_mutation(place, live);
         }
-        self.hold_borrow(op, place, kept, live, record);
+        self.hold_ref(op, place, kept, live, record);
     }
 
-    /// [`Self::walk_borrow`] for a caller that records the write itself. A
-    /// borrow of a call's result keeps that temporary as `kept` says.
-    fn hold_borrow(
+    /// [`Self::walk_ref`] for a caller that records the write itself. A
+    /// reference to a call's result keeps that temporary as `kept` says.
+    fn hold_ref(
         &mut self,
         op: TirUnaryOp,
         place: &TirExpr,
@@ -1819,26 +1815,26 @@ impl Analyzer<'_> {
         if record && is_call(place) {
             self.result_kept = Some(kept.clone());
         }
-        if let Some(r) = self.borrow_read(place, live, record)
+        if let Some(r) = self.ref_read(place, live, record)
             && record
         {
-            self.pin_borrow(op, r, place, kept);
+            self.pin_ref(op, r, place, kept);
         }
         assert!(
             self.result_kept.is_none(),
-            "the call producing a borrowed temporary takes what keeps it"
+            "the call producing a referenced temporary takes what keeps it"
         );
     }
 
     /// One call argument. A `&`/`&mut` is transient unless the callee stores
-    /// that position; `borrowing_receiver` marks the one it reads through,
+    /// that position; `ref_receiver` marks the one it reads through,
     /// whose writes the call records.
     fn walk_call_arg(
         &mut self,
         arg: &TirExpr,
         callee: Option<(&FunctionRef, u32)>,
         kept: &Kept,
-        borrowing_receiver: bool,
+        ref_receiver: bool,
         live: &mut IndexSet<u32>,
         record: bool,
     ) {
@@ -1847,31 +1843,31 @@ impl Analyzer<'_> {
             expr: place,
         } = &arg.kind
         else {
-            self.walk_kept(arg, kept, borrowing_receiver, live, record);
+            self.walk_kept(arg, kept, ref_receiver, live, record);
             return;
         };
         // Which fields a `&mut` argument is written through is the callee's
         // own answer. Only one this walk cannot name writes the whole place.
         let Some((c, position)) = callee else {
-            self.walk_borrow(*op, place, kept, live, record);
+            self.walk_ref(*op, place, kept, live, record);
             return;
         };
-        if record && !borrowing_receiver && *op == TirUnaryOp::MutRef {
+        if record && !ref_receiver && *op == TirUnaryOp::MutRef {
             self.record_call_mutation(c, arg, place, position, live);
         }
-        // A call handing its receiver back as its result keeps the borrow in
+        // A call handing its receiver back as its result keeps the reference in
         // that result, which the walk follows as a place.
         let handed_back = position == 0
             && self
                 .returns_receiver_alias
                 .contains(&c.module_source, &c.name);
         let op = if handed_back { TirUnaryOp::Ref } else { *op };
-        self.hold_borrow(op, place, kept, live, record);
+        self.hold_ref(op, place, kept, live, record);
     }
 
     /// A value handed to a position that keeps it as `kept` says. A reference
     /// pins its referent; any other value hands on what it holds. `&place` is
-    /// left to [`Analyzer::walk_borrow`], which knows the field it borrows.
+    /// left to [`Analyzer::walk_ref`], which knows the field it references.
     fn hand_on(&mut self, expr: &TirExpr, kept: &Kept) {
         let mut yielded = Vec::new();
         yielded_values(expr, self.type_table, &mut yielded);
@@ -1931,7 +1927,7 @@ impl Analyzer<'_> {
     }
 
     /// Walk the value a `let` or a whole-local assignment stores in `local`.
-    /// A borrow or a call result stored there lasts as long as `local` is
+    /// A reference or a call result stored there lasts as long as `local` is
     /// readable, so it pins its referent only that long. A place is followed
     /// by the alias chains; anything else a branch yields persists.
     fn walk_stored_value(
@@ -1948,7 +1944,7 @@ impl Analyzer<'_> {
                 expr: place,
             } => {
                 let kept = self.held_in(local);
-                self.walk_borrow(*op, place, &kept, live, record);
+                self.walk_ref(*op, place, &kept, live, record);
             }
             _ if alias_root(stripped).is_some() => self.walk_expr(value, live, record),
             _ if is_call(value) => {
@@ -1986,7 +1982,7 @@ impl Analyzer<'_> {
     /// Resolve the deferred write checks: a by-value argument whose storage the
     /// call's evaluation may write keeps its copy. A local's storage is
     /// reached through the alias chains as well as its own location; storage a
-    /// reference lends, through what the reference names.
+    /// reference points to, through what the reference names.
     fn resolve_write_checks(
         &mut self,
         func: &TirFunction,
@@ -2055,7 +2051,7 @@ impl Analyzer<'_> {
         handed_from: usize,
         own: usize,
     ) {
-        let is_borrow = matches!(
+        let is_ref = matches!(
             &arg.kind,
             TirExprKind::Unary {
                 op: TirUnaryOp::Ref | TirUnaryOp::MutRef,
@@ -2063,7 +2059,7 @@ impl Analyzer<'_> {
             }
         );
         // Only a value a copy would wrap has a copy to keep.
-        if is_borrow || !needs_value_copy(arg.type_id, self.type_table) {
+        if is_ref || !needs_value_copy(arg.type_id, self.type_table) {
             return;
         }
         let span = strip_casts(arg).span;
@@ -2080,7 +2076,7 @@ impl Analyzer<'_> {
                     span,
                     written: Rc::clone(&written),
                 }),
-                Storage::Lent(reference) => {
+                Storage::Referent(reference) => {
                     if self
                         .points_to
                         .reaches_written(self.frame, reference, &written)
@@ -2135,7 +2131,7 @@ impl Analyzer<'_> {
             self.type_table,
             &mut |leaf| match self.resolver.names(leaf) {
                 Names::Value => {}
-                Names::Place(place) if place.through_borrow => out.push(Storage::Lent(place.root)),
+                Names::Place(place) if place.through_ref => out.push(Storage::Referent(place.root)),
                 Names::Place(place) => out.push(Storage::Local(place.root)),
                 Names::Unknown => match (alias_root(leaf), &projected_from(leaf).kind) {
                     (Some(root), _) => out.push(Storage::Local(root)),
@@ -2143,7 +2139,7 @@ impl Analyzer<'_> {
                     // through its arguments, and so does a part of it.
                     (None, TirExprKind::Call { args, .. }) => {
                         for a in args {
-                            self.storage_roots(place::unwrap_borrow(&a.expr), out);
+                            self.storage_roots(place::unwrap_ref(&a.expr), out);
                         }
                     }
                     (None, _) => out.push(Storage::Unnamed),
@@ -2213,19 +2209,20 @@ impl Analyzer<'_> {
         let Names::Place(place) = self.resolver.names(call) else {
             return None;
         };
-        if place.through_borrow || !place.field_addressable() {
+        if place.through_ref || !place.field_addressable() {
             return None;
         }
         let param = self.resolver.return_path(func)?.param;
         let TirExprKind::Unary {
             op: TirUnaryOp::Ref,
-            expr: lent,
+            expr: referent,
         } = &place::arg_at(func, args, param).kind
         else {
             return None;
         };
         let retained = self.retained_by(func, args.len(), call);
-        if clean_root(lent) != Some(place.root) || retained.keeps(u32::try_from(param).unwrap()) {
+        if clean_root(referent) != Some(place.root) || retained.keeps(u32::try_from(param).unwrap())
+        {
             return None;
         }
         for (pos, a) in args.iter().enumerate() {
@@ -2240,7 +2237,7 @@ impl Analyzer<'_> {
     }
 
     /// Mark `conflict` for any use of an aggregate root that mutates or moves its
-    /// storage. A read-only borrow and a deep copy leave no live alias.
+    /// storage. A read-only reference and a deep copy leave no live alias.
     fn scan_place_uses(&self, expr: &TirExpr, conflict: &mut IndexSet<u32>) {
         match &expr.kind {
             TirExprKind::Local { index, .. } => {
@@ -2567,16 +2564,16 @@ impl Analyzer<'_> {
         live: &mut IndexSet<u32>,
         record: bool,
     ) {
-        if let Some((op, place)) = borrowed_place(scrut) {
+        if let Some((op, place)) = referenced_place(scrut) {
             if record && op == TirUnaryOp::MutRef {
                 self.record_mutation(place, live);
             }
-            // The walk goes through the projections over the borrow as well.
-            if let Some(r) = self.borrow_read(scrut, live, record)
+            // The walk goes through the projections over the reference as well.
+            if let Some(r) = self.ref_read(scrut, live, record)
                 && record
                 && !binds.is_empty()
             {
-                self.pin_borrow(op, r, place, &Kept::Into(binds.to_vec()));
+                self.pin_ref(op, r, place, &Kept::Into(binds.to_vec()));
             }
         } else if alias_root(scrut).is_some() {
             // A `match` projects its scrutinee rather than taking it: the arm
@@ -2590,7 +2587,7 @@ impl Analyzer<'_> {
     /// Close the escape set over reference bindings: an escaped reference
     /// carries the root it was taken over. Deferred, the walk being backward.
     fn propagate_escapes_to_referents(&mut self, func: &TirFunction, type_table: &TypeTable) {
-        let mut work: Vec<u32> = self.borrow_escaped.keys().copied().collect();
+        let mut work: Vec<u32> = self.ref_escaped.keys().copied().collect();
         let mut seen: IndexSet<u32> = work.iter().copied().collect();
         while let Some(local) = work.pop() {
             if !is_reference_local(func, local, type_table) {
@@ -2689,7 +2686,7 @@ impl Analyzer<'_> {
                 }
                 // A `&self` / `&mut self` receiver is a place the callee reads
                 // through rather than a value it takes.
-                let borrowing_receiver = receiver.is_some()
+                let ref_receiver = receiver.is_some()
                     && self
                         .ref_receiver_methods
                         .contains(&func.module_source, &func.name);
@@ -2720,7 +2717,7 @@ impl Analyzer<'_> {
                         &arg.expr,
                         Some((func, pos as u32)),
                         kept.get(pos).unwrap_or(&Kept::Transient),
-                        borrowing_receiver && pos == 0,
+                        ref_receiver && pos == 0,
                         live,
                         record,
                     );
@@ -2769,7 +2766,7 @@ impl Analyzer<'_> {
             TirExprKind::Unary {
                 op: op @ (TirUnaryOp::Ref | TirUnaryOp::MutRef),
                 expr: place,
-            } => self.walk_borrow(*op, place, &Kept::Frame, live, record),
+            } => self.walk_ref(*op, place, &Kept::Frame, live, record),
             TirExprKind::StructLiteral { fields, .. } => {
                 if record {
                     let children: Vec<&TirExpr> = fields.iter().map(|f| &f.value).collect();
@@ -2816,7 +2813,7 @@ impl Analyzer<'_> {
             | TirExprKind::Index { .. }
                 if is_scalar_type(expr.type_id, self.type_table) =>
             {
-                self.borrow_read(expr, live, record);
+                self.ref_read(expr, live, record);
             }
             // A newtype cast hands over the storage it wraps, so a local under
             // one is taken as the bare local would be.
@@ -2906,10 +2903,8 @@ fn yielded_leaves(expr: &TirExpr, type_table: &TypeTable, leaf: &mut dyn FnMut(&
                 block_yielded_leaves(eb, type_table, leaf);
             }
         }
-        TirExprKind::Block(block) => block_yielded_leaves(block, type_table, leaf),
-        TirExprKind::LabeledBlock { block, .. } => {
-            block_yielded_leaves(block, type_table, leaf);
-            BreakValues { type_table, leaf }.visit_block(block);
+        TirExprKind::Block(_) | TirExprKind::LabeledBlock { .. } => {
+            for_each_block_result(expr, &mut |result| yielded_leaves(result, type_table, leaf));
         }
         TirExprKind::TupleSpread { expr: inner } => yielded_leaves(inner, type_table, leaf),
         // A scalar read out of a local carries none of its storage.
@@ -2925,22 +2920,6 @@ fn block_yielded_leaves(block: &TirBlock, type_table: &TypeTable, leaf: &mut dyn
     }
 }
 
-/// What a labeled block's `break`s hand out of it, from anywhere inside. Which
-/// label one targets is not distinguished; an outer one only over-counts.
-struct BreakValues<'a> {
-    type_table: &'a TypeTable,
-    leaf: &'a mut dyn FnMut(&TirExpr),
-}
-
-impl TirRefVisitor for BreakValues<'_> {
-    fn visit_stmt(&mut self, stmt: &TirStmt) {
-        if let TirStmtKind::Break { value: Some(v), .. } = &stmt.kind {
-            yielded_leaves(v, self.type_table, self.leaf);
-        }
-        self.walk_stmt(stmt);
-    }
-}
-
 /// What a chain of projections is taken over.
 fn projected_from(mut expr: &TirExpr) -> &TirExpr {
     while let Some(base) = place::projection_base(expr) {
@@ -2949,9 +2928,9 @@ fn projected_from(mut expr: &TirExpr) -> &TirExpr {
     expr
 }
 
-/// The borrow a place chain bottoms out in, the shape a match takes on a
-/// borrowed scrutinee: its op and the place it takes.
-fn borrowed_place(expr: &TirExpr) -> Option<(TirUnaryOp, &TirExpr)> {
+/// The reference a place chain bottoms out in, the shape a match takes on a
+/// referenced scrutinee: its op and the place it takes.
+fn referenced_place(expr: &TirExpr) -> Option<(TirUnaryOp, &TirExpr)> {
     match &expr.kind {
         TirExprKind::Unary {
             op: op @ (TirUnaryOp::Ref | TirUnaryOp::MutRef),
@@ -2964,7 +2943,7 @@ fn borrowed_place(expr: &TirExpr) -> Option<(TirUnaryOp, &TirExpr)> {
         | TirExprKind::Unary {
             op: TirUnaryOp::Deref,
             expr: inner,
-        } => borrowed_place(inner),
+        } => referenced_place(inner),
         _ => None,
     }
 }

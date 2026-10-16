@@ -172,7 +172,7 @@ fn line_literals(expr: &Expr) -> Vec<usize> {
 }
 
 /// Finds what may change state between two evaluations without performing an
-/// effect: an assignment, a `&mut` borrow, a method taking `&mut self`, a call
+/// effect: an assignment, a `&mut`, a method taking `&mut self`, a call
 /// handed a value reaching a `&mut`, and a call of anything but a declared
 /// function, such as a `fn mut` closure.
 struct Writes<'a> {

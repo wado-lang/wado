@@ -18,6 +18,7 @@ use crate::nir_arena::{
     BlockId, Body, ExprId, ExprKind, NodeRef, Operand, PatId, PatKind, StmtId, StmtKind,
 };
 use crate::nir_engine::Engine;
+use crate::nir_package::NirPackage;
 use crate::nir_value_graph::{OpaqueSource, ValueId, ValueKind};
 use crate::optimize::mod_ref;
 use crate::optimize::value_copy::mutation::MutationOracle;
@@ -540,6 +541,67 @@ pub(super) fn cold_exprs(body: &Body, cold: FuncId) -> IndexSet<ExprId> {
     out
 }
 
+/// The functions no hot site reaches, indexed by store position: every path
+/// into one passes a `cold_path()` marker, so whatever runs in it runs only once
+/// a cold path is taken. A function no call site reaches is reached some other
+/// way (an export, a global initializer, a function reference), so it counts as
+/// hot. `call_sites` counts each function's sites, and `hot_callees` names what
+/// a function calls from a site no marker covers.
+pub(super) fn cold_functions<'a>(
+    project: &NirPackage,
+    call_sites: &[usize],
+    hot_callees: impl Fn(usize) -> &'a IndexSet<FuncId>,
+) -> Vec<bool> {
+    let mut hot: Vec<bool> = project
+        .functions
+        .iter()
+        .zip(call_sites)
+        .map(|(f, &sites)| {
+            let f = f.borrow();
+            sites == 0 || f.is_export || f.is_cm_export
+        })
+        .collect();
+    let mut work: Vec<usize> = (0..hot.len()).filter(|&i| hot[i]).collect();
+    while let Some(caller) = work.pop() {
+        for callee in hot_callees(caller) {
+            if !hot[callee.index()] {
+                hot[callee.index()] = true;
+                work.push(callee.index());
+            }
+        }
+    }
+    hot.into_iter().map(|hot| !hot).collect()
+}
+
+/// [`cold_functions`] over a fresh walk of every live body.
+pub(super) fn cold_functions_of(project: &NirPackage, cold_path: Option<FuncId>) -> Vec<bool> {
+    let mut call_sites = vec![0usize; project.functions.len()];
+    let hot_callees: Vec<IndexSet<FuncId>> = project
+        .functions
+        .iter()
+        .map(|f| {
+            let f = f.borrow();
+            let mut hot = IndexSet::default();
+            let Some(body) = f.body.as_ref().filter(|_| !f.is_dead) else {
+                return hot;
+            };
+            let cold = cold_path.map(|id| cold_exprs(body, id)).unwrap_or_default();
+            body.for_each_reachable_node(|node| {
+                if let NodeRef::Expr(e) = node
+                    && let ExprKind::Call { func_id, .. } = &body.exprs[e].kind
+                {
+                    call_sites[func_id.index()] += 1;
+                    if !cold.contains(&e) {
+                        hot.insert(*func_id);
+                    }
+                }
+            });
+            hot
+        })
+        .collect();
+    cold_functions(project, &call_sites, |caller| &hot_callees[caller])
+}
+
 /// [`is_pure_expr`] for an operand: a promoted constant is pure.
 pub(super) fn is_pure_operand(body: &Body, op: Operand) -> bool {
     op.as_expr().is_none_or(|e| is_pure_expr(body, e))
@@ -769,14 +831,14 @@ pub(super) fn expr_node_may_trap_typed(body: &Body, id: ExprId, types: Option<&T
 /// Flow-insensitive `&mut`-alias map: per `&mut`-typed local, the function locals
 /// its reference may point into. Built in one walk plus a fixpoint over
 /// ref-to-ref copies; every other shape leaves the provenance unknown, so a write
-/// may hit any `borrowed` local. A mut-ref parameter aliases nothing — a caller
+/// may hit any `mut_referenced` local. A mut-ref parameter aliases nothing — a caller
 /// cannot hold a reference into this frame's fresh locals.
 #[derive(Debug, Default)]
 pub(super) struct MutRefAliases {
     entries: hashmap::IndexMap<u32, AliasEntry>,
     /// Locals whose storage some `&mut` may alias — the conservative target
     /// set for writes through an unknown-provenance reference.
-    borrowed: IndexSet<u32>,
+    mut_referenced: IndexSet<u32>,
 }
 
 #[derive(Debug, Default)]
@@ -793,7 +855,7 @@ pub(super) enum WriteRoot {
     /// [`MutRefAliases`]).
     Local(u32),
     /// Chain passed a deref of a non-place (a call result, a ref stored in an
-    /// aggregate): the written storage may belong to any borrowed local.
+    /// aggregate): the written storage may belong to any `&mut`-referenced local.
     Aliased,
     /// Fresh temporary storage (a literal receiver, no deref): mutating it
     /// cannot touch a named local.
@@ -853,8 +915,8 @@ impl MutRefAliases {
                 map.entries.entry(i as u32).or_default();
             }
         }
-        let mut borrowed_refs: IndexSet<u32> = IndexSet::default();
-        map.build_walk(body, NodeRef::Block(body.root()), &mut borrowed_refs);
+        let mut mut_ref_locals: IndexSet<u32> = IndexSet::default();
+        map.build_walk(body, NodeRef::Block(body.root()), &mut mut_ref_locals);
         // A ref-typed local with no recognized definition (a pattern binding,
         // an engine-synthesized slot) has unknown provenance.
         for e in map.entries.values_mut() {
@@ -888,19 +950,19 @@ impl MutRefAliases {
                 break;
             }
         }
-        // Storage reachable through a borrowed ref local is borrowed too.
-        for r in borrowed_refs {
+        // Storage reachable through a `&mut`-referenced ref local is too.
+        for r in mut_ref_locals {
             if let Some(e) = map.entries.get(&r) {
                 let roots: Vec<u32> = e.roots.iter().copied().collect();
                 for root in roots {
-                    map.borrowed.insert(root);
+                    map.mut_referenced.insert(root);
                 }
             }
         }
         map
     }
 
-    fn build_walk(&mut self, body: &Body, node: NodeRef, borrowed_refs: &mut IndexSet<u32>) {
+    fn build_walk(&mut self, body: &Body, node: NodeRef, mut_ref_locals: &mut IndexSet<u32>) {
         match node {
             NodeRef::Stmt(s) => {
                 if let StmtKind::Let {
@@ -921,7 +983,7 @@ impl MutRefAliases {
                     expr: inner,
                 } => {
                     if let Some(ie) = inner.as_expr() {
-                        self.record_borrow_target(body, ie, borrowed_refs);
+                        self.record_mut_ref_target(body, ie, mut_ref_locals);
                     }
                 }
                 ExprKind::Call { args, .. } => {
@@ -929,7 +991,7 @@ impl MutRefAliases {
                         if arg.is_mut
                             && let Some(ae) = arg.expr.as_expr()
                         {
-                            self.record_borrow_target(body, ae, borrowed_refs);
+                            self.record_mut_ref_target(body, ae, mut_ref_locals);
                         }
                     }
                 }
@@ -937,18 +999,23 @@ impl MutRefAliases {
             },
             NodeRef::Block(_) | NodeRef::Pat(_) => {}
         }
-        body.for_each_child(node, |c| self.build_walk(body, c, borrowed_refs));
+        body.for_each_child(node, |c| self.build_walk(body, c, mut_ref_locals));
     }
 
     /// Record the storage a `&mut place` (or `mut`-flagged argument) may
-    /// alias: a plain local root goes into `borrowed`; a chain through a ref
-    /// local defers to that local's resolved roots (`borrowed_refs`).
-    fn record_borrow_target(&mut self, body: &Body, e: ExprId, borrowed_refs: &mut IndexSet<u32>) {
+    /// alias: a plain local root goes into `mut_referenced`; a chain through a ref
+    /// local defers to that local's resolved roots (`mut_ref_locals`).
+    fn record_mut_ref_target(
+        &mut self,
+        body: &Body,
+        e: ExprId,
+        mut_ref_locals: &mut IndexSet<u32>,
+    ) {
         if let WriteRoot::Local(root) = write_root(body, e, false) {
             if self.entries.contains_key(&root) {
-                borrowed_refs.insert(root);
+                mut_ref_locals.insert(root);
             } else {
-                self.borrowed.insert(root);
+                self.mut_referenced.insert(root);
             }
         }
     }
@@ -993,7 +1060,7 @@ impl MutRefAliases {
     }
 
     /// Invoke `sink` with `root` plus every local the stored `&mut` in `root`
-    /// may point into (all of `borrowed` for unknown provenance).
+    /// may point into (all of `mut_referenced` for unknown provenance).
     fn expand(&self, root: u32, sink: &mut impl FnMut(u32)) {
         sink(root);
         if let Some(e) = self.entries.get(&root) {
@@ -1001,7 +1068,7 @@ impl MutRefAliases {
                 sink(r);
             }
             if e.unknown {
-                for &b in &self.borrowed {
+                for &b in &self.mut_referenced {
                     sink(b);
                 }
             }
@@ -1064,14 +1131,14 @@ pub(super) fn for_each_mutated_root(
                     aliases.expand(root, &mut |r| sink(RootMutation::Through(r)));
                 }
                 WriteRoot::Aliased => {
-                    for &b in &aliases.borrowed {
+                    for &b in &aliases.mut_referenced {
                         sink(RootMutation::Through(b));
                     }
                 }
                 WriteRoot::Temp => {}
             }
         }
-        Witness::MutBorrow(e) => through_storage(sink, e),
+        Witness::MutRef(e) => through_storage(sink, e),
         Witness::CalleeArg {
             expr,
             verdict,

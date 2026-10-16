@@ -110,6 +110,12 @@ The walk skips into a qualifying `let`'s own value and into a hoisted argument,
 because hoisting both would nest one global's `GlobalVarSet` inside another's
 initializer — a shape the single-assignment classifier cannot see through.
 
+It also skips cold code: what follows a `cold_path()` marker, and a function
+only cold sites reach. Every global is built by the start function, which
+wasmtime compiles as one body whose cost grows faster than its length. Leaving
+the cold globals out cut wasmtime's compile of `temporal_test.wado` by a fifth,
+while a cold literal costs one build when its rare path runs.
+
 #### Identity
 
 Hoisting makes every evaluation of the binding yield one object, so a `==` by
@@ -147,7 +153,7 @@ an `S: AsStrSlice` parameter has exactly this shape once the blanket
 
 #### Gate: read-only
 
-`is_readonly` requires every use to be a borrowing or reading position. It is
+`is_readonly` requires every use to be a referencing or reading position. It is
 modelled on `value_copy_demote`'s element-immutability walk but stricter:
 because the whole object is shared, even a spine mutation (`push`) corrupts it.
 Any `&mut self` method, any `&mut` of a projection, and any assignment to the
@@ -156,7 +162,7 @@ binding or a projection disqualifies it.
 A bare whole-value read in a consuming position (return, block tail, `let y = xs`, an aggregate element) is also rejected: the value-copy machinery may have
 elided the copy treating the binding as a movable local, which globalizing would
 break. A by-value call argument is rejected too, unless the parameter it lands
-in passes the callee-parameter gate below. By-`&` borrows, field / index reads
+in passes the callee-parameter gate below. By-`&` references, field / index reads
 and `&self` methods are admitted.
 
 A field or index read may still name the binding's storage. A write through a

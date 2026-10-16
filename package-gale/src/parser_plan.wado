@@ -51,7 +51,7 @@ pub struct ParserPlan {
     pub lr_rule_snakes: HashSet<String> = HashSet::with_seed(GALE_SEED),
     /// A decision routes to the runtime ATN simulator: the parser carries its
     /// infrastructure (the `ATN_SIM` blob, `Parser.atn`, rule-entry stack
-    /// maintenance), and every scan borrows the parser's ATN state.
+    /// maintenance), and every scan takes the parser's ATN state by `&mut`.
     pub needs_atn: bool = false,
     /// `ATN_SIM` carries the LR tables `atn_lr_loop_decision` reads.
     pub needs_lr_atn: bool = false,

@@ -1,0 +1,35 @@
+// An open shape whose field is a pack or a projection is substituted like any
+// other. The compiler used to panic on both when instantiating its methods.
+use { println, Stdout } from "core:cli";
+
+trait Has with () {
+    type Out;
+    fn get(&self) -> Self::Out;
+}
+
+struct A {}
+
+impl Has for A {
+    type Out = i32;
+    fn get(&self) -> i32 {
+        return 9;
+    }
+}
+
+fn packed<..T>(t: [..T]) -> String {
+    let s = { a: t, n: 3 };
+    return `${s.n} ${s:?}`;
+}
+
+fn projected<T: Has>(t: T) -> String {
+    let s = { a: t.get() };
+    return `${s:?}`;
+}
+
+export fn run() with Stdout {
+    println(packed([1, "x"]));
+    println(projected(A {}));
+}
+
+__DATA__
+{"stdout": "3 { a: [1, \"x\"], n: 3 }\n{ a: 9 }\n"}

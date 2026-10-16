@@ -2,7 +2,7 @@
 //! read off the types alone: through a reference to a type that storage holds,
 //! or, for a result that is not fresh, by holding such a type by value.
 //!
-//! A call whose retention puts a borrowed argument into its result answers
+//! A call whose retention puts a reference argument into its result answers
 //! for every argument it might return. `rmsnorm(g, &x) -> List<&mut Value>`
 //! returns a fresh list of references to values. A `Value` owns a
 //! `List<&mut Value>` of its own, but no reference to one, so the result
@@ -129,7 +129,7 @@ impl<'a> StorageReach<'a> {
 
     /// Whether a `holder` can reach storage a `target` value leads to, through
     /// the references it carries as well as what it owns: an iterator's `next`
-    /// hands back an element of the list the iterator borrows.
+    /// hands back an element of the list the iterator references.
     #[must_use]
     pub fn reaches_through(&self, holder: TypeId, target: TypeId, by_value: bool) -> bool {
         self.storage(target, true)

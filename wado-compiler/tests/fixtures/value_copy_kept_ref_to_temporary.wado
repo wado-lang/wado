@@ -1,0 +1,28 @@
+// A callee that keeps the reference to a temporary it was handed gives back a
+// value that still aliases what it kept, so the result is copied before the
+// caller writes it.
+use { println, Stdout } from "core:cli";
+
+struct S { v: i32 }
+
+fn make(v: i32) -> S {
+    return S { v };
+}
+
+#[inline(never)]
+fn proj(a: &S, sink: &mut List<&S>) -> S {
+    sink.push(a);
+    return *a;
+}
+
+export fn run() with Stdout {
+    let mut sink: List<&S> = [];
+    let mut r = proj(&make(1), &mut sink);
+    r.v = 99;
+    println(`${sink[0].v} ${r.v}`);
+}
+
+__DATA__
+{
+  "stdout": "1 99\n"
+}

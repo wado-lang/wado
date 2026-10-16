@@ -213,9 +213,8 @@ The receiver runs first too. A receiver that is a place stays in its slot,
 because a `&mut self` method writes there. Only its subscripts are bound, so
 `v[i()].m(j())` still runs `i()` before `j()`. Any other receiver is bound whole.
 
-A `&mut` borrow of a place stays in its slot the same way, for the callee's
-writes to reach the place, and a default naming its parameter borrows the place
-again (`default_arg_mut_ref_place.wado`):
+A `&mut` of a place stays in its slot the same way, for the callee's writes to
+reach the place, and a default naming its parameter references the place again (`default_arg_mut_ref_place.wado`):
 
 ```wado
 fn put(o: &mut Option<i32>, v: i32 = peek(o) + 1) { ... }
@@ -223,8 +222,8 @@ fn put(o: &mut Option<i32>, v: i32 = peek(o) + 1) { ... }
 put(&mut s.o);          // → put(&mut s.o, peek(&mut s.o) + 1)
 ```
 
-A closure cannot hold such a borrow, so where a closure in a default names the
-parameter, the borrow is bound like any other argument.
+A closure cannot hold such a reference, so where a closure in a default names
+the parameter, the reference is bound like any other argument.
 
 #### Interaction with Function Types
 
@@ -669,9 +668,9 @@ A call that pins no type argument at all reports the parameter it could not
 infer, preceded by an `unknown function 'T::default'` from the default walk that
 had nothing to resolve against. The second diagnostic is the one to read.
 
-A closure in a default that names a `&mut` parameter holds the borrow in a
-local, so a call borrowing a field that holds a variant there is refused as a
-variable holding the detached copy past the borrow, where spelling the closure
+A closure in a default that names a `&mut` parameter holds the reference in
+a local, so a call referencing a field that holds a variant there is refused as
+a variable holding the detached copy past the reference, where spelling the closure
 at the call (`|| peek(&s.o)`) is accepted.
 
 ## See Also

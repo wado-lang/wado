@@ -96,13 +96,15 @@ Allocation and aggregates:
 
 - `inline` — replace a call to a small, non-recursive function with its body.
   `#[inline]`, `#[inline(always)]`, and `#[inline(never)]` adjust the decision,
-  and a cold call site opts out. A callee that reaches no safepoint (no call,
+  and a cold call site opts out, as does every site in a function only cold
+  sites reach, unless the body is no bigger than the call. A callee that
+  reaches no safepoint (no call,
   no allocation) is admitted at four times the threshold where the splice pays
   back: at its only call site, or at its only site in a loop.
 - `cold_outline` — move the region a `cold_path()` marks into a function of its
   own.
 - `sroa` — split into scalar locals a struct, tuple, or array local used only
-  for element access, or a local bound to a borrow of a struct or tuple
+  for element access, or a local bound to a reference to a struct or tuple
   literal. The highest-impact WasmGC pass.
 - `container_sroa` — turn a `List` of structs or tuples into one list per field.
 - `sroa_param` — pass the one field a callee reads instead of the struct.
@@ -157,7 +159,7 @@ Loops and fields:
 
 - `licm` — hoist loop-invariant field reads and arithmetic out of a loop.
 - `condition_implication` — drop a bounds or range check a dominating
-  condition already decides.
+  condition already decides, or the half of a range check it decides.
 - `loop_version_bce` — split a loop into a check-free fast path and the
   original, and turn a fill loop into `array.fill`.
 - `tmpl_hoist` — reuse a template string's buffer across loop iterations.
@@ -241,7 +243,7 @@ Architectural work is tracked in
 - [ ] Compile-time evaluation through a `&mut` held in a struct field.
 - [ ] Argument promotion: passing a by-reference parameter's fields by value.
 - [ ] Factoring a conjunctive `if` chain into a decision tree.
-- [ ] Scalarizing a struct borrowed by `&mut`.
+- [ ] Scalarizing a struct referenced by `&mut`.
 - [ ] Tail calls (`return_call`).
 - [ ] Bounds-check elimination across sequential accesses (`a[0]; a[1]; a[2]`).
 - [ ] Folding an effect-free call on constants whose callee exceeds the inline

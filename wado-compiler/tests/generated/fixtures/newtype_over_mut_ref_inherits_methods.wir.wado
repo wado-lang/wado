@@ -37,15 +37,17 @@ type "functype//core:rt/write_string_to_stream$dae[add_newline]" = fn(i32, ref A
 
 type "functype//core:rt/cm_stream_write_raw_all_u8" = fn(i32, ref Array<u8>, i32, i32) -> "core:prelude/types.wado//enum:CopyResult";  // TypeId(15)
 
-type "functype//core:prelude/string.wado/core:prelude/string.wado/String::grow" = fn(ref "core:prelude/string.wado//String", i32);  // TypeId(16)
+type "functype//core:prelude/string.wado/core:prelude/string.wado/String::realloc_to" = fn(ref "core:prelude/string.wado//String", i32);  // TypeId(16)
 
-type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(17)
+type "functype//core:prelude/string.wado/core:prelude/string.wado/String::grow" = fn(ref "core:prelude/string.wado//String", i32);  // TypeId(17)
 
-type "functype//wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code" = fn(i32);  // TypeId(18)
+type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(18)
 
-type "functype//wasi/task-return" = fn(i32);  // TypeId(19)
+type "functype//wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code" = fn(i32);  // TypeId(19)
 
-type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(20)
+type "functype//wasi/task-return" = fn(i32);  // TypeId(20)
+
+type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(21)
 
 import fn mem/realloc from "mem/realloc";
 import fn wasi/stream-write from "wasi/stream-write";
@@ -63,80 +65,80 @@ import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 global global:newtype_over_mut_ref_inherits_methods.wado::$const_obj_3: ref Array<u8> = array.new_fixed<u8>(32);
 
 fn "newtype_over_mut_ref_inherits_methods.wado/run"() with Stdout {
-    let $local_8_8: ref "core:prelude/string.wado//String";
+    let $local_8: ref "core:prelude/string.wado//String";
     let packed: i64;
     let $sroa_$f_buf_169: ref "core:prelude/string.wado//String";
-    let new_used_262: i32;
-    let start_263: i32;
-    $sroa_$f_buf_169 = local.tee $local_8_8(struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(84), used: 0 });
-    if @unlikely(local.tee new_used_262(0 + 1) > builtin::array_len($sroa_$f_buf_169.repr)) {
+    let new_used_258: i32;
+    let start_259: i32;
+    $sroa_$f_buf_169 = local.tee $local_8(struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(84), used: 0 });
+    if @unlikely(local.tee new_used_258(0 + 1) > builtin::array_len($sroa_$f_buf_169.repr)) {
         cold_path;
-        "core:prelude/string.wado/core:prelude/string.wado/String::grow"($sroa_$f_buf_169, new_used_262);
+        "core:prelude/string.wado/core:prelude/string.wado/String::grow"($sroa_$f_buf_169, new_used_258);
     }
-    start_263 = $sroa_$f_buf_169.used;
-    $sroa_$f_buf_169.used = new_used_262;
-    "core:prelude/primitive.wado/write_decimal_digits"($sroa_$f_buf_169.repr, start_263, 1_i64, 1);
-    if @unlikely(local.tee start_263($local_8_8.used + 1) > builtin::array_len($local_8_8.repr)) {
+    start_259 = $sroa_$f_buf_169.used;
+    $sroa_$f_buf_169.used = new_used_258;
+    "core:prelude/primitive.wado/write_decimal_digits"($sroa_$f_buf_169.repr, start_259, 1_i64, 1);
+    if @unlikely(local.tee start_259($local_8.used + 1) > builtin::array_len($local_8.repr)) {
         cold_path;
-        "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_8_8, start_263);
+        "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_8, start_259);
     }
-    new_used_262 = $local_8_8.used;
-    $local_8_8.used = start_263;
-    builtin::array_copy<u8>($local_8_8.repr, new_used_262, global:newtype_over_mut_ref_inherits_methods.wado::$const_obj_3, 0, 1);
-    if @unlikely(local.tee new_used_262(local.tee $sroa_$f_buf_169($local_8_8).used + 1) > builtin::array_len($sroa_$f_buf_169.repr)) {
+    new_used_258 = $local_8.used;
+    $local_8.used = start_259;
+    builtin::array_copy<u8>($local_8.repr, new_used_258, global:newtype_over_mut_ref_inherits_methods.wado::$const_obj_3, 0, 1);
+    if @unlikely(local.tee new_used_258(local.tee $sroa_$f_buf_169($local_8).used + 1) > builtin::array_len($sroa_$f_buf_169.repr)) {
         cold_path;
-        "core:prelude/string.wado/core:prelude/string.wado/String::grow"($sroa_$f_buf_169, new_used_262);
+        "core:prelude/string.wado/core:prelude/string.wado/String::grow"($sroa_$f_buf_169, new_used_258);
     }
-    start_263 = $sroa_$f_buf_169.used;
-    $sroa_$f_buf_169.used = new_used_262;
-    "core:prelude/primitive.wado/write_decimal_digits"($sroa_$f_buf_169.repr, start_263, 5_i64, 1);
-    if @unlikely(local.tee start_263($local_8_8.used + 1) > builtin::array_len($local_8_8.repr)) {
+    start_259 = $sroa_$f_buf_169.used;
+    $sroa_$f_buf_169.used = new_used_258;
+    "core:prelude/primitive.wado/write_decimal_digits"($sroa_$f_buf_169.repr, start_259, 5_i64, 1);
+    if @unlikely(local.tee start_259($local_8.used + 1) > builtin::array_len($local_8.repr)) {
         cold_path;
-        "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_8_8, start_263);
+        "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_8, start_259);
     }
-    new_used_262 = $local_8_8.used;
-    $local_8_8.used = start_263;
-    builtin::array_copy<u8>($local_8_8.repr, new_used_262, global:newtype_over_mut_ref_inherits_methods.wado::$const_obj_3, 0, 1);
-    if @unlikely(local.tee new_used_262(local.tee $sroa_$f_buf_169($local_8_8).used + 2) > builtin::array_len($sroa_$f_buf_169.repr)) {
+    new_used_258 = $local_8.used;
+    $local_8.used = start_259;
+    builtin::array_copy<u8>($local_8.repr, new_used_258, global:newtype_over_mut_ref_inherits_methods.wado::$const_obj_3, 0, 1);
+    if @unlikely(local.tee new_used_258(local.tee $sroa_$f_buf_169($local_8).used + 2) > builtin::array_len($sroa_$f_buf_169.repr)) {
         cold_path;
-        "core:prelude/string.wado/core:prelude/string.wado/String::grow"($sroa_$f_buf_169, new_used_262);
+        "core:prelude/string.wado/core:prelude/string.wado/String::grow"($sroa_$f_buf_169, new_used_258);
     }
-    start_263 = $sroa_$f_buf_169.used;
-    $sroa_$f_buf_169.used = new_used_262;
-    "core:prelude/primitive.wado/write_decimal_digits"($sroa_$f_buf_169.repr, start_263, 13_i64, 2);
-    if @unlikely(local.tee start_263($local_8_8.used + 1) > builtin::array_len($local_8_8.repr)) {
+    start_259 = $sroa_$f_buf_169.used;
+    $sroa_$f_buf_169.used = new_used_258;
+    "core:prelude/primitive.wado/write_decimal_digits"($sroa_$f_buf_169.repr, start_259, 13_i64, 2);
+    if @unlikely(local.tee start_259($local_8.used + 1) > builtin::array_len($local_8.repr)) {
         cold_path;
-        "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_8_8, start_263);
+        "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_8, start_259);
     }
-    new_used_262 = $local_8_8.used;
-    $local_8_8.used = start_263;
-    builtin::array_copy<u8>($local_8_8.repr, new_used_262, global:newtype_over_mut_ref_inherits_methods.wado::$const_obj_3, 0, 1);
-    if @unlikely(local.tee new_used_262(local.tee $sroa_$f_buf_169($local_8_8).used + 2) > builtin::array_len($sroa_$f_buf_169.repr)) {
+    new_used_258 = $local_8.used;
+    $local_8.used = start_259;
+    builtin::array_copy<u8>($local_8.repr, new_used_258, global:newtype_over_mut_ref_inherits_methods.wado::$const_obj_3, 0, 1);
+    if @unlikely(local.tee new_used_258(local.tee $sroa_$f_buf_169($local_8).used + 2) > builtin::array_len($sroa_$f_buf_169.repr)) {
         cold_path;
-        "core:prelude/string.wado/core:prelude/string.wado/String::grow"($sroa_$f_buf_169, new_used_262);
+        "core:prelude/string.wado/core:prelude/string.wado/String::grow"($sroa_$f_buf_169, new_used_258);
     }
-    start_263 = $sroa_$f_buf_169.used;
-    $sroa_$f_buf_169.used = new_used_262;
-    "core:prelude/primitive.wado/write_decimal_digits"($sroa_$f_buf_169.repr, start_263, 13_i64, 2);
-    if @unlikely(local.tee start_263($local_8_8.used + 1) > builtin::array_len($local_8_8.repr)) {
+    start_259 = $sroa_$f_buf_169.used;
+    $sroa_$f_buf_169.used = new_used_258;
+    "core:prelude/primitive.wado/write_decimal_digits"($sroa_$f_buf_169.repr, start_259, 13_i64, 2);
+    if @unlikely(local.tee start_259($local_8.used + 1) > builtin::array_len($local_8.repr)) {
         cold_path;
-        "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_8_8, start_263);
+        "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_8, start_259);
     }
-    new_used_262 = $local_8_8.used;
-    $local_8_8.used = start_263;
-    builtin::array_copy<u8>($local_8_8.repr, new_used_262, global:newtype_over_mut_ref_inherits_methods.wado::$const_obj_3, 0, 1);
-    if @unlikely(local.tee new_used_262(local.tee $sroa_$f_buf_169($local_8_8).used + 3) > builtin::array_len($sroa_$f_buf_169.repr)) {
+    new_used_258 = $local_8.used;
+    $local_8.used = start_259;
+    builtin::array_copy<u8>($local_8.repr, new_used_258, global:newtype_over_mut_ref_inherits_methods.wado::$const_obj_3, 0, 1);
+    if @unlikely(local.tee new_used_258(local.tee $sroa_$f_buf_169($local_8).used + 3) > builtin::array_len($sroa_$f_buf_169.repr)) {
         cold_path;
-        "core:prelude/string.wado/core:prelude/string.wado/String::grow"($sroa_$f_buf_169, new_used_262);
+        "core:prelude/string.wado/core:prelude/string.wado/String::grow"($sroa_$f_buf_169, new_used_258);
     }
-    start_263 = $sroa_$f_buf_169.used;
-    $sroa_$f_buf_169.used = new_used_262;
-    "core:prelude/primitive.wado/write_decimal_digits"($sroa_$f_buf_169.repr, start_263, 100_i64, 3);
-    start_263 = builtin::i32_wrap_i64(local.tee packed("wasi/stream-new"()));
-    new_used_262 = builtin::i32_wrap_i64(packed >> 32_i64);
-    start_263 = "newtype_over_mut_ref_inherits_methods.wado/$cm_binding__Stdout_write_via_stream"(start_263);
-    "core:rt/write_string_to_stream$dae[add_newline]"(new_used_262, $local_8_8.repr, $local_8_8.used);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(start_263);
+    start_259 = $sroa_$f_buf_169.used;
+    $sroa_$f_buf_169.used = new_used_258;
+    "core:prelude/primitive.wado/write_decimal_digits"($sroa_$f_buf_169.repr, start_259, 100_i64, 3);
+    start_259 = builtin::i32_wrap_i64(local.tee packed("wasi/stream-new"()));
+    new_used_258 = builtin::i32_wrap_i64(packed >> 32_i64);
+    start_259 = "newtype_over_mut_ref_inherits_methods.wado/$cm_binding__Stdout_write_via_stream"(start_259);
+    "core:rt/write_string_to_stream$dae[add_newline]"(new_used_258, $local_8.repr, $local_8.used);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(start_259);
 }
 
 fn "newtype_over_mut_ref_inherits_methods.wado/$cm_binding__Stdout_write_via_stream"(data) with Stdout {
@@ -236,16 +238,19 @@ fn "core:rt/cm_stream_write_raw_all_u8"(handle, $mv$data$repr, $mv$data$start, $
     };
 }
 
-fn "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self, min_capacity) {
-    let $load_0: ref Array<u8>;
-    let capacity: i32;
+fn "core:prelude/string.wado/core:prelude/string.wado/String::realloc_to"(self, new_capacity) {
     let new_repr: ref Array<u8>;
-    capacity = builtin::array_len(local.tee $load_0(self.repr));
+    builtin::array_copy<u8>(local.tee new_repr(builtin::array_new<u8>(new_capacity)), 0, self.repr, 0, self.used);
+    self.repr = new_repr;
+}
+
+fn "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self, min_capacity) {
+    let capacity: i32;
+    capacity = builtin::array_len(self.repr);
     if min_capacity <= capacity {
         return;
     }
-    builtin::array_copy<u8>(local.tee new_repr(builtin::array_new<u8>(select i32(min_capacity > 8, local.tee min_capacity(select i32(capacity > min_capacity, local.tee capacity(capacity * 2), min_capacity)), 8))), 0, $load_0, 0, self.used);
-    self.repr = new_repr;
+    "core:prelude/string.wado/core:prelude/string.wado/String::realloc_to"(self, select i32(min_capacity > 8, local.tee min_capacity(select i32(capacity > min_capacity, local.tee capacity(capacity * 2), min_capacity)), 8));
 }
 
 export fn "newtype_over_mut_ref_inherits_methods.wado/$cm_export__run" as "run"

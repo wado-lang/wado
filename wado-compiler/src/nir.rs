@@ -193,6 +193,20 @@ impl NirBinaryOp {
         }
     }
 
+    /// The comparison true exactly where this one is false, under the total
+    /// order every comparison reads. `None` for an op that is not one of the six.
+    pub fn opposite(self) -> Option<Self> {
+        Some(match self {
+            Self::Eq => Self::NotEq,
+            Self::NotEq => Self::Eq,
+            Self::Lt => Self::GtEq,
+            Self::LtEq => Self::Gt,
+            Self::Gt => Self::LtEq,
+            Self::GtEq => Self::Lt,
+            _ => return None,
+        })
+    }
+
     /// Whether this op may trap, whatever its operands. Integer `Div` / `Mod`
     /// trap on a zero divisor (and `MIN / -1`); every other binary op is total.
     /// The one listing every pass that deletes or moves an operation consults.
@@ -212,8 +226,8 @@ pub enum NirUnaryOp {
 }
 
 impl NirUnaryOp {
-    /// Whether the value pool has a `ValueKind` for this op. A borrow or a
-    /// dereference names a place, and no kind carries one.
+    /// Whether the value pool has a `ValueKind` for this op. A reference or
+    /// a dereference names a place, and no kind carries one.
     pub fn is_pooled(self) -> bool {
         !matches!(self, Self::Ref | Self::MutRef | Self::Deref)
     }
@@ -771,7 +785,7 @@ pub enum ParamAbi {
         field_names: Vec<String>,
         /// The parameter is a `&S`: its fields are loaded at the call, after
         /// every argument that runs code, as the callee would have read them.
-        borrowed: bool,
+        through_ref: bool,
     },
 }
 
@@ -979,7 +993,7 @@ pub struct NirParam {
     pub type_id: TypeId,
     pub local_index: u32,
     pub is_mut: bool,
-    /// The parameter is a `&mut T` borrow — the only kind that can mutate the
+    /// The parameter is a `&mut T` — the only kind that can mutate the
     /// caller's argument storage. Captured pre-boxing (see [`crate::tir::TirParam::is_mut_ref`]).
     pub is_mut_ref: bool,
     pub span: Span,

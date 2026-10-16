@@ -115,6 +115,9 @@ effect row is not yet known, and the effect check solves it.
    advances the adapter. `error_closure_beyond_expected_fn_type.wado` is
    rejected.
 7. [x] The specification states the rules above.
+8. [x] A function generic over an effect is taken as a value: the expected
+   `fn(...)` type settles its effect parameters as it settles its type
+   parameters. `effect_generic_fn_as_value.wado` holds it.
 
 ## Known gaps
 

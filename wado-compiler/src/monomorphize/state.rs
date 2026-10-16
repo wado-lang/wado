@@ -11,7 +11,11 @@ use crate::module_source::ModuleSource;
 use crate::monomorphize::Templates;
 use crate::name::{FqTraitName, FqTypeName, LocalMethodName, MethodName, mangle_generic_name};
 use crate::synthesis::template::{eq_from_written_cmp, written_impl_reaches};
-use crate::tir::{InstantiationKey, ResolvedType, TemplateId, TirTypeParam, TypeId, TypeTable};
+use crate::tir::{
+    AnonStructId, InstantiationKey, ReceiverAssocTypes, ResolvedType, TemplateId, TirFunction,
+    TirTypeParam, TypeId, TypeTable,
+};
+use crate::token::Span;
 
 /// Tracks struct monomorphization state
 pub(super) struct StructInstState {
@@ -23,6 +27,21 @@ pub(super) struct StructInstState {
     pub type_substitutions: IndexMap<TypeId, TypeId>,
     /// Map from `GenericInstance` `TypeId` to mangled struct name
     pub type_to_mangled_name: IndexMap<TypeId, String>,
+    /// Each written anonymous shape's site, which a shape substituted from it
+    /// reports too.
+    pub anon_sites: IndexMap<AnonStructId, Span>,
+    /// How long the type table's shape substitution log was when the last
+    /// batch was read from it.
+    pub anon_scanned: usize,
+    /// Substitutions into closed shapes, as the shape and the substitution's
+    /// index, whose origin's methods are yet to be instantiated.
+    pub pending_shapes: Vec<(AnonStructId, usize)>,
+    /// Each open shape by the receiver its synthesized methods name, and the
+    /// methods and associated types each substitution from it instantiates.
+    /// Kept across runs: a run drops the open shapes and their methods.
+    pub open_shape_heads: IndexMap<FqTypeName, AnonStructId>,
+    pub shape_methods: IndexMap<AnonStructId, Vec<Rc<RefCell<TirFunction>>>>,
+    pub shape_assoc_types: IndexMap<AnonStructId, ReceiverAssocTypes>,
 }
 
 /// Tracks function monomorphization state
@@ -41,7 +60,9 @@ pub(super) struct FuncInstState {
     /// emitted as written.
     pub templates: Rc<Templates>,
     /// Per module, the names written impls define; one for a single instance
-    /// wins over the template's (coherence Rule 1, WEP 2026-03-14 §5).
+    /// wins over the template's (coherence Rule 1, WEP 2026-03-14 §5). A
+    /// shape method instantiated at a concrete shape joins them, so a second
+    /// origin reaching the shape does not define it again.
     pub concrete_names: IndexMap<ModuleSource, IndexSet<String>>,
 }
 
@@ -121,6 +142,12 @@ impl Monomorphizer {
                 pending: Vec::new(),
                 type_substitutions: IndexMap::default(),
                 type_to_mangled_name: IndexMap::default(),
+                anon_sites: IndexMap::default(),
+                anon_scanned: 0,
+                pending_shapes: Vec::new(),
+                open_shape_heads: IndexMap::default(),
+                shape_methods: IndexMap::default(),
+                shape_assoc_types: IndexMap::default(),
             },
             functions: FuncInstState {
                 instantiated: IndexMap::default(),

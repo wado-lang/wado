@@ -1,0 +1,16 @@
+// A test may perform any effect, but that is what the test holds, not what a
+// function type it moves a closure into declares: `pure_caller` would perform
+// `Stdout` without declaring it.
+
+use { println } from "core:cli";
+
+fn pure_caller(f: fn()) {
+    f();
+}
+
+test "an effectful closure into an effect-free function type" {
+    pure_caller(|| { println("needs Stdout"); });
+}
+
+__DATA__
+{"test": {}, "compile_error": "this function value performs effect 'Stdout', which the function type it is expected to be does not declare"}

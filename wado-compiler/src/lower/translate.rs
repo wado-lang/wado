@@ -335,7 +335,7 @@ impl Interner {
 /// The canonical `FunctionId` of a TIR function — the same identity its
 /// converted `NirFunction` yields (`FunctionRef::function_id`), so the
 /// pre-built id map agrees with every call site's `convert_function_ref`.
-fn tir_function_key(f: &TirFunction) -> FunctionId {
+pub(super) fn tir_function_key(f: &TirFunction) -> FunctionId {
     nir::FunctionRef {
         module_source: f.module_source.clone(),
         name: f.name.clone(),
@@ -411,7 +411,7 @@ struct FunctionTranslator<'a, 'p> {
     /// The reads whose copy is elided because they hand their storage over.
     moves: value_copy::last_use::MoveEligible,
     /// Whether this function hands a returned variant's payload out uncopied,
-    /// so `return Some(place)` delivers the borrow exactly as `return place`
+    /// so `return Some(place)` delivers the place uncopied exactly as `return place`
     /// does ([`value_copy::hands_out_payload`]).
     hands_out_payload: bool,
     /// Locals whose binding copy is elided by sharing the source storage
@@ -469,7 +469,7 @@ impl<'a, 'p> FunctionTranslator<'a, 'p> {
         // The move/share/alias analyses only ever mark copyable-value locals; a
         // function with none has nothing to elide, so all three are empty. Skip
         // them — running them is otherwise pure per-function allocation, and most
-        // functions (scalar/reference-only) hit this path. A borrowed local is
+        // functions (scalar/reference-only) hit this path. A referenced local is
         // already retyped to its box, and the value it holds is what counts, as
         // is what a reference leads to, which `*r` hands to a call.
         let needs_copy_analysis = {
@@ -1360,13 +1360,12 @@ impl FunctionTranslator<'_, '_> {
             })
             .collect();
         for (path, value) in leaves.iter().zip(values) {
-            let leaf_type = path.last().expect("a leaf path names a field").2;
             let assign = self.alloc_expr(
                 ExprKind::Assign {
                     target: chain(handle, "$deref_ref", handle_type, path),
                     value,
                 },
-                leaf_type,
+                TypeTable::UNIT,
                 span,
             );
             out.push(self.alloc_stmt(StmtKind::Expr(assign.into()), span));
@@ -3103,7 +3102,7 @@ fn convert_monomorph_info(info: &MonomorphInfo) -> nir::MonomorphInfo {
     }
 }
 
-fn convert_function_ref(func: &FunctionRef) -> nir::FunctionRef {
+pub(super) fn convert_function_ref(func: &FunctionRef) -> nir::FunctionRef {
     nir::FunctionRef {
         module_source: func.module_source.clone(),
         name: func.name.clone(),

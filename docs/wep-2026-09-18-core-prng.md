@@ -70,10 +70,10 @@ xoshiro256++ serves both — its state transition is vertical, so eight lanes ne
 no permute. SHISHUA serves only the vector trait; its round is eight vectors
 wide and nothing smaller exists inside it.
 
-`with ()` is not decoration. It is the rule from `AGENTS.md` applied: every
-standard library trait declares it, so `Rng`, `VectorRng`, `Seedable`,
-`SampleUniform` and `SampleRange` all say in the type system that no
-implementation of them may perform I/O.
+`with ()` is not decoration: `Rng`, `VectorRng`, `Seedable`, `SampleUniform`
+and `SampleRange` all say in the type system that no implementation of them may
+perform I/O. That is what lets a simulation's inner loop draw a number without
+carrying a capability through its callers.
 
 ### The batch is sixteen u64, fixed by the library
 

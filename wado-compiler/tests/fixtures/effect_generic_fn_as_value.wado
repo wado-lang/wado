@@ -1,0 +1,35 @@
+// A function generic over an effect, named as a value: the expected `fn` type
+// settles its effect parameter by position, as it settles type arguments.
+
+use { println, Stdout } from "core:cli";
+
+fn apply<effect E>(f: fn() with E) with E {
+    f();
+}
+
+fn twice<T, effect E>(f: fn(T) -> T with E, x: T) -> T with E {
+    return f(f(x));
+}
+
+// The caller's own `E` is another parameter than `apply`'s, though they share
+// the name: `apply`'s settles to the caller's.
+fn relay<effect E>(g: fn() with E) with E {
+    let h: fn(fn() with E) with E = apply;
+    h(g);
+}
+
+export fn run() with Stdout {
+    relay(|| { println("relayed"); });
+
+    let pure: fn(fn()) = apply;
+    pure(|| {});
+
+    let loud: fn(fn() with Stdout) with Stdout = apply;
+    loud(|| { println("loud"); });
+
+    let add: fn(fn(i32) -> i32, i32) -> i32 = twice;
+    println(`${add(|n| n + 1, 40)}`);
+}
+
+__DATA__
+{"stdout": "relayed\nloud\n42\n"}

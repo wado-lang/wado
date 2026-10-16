@@ -959,6 +959,13 @@ two ways:
 Without either, it is a compile error, which suggests a turbofish or a closure
 wrapper (`|x| identity(x)`).
 
+A function generic over an effect is settled by the expected `fn(...)` type
+alone, since a turbofish names no effect. Each effect parameter takes what that
+type's rows meet it with: for `fn apply<effect E>(f: fn() with E) with E`,
+`let a: fn(fn()) = apply;` settles `E` to no effect, and
+`let b: fn(fn() with Stdout) with Stdout = apply;` to `Stdout`. Without an
+expected type it is a compile error.
+
 A function type crosses the Component Model boundary only as a
 [callback](./spec-components.md#callbacks).
 
@@ -1039,7 +1046,7 @@ test "a default names an earlier parameter" {
 }
 ```
 
-Where the named parameter is a `&mut`, the default borrows the same place again,
+Where the named parameter is a `&mut`, the default takes `&mut` of the same place again,
 and the callee's writes still reach it:
 
 <!-- {"fixture":"spec_functions_default_args.wado"} -->
@@ -1047,7 +1054,7 @@ and the callee's writes still reach it:
 ```wado
 fn put(o: &mut Option<i32>, v: i32 = peek(o) + 1) { *o = Option::Some(v); }
 
-test "a default borrows a `&mut` parameter's place again" {
+test "a default takes `&mut` of a `&mut` parameter's place again" {
     let mut s = S { o: Option::Some(1) };
     put(&mut s.o);                   // → put(&mut s.o, peek(&mut s.o) + 1)
     assert s.o == Option::Some(2);

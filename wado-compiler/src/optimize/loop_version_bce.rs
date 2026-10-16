@@ -31,11 +31,11 @@ use super::alias::{CallImmutability, builder_alias_sets, first_param_types};
 use super::arena_query::{block_contains_loop, has_break_to};
 use super::bounds;
 use super::condition_implication::{
-    Binds, BoundKey, Conjunct, InductionStep, VAR_OFFSET_MAX_DEPTH, build_copy_bindings,
-    capture_block_binding, check_conjuncts, eliminate_condition, induction_entry, induction_step,
-    modifies_any_root, negated_operand, panic_guard_check, parse_break_guard_head, parse_cmp,
-    parse_const_i64, parse_var_offset, peel_capture_block, resolve, resolve_panic_ids,
-    stmt_modifies,
+    Binds, BoundKey, Conjunct, InductionStep, VAR_OFFSET_MAX_DEPTH, break_guard_cmp,
+    build_copy_bindings, capture_block_binding, check_conjuncts, eliminate_condition,
+    induction_entry, induction_step, modifies_any_root, negated_operand, panic_guard_check,
+    parse_break_guard_head, parse_const_i64, parse_var_offset, peel_capture_block, resolve,
+    resolve_panic_ids, stmt_modifies,
 };
 use super::const_branch_prune::{BranchPruneRule, PruneMode};
 use super::dce::{DescriptorCache, callee_descriptor};
@@ -266,7 +266,8 @@ fn collect_loops(
     }
 }
 
-/// Parse the loop-head guard `if !(var CMP bound) { break }` (skipping
+/// Parse the loop-head guard `if !(var CMP bound) { break }`, or the
+/// comparison turned round as in `if var >= bound { break }` (skipping
 /// leading `let`s), through both the skeleton and promoted-operand forms.
 /// Returns `(guard_idx, var, bound, guard_le)`, the bound a local or a
 /// constant.
@@ -276,8 +277,7 @@ fn parse_loop_guard(
     loop_body: BlockId,
 ) -> Option<(usize, u32, BoundKey, bool)> {
     let (guard_idx, cond) = parse_break_guard_head(engine, loop_body)?;
-    let inner = negated_operand(engine, binds, cond)?;
-    let (var, off, h, op) = parse_cmp(engine, binds, inner)?;
+    let (var, off, h, op) = break_guard_cmp(engine, binds, cond)?;
     if off != 0 || matches!(h, BoundKey::Field(..)) {
         return None;
     }

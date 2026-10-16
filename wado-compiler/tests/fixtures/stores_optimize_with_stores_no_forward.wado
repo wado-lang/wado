@@ -2,6 +2,8 @@
 // must block field store→load forwarding. `hold_ref` stores `&p`, so writing
 // `h.pair.a` mutates `p` itself. Forwarding the struct-literal `p.a = 42` past
 // that write would be a miscompile — the read must observe the new value.
+// Once `hold_ref` is inlined the write reads `(&mut p).a = 7`, which is
+// `p.a = 7`, so the assert folds on the value written.
 
 use { println, Stdout } from "core:cli";
 
@@ -24,7 +26,7 @@ export fn run() with Stdout {
     let h = hold_ref(&mut p);
     // Mutate `p` through the stored reference: `p.a` is now 7, not 42.
     h.pair.a = 7;
-    // Forwarding the stale 42 here would be unsound, so the check survives.
+    // Forwarding the stale 42 here would be unsound.
     assert p.a == 7;
     println(`${p.a}`);
 }
@@ -32,7 +34,7 @@ export fn run() with Stdout {
 __DATA__
 {
     "stdout": "7\n",
-    "wir_expect:O2": [
+    "wir_not_expect:O2": [
         "core:rt/panic"
     ]
 }

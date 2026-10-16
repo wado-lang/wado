@@ -20,19 +20,20 @@ use crate::compiler_host::{Code, CompilerHost, Diagnostic, DiagnosticSpan, Sever
 use crate::const_eval::{format_float_repr, truncate_int};
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::logger::{Bail, Logger};
+use crate::lower::contract_checks::is_contract_clause;
 use crate::lower::plan::value_copy::place::{is_source_place, source_place_subscripts_mut};
 use crate::lower::wide_int_literal::{create_conversion, create_literal, method_ref};
 use crate::module_source::ModuleSource;
 use crate::name::{
-    CONTRACT_CHECKS_INTRINSIC, FqTypeName, Receiver, global_init_function, global_name,
-    unchecked_twin_name,
+    CONTRACT_CLAUSE_INTRINSIC, CONTRACT_SITE_INTRINSIC, FqTypeName, Receiver, contract_owner_name,
+    global_init_function, global_name, unchecked_twin_name,
 };
 use crate::symbol::SymbolTable;
 use crate::tir::{
     self as tir, CallArg, GlobalInit, InstancePattern, LetStorage, LocalFrame, ResolvedType,
     TirBinaryOp, TirBlock, TirEnum, TirEnumCase, TirExpr, TirExprKind, TirFlags, TirFlagsMember,
     TirFunction, TirGlobal, TirModule, TirNewtype, TirPattern, TirStmt, TirStmtKind, TirStruct,
-    TirTest, TirUnaryOp, TirVariantDecl, TypeId, TypeTable, transpose_tuple_expr,
+    TirTest, TirUnaryOp, TirVariantDecl, TypeId, TypeTable, assign_stmt, transpose_tuple_expr,
 };
 
 use super::coercion::{
@@ -350,22 +351,6 @@ fn break_unless(cond: TirExpr, cond_span: Span, span: Span) -> TirStmt {
             then_block: TirBlock::new(vec![bare_break(span)], span),
             else_block: None,
         },
-        span,
-    )
-}
-
-/// `target = value;` as a statement.
-fn assign_stmt(target: TirExpr, value: TirExpr, span: Span) -> TirStmt {
-    let type_id = value.type_id;
-    TirStmt::new(
-        TirStmtKind::Expr(TirExpr::new(
-            TirExprKind::Assign {
-                target: Box::new(target),
-                value: Box::new(value),
-            },
-            type_id,
-            span,
-        )),
         span,
     )
 }
@@ -705,7 +690,12 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                         continue;
                     }
                     let mut tir_func = self.reify_function(func);
-                    let twin = unchecked_twin(func, &mut tir_func);
+                    let twin = unchecked_twin(
+                        func,
+                        &mut tir_func,
+                        &self.current_module_source,
+                        &mut self.tysys.type_table.borrow_mut(),
+                    );
                     tir_module.add_function(tir_func);
                     if let Some(twin) = twin {
                         tir_module.add_function(twin);
@@ -1335,7 +1325,12 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         let mut out = Vec::with_capacity(live.len());
         for method in live {
             let mut tir_func = self.reify_method(method, &facts, concrete_owner.as_ref(), origin);
-            let twin = unchecked_twin(method, &mut tir_func);
+            let twin = unchecked_twin(
+                method,
+                &mut tir_func,
+                &self.current_module_source,
+                &mut self.tysys.type_table.borrow_mut(),
+            );
             out.push(tir_func);
             out.extend(twin);
         }
@@ -2521,9 +2516,9 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             }
             ast::Expr::Unary(unary) => {
                 // `&mut [1, 2] as List<i32>` parses as `(&mut [1, 2]) as …`,
-                // and annotate coerced the literal through the borrow and typed
-                // the whole unary as the target. Reify drops the wrapper to
-                // match: the call site auto-borrows the `List<i32>`, where a
+                // and annotate coerced the literal through the reference and
+                // typed the whole unary as the target. Reify drops the wrapper
+                // to match: the call site takes a reference to the `List<i32>`, where a
                 // `&mut` around it would name the referent instead.
                 if matches!(unary.op, ast::UnaryOp::Ref | ast::UnaryOp::MutRef)
                     && let ast::Expr::TupleLiteral(inner) = &unary.expr
@@ -2616,7 +2611,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 // Track address-taken locals for `&x` / `&mut x`, mirroring
                 // `Elaborator::resolve_unary`. The
                 // boxing pass (`lower::plan::boxing`) reads
-                // `TirFunction::address_taken_locals` to retag a borrowed
+                // `TirFunction::address_taken_locals` to retag a referenced
                 // local's declaration to its box type, so that mutation
                 // through the reference (e.g. `*slot = other_fn`) writes
                 // back to the original slot. Without this the local stays
@@ -2626,8 +2621,8 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 {
                     ctx.address_taken_locals.insert(*index);
                 }
-                // A reborrow names the storage its operand already references;
-                // borrowing the deref would box a copy of a scalar.
+                // `&*r` / `&mut *r` names the storage `r` already refers to;
+                // taking `&` of the deref would box a copy of a scalar.
                 if matches!(op, TirUnaryOp::Ref | TirUnaryOp::MutRef)
                     && let TirExprKind::Unary {
                         op: TirUnaryOp::Deref,
@@ -3199,38 +3194,64 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         // Header + `condition: <source>` + one `<label>: <text>` line per
         // emitted slot.
         let line = span.line as u64;
-        let mut parts: Vec<TirTemplatePart> = vec![
-            TirTemplatePart::Literal("Assertion failed in ".to_string()),
-            TirTemplatePart::Interpolation {
-                expr: Box::new(TirExpr::new(
-                    TirExprKind::StringLiteral(ctx.function_name.clone()),
-                    string_type,
-                    span,
-                )),
-                format_spec: None,
-            },
-            TirTemplatePart::Literal(" at ".to_string()),
-            TirTemplatePart::Interpolation {
-                expr: Box::new(TirExpr::new(
-                    TirExprKind::StringLiteral(self.current_module_source.to_string()),
-                    string_type,
-                    span,
-                )),
-                format_spec: None,
-            },
-            TirTemplatePart::Literal(":".to_string()),
-            TirTemplatePart::Interpolation {
-                expr: Box::new(TirExpr::new(
-                    TirExprKind::IntLiteral {
-                        value: line,
-                        repr: line.to_string(),
-                    },
-                    TypeTable::I32,
-                    span,
-                )),
-                format_spec: None,
-            },
-        ];
+        let file = self
+            .tysys
+            .trait_env
+            .module_of_span(span, &self.current_module_source)
+            .to_string();
+        let string_literal = |text: String| {
+            Box::new(TirExpr::new(
+                TirExprKind::StringLiteral(text),
+                string_type,
+                span,
+            ))
+        };
+        let mut parts: Vec<TirTemplatePart> = if assert_stmt.contract {
+            // The call breaking the contract is to blame, so the clause reports
+            // where it was called from.
+            let clause_site = format!("{file}:{line}");
+            vec![
+                TirTemplatePart::Literal("Contract of ".to_string()),
+                TirTemplatePart::Interpolation {
+                    expr: string_literal(contract_owner_name(&ctx.function_name)),
+                    format_spec: None,
+                },
+                TirTemplatePart::Literal(" failed at ".to_string()),
+                TirTemplatePart::Interpolation {
+                    expr: Box::new(builtin_call(
+                        CONTRACT_SITE_INTRINSIC,
+                        vec![*string_literal(clause_site)],
+                        string_type,
+                    )),
+                    format_spec: None,
+                },
+            ]
+        } else {
+            vec![
+                TirTemplatePart::Literal("Assertion failed in ".to_string()),
+                TirTemplatePart::Interpolation {
+                    expr: string_literal(ctx.function_name.clone()),
+                    format_spec: None,
+                },
+                TirTemplatePart::Literal(" at ".to_string()),
+                TirTemplatePart::Interpolation {
+                    expr: string_literal(file),
+                    format_spec: None,
+                },
+                TirTemplatePart::Literal(":".to_string()),
+                TirTemplatePart::Interpolation {
+                    expr: Box::new(TirExpr::new(
+                        TirExprKind::IntLiteral {
+                            value: line,
+                            repr: line.to_string(),
+                        },
+                        TypeTable::I32,
+                        span,
+                    )),
+                    format_spec: None,
+                },
+            ]
+        };
         if let Some(msg) = &assert_stmt.message {
             parts.push(TirTemplatePart::Literal(": ".to_string()));
             let msg_tir = self.reify_expr(msg, ctx, None);
@@ -4577,7 +4598,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
 
     /// Reify a tagged template as the call annotate resolved it: the tag on a
     /// literal of the template's anonymous type, one field per hole. A hole
-    /// that is a place is read or borrowed where it stands; any other is
+    /// that is a place is read or referenced where it stands; any other is
     /// evaluated once, in source order, into a local of the block the call
     /// then sits in (WEP 2026-01-10).
     fn reify_tagged_template(
@@ -4722,7 +4743,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
     }
 
     /// Whether a reified hole names storage the template literal can read or
-    /// borrow in situ: a local, a parameter, a global, or a field or element
+    /// reference in situ: a local, a parameter, a global, or a field or element
     /// chain rooted at one. Anything else computes a value, which the literal
     /// reads once from a temporary instead.
     ///
@@ -6962,7 +6983,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         let named = slots_named_by_defaults(args.len(), func_params);
         let captured = names_captured_by_defaults(args.len(), func_params);
         let mut prelude = Vec::new();
-        let mut borrows = BorrowedPlaces::default();
+        let mut mut_refs = MutRefPlaces::default();
         let walk = |this: &mut Self| {
             util::replaced(
                 this,
@@ -6971,8 +6992,9 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 |this| {
                     this.with_module_perspective(callee_module, |this| {
                         ctx.with_caller_bindings_hidden(|ctx| {
-                            // Every argument binds ahead of the defaults, in call order. A `&mut`
-                            // place stays in the call, and a default re-borrows it unless captured.
+                            // Every argument binds ahead of the defaults, in call order. A
+                            // `&mut` place stays in the call, and a default takes `&mut` of it
+                            // again unless captured.
                             if named.contains(&true) {
                                 for ((arg, (name, _)), named) in
                                     args.iter_mut().zip(func_params).zip(&named)
@@ -6985,11 +7007,11 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                                     let value = std::mem::replace(&mut arg.expr, unbound);
                                     arg.expr = if name == RECEIVER {
                                         this.bind_receiver_ahead(ctx, value, &mut prelude)
-                                    } else if is_mut_borrow(&value)
+                                    } else if is_mut_ref(&value)
                                         && this.tysys.is_source_place(&value)
                                         && !captured.contains(name)
                                     {
-                                        let borrow = this.bind_subscripts_ahead(
+                                        let mut_ref = this.bind_subscripts_ahead(
                                             ctx,
                                             value,
                                             "arg_index",
@@ -6998,11 +7020,11 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                                         if *named {
                                             let what = minted_name(name, ctx.fresh_serial());
                                             let stand_in =
-                                                ctx.add_local(what, borrow.type_id, false, None);
+                                                ctx.add_local(what, mut_ref.type_id, false, None);
                                             ctx.name_local(name.clone(), stand_in);
-                                            borrows.0.push((stand_in, borrow.clone()));
+                                            mut_refs.0.push((stand_in, mut_ref.clone()));
                                         }
-                                        borrow
+                                        mut_ref
                                     } else {
                                         bind_param_to_local(ctx, name, value, &mut prelude)
                                     };
@@ -7019,7 +7041,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                                 if let Some(expected) = expected {
                                     this.settle_packs_in_default(&mut resolved, expected);
                                 }
-                                borrows.visit_expr(&mut resolved);
+                                mut_refs.visit_expr(&mut resolved);
                                 if *named {
                                     resolved =
                                         bind_param_to_local(ctx, name, resolved, &mut prelude);
@@ -7729,10 +7751,10 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
 
         // A receiver the callee can replace rather than write into is boxed, or
         // the mutation has no slot to land in and `x.bump()` mutates a copy.
-        let needs_implicit_mut_borrow = !dispatch.is_ref_impl
+        let needs_implicit_mut_ref = !dispatch.is_ref_impl
             && matches!(dispatch.self_kind, ast::SelfKind::MutRef)
             && self.tysys.mut_self_receiver_needs_box(raw_receiver.type_id);
-        if needs_implicit_mut_borrow && let TirExprKind::Local { index, .. } = &raw_receiver.kind {
+        if needs_implicit_mut_ref && let TirExprKind::Local { index, .. } = &raw_receiver.kind {
             ctx.address_taken_locals.insert(*index);
         }
 
@@ -8488,7 +8510,11 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                     .make_compiler_struct(CompilerItem::String);
                 let file = match &self.call_site_location {
                     Some(loc) => loc.module.to_string(),
-                    None => self.current_module_source.to_string(),
+                    None => self
+                        .tysys
+                        .trait_env
+                        .module_of_span(lit.span, &self.current_module_source)
+                        .to_string(),
                 };
                 return TirExpr::new(TirExprKind::StringLiteral(file), string_type, lit.span);
             }
@@ -10101,7 +10127,7 @@ impl AstVisitor for ClosureSpelledNames {
     }
 }
 
-fn is_mut_borrow(expr: &TirExpr) -> bool {
+fn is_mut_ref(expr: &TirExpr) -> bool {
     matches!(
         expr.kind,
         TirExprKind::Unary {
@@ -10111,23 +10137,23 @@ fn is_mut_borrow(expr: &TirExpr) -> bool {
     )
 }
 
-/// The `&mut` borrows a call keeps in place, each with the local a default
-/// reads it through; [`TirMutVisitor::visit_expr`] reads the place again there.
+/// The `&mut`s a call keeps in place, each with the local a default reads it
+/// through; [`TirMutVisitor::visit_expr`] reads the place again there.
 #[derive(Default)]
-struct BorrowedPlaces(Vec<(u32, TirExpr)>);
+struct MutRefPlaces(Vec<(u32, TirExpr)>);
 
-impl TirMutVisitor for BorrowedPlaces {
+impl TirMutVisitor for MutRefPlaces {
     fn visit_expr(&mut self, expr: &mut TirExpr) {
         if let TirExprKind::Local { index, .. } = &expr.kind
-            && let Some((_, borrow)) = self.0.iter().find(|(local, _)| local == index)
+            && let Some((_, mut_ref)) = self.0.iter().find(|(local, _)| local == index)
         {
             let span = expr.span;
-            *expr = borrow.clone();
+            *expr = mut_ref.clone();
             expr.span = span;
             return;
         }
         // A closure body numbers its own locals, and none captures a stand-in:
-        // `names_captured_by_defaults` keeps those borrows bound.
+        // `names_captured_by_defaults` keeps those `&mut`s bound.
         if matches!(expr.kind, TirExprKind::Closure { .. }) {
             return;
         }
@@ -10176,13 +10202,12 @@ fn bind_to_local(
     TirExpr::new(TirExprKind::Local { index, name }, type_id, span)
 }
 
-/// `if $contract_checks() { check }`: one `contract` clause as the
-/// `unchecked` twin runs it. [`split_unchecked_twin`] unwraps it again for the
-/// checked function.
+/// `if $contract_clause() { check }`: one `contract` clause, marked for
+/// `lower::contract_checks` to copy to each call.
 fn contract_check(check: Vec<TirStmt>, span: Span) -> TirStmt {
     TirStmt::new(
         TirStmtKind::If {
-            condition: builtin_call(CONTRACT_CHECKS_INTRINSIC, Vec::new(), TypeTable::BOOL),
+            condition: builtin_call(CONTRACT_CLAUSE_INTRINSIC, Vec::new(), TypeTable::BOOL),
             then_block: TirBlock::new(check, span),
             else_block: None,
         },
@@ -10234,17 +10259,47 @@ fn unchecked_subscript(index: &ast::IndexExpr, mut dispatch: OperatorDispatch) -
 
 /// The `unchecked` twin of `func`, reified from `decl`, where `decl` writes a
 /// `contract` clause. See [`split_unchecked_twin`].
-fn unchecked_twin(decl: &ast::Function, func: &mut TirFunction) -> Option<TirFunction> {
-    let clauses: Vec<Span> = decl.contracts().map(|clause| clause.span).collect();
-    (!clauses.is_empty()).then(|| split_unchecked_twin(func, &clauses))
+fn unchecked_twin(
+    decl: &ast::Function,
+    func: &mut TirFunction,
+    module: &ModuleSource,
+    type_table: &mut TypeTable,
+) -> Option<TirFunction> {
+    let clauses = decl.contracts().count();
+    (clauses > 0).then(|| split_unchecked_twin(func, clauses, module, type_table))
 }
 
-/// Split `func`, whose body holds its `contract` clauses (spanning `clauses`)
-/// as [`contract_check`]s, into the function every unmarked call reaches,
-/// which always checks them, and the `unchecked` twin a marked call reaches,
-/// which checks them only in a build under `-f contract-checks`.
-fn split_unchecked_twin(func: &mut TirFunction, clauses: &[Span]) -> TirFunction {
+/// Split `func`, whose body opens with its `clauses` `contract` clauses as
+/// [`contract_check`]s, into its `unchecked` twin, holding the rest of the
+/// body, and `func` itself, left as the clauses and a call to the twin.
+fn split_unchecked_twin(
+    func: &mut TirFunction,
+    clauses: usize,
+    module: &ModuleSource,
+    type_table: &mut TypeTable,
+) -> TirFunction {
+    // Linking stamps every function's module, but the call to the twin
+    // records it now: a call to an instance resolves by name in that module.
+    func.module_source = module.clone();
+    let body = func
+        .body
+        .as_mut()
+        .expect("a function with a `contract` clause has a body");
+    // What runs ahead of the clauses, a coverage probe, counts the body run.
+    let mut rest = std::mem::take(&mut body.stmts);
+    let first = rest
+        .iter()
+        .position(is_contract_clause)
+        .expect("a function with a `contract` clause reifies to a contract check");
+    let checks: Vec<TirStmt> = rest.drain(first..first + clauses).collect();
+    assert!(
+        checks.iter().all(is_contract_clause) && !rest.iter().any(is_contract_clause),
+        "every `contract` clause of `{}` reifies to a contract check, one run of them in its body",
+        func.name
+    );
+    body.stmts = checks;
     let mut twin = func.clone();
+    twin.body = Some(TirBlock::new(rest, func.span));
     twin.name = unchecked_twin_name(&func.name);
     twin.def_id = None;
     twin.kind = FunctionKind::UncheckedTwin {
@@ -10258,34 +10313,23 @@ fn split_unchecked_twin(func: &mut TirFunction, clauses: &[Span]) -> TirFunction
     if let Some(info) = &mut twin.method_info {
         info.mark_unchecked();
     }
-    let body = func
-        .body
+    let call = call_with_params(func, &twin, type_table);
+    let forward = if func.return_type == TypeTable::UNIT {
+        TirStmtKind::Expr(call)
+    } else {
+        TirStmtKind::Return { value: Some(call) }
+    };
+    func.body
         .as_mut()
-        .expect("a function with a `contract` clause has a body");
-    let mut unwrapped = 0;
-    body.stmts = std::mem::take(&mut body.stmts)
-        .into_iter()
-        .flat_map(|stmt| match stmt.kind {
-            TirStmtKind::If { then_block, .. } if clauses.contains(&stmt.span) => {
-                unwrapped += 1;
-                then_block.stmts
-            }
-            kind => vec![TirStmt { kind, ..stmt }],
-        })
-        .collect();
-    assert_eq!(
-        unwrapped,
-        clauses.len(),
-        "every `contract` clause of `{}` reifies to a contract check in its body",
-        func.name
-    );
+        .expect("split above")
+        .stmts
+        .push(TirStmt::new(forward, func.span));
     twin
 }
 
 /// Bind an impl's `methods` to the `contract` clauses their trait declares.
-/// Each clause holder among them splits into the checked holder and its
-/// `unchecked` twin, and the method it holds the clauses of splits likewise,
-/// each half opening with a call to the matching half of the holder.
+/// The method a clause holder holds the clauses of splits as one writing its
+/// own clauses does, with a call to the holder as its one clause.
 /// `bindings` pairs each holder's declaration with the method's, as
 /// [`Reify::contract_bindings`] answers them.
 fn bind_trait_contracts(
@@ -10300,54 +10344,76 @@ fn bind_trait_contracts(
         let Some(holder_at) = position(&methods, holder_def) else {
             continue;
         };
-        let holder = &mut methods[holder_at];
-        // Linking stamps every function's module, but the calls below record
-        // it now: a call to an instance resolves by name in that module.
-        holder.module_source = module.clone();
-        let clauses: Vec<Span> = holder
-            .body
-            .iter()
-            .flat_map(|body| &body.stmts)
-            .map(|stmt| stmt.span)
-            .collect();
-        let holder_twin = split_unchecked_twin(holder, &clauses);
-        let holder = holder.clone();
+        methods[holder_at].module_source = module.clone();
+        let holder = methods[holder_at].clone();
         if let Some(held_at) = position(&methods, held_def) {
             let method = &mut methods[held_at];
-            let mut method_twin = split_unchecked_twin(method, &[]);
-            open_with_call(method, &holder, type_table);
-            open_with_call(&mut method_twin, &holder_twin, type_table);
-            methods.push(method_twin);
+            // An impl writing clauses of its own under the trait's is an error
+            // annotate reported, and its own split stands.
+            if method
+                .body
+                .iter()
+                .flat_map(|body| &body.stmts)
+                .any(is_contract_clause)
+            {
+                continue;
+            }
+            let open = call_with_params(method, &holder, type_table);
+            method
+                .body
+                .as_mut()
+                .expect("a method a trait's contract binds has a body")
+                .stmts
+                .insert(
+                    0,
+                    contract_check(
+                        vec![TirStmt::new(TirStmtKind::Expr(open), holder.span)],
+                        holder.span,
+                    ),
+                );
+            let twin = split_unchecked_twin(method, 1, module, type_table);
+            methods.push(twin);
         }
-        methods.push(holder_twin);
     }
     methods
 }
 
-/// Open `func`'s body with a call to `callee`, passing it `func`'s parameters
-/// and type parameters. The parser gave `callee` the type parameters `func`
-/// declares. A call passes no effect argument.
-fn open_with_call(func: &mut TirFunction, callee: &TirFunction, type_table: &mut TypeTable) {
+/// A call to `callee`, passing it `func`'s parameters and type parameters,
+/// which `callee` declares as well. A call passes no effect argument.
+fn call_with_params(
+    func: &TirFunction,
+    callee: &TirFunction,
+    type_table: &mut TypeTable,
+) -> TirExpr {
     let span = callee.span;
+    // A method's own parameters are numbered after its impl's.
+    let offset = func.impl_type_params.len() as u32;
     let type_args: Vec<TypeId> = func
         .type_params
         .iter()
         .filter(|param| !param.is_effect)
-        .map(|param| type_table.make_declared_param(param.name.clone(), param.index, param.is_pack))
+        .map(|param| {
+            type_table.make_declared_param(param.name.clone(), offset + param.index, param.is_pack)
+        })
         .collect();
     assert_eq!(func.type_params.len(), callee.type_params.len());
+    assert_eq!(func.params.len(), callee.params.len());
     let args = func
         .params
         .iter()
-        .map(|param| {
+        .zip(&callee.params)
+        .map(|(param, callee_param)| {
             let local = TirExprKind::Local {
                 index: param.local_index,
                 name: param.name.clone(),
             };
-            CallArg::new(TirExpr::new(local, param.type_id, span), false)
+            CallArg::new(
+                TirExpr::new(local, param.type_id, span),
+                callee_param.is_mut,
+            )
         })
         .collect();
-    let call = TirExpr::new(
+    TirExpr::new(
         TirExprKind::Call {
             func: Box::new(FunctionRef::from_resolved(
                 callee,
@@ -10356,14 +10422,9 @@ fn open_with_call(func: &mut TirFunction, callee: &TirFunction, type_table: &mut
             type_args,
             args: CallArgs::free(args),
         },
-        TypeTable::UNIT,
+        callee.return_type,
         span,
-    );
-    func.body
-        .as_mut()
-        .expect("a method a trait's contract binds has a body")
-        .stmts
-        .insert(0, TirStmt::new(TirStmtKind::Expr(call), span));
+    )
 }
 
 fn ast_unary_op_to_tir(op: ast::UnaryOp) -> TirUnaryOp {

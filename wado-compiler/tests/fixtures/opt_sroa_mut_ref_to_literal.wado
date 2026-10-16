@@ -2,7 +2,7 @@
 //
 // Passing `&mut Writer { … }` to a function the inliner takes leaves
 // `let w = &mut Writer { … }`. The literal is a fresh place only `w` reaches,
-// so it is the same program as binding the literal first and borrowing that,
+// so it is the same program as binding the literal first and referencing that,
 // which `sroa` scalarizes. `core:json`'s map-key writer has the shape.
 //
 // `put` writes `count` through the reference and `put_twice` reads it back, so

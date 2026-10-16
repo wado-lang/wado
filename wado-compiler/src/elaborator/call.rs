@@ -3205,48 +3205,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             return inferred;
         }
 
-        // Fast path: current-module cache (populated during item resolution),
-        // keyed by name, so only for a callee this module declares.
-        let declared_here = callee.module() == &self.current_module_source;
-        let cached = if declared_here
-            && let (Some(tp), Some(rp)) = (
-                self.sem
-                    .decls
-                    .generic_function_params
-                    .get(func_name)
-                    .cloned(),
-                self.sem
-                    .decls
-                    .generic_function_resolved_param_types
-                    .get(func_name)
-                    .cloned(),
-            ) {
-            let decl_return = self
-                .sem
-                .decls
-                .generic_function_resolved_return_types
-                .get(func_name)
-                .copied();
-            Some((tp, rp, decl_return))
-        } else {
-            None
-        };
-
-        let (type_param_list, resolved_param_types, decl_return_type) = if let Some(v) = cached {
-            v
-        } else {
-            // Fallback: cross-module lookup via imported functions / loaded modules.
-            let Some(info) = self.tysys.lookup_generic_func_for_inference(callee) else {
-                return vec![];
-            };
-            info
-        };
-
-        if type_param_list.is_empty() {
+        let Some(decl) = self.tysys.generic_decl_sig(callee) else {
             return vec![];
-        }
-
-        let param_ids: Vec<TypeId> = type_param_list.iter().map(|(_, id)| *id).collect();
+        };
+        let param_ids = decl.type_param_ids();
+        let resolved_param_types = decl.param_types;
+        let decl_return_type = decl.return_type;
 
         // Instantiate the callee's slots first. Inside a generic scope a caller
         // may forward its own type parameter (`outer<T>` calling `inner(g)`
@@ -3603,14 +3567,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         args: &[TypeId],
         call_span: Span,
     ) -> bool {
-        let is_borrow = |this: &Self, t| {
+        let is_ref = |this: &Self, t| {
             RefKind::from_resolved(this.tysys.type_table.borrow().get(t)).is_some()
         };
         let mismatched: Vec<usize> = (0..param_types.len().min(args.len()))
             .filter(|&i| {
-                is_borrow(self, param_types[i])
+                is_ref(self, param_types[i])
                     && !matches!(args[i], TypeTable::ERROR | TypeTable::UNKNOWN)
-                    && !is_borrow(self, args[i])
+                    && !is_ref(self, args[i])
                     && !self.type_has_infer_hole(args[i])
             })
             .collect();
@@ -4705,10 +4669,10 @@ impl TypeSystem {
     /// [`Self::packs_args_reach`] for a free function, whose parameter types
     /// the callee reference answers.
     fn packs_callee_args_reach(&self, callee: &CalleeRef, arg_count: usize) -> Vec<String> {
-        let Some((_, param_types, _)) = self.lookup_generic_func_for_inference(callee) else {
+        let Some(decl) = self.generic_decl_sig(callee) else {
             return vec![];
         };
-        self.packs_args_reach(&param_types, arg_count)
+        self.packs_args_reach(&decl.param_types, arg_count)
     }
 
     /// The signature of a trait default `key` inherits without overriding it,
@@ -4764,21 +4728,10 @@ impl TypeSystem {
             .collect()
     }
 
-    /// A generic function's `(type params, param types, return type)`; empty
-    /// for a non-generic one.
-    fn lookup_generic_func_for_inference(
-        &self,
-        callee: &CalleeRef,
-    ) -> Option<(Vec<(String, TypeId)>, Vec<TypeId>, Option<TypeId>)> {
+    /// The signature of a function with a type parameter to infer.
+    fn generic_decl_sig(&self, callee: &CalleeRef) -> Option<DeclSig> {
         let sig = self.signatures.function_sig(callee.def()?)?;
-        if sig.type_param_ids.is_empty() {
-            return Some((vec![], vec![], None));
-        }
-        Some((
-            sig.type_param_ids.clone(),
-            sig.decl.param_types.clone(),
-            sig.decl.return_type,
-        ))
+        (!sig.decl.type_params.is_empty()).then(|| sig.decl.clone())
     }
 
     /// The declaration and type arguments of `expected`, where it is an

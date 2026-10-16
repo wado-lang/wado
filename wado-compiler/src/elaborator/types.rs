@@ -508,7 +508,7 @@ pub enum TypeError {
     },
 
     /// A by-value `self` receiver on a non-resource type. Only resources are
-    /// move-only (WEP 2026-05-21); value types borrow with `&self`.
+    /// move-only (WEP 2026-05-21); value types take `&self`.
     SelfByValueOnNonResource {
         type_name: String,
         span: Span,
@@ -1353,11 +1353,11 @@ pub enum TypeError {
 
     /// A reference or a view has no Component Model representation. Triggered
     /// when an `export` (or imported) function's parameter or return type is
-    /// or holds one; `borrow` is the type that makes it one.
-    BorrowAtCmBoundary {
+    /// or holds one; `reference` is the type that makes it one.
+    RefAtCmBoundary {
         function: String,
         position: String,
-        borrow: String,
+        reference: String,
         span: Span,
     },
 
@@ -1537,6 +1537,12 @@ pub enum TypeError {
     /// closure (`|x| name(x)`) so the inner call site provides the
     /// inference context.
     BareGenericFunctionRef {
+        name: String,
+        span: Span,
+    },
+    /// A function generic over an effect named as a value with no expected
+    /// `fn(...)` type to settle the effect from.
+    BareEffectGenericFunctionRef {
         name: String,
         span: Span,
     },
@@ -1883,11 +1889,10 @@ impl TypeError {
                 *span,
             ),
             TypeError::TemplateHoleGeneric { type_name, span } => (
-                Code::InvalidSyntax,
+                Code::UnsupportedFeature,
                 format!(
                     "a tagged template hole of type `{type_name}` mentions a type parameter; \
-                     a template's type is minted per shape and cannot be generic over the \
-                     enclosing item"
+                     a template shape generic over the enclosing item is not implemented yet"
                 ),
                 *span,
             ),
@@ -2811,15 +2816,15 @@ impl TypeError {
                 ),
                 *span,
             ),
-            TypeError::BorrowAtCmBoundary {
+            TypeError::RefAtCmBoundary {
                 function,
                 position,
-                borrow,
+                reference,
                 span,
             } => (
                 Code::CmBoundaryType,
                 format!(
-                    "`{borrow}` in {position} of `{function}` is not allowed: a reference or a view points into storage it does not own and has no Component Model representation; pass an owned value such as a `List<T>` or a `String`"
+                    "`{reference}` in {position} of `{function}` is not allowed: a reference or a view points into storage it does not own and has no Component Model representation; pass an owned value such as a `List<T>` or a `String`"
                 ),
                 *span,
             ),
@@ -2952,6 +2957,16 @@ impl TypeError {
                 format!(
                     "ambiguous method '{method}': declared by resource '{resource}' and by trait '{trait_name}'; name one, e.g. '{resource}::{method}(&value)' or '{trait_name}::{method}(&value)'"
                 ),
+                *span,
+            ),
+            TypeError::BareEffectGenericFunctionRef { name, span } => (
+                Code::GenericFunctionRef,
+                {
+                    let name = unalias_namespace_member(name);
+                    format!(
+                        "cannot reference effect-generic function '{name}' without an expected function type, since a turbofish names no effect; annotate where it goes (e.g., `let f: fn(...) = {name};`) or wrap in a closure"
+                    )
+                },
                 *span,
             ),
             TypeError::BareGenericFunctionRef { name, span } => (
@@ -3271,9 +3286,9 @@ pub(super) struct FunctionContext {
     /// Deref overrides for mutable closures: maps original var name -> (ref var name, inner type)
     /// When a variable is in this map, lookups return `*$ref_name` instead of the value.
     pub(super) deref_overrides: IndexMap<String, (String, TypeId)>,
-    /// Bindings of an enclosing frame this frame borrows `&mut`, which the
+    /// Bindings of an enclosing frame this frame takes `&mut`, which the
     /// closure owning it captures `&mut`.
-    pub(super) borrowed_captures: IndexSet<String>,
+    pub(super) mut_ref_captures: IndexSet<String>,
     /// Box types for outer address-taken locals: maps outer var name -> `&mut T` type.
     /// When capturing such a variable, use `DerefCapture` to read through the box.
     pub(super) outer_box_types: IndexMap<String, TypeId>,
@@ -3544,7 +3559,7 @@ impl FunctionContext {
             active_labels: Vec::new(),
             function_name,
             deref_overrides: IndexMap::default(),
-            borrowed_captures: IndexSet::default(),
+            mut_ref_captures: IndexSet::default(),
             outer_box_types: IndexMap::default(),
             closure_defaults: IndexMap::default(),
             in_handler_method: false,
@@ -3627,7 +3642,7 @@ impl FunctionContext {
             active_labels: Vec::new(),
             function_name,
             deref_overrides: IndexMap::default(),
-            borrowed_captures: IndexSet::default(),
+            mut_ref_captures: IndexSet::default(),
             outer_box_types,
             closure_defaults: IndexMap::default(),
             // Closures inside a handler method body are NOT themselves

@@ -1,0 +1,19 @@
+// Regression: a `<=` guard on a constant leaves `v + 1` room to grow only
+// below the most `v`'s own type holds. An `i8` counter under `v <= 127` wraps
+// to -128, so the floor its entry gives is gone and the assert MUST trap.
+#[inline(never)]
+fn walk() -> i32 {
+    let mut steps = 0;
+    for let mut v: i8 = 0; v <= 127; v += 1 {
+        assert 0 <= v;
+        steps += 1;
+    }
+    return steps;
+}
+
+export fn run() {
+    let _ = walk();
+}
+
+__DATA__
+{"stderr_contains": ["Assertion failed"], "trapped": true}

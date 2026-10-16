@@ -306,7 +306,7 @@ struct CaptureScanner {
     /// Places read where they sit, in scan order: the read stays in the
     /// condition, so a later operand bound ahead of it runs first.
     places_behind: Vec<String>,
-    /// Writes the walk has passed, in scan order: the local a `&mut` borrow or a
+    /// Writes the walk has passed, in scan order: the local a `&mut` or a
     /// method receiver names, or `None` where an unentered subtree could write
     /// anything.
     writes: Vec<Option<String>>,
@@ -425,7 +425,7 @@ impl CaptureScanner {
         self.frontier_ok = false;
     }
 
-    /// A `&mut` borrow and a `&mut self` receiver are the only channels into a
+    /// A `&mut` and a `&mut self` receiver are the only channels into a
     /// local the rest of the condition also reads.
     fn record_write(&mut self, expr: &Expr) {
         if let Some(name) = place_root_name(expr) {
@@ -508,7 +508,7 @@ impl CaptureScanner {
                     return;
                 }
                 // `&place` names the place: a slot for the place would bind its
-                // value and hand the borrow that copy. Only what computes the
+                // value and hand the reference that copy. Only what computes the
                 // place is captured under it.
                 if u.op == UnaryOp::Ref
                     && !matches!(&u.expr, Expr::Ident(_))

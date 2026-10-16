@@ -1,9 +1,9 @@
-// Regression: a borrow that stops naming one object is no root.
+// Regression: a reference that stops naming one object is no root.
 //
 // `param_spec` treats `let r = &cfg;` as a second name for `cfg`, which means
 // the read under the `&` is a use it accounts for rather than one that makes
 // `cfg` opaque. A local bound to two different bases, or assigned something
-// that is not a borrow at all, names neither — and the reads it left behind
+// that is not a reference at all, names neither — and the reads it left behind
 // used to stay accounted for with no edge to carry the writes back, so `cfg`
 // kept a `level` that a write through `r` had already replaced.
 //

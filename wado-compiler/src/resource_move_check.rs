@@ -59,11 +59,11 @@ pub enum ResourceMoveError {
         move_span: Span,
         module: String,
     },
-    /// A resource moved out of a borrowed place (`self.f` on `&self`, a binding
+    /// A resource moved out of a referenced place (`self.f` on `&self`, a binding
     /// from `match *self`). The source keeps ownership, so the extracted handle
     /// would alias it; take `self` by value to consume, or return a fresh
     /// resource.
-    MoveOutOfBorrow {
+    MoveOutOfReference {
         /// The resource type being extracted.
         type_name: String,
         span: Span,
@@ -87,13 +87,13 @@ impl From<ResourceMoveError> for Diagnostic {
                 use_span,
                 module,
             ),
-            ResourceMoveError::MoveOutOfBorrow {
+            ResourceMoveError::MoveOutOfReference {
                 type_name,
                 span,
                 module,
             } => (
                 format!(
-                    "cannot move resource `{type_name}` out of a borrow; take `self` by value to consume it, or return a freshly created resource"
+                    "cannot move resource `{type_name}` out of a reference; take `self` by value to consume it, or return a freshly created resource"
                 ),
                 span,
                 module,
@@ -158,16 +158,16 @@ fn check_function(
 ) {
     if let Some(body) = &func.body {
         check_block(sem, module, body, out);
-        check_borrow_extraction(sem, module, func, out);
+        check_reference_extraction(sem, module, func, out);
     }
 }
 
-/// Reject moving a resource out of a borrowed place: a `&self` / `&T`-param
-/// method whose returned value is rooted in that borrow and carries a resource
-/// (`fn peek(&self) -> Fields { return self.f; }`). The borrow keeps the source
+/// Reject moving a resource out of a referenced place: a `&self` / `&T`-param
+/// method whose returned value is rooted in that reference and carries a resource
+/// (`fn peek(&self) -> Fields { return self.f; }`). The reference keeps the source
 /// owned, so the extracted handle would alias it — a double-drop. Extraction
 /// must consume by value (`self`) or return a freshly produced resource.
-fn check_borrow_extraction(
+fn check_reference_extraction(
     sem: &Semantics,
     module: &ModuleSource,
     func: &Function,
@@ -176,73 +176,73 @@ fn check_borrow_extraction(
     let Some(body) = &func.body else {
         return;
     };
-    let mut borrowed: Vec<AstId> = Vec::new();
+    let mut referenced: Vec<AstId> = Vec::new();
     for p in &func.params {
         let is_ref = matches!(p.self_kind, ast::SelfKind::Ref | ast::SelfKind::MutRef)
             || matches!(&p.ty, ast::Type::Reference(_) | ast::Type::MutReference(_));
         if is_ref {
-            borrowed.push(p.id);
+            referenced.push(p.id);
         }
     }
-    if borrowed.is_empty() {
+    if referenced.is_empty() {
         return;
     }
-    let mut checker = BorrowChecker {
+    let mut checker = ReferenceChecker {
         sem,
         module,
-        borrowed,
+        referenced,
         out,
     };
     checker.walk_block(body);
 }
 
-/// Tracks which bindings are rooted in a borrowed parameter and flags returns
+/// Tracks which bindings are rooted in a reference parameter and flags returns
 /// that carry a resource out of one.
-struct BorrowChecker<'a> {
+struct ReferenceChecker<'a> {
     sem: &'a Semantics,
     module: &'a ModuleSource,
-    /// Def `AstId`s rooted in a borrow: borrowed params plus `let` bindings and
-    /// match-arm bindings projected from a borrowed place.
-    borrowed: Vec<AstId>,
+    /// Def `AstId`s rooted in a reference: reference params plus `let` bindings
+    /// and match-arm bindings projected from a referenced place.
+    referenced: Vec<AstId>,
     out: &'a mut Vec<ResourceMoveError>,
 }
 
-impl BorrowChecker<'_> {
-    /// Whether `expr`'s value is rooted in a borrowed place. `extra` holds
+impl ReferenceChecker<'_> {
+    /// Whether `expr`'s value is rooted in a referenced place. `extra` holds
     /// match-arm bindings in scope for the current arm.
-    fn roots_in_borrow(&self, expr: &Expr, extra: &[AstId]) -> bool {
+    fn roots_in_reference(&self, expr: &Expr, extra: &[AstId]) -> bool {
         match expr {
             Expr::Ident(x) => self
                 .sem
                 .referenced_symbol(x.id)
-                .is_some_and(|def| self.borrowed.contains(&def) || extra.contains(&def)),
-            Expr::FieldAccess(fa) => self.roots_in_borrow(&fa.expr, extra),
-            Expr::Unary(u) => self.roots_in_borrow(&u.expr, extra),
-            Expr::Cast(c) => self.roots_in_borrow(&c.expr, extra),
-            Expr::Index(ix) => self.roots_in_borrow(&ix.expr, extra),
+                .is_some_and(|def| self.referenced.contains(&def) || extra.contains(&def)),
+            Expr::FieldAccess(fa) => self.roots_in_reference(&fa.expr, extra),
+            Expr::Unary(u) => self.roots_in_reference(&u.expr, extra),
+            Expr::Cast(c) => self.roots_in_reference(&c.expr, extra),
+            Expr::Index(ix) => self.roots_in_reference(&ix.expr, extra),
             Expr::Block(b) => self
                 .block_tail(b)
-                .is_some_and(|t| self.roots_in_borrow(t, extra)),
+                .is_some_and(|t| self.roots_in_reference(t, extra)),
             Expr::LabeledBlock(lb) => self
                 .block_tail(&lb.block)
-                .is_some_and(|t| self.roots_in_borrow(t, extra)),
+                .is_some_and(|t| self.roots_in_reference(t, extra)),
             Expr::If(ife) => {
                 self.block_tail(&ife.then_block)
-                    .is_some_and(|t| self.roots_in_borrow(t, extra))
+                    .is_some_and(|t| self.roots_in_reference(t, extra))
                     || ife
                         .else_block
                         .as_ref()
                         .and_then(|eb| self.block_tail(eb))
-                        .is_some_and(|t| self.roots_in_borrow(t, extra))
+                        .is_some_and(|t| self.roots_in_reference(t, extra))
             }
             Expr::Match(m) => {
-                let scrut_borrow = self.roots_in_borrow(&m.expr, extra);
+                let scrut_referenced = self.roots_in_reference(&m.expr, extra);
                 m.arms.iter().any(|arm| {
                     let mut arm_extra = extra.to_vec();
-                    if scrut_borrow {
+                    if scrut_referenced {
                         collect_pattern_bindings(&arm.pattern, &mut arm_extra);
                     }
-                    self.roots_in_borrow(&arm.body, &arm_extra)
+                    self.roots_in_reference(&arm.body, &arm_extra)
                 })
             }
             _ => false,
@@ -259,7 +259,7 @@ impl BorrowChecker<'_> {
     }
 
     fn check_return(&mut self, value: &Expr) {
-        if !self.roots_in_borrow(value, &[]) {
+        if !self.roots_in_reference(value, &[]) {
             return;
         }
         let Some(type_id) = self.sem.expression_type(value.id()) else {
@@ -268,7 +268,7 @@ impl BorrowChecker<'_> {
         if !type_carries_resource(self.sem, type_id, &mut Vec::new()) {
             return;
         }
-        self.out.push(ResourceMoveError::MoveOutOfBorrow {
+        self.out.push(ResourceMoveError::MoveOutOfReference {
             type_name: self.sem.types.type_name(type_id),
             span: value.span(),
             module: self.module.source_path(),
@@ -276,19 +276,19 @@ impl BorrowChecker<'_> {
     }
 
     fn walk_block(&mut self, block: &Block) {
-        let saved = self.borrowed.len();
+        let saved = self.referenced.len();
         for stmt in &block.stmts {
             self.walk_stmt(stmt);
         }
-        self.borrowed.truncate(saved);
+        self.referenced.truncate(saved);
     }
 
     fn walk_stmt(&mut self, stmt: &Stmt) {
         match stmt {
             Stmt::Let(l) => {
                 if let Some(value) = &l.value {
-                    if self.roots_in_borrow(value, &[]) {
-                        collect_pattern_bindings(&l.pattern, &mut self.borrowed);
+                    if self.roots_in_reference(value, &[]) {
+                        collect_pattern_bindings(&l.pattern, &mut self.referenced);
                     }
                     self.walk_nested(value);
                 }
@@ -352,14 +352,14 @@ impl BorrowChecker<'_> {
     }
 
     fn walk_match(&mut self, scrutinee: &Expr, arms: &[ast::MatchArm]) {
-        let scrut_borrow = self.roots_in_borrow(scrutinee, &[]);
+        let scrut_referenced = self.roots_in_reference(scrutinee, &[]);
         for arm in arms {
-            let saved = self.borrowed.len();
-            if scrut_borrow {
-                collect_pattern_bindings(&arm.pattern, &mut self.borrowed);
+            let saved = self.referenced.len();
+            if scrut_referenced {
+                collect_pattern_bindings(&arm.pattern, &mut self.referenced);
             }
             self.walk_nested(&arm.body);
-            self.borrowed.truncate(saved);
+            self.referenced.truncate(saved);
         }
     }
 }
@@ -501,7 +501,7 @@ impl MoveWalker<'_> {
                     self.visit_expr(expr);
                 }
             }
-            // A hole is read or borrowed where it stands, never moved.
+            // A hole is read or referenced where it stands, never moved.
             Expr::TaggedTemplate(t) => {
                 for expr in t.template.interpolations() {
                     self.visit_expr(expr);
