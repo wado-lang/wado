@@ -1246,10 +1246,15 @@ fn structural_loop_guard(
     let alone = gop == NirBinaryOp::Lt
         || matches!(strategy, GuardStrategy::ConstUb(ub)
             if local_int_max(engine, var).is_some_and(|max| ub < max));
+    let hi = match strategy {
+        GuardStrategy::ConstUb(ub) => Some(ub),
+        GuardStrategy::SameOffset => below_type_max(engine, var),
+        GuardStrategy::LeLocal(_) => None,
+    };
     let floor = (goff == 0 && (alone || matches!(strategy, GuardStrategy::LeLocal(_))))
         .then(|| induction_entry(engine, binds, parent, loop_stmt, loop_body, var))
         .flatten()
-        .map(|lo| Floor { var, lo, alone });
+        .map(|lo| Floor { var, lo, alone, hi });
     let mut changed = false;
     for &s in stmts.iter().skip(guard_idx + 1) {
         if stmt_modifies(engine, s, var, bound) {
@@ -1278,6 +1283,11 @@ fn local_int_max(engine: &Engine, var: u32) -> Option<i64> {
     i64::try_from(max).ok()
 }
 
+/// The most `var` holds under `var < bound`: a step below its type's most.
+fn below_type_max(engine: &Engine, var: u32) -> Option<i64> {
+    local_int_max(engine, var).map(|max| max - 1)
+}
+
 /// How a parsed loop guard refutes the checks it dominates.
 enum GuardStrategy {
     /// `var + goff < bound`: refutes a check at the identical offset and bound.
@@ -1290,11 +1300,13 @@ enum GuardStrategy {
 
 /// A proven `var >= lo`. Unless `alone`, it holds only where the same check's
 /// upper half is refuted too, which is what rules out the wrap it rests on.
+/// `hi`, where a guard caps `var` too, is the most it holds there.
 #[derive(Clone, Copy)]
 struct Floor {
     var: u32,
     lo: i64,
     alone: bool,
+    hi: Option<i64>,
 }
 
 /// Drive to `false` the condition of every `if <cond> { panic }` (no else)
@@ -1404,10 +1416,15 @@ fn part_holds(
 ) -> bool {
     match part {
         Conjunct::Lt(left, right) => refute(engine, binds, left, right),
-        // `var >= lo` bounds `var + off` only while the add cannot wrap, which
-        // a positive `off` does not rule out.
+        // `var >= lo` bounds `var + off` only while the add cannot wrap: a
+        // positive `off` needs a cap on `var` that keeps the sum in its type.
         Conjunct::AtLeast(v, off, f) => floor.is_some_and(|floor| {
-            floor.var == v && off <= 0 && floor.lo.checked_add(off).is_some_and(|l| l >= f)
+            let no_wrap = off <= 0
+                || floor
+                    .hi
+                    .zip(local_int_max(engine, v))
+                    .is_some_and(|(hi, max)| hi.checked_add(off).is_some_and(|top| top <= max));
+            floor.var == v && no_wrap && floor.lo.checked_add(off).is_some_and(|l| l >= f)
         }),
     }
 }
@@ -1591,9 +1608,18 @@ fn apply_dominating_if(engine: &mut Engine, s: StmtId, binds: &Binds) -> bool {
     {
         return false;
     }
+    // `var < bound` caps `var`; `var + k < bound` caps nothing once it wraps.
     let floor = conjuncts
         .iter()
-        .find_map(|&c| guard_floor(engine, binds, c).filter(|f| f.var == var));
+        .find_map(|&c| guard_floor(engine, binds, c).filter(|f| f.var == var))
+        .map(|f| Floor {
+            hi: if k == 0 {
+                below_type_max(engine, var)
+            } else {
+                None
+            },
+            ..f
+        });
     let mut changed = false;
     for &ts in &engine.body.blocks[then_b].stmts.clone() {
         if stmt_modifies(engine, ts, var, bound) {
@@ -1614,6 +1640,7 @@ fn guard_floor(engine: &Engine, binds: &Binds, c: Operand) -> Option<Floor> {
         var,
         lo,
         alone: true,
+        hi: None,
     })
 }
 
@@ -1631,6 +1658,7 @@ fn cmp_floor((var, off, bound, op): (u32, i64, BoundKey, NirBinaryOp)) -> Option
         var,
         lo,
         alone: true,
+        hi: None,
     })
 }
 
