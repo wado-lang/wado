@@ -52,21 +52,24 @@ pub fn derive(program: &mut Program, trait_: TraitDeclId, declarations: &[Declar
         };
         standing.push((decl, id, env));
     }
+    // Removing an impl only fails more, so the round order does not change the
+    // fixpoint.
     loop {
-        let before = standing.len();
-        standing.retain(|(decl, id, env)| {
-            let satisfied = decl
-                .members
-                .iter()
-                .all(|member| holds(program, env, member, trait_, decl.module).is_some());
-            if !satisfied {
-                program.remove_impl(*id);
-            }
-            satisfied
-        });
-        if standing.len() == before {
+        let unsatisfied: IndexSet<ImplId> = standing
+            .iter()
+            .filter(|(decl, _, env)| {
+                !decl
+                    .members
+                    .iter()
+                    .all(|member| holds(program, env, member, trait_, decl.module).is_some())
+            })
+            .map(|(_, id, _)| *id)
+            .collect();
+        if unsatisfied.is_empty() {
             break;
         }
+        program.remove_impls(&unsatisfied);
+        standing.retain(|(_, id, _)| !unsatisfied.contains(id));
     }
 }
 

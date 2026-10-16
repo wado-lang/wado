@@ -557,17 +557,21 @@ impl Program {
         *old = def;
     }
 
-    /// Take out the impl at `id`.
-    pub fn remove_impl(&mut self, id: ImplId) {
-        let def = self
-            .impls
-            .shift_remove(&id)
-            .expect("only an added impl is removed");
-        if let Some(trait_) = def.trait_ {
-            self.impls_by_trait[&trait_].retain(|&other| other != id);
-            let head = target_head(&def.target);
-            self.impls_by_target[&(trait_, head)].retain(|&other| other != id);
-            self.trait_impls_by_head[&head].retain(|&other| other != id);
+    /// Take out the impls at `ids`, each index scanned once whatever their count.
+    pub fn remove_impls(&mut self, ids: &IndexSet<ImplId>) {
+        let mut keys = IndexSet::<(TraitDeclId, _)>::default();
+        for id in ids {
+            let def = &self.impls[id];
+            if let Some(trait_) = def.trait_ {
+                keys.insert((trait_, target_head(&def.target)));
+            }
+        }
+        self.impls.retain(|id, _| !ids.contains(id));
+        let kept = |other: &ImplId| !ids.contains(other);
+        for &(trait_, head) in &keys {
+            self.impls_by_trait[&trait_].retain(kept);
+            self.impls_by_target[&(trait_, head)].retain(kept);
+            self.trait_impls_by_head[&head].retain(kept);
         }
     }
 
