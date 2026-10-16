@@ -738,10 +738,10 @@ impl Lints {
     }
 
     /// The entries of `modules` a lint reports in.
-    pub(crate) fn modules<'a>(
+    pub(crate) fn modules(
         self,
-        modules: &'a IndexMap<ModuleSource, ast::Module>,
-    ) -> impl Iterator<Item = (&'a ModuleSource, &'a ast::Module)> {
+        modules: &IndexMap<ModuleSource, ast::Module>,
+    ) -> impl Iterator<Item = (&ModuleSource, &ast::Module)> {
         modules
             .iter()
             .filter(move |(source, module)| self.reports_in(source, module))
