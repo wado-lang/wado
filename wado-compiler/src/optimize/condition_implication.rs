@@ -1584,14 +1584,14 @@ fn apply_dominating_if(engine: &mut Engine, s: StmtId, binds: &Binds) -> bool {
 /// The floor a guard conjunct `c` puts under a variable itself, written either
 /// way round: `f <= var`, `f - 1 < var`, `var >= f` or `var > f - 1`.
 fn guard_floor(engine: &Engine, binds: &Binds, c: Operand) -> Option<Floor> {
-    match classify_conjunct(engine, binds, c) {
-        Some(Conjunct::AtLeast(var, 0, lo)) => Some(Floor {
-            var,
-            lo,
-            alone: true,
-        }),
-        _ => cmp_floor(parse_cmp(engine, binds, c)?),
-    }
+    let (BoundKey::Local(var), lo) = comparison_floor(engine, binds, c)? else {
+        return None;
+    };
+    Some(Floor {
+        var,
+        lo,
+        alone: true,
+    })
 }
 
 /// The floor a comparison `var >= C` or `var > C - 1` puts under `var`.
@@ -1622,20 +1622,9 @@ pub(super) fn break_guard_cmp(
         Some(inner) => parse_cmp(engine, binds, inner),
         None => {
             let (var, off, bound, op) = parse_cmp(engine, binds, cond)?;
-            Some((var, off, bound, negated_cmp_op(op)?))
+            Some((var, off, bound, op.opposite()?))
         }
     }
-}
-
-/// The comparison that holds where `op` does not.
-fn negated_cmp_op(op: NirBinaryOp) -> Option<NirBinaryOp> {
-    Some(match op {
-        NirBinaryOp::GtEq => NirBinaryOp::Lt,
-        NirBinaryOp::Gt => NirBinaryOp::LtEq,
-        NirBinaryOp::Lt => NirBinaryOp::GtEq,
-        NirBinaryOp::LtEq => NirBinaryOp::Gt,
-        _ => return None,
-    })
 }
 
 /// A straight-line early-exit guard `if (var + K >= bound) { return/break }`:
@@ -2054,7 +2043,10 @@ impl ProvenLt {
 enum Fact {
     Lt(ProvenLt),
     /// `key >= lo`: a range check's lower half, or an `if` condition's.
-    Floor { key: BoundKey, lo: i64 },
+    Floor {
+        key: BoundKey,
+        lo: i64,
+    },
 }
 
 /// True if some fact refutes the check `var + j >= bound`.
@@ -2120,11 +2112,13 @@ fn condition_floors(engine: &Engine, binds: &Binds, cond: Operand) -> Vec<Fact> 
     parts
         .into_iter()
         .filter_map(|p| comparison_floor(engine, binds, p))
+        .map(|(key, lo)| Fact::Floor { key, lo })
         .collect()
 }
 
-/// `x > c`, `x >= c`, `c < x` or `c <= x` as the floor it puts under `x`.
-fn comparison_floor(engine: &Engine, binds: &Binds, op: Operand) -> Option<Fact> {
+/// `x > c`, `x >= c`, `c < x` or `c <= x` as the floor `(x, lo)` it puts
+/// under `x`.
+fn comparison_floor(engine: &Engine, binds: &Binds, op: Operand) -> Option<(BoundKey, i64)> {
     let (left, kind, right) = binary_parts(engine.body, resolve_through_opaque(engine, binds, op))?;
     let (x, c, strict) = match kind {
         NirBinaryOp::Gt | NirBinaryOp::GtEq => (left, right, kind == NirBinaryOp::Gt),
@@ -2132,10 +2126,8 @@ fn comparison_floor(engine: &Engine, binds: &Binds, op: Operand) -> Option<Fact>
         _ => return None,
     };
     let c = parse_const_i64(engine, binds, c)?;
-    Some(Fact::Floor {
-        key: parse_bound(engine, binds, x)?,
-        lo: if strict { c.checked_add(1)? } else { c },
-    })
+    let lo = if strict { c.checked_add(1)? } else { c };
+    Some((parse_bound(engine, binds, x)?, lo))
 }
 
 /// The `(minuend, k)` of a `<expr> - k` (skeleton or promoted), if any.
@@ -2386,9 +2378,9 @@ fn short_circuit_parts(engine: &Engine, node: NodeRef) -> Option<(Operand, Opera
 }
 
 /// Forward redundant-bounds-check elimination: walk `node` in execution order,
-/// harvesting proven `var + off < bound` facts from panic-guard checks at
-/// unconditionally-executed positions and driving to `false` any later check they
-/// refute. Facts thread by `&mut` through straight-line positions, by clone into
+/// harvesting proven `var + off < bound` facts and floors from panic-guard checks
+/// at unconditionally-executed positions, and floors from an `if` condition into
+/// its `then` branch, and driving to `false` any later check they refute. Facts thread by `&mut` through straight-line positions, by clone into
 /// conditional ones, and afresh into loop bodies; [`invalidate`] drops stale ones.
 fn rbce_walk(
     engine: &mut Engine,
