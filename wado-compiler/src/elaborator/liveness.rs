@@ -130,6 +130,13 @@ impl LivenessScope {
     }
 }
 
+/// Whether the items of `module` are report candidates. A `#![generated]`
+/// module is machine-emitted (e.g. Gale's parser output), not hand-edited
+/// source, so linting it is pure noise.
+pub(crate) fn is_reported(source: &ModuleSource, module: &Module) -> bool {
+    source.is_entry_package() && !module.has_generated()
+}
+
 /// Compute liveness over every loaded module.
 ///
 /// `world_export_names` holds every export name across all registered worlds; a
@@ -178,11 +185,9 @@ pub(crate) fn compute(
     let mut reported_modules = IndexSet::default();
     for (source, module) in modules {
         let roots = scope.module_roots(source);
-        // `#![generated]` modules are machine-emitted (e.g. Gale's parser
-        // output), not hand-edited source — linting them is pure noise, so they
-        // are never report candidates. They still seed exports / edges below, so
-        // they keep the items they call live.
-        let user = roots.reported && !module.has_generated();
+        // A generated module still seeds exports / edges below, so it keeps the
+        // items it calls live.
+        let user = is_reported(source, module);
         if user {
             reported_modules.insert(source.clone());
         }
