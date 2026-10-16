@@ -36,8 +36,9 @@ its `next` performs. A function generic over an iterator forwards that with
 [`with _`](./spec-effects.md#with-_).
 
 A lazy adapter (`map`, `filter`) holds the closure it is built from, and its
-type carries the closure's effects. Building one demands nothing. Advancing it
-demands what the closure performs:
+type carries the closure's effects. The methods that build one say `with ()`,
+so building one demands nothing. Advancing it demands what the closure
+performs:
 
 <!-- {"fixture":"effect_iterator_map_closure.wado"} -->
 

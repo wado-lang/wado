@@ -113,8 +113,9 @@ pub fn synthesize(project: Package) -> Result<Package, Vec<SynthesisError>> {
     for module in project.tir_modules.values_mut() {
         let tt = module.type_table.clone();
         template::expand_templates(module, &tt, &trait_env);
-        // A tagged template's `TemplateHole::fmt` renders a hole the way the untagged
-        // form would, so its bridge is minted here, by the same lowering.
+        // A tagged template's `TemplateHole::fmt` renders a hole through the
+        // same per-specifier dispatch as the direct untagged lowering, so its
+        // bridge is minted here, by that lowering's code.
         template::synthesize_hole_fmt_helpers(module, &tt, &trait_env);
     }
 

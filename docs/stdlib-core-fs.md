@@ -182,15 +182,23 @@ reading it as absence. Only "nothing is there" answers `false`.
 Every entry of the directory `path` names, in the order the host lists
 them. `""` and `"."` name the preopened directory itself.
 
-### `pub fn walk_dir<S: AsStrSlice>(path: S, descend: fn(&WalkEntry) -> bool = enter_every_directory) -> Result<List<WalkEntry>, FsError> with Preopens`
+### `pub fn walk_dir<S: AsStrSlice, effect E, F: fn mut(&WalkEntry) -> bool with E = fn(&WalkEntry) -> bool>(path: S, descend: F = enter_every_directory) -> Result<Walk<F>, FsError> with Preopens`
 
 Every entry under the directory `path` names, and every entry under those,
-with a directory listed before what it holds. Each `WalkEntry` carries the
-path that reaches it, and the whole tree is listed before the call returns.
+with a directory yielded before what it holds. Each `WalkEntry` carries the
+path that reaches it.
+
+The call lists `path` itself, so a path that names no directory fails here.
+Each directory under it is listed as it is yielded, before the loop body
+sees it, so what the body does to it is not what the walk sees: the entries
+of one the body removes are still yielded. A directory that cannot be
+listed is followed by its error, after which the walk goes on to the next
+entry.
 
 `descend` is asked about each directory, with that whole path, before the
-walk enters it; the directory is listed either way. A predicate that means
-a name takes [`file_name`] of the path it is handed.
+walk enters it; the directory is yielded either way. It may perform effects,
+which advancing the walk then performs. A predicate that means a name takes
+[`file_name`] of the path it is handed.
 
 ### `pub fn create_dir<S: AsStrSlice>(path: S) -> Result<(), FsError> with Preopens`
 
@@ -244,6 +252,16 @@ One entry of a directory.
 #### `name: String`
 
 #### `type: FileType`
+
+### `pub struct Walk<F>`
+
+A walk [`walk_dir`] started, depth first.
+
+_Fields are private._
+
+#### `impl Iterator for Walk<F>`
+
+##### `fn next(&mut self) -> Option<Result<WalkEntry, FsError>> with (Preopens, E)`
 
 ## Variants
 

@@ -32,8 +32,8 @@ on references compares the values.
 
 ### `pub fn format<T: ReflectTemplate<Holes = [..V]>, ..V>(t: T) -> String`
 
-The tag an untagged template means: every hole rendered through its
-specifier into one buffer. `` format`x=${x}` `` is `` `x=${x}` ``.
+The tag an untagged template is sugar for: every hole rendered through its
+specifier into one buffer. `` `x=${x}` `` is `` format`x=${x}` ``.
 See WEP 2026-01-10.
 
 ### `pub fn eq_constant_time<A: AsByteSlice, B: AsByteSlice>(a: &A, b: &B) -> bool`
@@ -3556,9 +3556,9 @@ The hole's value in `t`.
 
 #### `pub fn fmt(&self, t: &T, f: &mut Formatter)`
 
-Renders the value as the untagged template would: the trait method
-the specifier's type selects (`Display::fmt` when it names none), on a
-`Formatter` carrying the specifier's settings over `f`'s buffer.
+Renders the value through the trait method the specifier's type
+selects (`Display::fmt` when it names none), on a `Formatter` carrying
+the specifier's settings over `f`'s buffer.
 
 ### `pub struct StructField<T, F>`
 
@@ -4781,8 +4781,8 @@ Create a new empty string.
 #### `pub fn raw<T: ReflectTemplate<Holes = [..V]>, ..V>(t: T) -> String`
 
 The tag keeping a template's escapes as written: `` String::raw`a\nb` ``
-is `"a\\nb"`, its holes rendered as the untagged template renders
-them. See WEP 2026-01-10.
+is `"a\\nb"`, its holes rendered as `format` renders them. See
+WEP 2026-01-10.
 
 #### `pub fn with_capacity(capacity: i32) -> String`
 

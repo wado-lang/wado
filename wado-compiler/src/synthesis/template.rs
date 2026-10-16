@@ -174,7 +174,8 @@ pub fn expand_templates(
 }
 
 /// Mint `$hole_fmt$<shape>(t: &S, index: i32, f: &mut Formatter)` for every tagged
-/// template shape in `module`, each arm the untagged interpolation of hole `index`.
+/// template shape in `module`, each arm hole `index` rendered through the
+/// per-specifier dispatch `build_template_block` emits for an interpolation.
 pub fn synthesize_hole_fmt_helpers(
     module: &mut TirModule,
     tt: &Rc<RefCell<TypeTable>>,

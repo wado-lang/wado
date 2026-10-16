@@ -33,7 +33,7 @@ fn imported_paths(source: &String) -> List<String> {
 fn import_graph<S: AsStrSlice>(root: S) -> HashMap<String, List<String>> with Preopens {
     let mut graph = HashMap::<String, List<String>>::with_seed(GALE_SEED);
     for let entry of fs::walk_dir(root).unwrap() {
-        let path = entry.path;
+        let path = entry.unwrap().path;
         if !path.ends_with(".wado") || path.ends_with("_test.wado") {
             continue;
         }

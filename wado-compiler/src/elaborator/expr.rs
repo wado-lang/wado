@@ -16,7 +16,7 @@ use crate::name::{
 };
 use crate::tir::{
     EffectRef, FunctionRef, InstancePattern, REFLECT_NEWTYPE_BASE, ResolvedType,
-    SubstitutionContext, TirField, TirLiteralPattern, TirStruct, TypeId, TypeKey, TypeTable,
+    SubstitutionContext, TirLiteralPattern, TirStruct, TypeId, TypeKey, TypeTable,
 };
 use crate::token::Span;
 
@@ -1634,34 +1634,18 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 .iter()
                 .map(|t| self.resolve_type(t))
                 .collect();
-            let type_id = self
-                .compute_func_ref_type_from_sig(&sig, &resolved_args)
-                .unwrap_or(TypeTable::UNKNOWN);
-            self.record_func_ref_instantiation(ident.id, &resolved_args, type_id);
-            // Reify rebuilds the turbofish `FuncRef` from the
-            // recorded instantiation. Project the type only.
-            return type_id;
+            return self.func_ref_instance(ident, &sig, &resolved_args, expected_type);
         }
 
-        // Non-generic function: keep the original behaviour.
         if real_type_param_count == 0 {
-            let type_id = self
-                .compute_func_ref_type_from_sig(&sig, &[])
-                .unwrap_or(TypeTable::UNKNOWN);
-            return type_id;
+            return self.func_ref_instance(ident, &sig, &[], expected_type);
         }
 
         // (b) Generic without turbofish: try to infer from `expected_type`.
         if let Some(expected) = expected_type {
             match self.infer_func_ref_type_args(&sig, expected) {
                 FuncRefInference::Ok(inferred) => {
-                    let type_id = self
-                        .compute_func_ref_type_from_sig(&sig, &inferred)
-                        .unwrap_or(TypeTable::UNKNOWN);
-                    self.record_func_ref_instantiation(ident.id, &inferred, type_id);
-                    // Reify rebuilds the inferred-generic `FuncRef`
-                    // from the recorded instantiation. Project the type only.
-                    return type_id;
+                    return self.func_ref_instance(ident, &sig, &inferred, Some(expected));
                 }
                 FuncRefInference::ArityMismatch {
                     expected_params,
@@ -1685,6 +1669,59 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             span: ident.span,
         });
         TypeTable::ERROR
+    }
+
+    /// The type of `ident` naming `sig` instantiated at `type_args`, recorded
+    /// so reify rebuilds the same `FuncRef`.
+    fn func_ref_instance(
+        &mut self,
+        ident: &ast::IdentExpr,
+        sig: &FunctionSig,
+        type_args: &[TypeId],
+        expected_type: Option<TypeId>,
+    ) -> TypeId {
+        let type_id = self
+            .compute_func_ref_type_from_sig(sig, type_args)
+            .unwrap_or(TypeTable::UNKNOWN);
+        let type_id = self.settle_own_effects(ident, sig, type_id, expected_type);
+        self.record_func_ref_instantiation(ident.id, type_args, type_id);
+        type_id
+    }
+
+    /// A function value carries no call whose arguments could settle the
+    /// function's own effect parameters, and a turbofish names none, so the
+    /// `fn(...)` type it is expected to be settles them: each takes the
+    /// effects that type's rows meet it with, and none where they meet it
+    /// with nothing.
+    fn settle_own_effects(
+        &mut self,
+        ident: &ast::IdentExpr,
+        sig: &FunctionSig,
+        type_id: TypeId,
+        expected_type: Option<TypeId>,
+    ) -> TypeId {
+        if sig.decl.own_effects.is_empty()
+            || type_id == TypeTable::ERROR
+            || type_id == TypeTable::UNKNOWN
+        {
+            return type_id;
+        }
+        let expected = expected_type.map(|ty| self.tysys.type_table.borrow().peel_refs(ty));
+        let Some(expected) = expected.filter(|&ty| {
+            matches!(
+                self.tysys.type_table.borrow().get(ty),
+                ResolvedType::Function { .. }
+            )
+        }) else {
+            let _ = self.emit(TypeError::BareEffectGenericFunctionRef {
+                name: ident.name.clone(),
+                span: ident.span,
+            });
+            return TypeTable::ERROR;
+        };
+        let mut table = self.tysys.type_table.borrow_mut();
+        let rows = table.effect_binding(type_id, expected, &sig.decl.own_effects);
+        table.substitute_effect_rows(type_id, &rows)
     }
 
     /// Record the resolved type arguments and instance type of a generic
@@ -1751,7 +1788,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             };
         }
 
-        let type_param_ids: Vec<TypeId> = sig.type_param_ids.iter().map(|&(_, id)| id).collect();
+        let type_param_ids = sig.decl.type_param_ids();
         let decl_params = &sig.decl.param_types;
         let decl_return = sig.decl.return_type.unwrap_or(TypeTable::UNIT);
         if type_param_ids.is_empty() {
@@ -4638,26 +4675,16 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         };
         self.sem.decls.anon_struct_fields.insert(shape, field_info);
 
-        let tir_fields: Vec<TirField> = fields
-            .iter()
-            .enumerate()
-            .map(|(i, (fname, fty))| {
-                TirField::plain(fname.clone(), Visibility::Public, *fty, i as u32, span)
-            })
-            .collect();
-
-        self.sem.decls.pending_anonymous_structs.push(TirStruct {
-            def: head,
-            type_args: Vec::new(),
-            name: anon_name.to_string(),
-            module_source: self.current_module_source.clone(),
-            visibility: Visibility::Private,
-            type_params: Vec::new(),
-            monomorph_info: None,
-            fields: tir_fields,
-            span,
-            wire_name_policy: None,
-        });
+        self.sem
+            .decls
+            .pending_anonymous_structs
+            .push(TirStruct::anonymous(
+                shape,
+                anon_name.to_string(),
+                self.current_module_source.clone(),
+                fields,
+                span,
+            ));
 
         struct_type
     }

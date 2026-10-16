@@ -496,8 +496,8 @@ impl String {
     }
 
     /// The tag keeping a template's escapes as written: `` String::raw`a\nb` ``
-    /// is `"a\\nb"`, its holes rendered as the untagged template renders
-    /// them. See WEP 2026-01-10.
+    /// is `"a\\nb"`, its holes rendered as `format` renders them. See
+    /// WEP 2026-01-10.
     pub fn raw<T: ReflectTemplate<Holes = [..V]>, ..V>(t: T) -> String {
         let mut out = "";
         for let h of ReflectTemplate::<T>::members() {

@@ -1,0 +1,12 @@
+// With no expected function type, nothing settles `E`.
+
+fn apply<effect E>(f: fn() with E) with E {
+    f();
+}
+
+export fn run() {
+    let f = apply;
+}
+
+__DATA__
+{"compile_error": ":8:13: analysis error: cannot reference effect-generic function 'apply' without an expected function type"}

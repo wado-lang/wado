@@ -1,0 +1,19 @@
+// A generic function named as a value takes its type arguments from the
+// expected `fn` type. A `fn`-bound parameter takes none, so only `T` has to
+// come out bound, whether the function is declared here or imported.
+
+use { check } from "./sub/default_type_param_after_inferred_dep.wado";
+
+fn local<T, F: fn(i32) -> bool>(value: T, pred: F) -> bool {
+    return pred(1);
+}
+
+test {
+    let here: fn(String, fn(i32) -> bool) -> bool = local;
+    assert here("a", |n| n > 0);
+    let there: fn(String, fn(i32) -> bool) -> bool = check;
+    assert !there("a", |n| n > 1);
+}
+
+__DATA__
+{"test": {}}

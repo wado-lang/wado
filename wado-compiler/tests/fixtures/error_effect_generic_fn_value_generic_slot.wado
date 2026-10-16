@@ -1,0 +1,17 @@
+// An expected type that is not a function type, here the slot of `id`'s `T`,
+// settles no effect parameter.
+
+fn apply<effect E>(f: fn() with E) with E {
+    f();
+}
+
+fn id<T>(x: T) -> T {
+    return x;
+}
+
+export fn run() {
+    let f: fn(fn()) = id(apply);
+}
+
+__DATA__
+{"compile_error": ":13:26: analysis error: cannot reference effect-generic function 'apply' without an expected function type"}

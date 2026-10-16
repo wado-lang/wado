@@ -1,0 +1,13 @@
+// A closure parameter nothing supplies a type for is reported where it is
+// written; a later call does not supply one. The compiler used to panic in
+// WIR build on the parameter's unresolved type.
+use { println, Stdout } from "core:cli";
+
+export fn run() with Stdout {
+    let f = |x| x + 1;
+    let y: i32 = f(2);
+    println(`${y}`);
+}
+
+__DATA__
+{"compile_error": ":7:14: analysis error: cannot infer the type of closure parameter `x`; annotate it", "compile_error_codes": ["NEEDS_TYPE_ANNOTATION"]}

@@ -685,9 +685,12 @@ fn generate_struct_reflect_methods(
     for f in &mut functions {
         f.impl_type_params.clone_from(type_params);
     }
-    // A generic struct's bridges are keyed by concrete field types, so
-    // `synthesize_monomorphized_reflect_bridges` mints them per instantiation.
-    if !is_generic {
+    // A generic struct's or open shape's bridges are keyed by concrete field
+    // types, so `synthesize_monomorphized_reflect_bridges` mints them per
+    // instantiation.
+    let open_shape =
+        matches!(def, StructDef::Anon(shape) if type_table.borrow().anon_shape_is_open(*shape));
+    if !is_generic && !open_shape {
         functions.extend(generate_field_bridge_helpers(
             type_table,
             &field_infos,
