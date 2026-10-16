@@ -1404,8 +1404,10 @@ fn part_holds(
 ) -> bool {
     match part {
         Conjunct::Lt(left, right) => refute(engine, binds, left, right),
+        // `var >= lo` bounds `var + off` only while the add cannot wrap, which
+        // a positive `off` does not rule out.
         Conjunct::AtLeast(v, off, f) => floor.is_some_and(|floor| {
-            floor.var == v && floor.lo.checked_add(off).is_some_and(|l| l >= f)
+            floor.var == v && off <= 0 && floor.lo.checked_add(off).is_some_and(|l| l >= f)
         }),
     }
 }

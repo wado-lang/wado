@@ -14,7 +14,9 @@ use crate::defs::DefId;
 use crate::elaborator::trait_env::TraitEnv;
 use crate::flat_package::FlatPackage;
 use crate::hashmap::{IndexMap, IndexSet};
-use crate::lower::plan::value_copy::place::{is_source_place, source_place_subscripts_mut};
+use crate::lower::plan::value_copy::place::{
+    is_source_place, place_root, source_place_subscripts_mut,
+};
 use crate::lower::translate::{convert_function_ref, tir_function_key};
 use crate::name::{
     CONTRACT_CLAUSE_INTRINSIC, CONTRACT_SITE_INTRINSIC, FunctionId, LocalMethodName, RefKind,
@@ -103,6 +105,9 @@ struct Contract {
     /// holder, which is clauses alone.
     forward: Option<TirExpr>,
     params: Vec<TypeId>,
+    /// The parameters the clauses write. Each is the callee's own copy, so an
+    /// argument for one is always bound, never read from the caller's place.
+    written: IndexSet<u32>,
     locals: Vec<TirLocal>,
     address_taken: IndexSet<u32>,
 }
@@ -139,12 +144,14 @@ fn collect_contracts(flat: &FlatPackage) -> IndexMap<FunctionId, Contract> {
                 func.name
             ),
         };
+        let clauses = &body.stmts[..clauses];
         contracts.insert(
             tir_function_key(&func),
             Contract {
-                clauses: body.stmts[..clauses].to_vec(),
+                clauses: clauses.to_vec(),
                 forward,
                 params: func.params.iter().map(|p| p.type_id).collect(),
+                written: written_params(clauses, func.params.len() as u32),
                 locals: func.locals.clone(),
                 address_taken: func.address_taken_locals.clone(),
             },
@@ -173,6 +180,40 @@ fn holds_closure(stmt: &TirStmt) -> bool {
     let mut find = Find(false);
     find.visit_stmt(stmt);
     find.0
+}
+
+/// The parameters `clauses` assign or borrow mutably.
+fn written_params(clauses: &[TirStmt], params: u32) -> IndexSet<u32> {
+    struct Writes {
+        params: u32,
+        written: IndexSet<u32>,
+    }
+    impl TirRefVisitor for Writes {
+        fn visit_expr(&mut self, expr: &TirExpr) {
+            let place = match &expr.kind {
+                TirExprKind::Assign { target, .. } => Some(&**target),
+                TirExprKind::Unary {
+                    op: TirUnaryOp::MutRef,
+                    expr,
+                } => Some(&**expr),
+                _ => None,
+            };
+            if let Some(root) = place.and_then(place_root)
+                && root < self.params
+            {
+                self.written.insert(root);
+            }
+            self.walk_expr(expr);
+        }
+    }
+    let mut writes = Writes {
+        params,
+        written: IndexSet::default(),
+    };
+    for clause in clauses {
+        writes.visit_stmt(clause);
+    }
+    writes.written
 }
 
 pub fn is_contract_clause(stmt: &TirStmt) -> bool {
@@ -261,6 +302,9 @@ impl Expander<'_> {
                 } else {
                     Sink::Ahead(&mut stmts)
                 };
+                if contract.written.contains(&(i as u32)) {
+                    return self.bind(&mut arg.expr, sink);
+                }
                 self.bind_ahead(arg, param_type, sink)
             })
             .collect();

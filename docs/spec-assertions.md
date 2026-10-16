@@ -120,7 +120,7 @@ the clause's position instead, as the function cannot know who called it.
 
 ```wado
 fn pick_through<P: Pick>(p: &P, i: i32) -> i32 {
-    return p.pick(i);
+    return p.pick(i);   // a failure reports this line
 }
 ```
 
