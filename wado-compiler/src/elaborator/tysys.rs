@@ -674,6 +674,127 @@ impl TypeSystem {
     }
 }
 
+impl TypeSystem {
+    /// The struct and variant declarations whose instances name ever larger
+    /// instances of themselves, as `Nested<T>` holding a `Nested<List<T>>`
+    /// does. Every instance is a type of its own, so a program using one would
+    /// need infinitely many.
+    ///
+    /// The rule is ECMA-335's for expanding generic types (§ II.9.2). A type
+    /// parameter steps to the parameter whose argument it appears in. The step
+    /// expands where the argument holds the parameter without being it, and a
+    /// declaration is refused where it writes an expanding step on a cycle.
+    pub(crate) fn expanding_decls(&self) -> IndexSet<DefId> {
+        let table = self.type_table.borrow();
+        let members =
+            self.data
+                .struct_fields
+                .iter()
+                .map(|(def, info)| (*def, info.fields.iter().map(|(_, ty, _)| *ty).collect()))
+                .chain(self.data.variant_cases.iter().map(|(def, info)| {
+                    (*def, info.cases.iter().map(|case| case.payload).collect())
+                }));
+        let mut steps: IndexMap<(DefId, u32), Vec<(DefId, u32)>> = IndexMap::default();
+        let mut expanding: Vec<((DefId, u32), (DefId, u32))> = Vec::new();
+        for (def, member_types) in members {
+            let member_types: Vec<TypeId> = member_types;
+            for ty in member_types {
+                for_each_application(&table, ty, &mut |head, args| {
+                    for (position, &arg) in args.iter().enumerate() {
+                        let to = (head, position as u32);
+                        let mut params = Vec::new();
+                        type_params_in(&table, arg, &mut params);
+                        for param in params {
+                            let from = (def, param);
+                            steps.entry(from).or_default().push(to);
+                            let bare = matches!(
+                                table.get(arg),
+                                ResolvedType::TypeParam { index, .. } if *index == param
+                            );
+                            if !bare {
+                                expanding.push((from, to));
+                            }
+                        }
+                    }
+                });
+            }
+        }
+        expanding
+            .into_iter()
+            .filter(|&(from, to)| reaches(&steps, to, from))
+            .map(|((def, _), _)| def)
+            .collect()
+    }
+}
+
+/// Calls `visit` with the head and arguments of each nominal type `ty` is
+/// built from, at any depth.
+fn for_each_application(table: &TypeTable, ty: TypeId, visit: &mut dyn FnMut(DefId, &[TypeId])) {
+    let (head, parts) = constituents(table, ty);
+    if let Some(head) = head {
+        visit(head, &parts);
+    }
+    for part in parts {
+        for_each_application(table, part, visit);
+    }
+}
+
+/// The type parameters `ty` names, at any depth.
+fn type_params_in(table: &TypeTable, ty: TypeId, params: &mut Vec<u32>) {
+    if let ResolvedType::TypeParam { index, .. } = table.get(ty) {
+        params.push(*index);
+    }
+    for part in constituents(table, ty).1 {
+        type_params_in(table, part, params);
+    }
+}
+
+/// The types `ty` is built over, and the declaration it applies to them where
+/// it is a nominal type.
+fn constituents(table: &TypeTable, ty: TypeId) -> (Option<DefId>, Vec<TypeId>) {
+    match table.get(ty) {
+        ResolvedType::Struct {
+            def: StructDef::Decl(def),
+            type_args,
+        }
+        | ResolvedType::Newtype { def, type_args, .. } => (Some(*def), type_args.clone()),
+        ResolvedType::GenericInstance { def, type_args }
+        | ResolvedType::GenericResource { def, type_args } => (Some(*def), type_args.clone()),
+        ResolvedType::Ref(inner)
+        | ResolvedType::MutRef(inner)
+        | ResolvedType::BuiltinArray(inner) => (None, vec![*inner]),
+        ResolvedType::Function {
+            params,
+            return_type,
+            ..
+        } => {
+            let mut parts = params.clone();
+            parts.push(*return_type);
+            (None, parts)
+        }
+        _ => (None, Vec::new()),
+    }
+}
+
+/// Whether `steps` lead from `from` to `to`.
+fn reaches(
+    steps: &IndexMap<(DefId, u32), Vec<(DefId, u32)>>,
+    from: (DefId, u32),
+    to: (DefId, u32),
+) -> bool {
+    let mut seen = IndexSet::default();
+    let mut pending = vec![from];
+    while let Some(at) = pending.pop() {
+        if at == to {
+            return true;
+        }
+        if seen.insert(at) {
+            pending.extend(steps.get(&at).into_iter().flatten().copied());
+        }
+    }
+    false
+}
+
 impl HeldTypes for TypeSystem {
     fn held(&self, type_id: TypeId) -> Held {
         let (base, resolved) = {

@@ -1,0 +1,39 @@
+// A recursive type that names itself with its own parameters, or with an
+// argument that closes the cycle at a fixed type, needs finitely many
+// instances and is accepted.
+
+variant Tree<T> {
+    Leaf(T),
+    Branch(List<Tree<T>>),
+}
+
+fn count(tree: &Tree<i32>) -> i32 {
+    return match tree {
+        Leaf(_) => 1,
+        Branch(children) => {
+            let mut total = 0;
+            for let child of children {
+                total += count(child);
+            }
+            total
+        },
+    };
+}
+
+test "a type holding itself at its own parameters" {
+    let tree = Tree::Branch([Tree::Leaf(1), Tree::Branch([Tree::Leaf(2), Tree::Leaf(3)])]);
+    assert count(&tree) == 3;
+}
+
+struct Wide<T> {
+    narrow: Option<Narrow<Option<T>>>,
+}
+
+struct Narrow<U> {
+    wide: Option<Wide<i32>>,
+}
+
+test "a cycle closing at a fixed type" {
+    let wide: Wide<String> = Wide { narrow: Option::Some(Narrow { wide: null }) };
+    assert wide.narrow matches { Some(_) };
+}

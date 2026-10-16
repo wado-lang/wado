@@ -1451,6 +1451,40 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             Self::publish_impl_sigs(state, module_source);
         }
         Self::publish_data_decls(state, &sorted_sources);
+        let expanding = state.tysys.expanding_decls();
+        for module_source in &sorted_sources {
+            let Some(module) = modules.get(module_source) else {
+                continue;
+            };
+            let refused: Vec<(String, Span)> = module
+                .items
+                .iter()
+                .filter_map(|item| match item {
+                    Item::Struct(decl) => Some((decl.id, &decl.name, decl.span)),
+                    Item::Variant(decl) => Some((decl.id, &decl.name, decl.span)),
+                    _ => None,
+                })
+                .filter(|(id, _, _)| expanding.contains(&state.tysys.def_at(*id)))
+                .map(|(_, name, span)| (name.clone(), span))
+                .collect();
+            if refused.is_empty() {
+                continue;
+            }
+            Self::run_module_pass(
+                state,
+                module_source,
+                symbols,
+                logger,
+                &entry_module_source,
+                |elaborator| {
+                    elaborator.current_module_source = module_source.clone();
+                    for (name, span) in refused {
+                        let _ = elaborator.emit(TypeError::ExpandingRecursion { name, span });
+                    }
+                },
+            );
+            decl_failed.insert(module_source.clone());
+        }
 
         {
             let mut signatures = sig::Signatures {

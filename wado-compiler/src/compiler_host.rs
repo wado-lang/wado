@@ -128,6 +128,9 @@ pub enum Code {
     EffectNotAllowed,
     /// Unknown type name
     UnknownType,
+    /// A generic type whose instances name ever larger instances of
+    /// themselves, so a program would need infinitely many types
+    ExpandingRecursion,
     /// Invalid type cast
     InvalidCast,
     /// Generic function reference cannot be typed at this position:
@@ -306,6 +309,7 @@ impl std::fmt::Display for Code {
             Code::EffectNotInTrait => "EFFECT_NOT_IN_TRAIT",
             Code::EffectNotAllowed => "EFFECT_NOT_ALLOWED",
             Code::UnknownType => "UNKNOWN_TYPE",
+            Code::ExpandingRecursion => "EXPANDING_RECURSION",
             Code::InvalidCast => "INVALID_CAST",
             Code::ModuleNotFound => "MODULE_NOT_FOUND",
             Code::CircularDependency => "CIRCULAR_DEPENDENCY",

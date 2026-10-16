@@ -1,0 +1,13 @@
+// A type whose instances name ever larger instances of themselves needs
+// infinitely many types, so its declaration is refused.
+
+variant Nested<T> {
+    Leaf(T),
+    Deeper(List<Nested<List<T>>>),
+}
+
+export fn run() {
+}
+
+__DATA__
+{"compile_error": "expanding_recursion_refused.wado:4:1: analysis error: 'Nested' reaches itself through a type argument built over its own type parameter, so each instance needs a larger one and they never end"}
