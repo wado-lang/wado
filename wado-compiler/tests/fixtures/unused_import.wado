@@ -1,10 +1,13 @@
 // A `use` whose name no site of its module reaches is reported, at the name it
 // binds. A trait imported for its methods is used by a call dispatching to one
-// (`Halved` is not: `halved` here is `Half`'s own), a namespace by naming a
-// member through it (`cbor` is not: `to_bytes` reaches its member by its own
-// import), an effect by naming it in `#[benign]`, and a re-export by
-// whoever imports it.
+// (`Halved` is not: `halved` here is `Half`'s own), whatever import put it in
+// scope (`traits` for `tripled`). A namespace is used by naming a member
+// through it (`cbor` is not: `to_bytes` reaches its member by its own import),
+// an effect by naming it in `#[benign]`, and a re-export by whoever imports
+// it. `Stdin::{read_via_stream}` binds the function alone.
 use { println, eprintln, eprint, Stdout, Stderr } from "core:cli";
+use { Stdin, Stdin::{read_via_stream} } from "wasi:cli";
+use traits from "./sub/unused_import_traits.wado";
 use { TreeMap as Map, TreeSet } from "core:collections";
 use json from "core:json";
 use base64 from "core:base64";
@@ -25,14 +28,16 @@ export fn run() with Stdout {
     let m = Map::<i32, i32>::new();
     let half = Half { n: 2 }.halved();
     let bytes = to_bytes(&half).unwrap().len();
-    println(`${m.len()} ${json::to_string(&21.doubled()).unwrap()} ${half} ${bytes}`);
+    println(`${m.len()} ${json::to_string(&21.doubled()).unwrap()} ${half} ${bytes} ${2.tripled()}`);
 }
 
 __DATA__
 {
-    "stdout": "0 42 1 1\n",
+    "stdout": "0 42 1 1 6\n",
     "warnings_contains": [
         "import `eprintln` is never used",
+        "import `Stdin` is never used",
+        "import `read_via_stream` is never used",
         "import `TreeSet` is never used",
         "import `base64` is never used",
         "import `cbor` is never used",
@@ -47,6 +52,7 @@ __DATA__
         "import `json`",
         "import `to_bytes`",
         "import `Doubled`",
+        "import `traits`",
         "import `to_string`",
         "import `from_string`"
     ]

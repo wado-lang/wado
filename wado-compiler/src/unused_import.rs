@@ -26,10 +26,14 @@ pub fn unused_import_diagnostics(sem: &Semantics) -> Vec<Diagnostic> {
         if inner_attrs_allow(&module.inner_attributes, lint::UNUSED_IMPORTS) {
             continue;
         }
+        let traits = dispatched.swap_remove(src).unwrap_or_default();
+        let admitting = traits
+            .iter()
+            .flat_map(|&t| resolutions.imports_admitting(src, t));
         let uses = Uses {
             resolutions,
             module: src,
-            dispatched_traits: dispatched.swap_remove(src).unwrap_or_default(),
+            used: resolutions.used_imports_in(src).chain(admitting).collect(),
         };
         for item in &module.items {
             if let Item::Use(decl) = item
@@ -59,10 +63,10 @@ pub fn unused_import_diagnostics(sem: &Semantics) -> Vec<Diagnostic> {
 struct Uses<'a> {
     resolutions: &'a Resolutions,
     module: &'a ModuleSource,
-    /// The traits whose methods the module's calls dispatched to. A trait's
-    /// methods are candidates only where the trait is in scope, so importing
-    /// one for its methods uses it without naming it.
-    dispatched_traits: IndexSet<DefId>,
+    /// The local names of the module's imports that answered one of its
+    /// reference sites, or put in scope a trait one of its calls dispatched
+    /// to: a trait's methods are candidates only where the trait is in scope.
+    used: IndexSet<&'a str>,
 }
 
 impl Uses<'_> {
@@ -77,34 +81,15 @@ impl Uses<'_> {
                     alias,
                     local_span,
                     ..
-                } => {
-                    let local = alias.as_ref().unwrap_or(name);
-                    if !self.uses_local(local) {
-                        unused.push((local.clone(), *local_span));
-                    }
-                }
-                UseItem::InterfaceFunctions {
-                    interface_name,
-                    name_span,
-                    functions,
-                    ..
-                } => {
-                    let unused_functions: Vec<(String, Span)> = functions
+                } => unused.extend(self.unused_binding(name, alias.as_ref(), *local_span)),
+                // `I::{f}` binds the functions alone; `I` is a name of its own.
+                UseItem::InterfaceFunctions { functions, .. } => unused.extend(
+                    functions
                         .iter()
-                        .map(|f| (f.alias.as_ref().unwrap_or(&f.name).clone(), f.local_span))
-                        .filter(|(local, _)| !self.uses_local(local))
-                        .collect();
-                    // Naming the interface is what imports its functions, so it
-                    // is unused only with all of them.
-                    if unused_functions.len() == functions.len() && !self.uses_local(interface_name)
-                    {
-                        unused.push((interface_name.clone(), *name_span));
-                    } else {
-                        unused.extend(unused_functions);
-                    }
-                }
+                        .filter_map(|f| self.unused_binding(&f.name, f.alias.as_ref(), f.local_span)),
+                ),
                 UseItem::Namespace { name, name_span } => {
-                    let reached = self.resolutions.used_imports_in(self.module).any(|alias| {
+                    let reached = self.used.iter().any(|alias| {
                         alias
                             .strip_prefix(name.as_str())
                             .is_some_and(|rest| rest.starts_with(NAMESPACE_MEMBER_SEP))
@@ -119,14 +104,20 @@ impl Uses<'_> {
         unused
     }
 
-    /// Whether the module refers to what it imported as `local`.
-    fn uses_local(&self, local: &str) -> bool {
+    /// The local name `name`, or its `alias`, binds where the module never
+    /// refers to it, with `span`, where it is written.
+    fn unused_binding(
+        &self,
+        name: &String,
+        alias: Option<&String>,
+        span: Span,
+    ) -> Option<(String, Span)> {
+        let local = alias.unwrap_or(name);
         // An import that reaches nothing has its own error, and the editor
         // lints a module that still carries one.
-        let Some(def) = self.resolutions.imported_as(self.module, local) else {
-            return true;
-        };
-        self.resolutions.import_used(self.module, local) || self.dispatched_traits.contains(&def)
+        let unused = self.resolutions.imported_as(self.module, local).is_some()
+            && !self.used.contains(local.as_str());
+        unused.then(|| (local.clone(), span))
     }
 }
 

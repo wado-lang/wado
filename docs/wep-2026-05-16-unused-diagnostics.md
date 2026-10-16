@@ -52,7 +52,7 @@ existing `CompilerHost`. Two passes contribute, both consuming
 1. Reference pass — for every user-authored module, reports a binding
    no reference resolves to. Emits `UnusedImport`, `UnusedVariable`,
    `UnusedParameter`. Imports read the import entries that answered
-   the module's sites (`Resolutions::import_used`), since the resolver
+   the module's sites (`Resolutions::used_imports_in`), since the resolver
    is what decides which tier a name lands on.
 2. Liveness pass — the elaborate-time DCE pass introduced by
    [elaborator rearchitecture](./wep-2026-05-26-elaborator-rearchitecture.md).
@@ -265,15 +265,17 @@ two entries, each used only where it is written. For each `UseItem`:
 - `Simple`: reported when its local name (the alias, or the name) is
   unused.
 - `Namespace`: used when one of its `ns$member` entries is.
-- `InterfaceFunctions`: the interface is reported only when it and every
-  function listed with it are unused; otherwise each unused function is.
+- `InterfaceFunctions`: each unused function is reported. `I::{f}` binds
+  `f` alone, so `I` is reported only by a `Simple` item of its own.
 - `Wildcard`: skipped (side-effect imports).
 
 A trait has no reference site when only its methods are called: the
-import puts the methods in scope. A trait import therefore also counts
-as used when one of the module's method references, as the elaborator
-records them, reaches a method the trait declares or one of its
-`impl`s defines. Dispatch decided which declaration answered, so a
+import puts the methods in scope. So where one of the module's method
+references, as the elaborator records them, reaches a method a trait
+declares or one of its `impl`s defines, every import entry that puts
+that trait in scope (`Resolutions::imports_admitting`, the tier rule
+`decls_in_scope` reads) is used: a name, an alias, or a namespace's
+`ns$Trait`. Dispatch decided which declaration answered, so a
 same-named method of another type does not count.
 
 An import the resolver did not resolve counts as used, since its error

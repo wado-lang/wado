@@ -333,15 +333,6 @@ impl Resolutions {
         self.fn_bound_binders.get(&binder)
     }
 
-    /// Whether `module`'s import under the local name `local` answered one of
-    /// its reference sites.
-    #[must_use]
-    pub fn import_used(&self, module: &ModuleSource, local: &str) -> bool {
-        self.used_imports
-            .get(module)
-            .is_some_and(|used| used.contains(local))
-    }
-
     /// The local names of `module`'s imports that answered one of its
     /// reference sites — an alias, or a namespace import's `ns$member`.
     pub fn used_imports_in(&self, module: &ModuleSource) -> impl Iterator<Item = &str> {
@@ -484,9 +475,21 @@ impl Resolutions {
                 .flatten()
                 .any(|(name, &d)| d == def && self.scopes.resolve(module, name) == Some(def))
         };
-        named(self.scopes.imports.get(module))
+        self.imports_admitting(module, def).next().is_some()
             || named(self.scopes.own.get(module))
             || named(Some(&self.scopes.prelude))
+    }
+
+    /// The local names of `module`'s imports that put `def` in scope there:
+    /// each import entry naming it that no nearer tier shadows.
+    pub fn imports_admitting<'a>(
+        &'a self,
+        module: &'a ModuleSource,
+        def: DefId,
+    ) -> impl Iterator<Item = &'a str> {
+        self.imports_in(module)
+            .filter(move |&(name, d)| d == def && self.scopes.resolve(module, name) == Some(def))
+            .map(|(name, _)| name)
     }
 
     /// The declaration a reference site names. `None` for a binder, a builtin
