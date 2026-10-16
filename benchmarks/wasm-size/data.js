@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1792181867756,
+  "lastUpdate": 1792187418561,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -67617,6 +67617,50 @@ window.BENCHMARK_DATA = {
           {
             "name": "sqlite_highlight",
             "value": 301626,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "28ba85f0f0086f0a9d86039d590f0476684ee44f",
+          "message": "Merge pull request #2364 from wado-lang/loam-smollm2-gemma3\n\nfeat(loam): run Gemma 3 (270M), at a third of onnxruntime's time per token on WebGPU",
+          "timestamp": "2026-10-17T06:29:36+09:00",
+          "tree_id": "14348f709c026da8755d5d4872f93f2a4a9d23c8",
+          "url": "https://github.com/wado-lang/wado/commit/28ba85f0f0086f0a9d86039d590f0476684ee44f"
+        },
+        "date": 1792187417650,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 2955,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 7382,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 20208,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 301641,
             "unit": "bytes"
           }
         ]
