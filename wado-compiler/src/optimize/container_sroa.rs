@@ -2017,19 +2017,23 @@ impl Rewriter<'_, '_> {
                 let mut out = Vec::with_capacity(arity);
                 // Each field's write reads the index again, so one that is not a
                 // pure leaf is evaluated once, ahead of the source, as it was.
-                let idx = if is_duplicable_operand(engine.body, idx)
-                    && !self.source_spills_index(engine.body, src, all_scalar)
-                {
-                    idx
-                } else {
+                let spilled = !is_duplicable_operand(engine.body, idx)
+                    || self.source_spills_index(engine.body, src, all_scalar);
+                let idx = if spilled {
                     self.spill_index(engine, idx, span, &mut out)
+                } else {
+                    idx
                 };
                 let per_field =
                     self.decompose_source(engine, src, arity, &layout, all_scalar, &mut out)?;
                 let sig = sig_key_of_id(ctx.sig, func_id)?;
                 let (idx, per_field) =
                     if self.elements_observe_writes(engine, rec_local, &per_field) {
-                        let idx = self.spill_index(engine, idx, span, &mut out);
+                        let idx = if spilled {
+                            idx
+                        } else {
+                            self.spill_index(engine, idx, span, &mut out)
+                        };
                         let per_field =
                             self.spill_elements(engine, rec_local, per_field, span, &mut out);
                         (idx, per_field)

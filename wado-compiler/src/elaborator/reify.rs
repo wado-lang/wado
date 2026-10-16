@@ -3194,6 +3194,11 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         // Header + `condition: <source>` + one `<label>: <text>` line per
         // emitted slot.
         let line = span.line as u64;
+        let file = self
+            .tysys
+            .trait_env
+            .module_of_span(span, &self.current_module_source)
+            .to_string();
         let string_literal = |text: String| {
             Box::new(TirExpr::new(
                 TirExprKind::StringLiteral(text),
@@ -3204,7 +3209,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         let mut parts: Vec<TirTemplatePart> = if assert_stmt.contract {
             // The call breaking the contract is to blame, so the clause reports
             // where it was called from.
-            let clause_site = format!("{}:{line}", self.current_module_source);
+            let clause_site = format!("{file}:{line}");
             vec![
                 TirTemplatePart::Literal("Contract of ".to_string()),
                 TirTemplatePart::Interpolation {
@@ -3230,7 +3235,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 },
                 TirTemplatePart::Literal(" at ".to_string()),
                 TirTemplatePart::Interpolation {
-                    expr: string_literal(self.current_module_source.to_string()),
+                    expr: string_literal(file),
                     format_spec: None,
                 },
                 TirTemplatePart::Literal(":".to_string()),
@@ -8504,7 +8509,11 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                     .make_compiler_struct(CompilerItem::String);
                 let file = match &self.call_site_location {
                     Some(loc) => loc.module.to_string(),
-                    None => self.current_module_source.to_string(),
+                    None => self
+                        .tysys
+                        .trait_env
+                        .module_of_span(lit.span, &self.current_module_source)
+                        .to_string(),
                 };
                 return TirExpr::new(TirExprKind::StringLiteral(file), string_type, lit.span);
             }

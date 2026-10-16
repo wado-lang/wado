@@ -266,7 +266,8 @@ fn collect_loops(
     }
 }
 
-/// Parse the loop-head guard `if !(var CMP bound) { break }` (skipping
+/// Parse the loop-head guard `if !(var CMP bound) { break }`, or the
+/// comparison turned round as in `if var >= bound { break }` (skipping
 /// leading `let`s), through both the skeleton and promoted-operand forms.
 /// Returns `(guard_idx, var, bound, guard_le)`, the bound a local or a
 /// constant.

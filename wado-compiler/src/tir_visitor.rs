@@ -933,22 +933,28 @@ impl TirRefVisitor for BreakValues<'_> {
 /// Shift every local index a namespace owns — reads, `Let`s and bindings — so
 /// its body fits a frame already holding `offset` locals.
 pub fn shift_locals(expr: &mut TirExpr, offset: u32) {
-    ShiftLocals { offset }.visit_expr(expr);
+    remap_locals(expr, |index| index + offset);
 }
 
-struct ShiftLocals {
-    offset: u32,
+/// Renumber every local index a namespace owns — reads, `Let`s and bindings —
+/// by `map`.
+pub fn remap_locals(expr: &mut TirExpr, map: impl Fn(u32) -> u32) {
+    RemapLocals { map }.visit_expr(expr);
 }
 
-impl TirMutVisitor for ShiftLocals {
+struct RemapLocals<F> {
+    map: F,
+}
+
+impl<F: Fn(u32) -> u32> TirMutVisitor for RemapLocals<F> {
     fn visit_expr(&mut self, expr: &mut TirExpr) {
         match &mut expr.kind {
-            TirExprKind::Local { index, .. } => *index += self.offset,
+            TirExprKind::Local { index, .. } => *index = (self.map)(*index),
             // A closure body numbers from its own zero, so it is left alone —
-            // but its captures name locals out here, and shift with them.
+            // but its captures name locals out here, and move with them.
             TirExprKind::Closure { captures, .. } => {
                 for capture in captures.iter_mut() {
-                    capture.source = capture.source.map_local(|index| index + self.offset);
+                    capture.source = capture.source.map_local(&self.map);
                 }
             }
             _ => self.walk_expr(expr),
@@ -957,14 +963,14 @@ impl TirMutVisitor for ShiftLocals {
 
     fn visit_stmt(&mut self, stmt: &mut TirStmt) {
         if let TirStmtKind::Let { local_index, .. } = &mut stmt.kind {
-            *local_index += self.offset;
+            *local_index = (self.map)(*local_index);
         }
         self.walk_stmt(stmt);
     }
 
     fn visit_pattern(&mut self, pattern: &mut TirPattern) {
         if let Some(local_index) = pattern.declared_local_index_mut() {
-            *local_index += self.offset;
+            *local_index = (self.map)(*local_index);
         }
         self.walk_pattern(pattern);
     }

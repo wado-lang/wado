@@ -11,6 +11,7 @@
 
 use crate::compiler_item::CompilerItems;
 use crate::defs::DefId;
+use crate::elaborator::trait_env::TraitEnv;
 use crate::flat_package::FlatPackage;
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::lower::plan::value_copy::place::{is_source_place, source_place_subscripts_mut};
@@ -23,7 +24,7 @@ use crate::tir::{
     CallArg, LetStorage, TemplateId, TirBlock, TirExpr, TirExprKind, TirFunction, TirLocal,
     TirStmt, TirStmtKind, TirUnaryOp, TypeId, TypeTable, assign_stmt,
 };
-use crate::tir_visitor::{TirMutVisitor, TirRefVisitor, shift_locals};
+use crate::tir_visitor::{TirMutVisitor, TirRefVisitor, remap_locals};
 
 /// Under `-f contract-checks`, point every call `unchecked` marks back at its
 /// checked function, so that it is checked as an unmarked call is. Runs ahead
@@ -78,14 +79,13 @@ pub fn lower(flat: &FlatPackage) {
         let Some(mut body) = func.body.take() else {
             continue;
         };
-        let site_module = func.module_source.to_string();
         let mut expander = Expander {
             contracts: &contracts,
             type_table: &type_table,
             items,
+            trait_env: &flat.trait_env,
             func: &mut func,
             site: None,
-            site_module,
             expanding: Vec::new(),
             bound: IndexSet::default(),
         };
@@ -190,11 +190,11 @@ struct Expander<'a> {
     contracts: &'a IndexMap<FunctionId, Contract>,
     type_table: &'a TypeTable,
     items: &'a CompilerItems,
+    trait_env: &'a TraitEnv,
     func: &'a mut TirFunction,
     /// The position a clause copied here reports: the call's, where the copy
     /// reaches another call through a clause of its own.
     site: Option<String>,
-    site_module: String,
     /// The functions whose clauses are being copied, outermost first. A clause
     /// calling its own function back is left to call it.
     expanding: Vec<FunctionId>,
@@ -230,10 +230,10 @@ impl Expander<'_> {
         let contracts = self.contracts;
         let contract = &contracts[&key];
         let span = call.span;
-        let site = self
-            .site
-            .clone()
-            .unwrap_or_else(|| format!("{}:{}", self.site_module, span.line));
+        let site = self.site.clone().unwrap_or_else(|| {
+            let module = self.trait_env.module_of_span(span, &self.func.module_source);
+            format!("{module}:{}", span.line)
+        });
         let TirExprKind::Call { args, .. } = &mut call.kind else {
             unreachable!("only a call expands");
         };
@@ -263,20 +263,38 @@ impl Expander<'_> {
             })
             .collect();
 
-        let offset = self.func.locals.len() as u32;
-        self.func.locals.extend(contract.locals.iter().cloned());
-        self.func.local_count = self.func.locals.len() as u32;
+        // The callee's own locals follow the caller's; its parameters, which
+        // the arguments stand in for, are numbered past them only to be
+        // substituted away.
+        let params = contract.params.len() as u32;
+        let base = self.func.locals.len() as u32;
+        let own = contract.locals.len() as u32 - params;
+        let renumber = |index: u32| {
+            if index < params {
+                base + own + index
+            } else {
+                base + index - params
+            }
+        };
         self.func
-            .address_taken_locals
-            .extend(contract.address_taken.iter().map(|index| index + offset));
+            .locals
+            .extend(contract.locals[params as usize..].iter().cloned());
+        self.func.local_count = self.func.locals.len() as u32;
+        for &index in &contract.address_taken {
+            if index >= params {
+                self.func.address_taken_locals.insert(renumber(index));
+            } else if let TirExprKind::Local { index: arg, .. } = substitutes[index as usize].kind {
+                self.func.address_taken_locals.insert(arg);
+            }
+        }
         let mut clauses = TirExpr::new(
             TirExprKind::Block(TirBlock::new(contract.clauses.clone(), span)),
             TypeTable::UNIT,
             span,
         );
-        shift_locals(&mut clauses, offset);
+        remap_locals(&mut clauses, renumber);
         Substitute {
-            offset,
+            offset: base + own,
             substitutes: &substitutes,
             site: &site,
         }
@@ -418,7 +436,8 @@ impl Expander<'_> {
     /// local to that argument, out of reach of the clauses after it.
     fn bind(&mut self, slot: &mut TirExpr, sink: Sink<'_>) -> TirExpr {
         let index = self.func.locals.len() as u32;
-        let name = minted_name("contract_arg", index);
+        // Each binding joins `bound`, so its size is the serial.
+        let name = minted_name("contract_arg", self.bound.len());
         let (type_id, span) = (slot.type_id, slot.span);
         let in_place = matches!(sink, Sink::InPlace);
         self.func.locals.push(TirLocal {
@@ -545,8 +564,7 @@ fn borrow_of(place: TirExpr, op: TirUnaryOp, type_id: TypeId) -> TirExpr {
 /// Read each parameter of a copied clause as the call's argument, and report
 /// the call's position.
 struct Substitute<'a> {
-    /// Where the callee's locals, its parameters first, start among the
-    /// caller's.
+    /// Where the callee's parameters are numbered among the caller's locals.
     offset: u32,
     substitutes: &'a [TirExpr],
     site: &'a str,

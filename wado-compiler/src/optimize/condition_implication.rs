@@ -1581,6 +1581,14 @@ fn apply_dominating_if(engine: &mut Engine, s: StmtId, binds: &Binds) -> bool {
     else {
         return false;
     };
+    // A conjunct after the comparison may move `var` or `bound` before the
+    // branch runs.
+    if cond
+        .as_expr()
+        .is_some_and(|ce| node_modifies(engine, NodeRef::Expr(ce), var, bound))
+    {
+        return false;
+    }
     let floor = conjuncts
         .iter()
         .find_map(|&c| guard_floor(engine, binds, c).filter(|f| f.var == var));
