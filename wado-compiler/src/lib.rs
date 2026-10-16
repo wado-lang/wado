@@ -623,7 +623,7 @@ pub async fn package_unused_diagnostics<H: CompilerHost>(
     log_level: LogLevel,
 ) -> Option<Vec<Diagnostic>> {
     let logger = Logger::new(host, log_level);
-    let mut load = loader::ModuleLoader::new(host, log_level)
+    let load = loader::ModuleLoader::new(host, log_level)
         .with_invocations(invocations)
         .with_generated_bodies_skipped()
         .load_all(&package.entry_source(), Some(&package.entry_name()))
@@ -633,21 +633,14 @@ pub async fn package_unused_diagnostics<H: CompilerHost>(
         })
         .ok()?;
 
-    let sources: Vec<ModuleSource> = load.modules.keys().cloned().collect();
-    let imports: IndexMap<ModuleSource, Vec<ModuleSource>> = sources
-        .into_iter()
-        .map(|source| {
-            let imported = imports_of(&mut load, &source);
-            (source, imported)
-        })
-        .collect();
+    let imports = |source: &ModuleSource| load.imports.get(source).map_or(&[][..], Vec::as_slice);
     let mut importers: IndexMap<&ModuleSource, Vec<&ModuleSource>> = IndexMap::default();
-    for (source, imported) in &imports {
+    for (source, imported) in &load.imports {
         for target in imported {
             importers.entry(target).or_default().push(source);
         }
     }
-    let members = &imports[&load.entry_module_source];
+    let members = imports(&load.entry_module_source);
     assert_eq!(
         members.len(),
         package.members.len(),
@@ -659,7 +652,7 @@ pub async fn package_unused_diagnostics<H: CompilerHost>(
         .filter(|(_, path)| package.entries.contains(path))
         .map(|(source, _)| source.clone())
         .collect();
-    let production = reach(entries.iter(), |source| imports[source].iter().collect());
+    let production = reach(entries.iter(), |source| imports(source).iter().collect());
     let reported = load
         .modules
         .iter()
@@ -694,25 +687,6 @@ fn reach<'a>(
         }
     }
     reached
-}
-
-/// The loaded modules `from` names in its `use` declarations, in order.
-fn imports_of(load: &mut loader::LoadResult, from: &ModuleSource) -> Vec<ModuleSource> {
-    load.modules[from]
-        .items
-        .iter()
-        .filter_map(|item| match item {
-            Item::Use(decl) => loader::resolve_use_decl_source(
-                &mut load.interner,
-                from,
-                decl,
-                Some(&load.entry_module_source),
-                &load.invocations,
-            ),
-            _ => None,
-        })
-        .filter(|source| load.modules.contains_key(source))
-        .collect()
 }
 
 /// Every source-level lint. `unused` gates the unused lints alone, as

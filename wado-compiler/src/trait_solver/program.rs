@@ -441,23 +441,42 @@ pub struct Program {
 /// The ids whose target could match `ty`, in the order they were added: what
 /// `by_head` files under no declaration and under `ty`'s, or `all` for an open
 /// row.
-fn matching<'p>(
+fn matching<'p, A: Iterator<Item = ImplId>>(
     ty: &SolverType,
-    all: impl FnOnce() -> Vec<ImplId>,
+    all: impl FnOnce() -> A,
     by_head: impl Fn(Option<TypeDeclId>) -> Option<&'p Vec<ImplId>>,
-) -> Vec<ImplId> {
+) -> Matching<'p, A> {
     if matches!(ty, SolverType::AnyRow) {
-        return all();
+        return Matching::All(all());
     }
-    let named = target_head(ty).and_then(|head| by_head(Some(head)));
-    let mut ids: Vec<ImplId> = by_head(None)
-        .into_iter()
-        .chain(named)
-        .flatten()
-        .copied()
-        .collect();
-    ids.sort_unstable();
-    ids
+    let ids = |head| by_head(head).map_or(&[][..], Vec::as_slice);
+    let named = target_head(ty).map_or(&[][..], |head| ids(Some(head)));
+    Matching::Heads(ids(None), named)
+}
+
+/// What [`matching`] answers: every id, or two buckets merged in id order.
+enum Matching<'p, A> {
+    All(A),
+    Heads(&'p [ImplId], &'p [ImplId]),
+}
+
+impl<A: Iterator<Item = ImplId>> Iterator for Matching<'_, A> {
+    type Item = ImplId;
+
+    fn next(&mut self) -> Option<ImplId> {
+        let (a, b) = match self {
+            Self::All(all) => return all.next(),
+            Self::Heads(a, b) => (a, b),
+        };
+        let side = match (a.first(), b.first()) {
+            (Some(x), Some(y)) if y < x => b,
+            (Some(_), _) => a,
+            (None, _) => b,
+        };
+        let (&first, rest) = side.split_first()?;
+        *side = rest;
+        Some(first)
+    }
 }
 
 fn target_head(ty: &SolverType) -> Option<TypeDeclId> {
@@ -555,10 +574,10 @@ impl Program {
     ) -> impl Iterator<Item = (ImplId, &ImplDef)> {
         let ids = matching(
             ty,
-            || self.impls_of(trait_).map(|(id, _)| id).collect(),
+            || self.impls_of(trait_).map(|(id, _)| id),
             |head| self.impls_by_target.get(&(trait_, head)),
         );
-        ids.into_iter().map(|id| (id, &self.impls[&id]))
+        ids.map(|id| (id, &self.impls[&id]))
     }
 
     /// The trait impls whose target could match `ty`, of any trait, in the
@@ -568,11 +587,11 @@ impl Program {
             ty,
             || {
                 let trait_impls = self.impls.iter().filter(|(_, def)| def.trait_.is_some());
-                trait_impls.map(|(&id, _)| id).collect()
+                trait_impls.map(|(&id, _)| id)
             },
             |head| self.trait_impls_by_head.get(&head),
         );
-        ids.into_iter().map(|id| (id, &self.impls[&id]))
+        ids.map(|id| (id, &self.impls[&id]))
     }
 
     /// The default `def`'s trait declares for its argument at `index`, at

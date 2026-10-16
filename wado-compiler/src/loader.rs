@@ -465,6 +465,8 @@ pub struct LoadResult {
     /// The modules whose function bodies were read as empty blocks
     /// ([`ModuleLoader::with_generated_bodies_skipped`]).
     pub skipped_bodies: IndexSet<ModuleSource>,
+    /// The Wado modules each module's `use` declarations load, in order.
+    pub imports: IndexMap<ModuleSource, Vec<ModuleSource>>,
 }
 
 use crate::compiler_host::LogLevel;
@@ -1281,6 +1283,7 @@ pub struct ModuleLoader<'a, H: CompilerHost> {
     /// Set by [`Self::with_generated_bodies_skipped`].
     skip_generated_bodies: bool,
     skipped_bodies: IndexSet<ModuleSource>,
+    imports: IndexMap<ModuleSource, Vec<ModuleSource>>,
 }
 
 impl<'a, H: CompilerHost> ModuleLoader<'a, H> {
@@ -1309,6 +1312,7 @@ impl<'a, H: CompilerHost> ModuleLoader<'a, H> {
             invocations: InvocationIndex::new(),
             skip_generated_bodies: false,
             skipped_bodies: IndexSet::default(),
+            imports: IndexMap::default(),
         }
     }
 
@@ -1540,6 +1544,7 @@ impl<'a, H: CompilerHost> ModuleLoader<'a, H> {
             invocations: self.invocations,
             interner: self.interner,
             skipped_bodies: self.skipped_bodies,
+            imports: self.imports,
         })
     }
 
@@ -1600,6 +1605,10 @@ impl<'a, H: CompilerHost> ModuleLoader<'a, H> {
                 {
                     continue;
                 }
+                self.imports
+                    .entry(from_module_source.clone())
+                    .or_default()
+                    .push(resolved.clone());
                 pending.push_back((from_module_source.clone(), resolved));
             }
         }
