@@ -120,7 +120,6 @@ impl LivenessScope {
                 offers_pub: package.entries.contains(source),
                 internal_undecided: false,
                 test_code: !package.production.contains(source),
-                ..compilation
             },
         }
     }
