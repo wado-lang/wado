@@ -168,8 +168,31 @@ fn loams_webgpu_backend_computes_what_its_cpu_backend_does() {
     assert!(output.status.success(), "stderr: {stderr}");
     let lines: Vec<&str> = stdout.lines().collect();
     // Thirteen outputs, from a device's own binding limit and from one
-    // smaller than a weight, which splits the kernels reading it.
-    assert_eq!(lines.len(), 26, "stdout: {stdout}");
+    // smaller than a weight, which splits the kernels reading it, then three
+    // `arg_max`es, then two products of a few rows from each limit.
+    assert_eq!(lines.len(), 33, "stdout: {stdout}");
+    for line in lines {
+        let deviation: f32 = line
+            .rsplit(' ')
+            .next()
+            .and_then(|d| d.parse().ok())
+            .unwrap_or_else(|| panic!("no deviation in {line:?}"));
+        assert!(deviation <= LOAM_TOLERANCE, "{line}");
+    }
+}
+
+/// Grouped query attention runs on the device, with a past and without, turned
+/// in whole or in part, biased, capped and windowed.
+#[test]
+fn loams_webgpu_attention_computes_what_its_cpu_attention_does() {
+    let program = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("../package-loam/conformance/webgpu_attention.wado");
+    let output = run(&[program.to_str().unwrap()]);
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(output.status.success(), "stderr: {stderr}");
+    let lines: Vec<&str> = stdout.lines().collect();
+    assert_eq!(lines.len(), 3, "stdout: {stdout}");
     for line in lines {
         let deviation: f32 = line
             .rsplit(' ')

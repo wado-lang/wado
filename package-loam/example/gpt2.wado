@@ -155,14 +155,14 @@ use gpt2 from "../tests/models/tiny-gpt2/merged/model.onnx"
 global STEPS: i32 = 8;
 
 /// How many tokens the model reads at most: one position per row of `wpe`.
-fn positions(weights: &gpt2::Prepared<Cpu>) -> i32 {
-    return weights.transformer_wpe_weight_merged_0.extents[0];
+fn positions() -> i32 {
+    return gpt2::Pos::EXTENT;
 }
 
 /// The longest prompt `greedy` extends by `steps`. The last token it picks is
 /// never read, so the model reads one fewer than it returns.
-fn longest_prompt(steps: i32, weights: &gpt2::Prepared<Cpu>) -> i32 {
-    return positions(weights) - steps + 1;
+fn longest_prompt(steps: i32) -> i32 {
+    return positions() - steps + 1;
 }
 
 /// The keys and values so far, one per layer's key and value in the order the
@@ -239,7 +239,7 @@ fn decode(tokens: &List<i32>, cache: &Cache, weights: &gpt2::Prepared<Cpu>) -> [
 
 /// `prompt` extended by `steps` tokens, each the one the model ranks first.
 fn greedy(prompt: &List<i32>, steps: i32, weights: &gpt2::Prepared<Cpu>) -> List<i32> {
-    assert 1 <= prompt.len() <= longest_prompt(steps, weights);
+    assert 1 <= prompt.len() <= longest_prompt(steps);
     let mut ids = *prompt;
     let [first, prefilled] = decode(prompt, &empty_cache(), weights);
     ids.push(first);
@@ -259,7 +259,7 @@ export fn run() with (Stdout, Stderr, Environment) {
     }
     let ids = Tokenizer::encode(&prompt);
     let weights = gpt2::Prepared::embedded(&mut Cpu {});
-    let longest = longest_prompt(STEPS, &weights);
+    let longest = longest_prompt(STEPS);
     if !(1 <= ids.len() <= longest) {
         eprintln(`the prompt is ${ids.len()} tokens, and must be 1 to ${longest}`);
         return;
@@ -295,6 +295,6 @@ test "each prompt continues with the tokens onnxruntime picks greedily" {
 #[timeout_ms(30000)]
 test "the longest prompt fills every position the model reads" {
     let weights = gpt2::Prepared::embedded(&mut Cpu {});
-    let prompt = List::<i32>::filled(longest_prompt(2, &weights), 0);
-    assert greedy(&prompt, 2, &weights).len() == positions(&weights) + 1;
+    let prompt = List::<i32>::filled(longest_prompt(2), 0);
+    assert greedy(&prompt, 2, &weights).len() == positions() + 1;
 }

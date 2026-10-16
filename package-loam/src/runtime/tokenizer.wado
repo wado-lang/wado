@@ -1,27 +1,48 @@
-//! GPT-2's byte-level BPE (Radford et al. 2019, § 2.2): text split by its
-//! pattern, each piece spelled as bytes and merged pair by pair, the ids decoded
-//! back through the same byte spelling. A generated tokenizer builds one from
-//! the vocabulary and merges its `tokenizer.json` names.
+//! Byte-pair encoding (Sennrich et al. 2016) in the two spellings Hugging Face
+//! tokenizers write down. GPT-2's (Radford et al. 2019, § 2.2) splits text by
+//! its pattern and spells each piece as bytes. SentencePiece's (Kudo and
+//! Richardson 2018), as Gemma uses it, spells each space as `▁`, takes the
+//! whole text as one piece, and spells a character the vocabulary lacks as its
+//! UTF-8 bytes, each a `<0xXX>` token. A generated tokenizer builds one from the
+//! vocabulary and merges its `tokenizer.json` names.
 
 use { TreeMap } from "core:collections";
 use icu from "core:icu";
 
-/// A byte-level BPE tokenizer.
+/// How a tokenizer spells text before it merges, and back after.
+pub enum TokenSpelling {
+    /// GPT-2's: each piece of its pattern as bytes, each byte a character.
+    ByteLevel,
+    /// SentencePiece's: each space as `▁`, each character as itself, and one
+    /// the vocabulary lacks as its bytes.
+    Pieces,
+}
+
+/// The character SentencePiece spells a space as.
+global SPACE_PIECE: char = '▁';
+
+/// A BPE tokenizer.
 pub struct BpeTokenizer {
+    spelling: TokenSpelling,
     ids: TreeMap<String, i32>,
     tokens: List<String>,
     /// Each mergeable pair of ids, keyed by `pair_key`, as `[rank, merged id]`:
     /// the lowest rank merges first.
     merges: TreeMap<i64, [i32, i32]>,
-    /// The special tokens, matched in the text as they stand before it is split.
+    /// The added tokens, matched in the text as they stand before it is split.
     specials: List<String>,
-    /// Whether each id is a special token, which decodes as its own text.
+    /// Whether each id is an added token, which decodes as its own text.
     special_ids: List<bool>,
-    /// The id of the token each byte is spelled as.
+    /// The id of the token each byte is spelled as, -1 where none is.
     byte_ids: List<i32>,
-    /// The byte each of the byte alphabet's characters stands for, indexed by
-    /// code point.
-    char_bytes: List<u8>,
+    /// The byte each id stands for where it stands for one byte, -1 elsewhere:
+    /// under `ByteLevel` a character of the byte alphabet, by code point, and
+    /// under `Pieces` a `<0xXX>` token, by id.
+    bytes_of: List<i32>,
+    /// What a character no token and no byte spells encodes as, -1 for none.
+    unknown: i32,
+    /// The ids every encoding starts with.
+    prefix: List<i32>,
     letters: List<[u32, u32]>,
     numbers: List<[u32, u32]>,
 }
@@ -34,52 +55,68 @@ enum Class {
 }
 
 impl BpeTokenizer {
-    /// `tokens` holds one token per line, its id the line's index, and `merges`
-    /// one merge per line, `"left right"` by rank. `specials` are matched in the
-    /// text as they stand, before it is split. Every byte's character is a
-    /// token, and every merge's halves and result are tokens.
-    pub fn new(tokens: &ByteList, merges: &ByteList, specials: List<String>) -> BpeTokenizer {
-        let tokens = lines_of(tokens);
+    /// `tokens` holds each token, its id the index, separated by NUL bytes.
+    /// `merges` holds three little-endian `i32`s per merge by rank: the two ids
+    /// it joins, then the id they join to. `specials` are matched in the text
+    /// as they stand, before it is split. Under `ByteLevel` every byte's
+    /// character is a token; under `Pieces` the `<0xXX>` tokens spell the
+    /// bytes, and `unknown` names the token a character neither spells.
+    pub fn new(
+        tokens: &ByteList,
+        merges: &ByteList,
+        specials: List<String>,
+        spelling: TokenSpelling,
+        unknown: i32,
+        prefix: List<i32>,
+    ) -> BpeTokenizer {
+        let tokens = entries_of(tokens);
         let mut ids = TreeMap::<String, i32>::new();
         for let [id, token] of tokens.into_iter().enumerate() {
-            ids[token] = id;
+            ids.try_insert(token, id);
         }
         let mut merge_ranks = TreeMap::<i64, [i32, i32]>::new();
-        for let [rank, merge] of lines_of(merges).into_iter().enumerate() {
-            let Some([left, right]) = merge.split_once(" ") else {
-                unreachable();
-            };
-            let [left, right] = [
-                left.to_string(),
-                right.to_string(),
-            ];
-            let merged = ids.get(`${left}${right}`).unwrap();
-            merge_ranks.try_insert(pair_key(ids.get(left).unwrap(), ids.get(right).unwrap()), [rank, merged]);
+        let triples = List::<i32>::from_le_bytes(*merges);
+        for let rank of 0..<triples.len() / 3 {
+            merge_ranks.try_insert(pair_key(triples[rank * 3], triples[rank * 3 + 1]), [rank, triples[rank * 3 + 2]]);
         }
         let mut special_ids = List::<bool>::filled(tokens.len(), false);
         for let special of specials {
             special_ids[ids.get(special).unwrap()] = true;
         }
-        let byte_chars = byte_chars();
-        let mut byte_ids: List<i32> = [];
-        let mut char_bytes: List<u8> = [];
-        for let [b, c] of byte_chars.into_iter().enumerate() {
-            let mut spelled = String::new();
-            spelled.push(c);
-            byte_ids.push(ids.get(spelled).unwrap());
-            while char_bytes.len() <= c as i32 {
-                char_bytes.push(0);
-            }
-            char_bytes[c as i32] = b as u8;
+        let mut byte_ids = List::<i32>::filled(256, -1);
+        let mut bytes_of: List<i32> = [];
+        match spelling {
+            ByteLevel => {
+                for let [b, c] of byte_chars().into_iter().enumerate() {
+                    byte_ids[b] = ids.get(String::from(c)).unwrap();
+                    while bytes_of.len() <= c as i32 {
+                        bytes_of.push(-1);
+                    }
+                    bytes_of[c as i32] = b;
+                }
+            },
+            Pieces => {
+                bytes_of = List::<i32>::filled(tokens.len(), -1);
+                for let b of 0..<256 {
+                    if let Some(id) = ids.get(byte_token(b)) {
+                        byte_ids[b] = id;
+                        bytes_of[id] = b;
+                    }
+                }
+                assert unknown >= 0 || byte_ids.into_iter().all(|id| id >= 0), "a character the vocabulary lacks needs its bytes' tokens or an unknown token";
+            },
         }
         return BpeTokenizer {
+            spelling,
             ids,
             tokens,
             merges: merge_ranks,
             specials,
             special_ids,
             byte_ids,
-            char_bytes,
+            bytes_of,
+            unknown,
+            prefix,
             letters: icu::value_ranges("gc", "L").unwrap(),
             numbers: icu::value_ranges("gc", "N").unwrap(),
         };
@@ -87,7 +124,7 @@ impl BpeTokenizer {
 
     /// The ids `text` encodes to.
     pub fn encode(&self, text: &String) -> List<i32> {
-        let mut out: List<i32> = [];
+        let mut out = self.prefix;
         let mut rest = text.as_str_slice();
         loop {
             let Some([at, special]) = self.next_special(rest) else {
@@ -100,19 +137,37 @@ impl BpeTokenizer {
         }
     }
 
-    /// The text `ids` decode to. A special token is its own text, and every
-    /// other token stands for the bytes its characters spell. A byte sequence
-    /// that is not UTF-8 decodes with U+FFFD in its place, as a token boundary
-    /// can split a character.
+    /// The text `ids` decode to. Each token stands for the bytes its spelling
+    /// spells, but under `ByteLevel` an added token is its own text. A byte
+    /// sequence that is not UTF-8 decodes with U+FFFD in its place, as a token
+    /// boundary can split a character.
     pub fn decode(&self, ids: &List<i32>) -> String {
         let mut bytes: ByteList = [];
         for let id of *ids {
-            if self.special_ids[id] {
-                bytes.extend(&(self.tokens[id].bytes().collect() as ByteList));
-                continue;
-            }
-            for let c of self.tokens[id].chars() {
-                bytes.push(self.char_bytes[c as i32]);
+            let token = &self.tokens[id];
+            match self.spelling {
+                ByteLevel => {
+                    if self.special_ids[id] {
+                        bytes.extend_from_slice(token.as_bytes() as Slice<u8>);
+                        continue;
+                    }
+                    for let c of token.chars() {
+                        bytes.push(self.bytes_of[c as i32] as u8);
+                    }
+                },
+                Pieces => {
+                    if self.bytes_of[id] >= 0 {
+                        bytes.push(self.bytes_of[id] as u8);
+                        continue;
+                    }
+                    for let c of token.chars() {
+                        if c == SPACE_PIECE {
+                            bytes.push(b' ');
+                        } else {
+                            bytes.extend(&c.encode_utf8());
+                        }
+                    }
+                },
             }
         }
         return String::from_utf8_lossy(bytes);
@@ -138,16 +193,48 @@ impl BpeTokenizer {
     }
 
     fn encode_ordinary(&self, text: StrSlice, out: &mut List<i32>) {
+        if text.is_empty() {
+            return;
+        }
+        if self.spelling matches { Pieces } {
+            let mut parts: List<i32> = [];
+            for let c of text.chars() {
+                self.spell_piece(if c == ' ' { SPACE_PIECE } else { c }, &mut parts);
+            }
+            self.merge(parts, out);
+            return;
+        }
         let chars: List<char> = text.chars().collect();
         let mut at = 0;
         while at < chars.len() {
             let end = self.piece_end(&chars, at);
-            let mut piece = String::new();
+            let mut parts: List<i32> = [];
             for let k of at..<end {
-                piece.push(chars[k]);
+                for let b of chars[k].encode_utf8() {
+                    parts.push(self.byte_ids[b as i32]);
+                }
             }
-            self.merge(&piece, out);
+            self.merge(parts, out);
             at = end;
+        }
+    }
+
+    /// `c` as `Pieces` spells it before merging: its own token, else its
+    /// bytes', else the unknown token, one for a run of them.
+    fn spell_piece(&self, c: char, parts: &mut List<i32>) {
+        if let Some(id) = self.ids.get(String::from(c)) {
+            parts.push(id);
+            return;
+        }
+        let utf8 = c.encode_utf8();
+        if utf8.into_iter().all(|b| self.byte_ids[b as i32] >= 0) {
+            for let b of utf8 {
+                parts.push(self.byte_ids[b as i32]);
+            }
+            return;
+        }
+        if parts.last() != Option::Some(self.unknown) {
+            parts.push(self.unknown);
         }
     }
 
@@ -187,39 +274,114 @@ impl BpeTokenizer {
         return Class::Other;
     }
 
-    /// Spells `piece` as the ids of its bytes, merges the adjacent pair of
-    /// lowest rank until no pair merges, and appends what is left.
-    fn merge(&self, piece: &String, out: &mut List<i32>) {
-        let mut parts: List<i32> = piece.bytes().map(|b| self.byte_ids[b as i32]).collect();
-        loop {
-            let mut best = -1;
-            let mut best_rank = i32::MAX;
-            let mut merged_id = 0;
-            for let mut i = 0; i + 1 < parts.len(); i += 1 {
-                if let Some([rank, merged]) = self.merges.get(pair_key(parts[i], parts[i + 1])) && rank < best_rank {
-                    best_rank = rank;
-                    best = i;
-                    merged_id = merged;
-                }
-            }
-            if best < 0 {
-                break;
-            }
-            let [left, right] = [parts[best], parts[best + 1]];
-            let mut next: List<i32> = [];
-            let mut i = 0;
-            while i < parts.len() {
-                if i + 1 < parts.len() && parts[i] == left && parts[i + 1] == right {
-                    next.push(merged_id);
-                    i += 2;
-                } else {
-                    next.push(parts[i]);
-                    i += 1;
-                }
-            }
-            parts = next;
+    /// Merges the adjacent pair of lowest rank in `parts` until no pair
+    /// merges, and appends what is left. A round merges every place the pair
+    /// of its rank stands, left to right, as the parts stood when it began.
+    ///
+    /// `parts` is a linked list by place, and a heap orders its pairs by rank,
+    /// then by place, so a round finds its pairs without a scan. A pair a merge
+    /// forms joins the heap once the round ends, and a pair a merge broke is
+    /// skipped when it comes up.
+    fn merge(&self, parts: List<i32>, out: &mut List<i32>) {
+        let n = parts.len();
+        let mut ids = parts;
+        let mut prev: List<i32> = [];
+        let mut next: List<i32> = [];
+        for let at of 0..<n {
+            prev.push(at - 1);
+            next.push(if at + 1 < n { at + 1 } else { -1 });
         }
-        out.extend(&parts);
+        let mut alive = List::<bool>::filled(n, true);
+        let mut pairs: List<i64> = [];
+        for let at of 0..<n - 1 {
+            self.queue_pair(&ids, at, at + 1, &mut pairs);
+        }
+        let mut formed: List<i64> = [];
+        let mut round = -1;
+        let mut last: i64 = -1;
+        loop {
+            if pairs.is_empty() || (pairs[0] >> 32) as i32 != round {
+                for let pair of formed {
+                    heap_push(&mut pairs, pair);
+                }
+                formed = [];
+                if pairs.is_empty() {
+                    break;
+                }
+                round = (pairs[0] >> 32) as i32;
+                last = -1;
+            }
+            let pair = heap_pop(&mut pairs);
+            if pair == last {
+                continue;
+            }
+            last = pair;
+            let at = pair as i32;
+            let right = next[at];
+            if !alive[at] || right < 0 {
+                continue;
+            }
+            let Some([rank, merged]) = self.merges.get(pair_key(ids[at], ids[right])) else {
+                continue;
+            };
+            if rank != round {
+                continue;
+            }
+            ids[at] = merged;
+            alive[right] = false;
+            next[at] = next[right];
+            if next[at] >= 0 {
+                prev[next[at]] = at;
+                self.queue_pair(&ids, at, next[at], &mut formed);
+            }
+            if prev[at] >= 0 {
+                self.queue_pair(&ids, prev[at], at, &mut formed);
+            }
+        }
+        for let mut at = 0; at >= 0 && at < n; at = next[at] {
+            out.push(ids[at]);
+        }
+    }
+
+    /// Adds the pair of `ids` at `left` and `right` to `pairs`, keyed by its
+    /// rank and then its place, where it merges.
+    fn queue_pair(&self, ids: &List<i32>, left: i32, right: i32, pairs: &mut List<i64>) {
+        if let Some([rank, _]) = self.merges.get(pair_key(ids[left], ids[right])) {
+            heap_push(pairs, rank as i64 << 32 | left as i64);
+        }
+    }
+}
+
+/// Adds `entry` to the least-first heap `heap`.
+fn heap_push(heap: &mut List<i64>, entry: i64) {
+    heap.push(entry);
+    let mut at = heap.len() - 1;
+    while at > 0 && heap[(at - 1) / 2] > heap[at] {
+        heap.swap(at, (at - 1) / 2);
+        at = (at - 1) / 2;
+    }
+}
+
+/// Takes the least entry out of the heap `heap`, which holds one.
+fn heap_pop(heap: &mut List<i64>) -> i64 {
+    let least = heap[0];
+    let last = heap.pop().unwrap();
+    if heap.is_empty() {
+        return least;
+    }
+    heap[0] = last;
+    let mut at = 0;
+    loop {
+        let left = at * 2 + 1;
+        if left >= heap.len() {
+            return least;
+        }
+        let child = if left + 1 < heap.len() && heap[left + 1] < heap[left] { left + 1 } else { left };
+        if heap[at] <= heap[child] {
+            return least;
+        }
+        heap.swap(at, child);
+        at = child;
     }
 }
 
@@ -246,15 +408,20 @@ fn within(ranges: &List<[u32, u32]>, code: u32) -> bool {
     return false;
 }
 
-/// The lines of `bytes`, UTF-8 that its writer wrote one entry to a line.
-fn lines_of(bytes: &ByteList) -> List<String> {
+/// The entries of `bytes`, UTF-8 that its writer separated by NUL bytes.
+fn entries_of(bytes: &ByteList) -> List<String> {
     let Ok(text) = String::try_from_utf8(*bytes) else {
         unreachable();
     };
     if text.is_empty() {
         return [];
     }
-    return text.split("\n").map(|line| line.to_string()).collect();
+    return text.split("\0").map(|entry| entry.to_string()).collect();
+}
+
+/// The token SentencePiece spells the byte `b` as.
+pub fn byte_token(b: i32) -> String {
+    return `<0x${b:02X}>`;
 }
 
 /// The printable character each byte is spelled as, so that a token is text:

@@ -65,26 +65,45 @@ runs.
   host, since WGSL stores none. Indices are small, and a gather uploads them as
   `u32` when it runs.
 - The convolutions and `max_pool` stay on the CPU. No model step 14 targets
-  has them.
+  has them. `expand` is a view, each stretched axis read through a stride of 0.
+- `group_query_attention`, which Gemma 3 has and GPT-2 does not, is two
+  dispatches. One writes the present keys and values into one buffer, the new
+  keys turned by the rotary tables. The other attends each query row in a
+  workgroup of its own: the turned query, its scores, their softmax and the
+  values they weigh. `conformance/webgpu_attention.wado` holds it to `Cpu`.
+- A product of at most four rows, as a step over one token makes, does not
+  run in 16 by 16 tiles, which would leave 15 of 16 lanes idle. Each workgroup
+  computes a run of columns, its lanes splitting the inner axis. The lanes
+  that read the weight together read where it is contiguous: one row's run of
+  columns, or one column of a transposed weight, such as Gemma's head.
+- `arg_max` ranks each lane in a workgroup of its own and reads back one index
+  per lane, as an f32, which holds a vocabulary's indices exactly. A language
+  model picking its next token then reads back one index, not the vocabulary's
+  logits.
 - The device's limits are requested at the adapter's own, and a dispatch binds
   only the span of a buffer its views reach. GPT-2's token embedding is 154 MB,
   past WebGPU's default binding of 128 MiB, which is all llvmpipe offers. A
   gather whose rows still outgrow a binding runs over halves of its indices,
   and a copy over halves of an axis. A product runs over chunks of its inner
-  axis, whole tiles each, every chunk continuing the sums the one before left,
-  so it adds what one dispatch would, in the same order.
+  axis, whole tiles each, every chunk continuing the sums the one before left.
+  A tiled product so adds what one dispatch would, in the same order.
 
-Every dispatch of one `forward` goes into one command encoder, which is
-submitted when a tensor is read back. A dispatch's parameters are written to a
-buffer of its own, so none is overwritten before the encoder runs.
+Dispatches go into one compute pass of one command encoder, which is
+submitted when a tensor is read back or after every 32 dispatches, so the
+device runs the first while the host records the rest. Each dispatch's
+parameters take a span of their own in one buffer of the pass, so none is
+overwritten before the encoder runs, and they reach the device in one write
+when the encoder is submitted.
 
 A resource is move-only in Wado, so views cannot share a `GpuBuffer` by value.
 The backend owns its buffers and a view names one by its place. `keep`, which
 `Prepared` calls for every weight, writes a buffer that lives as long as the
-backend. Every other buffer belongs to the pass, and `begin`, which `pass`
-calls first, releases those of the pass before. A caller of `pass` reads its
-outputs before the next pass, and `forward` has downloaded them, so nothing
-still names those buffers.
+backend. Every other buffer belongs to the pass, and `begin`, which the caller
+of `pass` calls first, releases those of the pass before. A caller of `pass`
+reads its outputs before the next pass, and `forward` has downloaded them, so
+nothing still names those buffers. The exception is a buffer the pass
+retained, which lives through the next pass: Gemma's attention cache stays on
+the device from one token to the next.
 
 ### Fusion is chosen for dispatches
 
@@ -213,17 +232,28 @@ measurement that shows allocation matters.
 
 `example/gpt2-124m/webgpu.wado` continues "Hello, my name is" with eight
 greedy tokens on each backend, and picks the tokens onnxruntime picks on the
-device. The device is llvmpipe, a software rasterizer, which is all this
-machine offers. Its times say how many synchronizations and dispatches a pass
-makes, not how a GPU runs it. `Cpu` runs under `wado run-webgpu`'s wasmtime,
-and onnxruntime is `generate.mjs` on `onnxruntime-node`.
+device. It runs the whole sequence each token, having no attention cache.
+`example/gemma3-270m/webgpu.wado` continues two prompts with eight greedy
+tokens each, one token a pass against the attention cache, and picks
+onnxruntime's tokens. The device is an RTX 4060 Ti under Vulkan. GPT-2's `Cpu`
+runs under `wado run-webgpu`'s wasmtime, and Gemma's is
+`example/gemma3-270m/gemma3.wado` under `wado run`. onnxruntime is each
+example's `generate.mjs` on `onnxruntime-node`, on the CPU.
 
-| Backend                    | Time a token, onnxruntime's as 1 | Dispatches a token | Read backs a token |
-| -------------------------- | -------------------------------- | ------------------ | ------------------ |
-| `WebGpuBackend` (llvmpipe) | 106                              | 127                | 1                  |
-| `Cpu`                      | 217                              |                    |                    |
-| onnxruntime, CPU           | 1                                |                    |                    |
+| Model        | Backend         | Time a token, onnxruntime's as 1 | Dispatches a token | Read backs a token |
+| ------------ | --------------- | -------------------------------- | ------------------ | ------------------ |
+| GPT-2 (124M) | `WebGpuBackend` | 3.3                              | 127                | 1                  |
+| GPT-2 (124M) | `Cpu`           | 18                               |                    |                    |
+| Gemma 3 270M | `WebGpuBackend` | 0.34                             | 275                | 1                  |
+| Gemma 3 270M | `Cpu`           | 5.0                              |                    |                    |
+| either       | onnxruntime     | 1                                |                    |                    |
 
-The 127 dispatches are the 126 the layer table predicts and one more: llvmpipe
-binds 128 MiB at most, so the head's product, whose weight is the 154 MB
-embedding, runs in two chunks.
+GPT-2's dispatches are the 126 kernels the layer table predicts and one
+`arg_max`. On llvmpipe, which binds 128 MiB at most, its head runs in two
+chunks, its weight being the 154 MB embedding.
+
+Gemma's token cost the host more than the device until the dispatches shared
+one compute pass and one parameter buffer, `wado run-webgpu` built wasmtime and
+wgpu-core optimized, and `arg_max` replaced reading back the logits. Each
+roughly halved it. The products of a few rows then took it from 0.65 to 0.45,
+and submitting every 32 dispatches to 0.34.

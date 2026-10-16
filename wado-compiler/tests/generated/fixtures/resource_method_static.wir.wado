@@ -193,20 +193,19 @@ fn "resource_method_static.wado/$cm_binding__TcpSocket_create"(address_family) w
 fn "resource_method_static.wado/$cm_export__run"() {
     let result: ref "core:prelude/types.wado//Result<wasi:sockets/types.wado/TcpSocket,wasi:sockets/types.wado/ErrorCode>";
     let packed: i64;
-    let rx_10: i32;
-    let tx_11: i32;
+    let rx_9: i32;
+    let tx_10: i32;
     result = "resource_method_static.wado/$cm_binding__TcpSocket_create"(0);
-    rx_10 = builtin::i32_wrap_i64(local.tee packed("wasi/stream-new"()));
-    tx_11 = builtin::i32_wrap_i64(packed >> 32_i64);
-    rx_10 = "resource_method_static.wado/$cm_binding__Stdout_write_via_stream"(rx_10);
+    rx_9 = builtin::i32_wrap_i64(local.tee packed("wasi/stream-new"()));
+    tx_10 = builtin::i32_wrap_i64(packed >> 32_i64);
+    rx_9 = "resource_method_static.wado/$cm_binding__Stdout_write_via_stream"(rx_9);
     let $mv_field_2: ref Array<u8>;
     $mv_field_2 = array.new_data<u8>("Resource static method called");
-    "core:rt/write_string_to_stream$dae[add_newline]"(tx_11, $mv_field_2, 29);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(rx_10);
+    "core:rt/write_string_to_stream$dae[add_newline]"(tx_10, $mv_field_2, 29);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(rx_9);
     if ref.test "core:prelude/types.wado//Result<wasi:sockets/types.wado/TcpSocket,wasi:sockets/types.wado/ErrorCode>::Ok"(result) {
         "wasi/resource-drop:wasi/sockets/types.wado#tcp-socket"(ref.cast "core:prelude/types.wado//Result<wasi:sockets/types.wado/TcpSocket,wasi:sockets/types.wado/ErrorCode>::Ok"(result).payload_0);
     } else {
-        drop(ref.cast "core:prelude/types.wado//Result<wasi:sockets/types.wado/TcpSocket,wasi:sockets/types.wado/ErrorCode>::Err"(result).payload_0);
     }
     "wasi/task-return"(0);
 }

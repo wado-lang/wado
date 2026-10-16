@@ -1,0 +1,16 @@
+// Expanding recursion through another declaration is refused where the
+// growing argument is written.
+
+struct Outer<T> {
+    inner: Option<Inner<List<T>>>,
+}
+
+struct Inner<U> {
+    outer: Option<Outer<U>>,
+}
+
+export fn run() {
+}
+
+__DATA__
+{"compile_error": "expanding_recursion_mutual_refused.wado:4:1: analysis error: 'Outer' reaches itself through a type argument built over its own type parameter, so each instance needs a larger one and they never end"}

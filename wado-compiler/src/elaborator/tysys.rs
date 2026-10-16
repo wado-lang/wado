@@ -14,7 +14,7 @@ use crate::compiler_item::CompilerItem;
 use crate::component_model::CmInterfaceRegistry;
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::module_source::ModuleSource;
-use crate::resource_move_check::carries_affine_resource;
+use crate::resource_holding::{Held, HeldTypes, holds_resource};
 use crate::synthesis::template::{eq_from_written_cmp, written_impl_reaches};
 use crate::tir::{ResolvedType, StructDef, TypeId, TypeKey, TypeTable, range_item};
 
@@ -115,8 +115,7 @@ impl TypeSystem {
     /// The `TypeId` of each field of the struct `type_id` names, in declaration
     /// order, or `None` if it names no registered struct. Keyed by the type
     /// itself rather than a spelling of it, which is what every caller holds:
-    /// each reached one by destructuring a `ResolvedType`. Used by the resource
-    /// move check to decide whether an aggregate transitively owns a resource.
+    /// each reached one by destructuring a `ResolvedType`.
     ///
     /// An anonymous shape answers from its head: it has fields like any other
     /// struct, and no declaration to reach them through.
@@ -141,15 +140,10 @@ impl TypeSystem {
         Some(info.fields.iter().map(|(_, tid, _)| *tid).collect())
     }
 
-    /// Whether `type_id` is, or transitively carries, an affine resource.
-    /// Permits a by-value `self` receiver on an aggregate that owns a resource.
+    /// Whether `type_id` is, or holds at any depth, an affine resource: what
+    /// makes a binding of it move-only, and a by-value `self` on it legal.
     pub(crate) fn carries_resource(&self, type_id: TypeId) -> bool {
-        carries_affine_resource(
-            &self.type_table.borrow(),
-            &|id| self.struct_field_type_ids_of(id),
-            type_id,
-            &mut Vec::new(),
-        )
+        holds_resource(self, type_id)
     }
 
     /// Whether a value of `type_id` reaches a `&mut`, through which a call
@@ -677,5 +671,179 @@ impl TypeSystem {
     pub(super) fn compares_handles(&self, op: BinaryOp, left: TypeId, right: TypeId) -> bool {
         matches!(op, BinaryOp::Eq | BinaryOp::NotEq)
             && self.type_table.borrow().handles_compare(left, right)
+    }
+}
+
+impl TypeSystem {
+    /// The struct and variant declarations whose instances name ever larger
+    /// instances of themselves, as `Nested<T>` holding a `Nested<List<T>>`
+    /// does. Every instance is a type of its own, so a program using one would
+    /// need infinitely many.
+    ///
+    /// The rule is ECMA-335's for expanding generic types (§ II.9.2). A type
+    /// parameter steps to the parameter whose argument it appears in. The step
+    /// expands where the argument holds the parameter without being it, and a
+    /// declaration is refused where it writes an expanding step on a cycle.
+    pub(crate) fn expanding_decls(&self) -> IndexSet<DefId> {
+        let table = self.type_table.borrow();
+        let members =
+            self.data
+                .struct_fields
+                .iter()
+                .map(|(def, info)| (*def, info.fields.iter().map(|(_, ty, _)| *ty).collect()))
+                .chain(self.data.variant_cases.iter().map(|(def, info)| {
+                    (*def, info.cases.iter().map(|case| case.payload).collect())
+                }));
+        let mut steps: IndexMap<(DefId, u32), Vec<(DefId, u32)>> = IndexMap::default();
+        let mut expanding: Vec<((DefId, u32), (DefId, u32))> = Vec::new();
+        for (def, member_types) in members {
+            let member_types: Vec<TypeId> = member_types;
+            for ty in member_types {
+                for_each_application(&table, ty, &mut |head, args| {
+                    for (position, &arg) in args.iter().enumerate() {
+                        let to = (head, position as u32);
+                        let mut params = Vec::new();
+                        type_params_in(&table, arg, &mut params);
+                        for param in params {
+                            let from = (def, param);
+                            steps.entry(from).or_default().push(to);
+                            let bare = matches!(
+                                table.get(arg),
+                                ResolvedType::TypeParam { index, .. } if *index == param
+                            );
+                            if !bare {
+                                expanding.push((from, to));
+                            }
+                        }
+                    }
+                });
+            }
+        }
+        expanding
+            .into_iter()
+            .filter(|&(from, to)| reaches(&steps, to, from))
+            .map(|((def, _), _)| def)
+            .collect()
+    }
+}
+
+/// Calls `visit` with the head and arguments of each nominal type `ty` is
+/// built from, at any depth.
+fn for_each_application(table: &TypeTable, ty: TypeId, visit: &mut dyn FnMut(DefId, &[TypeId])) {
+    let (head, parts) = constituents(table, ty);
+    if let Some(head) = head {
+        visit(head, &parts);
+    }
+    for part in parts {
+        for_each_application(table, part, visit);
+    }
+}
+
+/// The type parameters `ty` is built over, at any depth. A projection
+/// (`K::Child`) is not: an impl settles what it names, so it need not be
+/// larger than `K`, unlike what [`TypeTable::type_param_indices`] counts.
+fn type_params_in(table: &TypeTable, ty: TypeId, params: &mut Vec<u32>) {
+    if let ResolvedType::TypeParam { index, .. } = table.get(ty) {
+        params.push(*index);
+    }
+    for part in constituents(table, ty).1 {
+        type_params_in(table, part, params);
+    }
+}
+
+/// The types `ty` is built over, and the declaration it applies to them where
+/// it is a nominal type.
+fn constituents(table: &TypeTable, ty: TypeId) -> (Option<DefId>, Vec<TypeId>) {
+    match table.get(ty) {
+        ResolvedType::Struct {
+            def: StructDef::Decl(def),
+            type_args,
+        }
+        | ResolvedType::Newtype { def, type_args, .. } => (Some(*def), type_args.clone()),
+        ResolvedType::GenericInstance { def, type_args }
+        | ResolvedType::GenericResource { def, type_args } => (Some(*def), type_args.clone()),
+        ResolvedType::Ref(inner)
+        | ResolvedType::MutRef(inner)
+        | ResolvedType::BuiltinArray(inner) => (None, vec![*inner]),
+        ResolvedType::Function {
+            params,
+            return_type,
+            ..
+        } => {
+            let mut parts = params.clone();
+            parts.push(*return_type);
+            (None, parts)
+        }
+        _ => (None, Vec::new()),
+    }
+}
+
+/// Whether `steps` lead from `from` to `to`.
+fn reaches(
+    steps: &IndexMap<(DefId, u32), Vec<(DefId, u32)>>,
+    from: (DefId, u32),
+    to: (DefId, u32),
+) -> bool {
+    let mut seen = IndexSet::default();
+    let mut pending = vec![from];
+    while let Some(at) = pending.pop() {
+        if at == to {
+            return true;
+        }
+        if seen.insert(at) {
+            pending.extend(steps.get(&at).into_iter().flatten().copied());
+        }
+    }
+    false
+}
+
+impl HeldTypes for TypeSystem {
+    fn held(&self, type_id: TypeId) -> Held {
+        let (base, resolved) = {
+            let table = self.type_table.borrow();
+            let base = table.representation_head(type_id);
+            (base, table.get(base).clone())
+        };
+        match resolved {
+            ResolvedType::Resource { def } | ResolvedType::GenericResource { def, .. } => {
+                if self.type_table.borrow().is_unrestricted_resource(def) {
+                    Held::Nothing
+                } else {
+                    Held::Resource
+                }
+            }
+            ResolvedType::Ref(_) | ResolvedType::MutRef(_) => Held::Nothing,
+            _ => {
+                if let Some(elements) = self.type_table.borrow().as_tuple(base) {
+                    return Held::Members {
+                        decl: None,
+                        args: Vec::new(),
+                        members: elements,
+                    };
+                }
+                let args = self
+                    .type_table
+                    .borrow()
+                    .nominal_type_args(base)
+                    .unwrap_or_default();
+                // A generic struct's instance is a `GenericInstance`, as a
+                // generic variant's is.
+                let members = if let Some(templates) = self.struct_field_type_ids_of(base) {
+                    templates
+                        .into_iter()
+                        .map(|field_type| self.substitute_type_params(field_type, &args))
+                        .collect()
+                } else if let Some(payloads) = self.case_payload_types(base) {
+                    payloads
+                } else {
+                    return Held::Nothing;
+                };
+                Held::Members {
+                    decl: self.type_def(base),
+                    args,
+                    members,
+                }
+            }
+        }
     }
 }

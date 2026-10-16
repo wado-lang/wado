@@ -4,8 +4,17 @@
 //! `package-loam/webgpu.md`.
 
 use { TreeMap } from "core:collections";
-use { Graph, KERNEL_ELEMENT, Node, data_type, is_binary_elementwise, is_unary_operator, settled } from "./graph.wado";
-use { Checked, gemm_options, is_reduction, reduced_axes, softmax_lane } from "./infer.wado";
+use {
+    GROUP_QUERY_ATTENTION,
+    Graph,
+    KERNEL_ELEMENT,
+    Node,
+    data_type,
+    is_binary_elementwise,
+    is_unary_operator,
+    settled,
+} from "./graph.wado";
+use { Checked, gemm_options, is_reduction, reduced_axes, softmax_lane, transpose_perm } from "./infer.wado";
 use { Shape } from "./shape.wado";
 
 /// What `forward` does for one node.
@@ -25,6 +34,9 @@ pub enum Lowering {
     /// Nothing: a `Reshape` restoring the leading axes a product's operand had
     /// flattened, whose output is the product's (see `Spread`).
     Restored,
+    /// Nothing: a weight matrix's `Transpose` that only a `MatMul` reads, as its
+    /// right operand, which the product reads by the weight as stored.
+    Transposed,
 }
 
 /// A `Gemm` whose first operand a `Reshape` flattened from leading axes, and
@@ -101,7 +113,29 @@ fn lowerings(graph: &Graph, checked: &Checked, fuse: bool) -> [List<Lowering>, T
         lowered[restore_at] = Lowering::Restored;
         spreads[node.outputs[0]] = Spread { operand: flatten.inputs[0], restored: restore.outputs[0] };
     }
+    for let [at, node] of graph.nodes.into_iter().enumerate() {
+        if node.op != "MatMul" || !lowered[at] matches { Kernel } || checked.shapes[node.inputs[0]].rank() < 2 {
+            continue;
+        }
+        let Some(t) = made.get(node.inputs[1]) else {
+            continue;
+        };
+        let transpose = &graph.nodes[t];
+        let weight = &transpose.inputs[0];
+        if transpose.op == "Transpose"
+            && lowered[t] matches { Kernel }
+            && checked.shapes[*weight].rank() == 2
+            && settled(transpose_perm(transpose, 2)) == [1, 0] as List<i32>
+            && is_initializer(graph, weight)
+            && only_reader(&transpose.outputs[0]) == Option::Some(at) {
+            lowered[t] = Lowering::Transposed;
+        }
+    }
     return [lowered, spreads];
+}
+
+fn is_initializer(graph: &Graph, tensor: &String) -> bool {
+    return graph.initializers.into_iter().any(|vi| vi.name == *tensor);
 }
 
 /// Whether a product over `x`'s leading axes computes what a `Gemm` from
@@ -220,6 +254,9 @@ pub enum Kind {
     Generation,
     /// An `If`, whose branches read the tensor.
     Branch,
+    /// Each output element reads whole rows of several operands and folds
+    /// them twice over: `GroupQueryAttention`.
+    Attention,
 }
 
 /// The kind of the operator `op`, one stage 0 lowers.
@@ -227,11 +264,14 @@ pub fn kind_of(op: &String) -> Kind {
     if is_unary_operator(op) || is_binary_elementwise(op) {
         return Kind::Elementwise;
     }
+    if *op == GROUP_QUERY_ATTENTION {
+        return Kind::Attention;
+    }
     return match op.as_str_slice() {
         "MatMul" | "Gemm" | "Conv" => Kind::Contraction,
         "ReduceMean" | "ReduceSum" | "Softmax" => Kind::Reduction,
         "MaxPool" => Kind::Window,
-        "Reshape" | "Flatten" | "Squeeze" | "Unsqueeze" | "Transpose" | "Concat" | "Split" | "Slice" | "Identity" => Kind::Regrouping,
+        "Reshape" | "Flatten" | "Squeeze" | "Unsqueeze" | "Transpose" | "Concat" | "Split" | "Slice" | "Identity" | "Expand" => Kind::Regrouping,
         "Gather" | "Where" => Kind::Selection,
         "Cast" => Kind::Conversion,
         "Range" | "ConstantOfShape" | "Shape" | "Constant" => Kind::Generation,
@@ -412,7 +452,7 @@ pub fn plan(graph: &Graph, checked: &Checked, fuse: bool) -> Plan {
     let mut readers = TreeMap::<String, List<i32>>::new();
     for let [at, node] of graph.nodes.into_iter().enumerate() {
         match lowered[at] {
-            Alias | Flattened | Restored => aliased[node.outputs[0]] = original(&aliased, &node.inputs[0]),
+            Alias | Flattened | Restored | Transposed => aliased[node.outputs[0]] = original(&aliased, &node.inputs[0]),
             Folded => {
             },
             _ => {

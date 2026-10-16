@@ -1164,6 +1164,44 @@ Whether a struct derives `Default` from its field defaults is stated in
 
 Rationale: [WEP: Default Arguments](./wep-2026-04-11-default-arguments.md).
 
+## Recursive Types
+
+A struct or variant may hold itself, directly or through other declarations.
+Every instance of a generic type is a type of its own, so the instances a
+recursive type reaches must be finitely many. Naming itself with its own
+parameters, or with arguments that close the cycle at a fixed type, keeps them
+finite:
+
+<!-- {"fixture":"recursive_type_finite_instances.wado"} -->
+
+```wado
+struct Wide<T> {
+    narrow: Option<Narrow<Option<T>>>,
+}
+
+struct Narrow<U> {
+    wide: Option<Wide<i32>>,
+}
+
+test "a cycle closing at a fixed type" {
+    let wide: Wide<String> = Wide { narrow: Option::Some(Narrow { wide: null }) };
+    assert wide.narrow matches { Some(_) };
+}
+```
+
+A declaration that reaches itself through an argument built over its own
+parameter is refused (`EXPANDING_RECURSION`): `Nested<i32>` would need
+`Nested<List<i32>>`, which would need `Nested<List<List<i32>>>`, without end.
+
+<!-- {"fixture":"expanding_recursion_refused.wado"} -->
+
+```wado
+variant Nested<T> {
+    Leaf(T),
+    Deeper(List<Nested<List<T>>>),
+}
+```
+
 ## Generic Type Inference
 
 Wado infers type arguments for struct literals, variant constructors, and generic function and method calls. It uses two complementary mechanisms.

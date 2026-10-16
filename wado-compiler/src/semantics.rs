@@ -546,11 +546,14 @@ impl Semantics {
         ))
     }
 
-    /// The `TypeId` of each field of the struct `type_id` names, in declaration
-    /// order. `None` if it is not a registered struct or the annotate state is
-    /// unavailable. Used by the resource move check's aggregate walk.
-    pub(crate) fn struct_field_type_ids_of(&self, type_id: TypeId) -> Option<Vec<TypeId>> {
-        self.state.as_ref()?.tysys.struct_field_type_ids_of(type_id)
+    /// Whether `type_id` is, or holds at any depth, an affine resource, which
+    /// makes a binding of it move-only.
+    pub(crate) fn carries_resource(&self, type_id: TypeId) -> bool {
+        self.state
+            .as_ref()
+            .expect("the resource move check runs on annotated semantics")
+            .tysys
+            .carries_resource(type_id)
     }
 
     /// Whether a value of `type_id` reaches a `&mut` a call handed it may write

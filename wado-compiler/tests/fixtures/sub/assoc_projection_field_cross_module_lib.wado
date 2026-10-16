@@ -1,0 +1,22 @@
+pub trait Back with () {
+    type T;
+    fn make(&mut self) -> Self::T;
+    fn read(&mut self, t: &Self::T) -> i32;
+}
+
+pub struct Passed<Q: Back> {
+    pub x: Q::T,
+}
+
+pub variant Held<Q: Back> {
+    Some(Q::T),
+    Empty,
+}
+
+pub fn pass<Q: Back>(b: &mut Q) -> Passed<Q> {
+    return Passed { x: b.make() };
+}
+
+pub fn hold<Q: Back>(b: &mut Q) -> Held<Q> {
+    return Held::Some(b.make());
+}

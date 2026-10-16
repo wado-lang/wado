@@ -7,7 +7,7 @@
 //! imports, so the tests discover none of it, and `program_over` in
 //! `oracle.wado` splices it.
 
-use { Cpu, Element, Epilogue, Expr, Held, Packed, Read, widen } from "lib:loam";
+use { Attention, Cpu, Element, Epilogue, Expr, Held, Packed, Read, widen } from "lib:loam";
 
 /// A tensor the generated module holds but cannot open.
 struct Handle<E, Axes> {
@@ -39,6 +39,14 @@ impl Opaque {
 
 fn handle<E, Axes>(held: Tensor<E, Axes>) -> Handle<E, Axes> {
     return Handle { held };
+}
+
+/// An optional operand opened, as the CPU's kernels read it.
+fn held_of<E, Axes>(t: Option<&Handle<E, Axes>>) -> Option<&Tensor<E, Axes>> {
+    return match t {
+        Some(h) => Option::Some(&h.held),
+        None => null,
+    };
 }
 
 /// `then`'s operands opened, as the CPU's kernels read them.
@@ -86,6 +94,10 @@ impl Backend for Opaque {
     fn download<E: Element, Axes>(&mut self, t: &Handle<E, Axes>) -> Tensor<E, Axes> {
         self.downloads += 1;
         return t.held;
+    }
+
+    fn extents_of<E: Element, Axes>(&self, t: &Handle<E, Axes>) -> List<i32> {
+        return t.held.extents;
     }
 
     fn prepare<E: Held, Axes>(&mut self, t: &Tensor<E, Axes>) -> Handle<f32, Axes> {
@@ -176,6 +188,34 @@ impl Backend for Opaque {
         return handle(self.cpu.matmul_shared(&a.held, &b.held, read));
     }
 
+    fn matmul_by_transposed<..Bs, M, K, N>(
+        &mut self,
+        a: &Handle<f32, [..Bs, M, K]>,
+        b: &Handle<f32, [N, K]>,
+        then: Option<Epilogue<Handle<f32, [..Bs, M, N]>>>,
+    ) -> Handle<f32, [..Bs, M, N]> {
+        let read = opened(&mut self.cpu, &then);
+        return handle(self.cpu.matmul_by_transposed(&a.held, &b.held, read));
+    }
+
+    fn matmul_by_rhs_transposed<..Bs, M, K, N>(
+        &mut self,
+        a: &Handle<f32, [..Bs, M, K]>,
+        b: &Packed<N, K>,
+        then: Option<Epilogue<Handle<f32, [..Bs, M, N]>>>,
+    ) -> Handle<f32, [..Bs, M, N]> {
+        let read = opened(&mut self.cpu, &then);
+        return handle(self.cpu.matmul_by_rhs_transposed(&a.held, b, read));
+    }
+
+    fn gather_rhs_rows<Row, Col, ..Ix>(
+        &mut self,
+        rows: &Packed<Row, Col>,
+        indices: &Handle<i64, [..Ix]>,
+    ) -> Handle<f32, [..Ix, Col]> {
+        return handle(self.cpu.gather_rhs_rows(rows, &indices.held));
+    }
+
     fn matmul_broadcast<A, B, Out>(
         &mut self,
         a: &Handle<f32, A>,
@@ -237,6 +277,10 @@ impl Backend for Opaque {
         return handle(self.cpu.lift::<E, In, Out>(&t.held, rank));
     }
 
+    fn expand<E: Element, In, Out>(&mut self, t: &Handle<E, In>, extents: List<i32>) -> Handle<E, Out> {
+        return handle(self.cpu.expand::<E, In, Out>(&t.held, extents));
+    }
+
     fn reshape<E: Element, In, Out>(&mut self, t: &Handle<E, In>, extents: List<i32>) -> Handle<E, Out> {
         return handle(self.cpu.reshape::<E, In, Out>(&t.held, extents));
     }
@@ -255,6 +299,36 @@ impl Backend for Opaque {
         window: &Window,
     ) -> Handle<f32, [N, C, ..Out]> {
         return handle(self.cpu.max_pool::<N, C, [..In], [..Out]>(&x.held, window));
+    }
+
+    fn group_query_attention<B, S, Q, K, H, P, T, D, Pos, Half, BB, BH>(
+        &mut self,
+        q: &Handle<f32, [B, S, Q]>,
+        k: &Handle<f32, [B, S, K]>,
+        v: &Handle<f32, [B, S, K]>,
+        past_k: &Handle<f32, [B, H, P, D]>,
+        past_v: &Handle<f32, [B, H, P, D]>,
+        cos: Option<&Handle<f32, [Pos, Half]>>,
+        sin: Option<&Handle<f32, [Pos, Half]>>,
+        bias: Option<&Handle<f32, [BB, BH, S, T]>>,
+        options: &Attention,
+    ) -> [Handle<f32, [B, S, Q]>, Handle<f32, [B, H, T, D]>, Handle<f32, [B, H, T, D]>] {
+        let [out, present_k, present_v] = self.cpu.group_query_attention::<B, S, Q, K, H, P, T, D, Pos, Half, BB, BH>(
+            &q.held,
+            &k.held,
+            &v.held,
+            &past_k.held,
+            &past_v.held,
+            held_of(cos),
+            held_of(sin),
+            held_of(bias),
+            options,
+        );
+        return [
+            handle(out),
+            handle(present_k),
+            handle(present_v),
+        ];
     }
 
     fn conv<N, Ci, Co, ..In, ..K, ..Out>(
@@ -332,5 +406,9 @@ impl Backend for Opaque {
 
     fn reduce_mean<Axes>(&mut self, t: &Handle<f32, Axes>, axes: List<i32>) -> Handle<f32, Axes> {
         return handle(self.cpu.reduce_mean(&t.held, axes));
+    }
+
+    fn arg_max<Axes>(&mut self, t: &Handle<f32, Axes>, axis: i32) -> Handle<i64, Axes> {
+        return handle(self.cpu.arg_max(&t.held, axis));
     }
 }

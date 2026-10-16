@@ -1,0 +1,17 @@
+// An `Option` holding a resource is move-only, as the resource is: once
+// moved, the binding is not read again, so the handle has one owner and is
+// dropped once.
+
+use { Fields } from "wasi:http";
+
+fn eat(f: Option<Fields>) {
+}
+
+fn twice() with Fields {
+    let held: Option<Fields> = Option::Some(Fields::new());
+    eat(held);
+    eat(held);
+}
+
+__DATA__
+{"compile_error": "resource `held` used after it was moved"}

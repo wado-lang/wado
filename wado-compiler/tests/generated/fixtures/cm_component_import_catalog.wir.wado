@@ -190,55 +190,64 @@ struct core:collections/entries.wado//MapEntriesRefIter<core:prelude/string.wado
     mut index: i32,
 }
 
-struct core:prelude/traits.wado//FlagsBit<./sub/cm-catalog.wasm/Perms> {  // TypeId(49)
+struct core:collections/entries.wado//EntryLog<core:prelude/string.wado/String,u32> {  // TypeId(49)
+    mut keys: ref "Array<core:prelude/string.wado/String>",
+    mut values: ref Array<u32>,
+    mut alive: ref Array<bool>,
+    mut count: i32,
+    mut size: i32,
+    mut deleted_count: i32,
+}
+
+struct core:prelude/traits.wado//FlagsBit<./sub/cm-catalog.wasm/Perms> {  // TypeId(50)
     mut bit: u64,
     mut value: u32,
     mut member_name: ref "core:prelude/string.wado//String",
 }
 
-struct core:prelude/traits.wado//EnumCase<./sub/cm-catalog.wasm/Color> {  // TypeId(50)
+struct core:prelude/traits.wado//EnumCase<./sub/cm-catalog.wasm/Color> {  // TypeId(51)
     mut discriminant: i32,
     mut value: "./sub/cm-catalog.wasm//enum:Color",
     mut case_name: ref "core:prelude/string.wado//String",
     mut wire_override: ref null "core:prelude/string.wado//String",
 }
 
-struct core:prelude/traits.wado//VariantCase<./sub/cm-catalog.wasm/Mixed,f32> {  // TypeId(51)
+struct core:prelude/traits.wado//VariantCase<./sub/cm-catalog.wasm/Mixed,f32> {  // TypeId(52)
     mut index: i32,
     mut case_name: ref "core:prelude/string.wado//String",
     mut wire_override: ref null "core:prelude/string.wado//String",
     mut is_unit: bool,
 }
 
-struct core:prelude/traits.wado//VariantCase<./sub/cm-catalog.wasm/Mixed,u32> {  // TypeId(52)
+struct core:prelude/traits.wado//VariantCase<./sub/cm-catalog.wasm/Mixed,u32> {  // TypeId(53)
     mut index: i32,
     mut case_name: ref "core:prelude/string.wado//String",
     mut wire_override: ref null "core:prelude/string.wado//String",
     mut is_unit: bool,
 }
 
-struct core:prelude/traits.wado//VariantCase<./sub/cm-catalog.wasm/Shape,()> {  // TypeId(53)
+struct core:prelude/traits.wado//VariantCase<./sub/cm-catalog.wasm/Shape,()> {  // TypeId(54)
     mut index: i32,
     mut case_name: ref "core:prelude/string.wado//String",
     mut wire_override: ref null "core:prelude/string.wado//String",
     mut is_unit: bool,
 }
 
-struct core:prelude/traits.wado//VariantCase<./sub/cm-catalog.wasm/Shape,[f64,f64]> {  // TypeId(54)
+struct core:prelude/traits.wado//VariantCase<./sub/cm-catalog.wasm/Shape,[f64,f64]> {  // TypeId(55)
     mut index: i32,
     mut case_name: ref "core:prelude/string.wado//String",
     mut wire_override: ref null "core:prelude/string.wado//String",
     mut is_unit: bool,
 }
 
-struct core:prelude/traits.wado//VariantCase<./sub/cm-catalog.wasm/Shape,f64> {  // TypeId(55)
+struct core:prelude/traits.wado//VariantCase<./sub/cm-catalog.wasm/Shape,f64> {  // TypeId(56)
     mut index: i32,
     mut case_name: ref "core:prelude/string.wado//String",
     mut wire_override: ref null "core:prelude/string.wado//String",
     mut is_unit: bool,
 }
 
-struct core:prelude/traits.wado//StructField<./sub/cm-catalog.wasm/Single,u64> {  // TypeId(56)
+struct core:prelude/traits.wado//StructField<./sub/cm-catalog.wasm/Single,u64> {  // TypeId(57)
     mut index: i32,
     mut field_name: ref "core:prelude/string.wado//String",
     mut wire_override: ref null "core:prelude/string.wado//String",
@@ -246,7 +255,7 @@ struct core:prelude/traits.wado//StructField<./sub/cm-catalog.wasm/Single,u64> {
     mut is_secret: bool,
 }
 
-struct core:prelude/types.wado//AsyncCall<u32> {  // TypeId(57)
+struct core:prelude/types.wado//AsyncCall<u32> {  // TypeId(58)
     mut __cm_packed: i32,
     mut __cm_outptr: i32,
     mut __cm_size: i32,
@@ -255,7 +264,7 @@ struct core:prelude/types.wado//AsyncCall<u32> {  // TypeId(57)
     mut __cm_ended: ref "core:prelude/types.wado//Box<bool>",
 }
 
-struct core:collections/treemap.wado//TreeMap<core:prelude/string.wado/String,u32> {  // TypeId(58)
+struct core:collections/treemap.wado//TreeMap<core:prelude/string.wado/String,u32> {  // TypeId(59)
     mut log: ref "core:collections/entries.wado//EntryLog<core:prelude/string.wado/String,u32>",
     mut slots: ref Array<i32>,
     mut nkeys: ref "Array<core:prelude/string.wado/String>",
@@ -264,15 +273,6 @@ struct core:collections/treemap.wado//TreeMap<core:prelude/string.wado/String,u3
     mut nodes: i32,
     mut root: i32,
     mut height: i32,
-}
-
-struct core:collections/entries.wado//EntryLog<core:prelude/string.wado/String,u32> {  // TypeId(59)
-    mut keys: ref "Array<core:prelude/string.wado/String>",
-    mut values: ref Array<u32>,
-    mut alive: ref Array<bool>,
-    mut count: i32,
-    mut size: i32,
-    mut deleted_count: i32,
 }
 
 struct core:prelude/traits.wado//VariantCase<core:prelude/types.wado/Option<u32>,u32> {  // TypeId(60)
@@ -9205,7 +9205,7 @@ fn "core:prelude/types.wado/core:prelude/types.wado/Option<core:collections/tree
 
 fn "core:prelude/types.wado/core:prelude/types.wado/AsyncCall<u32>::wait$cold0$dae[self]"($v0) with Subtask, WaitableSet {
     let $mv_field_2: ref Array<u8>;
-    $mv_field_2 = array.new_data<u8>("core:prelude/types.wado:536");
+    $mv_field_2 = array.new_data<u8>("core:prelude/types.wado:543");
     "core:prelude/types.wado/cm_subtask_settled$contract_report0"($v0, $mv_field_2, 27);
     unreachable;
 }

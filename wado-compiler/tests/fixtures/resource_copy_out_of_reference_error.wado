@@ -1,0 +1,50 @@
+// A generic call that reads its result through a shared reference copies it
+// out of storage the reference keeps (WEP 2026-05-21, "A call through a shared
+// reference copies"). Instantiated with a resource, the copy would be a second
+// owner of one move-only handle, so taking its result is rejected: `list[0]`,
+// a stdlib accessor, and a user's own generic `&self` getter alike. A copy
+// only read where it stands has no owner, and is allowed.
+
+use { Request, Response, ErrorCode, Fields, Headers, Trailers, FieldName } from "wasi:http";
+
+struct Shelf<T> {
+    items: List<T>,
+}
+
+impl<T> Shelf<T> {
+    fn first(&self) -> T {
+        return self.items[0];
+    }
+}
+
+fn eat(fields: Fields) {
+}
+
+fn copy() with Fields {
+    let list: List<Fields> = [Fields::new()];
+    assert !list[0].has("a" as FieldName);
+    let indexed = list[0];
+    eat(indexed);
+    let shelf = Shelf { items: [Fields::new()] };
+    eat(shelf.first());
+    eat(list.last().unwrap());
+}
+
+export async fn handle(request: Request) -> Result<Response, ErrorCode> {
+    copy();
+    let [trailers, trailers_tx] = Future::<Result<Option<Trailers>, ErrorCode>>::new();
+    let [response, _sent] = Response::new(Headers::new(), null, trailers);
+    task return Result::<Response, ErrorCode>::Ok(response);
+    trailers_tx.write(Result::<Option<Trailers>, ErrorCode>::Ok(null));
+}
+
+__DATA__
+{
+  "compile_error_codes": ["TYPE_MISMATCH"],
+  "compile_error_count": 3,
+  "compile_error": "cannot copy resource",
+  "compile_errors_contains": [
+    "cannot copy resource `Fields` out of a reference",
+    "cannot copy resource `Option<Fields>` out of a reference"
+  ]
+}

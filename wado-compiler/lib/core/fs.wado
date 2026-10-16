@@ -143,11 +143,11 @@ pub variant FileType {
 /// The caller owns the descriptor and may pass it to any `wasi:filesystem`
 /// method, which is the escape hatch for everything this module leaves out.
 pub fn root() -> Result<Descriptor, FsError> with Preopens {
-    let dirs = Preopens::get_directories();
+    let mut dirs = Preopens::get_directories();
     if dirs.is_empty() {
         return Result::Err(FsError { path: "", kind: FsErrorKind::NoPreopen });
     }
-    return Result::Ok(dirs[0].0);
+    return Result::Ok(dirs.remove(0).0);
 }
 
 /// The whole content of `path`. A path that names anything but a regular file
@@ -169,8 +169,13 @@ pub fn read<S: AsStrSlice>(path: S) -> Result<ByteList, FsError> with Preopens {
             return Result::Err(failure(path, e));
         },
     }
+    // The size is a hint: the file may change between the stat and the read.
+    let expected = match file.stat().wait() {
+        Ok(stat) => u64::min(stat.size as u64, i32::MAX as u64) as i32,
+        Err(_) => 0,
+    };
     let [stream, done] = file.read_via_stream(0 as Filesize);
-    let bytes = stream.read_to_end_bytes();
+    let bytes = stream.read_to_end_sized(expected) as ByteList;
     stream.drop();
     finish(path, done)?;
     return Result::Ok(bytes);

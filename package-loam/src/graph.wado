@@ -417,6 +417,14 @@ impl Node {
             None => Result::Ok(fallback),
         };
     }
+
+    /// `int_attr` for a string attribute.
+    pub fn string_attr<S: AsStrSlice>(&self, name: S, fallback: String) -> Result<String, AttrError> {
+        return match self.attr(name) {
+            Some(a) => a.string(),
+            None => Result::Ok(fallback),
+        };
+    }
 }
 
 /// Whether an initializer of `dtype` is read at build time, as `Reshape` reads
@@ -499,6 +507,10 @@ pub fn upgraded(nodes: List<Node>, opset: Option<i64>) -> Result<List<Node>, Str
                 continue;
             }
         }
+        if let Some(body) = function_body(&node)? {
+            out.extend(&body);
+            continue;
+        }
         if version < 4 && node.op == "Concat" && node.attr("axis") matches { None } {
             let mut attrs = node.attrs;
             attrs.push(Attr {
@@ -512,6 +524,110 @@ pub fn upgraded(nodes: List<Node>, opset: Option<i64>) -> Result<List<Node>, Str
         out.push(node);
     }
     return Result::Ok(out);
+}
+
+/// onnxruntime's grouped-query attention, as its domain qualifies it: the one
+/// operator Loam lowers from outside ONNX's default domain.
+pub global GROUP_QUERY_ATTENTION: String = "com.microsoft.GroupQueryAttention";
+
+/// The nodes an operator defined as a function of others stands for, in the
+/// operators Loam lowers, or `None` for any other operator. Each kernel the body
+/// becomes is fused as written ones are, so an operator gains no kernel of its
+/// own by being one. The body's tensors are named after the node's output.
+///
+/// - `Gelu` is ONNX's function (opset 20): `0.5 x (1 + erf(x / √2))`, or with
+///   `approximate = "tanh"`, `0.5 x (1 + tanh(√(2/π) (x + 0.044715 x³)))`.
+/// - `SimplifiedLayerNormalization` is onnxruntime's RMS normalization over the
+///   last axis: `x / √(mean(x²) + epsilon) · scale`, the function ONNX's
+///   `RMSNormalization` (opset 23) defines.
+fn function_body(node: &Node) -> Result<Option<List<Node>>, String> {
+    let site = node.site();
+    let attr_error = |e: AttrError| `${site}: ${e}`;
+    let mut body = FunctionBody { prefix: node.outputs.first().unwrap_or(node.op), nodes: [] };
+    if node.op == "Gelu" {
+        let x = node.inputs[0];
+        let inner = match node.string_attr("approximate", "none").map_err(attr_error)?.as_str_slice() {
+            "none" => body.unary("Erf", &body.binary("Mul", &x, &body.constant(f32::sqrt(0.5)))),
+            "tanh" => {
+                let cube = body.binary("Mul", &body.binary("Mul", &x, &x), &x);
+                let widened = body.binary("Add", &x, &body.binary("Mul", &cube, &body.constant(0.044715)));
+                body.unary("Tanh", &body.binary("Mul", &widened, &body.constant(f32::sqrt(2.0 / f32::PI))));
+            },
+            other => {
+                return Result::Err(`${site}: approximate ${other} is neither none nor tanh`);
+            },
+        };
+        let half = body.binary("Mul", &x, &body.constant(0.5));
+        body.output("Mul", [half, body.binary("Add", &inner, &body.constant(1.0))], node);
+        return Result::Ok(Option::Some(body.nodes));
+    }
+    if node.op == "SimplifiedLayerNormalization" {
+        if node.int_attr("axis", -1).map_err(attr_error)? != -1 {
+            return Result::Err(`${site}: only the last axis normalizes`);
+        }
+        let [x, scale] = [node.inputs[0], node.inputs[1]];
+        let epsilon = node.float_attr("epsilon", 1e-5).map_err(attr_error)?;
+        let square = body.binary("Mul", &x, &x);
+        let mean = body.node("ReduceMean", [square], [
+            Attr {
+                name: "axes",
+                values: ["-1"],
+                is_list: true,
+            },
+        ]);
+        let root = body.unary("Sqrt", &body.binary("Add", &mean, &body.constant(epsilon)));
+        body.output("Mul", [body.binary("Div", &x, &root), scale], node);
+        return Result::Ok(Option::Some(body.nodes));
+    }
+    return Result::Ok(null);
+}
+
+/// A function's body as it is written out, each tensor named under `prefix`.
+struct FunctionBody {
+    prefix: String,
+    nodes: List<Node>,
+}
+
+impl FunctionBody {
+    /// A node of the body, and the tensor it computes.
+    fn node(&mut self, op: String, inputs: List<String>, attrs: List<Attr>) -> String {
+        let out = `${self.prefix}/${op}_${self.nodes.len()}`;
+        self.nodes.push(Node {
+            op,
+            outputs: [out],
+            inputs,
+            attrs,
+        });
+        return out;
+    }
+
+    fn constant(&mut self, value: f32) -> String {
+        return self.node("Constant", [], [
+            Attr {
+                name: "value_float",
+                values: [`${value}`],
+                is_list: false,
+            },
+        ]);
+    }
+
+    fn unary(&mut self, op: String, x: &String) -> String {
+        return self.node(op, [*x], []);
+    }
+
+    fn binary(&mut self, op: String, a: &String, b: &String) -> String {
+        return self.node(op, [*a, *b], []);
+    }
+
+    /// The body's last node, which computes the function's output.
+    fn output(&mut self, op: String, inputs: List<String>, function: &Node) {
+        self.nodes.push(Node {
+            op,
+            outputs: [function.outputs[0]],
+            inputs,
+            attrs: [],
+        });
+    }
 }
 
 fn upgraded_subgraphs(attrs: List<Attr>, opset: Option<i64>) -> Result<List<Attr>, String> {

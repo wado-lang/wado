@@ -11,6 +11,10 @@ Loam compiles an ONNX graph into Wado source through Kiln. The design lives in
   code written after reading them is a derivative.
 - Published papers may be read, and so may the ONNX specification: the
   operator definitions and `onnx.proto`.
+- onnxruntime's operator documentation may be read, for the operators it
+  defines beyond ONNX, such as `com.microsoft::GroupQueryAttention`
+  (`docs/ContribOperators.md`). Its code may not. Where the documentation
+  leaves a behavior open, onnxruntime is run as an oracle for it.
 - An existing implementation may be run as an oracle, so long as its code is
   not read. onnxruntime is run this way for expected outputs.
 - Test data and models may be copied in and read, each directory carrying its

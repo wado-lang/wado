@@ -126,15 +126,15 @@ fn "stream_read_eof.wado/run"() with Stdout {
     let new_used: i32;
     rx_9 = builtin::i32_wrap_i64(local.tee packed_8("wasi/stream-new"()));
     "wasi/stream-drop-writable"(builtin::i32_wrap_i64(packed_8 >> 32_i64));
-    if @unlikely((local.tee new_used(local.tee $mv$chunk$items($inline_core_prelude_types_wado_Stream_u8___read_to_end_2: block -> ref "core:prelude//List<u8>" {
-        all = struct.new "core:prelude//List<u8>" { repr: array.new_fixed<u8>(), used: 0 };
+    if @unlikely((local.tee new_used(local.tee $mv$chunk$items($inline_core_prelude_types_wado_Stream_u8___read_to_end_sized_3: block -> ref "core:prelude//List<u8>" {
+        all = struct.new "core:prelude//List<u8>" { repr: builtin::array_new<u8>(0), used: 0 };
         block {
             l2: loop {
                 let $mv$chunk$items: ref "core:prelude//List<u8>";
                 let $mv$chunk$result: "core:prelude/types.wado//enum:CopyResult";
                 multivalue_bind [$mv$chunk$items, $mv$chunk$result] = "core:rt/cm_stream_read_u8"(rx_9, 4096);
-                $inline_core_prelude_list_wado_List_u8___extend_4: block {
-                    break_if $inline_core_prelude_list_wado_List_u8___extend_4 local.tee other_len($mv$chunk$items.used) == 0;
+                $inline_core_prelude_list_wado_List_u8___extend_2: block {
+                    break_if $inline_core_prelude_list_wado_List_u8___extend_2 local.tee other_len($mv$chunk$items.used) == 0;
                     if @unlikely(local.tee new_used(all.used + other_len) > builtin::array_len(all.repr)) {
                         cold_path;
                         "core:prelude/list.wado/core:prelude/list.wado/List<u8>::grow_to"(all, new_used);
@@ -143,7 +143,7 @@ fn "stream_read_eof.wado/run"() with Stdout {
                     all.used = new_used;
                 };
                 if $mv$chunk$result != 0 {
-                    break $inline_core_prelude_types_wado_Stream_u8___read_to_end_2: all;
+                    break $inline_core_prelude_types_wado_Stream_u8___read_to_end_sized_3: all;
                 }
                 continue l2;
             };

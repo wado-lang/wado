@@ -1038,6 +1038,12 @@ Read until the writable end drops, and return everything it wrote.
 Only the result stops it: an empty `Completed` copy is the writer
 offering nothing this time, and more can still follow.
 
+#### `pub fn read_to_end_sized(&self, expected: i32) -> List<T>`
+
+`read_to_end` into a buffer made for `expected` elements up front, so a
+stream whose length is known is never copied into a doubled buffer. A
+doubling past half the address space is what a large file cannot afford.
+
 #### `pub fn read_to_end_bytes(&self) -> ByteList`
 
 `read_to_end`, as the byte buffer a byte stream carries.

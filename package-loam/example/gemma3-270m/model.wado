@@ -1,0 +1,292 @@
+//! Gemma 3 (270M, instruction-tuned) as a library: its tokenizer, and the model
+//! that picks the next token greedily, keeping the attention cache between
+//! calls.
+
+use { Backend, LoadError, Tensor } from "lib:loam";
+/// Gemma's SentencePiece-spelled BPE, which puts `<bos>` first.
+pub use { Tokenizer } from "./build/tokenizer.json"
+    with {
+        type: "hf-tokenizer",
+        generator: { module: "lib:loam" },
+    };
+use gemma from "./gemma3.onnxtext"
+    with {
+        type: "onnxtext",
+        generator: {
+            module: "lib:loam",
+            inputs: [
+                { path: "./gemma3-header.safetensors", type: "safetensors" },
+            ],
+            options: {
+                dims: { batch_size: 1 },
+                layout: [
+                    {
+                        pattern: "input_ids",
+                        axes: ["Batch", "Seq"],
+                    },
+                    {
+                        pattern: "attention_mask",
+                        axes: ["Batch", "Total"],
+                    },
+                    {
+                        pattern: "past_key_values.*",
+                        axes: ["Batch", "KvHead", "Past", "Dim"],
+                    },
+                    {
+                        pattern: "present.*",
+                        axes: ["Batch", "KvHead", "Total", "Dim"],
+                    },
+                    {
+                        pattern: "model.embed_tokens.weight",
+                        axes: ["Vocab", "Embed"],
+                    },
+                    // Before `*layernorm.weight`: the first pattern that
+                    // matches a name lays it out.
+                    {
+                        pattern: "*attn.q_norm.layernorm.weight",
+                        axes: ["Dim"],
+                    },
+                    {
+                        pattern: "*attn.k_norm.layernorm.weight",
+                        axes: ["Dim"],
+                    },
+                    {
+                        pattern: "*layernorm.weight",
+                        axes: ["Embed"],
+                    },
+                    {
+                        pattern: "*q_proj.MatMul.weight",
+                        axes: ["Embed", "Hidden"],
+                    },
+                    {
+                        pattern: "*k_proj.MatMul.weight",
+                        axes: ["Embed", "Dim"],
+                    },
+                    {
+                        pattern: "*v_proj.MatMul.weight",
+                        axes: ["Embed", "Dim"],
+                    },
+                    {
+                        pattern: "*o_proj.MatMul.weight",
+                        axes: ["Hidden", "Embed"],
+                    },
+                    {
+                        pattern: "*gate_proj.MatMul.weight",
+                        axes: ["Embed", "Inner"],
+                    },
+                    {
+                        pattern: "*up_proj.MatMul.weight",
+                        axes: ["Embed", "Inner"],
+                    },
+                    {
+                        pattern: "*down_proj.MatMul.weight",
+                        axes: ["Inner", "Embed"],
+                    },
+                    {
+                        pattern: "cos_cache_*",
+                        axes: ["Pos", "Half"],
+                    },
+                    {
+                        pattern: "sin_cache_*",
+                        axes: ["Pos", "Half"],
+                    },
+                    // Each head's query and key normalized apart, then joined.
+                    {
+                        pattern: "*/q_norm/Reshape_1/output_0",
+                        axes: ["Batch", "SeqHead", "Dim"],
+                    },
+                    {
+                        pattern: "*/q_norm/Reshape_2/output_0",
+                        axes: ["Batch", "Seq", "Hidden"],
+                    },
+                    {
+                        pattern: "*/k_norm/Reshape_1/output_0",
+                        axes: ["Batch", "Seq", "Dim"],
+                    },
+                    {
+                        pattern: "*/k_norm/Reshape_2/output_0",
+                        axes: ["Batch", "Seq", "Dim"],
+                    },
+                    // The attention bias, built from the mask and stretched
+                    // over the heads and the new positions.
+                    {
+                        pattern: "/model/gqa_attention_bias/Unsqueeze/output_0",
+                        axes: ["Batch", "BiasHead", "BiasSeq", "Total"],
+                    },
+                    {
+                        pattern: "/model/gqa_attention_bias/Expand/output_0",
+                        axes: ["Batch", "BiasHead", "Seq", "Total"],
+                    },
+                ],
+            },
+        },
+    };
+
+/// The layers, each with a key and a value cache.
+global LAYERS: i32 = 18;
+
+/// Gemma 3 with its weights loaded where `Bk` runs the kernels.
+pub struct Model<Bk: Backend> {
+    backend: Bk,
+    weights: gemma::Prepared<Bk>,
+    /// The ids the caches hold the keys and values of.
+    seen: List<i32>,
+    /// Each layer's key cache, then its value cache, as the last pass wrote
+    /// and retained them; none before the first.
+    caches: List<Bk::Tensor<f32, [gemma::Batch, gemma::KvHead, gemma::Past, gemma::Dim]>>,
+}
+
+impl<Bk: Backend> Model<Bk> {
+    /// Loads the weights onto `backend` from a safetensors checkpoint laid out
+    /// as `gemma3-header.safetensors` says.
+    pub fn load(backend: Bk, checkpoint: &ByteList) -> Result<Model<Bk>, LoadError> with _ {
+        let mut on = backend;
+        let weights = gemma::Prepared::load(&mut on, checkpoint)?;
+        let mut model = Model { backend: on, weights, seen: [], caches: [] };
+        model.forget();
+        return Ok(model);
+    }
+
+    /// The backend the model runs on.
+    pub fn backend(&self) -> &Bk {
+        return &self.backend;
+    }
+
+    /// How many positions the model reads: one per row of the rotary caches.
+    pub fn positions(&self) -> i32 {
+        return gemma::Pos::EXTENT;
+    }
+
+    /// Empties the caches, so the next call reads its ids from the start.
+    pub fn forget(&mut self) {
+        self.seen = [];
+        self.caches = [];
+    }
+
+    /// The token the model ranks first after `ids`. Where `ids` extends the
+    /// ids of the last call, only the new ones run, against the cached keys
+    /// and values of the rest.
+    pub fn next_token(&mut self, ids: &List<i32>) -> i32 with _ {
+        assert 1 <= ids.len() <= self.positions(), "the model reads 1 to positions() tokens";
+        let vocab = gemma::Vocab::EXTENT;
+        for let id of ids {
+            assert 0 <= *id < vocab, "every token id is in the vocabulary";
+        }
+        if !self.extends(ids) {
+            self.forget();
+        }
+        let fresh: List<i64> = ids.into_iter().skip(self.seen.len()).map(|id| id as i64).collect();
+        let total = ids.len();
+        // The caches still held live through this pass. Retained here rather
+        // than as the last pass wrote them, a forgotten cache is released.
+        for let cache of &self.caches {
+            self.backend.retain(cache);
+        }
+        self.backend.begin();
+        if self.caches.is_empty() {
+            let extents: List<i32> = [gemma::Batch::EXTENT, gemma::KvHead::EXTENT, 0, gemma::Dim::EXTENT];
+            let empty = self.backend.upload(
+                &Tensor::<f32, [gemma::Batch, gemma::KvHead, gemma::Past, gemma::Dim]> { data: [], extents },
+            );
+            self.caches = List::filled(LAYERS * 2, empty);
+        }
+        let input_ids = self.backend.upload(&Tensor::<i64, [gemma::Batch, gemma::Seq]> {
+            data: fresh,
+            extents: [gemma::Batch::EXTENT, fresh.len()],
+        });
+        let mask = self.backend.upload(&Tensor::<i64, [gemma::Batch, gemma::Total]> {
+            data: List::<i64>::filled(total, 1),
+            extents: [gemma::Batch::EXTENT, total],
+        });
+        let c = &self.caches;
+        let passed = gemma::pass(
+            &mut self.backend,
+            &input_ids,
+            &mask,
+            &c[0],
+            &c[1],
+            &c[2],
+            &c[3],
+            &c[4],
+            &c[5],
+            &c[6],
+            &c[7],
+            &c[8],
+            &c[9],
+            &c[10],
+            &c[11],
+            &c[12],
+            &c[13],
+            &c[14],
+            &c[15],
+            &c[16],
+            &c[17],
+            &c[18],
+            &c[19],
+            &c[20],
+            &c[21],
+            &c[22],
+            &c[23],
+            &c[24],
+            &c[25],
+            &c[26],
+            &c[27],
+            &c[28],
+            &c[29],
+            &c[30],
+            &c[31],
+            &c[32],
+            &c[33],
+            &c[34],
+            &c[35],
+            &self.weights,
+        );
+        // Only the last position ranks the next token, and the backend ranks
+        // it, so one index is read back rather than the vocabulary's logits.
+        let last = self.backend.slice_axis::<f32, [gemma::Batch], gemma::Seq, Last, [gemma::Vocab]>(
+            &passed.logits,
+            1,
+            (fresh.len() - 1) as i64,
+            1,
+            1,
+        );
+        let best = self.backend.download(&self.backend.arg_max(&last, 2)).data[0] as i32;
+        let p = passed;
+        let presents = [
+            p.present_0_key, p.present_0_value, p.present_1_key, p.present_1_value, p.present_2_key, p.present_2_value,
+            p.present_3_key, p.present_3_value, p.present_4_key, p.present_4_value, p.present_5_key, p.present_5_value,
+            p.present_6_key, p.present_6_value, p.present_7_key, p.present_7_value, p.present_8_key, p.present_8_value,
+            p.present_9_key, p.present_9_value, p.present_10_key, p.present_10_value, p.present_11_key,
+            p.present_11_value, p.present_12_key, p.present_12_value, p.present_13_key, p.present_13_value,
+            p.present_14_key, p.present_14_value, p.present_15_key, p.present_15_value, p.present_16_key,
+            p.present_16_value, p.present_17_key, p.present_17_value,
+        ] as List<Bk::Tensor<f32, [gemma::Batch, gemma::KvHead, gemma::Total, gemma::Dim]>>;
+        // Each present becomes the next call's past where the backend holds it.
+        for let i of 0..<presents.len() {
+            let extents = self.backend.extents_of(&presents[i]);
+            self.caches[i] = self.backend.reshape::<f32, [gemma::Batch, gemma::KvHead, gemma::Total, gemma::Dim], [gemma::Batch, gemma::KvHead, gemma::Past, gemma::Dim]>(
+                &presents[i],
+                extents,
+            );
+        }
+        self.seen = *ids;
+        return best;
+    }
+
+    /// Whether `ids` starts with the ids the caches hold, and adds some.
+    fn extends(&self, ids: &List<i32>) -> bool {
+        if ids.len() <= self.seen.len() {
+            return false;
+        }
+        for let i of 0..<self.seen.len() {
+            if ids[i] != self.seen[i] {
+                return false;
+            }
+        }
+        return true;
+    }
+}
+
+/// The one position of the logits [`Model::next_token`] reads back.
+struct Last {
+}

@@ -1,0 +1,13 @@
+// A generic call through `&` cannot copy a resource out of what it reads.
+use { Fields } from "wasi:http";
+
+fn first(list: List<Fields>) -> Fields {
+    return list[0];      // ERROR: cannot copy resource `Fields` out of a reference
+}
+
+export fn run() {
+    first([]);
+}
+
+__DATA__
+{"compile_error": "cannot copy resource `Fields` out of a reference"}

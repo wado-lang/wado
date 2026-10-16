@@ -179,14 +179,14 @@ impl<Bk: Backend> Model<Bk> {
         }
         let input: List<i64> = ids.into_iter().map(|id| id as i64).collect();
         let extents: List<i32> = [gpt2::Batch::EXTENT, ids.len()];
-        let logits = gpt2::pass(
-            &mut self.backend,
-            &Tensor::<i64, [gpt2::Batch, gpt2::Seq]> { data: input, extents },
+        self.backend.begin();
+        let input_ids = self.backend.upload(&Tensor::<i64, [gpt2::Batch, gpt2::Seq]> { data: input, extents });
+        let mask = self.backend.upload(
             &Tensor::<i64, [gpt2::Batch, gpt2::Seq]> { data: List::<i64>::filled(ids.len(), 1), extents },
-            &self.weights,
         );
-        // Only the last position ranks the next token, so only its row is read
-        // back: a 1/len share of the logits.
+        let logits = gpt2::pass(&mut self.backend, &input_ids, &mask, &self.weights);
+        // Only the last position ranks the next token, and the backend ranks
+        // it, so one index is read back rather than the vocabulary's logits.
         let last = self.backend.slice_axis::<f32, [gpt2::Batch], gpt2::Seq, Last, [gpt2::Vocab]>(
             &logits,
             1,
@@ -194,14 +194,7 @@ impl<Bk: Backend> Model<Bk> {
             1,
             1,
         );
-        let row = self.backend.download(&last);
-        let mut best = 0;
-        for let v of 1..<vocab {
-            if row.data[v] > row.data[best] {
-                best = v;
-            }
-        }
-        return best;
+        return self.backend.download(&self.backend.arg_max(&last, 2)).data[0] as i32;
     }
 }
 

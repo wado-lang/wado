@@ -474,6 +474,13 @@ pub enum TypeError {
         span: Span,
     },
 
+    /// A declaration whose instances name ever larger instances of
+    /// themselves: see [`super::tysys::TypeSystem::expanding_decls`].
+    ExpandingRecursion {
+        name: String,
+        span: Span,
+    },
+
     /// A type parameter's `= Default` names a parameter declared at or after
     /// its own slot, which no argument has settled yet.
     ForwardTypeParamDefault {
@@ -1646,6 +1653,14 @@ impl TypeError {
                 Code::UnknownType,
                 format!(
                     "`Self` in a bound on `{param}` names no implementing type here; write `{param}`"
+                ),
+                *span,
+            ),
+            TypeError::ExpandingRecursion { name, span } => (
+                Code::ExpandingRecursion,
+                format!(
+                    "'{name}' reaches itself through a type argument built over its own type \
+                     parameter, so each instance needs a larger one and they never end"
                 ),
                 *span,
             ),

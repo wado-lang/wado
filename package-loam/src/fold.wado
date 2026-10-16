@@ -79,6 +79,7 @@ fn evaluated(
             return constant_of_shape(node, x);
         },
         "Add" | "Sub" | "Mul" | "Div" | "Pow" => arithmetic(node, x, &operands[1])?,
+        "Expand" => expand(x, &operands[1])?,
         "Slice" => {
             return slice(x, node, known);
         },
@@ -720,6 +721,21 @@ fn arithmetic(node: &Node, a: &Known, b: &Known) -> Result<Known, String> {
     };
     // ONNX computes in the operands' one element type.
     return Result::Ok(Known { extents, elements, stored: a.stored });
+}
+
+/// `x` broadcast against the extents `shape` lists, as `Expand` does.
+fn expand(x: &Known, shape: &Known) -> Result<Known, String> {
+    let mut target: List<i32> = [];
+    for let e of ints_of(shape)? {
+        if !(0 <= e <= i32::MAX as i64) {
+            return Result::Err(`the target's extent ${e} is no length`);
+        }
+        target.push(e as i32);
+    }
+    let Some(extents) = broadcast_extents(&x.extents, &target) else {
+        return Result::Err(`extents ${x.extents:?} do not broadcast to ${target:?}`);
+    };
+    return Result::Ok(Known { ..*x, extents, elements: picked(&x.elements, &positions(&x.extents, &extents)) });
 }
 
 /// B's extents, followed by an extent of 1 for each of A's axes after it where

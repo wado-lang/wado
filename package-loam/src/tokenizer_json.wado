@@ -1,21 +1,29 @@
 //! The pipeline a Hugging Face `tokenizer.json` writes down, as far as Loam
-//! generates one: GPT-2's byte-level BPE. Every stage and setting that would
-//! change the ids is checked, and one Loam does not generate names itself.
+//! generates one: BPE spelled as GPT-2 spells it, byte-level, or as
+//! SentencePiece does, with spaces as `▁` and bytes as `<0xXX>` tokens. Every
+//! stage and setting that would change the ids is checked, and one Loam does
+//! not generate names itself.
 
 use { TreeMap } from "core:collections";
 use { from_string } from "core:json";
 use { Value } from "core:value";
-use { byte_chars } from "./runtime/tokenizer.wado";
+use { TokenSpelling, byte_chars, byte_token } from "./runtime/tokenizer.wado";
 
-/// GPT-2's pipeline: text split by its pattern, each piece spelled as bytes
-/// and merged by BPE, the ids decoded back through the same byte spelling.
-pub struct ByteLevelBpe {
+/// A BPE pipeline: the vocabulary, the merges resolved to ids, the added
+/// tokens, how text is spelled, and the ids an encoding starts with.
+pub struct BpePipeline {
     /// Each token, its id the index.
     pub tokens: List<String>,
-    /// Each merge, written `"left right"`, the lowest rank first.
-    pub merges: List<String>,
+    /// Each merge, the lowest rank first: the two ids it joins and the id they
+    /// join to.
+    pub merges: List<[i32, i32, i32]>,
     /// The added tokens, matched in the text as they stand before it is split.
     pub specials: List<String>,
+    pub spelling: TokenSpelling,
+    /// The id a character no token or byte spells encodes as, -1 for none.
+    pub unknown: i32 = -1,
+    /// The ids the post-processor puts before every encoding.
+    pub prefix: List<i32> = [],
 }
 
 /// Why a `tokenizer.json` is not a pipeline Loam generates.
@@ -37,7 +45,7 @@ fn refused<T>(message: String) -> Result<T, TokenizerError> {
 }
 
 /// The pipeline `text`, a `tokenizer.json`, writes down.
-pub fn read(text: &String) -> Result<ByteLevelBpe, TokenizerError> {
+pub fn read(text: &String) -> Result<BpePipeline, TokenizerError> {
     let root = match from_string::<Value>(text) {
         Ok(Object(fields)) => fields,
         Ok(_) => {
@@ -47,87 +55,180 @@ pub fn read(text: &String) -> Result<ByteLevelBpe, TokenizerError> {
             return refused(`not JSON: ${e}`);
         },
     };
-    for let stage of ["normalizer", "truncation", "padding"] {
+    for let stage of ["truncation", "padding"] {
         if let Some(value) = root.get(stage) && !value matches { Null } {
             return refused(`${stage}: ${kind_of(&value)} is not supported`);
         }
     }
-    let pre = stage_of(&root, "pre_tokenizer", ["ByteLevel"])?;
-    settled(&pre, "pre_tokenizer", "add_prefix_space", &Value::Bool(false))?;
-    settled(&pre, "pre_tokenizer", "use_regex", &Value::Bool(true))?;
-    stage_of(&root, "decoder", ["ByteLevel"])?;
-    // Only offsets depend on it, which Loam does not compute.
-    if let Some(value) = root.get("post_processor") && !value matches { Null } {
-        stage_of(&root, "post_processor", ["ByteLevel"])?;
-    }
-
+    let spelling = spelling_of(&root)?;
     let Some(Object(model)) = root.get("model") else {
         return refused("model: not an object");
     };
     if let Some(kind) = model.get("type") && !kind matches { String(s) && s == "BPE" } {
         return refused(`model: ${spelled(&kind)} is not supported`);
     }
+    let pieces = spelling matches { Pieces };
     for let [key, neutral] of [
         ["dropout", Value::Null],
-        ["unk_token", Value::Null],
         ["continuing_subword_prefix", Value::String("")],
         ["end_of_word_suffix", Value::String("")],
-        ["fuse_unk", Value::Bool(false)],
-        ["byte_fallback", Value::Bool(false)],
         ["ignore_merges", Value::Bool(false)],
     ] as List<[String, Value]> {
         settled(&model, "model", key, &neutral)?;
     }
+    if !pieces {
+        for let [key, neutral] of [
+            ["unk_token", Value::Null],
+            ["fuse_unk", Value::Bool(false)],
+            ["byte_fallback", Value::Bool(false)],
+        ] as List<[String, Value]> {
+            settled(&model, "model", key, &neutral)?;
+        }
+    } else if model.get("fuse_unk") != Option::Some(Value::Bool(true))
+        && model.get("unk_token") matches { Some(String(_)) } {
+        return refused("model: an unknown token that does not fuse is not supported");
+    }
     let Some(Object(vocab)) = model.get("vocab") else {
         return refused("model: no vocab");
     };
-    let tokens = tokens_of(&vocab)?;
-    let merges = merges_of(&model)?;
-    let specials = specials_of(&root, &vocab)?;
-    spelled_in_bytes(&vocab, &merges, &specials)?;
-    return Result::Ok(ByteLevelBpe { tokens, merges, specials });
+    let mut tokens = tokens_of(&vocab)?;
+    let specials = specials_of(&root, &vocab, &mut tokens, pieces)?;
+    let mut ids = TreeMap::<String, i32>::new();
+    for let [id, token] of tokens.into_iter().enumerate() {
+        ids.try_insert(token, id);
+    }
+    let merges = merges_of(&model, &ids)?;
+    let mut pipeline = BpePipeline { tokens, merges, specials, spelling };
+    if pieces {
+        spelled_in_pieces(&model, &ids)?;
+        if let Some(String(unknown)) = model.get("unk_token") {
+            pipeline.unknown = id_of(&ids, &unknown, "model: the unknown token")?;
+        }
+        pipeline.prefix = prefix_of(&root, &ids)?;
+    } else {
+        spelled_in_bytes(&pipeline, &ids)?;
+    }
+    return Result::Ok(pipeline);
 }
 
-/// That the vocabulary spells every byte, every merge joins two tokens into a
-/// third, and every token but a special one is written in the byte alphabet:
-/// what `BpeTokenizer` encodes and decodes by.
-fn spelled_in_bytes(
-    vocab: &TreeMap<String, Value>,
-    merges: &List<String>,
-    specials: &List<String>,
-) -> Result<(), TokenizerError> {
+/// The spelling the normalizer, pre-tokenizer and decoder write down together:
+/// GPT-2's byte level, or SentencePiece's spaces as `▁`.
+fn spelling_of(root: &TreeMap<String, Value>) -> Result<TokenSpelling, TokenizerError> {
+    let normalizer = root.get("normalizer").unwrap_or(Value::Null);
+    if normalizer matches { Null } {
+        let pre = stage_of(root, "pre_tokenizer", ["ByteLevel"])?;
+        settled(&pre, "pre_tokenizer", "add_prefix_space", &Value::Bool(false))?;
+        settled(&pre, "pre_tokenizer", "use_regex", &Value::Bool(true))?;
+        stage_of(root, "decoder", ["ByteLevel"])?;
+        // Only offsets depend on it, which Loam does not compute.
+        if let Some(value) = root.get("post_processor") && !value matches { Null } {
+            stage_of(root, "post_processor", ["ByteLevel"])?;
+        }
+        return Result::Ok(TokenSpelling::ByteLevel);
+    }
+    if !is_space_replacement(&normalizer, " ", "▁") {
+        return refused(`normalizer: ${kind_of(&normalizer)} is not supported`);
+    }
+    if let Some(value) = root.get("pre_tokenizer") && !value matches { Null } {
+        return refused(`pre_tokenizer: ${kind_of(&value)} is not supported`);
+    }
+    let decoder = stage_of(root, "decoder", ["Sequence"])?;
+    let Some(List(steps)) = decoder.get("decoders") else {
+        return refused("decoder: a Sequence with no decoders");
+    };
+    let kinds: List<String> = steps.into_iter().map(|s| kind_of(&s)).collect();
+    if kinds != ["Replace", "ByteFallback", "Fuse"] as List<String> || !is_space_replacement(&steps[0], "▁", " ") {
+        return refused(`decoder: ${kinds.join(", ")} is not supported`);
+    }
+    return Result::Ok(TokenSpelling::Pieces);
+}
+
+/// Whether `stage` is a `Replace` of the string `pattern` by `content`.
+fn is_space_replacement(stage: &Value, pattern: String, content: String) -> bool {
+    let Object(fields) = *stage else {
+        return false;
+    };
+    let Some(Object(written)) = fields.get("pattern") else {
+        return false;
+    };
+    return fields.get("type") == Option::Some(Value::String("Replace"))
+        && written.get("String") == Option::Some(Value::String(pattern))
+        && written.len() == 1
+        && fields.get("content") == Option::Some(Value::String(content));
+}
+
+/// That the vocabulary spells every byte and every token but an added one is
+/// written in the byte alphabet: what `ByteLevel` encodes and decodes by.
+fn spelled_in_bytes(pipeline: &BpePipeline, ids: &TreeMap<String, i32>) -> Result<(), TokenizerError> {
     let alphabet = byte_chars();
     for let c of alphabet {
-        let mut token = String::new();
-        token.push(c);
-        if !vocab.contains_key(token) {
+        if !ids.contains_key(String::from(c)) {
             return refused(`model: the vocabulary has no token for the byte ${c}`);
         }
     }
-    for let merge of *merges {
-        let Some([left, right]) = merge.split_once(" ") else {
-            return refused(`model: merge ${merge} is not two tokens`);
-        };
-        let joined = `${left}${right}`;
-        for let part of [
-            left.to_string(),
-            right.to_string(),
-            joined,
-        ] {
-            if !vocab.contains_key(part) {
-                return refused(`model: merge ${merge} names ${part}, which the vocabulary lacks`);
-            }
-        }
-    }
-    for let [token, _] of vocab.entries() {
-        if specials.contains(token) {
+    for let token of pipeline.tokens {
+        if pipeline.specials.contains(&token) {
             continue;
         }
         if let Some(c) = token.chars().find(|c| !alphabet.contains(&c)) {
-            return refused(`model: ${*token} holds ${c}, which no byte is spelled as`);
+            return refused(`model: ${token} holds ${c}, which no byte is spelled as`);
         }
     }
     return Result::Ok(());
+}
+
+/// That the vocabulary has a `<0xXX>` token for every byte, where the model
+/// falls back to them.
+fn spelled_in_pieces(model: &TreeMap<String, Value>, ids: &TreeMap<String, i32>) -> Result<(), TokenizerError> {
+    if model.get("byte_fallback") != Option::Some(Value::Bool(true)) {
+        return refused("model: SentencePiece's spelling without byte_fallback is not supported");
+    }
+    for let b of 0..<256 {
+        id_of(ids, &byte_token(b), "model: the byte token")?;
+    }
+    return Result::Ok(());
+}
+
+/// The ids a `TemplateProcessing` puts before a single sequence. Only special
+/// tokens before it are supported, as a beginning-of-sequence token is.
+fn prefix_of(root: &TreeMap<String, Value>, ids: &TreeMap<String, i32>) -> Result<List<i32>, TokenizerError> {
+    let Some(value) = root.get("post_processor") else {
+        return Result::Ok([]);
+    };
+    if value matches { Null } {
+        return Result::Ok([]);
+    }
+    let processor = stage_of(root, "post_processor", ["TemplateProcessing"])?;
+    let Some(List(single)) = processor.get("single") else {
+        return refused("post_processor: no single template");
+    };
+    let mut prefix: List<i32> = [];
+    for let [i, piece] of single.into_iter().enumerate() {
+        let Object(fields) = piece else {
+            return refused("post_processor: a template piece is an object");
+        };
+        if let Some(Object(sequence)) = fields.get("Sequence") {
+            if i != single.len() - 1 || sequence.get("id") != Option::Some(Value::String("A")) {
+                return refused("post_processor: only special tokens before the sequence are supported");
+            }
+            return Result::Ok(prefix);
+        }
+        let Some(Object(special)) = fields.get("SpecialToken") else {
+            return refused("post_processor: a template piece is a SpecialToken or the Sequence");
+        };
+        let Some(String(name)) = special.get("id") else {
+            return refused("post_processor: a SpecialToken with no id");
+        };
+        prefix.push(id_of(ids, &name, "post_processor: the special token")?);
+    }
+    return refused("post_processor: the single template holds no sequence");
+}
+
+fn id_of(ids: &TreeMap<String, i32>, token: &String, what: String) -> Result<i32, TokenizerError> {
+    return match ids.get(*token) {
+        Some(id) => Result::Ok(id),
+        None => refused(`${what} ${*token} is not in the vocabulary`),
+    };
 }
 
 /// The stage `key`, which must be one of `kinds`.
@@ -174,9 +275,9 @@ fn tokens_of(vocab: &TreeMap<String, Value>) -> Result<List<String>, TokenizerEr
         if seen[id] {
             return refused(`model: id ${id} names two tokens`);
         }
-        // The generated tokenizer holds one token to a line.
-        if token.contains("\n") {
-            return refused(`model: token ${id} holds a line break`);
+        // The generated tokenizer separates its tokens by NUL.
+        if token.contains("\0") {
+            return refused(`model: token ${id} holds a NUL`);
         }
         seen[id] = true;
         tokens[id] = *token;
@@ -195,32 +296,58 @@ fn index_of(value: &Value, len: i32) -> Option<i32> {
     return Option::Some(f as i32);
 }
 
-/// Each merge as `"left right"`, which the older files write and the newer
-/// write as a pair.
-fn merges_of(model: &TreeMap<String, Value>) -> Result<List<String>, TokenizerError> {
+/// Each merge as the ids it joins and joins to. The older files write one as
+/// `"left right"`, the newer as a pair.
+fn merges_of(
+    model: &TreeMap<String, Value>,
+    ids: &TreeMap<String, i32>,
+) -> Result<List<[i32, i32, i32]>, TokenizerError> {
     let Some(List(items)) = model.get("merges") else {
         return refused("model: no merges");
     };
-    let mut merges: List<String> = [];
+    let mut merges: List<[i32, i32, i32]> = [];
     for let item of items {
-        match item {
-            String(merge) => merges.push(merge),
+        let [left, right] = match item {
+            String(merge) => {
+                let Some([l, r]) = merge.split_once(" ") else {
+                    return refused(`model: merge ${merge} is not two tokens`);
+                };
+                [
+                    l.to_string(),
+                    r.to_string(),
+                ];
+            },
             List(pair) && pair.len() == 2 => {
-                let [String(left), String(right)] = [pair[0], pair[1]] else {
+                let [String(l), String(r)] = [pair[0], pair[1]] else {
                     return refused("model: a merge pair holds two strings");
                 };
-                merges.push(`${left} ${right}`);
+                [l, r];
             },
             _ => {
                 return refused("model: a merge is a string or a pair");
             },
+        };
+        let mut joined: List<i32> = [];
+        for let part of [left, right, `${left}${right}`] {
+            let Some(id) = ids.get(part) else {
+                return refused(`model: merge ${left} ${right} names ${part}, which the vocabulary lacks`);
+            };
+            joined.push(id);
         }
+        merges.push([joined[0], joined[1], joined[2]]);
     }
     return Result::Ok(merges);
 }
 
-/// The added tokens, each one of `vocab`'s and matched as it stands.
-fn specials_of(root: &TreeMap<String, Value>, vocab: &TreeMap<String, Value>) -> Result<List<String>, TokenizerError> {
+/// The added tokens, each matched as it stands, which must not wait for a
+/// normalizer where `normalizes`. One past the vocabulary's end extends it;
+/// any other must be the vocabulary's own token of its id.
+fn specials_of(
+    root: &TreeMap<String, Value>,
+    vocab: &TreeMap<String, Value>,
+    tokens: &mut List<String>,
+    normalizes: bool,
+) -> Result<List<String>, TokenizerError> {
     let Some(List(added)) = root.get("added_tokens") else {
         return Result::Ok([]);
     };
@@ -235,9 +362,16 @@ fn specials_of(root: &TreeMap<String, Value>, vocab: &TreeMap<String, Value>) ->
         for let key of ["single_word", "lstrip", "rstrip"] {
             settled(&fields, `added_tokens: ${content}`, key, &Value::Bool(false))?;
         }
+        // The runtime matches an added token against the text as written.
+        if normalizes {
+            settled(&fields, `added_tokens: ${content}`, "normalized", &Value::Bool(false))?;
+        }
         let id = fields.get("id");
         let own = vocab.get(content);
-        if !id matches { Some(Float(_)) } || id != own {
+        let extends = own matches { None } && id matches { Some(Float(f)) && f == tokens.len() as f64 };
+        if extends {
+            tokens.push(content);
+        } else if !id matches { Some(Float(_)) } || id != own {
             let given = match own {
                 Some(Float(v)) => `${v as i64}`,
                 _ => "none",

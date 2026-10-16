@@ -160,29 +160,81 @@ fn read_value_info(vi: &onnx::ValueInfoProto) -> Result<ValueInfo, String> {
     return Result::Ok(ValueInfo { name, dtype, rank });
 }
 
-fn check_inline(t: &onnx::TensorProto, name: &String) -> Result<(), String> {
-    if let Some(entry) = t.external_data.first() {
-        return Result::Err(`${name}: external data (${entry.key.unwrap_or("")})`);
-    }
-    if t.data_location matches { Some(External) } {
-        return Result::Err(`${name}: external data`);
-    }
-    return Result::Ok(());
+/// The `external_data` entry `key` of `t`.
+fn external_entry(t: &onnx::TensorProto, key: String) -> Option<String> {
+    let entry = t.external_data.into_iter().find(|e| e.key == Option::Some(key))?;
+    return entry.value;
 }
 
-/// An initializer as a `ValueInfo`: its name, type, extents and data.
-fn read_initializer(t: &onnx::TensorProto, name: String, dtype: String) -> Result<ValueInfo, String> {
+fn is_external(t: &onnx::TensorProto) -> bool {
+    return !t.external_data.is_empty() || t.data_location matches { Some(External) };
+}
+
+/// `t`'s bytes out of the file its `external_data` names, among `files`.
+fn external_bytes(t: &onnx::TensorProto, name: &String, files: &TreeMap<String, ByteList>) -> Result<ByteList, String> {
+    let Some(location) = external_entry(t, "location") else {
+        return Result::Err(`${*name}: external data with no location`);
+    };
+    let Some(file) = files.get_ref_str(&location) else {
+        return Result::Err(`${*name}: external data in ${location}, which the reader was not given`);
+    };
+    let number = |key: String, absent: i64| -> Result<i64, String> {
+        let Some(text) = external_entry(t, key) else {
+            return Result::Ok(absent);
+        };
+        return i64::from_str(&text).map_err(|_| `${*name}: external data ${key} ${text}`);
+    };
+    let offset = number("offset", 0)?;
+    let length = number("length", file.len() as i64 - offset)?;
+    if offset < 0 || length < 0 || length > file.len() as i64 - offset {
+        return Result::Err(
+            `${*name}: external data at ${offset} for ${length} bytes, past the end of ${location}'s ${file.len()}`,
+        );
+    }
+    return Result::Ok(file[offset as i32..<(offset + length) as i32].to_list() as ByteList);
+}
+
+/// An initializer as a `ValueInfo`: its name, type, extents and data, the data
+/// out of `files` where it is external.
+fn read_initializer(
+    t: &onnx::TensorProto,
+    name: String,
+    dtype: String,
+    files: &TreeMap<String, ByteList>,
+) -> Result<ValueInfo, String> {
     let extents = extents_of(t, &name)?;
     let mut dims: List<Dim> = [];
     for let e of extents {
         dims.push(Dim::Static(e));
     }
-    return Result::Ok(ValueInfo {
-        name,
-        dtype,
-        rank: rank_of(dims),
-        data: payload(t, &name, &dtype, &extents)?,
-    });
+    let data = if is_external(t) {
+        Option::Some(external_payload(t, &name, &dtype, &extents, files)?);
+    } else {
+        payload(t, &name, &dtype, &extents)?;
+    };
+    return Result::Ok(ValueInfo { name, dtype, rank: rank_of(dims), data });
+}
+
+/// An external tensor's bytes, checked against its shape. They are copied out
+/// of the file once and moved from there, since a weight can be most of a
+/// model and a second copy of it is what a large model cannot afford.
+fn external_payload(
+    t: &onnx::TensorProto,
+    name: &String,
+    dtype: &String,
+    extents: &List<i32>,
+    files: &TreeMap<String, ByteList>,
+) -> Result<ByteList, String> {
+    let Some(element) = element_of(dtype) else {
+        return Result::Err(`${*name}: external ${*dtype} data`);
+    };
+    let bytes = external_bytes(t, name, files)?;
+    let width = element.width;
+    if bytes.len() % width != 0 {
+        return Result::Err(`${*name}: ${bytes.len()} raw bytes is not whole ${*dtype} elements`);
+    }
+    check_element_count(name, bytes.len() / width, extents)?;
+    return Result::Ok(bytes);
 }
 
 /// A tensor's elements as little-endian bytes: `raw_data` as it stands, or the
@@ -254,7 +306,9 @@ fn read_attr(a: &onnx::AttributeProto) -> Result<Attr, String> {
         },
         Some(onnx::AttributeProtoAttributeType::Graph) => {
             if let Some(g) = &a.g {
-                return Result::Ok(Attr { name, values, is_list, graph: Option::Some(read_graph(g)?) });
+                // A branch's own initializers stop the build, so none is external.
+                let graph = read_graph(g, &TreeMap::<String, ByteList>::new())?;
+                return Result::Ok(Attr { name, values, is_list, graph: Option::Some(graph) });
             }
         },
         Some(onnx::AttributeProtoAttributeType::Graphs) => {
@@ -274,21 +328,54 @@ fn read_node(n: &onnx::NodeProto) -> Result<Node, String> {
     for let a of n.attribute {
         attrs.push(read_attr(&a)?);
     }
-    return Result::Ok(Node { op: n.op_type.unwrap_or(""), outputs: n.output, inputs: n.input, attrs });
+    return Result::Ok(Node { op: qualified_op(n), outputs: n.output, inputs: n.input, attrs });
+}
+
+/// The operator's name as the textual format writes it: qualified by its
+/// domain, unless that is the default one. Two domains may each define an
+/// operator of one name, such as `Gelu`, and they need not agree on it.
+fn qualified_op(n: &onnx::NodeProto) -> String {
+    let op = n.op_type.unwrap_or("");
+    return match n.domain {
+        Some(domain) && domain != "" && domain != "ai.onnx" => `${domain}.${op}`,
+        _ => op,
+    };
 }
 
 /// Read a graph out of a serialized `ModelProto`. What the subset does not
 /// cover names itself, as the textual reader's errors do.
 pub fn read<S: AsByteSlice>(bytes: S) -> Result<Graph, ReadError> {
-    return read_model(bytes).map_err(|reason| ReadError { reason });
+    return read_with_external(bytes, &TreeMap::<String, ByteList>::new());
 }
 
-fn read_model<S: AsByteSlice>(bytes: S) -> Result<Graph, String> {
+/// Read a graph whose initializers may keep their data in other files: `files`
+/// holds each such file's bytes under the location the model names it by.
+pub fn read_with_external<S: AsByteSlice>(bytes: S, files: &TreeMap<String, ByteList>) -> Result<Graph, ReadError> {
+    return read_model(bytes, files).map_err(|reason| ReadError { reason });
+}
+
+/// The files a model's initializers keep their data in, each named once, as
+/// `read_with_external` wants them.
+pub fn external_locations<S: AsByteSlice>(bytes: S) -> Result<List<String>, ReadError> {
+    let model = grog::decode::<onnx::ModelProto, S>(bytes).map_err(|e| ReadError { reason: `${e}` })?;
+    let mut locations: List<String> = [];
+    let Some(graph) = &model.graph else {
+        return Result::Ok(locations);
+    };
+    for let t of graph.initializer {
+        if let Some(location) = external_entry(&t, "location") && !locations.contains(&location) {
+            locations.push(location);
+        }
+    }
+    return Result::Ok(locations);
+}
+
+fn read_model<S: AsByteSlice>(bytes: S, files: &TreeMap<String, ByteList>) -> Result<Graph, String> {
     let model = grog::decode::<onnx::ModelProto, S>(bytes).map_err(|e| `${e}`)?;
     let Some(graph) = &model.graph else {
         return Result::Err("a model without a graph");
     };
-    let written = read_graph(graph)?;
+    let written = read_graph(graph, files)?;
     let imports: List<[String, i64]> = model.opset_import.into_iter().map(|o| [
         o.domain.unwrap_or(""),
         o.version.unwrap_or(0),
@@ -298,20 +385,24 @@ fn read_model<S: AsByteSlice>(bytes: S) -> Result<Graph, String> {
 }
 
 /// A `GraphProto` as written, its operators not yet read at an opset.
-fn read_graph(graph: &onnx::GraphProto) -> Result<Graph, String> {
+fn read_graph(graph: &onnx::GraphProto, files: &TreeMap<String, ByteList>) -> Result<Graph, String> {
     let mut initializers: List<ValueInfo> = [];
     let mut constants = TreeMap::<String, Known>::new();
     for let t of graph.initializer {
         let name = name_of(&t);
-        check_inline(&t, &name)?;
         let elem_type = t.data_type.unwrap_or(0);
         let Some(dtype) = dtype_name(elem_type) else {
             return Result::Err(`${name}: element type ${elem_type}`);
         };
         if is_build_time(&dtype) {
-            constants[name] = known_tensor(&t)?.unwrap();
+            let inline = if is_external(&t) {
+                onnx::TensorProto { ..t, raw_data: Option::Some(external_bytes(&t, &name, files)?) };
+            } else {
+                t;
+            };
+            constants[name] = known_tensor(&inline)?.unwrap();
         } else {
-            initializers.push(read_initializer(&t, name, dtype)?);
+            initializers.push(read_initializer(&t, name, dtype, files)?);
         }
     }
     let mut declared: List<ValueInfo> = [];

@@ -1,0 +1,39 @@
+// A field or payload typed `Q::T` in another module's generic declaration,
+// read through `Passed<B>` or `Held<B>`, is the caller's `B::T`: the one its
+// trait's method takes.
+
+use { Back, Held, Passed, hold, pass } from "./sub/assoc_projection_field_cross_module_lib.wado";
+
+fn go<B: Back>(b: &mut B) -> i32 {
+    let p: Passed<B> = pass(b);
+    return b.read(&p.x);
+}
+
+fn unheld<B: Back>(b: &mut B) -> i32 {
+    return match hold(b) {
+        Some(t) => b.read(&t),
+        Empty => -1,
+    };
+}
+
+struct Host {}
+
+impl Back for Host {
+    type T = List<i32>;
+    fn make(&mut self) -> List<i32> {
+        return [7];
+    }
+    fn read(&mut self, t: &List<i32>) -> i32 {
+        return t[0];
+    }
+}
+
+test "a projection field read across modules is the reader's projection" {
+    let mut h = Host {};
+    assert go(&mut h) == 7;
+}
+
+test "a projection payload matched across modules is the reader's projection" {
+    let mut h = Host {};
+    assert unheld(&mut h) == 7;
+}

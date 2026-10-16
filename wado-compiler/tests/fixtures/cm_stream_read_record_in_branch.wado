@@ -14,18 +14,19 @@ use { println, eprintln, Stdout, Stderr } from "core:cli";
 use { Preopens, Descriptor, DescriptorType, DescriptorFlags, PathFlags, OpenFlags, DirectoryEntry } from "wasi:filesystem";
 
 export fn run() with (Stdout, Stderr, Preopens) {
-    let dirs = Preopens::get_directories();
-    if dirs.len() == 0 {
+    let mut dirs = Preopens::get_directories();
+    let count = dirs.len();
+    if count == 0 {
         eprintln("no preopened directories available");
         return;
     }
 
-    let dir = dirs[0].0;
+    let dir = dirs.remove(0).0;
     let [dir_stream, _done] = dir.read_directory();
 
     // The record stream read is nested inside an `if`-expression branch — a
     // position the discovery walker historically did not visit.
-    let entries = if dirs.len() > 0 {
+    let entries = if count > 0 {
         dir_stream.read(100).items
     } else {
         dir_stream.read(0).items

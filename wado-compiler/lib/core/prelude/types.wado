@@ -279,7 +279,14 @@ impl<T> Stream<T> {
     /// Only the result stops it: an empty `Completed` copy is the writer
     /// offering nothing this time, and more can still follow.
     pub fn read_to_end(&self) -> List<T> {
-        let mut all: List<T> = [];
+        return self.read_to_end_sized(0);
+    }
+
+    /// `read_to_end` into a buffer made for `expected` elements up front, so a
+    /// stream whose length is known is never copied into a doubled buffer. A
+    /// doubling past half the address space is what a large file cannot afford.
+    pub fn read_to_end_sized(&self, expected: i32) -> List<T> {
+        let mut all = List::<T>::with_capacity(expected);
         loop {
             let chunk = self.read(STREAM_CHUNK_ELEMENTS);
             all.extend(&chunk.items);

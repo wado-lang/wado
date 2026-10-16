@@ -1,0 +1,77 @@
+// A store in a loop body drops what it replaces only where the slot holds a
+// value on every edge into the loop head: what the loop entered with, and what
+// each iteration leaves behind. A value an iteration moved out is not dropped
+// again by the next iteration's store, and a value only some exits hold is
+// dropped on those exits.
+
+use { Request, Response, ErrorCode, Fields, Headers, Trailers } from "wasi:http";
+
+fn eat(fields: Fields) {
+}
+
+fn moved_each_iteration(n: i32) with Fields {
+    let mut held = Fields::new();
+    let mut i = 0;
+    while i < n {
+        held = Fields::new();
+        eat(held);
+        i += 1;
+    }
+}
+
+fn stored_after_a_move(n: i32) with Fields {
+    let mut held = Fields::new();
+    eat(held);
+    let mut i = 0;
+    while i < n {
+        held = Fields::new();
+        i += 1;
+    }
+}
+
+fn stored_before_some_exits(n: i32) with Fields {
+    let mut held = Fields::new();
+    eat(held);
+    let mut i = 0;
+    loop {
+        if i == n {
+            break;
+        }
+        held = Fields::new();
+        if i == 1 {
+            break;
+        }
+        i += 1;
+    }
+}
+
+fn stored_before_a_labeled_exit(skip: bool) with Fields {
+    let mut held = Fields::new();
+    eat(held);
+    out: {
+        if skip {
+            break out;
+        }
+        held = Fields::new();
+    }
+}
+
+export async fn handle(request: Request) -> Result<Response, ErrorCode> {
+    moved_each_iteration(3);
+    stored_after_a_move(3);
+    stored_before_some_exits(0);
+    stored_before_some_exits(3);
+    stored_before_a_labeled_exit(true);
+    stored_before_a_labeled_exit(false);
+    let [trailers, trailers_tx] = Future::<Result<Option<Trailers>, ErrorCode>>::new();
+    let [response, _sent] = Response::new(Headers::new(), null, trailers);
+    task return Result::<Response, ErrorCode>::Ok(response);
+    trailers_tx.write(Result::<Option<Trailers>, ErrorCode>::Ok(null));
+}
+
+__DATA__
+{
+  "wasi:http/service": {"status": 200},
+  "wir_scope": "stored_after_a_move",
+  "wir_expect:O0": ["resource-drop:wasi/http/types.wado#fields"]
+}

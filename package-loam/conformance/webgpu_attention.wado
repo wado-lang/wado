@@ -1,0 +1,167 @@
+//! The WebGPU backend's `group_query_attention` computes what `Cpu`'s does.
+//! Each case prints how far the attended rows and the present keys and values
+//! sit from `Cpu`'s. `wado test` cannot reach a device, so `wado-run-webgpu`'s
+//! tests run it:
+//!
+//!     wado run-webgpu package-loam/conformance/webgpu_attention.wado
+
+use { println, Stdout } from "core:cli";
+use {
+    Webgpu,
+    Gpu,
+    GpuAdapter,
+    GpuDevice,
+    GpuQueue,
+    GpuCommandEncoder,
+    GpuCommandBuffer,
+    GpuBuffer,
+    GpuBindGroupLayout,
+    GpuBindGroup,
+    GpuShaderModule,
+    GpuComputePipeline,
+    GpuComputePassEncoder,
+    GpuSupportedLimits,
+    RecordOptionGpuSize64,
+} from "wasi:webgpu";
+use { Attention, Backend, Cpu, Tensor, WebGpuBackend, element_count } from "lib:loam";
+use { deviation, noise } from "../example/webgpu/compare.wado";
+
+struct Batch {
+}
+
+struct Seq {
+}
+
+struct Query {
+}
+
+struct Key {
+}
+
+struct KvHead {
+}
+
+struct Past {
+}
+
+struct Total {
+}
+
+struct Dim {
+}
+
+struct Pos {
+}
+
+struct Half {
+}
+
+struct One {
+}
+
+/// The operands of one case: `seq` new positions after `past`, heads of 8,
+/// turned over `half` of each half where `half` is above 0.
+struct Case {
+    name: String,
+    seq: i32,
+    past: i32,
+    half: i32,
+    biased: bool,
+    options: Attention,
+}
+
+fn tensor<Axes>(extents: List<i32>, seed: u32) -> Tensor<f32, Axes> {
+    return Tensor { data: noise(element_count(&extents), seed, 1.0), extents };
+}
+
+export fn run() with (Stdout, Webgpu, Gpu, GpuAdapter, GpuDevice, GpuQueue, GpuCommandEncoder, GpuCommandBuffer, GpuBuffer, GpuBindGroupLayout, GpuBindGroup, GpuShaderModule, GpuComputePipeline, GpuComputePassEncoder, GpuSupportedLimits, RecordOptionGpuSize64) {
+    let Some(mut gpu) = WebGpuBackend::new() else {
+        println("no WebGPU adapter");
+        return;
+    };
+    let cases: List<Case> = [
+        Case {
+            name: "prompt",
+            seq: 5,
+            past: 0,
+            half: 4,
+            biased: false,
+            options: Attention { heads: 4, kv_heads: 2, scale: 0.35, softcap: -1.0, window: -1, causal: true },
+        },
+        Case {
+            name: "cached",
+            seq: 1,
+            past: 6,
+            half: 3,
+            biased: true,
+            options: Attention { heads: 4, kv_heads: 1, scale: 0.35, softcap: 2.0, window: 4, causal: true },
+        },
+        Case {
+            name: "plain",
+            seq: 3,
+            past: 2,
+            half: 0,
+            biased: true,
+            options: Attention { heads: 2, kv_heads: 2, scale: 0.5, softcap: -1.0, window: -1, causal: false },
+        },
+    ];
+    let [batch, d, positions] = [2, 8, 12];
+    for let c of cases {
+        let total = c.past + c.seq;
+        let q: Tensor<f32, [Batch, Seq, Query]> = tensor([batch, c.seq, c.options.heads * d], 1);
+        let k: Tensor<f32, [Batch, Seq, Key]> = tensor([batch, c.seq, c.options.kv_heads * d], 2);
+        let v: Tensor<f32, [Batch, Seq, Key]> = tensor([batch, c.seq, c.options.kv_heads * d], 3);
+        let past_k: Tensor<f32, [Batch, KvHead, Past, Dim]> = tensor([batch, c.options.kv_heads, c.past, d], 4);
+        let past_v: Tensor<f32, [Batch, KvHead, Past, Dim]> = tensor([batch, c.options.kv_heads, c.past, d], 5);
+        let cos: Tensor<f32, [Pos, Half]> = tensor([positions, c.half], 6);
+        let sin: Tensor<f32, [Pos, Half]> = tensor([positions, c.half], 7);
+        let bias: Tensor<f32, [One, One, Seq, Total]> = tensor([1, 1, c.seq, total], 8);
+        let turned = c.half > 0;
+        let on_cpu = Cpu {}.group_query_attention(
+            &q,
+            &k,
+            &v,
+            &past_k,
+            &past_v,
+            if turned { Option::Some(&cos) } else { null },
+            if turned { Option::Some(&sin) } else { null },
+            if c.biased { Option::Some(&bias) } else { null },
+            &c.options,
+        );
+        gpu.begin();
+        let [gq, gk, gv, gpk, gpv, gcos, gsin, gbias] = [
+            gpu.upload(&q),
+            gpu.upload(&k),
+            gpu.upload(&v),
+            gpu.upload(&past_k),
+            gpu.upload(&past_v),
+            gpu.upload(&cos),
+            gpu.upload(&sin),
+            gpu.upload(&bias),
+        ];
+        let on_gpu = gpu.group_query_attention(
+            &gq,
+            &gk,
+            &gv,
+            &gpk,
+            &gpv,
+            if turned { Option::Some(&gcos) } else { null },
+            if turned { Option::Some(&gsin) } else { null },
+            if c.biased { Option::Some(&gbias) } else { null },
+            &c.options,
+        );
+        let reads = gpu.read_backs();
+        let [out, present_k, present_v] = [
+            gpu.download(&on_gpu.0),
+            gpu.download(&on_gpu.1),
+            gpu.download(&on_gpu.2),
+        ];
+        // Only the three downloads read back: the kernel ran on the device.
+        assert gpu.read_backs() - reads == 3, "the attention reads nothing back";
+        let worst = f32::max(
+            deviation(&out.data, &on_cpu.0.data),
+            f32::max(deviation(&present_k.data, &on_cpu.1.data), deviation(&present_v.data, &on_cpu.2.data)),
+        );
+        println(`${c.name} ${worst}`);
+    }
+}

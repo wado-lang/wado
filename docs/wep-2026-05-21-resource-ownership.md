@@ -188,9 +188,42 @@ _freshly produced_ resource (`dir.open_at()`) stays legal (its return roots in a
 fresh allocation, not the reference).
 
 The gate is the concrete return type carrying a resource, so a generic body
-(`T` abstract) is not flagged at its definition; the stdlib avoids the issue by
-taking `self` by value, and a user-written generic `&self` extractor
-instantiated with a resource is the remaining call-site case (deferred).
+(`T` abstract) is not flagged at its definition. Its call sites are, by the
+rule below.
+
+### A call through a shared reference copies
+
+A generic body that returns a `T` it reads through a reference cannot be told
+apart, by its signature, from one that hands back a fresh value. So the
+signature decides, by the receiver kind: a generic function whose result names
+a type parameter that some `&` parameter stores, and no `&mut` parameter does,
+copies its result out of the referenced storage. `list[i]`, `List::last` and a
+user's `fn first(&self) -> T` are such copies. A parameter stores a type
+parameter through a field, an element, a payload or a reference, not through a
+function type's result, so `AsyncCall<T>::wait(&self) -> T` hands back a fresh
+`T`. The referenced storage keeps what was copied, so where the result holds a
+resource, a position that takes it (a binding, an argument, a `return`) is
+refused. Reading it where it stands (`list[0].has(name)`) leaves no second
+owner:
+
+```wado
+let list: List<Fields> = [Fields::new()];
+let f = list[0]; // error: cannot copy resource `Fields` out of a reference
+```
+
+The check runs where cleanup classifies the call, on the TIR before
+monomorphization, so a call written in a body generic over `T` is checked
+where that body's own signature is called, not inside it.
+
+### A call through `&mut` extracts
+
+A generic function whose result names a type parameter that a `&mut` parameter
+stores takes it out of the referenced storage, as `List::pop` and
+`List::remove` do. The caller owns the result whether or not a binding takes
+it, so `while let Some(_) = list.pop() {}` drops each element.
+
+A result whose type parameters no reference parameter stores is fresh
+(`List::map`), and the caller owns it as any other call's.
 
 ### Authoritative cleanup
 
@@ -205,9 +238,25 @@ by-value receiver transfer, with no aggregate-shape guessing. Two fixes landed:
 - A resource value discarded in statement position (`Fields::new();`,
   `let _ = …`) is dropped, not leaked; a tail expression is left for its
   consumer.
+- A store into a binding or one of its fields drops the resource it replaces,
+  after the stored value is computed, since computing it may read the old one.
+  A binding whose resource was moved owns the one stored into it.
+- Where paths join, a binding holds its resource after the join only where
+  every path into it does, and a path holding more drops the surplus before it
+  joins. The joins are an `if` or `match`, a loop's head (its entry, each
+  iteration's end and each `continue`) and its exit (each `break`), and a
+  labeled block's exit. The loop head is a fixpoint, since an iteration starts
+  from it, so cleanup elaborates a loop body as many times as it takes to settle
+  and a labeled block's body twice, throwing away all but the last.
 
 The `is_resource_aggregate` heuristic is **retired**: cleanup now drops "owned and
 not transferred at scope exit" directly.
+
+Whether a type holds a resource is answered by one walk,
+`resource_holding::holds_resource`, for the move check, a by-value `self` and
+this pass alike. Each supplies a type's members typed at its instance, and the
+walk cuts a declaration it reaches again with arguments that hold alike, which
+ends on polymorphic recursion as well as on a type that holds itself.
 
 ### Deterministic drop
 
@@ -217,7 +266,9 @@ guest-defined one runs its destructor (WEP 2026-01-12). An explicit
 `fn drop(self)` consumes the receiver, so exactly one drop fires; a `&self` drop
 would be unsound (the binding outlives its handle and double-frees). An aggregate
 containing a resource is move-only and gets a synthesized destructor in
-declaration order. Panic does not unwind, so a drop is not guaranteed on panic.
+declaration order. An aggregate that holds itself (`next: Option<Node>`) drops
+through a function synthesized per type, `$drop$…`, since expanding its drop in
+place never ends. Panic does not unwind, so a drop is not guaranteed on panic.
 
 ### CM boundary
 
@@ -451,8 +502,10 @@ Verified against the tree.
   kept in step with cleanup's `carries_resource` (variant / `Option` /
   `List` deferred with their destructors); whole-aggregate move only.
 - [x] No-move-out-of-reference: a `&self` / `&T`-param return rooted in the
-  reference whose concrete type carries a resource is rejected (generic-instantiation
-  call sites deferred).
+  reference whose concrete type carries a resource is rejected.
+- [x] Taking a resource a generic call copies out of a `&` parameter is
+  refused at its call site; one through `&mut` extracts, and its caller owns the
+  result. The check is cleanup's, on TIR, so the editor does not show it.
 - [ ] Unify with the value-copy last-use liveness.
 
 ### Cleanup
@@ -751,6 +804,13 @@ temporary it references, is never dropped.
 Moving one resource field out of a temporary aggregate (`make().a`) drops
 nothing else the temporary owns, so a second resource field leaks.
 
+A store through a reference (`*r = x`) or into an element (`list[i] = x`) drops
+nothing it replaces.
+
+An aggregate that holds itself and names a type parameter (`Node<T>` in a body
+generic over `T`) is not dropped past its first level: cleanup runs before
+monomorphization, and its `$drop$…` function would have to be generic.
+
 A panic drops nothing the program owns.
 
 ### Freshness does not read the fold's own wraps
@@ -767,9 +827,32 @@ needed.
 ### Some resource holders are not move-checked or dropped
 
 Every value holding an affine resource is move-only and dropped, but only a
-struct, a tuple and a `Result` are checked. An `Option`, a user variant or a
+struct, a tuple and a variant (`Option` and `Result` among them) are checked. A
 `List` holding one can be moved twice with no diagnostic, and is not dropped at
 scope exit.
+
+### A call through `&mut` that copies
+
+The receiver kind decides whether a call copies or extracts
+([A call through `&mut` extracts](#a-call-through-mut-extracts)), and a `&mut`
+function that copies breaks the rule unseen. The caller then owns a value the
+storage still holds.
+
+- `HashMap::get_or_insert` and `TreeMap::get_or_insert` return the value they
+  keep. Neither can return a reference instead: `&V` needs `V: Ref` and
+  `&mut V` needs `V: RefMut`, and a resource is neither.
+- An iterator that walks a borrowed container by value (`SliceValueIter`,
+  `MapValuesValueIter`) copies each element out through its `&mut self`. So
+  `for x of list` over a `List` holding a resource hands each element to the
+  loop while the list keeps it.
+
+### A generic body copies a type parameter
+
+The copy check reads a call's signature where the call is written. A body
+generic over `T` that copies a `T` out of a reference
+(`fn dup<T>(list: List<T>) -> T { return list[0]; }`) takes its arguments by
+value, so its own call sites are not refused. Instantiated with a resource, it
+returns a second owner.
 
 ### A resource field moves out of its holder
 

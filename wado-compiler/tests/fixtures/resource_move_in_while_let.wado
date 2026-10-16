@@ -1,0 +1,57 @@
+// A `while let`, an `if let` and a `match` arm bind their pattern afresh each
+// time they run, so moving the binding in a loop body moves only that
+// iteration's value. Reading it before the move, on a later iteration, reads
+// the next one.
+
+pub resource Counter {
+    fn bump(&self);
+}
+
+struct Holder {
+    id: i32,
+    c: Counter,
+}
+
+fn sift(from: &mut List<Holder>, keep: i32) -> List<Holder> {
+    let mut kept: List<Holder> = [];
+    while let Some(h) = from.pop() {
+        if h.id == keep {
+            kept.push(h);
+        }
+    }
+    return kept;
+}
+
+fn sift_if_let(from: &mut List<Holder>, keep: i32) -> List<Holder> {
+    let mut kept: List<Holder> = [];
+    for let _ of 0..<from.len() {
+        if let Some(h) = from.pop() && h.id == keep {
+            kept.push(h);
+        }
+    }
+    return kept;
+}
+
+fn sift_match(from: &mut List<Holder>, keep: i32) -> List<Holder> {
+    let mut kept: List<Holder> = [];
+    loop {
+        match from.pop() {
+            Some(h) => {
+                if h.id == keep {
+                    kept.push(h);
+                }
+            },
+            None => {
+                break;
+            },
+        }
+    }
+    return kept;
+}
+
+test "a binding moved in a loop body is a fresh one each iteration" {
+    let mut none: List<Holder> = [];
+    assert sift(&mut none, 1).is_empty();
+    assert sift_if_let(&mut none, 1).is_empty();
+    assert sift_match(&mut none, 1).is_empty();
+}

@@ -39,7 +39,34 @@ array Array<bool> (mut bool);  // TypeId(10)
 
 array Array<i8> (mut i8);  // TypeId(11)
 
-struct core:collections/treemap.wado//TreeMap<u64,i32> {  // TypeId(12)
+struct core:collections/entries.wado//EntryLog<u64,i32> {  // TypeId(12)
+    mut keys: ref Array<u64>,
+    mut values: ref Array<i32>,
+    mut alive: ref Array<bool>,
+    mut count: i32,
+    mut size: i32,
+    mut deleted_count: i32,
+}
+
+struct core:collections/entries.wado//EntryLog<u32,i32> {  // TypeId(13)
+    mut keys: ref Array<u32>,
+    mut values: ref Array<i32>,
+    mut alive: ref Array<bool>,
+    mut count: i32,
+    mut size: i32,
+    mut deleted_count: i32,
+}
+
+struct core:collections/entries.wado//EntryLog<i8,i32> {  // TypeId(14)
+    mut keys: ref Array<i8>,
+    mut values: ref Array<i32>,
+    mut alive: ref Array<bool>,
+    mut count: i32,
+    mut size: i32,
+    mut deleted_count: i32,
+}
+
+struct core:collections/treemap.wado//TreeMap<u64,i32> {  // TypeId(15)
     mut log: ref "core:collections/entries.wado//EntryLog<u64,i32>",
     mut slots: ref Array<i32>,
     mut nkeys: ref Array<u64>,
@@ -50,7 +77,7 @@ struct core:collections/treemap.wado//TreeMap<u64,i32> {  // TypeId(12)
     mut height: i32,
 }
 
-struct core:collections/treemap.wado//TreeMap<u32,i32> {  // TypeId(13)
+struct core:collections/treemap.wado//TreeMap<u32,i32> {  // TypeId(16)
     mut log: ref "core:collections/entries.wado//EntryLog<u32,i32>",
     mut slots: ref Array<i32>,
     mut nkeys: ref Array<u32>,
@@ -61,7 +88,7 @@ struct core:collections/treemap.wado//TreeMap<u32,i32> {  // TypeId(13)
     mut height: i32,
 }
 
-struct core:collections/treemap.wado//TreeMap<i8,i32> {  // TypeId(14)
+struct core:collections/treemap.wado//TreeMap<i8,i32> {  // TypeId(17)
     mut log: ref "core:collections/entries.wado//EntryLog<i8,i32>",
     mut slots: ref Array<i32>,
     mut nkeys: ref Array<i8>,
@@ -72,37 +99,10 @@ struct core:collections/treemap.wado//TreeMap<i8,i32> {  // TypeId(14)
     mut height: i32,
 }
 
-struct core:prelude/slice.wado//Slice<i32> {  // TypeId(15)
+struct core:prelude/slice.wado//Slice<i32> {  // TypeId(18)
     mut repr: ref Array<i32>,
     mut start: i32,
     mut end: i32,
-}
-
-struct core:collections/entries.wado//EntryLog<i8,i32> {  // TypeId(16)
-    mut keys: ref Array<i8>,
-    mut values: ref Array<i32>,
-    mut alive: ref Array<bool>,
-    mut count: i32,
-    mut size: i32,
-    mut deleted_count: i32,
-}
-
-struct core:collections/entries.wado//EntryLog<u32,i32> {  // TypeId(17)
-    mut keys: ref Array<u32>,
-    mut values: ref Array<i32>,
-    mut alive: ref Array<bool>,
-    mut count: i32,
-    mut size: i32,
-    mut deleted_count: i32,
-}
-
-struct core:collections/entries.wado//EntryLog<u64,i32> {  // TypeId(18)
-    mut keys: ref Array<u64>,
-    mut values: ref Array<i32>,
-    mut alive: ref Array<bool>,
-    mut count: i32,
-    mut size: i32,
-    mut deleted_count: i32,
 }
 
 struct core:prelude//List<u64> {  // TypeId(19)

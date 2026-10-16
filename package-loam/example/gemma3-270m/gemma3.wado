@@ -1,0 +1,81 @@
+//! Text in, text out: Gemma 3 (270M) continues a prompt one greedy token at a
+//! time. With no prompt it continues each prompt `generate.json` records and
+//! says whether it picks the tokens onnxruntime picks, and how long a token
+//! takes. `README.md` says how to run it.
+
+use { args, eprintln, println, Environment, Stderr, Stdout } from "core:cli";
+use fs from "core:fs";
+use { Preopens } from "core:fs";
+use { from_string } from "core:json";
+use { MonotonicClock } from "wasi:clocks";
+use { Cpu } from "lib:loam";
+use { Model, Tokenizer } from "./model.wado";
+
+global STEPS: i32 = 8;
+
+/// One prompt and the tokens onnxruntime picks after it, as `generate.mjs`
+/// writes them.
+struct Generated {
+    prompt: String,
+    ids: List<i32>,
+    generated: List<i32>,
+    ms_per_token: f64,
+}
+
+struct Oracle {
+    generate: List<Generated>,
+}
+
+/// `STEPS` greedy tokens after `ids`, and the milliseconds each took after the
+/// first, which reads the whole prompt.
+fn continued(model: &mut Model<Cpu>, ids: &List<i32>) -> [List<i32>, f64, f64] with MonotonicClock {
+    let mut all = *ids;
+    let started = MonotonicClock::now();
+    all.push(model.next_token(&all));
+    let prompted = MonotonicClock::now();
+    for let _ of 1..<STEPS {
+        all.push(model.next_token(&all));
+    }
+    let ended = MonotonicClock::now();
+    let first = (prompted - started) as u64 as f64 / 1_000_000.0;
+    let rest = (ended - prompted) as u64 as f64 / 1_000_000.0 / (STEPS - 1) as f64;
+    return [all[ids.len()..<all.len()].to_list(), first, rest];
+}
+
+export fn run() with (Stdout, Stderr, Environment, Preopens, MonotonicClock) {
+    let checkpoint = match fs::read("build/gemma3.safetensors") {
+        Ok(bytes) => bytes,
+        Err(e) => {
+            eprintln(`${e}; run fetch.sh first`);
+            return;
+        },
+    };
+    let mut model = match Model::load(Cpu {}, &checkpoint) {
+        Ok(model) => model,
+        Err(e) => {
+            eprintln(`build/gemma3.safetensors: ${e}`);
+            return;
+        },
+    };
+    let prompt = args().join(" ");
+    if !prompt.is_empty() {
+        let ids = Tokenizer::encode(&prompt);
+        let [generated, _, _] = continued(&mut model, &ids);
+        println(Tokenizer::decode(&generated));
+        return;
+    }
+    let Ok(text) = fs::read_to_string("generate.json") else {
+        eprintln("generate.json is missing; run generate.mjs");
+        return;
+    };
+    for let case of from_string::<Oracle>(&text).unwrap().generate {
+        let [generated, first, rest] = continued(&mut model, &case.ids);
+        let verdict = if generated == case.generated {
+            "matches onnxruntime";
+        } else {
+            `onnxruntime picks ${case.generated:?}`;
+        };
+        println(`${case.prompt:?} -> ${generated:?}: ${verdict}`);
+        println(`  ${first:.0} ms for the prompt, ${rest:.1} ms a token after it (onnxruntime ${case.ms_per_token:.1})`);
+    }
+}

@@ -10,8 +10,8 @@ use { Preopens, Filesize, PathFlags, OpenFlags, DescriptorFlags, ErrorCode } fro
 use { eprintln, Stderr } from "core:cli";
 
 export fn run() with (Preopens, Stderr) {
-    let dirs = Preopens::get_directories();
-    let root = dirs[0].0;
+    let mut dirs = Preopens::get_directories();
+    let root = dirs.remove(0).0;
     let file = root.open_at(
         PathFlags::none(),
         "out.txt",

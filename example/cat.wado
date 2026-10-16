@@ -29,12 +29,12 @@ export fn run() with (Stdout, Stderr, Environment, Preopens, Stdin, Exit) {
     }
 
     // Use the first preopened directory as the root for relative paths.
-    let dirs = Preopens::get_directories();
+    let mut dirs = Preopens::get_directories();
     if dirs.len() == 0 {
         eprintln("cat: no preopened directories available (try without --no-dir)");
         exit_error();
     }
-    let root = dirs[0].0;
+    let root = dirs.remove(0).0;
 
     // Like cat(1), a file that fails does not stop the rest.
     let mut failed = false;
