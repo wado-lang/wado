@@ -319,12 +319,10 @@ impl Visitor for ValueVisitor {
 }
 
 impl Inspect for Value {
-    /// The alternate (`#`) form puts each element or entry of a non-empty
-    /// collection on its own indented line.
     pub fn inspect(&self, f: &mut Formatter) {
         match self {
             Null => f.write_str("null"),
-            Bool(b) => f.write_str(&if *b { "true" } else { "false" }),
+            Bool(b) => (*b).inspect(f),
             Int(n) => (*n).inspect(f),
             UInt(n) => (*n).inspect(f),
             Int128(n) => (*n).inspect(f),
@@ -335,52 +333,8 @@ impl Inspect for Value {
                 f.write_str("0x");
                 f.write_str(&b.to_hex());
             },
-            List(arr) => {
-                if f.alternate && !arr.is_empty() {
-                    f.open_brace("[");
-                    for let item of arr {
-                        f.write_newline_indent();
-                        item.inspect(f);
-                        f.write_char(',');
-                    }
-                    f.close_brace("]");
-                    return;
-                }
-                f.write_char('[');
-                for let mut i = 0; i < arr.len(); i += 1 {
-                    if i > 0 {
-                        f.write_str(", ");
-                    }
-                    arr[i].inspect(f);
-                }
-                f.write_char(']');
-            },
-            Object(map) => {
-                if f.alternate && !map.is_empty() {
-                    f.open_brace("{");
-                    for let [k, v] of map.entries() {
-                        f.write_newline_indent();
-                        k.inspect(f);
-                        f.write_str(": ");
-                        v.inspect(f);
-                        f.write_char(',');
-                    }
-                    f.close_brace("}");
-                    return;
-                }
-                f.write_char('{');
-                let mut first = true;
-                for let [k, v] of map.entries() {
-                    if !first {
-                        f.write_str(", ");
-                    }
-                    first = false;
-                    k.inspect(f);
-                    f.write_str(": ");
-                    v.inspect(f);
-                }
-                f.write_char('}');
-            },
+            List(arr) => arr.inspect(f),
+            Object(map) => map.inspect(f),
             Undefined => f.write_str("undefined"),
             Unknown(b) => {
                 f.write_str("unknown(0x");
