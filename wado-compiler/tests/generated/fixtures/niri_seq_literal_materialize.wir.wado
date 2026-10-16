@@ -117,9 +117,8 @@ import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 import fn wasi/stream-new from "wasi/stream-new";
 import fn wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code from "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code";
 
-global global:core:prelude/format.wado::$const_obj_18: ref Array<u8> = array.new_fixed<u8>(46, 46, 46);
-global global:core:prelude/format.wado::$const_obj_19: ref Array<u8> = array.new_fixed<u8>(92, 117, 123);
-global global:core:prelude/primitive.wado::$const_obj_20: ref "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 };
+global global:core:prelude/format.wado::$const_obj_6: ref Array<u8> = array.new_fixed<u8>(46, 46, 46);
+global global:core:prelude/format.wado::$const_obj_7: ref Array<u8> = array.new_fixed<u8>(92, 117, 123);
 
 fn "niri_seq_literal_materialize.wado/sink"(name, v) {
     return name.used + v;
@@ -570,7 +569,7 @@ fn "core:prelude/format.wado/core/prelude/format.wado/inspect_text<core:prelude/
                 }
                 start_307 = local.tee $hfs_used_426(self_12.used);
                 $hfs_used_426 = new_used_306;
-                builtin::array_copy<u8>(self_12.repr, start_307, global:core:prelude/format.wado::$const_obj_19, 0, 3);
+                builtin::array_copy<u8>(self_12.repr, start_307, global:core:prelude/format.wado::$const_obj_7, 0, 3);
                 $tmpl_buf_379.used = 0;
                 "core:prelude/primitive.wado/u64::fmt_base$sroa[self.value]$spec0$sroa[f.buf]$dae[alt_prefix]"(builtin::i64_extend_i32_u($sroa_slot_409), $tmpl_buf_379, 16, 0);
                 $inline_core_prelude_string_wado_String__internal_push_string_17: block {
@@ -617,7 +616,7 @@ fn "core:prelude/format.wado/core/prelude/format.wado/inspect_text<core:prelude/
         }
         new_used_326 = $tmpl_buf_379.used;
         $tmpl_buf_379.used = new_used_67;
-        builtin::array_copy<u8>($tmpl_buf_379.repr, new_used_326, global:core:prelude/format.wado::$const_obj_18, 0, 3);
+        builtin::array_copy<u8>($tmpl_buf_379.repr, new_used_326, global:core:prelude/format.wado::$const_obj_6, 0, 3);
     }
 }
 
@@ -988,11 +987,11 @@ fn "core:prelude/primitive.wado/i32::fmt_decimal$sroa[self.value]"(self, f) {
     is_negative = self < 0;
     self = "core:prelude/primitive.wado/count_digits_u64"(local.tee x(x = builtin::i64_extend_i32_s(self); select i64(x < 0_i64, 0_i64 - x, x)));
     is_negative = block -> i32 {
-        let $mv_arg_3: ref "core:prelude/string.wado//String";
-        $mv_arg_3 = global:core:prelude/primitive.wado::$const_obj_20;
-        "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>"(f, is_negative, $mv_arg_3.repr, $mv_arg_3.used, self);
+        let $mv_field_3: ref Array<u8>;
+        $mv_field_3 = builtin::array_new<u8>(0);
+        "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>"(f, is_negative, $mv_field_3, 0, self);
     };
-    "core:prelude/primitive.wado/write_decimal_digits"(local.tee $mv_arg_3(f.buf).repr, is_negative, x, self);
+    "core:prelude/primitive.wado/write_decimal_digits"(f.buf.repr, is_negative, x, self);
 }
 
 fn "core:prelude/primitive.wado/u64::fmt_base$sroa[self.value]$spec0$sroa[f.buf]$dae[alt_prefix]"(self, f, base, upper) {
