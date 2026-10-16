@@ -413,7 +413,13 @@ solved better. Kept as an optimization opportunity, dropped as a promise.
   before the projection made the pack concrete and never asked again, so
   `..F: Trait` off `FieldTypes` held for any struct.
 - The binary grows by one tag instantiation per template shape, as it would by
-  inlining a builder at each site.
+  inlining a builder at each site. Since the source texts are part of the
+  shape, naming a hole's variable differently is what most often mints another.
+  Measured in issue #1992, keying without them would save little: shapes drop
+  from 21 to 20 in `wadopoet_test.wado`, 18 to 15 in Gale's `codegen_test.wado`
+  and 6 to 5 in `example/sql_tag.wado`, and the `-O2` binaries shrink by 0.01%,
+  0.05% and 1.2%. Keeping `source()` out of the key unless a reachable tag reads
+  it would need that asked after monomorphization, which this does not pay for.
 
 ## Implementation
 
