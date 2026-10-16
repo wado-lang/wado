@@ -15,7 +15,7 @@ use crate::token::Span;
 pub fn hex_suffix_lookalike_diagnostics(sem: &Semantics) -> Vec<Diagnostic> {
     let mut out = Vec::new();
     for (src, module) in &sem.modules {
-        if !src.is_user_authored()
+        if !src.is_entry_package()
             || inner_attrs_allow(&module.inner_attributes, lint::HEX_SUFFIX_LOOKALIKE)
         {
             continue;

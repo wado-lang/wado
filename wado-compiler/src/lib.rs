@@ -660,10 +660,11 @@ pub async fn package_unused_diagnostics<H: CompilerHost>(
         .map(|(source, _)| source.clone())
         .collect();
     let production = reach(entries.iter(), |source| imports[source].iter().collect());
-    // Generated modules hold no candidates, members or not.
-    let reported = members
+    let reported = load
+        .modules
         .iter()
-        .filter(|source| !load.modules[*source].has_generated());
+        .filter(|(source, module)| source.is_entry_package() && !module.has_generated())
+        .map(|(source, _)| source);
     let walked = reach(reported, |source| {
         importers.get(source).cloned().unwrap_or_default()
     });
@@ -672,7 +673,6 @@ pub async fn package_unused_diagnostics<H: CompilerHost>(
         "a module whose bodies are walked keeps them"
     );
     let scope = LivenessScope::Package(Box::new(PackageScope {
-        members: members.iter().cloned().collect(),
         entries,
         production,
         walked,
@@ -745,7 +745,7 @@ fn shadowing_diagnostics(sem: &semantics::Semantics) -> Vec<Diagnostic> {
     resolutions
         .shadowings()
         .iter()
-        .filter(|s| s.module.is_user_authored())
+        .filter(|s| s.module.is_entry_package())
         .map(|shadowing| {
             let what = match shadowing.shadowed {
                 Shadowed::Decl(def) => format!("the {} of the same name", defs.kind(def).label()),
@@ -773,7 +773,7 @@ fn shadowing_diagnostics(sem: &semantics::Semantics) -> Vec<Diagnostic> {
 fn undecided_effect_diagnostics(sem: &semantics::Semantics) -> Vec<Diagnostic> {
     let mut out = Vec::new();
     for (src, module) in &sem.modules {
-        if !src.is_user_authored()
+        if !src.is_entry_package()
             || inner_attrs_allow(&module.inner_attributes, lint::UNDECIDED_EFFECTS)
         {
             continue;

@@ -23,7 +23,7 @@ use crate::unparse::unparse_expr_source;
 pub fn constant_arithmetic_diagnostics(sem: &Semantics) -> Vec<Diagnostic> {
     let mut out = Vec::new();
     for (src, module) in &sem.modules {
-        if !src.is_user_authored() {
+        if !src.is_entry_package() {
             continue;
         }
         let waived = |name| inner_attrs_allow(&module.inner_attributes, name);

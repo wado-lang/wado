@@ -707,10 +707,10 @@ fn test_check_offers_the_api_of_every_declared_entry() {
     }
 }
 
-/// Checking a package reports its own files alone: a dependency's bodies go
-/// unwalked, so nothing there could tell a used import from an unused one.
+/// A lint reports in the package's own modules alone, checked as a package or
+/// as one file: a dependency is not the consumer's to fix.
 #[test]
-fn test_check_reports_no_unused_import_in_a_dependency() {
+fn test_check_reports_no_lint_in_a_dependency() {
     let tmp = tempfile::tempdir().unwrap();
     let greet = tmp.path().join("greet");
     std::fs::create_dir_all(&greet).unwrap();
@@ -722,7 +722,9 @@ fn test_check_reports_no_unused_import_in_a_dependency() {
     std::fs::write(
         greet.join("a.wado"),
         "use { Doubled } from \"./t.wado\";\n\
-         pub fn n() -> i32 { return 21.doubled(); }\n",
+         use { TreeSet } from \"core:collections\";\n\
+         pub fn n() -> i32 { let n = 21; return n.doubled(); }\n\
+         fn dead() {}\n",
     )
     .unwrap();
     std::fs::write(
@@ -745,12 +747,46 @@ fn test_check_reports_no_unused_import_in_a_dependency() {
     )
     .unwrap();
 
+    for args in [&["check"][..], &["check", "lib.wado"]] {
+        wado()
+            .current_dir(&app)
+            .args(args)
+            .assert()
+            .success()
+            .stderr(predicate::str::contains("greet").not());
+    }
+}
+
+/// A module the package's code reaches is the package's own, whether or not
+/// `wado test` runs it.
+#[test]
+fn test_check_reports_a_test_excluded_module_the_package_reaches() {
+    let tmp = tempfile::tempdir().unwrap();
+    let dir = tmp.path();
+    std::fs::create_dir_all(dir.join("src/gen")).unwrap();
+    std::fs::write(
+        dir.join("wado.toml"),
+        "[package]\nname = \"pkg\"\nnamespace = \"wado\"\nversion = \"0.1.0\"\nlib = \"src/lib.wado\"\n\n\
+         [test]\nexclude = [\"src/gen\"]\n",
+    )
+    .unwrap();
+    std::fs::write(
+        dir.join("src/lib.wado"),
+        "use { helper } from \"./gen/x.wado\";\npub fn api() -> i32 { return helper(); }\n",
+    )
+    .unwrap();
+    std::fs::write(
+        dir.join("src/gen/x.wado"),
+        "pub fn helper() -> i32 { return 1; }\nfn dead_one() {}\n",
+    )
+    .unwrap();
+
     wado()
-        .current_dir(&app)
+        .current_dir(dir)
         .arg("check")
         .assert()
         .success()
-        .stderr(predicate::str::contains("never used").not());
+        .stderr(predicate::str::contains("`dead_one` is never used"));
 }
 
 /// A directory names the project to check, so a workspace member is reachable

@@ -769,10 +769,15 @@ impl ModuleSource {
 
     /// Whether the entry package owns this module: the entry point and the
     /// local modules it reaches. A dependency, `core:` / `wasi:`, a remote and
-    /// a Kiln-generated module are all someone else's source.
+    /// a Kiln-generated module are all someone else's source. These are the
+    /// modules a lint reports in.
     #[must_use]
     pub fn is_entry_package(&self) -> bool {
-        matches!(self, Self::EntryPoint { .. } | Self::Local { .. })
+        match self {
+            Self::EntryPoint { .. } => true,
+            Self::Local { .. } => self.is_user_authored(),
+            _ => false,
+        }
     }
 
     /// Check if this is a local module.

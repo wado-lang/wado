@@ -33,9 +33,9 @@ pub(crate) struct Liveness {
     /// Candidates reachable from tests but not production (`∈ T \ E`), in
     /// source order. `TestOnlyFunction` / `TestOnlyGlobal`.
     pub(crate) test_only_items: Vec<AstId>,
-    /// The modules whose items are report candidates: user-authored, not
-    /// generated, and a member of the package a package scope checks. Every
-    /// unused lint reports these alone.
+    /// The modules whose items are report candidates: the entry package's own
+    /// ([`ModuleSource::is_entry_package`]), not generated. Every unused lint
+    /// reports these alone.
     pub(crate) reported_modules: IndexSet<ModuleSource>,
     /// Local last-use liveness (WEP 2026-05-21, value-copy client). Each entry
     /// is the `AstId` of an identifier *use* that is the final use, on every
@@ -64,8 +64,6 @@ pub(crate) enum LivenessScope {
 
 /// One package's modules, sorted by what they are for.
 pub(crate) struct PackageScope {
-    /// The package's own modules, the only ones reported.
-    pub(crate) members: IndexSet<ModuleSource>,
     /// The modules its manifest declares. Their `pub` items, and what they
     /// re-export, are what the package offers.
     pub(crate) entries: IndexSet<ModuleSource>,
@@ -112,19 +110,16 @@ impl LivenessScope {
 
     fn module_roots(&self, source: &ModuleSource) -> ModuleRoots {
         let compilation = ModuleRoots {
-            reported: source.is_user_authored(),
+            reported: source.is_entry_package(),
             offers_pub: true,
             internal_undecided: true,
             test_code: false,
         };
         match self {
+            // Another package's modules keep the compilation rules: only their
+            // own package decides their roots.
             Self::Compilation => compilation,
-            // Another package's modules keep the compilation rules: they are
-            // not reported, and only their own package decides their roots.
-            Self::Package(package) if !package.members.contains(source) => ModuleRoots {
-                reported: false,
-                ..compilation
-            },
+            Self::Package(_) if !compilation.reported => compilation,
             Self::Package(package) => ModuleRoots {
                 offers_pub: package.entries.contains(source),
                 internal_undecided: false,

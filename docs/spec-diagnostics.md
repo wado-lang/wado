@@ -7,7 +7,8 @@ not yet wrong. This chapter states the warnings and remarks that come from
 lints, the checks the compiler runs on code it accepts.
 
 [`#[allow(...)]`](./spec-attributes.md#allow) waives a lint. A lint reports
-only in the user's own modules, never in the standard library.
+only in the modules of the package being compiled, never in the standard
+library or a dependency.
 
 The lints are:
 

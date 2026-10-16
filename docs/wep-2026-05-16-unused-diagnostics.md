@@ -195,12 +195,14 @@ free function that only an unreached default body calls is dead.
 §Liveness says which dispatch fact it rides, why the two kinds above have none,
 and what the rule leaves open for a library's `pub trait`.
 
-### Stdlib exclusion
+### Stdlib and dependency exclusion
 
-Functions, imports, and locals whose `ModuleSource` is `Core`, `Wasi`,
-`Builtin`, or `Wasm` are excluded from both passes when the entry
-module is user-authored. Stdlib never emits unused diagnostics into the
-user's build output.
+Only the entry package's own modules (`ModuleSource::is_entry_package`) are
+report candidates, in both scopes. The standard library, a dependency, a
+remote module and a Kiln redirect are someone else's source, so no build of a
+consumer reports into them. In package mode a module the package's code
+reaches is its own even where `[test].exclude` keeps `wado test` from running
+it.
 
 ### Generated-module exclusion
 

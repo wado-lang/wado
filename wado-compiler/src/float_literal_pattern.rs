@@ -17,7 +17,7 @@ use crate::token::Span;
 pub fn float_literal_pattern_diagnostics(sem: &Semantics) -> Vec<Diagnostic> {
     let mut out = Vec::new();
     for (src, noted) in sem.inexact_float_patterns() {
-        if !src.is_user_authored() {
+        if !src.is_entry_package() {
             continue;
         }
         let module = &sem.modules[&src];
