@@ -1603,6 +1603,29 @@ fn query_references_include_declaration() {
     assert!(lines[1].ends_with(":6:13"), "call, got: {}", lines[1]);
 }
 
+/// A sibling's file name reaches the workspace load as written, whatever
+/// characters a string literal escapes.
+#[test]
+fn query_references_reach_a_sibling_whose_name_a_string_literal_escapes() {
+    let dir = tempfile::tempdir().unwrap();
+    std::fs::write(
+        dir.path().join("lib.wado"),
+        "pub fn helper() -> i32 { return 1; }\n",
+    )
+    .unwrap();
+    std::fs::write(
+        dir.path().join("a\"b.wado"),
+        "use { helper } from \"./lib.wado\";\nfn run() -> i32 { return helper(); }\n",
+    )
+    .unwrap();
+
+    wado_in(dir.path())
+        .args(["query", "references", "--symbol", "./lib.wado#helper"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("a\"b.wado:2:26"));
+}
+
 #[test]
 fn query_references_json_output() {
     let tmp = tempfile::NamedTempFile::with_suffix(".wado").unwrap();

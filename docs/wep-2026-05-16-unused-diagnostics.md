@@ -174,7 +174,9 @@ outside `E ∪ T`.
 
 The CLI runs each member's Kiln pipeline apart and folds the indexes into one
 keyed by the package's module identities
-(`PackageSources::adopt_member_invocations`). One pipeline over the whole
+(`PackageSources::adopt_member_invocations`). An entry's index is the one its
+own check already produced, so its generators neither run nor warn twice. One
+pipeline over the whole
 package would reject two members that generate one schema under different
 options, which Gale's descriptor corpus does.
 
@@ -183,8 +185,8 @@ walked. Any other module can name no candidate, and the impl methods its calls
 dispatch to are roots anyway, so its walk would change no verdict. Gale's
 generated parsers import only the standard library, and they are most of what
 its tests load. The loader goes one step further for a `#![generated]` module
-that imports nothing else: it skips its function bodies at parse time, so they
-cost no AST either.
+that imports none of the package's code: it skips its function bodies at parse
+time, so they cost no AST either.
 
 A single-file compile and the editor keep the compilation rules above, so
 `pub` and `internal` items stay roots there.

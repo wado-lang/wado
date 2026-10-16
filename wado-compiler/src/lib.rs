@@ -204,7 +204,6 @@ fn trait_bound_violation_message(
 }
 
 use std::cell::RefCell;
-use std::fmt::Write as _;
 use std::rc::Rc;
 
 use crate::hashmap::{IndexMap, IndexSet};
@@ -563,6 +562,12 @@ fn unused_diagnostics(sem: &semantics::Semantics, is_test_world: bool) -> Vec<Di
     out
 }
 
+/// The source line of a `use` binding `binding` to the module `specifier`
+/// names, for an entry the toolchain writes itself.
+pub fn use_declaration(binding: &str, specifier: &str) -> String {
+    format!("use {binding} from {};\n", quoted(specifier))
+}
+
 /// One package's source files, for [`package_unused_diagnostics`]. Each member
 /// is a path relative to `root`, `/`-separated.
 pub struct PackageSources {
@@ -579,11 +584,10 @@ impl PackageSources {
     }
 
     fn entry_source(&self) -> String {
-        let mut source = String::new();
-        for member in &self.members {
-            writeln!(source, "use _ from {};", quoted(&format!("./{member}"))).unwrap();
-        }
-        source
+        self.members
+            .iter()
+            .map(|member| use_declaration("_", &format!("./{member}")))
+            .collect()
     }
 
     /// The identity the package's load gives `member`.

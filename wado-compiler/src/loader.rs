@@ -1317,7 +1317,7 @@ impl<'a, H: CompilerHost> ModuleLoader<'a, H> {
     }
 
     /// Skip the function bodies of every `#![generated]` user module that
-    /// imports only the standard library, for a caller that walks no body
+    /// imports none of this package's code, for a caller that walks no body
     /// such a module holds ([`LoadResult::skipped_bodies`] names them).
     #[must_use]
     pub(crate) fn with_generated_bodies_skipped(mut self) -> Self {
@@ -1462,10 +1462,10 @@ impl<'a, H: CompilerHost> ModuleLoader<'a, H> {
 
             // Collect its imports (before bind)
             self.collect_imports(&ast, &module_source, &mut pending, &mut wasm_imports)?;
-            // A module importing only the standard library and other packages
-            // reaches none of this package's code, which never imports another
-            // package's, so no caller walks its bodies. One importing this
-            // package's code may be walked, and keeps them.
+            // Another package's code never imports this package's, so a module
+            // importing only it and the standard library reaches none of this
+            // package's code, and no caller walks its bodies. One importing
+            // this package's code may be walked, and keeps them.
             if skipped {
                 let reaches_package = |imported: &ModuleSource| {
                     imported.is_user_authored()

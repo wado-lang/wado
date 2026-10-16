@@ -15,6 +15,7 @@ use crate::module_source::{ModuleSource, ModuleSourceInterner};
 use crate::primitive::PrimitiveType;
 use crate::semantics::Semantics;
 use crate::token::Span;
+use crate::use_declaration;
 use crate::unparse::{
     get_item_id, unparse_assoc_type_decl, unparse_attributes, unparse_bound_arguments_into,
     unparse_contract_clause, unparse_enum_signature, unparse_function_signature,
@@ -911,7 +912,7 @@ fn parse_stdlib_for_doc(label: &str, source: &str) -> ParseResult {
 /// [`Semantics`] its page reads.
 #[must_use]
 pub fn stdlib_doc_entry(module_name: &str) -> String {
-    format!("use _ from \"{module_name}\";\n")
+    use_declaration("_", module_name)
 }
 
 /// Extract documentation from a stdlib module by name.

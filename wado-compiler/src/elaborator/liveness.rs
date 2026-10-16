@@ -33,9 +33,8 @@ pub(crate) struct Liveness {
     /// Candidates reachable from tests but not production (`∈ T \ E`), in
     /// source order. `TestOnlyFunction` / `TestOnlyGlobal`.
     pub(crate) test_only_items: Vec<AstId>,
-    /// The modules whose items are report candidates: the entry package's own
-    /// ([`ModuleSource::is_entry_package`]), not generated. Every unused lint
-    /// reports these alone.
+    /// The modules whose items are report candidates ([`is_reported`]). Every
+    /// unused lint reports these alone.
     pub(crate) reported_modules: IndexSet<ModuleSource>,
     /// Local last-use liveness (WEP 2026-05-21, value-copy client). Each entry
     /// is the `AstId` of an identifier *use* that is the final use, on every
@@ -79,8 +78,6 @@ pub(crate) struct PackageScope {
 
 /// What one module's visibility modifiers mean for liveness, under a scope.
 struct ModuleRoots {
-    /// Its items are report candidates.
-    reported: bool,
     /// Its `pub` items are offered beyond the package, and so are roots.
     offers_pub: bool,
     /// Whether another module uses its `internal` items is unknown here.
@@ -110,7 +107,6 @@ impl LivenessScope {
 
     fn module_roots(&self, source: &ModuleSource) -> ModuleRoots {
         let compilation = ModuleRoots {
-            reported: source.is_entry_package(),
             offers_pub: true,
             internal_undecided: true,
             test_code: false,
@@ -119,7 +115,7 @@ impl LivenessScope {
             // Another package's modules keep the compilation rules: only their
             // own package decides their roots.
             Self::Compilation => compilation,
-            Self::Package(_) if !compilation.reported => compilation,
+            Self::Package(_) if !source.is_entry_package() => compilation,
             Self::Package(package) => ModuleRoots {
                 offers_pub: package.entries.contains(source),
                 internal_undecided: false,
@@ -187,8 +183,8 @@ pub(crate) fn compute(
         let roots = scope.module_roots(source);
         // A generated module still seeds exports / edges below, so it keeps the
         // items it calls live.
-        let user = is_reported(source, module);
-        if user {
+        let reported = is_reported(source, module);
+        if reported {
             reported_modules.insert(source.clone());
         }
         // A file-level `#![allow(dead_code)]` waives the lint for every item in
@@ -219,7 +215,7 @@ pub(crate) fn compute(
                     // user-authored code that could be "dead". `#[allow(dead_code)]`
                     // (item- or module-level) opts an item out of the lint while
                     // leaving its call-graph edges intact.
-                    if user
+                    if reported
                         && func.body.is_some()
                         && !module_allows_dead
                         && !ast::attrs_allow(&func.attrs, ast::lint::DEAD_CODE)
@@ -243,7 +239,7 @@ pub(crate) fn compute(
                             graph.seed_export(key);
                         }
                     }
-                    if user
+                    if reported
                         && !module_allows_dead
                         && !ast::attrs_allow(&global.attributes, ast::lint::DEAD_CODE)
                     {
