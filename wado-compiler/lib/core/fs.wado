@@ -457,20 +457,26 @@ pub fn read_dir<S: AsStrSlice>(path: S) -> Result<List<DirEntry>, FsError> with 
 /// path that reaches it.
 ///
 /// The call lists `path` itself, so a path that names no directory fails here.
-/// Each directory under it is listed on the `next` after it is yielded, so what
-/// the loop does to it in between is what the walk sees: one the loop removed
-/// is yielded as `NotFound`. A directory that cannot be listed is yielded as
-/// its error, after which the walk goes on to the next entry.
+/// Each directory under it is listed as it is yielded, before the loop body
+/// sees it, so what the body does to it is not what the walk sees: the entries
+/// of one the body removes are still yielded. A directory that cannot be
+/// listed is followed by its error, after which the walk goes on to the next
+/// entry.
 ///
 /// `descend` is asked about each directory, with that whole path, before the
-/// walk enters it; the directory is yielded either way. A predicate that means
-/// a name takes [`file_name`] of the path it is handed.
-pub fn walk_dir<S: AsStrSlice>(
+/// walk enters it; the directory is yielded either way. It may perform effects,
+/// which advancing the walk then performs. A predicate that means a name takes
+/// [`file_name`] of the path it is handed.
+pub fn walk_dir<
+    S: AsStrSlice,
+    effect E,
+    F: fn mut(&WalkEntry) -> bool with E = fn(&WalkEntry) -> bool,
+>(
     path: S,
-    descend: fn(&WalkEntry) -> bool = enter_every_directory,
-) -> Result<Walk, FsError> with Preopens {
-    let mut walk = Walk { ahead: [], enter: null, descend };
-    walk.list(path.to_string())?;
+    descend: F = enter_every_directory,
+) -> Result<Walk<F>, FsError> with Preopens {
+    let mut walk = Walk { ahead: [], failed: null, descend };
+    walk.list(&path.to_string())?;
     return Result::Ok(walk);
 }
 
@@ -479,40 +485,40 @@ fn enter_every_directory(entry: &WalkEntry) -> bool {
 }
 
 /// A walk [`walk_dir`] started, depth first.
-pub struct Walk {
+pub struct Walk<F> {
     /// What is listed and not yet yielded, the next entry last.
     ahead: List<WalkEntry>,
-    /// The directory just yielded, when `descend` let the walk into it.
-    enter: Option<String>,
-    descend: fn(&WalkEntry) -> bool,
+    /// Why the directory just yielded could not be listed, yielded next.
+    failed: Option<FsError>,
+    descend: F,
 }
 
-impl Walk {
-    fn list(&mut self, path: String) -> Result<(), FsError> with Preopens {
-        let mut entries = read_dir(&path)?;
-        entries.reverse();
-        for let entry of entries {
-            self.ahead.push(WalkEntry { path: join(&path, &entry.name), type: entry.type });
+impl<F> Walk<F> {
+    fn list(&mut self, path: &String) -> Result<(), FsError> with Preopens {
+        let entries = read_dir(path)?;
+        for let mut i = entries.len() - 1; i >= 0; i -= 1 {
+            let entry = entries[i];
+            self.ahead.push(WalkEntry { path: join(path, &entry.name), type: entry.type });
         }
         return Result::Ok(());
     }
 }
 
-impl Iterator for Walk {
+impl<effect E, F: fn mut(&WalkEntry) -> bool with E> Iterator for Walk<F> {
     type Item = Result<WalkEntry, FsError>;
 
-    fn next(&mut self) -> Option<Result<WalkEntry, FsError>> with Preopens {
-        if let Some(dir) = self.enter {
-            self.enter = null;
-            if let Err(e) = self.list(dir) {
-                return Option::Some(Result::Err(e));
-            }
+    fn next(&mut self) -> Option<Result<WalkEntry, FsError>> with (Preopens, E) {
+        if let Some(e) = self.failed {
+            self.failed = null;
+            return Option::Some(Result::Err(e));
         }
         let Some(here) = self.ahead.pop() else {
             return null;
         };
         if here.type matches { Directory } && (self.descend)(&here) {
-            self.enter = Option::Some(here.path);
+            if let Err(e) = self.list(&here.path) {
+                self.failed = Option::Some(e);
+            }
         }
         return Option::Some(Result::Ok(here));
     }

@@ -321,15 +321,63 @@ test "a walk lists a directory only when it reaches it, and goes on past one it 
     };
 }
 
-test "a directory the loop removes is yielded as NotFound" {
-    let dir = scratch("walk-removed");
-    fs::create_dir_all(`${dir}/gone/inner`).unwrap();
+test "a walk yields a directory before what it holds, and what it holds next" {
+    let dir = scratch("walk-order");
+    fs::create_dir_all(`${dir}/a`).unwrap();
+    fs::create_dir_all(`${dir}/b`).unwrap();
+    fs::write(`${dir}/a/x.txt`, &"x").unwrap();
+    fs::write(`${dir}/b/y.txt`, &"y").unwrap();
 
-    let mut walk = fs::walk_dir(&dir).unwrap();
-    let gone = walk.next().unwrap().unwrap().path;
-    fs::remove_dir_all(&gone).unwrap();
-    assert walk.next().unwrap().unwrap_err().kind matches { NotFound };
-    assert walk.next() == null;
+    let mut paths: List<String> = [];
+    for let found of fs::walk_dir(&dir).unwrap() {
+        paths.push(found.unwrap().path);
+    }
+    assert paths.len() == 4;
+    for let i of [0, 2] as List<i32> {
+        assert paths[i + 1] == `${paths[i]}/${if paths[i].ends_with("/a") { "x.txt" } else { "y.txt" }}`;
+    }
+}
+
+test "a directory is listed as it is yielded, before the loop body sees it" {
+    let dir = scratch("walk-body");
+    fs::create_dir_all(`${dir}/gone`).unwrap();
+    fs::write(`${dir}/gone/inner.txt`, &"").unwrap();
+    fs::create_dir_all(`${dir}/grows`).unwrap();
+
+    // Removing a yielded directory leaves its listing standing, and a
+    // directory created under one is not in the listing already taken.
+    let mut paths: List<String> = [];
+    for let found of fs::walk_dir(&dir).unwrap() {
+        let entry = found.unwrap();
+        if entry.path.ends_with("/gone") {
+            fs::remove_dir_all(&entry.path).unwrap();
+        } else if entry.path.ends_with("/grows") {
+            fs::create_dir(`${entry.path}/new`).unwrap();
+        }
+        paths.push(entry.path);
+    }
+    paths.sort();
+    assert paths.len() == 3;
+    assert paths[0] == `${dir}/gone`;
+    assert paths[1] == `${dir}/gone/inner.txt`;
+    assert paths[2] == `${dir}/grows`;
+}
+
+test "the descend predicate may perform effects" {
+    let dir = scratch("walk-effectful");
+    fs::create_dir_all(`${dir}/repo/sub`).unwrap();
+    fs::write(`${dir}/repo/.stop`, &"").unwrap();
+    fs::create_dir_all(`${dir}/plain/sub`).unwrap();
+
+    let mut paths: List<String> = [];
+    for let found of fs::walk_dir(&dir, |e| !fs::exists(fs::join(&e.path, ".stop"))).unwrap() {
+        paths.push(found.unwrap().path);
+    }
+    paths.sort();
+    assert paths.len() == 3;
+    assert paths[0] == `${dir}/plain`;
+    assert paths[1] == `${dir}/plain/sub`;
+    assert paths[2] == `${dir}/repo`;
 }
 
 test "walking what is not a directory fails" {

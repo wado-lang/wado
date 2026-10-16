@@ -52,7 +52,7 @@ pub fn exists<S: AsStrSlice>(path: S) -> bool with Preopens;
 pub fn try_exists<S: AsStrSlice>(path: S) -> Result<bool, FsError> with Preopens;
 
 pub fn read_dir<S: AsStrSlice>(path: S) -> Result<List<DirEntry>, FsError> with Preopens;
-pub fn walk_dir<S: AsStrSlice>(path: S, descend: fn(&WalkEntry) -> bool = …) -> Result<Walk, FsError> with Preopens;
+pub fn walk_dir<S: AsStrSlice, effect E, F: fn mut(&WalkEntry) -> bool with E = …>(path: S, descend: F = …) -> Result<Walk<F>, FsError> with Preopens;
 pub fn create_dir<S: AsStrSlice>(path: S) -> Result<(), FsError> with Preopens;
 pub fn create_dir_all<S: AsStrSlice>(path: S) -> Result<(), FsError> with Preopens;
 pub fn remove_dir<S: AsStrSlice>(path: S) -> Result<(), FsError> with Preopens;
@@ -283,8 +283,9 @@ rather than this module checking one.
 `remove_dir_all` and `walk_dir` are a third shape. Each acts on a listing, so a
 tree that changes mid-walk answers partly from before and partly from after. A
 `remove_dir_all` whose tree grows under it leaves the root `Io(NotEmpty)`. A
-`walk_dir` lists a directory after yielding it, so the caller's own loop body
-is inside the window: a directory it removes comes back as `NotFound`.
+`walk_dir` lists a directory as it yields it, so a walk's own loop body acts
+after the listing it reads from: the entries of a directory the body removes
+are still yielded, and one the body creates is not.
 
 None of these windows reaches outside the preopen. Every path opens with
 `PathFlags::none()`, and a directory entry that is a symlink is `Other` rather
@@ -322,23 +323,28 @@ does neither. The re-export is for the caller that only needed the name.
 ### A walk is an iterator
 
 `walk_dir` lists the directory it is handed and returns a `Walk`, an iterator
-that lists each directory under it only when it reaches it. A caller that stops
-early never pays for the rest of the tree, and the walk holds only the
-listings along its current path rather than the whole tree.
+that lists each directory under it as it yields it, before the loop body runs.
+A caller that stops early never pays for the rest of the tree, and the walk
+holds only the listings along its current path rather than the whole tree.
+Listing before the body runs keeps what the walk reads independent of what the
+body does: a body that creates a directory inside each one it visits would
+otherwise never end.
 [WEP: Effects Through Closures and Iterators](./wep-2026-10-11-effects-through-closures.md)
 is what made this shape available: before it, `Iterator` said `with ()`, so a
 `next` that reads a directory could not be written, and `walk_dir` returned a
 list of the whole tree.
 
 So a failure has two places. The directory handed to `walk_dir` fails the call,
-as `read_dir` does. A directory under it that cannot be listed is an item,
-`Err` where its entries would have been, and the walk goes on with the next
-entry rather than ending. A caller that wants to stop at the first failure
-writes `?` on the item.
+as `read_dir` does. A directory under it that cannot be listed is yielded, and
+an `Err` follows it where its entries would have been. The walk then goes on
+with the next entry rather than ending. A caller that wants to stop at the
+first failure writes `?` on the item.
 
 `descend` is asked about a directory before the walk enters it, and the
 directory is yielded either way. Without it the callers that skip `.git` and
-`node_modules` would pay to list them.
+`node_modules` would pay to list them. It may perform effects, as the closure a
+`map` takes may, so a predicate that looks inside the directory is one
+`walk_dir` can be handed.
 
 An entry carries the path that reaches it rather than its name alone. A walk's
 answer is read, removed or opened, and rebuilding the path from a name is the
