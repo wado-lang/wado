@@ -1799,11 +1799,6 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             }
         }
         self.sem.decls.function_sigs = function_sigs;
-        for item in &module.items {
-            if let Item::Function(func) = item {
-                self.precompute_generic_function_cache(func);
-            }
-        }
     }
 
     /// Per-module body walk (`annotate_bodies`): resolves every item body,

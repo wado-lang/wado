@@ -3205,41 +3205,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             return inferred;
         }
 
-        // Fast path: current-module cache (populated during item resolution),
-        // keyed by name, so only for a callee this module declares.
-        let declared_here = callee.module() == &self.current_module_source;
-        let cached = if declared_here
-            && let (Some(tp), Some(rp)) = (
-                self.sem
-                    .decls
-                    .generic_function_params
-                    .get(func_name)
-                    .cloned(),
-                self.sem
-                    .decls
-                    .generic_function_resolved_param_types
-                    .get(func_name)
-                    .cloned(),
-            ) {
-            let decl_return = self
-                .sem
-                .decls
-                .generic_function_resolved_return_types
-                .get(func_name)
-                .copied();
-            Some((tp, rp, decl_return))
-        } else {
-            None
-        };
-
-        let (type_param_list, resolved_param_types, decl_return_type) = if let Some(v) = cached {
-            v
-        } else {
-            // Fallback: cross-module lookup via imported functions / loaded modules.
-            let Some(info) = self.tysys.lookup_generic_func_for_inference(callee) else {
-                return vec![];
-            };
-            info
+        let Some((type_param_list, resolved_param_types, decl_return_type)) =
+            self.tysys.lookup_generic_func_for_inference(callee)
+        else {
+            return vec![];
         };
 
         if type_param_list.is_empty() {
@@ -4764,10 +4733,8 @@ impl TypeSystem {
             .collect()
     }
 
-    /// A generic function's `(real type params, param types, return type)`;
-    /// empty for one with no real type parameter. An effect or `fn`-bound
-    /// parameter takes no type argument, so listing one would hand the call a
-    /// slot more than its declaration counts.
+    /// A generic function's `(type params, param types, return type)`; empty
+    /// for one with no type parameter that takes a type argument.
     fn lookup_generic_func_for_inference(
         &self,
         callee: &CalleeRef,

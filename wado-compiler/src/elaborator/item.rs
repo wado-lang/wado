@@ -2515,25 +2515,6 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             .insert(variant_decl.id, type_params);
     }
 
-    /// Populate `func`'s generic-inference caches without resolving its body, so
-    /// a same-module forward reference — `outer<T>` written before `inner<T>` —
-    /// can still run argument-derived inference at the call site. Idempotent, and
-    /// mints fresh `TypeId`s each time; `resolve_function`'s later overwrite is
-    /// what keeps the cache consistent with the body's own ids.
-    pub(super) fn precompute_generic_function_cache(&mut self, func: &Function) {
-        // Mirrors `resolve_function`'s guard: fn-bound params are realised
-        // eagerly, so a function whose only non-effect params are fn-bound
-        // has nothing to cache.
-        let has_real_type_params = func
-            .type_params
-            .iter()
-            .any(GenericParam::is_real_type_param);
-        if !has_real_type_params {
-            return;
-        }
-        self.populate_generic_function_cache(func);
-    }
-
     /// Resolve `func`'s canonical signature (see
     /// [`super::sem::decls::FunctionSig`]) and record its declared return
     /// type on `function_return_types`. The one signature resolution per
@@ -2541,13 +2522,6 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
     /// record per-node facts.
     pub(super) fn record_function_sig(&mut self, func: &Function) -> FunctionSig {
         let mut scope = self.enter_decl_params_scope(&func.type_params);
-        let type_param_ids: Vec<(String, TypeId)> = scope
-            .annotate_ctx
-            .trait_ctx
-            .type_params
-            .iter()
-            .map(|(name, b)| (name.clone(), b.type_id))
-            .collect();
         let real_type_params: Vec<(String, TypeId)> = func
             .type_params
             .iter()
@@ -2583,7 +2557,6 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                 return_type,
                 own_effects: own_effect_params(&func.type_params),
             },
-            type_param_ids,
             params: func
                 .params
                 .iter()
@@ -2597,34 +2570,19 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         }
     }
 
-    /// Populate the three generic-function inference caches for `func`
-    /// from its recorded [`super::sem::decls::FunctionSig`] — no
-    /// re-resolution. Returns the declared return type for callers that
-    /// need it (`resolve_function`'s `task_return_type`).
-    fn populate_generic_function_cache(&mut self, func: &Function) -> TypeId {
+    /// The return type `func`'s recorded [`super::sem::decls::FunctionSig`]
+    /// declares, resolved in the signature's frame so a generic one's
+    /// `TypeParam` ids match the body's.
+    fn declared_return_type(&self, func: &Function) -> TypeId {
         let def = self.tysys.def_at(func.id);
-        let sig = self
-            .sem
+        self.sem
             .decls
             .function_sigs
             .get(&def)
-            .expect("decl pass records every free function's canonical signature");
-        let type_param_list = sig.decl.type_params.clone();
-        let resolved_param_types = sig.decl.param_types.clone();
-        let declared_return_type = sig.decl.return_type.unwrap_or(TypeTable::UNIT);
-        self.sem
-            .decls
-            .generic_function_params
-            .insert(func.name.clone(), type_param_list);
-        self.sem
-            .decls
-            .generic_function_resolved_param_types
-            .insert(func.name.clone(), resolved_param_types);
-        self.sem
-            .decls
-            .generic_function_resolved_return_types
-            .insert(func.name.clone(), declared_return_type);
-        declared_return_type
+            .expect("decl pass records every free function's canonical signature")
+            .decl
+            .return_type
+            .unwrap_or(TypeTable::UNIT)
     }
 
     /// Resolve a function for its facts.
@@ -2638,25 +2596,21 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
 
         scope.register_generic_params(&func.type_params, 0);
 
-        // Populate the generic-inference caches before the `function_return_types`
-        // update below, which shares its map with non-generic callers and can be
-        // overwritten by an external registration. A `<F: fn(…)>` bound is
-        // eagerly realised to its function type and consumes no `TypeParam` slot,
-        // being nothing monomorphisation needs to substitute.
+        // A `<F: fn(…)>` bound is eagerly realised to its function type and
+        // consumes no `TypeParam` slot, being nothing monomorphisation needs to
+        // substitute.
         let has_real_type_params = func
             .type_params
             .iter()
             .any(GenericParam::is_real_type_param);
-        let declared_return_type = if has_real_type_params {
-            scope.populate_generic_function_cache(func)
+        let return_type = if has_real_type_params {
+            scope.declared_return_type(func)
         } else {
             func.return_type
                 .as_ref()
                 .map(|t| scope.resolve_type(t))
                 .unwrap_or(TypeTable::UNIT)
         };
-
-        let return_type = declared_return_type;
 
         scope
             .sem
@@ -2667,7 +2621,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         let mut ctx = FunctionContext::new(return_type, func.name.clone());
         if func.is_async {
             ctx.is_async = true;
-            ctx.task_return_type = Some(declared_return_type);
+            ctx.task_return_type = Some(return_type);
         }
 
         // Resolve parameters. A default expression resolves in the callee's
@@ -2743,9 +2697,9 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             });
         }
         if func.is_export {
-            scope.check_published(func, "return type", declared_return_type, func.span);
+            scope.check_published(func, "return type", return_type, func.span);
         }
-        if crosses_cm_boundary && let Some(reference) = scope.cm_ref_within(declared_return_type) {
+        if crosses_cm_boundary && let Some(reference) = scope.cm_ref_within(return_type) {
             let _ = scope.emit(TypeError::RefAtCmBoundary {
                 function: func.name.clone(),
                 position: "return type".to_string(),
@@ -2769,7 +2723,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                 .sem
                 .types
                 .function_task_returns
-                .insert(func.id, declared_return_type);
+                .insert(func.id, return_type);
         }
 
         drop(scope);
