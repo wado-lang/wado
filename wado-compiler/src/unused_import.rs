@@ -104,8 +104,9 @@ impl Uses<'_> {
         unused
     }
 
-    /// The local name `name`, or its `alias`, binds where the module never
-    /// refers to it, with `span`, where it is written.
+    /// The local name an import of `name` binds (its `alias` where it has
+    /// one) and `span`, where it is written, when the module never refers
+    /// to it.
     fn unused_binding(
         &self,
         name: &String,

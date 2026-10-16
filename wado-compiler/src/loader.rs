@@ -1461,15 +1461,15 @@ impl<'a, H: CompilerHost> ModuleLoader<'a, H> {
             };
 
             // Collect its imports (before bind)
-            let queued = pending.len();
             self.collect_imports(&ast, &module_source, &mut pending, &mut wasm_imports)?;
             // A module importing only the standard library reaches no user
             // code, so no caller walks its bodies. One importing user code
             // may be walked, and keeps them.
             if skipped {
-                if pending
-                    .range(queued..)
-                    .any(|(_, imported)| imported.is_user_authored())
+                if self
+                    .imports
+                    .get(&module_source)
+                    .is_some_and(|imported| imported.iter().any(ModuleSource::is_user_authored))
                 {
                     ast = self.parse_source(&source, &module_source)?;
                 } else {
