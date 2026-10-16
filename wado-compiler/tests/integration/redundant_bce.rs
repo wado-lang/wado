@@ -34,11 +34,12 @@ export fn run() {
 /// The number of bounds-check panics inside one function's WIR body: one per
 /// surviving `>= arr.used` guard.
 ///
-/// A guard's taken arm is spelled one of two ways — an inline `core:rt/panic`,
-/// or a call to the `$cold` helper `nir/cold_outline` moves that arm into. Both
-/// count: what these tests are about is how many checks survive, not which
-/// shape the optimizer left them in, and counting the callee name alone would
-/// read the split shape as no check at all.
+/// A guard's taken arm is spelled one of three ways — an inline
+/// `core:rt/panic`, a call to the `$cold` helper `nir/cold_outline` moves that
+/// arm into, or a call to the clause's shared `$contract_report`. All count:
+/// what these tests are about is how many checks survive, not which shape the
+/// optimizer left them in, and counting one callee name alone would read the
+/// other shapes as no check at all.
 fn panic_count(opt_level: OptLevel, file: &str, source: &str, func: &str) -> usize {
     let body = wir_function_body(
         Path::new(file),
@@ -46,7 +47,10 @@ fn panic_count(opt_level: OptLevel, file: &str, source: &str, func: &str) -> usi
         opt_level,
         &format!("fn \"{file}/{func}\""),
     );
-    body.matches("core:rt/panic").count() + body.matches("$cold").count()
+    ["core:rt/panic", "$cold", "$contract_report"]
+        .iter()
+        .map(|callee| body.matches(callee).count())
+        .sum()
 }
 
 fn bump_panic_count(opt_level: OptLevel) -> usize {
