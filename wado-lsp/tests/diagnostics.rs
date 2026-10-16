@@ -47,6 +47,29 @@ fn dead_code_diagnostics_carry_unnecessary_tag() {
     });
 }
 
+/// An unused verdict reads the absence of a use, which a partial snapshot
+/// cannot tell from a use its error left unrecorded: the trait import here is
+/// reached only through the dispatch of a call whose receiver failed.
+#[test]
+fn a_partial_snapshot_reports_no_unused_lint() {
+    futures::executor::block_on(async {
+        let traits = "pub trait Doubled { fn doubled(&self) -> i32; }\n\
+                      impl Doubled for i32 { fn doubled(&self) -> i32 { return *self * 2; } }\n";
+        let main = "use { Doubled } from \"./traits.wado\";\n\n\
+                    export fn run() {\n    let y = missing().doubled();\n}\n";
+        let host = in_memory_host(&[("./traits.wado", traits)]);
+        let mut engine = Engine::new();
+        engine.open_document("file:///work/main.wado", main.to_string());
+        let diags = engine.diagnostics("file:///work/main.wado", &host).await;
+        let errors: Vec<&str> = errors(&diags).iter().map(|d| d.message.as_str()).collect();
+        assert_eq!(errors, ["unknown function 'missing'"]);
+        assert!(
+            !diags.iter().any(|d| d.message.contains("is never used")),
+            "{diags:#?}"
+        );
+    });
+}
+
 /// Dead code in an imported module stays off the importer's diagnostics but
 /// still appears when that module is opened directly.
 #[test]
@@ -55,12 +78,13 @@ fn imported_module_dead_code_stays_off_the_importer() {
         let bar = "pub fn helper() -> i32 {\n    return 1;\n}\n\nfn dead_in_bar() -> i32 {\n    return 2;\n}\n";
         let foo =
             "use { helper } from \"./bar.wado\";\n\nexport fn run() {\n    let _ = helper();\n}\n";
-        let host = in_memory_host(&[("/work/bar.wado", bar)]);
+        let host = in_memory_host(&[("./bar.wado", bar)]);
         let mut engine = Engine::new();
         engine.open_document("file:///work/foo.wado", foo.to_string());
         engine.open_document("file:///work/bar.wado", bar.to_string());
 
         let foo_diags = engine.diagnostics("file:///work/foo.wado", &host).await;
+        assert!(errors(&foo_diags).is_empty(), "{foo_diags:#?}");
         assert!(
             !foo_diags.iter().any(|d| d.message.contains("dead_in_bar")),
             "imported module's dead code must not appear on the importer, got {foo_diags:#?}"
@@ -86,16 +110,14 @@ fn imported_module_errors_stay_off_the_importer() {
         let bar = "pub fn boom() -> i32 {\n    return \"not an i32\";\n}\n";
         let foo =
             "use { boom } from \"./bar.wado\";\n\nexport fn run() {\n    let _ = boom();\n}\n";
-        let host = in_memory_host(&[("/work/bar.wado", bar)]);
+        let host = in_memory_host(&[("./bar.wado", bar)]);
         let mut engine = Engine::new();
         engine.open_document("file:///work/foo.wado", foo.to_string());
         engine.open_document("file:///work/bar.wado", bar.to_string());
 
         let foo_diags = engine.diagnostics("file:///work/foo.wado", &host).await;
         assert!(
-            !foo_diags
-                .iter()
-                .any(|d| d.message.contains("type mismatch")),
+            errors(&foo_diags).is_empty(),
             "bar.wado's type error must not be published on foo.wado, got {foo_diags:#?}"
         );
 

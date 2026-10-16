@@ -765,7 +765,9 @@ pub fn lint_diagnostics(
     out.extend(constant_arithmetic_diagnostics(sem, lints));
     out.extend(hex_suffix_lookalike_diagnostics(sem, lints));
     out.extend(float_literal_pattern_diagnostics(sem, lints));
-    if unused {
+    // An unused verdict reads the absence of a use, which a partial snapshot
+    // cannot tell from one its error left unrecorded.
+    if unused && sem.is_complete() {
         out.extend(unused_diagnostics(sem, lints, is_test_world));
     }
     out
