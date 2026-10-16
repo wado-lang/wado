@@ -1071,15 +1071,8 @@ fn elab_labeled_block(label: &str, block: &mut TirBlock, owned: &mut Owned, cx: 
     } else {
         labeled_exit(&label, block, owned, cx)
     };
-    cx.targets
-        .push(BreakTarget::new(label, entry, None, Some(exit.clone())));
-    let flow = elab_block(block, owned, cx);
-    let target = cx.targets.pop().expect("pushed above");
-    if flow == Flow::Normal {
-        let drops = conform(owned, &exit, cx);
-        let stmts = std::mem::take(&mut block.stmts);
-        block.stmts = append_block_drops(stmts, drops, cx);
-    }
+    let target = BreakTarget::new(label, entry, None, Some(exit.clone()));
+    let (flow, target) = elab_target_body(block, owned, target, &exit, cx);
     set_held(owned, &exit);
     if target.breaks.is_empty() {
         flow
@@ -1088,22 +1081,51 @@ fn elab_labeled_block(label: &str, block: &mut TirBlock, owned: &mut Owned, cx: 
     }
 }
 
+/// Elaborate `block`, the body `target` is reached from, and drop what its end,
+/// where it falls through, holds that `end` does not.
+fn elab_target_body(
+    block: &mut TirBlock,
+    owned: &mut Owned,
+    target: BreakTarget,
+    end: &[bool],
+    cx: &mut Cx,
+) -> (Flow, BreakTarget) {
+    cx.targets.push(target);
+    let flow = elab_block(block, owned, cx);
+    let target = cx.targets.pop().expect("pushed above");
+    if flow == Flow::Normal {
+        let drops = conform(owned, end, cx);
+        let stmts = std::mem::take(&mut block.stmts);
+        block.stmts = append_block_drops(stmts, drops, cx);
+    }
+    (flow, target)
+}
+
 /// What the slots below `owned.len()` hold after a labeled block: where every
 /// way out holds them, each `break label` and the end where the body falls
 /// through.
 fn labeled_exit(label: &Option<String>, block: &TirBlock, owned: &Owned, cx: &mut Cx) -> Vec<bool> {
-    let entry = owned.len();
+    let (end, target) = trial(block, owned.clone(), label.clone(), cx);
+    meet(target.breaks.iter().chain(&end)).unwrap_or_else(|| held(owned))
+}
+
+/// Elaborate a copy of `block`, the body of the target `label` names, from
+/// `state` and throw the copy away. Returns what the slots below the body hold
+/// where it falls through, if it does, and the target with what each `break`
+/// and `continue` to it held.
+fn trial(
+    block: &TirBlock,
+    mut state: Owned,
+    label: Option<String>,
+    cx: &mut Cx,
+) -> (Option<Vec<bool>>, BreakTarget) {
     cx.dry_run(|cx| {
         let mut block = block.clone();
-        let mut state = owned.clone();
         cx.targets
-            .push(BreakTarget::new(label.clone(), entry, None, None));
+            .push(BreakTarget::new(label, state.len(), None, None));
         let flow = elab_block(&mut block, &mut state, cx);
-        let mut ways_out = cx.targets.pop().expect("pushed above").breaks;
-        if flow == Flow::Normal {
-            ways_out.push(held(&state));
-        }
-        meet(&ways_out).unwrap_or_else(|| held(owned))
+        let target = cx.targets.pop().expect("pushed above");
+        ((flow == Flow::Normal).then(|| held(&state)), target)
     })
 }
 
@@ -1113,21 +1135,14 @@ fn labeled_exit(label: &Option<String>, block: &TirBlock, owned: &Owned, cx: &mu
 /// starts from the head, so that is a fixpoint. Where it exits holds a slot
 /// only where every `break` holds it.
 fn loop_states(body: &TirBlock, owned: &Owned, cx: &mut Cx) -> (Vec<bool>, Vec<bool>) {
-    let entry = owned.len();
     let mut head = held(owned);
-    if entry == 0 {
+    if owned.is_empty() {
         return (head.clone(), head);
     }
     loop {
-        let (end, target) = cx.dry_run(|cx| {
-            let mut body = body.clone();
-            let mut state = owned.clone();
-            set_held(&mut state, &head);
-            cx.targets.push(BreakTarget::new(None, entry, None, None));
-            let flow = elab_block(&mut body, &mut state, cx);
-            let target = cx.targets.pop().expect("pushed above");
-            ((flow == Flow::Normal).then(|| held(&state)), target)
-        });
+        let mut state = owned.clone();
+        set_held(&mut state, &head);
+        let (end, target) = trial(body, state, None, cx);
         let next = meet([&head].into_iter().chain(&target.continues).chain(&end))
             .expect("the entry is one way in");
         if next == head {
@@ -1323,19 +1338,8 @@ fn elab_stmt(
             let entry = owned.len();
             let (head, exit) = loop_states(&body, owned, cx);
             out.extend(conform(owned, &head, cx));
-            cx.targets.push(BreakTarget::new(
-                None,
-                entry,
-                Some(head.clone()),
-                Some(exit.clone()),
-            ));
-            let flow = elab_block(&mut body, owned, cx);
-            cx.targets.pop();
-            if flow == Flow::Normal {
-                let drops = conform(owned, &head, cx);
-                let stmts = std::mem::take(&mut body.stmts);
-                body.stmts = append_block_drops(stmts, drops, cx);
-            }
+            let target = BreakTarget::new(None, entry, Some(head.clone()), Some(exit.clone()));
+            elab_target_body(&mut body, owned, target, &head, cx);
             set_held(owned, &exit);
             out.push(TirStmt {
                 kind: TirStmtKind::Loop { body },
@@ -1447,10 +1451,10 @@ fn elab_if_branches(
     let else_block = else_block.unwrap_or_else(|| TirBlock::empty(span));
     let (mut then_block, then_owned, then_flow) = elab_branch(then_block, owned, cx);
     let (mut else_block, else_owned, else_flow) = elab_branch(else_block, owned, cx);
-    let drops = merge_paths(owned, &[(then_owned, then_flow), (else_owned, else_flow)]);
-    for (block, lives) in [&mut then_block, &mut else_block].into_iter().zip(drops) {
+    let mut paths = [(then_owned, then_flow), (else_owned, else_flow)];
+    let drops = merge_paths(owned, &mut paths, cx);
+    for (block, drops) in [&mut then_block, &mut else_block].into_iter().zip(drops) {
         let stmts = std::mem::take(&mut block.stmts);
-        let drops = drop_all(&lives, cx);
         block.stmts = append_block_drops(stmts, drops, cx);
     }
     let else_block = (has_else || !else_block.stmts.is_empty()).then_some(else_block);
@@ -1461,32 +1465,25 @@ fn elab_if_branches(
 /// elaborated from a clone of `owned`. A resource is owned after the branch
 /// only where every path that falls through owns it, whether it kept it or an
 /// assignment gave it a new one. Where one does not, the others still owning
-/// it drop it at their end: returns, per path, what it must drop.
-fn merge_paths(owned: &mut Owned, paths: &[(Owned, Flow)]) -> Vec<Vec<Live>> {
-    let mut drops = vec![Vec::new(); paths.len()];
-    let falling_through: Vec<usize> = paths
+/// it drop it at their end: returns, per path, those drops.
+fn merge_paths(owned: &mut Owned, paths: &mut [(Owned, Flow)], cx: &mut Cx) -> Vec<Vec<TirStmt>> {
+    let falling_through: Vec<Vec<bool>> = paths
         .iter()
-        .enumerate()
-        .filter(|(_, (_, flow))| *flow == Flow::Normal)
-        .map(|(path, _)| path)
+        .filter(|(_, flow)| *flow == Flow::Normal)
+        .map(|(state, _)| held(state))
         .collect();
-    for (slot, state) in owned.iter_mut().enumerate() {
-        let owners: Vec<usize> = falling_through
-            .iter()
-            .copied()
-            .filter(|&path| paths[path].0[slot].held)
-            .collect();
-        if owners.len() == falling_through.len() {
-            // Where no path falls through, nothing reads the state after.
-            state.held |= !owners.is_empty();
-            continue;
-        }
-        for path in owners {
-            drops[path].push(state.live.clone());
-        }
-        state.held = false;
-    }
-    drops
+    // Where no path falls through, nothing reads the state after.
+    let Some(met) = meet(&falling_through) else {
+        return vec![Vec::new(); paths.len()];
+    };
+    set_held(owned, &met);
+    paths
+        .iter_mut()
+        .map(|(state, flow)| match flow {
+            Flow::Normal => conform(state, &met, cx),
+            Flow::Diverged => Vec::new(),
+        })
+        .collect()
 }
 
 /// Clear every slot of `owned` that `branch`, a clone of it elaborated along
@@ -1842,8 +1839,7 @@ fn elab_match(scrutinee: &mut TirExpr, arms: &mut [TirMatchArm], owned: &mut Own
         let flow = elab_arm_body(&mut arm.body, &mut arm_owned, cx, entry);
         arm_states.push((arm_owned, flow));
     }
-    for (arm, lives) in arms.iter_mut().zip(merge_paths(owned, &arm_states)) {
-        let drops = drop_all(&lives, cx);
+    for (arm, drops) in arms.iter_mut().zip(merge_paths(owned, &mut arm_states, cx)) {
         append_expr_drops(&mut arm.body, drops, cx);
     }
 }
