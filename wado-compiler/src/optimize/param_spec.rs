@@ -1184,8 +1184,11 @@ fn collect_sites(
             constants,
             state,
         );
+        // A call returning `!` runs at most once per call of its caller, so a
+        // clone for it buys nothing, wherever it sits.
         for site in &mut sites {
-            site.cold = cold_calls.contains(&site.call);
+            site.cold = cold_calls.contains(&site.call)
+                || types.is_never(body.exprs[site.call].type_id);
         }
         (!sites.is_empty()).then_some((index, sites))
     })

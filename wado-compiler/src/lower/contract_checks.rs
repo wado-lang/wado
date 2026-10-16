@@ -179,9 +179,13 @@ fn copied_clauses(body: &TirBlock) -> usize {
 
 /// Move what each failed clause reports into a function of its own,
 /// `F$contract_report{k}`, which every copy of the clause calls: a call then
-/// copies the clause's condition and that call, not a message builder each.
-/// The report takes the locals the message reads, so a call passes those
-/// alone, and no container the message leaves out escapes into it.
+/// copies the clause's bare condition and that call, not the power-assert
+/// captures and a message builder each. The report evaluates the condition
+/// again with its captures, which a clause may do since it performs no
+/// effect, and takes the locals that reads, so a call passes those alone and
+/// no container the message leaves out escapes into it. A clause writing a
+/// parameter would run again from what it wrote, so its function keeps the
+/// report in each copy.
 fn share_reports(flat: &mut FlatPackage) {
     if flat.codegen_flags.bare_asserts {
         return;
@@ -200,6 +204,10 @@ fn share_reports(flat: &mut FlatPackage) {
             continue;
         };
         let clauses = copied_clauses(&body);
+        if !written_params(&body.stmts[..clauses], func.params.len() as u32).is_empty() {
+            func.body = Some(body);
+            continue;
+        }
         let mut failures = ReportFailures {
             assert_failed: &assert_failed,
             func: &func,
@@ -215,8 +223,9 @@ fn share_reports(flat: &mut FlatPackage) {
         .extend(reports.into_iter().map(|report| Rc::new(RefCell::new(report))));
 }
 
-/// Replace each failure block of a clause, which ends in `assert_failed`
-/// reporting `$contract_site`, with a call to a report made of it.
+/// Rewrite each clause's check, `let $cond = …; if !$cond { … }` whose
+/// failure block reports `$contract_site` through `assert_failed`, to test
+/// the bare condition and call a report made of the rest.
 struct ReportFailures<'a> {
     assert_failed: &'a (ModuleSource, String),
     /// The function whose clauses fail, its body taken out.
@@ -227,18 +236,64 @@ struct ReportFailures<'a> {
 
 impl TirMutVisitor for ReportFailures<'_> {
     fn visit_block(&mut self, block: &mut TirBlock) {
-        let fails = block.stmts.iter().any(|stmt| {
-            matches!(&stmt.kind, TirStmtKind::Expr(TirExpr { kind: TirExprKind::Call { func, .. }, .. })
-                if func.module_source == self.assert_failed.0 && func.name == self.assert_failed.1)
-        });
-        let site = fails.then(|| find_site(block)).flatten();
-        let Some(site) = site else {
-            self.walk_block(block);
-            return;
+        match self.failing_check(block) {
+            Some(at) => self.share(block, at),
+            None => self.walk_block(block),
+        }
+    }
+}
+
+impl ReportFailures<'_> {
+    /// The index of the `if !$cond { … }` in `block` that reports a failed
+    /// clause, right after the `let $cond` it tests.
+    fn failing_check(&self, block: &TirBlock) -> Option<usize> {
+        (1..block.stmts.len()).find(|&at| {
+            let TirStmtKind::If {
+                then_block,
+                else_block: None,
+                ..
+            } = &block.stmts[at].kind
+            else {
+                return false;
+            };
+            let reports = then_block.stmts.iter().any(|stmt| {
+                matches!(&stmt.kind, TirStmtKind::Expr(TirExpr { kind: TirExprKind::Call { func, .. }, .. })
+                    if func.module_source == self.assert_failed.0 && func.name == self.assert_failed.1)
+            });
+            reports
+                && find_site(then_block).is_some()
+                && matches!(block.stmts[at - 1].kind, TirStmtKind::Let { .. })
+        })
+    }
+
+    fn share(&mut self, block: &mut TirBlock, at: usize) {
+        let TirStmtKind::Let {
+            value: condition, ..
+        } = &mut block.stmts[at - 1].kind
+        else {
+            unreachable!("matched by `failing_check`");
         };
-        let span = block.span;
-        let failure = std::mem::take(&mut block.stmts);
-        let LocalUse { read, declared } = local_use(&failure);
+        let instrumented = condition.clone();
+        // The captures the condition assigns as it runs, and their seen flags.
+        let captured = assigned_locals(&instrumented);
+        StripCaptures(&captured).visit_expr(condition);
+        let (flags, kept): (Vec<TirStmt>, Vec<TirStmt>) =
+            block.stmts.drain(..at - 1).partition(|stmt| {
+                matches!(stmt.kind, TirStmtKind::Let { local_index, .. } if captured.contains(&local_index))
+            });
+        block.stmts.splice(0..0, kept);
+        let check = at - flags.len();
+        let TirStmtKind::If { then_block, .. } = &mut block.stmts[check].kind else {
+            unreachable!("matched by `failing_check`");
+        };
+        let span = then_block.span;
+        let site = find_site(then_block).expect("matched by `failing_check`");
+        let failure = std::mem::take(&mut then_block.stmts);
+        let mut report_body = flags;
+        report_body.push(TirStmt::new(TirStmtKind::Expr(instrumented), span));
+        report_body.extend(failure);
+        let LocalUse { read, mut declared } = local_use(&report_body);
+        declared.extend(captured);
         let free: Vec<u32> = read.difference(&declared).copied().collect();
         let report = FunctionRef {
             module_source: self.func.module_source.clone(),
@@ -263,7 +318,7 @@ impl TirMutVisitor for ReportFailures<'_> {
         self.reports.push(report_function(
             self.func,
             report.name.clone(),
-            failure,
+            report_body,
             &free,
             &declared,
             site.type_id,
@@ -277,13 +332,85 @@ impl TirMutVisitor for ReportFailures<'_> {
             TypeTable::NEVER,
             span,
         );
-        block.stmts = vec![
+        then_block.stmts = vec![
             TirStmt::new(
                 TirStmtKind::Expr(builtin_call("cold_path", Vec::new(), TypeTable::UNIT)),
                 span,
             ),
             TirStmt::new(TirStmtKind::Expr(call), span),
         ];
+    }
+}
+
+/// The locals `expr` assigns.
+fn assigned_locals(expr: &TirExpr) -> IndexSet<u32> {
+    struct Assigned(IndexSet<u32>);
+    impl TirRefVisitor for Assigned {
+        fn visit_expr(&mut self, expr: &TirExpr) {
+            if let TirExprKind::Assign { target, .. } = &expr.kind
+                && let TirExprKind::Local { index, .. } = target.kind
+            {
+                self.0.insert(index);
+            }
+            self.walk_expr(expr);
+        }
+    }
+    let mut assigned = Assigned(IndexSet::default());
+    assigned.visit_expr(expr);
+    assigned.0
+}
+
+/// Replace each capture in a condition, `{ $v = e; [$v_seen = true;] $v }`
+/// over the captured locals, with `e`, leaving the bare condition.
+struct StripCaptures<'a>(&'a IndexSet<u32>);
+
+impl StripCaptures<'_> {
+    fn captured(&self, stmt: &TirStmt) -> Option<u32> {
+        match &stmt.kind {
+            TirStmtKind::Expr(TirExpr {
+                kind: TirExprKind::Assign { target, .. },
+                ..
+            }) => match target.kind {
+                TirExprKind::Local { index, .. } if self.0.contains(&index) => Some(index),
+                _ => None,
+            },
+            _ => None,
+        }
+    }
+
+    fn capture(&self, block: &TirBlock) -> bool {
+        let Some((TirStmt {
+            kind: TirStmtKind::Expr(TirExpr {
+                kind: TirExprKind::Local { index: read, .. },
+                ..
+            }),
+            ..
+        }, assigns)) = block.stmts.split_last()
+        else {
+            return false;
+        };
+        matches!(assigns, [value] | [value, _] if self.captured(value) == Some(*read))
+            && assigns.iter().all(|stmt| self.captured(stmt).is_some())
+    }
+}
+
+impl TirMutVisitor for StripCaptures<'_> {
+    fn visit_expr(&mut self, expr: &mut TirExpr) {
+        if let TirExprKind::Block(block) = &mut expr.kind
+            && self.capture(block)
+        {
+            let TirStmtKind::Expr(TirExpr {
+                kind: TirExprKind::Assign { value, .. },
+                ..
+            }) = block.stmts.swap_remove(0).kind
+            else {
+                unreachable!("matched by `capture`");
+            };
+            *expr = *value;
+            self.visit_expr(expr);
+            return;
+        }
+        self.walk_expr(expr);
     }
 }
 
@@ -347,13 +474,13 @@ fn local_use(stmts: &[TirStmt]) -> LocalUse {
     uses
 }
 
-/// A report: `failure`, a clause's failure block in `func`, taking the locals
-/// of `func` it reads but does not declare, `free`, and then the site to
-/// report.
+/// A report running `stmts`, a failed clause's instrumented condition and
+/// failure block in `func`, which takes the locals of `func` they read but do
+/// not declare, `free`, and then the site to report.
 fn report_function(
     func: &TirFunction,
     name: String,
-    failure: Vec<TirStmt>,
+    stmts: Vec<TirStmt>,
     free: &[u32],
     declared: &IndexSet<u32>,
     site_type: TypeId,
@@ -410,7 +537,7 @@ fn report_function(
             .collect(),
     };
     // The report is cold as a whole; the call to it keeps the marker.
-    let stmts = failure
+    let stmts = stmts
         .into_iter()
         .filter(|stmt| !matches!(&stmt.kind, TirStmtKind::Expr(expr) if is_intrinsic_call(expr, "cold_path")))
         .collect();
