@@ -828,7 +828,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             // type: the bound is surface syntax for "F is exactly this
             // signature". Such params consume no `TypeParam` index slot, keeping
             // the space dense so `substitute_type_params` — keyed by
-            // `TypeParam.index` — agrees with the inference cache's positions.
+            // `TypeParam.index` — agrees with the signature's slot positions.
             let fn_bound_sig = if tp.is_pack {
                 None
             } else {

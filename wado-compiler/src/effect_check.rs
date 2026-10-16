@@ -10,7 +10,7 @@ use crate::attribute::{AMBIENT, BENIGN};
 use crate::hashmap::{IndexMap, IndexSet};
 
 use crate::module_source::ModuleSource;
-use crate::name::{DeclaredHead, FqTraitName, FqTypeName, TypeHead, is_test_function};
+use crate::name::{DeclaredHead, FqTraitName, FqTypeName, TypeHead};
 use crate::resolve::{Resolution, Resolutions};
 use crate::tir::{
     EffectRef, EffectRows, FunctionRef, ResolvedType, RowFlow, TemplateId, TypeId, TypeSet,
@@ -1231,11 +1231,6 @@ fn check_function_effects_sem(
     let Some(body) = &func.body else {
         return;
     };
-    // `#[ambient]` bypasses the effect system; test helpers implicitly hold
-    // every effect.
-    if func.attrs.iter().any(|attr| attr.name == AMBIENT) || is_test_function(&func.name) {
-        return;
-    }
     let caller_key = func.id;
     let annotations = module_annotations(sem, module);
 
@@ -1274,14 +1269,15 @@ fn check_function_effects_sem(
         current,
         param_types,
         body,
-        holds_every_effect: false,
+        holds_every_effect: func.attrs.iter().any(|attr| attr.name == AMBIENT),
     };
     walk_body_effects(sem, module, annotations, index, walk, out, solved);
 }
 
-/// A test holds every effect, so nothing it performs is missing. A function
-/// value it moves into a `fn` type is still bound by that type's row: the
-/// callee holding the value performs it without holding what the test holds.
+/// A test holds every effect, as an `#[ambient]` body does, so nothing it
+/// performs is missing. A function value it moves into a `fn` type is still
+/// bound by that type's row: the callee holding the value performs it without
+/// holding what the test holds.
 fn check_test_effects_sem(
     sem: &Semantics,
     module: &ModuleSource,
@@ -1874,8 +1870,8 @@ struct SemEffectWalker<'a> {
     /// enclosing `with H => … do { … }` handler scope (pushed / popped as the
     /// walk enters / leaves the do-block body).
     current: IndexSet<EffectRef>,
-    /// A `test` body, which holds every effect: nothing it performs is
-    /// missing, whatever `current` lists.
+    /// A `test` or `#[ambient]` body, which holds every effect: nothing it
+    /// performs is missing, whatever `current` lists.
     holds_every_effect: bool,
     /// This function's parameter name → type id, for resolving the callee of an
     /// indirect call through a function-typed parameter (which leaves no

@@ -1751,7 +1751,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             };
         }
 
-        let type_param_ids: Vec<TypeId> = sig.decl.type_params.iter().map(|&(_, id)| id).collect();
+        let type_param_ids = sig.decl.type_param_ids();
         let decl_params = &sig.decl.param_types;
         let decl_return = sig.decl.return_type.unwrap_or(TypeTable::UNIT);
         if type_param_ids.is_empty() {
