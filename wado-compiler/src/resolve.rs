@@ -760,6 +760,12 @@ impl Resolver<'_> {
         self.refs.insert(site, answer);
     }
 
+    /// Resolve `key` as a type-position name written at `site`, and record it.
+    fn record_name(&mut self, site: AstId, key: &str) {
+        let answer = self.resolve_name(key);
+        self.record(site, key, answer);
+    }
+
     /// Note the import `key` names as used when it is what answered with
     /// `def`, rather than a nearer binder or local item.
     fn note_import(&mut self, key: &str, def: DefId) {
@@ -1209,9 +1215,7 @@ impl AstVisitor for Resolver<'_> {
             ..
         } = pat
         {
-            let key = name.replace("::", "$");
-            let answer = self.resolve_name(&key);
-            self.record(*id, &key, answer);
+            self.record_name(*id, &name.replace("::", "$"));
         }
         // The alternatives of an or-pattern are one binding set, not successive
         // ones: the language requires them to bind the same names, so each is
@@ -1267,8 +1271,7 @@ impl AstVisitor for Resolver<'_> {
     /// supertrait bound carries a resolved site just like a written one.
     fn visit_trait_bounds(&mut self, bounds: &[ast::TraitBound]) {
         for bound in bounds {
-            let answer = self.resolve_name(&bound.name);
-            self.record(bound.id, &bound.name, answer);
+            self.record_name(bound.id, &bound.name);
             for assoc in &bound.assoc_types {
                 // The member is named relative to the bound's trait, not to
                 // this module, so the site is recorded and left for the
@@ -1321,9 +1324,7 @@ impl AstVisitor for Resolver<'_> {
         if let ast::Expr::StructLiteral(lit) = expr
             && let (Some(name), Some(name_id)) = (lit.name.as_deref(), lit.name_id)
         {
-            let key = name.replace("::", "$");
-            let answer = self.resolve_name(&key);
-            self.record(name_id, &key, answer);
+            self.record_name(name_id, &name.replace("::", "$"));
         }
         // `ns::member` resolves under the `ns$member` alias; a path that is no
         // such import answers `Unresolved` and its segments below name it.
@@ -1336,16 +1337,14 @@ impl AstVisitor for Resolver<'_> {
             && let [head, rest @ ..] = ident.segments.as_slice()
             && !rest.is_empty()
         {
-            let answer = self.resolve_name(&head.name);
-            self.record(head.id, &head.name, answer);
+            self.record_name(head.id, &head.name);
             if let Some(owner) = ident.owner_index().filter(|i| *i > 0) {
                 let qualified = format!(
                     "{}${}",
                     ident.segments[owner - 1].name,
                     ident.segments[owner].name
                 );
-                let answer = self.resolve_name(&qualified);
-                self.record(ident.segments[owner].id, &qualified, answer);
+                self.record_name(ident.segments[owner].id, &qualified);
             }
         }
         ast::walk_expr(self, expr);
@@ -1354,12 +1353,10 @@ impl AstVisitor for Resolver<'_> {
     fn visit_type(&mut self, ty: &Type) {
         match ty {
             Type::Named(named) => {
-                let answer = self.resolve_name(&named.name);
-                self.record(named.id, &named.name, answer);
+                self.record_name(named.id, &named.name);
             }
             Type::Generic(generic) => {
-                let answer = self.resolve_name(&generic.name);
-                self.record(generic.id, &generic.name, answer);
+                self.record_name(generic.id, &generic.name);
                 for arg in &generic.args {
                     self.visit_type(arg);
                 }
@@ -1377,7 +1374,11 @@ impl AstVisitor for Resolver<'_> {
                     Some(base) => Resolution::Projection(base),
                     None => self.namespace_member(&ns.namespace, &ns.name),
                 };
-                self.record(ns.id, &namespace_member_alias(&ns.namespace, &ns.name), answer);
+                self.record(
+                    ns.id,
+                    &namespace_member_alias(&ns.namespace, &ns.name),
+                    answer,
+                );
                 for arg in &ns.args {
                     self.visit_type(arg);
                 }
@@ -1395,8 +1396,7 @@ impl AstVisitor for Resolver<'_> {
     /// An effect parameter, the `_` a signature's hole mints included, is a
     /// binder; any other effect name resolves like a type name.
     fn visit_effect_name(&mut self, effect: &ast::EffectName) {
-        let answer = self.resolve_name(&effect.name);
-        self.record(effect.id, &effect.name, answer);
+        self.record_name(effect.id, &effect.name);
     }
 }
 

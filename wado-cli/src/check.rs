@@ -231,7 +231,9 @@ async fn check_package_unused(
     // Component dependencies are named in the members' own `use` clauses.
     let sources = files
         .iter()
-        .map(|f| std::fs::read_to_string(f).map_err(|e| CliExit::error(format!("{}: {e}", f.display()))))
+        .map(|f| {
+            std::fs::read_to_string(f).map_err(|e| CliExit::error(format!("{}: {e}", f.display())))
+        })
         .collect::<Result<Vec<_>, _>>()?;
     let host = attach_manifest_and_component_deps(
         FilesystemCompilerHost::with_log_level(root.clone(), opts.knobs.log_level),

@@ -150,7 +150,9 @@ fn dispatched_traits(
         if defs.kind(method) != DefKind::Method {
             continue;
         }
-        let owner = defs.parent(method).expect("a method has the item declaring it");
+        let owner = defs
+            .parent(method)
+            .expect("a method has the item declaring it");
         let owning_trait = match defs.kind(owner) {
             DefKind::Trait => Some(owner),
             DefKind::Impl => *implemented
