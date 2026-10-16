@@ -125,3 +125,7 @@ effect row is not yet known, and the effect check solves it.
   reads the one its row names. A bound naming an effect outright
   (`G: fn() with Stderr`) rejects a closure literal that performs it: only a
   value annotated with that row meets it.
+- A function generic over an effect cannot be taken as a value. An expected
+  `fn(...)` type settles its type parameters, not its effect parameters, so
+  `let a: fn(fn()) = apply;` for `fn apply<effect E>(f: fn() with E) with E`
+  is a type mismatch against `fn(fn() with E) with E`.

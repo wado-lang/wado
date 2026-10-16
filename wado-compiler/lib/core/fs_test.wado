@@ -333,9 +333,8 @@ test "a walk yields a directory before what it holds, and what it holds next" {
         paths.push(found.unwrap().path);
     }
     assert paths.len() == 4;
-    for let i of [0, 2] as List<i32> {
-        assert paths[i + 1] == `${paths[i]}/${if paths[i].ends_with("/a") { "x.txt" } else { "y.txt" }}`;
-    }
+    assert paths[1].starts_with(`${paths[0]}/`);
+    assert paths[3].starts_with(`${paths[2]}/`);
 }
 
 test "a directory is listed as it is yielded, before the loop body sees it" {

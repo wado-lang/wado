@@ -467,11 +467,7 @@ pub fn read_dir<S: AsStrSlice>(path: S) -> Result<List<DirEntry>, FsError> with 
 /// walk enters it; the directory is yielded either way. It may perform effects,
 /// which advancing the walk then performs. A predicate that means a name takes
 /// [`file_name`] of the path it is handed.
-pub fn walk_dir<
-    S: AsStrSlice,
-    effect E,
-    F: fn mut(&WalkEntry) -> bool with E = fn(&WalkEntry) -> bool,
->(
+pub fn walk_dir<S: AsStrSlice, effect E, F: fn mut(&WalkEntry) -> bool with E = fn(&WalkEntry) -> bool>(
     path: S,
     descend: F = enter_every_directory,
 ) -> Result<Walk<F>, FsError> with Preopens {
