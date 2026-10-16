@@ -1222,40 +1222,40 @@ Traits use static dispatch. Use `Self::TypeName` to refer to associated types.
 ```wado
 // For arithmetic operators; `a + b` is `T::Output`, so a generic body
 // folding back into its own parameter writes `T: Add<Output = T>`
-trait Add<Rhs = Self> { type Output; fn add(&self, rhs: &Rhs) -> Self::Output; }
+trait Add<Rhs = Self> with () { type Output; fn add(&self, rhs: &Rhs) -> Self::Output; }
 
 // For == and != operators
-trait Eq<Rhs = Self> { fn eq(&self, other: &Rhs) -> bool; }
+trait Eq<Rhs = Self> with () { fn eq(&self, other: &Rhs) -> bool; }
 
 // A total order: what `<` `<=` `>` `>=`, `sort()`, `TreeMap` and a `T: Ord`
 // bound read, on every type. `a == b` exactly when `cmp` answers `Equal`.
 // A float is IEEE except that every NaN is one value, equal to itself and
 // greatest, and -0.0 == 0.0: -Inf < … < +Inf < NaN. Test a NaN with is_nan().
-trait Ord: Eq { fn cmp(&self, other: &Self) -> Ordering; }
+trait Ord: Eq with () { fn cmp(&self, other: &Self) -> Ordering; }
 
 // For default value (implemented for primitives, String, List<T>,
 // Option<T>, TreeMap<K, V>; not Result)
-trait Default { fn default() -> Self; }
+trait Default with () { fn default() -> Self; }
 
 // For [] operators. List's and Slice's impls require the index in range, so
 // `unchecked xs[i]` on one skips the range check as a marked call does.
-trait IndexRef<I> { type Output: Ref; fn index_ref(&self, index: I) -> &Self::Output; }
-trait IndexRefMut<I> { type Output: RefMut; fn index_ref_mut(&mut self, index: I) -> &mut Self::Output; }
-trait IndexValue<I> { type Output; fn index_value(&self, index: I) -> Self::Output; }
-trait IndexAssign<I> { type Output; fn index_assign(&mut self, index: I, value: Self::Output); }
+trait IndexRef<I> with () { type Output: Ref; fn index_ref(&self, index: I) -> &Self::Output; }
+trait IndexRefMut<I> with () { type Output: RefMut; fn index_ref_mut(&mut self, index: I) -> &mut Self::Output; }
+trait IndexValue<I> with () { type Output; fn index_value(&self, index: I) -> Self::Output; }
+trait IndexAssign<I> with () { type Output; fn index_assign(&mut self, index: I, value: Self::Output); }
 
 // For string template interpolation
-pub trait Display { fn fmt(&self, f: &mut Formatter); }         // stringify with specifiers
+pub trait Display with () { fn fmt(&self, f: &mut Formatter); } // stringify with specifiers
 
 // What every error type is. It adds nothing to Display, so `E: Error` says
 // only that the failure has a readable reason.
-pub trait Error: Display { }
+pub trait Error: Display with () { }
 
 // For parsing a value from a string. The parameter takes a `StrSlice` among
 // the rest, so parsing a field out of a larger buffer allocates no substring.
 // `Err: Error`, so a caller reaching it through the bound can always report
 // the reason.
-pub trait FromStr {
+pub trait FromStr with () {
     type Err: Error;
     fn from_str<S: AsStrSlice>(s: S) -> Result<Self, Self::Err>;
 }
@@ -1263,15 +1263,15 @@ pub trait FromStr {
 // Forgiving sibling of FromStr for human-supplied strings: accepts casing,
 // radix prefixes (0x/0o/0b), `_` digit separators, and alternate bool words
 // (1/0). Never trims whitespace. See WEP: Lenient String Parsing.
-pub trait LenientFromStr {
+pub trait LenientFromStr with () {
     type Err: Error;  // built-in impls all use LenientParseError
     fn from_str_lenient<S: AsStrSlice>(s: S) -> Result<Self, Self::Err>;
 }
 
 // Value-to-value conversion. `Err: Error` for the same reason FromStr's is.
 // The stdlib impls all use `ConvertError`.
-pub trait From<T> { fn from(value: T) -> Self; }
-pub trait TryFrom<T> {
+pub trait From<T> with () { fn from(value: T) -> Self; }
+pub trait TryFrom<T> with () {
     type Err: Error;
     fn try_from(value: T) -> Result<Self, Self::Err>;
 }
@@ -1498,7 +1498,7 @@ fn run<T: Tick>(t: &mut T) -> i32 with _ { return t.tick(); }
 #[allow(undecided_effects)]
 trait Undecided { fn tick(&mut self) -> i32; }
 
-// A method may say `with ()` under an open head: pure in every impl.
+// A method may say `with ()` under any head but `with ()`: pure in every impl.
 trait Source with _ {
     fn next(&mut self) -> i32;
     fn label(&self) -> String with () { return "source"; }

@@ -70,9 +70,9 @@ xoshiro256++ serves both — its state transition is vertical, so eight lanes ne
 no permute. SHISHUA serves only the vector trait; its round is eight vectors
 wide and nothing smaller exists inside it.
 
-`with ()` is not decoration: `Rng`, `VectorRng`, `Seedable`, `SampleUniform`
-and `SampleRange` all say in the type system that no implementation of them may
-perform I/O.
+`with ()` is not decoration. `core:secure_random` keeps the only effect, so
+`Rng`, `VectorRng`, `Seedable`, `SampleUniform` and `SampleRange` all say in the
+type system that no implementation of them may perform I/O.
 
 ### The batch is sixteen u64, fixed by the library
 
