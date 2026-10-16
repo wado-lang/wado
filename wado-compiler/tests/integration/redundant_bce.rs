@@ -57,13 +57,11 @@ fn bump_panic_count(opt_level: OptLevel) -> usize {
 fn redundant_index_recheck_is_eliminated() {
     // Each of `end[child]` / `end[parent]` is accessed in the `if` condition
     // and again in the body, and the body's re-checks collapse into the
-    // condition's guards. Three survive, not two: the write's guard is
-    // `0 <= parent & parent < used`, and nothing here bounds a parameter from
-    // below, so the conjunction stands whole even with its upper half proved.
+    // condition's guards: a passed `0 <= i & i < used` proves both halves.
     let count = bump_panic_count(OptLevel::O2);
     assert_eq!(
-        count, 3,
-        "expected 3 surviving bounds-check panics in `bump` at O2, found {count}"
+        count, 2,
+        "expected 2 surviving bounds-check panics in `bump` at O2, found {count}"
     );
 }
 

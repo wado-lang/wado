@@ -48,7 +48,7 @@ pub(super) fn eliminate_at_root(engine: &mut Engine) -> bool {
     // Flow-sensitive elimination: loop guards, dominating-ifs, and early-exit
     // facts, threaded through the block structure.
     changed |= process_block(engine, root, &binds);
-    let mut facts: Vec<ProvenLt> = Vec::new();
+    let mut facts: Vec<Fact> = Vec::new();
     changed |= rbce_walk(
         engine,
         NodeRef::Block(root),
@@ -2049,17 +2049,93 @@ impl ProvenLt {
     }
 }
 
+/// What [`rbce_walk`] holds proven at a point of the walk.
+#[derive(Clone, Copy)]
+enum Fact {
+    Lt(ProvenLt),
+    /// `key >= lo`: a range check's lower half, or an `if` condition's.
+    Floor { key: BoundKey, lo: i64 },
+}
+
 /// True if some fact refutes the check `var + j >= bound`.
-fn facts_refute(facts: &[ProvenLt], var: u32, j: i64, bound: BoundKey) -> bool {
+fn facts_refute(facts: &[Fact], var: u32, j: i64, bound: BoundKey) -> bool {
+    facts.iter().any(|f| {
+        matches!(f, Fact::Lt(f) if f.var == var && f.bound == bound && (f.lo..=f.hi).contains(&j))
+    })
+}
+
+/// The greatest proven floor under `key`.
+fn floor_of(facts: &[Fact], key: BoundKey) -> Option<i64> {
     facts
         .iter()
-        .any(|f| f.var == var && f.bound == bound && (f.lo..=f.hi).contains(&j))
+        .filter_map(|f| match *f {
+            Fact::Floor { key: k, lo } if k == key => Some(lo),
+            _ => None,
+        })
+        .max()
 }
 
 /// Drop every fact whose `var` / `bound` root `node` may modify (conservative:
 /// a false "modifies" only keeps a fact, never invents one).
-fn invalidate(engine: &Engine, node: NodeRef, facts: &mut Vec<ProvenLt>) {
-    facts.retain(|f| !node_modifies(engine, node, f.var, f.bound));
+fn invalidate(engine: &Engine, node: NodeRef, facts: &mut Vec<Fact>) {
+    facts.retain(|f| match *f {
+        Fact::Lt(lt) => !node_modifies(engine, node, lt.var, lt.bound),
+        Fact::Floor { key, .. } => {
+            bound_root(key).is_none_or(|root| !modifies_any_root(engine, node, &[root]))
+        }
+    });
+}
+
+/// The facts one conjunct of a passed check proves, `None` when it proves
+/// nothing this walk can hold. A floor needs no offset: `var + off >= f` says
+/// nothing of `var` once the add may wrap.
+fn conjunct_fact(engine: &Engine, binds: &Binds, part: Conjunct) -> Option<Fact> {
+    match part {
+        Conjunct::Lt(left, right) => {
+            let (var, off) = parse_var_offset(engine, binds, left)?;
+            let bound = parse_bound(engine, binds, right)?;
+            Some(Fact::Lt(ProvenLt::exact(var, off, bound)))
+        }
+        Conjunct::AtLeast(var, 0, lo) => Some(Fact::Floor {
+            key: BoundKey::Local(var),
+            lo,
+        }),
+        Conjunct::AtLeast(..) => None,
+    }
+}
+
+/// Whether `facts` already prove `fact`.
+fn fact_holds(facts: &[Fact], fact: Fact) -> bool {
+    match fact {
+        Fact::Lt(lt) => facts_refute(facts, lt.var, lt.lo, lt.bound),
+        Fact::Floor { key, lo } => floor_of(facts, key).is_some_and(|have| have >= lo),
+    }
+}
+
+/// The floors an `if` condition proves inside its `then` branch: each conjunct
+/// that bounds a local or a length from below by a constant.
+fn condition_floors(engine: &Engine, binds: &Binds, cond: Operand) -> Vec<Fact> {
+    let mut parts = Vec::new();
+    collect_and_operands(engine, binds, cond, &mut parts);
+    parts
+        .into_iter()
+        .filter_map(|p| comparison_floor(engine, binds, p))
+        .collect()
+}
+
+/// `x > c`, `x >= c`, `c < x` or `c <= x` as the floor it puts under `x`.
+fn comparison_floor(engine: &Engine, binds: &Binds, op: Operand) -> Option<Fact> {
+    let (left, kind, right) = binary_parts(engine.body, resolve_through_opaque(engine, binds, op))?;
+    let (x, c, strict) = match kind {
+        NirBinaryOp::Gt | NirBinaryOp::GtEq => (left, right, kind == NirBinaryOp::Gt),
+        NirBinaryOp::Lt | NirBinaryOp::LtEq => (right, left, kind == NirBinaryOp::Lt),
+        _ => return None,
+    };
+    let c = parse_const_i64(engine, binds, c)?;
+    Some(Fact::Floor {
+        key: parse_bound(engine, binds, x)?,
+        lo: if strict { c.checked_add(1)? } else { c },
+    })
 }
 
 /// The `(minuend, k)` of a `<expr> - k` (skeleton or promoted), if any.
@@ -2072,8 +2148,22 @@ fn sub_const(engine: &Engine, binds: &Binds, op: Operand) -> Option<(Operand, i6
     parse_const_i64(engine, binds, subtrahend).map(|k| (minuend, k))
 }
 
-/// The fact a `let idx = <seq>.len() - k` (k >= 1) proves, as in the
-/// `arr.last()` idiom: `idx + j < len` for `j < k`.
+/// The facts a `let idx = <seq>.len() - k` (k >= 1) proves, as in the
+/// `arr.last()` idiom: `idx + j < len` for `j < k`, and `idx >= lo - k` where
+/// `len >= lo` is already proven.
+fn push_len_minus_facts(engine: &Engine, binds: &Binds, node: NodeRef, facts: &mut Vec<Fact>) {
+    let Some(lt) = len_minus_fact(engine, binds, node) else {
+        return;
+    };
+    if let Some(lo) = floor_of(facts, lt.bound) {
+        facts.push(Fact::Floor {
+            key: BoundKey::Local(lt.var),
+            lo: lo - (lt.hi + 1),
+        });
+    }
+    facts.push(Fact::Lt(lt));
+}
+
 fn len_minus_fact(engine: &Engine, binds: &Binds, node: NodeRef) -> Option<ProvenLt> {
     let NodeRef::Stmt(s) = node else {
         return None;
@@ -2303,17 +2393,25 @@ fn short_circuit_parts(engine: &Engine, node: NodeRef) -> Option<(Operand, Opera
 fn rbce_walk(
     engine: &mut Engine,
     node: NodeRef,
-    facts: &mut Vec<ProvenLt>,
+    facts: &mut Vec<Fact>,
     binds: &Binds,
     frames: &mut Frames,
 ) -> bool {
     if let Some(cond) = panic_guard_check(engine, node) {
-        if let Some((var, off, bound)) = parse_check(engine, binds, cond) {
-            if facts_refute(facts, var, off, bound) {
+        // A check passed proves every conjunct of it, and one whose conjuncts
+        // are all proven already is dead.
+        let proven: Option<Vec<Fact>> = check_conjuncts(engine, binds, cond).and_then(|parts| {
+            parts
+                .into_iter()
+                .map(|p| conjunct_fact(engine, binds, p))
+                .collect()
+        });
+        if let Some(proven) = proven {
+            if proven.iter().all(|&f| fact_holds(facts, f)) {
                 eliminate_condition(engine, node, cond);
                 return true;
             }
-            facts.push(ProvenLt::exact(var, off, bound));
+            facts.extend(proven);
             return false;
         }
         if let Some(ce) = cond.as_expr() {
@@ -2328,7 +2426,12 @@ fn rbce_walk(
             changed |= rbce_walk(engine, NodeRef::Expr(ce), facts, binds, frames);
             invalidate(engine, NodeRef::Expr(ce), facts);
         }
+        let mut floors = condition_floors(engine, binds, cond);
+        if let Some(ce) = cond.as_expr() {
+            invalidate(engine, NodeRef::Expr(ce), &mut floors);
+        }
         let mut ft = facts.clone();
+        ft.extend(floors);
         changed |= rbce_walk(engine, NodeRef::Block(then_b), &mut ft, binds, frames);
         if let Some(eb) = else_b {
             let mut fe = facts.clone();
@@ -2375,7 +2478,7 @@ fn rbce_walk(
         _ => false,
     };
     if fresh_region {
-        let mut inner: Vec<ProvenLt> = Vec::new();
+        let mut inner: Vec<Fact> = Vec::new();
         let mut changed = false;
         let base = frames.len();
         engine.body.for_each_child(node, |c| frames.push(c));
@@ -2429,9 +2532,7 @@ fn rbce_walk(
         let c = frames[i];
         changed |= rbce_walk(engine, c, facts, binds, frames);
         invalidate(engine, c, facts);
-        if let Some(fact) = len_minus_fact(engine, binds, c) {
-            facts.push(fact);
-        }
+        push_len_minus_facts(engine, binds, c, facts);
     }
     frames.truncate(base);
     changed

@@ -1,0 +1,19 @@
+// Regression: the floor `if i > 0` puts under `i` must not outlive a write to
+// `i`. Here `i` drops to -1 before the read, which MUST still trap.
+#[inline(never)]
+fn pick(xs: &List<i32>, start: i32) -> i32 {
+    let mut i = start;
+    if i > 0 {
+        i -= 2;
+        return xs[i];
+    }
+    return 0;
+}
+
+export fn run() {
+    let xs: List<i32> = [10, 20];
+    let _ = pick(&builtin::black_box(xs), 1);
+}
+
+__DATA__
+{"stderr_contains": ["0 <= index"], "trapped": true}
