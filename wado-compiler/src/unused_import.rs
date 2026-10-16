@@ -1,13 +1,10 @@
 //! The `unused_imports` lint: a `use` bringing in a name its module never
 //! refers to. See `docs/spec-diagnostics.md`.
 
-use crate::ast::{
-    AstVisitor, Expr, Item, Module, UseDecl, UseItem, attrs_allow, inner_attrs_allow, lint,
-    walk_expr,
-};
+use crate::ast::{Item, UseDecl, UseItem, attrs_allow, inner_attrs_allow, lint};
 use crate::compiler_host::{Code, Diagnostic, DiagnosticSpan, Severity};
-use crate::defs::DefKind;
-use crate::hashmap::IndexSet;
+use crate::defs::{DefId, DefKind};
+use crate::hashmap::{IndexMap, IndexSet};
 use crate::module_source::ModuleSource;
 use crate::name::NAMESPACE_MEMBER_SEP;
 use crate::resolve::Resolutions;
@@ -21,6 +18,7 @@ pub fn unused_import_diagnostics(sem: &Semantics) -> Vec<Diagnostic> {
     let Some(resolutions) = sem.resolutions() else {
         return Vec::new();
     };
+    let mut dispatched = dispatched_traits(sem, resolutions);
     let mut out = Vec::new();
     for (src, module) in &sem.modules {
         if !src.is_user_authored()
@@ -32,7 +30,7 @@ pub fn unused_import_diagnostics(sem: &Semantics) -> Vec<Diagnostic> {
         let uses = Uses {
             resolutions,
             module: src,
-            method_names: method_names(module),
+            dispatched_traits: dispatched.swap_remove(src).unwrap_or_default(),
         };
         for item in &module.items {
             if let Item::Use(decl) = item
@@ -63,11 +61,10 @@ pub fn unused_import_diagnostics(sem: &Semantics) -> Vec<Diagnostic> {
 struct Uses<'a> {
     resolutions: &'a Resolutions,
     module: &'a ModuleSource,
-    /// Every method name the module calls, and every last segment of a
-    /// qualified path (`T::method`). A trait's methods are candidates
-    /// only where the trait is in scope, so importing one for its methods
-    /// uses it without naming it.
-    method_names: IndexSet<String>,
+    /// The traits whose methods the module's calls dispatched to. A trait's
+    /// methods are candidates only where the trait is in scope, so importing
+    /// one for its methods uses it without naming it.
+    dispatched_traits: IndexSet<DefId>,
 }
 
 impl Uses<'_> {
@@ -135,34 +132,56 @@ impl Uses<'_> {
         let Some(def) = self.resolutions.imported_as(self.module, local) else {
             return true;
         };
-        let defs = self.resolutions.defs();
-        self.resolutions.references_from(self.module, def)
-            || (defs.kind(def) == DefKind::Trait
-                && defs
-                    .members(def)
-                    .iter()
-                    .any(|method| self.method_names.contains(defs.name(*method))))
+        self.resolutions.references_from(self.module, def) || self.dispatched_traits.contains(&def)
     }
 }
 
-fn method_names(module: &Module) -> IndexSet<String> {
-    struct Calls(IndexSet<String>);
-    impl AstVisitor for Calls {
-        fn visit_expr(&mut self, expr: &Expr) {
-            if let Expr::MethodCall(call) = expr {
-                self.0.insert(call.method.clone());
-            }
-            if let Expr::Ident(ident) = expr
-                && let [_, .., last] = ident.segments.as_slice()
-            {
-                self.0.insert(last.name.clone());
-            }
-            walk_expr(self, expr);
+/// Per user-authored module, the traits declaring or implementing a method
+/// that one of its method calls dispatched to.
+fn dispatched_traits(
+    sem: &Semantics,
+    resolutions: &Resolutions,
+) -> IndexMap<ModuleSource, IndexSet<DefId>> {
+    let defs = resolutions.defs();
+    let mut implemented: IndexMap<DefId, Option<DefId>> = IndexMap::default();
+    let mut out: IndexMap<ModuleSource, IndexSet<DefId>> = IndexMap::default();
+    for (site, target) in sem.iter_references() {
+        let Some(module) = sem.module_of_id(site) else {
+            continue;
+        };
+        if !module.is_user_authored() {
+            continue;
+        }
+        let Some(method) = defs.of_ast_id(target) else {
+            continue;
+        };
+        if defs.kind(method) != DefKind::Method {
+            continue;
+        }
+        let owner = defs.parent(method).expect("a method has the item declaring it");
+        let owning_trait = match defs.kind(owner) {
+            DefKind::Trait => Some(owner),
+            DefKind::Impl => *implemented
+                .entry(owner)
+                .or_insert_with(|| implemented_trait(sem, resolutions, owner)),
+            _ => None,
+        };
+        if let Some(t) = owning_trait {
+            out.entry(module.clone()).or_default().insert(t);
         }
     }
-    let mut calls = Calls(IndexSet::default());
-    for item in &module.items {
-        calls.visit_item(item);
-    }
-    calls.0
+    out
+}
+
+/// The trait the `impl` block `block` implements; `None` for an inherent one.
+fn implemented_trait(sem: &Semantics, resolutions: &Resolutions, block: DefId) -> Option<DefId> {
+    let defs = resolutions.defs();
+    let id = defs.ast_id(block);
+    sem.modules[defs.module(block)]
+        .items
+        .iter()
+        .find_map(|item| match item {
+            Item::Impl(b) if b.id == id => resolutions.head_decl(b.trait_type.as_ref()?),
+            _ => None,
+        })
 }

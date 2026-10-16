@@ -271,14 +271,15 @@ use { println, eprintln, Stdout } from "core:cli";
 use { TreeMap as Map, TreeSet } from "core:collections";
 use json from "core:json";
 use base64 from "core:base64";
-use { Doubled, Halved } from "./sub/unused_import_traits.wado";
+use { Doubled, Halved, Half } from "./sub/unused_import_traits.wado";
 pub use { to_string } from "core:json";
 #[allow(unused_imports)]
 use { from_string } from "core:json";
 
 export fn run() with Stdout {
     let m = Map::<i32, i32>::new();
-    println(`${m.len()} ${json::to_string(&21.doubled()).unwrap()}`);
+    let half = Half { n: 2 }.halved();
+    println(`${m.len()} ${json::to_string(&21.doubled()).unwrap()} ${half}`);
 }
 ```
 
@@ -286,7 +287,9 @@ A name is used when a reference written in the module reaches it, with three
 kinds of use beyond that:
 
 - A trait's methods are candidates only where the trait is in scope, so a trait
-  is used where the module calls a method of the same name, here `doubled`.
+  is used where one of the module's calls dispatches to a method it declares
+  or implements, here `doubled`. `Halved` stays unused: `halved` here is
+  `Half`'s own method.
 - A namespace import is used where the module names a member through it.
 - An interface import with functions (`use { Stdout::{write_via_stream} }`) is
   used where any of the names it brings in is. One that goes unused is

@@ -265,9 +265,11 @@ reference resolved to; an import is used when its import-tier
 - `Wildcard`: skipped (side-effect imports).
 
 A trait has no reference site when only its methods are called: the
-import puts the methods in scope. A trait import therefore counts as
-used when the module calls a method, or names a path segment, sharing
-a name with one of the trait's members.
+import puts the methods in scope. A trait import therefore also counts
+as used when one of the module's method references, as the elaborator
+records them, reaches a method the trait declares or one of its
+`impl`s defines. Dispatch decided which declaration answered, so a
+same-named method of another type does not count.
 
 An import the resolver did not resolve counts as used, since its error
 is reported already. `pub`, `internal` and `export` uses are
@@ -642,10 +644,6 @@ through the diagnostics path.
   neither "never used" nor "only used by tests", and neither is what only it
   reaches. A single-file compile and the editor do not load the whole package.
 - A namespace re-export (`pub use ns from "./m.wado"`) seeds nothing in package
-  mode, so what it offers reports as unused.
-- A trait import counts as used by name alone: calling another type's method
-  that shares a name with one of the trait's members keeps an unused trait
-  import silent.
-- Package mode elaborates every member on one thread, and runs every member's
+  mode, so what it offers reports as unused.- Package mode elaborates every member on one thread, and runs every member's
   Kiln pipeline one at a time. On Gale it takes under twice as long as
   checking the declared entries alone.
