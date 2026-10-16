@@ -4872,6 +4872,18 @@ impl TypeTable {
         rows
     }
 
+    /// What each of the effect parameters `names` stands for where `declared`
+    /// meets `actual`: the row `actual` has at the same place, less what
+    /// `declared` names outright there. A parameter no row reaches is empty.
+    pub fn effect_binding(&self, declared: TypeId, actual: TypeId, names: &[String]) -> EffectRows {
+        let mut rows: EffectRows = names
+            .iter()
+            .map(|name| (name.clone(), Vec::new()))
+            .collect();
+        self.bind_rows(declared, actual, &mut rows);
+        rows
+    }
+
     /// [`Self::impl_effect_binding`] for one written type beside the type
     /// that meets it.
     fn bind_rows(&self, written: TypeId, actual: TypeId, rows: &mut EffectRows) {
