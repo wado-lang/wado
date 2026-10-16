@@ -1820,7 +1820,7 @@ for let found of fs::walk_dir("src")? {          // lists each directory as it r
     println(`${found?.path}`);                   // Result<WalkEntry, FsError>, deep
 }
 // `e.path` reaches the entry from the walk's root, so a name is compared as one
-fs::walk_dir(".", |e| fs::file_name(&e.path).unwrap() != ".git")?;
+for let found of fs::walk_dir(".", |e| fs::file_name(&e.path).unwrap() != ".git")? { ... }
 
 // Path text, no I/O: `/`-separated and preopen-relative, never URL rules
 fs::join("build", "out.json");                   // "build/out.json"

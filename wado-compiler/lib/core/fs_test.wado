@@ -321,6 +321,17 @@ test "a walk lists a directory only when it reaches it, and goes on past one it 
     };
 }
 
+test "a directory the loop removes is yielded as NotFound" {
+    let dir = scratch("walk-removed");
+    fs::create_dir_all(`${dir}/gone/inner`).unwrap();
+
+    let mut walk = fs::walk_dir(&dir).unwrap();
+    let gone = walk.next().unwrap().unwrap().path;
+    fs::remove_dir_all(&gone).unwrap();
+    assert walk.next().unwrap().unwrap_err().kind matches { NotFound };
+    assert walk.next() == null;
+}
+
 test "walking what is not a directory fails" {
     let dir = scratch("walk-file");
     let path = `${dir}/raw.bin`;
