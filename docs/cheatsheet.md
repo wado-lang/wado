@@ -1524,6 +1524,9 @@ fn apply<T, effect E>(f: fn(T) -> T with E, x: T) -> T with E {
 // `with _` is sugar for it: every `_` in one signature is the same parameter,
 // so `wrapper` above is `fn wrapper(f: fn() with _) with _`.
 
+// Taken as a value, an expected fn type settles E; a turbofish cannot
+let pure: fn(fn()) = wrapper;                        // E = (none)
+
 // E is inferred from the closure's effects at each call site
 wrapper(|| { println("hello"); });     // E = Stdout
 let x = apply(|n| n + 1, 41);          // E = (none)
