@@ -206,18 +206,18 @@ global global:core:prelude/primitive.wado::$const_obj_29: ref "core:prelude/stri
 
 fn "spec_worlds_command_stdio.wado/run"() with Stdin, Stdout, Stderr {
     let input: i32;
-    let all: ref "core:prelude//List<u8>";
     let slice: ref "core:prelude/slice.wado//Slice<u8>";
     let builder: ref "core:prelude/string.wado//String";
-    let self_31: ref "core:prelude/string.wado//StrLinesIter";
-    let packed_43: i64;
-    let elements: ref Array<u8>;
+    let self_29: ref "core:prelude/string.wado//StrLinesIter";
+    let packed_41: i64;
+    let all: ref "core:prelude//List<u8>";
     let other_len: i32;
-    let new_used_111: i32;
-    let f_133: ref "spec_worlds_command_stdio.wado//$Closure_0";
+    let new_used_114: i32;
+    let out_122: ref Array<u8>;
+    let f_136: ref "spec_worlds_command_stdio.wado//$Closure_0";
     input = "spec_worlds_command_stdio.wado/$cm_binding__Stdin_read_via_stream"().0;
-    $mv$chunk$items = $inline_core_prelude_types_wado_Stream_u8___read_to_end_2: block -> ref "core:prelude//List<u8>" {
-        all = struct.new "core:prelude//List<u8>" { repr: local.tee elements(array.new_fixed<u8>()), used: 0 };
+    $mv$chunk$items = $inline_core_prelude_types_wado_Stream_u8___read_to_end_sized_1: block -> ref "core:prelude//List<u8>" {
+        all = struct.new "core:prelude//List<u8>" { repr: builtin::array_new<u8>(0), used: 0 };
         block {
             l1: loop {
                 let $mv$chunk$items: ref "core:prelude//List<u8>";
@@ -225,15 +225,15 @@ fn "spec_worlds_command_stdio.wado/run"() with Stdin, Stdout, Stderr {
                 multivalue_bind [$mv$chunk$items, $mv$chunk$result] = "core:rt/cm_stream_read_u8"(input, 4096);
                 $inline_core_prelude_list_wado_List_u8___extend_2: block {
                     break_if $inline_core_prelude_list_wado_List_u8___extend_2 local.tee other_len($mv$chunk$items.used) == 0;
-                    if @unlikely(local.tee new_used_111(all.used + other_len) > builtin::array_len(all.repr)) {
+                    if @unlikely(local.tee new_used_114(all.used + other_len) > builtin::array_len(all.repr)) {
                         cold_path;
-                        "core:prelude/list.wado/core:prelude/list.wado/List<u8>::grow_to"(all, new_used_111);
+                        "core:prelude/list.wado/core:prelude/list.wado/List<u8>::grow_to"(all, new_used_114);
                     }
                     builtin::array_copy<u8>(all.repr, all.used, $mv$chunk$items.repr, 0, other_len);
-                    all.used = new_used_111;
+                    all.used = new_used_114;
                 };
                 if $mv$chunk$result != 0 {
-                    break $inline_core_prelude_types_wado_Stream_u8___read_to_end_2: all;
+                    break $inline_core_prelude_types_wado_Stream_u8___read_to_end_sized_1: all;
                 }
                 continue l1;
             };
@@ -241,26 +241,26 @@ fn "spec_worlds_command_stdio.wado/run"() with Stdin, Stdout, Stderr {
         unreachable;
     };
     "wasi/stream-drop-readable"(input);
-    self_31 = struct.new "core:prelude/string.wado//StrLinesIter" { repr: local.tee elements(local.tee builder($inline_core_prelude_string_wado_String__from_utf8_lossy_core_prelude_bytes_wado_ByteList__3: block -> ref "core:prelude/string.wado//String" {
+    self_29 = struct.new "core:prelude/string.wado//StrLinesIter" { repr: local.tee out_122(local.tee builder($inline_core_prelude_string_wado_String__from_utf8_lossy_core_prelude_bytes_wado_ByteList__3: block -> ref "core:prelude/string.wado//String" {
         if @likely("core:prelude/string.wado/core:prelude/string.wado/String::utf8_valid_prefix"(local.tee slice(struct.new "core:prelude/slice.wado//Slice<u8>" { repr: $mv$chunk$items.repr, start: 0, end: $mv$chunk$items.used })) == local.tee input(slice.end)) {
-            break $inline_core_prelude_string_wado_String__from_utf8_lossy_core_prelude_bytes_wado_ByteList__3: struct.new "core:prelude/string.wado//String" { repr: elements = builtin::array_new<u8>(select i32(input > 0, input, 0)); if input > 0 {
-                builtin::array_copy<u8>(elements, 0, slice.repr, 0, input);
-            }; elements, used: input };
+            break $inline_core_prelude_string_wado_String__from_utf8_lossy_core_prelude_bytes_wado_ByteList__3: struct.new "core:prelude/string.wado//String" { repr: out_122 = builtin::array_new<u8>(select i32(input > 0, input, 0)); if input > 0 {
+                builtin::array_copy<u8>(out_122, 0, slice.repr, 0, input);
+            }; out_122, used: input };
         }
         cold_path;
         builder = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(input), used: 0 };
-        new_used_111 = 0;
+        new_used_114 = 0;
         b6: block {
             l7: loop {
-                break_if b6 new_used_111 >= input;
+                break_if b6 new_used_114 >= input;
                 let $mv$scalar$valid: bool;
-                multivalue_bind [other_len, $mv$chunk$result, $mv$scalar$valid] = "core:prelude/string.wado/decode_utf8_scalar"(slice, new_used_111, input);
+                multivalue_bind [other_len, $mv$chunk$result, $mv$scalar$valid] = "core:prelude/string.wado/decode_utf8_scalar"(slice, new_used_114, input);
                 if $mv$scalar$valid {
                     "core:prelude/string.wado/core:prelude/string.wado/String::push"(builder, other_len);
                 } else {
                     "core:prelude/string.wado/core:prelude/string.wado/String::push"(builder, 65533);
                 }
-                new_used_111 = new_used_111 + $mv$chunk$result;
+                new_used_114 = new_used_114 + $mv$chunk$result;
                 continue l7;
             };
         };
@@ -269,7 +269,7 @@ fn "spec_worlds_command_stdio.wado/run"() with Stdin, Stdout, Stderr {
     $mv$scalar$valid = 0;
     b9: block {
         l10: loop {
-            if ref.is_null("core:prelude/string.wado/core:prelude/string.wado/StrLinesIter^core:prelude/traits.wado/Iterator::next"(self_31)) == 0 {
+            if ref.is_null("core:prelude/string.wado/core:prelude/string.wado/StrLinesIter^core:prelude/traits.wado/Iterator::next"(self_29)) == 0 {
                 $mv$scalar$valid = $mv$scalar$valid + 1;
             } else {
                 break b9;
@@ -282,30 +282,30 @@ fn "spec_worlds_command_stdio.wado/run"() with Stdin, Stdout, Stderr {
         "spec_worlds_command_stdio.wado/run$cold0"($mv$scalar$valid);
         unreachable;
     }
-    elements = builder.repr;
+    out_122 = builder.repr;
     $mv$scalar$valid = builder.used;
-    f_133 = struct.new "spec_worlds_command_stdio.wado//$Closure_0" {  };
-    builder = "core:prelude/string.wado/core:prelude/string.wado/String::from_iter<core:prelude/traits.wado/IterMap<core:prelude/string.wado/StrCharIter,fn mut(char)->char>>"(struct.new "core:prelude/traits.wado//IterMap<core:prelude/string.wado/StrCharIter,fn mut(char)->char>" { inner: struct.new "core:prelude/string.wado//StrCharIter" { repr: elements, used: $mv$scalar$valid, byte_index: 0 }, f: struct.new "canonical//CanonicalClosure_0" { env: f_133, func: ref.func "closure/spec_worlds_command_stdio.wado/$closure_wrapper_0" } });
-    $mv$scalar$valid = builtin::i32_wrap_i64(local.tee packed_43("wasi/stream-new"()));
-    new_used_111 = builtin::i32_wrap_i64(packed_43 >> 32_i64);
+    f_136 = struct.new "spec_worlds_command_stdio.wado//$Closure_0" {  };
+    builder = "core:prelude/string.wado/core:prelude/string.wado/String::from_iter<core:prelude/traits.wado/IterMap<core:prelude/string.wado/StrCharIter,fn mut(char)->char>>"(struct.new "core:prelude/traits.wado//IterMap<core:prelude/string.wado/StrCharIter,fn mut(char)->char>" { inner: struct.new "core:prelude/string.wado//StrCharIter" { repr: out_122, used: $mv$scalar$valid, byte_index: 0 }, f: struct.new "canonical//CanonicalClosure_0" { env: f_136, func: ref.func "closure/spec_worlds_command_stdio.wado/$closure_wrapper_0" } });
+    $mv$scalar$valid = builtin::i32_wrap_i64(local.tee packed_41("wasi/stream-new"()));
+    new_used_114 = builtin::i32_wrap_i64(packed_41 >> 32_i64);
     $mv$scalar$valid = "spec_worlds_command_stdio.wado/$cm_binding__Stdout_write_via_stream"($mv$scalar$valid);
     other_len = builder.used;
     drop(block -> "core:prelude/types.wado//enum:CopyResult" {
-        elements = builder.repr;
-        "core:rt/cm_stream_write_raw_all_u8"(new_used_111, elements, 0, other_len);
+        out_122 = builder.repr;
+        "core:rt/cm_stream_write_raw_all_u8"(new_used_114, out_122, 0, other_len);
     });
-    "wasi/stream-drop-writable"(new_used_111);
+    "wasi/stream-drop-writable"(new_used_114);
     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"($mv$scalar$valid);
     builder = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(27), used: 0 };
     if @unlikely(local.tee $mv$scalar$valid(0 + 5) > builtin::array_len(builder.repr)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"(builder, $mv$scalar$valid);
     }
-    new_used_111 = builder.used;
+    new_used_114 = builder.used;
     builder.used = $mv$scalar$valid;
-    builtin::array_copy<u8>(builder.repr, new_used_111, global:spec_worlds_command_stdio.wado::$const_obj_5, 0, 5);
-    $mv$scalar$valid = local.tee new_used_111($mv$chunk$items.used) < 0;
-    new_used_111 = "core:prelude/primitive.wado/count_digits_u64"(local.tee packed_43(packed_43 = builtin::i64_extend_i32_s(new_used_111); select i64(packed_43 < 0_i64, 0_i64 - packed_43, packed_43)));
+    builtin::array_copy<u8>(builder.repr, new_used_114, global:spec_worlds_command_stdio.wado::$const_obj_5, 0, 5);
+    $mv$scalar$valid = local.tee new_used_114($mv$chunk$items.used) < 0;
+    new_used_114 = "core:prelude/primitive.wado/count_digits_u64"(local.tee packed_41(packed_41 = builtin::i64_extend_i32_s(new_used_114); select i64(packed_41 < 0_i64, 0_i64 - packed_41, packed_41)));
     if $mv$scalar$valid {
         if @unlikely(local.tee $mv$scalar$valid(builder.used + 1) > builtin::array_len(builder.repr)) {
             cold_path;
@@ -316,24 +316,24 @@ fn "spec_worlds_command_stdio.wado/run"() with Stdin, Stdout, Stderr {
         builtin::array_set_u8(builder.repr, other_len, 45);
     } else {
     }
-    if @unlikely(local.tee other_len(builder.used + new_used_111) > builtin::array_len(builder.repr)) {
+    if @unlikely(local.tee other_len(builder.used + new_used_114) > builtin::array_len(builder.repr)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"(builder, other_len);
     }
     $mv$scalar$valid = builder.used;
     builder.used = other_len;
-    "core:prelude/primitive.wado/write_decimal_digits"(builder.repr, $mv$scalar$valid, packed_43, new_used_111);
-    if @unlikely(local.tee new_used_111(builder.used + 6) > builtin::array_len(builder.repr)) {
+    "core:prelude/primitive.wado/write_decimal_digits"(builder.repr, $mv$scalar$valid, packed_41, new_used_114);
+    if @unlikely(local.tee new_used_114(builder.used + 6) > builtin::array_len(builder.repr)) {
         cold_path;
-        "core:prelude/string.wado/core:prelude/string.wado/String::grow"(builder, new_used_111);
+        "core:prelude/string.wado/core:prelude/string.wado/String::grow"(builder, new_used_114);
     }
     $mv$scalar$valid = builder.used;
-    builder.used = new_used_111;
+    builder.used = new_used_114;
     builtin::array_copy<u8>(builder.repr, $mv$scalar$valid, global:spec_worlds_command_stdio.wado::$const_obj_4, 0, 6);
-    $mv$scalar$valid = builtin::i32_wrap_i64(local.tee packed_43("wasi/stream-new"()));
-    new_used_111 = builtin::i32_wrap_i64(packed_43 >> 32_i64);
+    $mv$scalar$valid = builtin::i32_wrap_i64(local.tee packed_41("wasi/stream-new"()));
+    new_used_114 = builtin::i32_wrap_i64(packed_41 >> 32_i64);
     $mv$scalar$valid = "spec_worlds_command_stdio.wado/$cm_binding__Stderr_write_via_stream"($mv$scalar$valid);
-    "core:rt/write_string_to_stream$spec0$dae[add_newline]"(new_used_111, builder.repr, builder.used);
+    "core:rt/write_string_to_stream$spec0$dae[add_newline]"(new_used_114, builder.repr, builder.used);
     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"($mv$scalar$valid);
 }
 

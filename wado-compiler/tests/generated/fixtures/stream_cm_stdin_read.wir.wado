@@ -104,29 +104,29 @@ global global:stream_cm_stdin_read.wado::$const_obj_4: ref Array<u8> = array.new
 fn "stream_cm_stdin_read.wado/run"() with Stdout, Stdin {
     let stdin_stream: i32;
     let $local_3: ref "core:prelude/string.wado//String";
-    let all: ref "core:prelude//List<u8>";
     let x: i64;
+    let all: ref "core:prelude//List<u8>";
     let other_len: i32;
-    let new_used_68: i32;
+    let new_used_75: i32;
     stdin_stream = "stream_cm_stdin_read.wado/$cm_binding__Stdin_read_via_stream"().0;
-    new_used_68 = local.tee $mv$chunk$items($inline_core_prelude_types_wado_Stream_u8___read_to_end_2: block -> ref "core:prelude//List<u8>" {
-        all = struct.new "core:prelude//List<u8>" { repr: array.new_fixed<u8>(), used: 0 };
+    new_used_75 = local.tee $mv$chunk$items($inline_core_prelude_types_wado_Stream_u8___read_to_end_sized_1: block -> ref "core:prelude//List<u8>" {
+        all = struct.new "core:prelude//List<u8>" { repr: builtin::array_new<u8>(0), used: 0 };
         block {
             l1: loop {
                 let $mv$chunk$items: ref "core:prelude//List<u8>";
                 let $mv$chunk$result: "core:prelude/types.wado//enum:CopyResult";
                 multivalue_bind [$mv$chunk$items, $mv$chunk$result] = "core:rt/cm_stream_read_u8"(stdin_stream, 4096);
-                $inline_core_prelude_list_wado_List_u8___extend_2: block {
-                    break_if $inline_core_prelude_list_wado_List_u8___extend_2 local.tee other_len($mv$chunk$items.used) == 0;
-                    if @unlikely(local.tee new_used_68(all.used + other_len) > builtin::array_len(all.repr)) {
+                $inline_core_prelude_list_wado_List_u8___extend_0: block {
+                    break_if $inline_core_prelude_list_wado_List_u8___extend_0 local.tee other_len($mv$chunk$items.used) == 0;
+                    if @unlikely(local.tee new_used_75(all.used + other_len) > builtin::array_len(all.repr)) {
                         cold_path;
-                        "core:prelude/list.wado/core:prelude/list.wado/List<u8>::grow_to"(all, new_used_68);
+                        "core:prelude/list.wado/core:prelude/list.wado/List<u8>::grow_to"(all, new_used_75);
                     }
                     builtin::array_copy<u8>(all.repr, all.used, $mv$chunk$items.repr, 0, other_len);
-                    all.used = new_used_68;
+                    all.used = new_used_75;
                 };
                 if $mv$chunk$result != 0 {
-                    break $inline_core_prelude_types_wado_Stream_u8___read_to_end_2: all;
+                    break $inline_core_prelude_types_wado_Stream_u8___read_to_end_sized_1: all;
                 }
                 continue l1;
             };
@@ -142,8 +142,8 @@ fn "stream_cm_stdin_read.wado/run"() with Stdout, Stdin {
     other_len = $local_3.used;
     $local_3.used = stdin_stream;
     builtin::array_copy<u8>($local_3.repr, other_len, global:stream_cm_stdin_read.wado::$const_obj_4, 0, 5);
-    other_len = new_used_68 < 0;
-    new_used_68 = "core:prelude/primitive.wado/count_digits_u64"(local.tee x(x = builtin::i64_extend_i32_s(new_used_68); select i64(x < 0_i64, 0_i64 - x, x)));
+    other_len = new_used_75 < 0;
+    new_used_75 = "core:prelude/primitive.wado/count_digits_u64"(local.tee x(x = builtin::i64_extend_i32_s(new_used_75); select i64(x < 0_i64, 0_i64 - x, x)));
     if other_len {
         if @unlikely(local.tee other_len($local_3.used + 1) > builtin::array_len($local_3.repr)) {
             cold_path;
@@ -154,24 +154,24 @@ fn "stream_cm_stdin_read.wado/run"() with Stdout, Stdin {
         builtin::array_set_u8($local_3.repr, stdin_stream, 45);
     } else {
     }
-    if @unlikely(local.tee stdin_stream($local_3.used + new_used_68) > builtin::array_len($local_3.repr)) {
+    if @unlikely(local.tee stdin_stream($local_3.used + new_used_75) > builtin::array_len($local_3.repr)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_3, stdin_stream);
     }
     other_len = $local_3.used;
     $local_3.used = stdin_stream;
-    "core:prelude/primitive.wado/write_decimal_digits"($local_3.repr, other_len, x, new_used_68);
-    if @unlikely(local.tee new_used_68($local_3.used + 6) > builtin::array_len($local_3.repr)) {
+    "core:prelude/primitive.wado/write_decimal_digits"($local_3.repr, other_len, x, new_used_75);
+    if @unlikely(local.tee new_used_75($local_3.used + 6) > builtin::array_len($local_3.repr)) {
         cold_path;
-        "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_3, new_used_68);
+        "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_3, new_used_75);
     }
     other_len = $local_3.used;
-    $local_3.used = new_used_68;
+    $local_3.used = new_used_75;
     builtin::array_copy<u8>($local_3.repr, other_len, global:stream_cm_stdin_read.wado::$const_obj_3, 0, 6);
     other_len = builtin::i32_wrap_i64(local.tee x("wasi/stream-new"()));
-    new_used_68 = builtin::i32_wrap_i64(x >> 32_i64);
+    new_used_75 = builtin::i32_wrap_i64(x >> 32_i64);
     other_len = "stream_cm_stdin_read.wado/$cm_binding__Stdout_write_via_stream"(other_len);
-    "core:rt/write_string_to_stream$dae[add_newline]"(new_used_68, $local_3.repr, $local_3.used);
+    "core:rt/write_string_to_stream$dae[add_newline]"(new_used_75, $local_3.repr, $local_3.used);
     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(other_len);
 }
 

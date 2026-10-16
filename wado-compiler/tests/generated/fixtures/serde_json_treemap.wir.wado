@@ -140,7 +140,43 @@ array Array<core:prelude/list.wado/List<i32>> (mut ref "core:prelude//List<i32>"
 
 array Array<core:prelude/types.wado/Option<i32>> (mut ref "core:prelude/types.wado//Option<i32>");  // TypeId(30)
 
-struct core:collections/treemap.wado//TreeMap<core:prelude/string.wado/String,core:prelude/types.wado/Option<i32>> {  // TypeId(31)
+struct core:collections/entries.wado//EntryLog<core:prelude/string.wado/String,core:prelude/types.wado/Option<i32>> {  // TypeId(31)
+    mut keys: ref "Array<core:prelude/string.wado/String>",
+    mut values: ref "Array<core:prelude/types.wado/Option<i32>>",
+    mut alive: ref Array<bool>,
+    mut count: i32,
+    mut size: i32,
+    mut deleted_count: i32,
+}
+
+struct core:collections/entries.wado//EntryLog<core:prelude/string.wado/String,core:prelude/list.wado/List<i32>> {  // TypeId(32)
+    mut keys: ref "Array<core:prelude/string.wado/String>",
+    mut values: ref "Array<core:prelude/list.wado/List<i32>>",
+    mut alive: ref Array<bool>,
+    mut count: i32,
+    mut size: i32,
+    mut deleted_count: i32,
+}
+
+struct core:collections/entries.wado//EntryLog<core:prelude/string.wado/String,bool> {  // TypeId(33)
+    mut keys: ref "Array<core:prelude/string.wado/String>",
+    mut values: ref Array<bool>,
+    mut alive: ref Array<bool>,
+    mut count: i32,
+    mut size: i32,
+    mut deleted_count: i32,
+}
+
+struct core:collections/entries.wado//EntryLog<core:prelude/string.wado/String,core:prelude/string.wado/String> {  // TypeId(34)
+    mut keys: ref "Array<core:prelude/string.wado/String>",
+    mut values: ref "Array<core:prelude/string.wado/String>",
+    mut alive: ref Array<bool>,
+    mut count: i32,
+    mut size: i32,
+    mut deleted_count: i32,
+}
+
+struct core:collections/treemap.wado//TreeMap<core:prelude/string.wado/String,core:prelude/types.wado/Option<i32>> {  // TypeId(35)
     mut log: ref "core:collections/entries.wado//EntryLog<core:prelude/string.wado/String,core:prelude/types.wado/Option<i32>>",
     mut slots: ref Array<i32>,
     mut nkeys: ref "Array<core:prelude/string.wado/String>",
@@ -151,7 +187,7 @@ struct core:collections/treemap.wado//TreeMap<core:prelude/string.wado/String,co
     mut height: i32,
 }
 
-struct core:collections/treemap.wado//TreeMap<core:prelude/string.wado/String,core:prelude/list.wado/List<i32>> {  // TypeId(32)
+struct core:collections/treemap.wado//TreeMap<core:prelude/string.wado/String,core:prelude/list.wado/List<i32>> {  // TypeId(36)
     mut log: ref "core:collections/entries.wado//EntryLog<core:prelude/string.wado/String,core:prelude/list.wado/List<i32>>",
     mut slots: ref Array<i32>,
     mut nkeys: ref "Array<core:prelude/string.wado/String>",
@@ -162,7 +198,7 @@ struct core:collections/treemap.wado//TreeMap<core:prelude/string.wado/String,co
     mut height: i32,
 }
 
-struct core:collections/treemap.wado//TreeMap<core:prelude/string.wado/String,bool> {  // TypeId(33)
+struct core:collections/treemap.wado//TreeMap<core:prelude/string.wado/String,bool> {  // TypeId(37)
     mut log: ref "core:collections/entries.wado//EntryLog<core:prelude/string.wado/String,bool>",
     mut slots: ref Array<i32>,
     mut nkeys: ref "Array<core:prelude/string.wado/String>",
@@ -173,7 +209,7 @@ struct core:collections/treemap.wado//TreeMap<core:prelude/string.wado/String,bo
     mut height: i32,
 }
 
-struct core:collections/treemap.wado//TreeMap<core:prelude/string.wado/String,core:prelude/string.wado/String> {  // TypeId(34)
+struct core:collections/treemap.wado//TreeMap<core:prelude/string.wado/String,core:prelude/string.wado/String> {  // TypeId(38)
     mut log: ref "core:collections/entries.wado//EntryLog<core:prelude/string.wado/String,core:prelude/string.wado/String>",
     mut slots: ref Array<i32>,
     mut nkeys: ref "Array<core:prelude/string.wado/String>",
@@ -184,7 +220,7 @@ struct core:collections/treemap.wado//TreeMap<core:prelude/string.wado/String,co
     mut height: i32,
 }
 
-struct core:collections/entries.wado//EntryLog<core:prelude/string.wado/String,i32> {  // TypeId(35)
+struct core:collections/entries.wado//EntryLog<core:prelude/string.wado/String,i32> {  // TypeId(39)
     mut keys: ref "Array<core:prelude/string.wado/String>",
     mut values: ref Array<i32>,
     mut alive: ref Array<bool>,
@@ -193,7 +229,7 @@ struct core:collections/entries.wado//EntryLog<core:prelude/string.wado/String,i
     mut deleted_count: i32,
 }
 
-struct core:collections/treemap.wado//TreeMap<core:prelude/string.wado/String,i32> {  // TypeId(36)
+struct core:collections/treemap.wado//TreeMap<core:prelude/string.wado/String,i32> {  // TypeId(40)
     mut log: ref "core:collections/entries.wado//EntryLog<core:prelude/string.wado/String,i32>",
     mut slots: ref Array<i32>,
     mut nkeys: ref "Array<core:prelude/string.wado/String>",
@@ -204,46 +240,10 @@ struct core:collections/treemap.wado//TreeMap<core:prelude/string.wado/String,i3
     mut height: i32,
 }
 
-struct core:prelude/slice.wado//Slice<u8> {  // TypeId(37)
+struct core:prelude/slice.wado//Slice<u8> {  // TypeId(41)
     mut repr: ref Array<u8>,
     mut start: i32,
     mut end: i32,
-}
-
-struct core:collections/entries.wado//EntryLog<core:prelude/string.wado/String,core:prelude/string.wado/String> {  // TypeId(38)
-    mut keys: ref "Array<core:prelude/string.wado/String>",
-    mut values: ref "Array<core:prelude/string.wado/String>",
-    mut alive: ref Array<bool>,
-    mut count: i32,
-    mut size: i32,
-    mut deleted_count: i32,
-}
-
-struct core:collections/entries.wado//EntryLog<core:prelude/string.wado/String,bool> {  // TypeId(39)
-    mut keys: ref "Array<core:prelude/string.wado/String>",
-    mut values: ref Array<bool>,
-    mut alive: ref Array<bool>,
-    mut count: i32,
-    mut size: i32,
-    mut deleted_count: i32,
-}
-
-struct core:collections/entries.wado//EntryLog<core:prelude/string.wado/String,core:prelude/list.wado/List<i32>> {  // TypeId(40)
-    mut keys: ref "Array<core:prelude/string.wado/String>",
-    mut values: ref "Array<core:prelude/list.wado/List<i32>>",
-    mut alive: ref Array<bool>,
-    mut count: i32,
-    mut size: i32,
-    mut deleted_count: i32,
-}
-
-struct core:collections/entries.wado//EntryLog<core:prelude/string.wado/String,core:prelude/types.wado/Option<i32>> {  // TypeId(41)
-    mut keys: ref "Array<core:prelude/string.wado/String>",
-    mut values: ref "Array<core:prelude/types.wado/Option<i32>>",
-    mut alive: ref Array<bool>,
-    mut count: i32,
-    mut size: i32,
-    mut deleted_count: i32,
 }
 
 struct core:collections/entries.wado//MapEntriesRefIter<core:prelude/string.wado/String,core:prelude/types.wado/Option<i32>> {  // TypeId(42)

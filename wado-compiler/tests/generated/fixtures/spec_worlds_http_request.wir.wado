@@ -722,12 +722,12 @@ fn "spec_worlds_http_request.wado/$cm_task_entry__handle"(request) {
     let v: ref "core:prelude/string.wado//String";
     let f_273: ref "core:prelude/format.wado//Formatter";
     let slice_356: ref "core:prelude/slice.wado//Slice<u8>";
-    let all: ref "core:prelude//List<u8>";
-    let packed_375: i64;
-    let a_481: ref Array<u8>;
+    let packed_373: i64;
+    let a_479: ref Array<u8>;
     let a_end: i32;
-    let b_484: ref Array<u8>;
-    let i_488: i32;
+    let b_482: ref Array<u8>;
+    let i_486: i32;
+    let all: ref "core:prelude//List<u8>";
     is_post = "spec_worlds_http_request.wado/$cm_binding__Request_get_method"(request).discriminant == 2;
     self_231 = "spec_worlds_http_request.wado/$cm_binding__Request_get_path_with_query"(request);
     default = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(47), used: 1 };
@@ -739,24 +739,24 @@ fn "spec_worlds_http_request.wado/$cm_task_entry__handle"(request) {
     greetings = "spec_worlds_http_request.wado/$cm_binding__Fields_get"(local.tee headers("spec_worlds_http_request.wado/$cm_binding__Request_get_headers"(request)), global:spec_worlds_http_request.wado::$const_obj_26);
     $v1_seen = 0;
     $v2_seen = 0;
-    i_488 = (if is_post -> i32 {
+    i_486 = (if is_post -> i32 {
         $v1_5 = default;
         $v1_seen = 1;
         $v2 = $inline_core_prelude_array_wado_seq_eq_u8__0: block -> bool {
-            a_481 = $v1_5.repr;
+            a_479 = $v1_5.repr;
             a_end = $v1_5.used;
-            b_484 = global:spec_worlds_http_request.wado::$const_obj_25;
+            b_482 = global:spec_worlds_http_request.wado::$const_obj_25;
             if a_end != 6 {
                 break $inline_core_prelude_array_wado_seq_eq_u8__0: 0;
             }
-            i_488 = 0;
+            i_486 = 0;
             b30: block {
                 l31: loop {
-                    break_if b30 i_488 >= a_end;
-                    if builtin::array_get_value<u8>(a_481, i_488) != builtin::array_get_value<u8>(b_484, i_488) {
+                    break_if b30 i_486 >= a_end;
+                    if builtin::array_get_value<u8>(a_479, i_486) != builtin::array_get_value<u8>(b_482, i_486) {
                         break $inline_core_prelude_array_wado_seq_eq_u8__0: 0;
                     }
-                    i_488 = i_488 + 1;
+                    i_486 = i_486 + 1;
                     continue l31;
                 };
             };
@@ -769,7 +769,7 @@ fn "spec_worlds_http_request.wado/$cm_task_entry__handle"(request) {
     });
     a_end = 0;
     $v5_seen = 0;
-    if @unlikely((if i_488 -> i32 {
+    if @unlikely((if i_486 -> i32 {
         $v5 = $v4 = greetings.used; a_end = 1; $v4 == 1;
         $v5_seen = 1;
         $v5;
@@ -806,18 +806,18 @@ fn "spec_worlds_http_request.wado/$cm_task_entry__handle"(request) {
         } else {
             struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("<not evaluated>"), used: 15 };
         });
-        "core:rt/panic"($v5 = "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"(local.tee $local_39(struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(340), used: 0 }), 60); builtin::array_copy<u8>(local.tee b_484($local_39.repr), $v5, global:spec_worlds_http_request.wado::$const_obj_24, 0, 20); $v5_seen = $v5 + 20; builtin::array_copy<u8>(b_484, $v5_seen, global:spec_worlds_http_request.wado::$const_obj_23, 0, 6); $v5_seen = $v5 + 26; builtin::array_copy<u8>(b_484, $v5_seen, global:spec_worlds_http_request.wado::$const_obj_22, 0, 4); $v5_seen = $v5 + 30; builtin::array_copy<u8>(b_484, $v5_seen, global:spec_worlds_http_request.wado::$const_obj_21, 0, 29); $v5 = $v5 + 59; builtin::array_copy<u8>(b_484, $v5, global:spec_worlds_http_request.wado::$const_obj_20, 0, 1); f_273 = local.tee $local_32("core:prelude/format.wado/core:prelude/format.wado/Formatter::new"($local_39)); "core:prelude/primitive.wado/i32::fmt_decimal$sroa[self.value]"(10, f_273); $v5 = "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"($local_39, 73); builtin::array_copy<u8>(local.tee b_484($local_39.repr), $v5, global:spec_worlds_http_request.wado::$const_obj_19, 0, 64); $v5 = $v5 + 64; builtin::array_copy<u8>(b_484, $v5, global:spec_worlds_http_request.wado::$const_obj_18, 0, 9); f_273 = local.tee $local_32("core:prelude/format.wado/core:prelude/format.wado/Formatter::new"($local_39)); "core:prelude/primitive.wado/bool::fmt_into$sroa[self.value]"(is_post, f_273); is_post = "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"($local_39, 7); builtin::array_copy<u8>(local.tee b_484($local_39.repr), is_post, global:spec_worlds_http_request.wado::$const_obj_7, 0, 1); is_post = is_post + 1; builtin::array_copy<u8>(b_484, is_post, global:spec_worlds_http_request.wado::$const_obj_16, 0, 6); is_post = default.used; $v5 = "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"($local_39, 19 + is_post); builtin::array_copy<u8>(local.tee b_484($local_39.repr), $v5, default.repr, 0, is_post); $v5_seen = $v5 + is_post; builtin::array_copy<u8>(b_484, $v5_seen, global:spec_worlds_http_request.wado::$const_obj_7, 0, 1); is_post = $v5 + (1 + is_post); builtin::array_copy<u8>(b_484, is_post, global:spec_worlds_http_request.wado::$const_obj_14, 0, 18); is_post = v.used; $v5 = "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"($local_39, 30 + is_post); builtin::array_copy<u8>(local.tee b_484($local_39.repr), $v5, v.repr, 0, is_post); $v5_seen = $v5 + is_post; builtin::array_copy<u8>(b_484, $v5_seen, global:spec_worlds_http_request.wado::$const_obj_7, 0, 1); is_post = $v5 + (1 + is_post); builtin::array_copy<u8>(b_484, is_post, global:spec_worlds_http_request.wado::$const_obj_12, 0, 29); $local_32 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::new"($local_39); "core:prelude/primitive.wado/bool::fmt_into$sroa[self.value]"(i_488, $local_32); i_488 = "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"($local_39, 18); builtin::array_copy<u8>(local.tee b_484($local_39.repr), i_488, global:spec_worlds_http_request.wado::$const_obj_7, 0, 1); i_488 = i_488 + 1; builtin::array_copy<u8>(b_484, i_488, global:spec_worlds_http_request.wado::$const_obj_10, 0, 17); i_488 = $local_35.used; is_post = "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"($local_39, 23 + i_488); builtin::array_copy<u8>(local.tee b_484($local_39.repr), is_post, $local_35.repr, 0, i_488); $v5 = is_post + i_488; builtin::array_copy<u8>(b_484, $v5, global:spec_worlds_http_request.wado::$const_obj_7, 0, 1); i_488 = is_post + (1 + i_488); builtin::array_copy<u8>(b_484, i_488, global:spec_worlds_http_request.wado::$const_obj_8, 0, 22); i_488 = $local_37.used; is_post = "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"($local_39, 1 + i_488); builtin::array_copy<u8>(local.tee b_484($local_39.repr), is_post, $local_37.repr, 0, i_488); i_488 = is_post + i_488; builtin::array_copy<u8>(b_484, i_488, global:spec_worlds_http_request.wado::$const_obj_7, 0, 1); $local_39);
+        "core:rt/panic"($v5 = "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"(local.tee $local_39(struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(340), used: 0 }), 60); builtin::array_copy<u8>(local.tee b_482($local_39.repr), $v5, global:spec_worlds_http_request.wado::$const_obj_24, 0, 20); $v5_seen = $v5 + 20; builtin::array_copy<u8>(b_482, $v5_seen, global:spec_worlds_http_request.wado::$const_obj_23, 0, 6); $v5_seen = $v5 + 26; builtin::array_copy<u8>(b_482, $v5_seen, global:spec_worlds_http_request.wado::$const_obj_22, 0, 4); $v5_seen = $v5 + 30; builtin::array_copy<u8>(b_482, $v5_seen, global:spec_worlds_http_request.wado::$const_obj_21, 0, 29); $v5 = $v5 + 59; builtin::array_copy<u8>(b_482, $v5, global:spec_worlds_http_request.wado::$const_obj_20, 0, 1); f_273 = local.tee $local_32("core:prelude/format.wado/core:prelude/format.wado/Formatter::new"($local_39)); "core:prelude/primitive.wado/i32::fmt_decimal$sroa[self.value]"(10, f_273); $v5 = "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"($local_39, 73); builtin::array_copy<u8>(local.tee b_482($local_39.repr), $v5, global:spec_worlds_http_request.wado::$const_obj_19, 0, 64); $v5 = $v5 + 64; builtin::array_copy<u8>(b_482, $v5, global:spec_worlds_http_request.wado::$const_obj_18, 0, 9); f_273 = local.tee $local_32("core:prelude/format.wado/core:prelude/format.wado/Formatter::new"($local_39)); "core:prelude/primitive.wado/bool::fmt_into$sroa[self.value]"(is_post, f_273); is_post = "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"($local_39, 7); builtin::array_copy<u8>(local.tee b_482($local_39.repr), is_post, global:spec_worlds_http_request.wado::$const_obj_7, 0, 1); is_post = is_post + 1; builtin::array_copy<u8>(b_482, is_post, global:spec_worlds_http_request.wado::$const_obj_16, 0, 6); is_post = default.used; $v5 = "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"($local_39, 19 + is_post); builtin::array_copy<u8>(local.tee b_482($local_39.repr), $v5, default.repr, 0, is_post); $v5_seen = $v5 + is_post; builtin::array_copy<u8>(b_482, $v5_seen, global:spec_worlds_http_request.wado::$const_obj_7, 0, 1); is_post = $v5 + (1 + is_post); builtin::array_copy<u8>(b_482, is_post, global:spec_worlds_http_request.wado::$const_obj_14, 0, 18); is_post = v.used; $v5 = "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"($local_39, 30 + is_post); builtin::array_copy<u8>(local.tee b_482($local_39.repr), $v5, v.repr, 0, is_post); $v5_seen = $v5 + is_post; builtin::array_copy<u8>(b_482, $v5_seen, global:spec_worlds_http_request.wado::$const_obj_7, 0, 1); is_post = $v5 + (1 + is_post); builtin::array_copy<u8>(b_482, is_post, global:spec_worlds_http_request.wado::$const_obj_12, 0, 29); $local_32 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::new"($local_39); "core:prelude/primitive.wado/bool::fmt_into$sroa[self.value]"(i_486, $local_32); i_486 = "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"($local_39, 18); builtin::array_copy<u8>(local.tee b_482($local_39.repr), i_486, global:spec_worlds_http_request.wado::$const_obj_7, 0, 1); i_486 = i_486 + 1; builtin::array_copy<u8>(b_482, i_486, global:spec_worlds_http_request.wado::$const_obj_10, 0, 17); i_486 = $local_35.used; is_post = "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"($local_39, 23 + i_486); builtin::array_copy<u8>(local.tee b_482($local_39.repr), is_post, $local_35.repr, 0, i_486); $v5 = is_post + i_486; builtin::array_copy<u8>(b_482, $v5, global:spec_worlds_http_request.wado::$const_obj_7, 0, 1); i_486 = is_post + (1 + i_486); builtin::array_copy<u8>(b_482, i_486, global:spec_worlds_http_request.wado::$const_obj_8, 0, 22); i_486 = $local_37.used; is_post = "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"($local_39, 1 + i_486); builtin::array_copy<u8>(local.tee b_482($local_39.repr), is_post, $local_37.repr, 0, i_486); i_486 = is_post + i_486; builtin::array_copy<u8>(b_482, i_486, global:spec_worlds_http_request.wado::$const_obj_7, 0, 1); $local_39);
         unreachable;
     }
-    i_488 = builtin::i32_wrap_i64("wasi/future-new:transmission-wasi/http/types.wado#error-code"());
-    i_488 = "spec_worlds_http_request.wado/$cm_binding__Request_consume_body"(request, i_488).0;
+    i_486 = builtin::i32_wrap_i64("wasi/future-new:transmission-wasi/http/types.wado#error-code"());
+    i_486 = "spec_worlds_http_request.wado/$cm_binding__Request_consume_body"(request, i_486).0;
     $local_39 = $inline_core_prelude_string_wado_String__from_utf8_lossy_core_prelude_bytes_wado_ByteList__44: block -> ref "core:prelude/string.wado//String" {
-        if @likely("core:prelude/string.wado/core:prelude/string.wado/String::utf8_valid_prefix"(local.tee slice_356(struct.new "core:prelude/slice.wado//Slice<u8>" { repr: local.tee $mv$chunk$items($inline_core_prelude_types_wado_Stream_u8___read_to_end_46: block -> ref "core:prelude//List<u8>" {
-            all = struct.new "core:prelude//List<u8>" { repr: local.tee b_484(array.new_fixed<u8>()), used: 0 };
+        if @likely("core:prelude/string.wado/core:prelude/string.wado/String::utf8_valid_prefix"(local.tee slice_356(struct.new "core:prelude/slice.wado//Slice<u8>" { repr: local.tee $mv$chunk$items($inline_core_prelude_types_wado_Stream_u8___read_to_end_sized_1: block -> ref "core:prelude//List<u8>" {
+            all = struct.new "core:prelude//List<u8>" { repr: builtin::array_new<u8>(0), used: 0 };
             block {
                 l41: loop {
                     let $mv$chunk$items: ref "core:prelude//List<u8>";
-                    multivalue_bind [$mv$chunk$items, request] = "core:rt/cm_stream_read_u8"(i_488, 4096);
+                    multivalue_bind [$mv$chunk$items, request] = "core:rt/cm_stream_read_u8"(i_486, 4096);
                     $inline_core_prelude_list_wado_List_u8___extend_2: block {
                         break_if $inline_core_prelude_list_wado_List_u8___extend_2 local.tee is_post($mv$chunk$items.used) == 0;
                         if @unlikely(local.tee $v5(all.used + is_post) > builtin::array_len(all.repr)) {
@@ -828,16 +828,16 @@ fn "spec_worlds_http_request.wado/$cm_task_entry__handle"(request) {
                         all.used = $v5;
                     };
                     if request != 0 {
-                        break $inline_core_prelude_types_wado_Stream_u8___read_to_end_46: all;
+                        break $inline_core_prelude_types_wado_Stream_u8___read_to_end_sized_1: all;
                     }
                     continue l41;
                 };
             };
             unreachable;
         }).repr, start: 0, end: $mv$chunk$items.used })) == local.tee is_post(slice_356.end)) {
-            break $inline_core_prelude_string_wado_String__from_utf8_lossy_core_prelude_bytes_wado_ByteList__44: struct.new "core:prelude/string.wado//String" { repr: b_484 = builtin::array_new<u8>(select i32(is_post > 0, is_post, 0)); if is_post > 0 {
-                builtin::array_copy<u8>(b_484, 0, slice_356.repr, 0, is_post);
-            }; b_484, used: is_post };
+            break $inline_core_prelude_string_wado_String__from_utf8_lossy_core_prelude_bytes_wado_ByteList__44: struct.new "core:prelude/string.wado//String" { repr: b_482 = builtin::array_new<u8>(select i32(is_post > 0, is_post, 0)); if is_post > 0 {
+                builtin::array_copy<u8>(b_482, 0, slice_356.repr, 0, is_post);
+            }; b_482, used: is_post };
         }
         cold_path;
         $local_39 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(is_post), used: 0 };
@@ -857,34 +857,34 @@ fn "spec_worlds_http_request.wado/$cm_task_entry__handle"(request) {
         };
         break $inline_core_prelude_string_wado_String__from_utf8_lossy_core_prelude_bytes_wado_ByteList__44: $local_39;
     };
-    "wasi/stream-drop-readable"(i_488);
-    i_488 = builtin::i32_wrap_i64(local.tee packed_375("wasi/stream-new"()));
-    $v5_seen = builtin::i32_wrap_i64(packed_375 >> 32_i64);
-    is_post = builtin::i32_wrap_i64(local.tee packed_375("wasi/future-new"()));
-    $v5 = builtin::i32_wrap_i64(packed_375 >> 32_i64);
-    is_post = "spec_worlds_http_request.wado/$cm_binding__Response_new"("spec_worlds_http_request.wado/$cm_binding__Fields_new"(), struct.new "core:prelude/types.wado//Option<core:prelude/types.wado/Stream<u8>>::Some" { discriminant: 1, payload_0: i_488 }, is_post).0;
-    i_488 = 0;
-    i_488 = is_post;
-    "wasi/task-return:handle"(0, i_488, 0, 0_i64, 0, 0, 0, 0);
+    "wasi/stream-drop-readable"(i_486);
+    i_486 = builtin::i32_wrap_i64(local.tee packed_373("wasi/stream-new"()));
+    $v5_seen = builtin::i32_wrap_i64(packed_373 >> 32_i64);
+    is_post = builtin::i32_wrap_i64(local.tee packed_373("wasi/future-new"()));
+    $v5 = builtin::i32_wrap_i64(packed_373 >> 32_i64);
+    is_post = "spec_worlds_http_request.wado/$cm_binding__Response_new"("spec_worlds_http_request.wado/$cm_binding__Fields_new"(), struct.new "core:prelude/types.wado//Option<core:prelude/types.wado/Stream<u8>>::Some" { discriminant: 1, payload_0: i_486 }, is_post).0;
+    i_486 = 0;
+    i_486 = is_post;
+    "wasi/task-return:handle"(0, i_486, 0, 0_i64, 0, 0, 0, 0);
     $local_37 = $inline_core_prelude_string_wado_String__from_utf8_lossy_wasi_http_types_wado_FieldValue__56: block -> ref "core:prelude/string.wado//String" {
-        i_488 = greetings.used;
-        if @unlikely(0 >= i_488) {
+        i_486 = greetings.used;
+        if @unlikely(0 >= i_486) {
             cold_path;
-            "core:prelude/list.wado/core:prelude/list.wado/List<wasi:http/types.wado/FieldValue>^core:prelude/traits.wado/IndexValue<i32>::index_value$cold0$dae[self,index]"(i_488);
+            "core:prelude/list.wado/core:prelude/list.wado/List<wasi:http/types.wado/FieldValue>^core:prelude/traits.wado/IndexValue<i32>::index_value$cold0$dae[self,index]"(i_486);
             unreachable;
         }
-        if @likely("core:prelude/string.wado/core:prelude/string.wado/String::utf8_valid_prefix"(local.tee slice_356(struct.new "core:prelude/slice.wado//Slice<u8>" { repr: local.tee $mv$chunk$items(builtin::array_get_value<ref "core:prelude//List<u8>">(greetings.repr, 0)).repr, start: 0, end: $mv$chunk$items.used })) == local.tee i_488(slice_356.end)) {
-            break $inline_core_prelude_string_wado_String__from_utf8_lossy_wasi_http_types_wado_FieldValue__56: struct.new "core:prelude/string.wado//String" { repr: b_484 = builtin::array_new<u8>(select i32(i_488 > 0, i_488, 0)); if i_488 > 0 {
-                builtin::array_copy<u8>(b_484, 0, slice_356.repr, 0, i_488);
-            }; b_484, used: i_488 };
+        if @likely("core:prelude/string.wado/core:prelude/string.wado/String::utf8_valid_prefix"(local.tee slice_356(struct.new "core:prelude/slice.wado//Slice<u8>" { repr: local.tee $mv$chunk$items(builtin::array_get_value<ref "core:prelude//List<u8>">(greetings.repr, 0)).repr, start: 0, end: $mv$chunk$items.used })) == local.tee i_486(slice_356.end)) {
+            break $inline_core_prelude_string_wado_String__from_utf8_lossy_wasi_http_types_wado_FieldValue__56: struct.new "core:prelude/string.wado//String" { repr: b_482 = builtin::array_new<u8>(select i32(i_486 > 0, i_486, 0)); if i_486 > 0 {
+                builtin::array_copy<u8>(b_482, 0, slice_356.repr, 0, i_486);
+            }; b_482, used: i_486 };
         }
         cold_path;
-        $local_37 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(i_488), used: 0 };
+        $local_37 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(i_486), used: 0 };
         is_post = 0;
         b51: block {
             l52: loop {
-                break_if b51 is_post >= i_488;
-                multivalue_bind [$v4, request, a_end] = "core:prelude/string.wado/decode_utf8_scalar"(slice_356, is_post, i_488);
+                break_if b51 is_post >= i_486;
+                multivalue_bind [$v4, request, a_end] = "core:prelude/string.wado/decode_utf8_scalar"(slice_356, is_post, i_486);
                 if a_end {
                     "core:prelude/string.wado/core:prelude/string.wado/String::push"($local_37, $v4);
                 } else {
@@ -896,18 +896,18 @@ fn "spec_worlds_http_request.wado/$cm_task_entry__handle"(request) {
         };
         break $inline_core_prelude_string_wado_String__from_utf8_lossy_wasi_http_types_wado_FieldValue__56: $local_37;
     };
-    "core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u8>::write_all$dae[return]"($v5_seen, $local_35 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(34), used: 0 }; i_488 = $local_37.used; if @unlikely(local.tee a_end(2 + i_488) > 34) {
+    "core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u8>::write_all$dae[return]"($v5_seen, $local_35 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(34), used: 0 }; i_486 = $local_37.used; if @unlikely(local.tee a_end(2 + i_486) > 34) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_35, a_end);
-    }; is_post = $local_35.used; $local_35.used = a_end; builtin::array_copy<u8>(local.tee b_484($local_35.repr), is_post, $local_37.repr, 0, i_488); i_488 = is_post + i_488; builtin::array_copy<u8>(b_484, i_488, global:spec_worlds_http_request.wado::$const_obj_6, 0, 2); $inline_core_prelude_string_wado_String__internal_push_string_74: block {
-        break_if $inline_core_prelude_string_wado_String__internal_push_string_74 local.tee i_488($local_39.used) == 0;
-        if @unlikely(local.tee is_post($local_35.used + i_488) > builtin::array_len(b_484)) {
+    }; is_post = $local_35.used; $local_35.used = a_end; builtin::array_copy<u8>(local.tee b_482($local_35.repr), is_post, $local_37.repr, 0, i_486); i_486 = is_post + i_486; builtin::array_copy<u8>(b_482, i_486, global:spec_worlds_http_request.wado::$const_obj_6, 0, 2); $inline_core_prelude_string_wado_String__internal_push_string_74: block {
+        break_if $inline_core_prelude_string_wado_String__internal_push_string_74 local.tee i_486($local_39.used) == 0;
+        if @unlikely(local.tee is_post($local_35.used + i_486) > builtin::array_len(b_482)) {
             cold_path;
             "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_35, is_post);
         }
         a_end = $local_35.used;
         $local_35.used = is_post;
-        builtin::array_copy<u8>($local_35.repr, a_end, $local_39.repr, 0, i_488);
+        builtin::array_copy<u8>($local_35.repr, a_end, $local_39.repr, 0, i_486);
     }; "core:prelude/list.wado/core:prelude/list.wado/List<u8>^core:prelude/traits.wado/FromIterator::from_iter<core:prelude/string.wado/StrUtf8ByteIter>"(struct.new "core:prelude/string.wado//StrUtf8ByteIter" { repr: $local_35.repr, used: $local_35.used, index: 0 }));
     "wasi/stream-drop-writable"($v5_seen);
     "spec_worlds_http_request.wado/$cm_future_write_core:prelude/types.wado/Result<core:prelude/types.wado/Option<wasi:http/types.wado/Trailers>,wasi:http/types.wado/ErrorCode>"($v5, global:spec_worlds_http_request.wado::$const_obj_5);

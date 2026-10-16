@@ -41,9 +41,9 @@ array Array<i32> (mut i32);  // TypeId(8)
 
 array Array<bool> (mut bool);  // TypeId(9)
 
-array Array<[core:prelude/string.wado/String,i32]> (mut ref "tuple//[core:prelude/string.wado/String, i32]");  // TypeId(10)
+array Array<core:prelude/string.wado/String> (mut ref "core:prelude/string.wado//String");  // TypeId(10)
 
-array Array<core:prelude/string.wado/String> (mut ref "core:prelude/string.wado//String");  // TypeId(11)
+array Array<[core:prelude/string.wado/String,i32]> (mut ref "tuple//[core:prelude/string.wado/String, i32]");  // TypeId(11)
 
 array Array<&mut treemap_btree.wado/BTreeNode<core:prelude/string.wado/String,i32>> (mut ref "treemap_btree.wado//BTreeNode<core:prelude/string.wado/String,i32>");  // TypeId(12)
 
@@ -72,19 +72,19 @@ struct core:prelude//List<&mut treemap_btree.wado/BTreeNode<core:prelude/string.
     mut used: i32,
 }
 
-struct treemap_btree.wado//TreeMap<core:prelude/string.wado/String,i32> {  // TypeId(18)
-    mut root: ref null "treemap_btree.wado//BTreeNode<core:prelude/string.wado/String,i32>",
-    mut t: i32,
-    mut size: i32,
-    mut deleted_count: i32,
-}
-
-struct treemap_btree.wado//BTreeNode<core:prelude/string.wado/String,i32> {  // TypeId(19)
+struct treemap_btree.wado//BTreeNode<core:prelude/string.wado/String,i32> {  // TypeId(18)
     mut keys: ref "core:prelude//List<core:prelude/string.wado/String>",
     mut values: ref "core:prelude//List<i32>",
     mut deleted: ref "core:prelude//List<bool>",
     mut children: ref "core:prelude//List<&mut treemap_btree.wado/BTreeNode<core:prelude/string.wado/String,i32>>",
     mut is_leaf: bool,
+}
+
+struct treemap_btree.wado//TreeMap<core:prelude/string.wado/String,i32> {  // TypeId(19)
+    mut root: ref null "treemap_btree.wado//BTreeNode<core:prelude/string.wado/String,i32>",
+    mut t: i32,
+    mut size: i32,
+    mut deleted_count: i32,
 }
 
 type "functype//mem/realloc" = fn(i32, i32, i32, i32) -> i32;  // TypeId(20)

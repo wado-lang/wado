@@ -246,55 +246,64 @@ struct core:collections/entries.wado//MapEntriesRefIter<core:prelude/string.wado
     mut index: i32,
 }
 
-struct core:prelude/traits.wado//FlagsBit<./sub/cm-catalog.wasm/Perms> {  // TypeId(60)
+struct core:collections/entries.wado//EntryLog<core:prelude/string.wado/String,u32> {  // TypeId(60)
+    mut keys: ref "Array<core:prelude/string.wado/String>",
+    mut values: ref Array<u32>,
+    mut alive: ref Array<bool>,
+    mut count: i32,
+    mut size: i32,
+    mut deleted_count: i32,
+}
+
+struct core:prelude/traits.wado//FlagsBit<./sub/cm-catalog.wasm/Perms> {  // TypeId(61)
     mut bit: u64,
     mut value: u32,
     mut member_name: ref "core:prelude/string.wado//String",
 }
 
-struct core:prelude/traits.wado//EnumCase<./sub/cm-catalog.wasm/Color> {  // TypeId(61)
+struct core:prelude/traits.wado//EnumCase<./sub/cm-catalog.wasm/Color> {  // TypeId(62)
     mut discriminant: i32,
     mut value: "./sub/cm-catalog.wasm//enum:Color",
     mut case_name: ref "core:prelude/string.wado//String",
     mut wire_override: ref null "core:prelude/string.wado//String",
 }
 
-struct core:prelude/traits.wado//VariantCase<./sub/cm-catalog.wasm/Mixed,f32> {  // TypeId(62)
+struct core:prelude/traits.wado//VariantCase<./sub/cm-catalog.wasm/Mixed,f32> {  // TypeId(63)
     mut index: i32,
     mut case_name: ref "core:prelude/string.wado//String",
     mut wire_override: ref null "core:prelude/string.wado//String",
     mut is_unit: bool,
 }
 
-struct core:prelude/traits.wado//VariantCase<./sub/cm-catalog.wasm/Mixed,u32> {  // TypeId(63)
+struct core:prelude/traits.wado//VariantCase<./sub/cm-catalog.wasm/Mixed,u32> {  // TypeId(64)
     mut index: i32,
     mut case_name: ref "core:prelude/string.wado//String",
     mut wire_override: ref null "core:prelude/string.wado//String",
     mut is_unit: bool,
 }
 
-struct core:prelude/traits.wado//VariantCase<./sub/cm-catalog.wasm/Shape,()> {  // TypeId(64)
+struct core:prelude/traits.wado//VariantCase<./sub/cm-catalog.wasm/Shape,()> {  // TypeId(65)
     mut index: i32,
     mut case_name: ref "core:prelude/string.wado//String",
     mut wire_override: ref null "core:prelude/string.wado//String",
     mut is_unit: bool,
 }
 
-struct core:prelude/traits.wado//VariantCase<./sub/cm-catalog.wasm/Shape,[f64,f64]> {  // TypeId(65)
+struct core:prelude/traits.wado//VariantCase<./sub/cm-catalog.wasm/Shape,[f64,f64]> {  // TypeId(66)
     mut index: i32,
     mut case_name: ref "core:prelude/string.wado//String",
     mut wire_override: ref null "core:prelude/string.wado//String",
     mut is_unit: bool,
 }
 
-struct core:prelude/traits.wado//VariantCase<./sub/cm-catalog.wasm/Shape,f64> {  // TypeId(66)
+struct core:prelude/traits.wado//VariantCase<./sub/cm-catalog.wasm/Shape,f64> {  // TypeId(67)
     mut index: i32,
     mut case_name: ref "core:prelude/string.wado//String",
     mut wire_override: ref null "core:prelude/string.wado//String",
     mut is_unit: bool,
 }
 
-struct core:prelude/traits.wado//StructField<./sub/cm-catalog.wasm/Single,u64> {  // TypeId(67)
+struct core:prelude/traits.wado//StructField<./sub/cm-catalog.wasm/Single,u64> {  // TypeId(68)
     mut index: i32,
     mut field_name: ref "core:prelude/string.wado//String",
     mut wire_override: ref null "core:prelude/string.wado//String",
@@ -302,7 +311,7 @@ struct core:prelude/traits.wado//StructField<./sub/cm-catalog.wasm/Single,u64> {
     mut is_secret: bool,
 }
 
-struct core:prelude/types.wado//AsyncCall<u32> {  // TypeId(68)
+struct core:prelude/types.wado//AsyncCall<u32> {  // TypeId(69)
     mut __cm_packed: i32,
     mut __cm_outptr: i32,
     mut __cm_size: i32,
@@ -311,7 +320,7 @@ struct core:prelude/types.wado//AsyncCall<u32> {  // TypeId(68)
     mut __cm_ended: ref "core:prelude/types.wado//Box<bool>",
 }
 
-struct core:collections/treemap.wado//TreeMap<core:prelude/string.wado/String,u32> {  // TypeId(69)
+struct core:collections/treemap.wado//TreeMap<core:prelude/string.wado/String,u32> {  // TypeId(70)
     mut log: ref "core:collections/entries.wado//EntryLog<core:prelude/string.wado/String,u32>",
     mut slots: ref Array<i32>,
     mut nkeys: ref "Array<core:prelude/string.wado/String>",
@@ -320,15 +329,6 @@ struct core:collections/treemap.wado//TreeMap<core:prelude/string.wado/String,u3
     mut nodes: i32,
     mut root: i32,
     mut height: i32,
-}
-
-struct core:collections/entries.wado//EntryLog<core:prelude/string.wado/String,u32> {  // TypeId(70)
-    mut keys: ref "Array<core:prelude/string.wado/String>",
-    mut values: ref Array<u32>,
-    mut alive: ref Array<bool>,
-    mut count: i32,
-    mut size: i32,
-    mut deleted_count: i32,
 }
 
 struct core:prelude/traits.wado//VariantCase<core:prelude/types.wado/Option<u32>,u32> {  // TypeId(71)
@@ -8876,7 +8876,7 @@ fn "core:prelude/types.wado/cm_subtask_settled$cold0$dae[event]"($v0) {
     let $fuse_at_6: i32;
     let offset_14: i32;
     let f_30: ref "core:prelude/format.wado//Formatter";
-    "core:rt/panic"($fuse_at_6 = "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"(local.tee $local_3(struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(180), used: 0 }), 66); builtin::array_copy<u8>(local.tee $load_0($local_3.repr), $fuse_at_6, global:cm_component_import_catalog.wado::$const_obj_7, 0, 20); offset_14 = $fuse_at_6 + 20; builtin::array_copy<u8>($load_0, offset_14, global:core:prelude/types.wado::$const_obj_1135, 0, 18); offset_14 = $fuse_at_6 + 38; builtin::array_copy<u8>($load_0, offset_14, global:cm_component_import_catalog.wado::$const_obj_5, 0, 4); offset_14 = $fuse_at_6 + 42; builtin::array_copy<u8>($load_0, offset_14, global:core:prelude/types.wado::$const_obj_1133, 0, 23); $fuse_at_6 = $fuse_at_6 + 65; builtin::array_copy<u8>($load_0, $fuse_at_6, global:cm_component_import_catalog.wado::$const_obj_3, 0, 1); f_30 = local.tee $local_4("core:prelude/format.wado/core:prelude/format.wado/Formatter::new"($local_3)); "core:prelude/primitive.wado/i32::fmt_decimal$sroa[self.value]"(394, f_30); $fuse_at_6 = "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"($local_3, 55); builtin::array_copy<u8>(local.tee $load_0($local_3.repr), $fuse_at_6, global:core:prelude/types.wado::$const_obj_1131, 0, 43); $fuse_at_6 = $fuse_at_6 + 43; builtin::array_copy<u8>($load_0, $fuse_at_6, global:core:prelude/types.wado::$const_obj_1130, 0, 12); f_30 = local.tee $local_4("core:prelude/format.wado/core:prelude/format.wado/Formatter::new"($local_3)); "core:prelude/primitive.wado/i32::fmt_decimal$sroa[self.value]"($v0, f_30); $v0 = "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"($local_3, 19); builtin::array_copy<u8>(local.tee $load_0($local_3.repr), $v0, global:cm_component_import_catalog.wado::$const_obj_99, 0, 1); $v0 = $v0 + 1; builtin::array_copy<u8>($load_0, $v0, global:core:prelude/types.wado::$const_obj_1128, 0, 18); $local_4 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::new"($local_3); "core:prelude/primitive.wado/i32::fmt_decimal$sroa[self.value]"(1, $local_4); "core:prelude/string.wado/core:prelude/string.wado/String^core:prelude/string.wado/AsStrSlice::internal_append_to$spec0"(global:cm_component_import_catalog.wado::$const_obj_0, $local_3); $local_3);
+    "core:rt/panic"($fuse_at_6 = "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"(local.tee $local_3(struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(180), used: 0 }), 66); builtin::array_copy<u8>(local.tee $load_0($local_3.repr), $fuse_at_6, global:cm_component_import_catalog.wado::$const_obj_7, 0, 20); offset_14 = $fuse_at_6 + 20; builtin::array_copy<u8>($load_0, offset_14, global:core:prelude/types.wado::$const_obj_1135, 0, 18); offset_14 = $fuse_at_6 + 38; builtin::array_copy<u8>($load_0, offset_14, global:cm_component_import_catalog.wado::$const_obj_5, 0, 4); offset_14 = $fuse_at_6 + 42; builtin::array_copy<u8>($load_0, offset_14, global:core:prelude/types.wado::$const_obj_1133, 0, 23); $fuse_at_6 = $fuse_at_6 + 65; builtin::array_copy<u8>($load_0, $fuse_at_6, global:cm_component_import_catalog.wado::$const_obj_3, 0, 1); f_30 = local.tee $local_4("core:prelude/format.wado/core:prelude/format.wado/Formatter::new"($local_3)); "core:prelude/primitive.wado/i32::fmt_decimal$sroa[self.value]"(401, f_30); $fuse_at_6 = "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"($local_3, 55); builtin::array_copy<u8>(local.tee $load_0($local_3.repr), $fuse_at_6, global:core:prelude/types.wado::$const_obj_1131, 0, 43); $fuse_at_6 = $fuse_at_6 + 43; builtin::array_copy<u8>($load_0, $fuse_at_6, global:core:prelude/types.wado::$const_obj_1130, 0, 12); f_30 = local.tee $local_4("core:prelude/format.wado/core:prelude/format.wado/Formatter::new"($local_3)); "core:prelude/primitive.wado/i32::fmt_decimal$sroa[self.value]"($v0, f_30); $v0 = "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"($local_3, 19); builtin::array_copy<u8>(local.tee $load_0($local_3.repr), $v0, global:cm_component_import_catalog.wado::$const_obj_99, 0, 1); $v0 = $v0 + 1; builtin::array_copy<u8>($load_0, $v0, global:core:prelude/types.wado::$const_obj_1128, 0, 18); $local_4 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::new"($local_3); "core:prelude/primitive.wado/i32::fmt_decimal$sroa[self.value]"(1, $local_4); "core:prelude/string.wado/core:prelude/string.wado/String^core:prelude/string.wado/AsStrSlice::internal_append_to$spec0"(global:cm_component_import_catalog.wado::$const_obj_0, $local_3); $local_3);
     unreachable;
 }
 

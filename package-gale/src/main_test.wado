@@ -77,7 +77,7 @@ struct Grants {
 
 impl Preopens for Grants {
     fn get_directories(&self) -> List<[Descriptor, String]> with Preopens {
-        let cwd = Preopens::get_directories()[0].0;
+        let cwd = Preopens::get_directories().remove(0).0;
         let mut granted: List<[Descriptor, String]> = [];
         for let dir of &self.dirs {
             let opened = cwd.open_at(

@@ -83,7 +83,16 @@ array Array<treeset_mut_ref_deep.wado/LitToken> (mut ref "treeset_mut_ref_deep.w
 
 array Array<()> (mut ());  // TypeId(20)
 
-struct core:collections/treemap.wado//TreeMap<core:prelude/string.wado/String,()> {  // TypeId(21)
+struct core:collections/entries.wado//EntryLog<core:prelude/string.wado/String,()> {  // TypeId(21)
+    mut keys: ref "Array<core:prelude/string.wado/String>",
+    mut values: ref Array<()>,
+    mut alive: ref Array<bool>,
+    mut count: i32,
+    mut size: i32,
+    mut deleted_count: i32,
+}
+
+struct core:collections/treemap.wado//TreeMap<core:prelude/string.wado/String,()> {  // TypeId(22)
     mut log: ref "core:collections/entries.wado//EntryLog<core:prelude/string.wado/String,()>",
     mut slots: ref Array<i32>,
     mut nkeys: ref "Array<core:prelude/string.wado/String>",
@@ -92,15 +101,6 @@ struct core:collections/treemap.wado//TreeMap<core:prelude/string.wado/String,()
     mut nodes: i32,
     mut root: i32,
     mut height: i32,
-}
-
-struct core:collections/entries.wado//EntryLog<core:prelude/string.wado/String,()> {  // TypeId(22)
-    mut keys: ref "Array<core:prelude/string.wado/String>",
-    mut values: ref Array<()>,
-    mut alive: ref Array<bool>,
-    mut count: i32,
-    mut size: i32,
-    mut deleted_count: i32,
 }
 
 struct core:prelude//List<treeset_mut_ref_deep.wado/Elem> {  // TypeId(23)

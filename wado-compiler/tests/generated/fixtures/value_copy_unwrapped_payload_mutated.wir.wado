@@ -39,7 +39,16 @@ array Array<core:prelude/string.wado/String> (mut ref "core:prelude/string.wado/
 
 array Array<value_copy_unwrapped_payload_mutated.wado/Shape> (mut ref "value_copy_unwrapped_payload_mutated.wado//Shape");  // TypeId(10)
 
-struct core:collections/treemap.wado//TreeMap<core:prelude/string.wado/String,value_copy_unwrapped_payload_mutated.wado/Shape> {  // TypeId(11)
+struct core:collections/entries.wado//EntryLog<core:prelude/string.wado/String,value_copy_unwrapped_payload_mutated.wado/Shape> {  // TypeId(11)
+    mut keys: ref "Array<core:prelude/string.wado/String>",
+    mut values: ref "Array<value_copy_unwrapped_payload_mutated.wado/Shape>",
+    mut alive: ref Array<bool>,
+    mut count: i32,
+    mut size: i32,
+    mut deleted_count: i32,
+}
+
+struct core:collections/treemap.wado//TreeMap<core:prelude/string.wado/String,value_copy_unwrapped_payload_mutated.wado/Shape> {  // TypeId(12)
     mut log: ref "core:collections/entries.wado//EntryLog<core:prelude/string.wado/String,value_copy_unwrapped_payload_mutated.wado/Shape>",
     mut slots: ref Array<i32>,
     mut nkeys: ref "Array<core:prelude/string.wado/String>",
@@ -48,15 +57,6 @@ struct core:collections/treemap.wado//TreeMap<core:prelude/string.wado/String,va
     mut nodes: i32,
     mut root: i32,
     mut height: i32,
-}
-
-struct core:collections/entries.wado//EntryLog<core:prelude/string.wado/String,value_copy_unwrapped_payload_mutated.wado/Shape> {  // TypeId(12)
-    mut keys: ref "Array<core:prelude/string.wado/String>",
-    mut values: ref "Array<value_copy_unwrapped_payload_mutated.wado/Shape>",
-    mut alive: ref Array<bool>,
-    mut count: i32,
-    mut size: i32,
-    mut deleted_count: i32,
 }
 
 struct core:prelude//List<core:prelude/string.wado/String> {  // TypeId(13)

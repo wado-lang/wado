@@ -238,8 +238,7 @@ fn open_granted<S: AsStrSlice>(path: S) -> Result<Descriptor, String> with Preop
     let mut grants: List<String> = [];
     let mut denied = false;
     for let mut i = 0; i < dirs.len(); i += 1 {
-        let root = dirs[i].0;
-        match root.open_at(PathFlags::none(), path.to_string(), OpenFlags::none(), DescriptorFlags::Read).wait() {
+        match dirs[i].0.open_at(PathFlags::none(), path.to_string(), OpenFlags::none(), DescriptorFlags::Read).wait() {
             Ok(file) => {
                 return Result::Ok(file);
             },
@@ -268,9 +267,9 @@ fn open_granted<S: AsStrSlice>(path: S) -> Result<Descriptor, String> with Preop
 /// Reading may search every grant, but creating cannot: the file does not exist
 /// yet, so a search would let grant order pick the output directory.
 fn create_granted<S: AsStrSlice>(path: S) -> Result<Descriptor, String> with Preopens {
-    let dirs = Preopens::get_directories();
+    let mut dirs = Preopens::get_directories();
     assert !dirs.is_empty(), "cmd_gen read the grammars through a grant";
-    let root = dirs[0].0;
+    let root = dirs.remove(0).0;
     let opened = root.open_at(
         PathFlags::none(),
         path.to_string(),
