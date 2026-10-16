@@ -231,7 +231,9 @@ impl Expander<'_> {
         let contract = &contracts[&key];
         let span = call.span;
         let site = self.site.clone().unwrap_or_else(|| {
-            let module = self.trait_env.module_of_span(span, &self.func.module_source);
+            let module = self
+                .trait_env
+                .module_of_span(span, &self.func.module_source);
             format!("{module}:{}", span.line)
         });
         let TirExprKind::Call { args, .. } = &mut call.kind else {
