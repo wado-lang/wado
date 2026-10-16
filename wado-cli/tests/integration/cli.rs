@@ -789,6 +789,32 @@ fn test_check_reports_a_test_excluded_module_the_package_reaches() {
         .stderr(predicate::str::contains("`dead_one` is never used"));
 }
 
+/// A member's file name reaches the package's load as written, whatever
+/// characters a string literal escapes.
+#[test]
+fn test_check_loads_a_member_whose_name_a_string_literal_escapes() {
+    let tmp = tempfile::tempdir().unwrap();
+    let dir = tmp.path();
+    std::fs::write(
+        dir.join("wado.toml"),
+        "[package]\nname = \"pkg\"\nnamespace = \"wado\"\nversion = \"0.1.0\"\nlib = \"lib.wado\"\n",
+    )
+    .unwrap();
+    std::fs::write(dir.join("lib.wado"), "pub fn api() -> i32 { return 1; }\n").unwrap();
+    std::fs::write(
+        dir.join("a\"b_test.wado"),
+        "use { api } from \"./lib.wado\";\nfn dead_one() {}\ntest { assert api() == 1; }\n",
+    )
+    .unwrap();
+
+    wado()
+        .current_dir(dir)
+        .arg("check")
+        .assert()
+        .success()
+        .stderr(predicate::str::contains("`dead_one` is never used"));
+}
+
 /// A directory names the project to check, so a workspace member is reachable
 /// without changing directory first.
 #[test]

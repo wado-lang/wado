@@ -80,7 +80,8 @@ use crate::component_model::{
     try_for_each_signed_type,
 };
 use crate::defs::DefId;
-use crate::elaborator::liveness::{LivenessScope, PackageScope};
+use crate::elaborator::liveness::{LivenessScope, PackageScope, is_reported};
+use crate::escape::quoted;
 use crate::elaborator::trait_env::TraitEnv;
 use crate::name::entry_dir_of;
 use crate::resolve::Shadowed;
@@ -580,7 +581,7 @@ impl PackageSources {
     fn entry_source(&self) -> String {
         let mut source = String::new();
         for member in &self.members {
-            writeln!(source, "use _ from \"./{member}\";").unwrap();
+            writeln!(source, "use _ from {};", quoted(&format!("./{member}"))).unwrap();
         }
         source
     }
@@ -656,7 +657,7 @@ pub async fn package_unused_diagnostics<H: CompilerHost>(
     let reported = load
         .modules
         .iter()
-        .filter(|(source, module)| source.is_entry_package() && !module.has_generated())
+        .filter(|(source, module)| is_reported(source, module))
         .map(|(source, _)| source);
     let walked = reach(reported, |source| {
         importers.get(source).cloned().unwrap_or_default()
