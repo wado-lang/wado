@@ -153,7 +153,7 @@ pub async fn run(opts: CheckOptions) -> Result<(), CliExit> {
     }
     let project = load_nearest_manifest(&path).map_err(CliExit::error)?;
     let world = check_world(opts.target_world.as_deref(), &path, project.as_ref());
-    check_entry(&path, world, project, true, &opts).await
+    check_entry(&path, world, project, true, &opts).await.map(drop)
 }
 
 const NO_PROJECT: &str = "no wado.toml found; name a file to check \
@@ -179,6 +179,7 @@ async fn check_declared_worlds(
     // narrowing the entries, the package's production code is unknown, so each
     // entry answers alone.
     let whole_package = opts.target_world.is_none();
+    let mut entry_runs = Vec::with_capacity(targets.len());
     for target in &targets {
         let world = match (&target.lib_world, &target.target_world) {
             (Some(fq), _) => CheckWorld::Lib(fq.clone()),
@@ -186,20 +187,23 @@ async fn check_declared_worlds(
             _ => unreachable!("a build target names exactly one world"),
         };
         let entry_project = load_nearest_manifest(&target.entry).map_err(CliExit::error)?;
-        check_entry(&target.entry, world, entry_project, !whole_package, opts).await?;
+        entry_runs
+            .push(check_entry(&target.entry, world, entry_project, !whole_package, opts).await?);
     }
     if whole_package {
-        check_package_unused(project, &targets, opts).await?;
+        check_package_unused(project, &targets, &entry_runs, opts).await?;
     }
     Ok(())
 }
 
 /// Report the unused items of the package rooted at `project`, decided over
 /// every member at once: what `targets` reach is production code, the rest of
-/// the members are its tests.
+/// the members are its tests. `entry_runs` holds what each target's own check
+/// generated, so its generators neither run nor warn a second time.
 async fn check_package_unused(
     project: &manifest::ProjectManifest,
     targets: &[build::BuildTarget],
+    entry_runs: &[InvocationIndex],
     opts: &CheckOptions,
 ) -> Result<(), CliExit> {
     let root = &project.root;
@@ -246,19 +250,32 @@ async fn check_package_unused(
     .map_err(CliExit::error)?;
     let mut invocations = InvocationIndex::default();
     for (file, member) in files.iter().zip(&package.members) {
-        // An entry's own check ran its generators in this run, so what they
-        // recorded is no cache `--no-cache` distrusts.
-        let no_cache = opts.knobs.no_cache && !package.entries.contains(member);
+        // `check_entry` names its entry by the path as given.
+        let entry_run = targets
+            .iter()
+            .zip(entry_runs)
+            .find(|(target, _)| relative(&target.entry).as_ref() == Some(member));
+        if let Some((target, index)) = entry_run {
+            let run_name = target.entry.to_string_lossy();
+            package.adopt_member_invocations(member, &run_name, index, &mut invocations);
+            continue;
+        }
+        let member_identity = package.member_identity(member);
         let outcome = maybe_run_pipeline_for(
             file,
-            Some(&package.member_identity(member)),
+            Some(&member_identity),
             &host,
-            no_cache,
+            opts.knobs.no_cache,
             Some(project.clone()),
         )
         .await
         .map_err(|e| pipeline_exit(e, "check"))?;
-        package.adopt_member_invocations(member, &outcome.invocations, &mut invocations);
+        package.adopt_member_invocations(
+            member,
+            &member_identity,
+            &outcome.invocations,
+            &mut invocations,
+        );
     }
     let lints = wado_compiler::package_unused_diagnostics(
         &host,
@@ -274,14 +291,15 @@ async fn check_package_unused(
 }
 
 /// Check `path` against `world`, under `manifest_pair`, the manifest nearest it.
-/// `unused` reports the items this entry alone leaves unused.
+/// `unused` reports the items this entry alone leaves unused. Answers what the
+/// entry's generators recorded.
 async fn check_entry(
     path: &Path,
     world: CheckWorld,
     manifest_pair: Option<manifest::ProjectManifest>,
     unused: bool,
     opts: &CheckOptions,
-) -> Result<(), CliExit> {
+) -> Result<InvocationIndex, CliExit> {
     let base_path = path
         .parent()
         .map(std::path::Path::to_path_buf)
@@ -312,7 +330,7 @@ async fn check_entry(
         opt_level: wado_compiler::OptLevel::O0,
         analysis_only: true,
         unused_diagnostics: unused,
-        invocations,
+        invocations: invocations.clone(),
         ..Default::default()
     };
     let entry_name = path.to_string_lossy().into_owned();
@@ -320,7 +338,8 @@ async fn check_entry(
         wado_compiler::compile_with_options(&source, &host, Some(&entry_name), compiler_options)
             .await;
 
-    check_outcome(&host, compile_result.is_err(), opts)
+    check_outcome(&host, compile_result.is_err(), opts)?;
+    Ok(invocations)
 }
 
 /// How a check ends once `host` holds what it reported: an error fails it,

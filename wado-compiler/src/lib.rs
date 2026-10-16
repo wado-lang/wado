@@ -592,20 +592,20 @@ impl PackageSources {
 
     /// Fold `index`, what a Kiln pipeline run with `member` as its entry
     /// produced, into `into`, keyed as the package's load names its modules.
-    /// The run names `member` by [`Self::member_identity`] and every other
-    /// module relative to `member`'s directory. Members run apart because two
-    /// of them may generate one schema under different options, which one run
-    /// rejects as a conflict.
+    /// The run names `member` by `run_name` and every other module relative to
+    /// `member`'s directory. Members run apart because two of them may generate
+    /// one schema under different options, which one run rejects as a conflict.
     pub fn adopt_member_invocations(
         &self,
         member: &str,
+        run_name: &str,
         index: &kiln::InvocationIndex,
         into: &mut kiln::InvocationIndex,
     ) {
         let member_identity = self.member_identity(member);
         for (decl, from, uri) in index.entries() {
-            let decl = if decl == member_identity {
-                decl.to_string()
+            let decl = if decl == run_name {
+                member_identity.clone()
             } else {
                 name::resolve_local_identity(&self.root, Some(&member_identity), decl)
             };

@@ -47,6 +47,30 @@ fn a_kiln_warning_in_a_test_member_fails_the_package_check() {
         ));
 }
 
+/// The package pass reuses what an entry's own check ran, so it neither runs
+/// the entry's generators again nor reports their warnings twice.
+#[test]
+fn a_package_check_reports_an_entry_kiln_warning_once() {
+    let tmp = tempfile::tempdir().unwrap();
+    let root = tmp.path();
+    write_kiln_project(root, "pkg", GREETING_GENERATOR, b"schema\n");
+
+    wado_in(root).arg("check").assert().success();
+    let generated = walkdir(root)
+        .into_iter()
+        .find(|p| p.file_name().is_some_and(|n| n == "hello.wado"))
+        .expect("the generator wrote hello.wado");
+    std::fs::write(&generated, "pub fn hello() -> i32 { return 2; }\n").unwrap();
+
+    wado_in(root)
+        .args(["check", "--warn"])
+        .assert()
+        .success()
+        .stderr(predicate::function(|stderr: &str| {
+            stderr.matches("has been modified after generation").count() == 1
+        }));
+}
+
 fn walkdir(dir: &std::path::Path) -> Vec<std::path::PathBuf> {
     let mut out = Vec::new();
     for entry in std::fs::read_dir(dir).unwrap() {
