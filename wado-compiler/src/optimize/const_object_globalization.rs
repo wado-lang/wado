@@ -21,9 +21,11 @@ use crate::parallel::Executor;
 use crate::tir::{ArrayElementAccess, ResolvedType, TypeId, TypeTable};
 
 use super::arena_query::{
-    bare_promoted_local, bare_promoted_reads, buried_promoted_reads, collect_reads,
-    expr_mentions_local, is_local, promoted_local_reads, reachable_nodes, strip_refs,
+    bare_promoted_local, bare_promoted_reads, buried_promoted_reads, cold_functions_of,
+    cold_path_id, collect_reads, expr_mentions_local, is_cold_marker, is_local,
+    promoted_local_reads, reachable_nodes, strip_refs,
 };
+use super::dce::DescriptorCache;
 use crate::ast::Visibility;
 use crate::name::{CONST_OBJ_GLOBAL_PREFIX, MODULE_INIT_FUNCTION, MODULES_INIT_FUNCTION};
 use crate::nir::aggregate_field_info;
@@ -124,7 +126,16 @@ impl CandidateKind {
     }
 }
 
-pub fn globalize_const_objects(project: &mut NirPackage, exec: &Executor) -> bool {
+pub fn globalize_const_objects(
+    project: &mut NirPackage,
+    descriptors: &mut DescriptorCache,
+    exec: &Executor,
+) -> bool {
+    // A global is built at instantiation by the start function, which wasmtime
+    // compiles as one body whose cost grows faster than its length. A cold
+    // object is built when its path runs, rarely, so it stays where it is.
+    let cold_path = cold_path_id(descriptors.descriptors(project));
+    let cold_functions = cold_functions_of(project, cold_path);
     // One id serves every instantiation — the hoisted type rides the call node.
     let is_uninitialized = project.intern_extern(&nir::FunctionRef {
         module_source: ModuleSource::builtin(),
@@ -177,7 +188,11 @@ pub fn globalize_const_objects(project: &mut NirPackage, exec: &Executor) -> boo
     let per_function = exec.map_indices(funcs.len(), |fi| {
         let f = funcs[fi].borrow();
         let mut found = Vec::new();
-        let Some(body) = f.body.as_ref().filter(|_| !skip_function(&f)) else {
+        let Some(body) = f
+            .body
+            .as_ref()
+            .filter(|_| !skip_function(&f) && !cold_functions[fi])
+        else {
             return found;
         };
         let gate = Gate {
@@ -195,7 +210,7 @@ pub fn globalize_const_objects(project: &mut NirPackage, exec: &Executor) -> boo
             string_inline_max_bytes,
         };
         compiler_trace!("const_object_globalization", "fn {}", f.name);
-        collect_candidates(body, &gate, fi, &f.module_source, &mut found);
+        collect_candidates(body, &gate, cold_path, fi, &f.module_source, &mut found);
         found
     });
     drop(shared_escape);
@@ -326,6 +341,7 @@ fn hoist_candidate(body: &mut Body, name: &str, cand: &Candidate, is_uninitializ
 fn collect_candidates(
     body: &Body,
     gate: &Gate<'_>,
+    cold_path: Option<FuncId>,
     func_idx: usize,
     module_source: &ModuleSource,
     out: &mut Vec<Candidate>,
@@ -341,6 +357,14 @@ fn collect_candidates(
     let first = out.len();
     let mut stack = vec![NodeRef::Block(body.root())];
     while let Some(node) = stack.pop() {
+        if let NodeRef::Block(block) = node {
+            let stmts = &body.blocks[block].stmts;
+            let hot = cold_path
+                .and_then(|cold| stmts.iter().position(|&s| is_cold_marker(body, s, cold)))
+                .unwrap_or(stmts.len());
+            stack.extend(stmts[..hot].iter().map(|&s| NodeRef::Stmt(s)));
+            continue;
+        }
         if let NodeRef::Stmt(s) = node
             && let StmtKind::Let {
                 local_index,

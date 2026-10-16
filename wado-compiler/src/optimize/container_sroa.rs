@@ -1379,6 +1379,24 @@ fn peel_value_copy(body: &Body, e: ExprId, value_copy_ids: &IndexSet<FuncId>) ->
     cur
 }
 
+/// A slot copy's source as the analysis and the rewrite both read it: under
+/// its `$value_copy$T` wrappers where the element is all-scalar, since each
+/// field is then copied by value and the struct-level clone is redundant. For
+/// an identity-carrying field the copy is load-bearing, so it stays, and SROA
+/// bails on the candidate.
+fn peel_source(
+    body: &Body,
+    e: ExprId,
+    all_scalar: bool,
+    value_copy_ids: &IndexSet<FuncId>,
+) -> ExprId {
+    if all_scalar {
+        peel_value_copy(body, e, value_copy_ids)
+    } else {
+        e
+    }
+}
+
 /// Recognize the supported initializer form, matched structurally: a
 /// `Constructor` call whose capacity argument is side-effect-free (so it can be
 /// cloned per field), or a `FromArray` call handed the empty `[]` literal
@@ -1581,14 +1599,7 @@ impl WhitelistChecker<'_> {
         expected_layout: &ElementLayout,
         src_all_scalar: bool,
     ) -> bool {
-        // See through a defensive slot copy `v[i] = $value_copy$T(src)` when the
-        // element is all-scalar: after decomposition each field is copied by
-        // value, so the struct-level clone is redundant. For an identity-carrying
-        // field the copy is load-bearing, so leave it (this arm doesn't fire) and
-        // SROA conservatively bails on the candidate.
-        if src_all_scalar && let Some(inner) = strip_one_value_copy(body, e, self.value_copy_ids) {
-            return self.check_source(body, inner, expected_arity, expected_layout, src_all_scalar);
-        }
+        let e = peel_source(body, e, src_all_scalar, self.value_copy_ids);
         match &body.exprs[e].kind {
             // Direct tuple literal `[e0, e1, ...]` (heap or multi-value form).
             ExprKind::TupleLiteral { elements } => {
@@ -1671,14 +1682,6 @@ impl WhitelistChecker<'_> {
                 if !layouts_compatible(expected_layout, &other_shape.layout) {
                     return false;
                 }
-                // The rewrite clones the index expression N times (once per
-                // field). A promoted constant index is trivially duplicable.
-                if !arg0.as_expr().is_none_or(|e| is_duplicable_expr(body, e)) {
-                    // Fall through to a normal visit so `other` gets marked
-                    // escaped via the bare `index_value` branch in `visit_expr`.
-                    self.visit_expr(body, e);
-                    return false;
-                }
                 // Index expression must be visited as a normal expression.
                 if let Some(e) = arg0.as_expr() {
                     self.visit_expr(body, e);
@@ -1734,13 +1737,6 @@ impl WhitelistChecker<'_> {
                     let shape = self.shape(rec_local);
                     let (arity, layout, all_scalar) =
                         (shape.arity, shape.layout.clone(), shape.all_scalar);
-                    // The rewrite clones the destination index N times.
-                    if !is_duplicable_operand(body, arg_ops[0]) {
-                        self.mark(rec_local);
-                        self.visit_operand(body, arg_ops[0]);
-                        self.visit_operand(body, arg_ops[1]);
-                        return;
-                    }
                     // index argument visited normally
                     self.visit_operand(body, arg_ops[0]);
                     if self.check_source_operand(body, arg_ops[1], arity, &layout, all_scalar) {
@@ -1990,15 +1986,16 @@ impl Rewriter<'_, '_> {
         match (kind, arg_ids.len()) {
             // Case 1: v.ElementWriter(source) — e.g. push
             (Some(ListMethodKind::ElementWriter), 1) => {
+                let mut out = Vec::with_capacity(arity);
                 let per_field = self.decompose_source(
                     engine,
                     arg_ids[0].as_expr()?,
                     arity,
                     &layout,
                     all_scalar,
+                    &mut out,
                 )?;
                 let sig = sig_key_of_id(ctx.sig, func_id)?;
-                let mut out = Vec::with_capacity(arity);
                 let per_field = if self.elements_observe_writes(engine, rec_local, &per_field) {
                     self.spill_elements(engine, rec_local, per_field, span, &mut out)
                 } else {
@@ -2016,19 +2013,27 @@ impl Rewriter<'_, '_> {
             // Case 2: v.IndexWriter(i, source) — e.g. index_assign
             (Some(ListMethodKind::IndexWriter), 2) => {
                 let idx = arg_ids[0];
-                let src = arg_ids[1];
-                if !is_duplicable_operand(engine.body, idx) {
-                    return None;
-                }
-                let per_field =
-                    self.decompose_source(engine, src.as_expr()?, arity, &layout, all_scalar)?;
-                let sig = sig_key_of_id(ctx.sig, func_id)?;
+                let src = arg_ids[1].as_expr()?;
                 let mut out = Vec::with_capacity(arity);
+                // Each field's write reads the index again, so one that is not a
+                // pure leaf is evaluated once, ahead of the source, as it was.
+                let spilled = !is_duplicable_operand(engine.body, idx)
+                    || self.source_spills_index(engine.body, src, all_scalar);
+                let idx = if spilled {
+                    self.spill_index(engine, idx, span, &mut out)
+                } else {
+                    idx
+                };
+                let per_field =
+                    self.decompose_source(engine, src, arity, &layout, all_scalar, &mut out)?;
+                let sig = sig_key_of_id(ctx.sig, func_id)?;
                 let (idx, per_field) =
                     if self.elements_observe_writes(engine, rec_local, &per_field) {
-                        let idx_type = engine.body.operand_type(idx);
-                        let idx = clone_or_dup(engine, idx);
-                        let idx = spill(engine, idx, idx_type, span, &mut out);
+                        let idx = if spilled {
+                            idx
+                        } else {
+                            self.spill_index(engine, idx, span, &mut out)
+                        };
                         let per_field =
                             self.spill_elements(engine, rec_local, per_field, span, &mut out);
                         (idx, per_field)
@@ -2083,6 +2088,37 @@ impl Rewriter<'_, '_> {
             .collect()
     }
 
+    /// Evaluate an index once into a temporary, rewritten as any expression is,
+    /// leaving the original in the call this expansion replaces.
+    fn spill_index(
+        &self,
+        engine: &mut Engine,
+        idx: Operand,
+        span: Span,
+        out: &mut Vec<StmtId>,
+    ) -> Operand {
+        let idx_type = engine.body.operand_type(idx);
+        let idx = clone_or_dup(engine, idx);
+        if let Some(e) = idx.as_expr() {
+            self.rewrite_expr(engine, e);
+        }
+        spill(engine, idx, idx_type, span, out)
+    }
+
+    /// Whether [`Self::decompose_source`] evaluates `src`'s index into a
+    /// temporary, ahead of any index read again per field.
+    fn source_spills_index(&self, body: &Body, src: ExprId, src_all_scalar: bool) -> bool {
+        let src = peel_source(body, src, src_all_scalar, self.ctx.value_copy_ids);
+        body.exprs[src]
+            .kind
+            .as_method_call()
+            .is_some_and(|(_, f, args)| {
+                list_method_kind(f, self.ctx.sig) == Some(ListMethodKind::IndexReader)
+                    && args.len() == 1
+                    && !is_duplicable_operand(body, args[0].expr)
+            })
+    }
+
     /// Decompose a source expression into N per-field value operands.
     /// `src_all_scalar` mirrors the analysis-side gate: only then is a
     /// `$value_copy$T` wrapper seen through (the per-field scalar assignments
@@ -2094,21 +2130,10 @@ impl Rewriter<'_, '_> {
         expected_arity: usize,
         expected_layout: &ElementLayout,
         src_all_scalar: bool,
+        out: &mut Vec<StmtId>,
     ) -> Option<Vec<Operand>> {
         let ctx = self.ctx;
-        // See through a defensive slot copy `$value_copy$T(src)` — matches
-        // `check_source`. The wrapped element read is decomposed instead.
-        if src_all_scalar
-            && let Some(inner) = strip_one_value_copy(engine.body, expr, ctx.value_copy_ids)
-        {
-            return self.decompose_source(
-                engine,
-                inner,
-                expected_arity,
-                expected_layout,
-                src_all_scalar,
-            );
-        }
+        let expr = peel_source(engine.body, expr, src_all_scalar, ctx.value_copy_ids);
         // Classify the source shape from a read-only inspection first.
         enum Source {
             Tuple(Vec<Operand>),
@@ -2166,12 +2191,6 @@ impl Rewriter<'_, '_> {
                     return None;
                 }
                 let idx_expr = args[0].expr;
-                if !idx_expr
-                    .as_expr()
-                    .is_none_or(|e| is_duplicable_expr(engine.body, e))
-                {
-                    return None;
-                }
                 let sig = sig_key_of_id(ctx.sig, func_id)?;
                 Source::IndexRead {
                     other,
@@ -2223,14 +2242,19 @@ impl Rewriter<'_, '_> {
                 sig,
                 span,
             } => {
-                let mut out = Vec::with_capacity(expected_arity);
+                let idx = if is_duplicable_operand(engine.body, idx) {
+                    idx
+                } else {
+                    self.spill_index(engine, idx, span, out)
+                };
+                let mut fields = Vec::with_capacity(expected_arity);
                 for k in 0..expected_arity {
                     let field = ctx.field_map[&(other, k as u32)].clone();
                     let idx_clone = clone_or_dup(engine, idx);
                     let call = build_index_reader_call(engine, &field, idx_clone, &sig, span, ctx);
-                    out.push(Operand::Expr(call));
+                    fields.push(Operand::Expr(call));
                 }
-                Some(out)
+                Some(fields)
             }
         }
     }

@@ -193,6 +193,20 @@ impl NirBinaryOp {
         }
     }
 
+    /// The comparison true exactly where this one is false, under the total
+    /// order every comparison reads. `None` for an op that is not one of the six.
+    pub fn opposite(self) -> Option<Self> {
+        Some(match self {
+            Self::Eq => Self::NotEq,
+            Self::NotEq => Self::Eq,
+            Self::Lt => Self::GtEq,
+            Self::LtEq => Self::Gt,
+            Self::Gt => Self::LtEq,
+            Self::GtEq => Self::Lt,
+            _ => return None,
+        })
+    }
+
     /// Whether this op may trap, whatever its operands. Integer `Div` / `Mod`
     /// trap on a zero divisor (and `MIN / -1`); every other binary op is total.
     /// The one listing every pass that deletes or moves an operation consults.

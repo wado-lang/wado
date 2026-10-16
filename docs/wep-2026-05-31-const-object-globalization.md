@@ -110,6 +110,12 @@ The walk skips into a qualifying `let`'s own value and into a hoisted argument,
 because hoisting both would nest one global's `GlobalVarSet` inside another's
 initializer — a shape the single-assignment classifier cannot see through.
 
+It also skips cold code: what follows a `cold_path()` marker, and a function
+only cold sites reach. Every global is built by the start function, which
+wasmtime compiles as one body whose cost grows faster than its length. Leaving
+the cold globals out cut wasmtime's compile of `temporal_test.wado` by a fifth,
+while a cold literal costs one build when its rare path runs.
+
 #### Identity
 
 Hoisting makes every evaluation of the binding yield one object, so a `==` by

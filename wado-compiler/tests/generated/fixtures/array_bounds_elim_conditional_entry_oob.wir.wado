@@ -82,15 +82,14 @@ fn "array_bounds_elim_conditional_entry_oob.wado/run"() with Stdout {
     let x: i64;
     let flag: bool;
     let i_36: i32;
-    let $cse_60: bool;
     builtin::array_fill<i32>(local.tee repr_5(builtin::array_new<i32>(local.tee n_3(black_box(5)))), 0, 3, n_3);
     $local_1 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
     i_36 = local.tee flag(flag = black_box(0); i_36 = -5; if flag {
         i_36 = 0;
     }; flag = 0; b1: block {
         l2: loop {
-            break_if b1 local.tee $cse_60(i_36 < n_3) == 0;
-            if @unlikely(select i32(0 <= i_36, $cse_60, 0) == 0) {
+            break_if b1 (i_36 < n_3) == 0;
+            if @unlikely(0 > i_36) {
                 cold_path;
                 "core:rt/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index out of range"), used: 18 });
                 unreachable;

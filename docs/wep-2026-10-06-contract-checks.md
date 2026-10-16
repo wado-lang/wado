@@ -288,12 +288,15 @@ call a predicate each impl defines, such as `contains_index`, and that
 predicate is exactly the clause a caller cannot read: it says only "whatever
 this impl accepts". A map would also look the key up twice on a checked read,
 once for the predicate and once to read. So the indexing traits declare no
-clause. `List` states `contract index < self.len()` on its index methods,
-leaving a negative index to the array access's own trap, which keeps a guard
-that proves only the upper end enough to remove the check. `Slice` states
-`contract 0 <= index < self.len()`, since a negative index would read before
-its view. `Array` states none, since the Wasm array access traps on its
-own, and a map states none, since a missing key panics as it always did.
+clause. `List` and `Slice` state `contract 0 <= index < self.len()` on their
+index methods. `List` first stated only `index < self.len()`, leaving a
+negative index to the array access's own trap, so that a guard proving only the
+upper end removed the whole check. That made its hover and `wado doc` read as
+if a negative index were admitted, while the same operation on a `Slice` read
+otherwise. The clause now states both ends. The optimizer removes each half a
+guard proves, so a guard proving only the upper end leaves one compare.
+`Array` states none, since the Wasm array access traps on its own, and a map
+states none, since a missing key panics as it always did.
 
 An impl whose type cannot take every input its trait admits, where the trait
 states a clause, is a design error in that impl, not a contract to add.
@@ -394,13 +397,36 @@ API waits for a program outside the standard library that needs one.
    - [x] `Sequence::get_unchecked` becomes `unchecked xs.at(i)`, and
      `ByteList::get_byte_unchecked` becomes `unchecked xs[i]`.
 8. The generated WIT carries an `export fn`'s contract as a comment.
+9. A failed check reports the call's position. Done. Reify splits a function
+   with a contract in two rather than copying its body: the `$unchecked` twin
+   holds the body, and the function itself checks the clauses and forwards to
+   the twin. A trait method's impl gets the holder call as its one clause, so
+   the holder needs no twin. A function value and an export reach the
+   function itself. After monomorphization, ahead of the plan,
+   `lower/contract_checks.rs` expands each direct call into a call to the
+   twin whose last argument evaluates the clauses once every argument is
+   evaluated, so the call stays the place an index names. An argument that is a
+   place stays in the call, its subscripts bound. Another is bound where it is
+   evaluated: the last argument's by a `let` in its own block, which the clauses
+   after it share, an earlier one's by assignment to a local of the function. A
+   `let` there would scope the local out of the clauses' reach. Where the last
+   parameter borrows, or no twin follows a trait's clauses, the arguments are
+   bound ahead instead, and the clauses then the call form a block. A copy
+   reports its call's position through the `$contract_site` intrinsic, which
+   the function's own clauses fall back from to the clause's. A copy tests the
+   clause's bare condition. What a failure reports moves into one function per
+   clause, `F$contract_report{k}`, which evaluates the condition again with its
+   power-assert captures and takes only the locals that reads, plus the site.
+   A clause writing a parameter keeps its report in each copy, since running it
+   again would start from what it wrote. Under
+   `-f contract-checks` a marked call goes back to the function before
+   monomorphization, and so is expanded as an unmarked one is.
 
 ## Known gaps
 
-- A failed check reports the clause's position inside the function, not the
-  call that broke the contract.
-- A function reached by both a marked and an unmarked call is emitted twice,
-  once for each.
+- A call inside a closure, or in a global's initializer, is not expanded: it
+  reaches the function itself, and a failure reports the clause's position. So
+  is every call to a function whose clause holds a closure.
 - A contract on a declaration with no body, outside a trait, is a compile
   error.
 - A call through a function value has no callee known statically, so it has no

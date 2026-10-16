@@ -1,0 +1,35 @@
+// A block's value is its tail's: a match over a labeled block whose tail reads
+// a place binds a copy of that place, as a match over the place itself does.
+// Reading the block as something fresh let the arm binding share the storage
+// the arm then wrote through.
+
+struct S { items: List<i32> }
+
+struct W { s: S }
+
+test "a match over a labeled block of a field binds a copy" {
+    let mut w = W { s: S { items: [1] } };
+    let n = match (b: { w.s }) {
+        S { items } => {
+            w.s.items.push(3);
+            items.len()
+        }
+    };
+    assert n == 1;
+}
+
+test "a match over a labeled block of an element binds a copy" {
+    let mut xs: List<S> = [S { items: [1] }];
+    let n = match (b: { xs[0] }) {
+        S { items } => {
+            xs[0].items.push(3);
+            items.len()
+        }
+    };
+    assert n == 1;
+}
+
+__DATA__
+{
+    "test": {}
+}

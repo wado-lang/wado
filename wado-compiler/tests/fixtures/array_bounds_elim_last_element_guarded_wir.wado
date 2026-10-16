@@ -1,0 +1,26 @@
+// `len > 0` puts a floor under `len - 1`, so the guarded last-element read
+// proves both halves of the index contract `0 <= index < self.len()`.
+use { println, Stdout } from "core:cli";
+
+#[inline(never)]
+fn top(stack: &List<i32>) -> i32 {
+    if stack.len() > 0 {
+        return stack[stack.len() - 1];
+    }
+    return -1;
+}
+
+export fn run() with Stdout {
+    let s: List<i32> = [3, 7, 4];
+    let e: List<i32> = [];
+    println(`${top(&builtin::black_box(s))} ${top(&builtin::black_box(e))}`);
+}
+
+__DATA__
+{
+    "stdout": "4 -1\n",
+    "wir_scope": "top",
+    "wir_not_expect:O2": [
+        "cold_path"
+    ]
+}

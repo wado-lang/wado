@@ -73,15 +73,15 @@ fn "array_bounds_elim_loop_guard_wir.wado/run"() with Stdout {
     let i_2: i32;
     let $local_3: ref "core:prelude/string.wado//String";
     let x: i64;
-    let $licm_repr_41: ref Array<i32>;
-    let start_80: i32;
+    let $sroa_arr_repr_46: ref Array<i32>;
+    let start_86: i32;
+    $sroa_arr_repr_46 = global:array_bounds_elim_loop_guard_wir.wado::$const_obj_0;
     sum = 0;
     i_2 = 0;
-    $licm_repr_41 = global:array_bounds_elim_loop_guard_wir.wado::$const_obj_0;
     b0: block {
         l1: loop {
             break_if b0 i_2 >= 3;
-            sum = sum + builtin::array_get_value<i32>($licm_repr_41, i_2);
+            sum = sum + builtin::array_get_value<i32>($sroa_arr_repr_46, i_2);
             i_2 = i_2 + 1;
             continue l1;
         };
@@ -94,17 +94,17 @@ fn "array_bounds_elim_loop_guard_wir.wado/run"() with Stdout {
             cold_path;
             "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_3, i_2);
         }
-        start_80 = $local_3.used;
+        start_86 = $local_3.used;
         $local_3.used = i_2;
-        builtin::array_set_u8($local_3.repr, start_80, 45);
+        builtin::array_set_u8($local_3.repr, start_86, 45);
     } else {
     }
-    if @unlikely(local.tee start_80($local_3.used + sum) > builtin::array_len($local_3.repr)) {
+    if @unlikely(local.tee start_86($local_3.used + sum) > builtin::array_len($local_3.repr)) {
         cold_path;
-        "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_3, start_80);
+        "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_3, start_86);
     }
     i_2 = $local_3.used;
-    $local_3.used = start_80;
+    $local_3.used = start_86;
     "core:prelude/primitive.wado/write_decimal_digits"($local_3.repr, i_2, x, sum);
     sum = builtin::i32_wrap_i64(local.tee x("wasi/stream-new"()));
     i_2 = builtin::i32_wrap_i64(x >> 32_i64);

@@ -382,7 +382,10 @@ impl FunctionTranslator<'_, '_> {
             return if order_on_nan == ieee_on_nan {
                 width.ieee(op, left, right)
             } else {
-                eqz(width.ieee(opposite(op), left, right))
+                let opposite = op
+                    .opposite()
+                    .unwrap_or_else(|| unreachable!("[WIR] `{op:?}` is not a comparison"));
+                eqz(width.ieee(opposite, left, right))
             };
         }
 
@@ -1033,20 +1036,6 @@ impl FloatWidth {
                 unreachable!("[WIR] `{not_comparison:?}` is not a comparison")
             }
         }
-    }
-}
-
-/// The comparison true exactly where `op` is false, for operands that are
-/// not NaNs.
-fn opposite(op: NirBinaryOp) -> NirBinaryOp {
-    match op {
-        NirBinaryOp::Eq => NirBinaryOp::NotEq,
-        NirBinaryOp::NotEq => NirBinaryOp::Eq,
-        NirBinaryOp::Lt => NirBinaryOp::GtEq,
-        NirBinaryOp::LtEq => NirBinaryOp::Gt,
-        NirBinaryOp::Gt => NirBinaryOp::LtEq,
-        NirBinaryOp::GtEq => NirBinaryOp::Lt,
-        not_comparison => unreachable!("[WIR] `{not_comparison:?}` is not a comparison"),
     }
 }
 

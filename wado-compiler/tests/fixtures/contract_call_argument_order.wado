@@ -1,0 +1,60 @@
+// A call's clauses read each argument as it was when that argument ran, and
+// the callee receives the same values: a later argument writing a place an
+// earlier one read changes neither.
+use { println, Stdout } from "core:cli";
+
+fn bump(x: &mut i32) -> i32 {
+    *x += 1;
+    return *x;
+}
+
+fn jump(x: &mut i32) -> i32 {
+    *x = 10;
+    return 5;
+}
+
+// The last parameter borrows, so the clauses run ahead of the call.
+fn ahead(a: i32, b: i32, xs: &List<i32>) -> i32
+    contract a < b
+{
+    return a * 10 + b + xs.len() * 0;
+}
+
+// The last parameter is a value, so the clauses ride the last argument.
+fn in_last(a: i32, b: i32) -> i32
+    contract a <= b
+{
+    return b - a;
+}
+
+struct Cell {
+    v: i32,
+}
+
+fn first_of(a: &mut Cell, n: i32) -> i32
+    contract a.v >= 0
+{
+    return a.v + n;
+}
+
+export fn run() with Stdout {
+    let ys: List<i32> = [1];
+    let mut x = 1;
+    println(`${ahead(x, bump(&mut x), &ys)}`);
+
+    let mut p = 1;
+    println(`${in_last(p, jump(&mut p))}`);
+
+    let mut arr: List<Cell> = [Cell { v: 5 }, Cell { v: -1 }];
+    let mut i = 0;
+    println(`${first_of(&mut arr[i], bump(&mut i))}`);
+
+    let xs: List<i32> = [3, 4];
+    let mut j = 0;
+    println(`${in_last(xs[j], bump(&mut j) + 3)}`);
+}
+
+__DATA__
+{
+    "stdout": "12\n4\n6\n1\n"
+}

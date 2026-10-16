@@ -100,25 +100,54 @@ pub fn cold_region_helper_name(enclosing_name: &str, ordinal: u32) -> String {
     format!("{enclosing_name}$cold{ordinal}")
 }
 
-/// The name of a function's `unchecked` twin, which an `unchecked` call
-/// reaches: the function's name with an `$unchecked` suffix.
+/// The name of a function's `unchecked` twin, which holds its body without
+/// its `contract` clauses: the function's name with an `$unchecked` suffix.
 pub fn unchecked_twin_name(name: &str) -> String {
     format!("{name}{UNCHECKED_TWIN_SUFFIX}")
 }
 
+/// The name a twin's function goes by, where `name` may name the twin.
+pub fn checked_name(name: &str) -> &str {
+    name.strip_suffix(UNCHECKED_TWIN_SUFFIX).unwrap_or(name)
+}
+
 const UNCHECKED_TWIN_SUFFIX: &str = "$unchecked";
 
-/// The `core:builtin` intrinsic heading the contract checks of an `unchecked`
-/// twin, `if $contract_checks() { … }`, which `lower::contract_checks` keeps
-/// or deletes under `-f contract-checks`. No source spells it, so no program
-/// writes a check a build removes.
-pub const CONTRACT_CHECKS_INTRINSIC: &str = "$contract_checks";
+/// The name of the function reporting the failure of the `ordinal`th
+/// `contract` clause of the function `function` identifies, shared by every
+/// call checking it. It lives in the function's module, so the module is left
+/// out of it.
+pub fn contract_report_name(function: &FunctionId, ordinal: u32) -> String {
+    match function {
+        FunctionId::Free(free) => format!("{}$contract_report{ordinal}", free.name),
+        FunctionId::Method(method) => format!("{method}$contract_report{ordinal}"),
+    }
+}
+
+/// The `core:builtin` intrinsic heading each `contract` clause of a function,
+/// `if $contract_clause() { … }`, which `lower::contract_checks` copies to
+/// each call and then unwraps. No source spells it.
+pub const CONTRACT_CLAUSE_INTRINSIC: &str = "$contract_clause";
+
+/// The `core:builtin` intrinsic a failed `contract` clause reports its
+/// position with, `$contract_site("module:line")`: `lower::contract_checks`
+/// answers the call's position where it copies the clause to a call, and the
+/// clause's own where a call reaches the function through a value.
+pub const CONTRACT_SITE_INTRINSIC: &str = "$contract_site";
 
 /// The name of the hidden default method a trait declares to hold the
 /// `contract` clauses of its method `method`, which every impl of the method
 /// calls at its head.
 pub fn contract_holder_name(method: &str) -> String {
-    format!("$contract${method}")
+    format!("{CONTRACT_HOLDER_PREFIX}{method}")
+}
+
+const CONTRACT_HOLDER_PREFIX: &str = "$contract$";
+
+/// The function a failed `contract` clause names, from the name of the one
+/// reifying it: the method a clause holder holds the clauses of.
+pub fn contract_owner_name(function_name: &str) -> String {
+    function_name.replacen(CONTRACT_HOLDER_PREFIX, "", 1)
 }
 
 /// The name of the function holding an effect operation's default
@@ -1314,13 +1343,17 @@ impl LocalMethodName {
         self.method_name = unchecked_twin_name(&self.method_name);
     }
 
+    /// Point this name at the method a twin is the twin of.
+    pub fn mark_checked(&mut self) {
+        assert!(self.is_unchecked(), "{self:?} names no twin");
+        self.method_name = self.declared_method_name().to_string();
+    }
+
     /// The method as its declaration names it, where this name may name its
     /// `unchecked` twin.
     #[must_use]
     pub fn declared_method_name(&self) -> &str {
-        self.method_name
-            .strip_suffix(UNCHECKED_TWIN_SUFFIX)
-            .unwrap_or(&self.method_name)
+        checked_name(&self.method_name)
     }
 
     /// The trait's declaration name without type args (`"Display"`,

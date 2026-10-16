@@ -159,7 +159,7 @@ Loops and fields:
 
 - `licm` — hoist loop-invariant field reads and arithmetic out of a loop.
 - `condition_implication` — drop a bounds or range check a dominating
-  condition already decides.
+  condition already decides, or the half of a range check it decides.
 - `loop_version_bce` — split a loop into a check-free fast path and the
   original, and turn a fill loop into `array.fill`.
 - `tmpl_hoist` — reuse a template string's buffer across loop iterations.

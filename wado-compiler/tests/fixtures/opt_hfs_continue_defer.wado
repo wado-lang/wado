@@ -10,6 +10,9 @@ struct Cursor {
 }
 
 impl Cursor {
+    // HFS is a `&mut` parameter's pass, so the subject has to stay a call:
+    // spliced into `run`, `c` is a local struct that SROA scalarizes away.
+    #[inline(never)]
     fn skip_run(&mut self) -> i32 {
         let mut seen = 0;
         while self.pos < self.data.len() {

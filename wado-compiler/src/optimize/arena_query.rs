@@ -18,6 +18,7 @@ use crate::nir_arena::{
     BlockId, Body, ExprId, ExprKind, NodeRef, Operand, PatId, PatKind, StmtId, StmtKind,
 };
 use crate::nir_engine::Engine;
+use crate::nir_package::NirPackage;
 use crate::nir_value_graph::{OpaqueSource, ValueId, ValueKind};
 use crate::optimize::mod_ref;
 use crate::optimize::value_copy::mutation::MutationOracle;
@@ -538,6 +539,67 @@ pub(super) fn cold_exprs(body: &Body, cold: FuncId) -> IndexSet<ExprId> {
         }
     });
     out
+}
+
+/// The functions no hot site reaches, indexed by store position: every path
+/// into one passes a `cold_path()` marker, so whatever runs in it runs only once
+/// a cold path is taken. A function no call site reaches is reached some other
+/// way (an export, a global initializer, a function reference), so it counts as
+/// hot. `call_sites` counts each function's sites, and `hot_callees` names what
+/// a function calls from a site no marker covers.
+pub(super) fn cold_functions<'a>(
+    project: &NirPackage,
+    call_sites: &[usize],
+    hot_callees: impl Fn(usize) -> &'a IndexSet<FuncId>,
+) -> Vec<bool> {
+    let mut hot: Vec<bool> = project
+        .functions
+        .iter()
+        .zip(call_sites)
+        .map(|(f, &sites)| {
+            let f = f.borrow();
+            sites == 0 || f.is_export || f.is_cm_export
+        })
+        .collect();
+    let mut work: Vec<usize> = (0..hot.len()).filter(|&i| hot[i]).collect();
+    while let Some(caller) = work.pop() {
+        for callee in hot_callees(caller) {
+            if !hot[callee.index()] {
+                hot[callee.index()] = true;
+                work.push(callee.index());
+            }
+        }
+    }
+    hot.into_iter().map(|hot| !hot).collect()
+}
+
+/// [`cold_functions`] over a fresh walk of every live body.
+pub(super) fn cold_functions_of(project: &NirPackage, cold_path: Option<FuncId>) -> Vec<bool> {
+    let mut call_sites = vec![0usize; project.functions.len()];
+    let hot_callees: Vec<IndexSet<FuncId>> = project
+        .functions
+        .iter()
+        .map(|f| {
+            let f = f.borrow();
+            let mut hot = IndexSet::default();
+            let Some(body) = f.body.as_ref().filter(|_| !f.is_dead) else {
+                return hot;
+            };
+            let cold = cold_path.map(|id| cold_exprs(body, id)).unwrap_or_default();
+            body.for_each_reachable_node(|node| {
+                if let NodeRef::Expr(e) = node
+                    && let ExprKind::Call { func_id, .. } = &body.exprs[e].kind
+                {
+                    call_sites[func_id.index()] += 1;
+                    if !cold.contains(&e) {
+                        hot.insert(*func_id);
+                    }
+                }
+            });
+            hot
+        })
+        .collect();
+    cold_functions(project, &call_sites, |caller| &hot_callees[caller])
 }
 
 /// [`is_pure_expr`] for an operand: a promoted constant is pure.

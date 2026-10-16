@@ -1,0 +1,18 @@
+// An `assert` in a trait's default method names the trait's file, though the
+// method is reified in the impl's module.
+use { Items } from "./sub/contract_site_default_method_trait.wado";
+
+struct Neg {}
+
+impl Items for Neg {
+    fn items(&self) -> List<i32> {
+        return [-1];
+    }
+}
+
+export fn run() {
+    let _ = Neg {}.first_positive();
+}
+
+__DATA__
+{"stderr_contains": ["at ./sub/contract_site_default_method_trait.wado:12"], "trapped": true}

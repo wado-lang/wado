@@ -5,13 +5,17 @@
 // each `i64.extend_i32_u` into the load feeding it. Charged an instruction
 // apiece, the four widenings put `read_le` over the -O2 threshold, and both
 // calls in the loop stayed calls.
+//
+// The reads are `unchecked`, as `sum_words`'s loop bound keeps every index in
+// range: a checked one expands its contract into `read_le`, whose price then
+// puts it over the threshold whatever a widening costs.
 use { println, Stdout } from "core:cli";
 
 fn read_le(bytes: &List<u8>, pos: i32) -> u64 {
-    let b0 = bytes[pos] as u64;
-    let b1 = bytes[pos + 1] as u64;
-    let b2 = bytes[pos + 2] as u64;
-    let b3 = bytes[pos + 3] as u64;
+    let b0 = unchecked bytes[pos] as u64;
+    let b1 = unchecked bytes[pos + 1] as u64;
+    let b2 = unchecked bytes[pos + 2] as u64;
+    let b3 = unchecked bytes[pos + 3] as u64;
     return b0 | b1 << 8 | b2 << 16 | b3 << 24;
 }
 

@@ -14,6 +14,7 @@ use crate::tir::{
     TirPattern, TirStmt, TirStmtKind, TirStructField, TirStructPatternField, TirUnaryOp, TypeId,
     TypeTable, struct_fields,
 };
+use crate::tir_visitor::for_each_block_result;
 use crate::token::Span;
 
 /// Coerce a by-value `value` to a `&T` / `&mut T` pattern binding.
@@ -1744,6 +1745,13 @@ impl<'a> PatternLowerer<'a> {
                     .contains(&func.module_source, &func.name) =>
             {
                 self.place_is_writable(place::arg_at(func, args, 0), type_table)
+            }
+            TirExprKind::Block(_) | TirExprKind::LabeledBlock { .. } => {
+                let mut writable = false;
+                for_each_block_result(expr, &mut |result| {
+                    writable |= self.place_is_writable(result, type_table);
+                });
+                writable
             }
             _ => place::projection_base(expr).is_some_and(|inner| {
                 place::is_reference(inner.type_id, type_table)

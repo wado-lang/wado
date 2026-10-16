@@ -37,18 +37,18 @@ pub(super) fn eliminate_at_root(engine: &mut Engine) -> bool {
     // Built once and threaded down: sound because eliminations never add
     // reassignments, so the snapshot only omits bindings, never holds a stale one.
     let binds = build_copy_bindings(engine);
-    // The three flow-insensitive eliminators recognise self-contained shapes
-    // (bitmask-bounded, const-bound index, short-circuit `||`), so one subtree
-    // walk from the root refutes every nesting depth once — rather than a full
-    // walk per top-level statement of every enclosing block.
+    // The flow-insensitive eliminators recognise self-contained shapes (a value
+    // bounded by its own range, short-circuit `||`), so one subtree walk from
+    // the root refutes every nesting depth once — rather than a full walk per
+    // top-level statement of every enclosing block.
     let mut frames = Frames::new();
-    let mut changed = BitmaskEliminator { binds: &binds }.visit_block(engine, root, &mut frames);
-    changed |= ConstBoundIndexEliminator { binds: &binds }.visit_block(engine, root, &mut frames);
+    let mut changed =
+        refute_panic_checks(engine, NodeRef::Block(root), &binds, None, lt_by_own_range);
     changed |= ShortCircuitEliminator { binds: &binds }.visit_block(engine, root, &mut frames);
     // Flow-sensitive elimination: loop guards, dominating-ifs, and early-exit
     // facts, threaded through the block structure.
     changed |= process_block(engine, root, &binds);
-    let mut facts: Vec<ProvenLt> = Vec::new();
+    let mut facts: Vec<Fact> = Vec::new();
     changed |= rbce_walk(
         engine,
         NodeRef::Block(root),
@@ -954,24 +954,6 @@ fn lt_operands(engine: &Engine, binds: &Binds, op: Operand) -> Option<(Operand, 
     }
 }
 
-/// Structural bitmask-bounded check (value_of-free): the failing predicate is
-/// `(x & MASK) >= BOUND` with `MASK` and `BOUND` constants and `BOUND > MASK >=
-/// 0`, so `x & MASK ∈ [0, MASK]` can never reach `BOUND`. The masked value is
-/// read through copy temps (`let idx = i & MASK`) and decomposed via the value
-/// **pool** when promoted — never the `value_of` side-table.
-fn is_bitmask_bounded_structural(engine: &Engine, binds: &Binds, cond: Operand) -> bool {
-    let Some((left, right)) = ge_check_operands(engine, binds, cond) else {
-        return false;
-    };
-    let Some(bound) = parse_const_i64(engine, binds, right) else {
-        return false;
-    };
-    let Some(mask) = bitand_mask(engine, binds, left) else {
-        return false;
-    };
-    mask >= 0 && bound > mask
-}
-
 /// The constant `MASK` of a `value & MASK` (through copy temps / value pool), if
 /// either operand is a constant.
 fn bitand_mask(engine: &Engine, binds: &Binds, op: Operand) -> Option<i64> {
@@ -1191,10 +1173,33 @@ fn structural_loop_guard(
         return false;
     };
     let stmts = engine.body.blocks[loop_body].stmts.clone();
-    let Some(inner) = negated_operand(engine, binds, gcond) else {
-        return false;
+    // What holds past the guard: the operand of `!(…)`, or a comparison
+    // `if var >= bound { break }` turned round.
+    let inner = negated_operand(engine, binds, gcond);
+    let cmp = break_guard_cmp(engine, binds, gcond);
+    // A floor guard `var >= C` proves the lower half of a range check, and no
+    // upper half.
+    let floor = match inner {
+        Some(inner) => guard_floor(engine, binds, inner),
+        None => cmp.and_then(cmp_floor),
     };
-    let Some((var, goff, bound, gop)) = parse_cmp(engine, binds, inner) else {
+    if let Some(floor) = floor {
+        let mut changed = false;
+        for &s in stmts.iter().skip(guard_idx + 1) {
+            if modifies_any_root(engine, NodeRef::Stmt(s), &[floor.var]) {
+                break;
+            }
+            changed |= refute_panic_checks(
+                engine,
+                NodeRef::Stmt(s),
+                binds,
+                Some(floor),
+                |_, _, _, _| false,
+            );
+        }
+        return changed;
+    }
+    let Some((var, goff, bound, gop)) = cmp else {
         return false;
     };
     // Walk the statements after the guard in order, eliminating dominated checks
@@ -1213,13 +1218,25 @@ fn structural_loop_guard(
         _ => return false,
     };
     // A `<` guard leaves `var` a step below its bound, so the `+ 1` of a
-    // counting loop cannot wrap and the entry constant floors every iteration.
-    // A `<=` guard has no such headroom; `loop_version_bce` buys it back from
-    // the versioning residual.
-    let floor = (gop == NirBinaryOp::Lt && goff == 0)
+    // counting loop cannot wrap and the entry constant floors every iteration,
+    // as does a `<=` guard on a constant below the most `var`'s type holds. A
+    // `<=` guard on a local has no such headroom of its own. Under `var <= gbl`,
+    // a check whose upper half is refuted reads a length `gbl + c` with
+    // `c > 0`, which puts `gbl` below `i32::MAX`, so the floor holds for that
+    // check alone; elsewhere `loop_version_bce` buys it back from the
+    // versioning residual.
+    let alone = gop == NirBinaryOp::Lt
+        || matches!(strategy, GuardStrategy::ConstUb(ub)
+            if local_int_max(engine, var).is_some_and(|max| ub < max));
+    let hi = match strategy {
+        GuardStrategy::ConstUb(ub) => Some(ub),
+        GuardStrategy::SameOffset => below_type_max(engine, var),
+        GuardStrategy::LeLocal(_) => None,
+    };
+    let floor = (goff == 0 && (alone || matches!(strategy, GuardStrategy::LeLocal(_))))
         .then(|| induction_entry(engine, binds, parent, loop_stmt, loop_body, var))
         .flatten()
-        .map(|lo| (var, lo));
+        .map(|lo| Floor { var, lo, alone, hi });
     let mut changed = false;
     for &s in stmts.iter().skip(guard_idx + 1) {
         if stmt_modifies(engine, s, var, bound) {
@@ -1240,6 +1257,19 @@ fn structural_loop_guard(
     changed
 }
 
+/// The most `var`'s integer type holds, where the type table says.
+fn local_int_max(engine: &Engine, var: u32) -> Option<i64> {
+    let types = engine.value_graph_type_table()?;
+    let local = &engine.locals()[var as usize];
+    let (_, max) = types.primitive_head(local.type_id)?.int_range()?;
+    i64::try_from(max).ok()
+}
+
+/// The most `var` holds under `var < bound`: a step below its type's most.
+fn below_type_max(engine: &Engine, var: u32) -> Option<i64> {
+    local_int_max(engine, var).map(|max| max - 1)
+}
+
 /// How a parsed loop guard refutes the checks it dominates.
 enum GuardStrategy {
     /// `var + goff < bound`: refutes a check at the identical offset and bound.
@@ -1250,28 +1280,53 @@ enum GuardStrategy {
     ConstUb(i64),
 }
 
+/// A proven `var >= lo`. Unless `alone`, it holds only where the same check's
+/// upper half is refuted too, which is what rules out the wrap it rests on.
+/// `hi`, where a guard caps `var` too, is the most it holds there.
+#[derive(Clone, Copy)]
+struct Floor {
+    var: u32,
+    lo: i64,
+    alone: bool,
+    hi: Option<i64>,
+}
+
 /// Drive to `false` the condition of every `if <cond> { panic }` (no else)
-/// nested in `node` for which `refute` proves the condition is false. Both
-/// `StmtKind::If` and `ExprKind::If` holders are handled (an inlined bounds
-/// check sits in value position). Candidates are collected first — the walk
-/// borrows the body immutably — then rewritten.
+/// nested in `node` for which `refute` proves the condition is false, and drop
+/// a proven conjunct from one it proves only in part. Both `StmtKind::If` and
+/// `ExprKind::If` holders are handled (an inlined bounds check sits in value
+/// position). Candidates are collected first — the walk borrows the body
+/// immutably — then rewritten.
 fn refute_panic_checks(
     engine: &mut Engine,
     node: NodeRef,
     binds: &Binds,
-    floor: Option<(u32, i64)>,
+    floor: Option<Floor>,
     refute: impl Fn(&Engine, &Binds, Operand, Operand) -> bool,
 ) -> bool {
+    let floor_alone = floor.filter(|f| f.alone);
     let mut holders: Vec<(NodeRef, Operand)> = Vec::new();
+    let mut proven_conjuncts: Vec<ConjunctSlot> = Vec::new();
     engine.body.for_each_live_node_under(node, |n| {
         // Driving the condition to `false` drops the expression with it, so a
         // condition that writes — an `assert`'s operand capture spliced into
         // the comparison — would lose a store the surviving path still makes.
-        if let Some(cond) = panic_guard_check(engine, n)
-            && is_pure_operand(engine.body, cond)
-            && check_refuted(engine, binds, cond, floor, &refute)
-        {
+        let Some(cond) = panic_guard_check(engine, n) else {
+            return;
+        };
+        if !is_pure_operand(engine.body, cond) {
+            return;
+        }
+        if check_refuted(engine, binds, cond, floor, &refute) {
             holders.push((n, cond));
+        } else {
+            // One per check: dropping a conjunct reshapes the `&` tree the
+            // other slots name. The fixpoint around this pass takes the rest.
+            proven_conjuncts.extend(
+                written_conjuncts(engine, cond)
+                    .into_iter()
+                    .find(|slot| conjunct_holds(engine, binds, slot.operand, floor_alone, &refute)),
+            );
         }
     });
     let mut changed = false;
@@ -1279,29 +1334,150 @@ fn refute_panic_checks(
         eliminate_condition(engine, holder, cond);
         changed = true;
     }
+    // A proven half of a range check: `!(0 <= i & i < n)` under a guard that
+    // proves `i < n` keeps only `!(0 <= i)`.
+    for slot in proven_conjuncts {
+        changed |= slot.drop_from_check(engine);
+    }
     changed
+}
+
+/// One conjunct of a check's `&` tree, as the operand slot of the `&` that
+/// holds it.
+struct ConjunctSlot {
+    parent: ExprId,
+    left: bool,
+    operand: Operand,
+}
+
+impl ConjunctSlot {
+    /// Rewrite the `&` holding this proven conjunct to its other operand.
+    fn drop_from_check(&self, engine: &mut Engine) -> bool {
+        let ExprKind::Binary { left, right, .. } = engine.body.exprs[self.parent].kind else {
+            unreachable!("a conjunct slot is an operand of a `&`");
+        };
+        match if self.left { right } else { left } {
+            Operand::Expr(other) => {
+                engine.become_expr(self.parent, other);
+                true
+            }
+            other => engine.redirect_expr(self.parent, other),
+        }
+    }
 }
 
 /// Whether the whole predicate a panic guard refutes is proven. A negated
 /// conjunction — what `assert 0 <= i < n` lowers to — is dead only when every
-/// conjunct holds, so each upper half goes to `refute` and each constant floor
-/// is answered by the caller's proven `floor` on that variable.
+/// conjunct holds.
 fn check_refuted(
     engine: &Engine,
     binds: &Binds,
     cond: Operand,
-    floor: Option<(u32, i64)>,
+    floor: Option<Floor>,
     refute: &impl Fn(&Engine, &Binds, Operand, Operand) -> bool,
 ) -> bool {
     let Some(parts) = check_conjuncts(engine, binds, cond) else {
         return false;
     };
-    parts.into_iter().all(|part| match part {
+    // A floor not `alone` rests on an upper half this check must also refute.
+    let has_upper = parts.iter().any(|p| matches!(p, Conjunct::Lt(..)));
+    let floor = floor.filter(|f| f.alone || has_upper);
+    parts
+        .into_iter()
+        .all(|part| part_holds(engine, binds, part, floor, refute))
+}
+
+/// Whether one conjunct of a check holds: an upper half by `refute`, a constant
+/// floor by the caller's proven `floor` on that variable or by its own.
+fn part_holds(
+    engine: &Engine,
+    binds: &Binds,
+    part: Conjunct,
+    floor: Option<Floor>,
+    refute: &impl Fn(&Engine, &Binds, Operand, Operand) -> bool,
+) -> bool {
+    match part {
         Conjunct::Lt(left, right) => refute(engine, binds, left, right),
+        // `var >= lo` bounds `var + off` only while the add cannot wrap: a
+        // positive `off` needs a cap on `var` that keeps the sum in its type.
         Conjunct::AtLeast(v, off, f) => {
-            floor.is_some_and(|(fv, lo)| fv == v && lo.checked_add(off).is_some_and(|l| l >= f))
+            floor
+                .into_iter()
+                .chain(own_floor(engine, binds, v))
+                .any(|floor| {
+                    let no_wrap = off <= 0
+                        || floor
+                            .hi
+                            .zip(local_int_max(engine, v))
+                            .is_some_and(|(hi, max)| {
+                                hi.checked_add(off).is_some_and(|top| top <= max)
+                            });
+                    floor.var == v && no_wrap && floor.lo.checked_add(off).is_some_and(|l| l >= f)
+                })
         }
-    })
+    }
+}
+
+fn conjunct_holds(
+    engine: &Engine,
+    binds: &Binds,
+    op: Operand,
+    floor: Option<Floor>,
+    refute: &impl Fn(&Engine, &Binds, Operand, Operand) -> bool,
+) -> bool {
+    classify_conjunct(engine, binds, op)
+        .is_some_and(|part| part_holds(engine, binds, part, floor, refute))
+}
+
+/// The conjuncts of a check `!(A & B …)` written in the condition itself, not
+/// reached through a `let`: rewriting one of those would change the bound
+/// value at its other reads. Empty for a check of one conjunct, which
+/// [`check_refuted`] answers whole.
+fn written_conjuncts(engine: &Engine, cond: Operand) -> Vec<ConjunctSlot> {
+    let Operand::Expr(ce) = cond else {
+        return Vec::new();
+    };
+    let ExprKind::Unary {
+        op: NirUnaryOp::Not,
+        expr: Operand::Expr(inner),
+    } = engine.body.exprs[ce].kind
+    else {
+        return Vec::new();
+    };
+    let mut out = Vec::new();
+    if is_conjunction(engine, inner) {
+        collect_written_conjuncts(engine, inner, &mut out);
+    }
+    out
+}
+
+fn collect_written_conjuncts(engine: &Engine, e: ExprId, out: &mut Vec<ConjunctSlot>) {
+    let ExprKind::Binary { left, right, .. } = engine.body.exprs[e].kind else {
+        unreachable!("only a conjunction is walked");
+    };
+    for (operand, is_left) in [(left, true), (right, false)] {
+        match operand {
+            Operand::Expr(child) if is_conjunction(engine, child) => {
+                collect_written_conjuncts(engine, child, out);
+            }
+            operand => out.push(ConjunctSlot {
+                parent: e,
+                left: is_left,
+                operand,
+            }),
+        }
+    }
+}
+
+fn is_conjunction(engine: &Engine, e: ExprId) -> bool {
+    engine.body.exprs[e].type_id == TypeTable::BOOL
+        && matches!(
+            engine.body.exprs[e].kind,
+            ExprKind::Binary {
+                op: NirBinaryOp::And | NirBinaryOp::BitAnd,
+                ..
+            }
+        )
 }
 
 /// Drive to `false` every else-less `if (var >= bound) { panic }` nested in
@@ -1316,7 +1492,7 @@ fn eliminate_checks_in_node(
     k: i64,
     bound: BoundKey,
     binds: &Binds,
-    floor: Option<(u32, i64)>,
+    floor: Option<Floor>,
 ) -> bool {
     refute_panic_checks(engine, node, binds, floor, |engine, binds, left, right| {
         matches!(
@@ -1334,7 +1510,7 @@ fn eliminate_le_checks_in_node(
     var: u32,
     gbound: u32,
     binds: &Binds,
-    floor: Option<(u32, i64)>,
+    floor: Option<Floor>,
 ) -> bool {
     refute_panic_checks(engine, node, binds, floor, |engine, binds, left, right| {
         let Some((cvar, cj)) = parse_var_offset(engine, binds, left) else {
@@ -1371,7 +1547,7 @@ fn eliminate_const_ub_checks_in_node(
     var: u32,
     ub: i64,
     binds: &Binds,
-    floor: Option<(u32, i64)>,
+    floor: Option<Floor>,
 ) -> bool {
     refute_panic_checks(engine, node, binds, floor, |engine, binds, left, right| {
         matches!(
@@ -1383,7 +1559,9 @@ fn eliminate_const_ub_checks_in_node(
 }
 
 /// A dominating `if (var + K) < bound { … }` proves `var + K < bound` inside its
-/// then-block (structural, value_of-free). Drive to `false` every dominated
+/// then-block (structural, value_of-free), and a conjunct `C <= var` of a
+/// condition `C <= var && var + K < bound` also proves the floor a range check
+/// `!(C <= var & var + K < bound)` asks for. Drive to `false` every dominated
 /// bounds-check `var + K >= bound` (identical offset — wrapping-add makes the
 /// weaker `var + j`, `j < K`, unsound) nested in the then-block, walked in order
 /// and stopped once a statement modifies `var` / `bound` (so the fact no longer
@@ -1398,22 +1576,94 @@ fn apply_dominating_if(engine: &mut Engine, s: StmtId, binds: &Binds) -> bool {
         return false;
     };
     let (cond, then_b) = (*condition, *then_block);
-    let Some((var, k, bound, op)) = parse_cmp(engine, binds, cond) else {
-        return false;
-    };
+    let mut conjuncts = Vec::new();
+    collect_and_operands(engine, binds, cond, &mut conjuncts);
     // `<` proves `var + k < bound`; a later `var + j >= bound` is refuted only
     // for `j == k`, since Wado add wraps (`j < k` need not shrink the index).
-    if op != NirBinaryOp::Lt || k < 0 {
+    let Some((var, k, bound)) = conjuncts
+        .iter()
+        .find_map(|&c| match parse_cmp(engine, binds, c) {
+            Some((var, k, bound, NirBinaryOp::Lt)) if k >= 0 => Some((var, k, bound)),
+            _ => None,
+        })
+    else {
+        return false;
+    };
+    // A conjunct after the comparison may move `var` or `bound` before the
+    // branch runs.
+    if cond
+        .as_expr()
+        .is_some_and(|ce| node_modifies(engine, NodeRef::Expr(ce), var, bound))
+    {
         return false;
     }
+    // `var < bound` caps `var`; `var + k < bound` caps nothing once it wraps.
+    let floor = conjuncts
+        .iter()
+        .find_map(|&c| guard_floor(engine, binds, c).filter(|f| f.var == var))
+        .map(|f| Floor {
+            hi: if k == 0 {
+                below_type_max(engine, var)
+            } else {
+                None
+            },
+            ..f
+        });
     let mut changed = false;
     for &ts in &engine.body.blocks[then_b].stmts.clone() {
         if stmt_modifies(engine, ts, var, bound) {
             break;
         }
-        changed |= eliminate_checks_in_node(engine, NodeRef::Stmt(ts), var, k, bound, binds, None);
+        changed |= eliminate_checks_in_node(engine, NodeRef::Stmt(ts), var, k, bound, binds, floor);
     }
     changed
+}
+
+/// The floor a guard conjunct `c` puts under a variable itself, written either
+/// way round: `f <= var`, `f - 1 < var`, `var >= f` or `var > f - 1`.
+fn guard_floor(engine: &Engine, binds: &Binds, c: Operand) -> Option<Floor> {
+    let (BoundKey::Local(var), lo) = comparison_floor(engine, binds, c)? else {
+        return None;
+    };
+    Some(Floor {
+        var,
+        lo,
+        alone: true,
+        hi: None,
+    })
+}
+
+/// The floor a comparison `var >= C` or `var > C - 1` puts under `var`.
+fn cmp_floor((var, off, bound, op): (u32, i64, BoundKey, NirBinaryOp)) -> Option<Floor> {
+    let (0, BoundKey::Const(c)) = (off, bound) else {
+        return None;
+    };
+    let lo = match op {
+        NirBinaryOp::GtEq => c,
+        NirBinaryOp::Gt => c.checked_add(1)?,
+        _ => return None,
+    };
+    Some(Floor {
+        var,
+        lo,
+        alone: true,
+        hi: None,
+    })
+}
+
+/// The comparison that holds past a guard `if cond { break }`: the operand of
+/// `cond = !(…)`, or `cond` turned round.
+pub(super) fn break_guard_cmp(
+    engine: &Engine,
+    binds: &Binds,
+    cond: Operand,
+) -> Option<(u32, i64, BoundKey, NirBinaryOp)> {
+    if let Some(inner) = negated_operand(engine, binds, cond) {
+        parse_cmp(engine, binds, inner)
+    } else {
+        let (var, off, bound, op) = parse_cmp(engine, binds, cond)?;
+        Some((var, off, bound, op.opposite()?))
+    }
 }
 
 /// A straight-line early-exit guard `if (var + K >= bound) { return/break }`:
@@ -1620,31 +1870,27 @@ fn is_panic_call(engine: &Engine, e: ExprId) -> bool {
     }
 }
 
-/// Eliminates bitmask-bounded false bounds checks:
-/// `if (x & MASK) >= BOUND { panic(...) }` with `BOUND > MASK >= 0`.
-struct BitmaskEliminator<'a> {
-    binds: &'a Binds,
+/// Whether `left < right` holds by `left`'s own range against a constant
+/// `right`: an `x & MASK` lies in `[0, MASK]`, and [`index_upper_bound`] caps a
+/// clamped index.
+fn lt_by_own_range(engine: &Engine, binds: &Binds, left: Operand, right: Operand) -> bool {
+    let Some(bound) = parse_const_i64(engine, binds, right) else {
+        return false;
+    };
+    bitand_mask(engine, binds, left).is_some_and(|mask| (0..bound).contains(&mask))
+        || index_upper_bound(engine, binds, left).is_some_and(|ub| ub < bound)
 }
 
-impl ArenaOptVisitor for BitmaskEliminator<'_> {
-    fn visit_stmt(&mut self, engine: &mut Engine, s: StmtId, frames: &mut Frames) -> bool {
-        let if_ids = match &engine.body.stmts[s].kind {
-            StmtKind::If {
-                condition,
-                then_block,
-                else_block: None,
-            } => Some((*condition, *then_block)),
-            _ => None,
-        };
-        if let Some((condition, then_block)) = if_ids
-            && is_panic_block(engine, then_block)
-            && is_bitmask_bounded_structural(engine, self.binds, condition)
-        {
-            eliminate_condition(engine, NodeRef::Stmt(s), condition);
-            return true;
-        }
-        arena_opt_walk(self, engine, NodeRef::Stmt(s), frames)
-    }
+/// The floor `var`'s own value gives it: `let var = x & MASK` with `MASK >= 0`
+/// lies in `[0, MASK]` wherever it is read.
+fn own_floor(engine: &Engine, binds: &Binds, var: u32) -> Option<Floor> {
+    let mask = bitand_mask(engine, binds, *binds.get(&var)?)?;
+    (mask >= 0).then_some(Floor {
+        var,
+        lo: 0,
+        alone: true,
+        hi: Some(mask),
+    })
 }
 
 /// Eliminates redundant bounds checks inside short-circuit `||` expressions
@@ -1772,34 +2018,6 @@ fn operand_same(engine: &Engine, binds: &Binds, a: Operand, b: Operand) -> bool 
     }
 }
 
-struct ConstBoundIndexEliminator<'a> {
-    binds: &'a Binds,
-}
-
-impl ArenaOptVisitor for ConstBoundIndexEliminator<'_> {
-    fn visit_stmt(&mut self, engine: &mut Engine, s: StmtId, frames: &mut Frames) -> bool {
-        let if_ids = match &engine.body.stmts[s].kind {
-            StmtKind::If {
-                condition,
-                then_block,
-                else_block: None,
-            } => Some((*condition, *then_block)),
-            _ => None,
-        };
-        if let Some((condition, then_block)) = if_ids
-            && is_panic_block(engine, then_block)
-            && let Some((idx, bound)) = ge_check_operands(engine, self.binds, condition)
-            && let Some(b) = parse_const_i64(engine, self.binds, bound)
-            && let Some(ub) = index_upper_bound(engine, self.binds, idx)
-            && ub < b
-        {
-            eliminate_condition(engine, NodeRef::Stmt(s), condition);
-            return true;
-        }
-        arena_opt_walk(self, engine, NodeRef::Stmt(s), frames)
-    }
-}
-
 // ---------------------------------------------------------------------------
 // Redundant bounds-check elimination (forward, dominating panic-guards)
 // ---------------------------------------------------------------------------
@@ -1827,17 +2045,96 @@ impl ProvenLt {
     }
 }
 
+/// What [`rbce_walk`] holds proven at a point of the walk.
+#[derive(Clone, Copy)]
+enum Fact {
+    Lt(ProvenLt),
+    /// `key >= lo`: a range check's lower half, or an `if` condition's.
+    Floor {
+        key: BoundKey,
+        lo: i64,
+    },
+}
+
 /// True if some fact refutes the check `var + j >= bound`.
-fn facts_refute(facts: &[ProvenLt], var: u32, j: i64, bound: BoundKey) -> bool {
+fn facts_refute(facts: &[Fact], var: u32, j: i64, bound: BoundKey) -> bool {
+    facts.iter().any(|f| {
+        matches!(f, Fact::Lt(f) if f.var == var && f.bound == bound && (f.lo..=f.hi).contains(&j))
+    })
+}
+
+/// The greatest proven floor under `key`.
+fn floor_of(facts: &[Fact], key: BoundKey) -> Option<i64> {
     facts
         .iter()
-        .any(|f| f.var == var && f.bound == bound && (f.lo..=f.hi).contains(&j))
+        .filter_map(|f| match *f {
+            Fact::Floor { key: k, lo } if k == key => Some(lo),
+            _ => None,
+        })
+        .max()
 }
 
 /// Drop every fact whose `var` / `bound` root `node` may modify (conservative:
 /// a false "modifies" only keeps a fact, never invents one).
-fn invalidate(engine: &Engine, node: NodeRef, facts: &mut Vec<ProvenLt>) {
-    facts.retain(|f| !node_modifies(engine, node, f.var, f.bound));
+fn invalidate(engine: &Engine, node: NodeRef, facts: &mut Vec<Fact>) {
+    facts.retain(|f| match *f {
+        Fact::Lt(lt) => !node_modifies(engine, node, lt.var, lt.bound),
+        Fact::Floor { key, .. } => {
+            bound_root(key).is_none_or(|root| !modifies_any_root(engine, node, &[root]))
+        }
+    });
+}
+
+/// The facts one conjunct of a passed check proves, `None` when it proves
+/// nothing this walk can hold. A floor needs no offset: `var + off >= f` says
+/// nothing of `var` once the add may wrap.
+fn conjunct_fact(engine: &Engine, binds: &Binds, part: Conjunct) -> Option<Fact> {
+    match part {
+        Conjunct::Lt(left, right) => {
+            let (var, off) = parse_var_offset(engine, binds, left)?;
+            let bound = parse_bound(engine, binds, right)?;
+            Some(Fact::Lt(ProvenLt::exact(var, off, bound)))
+        }
+        Conjunct::AtLeast(var, 0, lo) => Some(Fact::Floor {
+            key: BoundKey::Local(var),
+            lo,
+        }),
+        Conjunct::AtLeast(..) => None,
+    }
+}
+
+/// Whether `facts` already prove `fact`.
+fn fact_holds(facts: &[Fact], fact: Fact) -> bool {
+    match fact {
+        Fact::Lt(lt) => facts_refute(facts, lt.var, lt.lo, lt.bound),
+        Fact::Floor { key, lo } => floor_of(facts, key).is_some_and(|have| have >= lo),
+    }
+}
+
+/// The floors an `if` condition proves inside its `then` branch: each conjunct
+/// that bounds a local or a length from below by a constant.
+fn condition_floors(engine: &Engine, binds: &Binds, cond: Operand) -> Vec<Fact> {
+    let mut parts = Vec::new();
+    collect_and_operands(engine, binds, cond, &mut parts);
+    parts
+        .into_iter()
+        .filter_map(|p| comparison_floor(engine, binds, p))
+        .map(|(key, lo)| Fact::Floor { key, lo })
+        .collect()
+}
+
+/// `x > c`, `x >= c`, `c < x` or `c <= x` as the floor `(x, lo)` it puts
+/// under `x`.
+fn comparison_floor(engine: &Engine, binds: &Binds, op: Operand) -> Option<(BoundKey, i64)> {
+    let (left, kind, right) = binary_parts(engine.body, resolve_through_opaque(engine, binds, op))?;
+    let (x, c, strict) = match kind {
+        NirBinaryOp::Gt | NirBinaryOp::GtEq => (left, right, kind == NirBinaryOp::Gt),
+        NirBinaryOp::Lt | NirBinaryOp::LtEq => (right, left, kind == NirBinaryOp::Lt),
+        _ => return None,
+    };
+    let c = parse_const_i64(engine, binds, c)?;
+    let lo = if strict { c.checked_add(1)? } else { c };
+    Some((parse_bound(engine, binds, x)?, lo))
 }
 
 /// The `(minuend, k)` of a `<expr> - k` (skeleton or promoted), if any.
@@ -1850,8 +2147,22 @@ fn sub_const(engine: &Engine, binds: &Binds, op: Operand) -> Option<(Operand, i6
     parse_const_i64(engine, binds, subtrahend).map(|k| (minuend, k))
 }
 
-/// The fact a `let idx = <seq>.len() - k` (k >= 1) proves, as in the
-/// `arr.last()` idiom: `idx + j < len` for `j < k`.
+/// The facts a `let idx = <seq>.len() - k` (k >= 1) proves, as in the
+/// `arr.last()` idiom: `idx + j < len` for `j < k`, and `idx >= lo - k` where
+/// `len >= lo` is already proven.
+fn push_len_minus_facts(engine: &Engine, binds: &Binds, node: NodeRef, facts: &mut Vec<Fact>) {
+    let Some(lt) = len_minus_fact(engine, binds, node) else {
+        return;
+    };
+    if let Some(lo) = floor_of(facts, lt.bound) {
+        facts.push(Fact::Floor {
+            key: BoundKey::Local(lt.var),
+            lo: lo - (lt.hi + 1),
+        });
+    }
+    facts.push(Fact::Lt(lt));
+}
+
 fn len_minus_fact(engine: &Engine, binds: &Binds, node: NodeRef) -> Option<ProvenLt> {
     let NodeRef::Stmt(s) = node else {
         return None;
@@ -2074,24 +2385,32 @@ fn short_circuit_parts(engine: &Engine, node: NodeRef) -> Option<(Operand, Opera
 }
 
 /// Forward redundant-bounds-check elimination: walk `node` in execution order,
-/// harvesting proven `var + off < bound` facts from panic-guard checks at
-/// unconditionally-executed positions and driving to `false` any later check they
-/// refute. Facts thread by `&mut` through straight-line positions, by clone into
+/// harvesting proven `var + off < bound` facts and floors from panic-guard checks
+/// at unconditionally-executed positions, and floors from an `if` condition into
+/// its `then` branch, and driving to `false` any later check they refute. Facts thread by `&mut` through straight-line positions, by clone into
 /// conditional ones, and afresh into loop bodies; [`invalidate`] drops stale ones.
 fn rbce_walk(
     engine: &mut Engine,
     node: NodeRef,
-    facts: &mut Vec<ProvenLt>,
+    facts: &mut Vec<Fact>,
     binds: &Binds,
     frames: &mut Frames,
 ) -> bool {
     if let Some(cond) = panic_guard_check(engine, node) {
-        if let Some((var, off, bound)) = parse_check(engine, binds, cond) {
-            if facts_refute(facts, var, off, bound) {
+        // A check passed proves every conjunct of it, and one whose conjuncts
+        // are all proven already is dead.
+        let proven: Option<Vec<Fact>> = check_conjuncts(engine, binds, cond).and_then(|parts| {
+            parts
+                .into_iter()
+                .map(|p| conjunct_fact(engine, binds, p))
+                .collect()
+        });
+        if let Some(proven) = proven {
+            if proven.iter().all(|&f| fact_holds(facts, f)) {
                 eliminate_condition(engine, node, cond);
                 return true;
             }
-            facts.push(ProvenLt::exact(var, off, bound));
+            facts.extend(proven);
             return false;
         }
         if let Some(ce) = cond.as_expr() {
@@ -2106,7 +2425,12 @@ fn rbce_walk(
             changed |= rbce_walk(engine, NodeRef::Expr(ce), facts, binds, frames);
             invalidate(engine, NodeRef::Expr(ce), facts);
         }
+        let mut floors = condition_floors(engine, binds, cond);
+        if let Some(ce) = cond.as_expr() {
+            invalidate(engine, NodeRef::Expr(ce), &mut floors);
+        }
         let mut ft = facts.clone();
+        ft.extend(floors);
         changed |= rbce_walk(engine, NodeRef::Block(then_b), &mut ft, binds, frames);
         if let Some(eb) = else_b {
             let mut fe = facts.clone();
@@ -2153,7 +2477,7 @@ fn rbce_walk(
         _ => false,
     };
     if fresh_region {
-        let mut inner: Vec<ProvenLt> = Vec::new();
+        let mut inner: Vec<Fact> = Vec::new();
         let mut changed = false;
         let base = frames.len();
         engine.body.for_each_child(node, |c| frames.push(c));
@@ -2207,9 +2531,7 @@ fn rbce_walk(
         let c = frames[i];
         changed |= rbce_walk(engine, c, facts, binds, frames);
         invalidate(engine, c, facts);
-        if let Some(fact) = len_minus_fact(engine, binds, c) {
-            facts.push(fact);
-        }
+        push_len_minus_facts(engine, binds, c, facts);
     }
     frames.truncate(base);
     changed
