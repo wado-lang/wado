@@ -122,6 +122,10 @@ Naming a file checks that file alone, against the world whose `[world]` entry
 names it and otherwise the library world, which requires no entry point. So a
 library module checks as itself; `--world <name>` opts into a world's contract.
 
+Lints skip `#![generated]` modules; `--lint-generated` reports there too, and
+`--no-lint` reports none and skips the passes only lints need. Every compiling
+subcommand takes them, and the last one given wins.
+
 ## Run
 
 ```sh

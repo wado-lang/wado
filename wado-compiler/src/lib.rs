@@ -80,7 +80,7 @@ use crate::component_model::{
     try_for_each_signed_type,
 };
 use crate::defs::DefId;
-use crate::elaborator::liveness::{LivenessScope, PackageScope, is_reported};
+use crate::elaborator::liveness::{LivenessScope, PackageScope};
 use crate::elaborator::trait_env::TraitEnv;
 use crate::escape::quoted;
 use crate::name::entry_dir_of;
@@ -418,9 +418,13 @@ pub struct CompilerOptions {
     /// option (e.g. `["no-branch-hinting"]`). Parsed into [`CodegenFlags`] during
     /// compilation; an unrecognized flag is a hard error. Empty by default.
     pub codegen_flags: Vec<String>,
-    /// Emit unused diagnostics (`DeadFunction` / `DeadGlobal`, …). On by
-    /// default; the CLI's `--no-unused` flag turns it off. Gates only the
-    /// diagnostic emission, never the liveness analysis itself.
+    /// The modules the source-level lints report in; the CLI's `--no-lint`,
+    /// `--lint` and `--lint-generated` set it.
+    pub lints: Lints,
+    /// Emit unused diagnostics (`DeadFunction` / `DeadGlobal`, …) where
+    /// `lints` reports. Off where another pass decides them, as `wado check`
+    /// does over a whole package. Gates only the diagnostic emission, never
+    /// the liveness analysis itself.
     pub unused_diagnostics: bool,
     /// Library world FQ (`namespace:name/name@version`) for `wado compile
     /// --lib`. When `Some`, the compiler synthesizes a library world from the
@@ -467,6 +471,7 @@ impl Default for CompilerOptions {
             invocations: kiln::InvocationIndex::default(),
             test_name_filters: Vec::new(),
             codegen_flags: Vec::new(),
+            lints: Lints::default(),
             unused_diagnostics: true,
             lib_world: None,
             analysis_only: false,
@@ -501,9 +506,13 @@ pub async fn compile_with_host<H: CompilerHost>(
 /// Build unused-item warnings from the liveness classification: `DeadFunction`
 /// / `DeadGlobal` (reached by neither production nor tests) and
 /// `TestOnlyFunction` / `TestOnlyGlobal` (reached only by `test` blocks), then
-/// `UnusedImport`. Pure over `Semantics`; `is_test_world` suppresses the
-/// `TestOnly*` warnings.
-fn unused_diagnostics(sem: &semantics::Semantics, is_test_world: bool) -> Vec<Diagnostic> {
+/// `UnusedImport`, in the modules `lints` names. Pure over `Semantics`;
+/// `is_test_world` suppresses the `TestOnly*` warnings.
+fn unused_diagnostics(
+    sem: &semantics::Semantics,
+    lints: Lints,
+    is_test_world: bool,
+) -> Vec<Diagnostic> {
     let mut out = Vec::new();
     let mut collect = |ids: &[AstId], fn_code: Code, global_code: Code, reason: &str| {
         for id in ids {
@@ -513,6 +522,9 @@ fn unused_diagnostics(sem: &semantics::Semantics, is_test_world: bool) -> Vec<Di
             let Some(module) = sem.modules.get(owning) else {
                 continue;
             };
+            if !lints.reports_in(owning, module) {
+                continue;
+            }
             let filename = owning.source_path();
             for item in &module.items {
                 let (code, message, span) = match item {
@@ -558,7 +570,7 @@ fn unused_diagnostics(sem: &semantics::Semantics, is_test_world: bool) -> Vec<Di
         );
     }
 
-    out.extend(unused_import::unused_import_diagnostics(sem));
+    out.extend(unused_import::unused_import_diagnostics(sem, lints));
     out
 }
 
@@ -620,17 +632,26 @@ impl PackageSources {
 }
 
 /// The unused diagnostics of a whole package, decided over all its members at
-/// once. `None` when the package does not elaborate; its errors reach `host`.
+/// once, in the modules `lints` names. `None` when the package does not
+/// elaborate; its errors reach `host`.
 pub async fn package_unused_diagnostics<H: CompilerHost>(
     host: &H,
     package: &PackageSources,
     invocations: kiln::InvocationIndex,
+    lints: Lints,
     log_level: LogLevel,
 ) -> Option<Vec<Diagnostic>> {
+    assert_ne!(
+        lints,
+        Lints::Off,
+        "a package with its lints off has none to decide"
+    );
     let logger = Logger::new(host, log_level);
-    let load = loader::ModuleLoader::new(host, log_level)
-        .with_invocations(invocations)
-        .with_generated_bodies_skipped()
+    let mut loader = loader::ModuleLoader::new(host, log_level).with_invocations(invocations);
+    if lints == Lints::Own {
+        loader = loader.with_generated_bodies_skipped();
+    }
+    let load = loader
         .load_all(&package.entry_source(), Some(&package.entry_name()))
         .await
         .map_err(|e| {
@@ -661,7 +682,7 @@ pub async fn package_unused_diagnostics<H: CompilerHost>(
     let reported = load
         .modules
         .iter()
-        .filter(|(source, module)| is_reported(source, module))
+        .filter(|(source, module)| lints.reports_in(source, module))
         .map(|(source, _)| source);
     let walked = reach(reported, |source| {
         importers.get(source).cloned().unwrap_or_default()
@@ -676,7 +697,8 @@ pub async fn package_unused_diagnostics<H: CompilerHost>(
         walked,
     }));
     let sem = semantics::semantics_with_logger(load, &logger, false, None, &scope);
-    sem.is_complete().then(|| unused_diagnostics(&sem, false))
+    sem.is_complete()
+        .then(|| unused_diagnostics(&sem, lints, false))
 }
 
 /// `from`, and every module `next` leads to from there.
@@ -694,29 +716,58 @@ fn reach<'a>(
     reached
 }
 
-/// Every source-level lint. `unused` gates the unused lints alone, as
-/// `--no-unused` names them alone; the rest are waived by `allow` instead.
+/// The modules the source-level lints report in.
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Default)]
+pub enum Lints {
+    /// None: every lint is off.
+    Off,
+    /// The entry package's own modules, a `#![generated]` one aside. Its
+    /// generator, not whoever compiles it, is the one who could fix it.
+    #[default]
+    Own,
+    /// The entry package's own modules, `#![generated]` ones included, for a
+    /// generator's author.
+    Generated,
+}
+
+impl Lints {
+    /// Whether a lint reports in `module`, loaded from `source`.
+    pub(crate) fn reports_in(self, source: &ModuleSource, module: &ast::Module) -> bool {
+        source.is_entry_package()
+            && match self {
+                Self::Off => false,
+                Self::Own => !module.has_generated(),
+                Self::Generated => true,
+            }
+    }
+}
+
+/// Every source-level lint, in the modules `lints` names. `unused` gates the
+/// unused lints alone; the rest are waived by `allow` instead.
 pub fn lint_diagnostics(
     sem: &semantics::Semantics,
+    lints: Lints,
     unused: bool,
     is_test_world: bool,
 ) -> Vec<Diagnostic> {
-    let mut lints = shadowing_diagnostics(sem);
-    lints.extend(undecided_effect_diagnostics(sem));
-    lints.extend(self_comparison_diagnostics(sem));
-    lints.extend(constant_arithmetic_diagnostics(sem));
-    lints.extend(hex_suffix_lookalike_diagnostics(sem));
-    lints.extend(float_literal_pattern_diagnostics(sem));
-    if unused {
-        lints.extend(unused_diagnostics(sem, is_test_world));
+    if lints == Lints::Off {
+        return Vec::new();
     }
-    lints
+    let mut out = shadowing_diagnostics(sem, lints);
+    out.extend(undecided_effect_diagnostics(sem, lints));
+    out.extend(self_comparison_diagnostics(sem, lints));
+    out.extend(constant_arithmetic_diagnostics(sem, lints));
+    out.extend(hex_suffix_lookalike_diagnostics(sem, lints));
+    out.extend(float_literal_pattern_diagnostics(sem, lints));
+    if unused {
+        out.extend(unused_diagnostics(sem, lints, is_test_world));
+    }
+    out
 }
 
 /// Source-level `ShadowedName` warnings: every binder the resolution pass found
 /// taking a name that already reached a declaration or an enclosing binder.
-/// Stdlib modules are left alone, as the unused lints leave them.
-fn shadowing_diagnostics(sem: &semantics::Semantics) -> Vec<Diagnostic> {
+fn shadowing_diagnostics(sem: &semantics::Semantics, lints: Lints) -> Vec<Diagnostic> {
     let Some(resolutions) = sem.resolutions() else {
         return Vec::new();
     };
@@ -724,7 +775,7 @@ fn shadowing_diagnostics(sem: &semantics::Semantics) -> Vec<Diagnostic> {
     resolutions
         .shadowings()
         .iter()
-        .filter(|s| s.module.is_entry_package())
+        .filter(|s| lints.reports_in(&s.module, &sem.modules[&s.module]))
         .map(|shadowing| {
             let what = match shadowing.shadowed {
                 Shadowed::Decl(def) => format!("the {} of the same name", defs.kind(def).label()),
@@ -749,10 +800,10 @@ fn shadowing_diagnostics(sem: &semantics::Semantics) -> Vec<Diagnostic> {
 
 /// Source-level `UndecidedEffects` diagnostics: every trait head that says
 /// nothing about the effects its impls may declare.
-fn undecided_effect_diagnostics(sem: &semantics::Semantics) -> Vec<Diagnostic> {
+fn undecided_effect_diagnostics(sem: &semantics::Semantics, lints: Lints) -> Vec<Diagnostic> {
     let mut out = Vec::new();
     for (src, module) in &sem.modules {
-        if !src.is_entry_package()
+        if !lints.reports_in(src, module)
             || inner_attrs_allow(&module.inner_attributes, lint::UNDECIDED_EFFECTS)
         {
             continue;
@@ -1468,7 +1519,12 @@ fn compile_after_load<H: CompilerHost>(
         )
     });
 
-    for diag in lint_diagnostics(&sem, options.unused_diagnostics, is_test_world) {
+    for diag in lint_diagnostics(
+        &sem,
+        options.lints,
+        options.unused_diagnostics,
+        is_test_world,
+    ) {
         // A lint carries the severity it words itself at, so one that only
         // remarks is not raised to a warning on the way out.
         match (diag.severity, diag.span) {

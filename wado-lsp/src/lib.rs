@@ -695,7 +695,12 @@ impl Engine {
             diagnostics::from_compiler_diagnostic(d, lines.as_ref(), encoding)
         };
         let semantic = snapshot.semantic_diagnostics();
-        let lints = wado_compiler::lint_diagnostics(&snapshot.sem, self.unused_diagnostics, false);
+        let lints = wado_compiler::lint_diagnostics(
+            &snapshot.sem,
+            wado_compiler::Lints::default(),
+            self.unused_diagnostics,
+            false,
+        );
         snapshot
             .diagnostics
             .iter()

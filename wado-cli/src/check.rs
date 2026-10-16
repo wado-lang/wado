@@ -49,7 +49,13 @@ enum Opt {
 impl Opt {
     const ALL: &[Self] = &[Self::Warn, Self::World, Self::Help];
 
-    const KNOBS: &[CompileKnobOpt] = &[CompileKnobOpt::LogLevel, CompileKnobOpt::NoCache];
+    const KNOBS: &[CompileKnobOpt] = &[
+        CompileKnobOpt::LogLevel,
+        CompileKnobOpt::NoCache,
+        CompileKnobOpt::NoLint,
+        CompileKnobOpt::Lint,
+        CompileKnobOpt::LintGenerated,
+    ];
 
     const fn spec(self) -> args::OptSpec {
         match self {
@@ -192,7 +198,7 @@ async fn check_declared_worlds(
         entry_runs
             .push(check_entry(&target.entry, world, entry_project, !whole_package, opts).await?);
     }
-    if whole_package {
+    if whole_package && opts.knobs.lints != wado_compiler::Lints::Off {
         check_package_unused(project, &targets, &entry_runs, opts).await?;
     }
     Ok(())
@@ -283,6 +289,7 @@ async fn check_package_unused(
         &host,
         &package,
         invocations,
+        opts.knobs.lints,
         opts.knobs.log_level,
     )
     .await;
@@ -331,6 +338,7 @@ async fn check_entry(
         lib_world,
         opt_level: wado_compiler::OptLevel::O0,
         analysis_only: true,
+        lints: opts.knobs.lints,
         unused_diagnostics: unused,
         invocations: invocations.clone(),
         ..Default::default()

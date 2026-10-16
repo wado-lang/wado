@@ -54,6 +54,9 @@ impl Opt {
         CompileKnobOpt::NoCache,
         CompileKnobOpt::Allocator,
         CompileKnobOpt::Feature,
+        CompileKnobOpt::NoLint,
+        CompileKnobOpt::Lint,
+        CompileKnobOpt::LintGenerated,
     ];
 
     const fn spec(self) -> args::OptSpec {

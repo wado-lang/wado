@@ -307,8 +307,10 @@ impl Resolutions {
                 pattern_site: PatternSite::Test,
                 pattern_names: None,
                 reported_in_pattern: hashmap::IndexSet::default(),
-                lint_shadowing: !module.has_generated()
-                    && !ast::inner_attrs_allow(module.inner_attributes(), ast::lint::SHADOWED_NAME),
+                lint_shadowing: !ast::inner_attrs_allow(
+                    module.inner_attributes(),
+                    ast::lint::SHADOWED_NAME,
+                ),
             };
             for item in &module.items {
                 resolver.visit_item(item);

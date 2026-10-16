@@ -1,6 +1,7 @@
 //! The `unused_imports` lint: a `use` bringing in a name its module never
 //! refers to. See `docs/spec-diagnostics.md`.
 
+use crate::Lints;
 use crate::ast::{Item, UseDecl, UseItem, attrs_allow, inner_attrs_allow, lint};
 use crate::compiler_host::{Code, Diagnostic, DiagnosticSpan, Severity};
 use crate::defs::{DefId, DefKind};
@@ -11,17 +12,22 @@ use crate::resolve::Resolutions;
 use crate::semantics::Semantics;
 use crate::token::Span;
 
-/// Source-level `UnusedImport` warnings: every name a private `use` brings in
-/// that no reference site of its module reaches. A re-export is used by
-/// whoever imports it, so it is never reported.
-pub fn unused_import_diagnostics(sem: &Semantics) -> Vec<Diagnostic> {
+/// Source-level `UnusedImport` warnings, in the modules `lints` names: every
+/// name a private `use` brings in that no reference site of its module
+/// reaches. A re-export is used by whoever imports it, so it is never reported.
+pub fn unused_import_diagnostics(sem: &Semantics, lints: Lints) -> Vec<Diagnostic> {
     let Some(resolutions) = sem.resolutions() else {
         return Vec::new();
     };
-    let reported = &sem.liveness.reported_modules;
-    let mut dispatched = dispatched_traits(sem, resolutions, reported);
+    let reported: IndexSet<ModuleSource> = sem
+        .modules
+        .iter()
+        .filter(|(src, module)| lints.reports_in(src, module))
+        .map(|(src, _)| src.clone())
+        .collect();
+    let mut dispatched = dispatched_traits(sem, resolutions, &reported);
     let mut out = Vec::new();
-    for src in reported {
+    for src in &reported {
         let module = &sem.modules[src];
         if inner_attrs_allow(&module.inner_attributes, lint::UNUSED_IMPORTS) {
             continue;

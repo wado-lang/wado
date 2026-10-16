@@ -84,6 +84,9 @@ pub enum CompileKnobOpt {
     Feature,
     NoCache,
     NoValidate,
+    NoLint,
+    Lint,
+    LintGenerated,
 }
 
 impl CompileKnobOpt {
@@ -152,6 +155,25 @@ impl CompileKnobOpt {
                 value: None,
                 desc: "Skip Wasm validation (output raw bytes even if invalid)",
             },
+            // The three set one value, so the last one given wins.
+            Self::NoLint => OptSpec {
+                long: Some("no-lint"),
+                short: None,
+                value: None,
+                desc: "Report no lint warnings, and skip the passes only lints need",
+            },
+            Self::Lint => OptSpec {
+                long: Some("lint"),
+                short: None,
+                value: None,
+                desc: "Report lint warnings in the package's own modules,\n`#![generated]` ones aside (the default; undoes --no-lint)",
+            },
+            Self::LintGenerated => OptSpec {
+                long: Some("lint-generated"),
+                short: None,
+                value: None,
+                desc: "Report lint warnings in `#![generated]` modules too",
+            },
         }
     }
 }
@@ -179,6 +201,9 @@ pub struct CompileKnobs {
     /// `-f <flag>` codegen feature flags, forwarded verbatim to
     /// `CompilerOptions::codegen_flags`; the compiler validates them.
     pub codegen_flags: Vec<String>,
+    /// `--no-lint` / `--lint` / `--lint-generated`, forwarded to
+    /// `CompilerOptions::lints`.
+    pub lints: wado_compiler::Lints,
     /// `-D NAME=value` overrides, `--param-*` policy, and whatever fallbacks the
     /// subcommand supplies for itself.
     pub params: ParamInputs,
@@ -195,6 +220,7 @@ impl Default for CompileKnobs {
             opt_threads: None,
             allocator: None,
             codegen_flags: Vec::new(),
+            lints: wado_compiler::Lints::default(),
             params: ParamInputs::default(),
         }
     }
@@ -243,6 +269,9 @@ impl CompileKnobs {
             CompileKnobOpt::Feature => self.codegen_flags.push(args::require_string(parser)?),
             CompileKnobOpt::NoCache => self.no_cache = true,
             CompileKnobOpt::NoValidate => self.skip_validation = true,
+            CompileKnobOpt::NoLint => self.lints = wado_compiler::Lints::Off,
+            CompileKnobOpt::Lint => self.lints = wado_compiler::Lints::Own,
+            CompileKnobOpt::LintGenerated => self.lints = wado_compiler::Lints::Generated,
         }
         Ok(())
     }

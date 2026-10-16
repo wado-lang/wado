@@ -3,6 +3,7 @@
 //! the scrutinee's type; this walk reports them where no `allow` waives it. See
 //! `docs/spec-diagnostics.md`.
 
+use crate::Lints;
 use crate::ast::{
     AstId, AstVisitor, Attribute, Condition, ConditionElement, Stmt, attrs_allow,
     inner_attrs_allow, lint, walk_condition, walk_stmt,
@@ -14,13 +15,13 @@ use crate::token::Span;
 
 /// Source-level `FloatLiteralPattern` warnings, one per pattern the elaborator
 /// noted.
-pub fn float_literal_pattern_diagnostics(sem: &Semantics) -> Vec<Diagnostic> {
+pub fn float_literal_pattern_diagnostics(sem: &Semantics, lints: Lints) -> Vec<Diagnostic> {
     let mut out = Vec::new();
     for (src, noted) in sem.inexact_float_patterns() {
-        if !src.is_entry_package() {
+        let module = &sem.modules[&src];
+        if !lints.reports_in(&src, module) {
             continue;
         }
-        let module = &sem.modules[&src];
         let mut walk = Sites {
             noted,
             waived: inner_attrs_allow(&module.inner_attributes, lint::FLOAT_LITERAL_PATTERN),

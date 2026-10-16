@@ -3,8 +3,8 @@
 //!
 //! Slice 1 covers `DeadFunction` / `DeadGlobal` for free functions and
 //! globals: an item never reachable from the export boundary is reported;
-//! a reachable one (and the export root itself) is not. The `--no-unused`
-//! toggle (`CompilerOptions::unused_diagnostics`) silences the lints.
+//! a reachable one (and the export root itself) is not.
+//! `CompilerOptions::unused_diagnostics` silences the lints.
 
 use crate::common::{in_memory_host, runtime};
 use wado_compiler::{Code, CompilerOptions, OptLevel};
@@ -167,7 +167,7 @@ export fn run() {}
     );
     assert!(
         diags.is_empty(),
-        "`--no-unused` must silence the lints, got {diags:?}"
+        "`unused_diagnostics: false` must silence the lints, got {diags:?}"
     );
 }
 

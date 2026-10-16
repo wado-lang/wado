@@ -8,7 +8,17 @@ lints, the checks the compiler runs on code it accepts.
 
 [`#[allow(...)]`](./spec-attributes.md#allow) waives a lint. A lint reports
 only in the modules of the package being compiled, never in the standard
-library or a dependency.
+library or a dependency, and never in a
+[`#![generated]`](./spec-attributes.md#generated) module: its generator, not
+whoever compiles it, is the one who could fix it.
+
+Every compiling subcommand of `wado` takes three flags that choose where the
+lints report. They set one value, so the last one given wins:
+
+- `--lint`: the rule above. It is the default.
+- `--lint-generated`: `#![generated]` modules too, for a generator's author.
+- `--no-lint`: nowhere. A run that wants only errors skips the passes only the
+  lints need.
 
 The lints are:
 
@@ -249,8 +259,6 @@ An item the roots do not reach is reported one of two ways:
   the test world omits this warning too, since there those tests are what the
   item is for.
 - Reached from nothing: "never used".
-
-An item in a `#![generated]` module is never reported.
 
 `wado check` given a package, or given nothing inside one, decides the lint
 over the whole package. A compilation of one file loads only what that file

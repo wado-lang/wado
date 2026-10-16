@@ -33,9 +33,6 @@ pub(crate) struct Liveness {
     /// Candidates reachable from tests but not production (`∈ T \ E`), in
     /// source order. `TestOnlyFunction` / `TestOnlyGlobal`.
     pub(crate) test_only_items: Vec<AstId>,
-    /// The modules whose items are report candidates ([`is_reported`]). Every
-    /// unused lint reports these alone.
-    pub(crate) reported_modules: IndexSet<ModuleSource>,
     /// Local last-use liveness (WEP 2026-05-21, value-copy client). Each entry
     /// is the `AstId` of an identifier *use* that is the final use, on every
     /// path, of a move-eligible local binding, filled only where TIR is built
@@ -69,8 +66,8 @@ pub(crate) struct PackageScope {
     /// What the entries reach by `use`: production code. A member outside it
     /// is test code.
     pub(crate) production: IndexSet<ModuleSource>,
-    /// The modules that reach a reported one by `use`, itself included. A
-    /// module outside it names no candidate, and impl methods are roots, so
+    /// The modules that reach one a lint reports in by `use`, itself included.
+    /// A module outside it names no reported item, and impl methods are roots, so
     /// its bodies decide nothing and go unwalked: Gale's generated parsers,
     /// most of what its tests load, import only the standard library.
     pub(crate) walked: IndexSet<ModuleSource>,
@@ -125,13 +122,6 @@ impl LivenessScope {
     }
 }
 
-/// Whether the items of `module` are report candidates. A `#![generated]`
-/// module is machine-emitted (e.g. Gale's parser output), not hand-edited
-/// source, so linting it is pure noise.
-pub(crate) fn is_reported(source: &ModuleSource, module: &Module) -> bool {
-    source.is_entry_package() && !module.has_generated()
-}
-
 /// Compute liveness over every loaded module.
 ///
 /// `world_export_names` holds every export name across all registered worlds; a
@@ -177,15 +167,10 @@ pub(crate) fn compute(
         }
     }
 
-    let mut reported_modules = IndexSet::default();
     for (source, module) in modules {
         let roots = scope.module_roots(source);
-        // A generated module still seeds exports / edges below, so it keeps the
-        // items it calls live.
-        let reported = is_reported(source, module);
-        if reported {
-            reported_modules.insert(source.clone());
-        }
+        // Which candidates a lint reports is the emitter's to decide.
+        let candidates = source.is_entry_package();
         // A file-level `#![allow(dead_code)]` waives the lint for every item in
         // the module — the idiom for test-helper files whose functions exist
         // only to back `test` blocks.
@@ -214,7 +199,7 @@ pub(crate) fn compute(
                     // user-authored code that could be "dead". `#[allow(dead_code)]`
                     // (item- or module-level) opts an item out of the lint while
                     // leaving its call-graph edges intact.
-                    if reported
+                    if candidates
                         && func.body.is_some()
                         && !module_allows_dead
                         && !ast::attrs_allow(&func.attrs, ast::lint::DEAD_CODE)
@@ -238,7 +223,7 @@ pub(crate) fn compute(
                             graph.seed_export(key);
                         }
                     }
-                    if reported
+                    if candidates
                         && !module_allows_dead
                         && !ast::attrs_allow(&global.attributes, ast::lint::DEAD_CODE)
                     {
@@ -345,10 +330,7 @@ pub(crate) fn compute(
         }
     }
 
-    Liveness {
-        reported_modules,
-        ..graph.finish()
-    }
+    graph.finish()
 }
 
 /// Where a declared method's only call comes from.
@@ -1192,7 +1174,6 @@ impl Graph {
             emit_live,
             dead_items,
             test_only_items,
-            reported_modules: IndexSet::default(),
             last_uses: IndexSet::default(),
             moved_spans: IndexSet::default(),
         }

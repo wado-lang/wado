@@ -5,6 +5,7 @@
 use std::cell::OnceCell;
 use std::mem;
 
+use crate::Lints;
 use crate::ast::{
     AstVisitor, Attribute, BinaryOp, Expr, Literal, SelfKind, UnaryOp, attrs_allow,
     inner_attrs_allow, lint, walk_expr,
@@ -19,11 +20,11 @@ use crate::unparse::{binary_op_str, unparse_expr_source};
 /// Source-level `SelfComparison` warnings: every comparison, a chain's adjacent
 /// pairs included, whose two operands are one expression that evaluates the
 /// same way twice.
-pub fn self_comparison_diagnostics(sem: &Semantics) -> Vec<Diagnostic> {
+pub fn self_comparison_diagnostics(sem: &Semantics, lints: Lints) -> Vec<Diagnostic> {
     let probe = OnceCell::new();
     let mut out = Vec::new();
     for (src, module) in &sem.modules {
-        if !src.is_entry_package()
+        if !lints.reports_in(src, module)
             || inner_attrs_allow(&module.inner_attributes, lint::SELF_COMPARISON)
         {
             continue;

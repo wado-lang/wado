@@ -3,11 +3,16 @@
 //! are production code, every other member is test code.
 
 use crate::common::{in_memory_host, runtime};
-use wado_compiler::{Code, PackageSources, kiln::InvocationIndex};
+use wado_compiler::{Code, Lints, PackageSources, kiln::InvocationIndex};
 
 /// The unused diagnostics of a package made of `files`, the first of which is
 /// its one entry, as `(code, message)` pairs.
 fn package_unused(files: &[(&str, &str)]) -> Vec<(Code, String)> {
+    package_unused_in(files, Lints::default())
+}
+
+/// [`package_unused`], reported in the modules `lints` names.
+fn package_unused_in(files: &[(&str, &str)], lints: Lints) -> Vec<(Code, String)> {
     let rooted: Vec<(String, &str)> = files
         .iter()
         .map(|(path, source)| (format!("./{path}"), *source))
@@ -24,6 +29,7 @@ fn package_unused(files: &[(&str, &str)]) -> Vec<(Code, String)> {
             &host,
             &package,
             InvocationIndex::default(),
+            lints,
             wado_compiler::LogLevel::default(),
         ))
         .unwrap_or_else(|| panic!("the package must elaborate: {:?}", host.diagnostics()));
@@ -194,6 +200,31 @@ pub fn parse() -> i32 {
         ),
     ]);
     assert!(diags.is_empty(), "{diags:?}");
+}
+
+#[test]
+fn a_generated_module_reports_only_when_its_lints_are_asked_for() {
+    let files = [
+        (
+            "lib.wado",
+            r#"use { parse } from "./parser.wado"; pub fn api() -> i32 { return parse(); }"#,
+        ),
+        (
+            "parser.wado",
+            r#"#![generated(by = "test")]
+pub fn parse() -> i32 { return 1; }
+fn unused_rule() -> i32 { return 2; }"#,
+        ),
+    ];
+    let dead = |diags: &[(Code, String)]| {
+        reported(
+            diags,
+            Code::DeadFunction,
+            "function `unused_rule` is never used",
+        )
+    };
+    assert!(!dead(&package_unused(&files)));
+    assert!(dead(&package_unused_in(&files, Lints::Generated)));
 }
 
 #[test]

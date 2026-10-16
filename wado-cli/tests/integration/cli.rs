@@ -789,6 +789,82 @@ fn test_check_reports_a_test_excluded_module_the_package_reaches() {
         .stderr(predicate::str::contains("`dead_one` is never used"));
 }
 
+/// `--no-lint`, `--lint` and `--lint-generated` set one value, so the last one
+/// given decides where the lints report.
+#[test]
+fn test_lint_flags_choose_where_lints_report() {
+    let tmp = tempfile::tempdir().unwrap();
+    let dir = tmp.path();
+    std::fs::write(
+        dir.join("main.wado"),
+        "use { g } from \"./g.wado\";\nfn dead_own() {}\nexport fn run() { g(); }\n",
+    )
+    .unwrap();
+    std::fs::write(
+        dir.join("g.wado"),
+        "#![generated(by = \"test\")]\npub fn g() {}\nfn dead_generated() {}\n",
+    )
+    .unwrap();
+
+    let cases: [(&[&str], bool, bool); 5] = [
+        (&[], true, false),
+        (&["--lint-generated"], true, true),
+        (&["--no-lint"], false, false),
+        (&["--no-lint", "--lint"], true, false),
+        (&["--lint-generated", "--no-lint"], false, false),
+    ];
+    for (flags, own, generated) in cases {
+        let report = |name: &str, expected: bool| {
+            let found = predicate::str::contains(format!("`{name}` is never used"));
+            if expected {
+                found.boxed()
+            } else {
+                found.not().boxed()
+            }
+        };
+        wado()
+            .current_dir(dir)
+            .args(["compile", "--wat-to-stdout"])
+            .args(flags)
+            .arg("main.wado")
+            .assert()
+            .success()
+            .stderr(report("dead_own", own))
+            .stderr(report("dead_generated", generated));
+    }
+}
+
+/// `wado check --no-lint` skips the package's unused pass, which only lints
+/// need.
+#[test]
+fn test_check_no_lint_reports_no_unused_item() {
+    let tmp = tempfile::tempdir().unwrap();
+    let dir = tmp.path();
+    std::fs::write(
+        dir.join("wado.toml"),
+        "[package]\nname = \"pkg\"\nnamespace = \"wado\"\nversion = \"0.1.0\"\nlib = \"lib.wado\"\n",
+    )
+    .unwrap();
+    std::fs::write(
+        dir.join("lib.wado"),
+        "pub fn api() -> i32 { return 1; }\nfn dead_one() {}\n",
+    )
+    .unwrap();
+
+    wado()
+        .current_dir(dir)
+        .arg("check")
+        .assert()
+        .success()
+        .stderr(predicate::str::contains("`dead_one` is never used"));
+    wado()
+        .current_dir(dir)
+        .args(["check", "--no-lint"])
+        .assert()
+        .success()
+        .stderr(predicate::str::contains("never used").not());
+}
+
 /// A member's file name reaches the package's load as written, whatever
 /// characters a string literal escapes.
 #[test]

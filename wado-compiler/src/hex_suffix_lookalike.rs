@@ -2,6 +2,7 @@
 //! `_f32` or `_f64`, whose last digits read as a float type. See
 //! `docs/spec-diagnostics.md`.
 
+use crate::Lints;
 use crate::ast::{
     AstVisitor, Attribute, Expr, Literal, attrs_allow, inner_attrs_allow, lint, walk_expr,
 };
@@ -12,10 +13,10 @@ use crate::token::Span;
 
 /// Source-level `HexSuffixLookalike` warnings: every hex literal expression
 /// whose last `_`-separated group spells a float type.
-pub fn hex_suffix_lookalike_diagnostics(sem: &Semantics) -> Vec<Diagnostic> {
+pub fn hex_suffix_lookalike_diagnostics(sem: &Semantics, lints: Lints) -> Vec<Diagnostic> {
     let mut out = Vec::new();
     for (src, module) in &sem.modules {
-        if !src.is_entry_package()
+        if !lints.reports_in(src, module)
             || inner_attrs_allow(&module.inner_attributes, lint::HEX_SUFFIX_LOOKALIKE)
         {
             continue;

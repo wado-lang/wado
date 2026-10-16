@@ -2,6 +2,7 @@
 //! whose literal operands already say it wraps or traps. See
 //! `docs/spec-diagnostics.md`.
 
+use crate::Lints;
 use crate::ast::{
     AstVisitor, Attribute, BinaryExpr, BinaryOp, Expr, UnaryOp, attrs_allow, inner_attrs_allow,
     lint, walk_expr,
@@ -20,10 +21,10 @@ use crate::token::Span;
 use crate::unparse::unparse_expr_source;
 
 /// Source-level `ArithmeticOverflow` and `UnconditionalTrap` warnings.
-pub fn constant_arithmetic_diagnostics(sem: &Semantics) -> Vec<Diagnostic> {
+pub fn constant_arithmetic_diagnostics(sem: &Semantics, lints: Lints) -> Vec<Diagnostic> {
     let mut out = Vec::new();
     for (src, module) in &sem.modules {
-        if !src.is_entry_package() {
+        if !lints.reports_in(src, module) {
             continue;
         }
         let waived = |name| inner_attrs_allow(&module.inner_attributes, name);

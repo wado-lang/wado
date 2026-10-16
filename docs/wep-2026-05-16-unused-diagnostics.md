@@ -211,8 +211,9 @@ it.
 A module carrying the `#![generated]` inner attribute (Gale parser output,
 `wado-from-idl` bindings, and any other machine-emitted source) is excluded
 from the lint entirely: it is never hand-edited, so flagging its unused items
-is pure noise. The module still seeds the liveness closure, so items it calls
-stay live. This is the principled alternative to embedding `#[allow(dead_code)]`
+is pure noise. Every other lint excludes it the same way, and
+`--lint-generated` takes it back in for a generator's author. The module still
+seeds the liveness closure, so items it calls stay live. This is the principled alternative to embedding `#[allow(dead_code)]`
 in inlined runtime support — generated parsers carry the marker already, so no
 attribute is baked into every emitted file.
 
@@ -249,16 +250,17 @@ attribute is baked into every emitted file.
 | `wado-compiler/src/logger.rs`                     | Adds `Logger::warn_at(code, message, span, file)` for span-bearing warnings.                                                                                                              |
 | `wado-compiler/src/lib.rs`                        | Adds `CompilerOptions::unused_diagnostics`. Invokes the diagnostic emitter once the elaborator has produced `Semantics` and its `Liveness`.                                               |
 | `wado-compiler/src/ast_index.rs`                  | Adds `is_param(id)` predicate (1-bit table) so the reference pass can distinguish `UnusedVariable` from `UnusedParameter`.                                                                |
-| `wado-cli`                                        | Adds `--no-unused` flag.                                                                                                                                                                  |
+| `wado-cli`                                        | Adds `--no-lint`, which turns every lint off, these included.                                                                                                                             |
 | `wado-lsp`                                        | Invokes the diagnostic emitter from `Engine::diagnostics`. Renders `UnusedImport` / `UnusedVariable` / `UnusedParameter` as `Hint`-severity unused-token decorations as well.             |
 
 ### Algorithms
 
 #### Unused imports
 
-`unused_import.rs` walks every file-private `use` in a module liveness
-reports (`Liveness::reported_modules`), so both lints answer for the
-same files: a package check walks no dependency's bodies. The resolver
+`unused_import.rs` walks every file-private `use` in a module a lint reports
+in (`Lints::reports_in`), the one predicate every lint and the dead-item
+emitter read, so both unused lints answer for the same files: a package check
+walks no dependency's bodies. The resolver
 records, per module, the import entries, by local name, that answered
 one of its sites. A name written where no site holds it, which a later
 pass reads by name, counts as one: a `#[benign(E)]` argument, and a
@@ -578,7 +580,8 @@ the ref-parameter detection (`ResolvedType::Ref` / `MutRef` over
 
 #### Phase 4 — CLI wiring and reference pass
 
-- [ ] `wado-cli`: add `--no-unused` flag for `compile` / `run` / `serve` / `dump`.
+- [x] `wado-cli`: `--no-lint`, `--lint` and `--lint-generated` on every
+  compiling subcommand, in place of an unused-only `--no-unused`.
 - [x] Reference pass: `UnusedImport`.
 - [ ] Reference pass: `UnusedVariable` / `UnusedParameter`.
 - [ ] Method-level dead detection (the dispatch edges; stop seeding every method live).

@@ -180,6 +180,9 @@ impl Opt {
         CompileKnobOpt::NoCache,
         CompileKnobOpt::Allocator,
         CompileKnobOpt::Feature,
+        CompileKnobOpt::NoLint,
+        CompileKnobOpt::Lint,
+        CompileKnobOpt::LintGenerated,
     ];
 
     const fn spec(self) -> args::OptSpec {
@@ -385,6 +388,7 @@ pub async fn try_compile_with_run_cache(
         log_level: Some(knobs.log_level),
         allocator: knobs.allocator.clone(),
         codegen_flags: knobs.codegen_flags.clone(),
+        lints: knobs.lints,
         params: knobs.params.clone(),
         target_world: flags.target_world.clone(),
         invocations: pipeline_outcome.invocations,

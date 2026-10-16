@@ -171,8 +171,8 @@ fn toggling_unused_diagnostics_takes_effect_without_reopen() {
     });
 }
 
-/// `set_unused_diagnostics(false)` silences the unused lints alone, as
-/// `--no-unused` does; every other lint the batch compiler emits still shows.
+/// `set_unused_diagnostics(false)` silences the unused lints alone; every
+/// other lint the batch compiler emits still shows.
 #[test]
 fn disabling_unused_diagnostics_keeps_the_other_lints() {
     futures::executor::block_on(async {
