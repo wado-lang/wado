@@ -355,40 +355,6 @@ fn break_unless(cond: TirExpr, cond_span: Span, span: Span) -> TirStmt {
     )
 }
 
-/// `target = value;` as a statement.
-<<<<<<< HEAD
-||||||| 5e3b10b2a
-fn assign_stmt(target: TirExpr, value: TirExpr, span: Span) -> TirStmt {
-    let type_id = value.type_id;
-    TirStmt::new(
-        TirStmtKind::Expr(TirExpr::new(
-            TirExprKind::Assign {
-                target: Box::new(target),
-                value: Box::new(value),
-            },
-            type_id,
-            span,
-        )),
-        span,
-    )
-}
-
-=======
-fn assign_stmt(target: TirExpr, value: TirExpr, span: Span) -> TirStmt {
-    TirStmt::new(
-        TirStmtKind::Expr(TirExpr::new(
-            TirExprKind::Assign {
-                target: Box::new(target),
-                value: Box::new(value),
-            },
-            TypeTable::UNIT,
-            span,
-        )),
-        span,
-    )
-}
-
->>>>>>> origin/main
 pub(super) struct ReifyAssertCaptureContext {
     pub(super) slots: Vec<ReifyAssertSlot>,
     pub(super) ast_id_to_slot: IndexMap<AstId, usize>,

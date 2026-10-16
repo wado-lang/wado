@@ -7722,14 +7722,13 @@ impl TirBlock {
 
 /// `target = value;`
 pub fn assign_stmt(target: TirExpr, value: TirExpr, span: Span) -> TirStmt {
-    let type_id = value.type_id;
     TirStmt::new(
         TirStmtKind::Expr(TirExpr::new(
             TirExprKind::Assign {
                 target: Box::new(target),
                 value: Box::new(value),
             },
-            type_id,
+            TypeTable::UNIT,
             span,
         )),
         span,
