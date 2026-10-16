@@ -16,6 +16,7 @@ use crate::compiler_host::{
     SourceError,
 };
 use crate::defs::{DefId, DefKind};
+use crate::elaborator::liveness::LivenessScope;
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::loader::ModuleLoader;
 use crate::logger::Logger;
@@ -129,7 +130,13 @@ fn build_snapshot() -> Semantics {
     .expect("stdlib snapshot loader should succeed");
 
     // The snapshot caches stdlib TIR for batch reuse, so build it.
-    let sem = semantics_with_logger(load_result, &logger, true, None);
+    let sem = semantics_with_logger(
+        load_result,
+        &logger,
+        true,
+        None,
+        &LivenessScope::Compilation,
+    );
     assert!(
         sem.is_complete(),
         "stdlib snapshot should compute semantics cleanly",

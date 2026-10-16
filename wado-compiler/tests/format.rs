@@ -203,6 +203,30 @@ fn test_format_keeps_identifier_attribute_array() {
     assert_eq!(formatted, source);
 }
 
+/// A string outside an expression keeps its escapes as written, as an
+/// expression's string literal does, though the compiler reads its value.
+#[test]
+fn test_format_keeps_escapes_in_use_and_attribute_strings() {
+    let source = concat!(
+        "#![generated(by = \"g\\u{61}le\", sources = [\"A\\u{42}.g4\"])]\n",
+        "\n",
+        "use { a } from \"./a\\u{41}.wado\"\n",
+        "    with {\n",
+        "        generator: { module: \"lib:\\u{67}ale\" },\n",
+        "    };\n",
+        "\n",
+        "struct S {\n",
+        "    #[wire(name = \"t\\u{79}pe\")]\n",
+        "    kind: i32,\n",
+        "}\n",
+        "\n",
+        "#[unavailable(\"use \\\"b\\\" instead\")]\n",
+        "pub fn c();\n",
+    );
+    let formatted = wado_compiler::format(source).expect("format failed");
+    assert_eq!(formatted, source);
+}
+
 /// `_` is a token of its own, and a CRLF inside a literal reads as LF.
 #[test]
 fn test_format_keeps_wildcard_binders_and_crlf_literals() {

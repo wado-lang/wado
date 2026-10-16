@@ -3,10 +3,11 @@
 
 use crate::common::{WEB_PACKAGE, compile_against_web};
 
-/// A program whose `body` runs with `el`, a fresh `Element`, in scope.
-fn on_an_element(body: &str) -> String {
+/// A program importing `names` whose `body` runs with `el`, a fresh `Element`,
+/// in scope.
+fn on_an_element(names: &str, body: &str) -> String {
     format!(
-        "use {{ Dom, Node }} from \"{WEB_PACKAGE}\";\n\
+        "use {{ {names} }} from \"{WEB_PACKAGE}\";\n\
          export fn run() with Dom {{\n\
              let doc = Dom::document();\n\
              let el = doc.create_element(\"div\", null);\n\
@@ -26,7 +27,7 @@ const UPCAST: &str =
 /// `resource`, so the component's imports carry no handle type.
 #[test]
 fn an_unrestricted_resource_crosses_as_a_bare_f64() {
-    let wat = compile_to_wat(&on_an_element("el.set_id(\"app\");"));
+    let wat = compile_to_wat(&on_an_element("Dom", "el.set_id(\"app\");"));
     assert!(
         wat.contains("wado-lang:web/element"),
         "the element interface should be imported: {wat}"
@@ -45,7 +46,7 @@ fn an_unrestricted_resource_crosses_as_a_bare_f64() {
 /// declares it, with the receiver passed through unchanged.
 #[test]
 fn an_inherited_method_calls_the_declaring_interface() {
-    let wat = compile_to_wat(&on_an_element(INHERITED));
+    let wat = compile_to_wat(&on_an_element("Dom", INHERITED));
     assert!(
         wat.contains("wado-lang:web/node"),
         "the declaring interface should be imported: {wat}"
@@ -57,8 +58,8 @@ fn an_inherited_method_calls_the_declaring_interface() {
 #[test]
 fn an_upcast_is_a_no_op() {
     assert_eq!(
-        compile_to_wat(&on_an_element(UPCAST)),
-        compile_to_wat(&on_an_element(INHERITED))
+        compile_to_wat(&on_an_element("Dom, Node", UPCAST)),
+        compile_to_wat(&on_an_element("Dom", INHERITED))
     );
 }
 
@@ -67,6 +68,7 @@ fn an_upcast_is_a_no_op() {
 #[test]
 fn an_optional_extern_handle_result_lifts_to_the_declared_option() {
     let wat = compile_to_wat(&on_an_element(
+        "Dom",
         "assert doc.get_element_by_id(\"app\") matches { None };\n\
          assert el.parent_node() matches { None };",
     ));
@@ -82,6 +84,7 @@ fn an_optional_extern_handle_result_lifts_to_the_declared_option() {
 #[test]
 fn an_optional_extern_handle_argument_keeps_the_declared_option() {
     let wat = compile_to_wat(&on_an_element(
+        "Dom, Node",
         "let node: Node = el;\n\
          assert !el.contains(null);\n\
          assert el.is_same_node(Option::Some(node));\n\

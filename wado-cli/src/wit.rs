@@ -209,7 +209,7 @@ async fn analysis_host(
         FilesystemCompilerHost::new(base_path.to_path_buf()),
         project,
         base_path,
-        source,
+        &[source],
         Acquisition::Build,
     )
     .await

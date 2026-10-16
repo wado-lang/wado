@@ -715,7 +715,7 @@ fn wire_fault(
             && NamePolicy::parse(value).is_none()
         {
             return Some(AttributeFault::NamePolicy {
-                value: value.clone(),
+                value: value.value.clone(),
             });
         }
         let mut before = written
@@ -887,6 +887,7 @@ impl<F: FnMut(WrittenAttribute<'_>)> AstVisitor for AttributeWalk<'_, F> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::ast::StrLit;
 
     fn check_args(name: &str, args: &[AttrArg], target: AttrTarget) -> Option<AttributeFault> {
         check(
@@ -903,7 +904,7 @@ mod tests {
 
     #[test]
     fn a_stdlib_attribute_is_refused_in_a_program_alone() {
-        let args = [AttrArg::Str("mem".to_string())];
+        let args = [AttrArg::Str(StrLit::new("mem"))];
         let written = WrittenAttribute {
             name: WASM_MODULE,
             args: &args,
@@ -974,7 +975,7 @@ mod tests {
                 PARAM,
                 &[AttrArg::KeyValue(
                     "from_env".to_string(),
-                    "PORT".to_string()
+                    StrLit::new("PORT")
                 )],
                 AttrTarget::Global
             )

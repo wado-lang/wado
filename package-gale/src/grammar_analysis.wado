@@ -8,7 +8,6 @@ use {
     ParserRule,
     Alternative,
     Element,
-    LiteralElement,
     RepeatElement,
     AltAction,
     push_alt_actions,
@@ -168,7 +167,7 @@ impl GrammarAnalysis {
     }
 
     /// Index of a parser rule by name (position in `parser_rules`), or -1.
-    /// Matches `atn.wado::build_atn`'s rule indexing, so the generated
+    /// Matches `atn.wado::build_atn_with`'s rule indexing, so the generated
     /// parser can push this onto its caller stack for full-context prediction.
     pub fn rule_index_of<S: AsStrSlice>(&self, name: S) -> i32 {
         if let Some(i) = self.rule_index.get_str(name) {

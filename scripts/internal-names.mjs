@@ -22,6 +22,8 @@ const ALLOWED = new Map([
   ["__cm_ended", "a field lib/core/prelude/types.wado declares"],
   ["__wado_query__", "a synthetic module path, not an identifier"],
   ["__wado_probe__", "a synthetic module path, not an identifier"],
+  ["__wado_q", "a binding `wado query` writes into its synthetic entry's source"],
+  ["__p", "a binding `wado query` writes into its probe entry's source"],
   ["__wasm_import_dce_entry__", "a test's synthetic module path"],
   ["__wasm_import_dce_unused_entry__", "a test's synthetic module path"],
   ["__libm_dce_entry__", "a test's synthetic module path"],

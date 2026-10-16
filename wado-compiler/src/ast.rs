@@ -5,8 +5,11 @@ use crate::attribute::{
     UNAVAILABLE, WASM_MODULE,
 };
 use std::borrow::Cow;
+use std::fmt;
+use std::ops::Deref;
 
 use crate::defs::DefId;
+use crate::escape::escape_string;
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::lexer::WILDCARD;
 use crate::name::UNIT_TYPE_NAME;
@@ -217,7 +220,7 @@ impl InnerAttribute {
     ///
     /// For `#![generated(sources = ["a.wit", "b.wit"])]`,
     /// `attr.kv_array("sources")` returns the slice `["a.wit", "b.wit"]`.
-    pub fn kv_array(&self, key: &str) -> Option<&[String]> {
+    pub fn kv_array(&self, key: &str) -> Option<&[StrLit]> {
         self.args.iter().find_map(|arg| {
             if let AttrArg::KeyArray(k, vs) = arg {
                 if k == key { Some(vs.as_slice()) } else { None }
@@ -1317,7 +1320,7 @@ impl Module {
     ///
     /// For `#![generated(sources = ["a.wit", "b.wit"])]`,
     /// `module.generated_meta_array("sources")` returns `["a.wit", "b.wit"]`.
-    pub fn generated_meta_array(&self, key: &str) -> Option<&[String]> {
+    pub fn generated_meta_array(&self, key: &str) -> Option<&[StrLit]> {
         self.inner_attributes
             .iter()
             .filter(|a| a.name == GENERATED)
@@ -1648,6 +1651,71 @@ pub struct GlobalDecl {
     pub span: Span,
 }
 
+/// A string literal outside an expression: a `use` specifier or an attribute's
+/// text. Every reader takes its value; the formatter emits its spelling, which
+/// keeps its escapes as an expression's string literal keeps them.
+#[derive(Debug, Clone, Eq)]
+pub struct StrLit {
+    pub value: String,
+    /// As written between the quotes, escapes unresolved.
+    pub raw: String,
+}
+
+impl StrLit {
+    /// A literal the compiler writes itself, spelled as `escape_string` spells
+    /// its value.
+    #[must_use]
+    pub fn new(value: impl Into<String>) -> Self {
+        let value = value.into();
+        let raw = escape_string(&value);
+        Self { value, raw }
+    }
+
+    #[must_use]
+    pub fn as_str(&self) -> &str {
+        &self.value
+    }
+
+    /// The literal as written, quotes included.
+    #[must_use]
+    pub fn as_written(&self) -> String {
+        format!("\"{}\"", self.raw)
+    }
+}
+
+impl Deref for StrLit {
+    type Target = str;
+
+    fn deref(&self) -> &str {
+        &self.value
+    }
+}
+
+impl fmt::Display for StrLit {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(&self.value)
+    }
+}
+
+/// Two spellings of one value are one literal.
+impl PartialEq for StrLit {
+    fn eq(&self, other: &Self) -> bool {
+        self.value == other.value
+    }
+}
+
+impl PartialEq<str> for StrLit {
+    fn eq(&self, other: &str) -> bool {
+        self.value == other
+    }
+}
+
+impl PartialEq<&str> for StrLit {
+    fn eq(&self, other: &&str) -> bool {
+        self.value == *other
+    }
+}
+
 /// A single argument in an attribute, keeping string literals, bare identifiers,
 /// numbers, `key = value` pairs and `key = [array]` distinct so `unparse` can
 /// reconstruct the original syntax — `#[inline(always)]` is `[Ident("always")]`
@@ -1655,14 +1723,14 @@ pub struct GlobalDecl {
 #[derive(Debug, Clone)]
 pub enum AttrArg {
     /// A quoted string literal, e.g. `"value"`.
-    Str(String),
+    Str(StrLit),
     /// A bare identifier, e.g. `always` or `default`.
     Ident(String),
     /// A key = "value" pair, e.g. `rename = "type"`.
-    KeyValue(String, String),
+    KeyValue(String, StrLit),
     /// A key = \["value", ...\] pair whose value is a string array literal,
     /// e.g. `sources = ["a.wit", "b.wit"]`.
-    KeyArray(String, Vec<String>),
+    KeyArray(String, Vec<StrLit>),
     /// A `key = [ident, ...]` pair whose items name things in the source, e.g.
     /// `outside = [dst, src]`.
     KeyIdentArray(String, Vec<String>),
@@ -1680,11 +1748,10 @@ impl AttrArg {
     /// with its first element, empty where it holds none.
     pub fn as_str(&self) -> &str {
         match self {
-            Self::Str(s) | Self::Ident(s) | Self::Number(s) => s,
-            Self::KeyValue(_, v) | Self::KeyIdent(_, v) | Self::KeyNumber(_, v) => v,
-            Self::KeyArray(_, vs) | Self::KeyIdentArray(_, vs) => {
-                vs.first().map(String::as_str).unwrap_or("")
-            }
+            Self::Str(s) | Self::KeyValue(_, s) => s,
+            Self::Ident(s) | Self::Number(s) | Self::KeyIdent(_, s) | Self::KeyNumber(_, s) => s,
+            Self::KeyArray(_, vs) => vs.first().map_or("", StrLit::as_str),
+            Self::KeyIdentArray(_, vs) => vs.first().map_or("", String::as_str),
         }
     }
 
@@ -1693,7 +1760,8 @@ impl AttrArg {
     #[must_use]
     pub fn name(&self) -> &str {
         match self {
-            Self::Str(s) | Self::Ident(s) | Self::Number(s) => s,
+            Self::Str(s) => s,
+            Self::Ident(s) | Self::Number(s) => s,
             Self::KeyValue(k, _)
             | Self::KeyArray(k, _)
             | Self::KeyIdentArray(k, _)
@@ -1758,6 +1826,8 @@ pub mod lint {
     pub const SHADOWED_NAME: &str = "shadowed_name";
     /// An item nothing reaches from the export boundary.
     pub const DEAD_CODE: &str = "dead_code";
+    /// A `use` bringing in a name its module never refers to.
+    pub const UNUSED_IMPORTS: &str = "unused_imports";
     /// A trait head that says nothing about what its impls may do.
     pub const UNDECIDED_EFFECTS: &str = "undecided_effects";
     /// A comparison of an expression with itself: `x == x`.
@@ -2242,7 +2312,7 @@ pub struct UseItemSimple {
 /// [`IndexMap`] keeps round-tripping and cache-key encoding stable.
 #[derive(Debug, Clone, PartialEq)]
 pub enum AttrValue {
-    String(String),
+    String(StrLit),
     Int(i64),
     Float(f64),
     Bool(bool),
@@ -2277,6 +2347,12 @@ pub struct AttrEntry {
 }
 
 impl AttrValue {
+    /// A string value the compiler writes itself.
+    #[must_use]
+    pub fn string(value: impl Into<String>) -> Self {
+        Self::String(StrLit::new(value))
+    }
+
     /// Borrow the inner string, if this is a [`AttrValue::String`].
     #[must_use]
     pub fn as_str(&self) -> Option<&str> {
@@ -2499,7 +2575,7 @@ pub struct UseDecl {
     /// publishes each type it names.
     pub is_export: bool,
     /// Import source (e.g., "core:cli", "wasi:filesystem", "./utils.wado")
-    pub source: String,
+    pub source: StrLit,
     /// Span of the source string literal (without surrounding quotes in the
     /// start/end columns; used by LSP for path jumps).
     pub source_span: Span,

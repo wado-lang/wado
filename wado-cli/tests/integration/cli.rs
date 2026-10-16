@@ -620,6 +620,277 @@ fn test_check_with_no_file_checks_every_declared_world() {
     wado().current_dir(dir).arg("check").assert().success();
 }
 
+/// Checking a package decides unused items over all its files: a test file's
+/// helper is test code, and an `internal` item another file calls is used.
+#[test]
+fn test_check_decides_unused_items_over_the_package() {
+    let tmp = tempfile::tempdir().unwrap();
+    let dir = tmp.path();
+    std::fs::write(
+        dir.join("wado.toml"),
+        "[package]\n\
+         name = \"unused\"\n\
+         namespace = \"wado\"\n\
+         version = \"0.1.0\"\n\
+         lib = \"lib.wado\"\n",
+    )
+    .unwrap();
+    std::fs::write(
+        dir.join("lib.wado"),
+        "use { helper } from \"./impl.wado\";\n\
+         pub fn api() -> i32 { return helper(); }\n",
+    )
+    .unwrap();
+    std::fs::write(
+        dir.join("impl.wado"),
+        "internal fn helper() -> i32 { return 1; }\n\
+         internal fn tested_only() -> i32 { return 2; }\n",
+    )
+    .unwrap();
+    std::fs::write(
+        dir.join("impl_test.wado"),
+        "use { tested_only } from \"./impl.wado\";\n\
+         fn check(n: i32) -> bool { return n > 0; }\n\
+         test { assert check(tested_only()); }\n",
+    )
+    .unwrap();
+
+    wado()
+        .current_dir(dir)
+        .arg("check")
+        .assert()
+        .success()
+        .stderr(predicate::str::contains(
+            "function `tested_only` is only used by tests",
+        ))
+        .stderr(predicate::str::contains("`helper`").not())
+        .stderr(predicate::str::contains("`check`").not());
+}
+
+/// A package's entries offer its API however the manifest spells their path
+/// and whether or not its tests cover them.
+#[test]
+fn test_check_offers_the_api_of_every_declared_entry() {
+    let cases = [
+        ("lib = \"src/../lib.wado\"\n", ""),
+        ("lib = \"lib.wado\"\n", "[test]\nexclude = [\"lib.wado\"]\n"),
+    ];
+    for (lib, test) in cases {
+        let tmp = tempfile::tempdir().unwrap();
+        let dir = tmp.path();
+        std::fs::create_dir_all(dir.join("src")).unwrap();
+        std::fs::write(
+            dir.join("wado.toml"),
+            format!(
+                "[package]\nname = \"api\"\nnamespace = \"wado\"\nversion = \"0.1.0\"\n{lib}\n{test}"
+            ),
+        )
+        .unwrap();
+        std::fs::write(
+            dir.join("lib.wado"),
+            "use { helper } from \"./impl.wado\";\n\
+             pub fn api() -> i32 { return helper(); }\n",
+        )
+        .unwrap();
+        std::fs::write(
+            dir.join("impl.wado"),
+            "internal fn helper() -> i32 { return 1; }\n",
+        )
+        .unwrap();
+
+        wado()
+            .current_dir(dir)
+            .arg("check")
+            .assert()
+            .success()
+            .stderr(predicate::str::contains("never used").not());
+    }
+}
+
+/// A lint reports in the package's own modules alone, checked as a package or
+/// as one file: a dependency is not the consumer's to fix.
+#[test]
+fn test_check_reports_no_lint_in_a_dependency() {
+    let tmp = tempfile::tempdir().unwrap();
+    let greet = tmp.path().join("greet");
+    std::fs::create_dir_all(&greet).unwrap();
+    std::fs::write(
+        greet.join("wado.toml"),
+        "[package]\nname = \"greet\"\nnamespace = \"wado\"\nversion = \"0.1.0\"\nlib = \"a.wado\"\n",
+    )
+    .unwrap();
+    std::fs::write(
+        greet.join("a.wado"),
+        "use { Doubled } from \"./t.wado\";\n\
+         use { TreeSet } from \"core:collections\";\n\
+         pub fn n() -> i32 { let n = 21; return n.doubled(); }\n\
+         fn dead() {}\n",
+    )
+    .unwrap();
+    std::fs::write(
+        greet.join("t.wado"),
+        "pub trait Doubled with () { fn doubled(&self) -> i32; }\n\
+         impl Doubled for i32 { fn doubled(&self) -> i32 { return *self * 2; } }\n",
+    )
+    .unwrap();
+    let app = tmp.path().join("app");
+    std::fs::create_dir_all(&app).unwrap();
+    std::fs::write(
+        app.join("wado.toml"),
+        "[package]\nname = \"app\"\nnamespace = \"wado\"\nversion = \"0.1.0\"\nlib = \"lib.wado\"\n\n\
+         [dependencies]\n\"wado:greet\" = { path = \"../greet\" }\n",
+    )
+    .unwrap();
+    std::fs::write(
+        app.join("lib.wado"),
+        "use { n } from \"wado:greet\";\npub fn api() -> i32 { return n(); }\n",
+    )
+    .unwrap();
+
+    for args in [&["check"][..], &["check", "lib.wado"]] {
+        wado()
+            .current_dir(&app)
+            .args(args)
+            .assert()
+            .success()
+            .stderr(predicate::str::contains("greet").not());
+    }
+}
+
+/// A module the package's code reaches is the package's own, whether or not
+/// `wado test` runs it.
+#[test]
+fn test_check_reports_a_test_excluded_module_the_package_reaches() {
+    let tmp = tempfile::tempdir().unwrap();
+    let dir = tmp.path();
+    std::fs::create_dir_all(dir.join("src/gen")).unwrap();
+    std::fs::write(
+        dir.join("wado.toml"),
+        "[package]\nname = \"pkg\"\nnamespace = \"wado\"\nversion = \"0.1.0\"\nlib = \"src/lib.wado\"\n\n\
+         [test]\nexclude = [\"src/gen\"]\n",
+    )
+    .unwrap();
+    std::fs::write(
+        dir.join("src/lib.wado"),
+        "use { helper } from \"./gen/x.wado\";\npub fn api() -> i32 { return helper(); }\n",
+    )
+    .unwrap();
+    std::fs::write(
+        dir.join("src/gen/x.wado"),
+        "pub fn helper() -> i32 { return 1; }\nfn dead_one() {}\n",
+    )
+    .unwrap();
+
+    wado()
+        .current_dir(dir)
+        .arg("check")
+        .assert()
+        .success()
+        .stderr(predicate::str::contains("`dead_one` is never used"));
+}
+
+/// `--no-lint`, `--lint` and `--lint-generated` set one value, so the last one
+/// given decides where the lints report.
+#[test]
+fn test_lint_flags_choose_where_lints_report() {
+    let tmp = tempfile::tempdir().unwrap();
+    let dir = tmp.path();
+    std::fs::write(
+        dir.join("main.wado"),
+        "use { g } from \"./g.wado\";\nfn dead_own() {}\nexport fn run() { g(); }\n",
+    )
+    .unwrap();
+    std::fs::write(
+        dir.join("g.wado"),
+        "#![generated(by = \"test\")]\npub fn g() {}\nfn dead_generated() {}\n",
+    )
+    .unwrap();
+
+    let cases: [(&[&str], bool, bool); 5] = [
+        (&[], true, false),
+        (&["--lint-generated"], true, true),
+        (&["--no-lint"], false, false),
+        (&["--no-lint", "--lint"], true, false),
+        (&["--lint-generated", "--no-lint"], false, false),
+    ];
+    for (flags, own, generated) in cases {
+        let report = |name: &str, expected: bool| {
+            let found = predicate::str::contains(format!("`{name}` is never used"));
+            if expected {
+                found.boxed()
+            } else {
+                found.not().boxed()
+            }
+        };
+        wado()
+            .current_dir(dir)
+            .args(["compile", "--wat-to-stdout"])
+            .args(flags)
+            .arg("main.wado")
+            .assert()
+            .success()
+            .stderr(report("dead_own", own))
+            .stderr(report("dead_generated", generated));
+    }
+}
+
+/// `wado check --no-lint` skips the package's unused pass, which only lints
+/// need.
+#[test]
+fn test_check_no_lint_reports_no_unused_item() {
+    let tmp = tempfile::tempdir().unwrap();
+    let dir = tmp.path();
+    std::fs::write(
+        dir.join("wado.toml"),
+        "[package]\nname = \"pkg\"\nnamespace = \"wado\"\nversion = \"0.1.0\"\nlib = \"lib.wado\"\n",
+    )
+    .unwrap();
+    std::fs::write(
+        dir.join("lib.wado"),
+        "pub fn api() -> i32 { return 1; }\nfn dead_one() {}\n",
+    )
+    .unwrap();
+
+    wado()
+        .current_dir(dir)
+        .arg("check")
+        .assert()
+        .success()
+        .stderr(predicate::str::contains("`dead_one` is never used"));
+    wado()
+        .current_dir(dir)
+        .args(["check", "--no-lint"])
+        .assert()
+        .success()
+        .stderr(predicate::str::contains("never used").not());
+}
+
+/// A member's file name reaches the package's load as written, whatever
+/// characters a string literal escapes.
+#[test]
+fn test_check_loads_a_member_whose_name_a_string_literal_escapes() {
+    let tmp = tempfile::tempdir().unwrap();
+    let dir = tmp.path();
+    std::fs::write(
+        dir.join("wado.toml"),
+        "[package]\nname = \"pkg\"\nnamespace = \"wado\"\nversion = \"0.1.0\"\nlib = \"lib.wado\"\n",
+    )
+    .unwrap();
+    std::fs::write(dir.join("lib.wado"), "pub fn api() -> i32 { return 1; }\n").unwrap();
+    std::fs::write(
+        dir.join("a\"b_test.wado"),
+        "use { api } from \"./lib.wado\";\nfn dead_one() {}\ntest { assert api() == 1; }\n",
+    )
+    .unwrap();
+
+    wado()
+        .current_dir(dir)
+        .arg("check")
+        .assert()
+        .success()
+        .stderr(predicate::str::contains("`dead_one` is never used"));
+}
+
 /// A directory names the project to check, so a workspace member is reachable
 /// without changing directory first.
 #[test]

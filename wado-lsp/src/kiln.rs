@@ -47,6 +47,7 @@ pub async fn prepare_invocations<H: CompilerHost>(
         entry_filename,
         entry_filename,
         entry_ast.clone(),
+        &wado_compiler::hashmap::IndexSet::default(),
         async |identity| {
             let bytes = host.load_source(identity).await.ok()?;
             String::from_utf8(bytes).ok()

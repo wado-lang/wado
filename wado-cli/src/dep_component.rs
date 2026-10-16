@@ -186,7 +186,7 @@ pub async fn resolve_inline_git_dependencies(
         let Some(url) = attrs.git() else {
             continue;
         };
-        let name = use_decl.source.clone();
+        let name = use_decl.source.value.clone();
         let git_ref = attrs.git_ref().ok_or_else(|| {
             format!("dependency {name:?}: a `git` source needs a `ref` (tag, branch, or SHA)")
         })?;
@@ -276,7 +276,7 @@ fn parse_inline_dep(
     use_decl: &wado_compiler::ast::UseDecl,
     manifest: Option<&Manifest>,
 ) -> Result<Option<InlineDep>, String> {
-    let specifier = use_decl.source.clone();
+    let specifier = use_decl.source.value.clone();
     let Some((namespace, head, spec_version)) = classify_specifier(&specifier) else {
         return Ok(None);
     };

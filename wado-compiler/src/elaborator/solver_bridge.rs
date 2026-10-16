@@ -1221,7 +1221,7 @@ impl SolverBridge {
             DeclKey::TemplateShape => Some(CompilerItem::ReflectTemplate),
             DeclKey::Builtin(_) | DeclKey::FnShape { .. } | DeclKey::UndeclaredEffect => None,
         };
-        for (&id, def) in program.impls.iter().filter(|(id, _)| **id >= first) {
+        for (&id, def) in program.impls().iter().filter(|(id, _)| **id >= first) {
             if !matches!(def.origin, ImplOrigin::Derived | ImplOrigin::Marker) {
                 continue;
             }
@@ -1286,7 +1286,7 @@ impl SolverBridge {
                 // A prelude impl of the trait on the primitive, at any trait
                 // arguments, already states it.
                 let written = program
-                    .impls
+                    .impls()
                     .values()
                     .any(|def| def.trait_ == Some(trait_) && def.target == target);
                 if written {
@@ -2236,7 +2236,10 @@ impl SolverBridge {
         // is answered from the reference level alone.
         if through_ref.is_some() {
             let on_ref = |c: &Candidate| {
-                matches!(self.program.impls[&c.impl_].target, SolverType::Ref { .. })
+                matches!(
+                    self.program.impls()[&c.impl_].target,
+                    SolverType::Ref { .. }
+                )
             };
             found.in_scope.retain(on_ref);
             found.out_of_scope.retain(on_ref);

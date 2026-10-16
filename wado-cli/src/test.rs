@@ -200,6 +200,9 @@ impl Opt {
         CompileKnobOpt::Allocator,
         CompileKnobOpt::NoCache,
         CompileKnobOpt::Feature,
+        CompileKnobOpt::NoLint,
+        CompileKnobOpt::Lint,
+        CompileKnobOpt::LintGenerated,
     ];
 
     const fn spec(self) -> args::OptSpec {
@@ -312,7 +315,7 @@ fn format_usage() -> String {
 /// `--exclude` has the same shape as `[test].exclude`, so it extends it.
 /// `[test].include` overrides both, which is how a stdlib-style package keeps
 /// `*_test.wado` visible inside an excluded directory; it has no CLI flag yet.
-fn test_filters(
+pub(crate) fn test_filters(
     pkg_root: &Path,
     cli_excludes: &[String],
 ) -> Result<(discover::ExcludeSet, discover::IncludeSet), CliExit> {

@@ -1,0 +1,39 @@
+// No lint reports in a `#![generated]` module: it is machine-emitted, and the
+// one who could fix it is its generator, not whoever compiles it.
+#![generated(by = "test")]
+
+use { println, eprintln } from "core:cli";
+
+pub trait Undecided {
+    fn tick(&self) -> i32;
+}
+
+fn dead() {}
+
+fn pick(x: f64) -> i32 {
+    return match x {
+        1.5 => 1,
+        _ => 0,
+    };
+}
+
+export fn run() {
+    let n = builtin::black_box(3);
+    let println = n == n;
+    let h = 0x1_f32;
+    let t = 2147483647 + 1;
+    assert pick(1.5) == 1 && println && h > 0 && t < 0;
+}
+
+__DATA__
+{
+    "warnings_not_contains": [
+        "shadows the function",
+        "says nothing about the effects",
+        "compares a value with itself",
+        "overflows `i32`",
+        "is the hex integer",
+        "matches one exact float",
+        "is never used"
+    ]
+}

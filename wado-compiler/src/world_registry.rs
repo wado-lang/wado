@@ -457,7 +457,9 @@ mod tests {
             visibility: Visibility::Private,
             attrs: vec![Attribute {
                 name: CM.to_string(),
-                args: vec![ast::AttrArg::Str("wasi:cli/command@0.3.0".to_string())],
+                args: vec![ast::AttrArg::Str(ast::StrLit::new(
+                    "wasi:cli/command@0.3.0",
+                ))],
                 cm_boundary: Some(CmBoundary::Import(
                     CmImport::parse("wasi:cli/command@0.3.0").unwrap(),
                 )),

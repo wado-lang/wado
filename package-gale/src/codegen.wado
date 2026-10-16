@@ -121,12 +121,12 @@ pub fn canonicalize_for_analysis(grammar: &mut Grammar) -> TokenKinds {
     // for IR constructed with struct-literal syntax (e.g. unit tests).
     // Fold `( | X)` / `(X | )` empty-alt groups onto the Optional path
     // before any structural pass (lowering, ATN build) sees them, so both
-    // the emitter and `build_atn` agree on the canonical repeat shape.
+    // the emitter and `build_atn_with` agree on the canonical repeat shape.
     canonicalize_empty_alt_groups(grammar);
     splice_suffixed_alternations(grammar);
     // Canonicalization is done; everything downstream may assume its shape.
     assert_canonical_shape(grammar);
-    // Number every surface `RuleRef` call site so `build_atn`'s
+    // Number every surface `RuleRef` call site so `build_atn_with`'s
     // `call_site_returns` correspondence (read by codegen to push exact ATN
     // return states) is keyed consistently. Runs after canonicalization (the
     // numbered shape is the post-canonicalization one) and before lowering.

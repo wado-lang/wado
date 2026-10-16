@@ -9,6 +9,7 @@ use wado_lsp::{
 };
 
 use wado_compiler::kiln::InvocationIndex;
+use wado_compiler::use_declaration;
 
 use crate::args::CliExit;
 use crate::compile::{
@@ -51,7 +52,7 @@ async fn prepare_query(filename: &str) -> Result<PreparedQuery, CliExit> {
         FilesystemCompilerHost::silent(base.clone()),
         manifest_pair.as_ref(),
         &base,
-        &source,
+        &[&source],
         Acquisition::Analysis,
     )
     .await
@@ -226,7 +227,7 @@ async fn symbol_env(notation: &str, base: &str) -> Result<SymbolEnv, CliExit> {
         FilesystemCompilerHost::silent(base_dir.clone()),
         manifest_pair.as_ref(),
         &base_dir,
-        "",
+        &[],
         Acquisition::Analysis,
     )
     .await
@@ -251,7 +252,7 @@ fn open_entry(
 ) -> wado_lsp::Engine {
     let mut synthetic = String::new();
     for (i, module) in imports.iter().enumerate() {
-        synthetic.push_str(&format!("use __wado_q{i} from \"{module}\";\n"));
+        synthetic.push_str(&use_declaration(&format!("__wado_q{i}"), module));
     }
     let mut engine = wado_lsp::Engine::new();
     match invocations {
@@ -379,7 +380,7 @@ async fn file_analyzes(base_dir: &Path, host: &FilesystemCompilerHost, spec: &st
         .as_str()
         .to_string();
     let mut engine = wado_lsp::Engine::new();
-    engine.open_document(&uri, format!("use __p from \"{spec}\";\n"));
+    engine.open_document(&uri, use_declaration("__p", spec));
     engine.analyzes(&uri, host).await
 }
 

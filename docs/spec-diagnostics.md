@@ -7,7 +7,18 @@ not yet wrong. This chapter states the warnings and remarks that come from
 lints, the checks the compiler runs on code it accepts.
 
 [`#[allow(...)]`](./spec-attributes.md#allow) waives a lint. A lint reports
-only in the user's own modules, never in the standard library.
+only in the modules of the package being compiled, never in the standard
+library or a dependency, and never in a
+[`#![generated]`](./spec-attributes.md#generated) module: its generator, not
+whoever compiles it, is the one who could fix it.
+
+Every compiling subcommand of `wado` takes three flags that choose where the
+lints report. They set one value, so the last one given wins:
+
+- `--lint`: the rule above. It is the default.
+- `--lint-generated`: `#![generated]` modules too, for a generator's author.
+- `--no-lint`: nowhere. A run that wants only errors skips the passes only the
+  lints need.
 
 The lints are:
 
@@ -21,6 +32,7 @@ The lints are:
 | [`hex_suffix_lookalike`](#the-hex_suffix_lookalike-lint)   | a hex literal ending in `_f16`, `_bf16`, `_f32` or `_f64`                       |
 | [`undecided_effects`](#the-undecided_effects-lint)         | a trait head that writes no `with` clause                                       |
 | [`dead_code`](#the-dead_code-lint)                         | an unused or test-only free function or global                                  |
+| [`unused_imports`](#the-unused_imports-lint)               | a `use` bringing in a name its module never refers to                           |
 
 ## The `shadowed_name` Lint
 
@@ -217,12 +229,23 @@ nothing.
 ## The `dead_code` Lint
 
 The `dead_code` lint warns about a free function or a global that its package
-does not use, from any of its modules. An item is used when one of these roots
-reaches it:
+does not use, from any of its modules.
 
-- A `pub` or `export` item. An `internal` item is not a root, because nothing
-  outside the package can reach it.
-- A function whose name a world export names.
+The package's entries are the modules its `wado.toml` declares: `lib` and each
+`[world]` entry. Its production code is what the entries reach by `use`. Every
+other module of the package is test code: test files, and helpers only they
+import.
+
+An item is used when one of these roots reaches it:
+
+- What an entry offers: its `pub` and `export` items, and what it re-exports
+  with `pub use`. A `pub` item of any other module is not a root, since only an
+  entry's are offered beyond the package. Neither is an `internal` item.
+- An `export` function in any module, since any module may be compiled as an
+  entry of its own, as `wado run` runs a script.
+- A function of an entry whose name a world export names, so a misdeclared
+  entry point (`fn run()` without `export`) reaches the world's check rather
+  than this lint.
 - A method. A method is not itself reported, and a free function that only a
   method calls counts as used.
 - A struct field default, an associated constant's value, and the default body
@@ -233,16 +256,81 @@ function that only an unreached default body calls is unused.
 
 An item the roots do not reach is reported one of two ways:
 
-- Reached from a `test` block: "only used by tests". Compiling for the test
-  world omits this warning, since there those tests are what the item is for.
+- Reached from a `test` block: "only used by tests", for production code. Test
+  code exists to be reached from tests, so it reports nothing. Compiling for
+  the test world omits this warning too, since there those tests are what the
+  item is for.
 - Reached from nothing: "never used".
 
-An item in a `#![generated]` module is never reported.
+`wado check` given a package, or given nothing inside one, decides the lint
+over the whole package. A compilation of one file loads only what that file
+reaches, so it decides what it can see: every `pub` item counts as used, and
+so does every `internal` one, since a module it did not load may use it.
 
-> Not yet implemented: reachability is decided over the modules one
-> compilation loads. `wado test` compiles each test file as its own program, so
-> an `internal` item that only another module of the package uses is reported
-> "never used".
+Rationale: [WEP: Unused Diagnostics](./wep-2026-05-16-unused-diagnostics.md).
+
+## The `unused_imports` Lint
+
+The `unused_imports` lint warns about a name a `use` brings in that its module
+never refers to. One `use` can bring in several names, and each is reported on
+its own, where the `use` binds it.
+
+<!-- {"fixture": "unused_import.wado", "assert": false} -->
+
+```wado
+use { println, eprintln, eprint, Stdout, Stderr } from "core:cli";
+use { Stdin, Stdin::{read_via_stream} } from "wasi:cli";
+use traits from "./sub/unused_import_traits.wado";
+use parts from "./sub/unused_import_parts.wado";
+use { part } from "./sub/unused_import_parts.wado";
+use { TreeMap as Map, TreeSet } from "core:collections";
+use json from "core:json";
+use base64 from "core:base64";
+use cbor from "core:cbor";
+use { to_bytes } from "core:cbor";
+use { Doubled, Halved, Half } from "./sub/unused_import_traits.wado";
+pub use { to_string } from "core:json";
+#[allow(unused_imports)]
+use { from_string } from "core:json";
+
+#[benign(Stderr)]
+fn quiet() {
+    eprint("");
+}
+
+export fn run() with Stdout {
+    quiet();
+    let m = Map::<i32, i32>::new();
+    let half = Half { n: 2 }.halved();
+    let bytes = to_bytes(&half).unwrap().len();
+    let whole = match part() {
+        parts::Whole(n) => n,
+        _ => 0,
+    };
+    println(`${m.len()} ${json::to_string(&21.doubled()).unwrap()} ${half} ${bytes} ${2.tripled()} ${whole}`);
+}
+```
+
+A name is used when a reference written in the module resolves through it. Two
+imports of one declaration are two names, and each is used only where it is
+written. Beyond that:
+
+- A trait's methods are candidates only where the trait is in scope, so an
+  import putting a trait in scope is used where one of the module's calls
+  dispatches to a method the trait declares or implements: `Doubled` for
+  `doubled`, and the namespace `traits` for `tripled`. `Halved` stays unused:
+  `halved` here is `Half`'s own method.
+- An effect named in `#[benign(…)]` is used there, here `Stderr`, and so is an
+  interface a world declaration imports or exports.
+- A namespace import is used where the module spells it: naming a member
+  through it, or qualifying a case, as `parts` does. `cbor` stays unused:
+  `to_bytes` reaches its member by an import of its own.
+- An interface import with functions (`Stdin::{read_via_stream}`) brings in
+  the functions alone, and each is reported on its own. The interface is a
+  name only where imported by itself, as `Stdin` is here.
+
+A `pub` or `internal` `use` re-exports what it names, and an `export use`
+publishes it, so neither is reported: its users are the modules that import it.
 
 Rationale: [WEP: Unused Diagnostics](./wep-2026-05-16-unused-diagnostics.md).
 

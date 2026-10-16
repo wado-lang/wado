@@ -45,7 +45,7 @@ use crate::elaborator::item::{
     register_enum_compiler_items, register_trait_compiler_item, register_tuple_compiler_item,
     register_type_compiler_item, register_variant_compiler_items,
 };
-use crate::elaborator::liveness::{CompilerNamed, Liveness, References};
+use crate::elaborator::liveness::{CompilerNamed, Liveness, LivenessScope, References};
 use crate::elaborator::reify::Reify;
 use crate::elaborator::sem::ModuleSemantics;
 use crate::elaborator::solver_bridge::SolverBridge;
@@ -1335,6 +1335,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         snapshot: Option<&Semantics>,
         build_tir: bool,
         coverage: Option<CoverageScope>,
+        liveness_scope: &LivenessScope,
     ) -> Result<IndexMap<ModuleSource, TirModule>, Bail> {
         let mut result = IndexMap::default();
         // Per-rehydration memo: maps each cached function `Rc`'s pointer
@@ -1600,7 +1601,9 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         // sole TIR source. Liveness
         // runs between the two phases so reify can gate on it.
         for module_source in &sorted_sources {
-            if is_stdlib_snapshot_hit(snapshot, module_source) {
+            if is_stdlib_snapshot_hit(snapshot, module_source)
+                || !liveness_scope.walks_bodies_of(module_source)
+            {
                 continue;
             }
             let module = modules.get(module_source).expect("module should exist");
@@ -1667,7 +1670,12 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                 &export_names,
                 &compiler_named_entities(&state.tysys),
                 &trait_method_impls(&state.tysys),
+                liveness_scope,
             );
+            // Lowering alone reads the last uses, to elide copies.
+            if build_tir {
+                liveness::compute_last_uses(modules, &direct, &mut state.liveness);
+            }
         }
 
         // The plan reads which callee names `core:rt`'s `unreachable`, so it

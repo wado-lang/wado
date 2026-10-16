@@ -180,6 +180,9 @@ impl Opt {
         CompileKnobOpt::NoCache,
         CompileKnobOpt::Allocator,
         CompileKnobOpt::Feature,
+        CompileKnobOpt::NoLint,
+        CompileKnobOpt::Lint,
+        CompileKnobOpt::LintGenerated,
     ];
 
     const fn spec(self) -> args::OptSpec {
@@ -364,7 +367,7 @@ pub async fn try_compile_with_run_cache(
         base_host,
         manifest_pair.as_ref(),
         &base_path,
-        &source,
+        &[&source],
         Acquisition::Build,
     )
     .await
@@ -385,6 +388,7 @@ pub async fn try_compile_with_run_cache(
         log_level: Some(knobs.log_level),
         allocator: knobs.allocator.clone(),
         codegen_flags: knobs.codegen_flags.clone(),
+        lints: knobs.lints,
         params: knobs.params.clone(),
         target_world: flags.target_world.clone(),
         invocations: pipeline_outcome.invocations,
@@ -449,8 +453,9 @@ pub(crate) fn attach_manifest_deps(
 /// Like [`attach_manifest_deps`], plus resolving registry dependencies as
 /// prebuilt components so `use { X } from "ns:pkg"` resolves across the CM
 /// boundary. Two sources feed the component map: a manifest `[dependencies]`
-/// table entry (lock-pinned) and a single-file inline
-/// `use … from "ns:pkg@ver" with { registry }` clause parsed from `entry_source`.
+/// table entry (lock-pinned) and an inline
+/// `use … from "ns:pkg@ver" with { registry }` clause parsed from one of
+/// `sources`, each a whole file.
 ///
 /// `tier` chooses how far acquisition may go: [`Acquisition::Build`] pulls
 /// whatever is missing and resolves an unpinned version live, while
@@ -460,10 +465,10 @@ pub(crate) async fn attach_manifest_and_component_deps(
     base_host: FilesystemCompilerHost,
     project: Option<&manifest::ProjectManifest>,
     base_path: &Path,
-    entry_source: &str,
+    sources: &[&str],
     tier: Acquisition,
 ) -> Result<FilesystemCompilerHost, String> {
-    let index = manifest_and_component_index(project, base_path, entry_source, tier).await?;
+    let index = manifest_and_component_index(project, base_path, sources, tier).await?;
     Ok(base_host.with_dependency_index(index))
 }
 
@@ -474,7 +479,7 @@ pub(crate) async fn attach_manifest_and_component_deps(
 async fn manifest_and_component_index(
     project: Option<&manifest::ProjectManifest>,
     base_path: &Path,
-    entry_source: &str,
+    sources: &[&str],
     tier: Acquisition,
 ) -> Result<wado_compiler::DependencyIndex, String> {
     // Materialize any locked-but-cold git worktrees first, so the offline git
@@ -515,22 +520,46 @@ async fn manifest_and_component_index(
     }
 
     let manifest = project.map(|p| &p.manifest);
-    let inline = resolve_inline_component_dependencies(entry_source, manifest, tier).await?;
-    index.components.extend(inline.resolved);
-    index.unresolved.extend(inline.unresolved);
+    for source in sources {
+        let inline = resolve_inline_component_dependencies(source, manifest, tier).await?;
+        for (name, path) in inline.resolved {
+            bind_once(&mut index.components, name, path)?;
+        }
+        index.unresolved.extend(inline.unresolved);
 
-    // Inline git sources (`use … from "<name>" with { git }`) are source deps:
-    // their materialized worktree entry lands in `resolved`, compiled in.
-    let inline_git = resolve_inline_git_dependencies(entry_source, tier).await?;
-    for (name, path) in inline_git.resolved {
-        index.unresolved.swap_remove(&name);
-        index.resolved.insert(name, path);
-    }
-    for (name, reason) in inline_git.unresolved {
-        index.unresolved.insert(name, reason);
+        // Inline git sources (`use … from "<name>" with { git }`) are source
+        // deps: their materialized worktree entry lands in `resolved`, compiled
+        // in.
+        let inline_git = resolve_inline_git_dependencies(source, tier).await?;
+        for (name, path) in inline_git.resolved {
+            index.unresolved.swap_remove(&name);
+            bind_once(&mut index.resolved, name, path)?;
+        }
+        for (name, reason) in inline_git.unresolved {
+            index.unresolved.insert(name, reason);
+        }
     }
 
     Ok(index)
+}
+
+/// Bind the specifier `name` to `path` in `map`, where every file of the build
+/// must agree on what one specifier names.
+fn bind_once(
+    map: &mut wado_compiler::hashmap::IndexMap<String, String>,
+    name: String,
+    path: String,
+) -> Result<(), String> {
+    if let Some(bound) = map.get(&name)
+        && *bound != path
+    {
+        return Err(format!(
+            "dependency {name:?} names two sources: {bound} and {path}; \
+             one specifier resolves to one package"
+        ));
+    }
+    map.insert(name, path);
+    Ok(())
 }
 
 /// Materialize every locked git dependency's worktree so the build path reads a
@@ -601,8 +630,13 @@ impl KilnRun {
     }
 }
 
+/// The modules Kiln walks have harvested, by their path from the package root.
+/// A walk passes over them: their clauses ran with the walk that reached them.
+pub(crate) type Settled = wado_compiler::hashmap::IndexSet<String>;
+
 /// Collect the inline `with { generator: { ... } }` clauses `entry_file`
-/// declares and assemble everything the Kiln pipeline needs from them.
+/// declares and assemble everything the Kiln pipeline needs from them, past
+/// the modules in `settled`, which then holds those the walk reached.
 /// `Ok(None)` when the entry declares no generators.
 ///
 /// Shared by [`maybe_run_pipeline`], `wado check` and [`run_nested_pipeline`],
@@ -612,6 +646,7 @@ pub(crate) async fn prepare_kiln(
     entry_identity: Option<&str>,
     host: &FilesystemCompilerHost,
     run: &KilnRun,
+    settled: &mut Settled,
 ) -> Result<Option<KilnSetup>, PipelineError> {
     let KilnRun {
         project,
@@ -634,6 +669,7 @@ pub(crate) async fn prepare_kiln(
             entry_file,
             entry_identity,
             &manifest_root,
+            settled,
         )
         .await;
 
@@ -731,8 +767,29 @@ pub(crate) async fn maybe_run_pipeline(
     no_cache: bool,
     project: Option<manifest::ProjectManifest>,
 ) -> Result<PipelineOutcome, PipelineError> {
-    let Some(mut kiln) =
-        prepare_kiln(entry_file, None, host, &KilnRun::entry(project, no_cache)).await?
+    Box::pin(maybe_run_pipeline_for(
+        entry_file,
+        None,
+        host,
+        no_cache,
+        project,
+        &mut Settled::default(),
+    ))
+    .await
+}
+
+/// [`maybe_run_pipeline`] for an entry the compile that follows names
+/// `entry_identity` rather than by its path, past the modules in `settled`.
+pub(crate) async fn maybe_run_pipeline_for(
+    entry_file: &Path,
+    entry_identity: Option<&str>,
+    host: &FilesystemCompilerHost,
+    no_cache: bool,
+    project: Option<manifest::ProjectManifest>,
+    settled: &mut Settled,
+) -> Result<PipelineOutcome, PipelineError> {
+    let run = KilnRun::entry(project, no_cache);
+    let Some(mut kiln) = prepare_kiln(entry_file, entry_identity, host, &run, settled).await?
     else {
         return Ok(PipelineOutcome::default());
     };
@@ -743,7 +800,8 @@ pub(crate) async fn maybe_run_pipeline(
 
 /// `base_host` with what a build of `path` loads through: the dependencies of
 /// `project`, the manifest nearest it, and the Kiln invocations the entry's
-/// generators produce. `subcommand` names the failure it reports.
+/// generators produce. `subcommand` names the failure it reports. `settled`
+/// gains the modules the Kiln walk reached.
 pub(crate) async fn build_load(
     path: &Path,
     source: &str,
@@ -751,28 +809,36 @@ pub(crate) async fn build_load(
     base_host: FilesystemCompilerHost,
     no_cache: bool,
     subcommand: &str,
+    settled: &mut Settled,
 ) -> Result<(FilesystemCompilerHost, wado_compiler::kiln::InvocationIndex), CliExit> {
     let base_path = path.parent().map(Path::to_path_buf).unwrap_or_default();
     let host = attach_manifest_and_component_deps(
         base_host,
         project.as_ref(),
         &base_path,
-        source,
+        &[source],
         Acquisition::Build,
     )
     .await
     .map_err(CliExit::error)?;
-    let outcome = maybe_run_pipeline(path, &host, no_cache, project)
-        .await
-        .map_err(|e| match e {
-            // A malformed inline clause and a redirect conflict are reported
-            // as diagnostics already.
-            PipelineError::InlineClause(_) | PipelineError::RedirectConflict(_) => {
-                CliExit::silent_failure(1)
-            }
-            other => CliExit::error(format!("wado {subcommand}: {other}")),
-        })?;
+    let outcome = Box::pin(maybe_run_pipeline_for(
+        path, None, &host, no_cache, project, settled,
+    ))
+    .await
+    .map_err(|e| pipeline_exit(e, subcommand))?;
     Ok((host, outcome.invocations))
+}
+
+/// How `wado <subcommand>` exits on a Kiln pipeline failure.
+pub(crate) fn pipeline_exit(error: PipelineError, subcommand: &str) -> CliExit {
+    match error {
+        // A malformed inline clause and a redirect conflict are reported as
+        // diagnostics already.
+        PipelineError::InlineClause(_) | PipelineError::RedirectConflict(_) => {
+            CliExit::silent_failure(1)
+        }
+        other => CliExit::error(format!("wado {subcommand}: {other}")),
+    }
 }
 
 /// Resolve the Kiln invocations a generator's own source carries, so the
@@ -790,7 +856,10 @@ pub(crate) async fn run_nested_pipeline(
         project: load_nearest_manifest(entry_file).map_err(PipelineError::Manifest)?,
         ..outer.clone()
     };
-    let Some(mut kiln) = prepare_kiln(entry_file, Some(entry_identity), host, run).await? else {
+    // Its own root, so nothing the outer walk settled.
+    let settled = &mut Settled::default();
+    let Some(mut kiln) = prepare_kiln(entry_file, Some(entry_identity), host, run, settled).await?
+    else {
         return Ok(wado_compiler::kiln::InvocationIndex::default());
     };
     let mut invocations = kiln.run().await?.invocations;
@@ -923,6 +992,7 @@ async fn collect_inline_invocations_for_entry_with_identities(
     entry_file: &Path,
     entry_identity: Option<&str>,
     manifest_root: &Path,
+    settled: &mut Settled,
 ) -> (
     Vec<wado_compiler::kiln::Invocation>,
     wado_compiler::hashmap::IndexMap<String, String>,
@@ -952,9 +1022,11 @@ async fn collect_inline_invocations_for_entry_with_identities(
         &entry_key,
         &entry_identity,
         entry.ast,
+        settled,
         async |identity| fs::read_to_string(entry_dir.join(identity)).ok(),
     )
     .await;
+    settled.extend(harvest.modules.keys().cloned());
 
     let descriptors = wado_compiler::hashmap::IndexMap::default();
     let (invocations, diagnostics) = wado_compiler::kiln::collect_inline_invocations(
@@ -1316,7 +1388,10 @@ mod kiln_dir_module_tests {
         Vec<wado_compiler::Diagnostic>,
     ) {
         futures::executor::block_on(collect_inline_invocations_for_entry_with_identities(
-            entry, None, root,
+            entry,
+            None,
+            root,
+            &mut Settled::default(),
         ))
     }
 

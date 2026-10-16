@@ -112,7 +112,7 @@ fn find_file_path_at_cursor(module: &Module, line: usize, col: usize) -> Option<
         if span_contains(&use_decl.source_span, line, col)
             || use_decl.items.iter().any(names_module)
         {
-            return Some(use_decl.source.clone());
+            return Some(use_decl.source.value.clone());
         }
     }
     ast_search::find_in_module(

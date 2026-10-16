@@ -1,44 +1,7 @@
-use {
-    ParserRule,
-    Alternative,
-    Element,
-    RuleRefElement,
-    TokenRefElement,
-    RepeatElement,
-    RepeatKind,
-    GroupElement,
-    Visibility,
-} from "./ir.wado";
+use { ParserRule, Element, RepeatElement, RepeatKind } from "./ir.wado";
 use { GrammarAnalysis } from "./grammar_analysis.wado";
 use { FollowEnv, FollowSet, build } from "./follow_env.wado";
-
-fn tk<S: AsStrSlice>(name: S) -> Element {
-    return Element::TokenRef(TokenRefElement::new(name));
-}
-
-fn rr<S: AsStrSlice>(name: S) -> Element {
-    return Element::RuleRef(RuleRefElement::new(name));
-}
-
-fn opt(elem: Element) -> Element {
-    return Element::Repeat(RepeatElement {
-        kind: RepeatKind::Optional,
-        element: elem,
-        non_greedy: false,
-    });
-}
-
-fn group(alts: List<Alternative>) -> Element {
-    return Element::Group(GroupElement::new(alts));
-}
-
-fn alt(elements: List<Element>) -> Alternative {
-    return Alternative::new(elements);
-}
-
-fn mk_rule<S: AsStrSlice>(name: S, alts: List<Alternative>) -> ParserRule {
-    return ParserRule::new(name, Visibility::Private, [], alts);
-}
+use { tk, rr, opt, group, alt, mk_rule } from "../tests/support/fixtures.wado";
 
 fn mk_ctx(rules: &List<ParserRule>) -> GrammarAnalysis {
     return GrammarAnalysis::new(rules);

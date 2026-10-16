@@ -70,7 +70,7 @@ pub fn bound_candidates(
             let level = &levels[c.depth as usize];
             answers_args(
                 program,
-                &program.impls[&c.impl_],
+                &program.impls()[&c.impl_],
                 level,
                 Some(ty),
                 &c.trait_args,
@@ -86,7 +86,7 @@ pub fn bound_candidates(
 /// newtype over `List<u8>` reaches `impl<T> IntoIterator for &List<T>`.
 #[must_use]
 pub fn applies(program: &Program, env: &Env, scope: ModuleId, id: ImplId, ty: &SolverType) -> bool {
-    let def = &program.impls[&id];
+    let def = &program.impls()[&id];
     let levels = chain(program, ty);
     let reached = if program.not_inherited.contains(&id) {
         &levels[..(own_levels(ty) as usize).min(levels.len())]
@@ -115,7 +115,7 @@ fn collect(
     for (depth, ty) in chain(program, receiver).iter().enumerate() {
         let depth = u32::try_from(depth).expect("a chain shorter than 2^32");
         withheld.extend(withheld_at(program, ty));
-        for (&impl_, def) in &program.impls {
+        for (impl_, def) in program.trait_impls_for(ty) {
             let Some(trait_) = def.trait_ else {
                 continue;
             };

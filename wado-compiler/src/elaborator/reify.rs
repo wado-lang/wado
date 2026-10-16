@@ -1778,8 +1778,9 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                     emit(format!("unknown #[param] argument: {k}"));
                     ok = false;
                 }
-                ast::AttrArg::Str(s) | ast::AttrArg::Ident(s) | ast::AttrArg::Number(s) => {
-                    emit(format!("unknown #[param] argument: {s}"));
+                bare
+                @ (ast::AttrArg::Str(_) | ast::AttrArg::Ident(_) | ast::AttrArg::Number(_)) => {
+                    emit(format!("unknown #[param] argument: {}", bare.name()));
                     ok = false;
                 }
             }

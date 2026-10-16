@@ -4,6 +4,7 @@
 //! emit Wasm bytes. The resulting [`Semantics`] carries every fact an editor
 //! query needs without paying for monomorphize / lower / codegen.
 
+use std::cell::OnceCell;
 use std::sync::Arc;
 
 use crate::analyze::Analyzer;
@@ -17,7 +18,7 @@ use crate::coverage::{CoverageMap, CoverageScope, plan_module, render_plan};
 use crate::defs::DefId;
 use crate::elaborator::Elaborator;
 use crate::elaborator::assert::render_plans;
-use crate::elaborator::liveness::Liveness;
+use crate::elaborator::liveness::{Liveness, LivenessScope};
 use crate::elaborator::orchestration::{AnnotateState, rt_unreachable_calls};
 use crate::elaborator::sem::types::{CoercionKind, DesugarKind, MethodDispatch};
 use crate::elaborator::sem::{Fact, FactKind, ModuleSemantics};
@@ -60,11 +61,13 @@ pub struct Semantics {
     /// a call into [`Semantics`] or [`crate::Elaborator`], or the nested borrow
     /// panics. Write `sem.interner.borrow_mut().<one call>` and let it drop.
     pub interner: std::rc::Rc<std::cell::RefCell<ModuleSourceInterner>>,
-    /// Per-module structural index (name spans, write targets, span lookup).
-    /// Built once per [`Module`] in [`semantics_of`]. LSP queries (and
-    /// the in-tree [`name_span_of`] / [`span_of_key`] helpers) consult this
-    /// instead of re-walking the AST on every request.
-    pub(crate) ast_indices: IndexMap<ModuleSource, AstIndex>,
+    /// Per-module structural index (name spans, write targets, span lookup),
+    /// built on the first query into its module ([`Self::ast_index`]). LSP
+    /// queries (and the in-tree [`name_span_of`] / [`span_of_key`] helpers)
+    /// consult this instead of re-walking the AST on every request. A batch
+    /// compile queries few modules, and a package check loads megabytes of
+    /// generated parsers none of its queries reach.
+    ast_indices: IndexMap<ModuleSource, OnceCell<AstIndex>>,
     /// Shared elaborator state from [`Elaborator::annotate_modules`], paired with
     /// `is_complete` to distinguish three outcomes: `(None, false)` — analyze or
     /// resolve bailed, leaving only `symbols` + `ast_indices`; `(Some(_), false)`
@@ -269,7 +272,7 @@ impl Semantics {
     fn partial(
         entry_module_source: ModuleSource,
         modules: IndexMap<ModuleSource, Module>,
-        ast_indices: IndexMap<ModuleSource, AstIndex>,
+        ast_indices: IndexMap<ModuleSource, OnceCell<AstIndex>>,
         symbols: SymbolTable,
         interner: std::rc::Rc<std::cell::RefCell<ModuleSourceInterner>>,
     ) -> Self {
@@ -300,11 +303,16 @@ impl Semantics {
     /// Innermost AST node containing the given `(line, column)` in `module`.
     ///
     /// Returns `None` if the module is unknown or no node covers the position.
-    /// Answered from the per-module [`AstIndex`];
-    /// no AST traversal happens at query time.
+    /// Answered from the per-module [`AstIndex`]; no AST traversal happens at
+    /// query time once the module's index is built.
     #[must_use]
     pub fn ast_id_at(&self, module: &ModuleSource, line: usize, column: usize) -> Option<AstId> {
-        self.ast_indices.get(module)?.ast_id_at(line, column)
+        self.ast_index(module)?.ast_id_at(line, column)
+    }
+
+    fn ast_index(&self, module: &ModuleSource) -> Option<&AstIndex> {
+        let cell = self.ast_indices.get(module)?;
+        Some(cell.get_or_init(|| AstIndex::build(&self.modules[module])))
     }
 
     /// The `fact` recorded for `id`, read from the module [`Self::fact_home`]
@@ -769,7 +777,7 @@ impl Semantics {
     fn function_and_item_at(&self, id: AstId) -> Option<(&ast::Function, &Item)> {
         let owning = self.module_of_id(id)?;
         let module = self.modules.get(owning)?;
-        let location = self.ast_indices.get(owning)?.function_location(id)?;
+        let location = self.ast_index(owning)?.function_location(id)?;
         let (item_idx, method_idx) = match location {
             FunctionLocation::Free { item_idx } => (item_idx, None),
             FunctionLocation::Method {
@@ -1004,7 +1012,7 @@ impl Semantics {
     /// total over every parser-allocated [`AstId`].
     #[must_use]
     pub fn span_of_id(&self, id: AstId) -> Option<Span> {
-        self.ast_indices.get(self.module_of_id(id)?)?.span_of(id)
+        self.ast_index(self.module_of_id(id)?)?.span_of(id)
     }
 
     /// Span of the defining identifier alone — what go-to-definition wants,
@@ -1014,9 +1022,7 @@ impl Semantics {
     /// one: anonymous `impl` blocks, `Item::Resource`, tests.
     #[must_use]
     pub fn name_span_of(&self, id: AstId) -> Option<Span> {
-        self.ast_indices
-            .get(self.module_of_id(id)?)?
-            .name_span_of(id)
+        self.ast_index(self.module_of_id(id)?)?.name_span_of(id)
     }
 
     /// True iff `key` names an `IdentExpr` that appears as the direct
@@ -1026,7 +1032,7 @@ impl Semantics {
     #[must_use]
     pub fn is_write_target(&self, id: AstId) -> bool {
         self.module_of_id(id)
-            .and_then(|m| self.ast_indices.get(m))
+            .and_then(|m| self.ast_index(m))
             .is_some_and(|idx| idx.is_write_target(id))
     }
 
@@ -1252,7 +1258,13 @@ pub fn semantics_of<H: CompilerHost>(
     build_tir: bool,
 ) -> Semantics {
     let logger = Logger::new(host, log_level);
-    semantics_with_logger(loaded, &logger, build_tir, None)
+    semantics_with_logger(
+        loaded,
+        &logger,
+        build_tir,
+        None,
+        &LivenessScope::Compilation,
+    )
 }
 
 /// Logger-sharing variant. Internal: lets callers that already maintain a
@@ -1263,6 +1275,7 @@ pub(crate) fn semantics_with_logger<H: CompilerHost>(
     logger: &Logger<'_, H>,
     build_tir: bool,
     coverage: Option<CoverageScope>,
+    liveness_scope: &LivenessScope,
 ) -> Semantics {
     // Before any phase reports: a diagnostic's span names the file it indexes
     // by looking its parse up here.
@@ -1315,17 +1328,14 @@ pub(crate) fn semantics_with_logger<H: CompilerHost>(
         write_out_from_markers(&mut load_result.modules, &symbols);
     }
 
-    // Built once the AST is final, and before anything can bail, so cursor
+    // Set up once the AST is final, and before anything can bail, so cursor
     // positioning (`Semantics::ast_id_at`) works in partial mode, which the
     // LSP relies on for file-path jumps.
-    let ast_indices = {
-        let _span = logger.span("ast_index");
-        let mut indices: IndexMap<ModuleSource, AstIndex> = IndexMap::default();
-        for (source, module) in &load_result.modules {
-            indices.insert(source.clone(), AstIndex::build(module));
-        }
-        indices
-    };
+    let ast_indices: IndexMap<ModuleSource, OnceCell<AstIndex>> = load_result
+        .modules
+        .keys()
+        .map(|source| (source.clone(), OnceCell::new()))
+        .collect();
 
     if !analyze_ok {
         return Semantics::partial(
@@ -1379,6 +1389,7 @@ pub(crate) fn semantics_with_logger<H: CompilerHost>(
             snapshot.as_deref(),
             build_tir,
             coverage,
+            liveness_scope,
         ) {
             Ok(m) => (m, true),
             Err(_) => (IndexMap::default(), false),

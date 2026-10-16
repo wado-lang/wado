@@ -7,15 +7,24 @@
 use std::fmt::Write as _;
 use std::path::{Path, PathBuf};
 
+use indexmap::IndexMap;
 use lexopt::Arg::Value;
 use wado_compiler::Code;
+use wado_compiler::kiln::InvocationIndex;
+use wado_compiler::path::normalize;
 
 use crate::args::{self, CliExit};
 use crate::build;
-use crate::compile::{build_load, load_nearest_manifest};
+use crate::compile::{
+    Settled, attach_manifest_and_component_deps, build_load, load_nearest_manifest,
+    maybe_run_pipeline_for, pipeline_exit,
+};
 use crate::compiler_host::FilesystemCompilerHost;
+use crate::dep_component::Acquisition;
+use crate::discover;
 use crate::knobs::{CompileKnobOpt, CompileKnobs};
 use crate::manifest;
+use crate::test::test_filters;
 
 #[derive(Debug)]
 pub struct CheckOptions {
@@ -41,7 +50,13 @@ enum Opt {
 impl Opt {
     const ALL: &[Self] = &[Self::Warn, Self::World, Self::Help];
 
-    const KNOBS: &[CompileKnobOpt] = &[CompileKnobOpt::LogLevel, CompileKnobOpt::NoCache];
+    const KNOBS: &[CompileKnobOpt] = &[
+        CompileKnobOpt::LogLevel,
+        CompileKnobOpt::NoCache,
+        CompileKnobOpt::NoLint,
+        CompileKnobOpt::Lint,
+        CompileKnobOpt::LintGenerated,
+    ];
 
     const fn spec(self) -> args::OptSpec {
         match self {
@@ -145,7 +160,9 @@ pub async fn run(opts: CheckOptions) -> Result<(), CliExit> {
     }
     let project = load_nearest_manifest(&path).map_err(CliExit::error)?;
     let world = check_world(opts.target_world.as_deref(), &path, project.as_ref());
-    check_entry(&path, world, project, &opts).await
+    check_entry(&path, world, project, true, &opts, &mut Settled::default())
+        .await
+        .map(drop)
 }
 
 const NO_PROJECT: &str = "no wado.toml found; name a file to check \
@@ -166,25 +183,160 @@ async fn check_declared_worlds(
             "no world to check; declare [package].lib or a [world] entry in wado.toml",
         ));
     }
-    for target in targets {
+    // Unused is a question about the package, which one entry cannot answer:
+    // its siblings and its tests use what it leaves alone. With `--world`
+    // narrowing the entries, the package's production code is unknown, so each
+    // entry answers alone.
+    let whole_package = opts.target_world.is_none();
+    let mut entry_runs = Vec::with_capacity(targets.len());
+    let mut settled = Settled::default();
+    for target in &targets {
         let world = match (&target.lib_world, &target.target_world) {
             (Some(fq), _) => CheckWorld::Lib(fq.clone()),
             (_, Some(fq)) => CheckWorld::Target(fq.clone()),
             _ => unreachable!("a build target names exactly one world"),
         };
         let entry_project = load_nearest_manifest(&target.entry).map_err(CliExit::error)?;
-        check_entry(&target.entry, world, entry_project, opts).await?;
+        // Each entry compiles from its own invocations, so its walk passes
+        // over nothing another entry's settled.
+        let mut walked = Settled::default();
+        entry_runs.push(
+            check_entry(
+                &target.entry,
+                world,
+                entry_project,
+                !whole_package,
+                opts,
+                &mut walked,
+            )
+            .await?,
+        );
+        settled.extend(walked);
+    }
+    if whole_package && opts.knobs.lints != wado_compiler::Lints::Off {
+        check_package_unused(project, &targets, &entry_runs, settled, opts).await?;
     }
     Ok(())
 }
 
+/// Report the unused items of the package rooted at `project`, decided over
+/// every member at once: what `targets` reach is production code, the rest of
+/// the members are its tests. `entry_runs` holds what each target's own check
+/// generated, and `settled` the modules those checks walked, so a generator
+/// clause runs and warns once, in the first walk that reaches its module.
+async fn check_package_unused(
+    project: &manifest::ProjectManifest,
+    targets: &[build::BuildTarget],
+    entry_runs: &[InvocationIndex],
+    mut settled: Settled,
+    opts: &CheckOptions,
+) -> Result<(), CliExit> {
+    let root = &project.root;
+    // The spelling a member is matched by, so `src/../lib.wado` names
+    // `lib.wado`. A manifest entry outside the root is no member.
+    let relative = |path: &Path| {
+        Some(normalize(&path.strip_prefix(root).ok()?.to_string_lossy()))
+            .filter(|rel| !rel.starts_with("../"))
+    };
+    // The members are the files `wado test` runs, and the entries, which a
+    // `[test].exclude` may leave out of those.
+    let mut files = discover::package_files(root, &|pkg| test_filters(pkg, &[]))?;
+    let mut members: Vec<String> = files
+        .iter()
+        .map(|f| relative(f).expect("a package's members lie under its root"))
+        .collect();
+    // Each entry's first check, by the spelling its member is matched by.
+    let mut runs: IndexMap<String, (&build::BuildTarget, &InvocationIndex)> = IndexMap::new();
+    for (target, run) in targets.iter().zip(entry_runs) {
+        if let Some(entry) = relative(&target.entry) {
+            runs.entry(entry).or_insert((target, run));
+        }
+    }
+    let entries: Vec<String> = runs.keys().cloned().collect();
+    for entry in &entries {
+        if !members.contains(entry) {
+            files.push(root.join(entry));
+            members.push(entry.clone());
+        }
+    }
+    let mut read = Vec::with_capacity(files.len());
+    for (file, member) in files.into_iter().zip(members) {
+        let source = std::fs::read_to_string(&file)
+            .map_err(|e| CliExit::error(format!("{}: {e}", file.display())))?;
+        // A generated module belongs to the module importing it, never a member
+        // of its own: a Kiln output under the root would load once as each.
+        if entries.contains(&member) || !wado_compiler::is_generated_source(&source) {
+            read.push((file, member, source));
+        }
+    }
+    let package = wado_compiler::PackageSources {
+        root: root.to_string_lossy().into_owned(),
+        members: read.iter().map(|(_, member, _)| member.clone()).collect(),
+        entries,
+    };
+    let host = attach_manifest_and_component_deps(
+        FilesystemCompilerHost::with_log_level(root.clone(), opts.knobs.log_level),
+        Some(project),
+        root,
+        &read
+            .iter()
+            .map(|(_, _, source)| source.as_str())
+            .collect::<Vec<_>>(),
+        Acquisition::Build,
+    )
+    .await
+    .map_err(CliExit::error)?;
+    let mut invocations = InvocationIndex::default();
+    for (file, member, _) in &read {
+        // `check_entry` names its entry by the path as given.
+        if let Some((target, index)) = runs.get(member) {
+            let run_name = target.entry.to_string_lossy();
+            package.adopt_member_invocations(member, &run_name, index, &mut invocations);
+            continue;
+        }
+        let member_identity = package.member_identity(member);
+        let outcome = maybe_run_pipeline_for(
+            file,
+            Some(&member_identity),
+            &host,
+            opts.knobs.no_cache,
+            Some(project.clone()),
+            &mut settled,
+        )
+        .await
+        .map_err(|e| pipeline_exit(e, "check"))?;
+        package.adopt_member_invocations(
+            member,
+            &member_identity,
+            &outcome.invocations,
+            &mut invocations,
+        );
+    }
+    let lints = wado_compiler::package_unused_diagnostics(
+        &host,
+        &package,
+        invocations,
+        opts.knobs.lints,
+        opts.knobs.log_level,
+    )
+    .await;
+    for lint in lints.into_iter().flatten() {
+        wado_compiler::CompilerHost::emit_diagnostic(&host, lint);
+    }
+    check_outcome(&host, false, opts)
+}
+
 /// Check `path` against `world`, under `manifest_pair`, the manifest nearest it.
+/// `unused` reports the items this entry alone leaves unused. Answers what the
+/// entry's generators recorded; `settled` gains the modules its walk reached.
 async fn check_entry(
     path: &Path,
     world: CheckWorld,
     manifest_pair: Option<manifest::ProjectManifest>,
+    unused: bool,
     opts: &CheckOptions,
-) -> Result<(), CliExit> {
+    settled: &mut Settled,
+) -> Result<InvocationIndex, CliExit> {
     let base_path = path
         .parent()
         .map(std::path::Path::to_path_buf)
@@ -201,6 +353,7 @@ async fn check_entry(
         FilesystemCompilerHost::with_log_level(base_path, opts.knobs.log_level),
         opts.knobs.no_cache,
         "check",
+        settled,
     ))
     .await?;
 
@@ -214,7 +367,9 @@ async fn check_entry(
         lib_world,
         opt_level: wado_compiler::OptLevel::O0,
         analysis_only: true,
-        invocations,
+        lints: opts.knobs.lints,
+        unused_diagnostics: unused,
+        invocations: invocations.clone(),
         ..Default::default()
     };
     let entry_name = path.to_string_lossy().into_owned();
@@ -222,15 +377,24 @@ async fn check_entry(
         wado_compiler::compile_with_options(&source, &host, Some(&entry_name), compiler_options)
             .await;
 
-    let has_compile_errors = host.has_errors() || compile_result.is_err();
+    check_outcome(&host, compile_result.is_err(), opts)?;
+    Ok(invocations)
+}
+
+/// How a check ends once `host` holds what it reported: an error fails it,
+/// `failed` among them, and so does a Kiln warning unless `--warn` was given.
+fn check_outcome(
+    host: &FilesystemCompilerHost,
+    failed: bool,
+    opts: &CheckOptions,
+) -> Result<(), CliExit> {
+    if failed || host.has_errors() {
+        return Err(CliExit::silent_failure(1));
+    }
     let has_kiln_warnings = host
         .diagnostics()
         .into_iter()
         .any(|d| is_kiln_diagnostic(&d.code));
-
-    if has_compile_errors {
-        return Err(CliExit::silent_failure(1));
-    }
     if !opts.warn_only && has_kiln_warnings {
         return Err(CliExit::error(
             "wado check: Kiln integrity check failed — \

@@ -20,6 +20,7 @@ use crate::unparse::{
     unparse_contract_clause, unparse_enum_signature, unparse_function_signature,
     unparse_struct_signature, unparse_trait_header, unparse_type_into,
 };
+use crate::use_declaration;
 use crate::wit_consume::build_bindings;
 use crate::{ParseResult, ast, parse, stdlib};
 use wit_component::DecodedWasm;
@@ -911,7 +912,7 @@ fn parse_stdlib_for_doc(label: &str, source: &str) -> ParseResult {
 /// [`Semantics`] its page reads.
 #[must_use]
 pub fn stdlib_doc_entry(module_name: &str) -> String {
-    format!("use _ from \"{module_name}\";\n")
+    use_declaration("_", module_name)
 }
 
 /// Extract documentation from a stdlib module by name.
@@ -1051,7 +1052,7 @@ fn collect_pub_use_sources(module: &Module) -> Vec<String> {
             // A module re-exported by two statements is still one module, and
             // the names are collected across all of them; walking it twice
             // would publish every item it names twice.
-            sources.insert(u.source.clone());
+            sources.insert(u.source.value.clone());
         }
     }
     sources.into_iter().collect()
@@ -1234,7 +1235,7 @@ fn collect_side_effect_import_sources(module: &Module) -> Vec<String> {
         if let Item::Use(u) = item
             && u.items.iter().any(|i| matches!(i, UseItem::Wildcard))
         {
-            sources.push(u.source.clone());
+            sources.push(u.source.value.clone());
         }
     }
     sources

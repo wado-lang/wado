@@ -5,7 +5,7 @@
 use crate::ast::Visibility;
 use crate::ast::{
     AstId, Expr, GenericType, IdentExpr, Item, LetStmt, Module, NamedType, Param, Pattern,
-    SelfKind, Stmt, StructLiteralExpr, StructLiteralField, Type, UseDecl, UseItem,
+    SelfKind, Stmt, StrLit, StructLiteralExpr, StructLiteralField, Type, UseDecl, UseItem,
 };
 use crate::compiler_host::{Code, CompilerHost, Diagnostic, DiagnosticSpan, Severity};
 use crate::component_model::SourceInterfaceBatch;
@@ -328,7 +328,7 @@ fn ensure_kiln_imports(module: &mut Module, span: Span, needed: &[&str]) {
         attrs: Vec::new(),
         visibility: Visibility::Private,
         is_export: false,
-        source: "core:kiln".to_string(),
+        source: StrLit::new("core:kiln"),
         source_span: span,
         source_id: module.alloc_ast_id(),
         items: missing

@@ -212,7 +212,7 @@ fn lower_inline(
         Some(AttrEntry {
             value: AttrValue::String(t),
             ..
-        }) => Some(t.clone()),
+        }) => Some(t.value.clone()),
         Some(entry) => {
             errors.push(clause_error(
                 module_path,
@@ -447,7 +447,7 @@ fn lower_input(
             }
             let use_type = match attr_value(fields, ImportAttributes::TYPE) {
                 None => None,
-                Some(AttrValue::String(t)) => Some(t.clone()),
+                Some(AttrValue::String(t)) => Some(t.value.clone()),
                 Some(other) => {
                     error(format!(
                         "kiln: `{field}.type` must be a string, got {}",
@@ -531,7 +531,7 @@ fn optional_source_string(
 ) -> Option<String> {
     match attr_value(cfg, field) {
         None => None,
-        Some(AttrValue::String(s)) => Some(s.clone()),
+        Some(AttrValue::String(s)) => Some(s.value.clone()),
         Some(other) => {
             errors.push(use_error(
                 module_path,
@@ -705,7 +705,7 @@ fn use_error(module_path: &str, use_decl: &UseDecl, message: String) -> Diagnost
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::ast::{AstId, AttrItem, UseItem, Visibility};
+    use crate::ast::{AstId, AttrItem, StrLit, UseItem, Visibility};
     use crate::compiler_host::{Code, Severity};
     use crate::token::Span;
     use std::assert_matches;
@@ -740,7 +740,7 @@ mod tests {
             attrs: Vec::new(),
             visibility: Visibility::Private,
             is_export: false,
-            source: source.to_string(),
+            source: StrLit::new(source),
             source_span: span(),
             source_id: AstId::fresh(),
             items: vec![UseItem::Wildcard],
@@ -777,7 +777,7 @@ mod tests {
     #[test]
     fn extracts_invocation_from_inline_clause() {
         let attrs =
-            attr_with_generator(&[("module", AttrValue::String("ns:gen@1.0.0".to_string()))]);
+            attr_with_generator(&[("module", AttrValue::string("ns:gen@1.0.0".to_string()))]);
         let module = module_with_use("./schema.proto", attrs);
         let mut mods: IndexMap<String, Module> = IndexMap::default();
         mods.insert("src/main.wado".to_string(), module);
@@ -800,7 +800,7 @@ mod tests {
     fn lib_nickname_module_is_a_spec() {
         // A `lib:` nickname is a `[build-dependencies]` specifier like an open
         // coordinate; the host dispatches it on the entry's source.
-        let attrs = attr_with_generator(&[("module", AttrValue::String("lib:gen".to_string()))]);
+        let attrs = attr_with_generator(&[("module", AttrValue::string("lib:gen".to_string()))]);
         let module = module_with_use("./schema.proto", attrs);
         let mut mods: IndexMap<String, Module> = IndexMap::default();
         mods.insert("src/main.wado".to_string(), module);
@@ -818,7 +818,7 @@ mod tests {
     fn bare_name_module_is_rejected() {
         // A bare name (no `:`) is not a valid specifier — only relative paths and
         // `[build-dependencies]` specifiers (coordinate / `lib:` nickname).
-        let attrs = attr_with_generator(&[("module", AttrValue::String("gen".to_string()))]);
+        let attrs = attr_with_generator(&[("module", AttrValue::string("gen".to_string()))]);
         let module = module_with_use("./schema.proto", attrs);
         let mut mods: IndexMap<String, Module> = IndexMap::default();
         mods.insert("src/main.wado".to_string(), module);
@@ -840,9 +840,9 @@ mod tests {
         // `version` / `registry` on a specifier `module` supply the inline
         // (single-file) source.
         let attrs = attr_with_generator(&[
-            ("module", AttrValue::String("wado-lang:gale".to_string())),
-            ("version", AttrValue::String("^0.0.9".to_string())),
-            ("registry", AttrValue::String("oci://ghcr.io".to_string())),
+            ("module", AttrValue::string("wado-lang:gale".to_string())),
+            ("version", AttrValue::string("^0.0.9".to_string())),
+            ("registry", AttrValue::string("oci://ghcr.io".to_string())),
         ]);
         let module = module_with_use("./schema.g4", attrs);
         let mut mods: IndexMap<String, Module> = IndexMap::default();
@@ -867,8 +867,8 @@ mod tests {
     fn inline_source_on_a_relative_path_is_rejected() {
         // `version` / `registry` make no sense on a relative-path generator.
         let attrs = attr_with_generator(&[
-            ("module", AttrValue::String("./gen.wado".to_string())),
-            ("version", AttrValue::String("^0.0.9".to_string())),
+            ("module", AttrValue::string("./gen.wado".to_string())),
+            ("version", AttrValue::string("^0.0.9".to_string())),
         ]);
         let module = module_with_use("./schema.g4", attrs);
         let mut mods: IndexMap<String, Module> = IndexMap::default();
@@ -936,7 +936,7 @@ mod tests {
     #[test]
     fn unknown_generator_field_is_an_error_on_its_key() {
         let mut attrs =
-            attr_with_generator(&[("module", AttrValue::String("./inner.wado".to_string()))]);
+            attr_with_generator(&[("module", AttrValue::string("./inner.wado".to_string()))]);
         let generator = attrs.entries.get_mut("generator").expect("built above");
         let AttrValue::Object(fields) = &mut generator.value else {
             panic!("built as an object");
@@ -961,10 +961,10 @@ mod tests {
     #[test]
     fn a_key_beside_generator_is_an_error_on_its_key() {
         let mut attrs =
-            attr_with_generator(&[("module", AttrValue::String("./inner.wado".to_string()))]);
+            attr_with_generator(&[("module", AttrValue::string("./inner.wado".to_string()))]);
         attrs.entries.insert(
             "provider".to_string(),
-            entry_at(3, 9, AttrValue::String("./ext.wado".to_string())),
+            entry_at(3, 9, AttrValue::string("./ext.wado".to_string())),
         );
 
         assert_eq!(
@@ -983,11 +983,11 @@ mod tests {
     /// with `type` beside its generator where one is given.
     fn invocation_typed(use_type: Option<&str>) -> Invocation {
         let mut attrs =
-            attr_with_generator(&[("module", AttrValue::String("lib:gen".to_string()))]);
+            attr_with_generator(&[("module", AttrValue::string("lib:gen".to_string()))]);
         if let Some(t) = use_type {
             attrs
                 .entries
-                .insert("type".to_string(), entry(AttrValue::String(t.to_string())));
+                .insert("type".to_string(), entry(AttrValue::string(t)));
         }
         let module = module_with_use("./model.onnx", attrs);
         let mut result = expect_ok(collect_inline_invocations(
@@ -1019,7 +1019,7 @@ mod tests {
             })
             .collect();
         let attrs = attr_with_generator(&[
-            ("module", AttrValue::String("lib:gen".to_string())),
+            ("module", AttrValue::string("lib:gen".to_string())),
             ("inputs", AttrValue::Array(items)),
         ]);
         let module = module_with_use("./Calc.g4", attrs);
@@ -1034,10 +1034,7 @@ mod tests {
     fn input_object(fields: &[(&str, &str)]) -> AttrValue {
         let mut object = AttrObject::default();
         for (key, value) in fields {
-            object.insert(
-                (*key).to_string(),
-                entry(AttrValue::String((*value).to_string())),
-            );
+            object.insert((*key).to_string(), entry(AttrValue::string(*value)));
         }
         AttrValue::Object(object)
     }
@@ -1045,7 +1042,7 @@ mod tests {
     #[test]
     fn an_input_may_carry_a_type() {
         let inputs = lowered_inputs(vec![
-            AttrValue::String("./Lexer.g4".to_string()),
+            AttrValue::string("./Lexer.g4".to_string()),
             input_object(&[("path", "./Calc.highlights.scm"), ("type", "highlights")]),
         ]);
         assert_eq!(
@@ -1067,7 +1064,7 @@ mod tests {
     fn an_input_object_names_its_path_and_type_and_nothing_else() {
         let attrs_with = |input: AttrValue| {
             attr_with_generator(&[
-                ("module", AttrValue::String("lib:gen".to_string())),
+                ("module", AttrValue::string("lib:gen".to_string())),
                 (
                     "inputs",
                     AttrValue::Array(vec![AttrItem {
@@ -1102,7 +1099,7 @@ mod tests {
     fn an_input_type_is_part_of_the_invocation() {
         let digest_of = |input: AttrValue| {
             let attrs = attr_with_generator(&[
-                ("module", AttrValue::String("lib:gen".to_string())),
+                ("module", AttrValue::string("lib:gen".to_string())),
                 (
                     "inputs",
                     AttrValue::Array(vec![AttrItem {
@@ -1123,7 +1120,7 @@ mod tests {
             .clone()
         };
         assert_eq!(
-            digest_of(AttrValue::String("./a.scm".to_string())),
+            digest_of(AttrValue::string("./a.scm".to_string())),
             digest_of(input_object(&[("path", "./a.scm")])),
         );
         assert_ne!(
@@ -1146,7 +1143,7 @@ mod tests {
     #[test]
     fn a_type_beside_generator_that_is_not_a_string_is_an_error_on_its_key() {
         let mut attrs =
-            attr_with_generator(&[("module", AttrValue::String("lib:gen".to_string()))]);
+            attr_with_generator(&[("module", AttrValue::string("lib:gen".to_string()))]);
         attrs
             .entries
             .insert("type".to_string(), entry_at(2, 5, AttrValue::Bool(true)));
@@ -1162,7 +1159,7 @@ mod tests {
         let mut entries = AttrObject::default();
         entries.insert(
             "generator".to_string(),
-            entry_at(2, 5, AttrValue::String("./inner.wado".to_string())),
+            entry_at(2, 5, AttrValue::string("./inner.wado".to_string())),
         );
         let attrs = ImportAttributes {
             entries,
@@ -1183,7 +1180,7 @@ mod tests {
     fn dedup_merges_identical_clauses() {
         let mk = || {
             let attrs =
-                attr_with_generator(&[("module", AttrValue::String("ns:gen@1.0.0".to_string()))]);
+                attr_with_generator(&[("module", AttrValue::string("ns:gen@1.0.0".to_string()))]);
             module_with_use("./schema.proto", attrs)
         };
         let mut mods: IndexMap<String, Module> = IndexMap::default();
@@ -1202,11 +1199,11 @@ mod tests {
     fn conflict_detected_when_same_from_different_module() {
         let a = module_with_use(
             "./schema.proto",
-            attr_with_generator(&[("module", AttrValue::String("ns:a@1.0.0".to_string()))]),
+            attr_with_generator(&[("module", AttrValue::string("ns:a@1.0.0".to_string()))]),
         );
         let b = module_with_use(
             "./schema.proto",
-            attr_with_generator(&[("module", AttrValue::String("ns:b@1.0.0".to_string()))]),
+            attr_with_generator(&[("module", AttrValue::string("ns:b@1.0.0".to_string()))]),
         );
         let mut mods: IndexMap<String, Module> = IndexMap::default();
         mods.insert("src/a.wado".to_string(), a);
@@ -1230,7 +1227,7 @@ mod tests {
         let mut options = AttrObject::default();
         options.insert("n".to_string(), entry(AttrValue::Int(n)));
         let mut generator = vec![
-            ("module", AttrValue::String("./gen.wado".to_string())),
+            ("module", AttrValue::string("./gen.wado".to_string())),
             ("options", AttrValue::Object(options)),
         ];
         generator.extend(extra.iter().cloned());
@@ -1252,7 +1249,7 @@ mod tests {
 
     #[test]
     fn clauses_disagreeing_on_options_are_an_error() {
-        let shared_dir = [("output_dir", AttrValue::String("./gen".to_string()))];
+        let shared_dir = [("output_dir", AttrValue::string("./gen".to_string()))];
         for extra in [&[][..], &shared_dir[..]] {
             let mut mods: IndexMap<String, Module> = IndexMap::default();
             mods.insert("src/a.wado".to_string(), with_option_n_into(4, extra));
@@ -1271,7 +1268,7 @@ mod tests {
     fn no_options_keep_the_empty_table_id() {
         let module = module_with_use(
             "./model.onnx",
-            attr_with_generator(&[("module", AttrValue::String("./gen.wado".to_string()))]),
+            attr_with_generator(&[("module", AttrValue::string("./gen.wado".to_string()))]),
         );
         let mut mods: IndexMap<String, Module> = IndexMap::default();
         mods.insert("src/a.wado".to_string(), module);
@@ -1290,11 +1287,11 @@ mod tests {
     fn a_malformed_clause_leaves_the_others_standing() {
         let good = module_with_use(
             "./ok.proto",
-            attr_with_generator(&[("module", AttrValue::String("ns:gen@1.0.0".to_string()))]),
+            attr_with_generator(&[("module", AttrValue::string("ns:gen@1.0.0".to_string()))]),
         );
         let bad = module_with_use(
             "./broken.proto",
-            attr_with_generator(&[("module", AttrValue::String("gen".to_string()))]),
+            attr_with_generator(&[("module", AttrValue::string("gen".to_string()))]),
         );
         let mut mods: IndexMap<String, Module> = IndexMap::default();
         mods.insert("src/good.wado".to_string(), good);
@@ -1322,7 +1319,7 @@ mod tests {
     #[test]
     fn identical_clauses_in_two_modules_keep_both_sites() {
         let attrs =
-            attr_with_generator(&[("module", AttrValue::String("ns:gen@1.0.0".to_string()))]);
+            attr_with_generator(&[("module", AttrValue::string("ns:gen@1.0.0".to_string()))]);
         let mut mods: IndexMap<String, Module> = IndexMap::default();
         mods.insert(
             "src/a.wado".to_string(),
@@ -1357,7 +1354,7 @@ mod tests {
     #[test]
     fn relative_module_specifier_resolved_against_importing_file() {
         let attrs =
-            attr_with_generator(&[("module", AttrValue::String("../gen.wado".to_string()))]);
+            attr_with_generator(&[("module", AttrValue::string("../gen.wado".to_string()))]);
         let module = module_with_use("./x.proto", attrs);
         let mut mods: IndexMap<String, Module> = IndexMap::default();
         mods.insert("src/main.wado".to_string(), module);
@@ -1379,8 +1376,8 @@ mod tests {
     fn output_dir_override_relative_with_dot_slash() {
         // `./generated` resolves relative to the declaring file (`src/main.wado`).
         let attrs = attr_with_generator(&[
-            ("module", AttrValue::String("ns:gen@1.0.0".to_string())),
-            ("output_dir", AttrValue::String("./generated".to_string())),
+            ("module", AttrValue::string("ns:gen@1.0.0".to_string())),
+            ("output_dir", AttrValue::string("./generated".to_string())),
         ]);
         let module = module_with_use("./schema.proto", attrs);
         let mut mods: IndexMap<String, Module> = IndexMap::default();
@@ -1401,10 +1398,10 @@ mod tests {
         // A bare (non-`./`/`../`) path is rejected; relative paths must be
         // explicit, matching local module imports.
         let attrs = attr_with_generator(&[
-            ("module", AttrValue::String("ns:gen@1.0.0".to_string())),
+            ("module", AttrValue::string("ns:gen@1.0.0".to_string())),
             (
                 "output_dir",
-                AttrValue::String("tests/generated/calc".to_string()),
+                AttrValue::string("tests/generated/calc".to_string()),
             ),
         ]);
         let module = module_with_use("./schema.proto", attrs);
@@ -1426,7 +1423,7 @@ mod tests {
     #[test]
     fn bare_from_is_rejected() {
         let attrs =
-            attr_with_generator(&[("module", AttrValue::String("ns:gen@1.0.0".to_string()))]);
+            attr_with_generator(&[("module", AttrValue::string("ns:gen@1.0.0".to_string()))]);
         // `from` without a `./` prefix.
         let module = module_with_use("schema.proto", attrs);
         let mut mods: IndexMap<String, Module> = IndexMap::default();
@@ -1446,7 +1443,7 @@ mod tests {
     #[test]
     fn output_dir_non_string_rejected() {
         let attrs = attr_with_generator(&[
-            ("module", AttrValue::String("ns:gen@1.0.0".to_string())),
+            ("module", AttrValue::string("ns:gen@1.0.0".to_string())),
             ("output_dir", AttrValue::Int(42)),
         ]);
         let module = module_with_use("./schema.proto", attrs);
@@ -1554,8 +1551,8 @@ mod tests {
         // `./`-relative `output_dir` must stay inside the project, not resolve
         // to `../` (the `.` segment must not become a spurious `..`).
         let attrs = attr_with_generator(&[
-            ("module", AttrValue::String("ns:gen@1.0.0".to_string())),
-            ("output_dir", AttrValue::String("./generated".to_string())),
+            ("module", AttrValue::string("ns:gen@1.0.0".to_string())),
+            ("output_dir", AttrValue::string("./generated".to_string())),
         ]);
         let module = module_with_use("./schema.g4", attrs);
         let mut mods: IndexMap<String, Module> = IndexMap::default();

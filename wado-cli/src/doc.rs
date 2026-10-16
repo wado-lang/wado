@@ -13,7 +13,7 @@ use wado_compiler::kiln::InvocationIndex;
 use wado_compiler::semantics::{Semantics, semantics_for_world};
 
 use crate::args::{self, CliExit};
-use crate::compile::{build_load, load_nearest_manifest};
+use crate::compile::{Settled, build_load, load_nearest_manifest};
 use crate::compiler_host::FilesystemCompilerHost;
 
 const MODULE_PLACEHOLDER: &str = "{module}";
@@ -281,8 +281,16 @@ async fn load_doc(input: &str, include_private: bool) -> Result<DocModule, CliEx
         .ok_or_else(|| CliExit::error(format!("not a file: '{}'", path.display())))?;
     let project = load_nearest_manifest(path).map_err(CliExit::error)?;
     let dir = path.parent().unwrap_or(Path::new(""));
-    let (host, invocations) =
-        build_load(path, &source, project, doc_host(dir), false, "doc").await?;
+    let (host, invocations) = build_load(
+        path,
+        &source,
+        project,
+        doc_host(dir),
+        false,
+        "doc",
+        &mut Settled::default(),
+    )
+    .await?;
     let sem = analyze(&source, &host, input, invocations).await?;
 
     let parsed = wado_compiler::parse(&source)

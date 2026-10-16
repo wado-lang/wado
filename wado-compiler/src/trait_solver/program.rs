@@ -393,7 +393,14 @@ pub struct Fact {
 pub struct Program {
     /// Insertion order is the order every answer is reported in, so a caller
     /// that builds it deterministically gets deterministic diagnostics.
-    pub impls: IndexMap<ImplId, ImplDef>,
+    impls: IndexMap<ImplId, ImplDef>,
+    /// The trait impls in `impls` order: by trait, by trait and the
+    /// declaration the target names (`None` for any other target), and by that
+    /// declaration alone. A question names its trait and its type, and a scan
+    /// of every impl per question is quadratic in a whole package.
+    impls_by_trait: IndexMap<TraitDeclId, Vec<ImplId>>,
+    impls_by_target: IndexMap<(TraitDeclId, Option<TypeDeclId>), Vec<ImplId>>,
+    trait_impls_by_head: IndexMap<Option<TypeDeclId>, Vec<ImplId>>,
     pub traits: IndexMap<TraitDeclId, TraitDef>,
     pub types: IndexMap<TypeDeclId, TypeDef>,
     /// The non-recursive ways a bound holds, keyed by the declaration and the
@@ -429,6 +436,54 @@ pub struct Program {
     /// `From<Meters> for i64` would make every newtype of `i64` convert from
     /// `Meters`.
     pub not_inherited: IndexSet<ImplId>,
+}
+
+/// The ids whose target could match `ty`, in the order they were added: what
+/// `by_head` files under no declaration and under `ty`'s, or `all` for an open
+/// row.
+fn matching<'p, A: Iterator<Item = ImplId>>(
+    ty: &SolverType,
+    all: impl FnOnce() -> A,
+    by_head: impl Fn(Option<TypeDeclId>) -> Option<&'p Vec<ImplId>>,
+) -> Matching<'p, A> {
+    if matches!(ty, SolverType::AnyRow) {
+        return Matching::All(all());
+    }
+    let ids = |head| by_head(head).map_or(&[][..], Vec::as_slice);
+    let named = target_head(ty).map_or(&[][..], |head| ids(Some(head)));
+    Matching::Heads(ids(None), named)
+}
+
+/// What [`matching`] answers: every id, or two buckets merged in id order.
+enum Matching<'p, A> {
+    All(A),
+    Heads(&'p [ImplId], &'p [ImplId]),
+}
+
+impl<A: Iterator<Item = ImplId>> Iterator for Matching<'_, A> {
+    type Item = ImplId;
+
+    fn next(&mut self) -> Option<ImplId> {
+        let (a, b) = match self {
+            Self::All(all) => return all.next(),
+            Self::Heads(a, b) => (a, b),
+        };
+        let side = match (a.first(), b.first()) {
+            (Some(x), Some(y)) if y < x => b,
+            (Some(_), _) => a,
+            (None, _) => b,
+        };
+        let (&first, rest) = side.split_first()?;
+        *side = rest;
+        Some(first)
+    }
+}
+
+fn target_head(ty: &SolverType) -> Option<TypeDeclId> {
+    match ty {
+        SolverType::Decl(head, _) => Some(*head),
+        _ => None,
+    }
 }
 
 /// The bounds in force where a question was asked: a generic body's `T: Tr`
@@ -473,8 +528,90 @@ impl Program {
                     .any(|pin| undeclared(&pin.ty)),
             "{id:?} mentions a parameter it does not declare: {def:?}"
         );
+        if let Some(trait_) = def.trait_ {
+            self.impls_by_trait.entry(trait_).or_default().push(id);
+            let head = target_head(&def.target);
+            self.impls_by_target
+                .entry((trait_, head))
+                .or_default()
+                .push(id);
+            self.trait_impls_by_head.entry(head).or_default().push(id);
+        }
         assert!(self.impls.insert(id, def).is_none());
         id
+    }
+
+    /// Every impl, in the order they were added.
+    #[must_use]
+    pub fn impls(&self) -> &IndexMap<ImplId, ImplDef> {
+        &self.impls
+    }
+
+    /// Put `def` in place of the impl at `id`.
+    pub fn replace_impl(&mut self, id: ImplId, def: ImplDef) {
+        let old = &mut self.impls[&id];
+        assert!(
+            old.trait_ == def.trait_ && target_head(&old.target) == target_head(&def.target),
+            "a replacement keeps the trait and the target head the indices file it under"
+        );
+        *old = def;
+    }
+
+    /// Take out the impls at `ids`, each index scanned once whatever their count.
+    pub fn remove_impls(&mut self, ids: &IndexSet<ImplId>) {
+        let mut keys = IndexSet::<(TraitDeclId, _)>::default();
+        for id in ids {
+            let def = &self.impls[id];
+            if let Some(trait_) = def.trait_ {
+                keys.insert((trait_, target_head(&def.target)));
+            }
+        }
+        self.impls.retain(|id, _| !ids.contains(id));
+        let kept = |other: &ImplId| !ids.contains(other);
+        for &(trait_, head) in &keys {
+            self.impls_by_trait[&trait_].retain(kept);
+            self.impls_by_target[&(trait_, head)].retain(kept);
+            self.trait_impls_by_head[&head].retain(kept);
+        }
+    }
+
+    /// The impls of `trait_`, in the order they were added.
+    pub fn impls_of(&self, trait_: TraitDeclId) -> impl Iterator<Item = (ImplId, &ImplDef)> {
+        self.impls_by_trait
+            .get(&trait_)
+            .into_iter()
+            .flatten()
+            .map(|&id| (id, &self.impls[&id]))
+    }
+
+    /// The impls of `trait_` whose target could match `ty`, in the order they
+    /// were added: a target naming a declaration matches only that one, or an
+    /// open row.
+    pub fn impls_for(
+        &self,
+        trait_: TraitDeclId,
+        ty: &SolverType,
+    ) -> impl Iterator<Item = (ImplId, &ImplDef)> {
+        let ids = matching(
+            ty,
+            || self.impls_of(trait_).map(|(id, _)| id),
+            |head| self.impls_by_target.get(&(trait_, head)),
+        );
+        ids.map(|id| (id, &self.impls[&id]))
+    }
+
+    /// The trait impls whose target could match `ty`, of any trait, in the
+    /// order they were added.
+    pub fn trait_impls_for(&self, ty: &SolverType) -> impl Iterator<Item = (ImplId, &ImplDef)> {
+        let ids = matching(
+            ty,
+            || {
+                let trait_impls = self.impls.iter().filter(|(_, def)| def.trait_.is_some());
+                trait_impls.map(|(&id, _)| id)
+            },
+            |head| self.trait_impls_by_head.get(&head),
+        );
+        ids.map(|id| (id, &self.impls[&id]))
     }
 
     /// The default `def`'s trait declares for its argument at `index`, at

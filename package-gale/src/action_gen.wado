@@ -7,7 +7,6 @@ use {
     AltAction,
     Alternative,
     AttrDecl,
-    Element,
     Grammar,
     ParserRule,
     is_parser_members,
@@ -23,7 +22,7 @@ use { HashMap } from "core:collections";
 use { GALE_SEED } from "./hash_seed.wado";
 use { follow_forward_args, negate_cond, to_snake_case } from "./gen_util.wado";
 use { elements_match } from "./ir_shape.wado";
-use { CallForm, CallStmt, CodeWriter, FnSpec, ImplSpec, ParamSpec, wado } from "lib:wadopoet";
+use { CallForm, CallStmt, CodeWriter, FnSpec, ImplSpec, ParamSpec } from "lib:wadopoet";
 use { AmbiguousNode, PredictionNode, build_group_prediction_tree } from "./prediction.wado";
 use {
     RULE_START_TOK_LOCAL,
@@ -46,9 +45,8 @@ use {
 use { MemberDecls } from "./java2wado/jmembers.wado";
 use { AltBinding } from "./attr_resolve.wado";
 use { find_attr_refs } from "./attr_scan.wado";
-use { body_is_base_calls_only, body_names_this, opaque_span_end } from "./superclass.wado";
+use { opaque_span_end } from "./superclass.wado";
 use { escape_ident, PARSER_HANDLE } from "./ident.wado";
-use { SCAN_GATE_HANDLE, reads_only_scan_gate_fields, scan_gate_condition } from "./scan_gate.wado";
 
 /// The callee-local parameter name a rule argument binds to. `escape_ident`
 /// keeps a keyword-named arg (`type`) a legal identifier; the value is stored

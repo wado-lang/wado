@@ -1,8 +1,7 @@
 //! Tests for `highlight_gen.wado`. `default_ids` is indexed by token kind, so its
 //! rows must follow the numbering `gen_token_constants` emits.
 
-use { Grammar, alias_parser_literals } from "./ir.wado";
-use { parse } from "./g4/parser.wado";
+use { alias_parser_literals } from "./ir.wado";
 use { collect_literal_tokens } from "./lexer_gen.wado";
 use { gen_highlight } from "./highlight_gen.wado";
 use { parse_highlight_query } from "./highlight_query.wado";
@@ -10,12 +9,7 @@ use { GenSettings } from "./gen_settings.wado";
 use { Diagnostic, Diagnostics } from "./gir.wado";
 use { CodeWriter } from "lib:wadopoet";
 use { count_occurrences } from "../tests/support/text.wado";
-
-fn parse_grammar<S: AsStrSlice>(input: S) -> Grammar {
-    let mut g = parse(input).unwrap();
-    g.source_files.push("(test)");
-    return g;
-}
+use { parse_grammar } from "../tests/support/fixtures.wado";
 
 /// The generated text and the diagnostics one query run produced.
 fn highlight_run<S: AsStrSlice, S1: AsStrSlice>(input: S, query_src: S1) -> [String, List<Diagnostic>] {

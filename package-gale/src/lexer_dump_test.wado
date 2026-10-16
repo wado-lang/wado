@@ -1,17 +1,8 @@
 //! Tests for `render_lexer_dump`: each grammar forces one emit strategy, and the
 //! report must say why the cheaper one was not available.
 
-use { render_lexer_dump } from "./lexer_dump.wado";
-use { assemble_grammar } from "./g4/parser.wado";
 use { count_occurrences } from "../tests/support/text.wado";
-
-/// The report `gale dump --lexer` prints for `input`.
-fn lexer_dump<S: AsStrSlice>(input: S) -> String {
-    let inputs: List<[String, String]> = [
-        ["test.g4", input.to_string()],
-    ];
-    return render_lexer_dump(&assemble_grammar(&inputs).unwrap());
-}
+use { lexer_dump } from "../tests/support/fixtures.wado";
 
 test "lexer dump names the grammar and summarizes strategies" {
     let report = lexer_dump("grammar T;

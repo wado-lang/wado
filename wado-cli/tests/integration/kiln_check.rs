@@ -1,0 +1,151 @@
+//! End-to-end: `wado check` over a package fails on a Kiln warning wherever
+//! the member raising it sits, a test file as much as an entry.
+
+use crate::common::{wado_in, write_kiln_project};
+use predicates::prelude::*;
+
+const GREETING_GENERATOR: &str = r#"use { Request, Response, OutputFile, Error } from "core:kiln";
+
+export fn generate(req: Request) -> Result<Response, Error> {
+    return Result::Ok(Response {
+        files: [OutputFile {
+            path: "hello.wado",
+            content: "pub fn hello() -> i32 { return 1; }\n",
+            is_entry: true,
+        }],
+    });
+}
+"#;
+
+#[test]
+fn a_kiln_warning_in_a_test_member_fails_the_package_check() {
+    let tmp = tempfile::tempdir().unwrap();
+    let root = tmp.path();
+    write_kiln_project(root, "pkg", GREETING_GENERATOR, b"schema\n");
+    std::fs::rename(root.join("src/main.wado"), root.join("src/hello_test.wado")).unwrap();
+    std::fs::write(
+        root.join("src/hello_test.wado"),
+        "use { hello } from \"./schema.bin\"\n    with { generator: { module: \"./gen.wado\" } };\n\n\
+         test { assert hello() == 1; }\n",
+    )
+    .unwrap();
+    std::fs::write(root.join("src/main.wado"), "export fn run() {}\n").unwrap();
+
+    wado_in(root).arg("check").assert().success();
+    let generated = walkdir(root)
+        .into_iter()
+        .find(|p| p.file_name().is_some_and(|n| n == "hello.wado"))
+        .expect("the generator wrote hello.wado");
+    std::fs::write(&generated, "pub fn hello() -> i32 { return 2; }\n").unwrap();
+
+    wado_in(root)
+        .arg("check")
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains(
+            "has been modified after generation",
+        ));
+}
+
+/// The package pass reuses what an entry's own check ran, so it neither runs
+/// the entry's generators again nor reports their warnings twice.
+#[test]
+fn a_package_check_reports_an_entry_kiln_warning_once() {
+    let tmp = tempfile::tempdir().unwrap();
+    let root = tmp.path();
+    write_kiln_project(root, "pkg", GREETING_GENERATOR, b"schema\n");
+
+    wado_in(root).arg("check").assert().success();
+    let generated = walkdir(root)
+        .into_iter()
+        .find(|p| p.file_name().is_some_and(|n| n == "hello.wado"))
+        .expect("the generator wrote hello.wado");
+    std::fs::write(&generated, "pub fn hello() -> i32 { return 2; }\n").unwrap();
+
+    wado_in(root)
+        .args(["check", "--warn"])
+        .assert()
+        .success()
+        .stderr(predicate::function(|stderr: &str| {
+            stderr.matches("has been modified after generation").count() == 1
+        }));
+}
+
+fn walkdir(dir: &std::path::Path) -> Vec<std::path::PathBuf> {
+    let mut out = Vec::new();
+    for entry in std::fs::read_dir(dir).unwrap() {
+        let path = entry.unwrap().path();
+        if path.is_dir() {
+            out.extend(walkdir(&path));
+        } else {
+            out.push(path);
+        }
+    }
+    out
+}
+
+/// A generator clause in a module several members reach runs and warns once,
+/// not once per member.
+#[test]
+fn a_package_check_reports_a_shared_module_kiln_warning_once() {
+    let tmp = tempfile::tempdir().unwrap();
+    let root = tmp.path();
+    write_kiln_project(root, "pkg", GREETING_GENERATOR, b"schema\n");
+    std::fs::write(
+        root.join("src/shared.wado"),
+        "use { hello } from \"./schema.bin\"\n    with { generator: { module: \"./gen.wado\" } };\n\n\
+         pub fn shared() -> i32 { return hello(); }\n",
+    )
+    .unwrap();
+    std::fs::write(
+        root.join("src/main.wado"),
+        "use { shared } from \"./shared.wado\";\n\nexport fn run() { shared(); }\n",
+    )
+    .unwrap();
+    for name in ["a_test", "b_test"] {
+        std::fs::write(
+            root.join(format!("src/{name}.wado")),
+            "use { shared } from \"./shared.wado\";\n\ntest { assert shared() == 1; }\n",
+        )
+        .unwrap();
+    }
+
+    wado_in(root).arg("check").assert().success();
+    let generated = walkdir(root)
+        .into_iter()
+        .find(|p| p.file_name().is_some_and(|n| n == "hello.wado"))
+        .expect("the generator wrote hello.wado");
+    std::fs::write(&generated, "pub fn hello() -> i32 { return 2; }\n").unwrap();
+
+    wado_in(root)
+        .args(["check", "--warn"])
+        .assert()
+        .success()
+        .stderr(predicate::function(|stderr: &str| {
+            stderr.matches("has been modified after generation").count() == 1
+        }));
+}
+
+/// Output a generator writes inside the package is the importing module's, not
+/// a member of its own, so the package pass loads it once.
+#[test]
+fn generated_output_inside_the_package_is_no_member() {
+    let tmp = tempfile::tempdir().unwrap();
+    let root = tmp.path();
+    write_kiln_project(root, "pkg", GREETING_GENERATOR, b"schema\n");
+    std::fs::write(
+        root.join("src/main.wado"),
+        "use { hello } from \"./schema.bin\"\n    \
+         with { generator: { module: \"./gen.wado\", output_dir: \"./generated\" } };\n\n\
+         export fn run() { hello(); }\n",
+    )
+    .unwrap();
+
+    wado_in(root).arg("check").assert().success();
+    assert!(root.join("src/generated/hello.wado").exists());
+    wado_in(root)
+        .args(["check", "--lint-generated"])
+        .assert()
+        .success()
+        .stderr(predicate::str::contains("never used").not());
+}

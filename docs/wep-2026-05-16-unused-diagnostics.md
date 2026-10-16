@@ -49,10 +49,11 @@ analysis, producing `Severity::Warning` diagnostics through the
 existing `CompilerHost`. Two passes contribute, both consuming
 `&Semantics` and running before `reify`:
 
-1. Reference pass — walks `ModuleSemantics.bindings` (use→def edges)
-   for every user-authored module. Emits `UnusedImport`,
-   `UnusedVariable`, `UnusedParameter`. A binding is reported when
-   no edge has it as the def-side.
+1. Reference pass — for every user-authored module, reports a binding
+   no reference resolves to. Emits `UnusedImport`, `UnusedVariable`,
+   `UnusedParameter`. Imports read the import entries that answered
+   the module's sites (`Resolutions::used_imports_in`), since the resolver
+   is what decides which tier a name lands on.
 2. Liveness pass — the elaborate-time DCE pass introduced by
    [elaborator rearchitecture](./wep-2026-05-26-elaborator-rearchitecture.md).
    Computes source-level reachability from world-export roots over
@@ -92,8 +93,6 @@ optimize-time and silent.
 - `dead_type`, `dead_trait_impl`, `unreachable_pattern`, `dead_closure_functor`
 - The `unused` lint group and `#[deny(...)]` (only `#[allow(dead_code)]`,
   item- and module-level, is implemented — see Suppression)
-- Per-`UseItem::InterfaceFunctions` granularity (function-level inside
-  an interface import)
 - Workspace-aware multi-package root computation
 - Preserving `pub`-only items in `optimize/dce.rs` for the not-yet-implemented
   provider-metadata standalone-`.wasm` publish path (see Reachability roots)
@@ -144,9 +143,53 @@ root `pub` yet — the consumer's own build supplies real reachability from
 its own roots. Preserving `pub` for a standalone published `.wasm` (provider
 metadata) is deferred.
 
-`internal` (`Visibility::Internal`) is never a root: it is package-internal
-visibility only, so an unreferenced `internal fn` is dead code regardless of
-entry-point kind.
+`internal` (`Visibility::Internal`) is not a root of the package: it is
+package-internal visibility only, so an unreferenced `internal fn` is dead code
+regardless of entry-point kind. Deciding that takes every module of the
+package, and a compilation loads only the modules its entry reaches. So a
+compilation seeds an `internal` item into `E` (not into what reify emits): a
+module the compilation did not load may use it, so a report would be a guess.
+A private item stays decided, since all its users are in its own file.
+
+### Package analysis
+
+`wado check` over a package loads every member at once, through a synthetic
+entry that imports each one (`LivenessScope::Package`). With the whole package
+in view, the roots narrow to what the package offers:
+
+- The entries are the members `wado.toml` declares (`lib` and each `[world]`
+  entry). Their `pub` / `export` items and their `pub use` re-exports seed `E`.
+- A `pub` item of any other member is not a root. It is reachable from another
+  package only if an entry re-exports it.
+- An `export` function seeds `E` in every member: a member with one is a
+  program of its own (a script, an example, a benchmark), compiled as its own
+  entry by `wado run`.
+- An `internal` item is decided, like a private one.
+
+Production code is what the entries reach by `use`; every other member is test
+code. An item of production code in `T \ E` is "only used by tests", the case
+Rust's test build hides. An item of test code in `T` reports nothing, since
+reaching it from a test is its purpose. Either side reports "never used"
+outside `E ∪ T`.
+
+The CLI runs each member's Kiln pipeline apart and folds the indexes into one
+keyed by the package's module identities
+(`PackageSources::adopt_member_invocations`). An entry's index is the one its
+own check already produced, so its generators neither run nor warn twice. One
+pipeline over the whole
+package would reject two members that generate one schema under different
+options, which Gale's descriptor corpus does.
+
+Only the modules that reach a reported member by `use` have their bodies
+walked. Any other module can name no candidate, and the impl methods its calls
+dispatch to are roots anyway, so its walk would change no verdict. Gale's
+generated parsers import only the standard library, and they are most of what
+its tests load. The loader goes one step further for a `#![generated]` module
+that imports none of the package's code: it skips its function bodies at parse
+time, so they cost no AST either.
+
+A single-file compile and the editor keep the compilation rules above, so
+`pub` and `internal` items stay roots there.
 
 A declared method carrying a default body is an edge rather than a root, so a
 free function that only an unreached default body calls is dead.
@@ -154,22 +197,26 @@ free function that only an unreached default body calls is dead.
 §Liveness says which dispatch fact it rides, why the two kinds above have none,
 and what the rule leaves open for a library's `pub trait`.
 
-### Stdlib exclusion
+### Stdlib and dependency exclusion
 
-Functions, imports, and locals whose `ModuleSource` is `Core`, `Wasi`,
-`Builtin`, or `Wasm` are excluded from both passes when the entry
-module is user-authored. Stdlib never emits unused diagnostics into the
-user's build output.
+Only the entry package's own modules (`ModuleSource::is_entry_package`) are
+report candidates, in both scopes. The standard library, a dependency, a
+remote module and a Kiln redirect are someone else's source, so no build of a
+consumer reports into them. In package mode a module the package's code
+reaches is its own even where `[test].exclude` keeps `wado test` from running
+it.
 
 ### Generated-module exclusion
 
 A module carrying the `#![generated]` inner attribute (Gale parser output,
 `wado-from-idl` bindings, and any other machine-emitted source) is excluded
 from the lint entirely: it is never hand-edited, so flagging its unused items
-is pure noise. The module still seeds the liveness closure, so items it calls
-stay live. This is the principled alternative to embedding `#[allow(dead_code)]`
-in inlined runtime support — generated parsers carry the marker already, so no
-attribute is baked into every emitted file.
+is pure noise. Every other lint excludes it the same way, and
+`--lint-generated` takes it back in for a generator's author. The module still
+seeds the liveness closure, so items it calls stay live. This is the principled
+alternative to embedding `#[allow(dead_code)]` in inlined runtime support —
+generated parsers carry the marker already, so no attribute is baked into every
+emitted file.
 
 ### Suppression
 
@@ -178,6 +225,8 @@ attribute is baked into every emitted file.
   `wado format` is expected to produce when auto-fixing.
 - `Wildcard` imports (`use _ from "..."`) are silent — they exist for
   side effects.
+- `#[allow(unused_imports)]` on a `use`, or `#![allow(unused_imports)]`
+  on the module, waives `UnusedImport`.
 - `#[allow(dead_code)]` on a function or global waives its
   `DeadFunction` / `DeadGlobal` / `TestOnlyFunction` / `TestOnlyGlobal`
   lint — for unavoidable unused items (e.g. a library module being built
@@ -202,30 +251,45 @@ attribute is baked into every emitted file.
 | `wado-compiler/src/logger.rs`                     | Adds `Logger::warn_at(code, message, span, file)` for span-bearing warnings.                                                                                                              |
 | `wado-compiler/src/lib.rs`                        | Adds `CompilerOptions::unused_diagnostics`. Invokes the diagnostic emitter once the elaborator has produced `Semantics` and its `Liveness`.                                               |
 | `wado-compiler/src/ast_index.rs`                  | Adds `is_param(id)` predicate (1-bit table) so the reference pass can distinguish `UnusedVariable` from `UnusedParameter`.                                                                |
-| `wado-cli`                                        | Adds `--no-unused` flag.                                                                                                                                                                  |
+| `wado-cli`                                        | Adds `--no-lint`, which turns every lint off, these included.                                                                                                                             |
 | `wado-lsp`                                        | Invokes the diagnostic emitter from `Engine::diagnostics`. Renders `UnusedImport` / `UnusedVariable` / `UnusedParameter` as `Hint`-severity unused-token decorations as well.             |
 
 ### Algorithms
 
 #### Unused imports
 
-Walk every `UseDecl` in user-authored modules. For each `UseItem`:
+`unused_import.rs` walks every file-private `use` in a module a lint reports
+in (`Lints::reports_in`), the one predicate every lint and the dead-item
+emitter read, so both unused lints answer for the same files: a package check
+walks no dependency's bodies. The resolver records, per module, the import
+entries, by local name, that answered one of its sites. A name written where no site holds it, which a later
+pass reads by name, counts as one: a `#[benign(E)]` argument, and a
+world's `import X;` / `export X;`. A
+declaration imported twice (`use { a }` and `use m` reaching `m$a`) is
+two entries, each used only where it is written. For each `UseItem`:
 
-- `Simple { id, .. }` and `Namespace { name, .. }`: report
-  `UnusedImport` when no entry in `Semantics::references` has the
-  item's use-site `SymbolKey` as its `use_key` and no entry resolves to
-  the item's imported `def_key`.
+- `Simple`: reported when its local name (the alias, or the name) is
+  unused.
+- `Namespace`: used when one of its `ns$member` entries is, or a site spells
+  `ns` bare: a case qualifier (`ns::Case`), whose member the elaborator finds
+  by the scrutinee's type.
+- `InterfaceFunctions`: each unused function is reported. `I::{f}` binds
+  `f` alone, so `I` is reported only by a `Simple` item of its own.
 - `Wildcard`: skipped (side-effect imports).
-- `InterfaceFunctions`: reported only at the whole-`UseDecl` level for
-  MVP; per-function granularity is deferred.
 
-If every item in a single `UseDecl` is unused, emit one diagnostic at
-`UseDecl.span`; otherwise emit per-item diagnostics at
-`AstIndex::name_span_of(item.id)`.
+A trait has no reference site when only its methods are called: the
+import puts the methods in scope. So where one of the module's method
+references, as the elaborator records them, reaches a method a trait
+declares or one of its `impl`s defines, every import entry that puts
+that trait in scope (`Resolutions::imports_admitting`, the tier rule
+`decls_in_scope` reads) is used: a name, an alias, or a namespace's
+`ns$Trait`. Dispatch decided which declaration answered, so a
+same-named method of another type does not count.
 
-Prerequisite check: confirm `elaborator` records `UseItem::Simple.id` as
-a use-site in `references` during use-decl resolution. If not, add the
-single `record_reference_to_decl` call there.
+An import the resolver did not resolve counts as used, since its error
+is reported already. `pub`, `internal` and `export` uses are
+re-exports and never reported. Each diagnostic sits at the item's
+name.
 
 #### Unused variables and parameters
 
@@ -325,10 +389,10 @@ land with stage 6 of the rearchitecture (see
 
 #### Phase 2 — reference pass
 
-- [ ] Confirm the elaborator records `UseItem::Simple.id` as a use-site; patch if missing.
-- [ ] Implement the reference-pass emitter (imports, locals, params) against `Semantics`.
-- [ ] Wire into `compile_with_options` and `Engine::diagnostics`.
-- [ ] Add fixtures under `tests/fixtures/unused_*.wado`; touch `tests/e2e.rs`.
+- [x] Record each module's used import entries in the resolver.
+- [x] Implement the import emitter (`unused_import.rs`), wired through
+  `unused_diagnostics`, with `unused_import.wado`.
+- [ ] Implement the locals and params emitter.
 
 #### Phase 3 — liveness pass and DeadFunction / DeadGlobal
 
@@ -347,10 +411,9 @@ land with stage 6 of the rearchitecture (see
 - [x] E2E warning assertions: `warnings_contains` / `warnings_not_contains`
   fixture-spec fields (`compile_capturing_warnings` in the harness);
   `dead_fn_*` / `dead_global_*` fixtures cover dead and test-only.
-- [ ] Package-wide analysis so `T` is populated outside the entry module
-  (load the whole package via `wado test` discovery; `wado check`
-  package mode). Until then `test-only` only surfaces for `test` blocks
-  in the compiled entry's own module graph.
+- [x] Package-wide analysis in `wado check` package mode (see Package
+  analysis); members come from `wado test` discovery. Tests in
+  `tests/integration/package_unused.rs`.
 - [x] LSP wiring: the pure `lint_diagnostics(&Semantics, unused, is_test_world)`
   builder is shared by the batch path and `Engine::diagnostics`, which
   applies it at query time (toggle stays live via
@@ -517,17 +580,17 @@ the ref-parameter detection (`ResolvedType::Ref` / `MutRef` over
 
 #### Phase 4 — CLI wiring and reference pass
 
-- [ ] `wado-cli`: add `--no-unused` flag for `compile` / `run` / `serve` / `dump`.
-- [ ] Reference pass: `UnusedImport` / `UnusedVariable` / `UnusedParameter`.
+- [x] `wado-cli`: `--no-lint`, `--lint` and `--lint-generated` on every
+  compiling subcommand, in place of an unused-only `--no-unused`.
+- [x] Reference pass: `UnusedImport`.
+- [ ] Reference pass: `UnusedVariable` / `UnusedParameter`.
 - [ ] Method-level dead detection (the dispatch edges; stop seeding every method live).
 
 ### Test plan
 
 E2E fixtures (under `tests/fixtures/`):
 
-- `unused_import_basic.wado`
-- `unused_import_partial.wado`
-- `unused_import_wildcard_silent.wado`
+- `unused_import.wado`
 - `unused_var_basic.wado`
 - `unused_var_underscore_silent.wado`
 - `unused_param_basic.wado`
@@ -537,7 +600,7 @@ E2E fixtures (under `tests/fixtures/`):
 - `dead_fn_generic.wado`
 - `dead_fn_test_world.wado`
 - `dead_fn_pub_is_root.wado` (a `pub fn` with no in-package caller is not dead)
-- `dead_fn_internal_no_caller.wado` (an `internal fn` with no in-package caller is dead)
+- `dead_fn_internal_is_root.wado` (an `internal fn` with no caller in the compilation is not reported)
 - `dead_fn_cascade_via_global.wado` (function reachable until a dead global is removed)
 - `dead_global_basic.wado`
 - `dead_global_used_by_dead_fn.wado` (cascade across iterations)
@@ -593,10 +656,11 @@ through the diagnostics path.
 
 ## Known gaps
 
-- The `dead_code` lint sees only the `test` blocks of the modules the
-  compilation loads. A function whose only user is a test in a file the
-  compilation does not load, such as a test file that imports it, is reported
-  "never used" rather than "only used by tests".
-- The same holds outside tests. An `internal` item whose only user is a module
-  of the package the compilation does not load is reported "never used",
-  though the specification decides reachability over the whole package.
+- Outside `wado check` package mode, an `internal` item is never reported,
+  neither "never used" nor "only used by tests", and neither is what only it
+  reaches. A single-file compile and the editor do not load the whole package.
+- A namespace re-export (`pub use ns from "./m.wado"`) seeds nothing in package
+  mode, so what it offers reports as unused.
+- Package mode elaborates every member on one thread, and runs every member's
+  Kiln pipeline one at a time. On Gale it takes under twice as long as
+  checking the declared entries alone.

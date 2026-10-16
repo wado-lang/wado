@@ -5,13 +5,13 @@
 use std::cell::OnceCell;
 use std::mem;
 
+use crate::Lints;
 use crate::ast::{
     AstVisitor, Attribute, BinaryOp, Expr, Literal, SelfKind, UnaryOp, attrs_allow,
     inner_attrs_allow, lint, walk_expr,
 };
 use crate::compiler_host::{Code, Diagnostic, DiagnosticSpan, Severity};
 use crate::effect_check::EffectProbe;
-use crate::elaborator::liveness::is_user_authored;
 use crate::module_source::ModuleSource;
 use crate::semantics::Semantics;
 use crate::token::Span;
@@ -20,13 +20,11 @@ use crate::unparse::{binary_op_str, unparse_expr_source};
 /// Source-level `SelfComparison` warnings: every comparison, a chain's adjacent
 /// pairs included, whose two operands are one expression that evaluates the
 /// same way twice.
-pub fn self_comparison_diagnostics(sem: &Semantics) -> Vec<Diagnostic> {
+pub fn self_comparison_diagnostics(sem: &Semantics, lints: Lints) -> Vec<Diagnostic> {
     let probe = OnceCell::new();
     let mut out = Vec::new();
-    for (src, module) in &sem.modules {
-        if !is_user_authored(src)
-            || inner_attrs_allow(&module.inner_attributes, lint::SELF_COMPARISON)
-        {
+    for (src, module) in lints.modules(&sem.modules) {
+        if inner_attrs_allow(&module.inner_attributes, lint::SELF_COMPARISON) {
             continue;
         }
         let mut comparisons = SelfComparisons {

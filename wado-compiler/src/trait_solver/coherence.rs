@@ -23,7 +23,7 @@ pub enum CoherenceError {
 pub fn coherence_errors(program: &Program) -> Vec<CoherenceError> {
     let mut errors = Vec::new();
     let mut seen: IndexMap<ImplKey, ImplId> = IndexMap::default();
-    for (&id, def) in &program.impls {
+    for (&id, def) in program.impls() {
         if is_unbounded_value_blanket(def) {
             errors.push(CoherenceError::UnboundedValueBlanket { impl_: id });
         }

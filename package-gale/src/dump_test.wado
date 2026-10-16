@@ -9,9 +9,7 @@
 
 use {
     Grammar,
-    GrammarKind,
     ParserRule,
-    Alternative,
     Element,
     RuleRefElement,
     TokenRefElement,
@@ -28,6 +26,7 @@ use { GenSettings } from "./gen_settings.wado";
 use { canonicalize_for_analysis, lower_for_analysis } from "./codegen.wado";
 use { render_dump, render_atn_dump } from "./dump.wado";
 use { parse } from "./g4/parser.wado";
+use { empty_grammar, alt } from "../tests/support/fixtures.wado";
 
 /// Run the full front-end (parse → merge → synth → lower) and render,
 /// through the very functions `cmd_dump` calls. Used by tests whose grammar
@@ -93,31 +92,8 @@ fn dump_grammar(g: &Grammar) -> String {
     return render_dump(g, &lowered, &mut ctx);
 }
 
-fn empty_grammar<S: AsStrSlice>(name: S) -> Grammar {
-    return Grammar {
-        name: name.to_string(),
-        kind: GrammarKind::Combined,
-        parser_rules: [],
-        lexer_rules: [],
-        mode_names: ["DEFAULT_MODE"],
-        channels: [],
-        options: [],
-        named_actions: [],
-        pending_refs: [],
-        source_files: [],
-    };
-}
-
 fn no_lit_tokens() -> List<LitToken> {
     return [];
-}
-
-fn alt_of(elements: List<Element>) -> Alternative {
-    return Alternative {
-        label: null,
-        options: [],
-        elements,
-    };
 }
 
 test "render_dump shows simple rule name and shape" {
@@ -127,7 +103,7 @@ test "render_dump shows simple rule name and shape" {
             "value",
             Visibility::Default,
             [],
-            [alt_of([Element::TokenRef(TokenRefElement::new("INT"))])],
+            [alt([Element::TokenRef(TokenRefElement::new("INT"))])],
         ),
     ];
 
@@ -147,8 +123,8 @@ test "render_dump shows Direct dispatch for disjoint multi-alt" {
             Visibility::Default,
             [],
             [
-                alt_of([Element::TokenRef(TokenRefElement::new("INT"))]),
-                alt_of([Element::TokenRef(TokenRefElement::new("STRING"))]),
+                alt([Element::TokenRef(TokenRefElement::new("INT"))]),
+                alt([Element::TokenRef(TokenRefElement::new("STRING"))]),
             ],
         ),
     ];
@@ -174,11 +150,11 @@ test "render_dump shows Tournament and overlap warning" {
             Visibility::Default,
             [],
             [
-                alt_of([
+                alt([
                     Element::TokenRef(TokenRefElement::new("ID")),
                     Element::TokenRef(TokenRefElement::new("INT")),
                 ]),
-                alt_of([
+                alt([
                     Element::TokenRef(TokenRefElement::new("ID")),
                     Element::TokenRef(TokenRefElement::new("STRING")),
                 ]),
@@ -209,11 +185,11 @@ test "render_dump shows prediction tree for overlap group" {
             Visibility::Default,
             [],
             [
-                alt_of([
+                alt([
                     Element::TokenRef(TokenRefElement::new("ID")),
                     Element::TokenRef(TokenRefElement::new("INT")),
                 ]),
-                alt_of([
+                alt([
                     Element::TokenRef(TokenRefElement::new("ID")),
                     Element::TokenRef(TokenRefElement::new("STRING")),
                 ]),
@@ -246,15 +222,15 @@ test "render_dump shows prediction tree for LR atom overlap" {
             Visibility::Default,
             [],
             [
-                alt_of([
+                alt([
                     Element::TokenRef(TokenRefElement::new("ID")),
                     Element::TokenRef(TokenRefElement::new("INT")),
                 ]),
-                alt_of([
+                alt([
                     Element::TokenRef(TokenRefElement::new("ID")),
                     Element::TokenRef(TokenRefElement::new("STRING")),
                 ]),
-                alt_of([
+                alt([
                     Element::RuleRef(RuleRefElement::new("expr")),
                     Element::TokenRef(TokenRefElement::new("PLUS")),
                     Element::RuleRef(RuleRefElement::new("expr")),
@@ -288,11 +264,11 @@ test "render_dump annotates an Ambiguous leaf with its halt reason" {
             Visibility::Default,
             [],
             [
-                alt_of([
+                alt([
                     Element::RuleRef(RuleRefElement::new("expr")),
                     Element::TokenRef(TokenRefElement::new("SEMI")),
                 ]),
-                alt_of([
+                alt([
                     Element::RuleRef(RuleRefElement::new("expr")),
                     Element::TokenRef(TokenRefElement::new("DOT")),
                 ]),
@@ -303,8 +279,8 @@ test "render_dump annotates an Ambiguous leaf with its halt reason" {
             Visibility::Default,
             [],
             [
-                alt_of([Element::TokenRef(TokenRefElement::new("ID"))]),
-                alt_of([
+                alt([Element::TokenRef(TokenRefElement::new("ID"))]),
+                alt([
                     Element::TokenRef(TokenRefElement::new("ID")),
                     Element::TokenRef(TokenRefElement::new("PLUS")),
                     Element::TokenRef(TokenRefElement::new("ID")),

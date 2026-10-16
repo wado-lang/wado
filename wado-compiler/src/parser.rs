@@ -15,14 +15,14 @@ use crate::ast::{
     Literal, LiteralExpr, LoopStmt, MatchArm, MatchExpr, MatchesExpr, MethodCallExpr, Module,
     NamedType, NamespacedGenericType, Newtype, Param, PathSegment, Pattern, RangeExpr, RangeKind,
     ResourceDecl, RestClause, RestClauseDecl, ReturnKeyword, ReturnStmt, SelfKind,
-    StaticMethodCallExpr, Stmt, StructDecl, StructField, StructLiteralExpr, StructLiteralField,
-    StructLiteralSpread, StructPatternField, TaggedTemplateExpr, TaskReturnStmt, TemplatePart,
-    TemplateStringExpr, TestDecl, TraitBound, TraitDecl, TraitHead, TryOpExpr,
-    TupleComprehensionExpr, TupleLiteralExpr, TupleTypeDecl, Type, UnaryExpr, UnaryOp, UseDecl,
-    UseItem, UseItemSimple, VariantCase, VariantDecl, Visibility, WhileStmt, WithHandlerExpr,
-    WorldDecl, WorldExport, WorldExportFn, WorldExportInterface, WorldImport,
+    StaticMethodCallExpr, Stmt, StrLit, StructDecl, StructField, StructLiteralExpr,
+    StructLiteralField, StructLiteralSpread, StructPatternField, TaggedTemplateExpr,
+    TaskReturnStmt, TemplatePart, TemplateStringExpr, TestDecl, TraitBound, TraitDecl, TraitHead,
+    TryOpExpr, TupleComprehensionExpr, TupleLiteralExpr, TupleTypeDecl, Type, UnaryExpr, UnaryOp,
+    UseDecl, UseItem, UseItemSimple, VariantCase, VariantDecl, Visibility, WhileStmt,
+    WithHandlerExpr, WorldDecl, WorldExport, WorldExportFn, WorldExportInterface, WorldImport,
 };
-use crate::attribute::{CANONICAL, CM, TODO};
+use crate::attribute::{CANONICAL, CM, GENERATED, TODO};
 use crate::comment::{Comment, TriviaMap};
 use crate::compiler_host::{Code, Diagnostic, DiagnosticSpan, Severity};
 use crate::escape::{quoted, unescape_string};
@@ -97,6 +97,19 @@ pub struct Parser {
     /// Inside a trait whose head is not `with ()`, where a method's own
     /// `with ()` says it is pure rather than nothing.
     pure_override_allowed: bool,
+    bodies: Bodies,
+    /// Each skipped body's block, and the position of its `{`.
+    skipped: Vec<(AstId, usize)>,
+}
+
+/// Whether the parser reads function bodies.
+#[derive(Clone, Copy, PartialEq)]
+enum Bodies {
+    Read,
+    /// Skipped once the module turns out `#![generated]`.
+    SkipIfGenerated,
+    /// Each one an empty block, its tokens skipped to the matching `}`.
+    Skipped,
 }
 
 /// Why a read of a condition's operands rolled back.
@@ -292,7 +305,70 @@ impl Parser {
             recovering: false,
             effect_hole: EffectHole::Outside,
             pure_override_allowed: false,
+            bodies: Bodies::Read,
+            skipped: Vec::new(),
         }
+    }
+
+    /// Skip the function bodies of a `#![generated]` module: each parses as an
+    /// empty block, for a caller that reads only declarations. A generated
+    /// module is megabytes of bodies.
+    #[must_use]
+    pub fn skipping_generated_bodies(mut self) -> Self {
+        self.bodies = Bodies::SkipIfGenerated;
+        self
+    }
+
+    /// Whether the module is `#![generated]`, read from its inner attributes
+    /// alone.
+    pub fn declares_generated(mut self) -> bool {
+        let _ = self.parse_inner_attributes();
+        self.parsed_inner_attributes
+            .iter()
+            .any(|a| a.name == GENERATED)
+    }
+
+    /// Read into `module`, the parse's own, the bodies
+    /// [`Self::skipping_generated_bodies`] skipped. The tokens are this parse's
+    /// still, so nothing is lexed or parsed twice.
+    pub fn read_skipped_bodies(&mut self, module: &mut Module) {
+        assert!(
+            self.skipped_bodies(),
+            "only a parse that skipped reads back"
+        );
+        self.bodies = Bodies::Read;
+        let mut read = hashmap::IndexMap::<AstId, Vec<Stmt>>::default();
+        for (block, pos) in std::mem::take(&mut self.skipped) {
+            self.pos = pos;
+            match self.parse_block() {
+                Ok(body) => {
+                    read.insert(block, body.stmts);
+                }
+                Err(e) => self.errors.push(e),
+            }
+        }
+        let functions = module.items.iter_mut().flat_map(|item| match item {
+            Item::Function(func) => std::slice::from_mut(func),
+            Item::Impl(decl) => &mut decl.methods[..],
+            Item::Trait(decl) => &mut decl.methods[..],
+            Item::Interface(decl) => &mut decl.methods[..],
+            Item::Resource(decl) => &mut decl.methods[..],
+            _ => &mut [],
+        });
+        for func in functions {
+            if let Some(body) = &mut func.body
+                && let Some(stmts) = read.swap_remove(&body.id)
+            {
+                // A body opens with its `contract` clauses, read with the head.
+                body.stmts.extend(stmts);
+            }
+        }
+        assert!(read.is_empty(), "every skipped body is a function's");
+    }
+
+    /// Whether [`Self::skipping_generated_bodies`] took effect.
+    pub fn skipped_bodies(&self) -> bool {
+        self.bodies == Bodies::Skipped
     }
 
     /// Drain the syntax errors collected during error recovery.
@@ -416,6 +492,8 @@ impl Parser {
         // decides again, and may read the same token as a name.
         self.contextual_keywords
             .truncate(cp.contextual_keywords_len);
+        let rolled_back = AstId::new(self.ast_id_space, cp.next_ast_id);
+        self.skipped.retain(|(block, _)| *block < rolled_back);
     }
 
     /// Returns true if the parsed inner attributes include `#![TODO]`.
@@ -486,6 +564,13 @@ impl Parser {
             self.errors.push(e);
         }
         let inner_attributes = self.parsed_inner_attributes.clone();
+        if self.bodies == Bodies::SkipIfGenerated {
+            self.bodies = if inner_attributes.iter().any(|a| a.name == GENERATED) {
+                Bodies::Skipped
+            } else {
+                Bodies::Read
+            };
+        }
 
         let mut items = Vec::new();
 
@@ -1494,12 +1579,16 @@ impl Parser {
         })
     }
 
-    /// Consume the attribute string the cursor is on, with its escapes resolved
-    /// the way an expression's string literal has them resolved.
-    fn take_attr_string(&mut self, raw: &str) -> ParseResult<String> {
+    /// Consume the string literal the cursor is on, `raw` its text, with its
+    /// escapes resolved the way an expression's string literal has them resolved.
+    fn take_string(&mut self, raw: &str) -> ParseResult<StrLit> {
         let span = self.peek().span;
         self.advance();
-        unescape_string(raw).map_err(|message| self.error_at_span(span, &message))
+        let value = unescape_string(raw).map_err(|message| self.error_at_span(span, &message))?;
+        Ok(StrLit {
+            value,
+            raw: raw.to_string(),
+        })
     }
 
     /// Parse a comma-separated list of attribute arguments up to the closing
@@ -1512,7 +1601,7 @@ impl Parser {
             // `as_ident_name`, so a contextual keyword can be a key.
             let key = self.peek_kind().as_ident_name().map(str::to_string);
             let arg = match (key, self.peek_kind().clone()) {
-                (_, TokenKind::StringLit(raw)) => AttrArg::Str(self.take_attr_string(&raw)?),
+                (_, TokenKind::StringLit(raw)) => AttrArg::Str(self.take_string(&raw)?),
                 (Some(value), _) => {
                     self.mark_keyword_name();
                     self.advance();
@@ -1521,7 +1610,7 @@ impl Parser {
                         self.advance();
                         match self.peek_kind().clone() {
                             TokenKind::StringLit(val) => {
-                                AttrArg::KeyValue(value, self.take_attr_string(&val)?)
+                                AttrArg::KeyValue(value, self.take_string(&val)?)
                             }
                             TokenKind::LBracket => {
                                 self.advance();
@@ -1529,16 +1618,17 @@ impl Parser {
                                 // or identifiers, and the attribute's reader
                                 // rejects the kind it does not take.
                                 let names = self.peek_kind().as_ident_name().is_some();
-                                let mut items: Vec<String> = Vec::new();
+                                let mut strings: Vec<StrLit> = Vec::new();
+                                let mut idents: Vec<String> = Vec::new();
                                 if !self.check(&TokenKind::RBracket) {
                                     loop {
                                         let kind = self.peek_kind().clone();
                                         match (&kind, kind.as_ident_name()) {
                                             (TokenKind::StringLit(item), _) if !names => {
-                                                items.push(self.take_attr_string(item)?);
+                                                strings.push(self.take_string(item)?);
                                             }
                                             (_, Some(named)) if names => {
-                                                items.push(named.to_string());
+                                                idents.push(named.to_string());
                                                 self.mark_keyword_name();
                                                 self.advance();
                                             }
@@ -1564,9 +1654,9 @@ impl Parser {
                                 }
                                 self.expect(&TokenKind::RBracket)?;
                                 if names {
-                                    AttrArg::KeyIdentArray(value, items)
+                                    AttrArg::KeyIdentArray(value, idents)
                                 } else {
-                                    AttrArg::KeyArray(value, items)
+                                    AttrArg::KeyArray(value, strings)
                                 }
                             }
                             TokenKind::NumberLit(number) => {
@@ -2026,14 +2116,11 @@ impl Parser {
         }
     }
 
-    /// The raw text of the string literal at the cursor, escapes unresolved.
-    /// [`Self::take_attr_string`] is the one that resolves them.
-    fn consume_string(&mut self) -> ParseResult<String> {
+    fn consume_string(&mut self) -> ParseResult<StrLit> {
         match self.peek_kind() {
             TokenKind::StringLit(raw) => {
                 let raw = raw.clone();
-                self.advance();
-                Ok(raw)
+                self.take_string(&raw)
             }
             _ => Err(ParseError {
                 message: "expected string literal".to_string(),
@@ -2152,6 +2239,8 @@ impl Parser {
             // via the block span below.
             decl_end_span = Some(self.tokens[self.pos.saturating_sub(1)].span);
             None
+        } else if self.bodies == Bodies::Skipped {
+            Some(self.skip_block()?)
         } else {
             Some(self.parse_block()?)
         };
@@ -2661,6 +2750,32 @@ impl Parser {
             id,
             stmts,
             span: start_span.merge(&end_span),
+        })
+    }
+
+    /// A block read as empty: `{`, then every token through its matching `}`.
+    /// An interpolation's braces live inside its template token, so the
+    /// braces in `tokens` balance in any well-formed body.
+    fn skip_block(&mut self) -> ParseResult<Block> {
+        let id = self.alloc_ast_id();
+        self.skipped.push((id, self.pos));
+        let start_span = self.peek().span;
+        self.expect(&TokenKind::LBrace)?;
+        let mut depth = 1;
+        while depth > 0 {
+            if self.is_at_end() {
+                return Err(self.error_at_span(self.peek().span, "expected `}`"));
+            }
+            match self.advance().kind {
+                TokenKind::LBrace => depth += 1,
+                TokenKind::RBrace => depth -= 1,
+                _ => {}
+            }
+        }
+        Ok(Block {
+            id,
+            stmts: Vec::new(),
+            span: start_span.merge(&self.previous().span),
         })
     }
 
@@ -7098,8 +7213,8 @@ fn parse_cm_boundary(name: &str, args: &[AttrArg]) -> Result<Option<CmBoundary>,
             return Err("#[canonical] arguments must be string literals".to_string());
         };
         return Ok(Some(CmBoundary::Canonical {
-            namespace: ns.clone(),
-            name: fname.clone(),
+            namespace: ns.value.clone(),
+            name: fname.value.clone(),
         }));
     }
     if name == CM {
@@ -7155,7 +7270,7 @@ fn parse_cm_boundary(name: &str, args: &[AttrArg]) -> Result<Option<CmBoundary>,
         }
         return Ok(Some(match CmImport::parse(s) {
             Some(cm) => CmBoundary::Import(cm),
-            None => CmBoundary::Name(s.clone()),
+            None => CmBoundary::Name(s.value.clone()),
         }));
     }
     Ok(None)
@@ -7257,6 +7372,7 @@ mod tests {
     };
     use crate::lexer::lex;
     use crate::name::INTERNAL_PREFIX;
+    use crate::unparse::Unparser;
     use crate::{ast, format};
     use std::assert_matches;
 
@@ -7276,6 +7392,27 @@ mod tests {
 
     fn effect_names(effects: &[EffectName]) -> Vec<&str> {
         effects.iter().map(|e| e.name.as_str()).collect()
+    }
+
+    #[test]
+    fn skipped_bodies_read_back_as_a_full_parse_reads_them() {
+        let source = "#![generated(by = \"g\")]\n\
+            fn half(n: i32) -> i32\n    contract n % 2 == 0\n{\n    return n / 2;\n}\n\
+            struct P { x: i32 }\n\
+            impl P {\n    fn get(&self) -> i32 { let y = { x: self.x } as P; return y.x; }\n}\n\
+            trait T {\n    fn one(&self) -> i32 { return 1; }\n}\n\
+            test { assert half(4) == 2; }\n";
+        let unparse = |module: &Module| Unparser::new().unparse(module);
+        let full = parse(source).unwrap();
+
+        let mut parser = Parser::from_lex_no_trivia(lex(source)).skipping_generated_bodies();
+        let mut skipped = parser.parse();
+        assert!(parser.skipped_bodies());
+        assert_ne!(unparse(&skipped), unparse(&full));
+        parser.read_skipped_bodies(&mut skipped);
+
+        assert!(parser.take_errors().is_empty());
+        assert_eq!(unparse(&skipped), unparse(&full));
     }
 
     /// Parse helper that exposes the full recovery result: the (always
@@ -8982,7 +9119,7 @@ line 2
         assert_eq!(module.generated_meta("by"), Some("tool"));
         // List values are exposed via generated_meta_array.
         let sources = module.generated_meta_array("sources").unwrap();
-        let owned: Vec<&str> = sources.iter().map(String::as_str).collect();
+        let owned: Vec<&str> = sources.iter().map(StrLit::as_str).collect();
         assert_eq!(owned, vec!["a.wit", "b.wit"]);
         // Unknown keys return None.
         assert_eq!(module.generated_meta("unknown"), None);
@@ -8997,7 +9134,7 @@ line 2
 "#;
         let module = parse(source).unwrap();
         let sources = module.generated_meta_array("sources").unwrap();
-        assert_eq!(sources, &["a.wit".to_string()]);
+        assert_eq!(sources, &[StrLit::new("a.wit")]);
     }
 
     #[test]
@@ -9014,15 +9151,10 @@ line 2
         // Metadata is also queryable after unparse+reparse.
         let reparsed = parse(&formatted).unwrap();
         assert_eq!(reparsed.generated_meta("by"), Some("tool"));
-        assert_eq!(
-            reparsed.generated_meta_array("sources").unwrap(),
-            &["a.wit".to_string(), "b.wit".to_string()],
-        );
+        let written = [StrLit::new("a.wit"), StrLit::new("b.wit")];
+        assert_eq!(reparsed.generated_meta_array("sources").unwrap(), &written);
         // Sanity: the original module still works too.
-        assert_eq!(
-            module.generated_meta_array("sources").unwrap(),
-            &["a.wit".to_string(), "b.wit".to_string()],
-        );
+        assert_eq!(module.generated_meta_array("sources").unwrap(), &written);
     }
 
     /// Extract the substring covered by `span` (byte offsets).

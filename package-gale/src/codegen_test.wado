@@ -14,11 +14,11 @@ use {
     merge_grammars,
 } from "./ir.wado";
 use { generate, GenerateOptions, GeneratedOutput } from "./codegen.wado";
-use { render_lexer_dump } from "./lexer_dump.wado";
 use { Diagnostic } from "./gir.wado";
 use { parse_highlight_query } from "./highlight_query.wado";
-use { parse, parse_checked, assemble_grammar } from "./g4/parser.wado";
+use { parse, parse_checked } from "./g4/parser.wado";
 use { count_occurrences } from "../tests/support/text.wado";
+use { lexer_dump } from "../tests/support/fixtures.wado";
 use { eval, Output } from "core:eval";
 use { wado } from "lib:wadopoet";
 
@@ -2897,14 +2897,6 @@ ID : 'x' ; LB : '(' ; RB : ')' ;
 WS : [ \\t\\r\\n]+ -> skip ;
 ", "start", ["(x()", "x()"]);
     assert got == "(x() => (start ( (body x (xs ()) ))\nx() => (start (body (r x) (xs () )))\n";
-}
-
-/// The report `gale dump --lexer` prints for `input`.
-fn lexer_dump<S: AsStrSlice>(input: S) -> String {
-    let inputs: List<[String, String]> = [
-        ["test.g4", input.to_string()],
-    ];
-    return render_lexer_dump(&assemble_grammar(&inputs).unwrap());
 }
 
 /// One strategy: the sentence the dump prints for it, and the local the emitter

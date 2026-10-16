@@ -3,8 +3,8 @@
 //!
 //! Slice 1 covers `DeadFunction` / `DeadGlobal` for free functions and
 //! globals: an item never reachable from the export boundary is reported;
-//! a reachable one (and the export root itself) is not. The `--no-unused`
-//! toggle (`CompilerOptions::unused_diagnostics`) silences the lints.
+//! a reachable one (and the export root itself) is not.
+//! `CompilerOptions::unused_diagnostics` silences the lints.
 
 use crate::common::{in_memory_host, runtime};
 use wado_compiler::{Code, CompilerOptions, OptLevel};
@@ -167,7 +167,7 @@ export fn run() {}
     );
     assert!(
         diags.is_empty(),
-        "`--no-unused` must silence the lints, got {diags:?}"
+        "`unused_diagnostics: false` must silence the lints, got {diags:?}"
     );
 }
 
@@ -366,37 +366,5 @@ export fn run() {}
     assert!(
         !has_dead_global(&diags, "LIBRARY_CONST"),
         "`pub global` is a package-external root, got {diags:?}"
-    );
-}
-
-#[test]
-fn internal_function_with_no_caller_is_reported_dead() {
-    // `internal` is package-internal-only visibility, not a liveness root:
-    // an unreferenced `internal fn` is still dead code.
-    let diags = unused_for(
-        r#"
-internal fn helper() -> i32 { return 1; }
-
-export fn run() {}
-"#,
-    );
-    assert!(
-        has_dead_function(&diags, "helper"),
-        "`internal fn` with no caller must still be reported, got {diags:?}"
-    );
-}
-
-#[test]
-fn internal_global_with_no_caller_is_reported_dead() {
-    let diags = unused_for(
-        r#"
-internal global UNUSED: i32 = 42;
-
-export fn run() {}
-"#,
-    );
-    assert!(
-        has_dead_global(&diags, "UNUSED"),
-        "`internal global` with no caller must still be reported, got {diags:?}"
     );
 }

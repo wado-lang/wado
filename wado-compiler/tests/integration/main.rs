@@ -53,6 +53,7 @@ mod loader_canonical_identity;
 mod match_place_scrutinee;
 mod niri;
 mod opt_loop_convergence;
+mod package_unused;
 mod purity_sem;
 mod redundant_bce;
 mod remarks;

@@ -5,7 +5,7 @@ use std::path::Path;
 use lexopt::Arg::Value;
 
 use crate::args::{self, CliExit};
-use crate::compile::{build_load, load_nearest_manifest};
+use crate::compile::{Settled, build_load, load_nearest_manifest};
 use crate::compiler_host::FilesystemCompilerHost;
 use crate::knobs::{CompileKnobOpt, CompileKnobs};
 
@@ -349,6 +349,7 @@ async fn run_single(opts: &DumpOptions, input: &str) -> Result<(), CliExit> {
         FilesystemCompilerHost::with_log_level(base_path, opts.knobs.log_level),
         opts.knobs.no_cache,
         "dump",
+        &mut Settled::default(),
     )
     .await?;
 

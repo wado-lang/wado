@@ -387,9 +387,7 @@ pub fn discover_tree(root: &Path, filters: Filters<'_>) -> Result<Vec<PackageFil
     let mut packages = Vec::new();
     let mut queue = vec![root.to_path_buf()];
     while let Some(pkg_root) = queue.pop() {
-        let (excludes, includes) = filters(&pkg_root)?;
-        let result =
-            discover_wado_files(&pkg_root, &excludes, &includes).map_err(CliExit::error)?;
+        let result = walk_package(&pkg_root, filters)?;
         queue.extend(result.subpackages.into_iter().rev());
         packages.push(PackageFiles {
             root: pkg_root,
@@ -397,6 +395,16 @@ pub fn discover_tree(root: &Path, filters: Filters<'_>) -> Result<Vec<PackageFil
         });
     }
     Ok(packages)
+}
+
+/// The `*.wado` files of the package at `root`, its sub-packages left out.
+pub fn package_files(root: &Path, filters: Filters<'_>) -> Result<Vec<PathBuf>, CliExit> {
+    Ok(walk_package(root, filters)?.files)
+}
+
+fn walk_package(root: &Path, filters: Filters<'_>) -> Result<DiscoveryResult, CliExit> {
+    let (excludes, includes) = filters(root)?;
+    discover_wado_files(root, &excludes, &includes).map_err(CliExit::error)
 }
 
 /// The `*.wado` files one directory argument expands to. Matching nothing is
