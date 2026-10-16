@@ -78,33 +78,34 @@ import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 
 global global:type_pattern_ascription.wado::$const_obj_3: ref "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(115, 109, 97, 108, 108), used: 5 };
 global global:type_pattern_ascription.wado::$const_obj_4: ref "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(98, 105, 103), used: 3 };
-global global:type_pattern_ascription.wado::$const_obj_5: ref Array<u8> = array.new_fixed<u8>(32);
-global global:type_pattern_ascription.wado::$const_obj_6: ref "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(49, 32, 111, 110, 101), used: 5 };
+global global:type_pattern_ascription.wado::$const_obj_5: ref "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(49, 32, 111, 110, 101), used: 5 };
 global global:core:builtin::$unit_case$core:prelude/types.wado//Option<i32>$0: ref "core:prelude/types.wado//Option<i32>" = struct.new "core:prelude/types.wado//Option<i32>" { 0 };
 
 fn "type_pattern_ascription.wado/run"() with Stdout {
     let packed_54: i64;
     let rx_55: i32;
     let tx_56: i32;
+    let $sroa_other_repr_157: ref Array<u8>;
     let $sroa_$f_buf_178: ref "core:prelude/string.wado//String";
     rx_55 = builtin::i32_wrap_i64(local.tee packed_54("wasi/stream-new"()));
     tx_56 = builtin::i32_wrap_i64(packed_54 >> 32_i64);
     rx_55 = "type_pattern_ascription.wado/$cm_binding__Stdout_write_via_stream"(rx_55);
     let $mv_arg_2: ref "core:prelude/string.wado//String";
-    $mv_arg_2 = global:type_pattern_ascription.wado::$const_obj_6;
+    $mv_arg_2 = global:type_pattern_ascription.wado::$const_obj_5;
     "core:rt/write_string_to_stream$spec0$dae[add_newline]"(tx_56, $mv_arg_2.repr, $mv_arg_2.used);
     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(rx_55);
     $sroa_$f_buf_178 = local.tee $mv_arg_2(struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(33), used: 0 });
     cold_path;
     rx_55 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$sroa[self.buf]$dae[alt_prefix]"($sroa_$f_buf_178, 0, 2);
     "core:prelude/primitive.wado/write_decimal_digits"($sroa_$f_buf_178.repr, rx_55, 42_i64, 2);
+    $sroa_other_repr_157 = array.new_fixed<u8>(32);
     if @unlikely(local.tee rx_55($mv_arg_2.used + 1) > builtin::array_len($mv_arg_2.repr)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"($mv_arg_2, rx_55);
     }
     tx_56 = $mv_arg_2.used;
     $mv_arg_2.used = rx_55;
-    builtin::array_copy<u8>($mv_arg_2.repr, tx_56, global:type_pattern_ascription.wado::$const_obj_5, 0, 1);
+    builtin::array_copy<u8>($mv_arg_2.repr, tx_56, $sroa_other_repr_157, 0, 1);
     $sroa_$f_buf_178 = $mv_arg_2;
     rx_55 = local.tee tx_56($inline_double_38: block -> i32 {
         cold_path;

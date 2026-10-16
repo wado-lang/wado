@@ -98,9 +98,6 @@ import fn wasi/stream-new from "wasi/stream-new";
 import fn wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code from "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code";
 import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 
-global global:inline_cold_function.wado::$const_obj_3: ref "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(109, 105, 120, 101, 100, 58, 32), used: 7 };
-global global:core:prelude/primitive.wado::$const_obj_4: ref "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 };
-
 fn "inline_cold_function.wado/mix"(x, y) {
     return local.tee y((local.tee y((local.tee y(x ^ (y * 668265261)) ^ (y >> 15)) * 739982445) ^ (y >> 12)) * 695872825) ^ (y >> 15);
 }
@@ -108,7 +105,8 @@ fn "inline_cold_function.wado/mix"(x, y) {
 fn "inline_cold_function.wado/report"(x) {
     let $local_1: ref "core:prelude/string.wado//String";
     let $local_2: ref "core:prelude/format.wado//Formatter";
-    return "core:prelude/string.wado/core:prelude/string.wado/String::internal_push_string$spec0"(local.tee $local_1(struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(23), used: 0 }), global:inline_cold_function.wado::$const_obj_3), $local_2 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::new"($local_1), "core:prelude/primitive.wado/i32::fmt_decimal$sroa[self.value]"("inline_cold_function.wado/mix"(x, x + 1), $local_2), $local_1;
+    let other: ref "core:prelude/string.wado//String";
+    return $local_1 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(23), used: 0 }, other = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("mixed: "), used: 7 }, "core:prelude/string.wado/core:prelude/string.wado/String::internal_push_string$spec0"($local_1, other), $local_2 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::new"($local_1), "core:prelude/primitive.wado/i32::fmt_decimal$sroa[self.value]"("inline_cold_function.wado/mix"(x, x + 1), $local_2), $local_1;
 }
 
 fn "inline_cold_function.wado/$cm_binding__Stdout_write_via_stream"(data) with Stdout {
@@ -641,11 +639,11 @@ fn "core:prelude/primitive.wado/i32::fmt_decimal$sroa[self.value]"(self, f) {
     is_negative = self < 0;
     self = "core:prelude/primitive.wado/count_digits_u64"(local.tee x(x = builtin::i64_extend_i32_s(self); select i64(x < 0_i64, 0_i64 - x, x)));
     is_negative = block -> i32 {
-        let $mv_arg_3: ref "core:prelude/string.wado//String";
-        $mv_arg_3 = global:core:prelude/primitive.wado::$const_obj_4;
-        "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>"(f, is_negative, $mv_arg_3.repr, $mv_arg_3.used, self);
+        let $mv_field_3: ref Array<u8>;
+        $mv_field_3 = builtin::array_new<u8>(0);
+        "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>"(f, is_negative, $mv_field_3, 0, self);
     };
-    "core:prelude/primitive.wado/write_decimal_digits"(local.tee $mv_arg_3(f.buf).repr, is_negative, x, self);
+    "core:prelude/primitive.wado/write_decimal_digits"(f.buf.repr, is_negative, x, self);
 }
 
 fn "core:prelude/string.wado/core:prelude/string.wado/String::internal_push_string$spec0"(self, other) {
