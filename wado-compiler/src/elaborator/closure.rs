@@ -42,6 +42,7 @@ pub(super) fn relink_recorded_captures(
 
 /// Expected function-type info extracted from an `expected_type` hint.
 struct ExpectedFn {
+    ty: TypeId,
     params: Vec<TypeId>,
     return_type: TypeId,
     effects: Vec<EffectRef>,
@@ -106,6 +107,7 @@ impl TypeSystem {
                 effects,
                 ..
             } => Some(ExpectedFn {
+                ty: tid,
                 params: params.clone(),
                 return_type: *return_type,
                 effects: effects.clone(),
@@ -128,11 +130,31 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             self.reject_unresolved_annotation(ty);
             return self.resolve_type(ty);
         }
-        if let Some(ef) = expected_fn
-            && let Some(t) = ef.params.get(index)
-        {
-            return *t;
+        if let Some(ef) = expected_fn {
+            if let Some(&t) = ef.params.get(index) {
+                return t;
+            }
+            // The fn-type check passes an unknown parameter, so the arity is
+            // reported here.
+            let (expected, _) = self
+                .tysys
+                .type_table
+                .borrow()
+                .type_names_for_mismatch(ef.ty, ef.ty);
+            let _ = self.emit(TypeError::TypeMismatch {
+                expected,
+                found: format!("a closure of {} or more parameters", index + 1),
+                span: param.name_span,
+            });
+            return TypeTable::UNKNOWN;
         }
+        let _ = self.emit(TypeError::CannotInferType {
+            message: format!(
+                "cannot infer the type of closure parameter `{}`; annotate it",
+                param.name
+            ),
+            span: param.name_span,
+        });
         TypeTable::UNKNOWN
     }
 
@@ -165,7 +187,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let mut mut_captures: Vec<MutCapture> = Vec::new();
         let mut any_mutating_capture = false;
 
-        for var_name in writes.assigned.union(&writes.borrowed) {
+        for var_name in writes.assigned.union(&writes.mut_referenced) {
             let written = writes.assigned.contains(var_name);
             let Some(local) = ctx.lookup(var_name) else {
                 // A binding `ctx` only reaches by capture is boxed where it is
@@ -243,8 +265,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
         let body_type = self.resolve_expr(&closure.body, &mut closure_ctx, body_expected);
 
-        // Only the walk knows which borrows reach a capture's own storage.
-        for var_name in std::mem::take(&mut closure_ctx.borrowed_captures) {
+        // Only the walk knows which `&mut`s reach a capture's own storage.
+        for var_name in std::mem::take(&mut closure_ctx.mut_ref_captures) {
             if closure_ctx.deref_overrides.contains_key(&var_name) {
                 any_mutating_capture = true;
             } else if let Some(local) = ctx.lookup(&var_name) {
@@ -254,7 +276,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 );
             } else {
                 any_mutating_capture |= ctx.binding(&var_name).is_some_and(|b| b.is_mut);
-                ctx.borrowed_captures.insert(var_name);
+                ctx.mut_ref_captures.insert(var_name);
             }
         }
 

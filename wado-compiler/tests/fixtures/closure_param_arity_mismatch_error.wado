@@ -1,0 +1,11 @@
+// A closure with more parameters than the fn type it is checked against is a
+// type mismatch, not a parameter to annotate.
+use { println, Stdout } from "core:cli";
+
+export fn run() with Stdout {
+    let f: fn(i32) -> i32 = |x, y| x;
+    println(`${f(1)}`);
+}
+
+__DATA__
+{"compile_error": ":6:33: analysis error: type mismatch: expected 'fn(i32) -> i32', found 'a closure of 2 or more parameters'"}

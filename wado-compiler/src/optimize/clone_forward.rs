@@ -43,7 +43,7 @@ struct Usage {
     /// Every `Local` mention (reads and assignment targets).
     occurrences: u32,
     reassigned: bool,
-    /// Field-mutated (`t.f = …`), `&mut`-borrowed, or passed as a mutable arg.
+    /// Field-mutated (`t.f = …`), taken `&mut`, or passed as a mutable arg.
     mutated: bool,
 }
 
@@ -157,7 +157,7 @@ fn call_disturbs_root(root: &PlaceRoot, address_taken: &IndexSet<u32>) -> bool {
 
 /// Whether the subtree rooted at `stmt` mutates `root` (of a local place) or
 /// writes any global — anything that can change a re-materialized place's value
-/// across the binding→use interval. Beyond direct assignments / `&mut` borrows /
+/// across the binding→use interval. Beyond direct assignments / `&mut` references /
 /// `mut` arguments, this covers three otherwise-invisible channels: a mutating
 /// method receiver (`xs.push(0)`, whose receiver is a bare `Local` with no
 /// `MutRef` node), a write through a `&mut` reference created before the interval
@@ -238,7 +238,7 @@ fn mut_arg_hits_root(body: &Body, args: &[ArenaCallArg], root: &PlaceRoot) -> bo
     })
 }
 
-/// Locals whose address is taken by a `&mut` borrow anywhere in the function:
+/// Locals whose address is taken by a `&mut` anywhere in the function:
 /// a write through such a reference can reach the local without naming it.
 fn collect_address_taken(body: &Body, out: &mut IndexSet<u32>) {
     body.for_each_reachable_node(|node| {

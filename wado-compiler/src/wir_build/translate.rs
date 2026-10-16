@@ -2258,10 +2258,11 @@ impl FunctionTranslator<'_, '_> {
         // A split `&S` reads its referent's fields at the call, as the callee
         // would have, so every argument after it that may write runs before
         // those reads.
-        let first_borrowed = (0..ordered.len()).find(|i| split.get(i).is_some_and(|p| p.borrowed));
+        let first_through_ref =
+            (0..ordered.len()).find(|i| split.get(i).is_some_and(|p| p.through_ref));
         let may_write: Vec<bool> = ordered.iter().map(|&op| !self.writes_nothing(op)).collect();
         let runs_before_split_reads =
-            |i: usize| first_borrowed.is_some_and(|r| i > r) && may_write[i];
+            |i: usize| first_through_ref.is_some_and(|r| i > r) && may_write[i];
         // A local read stays cheap to repeat, so a split parameter takes its
         // fields off one at the call, with nothing evaluated ahead.
         let split_ahead = |i: usize| split.contains_key(&i) && !local_read[i];
@@ -2324,7 +2325,7 @@ impl FunctionTranslator<'_, '_> {
         (prelude, call_args)
     }
 
-    /// Whether `op` reads a local, or borrows one: what translates to a
+    /// Whether `op` reads a local, or references one: what translates to a
     /// `local.get` alone.
     fn reads_a_local(&self, op: Operand) -> bool {
         let Operand::Expr(e) = op else {

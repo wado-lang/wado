@@ -296,7 +296,7 @@ impl Holder {
 
 export fn run() {}
 "#,
-            "cannot move resource `Fields` out of a borrow",
+            "cannot move resource `Fields` out of a reference",
         ),
     ];
     futures::executor::block_on(async {

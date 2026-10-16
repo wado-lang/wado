@@ -20,9 +20,10 @@ use crate::defs::DefId;
 use crate::flat_package::FlatPackage;
 use crate::hashmap::IndexMap;
 use crate::module_source::ModuleSource;
-use crate::name::FreeFunctionName;
+use crate::name::{FreeFunctionName, LocalMethodName};
 use crate::tir::{
-    MonomorphInfo, ResolvedType, TemplateId, TirFunction, TirModule, TirStruct, TypeId, TypeTable,
+    AnonStructId, MonomorphInfo, ResolvedType, StructDef, TemplateId, TirFunction, TirModule,
+    TirStruct, TypeId, TypeTable,
 };
 use crate::tir_visitor::TirRefVisitor;
 
@@ -238,7 +239,35 @@ impl Monomorphizer {
                 }
             }
         }
+        new_structs.extend(self.substituted_anon_structs(&mut type_table.borrow_mut()));
         new_structs
+    }
+
+    /// A struct for each closed anonymous shape a substitution first reached
+    /// since the last call, unless a literal wrote it. Each substitution also
+    /// awaits its origin's methods.
+    fn substituted_anon_structs(&mut self, tt: &mut TypeTable) -> Vec<TirStruct> {
+        let (substitutions, end) = tt.closed_shape_substitutions_since(self.structs.anon_scanned);
+        self.structs.anon_scanned = end;
+        self.structs.pending_shapes.extend(&substitutions);
+        let unwritten: Vec<(AnonStructId, usize)> = substitutions
+            .into_iter()
+            .filter(|&(shape, index)| index == 0 && !tt.anon_struct_is_written(shape))
+            .collect();
+        unwritten
+            .into_iter()
+            .map(|(shape, index)| {
+                let span = self.structs.anon_sites[&tt.shape_substitution(shape, index).origin];
+                let fields = tt.anon_shape_struct_fields(shape);
+                TirStruct::anonymous(
+                    shape,
+                    tt.anon_struct_mangle(shape),
+                    tt.anon_struct_module(shape).clone(),
+                    &fields,
+                    span,
+                )
+            })
+            .collect()
     }
 
     /// Monomorphize `module` against templates a previous run already holds,
@@ -270,15 +299,32 @@ impl Monomorphizer {
         // Phase 1: Collect all generic struct definitions
         let mut generic_structs = external_generic_structs.clone();
         generic_structs.extend(generic_structs_in(&module.structs));
+        let tt = module.type_table.borrow();
+        for s in &module.structs {
+            if let StructDef::Anon(shape) = s.def {
+                self.structs.anon_sites.insert(shape, s.span);
+                if tt.anon_shape_is_open(shape) {
+                    self.structs
+                        .open_shape_heads
+                        .insert(tt.fq_struct_head(s.def), shape);
+                }
+            }
+        }
+        drop(tt);
 
         // Phase 2-4: a struct's fields may name further instances, hence a fixpoint.
         let new_structs = self.drain_pending_structs(&module.type_table, &generic_structs);
         module.structs.extend(new_structs);
 
-        // Phase 5: Remove generic structs from the concrete struct list
-        module
-            .structs
-            .retain(|s| s.type_params.is_empty() || s.monomorph_info.is_some());
+        // Phase 5: Remove generic structs and open shapes from the concrete
+        // struct list
+        {
+            let tt = module.type_table.borrow();
+            module.structs.retain(|s| match s.def {
+                StructDef::Anon(shape) => !tt.anon_shape_is_open(shape),
+                StructDef::Decl(_) => s.type_params.is_empty() || s.monomorph_info.is_some(),
+            });
+        }
 
         // Phase 6: Rewrite all GenericInstance type_ids to concrete struct type_ids
         self.rewrite_types_in_module(&mut module);
@@ -294,6 +340,27 @@ impl Monomorphizer {
 
         let generic_functions = Rc::new(generic_functions);
         self.functions.templates = Rc::clone(&generic_functions);
+
+        // The methods synthesis gave each open shape, which every shape
+        // substituted from it instantiates. Like a template's, they leave the
+        // module: their types are an instance's only once substituted.
+        module.functions.retain(|func_rc| {
+            let head = func_rc
+                .borrow()
+                .method_info
+                .as_ref()
+                .map(LocalMethodName::fq_base_struct_name);
+            let Some(&shape) = head.and_then(|head| self.structs.open_shape_heads.get(&head))
+            else {
+                return true;
+            };
+            self.structs
+                .shape_methods
+                .entry(shape)
+                .or_default()
+                .push(Rc::clone(func_rc));
+            false
+        });
 
         // Phase 7.5: expand the packs their own site settled, before Phase 8
         // collects the calls that produces.
@@ -342,6 +409,15 @@ impl Monomorphizer {
                 self.alias_canonical_keys(&mut module.type_table.borrow_mut());
             }
             module.structs.extend(new_structs);
+            for (shape, index) in std::mem::take(&mut self.structs.pending_shapes) {
+                let instances = self.instantiate_shape_substitution(
+                    shape,
+                    index,
+                    &mut module.type_table.borrow_mut(),
+                );
+                made_progress |= !instances.is_empty();
+                batch.extend(instances);
+            }
 
             for mut concrete in batch {
                 self.rewrite_types_in_function(&mut concrete, &mut module.type_table.borrow_mut());

@@ -393,6 +393,20 @@ test "pretty-print keeps empty containers on one line" {
 }";
 }
 
+test "inspect caps a list as List does" {
+    let v: Value = Value::List([
+        Value::Int(1),
+        Value::Int(2),
+        Value::Int(3),
+    ]);
+    assert `${v:.2?}` == "[1, 2, ...]";
+    assert `${v:#.2?}` == "[
+  1,
+  2,
+  ...
+]";
+}
+
 // --- equality ---
 
 #[allow(self_comparison)]

@@ -80,7 +80,7 @@ fn collect_candidates(
             if param.is_mut || param.is_mut_ref {
                 continue;
             }
-            let (aggregate, borrowed) = match type_table.get(param.type_id) {
+            let (aggregate, through_ref) = match type_table.get(param.type_id) {
                 ResolvedType::Ref(referent) => (*referent, true),
                 _ => (param.type_id, false),
             };
@@ -91,7 +91,7 @@ fn collect_candidates(
             };
             // A by-value argument is often a literal or a multi-value result,
             // which hands over every field, so it takes them all.
-            if !borrowed && !splittable(&all_types, type_table) {
+            if !through_ref && !splittable(&all_types, type_table) {
                 continue;
             }
             let scope = ParamScope {
@@ -104,19 +104,19 @@ fn collect_candidates(
             if reads.whole {
                 continue;
             }
-            // A borrow's fields are loaded at every call, so it takes those the
+            // A reference's fields are loaded at every call, so it takes those the
             // callee reads and no other, and only where it reads each on every
             // path: one read past an early exit costs a load where it is not.
-            if borrowed && !reads.fields.is_subset(&scope.read_on_entry()) {
+            if through_ref && !reads.fields.is_subset(&scope.read_on_entry()) {
                 continue;
             }
             let (field_types, field_names): (Vec<TypeId>, Vec<String>) = all_types
                 .into_iter()
                 .zip(&all_names)
-                .filter(|(_, name)| !borrowed || reads.fields.contains(name.as_str()))
+                .filter(|(_, name)| !through_ref || reads.fields.contains(name.as_str()))
                 .map(|(ty, name)| (ty, name.clone()))
                 .unzip();
-            if borrowed && !splittable(&field_types, type_table) {
+            if through_ref && !splittable(&field_types, type_table) {
                 continue;
             }
             out.insert(
@@ -125,9 +125,9 @@ fn collect_candidates(
                     abi: ParamAbi::MultiValue {
                         field_types,
                         field_names,
-                        borrowed,
+                        through_ref,
                     },
-                    referent: borrowed.then_some(aggregate),
+                    referent: through_ref.then_some(aggregate),
                 },
             );
         }

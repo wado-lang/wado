@@ -5,6 +5,7 @@
 //! abandons the evaluation rather than stepping past an unperformed write.
 
 use crate::const_eval::Value;
+use crate::hashmap::IndexSet;
 use crate::nir::NirUnaryOp;
 use crate::nir_arena::{
     BlockId, Body, ExprId, ExprKind, ExprNode, NodeRef, Operand, StmtId, StmtKind, StmtNode,
@@ -13,7 +14,9 @@ use crate::nir_visitor::NirRefVisitor;
 use crate::tir::TypeTable;
 
 use super::callee::{CallSite, CalleeKey};
-use super::place::{borrowed_place_operand, named_local, place_aliased_by_another, place_of};
+use super::place::{
+    named_local, place_aliased_by_another, place_of, referenced_place_operand, write_root_local,
+};
 use super::region::{block_shape, region_needs, region_shape, value_block_shape};
 use super::rewrite::is_discardable_operand;
 use super::trackability::Trackability;
@@ -166,13 +169,60 @@ impl LoopSnapshot {
 /// parameter binds its own snapshot and each write-back replays whole, so a
 /// second handle either reads a value the program never had or loses its own
 /// write. Whether it could actually observe the write is not asked: after
-/// `prepare_types` a shared borrow of a primitive is the same `Box<T>` a
+/// `prepare_types` a `&` reference to a primitive is the same `Box<T>` a
 /// by-value parameter carries. Wado has no borrow checker, so this is ordinary
 /// source — the frame declines the call rather than mis-running it.
 fn aliased_write_targets(targets: &[(u32, u32, Vec<u32>)], places: &[(u32, Vec<u32>)]) -> bool {
     targets
         .iter()
         .any(|(_, root, path)| place_aliased_by_another(places, *root, path))
+}
+
+/// The locals something under `e` writes, through the channels
+/// [`clobbered_locals`] reads: an assignment, a `&mut`, an argument
+/// reaching storage.
+///
+/// [`clobbered_locals`]: super::trackability::clobbered_locals
+fn locals_written_under(body: &Body, e: ExprId) -> IndexSet<u32> {
+    let mut written = IndexSet::default();
+    body.find_in_nodes_under(NodeRef::Expr(e), |node| {
+        let NodeRef::Expr(e) = node else {
+            return None::<()>;
+        };
+        match &body.exprs[e].kind {
+            ExprKind::Assign { target, .. } => {
+                written.extend(write_root_local(body, (*target).into()));
+            }
+            ExprKind::Unary {
+                op: NirUnaryOp::MutRef,
+                expr,
+            } => written.extend(write_root_local(body, *expr)),
+            ExprKind::Call { args, .. } => {
+                for (arg, reaches_storage) in args.with_storage_reach(true) {
+                    if reaches_storage {
+                        written.extend(write_root_local(body, arg.expr));
+                    }
+                }
+            }
+            _ => {}
+        }
+        None
+    });
+    written
+}
+
+/// Every local `e` names, read or written.
+fn locals_mentioned_under(body: &Body, e: ExprId) -> impl Iterator<Item = u32> {
+    let mut mentioned = Vec::new();
+    body.find_in_nodes_under(NodeRef::Expr(e), |node| {
+        if let NodeRef::Expr(e) = node
+            && let ExprKind::Local { index, .. } = body.exprs[e].kind
+        {
+            mentioned.push(index);
+        }
+        None::<()>
+    });
+    mentioned.into_iter()
 }
 
 impl Interpreter<'_> {
@@ -221,7 +271,7 @@ impl Interpreter<'_> {
                 {
                     return Flow::Bail;
                 }
-                // What makes an immutable binding of a borrow an alias is that
+                // What makes an immutable binding of a reference an alias is that
                 // nothing displaces it, which is equally true of a mutable
                 // local nothing reassigns.
                 if (!is_mut || !self.frame.reassigned.contains(index))
@@ -400,10 +450,13 @@ impl Interpreter<'_> {
 
     /// Run a call at statement position for the writes it performs. `None`
     /// when the expression is not a call the frame knows.
-    fn exec_call_stmt(&mut self, body: &Body, e: ExprId) -> Option<Flow> {
-        let (key, _) = self.call_target(body, e)?;
+    fn exec_call_stmt(&mut self, body: &mut Body, e: ExprId) -> Option<Flow> {
+        let (key, args) = self.call_target(body, e)?;
         if !self.facts.callees.is_some_and(|c| c.contains_key(&key)) {
             return None;
+        }
+        if self.exec_block_args(body, &args).is_none() {
+            return Some(Flow::Bail);
         }
         let Some(run) = self.run_call(body, e, true) else {
             return Some(Flow::Bail);
@@ -412,6 +465,42 @@ impl Interpreter<'_> {
             Some(()) => Some(Flow::Fallthrough(run.result)),
             None => Some(Flow::Bail),
         }
+    }
+
+    /// Run the block-shaped arguments, the shape inlining leaves in an argument
+    /// position, and record each one's value in `scratch_folds`, where
+    /// [`Interpreter::run_call`] reads it back with the other arguments.
+    ///
+    /// The program runs each argument in turn, while the frame runs the blocks
+    /// first and reads the rest at the call. The two agree only where no block
+    /// writes a local an argument ahead of it mentions, so a call that breaks
+    /// this is declined: a reference to a boxed primitive reads as a value, so the
+    /// operand's shape cannot say which earlier argument would see the write.
+    /// `None` on a decline, or when a block reaches no constant.
+    fn exec_block_args(&mut self, body: &mut Body, args: &[Operand]) -> Option<()> {
+        let blocks: Vec<(usize, ExprId)> = args
+            .iter()
+            .enumerate()
+            .filter_map(|(i, arg)| {
+                let e = arg.as_expr()?;
+                block_shape(body, e).map(|_| (i, e))
+            })
+            .collect();
+        for &(i, e) in &blocks {
+            let written = locals_written_under(body, e);
+            let ahead_reads = args[..i]
+                .iter()
+                .filter_map(|arg| arg.as_expr())
+                .any(|ahead| locals_mentioned_under(body, ahead).any(|l| written.contains(&l)));
+            if ahead_reads {
+                return None;
+            }
+        }
+        for (_, e) in blocks {
+            let value = self.eval_operand(body, e.into()).as_const()?;
+            self.frame.scratch_folds.insert(e, value);
+        }
+        Some(())
     }
 
     /// Bind what a materializing store names, so the read it serves resolves
@@ -609,14 +698,14 @@ impl Interpreter<'_> {
         self.bind_local(index, lattice);
     }
 
-    /// The operand a `let` binds as a place rather than a value: a borrow names
+    /// The operand a `let` binds as a place rather than a value: a reference names
     /// the place it was taken over, and a bare local already naming one rebinds
     /// the same place. Nothing else qualifies — a projection out of an alias
     /// reads *through* it — hence matching the RHS as a local. Boxing rewrites
     /// `&x` into a bare read, so the type test accepts any reference shape.
     fn aliased_operand(&self, body: &Body, value: Operand) -> Option<Operand> {
-        if let Some((_, borrowed)) = borrowed_place_operand(body, value) {
-            return Some(borrowed);
+        if let Some((_, referenced)) = referenced_place_operand(body, value) {
+            return Some(referenced);
         }
         let index = named_local(body, value)?;
         if self.frame.place_aliases.contains_key(&index) {
@@ -628,8 +717,8 @@ impl Interpreter<'_> {
             .then_some(value)
     }
 
-    /// Resolve `index` to the place `inner` borrows, so later reads and writes
-    /// through it reach the borrowed storage rather than a copy. Recorded
+    /// Resolve `index` to the place `inner` refers to, so later reads and writes
+    /// through it reach the referenced storage rather than a copy. Recorded
     /// pre-flattened through the aliases already in effect, so a chain never
     /// needs chasing. An alias over its own storage — an index reuse this
     /// frame cannot express — refuses instead.
@@ -643,7 +732,7 @@ impl Interpreter<'_> {
         Some(())
     }
 
-    /// [`place_of`] with the frame's borrow aliases applied: a chain rooted at
+    /// [`place_of`] with the frame's reference aliases applied: a chain rooted at
     /// an alias re-roots at the place the alias was taken over.
     pub(super) fn frame_place_of(&self, body: &Body, op: Operand) -> Option<(u32, Vec<u32>)> {
         let (root, mut path) = place_of(body, op)?;
@@ -684,8 +773,14 @@ impl Interpreter<'_> {
     /// reference cannot write, so the referent's own constant stands; one
     /// retained past the callee's return is refused. An alias local passes its
     /// place's value, as `&place` does: the parameter reads through what it
-    /// receives.
+    /// receives. A block argument reads as the value
+    /// [`Self::exec_block_args`] ran it to.
     fn shared_ref_arg_value(&mut self, body: &Body, arg: Operand) -> Option<Value> {
+        if let Some(e) = arg.as_expr()
+            && let Some(value) = self.frame.scratch_folds.get(&e)
+        {
+            return Some(value.clone());
+        }
         if let Some(e) = arg.as_expr()
             && let ExprKind::Unary {
                 op: NirUnaryOp::Ref,
@@ -799,10 +894,10 @@ impl Interpreter<'_> {
             return self.decline(&key, "two arguments reach one place");
         }
         // A result may embed a parameter's storage — `Formatter::new(&mut buf)`
-        // returns a `Formatter` holding that borrow, and a retained shared one
+        // returns a `Formatter` holding that reference, and a retained `&` one
         // does the same. The engine has no reference values, so it would stand
         // as a snapshot the next write to that storage leaves stale. A scalar
-        // embeds nothing, and so does a retained borrow of a place this frame
+        // embeds nothing, and so does a retained reference to a place this frame
         // settles: `"abc".as_str_slice()` views a literal no write reaches.
         let may_embed_caller_storage = !targets.is_empty() || retains_unsettled_storage;
 

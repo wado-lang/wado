@@ -209,7 +209,7 @@ The SIMD lane readers pad a short literal with zero (`if i < a.len() { a[i] } el
 The elaborator builds an `Array` value and emits an ordinary static call. That
 deletes the coercion facts, the remangle sweep, and both hand-built TIR
 expansions in `reify.rs`; what remains of the old paths is the element-type
-inference, the newtype peel, the `&mut […] as T` borrow transparency, and the
+inference, the newtype peel, the `&mut […] as T` reference transparency, and the
 duplicate-key and dead-write diagnostics.
 
 `TirExprKind::ArrayLiteral` is added, and `lower` emits `NirExprKind::ArrayLiteral`

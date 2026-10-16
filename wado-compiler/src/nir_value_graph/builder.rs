@@ -552,7 +552,7 @@ struct Builder<'a> {
     /// Locals a call may mutate (mutable escape). Only these are bumped by
     /// [`Builder::bump_call_effects`]. See [`build`].
     mut_escaped: IndexSet<u32>,
-    /// Receivers bound to a struct literal, or a borrow of one (`&S { … }`):
+    /// Receivers bound to a struct literal, or a reference to one (`&S { … }`):
     /// an object the frame just built, which nothing outside it reaches unless
     /// it escapes, and escaping marks it `untrackable` or `mut_escaped` as for
     /// any other local.
@@ -608,7 +608,7 @@ struct Builder<'a> {
     /// returns. Empty is conservative.
     pure_builtin_callees: IndexSet<FuncId>,
     /// Calls whose callee cannot write through the receiver, so a loop does not
-    /// borrow it. Empty is conservative.
+    /// take it `&mut`. Empty is conservative.
     receiver_immutable_calls: IndexSet<ExprId>,
     /// See [`CallFacts::writes`]. Empty is conservative.
     call_writes: IndexMap<ExprId, ObjectTypes>,
@@ -791,7 +791,7 @@ impl<'a> Builder<'a> {
         let target = match &self.body.exprs[value].kind {
             ExprKind::Unary { .. } => self
                 .body
-                .borrowed_local(Operand::Expr(value))
+                .referenced_local(Operand::Expr(value))
                 .map(|(l, _)| l),
             // `let r = obj.f` where the literal built `f` from `&x` reaches `x`
             // exactly as `let r = &x` does.
@@ -802,7 +802,7 @@ impl<'a> Builder<'a> {
             } => {
                 let (recv, field_index) = (*recv, *field_index);
                 // The receiver resolves as the read path resolves it, so a
-                // borrow of the literal's binding reaches the same entry.
+                // reference to the literal's binding reaches the same entry.
                 let rv = recv
                     .as_expr()
                     .and_then(|ie| self.reference_lookthrough(ie).map(|(vn, _)| vn))
@@ -845,7 +845,7 @@ impl<'a> Builder<'a> {
         Some(array)
     }
 
-    /// The recorded length of the array `op` names, looking through the borrow
+    /// The recorded length of the array `op` names, looking through the reference
     /// `array_len(&xs)` passes it under.
     fn known_array_len(&mut self, op: Operand) -> Option<ValueId> {
         let inner = match op.as_expr().map(|e| &self.body.exprs[e].kind) {
@@ -1192,7 +1192,7 @@ impl<'a> Builder<'a> {
                     }
                     Some(self.pool.unary(op, operand, result_type))
                 } else {
-                    // Still walk the child, so pure subtrees under a borrow land
+                    // Still walk the child, so pure subtrees under a `&` land
                     // in `value_of`; only this expr goes unnamed.
                     self.walk_operand(inner);
                     None
@@ -1229,7 +1229,7 @@ impl<'a> Builder<'a> {
                             matches!(&self.body.exprs[recv_e].kind, ExprKind::Local { .. });
                         // Resolve the receiver as a read of it resolves — a
                         // write through `&mut x` must seed `x`'s slot, or the
-                        // read that looks through the borrow finds nothing.
+                        // read that looks through the reference finds nothing.
                         if let Some((pointee_vn, pointee)) = self.reference_lookthrough(recv_e) {
                             self.walk_operand(*recv);
                             Some((Some(pointee), Some(pointee_vn), true, Holder::Frame))
@@ -1541,7 +1541,7 @@ impl<'a> Builder<'a> {
                 ExprKind::StructLiteral { .. } => break,
                 // `let r = &S` / `&mut S` where `S` is an inline aggregate (e.g.
                 // the inlined `len(&self)` binds `self = &String { … }`). Peel
-                // the borrow and seed `r`'s fields from `S` directly, so a later
+                // the reference and seed `r`'s fields from `S` directly, so a later
                 // `r.field` read forwards — the pointee has no own local to track
                 // via `ref_targets`, so seeding onto `r` is the only handle.
                 ExprKind::Unary {
@@ -1586,21 +1586,21 @@ impl<'a> Builder<'a> {
         let attempted = pairs.len();
         let mut seeded = 0;
         for (field_index, field_value) in pairs {
-            if let Some((pointee, _)) = self.body.borrowed_local(field_value)
+            if let Some((pointee, _)) = self.body.referenced_local(field_value)
                 && !self.assigned_fields.contains(&field_index)
             {
                 // `assigned_fields` sees this body only, so a callee could
                 // repoint the field and leave the entry naming the old local.
-                // It reaches nothing: borrowing made the pointee escape, and an
+                // It reaches nothing: taking `&` made the pointee escape, and an
                 // impure call moves the escaped generation, so the read that
                 // follows one matches no store this seeded.
                 assert!(
                     self.aliased.contains(&pointee) || self.mut_escaped.contains(&pointee),
-                    "a borrowed local escapes, so a stale pointee outlives no call"
+                    "a referenced local escapes, so a stale pointee outlives no call"
                 );
                 compiler_trace!(
                     "vg_field",
-                    "[{}] field {field_index} of {recv:?} borrows local {pointee}",
+                    "[{}] field {field_index} of {recv:?} refers to local {pointee}",
                     self.trace_id
                 );
                 self.field_ref_targets.insert((recv, field_index), pointee);
@@ -2165,7 +2165,7 @@ impl<'a> Builder<'a> {
     }
 
     /// Invalidate the heap generations a loop body may write: a written
-    /// `local.field` bumps `per_slot`, or `field_global` when aliased; a borrow
+    /// `local.field` bumps `per_slot`, or `field_global` when aliased; a `&mut`
     /// bumps that one local's `per_local`; an external write invalidates the
     /// whole `mut_escaped` set through its shared version, exactly as the
     /// per-call [`Builder::bump_call_effects`] does. Untouched fields survive.
@@ -2177,7 +2177,7 @@ impl<'a> Builder<'a> {
                 self.heap_state.bump_slot(local, field);
             }
         }
-        for &local in &eff.mut_borrowed {
+        for &local in &eff.mut_referenced {
             self.heap_state.bump_local(local);
         }
         if eff.has_external_writes {
@@ -2261,7 +2261,7 @@ struct LoopHeapEffects {
     written_fields: IndexSet<(u32, u32)>,
     /// `&mut local`, `&mut local.field`, a `&mut` call arg, or a method
     /// receiver — the callee may store through the reference.
-    mut_borrowed: IndexSet<u32>,
+    mut_referenced: IndexSet<u32>,
     /// An impure call, indirect or CM call, or opaque-target store that may
     /// mutate aliased state.
     has_external_writes: bool,
@@ -2367,7 +2367,7 @@ fn record_loop_heap_write(
             expr: inner,
         } => match inner.as_expr().map(|ie| &body.exprs[ie].kind) {
             Some(ExprKind::Local { index, .. }) => {
-                eff.mut_borrowed.insert(*index);
+                eff.mut_referenced.insert(*index);
             }
             Some(ExprKind::FieldAccess {
                 expr: receiver,
@@ -2379,7 +2379,7 @@ fn record_loop_heap_write(
                 }
                 _ => match root_local_of(body, *receiver) {
                     Some(root) => {
-                        eff.mut_borrowed.insert(root);
+                        eff.mut_referenced.insert(root);
                     }
                     None => eff.write_anywhere(),
                 },
@@ -2387,7 +2387,7 @@ fn record_loop_heap_write(
             _ => eff.write_anywhere(),
         },
         ExprKind::Call { func_id, args, .. } => {
-            // A receiver is borrowed unless the callee cannot write through it.
+            // A receiver is taken `&mut` unless the callee cannot write through it.
             // The verdict already accounts for a declared `&mut self`, so it
             // replaces `arg.is_mut` for that slot rather than joining it.
             let receiver_reaches = !facts.receiver_immutable.contains(&e);
@@ -2396,7 +2396,7 @@ fn record_loop_heap_write(
                     && let Some(ExprKind::Local { index, .. }) =
                         arg.expr.as_expr().map(|ae| &body.exprs[ae].kind)
                 {
-                    eff.mut_borrowed.insert(*index);
+                    eff.mut_referenced.insert(*index);
                 }
             }
             // A builtin writes no tracked slot; a pure call writes no escaped
@@ -2753,39 +2753,39 @@ mod tests {
         (block, call)
     }
 
-    /// A callee that cannot write through the receiver does not borrow it for
-    /// the loop; an unknown callee still does.
+    /// A callee that cannot write through the receiver does not mark it written
+    /// for the loop; an unknown callee still does.
     #[test]
-    fn receiver_immutable_call_does_not_borrow_its_receiver() {
+    fn receiver_immutable_call_leaves_its_receiver_unwritten() {
         let mut body = Body::empty();
         let (block, call) = receiver_call_block(&mut body);
         let facts = TestFacts::immutable(&[call]);
 
         let eff = collect_loop_heap_effects(&body, &facts.facts(), block);
         assert!(
-            !eff.mut_borrowed.contains(&0),
-            "a callee that cannot write through the receiver does not borrow it"
+            !eff.mut_referenced.contains(&0),
+            "a callee that cannot write through the receiver leaves it unwritten"
         );
 
         // Unknown callee: the conservative mark stays.
         let none = TestFacts::default();
         let eff = collect_loop_heap_effects(&body, &none.facts(), block);
-        assert!(eff.mut_borrowed.contains(&0));
+        assert!(eff.mut_referenced.contains(&0));
     }
 
-    /// A method declared `&mut self` still does not borrow its receiver once
+    /// A method declared `&mut self` still leaves its receiver unwritten once
     /// the verdict proves the body never writes through it: the declared
     /// mutability alone must not override a proven-safe verdict.
     #[test]
-    fn receiver_immutable_call_does_not_borrow_a_declared_mut_receiver() {
+    fn receiver_immutable_call_leaves_a_declared_mut_receiver_unwritten() {
         let mut body = Body::empty();
         let (block, call) = receiver_call_block_with(&mut body, true);
         let facts = TestFacts::immutable(&[call]);
 
         let eff = collect_loop_heap_effects(&body, &facts.facts(), block);
         assert!(
-            !eff.mut_borrowed.contains(&0),
-            "a proven-immutable receiver is not borrowed even when declared `&mut self`"
+            !eff.mut_referenced.contains(&0),
+            "a proven-immutable receiver is not written even when declared `&mut self`"
         );
     }
 

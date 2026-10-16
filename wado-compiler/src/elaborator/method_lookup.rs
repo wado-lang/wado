@@ -63,7 +63,7 @@ pub(super) enum ImplKind {
 pub(super) const REPLACE_ON_ASSIGN_TYPE: &str =
     "a replace-on-assign type (primitive, enum, flags, fn)";
 
-/// Shared so the explicit `&mut x.f` and the implicit `&mut self` borrow say
+/// Shared so the explicit `&mut x.f` and the implicit `&mut self` say
 /// the same thing about the same refusal.
 pub(super) fn replace_on_assign_place() -> String {
     format!(
@@ -309,7 +309,7 @@ impl TypeSystem {
             .filter(|args| !args.is_empty())
     }
 
-    /// Whether an implicit `&mut self` borrow of a local receiver has to box
+    /// Whether an implicit `&mut self` of a local receiver has to box
     /// it: a receiver whose reference is a box cell is handed a copy, and the
     /// callee's write reaches the local only through the box the address-taken
     /// mark promotes it to.
@@ -1568,7 +1568,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         ctx: &mut FunctionContext,
     ) {
         if let Some(place) = receiver_ast {
-            self.record_mut_borrow(place, ctx);
+            self.record_mut_ref(place, ctx);
         }
         let immutable = match self.reference_mutability(receiver) {
             Some(mutable) => !mutable,
@@ -1594,8 +1594,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             });
         }
 
-        // `operators.rs` refuses the explicit `&mut x.f`; the implicit receiver
-        // borrow must match it.
+        // `operators.rs` refuses the explicit `&mut x.f`; the implicit `&mut`
+        // receiver must match it.
         if receiver_ast
             .is_some_and(|e| matches!(e, ast::Expr::FieldAccess(_) | ast::Expr::Index(_)))
             && self.tysys.is_replace_on_assign_place_type(receiver)
@@ -1646,13 +1646,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
     }
 
-    /// Record that `place` is borrowed `&mut` here. One rooted at a binding of an
+    /// Record that `place` is taken `&mut` here. One rooted at a binding of an
     /// enclosing frame is written through, so the closure must capture it `&mut`.
-    pub(super) fn record_mut_borrow(&self, place: &ast::Expr, ctx: &mut FunctionContext) {
+    pub(super) fn record_mut_ref(&self, place: &ast::Expr, ctx: &mut FunctionContext) {
         if let Some(root) = self.place_root(place)
             && ctx.lookup(root).is_none()
         {
-            ctx.borrowed_captures.insert(root.to_string());
+            ctx.mut_ref_captures.insert(root.to_string());
         }
     }
 
@@ -3294,7 +3294,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         if self_kind != ast::SelfKind::MutRef {
             return None; // Method doesn't need &mut, fall back to Index
         }
-        self.record_mut_borrow(&method_call.receiver, ctx);
+        self.record_mut_ref(&method_call.receiver, ctx);
 
         // Past the bail, this path owns the call, so it owns the use->def edge
         // for the method name too — `resolve_method_call_with` never sees it.

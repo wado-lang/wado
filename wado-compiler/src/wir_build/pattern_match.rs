@@ -322,7 +322,7 @@ impl FunctionTranslator<'_, '_> {
             })
             .collect();
         // Each scalar result lands in its local as it is, so a boxed binding (one
-        // borrowed and captured) takes the tuple-struct path, which boxes it.
+        // referenced and captured) takes the tuple-struct path, which boxes it.
         let boxed = bindings.iter().flatten().any(|&local_index| {
             let local_type = self.tir_func.locals[local_index as usize].type_id;
             matches!(

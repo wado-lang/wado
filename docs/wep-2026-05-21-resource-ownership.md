@@ -32,7 +32,7 @@ traps.
 
 ### Wado today
 
-- `resource` methods take `self: &Descriptor` (a borrow) or the resource by
+- `resource` methods take `self: &Descriptor` (a reference) or the resource by
   value (a consuming method like `Request::consume_body`). By-value `self` is
   already supported.
 - CM-binding synthesis maps `&R` → `borrow<R>` and by-value `R` → `own<R>`.
@@ -116,11 +116,11 @@ The receiver has exactly three spellings and never a type annotation:
 | Spelling    | Meaning                       | CM handle   |
 | ----------- | ----------------------------- | ----------- |
 | `self`      | by-value move — resource-only | `own<R>`    |
-| `&self`     | shared borrow                 | `borrow<R>` |
-| `&mut self` | mutable borrow                | `borrow<R>` |
+| `&self`     | shared reference              | `borrow<R>` |
+| `&mut self` | mutable reference             | `borrow<R>` |
 
 `self: T` and `self: &T` are rejected. A copyable type has no use for a value
-receiver (`&self` plus a `*self` deref-copy covers it), and a single borrow
+receiver (`&self` plus a `*self` deref-copy covers it), and a single reference
 spelling removes a needless choice. Bare `self` is legal on a resource or an
 aggregate that carries one (its consuming method hands that resource off); on a
 value type that owns no resource it is a diagnostic (`value types are not move-only; use &self`) — this is how the value-semantics friction is mitigated,
@@ -154,13 +154,13 @@ future work, not a present fact.
 Done: use-after-move of a bare resource local, by-value `self` consumption (a
 bare `self` receiver moves it, via a `consumes_self` dispatch fact — the
 semantic-layer twin of `resource_cleanup`'s `owned_self`), and whole-move of a
-resource-carrying struct / tuple / `Result`, and no-move-out-of-borrow (a `&self`
-return rooted in the borrow that carries a resource) — see below.
+resource-carrying struct / tuple / `Result`, and no-move-out-of-reference (a `&self`
+return rooted in the reference that carries a resource) — see below.
 
 ### Extraction is a by-value receiver (Rust-aligned)
 
 Pulling a resource out of a `Result` / `Option` returns an owned handle, so the
-source must relinquish ownership. `unwrap(&self)` cannot — a borrow keeps the
+source must relinquish ownership. `unwrap(&self)` cannot — a reference keeps the
 receiver owned, so the returned handle would _alias_ the one still inside the
 container: two owners of one move-only resource, hence a double-free. The fix
 mirrors Rust: the consuming accessors (`unwrap` / `expect` / `unwrap_err` /
@@ -175,17 +175,17 @@ By-value `self` on a value type is otherwise a diagnostic
 permitted because a generic self-type resolves to a `GenericInstance`, not a
 concrete value type.
 
-### No move out of a borrow
+### No move out of a reference
 
-A hand-written `fn f(&self) -> Resource { return self.f; }` (or `match *self { … => interior }`, or a `let`-bound projection) moves a resource out of a borrowed
-place: the borrow keeps the source owned, so the returned handle aliases it — a
+A hand-written `fn f(&self) -> Resource { return self.f; }` (or `match *self { … => interior }`, or a `let`-bound projection) moves a resource out of a referenced
+place: the reference keeps the source owned, so the returned handle aliases it — a
 double-free. `resource_move_check` rejects it. For each function it seeds the
-borrowed parameters (`&self` / `&mut self` / `&T`), tracks bindings projected
+reference parameters (`&self` / `&mut self` / `&T`), tracks bindings projected
 from them (through `let`, field access, deref, and match-arm bindings whose
-scrutinee is borrowed), and flags a `return` whose value is rooted in a borrow
-and whose type carries a resource. A `&self` method returning a _freshly
-produced_ resource (`dir.open_at()`) stays legal (its return roots in a fresh
-allocation, not the borrow).
+scrutinee is a reference), and flags a `return` whose value is rooted in a
+reference and whose type carries a resource. A `&self` method returning a
+_freshly produced_ resource (`dir.open_at()`) stays legal (its return roots in a
+fresh allocation, not the reference).
 
 The gate is the concrete return type carrying a resource, so a generic body
 (`T` abstract) is not flagged at its definition; the stdlib avoids the issue by
@@ -200,7 +200,7 @@ is transferred when passed by value, returned, placed in an aggregate, or used a
 the receiver of a by-value (`self`) method — so extraction (`unwrap`) is just a
 by-value receiver transfer, with no aggregate-shape guessing. Two fixes landed:
 
-- A `&self` inspector on a `Result<Resource, E>` (`is_ok`, …) is a borrow and
+- A `&self` inspector on a `Result<Resource, E>` (`is_ok`, …) takes a reference and
   leaves the structural drop intact (#1569).
 - A resource value discarded in statement position (`Fields::new();`,
   `let _ = …`) is dropped, not leaked; a tail expression is left for its
@@ -240,14 +240,14 @@ where it cannot prove move / share / fresh; no elision pass):
 
 - Move — `last_use::compute_move_eligible` plus `elaborator::liveness`'s
   `moved_local_spans`. The elaborator reads names only. It sees a `&x`, but a
-  method call borrows its receiver with no `&` written, so its final uses count
-  only for a local the TIR walk finds no kept borrow pinning. This also covers a **place-level move**: at a struct /
+  method call references its receiver with no `&` written, so its final uses
+  count only for a local the TIR walk finds no kept reference pinning. This also covers a **place-level move**: at a struct /
   tuple literal, a whole-value or clean-field materialization aliases out of a
   _dead_ aggregate (the root is dead after the literal, sibling reads neither
   mutate nor move it, and the materialized fields are disjoint owners) instead of
   deep-copying — so `T { x: p.a, y: p.b }` over a dead `p`, and a shorthand store
   `S { data, n: data.len() }` past a read-only reuse, both move. A method
-  receiver borrow escapes only if the callee stores its receiver specifically
+  receiver reference escapes only if the callee stores its receiver specifically
   (`receiver_storing_methods`), so a `&mut self` mutation like `List::push`
   (which stores only its value) no longer pins the receiver local. A `let` is
   the same site: `let v = p.a` over a dead `p` moves, which is what keeps an
@@ -307,11 +307,11 @@ where it cannot prove move / share / fresh; no elision pass):
   own members assumed owned and the ones a walk refutes dropped. Grown from
   nothing, a cycle whose members return each other's result (`lower_element`
   yields `lower_group`'s value and `lower_group` yields `lower_element`'s) has
-  each reading the other's unproven "borrowed", and every result the family
+  each reading the other's unproven "shared", and every result the family
   builds is deep-copied.
-- Transient borrows — a referent is pinned only at a move where a holder of a
-  borrow of it is still readable. When a holder is readable is stated in
-  [WEP: Borrow Liveness and Assignment to a Borrowed Place](./wep-2026-10-13-borrowed-places.md#a-borrow-lasts-while-its-holder-is-readable).
+- Transient references — a referent is pinned only at a move where a holder of a
+  reference to it is still readable. When a holder is readable is stated in
+  [WEP: Reference Liveness and Assignment to a Referenced Place](./wep-2026-10-13-referenced-places.md#a-reference-lasts-while-its-holder-is-readable).
 - Confinement — `confine.rs` per-parameter escape fixpoint. A builtin declares
   no function, so it is absent from the table that walk builds; reading absence
   as an opaque callee made every parameter handed to one escape. `a[i]` is a
@@ -344,7 +344,7 @@ helper), replacing an identity fallback that silently shared storage.
 
 A function that calls itself is assumed to return owned while that is being
 proved: the fixpoint only adds, so its own call would otherwise read back the
-verdict being computed and pin it at borrowed. The returns that do not go through
+verdict being computed and pin it at shared. The returns that do not go through
 the recursive call are still checked on their own, and those base cases are what
 a recursive result is built from.
 
@@ -358,7 +358,7 @@ elsewhere in the body does not. Without liveness a deserializer deep-copies a
 field it read before any `&mut self` call runs. Who owns the storage a place
 names, what is live at a point, how a write is placed and what a call writes are
 stated in
-[WEP: Borrow Liveness and Assignment to a Borrowed Place](./wep-2026-10-13-borrowed-places.md).
+[WEP: Reference Liveness and Assignment to a Referenced Place](./wep-2026-10-13-referenced-places.md).
 
 A move also hands storage on, so a binding the fold will move out of cannot share
 it. Two reads are such a move: a value read of the binding, and a place-level
@@ -450,8 +450,8 @@ Verified against the tree.
 - [x] Resource-carrying aggregates (struct / tuple / `Result`) are move-only,
   kept in step with cleanup's `carries_resource` (variant / `Option` /
   `List` deferred with their destructors); whole-aggregate move only.
-- [x] No-move-out-of-borrow: a `&self` / `&T`-param return rooted in the borrow
-  whose concrete type carries a resource is rejected (generic-instantiation
+- [x] No-move-out-of-reference: a `&self` / `&T`-param return rooted in the
+  reference whose concrete type carries a resource is rejected (generic-instantiation
   call sites deferred).
 - [ ] Unify with the value-copy last-use liveness.
 
@@ -459,7 +459,7 @@ Verified against the tree.
 
 - [x] `&self` aggregate call classified by return type (#1569).
 - [x] Discarded resource value is dropped, not leaked.
-- [x] A temporary in a borrowing position (receiver, `&` argument, field read,
+- [x] A temporary in a referencing position (receiver, `&` argument, field read,
   operand, condition, scrutinee) is dropped at the end of its statement,
   and `break` / `continue` drop what their target encloses.
 - [x] `is_resource_aggregate` retired: extraction accessors take `self` by
@@ -494,7 +494,7 @@ Verified against the tree.
 - [x] Move through a newtype cast (`bytes as ByteArray`), which the freshness
   side already read through.
 - [x] A bytes literal counts as fresh, like a string literal.
-- [x] A reference root answers for the place it borrows — in the immutable-root
+- [x] A reference root answers for the place it refers to — in the immutable-root
   rule, in the freshness seed, and in path disjointness. Before, each read it
   as an owner: a `let` out of a `&`- or `&mut`-held struct kept seeing the
   source's later writes.
@@ -586,8 +586,8 @@ Verified against the tree.
       but project different cases, so the local names only what they agree on —
       the value the whole pattern matched. Reading it as one alternative's
       payload lets a write to another's be called disjoint.
-- [x] A borrowed projection returned behind a variant construction. `return` is
-  not a wrap site, so `return place` hands a borrow out for the caller to
+- [x] A referenced projection returned behind a variant construction. `return`
+  is not a wrap site, so `return place` hands a reference out for the caller to
   materialize; `analyze::returned_value` makes `return Some(place)` do the
   same, and `ownership` judges that payload for the convention that tells
   callers so.
@@ -604,17 +604,17 @@ Verified against the tree.
       dropped path leaves a place nothing can name. That is what made
       `core:serde` deep-copy every field of every value it serialized.
       
-      Whether a place is reached through a borrow is decided by the walk that
-      resolves it, never re-derived from an expression's syntax. The walk
+      Whether a place is reached through a reference is decided by the walk
+      that resolves it, never re-derived from an expression's syntax. The walk
       follows local bindings and callee return paths that the syntax does not,
-      so the two disagree, and a caller told a borrow is owned shares across a
-      write.
+      so the two disagree, and a caller told a referenced place is owned shares
+      across a write.
 
-- [ ] Follow a borrowed field back to what it borrows. This is what the item
+- [ ] Follow a reference field back to what it refers to. This is what the item
   above does _not_ reach, and it is the by-value `for` binding: a
   `SliceValueIter` holds `repr: &Array<T>`, so the element it hands back is
   a projection of the _list_, not of the iterator, and `ReturnPath`'s
-  `through_borrow` closes the gate rather than claim a place it cannot
+  `through_ref` closes the gate rather than claim a place it cannot
   justify. The walk already records which parameter a callee persists;
   what is missing is _into which field_, which is what would let a caller
   re-root `it.repr[i]` at the list `into_iter` was handed.
@@ -671,7 +671,7 @@ position, so it cannot say today which repoints dominate a site.
 
 `projection_param` matches a syntactic deref / field / index / payload / cast
 chain rooted at a parameter. Returned as written, such a chain is handed out as
-a borrow, inside a variant construction too: `return Option::Some(h.item)`
+a reference, inside a variant construction too: `return Option::Some(h.item)`
 copies nothing. Bound by a `let` first, it is not recognized.
 `let item = h.item; return item;` returns owned, and the fold deep-copies
 `h.item` into `item`.
@@ -685,8 +685,8 @@ return Option::Some(item);
 
 So every by-value `for x of list` over a `List` of aggregates pays a copy of
 each element, even when the loop body only reads it. The element is also reached
-through the borrowed field `repr`, which the Roadmap item "Follow a borrowed
-field back to what it borrows" covers. Nothing about the copy is required: the
+through the reference field `repr`, which the Roadmap item "Follow a reference
+field back to what it refers to" covers. Nothing about the copy is required: the
 same walk written over `&list`, or as an index loop in one body, reads the
 element in place under the read-only share.
 
@@ -746,7 +746,7 @@ cannot return early at all.
 ### What cleanup does not reach
 
 Cleanup walks function bodies only. A resource a closure body binds, or a
-temporary it borrows, is never dropped.
+temporary it references, is never dropped.
 
 Moving one resource field out of a temporary aggregate (`make().a`) drops
 nothing else the temporary owns, so a second resource field leaks.

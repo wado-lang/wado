@@ -99,7 +99,7 @@ global's separately known fields, such as a sequence global's length; and a
 global whose value is not in its slot but in the assignment that fills it, which
 is what an extracted initializer and body globalization leave behind. Nothing is
 read off a local or global something writes through, since `global` without `mut`
-forbids reassignment, not in-place mutation. A borrow denotes its referent,
+forbids reassignment, not in-place mutation. A reference denotes its referent,
 whether the binding is mutable or not: what makes an alias safe is that nothing
 displaces it, which holds of a `let mut` nothing reassigns. Which locals carry
 one is decided once per body over the whole arena, so a read folds through a
@@ -314,7 +314,7 @@ A literal is a fresh object. Writing one over an expression that yields a shared
 one leaves the program two objects where it had one, and `ref.eq` tells them
 apart. So the exit writes only over a node that yields an object nothing else
 reaches: a call or a region, which hand back what they built; a literal, which is
-one already; and the single read of a local nothing borrows, since a second read
+one already; and the single read of a local nothing references, since a second read
 or a `&p` beside one is the second reacher. Whether the copy planner would later
 copy a value read is not knowable here, which is why a second read counts as
 sharing whatever its type. A reference-shaped leaf is refused outright, at each
@@ -401,7 +401,7 @@ fixed, and the branch is gone.
   aggregate is not a constant, since a field holding the referent's value
   would take a write meant for the referent; what it needs to hold is the
   place the frame already names elsewhere — `place_aliases` records exactly
-  that pair for a `let`-bound borrow, and the gap is carrying one inside a
+  that pair for a `let`-bound reference, and the gap is carrying one inside a
   value. The refusal is whole-value, so a scalar field naming no storage is
   refused with the rest. A template folds today only where inlining and SROA
   dissolve its `Formatter` first, which the inliner's pricing decides, not

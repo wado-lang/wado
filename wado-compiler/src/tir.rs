@@ -524,6 +524,23 @@ struct AnonEntry {
     module: ModuleSource,
     shape: AnonShape,
     mangle: String,
+    /// Whether the shape mentions a type parameter, which its types fix.
+    open: bool,
+    /// Whether a literal wrote the shape, so elaboration emitted its struct.
+    written: bool,
+    /// The substitutions that make this shape, one per written origin: a
+    /// concrete shape is where any number of open ones, and a literal, meet.
+    substitutions: Vec<ShapeSubstitution>,
+}
+
+/// A written shape a substituted one is made from, and the substitution that
+/// makes it, over every parameter the origin mentions: what instantiating the
+/// origin's methods applies. Binding the two shapes again cannot recover it
+/// where a field is a pack or a projection.
+#[derive(Debug, Clone)]
+pub struct ShapeSubstitution {
+    pub origin: AnonStructId,
+    pub params: IndexMap<u32, TypeId>,
 }
 
 /// What a struct type's head is.
@@ -908,6 +925,11 @@ pub enum InstanceKey {
 #[derive(Debug, Clone, Default)]
 struct AssocAnswers(Vec<AssocAnswer>);
 
+/// The associated types one receiver answers, from
+/// [`TypeTable::assoc_types_of`].
+#[derive(Debug, Clone)]
+pub struct ReceiverAssocTypes(Vec<(AssocTypeKey, AssocAnswers)>);
+
 /// One impl's answer: the trait arguments its header writes, which a bare
 /// bound tells apart by their absence, and those with the trait's defaults
 /// filled, which a projection reached at full arguments compares. A generic
@@ -1159,6 +1181,9 @@ pub struct TypeTable {
     anon_struct_index: IndexMap<(ModuleSource, AnonShape), AnonStructId>,
     /// Every mangle handed out, so a template shape's hash cannot name two.
     anon_struct_mangles: IndexSet<(ModuleSource, String)>,
+    /// Each shape substitution recorded, in order, by the shape and its index
+    /// among the shape's substitutions: what monomorphization instantiates.
+    shape_substitution_log: Vec<(AnonStructId, usize)>,
     /// `(WIT name, generated module)` of each type declaration, for
     /// [`Self::cm_decl_in`]. Built with [`Self::attach_defs`], so it answers at
     /// any point in the pipeline rather than only after a declaration's type is
@@ -1306,6 +1331,7 @@ impl TypeTable {
             anon_structs: Vec::new(),
             anon_struct_index: IndexMap::default(),
             anon_struct_mangles: IndexSet::default(),
+            shape_substitution_log: Vec::new(),
             decl_index: IndexMap::default(),
             cm_decl_index: IndexMap::default(),
             unrestricted_resources: IndexMap::default(),
@@ -1373,17 +1399,17 @@ impl TypeTable {
             .unwrap_or_else(|| panic!("TypeId {id:?} not found in TypeTable"))
     }
 
-    /// Where [`Self::redefine_to`] pointed `id`, when `id` is a borrow it
+    /// Where [`Self::redefine_to`] pointed `id`, when `id` is a reference it
     /// redefined. Erasure's redirect is not one, and the spelling tells them
-    /// apart: only a borrow is ever redefined.
+    /// apart: only a reference is ever redefined.
     fn box_redefinition(&self, id: TypeId) -> Option<TypeId> {
         let target = self.redirects.get(id).copied()?;
-        self.spelled_borrow(id).map(|_| target)
+        self.spelled_ref(id).map(|_| target)
     }
 
     /// [`Self::get`] before the newtype / flags erasure, which runs once
     /// monomorphize is done. A boxing redefinition is no part of that, so a
-    /// redefined borrow reads as the `Box<T>` here too.
+    /// redefined reference reads as the `Box<T>` here too.
     ///
     /// Erasure is a representation choice — a `flags` value is a `u32` at
     /// runtime — but `impl Trait for Perms` is still keyed under `Perms`. A
@@ -1887,7 +1913,18 @@ impl TypeTable {
         }
     }
 
+    /// Intern a shape a literal writes.
     fn intern_shape(&mut self, module_source: ModuleSource, shape: AnonShape) -> AnonStructId {
+        let id = self.intern_shape_entry(module_source, shape);
+        self.anon_structs[id.0 as usize].written = true;
+        id
+    }
+
+    fn intern_shape_entry(
+        &mut self,
+        module_source: ModuleSource,
+        shape: AnonShape,
+    ) -> AnonStructId {
         let key = (module_source, shape);
         if let Some(&id) = self.anon_struct_index.get(&key) {
             return id;
@@ -1903,13 +1940,220 @@ impl TypeTable {
         {
             mangle.push('_');
         }
+        let open = Self::any_shape_type(&key.1, &mut |ty| self.mentions_rigid_param(ty));
         self.anon_structs.push(AnonEntry {
             module: key.0.clone(),
             shape: key.1.clone(),
             mangle,
+            open,
+            written: false,
+            substitutions: Vec::new(),
         });
         self.anon_struct_index.insert(key, id);
         id
+    }
+
+    /// Record that `substitution` makes `shape`, unless its origin already
+    /// reached it: an origin's methods are instantiated at a shape once.
+    fn record_shape_substitution(&mut self, shape: AnonStructId, substitution: ShapeSubstitution) {
+        let entry = &mut self.anon_structs[shape.0 as usize];
+        if entry
+            .substitutions
+            .iter()
+            .any(|s| s.origin == substitution.origin)
+        {
+            return;
+        }
+        entry.substitutions.push(substitution);
+        self.shape_substitution_log
+            .push((shape, entry.substitutions.len() - 1));
+    }
+
+    /// The substitution recorded at `index` among those making `shape`.
+    #[must_use]
+    pub fn shape_substitution(&self, shape: AnonStructId, index: usize) -> &ShapeSubstitution {
+        &self.anon_structs[shape.0 as usize].substitutions[index]
+    }
+
+    /// Whether a literal wrote shape `id`, rather than only a substitution.
+    #[must_use]
+    pub fn anon_struct_is_written(&self, id: AnonStructId) -> bool {
+        self.anon_structs[id.0 as usize].written
+    }
+
+    /// The substitutions into a closed shape recorded at log index `from` or
+    /// later, as the shape and the substitution's index among its own, and the
+    /// index the log ends at, to ask from next time.
+    #[must_use]
+    pub fn closed_shape_substitutions_since(
+        &self,
+        from: usize,
+    ) -> (Vec<(AnonStructId, usize)>, usize) {
+        let log = &self.shape_substitution_log[from..];
+        let closed = log
+            .iter()
+            .copied()
+            .filter(|&(shape, _)| !self.anon_shape_is_open(shape))
+            .collect();
+        (closed, self.shape_substitution_log.len())
+    }
+
+    /// The fields a struct of shape `id` holds: a literal's as written, a
+    /// template's one per hole typed by [`Self::hole_field_type`].
+    pub fn anon_shape_struct_fields(&mut self, id: AnonStructId) -> Vec<(String, TypeId)> {
+        match self.anon_structs[id.0 as usize].shape.clone() {
+            AnonShape::Fields(fields) => fields,
+            AnonShape::Template(shape) => shape
+                .holes
+                .iter()
+                .enumerate()
+                .map(|(k, hole)| (TemplateShape::field_name(k), self.hole_field_type(hole.ty)))
+                .collect(),
+            AnonShape::Synthetic(name) => {
+                unreachable!("synthetic shape `{name}` carries its fields itself")
+            }
+        }
+    }
+
+    /// Whether shape `id` mentions a type parameter, so that only a
+    /// substitution into it reaches a struct codegen can lay out.
+    #[must_use]
+    pub fn anon_shape_is_open(&self, id: AnonStructId) -> bool {
+        self.anon_structs[id.0 as usize].open
+    }
+
+    /// Whether `id` mentions a type parameter or pack: what a substitution
+    /// answers, unlike an inference variable, which solving answers in place.
+    fn mentions_rigid_param(&self, id: TypeId) -> bool {
+        match self.get(id) {
+            ResolvedType::TypeParam { .. } | ResolvedType::TypePack { .. } => true,
+            _ => self.any_constituent(id, &mut |t| self.mentions_rigid_param(t)),
+        }
+    }
+
+    /// The type parameters shape `id` mentions, by name: the frame its
+    /// synthesized methods are instantiated in at a substituted shape.
+    #[must_use]
+    pub fn anon_shape_type_params(&self, id: AnonStructId) -> IndexMap<String, u32> {
+        self.anon_shape_params(id)
+            .into_iter()
+            .map(|(index, ty)| match self.get(ty) {
+                ResolvedType::TypeParam { name, .. } | ResolvedType::TypePack { name, .. } => {
+                    (name.clone(), index)
+                }
+                other => unreachable!("collected a parameter that is not one: {other:?}"),
+            })
+            .collect()
+    }
+
+    /// The type parameters and packs shape `id` mentions, by index.
+    fn anon_shape_params(&self, id: AnonStructId) -> IndexMap<u32, TypeId> {
+        let mut found = IndexMap::default();
+        self.any_anon_shape_type(id, &mut |ty| {
+            self.collect_type_params(ty, &mut found);
+            false
+        });
+        found
+    }
+
+    fn collect_type_params(&self, id: TypeId, found: &mut IndexMap<u32, TypeId>) {
+        match self.get(id) {
+            ResolvedType::TypeParam { index, .. } | ResolvedType::TypePack { index, .. } => {
+                found.insert(*index, id);
+            }
+            _ => {
+                self.any_constituent(id, &mut |t| {
+                    self.collect_type_params(t, found);
+                    false
+                });
+            }
+        }
+    }
+
+    /// Whether `f` holds of a type shape `id` is built over.
+    fn any_anon_shape_type(&self, id: AnonStructId, f: &mut dyn FnMut(TypeId) -> bool) -> bool {
+        Self::any_shape_type(&self.anon_structs[id.0 as usize].shape, f)
+    }
+
+    /// Whether `f` holds of a type `shape` is built over.
+    fn any_shape_type(shape: &AnonShape, f: &mut dyn FnMut(TypeId) -> bool) -> bool {
+        match shape {
+            AnonShape::Fields(fields) => fields.iter().any(|&(_, ty)| f(ty)),
+            AnonShape::Template(shape) => shape.holes.iter().any(|hole| f(hole.ty)),
+            AnonShape::Synthetic(_) => false,
+        }
+    }
+
+    /// `type_id`, a struct of shape `id`, with `leaves` substituted into the
+    /// shape's types. A shape's identity is its types, so the result is the
+    /// struct of the substituted shape (WEP 2026-01-10, open shapes).
+    fn subst_anon_shape(
+        &mut self,
+        type_id: TypeId,
+        id: AnonStructId,
+        leaves: &Leaves<'_>,
+    ) -> TypeId {
+        // A row erased or an effect parameter answered changes no layout, and
+        // re-interning a closed shape over one would part a value from its type.
+        if !self.anon_shape_is_open(id) {
+            return type_id;
+        }
+        let entry = &self.anon_structs[id.0 as usize];
+        let module = entry.module.clone();
+        let shape = match entry.shape.clone() {
+            AnonShape::Synthetic(name) => unreachable!("synthetic shape `{name}` is never open"),
+            AnonShape::Fields(fields) => AnonShape::Fields(
+                fields
+                    .into_iter()
+                    .map(|(name, ty)| (name, self.subst_rec(ty, leaves)))
+                    .collect(),
+            ),
+            AnonShape::Template(shape) => AnonShape::Template(TemplateShape {
+                holes: shape
+                    .holes
+                    .into_iter()
+                    .map(|hole| TemplateHole {
+                        ty: self.subst_rec(hole.ty, leaves),
+                        ..hole
+                    })
+                    .collect(),
+                ..shape
+            }),
+        };
+        if shape == self.anon_structs[id.0 as usize].shape {
+            return type_id;
+        }
+        // Each origin of this shape reaches the result, its parameters mapped
+        // to what this substitution makes of their answers here. A literal
+        // makes the shape its own origin, every parameter answering itself.
+        let entry = &self.anon_structs[id.0 as usize];
+        let mut origins = entry.substitutions.clone();
+        if entry.written {
+            origins.push(ShapeSubstitution {
+                origin: id,
+                params: self.anon_shape_params(id),
+            });
+        }
+        assert!(
+            !origins.is_empty(),
+            "an open shape is written or substituted"
+        );
+        let substituted = self.intern_shape_entry(module, shape);
+        for earlier in origins {
+            let params = earlier
+                .params
+                .into_iter()
+                .map(|(slot, ty)| (slot, self.subst_rec(ty, leaves)))
+                .collect();
+            self.record_shape_substitution(
+                substituted,
+                ShapeSubstitution {
+                    origin: earlier.origin,
+                    params,
+                },
+            );
+        }
+        self.make_struct(StructDef::Anon(substituted))
     }
 
     /// The fields of an anonymous struct shape; empty for a synthetic one.
@@ -2393,6 +2637,15 @@ impl TypeTable {
             }
             if let Some(ty) = self.types.get(id) {
                 match ty {
+                    ResolvedType::Struct {
+                        def: StructDef::Anon(shape),
+                        ..
+                    } => {
+                        self.any_anon_shape_type(*shape, &mut |t| {
+                            components.push(t);
+                            false
+                        });
+                    }
                     ResolvedType::Struct { type_args, .. }
                     | ResolvedType::GenericInstance { type_args, .. }
                     | ResolvedType::GenericResource { type_args, .. } => {
@@ -2485,9 +2738,9 @@ impl TypeTable {
         self.struct_name_index.clear();
         self.decl_name_index.clear();
         for (id, ty) in self.types.iter() {
-            // A redefined borrow keeps its spelling in the slot alone.
+            // A redefined reference keeps its spelling in the slot alone.
             // Re-interning it would hand a later `intern(&T)` an id that no
-            // longer resolves as a borrow.
+            // longer resolves as a reference.
             if self.box_redefinition(id).is_none() {
                 self.intern_map.insert(ty.clone(), id);
             }
@@ -3338,7 +3591,7 @@ impl TypeTable {
     /// Redefine `id` to resolve as `target`, retiring its own spelling so a
     /// later [`Self::intern`] of that spelling mints a fresh id instead.
     ///
-    /// The boxing pass's `&T` → `Box<T>`. The slot keeps the borrow, which is
+    /// The boxing pass's `&T` → `Box<T>`. The slot keeps the reference, which is
     /// how [`Self::is_mut_box`] still tells `&T` from `&mut T`.
     pub fn redefine_to(&mut self, id: TypeId, target: TypeId) {
         assert!(
@@ -3352,7 +3605,7 @@ impl TypeTable {
             .unwrap_or_else(|| panic!("TypeId {id:?} not found in TypeTable"));
         assert!(
             matches!(spelling, ResolvedType::Ref(_) | ResolvedType::MutRef(_)),
-            "only a borrow is redefined: `box_redefinition` tells one by that shape"
+            "only a reference is redefined: `box_redefinition` tells one by that shape"
         );
         if self.intern_map.get(&spelling) == Some(&id) {
             self.intern_map.shift_remove(&spelling);
@@ -3471,10 +3724,10 @@ impl TypeTable {
     /// Whether `type_id` may name storage rather than hold a value: a `&T` /
     /// `&mut T`, or the `Box<T>` the boxing pass redefines one into. Both
     /// spellings answer yes, since after `prepare_types` no signature test
-    /// tells a boxed borrow from a by-value parameter of the same shape.
+    /// tells a boxed reference from a by-value parameter of the same shape.
     ///
     /// [`RefKind::from_resolved`] alone sees only what is still spelled as a
-    /// borrow, so a caller reasoning about values asks this instead.
+    /// reference, so a caller reasoning about values asks this instead.
     pub fn is_reference_shaped(&self, type_id: TypeId) -> bool {
         RefKind::from_resolved(self.get(type_id)).is_some()
             || self.box_payload_of(type_id).is_some()
@@ -3486,12 +3739,12 @@ impl TypeTable {
     /// `false`, so an unclassified wrapper stays writable.
     pub fn is_mut_box(&self, wrapper: TypeId) -> bool {
         self.box_payload_types.get(wrapper).is_some()
-            && !matches!(self.spelled_borrow(wrapper), Some((_, RefKind::Shared)))
+            && !matches!(self.spelled_ref(wrapper), Some((_, RefKind::Shared)))
     }
 
-    /// How `id`'s own slot spells a borrow, or `None` when it is not one. The
-    /// sole reader of a redefined borrow; every other view answers `Box<T>`.
-    fn spelled_borrow(&self, id: TypeId) -> Option<(TypeId, RefKind)> {
+    /// How `id`'s own slot spells a reference, or `None` when it is not one.
+    /// The sole reader of a redefined reference; every other view answers `Box<T>`.
+    fn spelled_ref(&self, id: TypeId) -> Option<(TypeId, RefKind)> {
         match *self.types.get(id)? {
             ResolvedType::Ref(payload) => Some((payload, RefKind::Shared)),
             ResolvedType::MutRef(payload) => Some((payload, RefKind::Mut)),
@@ -3943,6 +4196,52 @@ impl TypeTable {
             })
             .or_default()
             .insert(trait_ref.args, filled, resolved_id, None);
+    }
+
+    /// Each associated type `receiver` answers: what synthesis registered for
+    /// an open shape, for [`Self::instantiate_assoc_types`] to instantiate at
+    /// every shape substituted from it.
+    #[must_use]
+    pub fn assoc_types_of(&self, receiver: TypeId) -> ReceiverAssocTypes {
+        let from = self.instance_key(receiver);
+        ReceiverAssocTypes(
+            self.assoc_type_resolutions
+                .iter()
+                .filter(|(key, _)| key.receiver == from)
+                .map(|(key, answers)| (key.clone(), answers.clone()))
+                .collect(),
+        )
+    }
+
+    /// Register for `instance` each of `origin`'s associated types under
+    /// `substitution`, where `instance` answers none of its own: a literal
+    /// writing `instance` gave it its own.
+    pub fn instantiate_assoc_types(
+        &mut self,
+        origin: &ReceiverAssocTypes,
+        instance: TypeId,
+        substitution: &IndexMap<u32, TypeId>,
+    ) {
+        let to = self.instance_key(instance);
+        for (key, answers) in &origin.0 {
+            let key = AssocTypeKey {
+                receiver: to.clone(),
+                ..key.clone()
+            };
+            if self.assoc_type_resolutions.contains_key(&key) {
+                continue;
+            }
+            let mut subst = |ty: TypeId| self.substitute_type_params(ty, substitution);
+            let mut instantiated = AssocAnswers::default();
+            for entry in answers.0.iter().cloned() {
+                let written = entry.written.into_iter().map(&mut subst).collect();
+                let filled = entry
+                    .filled
+                    .map(|args| args.into_iter().map(&mut subst).collect());
+                instantiated.insert(written, filled, subst(entry.answer), entry.impl_def);
+            }
+            self.assoc_type_resolutions.insert(key, instantiated);
+        }
     }
 
     /// `trait_ref`'s arguments with the trait's defaults filled where it
@@ -4990,8 +5289,13 @@ impl TypeTable {
                     self.make_newtype_instance(def, new_args, new_base)
                 }
             }
+            ResolvedType::Struct {
+                def: StructDef::Anon(id),
+                ..
+            } => self.subst_anon_shape(type_id, id, leaves),
             // Primitives, Unit, Never, Unknown, Error, Enum, Variant, Resource,
-            // Flags name no parameter; a `Struct` is a monomorphized instance.
+            // Flags name no parameter; a declared `Struct` is a monomorphized
+            // instance.
             _ => type_id,
         }
     }
@@ -5634,6 +5938,10 @@ impl TypeTable {
                     || projection_arguments(args, trait_args).any(&mut *f)
                     || assoc_type_bindings.iter().any(|(_, t)| f(*t))
             }
+            ResolvedType::Struct {
+                def: StructDef::Anon(id),
+                ..
+            } => self.any_anon_shape_type(*id, f),
             _ => false,
         }
     }
@@ -5778,10 +6086,10 @@ impl TypeTable {
     }
 
     /// [`Self::type_name`] as the type read before `boxing::prepare_types`
-    /// redefined a borrow into `Box<T>`: what the source wrote, `&i32`.
+    /// redefined a reference into `Box<T>`: what the source wrote, `&i32`.
     #[must_use]
     pub fn type_name_unboxed(&self, id: TypeId) -> String {
-        match self.spelled_borrow(id) {
+        match self.spelled_ref(id) {
             Some((payload, RefKind::Shared)) => format!("&{}", self.type_name_unboxed(payload)),
             Some((payload, RefKind::Mut)) => format!("&mut {}", self.type_name_unboxed(payload)),
             None => self.type_name(id),
@@ -6106,7 +6414,7 @@ impl TypeTable {
     }
 
     /// [`Self::mangle_type_arg_rowless`] as the type read *before*
-    /// `boxing::prepare_types` redefined every borrowed `TypeId` into `Box<T>`,
+    /// `boxing::prepare_types` redefined every reference `TypeId` into `Box<T>`,
     /// so a post-boxing call site names the bridge pre-boxing synthesis minted.
     /// A bridge is keyed by a type its struct takes as an argument, which no
     /// row tells apart.
@@ -6175,7 +6483,7 @@ impl TypeTable {
         match self.get_unerased(id) {
             ResolvedType::Ref(_) | ResolvedType::MutRef(_) => {
                 Receiver::Ref(RefKind::from_resolved(self.get(id)).expect(
-                    "a borrow unerased is a borrow erased: `get_unerased` resolves the \
+                    "a reference unerased is a reference erased: `get_unerased` resolves the \
                      box redefinition, the one rewrite that makes the two views differ",
                 ))
             }
@@ -6283,8 +6591,8 @@ impl TypeTable {
     }
 
     /// [`Self::fq_type_name`] as the type read *before* `boxing::prepare_types`
-    /// redefined every borrowed `TypeId` into `Box<T>`. Every shape recurses,
-    /// so a borrow nested anywhere in the spelling comes back as one.
+    /// redefined every reference `TypeId` into `Box<T>`. Every shape recurses,
+    /// so a reference nested anywhere in the spelling comes back as one.
     pub fn fq_type_name_unboxed(&self, id: TypeId) -> FqTypeName {
         self.fq_type_name_spelled(id, true)
     }
@@ -6314,10 +6622,10 @@ impl TypeTable {
             RowSpelling::Everywhere => RowSpelling::Everywhere,
             RowSpelling::OutsideArgs | RowSpelling::Nowhere => RowSpelling::Nowhere,
         };
-        // Only a borrow is read off the slot's own type. Every other shape
+        // Only a reference is read off the slot's own type. Every other shape
         // keeps the erased view below, where ids that erase together must
         // answer one name.
-        if unboxed && let Some((payload, kind)) = self.spelled_borrow(id) {
+        if unboxed && let Some((payload, kind)) = self.spelled_ref(id) {
             return self
                 .fq_type_name_spelled_in(payload, unboxed, rows)
                 .with_reference(kind);
@@ -8957,7 +9265,7 @@ pub struct BuiltinDeclaration {
     pub returns: Option<ReturnConvention>,
     /// What the call keeps beyond it, as the storage implies.
     pub retains: Vec<RetainSpec<usize>>,
-    /// Positions the declaration takes through a reference, which lend it the
+    /// Positions the declaration takes through a reference, which hand it the
     /// argument's storage.
     pub reference_params: IndexSet<usize>,
     /// Positions the declaration takes by `&mut`, the only ones it can write
@@ -9580,7 +9888,7 @@ pub struct TirParam {
     pub type_id: TypeId,
     pub local_index: u32,
     pub is_mut: bool,
-    /// The parameter is a `&mut T` borrow (captured here before the boxing
+    /// The parameter is a `&mut T` (captured here before the boxing
     /// plan rewrites `&mut T` and `&T` to the same `Box<T>` type, erasing the
     /// distinction). A `&T` cannot be written through, so only a `&mut`
     /// parameter can mutate the caller's argument storage.
@@ -9618,6 +9926,36 @@ pub struct TirStruct {
     pub span: Span,
     /// `#[wire(name_policy = "...")]` — naming strategy for all fields.
     pub wire_name_policy: Option<NamePolicy>,
+}
+
+impl TirStruct {
+    /// The struct of anonymous shape `shape`, holding `fields`.
+    pub fn anonymous(
+        shape: AnonStructId,
+        name: String,
+        module_source: ModuleSource,
+        fields: &[(String, TypeId)],
+        span: Span,
+    ) -> Self {
+        Self {
+            def: StructDef::Anon(shape),
+            type_args: Vec::new(),
+            name,
+            module_source,
+            visibility: Visibility::Private,
+            type_params: Vec::new(),
+            monomorph_info: None,
+            fields: fields
+                .iter()
+                .enumerate()
+                .map(|(i, (name, ty))| {
+                    TirField::plain(name.clone(), Visibility::Public, *ty, i as u32, span)
+                })
+                .collect(),
+            span,
+            wire_name_policy: None,
+        }
+    }
 }
 
 /// Each reified struct's fields, keyed as `ResolvedType::Struct` names it.
@@ -10169,6 +10507,7 @@ impl TirProgram {
 mod tests {
     use super::*;
     use crate::ast::{AstId, AstIdSpace};
+    use crate::intern::StringInterner;
     use std::assert_matches;
 
     #[test]
@@ -10201,8 +10540,8 @@ mod tests {
     }
 
     /// A redefinition reaches every view of the type: only `is_mut_box` reads
-    /// the borrow left in the slot. The spelling also leaves `intern`, so a
-    /// later ask for it mints a live borrow.
+    /// the reference left in the slot. The spelling also leaves `intern`, so a
+    /// later ask for it mints a live reference.
     #[test]
     fn a_redefinition_reaches_every_view_of_the_type() {
         let mut table = TypeTable::new();
@@ -10220,10 +10559,10 @@ mod tests {
         assert_matches!(table.get(minted), ResolvedType::MutRef(TypeTable::I32));
     }
 
-    /// `&T` and `&mut T` share one `Box<T>`, so the borrow left in the slot is
-    /// the only thing that still tells a writable box from a shared one.
+    /// `&T` and `&mut T` share one `Box<T>`, so the reference left in the slot
+    /// is the only thing that still tells a writable box from a shared one.
     #[test]
-    fn a_redefined_borrow_still_says_whether_it_was_mut() {
+    fn a_redefined_ref_still_says_whether_it_was_mut() {
         let mut table = TypeTable::new();
         let shared = table.intern(ResolvedType::Ref(TypeTable::I32));
         let mutable = table.intern(ResolvedType::MutRef(TypeTable::I32));
@@ -10237,7 +10576,7 @@ mod tests {
     }
 
     /// `retain` rebuilds the intern map from the surviving slots, and a
-    /// retired borrow is still spelled as one there.
+    /// retired reference is still spelled as one there.
     #[test]
     fn retain_leaves_a_retired_spelling_retired() {
         let mut table = TypeTable::new();
@@ -10250,6 +10589,24 @@ mod tests {
 
         assert_eq!(table.type_key(redefined), table.type_key(TypeTable::I32));
         assert_ne!(table.intern(ResolvedType::Ref(TypeTable::I32)), redefined);
+    }
+
+    /// A surviving anonymous struct spells itself with its field types, which
+    /// nothing else may keep alive once the optimizer has split the value.
+    #[test]
+    fn retain_keeps_an_anonymous_shapes_field_types() {
+        let mut table = TypeTable::new();
+        let field = table.intern(ResolvedType::Ref(TypeTable::I64));
+        let module = ModuleSource::Core {
+            name: StringInterner::new().intern("test"),
+        };
+        let shape = table.intern_anon_struct(module, vec![("a".to_string(), field)]);
+        let anon = table.make_struct(StructDef::Anon(shape));
+        let mut keep = IndexSet::default();
+        keep.insert(anon);
+        table.retain(&keep);
+
+        assert_eq!(table.type_name(anon), "{ a: &i64 }");
     }
 
     #[test]

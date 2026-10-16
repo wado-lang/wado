@@ -1,0 +1,48 @@
+// A reference handed to a call reads its referent at the call, after every
+// argument has run. SROA rebuilt the referenced struct from its scalars where
+// the `&` stood, so a later argument's write to a field never reached the
+// callee, and `sum_through` read 1 for 5.
+
+use { println, Stdout } from "core:cli";
+
+struct Cell {
+    v: i32,
+}
+
+#[inline(never)]
+fn sum_through(a: &Cell, b: i32) -> i32 {
+    return a.v + b;
+}
+
+#[inline(never)]
+fn through() -> i32 {
+    let mut c = Cell { v: builtin::black_box(1) };
+    let r = sum_through(a: { &c }, b: {
+        c.v = 5;
+        0
+    });
+    return r;
+}
+
+#[inline(never)]
+fn sum_int(a: &i32, b: i32) -> i32 {
+    return *a + b;
+}
+
+fn through_int() -> i32 {
+    let mut x = 1;
+    let r = sum_int(a: { &x }, b: {
+        x = 5;
+        0
+    });
+    return r;
+}
+
+export fn run() with Stdout {
+    println(`${through()} ${through_int()}`);
+}
+
+__DATA__
+{
+    "stdout": "5 5\n"
+}

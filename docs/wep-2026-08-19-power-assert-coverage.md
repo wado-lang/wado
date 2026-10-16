@@ -43,7 +43,7 @@ every later slot is captured where it sits; a receiver and a callee clear it for
 the operands under them, though the node containing them may still bind ahead,
 since that moves the whole group and nothing within it. A place passes the fact
 through — the failure branch re-reads it — save against an operand that may
-write through it: a `&mut` borrow, a method call (`&mut self` is not knowable
+write through it: a `&mut` reference, a method call (`&mut self` is not knowable
 this early), or a subtree the scan does not enter.
 
 A receiver, of a method call or a subscript, is not captured at all; the

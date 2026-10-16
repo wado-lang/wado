@@ -1,0 +1,27 @@
+// A closed anonymous shape holding an effectful closure keeps its identity
+// when monomorphization erases the closure's effect row: re-interning it
+// would part the value from its type.
+use { println, Stdout } from "core:cli";
+
+struct W<T> { v: T }
+
+fn cnt<T: ReflectTemplate<Holes = [..V]>, ..V>(t: T) -> i32 {
+    let mut n = 0;
+    for let h of ReflectTemplate::<T>::members() {
+        n += h.index() + 1;
+    }
+    return n;
+}
+
+export fn run() with Stdout {
+    let w = W { v: { f: || println("hi"), n: 1 } };
+    let s = w.v;
+    (s.f)();
+    println(`${s.n}`);
+
+    let f = || println("x");
+    println(`${cnt`a${f:?}`}`);
+}
+
+__DATA__
+{"stdout": "hi\n1\n1\n"}

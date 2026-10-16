@@ -1041,7 +1041,7 @@ fn for_each_write(engine: &Engine, e: ExprId, sink: &mut impl FnMut(Write)) {
     let oracle = MutationOracle::new(&no_signatures);
     expr_witnesses(body, e, &oracle, &mut |w| match w {
         Witness::Rebind(l) => sink(Write::Root(l)),
-        Witness::MutBorrow(place) => {
+        Witness::MutRef(place) => {
             if let Some(root) = storage_root(body, place) {
                 sink(Write::Root(root));
             }

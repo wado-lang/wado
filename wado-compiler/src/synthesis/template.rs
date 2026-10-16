@@ -174,7 +174,8 @@ pub fn expand_templates(
 }
 
 /// Mint `$hole_fmt$<shape>(t: &S, index: i32, f: &mut Formatter)` for every tagged
-/// template shape in `module`, each arm the untagged interpolation of hole `index`.
+/// template shape in `module`, each arm hole `index` rendered through the
+/// per-specifier dispatch `build_template_block` emits for an interpolation.
 pub fn synthesize_hole_fmt_helpers(
     module: &mut TirModule,
     tt: &Rc<RefCell<TypeTable>>,
@@ -948,7 +949,7 @@ fn method_call_info_for_type(
     let tt = ctx.tt;
     let resolved = tt.borrow().get(type_id).clone();
     match resolved {
-        // In generic code `&T` and `&X::Item` borrow a value of the pointee, so
+        // In generic code `&T` and `&X::Item` refer to a value of the pointee, so
         // they format as it. A reference over any other type keeps the ref
         // blanket (`${&x:?}` → `&42`), whether or not it mentions a parameter.
         ResolvedType::Ref(inner) | ResolvedType::MutRef(inner)

@@ -1,7 +1,7 @@
 // A region that writes an outer local through a `&mut self` receiver must not
 // fold (WEP: NIR Interpreter, regions). NIR spells such a receiver as a bare
 // local — no `&mut` node — so `region_needs` must read the write off the
-// callee's signature, not off the borrow syntax.
+// callee's signature, not off the `&mut` syntax.
 //
 // `drain` empties `c` as a side effect of producing the interpolated value,
 // and `c.s` is read again after the template, so a fold that ran the region

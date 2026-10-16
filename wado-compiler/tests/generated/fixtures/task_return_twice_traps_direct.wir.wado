@@ -90,13 +90,13 @@ fn "task_return_twice_traps_direct.wado/$cm_export__run"() {
     $mv_field_2 = array.new_data<u8>("start");
     "core:rt/write_string_to_stream$dae[add_newline]"(tx_7, $mv_field_2, 5);
     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(rx_6);
-    drop($inline_deliver_0: block -> ref "core:prelude/types.wado//Result<i32,core:prelude/string.wado/String>" {
+    drop($inline_deliver_2: block -> ref "core:prelude/types.wado//Result<i32,core:prelude/string.wado/String>" {
         $local_1 = ref.null none;
         $local_1 = struct.new "core:prelude/types.wado//Result<i32,core:prelude/string.wado/String>::Ok" { discriminant: 0, payload_0: 1 };
         "core:rt/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("task return after the result was delivered"), used: 42 });
         unreachable;
         if @likely(ref.is_null(local.tee $local_1(struct.new "core:prelude/types.wado//Result<i32,core:prelude/string.wado/String>::Ok" { discriminant: 0, payload_0: 2 })) == 0) {
-            break $inline_deliver_0: ref.as_non_null($local_1);
+            break $inline_deliver_2: ref.as_non_null($local_1);
         } else {
             unreachable;
         }

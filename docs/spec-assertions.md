@@ -130,7 +130,7 @@ the build checks contracts. A call without the marker is checked in every
 build. The operand of `unchecked` is a call to a function with a contract, or
 an index `c[i]` whose index method has one (see
 [Indexing Traits](./spec-standard-traits.md#indexing-traits)); anything else is
-a compile error. A marked index is the place `c[i]` names, borrowed or written
+a compile error. A marked index is the place `c[i]` names, referenced or written
 through only where `c[i]` could be, but an index assignment takes no marker.
 Postfix operators bind tighter, so
 `unchecked f(x)?` marks the `?`, an error, and `(unchecked f(x))?` marks the

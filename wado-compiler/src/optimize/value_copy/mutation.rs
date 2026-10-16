@@ -52,7 +52,7 @@ pub(in crate::optimize) enum Witness {
     /// target's inner operand.
     Write(Operand),
     /// `&mut place`.
-    MutBorrow(ExprId),
+    MutRef(ExprId),
     CalleeArg {
         expr: ExprId,
         verdict: Option<bool>,
@@ -93,7 +93,7 @@ pub(in crate::optimize) fn expr_witnesses(
             expr: inner,
         } => {
             if let Some(e) = inner.as_expr() {
-                sink(Witness::MutBorrow(e));
+                sink(Witness::MutRef(e));
             }
         }
         ExprKind::Call { func_id, args, .. } => {

@@ -168,8 +168,8 @@ fn analyze_copy_binding(
 
     // A `skip_value_copy` binding names its source rather than owning a copy, so
     // propagating it is if anything safer — the two already share. Only a bare
-    // local qualifies: for a borrow the flag records that ownership analysis
-    // reasoned about this binding, which `can_propagate_copy`'s borrow gates are
+    // local qualifies: for a reference the flag records that ownership analysis
+    // reasoned about this binding, which `can_propagate_copy`'s reference gates are
     // not. `licm` sets the flag on its hoists, and this clears the one left when
     // a later pass reduces a hoisted field chain to a local read.
     if skip_value_copy && !matches!(&body.exprs[value].kind, ExprKind::Local { .. }) {
@@ -686,7 +686,7 @@ fn can_propagate_copy(
             if target_usage.read_count != 1 {
                 compiler_trace!(
                     "copy_prop",
-                    "borrow {} of {index}: {} reads",
+                    "reference {} to {index}: {} reads",
                     binding.target_local,
                     target_usage.read_count
                 );
@@ -697,7 +697,7 @@ fn can_propagate_copy(
             {
                 compiler_trace!(
                     "copy_prop",
-                    "borrow {} of {index}: referent is assigned",
+                    "reference {} to {index}: referent is assigned",
                     binding.target_local
                 );
                 return false;

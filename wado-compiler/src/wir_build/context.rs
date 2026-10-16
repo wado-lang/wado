@@ -80,8 +80,8 @@ impl UnregisteredType {
 pub struct SplitParam {
     /// `(field_name, type_id)` of each Wasm slot, in order.
     pub fields: Vec<(String, TypeId)>,
-    /// The fields are loaded off a borrow at the call.
-    pub borrowed: bool,
+    /// The fields are loaded off a reference at the call.
+    pub through_ref: bool,
 }
 
 /// Builder context for the `tir_to_wir` translation.
@@ -312,7 +312,7 @@ impl<'a> WirContext<'a> {
                 let nir::ParamAbi::MultiValue {
                     field_types,
                     field_names,
-                    borrowed,
+                    through_ref,
                 } = &param.param_abi
                 else {
                     continue;
@@ -321,7 +321,7 @@ impl<'a> WirContext<'a> {
                     param_idx,
                     SplitParam {
                         fields: abi_fields(field_names, field_types),
-                        borrowed: *borrowed,
+                        through_ref: *through_ref,
                     },
                 );
             }

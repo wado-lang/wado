@@ -226,8 +226,8 @@ pub enum NirUnaryOp {
 }
 
 impl NirUnaryOp {
-    /// Whether the value pool has a `ValueKind` for this op. A borrow or a
-    /// dereference names a place, and no kind carries one.
+    /// Whether the value pool has a `ValueKind` for this op. A reference or
+    /// a dereference names a place, and no kind carries one.
     pub fn is_pooled(self) -> bool {
         !matches!(self, Self::Ref | Self::MutRef | Self::Deref)
     }
@@ -785,7 +785,7 @@ pub enum ParamAbi {
         field_names: Vec<String>,
         /// The parameter is a `&S`: its fields are loaded at the call, after
         /// every argument that runs code, as the callee would have read them.
-        borrowed: bool,
+        through_ref: bool,
     },
 }
 
@@ -993,7 +993,7 @@ pub struct NirParam {
     pub type_id: TypeId,
     pub local_index: u32,
     pub is_mut: bool,
-    /// The parameter is a `&mut T` borrow — the only kind that can mutate the
+    /// The parameter is a `&mut T` — the only kind that can mutate the
     /// caller's argument storage. Captured pre-boxing (see [`crate::tir::TirParam::is_mut_ref`]).
     pub is_mut_ref: bool,
     pub span: Span,

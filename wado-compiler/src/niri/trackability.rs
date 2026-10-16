@@ -13,7 +13,7 @@ use crate::nir_arena::{
 };
 
 use super::place::{
-    borrowed_place_operand, lvalue_root_local, peel_wrappers, place_of, write_root_local,
+    lvalue_root_local, peel_wrappers, place_of, referenced_place_operand, write_root_local,
 };
 use crate::nir_visitor::reachable_exprs;
 use crate::tir::TypeTable;
@@ -77,16 +77,16 @@ impl Reached {
                 reached.place_assigns.insert(*e);
             }
         }
-        reached.record_alias_borrows(body, reassigned);
+        reached.record_alias_refs(body, reassigned);
         reached
     }
 
-    /// A `let` binding a borrow of a place records that place as reached: the
+    /// A `let` binding a reference to a place records that place as reached: the
     /// frame resolves the binding to an alias, so a write through it is either
     /// performed against the place's current value or abandons the evaluation,
     /// and a read projects that value rather than a copy. Frame-only, like the
     /// write accounting — an ordinary walk resolves no aliases.
-    fn record_alias_borrows(&mut self, body: &Body, reassigned: &LocalSet) {
+    fn record_alias_refs(&mut self, body: &Body, reassigned: &LocalSet) {
         for s in reachable_stmts(body) {
             let StmtKind::Let {
                 value,
@@ -98,21 +98,21 @@ impl Reached {
                 continue;
             };
             // The predicate the frame binds an alias under, and the two must
-            // agree: a borrow the frame aliases but this walk clobbers leaves
+            // agree: a reference the frame aliases but this walk clobbers leaves
             // the frame holding no value for the place it just aliased.
             if *is_mut && reassigned.contains(*local_index) {
                 compiler_trace!(
                     "region_seed",
-                    "alias borrow skipped: let {local_index} is mut and reassigned"
+                    "alias reference skipped: let {local_index} is mut and reassigned"
                 );
                 continue;
             }
-            let Some((is_mut, inner)) = borrowed_place_operand(body, *value) else {
+            let Some((is_mut, inner)) = referenced_place_operand(body, *value) else {
                 continue;
             };
             compiler_trace!(
                 "region_seed",
-                "alias borrow recorded: let {local_index} over {inner:?} (mut={is_mut})"
+                "alias reference recorded: let {local_index} over {inner:?} (mut={is_mut})"
             );
             let reach = if is_mut { Reach::Write } else { Reach::Read };
             self.record(body, inner, reach);
@@ -135,14 +135,14 @@ impl Reached {
     /// owns the rule.
     fn collect(body: &Body, facts: ProgramFacts<'_>, performed: &IndexSet<ExprId>) -> Self {
         let mut reached = Self::default();
-        reached.collect_builtin_borrows(body, facts.ctfe_builtins, performed);
-        reached.collect_call_borrows(body, facts.callees, performed);
+        reached.collect_builtin_reaches(body, facts.ctfe_builtins, performed);
+        reached.collect_call_reaches(body, facts.callees, performed);
         reached
     }
 
     /// The engine models a builtin call exactly, so the destination it writes
     /// and the source it reads are equally current — where the frame runs it.
-    fn collect_builtin_borrows(
+    fn collect_builtin_reaches(
         &mut self,
         body: &Body,
         ctfe_builtins: Option<&CtfeBuiltinMap>,
@@ -179,7 +179,7 @@ impl Reached {
     /// of its own capacity. A `&mut` one counts only at statement position,
     /// where a frame performs the write; elsewhere the projection merely reads
     /// the call. A callee the map does not hold exempts nothing.
-    fn collect_call_borrows(
+    fn collect_call_reaches(
         &mut self,
         body: &Body,
         callees: Option<&CalleeMap>,
@@ -212,7 +212,7 @@ impl Reached {
     }
 
     /// Both directions of the mention check go through [`peel_wrappers`], so a
-    /// mention recorded at a cast still matches the borrow the disqualification
+    /// mention recorded at a cast still matches the reference the disqualification
     /// walk asks about.
     fn covers(&self, body: &Body, op: Operand) -> bool {
         let Some(e) = peel_wrappers(body, op) else {
@@ -370,7 +370,7 @@ pub(super) fn aggregate_safe_locals(
 }
 
 /// Locals of `body` a compile-time frame cannot track: something other than a
-/// write it performs itself can reach them — a borrow, a mutable argument, a
+/// write it performs itself can reach them — a `&mut`, a mutable argument, a
 /// method receiver, or an assignment buried inside a larger expression.
 ///
 /// Reachable body only, as in [`aggregate_safe_locals`]. The arena keeps every
@@ -396,11 +396,11 @@ pub(super) fn clobbered_locals(
                     disqualify(body, (*target).into(), &mut set);
                 }
             }
-            // Only a mutable borrow. A shared one cannot be written through, so
+            // Only a `&mut`. A `&` cannot be written through, so
             // it cannot make the referent stale — which is the same reading
             // [`aggregate_safe_locals`] gives the node, where `&x` counts as a
             // read of `x`. A frame that refused it could not run a body whose
-            // own parameter is borrowed, which every `&self` method's is.
+            // own parameter is referenced, which every `&self` method's is.
             ExprKind::Unary {
                 op: NirUnaryOp::MutRef,
                 expr,
@@ -454,7 +454,7 @@ fn reassigned_locals(body: &Body) -> LocalSet {
     set
 }
 
-/// Locals that name settled storage: every binding of one is a shared borrow
+/// Locals that name settled storage: every binding of one is a `&` reference
 /// rooted at a literal or at a global the program holds one value for, and
 /// nothing rebinds it. Nothing can write what such a local names, so a value
 /// read off it stands as long as the body does.
@@ -526,7 +526,7 @@ fn shared_reference_root(
 }
 
 /// Locals whose object no second expression reaches: read exactly once, and
-/// never borrowed. A constant one may be written over at that read, since
+/// never referenced. A constant one may be written over at that read, since
 /// nothing is left to tell the fresh literal from what the binding held —
 /// where two reads, or a `&p` beside one, leave the program two objects where
 /// it had one, which `ref.eq` tells apart.

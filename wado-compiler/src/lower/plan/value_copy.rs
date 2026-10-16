@@ -111,13 +111,13 @@ impl<T> ValueCopyHelpers<T> {
 }
 
 /// Which `$value_copy$` helper copies each type, plus the return conventions
-/// telling the fold whether a call result is owned (a move) or borrowed.
+/// telling the fold whether a call result is owned (a move) or shared.
 pub struct ValueCopyPlan {
     pub helpers: ValueCopyHelpers<(ModuleSource, String)>,
     /// What each call writes into its receiver, as fields of the receiver's
     /// type: a read of one field is undisturbed by a call that writes another.
     pub mod_ref: modref::ModRef,
-    /// The fields a borrow may observe from outside the body assigning them, so
+    /// The fields a reference may observe from outside the body assigning them, so
     /// an assignment through a parameter or a reference writes in place.
     pub observed_fields: observed::ObservedFields,
     /// What a `fn` value of each shape can hold, for `reach::StorageReach`.
@@ -135,8 +135,8 @@ pub struct ValueCopyPlan {
     pub builtins: BuiltinDeclarations,
     /// Per-call retention: which argument positions a direct call may persist a
     /// reference to, and where a bounded one lands. A local whose `&`/`&mut` is
-    /// passed at a *retained* position is borrow-escaped and cannot be moved;
-    /// passed anywhere else it is a transient borrow. Position 0 is the
+    /// passed at a *retained* position has a reference escape and cannot be
+    /// moved; passed anywhere else the reference is transient. Position 0 is the
     /// receiver.
     pub retention: retention::CallRetention,
     /// Per-functor-type retention: what a call through a function value of that
@@ -159,11 +159,11 @@ pub struct ValueCopyPlan {
     /// mutate a shared by-value argument during the call. A confined by-value
     /// argument keeps its copy only when it aliases such a sibling.
     pub mut_ref_params: FuncKeyMap<Vec<bool>>,
-    /// Methods whose receiver is a reference (`&self` / `&mut self`) — a
-    /// borrowing, not consuming, receiver. Used by the read-only-share analysis.
+    /// Methods whose receiver is a reference (`&self` / `&mut self`), so the
+    /// call does not consume it. Used by the read-only-share analysis.
     pub ref_receiver_methods: FuncKeySet,
-    /// Functions whose result aliases their receiver's storage (a borrowed
-    /// projection / element read). Because it admits borrowed projections it
+    /// Functions whose result aliases their receiver's storage (a shared
+    /// projection / element read). Because it admits shared projections it
     /// must not feed the move / owned decision.
     pub returns_receiver_alias: FuncKeySet,
     /// Return types for which every closure `$call` — the complete set of
@@ -303,11 +303,11 @@ fn register_variant_cases(flat: &FlatPackage) {
 pub fn hands_out_payload(func: &TirFunction, return_paths: &place::ReturnPaths) -> bool {
     return_paths
         .get(&func.module_source, &func.name)
-        .is_some_and(|path| !path.through_borrow)
+        .is_some_and(|path| !path.through_ref)
 }
 
 /// Whether `type_id` is spelled `&T` / `&mut T`. Narrower than
-/// [`TypeTable::is_reference_shaped`], which also answers for a boxed borrow.
+/// [`TypeTable::is_reference_shaped`], which also answers for a boxed reference.
 pub fn is_reference_type(type_id: TypeId, type_table: &TypeTable) -> bool {
     matches!(
         type_table.get(type_id),

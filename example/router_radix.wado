@@ -1,8 +1,8 @@
 //! Radix-tree HTTP router (compressed byte-level trie).
 //!
 //! Nodes are stored in a flat arena (`List<RadixNode>`) addressed by `i32`
-//! ids; this avoids the `&mut` re-borrow gymnastics that arise when chains
-//! of mutations would have to walk through `Option<RadixNode>` fields.
+//! ids; this avoids handing a `&mut` down through every `Option<RadixNode>`
+//! field a chain of mutations would otherwise walk.
 //!
 //! Each literal edge carries a byte-level label that *includes* the path
 //! separators. So `/api/v1/users/list` enters the tree as a single edge

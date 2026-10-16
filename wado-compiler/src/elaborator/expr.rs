@@ -16,7 +16,7 @@ use crate::name::{
 };
 use crate::tir::{
     EffectRef, FunctionRef, InstancePattern, REFLECT_NEWTYPE_BASE, ResolvedType,
-    SubstitutionContext, TirField, TirLiteralPattern, TirStruct, TypeId, TypeKey, TypeTable,
+    SubstitutionContext, TirLiteralPattern, TirStruct, TypeId, TypeKey, TypeTable,
 };
 use crate::token::Span;
 
@@ -4638,26 +4638,16 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         };
         self.sem.decls.anon_struct_fields.insert(shape, field_info);
 
-        let tir_fields: Vec<TirField> = fields
-            .iter()
-            .enumerate()
-            .map(|(i, (fname, fty))| {
-                TirField::plain(fname.clone(), Visibility::Public, *fty, i as u32, span)
-            })
-            .collect();
-
-        self.sem.decls.pending_anonymous_structs.push(TirStruct {
-            def: head,
-            type_args: Vec::new(),
-            name: anon_name.to_string(),
-            module_source: self.current_module_source.clone(),
-            visibility: Visibility::Private,
-            type_params: Vec::new(),
-            monomorph_info: None,
-            fields: tir_fields,
-            span,
-            wire_name_policy: None,
-        });
+        self.sem
+            .decls
+            .pending_anonymous_structs
+            .push(TirStruct::anonymous(
+                shape,
+                anon_name.to_string(),
+                self.current_module_source.clone(),
+                fields,
+                span,
+            ));
 
         struct_type
     }
@@ -5773,9 +5763,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 #[derive(Default)]
 pub(super) struct CaptureWrites {
     pub(super) assigned: IndexSet<String>,
-    /// Borrowed `&mut` or a method's receiver: a write only where the walk
-    /// finds a `&mut` borrow of this storage.
-    pub(super) borrowed: IndexSet<String>,
+    /// Taken `&mut` or a method's receiver: a write only where the walk
+    /// finds a `&mut` of this storage.
+    pub(super) mut_referenced: IndexSet<String>,
 }
 
 /// Records the outer bindings a closure body may write, walking it under its
@@ -5802,9 +5792,9 @@ impl CaptureWritesCollector {
         }
     }
 
-    fn record_borrow(&mut self, place: &ast::Expr) {
+    fn record_mut_ref(&mut self, place: &ast::Expr) {
         if let Some(name) = self.outer_root(place) {
-            self.writes.borrowed.insert(name.to_string());
+            self.writes.mut_referenced.insert(name.to_string());
         }
     }
 
@@ -5851,11 +5841,11 @@ impl AstVisitor for CaptureWritesCollector {
                 ast::walk_expr(self, expr);
             }
             ast::Expr::Unary(u) if u.op == ast::UnaryOp::MutRef => {
-                self.record_borrow(&u.expr);
+                self.record_mut_ref(&u.expr);
                 ast::walk_expr(self, expr);
             }
             ast::Expr::MethodCall(call) => {
-                self.record_borrow(&call.receiver);
+                self.record_mut_ref(&call.receiver);
                 ast::walk_expr(self, expr);
             }
             ast::Expr::Closure(c) => self.closure_body(c),

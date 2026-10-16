@@ -37,18 +37,18 @@ impl Rule for IdentityDerefRule {
     fn apply_expr(&self, e: &mut Engine, id: ExprId) -> bool {
         let ExprKind::Unary {
             op: NirUnaryOp::Deref,
-            expr: borrowed,
+            expr: operand,
         } = &e.body.exprs[id].kind
         else {
             return false;
         };
-        let Some(borrow) = borrowed.as_expr() else {
+        let Some(reference) = operand.as_expr() else {
             return false;
         };
         let ExprKind::Unary {
             op: NirUnaryOp::Ref | NirUnaryOp::MutRef,
             expr: inner,
-        } = &e.body.exprs[borrow].kind
+        } = &e.body.exprs[reference].kind
         else {
             return false;
         };

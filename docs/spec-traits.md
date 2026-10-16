@@ -1296,6 +1296,11 @@ So a `T: Display` bound certifies a real string representation, and
 `String::push_display` takes any `Display`. `${x:#}` is the
 [alternate form](./spec-literals.md#alternate-form).
 
+A hole of a generic type meets the trait its specifier selects only through the
+bounds its item declares. A type character asks for its own trait the same
+way: `${x:x}` over `x: T` needs `T: LowerHex`, which `T: Display` does not
+supply.
+
 <!-- {"fixture":"spec_traits_format_bounds.wado"} -->
 
 ```wado
@@ -1307,5 +1312,9 @@ test {
     assert label(&42) == "42";
 }
 ```
+
+> Not yet implemented: a template string checks a hole of a generic type only
+> once the item is instantiated, so it asks for no bound, and the error names
+> the instantiated type at the hole.
 
 Rationale: [WEP: Trait Derivation Policy](./wep-2026-06-25-trait-derivation.md).

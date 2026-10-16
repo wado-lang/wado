@@ -343,7 +343,7 @@ fn analyze_body(
         excluded: IndexSet::default(),
         closure_depth: 0,
     };
-    // By-value parameters are move-eligible; borrow (`&T` / `&mut T`) and `self`
+    // By-value parameters are move-eligible; reference (`&T` / `&mut T`) and `self`
     // receivers are not — they name the caller's storage and are never moved.
     // The planner withdraws a parameter its callers pass uncopied, which only
     // the whole program shows.
@@ -384,9 +384,9 @@ fn analyze_body(
 /// binding site, and the locals that must be excluded from move eligibility
 /// because they are captured by a closure or name storage the scrutinee owns.
 /// Over-exclusion only costs an extra copy, so the pass errs toward marking a
-/// local ineligible whenever unsure. A borrowed local stays eligible: whether a
-/// borrow outlives its final read is the value-copy planner's pin analysis,
-/// which vetoes a final read a live borrow still reaches.
+/// local ineligible whenever unsure. A referenced local stays eligible: whether
+/// a reference outlives its final read is the value-copy planner's pin
+/// analysis, which vetoes a final read a live reference still reaches.
 struct EligibilityPass<'a> {
     references: &'a IndexMap<AstId, AstId>,
     bindings: IndexSet<AstId>,
@@ -1213,10 +1213,10 @@ mod last_use_tests {
     }
 
     #[test]
-    fn a_borrowed_local_keeps_its_final_use() {
+    fn a_referenced_local_keeps_its_final_use() {
         let src = "export fn f(a: List<i32>) -> i32 { \
                    let n = (&a).len(); let b = a; return n + b.len(); }";
-        // The borrow ends before `let b = a`, which is `a`'s final read.
+        // The reference ends before `let b = a`, which is `a`'s final read.
         assert_eq!(count(src, "a"), 1);
     }
 

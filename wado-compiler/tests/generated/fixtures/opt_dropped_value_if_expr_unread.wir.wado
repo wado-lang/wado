@@ -99,7 +99,7 @@ type "functype//core:rt/write_string_to_stream$dae[add_newline]" = fn(i32, ref A
 
 type "functype//core:rt/cm_stream_write_raw_all_u8" = fn(i32, ref Array<u8>, i32, i32) -> "core:prelude/types.wado//enum:CopyResult";  // TypeId(31)
 
-type "functype//core:prelude/primitive.wado/i32::max$dae[a]" = fn(i32) -> i32;  // TypeId(32)
+type "functype//core:prelude/string.wado/core:prelude/string.wado/String::realloc_to" = fn(ref "core:prelude/string.wado//String", i32);  // TypeId(32)
 
 type "functype//core:prelude/string.wado/core:prelude/string.wado/String::grow" = fn(ref "core:prelude/string.wado//String", i32);  // TypeId(33)
 
@@ -147,17 +147,18 @@ fn "opt_dropped_value_if_expr_unread.wado/distinct_rules"(elems) {
     let $sroa_names_inner_18: ref "core:collections/treemap.wado//TreeMap<core:prelude/string.wado/String,()>";
     let self_31: ref "core:collections/entries.wado//EntryLog<core:prelude/string.wado/String,()>";
     let e_34: i32;
-    let $sroa_$iter_0_repr_45: ref "Array<opt_dropped_value_if_expr_unread.wado/Element>";
-    let $sroa_$iter_0_index_46: i32;
+    let b: i32;
+    let $sroa_$iter_0_repr_47: ref "Array<opt_dropped_value_if_expr_unread.wado/Element>";
+    let $sroa_$iter_0_index_48: i32;
     $sroa_names_inner_18 = struct.new "core:collections/treemap.wado//TreeMap<core:prelude/string.wado/String,()>" { log: struct.new "core:collections/entries.wado//EntryLog<core:prelude/string.wado/String,()>" { keys: builtin::array_new<ref "core:prelude/string.wado//String">(0), values: builtin::array_new<()>(0), alive: builtin::array_new<bool>(0), count: 0, size: 0, deleted_count: 0 }, slots: builtin::array_new<i32>(0), nkeys: builtin::array_new<ref "core:prelude/string.wado//String">(0), kids: builtin::array_new<i32>(0), lens: builtin::array_new<i32>(0), nodes: 0, root: -1, height: 0 };
     end = elems.used;
-    $sroa_$iter_0_repr_45 = elems.repr;
-    $sroa_$iter_0_index_46 = 0;
+    $sroa_$iter_0_repr_47 = elems.repr;
+    $sroa_$iter_0_index_48 = 0;
     b0: block {
         l1: loop {
-            break_if b0 $sroa_$iter_0_index_46 >= end;
-            ref_val = builtin::array_get_value<ref "opt_dropped_value_if_expr_unread.wado//Element">($sroa_$iter_0_repr_45, $sroa_$iter_0_index_46);
-            $sroa_$iter_0_index_46 = $sroa_$iter_0_index_46 + 1;
+            break_if b0 $sroa_$iter_0_index_48 >= end;
+            ref_val = builtin::array_get_value<ref "opt_dropped_value_if_expr_unread.wado//Element">($sroa_$iter_0_repr_47, $sroa_$iter_0_index_48);
+            $sroa_$iter_0_index_48 = $sroa_$iter_0_index_48 + 1;
             if ref.test "opt_dropped_value_if_expr_unread.wado//Element::RuleRef"(ref_val) {
                 v = ref.cast "opt_dropped_value_if_expr_unread.wado//Element::RuleRef"(ref_val).payload_0.name;
                 value_15 = struct.new "core:prelude/string.wado//String" { repr: let $array_clone_src_1: ref Array<u8>; $array_clone_src_1 = v.repr; $load_4 = v.used; let $array_clone_dst_2: ref Array<u8>; builtin::array_copy<u8>(local.tee $array_clone_dst_2(builtin::array_new<u8>($load_4)), 0, $array_clone_src_1, 0, $load_4); $array_clone_dst_2, used: $load_4 };
@@ -167,7 +168,7 @@ fn "opt_dropped_value_if_expr_unread.wado/distinct_rules"(elems) {
                     }
                     if @unlikely(local.tee e_34(local.tee self_31($sroa_names_inner_18.log).count) == builtin::array_len(self_31.keys)) {
                         cold_path;
-                        "core:collections/entries.wado/core:collections/entries.wado/EntryLog<core:prelude/string.wado/String,()>::grow"(self_31, "core:prelude/primitive.wado/i32::max$dae[a]"(e_34 * 2));
+                        "core:collections/entries.wado/core:collections/entries.wado/EntryLog<core:prelude/string.wado/String,()>::grow"(self_31, b = e_34 * 2; select i32(4 > b, 4, b));
                     }
                     builtin::array_set<ref "core:prelude/string.wado//String">(self_31.keys, e_34, value_15);
                     builtin::array_set<()>(self_31.values, e_34, nop);
@@ -384,20 +385,19 @@ fn "core:rt/cm_stream_write_raw_all_u8"(handle, $mv$data$repr, $mv$data$start, $
     };
 }
 
-fn "core:prelude/primitive.wado/i32::max$dae[a]"(b) {
-    return select i32(4 > b, 4, b);
+fn "core:prelude/string.wado/core:prelude/string.wado/String::realloc_to"(self, new_capacity) {
+    let new_repr: ref Array<u8>;
+    builtin::array_copy<u8>(local.tee new_repr(builtin::array_new<u8>(new_capacity)), 0, self.repr, 0, self.used);
+    self.repr = new_repr;
 }
 
 fn "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self, min_capacity) {
-    let $load_0: ref Array<u8>;
     let capacity: i32;
-    let new_repr: ref Array<u8>;
-    capacity = builtin::array_len(local.tee $load_0(self.repr));
+    capacity = builtin::array_len(self.repr);
     if min_capacity <= capacity {
         return;
     }
-    builtin::array_copy<u8>(local.tee new_repr(builtin::array_new<u8>(select i32(min_capacity > 8, local.tee min_capacity(select i32(capacity > min_capacity, local.tee capacity(capacity * 2), min_capacity)), 8))), 0, $load_0, 0, self.used);
-    self.repr = new_repr;
+    "core:prelude/string.wado/core:prelude/string.wado/String::realloc_to"(self, select i32(min_capacity > 8, local.tee min_capacity(select i32(capacity > min_capacity, local.tee capacity(capacity * 2), min_capacity)), 8));
 }
 
 fn "core:collections/treemap.wado/core:collections/treemap.wado/TreeMap<core:prelude/string.wado/String,()>::place"(self, key, e) {

@@ -1,0 +1,53 @@
+// A call whose argument is a block, the shape inlining leaves when it splices a
+// callee into an argument position, still runs at compile time: the frame runs
+// the block, then the call. Arguments evaluate left to right, so `pair` reads
+// `x` before the block assigns it, and prints 15, not 55: the frame declines a
+// block that writes what an argument ahead of it reads. At O2 both calls fold
+// away.
+
+use { println, Stdout } from "core:cli";
+
+#[inline(never)]
+fn pair(a: i32, b: i32) -> i32 {
+    return a * 10 + b;
+}
+
+struct Cell {
+    v: i32,
+}
+
+#[inline(never)]
+fn bump(c: &mut Cell, by: i32) {
+    c.v += by;
+}
+
+fn ordered() -> i32 {
+    let mut x = 1;
+    let r = pair(x, b: {
+        x = 5;
+        x
+    });
+    return r;
+}
+
+fn bumped() -> i32 {
+    let mut c = Cell { v: 1 };
+    bump(&mut c, by: {
+        let d = c.v * 2;
+        if d > 8 {
+            break by: d;
+        }
+        8
+    });
+    return c.v;
+}
+
+export fn run() with Stdout {
+    println(`${ordered()} ${bumped()}`);
+}
+
+__DATA__
+{
+    "stdout": "15 9\n",
+    "wir_not_expect:O2": ["\"ctfe_block_argument.wado/pair\"(", "\"ctfe_block_argument.wado/bump\"("]
+}

@@ -186,7 +186,7 @@ impl<K: Inspect, V: Inspect> EntryLog<K, V> {
 }
 
 impl<K, V: Ref> EntryLog<K, V> {
-    /// `value_at`, borrowing the value.
+    /// `value_at`, returning a reference to the value instead of a copy.
     internal fn value_ref_at(&self, e: i32) -> Option<&V> {
         if e < 0 {
             return null;
