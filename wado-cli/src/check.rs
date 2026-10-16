@@ -246,11 +246,14 @@ async fn check_package_unused(
     .map_err(CliExit::error)?;
     let mut invocations = InvocationIndex::default();
     for (file, member) in files.iter().zip(&package.members) {
+        // An entry's own check ran its generators in this run, so what they
+        // recorded is no cache `--no-cache` distrusts.
+        let no_cache = opts.knobs.no_cache && !package.entries.contains(member);
         let outcome = maybe_run_pipeline_for(
             file,
             Some(&package.member_identity(member)),
             &host,
-            opts.knobs.no_cache,
+            no_cache,
             Some(project.clone()),
         )
         .await
@@ -267,10 +270,7 @@ async fn check_package_unused(
     for lint in lints.into_iter().flatten() {
         wado_compiler::CompilerHost::emit_diagnostic(&host, lint);
     }
-    if host.has_errors() {
-        return Err(CliExit::silent_failure(1));
-    }
-    Ok(())
+    check_outcome(&host, false, opts)
 }
 
 /// Check `path` against `world`, under `manifest_pair`, the manifest nearest it.
@@ -320,15 +320,23 @@ async fn check_entry(
         wado_compiler::compile_with_options(&source, &host, Some(&entry_name), compiler_options)
             .await;
 
-    let has_compile_errors = host.has_errors() || compile_result.is_err();
+    check_outcome(&host, compile_result.is_err(), opts)
+}
+
+/// How a check ends once `host` holds what it reported: an error fails it,
+/// `failed` among them, and so does a Kiln warning unless `--warn` was given.
+fn check_outcome(
+    host: &FilesystemCompilerHost,
+    failed: bool,
+    opts: &CheckOptions,
+) -> Result<(), CliExit> {
+    if failed || host.has_errors() {
+        return Err(CliExit::silent_failure(1));
+    }
     let has_kiln_warnings = host
         .diagnostics()
         .into_iter()
         .any(|d| is_kiln_diagnostic(&d.code));
-
-    if has_compile_errors {
-        return Err(CliExit::silent_failure(1));
-    }
     if !opts.warn_only && has_kiln_warnings {
         return Err(CliExit::error(
             "wado check: Kiln integrity check failed — \

@@ -21,6 +21,7 @@ mod external_subcommand;
 mod gale_cli;
 mod git_dependency;
 mod kiln_build_dep;
+mod kiln_check;
 mod kiln_compile;
 mod kiln_embed_wit;
 mod kiln_multi_file;
