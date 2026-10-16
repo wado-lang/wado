@@ -138,8 +138,8 @@ fn "wir_optimize_unwrap_fresh_elision_edge.wado/run"() with Stdout {
     let tens: i32;
     let new_used_743: i32;
     let start_744: i32;
-    let new_used_802: i32;
-    let start_803: i32;
+    let new_used_798: i32;
+    let start_799: i32;
     i_5 = 0;
     b0: block {
         l1: loop {
@@ -215,12 +215,12 @@ fn "wir_optimize_unwrap_fresh_elision_edge.wado/run"() with Stdout {
                 $local_1_117.used = new_used_743;
                 builtin::array_set_u8($local_1_117.repr, start_744, 45);
             } else {
-            }; if @unlikely(local.tee new_used_802($local_1_117.used + digit_count_142) > builtin::array_len($local_1_117.repr)) {
+            }; if @unlikely(local.tee new_used_798($local_1_117.used + digit_count_142) > builtin::array_len($local_1_117.repr)) {
                 cold_path;
-                "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_1_117, new_used_802);
-            }; start_803 = $local_1_117.used; $local_1_117.used = new_used_802; arr = $local_1_117.repr; pos = start_803 + digit_count_142; t = abs_val_141; b25: block {
+                "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_1_117, new_used_798);
+            }; start_799 = $local_1_117.used; $local_1_117.used = new_used_798; arr = $local_1_117.repr; pos = start_799 + digit_count_142; t = abs_val_141; b25: block {
                 l26: loop {
-                    break_if b25 (pos - start_803) < 2;
+                    break_if b25 (pos - start_799) < 2;
                     q = t /u 100_i64;
                     tens = local.tee pair(builtin::i32_wrap_i64(t - (q * 100_i64))) / 10;
                     builtin::array_set_u8(arr, pos - 1, ((48 + pair) - (tens * 10)) & 255);
@@ -229,8 +229,8 @@ fn "wir_optimize_unwrap_fresh_elision_edge.wado/run"() with Stdout {
                     t = q;
                     continue l26;
                 };
-            }; if pos > start_803 {
-                builtin::array_set_u8(arr, start_803, (48 + builtin::i32_wrap_i64(t %u 10_i64)) & 255);
+            }; if pos > start_799 {
+                builtin::array_set_u8(arr, start_799, (48 + builtin::i32_wrap_i64(t %u 10_i64)) & 255);
             }; $local_1_117 }.y;
             $v2 = i_5 * 2;
             if @unlikely($v0_9 != $v2) {

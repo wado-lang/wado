@@ -187,8 +187,8 @@ fn "tuple_destructuring.wado/destruct_for_of"() with Stdout {
     let $sroa_$iter_0_index_108: i32;
     let new_used_154: i32;
     let start_155: i32;
-    let new_used_213: i32;
-    let start_214: i32;
+    let new_used_209: i32;
+    let start_210: i32;
     $sroa_pairs_repr_87 = global:tuple_destructuring.wado::$const_obj_11;
     $sroa_$iter_0_index_108 = 0;
     b0: block {
@@ -278,18 +278,18 @@ fn "tuple_destructuring.wado/destruct_for_of"() with Stdout {
                     builtin::array_set_u8($local_6.repr, start_155, 45);
                 } else {
                 }
-                if @unlikely(local.tee new_used_213($local_6.used + digit_count_29) > builtin::array_len($local_6.repr)) {
+                if @unlikely(local.tee new_used_209($local_6.used + digit_count_29) > builtin::array_len($local_6.repr)) {
                     cold_path;
-                    "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_6, new_used_213);
+                    "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_6, new_used_209);
                 }
-                start_214 = $local_6.used;
-                $local_6.used = new_used_213;
+                start_210 = $local_6.used;
+                $local_6.used = new_used_209;
                 $load_12 = $local_6.repr;
-                pos = start_214 + digit_count_29;
+                pos = start_210 + digit_count_29;
                 t = abs_val;
                 b26: block {
                     l27: loop {
-                        break_if b26 (pos - start_214) < 2;
+                        break_if b26 (pos - start_210) < 2;
                         q = t /u 100_i64;
                         tens = local.tee pair(builtin::i32_wrap_i64(t - (q * 100_i64))) / 10;
                         builtin::array_set_u8($load_12, pos - 1, ((48 + pair) - (tens * 10)) & 255);
@@ -299,8 +299,8 @@ fn "tuple_destructuring.wado/destruct_for_of"() with Stdout {
                         continue l27;
                     };
                 };
-                if pos > start_214 {
-                    builtin::array_set_u8($load_12, start_214, (48 + builtin::i32_wrap_i64(t %u 10_i64)) & 255);
+                if pos > start_210 {
+                    builtin::array_set_u8($load_12, start_210, (48 + builtin::i32_wrap_i64(t %u 10_i64)) & 255);
                 }
                 if @unlikely(local.tee new_used_53($local_6.used + 2) > builtin::array_len($load_12)) {
                     cold_path;

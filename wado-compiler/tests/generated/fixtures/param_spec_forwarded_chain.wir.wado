@@ -113,23 +113,23 @@ fn "param_spec_forwarded_chain.wado/outer$spec0$dae[st]"(out, word) {
 fn "param_spec_forwarded_chain.wado/inner$spec0$dae[st]"(out, word) {
     let i: i32;
     let b: u8;
-    let new_used_48: i32;
-    let start_49: i32;
-    let $licm_repr_90: ref Array<u8>;
+    let new_used_42: i32;
+    let start_43: i32;
+    let $licm_repr_80: ref Array<u8>;
     i = 0;
-    $licm_repr_90 = word.repr;
+    $licm_repr_80 = word.repr;
     b2: block {
         l3: loop {
             break_if b2 i >= word.used;
-            b = builtin::array_get_value<u8>($licm_repr_90, i);
-            if @unlikely(local.tee new_used_48(out.used + 1) > builtin::array_len(out.repr)) {
+            b = builtin::array_get_value<u8>($licm_repr_80, i);
+            if @unlikely(local.tee new_used_42(out.used + 1) > builtin::array_len(out.repr)) {
                 cold_path;
-                "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out, new_used_48);
-                $licm_repr_90 = word.repr;
+                "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out, new_used_42);
+                $licm_repr_80 = word.repr;
             }
-            start_49 = out.used;
-            out.used = new_used_48;
-            builtin::array_set_u8(out.repr, start_49, b);
+            start_43 = out.used;
+            out.used = new_used_42;
+            builtin::array_set_u8(out.repr, start_43, b);
             i = i + 1;
             continue l3;
         };

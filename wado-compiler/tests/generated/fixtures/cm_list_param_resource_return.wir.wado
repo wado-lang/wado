@@ -96,31 +96,39 @@ import fn wasi/stream-new from "wasi/stream-new";
 import fn wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code from "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code";
 
 fn "cm_list_param_resource_return.wado/$cm_binding__Api_make_layout"(entries) with Api {
-    let $entries_len: i32;
+    let $load_1: i32;
     let $entries_base: i32;
     let $entries_i: i32;
     let $entries_addr: i32;
     let $entries_elem: u32;
-    let $licm_repr_17: ref Array<u32>;
-    if @unlikely((local.tee $entries_len(entries.used) < 0) | ($entries_len > 536870911)) {
+    let $licm_used_88: i32;
+    let $array_clone_src_1: ref Array<u32>;
+    $array_clone_src_1 = entries.repr;
+    $load_1 = entries.used;
+    let $array_clone_dst_2: ref Array<u32>;
+    builtin::array_copy<u32>(local.tee $array_clone_dst_2(builtin::array_new<u32>($load_1)), 0, $array_clone_src_1, 0, $load_1);
+    drop($array_clone_dst_2);
+    if @unlikely(($load_1 < 0) | ($load_1 > 536870911)) {
         cold_path;
         "core:rt/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("a buffer's length is negative or past what linear memory can address"), used: 68 });
         unreachable;
     }
-    $entries_base = "mem/realloc"(0, 0, 4, $entries_len * 4);
+    $entries_base = "mem/realloc"(0, 0, 4, $load_1 * 4);
     $entries_i = 0;
-    $licm_repr_17 = entries.repr;
+    $array_clone_dst_2 = entries.repr;
+    $licm_used_88 = entries.used;
     b1: block {
         l2: loop {
-            break_if b1 $entries_i >= $entries_len;
+            break_if b1 $entries_i >= $load_1;
             $entries_addr = $entries_base + ($entries_i * 4);
-            $entries_elem = builtin::array_get_value<u32>($licm_repr_17, $entries_i);
+            builtin::array_copy<u32>(local.tee $array_clone_src_1(builtin::array_new<u32>($licm_used_88)), 0, $array_clone_dst_2, 0, $licm_used_88);
+            $entries_elem = builtin::array_get_value<u32>($array_clone_src_1, $entries_i);
             builtin::store_i32($entries_addr, $entries_elem);
             $entries_i = $entries_i + 1;
             continue l2;
         };
     };
-    return "wasi/wasi:demo/Api::make_layout"($entries_base, $entries_len);
+    return "wasi/wasi:demo/Api::make_layout"($entries_base, $load_1);
 }
 
 fn "cm_list_param_resource_return.wado/$cm_binding__Layout_id"(self) with Layout {
