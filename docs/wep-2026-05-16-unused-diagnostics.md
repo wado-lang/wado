@@ -648,10 +648,6 @@ through the diagnostics path.
   reaches. A single-file compile and the editor do not load the whole package.
 - A namespace re-export (`pub use ns from "./m.wado"`) seeds nothing in package
   mode, so what it offers reports as unused.
-- Two members that never share a compilation, such as two test files, may
-  each declare an `impl` of one trait for one type. Package mode loads them
-  together, so it reports the pair as a coherence conflict that no single
-  compilation has.
 - Package mode elaborates every member on one thread, and runs every member's
   Kiln pipeline one at a time. On Gale it takes under twice as long as
   checking the declared entries alone.
