@@ -393,7 +393,7 @@ pub struct Fact {
 pub struct Program {
     /// Insertion order is the order every answer is reported in, so a caller
     /// that builds it deterministically gets deterministic diagnostics.
-    pub impls: IndexMap<ImplId, ImplDef>,
+    impls: IndexMap<ImplId, ImplDef>,
     /// The trait impls in `impls` order: by trait, by trait and the
     /// declaration the target names (`None` for any other target), and by that
     /// declaration alone. A question names its trait and its type, and a scan
@@ -539,6 +539,22 @@ impl Program {
         }
         assert!(self.impls.insert(id, def).is_none());
         id
+    }
+
+    /// Every impl, in the order they were added.
+    #[must_use]
+    pub fn impls(&self) -> &IndexMap<ImplId, ImplDef> {
+        &self.impls
+    }
+
+    /// Put `def` in place of the impl at `id`.
+    pub fn replace_impl(&mut self, id: ImplId, def: ImplDef) {
+        let old = &mut self.impls[&id];
+        assert!(
+            old.trait_ == def.trait_ && target_head(&old.target) == target_head(&def.target),
+            "a replacement keeps the trait and the target head the indices file it under"
+        );
+        *old = def;
     }
 
     /// Take out the impl at `id`.

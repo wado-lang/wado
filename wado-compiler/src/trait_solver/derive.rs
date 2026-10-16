@@ -127,7 +127,7 @@ pub fn pair_comparisons(program: &mut Program, eq: TraitDeclId, ord: TraitDeclId
             program.push_impl(paired(ImplOrigin::Paired));
         }
         for marker in markers {
-            program.impls[&marker] = paired(ImplOrigin::Marker);
+            program.replace_impl(marker, paired(ImplOrigin::Marker));
         }
     }
 }
@@ -192,7 +192,7 @@ mod tests {
     fn derived(program: Program, declarations: &[Declaration]) -> Vec<ImplDef> {
         let mut p = program;
         derive(&mut p, EQ, declarations);
-        p.impls
+        p.impls()
             .values()
             .filter(|def| def.origin == ImplOrigin::Derived)
             .cloned()
@@ -476,7 +476,7 @@ mod tests {
         p.push_impl(bounded(ORD, wrapper.clone(), vec![ORD]));
         pair_comparisons(&mut p, EQ, ORD);
         let paired: Vec<&ImplDef> = p
-            .impls
+            .impls()
             .values()
             .filter(|def| def.origin == ImplOrigin::Paired)
             .collect();
@@ -561,9 +561,9 @@ mod tests {
             ..bounded(EQ, wrapper_of(SolverType::Param(0)), vec![])
         });
         pair_comparisons(&mut p, EQ, ORD);
-        assert!(p.impls.values().all(|def| def.origin != ImplOrigin::Paired));
+        assert!(p.impls().values().all(|def| def.origin != ImplOrigin::Paired));
         assert_eq!(
-            p.impls[&marker],
+            p.impls()[&marker],
             ImplDef {
                 origin: ImplOrigin::Marker,
                 ..bounded(EQ, wrapper_of(SolverType::Param(0)), vec![ORD])
