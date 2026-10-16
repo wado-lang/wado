@@ -153,7 +153,9 @@ pub async fn run(opts: CheckOptions) -> Result<(), CliExit> {
     }
     let project = load_nearest_manifest(&path).map_err(CliExit::error)?;
     let world = check_world(opts.target_world.as_deref(), &path, project.as_ref());
-    check_entry(&path, world, project, true, &opts).await.map(drop)
+    check_entry(&path, world, project, true, &opts)
+        .await
+        .map(drop)
 }
 
 const NO_PROJECT: &str = "no wado.toml found; name a file to check \

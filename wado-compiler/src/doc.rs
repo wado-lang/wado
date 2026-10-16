@@ -15,12 +15,12 @@ use crate::module_source::{ModuleSource, ModuleSourceInterner};
 use crate::primitive::PrimitiveType;
 use crate::semantics::Semantics;
 use crate::token::Span;
-use crate::use_declaration;
 use crate::unparse::{
     get_item_id, unparse_assoc_type_decl, unparse_attributes, unparse_bound_arguments_into,
     unparse_contract_clause, unparse_enum_signature, unparse_function_signature,
     unparse_struct_signature, unparse_trait_header, unparse_type_into,
 };
+use crate::use_declaration;
 use crate::wit_consume::build_bindings;
 use crate::{ParseResult, ast, parse, stdlib};
 use wit_component::DecodedWasm;

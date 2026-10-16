@@ -81,8 +81,8 @@ use crate::component_model::{
 };
 use crate::defs::DefId;
 use crate::elaborator::liveness::{LivenessScope, PackageScope, is_reported};
-use crate::escape::quoted;
 use crate::elaborator::trait_env::TraitEnv;
+use crate::escape::quoted;
 use crate::name::entry_dir_of;
 use crate::resolve::Shadowed;
 use crate::wit_consume::module_host_leaf_imports;

@@ -594,14 +594,17 @@ impl Resolutions {
 
 /// The names `module`'s namespace imports (`use ns from "…"`) bind.
 fn namespace_import_names(module: &Module) -> impl Iterator<Item = &str> {
-    module.items.iter().flat_map(|item| match item {
-        Item::Use(decl) => decl.items.as_slice(),
-        _ => &[],
-    })
-    .filter_map(|item| match item {
-        ast::UseItem::Namespace { name, .. } => Some(name.as_str()),
-        _ => None,
-    })
+    module
+        .items
+        .iter()
+        .flat_map(|item| match item {
+            Item::Use(decl) => decl.items.as_slice(),
+            _ => &[],
+        })
+        .filter_map(|item| match item {
+            ast::UseItem::Namespace { name, .. } => Some(name.as_str()),
+            _ => None,
+        })
 }
 
 /// `ns::member` written in `module`, through a namespace import, which
@@ -1076,7 +1079,12 @@ impl AstVisitor for Resolver<'_> {
                 ast::WorldExport::Interface(i) => Some(&i.interface_name),
                 ast::WorldExport::Function(_) => None,
             });
-            for name in world.imports.iter().map(|i| &i.interface_name).chain(exports) {
+            for name in world
+                .imports
+                .iter()
+                .map(|i| &i.interface_name)
+                .chain(exports)
+            {
                 self.note_unsited(name);
             }
         }
