@@ -4764,18 +4764,20 @@ impl TypeSystem {
             .collect()
     }
 
-    /// A generic function's `(type params, param types, return type)`; empty
-    /// for a non-generic one.
+    /// A generic function's `(real type params, param types, return type)`;
+    /// empty for one with no real type parameter. An effect or `fn`-bound
+    /// parameter takes no type argument, so listing one would hand the call a
+    /// slot more than its declaration counts.
     fn lookup_generic_func_for_inference(
         &self,
         callee: &CalleeRef,
     ) -> Option<(Vec<(String, TypeId)>, Vec<TypeId>, Option<TypeId>)> {
         let sig = self.signatures.function_sig(callee.def()?)?;
-        if sig.type_param_ids.is_empty() {
+        if sig.decl.type_params.is_empty() {
             return Some((vec![], vec![], None));
         }
         Some((
-            sig.type_param_ids.clone(),
+            sig.decl.type_params.clone(),
             sig.decl.param_types.clone(),
             sig.decl.return_type,
         ))

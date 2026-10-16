@@ -1,0 +1,13 @@
+// A defaulted type parameter after one the arguments infer, on a function
+// another module declares: the call omits the defaulted argument, and the
+// default fills its type parameter. Within one module it always worked.
+
+use { check } from "./sub/default_type_param_after_inferred_dep.wado";
+
+test {
+    assert check("a");
+    assert check(1, |n| n > 0);
+}
+
+__DATA__
+{"test": {}}
