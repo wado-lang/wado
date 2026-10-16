@@ -1527,9 +1527,9 @@ impl Parser {
         })
     }
 
-    /// Consume the attribute string the cursor is on, with its escapes resolved
-    /// the way an expression's string literal has them resolved.
-    fn take_attr_string(&mut self, raw: &str) -> ParseResult<String> {
+    /// Consume the string literal the cursor is on, `raw` its text, with its
+    /// escapes resolved the way an expression's string literal has them resolved.
+    fn take_string(&mut self, raw: &str) -> ParseResult<String> {
         let span = self.peek().span;
         self.advance();
         unescape_string(raw).map_err(|message| self.error_at_span(span, &message))
@@ -1545,7 +1545,7 @@ impl Parser {
             // `as_ident_name`, so a contextual keyword can be a key.
             let key = self.peek_kind().as_ident_name().map(str::to_string);
             let arg = match (key, self.peek_kind().clone()) {
-                (_, TokenKind::StringLit(raw)) => AttrArg::Str(self.take_attr_string(&raw)?),
+                (_, TokenKind::StringLit(raw)) => AttrArg::Str(self.take_string(&raw)?),
                 (Some(value), _) => {
                     self.mark_keyword_name();
                     self.advance();
@@ -1554,7 +1554,7 @@ impl Parser {
                         self.advance();
                         match self.peek_kind().clone() {
                             TokenKind::StringLit(val) => {
-                                AttrArg::KeyValue(value, self.take_attr_string(&val)?)
+                                AttrArg::KeyValue(value, self.take_string(&val)?)
                             }
                             TokenKind::LBracket => {
                                 self.advance();
@@ -1568,7 +1568,7 @@ impl Parser {
                                         let kind = self.peek_kind().clone();
                                         match (&kind, kind.as_ident_name()) {
                                             (TokenKind::StringLit(item), _) if !names => {
-                                                items.push(self.take_attr_string(item)?);
+                                                items.push(self.take_string(item)?);
                                             }
                                             (_, Some(named)) if names => {
                                                 items.push(named.to_string());
@@ -2059,14 +2059,11 @@ impl Parser {
         }
     }
 
-    /// The raw text of the string literal at the cursor, escapes unresolved.
-    /// [`Self::take_attr_string`] is the one that resolves them.
     fn consume_string(&mut self) -> ParseResult<String> {
         match self.peek_kind() {
             TokenKind::StringLit(raw) => {
                 let raw = raw.clone();
-                self.advance();
-                Ok(raw)
+                self.take_string(&raw)
             }
             _ => Err(ParseError {
                 message: "expected string literal".to_string(),

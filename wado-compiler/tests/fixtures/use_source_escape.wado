@@ -1,0 +1,13 @@
+// A module specifier is a string literal, so its escapes denote the path.
+use { part, Part } from "./sub/unused_import_p\u{61}rts.wado";
+
+export fn run() {
+    let n = match part() {
+        Part::Whole(n) => n,
+        Part::Bit => 0,
+    };
+    assert n == 4;
+}
+
+__DATA__
+{}
