@@ -19,8 +19,8 @@ use crate::tir::{
 use crate::token::Span;
 
 use crate::ast::{
-    self, AstId, AstVisitor, Attribute, CmImport, EffectHandlerBinding, Expr, Function, ImplBlock,
-    Item, Pattern, RestClause, Stmt, cm_import_of,
+    self, AstId, AstVisitor, Attribute, Block, CmImport, EffectHandlerBinding, Expr, Function,
+    ImplBlock, Item, Pattern, RestClause, Stmt, TestDecl, cm_import_of,
 };
 use crate::compiler_host::{Code, Diagnostic, DiagnosticSpan, Severity};
 use crate::compiler_item::CompilerItem;
@@ -469,6 +469,9 @@ fn run_effect_checks(
                 // unknown name is reported here, as on a function.
                 Item::Global(global) => {
                     benign_effects(&global.name, &global.attributes, src, index, out);
+                }
+                Item::Test(test) => {
+                    check_test_effects_sem(sem, src, test, index, out, solved);
                 }
                 _ => {}
             }
@@ -1234,15 +1237,7 @@ fn check_function_effects_sem(
         return;
     }
     let caller_key = func.id;
-
-    // Per-module annotations carry the dispatch facts and signature types that
-    // have no flattened `Semantics` mirror (static-method dispatch,
-    // param / return type ids).
-    let annotations = sem
-        .state
-        .as_ref()
-        .and_then(|state| state.module_semantics.get(module))
-        .map(|module_sem| &module_sem.types);
+    let annotations = module_annotations(sem, module);
 
     // Declared effects, plus resources that appear in the signature so a
     // `fn f(s: Stream<u8>)` need not repeat `with Stream`.
@@ -1274,6 +1269,77 @@ fn check_function_effects_sem(
         }
     }
 
+    let walk = BodyWalk {
+        name: &func.name,
+        current,
+        param_types,
+        body,
+        holds_every_effect: false,
+    };
+    walk_body_effects(sem, module, annotations, index, walk, out, solved);
+}
+
+/// A test holds every effect, so nothing it performs is missing. A function
+/// value it moves into a `fn` type is still bound by that type's row: the
+/// callee holding the value performs it without holding what the test holds.
+fn check_test_effects_sem(
+    sem: &Semantics,
+    module: &ModuleSource,
+    test: &TestDecl,
+    index: &EffectIndex,
+    out: &mut Vec<EffectError>,
+    solved: &mut EffectRows,
+) {
+    let walk = BodyWalk {
+        name: test.name.as_deref().unwrap_or("test"),
+        current: IndexSet::default(),
+        param_types: IndexMap::default(),
+        body: &test.body,
+        holds_every_effect: true,
+    };
+    walk_body_effects(
+        sem,
+        module,
+        module_annotations(sem, module),
+        index,
+        walk,
+        out,
+        solved,
+    );
+}
+
+/// Per-module annotations carry the dispatch facts and signature types that
+/// have no flattened `Semantics` mirror (static-method dispatch, param /
+/// return type ids).
+fn module_annotations<'a>(
+    sem: &'a Semantics,
+    module: &ModuleSource,
+) -> Option<&'a TypeAnnotations> {
+    sem.state
+        .as_ref()
+        .and_then(|state| state.module_semantics.get(module))
+        .map(|module_sem| &module_sem.types)
+}
+
+/// One body to walk, with what it holds on entry.
+struct BodyWalk<'a> {
+    name: &'a str,
+    current: IndexSet<EffectRef>,
+    param_types: IndexMap<String, TypeId>,
+    body: &'a Block,
+    /// Report only what a value performs beyond the `fn` type it moves into.
+    holds_every_effect: bool,
+}
+
+fn walk_body_effects(
+    sem: &Semantics,
+    module: &ModuleSource,
+    annotations: Option<&TypeAnnotations>,
+    index: &EffectIndex,
+    walk: BodyWalk,
+    out: &mut Vec<EffectError>,
+    solved: &mut EffectRows,
+) {
     // A variable is solved at the call that minted it, and read wherever the
     // call's value flows, which may come before the walk reaches the call. Walk
     // until no solution read changed after it was read, keeping only the last
@@ -1286,19 +1352,22 @@ fn check_function_effects_sem(
             sem,
             annotations,
             index,
-            current: current.clone(),
-            param_types: param_types.clone(),
+            current: walk.current.clone(),
+            param_types: walk.param_types.clone(),
             module: module.source_path(),
             out: &mut found,
             closures: ClosureEffects::default(),
             collecting: None,
             rows: Rows::starting_from(rows),
         };
-        ast::walk_block(&mut walker, body);
+        ast::walk_block(&mut walker, walk.body);
         let mut walked = walker.rows;
         walked.propagate_flows(index);
         if walked.read_final() {
-            walked.assert_solved(&func.name);
+            walked.assert_solved(walk.name);
+            if walk.holds_every_effect {
+                found.clear();
+            }
             walked.bound_flows(index, &mut found);
             out.extend(found);
             solved.extend(walked.solved);
