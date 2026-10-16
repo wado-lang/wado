@@ -271,6 +271,8 @@ its own, where the `use` binds it.
 use { println, eprintln, eprint, Stdout, Stderr } from "core:cli";
 use { Stdin, Stdin::{read_via_stream} } from "wasi:cli";
 use traits from "./sub/unused_import_traits.wado";
+use parts from "./sub/unused_import_parts.wado";
+use { part } from "./sub/unused_import_parts.wado";
 use { TreeMap as Map, TreeSet } from "core:collections";
 use json from "core:json";
 use base64 from "core:base64";
@@ -291,7 +293,11 @@ export fn run() with Stdout {
     let m = Map::<i32, i32>::new();
     let half = Half { n: 2 }.halved();
     let bytes = to_bytes(&half).unwrap().len();
-    println(`${m.len()} ${json::to_string(&21.doubled()).unwrap()} ${half} ${bytes} ${2.tripled()}`);
+    let whole = match part() {
+        parts::Whole(n) => n,
+        _ => 0,
+    };
+    println(`${m.len()} ${json::to_string(&21.doubled()).unwrap()} ${half} ${bytes} ${2.tripled()} ${whole}`);
 }
 ```
 
@@ -304,9 +310,11 @@ written. Beyond that:
   dispatches to a method the trait declares or implements: `Doubled` for
   `doubled`, and the namespace `traits` for `tripled`. `Halved` stays unused:
   `halved` here is `Half`'s own method.
-- An effect named in `#[benign(…)]` is used there, here `Stderr`.
-- A namespace import is used where the module names a member through it.
-  `cbor` stays unused: `to_bytes` reaches its member by an import of its own.
+- An effect named in `#[benign(…)]` is used there, here `Stderr`, and so is an
+  interface a world declaration imports or exports.
+- A namespace import is used where the module spells it: naming a member
+  through it, or qualifying a case, as `parts` does. `cbor` stays unused:
+  `to_bytes` reaches its member by an import of its own.
 - An interface import with functions (`Stdin::{read_via_stream}`) brings in
   the functions alone, and each is reported on its own. The interface is a
   name only where imported by itself, as `Stdin` is here.

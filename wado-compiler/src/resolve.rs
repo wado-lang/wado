@@ -298,6 +298,7 @@ impl Resolutions {
                 scopes: &scopes,
                 refs: &mut refs,
                 used_imports: hashmap::IndexSet::default(),
+                namespaces: namespace_import_names(module).collect(),
                 shadowings: &mut shadowings,
                 redeclarations: &mut redeclarations,
                 effect_binders: &mut effect_binders,
@@ -591,6 +592,18 @@ impl Resolutions {
     }
 }
 
+/// The names `module`'s namespace imports (`use ns from "…"`) bind.
+fn namespace_import_names(module: &Module) -> impl Iterator<Item = &str> {
+    module.items.iter().flat_map(|item| match item {
+        Item::Use(decl) => decl.items.as_slice(),
+        _ => &[],
+    })
+    .filter_map(|item| match item {
+        ast::UseItem::Namespace { name, .. } => Some(name.as_str()),
+        _ => None,
+    })
+}
+
 /// `ns::member` written in `module`, through a namespace import, which
 /// registers each member under its `ns$member` alias.
 fn namespace_member(
@@ -682,8 +695,12 @@ struct Resolver<'a> {
     bindings: Vec<IndexMap<String, Span>>,
     scopes: &'a Scopes,
     refs: &'a mut IndexMap<AstId, Resolution>,
-    /// This module's imports, by local name, that answered one of its sites.
+    /// This module's imports, by local name, that answered one of its sites. A
+    /// namespace import is held by its own name where a site spells it bare,
+    /// as a qualifier the elaborator reads by type (`ns::Case`).
     used_imports: hashmap::IndexSet<String>,
+    /// The names this module's namespace imports bind.
+    namespaces: hashmap::IndexSet<&'a str>,
     shadowings: &'a mut Vec<Shadowing>,
     redeclarations: &'a mut Vec<Redeclaration>,
     /// Off under an `#[allow(shadowed_name)]` on any enclosing node, the module
@@ -757,10 +774,25 @@ impl Resolver<'_> {
 
     /// Record what `site`, which named `key` in its scope, refers to.
     fn record(&mut self, site: AstId, key: &str, answer: Resolution) {
-        if let Resolution::Def(def) = answer {
-            self.note_import(key, def);
+        match answer {
+            Resolution::Def(def) => self.note_import(key, def),
+            // A bare namespace names no declaration; what it qualifies is the
+            // elaborator's to find.
+            Resolution::Unresolved if self.namespaces.contains(key) => {
+                self.used_imports.insert(key.to_string());
+            }
+            _ => {}
         }
         self.refs.insert(site, answer);
+    }
+
+    /// Note `name`, written where no reference site holds it, as the module's
+    /// scope answers it: a `#[benign]` argument, or a world's member, which
+    /// the effect check and the world registry read by name.
+    fn note_unsited(&mut self, name: &str) {
+        if let Some(def) = self.scopes.resolve(self.module, name) {
+            self.note_import(name, def);
+        }
     }
 
     /// Resolve `key` as a type-position name written at `site`, and record it.
@@ -1025,16 +1057,12 @@ fn expr_scopes_bindings(expr: &ast::Expr) -> bool {
 
 impl AstVisitor for Resolver<'_> {
     fn visit_attributed(&mut self, attrs: &[ast::Attribute], body: impl FnOnce(&mut Self)) {
-        // A `#[benign]` argument names an effect with no reference site, so
-        // the module's scope answers it, as effect checking reads it.
         for arg in attrs
             .iter()
             .filter(|attr| attr.name == BENIGN)
             .flat_map(|attr| &attr.args)
         {
-            if let Some(def) = self.scopes.resolve(self.module, arg.as_str()) {
-                self.note_import(arg.as_str(), def);
-            }
+            self.note_unsited(arg.as_str());
         }
         let saved = self.lint_shadowing;
         self.lint_shadowing &= !ast::attrs_allow(attrs, ast::lint::SHADOWED_NAME);
@@ -1043,6 +1071,15 @@ impl AstVisitor for Resolver<'_> {
     }
 
     fn visit_item(&mut self, item: &Item) {
+        if let Item::World(world) = item {
+            let exports = world.exports.iter().filter_map(|export| match export {
+                ast::WorldExport::Interface(i) => Some(&i.interface_name),
+                ast::WorldExport::Function(_) => None,
+            });
+            for name in world.imports.iter().map(|i| &i.interface_name).chain(exports) {
+                self.note_unsited(name);
+            }
+        }
         // Every item that introduces type parameters opens a binder scope for
         // the whole of its body, so a name inside it is checked against them
         // before any module scope.

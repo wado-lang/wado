@@ -258,13 +258,17 @@ attribute is baked into every emitted file.
 reports (`Liveness::reported_modules`), so both lints answer for the
 same files: a package check walks no dependency's bodies. The resolver
 records, per module, the import entries, by local name, that answered
-one of its sites; a `#[benign(E)]` argument counts as a site. A
+one of its sites. A name written where no site holds it, which a later
+pass reads by name, counts as one: a `#[benign(E)]` argument, and a
+world's `import X;` / `export X;`. A
 declaration imported twice (`use { a }` and `use m` reaching `m$a`) is
 two entries, each used only where it is written. For each `UseItem`:
 
 - `Simple`: reported when its local name (the alias, or the name) is
   unused.
-- `Namespace`: used when one of its `ns$member` entries is.
+- `Namespace`: used when one of its `ns$member` entries is, or a site spells
+  `ns` bare: a case qualifier (`ns::Case`), whose member the elaborator finds
+  by the scrutinee's type.
 - `InterfaceFunctions`: each unused function is reported. `I::{f}` binds
   `f` alone, so `I` is reported only by a `Simple` item of its own.
 - `Wildcard`: skipped (side-effect imports).

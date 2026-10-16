@@ -90,9 +90,9 @@ impl Uses<'_> {
                 }
                 UseItem::Namespace { name, name_span } => {
                     let reached = self.used.iter().any(|alias| {
-                        alias
-                            .strip_prefix(name.as_str())
-                            .is_some_and(|rest| rest.starts_with(NAMESPACE_MEMBER_SEP))
+                        alias.strip_prefix(name.as_str()).is_some_and(|rest| {
+                            rest.is_empty() || rest.starts_with(NAMESPACE_MEMBER_SEP)
+                        })
                     });
                     if !reached {
                         unused.push((name.clone(), *name_span));
