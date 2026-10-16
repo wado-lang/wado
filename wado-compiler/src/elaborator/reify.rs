@@ -10286,7 +10286,10 @@ fn split_unchecked_twin(
         .expect("a function with a `contract` clause has a body");
     // What runs ahead of the clauses, a coverage probe, counts the body run.
     let mut rest = std::mem::take(&mut body.stmts);
-    let first = rest.iter().position(is_contract_clause).unwrap_or(0);
+    let first = rest
+        .iter()
+        .position(is_contract_clause)
+        .expect("a function with a `contract` clause reifies to a contract check");
     let checks: Vec<TirStmt> = rest.drain(first..first + clauses).collect();
     assert!(
         checks.iter().all(is_contract_clause) && !rest.iter().any(is_contract_clause),
