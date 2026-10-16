@@ -77,6 +77,7 @@ export fn run() with (Stdout, Stderr, Environment, Preopens, Exit) {
 fn collect_md_files<S: AsStrSlice>(dir: S) -> Result<List<String>, fs::FsError> with Preopens {
     let mut out: List<String> = [];
     for let entry of fs::walk_dir(dir, |found| !is_excluded_dir(found))? {
+        let entry = entry?;
         if entry.type matches { File } && entry.path.ends_with(".md") {
             out.push(entry.path);
         }

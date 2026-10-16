@@ -4872,6 +4872,44 @@ impl TypeTable {
         rows
     }
 
+    /// What each of the effect parameters `names` stands for where `declared`
+    /// meets `actual`: the row `actual` has at the same place, less what
+    /// `declared` names outright there. A parameter no row reaches is empty.
+    /// `actual` is written in another frame, whose own parameter of the same
+    /// name is a different one, so each of `names` is told apart from it by a
+    /// fresh variable while the two are matched.
+    pub fn effect_binding(
+        &mut self,
+        declared: TypeId,
+        actual: TypeId,
+        names: &[String],
+    ) -> EffectRows {
+        let marks: Vec<(String, EffectRef)> = names
+            .iter()
+            .map(|name| (name.clone(), self.mint_effect_var()))
+            .collect();
+        let marked_rows: EffectRows = marks
+            .iter()
+            .map(|(name, mark)| (name.clone(), vec![mark.clone()]))
+            .collect();
+        let marked = self.substitute_effect_rows(declared, &marked_rows);
+        let mut rows: EffectRows = names
+            .iter()
+            .map(|name| (name.clone(), Vec::new()))
+            .collect();
+        self.zip_rows(marked, actual, true, &mut |we, ae| {
+            for (name, _) in marks.iter().filter(|(_, mark)| we.contains(mark)) {
+                let row = rows.get_mut(name).expect("every name has a row");
+                for e in ae.iter().filter(|e| !we.contains(e)) {
+                    if !row.contains(e) {
+                        row.push(e.clone());
+                    }
+                }
+            }
+        });
+        rows
+    }
+
     /// [`Self::impl_effect_binding`] for one written type beside the type
     /// that meets it.
     fn bind_rows(&self, written: TypeId, actual: TypeId, rows: &mut EffectRows) {

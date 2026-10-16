@@ -27,12 +27,6 @@ pub(crate) struct FunctionSig {
     /// the return type. Instantiated at a use site through
     /// [`DeclSig::instantiate`].
     pub(crate) decl: DeclSig,
-    /// Registered `(name, TypeId)` pairs, in registration order — real
-    /// params as `TypeParam` slots, fn-bound params as their realised
-    /// function type. Effect params are excluded; empty iff the function
-    /// declares only effect params (or none). A superset of
-    /// `decl.type_params`, which holds only the slot-consuming subset.
-    pub(crate) type_param_ids: Vec<(String, TypeId)>,
     /// The declared parameters, in order, parallel to `decl.param_types`.
     pub(crate) params: Vec<sig::Param>,
     /// Declared `with` effects, resolved in the declaring perspective
@@ -123,15 +117,6 @@ pub(crate) struct ModuleDecls {
     /// instead of resolving the same methods a second time.
     pub(crate) effect_ops: IndexMap<DefId, Vec<TirEffectOp>>,
 
-    /// `func_name → type_params` for generic functions in this module.
-    pub(crate) generic_function_params: IndexMap<String, Vec<(String, TypeId)>>,
-    /// `func_name → resolved param TypeIds` for generic functions. The
-    /// `TypeIds` are resolved in the function's own type-param scope so
-    /// `TypeParam` ids match.
-    pub(crate) generic_function_resolved_param_types: IndexMap<String, Vec<TypeId>>,
-    /// `func_name → resolved return TypeId` for generic functions. Used for
-    /// expected-return back-inference.
-    pub(crate) generic_function_resolved_return_types: IndexMap<String, TypeId>,
     /// `mangled_name → type_params` for generic methods.
     pub(crate) generic_method_params: IndexMap<String, Vec<(String, TypeId)>>,
     /// `mangled_name → resolved param TypeIds` for generic methods. Resolved

@@ -61,7 +61,9 @@ test {
 - `test` is a contextual keyword (functions named `test` are still allowed)
 - Test name is an optional string literal
 - Test body is a block containing statements
-- A test declares no return type and no effects, and may perform any effect
+- A test declares no return type and no effects, and may perform any effect. A
+  function value it hands on is still bound by the function type it is moved
+  into, which holds none of the test's effects
 - Attributes (e.g., `#[expect_trap]`, `#[TODO]`, `#[timeout_ms(N)]`, [`#[synopsis]`](./spec-attributes.md#synopsis)) may appear before the `test` keyword
 
 ## Test Semantics

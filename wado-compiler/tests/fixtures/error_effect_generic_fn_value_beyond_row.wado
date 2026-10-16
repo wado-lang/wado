@@ -1,0 +1,16 @@
+// The expected type settles `E` to no effect, so the closure handed to the
+// value may perform none.
+
+use { println } from "core:cli";
+
+fn apply<effect E>(f: fn() with E) with E {
+    f();
+}
+
+export fn run() {
+    let pure: fn(fn()) = apply;
+    pure(|| { println("x"); });
+}
+
+__DATA__
+{"compile_error": "this function value performs effect 'Stdout', which the function type it is expected to be does not declare"}

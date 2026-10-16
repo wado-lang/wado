@@ -320,27 +320,25 @@ fn read_files(blocks: &List<FencedCode>, into: &mut TreeMap<String, String>) wit
 }
 
 /// Every `.wado` file under `FIXTURE_DIR`, by its path.
-fn read_fixtures(into: &mut TreeMap<String, String>) with (Stderr, Preopens) {
-    let entries = match fs::walk_dir(&FIXTURE_DIR) {
-        Ok(entries) => entries,
-        Err(e) => {
-            eprintln(`error: ${e}`);
-            return;
-        },
-    };
-    for let entry of entries {
+fn read_fixtures(into: &mut TreeMap<String, String>) -> Result<(), fs::FsError> with Preopens {
+    for let found of fs::walk_dir(&FIXTURE_DIR)? {
+        let entry = found?;
         if entry.path.ends_with(".wado") {
-            if let Ok(text) = fs::read_to_string(&entry.path) {
-                into[entry.path] = text;
-            }
+            into[entry.path] = fs::read_to_string(&entry.path)?;
         }
     }
+    return Result::Ok(());
 }
 
 /// Report each block of `paths` that does not comply, and how many there were.
+/// A fixture tree read only in part fails the check: a helper reached only from
+/// the unread part would be reported as reached by no fixture.
 fn report(paths: &List<String>) -> i32 with (Stderr, Preopens) {
     let mut files = TreeMap::<String, String>::new();
-    read_fixtures(&mut files);
+    if let Err(e) = read_fixtures(&mut files) {
+        eprintln(`error: ${e}`);
+        return 1;
+    }
     let reached = reached_helpers(&files);
     let mut failed = 0;
     for let path of paths {
