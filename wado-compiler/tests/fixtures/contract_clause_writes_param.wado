@@ -29,6 +29,12 @@ fn bumped_beside(mut n: i32, xs: &List<i32>) -> i32
     return n + xs.len();
 }
 
+fn bumped_then(mut n: i32, k: i32) -> i32
+    contract bump(&mut n)
+{
+    return n * 10 + k;
+}
+
 export fn run() with Stdout {
     let a = builtin::black_box(5);
     println(`${bumped(a)} ${a}`);
@@ -38,11 +44,12 @@ export fn run() with Stdout {
     println(`${bumped(ys[1])} ${ys[1]}`);
     println(`${bumped_beside(a, &ys)} ${a}`);
     println(`${doubled(a)} ${a}`);
+    println(`${bumped_then(a, 3)} ${a}`);
     let f: fn(i32) -> i32 = bumped;
     println(`${f(a)} ${a}`);
 }
 
 __DATA__
 {
-    "stdout": "6 5\n6 5\n9 8\n8 5\n10 5\n6 5\n"
+    "stdout": "6 5\n6 5\n9 8\n8 5\n10 5\n63 5\n6 5\n"
 }

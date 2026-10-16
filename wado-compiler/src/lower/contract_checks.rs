@@ -682,9 +682,10 @@ impl TirMutVisitor for Expander<'_> {
 impl Expander<'_> {
     /// Rewrite `call` to a call to the twin whose last argument checks the
     /// callee's clauses once every argument is evaluated, so the call stays
-    /// the place an index call names. Where the last parameter borrows, or no
-    /// twin follows a trait's clauses, the clauses and then the call form a
-    /// block instead, its arguments bound ahead.
+    /// the place an index call names. Where the last parameter borrows, a
+    /// clause writes an earlier one, which the call would already have read,
+    /// or no twin follows a trait's clauses, the clauses and then the call
+    /// form a block instead, its arguments bound ahead.
     fn expand(&mut self, call: &mut TirExpr, key: FunctionId) {
         let contracts = self.contracts;
         let contract = &contracts[&key];
@@ -702,7 +703,11 @@ impl Expander<'_> {
             && contract
                 .params
                 .last()
-                .is_some_and(|&param| RefKind::from_resolved(self.type_table.get(param)).is_none());
+                .is_some_and(|&param| RefKind::from_resolved(self.type_table.get(param)).is_none())
+            && contract
+                .written
+                .iter()
+                .all(|&param| param as usize + 1 == contract.params.len());
         // The last argument's own bindings are `let`s in its block, which the
         // clauses after them share; only an earlier argument's are assigned.
         let mut stmts = Vec::new();
