@@ -56,3 +56,29 @@ impl Rule for IdentityDerefRule {
         e.redirect_expr(id, inner)
     }
 }
+
+/// `(&e).f` is `e.f`: a field access reads through a reference as it reads
+/// the value. Inlining a `&self` method on a local leaves one per field the
+/// body reads, and the reference keeps the read from forwarding the local's
+/// field, or from hoisting it out of a loop.
+pub(super) struct FieldThroughRefRule;
+
+impl Rule for FieldThroughRefRule {
+    fn apply_expr(&self, e: &mut Engine, id: ExprId) -> bool {
+        let ExprKind::FieldAccess { expr: base, .. } = &e.body.exprs[id].kind else {
+            return false;
+        };
+        let Some(reference) = base.as_expr() else {
+            return false;
+        };
+        let ExprKind::Unary {
+            op: NirUnaryOp::Ref | NirUnaryOp::MutRef,
+            expr: inner,
+        } = &e.body.exprs[reference].kind
+        else {
+            return false;
+        };
+        let inner = *inner;
+        e.redirect_expr(reference, inner)
+    }
+}

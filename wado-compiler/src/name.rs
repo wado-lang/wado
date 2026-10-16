@@ -113,6 +113,17 @@ pub fn checked_name(name: &str) -> &str {
 
 const UNCHECKED_TWIN_SUFFIX: &str = "$unchecked";
 
+/// The name of the function reporting the failure of the `ordinal`th
+/// `contract` clause of the function `function` identifies, shared by every
+/// call checking it. It lives in the function's module, so the module is left
+/// out of it.
+pub fn contract_report_name(function: &FunctionId, ordinal: u32) -> String {
+    match function {
+        FunctionId::Free(free) => format!("{}$contract_report{ordinal}", free.name),
+        FunctionId::Method(method) => format!("{method}$contract_report{ordinal}"),
+    }
+}
+
 /// The `core:builtin` intrinsic heading each `contract` clause of a function,
 /// `if $contract_clause() { … }`, which `lower::contract_checks` copies to
 /// each call and then unwraps. No source spells it.

@@ -9,7 +9,11 @@
 //! `-f contract-checks` turned it back (see [`check_marked_calls`]). `F` itself
 //! is left to the calls that reach it as a value, which check at the clause.
 
-use crate::compiler_item::CompilerItems;
+use std::cell::RefCell;
+use std::rc::Rc;
+
+use crate::call_args::CallArgs;
+use crate::compiler_item::{CompilerItem, CompilerItems};
 use crate::defs::DefId;
 use crate::elaborator::trait_env::TraitEnv;
 use crate::flat_package::FlatPackage;
@@ -18,13 +22,16 @@ use crate::lower::plan::value_copy::place::{
     is_source_place, place_root, source_place_subscripts_mut,
 };
 use crate::lower::translate::{convert_function_ref, tir_function_key};
+use crate::module_source::ModuleSource;
 use crate::name::{
     CONTRACT_CLAUSE_INTRINSIC, CONTRACT_SITE_INTRINSIC, FunctionId, LocalMethodName, RefKind,
-    minted_name,
+    contract_report_name, minted_name,
 };
+use crate::synthesis::common::builtin_call;
 use crate::tir::{
-    CallArg, LetStorage, TemplateId, TirBlock, TirExpr, TirExprKind, TirFunction, TirLocal,
-    TirStmt, TirStmtKind, TirUnaryOp, TypeId, TypeTable, assign_stmt,
+    CallArg, FunctionRef, LetStorage, LocalFrame, TemplateId, TirBlock, TirExpr, TirExprKind,
+    TirFunction, TirLocal, TirParam, TirPattern, TirStmt, TirStmtKind, TirUnaryOp, TypeId, TypeTable,
+    assign_stmt,
 };
 use crate::tir_visitor::{TirMutVisitor, TirRefVisitor, remap_locals};
 
@@ -72,7 +79,8 @@ impl TirMutVisitor for MarkedCalls {
 }
 
 /// Copy each function's `contract` clauses to every call naming it.
-pub fn lower(flat: &FlatPackage) {
+pub fn lower(flat: &mut FlatPackage) {
+    share_reports(flat);
     let contracts = collect_contracts(flat);
     let type_table = flat.type_table.borrow();
     let items = type_table.compiler_items();
@@ -119,14 +127,8 @@ fn collect_contracts(flat: &FlatPackage) -> IndexMap<FunctionId, Contract> {
         let Some(body) = &func.body else {
             continue;
         };
-        let clauses = body
-            .stmts
-            .iter()
-            .take_while(|s| is_contract_clause(s))
-            .count();
-        // A closure numbers its locals from its own zero, so its captures
-        // name a parameter by index, which no argument can stand in for.
-        if clauses == 0 || body.stmts[..clauses].iter().any(holds_closure) {
+        let clauses = copied_clauses(body);
+        if clauses == 0 {
             continue;
         }
         let forward = match body.stmts.get(clauses..) {
@@ -158,6 +160,288 @@ fn collect_contracts(flat: &FlatPackage) -> IndexMap<FunctionId, Contract> {
         );
     }
     contracts
+}
+
+/// How many `contract` clauses `body` opens with that a call can copy: none
+/// where one holds a closure, which numbers its locals from its own zero, so
+/// its captures name a parameter by index, which no argument can stand in for.
+fn copied_clauses(body: &TirBlock) -> usize {
+    let clauses = body
+        .stmts
+        .iter()
+        .take_while(|s| is_contract_clause(s))
+        .count();
+    if body.stmts[..clauses].iter().any(holds_closure) {
+        return 0;
+    }
+    clauses
+}
+
+/// Move what each failed clause reports into a function of its own,
+/// `F$contract_report{k}`, which every copy of the clause calls: a call then
+/// copies the clause's condition and that call, not a message builder each.
+/// The report takes the locals the message reads, so a call passes those
+/// alone, and no container the message leaves out escapes into it.
+fn share_reports(flat: &mut FlatPackage) {
+    if flat.codegen_flags.bare_asserts {
+        return;
+    }
+    let assert_failed = {
+        let type_table = flat.type_table.borrow();
+        let (module, name) = type_table
+            .compiler_items()
+            .require_function(CompilerItem::AssertFailed);
+        (module.clone(), name.to_string())
+    };
+    let mut reports = Vec::new();
+    for func_rc in &flat.functions {
+        let mut func = func_rc.borrow_mut();
+        let Some(mut body) = func.body.take() else {
+            continue;
+        };
+        let clauses = copied_clauses(&body);
+        let mut failures = ReportFailures {
+            assert_failed: &assert_failed,
+            func: &func,
+            reports: &mut reports,
+            made: 0,
+        };
+        for clause in &mut body.stmts[..clauses] {
+            failures.visit_stmt(clause);
+        }
+        func.body = Some(body);
+    }
+    flat.functions
+        .extend(reports.into_iter().map(|report| Rc::new(RefCell::new(report))));
+}
+
+/// Replace each failure block of a clause, which ends in `assert_failed`
+/// reporting `$contract_site`, with a call to a report made of it.
+struct ReportFailures<'a> {
+    assert_failed: &'a (ModuleSource, String),
+    /// The function whose clauses fail, its body taken out.
+    func: &'a TirFunction,
+    reports: &'a mut Vec<TirFunction>,
+    made: u32,
+}
+
+impl TirMutVisitor for ReportFailures<'_> {
+    fn visit_block(&mut self, block: &mut TirBlock) {
+        let fails = block.stmts.iter().any(|stmt| {
+            matches!(&stmt.kind, TirStmtKind::Expr(TirExpr { kind: TirExprKind::Call { func, .. }, .. })
+                if func.module_source == self.assert_failed.0 && func.name == self.assert_failed.1)
+        });
+        let site = fails.then(|| find_site(block)).flatten();
+        let Some(site) = site else {
+            self.walk_block(block);
+            return;
+        };
+        let span = block.span;
+        let failure = std::mem::take(&mut block.stmts);
+        let LocalUse { read, declared } = local_use(&failure);
+        let free: Vec<u32> = read.difference(&declared).copied().collect();
+        let report = FunctionRef {
+            module_source: self.func.module_source.clone(),
+            name: contract_report_name(&tir_function_key(self.func), self.made),
+            template: None,
+            monomorph_info: None,
+            method_info: None,
+        };
+        self.made += 1;
+        let args = free
+            .iter()
+            .map(|&index| {
+                let local = &self.func.locals[index as usize];
+                let read = TirExprKind::Local {
+                    index,
+                    name: local.name.clone(),
+                };
+                CallArg::new(TirExpr::new(read, local.type_id, span), false)
+            })
+            .chain([CallArg::new(site.clone(), false)])
+            .collect();
+        self.reports.push(report_function(
+            self.func,
+            report.name.clone(),
+            failure,
+            &free,
+            &declared,
+            site.type_id,
+        ));
+        let call = TirExpr::new(
+            TirExprKind::Call {
+                func: Box::new(report),
+                type_args: Vec::new(),
+                args: CallArgs::free(args),
+            },
+            TypeTable::NEVER,
+            span,
+        );
+        block.stmts = vec![
+            TirStmt::new(
+                TirStmtKind::Expr(builtin_call("cold_path", Vec::new(), TypeTable::UNIT)),
+                span,
+            ),
+            TirStmt::new(TirStmtKind::Expr(call), span),
+        ];
+    }
+}
+
+/// The `$contract_site` call `block` reports, if any.
+fn find_site(block: &TirBlock) -> Option<TirExpr> {
+    struct Find(Option<TirExpr>);
+    impl TirRefVisitor for Find {
+        fn visit_expr(&mut self, expr: &TirExpr) {
+            if self.0.is_some() {
+                return;
+            }
+            if is_intrinsic_call(expr, CONTRACT_SITE_INTRINSIC) {
+                self.0 = Some(expr.clone());
+            } else {
+                self.walk_expr(expr);
+            }
+        }
+    }
+    let mut find = Find(None);
+    find.visit_block(block);
+    find.0
+}
+
+/// The locals `stmts` read, and those it declares, each in the order met.
+struct LocalUse {
+    read: IndexSet<u32>,
+    declared: IndexSet<u32>,
+}
+
+impl TirRefVisitor for LocalUse {
+    fn visit_expr(&mut self, expr: &TirExpr) {
+        if let TirExprKind::Local { index, .. } = expr.kind {
+            self.read.insert(index);
+        }
+        self.walk_expr(expr);
+    }
+
+    fn visit_stmt(&mut self, stmt: &TirStmt) {
+        if let TirStmtKind::Let { local_index, .. } = stmt.kind {
+            self.declared.insert(local_index);
+        }
+        self.walk_stmt(stmt);
+    }
+
+    fn visit_pattern(&mut self, pattern: &TirPattern) {
+        if let Some((local_index, _)) = pattern.declared_local() {
+            self.declared.insert(local_index);
+        }
+        self.walk_pattern(pattern);
+    }
+}
+
+fn local_use(stmts: &[TirStmt]) -> LocalUse {
+    let mut uses = LocalUse {
+        read: IndexSet::default(),
+        declared: IndexSet::default(),
+    };
+    for stmt in stmts {
+        uses.visit_stmt(stmt);
+    }
+    uses
+}
+
+/// A report: `failure`, a clause's failure block in `func`, taking the locals
+/// of `func` it reads but does not declare, `free`, and then the site to
+/// report.
+fn report_function(
+    func: &TirFunction,
+    name: String,
+    failure: Vec<TirStmt>,
+    free: &[u32],
+    declared: &IndexSet<u32>,
+    site_type: TypeId,
+) -> TirFunction {
+    let span = func.span;
+    let site = free.len() as u32;
+    let site_name = "$site".to_string();
+    let renumber: IndexMap<u32, u32> = free
+        .iter()
+        .chain(declared)
+        .enumerate()
+        .map(|(i, &local)| {
+            let i = i as u32;
+            (local, if i < site { i } else { i + 1 })
+        })
+        .collect();
+    let local_of = |index: u32| func.locals[index as usize].clone();
+    let params = free.iter().enumerate().map(|(i, &local)| {
+        let local = local_of(local);
+        TirParam {
+            name: local.name,
+            type_id: local.type_id,
+            local_index: i as u32,
+            is_mut: false,
+            is_mut_ref: false,
+            span,
+        }
+    });
+    let site_param = TirParam {
+        name: site_name.clone(),
+        type_id: site_type,
+        local_index: site,
+        is_mut: false,
+        is_mut_ref: false,
+        span,
+    };
+    let params: Vec<TirParam> = params.chain([site_param]).collect();
+    let locals = params
+        .iter()
+        .map(|param| TirLocal {
+            name: param.name.clone(),
+            type_id: param.type_id,
+            is_mut: false,
+            span,
+        })
+        .chain(declared.iter().map(|&local| local_of(local)))
+        .collect();
+    let frame = LocalFrame {
+        locals,
+        address_taken: func
+            .address_taken_locals
+            .iter()
+            .filter_map(|local| renumber.get(local).copied())
+            .collect(),
+    };
+    // The report is cold as a whole; the call to it keeps the marker.
+    let stmts = failure
+        .into_iter()
+        .filter(|stmt| !matches!(&stmt.kind, TirStmtKind::Expr(expr) if is_intrinsic_call(expr, "cold_path")))
+        .collect();
+    let mut body = TirExpr::new(
+        TirExprKind::Block(TirBlock::new(stmts, span)),
+        TypeTable::NEVER,
+        span,
+    );
+    remap_locals(&mut body, |local| renumber[&local]);
+    Substitute {
+        offset: 0,
+        substitutes: &[],
+        site: &TirExprKind::Local {
+            index: site,
+            name: site_name,
+        },
+    }
+    .visit_expr(&mut body);
+    let TirExprKind::Block(body) = body.kind else {
+        unreachable!("built as a block above");
+    };
+    let mut report = TirFunction::synthesized(
+        func.module_source.clone(),
+        name,
+        TypeTable::NEVER,
+        body,
+        frame,
+        span,
+    );
+    report.params = params;
+    report
 }
 
 /// `expr`, leaving a unit in its place.
@@ -342,7 +626,7 @@ impl Expander<'_> {
         Substitute {
             offset: base + own,
             substitutes: &substitutes,
-            site: &site,
+            site: &TirExprKind::StringLiteral(site.clone()),
         }
         .visit_expr(&mut clauses);
         let TirExprKind::Block(TirBlock { stmts: copied, .. }) = clauses.kind else {
@@ -613,7 +897,8 @@ struct Substitute<'a> {
     /// Where the callee's parameters are numbered among the caller's locals.
     offset: u32,
     substitutes: &'a [TirExpr],
-    site: &'a str,
+    /// What each `$contract_site` reads instead.
+    site: &'a TirExprKind,
 }
 
 impl TirMutVisitor for Substitute<'_> {
@@ -625,7 +910,7 @@ impl TirMutVisitor for Substitute<'_> {
                 *expr = self.substitutes[(index - self.offset) as usize].clone();
             }
             _ if is_intrinsic_call(expr, CONTRACT_SITE_INTRINSIC) => {
-                expr.kind = TirExprKind::StringLiteral(self.site.to_string());
+                expr.kind = self.site.clone();
             }
             _ => self.walk_expr(expr),
         }
