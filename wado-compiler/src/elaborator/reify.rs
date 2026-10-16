@@ -10395,7 +10395,10 @@ fn call_with_params(
                 index: param.local_index,
                 name: param.name.clone(),
             };
-            CallArg::new(TirExpr::new(local, param.type_id, span), callee_param.is_mut)
+            CallArg::new(
+                TirExpr::new(local, param.type_id, span),
+                callee_param.is_mut,
+            )
         })
         .collect();
     TirExpr::new(

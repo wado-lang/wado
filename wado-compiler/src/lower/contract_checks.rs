@@ -324,7 +324,11 @@ impl Expander<'_> {
             let forwarded = take(call);
             stmts.extend(copied.stmts);
             stmts.push(TirStmt::new(TirStmtKind::Expr(forwarded), span));
-            *call = TirExpr::new(TirExprKind::Block(TirBlock::new(stmts, span)), type_id, span);
+            *call = TirExpr::new(
+                TirExprKind::Block(TirBlock::new(stmts, span)),
+                type_id,
+                span,
+            );
             return;
         }
         let last = args
@@ -360,7 +364,8 @@ impl Expander<'_> {
             };
             &mut **expr
         } else if is_source_place(&arg.expr, self.items)
-            && (RefKind::from_resolved(self.type_table.get(param_type)).is_some() || !later_args_run)
+            && (RefKind::from_resolved(self.type_table.get(param_type)).is_some()
+                || !later_args_run)
         {
             &mut arg.expr
         } else {
@@ -382,7 +387,12 @@ impl Expander<'_> {
     /// Bind the value `arg` passes as a `let` in `stmts`, a borrow included,
     /// and pass the bound local instead: the call follows every `let`, so
     /// anything it evaluated itself would run after the later arguments.
-    fn bind_passed(&mut self, arg: &mut CallArg, param_type: TypeId, stmts: &mut Vec<TirStmt>) -> TirExpr {
+    fn bind_passed(
+        &mut self,
+        arg: &mut CallArg,
+        param_type: TypeId,
+        stmts: &mut Vec<TirStmt>,
+    ) -> TirExpr {
         if let Some(op) = self.receiver_borrow(&arg.expr, param_type) {
             arg.expr = borrow_of(take(&mut arg.expr), op, param_type);
         }

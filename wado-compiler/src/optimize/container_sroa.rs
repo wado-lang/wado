@@ -1384,7 +1384,12 @@ fn peel_value_copy(body: &Body, e: ExprId, value_copy_ids: &IndexSet<FuncId>) ->
 /// field is then copied by value and the struct-level clone is redundant. For
 /// an identity-carrying field the copy is load-bearing, so it stays, and SROA
 /// bails on the candidate.
-fn peel_source(body: &Body, e: ExprId, all_scalar: bool, value_copy_ids: &IndexSet<FuncId>) -> ExprId {
+fn peel_source(
+    body: &Body,
+    e: ExprId,
+    all_scalar: bool,
+    value_copy_ids: &IndexSet<FuncId>,
+) -> ExprId {
     if all_scalar {
         peel_value_copy(body, e, value_copy_ids)
     } else {
