@@ -1,0 +1,21 @@
+// Regression: under `while i <= n`, the entry constant floors `i` only for a
+// check whose upper half is refuted too, since that is what keeps `i + 1` from
+// wrapping. A lone `0 <= i` has none, so at `n = i8::MAX` it MUST still trap.
+#[inline(never)]
+fn walk(n: i8) -> i32 {
+    let mut i: i8 = 0;
+    let mut steps = 0;
+    while i <= n {
+        assert 0 <= i;
+        steps += 1;
+        i += 1;
+    }
+    return steps;
+}
+
+export fn run() {
+    let _ = walk(builtin::black_box(127 as i8));
+}
+
+__DATA__
+{"stderr_contains": ["Assertion failed"], "trapped": true}

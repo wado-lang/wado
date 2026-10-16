@@ -1237,13 +1237,15 @@ fn structural_loop_guard(
     };
     // A `<` guard leaves `var` a step below its bound, so the `+ 1` of a
     // counting loop cannot wrap and the entry constant floors every iteration,
-    // as does a `<=` guard on a constant below `i32::MAX`. A `<=` guard on a
-    // local has no such headroom of its own. Under `var <= gbl`, a check whose
-    // upper half is refuted reads a length `gbl + c` with `c > 0`, which puts
-    // `gbl` below `i32::MAX`, so the floor holds for that check alone;
-    // elsewhere `loop_version_bce` buys it back from the versioning residual.
+    // as does a `<=` guard on a constant below the most `var`'s type holds. A
+    // `<=` guard on a local has no such headroom of its own. Under `var <= gbl`,
+    // a check whose upper half is refuted reads a length `gbl + c` with
+    // `c > 0`, which puts `gbl` below `i32::MAX`, so the floor holds for that
+    // check alone; elsewhere `loop_version_bce` buys it back from the
+    // versioning residual.
     let alone = gop == NirBinaryOp::Lt
-        || matches!(strategy, GuardStrategy::ConstUb(ub) if ub < i64::from(i32::MAX));
+        || matches!(strategy, GuardStrategy::ConstUb(ub)
+            if local_int_max(engine, var).is_some_and(|max| ub < max));
     let floor = (goff == 0 && (alone || matches!(strategy, GuardStrategy::LeLocal(_))))
         .then(|| induction_entry(engine, binds, parent, loop_stmt, loop_body, var))
         .flatten()
@@ -1266,6 +1268,14 @@ fn structural_loop_guard(
         };
     }
     changed
+}
+
+/// The most `var`'s integer type holds, where the type table says.
+fn local_int_max(engine: &Engine, var: u32) -> Option<i64> {
+    let types = engine.value_graph_type_table()?;
+    let local = &engine.locals()[var as usize];
+    let (_, max) = types.primitive_head(local.type_id)?.int_range()?;
+    i64::try_from(max).ok()
 }
 
 /// How a parsed loop guard refutes the checks it dominates.
@@ -1375,6 +1385,9 @@ fn check_refuted(
     let Some(parts) = check_conjuncts(engine, binds, cond) else {
         return false;
     };
+    // A floor not `alone` rests on an upper half this check must also refute.
+    let has_upper = parts.iter().any(|p| matches!(p, Conjunct::Lt(..)));
+    let floor = floor.filter(|f| f.alone || has_upper);
     parts
         .into_iter()
         .all(|part| part_holds(engine, binds, part, floor, refute))

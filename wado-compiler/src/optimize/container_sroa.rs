@@ -1379,6 +1379,19 @@ fn peel_value_copy(body: &Body, e: ExprId, value_copy_ids: &IndexSet<FuncId>) ->
     cur
 }
 
+/// A slot copy's source as the analysis and the rewrite both read it: under
+/// its `$value_copy$T` wrappers where the element is all-scalar, since each
+/// field is then copied by value and the struct-level clone is redundant. For
+/// an identity-carrying field the copy is load-bearing, so it stays, and SROA
+/// bails on the candidate.
+fn peel_source(body: &Body, e: ExprId, all_scalar: bool, value_copy_ids: &IndexSet<FuncId>) -> ExprId {
+    if all_scalar {
+        peel_value_copy(body, e, value_copy_ids)
+    } else {
+        e
+    }
+}
+
 /// Recognize the supported initializer form, matched structurally: a
 /// `Constructor` call whose capacity argument is side-effect-free (so it can be
 /// cloned per field), or a `FromArray` call handed the empty `[]` literal
@@ -1581,14 +1594,7 @@ impl WhitelistChecker<'_> {
         expected_layout: &ElementLayout,
         src_all_scalar: bool,
     ) -> bool {
-        // See through a defensive slot copy `v[i] = $value_copy$T(src)` when the
-        // element is all-scalar: after decomposition each field is copied by
-        // value, so the struct-level clone is redundant. For an identity-carrying
-        // field the copy is load-bearing, so leave it (this arm doesn't fire) and
-        // SROA conservatively bails on the candidate.
-        if src_all_scalar && let Some(inner) = strip_one_value_copy(body, e, self.value_copy_ids) {
-            return self.check_source(body, inner, expected_arity, expected_layout, src_all_scalar);
-        }
+        let e = peel_source(body, e, src_all_scalar, self.value_copy_ids);
         match &body.exprs[e].kind {
             // Direct tuple literal `[e0, e1, ...]` (heap or multi-value form).
             ExprKind::TupleLiteral { elements } => {
@@ -2093,11 +2099,7 @@ impl Rewriter<'_, '_> {
     /// Whether [`Self::decompose_source`] evaluates `src`'s index into a
     /// temporary, ahead of any index read again per field.
     fn source_spills_index(&self, body: &Body, src: ExprId, src_all_scalar: bool) -> bool {
-        let src = if src_all_scalar {
-            strip_one_value_copy(body, src, self.ctx.value_copy_ids).unwrap_or(src)
-        } else {
-            src
-        };
+        let src = peel_source(body, src, src_all_scalar, self.ctx.value_copy_ids);
         body.exprs[src]
             .kind
             .as_method_call()
@@ -2122,20 +2124,7 @@ impl Rewriter<'_, '_> {
         out: &mut Vec<StmtId>,
     ) -> Option<Vec<Operand>> {
         let ctx = self.ctx;
-        // See through a defensive slot copy `$value_copy$T(src)` — matches
-        // `check_source`. The wrapped element read is decomposed instead.
-        if src_all_scalar
-            && let Some(inner) = strip_one_value_copy(engine.body, expr, ctx.value_copy_ids)
-        {
-            return self.decompose_source(
-                engine,
-                inner,
-                expected_arity,
-                expected_layout,
-                src_all_scalar,
-                out,
-            );
-        }
+        let expr = peel_source(engine.body, expr, src_all_scalar, ctx.value_copy_ids);
         // Classify the source shape from a read-only inspection first.
         enum Source {
             Tuple(Vec<Operand>),

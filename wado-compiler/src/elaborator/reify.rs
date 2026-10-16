@@ -10385,15 +10385,17 @@ fn call_with_params(
         })
         .collect();
     assert_eq!(func.type_params.len(), callee.type_params.len());
+    assert_eq!(func.params.len(), callee.params.len());
     let args = func
         .params
         .iter()
-        .map(|param| {
+        .zip(&callee.params)
+        .map(|(param, callee_param)| {
             let local = TirExprKind::Local {
                 index: param.local_index,
                 name: param.name.clone(),
             };
-            CallArg::new(TirExpr::new(local, param.type_id, span), param.is_mut)
+            CallArg::new(TirExpr::new(local, param.type_id, span), callee_param.is_mut)
         })
         .collect();
     TirExpr::new(

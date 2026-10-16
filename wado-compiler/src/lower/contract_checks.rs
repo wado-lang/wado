@@ -251,7 +251,10 @@ impl Expander<'_> {
             .zip(&contract.params)
             .enumerate()
             .map(|(i, (arg, &param_type))| {
-                let sink = if in_last_arg && i < last_index {
+                if !in_last_arg {
+                    return self.bind_passed(arg, param_type, &mut stmts);
+                }
+                let sink = if i < last_index {
                     Sink::InPlace
                 } else {
                     Sink::Ahead(&mut stmts)
@@ -317,10 +320,11 @@ impl Expander<'_> {
         func.clone_from(twin);
         call_type_args.clone_from(type_args);
         if !in_last_arg {
-            let forwarded = TirExpr::new(take_kind(call), call.type_id, span);
+            let type_id = call.type_id;
+            let forwarded = take(call);
             stmts.extend(copied.stmts);
             stmts.push(TirStmt::new(TirStmtKind::Expr(forwarded), span));
-            call.kind = TirExprKind::Block(TirBlock::new(stmts, span));
+            *call = TirExpr::new(TirExprKind::Block(TirBlock::new(stmts, span)), type_id, span);
             return;
         }
         let last = args
@@ -339,9 +343,13 @@ impl Expander<'_> {
     }
 
     /// What the clauses read for the parameter `arg` passes, evaluating it
-    /// once: a place stays in the call for a `&mut` parameter to write, with
-    /// its subscripts bound; any other value is bound and read from there.
+    /// once: a place a reference parameter takes stays in the call, with its
+    /// subscripts bound, as the callee reads through it only once it runs; any
+    /// other value is bound and read from there. A place read by value stays
+    /// only as the last argument: nothing runs between it and the clauses to
+    /// change what it holds.
     fn bind_ahead(&mut self, arg: &mut CallArg, param_type: TypeId, mut sink: Sink<'_>) -> TirExpr {
+        let later_args_run = matches!(sink, Sink::InPlace);
         let borrowed_place = matches!(
             &arg.expr.kind,
             TirExprKind::Unary { op: TirUnaryOp::Ref | TirUnaryOp::MutRef, expr } if is_source_place(expr, self.items)
@@ -351,38 +359,47 @@ impl Expander<'_> {
                 unreachable!("matched above");
             };
             &mut **expr
-        } else if is_source_place(&arg.expr, self.items) {
+        } else if is_source_place(&arg.expr, self.items)
+            && (RefKind::from_resolved(self.type_table.get(param_type)).is_some() || !later_args_run)
+        {
             &mut arg.expr
         } else {
             return self.bind(&mut arg.expr, sink.reborrow());
         };
         let items = self.items;
         for subscript in source_place_subscripts_mut(place, items) {
-            if !matches!(subscript.kind, TirExprKind::Local { .. }) {
+            if later_args_run || !matches!(subscript.kind, TirExprKind::Local { .. }) {
                 self.bind(subscript, sink.reborrow());
             }
         }
         let read = self.read_of(&arg.expr);
-        // A receiver is passed as its place where the parameter borrows it.
-        let borrow = RefKind::from_resolved(self.type_table.get(param_type));
-        match borrow {
-            Some(kind) if RefKind::from_resolved(self.type_table.get(read.type_id)).is_none() => {
-                let op = match kind {
-                    RefKind::Shared => TirUnaryOp::Ref,
-                    RefKind::Mut => TirUnaryOp::MutRef,
-                };
-                let span = read.span;
-                TirExpr::new(
-                    TirExprKind::Unary {
-                        op,
-                        expr: Box::new(read),
-                    },
-                    param_type,
-                    span,
-                )
-            }
-            _ => read,
+        match self.receiver_borrow(&read, param_type) {
+            Some(op) => borrow_of(read, op, param_type),
+            None => read,
         }
+    }
+
+    /// Bind the value `arg` passes as a `let` in `stmts`, a borrow included,
+    /// and pass the bound local instead: the call follows every `let`, so
+    /// anything it evaluated itself would run after the later arguments.
+    fn bind_passed(&mut self, arg: &mut CallArg, param_type: TypeId, stmts: &mut Vec<TirStmt>) -> TirExpr {
+        if let Some(op) = self.receiver_borrow(&arg.expr, param_type) {
+            arg.expr = borrow_of(take(&mut arg.expr), op, param_type);
+        }
+        self.bind(&mut arg.expr, Sink::Ahead(stmts))
+    }
+
+    /// The borrow a receiver passed as its place takes, where the parameter
+    /// borrows it.
+    fn receiver_borrow(&self, arg: &TirExpr, param_type: TypeId) -> Option<TirUnaryOp> {
+        let kind = RefKind::from_resolved(self.type_table.get(param_type))?;
+        if RefKind::from_resolved(self.type_table.get(arg.type_id)).is_some() {
+            return None;
+        }
+        Some(match kind {
+            RefKind::Shared => TirUnaryOp::Ref,
+            RefKind::Mut => TirUnaryOp::MutRef,
+        })
     }
 
     /// Bind what `slot` evaluates to a new local of the function, where `sink`
@@ -503,9 +520,16 @@ impl Sink<'_> {
     }
 }
 
-/// `expr`'s kind, leaving a unit in its place.
-fn take_kind(expr: &mut TirExpr) -> TirExprKind {
-    std::mem::replace(&mut expr.kind, TirExprKind::Unit)
+fn borrow_of(place: TirExpr, op: TirUnaryOp, type_id: TypeId) -> TirExpr {
+    let span = place.span;
+    TirExpr::new(
+        TirExprKind::Unary {
+            op,
+            expr: Box::new(place),
+        },
+        type_id,
+        span,
+    )
 }
 
 /// Read each parameter of a copied clause as the call's argument, and report
