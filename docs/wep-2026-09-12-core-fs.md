@@ -52,7 +52,7 @@ pub fn exists<S: AsStrSlice>(path: S) -> bool with Preopens;
 pub fn try_exists<S: AsStrSlice>(path: S) -> Result<bool, FsError> with Preopens;
 
 pub fn read_dir<S: AsStrSlice>(path: S) -> Result<List<DirEntry>, FsError> with Preopens;
-pub fn walk_dir<S: AsStrSlice>(path: S, descend: fn(&WalkEntry) -> bool = …) -> Result<List<WalkEntry>, FsError> with Preopens;
+pub fn walk_dir<S: AsStrSlice>(path: S, descend: fn(&WalkEntry) -> bool = …) -> Result<Walk, FsError> with Preopens;
 pub fn create_dir<S: AsStrSlice>(path: S) -> Result<(), FsError> with Preopens;
 pub fn create_dir_all<S: AsStrSlice>(path: S) -> Result<(), FsError> with Preopens;
 pub fn remove_dir<S: AsStrSlice>(path: S) -> Result<(), FsError> with Preopens;
@@ -317,18 +317,26 @@ A file that calls `wasi:filesystem` itself still imports it. `example/cat.wado`
 streams and `package-gale/src/main.wado` searches every grant, and this module
 does neither. The re-export is for the caller that only needed the name.
 
-### A walk is a list
+### A walk is an iterator
 
-`walk_dir` lists a whole tree before it returns. The shape that suggests itself
-is an iterator, and it was not available when this was decided: `Iterator` said
-`with ()` then, so a `next` that reads a directory could not be written. A walk
-too large to hold is `read_dir` and a
-recursion of the caller's own, which is what `example/tree.wado` keeps.
+`walk_dir` lists the directory it is handed and returns a `Walk`, an iterator
+that lists each directory under it only when it reaches it. A caller that stops
+early never pays for the rest of the tree, and a tree too large to hold is
+walked in the memory of its deepest path.
+[WEP: Effects Through Closures](./wep-2026-10-11-effects-through-closures.md)
+is what made this shape available: before it, `Iterator` said `with ()`, so a
+`next` that reads a directory could not be written, and `walk_dir` returned a
+list of the whole tree.
 
-The cost that shape would have saved is pruning, so `walk_dir` takes the
-predicate instead: `descend` is asked about a directory before the walk enters
-it, and the directory is listed either way. Without it the callers that skip
-`.git` and `node_modules` would pay to list them.
+So a failure has two places. The directory handed to `walk_dir` fails the call,
+as `read_dir` does, and `?` on it reads as it did for the list. A directory
+under it that cannot be listed is an item, `Err` where its entries would have
+been, and the walk goes on with the next entry rather than ending. A caller
+that wants to stop at the first failure writes `?` on the item.
+
+`descend` is asked about a directory before the walk enters it, and the
+directory is yielded either way. Without it the callers that skip `.git` and
+`node_modules` would pay to list them.
 
 An entry carries the path that reaches it rather than its name alone. A walk's
 answer is read, removed or opened, and rebuilding the path from a name is the
@@ -427,7 +435,3 @@ cannot reach is unowned and sits below.
 - An unnamed cause renders through `Inspect`, so `Io(ErrorCode::Access)` reads
   as `path: ErrorCode::Access` rather than as prose. Prose would need a message
   for each of the 40 `ErrorCode`s, most of which no caller branches on.
-- `walk_dir` holds the whole tree before it returns, though the reason it was
-  given no other shape is gone:
-  [WEP: Effects Through Closures](./wep-2026-10-11-effects-through-closures.md)
-  lets an iterator perform I/O.

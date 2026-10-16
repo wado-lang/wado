@@ -248,7 +248,7 @@ test "walk_dir reaches every entry under the path" {
 
     let mut names: List<String> = [];
     for let entry of fs::walk_dir(&dir).unwrap() {
-        names.push(entry.path);
+        names.push(entry.unwrap().path);
     }
     names.sort();
     assert names.len() == 5;
@@ -266,6 +266,7 @@ test "a walked path reads back without being rebuilt" {
 
     let mut found = 0;
     for let entry of fs::walk_dir(&dir).unwrap() {
+        let entry = entry.unwrap();
         if entry.type matches { File } {
             assert fs::read_to_string(&entry.path).unwrap() == "leaf";
             found += 1;
@@ -285,7 +286,7 @@ test "a walk skips the subtree it is told not to enter" {
     // means a name takes the name.
     let mut names: List<String> = [];
     for let entry of fs::walk_dir(&dir, |e| fs::file_name(&e.path).unwrap() != "skip").unwrap() {
-        names.push(entry.path);
+        names.push(entry.unwrap().path);
     }
     names.sort();
     assert names.len() == 3;
@@ -296,7 +297,22 @@ test "a walk skips the subtree it is told not to enter" {
 
 test "walking an empty directory answers nothing" {
     let dir = scratch("walk-empty");
-    assert fs::walk_dir(&dir).unwrap().is_empty();
+    assert fs::walk_dir(&dir).unwrap().next() == null;
+}
+
+test "a walk lists a directory only when it reaches it" {
+    let dir = scratch("walk-lazy");
+    fs::create_dir_all(`${dir}/only-dir/sub`).unwrap();
+
+    // The one lookup lists `only-dir`. Yielding `sub` takes none; listing what
+    // `sub` holds is the next one, and fails, after which the walk is done.
+    let mut one = Rationed { left: 1 };
+    with Preopens => &mut one do {
+        let mut walk = fs::walk_dir(`${dir}/only-dir`).unwrap();
+        assert walk.next().unwrap().unwrap().path == `${dir}/only-dir/sub`;
+        assert no_preopen(walk.next().unwrap());
+        assert walk.next() == null;
+    };
 }
 
 test "walking what is not a directory fails" {
@@ -632,10 +648,6 @@ test "a failure partway through a tree is reported, not skipped" {
 
     // One lookup lists the directory; the next, for what it holds, fails.
     let mut one = Rationed { left: 1 };
-    with Preopens => &mut one do {
-        assert no_preopen(fs::walk_dir(`${dir}/only-dir`));
-    };
-    one.left = 1;
     with Preopens => &mut one do {
         assert no_preopen(fs::remove_dir_all(`${dir}/only-dir`));
     };

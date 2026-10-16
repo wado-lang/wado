@@ -1816,8 +1816,8 @@ let meta = fs::metadata("icon.png")?;            // Metadata { type, size, modif
 for let entry of fs::read_dir("src")? {          // DirEntry { name, type }
     if entry.type matches { Directory } { continue; }
 }
-for let found of fs::walk_dir("src")? {          // WalkEntry { path, type }, deep
-    println(`${found.path}`);
+for let found of fs::walk_dir("src")? {          // lists each directory as it reaches it
+    println(`${found?.path}`);                   // Result<WalkEntry, FsError>, deep
 }
 // `e.path` reaches the entry from the walk's root, so a name is compared as one
 fs::walk_dir(".", |e| fs::file_name(&e.path).unwrap() != ".git")?;

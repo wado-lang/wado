@@ -321,14 +321,21 @@ fn read_files(blocks: &List<FencedCode>, into: &mut TreeMap<String, String>) wit
 
 /// Every `.wado` file under `FIXTURE_DIR`, by its path.
 fn read_fixtures(into: &mut TreeMap<String, String>) with (Stderr, Preopens) {
-    let entries = match fs::walk_dir(&FIXTURE_DIR) {
-        Ok(entries) => entries,
+    let walk = match fs::walk_dir(&FIXTURE_DIR) {
+        Ok(walk) => walk,
         Err(e) => {
             eprintln(`error: ${e}`);
             return;
         },
     };
-    for let entry of entries {
+    for let found of walk {
+        let entry = match found {
+            Ok(entry) => entry,
+            Err(e) => {
+                eprintln(`error: ${e}`);
+                return;
+            },
+        };
         if entry.path.ends_with(".wado") {
             if let Ok(text) = fs::read_to_string(&entry.path) {
                 into[entry.path] = text;
