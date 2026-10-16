@@ -1799,6 +1799,10 @@ impl Backend for WebGpuBackend {
         let rank = view.extents.len();
         let moved = permuted(&view, &moved_last(rank, &([axis] as List<i32>)));
         let lane = view.extents[axis];
+        // An empty axis breaks the contract the Cpu kernel states.
+        if lane == 0 {
+            return Placed::Host(self.cpu.arg_max(&self.host(t), axis));
+        }
         let lanes = element_count(&view.extents) / lane;
         let operands = [moved] as List<DeviceTensor>;
         if lane > 1 << 24 || lanes > self.max_binding || !self.binds(&operands) {

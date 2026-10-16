@@ -702,7 +702,9 @@ impl TypeSystem {
                 for_each_application(&table, ty, &mut |head, args| {
                     for (position, &arg) in args.iter().enumerate() {
                         let to = (head, position as u32);
-                        for param in table.type_param_indices(arg) {
+                        let mut params = Vec::new();
+                        type_params_in(&table, arg, &mut params);
+                        for param in params {
                             let from = (def, param);
                             steps.entry(from).or_default().push(to);
                             let bare = matches!(
@@ -734,6 +736,18 @@ fn for_each_application(table: &TypeTable, ty: TypeId, visit: &mut dyn FnMut(Def
     }
     for part in parts {
         for_each_application(table, part, visit);
+    }
+}
+
+/// The type parameters `ty` is built over, at any depth. A projection
+/// (`K::Child`) is not: an impl settles what it names, so it need not be
+/// larger than `K`, unlike what [`TypeTable::type_param_indices`] counts.
+fn type_params_in(table: &TypeTable, ty: TypeId, params: &mut Vec<u32>) {
+    if let ResolvedType::TypeParam { index, .. } = table.get(ty) {
+        params.push(*index);
+    }
+    for part in constituents(table, ty).1 {
+        type_params_in(table, part, params);
     }
 }
 

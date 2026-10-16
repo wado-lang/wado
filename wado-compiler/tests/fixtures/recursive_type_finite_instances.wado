@@ -1,6 +1,6 @@
-// A recursive type that names itself with its own parameters, or with an
-// argument that closes the cycle at a fixed type, needs finitely many
-// instances and is accepted.
+// A recursive type that names itself with its own parameters, with an
+// argument that closes the cycle at a fixed type, or through a projection an
+// impl settles, needs finitely many instances and is accepted.
 
 variant Tree<T> {
     Leaf(T),
@@ -36,4 +36,24 @@ struct Narrow<U> {
 test "a cycle closing at a fixed type" {
     let wide: Wide<String> = Wide { narrow: Option::Some(Narrow { wide: null }) };
     assert wide.narrow matches { Some(_) };
+}
+
+trait Node {
+    type Child: Node;
+}
+
+struct Leaf {
+}
+
+impl Node for Leaf {
+    type Child = Leaf;
+}
+
+struct Rooted<K: Node> {
+    kids: List<Rooted<K::Child>>,
+}
+
+test "a cycle through a projection, which an impl settles" {
+    let rooted = Rooted::<Leaf> { kids: [Rooted { kids: [] }] };
+    assert rooted.kids.len() == 1;
 }

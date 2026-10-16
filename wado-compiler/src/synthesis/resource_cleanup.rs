@@ -94,10 +94,39 @@ impl Flow {
 }
 
 /// Where a `break` or `continue` lands: a labeled block, or a loop
-/// (`label: None`). Leaving for it drops every slot from `entry` up.
+/// (`label: None`). Leaving for it drops every slot from `entry` up, and each
+/// slot below that the state it lands in does not hold.
 struct BreakTarget {
     label: Option<String>,
     entry: usize,
+    /// What the slots below `entry` hold at a loop's head, where `continue`
+    /// lands. `None` while a dry run gathers it, and for a labeled block.
+    head: Option<Vec<bool>>,
+    /// What the slots below `entry` hold where `break` lands. `None` while a
+    /// dry run gathers it.
+    exit: Option<Vec<bool>>,
+    /// What the slots below `entry` held at each `break` to here.
+    breaks: Vec<Vec<bool>>,
+    /// What the slots below `entry` held at each `continue` to here.
+    continues: Vec<Vec<bool>>,
+}
+
+impl BreakTarget {
+    fn new(
+        label: Option<String>,
+        entry: usize,
+        head: Option<Vec<bool>>,
+        exit: Option<Vec<bool>>,
+    ) -> Self {
+        Self {
+            label,
+            entry,
+            head,
+            exit,
+            breaks: Vec::new(),
+            continues: Vec::new(),
+        }
+    }
 }
 
 struct Cx<'a> {
@@ -156,15 +185,38 @@ impl Cx<'_> {
         });
     }
 
-    /// The first slot a `break label` (or, with `None`, a `break` or
-    /// `continue`) leaves behind.
-    fn target_entry(&self, label: Option<&str>) -> usize {
+    /// Where a `break label` (or, with `None`, a `break` or `continue`)
+    /// lands.
+    fn target_mut(&mut self, label: Option<&str>) -> &mut BreakTarget {
         self.targets
-            .iter()
+            .iter_mut()
             .rev()
             .find(|target| target.label.as_deref() == label)
             .expect("a `break` or `continue` lands in an enclosing loop or labeled block")
-            .entry
+    }
+
+    /// Run `elaborate` for the states it reaches, then undo what it added to
+    /// `self`: the code it rewrote is thrown away, so the locals, glue,
+    /// refusals and arrivals it recorded go too.
+    fn dry_run<R>(&mut self, elaborate: impl FnOnce(&mut Self) -> R) -> R {
+        let locals = self.locals.len();
+        let refused = self.refused.len();
+        let glue = self.glue.called.len();
+        let arrivals: Vec<(usize, usize)> = self
+            .targets
+            .iter()
+            .map(|target| (target.breaks.len(), target.continues.len()))
+            .collect();
+        let result = elaborate(self);
+        self.locals.truncate(locals);
+        *self.local_count = locals as u32;
+        self.refused.truncate(refused);
+        self.glue.called.truncate(glue);
+        for (target, (breaks, continues)) in self.targets.iter_mut().zip(arrivals) {
+            target.breaks.truncate(breaks);
+            target.continues.truncate(continues);
+        }
+        result
     }
 }
 
@@ -1012,13 +1064,116 @@ fn elab_plain_block(block: &mut TirBlock, owned: &mut Owned, cx: &mut Cx) {
 
 /// [`elab_block`] for the body of a labeled block, which `break label` leaves.
 fn elab_labeled_block(label: &str, block: &mut TirBlock, owned: &mut Owned, cx: &mut Cx) -> Flow {
-    cx.targets.push(BreakTarget {
-        label: Some(label.to_string()),
-        entry: owned.len(),
-    });
+    let entry = owned.len();
+    let label = Some(label.to_string());
+    let exit = if entry == 0 {
+        Vec::new()
+    } else {
+        labeled_exit(&label, block, owned, cx)
+    };
+    cx.targets
+        .push(BreakTarget::new(label, entry, None, Some(exit.clone())));
     let flow = elab_block(block, owned, cx);
-    cx.targets.pop();
-    flow
+    let target = cx.targets.pop().expect("pushed above");
+    if flow == Flow::Normal {
+        let drops = conform(owned, &exit, cx);
+        let stmts = std::mem::take(&mut block.stmts);
+        block.stmts = append_block_drops(stmts, drops, cx);
+    }
+    set_held(owned, &exit);
+    if target.breaks.is_empty() {
+        flow
+    } else {
+        Flow::Normal
+    }
+}
+
+/// What the slots below `owned.len()` hold after a labeled block: where every
+/// way out holds them, each `break label` and the end where the body falls
+/// through.
+fn labeled_exit(label: &Option<String>, block: &TirBlock, owned: &Owned, cx: &mut Cx) -> Vec<bool> {
+    let entry = owned.len();
+    cx.dry_run(|cx| {
+        let mut block = block.clone();
+        let mut state = owned.clone();
+        cx.targets
+            .push(BreakTarget::new(label.clone(), entry, None, None));
+        let flow = elab_block(&mut block, &mut state, cx);
+        let mut ways_out = cx.targets.pop().expect("pushed above").breaks;
+        if flow == Flow::Normal {
+            ways_out.push(held(&state));
+        }
+        meet(&ways_out).unwrap_or_else(|| held(owned))
+    })
+}
+
+/// What a loop's slots below `owned.len()` hold at its head and where it
+/// exits. The head holds a slot only where the loop's entry and each
+/// iteration's end, falling through or by `continue`, hold it; an iteration
+/// starts from the head, so that is a fixpoint. Where it exits holds a slot
+/// only where every `break` holds it.
+fn loop_states(body: &TirBlock, owned: &Owned, cx: &mut Cx) -> (Vec<bool>, Vec<bool>) {
+    let entry = owned.len();
+    let mut head = held(owned);
+    if entry == 0 {
+        return (head.clone(), head);
+    }
+    loop {
+        let (end, target) = cx.dry_run(|cx| {
+            let mut body = body.clone();
+            let mut state = owned.clone();
+            set_held(&mut state, &head);
+            cx.targets.push(BreakTarget::new(None, entry, None, None));
+            let flow = elab_block(&mut body, &mut state, cx);
+            let target = cx.targets.pop().expect("pushed above");
+            ((flow == Flow::Normal).then(|| held(&state)), target)
+        });
+        let next = meet([&head].into_iter().chain(&target.continues).chain(&end))
+            .expect("the entry is one way in");
+        if next == head {
+            let exit = meet(&target.breaks).unwrap_or_else(|| head.clone());
+            return (head, exit);
+        }
+        head = next;
+    }
+}
+
+/// What each slot holds.
+fn held(slots: &[Slot]) -> Vec<bool> {
+    slots.iter().map(|slot| slot.held).collect()
+}
+
+/// Set what each of the first slots holds.
+fn set_held(owned: &mut Owned, holds: &[bool]) {
+    for (slot, &held) in owned.iter_mut().zip(holds) {
+        slot.held = held;
+    }
+}
+
+/// What every one of `states` holds alike, if there is one.
+fn meet<'s>(states: impl IntoIterator<Item = &'s Vec<bool>>) -> Option<Vec<bool>> {
+    states.into_iter().fold(None, |met, state| match met {
+        None => Some(state.clone()),
+        Some(mut met) => {
+            for (held, &also) in met.iter_mut().zip(state) {
+                *held &= also;
+            }
+            Some(met)
+        }
+    })
+}
+
+/// Take the slots `owned` holds and `target` does not, and build the
+/// statements that drop them, innermost first: a path joining others that
+/// hold less drops its surplus before it joins.
+fn conform(owned: &mut Owned, target: &[bool], cx: &mut Cx) -> Vec<TirStmt> {
+    let lives: Vec<Live> = owned
+        .iter_mut()
+        .zip(target)
+        .filter(|(_, keep)| !**keep)
+        .filter_map(|(slot, _)| slot.take())
+        .collect();
+    drop_all(lives.iter().rev(), cx)
 }
 
 /// Whether a finished statement list diverges (its last statement does not
@@ -1165,17 +1320,23 @@ fn elab_stmt(
         }
 
         TirStmtKind::Loop { mut body } => {
-            cx.targets.push(BreakTarget {
-                label: None,
-                entry: owned.len(),
-            });
-            let mut body_owned = owned.clone();
-            elab_block(&mut body, &mut body_owned, cx);
+            let entry = owned.len();
+            let (head, exit) = loop_states(&body, owned, cx);
+            out.extend(conform(owned, &head, cx));
+            cx.targets.push(BreakTarget::new(
+                None,
+                entry,
+                Some(head.clone()),
+                Some(exit.clone()),
+            ));
+            let flow = elab_block(&mut body, owned, cx);
             cx.targets.pop();
-            // A resource of an enclosing scope transferred inside the loop
-            // body is consumed (possibly every iteration); reflect that so it
-            // is never dropped again after the loop.
-            release_transferred(owned, &body_owned);
+            if flow == Flow::Normal {
+                let drops = conform(owned, &head, cx);
+                let stmts = std::mem::take(&mut body.stmts);
+                body.stmts = append_block_drops(stmts, drops, cx);
+            }
+            set_held(owned, &exit);
             out.push(TirStmt {
                 kind: TirStmtKind::Loop { body },
                 span,
@@ -1195,8 +1356,14 @@ fn elab_stmt(
         TirStmtKind::Break { label, value } => {
             let value = value.map(|v| elab_value_expr(v, owned, cx));
             // `break` skips the exit drops of every scope it leaves.
-            let target = cx.target_entry(label.as_deref());
-            let drops = drop_slots(owned, target, cx);
+            let target = cx.target_mut(label.as_deref());
+            let entry = target.entry;
+            target.breaks.push(held(&owned[..entry]));
+            let exit = target.exit.clone();
+            let mut drops = drop_slots(owned, entry, cx);
+            if let Some(exit) = exit {
+                drops.extend(conform(owned, &exit, cx));
+            }
             leave_after_drops(value, drops, span, cx, out, |value| TirStmtKind::Break {
                 label,
                 value,
@@ -1204,8 +1371,14 @@ fn elab_stmt(
         }
 
         TirStmtKind::Continue => {
-            let target = cx.target_entry(None);
-            let drops = drop_slots(owned, target, cx);
+            let target = cx.target_mut(None);
+            let entry = target.entry;
+            target.continues.push(held(&owned[..entry]));
+            let head = target.head.clone();
+            let mut drops = drop_slots(owned, entry, cx);
+            if let Some(head) = head {
+                drops.extend(conform(owned, &head, cx));
+            }
             leave_after_drops(None, drops, span, cx, out, |_| TirStmtKind::Continue)
         }
 

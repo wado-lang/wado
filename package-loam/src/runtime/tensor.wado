@@ -2095,9 +2095,9 @@ pub trait Backend with _ {
     fn begin(&mut self) {
     }
     /// Keeps `t` alive through the next [`Self::begin`], for the pass after
-    /// this one to read, as a model reads the attention cache its last pass
-    /// wrote. The begin after that releases it, unless that pass retains it
-    /// again.
+    /// it to read, as a model retains the attention cache it still holds just
+    /// before it begins. The begin after that releases it, unless `t` is
+    /// retained again.
     fn retain<E: Element, Axes>(&mut self, t: &Self::Tensor<E, Axes>) {
         let _ = t;
     }

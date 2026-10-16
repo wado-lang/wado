@@ -177,7 +177,11 @@ impl<Bk: Backend> Model<Bk> {
         }
         let fresh: List<i64> = ids.into_iter().skip(self.seen.len()).map(|id| id as i64).collect();
         let total = ids.len();
-        // The pass before retained the caches, so they live through this one.
+        // The caches still held live through this pass. Retained here rather
+        // than as the last pass wrote them, a forgotten cache is released.
+        for let cache of &self.caches {
+            self.backend.retain(cache);
+        }
         self.backend.begin();
         if self.caches.is_empty() {
             let extents: List<i32> = [gemma::Batch::EXTENT, gemma::KvHead::EXTENT, 0, gemma::Dim::EXTENT];
@@ -264,7 +268,6 @@ impl<Bk: Backend> Model<Bk> {
                 &presents[i],
                 extents,
             );
-            self.backend.retain(&self.caches[i]);
         }
         self.seen = *ids;
         return best;

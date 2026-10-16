@@ -241,6 +241,13 @@ by-value receiver transfer, with no aggregate-shape guessing. Two fixes landed:
 - A store into a binding or one of its fields drops the resource it replaces,
   after the stored value is computed, since computing it may read the old one.
   A binding whose resource was moved owns the one stored into it.
+- Where paths join, a binding holds its resource after the join only where
+  every path into it does, and a path holding more drops the surplus before it
+  joins. The joins are an `if` or `match`, a loop's head (its entry, each
+  iteration's end and each `continue`) and its exit (each `break`), and a
+  labeled block's exit. The loop head is a fixpoint, since an iteration starts
+  from it, so cleanup elaborates a loop body as many times as it takes to settle
+  and a labeled block's body twice, throwing away all but the last.
 
 The `is_resource_aggregate` heuristic is **retired**: cleanup now drops "owned and
 not transferred at scope exit" directly.
