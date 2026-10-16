@@ -522,7 +522,9 @@ async fn manifest_and_component_index(
     let manifest = project.map(|p| &p.manifest);
     for source in sources {
         let inline = resolve_inline_component_dependencies(source, manifest, tier).await?;
-        index.components.extend(inline.resolved);
+        for (name, path) in inline.resolved {
+            bind_once(&mut index.components, name, path)?;
+        }
         index.unresolved.extend(inline.unresolved);
 
         // Inline git sources (`use … from "<name>" with { git }`) are source
@@ -531,15 +533,7 @@ async fn manifest_and_component_index(
         let inline_git = resolve_inline_git_dependencies(source, tier).await?;
         for (name, path) in inline_git.resolved {
             index.unresolved.swap_remove(&name);
-            if let Some(bound) = index.resolved.get(&name)
-                && *bound != path
-            {
-                return Err(format!(
-                    "dependency {name:?} names two sources: {bound} and {path}; \
-                     one specifier resolves to one package"
-                ));
-            }
-            index.resolved.insert(name, path);
+            bind_once(&mut index.resolved, name, path)?;
         }
         for (name, reason) in inline_git.unresolved {
             index.unresolved.insert(name, reason);
@@ -547,6 +541,25 @@ async fn manifest_and_component_index(
     }
 
     Ok(index)
+}
+
+/// Bind the specifier `name` to `path` in `map`, where every file of the build
+/// must agree on what one specifier names.
+fn bind_once(
+    map: &mut wado_compiler::hashmap::IndexMap<String, String>,
+    name: String,
+    path: String,
+) -> Result<(), String> {
+    if let Some(bound) = map.get(&name)
+        && *bound != path
+    {
+        return Err(format!(
+            "dependency {name:?} names two sources: {bound} and {path}; \
+             one specifier resolves to one package"
+        ));
+    }
+    map.insert(name, path);
+    Ok(())
 }
 
 /// Materialize every locked git dependency's worktree so the build path reads a
