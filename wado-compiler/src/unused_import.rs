@@ -86,7 +86,7 @@ impl Uses<'_> {
                 UseItem::InterfaceFunctions { functions, .. } => {
                     unused.extend(functions.iter().filter_map(|f| {
                         self.unused_binding(&f.name, f.alias.as_ref(), f.local_span)
-                    }))
+                    }));
                 }
                 UseItem::Namespace { name, name_span } => {
                     let reached = self.used.iter().any(|alias| {
