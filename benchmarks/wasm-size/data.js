@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1792187418561,
+  "lastUpdate": 1792189129117,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -67641,6 +67641,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/28ba85f0f0086f0a9d86039d590f0476684ee44f"
         },
         "date": 1792187417650,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 2955,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 7382,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 20208,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 301641,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "b49ce59e1a80a61e905f1e1d78cef09ca5d9cfb6",
+          "message": "Merge pull request #2366 from wado-lang/ccr-2653837d-us5z8i\n\nfeat(check): decide unused items over the whole package, and add unused_imports",
+          "timestamp": "2026-10-17T07:02:34+09:00",
+          "tree_id": "251cbda19098c3eb9feee93adfb83230dab8622f",
+          "url": "https://github.com/wado-lang/wado/commit/b49ce59e1a80a61e905f1e1d78cef09ca5d9cfb6"
+        },
+        "date": 1792189128067,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
