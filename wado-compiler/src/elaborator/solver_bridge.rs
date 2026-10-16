@@ -2236,7 +2236,10 @@ impl SolverBridge {
         // is answered from the reference level alone.
         if through_ref.is_some() {
             let on_ref = |c: &Candidate| {
-                matches!(self.program.impls()[&c.impl_].target, SolverType::Ref { .. })
+                matches!(
+                    self.program.impls()[&c.impl_].target,
+                    SolverType::Ref { .. }
+                )
             };
             found.in_scope.retain(on_ref);
             found.out_of_scope.retain(on_ref);

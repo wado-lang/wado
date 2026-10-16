@@ -7,6 +7,7 @@
 use std::fmt::Write as _;
 use std::path::{Path, PathBuf};
 
+use indexmap::IndexMap;
 use lexopt::Arg::Value;
 use wado_compiler::Code;
 use wado_compiler::kiln::InvocationIndex;
@@ -228,7 +229,14 @@ async fn check_package_unused(
         .iter()
         .map(|f| relative(f).expect("a package's members lie under its root"))
         .collect();
-    let entries: Vec<String> = targets.iter().filter_map(|t| relative(&t.entry)).collect();
+    // Each entry's first check, by the spelling its member is matched by.
+    let mut runs: IndexMap<String, (&build::BuildTarget, &InvocationIndex)> = IndexMap::new();
+    for (target, run) in targets.iter().zip(entry_runs) {
+        if let Some(entry) = relative(&target.entry) {
+            runs.entry(entry).or_insert((target, run));
+        }
+    }
+    let entries: Vec<String> = runs.keys().cloned().collect();
     for entry in &entries {
         if !members.contains(entry) {
             files.push(root.join(entry));
@@ -259,11 +267,7 @@ async fn check_package_unused(
     let mut invocations = InvocationIndex::default();
     for (file, member) in files.iter().zip(&package.members) {
         // `check_entry` names its entry by the path as given.
-        let entry_run = targets
-            .iter()
-            .zip(entry_runs)
-            .find(|(target, _)| relative(&target.entry).as_ref() == Some(member));
-        if let Some((target, index)) = entry_run {
+        if let Some((target, index)) = runs.get(member) {
             let run_name = target.entry.to_string_lossy();
             package.adopt_member_invocations(member, &run_name, index, &mut invocations);
             continue;

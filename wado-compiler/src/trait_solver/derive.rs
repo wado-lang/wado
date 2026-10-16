@@ -561,7 +561,11 @@ mod tests {
             ..bounded(EQ, wrapper_of(SolverType::Param(0)), vec![])
         });
         pair_comparisons(&mut p, EQ, ORD);
-        assert!(p.impls().values().all(|def| def.origin != ImplOrigin::Paired));
+        assert!(
+            p.impls()
+                .values()
+                .all(|def| def.origin != ImplOrigin::Paired)
+        );
         assert_eq!(
             p.impls()[&marker],
             ImplDef {

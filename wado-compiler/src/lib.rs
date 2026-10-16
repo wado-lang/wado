@@ -644,7 +644,7 @@ pub async fn package_unused_diagnostics<H: CompilerHost>(
     assert_ne!(
         lints,
         Lints::Off,
-        "a package with its lints off has none to decide"
+        "a package's unused items are decided only with its lints on"
     );
     let logger = Logger::new(host, log_level);
     let mut loader = loader::ModuleLoader::new(host, log_level).with_invocations(invocations);
