@@ -1478,7 +1478,7 @@ fn both(f: fn() with (Stdout, Stderr), x: i32) { ... }           // two paramete
 
 // A trait method's `with` clause bounds every impl of it. A call requires what
 // the trait declares, since through a bound there is no impl to read.
-trait Source { fn next(&mut self) -> i32 with Stdout; }
+trait Source with _ { fn next(&mut self) -> i32 with Stdout; }
 impl Source for Loud {
     fn next(&mut self) -> i32 with Stdout { ... }   // matching; more is an error
 }
