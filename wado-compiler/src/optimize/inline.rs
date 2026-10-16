@@ -34,7 +34,7 @@ use crate::tir::{BuiltinDeclaration, ResolvedType, TypeId, TypeTable};
 
 use cranelift_entity::EntityRef;
 
-use super::arena_query::{self, cold_exprs, cold_path_id};
+use super::arena_query::{self, cold_exprs, cold_functions, cold_path_id};
 use super::body_memo::BodyMemo;
 use super::dce::callee_descriptor;
 use super::gate::{FunctionGate, GatedPass};
@@ -398,6 +398,27 @@ impl<'a> CostWalk<'a> {
         cost
     }
 
+    /// What an `if` costs over its operands. A guard, an arm-less `if` whose
+    /// arm opens with `cold_path()`, is laid out of line and never merges back,
+    /// so running it costs the test and a jump and splits no region: one
+    /// [`weight::OP`]. Pricing it as a [`weight::BRANCH`] held `Slice::slice`
+    /// back once the `contract` checks of its two `i32::clamp` calls were
+    /// copied into it, and with it every fold of a constant slice.
+    fn branch_weight(&self, then_block: BlockId, else_block: Option<BlockId>) -> usize {
+        let guard = self.price == Price::Hot
+            && else_block.is_none()
+            && self.body.blocks[then_block]
+                .stmts
+                .first()
+                .is_some_and(|&s| {
+                    matches!(
+                        block_cut(self.body, s, self.type_table, self.descriptors),
+                        BlockCut::Cold
+                    )
+                });
+        if guard { weight::OP } else { weight::BRANCH }
+    }
+
     /// Cost of a NIR block, stopping once the rest of it becomes cold or
     /// unreachable. The walk ends at the first statement [`block_cut`] flags: a
     /// `cold_path()` marker drops the marker and, at [`Price::Hot`], everything
@@ -447,7 +468,7 @@ impl<'a> CostWalk<'a> {
                     });
                     return self.decided_arms(arms, seen);
                 }
-                weight::BRANCH
+                self.branch_weight(*then_block, *else_block)
                     + self.operand(*condition, seen)
                     + self.block(*then_block, seen)
                     + else_block.map_or(0, |b| self.block(b, seen))
@@ -628,7 +649,7 @@ impl<'a> CostWalk<'a> {
                     });
                     return self.decided_arms(arms, seen);
                 }
-                weight::BRANCH
+                self.branch_weight(*then_branch, *else_branch)
                     + self.operand(*condition, seen)
                     + self.block(*then_branch, seen)
                     + else_branch.map_or(0, |b| self.block(b, seen))
@@ -1801,33 +1822,6 @@ fn call_site_counts(scans: &[BodyScan]) -> Vec<usize> {
     counts
 }
 
-/// The functions no hot site reaches, indexed by store position: every path
-/// into one passes a `cold_path()` marker, so whatever is spliced into it runs
-/// only once a cold path is taken. A function no call site reaches is reached
-/// some other way (an export, a global initializer, a function reference), so
-/// it counts as hot.
-fn cold_functions(project: &NirPackage, scans: &[BodyScan], call_sites: &[usize]) -> Vec<bool> {
-    let mut hot: Vec<bool> = project
-        .functions
-        .iter()
-        .zip(call_sites)
-        .map(|(f, &sites)| {
-            let f = f.borrow();
-            sites == 0 || f.is_export || f.is_cm_export
-        })
-        .collect();
-    let mut work: Vec<usize> = (0..hot.len()).filter(|&i| hot[i]).collect();
-    while let Some(caller) = work.pop() {
-        for callee in &scans[caller].hot_callees {
-            if !hot[callee.index()] {
-                hot[callee.index()] = true;
-                work.push(callee.index());
-            }
-        }
-    }
-    hot.into_iter().map(|hot| !hot).collect()
-}
-
 /// The functions some cold site calls, indexed by store position: the ones a
 /// [`Site::Cold`] admission asks whether they shrink.
 fn called_cold(scans: &[BodyScan], cold: &[bool]) -> Vec<bool> {
@@ -2099,7 +2093,7 @@ pub fn inline_functions(
     // Taken every round, unlike the prices below: a callee's only site is one
     // where its splice pays back.
     let call_sites = call_site_counts(scans);
-    let cold = cold_functions(project, scans, &call_sites);
+    let cold = cold_functions(project, &call_sites, |caller| &scans[caller].hot_callees);
     let called_cold = called_cold(scans, &cold);
     let never: Vec<bool> = {
         let type_table = project.type_table.borrow();

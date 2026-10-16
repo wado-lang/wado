@@ -12,7 +12,7 @@ use crate::tir::{
     CaptureSource, ResolvedType, TirBlock, TirCapture, TirExpr, TirExprKind, TirFunction, TirStmt,
     TirStmtKind, TirUnaryOp, capture_at,
 };
-use crate::tir_visitor::TirRefVisitor;
+use crate::tir_visitor::{TirRefVisitor, for_each_block_result};
 
 /// Per-function parameter positions replaced by a whole-value write.
 pub type WholeValueWrites = FuncKeyMap<IndexSet<u32>>;
@@ -251,6 +251,11 @@ impl<'a> WriteWalker<'a> {
             TirExprKind::VariantConstruct {
                 payload: Some(p), ..
             } => self.carried(p),
+            TirExprKind::Block(_) | TirExprKind::LabeledBlock { .. } => {
+                let mut out = IndexSet::default();
+                for_each_block_result(expr, &mut |result| out.extend(self.carried(result)));
+                out
+            }
             // What a call routes to its result is read off a body, which this
             // walk does not have. A result whose type cannot hold a reference
             // hands on nothing whatever the body does; one that can is read as

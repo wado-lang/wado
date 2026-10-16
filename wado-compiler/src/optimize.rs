@@ -983,7 +983,7 @@ fn run_optimization_passes(
     // `wir_optimize::const_global`; the final `run_dce` reclaims the dead
     // binding locals.
     run_pass("nir/const_object_globalization", project, profiler, |p| {
-        globalize_const_objects(p, exec)
+        globalize_const_objects(p, descriptor_cache, exec)
     });
     // Clean up after globalization: fold the `global:X.used` length reads it
     // exposes (recovered via `const_folding`'s `GlobalFieldEnv`) and prune the

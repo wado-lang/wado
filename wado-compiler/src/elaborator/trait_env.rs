@@ -1258,6 +1258,17 @@ impl TraitEnv {
         self.space_modules.get(&space)
     }
 
+    /// The module whose text `span` indexes, or `holder`'s for a synthesized
+    /// span. A body reified away from its text (a trait's default method, per
+    /// impl) holds spans of another module than its own.
+    pub(crate) fn module_of_span<'m>(
+        &'m self,
+        span: Span,
+        holder: &'m ModuleSource,
+    ) -> &'m ModuleSource {
+        self.space_modules.get(&span.space).unwrap_or(holder)
+    }
+
     /// The pre-computed namespace aliases for `module`. Every loaded module has
     /// a table, empty where it wrote no `use ns from "..."`.
     pub(super) fn namespace_imports(&self, module: &ModuleSource) -> Option<&NamespaceImports> {

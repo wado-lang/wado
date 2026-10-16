@@ -133,9 +133,6 @@ import fn wasi/stream-new from "wasi/stream-new";
 import fn wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code from "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code";
 import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 
-global global:bug_globalize_iterator_copied_through_reference.wado::$const_obj_3: ref "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(32), used: 1 };
-global global:core:prelude/primitive.wado::$const_obj_4: ref "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 };
-
 fn "bug_globalize_iterator_copied_through_reference.wado/count"() {
     let names: ref "core:prelude//List<core:prelude/string.wado/String>";
     let n: i32;
@@ -190,7 +187,8 @@ fn "bug_globalize_iterator_copied_through_reference.wado/run$cold0"() with Stdou
     let $local_1: ref "core:prelude/format.wado//Formatter";
     let self_3: i32;
     let f_4: ref "core:prelude/format.wado//Formatter";
-    "core:cli/println"($local_1 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::new"(local.tee $local_0(struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(33), used: 0 })); self_3 = "bug_globalize_iterator_copied_through_reference.wado/count"(); f_4 = $local_1; "core:prelude/primitive.wado/i32::fmt_decimal$sroa[self.value]"(self_3, f_4); "core:prelude/string.wado/core:prelude/string.wado/String::internal_push_string$spec0"($local_0, global:bug_globalize_iterator_copied_through_reference.wado::$const_obj_3); $local_1 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::new"($local_0); "core:prelude/primitive.wado/i32::fmt_decimal$sroa[self.value]"(local.tee self_3("bug_globalize_iterator_copied_through_reference.wado/count"()), $local_1); $local_0);
+    let other: ref "core:prelude/string.wado//String";
+    "core:cli/println"($local_1 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::new"(local.tee $local_0(struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(33), used: 0 })); self_3 = "bug_globalize_iterator_copied_through_reference.wado/count"(); f_4 = $local_1; "core:prelude/primitive.wado/i32::fmt_decimal$sroa[self.value]"(self_3, f_4); other = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(32), used: 1 }; "core:prelude/string.wado/core:prelude/string.wado/String::internal_push_string$spec0"($local_0, other); $local_1 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::new"($local_0); "core:prelude/primitive.wado/i32::fmt_decimal$sroa[self.value]"(local.tee self_3("bug_globalize_iterator_copied_through_reference.wado/count"()), $local_1); $local_0);
 }
 
 fn "bug_globalize_iterator_copied_through_reference.wado/weigh$sroa[name.used]"(i, name) {
@@ -743,11 +741,11 @@ fn "core:prelude/primitive.wado/i32::fmt_decimal$sroa[self.value]"(self, f) {
     is_negative = self < 0;
     self = "core:prelude/primitive.wado/count_digits_u64"(local.tee x(x = builtin::i64_extend_i32_s(self); select i64(x < 0_i64, 0_i64 - x, x)));
     is_negative = block -> i32 {
-        let $mv_arg_3: ref "core:prelude/string.wado//String";
-        $mv_arg_3 = global:core:prelude/primitive.wado::$const_obj_4;
-        "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>"(f, is_negative, $mv_arg_3.repr, $mv_arg_3.used, self);
+        let $mv_field_3: ref Array<u8>;
+        $mv_field_3 = builtin::array_new<u8>(0);
+        "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>"(f, is_negative, $mv_field_3, 0, self);
     };
-    "core:prelude/primitive.wado/write_decimal_digits"(local.tee $mv_arg_3(f.buf).repr, is_negative, x, self);
+    "core:prelude/primitive.wado/write_decimal_digits"(f.buf.repr, is_negative, x, self);
 }
 
 fn "core:prelude/string.wado/core:prelude/string.wado/String::internal_push_string$spec0"(self, other) {

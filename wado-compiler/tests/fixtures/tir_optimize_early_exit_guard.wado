@@ -1,8 +1,9 @@
 // Test: early-exit guard eliminates redundant bounds checks.
 //
 // Pattern: `if pos >= arr.len() { return ...; }; arr[pos]`
-// After the guard, pos < arr.len() is known, so the bounds check
-// inside arr[pos] is always false and gets eliminated.
+// After the guard, pos < arr.len() is known, so the upper half of the index
+// contract inside arr[pos] holds and is eliminated. The lower half, `0 <= pos`,
+// stays: nothing proves it.
 
 use { println, Stdout } from "core:cli";
 
@@ -26,5 +27,5 @@ __DATA__
 {
     "stdout": "b\n?\n",
     "wir_expect:O2": ["builtin::array_get_value<char>(arr.repr, pos)"],
-    "wir_not_expect:O2": ["index < self.len()"]
+    "wir_not_expect:O2": ["pos < "]
 }

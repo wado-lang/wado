@@ -1,0 +1,29 @@
+// A floor on `i` bounds `i + 1` from below only while the add cannot wrap.
+// `i >= 0` and `i + 1 < xs.len()` both hold for `i == i32::MAX`, where `i + 1`
+// wraps to `i32::MIN`, so the read keeps its lower-bound check and reports the
+// broken contract.
+
+use { println, Stdout } from "core:cli";
+
+fn at_next(xs: &List<i32>, i: i32) -> i32 {
+    if i >= 0 && i + 1 < xs.len() {
+        return xs[i + 1];
+    }
+    return -1;
+}
+
+export fn run() with Stdout {
+    let xs: List<i32> = [1, 2, 3];
+    println(`${at_next(&xs, builtin::black_box(1))}`);
+    println(`${at_next(&xs, builtin::black_box(i32::MAX))}`);
+}
+
+__DATA__
+{
+    "stdout": "3\n",
+    "stderr_contains": [
+        "Contract of List::index_value failed",
+        "index: -2147483648"
+    ],
+    "trapped": true
+}

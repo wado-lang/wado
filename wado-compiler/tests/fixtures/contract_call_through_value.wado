@@ -1,0 +1,29 @@
+// A call through a function value reaches the function itself, which checks
+// its clauses as written: the failure reports the clause's position, since the
+// call is not known where the value was made.
+use { println, Stdout } from "core:cli";
+
+fn half(n: i32) -> i32
+    contract n % 2 == 0
+{
+    return n / 2;
+}
+
+fn apply(f: fn(i32) -> i32, n: i32) -> i32 {
+    return f(n);
+}
+
+export fn run() with Stdout {
+    println(`${apply(half, 4)}`);
+    println(`${apply(half, builtin::black_box(3))}`);
+}
+
+__DATA__
+{
+    "stdout": "2\n",
+    "stderr_contains": [
+        "Contract of half failed at contract_call_through_value.wado:7",
+        "condition: n % 2 == 0"
+    ],
+    "trapped": true
+}

@@ -1,0 +1,18 @@
+// A trait's default method is reified once per impl, in the impl's module,
+// but its text is the trait's: a failure in it names the trait's file.
+use { Items } from "./sub/contract_site_default_method_trait.wado";
+
+struct Bag {}
+
+impl Items for Bag {
+    fn items(&self) -> List<i32> {
+        return [1, 2];
+    }
+}
+
+export fn run() {
+    let _ = Bag {}.nth(5);
+}
+
+__DATA__
+{"stderr_contains": ["failed at ./sub/contract_site_default_method_trait.wado:7"], "trapped": true}
