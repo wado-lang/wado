@@ -1462,14 +1462,22 @@ impl<'a, H: CompilerHost> ModuleLoader<'a, H> {
 
             // Collect its imports (before bind)
             self.collect_imports(&ast, &module_source, &mut pending, &mut wasm_imports)?;
-            // A module importing only the standard library reaches no user
-            // code, so no caller walks its bodies. One importing user code
-            // may be walked, and keeps them.
+            // A module importing only the standard library and other packages
+            // reaches none of this package's code, which never imports another
+            // package's, so no caller walks its bodies. One importing this
+            // package's code may be walked, and keeps them.
             if skipped {
+                let reaches_package = |imported: &ModuleSource| {
+                    imported.is_user_authored()
+                        && !matches!(
+                            imported,
+                            ModuleSource::Dependency { .. } | ModuleSource::Remote { .. }
+                        )
+                };
                 if self
                     .imports
                     .get(&module_source)
-                    .is_some_and(|imported| imported.iter().any(ModuleSource::is_user_authored))
+                    .is_some_and(|imported| imported.iter().any(reaches_package))
                 {
                     ast = self.parse_source(&source, &module_source)?;
                 } else {
