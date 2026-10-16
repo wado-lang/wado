@@ -1466,7 +1466,7 @@ impl<'a, H: CompilerHost> ModuleLoader<'a, H> {
             // importing only it and the standard library reaches none of this
             // package's code, and no caller walks its bodies. One importing
             // this package's code may be walked, and keeps them.
-            if skipped {
+            if let Some(parser) = skipped {
                 let reaches_package = |imported: &ModuleSource| {
                     imported.is_user_authored()
                         && !matches!(
@@ -1479,7 +1479,7 @@ impl<'a, H: CompilerHost> ModuleLoader<'a, H> {
                     .get(&module_source)
                     .is_some_and(|imported| imported.iter().any(reaches_package))
                 {
-                    ast = self.parse_source(&source, &module_source)?;
+                    Self::read_skipped_bodies(parser, &mut ast, &module_source)?;
                 } else {
                     self.skipped_bodies.insert(module_source.clone());
                 }
@@ -2053,13 +2053,14 @@ impl<'a, H: CompilerHost> ModuleLoader<'a, H> {
     }
 
     /// Parse `source`, skipping a generated module's function bodies when
-    /// `skip_generated_bodies`. The flag says whether they were skipped.
+    /// `skip_generated_bodies`. Where they were skipped, the parser comes back
+    /// to read them on demand.
     fn parse_source_with(
         &self,
         source: &str,
         module_source: &ModuleSource,
         skip_generated_bodies: bool,
-    ) -> Result<(Module, bool), LoadError> {
+    ) -> Result<(Module, Option<Parser>), LoadError> {
         let lex_result = lex(source);
         if let Some(e) = lex_result.errors.first() {
             return Err(LoadError::from_lex_error(e, module_source.clone()));
@@ -2075,7 +2076,20 @@ impl<'a, H: CompilerHost> ModuleLoader<'a, H> {
         if let Some(e) = parser.take_errors().first() {
             return Err(LoadError::from_parse_error(e, module_source.clone()));
         }
-        Ok((ast, parser.skipped_bodies()))
+        Ok((ast, parser.skipped_bodies().then_some(parser)))
+    }
+
+    /// Read the bodies `parser` skipped into `ast`, fail-fast as a parse is.
+    fn read_skipped_bodies(
+        mut parser: Parser,
+        ast: &mut Module,
+        module_source: &ModuleSource,
+    ) -> Result<(), LoadError> {
+        parser.read_skipped_bodies(ast);
+        match parser.take_errors().first() {
+            Some(e) => Err(LoadError::from_parse_error(e, module_source.clone())),
+            None => Ok(()),
+        }
     }
 
     /// Bind a module (local name resolution and scope checking)

@@ -98,6 +98,8 @@ pub struct Parser {
     /// `with ()` says it is pure rather than nothing.
     pure_override_allowed: bool,
     bodies: Bodies,
+    /// Each skipped body's block, and the position of its `{`.
+    skipped: Vec<(AstId, usize)>,
 }
 
 /// Whether the parser reads function bodies.
@@ -304,6 +306,7 @@ impl Parser {
             effect_hole: EffectHole::Outside,
             pure_override_allowed: false,
             bodies: Bodies::Read,
+            skipped: Vec::new(),
         }
     }
 
@@ -323,6 +326,44 @@ impl Parser {
         self.parsed_inner_attributes
             .iter()
             .any(|a| a.name == GENERATED)
+    }
+
+    /// Read into `module`, the parse's own, the bodies
+    /// [`Self::skipping_generated_bodies`] skipped. The tokens are this parse's
+    /// still, so nothing is lexed or parsed twice.
+    pub fn read_skipped_bodies(&mut self, module: &mut Module) {
+        assert!(
+            self.skipped_bodies(),
+            "only a parse that skipped reads back"
+        );
+        self.bodies = Bodies::Read;
+        let mut read = hashmap::IndexMap::<AstId, Vec<Stmt>>::default();
+        for (block, pos) in std::mem::take(&mut self.skipped) {
+            self.pos = pos;
+            match self.parse_block() {
+                Ok(body) => {
+                    read.insert(block, body.stmts);
+                }
+                Err(e) => self.errors.push(e),
+            }
+        }
+        let functions = module.items.iter_mut().flat_map(|item| match item {
+            Item::Function(func) => std::slice::from_mut(func),
+            Item::Impl(decl) => &mut decl.methods[..],
+            Item::Trait(decl) => &mut decl.methods[..],
+            Item::Interface(decl) => &mut decl.methods[..],
+            Item::Resource(decl) => &mut decl.methods[..],
+            _ => &mut [],
+        });
+        for func in functions {
+            if let Some(body) = &mut func.body
+                && let Some(stmts) = read.swap_remove(&body.id)
+            {
+                // A body opens with its `contract` clauses, read with the head.
+                body.stmts.extend(stmts);
+            }
+        }
+        assert!(read.is_empty(), "every skipped body is a function's");
     }
 
     /// Whether [`Self::skipping_generated_bodies`] took effect.
@@ -451,6 +492,8 @@ impl Parser {
         // decides again, and may read the same token as a name.
         self.contextual_keywords
             .truncate(cp.contextual_keywords_len);
+        let rolled_back = AstId::new(self.ast_id_space, cp.next_ast_id);
+        self.skipped.retain(|(block, _)| *block < rolled_back);
     }
 
     /// Returns true if the parsed inner attributes include `#![TODO]`.
@@ -2715,6 +2758,7 @@ impl Parser {
     /// braces in `tokens` balance in any well-formed body.
     fn skip_block(&mut self) -> ParseResult<Block> {
         let id = self.alloc_ast_id();
+        self.skipped.push((id, self.pos));
         let start_span = self.peek().span;
         self.expect(&TokenKind::LBrace)?;
         let mut depth = 1;
@@ -7328,6 +7372,7 @@ mod tests {
     };
     use crate::lexer::lex;
     use crate::name::INTERNAL_PREFIX;
+    use crate::unparse::Unparser;
     use crate::{ast, format};
     use std::assert_matches;
 
@@ -7347,6 +7392,27 @@ mod tests {
 
     fn effect_names(effects: &[EffectName]) -> Vec<&str> {
         effects.iter().map(|e| e.name.as_str()).collect()
+    }
+
+    #[test]
+    fn skipped_bodies_read_back_as_a_full_parse_reads_them() {
+        let source = "#![generated(by = \"g\")]\n\
+            fn half(n: i32) -> i32\n    contract n % 2 == 0\n{\n    return n / 2;\n}\n\
+            struct P { x: i32 }\n\
+            impl P {\n    fn get(&self) -> i32 { let y = { x: self.x } as P; return y.x; }\n}\n\
+            trait T {\n    fn one(&self) -> i32 { return 1; }\n}\n\
+            test { assert half(4) == 2; }\n";
+        let unparse = |module: &Module| Unparser::new().unparse(module);
+        let full = parse(source).unwrap();
+
+        let mut parser = Parser::from_lex_no_trivia(lex(source)).skipping_generated_bodies();
+        let mut skipped = parser.parse();
+        assert!(parser.skipped_bodies());
+        assert_ne!(unparse(&skipped), unparse(&full));
+        parser.read_skipped_bodies(&mut skipped);
+
+        assert!(parser.take_errors().is_empty());
+        assert_eq!(unparse(&skipped), unparse(&full));
     }
 
     /// Parse helper that exposes the full recovery result: the (always
