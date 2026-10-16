@@ -4898,7 +4898,7 @@ impl TypeTable {
             .map(|name| (name.clone(), Vec::new()))
             .collect();
         self.zip_rows(marked, actual, true, &mut |we, ae| {
-            for (name, mark) in marks.iter().filter(|(_, mark)| we.contains(mark)) {
+            for (name, _) in marks.iter().filter(|(_, mark)| we.contains(mark)) {
                 let row = rows.get_mut(name).expect("every name has a row");
                 for e in ae.iter().filter(|e| !we.contains(e)) {
                     if !row.contains(e) {

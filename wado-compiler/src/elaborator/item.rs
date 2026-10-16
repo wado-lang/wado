@@ -29,7 +29,7 @@ use super::types::{FunctionContext, TypeError};
 use super::tysys::TypeSystem;
 use super::util;
 use super::{AbstractSelections, Elaborator};
-use crate::ast::{AssociatedTypeDecl, AstId, Attribute, GenericParam};
+use crate::ast::{AssociatedTypeDecl, AstId, Attribute};
 use crate::compiler_item::TraitAssocType;
 use crate::defs::{DefId, DefKind};
 use crate::elaborator::method_lookup::{ImplParamSlots, impl_target_args, impl_target_head_args};
