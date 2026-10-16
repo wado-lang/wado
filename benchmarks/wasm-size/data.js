@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1792131235987,
+  "lastUpdate": 1792162402592,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -67509,6 +67509,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/79a01ff9e30acf0172516401ad297443fb48fefa"
         },
         "date": 1792131234952,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 2955,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 7350,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 19942,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 337123,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "13e7d0051a1585b4d76d4055e3901c21f6b3267d",
+          "message": "Merge pull request #2365 from wado-lang/claude/spec-c07-trait-effects-olrk4u\n\nfeat(core:fs): walk_dir lists each directory as it yields it, with an effectful descend",
+          "timestamp": "2026-10-16T23:31:34+09:00",
+          "tree_id": "0f027019e9f1f0ad5a191ba60b6c5d76bf00e587",
+          "url": "https://github.com/wado-lang/wado/commit/13e7d0051a1585b4d76d4055e3901c21f6b3267d"
+        },
+        "date": 1792162402179,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
