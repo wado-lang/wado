@@ -702,9 +702,7 @@ impl TypeSystem {
                 for_each_application(&table, ty, &mut |head, args| {
                     for (position, &arg) in args.iter().enumerate() {
                         let to = (head, position as u32);
-                        let mut params = Vec::new();
-                        type_params_in(&table, arg, &mut params);
-                        for param in params {
+                        for param in table.type_param_indices(arg) {
                             let from = (def, param);
                             steps.entry(from).or_default().push(to);
                             let bare = matches!(
@@ -736,16 +734,6 @@ fn for_each_application(table: &TypeTable, ty: TypeId, visit: &mut dyn FnMut(Def
     }
     for part in parts {
         for_each_application(table, part, visit);
-    }
-}
-
-/// The type parameters `ty` names, at any depth.
-fn type_params_in(table: &TypeTable, ty: TypeId, params: &mut Vec<u32>) {
-    if let ResolvedType::TypeParam { index, .. } = table.get(ty) {
-        params.push(*index);
-    }
-    for part in constituents(table, ty).1 {
-        type_params_in(table, part, params);
     }
 }
 

@@ -237,21 +237,11 @@ pub(crate) fn report_without_span<H: CompilerHost>(
     code: Code,
     message: String,
 ) {
-    report_at(logger, code, message, None);
-}
-
-/// Report a compilation error, at `span` where the pipeline knows one.
-fn report_at<H: CompilerHost>(
-    logger: &Logger<'_, H>,
-    code: Code,
-    message: String,
-    span: Option<Span>,
-) {
     let _ = logger.error(Diagnostic {
         severity: Severity::Error,
         code,
         message,
-        span: span.map(|span| DiagnosticSpan::from_span(&span, None)),
+        span: None,
     });
 }
 

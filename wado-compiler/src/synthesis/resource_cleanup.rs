@@ -431,8 +431,9 @@ impl CalleeFacts {
     }
 }
 
-/// Whether a type stores a value of one of `params`, for [`CalleeFacts`]: in
-/// a field, an element or a payload, or behind a reference. A function type
+/// Whether a type stores a value of one of `params`, for [`CalleeFacts`],
+/// asked through [`holds_resource`] with such a value as the resource it
+/// counts: in a field, an element or a payload, or behind a reference. A function type
 /// produces its result rather than storing it, so `AsyncCall<T>`, which holds
 /// only a `fn(i32) -> T`, stores no `T`.
 struct Stores<'a> {
@@ -458,13 +459,9 @@ impl HeldTypes for Stores<'_> {
                 args: Vec::new(),
                 members: vec![inner],
             },
-            _ => match self.resources.layout(type_id) {
-                Layout::Holder { decl, args, parts } => Held::Members {
-                    decl,
-                    args,
-                    members: parts.types(),
-                },
-                Layout::Resource(..) | Layout::Opaque => Held::Nothing,
+            _ => match self.resources.held(type_id) {
+                Held::Resource => Held::Nothing,
+                held => held,
             },
         }
     }
