@@ -18,13 +18,12 @@ pub fn unused_import_diagnostics(sem: &Semantics) -> Vec<Diagnostic> {
     let Some(resolutions) = sem.resolutions() else {
         return Vec::new();
     };
-    let mut dispatched = dispatched_traits(sem, resolutions);
+    let reported = &sem.liveness.reported_modules;
+    let mut dispatched = dispatched_traits(sem, resolutions, reported);
     let mut out = Vec::new();
-    for (src, module) in &sem.modules {
-        if !src.is_user_authored()
-            || module.has_generated()
-            || inner_attrs_allow(&module.inner_attributes, lint::UNUSED_IMPORTS)
-        {
+    for src in reported {
+        let module = &sem.modules[src];
+        if inner_attrs_allow(&module.inner_attributes, lint::UNUSED_IMPORTS) {
             continue;
         }
         let uses = Uses {
@@ -35,7 +34,6 @@ pub fn unused_import_diagnostics(sem: &Semantics) -> Vec<Diagnostic> {
         for item in &module.items {
             if let Item::Use(decl) = item
                 && !decl.visibility.reaches_beyond_file()
-                && !decl.is_export
                 && !attrs_allow(&decl.attrs, lint::UNUSED_IMPORTS)
             {
                 out.extend(
@@ -106,15 +104,11 @@ impl Uses<'_> {
                     }
                 }
                 UseItem::Namespace { name, name_span } => {
-                    let reached = self
-                        .resolutions
-                        .imports_in(self.module)
-                        .filter(|(alias, _)| {
-                            alias
-                                .strip_prefix(name.as_str())
-                                .is_some_and(|rest| rest.starts_with(NAMESPACE_MEMBER_SEP))
-                        })
-                        .any(|(_, def)| self.resolutions.references_from(self.module, def));
+                    let reached = self.resolutions.used_imports_in(self.module).any(|alias| {
+                        alias
+                            .strip_prefix(name.as_str())
+                            .is_some_and(|rest| rest.starts_with(NAMESPACE_MEMBER_SEP))
+                    });
                     if !reached {
                         unused.push((name.clone(), *name_span));
                     }
@@ -132,26 +126,24 @@ impl Uses<'_> {
         let Some(def) = self.resolutions.imported_as(self.module, local) else {
             return true;
         };
-        self.resolutions.references_from(self.module, def) || self.dispatched_traits.contains(&def)
+        self.resolutions.import_used(self.module, local) || self.dispatched_traits.contains(&def)
     }
 }
 
-/// Per user-authored module, the traits declaring or implementing a method
+/// Per module of `reported`, the traits declaring or implementing a method
 /// that one of its method calls dispatched to.
 fn dispatched_traits(
     sem: &Semantics,
     resolutions: &Resolutions,
+    reported: &IndexSet<ModuleSource>,
 ) -> IndexMap<ModuleSource, IndexSet<DefId>> {
     let defs = resolutions.defs();
     let mut implemented: IndexMap<DefId, Option<DefId>> = IndexMap::default();
     let mut out: IndexMap<ModuleSource, IndexSet<DefId>> = IndexMap::default();
     for (site, target) in sem.iter_references() {
-        let Some(module) = sem.module_of_id(site) else {
+        let Some(module) = sem.module_of_id(site).filter(|m| reported.contains(*m)) else {
             continue;
         };
-        if !module.is_user_authored() {
-            continue;
-        }
         let Some(method) = defs.of_ast_id(target) else {
             continue;
         };

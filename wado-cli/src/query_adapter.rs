@@ -51,7 +51,7 @@ async fn prepare_query(filename: &str) -> Result<PreparedQuery, CliExit> {
         FilesystemCompilerHost::silent(base.clone()),
         manifest_pair.as_ref(),
         &base,
-        &source,
+        &[&source],
         Acquisition::Analysis,
     )
     .await
@@ -226,7 +226,7 @@ async fn symbol_env(notation: &str, base: &str) -> Result<SymbolEnv, CliExit> {
         FilesystemCompilerHost::silent(base_dir.clone()),
         manifest_pair.as_ref(),
         &base_dir,
-        "",
+        &[],
         Acquisition::Analysis,
     )
     .await

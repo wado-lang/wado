@@ -7,6 +7,7 @@
 use std::sync::Arc;
 
 use crate::ast::{self, AstId, AstVisitor, GenericParam, Item, Module, Type};
+use crate::attribute::BENIGN;
 use crate::bind::expr_references_var;
 use crate::compiler_host::{Code, Diagnostic, DiagnosticSpan, Severity};
 use crate::defs::{DefId, DefKind, DefTable};
@@ -92,8 +93,8 @@ pub struct Resolutions {
     /// render it.
     defs: Arc<DefTable>,
     refs: IndexMap<AstId, Resolution>,
-    /// The declarations each module's reference sites reach.
-    referenced: IndexMap<ModuleSource, hashmap::IndexSet<DefId>>,
+    /// Each module's imports that answered one of its reference sites.
+    used_imports: IndexMap<ModuleSource, hashmap::IndexSet<String>>,
     /// The module scopes, layered. Held here rather than recomputed, so the
     /// site walk and a name-only caller run one implementation and cannot
     /// answer differently.
@@ -146,13 +147,18 @@ impl Scopes {
     ///
     /// The one implementation of the scope order.
     fn resolve(&self, module: &ModuleSource, name: &str) -> Option<DefId> {
-        if let Some(def) = self.imports.get(module).and_then(|m| m.get(name)) {
-            return Some(*def);
+        if let Some(def) = self.imported(module, name) {
+            return Some(def);
         }
         if let Some(def) = self.own.get(module).and_then(|m| m.get(name)) {
             return Some(*def);
         }
         self.prelude.get(name).copied()
+    }
+
+    /// The import tier alone: what `module` imports under the local `name`.
+    fn imported(&self, module: &ModuleSource, name: &str) -> Option<DefId> {
+        self.imports.get(module)?.get(name).copied()
     }
 
     /// [`Self::resolve`], then the case tier.
@@ -276,7 +282,7 @@ impl Resolutions {
     ) -> Self {
         let scopes = Scopes::build(modules, symbols, &defs);
         let mut refs = IndexMap::default();
-        let mut referenced = IndexMap::default();
+        let mut used_imports = IndexMap::default();
         let mut shadowings = Vec::new();
         let mut redeclarations = Vec::new();
         let mut effect_binders = hashmap::IndexSet::default();
@@ -291,7 +297,7 @@ impl Resolutions {
                 bindings: Vec::new(),
                 scopes: &scopes,
                 refs: &mut refs,
-                referenced: hashmap::IndexSet::default(),
+                used_imports: hashmap::IndexSet::default(),
                 shadowings: &mut shadowings,
                 redeclarations: &mut redeclarations,
                 effect_binders: &mut effect_binders,
@@ -306,12 +312,12 @@ impl Resolutions {
             for item in &module.items {
                 resolver.visit_item(item);
             }
-            referenced.insert(module_source.clone(), resolver.referenced);
+            used_imports.insert(module_source.clone(), resolver.used_imports);
         }
         Self {
             defs,
             refs,
-            referenced,
+            used_imports,
             scopes,
             shadowings,
             redeclarations,
@@ -327,12 +333,23 @@ impl Resolutions {
         self.fn_bound_binders.get(&binder)
     }
 
-    /// Whether a reference site `module` wrote reaches `def`.
+    /// Whether `module`'s import under the local name `local` answered one of
+    /// its reference sites.
     #[must_use]
-    pub fn references_from(&self, module: &ModuleSource, def: DefId) -> bool {
-        self.referenced
+    pub fn import_used(&self, module: &ModuleSource, local: &str) -> bool {
+        self.used_imports
             .get(module)
-            .is_some_and(|reached| reached.contains(&def))
+            .is_some_and(|used| used.contains(local))
+    }
+
+    /// The local names of `module`'s imports that answered one of its
+    /// reference sites — an alias, or a namespace import's `ns$member`.
+    pub fn used_imports_in(&self, module: &ModuleSource) -> impl Iterator<Item = &str> {
+        self.used_imports
+            .get(module)
+            .into_iter()
+            .flatten()
+            .map(String::as_str)
     }
 
     /// Every binder that took a name already in scope.
@@ -392,11 +409,7 @@ impl Resolutions {
     /// caller asks when the *aliasing* is the point, not what the name means.
     #[must_use]
     pub fn imported_as(&self, module: &ModuleSource, name: &str) -> Option<DefId> {
-        self.scopes
-            .imports
-            .get(module)
-            .and_then(|m| m.get(name))
-            .copied()
+        self.scopes.imported(module, name)
     }
 
     /// The declaration `name` refers to as written in `module`, for a spelling
@@ -666,8 +679,8 @@ struct Resolver<'a> {
     bindings: Vec<IndexMap<String, Span>>,
     scopes: &'a Scopes,
     refs: &'a mut IndexMap<AstId, Resolution>,
-    /// The declarations this module's sites have reached so far.
-    referenced: hashmap::IndexSet<DefId>,
+    /// This module's imports, by local name, that answered one of its sites.
+    used_imports: hashmap::IndexSet<String>,
     shadowings: &'a mut Vec<Shadowing>,
     redeclarations: &'a mut Vec<Redeclaration>,
     /// Off under an `#[allow(shadowed_name)]` on any enclosing node, the module
@@ -739,11 +752,20 @@ impl Resolver<'_> {
             .map_or(Resolution::Unresolved, Resolution::Def)
     }
 
-    fn record(&mut self, site: AstId, answer: Resolution) {
+    /// Record what `site`, which named `key` in its scope, refers to.
+    fn record(&mut self, site: AstId, key: &str, answer: Resolution) {
         if let Resolution::Def(def) = answer {
-            self.referenced.insert(def);
+            self.note_import(key, def);
         }
         self.refs.insert(site, answer);
+    }
+
+    /// Note the import `key` names as used when it is what answered with
+    /// `def`, rather than a nearer binder or local item.
+    fn note_import(&mut self, key: &str, def: DefId) {
+        if self.scopes.imported(self.module, key) == Some(def) {
+            self.used_imports.insert(key.to_string());
+        }
     }
 
     fn push_binders(&mut self, params: &[GenericParam], self_binder: Option<AstId>) {
@@ -994,6 +1016,17 @@ fn expr_scopes_bindings(expr: &ast::Expr) -> bool {
 
 impl AstVisitor for Resolver<'_> {
     fn visit_attributed(&mut self, attrs: &[ast::Attribute], body: impl FnOnce(&mut Self)) {
+        // A `#[benign]` argument names an effect with no reference site, so
+        // the module's scope answers it, as effect checking reads it.
+        for arg in attrs
+            .iter()
+            .filter(|attr| attr.name == BENIGN)
+            .flat_map(|attr| &attr.args)
+        {
+            if let Some(def) = self.scopes.resolve(self.module, arg.as_str()) {
+                self.note_import(arg.as_str(), def);
+            }
+        }
         let saved = self.lint_shadowing;
         self.lint_shadowing &= !ast::attrs_allow(attrs, ast::lint::SHADOWED_NAME);
         body(self);
@@ -1018,7 +1051,7 @@ impl AstVisitor for Resolver<'_> {
                 // minted spelling would be a reference the walk never saw — so
                 // the declaration node answers for itself and the bound names
                 // it instead of respelling its name.
-                self.record(t.id, Resolution::Def(self.defs.def_at(t.id)));
+                self.record(t.id, &t.name, Resolution::Def(self.defs.def_at(t.id)));
                 (&t.type_params, Some(t.id))
             }
             Item::Function(_)
@@ -1051,11 +1084,14 @@ impl AstVisitor for Resolver<'_> {
     /// taking a parameter's name redeclares it.
     fn visit_function(&mut self, func: &ast::Function) {
         for target in &func.export_targets {
-            let answer = match &target.namespace {
-                Some(ns) => self.namespace_member(ns, &target.world),
-                None => self.resolve_name(&target.world),
+            let (key, answer) = match &target.namespace {
+                Some(ns) => (
+                    namespace_member_alias(ns, &target.world),
+                    self.namespace_member(ns, &target.world),
+                ),
+                None => (target.world.clone(), self.resolve_name(&target.world)),
             };
-            self.record(target.id, answer);
+            self.record(target.id, &key, answer);
         }
         self.in_scope(&func.type_params, None, |s| {
             s.in_frame(|s| {
@@ -1173,8 +1209,9 @@ impl AstVisitor for Resolver<'_> {
             ..
         } = pat
         {
-            let answer = self.resolve_name(&name.replace("::", "$"));
-            self.record(*id, answer);
+            let key = name.replace("::", "$");
+            let answer = self.resolve_name(&key);
+            self.record(*id, &key, answer);
         }
         // The alternatives of an or-pattern are one binding set, not successive
         // ones: the language requires them to bind the same names, so each is
@@ -1213,7 +1250,7 @@ impl AstVisitor for Resolver<'_> {
         match pat {
             ast::Pattern::MutIdent { name, span, .. } => self.bind_pattern_name(name, *span),
             ast::Pattern::Ident { id, name, span } => match self.pattern_constant(name) {
-                Some(def) => self.record(*id, Resolution::Def(def)),
+                Some(def) => self.record(*id, name, Resolution::Def(def)),
                 None if !self.scopes.case_names.contains(name) => {
                     self.bind_pattern_name(name, *span);
                 }
@@ -1231,12 +1268,12 @@ impl AstVisitor for Resolver<'_> {
     fn visit_trait_bounds(&mut self, bounds: &[ast::TraitBound]) {
         for bound in bounds {
             let answer = self.resolve_name(&bound.name);
-            self.record(bound.id, answer);
+            self.record(bound.id, &bound.name, answer);
             for assoc in &bound.assoc_types {
                 // The member is named relative to the bound's trait, not to
                 // this module, so the site is recorded and left for the
                 // consumer that knows the trait.
-                self.record(assoc.id, Resolution::Unresolved);
+                self.record(assoc.id, &assoc.name, Resolution::Unresolved);
             }
         }
         // The types a bound carries are reached structurally, so a shape the
@@ -1284,22 +1321,23 @@ impl AstVisitor for Resolver<'_> {
         if let ast::Expr::StructLiteral(lit) = expr
             && let (Some(name), Some(name_id)) = (lit.name.as_deref(), lit.name_id)
         {
-            let answer = self.resolve_name(&name.replace("::", "$"));
-            self.record(name_id, answer);
+            let key = name.replace("::", "$");
+            let answer = self.resolve_name(&key);
+            self.record(name_id, &key, answer);
         }
         // `ns::member` resolves under the `ns$member` alias; a path that is no
         // such import answers `Unresolved` and its segments below name it.
         if let ast::Expr::Ident(ident) = expr {
             let written = ident.name.replace("::", "$");
             let answer = self.resolve_value_name(&written);
-            self.record(ident.id, answer);
+            self.record(ident.id, &written, answer);
         }
         if let ast::Expr::Ident(ident) = expr
             && let [head, rest @ ..] = ident.segments.as_slice()
             && !rest.is_empty()
         {
             let answer = self.resolve_name(&head.name);
-            self.record(head.id, answer);
+            self.record(head.id, &head.name, answer);
             if let Some(owner) = ident.owner_index().filter(|i| *i > 0) {
                 let qualified = format!(
                     "{}${}",
@@ -1307,7 +1345,7 @@ impl AstVisitor for Resolver<'_> {
                     ident.segments[owner].name
                 );
                 let answer = self.resolve_name(&qualified);
-                self.record(ident.segments[owner].id, answer);
+                self.record(ident.segments[owner].id, &qualified, answer);
             }
         }
         ast::walk_expr(self, expr);
@@ -1317,11 +1355,11 @@ impl AstVisitor for Resolver<'_> {
         match ty {
             Type::Named(named) => {
                 let answer = self.resolve_name(&named.name);
-                self.record(named.id, answer);
+                self.record(named.id, &named.name, answer);
             }
             Type::Generic(generic) => {
                 let answer = self.resolve_name(&generic.name);
-                self.record(generic.id, answer);
+                self.record(generic.id, &generic.name, answer);
                 for arg in &generic.args {
                     self.visit_type(arg);
                 }
@@ -1339,7 +1377,7 @@ impl AstVisitor for Resolver<'_> {
                     Some(base) => Resolution::Projection(base),
                     None => self.namespace_member(&ns.namespace, &ns.name),
                 };
-                self.record(ns.id, answer);
+                self.record(ns.id, &namespace_member_alias(&ns.namespace, &ns.name), answer);
                 for arg in &ns.args {
                     self.visit_type(arg);
                 }
@@ -1358,7 +1396,7 @@ impl AstVisitor for Resolver<'_> {
     /// binder; any other effect name resolves like a type name.
     fn visit_effect_name(&mut self, effect: &ast::EffectName) {
         let answer = self.resolve_name(&effect.name);
-        self.record(effect.id, answer);
+        self.record(effect.id, &effect.name, answer);
     }
 }
 

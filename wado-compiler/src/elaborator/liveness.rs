@@ -33,6 +33,10 @@ pub(crate) struct Liveness {
     /// Candidates reachable from tests but not production (`∈ T \ E`), in
     /// source order. `TestOnlyFunction` / `TestOnlyGlobal`.
     pub(crate) test_only_items: Vec<AstId>,
+    /// The modules whose items are report candidates: user-authored, not
+    /// generated, and a member of the package a package scope checks. Every
+    /// unused lint reports these alone.
+    pub(crate) reported_modules: IndexSet<ModuleSource>,
     /// Local last-use liveness (WEP 2026-05-21, value-copy client). Each entry
     /// is the `AstId` of an identifier *use* that is the final use, on every
     /// path, of a move-eligible local binding, filled only where TIR is built
@@ -50,11 +54,9 @@ pub(crate) struct Liveness {
 }
 
 /// Which modules a liveness run sees, and so which roots it can trust.
-#[derive(Default)]
 pub(crate) enum LivenessScope {
     /// One compilation: the modules its entry reaches. Another module of the
     /// package may use an `internal` item unseen, so one counts as used.
-    #[default]
     Compilation,
     /// A whole package, loaded together.
     Package(Box<PackageScope>),
@@ -178,6 +180,7 @@ pub(crate) fn compute(
         }
     }
 
+    let mut reported_modules = IndexSet::default();
     for (source, module) in modules {
         let roots = scope.module_roots(source);
         // `#![generated]` modules are machine-emitted (e.g. Gale's parser
@@ -185,6 +188,9 @@ pub(crate) fn compute(
         // are never report candidates. They still seed exports / edges below, so
         // they keep the items they call live.
         let user = roots.reported && !module.has_generated();
+        if user {
+            reported_modules.insert(source.clone());
+        }
         // A file-level `#![allow(dead_code)]` waives the lint for every item in
         // the module — the idiom for test-helper files whose functions exist
         // only to back `test` blocks.
@@ -344,7 +350,10 @@ pub(crate) fn compute(
         }
     }
 
-    graph.finish()
+    Liveness {
+        reported_modules,
+        ..graph.finish()
+    }
 }
 
 /// Where a declared method's only call comes from.
@@ -1188,6 +1197,7 @@ impl Graph {
             emit_live,
             dead_items,
             test_only_items,
+            reported_modules: IndexSet::default(),
             last_uses: IndexSet::default(),
             moved_spans: IndexSet::default(),
         }

@@ -51,9 +51,9 @@ existing `CompilerHost`. Two passes contribute, both consuming
 
 1. Reference pass — for every user-authored module, reports a binding
    no reference resolves to. Emits `UnusedImport`, `UnusedVariable`,
-   `UnusedParameter`. Imports read the resolver's per-module
-   referenced-definition set (`Resolutions::references_from`), since
-   the resolver is what decides which tier a name lands on.
+   `UnusedParameter`. Imports read the import entries that answered
+   the module's sites (`Resolutions::import_used`), since the resolver
+   is what decides which tier a name lands on.
 2. Liveness pass — the elaborate-time DCE pass introduced by
    [elaborator rearchitecture](./wep-2026-05-26-elaborator-rearchitecture.md).
    Computes source-level reachability from world-export roots over
@@ -252,14 +252,17 @@ attribute is baked into every emitted file.
 
 #### Unused imports
 
-`unused_import.rs` walks every file-private `use` in a user-authored
-module. The resolver records, per module, every definition a
-reference resolved to; an import is used when its import-tier
-`DefId` (`Resolutions::imported_as`) is in that set. For each `UseItem`:
+`unused_import.rs` walks every file-private `use` in a module liveness
+reports (`Liveness::reported_modules`), so both lints answer for the
+same files: a package check walks no dependency's bodies. The resolver
+records, per module, the import entries, by local name, that answered
+one of its sites; a `#[benign(E)]` argument counts as a site. A
+declaration imported twice (`use { a }` and `use m` reaching `m$a`) is
+two entries, each used only where it is written. For each `UseItem`:
 
 - `Simple`: reported when its local name (the alias, or the name) is
   unused.
-- `Namespace`: used when any `ns$member` it offers is referenced.
+- `Namespace`: used when one of its `ns$member` entries is.
 - `InterfaceFunctions`: the interface is reported only when it and every
   function listed with it are unused; otherwise each unused function is.
 - `Wildcard`: skipped (side-effect imports).
@@ -374,7 +377,7 @@ land with stage 6 of the rearchitecture (see
 
 #### Phase 2 — reference pass
 
-- [x] Record each module's referenced definitions in the resolver.
+- [x] Record each module's used import entries in the resolver.
 - [x] Implement the import emitter (`unused_import.rs`), wired through
   `unused_diagnostics`, with `unused_import.wado`.
 - [ ] Implement the locals and params emitter.

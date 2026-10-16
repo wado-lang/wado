@@ -328,3 +328,56 @@ fn inline_git_source_in_a_single_file_script() {
         .success()
         .stdout(predicate::str::contains("hello from inline git"));
 }
+
+/// Checking a package reads each member's inline sources as a file of its own:
+/// a member ending in `__DATA__` hides nothing in the next one.
+#[test]
+fn inline_git_source_in_a_package_member_after_a_data_section() {
+    let tmp = tempfile::tempdir().unwrap();
+    let root = tmp.path();
+    let cache = root.join("wado-cache");
+
+    let greet = root.join("greet");
+    fs::create_dir_all(greet.join("src")).unwrap();
+    fs::write(
+        greet.join("wado.toml"),
+        "[package]\nname = \"greet\"\nversion = \"0.1.0\"\nlib = \"src/lib.wado\"\n",
+    )
+    .unwrap();
+    fs::write(
+        greet.join("src/lib.wado"),
+        "export fn hello() -> String {\n    return \"hello\";\n}\n",
+    )
+    .unwrap();
+    git(&greet, &["init", "-q", "-b", "main"]);
+    git(&greet, &["add", "-A"]);
+    git(&greet, &["commit", "-q", "-m", "init"]);
+    let url = format!("file://{}", greet.display());
+
+    let app = root.join("app");
+    fs::create_dir_all(&app).unwrap();
+    fs::write(
+        app.join("wado.toml"),
+        "[package]\nname = \"app\"\nnamespace = \"wado\"\nversion = \"0.1.0\"\nlib = \"lib.wado\"\n",
+    )
+    .unwrap();
+    fs::write(
+        app.join("a_test.wado"),
+        "test { assert #data.len() > 0; }\n\n__DATA__\nsome data\n",
+    )
+    .unwrap();
+    fs::write(
+        app.join("lib.wado"),
+        format!(
+            "use {{ hello }} from \"greet\" with {{ git: \"{url}\", ref: \"main\" }};\n\n\
+             pub fn greeting() -> String {{\n    return hello();\n}}\n"
+        ),
+    )
+    .unwrap();
+
+    wado_in(&app)
+        .env("WADO_ROOT", &cache)
+        .arg("check")
+        .assert()
+        .success();
+}

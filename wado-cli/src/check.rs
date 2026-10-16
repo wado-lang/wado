@@ -10,6 +10,7 @@ use std::path::{Path, PathBuf};
 use lexopt::Arg::Value;
 use wado_compiler::Code;
 use wado_compiler::kiln::InvocationIndex;
+use wado_compiler::path::normalize;
 
 use crate::args::{self, CliExit};
 use crate::build;
@@ -202,33 +203,41 @@ async fn check_package_unused(
     opts: &CheckOptions,
 ) -> Result<(), CliExit> {
     let root = &project.root;
-    // The members are the files `wado test` runs.
-    let files = discover::discover_tree(root, &|pkg| test_filters(pkg, &[]))?
-        .into_iter()
-        .next()
-        .map(|pkg| pkg.files)
-        .unwrap_or_default();
+    // The spelling a member is matched by, so `src/../lib.wado` names
+    // `lib.wado`. A manifest entry outside the root is no member.
     let relative = |path: &Path| {
-        let rel = path
-            .strip_prefix(root)
-            .expect("a package's members lie under its root");
-        rel.to_string_lossy().replace('\\', "/")
+        Some(normalize(&path.strip_prefix(root).ok()?.to_string_lossy()))
+            .filter(|rel| !rel.starts_with("../"))
     };
+    // The members are the files `wado test` runs, and the entries, which a
+    // `[test].exclude` may leave out of those.
+    let mut files = discover::package_files(root, &|pkg| test_filters(pkg, &[]))?;
+    let mut members: Vec<String> = files
+        .iter()
+        .map(|f| relative(f).expect("a package's members lie under its root"))
+        .collect();
+    let entries: Vec<String> = targets.iter().filter_map(|t| relative(&t.entry)).collect();
+    for entry in &entries {
+        if !members.contains(entry) {
+            files.push(root.join(entry));
+            members.push(entry.clone());
+        }
+    }
     let package = wado_compiler::PackageSources {
         root: root.to_string_lossy().into_owned(),
-        members: files.iter().map(|f| relative(f)).collect(),
-        entries: targets.iter().map(|t| relative(&t.entry)).collect(),
+        members,
+        entries,
     };
     // Component dependencies are named in the members' own `use` clauses.
-    let sources: String = files
+    let sources = files
         .iter()
-        .filter_map(|f| std::fs::read_to_string(f).ok())
-        .collect();
+        .map(|f| std::fs::read_to_string(f).map_err(|e| CliExit::error(format!("{}: {e}", f.display()))))
+        .collect::<Result<Vec<_>, _>>()?;
     let host = attach_manifest_and_component_deps(
         FilesystemCompilerHost::with_log_level(root.clone(), opts.knobs.log_level),
         Some(project),
         root,
-        &sources,
+        &sources.iter().map(String::as_str).collect::<Vec<_>>(),
         Acquisition::Build,
     )
     .await

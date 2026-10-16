@@ -15,9 +15,9 @@ pub fn derive(program: &mut Program, trait_: TraitDeclId, declarations: &[Declar
     // An impl at other arguments (`Eq<String>`) leaves the defaults, where a
     // derived impl answers, to derive.
     let has_impl: IndexSet<TypeDeclId> = program
-        .impls
-        .values()
-        .filter(|def| def.trait_ == Some(trait_) && at_defaults(program, def))
+        .impls_of(trait_)
+        .map(|(_, def)| def)
+        .filter(|def| at_defaults(program, def))
         .filter_map(|def| match &def.target {
             SolverType::Decl(head, _) if covers_every_instance(def) => Some(*head),
             SolverType::Decl(..)

@@ -667,6 +667,92 @@ fn test_check_decides_unused_items_over_the_package() {
         .stderr(predicate::str::contains("`check`").not());
 }
 
+/// A package's entries offer its API however the manifest spells their path
+/// and whether or not its tests cover them.
+#[test]
+fn test_check_offers_the_api_of_every_declared_entry() {
+    let cases = [
+        ("lib = \"src/../lib.wado\"\n", ""),
+        ("lib = \"lib.wado\"\n", "[test]\nexclude = [\"lib.wado\"]\n"),
+    ];
+    for (lib, test) in cases {
+        let tmp = tempfile::tempdir().unwrap();
+        let dir = tmp.path();
+        std::fs::create_dir_all(dir.join("src")).unwrap();
+        std::fs::write(
+            dir.join("wado.toml"),
+            format!(
+                "[package]\nname = \"api\"\nnamespace = \"wado\"\nversion = \"0.1.0\"\n{lib}\n{test}"
+            ),
+        )
+        .unwrap();
+        std::fs::write(
+            dir.join("lib.wado"),
+            "use { helper } from \"./impl.wado\";\n\
+             pub fn api() -> i32 { return helper(); }\n",
+        )
+        .unwrap();
+        std::fs::write(
+            dir.join("impl.wado"),
+            "internal fn helper() -> i32 { return 1; }\n",
+        )
+        .unwrap();
+
+        wado()
+            .current_dir(dir)
+            .arg("check")
+            .assert()
+            .success()
+            .stderr(predicate::str::contains("never used").not());
+    }
+}
+
+/// Checking a package reports its own files alone: a dependency's bodies go
+/// unwalked, so nothing there could tell a used import from an unused one.
+#[test]
+fn test_check_reports_no_unused_import_in_a_dependency() {
+    let tmp = tempfile::tempdir().unwrap();
+    let greet = tmp.path().join("greet");
+    std::fs::create_dir_all(&greet).unwrap();
+    std::fs::write(
+        greet.join("wado.toml"),
+        "[package]\nname = \"greet\"\nnamespace = \"wado\"\nversion = \"0.1.0\"\nlib = \"a.wado\"\n",
+    )
+    .unwrap();
+    std::fs::write(
+        greet.join("a.wado"),
+        "use { Doubled } from \"./t.wado\";\n\
+         pub fn n() -> i32 { return 21.doubled(); }\n",
+    )
+    .unwrap();
+    std::fs::write(
+        greet.join("t.wado"),
+        "pub trait Doubled with () { fn doubled(&self) -> i32; }\n\
+         impl Doubled for i32 { fn doubled(&self) -> i32 { return *self * 2; } }\n",
+    )
+    .unwrap();
+    let app = tmp.path().join("app");
+    std::fs::create_dir_all(&app).unwrap();
+    std::fs::write(
+        app.join("wado.toml"),
+        "[package]\nname = \"app\"\nnamespace = \"wado\"\nversion = \"0.1.0\"\nlib = \"lib.wado\"\n\n\
+         [dependencies]\n\"wado:greet\" = { path = \"../greet\" }\n",
+    )
+    .unwrap();
+    std::fs::write(
+        app.join("lib.wado"),
+        "use { n } from \"wado:greet\";\npub fn api() -> i32 { return n(); }\n",
+    )
+    .unwrap();
+
+    wado()
+        .current_dir(&app)
+        .arg("check")
+        .assert()
+        .success()
+        .stderr(predicate::str::contains("never used").not());
+}
+
 /// A directory names the project to check, so a workspace member is reachable
 /// without changing directory first.
 #[test]

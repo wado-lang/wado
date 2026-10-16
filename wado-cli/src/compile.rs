@@ -364,7 +364,7 @@ pub async fn try_compile_with_run_cache(
         base_host,
         manifest_pair.as_ref(),
         &base_path,
-        &source,
+        &[&source],
         Acquisition::Build,
     )
     .await
@@ -449,8 +449,9 @@ pub(crate) fn attach_manifest_deps(
 /// Like [`attach_manifest_deps`], plus resolving registry dependencies as
 /// prebuilt components so `use { X } from "ns:pkg"` resolves across the CM
 /// boundary. Two sources feed the component map: a manifest `[dependencies]`
-/// table entry (lock-pinned) and a single-file inline
-/// `use … from "ns:pkg@ver" with { registry }` clause parsed from `entry_source`.
+/// table entry (lock-pinned) and an inline
+/// `use … from "ns:pkg@ver" with { registry }` clause parsed from one of
+/// `sources`, each a whole file.
 ///
 /// `tier` chooses how far acquisition may go: [`Acquisition::Build`] pulls
 /// whatever is missing and resolves an unpinned version live, while
@@ -460,10 +461,10 @@ pub(crate) async fn attach_manifest_and_component_deps(
     base_host: FilesystemCompilerHost,
     project: Option<&manifest::ProjectManifest>,
     base_path: &Path,
-    entry_source: &str,
+    sources: &[&str],
     tier: Acquisition,
 ) -> Result<FilesystemCompilerHost, String> {
-    let index = manifest_and_component_index(project, base_path, entry_source, tier).await?;
+    let index = manifest_and_component_index(project, base_path, sources, tier).await?;
     Ok(base_host.with_dependency_index(index))
 }
 
@@ -474,7 +475,7 @@ pub(crate) async fn attach_manifest_and_component_deps(
 async fn manifest_and_component_index(
     project: Option<&manifest::ProjectManifest>,
     base_path: &Path,
-    entry_source: &str,
+    sources: &[&str],
     tier: Acquisition,
 ) -> Result<wado_compiler::DependencyIndex, String> {
     // Materialize any locked-but-cold git worktrees first, so the offline git
@@ -515,19 +516,22 @@ async fn manifest_and_component_index(
     }
 
     let manifest = project.map(|p| &p.manifest);
-    let inline = resolve_inline_component_dependencies(entry_source, manifest, tier).await?;
-    index.components.extend(inline.resolved);
-    index.unresolved.extend(inline.unresolved);
+    for source in sources {
+        let inline = resolve_inline_component_dependencies(source, manifest, tier).await?;
+        index.components.extend(inline.resolved);
+        index.unresolved.extend(inline.unresolved);
 
-    // Inline git sources (`use … from "<name>" with { git }`) are source deps:
-    // their materialized worktree entry lands in `resolved`, compiled in.
-    let inline_git = resolve_inline_git_dependencies(entry_source, tier).await?;
-    for (name, path) in inline_git.resolved {
-        index.unresolved.swap_remove(&name);
-        index.resolved.insert(name, path);
-    }
-    for (name, reason) in inline_git.unresolved {
-        index.unresolved.insert(name, reason);
+        // Inline git sources (`use … from "<name>" with { git }`) are source
+        // deps: their materialized worktree entry lands in `resolved`, compiled
+        // in.
+        let inline_git = resolve_inline_git_dependencies(source, tier).await?;
+        for (name, path) in inline_git.resolved {
+            index.unresolved.swap_remove(&name);
+            index.resolved.insert(name, path);
+        }
+        for (name, reason) in inline_git.unresolved {
+            index.unresolved.insert(name, reason);
+        }
     }
 
     Ok(index)
@@ -771,7 +775,7 @@ pub(crate) async fn build_load(
         base_host,
         project.as_ref(),
         &base_path,
-        source,
+        &[source],
         Acquisition::Build,
     )
     .await
