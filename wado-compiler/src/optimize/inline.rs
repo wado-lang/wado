@@ -398,6 +398,24 @@ impl<'a> CostWalk<'a> {
         cost
     }
 
+    /// What an `if` costs over its operands. A guard, an arm-less `if` whose
+    /// arm opens with `cold_path()`, is laid out of line and never merges back,
+    /// so running it costs the test and a jump and splits no region: one
+    /// [`weight::OP`]. Pricing it as a [`weight::BRANCH`] held `Slice::slice`
+    /// back once the `contract` checks of its two `i32::clamp` calls were
+    /// copied into it, and with it every fold of a constant slice.
+    fn branch_weight(&self, then_block: BlockId, else_block: Option<BlockId>) -> usize {
+        let guard = self.price == Price::Hot
+            && else_block.is_none()
+            && self.body.blocks[then_block].stmts.first().is_some_and(|&s| {
+                matches!(
+                    block_cut(self.body, s, self.type_table, self.descriptors),
+                    BlockCut::Cold
+                )
+            });
+        if guard { weight::OP } else { weight::BRANCH }
+    }
+
     /// Cost of a NIR block, stopping once the rest of it becomes cold or
     /// unreachable. The walk ends at the first statement [`block_cut`] flags: a
     /// `cold_path()` marker drops the marker and, at [`Price::Hot`], everything
@@ -447,7 +465,7 @@ impl<'a> CostWalk<'a> {
                     });
                     return self.decided_arms(arms, seen);
                 }
-                weight::BRANCH
+                self.branch_weight(*then_block, *else_block)
                     + self.operand(*condition, seen)
                     + self.block(*then_block, seen)
                     + else_block.map_or(0, |b| self.block(b, seen))
@@ -628,7 +646,7 @@ impl<'a> CostWalk<'a> {
                     });
                     return self.decided_arms(arms, seen);
                 }
-                weight::BRANCH
+                self.branch_weight(*then_branch, *else_branch)
                     + self.operand(*condition, seen)
                     + self.block(*then_branch, seen)
                     + else_branch.map_or(0, |b| self.block(b, seen))

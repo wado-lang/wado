@@ -1,0 +1,32 @@
+// A guard, an `if` whose only arm opens with `cold_path()`, runs as a test and
+// a jump: the arm is laid out of line and never merges back. The inliner
+// prices it as one instruction, not as a branch. `probe` is seven guards over a
+// small body, which fits the -O2 threshold at that price and not at a branch's,
+// so it is inlined at both sites and its name leaves the WIR. A `contract`
+// clause copied into a callee is such a guard, and pricing it as a branch held
+// back every callee checking two.
+
+use { println, Stdout } from "core:cli";
+
+fn probe(x: i32, y: i32) -> i32 {
+    if x < 1 { builtin::cold_path(); panic("1"); }
+    if x < 2 { builtin::cold_path(); panic("2"); }
+    if x < 3 { builtin::cold_path(); panic("3"); }
+    if y < 4 { builtin::cold_path(); panic("4"); }
+    if y < 5 { builtin::cold_path(); panic("5"); }
+    if y < 6 { builtin::cold_path(); panic("6"); }
+    if x > y { builtin::cold_path(); panic("7"); }
+    return x * y + x - y;
+}
+
+export fn run() with Stdout {
+    let a = probe(builtin::black_box(3), builtin::black_box(7));
+    let b = probe(builtin::black_box(4), builtin::black_box(8));
+    println(`${a} ${b}`);
+}
+
+__DATA__
+{
+    "stdout": "17 28\n",
+    "wir_not_expect:O2": ["probe"]
+}
