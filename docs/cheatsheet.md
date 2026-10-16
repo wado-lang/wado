@@ -1505,9 +1505,7 @@ trait Source with _ {
 }
 
 // Iterator and IntoIterator are open: a `next` may perform I/O, and a loop
-// over it demands what it performs. Every other standard library trait,
-// FromStr included, says `with ()`: an impl of one performing I/O is a design
-// error.
+// over it demands what it performs.
 
 // Effect in function type position
 fn for_each(items: List<i32>, f: fn(i32) with Stdout) with Stdout {

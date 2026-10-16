@@ -621,7 +621,7 @@ A fixed head demands the same effects of every caller. An open one is resolved f
 
 A head that writes nothing reads as `with _`, so a bare trait is open rather than effect-free. The [`undecided_effects`](./spec-diagnostics.md#the-undecided_effects-lint) lint reports one.
 
-A method of a trait whose head is not `with ()` may write `with ()` itself. That method is pure in every impl, so a call to it demands nothing whatever the impl's other methods perform. Everywhere else `with ()` is rejected, since writing no clause already says it:
+A method of a trait whose head is not `with ()` may write `with ()` itself. That method is pure in every impl, so a call to it demands nothing whatever the impl's other methods perform. These are the two places `with ()` is written, the trait head and such a method. Anywhere else it is rejected, since writing no clause already says it:
 
 <!-- {"fixture":"effect_trait_method_pure_override.wado"} -->
 
@@ -644,8 +644,6 @@ export fn run() with Stdout {
     println(`${loud.next()}`);
 }
 ```
-
-The standard library's iteration traits, `Iterator` and `IntoIterator`, are open, since advancing an iterator may perform I/O. Their methods that only build an adapter say `with ()`. Every other trait in the standard library says `with ()`: an impl of one that performs I/O is a design error, for comparison and conversion alike.
 
 A type implements a trait once, so two impls that differ only in their effects are rejected. The effects are what the impl brings, not a choice a call makes.
 

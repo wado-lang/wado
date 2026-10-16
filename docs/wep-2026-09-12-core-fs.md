@@ -317,12 +317,13 @@ A file that calls `wasi:filesystem` itself still imports it. `example/cat.wado`
 streams and `package-gale/src/main.wado` searches every grant, and this module
 does neither. The re-export is for the caller that only needed the name.
 
-### A walk is a list, because an iterator may not perform I/O
+### A walk is a list
 
 `walk_dir` lists a whole tree before it returns. The shape that suggests itself
-is an iterator, and it is not available: every standard library trait declares
-`with ()`, `Iterator` included, so a `next` that reads a directory is a design
-error rather than a slow path. A walk too large to hold is `read_dir` and a
+is an iterator, and it was not available when this was decided: `Iterator` said
+`with ()` then, so a `next` that reads a directory could not be written.
+[WEP: Effects Through Closures](./wep-2026-10-11-effects-through-closures.md)
+has since opened `Iterator`. A walk too large to hold is `read_dir` and a
 recursion of the caller's own, which is what `example/tree.wado` keeps.
 
 The cost that shape would have saved is pruning, so `walk_dir` takes the
@@ -427,3 +428,5 @@ cannot reach is unowned and sits below.
 - An unnamed cause renders through `Inspect`, so `Io(ErrorCode::Access)` reads
   as `path: ErrorCode::Access` rather than as prose. Prose would need a message
   for each of the 40 `ErrorCode`s, most of which no caller branches on.
+- `walk_dir` still lists the whole tree before it returns, though an iterator
+  may now perform I/O. Whether a walk should become one is undecided.
