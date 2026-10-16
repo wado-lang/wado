@@ -1400,14 +1400,21 @@ fn part_holds(
         Conjunct::Lt(left, right) => refute(engine, binds, left, right),
         // `var >= lo` bounds `var + off` only while the add cannot wrap: a
         // positive `off` needs a cap on `var` that keeps the sum in its type.
-        Conjunct::AtLeast(v, off, f) => floor.into_iter().chain(own_floor(engine, binds, v)).any(|floor| {
-            let no_wrap = off <= 0
-                || floor
-                    .hi
-                    .zip(local_int_max(engine, v))
-                    .is_some_and(|(hi, max)| hi.checked_add(off).is_some_and(|top| top <= max));
-            floor.var == v && no_wrap && floor.lo.checked_add(off).is_some_and(|l| l >= f)
-        }),
+        Conjunct::AtLeast(v, off, f) => {
+            floor
+                .into_iter()
+                .chain(own_floor(engine, binds, v))
+                .any(|floor| {
+                    let no_wrap = off <= 0
+                        || floor
+                            .hi
+                            .zip(local_int_max(engine, v))
+                            .is_some_and(|(hi, max)| {
+                                hi.checked_add(off).is_some_and(|top| top <= max)
+                            });
+                    floor.var == v && no_wrap && floor.lo.checked_add(off).is_some_and(|l| l >= f)
+                })
+        }
     }
 }
 

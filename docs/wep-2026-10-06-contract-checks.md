@@ -413,7 +413,12 @@ API waits for a program outside the standard library that needs one.
    parameter borrows, or no twin follows a trait's clauses, the arguments are
    bound ahead instead, and the clauses then the call form a block. A copy
    reports its call's position through the `$contract_site` intrinsic, which
-   the function's own clauses fall back from to the clause's. Under
+   the function's own clauses fall back from to the clause's. A copy tests the
+   clause's bare condition. What a failure reports moves into one function per
+   clause, `F$contract_report{k}`, which evaluates the condition again with its
+   power-assert captures and takes only the locals that reads, plus the site.
+   A clause writing a parameter keeps its report in each copy, since running it
+   again would start from what it wrote. Under
    `-f contract-checks` a marked call goes back to the function before
    monomorphization, and so is expanded as an unmarked one is.
 

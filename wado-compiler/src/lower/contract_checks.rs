@@ -30,8 +30,8 @@ use crate::name::{
 use crate::synthesis::common::builtin_call;
 use crate::tir::{
     CallArg, FunctionRef, LetStorage, LocalFrame, TemplateId, TirBlock, TirExpr, TirExprKind,
-    TirFunction, TirLocal, TirParam, TirPattern, TirStmt, TirStmtKind, TirUnaryOp, TypeId, TypeTable,
-    assign_stmt,
+    TirFunction, TirLocal, TirParam, TirPattern, TirStmt, TirStmtKind, TirUnaryOp, TypeId,
+    TypeTable, assign_stmt,
 };
 use crate::tir_visitor::{TirMutVisitor, TirRefVisitor, remap_locals};
 
@@ -219,8 +219,11 @@ fn share_reports(flat: &mut FlatPackage) {
         }
         func.body = Some(body);
     }
-    flat.functions
-        .extend(reports.into_iter().map(|report| Rc::new(RefCell::new(report))));
+    flat.functions.extend(
+        reports
+            .into_iter()
+            .map(|report| Rc::new(RefCell::new(report))),
+    );
 }
 
 /// Rewrite each clause's check, `let $cond = …; if !$cond { … }` whose
@@ -379,13 +382,17 @@ impl StripCaptures<'_> {
     }
 
     fn capture(&self, block: &TirBlock) -> bool {
-        let Some((TirStmt {
-            kind: TirStmtKind::Expr(TirExpr {
-                kind: TirExprKind::Local { index: read, .. },
+        let Some((
+            TirStmt {
+                kind:
+                    TirStmtKind::Expr(TirExpr {
+                        kind: TirExprKind::Local { index: read, .. },
+                        ..
+                    }),
                 ..
-            }),
-            ..
-        }, assigns)) = block.stmts.split_last()
+            },
+            assigns,
+        )) = block.stmts.split_last()
         else {
             return false;
         };

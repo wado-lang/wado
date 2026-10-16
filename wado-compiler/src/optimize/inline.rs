@@ -407,12 +407,15 @@ impl<'a> CostWalk<'a> {
     fn branch_weight(&self, then_block: BlockId, else_block: Option<BlockId>) -> usize {
         let guard = self.price == Price::Hot
             && else_block.is_none()
-            && self.body.blocks[then_block].stmts.first().is_some_and(|&s| {
-                matches!(
-                    block_cut(self.body, s, self.type_table, self.descriptors),
-                    BlockCut::Cold
-                )
-            });
+            && self.body.blocks[then_block]
+                .stmts
+                .first()
+                .is_some_and(|&s| {
+                    matches!(
+                        block_cut(self.body, s, self.type_table, self.descriptors),
+                        BlockCut::Cold
+                    )
+                });
         if guard { weight::OP } else { weight::BRANCH }
     }
 
@@ -1818,7 +1821,6 @@ fn call_site_counts(scans: &[BodyScan]) -> Vec<usize> {
     }
     counts
 }
-
 
 /// The functions some cold site calls, indexed by store position: the ones a
 /// [`Site::Cold`] admission asks whether they shrink.
