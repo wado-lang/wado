@@ -329,8 +329,7 @@ is what made this shape available: before it, `Iterator` said `with ()`, so a
 list of the whole tree.
 
 So a failure has two places. The directory handed to `walk_dir` fails the call,
-as `read_dir` does, and `?` on it reads as it did for the list. A directory
-under it that cannot be listed is an item, `Err` where its entries would have
+as `read_dir` does. A directory under it that cannot be listed is an item, `Err` where its entries would have
 been, and the walk goes on with the next entry rather than ending. A caller
 that wants to stop at the first failure writes `?` on the item.
 
