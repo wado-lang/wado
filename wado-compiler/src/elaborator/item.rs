@@ -2572,17 +2572,12 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
 
     /// The return type `func`'s recorded [`super::sem::decls::FunctionSig`]
     /// declares, resolved in the signature's frame so a generic one's
-    /// `TypeParam` ids match the body's.
-    fn declared_return_type(&self, func: &Function) -> TypeId {
-        let def = self.tysys.def_at(func.id);
-        self.sem
-            .decls
-            .function_sigs
-            .get(&def)
-            .expect("decl pass records every free function's canonical signature")
-            .decl
-            .return_type
-            .unwrap_or(TypeTable::UNIT)
+    /// `TypeParam` ids match the body's. The decl pass records one for every
+    /// free function.
+    fn recorded_return_type(&self, func: &Function) -> Option<TypeId> {
+        let def = self.tysys.resolutions.defs().of_ast_id(func.id)?;
+        let sig = self.sem.decls.function_sigs.get(&def)?;
+        Some(sig.decl.return_type.unwrap_or(TypeTable::UNIT))
     }
 
     /// Resolve a function for its facts.
@@ -2596,20 +2591,16 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
 
         scope.register_generic_params(&func.type_params, 0);
 
-        // A `<F: fn(…)>` bound is eagerly realised to its function type and
-        // consumes no `TypeParam` slot, being nothing monomorphisation needs to
-        // substitute.
-        let has_real_type_params = func
-            .type_params
-            .iter()
-            .any(GenericParam::is_real_type_param);
-        let return_type = if has_real_type_params {
-            scope.declared_return_type(func)
-        } else {
-            func.return_type
+        // An interface operation's default body is walked as a function but
+        // records no signature of its own; it declares no type parameters, so
+        // resolving its return type here gives the ids the signature would.
+        let return_type = match scope.recorded_return_type(func) {
+            Some(return_type) => return_type,
+            None => func
+                .return_type
                 .as_ref()
                 .map(|t| scope.resolve_type(t))
-                .unwrap_or(TypeTable::UNIT)
+                .unwrap_or(TypeTable::UNIT),
         };
 
         scope

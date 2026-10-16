@@ -11,7 +11,16 @@ fn twice<T, effect E>(f: fn(T) -> T with E, x: T) -> T with E {
     return f(f(x));
 }
 
+// The caller's own `E` is another parameter than `apply`'s, though they share
+// the name: `apply`'s settles to the caller's.
+fn relay<effect E>(g: fn() with E) with E {
+    let h: fn(fn() with E) with E = apply;
+    h(g);
+}
+
 export fn run() with Stdout {
+    relay(|| { println("relayed"); });
+
     let pure: fn(fn()) = apply;
     pure(|| {});
 
@@ -23,4 +32,4 @@ export fn run() with Stdout {
 }
 
 __DATA__
-{"stdout": "loud\n42\n"}
+{"stdout": "relayed\nloud\n42\n"}

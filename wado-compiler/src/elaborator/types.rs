@@ -2964,7 +2964,7 @@ impl TypeError {
                 {
                     let name = unalias_namespace_member(name);
                     format!(
-                        "cannot reference effect-generic function '{name}' without an expected function type; annotate where it goes (e.g., `let f: fn(...) = {name};`) or wrap in a closure"
+                        "cannot reference effect-generic function '{name}' without an expected function type, since a turbofish names no effect; annotate where it goes (e.g., `let f: fn(...) = {name};`) or wrap in a closure"
                     )
                 },
                 *span,
