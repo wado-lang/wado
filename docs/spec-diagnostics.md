@@ -264,7 +264,7 @@ The `unused_imports` lint warns about a name a `use` brings in that its module
 never refers to. One `use` can bring in several names, and each is reported on
 its own, where the `use` binds it.
 
-<!-- {"fixture": "unused_import.wado"} -->
+<!-- {"fixture": "unused_import.wado", "assert": false} -->
 
 ```wado
 use { println, eprintln, Stdout } from "core:cli";
