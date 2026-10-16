@@ -185,7 +185,7 @@ fn check_value(
             Some(CanonicalValue::String(s.value.clone()))
         }
         (OptionsType::Enum { variants, name }, AttrValue::String(s)) => {
-            if variants.iter().any(|v| *v == s.value) {
+            if variants.contains(&s.value) {
                 Some(CanonicalValue::Enum(s.value.clone()))
             } else {
                 diagnostics.push(site.error(format!(
