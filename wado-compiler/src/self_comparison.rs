@@ -23,10 +23,8 @@ use crate::unparse::{binary_op_str, unparse_expr_source};
 pub fn self_comparison_diagnostics(sem: &Semantics, lints: Lints) -> Vec<Diagnostic> {
     let probe = OnceCell::new();
     let mut out = Vec::new();
-    for (src, module) in &sem.modules {
-        if !lints.reports_in(src, module)
-            || inner_attrs_allow(&module.inner_attributes, lint::SELF_COMPARISON)
-        {
+    for (src, module) in lints.modules(&sem.modules) {
+        if inner_attrs_allow(&module.inner_attributes, lint::SELF_COMPARISON) {
             continue;
         }
         let mut comparisons = SelfComparisons {

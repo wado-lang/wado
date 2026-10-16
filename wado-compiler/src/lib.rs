@@ -679,11 +679,7 @@ pub async fn package_unused_diagnostics<H: CompilerHost>(
         .map(|(source, _)| source.clone())
         .collect();
     let production = reach(entries.iter(), |source| imports(source).iter().collect());
-    let reported = load
-        .modules
-        .iter()
-        .filter(|(source, module)| lints.reports_in(source, module))
-        .map(|(source, _)| source);
+    let reported = lints.modules(&load.modules).map(|(source, _)| source);
     let walked = reach(reported, |source| {
         importers.get(source).cloned().unwrap_or_default()
     });
@@ -739,6 +735,16 @@ impl Lints {
                 Self::Own => !module.has_generated(),
                 Self::Generated => true,
             }
+    }
+
+    /// The entries of `modules` a lint reports in.
+    pub(crate) fn modules<'a>(
+        self,
+        modules: &'a IndexMap<ModuleSource, ast::Module>,
+    ) -> impl Iterator<Item = (&'a ModuleSource, &'a ast::Module)> {
+        modules
+            .iter()
+            .filter(move |(source, module)| self.reports_in(source, module))
     }
 }
 
@@ -802,10 +808,8 @@ fn shadowing_diagnostics(sem: &semantics::Semantics, lints: Lints) -> Vec<Diagno
 /// nothing about the effects its impls may declare.
 fn undecided_effect_diagnostics(sem: &semantics::Semantics, lints: Lints) -> Vec<Diagnostic> {
     let mut out = Vec::new();
-    for (src, module) in &sem.modules {
-        if !lints.reports_in(src, module)
-            || inner_attrs_allow(&module.inner_attributes, lint::UNDECIDED_EFFECTS)
-        {
+    for (src, module) in lints.modules(&sem.modules) {
+        if inner_attrs_allow(&module.inner_attributes, lint::UNDECIDED_EFFECTS) {
             continue;
         }
         for item in &module.items {

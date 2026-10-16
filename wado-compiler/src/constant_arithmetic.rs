@@ -23,10 +23,7 @@ use crate::unparse::unparse_expr_source;
 /// Source-level `ArithmeticOverflow` and `UnconditionalTrap` warnings.
 pub fn constant_arithmetic_diagnostics(sem: &Semantics, lints: Lints) -> Vec<Diagnostic> {
     let mut out = Vec::new();
-    for (src, module) in &sem.modules {
-        if !lints.reports_in(src, module) {
-            continue;
-        }
+    for (src, module) in lints.modules(&sem.modules) {
         let waived = |name| inner_attrs_allow(&module.inner_attributes, name);
         let mut walk = ConstantArithmetic {
             sem,

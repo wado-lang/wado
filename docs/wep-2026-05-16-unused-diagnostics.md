@@ -213,9 +213,10 @@ A module carrying the `#![generated]` inner attribute (Gale parser output,
 from the lint entirely: it is never hand-edited, so flagging its unused items
 is pure noise. Every other lint excludes it the same way, and
 `--lint-generated` takes it back in for a generator's author. The module still
-seeds the liveness closure, so items it calls stay live. This is the principled alternative to embedding `#[allow(dead_code)]`
-in inlined runtime support — generated parsers carry the marker already, so no
-attribute is baked into every emitted file.
+seeds the liveness closure, so items it calls stay live. This is the principled
+alternative to embedding `#[allow(dead_code)]` in inlined runtime support —
+generated parsers carry the marker already, so no attribute is baked into every
+emitted file.
 
 ### Suppression
 
@@ -260,9 +261,8 @@ attribute is baked into every emitted file.
 `unused_import.rs` walks every file-private `use` in a module a lint reports
 in (`Lints::reports_in`), the one predicate every lint and the dead-item
 emitter read, so both unused lints answer for the same files: a package check
-walks no dependency's bodies. The resolver
-records, per module, the import entries, by local name, that answered
-one of its sites. A name written where no site holds it, which a later
+walks no dependency's bodies. The resolver records, per module, the import
+entries, by local name, that answered one of its sites. A name written where no site holds it, which a later
 pass reads by name, counts as one: a `#[benign(E)]` argument, and a
 world's `import X;` / `export X;`. A
 declaration imported twice (`use { a }` and `use m` reaching `m$a`) is

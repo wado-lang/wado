@@ -15,10 +15,8 @@ use crate::token::Span;
 /// whose last `_`-separated group spells a float type.
 pub fn hex_suffix_lookalike_diagnostics(sem: &Semantics, lints: Lints) -> Vec<Diagnostic> {
     let mut out = Vec::new();
-    for (src, module) in &sem.modules {
-        if !lints.reports_in(src, module)
-            || inner_attrs_allow(&module.inner_attributes, lint::HEX_SUFFIX_LOOKALIKE)
-        {
+    for (src, module) in lints.modules(&sem.modules) {
+        if inner_attrs_allow(&module.inner_attributes, lint::HEX_SUFFIX_LOOKALIKE) {
             continue;
         }
         let mut walk = Lookalikes(Vec::new());

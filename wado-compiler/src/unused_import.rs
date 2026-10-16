@@ -19,10 +19,8 @@ pub fn unused_import_diagnostics(sem: &Semantics, lints: Lints) -> Vec<Diagnosti
     let Some(resolutions) = sem.resolutions() else {
         return Vec::new();
     };
-    let reported: IndexSet<ModuleSource> = sem
-        .modules
-        .iter()
-        .filter(|(src, module)| lints.reports_in(src, module))
+    let reported: IndexSet<ModuleSource> = lints
+        .modules(&sem.modules)
         .map(|(src, _)| src.clone())
         .collect();
     let mut dispatched = dispatched_traits(sem, resolutions, &reported);
