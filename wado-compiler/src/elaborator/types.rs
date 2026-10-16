@@ -1540,6 +1540,12 @@ pub enum TypeError {
         name: String,
         span: Span,
     },
+    /// A function generic over an effect named as a value with no expected
+    /// `fn(...)` type to settle the effect from.
+    BareEffectGenericFunctionRef {
+        name: String,
+        span: Span,
+    },
 
     /// A bare reference to a generic function was used in a position with
     /// an expected `fn(...)` type, but the parameter counts disagree —
@@ -2951,6 +2957,16 @@ impl TypeError {
                 format!(
                     "ambiguous method '{method}': declared by resource '{resource}' and by trait '{trait_name}'; name one, e.g. '{resource}::{method}(&value)' or '{trait_name}::{method}(&value)'"
                 ),
+                *span,
+            ),
+            TypeError::BareEffectGenericFunctionRef { name, span } => (
+                Code::GenericFunctionRef,
+                {
+                    let name = unalias_namespace_member(name);
+                    format!(
+                        "cannot reference effect-generic function '{name}' without an expected function type, since a turbofish names no effect; annotate where it goes (e.g., `let f: fn(...) = {name};`) or wrap in a closure"
+                    )
+                },
                 *span,
             ),
             TypeError::BareGenericFunctionRef { name, span } => (

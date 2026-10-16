@@ -1779,12 +1779,9 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             self.sem.decls.effect_ops.insert(owner, ops);
         }
 
-        // Pre-populate the generic-function inference caches for every
-        // generic function in the current module. This allows same-module
-        // forward references (e.g. `outer<T>` calling `inner<T>` defined
-        // later in the file) to infer type arguments at the call site
-        // during body resolution, without relying on a later
-        // monomorphization-time fallback.
+        // Before any body, so a same-module forward reference (`outer<T>`
+        // calling `inner<T>` defined later in the file) infers its type
+        // arguments from `inner`'s signature at the call site.
         let mut function_sigs: IndexMap<DefId, Rc<sem::decls::FunctionSig>> = IndexMap::default();
         for item in &module.items {
             if let Item::Function(func) = item {
@@ -1799,11 +1796,6 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             }
         }
         self.sem.decls.function_sigs = function_sigs;
-        for item in &module.items {
-            if let Item::Function(func) = item {
-                self.precompute_generic_function_cache(func);
-            }
-        }
     }
 
     /// Per-module body walk (`annotate_bodies`): resolves every item body,

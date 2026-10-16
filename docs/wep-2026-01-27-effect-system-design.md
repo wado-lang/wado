@@ -356,7 +356,7 @@ A trait head says what every impl of it may do. It has four states, and a bare h
 
 A method's own `with` clause overrides the head.
 
-"Should be pure" is a contract worth writing down, and writing nothing says something else. Every trait the standard library declares says `with ()`: an impl of one that performs I/O is a design error, for comparison, conversion and iteration alike. A trait that means to admit an effect says so, and its author does not have to guess on the first day.
+"Should be pure" is a contract worth writing down, and writing nothing says something else. A trait that means to admit an effect says so, and its author does not have to guess on the first day.
 
 #### A decided head binds every impl
 

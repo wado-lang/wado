@@ -390,7 +390,7 @@ Apart from a narrowing, nothing a body does adds to what its function holds.
 
 ### Ambient Functions
 
-`#[ambient]` on a function exempts its body from effect checking. The body may perform any effect without declaring it, and a call demands only what the function's own `with` clause declares. It is for best-effort output that must work from any function: `log_stdout` and `log_stderr` are ambient, and so is the `core:log` facade. Whether a call whose result goes unused runs is [unspecified](./spec-overview.md#behavior-classes), so its output may never appear.
+`#[ambient]` on a function exempts its body from effect checking. The body may perform any effect without declaring it, and a call demands only what the function's own `with` clause declares. A function value it hands on is still bound by the function type it is moved into, which holds none of what the body holds. It is for best-effort output that must work from any function: `log_stdout` and `log_stderr` are ambient, and so is the `core:log` facade. Whether a call whose result goes unused runs is [unspecified](./spec-overview.md#behavior-classes), so its output may never appear.
 
 <!-- {"fixture":"spec_effects_ambient.wado"} -->
 
@@ -621,7 +621,7 @@ A fixed head demands the same effects of every caller. An open one is resolved f
 
 A head that writes nothing reads as `with _`, so a bare trait is open rather than effect-free. The [`undecided_effects`](./spec-diagnostics.md#the-undecided_effects-lint) lint reports one.
 
-A method of a trait whose head is not `with ()` may write `with ()` itself. That method is pure in every impl, so a call to it demands nothing whatever the impl's other methods perform. Everywhere else `with ()` is rejected, since writing no clause already says it:
+A method of a trait whose head is not `with ()` may write `with ()` itself. That method is pure in every impl, so a call to it demands nothing whatever the impl's other methods perform:
 
 <!-- {"fixture":"effect_trait_method_pure_override.wado"} -->
 
@@ -645,7 +645,7 @@ export fn run() with Stdout {
 }
 ```
 
-The standard library's iteration traits, `Iterator` and `IntoIterator`, are open, since advancing an iterator may perform I/O. Their methods that only build an adapter say `with ()`. Every other trait in the standard library says `with ()`: an impl of one that performs I/O is a design error, for comparison and conversion alike.
+On any other function or method, or a function type, `with ()` is rejected, since writing no clause already says it.
 
 A type implements a trait once, so two impls that differ only in their effects are rejected. The effects are what the impl brings, not a choice a call makes.
 

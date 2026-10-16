@@ -959,6 +959,13 @@ two ways:
 Without either, it is a compile error, which suggests a turbofish or a closure
 wrapper (`|x| identity(x)`).
 
+A function generic over an effect is settled by the expected `fn(...)` type
+alone, since a turbofish names no effect. Each effect parameter takes what that
+type's rows meet it with: for `fn apply<effect E>(f: fn() with E) with E`,
+`let a: fn(fn()) = apply;` settles `E` to no effect, and
+`let b: fn(fn() with Stdout) with Stdout = apply;` to `Stdout`. Without an
+expected type it is a compile error.
+
 A function type crosses the Component Model boundary only as a
 [callback](./spec-components.md#callbacks).
 
