@@ -13,6 +13,7 @@ pub mod serde_synth;
 pub mod template;
 pub mod traits;
 
+use crate::compiler_host::Code;
 use crate::defs::DefId;
 use crate::elaborator::trait_env::{SynthesisedImpls, TraitEnv};
 use crate::module_source::ModuleSource;
@@ -24,16 +25,39 @@ use crate::token::Span;
 /// A synthesis failure, at the declaration it concerns where one is known.
 #[derive(Debug)]
 pub struct SynthesisError {
+    pub code: Code,
     pub message: String,
     pub span: Option<Span>,
+    /// The module `span` is in. `None` reports it against the entry module.
+    pub module: Option<ModuleSource>,
+}
+
+impl SynthesisError {
+    /// An unsupported construct at `span` in the entry module.
+    pub fn at(span: Span, message: String) -> Self {
+        Self {
+            code: Code::UnsupportedFeature,
+            message,
+            span: Some(span),
+            module: None,
+        }
+    }
 }
 
 impl From<String> for SynthesisError {
     fn from(message: String) -> Self {
         Self {
+            code: Code::UnsupportedFeature,
             message,
             span: None,
+            module: None,
         }
+    }
+}
+
+impl From<SynthesisError> for Vec<SynthesisError> {
+    fn from(error: SynthesisError) -> Self {
+        vec![error]
     }
 }
 
@@ -57,7 +81,7 @@ fn synthesize_reflect_metadata(project: &mut Package) {
 /// 2. Traits — generates `Eq`/`Ord` for enums, `Inspect`/`Display` for all types
 /// 3. Template expansion — expands `TemplateString` nodes into trait method calls
 /// 4. CM bindings — generates Component Model boundary adapters
-pub fn synthesize(project: Package) -> Result<Package, SynthesisError> {
+pub fn synthesize(project: Package) -> Result<Package, Vec<SynthesisError>> {
     let mut project = project;
 
     // Reflection metadata first: an auto-derived body dispatches through the
@@ -99,13 +123,17 @@ pub fn synthesize(project: Package) -> Result<Package, SynthesisError> {
     // `cm_name`-tagged shape and routed to the dispatch wrapper, whose fallback
     // emits that same shape for cm_binding to rewrite uniformly. `WithHandler`
     // desugaring stays late: effect-check reads the original shape.
-    let project = effect_dispatch::synthesize_pre_cm_binding(project)?;
+    let project =
+        effect_dispatch::synthesize_pre_cm_binding(project).map_err(SynthesisError::from)?;
 
     // Insert `resource.drop` for every owned Component Model resource that is
     // never transferred. Runs before CM-binding synthesis, whose rewrite of
     // resource method calls would obscure the reference-vs-transfer distinction.
     let mut project = project;
-    resource_cleanup::elaborate_resource_drops(&mut project);
+    let refused = resource_cleanup::elaborate_resource_drops(&mut project);
+    if !refused.is_empty() {
+        return Err(refused);
+    }
 
     let project = cm_binding::generate_adapters(project)?;
     Ok(project)

@@ -5711,6 +5711,27 @@ impl TypeTable {
         }
     }
 
+    /// The frame slots `id` (recursively) mentions, projections included.
+    pub fn type_param_indices(&self, id: TypeId) -> IndexSet<u32> {
+        let mut indices = IndexSet::default();
+        self.collect_type_param_indices(id, &mut indices);
+        indices
+    }
+
+    fn collect_type_param_indices(&self, id: TypeId, indices: &mut IndexSet<u32>) {
+        match self.get(id) {
+            ResolvedType::TypeParam { index, .. } | ResolvedType::TypePack { index, .. } => {
+                indices.insert(*index);
+            }
+            _ => {
+                self.any_constituent(id, &mut |t| {
+                    self.collect_type_param_indices(t, indices);
+                    false
+                });
+            }
+        }
+    }
+
     /// Whether every `TypeParam` / `TypePack` `id` (recursively) mentions is in
     /// `allowed` (by `TypeId`). A type with no type parameters trivially holds.
     /// Used to decide whether an inference hole may be solved against an

@@ -188,9 +188,42 @@ _freshly produced_ resource (`dir.open_at()`) stays legal (its return roots in a
 fresh allocation, not the reference).
 
 The gate is the concrete return type carrying a resource, so a generic body
-(`T` abstract) is not flagged at its definition; the stdlib avoids the issue by
-taking `self` by value, and a user-written generic `&self` extractor
-instantiated with a resource is the remaining call-site case (deferred).
+(`T` abstract) is not flagged at its definition. Its call sites are, by the
+rule below.
+
+### A call through a shared reference copies
+
+A generic body that returns a `T` it reads through a reference cannot be told
+apart, by its signature, from one that hands back a fresh value. So the
+signature decides, by the receiver kind: a generic function whose result names
+a type parameter that some `&` parameter stores, and no `&mut` parameter does,
+copies its result out of the referenced storage. `list[i]`, `List::last` and a
+user's `fn first(&self) -> T` are such copies. A parameter stores a type
+parameter through a field, an element, a payload or a reference, not through a
+function type's result, so `AsyncCall<T>::wait(&self) -> T` hands back a fresh
+`T`. The referenced storage keeps what was copied, so where the result holds a
+resource, a position that takes it (a binding, an argument, a `return`) is
+refused. Reading it where it stands (`list[0].has(name)`) leaves no second
+owner:
+
+```wado
+let list: List<Fields> = [Fields::new()];
+let f = list[0]; // error: cannot copy resource `Fields` out of a reference
+```
+
+The check runs where cleanup classifies the call, on the TIR before
+monomorphization, so a call written in a body generic over `T` is checked
+where that body's own signature is called, not inside it.
+
+### A call through `&mut` extracts
+
+A generic function whose result names a type parameter that a `&mut` parameter
+stores takes it out of the referenced storage, as `List::pop` and
+`List::remove` do. The caller owns the result whether or not a binding takes
+it, so `while let Some(_) = list.pop() {}` drops each element.
+
+A result whose type parameters no reference parameter stores is fresh
+(`List::map`), and the caller owns it as any other call's.
 
 ### Authoritative cleanup
 
@@ -462,8 +495,10 @@ Verified against the tree.
   kept in step with cleanup's `carries_resource` (variant / `Option` /
   `List` deferred with their destructors); whole-aggregate move only.
 - [x] No-move-out-of-reference: a `&self` / `&T`-param return rooted in the
-  reference whose concrete type carries a resource is rejected (generic-instantiation
-  call sites deferred).
+  reference whose concrete type carries a resource is rejected.
+- [x] Taking a resource a generic call copies out of a `&` parameter is
+  refused at its call site; one through `&mut` extracts, and its caller owns the
+  result. The check is cleanup's, on TIR, so the editor does not show it.
 - [ ] Unify with the value-copy last-use liveness.
 
 ### Cleanup
@@ -789,15 +824,28 @@ struct, a tuple and a variant (`Option` and `Result` among them) are checked. A
 `List` holding one can be moved twice with no diagnostic, and is not dropped at
 scope exit.
 
-### A generic call's result that nothing binds
+### A call through `&mut` that copies
 
-A generic function that takes a reference and returns a type parameter may
-hand back a value the referenced container still owns, so cleanup
-(`alias_returning`) owns its result only once a binding takes it. `List::pop`
-moves its element out, and `while let Some(s) = list.pop() {}` drops each `s`.
-`while let Some(_) = list.pop() {}` binds nothing, so it drops none of them.
-The signature cannot tell `pop` from `List::index_value` or
-`TreeMap::get_or_insert`, whose result the container keeps.
+The receiver kind decides whether a call copies or extracts
+([A call through `&mut` extracts](#a-call-through-mut-extracts)), and a `&mut`
+function that copies breaks the rule unseen. The caller then owns a value the
+storage still holds.
+
+- `HashMap::get_or_insert` and `TreeMap::get_or_insert` return the value they
+  keep. Neither can return a reference instead: `&V` needs `V: Ref` and
+  `&mut V` needs `V: RefMut`, and a resource is neither.
+- An iterator that walks a borrowed container by value (`SliceValueIter`,
+  `MapValuesValueIter`) copies each element out through its `&mut self`. So
+  `for x of list` over a `List` holding a resource hands each element to the
+  loop while the list keeps it.
+
+### A generic body copies a type parameter
+
+The copy check reads a call's signature where the call is written. A body
+generic over `T` that copies a `T` out of a reference
+(`fn dup<T>(list: List<T>) -> T { return list[0]; }`) takes its arguments by
+value, so its own call sites are not refused. Instantiated with a resource, it
+returns a second owner.
 
 ### A resource field moves out of its holder
 

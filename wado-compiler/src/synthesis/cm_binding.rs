@@ -1048,9 +1048,8 @@ fn validate_imports_representable(project: &Package) -> Result<(), SynthesisErro
                 &tt,
                 &project.tir_modules,
             )
-            .map_err(|(reason, span)| SynthesisError {
-                message: format!("import function `{}`: {reason}", op.name),
-                span: Some(span),
+            .map_err(|(reason, span)| {
+                SynthesisError::at(span, format!("import function `{}`: {reason}", op.name))
             })?;
         }
     }
@@ -1070,9 +1069,8 @@ fn validate_boundary_representable(
         tt,
         tir_modules,
     )
-    .map_err(|(reason, span)| SynthesisError {
-        message: format!("export function `{export_name}`: {reason}"),
-        span: Some(span),
+    .map_err(|(reason, span)| {
+        SynthesisError::at(span, format!("export function `{export_name}`: {reason}"))
     })
 }
 
@@ -1113,12 +1111,7 @@ fn validate_world_signature_compatibility(
     tir_modules: &IndexMap<ModuleSource, TirModule>,
     registry: &CmInterfaceRegistry,
 ) -> Result<(), SynthesisError> {
-    let at = |span: Span| {
-        move |message: String| SynthesisError {
-            message,
-            span: Some(span),
-        }
-    };
+    let at = |span: Span| move |message: String| SynthesisError::at(span, message);
     if user_func.params.len() != export.params.len() {
         return Err(at(user_func.span)(format!(
             "export function `{}` has {} parameter(s), \

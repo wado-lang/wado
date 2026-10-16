@@ -16,8 +16,8 @@ use { Preopens, Filesize, PathFlags, OpenFlags, DescriptorFlags, ErrorCode } fro
 use { println, Stdout } from "core:cli";
 
 export fn run() with (Preopens, Stdout) {
-    let dirs = Preopens::get_directories();
-    let root = dirs[0].0;
+    let mut dirs = Preopens::get_directories();
+    let root = dirs.remove(0).0;
 
     let wfile = root.open_at(
         PathFlags::none(),

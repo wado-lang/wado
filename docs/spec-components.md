@@ -348,6 +348,34 @@ test {
 }
 ```
 
+#### Generic Calls Through a Reference
+
+A generic function's signature says whether its result is copied or taken out. When the result names a type parameter that a `&` parameter stores (in a field, an element, a payload or behind a reference) and no `&mut` parameter does, the call copies it out of the referenced storage, which keeps it: `list[i]`, `List::last`, and a `fn first(&self) -> T` of one's own. Where the result holds a resource, taking it (binding, passing or returning it) is a compile error. Reading it where it stands (`list[0].has(name)`) leaves no second owner and is allowed.
+
+<!-- {"fixture":"spec_components_copy_out_of_reference.wado"} -->
+
+```wado
+fn first(list: List<Fields>) -> Fields {
+    return list[0];      // ERROR: cannot copy resource `Fields` out of a reference
+}
+```
+
+When a `&mut` parameter stores it, the call takes the result out, as `List::pop` and `List::remove` do. The caller owns it, so a result nothing binds is dropped.
+
+<!-- {"fixture":"spec_components_extract_through_mut.wado"} -->
+
+```wado
+fn take_last(list: &mut List<Fields>) -> Option<Fields> {
+    return list.pop();   // OK: `pop` takes the element out
+}
+
+test {
+    let mut list: List<Fields> = [];
+    take_last(&mut list);    // the result nothing binds is dropped
+    assert list.is_empty();
+}
+```
+
 #### Drop
 
 An owned resource that has not moved is dropped when its scope ends, on every path out of it. A move suppresses that drop, so each handle is dropped exactly once. An imported resource drops through the Component Model's `resource.drop`. A value holding resources drops each of them, a struct's fields in declaration order. A resource value discarded as a statement (`Fields::new();`, `let _ = ...`) is dropped there.

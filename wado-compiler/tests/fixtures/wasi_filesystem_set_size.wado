@@ -28,13 +28,13 @@ fn read_all(file: &Descriptor) -> List<u8> with Descriptor {
 }
 
 export fn run() with (Stdout, Stderr, Preopens, Descriptor) {
-    let dirs = Preopens::get_directories();
+    let mut dirs = Preopens::get_directories();
     if dirs.len() == 0 {
         eprintln("no preopened directories available");
         return;
     }
 
-    let dir = dirs[0].0;
+    let dir = dirs.remove(0).0;
 
     // Create a file with 10 bytes: "ABCDEFGHIJ"
     let file_result = dir.open_at(

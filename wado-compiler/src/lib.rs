@@ -278,9 +278,22 @@ pub(crate) fn bail_with<H: CompilerHost>(
     Bail
 }
 
-/// Report a synthesis failure, at the declaration it concerns where it names one.
-fn bail_with_synthesis<H: CompilerHost>(logger: &Logger<'_, H>, error: SynthesisError) -> Bail {
-    report_at(logger, Code::UnsupportedFeature, error.message, error.span);
+/// Report each synthesis failure, at what it concerns where it names that.
+fn bail_with_synthesis<H: CompilerHost>(
+    logger: &Logger<'_, H>,
+    errors: Vec<SynthesisError>,
+) -> Bail {
+    for error in errors {
+        let file = error.module.as_ref().map(ModuleSource::source_path);
+        let _ = logger.error(Diagnostic {
+            severity: Severity::Error,
+            code: error.code,
+            message: error.message,
+            span: error
+                .span
+                .map(|span| DiagnosticSpan::from_span(&span, file.as_deref())),
+        });
+    }
     Bail
 }
 

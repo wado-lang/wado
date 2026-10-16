@@ -1,0 +1,12 @@
+// A generic call through `&mut` takes a resource out of what it reads.
+use { Fields } from "wasi:http";
+
+fn take_last(list: &mut List<Fields>) -> Option<Fields> {
+    return list.pop();   // OK: `pop` takes the element out
+}
+
+test {
+    let mut list: List<Fields> = [];
+    take_last(&mut list);    // the result nothing binds is dropped
+    assert list.is_empty();
+}

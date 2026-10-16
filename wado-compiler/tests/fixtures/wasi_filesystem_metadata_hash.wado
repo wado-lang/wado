@@ -11,13 +11,13 @@ use { println, eprintln, Stdout, Stderr } from "core:cli";
 use { Preopens, Descriptor, DescriptorFlags, PathFlags, OpenFlags, Filesize } from "wasi:filesystem";
 
 export fn run() with (Stdout, Stderr, Preopens) {
-    let dirs = Preopens::get_directories();
+    let mut dirs = Preopens::get_directories();
     if dirs.len() == 0 {
         eprintln("no preopened directories available");
         return;
     }
 
-    let dir = dirs[0].0;
+    let dir = dirs.remove(0).0;
 
     // Open hello.txt twice
     let file1_result = dir.open_at(
