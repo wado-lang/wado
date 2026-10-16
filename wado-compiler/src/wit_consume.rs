@@ -11,7 +11,7 @@
 use crate::ast::{
     AstId, AstIdSpace, AttrArg, Attribute, CmBoundary, CmImport, EffectsSource, EnumCase, EnumDecl,
     FlagsDecl, FlagsVariant, Function, GenericType, InnerAttribute, InterfaceDecl, Item, Module,
-    NamedType, Newtype, Param, SelfKind, StructDecl, StructField, Type, UseDecl, UseItem,
+    NamedType, Newtype, Param, SelfKind, StrLit, StructDecl, StructField, Type, UseDecl, UseItem,
     VariantCase, VariantDecl, Visibility, cm_import_of,
 };
 use crate::attribute::{CM, CM_HOST_IMPORTS, CM_PARAMS};
@@ -54,7 +54,7 @@ pub fn module_host_leaf_imports(module: &Module) -> Vec<String> {
                 .iter()
                 .filter_map(|arg| {
                     if let AttrArg::Str(s) = arg {
-                        Some(s.clone())
+                        Some(s.value.clone())
                     } else {
                         None
                     }
@@ -151,8 +151,7 @@ pub fn build_bindings(resolve: &Resolve, world: WorldId) -> Result<ComponentBind
             name: CM_HOST_IMPORTS.to_string(),
             args: host_leaf_imports
                 .iter()
-                .cloned()
-                .map(AttrArg::Str)
+                .map(|import| AttrArg::Str(StrLit::new(import.as_str())))
                 .collect(),
             span: syn(),
         }]
@@ -214,7 +213,7 @@ impl Builder {
             attrs: Vec::new(),
             visibility: Visibility::Private,
             is_export: false,
-            source: "core:collections".to_string(),
+            source: StrLit::new("core:collections"),
             source_span: syn(),
             source_id: self.id(),
             items: vec![UseItem::Simple {
@@ -287,7 +286,7 @@ impl Builder {
             let cm_params: Vec<AttrArg> = func
                 .params
                 .iter()
-                .map(|p| AttrArg::Str(p.name.clone()))
+                .map(|p| AttrArg::Str(StrLit::new(p.name.as_str())))
                 .collect();
             let params: Vec<Param> = func
                 .params
@@ -375,7 +374,7 @@ impl Builder {
         let cm_params: Vec<AttrArg> = func
             .params
             .iter()
-            .map(|p| AttrArg::Str(p.name.clone()))
+            .map(|p| AttrArg::Str(StrLit::new(p.name.as_str())))
             .collect();
         let params: Vec<Param> = func
             .params

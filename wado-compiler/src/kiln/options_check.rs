@@ -181,10 +181,12 @@ fn check_value(
         (OptionsType::F32 | OptionsType::F64, AttrValue::Int(n)) => {
             Some(CanonicalValue::F64(*n as f64))
         }
-        (OptionsType::String, AttrValue::String(s)) => Some(CanonicalValue::String(s.clone())),
+        (OptionsType::String, AttrValue::String(s)) => {
+            Some(CanonicalValue::String(s.value.clone()))
+        }
         (OptionsType::Enum { variants, name }, AttrValue::String(s)) => {
-            if variants.iter().any(|v| v == s) {
-                Some(CanonicalValue::Enum(s.clone()))
+            if variants.iter().any(|v| *v == s.value) {
+                Some(CanonicalValue::Enum(s.value.clone()))
             } else {
                 diagnostics.push(site.error(format!(
                     "kiln: `{}` expected one of {name}::{{{}}}, got \"{s}\"",
@@ -467,7 +469,7 @@ mod tests {
         };
         let err = validate(
             &desc,
-            Some(&AttrValue::String("nope".to_string())),
+            Some(&AttrValue::string("nope".to_string())),
             anchor(),
         )
         .unwrap_err();
@@ -500,8 +502,8 @@ mod tests {
         obj.insert(
             "entries".to_string(),
             entry(array(vec![
-                AttrValue::String("a".to_string()),
-                AttrValue::String("b".to_string()),
+                AttrValue::string("a".to_string()),
+                AttrValue::string("b".to_string()),
             ])),
         );
         let result = validate(&desc, Some(&AttrValue::Object(obj)), anchor()).unwrap();
@@ -583,7 +585,7 @@ mod tests {
         let mut obj = AttrObject::default();
         obj.insert(
             "enabled".to_string(),
-            entry_at(8, 15, AttrValue::String("yes".to_string())),
+            entry_at(8, 15, AttrValue::string("yes".to_string())),
         );
         let err = validate(&desc, Some(&AttrValue::Object(obj)), anchor()).unwrap_err();
         let d = only(&err);
@@ -669,7 +671,7 @@ mod tests {
         let mut obj = AttrObject::default();
         obj.insert(
             "rule".to_string(),
-            entry(AttrValue::String("expr".to_string())),
+            entry(AttrValue::string("expr".to_string())),
         );
         let result = validate(&desc, Some(&AttrValue::Object(obj)), anchor()).unwrap();
         assert_eq!(

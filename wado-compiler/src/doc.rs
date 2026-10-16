@@ -1052,7 +1052,7 @@ fn collect_pub_use_sources(module: &Module) -> Vec<String> {
             // A module re-exported by two statements is still one module, and
             // the names are collected across all of them; walking it twice
             // would publish every item it names twice.
-            sources.insert(u.source.clone());
+            sources.insert(u.source.value.clone());
         }
     }
     sources.into_iter().collect()
@@ -1235,7 +1235,7 @@ fn collect_side_effect_import_sources(module: &Module) -> Vec<String> {
         if let Item::Use(u) = item
             && u.items.iter().any(|i| matches!(i, UseItem::Wildcard))
         {
-            sources.push(u.source.clone());
+            sources.push(u.source.value.clone());
         }
     }
     sources

@@ -12,7 +12,7 @@ use crate::ast::{
     IndexExpr, InnerAttribute, InterfaceDecl, Item, LabeledBlockExpr, LabeledBlockStmt, LetStmt,
     Literal, LiteralMember, LoopStmt, MatchArm, MatchExpr, MatchesExpr, MethodCallExpr, Module,
     Newtype, Param, Pattern, ResourceDecl, RestClause, ReturnStmt, SelfKind, StaticMethodCallExpr,
-    Stmt, StructDecl, StructField, StructLiteralExpr, StructLiteralField, TaskReturnStmt,
+    Stmt, StrLit, StructDecl, StructField, StructLiteralExpr, StructLiteralField, TaskReturnStmt,
     TemplatePart, TemplateStringExpr, TestDecl, TraitBound, TraitDecl, TraitHead,
     TupleComprehensionExpr, TupleLiteralExpr, TupleTypeDecl, Type, UnaryExpr, UnaryOp, UseDecl,
     UseItem, UseItemSimple, VariantCase, VariantDecl, Visibility, WhileStmt, WithHandlerExpr,
@@ -760,7 +760,7 @@ impl<'a> Unparser<'a> {
     /// Emit the ` from "..."` source clause.
     fn emit_use_from(&mut self, u: &UseDecl) {
         self.output.push_str(" from ");
-        self.output.push_str(&quoted(&u.source));
+        self.output.push_str(&u.source.as_written());
     }
 
     /// Emit the ` with { ... }` attribute clause on the same line (or nothing
@@ -837,7 +837,7 @@ impl<'a> Unparser<'a> {
 
     fn unparse_attr_value(&mut self, v: &AttrValue) {
         match v {
-            AttrValue::String(s) => self.output.push_str(&quoted(s)),
+            AttrValue::String(s) => self.output.push_str(&s.as_written()),
             AttrValue::Int(n) => {
                 self.output.push_str(&n.to_string());
             }
@@ -3654,18 +3654,18 @@ fn unparse_attr_body_into(name: &str, args: &[AttrArg], output: &mut String) {
 
 fn unparse_attr_arg_into(arg: &AttrArg, output: &mut String) {
     match arg {
-        AttrArg::Str(s) => output.push_str(&quoted(s)),
+        AttrArg::Str(s) => output.push_str(&s.as_written()),
         AttrArg::Ident(s) | AttrArg::Number(s) => output.push_str(s),
         AttrArg::KeyValue(k, v) => {
             output.push_str(k);
             output.push_str(" = ");
-            output.push_str(&quoted(v));
+            output.push_str(&v.as_written());
         }
         AttrArg::KeyArray(k, vs) => {
             output.push_str(k);
             output.push_str(" = ");
-            delimited_into("[", "]", vs, output, |v: &String, out: &mut String| {
-                out.push_str(&quoted(v));
+            delimited_into("[", "]", vs, output, |v: &StrLit, out: &mut String| {
+                out.push_str(&v.as_written());
             });
         }
         AttrArg::KeyIdentArray(k, vs) => {

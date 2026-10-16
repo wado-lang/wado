@@ -1401,7 +1401,7 @@ impl<'a, H: CompilerHost> Analyzer<'a, H> {
                     self.logger.error_in(
                         from_module_source,
                         AnalyzeError::InvalidModulePath {
-                            path: use_decl.source.clone(),
+                            path: use_decl.source.value.clone(),
                             message,
                             span: use_decl.span,
                         },
@@ -1421,7 +1421,7 @@ impl<'a, H: CompilerHost> Analyzer<'a, H> {
                     self.logger.error_in(
                         from_module_source,
                         AnalyzeError::InvalidModulePath {
-                            path: use_decl.source.clone(),
+                            path: use_decl.source.value.clone(),
                             message: "wasm asset paths must be relative (`./` or `../`); \
                              absolute namespace-qualified paths are not supported here"
                                 .to_string(),

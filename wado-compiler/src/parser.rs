@@ -15,12 +15,12 @@ use crate::ast::{
     Literal, LiteralExpr, LoopStmt, MatchArm, MatchExpr, MatchesExpr, MethodCallExpr, Module,
     NamedType, NamespacedGenericType, Newtype, Param, PathSegment, Pattern, RangeExpr, RangeKind,
     ResourceDecl, RestClause, RestClauseDecl, ReturnKeyword, ReturnStmt, SelfKind,
-    StaticMethodCallExpr, Stmt, StructDecl, StructField, StructLiteralExpr, StructLiteralField,
-    StructLiteralSpread, StructPatternField, TaggedTemplateExpr, TaskReturnStmt, TemplatePart,
-    TemplateStringExpr, TestDecl, TraitBound, TraitDecl, TraitHead, TryOpExpr,
-    TupleComprehensionExpr, TupleLiteralExpr, TupleTypeDecl, Type, UnaryExpr, UnaryOp, UseDecl,
-    UseItem, UseItemSimple, VariantCase, VariantDecl, Visibility, WhileStmt, WithHandlerExpr,
-    WorldDecl, WorldExport, WorldExportFn, WorldExportInterface, WorldImport,
+    StaticMethodCallExpr, Stmt, StrLit, StructDecl, StructField, StructLiteralExpr,
+    StructLiteralField, StructLiteralSpread, StructPatternField, TaggedTemplateExpr,
+    TaskReturnStmt, TemplatePart, TemplateStringExpr, TestDecl, TraitBound, TraitDecl, TraitHead,
+    TryOpExpr, TupleComprehensionExpr, TupleLiteralExpr, TupleTypeDecl, Type, UnaryExpr, UnaryOp,
+    UseDecl, UseItem, UseItemSimple, VariantCase, VariantDecl, Visibility, WhileStmt,
+    WithHandlerExpr, WorldDecl, WorldExport, WorldExportFn, WorldExportInterface, WorldImport,
 };
 use crate::attribute::{CANONICAL, CM, GENERATED, TODO};
 use crate::comment::{Comment, TriviaMap};
@@ -1529,10 +1529,14 @@ impl Parser {
 
     /// Consume the string literal the cursor is on, `raw` its text, with its
     /// escapes resolved the way an expression's string literal has them resolved.
-    fn take_string(&mut self, raw: &str) -> ParseResult<String> {
+    fn take_string(&mut self, raw: &str) -> ParseResult<StrLit> {
         let span = self.peek().span;
         self.advance();
-        unescape_string(raw).map_err(|message| self.error_at_span(span, &message))
+        let value = unescape_string(raw).map_err(|message| self.error_at_span(span, &message))?;
+        Ok(StrLit {
+            value,
+            raw: raw.to_string(),
+        })
     }
 
     /// Parse a comma-separated list of attribute arguments up to the closing
@@ -1562,16 +1566,17 @@ impl Parser {
                                 // or identifiers, and the attribute's reader
                                 // rejects the kind it does not take.
                                 let names = self.peek_kind().as_ident_name().is_some();
-                                let mut items: Vec<String> = Vec::new();
+                                let mut strings: Vec<StrLit> = Vec::new();
+                                let mut idents: Vec<String> = Vec::new();
                                 if !self.check(&TokenKind::RBracket) {
                                     loop {
                                         let kind = self.peek_kind().clone();
                                         match (&kind, kind.as_ident_name()) {
                                             (TokenKind::StringLit(item), _) if !names => {
-                                                items.push(self.take_string(item)?);
+                                                strings.push(self.take_string(item)?);
                                             }
                                             (_, Some(named)) if names => {
-                                                items.push(named.to_string());
+                                                idents.push(named.to_string());
                                                 self.mark_keyword_name();
                                                 self.advance();
                                             }
@@ -1597,9 +1602,9 @@ impl Parser {
                                 }
                                 self.expect(&TokenKind::RBracket)?;
                                 if names {
-                                    AttrArg::KeyIdentArray(value, items)
+                                    AttrArg::KeyIdentArray(value, idents)
                                 } else {
-                                    AttrArg::KeyArray(value, items)
+                                    AttrArg::KeyArray(value, strings)
                                 }
                             }
                             TokenKind::NumberLit(number) => {
@@ -2059,7 +2064,7 @@ impl Parser {
         }
     }
 
-    fn consume_string(&mut self) -> ParseResult<String> {
+    fn consume_string(&mut self) -> ParseResult<StrLit> {
         match self.peek_kind() {
             TokenKind::StringLit(raw) => {
                 let raw = raw.clone();
@@ -7155,8 +7160,8 @@ fn parse_cm_boundary(name: &str, args: &[AttrArg]) -> Result<Option<CmBoundary>,
             return Err("#[canonical] arguments must be string literals".to_string());
         };
         return Ok(Some(CmBoundary::Canonical {
-            namespace: ns.clone(),
-            name: fname.clone(),
+            namespace: ns.value.clone(),
+            name: fname.value.clone(),
         }));
     }
     if name == CM {
@@ -7212,7 +7217,7 @@ fn parse_cm_boundary(name: &str, args: &[AttrArg]) -> Result<Option<CmBoundary>,
         }
         return Ok(Some(match CmImport::parse(s) {
             Some(cm) => CmBoundary::Import(cm),
-            None => CmBoundary::Name(s.clone()),
+            None => CmBoundary::Name(s.value.clone()),
         }));
     }
     Ok(None)
@@ -9039,7 +9044,7 @@ line 2
         assert_eq!(module.generated_meta("by"), Some("tool"));
         // List values are exposed via generated_meta_array.
         let sources = module.generated_meta_array("sources").unwrap();
-        let owned: Vec<&str> = sources.iter().map(String::as_str).collect();
+        let owned: Vec<&str> = sources.iter().map(StrLit::as_str).collect();
         assert_eq!(owned, vec!["a.wit", "b.wit"]);
         // Unknown keys return None.
         assert_eq!(module.generated_meta("unknown"), None);
@@ -9054,7 +9059,7 @@ line 2
 "#;
         let module = parse(source).unwrap();
         let sources = module.generated_meta_array("sources").unwrap();
-        assert_eq!(sources, &["a.wit".to_string()]);
+        assert_eq!(sources, &[StrLit::new("a.wit")]);
     }
 
     #[test]
@@ -9071,15 +9076,10 @@ line 2
         // Metadata is also queryable after unparse+reparse.
         let reparsed = parse(&formatted).unwrap();
         assert_eq!(reparsed.generated_meta("by"), Some("tool"));
-        assert_eq!(
-            reparsed.generated_meta_array("sources").unwrap(),
-            &["a.wit".to_string(), "b.wit".to_string()],
-        );
+        let written = [StrLit::new("a.wit"), StrLit::new("b.wit")];
+        assert_eq!(reparsed.generated_meta_array("sources").unwrap(), &written);
         // Sanity: the original module still works too.
-        assert_eq!(
-            module.generated_meta_array("sources").unwrap(),
-            &["a.wit".to_string(), "b.wit".to_string()],
-        );
+        assert_eq!(module.generated_meta_array("sources").unwrap(), &written);
     }
 
     /// Extract the substring covered by `span` (byte offsets).
