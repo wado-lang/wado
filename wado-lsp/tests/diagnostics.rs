@@ -47,9 +47,8 @@ fn dead_code_diagnostics_carry_unnecessary_tag() {
     });
 }
 
-/// An unused verdict reads the absence of a use, which a partial snapshot
-/// cannot tell from a use its error left unrecorded: the trait import here is
-/// reached only through the dispatch of a call whose receiver failed.
+/// A partial snapshot reports no unused lint: the trait import here is reached
+/// only through the dispatch of a call whose receiver failed.
 #[test]
 fn a_partial_snapshot_reports_no_unused_lint() {
     futures::executor::block_on(async {
