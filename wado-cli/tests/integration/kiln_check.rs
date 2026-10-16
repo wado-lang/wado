@@ -42,7 +42,9 @@ fn a_kiln_warning_in_a_test_member_fails_the_package_check() {
         .arg("check")
         .assert()
         .failure()
-        .stderr(predicate::str::contains("has been modified after generation"));
+        .stderr(predicate::str::contains(
+            "has been modified after generation",
+        ));
 }
 
 fn walkdir(dir: &std::path::Path) -> Vec<std::path::PathBuf> {

@@ -83,11 +83,11 @@ impl Uses<'_> {
                     ..
                 } => unused.extend(self.unused_binding(name, alias.as_ref(), *local_span)),
                 // `I::{f}` binds the functions alone; `I` is a name of its own.
-                UseItem::InterfaceFunctions { functions, .. } => unused.extend(
-                    functions
-                        .iter()
-                        .filter_map(|f| self.unused_binding(&f.name, f.alias.as_ref(), f.local_span)),
-                ),
+                UseItem::InterfaceFunctions { functions, .. } => {
+                    unused.extend(functions.iter().filter_map(|f| {
+                        self.unused_binding(&f.name, f.alias.as_ref(), f.local_span)
+                    }))
+                }
                 UseItem::Namespace { name, name_span } => {
                     let reached = self.used.iter().any(|alias| {
                         alias
