@@ -300,13 +300,13 @@ test "walking an empty directory answers nothing" {
     assert fs::walk_dir(&dir).unwrap().next() == null;
 }
 
-test "a walk lists a directory only when it reaches it, and goes on past one it cannot" {
+test "a walk lists a directory as it yields it, and goes on past one it cannot" {
     let dir = scratch("walk-lazy");
     fs::create_dir_all(`${dir}/one/inner`).unwrap();
     fs::create_dir_all(`${dir}/two/inner`).unwrap();
 
-    // The one lookup lists `dir`. Yielding a directory takes none; listing what
-    // it holds is the next lookup, and fails, after which its sibling follows.
+    // The one lookup lists `dir`. Yielding a directory lists what it holds,
+    // which fails and is the next item, after which its sibling follows.
     let mut one = Rationed { left: 1 };
     with Preopens => &mut one do {
         let mut walk = fs::walk_dir(&dir).unwrap();

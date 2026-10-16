@@ -1327,7 +1327,6 @@ struct BodyWalk<'a> {
     current: IndexSet<EffectRef>,
     param_types: IndexMap<String, TypeId>,
     body: &'a Block,
-    /// Report only what a value performs beyond the `fn` type it moves into.
     holds_every_effect: bool,
 }
 
@@ -1353,6 +1352,7 @@ fn walk_body_effects(
             annotations,
             index,
             current: walk.current.clone(),
+            holds_every_effect: walk.holds_every_effect,
             param_types: walk.param_types.clone(),
             module: module.source_path(),
             out: &mut found,
@@ -1365,9 +1365,6 @@ fn walk_body_effects(
         walked.propagate_flows(index);
         if walked.read_final() {
             walked.assert_solved(walk.name);
-            if walk.holds_every_effect {
-                found.clear();
-            }
             walked.bound_flows(index, &mut found);
             out.extend(found);
             solved.extend(walked.solved);
@@ -1877,6 +1874,9 @@ struct SemEffectWalker<'a> {
     /// enclosing `with H => … do { … }` handler scope (pushed / popped as the
     /// walk enters / leaves the do-block body).
     current: IndexSet<EffectRef>,
+    /// A `test` body, which holds every effect: nothing it performs is
+    /// missing, whatever `current` lists.
+    holds_every_effect: bool,
     /// This function's parameter name → type id, for resolving the callee of an
     /// indirect call through a function-typed parameter (which leaves no
     /// `references` edge or recorded expression type at the call site).
@@ -2554,6 +2554,9 @@ impl SemEffectWalker<'_> {
             );
             return;
         }
+        if self.holds_every_effect {
+            return;
+        }
         for effect in effects {
             if effect.is_param() {
                 // An undetermined parameter stands for whatever the callee
@@ -2755,6 +2758,7 @@ impl SemEffectWalker<'_> {
             annotations: self.annotations,
             index: self.index,
             current,
+            holds_every_effect: false,
             param_types: self.param_types.clone(),
             module: self.module.clone(),
             out: &mut scratch,

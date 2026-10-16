@@ -491,9 +491,9 @@ pub struct Walk<F> {
 
 impl<F> Walk<F> {
     fn list(&mut self, path: &String) -> Result<(), FsError> with Preopens {
-        let entries = read_dir(path)?;
-        for let mut i = entries.len() - 1; i >= 0; i -= 1 {
-            let entry = entries[i];
+        let mut entries = read_dir(path)?;
+        entries.reverse();
+        for let entry of entries {
             self.ahead.push(WalkEntry { path: join(path, &entry.name), type: entry.type });
         }
         return Result::Ok(());
