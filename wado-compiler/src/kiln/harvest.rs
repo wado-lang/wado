@@ -5,7 +5,7 @@ use std::collections::VecDeque;
 
 use crate::ast::{ImportAttributes, Item, Module};
 use crate::compiler_host::{Code, Diagnostic, Severity};
-use crate::hashmap::IndexMap;
+use crate::hashmap::{IndexMap, IndexSet};
 use crate::kiln::inline::InvocationIndex;
 use crate::name::{module_parent_dir, resolve_local_identity, resolve_module_path};
 use crate::parse;
@@ -32,11 +32,14 @@ pub struct Harvest {
 /// because the loader does not read the entry through a host either.
 ///
 /// A module that fails to load, or whose parse recovered from an error, is
-/// skipped: a mid-edit source must not trigger codegen side effects.
+/// skipped: a mid-edit source must not trigger codegen side effects. So is a
+/// key in `settled`, which an earlier walk from the same root harvested along
+/// with everything it imports.
 pub async fn harvest_module_graph<L>(
     entry_key: &str,
     entry_identity: &str,
     entry_ast: Module,
+    settled: &IndexSet<String>,
     load: L,
 ) -> Harvest
 where
@@ -57,7 +60,7 @@ where
         Some(entry_ast),
     )]);
     while let Some((key, loader_id, ast)) = queue.pop_front() {
-        if modules.contains_key(&key) {
+        if modules.contains_key(&key) || settled.contains(&key) {
             continue;
         }
         let ast = if let Some(ast) = ast {
@@ -193,6 +196,7 @@ mod tests {
             "src/main.wado",
             "src/main.wado",
             ast_of("use { a } from \"./lib.wado\";\n"),
+            &IndexSet::default(),
             exact(sources),
         ));
 
@@ -223,6 +227,7 @@ mod tests {
                  use calc from \"./Calc.g4\" with { generator: { module: \"lib:gale\" } };\n\
                  use { f } from \"./m.wasm\" with { type: \"wasm\" };\n",
             ),
+            &IndexSet::default(),
             exact(sources),
         ));
 
@@ -239,6 +244,7 @@ mod tests {
             "src/a.wado",
             "src/a.wado",
             ast_of("use { x } from \"./b.wado\";\n"),
+            &IndexSet::default(),
             exact(sources),
         ));
 
@@ -325,9 +331,31 @@ mod tests {
             "main.wado",
             "main.wado",
             ast_of("use { a } from \"./missing.wado\";\n"),
+            &IndexSet::default(),
             async |_| None,
         ));
 
         assert_eq!(harvest.modules.keys().collect::<Vec<_>>(), ["main.wado"]);
+    }
+
+    #[test]
+    fn a_settled_module_is_neither_read_nor_walked() {
+        let sources: &[(&str, &str)] = &[
+            ("./shared.wado", "use { b } from \"./deep.wado\";\n"),
+            ("./deep.wado", "pub fn b() {}\n"),
+        ];
+        let settled: IndexSet<String> = ["src/shared.wado".to_string()].into_iter().collect();
+        let harvest = block_on(harvest_module_graph(
+            "src/a_test.wado",
+            "src/a_test.wado",
+            ast_of("use { a } from \"./shared.wado\";\n"),
+            &settled,
+            exact(sources),
+        ));
+
+        assert_eq!(
+            harvest.modules.keys().collect::<Vec<_>>(),
+            ["src/a_test.wado"]
+        );
     }
 }

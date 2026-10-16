@@ -316,6 +316,15 @@ impl Parser {
         self
     }
 
+    /// Whether the module is `#![generated]`, read from its inner attributes
+    /// alone.
+    pub fn declares_generated(mut self) -> bool {
+        let _ = self.parse_inner_attributes();
+        self.parsed_inner_attributes
+            .iter()
+            .any(|a| a.name == GENERATED)
+    }
+
     /// Whether [`Self::skipping_generated_bodies`] took effect.
     pub fn skipped_bodies(&self) -> bool {
         self.bodies == Bodies::Skipped

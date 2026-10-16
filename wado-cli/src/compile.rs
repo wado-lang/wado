@@ -617,8 +617,13 @@ impl KilnRun {
     }
 }
 
+/// The modules Kiln walks have harvested, by their path from the package root.
+/// A walk passes over them: their clauses ran with the walk that reached them.
+pub(crate) type Settled = wado_compiler::hashmap::IndexSet<String>;
+
 /// Collect the inline `with { generator: { ... } }` clauses `entry_file`
-/// declares and assemble everything the Kiln pipeline needs from them.
+/// declares and assemble everything the Kiln pipeline needs from them, past
+/// the modules in `settled`, which then holds those the walk reached.
 /// `Ok(None)` when the entry declares no generators.
 ///
 /// Shared by [`maybe_run_pipeline`], `wado check` and [`run_nested_pipeline`],
@@ -628,6 +633,7 @@ pub(crate) async fn prepare_kiln(
     entry_identity: Option<&str>,
     host: &FilesystemCompilerHost,
     run: &KilnRun,
+    settled: &mut Settled,
 ) -> Result<Option<KilnSetup>, PipelineError> {
     let KilnRun {
         project,
@@ -650,6 +656,7 @@ pub(crate) async fn prepare_kiln(
             entry_file,
             entry_identity,
             &manifest_root,
+            settled,
         )
         .await;
 
@@ -748,22 +755,29 @@ pub(crate) async fn maybe_run_pipeline(
     project: Option<manifest::ProjectManifest>,
 ) -> Result<PipelineOutcome, PipelineError> {
     Box::pin(maybe_run_pipeline_for(
-        entry_file, None, host, no_cache, project,
+        entry_file,
+        None,
+        host,
+        no_cache,
+        project,
+        &mut Settled::default(),
     ))
     .await
 }
 
 /// [`maybe_run_pipeline`] for an entry the compile that follows names
-/// `entry_identity` rather than by its path.
+/// `entry_identity` rather than by its path, past the modules in `settled`.
 pub(crate) async fn maybe_run_pipeline_for(
     entry_file: &Path,
     entry_identity: Option<&str>,
     host: &FilesystemCompilerHost,
     no_cache: bool,
     project: Option<manifest::ProjectManifest>,
+    settled: &mut Settled,
 ) -> Result<PipelineOutcome, PipelineError> {
     let run = KilnRun::entry(project, no_cache);
-    let Some(mut kiln) = prepare_kiln(entry_file, entry_identity, host, &run).await? else {
+    let Some(mut kiln) = prepare_kiln(entry_file, entry_identity, host, &run, settled).await?
+    else {
         return Ok(PipelineOutcome::default());
     };
     let mut outcome = kiln.run().await?;
@@ -773,7 +787,8 @@ pub(crate) async fn maybe_run_pipeline_for(
 
 /// `base_host` with what a build of `path` loads through: the dependencies of
 /// `project`, the manifest nearest it, and the Kiln invocations the entry's
-/// generators produce. `subcommand` names the failure it reports.
+/// generators produce. `subcommand` names the failure it reports. `settled`
+/// gains the modules the Kiln walk reached.
 pub(crate) async fn build_load(
     path: &Path,
     source: &str,
@@ -781,6 +796,7 @@ pub(crate) async fn build_load(
     base_host: FilesystemCompilerHost,
     no_cache: bool,
     subcommand: &str,
+    settled: &mut Settled,
 ) -> Result<(FilesystemCompilerHost, wado_compiler::kiln::InvocationIndex), CliExit> {
     let base_path = path.parent().map(Path::to_path_buf).unwrap_or_default();
     let host = attach_manifest_and_component_deps(
@@ -792,9 +808,11 @@ pub(crate) async fn build_load(
     )
     .await
     .map_err(CliExit::error)?;
-    let outcome = maybe_run_pipeline(path, &host, no_cache, project)
-        .await
-        .map_err(|e| pipeline_exit(e, subcommand))?;
+    let outcome = Box::pin(maybe_run_pipeline_for(
+        path, None, &host, no_cache, project, settled,
+    ))
+    .await
+    .map_err(|e| pipeline_exit(e, subcommand))?;
     Ok((host, outcome.invocations))
 }
 
@@ -825,7 +843,10 @@ pub(crate) async fn run_nested_pipeline(
         project: load_nearest_manifest(entry_file).map_err(PipelineError::Manifest)?,
         ..outer.clone()
     };
-    let Some(mut kiln) = prepare_kiln(entry_file, Some(entry_identity), host, run).await? else {
+    // Its own root, so nothing the outer walk settled.
+    let settled = &mut Settled::default();
+    let Some(mut kiln) = prepare_kiln(entry_file, Some(entry_identity), host, run, settled).await?
+    else {
         return Ok(wado_compiler::kiln::InvocationIndex::default());
     };
     let mut invocations = kiln.run().await?.invocations;
@@ -958,6 +979,7 @@ async fn collect_inline_invocations_for_entry_with_identities(
     entry_file: &Path,
     entry_identity: Option<&str>,
     manifest_root: &Path,
+    settled: &mut Settled,
 ) -> (
     Vec<wado_compiler::kiln::Invocation>,
     wado_compiler::hashmap::IndexMap<String, String>,
@@ -987,9 +1009,11 @@ async fn collect_inline_invocations_for_entry_with_identities(
         &entry_key,
         &entry_identity,
         entry.ast,
+        settled,
         async |identity| fs::read_to_string(entry_dir.join(identity)).ok(),
     )
     .await;
+    settled.extend(harvest.modules.keys().cloned());
 
     let descriptors = wado_compiler::hashmap::IndexMap::default();
     let (invocations, diagnostics) = wado_compiler::kiln::collect_inline_invocations(
@@ -1351,7 +1375,10 @@ mod kiln_dir_module_tests {
         Vec<wado_compiler::Diagnostic>,
     ) {
         futures::executor::block_on(collect_inline_invocations_for_entry_with_identities(
-            entry, None, root,
+            entry,
+            None,
+            root,
+            &mut Settled::default(),
         ))
     }
 

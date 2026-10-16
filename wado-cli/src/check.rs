@@ -16,8 +16,8 @@ use wado_compiler::path::normalize;
 use crate::args::{self, CliExit};
 use crate::build;
 use crate::compile::{
-    attach_manifest_and_component_deps, build_load, load_nearest_manifest, maybe_run_pipeline_for,
-    pipeline_exit,
+    Settled, attach_manifest_and_component_deps, build_load, load_nearest_manifest,
+    maybe_run_pipeline_for, pipeline_exit,
 };
 use crate::compiler_host::FilesystemCompilerHost;
 use crate::dep_component::Acquisition;
@@ -160,7 +160,7 @@ pub async fn run(opts: CheckOptions) -> Result<(), CliExit> {
     }
     let project = load_nearest_manifest(&path).map_err(CliExit::error)?;
     let world = check_world(opts.target_world.as_deref(), &path, project.as_ref());
-    check_entry(&path, world, project, true, &opts)
+    check_entry(&path, world, project, true, &opts, &mut Settled::default())
         .await
         .map(drop)
 }
@@ -189,6 +189,7 @@ async fn check_declared_worlds(
     // entry answers alone.
     let whole_package = opts.target_world.is_none();
     let mut entry_runs = Vec::with_capacity(targets.len());
+    let mut settled = Settled::default();
     for target in &targets {
         let world = match (&target.lib_world, &target.target_world) {
             (Some(fq), _) => CheckWorld::Lib(fq.clone()),
@@ -196,11 +197,24 @@ async fn check_declared_worlds(
             _ => unreachable!("a build target names exactly one world"),
         };
         let entry_project = load_nearest_manifest(&target.entry).map_err(CliExit::error)?;
-        entry_runs
-            .push(check_entry(&target.entry, world, entry_project, !whole_package, opts).await?);
+        // Each entry compiles from its own invocations, so its walk passes
+        // over nothing another entry's settled.
+        let mut walked = Settled::default();
+        entry_runs.push(
+            check_entry(
+                &target.entry,
+                world,
+                entry_project,
+                !whole_package,
+                opts,
+                &mut walked,
+            )
+            .await?,
+        );
+        settled.extend(walked);
     }
     if whole_package && opts.knobs.lints != wado_compiler::Lints::Off {
-        check_package_unused(project, &targets, &entry_runs, opts).await?;
+        check_package_unused(project, &targets, &entry_runs, settled, opts).await?;
     }
     Ok(())
 }
@@ -208,11 +222,13 @@ async fn check_declared_worlds(
 /// Report the unused items of the package rooted at `project`, decided over
 /// every member at once: what `targets` reach is production code, the rest of
 /// the members are its tests. `entry_runs` holds what each target's own check
-/// generated, so its generators neither run nor warn a second time.
+/// generated, and `settled` the modules those checks walked, so a generator
+/// clause runs and warns once, in the first walk that reaches its module.
 async fn check_package_unused(
     project: &manifest::ProjectManifest,
     targets: &[build::BuildTarget],
     entry_runs: &[InvocationIndex],
+    mut settled: Settled,
     opts: &CheckOptions,
 ) -> Result<(), CliExit> {
     let root = &project.root;
@@ -243,29 +259,35 @@ async fn check_package_unused(
             members.push(entry.clone());
         }
     }
+    let mut read = Vec::with_capacity(files.len());
+    for (file, member) in files.into_iter().zip(members) {
+        let source = std::fs::read_to_string(&file)
+            .map_err(|e| CliExit::error(format!("{}: {e}", file.display())))?;
+        // A generated module belongs to the module importing it, never a member
+        // of its own: a Kiln output under the root would load once as each.
+        if entries.contains(&member) || !wado_compiler::is_generated_source(&source) {
+            read.push((file, member, source));
+        }
+    }
     let package = wado_compiler::PackageSources {
         root: root.to_string_lossy().into_owned(),
-        members,
+        members: read.iter().map(|(_, member, _)| member.clone()).collect(),
         entries,
     };
-    // Component dependencies are named in the members' own `use` clauses.
-    let sources = files
-        .iter()
-        .map(|f| {
-            std::fs::read_to_string(f).map_err(|e| CliExit::error(format!("{}: {e}", f.display())))
-        })
-        .collect::<Result<Vec<_>, _>>()?;
     let host = attach_manifest_and_component_deps(
         FilesystemCompilerHost::with_log_level(root.clone(), opts.knobs.log_level),
         Some(project),
         root,
-        &sources.iter().map(String::as_str).collect::<Vec<_>>(),
+        &read
+            .iter()
+            .map(|(_, _, source)| source.as_str())
+            .collect::<Vec<_>>(),
         Acquisition::Build,
     )
     .await
     .map_err(CliExit::error)?;
     let mut invocations = InvocationIndex::default();
-    for (file, member) in files.iter().zip(&package.members) {
+    for (file, member, _) in &read {
         // `check_entry` names its entry by the path as given.
         if let Some((target, index)) = runs.get(member) {
             let run_name = target.entry.to_string_lossy();
@@ -279,6 +301,7 @@ async fn check_package_unused(
             &host,
             opts.knobs.no_cache,
             Some(project.clone()),
+            &mut settled,
         )
         .await
         .map_err(|e| pipeline_exit(e, "check"))?;
@@ -305,13 +328,14 @@ async fn check_package_unused(
 
 /// Check `path` against `world`, under `manifest_pair`, the manifest nearest it.
 /// `unused` reports the items this entry alone leaves unused. Answers what the
-/// entry's generators recorded.
+/// entry's generators recorded; `settled` gains the modules its walk reached.
 async fn check_entry(
     path: &Path,
     world: CheckWorld,
     manifest_pair: Option<manifest::ProjectManifest>,
     unused: bool,
     opts: &CheckOptions,
+    settled: &mut Settled,
 ) -> Result<InvocationIndex, CliExit> {
     let base_path = path
         .parent()
@@ -329,6 +353,7 @@ async fn check_entry(
         FilesystemCompilerHost::with_log_level(base_path, opts.knobs.log_level),
         opts.knobs.no_cache,
         "check",
+        settled,
     ))
     .await?;
 

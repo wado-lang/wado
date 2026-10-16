@@ -2762,6 +2762,12 @@ pub fn parse(source: &str) -> ParseResult {
     }
 }
 
+/// Whether `source` is a `#![generated]` module, without parsing its items.
+#[must_use]
+pub fn is_generated_source(source: &str) -> bool {
+    Parser::from_lex_no_trivia(lexer::lex(source)).declares_generated()
+}
+
 /// Compilation error with structured location info
 #[derive(Debug)]
 pub enum CompileError {

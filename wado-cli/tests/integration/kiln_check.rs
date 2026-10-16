@@ -83,3 +83,69 @@ fn walkdir(dir: &std::path::Path) -> Vec<std::path::PathBuf> {
     }
     out
 }
+
+/// A generator clause in a module several members reach runs and warns once,
+/// not once per member.
+#[test]
+fn a_package_check_reports_a_shared_module_kiln_warning_once() {
+    let tmp = tempfile::tempdir().unwrap();
+    let root = tmp.path();
+    write_kiln_project(root, "pkg", GREETING_GENERATOR, b"schema\n");
+    std::fs::write(
+        root.join("src/shared.wado"),
+        "use { hello } from \"./schema.bin\"\n    with { generator: { module: \"./gen.wado\" } };\n\n\
+         pub fn shared() -> i32 { return hello(); }\n",
+    )
+    .unwrap();
+    std::fs::write(
+        root.join("src/main.wado"),
+        "use { shared } from \"./shared.wado\";\n\nexport fn run() { shared(); }\n",
+    )
+    .unwrap();
+    for name in ["a_test", "b_test"] {
+        std::fs::write(
+            root.join(format!("src/{name}.wado")),
+            "use { shared } from \"./shared.wado\";\n\ntest { assert shared() == 1; }\n",
+        )
+        .unwrap();
+    }
+
+    wado_in(root).arg("check").assert().success();
+    let generated = walkdir(root)
+        .into_iter()
+        .find(|p| p.file_name().is_some_and(|n| n == "hello.wado"))
+        .expect("the generator wrote hello.wado");
+    std::fs::write(&generated, "pub fn hello() -> i32 { return 2; }\n").unwrap();
+
+    wado_in(root)
+        .args(["check", "--warn"])
+        .assert()
+        .success()
+        .stderr(predicate::function(|stderr: &str| {
+            stderr.matches("has been modified after generation").count() == 1
+        }));
+}
+
+/// Output a generator writes inside the package is the importing module's, not
+/// a member of its own, so the package pass loads it once.
+#[test]
+fn generated_output_inside_the_package_is_no_member() {
+    let tmp = tempfile::tempdir().unwrap();
+    let root = tmp.path();
+    write_kiln_project(root, "pkg", GREETING_GENERATOR, b"schema\n");
+    std::fs::write(
+        root.join("src/main.wado"),
+        "use { hello } from \"./schema.bin\"\n    \
+         with { generator: { module: \"./gen.wado\", output_dir: \"./generated\" } };\n\n\
+         export fn run() { hello(); }\n",
+    )
+    .unwrap();
+
+    wado_in(root).arg("check").assert().success();
+    assert!(root.join("src/generated/hello.wado").exists());
+    wado_in(root)
+        .args(["check", "--lint-generated"])
+        .assert()
+        .success()
+        .stderr(predicate::str::contains("never used").not());
+}
