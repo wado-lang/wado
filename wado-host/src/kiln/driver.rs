@@ -850,6 +850,9 @@ pub enum PipelineError {
     /// A generator package's `wado.toml` cannot be read or parsed. The host
     /// reads manifests, so the error is its own.
     Manifest(Box<dyn std::error::Error + Send + Sync>),
+    /// Acquiring what a package the walk reached depends on failed. The host
+    /// acquires, so the reason is its own.
+    Acquisition(String),
 }
 
 impl PipelineError {
@@ -864,7 +867,8 @@ impl PipelineError {
             | PipelineError::Provider { .. }
             | PipelineError::Io { .. }
             | PipelineError::MetadataSave { .. }
-            | PipelineError::Manifest(_) => false,
+            | PipelineError::Manifest(_)
+            | PipelineError::Acquisition(_) => false,
         }
     }
 }
@@ -892,6 +896,7 @@ impl std::fmt::Display for PipelineError {
                 write!(f, "kiln: {n} conflicting generator redirect(s)")
             }
             PipelineError::Manifest(e) => write!(f, "kiln: {e}"),
+            PipelineError::Acquisition(e) => write!(f, "fetching dependencies: {e}"),
         }
     }
 }

@@ -7,12 +7,14 @@ use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 use std::time::Instant;
 
+use indexmap::IndexMap;
 use wado_compiler::{
-    Code, CompilerHost, Diagnostic, GeneratorRequest, GeneratorResponse, GeneratorRunnerError,
-    LogLevel, Severity, SourceError,
+    Code, CompilerHost, DependencyIndex, Diagnostic, GeneratorRequest, GeneratorResponse,
+    GeneratorRunnerError, LogLevel, Severity, SourceError,
 };
 
 use crate::args::DEFAULT_LOG_LEVEL;
+use crate::dep_component::Acquisition;
 use crate::manifest::resolution_inputs;
 use crate::rss::RssSample;
 use crate::run_cache::RunCache;
@@ -32,9 +34,22 @@ pub struct FilesystemCompilerHost {
     /// returns it instead of having the inner host re-read the manifest —
     /// the caller already parsed it for the Kiln pipeline.
     dep_index: Option<wado_compiler::DependencyIndex>,
+    /// How far a build may go to acquire what the packages it reaches depend
+    /// on. `None` where nothing is to be acquired, so every index is offline.
+    acquisition: Option<Acquisition>,
+    /// Each package a walk placed modules in that no manifest declares, by its
+    /// root. Shared with every sibling host, so the compile reads the index the
+    /// Kiln walk's acquisition left.
+    undeclared: Arc<Mutex<IndexMap<String, UndeclaredPackage>>>,
     /// The resident set at each open span's start, innermost last, so a span's
     /// end line says how far it moved.
     span_rss: Mutex<Vec<Option<RssSample>>>,
+}
+
+/// The index an undeclared package is answered: offline until acquired.
+enum UndeclaredPackage {
+    Offline(DependencyIndex),
+    Acquired(DependencyIndex),
 }
 
 impl FilesystemCompilerHost {
@@ -48,6 +63,8 @@ impl FilesystemCompilerHost {
             start_time: Instant::now(),
             run: Arc::new(RunCache::new()),
             dep_index: None,
+            acquisition: None,
+            undeclared: Arc::default(),
             span_rss: Mutex::default(),
         }
     }
@@ -73,6 +90,34 @@ impl FilesystemCompilerHost {
     pub fn with_dependency_index(mut self, index: wado_compiler::DependencyIndex) -> Self {
         self.dep_index = Some(index);
         self
+    }
+
+    /// Acquire per `tier` what an undeclared package a walk reaches depends on,
+    /// as the declared ones were.
+    #[must_use]
+    pub fn acquiring(mut self, tier: Acquisition) -> Self {
+        self.acquisition = Some(tier);
+        self
+    }
+
+    /// The tier to acquire at, and each undeclared package a walk reached that
+    /// is not yet acquired, with the offline index it was answered.
+    #[must_use]
+    pub fn unacquired_packages(&self) -> Option<(Acquisition, Vec<(String, DependencyIndex)>)> {
+        let tier = self.acquisition?;
+        let unacquired = lock(&self.undeclared)
+            .iter()
+            .filter_map(|(root, package)| match package {
+                UndeclaredPackage::Offline(index) => Some((root.clone(), index.clone())),
+                UndeclaredPackage::Acquired(_) => None,
+            })
+            .collect();
+        Some((tier, unacquired))
+    }
+
+    /// Answer `index` for the undeclared package at `root` from now on.
+    pub fn adopt_acquired(&self, root: String, index: DependencyIndex) {
+        lock(&self.undeclared).insert(root, UndeclaredPackage::Acquired(index));
     }
 
     /// Share one [`RunCache`] across hosts, so a `wado test` run resolves and
@@ -128,6 +173,8 @@ impl FilesystemCompilerHost {
             start_time: self.start_time,
             run: Arc::clone(&self.run),
             dep_index: self.dep_index.clone(),
+            acquisition: self.acquisition,
+            undeclared: Arc::clone(&self.undeclared),
             span_rss: Mutex::default(),
         }
     }
@@ -274,11 +321,19 @@ impl CompilerHost for FilesystemCompilerHost {
         })
     }
 
-    fn package_index(&self, root: &str) -> wado_compiler::DependencyIndex {
+    fn package_index(&self, root: &str) -> DependencyIndex {
         for file in resolution_inputs(Path::new(root)) {
             self.run.depend_on_file(&file);
         }
-        self.inner.package_index(root)
+        let mut undeclared = lock(&self.undeclared);
+        if let Some(UndeclaredPackage::Acquired(index)) = undeclared.get(root) {
+            return index.clone();
+        }
+        let offline = self.inner.package_index(root);
+        if self.acquisition.is_some() {
+            undeclared.insert(root.to_string(), UndeclaredPackage::Offline(offline.clone()));
+        }
+        offline
     }
 
     fn env_var(&self, name: &str) -> Option<String> {

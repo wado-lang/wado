@@ -474,7 +474,7 @@ pub(crate) async fn attach_manifest_and_component_deps(
     tier: Acquisition,
 ) -> Result<FilesystemCompilerHost, String> {
     let index = manifest_and_component_index(project, base_path, sources, tier).await?;
-    Ok(base_host.with_dependency_index(index))
+    Ok(base_host.with_dependency_index(index).acquiring(tier))
 }
 
 /// Build the [`DependencyIndex`] for `project` (path deps + offline registry
@@ -491,14 +491,7 @@ async fn manifest_and_component_index(
     // dependency's at any depth, inline ones included, before indexing it, so
     // the offline pass finds their git worktrees warm.
     let mut index = match project {
-        Some(project) => {
-            let own = acquire_package(&project.manifest, &project.root, tier).await?;
-            let (mut index, entries) =
-                wado_lsp::host::package_index(&project.manifest, &project.root, base_path);
-            adopt_components(&mut index, own);
-            acquire_and_index(&mut index, entries, base_path, tier).await?;
-            index
-        }
+        Some(project) => acquired_index(&project.manifest, &project.root, base_path, tier).await?,
         None => wado_compiler::DependencyIndex::default(),
     };
 
@@ -525,6 +518,52 @@ async fn manifest_and_component_index(
         }
     }
     Ok(index)
+}
+
+/// The index of the package at `root`, whose manifest is `manifest`, keyed from
+/// `base_path`, with what it and each source dependency it reaches depend on
+/// acquired per `tier`.
+async fn acquired_index(
+    manifest: &wado_manifest::Manifest,
+    root: &Path,
+    base_path: &Path,
+    tier: Acquisition,
+) -> Result<wado_compiler::DependencyIndex, String> {
+    let own = acquire_package(manifest, root, tier).await?;
+    let (mut index, entries) = wado_lsp::host::package_index(manifest, root, base_path);
+    adopt_components(&mut index, own);
+    acquire_and_index(&mut index, entries, base_path, tier).await?;
+    Ok(index)
+}
+
+/// Acquire what each package a walk through `host` reached, and no manifest
+/// declares, depends on, as the declared ones were before the walk. True when
+/// that resolved a dependency the walk found unresolved, so the walk saw less
+/// than is there.
+async fn acquire_undeclared_packages(host: &FilesystemCompilerHost) -> Result<bool, String> {
+    let Some((tier, unacquired)) = host.unacquired_packages() else {
+        return Ok(false);
+    };
+    let mut resolved_more = false;
+    for (root, offline) in unacquired {
+        // A manifest that cannot be read names nothing to acquire, and its
+        // offline index already says why.
+        let acquired = match manifest_in(Path::new(&root)) {
+            Ok(Some(manifest)) => {
+                acquired_index(&manifest, Path::new(&root), host.base_path(), tier).await?
+            }
+            Ok(None) | Err(_) => offline.clone(),
+        };
+        resolved_more |= unresolved_count(&acquired) < unresolved_count(&offline);
+        host.adopt_acquired(root, acquired);
+    }
+    Ok(resolved_more)
+}
+
+/// How many dependencies `index` and the packages it reaches leave unresolved.
+fn unresolved_count(index: &wado_compiler::DependencyIndex) -> usize {
+    let reached = index.packages.values().map(|p| p.unresolved.len());
+    index.unresolved.len() + reached.sum::<usize>()
 }
 
 /// Add to `index.packages` the package of each entry module in `entries`, and
@@ -701,20 +740,32 @@ pub(crate) async fn prepare_kiln(
         .map(|p| p.root.clone())
         .unwrap_or(entry_dir);
     let dependencies = host.dependency_index();
+    // A walk acquiring an undeclared package's dependencies may reach modules
+    // it could not before, so it walks again until it reaches nothing new.
+    let unwalked = settled.clone();
     let Harvested {
         invocations,
         identities,
         packages,
         diagnostics: inline_diagnostics,
-    } = collect_inline_invocations_for_entry_with_identities(
-        entry_file,
-        entry_identity,
-        &manifest_root,
-        host,
-        &dependencies,
-        settled,
-    )
-    .await;
+    } = loop {
+        let harvested = collect_inline_invocations_for_entry_with_identities(
+            entry_file,
+            entry_identity,
+            &manifest_root,
+            host,
+            &dependencies,
+            settled,
+        )
+        .await;
+        if !acquire_undeclared_packages(host)
+            .await
+            .map_err(PipelineError::Acquisition)?
+        {
+            break harvested;
+        }
+        settled.clone_from(&unwalked);
+    };
 
     // Fail on a malformed clause here, with its own diagnostics, so the clear
     // error is not buried under the downstream failure of the unredirected
