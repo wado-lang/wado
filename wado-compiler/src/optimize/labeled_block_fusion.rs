@@ -98,8 +98,46 @@ impl Rule for LabeledBlockFusionRule {
             engine.note_elided_local(temp);
             return true;
         }
-        false
+        (0..stmts.len() - 1).any(|i| thread_bound_block(engine, block, &stmts, i))
     }
+}
+
+/// `let t = LB; … match t { … }` → `… match LB { … }`, threaded: the shape an
+/// inlined `unwrap` leaves, whose arms the value-discarding fusion above does
+/// not take. The match is the consumer's whole value and evaluates `t` first,
+/// so moving `LB` there evaluates it where the `let` did.
+fn thread_bound_block(engine: &mut Engine, block: BlockId, stmts: &[StmtId], i: usize) -> bool {
+    let StmtKind::Let {
+        local_index: temp,
+        value: Operand::Expr(lb),
+        ..
+    } = engine.body.stmts[stmts[i]].kind
+    else {
+        return false;
+    };
+    let Some(match_id) = consumer_match(engine.body, stmts[i + 1]) else {
+        return false;
+    };
+    let ExprKind::Match {
+        expr: Operand::Expr(scrut),
+        ..
+    } = engine.body.exprs[match_id].kind
+    else {
+        return false;
+    };
+    if !is_local(engine.body, scrut, temp) || body_uses(engine, temp) != 1 {
+        return false;
+    }
+    let Some(plan) = plan_threading_of(engine.body, match_id, lb, engine.locals()) else {
+        return false;
+    };
+    assert!(engine.redirect_expr(scrut, Operand::Expr(lb)));
+    let mut kept = stmts.to_vec();
+    kept.remove(i);
+    engine.set_block_stmts(block, kept);
+    engine.note_elided_local(temp);
+    perform_threading(engine, match_id, plan);
+    true
 }
 
 /// Whether `consumer` is a `match` with a value of its own. A unit one, or an
@@ -642,7 +680,11 @@ impl<S: ExitSink> ExitWalk<'_, S> {
                     stmt: s,
                     scope: self.scope.clone(),
                 });
+                // `Ok(f()?)` inlined puts the `?` exit inside the other exit's
+                // payload. Threading keeps a payload where it evaluates, so an
+                // exit inside one is rewritten in place like any other.
                 self.sink.visit(body, *value)
+                    && (!self.sink.descend_branches() || value.is_none_or(|v| self.operand(body, v)))
             }
             StmtKind::LabeledBlock { label: l, .. } if l == self.label => true,
             StmtKind::If {
@@ -707,8 +749,24 @@ impl<S: ExitSink> ExitWalk<'_, S> {
                     && arms.iter().all(|b| self.block(body, *b))
                     && self.block(body, *default)
             }
+            // Threading rewrites an exit in the block holding it, whatever
+            // expression holds that block.
+            _ if self.sink.descend_branches() => {
+                let mut ok = true;
+                body.for_each_child(NodeRef::Expr(e), |c| ok = ok && self.node(body, c));
+                ok
+            }
             // Opaque expression: an exit hidden inside is one no rewrite reaches.
             _ => !has_break_to(body, NodeRef::Expr(e), self.label),
+        }
+    }
+
+    fn node(&mut self, body: &Body, node: NodeRef) -> bool {
+        match node {
+            NodeRef::Expr(e) => self.expr(body, e),
+            NodeRef::Block(b) => self.block(body, b),
+            NodeRef::Stmt(s) => self.stmt(body, s),
+            NodeRef::Pat(_) => true,
         }
     }
 }
@@ -1795,10 +1853,23 @@ struct ThreadPlan {
 }
 
 fn plan_threading(body: &Body, id: ExprId, locals: &[NirLocal]) -> Option<ThreadPlan> {
-    let ExprKind::Match { expr: scrut, arms } = &body.exprs[id].kind else {
+    let ExprKind::Match { expr: scrut, .. } = &body.exprs[id].kind else {
         return None;
     };
-    let scrut = scrut.as_expr()?;
+    plan_threading_of(body, id, scrut.as_expr()?, locals)
+}
+
+/// [`plan_threading`] for the match `id` with `scrut` as its scrutinee, which
+/// it need not hold yet.
+fn plan_threading_of(
+    body: &Body,
+    id: ExprId,
+    scrut: ExprId,
+    locals: &[NirLocal],
+) -> Option<ThreadPlan> {
+    let ExprKind::Match { arms, .. } = &body.exprs[id].kind else {
+        return None;
+    };
     let ExprKind::LabeledBlock {
         label,
         block: lb_block,
@@ -1892,10 +1963,9 @@ fn selected_arm(body: &Body, exit: StmtId, arms: &[ArmInfo]) -> usize {
 
 /// [`ExitSink`] for threading: resolves each `break L:` exit to the arm it
 /// selects and checks the arm's payload binding type. Descends `Match` /
-/// `Switch` arms (the threading transform rewrites them) and rejects any hidden
-/// break.
+/// `Switch` arms and exit payloads (the threading transform rewrites them) and
+/// rejects any hidden break.
 struct ExitValidator<'a> {
-    label: &'a str,
     arms: &'a [ArmInfo],
     locals: &'a [NirLocal],
 }
@@ -1915,12 +1985,6 @@ impl ExitSink for ExitValidator<'_> {
             return false;
         };
         let (case_index, payload) = (*case_index, *payload);
-        if payload.is_some_and(|p| {
-            p.as_expr()
-                .is_some_and(|e| has_break_to(body, NodeRef::Expr(e), self.label))
-        }) {
-            return false;
-        }
         let Some(idx) = select_arm(self.arms, case_index) else {
             return false;
         };
@@ -1953,11 +2017,7 @@ fn validate_exits_in_block(
     arms: &[ArmInfo],
     locals: &[NirLocal],
 ) -> Option<Vec<Exit>> {
-    let mut sink = ExitValidator {
-        label,
-        arms,
-        locals,
-    };
+    let mut sink = ExitValidator { arms, locals };
     walk_exits(body, block, label, &mut sink)
 }
 

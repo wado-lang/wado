@@ -1,0 +1,38 @@
+// `Ok(f(x)?).unwrap()` inlined binds the block before matching it, and leaves
+// the `?` exit inside the payload of the other exit:
+// `let r = L: { break L: Ok({ … break L: Err(e) … }) }; let v = match r { … }`.
+// Both exits still thread into the consumer's arms, so no `Result` is built.
+use { println, Stdout } from "core:cli";
+
+// The loop keeps `trailing_zeros` out of line, as `parse_float_bits` is.
+fn trailing_zeros(n: i32) -> Result<i32, String> {
+    if n == 0 {
+        return Result::Err("zero");
+    }
+    let mut k = 0;
+    while (n >> k) & 1 == 0 {
+        k += 1;
+    }
+    return Result::Ok(k);
+}
+
+fn bit(n: i32) -> Result<i32, String> {
+    return Result::Ok(1 << trailing_zeros(n)?);
+}
+
+fn show(n: i32) -> String {
+    return `bit ${bit(n).unwrap()}`;
+}
+
+export fn run() with Stdout {
+    println(show(builtin::black_box(12)));
+    println(show(builtin::black_box(1)));
+}
+
+__DATA__
+{
+    "stdout": "bit 4\nbit 1\n",
+    "wir_not_expect:O2": [
+        "struct.new \"core:prelude/types.wado//Result<i32,core:prelude/string.wado/String>::Ok\""
+    ]
+}
