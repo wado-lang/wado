@@ -158,6 +158,8 @@ impl<T> Places<T> {
     }
 
     fn replace(&mut self, at: i32, value: Option<T>) {
+        // A store into an element drops nothing it replaces (a known gap of
+        // WEP: Resource Ownership), so the old value is popped, which does.
         self.held.push(value);
         self.held.swap(at, self.held.len() - 1);
         self.held.pop();
@@ -248,7 +250,8 @@ pub struct WebGpuBackend {
     cpu: Cpu,
 }
 
-/// Invocations per workgroup of every shader but the product's.
+/// Invocations per workgroup of every shader but the product's: a power of
+/// two, as the shaders' reductions halve it.
 global LANES: i32 = 64;
 
 /// The most workgroups one dispatch dimension takes, as WebGPU's default limit
@@ -531,34 +534,41 @@ impl WebGpuBackend {
         return contiguous(slot, 0, t.extents);
     }
 
-    /// A `[k, n]` matrix of `values`, kept column by column, so a product of a
-    /// few rows reads each column's run along the inner axis: one workgroup
-    /// lane per run of it, rather than one per column, which leaves most of a
-    /// device idle where the columns are few. `column_major(i)` is the matrix's
-    /// element `i` in that order. It is kept in bf16 where that loses nothing.
-    fn kept_by_columns<K, N>(
+    /// A `[k, n]` matrix of `values`, `at(r, c)` its element at row `r` and
+    /// column `c`, kept in bf16 where that loses nothing. It is kept column by
+    /// column, so a product of a few rows reads each column's run along the
+    /// inner axis: one workgroup lane per run of it, rather than one per
+    /// column, which leaves most of a device idle where the columns are few.
+    /// A matrix one binding does not hold is kept row by row instead, where a
+    /// row, and a run of rows, is a span of its own: column by column, every
+    /// row reaches across the whole buffer, and no gather or chunk of the
+    /// inner axis would bind.
+    fn kept_matrix<K, N>(
         &mut self,
         k: i32,
         n: i32,
         values: &List<f32>,
-        column_major: fn(i32) -> f32,
+        at: fn(i32, i32) -> f32,
     ) -> Placed<f32, [K, N]> with (GpuDevice, GpuQueue, GpuBuffer) {
         let count = k * n;
         let half = held_in_bf16(values);
+        let words = if half { count.div_ceil(2) } else { count };
+        let by_columns = words <= self.max_binding;
+        let element = |i: i32| if by_columns { at(i % k, i / k) } else { at(i / n, i % n) };
         let slot = if half {
-            self.written(count.div_ceil(2), |w| {
-                let low = column_major(2 * w).to_bits() >> 16;
-                let high = if 2 * w + 1 < count { column_major(2 * w + 1).to_bits() & 0xFFFF_0000 } else { 0 };
+            self.written(words, |w| {
+                let low = element(2 * w).to_bits() >> 16;
+                let high = if 2 * w + 1 < count { element(2 * w + 1).to_bits() & 0xFFFF_0000 } else { 0 };
                 return high | low;
             }, true);
         } else {
-            self.written(count, |i| column_major(i).to_bits(), true);
+            self.written(words, |i| element(i).to_bits(), true);
         };
         return Placed::Device(DeviceTensor {
             slot,
             offset: 0,
             extents: [k, n],
-            strides: [1, k],
+            strides: if by_columns { [1, k] } else { [n, 1] },
             half,
         });
     }
@@ -1174,7 +1184,7 @@ impl WebGpuBackend {
                 ];
             } else {
                 [
-                    ShaderKey::Product([op, bound.bindings, br, continued, half]),
+                    ShaderKey::Product([op, bound.bindings, br, continued, half, across]),
                     rows.div_ceil(TILE),
                     TILE,
                 ];
@@ -1436,8 +1446,8 @@ impl WebGpuBackend {
 impl Backend for WebGpuBackend {
     type Tensor<E: Element, Axes> = Placed<E, Axes>;
     type Operand<Axes> = PlacedRead<Axes>;
-    /// A matrix kept column by column, of bf16 elements where those hold every
-    /// value: see `kept_by_columns`.
+    /// A matrix kept column by column where one binding holds it, of bf16
+    /// elements where those hold every value: see `kept_matrix`.
     type Rhs<K, N> = Placed<f32, [K, N]>;
 
     fn upload<E: Element, Axes>(&mut self, t: &Tensor<E, Axes>) -> Placed<E, Axes> with (GpuDevice, GpuQueue, GpuBuffer) {
@@ -1452,15 +1462,16 @@ impl Backend for WebGpuBackend {
     fn keep_rhs<K, N>(&mut self, t: &Tensor<f32, [K, N]>) -> Placed<f32, [K, N]> with (GpuDevice, GpuQueue, GpuBuffer) {
         let [k, n] = [t.extents[0], t.extents[1]];
         let data = &t.data;
-        return self.kept_by_columns(k, n, data, |i| data[i % k * n + i / k]);
+        return self.kept_matrix(k, n, data, |r, c| data[r * n + c]);
     }
 
     fn keep_rhs_transposed<K, N>(
         &mut self,
         t: &Tensor<f32, [N, K]>,
     ) -> Placed<f32, [K, N]> with (GpuDevice, GpuQueue, GpuBuffer) {
+        let k = t.extents[1];
         let data = &t.data;
-        return self.kept_by_columns(t.extents[1], t.extents[0], data, |i| data[i]);
+        return self.kept_matrix(k, t.extents[0], data, |r, c| data[c * k + r]);
     }
 
     /// Submits what the pass before recorded and releases its buffers, so a
@@ -2486,7 +2497,7 @@ variant ShaderKey {
     /// [`copy_shader`]'s arguments.
     Copy([i32, bool]),
     /// [`product_shader`]'s arguments.
-    Product([Expr, List<i32>, i32, bool, bool]),
+    Product([Expr, List<i32>, i32, bool, bool, bool]),
     /// [`narrow_product_shader`]'s arguments.
     NarrowProduct([Expr, List<i32>, i32, bool, bool, bool, i32]),
     /// [`gather_shader`]'s arguments.
@@ -2508,7 +2519,14 @@ impl ShaderKey {
             Elementwise([op, bindings, rank]) => elementwise_shader(op, bindings, *rank),
             Rows([op, bindings, rank, row_axes, reduced]) => row_shader(op, bindings, *rank, *row_axes, *reduced),
             Copy([rank, half]) => copy_shader(*rank, *half),
-            Product([op, bindings, batch, continued, half]) => product_shader(op, bindings, *batch, *continued, *half),
+            Product([op, bindings, batch, continued, half, across]) => product_shader(
+                op,
+                bindings,
+                *batch,
+                *continued,
+                *half,
+                *across,
+            ),
             NarrowProduct([op, bindings, batch, continued, across, half, width]) => narrow_product_shader(
                 op,
                 bindings,
@@ -2582,7 +2600,7 @@ fn present_shader(bindings: &List<i32>, rotary: bool) -> String {
         "    let turned = x;\n";
     };
     return `${buffers_wgsl(1 + max_of(bindings), null)}
-@compute @workgroup_size(64)
+@compute @workgroup_size(${LANES})
 fn main(@builtin(global_invocation_id) id: vec3<u32>) {
     let i = id.x + id.y * p[1];
     if i >= p[0] {
@@ -2617,7 +2635,7 @@ ${key}    out[i] = turned;
 }
 
 /// The WGSL attending one query row of `group_query_attention` over one part
-/// of 64 positions per workgroup, for heads of `head` elements: the query
+/// of `LANES` positions per workgroup, for heads of `head` elements: the query
 /// turned where `rotary`, its scores against each position's key scaled,
 /// capped, biased where `biased` and masked, and the values they weigh. A part
 /// writes its weighed values, its greatest score, and its weights' sum, each
@@ -2643,18 +2661,18 @@ fn attend_shader(bindings: &List<i32>, head: i32, rotary: bool, biased: bool) ->
     };
     return `${buffers_wgsl(1 + max_of(bindings), null)}
 var<workgroup> query: array<f32, ${head}>;
-var<workgroup> partial: array<f32, 64>;
-var<workgroup> weights: array<f32, 64>;
+var<workgroup> partial: array<f32, ${LANES}>;
+var<workgroup> weights: array<f32, ${LANES}>;
 
-@compute @workgroup_size(64)
+@compute @workgroup_size(${LANES})
 fn main(@builtin(workgroup_id) group: vec3<u32>, @builtin(local_invocation_index) lid: u32) {
     let flat = group.x + group.y * p[1];
     if flat >= p[0] {
         return;
     }
-    let parts = (p[6] + 63u) / 64u;
+    let parts = (p[6] + ${LANES - 1}u) / ${LANES}u;
     let row = flat / parts;
-    let first = flat % parts * 64u;
+    let first = flat % parts * ${LANES}u;
     let seq = p[3];
     let heads = p[4];
     let d = p[5];
@@ -2671,7 +2689,7 @@ fn main(@builtin(workgroup_id) group: vec3<u32>, @builtin(local_invocation_index
     let kh = h / p[8];
     let position = past + s;
     let none = bitcast<f32>(0xff800000u);
-    for (var e = lid; e < d; e += 64u) {
+    for (var e = lid; e < d; e += ${LANES}u) {
         let x = ${query_at("e")};
 ${turning}        query[e] = turned;
     }
@@ -2695,7 +2713,7 @@ ${turning}        query[e] = turned;
 ${biasing}    }
     partial[lid] = sc;
     workgroupBarrier();
-    for (var w = 32u; w > 0u; w = w >> 1u) {
+    for (var w = ${LANES / 2}u; w > 0u; w = w >> 1u) {
         if lid < w {
             partial[lid] = max(partial[lid], partial[lid + w]);
         }
@@ -2707,19 +2725,19 @@ ${biasing}    }
     weights[lid] = weight;
     partial[lid] = weight;
     workgroupBarrier();
-    for (var w = 32u; w > 0u; w = w >> 1u) {
+    for (var w = ${LANES / 2}u; w > 0u; w = w >> 1u) {
         if lid < w {
             partial[lid] = partial[lid] + partial[lid + w];
         }
         workgroupBarrier();
     }
     let at = flat * (d + 2u);
-    let count = min(64u, total - first);
+    let count = min(${LANES}u, total - first);
     let j = first;
     let values = ${view_index_wgsl(23, ["b", "kh", "j"])};
     let next = bitcast<i32>(p[26]);
     let along = bitcast<i32>(p[27]);
-    for (var e = lid; e < d; e += 64u) {
+    for (var e = lid; e < d; e += ${LANES}u) {
         var acc = 0.0;
         let column = values + i32(e) * along;
         for (var i = 0u; i < count; i++) {
@@ -2745,7 +2763,7 @@ ${biasing}    }
 fn attend_join_shader(bindings: &List<i32>) -> String {
     let part = |c: String, at: String| `o${bindings[0]}[p[4] + (row * parts + ${c}) * (d + 2u) + ${at}]`;
     return `${buffers_wgsl(1 + max_of(bindings), null)}
-@compute @workgroup_size(64)
+@compute @workgroup_size(${LANES})
 fn main(@builtin(workgroup_id) group: vec3<u32>, @builtin(local_invocation_index) lid: u32) {
     let row = group.x + group.y * p[1];
     if row >= p[0] {
@@ -2763,7 +2781,7 @@ fn main(@builtin(workgroup_id) group: vec3<u32>, @builtin(local_invocation_index
         let top = ${part("c", "d")};
         all += select(exp(top - most), 0.0, top == none) * ${part("c", "d + 1u")};
     }
-    for (var e = lid; e < d; e += 64u) {
+    for (var e = lid; e < d; e += ${LANES}u) {
         var acc = 0.0;
         for (var c = 0u; c < parts; c++) {
             let top = ${part("c", "d")};
@@ -2819,14 +2837,15 @@ ${coords_wgsl("row", 4, 0, rank - 1, "c", "    ")}`, direct,
         ],
         Combine => [
             "    let row = flat;\n    let first = 0u;\n    let end = p[3];\n",
-            `        let x = o${bindings[0]}[2u * (row * p[3] + j)];
-        let i = u32(o${bindings[0]}[2u * (row * p[3] + j) + 1u]);
+            `        let pair = p[${at}] + 2u * (row * p[3] + j);
+        let x = o${bindings[0]}[pair];
+        let i = u32(o${bindings[0]}[pair + 1u]);
 `, "        out[row] = f32(indices[0]);\n",
         ],
     };
     return `${buffers_wgsl(1 + max_of(bindings), null)}
-var<workgroup> values: array<f32, 64>;
-var<workgroup> indices: array<u32, 64>;
+var<workgroup> values: array<f32, ${LANES}>;
+var<workgroup> indices: array<u32, ${LANES}>;
 
 const NONE = 0xffffffffu;
 
@@ -2848,7 +2867,7 @@ fn before(a: f32, i: u32, b: f32, j: u32) -> bool {
     return a > b || (a == b && i < j);
 }
 
-@compute @workgroup_size(64)
+@compute @workgroup_size(${LANES})
 fn main(@builtin(workgroup_id) group: vec3<u32>, @builtin(local_invocation_index) lid: u32) {
     let flat = group.x + group.y * p[1];
     if flat >= p[0] {
@@ -2856,7 +2875,7 @@ fn main(@builtin(workgroup_id) group: vec3<u32>, @builtin(local_invocation_index
     }
 ${range}    var best = 0.0;
     var at = NONE;
-    for (var j = first + lid; j < end; j += 64u) {
+    for (var j = first + lid; j < end; j += ${LANES}u) {
 ${read}        if before(x, i, best, at) {
             best = x;
             at = i;
@@ -2865,7 +2884,7 @@ ${read}        if before(x, i, best, at) {
     values[lid] = best;
     indices[lid] = at;
     workgroupBarrier();
-    for (var w = 32u; w > 0u; w = w >> 1u) {
+    for (var w = ${LANES / 2}u; w > 0u; w = w >> 1u) {
         if lid < w && before(values[lid + w], indices[lid + w], values[lid], indices[lid]) {
             values[lid] = values[lid + w];
             indices[lid] = indices[lid + w];
@@ -2892,7 +2911,7 @@ fn elementwise_shader(op: &Expr, bindings: &List<i32>, rank: i32) -> String {
     }
     body.push_str(&steps_wgsl(op, op.steps.len() - 1, "    "));
     return `${buffers_wgsl(buffers, null)}
-@compute @workgroup_size(64)
+@compute @workgroup_size(${LANES})
 fn main(@builtin(global_invocation_id) id: vec3<u32>) {
     let i = id.x + id.y * p[1];
     if i >= p[0] {
@@ -2946,13 +2965,13 @@ fn row_shader(op: &Expr, bindings: &List<i32>, rank: i32, row_axes: i32, reduced
         let tree = combine.replace("acc", "partial[lid]").replace("v", "partial[lid + s]");
         phases.push_str(`    {
         var acc = ${init};
-        for (var e = lid; e < len; e += 64u) {
+        for (var e = lid; e < len; e += ${LANES}u) {
 ${element(a)}            let v = s${a};
             acc = ${combine};
         }
         partial[lid] = acc;
         workgroupBarrier();
-        for (var s = 32u; s > 0u; s = s >> 1u) {
+        for (var s = ${LANES / 2}u; s > 0u; s = s >> 1u) {
             if lid < s {
                 partial[lid] = ${tree};
             }
@@ -2974,16 +2993,16 @@ ${element(last)}        out[row] = s${last};
     }
 `;
     } else {
-        `    for (var e = lid; e < len; e += 64u) {
+        `    for (var e = lid; e < len; e += ${LANES}u) {
 ${element(last)}        out[row * len + e] = s${last};
     }
 `;
     };
     return `${buffers_wgsl(buffers, null)}
-var<workgroup> partial: array<f32, 64>;
+var<workgroup> partial: array<f32, ${LANES}>;
 var<workgroup> folds: array<f32, ${i32::max(folds, 1)}>;
 
-@compute @workgroup_size(64)
+@compute @workgroup_size(${LANES})
 fn main(@builtin(workgroup_id) group: vec3<u32>, @builtin(local_invocation_index) lid: u32) {
     let row = group.x + group.y * p[1];
     if row >= p[0] {
@@ -3005,7 +3024,7 @@ fn copy_shader(rank: i32, half: bool) -> String {
 @group(0) @binding(1) var<storage, read_write> dst: array<f32>;
 @group(0) @binding(2) var<storage, read> p: array<u32>;
 
-@compute @workgroup_size(64)
+@compute @workgroup_size(${LANES})
 fn main(@builtin(global_invocation_id) id: vec3<u32>) {
     let i = id.x + id.y * p[1];
     if i >= p[0] {
@@ -3036,7 +3055,7 @@ fn gather_shader(rank: i32, axis: i32, half: bool) -> String {
 @group(0) @binding(2) var<storage, read_write> out: array<f32>;
 @group(0) @binding(3) var<storage, read> p: array<u32>;
 
-@compute @workgroup_size(64)
+@compute @workgroup_size(${LANES})
 fn main(@builtin(global_invocation_id) id: vec3<u32>) {
     let i = id.x + id.y * p[1];
     if i >= p[0] {
@@ -3061,7 +3080,12 @@ ${coords_wgsl("i", 2, 0, rank, "c", "    ")}    let picked = i32(indices[p[${fir
 /// `[..batch, rows, cols]`. Where `continued`, the sums start from a partial
 /// result laid out as the output is, the last binding, after whose offset the
 /// parameters end. Where `half`, the right matrix is bf16, widened as read.
-fn product_shader(op: &Expr, bindings: &List<i32>, batch: i32, continued: bool, half: bool) -> String {
+/// Where `across`, the right matrix is contiguous along its inner axis, so a
+/// tile of it is read with neighbouring lanes along that axis.
+fn product_shader(op: &Expr, bindings: &List<i32>, batch: i32, continued: bool, half: bool, across: bool) -> String {
+    // The tile element a lane loads of the right matrix: its step of the inner
+    // axis and its column, each within the tile.
+    let [step, column] = if across { ["local.x", "local.y"] } else { ["local.y", "local.x"] };
     let mut start = "";
     if continued {
         start = `    if row < rows && col < cols {
@@ -3085,12 +3109,13 @@ ${start}    for (var t = 0u; t < (inner + 15u) / 16u; t++) {
             va = o${bindings[0]}[u32(a_base + i32(row) * a_row + i32(ka) * a_inner)];
         }
         ta[local.y * 16u + local.x] = va;
-        let kb = t * 16u + local.y;
+        let kb = t * 16u + ${step};
+        let cb = group.x * 16u + ${column};
         var vb = 0.0;
-        if kb < inner && col < cols {
-            vb = ${right_wgsl(bindings, half, "kb")};
+        if kb < inner && cb < cols {
+            vb = ${right_wgsl(bindings, half, "kb", "cb")};
         }
-        tb[local.y * 16u + local.x] = vb;
+        tb[${step} * 16u + ${column}] = vb;
         workgroupBarrier();
         for (var k = 0u; k < 16u; k++) {
             acc += ta[local.y * 16u + k] * tb[k * 16u + local.x];
@@ -3229,15 +3254,15 @@ fn right_binding(bindings: &List<i32>, half: bool) -> Option<i32> {
     return Option::Some(bindings[1]);
 }
 
-/// A product's right matrix at the inner index `k` and column `col`.
-fn right_wgsl(bindings: &List<i32>, half: bool, k: String) -> String {
-    return element_wgsl(`o${bindings[1]}`, right_index_wgsl(k), half);
+/// A product's right matrix at the inner index `k` and column `column`.
+fn right_wgsl(bindings: &List<i32>, half: bool, k: String, column: String = "col") -> String {
+    return element_wgsl(`o${bindings[1]}`, right_index_wgsl(k, column), half);
 }
 
 /// The element index, a `u32`, of a product's right matrix at the inner index
-/// `k` and column `col`.
-fn right_index_wgsl(k: String) -> String {
-    return `u32(b_base + i32(${k}) * b_inner + i32(col) * b_col)`;
+/// `k` and column `column`.
+fn right_index_wgsl(k: String, column: String = "col") -> String {
+    return `u32(b_base + i32(${k}) * b_inner + i32(${column}) * b_col)`;
 }
 
 /// The columns one workgroup of [`narrow_product_shader`] computes, whose

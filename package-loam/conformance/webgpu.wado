@@ -270,6 +270,9 @@ fn half_weights() with (Stdout, Webgpu, Gpu, GpuAdapter, GpuDevice, GpuQueue, Gp
         let across = gpu.matmul_by_rhs_transposed(&gpu.upload(&one), &b, null);
         let gathered = gpu.gather_rhs_rows(&b, &gpu.upload(&ix));
         let few_by_f = gpu.matmul_rhs(&gpu.upload(&few), &f, null);
+        // Only the product across the rows leaves the device, reading back
+        // the weight and its left operand, and only under the split.
+        assert gpu.read_backs() == if limit matches { Some(_) } { 2 } else { 0 };
         let got = [
             gpu.download(&few_by_b).data,
             gpu.download(&tile_by_b).data,
@@ -285,8 +288,8 @@ fn half_weights() with (Stdout, Webgpu, Gpu, GpuAdapter, GpuDevice, GpuQueue, Gp
 }
 
 /// A binding that holds 266 of the 700 rows of `half_weights`' weight in bf16,
-/// so its products along the rows run in chunks, its product across them on
-/// the CPU, and its gather in parts.
+/// so the weight is kept row by row, its products along the rows run in
+/// chunks, its product across them on the CPU, and its gather in parts.
 global HALF_SPLIT: i32 = 40_000;
 
 /// Products of a few rows, as a model's step over one token makes, by a
