@@ -255,13 +255,48 @@ on every path; a store drops what it replaces; a discarded value is dropped.
 The rule now has nothing to exclude, since no copyable container holds an
 affine value. A panic drops nothing.
 
+### A write returns what it did not deliver
+
+The Component Model leaves with the writer what a write did not deliver. Three
+cases do not deliver everything:
+
+- a `stream.write` the reader took only a prefix of, while the stream stays
+  open;
+- a write of either kind the reader dropped before (`Dropped`);
+- a cancelled write of either kind (`Cancelled`).
+
+A copyable writer still has its own copy of what was left. An affine one has
+nothing, so the write hands it back:
+
+```wado
+fn write(&self, value: T) -> FutureWrite<T>;       // FutureWritable<affine T>
+fn write(&self, data: List<T>) -> StreamWrite<T>;  // StreamWritable<affine T>
+
+struct FutureWrite<affine T> { result: CopyResult, rest: Option<T> }
+struct StreamWrite<affine T> { result: CopyResult, rest: List<T> }
+```
+
+The write takes what it is given and returns the rest. That is exactly the part
+of the buffer the Component Model leaves in the writer's table. A write blocks
+until its copy ends, so the write call reports every case, a cancellation
+included, and `cancel_write` returns nothing.
+
+A caller that ignores the result discards the rest, and the rule for a
+discarded value drops it at the end of the statement. Nothing leaks, and
+nothing obliges the caller to look. `StreamWrite` loses its `count`, which
+`data.len() - rest.len()` states. The optimizer may skip building a `rest` no
+one reads.
+
 ### Standard library
 
 - `Option<affine T>` and `Result<affine T, affine E>`, with `take` and
   `replace` on `Option`. `unwrap`, `expect`, `unwrap_or`, `map`, `map_err` and
   `ok_or` keep their by-value `self`.
-- `Future<affine T>`: a future carries an affine payload today
-  (`Future<Result<Option<Trailers>, ErrorCode>>`).
+- `Future<affine T>` and `Stream<affine T>`, with their writable ends. A
+  future carries an affine payload today
+  (`Future<Result<Option<Trailers>, ErrorCode>>`), and a stream does too
+  (`Stream<TcpSocket>`). The read side needs nothing new: `StreamChunk<T>`
+  holds a `List<T>`.
 - `affine struct AsyncCall<affine T>`, with `wait(self)` and `cancel(self)`,
   and without the `__cm_ended` flag.
 - `List<affine T>`. A method is available for an affine element when an
@@ -270,8 +305,6 @@ affine value. A panic drops nothing.
   copyable element only. Iterating a list by value consumes it, so
   `IntoIterator::into_iter` takes `self` by value and `Iterator::Item` is an
   `affine type`.
-- `Stream<T>` is not decided yet
-  ([Open questions](#open-questions)).
 - `Slice<T>`, `TreeMap<K, V>`, `HashMap<K, V>`, `TreeSet<T>` and their
   iterators stay unmarked.
 
@@ -325,12 +358,12 @@ D6 is settled: a resource is boxed, and the box is its cell.
    it proves no use reaches a dead cell.
 6. [ ] `Option::take`, `Option::replace`, partial move out of a local holder,
    `..base` over an affine holder.
-7. [ ] Settle `Stream<T>` ([Open questions](#open-questions)). The next item
-   makes `Stream<TcpSocket>` and `Stream<GpuError>` type errors until this is
-   done.
+7. [ ] `FutureWrite<T>` and `StreamWrite<T>`: a write returns what it did not
+   deliver, in every case the result reports, and the stdlib's write loops
+   (`write_all`) read `rest` rather than `count`.
 8. [ ] Instantiation rule: an affine argument for an unmarked parameter is a
-   type error naming the parameter. `Option`, `Result`, `Future`, `AsyncCall`
-   and `List` are marked by then.
+   type error naming the parameter. `Option`, `Result`, `Future`, `Stream`,
+   `AsyncCall` and `List` are marked by then.
 9. [ ] Withdraw the receiver-kind rule and the TIR copy check from #2364, and
    the `resource_copy_out_of_reference_error` fixture with it.
 10. [ ] Cleanup drops a `Stream` and a `Future` the body does not move, which
@@ -363,23 +396,6 @@ a panic drops nothing; a generic resource a user module declares is not
 checked; `5 as Counter` mints a handle nothing owns; web handles leak.
 
 ## Open questions
-
-### A write that does not deliver
-
-The Component Model leaves with the writer what a write did not deliver: a
-`future.write` the reader dropped before, a `stream.write` the reader took
-only a prefix of, and a cancelled write of either. For a copyable value the
-writer still has its own copy. For an affine one it has nothing, because
-`FutureWritable::write(&self, value: T)` and
-`StreamWritable::write(&self, data: List<T>)` took the value and return no
-part of it. What was not delivered is never dropped.
-
-`Future` is affine already, so its half is open now. `Stream<affine T>` is the
-same question with a prefix, which is why `Stream` is left unmarked until it is
-answered. Its read side needs nothing new: `StreamChunk<T>` holds a
-`List<T>`.
-
-### The rest
 
 - Whether a trait may declare its `Self` affine, so that a trait method can be
   written over an affine `Self`.
