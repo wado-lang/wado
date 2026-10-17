@@ -229,6 +229,42 @@ pub fn scan_balanced(chars: &List<char>, open_idx: i32, open: char, close: char)
     return null;
 }
 
+/// Past the ASCII whitespace from `start`, stopping at `n`.
+pub fn skip_ws(chars: &List<char>, start: i32, n: i32) -> i32 {
+    let mut i = start;
+    while i < n && chars[i].is_ascii_whitespace() {
+        i += 1;
+    }
+    return i;
+}
+
+/// Whether `text` sits at `i`, ending by `n`.
+pub fn text_at<S: AsStrSlice>(chars: &List<char>, i: i32, n: i32, text: S) -> bool {
+    if i < 0 {
+        return false;
+    }
+    let mut k = i;
+    for let c of text.chars() {
+        if k >= n || chars[k] != c {
+            return false;
+        }
+        k += 1;
+    }
+    return true;
+}
+
+/// Whether `word` sits at `i` as a whole word, not part of a longer name.
+pub fn word_at<S: AsStrSlice>(chars: &List<char>, i: i32, n: i32, word: S) -> bool {
+    if !text_at(chars, i, n, word) {
+        return false;
+    }
+    if i > 0 && is_id_continue_char(chars[i - 1]) {
+        return false;
+    }
+    let end = i + word.chars().count();
+    return !(end < n && is_id_continue_char(chars[end]));
+}
+
 /// ANTLR4's `NameStartChar` (`vendor/antlr4/doc/lexicon.md`), which is XML's:
 /// a fixed range list rather than a Unicode property, so it is written out
 /// rather than asked of `core:icu`.

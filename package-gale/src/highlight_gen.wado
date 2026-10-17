@@ -1,5 +1,6 @@
 use { Grammar, LexerRule, ParserRule, lexer_alias_text } from "./ir.wado";
 use { LitToken, TokenSlot, token_slot_order } from "./lexer_gen.wado";
+use { push_unique } from "./list_util.wado";
 use { CodeWriter, FnSpec, Vis, wado } from "lib:wadopoet";
 use { HighlightRule, TokenSelector } from "./highlight_query.wado";
 use { GenSettings } from "./gen_settings.wado";
@@ -460,10 +461,4 @@ fn gen_highlight_mapping(
     w.line("return HIGHLIGHT_MAPPING.capture_names;");
     w.end();
     w.blank();
-}
-
-fn push_unique<S: AsStrSlice>(out: &mut List<String>, value: S) {
-    if !out.contains_str(value) {
-        out.push(value.to_string());
-    }
 }

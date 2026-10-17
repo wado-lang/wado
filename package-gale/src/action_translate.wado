@@ -17,7 +17,7 @@ use {
     VALS_LOCAL,
     MIN_PREC_LOCAL,
 } from "./ident.wado";
-use { is_self_ref_element } from "./lr_util.wado";
+use { rule_is_left_recursive } from "./lr_util.wado";
 use { push_unique } from "./list_util.wado";
 
 /// Name of a rule's value-channel struct (`e` -> `EVals`).
@@ -677,15 +677,6 @@ fn is_arg<S: AsStrSlice>(rule: &ParserRule, name: S) -> bool {
 /// read the channel — a caller might.
 pub fn rule_returns_vals(rule: &ParserRule) -> bool {
     return rule_value_channel_ready(rule);
-}
-
-/// Whether any alternative is directly left-recursive (its first element
-/// references the rule itself). Mirrors lowering's LR classification at the
-/// surface level so the value-channel decision can exclude LR rules without a
-/// lowered `Rule`.
-pub fn rule_is_left_recursive(rule: &ParserRule) -> bool {
-    return rule.alternatives.iter_ref().any(|alt| !alt.elements.is_empty()
-        && is_self_ref_element(&alt.elements[0], &rule.name));
 }
 
 /// Whether a rule exposes an emittable value channel: a returns / locals field
