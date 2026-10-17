@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1792242956392,
+  "lastUpdate": 1792252544049,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -67817,6 +67817,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/f720ac877faf4136644fba6f4000cbfc08e9c03d"
         },
         "date": 1792242955538,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 2955,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 7382,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 20208,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 298222,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "8f32214adbbd6382477e0002ad931bbfdea6a3b9",
+          "message": "Merge pull request #2375 from wado-lang/ccr-791466f1-aexi13\n\nperf(loam): read a text initializer's elements without per-element copies",
+          "timestamp": "2026-10-18T00:35:27+09:00",
+          "tree_id": "2c0499c02b025ef530d25a66f20c43afcd4bd91d",
+          "url": "https://github.com/wado-lang/wado/commit/8f32214adbbd6382477e0002ad931bbfdea6a3b9"
+        },
+        "date": 1792252542998,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
