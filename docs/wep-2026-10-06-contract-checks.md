@@ -267,9 +267,9 @@ A trait method's clauses are written on the trait's declaration, a signature
 without a body included, and bind every impl, as its default arguments do.
 Where the trait states clauses, an impl of the method writes none: it neither
 restates them nor adds one. Where it states none, an impl may state its own, as
-the last paragraphs of this section say.
-Trait dispatch is static, so a call through a bound reaches a known impl, and
-each impl checks the trait's clauses at its head.
+the last paragraphs of this section say. Trait dispatch is static, so a call
+through a bound reaches a known impl, and each impl checks the trait's clauses
+at its head.
 
 An impl that added a clause to the trait's would make `unchecked` remove a
 check its caller never saw: generic code marks a call vouching for the trait's

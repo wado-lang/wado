@@ -167,9 +167,8 @@ wado compile -O2 -f contract-checks app.wado    # checks
 A trait method's clauses are written on the trait's declaration, one without a
 body included, and bind every impl of the method and the trait's default body.
 An impl of a method whose trait states clauses writes none; one that does is a
-compile error. A
-call through a bound checks the trait's clauses, and `unchecked` vouches for
-them.
+compile error. A call through a bound checks the trait's clauses, and
+`unchecked` vouches for them.
 
 An impl of a trait method that declares no clause may state its own. A call
 checks them however it reaches the impl, through a bound included. `unchecked`
