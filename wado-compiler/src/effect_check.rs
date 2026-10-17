@@ -3000,6 +3000,27 @@ fn expr_types_of(expr: &Expr, sem: &Semantics) -> Vec<TypeId> {
     sem.expression_types(expr.id()).collect()
 }
 
+/// The spans of the bindings `expr` declares with a closure literal as its
+/// initializer.
+fn closure_bindings(expr: &Expr) -> Vec<Span> {
+    struct Closures(Vec<Span>);
+    impl AstVisitor for Closures {
+        fn visit_stmt(&mut self, stmt: &Stmt) {
+            if let Stmt::Let(binding) = stmt
+                && let Some(Expr::Closure(_)) = &binding.value
+                && let Pattern::Ident { span, .. } | Pattern::MutIdent { span, .. } =
+                    &binding.pattern
+            {
+                self.0.push(*span);
+            }
+            ast::walk_stmt(self, stmt);
+        }
+    }
+    let mut closures = Closures(Vec::new());
+    closures.visit_expr(expr);
+    closures.0
+}
+
 // ---------------------------------------------------------------------------
 // Semantics-based purity checking
 // ---------------------------------------------------------------------------
@@ -3125,9 +3146,11 @@ struct PurityWalker<'a> {
     /// before any is bound.
     param_types: IndexMap<String, TypeId>,
     /// The span of the `contract` clause being walked. A build may skip the
-    /// clause, so it may write only what it declares: a write reaching anything
-    /// else would make what the call computes depend on the build.
+    /// clause, so it may write only the values it creates: a write reaching
+    /// anything else would make what the call computes depend on the build.
     clause: Option<Span>,
+    /// Where the clause binds a closure it writes, by the binding's span.
+    clause_closures: Vec<Span>,
     out: &'a mut Vec<PurityError>,
 }
 
@@ -3149,6 +3172,7 @@ impl<'a> PurityWalker<'a> {
             granted: IndexSet::default(),
             param_types: IndexMap::default(),
             clause: None,
+            clause_closures: Vec::new(),
             out,
         }
     }
@@ -3177,6 +3201,7 @@ impl<'a> PurityWalker<'a> {
         for clause in func.contracts() {
             self.clause = Some(clause.span);
             for expr in std::iter::once(&clause.condition).chain(&clause.message) {
+                self.clause_closures = closure_bindings(expr);
                 self.check(PureContext::Contract, expr);
                 for_each_write_site(sem, expr, |site| self.flag_clause_write(site));
             }
@@ -3193,6 +3218,13 @@ impl<'a> PurityWalker<'a> {
             // operand reaching a `&mut` passes on one the clause did not take.
             WriteSite::Lent(Expr::Unary(unary)) if unary.op == ast::UnaryOp::MutRef => {}
             WriteSite::Lent(operand) => self.flag_mutate(operand),
+            // A closure the clause writes is walked with it, so its writes are
+            // judged where they stand.
+            WriteSite::Opaque(Expr::Closure(_)) => {}
+            WriteSite::Opaque(callee)
+                if self
+                    .binding_span(callee)
+                    .is_some_and(|span| self.clause_closures.contains(&span)) => {}
             WriteSite::Opaque(callee) => {
                 let name = unparse_expr_source(callee);
                 self.flag(Impurity::CallValue(name), callee.span());
@@ -3232,14 +3264,22 @@ impl<'a> PurityWalker<'a> {
 
     /// Whether `expr` names a binding the clause being walked declares.
     fn declared_in_clause(&self, expr: &Expr) -> bool {
-        let (Some(clause), Expr::Ident(ident)) = (self.clause, expr) else {
+        let Some(clause) = self.clause else {
             return false;
+        };
+        self.binding_span(expr)
+            .is_some_and(|span| clause.start <= span.start && span.end <= clause.end)
+    }
+
+    /// Where the binding `expr` names is declared.
+    fn binding_span(&self, expr: &Expr) -> Option<Span> {
+        let Expr::Ident(ident) = expr else {
+            return None;
         };
         self.sem
             .referenced_symbol(ident.id)
             .and_then(|def| self.sem.symbol_at(def))
             .and_then(|symbol| symbol.span)
-            .is_some_and(|span| clause.start <= span.start && span.end <= clause.end)
     }
 
     fn is_reference(&self, expr: &Expr) -> bool {

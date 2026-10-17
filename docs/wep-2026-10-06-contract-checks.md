@@ -432,7 +432,8 @@ API waits for a program outside the standard library that needs one.
     purity check reads the clause's writes from `write_sites.rs`, which the
     `self_comparison` lint shares, and keeps those landing in a value the clause
     creates that holds no `&mut`, resource, or function value. A function value
-    is never called, `fn` included: it may write through a `&mut` it captured. Lowering then copies an argument from the caller's place and
+    is called only where the clause writes the closure, since one from outside
+    may write through a `&mut` it captured, `fn` as well as `fn mut`. Lowering then copies an argument from the caller's place and
     evaluates a failed clause again for its report without a parameter having
     changed.
 

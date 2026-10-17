@@ -101,8 +101,8 @@ A clause writes only the values it creates. A build may skip the clause, so a
 write reaching anything else would make what the call computes depend on the
 build. Writing a parameter, a global, or anything through a reference is a
 compile error. So is taking `&mut` of one, calling a method that takes
-`&mut self` on one, and calling a function value: a `fn`, like a `fn mut`, may
-write through a `&mut` it captured. A value the clause binds is its own only if
+`&mut self` on one, and calling a function value other than a closure the
+clause writes: a `fn`, like a `fn mut`, may write through a `&mut` it captured. A value the clause binds is its own only if
 it holds no `&mut`, resource, or function value, since a copy of one shares what
 that points to. A call may be handed a value holding one only as an argument
 written `&mut x`, where `x` is the clause's own.
