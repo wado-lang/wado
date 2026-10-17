@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1792252544049,
+  "lastUpdate": 1792273474994,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -67861,6 +67861,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/8f32214adbbd6382477e0002ad931bbfdea6a3b9"
         },
         "date": 1792252542998,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 2955,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 7382,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 20208,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 298222,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "7c84efba9c2054e3091300683989b78fff563605",
+          "message": "Merge pull request #2376 from wado-lang/ccr-760f99a9-12qjc2\n\nperf(nir): fuse a Result whose ? exit nests inside the Ok payload",
+          "timestamp": "2026-10-18T06:25:25+09:00",
+          "tree_id": "5beff25c037dab0e84aafd1382d8d6142b4d255e",
+          "url": "https://github.com/wado-lang/wado/commit/7c84efba9c2054e3091300683989b78fff563605"
+        },
+        "date": 1792273473976,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
