@@ -4,10 +4,13 @@
 use std::collections::VecDeque;
 
 use crate::ast::{ImportAttributes, Item, Module};
-use crate::compiler_host::{Code, Diagnostic, Severity};
+use crate::compiler_host::{Code, DependencyIndex, Diagnostic, Severity};
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::kiln::inline::InvocationIndex;
-use crate::name::{module_parent_dir, resolve_local_identity, resolve_module_path};
+use crate::module_source::{ModuleSource, ModuleSourceInterner, PackageHost};
+use crate::name::{
+    canonicalize_entry_point, decl_file_of, resolve_import_with_entry, resolve_module_path,
+};
 use crate::parse;
 use crate::path::is_cwd_relative;
 
@@ -18,17 +21,25 @@ pub struct Harvest {
     /// Module path → the identity the loader resolves that module under, which
     /// is what an [`InvocationIndex`] key must be ([`remap_decl_files`]).
     pub identities: IndexMap<String, String>,
+    /// Module path → the `wado.toml` of the package it belongs to, `None` for
+    /// a module in no package. A module of the walk's own package is absent.
+    pub packages: IndexMap<String, Option<String>>,
 }
 
-/// Walk the local module graph from `entry_key` and `entry_ast`, parsing every
-/// `./` / `../` Wado source import reachable from them.
+/// Walk the module graph from `entry_key` and `entry_ast`, parsing every Wado
+/// source import reachable from them: a `./` / `../` path, and a module of a
+/// source dependency in `dependencies` at any depth.
 ///
 /// A module carries two names, seeded by `entry_key` and `entry_identity`: a
 /// clause path is spelled against the key, and the loader reads the module
 /// under the identity. They differ because a generator's own compile is rooted
 /// at its entry's directory while its invocations are rooted at its package.
+/// Each import resolves as the loader resolves it, so the identity is the one
+/// the loader gives the module.
 ///
-/// `load` receives the loader identity. The caller supplies the entry's tree
+/// `load` receives the loader identity, and `host` answers about packages as
+/// the loader's host does, so a relatively reached file is placed in the
+/// package the loader places it in. The caller supplies the entry's tree
 /// because the loader does not read the entry through a host either.
 ///
 /// A module that fails to load, or whose parse recovered from an error, is
@@ -40,6 +51,8 @@ pub async fn harvest_module_graph<L>(
     entry_identity: &str,
     entry_ast: Module,
     settled: &IndexSet<String>,
+    dependencies: &DependencyIndex,
+    host: &impl PackageHost,
     load: L,
 ) -> Harvest
 where
@@ -47,43 +60,58 @@ where
 {
     let mut modules = IndexMap::<String, Module>::default();
     let mut identities = IndexMap::<String, String>::default();
+    let mut packages = IndexMap::<String, Option<String>>::default();
 
-    let entry_dir = module_parent_dir(entry_identity).to_string();
+    let mut interner = ModuleSourceInterner::new();
+    interner.set_dependencies(dependencies.clone());
+    interner.bound_packages(&canonicalize_entry_point(entry_identity), host);
     // The entry's identity must stay byte-identical to its `EntryPoint.filename`
     // (interned verbatim by the loader), so the redirect it keys is found at
     // resolve time — do not normalize it here.
+    let entry = interner.entry_point(entry_identity);
     identities.insert(entry_key.to_string(), entry_identity.to_string());
 
-    let mut queue: VecDeque<(String, String, Option<Module>)> = VecDeque::from([(
-        entry_key.to_string(),
-        entry_identity.to_string(),
-        Some(entry_ast),
-    )]);
-    while let Some((key, loader_id, ast)) = queue.pop_front() {
+    let mut queue: VecDeque<(String, ModuleSource, Option<Module>)> =
+        VecDeque::from([(entry_key.to_string(), entry.clone(), Some(entry_ast))]);
+    while let Some((key, source, ast)) = queue.pop_front() {
         if modules.contains_key(&key) || settled.contains(&key) {
             continue;
         }
         let ast = if let Some(ast) = ast {
             ast
         } else {
-            let Some(source) = load(&loader_id).await else {
+            let Some(text) = load(decl_file_of(&source)).await else {
                 continue;
             };
-            let Ok(parsed) = parse(&source).into_fail_fast() else {
+            let Ok(parsed) = parse(&text).into_fail_fast() else {
                 continue;
             };
             parsed.ast
         };
 
-        for import in local_wado_imports(&ast) {
-            let child_key = resolve_module_path(&key, import);
-            let importer = (key != entry_key).then_some(loader_id.as_str());
-            let child_loader_id = resolve_local_identity(&entry_dir, importer, import);
-            // Don't overwrite the entry's pinned identity (back-refs fold to it).
-            if child_key != entry_key {
-                identities.insert(child_key.clone(), child_loader_id.clone());
+        for import in wado_source_imports(&ast) {
+            let child = resolve_import_with_entry(&mut interner, &source, import, Some(&entry));
+            let (child, child_key) = match child {
+                ModuleSource::Local { path, .. } if is_cwd_relative(import) => {
+                    let path = path.to_string();
+                    let placed = interner.place(&path, host);
+                    (placed, resolve_module_path(&key, import))
+                }
+                ModuleSource::Dependency { ref path, .. } => {
+                    let child_key = key_of(entry_key, path);
+                    (child, child_key)
+                }
+                // A back-reference to the entry folds onto it; anything else
+                // is not Wado source this walk reads.
+                _ => continue,
+            };
+            // A relative path into another package's tree places the module there.
+            if !child.is_entry_package() {
+                let manifest = interner.dependency_manifest(&child);
+                packages.insert(child_key.clone(), manifest.map(|m| m.path.clone()));
             }
-            queue.push_back((child_key, child_loader_id, None));
+            identities.insert(child_key.clone(), decl_file_of(&child).to_string());
+            queue.push_back((child_key, child, None));
         }
         modules.insert(key, ast);
     }
@@ -91,23 +119,32 @@ where
     Harvest {
         modules,
         identities,
+        packages,
     }
 }
 
-/// The `./` / `../` imports of `module` that are Wado source: those with neither
-/// `generator` nor `type`, whatever the extension. A `core:` / `wasi:` /
-/// dependency specifier names no module here.
-fn local_wado_imports(module: &Module) -> impl Iterator<Item = &str> {
+/// The key of the module the loader names `identity`, a path relative to the
+/// entry's directory: the same path, spelled from the walk's root.
+fn key_of(entry_key: &str, identity: &str) -> String {
+    if is_cwd_relative(identity) {
+        resolve_module_path(entry_key, identity)
+    } else {
+        resolve_module_path(entry_key, &format!("./{identity}"))
+    }
+}
+
+/// The imports of `module` that are Wado source: those with neither `generator`
+/// nor `type`, whatever the extension.
+fn wado_source_imports(module: &Module) -> impl Iterator<Item = &str> {
     module.items.iter().filter_map(|item| {
         let Item::Use(use_decl) = item else {
             return None;
         };
-        let src = use_decl.source.as_str();
         let is_source = use_decl
             .attributes
             .as_ref()
             .is_none_or(ImportAttributes::reads_as_source);
-        (is_cwd_relative(src) && is_source).then_some(src)
+        is_source.then_some(use_decl.source.as_str())
     })
 }
 
@@ -161,6 +198,8 @@ pub fn remap_decl_files(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::compiler_host::DependencyManifest;
+    use crate::module_source::TestPackages;
 
     fn block_on<F: Future>(future: F) -> F::Output {
         futures::executor::block_on(future)
@@ -168,6 +207,34 @@ mod tests {
 
     fn ast_of(source: &str) -> Module {
         parse(source).ast
+    }
+
+    fn no_packages() -> TestPackages<impl Fn(&str) -> Option<String>> {
+        TestPackages {
+            root: |_: &str| None,
+            indexes: IndexMap::default(),
+        }
+    }
+
+    /// The walk with no dependencies, every module in no package.
+    async fn walk(
+        entry_key: &str,
+        entry_identity: &str,
+        entry_ast: Module,
+        settled: &IndexSet<String>,
+        load: impl AsyncFn(&str) -> Option<String>,
+    ) -> Harvest {
+        let dependencies = DependencyIndex::default();
+        harvest_module_graph(
+            entry_key,
+            entry_identity,
+            entry_ast,
+            settled,
+            &dependencies,
+            &no_packages(),
+            load,
+        )
+        .await
     }
 
     /// A host that matches its keys exactly, as the in-memory hosts do.
@@ -192,7 +259,7 @@ mod tests {
             ("./lib.wado", "use { b } from \"./deep/util.wado\";\n"),
             ("./deep/util.wado", "pub fn b() {}\n"),
         ];
-        let harvest = block_on(harvest_module_graph(
+        let harvest = block_on(walk(
             "src/main.wado",
             "src/main.wado",
             ast_of("use { a } from \"./lib.wado\";\n"),
@@ -219,7 +286,7 @@ mod tests {
             ("./Calc.g4", "grammar Calc;\n"),
             ("./m.wasm", "\0asm"),
         ];
-        let harvest = block_on(harvest_module_graph(
+        let harvest = block_on(walk(
             "src/main.wado",
             "src/main.wado",
             ast_of(
@@ -240,7 +307,7 @@ mod tests {
     #[test]
     fn a_cycle_terminates() {
         let sources: &[(&str, &str)] = &[("./b.wado", "use { y } from \"./a.wado\";\n")];
-        let harvest = block_on(harvest_module_graph(
+        let harvest = block_on(walk(
             "src/a.wado",
             "src/a.wado",
             ast_of("use { x } from \"./b.wado\";\n"),
@@ -327,7 +394,7 @@ mod tests {
 
     #[test]
     fn an_unloadable_module_is_skipped_not_fatal() {
-        let harvest = block_on(harvest_module_graph(
+        let harvest = block_on(walk(
             "main.wado",
             "main.wado",
             ast_of("use { a } from \"./missing.wado\";\n"),
@@ -339,13 +406,75 @@ mod tests {
     }
 
     #[test]
+    fn walks_into_a_dependency_under_the_identity_the_loader_gives_it() {
+        let lib = "../shapes/src/lib.wado";
+        let manifest = "../shapes/wado.toml";
+        let mut shapes = DependencyIndex {
+            manifest: Some(DependencyManifest {
+                path: manifest.to_string(),
+                error: None,
+            }),
+            ..DependencyIndex::default()
+        };
+        shapes.exports.insert(
+            "src/point.wado".to_string(),
+            "../shapes/src/point.wado".to_string(),
+        );
+        let mut dependencies = DependencyIndex::default();
+        dependencies
+            .resolved
+            .insert("lib:shapes".to_string(), lib.to_string());
+        dependencies.packages.insert(lib.to_string(), shapes);
+        let sources: &[(&str, &str)] = &[
+            ("../shapes/src/lib.wado", "pub fn l() {}\n"),
+            (
+                "../shapes/src/point.wado",
+                "use { h } from \"./helper.wado\";\n",
+            ),
+            ("../shapes/src/helper.wado", "pub fn h() {}\n"),
+        ];
+        let harvest = block_on(harvest_module_graph(
+            "main.wado",
+            "main.wado",
+            ast_of(
+                "use { l } from \"lib:shapes\";\n\
+                 use { p } from \"lib:shapes/src/point.wado\";\n\
+                 use { q } from \"lib:absent\";\n",
+            ),
+            &IndexSet::default(),
+            &dependencies,
+            &no_packages(),
+            exact(sources),
+        ));
+
+        assert_eq!(
+            harvest.modules.keys().collect::<Vec<_>>(),
+            [
+                "main.wado",
+                "../shapes/src/lib.wado",
+                "../shapes/src/point.wado",
+                "../shapes/src/helper.wado"
+            ],
+        );
+        assert_eq!(
+            harvest.identities.get("../shapes/src/helper.wado").unwrap(),
+            "../shapes/src/helper.wado",
+        );
+        assert_eq!(
+            harvest.packages["../shapes/src/helper.wado"].as_deref(),
+            Some(manifest)
+        );
+        assert!(!harvest.packages.contains_key("main.wado"));
+    }
+
+    #[test]
     fn a_settled_module_is_neither_read_nor_walked() {
         let sources: &[(&str, &str)] = &[
             ("./shared.wado", "use { b } from \"./deep.wado\";\n"),
             ("./deep.wado", "pub fn b() {}\n"),
         ];
         let settled: IndexSet<String> = ["src/shared.wado".to_string()].into_iter().collect();
-        let harvest = block_on(harvest_module_graph(
+        let harvest = block_on(walk(
             "src/a_test.wado",
             "src/a_test.wado",
             ast_of("use { a } from \"./shared.wado\";\n"),

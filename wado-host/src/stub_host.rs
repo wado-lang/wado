@@ -10,6 +10,7 @@ use wado_compiler::{
     GeneratorRunnerError, SourceError,
 };
 use wado_lsp::FilesystemCompilerHost;
+use wado_lsp::host::discovery::normalize_path;
 
 use crate::kiln::component_cache::ComponentCache;
 use crate::kiln::runtime::{generate_for, probe_for};
@@ -22,6 +23,9 @@ pub struct HostStubs {
     /// The `[dependencies]` a bare `use ... from "name"` binds to: name → the
     /// dependency's `[package].lib` path, relative to the host's base.
     pub dependencies: IndexMap<String, String>,
+    /// The directories, relative to the host's base, that stand where a
+    /// `wado.toml` would.
+    pub package_roots: Vec<String>,
     /// The `[build-dependencies]` a clause's `module: "lib:name"` names: the
     /// nickname → the generator's `.wado` file, relative to the host's base.
     pub build_dependencies: IndexMap<String, String>,
@@ -94,10 +98,28 @@ impl CompilerHost for StubHost {
         self.filesystem.stdlib_module_read(import_path);
     }
 
+    /// The nearest stubbed root above the module, compared lexically: a
+    /// fixture directory holds no symlink.
+    fn package_root(&self, path: &str) -> Option<String> {
+        let base = self.filesystem.base_path();
+        let file = normalize_path(&base.join(path));
+        let dir = file.parent().expect("a module path names a file");
+        self.stubs
+            .package_roots
+            .iter()
+            .map(|root| (root, normalize_path(&base.join(root))))
+            .filter(|(_, abs)| dir.starts_with(abs))
+            .max_by_key(|(_, abs)| abs.components().count())
+            .map(|(root, _)| root.clone())
+    }
+
     fn dependency_index(&self) -> DependencyIndex {
         let mut index = DependencyIndex::default();
         for (name, lib) in &self.stubs.dependencies {
             index.resolved.insert(name.clone(), lib.clone());
+            index
+                .packages
+                .insert(lib.clone(), DependencyIndex::default());
         }
         index
     }

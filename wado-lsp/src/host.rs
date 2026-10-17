@@ -108,6 +108,23 @@ impl FilesystemCompilerHost {
     pub fn collect_diagnostic(&self, diagnostic: Diagnostic) {
         self.buffer().push(diagnostic);
     }
+
+    /// [`CompilerHost::package_root`], telling `probed` each file the walk
+    /// looks for and whether one is there. The walk starts from the
+    /// module's directory as the OS resolves it, `..` after a symlink
+    /// included, since that is the directory [`CompilerHost::load_source`]
+    /// reads from. A directory that does not exist has no root, and the load
+    /// of the module reports it.
+    pub fn package_root_probing(
+        &self,
+        path: &str,
+        probed: impl FnMut(&Path, bool),
+    ) -> Option<String> {
+        let file = self.base_path.join(path);
+        let dir = std::fs::canonicalize(file.parent().expect("a module path names a file")).ok()?;
+        let root = discovery::nearest_manifest_dir_probing(&dir, probed)?;
+        Some(root.display().to_string())
+    }
 }
 
 impl CompilerHost for FilesystemCompilerHost {
@@ -130,23 +147,28 @@ impl CompilerHost for FilesystemCompilerHost {
     /// An invalid manifest yields an empty index that says why, so the editor
     /// keeps answering and each dependency import reports the manifest.
     fn dependency_index(&self) -> DependencyIndex {
-        let Some(dir) = discovery::nearest_manifest_dir(&self.base_path) else {
-            return DependencyIndex::default();
-        };
-        match read_manifest(&dir) {
-            Ok(manifest) => dependency_index_from(&manifest, &dir, &self.base_path),
-            Err(error) => DependencyIndex {
-                manifest: Some(DependencyManifest {
-                    path: manifest_path(&dir),
-                    error: Some(error),
-                }),
-                ..DependencyIndex::default()
-            },
+        match discovery::nearest_manifest_dir(&self.base_path) {
+            Some(dir) => manifest_index(&dir, &self.base_path),
+            None => DependencyIndex::default(),
         }
+    }
+
+    /// `root` is canonical, as [`Self::package_root`] answers it, so the
+    /// entries it names are keyed from the canonical base: a key relative to a
+    /// base spelled through a symlink names a package the entry's index names
+    /// differently.
+    fn package_index(&self, root: &str) -> DependencyIndex {
+        let base = std::fs::canonicalize(&self.base_path)
+            .expect("a host that answered a package root has its base on disk");
+        manifest_index(Path::new(root), &base)
     }
 
     fn serves_core(&self) -> bool {
         is_in_dev_stdlib_core(&self.base_path)
+    }
+
+    fn package_root(&self, path: &str) -> Option<String> {
+        self.package_root_probing(path, |_, _| {})
     }
 
     /// The language service recompiles on every edit and caches no outcome.
@@ -172,7 +194,8 @@ fn is_in_dev_stdlib_core(_dir: &Path) -> bool {
     false
 }
 
-/// Build the compiler's dependency index from a manifest's `[dependencies]`.
+/// Build the compiler's dependency index from a manifest's `[dependencies]`,
+/// and each source dependency's own, at any depth.
 ///
 /// Source entries are re-expressed relative to `base` — the base `load_source`
 /// joins against — so `use { … } from "<name>"` resolves to them.
@@ -182,20 +205,67 @@ pub fn dependency_index_from(
     manifest_dir: &Path,
     base: &Path,
 ) -> DependencyIndex {
+    let base_abs = absolutize(base);
+    let (mut index, entries) = package_index(manifest, manifest_dir, &base_abs);
+    index_packages(&mut index, entries, base);
+    index
+}
+
+/// The key `index.resolved` names the source dependency whose entry module is
+/// `entry` by: its path relative to `base`, the base `load_source` joins against.
+#[must_use]
+pub fn dependency_key(entry: &Path, base: &Path) -> String {
+    relative_path(&absolutize(base), &normalize_path(&absolutize(entry)))
+}
+
+/// Add to `index.packages` the package of each source dependency entry module
+/// in `entries`, and of each source dependency those reach, at any depth.
+pub fn index_packages(index: &mut DependencyIndex, mut entries: Vec<PathBuf>, base: &Path) {
+    let base_abs = absolutize(base);
+    let mut next = 0;
+    while let Some(entry) = entries.get(next).cloned() {
+        next += 1;
+        let lib = dependency_key(&entry, base);
+        if index.packages.contains_key(&lib) {
+            continue;
+        }
+        let own = match discovery::lib_package(&entry) {
+            Some((root, manifest)) => {
+                let (own, reached) = package_index(&manifest, &root, &base_abs);
+                entries.extend(reached);
+                own
+            }
+            None => DependencyIndex::default(),
+        };
+        index.packages.insert(lib, own);
+    }
+}
+
+/// One package's index, without `packages`, and the absolute entry module of
+/// each of its source dependencies.
+fn package_index(
+    manifest: &wado_manifest::Manifest,
+    manifest_dir: &Path,
+    base_abs: &Path,
+) -> (DependencyIndex, Vec<PathBuf>) {
+    let root = normalize_path(&absolutize(manifest_dir));
+    let exports = manifest.package.iter().flat_map(|p| &p.exports);
     let mut index = DependencyIndex {
         manifest: Some(DependencyManifest {
             path: manifest_path(manifest_dir),
             error: None,
         }),
+        exports: exports
+            .map(|entry| (entry.clone(), relative_path(base_abs, &root.join(entry))))
+            .collect(),
         ..DependencyIndex::default()
     };
-    let base_abs = absolutize(base);
+    let mut entries = Vec::new();
     for (name, entry) in discovery::resolve_all(manifest, manifest_dir) {
         match entry {
             Ok(DependencyEntry::Source(path)) => {
-                index
-                    .resolved
-                    .insert(name, relative_path(&base_abs, &absolutize(&path)));
+                index.resolved.insert(name, dependency_key(&path, base_abs));
+                entries.push(path);
             }
             Ok(DependencyEntry::Component(path)) => {
                 index.components.insert(name, path.display().to_string());
@@ -205,7 +275,27 @@ pub fn dependency_index_from(
             }
         }
     }
-    index
+    (index, entries)
+}
+
+/// The index of the package whose `wado.toml` is in `dir`, keyed from `base`.
+fn manifest_index(dir: &Path, base: &Path) -> DependencyIndex {
+    match read_manifest(dir) {
+        Ok(manifest) => dependency_index_from(&manifest, dir, base),
+        Err(error) => unreadable_manifest(dir, error),
+    }
+}
+
+/// The index of a package whose `wado.toml` in `dir` cannot be read: empty,
+/// saying why, so each import that needed an entry reports it.
+fn unreadable_manifest(dir: &Path, error: String) -> DependencyIndex {
+    DependencyIndex {
+        manifest: Some(DependencyManifest {
+            path: manifest_path(dir),
+            error: Some(error),
+        }),
+        ..DependencyIndex::default()
+    }
 }
 
 /// The `wado.toml` in `dir`, parsed, or why it cannot be.

@@ -29,7 +29,7 @@ pub struct SynthesisError {
     pub message: String,
     pub span: Option<Span>,
     /// The module `span` is in. `None` reports it against the entry module.
-    pub module: Option<ModuleSource>,
+    pub module: Option<Box<ModuleSource>>,
 }
 
 impl SynthesisError {

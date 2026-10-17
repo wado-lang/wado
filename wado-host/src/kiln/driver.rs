@@ -30,7 +30,8 @@ use std::sync::Arc;
 
 use wado_compiler::ast::AttrValue;
 use wado_compiler::compiler_host::{
-    CompilerHost, GeneratorInputFile, GeneratorRequest, GeneratorRunnerError, SourceError,
+    CompilerHost, DependencyIndex, GeneratorInputFile, GeneratorRequest, GeneratorRunnerError,
+    SourceError,
 };
 use wado_compiler::hashmap::{IndexMap, IndexSet};
 #[cfg(test)]
@@ -41,6 +42,7 @@ use wado_compiler::kiln::{
     content_hash, file_hash, generator_identity, harvest_module_graph, has_generated_marker,
     hex_digest, validate_options,
 };
+use wado_compiler::module_source::PackageHost;
 use wado_compiler::{Code, CompilerOptions, Diagnostic, OptLevel, Severity};
 
 use super::metadata::{
@@ -949,11 +951,23 @@ impl<H: CompilerHost> Drop for KilnSpan<'_, H> {
     }
 }
 
+/// The inline Kiln invocations of an entry and every module it reaches.
+#[derive(Default)]
+pub struct Harvested {
+    pub invocations: Vec<Invocation>,
+    /// Harvest key → loader identity, which the caller rewrites the redirect
+    /// index through ([`wado_compiler::kiln::remap_decl_files`]).
+    pub identities: IndexMap<String, String>,
+    /// Harvest key → the `wado.toml` of the package the module belongs to,
+    /// where that is not the entry's ([`wado_compiler::kiln::Harvest::packages`]).
+    pub packages: IndexMap<String, Option<String>>,
+    pub diagnostics: Vec<Diagnostic>,
+}
+
 /// The inline invocations declared by `entry_source`, the text of `entry_file`
-/// the compile that follows reads, and the local `.wado`
-/// modules it reaches past those in `settled`, which gains them, plus the
-/// `harvest_key → loader_identity` map the caller rewrites the redirect index
-/// through ([`wado_compiler::kiln::remap_decl_files`]).
+/// the compile that follows reads, and every Wado module it reaches through
+/// `host` past those in `settled`, which gains them: its own and its source
+/// dependencies' in `dependencies`.
 ///
 /// `entry_identity` must be byte-identical to the name the compile that follows
 /// gives its entry, since that is what the loader interns the redirect under.
@@ -966,11 +980,13 @@ pub async fn harvest_invocations(
     entry_identity: &str,
     entry_key: &str,
     settled: &mut IndexSet<String>,
-) -> (Vec<Invocation>, IndexMap<String, String>, Vec<Diagnostic>) {
+    dependencies: &DependencyIndex,
+    host: &impl PackageHost,
+) -> Harvested {
     // An entry whose parse recovered from an error harvests nothing; the
     // compile that follows reports it.
     let Ok(entry) = wado_compiler::parse(entry_source).into_fail_fast() else {
-        return Default::default();
+        return Harvested::default();
     };
     // A loader identity is anchored on the entry's directory, so that is what
     // an import joins onto.
@@ -983,6 +999,8 @@ pub async fn harvest_invocations(
         entry_identity,
         entry.ast,
         settled,
+        dependencies,
+        host,
         async |identity| std::fs::read_to_string(entry_dir.join(identity)).ok(),
     )
     .await;
@@ -993,7 +1011,12 @@ pub async fn harvest_invocations(
         &IndexMap::default(),
         "",
     );
-    (invocations, harvest.identities, diagnostics)
+    Harvested {
+        invocations,
+        identities: harvest.identities,
+        packages: harvest.packages,
+        diagnostics,
+    }
 }
 
 /// How every host compiles a generator, with `invocations` redirecting the

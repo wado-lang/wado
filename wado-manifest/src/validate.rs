@@ -1,3 +1,5 @@
+use std::collections::BTreeSet;
+
 use crate::manifest::{
     DependencySource, GitPin, Manifest, ManifestError, Package, WorkspacePackage,
 };
@@ -11,15 +13,12 @@ pub fn validate(manifest: &Manifest) -> Result<(), ManifestError> {
     if let Some(pkg) = &manifest.package {
         validate_package(pkg)?;
     }
-    if let Some(ws_pkg) = manifest.workspace.as_ref().and_then(|w| w.package.as_ref()) {
-        validate_workspace_package(ws_pkg)?;
-    }
     validate_dependencies(manifest)?;
     Ok(())
 }
 
 /// Validate the `[workspace.package]` table at its source, so problems are
-/// attributed to the workspace root rather than to an inheriting member.
+/// attributed to the workspace file rather than to an inheriting member.
 pub(crate) fn validate_workspace_package(p: &WorkspacePackage) -> Result<(), ManifestError> {
     if p.license.is_some() && p.license_file.is_some() {
         return Err(ManifestError::WorkspaceConflictingLicense);
@@ -75,6 +74,44 @@ fn validate_package(pkg: &Package) -> Result<(), ManifestError> {
             reason: e.to_string(),
         })?;
     }
+    validate_exports(&pkg.exports)
+}
+
+/// Each entry is a key a consumer names a file by, not a traversal: a
+/// forward-slash path below the package root whose file name has an extension,
+/// listed once.
+fn validate_exports(exports: &[String]) -> Result<(), ManifestError> {
+    let mut seen = BTreeSet::new();
+    for entry in exports {
+        let invalid = |reason| ManifestError::InvalidExport {
+            entry: entry.clone(),
+            reason,
+        };
+        if entry.starts_with('/') || entry.contains('\\') {
+            return Err(invalid(
+                "must be a forward-slash path relative to the package root",
+            ));
+        }
+        let segments: Vec<&str> = entry.split('/').collect();
+        if segments
+            .iter()
+            .any(|s| s.is_empty() || *s == "." || *s == "..")
+        {
+            return Err(invalid(
+                "must name a file below the package root, with no `.` or `..` segment",
+            ));
+        }
+        let file_name = segments[segments.len() - 1];
+        if !file_name
+            .rsplit_once('.')
+            .is_some_and(|(stem, ext)| !stem.is_empty() && !ext.is_empty())
+        {
+            return Err(invalid("must carry its file extension"));
+        }
+        if !seen.insert(entry) {
+            return Err(invalid("is listed twice"));
+        }
+    }
     Ok(())
 }
 
@@ -98,6 +135,9 @@ pub enum PublishError {
     /// A shipped `workspace = true` dependency has no concrete source once the
     /// package is extracted from its workspace.
     WorkspaceDependency { dep_name: String },
+    /// A `[package].exports` entry names a file the package does not carry,
+    /// spelled as the entry spells it.
+    MissingExport { entry: String },
 }
 
 impl std::fmt::Display for PublishError {
@@ -124,6 +164,10 @@ impl std::fmt::Display for PublishError {
             PublishError::WorkspaceDependency { dep_name } => write!(
                 f,
                 "workspace dependency {dep_name:?} must resolve to a concrete source to publish"
+            ),
+            PublishError::MissingExport { entry } => write!(
+                f,
+                "[package].exports names {entry:?}, which the package does not carry"
             ),
         }
     }

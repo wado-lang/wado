@@ -660,7 +660,7 @@ The initial algorithm is SHA-256. The resolver verifies integrity on every insta
 ```
 wado.toml            = project manifest (the file)
 [package]            = CM package (the distributable unit)
-[workspace]          = package group (multi-package development)
+wado-workspace.toml  = package group (multi-package development)
 [dependencies]       = package dependencies (shipped with the package)
 [dev-dependencies]   = project dependencies (development only, not shipped)
 ```
@@ -669,10 +669,10 @@ The file itself represents the project. `[package]` describes the distributable 
 
 ### `[workspace]`
 
-A workspace groups multiple packages for co-development. The workspace root has a `wado.toml` with a `[workspace]` section:
+A workspace groups multiple packages for co-development. It is declared by a `wado-workspace.toml` with a `[workspace]` section:
 
 ```toml
-# workspace root: wado.toml
+# wado-workspace.toml
 [workspace]
 members = ["packages/*"]
 
@@ -721,19 +721,19 @@ repository-directory = "packages/cli"
 
 `[workspace.package]` holds metadata shared by every member. Inheritance is automatic — unlike dependencies, members do not write `{ workspace = true }`. Override depends on the field:
 
-| Field          | Inheritance                     | Member override          |
-| -------------- | ------------------------------- | ------------------------ |
-| `version`      | Forced                          | Error if set in a member |
-| `repository`   | Forced                          | Error if set in a member |
-| `namespace`    | Forced                          | Error if set in a member |
-| `license`      | Default                         | Allowed                  |
-| `license-file` | Default (path relative to root) | Allowed                  |
-| `authors`      | Default                         | Allowed                  |
-| `wado-version` | Default                         | Allowed                  |
+| Field          | Inheritance                              | Member override          |
+| -------------- | ---------------------------------------- | ------------------------ |
+| `version`      | Forced                                   | Error if set in a member |
+| `repository`   | Forced                                   | Error if set in a member |
+| `namespace`    | Forced                                   | Error if set in a member |
+| `license`      | Default                                  | Allowed                  |
+| `license-file` | Default (path relative to the workspace) | Allowed                  |
+| `authors`      | Default                                  | Allowed                  |
+| `wado-version` | Default                                  | Allowed                  |
 
 Only these seven fields are inheritable; any other key (`name`, `lib`, `description`, `homepage`, `documentation`, `repository-directory`, `publish`) is package-specific. A member that re-declares a forced field is an error (`version is inherited from [workspace.package]; remove it here`) — see the [Lockstep Contract](#lockstep-contract).
 
-`license` and `license-file` are one slot: a member setting either replaces it whole (still mutually exclusive within a manifest), and an inherited `license-file` resolves relative to the root. A field a workspace does not want to share is simply omitted, and each member sets its own.
+`license` and `license-file` are one slot: a member setting either replaces it whole (still mutually exclusive within a manifest), and an inherited `license-file` resolves relative to the workspace's directory. A field a workspace does not want to share is simply omitted, and each member sets its own.
 
 `[workspace.dependencies]` and `[workspace.dev-dependencies]` declare shared dependency versions. Member packages reference them with explicit opt-in (unlike metadata):
 
@@ -746,7 +746,7 @@ Only these seven fields are inheritable; any other key (`name`, `lib`, `descript
 "lib:bench" = { workspace = true }  # inherits from [workspace.dev-dependencies]
 ```
 
-A workspace root `wado.toml` can have both `[workspace]` and `[package]` — the root itself is both a workspace and a package (like Cargo). The root's own `[package]` is the authority, not a governed member: it does not force-inherit from `[workspace.package]` and declares its own `version`/`repository`/`namespace` directly.
+A workspace is not a package, unlike Cargo's, whose root `Cargo.toml` may be both. `wado-workspace.toml` has no `[package]`, and no `wado.toml` shares its directory. A `wado.toml` is then always a package, so its directory is a package root with no exception, and the search for one stops at a workspace: a file under a workspace that no package holds is in no package. It was first one file with both tables, which made a `[workspace]`-only `wado.toml` a package root holding no package.
 
 Properties:
 
@@ -878,13 +878,13 @@ By default every declared world is published. A single world opts out with
 `[package].publish = false` still opts the whole package out, overriding any
 per-world setting.
 
-In a workspace, `wado publish` is gated to the workspace root: it publishes every
-publishable member (and the root's own `[package]`, if any) together at the
-shared version, all against the root's `[registries]` (a member's own
-`[registries]` is not consulted, since publish is a root-only operation).
-Members that are not publishable (`publish = false` or no `namespace`) are
-skipped, and any member with unmet requirements aborts the whole publish.
-Running `wado publish` from a member directory is an error pointing at the root.
+In a workspace, `wado publish` is gated to the directory of `wado-workspace.toml`:
+it publishes every publishable member together at the shared version, all
+against the workspace's `[registries]` (a member's own `[registries]` is not
+consulted, since publish is a workspace-only operation). Members that are not
+publishable (`publish = false` or no `namespace`) are skipped, and any member
+with unmet requirements aborts the whole publish. Running `wado publish` from a
+member directory is an error pointing at the workspace.
 This is the registry half of the [Lockstep Contract](#lockstep-contract).
 
 #### Path Dependency Replacement

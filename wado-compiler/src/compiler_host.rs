@@ -560,6 +560,25 @@ pub trait CompilerHost: Send + Sync {
         false
     }
 
+    /// The root of the package the module at `path` lies in: the directory of
+    /// the nearest `wado.toml` above it, short of a `wado-workspace.toml`, in
+    /// whatever form the host names directories. Two modules share a package
+    /// exactly when they answer the same root, and the answer depends on the
+    /// module's directory alone, so the loader asks once per directory. `None`
+    /// where the module is in no package, as every module is on a host
+    /// without a filesystem.
+    fn package_root(&self, _path: &str) -> Option<String> {
+        None
+    }
+
+    /// The index of the package rooted at `root`, as [`Self::package_root`]
+    /// names it, built as [`Self::dependency_index`] builds the entry's. Asked
+    /// for a package a module lies in that no manifest declares, once per
+    /// package. Empty by default.
+    fn package_index(&self, _root: &str) -> DependencyIndex {
+        DependencyIndex::default()
+    }
+
     /// Read an environment variable at compile time, for `#[param(from_env =
     /// "...")]` resolution (see `wep-2026-04-26-compile-time-params.md`).
     ///
@@ -598,6 +617,14 @@ pub struct DependencyIndex {
     /// The `wado.toml` these entries were read from, named where an import
     /// finds no entry. `None` when no manifest governs the entry module.
     pub manifest: Option<DependencyManifest>,
+    /// Each source dependency reachable at any depth, by its entry module as
+    /// `resolved` names it → the index its own `wado.toml` declares, against
+    /// which its modules' bare-name imports resolve. Flat: an inner index's
+    /// own `packages` is empty.
+    pub packages: hashmap::IndexMap<String, DependencyIndex>,
+    /// The files the package's own `[package].exports` offers, each
+    /// NFC-normalized entry → its path relative to the host base.
+    pub exports: hashmap::IndexMap<String, String>,
 }
 
 /// The `wado.toml` a [`DependencyIndex`] was read from.

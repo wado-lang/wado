@@ -277,7 +277,7 @@ fn bail_with_synthesis<H: CompilerHost>(
     errors: Vec<SynthesisError>,
 ) -> Bail {
     for error in errors {
-        let file = error.module.as_ref().map(ModuleSource::source_path);
+        let file = error.module.as_deref().map(ModuleSource::source_path);
         let _ = logger.error(Diagnostic {
             severity: Severity::Error,
             code: error.code,

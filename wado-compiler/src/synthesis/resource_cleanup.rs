@@ -181,7 +181,7 @@ impl Cx<'_> {
                  leaves it in place, so take it out through `&mut`, as `pop` or `remove` do"
             ),
             span: Some(span),
-            module: Some(self.module.clone()),
+            module: Some(Box::new(self.module.clone())),
         });
     }
 

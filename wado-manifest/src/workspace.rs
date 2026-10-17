@@ -9,6 +9,9 @@ use glob::{MatchOptions, Pattern};
 
 pub const MANIFEST_FILENAME: &str = "wado.toml";
 
+/// A workspace's file. It and a `wado.toml` never share a directory.
+pub const WORKSPACE_FILENAME: &str = "wado-workspace.toml";
+
 /// Glob match options shared by the file walker (`wado-cli`'s discover, which
 /// re-exports this) and workspace-member matching, so `members` globs and the
 /// `[test].exclude` / `--filter` patterns are interpreted identically.

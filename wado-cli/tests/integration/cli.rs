@@ -757,6 +757,192 @@ fn test_check_reports_no_lint_in_a_dependency() {
     }
 }
 
+/// A file outside the package's directory belongs to the package whose
+/// manifest encloses it, or is a package of its own where none does. Its items
+/// are not the consumer's to lint, and its `internal` items stay in its package.
+#[test]
+fn test_a_file_outside_the_package_is_another_package() {
+    let tmp = tempfile::tempdir().unwrap();
+    let other = tmp.path().join("other");
+    std::fs::create_dir_all(&other).unwrap();
+    std::fs::write(
+        other.join("wado.toml"),
+        "[package]\nname = \"other\"\nnamespace = \"wado\"\nversion = \"0.1.0\"\n",
+    )
+    .unwrap();
+    std::fs::write(
+        other.join("o.wado"),
+        "use { base } from \"./p.wado\";\n\
+         pub fn o() -> i32 { return base(); }\n\
+         internal fn o_internal() -> i32 { return 2; }\n\
+         pub fn o_unused() {}\n\
+         fn o_dead() {}\n",
+    )
+    .unwrap();
+    std::fs::write(
+        other.join("p.wado"),
+        "internal fn base() -> i32 { return 1; }\n",
+    )
+    .unwrap();
+    let loose = tmp.path().join("loose");
+    std::fs::create_dir_all(&loose).unwrap();
+    std::fs::write(
+        loose.join("s.wado"),
+        "pub fn s() -> i32 { return 3; }\nfn s_dead() {}\n",
+    )
+    .unwrap();
+    let app = tmp.path().join("app");
+    std::fs::create_dir_all(&app).unwrap();
+    std::fs::write(
+        app.join("wado.toml"),
+        "[package]\nname = \"app\"\nnamespace = \"wado\"\nversion = \"0.1.0\"\nlib = \"lib.wado\"\n",
+    )
+    .unwrap();
+    std::fs::write(
+        app.join("lib.wado"),
+        "use { o } from \"../other/o.wado\";\n\
+         use { s } from \"../loose/s.wado\";\n\
+         pub fn api() -> i32 { return o() + s(); }\n",
+    )
+    .unwrap();
+
+    for args in [&["check"][..], &["check", "lib.wado"]] {
+        wado()
+            .current_dir(&app)
+            .args(args)
+            .assert()
+            .success()
+            .stderr(predicate::str::contains("never used").not())
+            .stderr(predicate::str::contains("unused").not());
+    }
+
+    std::fs::write(
+        app.join("lib.wado"),
+        "use { o_internal } from \"../other/o.wado\";\n\
+         pub fn api() -> i32 { return o_internal(); }\n",
+    )
+    .unwrap();
+    wado()
+        .current_dir(&app)
+        .args(["check", "lib.wado"])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains(
+            "symbol 'o_internal' is `internal` to '../other/o.wado' and cannot be imported from another package",
+        ));
+}
+
+/// A relative import of a path dependency's file reaches the module the
+/// dependency names, so a type it declares is one type either way.
+#[test]
+fn test_a_relative_import_into_a_path_dependency_is_the_dependency() {
+    let tmp = tempfile::tempdir().unwrap();
+    let other = tmp.path().join("other");
+    std::fs::create_dir_all(&other).unwrap();
+    std::fs::write(
+        other.join("wado.toml"),
+        "[package]\nname = \"other\"\nversion = \"0.1.0\"\nlib = \"o.wado\"\n",
+    )
+    .unwrap();
+    std::fs::write(
+        other.join("o.wado"),
+        "pub struct P { pub x: i32 }\npub fn make() -> P { return P { x: 1 }; }\n",
+    )
+    .unwrap();
+    let app = tmp.path().join("app");
+    std::fs::create_dir_all(&app).unwrap();
+    std::fs::write(
+        app.join("wado.toml"),
+        "[package]\nname = \"app\"\nversion = \"0.1.0\"\n\n\
+         [dependencies]\n\"lib:other\" = { path = \"../other\" }\n",
+    )
+    .unwrap();
+    std::fs::write(
+        app.join("main.wado"),
+        "use { P } from \"lib:other\";\n\
+         use { make } from \"../other/o.wado\";\n\
+         export fn run() { let p: P = make(); assert p.x == 1; }\n",
+    )
+    .unwrap();
+
+    wado()
+        .current_dir(&app)
+        .args(["check", "main.wado"])
+        .assert()
+        .success();
+}
+
+/// An entry under no manifest declares no package boundary, so every file it
+/// reaches is in its package.
+#[test]
+fn test_modules_in_no_package_share_one_scope() {
+    let tmp = tempfile::tempdir().unwrap();
+    // Above the workspace, so a file under it that no package holds is in none.
+    std::fs::write(
+        tmp.path().join("wado.toml"),
+        "[package]\nname = \"outer\"\nnamespace = \"wado\"\nversion = \"0.1.0\"\n",
+    )
+    .unwrap();
+    let ws = tmp.path().join("ws");
+    for dir in ["script", "lib", "app", "pkg"] {
+        std::fs::create_dir_all(ws.join(dir)).unwrap();
+    }
+    std::fs::write(
+        ws.join("wado-workspace.toml"),
+        "[workspace]\nmembers = []\n",
+    )
+    .unwrap();
+    std::fs::write(
+        ws.join("lib/x.wado"),
+        "internal fn x() -> i32 { return 1; }\n",
+    )
+    .unwrap();
+    std::fs::write(
+        ws.join("script/s.wado"),
+        "use { x } from \"../lib/x.wado\";\npub fn s() -> i32 { return x(); }\n",
+    )
+    .unwrap();
+    for package in ["app", "pkg"] {
+        std::fs::write(
+            ws.join(package).join("wado.toml"),
+            format!("[package]\nname = \"{package}\"\nnamespace = \"wado\"\nversion = \"0.1.0\"\n"),
+        )
+        .unwrap();
+    }
+    std::fs::write(
+        ws.join("pkg/p.wado"),
+        "internal fn p() -> i32 { return 2; }\n",
+    )
+    .unwrap();
+    std::fs::write(
+        ws.join("app/lib.wado"),
+        "use { s } from \"../script/s.wado\";\npub fn api() -> i32 { return s(); }\n",
+    )
+    .unwrap();
+
+    for (dir, file) in [("script", "s.wado"), ("app", "lib.wado")] {
+        wado()
+            .current_dir(ws.join(dir))
+            .args(["check", file])
+            .assert()
+            .success();
+    }
+
+    std::fs::write(
+        ws.join("script/s.wado"),
+        "use { p } from \"../pkg/p.wado\";\npub fn s() -> i32 { return p(); }\n",
+    )
+    .unwrap();
+    wado()
+        .current_dir(ws.join("script"))
+        .args(["check", "s.wado"])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains(
+            "symbol 'p' is `internal` to '../pkg/p.wado' and cannot be imported from another package",
+        ));
+}
+
 /// A module the package's code reaches is the package's own, whether or not
 /// `wado test` runs it.
 #[test]
@@ -1225,7 +1411,7 @@ fn test_test_skips_a_passed_file_until_something_it_read_changes() {
 }
 
 #[test]
-fn test_test_reruns_a_passed_file_once_a_path_dependency_names_another_entry() {
+fn test_test_reruns_a_passed_file_once_a_transitive_path_dependency_names_another_entry() {
     let tmp = tempfile::tempdir().unwrap();
     let greet = tmp.path().join("greet");
     std::fs::create_dir_all(&greet).unwrap();
@@ -1234,16 +1420,24 @@ fn test_test_reruns_a_passed_file_once_a_path_dependency_names_another_entry() {
     std::fs::write(greet.join("wado.toml"), manifest("a.wado")).unwrap();
     std::fs::write(greet.join("a.wado"), "pub fn n() -> i32 { return 1; }\n").unwrap();
     std::fs::write(greet.join("b.wado"), "pub fn n() -> i32 { return 2; }\n").unwrap();
+    let mid = tmp.path().join("mid");
+    std::fs::create_dir_all(&mid).unwrap();
+    std::fs::write(
+        mid.join("wado.toml"),
+        "[package]\nname = \"mid\"\nversion = \"0.1.0\"\nlib = \"mid.wado\"\n\n[dependencies]\ngreet = { path = \"../greet\" }\n",
+    )
+    .unwrap();
+    std::fs::write(mid.join("mid.wado"), "pub use { n } from \"greet\";\n").unwrap();
     let app = tmp.path().join("app");
     std::fs::create_dir_all(&app).unwrap();
     std::fs::write(
         app.join("wado.toml"),
-        "[package]\nname = \"app\"\nversion = \"0.1.0\"\n\n[dependencies]\ngreet = { path = \"../greet\" }\n",
+        "[package]\nname = \"app\"\nversion = \"0.1.0\"\n\n[dependencies]\nmid = { path = \"../mid\" }\n",
     )
     .unwrap();
     std::fs::write(
         app.join("app_test.wado"),
-        "use { n } from \"greet\";\n\ntest \"one\" {\n    assert n() == 1;\n}\n",
+        "use { n } from \"mid\";\n\ntest \"one\" {\n    assert n() == 1;\n}\n",
     )
     .unwrap();
     let run = || wado().arg("test").arg(app.join("app_test.wado")).assert();
@@ -1256,6 +1450,102 @@ fn test_test_reruns_a_passed_file_once_a_path_dependency_names_another_entry() {
     run()
         .failure()
         .stdout(predicate::str::contains("0 passed, 1 failed"));
+}
+
+/// A file's package is decided by the manifests above it, so adding one reruns
+/// a passed file that a relative import reaches across it.
+#[test]
+fn test_test_reruns_a_passed_file_once_a_package_boundary_moves() {
+    let tmp = tempfile::tempdir().unwrap();
+    let other = tmp.path().join("other");
+    std::fs::create_dir_all(&other).unwrap();
+    std::fs::write(
+        other.join("wado.toml"),
+        "[package]\nname = \"other\"\nversion = \"0.1.0\"\n",
+    )
+    .unwrap();
+    std::fs::write(
+        other.join("o.wado"),
+        "use { base } from \"./inner/p.wado\";\npub fn o() -> i32 { return base(); }\n",
+    )
+    .unwrap();
+    std::fs::create_dir_all(other.join("inner")).unwrap();
+    std::fs::write(
+        other.join("inner/p.wado"),
+        "internal fn base() -> i32 { return 1; }\n",
+    )
+    .unwrap();
+    let app = tmp.path().join("app");
+    std::fs::create_dir_all(&app).unwrap();
+    std::fs::write(
+        app.join("wado.toml"),
+        "[package]\nname = \"app\"\nversion = \"0.1.0\"\n",
+    )
+    .unwrap();
+    std::fs::write(
+        app.join("a_test.wado"),
+        "use { o } from \"../other/o.wado\";\n\ntest \"one\" {\n    assert o() == 1;\n}\n",
+    )
+    .unwrap();
+    let run = || wado().arg("test").arg(app.join("a_test.wado")).assert();
+
+    run().success();
+    run()
+        .success()
+        .stdout(predicate::str::contains("cached:  1 files"));
+    std::fs::write(
+        other.join("inner/wado.toml"),
+        "[package]\nname = \"inner\"\nversion = \"0.1.0\"\n",
+    )
+    .unwrap();
+    run()
+        .failure()
+        .stdout(predicate::str::contains("cached:").not());
+}
+
+/// The package a module is in is the one its file is in on disk, `..` taken
+/// after a symlinked directory as the OS takes it.
+#[cfg(unix)]
+#[test]
+fn test_a_package_root_is_found_where_the_module_is_read() {
+    let tmp = tempfile::tempdir().unwrap();
+    let pkgs = tmp.path().join("real/pkgs");
+    std::fs::create_dir_all(pkgs.join("app")).unwrap();
+    std::fs::create_dir_all(pkgs.join("other")).unwrap();
+    std::fs::write(
+        pkgs.join("other/wado.toml"),
+        "[package]\nname = \"other\"\nversion = \"0.1.0\"\n",
+    )
+    .unwrap();
+    std::fs::write(
+        pkgs.join("other/o.wado"),
+        "use { base } from \"./p.wado\";\npub fn o() -> i32 { return base(); }\n",
+    )
+    .unwrap();
+    std::fs::write(
+        pkgs.join("other/p.wado"),
+        "internal fn base() -> i32 { return 1; }\n",
+    )
+    .unwrap();
+    std::fs::write(
+        pkgs.join("app/wado.toml"),
+        "[package]\nname = \"app\"\nversion = \"0.1.0\"\n",
+    )
+    .unwrap();
+    std::fs::write(
+        pkgs.join("app/main.wado"),
+        "use { o } from \"../other/o.wado\";\nexport fn run() { assert o() == 1; }\n",
+    )
+    .unwrap();
+    let work = tmp.path().join("work");
+    std::fs::create_dir_all(&work).unwrap();
+    std::os::unix::fs::symlink(pkgs.join("app"), work.join("app")).unwrap();
+
+    wado()
+        .current_dir(&work)
+        .args(["check", "app/main.wado"])
+        .assert()
+        .success();
 }
 
 #[test]
@@ -1866,7 +2156,7 @@ fn test_publish_dry_run_reports_every_broken_world() {
     let tmp = tempfile::tempdir().unwrap();
     let dir = tmp.path();
     std::fs::write(
-        dir.join("wado.toml"),
+        dir.join("wado-workspace.toml"),
         "[workspace]\nmembers = [\"a\", \"b\"]\n\n[workspace.package]\nversion = \"0.1.0\"\nrepository = \"https://x/y\"\nnamespace = \"acme\"\nlicense = \"MIT\"\nauthors = [\"A\"]\n\n[registries]\ndefault = \"oci://ghcr.io\"\n",
     )
     .unwrap();
@@ -1893,6 +2183,30 @@ fn test_publish_dry_run_reports_every_broken_world() {
         .assert()
         .failure()
         .stderr(predicate::str::contains("exports nothing").count(2));
+}
+
+/// Run from a directory of a workspace that is no member, publish names the
+/// workspace root to run from.
+#[test]
+fn test_publish_outside_a_member_names_the_workspace_root() {
+    let tmp = tempfile::tempdir().unwrap();
+    let dir = tmp.path();
+    std::fs::write(
+        dir.join("wado-workspace.toml"),
+        "[workspace]\nmembers = [\"a\"]\n",
+    )
+    .unwrap();
+    std::fs::create_dir_all(dir.join("tools")).unwrap();
+
+    wado_in(&dir.join("tools"))
+        .arg("publish")
+        .arg("--dry-run")
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains(format!(
+            "run `wado publish` from its root:\n  {}",
+            dir.canonicalize().unwrap().display()
+        )));
 }
 
 #[test]

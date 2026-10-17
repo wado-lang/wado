@@ -5,6 +5,7 @@
 
 use crate::ast::AttrValue;
 use crate::kiln::cache::{encode_options_canonical, encode_written_options};
+use crate::kiln::inline::default_output_dir;
 use crate::kiln::options_check::CanonicalOptions;
 use crate::token::Span;
 use std::fmt;
@@ -256,6 +257,12 @@ impl Invocation {
         self.decl_sites
             .first()
             .expect("an invocation has at least one declaring site")
+    }
+
+    /// Write into the consuming build's tree, whatever `output_dir` the clause
+    /// gives: a clause of another package never writes to that package's.
+    pub fn write_into_consumer(&mut self) {
+        self.output_dir = default_output_dir(&self.decl_site().synthetic_id);
     }
 
     /// Canonical byte encoding of [`Self::options`], for the invocation cache

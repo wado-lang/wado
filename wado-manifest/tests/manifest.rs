@@ -1,5 +1,5 @@
 use std::assert_matches;
-use wado_manifest::{DependencySource, GitPin, Manifest, ManifestError};
+use wado_manifest::{DependencySource, GitPin, Manifest, ManifestError, WorkspaceManifest};
 
 #[test]
 fn package_lib_entry_parsed() {
@@ -111,16 +111,16 @@ bench = { git = "https://gitlab.com/user/bench.git", version = "^0.1.0" }
 [registries]
 default = "https://wa.dev"
 "#;
-    let m: Manifest = toml.parse().unwrap();
-    assert!(m.package.is_none());
-    let ws = m.workspace.as_ref().unwrap();
+    let m: WorkspaceManifest = toml.parse().unwrap();
+    let ws = &m.workspace;
     assert_eq!(ws.members, vec!["packages/*"]);
     assert!(ws.dependencies.contains_key("json"));
     assert!(ws.dev_dependencies.contains_key("bench"));
+    assert_eq!(m.registries["default"], "https://wa.dev");
 }
 
 #[test]
-fn workspace_root_with_package() {
+fn a_workspace_has_no_package() {
     let toml = r#"
 [workspace]
 members = ["packages/*"]
@@ -128,13 +128,22 @@ members = ["packages/*"]
 [package]
 name = "monorepo-root"
 version = "0.1.0"
-
-[registries]
-default = "https://wa.dev"
 "#;
-    let m: Manifest = toml.parse().unwrap();
-    assert!(m.package.is_some());
-    assert!(m.workspace.is_some());
+    assert_matches!(
+        toml.parse::<WorkspaceManifest>(),
+        Err(ManifestError::PackageInWorkspace)
+    );
+}
+
+#[test]
+fn a_workspace_table_in_a_manifest_points_to_the_workspace_file() {
+    let toml = r#"
+[workspace]
+members = ["packages/*"]
+"#;
+    let err = toml.parse::<Manifest>().unwrap_err();
+    assert_matches!(err, ManifestError::WorkspaceInManifest);
+    assert!(err.to_string().contains("wado-workspace.toml"));
 }
 
 #[test]
@@ -360,18 +369,6 @@ special = { registry = "custom", package = "ns:lib", version = "^1.0.0" }
             version,
         } if reg == "custom" && package == "ns:lib" && version == "^1.0.0"
     );
-}
-
-#[test]
-fn manifest_without_package_section() {
-    // Pure workspace root
-    let toml = r#"
-[workspace]
-members = ["packages/*"]
-"#;
-    let m: Manifest = toml.parse().unwrap();
-    assert!(m.package.is_none());
-    assert!(m.workspace.is_some());
 }
 
 #[test]

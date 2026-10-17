@@ -233,7 +233,7 @@ version = "0.1.0"
         // `version`.
         let tmp = tempfile::tempdir().unwrap();
         std::fs::write(
-            tmp.path().join("wado.toml"),
+            tmp.path().join("wado-workspace.toml"),
             r#"
 [workspace]
 members = ["app", "member"]
