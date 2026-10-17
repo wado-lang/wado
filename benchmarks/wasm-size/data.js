@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1792241558007,
+  "lastUpdate": 1792242956392,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -67773,6 +67773,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/98bc07749f76cfc441864586e209979c4c80ce4c"
         },
         "date": 1792241557344,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 2955,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 7382,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 20208,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 298222,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "f720ac877faf4136644fba6f4000cbfc08e9c03d",
+          "message": "Merge pull request #2371 from wado-lang/ccr-791466f1-aexi13\n\nfeat(contracts)!: a contract clause writes only the values it creates",
+          "timestamp": "2026-10-17T21:41:38+09:00",
+          "tree_id": "81fa5846b1879e2afee2a32a11e42b872382f9bd",
+          "url": "https://github.com/wado-lang/wado/commit/f720ac877faf4136644fba6f4000cbfc08e9c03d"
+        },
+        "date": 1792242955538,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
