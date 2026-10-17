@@ -113,11 +113,9 @@ Wado already has most of the surface: `resource`, `fn drop(self)`, `&T` /
 check, scope-exit drop. What it lacks is the generic rule, the second-class
 reference, and the ways out of a place.
 
-Swift's own gaps are worth knowing, because they mark what is hard rather than
-what Swift forgot. `Array` does not accept a noncopyable element after two
-years; `InlineArray` and `Span` arrived in 6.2 instead. A local borrow binding
-is still a pitch. An escaping closure could not capture a noncopyable value at
-first, and may now only by consuming it.
+Swift's own gaps mark what is hard rather than what Swift forgot. `Array` does
+not accept a noncopyable element; `InlineArray` and `Span` arrived in 6.2
+instead.
 
 ## Decision
 
@@ -156,7 +154,7 @@ A binding whose type is affine, or is a `T: Affine`, may be:
 
 - moved: a `let`, a by-value argument, a `return`, a place in an aggregate, a
   by-value `self`, an assignment into a place;
-- referenced: `&x` or `&mut x` as an argument or a receiver;
+- referenced: `&x` or `&mut x` as an argument, a receiver or a scrutinee;
 - dropped: by scope exit, or by `x.drop()` on a resource.
 
 It may not be read twice. The move check already states that for a resource;
@@ -181,7 +179,7 @@ A `&R` or `&mut R` whose referent type is affine may stand in two positions:
 
 Each lasts no longer than the call or the arm that holds it. A `&R` may not be
 bound by a `let`, stored in a field or an element, returned, or captured by a
-closure, and `*r` is not a by-value expression. A `&T` whose referent is not
+closure. A `&T` whose referent is not
 affine is unchanged and stays first-class.
 
 `&mut R` keeps its one write: `*r = value` replaces the referent and drops what
@@ -295,7 +293,7 @@ time. Swift has no `Array` of noncopyable values either.
 
 A closure captures by reference, and a reference to an affine value is
 second-class, so a closure may not capture one. A program hands the value in
-as a parameter instead. Swift admits a capture that consumes the value.
+as a parameter instead.
 
 ### The rest
 
