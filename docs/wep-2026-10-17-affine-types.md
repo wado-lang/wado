@@ -237,6 +237,34 @@ use reaches the cell dead, as it may keep a primitive unboxed. The trap is the
 cell's only observable effect, so a proof that the trap cannot fire is all the
 erasure needs.
 
+### No cast between an affine resource and an integer
+
+`as` converts neither way between an affine resource and an integer. A cast
+was the one way a raw handle entered or left the type system, and it moved
+nothing. `r as i32` left `r` its owner, so a raw handle handed to an import
+that takes it left two owners. `h as R` minted an owner each time it ran, so
+two casts of one integer left two. With a cell, either direction would also
+hide an allocation or a read behind syntax that otherwise converts for free.
+
+A cast between an unrestricted handle and an `f64` is unchanged.
+
+What casts did, the following do instead:
+
+- The CM ABI is lifted by binding synthesis. `stream-new` and `future-new`
+  return both ends packed in one `i64` (`readable | writable << 32`).
+  Synthesis splits it and lifts each handle, as it lifts every other one, so
+  `core:rt` loses `cm_stream_pair` and `cm_future_pair`.
+- A builtin that passes a handle across states it in its signature:
+  `call_indirect_stdout_write_via_stream(rx: Stream<u8>) -> Future<…>`, not
+  `(rx: i32) -> i32`. The move check then sees `rx` handed over.
+- An identity that owns nothing is a `ResourceId`, read by `r.id()` through
+  `&self`. It is a copyable value with `Eq` and `Ord`, so it keys a map, and
+  nothing converts it back into a resource. It names a live resource only: a
+  dropped one's identity may come back for a later one, as a `Waitable`'s
+  does.
+- A test double returns a real handle, from `Stream::<u8>::new()`, where it
+  used to return `0 as Stream<u8>`.
+
 ### Ways out of a place
 
 - `Option<affine T>::take(&mut self) -> Option<T>` moves the payload out and
@@ -307,6 +335,7 @@ one reads.
   `affine type`.
 - `Slice<T>`, `TreeMap<K, V>`, `HashMap<K, V>`, `TreeSet<T>` and their
   iterators stay unmarked.
+- `ResourceId`, and `id(&self) -> ResourceId` on every affine resource.
 
 `wado-from-idl` declares `affine` every record and variant it generates that
 holds an affine resource.
@@ -334,6 +363,7 @@ In [WEP: Resource Ownership](./wep-2026-05-21-resource-ownership.md):
   the type system excludes what they could not see.
 - Value-copy elision is unaffected: it serves copyable types, and an affine
   type never reaches a copy site.
+- The known gap "An integer casts to an affine resource" is closed.
 
 In [WEP: Reference Representation](./wep-2026-06-13-reference-representation.md),
 D6 is settled: a resource is boxed, and the box is its cell.
@@ -353,23 +383,29 @@ D6 is settled: a resource is boxed, and the box is its cell.
 4. [ ] `List<affine T>`: the methods that move elements in
    `impl<affine T> List<T>`, `IntoIterator::into_iter(self)`, and
    `Iterator`'s `affine type Item`.
-5. [ ] The handle cell: the representation, the trap, the `borrow` an export
+5. [ ] No cast between an affine resource and an integer: synthesis splits
+   and lifts the `stream-new` / `future-new` pair, the raw-handle builtins
+   take and return resources, `ResourceId` and `id`, and the test doubles in
+   `core:kiln`, `core:cli` and `package-gale` return real handles. It comes
+   before the cell, which a cast would have to allocate, and before cleanup
+   drops a `Stream`, which `log_stdout` would then drop twice.
+6. [ ] The handle cell: the representation, the trap, the `borrow` an export
    receives, and `*r = value` through it. Then the optimizer's erasure where
    it proves no use reaches a dead cell.
-6. [ ] `Option::take`, `Option::replace`, partial move out of a local holder,
+7. [ ] `Option::take`, `Option::replace`, partial move out of a local holder,
    `..base` over an affine holder.
-7. [ ] `FutureWrite<T>` and `StreamWrite<T>`: a write returns what it did not
+8. [ ] `FutureWrite<T>` and `StreamWrite<T>`: a write returns what it did not
    deliver, in every case the result reports, and the stdlib's write loops
    (`write_all`) read `rest` rather than `count`.
-8. [ ] Instantiation rule: an affine argument for an unmarked parameter is a
+9. [ ] Instantiation rule: an affine argument for an unmarked parameter is a
    type error naming the parameter. `Option`, `Result`, `Future`, `Stream`,
    `AsyncCall` and `List` are marked by then.
-9. [ ] Withdraw the receiver-kind rule and the TIR copy check from #2364, and
-   the `resource_copy_out_of_reference_error` fixture with it.
-10. [ ] Cleanup drops a `Stream` and a `Future` the body does not move, which
+10. [ ] Withdraw the receiver-kind rule and the TIR copy check from #2364, and
+    the `resource_copy_out_of_reference_error` fixture with it.
+11. [ ] Cleanup drops a `Stream` and a `Future` the body does not move, which
     it excludes today
     ([A `Stream` or `Future` handle nothing drops](./wep-2026-05-21-resource-ownership.md#a-stream-or-future-handle-nothing-drops)).
-11. [ ] Spec: rewrite
+12. [ ] Spec: rewrite
     [Resource Ownership](./spec-components.md#resource-ownership), the
     resource paragraph of [Memory Model](./spec-memory.md), and the cheatsheet.
     Amend the WEPs above.
@@ -393,7 +429,7 @@ drop.
 Unchanged from
 [WEP: Resource Ownership](./wep-2026-05-21-resource-ownership.md#known-gaps):
 a panic drops nothing; a generic resource a user module declares is not
-checked; `5 as Counter` mints a handle nothing owns; web handles leak.
+checked; web handles leak.
 
 ## Open questions
 
