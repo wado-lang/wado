@@ -272,9 +272,13 @@ impl ModuleSourceInterner {
         let package = if package_root == self.root_dir {
             self.root_package.clone()
         } else if let Some(root) = package_root {
+            // An undeclared package can claim a root for a package it depends
+            // on after modules of that root were placed: those keep it Path.
+            let interned = self.intern(&root);
+            let undeclared = self.undeclared_packages.contains_key(&interned);
             match self.dependency_roots.get(&root).cloned() {
-                Some(lib) => PackageId::Dependency(self.intern(&lib)),
-                None => PackageId::Path(self.undeclared_package(&root, host)),
+                Some(lib) if !undeclared => PackageId::Dependency(self.intern(&lib)),
+                _ => PackageId::Path(self.undeclared_package(&root, host)),
             }
         } else {
             PackageId::Unpackaged
@@ -337,17 +341,13 @@ impl ModuleSourceInterner {
     /// The dependencies a bare-name import in `importer` resolves against: its
     /// own package's, and none where it lies in no package but the entry does.
     fn dependencies_of(&self, importer: &ModuleSource) -> &DependencyIndex {
-        match importer {
-            ModuleSource::Dependency { pkg, .. } => self.package(pkg.as_str()),
-            ModuleSource::Local {
-                package: PackageId::Path(root),
-                ..
-            } => &self.undeclared_packages[root],
-            ModuleSource::Local {
-                package: PackageId::Unpackaged,
-                ..
-            } => &self.no_dependencies,
-            _ => &self.dependencies,
+        match importer.package_id() {
+            PackageId::Dependency(lib) => self.package(lib.as_str()),
+            PackageId::Path(root) => &self.undeclared_packages[&root],
+            PackageId::Unpackaged => &self.no_dependencies,
+            PackageId::Root | PackageId::Core | PackageId::Binding(_) | PackageId::Remote(_) => {
+                &self.dependencies
+            }
         }
     }
 
@@ -1539,6 +1539,43 @@ mod tests {
         let o = single.place("../other/o.wado", &root);
         assert!(!o.same_package(&single.dependency("../other/single.wado")));
         assert!(matches!(o, ModuleSource::Local { .. }));
+    }
+
+    #[test]
+    fn a_package_keeps_the_identity_it_was_first_placed_under() {
+        let manifest = |path: &str| DependencyIndex {
+            manifest: Some(DependencyManifest {
+                path: path.to_string(),
+                error: None,
+            }),
+            ..DependencyIndex::default()
+        };
+        // `a` depends on `b`, so placing a module of `a` claims `b`'s root.
+        let mut a = manifest("/a/wado.toml");
+        a.resolved
+            .insert("lib:b".to_string(), "../b/lib.wado".to_string());
+        a.packages
+            .insert("../b/lib.wado".to_string(), manifest("/b/wado.toml"));
+        let host = TestPackages {
+            root: |path: &str| match path.split('/').nth(1) {
+                Some(".") | Some("main.wado") => Some("/app".to_string()),
+                Some(name) => Some(format!("/{name}")),
+                None => None,
+            },
+            indexes: [
+                ("/a".to_string(), a),
+                ("/b".to_string(), manifest("/b/wado.toml")),
+            ]
+            .into_iter()
+            .collect(),
+        };
+        let mut interner = ModuleSourceInterner::new();
+        interner.bound_packages("./main.wado", &host);
+        let x = interner.place("../b/x.wado", &host);
+        interner.place("../a/y.wado", &host);
+        let z = interner.place("../b/sub/z.wado", &host);
+        assert!(x.same_package(&z));
+        assert!(matches!(z, ModuleSource::Local { .. }));
     }
 
     #[test]

@@ -246,7 +246,7 @@ export fn generate(req: Request) -> Result<Response, Error> {
     return Result::Ok(Response {
         files: [OutputFile {
             path: "greeting.wado",
-            content: "pub fn greeting() -> String { return \"hi from a dependency\"; }",
+            content: "use { leaf } from \"lib:leaf\";\npub fn greeting() -> String { return leaf(); }",
             is_entry: true,
         }],
     });
@@ -255,11 +255,26 @@ export fn generate(req: Request) -> Result<Response, Error> {
     )
     .unwrap();
 
+    // The generated module imports what the dependency declares, not the consumer.
+    let leaf = root.join("leaf");
+    fs::create_dir_all(leaf.join("src")).unwrap();
+    fs::write(
+        leaf.join("wado.toml"),
+        "[package]\nname = \"leaf\"\nversion = \"0.1.0\"\nlib = \"src/lib.wado\"\n",
+    )
+    .unwrap();
+    fs::write(
+        leaf.join("src/lib.wado"),
+        "pub fn leaf() -> String { return \"hi from a dependency\"; }\n",
+    )
+    .unwrap();
+
     let lib = root.join("lib");
     fs::create_dir_all(lib.join("src")).unwrap();
     fs::write(
         lib.join("wado.toml"),
         "[package]\nname = \"lib\"\nversion = \"0.1.0\"\nlib = \"src/lib.wado\"\n\n\
+         [dependencies]\n\"lib:leaf\" = { path = \"../leaf\" }\n\n\
          [build-dependencies]\n\"lib:gen\" = { path = \"../gen\" }\n",
     )
     .unwrap();

@@ -565,6 +565,41 @@ fn an_undeclared_package_file_resolves_against_its_own_manifest() {
         )));
 }
 
+/// A package an undeclared package shares with its importer is one package,
+/// even where the entry is named through a symlink.
+#[cfg(unix)]
+#[test]
+fn a_shared_dependency_is_one_package_through_a_symlink() {
+    let tmp = tempfile::tempdir().unwrap();
+    let root = tmp.path().join("real");
+    library(
+        &root.join("leaf"),
+        "",
+        "pub struct Token { pub v: i32 }\npub fn make() -> Token { return Token { v: 1 }; }\n",
+    );
+    let leaf = "\"lib:leaf\" = { path = \"../leaf\" }\n";
+    let mid = root.join("mid");
+    library(&mid, leaf, "pub fn m() {}\n");
+    fs::write(
+        mid.join("src/part.wado"),
+        "use { Token } from \"lib:leaf\";\npub fn take(t: Token) -> i32 { return t.v; }\n",
+    )
+    .unwrap();
+    library(
+        &root.join("app"),
+        leaf,
+        "use { make } from \"lib:leaf\";\nuse { take } from \"../../mid/src/part.wado\";\n\
+         pub fn api() -> i32 { return take(make()); }\n",
+    );
+    let link = tmp.path().join("link");
+    std::os::unix::fs::symlink(&root, &link).unwrap();
+    wado_in(&root.join("app"))
+        .args(["check"])
+        .arg(link.join("app/src/lib.wado"))
+        .assert()
+        .success();
+}
+
 /// A file in no package, reached by a path, declares no dependencies, whatever
 /// its importer declares.
 #[test]

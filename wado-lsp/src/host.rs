@@ -148,17 +148,19 @@ impl CompilerHost for FilesystemCompilerHost {
     /// keeps answering and each dependency import reports the manifest.
     fn dependency_index(&self) -> DependencyIndex {
         match discovery::nearest_manifest_dir(&self.base_path) {
-            Some(dir) => self.package_index(&dir.display().to_string()),
+            Some(dir) => manifest_index(&dir, &self.base_path),
             None => DependencyIndex::default(),
         }
     }
 
+    /// `root` is canonical, as [`Self::package_root`] answers it, so the
+    /// entries it names are keyed from the canonical base: a key relative to a
+    /// base spelled through a symlink names a package the entry's index names
+    /// differently.
     fn package_index(&self, root: &str) -> DependencyIndex {
-        let dir = Path::new(root);
-        match read_manifest(dir) {
-            Ok(manifest) => dependency_index_from(&manifest, dir, &self.base_path),
-            Err(error) => unreadable_manifest(dir, error),
-        }
+        let base = std::fs::canonicalize(&self.base_path)
+            .expect("a host that answered a package root has its base on disk");
+        manifest_index(Path::new(root), &base)
     }
 
     fn serves_core(&self) -> bool {
@@ -274,6 +276,14 @@ fn package_index(
         }
     }
     (index, entries)
+}
+
+/// The index of the package whose `wado.toml` is in `dir`, keyed from `base`.
+fn manifest_index(dir: &Path, base: &Path) -> DependencyIndex {
+    match read_manifest(dir) {
+        Ok(manifest) => dependency_index_from(&manifest, dir, base),
+        Err(error) => unreadable_manifest(dir, error),
+    }
 }
 
 /// The index of a package whose `wado.toml` in `dir` cannot be read: empty,
