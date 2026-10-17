@@ -1856,8 +1856,9 @@ impl Backend for WebGpuBackend {
         return Placed::Device(out);
     }
 
-    /// One workgroup per lane, each index read back as an f32, which holds it
-    /// exactly: an `i64` tensor lives on the host.
+    /// One workgroup per part of a lane, then one per lane over the parts'
+    /// winners, each index read back as an f32, which holds it exactly: an
+    /// `i64` tensor lives on the host.
     fn arg_max<Axes>(
         &mut self,
         t: &Placed<f32, Axes>,
@@ -1877,15 +1878,37 @@ impl Backend for WebGpuBackend {
             return Placed::Host(self.cpu.arg_max(&self.host(t), axis));
         }
         let out = self.allocated(lanes, false);
-        let gx = i32::min(lanes, MAX_GROUPS);
+        let parts = lane.div_ceil(ARG_MAX_PART);
+        let groups = lanes * parts;
+        let gx = i32::min(groups, MAX_GROUPS);
         let mut head: List<u32> = [];
-        push_all(&mut head, &([lanes, gx, lane] as List<i32>));
+        push_all(&mut head, &([groups, gx, lane, parts] as List<i32>));
         push_all(&mut head, &moved.extents);
-        self.dispatch_bound(&operands, out, lanes, head, |bindings| ShaderKey::ArgMax([bindings, rank]), [
-            gx,
-            lanes.div_ceil(gx),
-            1,
-        ]);
+        if parts == 1 {
+            self.dispatch_bound(&operands, out, lanes, head, |bindings| ShaderKey::ArgMax([bindings, rank, Whole]), [
+                gx,
+                lanes.div_ceil(gx),
+                1,
+            ]);
+        } else {
+            let pairs = self.allocated(2 * groups, false);
+            self.dispatch_bound(&operands, pairs, 2 * groups, head, |bindings| ShaderKey::ArgMax(
+                [bindings, rank, Parts],
+            ), [gx, groups.div_ceil(gx), 1]);
+            let lx = i32::min(lanes, MAX_GROUPS);
+            let combine = [contiguous(pairs, 0, [2 * groups])] as List<DeviceTensor>;
+            let mut combined = head;
+            combined[0] = lanes as u32;
+            combined[1] = lx as u32;
+            self.dispatch_bound(
+                &combine,
+                out,
+                lanes,
+                combined,
+                |bindings| ShaderKey::ArgMax([bindings, rank, Combine]),
+                [lx, lanes.div_ceil(lx), 1],
+            );
+        }
         let mut extents = view.extents;
         extents[axis] = 1;
         let mut data = List::<i64>::with_capacity(lanes);
@@ -2302,7 +2325,7 @@ variant ShaderKey {
     /// [`attend_shader`]'s arguments.
     Attend([List<i32>, i32, bool, bool]),
     /// [`arg_max_shader`]'s arguments.
-    ArgMax([List<i32>, i32]),
+    ArgMax([List<i32>, i32, ArgMaxStage]),
 }
 
 impl ShaderKey {
@@ -2325,7 +2348,7 @@ impl ShaderKey {
             Gather([rank, axis, half]) => gather_shader(*rank, *axis, *half),
             Present([bindings, rotary]) => present_shader(bindings, *rotary),
             Attend([bindings, head, rotary, biased]) => attend_shader(bindings, *head, *rotary, *biased),
-            ArgMax([bindings, rank]) => arg_max_shader(bindings, *rank),
+            ArgMax([bindings, rank, stage]) => arg_max_shader(bindings, *rank, *stage),
         };
     }
 }
@@ -2527,14 +2550,55 @@ ${biasing}        }
 `;
 }
 
+/// What one dispatch of [`arg_max_shader`] reduces.
+enum ArgMaxStage {
+    /// Each lane whole, in one workgroup.
+    Whole,
+    /// Each lane's parts of `ARG_MAX_PART` elements, one workgroup a part,
+    /// into its greatest element and that element's index.
+    Parts,
+    /// Each lane's parts as `Parts` wrote them, in one workgroup.
+    Combine,
+}
+
+/// The elements one workgroup of an `arg_max` reduces at most, a part of a
+/// longer lane, so a vocabulary's lane spreads over the device.
+global ARG_MAX_PART: i32 = 4096;
+
 /// The WGSL writing, one workgroup per lane along the last of `rank` axes, the
 /// index of the lane's first greatest element as an f32. A NaN is greatest,
 /// as `Cpu`'s `>` orders it; WGSL may assume a comparison meets none, so its
-/// bits say what it is. Parameters: the lanes, the workgroups per row of the
-/// grid, the lane's length, the extents, then the view of the operand.
-fn arg_max_shader(bindings: &List<i32>, rank: i32) -> String {
-    let at = 3 + rank;
+/// bits say what it is. Parameters: the workgroups, the workgroups per row of
+/// the grid, the lane's length, the parts of a lane, the extents, then the
+/// view of the operand. A `Parts` dispatch writes each part's greatest element
+/// and its index as an f32 pair, and `Combine` reads those pairs.
+fn arg_max_shader(bindings: &List<i32>, rank: i32, stage: ArgMaxStage) -> String {
+    let at = 4 + rank;
     let index = index_wgsl(at, 0, rank - 1, "c", `bitcast<i32>(p[${at}])`);
+    let direct = `        let x = o${bindings[0]}[u32(${index} + i32(j) * bitcast<i32>(p[${at + rank}]))];
+        let i = j;
+`;
+    let [range, read, write] = match stage {
+        Whole => [
+            `    let row = flat;
+${coords_wgsl("row", 4, 0, rank - 1, "c", "    ")}    let first = 0u;
+    let end = p[2];
+`, direct, "        out[row] = f32(indices[0]);\n",
+        ],
+        Parts => [
+            `    let row = flat / p[3];
+    let first = flat % p[3] * ${ARG_MAX_PART}u;
+    let end = min(p[2], first + ${ARG_MAX_PART}u);
+${coords_wgsl("row", 4, 0, rank - 1, "c", "    ")}`, direct,
+            "        out[2u * flat] = values[0];\n        out[2u * flat + 1u] = f32(indices[0]);\n",
+        ],
+        Combine => [
+            "    let row = flat;\n    let first = 0u;\n    let end = p[3];\n",
+            `        let x = o${bindings[0]}[2u * (row * p[3] + j)];
+        let i = u32(o${bindings[0]}[2u * (row * p[3] + j) + 1u]);
+`, "        out[row] = f32(indices[0]);\n",
+        ],
+    };
     return `${buffers_wgsl(1 + max_of(bindings), null)}
 var<workgroup> values: array<f32, 64>;
 var<workgroup> indices: array<u32, 64>;
@@ -2561,17 +2625,16 @@ fn before(a: f32, i: u32, b: f32, j: u32) -> bool {
 
 @compute @workgroup_size(64)
 fn main(@builtin(workgroup_id) group: vec3<u32>, @builtin(local_invocation_index) lid: u32) {
-    let row = group.x + group.y * p[1];
-    if row >= p[0] {
+    let flat = group.x + group.y * p[1];
+    if flat >= p[0] {
         return;
     }
-${coords_wgsl("row", 3, 0, rank - 1, "c", "    ")}    var best = 0.0;
+${range}    var best = 0.0;
     var at = NONE;
-    for (var j = lid; j < p[2]; j += 64u) {
-        let x = o${bindings[0]}[u32(${index} + i32(j) * bitcast<i32>(p[${at + rank}]))];
-        if before(x, j, best, at) {
+    for (var j = first + lid; j < end; j += 64u) {
+${read}        if before(x, i, best, at) {
             best = x;
-            at = j;
+            at = i;
         }
     }
     values[lid] = best;
@@ -2585,8 +2648,7 @@ ${coords_wgsl("row", 3, 0, rank - 1, "c", "    ")}    var best = 0.0;
         workgroupBarrier();
     }
     if lid == 0u {
-        out[row] = f32(indices[0]);
-    }
+${write}    }
 }
 `;
 }
