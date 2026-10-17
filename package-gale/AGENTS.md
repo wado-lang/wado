@@ -83,7 +83,7 @@ gale gen --trace Grammar.g4
 
 or `options: { trace: true }` in a Kiln `with { generator: ... }` block.
 
-`tools/rust_corpus_check.wado` parses a list of Rust files with the generated `RustParser.g4` parser and prints one `ok` / `ng` line each — path, diagnostic count, line, message, and the first diagnostic's rule stack — plus a summary on stderr. The stack is the part that carries information: recovery restarts at an item boundary, so most failures report the same `expected KW_EXTERN` whatever went wrong inside, and only the stack names the rule. Repository-wide it is the one number that says whether a prediction change helped.
+`tools/rust_corpus_check.wado` parses a list of Rust files with the generated `RustParser.g4` parser and prints one `ok` / `ng` line each — path, diagnostic count, line, message, and the first diagnostic's rule stack — plus a summary on stderr. The stack is the part that carries information: recovery restarts at an item boundary, so most failures report the same `expected 'extern'` whatever went wrong inside, and only the stack names the rule. Repository-wide it is the one number that says whether a prediction change helped.
 
 ```sh
 git ls-files '*.rs' > target/rs-corpus.txt

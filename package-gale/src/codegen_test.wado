@@ -3462,6 +3462,17 @@ A : 'a' ; B : 'b' ;
     assert got == "ab => (s a b) [true\nba\n]\n";
 }
 
+test "a diagnostic names a literal-alias token by its literal, whether it was missing or expected" {
+    let got = printed("grammar T;
+s : A LB B EOF | B (LB | RB) EOF ;
+A : 'a' ; B : 'b' ; LB : '{' ; RB : '}' ;
+", "for let input of [\"ab\", \"bb\"] {
+    for let d of &parse(input).diagnostics { println(d.message); }
+}
+");
+    assert got == "missing '{'\nexpected '{' or '}'; no viable alternative\n";
+}
+
 test "past a shared first token, the next tokens pick the alternative through groups, loops, labels, optionals, sets and rule calls" {
     let got = parses_each("grammar T;
 r : A (B|C) D EOF | A (B|C) E EOF ;

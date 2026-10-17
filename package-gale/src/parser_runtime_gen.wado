@@ -546,7 +546,7 @@ pub fn gen_parser_struct<S: AsStrSlice>(
     kn.emit_begin(w);
     w.line("let mut out: List<String> = List::with_capacity(kinds.len());");
     w.begin("for let k of kinds");
-    w.line("out.push(token_kind_name(*k));");
+    w.line("out.push(TOKEN_NAMES[*k]);");
     w.end();
     w.line("return out;");
     w.end();
