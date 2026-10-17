@@ -3,7 +3,7 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 
-use wado_manifest::{DependencySource, registry_url};
+use wado_manifest::{DependencySource, MANIFEST_FILENAME, registry_url};
 
 use lexopt::Arg::Value;
 use wado_compiler::{CompilerHost as _, Diagnostic, Severity, wit_bundle};
@@ -706,10 +706,22 @@ pub(crate) async fn prepare_kiln(
         .partition(|inv| packages.contains_key(&inv.decl_site().module));
     rewrite_build_dep_modules(&mut ours, &manifest, &manifest_root)
         .map_err(PipelineError::Manifest)?;
+    let mut package_manifests = wado_compiler::hashmap::IndexMap::default();
     for mut invocation in theirs {
-        let lib = &packages[&invocation.decl_site().module];
-        let package = dependencies.packages[lib].manifest.as_ref();
-        let package = package.map(|m| Path::new(&m.path));
+        let lib = packages[&invocation.decl_site().module].as_str();
+        if !package_manifests.contains_key(lib) {
+            let path = dependencies.packages[lib].manifest.as_ref();
+            let root = path.and_then(|m| Path::new(&m.path).parent());
+            let manifest = match root {
+                Some(root) => manifest_in(root)
+                    .map_err(PipelineError::Manifest)?
+                    .map(|m| (root.to_path_buf(), m)),
+                None => None,
+            };
+            package_manifests.insert(lib, manifest);
+        }
+        let package = package_manifests[lib].as_ref();
+        let package = package.map(|(root, m)| (root.as_path(), m));
         adopt_dependency_invocation(&mut invocation, package, &manifest_root)?;
         ours.push(invocation);
     }
@@ -916,12 +928,12 @@ pub(crate) fn rewrite_build_dep_modules(
 }
 
 /// Make an invocation a source dependency declares this run's own: its
-/// generator resolves through the `[build-dependencies]` of the dependency's
-/// manifest at `package_manifest`, never the consumer's, and it writes into the
+/// generator resolves through the `[build-dependencies]` of `package`, the
+/// dependency's root and manifest, never the consumer's, and it writes into the
 /// consumer's tree, since a dependency's tree is not this run's to write.
 fn adopt_dependency_invocation(
     invocation: &mut wado_compiler::kiln::Invocation,
-    package_manifest: Option<&Path>,
+    package: Option<(&Path, &wado_manifest::Manifest)>,
     manifest_root: &Path,
 ) -> Result<(), PipelineError> {
     use wado_compiler::kiln::inline::DEFAULT_INLINE_OUTPUT_DIR_PREFIX;
@@ -933,24 +945,17 @@ fn adopt_dependency_invocation(
     let GeneratorModule::Spec(spec) = &invocation.module else {
         return Ok(());
     };
-    let package_root = package_manifest.and_then(Path::parent);
-    let manifest = match package_root {
-        Some(root) => manifest_in(root).map_err(PipelineError::Manifest)?,
-        None => None,
-    };
     let unsupported = |message: String| PipelineError::Provider {
         invocation: synthetic_id.clone(),
         source: ProviderError::Unsupported { message },
     };
-    let declared_in = package_manifest.map_or_else(
+    let declared_in = package.map_or_else(
         || "the dependency, which has no wado.toml".to_string(),
-        |path| path.display().to_string(),
+        |(root, _)| root.join(MANIFEST_FILENAME).display().to_string(),
     );
     let key = spec_key(&spec.spec);
-    let Some(dep) = manifest
-        .as_ref()
-        .and_then(|m| m.build_dependencies.get(key))
-    else {
+    let declared = package.and_then(|(root, m)| Some((root, m, m.build_dependencies.get(key)?)));
+    let Some((package_root, manifest, dep)) = declared else {
         // An inline source names the generator by itself (single-file mode).
         if spec.version.is_some() || spec.registry.is_some() {
             return Ok(());
@@ -960,8 +965,6 @@ fn adopt_dependency_invocation(
             spec.spec
         )));
     };
-    let manifest = manifest.as_ref().expect("a declared entry has a manifest");
-    let package_root = package_root.expect("a manifest has a directory");
     invocation.module = match &dep.source {
         DependencySource::Path { .. } => {
             let Some(local) = build_dep_generator_local_path(key, manifest, package_root)

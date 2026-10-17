@@ -92,22 +92,17 @@ where
         };
 
         for import in wado_source_imports(&ast) {
-            let child =
-                match resolve_import_with_entry(&mut interner, &source, import, Some(&entry)) {
-                    ModuleSource::Local { path, .. } if is_cwd_relative(import) => {
-                        let path = path.to_string();
-                        interner.place(&path, &package_root)
-                    }
-                    child => child,
-                };
-            let child_key = match &child {
-                ModuleSource::Local { .. } if is_cwd_relative(import) => {
-                    resolve_module_path(&key, import)
+            let child = resolve_import_with_entry(&mut interner, &source, import, Some(&entry));
+            let (child, child_key) = match child {
+                ModuleSource::Local { path, .. } if is_cwd_relative(import) => {
+                    let path = path.to_string();
+                    let placed = interner.place(&path, &package_root);
+                    (placed, resolve_module_path(&key, import))
                 }
-                ModuleSource::Dependency { path, pkg } => {
+                ModuleSource::Dependency { ref path, ref pkg } => {
                     let child_key = key_of(entry_key, path);
                     packages.insert(child_key.clone(), pkg.to_string());
-                    child_key
+                    (child, child_key)
                 }
                 // A back-reference to the entry folds onto it; anything else
                 // is not Wado source this walk reads.
