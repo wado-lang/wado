@@ -442,6 +442,8 @@ pub enum ManifestError {
     WorkspaceInvalidLicense { value: String, reason: String },
     /// `wado-workspace.toml` has a `[package]`, or a `wado.toml` beside it.
     PackageInWorkspace,
+    /// `wado.toml` has a `[workspace]`, which belongs in `wado-workspace.toml`.
+    WorkspaceInManifest,
     /// A `[world]` value is neither an entry-path string nor a valid table.
     InvalidWorldEntry { world: String, reason: String },
     /// A `[package].exports` entry names no file the package can offer.
@@ -514,6 +516,11 @@ impl fmt::Display for ManifestError {
                 f,
                 "a workspace is not a package: wado-workspace.toml has no [package] \
                  and no wado.toml beside it; put the package in a member directory"
+            ),
+            ManifestError::WorkspaceInManifest => write!(
+                f,
+                "[workspace] does not belong in wado.toml; \
+                 move it to a wado-workspace.toml in this directory"
             ),
             ManifestError::InvalidWorldEntry { world, reason } => {
                 write!(f, "[world].{world:?}: {reason}")
@@ -672,6 +679,9 @@ struct RawDependency {
 }
 
 fn convert_raw(raw: RawManifest) -> Result<Manifest, ManifestError> {
+    if raw.unknown.contains_key("workspace") {
+        return Err(ManifestError::WorkspaceInManifest);
+    }
     let unknown_sections = unknown_keys(&raw.unknown);
     let package = raw.package.map(convert_package).transpose()?;
     let mut world = IndexMap::new();
@@ -1889,6 +1899,15 @@ lib = "src/lib.wado"
                 "field {field}"
             );
         }
+    }
+
+    #[test]
+    fn a_member_with_a_workspace_table_points_to_the_workspace_file() {
+        let member = "[package]\nname = \"core\"\n\n[workspace]\nmembers = [\"*\"]\n";
+        assert_matches!(
+            resolve_member(member, ROOT_WS),
+            Err(ManifestError::WorkspaceInManifest)
+        );
     }
 
     #[test]

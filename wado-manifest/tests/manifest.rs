@@ -136,13 +136,14 @@ version = "0.1.0"
 }
 
 #[test]
-fn a_workspace_table_in_a_manifest_is_an_unknown_section() {
+fn a_workspace_table_in_a_manifest_points_to_the_workspace_file() {
     let toml = r#"
 [workspace]
 members = ["packages/*"]
 "#;
-    let m: Manifest = toml.parse().unwrap();
-    assert_eq!(m.unknown_sections, vec!["workspace"]);
+    let err = toml.parse::<Manifest>().unwrap_err();
+    assert_matches!(err, ManifestError::WorkspaceInManifest);
+    assert!(err.to_string().contains("wado-workspace.toml"));
 }
 
 #[test]

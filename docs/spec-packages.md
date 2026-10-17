@@ -76,7 +76,8 @@ The manifest holds these tables:
 A key the manifest does not define draws a warning and is ignored. This holds at
 the top level, in `[package]`, in `[workspace.package]`, and in the table form of
 a `[world]` entry. A misspelled key is reported, and the build goes on. Every
-other mistake in a manifest is an error.
+other mistake in a manifest is an error. `[workspace]` is one: it belongs in a
+`wado-workspace.toml` ([Workspaces](#workspaces)), and the error says so.
 
 ```toml
 [package]
