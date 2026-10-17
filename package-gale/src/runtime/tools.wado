@@ -7,10 +7,7 @@ struct CharIndexCursor {
 
 impl CharIndexCursor {
     fn advance_to(&mut self, src: &StrSlice, byte: i32) -> i32 {
-        if byte < self.byte {
-            self.byte = 0;
-            self.char = 0;
-        }
+        assert byte >= self.byte, "to_lexer_string visits tokens in source order";
         self.char += char_count(src, self.byte, byte);
         self.byte = byte;
         return self.char;

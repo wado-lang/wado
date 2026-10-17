@@ -163,15 +163,14 @@ pub fn highlight_html<S: AsStrSlice>(source: S, captures: &List<HighlightCapture
     let mut out = String::with_capacity(source.len() * 5);
     let mut at = 0;
     for let cap of captures {
-        let start = i32::max(at, cap.start);
-        let end = i32::max(start, cap.end);
-        push_html_escaped(&mut out, source, at, start);
+        assert at <= cap.start <= cap.end, "captures are in source order and disjoint";
+        push_html_escaped(&mut out, source, at, cap.start);
         out.push_str("<span class=\"");
         out.push_str(&classes[cap.capture_id]);
         out.push_str("\">");
-        push_html_escaped(&mut out, source, start, end);
+        push_html_escaped(&mut out, source, cap.start, cap.end);
         out.push_str("</span>");
-        at = end;
+        at = cap.end;
     }
     push_html_escaped(&mut out, source, at, source.len());
     return out;

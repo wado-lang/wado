@@ -194,7 +194,9 @@ test "gen_lexer: an ASCII class reads one byte, any other class decodes a char" 
     let out = lexer_source("lexer grammar L; A : [a-z] ; B : [é] ; C : ~[a] ;");
     assert out.contains("if !(unchecked src.byte_at(pos) matches { b'a'..=b'z' }) { return -1; }\n    pos += 1;");
     assert out.contains("if !(char_at(src, pos) matches { 'é' }) { return -1; }\n    pos = char_end(src, pos);");
-    assert out.contains("if (unchecked src.byte_at(pos) matches { b'a' }) { return -1; }\n    pos = char_end(src, pos);");
+    assert out.contains(
+        "if (unchecked src.byte_at(pos) matches { b'a' }) { return -1; }\n    pos = char_end(src, pos);",
+    );
 }
 
 test "gen_lexer: a large class is one shared function, however many sites test it" {
