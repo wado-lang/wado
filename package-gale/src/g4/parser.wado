@@ -42,6 +42,7 @@ use {
     check_rule_shapes,
     synthesize_implicit_tokens,
     compose_grammars,
+    imported_names,
     superclass_bases,
 } from "../ir.wado";
 use { G4Token, Token } from "./token.wado";
@@ -54,7 +55,7 @@ use {
 } from "./lexer.wado";
 use { collect_range } from "../text.wado";
 use { push_unique } from "../list_util.wado";
-use { scan_balanced, is_id_continue_char, is_rule_name_upper } from "./scan.wado";
+use { scan_balanced, split_top_level_commas, is_id_continue_char, is_rule_name_upper } from "./scan.wado";
 use {
     clip_to_scalars,
     complement_char_ranges,
@@ -312,6 +313,7 @@ impl G4Parser {
         let mut lexer_rules: List<LexerRule> = [];
         let mut mode_names: List<String> = ["DEFAULT_MODE"];
         let mut current_mode: i32 = DEFAULT_MODE;
+        let mut misplaced_rule: Option<ParseError> = null;
 
         while !self.at_eof() {
             if self.is_kind(G4Token::Identifier) && self.peek().text == "mode" {
@@ -361,7 +363,19 @@ impl G4Parser {
             let rule_name = rule_name_tok.text;
             let rule_name_span = rule_name_tok.span;
 
-            if is_lexer_grammar || is_frag || is_lexer_rule_name(&rule_name) {
+            let is_lexer_rule = is_frag || is_lexer_rule_name(&rule_name);
+            if misplaced_rule matches { None } {
+                if is_parser_grammar && is_lexer_rule {
+                    misplaced_rule = Option::Some(
+                        ParseError::new(`lexer rule ${rule_name} not allowed in parser`, rule_name_span, ["parser rule"]),
+                    );
+                } else if is_lexer_grammar && !is_lexer_rule {
+                    misplaced_rule = Option::Some(
+                        ParseError::new(`parser rule ${rule_name} not allowed in lexer`, rule_name_span, ["lexer rule"]),
+                    );
+                }
+            }
+            if is_lexer_rule {
                 for let existing of &lexer_rules {
                     if existing.name == rule_name {
                         return Result::<Grammar, ParseError>::Err(
@@ -375,7 +389,15 @@ impl G4Parser {
                 }
                 let mut rule = self.parse_lexer_rule(rule_name, is_frag, current_mode, &mut mode_names)?;
                 rule.visibility = visibility;
-                let _ = self.parse_exception_group();
+                if self.at_exception_clause() {
+                    return Result::<Grammar, ParseError>::Err(
+                        ParseError::new(
+                            "a lexer rule takes no `catch` or `finally` clause",
+                            self.peek().span,
+                            ["rule definition"],
+                        ),
+                    );
+                }
                 lexer_rules.push(rule);
             } else {
                 for let existing of &parser_rules {
@@ -391,7 +413,7 @@ impl G4Parser {
                 }
                 let mut rule = self.parse_parser_rule(rule_name)?;
                 rule.visibility = visibility;
-                let exc = self.parse_exception_group();
+                let exc = self.parse_exception_group()?;
                 rule.catches = exc.catches;
                 rule.finally_action = exc.finally_action;
                 parser_rules.push(rule);
@@ -436,6 +458,7 @@ impl G4Parser {
                 source_files,
                 lexer_superclass,
                 parser_superclass,
+                misplaced_rule,
             },
         );
     }
@@ -456,8 +479,7 @@ impl G4Parser {
                 }
                 if *text == "options" {
                     self.advance();
-                    let opts = self.parse_options_block();
-                    for let o of opts {
+                    for let o of self.parse_options_block()? {
                         self.options.push(o);
                     }
                     continue;
@@ -492,22 +514,13 @@ impl G4Parser {
         }
         let brace_span = self.peek().span;
         self.advance();
+        // `ident (, ident)*`, possibly empty, with no trailing comma: what the
+        // jar admits.
         while !self.at_eof() && !self.is_kind(G4Token::RBrace) {
-            if self.is_kind(G4Token::Identifier) {
-                names.push(self.peek().text);
-                self.advance();
-                if self.is_kind(G4Token::Assign) {
-                    self.advance();
-                    if self.is_kind(G4Token::IntLit) {
-                        self.advance();
-                    }
-                }
-            } else {
-                self.advance();
+            if !names.is_empty() {
+                self.expect(G4Token::Comma)?;
             }
-            if self.is_kind(G4Token::Comma) {
-                self.advance();
-            }
+            names.push(self.expect(G4Token::Identifier)?.text);
         }
         if !self.is_kind(G4Token::RBrace) {
             let mut msg = String::with_capacity(56);
@@ -582,64 +595,57 @@ impl G4Parser {
         return Result::<(), ParseError>::Ok(());
     }
 
-    fn parse_options_block(&mut self) -> List<GrammarOption> {
+    /// `{ (name = value ;)* }`, each `;` required, as the jar requires it.
+    fn parse_options_block(&mut self) -> Result<List<GrammarOption>, ParseError> {
         let mut out: List<GrammarOption> = [];
-        if !self.is_kind(G4Token::LBrace) {
-            return out;
+        self.expect(G4Token::LBrace)?;
+        while !self.is_kind(G4Token::RBrace) {
+            let name = self.expect(G4Token::Identifier)?.text;
+            self.expect(G4Token::Assign)?;
+            let value = self.parse_option_value()?;
+            out.push(GrammarOption { name, value });
+            self.expect(G4Token::Semicolon)?;
         }
         self.advance();
-        while !self.at_eof() && !self.is_kind(G4Token::RBrace) {
-            if !self.is_kind(G4Token::Identifier) {
-                self.advance();
-                continue;
-            }
-            let name = self.peek().text;
-            self.advance();
-            if !self.is_kind(G4Token::Assign) {
-                while !self.at_eof() && !self.is_kind(G4Token::Semicolon) && !self.is_kind(G4Token::RBrace) {
-                    self.advance();
-                }
-                if self.is_kind(G4Token::Semicolon) {
-                    self.advance();
-                }
-                continue;
-            }
-            self.advance();
-            let value = self.parse_option_value();
-            out.push(GrammarOption { name, value });
-            if self.is_kind(G4Token::Semicolon) {
-                self.advance();
-            }
-        }
-        if self.is_kind(G4Token::RBrace) {
-            self.advance();
-        }
-        return out;
+        return Result::Ok(out);
     }
 
-    fn parse_option_value(&mut self) -> OptionValue {
+    /// The integer literal at the cursor, rejected past `max`.
+    fn take_int_literal(&mut self, max: i64) -> Result<i64, ParseError> {
+        let tok = self.advance();
+        return match i64::from_str(&tok.text) {
+            Ok(v) && v <= max => Result::Ok(v),
+            _ => Result::Err(ParseError::new(`${tok.text} is out of range`, tok.span, [`at most ${max}`])),
+        };
+    }
+
+    fn parse_option_value(&mut self) -> Result<OptionValue, ParseError> {
         if self.is_kind(G4Token::StringLit) {
             let body = self.peek().text;
             self.advance();
-            return OptionValue::Str(body);
+            return Result::Ok(OptionValue::Str(body));
         }
         if self.is_kind(G4Token::IntLit) {
-            let text = self.peek().text;
-            self.advance();
-            return OptionValue::Int(parse_int_literal(&text) as i64);
+            return Result::Ok(OptionValue::Int(self.take_int_literal(i64::MAX)?));
         }
         if self.is_kind(G4Token::LBrace) {
             let body = self.extract_action('{', '}');
-            return OptionValue::Action(body);
+            return Result::Ok(OptionValue::Action(body));
         }
         if self.is_kind(G4Token::Identifier) {
             let parts = self.parse_dotted_name();
             if parts.len() == 1 {
-                return OptionValue::Ident(parts[0]);
+                return Result::Ok(OptionValue::Ident(parts[0]));
             }
-            return OptionValue::Qualified(parts);
+            return Result::Ok(OptionValue::Qualified(parts));
         }
-        return OptionValue::Ident("");
+        return Result::Err(
+            ParseError::new(
+                found_desc(self.peek()),
+                self.peek().span,
+                ["an identifier", "a string", "an integer", "an action"],
+            ),
+        );
     }
 
     fn parse_named_action(&mut self) -> NamedAction {
@@ -743,7 +749,7 @@ impl G4Parser {
             }
             self.advance();
             let value_span = self.peek().span;
-            let value = self.parse_option_value();
+            let value = self.parse_option_value()?;
             if name == "assoc" {
                 let mut valid = false;
                 if let Ident(v) = &value {
@@ -770,7 +776,7 @@ impl G4Parser {
     }
 
     fn parse_parser_rule<S: AsStrSlice>(&mut self, name: S) -> Result<ParserRule, ParseError> {
-        let prequel = self.parse_rule_prequel();
+        let prequel = self.parse_rule_prequel()?;
         self.expect(G4Token::Colon)?;
         self.current_rule = name.to_string();
         let alternatives = self.parse_alternatives()?;
@@ -786,7 +792,7 @@ impl G4Parser {
         return Result::<ParserRule, ParseError>::Ok(rule);
     }
 
-    fn parse_rule_prequel(&mut self) -> RulePrequel {
+    fn parse_rule_prequel(&mut self) -> Result<RulePrequel, ParseError> {
         let mut p = RulePrequel {};
         loop {
             if self.is_kind(G4Token::CharClass) {
@@ -801,15 +807,14 @@ impl G4Parser {
                 let is_returns = *text == "returns";
                 let is_locals = *text == "locals";
                 if is_returns || is_locals {
+                    let what = if is_returns { "`[...]` after `returns`" } else { "`[...]` after `locals`" };
                     self.advance();
-                    if self.is_kind(G4Token::CharClass) {
-                        let act = self.extract_action('[', ']');
-                        for let d of parse_attr_decls(&act.text, act.span) {
-                            if is_returns {
-                                p.returns_decls.push(d);
-                            } else {
-                                p.locals_decls.push(d);
-                            }
+                    let act = self.expect_action(G4Token::CharClass, what)?;
+                    for let d of parse_attr_decls(&act.text, act.span) {
+                        if is_returns {
+                            p.returns_decls.push(d);
+                        } else {
+                            p.locals_decls.push(d);
                         }
                     }
                     continue;
@@ -823,8 +828,7 @@ impl G4Parser {
                 }
                 if *text == "options" {
                     self.advance();
-                    let opts = self.parse_options_block();
-                    for let o of opts {
+                    for let o of self.parse_options_block()? {
                         p.options.push(o);
                     }
                     continue;
@@ -841,7 +845,7 @@ impl G4Parser {
             }
             break;
         }
-        return p;
+        return Result::Ok(p);
     }
 
     /// An identifier and each `.ident` after it; a `.` not followed by an
@@ -872,36 +876,36 @@ impl G4Parser {
         return out;
     }
 
-    fn parse_exception_group(&mut self) -> ExceptionGroup {
+    fn at_exception_clause(&self) -> bool {
+        return self.is_kind(G4Token::Identifier) && (self.peek().text == "catch" || self.peek().text == "finally");
+    }
+
+    /// `catch [decl] { body }`, any number, then at most one `finally { body }`.
+    fn parse_exception_group(&mut self) -> Result<ExceptionGroup, ParseError> {
         let mut g = ExceptionGroup {};
-        loop {
-            if !self.is_kind(G4Token::Identifier) {
-                break;
-            }
-            let text = &self.peek().text;
-            if *text == "catch" {
-                self.advance();
-                let mut decl_text = "";
-                if self.is_kind(G4Token::CharClass) {
-                    decl_text = self.extract_action('[', ']').text;
-                }
-                let mut body = ActionSource {};
-                if self.is_kind(G4Token::LBrace) {
-                    body = self.extract_action('{', '}');
-                }
-                g.catches.push(CatchClause { decl_text, body });
-                continue;
-            }
-            if *text == "finally" {
-                self.advance();
-                if self.is_kind(G4Token::LBrace) {
-                    g.finally_action = Option::<ActionSource>::Some(self.extract_action('{', '}'));
-                }
-                break;
-            }
-            break;
+        while self.is_kind(G4Token::Identifier) && self.peek().text == "catch" {
+            self.advance();
+            let decl_text = self.expect_action(G4Token::CharClass, "`[...]` after `catch`")?.text;
+            let body = self.expect_action(G4Token::LBrace, "`{...}` after `catch [...]`")?;
+            g.catches.push(CatchClause { decl_text, body });
         }
-        return g;
+        if self.is_kind(G4Token::Identifier) && self.peek().text == "finally" {
+            self.advance();
+            g.finally_action = Option::<ActionSource>::Some(
+                self.expect_action(G4Token::LBrace, "`{...}` after `finally`")?,
+            );
+        }
+        return Result::Ok(g);
+    }
+
+    /// The `[...]` or `{...}` block `kind` names, which the grammar requires here.
+    fn expect_action<S: AsStrSlice>(&mut self, kind: G4Token, what: S) -> Result<ActionSource, ParseError> {
+        if !self.is_kind(kind) {
+            return Result::Err(ParseError::new(`expected ${what}`, self.peek().span, [what.to_string()]));
+        }
+        return Result::Ok(
+            if kind matches { CharClass } { self.extract_action('[', ']') } else { self.extract_action('{', '}') },
+        );
     }
 
     fn parse_alternatives(&mut self) -> Result<List<Alternative>, ParseError> {
@@ -1011,6 +1015,11 @@ impl G4Parser {
                 options = self.parse_angle_options()?;
             }
             if is_lexer_rule_name(&name) {
+                if let Some(arg) = &arg_action {
+                    return Result::Err(
+                        ParseError::new(`token reference ${name} takes no argument`, arg.span, ["a rule reference"]),
+                    );
+                }
                 self.pending_refs.push(PendingRef {
                     kind: RefKind::TokenRef,
                     containing_rule: self.current_rule,
@@ -1044,7 +1053,7 @@ impl G4Parser {
         }
         if self.is_kind(G4Token::LParen) {
             self.advance();
-            let options = self.parse_block_prequel();
+            let options = self.parse_block_prequel()?;
             let alternatives = self.parse_alternatives()?;
             self.expect(G4Token::RParen)?;
             return Result::<Element, ParseError>::Ok(
@@ -1089,14 +1098,15 @@ impl G4Parser {
         );
     }
 
-    fn parse_block_prequel(&mut self) -> List<GrammarOption> {
+    /// `options { ... }` and `@name { ... }` at the head of a block, closed by
+    /// the `:` the jar requires after them.
+    fn parse_block_prequel(&mut self) -> Result<List<GrammarOption>, ParseError> {
         let mut options: List<GrammarOption> = [];
         let mut consumed = false;
         loop {
             if self.is_kind(G4Token::Identifier) && self.peek().text == "options" {
                 self.advance();
-                let opts = self.parse_options_block();
-                for let o of opts {
+                for let o of self.parse_options_block()? {
                     options.push(o);
                 }
                 consumed = true;
@@ -1109,10 +1119,10 @@ impl G4Parser {
             }
             break;
         }
-        if consumed && self.is_kind(G4Token::Colon) {
-            self.advance();
+        if consumed {
+            self.expect(G4Token::Colon)?;
         }
-        return options;
+        return Result::Ok(options);
     }
 
     fn parse_repeat_op(&mut self) -> Option<[RepeatKind, bool]> {
@@ -1151,7 +1161,12 @@ impl G4Parser {
         mode: i32,
         mode_names: &mut List<String>,
     ) -> Result<LexerRule, ParseError> {
-        let options = self.parse_rule_prequel().options;
+        // Only `options` may stand between a lexer rule's name and its `:`.
+        let mut options: List<GrammarOption> = [];
+        if self.is_kind(G4Token::Identifier) && self.peek().text == "options" {
+            self.advance();
+            options = self.parse_options_block()?;
+        }
         self.expect(G4Token::Colon)?;
         self.current_rule = name.to_string();
         let body = self.parse_lexer_alternatives()?;
@@ -1207,6 +1222,33 @@ impl G4Parser {
         return Result::<String, ParseError>::Ok(arg);
     }
 
+    /// A channel number that fits `i32`, or a channel name.
+    fn parse_channel_arg(&mut self) -> Result<i32, ParseError> {
+        if self.is_kind(G4Token::IntLit) {
+            return Result::Ok(self.take_int_literal(i32::MAX as i64)? as i32);
+        }
+        let arg = self.expect(G4Token::Identifier)?;
+        if arg.text == "DEFAULT_TOKEN_CHANNEL" {
+            return Result::Ok(DEFAULT_CHANNEL);
+        }
+        if arg.text == "HIDDEN" {
+            return Result::Ok(HIDDEN_CHANNEL);
+        }
+        for let mut i = 0; i < self.channels.len(); i += 1 {
+            if self.channels[i] == arg.text {
+                return Result::Ok(i + 2);
+            }
+        }
+        let expected: List<String> = ["a channel declared in `channels { }`"];
+        return Result::Err(
+            ParseError::new(
+                `channel "${arg.text}" is not declared in a \`channels { ... }\` block`,
+                arg.span,
+                expected,
+            ),
+        );
+    }
+
     fn parse_lexer_actions(
         &mut self,
         actions: &mut LexerCommands,
@@ -1239,34 +1281,8 @@ impl G4Parser {
                 },
                 "channel" => {
                     self.expect(G4Token::LParen)?;
-                    let arg = self.advance();
+                    actions.channel = self.parse_channel_arg()?;
                     self.expect(G4Token::RParen)?;
-                    if arg.text == "DEFAULT_TOKEN_CHANNEL" {
-                        actions.channel = DEFAULT_CHANNEL;
-                    } else if arg.text == "HIDDEN" {
-                        actions.channel = HIDDEN_CHANNEL;
-                    } else if arg.kind == G4Token::IntLit.code() {
-                        actions.channel = parse_int_literal(&arg.text);
-                    } else {
-                        let name = arg.text;
-                        let mut resolved = -1;
-                        for let mut i = 0; i < self.channels.len(); i += 1 {
-                            if self.channels[i] == name {
-                                resolved = i + 2;
-                            }
-                        }
-                        if resolved < 0 {
-                            let expected: List<String> = ["a channel declared in `channels { }`"];
-                            return Result::<(), ParseError>::Err(
-                                ParseError::new(
-                                    `channel "${name}" is not declared in a \`channels { ... }\` block`,
-                                    arg.span,
-                                    expected,
-                                ),
-                            );
-                        }
-                        actions.channel = resolved;
-                    }
                 },
                 "type" => {
                     actions.type_override = Option::<String>::Some(
@@ -1505,15 +1521,24 @@ fn parse_char_class<S: AsStrSlice>(text: S, span: Span) -> Result<CharClass, Par
     while pos < end {
         if at_property_escape(&chars, pos, end) {
             let complement = chars[pos + 1] == 'P';
+            let start = pos;
             pos += 3;
             let mut prop = String::with_capacity(16);
             while pos < end && chars[pos] != '}' {
                 prop.push(chars[pos]);
                 pos += 1;
             }
-            if pos < end {
-                pos += 1;
+            if pos == end {
+                let expected: List<String> = ["`}` closing the property"];
+                return Result::Err(
+                    ParseError::new(
+                        `invalid escape sequence ${collect_range(&chars, start, end)}`,
+                        Span::new(span.start + start, span.start + end),
+                        expected,
+                    ),
+                );
             }
+            pos += 1;
             let mut prop_ranges: List<CharRange> = [];
             if !expand_unicode_property(&prop, &mut prop_ranges) {
                 let expected: List<String> = ["a supported Unicode property"];
@@ -1607,33 +1632,11 @@ struct RulePrequel {
 
 fn parse_attr_decls<S: AsStrSlice>(body: S, list_span: Span) -> List<AttrDecl> {
     let chars: List<char> = body.chars().collect();
-    let n = chars.len();
     let mut out: List<AttrDecl> = [];
-    let mut depth = 0;
-    let mut seg = String::with_capacity(16);
-    let mut i = 0;
-    while i <= n {
-        let c = if i == n { ',' } else { chars[i] };
-        match c {
-            '<' | '[' | '(' => {
-                depth += 1;
-                seg.push(c);
-            },
-            '>' | ']' | ')' => {
-                if depth > 0 {
-                    depth -= 1;
-                }
-                seg.push(c);
-            },
-            ',' && depth == 0 => {
-                if let Some(d) = split_attr_decl(&seg, list_span) {
-                    out.push(d);
-                }
-                seg = String::with_capacity(16);
-            },
-            _ => seg.push(c),
+    for let seg of &split_top_level_commas(&chars, true) {
+        if let Some(d) = split_attr_decl(seg, list_span) {
+            out.push(d);
         }
-        i += 1;
     }
     return out;
 }
@@ -1690,15 +1693,6 @@ fn scan_balanced_or_end(chars: &List<char>, start: i32, open: char, close: char)
     };
 }
 
-fn parse_int_literal<S: AsStrSlice>(text: S) -> i32 {
-    let mut value: i32 = 0;
-    for let c of text.chars() {
-        let digit = c as i32 - '0' as i32;
-        value = value * 10 + digit;
-    }
-    return value;
-}
-
 pub fn parse<S: AsStrSlice>(input: S) -> Result<Grammar, ParseError> {
     let chars: List<char> = input.chars().collect();
     let tokens = tokenize_chars(&chars);
@@ -1719,8 +1713,17 @@ fn finish_grammar(grammar: &mut Grammar) -> Result<(), ParseError> {
 #[allow(dead_code)]
 pub fn parse_checked<S: AsStrSlice>(input: S) -> Result<Grammar, ParseError> {
     let mut grammar = parse(input)?;
+    check_rule_kinds(&grammar)?;
     finish_grammar(&mut grammar)?;
     return Result::<Grammar, ParseError>::Ok(grammar);
+}
+
+/// The misplaced rule a grammar compiled as a root reports.
+fn check_rule_kinds(grammar: &Grammar) -> Result<(), ParseError> {
+    return match &grammar.misplaced_rule {
+        Some(e) => Result::Err(*e),
+        None => Result::Ok(()),
+    };
 }
 
 pub variant AssembleError {
@@ -1739,6 +1742,15 @@ pub fn assemble_grammar(inputs: &List<[String, String]>) -> Result<Grammar, Asse
             Err(e) => {
                 return Result::Err(AssembleError::Parse([inp.0, e.full_message()]));
             },
+        }
+    }
+    let delegates = imported_names(&grammars);
+    for let g of &grammars {
+        if delegates.contains(&g.name) {
+            continue;
+        }
+        if let Err(e) = check_rule_kinds(g) {
+            return Result::Err(AssembleError::Parse([g.source_files[0], e.full_message()]));
         }
     }
     let mut merged = match compose_grammars(grammars) {

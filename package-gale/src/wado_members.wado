@@ -1,5 +1,6 @@
 use { MemberField, MemberMethod, MemberDecls } from "./java2wado/jmembers.wado";
 use { collect_range, is_ident_char } from "./text.wado";
+use { wado_opaque_end } from "./g4/scan.wado";
 
 pub fn translate_wado_members<S: AsStrSlice>(body: S) -> Result<MemberDecls, String> {
     let chars: List<char> = body.chars().collect();
@@ -232,38 +233,5 @@ fn scan_to(chars: &List<char>, start: i32, n: i32, target: char) -> i32 {
 }
 
 fn skip_span(chars: &List<char>, i: i32, n: i32) -> i32 {
-    let c = chars[i];
-    if c == '"' || c == '\'' || c == '`' {
-        return skip_quoted(chars, i, n, c);
-    }
-    if c == '/' && i + 1 < n && chars[i + 1] == '/' {
-        let mut j = i + 2;
-        while j < n && chars[j] != '\n' {
-            j += 1;
-        }
-        return j;
-    }
-    if c == '/' && i + 1 < n && chars[i + 1] == '*' {
-        let mut j = i + 2;
-        while j + 1 < n && !(chars[j] == '*' && chars[j + 1] == '/') {
-            j += 1;
-        }
-        return if j + 1 < n { j + 2 } else { n };
-    }
-    return i + 1;
-}
-
-fn skip_quoted(chars: &List<char>, open: i32, n: i32, quote: char) -> i32 {
-    let mut i = open + 1;
-    while i < n {
-        if chars[i] == '\\' {
-            i += 2;
-            continue;
-        }
-        if chars[i] == quote {
-            return i + 1;
-        }
-        i += 1;
-    }
-    return n;
+    return wado_opaque_end(chars, i, n).unwrap_or(i + 1);
 }

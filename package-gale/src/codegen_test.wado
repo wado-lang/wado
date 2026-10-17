@@ -2985,6 +2985,17 @@ WS : [ \\t]+ -> skip ;
     assert got == "a b => (s (e a) (e b)) [3 13 ]\n";
 }
 
+test "a `<` in a call argument is a comparison, not a bracket" {
+    let got = parses("grammar T;
+s : a=n e[$a.v < 2, $a.v] EOF ;
+n returns [int v] : ID { $v = 1; } ;
+e[boolean x, int y] : ID { System.out.print($x + \" \" + $y); } ;
+ID : [a-z]+ ;
+WS : [ \\t]+ -> skip ;
+", "s", ["a b"]);
+    assert got == "a b => (s (n a) (e b)) [true 1]\n";
+}
+
 // `args` scopes the gate for its own extent (`locals` + `@init` / `@after`), so
 // the ban on the braced form resumes after the `)`; the scan has to restore it
 // the same way or it disagrees with the parse about the head's tail.

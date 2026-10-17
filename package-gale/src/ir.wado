@@ -211,6 +211,11 @@ pub struct Grammar {
     /// `options` — answer which base a call site reaches.
     pub lexer_superclass: String = "",
     pub parser_superclass: String = "",
+    /// The first rule of the kind this grammar's header forbids: a lexer rule
+    /// in a `parser grammar`, a parser rule in a `lexer grammar`. The jar
+    /// rejects it in a grammar compiled on its own and accepts it in an
+    /// imported one, so only a grammar no import names reports it.
+    pub misplaced_rule: Option<ParseError> = null,
 }
 
 /// The `[lexer, parser]` bases a grammar declares: a `lexer grammar` names the
@@ -1397,7 +1402,7 @@ pub fn compose_grammars(grammars: List<Grammar>) -> Result<Grammar, ParseError> 
 }
 
 /// Every name some grammar's `import` lists, in first-declaration order.
-fn imported_names(grammars: &List<Grammar>) -> List<String> {
+pub fn imported_names(grammars: &List<Grammar>) -> List<String> {
     let mut names: List<String> = [];
     for let g of grammars {
         dedup_append_arr(&mut names, &g.imports);
