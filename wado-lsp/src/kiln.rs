@@ -192,7 +192,9 @@ async fn resolve_invocation<H: CompilerHost>(
     Ok(path_to_kiln_uri(&canonicalized(abs_entry)))
 }
 
-/// The nearest ancestor of `start` whose `wado.toml` the host can load.
+/// The nearest ancestor of `start` whose `wado.toml` the host can load, short
+/// of a `wado-workspace.toml`, as [`crate::host::discovery::nearest_manifest_dir`]
+/// walks.
 ///
 /// A relative `start` — every non-`file:` document URI — has no workspace to
 /// anchor against and yields `None` rather than walking the process's cwd.
@@ -205,6 +207,10 @@ async fn nearest_manifest_dir<H: CompilerHost>(start: &Path, host: &H) -> Option
         let manifest = dir.join(wado_manifest::MANIFEST_FILENAME);
         if host.source_exists(&manifest.display().to_string()).await {
             return Some(dir);
+        }
+        let workspace = dir.join(wado_manifest::WORKSPACE_FILENAME);
+        if host.source_exists(&workspace.display().to_string()).await {
+            return None;
         }
     }
     None

@@ -973,7 +973,6 @@ pub fn empty_manifest() -> wado_manifest::Manifest {
         dependencies: indexmap::IndexMap::new(),
         dev_dependencies: indexmap::IndexMap::new(),
         build_dependencies: indexmap::IndexMap::new(),
-        workspace: None,
         test: wado_manifest::TestSettings::default(),
         format: wado_manifest::FormatSettings::default(),
         unknown_sections: Vec::new(),

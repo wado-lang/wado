@@ -2,12 +2,15 @@ use std::env;
 use std::path::{Component, Path, PathBuf};
 use std::{fs, io};
 
-use wado_lsp::host::discovery::{absolutize, governing_workspace, normalize_path};
-use wado_manifest::{DependencySource, Manifest, ManifestError};
+use wado_lsp::host::discovery::{
+    absolutize, governing_workspace, normalize_path, resolve_member_manifest,
+};
+use wado_manifest::{
+    DependencySource, MANIFEST_FILENAME, Manifest, ManifestError, WORKSPACE_FILENAME,
+    WorkspaceManifest,
+};
 
 use crate::args::CliExit;
-
-const MANIFEST_FILENAME: &str = "wado.toml";
 
 /// A discovered manifest with its root directory.
 #[derive(Debug, Clone)]
@@ -51,27 +54,42 @@ pub fn discover(start_dir: &Path) -> Result<Option<ProjectManifest>, DiscoveryEr
     Ok(Some(ProjectManifest { manifest, root }))
 }
 
-/// The nearest directory at or above `start_dir` holding a `wado.toml`.
+/// The nearest directory at or above `start_dir` holding a `wado.toml`, short
+/// of one holding a `wado-workspace.toml`, which no package encloses.
 pub(crate) fn package_root(start_dir: &Path) -> Option<PathBuf> {
     let mut dir = start_dir.to_path_buf();
     loop {
         if dir.join(MANIFEST_FILENAME).is_file() {
             return Some(openable_dir(&dir).to_path_buf());
         }
+        if dir.join(WORKSPACE_FILENAME).is_file() {
+            return None;
+        }
         dir = parent_dir(&dir)?;
     }
 }
 
+/// The `wado-workspace.toml` in `dir` itself, parsed: `None` when `dir` has none.
+pub(crate) fn workspace_in(dir: &Path) -> Result<Option<WorkspaceManifest>, DiscoveryError> {
+    let Ok(content) = fs::read_to_string(dir.join(WORKSPACE_FILENAME)) else {
+        return Ok(None);
+    };
+    if dir.join(MANIFEST_FILENAME).is_file() {
+        return Err(DiscoveryError::Parse(ManifestError::PackageInWorkspace));
+    }
+    content.parse().map(Some).map_err(DiscoveryError::Parse)
+}
+
 /// The files besides sources that decide how `project` resolves its imports:
-/// its own manifest and lock, the manifest of the workspace governing it, and
-/// each path dependency's manifest, which names that dependency's entry.
+/// its own manifest and lock, the workspace file governing it, and each path
+/// dependency's manifest, which names that dependency's entry.
 pub(crate) fn resolution_inputs(project: &ProjectManifest) -> Vec<PathBuf> {
     let mut files = vec![
         project.root.join(MANIFEST_FILENAME),
         project.root.join("wado.lock"),
     ];
-    if let Ok(Some(workspace)) = governing_workspace_root_dir(&project.root) {
-        files.push(workspace.join(MANIFEST_FILENAME));
+    if let Some(workspace) = governing_workspace_root_dir(&project.root) {
+        files.push(workspace.join(WORKSPACE_FILENAME));
     }
     for dependency in project.manifest.dependencies.values() {
         if let DependencySource::Path { path, .. } = &dependency.source {
@@ -140,26 +158,13 @@ pub(crate) fn resolve_manifest(
     member_dir: &Path,
     member_content: &str,
 ) -> Result<Manifest, DiscoveryError> {
-    match find_workspace_root(member_dir, member_content) {
-        Some(root_content) => wado_manifest::resolve_member(member_content, &root_content)
-            .map_err(DiscoveryError::Parse),
-        None => member_content.parse().map_err(DiscoveryError::Parse),
-    }
+    resolve_member_manifest(member_dir, member_content).map_err(DiscoveryError::Parse)
 }
 
-/// The workspace-root `wado.toml` contents governing `member_dir`, if any.
-fn find_workspace_root(member_dir: &Path, member_content: &str) -> Option<String> {
-    governing_workspace(member_dir, member_content).map(|(_, content)| content)
-}
-
-/// The workspace root directory governing the package at `member_dir`, if it is
-/// a workspace member. Used to gate `wado publish` to the workspace root.
-pub(crate) fn governing_workspace_root_dir(
-    member_dir: &Path,
-) -> Result<Option<PathBuf>, DiscoveryError> {
-    let content =
-        fs::read_to_string(member_dir.join(MANIFEST_FILENAME)).map_err(DiscoveryError::Io)?;
-    Ok(governing_workspace(member_dir, &content).map(|(dir, _)| dir))
+/// The directory of the workspace governing the package at `member_dir`, if it
+/// is a workspace member. Used to gate `wado publish` to the workspace.
+pub(crate) fn governing_workspace_root_dir(member_dir: &Path) -> Option<PathBuf> {
+    governing_workspace(member_dir).map(|(dir, _)| dir)
 }
 
 /// The directory a `license-file` path resolves against: the package's own root
@@ -172,9 +177,7 @@ pub(crate) fn license_file_base_dir(package_root: &Path) -> PathBuf {
     if own_manifest_declares_license_slot(&content) {
         return package_root.to_path_buf();
     }
-    governing_workspace(package_root, &content)
-        .map(|(dir, _)| dir)
-        .unwrap_or_else(|| package_root.to_path_buf())
+    governing_workspace_root_dir(package_root).unwrap_or_else(|| package_root.to_path_buf())
 }
 
 /// Whether `[package]` sets `license` or `license-file` directly.
@@ -797,7 +800,7 @@ authors = ["Alice"]
     #[test]
     fn member_inherits_workspace_metadata_via_discovery() {
         let tmp = tempfile::tempdir().unwrap();
-        write(&tmp.path().join("wado.toml"), WS_ROOT);
+        write(&tmp.path().join(WORKSPACE_FILENAME), WS_ROOT);
         let member_dir = tmp.path().join("packages/core");
         write(
             &member_dir.join("wado.toml"),
@@ -812,28 +815,43 @@ authors = ["Alice"]
     }
 
     #[test]
-    fn workspace_root_that_is_also_a_package_parses_standalone() {
+    fn a_manifest_beside_a_workspace_is_refused() {
         let tmp = tempfile::tempdir().unwrap();
-        let toml = format!(
-            "{WS_ROOT}\n[package]\nname = \"root-pkg\"\nversion = \"0.1.0\"\nrepository = \"https://github.com/org/monorepo\"\nnamespace = \"org\"\n"
+        write(&tmp.path().join(WORKSPACE_FILENAME), WS_ROOT);
+        write(
+            &tmp.path().join("wado.toml"),
+            "[package]\nname = \"root-pkg\"\nversion = \"0.1.0\"\n",
         );
-        write(&tmp.path().join("wado.toml"), &toml);
-        let project = discover(tmp.path()).unwrap().unwrap();
-        assert_eq!(project.manifest.package.unwrap().name, "root-pkg");
+        let refused = |err: DiscoveryError| {
+            matches!(err, DiscoveryError::Parse(ManifestError::PackageInWorkspace))
+        };
+        assert!(refused(discover(tmp.path()).unwrap_err()));
+        assert!(refused(workspace_in(tmp.path()).unwrap_err()));
+    }
+
+    #[test]
+    fn no_package_encloses_a_file_under_a_workspace() {
+        let tmp = tempfile::tempdir().unwrap();
+        write(&tmp.path().join("wado.toml"), "[package]\nname = \"outer\"\n");
+        let workspace = tmp.path().join("ws");
+        write(&workspace.join(WORKSPACE_FILENAME), WS_ROOT);
+        fs::create_dir_all(workspace.join("tools")).unwrap();
+        assert_eq!(package_root(&workspace.join("tools")), None);
     }
 
     #[test]
     fn governing_workspace_root_dir_identifies_root_for_member() {
         let tmp = tempfile::tempdir().unwrap();
-        write(&tmp.path().join("wado.toml"), WS_ROOT);
+        write(&tmp.path().join(WORKSPACE_FILENAME), WS_ROOT);
         let member_dir = tmp.path().join("packages/core");
         write(
             &member_dir.join("wado.toml"),
             "[package]\nname = \"core\"\nlib = \"src/lib.wado\"\n",
         );
-        let root = governing_workspace_root_dir(&member_dir).unwrap().unwrap();
-        assert_eq!(root, tmp.path());
-        assert!(governing_workspace_root_dir(tmp.path()).unwrap().is_none());
+        assert_eq!(
+            governing_workspace_root_dir(&member_dir).as_deref(),
+            Some(tmp.path())
+        );
     }
 
     #[test]
@@ -843,13 +861,13 @@ authors = ["Alice"]
             &tmp.path().join("wado.toml"),
             "[package]\nname = \"solo\"\nversion = \"0.1.0\"\nlib = \"src/lib.wado\"\n",
         );
-        assert!(governing_workspace_root_dir(tmp.path()).unwrap().is_none());
+        assert!(governing_workspace_root_dir(tmp.path()).is_none());
     }
 
     #[test]
     fn workspace_member_dirs_expands_globs() {
         let tmp = tempfile::tempdir().unwrap();
-        write(&tmp.path().join("wado.toml"), WS_ROOT);
+        write(&tmp.path().join(WORKSPACE_FILENAME), WS_ROOT);
         write(
             &tmp.path().join("packages/a/wado.toml"),
             "[package]\nname = \"a\"\n",
@@ -891,7 +909,7 @@ authors = ["Alice"]
     #[test]
     fn license_file_base_dir_inherited_uses_workspace_root() {
         let tmp = tempfile::tempdir().unwrap();
-        write(&tmp.path().join("wado.toml"), WS_ROOT_LICENSE_FILE);
+        write(&tmp.path().join(WORKSPACE_FILENAME), WS_ROOT_LICENSE_FILE);
         let member_dir = tmp.path().join("packages/core");
         write(
             &member_dir.join("wado.toml"),
@@ -904,7 +922,7 @@ authors = ["Alice"]
     #[test]
     fn license_file_base_dir_member_own_license_file_uses_member() {
         let tmp = tempfile::tempdir().unwrap();
-        write(&tmp.path().join("wado.toml"), WS_ROOT_LICENSE_FILE);
+        write(&tmp.path().join(WORKSPACE_FILENAME), WS_ROOT_LICENSE_FILE);
         let member_dir = tmp.path().join("packages/core");
         write(
             &member_dir.join("wado.toml"),
@@ -916,7 +934,7 @@ authors = ["Alice"]
     #[test]
     fn non_member_directory_does_not_inherit() {
         let tmp = tempfile::tempdir().unwrap();
-        write(&tmp.path().join("wado.toml"), WS_ROOT);
+        write(&tmp.path().join(WORKSPACE_FILENAME), WS_ROOT);
         let outside = tmp.path().join("tools/helper");
         write(
             &outside.join("wado.toml"),

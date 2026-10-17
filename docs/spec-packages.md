@@ -12,14 +12,15 @@ A package bounds how far `internal` reaches
 ([Package Boundary](./spec-traits.md#package-boundary)). A program's modules
 fall into packages this way:
 
-- The entry module, each local module whose nearest `wado.toml` above it is
-  the entry's, and the Wasm assets those modules import form one package. The
-  directory of that `wado.toml` is the package root. An entry with no
-  `wado.toml` above it has no package root, and every local module it reaches
-  through `./` / `../` imports is in its package.
-- Any other local module is in the package of the nearest `wado.toml` above
-  it, which may lie inside the entry's package root, or a package of its own
-  where none is above it. Either way it is another package, as a dependency is.
+- A local module is in the package of the nearest `wado.toml` above it, whose
+  directory is the package root. The search stops at a `wado-workspace.toml`
+  ([Workspaces](#workspaces)), so a module under a workspace that no package
+  holds is in none, whatever lies above the workspace.
+- The entry module, the local modules in its package, and the Wasm assets
+  those modules import form the package being compiled. Any other package a
+  local module is in is another package, as a dependency is.
+- The modules in no package share one scope, as a package does, and an entry
+  in no package is in that scope.
 - Each dependency is a package. A relative import inside a dependency stays in
   that dependency's package.
 - `core:*`, which is one package, and `wasi:*`, which is another. A test of
@@ -69,7 +70,6 @@ The manifest holds these tables:
 | `[dev-dependencies]`   | The packages only its development needs              | [Dependencies](#dependencies)                           |
 | `[build-dependencies]` | The Kiln generators its imports run                  | [Kiln Generators](./spec-kiln.md#manifest)              |
 | `[registries]`         | Names for the registries its dependencies come from  | [Registries](#registries)                               |
-| `[workspace]`          | The packages developed together with it              | [Workspaces](#workspaces)                               |
 | `[test]`               | Which files `wado test` discovers                    | [Test Discovery](./spec-testing.md#test-discovery)      |
 | `[format]`             | Which files `wado format` discovers                  | [Wado Formatter](./formatter.md)                        |
 
@@ -595,9 +595,11 @@ A path dependency has no entry.
 
 ## Workspaces
 
-A workspace is a set of packages developed together. Its root `wado.toml` has a
-`[workspace]` table, whose `members` lists the member directories as glob
-patterns:
+A workspace is a set of packages developed together. It is not a package itself:
+it is declared by a `wado-workspace.toml`, which has no `[package]`, and no
+`wado.toml` shares its directory. Its `[workspace]` table's `members` lists the
+member directories as glob patterns, so a package under the workspace that
+`members` leaves out is in no workspace:
 
 ```toml
 [workspace]
@@ -620,7 +622,7 @@ the member. A member inherits the fields in one of two ways:
 | `repository`   | Forced                                                   |
 | `namespace`    | Forced                                                   |
 | `license`      | A default the member may replace                         |
-| `license-file` | A default the member may replace; resolved from the root |
+| `license-file` | A default the member may replace; resolved from the workspace's directory |
 | `authors`      | A default the member may replace                         |
 | `wado-version` | A default the member may replace                         |
 
@@ -637,8 +639,9 @@ lib = "src/lib.wado"
 ```
 
 Any other `[package]` field belongs to the member. A key in `[workspace.package]`
-that is not one of the seven draws the unknown-key warning. The root may also
-have a `[package]` of its own, which inherits nothing.
+that is not one of the seven draws the unknown-key warning. Besides
+`[workspace]`, the file holds only `[registries]`, which publishing the
+workspace resolves every member against.
 
 ## Publishing
 

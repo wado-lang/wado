@@ -11,15 +11,12 @@ pub fn validate(manifest: &Manifest) -> Result<(), ManifestError> {
     if let Some(pkg) = &manifest.package {
         validate_package(pkg)?;
     }
-    if let Some(ws_pkg) = manifest.workspace.as_ref().and_then(|w| w.package.as_ref()) {
-        validate_workspace_package(ws_pkg)?;
-    }
     validate_dependencies(manifest)?;
     Ok(())
 }
 
 /// Validate the `[workspace.package]` table at its source, so problems are
-/// attributed to the workspace root rather than to an inheriting member.
+/// attributed to the workspace file rather than to an inheriting member.
 pub(crate) fn validate_workspace_package(p: &WorkspacePackage) -> Result<(), ManifestError> {
     if p.license.is_some() && p.license_file.is_some() {
         return Err(ManifestError::WorkspaceConflictingLicense);

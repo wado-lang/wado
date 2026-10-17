@@ -21,16 +21,71 @@ pub struct Manifest {
     pub dependencies: IndexMap<String, Dependency>,
     pub dev_dependencies: IndexMap<String, Dependency>,
     pub build_dependencies: IndexMap<String, Dependency>,
-    pub workspace: Option<Workspace>,
     pub test: TestSettings,
     pub format: FormatSettings,
     /// Unknown top-level keys/sections (typos, unsupported). Reported as
     /// warnings, never errors.
     pub unknown_sections: Vec<String>,
-    /// Unknown `[workspace.package]` keys inherited from the workspace root
-    /// during member resolution. Surfaced as `workspace.package` warnings on the
-    /// member (whose own `workspace` is `None`). Empty otherwise.
+    /// Unknown `[workspace.package]` keys inherited from the workspace during
+    /// member resolution. Surfaced as `workspace.package` warnings on the
+    /// member. Empty otherwise.
     pub inherited_unknown_fields: Vec<String>,
+}
+
+/// A parsed `wado-workspace.toml`. A workspace is not a package, so the file has
+/// no `[package]`.
+#[derive(Debug, Clone)]
+pub struct WorkspaceManifest {
+    pub workspace: Workspace,
+    pub registries: IndexMap<String, String>,
+    /// Unknown top-level keys/sections. Reported as warnings.
+    pub unknown_sections: Vec<String>,
+}
+
+impl WorkspaceManifest {
+    #[must_use]
+    pub fn warnings(&self) -> Vec<ManifestWarning> {
+        let unknown_package_fields = self
+            .workspace
+            .package
+            .as_ref()
+            .map(|p| p.unknown_fields.as_slice())
+            .unwrap_or_default();
+        self.unknown_sections
+            .iter()
+            .map(|field| (None, field))
+            .chain(
+                unknown_package_fields
+                    .iter()
+                    .map(|field| (Some("workspace.package".to_string()), field)),
+            )
+            .map(|(section, field)| ManifestWarning::UnknownField {
+                section,
+                field: field.clone(),
+            })
+            .collect()
+    }
+}
+
+impl FromStr for WorkspaceManifest {
+    type Err = ManifestError;
+
+    fn from_str(toml_str: &str) -> Result<Self, Self::Err> {
+        let raw: RawWorkspaceManifest =
+            toml::from_str(toml_str).map_err(|e| ManifestError::Toml(e.to_string()))?;
+        if raw.package.is_some() {
+            return Err(ManifestError::PackageInWorkspace);
+        }
+        let workspace = convert_workspace(raw.workspace.unwrap_or_default())?;
+        if let Some(package) = &workspace.package {
+            validate::validate_workspace_package(package)?;
+        }
+        Ok(Self {
+            workspace,
+            registries: raw.registries.unwrap_or_default(),
+            unknown_sections: unknown_keys(&raw.unknown),
+        })
+    }
 }
 
 /// A `[world]` table entry: the world's entry-point path and whether it is
@@ -113,15 +168,7 @@ impl Manifest {
                 });
             }
         }
-        let workspace_pkg_unknowns = self
-            .workspace
-            .as_ref()
-            .and_then(|ws| ws.package.as_ref())
-            .map(|p| p.unknown_fields.as_slice())
-            .unwrap_or_default()
-            .iter()
-            .chain(&self.inherited_unknown_fields);
-        for field in workspace_pkg_unknowns {
+        for field in &self.inherited_unknown_fields {
             warnings.push(ManifestWarning::UnknownField {
                 section: Some("workspace.package".to_string()),
                 field: field.clone(),
@@ -261,7 +308,7 @@ impl Package {
     }
 }
 
-/// The `[workspace]` section of `wado.toml`.
+/// The `[workspace]` section of `wado-workspace.toml`.
 #[derive(Debug, Clone)]
 pub struct Workspace {
     pub members: Vec<String>,
@@ -388,6 +435,8 @@ pub enum ManifestError {
     WorkspaceConflictingLicense,
     /// `[workspace.package].license` is not a valid SPDX expression.
     WorkspaceInvalidLicense { value: String, reason: String },
+    /// `wado-workspace.toml` has a `[package]`, or a `wado.toml` beside it.
+    PackageInWorkspace,
     /// A `[world]` value is neither an entry-path string nor a valid table.
     InvalidWorldEntry { world: String, reason: String },
 }
@@ -454,6 +503,11 @@ impl fmt::Display for ManifestError {
                 f,
                 "[workspace.package].license {value:?} is not a valid SPDX expression: {reason}"
             ),
+            ManifestError::PackageInWorkspace => write!(
+                f,
+                "a workspace is not a package: wado-workspace.toml has no [package] \
+                 and no wado.toml beside it; put the package in a member directory"
+            ),
             ManifestError::InvalidWorldEntry { world, reason } => {
                 write!(f, "[world].{world:?}: {reason}")
             }
@@ -513,9 +567,17 @@ struct RawManifest {
     dev_dependencies: Option<IndexMap<String, RawDependency>>,
     #[serde(rename = "build-dependencies")]
     build_dependencies: Option<IndexMap<String, RawDependency>>,
-    workspace: Option<RawWorkspace>,
     test: Option<RawTestSettings>,
     format: Option<RawFormatSettings>,
+    #[serde(flatten)]
+    unknown: BTreeMap<String, toml::Value>,
+}
+
+#[derive(Deserialize)]
+struct RawWorkspaceManifest {
+    workspace: Option<RawWorkspace>,
+    registries: Option<IndexMap<String, String>>,
+    package: Option<toml::Value>,
     #[serde(flatten)]
     unknown: BTreeMap<String, toml::Value>,
 }
@@ -559,7 +621,7 @@ struct RawPackage {
     unknown: BTreeMap<String, toml::Value>,
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, Default)]
 struct RawWorkspace {
     members: Option<Vec<String>>,
     package: Option<RawWorkspacePackage>,
@@ -610,7 +672,6 @@ fn convert_raw(raw: RawManifest) -> Result<Manifest, ManifestError> {
     let dependencies = convert_deps(raw.dependencies.unwrap_or_default())?;
     let dev_dependencies = convert_deps(raw.dev_dependencies.unwrap_or_default())?;
     let build_dependencies = convert_deps(raw.build_dependencies.unwrap_or_default())?;
-    let workspace = raw.workspace.map(convert_workspace).transpose()?;
     let test = raw.test.map(convert_test).unwrap_or_default();
     let format = raw.format.map(convert_format).unwrap_or_default();
 
@@ -621,7 +682,6 @@ fn convert_raw(raw: RawManifest) -> Result<Manifest, ManifestError> {
         dependencies,
         dev_dependencies,
         build_dependencies,
-        workspace,
         test,
         format,
         unknown_sections,
@@ -629,8 +689,8 @@ fn convert_raw(raw: RawManifest) -> Result<Manifest, ManifestError> {
     })
 }
 
-/// Parse a workspace member's manifest, inheriting metadata from the workspace
-/// root's `[workspace.package]`.
+/// Parse a workspace member's manifest, inheriting metadata from the
+/// `[workspace.package]` of the `wado-workspace.toml` in `workspace_toml`.
 ///
 /// `version`/`repository`/`namespace` are force-inherited: if the member sets
 /// one (and the workspace defines it) it is a [`ManifestError::WorkspaceFieldOverride`].
@@ -640,24 +700,17 @@ fn convert_raw(raw: RawManifest) -> Result<Manifest, ManifestError> {
 ///
 /// # Errors
 /// Propagates TOML, inheritance, and validation errors for the merged member,
-/// including problems in the root's `[workspace.package]` itself.
-pub fn resolve_member(member_toml: &str, root_toml: &str) -> Result<Manifest, ManifestError> {
+/// including problems in the workspace file itself.
+pub fn resolve_member(member_toml: &str, workspace_toml: &str) -> Result<Manifest, ManifestError> {
     let mut member_raw: RawManifest =
         toml::from_str(member_toml).map_err(|e| ManifestError::Toml(e.to_string()))?;
-    let root_raw: RawManifest =
-        toml::from_str(root_toml).map_err(|e| ManifestError::Toml(e.to_string()))?;
-
-    let ws_pkg = root_raw
-        .workspace
-        .and_then(|w| w.package)
-        .map(convert_workspace_package);
+    let ws_pkg = workspace_toml.parse::<WorkspaceManifest>()?.workspace.package;
     let inherited_unknown_fields = ws_pkg
         .as_ref()
         .map(|p| p.unknown_fields.clone())
         .unwrap_or_default();
 
     if let (Some(pkg), Some(ws)) = (member_raw.package.as_mut(), ws_pkg.as_ref()) {
-        validate::validate_workspace_package(ws)?;
         inherit_workspace_package(pkg, ws)?;
     }
 
@@ -667,11 +720,10 @@ pub fn resolve_member(member_toml: &str, root_toml: &str) -> Result<Manifest, Ma
     Ok(manifest)
 }
 
-/// Read `[workspace].members` from a `wado.toml` without full validation. A
-/// workspace member may omit inherited required fields (e.g. `version`) that a
-/// full parse would reject, so identifying the workspace must not depend on the
-/// member parsing standalone. Returns `None` when there is no `[workspace]`
-/// table.
+/// Read `[workspace].members` from a `wado-workspace.toml` without full
+/// validation, so finding which workspace governs a member does not depend on
+/// the workspace file being valid; [`resolve_member`] reports what is wrong
+/// with it. Returns `None` when there is no `[workspace].members`.
 #[must_use]
 pub fn read_workspace_members(content: &str) -> Option<Vec<String>> {
     let table: toml::Table = toml::from_str(content).ok()?;
@@ -1862,7 +1914,7 @@ license-file = "LICENSE"
         let member = "[package]\nname = \"core\"\nlib = \"src/lib.wado\"\n";
         let err = resolve_member(member, root).unwrap_err();
         assert_matches!(err, ManifestError::WorkspaceConflictingLicense);
-        let err = root.parse::<Manifest>().unwrap_err();
+        let err = root.parse::<WorkspaceManifest>().unwrap_err();
         assert_matches!(err, ManifestError::WorkspaceConflictingLicense);
     }
 
@@ -1876,7 +1928,7 @@ members = ["packages/*"]
 version = "0.1.0"
 license = "Not A License"
 "#;
-        let err = root.parse::<Manifest>().unwrap_err();
+        let err = root.parse::<WorkspaceManifest>().unwrap_err();
         assert_matches!(err, ManifestError::WorkspaceInvalidLicense { .. });
     }
 
@@ -1890,7 +1942,7 @@ members = ["packages/*"]
 version = "0.1.0"
 description = "not inheritable"
 "#;
-        let m = toml.parse::<Manifest>().unwrap();
+        let m = toml.parse::<WorkspaceManifest>().unwrap();
         let warnings = m.warnings();
         assert!(
             warnings.iter().any(|w| matches!(

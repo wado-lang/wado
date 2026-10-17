@@ -15,17 +15,19 @@
 //! its `WKG_OCI_USERNAME` / `WKG_OCI_PASSWORD` override; Wado stores no
 //! credentials.
 //!
-//! In a workspace, publishing is gated to the workspace root: it publishes every
-//! publishable member together at the shared (force-inherited) version against
-//! the root's `[registries]`, so the registry can never end up with members at
-//! mismatched versions. Running it from a member directory is an error pointing
-//! at the root.
+//! In a workspace, publishing is gated to the directory of `wado-workspace.toml`:
+//! it publishes every publishable member together at the shared
+//! (force-inherited) version against the workspace's `[registries]`, so the
+//! registry can never end up with members at mismatched versions. Running it
+//! from a member directory is an error pointing at the workspace.
 
 use std::fmt::Write as _;
 use std::path::Path;
 use std::process::Command;
 
-use wado_manifest::{Manifest, Package, PublishError, validate_for_publish};
+use wado_manifest::{
+    Manifest, Package, PublishError, WORKSPACE_FILENAME, WorkspaceManifest, validate_for_publish,
+};
 
 use crate::args::{self, CliExit};
 use crate::build::{BuildTarget, build_world_components, declared_worlds};
@@ -33,7 +35,7 @@ use crate::compile::world_path_segment;
 use crate::knobs::{CompileKnobs, EmbedOptions, OptLevel};
 use crate::manifest::{
     ProjectManifest, discover, emit_manifest_warnings, governing_workspace_root_dir,
-    workspace_member_dirs,
+    workspace_in, workspace_member_dirs,
 };
 use crate::metadata_embed::working_tree_dirty;
 
@@ -110,14 +112,13 @@ pub fn parse_args(mut parser: lexopt::Parser) -> Result<PublishOptions, CliExit>
 pub async fn run(opts: PublishOptions) -> Result<(), CliExit> {
     let cwd = std::env::current_dir()
         .map_err(|e| CliExit::error(format!("cannot get current directory: {e}")))?;
+    if let Some(workspace) = workspace_in(&cwd).map_err(CliExit::error)? {
+        return publish_workspace(&cwd, &workspace, opts.dry_run).await;
+    }
     let project = discover(&cwd)
         .map_err(CliExit::error)?
         .ok_or_else(|| CliExit::error("no wado.toml found"))?;
-
-    if project.manifest.workspace.is_some() {
-        return publish_workspace(&project, opts.dry_run).await;
-    }
-    if let Some(root) = governing_workspace_root_dir(&project.root).map_err(CliExit::error)? {
+    if let Some(root) = governing_workspace_root_dir(&project.root) {
         return Err(CliExit::error(format!(
             "this package belongs to a workspace; run `wado publish` from the workspace \
              root to publish all members together at the shared version:\n  {}",
@@ -176,32 +177,25 @@ async fn publish_single(project: &ProjectManifest, dry_run: bool) -> Result<(), 
     }
 }
 
-async fn publish_workspace(root: &ProjectManifest, dry_run: bool) -> Result<(), CliExit> {
-    emit_manifest_warnings(root);
-    let members = root
-        .manifest
-        .workspace
-        .as_ref()
-        .map(|w| w.members.as_slice())
-        .unwrap_or_default();
-    let member_dirs = workspace_member_dirs(&root.root, members);
+async fn publish_workspace(
+    root: &Path,
+    workspace: &WorkspaceManifest,
+    dry_run: bool,
+) -> Result<(), CliExit> {
+    for w in workspace.warnings() {
+        eprintln!("warning: {}: {w}", root.join(WORKSPACE_FILENAME).display());
+    }
+    let member_dirs = workspace_member_dirs(root, &workspace.workspace.members);
 
-    // Keep each candidate's `ProjectManifest` so a non-dry-run publish can build
-    // it; the root's own `[package]` (if any) publishes alongside the members.
-    let mut candidates: Vec<(String, ProjectManifest)> = vec![(
-        ".".to_string(),
-        ProjectManifest {
-            manifest: root.manifest.clone(),
-            root: root.root.clone(),
-        },
-    )];
+    // Keep each candidate's `ProjectManifest` so a non-dry-run publish can build it.
+    let mut candidates: Vec<(String, ProjectManifest)> = Vec::new();
     for dir in member_dirs {
         let project = discover(&dir)
             .map_err(CliExit::error)?
             .ok_or_else(|| CliExit::error(format!("no wado.toml in member {}", dir.display())))?;
         emit_manifest_warnings(&project);
         let label = dir
-            .strip_prefix(&root.root)
+            .strip_prefix(root)
             .unwrap_or(&dir)
             .display()
             .to_string();
@@ -237,9 +231,9 @@ async fn publish_workspace(root: &ProjectManifest, dry_run: bool) -> Result<(), 
         return Err(CliExit::error("no publishable packages in this workspace"));
     }
 
-    // Publish is a root-only operation, so every member resolves against the
-    // workspace root's `[registries]`, not its own.
-    publish_ready(&ready, &root.manifest.registries, dry_run).await?;
+    // Publish is a workspace-only operation, so every member resolves against
+    // the workspace's `[registries]`, not its own.
+    publish_ready(&ready, &workspace.registries, dry_run).await?;
     if dry_run {
         let coords: Vec<&str> = ready.iter().map(|(c, _)| c.as_str()).collect();
         eprintln!(
@@ -550,8 +544,8 @@ mod tests {
     }
 
     #[test]
-    fn classify_not_a_package_for_workspace_only_manifest() {
-        let m = manifest("[workspace]\nmembers = [\"packages/*\"]\n");
+    fn classify_not_a_package_without_a_package_table() {
+        let m = manifest("[registries]\ndefault = \"oci://ghcr.io\"\n");
         assert_matches!(classify(&m), Verdict::NotAPackage);
     }
 

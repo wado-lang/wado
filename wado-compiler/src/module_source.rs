@@ -139,8 +139,8 @@ pub struct ModuleSourceInterner {
     redirect_packages: hashmap::IndexMap<InternedStr, PackageId>,
     /// The package of the entry point and the local modules inside its root.
     root_package: PackageId,
-    /// The entry's package root, as the host answers it. `None` declares no
-    /// boundary: every local module is in the entry's package.
+    /// The entry's package root, as the host answers it. `None` where the entry
+    /// is in no package, and so shares its scope with every module in none.
     root_dir: Option<String>,
     /// Each path dependency's package root → its entry module.
     dependency_roots: hashmap::IndexMap<String, String>,
@@ -208,19 +208,19 @@ impl ModuleSourceInterner {
     }
 
     /// Place the local module at `path` in the package rooted at
-    /// `package_root`, or in one of its own where no manifest encloses it.
+    /// `package_root`, or with the modules in no package where it is `None`.
     pub fn place_local(&mut self, path: &str, package_root: Option<String>) {
         self.dir_roots
             .insert(module_parent_dir(path).to_string(), package_root.clone());
-        let dependency = package_root
-            .as_ref()
-            .and_then(|root| self.dependency_roots.get(root).cloned());
-        let package = match (package_root, dependency) {
-            (Some(root), _) if self.root_dir.as_ref() == Some(&root) => self.root_package.clone(),
-            (_, Some(lib)) => PackageId::Dependency(self.intern(&lib)),
-            _ if self.root_dir.is_none() => self.root_package.clone(),
-            (Some(root), None) => PackageId::Path(self.intern(&root)),
-            (None, None) => PackageId::Path(self.intern(path)),
+        let package = if package_root == self.root_dir {
+            self.root_package.clone()
+        } else if let Some(root) = package_root {
+            match self.dependency_roots.get(&root).cloned() {
+                Some(lib) => PackageId::Dependency(self.intern(&lib)),
+                None => PackageId::Path(self.intern(&root)),
+            }
+        } else {
+            PackageId::Unpackaged
         };
         let path = self.intern(path);
         self.local_packages.insert(path, package);
@@ -547,10 +547,12 @@ pub enum PackageId {
     Root,
     Dependency(InternedStr),
     Remote(InternedStr),
-    /// A local module's package other than the entry's: the root
-    /// [`CompilerHost::package_root`] answers for it, or the module's own path
-    /// where no manifest encloses it.
+    /// A local module's package other than the entry's, named by the root
+    /// [`CompilerHost::package_root`] answers for it.
     Path(InternedStr),
+    /// The local modules in no package, where the entry is in one. They share
+    /// one scope, as they do with an entry in no package, which is `Root`.
+    Unpackaged,
 }
 
 impl ModuleSource {
@@ -852,7 +854,8 @@ impl ModuleSource {
         match self {
             Self::EntryPoint { .. } => true,
             Self::Local { package, .. } => {
-                !matches!(package, PackageId::Path(_)) && self.is_user_authored()
+                !matches!(package, PackageId::Path(_) | PackageId::Unpackaged)
+                    && self.is_user_authored()
             }
             _ => false,
         }
@@ -1281,13 +1284,16 @@ mod tests {
         assert!(!o.same_package(&entry));
         assert!(o.same_package(&interner.local("../other/p.wado")));
         assert!(!s.same_package(&entry));
-        assert!(!s.same_package(&interner.local("../loose/t.wado")));
+        assert!(s.same_package(&interner.local("../loose/t.wado")));
         assert!(a.is_entry_package() && !o.is_entry_package() && !s.is_entry_package());
 
-        let mut unbounded = ModuleSourceInterner::new();
-        unbounded.place_local("../loose/s.wado", None);
-        let loose = unbounded.local("../loose/s.wado");
-        assert!(loose.same_package(&unbounded.entry_point("main.wado")));
+        let mut unpackaged = ModuleSourceInterner::new();
+        unpackaged.place_local("../loose/s.wado", None);
+        unpackaged.place_local("../other/o.wado", Some("/other".to_string()));
+        let entry = unpackaged.entry_point("main.wado");
+        let loose = unpackaged.local("../loose/s.wado");
+        assert!(loose.same_package(&entry) && loose.is_entry_package());
+        assert!(!unpackaged.local("../other/o.wado").same_package(&entry));
 
         let mut with_dep = ModuleSourceInterner::new();
         let roots = [("/other".to_string(), "../other/lib.wado".to_string())];

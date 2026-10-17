@@ -139,9 +139,9 @@ fn generator_build_dependency_in_workspace_member_bare_relative_entry() {
     let tmp = tempfile::tempdir().unwrap();
     let root = tmp.path();
 
-    // Workspace root: members inherit version + namespace.
+    // Workspace: members inherit version + namespace.
     fs::write(
-        root.join("wado.toml"),
+        root.join("wado-workspace.toml"),
         r#"[workspace]
 members = ["gen", "app"]
 

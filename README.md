@@ -191,11 +191,11 @@ Releases are made roughly weekly by merging a release PR managed by [tagpr](http
 
 How it works:
 
-1. Every push to `main` opens a **Release PR** that bumps `[workspace.package].version` in both `Cargo.toml` and `wado.toml` (kept in lockstep so the CLI and the published Wado packages ship one version), regenerates `Cargo.lock`, and updates `CHANGELOG.md` from PRs merged since the previous tag.
+1. Every push to `main` opens a **Release PR** that bumps `[workspace.package].version` in both `Cargo.toml` and `wado-workspace.toml` (kept in lockstep so the CLI and the published Wado packages ship one version), regenerates `Cargo.lock`, and updates `CHANGELOG.md` from PRs merged since the previous tag.
 2. Merging the Release PR pushes tag `v<next>`, which triggers `.github/workflows/release.yml`.
 3. The default version bump is **patch**. Add a `tagpr:minor` or `tagpr:major` label to the Release PR to override it.
 
-`tagpr` is the single version manager: the workspace version is bumped only by the Release PR, never by hand. Do not edit `[workspace.package].version` in `Cargo.toml` or `wado.toml` directly.
+`tagpr` is the single version manager: the workspace version is bumped only by the Release PR, never by hand. Do not edit `[workspace.package].version` in `Cargo.toml` or `wado-workspace.toml` directly.
 
 ## Benchmarks
 
