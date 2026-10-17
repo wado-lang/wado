@@ -2457,11 +2457,11 @@ X : [-\\p{Nd}] ;");
 test "a grammar the jar rejects is rejected" {
     // Each is otherwise valid, and the jar (4.13.2) refuses each.
     let bad: List<String> = [
-        "grammar G;\ns : A EOF ;\nA : 'a' ;\ncatch [Exception e] { }",
-        "grammar G;\ns : A EOF ;\nA : 'a' ;\nfinally { }", "grammar G;\ntokens { 'x' }\ns : A EOF ;\nA : 'a' ;",
-        "grammar G;\noptions { a b; }\ns : A EOF ;\nA : 'a' ;", "grammar G;\ns returns : A EOF ;\nA : 'a' ;",
-        "grammar G;\ns locals : A EOF ;\nA : 'a' ;", "grammar G;\ns : A[3] EOF ;\nA : 'a' ;",
-        "grammar G;\ns : A EOF ;\nA : [\\p{L] ;", "lexer grammar L;\nA : 'a' -> channel(99999999999) ;",
+        "grammar G;\ns : A EOF ;\nA : 'a' ;\ncatch [Exception e] { }", "grammar G;\ns : A EOF ;\nA : 'a' ;\nfinally { }",
+        "grammar G;\ntokens { 'x' }\ns : A EOF ;\nA : 'a' ;", "grammar G;\noptions { a b; }\ns : A EOF ;\nA : 'a' ;",
+        "grammar G;\ns returns : A EOF ;\nA : 'a' ;", "grammar G;\ns locals : A EOF ;\nA : 'a' ;",
+        "grammar G;\ns : A[3] EOF ;\nA : 'a' ;", "grammar G;\ns : A EOF ;\nA : [\\p{L] ;",
+        "lexer grammar L;\nA : 'a' -> channel(99999999999) ;",
     ];
     for let src of &bad {
         assert parse(*src) matches { Err(_) }, *src;
@@ -2488,7 +2488,8 @@ test "the jar's punctuation in prequel blocks is required" {
         "grammar G;\ntokens { B, }\ns : A EOF ;\nA : 'a' ;", "grammar G;\nchannels { X Y }\ns : A EOF ;\nA : 'a' ;",
         "grammar G;\ns : A EOF ;\ncatch { }\nA : 'a' ;", "grammar G;\ns : A EOF ;\nfinally\nA : 'a' ;",
         "grammar G;\ns : (options { greedy = false; } A) EOF ;\nA : 'a' ;",
-        "grammar G;\ntokens { FOO, 42, BAR }\nr : FOO ;", "lexer grammar L;\nchannels { C ; D }\nWS : ' ' -> channel(C) ;",
+        "grammar G;\ntokens { FOO, 42, BAR }\nr : FOO ;",
+        "lexer grammar L;\nchannels { C ; D }\nWS : ' ' -> channel(C) ;",
         "lexer grammar L;\nchannels { C = 1, D = 2 }\nWS : ' ' -> channel(C) ;", "grammar G;\nr : A<foo=> ;\nA : 'a' ;",
     ];
     for let src of &bad {

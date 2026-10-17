@@ -146,11 +146,14 @@ pub fn split_top_level_commas(chars: &List<char>, declarations: bool) -> List<St
             continue;
         }
         let c = chars[i];
-        if c matches { '(' | '[' | '{' } || c == '<' && (in_type || i >= 2 && chars[i - 1] == ':' && chars[i - 2] == ':') {
+        if c matches { '(' | '[' | '{' }
+            || c == '<' && (in_type || i >= 2 && chars[i - 1] == ':' && chars[i - 2] == ':') {
             open.push(c);
         } else if c matches { ')' | ']' | '}' } || c == '>' && open.last() == Option::Some('<') && chars[i - 1] != '-' {
             open.pop();
-        } else if open.is_empty() && c == '=' && !(i + 1 < n && chars[i + 1] == '=')
+        } else if open.is_empty()
+            && c == '='
+            && !(i + 1 < n && chars[i + 1] == '=')
             && !(i > 0 && chars[i - 1] matches { '!' | '<' | '>' | '=' }) {
             in_type = false;
         } else if open.is_empty() && c == ',' {

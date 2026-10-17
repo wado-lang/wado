@@ -54,26 +54,6 @@ pub fn literal_field_name<S: AsStrSlice>(text: S) -> String {
     return result;
 }
 
-pub fn strip_suffix<S: AsStrSlice, S1: AsStrSlice>(s: S, suffix: S1) -> String {
-    let s_chars: List<char> = s.chars().collect();
-    let suffix_chars: List<char> = suffix.chars().collect();
-    let s_len = s_chars.len();
-    let suf_len = suffix_chars.len();
-    if s_len < suf_len {
-        return s.to_string();
-    }
-    for let mut i = 0; i < suf_len; i += 1 {
-        if s_chars[s_len - suf_len + i] != suffix_chars[i] {
-            return s.to_string();
-        }
-    }
-    let mut result = String::with_capacity(s.len());
-    for let mut i = 0; i < s_len - suf_len; i += 1 {
-        result.push(s_chars[i]);
-    }
-    return result;
-}
-
 // Parser codegen names every consumed element so the surrounding struct
 // field can be populated. When the same base name appears more than
 // once in an alt (e.g. two `ID` tokens) the second occurrence gets a

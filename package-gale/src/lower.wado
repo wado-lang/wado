@@ -57,7 +57,7 @@ use {
     sort_group_by_element_count,
 } from "./alt_grouping.wado";
 use { gate_assignment } from "./scan_gate.wado";
-use { rule_type_name, literal_field_name, dedup_name, strip_suffix } from "./gen_util.wado";
+use { rule_type_name, literal_field_name, dedup_name } from "./gen_util.wado";
 use {
     not_element_field_name,
     case_names_for_rule,
@@ -1321,7 +1321,7 @@ fn lower_lr_alt(
     // threaded in by `lower_lr_rule` so they are computed once, not
     // once per LR alt.
     let type_name = rule.type_name;
-    let base = strip_suffix(&type_name, "Node");
+    let base = type_name.strip_suffix("Node").unwrap();
     let case_name = case_names[alt_index];
     let struct_name = `${base}${case_name}`;
 
@@ -2669,7 +2669,7 @@ fn lower_alt_body(
     let mut case_name: String = "";
     let mut struct_name: String = type_name;
     if rule.alternatives.len() != 1 {
-        let base = strip_suffix(&type_name, "Node");
+        let base = type_name.strip_suffix("Node").unwrap();
         case_name = case_names[idx];
         struct_name = `${base}${case_names[idx]}`;
     }

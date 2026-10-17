@@ -605,7 +605,9 @@ test "pipeline: a rule its header forbids is rejected in a root grammar only" {
     // accepts both once imported into a combined grammar.
     let roots: List<String> = ["parser grammar P;\ns : A EOF ;\nA : 'a' ;", "lexer grammar L;\nA : 'a' ;\nfoo : A ;"];
     for let src of &roots {
-        let inputs: List<[String, String]> = [["X.g4", *src]];
+        let inputs: List<[String, String]> = [
+            ["X.g4", *src],
+        ];
         assert assemble_grammar(&inputs) matches { Err(Parse(_)) }, *src;
     }
     let parser_delegate: List<[String, String]> = [

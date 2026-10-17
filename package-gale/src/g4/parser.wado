@@ -55,7 +55,7 @@ use {
 } from "./lexer.wado";
 use { collect_range } from "../text.wado";
 use { push_unique } from "../list_util.wado";
-use { scan_balanced, split_top_level_commas, is_id_continue_char, is_rule_name_upper } from "./scan.wado";
+use { scan_balanced, split_top_level_commas, is_id_continue_char, is_rule_name_upper, skip_ws } from "./scan.wado";
 use {
     clip_to_scalars,
     complement_char_ranges,
@@ -367,7 +367,11 @@ impl G4Parser {
             if misplaced_rule matches { None } {
                 if is_parser_grammar && is_lexer_rule {
                     misplaced_rule = Option::Some(
-                        ParseError::new(`lexer rule ${rule_name} not allowed in parser`, rule_name_span, ["parser rule"]),
+                        ParseError::new(
+                            `lexer rule ${rule_name} not allowed in parser`,
+                            rule_name_span,
+                            ["parser rule"],
+                        ),
                     );
                 } else if is_lexer_grammar && !is_lexer_rule {
                     misplaced_rule = Option::Some(
@@ -1667,22 +1671,12 @@ fn split_attr_decl<S: AsStrSlice>(seg: S, span: Span) -> Option<AttrDecl> {
     while name_start > 0 && is_id_continue_char(chars[name_start - 1]) {
         name_start -= 1;
     }
-    let mut name = String::with_capacity(end - name_start);
-    for let mut k = name_start; k < end; k += 1 {
-        name.push(chars[k]);
-    }
+    let name = collect_range(&chars, name_start, end);
     let mut type_end = name_start;
     while type_end > 0 && chars[type_end - 1].is_ascii_whitespace() {
         type_end -= 1;
     }
-    let mut type_text = String::with_capacity(type_end);
-    let mut ts = 0;
-    while ts < type_end && chars[ts].is_ascii_whitespace() {
-        ts += 1;
-    }
-    for let mut k = ts; k < type_end; k += 1 {
-        type_text.push(chars[k]);
-    }
+    let type_text = collect_range(&chars, skip_ws(&chars, 0, type_end), type_end);
     return Option::<AttrDecl>::Some(AttrDecl { type_text, name, span });
 }
 

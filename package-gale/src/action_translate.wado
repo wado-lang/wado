@@ -19,6 +19,7 @@ use {
 } from "./ident.wado";
 use { rule_is_left_recursive } from "./lr_util.wado";
 use { push_unique } from "./list_util.wado";
+use { skip_ws } from "./g4/scan.wado";
 
 /// Name of a rule's value-channel struct (`e` -> `EVals`).
 pub fn vals_struct_name(rule: &ParserRule) -> String {
@@ -100,10 +101,7 @@ pub fn ref_is_call_ctx<S: AsStrSlice>(ref_text: S) -> bool {
 /// parens — that ref is spliced on its own.
 fn swallow_trailing_call(chars: &List<char>, end: i32) -> i32 {
     let n = chars.len();
-    let mut j = end;
-    while j < n && chars[j].is_ascii_whitespace() {
-        j += 1;
-    }
+    let j = skip_ws(chars, end, n);
     if j >= n || chars[j] != '(' {
         return end;
     }
@@ -539,10 +537,7 @@ pub fn body_mode_attr_use<S: AsStrSlice>(body: S, out: &mut ModeAttrUse) {
 /// assigns, a compound one does both. `$x` is a leaf, so nothing but the
 /// operator right after it can make the site a write.
 fn attr_ref_use(chars: &List<char>, r: &AttrRef) -> AttrUse {
-    let mut j = r.end;
-    while j < chars.len() && chars[j].is_ascii_whitespace() {
-        j += 1;
-    }
+    let j = skip_ws(chars, r.end, chars.len());
     if j >= chars.len() {
         return AttrUse::Read;
     }
