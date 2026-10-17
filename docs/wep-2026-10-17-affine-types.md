@@ -7,8 +7,7 @@
 An affine resource is a handle the host owns: a CM `own`, a `stream`, a
 `future`, a guest resource with a destructor. The program must keep one
 invariant for each: at every point it has exactly one owner, that owner drops
-it once or hands it to the next owner, and no reference to it outlives the
-owner.
+it once or hands it to the next owner, and no use reaches it after the drop.
 
 The invariant has four parts, and they are not equally serious:
 
@@ -39,8 +38,7 @@ value-semantics model that an affine value contradicts:
    (`TreeMap::get_or_insert`), or one that copies a `T` it took by value
    (`fn dup<T>(x: T) -> [T, T]`), breaks the proxy with no diagnostic.
 2. A reference never dangles. True for a GC value, which the collector keeps
-   alive. False for a handle, which is dead the moment it is dropped. Wado's
-   `&R` is first-class, so it is stored, returned and captured freely.
+   alive. False for a handle, which is dead the moment it is dropped.
 3. The only way out of a place is a copy. There is no `take`, `replace` or
    partial move, so `h.f`, `*r`, `..base`, `list[i]` and `for x of list` all
    copy.
@@ -74,6 +72,25 @@ And `*r = Fields::new()` through a `&mut Fields` panics the compiler
 The issue is not any one gap. Every rule that infers ownership from a signature
 has a counterexample, because the signature does not carry the fact.
 
+### What the Component Model puts in lists and records
+
+WIT places handles where a Wado value type holds them, and the generated
+bindings follow:
+
+| WIT position               | Wado binding                                                                   |
+| -------------------------- | ------------------------------------------------------------------------------ |
+| `list<tuple<own<R>, …>>`   | `Preopens::get_directories() -> List<[Descriptor, String]>`, read by `core:fs` |
+| `list<own<R>>`             | `GpuCompilationInfo::messages() -> List<GpuCompilationMessage>`                |
+| `list<borrow<R>>`          | `GpuQueue::submit(command_buffers: List<&GpuCommandBuffer>)`                   |
+| a record field `borrow<R>` | `GpuBufferBinding { buffer: &GpuBuffer, … }`, and the other descriptors        |
+| a record field `own<R>`    | `GpuCanvasConfigurationOwned { device: GpuDevice, … }`                         |
+| `stream<own<R>>`           | `TcpSocket::listen() -> Result<Stream<TcpSocket>, ErrorCode>`                  |
+
+A descriptor holding a `borrow` is built before a call and passed to it, often
+through a `let` and a `push` in a loop. A design that forbids a list of affine
+values, or a reference to one outside a parameter, cannot bind these
+signatures.
+
 ### Approaches considered
 
 | Approach                                  | Why not                                                                                                            |
@@ -86,13 +103,22 @@ has a counterexample, because the signature does not carry the fact.
 | Scoped use (`bracket`, `with`)            | A resource cannot be held in a structure past the scope: no pool, no body written later.                           |
 | Post-monomorphization check               | Errors point into the stdlib's body, with no span the editor shows.                                                |
 | Finish the signature inference            | Unsound by construction: see above.                                                                                |
-| A run-time cell around every handle       | Turns a double drop into a certain trap. A safety net, not a design: it does not make a drop happen.               |
+| A run-time cell around every handle       | Makes a use after drop a certain trap, but makes no drop happen. Adopted for references only, below.               |
+
+For references alone, three more:
+
+| Approach                                      | Why not                                                                                                                       |
+| --------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------- |
+| Second-class references (Swift's `borrowing`) | A descriptor could only be written as a literal in argument position. No `let`, no `push`.                                    |
+| Non-escaping holders (Swift's `~Escapable`)   | A borrow check within each body, against the language's stated absence of one, and a second kind of parameter for `List<&R>`. |
+| Reference-counted handles (Swift's Metal API) | Swift makes a GPU object a class. Reference counting is ruled out above.                                                      |
 
 ### The model: Swift's noncopyable types
 
-Swift solved this problem for the same kind of value. SE-0390's motivating
-example is `struct FileDescriptor: ~Copyable { deinit { close(fd) } }`, which
-is a Wado resource. Its rules, refined by SE-0427 (generics), SE-0429 (partial
+Swift solved the ownership half of this problem for the same kind of value.
+SE-0390's motivating example is
+`struct FileDescriptor: ~Copyable { deinit { close(fd) } }`, which is a Wado
+resource. Its rules, refined by SE-0427 (generics), SE-0429 (partial
 consumption) and SE-0432 (`switch`), are:
 
 - A type declares itself noncopyable. A struct or enum that holds a noncopyable
@@ -101,7 +127,7 @@ consumption) and SE-0432 (`switch`), are:
   noncopyable, and the body is then checked, at its definition, to copy no
   `T`.
 - A parameter is `borrowing`, `inout` or `consuming`; a method's `self` is the
-  same three. A borrow is second-class: it is a parameter and nothing else.
+  same three.
 - An unconsumed value is destroyed at the end of its scope.
 - A local or a consumed `self` may give up one field; the rest are destroyed
   with it.
@@ -110,8 +136,9 @@ consumption) and SE-0432 (`switch`), are:
 
 Wado already has most of the surface: `resource`, `fn drop(self)`, `&T` /
 `&mut T` / `T` parameters, `self` / `&self` / `&mut self` receivers, the move
-check, scope-exit drop. What it lacks is the generic rule, the second-class
-reference, and the ways out of a place.
+check, scope-exit drop. What it lacks is the generic rule and the ways out of a
+place. Its references depart from Swift's, for the reason the table above
+gives.
 
 Swift's own gaps mark what is hard rather than what Swift forgot. `Array` does
 not accept a noncopyable element; `InlineArray` and `Span` arrived in 6.2
@@ -119,81 +146,94 @@ instead.
 
 ## Decision
 
-### One name, two positions
-
-The marker is a sealed prelude trait, `Affine`, written with syntax that
-exists. The word is the one the spec already uses for the linearity.
+### The `affine` keyword
 
 ```wado
-impl Affine for Holder;              // declaration: Holder is move-only
-pub variant Option<T: Affine> { … }  // permission: T may be an affine type
-fn dup<T>(x: T) -> [T, T] { … }      // unmarked: T is copyable
+affine struct Holder { f: Fields, n: i32 }   // declaration: Holder is move-only
+affine variant Slot { Empty, Held(Fields) }
+
+pub variant Option<affine T> { None, Some(T) }  // permission: T may be affine
+fn apply<T, effect E>(f: fn(T) -> T with E, x: T) -> T with E { … }
+fn dup<T>(x: T) -> [T, T] { … }              // unmarked: T is copyable
+
+trait Iterator { affine type Item; … }       // an associated type takes it too
 ```
 
-In declaration position, `impl Affine for X;` says `X` is move-only. A struct
-or a variant that holds an affine resource, directly or through a field or a
-payload, must write it, or the declaration is an error that names the field.
-A tuple and a newtype do not write it, and writing it on one is an error. They
-are inferred instead: a tuple is affine when an element is, a newtype when its
-base is.
+`affine` is a keyword, as `effect` is, and stands in the same place: before a
+type parameter it says what kind of parameter it is.
 
-In permission position, `T: Affine` says an argument for `T` may be affine.
-Every type satisfies it, so `Option<i32>` is unchanged. What changes is the
-body: it is checked at its definition to treat `T` as affine. Without the
-bound, `T` is copyable, and `dup::<Fields>` is a type error at the
-instantiation, which names the parameter and the bound that would admit it.
+A declaration with `affine` is move-only. A named `struct` or `variant` that
+holds an affine value, directly or through a field or a payload, must be
+declared `affine`, or the declaration is an error that names the field. A
+tuple, a newtype and an anonymous struct have no declaration to mark, so they
+are inferred: each is affine when something it holds is. A `resource` is
+affine unless it declares `linearity = "unrestricted"`, as today.
 
-The two readings differ, as Swift's `~Copyable` differs between
-`struct S: ~Copyable` and `func f<T: ~Copyable>`. The alternative, a
-suppression syntax (`?Copy`, `~Copy`), was rejected: it adds syntax to say the
-same thing.
+A parameter with `affine` admits an affine argument. The body is checked at its
+definition to treat the parameter as affine. A parameter without it is
+copyable, and `dup::<Fields>` is a type error at the instantiation, which names
+the parameter and says `affine` would admit it.
+
+`affine` names a kind, not a bound. A bound adds what a body may do, and this
+takes copying away, so a trait could not state it. A kind also composes with
+bounds: `<affine T: Eq>`.
+
+The word is exact in both positions. Affine means used at most once. A
+copyable value can be used once too, so every type is an `affine T` and
+`Option<i32>` is unchanged. `unique` reads as a demand on the argument, which
+`i32` does not meet, and elsewhere it names a pointer with one referent
+(`unique_ptr`, a unique borrow).
 
 ### What a body may do with an affine value
 
-A binding whose type is affine, or is a `T: Affine`, may be:
+A binding of an affine type, or of an `affine` parameter, may be:
 
 - moved: a `let`, a by-value argument, a `return`, a place in an aggregate, a
   by-value `self`, an assignment into a place;
-- referenced: `&x` or `&mut x` as an argument, a receiver or a scrutinee;
+- referenced: `&x` or `&mut x`;
 - dropped: by scope exit, or by `x.drop()` on a resource.
 
 It may not be read twice. The move check already states that for a resource;
-it now states it for every affine type, generic `T` included, at the
+it now states it for every affine type, `affine` parameters included, at the
 definition. The error is any read that would copy:
 
 - a second use after a move;
 - a `*r` or an `r.f` read by value through a reference;
-- a `list[i]`;
-- a capture by a closure.
+- a `list[i]` read by value.
 
 The check runs on the `Semantics` layer, so it has spans and reaches the
 editor, and it needs no instantiation to run.
 
-### Second-class references
+### References reach a handle through a cell
 
-A `&R` or `&mut R` whose referent type is affine may stand in two positions:
+A reference to an affine value is first-class, as every reference is. It may be
+bound, stored, returned and captured, and a list or a record may hold one.
 
-- a parameter, the receiver included, which the call's argument fills;
-- a binding made by a `match`, `if let` or `while let` whose scrutinee is a
-  reference.
+What keeps it from dangling is the handle's representation. An affine resource
+is a cell: a GC object holding the handle and whether it is live.
 
-Each lasts no longer than the call or the arm that holds it. A `&R` may not be
-bound by a `let`, stored in a field or an element, returned, or captured by a
-closure. A `&T` whose referent is not
-affine is unchanged and stays first-class.
+- A move hands the cell on.
+- A drop marks it dead, and so does a transfer as `own` across the boundary.
+- A `borrow` an export receives is a cell marked dead when the export returns.
+- Every use reads the handle through the cell. A use of a dead cell traps with
+  a message naming the resource.
 
-`&mut R` keeps its one write: `*r = value` replaces the referent and drops what
-it held. That is the store rule cleanup already applies to a binding.
+So ownership is static and a use after drop is a run-time trap. The two halves
+need different guarantees: ownership decides when a drop happens, which a trap
+cannot, while a reference only needs never to reach a dead handle. A reused
+index is never reached either, since a dead cell no longer holds one.
 
-The second position is SE-0432's borrowing `switch`: a `match` over a
-reference binds references, so an arm reads a payload where it stands. A
-`match` over an affine value by value is the consuming `switch`: it consumes
-the value, and each arm owns what it binds. The scrutinee's type tells the two
-apart, not a keyword.
+The cell is also the box D6 asks for. `*r = value` through a `&mut R` drops the
+handle the cell holds and stores the new one.
+
+The optimizer may represent a resource as its bare handle wherever it proves no
+use reaches the cell dead, as it may keep a primitive unboxed. The trap is the
+cell's only observable effect, so a proof that the trap cannot fire is all the
+erasure needs.
 
 ### Ways out of a place
 
-- `Option<T: Affine>::take(&mut self) -> Option<T>` moves the payload out and
+- `Option<affine T>::take(&mut self) -> Option<T>` moves the payload out and
   leaves `None`. `replace(&mut self, value: T) -> Option<T>` swaps it.
 - A field may be moved out of a local holder: `let f = h.f;` consumes `h.f`,
   and the holder is unusable as a whole afterwards. The other fields are
@@ -211,16 +251,24 @@ affine value. A panic drops nothing.
 
 ### Standard library
 
-- `Option<T: Affine>` and `Result<T: Affine, E: Affine>`, with `take` and
+- `Option<affine T>` and `Result<affine T, affine E>`, with `take` and
   `replace` on `Option`. `unwrap`, `expect`, `unwrap_or`, `map`, `map_err` and
   `ok_or` keep their by-value `self`.
-- `Future<T: Affine>`, `Stream<T>`, `AsyncCall<T: Affine>`: a future carries an
-  affine payload today (`Future<Result<Option<Trailers>, ErrorCode>>`).
-- `List<T>`, `Slice<T>`, `TreeMap<K, V>`, `HashMap<K, V>`, `TreeSet<T>` and
-  every iterator stay unmarked. `List<Fields>` is a type error
-  ([A collection of affine values](#a-collection-of-affine-values)).
-- Stdlib generics that hold a `T` by value in state the type system cannot see
-  (an iterator's `repr`, a map's log) are the reason the list above is short.
+- `Future<affine T>` and `AsyncCall<affine T>`: a future carries an affine
+  payload today (`Future<Result<Option<Trailers>, ErrorCode>>`).
+- `List<affine T>`. A method is available for an affine element when an
+  `impl<affine T> List<T>` declares it, and the definition-site check holds
+  its body to moving elements. The rest stay in `impl<T> List<T>`, for a
+  copyable element only. Iterating a list by value consumes it, so
+  `IntoIterator::into_iter` takes `self` by value and `Iterator::Item` is an
+  `affine type`.
+- `Stream<T>` is not decided yet
+  ([Open questions](#open-questions)).
+- `Slice<T>`, `TreeMap<K, V>`, `HashMap<K, V>`, `TreeSet<T>` and their
+  iterators stay unmarked.
+
+`wado-from-idl` declares `affine` every record and variant it generates that
+holds an affine resource.
 
 ### Web handles
 
@@ -239,61 +287,65 @@ In [WEP: Resource Ownership](./wep-2026-05-21-resource-ownership.md):
 - "A call through a shared reference copies" and "A call through `&mut`
   extracts" are withdrawn. The signature now carries the fact, so there is
   nothing to infer.
-- "No move out of a reference" becomes a consequence of second-class
-  references, which refuse the `let` and the `return` alike.
+- "No move out of a reference" becomes the body rule above: a by-value read
+  through a reference is a copy.
 - The move check and cleanup stay as the implementation. They are sound once
   the type system excludes what they could not see.
 - Value-copy elision is unaffected: it serves copyable types, and an affine
   type never reaches a copy site.
 
-In [WEP: Resource Lifecycle](./wep-2026-01-12-resource-lifecycle.md), "Arrays
-of resources" is withdrawn: `List<File>` does not exist.
+In [WEP: Reference Representation](./wep-2026-06-13-reference-representation.md),
+D6 is settled: a resource is boxed, and the box is its cell.
 
 ## Roadmap
 
 1. [ ] Fix the `*r = value` panic through `&mut R` with a fixture. A compiler
    panic is P0 and does not wait for the rest.
-2. [ ] `Affine` in the prelude, sealed. Declaration rule: a struct or variant
-   holding an affine value without the marker is an error naming the field;
-   a tuple and a newtype infer, and the marker on one is an error. Fixtures
-   for each, and `resource_*` fixtures
-   updated to declare their holders.
-3. [ ] Instantiation rule: an affine argument for an unmarked parameter is a
-   type error naming the parameter. `Option`, `Result`, `Future`, `Stream`,
-   `AsyncCall` marked. Every fixture and stdlib site that builds a
-   `List<Resource>` is rewritten or becomes a `compile_error` fixture.
-4. [ ] Definition-site check of a body whose `T: Affine`: the move check runs
-   over `T` bindings as over resource bindings. The stdlib's marked bodies
-   pass it, or are rewritten until they do.
-5. [ ] Second-class `&R`: `let`, field, element, `return`, closure capture and
-   `*r` by value refused at the semantic layer, with the borrowing `match`
-   kept. `&mut R` store through `*r` works and drops.
+2. [ ] `affine` as a keyword on `struct` and `variant`. A named declaration
+   holding an affine value without it is an error naming the field; a tuple,
+   a newtype and an anonymous struct infer. `wado-from-idl` emits it, and the
+   generated stdlib is regenerated. `resource_*` fixtures declare their
+   holders.
+3. [ ] `affine` on a type parameter and on an associated type, with the
+   definition-site check: the move check runs over its bindings as over
+   resource bindings.
+4. [ ] `List<affine T>`: the methods that move elements in
+   `impl<affine T> List<T>`, `IntoIterator::into_iter(self)`, and
+   `Iterator`'s `affine type Item`.
+5. [ ] The handle cell: the representation, the trap, the `borrow` an export
+   receives, and `*r = value` through it. Then the optimizer's erasure where
+   it proves no use reaches a dead cell.
 6. [ ] `Option::take`, `Option::replace`, partial move out of a local holder,
    `..base` over an affine holder.
-7. [ ] Withdraw the receiver-kind rule and the TIR copy check from #2364, and
+7. [ ] Settle `Stream<T>` ([Open questions](#open-questions)). The next item
+   makes `Stream<TcpSocket>` and `Stream<GpuError>` type errors until this is
+   done.
+8. [ ] Instantiation rule: an affine argument for an unmarked parameter is a
+   type error naming the parameter. `Option`, `Result`, `Future`, `AsyncCall`
+   and `List` are marked by then.
+9. [ ] Withdraw the receiver-kind rule and the TIR copy check from #2364, and
    the `resource_copy_out_of_reference_error` fixture with it.
-8. [ ] Cleanup drops a `Stream` and a `Future` the body does not move, which
-   it excludes today
-   ([A `Stream` or `Future` handle nothing drops](./wep-2026-05-21-resource-ownership.md#a-stream-or-future-handle-nothing-drops)).
-9. [ ] Spec: rewrite
-   [Resource Ownership](./spec-components.md#resource-ownership), the resource
-   paragraph of [Memory Model](./spec-memory.md), and the cheatsheet. Amend
-   the two WEPs above.
+10. [ ] Cleanup drops a `Stream` and a `Future` the body does not move, which
+    it excludes today
+    ([A `Stream` or `Future` handle nothing drops](./wep-2026-05-21-resource-ownership.md#a-stream-or-future-handle-nothing-drops)).
+11. [ ] Spec: rewrite
+    [Resource Ownership](./spec-components.md#resource-ownership), the
+    resource paragraph of [Memory Model](./spec-memory.md), and the cheatsheet.
+    Amend the WEPs above.
 
 ## Known gaps
 
-### A collection of affine values
+### Maps and sets of affine values
 
-`List<R>` is a type error, and nothing replaces it. A program cannot hold a
-number of affine values that is known only at run time. One that opens many
-files holds them in a struct, an `Option` per slot, or opens them one at a
-time. Swift has no `Array` of noncopyable values either.
+`TreeMap<K, V>`, `HashMap<K, V>` and `TreeSet<T>` with an affine element are
+type errors. A program keyed on affine values keeps them in a `List` and the
+keys beside it.
 
-### A closure cannot hold an affine value
+### A closure cannot own an affine value
 
-A closure captures by reference, and a reference to an affine value is
-second-class, so a closure may not capture one. A program hands the value in
-as a parameter instead.
+A closure captures by reference, so it may use an affine value but never owns
+one. A closure that outlives the value's owner traps on its first use after the
+drop.
 
 ### The rest
 
@@ -304,10 +356,27 @@ checked; `5 as Counter` mints a handle nothing owns; web handles leak.
 
 ## Open questions
 
-- Whether a trait may bound `Self` with `Affine`, so that a trait method can
-  be written over an affine `Self`.
-- Whether `impl Affine for X;` on a type that holds no resource is worth
-  admitting now, or later when a use appears.
+### A write that does not deliver
+
+The Component Model leaves with the writer what a write did not deliver: a
+`future.write` the reader dropped before, a `stream.write` the reader took
+only a prefix of, and a cancelled write of either. For a copyable value the
+writer still has its own copy. For an affine one it has nothing, because
+`FutureWritable::write(&self, value: T)` and
+`StreamWritable::write(&self, data: List<T>)` took the value and return no
+part of it. What was not delivered is never dropped.
+
+`Future` is affine already, so its half is open now. `Stream<affine T>` is the
+same question with a prefix, which is why `Stream` is left unmarked until it is
+answered. Its read side needs nothing new: `StreamChunk<T>` holds a
+`List<T>`.
+
+### The rest
+
+- Whether a trait may declare its `Self` affine, so that a trait method can be
+  written over an affine `Self`.
+- Whether `affine struct` on a type that holds no resource is admitted now, or
+  later when a use appears.
 
 ## References
 
@@ -315,8 +384,10 @@ checked; `5 as Counter` mints a handle nothing owns; web handles leak.
 - [SE-0427: Noncopyable generics](https://github.com/swiftlang/swift-evolution/blob/main/proposals/0427-noncopyable-generics.md)
 - [SE-0429: Partial consumption of noncopyable values](https://github.com/swiftlang/swift-evolution/blob/main/proposals/0429-partial-consumption.md)
 - [SE-0432: Borrowing and consuming pattern matching for noncopyable types](https://github.com/swiftlang/swift-evolution/blob/main/proposals/0432-noncopyable-switch.md)
+- [SE-0446: Nonescapable types](https://github.com/swiftlang/swift-evolution/blob/main/proposals/0446-non-escapable.md)
 - [WEP: Resource Ownership](./wep-2026-05-21-resource-ownership.md)
 - [WEP: Resource Lifecycle Management (RAII)](./wep-2026-01-12-resource-lifecycle.md)
 - [WEP: Resource Inheritance and Narrowing](./wep-2026-04-28-resource-inheritance.md)
 - [WEP: Reference Representation and Mutation Write-Back](./wep-2026-06-13-reference-representation.md)
+- [WEP: Stream Copy Results](./wep-2026-08-30-stream-copy-result.md)
 - #2367
