@@ -30,8 +30,9 @@ use crate::compile::{build_dir, load_nearest_manifest, render_error_diagnostics}
 use crate::fingerprint::{Input, compiler_digest, hash_field};
 use crate::kiln_provider::hex32;
 use crate::knobs::CompileKnobs;
-use crate::runtime::{CAPTURED_STDIO_CAPACITY, DEFAULT_GC_HEAP_INITIAL_SIZE, create_fuel_engine};
+use crate::runtime::{CAPTURED_STDIO_CAPACITY, create_fuel_engine};
 use wado_host::atomic_write::write_atomic;
+use wado_host::engine::DEFAULT_GC_HEAP_INITIAL_SIZE;
 use wado_host::sync::lock;
 
 wasmtime::component::bindgen!({

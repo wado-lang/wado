@@ -6,9 +6,8 @@ use wado_compiler::LogLevel;
 use wado_compiler::param_resolution::ParamInputs;
 
 use crate::args::{self, CliExit, OptSpec};
-use crate::runtime::{
-    DEFAULT_COLLECTOR, DEFAULT_GC_HEAP_INITIAL_SIZE, parse_collector, parse_gc_heap_size,
-};
+use crate::runtime::{parse_collector, parse_gc_heap_size};
+use wado_host::engine::{DEFAULT_COLLECTOR, DEFAULT_GC_HEAP_INITIAL_SIZE};
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug, Default)]
 pub enum OptLevel {
