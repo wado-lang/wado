@@ -25,6 +25,7 @@ use std::fmt::Write as _;
 use std::path::Path;
 use std::process::Command;
 
+use unicode_normalization::UnicodeNormalization;
 use wado_manifest::{
     Manifest, Package, PublishError, WORKSPACE_FILENAME, WorkspaceManifest, validate_for_publish,
 };
@@ -143,7 +144,8 @@ enum Verdict {
     Failed(Vec<PublishError>),
 }
 
-fn classify(manifest: &Manifest) -> Verdict {
+/// The verdict on the package whose `wado.toml` in `root` parsed to `manifest`.
+fn classify(manifest: &Manifest, root: &Path) -> Verdict {
     let Some(pkg) = manifest.package.as_ref() else {
         return Verdict::NotAPackage;
     };
@@ -153,7 +155,15 @@ fn classify(manifest: &Manifest) -> Verdict {
     let Some(namespace) = pkg.namespace.as_deref() else {
         return Verdict::Skipped("no namespace".to_string());
     };
-    let problems = validate_for_publish(manifest);
+    let mut problems = validate_for_publish(manifest);
+    problems.extend(
+        pkg.exports
+            .iter()
+            .filter(|entry| !carries_file(root, entry))
+            .map(|entry| PublishError::MissingExport {
+                entry: entry.clone(),
+            }),
+    );
     if problems.is_empty() {
         Verdict::Ready(format!("{namespace}:{}@{}", pkg.name, pkg.version))
     } else {
@@ -161,8 +171,32 @@ fn classify(manifest: &Manifest) -> Verdict {
     }
 }
 
+/// Whether the package at `root` carries the file `entry` names, spelled as
+/// `entry` spells it: a case-insensitive filesystem answers for any casing, and
+/// a consumer's may not.
+fn carries_file(root: &Path, entry: &str) -> bool {
+    let mut dir = root.to_path_buf();
+    for segment in entry.split('/') {
+        let Ok(names) = std::fs::read_dir(&dir) else {
+            return false;
+        };
+        let spelled = names
+            .filter_map(Result::ok)
+            .map(|e| e.file_name())
+            .find(|name| {
+                name.to_str()
+                    .is_some_and(|name| name.nfc().eq(segment.chars()))
+            });
+        let Some(name) = spelled else {
+            return false;
+        };
+        dir.push(name);
+    }
+    dir.is_file()
+}
+
 async fn publish_single(project: &ProjectManifest, dry_run: bool) -> Result<(), CliExit> {
-    match classify(&project.manifest) {
+    match classify(&project.manifest, &project.root) {
         Verdict::Ready(coord) => {
             publish_ready(&[(coord, project)], &project.manifest.registries, dry_run).await
         }
@@ -202,7 +236,7 @@ async fn publish_workspace(
     let mut skipped: Vec<(String, String)> = Vec::new();
     let mut failed: Vec<(String, Vec<PublishError>)> = Vec::new();
     for (label, project) in &candidates {
-        match classify(&project.manifest) {
+        match classify(&project.manifest, &project.root) {
             Verdict::NotAPackage => {}
             Verdict::Skipped(reason) => skipped.push((label.clone(), reason)),
             Verdict::Ready(coord) => ready.push((coord, project)),
@@ -515,34 +549,54 @@ mod tests {
         toml.parse().unwrap()
     }
 
+    const READY: &str = "[package]\nnamespace = \"org\"\nname = \"app\"\nversion = \"0.1.0\"\ndescription = \"d\"\nrepository = \"https://x/y\"\nlicense = \"MIT\"\nauthors = [\"A\"]\n";
+
+    #[test]
     #[test]
     fn classify_ready_package() {
-        let m = manifest(
-            "[package]\nnamespace = \"org\"\nname = \"app\"\nversion = \"0.1.0\"\ndescription = \"d\"\nrepository = \"https://x/y\"\nlicense = \"MIT\"\nauthors = [\"A\"]\n",
-        );
-        assert_matches!(classify(&m), Verdict::Ready(c) if c == "org:app@0.1.0");
+        let m = manifest(READY);
+        assert_matches!(classify(&m, Path::new(".")), Verdict::Ready(c) if c == "org:app@0.1.0");
+    }
+
+    #[test]
+    fn classify_failed_when_an_export_is_not_carried_as_spelled() {
+        let tmp = tempfile::tempdir().unwrap();
+        std::fs::create_dir(tmp.path().join("grammar")).unwrap();
+        std::fs::write(tmp.path().join("grammar/Wado.g4"), "").unwrap();
+        std::fs::write(tmp.path().join("cafe\u{301}.txt"), "").unwrap();
+        let with = |exports: &str| manifest(&format!("{READY}exports = [{exports}]\n"));
+
+        let carried = with("\"grammar/Wado.g4\", \"caf\u{e9}.txt\"");
+        assert_matches!(classify(&carried, tmp.path()), Verdict::Ready(_));
+        for missing in ["grammar/wado.g4", "grammar/Other.g4", "Grammar/Wado.g4"] {
+            let m = with(&format!("\"{missing}\""));
+            assert_matches!(
+                classify(&m, tmp.path()),
+                Verdict::Failed(p) if p == [PublishError::MissingExport { entry: missing.to_string() }]
+            );
+        }
     }
 
     #[test]
     fn classify_skips_publish_false_and_no_namespace() {
         let no_ns = manifest("[package]\nname = \"app\"\nversion = \"0.1.0\"\n");
-        assert_matches!(classify(&no_ns), Verdict::Skipped(r) if r == "no namespace");
+        assert_matches!(classify(&no_ns, Path::new(".")), Verdict::Skipped(r) if r == "no namespace");
         let opted_out = manifest(
             "[package]\nnamespace = \"org\"\nname = \"app\"\nversion = \"0.1.0\"\npublish = false\n",
         );
-        assert_matches!(classify(&opted_out), Verdict::Skipped(r) if r == "publish = false");
+        assert_matches!(classify(&opted_out, Path::new(".")), Verdict::Skipped(r) if r == "publish = false");
     }
 
     #[test]
     fn classify_failed_when_metadata_missing() {
         let m = manifest("[package]\nnamespace = \"org\"\nname = \"app\"\nversion = \"0.1.0\"\n");
-        assert_matches!(classify(&m), Verdict::Failed(p) if !p.is_empty());
+        assert_matches!(classify(&m, Path::new(".")), Verdict::Failed(p) if !p.is_empty());
     }
 
     #[test]
     fn classify_not_a_package_without_a_package_table() {
         let m = manifest("[registries]\ndefault = \"oci://ghcr.io\"\n");
-        assert_matches!(classify(&m), Verdict::NotAPackage);
+        assert_matches!(classify(&m, Path::new(".")), Verdict::NotAPackage);
     }
 
     fn ready_manifest_with_registry(registry: &str) -> Manifest {

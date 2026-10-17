@@ -4,6 +4,7 @@ use std::str::FromStr;
 
 use indexmap::IndexMap;
 use serde::Deserialize;
+use unicode_normalization::UnicodeNormalization;
 
 use crate::validate;
 use crate::version::VersionSpecifier;
@@ -263,6 +264,9 @@ pub struct Package {
     /// items are visible to a consumer of the source; a consumer of the built
     /// component sees the `export` items only.
     pub lib: Option<String>,
+    /// The files a consumer may name as `"<specifier>/<path>"`, relative to the
+    /// package root, NFC-normalized. Every other file is invisible to it.
+    pub exports: Vec<String>,
     /// Short, human-readable summary (→ `org.opencontainers.image.description`).
     pub description: Option<String>,
     /// Project home page URL (→ `org.opencontainers.image.url`). Falls back to
@@ -440,6 +444,8 @@ pub enum ManifestError {
     PackageInWorkspace,
     /// A `[world]` value is neither an entry-path string nor a valid table.
     InvalidWorldEntry { world: String, reason: String },
+    /// A `[package].exports` entry names no file the package can offer.
+    InvalidExport { entry: String, reason: &'static str },
 }
 
 impl fmt::Display for ManifestError {
@@ -511,6 +517,9 @@ impl fmt::Display for ManifestError {
             ),
             ManifestError::InvalidWorldEntry { world, reason } => {
                 write!(f, "[world].{world:?}: {reason}")
+            }
+            ManifestError::InvalidExport { entry, reason } => {
+                write!(f, "[package].exports entry {entry:?} {reason}")
             }
         }
     }
@@ -605,6 +614,7 @@ struct RawPackage {
     name: Option<String>,
     version: Option<String>,
     lib: Option<String>,
+    exports: Option<Vec<String>>,
     description: Option<String>,
     homepage: Option<String>,
     repository: Option<String>,
@@ -808,6 +818,12 @@ fn convert_package(raw: RawPackage) -> Result<Package, ManifestError> {
         name,
         version,
         lib: raw.lib,
+        exports: raw
+            .exports
+            .unwrap_or_default()
+            .iter()
+            .map(|entry| entry.nfc().collect())
+            .collect(),
         description: raw.description,
         homepage: raw.homepage,
         repository: raw.repository,
@@ -1751,6 +1767,42 @@ wado-version = "not a req"
 "#;
         let err = toml.parse::<Manifest>().unwrap_err();
         assert_matches!(err, ManifestError::InvalidWadoVersion { .. });
+    }
+
+    fn with_exports(exports: &str) -> Result<Manifest, ManifestError> {
+        format!("[package]\nname = \"app\"\nversion = \"0.1.0\"\nexports = [{exports}]\n").parse()
+    }
+
+    #[test]
+    fn exports_parse_nfc_normalized() {
+        let manifest = with_exports("\"grammar/Wado.g4\", \"src/cafe\u{301}.wado\"").unwrap();
+        let exports = manifest.package.unwrap().exports;
+        assert_eq!(exports, ["grammar/Wado.g4", "src/caf\u{e9}.wado"]);
+    }
+
+    #[test]
+    fn exports_reject_what_is_not_a_package_file() {
+        for entry in [
+            "../up.wado",
+            "src/../x.wado",
+            "./x.wado",
+            "/abs.wado",
+            "src\\\\x.wado",
+            "src//x.wado",
+            "src/",
+            "Makefile",
+            "src/.hidden",
+            "",
+        ] {
+            let err = with_exports(&format!("\"{entry}\"")).unwrap_err();
+            assert_matches!(err, ManifestError::InvalidExport { .. }, "{entry:?}");
+        }
+    }
+
+    #[test]
+    fn exports_reject_a_repeated_entry() {
+        let err = with_exports("\"src/caf\u{e9}.wado\", \"src/cafe\u{301}.wado\"").unwrap_err();
+        assert_matches!(err, ManifestError::InvalidExport { .. });
     }
 
     #[test]
