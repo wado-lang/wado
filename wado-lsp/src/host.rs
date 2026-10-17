@@ -151,7 +151,8 @@ impl CompilerHost for FilesystemCompilerHost {
 
     fn package_root(&self, path: &str) -> Option<String> {
         let file = normalize_path(&absolutize(&self.base_path.join(path)));
-        let dir = discovery::nearest_manifest_dir(file.parent()?)?;
+        let dir =
+            discovery::nearest_manifest_dir(file.parent().expect("a module path names a file"))?;
         Some(dir.display().to_string())
     }
 
