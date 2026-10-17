@@ -797,8 +797,10 @@ the generator again.
 ## Dialects
 
 A dialect is a superset of Wado, or another surface for it, implemented as a
-generator. Its files take their own extension, since a `.wado` file is always
-imported as a module. The generator's output is ordinary Wado on disk, and every
-tool that reads Wado reads it unchanged.
+generator. A dialect file is reached only through a `use` naming its generator,
+since without one any file is read as Wado source. Its files take their own
+extension anyway, so `wado test` and `wado format`, which walk a directory for
+`.wado` files, pass them by. The generator's output is ordinary Wado on disk,
+and every tool that reads Wado reads it unchanged.
 
 Rationale: [WEP: Kiln, Dialects](./wep-2026-04-12-kiln.md#dialects).
