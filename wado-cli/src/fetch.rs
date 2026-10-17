@@ -15,11 +15,12 @@ use crate::args::{self, CliExit};
 use crate::build_dep::{
     fetch_build_dependencies, locked_generator_versions, resolve_build_dependencies,
 };
-use crate::cache::{component_path, generator_path, write_atomic};
+use crate::cache::{component_path, generator_path};
 use crate::git::materialize;
 use crate::manifest::{ProjectManifest, discover, emit_manifest_warnings};
 use crate::oci;
 use crate::registry::FilesystemProvider;
+use wado_host::atomic_write::write_atomic;
 
 #[derive(Debug)]
 pub struct FetchOptions {}

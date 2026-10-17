@@ -2,9 +2,11 @@
 //! bookkeeping for inline-declared invocations.
 //!
 //! All Kiln invocations originate from inline `use ... with { generator: ... }`
-//! clauses; the manifest does not declare any. This module is the CLI-side
+//! clauses; the manifest does not declare any. This module is the host-side
 //! glue between the parsed inline invocation set and the pure-data
-//! algorithmic module at [`wado_compiler::kiln`]. Its responsibilities are:
+//! algorithmic module at [`wado_compiler::kiln`], shared by `wado` and the e2e
+//! harness, each resolving generators through its own [`GeneratorProvider`].
+//! Its responsibilities are:
 //!
 //! 1. Topologically sort the inline invocation set via [`build_plan`].
 //! 2. Execute a single invocation by calling
@@ -12,7 +14,7 @@
 //!    writing the response to disk under the invocation's output
 //!    directory, with a canonical `#![generated]` header stamped on each
 //!    file that does not already carry one — see [`execute`].
-//! 3. Convert an [`InvocationRun`] into a [`crate::kiln_metadata::Metadata`]
+//! 3. Convert an [`InvocationRun`] into a [`Metadata`]
 //!    record for persistence (`build_metadata`), check a recorded
 //!    `<primary>.kiln.json` for freshness against the current filesystem +
 //!    sources (`cache_matches`), and delete orphaned `#![generated]`
@@ -20,7 +22,7 @@
 //!
 //! Per-invocation cache state lives at
 //! `<manifest_root>/<output_dir>/<primary>.kiln.json` (see
-//! [`crate::kiln_metadata`]). `wado.lock` is dependency-pin-only since
+//! [`kiln_metadata`]). `wado.lock` is dependency-pin-only since
 //! WEP M9 — it does not contain any generator-cache rows.
 
 use std::path::{Path, PathBuf};
@@ -30,20 +32,21 @@ use wado_compiler::ast::AttrValue;
 use wado_compiler::compiler_host::{
     CompilerHost, GeneratorInputFile, GeneratorRequest, GeneratorRunnerError, SourceError,
 };
+use wado_compiler::hashmap::{IndexMap, IndexSet};
 #[cfg(test)]
 use wado_compiler::kiln::DeclSite;
 use wado_compiler::kiln::{
     FileHash, GeneratedHeader, GeneratorModule, Invocation, InvocationPath, OptionsAnchor,
-    OptionsDescriptor, Plan, PlanError, content_hash, file_hash, generator_identity,
-    has_generated_marker, hex_digest, validate_options,
+    OptionsDescriptor, Plan, PlanError, collect_inline_invocations, content_hash, file_hash,
+    generator_identity, harvest_module_graph, has_generated_marker, hex_digest, validate_options,
 };
 use wado_compiler::{Code, Diagnostic, Severity};
 
-use crate::cache::{is_staging_file, write_atomic};
-use crate::kiln_metadata::{
-    self, FileHash as MetaFileHash, METADATA_VERSION, Metadata, OutputEntry as MetaOutputEntry,
+use super::metadata::{
+    self as kiln_metadata, FileHash as MetaFileHash, METADATA_VERSION, Metadata,
+    OutputEntry as MetaOutputEntry,
 };
-use crate::manifest::DiscoveryError;
+use crate::atomic_write::{is_staging_file, write_atomic};
 
 /// Outcome of plan construction.
 #[derive(Debug)]
@@ -841,8 +844,9 @@ pub enum PipelineError {
     /// per-conflict diagnostics have already been emitted through the host;
     /// this carries the count for the summary.
     RedirectConflict(usize),
-    /// A generator package's `wado.toml` cannot be read or parsed.
-    Manifest(DiscoveryError),
+    /// A generator package's `wado.toml` cannot be read or parsed. The host
+    /// reads manifests, so the error is its own.
+    Manifest(Box<dyn std::error::Error + Send + Sync>),
 }
 
 impl std::fmt::Display for PipelineError {
@@ -908,13 +912,13 @@ fn span_end<H: CompilerHost>(host: &H, name: &str) {
 /// which kept the Kiln driver's `?` flow free and avoided an extra
 /// `async fn` wrapper that would otherwise inflate the layout depth
 /// of `compile::run` past rustc's default recursion limit.
-pub(crate) struct KilnSpan<'a, H: CompilerHost> {
+pub struct KilnSpan<'a, H: CompilerHost> {
     host: &'a H,
     name: String,
 }
 
 impl<'a, H: CompilerHost> KilnSpan<'a, H> {
-    pub(crate) fn new(host: &'a H, name: impl Into<String>) -> Self {
+    pub fn new(host: &'a H, name: impl Into<String>) -> Self {
         let name = name.into();
         span_start(host, &name);
         Self { host, name }
@@ -925,6 +929,51 @@ impl<H: CompilerHost> Drop for KilnSpan<'_, H> {
     fn drop(&mut self) {
         span_end(self.host, &self.name);
     }
+}
+
+/// The inline invocations declared by `entry_file` and the local `.wado`
+/// modules it reaches past those in `settled`, which gains them, plus the
+/// `harvest_key → loader_identity` map the caller rewrites the redirect index
+/// through ([`wado_compiler::kiln::remap_decl_files`]).
+///
+/// `entry_identity` must be byte-identical to the name the compile that follows
+/// gives its entry, since that is what the loader interns the redirect under.
+/// `entry_key` spells the entry from the package root, so an invocation keeps
+/// one identity whether the entry is compiled on its own behalf or as a
+/// generator.
+pub async fn harvest_invocations(
+    entry_file: &Path,
+    entry_identity: &str,
+    entry_key: &str,
+    settled: &mut IndexSet<String>,
+) -> (Vec<Invocation>, IndexMap<String, String>, Vec<Diagnostic>) {
+    // An unreadable entry, or one whose parse recovered from an error, harvests
+    // nothing; the compile that follows reports it.
+    let Ok(entry_source) = std::fs::read_to_string(entry_file) else {
+        return Default::default();
+    };
+    let Ok(entry) = wado_compiler::parse(&entry_source).into_fail_fast() else {
+        return Default::default();
+    };
+    // A loader identity is anchored on the entry's directory, so that is what
+    // an import joins onto.
+    let entry_dir = entry_file.parent().unwrap_or(Path::new(".")).to_path_buf();
+    let harvest = harvest_module_graph(
+        entry_key,
+        entry_identity,
+        entry.ast,
+        settled,
+        async |identity| std::fs::read_to_string(entry_dir.join(identity)).ok(),
+    )
+    .await;
+    settled.extend(harvest.modules.keys().cloned());
+
+    let (invocations, diagnostics) = collect_inline_invocations(
+        harvest.modules.iter().map(|(k, v)| (k.as_str(), v)),
+        &IndexMap::default(),
+        "",
+    );
+    (invocations, harvest.identities, diagnostics)
 }
 
 /// Run the full Kiln pipeline for the given inline invocations: resolve
@@ -1599,7 +1648,7 @@ mod tests {
 
     mod cache_tests {
         use super::*;
-        use crate::cache::staging_file_name;
+        use crate::atomic_write::staging_file_name;
         use indexmap::IndexMap;
         use std::sync::Mutex;
         use wado_compiler::compiler_host::{

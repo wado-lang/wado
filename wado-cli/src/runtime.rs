@@ -25,7 +25,7 @@ use crate::coverage_host::{CoverageHits, add_to_linker as add_coverage_to_linker
 use crate::eval_host::{EvalSession, add_to_linker as add_eval_to_linker};
 use crate::http_hooks::WadoHttpHooks;
 use crate::knobs::RuntimeKnobs;
-use crate::sync::lock;
+use wado_host::sync::lock;
 use wado_host::timezone::add_to_linker;
 use wado_host::tls_trust::{build_root_cert_store, install_default_crypto_provider};
 

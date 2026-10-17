@@ -2,10 +2,17 @@
 //! ask its environment, for compiling the e2e fixtures outside `wado`.
 
 use std::path::PathBuf;
+use std::sync::Arc;
 
 use indexmap::IndexMap;
-use wado_compiler::{CompilerHost, DependencyIndex, Diagnostic, SourceError};
+use wado_compiler::{
+    CompilerHost, DependencyIndex, Diagnostic, GeneratorRequest, GeneratorResponse,
+    GeneratorRunnerError, SourceError,
+};
 use wado_lsp::FilesystemCompilerHost;
+
+use crate::kiln::component_cache::ComponentCache;
+use crate::kiln::runtime::{self, KilnRunPolicy, relay_diagnostic};
 
 /// What a [`StubHost`] answers in place of the environment.
 #[derive(Debug, Default, Clone)]
@@ -19,10 +26,12 @@ pub struct HostStubs {
 
 /// A [`FilesystemCompilerHost`] that answers the dependency index and the
 /// environment from [`HostStubs`] rather than from `wado.toml` and the process.
-#[derive(Debug)]
 pub struct StubHost {
     filesystem: FilesystemCompilerHost,
     stubs: HostStubs,
+    /// Where generators run, once [`Self::with_generators`] gives a cache.
+    /// Without one the host cannot run a generator, as the trait's default.
+    generators: Option<Arc<ComponentCache>>,
 }
 
 impl StubHost {
@@ -33,7 +42,27 @@ impl StubHost {
         Self {
             filesystem: FilesystemCompilerHost::new(base_path),
             stubs: HostStubs::default(),
+            generators: None,
         }
+    }
+
+    /// This host, running Kiln generators on the components `cache` holds.
+    #[must_use]
+    pub fn with_generators(mut self, cache: Arc<ComponentCache>) -> Self {
+        self.generators = Some(cache);
+        self
+    }
+
+    /// The generator component for `wasm` and its engine, or `Unsupported`
+    /// when this host was given no cache.
+    fn component(
+        &self,
+        wasm: &[u8],
+    ) -> Result<(wasmtime::Engine, wasmtime::component::Component), GeneratorRunnerError> {
+        self.generators
+            .as_ref()
+            .ok_or(GeneratorRunnerError::Unsupported)?
+            .get_or_compile(wasm)
     }
 
     /// This host, answering from `stubs` what a real host would ask its
@@ -79,6 +108,34 @@ impl CompilerHost for StubHost {
             index.resolved.insert(name.clone(), lib.clone());
         }
         index
+    }
+
+    async fn run_generator(
+        &self,
+        component_wasm: &[u8],
+        request: GeneratorRequest,
+    ) -> Result<GeneratorResponse, GeneratorRunnerError> {
+        let (engine, component) = self.component(component_wasm)?;
+        let (outcome, diagnostics) =
+            runtime::run_generator(&engine, &component, request, KilnRunPolicy::default()).await;
+        for diagnostic in diagnostics {
+            relay_diagnostic(self, diagnostic);
+        }
+        outcome
+    }
+
+    async fn probe_generator(
+        &self,
+        component_wasm: &[u8],
+        request: &GeneratorRequest,
+    ) -> Result<Vec<Option<u64>>, GeneratorRunnerError> {
+        let (engine, component) = self.component(component_wasm)?;
+        let (outcome, diagnostics) =
+            runtime::run_probe(&engine, &component, request, KilnRunPolicy::default()).await;
+        for diagnostic in diagnostics {
+            relay_diagnostic(self, diagnostic);
+        }
+        outcome
     }
 }
 

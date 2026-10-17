@@ -31,12 +31,12 @@ use crate::manifest::package_root;
 use crate::rss::summary_line;
 use crate::run_cache::RunCache;
 use crate::runtime::{self, ProfileMode, Ticker, WasiState};
-use crate::sync::lock;
 use crate::test_cache::{self, Tally, TestCache};
 use crate::test_report::{
     CompileEvent, HeartbeatReporter, LoadEvent, PackageDoneArgs, TapReporter, TestReporter,
     VerboseReporter,
 };
+use wado_host::sync::lock;
 
 const DEFAULT_TIMEOUT_MS: u64 = 5000;
 // Coarse epoch interval to keep thread wake-ups down. Cost: up to 1s

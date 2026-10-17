@@ -31,6 +31,7 @@ use wado_compiler::{
     CompileError, CompileFailure, CompilerHost, CompilerOptions, Diagnostic, InMemoryCompilerHost,
     OptLevel,
 };
+use wado_host::kiln::local::{generators, run_local_generators};
 use wado_host::timezone;
 pub use wado_host::tls_trust::install_default_crypto_provider;
 pub use wado_host::{HostStubs, StubHost};
@@ -1098,19 +1099,31 @@ pub fn compile_capturing_diagnostics(
 ) -> CapturedCompile {
     use wado_compiler::Severity;
     let base_path = path.parent().map(Path::to_path_buf).unwrap_or_default();
-    let host = StubHost::new(base_path).with_stubs(stubs);
+    let host = StubHost::new(base_path)
+        .with_stubs(stubs)
+        .with_generators(generators());
     let filename = display_filename
         .map(std::borrow::Cow::Borrowed)
         .unwrap_or_else(|| path.to_string_lossy());
 
     let result = runtime()
-        .block_on(wado_compiler::compile_with_options(
-            source,
-            &host,
-            Some(&filename),
-            options,
-        ))
-        .map_err(|_| bail_to_compile_error(&host.diagnostics(), Some(&filename)));
+        .block_on(async {
+            let invocations = run_local_generators(path, &filename, &host)
+                .await
+                .ok_or(())?;
+            wado_compiler::compile_with_options(
+                source,
+                &host,
+                Some(&filename),
+                CompilerOptions {
+                    invocations,
+                    ..options
+                },
+            )
+            .await
+            .map_err(drop)
+        })
+        .map_err(|()| bail_to_compile_error(&host.diagnostics(), Some(&filename)));
 
     let diagnostics = host.diagnostics();
     let captured = |keep: fn(Severity) -> bool| -> Vec<CapturedDiagnostic> {

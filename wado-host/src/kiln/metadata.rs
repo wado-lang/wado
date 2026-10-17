@@ -33,7 +33,7 @@ pub use wado_compiler::kiln::metadata::{
 /// [`metadata_filename`] so two invocations sharing one
 /// `output_dir` collide only if they share both primary basename and
 /// options, which would already make them the same invocation under
-/// [`crate::kiln_driver::invocation_id`].
+/// [`super::driver::invocation_id`].
 #[must_use]
 pub fn metadata_path(manifest_root: &Path, output_dir: &str, primary: &str) -> PathBuf {
     manifest_root

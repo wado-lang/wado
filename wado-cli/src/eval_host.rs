@@ -26,13 +26,13 @@ use wado_lsp::host::dependency_index_from;
 use wado_lsp::host::discovery::{absolutize, normalize_path};
 
 use crate::COMPILER_STACK_SIZE;
-use crate::cache::write_atomic;
 use crate::compile::{build_dir, load_nearest_manifest, render_error_diagnostics};
 use crate::fingerprint::{Input, compiler_digest, hash_field};
 use crate::kiln_provider::hex32;
 use crate::knobs::CompileKnobs;
 use crate::runtime::{CAPTURED_STDIO_CAPACITY, DEFAULT_GC_HEAP_INITIAL_SIZE, create_fuel_engine};
-use crate::sync::lock;
+use wado_host::atomic_write::write_atomic;
+use wado_host::sync::lock;
 
 wasmtime::component::bindgen!({
     inline: "package wado:eval-runner; world runner { import core:eval/eval-host@0.1.0; }",

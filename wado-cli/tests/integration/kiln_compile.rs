@@ -15,11 +15,11 @@
 use std::path::PathBuf;
 
 use wado_cli::compiler_host::FilesystemCompilerHost;
-use wado_cli::kiln_driver::{GeneratorProvider, ProviderError};
 use wado_cli::kiln_provider::{CACHE_DIR, CliGeneratorProvider, INDEX_FILE};
 use wado_cli::run_cache::RunCache;
 use wado_compiler::kiln::{GeneratorModule, InvocationPath};
 use wado_compiler::{CompilerHost, GeneratorInputFile, GeneratorRequest, LogLevel};
+use wado_host::kiln::driver::{GeneratorProvider, ProviderError};
 
 use crate::common::runtime;
 

@@ -1,6 +1,6 @@
 //! Integration tests for the Kiln pipeline driver.
 //!
-//! Exercises `wado_cli::kiln_driver::run_pipeline` through the crate's
+//! Exercises `wado_host::kiln::driver::run_pipeline` through the crate's
 //! public API, using a static in-memory generator provider and a mock
 //! `CompilerHost`. All invocations originate inline; the manifest carries
 //! only `[build-dependencies]`.
@@ -9,15 +9,15 @@ use std::path::Path;
 use std::sync::Mutex;
 
 use indexmap::IndexMap;
-use wado_cli::kiln_driver::{
-    GeneratorProvider, PipelineOutcome, ProviderError, ResolvedGenerator, run_pipeline,
-};
-use wado_cli::kiln_metadata;
 use wado_compiler::compiler_host::{
     CompilerHost, Diagnostic, GeneratorOutputFile, GeneratorRequest, GeneratorResponse,
     GeneratorRunnerError, SourceError,
 };
 use wado_compiler::kiln::{DeclSite, GeneratorModule, Invocation, InvocationPath};
+use wado_host::kiln::driver::{
+    GeneratorProvider, PipelineOutcome, ProviderError, ResolvedGenerator, run_pipeline,
+};
+use wado_host::kiln::metadata as kiln_metadata;
 
 use crate::common::runtime;
 

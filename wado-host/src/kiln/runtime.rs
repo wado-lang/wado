@@ -393,6 +393,24 @@ fn as_u64(v: &CanonicalValue) -> Option<u64> {
     }
 }
 
+/// An engine with the features a generator component needs, metering fuel, for
+/// a host with no runtime configuration of its own. `wado` runs generators on
+/// its own engine instead.
+///
+/// # Errors
+///
+/// Fails when wasmtime rejects the configuration.
+pub fn generator_engine() -> anyhow::Result<Engine> {
+    let mut config = wasmtime::Config::new();
+    config.wasm_component_model_gc(true);
+    config.wasm_component_model_more_async_builtins(true);
+    config.wasm_component_model_async_stackful(true);
+    config.wasm_component_model_map(true);
+    config.consume_fuel(true);
+    config.cranelift_opt_level(wasmtime::OptLevel::Speed);
+    Ok(Engine::new(&config)?)
+}
+
 /// Build a wasmtime [`Component`] from raw bytes. Cranelift-AOT
 /// dominates here (~7s on a 432KB generator), so the host caches the
 /// result across invocations that share the same bytes — see
@@ -579,7 +597,8 @@ pub async fn run_probe(
     (outcome, emitted)
 }
 
-pub(crate) fn relay_diagnostic<H: CompilerHost + ?Sized>(host: &H, diag: GeneratorDiagnostic) {
+/// Report a generator's diagnostic through `host`, which owns how it reads.
+pub fn relay_diagnostic<H: CompilerHost + ?Sized>(host: &H, diag: GeneratorDiagnostic) {
     use wado_compiler::{Code, Diagnostic, DiagnosticSpan, Severity};
     let severity = match diag.level {
         GeneratorDiagnosticLevel::Error => Severity::Error,
@@ -606,7 +625,6 @@ pub(crate) fn relay_diagnostic<H: CompilerHost + ?Sized>(host: &H, diag: Generat
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::runtime::create_fuel_engine;
 
     #[test]
     fn malformed_component_is_host_error() {
@@ -614,7 +632,7 @@ mod tests {
         // (so the host can cache the result across invocations); this
         // is where a malformed module surfaces, not from
         // `run_generator`.
-        let engine = create_fuel_engine(wasmtime::OptLevel::Speed).expect("engine");
+        let engine = generator_engine().expect("engine");
         match compile_component(&engine, &[0, 1, 2, 3]) {
             Err(GeneratorRunnerError::Host(msg)) => {
                 assert!(msg.contains("component compile"), "msg = {msg}");
@@ -724,7 +742,7 @@ export fn generate(req: Request<Options>) -> Result<Response, Error> {
             values: vec![("verbose".to_string(), CanonicalValue::Bool(true))],
         };
 
-        let engine = create_fuel_engine(wasmtime::OptLevel::Speed).expect("engine");
+        let engine = generator_engine().expect("engine");
         let component = compile_component(&engine, &compiled.wasm).expect("component");
         let request = GeneratorRequest {
             primary: GeneratorInputFile {
@@ -817,7 +835,7 @@ export fn generate(req: Request<Options>) -> Result<Response, Error> {
             ],
         };
 
-        let engine = create_fuel_engine(wasmtime::OptLevel::Speed).expect("engine");
+        let engine = generator_engine().expect("engine");
         let component = compile_component(&engine, &compiled.wasm).expect("component");
         let request = GeneratorRequest {
             primary: GeneratorInputFile {

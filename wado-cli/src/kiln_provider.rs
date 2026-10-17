@@ -56,14 +56,15 @@ use wado_manifest::registry_url;
 use crate::build_dep::{
     GENERATOR_WORLD_FQ, GENERATOR_WORLD_SEGMENT, parse_spec, resolve_generator_version,
 };
-use crate::cache::{generator_path, write_atomic};
+use crate::cache::generator_path;
 use crate::compile::{KilnRun, run_nested_pipeline};
 use crate::compiler_host::FilesystemCompilerHost;
-use crate::kiln_driver::{GeneratorProvider, PipelineError, ProviderError, ResolvedGenerator};
 use crate::kiln_wit::options_descriptor_from_component;
 use crate::oci;
 use crate::run_cache::RunCache;
-use crate::sync::lock;
+use wado_host::atomic_write::write_atomic;
+use wado_host::kiln::driver::{GeneratorProvider, PipelineError, ProviderError, ResolvedGenerator};
+use wado_host::sync::lock;
 
 /// Compiled generator components, each named by the hash of its sources.
 /// Gitignored. A registry (`Spec`) generator is prebuilt and caches in the

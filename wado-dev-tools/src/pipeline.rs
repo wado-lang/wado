@@ -6,6 +6,7 @@ use wado_compiler::hashmap::{IndexMap, IndexSet};
 
 use wado_compiler::OptLevel;
 use wado_host::StubHost;
+use wado_host::kiln::local::{generators, run_local_generators};
 
 use crate::data_section::{FixtureCompile, read_fixture_compile, should_skip_file};
 use crate::template::Template;
@@ -517,6 +518,15 @@ async fn render_phases(
     } = read_fixture_compile(source, default_world).unwrap_or_else(|e| panic!("{input_path}: {e}"));
     let params = inputs.param_inputs();
 
+    let kiln_host = StubHost::new(base_path.clone()).with_generators(generators());
+    let Some(invocations) = run_local_generators(path, input_path, &kiln_host).await else {
+        let e = diagnostics_summary(&kiln_host, "kiln failed");
+        for p in phases {
+            out.insert(*p, Err(e.clone()));
+        }
+        return out;
+    };
+
     if needs_dump {
         let host = StubHost::new(base_path.clone()).with_stubs(inputs.host_stubs());
         let dumped = wado_compiler::dump_with_host_and_world(
@@ -529,7 +539,7 @@ async fn render_phases(
             wado_compiler::OptOverrides::default(),
             &inputs.codegen_flags,
             &params,
-            wado_compiler::kiln::InvocationIndex::default(),
+            invocations.clone(),
             // More than one, so a golden that depends on the thread count
             // drifts from the one committed.
             2,
@@ -610,6 +620,7 @@ async fn render_phases(
             log_level: Some(wado_compiler::LogLevel::Off),
             codegen_flags: inputs.codegen_flags.clone(),
             params,
+            invocations,
             ..wado_compiler::CompilerOptions::default()
         };
         let res =

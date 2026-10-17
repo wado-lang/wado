@@ -371,6 +371,22 @@ test "a .txt file under type wat is read as Wasm text" {
 }
 ```
 
+And under `generator`, it is the generator's input, and the `use` binds against
+the module the generator writes:
+
+<!-- {"fixture": "use_reads_txt_as_kiln_input.wado"} -->
+
+```wado
+use { number } from "./sub/use_reads_txt_as_kiln_input.txt"
+    with {
+        generator: { module: "./sub/use_reads_txt_as_kiln_input_generator.wado" },
+    };
+
+test "a .txt file under generator is a generator's input" {
+    assert number() == 7;
+}
+```
+
 ## Wasm Module and Component Imports
 
 A Wasm asset is imported directly with `with { type: "wasm" | "wat" }`. Whether the file is a core module or a Component Model component is detected from its content, not declared, and either may be written as `.wasm` or `.wat`. A single `use` may pull several names (functions from a core module, interfaces from a component). The path is a `./` or `../` path.
