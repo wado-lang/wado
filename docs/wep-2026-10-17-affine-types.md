@@ -93,17 +93,17 @@ signatures.
 
 ### Approaches considered
 
-| Approach                                  | Why not                                                                                                            |
-| ----------------------------------------- | ------------------------------------------------------------------------------------------------------------------ |
-| Hand-written `drop` (Go, C#, Java)        | A `?` path forgets its drop. For a stream that is a hang, exactly where the guarantee matters most.                |
-| Reference counting (Swift ARC, Nim, Koka) | Needs a release point. A closure, a `Box` cell or an iterator state is reclaimed by the collector, which has none. |
-| Arena or scope object                     | Drops at the scope, not at the point the stream needs.                                                             |
-| Finalizers                                | Wasm GC has none, and a finalizer's timing is undefined where one exists.                                          |
-| Linear types (Austral)                    | Removes cleanup synthesis, but leaves the generic problem in place.                                                |
-| Scoped use (`bracket`, `with`)            | A resource cannot be held in a structure past the scope: no pool, no body written later.                           |
-| Post-monomorphization check               | Errors point into the stdlib's body, with no span the editor shows.                                                |
-| Finish the signature inference            | Unsound by construction: see above.                                                                                |
-| A run-time cell around every handle       | Makes a use after drop a certain trap, but makes no drop happen. Adopted for references only, below.               |
+| Approach                                  | Why not                                                                                                             |
+| ----------------------------------------- | ------------------------------------------------------------------------------------------------------------------- |
+| Hand-written `drop` (Go, C#, Java)        | A `?` path forgets its drop. For a stream that is a hang, exactly where the guarantee matters most.                 |
+| Reference counting (Swift ARC, Nim, Koka) | Needs a release point. A closure, a `Box` cell or an iterator state is reclaimed by the collector, which has none.  |
+| Arena or scope object                     | Drops at the scope, not at the point the stream needs.                                                              |
+| Finalizers                                | Wasm GC has none, and a finalizer's timing is undefined where one exists.                                           |
+| Linear types (Austral)                    | Removes cleanup synthesis, but leaves the generic problem in place.                                                 |
+| Scoped use (`bracket`, `with`)            | A resource cannot be held in a structure past the scope: no pool, no body written later.                            |
+| Post-monomorphization check               | Errors point into the stdlib's body, with no span the editor shows.                                                 |
+| Finish the signature inference            | Unsound by construction: see above.                                                                                 |
+| A run-time check on every use             | Makes a use after drop a certain trap, but makes no drop happen. Adopted below for what the static rule cannot see. |
 
 For references alone, three more:
 
@@ -142,13 +142,21 @@ Wado already has most of the surface: `resource`, `fn drop(self)`, `&T` /
 `&mut T` / `T` parameters, `self` / `&self` / `&mut self` receivers, the move
 check, scope-exit drop. What it lacks is the generic rule and the ways out of a
 place. Its references depart from Swift's, for the reason the table above
-gives.
+gives: Swift keeps a reference from outliving its value with a borrow check,
+and Wado has none. So Wado takes Swift's static rule for copying, and a
+run-time rule for what a reference reaches.
 
 Swift's own gaps mark what is hard rather than what Swift forgot. `Array` does
 not accept a noncopyable element; `InlineArray` and `Span` arrived in 6.2
 instead.
 
 ## Decision
+
+Three rules carry the design. A static rule says what a body may do with an
+affine value, and it is Swift's. A representation rule says what an affine
+value is at run time: an object, held by nullable places. A dynamic rule says
+what a move, a drop and a use do to those places. Everything else in this
+section follows from the three.
 
 ### The `affine` keyword
 
@@ -221,7 +229,7 @@ copyable value can be used once too, so every type is an `affine T` and
 A binding of an affine type, or of an `affine` parameter, may be:
 
 - moved: a `let`, a by-value argument, a `return`, a place in an aggregate, a
-  by-value `self`, an assignment into a place;
+  by-value `self`, an assignment into a place, a by-value pattern;
 - referenced: `&x` or `&mut x`;
 - dropped: by scope exit, or by `x.drop()` on a type that implements `Drop`.
 
@@ -229,48 +237,91 @@ It may not be read twice. The move check already states that for a resource;
 it now states it for every affine type, `affine` parameters included, at the
 definition. The error is any read that would copy:
 
-- a second use after a move;
+- a second use of a local path (`x`, `h.f`, `t.0`) after a move;
 - a `*r` or an `r.f` read by value through a reference;
-- a `list[i]` read by value.
+- a `list[i]` read by value;
+- a read by value of a global, which no check follows across functions.
+
+A by-value pattern consumes its scrutinee: each binding takes its part, and a
+part no binding names is dropped as the arm is entered. `match &x`, and the
+match ergonomics that bind references out of a `&x` scrutinee, consume nothing.
+`matches` reads its scrutinee by reference. `if let`, `while let`, `let-else`
+and `?` are matches and follow the same rule.
+
+A field may be moved out of a local holder: `let f = h.f;` consumes `h.f`,
+and `h` as a whole with it. `..base` consumes `base`: a field the literal lists
+replaces the one `base` carried, which is dropped. A type that implements
+`Drop` gives up no field this way, as SE-0429 holds for a type with a `deinit`:
+its `drop` relies on the fields it was built with.
 
 The check runs on the `Semantics` layer, so it has spans and reaches the
 editor, and it needs no instantiation to run.
 
-### References reach a handle through a cell
+### An affine value is an object, and a place is a nullable reference to it
 
-A reference to an affine value is first-class, as every reference is. It may be
-bound, stored, returned and captured, and a list or a record may hold one.
+At run time an affine value is a mutable GC object. A struct is its object, as
+today. A resource is a box holding its handle. A variant or a tuple that is
+affine is wrapped in a box. A place that holds an affine value, whether a
+local, a field or an element, is a nullable reference to the object.
 
-What keeps it from dangling is the handle's representation. An affine resource
-is a cell: a GC object holding the handle and whether it is live. A handle is
-held by one live cell at a time.
+Three operations act on places and objects:
 
-- A move into a place that has no cell of its own hands the cell on.
-- A move into a cell that exists, as `*r = value` does, drops the handle the
-  target held, takes the value's handle into the target, and marks the
-  value's cell dead. A reference to the value's old place then traps rather
-  than reach a handle another cell owns.
-- A drop marks it dead, and so does a transfer as `own` across the boundary.
-- A `borrow` an export receives is a cell marked dead when the export returns.
-- Every use reads the handle through the cell. A use of a dead cell traps with
-  a message naming the resource. A store through a reference is a use:
-  `*r = value` into a dead cell traps rather than revive it, since nothing
-  would own the handle it stored.
+- A move stores the reference in the destination and writes null into the
+  source.
+- A drop runs the type's `Drop` and then zeroes the object: a box's handle
+  becomes 0, which the Component Model never issues, since index 0 of a handle
+  table is reserved; an aggregate's fields become null.
+- A use of a null place or a zeroed object traps. For a reference the trap is
+  the engine's: a `struct.get` on a null reference traps in Wasm GC, so the
+  compiler adds no check.
 
-So ownership is static and a use after drop is a run-time trap. The two halves
-need different guarantees: ownership decides when a drop happens, which a trap
-cannot, while a reference only needs never to reach a dead handle. A reused
-index is never reached either, since a dead cell no longer holds one.
+Scope exit drops every affine local that is not null. A container drops every
+slot that is not null. A store into a place drops what the place held. That is
+all of cleanup: no path is analysed, since a moved local is null on the path
+that moved it. A closure body, a temporary (`make().a`), a generic `Node<T>`
+and an element are reached by the same rule, because the rule is about places
+and every one of those is a place. A panic drops nothing.
 
-The cell is also the box D6 asks for, and it is a GC reference, so an affine
-resource is `Ref` and `RefMut` as a struct is. `&list[i]` and `&mut list[i]`
-reach an element's cell, and `*r = value` through either is the move into a
-cell above.
+The static rule above and this dynamic one divide the work. Copying is silent,
+so only the static rule can stop it. A use after a move or a drop is a trap
+wherever the static rule did not already report it, which is everywhere the
+value was reached through a reference, an element or a closure.
 
-The optimizer may represent a resource as its bare handle wherever it proves no
-use reaches the cell dead, as it may keep a primitive unboxed. The trap is the
-cell's only observable effect, so a proof that the trap cannot fire is all the
-erasure needs.
+What follows for references:
+
+- A reference is to the object, as `&s` is to a struct today. It follows the
+  object through a move, and it sees the drop: `let r = &f; eat(f); r.has()`
+  traps in `has`, because `eat` dropped `f` and zeroed its box.
+- `*r = value` through a reference replaces the object's content and drops the
+  old content, as the write-back of `*r = s2` does for a struct. The value's
+  own object is zeroed by the move, so a reference to it traps too.
+- A `borrow` an export receives arrives in a box that synthesis zeroes when
+  the export returns. A reference that escaped the export traps.
+- `&mut` of an affine variant field or element is the variant's box, a real
+  place. `opt.take()` on `h.slot` or on `list[i]` writes into it. For a
+  copyable variant the rule of
+  [Mutable References to Fields and Elements](./spec-memory.md#mutable-references-to-fields-and-elements)
+  is unchanged.
+- An affine value is `Ref` and `RefMut` in every instantiation where it is
+  affine, since it is an object there. `Option<Fields>` is `RefMut` and
+  `Option<i32>` is not, and `IndexRefMut`'s `Output: RefMut` needs no change.
+- `assert` records the values it prints by reference, and prints a moved one
+  as moved.
+
+What follows for the standard library: one builtin moves a value out through a
+reference. `builtin::replace(r: &mut T, v: T) -> T` stores `v` where `r` points
+and returns what was there, and the move check trusts it. It is what
+`ptr::read` and `ptr::write` are to Rust's `mem::replace`, and the one place
+`core` is trusted rather than checked. `Option::take` is
+`replace(self, None)`, and `Option::replace` is `replace` itself. The storage
+builtins of `Array` move for an affine element: `array_get` writes null into
+the slot it read, and `array_set` drops what it replaces. So `pop`, `remove`,
+`insert` and the cursor `for-of` walks are written as they are for a copyable
+element, and the definition-site check holds their bodies to moves.
+
+The optimizer may drop the null store of a move it proves dead, and may
+represent a resource by its bare handle where it proves no reference reaches
+the box, as it keeps a primitive unboxed.
 
 ### No cast between an affine resource and an integer
 
@@ -278,10 +329,10 @@ erasure needs.
 was the one way a raw handle entered or left the type system, and it moved
 nothing. `r as i32` left `r` its owner, so a raw handle handed to an import
 that takes it left two owners. `h as R` minted an owner each time it ran, so
-two casts of one integer left two. With a cell, either direction would also
-hide an allocation or a read behind syntax that otherwise converts for free.
-
-A cast between an unrestricted handle and an `f64` is unchanged.
+two casts of one integer left two. With a box, either direction would also
+hide an allocation or a read behind syntax that otherwise converts for free. A
+cast between an unrestricted handle and an `f64` is unchanged, and a newtype
+cast moves, as it converts for free.
 
 What casts did, the following do instead:
 
@@ -308,29 +359,7 @@ What casts did, the following do instead:
   and leaves the end done, and drops it then. A write before that would block
   on a reader nobody runs, and a drop before it traps.
 
-### Ways out of a place
-
-- `Option<affine T>::take(&mut self) -> Option<T>` moves the payload out and
-  leaves `None`. `replace(&mut self, value: T) -> Option<T>` swaps it.
-- A field may be moved out of a local holder: `let f = h.f;` consumes `h.f`,
-  and the holder is unusable as a whole afterwards. The other fields are
-  dropped at scope exit, since a holder's drop is synthesized field by field.
-- `..base` consumes `base`. A field the literal lists replaces the one `base`
-  carried, which is dropped.
-
-A type that implements `Drop` gives up no field on its own: neither a partial
-move nor `..base` over it is allowed. Its `drop` relies on the fields it was
-built with, as SE-0429 holds for a type with a `deinit`.
-
 ### Drop
-
-When a value is dropped is unchanged in substance: an owned, unmoved affine
-value is dropped at scope exit on every path; a store drops what it replaces; a
-discarded value is dropped. A `List<affine T>` joins the rule: it drops its
-elements when it is dropped, and a store into an element drops what it
-replaces. Today a `List` holding a resource does neither. Nothing else is
-excluded, since no copyable container holds an affine value. A panic drops
-nothing.
 
 What a drop does is the type's `Drop`:
 
@@ -341,7 +370,8 @@ pub affine trait Drop with () {
 ```
 
 - A type without an impl drops its fields one by one, in declaration order,
-  as today.
+  as today. A `List<affine T>` drops its elements, which a `List` holding a
+  resource does not do today.
 - A type with an impl runs its `drop`. The body may move fields out of `self`,
   and whatever is left at its end is dropped field by field. `self` is never
   dropped as a whole again, which would run `drop` once more.
@@ -352,8 +382,7 @@ pub affine trait Drop with () {
 - A body generic over `affine T` drops a `T` through `Drop`, resolved at
   monomorphization like any trait call. Every type answers: an impl, a
   field-by-field drop synthesized for an affine type without one, and nothing
-  for a copyable type. Cleanup runs before monomorphization, so it emits the
-  call and cannot expand the drop in place.
+  for a copyable type.
 - A drop performs no effect. A generic body drops a `T` wherever it discards
   one (`unwrap_or` discards its fallback), and a drop with effects would
   perform them in a function that declares none.
@@ -363,10 +392,10 @@ pub affine trait Drop with () {
   a caller observes, so a writer that buffers ahead of a stream flushes by an
   explicit call, not in its drop.
 
-A field-by-field drop is wrong for some types. `AsyncCall` is one: a
-`Subtask` traps on `drop` until it resolves, so an unawaited call must cancel
-it first. Its result buffer is linear memory no resource frees, and a result
-the callee returned holds handles that only a lift reaches.
+A type whose consuming methods take fields out of `self`, and which implements
+`Drop`, holds those fields in an `Option` and takes them. `drop` then finds
+`None` where a method took the field. That is Rust's idiom for the same case,
+and it needs no `discard self`.
 
 A `FutureWritable` dropped before its write traps, with a message naming it.
 The Component Model traps on `future.drop-writable` before the end is done,
@@ -410,93 +439,9 @@ caller knows how many it offered, and `rest.len()` says how many came back. An
 affine caller reads the length before the write, since `data` is moved by it.
 The optimizer may skip building a `rest` no one reads.
 
-### An async call records a delivered resolution
-
-The Component Model delivers a subtask's resolution once, through the first
-waitable set that reports it. Waiting for it again never returns, and
-`subtask.cancel` traps. A program that joins a call to its own set and waits
-there has received the resolution before it calls `wait` or `cancel` or drops
-the call. So `AsyncCall` records the delivery in `resolved`:
-
-- `join` registers `resolved` under the subtask's waitable handle, in a table
-  `core` keeps. The entry goes when the subtask is dropped.
-- `WaitableSet::wait` and `poll` become guest functions over the canon
-  built-ins. A subtask event whose payload says resolved sets the flag
-  registered for its handle.
-- `wait` waits only where `resolved` is false.
-- `cancel` and `Drop` cancel only where it is false, leaving any set first as
-  `cancel` does today. `Subtask::cancel` returns the state `subtask.cancel`
-  reports, which it discards today. Where the subtask returned, before the
-  cancel or during it, its result is in the buffer: they lift it and drop it,
-  which drops the handles it owns. Then they drop the subtask and free the
-  buffer.
-
-### Standard library
-
-- `Option<affine T>` and `Result<affine T, affine E>`, with `take` and
-  `replace` on `Option`. `unwrap`, `expect`, `unwrap_or`, `map`, `map_err` and
-  `ok_or` keep their by-value `self`.
-- `Future<affine T>` and `Stream<affine T>`, with their writable ends. A
-  future carries an affine payload today
-  (`Future<Result<Option<Trailers>, ErrorCode>>`), and a stream does too
-  (`Stream<TcpSocket>`). `StreamChunk<affine T>` carries the read side's
-  `List<T>`.
-- `AsyncCall<affine T>` holds a real `Subtask` rather than a raw `i32` it
-  casts into one at each use:
-
-  ```wado
-  affine struct AsyncCall<affine T> {
-      subtask: Option<Subtask>,   // None where the call completed synchronously
-      resolved: &mut bool,        // the subtask's resolution has been delivered
-      buffer: ResultBuffer,       // the linear memory the result is lifted from
-      lift: fn(i32) -> T,
-  }
-  ```
-
-  `wait(self)` and `cancel(self)` take the subtask out and consume it, so a
-  second call is a compile error and the shared `__cm_ended` flag goes.
-  `resolved` records
-  [the delivered resolution](#an-async-call-records-a-delivered-resolution).
-- `affine trait`: `Drop`, `ForOf`, `From<affine T>`, `Eq<affine Rhs = Self>`,
-  `Inspect`, `Display`, `Ref`, `RefMut`, `IndexRef`, `IndexRefMut` and
-  `IndexAssign`. A resource implements `Eq` and `Inspect` today, a list
-  literal lowers through `From`, and `List<affine T>` is indexed through the
-  last three. `IndexValue` stays unmarked, since a read by value is a copy.
-- `List<affine T>`. A method is available for an affine element when an
-  `impl<affine T> List<T>` declares it, and the definition-site check holds
-  its body to moving elements. The rest stay in `impl<T> List<T>`, for a
-  copyable element only.
-- `Iterator`, `IntoIterator`, `TreeMap<K, V>`, `HashMap<K, V>`, `TreeSet<T>`
-  and their iterators stay unmarked.
-- `ResourceId`, with `ResourceId::of(&r)` over every affine resource.
-
-`wado-from-idl` declares `affine` every record and variant it generates that
-holds an affine resource.
-
-What gets marked is read off the source, one operation at a time: each
-operation this WEP gives an affine value, and the impl and trait it resolves
-through today.
-
-| Operation                                      | Resolves through                                                                         | Marked                                         |
-| ---------------------------------------------- | ---------------------------------------------------------------------------------------- | ---------------------------------------------- |
-| a list literal `[a, b]`                        | `From<Array<T>> for List<T>`                                                             | the trait and the impl                         |
-| `list[i] = v`, `&list[i]`, `&mut list[i]`      | `IndexAssign`, `IndexRef` (`T: Ref`), `IndexRefMut` (`T: RefMut`) for `List` and `Array` | the traits and the impls                       |
-| `list.len()`                                   | `impl<T> List<T>`                                                                        | moved to `impl<affine T> List<T>`              |
-| `list.is_empty()`, `list.iter_ref()`           | default methods of `Sequence` and `AsSlice`, which stay unmarked                         | declared again in `impl<affine T> List<T>`     |
-| `for x of list`                                | `ForOf for List<T>`                                                                      | the trait and the impl                         |
-| `for x of &list`, `for x of &mut list`         | `IntoIterator` for `&List<T>` and `&mut List<T>`, `SliceRefIter`, `SliceRefMutIter`      | the impls, and the iterators' `Iterator` impls |
-| `==`, `inspect`, `${…}` on a list              | `Eq`, `Inspect` and `Display` for `List`, `Array` and `Slice`                            | the traits and the impls                       |
-| `opt.map(f)`, `opt.ok_or(e)`                   | `Option::map<U>`, `Option::ok_or<E>`                                                     | `<affine U>`, `<affine E>`                     |
-| `res.map(f)`, `res.map_err(f)`, `res.unwrap()` | `Result::map<U>`, `Result::map_err<F>`, and `unwrap_failed<V>` under every `unwrap`      | `<affine U>`, `<affine F>`, `<affine V>`       |
-| `stream.read(n)`, `read_to_end()`, `write_all` | `Stream<T>`, `StreamWritable<T>` and their impls                                         | the resources and the impls                    |
-| `future.read()`, `writer.write(v)`             | `Future<T>`, `FutureWritable<T>`                                                         | the resources                                  |
-
-The stock leaves some unmarked. `Sequence`, `AsSlice`, `IndexValue`,
-`SliceValueIter`, `SliceWindows` and `SliceChunks` hand out elements by value.
-`Hash`, `Ord` and `Default` serve maps, sorting and `List::default`, which no
-operation above reaches. `StreamWritable::write_raw_all(Slice<T>)` is for a
-copyable element only: the Component Model lifts the elements a slice views
-while the writer keeps them, which leaves two owners.
+`StreamWritable::write_raw_all(Slice<T>)` is for a copyable element only. The
+Component Model lifts the elements a slice views while the writer keeps them,
+which leaves two owners.
 
 ### `for-of` dispatches to `ForOf`
 
@@ -531,8 +476,9 @@ Removing that copy is the job of
 | read                           | yes                | deep copy | one more copy of the list                      |
 
 Sharing holds because the state never writes the list. A `ListCursor<T>` is the
-list and a position: `next` reads the element at the position and advances it,
-and the cursor's drop drops the elements from the position to the end.
+list and a position: `next` reads the element at the position through
+`array_get`, which moves it out for an affine element, and advances. The
+cursor's drop drops the list, and the list drops the slots that are not null.
 
 So a loop walks the value its operand held when the loop began. A body that
 writes an element the loop has not reached no longer sees the write, and a body
@@ -561,6 +507,51 @@ The second row is where `find` and `filter` reach an affine element: the
 iterator's `Item` is `&T` already, so a predicate takes it by value with one
 reference, not two.
 
+### Standard library
+
+The rules above decide what the standard library marks. A trait an affine type
+implements is an `affine trait`, and so is a trait whose associated type is
+affine. A generic type that holds an affine argument marks the parameter, and
+so does a method whose own parameter takes one (`Option::map<U>`). A method
+that reads an element by value stays in an `impl<T>`, for a copyable element
+only; a `List<affine T>` reaches a method through an `impl<affine T> List<T>`
+that declares it. The instantiation rule names every generic the corpus
+instantiates with an affine argument, and each is marked or rewritten.
+
+What the rules leave unmarked, and why:
+
+- `Iterator` and `IntoIterator`, above.
+- `Sequence`, `AsSlice` and `IndexValue`: `at`, `get`, `first`, `last` and
+  `index_value` hand an element out by value. `List<affine T>` declares `len`,
+  `is_empty` and `iter_ref` itself.
+- `TreeMap<K, V>`, `HashMap<K, V>` and `TreeSet<T>`: a known gap below.
+
+What changes shape:
+
+- `Option<affine T>` gains `take` and `replace`, over `builtin::replace`.
+- `AsyncCall<affine T>` becomes an `affine struct` holding a `Subtask` rather
+  than a raw `i32` it casts into one at each use:
+
+  ```wado
+  affine struct AsyncCall<affine T> {
+      subtask: Option<Subtask>,       // None where the call completed synchronously
+      buffer: Option<ResultBuffer>,   // the linear memory the result is lifted from
+      lift: fn(i32) -> T,
+  }
+  ```
+
+  `wait(self)` and `cancel(self)` take the subtask and the buffer and consume
+  them, so a second call is a compile error and the shared `__cm_ended` flag
+  goes. Its `Drop` cancels a subtask nobody awaited, since a `Subtask` traps on
+  `drop` until it resolves, lifts and drops a result the callee returned, which
+  owns handles only a lift reaches, and frees the buffer. A call that was
+  joined to a set and reported there cannot be ended, today or after this WEP:
+  that is
+  [a gap of the `AsyncCall` WEP](./wep-2026-04-22-subtask-generic.md#known-gaps).
+- `ResourceId`, with `ResourceId::of(&r)` over every affine resource.
+- `wado-from-idl` declares `affine` every record and variant it generates that
+  holds an affine resource.
+
 ### Web handles
 
 A `linearity = "unrestricted"` handle is outside this discipline, as it is
@@ -580,20 +571,24 @@ In [WEP: Resource Ownership](./wep-2026-05-21-resource-ownership.md):
   nothing to infer.
 - "No move out of a reference" becomes the body rule above: a by-value read
   through a reference is a copy.
-- The move check and cleanup stay as the implementation. They are sound once
-  the type system excludes what they could not see.
+- The move check stays, as the diagnostic. Cleanup synthesis retires: the
+  scope-exit drop of what is not null replaces its path analysis.
 - Value-copy elision is unaffected: it serves copyable types, and an affine
   type never reaches a copy site.
 - Its known gaps on resources close: "A call through `&mut` that copies", "A
   generic body copies a type parameter", "Some resource holders are not
   move-checked or dropped", "A resource field moves out of its holder", "An
-  integer casts to an affine resource" and "A `Stream` or `Future` handle
-  nothing drops". So does the store through a reference or into an element in
-  "What cleanup does not reach". The rest of that section stands, and so do
-  its gaps on value-copy elision, which serves copyable types only.
+  integer casts to an affine resource", "A `Stream` or `Future` handle nothing
+  drops" and "A generic resource a user module declares". "What cleanup does
+  not reach" closes but for the panic. The rest of that section stands, and so
+  do its gaps on value-copy elision.
 
 In [WEP: Reference Representation](./wep-2026-06-13-reference-representation.md),
-D6 is settled: a resource is boxed, and the box is its cell.
+D6 is settled: a resource is boxed, and the box is its object.
+
+In [Memory Model](./spec-memory.md#mutable-references-to-fields-and-elements),
+the unsettled rule for `&mut` of a variant field or element is settled for an
+affine variant: the reference is a place.
 
 In [WEP: Resource Lifecycle](./wep-2026-01-12-resource-lifecycle.md), the open
 question of a user-defined drop for a type that is not a resource is answered:
@@ -613,42 +608,37 @@ benign ones.
   holders.
 - [ ] `affine` on a type parameter, an associated type and a trait, with the
   definition-site check: the move check runs over its bindings as over
-  resource bindings, and over a marked trait's default bodies with `Self`
-  affine. An affine type implementing an unmarked trait is an error at the
-  impl. The prelude traits named under Standard library are marked.
-- [ ] The stdlib generics take `affine` on their parameters, and their bodies
-  pass the definition-site check: `Option`, `Result`, `Future`,
-  `FutureWritable`, `Stream`, `StreamWritable`, `StreamChunk`, `FutureWrite`,
-  `StreamWrite`, `AsyncCall` and `List`, and every trait, impl and method the
-  stock under Standard library marks. Everything after this needs them.
+  resource bindings, over patterns, over globals, and over a marked trait's
+  default bodies with `Self` affine. An affine type implementing an unmarked
+  trait is an error at the impl. The prelude traits an affine type implements
+  are marked.
+- [ ] The object and its places: an affine variant or tuple is boxed, a move
+  writes null into its source, a drop zeroes the object, scope exit drops what
+  is not null, a container drops the slots that are not null, and a store
+  drops what it replaces. The cleanup pass retires. An export's `borrow` is
+  zeroed at return. Fixtures: a reference used after the drop traps; a resource
+  bound in a closure body, one under `make().a` and one in a `Node<T>` are
+  dropped; `*r = value` through `&mut R`.
+- [ ] `builtin::replace`, `Option::take` and `Option::replace`, the storage
+  builtins moving for an affine element, `impl<affine T> List<T>` with `len`,
+  `is_empty`, `iter_ref`, `push`, `pop`, `insert` and `remove`, and `&mut`
+  of an affine variant element and field as a place. `opt.take()` on
+  `list[i]` is the fixture.
 - [ ] `Drop`: a resource's `fn drop(self)` as its impl, a user impl on an
   affine type, the fields left at the end of `drop` dropped one by one, a drop
-  that performs no effect but a `#[benign]` one, and no partial move or
-  `..base` over a type that implements it. Cleanup drops a generic `T` through
-  `Drop`, which every type answers at monomorphization.
-- [ ] `ForOf` and `List<affine T>`: `for-of` passes its operand by value to
-  `ForOf::start`, with `List`'s impl over `ListCursor<T>` and the blanket impl
-  over `IntoIterator`; the methods that move elements in
-  `impl<affine T> List<T>`, and `&list` iteration over an affine element. The
-  list drops its elements, and a store into an element drops what it replaces.
+  that performs no effect but a `#[benign]` one, no partial move or `..base`
+  over a type that implements it, and a generic `T` dropped through `Drop`.
+- [ ] `ForOf`: `for-of` passes its operand by value to `ForOf::start`, with
+  `List`'s impl over `ListCursor<T>` and the blanket impl over `IntoIterator`.
   A fixture pins that elision shares a list the loop's body does not write: no
-  `$value_copy$` in the output. The fixtures that relied on a body's write being
-  seen by the loop are rewritten.
-- [ ] `Option::take`, `Option::replace`, partial move out of a local holder,
-  `..base` over an affine holder.
+  `$value_copy$` in the output. The fixtures that relied on a body's write
+  being seen by the loop are rewritten.
 - [ ] No cast between an affine resource and an integer: synthesis splits and
   lifts the `stream-new` / `future-new` pair, the raw-handle builtins take and
   return resources, `ResourceId::of`, and the test doubles in `core:kiln`,
   `core:cli` and `package-gale` return real handles. `AsyncCall` holds a
-  `Subtask`, with its `Drop` and the `resolved` flag that `join` registers and
-  `WaitableSet::wait` sets. A fixture joins a call to its own set, waits there,
-  and then drops the call, which neither hangs nor traps and drops the
-  result's handles. This item comes before the cell, which a cast would have
-  to allocate, and before cleanup drops a `Stream`, which `log_stdout` would
-  then drop twice.
-- [ ] The handle cell: the representation, the trap, the `borrow` an export
-  receives, and `*r = value` through it. Then the optimizer's erasure where it
-  proves no use reaches a dead cell.
+  `Subtask`, with its `Drop`. This item comes before cleanup drops a `Stream`,
+  which `log_stdout` would then drop twice.
 - [ ] `FutureWrite<T>` and `StreamWrite<T>`: a write returns what it did not
   deliver, in every case the result reports, and the stdlib's write loops
   (`write_all`) read `rest` rather than `count`.
@@ -662,16 +652,18 @@ benign ones.
   `&self` getter instantiated with `Fields` is an affine argument for an
   unmarked parameter, and `list.last()` is not found, since `Sequence`, which
   declares it, is implemented for a copyable element only.
-- [ ] Cleanup drops a `Stream` and a `Future` the body does not move, which it
-  excludes today
+- [ ] Scope exit drops a `Stream` and a `Future` the body does not move, which
+  cleanup excludes today
   ([A `Stream` or `Future` handle nothing drops](./wep-2026-05-21-resource-ownership.md#a-stream-or-future-handle-nothing-drops)),
   and a `FutureWritable` dropped before its write traps with a message naming
   it. A fixture pins the `?` between `Future::new()` and the write.
+- [ ] `assert` records the values it prints by reference, and prints a moved
+  one as moved.
 - [ ] Spec: rewrite [Resource Ownership](./spec-components.md#resource-ownership),
-  the resource paragraph of [Memory Model](./spec-memory.md),
+  the resource paragraph and the `&mut`-to-a-field rule of
+  [Memory Model](./spec-memory.md),
   [For-Of Loop](./spec-control-flow.md#for-of-loop) over `ForOf` and the
-  value the loop began with, and the
-  cheatsheet. Amend the WEPs above.
+  value the loop began with, and the cheatsheet. Amend the WEPs above.
 
 ## Known gaps
 
@@ -693,19 +685,10 @@ A closure captures by reference, so it may use an affine value but never owns
 one. A closure that outlives the value's owner traps on its first use after the
 drop.
 
-### The rest
+### A panic drops nothing
 
-Unchanged from
-[WEP: Resource Ownership](./wep-2026-05-21-resource-ownership.md#known-gaps):
-
-- A panic drops nothing.
-- A generic resource a user module declares is not checked.
-- A resource a closure body binds, or a temporary it references, is never
-  dropped.
-- Moving one resource field out of a temporary aggregate (`make().a`) drops
-  nothing else the temporary owns.
-- An aggregate that holds itself and names a type parameter (`Node<T>` in a
-  body generic over `T`) is not dropped past its first level.
+A trap unwinds nothing in Wasm, so a resource owned at a panic is held until
+the instance ends. For a stream, the other side hangs.
 
 ## References
 
@@ -718,5 +701,6 @@ Unchanged from
 - [WEP: Resource Lifecycle Management (RAII)](./wep-2026-01-12-resource-lifecycle.md)
 - [WEP: Resource Inheritance and Narrowing](./wep-2026-04-28-resource-inheritance.md)
 - [WEP: Reference Representation and Mutation Write-Back](./wep-2026-06-13-reference-representation.md)
+- [WEP: Generic `AsyncCall<T>` for CM async imports](./wep-2026-04-22-subtask-generic.md)
 - [WEP: Stream Copy Results](./wep-2026-08-30-stream-copy-result.md)
 - #2367

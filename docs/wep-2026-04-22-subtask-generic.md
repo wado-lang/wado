@@ -207,6 +207,12 @@ trailers_tx.write(Result::Ok(null));
   live in one component: one end goes to an import's subtask or to the caller.
 - No structured concurrency over several calls (`join`, `race`). A caller
   combines them by hand with `WaitableSet::wait`.
+- A call that was joined to a set and reported there cannot be ended. The
+  Component Model delivers a subtask's resolution once, through the first
+  `waitable-set.wait` that reports it. After that, `wait` on the call waits for
+  an event that never comes, and `cancel` traps, since `subtask.cancel` traps
+  once the resolution was delivered. Nothing in `AsyncCall` records the
+  delivery.
 - TLS trust store configuration for outgoing HTTPS requests from `wado run`.
   wasmtime-wasi-http 43.0.1's `WasiHttpHooks::send_request` signature uses
   `pub(crate)` types (`HttpResult`, `HttpError`, `body::UnsyncBoxBody`), so
