@@ -414,6 +414,13 @@ impl Semantics {
         self.fact_at(ModuleSemantics::REFERENCES, id).copied()
     }
 
+    /// The symbol a use site at `id` resolves to.
+    #[must_use]
+    pub(crate) fn referenced_symbol_at(&self, id: AstId) -> Option<&Symbol> {
+        self.referenced_symbol(id)
+            .and_then(|def| self.symbol_at(def))
+    }
+
     /// Iterate every declared symbol with its canonical key, across all
     /// modules. Includes both item-level symbols and the synthetic local
     /// table (`let` / parameter bindings), mirroring [`Self::symbol_at`].
@@ -532,6 +539,24 @@ impl Semantics {
     /// the first.
     pub(crate) fn method_dispatches_at(&self, id: AstId) -> impl Iterator<Item = &MethodDispatch> {
         self.facts_at(ModuleSemantics::METHOD_DISPATCH, id)
+    }
+
+    /// The parameter types the callee of the call at `id` takes, one list per
+    /// walk that resolved it, with this call's type arguments substituted.
+    /// A list may lead with the receiver where the call spells it as an
+    /// argument, so a reader pairs it with the arguments only where the
+    /// lengths agree.
+    pub(crate) fn callee_param_types_at(&self, id: AstId) -> impl Iterator<Item = &[TypeId]> {
+        let methods = self
+            .method_dispatches_at(id)
+            .map(|dispatch| dispatch.param_types.as_slice());
+        let statics = self
+            .facts_at(ModuleSemantics::STATIC_METHOD_DISPATCH, id)
+            .map(|dispatch| dispatch.param_types.as_slice());
+        let calls = self
+            .facts_at(ModuleSemantics::CALL_PARAM_TYPES, id)
+            .map(Vec::as_slice);
+        methods.chain(statics).chain(calls)
     }
 
     /// Stable public view onto the recorded method-dispatch decision:

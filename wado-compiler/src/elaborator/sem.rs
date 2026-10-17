@@ -53,6 +53,8 @@ pub(crate) enum FactKind {
     LocalType,
     ExpressionType,
     MethodDispatch,
+    StaticMethodDispatch,
+    CallParamTypes,
     Coercion,
     Desugar,
 }
@@ -146,6 +148,14 @@ impl ModuleSemantics {
         FactKind::MethodDispatch,
         FactMap::Body(|t| &t.method_dispatch),
     );
+    pub(crate) const STATIC_METHOD_DISPATCH: Fact<types::StaticMethodDispatch> = Fact::new(
+        FactKind::StaticMethodDispatch,
+        FactMap::Body(|t| &t.static_method_dispatch),
+    );
+    pub(crate) const CALL_PARAM_TYPES: Fact<Vec<TypeId>> = Fact::new(
+        FactKind::CallParamTypes,
+        FactMap::Body(|t| &t.call_param_types),
+    );
     pub(crate) const COERCIONS: Fact<types::CoercionChoice> =
         Fact::new(FactKind::Coercion, FactMap::Body(|t| &t.coercions));
     pub(crate) const DESUGARS: Fact<types::DesugarKind> =
@@ -160,6 +170,8 @@ impl ModuleSemantics {
             .chain(Self::LOCAL_TYPES.keys(self))
             .chain(Self::EXPRESSION_TYPES.keys(self))
             .chain(Self::METHOD_DISPATCH.keys(self))
+            .chain(Self::STATIC_METHOD_DISPATCH.keys(self))
+            .chain(Self::CALL_PARAM_TYPES.keys(self))
             .chain(Self::COERCIONS.keys(self))
             .chain(Self::DESUGARS.keys(self))
     }

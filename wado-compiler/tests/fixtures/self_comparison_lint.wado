@@ -19,6 +19,10 @@ impl Counter {
         self.n += 1;
         return self.n;
     }
+
+    fn peek(&self) -> i32 {
+        return self.n;
+    }
 }
 
 struct Tally {
@@ -84,6 +88,7 @@ export fn run() with Stdout {
     assert c.bump() != c.bump();         // no warning: `bump` takes `&mut self`
     let r = &mut c;
     assert advance(r) != advance(r);     // no warning: `r` is a `&mut` argument
+    assert r.peek() == r.peek();         // warns: a `&self` method writes nothing
     let mut k = 0;
     let t = Tally { n: &mut k };
     assert t.bump() != t.bump();         // no warning: `t` holds a `&mut`
@@ -112,7 +117,8 @@ __DATA__
     "`h == h` compares a value with itself, so it is always true; test a NaN with `is_nan()`;",
     "`rx != rx` compares a value with itself, so it is always false; test a NaN with `is_nan()`;",
     "`b <= b` compares a value with itself, so it is always true;",
-    "`norm(&p) == norm(&p)` compares a value with itself"
+    "`norm(&p) == norm(&p)` compares a value with itself",
+    "`r.peek() == r.peek()` compares a value with itself"
   ],
   "warnings_not_contains": ["`0 <= b`", "line_of(#line)", "tick()", "bump()", "bump_first(", "advance(r)", "next()", "w == w", "`a == a` compares a value with itself, so it is always true; test a NaN"]
 }

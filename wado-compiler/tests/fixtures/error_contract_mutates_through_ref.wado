@@ -1,0 +1,19 @@
+// A clause cannot call a `&mut self` method on what a parameter reaches: the
+// caller would see the write in a build that checks, and not in one that skips.
+struct Bag { items: List<i32> }
+
+fn take(b: &mut Bag) -> i32
+    contract b.items.pop() matches { Some(_) }
+{
+    return b.items.len();
+}
+
+export fn run() {
+    let mut b = Bag { items: [1, 2, 3] };
+    let _ = take(&mut b);
+}
+
+__DATA__
+{
+  "compile_error": ":6:14: analysis error: contract clause cannot mutate 'b', which reaches state it did not create"
+}

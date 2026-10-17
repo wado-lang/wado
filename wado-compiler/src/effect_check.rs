@@ -1,6 +1,8 @@
 //! Effect and purity checking for Wado (Design B): that every call holds the
-//! effects its callee requires, and that defaults and global initializers are
-//! pure. Both read [`Semantics`] rather than the emitted TIR, so they see every
+//! effects its callee requires, that defaults, global initializers and
+//! `contract` clauses are pure, and that a clause writes only the values it
+//! creates.
+//! Both read [`Semantics`] rather than the emitted TIR, so they see every
 //! source function and run on the LSP path. Violations are returned.
 
 use std::cell::RefCell;
@@ -29,6 +31,8 @@ use crate::elaborator::ImplParamSlots;
 use crate::elaborator::orchestration::AnnotateState;
 use crate::elaborator::sem::types::{ForOfIteratorInfo, ImplFacts, TypeAnnotations};
 use crate::semantics::Semantics;
+use crate::unparse::unparse_expr_source;
+use crate::write_sites::{WriteSite, for_each_write_site};
 
 /// Whether a missing `with` entry refers to a resource or a regular effect.
 /// Used to select the diagnostic wording (`missing resource` vs `missing effect`).
@@ -173,6 +177,12 @@ pub enum Impurity {
     /// The position installs a handler for the named effect whose methods
     /// declare an effect it does not hold.
     Install(String),
+    /// A `contract` clause writes, or lends a callee the means to write, state
+    /// it did not create, reached from the named binding.
+    Mutate(String),
+    /// A `contract` clause calls the named function value, which may write
+    /// through a `&mut` it captured, `fn` and `fn mut` alike.
+    CallValue(String),
 }
 
 /// One impurity, at the position that must not hold it.
@@ -187,22 +197,37 @@ pub struct PurityError {
 impl From<PurityError> for Diagnostic {
     fn from(e: PurityError) -> Self {
         let noun = e.context.noun();
-        let message = match &e.impurity {
-            Impurity::Call(callee) => {
-                format!("{noun} cannot perform effects, but calls effectful function '{callee}'")
-            }
-            Impurity::Dispatch(op) => format!(
-                "{noun} cannot perform effects, but dispatches '{op}', which needs a \
-                 capability the position does not hold"
+        let (code, message) = match &e.impurity {
+            Impurity::Call(callee) => (
+                Code::EffectNotAllowed,
+                format!("{noun} cannot perform effects, but calls effectful function '{callee}'"),
             ),
-            Impurity::Install(effect) => format!(
-                "{noun} cannot perform effects, but installs a handler for '{effect}' \
-                 whose methods need a capability the position does not hold"
+            Impurity::Dispatch(op) => (
+                Code::EffectNotAllowed,
+                format!(
+                    "{noun} cannot perform effects, but dispatches '{op}', which needs a \
+                     capability the position does not hold"
+                ),
+            ),
+            Impurity::Install(effect) => (
+                Code::EffectNotAllowed,
+                format!(
+                    "{noun} cannot perform effects, but installs a handler for '{effect}' \
+                     whose methods need a capability the position does not hold"
+                ),
+            ),
+            Impurity::Mutate(name) => (
+                Code::ContractWrite,
+                format!("{noun} cannot mutate '{name}', which reaches state it did not create"),
+            ),
+            Impurity::CallValue(name) => (
+                Code::ContractWrite,
+                format!("{noun} cannot call '{name}', which may write what it captured"),
             ),
         };
         Diagnostic {
             severity: Severity::Error,
-            code: Code::EffectNotAllowed,
+            code,
             message,
             span: Some(DiagnosticSpan::from_span(&e.span, Some(&e.module))),
         }
@@ -2976,6 +3001,27 @@ fn expr_types_of(expr: &Expr, sem: &Semantics) -> Vec<TypeId> {
     sem.expression_types(expr.id()).collect()
 }
 
+/// The spans of the bindings `expr` declares with a closure literal as its
+/// initializer.
+fn closure_bindings(expr: &Expr) -> Vec<Span> {
+    struct Closures(Vec<Span>);
+    impl AstVisitor for Closures {
+        fn visit_stmt(&mut self, stmt: &Stmt) {
+            if let Stmt::Let(binding) = stmt
+                && let Some(Expr::Closure(_)) = &binding.value
+                && let Pattern::Ident { span, .. } | Pattern::MutIdent { span, .. } =
+                    &binding.pattern
+            {
+                self.0.push(*span);
+            }
+            ast::walk_stmt(self, stmt);
+        }
+    }
+    let mut closures = Closures(Vec::new());
+    closures.visit_expr(expr);
+    closures.0
+}
+
 // ---------------------------------------------------------------------------
 // Semantics-based purity checking
 // ---------------------------------------------------------------------------
@@ -3100,6 +3146,12 @@ struct PurityWalker<'a> {
     /// default expression cannot name a parameter — the call site evaluates it
     /// before any is bound.
     param_types: IndexMap<String, TypeId>,
+    /// The span of the `contract` clause being walked. A build may skip the
+    /// clause, so it may write only the values it creates: a write reaching
+    /// anything else would make what the call computes depend on the build.
+    clause: Option<Span>,
+    /// Where the clause binds a closure it writes, by the binding's span.
+    clause_closures: Vec<Span>,
     out: &'a mut Vec<PurityError>,
 }
 
@@ -3120,6 +3172,8 @@ impl<'a> PurityWalker<'a> {
             context: PureContext::DefaultValue,
             granted: IndexSet::default(),
             param_types: IndexMap::default(),
+            clause: None,
+            clause_closures: Vec::new(),
             out,
         }
     }
@@ -3144,12 +3198,105 @@ impl<'a> PurityWalker<'a> {
     }
 
     fn check_contracts(&mut self, func: &ast::Function) {
+        let sem = self.sem;
         for clause in func.contracts() {
-            self.check(PureContext::Contract, &clause.condition);
-            if let Some(message) = &clause.message {
-                self.check(PureContext::Contract, message);
+            self.clause = Some(clause.span);
+            for expr in std::iter::once(&clause.condition).chain(&clause.message) {
+                self.clause_closures = closure_bindings(expr);
+                self.check(PureContext::Contract, expr);
+                for_each_write_site(sem, expr, |site| self.flag_clause_write(site));
             }
         }
+        self.clause = None;
+    }
+
+    /// Flags `site` where it writes state the clause being walked did not
+    /// create.
+    fn flag_clause_write(&mut self, site: WriteSite<'_>) {
+        match site {
+            WriteSite::Place(place) | WriteSite::Unresolved(place) => self.flag_write(place),
+            // A `&mut place` operand is that place's `Place` site. Any other
+            // operand reaching a `&mut` passes on one the clause did not take.
+            WriteSite::Lent(Expr::Unary(unary)) if unary.op == ast::UnaryOp::MutRef => {}
+            // A closure the clause writes is walked with it, so its writes are
+            // judged where they stand, wherever it is called.
+            WriteSite::Lent(value) | WriteSite::Opaque(value) if self.is_clause_closure(value) => {}
+            WriteSite::Lent(operand) => self.flag_mutate(operand),
+            WriteSite::Opaque(callee) => {
+                let name = unparse_expr_source(callee);
+                self.flag(Impurity::CallValue(name), callee.span());
+            }
+        }
+    }
+
+    /// Flags a write to `place` unless it lands in a value the clause created
+    /// and that holds nothing able to write elsewhere. A copy of a value
+    /// holding a `&mut` shares what that `&mut` points to, wherever the copy
+    /// is bound.
+    fn flag_write(&mut self, place: &Expr) {
+        let owned = match place {
+            Expr::FieldAccess(access) if !self.is_reference(&access.expr) => {
+                return self.flag_write(&access.expr);
+            }
+            Expr::Index(index) if !self.is_reference(&index.expr) => {
+                return self.flag_write(&index.expr);
+            }
+            Expr::Ident(_) => self.declared_in_clause(place) && !self.reaches_mut_ref(place),
+            Expr::FieldAccess(_) | Expr::Index(_) => false,
+            Expr::Unary(unary) if unary.op == ast::UnaryOp::Deref => false,
+            // A value the clause computed, which nothing outside it holds.
+            _ => !self.reaches_mut_ref(place),
+        };
+        if !owned {
+            self.flag_mutate(place);
+        }
+    }
+
+    /// Flags a write the clause makes through `place`, named by what it starts
+    /// from.
+    fn flag_mutate(&mut self, place: &Expr) {
+        let root = place.place_root();
+        self.flag(Impurity::Mutate(unparse_expr_source(root)), root.span());
+    }
+
+    /// Whether `expr` names a binding the clause being walked declares.
+    fn declared_in_clause(&self, expr: &Expr) -> bool {
+        let Some(clause) = self.clause else {
+            return false;
+        };
+        self.binding_span(expr)
+            .is_some_and(|span| clause.encloses(&span))
+    }
+
+    /// Whether `expr` is a closure the clause being walked writes, or a
+    /// binding it initializes with one.
+    fn is_clause_closure(&self, expr: &Expr) -> bool {
+        matches!(expr, Expr::Closure(_))
+            || self
+                .binding_span(expr)
+                .is_some_and(|span| self.clause_closures.contains(&span))
+    }
+
+    /// Where the binding `expr` names is declared.
+    fn binding_span(&self, expr: &Expr) -> Option<Span> {
+        let Expr::Ident(ident) = expr else {
+            return None;
+        };
+        self.sem
+            .referenced_symbol_at(ident.id)
+            .and_then(|symbol| symbol.span)
+    }
+
+    fn is_reference(&self, expr: &Expr) -> bool {
+        expr_types_of(expr, self.sem)
+            .into_iter()
+            .any(|ty| self.sem.types.is_reference_shaped(ty))
+    }
+
+    fn reaches_mut_ref(&self, expr: &Expr) -> bool {
+        expr_types_of(expr, self.sem)
+            .into_iter()
+            .any(|ty| self.sem.reaches_mut_ref(ty))
     }
 
     fn flag(&mut self, impurity: Impurity, span: Span) {
