@@ -166,26 +166,27 @@ fn read_constant_data(
     let Some(element) = element_of(dtype) else {
         return Result::Ok(null);
     };
-    let Some(texts) = inline_texts(s, toks, vi, name, rank)? else {
+    let Some(tokens) = inline_tokens(s, toks, vi, name, rank)? else {
         return Result::Ok(null);
     };
     let width = element.width;
-    let mut bytes = ByteList::with_capacity(texts.len() * width);
-    for let text of texts {
+    let mut bytes = ByteList::with_capacity(tokens.len() * width);
+    for let token of tokens {
+        let text = literal_text(toks, token, name)?;
         push_element(&mut bytes, element_bits(name, &text, dtype, width)? as u64, width);
     }
     return Result::Ok(Option::Some(bytes));
 }
 
-/// A value's inline elements as text, each as ONNX's parser reads it
-/// (`onnx/defs/parser.cc`), or `None` where the value is written without any.
-fn inline_texts(
+/// A value's inline elements as their literal tokens, or `None` where the value
+/// is written without any.
+fn inline_tokens(
     s: &onnx::CstStore,
     toks: &onnx::TokenStream,
     vi: i32,
     name: &String,
     rank: &Rank,
-) -> Result<Option<List<String>>, String> {
+) -> Result<Option<List<i32>>, String> {
     let Some(data) = first_child_of_kind(s, vi, onnx::RK_CONSTANT_DATA) else {
         return Result::Ok(null);
     };
@@ -194,28 +195,37 @@ fn inline_texts(
     let Some(values) = first_child_of_kind(s, data, onnx::RK_TENSOR_VALUES) else {
         return Result::Err(`${name}: an initializer whose data lives in another file is not read`);
     };
-    return Result::Ok(Option::Some(element_texts(s, toks, values, name, rank)?));
+    return Result::Ok(Option::Some(element_tokens(s, toks, values, name, rank)?));
 }
 
-/// A `tensorValues`'s elements as text, as many as `rank` says.
-fn element_texts(
+/// A `tensorValues`'s elements as their literal tokens, as many as `rank` says.
+fn element_tokens(
     s: &onnx::CstStore,
     toks: &onnx::TokenStream,
     values: i32,
     name: &String,
     rank: &Rank,
-) -> Result<List<String>, String> {
+) -> Result<List<i32>, String> {
     let Some(extents) = static_extents(rank) else {
         return Result::Err(`${name}: inline values need every extent stated`);
     };
     let elements = children_of_kind(s, values, onnx::RK_TENSOR_ELEM);
     check_element_count(name, elements.len(), &extents)?;
-    let mut texts: List<String> = [];
+    let mut tokens = List::<i32>::with_capacity(elements.len());
     for let e of elements {
         let token = first_token(s, e);
         if toks.kind_at(token) == onnx::TK_STRING {
             return Result::Err(`${name}: ${toks.token_text(token)} is a string, and the tensor holds numbers`);
         }
+        tokens.push(token);
+    }
+    return Result::Ok(tokens);
+}
+
+/// Each token's element as text, as ONNX's parser reads it (`onnx/defs/parser.cc`).
+fn element_texts(toks: &onnx::TokenStream, tokens: List<i32>, name: &String) -> Result<List<String>, String> {
+    let mut texts = List::<String>::with_capacity(tokens.len());
+    for let token of tokens {
         texts.push(literal_text(toks, token, name)?);
     }
     return Result::Ok(texts);
@@ -223,9 +233,10 @@ fn element_texts(
 
 /// An initializer the build reads, as its inline values spell it.
 fn read_known(s: &onnx::CstStore, toks: &onnx::TokenStream, vi: i32, info: &ValueInfo) -> Result<Known, String> {
-    let Some(texts) = inline_texts(s, toks, vi, &info.name, &info.rank)? else {
+    let Some(tokens) = inline_tokens(s, toks, vi, &info.name, &info.rank)? else {
         return Result::Err(constant_without_values(&info.name));
     };
+    let texts = element_texts(toks, tokens, &info.name)?;
     return Result::Ok(known_of(&info.name, &info.dtype, static_extents(&info.rank).unwrap(), texts)?.unwrap());
 }
 
@@ -281,7 +292,7 @@ fn read_tensor_attr(s: &onnx::CstStore, toks: &onnx::TokenStream, tensor: i32, n
     };
     let [dtype, rank] = read_tensor_type(s, toks, tensor_type, &name)?;
     let values = first_child_of_kind(s, tensor, onnx::RK_TENSOR_VALUES).unwrap();
-    let texts = element_texts(s, toks, values, &name, &rank)?;
+    let texts = element_texts(toks, element_tokens(s, toks, values, &name, &rank)?, &name)?;
     let known = known_of(&name, &dtype, static_extents(&rank).unwrap(), texts)?;
     return Result::Ok(Attr {
         name,
@@ -322,25 +333,20 @@ fn literal_text(toks: &onnx::TokenStream, token: i32, name: &String) -> Result<S
     if kind == onnx::TK_ID || !text.chars().any(|c| c.is_ascii_digit()) {
         return Result::Err(`${name}: ${text} is not a value`);
     }
-    return Result::Ok(digit_after_point(&text));
+    return Result::Ok(digit_after_point(text));
 }
 
 /// ONNX's float literal may end its fraction at the point (`1.`, `1.e5`), which
-/// `f32::from_str` refuses.
-fn digit_after_point(text: &String) -> String {
-    let mut spelled = String::with_capacity(text.len() + 1);
-    let mut after_point = false;
-    for let c of text.chars() {
-        if after_point && !c.is_ascii_digit() {
-            spelled.push('0');
-        }
-        spelled.push(c);
-        after_point = c == '.';
+/// `f32::from_str` refuses. A literal holds one point at most.
+fn digit_after_point(mut text: String) -> String {
+    let Some(point) = text.find(".") else {
+        return text;
+    };
+    let fraction = point + 1;
+    if fraction == text.len() || !text.byte_at(fraction).is_ascii_digit() {
+        text.insert(fraction, '0');
     }
-    if after_point {
-        spelled.push('0');
-    }
-    return spelled;
+    return text;
 }
 
 fn read_tensor_type(
