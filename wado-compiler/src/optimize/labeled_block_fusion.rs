@@ -616,9 +616,10 @@ trait ExitSink {
     /// Handle one `break <label>: value` exit. Returning `false` aborts the
     /// walk with an overall `false`.
     fn visit(&mut self, body: &Body, value: Option<Operand>) -> bool;
-    /// Descend structurally into `Match` / `Switch` arms (the coverage the
-    /// threading rewrite handles) rather than treating the node as opaque.
-    fn descend_branches(&self) -> bool;
+    /// Whether the rewrite replaces an exit in the block holding it, so an exit
+    /// under any expression, an exit's payload included, is one it reaches.
+    /// Otherwise only `if` and labeled blocks are looked into.
+    fn reaches_nested_exits(&self) -> bool;
 }
 
 /// One `break label` exit, with what encloses it inside the labeled block.
@@ -681,10 +682,10 @@ impl<S: ExitSink> ExitWalk<'_, S> {
                     scope: self.scope.clone(),
                 });
                 // `Ok(f()?)` inlined puts the `?` exit inside the other exit's
-                // payload. Threading keeps a payload where it evaluates, so an
-                // exit inside one is rewritten in place like any other.
+                // payload.
                 self.sink.visit(body, *value)
-                    && (!self.sink.descend_branches() || value.is_none_or(|v| self.operand(body, v)))
+                    && (!self.sink.reaches_nested_exits()
+                        || value.is_none_or(|v| self.operand(body, v)))
             }
             StmtKind::LabeledBlock { label: l, .. } if l == self.label => true,
             StmtKind::If {
@@ -732,26 +733,7 @@ impl<S: ExitSink> ExitWalk<'_, S> {
                     && self.block(body, *then_branch)
                     && else_branch.is_none_or(|eb| self.block(body, eb))
             }
-            ExprKind::Match { expr, arms } if self.sink.descend_branches() => {
-                self.operand(body, *expr)
-                    && arms.iter().all(|arm| {
-                        self.operand(body, arm.body)
-                            && arm.guard.is_none_or(|g| self.operand(body, g))
-                    })
-            }
-            ExprKind::Switch {
-                scrutinee,
-                arms,
-                default,
-                ..
-            } if self.sink.descend_branches() => {
-                self.operand(body, *scrutinee)
-                    && arms.iter().all(|b| self.block(body, *b))
-                    && self.block(body, *default)
-            }
-            // Threading rewrites an exit in the block holding it, whatever
-            // expression holds that block.
-            _ if self.sink.descend_branches() => {
+            _ if self.sink.reaches_nested_exits() => {
                 let mut ok = true;
                 body.for_each_child(NodeRef::Expr(e), |c| ok = ok && self.node(body, c));
                 ok
@@ -882,8 +864,8 @@ fn replace_exits(
 
 /// [`ExitSink`] for `check_lb_breaks_and_get_payload`: every `break L:` must
 /// carry `null` or a `VariantConstruct`, and the matching case's payload type
-/// is recorded. Value-discarding fusion does not descend `Match` / `Switch`
-/// (kept opaque, as before) but rejects any hidden break.
+/// is recorded. Value-discarding fusion reaches no nested exit, and rejects
+/// any hidden break.
 struct BreakChecker<'a> {
     label: &'a str,
     case_index: u32,
@@ -922,7 +904,7 @@ impl ExitSink for BreakChecker<'_> {
         }
         true
     }
-    fn descend_branches(&self) -> bool {
+    fn reaches_nested_exits(&self) -> bool {
         false
     }
 }
@@ -984,7 +966,7 @@ impl ExitSink for TaggedTupleChecker<'_> {
                 && !has_break_to(body, NodeRef::Expr(oe), self.label)
         })
     }
-    fn descend_branches(&self) -> bool {
+    fn reaches_nested_exits(&self) -> bool {
         false
     }
 }
@@ -1962,9 +1944,7 @@ fn selected_arm(body: &Body, exit: StmtId, arms: &[ArmInfo]) -> usize {
 }
 
 /// [`ExitSink`] for threading: resolves each `break L:` exit to the arm it
-/// selects and checks the arm's payload binding type. Descends `Match` /
-/// `Switch` arms and exit payloads (the threading transform rewrites them) and
-/// rejects any hidden break.
+/// selects and checks the arm's payload binding type.
 struct ExitValidator<'a> {
     arms: &'a [ArmInfo],
     locals: &'a [NirLocal],
@@ -2002,7 +1982,7 @@ impl ExitSink for ExitValidator<'_> {
         }
         true
     }
-    fn descend_branches(&self) -> bool {
+    fn reaches_nested_exits(&self) -> bool {
         true
     }
 }
@@ -2379,7 +2359,7 @@ impl ExitSink for SlotExitChecker<'_> {
             }
         }
     }
-    fn descend_branches(&self) -> bool {
+    fn reaches_nested_exits(&self) -> bool {
         true
     }
 }
