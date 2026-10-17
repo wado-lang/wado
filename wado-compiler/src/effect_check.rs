@@ -1,6 +1,7 @@
 //! Effect and purity checking for Wado (Design B): that every call holds the
-//! effects its callee requires, and that defaults and global initializers are
-//! pure. Both read [`Semantics`] rather than the emitted TIR, so they see every
+//! effects its callee requires, that defaults, global initializers and
+//! `contract` clauses are pure, and that a clause writes only what it declares.
+//! Both read [`Semantics`] rather than the emitted TIR, so they see every
 //! source function and run on the LSP path. Violations are returned.
 
 use std::cell::RefCell;
@@ -3191,10 +3192,7 @@ impl<'a> PurityWalker<'a> {
             // A `&mut place` operand is that place's `Place` site. Any other
             // operand reaching a `&mut` passes on one the clause did not take.
             WriteSite::Lent(Expr::Unary(unary)) if unary.op == ast::UnaryOp::MutRef => {}
-            WriteSite::Lent(operand) => {
-                let root = written_root(operand);
-                self.flag(Impurity::Mutate(unparse_expr_source(root)), root.span());
-            }
+            WriteSite::Lent(operand) => self.flag_mutate(operand),
             // A plain `fn` writes nothing it captured.
             WriteSite::Opaque(callee) => {
                 if self.is_fn_mut(callee) && !self.declared_in_clause(callee) {
@@ -3223,9 +3221,15 @@ impl<'a> PurityWalker<'a> {
             _ => !self.is_reference(place),
         };
         if !owned {
-            let root = written_root(place);
-            self.flag(Impurity::Mutate(unparse_expr_source(root)), root.span());
+            self.flag_mutate(place);
         }
+    }
+
+    /// Flags a write the clause makes through `place`, named by what it starts
+    /// from.
+    fn flag_mutate(&mut self, place: &Expr) {
+        let root = place.place_root();
+        self.flag(Impurity::Mutate(unparse_expr_source(root)), root.span());
     }
 
     /// Whether `expr` names a binding the clause being walked declares.
@@ -3241,18 +3245,20 @@ impl<'a> PurityWalker<'a> {
     }
 
     fn is_reference(&self, expr: &Expr) -> bool {
-        self.has_type(expr, |ty| matches!(ty, ResolvedType::Ref(_) | ResolvedType::MutRef(_)))
+        self.has_type(expr, TypeTable::is_reference_shaped)
     }
 
     fn is_fn_mut(&self, expr: &Expr) -> bool {
-        self.has_type(expr, |ty| matches!(ty, ResolvedType::Function { is_mut: true, .. }))
+        self.has_type(expr, |types, ty| {
+            matches!(types.get(ty), ResolvedType::Function { is_mut: true, .. })
+        })
     }
 
     /// Whether any walk that reached `expr` gave it a type `test` accepts.
-    fn has_type(&self, expr: &Expr, test: impl Fn(&ResolvedType) -> bool) -> bool {
+    fn has_type(&self, expr: &Expr, test: impl Fn(&TypeTable, TypeId) -> bool) -> bool {
         expr_types_of(expr, self.sem)
             .into_iter()
-            .any(|ty| test(self.sem.types.get(ty)))
+            .any(|ty| test(&self.sem.types, ty))
     }
 
     fn flag(&mut self, impurity: Impurity, span: Span) {
@@ -3328,16 +3334,6 @@ impl<'a> PurityWalker<'a> {
                 self.flag(Impurity::Call(site.name), span);
             }
         }
-    }
-}
-
-/// The binding a write to `place` starts from, or `place` where none does.
-fn written_root(place: &Expr) -> &Expr {
-    match place {
-        Expr::FieldAccess(access) => written_root(&access.expr),
-        Expr::Index(index) => written_root(&index.expr),
-        Expr::Unary(unary) if unary.op == ast::UnaryOp::Deref => written_root(&unary.expr),
-        _ => place,
     }
 }
 

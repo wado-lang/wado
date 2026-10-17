@@ -7,8 +7,7 @@ use std::mem;
 
 use crate::Lints;
 use crate::ast::{
-    AstVisitor, Attribute, BinaryOp, Expr, Literal, attrs_allow, inner_attrs_allow, lint,
-    walk_expr,
+    AstVisitor, Attribute, BinaryOp, Expr, Literal, attrs_allow, inner_attrs_allow, lint, walk_expr,
 };
 use crate::compiler_host::{Code, Diagnostic, DiagnosticSpan, Severity};
 use crate::effect_check::EffectProbe;

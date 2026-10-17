@@ -3224,6 +3224,17 @@ impl Expr {
         }
     }
 
+    /// What a field, index and unary chain starts from: `r` of `(*r).f[i]`,
+    /// or the expression itself where it is no such chain.
+    pub fn place_root(&self) -> &Expr {
+        match self {
+            Expr::FieldAccess(fa) => fa.expr.place_root(),
+            Expr::Index(idx) => idx.expr.place_root(),
+            Expr::Unary(u) => u.expr.place_root(),
+            _ => self,
+        }
+    }
+
     /// Returns the [`AstId`] for this expression.
     ///
     /// For `Expr::Spread(inner, _)` the id of the inner expression is returned,

@@ -239,11 +239,8 @@ fn is_inert(expr: &Expr) -> bool {
 /// The local an lvalue chain roots at. `None` where it roots in an rvalue,
 /// which names no local the condition could also read.
 fn place_root_name(expr: &Expr) -> Option<String> {
-    match expr {
+    match expr.place_root() {
         Expr::Ident(ident) => Some(ident.name.clone()),
-        Expr::FieldAccess(f) => place_root_name(&f.expr),
-        Expr::Index(i) => place_root_name(&i.expr),
-        Expr::Unary(u) => place_root_name(&u.expr),
         _ => None,
     }
 }
