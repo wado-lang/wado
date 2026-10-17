@@ -236,7 +236,7 @@ A map reaches the generator in key order. Given
 `options: { sizes: { small: 1, large: 3 } }`, this generator spells out
 `large=3,small=1`:
 
-<!-- {"source": "wado-cli/tests/integration/kiln_options.rs"} -->
+<!-- {"fixture": "sub/kiln/options/map_generator.wado"} -->
 
 ```wado
 export struct Options {
@@ -740,7 +740,7 @@ An invocation whose generator is built from its own output, directly or through
 other invocations, is a cycle. The cycle is an error naming the invocations in
 it. This generator imports a module it would itself produce:
 
-<!-- {"source": "wado-cli/tests/fixtures/kiln_nested_cycle/src/cyclic.wado"} -->
+<!-- {"fixture": "sub/kiln/cycle/cyclic.wado"} -->
 
 ```wado
 use { answer } from "./loop.spec"
