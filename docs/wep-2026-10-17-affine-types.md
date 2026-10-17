@@ -126,6 +126,10 @@ consumption) and SE-0432 (`switch`), are:
 - A type parameter is copyable by default. `T: ~Copyable` lets an argument be
   noncopyable, and the body is then checked, at its definition, to copy no
   `T`.
+- A protocol's `Self` is copyable by default too. `protocol P: ~Copyable`
+  admits a noncopyable conformer.
+- A noncopyable type may declare a `deinit`. A copyable one may not, since
+  every copy would run it.
 - A parameter is `borrowing`, `inout` or `consuming`; a method's `self` is the
   same three.
 - An unconsumed value is destroyed at the end of its scope.
@@ -156,24 +160,21 @@ pub variant Option<affine T> { None, Some(T) }  // permission: T may be affine
 fn apply<T, effect E>(f: fn(T) -> T with E, x: T) -> T with E { … }
 fn dup<T>(x: T) -> [T, T] { … }              // unmarked: T is copyable
 
-trait Iterator { affine type Item; … }       // an associated type takes it too
+affine trait Iterator { affine type Item; … }  // a trait for its Self, and
+                                                // an associated type
 ```
 
 `affine` is a keyword, as `effect` is, and stands in the same place: before a
 type parameter it says what kind of parameter it is.
 
-A declaration with `affine` is move-only. A named `struct` or `variant` that
-holds an affine value, directly or through a field or a payload, must be
-declared `affine`, or the declaration is an error that names the field. A
-tuple, a newtype and an anonymous struct have no declaration to mark, so they
-are inferred: each is affine when something it holds is. A `resource` is
-affine unless it declares `linearity = "unrestricted"`, as today.
-
-A type that holds no resource may be declared `affine` too. `AsyncCall<T>` is
-one: it holds its CM subtask as a raw `i32` and a result buffer to free, and
-today every copy shares a `&mut bool` so that a second `wait` panics with
-`AsyncCall used after wait or cancel`. Declared `affine`, its `wait` and
-`cancel` take `self`, and the second call is a compile error.
+A declaration with `affine` is move-only. A named `struct` or `variant` must be
+declared `affine` when it holds an affine value, directly or through a field or
+a payload, or when it implements `Drop`. Otherwise the declaration is an error
+that names the field or the impl. A type that does neither may not be declared
+`affine`: no use for one has appeared. A tuple, a newtype and an anonymous
+struct have no declaration to mark, so they are inferred: each is affine when
+something it holds is. A `resource` is affine unless it declares
+`linearity = "unrestricted"`, as today.
 
 A parameter with `affine` admits an affine argument. The body is checked at its
 definition to treat the parameter as affine. A parameter without it is
@@ -183,6 +184,21 @@ the parameter and says `affine` would admit it.
 `affine` names a kind, not a bound. A bound adds what a body may do, and this
 takes copying away, so a trait could not state it. A kind also composes with
 bounds: `<affine T: Eq>`.
+
+A trait's `Self` is a type parameter too, so a trait states its kind the same
+way. A default method is written over an abstract `Self` and checked once,
+like a generic body. Without a mark it may copy `Self`, and an affine type that
+used it would copy itself:
+
+```wado
+trait Twice { fn twice(&self) -> [Self, Self] { return [*self, *self]; } }
+impl Twice for Fields {}   // compiles today, and returns two owners
+```
+
+`affine trait` admits an affine implementor and checks every default body at
+the trait's definition with `Self` affine. An affine type implementing an
+unmarked trait is an error at the impl. A body bounded by an unmarked trait is
+unaffected: its `T` is copyable already, unless it says `<affine T>`.
 
 The word is exact in both positions. Affine means used at most once. A
 copyable value can be used once too, so every type is an `affine T` and
@@ -197,7 +213,7 @@ A binding of an affine type, or of an `affine` parameter, may be:
 - moved: a `let`, a by-value argument, a `return`, a place in an aggregate, a
   by-value `self`, an assignment into a place;
 - referenced: `&x` or `&mut x`;
-- dropped: by scope exit, or by `x.drop()` on a resource.
+- dropped: by scope exit, or by `x.drop()` on a type that implements `Drop`.
 
 It may not be read twice. The move check already states that for a resource;
 it now states it for every affine type, `affine` parameters included, at the
@@ -280,12 +296,43 @@ What casts did, the following do instead:
   carried, which is dropped.
 - An assignment into a field or an element drops what it replaces. Unchanged.
 
+A type that implements `Drop` gives up no field on its own: neither a partial
+move nor `..base` over it is allowed. Its `drop` relies on the fields it was
+built with, as SE-0429 holds for a type with a `deinit`.
+
 ### Drop
 
-Unchanged in substance: an owned, unmoved affine value is dropped at scope exit
-on every path; a store drops what it replaces; a discarded value is dropped.
-The rule now has nothing to exclude, since no copyable container holds an
-affine value. A panic drops nothing.
+When a value is dropped is unchanged in substance: an owned, unmoved affine
+value is dropped at scope exit on every path; a store drops what it replaces; a
+discarded value is dropped. The rule now has nothing to exclude, since no
+copyable container holds an affine value. A panic drops nothing.
+
+What a drop does is the type's `Drop`:
+
+```wado
+pub affine trait Drop with _ {
+    fn drop(self);
+}
+```
+
+- A type without an impl drops its fields one by one, in declaration order,
+  as today.
+- A type with an impl runs its `drop`. The body may move fields out of `self`,
+  and whatever is left at its end is dropped field by field. `self` is never
+  dropped as a whole again, which would run `drop` once more.
+- A resource's `fn drop(self)` is its `Drop` impl, whether it calls the
+  Component Model's `resource.drop` or runs a guest destructor.
+- Only an affine type implements `Drop`. A copyable type with one would run it
+  for every copy.
+- Each impl brings its own effects (`with _`), and a scope exit that drops the
+  value performs them, as
+  [WEP: Resource Lifecycle](./wep-2026-01-12-resource-lifecycle.md) has a
+  function owning a resource declare its destructor's effects.
+
+A field-by-field drop is wrong for some types. `AsyncCall` is one: a
+`Subtask` traps on `drop` until it resolves, so an unawaited call must cancel
+it first, and its result buffer is linear memory no resource frees. A writer
+that buffers ahead of a stream must flush before the stream closes.
 
 ### A write returns what it did not deliver
 
@@ -329,8 +376,25 @@ one reads.
   (`Future<Result<Option<Trailers>, ErrorCode>>`), and a stream does too
   (`Stream<TcpSocket>`). The read side needs nothing new: `StreamChunk<T>`
   holds a `List<T>`.
-- `affine struct AsyncCall<affine T>`, with `wait(self)` and `cancel(self)`,
-  and without the `__cm_ended` flag.
+- `AsyncCall<affine T>` holds a real `Subtask` rather than a raw `i32` it
+  casts into one at each use:
+
+  ```wado
+  affine struct AsyncCall<affine T> {
+      subtask: Option<Subtask>,   // None where the call completed synchronously
+      status: i32,
+      buffer: ResultBuffer,       // the linear memory the result is lifted from
+      lift: fn(i32) -> T,
+  }
+  ```
+
+  `wait(self)` and `cancel(self)` take the subtask out and consume it, so a
+  second call is a compile error and the shared `__cm_ended` flag goes. Its
+  `Drop` cancels a subtask nobody awaited before dropping it, and frees the
+  buffer.
+- `affine trait`: `Drop`, `Iterator`, `IntoIterator`, `Eq`, `Inspect` and
+  `Display`. A resource implements `Eq` and `Inspect` today, and a list
+  iterated by value is an affine iterator.
 - `List<affine T>`. A method is available for an affine element when an
   `impl<affine T> List<T>` declares it, and the definition-site check holds
   its body to moving elements. The rest stay in `impl<T> List<T>`, for a
@@ -372,44 +436,56 @@ In [WEP: Resource Ownership](./wep-2026-05-21-resource-ownership.md):
 In [WEP: Reference Representation](./wep-2026-06-13-reference-representation.md),
 D6 is settled: a resource is boxed, and the box is its cell.
 
+In [WEP: Resource Lifecycle](./wep-2026-01-12-resource-lifecycle.md), the open
+question of a user-defined drop for a type that is not a resource is answered:
+an affine type implements `Drop`.
+
 ## Roadmap
 
 1. [ ] Fix the `*r = value` panic through `&mut R` with a fixture. A compiler
    panic is P0 and does not wait for the rest.
 2. [ ] `affine` as a keyword on `struct` and `variant`. A named declaration
-   holding an affine value without it is an error naming the field; a tuple,
-   a newtype and an anonymous struct infer. `wado-from-idl` emits it, and the
-   generated stdlib is regenerated. `resource_*` fixtures declare their
-   holders.
-3. [ ] `affine` on a type parameter and on an associated type, with the
+   holding an affine value or implementing `Drop` without it is an error
+   naming the field or the impl, and one doing neither with it is an error
+   too; a tuple, a newtype and an anonymous struct infer. `wado-from-idl`
+   emits it, and the generated stdlib is regenerated. `resource_*` fixtures
+   declare their holders.
+3. [ ] `affine` on a type parameter, an associated type and a trait, with the
    definition-site check: the move check runs over its bindings as over
-   resource bindings.
-4. [ ] `List<affine T>`: the methods that move elements in
+   resource bindings, and over a marked trait's default bodies with `Self`
+   affine. An affine type implementing an unmarked trait is an error at the
+   impl. The prelude traits named under Standard library are marked.
+4. [ ] `Drop`: a resource's `fn drop(self)` as its impl, a user impl on an
+   affine type, the fields left at the end of `drop` dropped one by one, the
+   effects a scope exit performs through it, and no partial move or `..base`
+   over a type that implements it.
+5. [ ] `List<affine T>`: the methods that move elements in
    `impl<affine T> List<T>`, `IntoIterator::into_iter(self)`, and
    `Iterator`'s `affine type Item`.
-5. [ ] No cast between an affine resource and an integer: synthesis splits
+6. [ ] No cast between an affine resource and an integer: synthesis splits
    and lifts the `stream-new` / `future-new` pair, the raw-handle builtins
    take and return resources, `ResourceId::of`, and the test doubles in
-   `core:kiln`, `core:cli` and `package-gale` return real handles. It comes
-   before the cell, which a cast would have to allocate, and before cleanup
-   drops a `Stream`, which `log_stdout` would then drop twice.
-6. [ ] The handle cell: the representation, the trap, the `borrow` an export
+   `core:kiln`, `core:cli` and `package-gale` return real handles.
+   `AsyncCall` holds a `Subtask`, with its `Drop`. It comes before the cell,
+   which a cast would have to allocate, and before cleanup drops a `Stream`,
+   which `log_stdout` would then drop twice.
+7. [ ] The handle cell: the representation, the trap, the `borrow` an export
    receives, and `*r = value` through it. Then the optimizer's erasure where
    it proves no use reaches a dead cell.
-7. [ ] `Option::take`, `Option::replace`, partial move out of a local holder,
+8. [ ] `Option::take`, `Option::replace`, partial move out of a local holder,
    `..base` over an affine holder.
-8. [ ] `FutureWrite<T>` and `StreamWrite<T>`: a write returns what it did not
+9. [ ] `FutureWrite<T>` and `StreamWrite<T>`: a write returns what it did not
    deliver, in every case the result reports, and the stdlib's write loops
    (`write_all`) read `rest` rather than `count`.
-9. [ ] Instantiation rule: an affine argument for an unmarked parameter is a
-   type error naming the parameter. `Option`, `Result`, `Future`, `Stream`,
-   `AsyncCall` and `List` are marked by then.
-10. [ ] Withdraw the receiver-kind rule and the TIR copy check from #2364, and
+10. [ ] Instantiation rule: an affine argument for an unmarked parameter is a
+    type error naming the parameter. `Option`, `Result`, `Future`, `Stream`,
+    `AsyncCall` and `List` are marked by then.
+11. [ ] Withdraw the receiver-kind rule and the TIR copy check from #2364, and
     the `resource_copy_out_of_reference_error` fixture with it.
-11. [ ] Cleanup drops a `Stream` and a `Future` the body does not move, which
+12. [ ] Cleanup drops a `Stream` and a `Future` the body does not move, which
     it excludes today
     ([A `Stream` or `Future` handle nothing drops](./wep-2026-05-21-resource-ownership.md#a-stream-or-future-handle-nothing-drops)).
-12. [ ] Spec: rewrite
+13. [ ] Spec: rewrite
     [Resource Ownership](./spec-components.md#resource-ownership), the
     resource paragraph of [Memory Model](./spec-memory.md), and the cheatsheet.
     Amend the WEPs above.
@@ -434,15 +510,6 @@ Unchanged from
 [WEP: Resource Ownership](./wep-2026-05-21-resource-ownership.md#known-gaps):
 a panic drops nothing; a generic resource a user module declares is not
 checked; web handles leak.
-
-## Open questions
-
-- Whether a trait may declare its `Self` affine, so that a trait method can be
-  written over an affine `Self`.
-- What dropping an affine type that holds no resource does. Its synthesized
-  drop reaches no resource, so an `AsyncCall` nobody waits on drops nothing,
-  neither its subtask nor its buffer. Whether such a type may declare its own
-  `fn drop(self)` is not decided.
 
 ## References
 
