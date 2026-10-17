@@ -82,12 +82,18 @@ impl<T: HeldTypes> Walk<'_, T> {
                 // descends into it, which ends where the type does.
                 let holding: Vec<bool> = args.iter().map(|&arg| self.holds(arg)).collect();
                 let recurs = self.open.iter().any(|open| {
-                    open.decl == decl && open.holding == holding && !self.within(type_id, &open.args)
+                    open.decl == decl
+                        && open.holding == holding
+                        && !self.within(type_id, &open.args)
                 });
                 if recurs {
                     return false;
                 }
-                self.open.push(Open { decl, holding, args });
+                self.open.push(Open {
+                    decl,
+                    holding,
+                    args,
+                });
                 let held = members.into_iter().any(|member| self.holds(member));
                 self.open.pop();
                 held
