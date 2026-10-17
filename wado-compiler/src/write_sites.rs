@@ -79,13 +79,9 @@ impl<F: FnMut(WriteSite<'_>)> Sites<'_, F> {
             return true;
         };
         self.sem
-            .referenced_symbol(ident.id)
-            .and_then(|def| self.sem.symbol_at(def))
+            .referenced_symbol_at(ident.id)
             .is_some_and(|symbol| {
-                matches!(
-                    symbol.kind,
-                    SymbolKind::Variable(_) | SymbolKind::Global(_)
-                )
+                matches!(symbol.kind, SymbolKind::Variable(_) | SymbolKind::Global(_))
             })
     }
 }

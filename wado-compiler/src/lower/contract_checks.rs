@@ -185,7 +185,7 @@ fn copied_clauses(body: &TirBlock) -> usize {
 /// copies the clause's bare condition and that call, not the power-assert
 /// captures and a message builder each. The report evaluates the condition
 /// again with its captures, which a clause may do since it performs no
-/// effect and writes nothing it did not declare, and takes the locals that
+/// effect and writes only the values it creates, and takes the locals that
 /// reads, so a call passes those alone and no container the message leaves
 /// out escapes into it.
 fn share_reports(flat: &mut FlatPackage) {

@@ -414,6 +414,13 @@ impl Semantics {
         self.fact_at(ModuleSemantics::REFERENCES, id).copied()
     }
 
+    /// The symbol a use site at `id` resolves to.
+    #[must_use]
+    pub(crate) fn referenced_symbol_at(&self, id: AstId) -> Option<&Symbol> {
+        self.referenced_symbol(id)
+            .and_then(|def| self.symbol_at(def))
+    }
+
     /// Iterate every declared symbol with its canonical key, across all
     /// modules. Includes both item-level symbols and the synthetic local
     /// table (`let` / parameter bindings), mirroring [`Self::symbol_at`].

@@ -1,6 +1,7 @@
 //! Effect and purity checking for Wado (Design B): that every call holds the
 //! effects its callee requires, that defaults, global initializers and
-//! `contract` clauses are pure, and that a clause writes only what it declares.
+//! `contract` clauses are pure, and that a clause writes only the values it
+//! creates.
 //! Both read [`Semantics`] rather than the emitted TIR, so they see every
 //! source function and run on the LSP path. Violations are returned.
 
@@ -176,8 +177,8 @@ pub enum Impurity {
     /// The position installs a handler for the named effect whose methods
     /// declare an effect it does not hold.
     Install(String),
-    /// A `contract` clause writes, or lends `&mut` to, the named binding it
-    /// did not declare.
+    /// A `contract` clause writes, or lends a callee the means to write, state
+    /// it did not create, reached from the named binding.
     Mutate(String),
     /// A `contract` clause calls the named function value, which may write
     /// through a `&mut` it captured, `fn` and `fn mut` alike.
@@ -3209,8 +3210,8 @@ impl<'a> PurityWalker<'a> {
         self.clause = None;
     }
 
-    /// Flags `site` where it writes what the clause being walked did not
-    /// declare.
+    /// Flags `site` where it writes state the clause being walked did not
+    /// create.
     fn flag_clause_write(&mut self, site: WriteSite<'_>) {
         match site {
             WriteSite::Place(place) | WriteSite::Unresolved(place) => self.flag_write(place),
@@ -3277,8 +3278,7 @@ impl<'a> PurityWalker<'a> {
             return None;
         };
         self.sem
-            .referenced_symbol(ident.id)
-            .and_then(|def| self.sem.symbol_at(def))
+            .referenced_symbol_at(ident.id)
             .and_then(|symbol| symbol.span)
     }
 
