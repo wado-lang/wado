@@ -1321,9 +1321,10 @@ impl WebGpuBackend {
         return Option::Some(permuted(&out, &inverse(&perm)));
     }
 
-    /// `group_query_attention` in two dispatches: one writes the present keys
-    /// and values, turned keys first, into one buffer, and one attends each
-    /// query row in a workgroup of its own. `rotary` is the cosine and sine
+    /// `group_query_attention` in three dispatches: one writes the present
+    /// keys and values, turned keys first, into one buffer, one attends each
+    /// query row over each part of `LANES` positions in a workgroup of its
+    /// own, and one joins each row's parts. `rotary` is the cosine and sine
     /// tables. `None` where the operands outgrow what a dispatch binds.
     fn attended(
         &mut self,
@@ -1341,9 +1342,9 @@ impl WebGpuBackend {
         let total = past + s;
         let rows = batch * s * heads;
         let n = batch * kv * total * d;
-        // The attended rows, then each row's weights over the positions.
-        let written = rows * d + rows * total;
-        if 2 * n > self.max_binding || written > self.max_binding || d > MAX_HEAD {
+        let groups = rows * total.div_ceil(LANES);
+        let attended = groups * (d + 2);
+        if 2 * n > self.max_binding || attended > self.max_binding || d > MAX_HEAD {
             return null;
         }
         let half = match rotary {
@@ -1384,18 +1385,28 @@ impl WebGpuBackend {
         let present_v = contiguous(presents, n, extents);
         attend_operands[1] = present_k;
         attend_operands[2] = present_v;
-        let out = self.allocated(written, false);
-        let gx = i32::min(rows, MAX_GROUPS);
+        let parts = self.allocated(attended, false);
+        let gx = i32::min(groups, MAX_GROUPS);
         let mut attend_head: List<u32> = [];
-        push_all(&mut attend_head, &([rows, gx, batch, s, heads, d, total, past, heads / kv, half] as List<i32>));
+        push_all(&mut attend_head, &([groups, gx, batch, s, heads, d, total, past, heads / kv, half] as List<i32>));
         attend_head.push(options.scale.to_bits());
         attend_head.push(options.softcap.to_bits());
         push_signed(&mut attend_head, options.window);
         attend_head.push(if options.causal { 1 } else { 0 });
         let biased = bias matches { Some(_) };
-        self.dispatch_bound(&attend_operands, out, written, attend_head, |bindings| ShaderKey::Attend([
+        self.dispatch_bound(&attend_operands, parts, attended, attend_head, |bindings| ShaderKey::Attend([
             bindings, d, half > 0, biased,
-        ]), [gx, rows.div_ceil(i32::max(gx, 1)), 1]);
+        ]), [gx, groups.div_ceil(i32::max(gx, 1)), 1]);
+
+        let out = self.allocated(rows * d, false);
+        let rx = i32::min(rows, MAX_GROUPS);
+        let joined = [contiguous(parts, 0, [attended])] as List<DeviceTensor>;
+        let join_head: List<u32> = [rows as u32, rx as u32, total.div_ceil(LANES) as u32, d as u32];
+        self.dispatch_bound(&joined, out, rows * d, join_head, |bindings| ShaderKey::AttendJoin(bindings), [
+            rx,
+            rows.div_ceil(i32::max(rx, 1)),
+            1,
+        ]);
         return Option::Some([contiguous(out, 0, [batch, s, heads * d]), present_k, present_v]);
     }
 
@@ -2480,6 +2491,8 @@ variant ShaderKey {
     Present([List<i32>, bool]),
     /// [`attend_shader`]'s arguments.
     Attend([List<i32>, i32, bool, bool]),
+    /// [`attend_join_shader`]'s argument.
+    AttendJoin(List<i32>),
     /// [`arg_max_shader`]'s arguments.
     ArgMax([List<i32>, i32, ArgMaxStage]),
 }
@@ -2504,6 +2517,7 @@ impl ShaderKey {
             Gather([rank, axis, half]) => gather_shader(*rank, *axis, *half),
             Present([bindings, rotary]) => present_shader(bindings, *rotary),
             Attend([bindings, head, rotary, biased]) => attend_shader(bindings, *head, *rotary, *biased),
+            AttendJoin(bindings) => attend_join_shader(bindings),
             ArgMax([bindings, rank, stage]) => arg_max_shader(bindings, *rank, *stage),
         };
     }
@@ -2512,11 +2526,17 @@ impl ShaderKey {
 /// The element of operand `k`, read from binding `bindings[k]`, whose view's
 /// offset is at `p[at]` and strides follow, at `coords`.
 fn view_wgsl(bindings: &List<i32>, k: i32, at: i32, coords: List<String>) -> String {
+    return `o${bindings[k]}[u32(${view_index_wgsl(at, coords)})]`;
+}
+
+/// The index, as an i32, of the element at `coords` of the view whose offset
+/// is at `p[at]` and strides follow, over the leading axes `coords` names.
+fn view_index_wgsl(at: i32, coords: List<String>) -> String {
     let mut index = `bitcast<i32>(p[${at}])`;
     for let [d, c] of coords.into_iter().enumerate() {
         index.push_str(` + i32(${c}) * bitcast<i32>(p[${at + 1 + d}])`);
     }
-    return `o${bindings[k]}[u32(${index})]`;
+    return index;
 }
 
 /// Lines setting `turned` to `x`, element `e` of a head whose element `c` is
@@ -2592,13 +2612,15 @@ ${key}    out[i] = turned;
 `;
 }
 
-/// The WGSL attending one query row of `group_query_attention` per workgroup,
-/// for heads of `head` elements: the query turned where `rotary`, its scores
-/// against every position's key scaled, capped, biased where `biased` and
-/// masked, their softmax, and the values it weighs. The weights are written
-/// after the attended rows, so each lane reads every position's.
-/// Parameters: the rows, the workgroups per row of the grid, the batch, the
-/// new positions, the heads, the head's length, the positions in all, the
+/// The WGSL attending one query row of `group_query_attention` over one part
+/// of 64 positions per workgroup, for heads of `head` elements: the query
+/// turned where `rotary`, its scores against each position's key scaled,
+/// capped, biased where `biased` and masked, and the values they weigh. A part
+/// writes its weighed values, its greatest score, and its weights' sum, each
+/// weight taken against that score: `attend_join_shader` joins a row's parts.
+/// A lane scores one position, so a long sequence spreads over the device.
+/// Parameters: the workgroups, the workgroups per row of the grid, the batch,
+/// the new positions, the heads, the head's length, the positions in all, the
 /// past's, the query heads per key head, the turned half's length, the scale
 /// and the cap as f32 bits, the window, whether causal, then the views of the
 /// queries, the present keys and values, the cosines and sines, and the bias.
@@ -2618,13 +2640,17 @@ fn attend_shader(bindings: &List<i32>, head: i32, rotary: bool, biased: bool) ->
     return `${buffers_wgsl(1 + max_of(bindings), null)}
 var<workgroup> query: array<f32, ${head}>;
 var<workgroup> partial: array<f32, 64>;
+var<workgroup> weights: array<f32, 64>;
 
 @compute @workgroup_size(64)
 fn main(@builtin(workgroup_id) group: vec3<u32>, @builtin(local_invocation_index) lid: u32) {
-    let row = group.x + group.y * p[1];
-    if row >= p[0] {
+    let flat = group.x + group.y * p[1];
+    if flat >= p[0] {
         return;
     }
+    let parts = (p[6] + 63u) / 64u;
+    let row = flat / parts;
+    let first = flat % parts * 64u;
     let seq = p[3];
     let heads = p[4];
     let d = p[5];
@@ -2646,25 +2672,24 @@ fn main(@builtin(workgroup_id) group: vec3<u32>, @builtin(local_invocation_index
 ${turning}        query[e] = turned;
     }
     workgroupBarrier();
-    let weights = p[0] * d + row * total;
-    var top = none;
-    for (var j = lid; j < total; j += 64u) {
-        var sc = none;
-        let masked = (causal && j > position) || (window > 0 && i32(position) - i32(j) >= window);
-        if !masked {
-            var dot = 0.0;
-            for (var e = 0u; e < d; e++) {
-                dot += query[e] * ${view_wgsl(bindings, 1, 18, ["b", "kh", "j", "e"])};
-            }
-            sc = dot * scale;
-            if softcap > 0.0 {
-                sc = softcap * tanh(sc / softcap);
-            }
-${biasing}        }
-        out[weights + j] = sc;
-        top = max(top, sc);
-    }
-    partial[lid] = top;
+    let mine = first + lid;
+    var sc = none;
+    let masked = mine >= total || (causal && mine > position)
+        || (window > 0 && i32(position) - i32(mine) >= window);
+    if !masked {
+        let j = mine;
+        let key = ${view_index_wgsl(18, ["b", "kh", "j"])};
+        let along = bitcast<i32>(p[22]);
+        var dot = 0.0;
+        for (var e = 0u; e < d; e++) {
+            dot += query[e] * o${bindings[1]}[u32(key + i32(e) * along)];
+        }
+        sc = dot * scale;
+        if softcap > 0.0 {
+            sc = softcap * tanh(sc / softcap);
+        }
+${biasing}    }
+    partial[lid] = sc;
     workgroupBarrier();
     for (var w = 32u; w > 0u; w = w >> 1u) {
         if lid < w {
@@ -2674,14 +2699,9 @@ ${biasing}        }
     }
     let most = partial[0];
     workgroupBarrier();
-    var sum = 0.0;
-    for (var j = lid; j < total; j += 64u) {
-        let sc = out[weights + j];
-        let w = select(exp(sc - most), 0.0, sc == none);
-        out[weights + j] = w;
-        sum += w;
-    }
-    partial[lid] = sum;
+    let weight = select(exp(sc - most), 0.0, sc == none);
+    weights[lid] = weight;
+    partial[lid] = weight;
     workgroupBarrier();
     for (var w = 32u; w > 0u; w = w >> 1u) {
         if lid < w {
@@ -2689,18 +2709,63 @@ ${biasing}        }
         }
         workgroupBarrier();
     }
-    let all = partial[0];
-    storageBarrier();
-    workgroupBarrier();
+    let at = flat * (d + 2u);
+    let count = min(64u, total - first);
+    let j = first;
+    let values = ${view_index_wgsl(23, ["b", "kh", "j"])};
+    let next = bitcast<i32>(p[26]);
+    let along = bitcast<i32>(p[27]);
     for (var e = lid; e < d; e += 64u) {
         var acc = 0.0;
-        for (var j = 0u; j < total; j++) {
-            let w = out[weights + j] / all;
+        let column = values + i32(e) * along;
+        for (var i = 0u; i < count; i++) {
+            let w = weights[i];
             if w != 0.0 {
-                acc += w * ${view_wgsl(bindings, 2, 23, ["b", "kh", "j", "e"])};
+                acc += w * o${bindings[2]}[u32(column + i32(i) * next)];
             }
         }
-        out[row * d + e] = acc;
+        out[at + e] = acc;
+    }
+    if lid == 0u {
+        out[at + d] = most;
+        out[at + d + 1u] = partial[0];
+    }
+}
+`;
+}
+
+/// The WGSL joining the parts `attend_shader` wrote of each row, one row per
+/// workgroup: each part's weighed values and weights' sum rescaled from its
+/// greatest score to the row's. Parameters: the rows, the workgroups per row of
+/// the grid, the parts of a row, the head's length, then the view of the parts.
+fn attend_join_shader(bindings: &List<i32>) -> String {
+    let part = |c: String, at: String| `o${bindings[0]}[p[4] + (row * parts + ${c}) * (d + 2u) + ${at}]`;
+    return `${buffers_wgsl(1 + max_of(bindings), null)}
+@compute @workgroup_size(64)
+fn main(@builtin(workgroup_id) group: vec3<u32>, @builtin(local_invocation_index) lid: u32) {
+    let row = group.x + group.y * p[1];
+    if row >= p[0] {
+        return;
+    }
+    let parts = p[2];
+    let d = p[3];
+    let none = bitcast<f32>(0xff800000u);
+    var most = none;
+    for (var c = 0u; c < parts; c++) {
+        most = max(most, ${part("c", "d")});
+    }
+    var all = 0.0;
+    for (var c = 0u; c < parts; c++) {
+        let top = ${part("c", "d")};
+        all += select(exp(top - most), 0.0, top == none) * ${part("c", "d + 1u")};
+    }
+    for (var e = lid; e < d; e += 64u) {
+        var acc = 0.0;
+        for (var c = 0u; c < parts; c++) {
+            let top = ${part("c", "d")};
+            acc += select(exp(top - most), 0.0, top == none) * ${part("c", "e")};
+        }
+        out[row * d + e] = acc / all;
     }
 }
 `;

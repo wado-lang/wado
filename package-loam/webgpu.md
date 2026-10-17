@@ -66,11 +66,15 @@ runs.
   `u32` when it runs.
 - The convolutions and `max_pool` stay on the CPU. No model step 14 targets
   has them. `expand` is a view, each stretched axis read through a stride of 0.
-- `group_query_attention`, which Gemma 3 has and GPT-2 does not, is two
+- `group_query_attention`, which Gemma 3 has and GPT-2 does not, is three
   dispatches. One writes the present keys and values into one buffer, the new
-  keys turned by the rotary tables. The other attends each query row in a
-  workgroup of its own: the turned query, its scores, their softmax and the
-  values they weigh. `conformance/webgpu_attention.wado` holds it to `Cpu`.
+  keys turned by the rotary tables. The next attends each query row over each
+  part of 64 positions in a workgroup of its own: the turned query, its scores,
+  their weights against the part's greatest, and the values they weigh. The
+  last joins a row's parts, rescaling each to the row's greatest score. Gemma's
+  step over one token has 4 query rows, so a workgroup a row left the device idle
+  and grew slower with the sequence: at 600 positions, 11.5 ms a token against
+  6.0 for the parts. `conformance/webgpu_attention.wado` holds it to `Cpu`.
 - A product of at most four rows, as a step over one token makes, does not
   run in 16 by 16 tiles, which would leave 15 of 16 lanes idle. Each workgroup
   computes a run of columns, its lanes splitting the inner axis. The lanes
@@ -270,7 +274,7 @@ example's `generate.mjs` on `onnxruntime-node`, on the CPU.
 | ------------ | --------------- | -------------------------------- | ------------------ | ------------------ |
 | GPT-2 (124M) | `WebGpuBackend` | 2.5                              | 128                | 1                  |
 | GPT-2 (124M) | `Cpu`           | 18                               |                    |                    |
-| Gemma 3 270M | `WebGpuBackend` | 0.19                             | 276                | 1                  |
+| Gemma 3 270M | `WebGpuBackend` | 0.19                             | 294                | 1                  |
 | Gemma 3 270M | `Cpu`           | 5.0                              |                    |                    |
 | either       | onnxruntime     | 1                                |                    |                    |
 

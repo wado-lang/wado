@@ -104,8 +104,26 @@ export fn run() with (Stdout, Webgpu, Gpu, GpuAdapter, GpuDevice, GpuQueue, GpuC
             biased: true,
             options: Attention { heads: 2, kv_heads: 2, scale: 0.5, softcap: -1.0, window: -1, causal: false },
         },
+        // Past 64 positions, a row's parts are several workgroups.
+        Case {
+            name: "long",
+            seq: 3,
+            past: 140,
+            half: 2,
+            biased: true,
+            options: Attention { heads: 2, kv_heads: 1, scale: 0.35, softcap: -1.0, window: -1, causal: true },
+        },
+        // A window behind the first 64 positions masks a whole part.
+        Case {
+            name: "windowed",
+            seq: 1,
+            past: 150,
+            half: 0,
+            biased: false,
+            options: Attention { heads: 4, kv_heads: 2, scale: 0.35, softcap: 2.0, window: 40, causal: true },
+        },
     ];
-    let [batch, d, positions] = [2, 8, 12];
+    let [batch, d, positions] = [2, 8, 160];
     for let c of cases {
         let total = c.past + c.seq;
         let q: Tensor<f32, [Batch, Seq, Query]> = tensor([batch, c.seq, c.options.heads * d], 1);
