@@ -1,3 +1,4 @@
+use std::collections::BTreeSet;
 use std::env;
 use std::path::{Component, Path, PathBuf};
 use std::{fs, io};
@@ -81,19 +82,32 @@ pub(crate) fn workspace_in(dir: &Path) -> Result<Option<WorkspaceManifest>, Disc
 }
 
 /// The files besides sources that decide how `project` resolves its imports:
-/// its own manifest and lock, the workspace file governing it, and each path
-/// dependency's manifest, which names that dependency's entry.
+/// for it and each path dependency at any depth, the manifest, which names the
+/// package's entry and its own dependencies, the lock, and the workspace file
+/// governing it. A git dependency's checkout is immutable, so nothing in it is
+/// watched.
 pub(crate) fn resolution_inputs(project: &ProjectManifest) -> Vec<PathBuf> {
-    let mut files = vec![
-        project.root.join(MANIFEST_FILENAME),
-        project.root.join("wado.lock"),
-    ];
-    if let Some(workspace) = governing_workspace_root_dir(&project.root) {
-        files.push(workspace.join(WORKSPACE_FILENAME));
-    }
-    for dependency in project.manifest.dependencies.values() {
-        if let DependencySource::Path { path, .. } = &dependency.source {
-            files.push(project.root.join(path).join(MANIFEST_FILENAME));
+    let mut files = Vec::new();
+    let mut seen = BTreeSet::new();
+    let mut pending = vec![project.root.clone()];
+    while let Some(root) = pending.pop() {
+        if !seen.insert(fs::canonicalize(&root).unwrap_or_else(|_| root.clone())) {
+            continue;
+        }
+        let manifest_path = root.join(MANIFEST_FILENAME);
+        files.push(manifest_path.clone());
+        files.push(root.join("wado.lock"));
+        if let Some(workspace) = governing_workspace_root_dir(&root) {
+            files.push(workspace.join(WORKSPACE_FILENAME));
+        }
+        let manifest = match fs::read_to_string(&manifest_path) {
+            Ok(content) => resolve_manifest(&root, &content).ok(),
+            Err(_) => None,
+        };
+        for dependency in manifest.iter().flat_map(|m| m.dependencies.values()) {
+            if let DependencySource::Path { path, .. } = &dependency.source {
+                pending.push(root.join(path));
+            }
         }
     }
     files

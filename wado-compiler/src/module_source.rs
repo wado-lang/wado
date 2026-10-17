@@ -177,9 +177,11 @@ impl ModuleSourceInterner {
         self.root_package = PackageId::Core;
     }
 
-    /// The entry module of each path dependency.
+    /// The entry module of each path dependency, at any depth.
     pub fn dependency_libs(&self) -> impl Iterator<Item = &str> {
-        self.dependencies.resolved.values().map(String::as_str)
+        let direct = self.dependencies.resolved.values();
+        let transitive = self.dependencies.packages.keys();
+        direct.chain(transitive).map(String::as_str)
     }
 
     /// Bound the entry's package at `root_dir`, and each path dependency's at
@@ -258,31 +260,58 @@ impl ModuleSourceInterner {
         self.package_roots[path].clone()
     }
 
-    /// Resolve a bare dependency name to its entry module `ModuleSource`, if
-    /// declared in `[dependencies]` and successfully resolved.
-    pub fn resolve_dependency(&mut self, name: &str) -> Option<ModuleSource> {
-        let path = self.dependencies.resolved.get(name)?.clone();
+    /// The dependencies a bare-name import in `importer` resolves against: its
+    /// own package's where it is a dependency's module, else the entry's.
+    fn dependencies_of(&self, importer: &ModuleSource) -> &DependencyIndex {
+        static NONE: LazyLock<DependencyIndex> = LazyLock::new(DependencyIndex::default);
+        match importer {
+            ModuleSource::Dependency { pkg, .. } => self
+                .dependencies
+                .packages
+                .get(pkg.as_str())
+                .unwrap_or(&NONE),
+            _ => &self.dependencies,
+        }
+    }
+
+    /// Resolve a bare dependency name imported by `importer` to its entry
+    /// module `ModuleSource`, if its package declares it in `[dependencies]`
+    /// and it resolved.
+    pub fn resolve_dependency(
+        &mut self,
+        importer: &ModuleSource,
+        name: &str,
+    ) -> Option<ModuleSource> {
+        let path = self.dependencies_of(importer).resolved.get(name)?.clone();
         Some(self.dependency(&path))
     }
 
-    /// Resolve a coordinate to a *prebuilt component* dependency's `ModuleSource`
-    /// (a registry dependency fetched as a `.wasm`), imported across the CM
-    /// boundary like a `with { type: "wasm" }` asset.
-    pub fn resolve_component_dependency(&mut self, name: &str) -> Option<ModuleSource> {
-        let path = self.dependencies.components.get(name)?.clone();
+    /// Resolve a coordinate imported by `importer` to a *prebuilt component*
+    /// dependency's `ModuleSource` (a registry dependency fetched as a
+    /// `.wasm`), imported across the CM boundary like a `with { type: "wasm" }`
+    /// asset.
+    pub fn resolve_component_dependency(
+        &mut self,
+        importer: &ModuleSource,
+        name: &str,
+    ) -> Option<ModuleSource> {
+        let path = self.dependencies_of(importer).components.get(name)?.clone();
         Some(self.wasm(&path, WasmAssetKind::Wasm))
     }
 
-    /// The reason a *declared* dependency could not be resolved, if any.
+    /// The reason a dependency `importer`'s package *declares* could not be
+    /// resolved, if any.
     #[must_use]
-    pub fn unresolved_dependency(&self, name: &str) -> Option<&str> {
-        self.dependencies.unresolved.get(name).map(String::as_str)
+    pub fn unresolved_dependency(&self, importer: &ModuleSource, name: &str) -> Option<&str> {
+        let unresolved = &self.dependencies_of(importer).unresolved;
+        unresolved.get(name).map(String::as_str)
     }
 
-    /// The `wado.toml` the dependencies were read from, if one governs the entry.
+    /// The `wado.toml` `importer`'s dependencies were read from, if one governs
+    /// its package.
     #[must_use]
-    pub fn dependency_manifest(&self) -> Option<&DependencyManifest> {
-        self.dependencies.manifest.as_ref()
+    pub fn dependency_manifest(&self, importer: &ModuleSource) -> Option<&DependencyManifest> {
+        self.dependencies_of(importer).manifest.as_ref()
     }
 
     pub fn intern(&mut self, s: &str) -> InternedStr {
@@ -1089,18 +1118,34 @@ mod tests {
             "broken".to_string(),
             "declares no [package].lib".to_string(),
         );
+        let mut greet = DependencyIndex::default();
+        greet
+            .resolved
+            .insert("leaf".to_string(), "../leaf/lib.wado".to_string());
+        index
+            .packages
+            .insert("../greet/src/lib.wado".to_string(), greet);
         interner.set_dependencies(index);
+        let entry = interner.entry_point("main.wado");
+        let greet = interner.dependency("../greet/src/lib.wado");
         assert_eq!(
-            interner.resolve_dependency("greet"),
-            Some(interner.dependency("../greet/src/lib.wado"))
+            interner.resolve_dependency(&entry, "greet"),
+            Some(greet.clone())
         );
-        assert_eq!(interner.resolve_dependency("missing"), None);
+        assert_eq!(interner.resolve_dependency(&entry, "missing"), None);
         // Declared-but-unresolved entries surface their reason instead.
-        assert_eq!(interner.resolve_dependency("broken"), None);
+        assert_eq!(interner.resolve_dependency(&entry, "broken"), None);
         assert_eq!(
-            interner.unresolved_dependency("broken"),
+            interner.unresolved_dependency(&entry, "broken"),
             Some("declares no [package].lib")
         );
+        // A dependency resolves against its own `[dependencies]` alone.
+        assert_eq!(
+            interner.resolve_dependency(&greet, "leaf"),
+            Some(interner.dependency("../leaf/lib.wado"))
+        );
+        assert_eq!(interner.resolve_dependency(&entry, "leaf"), None);
+        assert_eq!(interner.resolve_dependency(&greet, "greet"), None);
     }
 
     #[test]

@@ -332,6 +332,68 @@ fn an_undeclared_alias_names_the_manifest() {
         );
 }
 
+/// Write a package at `dir` whose `src/lib.wado` is `lib`, with the
+/// `[dependencies]` lines in `deps`.
+fn library(dir: &std::path::Path, deps: &str, lib: &str) {
+    fs::create_dir_all(dir.join("src")).unwrap();
+    let name = dir.file_name().unwrap().to_str().unwrap();
+    fs::write(
+        dir.join("wado.toml"),
+        format!(
+            "[package]\nname = \"{name}\"\nversion = \"0.1.0\"\nlib = \"src/lib.wado\"\n\n\
+             [dependencies]\n{deps}"
+        ),
+    )
+    .unwrap();
+    fs::write(dir.join("src/lib.wado"), lib).unwrap();
+}
+
+/// A dependency's bare import resolves against its own `[dependencies]`, at
+/// any depth, and never against its consumer's.
+#[test]
+fn a_dependency_resolves_its_imports_against_its_own_manifest() {
+    let tmp = tempfile::tempdir().unwrap();
+    let root = tmp.path();
+    library(
+        &root.join("leaf"),
+        "",
+        "pub fn leaf() -> i32 { return 1; }\n",
+    );
+    library(
+        &root.join("mid"),
+        "\"lib:leaf\" = { path = \"../leaf\" }\n",
+        "use { leaf } from \"lib:leaf\";\npub fn mid() -> i32 { return leaf() + 1; }\n",
+    );
+    library(
+        &root.join("app"),
+        "\"lib:mid\" = { path = \"../mid\" }\n",
+        "use { mid } from \"lib:mid\";\npub fn api() -> i32 { return mid(); }\n",
+    );
+    wado_in(&root.join("app"))
+        .args(["check", "src/lib.wado"])
+        .assert()
+        .success();
+
+    library(
+        &root.join("mid"),
+        "",
+        "use { leaf } from \"lib:leaf\";\npub fn mid() -> i32 { return leaf() + 1; }\n",
+    );
+    library(
+        &root.join("app"),
+        "\"lib:mid\" = { path = \"../mid\" }\n\"lib:leaf\" = { path = \"../leaf\" }\n",
+        "use { mid } from \"lib:mid\";\npub fn api() -> i32 { return mid(); }\n",
+    );
+    wado_in(&root.join("app"))
+        .args(["check", "src/lib.wado"])
+        .assert()
+        .failure()
+        .stderr(
+            predicate::str::contains("dependency 'lib:leaf' is not declared in [dependencies] of ")
+                .and(predicate::str::contains("mid/wado.toml")),
+        );
+}
+
 /// With no manifest at all, the same import says there is none to declare it in.
 #[test]
 fn an_undeclared_alias_without_a_manifest_says_so() {

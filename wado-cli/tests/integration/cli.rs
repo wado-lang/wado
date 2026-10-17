@@ -1411,7 +1411,7 @@ fn test_test_skips_a_passed_file_until_something_it_read_changes() {
 }
 
 #[test]
-fn test_test_reruns_a_passed_file_once_a_path_dependency_names_another_entry() {
+fn test_test_reruns_a_passed_file_once_a_transitive_path_dependency_names_another_entry() {
     let tmp = tempfile::tempdir().unwrap();
     let greet = tmp.path().join("greet");
     std::fs::create_dir_all(&greet).unwrap();
@@ -1420,16 +1420,24 @@ fn test_test_reruns_a_passed_file_once_a_path_dependency_names_another_entry() {
     std::fs::write(greet.join("wado.toml"), manifest("a.wado")).unwrap();
     std::fs::write(greet.join("a.wado"), "pub fn n() -> i32 { return 1; }\n").unwrap();
     std::fs::write(greet.join("b.wado"), "pub fn n() -> i32 { return 2; }\n").unwrap();
+    let mid = tmp.path().join("mid");
+    std::fs::create_dir_all(&mid).unwrap();
+    std::fs::write(
+        mid.join("wado.toml"),
+        "[package]\nname = \"mid\"\nversion = \"0.1.0\"\nlib = \"mid.wado\"\n\n[dependencies]\ngreet = { path = \"../greet\" }\n",
+    )
+    .unwrap();
+    std::fs::write(mid.join("mid.wado"), "pub use { n } from \"greet\";\n").unwrap();
     let app = tmp.path().join("app");
     std::fs::create_dir_all(&app).unwrap();
     std::fs::write(
         app.join("wado.toml"),
-        "[package]\nname = \"app\"\nversion = \"0.1.0\"\n\n[dependencies]\ngreet = { path = \"../greet\" }\n",
+        "[package]\nname = \"app\"\nversion = \"0.1.0\"\n\n[dependencies]\nmid = { path = \"../mid\" }\n",
     )
     .unwrap();
     std::fs::write(
         app.join("app_test.wado"),
-        "use { n } from \"greet\";\n\ntest \"one\" {\n    assert n() == 1;\n}\n",
+        "use { n } from \"mid\";\n\ntest \"one\" {\n    assert n() == 1;\n}\n",
     )
     .unwrap();
     let run = || wado().arg("test").arg(app.join("app_test.wado")).assert();

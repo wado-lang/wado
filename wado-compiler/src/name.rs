@@ -1924,16 +1924,15 @@ pub fn resolve_import_with_entry(
     }
 
     // Dependency name (`use { … } from "router"` / `from "ns:pkg"`): resolve
-    // against `[dependencies]` before treating it as a relative sibling file.
-    // Only the consuming project resolves its own `[dependencies]`; a bare
-    // import from within a dependency must not bind to the consumer's deps. A
-    // path dependency is Wado source; a registry dependency is a prebuilt
-    // component imported across the CM boundary.
-    if !relative && !matches!(from_module, ModuleSource::Dependency { .. }) {
-        if let Some(dep) = interner.resolve_dependency(import_source) {
+    // against the `[dependencies]` of the importer's own package, never the
+    // consumer's on a dependency's behalf. A path dependency is Wado source; a
+    // registry dependency is a prebuilt component imported across the CM
+    // boundary.
+    if !relative {
+        if let Some(dep) = interner.resolve_dependency(from_module, import_source) {
             return dep;
         }
-        if let Some(component) = interner.resolve_component_dependency(import_source) {
+        if let Some(component) = interner.resolve_component_dependency(from_module, import_source) {
             return component;
         }
     }

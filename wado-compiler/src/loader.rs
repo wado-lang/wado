@@ -1948,15 +1948,16 @@ impl<'a, H: CompilerHost> ModuleLoader<'a, H> {
 
         // Declared but unresolvable (e.g. missing `[package].lib`): report
         // why, instead of a generic "invalid module path".
-        if !matches!(from_module_source, ModuleSource::Dependency { .. })
-            && let Some(reason) = self.interner.unresolved_dependency(import_source)
+        if let Some(reason) = self
+            .interner
+            .unresolved_dependency(from_module_source, import_source)
         {
             return Err(LoadError::DependencyUnresolved {
                 name: import_source.to_string(),
                 reason: reason.to_string(),
             });
         }
-        let manifest = self.interner.dependency_manifest();
+        let manifest = self.interner.dependency_manifest(from_module_source);
         if let Some(DependencyManifest {
             path,
             error: Some(error),

@@ -152,13 +152,7 @@ impl CompilerHost for FilesystemCompilerHost {
         };
         match read_manifest(&dir) {
             Ok(manifest) => dependency_index_from(&manifest, &dir, &self.base_path),
-            Err(error) => DependencyIndex {
-                manifest: Some(DependencyManifest {
-                    path: manifest_path(&dir),
-                    error: Some(error),
-                }),
-                ..DependencyIndex::default()
-            },
+            Err(error) => unreadable_manifest(&dir, error),
         }
     }
 
@@ -193,7 +187,8 @@ fn is_in_dev_stdlib_core(_dir: &Path) -> bool {
     false
 }
 
-/// Build the compiler's dependency index from a manifest's `[dependencies]`.
+/// Build the compiler's dependency index from a manifest's `[dependencies]`,
+/// and each source dependency's own, at any depth.
 ///
 /// Source entries are re-expressed relative to `base` — the base `load_source`
 /// joins against — so `use { … } from "<name>"` resolves to them.
@@ -203,6 +198,38 @@ pub fn dependency_index_from(
     manifest_dir: &Path,
     base: &Path,
 ) -> DependencyIndex {
+    let base_abs = absolutize(base);
+    let (mut index, mut pending) = package_index(manifest, manifest_dir, &base_abs);
+    let mut next = 0;
+    while let Some(entry) = pending.get(next).cloned() {
+        next += 1;
+        let lib = relative_path(&base_abs, &entry);
+        if index.packages.contains_key(&lib) {
+            continue;
+        }
+        let own = match discovery::nearest_manifest_dir(&entry) {
+            Some(dir) => match read_manifest(&dir) {
+                Ok(manifest) => {
+                    let (own, entries) = package_index(&manifest, &dir, &base_abs);
+                    pending.extend(entries);
+                    own
+                }
+                Err(error) => unreadable_manifest(&dir, error),
+            },
+            None => DependencyIndex::default(),
+        };
+        index.packages.insert(lib, own);
+    }
+    index
+}
+
+/// One package's index, without `packages`, and the absolute entry module of
+/// each of its source dependencies.
+fn package_index(
+    manifest: &wado_manifest::Manifest,
+    manifest_dir: &Path,
+    base_abs: &Path,
+) -> (DependencyIndex, Vec<PathBuf>) {
     let mut index = DependencyIndex {
         manifest: Some(DependencyManifest {
             path: manifest_path(manifest_dir),
@@ -210,13 +237,13 @@ pub fn dependency_index_from(
         }),
         ..DependencyIndex::default()
     };
-    let base_abs = absolutize(base);
+    let mut entries = Vec::new();
     for (name, entry) in discovery::resolve_all(manifest, manifest_dir) {
         match entry {
             Ok(DependencyEntry::Source(path)) => {
-                index
-                    .resolved
-                    .insert(name, relative_path(&base_abs, &absolutize(&path)));
+                let path = normalize_path(&absolutize(&path));
+                index.resolved.insert(name, relative_path(base_abs, &path));
+                entries.push(path);
             }
             Ok(DependencyEntry::Component(path)) => {
                 index.components.insert(name, path.display().to_string());
@@ -226,7 +253,19 @@ pub fn dependency_index_from(
             }
         }
     }
-    index
+    (index, entries)
+}
+
+/// The index of a package whose `wado.toml` in `dir` cannot be read: empty,
+/// saying why, so each import that needed an entry reports it.
+fn unreadable_manifest(dir: &Path, error: String) -> DependencyIndex {
+    DependencyIndex {
+        manifest: Some(DependencyManifest {
+            path: manifest_path(dir),
+            error: Some(error),
+        }),
+        ..DependencyIndex::default()
+    }
 }
 
 /// The `wado.toml` in `dir`, parsed, or why it cannot be.

@@ -605,6 +605,11 @@ pub struct DependencyIndex {
     /// The `wado.toml` these entries were read from, named where an import
     /// finds no entry. `None` when no manifest governs the entry module.
     pub manifest: Option<DependencyManifest>,
+    /// Each source dependency reachable at any depth, by its entry module as
+    /// `resolved` names it → the index its own `wado.toml` declares, against
+    /// which its modules' bare-name imports resolve. Flat: an inner index's
+    /// own `packages` is empty.
+    pub packages: hashmap::IndexMap<String, DependencyIndex>,
 }
 
 /// The `wado.toml` a [`DependencyIndex`] was read from.
