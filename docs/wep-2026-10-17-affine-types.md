@@ -403,6 +403,27 @@ caller knows how many it offered, and `rest.len()` says how many came back. An
 affine caller reads the length before the write, since `data` is moved by it.
 The optimizer may skip building a `rest` no one reads.
 
+### An async call records a delivered resolution
+
+The Component Model delivers a subtask's resolution once, through the first
+waitable set that reports it. Waiting for it again never returns, and
+`subtask.cancel` traps. A program that joins a call to its own set and waits
+there has received the resolution before it calls `wait` or `cancel` or drops
+the call. So `AsyncCall` records the delivery in `resolved`:
+
+- `join` registers `resolved` under the subtask's waitable handle, in a table
+  `core` keeps. The entry goes when the subtask is dropped.
+- `WaitableSet::wait` and `poll` become guest functions over the canon
+  built-ins. A subtask event whose payload says resolved sets the flag
+  registered for its handle.
+- `wait` waits only where `resolved` is false.
+- `cancel` and `Drop` cancel only where it is false, leaving any set first as
+  `cancel` does today. `Subtask::cancel` returns the state `subtask.cancel`
+  reports, which it discards today. Where the subtask returned, before the
+  cancel or during it, its result is in the buffer: they lift it and drop it,
+  which drops the handles it owns. Then they drop the subtask and free the
+  buffer.
+
 ### Standard library
 
 - `Option<affine T>` and `Result<affine T, affine E>`, with `take` and
@@ -426,26 +447,8 @@ The optimizer may skip building a `rest` no one reads.
   ```
 
   `wait(self)` and `cancel(self)` take the subtask out and consume it, so a
-  second call is a compile error and the shared `__cm_ended` flag goes.
-
-  The Component Model delivers a subtask's resolution once, through the first
-  waitable set that reports it. Waiting for it again never returns, and
-  `subtask.cancel` traps. A program that joins a call to its own set and waits
-  there has received the resolution before it calls `wait` or `cancel` or drops
-  the call. So the call records the delivery:
-
-- `join` registers `resolved` under the subtask's waitable handle, in a
-  table `core` keeps. The entry goes when the subtask is dropped.
-- `WaitableSet::wait` and `poll` become guest functions over the canon
-  built-ins. A subtask event whose payload says resolved sets the flag
-  registered for its handle.
-- `wait` waits only where `resolved` is false.
-- `cancel` and `Drop` cancel only where it is false. `Subtask::cancel`
-  returns the state `subtask.cancel` reports, which it discards today. Where
-  the subtask returned, before the cancel or during it, its result is in the
-  buffer: they lift it and drop it, which drops the handles it owns. Then
-  they drop the subtask and free the buffer.
-
+  second call is a compile error and the shared `__cm_ended` flag goes. `resolved` is
+  [the delivered resolution](#an-async-call-records-a-delivered-resolution).
 - `affine trait`: `Drop`, `ForOf`, `Eq`, `Inspect`, `Display`, `Ref`,
   `RefMut`, `IndexRef`, `IndexRefMut` and `IndexAssign`. A resource implements
   `Eq` and `Inspect` today, a list is walked by `ForOf`, and
@@ -614,7 +617,7 @@ benign ones.
   `Subtask`, with its `Drop` and the `resolved` flag that `join` registers and
   `WaitableSet::wait` sets. A fixture joins a call to its own set, waits there,
   and then drops the call, which neither hangs nor traps and drops the
-  result's handles. It comes before the cell, which a cast would have
+  result's handles. This item comes before the cell, which a cast would have
   to allocate, and before cleanup drops a `Stream`, which `log_stdout` would
   then drop twice.
 - [ ] The handle cell: the representation, the trap, the `borrow` an export
