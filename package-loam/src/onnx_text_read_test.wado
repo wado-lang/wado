@@ -486,6 +486,17 @@ test "a string element of a number tensor names itself" {
     }
 }
 
+test "the first bad element of a tensor is the one named" {
+    let e = read(
+        `agraph (float[2] X) => (float[2] Y)
+        <float[2] W = {-infinite, "3"}>
+        {
+            Y = Add(X, W)
+        }`,
+    ).unwrap_err().reason;
+    assert e == "W: -infinite is not a value";
+}
+
 test "a float word in an integer tensor names itself" {
     let e = read(
         `agraph (float[2, 3] X) => (float[6] Y)
