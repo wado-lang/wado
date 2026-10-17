@@ -280,7 +280,7 @@ slot that is not null. A store into a place drops what the place held. That is
 all of cleanup: no path is analysed, since a moved local is null on the path
 that moved it. A closure body, a temporary (`make().a`), a generic `Node<T>`
 and an element are reached by the same rule, because the rule is about places
-and every one of those is a place. A panic drops nothing.
+and every one of those is a place.
 
 The static rule above and this dynamic one divide the work. Copying is silent,
 so only the static rule can stop it. A use after a move or a drop is a trap
@@ -394,8 +394,7 @@ pub affine trait Drop with () {
 
 A type whose consuming methods take fields out of `self`, and which implements
 `Drop`, holds those fields in an `Option` and takes them. `drop` then finds
-`None` where a method took the field. That is Rust's idiom for the same case,
-and it needs no `discard self`.
+`None` where a method took the field. That is Rust's idiom for the same case.
 
 A `FutureWritable` dropped before its write traps, with a message naming it.
 The Component Model traps on `future.drop-writable` before the end is done,
@@ -612,13 +611,22 @@ benign ones.
   default bodies with `Self` affine. An affine type implementing an unmarked
   trait is an error at the impl. The prelude traits an affine type implements
   are marked.
+- [ ] No cast between an affine resource and an integer: synthesis splits and
+  lifts the `stream-new` / `future-new` pair, the raw-handle builtins take and
+  return resources, `ResourceId::of`, and the test doubles in `core:kiln`,
+  `core:cli` and `package-gale` return real handles. This comes before the
+  next item, whose scope-exit drop would otherwise drop a second time the
+  `Stream` that `log_stdout` hands over through a cast today.
 - [ ] The object and its places: an affine variant or tuple is boxed, a move
   writes null into its source, a drop zeroes the object, scope exit drops what
   is not null, a container drops the slots that are not null, and a store
-  drops what it replaces. The cleanup pass retires. An export's `borrow` is
-  zeroed at return. Fixtures: a reference used after the drop traps; a resource
-  bound in a closure body, one under `make().a` and one in a `Node<T>` are
-  dropped; `*r = value` through `&mut R`.
+  drops what it replaces. The cleanup pass retires, and with it its exclusion
+  of a `Stream` and a `Future` the body does not move
+  ([A `Stream` or `Future` handle nothing drops](./wep-2026-05-21-resource-ownership.md#a-stream-or-future-handle-nothing-drops)).
+  An export's `borrow` is zeroed at return. Fixtures: a reference used after
+  the drop traps; a resource bound in a closure body, one under `make().a`,
+  one in a `Node<T>` and an unmoved `Stream` are dropped; `*r = value` through
+  `&mut R`.
 - [ ] `builtin::replace`, `Option::take` and `Option::replace`, the storage
   builtins moving for an affine element, `impl<affine T> List<T>` with `len`,
   `is_empty`, `iter_ref`, `push`, `pop`, `insert` and `remove`, and `&mut`
@@ -627,18 +635,17 @@ benign ones.
 - [ ] `Drop`: a resource's `fn drop(self)` as its impl, a user impl on an
   affine type, the fields left at the end of `drop` dropped one by one, a drop
   that performs no effect but a `#[benign]` one, no partial move or `..base`
-  over a type that implements it, and a generic `T` dropped through `Drop`.
+  over a type that implements it, a generic `T` dropped through `Drop`, and a
+  `FutureWritable` dropped before its write trapping with a message naming
+  it. A fixture pins the `?` between `Future::new()` and the write.
 - [ ] `ForOf`: `for-of` passes its operand by value to `ForOf::start`, with
   `List`'s impl over `ListCursor<T>` and the blanket impl over `IntoIterator`.
   A fixture pins that elision shares a list the loop's body does not write: no
   `$value_copy$` in the output. The fixtures that relied on a body's write
   being seen by the loop are rewritten.
-- [ ] No cast between an affine resource and an integer: synthesis splits and
-  lifts the `stream-new` / `future-new` pair, the raw-handle builtins take and
-  return resources, `ResourceId::of`, and the test doubles in `core:kiln`,
-  `core:cli` and `package-gale` return real handles. `AsyncCall` holds a
-  `Subtask`, with its `Drop`. This item comes before cleanup drops a `Stream`,
-  which `log_stdout` would then drop twice.
+- [ ] `AsyncCall` holds an `Option<Subtask>` and an `Option<ResultBuffer>`,
+  with `wait(self)`, `cancel(self)` and its `Drop`. The fixture drops a call
+  nobody awaited.
 - [ ] `FutureWrite<T>` and `StreamWrite<T>`: a write returns what it did not
   deliver, in every case the result reports, and the stdlib's write loops
   (`write_all`) read `rest` rather than `count`.
@@ -652,11 +659,6 @@ benign ones.
   `&self` getter instantiated with `Fields` is an affine argument for an
   unmarked parameter, and `list.last()` is not found, since `Sequence`, which
   declares it, is implemented for a copyable element only.
-- [ ] Scope exit drops a `Stream` and a `Future` the body does not move, which
-  cleanup excludes today
-  ([A `Stream` or `Future` handle nothing drops](./wep-2026-05-21-resource-ownership.md#a-stream-or-future-handle-nothing-drops)),
-  and a `FutureWritable` dropped before its write traps with a message naming
-  it. A fixture pins the `?` between `Future::new()` and the write.
 - [ ] `assert` records the values it prints by reference, and prints a moved
   one as moved.
 - [ ] Spec: rewrite [Resource Ownership](./spec-components.md#resource-ownership),
