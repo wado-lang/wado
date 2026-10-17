@@ -172,9 +172,10 @@ A declaration with `affine` is move-only. A named `struct` or `variant` must be
 declared `affine` when it holds an affine value, directly or through a field or
 a payload, or when it implements `Drop`. Otherwise the declaration is an error
 that names the field or the impl. A type that does neither may not be declared
-`affine`: no use for one has appeared. A tuple, a newtype and an anonymous
-struct have no declaration to mark, so they are inferred: each is affine when
-something it holds is. A `resource` is affine unless it declares
+`affine`: no use for one has appeared. A tuple and an anonymous struct have no
+declaration to mark, and a newtype has the kind of the type it wraps, so each
+is inferred: it is affine when something it holds is. `affine type` is the
+spelling of an associated type only. A `resource` is affine unless it declares
 `linearity = "unrestricted"`, as today.
 
 A generic type is affine or copyable per instantiation. Its `affine`
@@ -252,7 +253,9 @@ held by one live cell at a time.
 - A drop marks it dead, and so does a transfer as `own` across the boundary.
 - A `borrow` an export receives is a cell marked dead when the export returns.
 - Every use reads the handle through the cell. A use of a dead cell traps with
-  a message naming the resource.
+  a message naming the resource. A store through a reference is a use:
+  `*r = value` into a dead cell traps rather than revive it, since nothing
+  would own the handle it stored.
 
 So ownership is static and a use after drop is a run-time trap. The two halves
 need different guarantees: ownership decides when a drop happens, which a trap
@@ -299,7 +302,11 @@ What casts did, the following do instead:
   dropped one's identity may come back for a later one, as a `Waitable`'s
   does.
 - A test double returns a real handle, from `Stream::<u8>::new()`, where it
-  used to return `0 as Stream<u8>`.
+  used to return `0 as Stream<u8>`. A double that returns a future, as
+  `MockStdio::write_via_stream` does, keeps the writable end. It writes it once
+  the caller has dropped the reader, when the write reports `Dropped` at once
+  and leaves the end done, and drops it then. A write before that would block
+  on a reader nobody runs, and a drop before it traps.
 
 ### Ways out of a place
 
@@ -449,28 +456,45 @@ the call. So `AsyncCall` records the delivery in `resolved`:
   `wait(self)` and `cancel(self)` take the subtask out and consume it, so a
   second call is a compile error and the shared `__cm_ended` flag goes. `resolved` is
   [the delivered resolution](#an-async-call-records-a-delivered-resolution).
-- `affine trait`: `Drop`, `ForOf`, `Eq`, `Inspect`, `Display`, `Ref`,
-  `RefMut`, `IndexRef`, `IndexRefMut` and `IndexAssign`. A resource implements
-  `Eq` and `Inspect` today, a list is walked by `ForOf`, and
-  `List<affine T>` is indexed through the last three. `IndexValue` stays
-  unmarked, since a read by value is a copy.
+- `affine trait`: `Drop`, `ForOf`, `From<affine T>`, `Eq<affine Rhs = Self>`,
+  `Inspect`, `Display`, `Ref`, `RefMut`, `IndexRef`, `IndexRefMut` and
+  `IndexAssign`. A resource implements `Eq` and `Inspect` today, a list
+  literal lowers through `From`, and `List<affine T>` is indexed through the
+  last three. `IndexValue` stays unmarked, since a read by value is a copy.
 - `List<affine T>`. A method is available for an affine element when an
   `impl<affine T> List<T>` declares it, and the definition-site check holds
   its body to moving elements. The rest stay in `impl<T> List<T>`, for a
   copyable element only.
-- What `List` is built on, marked with it: `Array<affine T>`, its storage;
-  `impl<affine T> From<Array<T>> for List<T>`, through which a list literal
-  lowers; `Slice<affine T>`, `SliceRefIter<affine T>` and
-  `SliceRefMutIter<affine T>`, which `&list`, `&mut list` and `iter_ref()`
-  return; and the `IntoIterator` impls for `&List<T>` and `&mut List<T>`.
-- `Iterator`, `IntoIterator`, `Sequence`, `SliceValueIter<T>`,
-  `TreeMap<K, V>`, `HashMap<K, V>`, `TreeSet<T>` and their iterators stay
-  unmarked. `Sequence::at` returns an element by value, so `get`, `first` and
-  `last` reach a copyable element only.
+- `Iterator`, `IntoIterator`, `TreeMap<K, V>`, `HashMap<K, V>`, `TreeSet<T>`
+  and their iterators stay unmarked.
 - `ResourceId`, with `ResourceId::of(&r)` over every affine resource.
 
 `wado-from-idl` declares `affine` every record and variant it generates that
 holds an affine resource.
+
+What gets marked is read off the source, one operation at a time: each
+operation this WEP gives an affine value, and the impl and trait it resolves
+through today.
+
+| Operation                                      | Resolves through                                                                         | Marked                                         |
+| ---------------------------------------------- | ---------------------------------------------------------------------------------------- | ---------------------------------------------- |
+| a list literal `[a, b]`                        | `From<Array<T>> for List<T>`                                                             | the trait and the impl                         |
+| `list[i] = v`, `&list[i]`, `&mut list[i]`      | `IndexAssign`, `IndexRef` (`T: Ref`), `IndexRefMut` (`T: RefMut`) for `List` and `Array` | the traits and the impls                       |
+| `list.len()`                                   | `impl<T> List<T>`                                                                        | moved to `impl<affine T> List<T>`              |
+| `list.is_empty()`, `list.iter_ref()`           | default methods of `Sequence` and `AsSlice`, which stay unmarked                         | declared again in `impl<affine T> List<T>`     |
+| `for x of list`                                | `ForOf for List<T>`                                                                      | the trait and the impl                         |
+| `for x of &list`, `for x of &mut list`         | `IntoIterator` for `&List<T>` and `&mut List<T>`, `SliceRefIter`, `SliceRefMutIter`      | the impls, and the iterators' `Iterator` impls |
+| `==`, `inspect`, `${…}` on a list              | `Eq`, `Inspect` and `Display` for `List`, `Array` and `Slice`                            | the traits and the impls                       |
+| `opt.map(f)`, `opt.ok_or(e)`                   | `Option::map<U>`, `Option::ok_or<E>`                                                     | `<affine U>`, `<affine E>`                     |
+| `res.map(f)`, `res.map_err(f)`, `res.unwrap()` | `Result::map<U>`, `Result::map_err<F>`, and `unwrap_failed<V>` under every `unwrap`      | `<affine U>`, `<affine F>`, `<affine V>`       |
+| `stream.read(n)`, `read_to_end()`, `write_all` | `Stream<T>`, `StreamWritable<T>` and their impls                                         | the resources and the impls                    |
+| `future.read()`, `writer.write(v)`             | `Future<T>`, `FutureWritable<T>`                                                         | the resources                                  |
+
+The stock leaves some unmarked. `Sequence`, `AsSlice`, `IndexValue`, `Hash`,
+`Ord`, `Default`, `SliceValueIter`, `SliceWindows` and `SliceChunks` read or
+hand out elements by value. `StreamWritable::write_raw_all(Slice<T>)` is for a
+copyable element only: the Component Model lifts the elements a slice views
+while the writer keeps them, which leaves two owners.
 
 ### `for-of` dispatches to `ForOf`
 
@@ -593,10 +617,8 @@ benign ones.
 - [ ] The stdlib generics take `affine` on their parameters, and their bodies
   pass the definition-site check: `Option`, `Result`, `Future`,
   `FutureWritable`, `Stream`, `StreamWritable`, `StreamChunk`, `FutureWrite`,
-  `StreamWrite`, `AsyncCall` and `List`, with what `List` is built on: `Array`,
-  `From<Array<T>>`, `Slice`, `SliceRefIter`, `SliceRefMutIter` and the
-  `IntoIterator` impls for `&List<T>` and `&mut List<T>`. Everything after
-  this needs them.
+  `StreamWrite`, `AsyncCall` and `List`, and every trait, impl and method the
+  stock under Standard library marks. Everything after this needs them.
 - [ ] `Drop`: a resource's `fn drop(self)` as its impl, a user impl on an
   affine type, the fields left at the end of `drop` dropped one by one, a drop
   that performs no effect but a `#[benign]` one, and no partial move or
@@ -610,6 +632,8 @@ benign ones.
   A fixture pins that elision shares a list the loop's body does not write: no
   `$value_copy$` in the output. The fixtures that relied on a body's write being
   seen by the loop are rewritten.
+- [ ] `Option::take`, `Option::replace`, partial move out of a local holder,
+  `..base` over an affine holder.
 - [ ] No cast between an affine resource and an integer: synthesis splits and
   lifts the `stream-new` / `future-new` pair, the raw-handle builtins take and
   return resources, `ResourceId::of`, and the test doubles in `core:kiln`,
@@ -623,8 +647,6 @@ benign ones.
 - [ ] The handle cell: the representation, the trap, the `borrow` an export
   receives, and `*r = value` through it. Then the optimizer's erasure where it
   proves no use reaches a dead cell.
-- [ ] `Option::take`, `Option::replace`, partial move out of a local holder,
-  `..base` over an affine holder.
 - [ ] `FutureWrite<T>` and `StreamWrite<T>`: a write returns what it did not
   deliver, in every case the result reports, and the stdlib's write loops
   (`write_all`) read `rest` rather than `count`.
@@ -676,7 +698,6 @@ Unchanged from
 
 - A panic drops nothing.
 - A generic resource a user module declares is not checked.
-- Web handles leak.
 - A resource a closure body binds, or a temporary it references, is never
   dropped.
 - Moving one resource field out of a temporary aggregate (`make().a`) drops
