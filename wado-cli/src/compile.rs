@@ -551,7 +551,10 @@ async fn acquire_undeclared_packages(host: &FilesystemCompilerHost) -> Result<bo
         // offline index already says why.
         let acquired = match manifest_in(root) {
             Ok(Some(manifest)) => acquired_index(&manifest, root, &read.base, tier).await?,
-            Ok(None) | Err(_) => offline.clone(),
+            Ok(None) | Err(_) => {
+                host.adopt_acquired(read, offline);
+                continue;
+            }
         };
         resolved_more |= resolves_more(&offline, &acquired);
         host.adopt_acquired(read, acquired);

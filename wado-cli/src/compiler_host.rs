@@ -54,7 +54,7 @@ pub struct PackageRead {
     pub root: String,
 }
 
-/// The index an undeclared package is answered: offline until acquired.
+/// The index an undeclared package is answered with: offline until acquired.
 enum UndeclaredPackage {
     Offline(DependencyIndex),
     Acquired(DependencyIndex),
@@ -109,7 +109,7 @@ impl FilesystemCompilerHost {
     }
 
     /// The tier to acquire at, and each undeclared package a walk reached that
-    /// is not yet acquired, with the offline index it was answered.
+    /// is not yet acquired, with the offline index it was answered with.
     #[must_use]
     pub fn unacquired_packages(
         &self,
@@ -415,7 +415,8 @@ mod tests {
         )
         .unwrap();
         let root = package.display().to_string();
-        let host = FilesystemCompilerHost::silent(tmp.path().join("a")).acquiring(Acquisition::Build);
+        let host =
+            FilesystemCompilerHost::silent(tmp.path().join("a")).acquiring(Acquisition::Build);
         let sibling = host.rebased(tmp.path().join("b"));
 
         host.package_index(&root);
@@ -428,7 +429,16 @@ mod tests {
             host.adopt_acquired(package, acquired.clone());
         }
 
-        assert!(host.package_index(&root).resolved.contains_key("lib:marker"));
-        assert!(!sibling.package_index(&root).resolved.contains_key("lib:marker"));
+        assert!(
+            host.package_index(&root)
+                .resolved
+                .contains_key("lib:marker")
+        );
+        assert!(
+            !sibling
+                .package_index(&root)
+                .resolved
+                .contains_key("lib:marker")
+        );
     }
 }
