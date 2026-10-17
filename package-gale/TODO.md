@@ -38,12 +38,6 @@ Entries state the symptom, how to reproduce it, and anything already measured �
 
 Empty right now.
 
-### Duplication
-
-Each item is two or more pieces of code computing the same answer. A fix to one copy does not reach the others, and where the copies already differ, they give different answers on the same input.
-
-- [ ] **Context wrappers.** `EmitContext` and `LowerContext` both forward `alt_has_gate`, `alt_scan_gate_conditions` and `rule_overlap` to `gate_conditions.wado` / `rule_overlap.wado` in one line each, and both keep a current rule index. Only `predicate_site` differs, on purpose (`gate_conditions.wado` explains why). **Design judgement:** a shared trait with default methods would need five accessors per context (settings, analysis, mutable analysis, follow, site) to replace three one-line forwarders, and every caller would import it. That costs more code than the copies. Merging the contexts' common fields into one struct removes the copies, at the price of rewriting every `ctx.analysis` / `ctx.settings` read.
-
 ## Stage C — action / predicate execution
 
 Design in [`action.md`](./action.md). Landed: every lexer emit the match can take replays its translatable actions in place (restructured repeats included), the lexer `$`-attribute surface answers in a `language = Wado` body, `@lexer::members` works under `language = Java`, and a same-named label resolves against the rule its own alternative called. A body the translator refuses is still reported and dropped rather than replayed — `UnsupportedAction`, warn-and-emit, unchanged. What is left below is held by something other than action execution.
