@@ -189,6 +189,13 @@ names no result and no old value.
 A condition performs no effect. It may call a function that has a contract of
 its own; that call is an ordinary call, checked unless it is marked.
 
+A condition also writes only what it declares itself. A skipped clause must
+leave the call computing what a checked one computes, and a write to a
+parameter, a global, or anything a reference reaches shows in one build and not
+the other. The first implementation admitted such a write: a clause doubling its
+parameter made `doubled(5)` return 10 at `-O0` and `unchecked doubled(5)` return
+5 at `-O2`.
+
 Every program may declare a contract, not only the standard library.
 
 A caller marks a call with `unchecked`, a prefix unary operator. Postfix
@@ -419,10 +426,14 @@ API waits for a program outside the standard library that needs one.
    clause's bare condition. What a failure reports moves into one function per
    clause, `F$contract_report{k}`, which evaluates the condition again with its
    power-assert captures and takes only the locals that reads, plus the site.
-   A clause writing a parameter keeps its report in each copy, since running it
-   again would start from what it wrote. Under
-   `-f contract-checks` a marked call goes back to the function before
+   Under `-f contract-checks` a marked call goes back to the function before
    monomorphization, and so is expanded as an unmarked one is.
+10. A clause writing what it does not declare is a compile error. Done. The
+    purity check reads the clause's writes from `write_sites.rs`, which the
+    `self_comparison` lint shares, and keeps those landing in a value the clause
+    declares. Lowering then copies an argument from the caller's place and
+    evaluates a failed clause again for its report without a parameter having
+    changed.
 
 ## Known gaps
 
@@ -431,6 +442,11 @@ API waits for a program outside the standard library that needs one.
   is every call to a function whose clause holds a closure.
 - A contract on a declaration with no body, outside a trait, is a compile
   error.
+- A function a clause calls may write a mutable global: global access is not
+  tracked yet, so nothing tells the clause's check that it does.
+- A clause that takes `&mut` of a value it declares and hands the reference on
+  through a local, rather than as the argument `&mut x`, is rejected, though
+  the write lands in the clause's own value.
 - A call through a function value has no callee known statically, so it has no
   contract to check or to remove.
 - `String::from_utf8` copies the bytes of a `ByteList` argument, though the

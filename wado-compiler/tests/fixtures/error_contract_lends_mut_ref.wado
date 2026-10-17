@@ -1,0 +1,63 @@
+// A clause cannot lend `&mut` to what it did not declare, whether it takes the
+// reference itself or passes on one a parameter holds, even beneath the `&` a
+// `&self` method takes.
+struct Counter { n: i32 }
+
+struct Holder { r: &mut i32 }
+
+impl Holder {
+    fn poke(&self) -> bool {
+        *self.r = 9;
+        return true;
+    }
+
+    fn reset(h: Holder) -> bool {
+        *h.r = 0;
+        return true;
+    }
+}
+
+fn poked(h: Holder) -> i32
+    contract h.poke()
+{
+    return *h.r;
+}
+
+fn reset(h: Holder) -> i32
+    contract Holder::reset(h)
+{
+    return *h.r;
+}
+
+fn bump(v: &mut i32) -> bool {
+    *v += 1;
+    return true;
+}
+
+fn tick(c: &mut Counter) -> bool {
+    c.n += 1;
+    return true;
+}
+
+fn bumped(mut n: i32) -> i32
+    contract bump(&mut n)
+{
+    return n;
+}
+
+fn ticked(c: &mut Counter) -> i32
+    contract tick(c)
+{
+    return c.n;
+}
+
+export fn run() {
+    let mut c = Counter { n: 0 };
+    let mut n = 1;
+    let _ = bumped(1) + ticked(&mut c) + poked(Holder { r: &mut n }) + reset(Holder { r: &mut n });
+}
+
+__DATA__
+{
+  "compile_error": ":21:14: analysis error: contract clause cannot mutate 'h', which it did not declare; 27:28: contract clause cannot mutate 'h', which it did not declare; 43:24: contract clause cannot mutate 'n', which it did not declare; 49:19: contract clause cannot mutate 'c', which it did not declare"
+}

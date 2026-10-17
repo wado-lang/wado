@@ -97,6 +97,26 @@ fn half(n: i32) -> i32
 }
 ```
 
+A clause writes only what it declares itself. A build may skip the clause, so a
+write reaching anything else would make what the call computes depend on the
+build. Writing a parameter, a global, or anything through a reference is a
+compile error. So is taking `&mut` of one, calling a method that takes
+`&mut self` on one, and calling a `fn mut` the clause did not declare. A call
+may be handed a value reaching a `&mut` only as an argument written `&mut x`,
+where `x` is something the clause declares.
+
+> Not yet implemented: a function a clause calls may write a mutable global.
+
+<!-- {"fixture":"error_contract_mutates_param.wado"} -->
+
+```wado
+fn doubled(mut n: i32) -> i32
+    contract doubling: { n = n * 2; true }
+{
+    return n;
+}
+```
+
 The clauses are checked in the order written, and the first that fails traps,
 so a later clause may rely on the earlier ones.
 

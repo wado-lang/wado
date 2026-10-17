@@ -7,8 +7,8 @@ use std::mem;
 
 use crate::Lints;
 use crate::ast::{
-    AstVisitor, Attribute, BinaryOp, Expr, Literal, SelfKind, UnaryOp, attrs_allow,
-    inner_attrs_allow, lint, walk_expr,
+    AstVisitor, Attribute, BinaryOp, Expr, Literal, attrs_allow, inner_attrs_allow, lint,
+    walk_expr,
 };
 use crate::compiler_host::{Code, Diagnostic, DiagnosticSpan, Severity};
 use crate::effect_check::EffectProbe;
@@ -16,6 +16,7 @@ use crate::module_source::ModuleSource;
 use crate::semantics::Semantics;
 use crate::token::Span;
 use crate::unparse::{binary_op_str, unparse_expr_source};
+use crate::write_sites::for_each_write_site;
 
 /// Source-level `SelfComparison` warnings: every comparison, a chain's adjacent
 /// pairs included, whose two operands are one expression that evaluates the
@@ -114,12 +115,9 @@ impl SelfComparisons<'_> {
     /// Whether evaluating `expr` twice may give two answers: it performs an
     /// effect, writes through a `&mut`, or calls what cannot be seen into.
     fn may_differ(&self, expr: &Expr) -> bool {
-        let mut writes = Writes {
-            sem: self.sem,
-            found: false,
-        };
-        writes.visit_expr(expr);
-        writes.found
+        let mut writes = false;
+        for_each_write_site(self.sem, expr, |_| writes = true);
+        writes
             || self
                 .probe
                 .get_or_init(|| EffectProbe::new(self.sem))
@@ -169,51 +167,4 @@ fn line_literals(expr: &Expr) -> Vec<usize> {
     let mut lines = Lines(Vec::new());
     lines.visit_expr(expr);
     lines.0
-}
-
-/// Finds what may change state between two evaluations without performing an
-/// effect: an assignment, a `&mut`, a method taking `&mut self`, a call
-/// handed a value reaching a `&mut`, and a call of anything but a declared
-/// function, such as a `fn mut` closure.
-struct Writes<'a> {
-    sem: &'a Semantics,
-    found: bool,
-}
-
-impl Writes<'_> {
-    fn reaches_mut_ref<'e>(&self, operands: impl IntoIterator<Item = &'e Expr>) -> bool {
-        operands.into_iter().any(|operand| {
-            self.sem
-                .expression_type(operand.id())
-                .is_none_or(|ty| self.sem.reaches_mut_ref(ty))
-        })
-    }
-}
-
-impl AstVisitor for Writes<'_> {
-    fn visit_expr(&mut self, expr: &Expr) {
-        self.found |= match expr {
-            Expr::Assign(_) | Expr::CompoundAssign(_) => true,
-            Expr::Unary(unary) => unary.op == UnaryOp::MutRef,
-            Expr::MethodCall(call) => {
-                let mut dispatches = self.sem.method_dispatches_at(call.id).peekable();
-                dispatches.peek().is_none()
-                    || self.reaches_mut_ref(std::iter::once(&call.receiver).chain(&call.args))
-                    || dispatches.any(|dispatch| dispatch.self_kind == SelfKind::MutRef)
-            }
-            Expr::Call(call) => {
-                self.reaches_mut_ref(&call.args)
-                    || match &call.callee {
-                        Expr::Ident(ident) => self
-                            .sem
-                            .referenced_symbol(ident.id)
-                            .and_then(|def| self.sem.function_at(def))
-                            .is_none(),
-                        _ => true,
-                    }
-            }
-            _ => false,
-        };
-        walk_expr(self, expr);
-    }
 }

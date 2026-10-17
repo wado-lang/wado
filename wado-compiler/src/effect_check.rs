@@ -29,6 +29,8 @@ use crate::elaborator::ImplParamSlots;
 use crate::elaborator::orchestration::AnnotateState;
 use crate::elaborator::sem::types::{ForOfIteratorInfo, ImplFacts, TypeAnnotations};
 use crate::semantics::Semantics;
+use crate::unparse::unparse_expr_source;
+use crate::write_sites::{WriteSite, for_each_write_site};
 
 /// Whether a missing `with` entry refers to a resource or a regular effect.
 /// Used to select the diagnostic wording (`missing resource` vs `missing effect`).
@@ -173,6 +175,12 @@ pub enum Impurity {
     /// The position installs a handler for the named effect whose methods
     /// declare an effect it does not hold.
     Install(String),
+    /// A `contract` clause writes, or lends `&mut` to, the named binding it
+    /// did not declare.
+    Mutate(String),
+    /// A `contract` clause calls the named `fn mut` it did not declare, which
+    /// writes what that closure captured.
+    CallMut(String),
 }
 
 /// One impurity, at the position that must not hold it.
@@ -187,22 +195,37 @@ pub struct PurityError {
 impl From<PurityError> for Diagnostic {
     fn from(e: PurityError) -> Self {
         let noun = e.context.noun();
-        let message = match &e.impurity {
-            Impurity::Call(callee) => {
-                format!("{noun} cannot perform effects, but calls effectful function '{callee}'")
-            }
-            Impurity::Dispatch(op) => format!(
-                "{noun} cannot perform effects, but dispatches '{op}', which needs a \
-                 capability the position does not hold"
+        let (code, message) = match &e.impurity {
+            Impurity::Call(callee) => (
+                Code::EffectNotAllowed,
+                format!("{noun} cannot perform effects, but calls effectful function '{callee}'"),
             ),
-            Impurity::Install(effect) => format!(
-                "{noun} cannot perform effects, but installs a handler for '{effect}' \
-                 whose methods need a capability the position does not hold"
+            Impurity::Dispatch(op) => (
+                Code::EffectNotAllowed,
+                format!(
+                    "{noun} cannot perform effects, but dispatches '{op}', which needs a \
+                     capability the position does not hold"
+                ),
+            ),
+            Impurity::Install(effect) => (
+                Code::EffectNotAllowed,
+                format!(
+                    "{noun} cannot perform effects, but installs a handler for '{effect}' \
+                     whose methods need a capability the position does not hold"
+                ),
+            ),
+            Impurity::Mutate(name) => (
+                Code::ImmutableAssignment,
+                format!("{noun} cannot mutate '{name}', which it did not declare"),
+            ),
+            Impurity::CallMut(name) => (
+                Code::ImmutableAssignment,
+                format!("{noun} cannot call '{name}', a `fn mut` it did not declare"),
             ),
         };
         Diagnostic {
             severity: Severity::Error,
-            code: Code::EffectNotAllowed,
+            code,
             message,
             span: Some(DiagnosticSpan::from_span(&e.span, Some(&e.module))),
         }
@@ -3100,6 +3123,10 @@ struct PurityWalker<'a> {
     /// default expression cannot name a parameter — the call site evaluates it
     /// before any is bound.
     param_types: IndexMap<String, TypeId>,
+    /// The span of the `contract` clause being walked. A build may skip the
+    /// clause, so it may write only what it declares: a write reaching anything
+    /// else would make what the call computes depend on the build.
+    clause: Option<Span>,
     out: &'a mut Vec<PurityError>,
 }
 
@@ -3120,6 +3147,7 @@ impl<'a> PurityWalker<'a> {
             context: PureContext::DefaultValue,
             granted: IndexSet::default(),
             param_types: IndexMap::default(),
+            clause: None,
             out,
         }
     }
@@ -3144,12 +3172,87 @@ impl<'a> PurityWalker<'a> {
     }
 
     fn check_contracts(&mut self, func: &ast::Function) {
+        let sem = self.sem;
         for clause in func.contracts() {
-            self.check(PureContext::Contract, &clause.condition);
-            if let Some(message) = &clause.message {
-                self.check(PureContext::Contract, message);
+            self.clause = Some(clause.span);
+            for expr in std::iter::once(&clause.condition).chain(&clause.message) {
+                self.check(PureContext::Contract, expr);
+                for_each_write_site(sem, expr, |site| self.flag_clause_write(site));
             }
         }
+        self.clause = None;
+    }
+
+    /// Flags `site` where it writes what the clause being walked did not
+    /// declare.
+    fn flag_clause_write(&mut self, site: WriteSite<'_>) {
+        match site {
+            WriteSite::Place(place) | WriteSite::Unresolved(place) => self.flag_write(place),
+            // A `&mut place` operand is that place's `Place` site. Any other
+            // operand reaching a `&mut` passes on one the clause did not take.
+            WriteSite::Lent(Expr::Unary(unary)) if unary.op == ast::UnaryOp::MutRef => {}
+            WriteSite::Lent(operand) => {
+                let root = written_root(operand);
+                self.flag(Impurity::Mutate(unparse_expr_source(root)), root.span());
+            }
+            // A plain `fn` writes nothing it captured.
+            WriteSite::Opaque(callee) => {
+                if self.is_fn_mut(callee) && !self.declared_in_clause(callee) {
+                    let name = unparse_expr_source(callee);
+                    self.flag(Impurity::CallMut(name), callee.span());
+                }
+            }
+        }
+    }
+
+    /// Flags a write to `place` unless the clause declares the value it lands
+    /// in. A write through a reference lands outside whatever holds the
+    /// reference, so it is flagged wherever the reference came from.
+    fn flag_write(&mut self, place: &Expr) {
+        let owned = match place {
+            Expr::FieldAccess(access) if !self.is_reference(&access.expr) => {
+                return self.flag_write(&access.expr);
+            }
+            Expr::Index(index) if !self.is_reference(&index.expr) => {
+                return self.flag_write(&index.expr);
+            }
+            Expr::Ident(_) => self.declared_in_clause(place) && !self.is_reference(place),
+            Expr::FieldAccess(_) | Expr::Index(_) => false,
+            Expr::Unary(unary) if unary.op == ast::UnaryOp::Deref => false,
+            // A value the clause computed, which nothing outside it holds.
+            _ => !self.is_reference(place),
+        };
+        if !owned {
+            let root = written_root(place);
+            self.flag(Impurity::Mutate(unparse_expr_source(root)), root.span());
+        }
+    }
+
+    /// Whether `expr` names a binding the clause being walked declares.
+    fn declared_in_clause(&self, expr: &Expr) -> bool {
+        let (Some(clause), Expr::Ident(ident)) = (self.clause, expr) else {
+            return false;
+        };
+        self.sem
+            .referenced_symbol(ident.id)
+            .and_then(|def| self.sem.symbol_at(def))
+            .and_then(|symbol| symbol.span)
+            .is_some_and(|span| clause.start <= span.start && span.end <= clause.end)
+    }
+
+    fn is_reference(&self, expr: &Expr) -> bool {
+        self.has_type(expr, |ty| matches!(ty, ResolvedType::Ref(_) | ResolvedType::MutRef(_)))
+    }
+
+    fn is_fn_mut(&self, expr: &Expr) -> bool {
+        self.has_type(expr, |ty| matches!(ty, ResolvedType::Function { is_mut: true, .. }))
+    }
+
+    /// Whether any walk that reached `expr` gave it a type `test` accepts.
+    fn has_type(&self, expr: &Expr, test: impl Fn(&ResolvedType) -> bool) -> bool {
+        expr_types_of(expr, self.sem)
+            .into_iter()
+            .any(|ty| test(self.sem.types.get(ty)))
     }
 
     fn flag(&mut self, impurity: Impurity, span: Span) {
@@ -3225,6 +3328,16 @@ impl<'a> PurityWalker<'a> {
                 self.flag(Impurity::Call(site.name), span);
             }
         }
+    }
+}
+
+/// The binding a write to `place` starts from, or `place` where none does.
+fn written_root(place: &Expr) -> &Expr {
+    match place {
+        Expr::FieldAccess(access) => written_root(&access.expr),
+        Expr::Index(index) => written_root(&index.expr),
+        Expr::Unary(unary) if unary.op == ast::UnaryOp::Deref => written_root(&unary.expr),
+        _ => place,
     }
 }
 

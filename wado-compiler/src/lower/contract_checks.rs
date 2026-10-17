@@ -113,9 +113,6 @@ struct Contract {
     /// holder, which is clauses alone.
     forward: Option<TirExpr>,
     params: Vec<TypeId>,
-    /// The parameters the clauses write. Each is the callee's own copy, so an
-    /// argument for one is always bound, never read from the caller's place.
-    written: IndexSet<u32>,
     locals: Vec<TirLocal>,
     address_taken: IndexSet<u32>,
 }
@@ -147,13 +144,19 @@ fn collect_contracts(flat: &FlatPackage) -> IndexMap<FunctionId, Contract> {
             ),
         };
         let clauses = &body.stmts[..clauses];
+        // A copy reads an argument from the caller's place, and a report
+        // evaluates its clause again, both relying on this.
+        assert!(
+            written_params(clauses, func.params.len() as u32).is_empty(),
+            "the purity check rejects a `contract` clause of `{}` writing a parameter",
+            func.name
+        );
         contracts.insert(
             tir_function_key(&func),
             Contract {
                 clauses: clauses.to_vec(),
                 forward,
                 params: func.params.iter().map(|p| p.type_id).collect(),
-                written: written_params(clauses, func.params.len() as u32),
                 locals: func.locals.clone(),
                 address_taken: func.address_taken_locals.clone(),
             },
@@ -182,10 +185,9 @@ fn copied_clauses(body: &TirBlock) -> usize {
 /// copies the clause's bare condition and that call, not the power-assert
 /// captures and a message builder each. The report evaluates the condition
 /// again with its captures, which a clause may do since it performs no
-/// effect, and takes the locals that reads, so a call passes those alone and
-/// no container the message leaves out escapes into it. A clause writing a
-/// parameter would run again from what it wrote, so its function keeps the
-/// report in each copy.
+/// effect and writes nothing it did not declare, and takes the locals that
+/// reads, so a call passes those alone and no container the message leaves
+/// out escapes into it.
 fn share_reports(flat: &mut FlatPackage) {
     if flat.codegen_flags.bare_asserts {
         return;
@@ -204,10 +206,6 @@ fn share_reports(flat: &mut FlatPackage) {
             continue;
         };
         let clauses = copied_clauses(&body);
-        if !written_params(&body.stmts[..clauses], func.params.len() as u32).is_empty() {
-            func.body = Some(body);
-            continue;
-        }
         let mut failures = ReportFailures {
             assert_failed: &assert_failed,
             func: &func,
@@ -682,10 +680,9 @@ impl TirMutVisitor for Expander<'_> {
 impl Expander<'_> {
     /// Rewrite `call` to a call to the twin whose last argument checks the
     /// callee's clauses once every argument is evaluated, so the call stays
-    /// the place an index call names. Where the last parameter borrows, a
-    /// clause writes an earlier one, which the call would already have read,
-    /// or no twin follows a trait's clauses, the clauses and then the call
-    /// form a block instead, its arguments bound ahead.
+    /// the place an index call names. Where the last parameter borrows, or no
+    /// twin follows a trait's clauses, the clauses and then the call form a
+    /// block instead, its arguments bound ahead.
     fn expand(&mut self, call: &mut TirExpr, key: FunctionId) {
         let contracts = self.contracts;
         let contract = &contracts[&key];
@@ -703,11 +700,7 @@ impl Expander<'_> {
             && contract
                 .params
                 .last()
-                .is_some_and(|&param| RefKind::from_resolved(self.type_table.get(param)).is_none())
-            && contract
-                .written
-                .iter()
-                .all(|&param| param as usize + 1 == contract.params.len());
+                .is_some_and(|&param| RefKind::from_resolved(self.type_table.get(param)).is_none());
         // The last argument's own bindings are `let`s in its block, which the
         // clauses after them share; only an earlier argument's are assigned.
         let mut stmts = Vec::new();
@@ -725,9 +718,6 @@ impl Expander<'_> {
                 } else {
                     Sink::Ahead(&mut stmts)
                 };
-                if contract.written.contains(&(i as u32)) {
-                    return self.bind(&mut arg.expr, sink);
-                }
                 self.bind_ahead(arg, param_type, sink)
             })
             .collect();

@@ -1,0 +1,16 @@
+// A contract clause mutates nothing it did not declare: a build may skip the
+// clause, so a write would make the call's result depend on the build.
+fn doubled(mut n: i32) -> i32
+    contract doubling: { n = n * 2; true }
+{
+    return n;
+}
+
+export fn run() {
+    let _ = doubled(5);
+}
+
+__DATA__
+{
+  "compile_error": ":4:26: analysis error: contract clause cannot mutate 'n', which it did not declare"
+}

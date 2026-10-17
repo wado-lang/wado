@@ -1,0 +1,98 @@
+//! Where an expression may change state without performing an effect. The
+//! `self_comparison` lint and the `contract` clause check both ask it.
+
+use crate::ast::{AstId, AstVisitor, Expr, SelfKind, UnaryOp, walk_expr};
+use crate::semantics::Semantics;
+
+/// One way an expression may write.
+pub(crate) enum WriteSite<'e> {
+    /// The place an assignment, a `&mut`, or a method taking `&mut self`
+    /// writes.
+    Place(&'e Expr),
+    /// An operand handed to a call whose value reaches a `&mut`, which the
+    /// callee may write through. A receiver counts only beneath the reference
+    /// its method takes, since a `&self` method cannot write the receiver
+    /// itself.
+    Lent(&'e Expr),
+    /// The callee of a call that is not a declared function, such as a
+    /// `fn mut` closure, which may write what it captured.
+    Opaque(&'e Expr),
+    /// The receiver of a method call with no recorded dispatch, which nothing
+    /// can see into.
+    Unresolved(&'e Expr),
+}
+
+/// Hands `found` every [`WriteSite`] in `expr`, in source order.
+pub(crate) fn for_each_write_site(sem: &Semantics, expr: &Expr, found: impl FnMut(WriteSite<'_>)) {
+    Sites { sem, found }.visit_expr(expr);
+}
+
+struct Sites<'s, F> {
+    sem: &'s Semantics,
+    found: F,
+}
+
+impl<F: FnMut(WriteSite<'_>)> Sites<'_, F> {
+    fn reaches_mut_ref(&self, operand: &Expr, beneath_refs: bool) -> bool {
+        self.sem.expression_type(operand.id()).is_none_or(|ty| {
+            let ty = if beneath_refs {
+                self.sem.types.peel_refs(ty)
+            } else {
+                ty
+            };
+            self.sem.reaches_mut_ref(ty)
+        })
+    }
+
+    fn lend(&mut self, args: &[Expr]) {
+        for arg in args {
+            if self.reaches_mut_ref(arg, false) {
+                (self.found)(WriteSite::Lent(arg));
+            }
+        }
+    }
+
+    fn method_call(&mut self, receiver: &Expr, args: &[Expr], id: AstId) {
+        let mut dispatches = self.sem.method_dispatches_at(id).peekable();
+        if dispatches.peek().is_none() {
+            (self.found)(WriteSite::Unresolved(receiver));
+        } else if dispatches.any(|dispatch| dispatch.self_kind == SelfKind::MutRef) {
+            (self.found)(WriteSite::Place(receiver));
+        } else if self.reaches_mut_ref(receiver, true) {
+            (self.found)(WriteSite::Lent(receiver));
+        }
+        self.lend(args);
+    }
+
+    fn call(&mut self, callee: &Expr, args: &[Expr]) {
+        let declared = match callee {
+            Expr::Ident(ident) => self
+                .sem
+                .referenced_symbol(ident.id)
+                .and_then(|def| self.sem.function_at(def))
+                .is_some(),
+            _ => false,
+        };
+        if !declared {
+            (self.found)(WriteSite::Opaque(callee));
+        }
+        self.lend(args);
+    }
+}
+
+impl<F: FnMut(WriteSite<'_>)> AstVisitor for Sites<'_, F> {
+    fn visit_expr(&mut self, expr: &Expr) {
+        match expr {
+            Expr::Assign(assign) => (self.found)(WriteSite::Place(&assign.target)),
+            Expr::CompoundAssign(compound) => (self.found)(WriteSite::Place(&compound.target)),
+            Expr::Unary(unary) if unary.op == UnaryOp::MutRef => {
+                (self.found)(WriteSite::Place(&unary.expr));
+            }
+            Expr::MethodCall(call) => self.method_call(&call.receiver, &call.args, call.id),
+            Expr::Call(call) => self.call(&call.callee, &call.args),
+            Expr::StaticMethodCall(call) => self.lend(&call.args),
+            _ => {}
+        }
+        walk_expr(self, expr);
+    }
+}

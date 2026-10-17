@@ -1,0 +1,35 @@
+// A clause may mutate what it declares: the write reaches nothing outside the
+// clause, so skipping the clause changes nothing the call computes.
+use { println, Stdout } from "core:cli";
+
+fn fill(v: &mut List<i32>) {
+    v.push(1);
+}
+
+fn total(xs: &List<i32>) -> i32
+    contract non_negative: {
+        let mut sum = 0;
+        for let x of xs { sum += *x; }
+        let mut copy = *xs;
+        copy.push(0);
+        fill(&mut copy);
+        let mut seen = 0;
+        let mut count = || { seen += 1; };
+        count();
+        sum >= 0 && copy.len() == xs.len() + 2 && seen == 1
+    }
+{
+    let mut sum = 0;
+    for let x of xs { sum += *x; }
+    return sum;
+}
+
+export fn run() with Stdout {
+    let xs: List<i32> = [1, 2, 3];
+    println(`${total(&xs)} ${unchecked total(&xs)} ${xs.len()}`);
+}
+
+__DATA__
+{
+    "stdout": "6 6 3\n"
+}

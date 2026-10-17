@@ -71,6 +71,7 @@ pub mod signature_reach;
 pub mod stdlib;
 pub(crate) mod stdlib_snapshot;
 pub mod test_names;
+mod write_sites;
 use crate::ast::{Item, Type, UseDecl, attrs_allow, inner_attrs_allow, lint};
 use std::convert::Infallible;
 use std::sync::Arc;

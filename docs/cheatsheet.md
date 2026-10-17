@@ -891,7 +891,7 @@ every build; a call marked `unchecked` vouches for it, and only a build under
 
 ```wado
 fn half(n: i32) -> i32
-    contract n % 2 == 0, "n must be even"   // any number; no effects
+    contract n % 2 == 0, "n must be even"   // any number; no effects or writes
 {
     return n / 2;
 }
