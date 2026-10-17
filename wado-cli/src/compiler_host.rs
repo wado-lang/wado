@@ -331,7 +331,10 @@ impl CompilerHost for FilesystemCompilerHost {
         }
         let offline = self.inner.package_index(root);
         if self.acquisition.is_some() {
-            undeclared.insert(root.to_string(), UndeclaredPackage::Offline(offline.clone()));
+            undeclared.insert(
+                root.to_string(),
+                UndeclaredPackage::Offline(offline.clone()),
+            );
         }
         offline
     }

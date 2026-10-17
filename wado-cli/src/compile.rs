@@ -546,15 +546,16 @@ async fn acquire_undeclared_packages(host: &FilesystemCompilerHost) -> Result<bo
     };
     let mut resolved_more = false;
     for (root, offline) in unacquired {
+        let was_unresolved = unresolved_count(&offline);
         // A manifest that cannot be read names nothing to acquire, and its
         // offline index already says why.
         let acquired = match manifest_in(Path::new(&root)) {
             Ok(Some(manifest)) => {
                 acquired_index(&manifest, Path::new(&root), host.base_path(), tier).await?
             }
-            Ok(None) | Err(_) => offline.clone(),
+            Ok(None) | Err(_) => offline,
         };
-        resolved_more |= unresolved_count(&acquired) < unresolved_count(&offline);
+        resolved_more |= unresolved_count(&acquired) < was_unresolved;
         host.adopt_acquired(root, acquired);
     }
     Ok(resolved_more)
