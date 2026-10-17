@@ -201,9 +201,6 @@ impl std::fmt::Display for LoadError {
                     ExportRefusal::Component => {
                         write!(f, "; it is a prebuilt component, which carries no files")
                     }
-                    ExportRefusal::NoSuchPackage => {
-                        unreachable!("an undeclared package is reported as undeclared")
-                    }
                 }
             }
             LoadError::WasmImport {
@@ -1967,13 +1964,16 @@ impl<'a, H: CompilerHost> ModuleLoader<'a, H> {
             let path = path.to_string();
             return Ok(self.interner.place(&path, self.host));
         }
+        // A dependency of a package a path reached first, placed in it.
+        if self.interner.is_placed(path) {
+            return Ok(resolved);
+        }
 
         let exported_file = split_exported_file(import_source);
         if let Some((package, file)) = exported_file
-            && let Err(refusal) =
+            && let Some(Err(refusal)) =
                 self.interner
                     .resolve_exported_file(from_module_source, package, file)
-            && refusal != ExportRefusal::NoSuchPackage
         {
             return Err(LoadError::UnexportedFile {
                 package: package.to_string(),

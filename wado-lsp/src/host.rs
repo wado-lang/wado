@@ -6,6 +6,7 @@
 //! wrap this host. [`discovery`] holds the filesystem reads that answer what
 //! this host's [`CompilerHost::dependency_index`] reports.
 
+use std::collections::VecDeque;
 use std::path::{Component, Path, PathBuf};
 use std::sync::{Arc, Mutex};
 
@@ -153,14 +154,8 @@ impl CompilerHost for FilesystemCompilerHost {
         }
     }
 
-    /// `root` is canonical, as [`Self::package_root`] answers it, so the
-    /// entries it names are keyed from the canonical base: a key relative to a
-    /// base spelled through a symlink names a package the entry's index names
-    /// differently.
     fn package_index(&self, root: &str) -> DependencyIndex {
-        let base = std::fs::canonicalize(&self.base_path)
-            .expect("a host that answered a package root has its base on disk");
-        manifest_index(Path::new(root), &base)
+        manifest_index(Path::new(root), &self.base_path)
     }
 
     fn serves_core(&self) -> bool {
@@ -205,48 +200,106 @@ pub fn dependency_index_from(
     manifest_dir: &Path,
     base: &Path,
 ) -> DependencyIndex {
-    let base_abs = absolutize(base);
-    let (mut index, entries) = package_index(manifest, manifest_dir, &base_abs);
+    let (mut index, entries) = package_index(manifest, manifest_dir, base);
     index_packages(&mut index, entries, base);
     index
 }
 
 /// The key `index.resolved` names the source dependency whose entry module is
 /// `entry` by: its path relative to `base`, the base `load_source` joins against.
+/// Both are taken as the OS reaches them, since that is how `load_source` reads
+/// the key back: a `..` climbs a symlink's target, not its spelling. Every
+/// index then names one package by one key, however it was reached.
 #[must_use]
 pub fn dependency_key(entry: &Path, base: &Path) -> String {
-    relative_path(&absolutize(base), &normalize_path(&absolutize(entry)))
+    relative_path(&physical(base), &physical(entry))
+}
+
+/// `path` as the OS reaches it: its deepest existing ancestor with symlinks
+/// resolved, and the rest of it appended. A path nothing of which resolves (as
+/// on a host with no filesystem) is taken lexically.
+fn physical(path: &Path) -> PathBuf {
+    let path = absolutize(path);
+    for ancestor in path.ancestors() {
+        if let Ok(real) = std::fs::canonicalize(ancestor) {
+            let rest = path.strip_prefix(ancestor).expect("an ancestor prefixes its path");
+            return normalize_path(&real.join(rest));
+        }
+    }
+    normalize_path(&path)
 }
 
 /// Add to `index.packages` the package of each source dependency entry module
 /// in `entries`, and of each source dependency those reach, at any depth.
-pub fn index_packages(index: &mut DependencyIndex, mut entries: Vec<PathBuf>, base: &Path) {
-    let base_abs = absolutize(base);
-    let mut next = 0;
-    while let Some(entry) = entries.get(next).cloned() {
-        next += 1;
-        let lib = dependency_key(&entry, base);
-        if index.packages.contains_key(&lib) {
-            continue;
+pub fn index_packages(index: &mut DependencyIndex, entries: Vec<PathBuf>, base: &Path) {
+    let mut walk = PackageWalk::new(entries, base);
+    while let Some(package) = walk.next(index) {
+        walk.index(index, package);
+    }
+}
+
+/// The walk over the source dependencies an index reaches, at any depth, each
+/// package once by its key. A driver may act on a package [`Self::next`] hands
+/// out before [`Self::index`] lists what it depends on.
+pub struct PackageWalk {
+    pending: VecDeque<PathBuf>,
+    base: PathBuf,
+}
+
+/// A package [`PackageWalk::next`] hands out: its key, root and manifest.
+pub struct WalkedPackage {
+    pub lib: String,
+    pub root: PathBuf,
+    pub manifest: wado_manifest::Manifest,
+}
+
+impl PackageWalk {
+    /// A walk from the dependency entry modules `entries`, keyed from `base`.
+    #[must_use]
+    pub fn new(entries: Vec<PathBuf>, base: &Path) -> Self {
+        Self {
+            pending: entries.into(),
+            base: base.to_path_buf(),
         }
-        let own = match discovery::lib_package(&entry) {
-            Some((root, manifest)) => {
-                let (own, reached) = package_index(&manifest, &root, &base_abs);
-                entries.extend(reached);
-                own
+    }
+
+    /// The next package `index` does not hold. A single-file dependency, which
+    /// has no manifest, is recorded on the way with nothing to index.
+    pub fn next(&mut self, index: &mut DependencyIndex) -> Option<WalkedPackage> {
+        while let Some(entry) = self.pending.pop_front() {
+            let lib = dependency_key(&entry, &self.base);
+            if index.packages.contains_key(&lib) {
+                continue;
             }
-            None => DependencyIndex::default(),
-        };
-        index.packages.insert(lib, own);
+            match discovery::lib_package(&entry) {
+                Some((root, manifest)) => return Some(WalkedPackage { lib, root, manifest }),
+                None => {
+                    index.packages.insert(lib, DependencyIndex::default());
+                }
+            }
+        }
+        None
+    }
+
+    /// Index `package` into `index`, and queue the packages it depends on.
+    pub fn index<'a>(
+        &mut self,
+        index: &'a mut DependencyIndex,
+        package: WalkedPackage,
+    ) -> &'a mut DependencyIndex {
+        let (own, reached) = package_index(&package.manifest, &package.root, &self.base);
+        self.pending.extend(reached);
+        index.packages.entry(package.lib).or_insert(own)
     }
 }
 
 /// One package's index, without `packages`, and the absolute entry module of
-/// each of its source dependencies.
-fn package_index(
+/// each of its source dependencies, keyed from `base`.
+#[must_use]
+pub fn package_index(
     manifest: &wado_manifest::Manifest,
     manifest_dir: &Path,
-    base_abs: &Path,
+    base: &Path,
 ) -> (DependencyIndex, Vec<PathBuf>) {
     let root = normalize_path(&absolutize(manifest_dir));
     let exports = manifest.package.iter().flat_map(|p| &p.exports);
@@ -256,7 +309,7 @@ fn package_index(
             error: None,
         }),
         exports: exports
-            .map(|entry| (entry.clone(), relative_path(base_abs, &root.join(entry))))
+            .map(|entry| (entry.clone(), dependency_key(&root.join(entry), base)))
             .collect(),
         ..DependencyIndex::default()
     };
@@ -264,7 +317,7 @@ fn package_index(
     for (name, entry) in discovery::resolve_all(manifest, manifest_dir) {
         match entry {
             Ok(DependencyEntry::Source(path)) => {
-                index.resolved.insert(name, dependency_key(&path, base_abs));
+                index.resolved.insert(name, dependency_key(&path, base));
                 entries.push(path);
             }
             Ok(DependencyEntry::Component(path)) => {

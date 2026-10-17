@@ -181,6 +181,10 @@ pub struct ModuleSourceInterner {
     root_dir: Option<String>,
     /// Each path dependency's package root → its entry module.
     dependency_roots: hashmap::IndexMap<String, String>,
+    /// Each path dependency whose root a path reached before any manifest
+    /// declared it, → that root: the package keeps the identity its first
+    /// modules were given.
+    reached_first: hashmap::IndexMap<String, InternedStr>,
     /// Each local module the host has placed, and its package. A module in a
     /// path dependency's root is placed in that dependency.
     local_packages: hashmap::IndexMap<InternedStr, PackageId>,
@@ -204,6 +208,7 @@ impl ModuleSourceInterner {
             root_package: PackageId::Root,
             root_dir: None,
             dependency_roots: hashmap::IndexMap::default(),
+            reached_first: hashmap::IndexMap::default(),
             local_packages: hashmap::IndexMap::default(),
             undeclared_packages: hashmap::IndexMap::default(),
             no_dependencies: DependencyIndex::default(),
@@ -243,6 +248,10 @@ impl ModuleSourceInterner {
             if self.package(&lib).manifest.is_some()
                 && let Some(root) = host.package_root(&lib)
             {
+                let interned = self.intern(&root);
+                if self.undeclared_packages.contains_key(&interned) {
+                    self.reached_first.insert(lib.clone(), interned);
+                }
                 self.dependency_roots.insert(root, lib);
             }
         }
@@ -314,10 +323,24 @@ impl ModuleSourceInterner {
     /// A non-entry module of the dependency package rooted at `pkg`, elected
     /// by [`Self::elect_package_root`] so one file reached two ways stays one
     /// module in one package.
+    ///
+    /// A package a path reached first stays the [`PackageId::Path`] its first
+    /// modules were placed in, so each module of it is a placed local one.
     pub fn dependency_module(&mut self, pkg: &str, path: &str) -> ModuleSource {
         let path = self.intern(path);
+        if let Some(root) = self.reached_first.get(pkg) {
+            let package = PackageId::Path(root.clone());
+            self.local_packages.insert(path.clone(), package.clone());
+            return ModuleSource::Local { path, package };
+        }
         let pkg = self.elect_package_root(&path, pkg);
         ModuleSource::Dependency { pkg, path }
+    }
+
+    /// Whether the local module at `path` has been placed in its package.
+    #[must_use]
+    pub fn is_placed(&self, path: &InternedStr) -> bool {
+        self.local_packages.contains_key(path)
     }
 
     /// The package root for `path`. A module is reachable under more than one
@@ -373,30 +396,31 @@ impl ModuleSourceInterner {
 
     /// Resolve the file `file` of the source dependency `name`, imported by
     /// `importer` as `"<name>/<file>"`, where the dependency's
-    /// `[package].exports` lists it. Compared after NFC, case exactly.
+    /// `[package].exports` lists it. Compared after NFC, case exactly. `None`
+    /// where `importer`'s package declares no dependency `name`.
     pub fn resolve_exported_file(
         &mut self,
         importer: &ModuleSource,
         name: &str,
         file: &str,
-    ) -> Result<ModuleSource, ExportRefusal> {
+    ) -> Option<Result<ModuleSource, ExportRefusal>> {
         let dependencies = self.dependencies_of(importer);
         let Some(lib) = dependencies.resolved.get(name).cloned() else {
-            if dependencies.components.contains_key(name) {
-                return Err(ExportRefusal::Component);
-            }
-            return Err(ExportRefusal::NoSuchPackage);
+            return dependencies
+                .components
+                .contains_key(name)
+                .then_some(Err(ExportRefusal::Component));
         };
         let exports = &self.package(&lib).exports;
         let file: String = file.nfc().collect();
         let Some(path) = exports.get(&file).cloned() else {
             let lowered = file.to_lowercase();
             let spelled_alike = exports.keys().find(|e| e.to_lowercase() == lowered);
-            return Err(ExportRefusal::NotExported {
+            return Some(Err(ExportRefusal::NotExported {
                 spelled_alike: spelled_alike.cloned(),
-            });
+            }));
         };
-        Ok(self.dependency_module(&lib, &path))
+        Some(Ok(self.dependency_module(&lib, &path)))
     }
 
     /// Resolve a coordinate imported by `importer` to a *prebuilt component*
@@ -544,8 +568,6 @@ impl WasmAssetKind {
 /// Why a `"<package>/<file>"` reference names no module.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ExportRefusal {
-    /// The importer's package declares no source dependency by that name.
-    NoSuchPackage,
     /// The package is a prebuilt component, which carries no files.
     Component,
     /// The package's `[package].exports` lists no such file, whether or not it
@@ -1206,11 +1228,11 @@ mod tests {
         let entry = interner.entry_point("main.wado");
         assert_eq!(
             interner.resolve_exported_file(&entry, "acme:geo", "src/shapes.wado"),
-            Err(ExportRefusal::Component),
+            Some(Err(ExportRefusal::Component)),
         );
         assert_eq!(
             interner.resolve_exported_file(&entry, "acme:other", "src/shapes.wado"),
-            Err(ExportRefusal::NoSuchPackage),
+            None,
         );
     }
 

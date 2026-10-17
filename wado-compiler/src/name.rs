@@ -1882,7 +1882,8 @@ pub fn is_package_namespace(segment: &str) -> bool {
 #[must_use]
 pub fn split_exported_file(specifier: &str) -> Option<(&str, &str)> {
     let (package, file) = specifier.split_once('/')?;
-    package.contains(':').then_some((package, file))
+    let (namespace, name) = package.split_once(':')?;
+    (is_package_namespace(namespace) && !name.is_empty()).then_some((package, file))
 }
 
 /// Resolve an import source, a Kiln invocation's redirect first. The one
@@ -1949,7 +1950,7 @@ pub fn resolve_import_with_entry(
     // dependency is a prebuilt component imported across the CM boundary.
     if !relative {
         if let Some((package, file)) = split_exported_file(import_source) {
-            if let Ok(module) = interner.resolve_exported_file(from_module, package, file) {
+            if let Some(Ok(module)) = interner.resolve_exported_file(from_module, package, file) {
                 return module;
             }
         } else {
@@ -1964,15 +1965,15 @@ pub fn resolve_import_with_entry(
         }
     }
 
-    if relative
-        && let ModuleSource::Local {
-            path: from_path, ..
-        } = from_module
-    {
-        let resolved =
-            resolve_local_identity(&entry_dir_of(entry_module), Some(from_path), import_source);
-        // If this resolves to the entry module's canonical name, return the
-        // entry ModuleSource to maintain a single type identity.
+    let importer = match from_module {
+        ModuleSource::Local { path, .. } if relative => Some(Some(path.as_str())),
+        ModuleSource::EntryPoint { .. } => Some(None),
+        _ => None,
+    };
+    if let Some(importer) = importer {
+        let resolved = resolve_local_identity(&entry_dir_of(entry_module), importer, import_source);
+        // A path back to the entry, from any module the entry itself included,
+        // names the entry, so it keeps a single type identity.
         if let Some(entry) = entry_module {
             let entry_canonical = match entry {
                 ModuleSource::EntryPoint { filename, .. } => canonicalize_entry_point(filename),
@@ -1982,11 +1983,6 @@ pub fn resolve_import_with_entry(
                 return entry.clone();
             }
         }
-        return interner.local(&resolved);
-    }
-
-    if matches!(from_module, ModuleSource::EntryPoint { .. }) {
-        let resolved = resolve_local_identity(&entry_dir_of(entry_module), None, import_source);
         return interner.local(&resolved);
     }
 

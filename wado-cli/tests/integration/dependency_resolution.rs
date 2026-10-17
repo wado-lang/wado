@@ -600,6 +600,79 @@ fn a_shared_dependency_is_one_package_through_a_symlink() {
         .success();
 }
 
+/// A package reached by a path before another package declares it stays one
+/// package: its files keep one identity however they are reached after.
+#[test]
+fn a_package_reached_by_a_path_then_declared_is_one_package() {
+    let tmp = tempfile::tempdir().unwrap();
+    let root = tmp.path();
+    let b = root.join("b");
+    library(
+        &b,
+        "",
+        "use { Token } from \"./x.wado\";\npub fn make() -> Token { return Token { v: 1 }; }\n",
+    );
+    fs::write(b.join("src/x.wado"), "pub struct Token { pub v: i32 }\n").unwrap();
+    let a = root.join("a");
+    library(&a, "\"lib:b\" = { path = \"../b\" }\n", "pub fn unused() {}\n");
+    fs::write(
+        a.join("src/y.wado"),
+        "use { make } from \"lib:b\";\nuse { Token } from \"../../b/src/x.wado\";\n\
+         pub fn mint() -> Token { return make(); }\n",
+    )
+    .unwrap();
+    library(
+        &root.join("app"),
+        "",
+        "use { Token } from \"../../b/src/x.wado\";\nuse { mint } from \"../../a/src/y.wado\";\n\
+         pub fn api() -> i32 { let t: Token = mint(); return t.v; }\n",
+    );
+    wado_in(&root.join("app"))
+        .args(["check", "src/lib.wado"])
+        .assert()
+        .success();
+}
+
+/// A dependency is named by the path the OS reaches it by, so a source tree
+/// linked in from elsewhere still reaches it, as one package however reached.
+#[cfg(unix)]
+#[test]
+fn a_dependency_is_keyed_by_the_path_the_os_reaches() {
+    let tmp = tempfile::tempdir().unwrap();
+    let root = tmp.path();
+    library(
+        &root.join("leaf"),
+        "",
+        "pub struct Token { pub v: i32 }\npub fn make() -> Token { return Token { v: 1 }; }\n",
+    );
+    let leaf = "\"lib:leaf\" = { path = \"../leaf\" }\n";
+    let mid = root.join("mid");
+    library(&mid, leaf, "pub fn m() {}\n");
+    fs::write(
+        mid.join("src/part.wado"),
+        "use { Token } from \"lib:leaf\";\npub fn take(t: Token) -> i32 { return t.v; }\n",
+    )
+    .unwrap();
+    let app = root.join("app");
+    library(&app, leaf, "pub fn unused() {}\n");
+    // `src` lives two levels deeper than it appears, so `..` from it climbs
+    // differently on disk than in its spelling.
+    let far = root.join("far/away/src");
+    fs::create_dir_all(&far).unwrap();
+    fs::write(
+        far.join("lib.wado"),
+        "use { make } from \"lib:leaf\";\nuse { take } from \"../../../mid/src/part.wado\";\n\
+         pub fn api() -> i32 { return take(make()); }\n",
+    )
+    .unwrap();
+    fs::remove_dir_all(app.join("src")).unwrap();
+    std::os::unix::fs::symlink(&far, app.join("src")).unwrap();
+    wado_in(&app)
+        .args(["check", "src/lib.wado"])
+        .assert()
+        .success();
+}
+
 /// A file in no package, reached by a path, declares no dependencies, whatever
 /// its importer declares.
 #[test]

@@ -1006,16 +1006,72 @@ pub async fn harvest_invocations(
     .await;
     settled.extend(harvest.modules.keys().cloned());
 
-    let (invocations, diagnostics) = collect_inline_invocations(
-        harvest.modules.iter().map(|(k, v)| (k.as_str(), v)),
-        &IndexMap::default(),
-        "",
-    );
+    // A clause names its generator through its own package's manifest, so two
+    // packages' clauses merge only once each has resolved
+    // ([`merge_across_packages`]).
+    let mut by_package = IndexMap::<Option<&Option<String>>, Vec<_>>::default();
+    for (key, module) in &harvest.modules {
+        let package = harvest.packages.get(key);
+        by_package
+            .entry(package)
+            .or_default()
+            .push((key.as_str(), module));
+    }
+    let mut invocations = Vec::new();
+    let mut diagnostics = Vec::new();
+    for modules in by_package.into_values() {
+        let (mut collected, mut reported) =
+            collect_inline_invocations(modules, &IndexMap::default(), "");
+        invocations.append(&mut collected);
+        diagnostics.append(&mut reported);
+    }
     Harvested {
         invocations,
         identities: harvest.identities,
         packages: harvest.packages,
         diagnostics,
+    }
+}
+
+/// Merge the invocations of [`harvest_invocations`]' packages once each clause
+/// has resolved its generator through its own package: clauses that resolve
+/// alike are one invocation, and two naming one `from` that resolve apart
+/// cannot both generate it, so they are reported.
+pub fn merge_across_packages(invocations: Vec<Invocation>) -> Result<Vec<Invocation>, Vec<Diagnostic>> {
+    let mut merged: Vec<Invocation> = Vec::new();
+    let mut diagnostics = Vec::new();
+    for invocation in invocations {
+        let tuple = invocation.identity_tuple();
+        if let Some(existing) = merged.iter_mut().find(|m| m.identity_tuple() == tuple) {
+            for site in invocation.decl_sites {
+                if !existing.decl_sites.contains(&site) {
+                    existing.decl_sites.push(site);
+                }
+            }
+            continue;
+        }
+        if let Some(existing) = merged.iter().find(|m| m.from == invocation.from) {
+            diagnostics.push(Diagnostic {
+                severity: Severity::Error,
+                code: Code::Log,
+                message: format!(
+                    "kiln: generator clauses of two packages disagree for `from = \"{}\"` \
+                     (first in {}, second in {}): each resolves its generator through its \
+                     own package's [build-dependencies]",
+                    invocation.from.as_str(),
+                    existing.decl_site().module,
+                    invocation.decl_site().module,
+                ),
+                span: None,
+            });
+            continue;
+        }
+        merged.push(invocation);
+    }
+    if diagnostics.is_empty() {
+        Ok(merged)
+    } else {
+        Err(diagnostics)
     }
 }
 

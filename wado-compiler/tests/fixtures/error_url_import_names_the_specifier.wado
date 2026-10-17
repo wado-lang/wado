@@ -1,0 +1,11 @@
+// A specifier with a `/` after its namespace that names no package: the error
+// names what was written, not the part before the `/`.
+
+use { foo } from "file:///tmp/x.wado";
+
+export fn run() {
+    foo();
+}
+
+__DATA__
+{"compile_error": "dependency 'file:///tmp/x.wado' is not declared: no wado.toml governs this module, and the `use` gives no inline source", "compile_error_codes": ["MODULE_NOT_FOUND"]}

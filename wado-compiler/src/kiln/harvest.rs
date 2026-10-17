@@ -101,6 +101,11 @@ where
                     let child_key = key_of(entry_key, path);
                     (child, child_key)
                 }
+                // A dependency of a package a path reached first.
+                ModuleSource::Local { ref path, .. } if interner.is_placed(path) => {
+                    let child_key = key_of(entry_key, path);
+                    (child, child_key)
+                }
                 // A back-reference to the entry folds onto it; anything else
                 // is not Wado source this walk reads.
                 _ => continue,

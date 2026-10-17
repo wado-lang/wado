@@ -24,7 +24,7 @@ use wado_compiler::{
 };
 use wado_lsp::FilesystemCompilerHost;
 use wado_lsp::host::dependency_index_from;
-use wado_lsp::host::discovery::{absolutize, lib_package, normalize_path};
+use wado_lsp::host::discovery::{absolutize, normalize_path};
 
 use crate::COMPILER_STACK_SIZE;
 use crate::compile::{build_dir, load_nearest_manifest, render_error_diagnostics};
@@ -342,8 +342,8 @@ impl Dependencies {
         Self {
             roots: index
                 .packages
-                .keys()
-                .map(|entry| dependency_root(&absolute(entry)))
+                .iter()
+                .map(|(entry, package)| dependency_root(&absolute(entry), package))
                 .collect(),
             components: [&index]
                 .into_iter()
@@ -393,17 +393,17 @@ fn hash_index(hasher: &mut Sha256, index: &DependencyIndex) {
     hash_field(hasher, format!("{manifest:?}").as_bytes());
 }
 
-/// The directory a dependency whose entry module is `entry` reads from: its
-/// package's root where `entry` is that package's `lib`, and otherwise the
-/// directory holding `entry`, a single-file dependency.
-fn dependency_root(entry: &Path) -> PathBuf {
-    match lib_package(entry) {
-        Some((root, _)) => normalize_path(&root),
-        None => entry
-            .parent()
-            .expect("an entry module is a file, so it has a parent")
-            .to_path_buf(),
-    }
+/// The directory a dependency whose entry module is `entry` and whose index is
+/// `package` reads from: the root of its manifest, and otherwise the directory
+/// holding `entry`, a single-file dependency.
+fn dependency_root(entry: &Path, package: &DependencyIndex) -> PathBuf {
+    let dir = match &package.manifest {
+        Some(manifest) => Path::new(&manifest.path),
+        None => entry,
+    };
+    dir.parent()
+        .expect("a manifest or an entry module is a file, so it has a parent")
+        .to_path_buf()
 }
 
 /// The compiler host an evaluated program compiles on: it serves the files of

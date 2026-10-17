@@ -1,4 +1,3 @@
-use std::collections::BTreeSet;
 use std::fmt::Write as _;
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -8,8 +7,8 @@ use wado_manifest::{DependencySource, MANIFEST_FILENAME, registry_url};
 
 use lexopt::Arg::Value;
 use wado_compiler::{CompilerHost as _, Diagnostic, Severity, wit_bundle};
-use wado_lsp::host::discovery::{DependencyEntry, lib_package, normalize_path, resolve_all};
-use wado_lsp::host::{dependency_key, index_packages};
+use wado_lsp::host::discovery::normalize_path;
+use wado_lsp::host::{PackageWalk, dependency_key};
 
 use crate::args::{self, CliExit};
 use crate::build_dep::{GENERATOR_WORLD_FQ, locked_generator_versions, spec_key};
@@ -29,7 +28,7 @@ use crate::wit::default_interface_name;
 use wado_compiler::world_registry::WorldSurface;
 use wado_host::kiln::driver::{
     Harvested, PipelineError, PipelineOutcome, ProviderError, emit_counting_errors,
-    harvest_invocations, run_pipeline,
+    harvest_invocations, merge_across_packages, run_pipeline,
 };
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
@@ -491,15 +490,13 @@ async fn manifest_and_component_index(
     // Acquire for every package of the build, the consumer's and each source
     // dependency's at any depth, inline ones included, before indexing it, so
     // the offline pass finds their git worktrees warm.
-    let mut acquired = Acquired::default();
     let mut index = match project {
         Some(project) => {
             let own = acquire_package(&project.manifest, &project.root, tier).await?;
-            let entries = source_entries(&project.manifest, &project.root);
-            acquired.reach(entries, base_path, tier).await?;
-            let mut index =
-                wado_lsp::host::dependency_index_from(&project.manifest, &project.root, base_path);
+            let (mut index, entries) =
+                wado_lsp::host::package_index(&project.manifest, &project.root, base_path);
             adopt_components(&mut index, own);
+            acquire_and_index(&mut index, entries, base_path, tier).await?;
             index
         }
         None => wado_compiler::DependencyIndex::default(),
@@ -521,57 +518,31 @@ async fn manifest_and_component_index(
             index.unresolved.swap_remove(&name);
             let entry = PathBuf::from(path);
             bind_once(&mut index.resolved, name, dependency_key(&entry, base_path))?;
-            acquired.reach(vec![entry.clone()], base_path, tier).await?;
-            index_packages(&mut index, vec![entry], base_path);
+            acquire_and_index(&mut index, vec![entry], base_path, tier).await?;
         }
         for (name, reason) in inline_git.unresolved {
             index.unresolved.insert(name, reason);
         }
     }
-
-    for (lib, fetched) in acquired.fetched {
-        let package = index.packages.get_mut(&lib);
-        adopt_components(
-            package.expect("the index holds each package the walk reached"),
-            fetched,
-        );
-    }
     Ok(index)
 }
 
-/// What acquisition fetched for each source dependency it reached, by the key
-/// `DependencyIndex::packages` names it by.
-#[derive(Default)]
-struct Acquired {
-    seen: BTreeSet<String>,
-    fetched: Vec<(String, Resolution)>,
-}
-
-impl Acquired {
-    /// Acquire the package of each entry module in `pending`, and of each
-    /// source dependency those reach, at any depth. A package is acquired
-    /// before its own dependencies are listed, since a git one only resolves
-    /// once materialized.
-    async fn reach(
-        &mut self,
-        mut pending: Vec<PathBuf>,
-        base_path: &Path,
-        tier: Acquisition,
-    ) -> Result<(), String> {
-        while let Some(entry) = pending.pop() {
-            let lib = dependency_key(&entry, base_path);
-            if !self.seen.insert(lib.clone()) {
-                continue;
-            }
-            let Some((root, manifest)) = lib_package(&entry) else {
-                continue;
-            };
-            let fetched = acquire_package(&manifest, &root, tier).await?;
-            self.fetched.push((lib, fetched));
-            pending.extend(source_entries(&manifest, &root));
-        }
-        Ok(())
+/// Add to `index.packages` the package of each entry module in `entries`, and
+/// of each source dependency those reach, at any depth, each acquired before
+/// its own dependencies are listed, since a git one only resolves once
+/// materialized.
+async fn acquire_and_index(
+    index: &mut wado_compiler::DependencyIndex,
+    entries: Vec<PathBuf>,
+    base_path: &Path,
+    tier: Acquisition,
+) -> Result<(), String> {
+    let mut walk = PackageWalk::new(entries, base_path);
+    while let Some(package) = walk.next(index) {
+        let fetched = acquire_package(&package.manifest, &package.root, tier).await?;
+        adopt_components(walk.index(index, package), fetched);
     }
+    Ok(())
 }
 
 /// Acquire per `tier` what the package at `root`, whose manifest is
@@ -596,17 +567,6 @@ async fn acquire_package(
         return Ok(Resolution::default());
     }
     fetch_component_dependencies(manifest, root, tier).await
-}
-
-/// The entry module of each source dependency `manifest` resolves.
-fn source_entries(manifest: &wado_manifest::Manifest, root: &Path) -> Vec<PathBuf> {
-    resolve_all(manifest, root)
-        .into_iter()
-        .filter_map(|(_, entry)| match entry {
-            Ok(DependencyEntry::Source(path)) => Some(path),
-            Ok(DependencyEntry::Component(_)) | Err(_) => None,
-        })
-        .collect()
 }
 
 /// Upgrade the registry dependencies the offline pass left cold in `index`
@@ -792,6 +752,8 @@ pub(crate) async fn prepare_kiln(
     }
     let mut invocations = ours;
     rewrite_local_dir_modules(&mut invocations, &manifest_root).map_err(manifest_error)?;
+    let invocations = merge_across_packages(invocations)
+        .map_err(|disagreements| PipelineError::InlineClause(emit_counting_errors(host, disagreements)))?;
     // A generator's outputs are products of this run, not a tree moving under
     // it. Declared here but applied when the watch is asked, so the order
     // fixtures compile in does not matter.
@@ -1002,8 +964,12 @@ fn adopt_dependency_invocation(
     package: Option<(&Path, &wado_manifest::Manifest)>,
     manifest_root: &Path,
 ) -> Result<(), PipelineError> {
-    use wado_compiler::kiln::{GeneratorModule, GeneratorSpec, InvocationPath};
-    let synthetic_id = invocation.decl_site().synthetic_id.clone();
+    use wado_compiler::kiln::{DeclSite, GeneratorModule, GeneratorSpec, InvocationPath};
+    let DeclSite {
+        module,
+        synthetic_id,
+        ..
+    } = invocation.decl_site().clone();
     invocation.write_into_consumer();
     let GeneratorModule::Spec(spec) = &invocation.module else {
         return Ok(());
@@ -1013,7 +979,7 @@ fn adopt_dependency_invocation(
         source: ProviderError::Unsupported { message },
     };
     let declared_in = package.map_or_else(
-        || "the dependency, which has no wado.toml".to_string(),
+        || format!("`{module}`, which no wado.toml governs"),
         |(root, _)| root.join(MANIFEST_FILENAME).display().to_string(),
     );
     let key = spec_key(&spec.spec);

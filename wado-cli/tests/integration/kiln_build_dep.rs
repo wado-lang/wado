@@ -9,6 +9,7 @@
 
 use predicates::prelude::*;
 use std::fs;
+use std::path::Path;
 
 use crate::common::wado_in;
 
@@ -366,4 +367,152 @@ export fn run() with Stdout {
         !lib.join("build").exists(),
         "the package's tree is not written"
     );
+}
+
+/// A generator package at `dir` whose one output says `greeting`.
+fn greeting_generator(dir: &Path, greeting: &str) {
+    fs::create_dir_all(dir.join("src")).unwrap();
+    let name = dir.file_name().unwrap().to_str().unwrap();
+    fs::write(
+        dir.join("wado.toml"),
+        format!(
+            "[package]\nname = \"{name}\"\nversion = \"0.1.0\"\n\n\
+             [world]\n\"core:kiln/generator\" = \"src/generator.wado\"\n"
+        ),
+    )
+    .unwrap();
+    fs::write(
+        dir.join("src/generator.wado"),
+        format!(
+            r#"use {{ Request, Response, OutputFile, Error }} from "core:kiln";
+
+export fn generate(req: Request) -> Result<Response, Error> {{
+    return Result::Ok(Response {{
+        files: [OutputFile {{
+            path: "greeting.wado",
+            content: "pub fn greeting() -> String {{ return \"{greeting}\"; }}",
+            is_entry: true,
+        }}],
+    }});
+}}
+"#
+        ),
+    )
+    .unwrap();
+}
+
+/// A clause in a file no `wado.toml` governs has no `[build-dependencies]` to
+/// name its generator through, whatever its importer declares.
+#[test]
+fn a_clause_in_no_package_names_no_build_dependency() {
+    let tmp = tempfile::tempdir().unwrap();
+    let root = tmp.path();
+    greeting_generator(&root.join("gen"), "hi");
+    fs::create_dir_all(root.join("loose")).unwrap();
+    fs::write(root.join("loose/schema.idl"), "anything\n").unwrap();
+    fs::write(
+        root.join("loose/part.wado"),
+        r#"use { greeting } from "./schema.idl" with { generator: { module: "lib:gen" } };
+
+pub fn part() -> String {
+    return greeting();
+}
+"#,
+    )
+    .unwrap();
+    let app = root.join("app");
+    fs::create_dir_all(app.join("src")).unwrap();
+    fs::write(
+        app.join("wado.toml"),
+        "[package]\nname = \"app\"\nversion = \"0.1.0\"\n\n\
+         [world]\n\"wasi:cli/command\" = \"src/main.wado\"\n\n\
+         [build-dependencies]\n\"lib:gen\" = { path = \"../gen\" }\n",
+    )
+    .unwrap();
+    fs::write(
+        app.join("src/main.wado"),
+        r#"use { println, Stdout } from "core:cli";
+use { part } from "../../loose/part.wado";
+
+export fn run() with Stdout {
+    println(part());
+}
+"#,
+    )
+    .unwrap();
+    wado_in(&app)
+        .args(["run", "src/main.wado"])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains(
+            "kiln: generator `lib:gen` is not in the [build-dependencies] of \
+             `../loose/part.wado`, which no wado.toml governs",
+        ));
+}
+
+/// One schema two packages generate from: each clause resolves its generator
+/// through its own package, so the two agree only where those generators are
+/// one.
+#[test]
+fn two_packages_clauses_on_one_schema_merge_only_when_they_resolve_alike() {
+    let tmp = tempfile::tempdir().unwrap();
+    let root = tmp.path();
+    greeting_generator(&root.join("gen_a"), "from a");
+    greeting_generator(&root.join("gen_b"), "from b");
+
+    let lib = root.join("lib");
+    fs::create_dir_all(lib.join("src")).unwrap();
+    fs::write(
+        lib.join("wado.toml"),
+        "[package]\nname = \"lib\"\nversion = \"0.1.0\"\nlib = \"src/lib.wado\"\n\n\
+         [build-dependencies]\n\"lib:gen\" = { path = \"../gen_b\" }\n",
+    )
+    .unwrap();
+    fs::write(lib.join("src/schema.idl"), "anything\n").unwrap();
+    fs::write(
+        lib.join("src/lib.wado"),
+        r#"use { greeting } from "./schema.idl" with { generator: { module: "lib:gen" } };
+
+pub fn hello() -> String {
+    return greeting();
+}
+"#,
+    )
+    .unwrap();
+
+    let app = root.join("app");
+    fs::create_dir_all(app.join("src")).unwrap();
+    let app_manifest = |generator: &str| {
+        format!(
+            "[package]\nname = \"app\"\nversion = \"0.1.0\"\n\n\
+             [world]\n\"wasi:cli/command\" = \"src/main.wado\"\n\n\
+             [build-dependencies]\n\"lib:gen\" = {{ path = \"../{generator}\" }}\n"
+        )
+    };
+    fs::write(app.join("wado.toml"), app_manifest("gen_a")).unwrap();
+    fs::write(
+        app.join("src/main.wado"),
+        r#"use { println, Stdout } from "core:cli";
+use { greeting } from "../../lib/src/schema.idl" with { generator: { module: "lib:gen" } };
+use { hello } from "../../lib/src/lib.wado";
+
+export fn run() with Stdout {
+    println(`${greeting()} ${hello()}`);
+}
+"#,
+    )
+    .unwrap();
+
+    wado_in(&app)
+        .args(["run", "src/main.wado"])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("disagree"));
+
+    fs::write(app.join("wado.toml"), app_manifest("gen_b")).unwrap();
+    wado_in(&app)
+        .args(["run", "src/main.wado"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("from b from b"));
 }
