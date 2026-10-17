@@ -1157,7 +1157,7 @@ struct Parser {
 fn kind_names(kinds: &List<i32>) -> List<String> {
     let mut out: List<String> = List::with_capacity(kinds.len());
     for let k of kinds {
-        out.push(token_kind_name(*k));
+        out.push(TOKEN_NAMES[*k]);
     }
     return out;
 }
@@ -1211,15 +1211,15 @@ impl Parser {
         return self.tokens.starts[i];
     }
 
-    fn la(&self, k: i32) -> i32 {
-        return self.peek_at(k - 1);
-    }
-
     fn lt(&self, k: i32) -> i32 {
-        let idx = self.pos + k - 1;
+        let idx = if k > 0 { self.pos + k - 1 } else { self.pos + k };
         if idx >= self.kinds.len() { return self.kinds.len() - 1; }
         if idx < 0 { return 0; }
         return idx;
+    }
+
+    fn la(&self, k: i32) -> i32 {
+        return self.kinds[self.lt(k)];
     }
 
     fn text_span(&self, start: i32, end: i32) -> String {
