@@ -17,8 +17,8 @@ use wado_compiler::{Code, CompilerHost, Diagnostic, Severity};
 
 use super::driver::{
     GeneratorProvider, Harvested, PipelineError, ProviderError, ResolvedGenerator,
-    emit_counting_errors,
-    generator_compile_options, generator_cycle, harvest_invocations, run_pipeline,
+    emit_counting_errors, generator_compile_options, generator_cycle, harvest_invocations,
+    run_pipeline,
 };
 use crate::sync::lock;
 use crate::{HostStubs, StubHost};

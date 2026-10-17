@@ -30,7 +30,8 @@ use std::sync::Arc;
 
 use wado_compiler::ast::AttrValue;
 use wado_compiler::compiler_host::{
-    CompilerHost, DependencyIndex, GeneratorInputFile, GeneratorRequest, GeneratorRunnerError, SourceError,
+    CompilerHost, DependencyIndex, GeneratorInputFile, GeneratorRequest, GeneratorRunnerError,
+    SourceError,
 };
 use wado_compiler::hashmap::{IndexMap, IndexSet};
 #[cfg(test)]
