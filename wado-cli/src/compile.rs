@@ -549,12 +549,11 @@ async fn acquire_undeclared_packages(host: &FilesystemCompilerHost) -> Result<bo
         let root = Path::new(&read.root);
         // A manifest that cannot be read names nothing to acquire, and its
         // offline index already says why.
-        let acquired = match manifest_in(root) {
-            Ok(Some(manifest)) => acquired_index(&manifest, root, &read.base, tier).await?,
-            Ok(None) | Err(_) => {
-                host.adopt_acquired(read, offline);
-                continue;
-            }
+        let acquired = if let Ok(Some(manifest)) = manifest_in(root) {
+            acquired_index(&manifest, root, &read.base, tier).await?
+        } else {
+            host.adopt_acquired(read, offline);
+            continue;
         };
         resolved_more |= resolves_more(&offline, &acquired);
         host.adopt_acquired(read, acquired);
