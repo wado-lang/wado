@@ -2205,7 +2205,7 @@ fn test_publish_outside_a_member_names_the_workspace_root() {
         .failure()
         .stderr(predicate::str::contains(format!(
             "run `wado publish` from its root:\n  {}",
-            dir.display()
+            dir.canonicalize().unwrap().display()
         )));
 }
 

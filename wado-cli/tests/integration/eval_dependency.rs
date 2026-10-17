@@ -313,6 +313,100 @@ fn rebinding_a_dependencys_dependency_misses_the_cache() {
         .success();
 }
 
+/// `greet`, declared by `app` as `lib:greet`, depending on `lib:leaf` and
+/// listing `exports`, and `app`, whose test evaluates `program` and asserts
+/// `check` on the outcome `out`.
+fn write_exporting_packages(root: &Path, exports: &str, program: &str, check: &str) {
+    let leaf = root.join("leaf");
+    fs::create_dir_all(leaf.join("src")).unwrap();
+    fs::write(
+        leaf.join("wado.toml"),
+        "[package]\nname = \"leaf\"\nversion = \"0.1.0\"\nlib = \"src/lib.wado\"\n",
+    )
+    .unwrap();
+    fs::write(
+        leaf.join("src/lib.wado"),
+        "pub fn leaf() -> String { return \"leaf\"; }\n",
+    )
+    .unwrap();
+    let greet = root.join("greet");
+    fs::create_dir_all(greet.join("src")).unwrap();
+    fs::write(
+        greet.join("wado.toml"),
+        format!(
+            "[package]\nname = \"greet\"\nversion = \"0.1.0\"\nlib = \"src/lib.wado\"\n\
+             exports = [{exports}]\n\n[dependencies]\n\"lib:leaf\" = {{ path = \"../leaf\" }}\n"
+        ),
+    )
+    .unwrap();
+    fs::write(greet.join("src/lib.wado"), "pub fn hello() {}\n").unwrap();
+    fs::write(
+        greet.join("src/part.wado"),
+        "use { leaf } from \"lib:leaf\";\npub fn part() -> String { return leaf(); }\n",
+    )
+    .unwrap();
+    let app = root.join("app");
+    fs::create_dir_all(&app).unwrap();
+    fs::write(
+        app.join("wado.toml"),
+        "[package]\nname = \"app\"\nversion = \"0.1.0\"\n\n\
+         [dependencies]\n\"lib:greet\" = { path = \"../greet\" }\n",
+    )
+    .unwrap();
+    fs::write(
+        app.join("app_test.wado"),
+        format!(
+            r#"use {{ eval }} from "core:eval";
+
+test "the program reaches the dependency's file" {{
+    let out = eval(`use {{ println, Stdout }} from "core:cli";
+{program}
+export fn run() with Stdout {{ println(part()); }}`);
+    {check}
+}}
+"#
+        ),
+    )
+    .unwrap();
+}
+
+#[test]
+fn unexporting_a_dependency_file_misses_the_cache() {
+    let tmp = tempfile::tempdir().unwrap();
+    let app = tmp.path().join("app");
+    let program = "use { part } from \"lib:greet/src/part.wado\";";
+    let ok = "assert out matches { Ok(o) && o.stdout == \"leaf\\n\" };";
+    write_exporting_packages(tmp.path(), "\"src/part.wado\"", program, ok);
+    wado_in(&app)
+        .args(["test", "app_test.wado"])
+        .assert()
+        .success();
+
+    let refused = "assert out matches { Err(_) };";
+    write_exporting_packages(tmp.path(), "", program, refused);
+    wado_in(&app)
+        .args(["test", "app_test.wado"])
+        .assert()
+        .success();
+}
+
+/// A dependency's file reached by a path is that dependency's, so its imports
+/// resolve against the dependency's `[dependencies]`, which the caller's lack.
+#[test]
+fn a_dependency_file_reached_by_a_path_resolves_against_its_own_manifest() {
+    let tmp = tempfile::tempdir().unwrap();
+    write_exporting_packages(
+        tmp.path(),
+        "",
+        "use { part } from \"../greet/src/part.wado\";",
+        "assert out matches { Ok(o) && o.stdout == \"leaf\\n\" }, `${out:?}`;",
+    );
+    wado_in(&tmp.path().join("app"))
+        .args(["test", "app_test.wado"])
+        .assert()
+        .success();
+}
+
 #[test]
 fn a_caller_inside_its_dependency_reads_none_of_its_own_files() {
     let tmp = tempfile::tempdir().unwrap();

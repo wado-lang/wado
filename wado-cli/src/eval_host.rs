@@ -22,6 +22,7 @@ use wado_compiler::hashmap::IndexMap;
 use wado_compiler::{
     CompilerHost, CompilerOptions, DependencyIndex, Diagnostic, Severity, SourceError,
 };
+use wado_lsp::FilesystemCompilerHost;
 use wado_lsp::host::dependency_index_from;
 use wado_lsp::host::discovery::{absolutize, lib_package, normalize_path};
 
@@ -30,6 +31,7 @@ use crate::compile::{build_dir, load_nearest_manifest, render_error_diagnostics}
 use crate::fingerprint::{Input, compiler_digest, hash_field};
 use crate::kiln_provider::hex32;
 use crate::knobs::CompileKnobs;
+use crate::manifest::resolution_inputs;
 use crate::runtime::CAPTURED_STDIO_CAPACITY;
 use wado_host::atomic_write::write_atomic;
 use wado_host::engine::{DEFAULT_GC_HEAP_INITIAL_SIZE, fuel_engine};
@@ -369,15 +371,26 @@ impl Dependencies {
     }
 }
 
-/// Hash what one package's index binds, its `packages` aside.
+/// Hash what one package's index binds, its `packages` aside. Destructured
+/// whole, so a field added to the index is one this has to hash.
 fn hash_index(hasher: &mut Sha256, index: &DependencyIndex) {
-    for entries in [&index.resolved, &index.components, &index.unresolved] {
+    let DependencyIndex {
+        resolved,
+        components,
+        unresolved,
+        manifest,
+        packages: _,
+        exports,
+    } = index;
+    for entries in [resolved, components, unresolved, exports] {
         hasher.update((entries.len() as u64).to_le_bytes());
         for (name, entry) in entries {
             hash_field(hasher, name.as_bytes());
             hash_field(hasher, entry.as_bytes());
         }
     }
+    let manifest = manifest.as_ref().map(|m| (&m.path, &m.error));
+    hash_field(hasher, format!("{manifest:?}").as_bytes());
 }
 
 /// The directory a dependency whose entry module is `entry` reads from: its
@@ -396,6 +409,8 @@ fn dependency_root(entry: &Path) -> PathBuf {
 /// The compiler host an evaluated program compiles on: it serves the files of
 /// the calling package's dependencies and records each one it reads.
 struct DependencyHost {
+    /// Answers which package a module lies in, as a compile of the caller does.
+    packages: FilesystemCompilerHost,
     deps: Arc<Dependencies>,
     diagnostics: Mutex<Vec<Diagnostic>>,
     read: Mutex<Vec<Input>>,
@@ -404,10 +419,17 @@ struct DependencyHost {
 impl DependencyHost {
     fn new(deps: Arc<Dependencies>) -> Self {
         Self {
+            packages: FilesystemCompilerHost::new(deps.base.clone()),
             deps,
             diagnostics: Mutex::default(),
             read: Mutex::default(),
         }
+    }
+
+    /// Record `file` as an input, present or not.
+    fn observe(&self, file: &Path) {
+        let bytes = std::fs::read(file).ok();
+        lock(&self.read).push(Input::of(file.to_path_buf(), bytes.as_deref()));
     }
 }
 
@@ -444,6 +466,18 @@ impl CompilerHost for DependencyHost {
 
     fn dependency_index(&self) -> DependencyIndex {
         self.deps.index.clone()
+    }
+
+    fn package_root(&self, path: &str) -> Option<String> {
+        self.packages
+            .package_root_probing(path, |manifest, _| self.observe(manifest))
+    }
+
+    fn package_index(&self, root: &str) -> DependencyIndex {
+        for file in resolution_inputs(Path::new(root)) {
+            self.observe(&file);
+        }
+        self.packages.package_index(root)
     }
 
     /// An outcome is keyed by [`compiler_digest`], which covers the whole
