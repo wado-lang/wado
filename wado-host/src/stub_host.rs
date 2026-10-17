@@ -2,7 +2,7 @@
 //! ask its environment, for compiling the e2e fixtures outside `wado`.
 
 use std::path::PathBuf;
-use std::sync::{Arc, OnceLock};
+use std::sync::LazyLock;
 
 use indexmap::IndexMap;
 use wado_compiler::{
@@ -28,33 +28,27 @@ pub struct HostStubs {
 }
 
 /// A [`FilesystemCompilerHost`] that answers the dependency index and the
-/// environment from [`HostStubs`] rather than from `wado.toml` and the process.
+/// environment from [`HostStubs`] rather than from `wado.toml` and the process,
+/// and runs Kiln generators as `wado` does.
+#[derive(Debug)]
 pub struct StubHost {
     filesystem: FilesystemCompilerHost,
     stubs: HostStubs,
-    /// The generator components the process shares, so a run of many fixtures
-    /// compiles each generator once.
-    generators: Arc<ComponentCache>,
 }
+
+/// The generator components every [`StubHost`] shares, so a run of many
+/// fixtures compiles each generator once.
+static GENERATORS: LazyLock<ComponentCache> = LazyLock::new(ComponentCache::default);
 
 impl StubHost {
     /// A host loading sources relative to `base_path`, with nothing stubbed.
     #[must_use]
     pub fn new(base_path: PathBuf) -> Self {
-        static GENERATORS: OnceLock<Arc<ComponentCache>> = OnceLock::new();
         wado_lsp::install_stderr_trace_sink();
         Self {
             filesystem: FilesystemCompilerHost::new(base_path),
             stubs: HostStubs::default(),
-            generators: GENERATORS.get_or_init(Arc::default).clone(),
         }
-    }
-
-    fn component(
-        &self,
-        wasm: &[u8],
-    ) -> Result<(wasmtime::Engine, wasmtime::component::Component), GeneratorRunnerError> {
-        self.generators.get_or_compile(wasm)
     }
 
     /// This host, answering from `stubs` what a real host would ask its
@@ -113,7 +107,7 @@ impl CompilerHost for StubHost {
         component_wasm: &[u8],
         request: GeneratorRequest,
     ) -> Result<GeneratorResponse, GeneratorRunnerError> {
-        let (engine, component) = self.component(component_wasm)?;
+        let (engine, component) = GENERATORS.get_or_compile(component_wasm)?;
         generate_for(self, &engine, &component, request).await
     }
 
@@ -122,7 +116,7 @@ impl CompilerHost for StubHost {
         component_wasm: &[u8],
         request: &GeneratorRequest,
     ) -> Result<Vec<Option<u64>>, GeneratorRunnerError> {
-        let (engine, component) = self.component(component_wasm)?;
+        let (engine, component) = GENERATORS.get_or_compile(component_wasm)?;
         probe_for(self, &engine, &component, request).await
     }
 }
