@@ -430,7 +430,7 @@ The optimizer may skip building a `rest` no one reads.
   buffer.
 - `affine trait`: `Drop`, `ForOf`, `Eq`, `Inspect`, `Display`, `Ref`,
   `RefMut`, `IndexRef`, `IndexRefMut` and `IndexAssign`. A resource implements
-  `Eq` and `Inspect` today, a drained list is walked by `ForOf`, and
+  `Eq` and `Inspect` today, a list is walked by `ForOf`, and
   `List<affine T>` is indexed through the last three. `IndexValue` stays
   unmarked, since a read by value is a copy.
 - `List<affine T>`. A method is available for an affine element when an
@@ -463,16 +463,38 @@ pub affine trait ForOf with _ {
     fn next(state: &mut Self::State) -> Option<Self::Item>;
 }
 
-impl<I: IntoIterator> ForOf for I { … }   // every iterable walks as today
+impl<affine T> ForOf for List<T> { … }  // State = ListCursor<T>, Item = T
+impl<I: IntoIterator> ForOf for I { … }  // every other iterable
 ```
 
-`for let x of e` calls `ForOf::start(e)` once and then `ForOf::next` on the
-state until it returns `None`. Through the blanket impl, every type that
-implements `IntoIterator` walks as it does today, so no existing loop changes.
+`for let x of e` passes `e` to `ForOf::start` by value, as any argument is
+passed, and then calls `ForOf::next` on the state until it returns `None`. The
+loop owns what it walks. An affine operand moves into the loop, and leaving the
+loop early drops the elements it did not reach. A copyable operand the program
+reads after the loop is copied, as an argument is. `List`'s impl names its
+head, so it ranks above the blanket for every element type.
+
+Removing that copy is the job of
+[value-copy elision](./wep-2026-05-21-resource-ownership.md#value-copy-elision-the-second-client):
+
+| After the loop, the operand is | The body writes it | Elision   | Against today                                  |
+| ------------------------------ | ------------------ | --------- | ---------------------------------------------- |
+| not read                       | ―                  | move      | no copy, and each element moves into `x`       |
+| read                           | no                 | share     | the same: the loop reads the operand's storage |
+| read                           | yes                | deep copy | one more copy of the list                      |
+
+Sharing holds because the state never writes the list. A `ListCursor<T>` is the
+list and a position: `next` reads the element at the position and advances it,
+and the cursor's drop drops the elements from the position to the end.
+
+So a loop walks the value its operand held when the loop began. A body that
+writes an element the loop has not reached no longer sees the write, and a body
+that shrinks the list no longer breaks the contract of its views.
 
 A tuple is not walked through `ForOf`: `for-of` over a tuple stays unrolled at
-compile time, one body per element. Over a tuple holding an affine value, the
-loop consumes the tuple and moves each element into the binding once.
+compile time, one body per element. The operand still passes by value, so over
+a tuple holding an affine value the loop consumes the tuple and moves each
+element into the binding once.
 
 `Iterator` and `IntoIterator` stay unmarked. Their adapters take `&self` and
 copy it, and `find`, `filter`, `min_by_key` and `max_by_key` hand an element to
@@ -483,21 +505,14 @@ does not accept a noncopyable element either.
 
 An affine element is walked one of two ways:
 
-| Written                             | Element | API                 | Why                                                                                                                                                  |
-| ----------------------------------- | ------- | ------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `for x of list.drain()`             | `T`     | `for-of` and `next` | `drain(self)` consumes the list and returns an affine `ListDrain<T>` that implements `ForOf`. Leaving the loop early drops the elements not reached. |
-| `for x of &list`, `list.iter_ref()` | `&T`    | all of `Iterator`   | A reference iterator holds only references, so it is copyable whatever its element, and implements the unmarked `Iterator`.                          |
-| `for x of list`                     | ―       | a type error        | `impl<T> IntoIterator for List<T>` is unmarked. The error names `drain()` and `&list`.                                                               |
+| Written                             | Element | API               | Why                                                                                                                         |
+| ----------------------------------- | ------- | ----------------- | --------------------------------------------------------------------------------------------------------------------------- |
+| `for x of list`                     | `T`     | `for-of`          | The loop consumes the list.                                                                                                 |
+| `for x of &list`, `list.iter_ref()` | `&T`    | all of `Iterator` | A reference iterator holds only references, so it is copyable whatever its element, and implements the unmarked `Iterator`. |
 
 The second row is where `find` and `filter` reach an affine element: the
 iterator's `Item` is `&T` already, so a predicate takes it by value with one
 reference, not two.
-
-`List` does not implement `ForOf` itself. An `impl<affine T> ForOf for List<T>`
-names the list's head, so the impl ranking puts it above the blanket for every
-element type, `List<i32>` included, and its by-value `start` would copy a list
-the program still reads after the loop. Today's loop reads the list's storage in
-place. So consuming a list is the explicit `drain()`.
 
 ### Web handles
 
@@ -566,11 +581,14 @@ benign ones.
   that performs no effect but a `#[benign]` one, and no partial move or
   `..base` over a type that implements it. Cleanup drops a generic `T` through
   `Drop`, which every type answers at monomorphization.
-- [ ] `ForOf` and `List<affine T>`: `for-of` lowers through `ForOf`, with the
-  blanket impl over `IntoIterator`; the methods that move elements in
-  `impl<affine T> List<T>`, `drain()` and `ListDrain<T>`, and `&list`
-  iteration over an affine element. The list drops its elements, and a store
-  into an element drops what it replaces.
+- [ ] `ForOf` and `List<affine T>`: `for-of` passes its operand by value to
+  `ForOf::start`, with `List`'s impl over `ListCursor<T>` and the blanket impl
+  over `IntoIterator`; the methods that move elements in
+  `impl<affine T> List<T>`, and `&list` iteration over an affine element. The
+  list drops its elements, and a store into an element drops what it replaces.
+  A fixture pins that elision shares a list the loop's body does not write: no
+  `$value_copy$` in the output. The fixtures that relied on a body's write being
+  seen by the loop are rewritten.
 - [ ] No cast between an affine resource and an integer: synthesis splits and
   lifts the `stream-new` / `future-new` pair, the raw-handle builtins take and
   return resources, `ResourceId::of`, and the test doubles in `core:kiln`,
@@ -603,7 +621,8 @@ benign ones.
   it. A fixture pins the `?` between `Future::new()` and the write.
 - [ ] Spec: rewrite [Resource Ownership](./spec-components.md#resource-ownership),
   the resource paragraph of [Memory Model](./spec-memory.md),
-  [For-Of Loop](./spec-control-flow.md#for-of-loop) over `ForOf`, and the
+  [For-Of Loop](./spec-control-flow.md#for-of-loop) over `ForOf` and the
+  value the loop began with, and the
   cheatsheet. Amend the WEPs above.
 
 ## Known gaps
@@ -617,8 +636,8 @@ keys beside it.
 ### No adapter takes an affine element by value
 
 `map`, `filter`, `collect` and the rest are `Iterator`'s, which an affine
-element does not reach by value. A program that transforms drained elements
-writes the loop.
+element does not reach by value. A program that transforms the elements it
+consumes writes the loop.
 
 ### A closure cannot own an affine value
 
