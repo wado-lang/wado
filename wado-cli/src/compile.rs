@@ -1178,10 +1178,10 @@ async fn collect_inline_invocations_for_entry_with_identities(
     // An unreadable entry, or one whose parse recovered from an error, harvests
     // nothing; the compile that follows reports it.
     let Ok(entry_source) = fs::read_to_string(entry_file) else {
-        return Default::default();
+        return Harvested::default();
     };
     let Ok(entry) = wado_compiler::parse(&entry_source).into_fail_fast() else {
-        return Default::default();
+        return Harvested::default();
     };
     // A loader identity is anchored on the entry's directory, so that is what
     // an import joins onto.
