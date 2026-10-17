@@ -157,7 +157,8 @@ affine struct Holder { f: Fields, n: i32 }   // declaration: Holder is move-only
 affine variant Slot { Empty, Held(Fields) }
 
 pub variant Option<affine T> { None, Some(T) }  // permission: T may be affine
-fn apply<T, effect E>(f: fn(T) -> T with E, x: T) -> T with E { … }
+fn apply<affine T, effect E>(f: fn(T) -> T with E, x: T) -> T with E { … }
+                                             // `affine` stands where `effect` does
 fn dup<T>(x: T) -> [T, T] { … }              // unmarked: T is copyable
 
 affine trait ForOf { affine type Item; … }  // a trait for its Self, and
@@ -341,6 +342,11 @@ pub affine trait Drop with () {
   Component Model's `resource.drop` or runs a guest destructor.
 - Only an affine type implements `Drop`. A copyable type with one would run it
   for every copy.
+- A body generic over `affine T` drops a `T` through `Drop`, resolved at
+  monomorphization like any trait call. Every type answers: an impl, a
+  field-by-field drop synthesized for an affine type without one, and nothing
+  for a copyable type. Cleanup runs before monomorphization, so it emits the
+  call and cannot expand the drop in place.
 - A drop performs no effect. A body generic over `affine T` drops a `T`
   wherever it discards one (`unwrap_or` discards its fallback), and a drop
   with effects would perform them in a function that declares none.
@@ -359,7 +365,9 @@ The Component Model traps on `future.drop-writable` before the end is done,
 and nothing a drop could write stands in for the value the reader waits for.
 A trap there is better than the alternative, a reader that waits forever. So a
 `?` or an early `return` between `Future::new()` and the write is a trap
-rather than a leak.
+rather than a leak. A cancelled write leaves the end unwritten too: the
+Component Model returns it to idle, not done. A program that cancels a future
+write writes again before the end is dropped.
 
 ### A write returns what it did not deliver
 
@@ -429,8 +437,17 @@ The optimizer may skip building a `rest` no one reads.
   `impl<affine T> List<T>` declares it, and the definition-site check holds
   its body to moving elements. The rest stay in `impl<T> List<T>`, for a
   copyable element only.
-- `Iterator`, `IntoIterator`, `Slice<T>`, `TreeMap<K, V>`, `HashMap<K, V>`,
-  `TreeSet<T>` and their iterators stay unmarked.
+- What `List` is built on, marked with it: `Array<affine T>`, its storage;
+  `impl<affine T> From<Array<T>> for List<T>`, through which a list literal
+  lowers; `Slice<affine T>`, `SliceRefIter<affine T>` and
+  `SliceRefMutIter<affine T>`, which `&list`, `&mut list` and `iter_ref()`
+  return; and the `IntoIterator` impls for `&List<T>` and `&mut List<T>`. A
+  reference iterator holds only references, so it is copyable whatever its
+  element and implements the unmarked `Iterator`.
+- `Iterator`, `IntoIterator`, `Sequence`, `SliceValueIter<T>`,
+  `TreeMap<K, V>`, `HashMap<K, V>`, `TreeSet<T>` and their iterators stay
+  unmarked. `Sequence::at` returns an element by value, so `get`, `first` and
+  `last` reach a copyable element only.
 - `ResourceId`, with `ResourceId::of(&r)` over every affine resource.
 
 `wado-from-idl` declares `affine` every record and variant it generates that
@@ -454,6 +471,10 @@ impl<I: IntoIterator> ForOf for I { … }   // every iterable walks as today
 `for let x of e` calls `ForOf::start(e)` once and then `ForOf::next` on the
 state until it returns `None`. Through the blanket impl, every type that
 implements `IntoIterator` walks as it does today, so no existing loop changes.
+
+A tuple is not walked through `ForOf`: `for-of` over a tuple stays unrolled at
+compile time, one body per element. Over a tuple holding an affine value, the
+loop consumes the tuple and moves each element into the binding once.
 
 `Iterator` and `IntoIterator` stay unmarked. Their adapters take `&self` and
 copy it, and `find`, `filter`, `min_by_key` and `max_by_key` hand an element to
@@ -522,65 +543,70 @@ benign ones.
 
 ## Roadmap
 
-1. [ ] Fix the `*r = value` panic through `&mut R` with a fixture. A compiler
-   panic is P0 and does not wait for the rest.
-2. [ ] `affine` as a keyword on `struct` and `variant`. A named declaration
-   holding an affine value or implementing `Drop` without it is an error
-   naming the field or the impl, and one doing neither with it is an error
-   too; a tuple, a newtype and an anonymous struct infer. `wado-from-idl`
-   emits it, and the generated stdlib is regenerated. `resource_*` fixtures
-   declare their holders.
-3. [ ] `affine` on a type parameter, an associated type and a trait, with the
-   definition-site check: the move check runs over its bindings as over
-   resource bindings, and over a marked trait's default bodies with `Self`
-   affine. An affine type implementing an unmarked trait is an error at the
-   impl. The prelude traits named under Standard library are marked.
-4. [ ] `Drop`: a resource's `fn drop(self)` as its impl, a user impl on an
-   affine type, the fields left at the end of `drop` dropped one by one, a
-   drop that performs no effect but a `#[benign]` one, and no partial move or
-   `..base` over a type that implements it.
-5. [ ] `ForOf` and `List<affine T>`: `for-of` lowers through `ForOf`, with the
-   blanket impl over `IntoIterator`; the methods that move elements in
-   `impl<affine T> List<T>`, `drain()` and `ListDrain<T>`, and `&list`
-   iteration over an affine element. The list drops its elements, and a store
-   into an element drops what it replaces.
-6. [ ] No cast between an affine resource and an integer: synthesis splits
-   and lifts the `stream-new` / `future-new` pair, the raw-handle builtins
-   take and return resources, `ResourceId::of`, and the test doubles in
-   `core:kiln`, `core:cli` and `package-gale` return real handles.
-   `AsyncCall` holds a `Subtask`, with its `Drop`. It comes before the cell,
-   which a cast would have to allocate, and before cleanup drops a `Stream`,
-   which `log_stdout` would then drop twice.
-7. [ ] The handle cell: the representation, the trap, the `borrow` an export
-   receives, and `*r = value` through it. Then the optimizer's erasure where
-   it proves no use reaches a dead cell.
-8. [ ] `Option::take`, `Option::replace`, partial move out of a local holder,
-   `..base` over an affine holder.
-9. [ ] `FutureWrite<T>` and `StreamWrite<T>`: a write returns what it did not
-   deliver, in every case the result reports, and the stdlib's write loops
-   (`write_all`) read `rest` rather than `count`.
-10. [ ] Instantiation rule: an affine argument for an unmarked parameter is a
-    type error naming the parameter. First the stdlib generics take `affine`
-    on their parameters: `Option`, `Result`, `Future`, `FutureWritable`,
-    `Stream`, `StreamWritable`, `StreamChunk`, `FutureWrite`, `StreamWrite`,
-    `AsyncCall` and `List`. The rule then names every other generic the
-    corpus instantiates with an affine argument, and each is marked or
-    rewritten.
-11. [ ] Withdraw the receiver-kind rule and the TIR copy check from #2364. The
-    `resource_copy_out_of_reference_error` fixture stays, its expectations
-    rewritten to the definition-site check: `list[0]`, a generic `&self`
-    getter and `list.last().unwrap()` still copy an element out of a
-    `List<Fields>`.
-12. [ ] Cleanup drops a `Stream` and a `Future` the body does not move, which
-    it excludes today
-    ([A `Stream` or `Future` handle nothing drops](./wep-2026-05-21-resource-ownership.md#a-stream-or-future-handle-nothing-drops)),
-    and a `FutureWritable` dropped before its write traps with a message
-    naming it. A fixture pins the `?` between `Future::new()` and the write.
-13. [ ] Spec: rewrite
-    [Resource Ownership](./spec-components.md#resource-ownership), the
-    resource paragraph of [Memory Model](./spec-memory.md),
-    [For-Of Loop](./spec-control-flow.md#for-of-loop) over `ForOf`, and the
-    cheatsheet. Amend the WEPs above.
+- [ ] Fix the `*r = value` panic through `&mut R` with a fixture. A compiler
+  panic is P0 and does not wait for the rest.
+- [ ] `affine` as a keyword on `struct` and `variant`. A named declaration
+  holding an affine value or implementing `Drop` without it is an error naming
+  the field or the impl, and one doing neither with it is an error too; a
+  tuple, a newtype and an anonymous struct infer. `wado-from-idl` emits it, and
+  the generated stdlib is regenerated. `resource_*` fixtures declare their
+  holders.
+- [ ] `affine` on a type parameter, an associated type and a trait, with the
+  definition-site check: the move check runs over its bindings as over
+  resource bindings, and over a marked trait's default bodies with `Self`
+  affine. An affine type implementing an unmarked trait is an error at the
+  impl. The prelude traits named under Standard library are marked.
+- [ ] The stdlib generics take `affine` on their parameters, and their bodies
+  pass the definition-site check: `Option`, `Result`, `Future`,
+  `FutureWritable`, `Stream`, `StreamWritable`, `StreamChunk`, `FutureWrite`,
+  `StreamWrite`, `AsyncCall` and `List`, with what `List` is built on: `Array`,
+  `From<Array<T>>`, `Slice`, `SliceRefIter`, `SliceRefMutIter` and the
+  `IntoIterator` impls for `&List<T>` and `&mut List<T>`. Everything after
+  this needs them.
+- [ ] `Drop`: a resource's `fn drop(self)` as its impl, a user impl on an
+  affine type, the fields left at the end of `drop` dropped one by one, a drop
+  that performs no effect but a `#[benign]` one, and no partial move or
+  `..base` over a type that implements it. Cleanup drops a generic `T` through
+  `Drop`, which every type answers at monomorphization.
+- [ ] `ForOf` and `List<affine T>`: `for-of` lowers through `ForOf`, with the
+  blanket impl over `IntoIterator`; the methods that move elements in
+  `impl<affine T> List<T>`, `drain()` and `ListDrain<T>`, and `&list`
+  iteration over an affine element. The list drops its elements, and a store
+  into an element drops what it replaces.
+- [ ] No cast between an affine resource and an integer: synthesis splits and
+  lifts the `stream-new` / `future-new` pair, the raw-handle builtins take and
+  return resources, `ResourceId::of`, and the test doubles in `core:kiln`,
+  `core:cli` and `package-gale` return real handles. `AsyncCall` holds a
+  `Subtask`, with its `Drop`. It comes before the cell, which a cast would have
+  to allocate, and before cleanup drops a `Stream`, which `log_stdout` would
+  then drop twice.
+- [ ] The handle cell: the representation, the trap, the `borrow` an export
+  receives, and `*r = value` through it. Then the optimizer's erasure where it
+  proves no use reaches a dead cell.
+- [ ] `Option::take`, `Option::replace`, partial move out of a local holder,
+  `..base` over an affine holder.
+- [ ] `FutureWrite<T>` and `StreamWrite<T>`: a write returns what it did not
+  deliver, in every case the result reports, and the stdlib's write loops
+  (`write_all`) read `rest` rather than `count`.
+- [ ] Instantiation rule: an affine argument for an unmarked parameter is a
+  type error naming the parameter. It names every generic the corpus
+  instantiates with an affine argument, and each is marked or rewritten.
+- [ ] Withdraw the receiver-kind rule and the TIR copy check from #2364. The
+  `resource_copy_out_of_reference_error` fixture stays, its expectations
+  rewritten to the rules that now catch each case: `list[0]` on a
+  `List<Fields>` is a copy through a reference under the body rule, a generic
+  `&self` getter instantiated with `Fields` is an affine argument for an
+  unmarked parameter, and `list.last()` is not found, since `Sequence`, which
+  declares it, is implemented for a copyable element only.
+- [ ] Cleanup drops a `Stream` and a `Future` the body does not move, which it
+  excludes today
+  ([A `Stream` or `Future` handle nothing drops](./wep-2026-05-21-resource-ownership.md#a-stream-or-future-handle-nothing-drops)),
+  and a `FutureWritable` dropped before its write traps with a message naming
+  it. A fixture pins the `?` between `Future::new()` and the write.
+- [ ] Spec: rewrite [Resource Ownership](./spec-components.md#resource-ownership),
+  the resource paragraph of [Memory Model](./spec-memory.md),
+  [For-Of Loop](./spec-control-flow.md#for-of-loop) over `ForOf`, and the
+  cheatsheet. Amend the WEPs above.
 
 ## Known gaps
 
