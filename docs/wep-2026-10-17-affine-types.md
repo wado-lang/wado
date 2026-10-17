@@ -272,8 +272,9 @@ Four operations act on places and objects:
   source.
 - A store through a reference, `*r = value`, moves the content of the value's
   object into the object `r` names, after dropping what that object held, and
-  zeroes the value's object. A reference to the value's old object then traps,
-  and `r` keeps naming the object it did.
+  zeroes the value's object, as the write-back of `*r = s2` does for a struct
+  today. A reference to the value's old object then traps, and `r` keeps
+  naming the object it did.
 - A drop runs the type's `Drop` and then zeroes the object: a box's handle
   becomes 0, which the Component Model never issues, since index 0 of a handle
   table is reserved; an aggregate's fields become null.
@@ -298,8 +299,6 @@ What follows for references:
 - A reference is to the object, as `&s` is to a struct today. It follows the
   object through a move, and it sees the drop: `let r = &f; eat(f); r.has()`
   traps in `has`, because `eat` dropped `f` and zeroed its box.
-- `*r = value` is the store above, as the write-back of `*r = s2` is for a
-  struct today.
 - A `borrow` an export receives arrives in a box that synthesis zeroes when
   the export returns. A reference that escaped the export traps.
 - `&mut` of an affine variant field or element is the variant's box, a real
