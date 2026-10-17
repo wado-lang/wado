@@ -347,9 +347,9 @@ pub affine trait Drop with () {
   field-by-field drop synthesized for an affine type without one, and nothing
   for a copyable type. Cleanup runs before monomorphization, so it emits the
   call and cannot expand the drop in place.
-- A drop performs no effect. A body generic over `affine T` drops a `T`
-  wherever it discards one (`unwrap_or` discards its fallback), and a drop
-  with effects would perform them in a function that declares none.
+- A drop performs no effect. A generic body drops a `T` wherever it discards
+  one (`unwrap_or` discards its fallback), and a drop with effects would
+  perform them in a function that declares none.
 - A drop that must perform an effect no caller can observe names it with
   [`#[benign(E)]`](./spec-attributes.md#benigne-), which any function may
   carry already. `AsyncCall`'s drop is `#[benign(Subtask)]`. A flush is output
@@ -441,9 +441,7 @@ The optimizer may skip building a `rest` no one reads.
   `impl<affine T> From<Array<T>> for List<T>`, through which a list literal
   lowers; `Slice<affine T>`, `SliceRefIter<affine T>` and
   `SliceRefMutIter<affine T>`, which `&list`, `&mut list` and `iter_ref()`
-  return; and the `IntoIterator` impls for `&List<T>` and `&mut List<T>`. A
-  reference iterator holds only references, so it is copyable whatever its
-  element and implements the unmarked `Iterator`.
+  return; and the `IntoIterator` impls for `&List<T>` and `&mut List<T>`.
 - `Iterator`, `IntoIterator`, `Sequence`, `SliceValueIter<T>`,
   `TreeMap<K, V>`, `HashMap<K, V>`, `TreeSet<T>` and their iterators stay
   unmarked. `Sequence::at` returns an element by value, so `get`, `first` and
