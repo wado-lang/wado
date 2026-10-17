@@ -402,7 +402,8 @@ A package offers other packages its library world
 is the file `[package].lib` names, and a specifier that names the package
 imports that module. A dependency without `[package].lib` cannot be imported,
 unless it is a single `.wado` file named by a path source, which is its own
-entry module.
+entry module. Such a file is a package with no manifest, whatever package's
+tree holds it, so it declares no dependencies of its own.
 
 These two files are a package `geo`, with `lib = "src/lib.wado"`:
 

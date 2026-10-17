@@ -515,7 +515,10 @@ async fn manifest_and_component_index(
     };
     for (lib, fetched) in acquired {
         let package = index.packages.get_mut(&lib);
-        adopt_components(package.expect("the index holds each package the walk reached"), fetched);
+        adopt_components(
+            package.expect("the index holds each package the walk reached"),
+            fetched,
+        );
     }
 
     let manifest = project.map(|p| &p.manifest);

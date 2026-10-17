@@ -1971,9 +1971,9 @@ impl<'a, H: CompilerHost> ModuleLoader<'a, H> {
 
         let exported_file = split_exported_file(import_source);
         if let Some((package, file)) = exported_file
-            && let Err(refusal) = self
-                .interner
-                .resolve_exported_file(from_module_source, package, file)
+            && let Err(refusal) =
+                self.interner
+                    .resolve_exported_file(from_module_source, package, file)
             && refusal != ExportRefusal::NoSuchPackage
         {
             return Err(LoadError::UnexportedFile {

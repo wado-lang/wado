@@ -464,7 +464,11 @@ fn a_single_file_dependency_declares_nothing() {
         "pub fn leaf() -> i32 { return 1; }\n",
     );
     let host = root.join("host");
-    library(&host, "\"lib:leaf\" = { path = \"../leaf\" }\n", "pub fn h() {}\n");
+    library(
+        &host,
+        "\"lib:leaf\" = { path = \"../leaf\" }\n",
+        "pub fn h() {}\n",
+    );
     fs::write(
         host.join("shared.wado"),
         "use { leaf } from \"lib:leaf\";\npub fn shared() -> i32 { return leaf(); }\n",
@@ -496,7 +500,11 @@ fn a_dependency_file_reached_by_path_resolves_against_its_package() {
         "pub fn leaf() -> i32 { return 1; }\n",
     );
     let mid = root.join("mid");
-    library(&mid, "\"lib:leaf\" = { path = \"../leaf\" }\n", "pub fn m() {}\n");
+    library(
+        &mid,
+        "\"lib:leaf\" = { path = \"../leaf\" }\n",
+        "pub fn m() {}\n",
+    );
     fs::write(
         mid.join("src/part.wado"),
         "use { leaf } from \"lib:leaf\";\npub fn part() -> i32 { return leaf(); }\n",
