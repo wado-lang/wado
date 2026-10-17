@@ -117,10 +117,10 @@ pub fn bit_pattern(tensor: &String, dtype: &String, v: i32, width: i32) -> Resul
 
 /// Whether `text` is a float the text form spells as a word, as ONNX's parser
 /// reads one: `nan`, `inf` or `infinity` in any case, after an optional minus.
-pub fn is_float_word(text: &String) -> bool {
-    let unsigned = if text.starts_with("-") { text.substr_bytes(1, text.len()) } else { *text };
-    let word = unsigned.to_ascii_lowercase();
-    return word == "nan" || word == "inf" || word == "infinity";
+pub fn is_float_word<S: AsStrSlice>(text: S) -> bool {
+    let view = text.as_str_slice();
+    let word = view.strip_prefix("-").unwrap_or(view);
+    return word.eq_ignore_ascii_case("nan") || word.eq_ignore_ascii_case("inf") || word.eq_ignore_ascii_case("infinity");
 }
 
 /// One element's low `width` bytes, little-endian, as the protobuf form lays
