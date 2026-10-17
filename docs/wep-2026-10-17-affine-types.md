@@ -327,7 +327,7 @@ nothing.
 What a drop does is the type's `Drop`:
 
 ```wado
-pub affine trait Drop with _ {
+pub affine trait Drop with () {
     fn drop(self);
 }
 ```
@@ -341,15 +341,25 @@ pub affine trait Drop with _ {
   Component Model's `resource.drop` or runs a guest destructor.
 - Only an affine type implements `Drop`. A copyable type with one would run it
   for every copy.
-- Each impl brings its own effects (`with _`), and a scope exit that drops the
-  value performs them, as
-  [WEP: Resource Lifecycle](./wep-2026-01-12-resource-lifecycle.md) has a
-  function owning a resource declare its destructor's effects.
+- A drop performs no effect. A body generic over `affine T` drops a `T`
+  wherever it discards one (`unwrap_or` discards its fallback), and a drop
+  with effects would perform them in a function that declares none.
+- A drop that must perform an effect no caller can observe names it with
+  [`#[benign(E)]`](./spec-attributes.md#benigne-), which any function may
+  carry already. `AsyncCall`'s drop is `#[benign(Subtask)]`. A flush is output
+  a caller observes, so a writer that buffers ahead of a stream flushes by an
+  explicit call, not in its drop.
 
 A field-by-field drop is wrong for some types. `AsyncCall` is one: a
 `Subtask` traps on `drop` until it resolves, so an unawaited call must cancel
-it first, and its result buffer is linear memory no resource frees. A writer
-that buffers ahead of a stream must flush before the stream closes.
+it first, and its result buffer is linear memory no resource frees.
+
+A `FutureWritable` dropped before its write traps, with a message naming it.
+The Component Model traps on `future.drop-writable` before the end is done,
+and nothing a drop could write stands in for the value the reader waits for.
+A trap there is better than the alternative, a reader that waits forever. So a
+`?` or an early `return` between `Future::new()` and the write is a trap
+rather than a leak.
 
 ### A write returns what it did not deliver
 
@@ -464,7 +474,9 @@ D6 is settled: a resource is boxed, and the box is its cell.
 
 In [WEP: Resource Lifecycle](./wep-2026-01-12-resource-lifecycle.md), the open
 question of a user-defined drop for a type that is not a resource is answered:
-an affine type implements `Drop`.
+an affine type implements `Drop`. Its rule that a function owning a resource
+declares the destructor's effects is withdrawn: a drop performs none, or only
+benign ones.
 
 ## Roadmap
 
@@ -482,9 +494,9 @@ an affine type implements `Drop`.
    affine. An affine type implementing an unmarked trait is an error at the
    impl. The prelude traits named under Standard library are marked.
 4. [ ] `Drop`: a resource's `fn drop(self)` as its impl, a user impl on an
-   affine type, the fields left at the end of `drop` dropped one by one, the
-   effects a scope exit performs through it, and no partial move or `..base`
-   over a type that implements it.
+   affine type, the fields left at the end of `drop` dropped one by one, a
+   drop that performs no effect but a `#[benign]` one, and no partial move or
+   `..base` over a type that implements it.
 5. [ ] `List<affine T>`: the methods that move elements in
    `impl<affine T> List<T>`, `IntoIterator::into_iter(self)`, and
    `Iterator`'s `affine type Item`. The list drops its elements, and a store
@@ -518,7 +530,9 @@ an affine type implements `Drop`.
     `List<Fields>`.
 12. [ ] Cleanup drops a `Stream` and a `Future` the body does not move, which
     it excludes today
-    ([A `Stream` or `Future` handle nothing drops](./wep-2026-05-21-resource-ownership.md#a-stream-or-future-handle-nothing-drops)).
+    ([A `Stream` or `Future` handle nothing drops](./wep-2026-05-21-resource-ownership.md#a-stream-or-future-handle-nothing-drops)),
+    and a `FutureWritable` dropped before its write traps with a message
+    naming it. A fixture pins the `?` between `Future::new()` and the write.
 13. [ ] Spec: rewrite
     [Resource Ownership](./spec-components.md#resource-ownership), the
     resource paragraph of [Memory Model](./spec-memory.md), and the cheatsheet.
