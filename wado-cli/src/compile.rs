@@ -3,10 +3,11 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 
-use wado_manifest::DependencySource;
+use wado_manifest::{DependencySource, registry_url};
 
 use lexopt::Arg::Value;
-use wado_compiler::{Diagnostic, Severity, wit_bundle};
+use wado_compiler::{CompilerHost as _, Diagnostic, Severity, wit_bundle};
+use wado_lsp::host::discovery::normalize_path;
 use wado_lsp::host::{dependency_key, index_packages};
 
 use crate::args::{self, CliExit};
@@ -17,7 +18,7 @@ use crate::dep_component::{
     resolve_inline_git_dependencies,
 };
 use crate::git::materialize;
-use crate::kiln_driver::{PipelineError, PipelineOutcome};
+use crate::kiln_driver::{PipelineError, PipelineOutcome, ProviderError};
 use crate::kiln_provider::{CliGeneratorProvider, RegistryContext, relative_to};
 use crate::knobs::{CompileKnobOpt, CompileKnobs, EmbedOpt, EmbedOptions};
 use crate::manifest::{DiscoveryError, absolute, manifest_in, openable_dir, resolution_inputs};
@@ -667,14 +668,19 @@ pub(crate) async fn prepare_kiln(
         .as_ref()
         .map(|p| p.root.clone())
         .unwrap_or(entry_dir);
-    let (mut invocations, identities, inline_diagnostics) =
-        collect_inline_invocations_for_entry_with_identities(
-            entry_file,
-            entry_identity,
-            &manifest_root,
-            settled,
-        )
-        .await;
+    let Harvested {
+        invocations,
+        identities,
+        packages,
+        diagnostics: inline_diagnostics,
+    } = collect_inline_invocations_for_entry_with_identities(
+        entry_file,
+        entry_identity,
+        &manifest_root,
+        host,
+        settled,
+    )
+    .await;
 
     // Fail on a malformed clause here, with its own diagnostics, so the clear
     // error is not buried under the downstream failure of the unredirected
@@ -694,8 +700,20 @@ pub(crate) async fn prepare_kiln(
         return Ok(None);
     }
     let manifest = project.map_or_else(empty_manifest, |p| p.manifest);
-    rewrite_build_dep_modules(&mut invocations, &manifest, &manifest_root)
+    let dependencies = host.dependency_index();
+    let (theirs, mut ours): (Vec<_>, Vec<_>) = invocations
+        .into_iter()
+        .partition(|inv| packages.contains_key(&inv.decl_site().module));
+    rewrite_build_dep_modules(&mut ours, &manifest, &manifest_root)
         .map_err(PipelineError::Manifest)?;
+    for mut invocation in theirs {
+        let lib = &packages[&invocation.decl_site().module];
+        let package = dependencies.packages[lib].manifest.as_ref();
+        let package = package.map(|m| Path::new(&m.path));
+        adopt_dependency_invocation(&mut invocation, package, &manifest_root)?;
+        ours.push(invocation);
+    }
+    let mut invocations = ours;
     rewrite_local_dir_modules(&mut invocations, &manifest_root).map_err(PipelineError::Manifest)?;
     // A generator's outputs are products of this run, not a tree moving under
     // it. Declared here but applied when the watch is asked, so the order
@@ -897,6 +915,96 @@ pub(crate) fn rewrite_build_dep_modules(
     Ok(())
 }
 
+/// Make an invocation a source dependency declares this run's own: its
+/// generator resolves through the `[build-dependencies]` of the dependency's
+/// manifest at `package_manifest`, never the consumer's, and it writes into the
+/// consumer's tree, since a dependency's tree is not this run's to write.
+fn adopt_dependency_invocation(
+    invocation: &mut wado_compiler::kiln::Invocation,
+    package_manifest: Option<&Path>,
+    manifest_root: &Path,
+) -> Result<(), PipelineError> {
+    use wado_compiler::kiln::inline::DEFAULT_INLINE_OUTPUT_DIR_PREFIX;
+    use wado_compiler::kiln::{GeneratorModule, GeneratorSpec, InvocationPath};
+    let synthetic_id = invocation.decl_site().synthetic_id.clone();
+    invocation.output_dir = InvocationPath::normalize(&format!(
+        "{DEFAULT_INLINE_OUTPUT_DIR_PREFIX}/{synthetic_id}"
+    ));
+    let GeneratorModule::Spec(spec) = &invocation.module else {
+        return Ok(());
+    };
+    let package_root = package_manifest.and_then(Path::parent);
+    let manifest = match package_root {
+        Some(root) => manifest_in(root).map_err(PipelineError::Manifest)?,
+        None => None,
+    };
+    let unsupported = |message: String| PipelineError::Provider {
+        invocation: synthetic_id.clone(),
+        source: ProviderError::Unsupported { message },
+    };
+    let declared_in = package_manifest.map_or_else(
+        || "the dependency, which has no wado.toml".to_string(),
+        |path| path.display().to_string(),
+    );
+    let key = spec_key(&spec.spec);
+    let Some(dep) = manifest
+        .as_ref()
+        .and_then(|m| m.build_dependencies.get(key))
+    else {
+        // An inline source names the generator by itself (single-file mode).
+        if spec.version.is_some() || spec.registry.is_some() {
+            return Ok(());
+        }
+        return Err(unsupported(format!(
+            "kiln: generator `{}` is not in the [build-dependencies] of {declared_in}",
+            spec.spec
+        )));
+    };
+    let manifest = manifest.as_ref().expect("a declared entry has a manifest");
+    let package_root = package_root.expect("a manifest has a directory");
+    invocation.module = match &dep.source {
+        DependencySource::Path { .. } => {
+            let Some(local) = build_dep_generator_local_path(key, manifest, package_root)
+                .map_err(PipelineError::Manifest)?
+            else {
+                return Err(unsupported(format!(
+                    "kiln: build-dependency `{key}` of {declared_in} declares no \
+                     `{GENERATOR_WORLD_FQ}` world"
+                )));
+            };
+            let entry = normalize_path(&absolute(package_root).join(local.as_str()));
+            let rebased =
+                relative_to(&absolute(manifest_root), &entry).expect("both paths are absolute");
+            GeneratorModule::LocalPath(InvocationPath::normalize(&rebased))
+        }
+        DependencySource::Registry {
+            registry,
+            package,
+            version,
+        } => GeneratorModule::Spec(GeneratorSpec {
+            spec: package.clone(),
+            version: Some(version.clone()),
+            registry: Some(
+                registry_url(&manifest.registries, registry.as_deref())
+                    .cloned()
+                    .ok_or_else(|| {
+                        unsupported(format!(
+                            "kiln: {declared_in} has no `[registries].{}` for `{key}`",
+                            registry.as_deref().unwrap_or("default")
+                        ))
+                    })?,
+            ),
+        }),
+        _ => {
+            return Err(unsupported(format!(
+                "kiln: build-dependency `{key}` of {declared_in} must be a registry or path \
+                 entry; git and workspace sources are not supported"
+            )));
+        }
+    };
+    Ok(())
+}
+
 /// Rewrite each inline invocation whose `module` is a `LocalPath` pointing
 /// at a *directory* (a generator package) into a `LocalPath` pointing at
 /// that package's `[world]."core:kiln/generator"` entry file. This collapses
@@ -983,10 +1091,21 @@ pub fn empty_manifest() -> wado_manifest::Manifest {
     }
 }
 
-/// Harvest inline Kiln invocations from `entry_file` and its transitive local
-/// `.wado` imports, plus the `harvest_key → loader_identity` map the caller
-/// rewrites the redirect index through
-/// ([`wado_compiler::kiln::remap_decl_files`]).
+/// The inline Kiln invocations of an entry and every module it reaches.
+#[derive(Default)]
+struct Harvested {
+    invocations: Vec<wado_compiler::kiln::Invocation>,
+    /// Harvest key → loader identity, which the caller rewrites the redirect
+    /// index through ([`wado_compiler::kiln::remap_decl_files`]).
+    identities: wado_compiler::hashmap::IndexMap<String, String>,
+    /// Harvest key → the entry module of the source dependency the module
+    /// belongs to, where it belongs to one.
+    packages: wado_compiler::hashmap::IndexMap<String, String>,
+    diagnostics: Vec<wado_compiler::Diagnostic>,
+}
+
+/// Harvest inline Kiln invocations from `entry_file` and every Wado module it
+/// reaches through `host`, its own and its source dependencies'.
 ///
 /// Keys are spelled from `manifest_root`, so an invocation keeps one identity
 /// whether the entry is compiled on its own behalf or as a generator.
@@ -994,12 +1113,9 @@ async fn collect_inline_invocations_for_entry_with_identities(
     entry_file: &Path,
     entry_identity: Option<&str>,
     manifest_root: &Path,
+    host: &FilesystemCompilerHost,
     settled: &mut Settled,
-) -> (
-    Vec<wado_compiler::kiln::Invocation>,
-    wado_compiler::hashmap::IndexMap<String, String>,
-    Vec<wado_compiler::Diagnostic>,
-) {
+) -> Harvested {
     // The identity must be byte-identical to the name the compile that follows
     // gives its entry, since that is what the loader interns the redirect under.
     let entry_identity = entry_identity
@@ -1025,6 +1141,8 @@ async fn collect_inline_invocations_for_entry_with_identities(
         &entry_identity,
         entry.ast,
         settled,
+        &host.dependency_index(),
+        |path| host.package_root(path),
         async |identity| fs::read_to_string(entry_dir.join(identity)).ok(),
     )
     .await;
@@ -1036,7 +1154,12 @@ async fn collect_inline_invocations_for_entry_with_identities(
         &descriptors,
         "",
     );
-    (invocations, harvest.identities, diagnostics)
+    Harvested {
+        invocations,
+        identities: harvest.identities,
+        packages: harvest.packages,
+        diagnostics,
+    }
 }
 
 /// Remap `index` to loader identities via [`wado_compiler::kiln::remap_decl_files`], emit any
@@ -1389,12 +1512,20 @@ mod kiln_dir_module_tests {
         wado_compiler::hashmap::IndexMap<String, String>,
         Vec<wado_compiler::Diagnostic>,
     ) {
-        futures::executor::block_on(collect_inline_invocations_for_entry_with_identities(
-            entry,
-            None,
-            root,
-            &mut Settled::default(),
-        ))
+        let host = FilesystemCompilerHost::new(entry.parent().unwrap().to_path_buf());
+        let harvested =
+            futures::executor::block_on(collect_inline_invocations_for_entry_with_identities(
+                entry,
+                None,
+                root,
+                &host,
+                &mut Settled::default(),
+            ));
+        (
+            harvested.invocations,
+            harvested.identities,
+            harvested.diagnostics,
+        )
     }
 
     #[test]

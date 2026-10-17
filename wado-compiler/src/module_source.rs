@@ -185,34 +185,38 @@ impl ModuleSourceInterner {
         direct.chain(transitive).map(String::as_str)
     }
 
-    /// Bound the entry's package at `root_dir`, and each path dependency's at
-    /// the root keyed in `dependency_roots`, as the host answers them.
-    pub fn set_package_roots(
+    /// Bound the package of the entry at `entry` and of each path dependency at
+    /// the root `package_root` answers for it.
+    pub fn bound_packages(&mut self, entry: &str, package_root: impl Fn(&str) -> Option<String>) {
+        self.dependency_roots = self
+            .dependency_libs()
+            .filter_map(|lib| Some((package_root(lib)?, lib.to_string())))
+            .collect();
+        self.root_dir = package_root(entry);
+    }
+
+    /// The local module at `path`, placed in its package first if it waits on
+    /// one. `package_root` answers for a directory no placed module lies in, so
+    /// the host is asked once per directory.
+    pub fn place(
         &mut self,
-        root_dir: Option<String>,
-        dependency_roots: hashmap::IndexMap<String, String>,
-    ) {
-        self.root_dir = root_dir;
-        self.dependency_roots = dependency_roots;
-    }
-
-    /// Whether the local module at `path` waits on its package root, which the
-    /// host answers once per directory.
-    #[must_use]
-    pub fn needs_placing(&self, path: &InternedStr) -> bool {
-        !self.local_packages.contains_key(path)
-    }
-
-    /// The package root the host answered for a module in `path`'s directory,
-    /// where it has answered for one.
-    #[must_use]
-    pub fn dir_root(&self, path: &str) -> Option<Option<String>> {
-        self.dir_roots.get(module_parent_dir(path)).cloned()
+        path: &str,
+        package_root: impl FnOnce(&str) -> Option<String>,
+    ) -> ModuleSource {
+        let interned = self.intern(path);
+        if !self.local_packages.contains_key(&interned) {
+            let root = match self.dir_roots.get(module_parent_dir(path)) {
+                Some(root) => root.clone(),
+                None => package_root(path),
+            };
+            self.place_local(path, root);
+        }
+        self.local(path)
     }
 
     /// Place the local module at `path` in the package rooted at
     /// `package_root`, or with the modules in no package where it is `None`.
-    pub fn place_local(&mut self, path: &str, package_root: Option<String>) {
+    fn place_local(&mut self, path: &str, package_root: Option<String>) {
         self.dir_roots
             .insert(module_parent_dir(path).to_string(), package_root.clone());
         let package = if package_root == self.root_dir {
@@ -1349,41 +1353,52 @@ mod tests {
 
     #[test]
     fn a_local_module_outside_the_package_root_is_another_package() {
+        let root = |path: &str| match path.rsplit_once('/').map(|(dir, _)| dir) {
+            Some(".") => Some("/app".to_string()),
+            Some("../other") => Some("/other".to_string()),
+            _ => None,
+        };
+        let asked = std::cell::Cell::new(0);
         let mut interner = ModuleSourceInterner::new();
-        interner.set_package_roots(Some("/app".to_string()), hashmap::IndexMap::default());
-        let inside = interner.intern("./a.wado");
-        assert!(interner.needs_placing(&inside));
-        interner.place_local("./a.wado", Some("/app".to_string()));
-        interner.place_local("../other/o.wado", Some("/other".to_string()));
-        interner.place_local("../other/p.wado", Some("/other".to_string()));
-        interner.place_local("../loose/s.wado", None);
-        interner.place_local("../loose/t.wado", None);
-        assert!(!interner.needs_placing(&inside));
+        interner.bound_packages("./main.wado", root);
+        let place = |interner: &mut ModuleSourceInterner, path: &str| {
+            interner.place(path, |p| {
+                asked.set(asked.get() + 1);
+                root(p)
+            })
+        };
+        let a = place(&mut interner, "./a.wado");
+        let o = place(&mut interner, "../other/o.wado");
+        let p = place(&mut interner, "../other/p.wado");
+        let s = place(&mut interner, "../loose/s.wado");
+        let t = place(&mut interner, "../loose/t.wado");
+        assert_eq!(place(&mut interner, "./a.wado"), a);
+        assert_eq!(asked.get(), 3, "once per directory");
 
         let entry = interner.entry_point("main.wado");
-        let a = interner.local("./a.wado");
-        let o = interner.local("../other/o.wado");
-        let s = interner.local("../loose/s.wado");
         assert!(a.same_package(&entry));
         assert!(!o.same_package(&entry));
-        assert!(o.same_package(&interner.local("../other/p.wado")));
+        assert!(o.same_package(&p));
         assert!(!s.same_package(&entry));
-        assert!(s.same_package(&interner.local("../loose/t.wado")));
+        assert!(s.same_package(&t));
         assert!(a.is_entry_package() && !o.is_entry_package() && !s.is_entry_package());
 
         let mut unpackaged = ModuleSourceInterner::new();
-        unpackaged.place_local("../loose/s.wado", None);
-        unpackaged.place_local("../other/o.wado", Some("/other".to_string()));
+        unpackaged.bound_packages("../loose/main.wado", root);
+        let loose = unpackaged.place("../loose/s.wado", root);
+        let other = unpackaged.place("../other/o.wado", root);
         let entry = unpackaged.entry_point("main.wado");
-        let loose = unpackaged.local("../loose/s.wado");
         assert!(loose.same_package(&entry) && loose.is_entry_package());
-        assert!(!unpackaged.local("../other/o.wado").same_package(&entry));
+        assert!(!other.same_package(&entry));
 
         let mut with_dep = ModuleSourceInterner::new();
-        let roots = [("/other".to_string(), "../other/lib.wado".to_string())];
-        with_dep.set_package_roots(Some("/app".to_string()), roots.into_iter().collect());
-        with_dep.place_local("../other/o.wado", Some("/other".to_string()));
-        let o = with_dep.local("../other/o.wado");
+        let mut index = DependencyIndex::default();
+        index
+            .resolved
+            .insert("lib:other".to_string(), "../other/lib.wado".to_string());
+        with_dep.set_dependencies(index);
+        with_dep.bound_packages("./main.wado", root);
+        let o = with_dep.place("../other/o.wado", root);
         assert!(o.same_package(&with_dep.dependency("../other/lib.wado")));
         assert!(matches!(o, ModuleSource::Dependency { .. }));
     }

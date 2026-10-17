@@ -1418,13 +1418,9 @@ impl<'a, H: CompilerHost> ModuleLoader<'a, H> {
         )?
         .unwrap_or(tentative_entry_source);
         if let ModuleSource::EntryPoint { filename, .. } = &entry_module_source {
-            let root_dir = self.host.package_root(&canonicalize_entry_point(filename));
-            let dependency_roots = self
-                .interner
-                .dependency_libs()
-                .filter_map(|lib| Some((self.host.package_root(lib)?, lib.to_string())))
-                .collect();
-            self.interner.set_package_roots(root_dir, dependency_roots);
+            let entry = canonicalize_entry_point(filename);
+            self.interner
+                .bound_packages(&entry, |p| self.host.package_root(p));
         }
         self.entry_module_source = Some(entry_module_source.clone());
 
@@ -1956,16 +1952,11 @@ impl<'a, H: CompilerHost> ModuleLoader<'a, H> {
             return Ok(resolved);
         };
         if is_cwd_relative(import_source) {
-            if !resolved.is_user_authored() || !self.interner.needs_placing(path) {
+            if !resolved.is_user_authored() {
                 return Ok(resolved);
             }
             let path = path.to_string();
-            let package_root = match self.interner.dir_root(&path) {
-                Some(root) => root,
-                None => self.host.package_root(&path),
-            };
-            self.interner.place_local(&path, package_root);
-            return Ok(self.interner.local(&path));
+            return Ok(self.interner.place(&path, |p| self.host.package_root(p)));
         }
 
         let exported_file = split_exported_file(import_source);

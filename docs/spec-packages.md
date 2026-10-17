@@ -109,22 +109,23 @@ authors = ["Alice <alice@acme.example>"]
 wado-version = ">=0.5"
 ```
 
-| Field                  | Type     | Required | Meaning                                                            |
-| ---------------------- | -------- | -------- | ------------------------------------------------------------------ |
-| `name`                 | string   | yes      | The package's name                                                 |
-| `version`              | string   | yes      | The package's version, in semantic versioning (`0.2.0`)            |
-| `namespace`            | string   | no       | The organization or person the package belongs to                  |
-| `lib`                  | string   | no       | The entry module of the package's library world                    |
-| `description`          | string   | no       | A short summary                                                    |
-| `homepage`             | string   | no       | The home page URL; `repository` when absent                        |
-| `repository`           | string   | no       | The source repository URL, without a subdirectory                  |
-| `repository-directory` | string   | no       | The package's directory inside `repository`                        |
-| `documentation`        | string   | no       | The documentation URL; `repository` when absent                    |
-| `license`              | string   | no       | An SPDX license expression                                         |
-| `license-file`         | string   | no       | A file holding a license that has no SPDX identifier               |
-| `authors`              | string[] | no       | The people or organization responsible                             |
-| `wado-version`         | string   | no       | The compiler versions that can build the package (`>=0.5`)         |
-| `publish`              | bool     | no       | `false` keeps the package from being published; `true` when absent |
+| Field                  | Type     | Required | Meaning                                                                     |
+| ---------------------- | -------- | -------- | --------------------------------------------------------------------------- |
+| `name`                 | string   | yes      | The package's name                                                          |
+| `version`              | string   | yes      | The package's version, in semantic versioning (`0.2.0`)                     |
+| `namespace`            | string   | no       | The organization or person the package belongs to                           |
+| `lib`                  | string   | no       | The entry module of the package's library world                             |
+| `exports`              | string[] | no       | Further files other packages may import ([Exported Files](#exported-files)) |
+| `description`          | string   | no       | A short summary                                                             |
+| `homepage`             | string   | no       | The home page URL; `repository` when absent                                 |
+| `repository`           | string   | no       | The source repository URL, without a subdirectory                           |
+| `repository-directory` | string   | no       | The package's directory inside `repository`                                 |
+| `documentation`        | string   | no       | The documentation URL; `repository` when absent                             |
+| `license`              | string   | no       | An SPDX license expression                                                  |
+| `license-file`         | string   | no       | A file holding a license that has no SPDX identifier                        |
+| `authors`              | string[] | no       | The people or organization responsible                                      |
+| `wado-version`         | string   | no       | The compiler versions that can build the package (`>=0.5`)                  |
+| `publish`              | bool     | no       | `false` keeps the package from being published; `true` when absent          |
 
 `name` and `namespace` are each 1 to 64 characters from `[a-zA-Z0-9_-]`. The
 two together, `namespace:name`, are the package's coordinate: its identity in a
@@ -479,6 +480,30 @@ file in the package reaches a consumer only when the entry module re-exports it.
 use { Square, perimeter } from "lib:geo";   // error: `perimeter` is `pub` in a file the entry does not re-export
 ```
 
+### Exported Files
+
+`[package].exports` lists further files a consumer may import, each by its path
+from the package root:
+
+```toml
+[package]
+name = "geo"
+lib = "src/lib.wado"
+exports = ["src/shapes.wado"]
+```
+
+A consumer names an exported file as `"<specifier>/<path>"`, such as
+`"lib:geo/src/shapes.wado"`, and may import every `pub` item in it. A file that
+`lib` and `exports` both reach is one module, so its types are the same types
+either way.
+
+- An entry is a relative path with an extension. It has no empty, `.` or `..`
+  segment, no `\` and no leading `/`, and no entry is listed twice.
+- The path in a specifier is compared to the entries after NFC normalization,
+  with case compared exactly. A path no entry names is an error naming the
+  package, whether or not the file exists.
+- `wado publish` refuses a list naming a file the package does not carry.
+
 ### Source Dependencies
 
 A `path` or `git` dependency is Wado source. It is compiled into the consuming
@@ -527,8 +552,10 @@ test {
 }
 ```
 
-A consumer's `[dependencies]` do not reach into its dependencies. A `use` inside
-a dependency never resolves against them.
+A `use` resolves against the manifest of the package its module belongs to. A
+`use` inside a dependency resolves against that dependency's own
+`[dependencies]`, never the consumer's. A consumer cannot import a dependency's
+dependency without declaring it in its own manifest.
 
 ### The Library World as a Component
 

@@ -221,3 +221,92 @@ export fn run() with Stdout {
         .success()
         .stdout(predicate::str::contains("hi from generator"));
 }
+
+/// A clause in a source dependency's module resolves its generator through that
+/// dependency's own `[build-dependencies]`, which the consumer does not declare,
+/// and writes into the consumer's tree rather than the dependency's.
+#[test]
+fn a_dependency_clause_resolves_through_the_dependency_manifest() {
+    let tmp = tempfile::tempdir().unwrap();
+    let root = tmp.path();
+
+    let gen_pkg = root.join("gen");
+    fs::create_dir_all(gen_pkg.join("src")).unwrap();
+    fs::write(
+        gen_pkg.join("wado.toml"),
+        "[package]\nname = \"gen\"\nversion = \"0.1.0\"\n\n\
+         [world]\n\"core:kiln/generator\" = \"src/generator.wado\"\n",
+    )
+    .unwrap();
+    fs::write(
+        gen_pkg.join("src/generator.wado"),
+        r#"use { Request, Response, OutputFile, Error } from "core:kiln";
+
+export fn generate(req: Request) -> Result<Response, Error> {
+    return Result::Ok(Response {
+        files: [OutputFile {
+            path: "greeting.wado",
+            content: "pub fn greeting() -> String { return \"hi from a dependency\"; }",
+            is_entry: true,
+        }],
+    });
+}
+"#,
+    )
+    .unwrap();
+
+    let lib = root.join("lib");
+    fs::create_dir_all(lib.join("src")).unwrap();
+    fs::write(
+        lib.join("wado.toml"),
+        "[package]\nname = \"lib\"\nversion = \"0.1.0\"\nlib = \"src/lib.wado\"\n\n\
+         [build-dependencies]\n\"lib:gen\" = { path = \"../gen\" }\n",
+    )
+    .unwrap();
+    fs::write(lib.join("src/schema.idl"), "anything\n").unwrap();
+    fs::write(
+        lib.join("src/lib.wado"),
+        r#"use { greeting } from "./schema.idl" with { generator: { module: "lib:gen" } };
+
+pub fn hello() -> String {
+    return greeting();
+}
+"#,
+    )
+    .unwrap();
+
+    let app = root.join("app");
+    fs::create_dir_all(app.join("src")).unwrap();
+    fs::write(
+        app.join("wado.toml"),
+        "[package]\nname = \"app\"\nversion = \"0.1.0\"\n\n\
+         [world]\n\"wasi:cli/command\" = \"src/main.wado\"\n\n\
+         [dependencies]\n\"lib:lib\" = { path = \"../lib\" }\n",
+    )
+    .unwrap();
+    fs::write(
+        app.join("src/main.wado"),
+        r#"use { println, Stdout } from "core:cli";
+use { hello } from "lib:lib";
+
+export fn run() with Stdout {
+    println(hello());
+}
+"#,
+    )
+    .unwrap();
+
+    wado_in(&app)
+        .args(["run", "src/main.wado"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("hi from a dependency"));
+    assert!(
+        app.join("build/kiln").is_dir(),
+        "the consumer's tree holds the output"
+    );
+    assert!(
+        !lib.join("build").exists(),
+        "the dependency's tree is not written"
+    );
+}

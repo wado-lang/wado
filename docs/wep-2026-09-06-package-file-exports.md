@@ -118,6 +118,11 @@ submodule may use every `pub` item in it, whether or not the `lib` entry
 re-exports that item. `internal` stays package-local, and a file the allowlist
 does not name offers nothing.
 
+A file reached through the `lib` entry and through `exports` is one module, so
+each declaration in it stays one nominal type
+([Module Loader](./wep-2026-01-24-module-loader.md) §"Canonical module
+identity").
+
 A `pub` item that no exported file reaches is therefore public in name only. The
 compiler says so, as a lint in the unused family: the declaration claims an API
 the package does not offer, and the fix is to export the file or drop the item
@@ -216,6 +221,9 @@ without the exception.
 
 ## Roadmap
 
+Items 1 and 2 are done. Items 4 and 6 are done except for the parts each one
+names as left.
+
 1. `[package].exports` in `wado-manifest`: parse, and validate each entry as a
    package-root-relative path with an extension and no `..`, NFC-normalized.
    Done when a manifest round-trips it and `wado publish` refuses a list naming
@@ -234,7 +242,8 @@ without the exception.
    clause's paths on that dependency's package root as `ns:pkg@ver/path`, and
    key its redirect by the identity the loader gives that module. Done when a
    consuming build reports a dependency's malformed clause instead of ignoring
-   it.
+   it. Left: a clause's paths are anchored on the consumer's package root, so
+   they are still the dependency's path on this machine, not `ns:pkg@ver/path`.
 5. Consume a recorded output: resolve a dependency's invocation from the
    `<primary>.kiln.json` beside its committed output, as consume-only mode does.
    Done when `package-gale-highlight-wado` builds as a dependency with no
@@ -243,7 +252,10 @@ without the exception.
    `[build-dependencies]`, pin it in the consuming project's lock as part of the
    transitive build graph, and write the output into that project's tree. Done
    when a dependency that commits no output builds in a consumer, and a second
-   build of it hits a warm cache.
+   build of it hits a warm cache. Left: the lock pin. A path or registry
+   build-dependency of the dependency resolves; a git or workspace one is
+   refused. Until item 5, a dependency's clause runs even where its output is
+   committed.
 7. `#include_str` / `#include_bytes`: the same reference, resolved through the
    same path.
 8. Registry distribution: assets and recorded Kiln outputs travel in the
@@ -253,15 +265,6 @@ without the exception.
    reported in the unused family. Done when a package with a `pub` item outside
    its `lib` reach and outside `exports` reports it, and adding the file to
    `exports` clears it.
-
-## Known gaps
-
-- Whether a `lib` entry and an exported submodule that reach the same file
-  resolve to one module identity. Two identities would make one declaration two
-  nominal types, which
-  [Module Loader](./wep-2026-01-24-module-loader.md) §"Canonical module
-  identity" avoids for local paths; the package boundary has not been checked
-  against it.
 
 ## References
 
