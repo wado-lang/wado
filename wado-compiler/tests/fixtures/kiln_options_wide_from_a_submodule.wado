@@ -1,0 +1,19 @@
+// Wide options declared in a submodule and holding a record another submodule
+// declares: lifting them from memory finds each declaration where it is
+// written.
+
+use { greeting } from "./sub/kiln/value.schema"
+    with {
+        generator: {
+            module: "./sub/kiln/options/wide_submodule_generator.wado",
+            options: {
+                sizes: { small: 1 },
+                rules: [{ pattern: "x", axes: ["A", "B"] }],
+                on: false,
+            },
+        },
+    };
+
+test {
+    assert greeting() == "small=1;x=A,B;false";
+}

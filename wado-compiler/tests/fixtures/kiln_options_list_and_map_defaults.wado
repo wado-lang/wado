@@ -1,0 +1,14 @@
+// A list or map field may default to a literal, which a use site leaving the
+// field out receives.
+
+use { greeting } from "./sub/kiln/value.schema"
+    with {
+        generator: {
+            module: "./sub/kiln/options/defaults_generator.wado",
+            options: {},
+        },
+    };
+
+test {
+    assert greeting() == "large=3,small=1;a,b";
+}

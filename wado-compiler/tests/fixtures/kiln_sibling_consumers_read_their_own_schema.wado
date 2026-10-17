@@ -1,0 +1,12 @@
+// A path in a clause resolves against the file that writes it. Two consumers in
+// sibling directories both name `./grammar.g4`, and each reads its own: feat1's
+// returns 1 and feat2's 2. Had the two collapsed into one invocation, or shared
+// one output directory, both would return the same number.
+
+use { v1 } from "./sub/kiln/siblings/feat1/mod.wado";
+use { v2 } from "./sub/kiln/siblings/feat2/mod.wado";
+
+test {
+    assert v1() == 1;
+    assert v2() == 2;
+}

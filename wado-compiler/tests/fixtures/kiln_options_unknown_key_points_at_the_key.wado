@@ -1,0 +1,20 @@
+// A misspelled options key squiggles the key itself, and stops the build
+// before the generator runs on options its use site did not write.
+
+use { greeting } from "./sub/kiln/value.schema"
+    with {
+        generator: {
+            module: "./sub/kiln/options/verbose_generator.wado",
+            options: { verbsoe: false, verbose: false },
+        },
+    };
+
+test {
+    assert greeting() == "hi";
+}
+
+__DATA__
+{
+    "compile_error": ":8:24: analysis error: kiln: unknown options field `options.verbsoe`",
+    "compile_errors_not_contains": ["generator host error"]
+}

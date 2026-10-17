@@ -1,0 +1,13 @@
+// A generator's entry may re-export `Options` from the module that declares it.
+
+use { greeting } from "./sub/kiln/value.schema"
+    with {
+        generator: {
+            module: "./sub/kiln/options/reexport_generator.wado",
+            options: { sizes: { small: 1, large: 3 } },
+        },
+    };
+
+test {
+    assert greeting() == "large=3,small=1";
+}

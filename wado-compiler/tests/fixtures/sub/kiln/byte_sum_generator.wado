@@ -1,0 +1,17 @@
+// A Kiln generator whose `hello()` returns the sum of its input's bytes.
+
+use { Request, Response, OutputFile, Error, read_all } from "core:kiln";
+
+export fn generate(req: Request) -> Result<Response, Error> {
+    let mut sum = 0;
+    for let b of read_all(req.primary.content) as List<u8> {
+        sum += b as i32;
+    }
+    return Result::Ok(Response {
+        files: [OutputFile {
+            path: "out.wado",
+            content: `pub fn hello() -> i32 { return ${sum}; }`,
+            is_entry: true,
+        }],
+    });
+}

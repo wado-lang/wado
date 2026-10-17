@@ -1,0 +1,16 @@
+// A map value of the wrong type squiggles the key it sits under.
+
+use { greeting } from "./sub/kiln/value.schema"
+    with {
+        generator: {
+            module: "./sub/kiln/options/map_generator.wado",
+            options: { sizes: { small: true } },
+        },
+    };
+
+test {
+    assert greeting() == "small=1";
+}
+
+__DATA__
+{"compile_error": ":7:33: analysis error: kiln: `options.sizes.small` expected i32, got bool"}

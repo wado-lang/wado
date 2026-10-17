@@ -1,0 +1,16 @@
+// A value of the wrong type squiggles its own key, not the table's.
+
+use { greeting } from "./sub/kiln/value.schema"
+    with {
+        generator: {
+            module: "./sub/kiln/options/verbose_generator.wado",
+            options: { verbose: 1 },
+        },
+    };
+
+test {
+    assert greeting() == "hi";
+}
+
+__DATA__
+{"compile_error": ":7:24: analysis error: kiln: `options.verbose` expected bool, got integer"}

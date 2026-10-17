@@ -1,0 +1,14 @@
+// A repeated key in a map default keeps its last value, as the `TreeMap` its
+// pairs build does.
+
+use { greeting } from "./sub/kiln/value.schema"
+    with {
+        generator: {
+            module: "./sub/kiln/options/repeated_key_generator.wado",
+            options: {},
+        },
+    };
+
+test {
+    assert greeting() == "small=2";
+}

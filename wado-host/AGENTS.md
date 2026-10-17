@@ -28,7 +28,8 @@ The native host pieces that `wado-cli`, `wado-dev-tools`, and
 - `kiln/` — the Kiln pipeline (`driver.rs`), the generator runtime
   (`runtime.rs`), the compiled-component cache (`component_cache.rs`), and the
   per-invocation cache state (`metadata.rs`). `wado` feeds the pipeline its own
-  generator provider; `local.rs` feeds it the `./` generators a fixture names.
+  generator provider; `local.rs` feeds it the generators a fixture names,
+  each compiled after its own invocations have run.
 - `sync.rs` — how production code locks a mutex: recover a poisoned guard. Test
   mocks may still `unwrap`.
 - `atomic_write.rs` — write a file through a staged sibling and a rename.

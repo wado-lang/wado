@@ -1,0 +1,12 @@
+// `generate` sees its input cut to the extent `probe` declared, so a generator
+// reading past it gets the end of the stream, never bytes the cache key does
+// not cover. Were the payload line to reach it, `hello()` would not compile.
+
+use { hello } from "./sub/kiln/header_and_payload.schema"
+    with {
+        generator: { module: "./sub/kiln/header_probe_generator.wado" },
+    };
+
+test {
+    assert hello() == 7;
+}

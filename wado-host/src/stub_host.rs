@@ -22,6 +22,9 @@ pub struct HostStubs {
     /// The `[dependencies]` a bare `use ... from "name"` binds to: name → the
     /// dependency's `[package].lib` path, relative to the host's base.
     pub dependencies: IndexMap<String, String>,
+    /// The `[build-dependencies]` a clause's `module: "lib:name"` names: the
+    /// nickname → the generator's `.wado` file, relative to the host's base.
+    pub build_dependencies: IndexMap<String, String>,
 }
 
 /// A [`FilesystemCompilerHost`] that answers the dependency index and the
@@ -71,6 +74,12 @@ impl StubHost {
     pub fn with_stubs(mut self, stubs: HostStubs) -> Self {
         self.stubs = stubs;
         self
+    }
+
+    /// What this host answers in place of the environment.
+    #[must_use]
+    pub fn stubs(&self) -> &HostStubs {
+        &self.stubs
     }
 
     /// The diagnostics emitted since this host was created.

@@ -1,0 +1,14 @@
+// A `TreeMap<String, V>` option takes an object whose keys are the author's
+// own, and the generator reads them in key order.
+
+use { greeting } from "./sub/kiln/value.schema"
+    with {
+        generator: {
+            module: "./sub/kiln/options/map_generator.wado",
+            options: { sizes: { small: 1, large: 3 } },
+        },
+    };
+
+test {
+    assert greeting() == "large=3,small=1";
+}

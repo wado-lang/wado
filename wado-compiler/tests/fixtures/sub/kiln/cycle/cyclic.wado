@@ -1,0 +1,19 @@
+// A Kiln generator whose own source is produced by an invocation that reaches
+// back to it: there is no order to run the two in.
+
+use { Request, Response, OutputFile, Error } from "core:kiln";
+use { answer } from "./loop.spec"
+    with {
+        generator: { module: "./cyclic.wado" },
+    };
+
+export fn generate(req: Request) -> Result<Response, Error> {
+    let _ = req.primary.path;
+    return Result::Ok(Response {
+        files: [OutputFile {
+            path: "model.wado",
+            content: `pub fn model() -> i32 { return ${answer()}; }`,
+            is_entry: true,
+        }],
+    });
+}

@@ -1,0 +1,24 @@
+// A Kiln generator whose list option defaults to what a call computes, which is
+// not a literal even though the call takes one.
+
+use { Request, Response, OutputFile, Error } from "core:kiln";
+
+export struct Options {
+    pub tags: List<String> = twice(["a"]),
+}
+
+fn twice(l: List<String>) -> List<String> {
+    let mut out = l;
+    out.extend(&l);
+    return out;
+}
+
+export fn generate(req: Request<Options>) -> Result<Response, Error> {
+    return Result::Ok(Response {
+        files: [OutputFile {
+            path: "greeting.wado",
+            content: `pub fn greeting() -> String { return "${req.options.tags.join(",")}"; }`,
+            is_entry: true,
+        }],
+    });
+}
