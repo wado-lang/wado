@@ -18,7 +18,7 @@ pub const DEFAULT_COLLECTOR: Collector = Collector::Copying;
 pub const DEFAULT_GC_HEAP_INITIAL_SIZE: u64 = 256 << 20;
 
 /// Enable the Wasm features what Wado emits may use.
-pub fn enable_wasm_features(config: &mut Config) {
+fn enable_wasm_features(config: &mut Config) {
     config.wasm_component_model_gc(true);
     config.wasm_component_model_more_async_builtins(true);
     config.wasm_component_model_async_stackful(true);

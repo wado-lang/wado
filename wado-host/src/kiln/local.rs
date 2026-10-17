@@ -8,7 +8,7 @@ use std::sync::{Arc, Mutex, OnceLock};
 
 use indexmap::IndexMap;
 use wado_compiler::hashmap::IndexSet;
-use wado_compiler::kiln::inline::DEFAULT_INLINE_OUTPUT_DIR_PREFIX;
+use wado_compiler::kiln::inline::default_output_dir;
 use wado_compiler::kiln::{
     GeneratorModule, Invocation, InvocationIndex, InvocationPath, content_hash, generator_identity,
     hex_digest, remap_decl_files, spec_key,
@@ -149,13 +149,9 @@ fn refuse_own_output_dirs(invocations: &[Invocation]) -> Vec<Diagnostic> {
     invocations
         .iter()
         .filter(|i| {
-            !i.decl_sites.iter().any(|site| {
-                i.output_dir
-                    == InvocationPath::normalize(&format!(
-                        "{DEFAULT_INLINE_OUTPUT_DIR_PREFIX}/{}",
-                        site.synthetic_id
-                    ))
-            })
+            !i.decl_sites
+                .iter()
+                .any(|site| i.output_dir == default_output_dir(&site.synthetic_id))
         })
         .map(|i| Diagnostic {
             severity: Severity::Error,
