@@ -309,4 +309,28 @@ export fn run() with Stdout {
         !lib.join("build").exists(),
         "the dependency's tree is not written"
     );
+
+    // Reached by a path rather than by its specifier, the file is still the
+    // dependency's, and so is its clause.
+    fs::remove_dir_all(app.join("build")).unwrap();
+    fs::write(
+        app.join("src/main.wado"),
+        r#"use { println, Stdout } from "core:cli";
+use { hello } from "../../lib/src/lib.wado";
+
+export fn run() with Stdout {
+    println(hello());
+}
+"#,
+    )
+    .unwrap();
+    wado_in(&app)
+        .args(["run", "src/main.wado"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("hi from a dependency"));
+    assert!(
+        !lib.join("build").exists(),
+        "the dependency's tree is not written"
+    );
 }

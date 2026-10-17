@@ -99,15 +99,18 @@ where
                     let placed = interner.place(&path, &package_root);
                     (placed, resolve_module_path(&key, import))
                 }
-                ModuleSource::Dependency { ref path, ref pkg } => {
+                ModuleSource::Dependency { ref path, .. } => {
                     let child_key = key_of(entry_key, path);
-                    packages.insert(child_key.clone(), pkg.to_string());
                     (child, child_key)
                 }
                 // A back-reference to the entry folds onto it; anything else
                 // is not Wado source this walk reads.
                 _ => continue,
             };
+            // A relative path into a dependency's tree places the module there.
+            if let ModuleSource::Dependency { pkg, .. } = &child {
+                packages.insert(child_key.clone(), pkg.to_string());
+            }
             identities.insert(child_key.clone(), decl_file_of(&child).to_string());
             queue.push_back((child_key, child, None));
         }

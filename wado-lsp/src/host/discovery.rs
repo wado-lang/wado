@@ -379,6 +379,19 @@ pub fn package_lib_entry(dep_path: &Path) -> Result<PathBuf, String> {
     Ok(dep_path.join(lib))
 }
 
+/// The root and manifest of the package whose `[package].lib` is `entry`, a
+/// dependency's entry module. `None` for a single-file dependency, which is a
+/// package of its own with no manifest, whatever package's tree holds it.
+#[must_use]
+pub fn lib_package(entry: &Path) -> Option<(PathBuf, Manifest)> {
+    let root = nearest_manifest_dir(entry)?;
+    let text = std::fs::read_to_string(root.join(MANIFEST_FILENAME)).ok()?;
+    let manifest = resolve_member_manifest(&root, &text).ok()?;
+    let lib = manifest.package.as_ref()?.lib.as_ref()?;
+    let is_lib = normalize_path(&root.join(lib)) == normalize_path(&absolutize(entry));
+    is_lib.then_some((root, manifest))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

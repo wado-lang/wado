@@ -23,7 +23,7 @@ use wado_compiler::{
     CompilerHost, CompilerOptions, DependencyIndex, Diagnostic, Severity, SourceError,
 };
 use wado_lsp::host::dependency_index_from;
-use wado_lsp::host::discovery::{absolutize, normalize_path};
+use wado_lsp::host::discovery::{absolutize, lib_package, normalize_path};
 
 use crate::COMPILER_STACK_SIZE;
 use crate::cache::write_atomic;
@@ -343,8 +343,8 @@ impl Dependencies {
         let absolute = |entry: &String| normalize_path(&absolutize(&base.join(entry)));
         Self {
             roots: index
-                .resolved
-                .values()
+                .packages
+                .keys()
                 .map(|entry| dependency_root(&absolute(entry)))
                 .collect(),
             components: index.components.values().map(absolute).collect(),
@@ -372,21 +372,13 @@ impl Dependencies {
 /// package's root where `entry` is that package's `lib`, and otherwise the
 /// directory holding `entry`, a single-file dependency.
 fn dependency_root(entry: &Path) -> PathBuf {
-    let directory = entry
-        .parent()
-        .expect("an entry module is a file, so it has a parent")
-        .to_path_buf();
-    let Ok(Some(package)) = load_nearest_manifest(entry) else {
-        return directory;
-    };
-    let root = normalize_path(&absolutize(&package.root));
-    let is_lib = package
-        .manifest
-        .package
-        .as_ref()
-        .and_then(|p| p.lib.as_ref())
-        .is_some_and(|lib| normalize_path(&root.join(lib)) == entry);
-    if is_lib { root } else { directory }
+    match lib_package(entry) {
+        Some((root, _)) => normalize_path(&root),
+        None => entry
+            .parent()
+            .expect("an entry module is a file, so it has a parent")
+            .to_path_buf(),
+    }
 }
 
 /// The compiler host an evaluated program compiles on: it serves the files of

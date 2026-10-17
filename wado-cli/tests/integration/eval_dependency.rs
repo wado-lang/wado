@@ -62,6 +62,42 @@ fn an_evaluated_program_imports_the_callers_dependency() {
         .success();
 }
 
+/// The files of a dependency's own dependency are served too, as a compile of
+/// the caller reads them.
+#[test]
+fn an_evaluated_program_reaches_a_dependencys_dependency() {
+    let tmp = tempfile::tempdir().unwrap();
+    write_packages(tmp.path(), "hello", "hello");
+    let leaf = tmp.path().join("leaf");
+    fs::create_dir_all(leaf.join("src")).unwrap();
+    fs::write(
+        leaf.join("wado.toml"),
+        "[package]\nname = \"leaf\"\nversion = \"0.1.0\"\nlib = \"src/lib.wado\"\n",
+    )
+    .unwrap();
+    fs::write(
+        leaf.join("src/lib.wado"),
+        "pub fn part(s: String) -> String { return s; }\n",
+    )
+    .unwrap();
+    let greet = tmp.path().join("greet");
+    fs::write(
+        greet.join("wado.toml"),
+        "[package]\nname = \"greet\"\nversion = \"0.1.0\"\nlib = \"src/lib.wado\"\n\n\
+         [dependencies]\n\"lib:leaf\" = { path = \"../leaf\" }\n",
+    )
+    .unwrap();
+    fs::write(
+        greet.join("src/lib.wado"),
+        "use { part } from \"lib:leaf\";\npub fn hello() -> String { return part(\"hello\"); }\n",
+    )
+    .unwrap();
+    wado_in(&tmp.path().join("app"))
+        .args(["test", "app_test.wado"])
+        .assert()
+        .success();
+}
+
 #[test]
 fn editing_the_dependency_misses_the_cache() {
     let tmp = tempfile::tempdir().unwrap();

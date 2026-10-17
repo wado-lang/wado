@@ -222,15 +222,12 @@ pub fn index_packages(index: &mut DependencyIndex, mut entries: Vec<PathBuf>, ba
         if index.packages.contains_key(&lib) {
             continue;
         }
-        let own = match discovery::nearest_manifest_dir(&entry) {
-            Some(dir) => match read_manifest(&dir) {
-                Ok(manifest) => {
-                    let (own, reached) = package_index(&manifest, &dir, &base_abs);
-                    entries.extend(reached);
-                    own
-                }
-                Err(error) => unreadable_manifest(&dir, error),
-            },
+        let own = match discovery::lib_package(&entry) {
+            Some((root, manifest)) => {
+                let (own, reached) = package_index(&manifest, &root, &base_abs);
+                entries.extend(reached);
+                own
+            }
             None => DependencyIndex::default(),
         };
         index.packages.insert(lib, own);

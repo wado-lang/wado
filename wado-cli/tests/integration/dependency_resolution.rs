@@ -452,6 +452,67 @@ fn an_undeclared_hyphenated_namespace_names_the_manifest() {
         ));
 }
 
+/// A single-file dependency is its own package, with no manifest, even inside
+/// another package's tree: that package's `[dependencies]` are not its own.
+#[test]
+fn a_single_file_dependency_declares_nothing() {
+    let tmp = tempfile::tempdir().unwrap();
+    let root = tmp.path();
+    library(
+        &root.join("leaf"),
+        "",
+        "pub fn leaf() -> i32 { return 1; }\n",
+    );
+    let host = root.join("host");
+    library(&host, "\"lib:leaf\" = { path = \"../leaf\" }\n", "pub fn h() {}\n");
+    fs::write(
+        host.join("shared.wado"),
+        "use { leaf } from \"lib:leaf\";\npub fn shared() -> i32 { return leaf(); }\n",
+    )
+    .unwrap();
+    library(
+        &root.join("app"),
+        "\"lib:shared\" = { path = \"../host/shared.wado\" }\n",
+        "use { shared } from \"lib:shared\";\npub fn api() -> i32 { return shared(); }\n",
+    );
+    wado_in(&root.join("app"))
+        .args(["check", "src/lib.wado"])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains(
+            "dependency 'lib:leaf' is not declared",
+        ));
+}
+
+/// A dependency's file reached by a path is still its module, and resolves
+/// against the dependency's `[dependencies]`.
+#[test]
+fn a_dependency_file_reached_by_path_resolves_against_its_package() {
+    let tmp = tempfile::tempdir().unwrap();
+    let root = tmp.path();
+    library(
+        &root.join("leaf"),
+        "",
+        "pub fn leaf() -> i32 { return 1; }\n",
+    );
+    let mid = root.join("mid");
+    library(&mid, "\"lib:leaf\" = { path = \"../leaf\" }\n", "pub fn m() {}\n");
+    fs::write(
+        mid.join("src/part.wado"),
+        "use { leaf } from \"lib:leaf\";\npub fn part() -> i32 { return leaf(); }\n",
+    )
+    .unwrap();
+    library(
+        &root.join("app"),
+        "\"lib:mid\" = { path = \"../mid\" }\n",
+        "use { part } from \"../../mid/src/part.wado\";\npub fn api() -> i32 { return part(); }\n",
+    );
+    wado_in(&root.join("app"))
+        .args(["check", "src/lib.wado"])
+        .assert()
+        .success();
+}
+
 /// A dependency's bare import resolves against its own `[dependencies]`, at
 /// any depth, and never against its consumer's.
 #[test]

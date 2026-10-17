@@ -105,7 +105,10 @@ pub(crate) fn resolution_inputs(project: &ProjectManifest) -> Vec<PathBuf> {
             Err(_) => None,
         };
         for dependency in manifest.iter().flat_map(|m| m.dependencies.values()) {
-            if let DependencySource::Path { path, .. } = &dependency.source {
+            // A single-file dependency has no manifest of its own to watch.
+            if let DependencySource::Path { path, .. } = &dependency.source
+                && root.join(path).is_dir()
+            {
                 pending.push(root.join(path));
             }
         }

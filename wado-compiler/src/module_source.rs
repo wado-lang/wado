@@ -186,10 +186,12 @@ impl ModuleSourceInterner {
     }
 
     /// Bound the package of the entry at `entry` and of each path dependency at
-    /// the root `package_root` answers for it.
+    /// the root `package_root` answers for it. A single-file dependency has no
+    /// manifest, so it claims no root: the tree around it is not its package.
     pub fn bound_packages(&mut self, entry: &str, package_root: impl Fn(&str) -> Option<String>) {
         self.dependency_roots = self
             .dependency_libs()
+            .filter(|lib| self.package(lib).manifest.is_some())
             .filter_map(|lib| Some((package_root(lib)?, lib.to_string())))
             .collect();
         self.root_dir = package_root(entry);
