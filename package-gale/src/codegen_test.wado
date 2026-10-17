@@ -3454,6 +3454,29 @@ A : 'a' ; B : 'b' ;
     assert got == "true ab => (s a b)\nfalse ab => error\nfalse b => (s b)\n";
 }
 
+test "a negative offset to `_input.LT` and `_input.LA` counts back from the last consumed token" {
+    let got = parses(
+        "grammar T;
+s : A {System.out.println(_input.LA(-1) != _input.LA(1));} B {System.out.println(_input.LT(-1).getText() + _input.LT(-2).getText());} EOF ;
+A : 'a' ; B : 'b' ;
+",
+        "s",
+        ["ab"],
+    );
+    assert got == "ab => (s a b) [true\nba\n]\n";
+}
+
+test "a diagnostic names a literal-alias token by its literal, whether it was missing or expected" {
+    let got = printed("grammar T;
+s : A LB B EOF | B (LB | RB) EOF ;
+A : 'a' ; B : 'b' ; LB : '{' ; RB : '}' ;
+", "for let input of [\"ab\", \"bb\"] {
+    for let d of &parse(input).diagnostics { println(d.message); }
+}
+");
+    assert got == "missing '{'\nexpected '{' or '}'; no viable alternative\n";
+}
+
 test "past a shared first token, the next tokens pick the alternative through groups, loops, labels, optionals, sets and rule calls" {
     let got = parses_each("grammar T;
 r : A (B|C) D EOF | A (B|C) E EOF ;
