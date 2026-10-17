@@ -373,6 +373,10 @@ impl<'a> Resources<'a> {
 }
 
 impl HeldTypes for Resources<'_> {
+    fn key(&self, type_id: TypeId) -> TypeKey {
+        self.tt.borrow().type_key(type_id)
+    }
+
     fn held(&self, type_id: TypeId) -> Held {
         match self.layout(type_id) {
             Layout::Resource(..) => Held::Resource,
@@ -494,6 +498,10 @@ struct Stores<'a> {
 }
 
 impl HeldTypes for Stores<'_> {
+    fn key(&self, type_id: TypeId) -> TypeKey {
+        self.resources.key(type_id)
+    }
+
     fn held(&self, type_id: TypeId) -> Held {
         let resolved = self.resources.tt.borrow().get(type_id).clone();
         match resolved {

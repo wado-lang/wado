@@ -4,7 +4,7 @@
 //! here decides the rest, so the phases cannot disagree on an aggregate.
 
 use crate::defs::DefId;
-use crate::tir::TypeId;
+use crate::tir::{TypeId, TypeKey};
 
 /// What a type holds, one level down.
 pub(crate) enum Held {
@@ -25,6 +25,9 @@ pub(crate) enum Held {
 /// A phase's answer to what a type holds.
 pub(crate) trait HeldTypes {
     fn held(&self, type_id: TypeId) -> Held;
+
+    /// `type_id`'s identity: many ids can name one type.
+    fn key(&self, type_id: TypeId) -> TypeKey;
 }
 
 /// Whether `type_id` is, or holds at any depth, a resource `types` counts.
@@ -52,8 +55,9 @@ struct Open {
 impl<T: HeldTypes> Walk<'_, T> {
     /// Whether `type_id` is one of `args`, or is inside one of them.
     fn within(&self, type_id: TypeId, args: &[TypeId]) -> bool {
+        let key = self.types.key(type_id);
         args.iter().any(|&arg| {
-            arg == type_id
+            self.types.key(arg) == key
                 || matches!(self.types.held(arg), Held::Members { args, .. } if self.within(type_id, &args))
         })
     }
