@@ -3265,7 +3265,7 @@ impl<'a> PurityWalker<'a> {
             return false;
         };
         self.binding_span(expr)
-            .is_some_and(|span| clause.start <= span.start && span.end <= clause.end)
+            .is_some_and(|span| clause.encloses(&span))
     }
 
     /// Whether `expr` is a closure the clause being walked writes, or a

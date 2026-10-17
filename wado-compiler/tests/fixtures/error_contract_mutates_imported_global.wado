@@ -1,0 +1,20 @@
+// A global another module declares is not the clause's own, wherever its
+// declaration sits in that module's text. Here its offsets fall inside the
+// clause's.
+use { COUNT } from "./sub/contract_imported_global_dep.wado";
+
+fn checked(n: i32) -> i32
+    contract counted: { COUNT += 1; true }
+{
+    return n;
+}
+
+export fn run() {
+    checked(1);
+}
+
+__DATA__
+{
+    "compile_error": "error_contract_mutates_imported_global.wado:7:25: error: contract clause cannot mutate 'COUNT', which reaches state it did not create",
+    "compile_error_codes": ["CONTRACT_WRITE"]
+}
