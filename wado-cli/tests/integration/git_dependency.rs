@@ -109,6 +109,76 @@ fn git_dependency_resolves_fetches_and_runs() {
         .success();
 }
 
+/// A path dependency's own git dependency is materialized by the consumer's
+/// build, as the consumer's own is.
+#[test]
+fn a_dependencys_git_dependency_is_materialized() {
+    let tmp = tempfile::tempdir().unwrap();
+    let root = tmp.path();
+    let cache = root.join("wado-cache");
+
+    let greet = root.join("greet");
+    fs::create_dir_all(greet.join("src")).unwrap();
+    fs::write(
+        greet.join("wado.toml"),
+        "[package]\nname = \"greet\"\nversion = \"0.1.0\"\nlib = \"src/lib.wado\"\n",
+    )
+    .unwrap();
+    fs::write(
+        greet.join("src/lib.wado"),
+        "pub fn hello() -> String {\n    return \"hello through mid\";\n}\n",
+    )
+    .unwrap();
+    git(&greet, &["init", "-q", "-b", "main"]);
+    git(&greet, &["add", "-A"]);
+    git(&greet, &["commit", "-q", "-m", "init"]);
+    let url = format!("file://{}", greet.display());
+
+    let mid = root.join("mid");
+    fs::create_dir_all(mid.join("src")).unwrap();
+    fs::write(
+        mid.join("wado.toml"),
+        format!(
+            "[package]\nname = \"mid\"\nversion = \"0.1.0\"\nlib = \"src/lib.wado\"\n\n\
+             [dependencies]\n\"lib:greet\" = {{ git = \"{url}\", ref = \"main\" }}\n"
+        ),
+    )
+    .unwrap();
+    fs::write(
+        mid.join("src/lib.wado"),
+        "use { hello } from \"lib:greet\";\npub fn mid() -> String { return hello(); }\n",
+    )
+    .unwrap();
+    wado_in(&mid)
+        .env("WADO_ROOT", &cache)
+        .arg("update")
+        .assert()
+        .success();
+
+    let app = root.join("app");
+    fs::create_dir_all(app.join("src")).unwrap();
+    fs::write(
+        app.join("wado.toml"),
+        "[package]\nname = \"app\"\nversion = \"0.1.0\"\n\n\
+         [world]\n\"wasi:cli/command\" = \"src/main.wado\"\n\n\
+         [dependencies]\n\"lib:mid\" = { path = \"../mid\" }\n",
+    )
+    .unwrap();
+    fs::write(
+        app.join("src/main.wado"),
+        "use { println, Stdout } from \"core:cli\";\n\
+         use { mid } from \"lib:mid\";\n\n\
+         export fn run() with Stdout {\n    println(mid());\n}\n",
+    )
+    .unwrap();
+    wado_in(&app)
+        .env("WADO_ROOT", &cache)
+        .args(["run", "src/main.wado"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("hello through mid"));
+}
+
 /// A monorepo git dependency: one repository holds several packages in
 /// subdirectories, and `directory` selects which one. `update` reads the
 /// subdirectory's `wado.toml`, `run` compiles that package's library into the

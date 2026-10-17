@@ -1417,16 +1417,35 @@ mod tests {
         assert!(loose.same_package(&entry) && loose.is_entry_package());
         assert!(!other.same_package(&entry));
 
-        let mut with_dep = ModuleSourceInterner::new();
-        let mut index = DependencyIndex::default();
-        index
-            .resolved
-            .insert("lib:other".to_string(), "../other/lib.wado".to_string());
-        with_dep.set_dependencies(index);
-        with_dep.bound_packages("./main.wado", root);
-        let o = with_dep.place("../other/o.wado", root);
-        assert!(o.same_package(&with_dep.dependency("../other/lib.wado")));
+        // A dependency whose package has a manifest claims its root; a
+        // single-file one, which has none, claims nothing around it.
+        let with_dep = |lib: &str, manifest: Option<DependencyManifest>| {
+            let mut interner = ModuleSourceInterner::new();
+            let mut index = DependencyIndex::default();
+            index
+                .resolved
+                .insert("lib:other".to_string(), lib.to_string());
+            let package = DependencyIndex {
+                manifest,
+                ..DependencyIndex::default()
+            };
+            index.packages.insert(lib.to_string(), package);
+            interner.set_dependencies(index);
+            interner.bound_packages("./main.wado", root);
+            interner
+        };
+        let manifest = DependencyManifest {
+            path: "/other/wado.toml".to_string(),
+            error: None,
+        };
+        let mut packaged = with_dep("../other/lib.wado", Some(manifest));
+        let o = packaged.place("../other/o.wado", root);
+        assert!(o.same_package(&packaged.dependency("../other/lib.wado")));
         assert!(matches!(o, ModuleSource::Dependency { .. }));
+        let mut single = with_dep("../other/single.wado", None);
+        let o = single.place("../other/o.wado", root);
+        assert!(!o.same_package(&single.dependency("../other/single.wado")));
+        assert!(matches!(o, ModuleSource::Local { .. }));
     }
 
     #[test]

@@ -1,3 +1,4 @@
+use std::collections::BTreeSet;
 use std::fmt::Write as _;
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -7,14 +8,14 @@ use wado_manifest::{DependencySource, MANIFEST_FILENAME, registry_url};
 
 use lexopt::Arg::Value;
 use wado_compiler::{CompilerHost as _, Diagnostic, Severity, wit_bundle};
-use wado_lsp::host::discovery::normalize_path;
+use wado_lsp::host::discovery::{DependencyEntry, lib_package, normalize_path, resolve_all};
 use wado_lsp::host::{dependency_key, index_packages};
 
 use crate::args::{self, CliExit};
 use crate::build_dep::{GENERATOR_WORLD_FQ, locked_generator_versions, spec_key};
 use crate::compiler_host::FilesystemCompilerHost;
 use crate::dep_component::{
-    Acquisition, fetch_component_dependencies, resolve_inline_component_dependencies,
+    Acquisition, Resolution, fetch_component_dependencies, resolve_inline_component_dependencies,
     resolve_inline_git_dependencies,
 };
 use crate::git::materialize;
@@ -484,41 +485,37 @@ async fn manifest_and_component_index(
     sources: &[&str],
     tier: Acquisition,
 ) -> Result<wado_compiler::DependencyIndex, String> {
-    // Materialize any locked-but-cold git worktrees first, so the offline git
-    // arm below resolves them without a separate `wado fetch`. The analysis tier
-    // joins in, and leaves a clone that failed for that arm to report.
-    if let Some(project) = project {
-        let materialized = materialize_git_dependencies(&project.manifest, &project.root).await;
-        if tier == Acquisition::Build {
-            materialized?;
-        }
-    }
-
+    // Acquire for every package of the build, the consumer's and each source
+    // dependency's at any depth, before indexing, so the offline pass below
+    // finds their git worktrees warm. A package is acquired before its own
+    // dependencies are listed, since a git one only resolves once materialized.
+    let mut acquired = Vec::new();
     let mut index = match project {
         Some(project) => {
-            wado_lsp::host::dependency_index_from(&project.manifest, &project.root, base_path)
+            let own = acquire_package(&project.manifest, &project.root, tier).await?;
+            let mut pending = source_entries(&project.manifest, &project.root);
+            let mut seen = BTreeSet::new();
+            while let Some(entry) = pending.pop() {
+                let lib = dependency_key(&entry, base_path);
+                if !seen.insert(lib.clone()) {
+                    continue;
+                }
+                let Some((root, manifest)) = lib_package(&entry) else {
+                    continue;
+                };
+                acquired.push((lib, acquire_package(&manifest, &root, tier).await?));
+                pending.extend(source_entries(&manifest, &root));
+            }
+            let mut index =
+                wado_lsp::host::dependency_index_from(&project.manifest, &project.root, base_path);
+            adopt_components(&mut index, own);
+            index
         }
         None => wado_compiler::DependencyIndex::default(),
     };
-
-    // The offline pass above already placed warm manifest registry deps in
-    // `components` and cold ones in `unresolved`. Upgrade the cold ones by
-    // pulling them and clearing the stale hint.
-    if let Some(project) = project {
-        let has_registry_dep = project
-            .manifest
-            .dependencies
-            .values()
-            .any(|d| matches!(d.source, wado_manifest::DependencySource::Registry { .. }));
-        if has_registry_dep {
-            let fetched =
-                fetch_component_dependencies(&project.manifest, &project.root, tier).await?;
-            for (name, path) in fetched.resolved {
-                index.unresolved.swap_remove(&name);
-                index.components.insert(name, path);
-            }
-            index.unresolved.extend(fetched.unresolved);
-        }
+    for (lib, fetched) in acquired {
+        let package = index.packages.get_mut(&lib);
+        adopt_components(package.expect("the index holds each package the walk reached"), fetched);
     }
 
     let manifest = project.map(|p| &p.manifest);
@@ -545,6 +542,51 @@ async fn manifest_and_component_index(
     }
 
     Ok(index)
+}
+
+/// Acquire per `tier` what the package at `root`, whose manifest is
+/// `manifest`, depends on: its locked git worktrees materialized, so the offline
+/// git arm resolves them without a separate `wado fetch`, and its registry
+/// components pulled. The analysis tier leaves a clone that failed for that arm
+/// to report.
+async fn acquire_package(
+    manifest: &wado_manifest::Manifest,
+    root: &Path,
+    tier: Acquisition,
+) -> Result<Resolution, String> {
+    let materialized = materialize_git_dependencies(manifest, root).await;
+    if tier == Acquisition::Build {
+        materialized?;
+    }
+    let has_registry_dep = manifest
+        .dependencies
+        .values()
+        .any(|d| matches!(d.source, DependencySource::Registry { .. }));
+    if !has_registry_dep {
+        return Ok(Resolution::default());
+    }
+    fetch_component_dependencies(manifest, root, tier).await
+}
+
+/// The entry module of each source dependency `manifest` resolves.
+fn source_entries(manifest: &wado_manifest::Manifest, root: &Path) -> Vec<PathBuf> {
+    resolve_all(manifest, root)
+        .into_iter()
+        .filter_map(|(_, entry)| match entry {
+            Ok(DependencyEntry::Source(path)) => Some(path),
+            Ok(DependencyEntry::Component(_)) | Err(_) => None,
+        })
+        .collect()
+}
+
+/// Upgrade the registry dependencies the offline pass left cold in `index`
+/// with the components `fetched` pulled, clearing their stale hints.
+fn adopt_components(index: &mut wado_compiler::DependencyIndex, fetched: Resolution) {
+    for (name, path) in fetched.resolved {
+        index.unresolved.swap_remove(&name);
+        index.components.insert(name, path);
+    }
+    index.unresolved.extend(fetched.unresolved);
 }
 
 /// Bind the specifier `name` to `path` in `map`, where every file of the build
