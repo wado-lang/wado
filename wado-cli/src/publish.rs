@@ -116,9 +116,19 @@ pub async fn run(opts: PublishOptions) -> Result<(), CliExit> {
     if let Some(workspace) = workspace_in(&cwd).map_err(CliExit::error)? {
         return publish_workspace(&cwd, &workspace, opts.dry_run).await;
     }
-    let project = discover(&cwd)
-        .map_err(CliExit::error)?
-        .ok_or_else(|| CliExit::error("no wado.toml found"))?;
+    let Some(project) = discover(&cwd).map_err(CliExit::error)? else {
+        let enclosing = cwd
+            .ancestors()
+            .find(|dir| dir.join(WORKSPACE_FILENAME).is_file());
+        return Err(CliExit::error(match enclosing {
+            Some(root) => format!(
+                "no wado.toml found; to publish the workspace, run `wado publish` from its \
+                 root:\n  {}",
+                root.display()
+            ),
+            None => "no wado.toml found".to_string(),
+        }));
+    };
     if let Some(root) = governing_workspace_root_dir(&project.root) {
         return Err(CliExit::error(format!(
             "this package belongs to a workspace; run `wado publish` from the workspace \

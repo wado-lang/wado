@@ -23,14 +23,23 @@ use crate::host::discovery::resolve_member_manifest;
 ///
 /// Describing a generator analyzes its whole source, so each entry file is
 /// described once and every clause naming it answers from that verdict.
+///
+/// `packages` is the harvest's: a clause of another package names its
+/// generator through that package's `[build-dependencies]`.
 pub(super) async fn check_all<H: CompilerHost>(
     invocations: &[Invocation],
     manifest_root: &Path,
+    packages: &IndexMap<String, Option<String>>,
     host: &H,
 ) {
     let mut described: IndexMap<PathBuf, Option<OptionsDescriptor>> = IndexMap::default();
     for invocation in invocations {
-        let Some(entry) = generator_entry(invocation, manifest_root, host).await else {
+        let declared_in = match packages.get(&invocation.decl_site().module) {
+            Some(manifest) => manifest.as_deref().and_then(|m| Path::new(m).parent()),
+            None => Some(manifest_root),
+        };
+        let Some(entry) = generator_entry(invocation, manifest_root, declared_in, host).await
+        else {
             continue;
         };
         if !described.contains_key(&entry) {
@@ -60,9 +69,13 @@ pub(super) async fn check_all<H: CompilerHost>(
 /// paths a cache artifact names. These the user wrote in their own source and
 /// manifest, where `../gen` is an ordinary sibling package, and the loader
 /// follows the same spellings for a plain `use`.
+///
+/// A path is spelled from `manifest_root`, and a specifier is declared in the
+/// manifest in `declared_in`, `None` for a clause in no package.
 async fn generator_entry<H: CompilerHost>(
     invocation: &Invocation,
     manifest_root: &Path,
+    declared_in: Option<&Path>,
     host: &H,
 ) -> Option<PathBuf> {
     match &invocation.module {
@@ -71,12 +84,13 @@ async fn generator_entry<H: CompilerHost>(
             Some(package_generator_entry(&abs, host).await.unwrap_or(abs))
         }
         GeneratorModule::Spec(spec) => {
-            let manifest = read_manifest(manifest_root, host).await?;
+            let root = declared_in?;
+            let manifest = read_manifest(root, host).await?;
             let dep = manifest.build_dependencies.get(spec_key(&spec.spec))?;
             let DependencySource::Path { path, .. } = &dep.source else {
                 return None;
             };
-            package_generator_entry(&manifest_root.join(path), host).await
+            package_generator_entry(&root.join(path), host).await
         }
     }
 }

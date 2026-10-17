@@ -1005,12 +1005,9 @@ fn adopt_dependency_invocation(
     package: Option<(&Path, &wado_manifest::Manifest)>,
     manifest_root: &Path,
 ) -> Result<(), PipelineError> {
-    use wado_compiler::kiln::inline::DEFAULT_INLINE_OUTPUT_DIR_PREFIX;
     use wado_compiler::kiln::{GeneratorModule, GeneratorSpec, InvocationPath};
     let synthetic_id = invocation.decl_site().synthetic_id.clone();
-    invocation.output_dir = InvocationPath::normalize(&format!(
-        "{DEFAULT_INLINE_OUTPUT_DIR_PREFIX}/{synthetic_id}"
-    ));
+    invocation.write_into_consumer();
     let GeneratorModule::Spec(spec) = &invocation.module else {
         return Ok(());
     };

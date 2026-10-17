@@ -2185,6 +2185,30 @@ fn test_publish_dry_run_reports_every_broken_world() {
         .stderr(predicate::str::contains("exports nothing").count(2));
 }
 
+/// Run from a directory of a workspace that is no member, publish names the
+/// workspace root to run from.
+#[test]
+fn test_publish_outside_a_member_names_the_workspace_root() {
+    let tmp = tempfile::tempdir().unwrap();
+    let dir = tmp.path();
+    std::fs::write(
+        dir.join("wado-workspace.toml"),
+        "[workspace]\nmembers = [\"a\"]\n",
+    )
+    .unwrap();
+    std::fs::create_dir_all(dir.join("tools")).unwrap();
+
+    wado_in(&dir.join("tools"))
+        .arg("publish")
+        .arg("--dry-run")
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains(format!(
+            "run `wado publish` from its root:\n  {}",
+            dir.display()
+        )));
+}
+
 #[test]
 fn test_lib_duplicate_export_name_rejected() {
     let tmp = tempfile::tempdir().unwrap();

@@ -61,7 +61,7 @@ pub async fn prepare_invocations<H: CompilerHost>(
     let manifest_root_str = manifest_root.to_string_lossy();
     // Emitting the clause diagnostics here is what reaches the editor: no later
     // phase re-runs this collector, and each snapshot builds once.
-    let (invocations, diagnostics) = collect_inline_invocations(
+    let (mut invocations, diagnostics) = collect_inline_invocations(
         harvest.modules.iter().map(|(k, ast)| (k.as_str(), ast)),
         &descriptors,
         &manifest_root_str,
@@ -69,8 +69,16 @@ pub async fn prepare_invocations<H: CompilerHost>(
     for diagnostic in diagnostics {
         host.emit_diagnostic(diagnostic);
     }
+    for invocation in &mut invocations {
+        if harvest
+            .packages
+            .contains_key(&invocation.decl_site().module)
+        {
+            invocation.write_into_consumer();
+        }
+    }
 
-    options::check_all(&invocations, &manifest_root, host).await;
+    options::check_all(&invocations, &manifest_root, &harvest.packages, host).await;
 
     if let Some(index) = override_index {
         return index;
