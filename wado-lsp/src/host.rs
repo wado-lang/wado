@@ -147,12 +147,17 @@ impl CompilerHost for FilesystemCompilerHost {
     /// An invalid manifest yields an empty index that says why, so the editor
     /// keeps answering and each dependency import reports the manifest.
     fn dependency_index(&self) -> DependencyIndex {
-        let Some(dir) = discovery::nearest_manifest_dir(&self.base_path) else {
-            return DependencyIndex::default();
-        };
-        match read_manifest(&dir) {
-            Ok(manifest) => dependency_index_from(&manifest, &dir, &self.base_path),
-            Err(error) => unreadable_manifest(&dir, error),
+        match discovery::nearest_manifest_dir(&self.base_path) {
+            Some(dir) => self.package_index(&dir.display().to_string()),
+            None => DependencyIndex::default(),
+        }
+    }
+
+    fn package_index(&self, root: &str) -> DependencyIndex {
+        let dir = Path::new(root);
+        match read_manifest(dir) {
+            Ok(manifest) => dependency_index_from(&manifest, dir, &self.base_path),
+            Err(error) => unreadable_manifest(dir, error),
         }
     }
 

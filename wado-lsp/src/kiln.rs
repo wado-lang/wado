@@ -49,7 +49,7 @@ pub async fn prepare_invocations<H: CompilerHost>(
         entry_ast.clone(),
         &wado_compiler::hashmap::IndexSet::default(),
         &host.dependency_index(),
-        |path| host.package_root(path),
+        host,
         async |identity| {
             let bytes = host.load_source(identity).await.ok()?;
             String::from_utf8(bytes).ok()

@@ -287,7 +287,9 @@ A build runs the clauses of every source dependency it compiles, at any depth.
 Such a clause names its generator through the dependency's own
 `[build-dependencies]`, so the consumer declares none of them. Its output is
 written into the consumer's `build/kiln`, whatever `output_dir` the clause
-gives, and the dependency's tree is never written to.
+gives, and the dependency's tree is never written to. A clause in another
+package's file reached by a path is that package's, declared as a dependency or
+not.
 
 A dependency that commits its output ships it with the `<primary>.kiln.json`
 beside it, and a consuming build uses that output without running the generator

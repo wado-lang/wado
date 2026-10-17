@@ -356,6 +356,10 @@ impl CompilerHost for FilesystemCompilerHost {
         })
     }
 
+    fn package_index(&self, root: &str) -> wado_compiler::DependencyIndex {
+        self.inner.package_index(root)
+    }
+
     fn env_var(&self, name: &str) -> Option<String> {
         self.run.observe_untracked();
         std::env::var(name).ok()

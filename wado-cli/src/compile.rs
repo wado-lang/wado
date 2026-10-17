@@ -754,19 +754,18 @@ pub(crate) async fn prepare_kiln(
         .map_err(PipelineError::Manifest)?;
     let mut package_manifests = wado_compiler::hashmap::IndexMap::default();
     for mut invocation in theirs {
-        let lib = packages[&invocation.decl_site().module].as_str();
-        if !package_manifests.contains_key(lib) {
-            let path = dependencies.packages[lib].manifest.as_ref();
-            let root = path.and_then(|m| Path::new(&m.path).parent());
+        let path = packages[&invocation.decl_site().module].as_deref();
+        if !package_manifests.contains_key(&path) {
+            let root = path.and_then(|path| Path::new(path).parent());
             let manifest = match root {
                 Some(root) => manifest_in(root)
                     .map_err(PipelineError::Manifest)?
                     .map(|m| (root.to_path_buf(), m)),
                 None => None,
             };
-            package_manifests.insert(lib, manifest);
+            package_manifests.insert(path, manifest);
         }
-        let package = package_manifests[lib].as_ref();
+        let package = package_manifests[&path].as_ref();
         let package = package.map(|(root, m)| (root.as_path(), m));
         adopt_dependency_invocation(&mut invocation, package, &manifest_root)?;
         ours.push(invocation);
@@ -1147,9 +1146,9 @@ struct Harvested {
     /// Harvest key → loader identity, which the caller rewrites the redirect
     /// index through ([`wado_compiler::kiln::remap_decl_files`]).
     identities: wado_compiler::hashmap::IndexMap<String, String>,
-    /// Harvest key → the entry module of the source dependency the module
-    /// belongs to, where it belongs to one.
-    packages: wado_compiler::hashmap::IndexMap<String, String>,
+    /// Harvest key → the `wado.toml` of the package the module belongs to,
+    /// where that is not the entry's ([`wado_compiler::kiln::Harvest::packages`]).
+    packages: wado_compiler::hashmap::IndexMap<String, Option<String>>,
     diagnostics: Vec<wado_compiler::Diagnostic>,
 }
 
@@ -1192,7 +1191,7 @@ async fn collect_inline_invocations_for_entry_with_identities(
         entry.ast,
         settled,
         dependencies,
-        |path| host.package_root(path),
+        host,
         async |identity| fs::read_to_string(entry_dir.join(identity)).ok(),
     )
     .await;

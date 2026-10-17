@@ -521,6 +521,81 @@ fn a_dependency_file_reached_by_path_resolves_against_its_package() {
         .success();
 }
 
+/// A file of a package no manifest declares, reached by a path, resolves
+/// against that package's `[dependencies]`, never its importer's.
+#[test]
+fn an_undeclared_package_file_resolves_against_its_own_manifest() {
+    let tmp = tempfile::tempdir().unwrap();
+    let root = tmp.path();
+    library(
+        &root.join("leaf"),
+        "",
+        "pub fn leaf() -> i32 { return 1; }\n",
+    );
+    let mid = root.join("mid");
+    let part = "use { leaf } from \"lib:leaf\";\npub fn part() -> i32 { return leaf(); }\n";
+    let app_lib =
+        "use { part } from \"../../mid/src/part.wado\";\npub fn api() -> i32 { return part(); }\n";
+    library(
+        &mid,
+        "\"lib:leaf\" = { path = \"../leaf\" }\n",
+        "pub fn m() {}\n",
+    );
+    fs::write(mid.join("src/part.wado"), part).unwrap();
+    library(&root.join("app"), "", app_lib);
+    wado_in(&root.join("app"))
+        .args(["check", "src/lib.wado"])
+        .assert()
+        .success();
+
+    library(&mid, "", "pub fn m() {}\n");
+    fs::write(mid.join("src/part.wado"), part).unwrap();
+    library(
+        &root.join("app"),
+        "\"lib:leaf\" = { path = \"../leaf\" }\n",
+        app_lib,
+    );
+    wado_in(&root.join("app"))
+        .args(["check", "src/lib.wado"])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains(format!(
+            "dependency 'lib:leaf' is not declared in [dependencies] of {}",
+            mid.join("wado.toml").canonicalize().unwrap().display()
+        )));
+}
+
+/// A file in no package, reached by a path, declares no dependencies, whatever
+/// its importer declares.
+#[test]
+fn a_file_in_no_package_declares_nothing() {
+    let tmp = tempfile::tempdir().unwrap();
+    let root = tmp.path();
+    library(
+        &root.join("leaf"),
+        "",
+        "pub fn leaf() -> i32 { return 1; }\n",
+    );
+    fs::create_dir_all(root.join("loose")).unwrap();
+    fs::write(
+        root.join("loose/part.wado"),
+        "use { leaf } from \"lib:leaf\";\npub fn part() -> i32 { return leaf(); }\n",
+    )
+    .unwrap();
+    library(
+        &root.join("app"),
+        "\"lib:leaf\" = { path = \"../leaf\" }\n",
+        "use { part } from \"../../loose/part.wado\";\npub fn api() -> i32 { return part(); }\n",
+    );
+    wado_in(&root.join("app"))
+        .args(["check", "src/lib.wado"])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains(
+            "dependency 'lib:leaf' is not declared: no wado.toml governs this module",
+        ));
+}
+
 /// A dependency's bare import resolves against its own `[dependencies]`, at
 /// any depth, and never against its consumer's.
 #[test]

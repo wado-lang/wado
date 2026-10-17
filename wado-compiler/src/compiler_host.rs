@@ -567,6 +567,14 @@ pub trait CompilerHost: Send + Sync {
         None
     }
 
+    /// The index of the package rooted at `root`, as [`Self::package_root`]
+    /// names it, built as [`Self::dependency_index`] builds the entry's. Asked
+    /// for a package a module lies in that no manifest declares, once per
+    /// package. Empty by default.
+    fn package_index(&self, _root: &str) -> DependencyIndex {
+        DependencyIndex::default()
+    }
+
     /// Read an environment variable at compile time, for `#[param(from_env =
     /// "...")]` resolution (see `wep-2026-04-26-compile-time-params.md`).
     ///

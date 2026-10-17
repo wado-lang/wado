@@ -1429,8 +1429,7 @@ impl<'a, H: CompilerHost> ModuleLoader<'a, H> {
         .unwrap_or(tentative_entry_source);
         if let ModuleSource::EntryPoint { filename, .. } = &entry_module_source {
             let entry = canonicalize_entry_point(filename);
-            self.interner
-                .bound_packages(&entry, |p| self.host.package_root(p));
+            self.interner.bound_packages(&entry, self.host);
         }
         self.entry_module_source = Some(entry_module_source.clone());
 
@@ -1966,7 +1965,7 @@ impl<'a, H: CompilerHost> ModuleLoader<'a, H> {
                 return Ok(resolved);
             }
             let path = path.to_string();
-            return Ok(self.interner.place(&path, |p| self.host.package_root(p)));
+            return Ok(self.interner.place(&path, self.host));
         }
 
         let exported_file = split_exported_file(import_source);

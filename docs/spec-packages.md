@@ -556,7 +556,9 @@ test {
 A `use` resolves against the manifest of the package its module belongs to. A
 `use` inside a dependency resolves against that dependency's own
 `[dependencies]`, never the consumer's. A consumer cannot import a dependency's
-dependency without declaring it in its own manifest.
+dependency without declaring it in its own manifest. The same holds for a file
+reached by a path: it belongs to the package whose tree holds it, declared as a
+dependency or not, and a file in no package declares nothing.
 
 ### The Library World as a Component
 

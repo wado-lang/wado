@@ -7,7 +7,7 @@ use crate::ast::{ImportAttributes, Item, Module};
 use crate::compiler_host::{Code, DependencyIndex, Diagnostic, Severity};
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::kiln::inline::InvocationIndex;
-use crate::module_source::{ModuleSource, ModuleSourceInterner};
+use crate::module_source::{ModuleSource, ModuleSourceInterner, PackageHost};
 use crate::name::{
     canonicalize_entry_point, decl_file_of, resolve_import_with_entry, resolve_module_path,
 };
@@ -21,10 +21,9 @@ pub struct Harvest {
     /// Module path → the identity the loader resolves that module under, which
     /// is what an [`InvocationIndex`] key must be ([`remap_decl_files`]).
     pub identities: IndexMap<String, String>,
-    /// Module path → the entry module of the source dependency it belongs to,
-    /// as `DependencyIndex::packages` keys it. A module of the walk's own
-    /// package is absent.
-    pub packages: IndexMap<String, String>,
+    /// Module path → the `wado.toml` of the package it belongs to, `None` for
+    /// a module in no package. A module of the walk's own package is absent.
+    pub packages: IndexMap<String, Option<String>>,
 }
 
 /// Walk the module graph from `entry_key` and `entry_ast`, parsing every Wado
@@ -38,35 +37,34 @@ pub struct Harvest {
 /// Each import resolves as the loader resolves it, so the identity is the one
 /// the loader gives the module.
 ///
-/// `load` receives the loader identity, and `package_root` answers what
-/// `CompilerHost::package_root` does, so a relatively reached file is placed in
-/// the package the loader places it in. The caller supplies the entry's tree
+/// `load` receives the loader identity, and `host` answers about packages as
+/// the loader's host does, so a relatively reached file is placed in the
+/// package the loader places it in. The caller supplies the entry's tree
 /// because the loader does not read the entry through a host either.
 ///
 /// A module that fails to load, or whose parse recovered from an error, is
 /// skipped: a mid-edit source must not trigger codegen side effects. So is a
 /// key in `settled`, which an earlier walk from the same root harvested along
 /// with everything it imports.
-pub async fn harvest_module_graph<R, L>(
+pub async fn harvest_module_graph<L>(
     entry_key: &str,
     entry_identity: &str,
     entry_ast: Module,
     settled: &IndexSet<String>,
     dependencies: &DependencyIndex,
-    package_root: R,
+    host: &impl PackageHost,
     load: L,
 ) -> Harvest
 where
-    R: Fn(&str) -> Option<String>,
     L: AsyncFn(&str) -> Option<String>,
 {
     let mut modules = IndexMap::<String, Module>::default();
     let mut identities = IndexMap::<String, String>::default();
-    let mut packages = IndexMap::<String, String>::default();
+    let mut packages = IndexMap::<String, Option<String>>::default();
 
     let mut interner = ModuleSourceInterner::new();
     interner.set_dependencies(dependencies.clone());
-    interner.bound_packages(&canonicalize_entry_point(entry_identity), &package_root);
+    interner.bound_packages(&canonicalize_entry_point(entry_identity), host);
     // The entry's identity must stay byte-identical to its `EntryPoint.filename`
     // (interned verbatim by the loader), so the redirect it keys is found at
     // resolve time — do not normalize it here.
@@ -96,7 +94,7 @@ where
             let (child, child_key) = match child {
                 ModuleSource::Local { path, .. } if is_cwd_relative(import) => {
                     let path = path.to_string();
-                    let placed = interner.place(&path, &package_root);
+                    let placed = interner.place(&path, host);
                     (placed, resolve_module_path(&key, import))
                 }
                 ModuleSource::Dependency { ref path, .. } => {
@@ -107,9 +105,10 @@ where
                 // is not Wado source this walk reads.
                 _ => continue,
             };
-            // A relative path into a dependency's tree places the module there.
-            if let ModuleSource::Dependency { pkg, .. } = &child {
-                packages.insert(child_key.clone(), pkg.to_string());
+            // A relative path into another package's tree places the module there.
+            if !child.is_entry_package() {
+                let manifest = interner.dependency_manifest(&child);
+                packages.insert(child_key.clone(), manifest.map(|m| m.path.clone()));
             }
             identities.insert(child_key.clone(), decl_file_of(&child).to_string());
             queue.push_back((child_key, child, None));
@@ -199,6 +198,8 @@ pub fn remap_decl_files(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::compiler_host::DependencyManifest;
+    use crate::module_source::TestPackages;
 
     fn block_on<F: Future>(future: F) -> F::Output {
         futures::executor::block_on(future)
@@ -206,6 +207,13 @@ mod tests {
 
     fn ast_of(source: &str) -> Module {
         parse(source).ast
+    }
+
+    fn no_packages() -> TestPackages<impl Fn(&str) -> Option<String>> {
+        TestPackages {
+            root: |_: &str| None,
+            indexes: IndexMap::default(),
+        }
     }
 
     /// The walk with no dependencies, every module in no package.
@@ -223,7 +231,7 @@ mod tests {
             entry_ast,
             settled,
             &dependencies,
-            |_| None,
+            &no_packages(),
             load,
         )
         .await
@@ -400,7 +408,14 @@ mod tests {
     #[test]
     fn walks_into_a_dependency_under_the_identity_the_loader_gives_it() {
         let lib = "../shapes/src/lib.wado";
-        let mut shapes = DependencyIndex::default();
+        let manifest = "../shapes/wado.toml";
+        let mut shapes = DependencyIndex {
+            manifest: Some(DependencyManifest {
+                path: manifest.to_string(),
+                error: None,
+            }),
+            ..DependencyIndex::default()
+        };
         shapes.exports.insert(
             "src/point.wado".to_string(),
             "../shapes/src/point.wado".to_string(),
@@ -428,7 +443,7 @@ mod tests {
             ),
             &IndexSet::default(),
             &dependencies,
-            |_| None,
+            &no_packages(),
             exact(sources),
         ));
 
@@ -446,8 +461,8 @@ mod tests {
             "../shapes/src/helper.wado",
         );
         assert_eq!(
-            harvest.packages.get("../shapes/src/helper.wado").unwrap(),
-            lib
+            harvest.packages["../shapes/src/helper.wado"].as_deref(),
+            Some(manifest)
         );
         assert!(!harvest.packages.contains_key("main.wado"));
     }

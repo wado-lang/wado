@@ -333,4 +333,22 @@ export fn run() with Stdout {
         !lib.join("build").exists(),
         "the dependency's tree is not written"
     );
+
+    // Undeclared, the package still resolves its clause through its own manifest.
+    fs::remove_dir_all(app.join("build")).unwrap();
+    fs::write(
+        app.join("wado.toml"),
+        "[package]\nname = \"app\"\nversion = \"0.1.0\"\n\n\
+         [world]\n\"wasi:cli/command\" = \"src/main.wado\"\n",
+    )
+    .unwrap();
+    wado_in(&app)
+        .args(["run", "src/main.wado"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("hi from a dependency"));
+    assert!(
+        !lib.join("build").exists(),
+        "the package's tree is not written"
+    );
 }
