@@ -105,17 +105,21 @@ nothing still names those buffers. The exception is a buffer the pass
 retained, which lives through the next pass: Gemma's attention cache stays on
 the device from one token to the next.
 
-### A product weight is kept in bf16 where that loses nothing
+### A product weight is kept column by column, in bf16 where that loses nothing
 
-`keep_rhs` writes a weight in bf16 when every value's low 16 bits are zero, two
+`keep_rhs` writes a weight column by column, so the inner axis of a product is
+the contiguous one. A product of a few rows then gives each column a run of
+lanes splitting the inner axis. Kept row by row, a lane takes a column, and a
+layer's products of 256 to 2048 columns ran in 4 to 32 workgroups, leaving most
+of the device idle.
+
+It writes the weight in bf16 when every value's low 16 bits are zero, two
 elements to a word. A model released in bf16 and exported in f32 has such
 weights: every product weight of Gemma 3 (270M) and its embedding do. The
 product, gather and copy shaders widen each element as they read it, so the
 results are the ones f32 storage gives, and every other kernel reads f32 only.
-The weights take half the device memory.
-
-The time a token takes did not change. The shaders read one element per lane,
-so they are bound by instructions rather than by the bytes they read.
+The weights take half the device memory, and a lane of a product of a few rows
+reads two elements a word.
 
 ### Fusion is chosen for dispatches
 

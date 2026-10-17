@@ -414,6 +414,38 @@ impl WebGpuBackend {
         return contiguous(slot, 0, t.extents);
     }
 
+    /// A `[k, n]` matrix of `values`, kept column by column, so a product of a
+    /// few rows reads each column's run along the inner axis: one workgroup
+    /// lane per run of it, rather than one per column, which leaves most of a
+    /// device idle where the columns are few. `column_major(i)` is the matrix's
+    /// element `i` in that order. It is kept in bf16 where that loses nothing.
+    fn kept_by_columns<K, N>(
+        &mut self,
+        k: i32,
+        n: i32,
+        values: &List<f32>,
+        column_major: fn(i32) -> f32,
+    ) -> Placed<f32, [K, N]> with (GpuDevice, GpuQueue, GpuBuffer) {
+        let count = k * n;
+        let half = held_in_bf16(values);
+        let slot = if half {
+            self.written(count.div_ceil(2), |w| {
+                let low = column_major(2 * w).to_bits() >> 16;
+                let high = if 2 * w + 1 < count { column_major(2 * w + 1).to_bits() & 0xFFFF_0000 } else { 0 };
+                return high | low;
+            }, true);
+        } else {
+            self.written(count, |i| column_major(i).to_bits(), true);
+        };
+        return Placed::Device(DeviceTensor {
+            slot,
+            offset: 0,
+            extents: [k, n],
+            strides: [1, k],
+            half,
+        });
+    }
+
     /// `t` on the device where an f32 holds its values, and on the host
     /// otherwise.
     fn stored<E: Element, Axes>(
@@ -1257,8 +1289,8 @@ impl WebGpuBackend {
 impl Backend for WebGpuBackend {
     type Tensor<E: Element, Axes> = Placed<E, Axes>;
     type Operand<Axes> = PlacedRead<Axes>;
-    /// The product's shader reads a plain row-major matrix, of bf16 elements
-    /// where those hold every value.
+    /// A matrix kept column by column, of bf16 elements where those hold every
+    /// value: see `kept_by_columns`.
     type Rhs<K, N> = Placed<f32, [K, N]>;
 
     fn upload<E: Element, Axes>(&mut self, t: &Tensor<E, Axes>) -> Placed<E, Axes> with (GpuDevice, GpuQueue, GpuBuffer) {
@@ -1271,24 +1303,17 @@ impl Backend for WebGpuBackend {
     }
 
     fn keep_rhs<K, N>(&mut self, t: &Tensor<f32, [K, N]>) -> Placed<f32, [K, N]> with (GpuDevice, GpuQueue, GpuBuffer) {
-        if !held_in_bf16(&t.data) {
-            return self.stored(t, true);
-        }
+        let [k, n] = [t.extents[0], t.extents[1]];
         let data = &t.data;
-        let n = data.len();
-        let slot = self.written(n.div_ceil(2), |w| {
-            let low = data[2 * w].to_bits() >> 16;
-            let high = if 2 * w + 1 < n { data[2 * w + 1].to_bits() & 0xFFFF_0000 } else { 0 };
-            return high | low;
-        }, true);
-        return Placed::Device(DeviceTensor { ..contiguous(slot, 0, t.extents), half: true });
+        return self.kept_by_columns(k, n, data, |i| data[i % k * n + i / k]);
     }
 
     fn keep_rhs_transposed<K, N>(
         &mut self,
         t: &Tensor<f32, [N, K]>,
     ) -> Placed<f32, [K, N]> with (GpuDevice, GpuQueue, GpuBuffer) {
-        return self.keep_rhs(&self.cpu.transpose2(t));
+        let data = &t.data;
+        return self.kept_by_columns(t.extents[1], t.extents[0], data, |i| data[i]);
     }
 
     /// Submits what the pass before recorded and releases its buffers, so a
