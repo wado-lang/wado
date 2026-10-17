@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1792189129117,
+  "lastUpdate": 1792214686753,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -67705,6 +67705,50 @@ window.BENCHMARK_DATA = {
           {
             "name": "sqlite_highlight",
             "value": 301641,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "814bbca1eb4714e2df2b0b54b7cbc965a23466d0",
+          "message": "Merge pull request #2368 from wado-lang/ccr-1ad737bf-1w9lhx\n\nfix(gale): ANTLR-compatible negative LT/LA offsets and token names in diagnostics",
+          "timestamp": "2026-10-17T14:04:26+09:00",
+          "tree_id": "a64c8e996c7645f84ebd3aae89a5e72da468aba6",
+          "url": "https://github.com/wado-lang/wado/commit/814bbca1eb4714e2df2b0b54b7cbc965a23466d0"
+        },
+        "date": 1792214685817,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 2955,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 7382,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 20208,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 298222,
             "unit": "bytes"
           }
         ]
