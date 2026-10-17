@@ -236,7 +236,7 @@ A map reaches the generator in key order. Given
 `options: { sizes: { small: 1, large: 3 } }`, this generator spells out
 `large=3,small=1`:
 
-<!-- {"source": "wado-cli/tests/integration/kiln_options.rs"} -->
+<!-- {"fixture": "sub/kiln/options/map_generator.wado"} -->
 
 ```wado
 export struct Options {
@@ -740,7 +740,7 @@ An invocation whose generator is built from its own output, directly or through
 other invocations, is a cycle. The cycle is an error naming the invocations in
 it. This generator imports a module it would itself produce:
 
-<!-- {"source": "wado-cli/tests/fixtures/kiln_nested_cycle/src/cyclic.wado"} -->
+<!-- {"fixture": "sub/kiln/cycle/cyclic.wado"} -->
 
 ```wado
 use { answer } from "./loop.spec"
@@ -797,8 +797,10 @@ the generator again.
 ## Dialects
 
 A dialect is a superset of Wado, or another surface for it, implemented as a
-generator. Its files take their own extension, since a `.wado` file is always
-imported as a module. The generator's output is ordinary Wado on disk, and every
-tool that reads Wado reads it unchanged.
+generator. A dialect file is reached only through a `use` naming its generator,
+since without one any file is read as Wado source. Its files take their own
+extension anyway, so `wado test` and `wado format`, which walk a directory for
+`.wado` files, pass them by. The generator's output is ordinary Wado on disk,
+and every tool that reads Wado reads it unchanged.
 
 Rationale: [WEP: Kiln, Dialects](./wep-2026-04-12-kiln.md#dialects).

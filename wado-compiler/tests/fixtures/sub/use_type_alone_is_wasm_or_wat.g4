@@ -1,0 +1,3 @@
+grammar Greeting;
+
+greeting: 'hello';

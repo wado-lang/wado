@@ -17,8 +17,8 @@ use wasmtime::component::{HasSelf, Linker};
 
 use crate::args::CliExit;
 use crate::compile::build_dir;
-use crate::sync::lock;
 use crate::test_report::TestReporter;
+use wado_host::sync::lock;
 
 wasmtime::component::bindgen!({
     inline: "package wado:coverage-runner; world runner { import core:coverage/coverage-host@0.1.0; }",

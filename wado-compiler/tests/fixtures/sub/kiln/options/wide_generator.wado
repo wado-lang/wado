@@ -1,0 +1,29 @@
+// A Kiln generator whose options are wide enough that `generate`'s parameters
+// flatten past the sixteen values a call passes directly, so the host writes
+// them to memory and passes one pointer.
+
+use { Request, Response, OutputFile, Error } from "core:kiln";
+use { TreeMap } from "core:collections";
+
+export struct Options {
+    pub sizes: TreeMap<String, i32>,
+    pub a: List<String> = [],
+    pub b: List<String> = [],
+    pub c: List<String> = [],
+    pub on: bool = true,
+}
+
+export fn generate(req: Request<Options>) -> Result<Response, Error> {
+    let mut spelled: List<String> = [];
+    for let [k, v] of req.options.sizes.entries() {
+        spelled.push(`${k}=${v}`);
+    }
+    let o = &req.options;
+    return Result::Ok(Response {
+        files: [OutputFile {
+            path: "greeting.wado",
+            content: `pub fn greeting() -> String { return "${spelled.join(",")};${o.a.join(",")};${o.c.join(",")};${o.on}"; }`,
+            is_entry: true,
+        }],
+    });
+}

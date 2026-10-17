@@ -1,0 +1,14 @@
+// Options wide enough that the host passes them through memory still reach the
+// generator, every field of them.
+
+use { greeting } from "./sub/kiln/value.schema"
+    with {
+        generator: {
+            module: "./sub/kiln/options/wide_generator.wado",
+            options: { sizes: { small: 1 }, a: ["x"], c: ["y", "z"], on: false },
+        },
+    };
+
+test {
+    assert greeting() == "small=1;x;y,z;false";
+}

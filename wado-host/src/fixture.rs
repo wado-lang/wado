@@ -39,6 +39,10 @@ pub struct CompileInputs {
     /// relative to the fixture directory. Each entry is its own package.
     #[serde(default)]
     pub dependencies: IndexMap<String, String>,
+    /// Stubbed path `[build-dependencies]`: nickname → the generator's `.wado`
+    /// file, relative to the fixture directory.
+    #[serde(default)]
+    pub build_dependencies: IndexMap<String, String>,
     /// Override the `--param-unknown` policy level (`error` / `warn` / `ignore`).
     #[serde(default, deserialize_with = "policy_level")]
     pub param_unknown: Option<ParamPolicyLevel>,
@@ -66,6 +70,7 @@ impl CompileInputs {
         HostStubs {
             env: self.param_env.clone(),
             dependencies: self.dependencies.clone(),
+            build_dependencies: self.build_dependencies.clone(),
         }
     }
 

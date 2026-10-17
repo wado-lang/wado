@@ -1,0 +1,12 @@
+// `read_all` hands a generator an input that is not text. The schema holds
+// 0x00 0xFF 0x80 0x41, and 0xFF and 0x80 appear in no UTF-8 sequence, so it
+// reaches the generator only if the boundary carries bytes, not a string.
+
+use { hello } from "./sub/kiln/not_utf8.schema"
+    with {
+        generator: { module: "./sub/kiln/byte_sum_generator.wado" },
+    };
+
+test {
+    assert hello() == 448;
+}

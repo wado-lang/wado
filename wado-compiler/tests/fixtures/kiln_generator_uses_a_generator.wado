@@ -1,0 +1,11 @@
+// A generator may use a generator: the outer one's source imports a module
+// the inner one writes, so the innermost input reaches the program.
+
+use { model } from "./sub/kiln/value.schema"
+    with {
+        generator: { module: "./sub/kiln/nested/outer.wado" },
+    };
+
+test {
+    assert model() == 42;
+}

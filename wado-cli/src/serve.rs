@@ -38,7 +38,7 @@ use crate::compile::CompileFlags;
 use crate::knobs::{CompileKnobOpt, CompileKnobs, RuntimeKnobOpt, RuntimeKnobs};
 use crate::manifest;
 use crate::runtime::{self, Preopens, ProfileMode, Ticker, WasiState};
-use crate::sync::lock;
+use wado_host::sync::lock;
 
 /// First-byte timeout cuts off guests stuck in the host; the epoch
 /// deadline (see `worker_loop`) catches runaway pure-wasm loops.

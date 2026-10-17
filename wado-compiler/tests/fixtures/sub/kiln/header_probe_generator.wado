@@ -1,0 +1,34 @@
+// A Kiln generator whose probe declares that everything through the first
+// newline determines its output. `generate` reads to the end of what it is
+// given, so its output shows where the input was cut.
+
+use { Request, Response, OutputFile, Error, read_text } from "core:kiln";
+
+export fn probe(path: String, content: Stream<u8>) -> Result<u64, Error> {
+    let mut n: u64 = 0;
+    loop {
+        let chunk = content.read(1);
+        if chunk.items.len() > 0 {
+            n += 1;
+            if chunk.items[0] == b'\n' {
+                break;
+            }
+        }
+        if chunk.result != CopyResult::Completed {
+            break;
+        }
+    }
+    content.drop();
+    return Result::Ok(n);
+}
+
+export fn generate(req: Request) -> Result<Response, Error> {
+    let head = read_text(req.primary.content).unwrap();
+    return Result::Ok(Response {
+        files: [OutputFile {
+            path: "out.wado",
+            content: `pub fn hello() -> i32 { return ${head.trim()}; }`,
+            is_entry: true,
+        }],
+    });
+}

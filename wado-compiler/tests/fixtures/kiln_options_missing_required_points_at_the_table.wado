@@ -1,0 +1,17 @@
+// A required field the table leaves out has no key of its own, so it squiggles
+// the `options` key that owns the table.
+
+use { greeting } from "./sub/kiln/value.schema"
+    with {
+        generator: {
+            module: "./sub/kiln/options/verbose_generator.wado",
+            options: {},
+        },
+    };
+
+test {
+    assert greeting() == "hi";
+}
+
+__DATA__
+{"compile_error": ":8:13: analysis error: kiln: required options field `options.verbose`"}

@@ -21,11 +21,12 @@
 use wado_compiler::path::is_cwd_relative;
 use wado_manifest::Manifest;
 
-use crate::cache::{component_path, write_atomic};
+use crate::cache::component_path;
 use crate::fetch::split_registry_id;
 use crate::git::{fetch_manifest, materialize_entry, resolve_ref};
 use crate::oci;
 use crate::registry::FilesystemProvider;
+use wado_host::atomic_write::write_atomic;
 
 /// How far a subcommand may go to acquire a dependency that the cache does not
 /// already hold.

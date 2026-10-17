@@ -21,12 +21,12 @@ use tokio::sync::Notify;
 use wado_compiler::hashmap::IndexMap;
 
 use crate::rss::live_suffix;
-use crate::sync::lock;
 use crate::test::{
     self, CompileFailure, LoadFailure, PackageRun, PackageTotals, TestOutcome, TestResult,
     TodoCompileError,
 };
 use crate::test_cache::Tally;
+use wado_host::sync::lock;
 
 /// How often the heartbeat reporter re-prints progress while
 /// otherwise quiet. A failure/resolved-TODO notice resets this window

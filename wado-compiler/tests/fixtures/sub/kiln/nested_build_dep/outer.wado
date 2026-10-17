@@ -1,0 +1,19 @@
+// A Kiln generator naming its own generator by a `[build-dependencies]`
+// nickname, whose path is spelled against the project root, not against here.
+
+use { Request, Response, OutputFile, Error } from "core:kiln";
+use { hello } from "./value.txt"
+    with {
+        generator: { module: "lib:inner" },
+    };
+
+export fn generate(req: Request) -> Result<Response, Error> {
+    let _ = req.primary.path;
+    return Result::Ok(Response {
+        files: [OutputFile {
+            path: "model.wado",
+            content: `pub fn model() -> i32 { return ${hello()}; }`,
+            is_entry: true,
+        }],
+    });
+}

@@ -1,0 +1,11 @@
+use { Request, Response, ErrorCode, Headers, Trailers } from "wasi:http";
+
+export async fn handle(_request: Request) -> Result<Response, ErrorCode> with ErrorContext {
+    ErrorContext::new("made and dropped").drop();
+    let [trailers_future, trailers_tx] = Future::<Result<Option<Trailers>, ErrorCode>>::new();
+    let headers = Headers::new();
+    let [response, _tx_future] = Response::new(headers, null, trailers_future);
+    response.set_status_code(200);
+    task return Result::<Response, ErrorCode>::Ok(response);
+    trailers_tx.write(Result::<Option<Trailers>, ErrorCode>::Ok(null));
+}

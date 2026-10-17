@@ -1,0 +1,16 @@
+// A re-export that narrows `Options` below `pub` is named as the cause.
+
+use { greeting } from "./sub/kiln/value.schema"
+    with {
+        generator: {
+            module: "./sub/kiln/options/narrowing_reexport_generator.wado",
+            options: {},
+        },
+    };
+
+test {
+    assert greeting() == "hi";
+}
+
+__DATA__
+{"compile_error": "kiln: `Options` must be `pub`, and so must a `use` re-exporting it"}

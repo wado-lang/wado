@@ -1,13 +1,10 @@
 //! End-to-end tests for the optional `probe` export.
 //!
 //! A probe reports how many leading bytes of an input determine the
-//! generator's output. Two consequences are pinned here:
-//!
-//! 1. `generate` sees the input cut to that extent, so a generator that reads
-//!    past what it declared gets EOF rather than bytes the cache key does not
-//!    cover.
-//! 2. A later build hashes only that extent, so editing the payload behind the
-//!    header is a cache hit and editing the header is a miss.
+//! generator's output, and a later build hashes only that extent: editing the
+//! payload behind the header is a cache hit and editing the header is a miss.
+//! That `generate` sees the input cut to the extent is the e2e fixture
+//! `kiln_probe_cuts_the_input`.
 
 use std::fs;
 
@@ -51,21 +48,6 @@ export fn generate(req: Request) -> Result<Response, Error> {
 
 fn write_project(root: &std::path::Path, schema: &str) {
     write_kiln_project(root, "probed", HEADER_GENERATOR, schema.as_bytes());
-}
-
-/// The payload past the extent never reaches `generate`: the output is built
-/// from the header alone.
-#[test]
-fn generate_sees_the_input_cut_to_its_extent() {
-    let tmp = tempfile::tempdir().unwrap();
-    let root = tmp.path();
-    write_project(root, "7\nPAYLOAD THAT MUST NOT REACH THE GENERATOR\n");
-
-    wado_in(root)
-        .args(["run", "src/main.wado"])
-        .assert()
-        .success()
-        .stdout(predicate::str::contains("7"));
 }
 
 /// Editing behind the extent is a cache hit, editing the header is a miss.

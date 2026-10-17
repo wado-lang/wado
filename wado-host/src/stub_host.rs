@@ -2,10 +2,17 @@
 //! ask its environment, for compiling the e2e fixtures outside `wado`.
 
 use std::path::PathBuf;
+use std::sync::LazyLock;
 
 use indexmap::IndexMap;
-use wado_compiler::{CompilerHost, DependencyIndex, Diagnostic, SourceError};
+use wado_compiler::{
+    CompilerHost, DependencyIndex, Diagnostic, GeneratorRequest, GeneratorResponse,
+    GeneratorRunnerError, SourceError,
+};
 use wado_lsp::FilesystemCompilerHost;
+
+use crate::kiln::component_cache::ComponentCache;
+use crate::kiln::runtime::{generate_for, probe_for};
 
 /// What a [`StubHost`] answers in place of the environment.
 #[derive(Debug, Default, Clone)]
@@ -15,15 +22,23 @@ pub struct HostStubs {
     /// The `[dependencies]` a bare `use ... from "name"` binds to: name → the
     /// dependency's `[package].lib` path, relative to the host's base.
     pub dependencies: IndexMap<String, String>,
+    /// The `[build-dependencies]` a clause's `module: "lib:name"` names: the
+    /// nickname → the generator's `.wado` file, relative to the host's base.
+    pub build_dependencies: IndexMap<String, String>,
 }
 
 /// A [`FilesystemCompilerHost`] that answers the dependency index and the
-/// environment from [`HostStubs`] rather than from `wado.toml` and the process.
+/// environment from [`HostStubs`] rather than from `wado.toml` and the process,
+/// and runs Kiln generators as `wado` does.
 #[derive(Debug)]
 pub struct StubHost {
     filesystem: FilesystemCompilerHost,
     stubs: HostStubs,
 }
+
+/// The generator components every [`StubHost`] shares, so a run of many
+/// fixtures compiles each generator once.
+static GENERATORS: LazyLock<ComponentCache> = LazyLock::new(ComponentCache::default);
 
 impl StubHost {
     /// A host loading sources relative to `base_path`, with nothing stubbed.
@@ -42,6 +57,12 @@ impl StubHost {
     pub fn with_stubs(mut self, stubs: HostStubs) -> Self {
         self.stubs = stubs;
         self
+    }
+
+    /// What this host answers in place of the environment.
+    #[must_use]
+    pub fn stubs(&self) -> &HostStubs {
+        &self.stubs
     }
 
     /// The diagnostics emitted since this host was created.
@@ -79,6 +100,24 @@ impl CompilerHost for StubHost {
             index.resolved.insert(name.clone(), lib.clone());
         }
         index
+    }
+
+    async fn run_generator(
+        &self,
+        component_wasm: &[u8],
+        request: GeneratorRequest,
+    ) -> Result<GeneratorResponse, GeneratorRunnerError> {
+        let (engine, component) = GENERATORS.get_or_compile(component_wasm)?;
+        generate_for(self, &engine, &component, request).await
+    }
+
+    async fn probe_generator(
+        &self,
+        component_wasm: &[u8],
+        request: &GeneratorRequest,
+    ) -> Result<Vec<Option<u64>>, GeneratorRunnerError> {
+        let (engine, component) = GENERATORS.get_or_compile(component_wasm)?;
+        probe_for(self, &engine, &component, request).await
     }
 }
 

@@ -104,18 +104,39 @@ pub fn emit_corpus_to(out: &str) {
     eprintln!("corpus: {} files", corpus.len());
 }
 
-/// Every `.wado` file under [`CORPUS_ROOTS`], sorted, so both sides walk the
-/// same list in the same order. Shared with [`crate::highlight_corpus`], which
-/// compares what each side colours over the same files.
+/// Every `.wado` file under [`CORPUS_ROOTS`] that git does not ignore, sorted,
+/// so both sides walk the same list in the same order. Shared with
+/// [`crate::highlight_corpus`], which compares what each side colours over the
+/// same files.
+///
+/// Not ignored, because a build writes `.wado` files into these trees too
+/// (Kiln outputs under `build/`), and CI's checkout holds none of them. A file
+/// not yet added counts, and one deleted but still tracked does not.
 pub fn collect_corpus() -> Vec<String> {
-    let mut paths: Vec<String> = Vec::new();
-    for root in CORPUS_ROOTS {
-        let pattern = format!("{root}/**/*.wado");
-        for entry in glob::glob(&pattern).unwrap_or_else(|e| panic!("bad glob '{pattern}': {e}")) {
-            let path = entry.unwrap_or_else(|e| panic!("walking '{pattern}': {e}"));
-            paths.push(path.to_string_lossy().into_owned());
-        }
-    }
+    let output = std::process::Command::new("git")
+        .args([
+            "ls-files",
+            "-z",
+            "--cached",
+            "--others",
+            "--exclude-standard",
+            "--",
+        ])
+        .args(CORPUS_ROOTS)
+        .output()
+        .unwrap_or_else(|e| panic!("running git ls-files: {e}"));
+    assert!(
+        output.status.success(),
+        "git ls-files failed: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let mut paths: Vec<String> = String::from_utf8(output.stdout)
+        .expect("git prints paths as UTF-8")
+        .split('\0')
+        .filter(|path| Path::new(path).extension().is_some_and(|e| e == "wado"))
+        .filter(|path| Path::new(path).is_file())
+        .map(str::to_string)
+        .collect();
     paths.sort();
     paths
 }

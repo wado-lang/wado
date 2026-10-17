@@ -31,6 +31,8 @@ use wado_compiler::{
     CompileError, CompileFailure, CompilerHost, CompilerOptions, Diagnostic, InMemoryCompilerHost,
     OptLevel,
 };
+use wado_host::engine::default_config;
+use wado_host::kiln::local::run_local_generators;
 use wado_host::timezone;
 pub use wado_host::tls_trust::install_default_crypto_provider;
 pub use wado_host::{HostStubs, StubHost};
@@ -371,21 +373,11 @@ pub fn report_fuel_used<T>(store: &mut Store<T>, label: &str, timeout_ms: u64) {
     report_fuel(label, budget.saturating_sub(store.get_fuel().unwrap_or(0)));
 }
 
-/// The Wasm features every test engine runs with. [`engine`] adds metering and
-/// backtraces on top of these, [`capped_engine`] a pooling memory cap.
+/// What `wado` runs a program with, at minimal Cranelift optimization for
+/// faster compilation. [`engine`] adds metering and backtraces on top,
+/// [`capped_engine`] a pooling memory cap.
 fn base_config() -> Config {
-    let mut config = Config::new();
-    config.wasm_component_model_gc(true);
-    config.wasm_component_model_more_async_builtins(true);
-    config.wasm_component_model_async_stackful(true);
-    config.wasm_component_model_error_context(true);
-    config.wasm_component_model_map(true);
-    // Match the wado CLI's default collector so the suite exercises the
-    // collector users actually get (see `runtime::DEFAULT_COLLECTOR`).
-    config.collector(wasmtime::Collector::Copying);
-    // Minimal optimization, for faster compilation in tests.
-    config.cranelift_opt_level(wasmtime::OptLevel::None);
-    config
+    default_config(wasmtime::OptLevel::None)
 }
 
 /// An engine whose guest linear memory is capped at `memory_cap` bytes, so an
@@ -399,6 +391,9 @@ pub fn capped_engine(memory_cap: usize) -> Engine {
     pooling.total_component_instances(16);
 
     let mut config = base_config();
+    // The pool caps the GC heap too, which `default_config`'s start overruns.
+    // Zero is wasmtime's own default.
+    config.gc_heap_initial_size(0);
     config.allocation_strategy(InstanceAllocationStrategy::Pooling(pooling));
     Engine::new(&config).expect("build capped engine")
 }
@@ -410,10 +405,6 @@ pub fn capped_engine(memory_cap: usize) -> Engine {
 pub fn engine() -> &'static Engine {
     ENGINE.get_or_init(|| {
         let mut config = base_config();
-        // Honor the `metadata.code.branch_hint` custom section the compiler
-        // emits for `builtin::cold_path()`, matching the wado CLI runtime so
-        // the e2e suite validates the hints it produces.
-        config.wasm_branch_hinting(true);
         config.wasm_backtrace_details(wasmtime::WasmBacktraceDetails::Enable);
         // Enable epoch-based interruption for timeout enforcement
         config.epoch_interruption(true);
@@ -1097,6 +1088,10 @@ pub fn compile_capturing_diagnostics(
     stubs: HostStubs,
 ) -> CapturedCompile {
     use wado_compiler::Severity;
+    assert!(
+        options.invocations.is_empty(),
+        "the harness runs the source's generators for its redirect index"
+    );
     let base_path = path.parent().map(Path::to_path_buf).unwrap_or_default();
     let host = StubHost::new(base_path).with_stubs(stubs);
     let filename = display_filename
@@ -1104,13 +1099,23 @@ pub fn compile_capturing_diagnostics(
         .unwrap_or_else(|| path.to_string_lossy());
 
     let result = runtime()
-        .block_on(wado_compiler::compile_with_options(
-            source,
-            &host,
-            Some(&filename),
-            options,
-        ))
-        .map_err(|_| bail_to_compile_error(&host.diagnostics(), Some(&filename)));
+        .block_on(async {
+            let invocations = run_local_generators(path, source, &filename, &host)
+                .await
+                .ok_or(())?;
+            wado_compiler::compile_with_options(
+                source,
+                &host,
+                Some(&filename),
+                CompilerOptions {
+                    invocations,
+                    ..options
+                },
+            )
+            .await
+            .map_err(drop)
+        })
+        .map_err(|()| bail_to_compile_error(&host.diagnostics(), Some(&filename)));
 
     let diagnostics = host.diagnostics();
     let captured = |keep: fn(Severity) -> bool| -> Vec<CapturedDiagnostic> {

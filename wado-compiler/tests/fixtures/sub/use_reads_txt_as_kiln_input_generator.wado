@@ -1,0 +1,18 @@
+// A Kiln generator turning a number written as text into a function returning
+// it.
+
+use { Request, Response, OutputFile, Error, read_text } from "core:kiln";
+
+export fn generate(req: Request) -> Result<Response, Error> {
+    let text = match read_text(req.primary.content) {
+        Ok(text) => text,
+        Err(e) => { return Result::Err(Error::InvalidSchema(`not text: ${e}`)); },
+    };
+    return Result::Ok(Response {
+        files: [OutputFile {
+            path: "number.wado",
+            content: `pub fn number() -> i32 { return ${text.trim()}; }`,
+            is_entry: true,
+        }],
+    });
+}

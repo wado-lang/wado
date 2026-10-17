@@ -53,17 +53,19 @@ use wado_compiler::{CompilerHost, CompilerOptions, Diagnostic, LogLevel};
 use wado_lsp::host::discovery::normalize_path;
 use wado_manifest::registry_url;
 
-use crate::build_dep::{
-    GENERATOR_WORLD_FQ, GENERATOR_WORLD_SEGMENT, parse_spec, resolve_generator_version,
-};
-use crate::cache::{generator_path, write_atomic};
+use crate::build_dep::{GENERATOR_WORLD_SEGMENT, parse_spec, resolve_generator_version};
+use crate::cache::generator_path;
 use crate::compile::{KilnRun, run_nested_pipeline};
 use crate::compiler_host::FilesystemCompilerHost;
-use crate::kiln_driver::{GeneratorProvider, PipelineError, ProviderError, ResolvedGenerator};
 use crate::kiln_wit::options_descriptor_from_component;
 use crate::oci;
 use crate::run_cache::RunCache;
-use crate::sync::lock;
+use wado_host::atomic_write::write_atomic;
+use wado_host::kiln::driver::{
+    GeneratorProvider, PipelineError, ProviderError, ResolvedGenerator, generator_compile_options,
+    generator_cycle,
+};
+use wado_host::sync::lock;
 
 /// Compiled generator components, each named by the hash of its sources.
 /// Gitignored. A registry (`Spec`) generator is prebuilt and caches in the
@@ -445,16 +447,8 @@ impl CliGeneratorProvider {
                     loaded: loaded_for_task,
                 };
                 let options = CompilerOptions {
-                    // A generator's opt level never reaches the artifact, so all
-                    // it buys is generation speed: on `Wado.g4`, 0.19s at O1
-                    // against 0.16s at O2, for a 57s compile against 93s. The
-                    // `kiln/generate` and `kiln/aot` spans re-measure this.
-                    opt_level: wado_compiler::OptLevel::O1,
-                    target_world: Some(GENERATOR_WORLD_FQ.to_string()),
-                    skip_validation: false,
                     log_level: Some(log_level),
-                    invocations,
-                    ..CompilerOptions::default()
+                    ..generator_compile_options(invocations)
                 };
                 let rt = tokio::runtime::Builder::new_current_thread()
                     .enable_all()
@@ -541,12 +535,8 @@ impl ActiveGenerator {
     fn enter(chain: &Arc<Mutex<Vec<String>>>, path: &Path) -> Result<Self, ProviderError> {
         let entry = normalize_path(path).to_string_lossy().to_string();
         let mut held = lock(chain);
-        if let Some(start) = held.iter().position(|active| active == &entry) {
-            let mut cycle: Vec<&str> = held[start..].iter().map(String::as_str).collect();
-            cycle.push(&entry);
-            return Err(ProviderError::Internal {
-                message: format!("kiln: generator cycle: {}", cycle.join(" -> ")),
-            });
+        if let Some(cycle) = generator_cycle(&held, &entry) {
+            return Err(cycle);
         }
         held.push(entry);
         drop(held);

@@ -1,0 +1,15 @@
+// A Kiln generator whose entry re-exports `Options` below `pub`.
+
+use { Request, Response, OutputFile, Error } from "core:kiln";
+internal use { Options } from "./sizes_options.wado";
+
+export fn generate(req: Request<Options>) -> Result<Response, Error> {
+    let _ = req.options.sizes;
+    return Result::Ok(Response {
+        files: [OutputFile {
+            path: "greeting.wado",
+            content: "pub fn greeting() -> String { return \"hi\"; }",
+            is_entry: true,
+        }],
+    });
+}
