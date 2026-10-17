@@ -252,10 +252,9 @@ names as left.
    `[build-dependencies]`, pin it in the consuming project's lock as part of the
    transitive build graph, and write the output into that project's tree. Done
    when a dependency that commits no output builds in a consumer, and a second
-   build of it hits a warm cache. Left: the lock pin. A path or registry
-   build-dependency of the dependency resolves; a git or workspace one is
-   refused. Until item 5, a dependency's clause runs even where its output is
-   committed.
+   build of it hits a warm cache. Left: the lock pin, and a git or workspace
+   build-dependency ([Kiln](./wep-2026-04-12-kiln.md) Roadmap 1). Until item 5,
+   a dependency's clause runs even where its output is committed.
 7. `#include_str` / `#include_bytes`: the same reference, resolved through the
    same path.
 8. Registry distribution: assets and recorded Kiln outputs travel in the
