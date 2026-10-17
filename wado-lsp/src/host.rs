@@ -108,6 +108,23 @@ impl FilesystemCompilerHost {
     pub fn collect_diagnostic(&self, diagnostic: Diagnostic) {
         self.buffer().push(diagnostic);
     }
+
+    /// [`CompilerHost::package_root`], telling `probed` each manifest path the
+    /// walk looks at and whether one is there. The walk starts from the
+    /// module's directory as the OS resolves it, `..` after a symlink
+    /// included, since that is the directory [`CompilerHost::load_source`]
+    /// reads from. A directory that does not exist has no root, and the load
+    /// of the module reports it.
+    pub fn package_root_probing(
+        &self,
+        path: &str,
+        probed: impl FnMut(&Path, bool),
+    ) -> Option<String> {
+        let file = self.base_path.join(path);
+        let dir = std::fs::canonicalize(file.parent().expect("a module path names a file")).ok()?;
+        let root = discovery::nearest_manifest_dir_probing(&dir, probed)?;
+        Some(root.display().to_string())
+    }
 }
 
 impl CompilerHost for FilesystemCompilerHost {
@@ -150,10 +167,7 @@ impl CompilerHost for FilesystemCompilerHost {
     }
 
     fn package_root(&self, path: &str) -> Option<String> {
-        let file = normalize_path(&absolutize(&self.base_path.join(path)));
-        let dir =
-            discovery::nearest_manifest_dir(file.parent().expect("a module path names a file"))?;
-        Some(dir.display().to_string())
+        self.package_root_probing(path, |_, _| {})
     }
 
     /// The language service recompiles on every edit and caches no outcome.

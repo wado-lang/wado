@@ -1397,7 +1397,12 @@ impl<'a, H: CompilerHost> ModuleLoader<'a, H> {
         .unwrap_or(tentative_entry_source);
         if let ModuleSource::EntryPoint { filename, .. } = &entry_module_source {
             let root_dir = self.host.package_root(&canonicalize_entry_point(filename));
-            self.interner.set_root_dir(root_dir);
+            let dependency_roots = self
+                .interner
+                .dependency_libs()
+                .filter_map(|lib| Some((self.host.package_root(lib)?, lib.to_string())))
+                .collect();
+            self.interner.set_package_roots(root_dir, dependency_roots);
         }
         self.entry_module_source = Some(entry_module_source.clone());
 
@@ -1933,7 +1938,10 @@ impl<'a, H: CompilerHost> ModuleLoader<'a, H> {
                 return Ok(resolved);
             }
             let path = path.to_string();
-            let package_root = self.host.package_root(&path);
+            let package_root = match self.interner.dir_root(&path) {
+                Some(root) => root,
+                None => self.host.package_root(&path),
+            };
             self.interner.place_local(&path, package_root);
             return Ok(self.interner.local(&path));
         }

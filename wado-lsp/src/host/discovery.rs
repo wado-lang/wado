@@ -25,9 +25,21 @@ use crate::host::prefetch;
 /// re-anchoring other paths against it must express those in the same frame.
 #[must_use]
 pub fn nearest_manifest_dir(start: &Path) -> Option<PathBuf> {
+    nearest_manifest_dir_probing(start, |_, _| {})
+}
+
+/// [`nearest_manifest_dir`], telling `probed` each manifest path it looks at
+/// and whether one is there, for a caller recording what its answer read.
+pub fn nearest_manifest_dir_probing(
+    start: &Path,
+    mut probed: impl FnMut(&Path, bool),
+) -> Option<PathBuf> {
     let mut dir = absolutize(start);
     loop {
-        if dir.join(MANIFEST_FILENAME).is_file() {
+        let manifest = dir.join(MANIFEST_FILENAME);
+        let found = manifest.is_file();
+        probed(&manifest, found);
+        if found {
             return Some(dir);
         }
         if !dir.pop() {

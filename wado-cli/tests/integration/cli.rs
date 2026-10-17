@@ -832,6 +832,46 @@ fn test_a_file_outside_the_package_is_another_package() {
         ));
 }
 
+/// A relative import of a path dependency's file reaches the module the
+/// dependency names, so a type it declares is one type either way.
+#[test]
+fn test_a_relative_import_into_a_path_dependency_is_the_dependency() {
+    let tmp = tempfile::tempdir().unwrap();
+    let other = tmp.path().join("other");
+    std::fs::create_dir_all(&other).unwrap();
+    std::fs::write(
+        other.join("wado.toml"),
+        "[package]\nname = \"other\"\nversion = \"0.1.0\"\nlib = \"o.wado\"\n",
+    )
+    .unwrap();
+    std::fs::write(
+        other.join("o.wado"),
+        "pub struct P { pub x: i32 }\npub fn make() -> P { return P { x: 1 }; }\n",
+    )
+    .unwrap();
+    let app = tmp.path().join("app");
+    std::fs::create_dir_all(&app).unwrap();
+    std::fs::write(
+        app.join("wado.toml"),
+        "[package]\nname = \"app\"\nversion = \"0.1.0\"\n\n\
+         [dependencies]\n\"lib:other\" = { path = \"../other\" }\n",
+    )
+    .unwrap();
+    std::fs::write(
+        app.join("main.wado"),
+        "use { P } from \"lib:other\";\n\
+         use { make } from \"../other/o.wado\";\n\
+         export fn run() { let p: P = make(); assert p.x == 1; }\n",
+    )
+    .unwrap();
+
+    wado()
+        .current_dir(&app)
+        .args(["check", "main.wado"])
+        .assert()
+        .success();
+}
+
 /// An entry under no manifest declares no package boundary, so every file it
 /// reaches is in its package.
 #[test]
@@ -1356,6 +1396,95 @@ fn test_test_reruns_a_passed_file_once_a_path_dependency_names_another_entry() {
     run()
         .failure()
         .stdout(predicate::str::contains("0 passed, 1 failed"));
+}
+
+/// A file's package is decided by the manifests above it, so removing one
+/// reruns a passed file that a relative import reaches across it.
+#[test]
+fn test_test_reruns_a_passed_file_once_a_package_boundary_moves() {
+    let tmp = tempfile::tempdir().unwrap();
+    let other = tmp.path().join("other");
+    std::fs::create_dir_all(&other).unwrap();
+    std::fs::write(
+        other.join("wado.toml"),
+        "[package]\nname = \"other\"\nversion = \"0.1.0\"\n",
+    )
+    .unwrap();
+    std::fs::write(
+        other.join("o.wado"),
+        "use { base } from \"./p.wado\";\npub fn o() -> i32 { return base(); }\n",
+    )
+    .unwrap();
+    std::fs::write(
+        other.join("p.wado"),
+        "internal fn base() -> i32 { return 1; }\n",
+    )
+    .unwrap();
+    let app = tmp.path().join("app");
+    std::fs::create_dir_all(&app).unwrap();
+    std::fs::write(
+        app.join("wado.toml"),
+        "[package]\nname = \"app\"\nversion = \"0.1.0\"\n",
+    )
+    .unwrap();
+    std::fs::write(
+        app.join("a_test.wado"),
+        "use { o } from \"../other/o.wado\";\n\ntest \"one\" {\n    assert o() == 1;\n}\n",
+    )
+    .unwrap();
+    let run = || wado().arg("test").arg(app.join("a_test.wado")).assert();
+
+    run().success();
+    run()
+        .success()
+        .stdout(predicate::str::contains("cached:  1 files"));
+    std::fs::remove_file(other.join("wado.toml")).unwrap();
+    run().failure().stdout(predicate::str::contains("cached:").not());
+}
+
+/// The package a module is in is the one its file is in on disk, `..` taken
+/// after a symlinked directory as the OS takes it.
+#[cfg(unix)]
+#[test]
+fn test_a_package_root_is_found_where_the_module_is_read() {
+    let tmp = tempfile::tempdir().unwrap();
+    let pkgs = tmp.path().join("real/pkgs");
+    std::fs::create_dir_all(pkgs.join("app")).unwrap();
+    std::fs::create_dir_all(pkgs.join("other")).unwrap();
+    std::fs::write(
+        pkgs.join("other/wado.toml"),
+        "[package]\nname = \"other\"\nversion = \"0.1.0\"\n",
+    )
+    .unwrap();
+    std::fs::write(
+        pkgs.join("other/o.wado"),
+        "use { base } from \"./p.wado\";\npub fn o() -> i32 { return base(); }\n",
+    )
+    .unwrap();
+    std::fs::write(
+        pkgs.join("other/p.wado"),
+        "internal fn base() -> i32 { return 1; }\n",
+    )
+    .unwrap();
+    std::fs::write(
+        pkgs.join("app/wado.toml"),
+        "[package]\nname = \"app\"\nversion = \"0.1.0\"\n",
+    )
+    .unwrap();
+    std::fs::write(
+        pkgs.join("app/main.wado"),
+        "use { o } from \"../other/o.wado\";\nexport fn run() { assert o() == 1; }\n",
+    )
+    .unwrap();
+    let work = tmp.path().join("work");
+    std::fs::create_dir_all(&work).unwrap();
+    std::os::unix::fs::symlink(pkgs.join("app"), work.join("app")).unwrap();
+
+    wado()
+        .current_dir(&work)
+        .args(["check", "app/main.wado"])
+        .assert()
+        .success();
 }
 
 #[test]

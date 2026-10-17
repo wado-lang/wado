@@ -1,0 +1,13 @@
+// `sub/spec_packages_outside` stands where a `wado.toml` would, so the modules
+// in it are another package. `o` reaches `internal` items of its own package.
+use { o } from "./sub/spec_packages_outside/o.wado";
+
+test {
+    assert o() == 1;
+}
+
+__DATA__
+{
+  "test": {},
+  "package_roots": [".", "sub/spec_packages_outside"]
+}

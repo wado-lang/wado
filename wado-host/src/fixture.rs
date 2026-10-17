@@ -39,6 +39,11 @@ pub struct CompileInputs {
     /// relative to the fixture directory. Each entry is its own package.
     #[serde(default)]
     pub dependencies: IndexMap<String, String>,
+    /// Stubbed package roots, each a directory relative to the fixture
+    /// directory that stands where a `wado.toml` would. Empty declares no
+    /// package boundary.
+    #[serde(default)]
+    pub package_roots: Vec<String>,
     /// Override the `--param-unknown` policy level (`error` / `warn` / `ignore`).
     #[serde(default, deserialize_with = "policy_level")]
     pub param_unknown: Option<ParamPolicyLevel>,
@@ -66,6 +71,7 @@ impl CompileInputs {
         HostStubs {
             env: self.param_env.clone(),
             dependencies: self.dependencies.clone(),
+            package_roots: self.package_roots.clone(),
         }
     }
 

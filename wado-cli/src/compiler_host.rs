@@ -347,7 +347,13 @@ impl CompilerHost for FilesystemCompilerHost {
     }
 
     fn package_root(&self, path: &str) -> Option<String> {
-        self.inner.package_root(path)
+        self.inner.package_root_probing(path, |manifest, found| {
+            if found {
+                self.run.depend_on_file(manifest);
+            } else {
+                self.run.observe_absent(manifest);
+            }
+        })
     }
 
     fn env_var(&self, name: &str) -> Option<String> {

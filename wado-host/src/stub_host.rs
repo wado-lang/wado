@@ -6,6 +6,7 @@ use std::path::PathBuf;
 use indexmap::IndexMap;
 use wado_compiler::{CompilerHost, DependencyIndex, Diagnostic, SourceError};
 use wado_lsp::FilesystemCompilerHost;
+use wado_lsp::host::discovery::normalize_path;
 
 /// What a [`StubHost`] answers in place of the environment.
 #[derive(Debug, Default, Clone)]
@@ -15,6 +16,9 @@ pub struct HostStubs {
     /// The `[dependencies]` a bare `use ... from "name"` binds to: name → the
     /// dependency's `[package].lib` path, relative to the host's base.
     pub dependencies: IndexMap<String, String>,
+    /// The directories, relative to the host's base, that stand where a
+    /// `wado.toml` would.
+    pub package_roots: Vec<String>,
 }
 
 /// A [`FilesystemCompilerHost`] that answers the dependency index and the
@@ -71,6 +75,20 @@ impl CompilerHost for StubHost {
 
     fn stdlib_module_read(&self, import_path: &str) {
         self.filesystem.stdlib_module_read(import_path);
+    }
+
+    /// The nearest stubbed root above the module, compared lexically: a
+    /// fixture directory holds no symlink.
+    fn package_root(&self, path: &str) -> Option<String> {
+        let base = self.filesystem.base_path();
+        let file = normalize_path(&base.join(path));
+        let dir = file.parent().expect("a module path names a file");
+        self.stubs
+            .package_roots
+            .iter()
+            .filter(|root| dir.starts_with(normalize_path(&base.join(root))))
+            .max_by_key(|root| normalize_path(&base.join(root)).components().count())
+            .cloned()
     }
 
     fn dependency_index(&self) -> DependencyIndex {
