@@ -861,8 +861,7 @@ impl WebGpuBackend {
         };
         let out_extents = row_extents(&extents, row_axes, reduced);
         let out = contiguous(self.allocated(element_count(&out_extents), false), 0, out_extents);
-        let x = i32::min(rows, MAX_GROUPS);
-        let y = rows.div_ceil(x);
+        let [x, y] = spread(rows);
         let mut params: List<u32> = [rows as u32, x as u32, row as u32];
         push_all(&mut params, &extents);
         for let o of bound.views {
@@ -1386,7 +1385,7 @@ impl WebGpuBackend {
         attend_operands[1] = present_k;
         attend_operands[2] = present_v;
         let parts = self.allocated(attended, false);
-        let gx = i32::min(groups, MAX_GROUPS);
+        let [gx, gy] = spread(groups);
         let mut attend_head: List<u32> = [];
         push_all(&mut attend_head, &([groups, gx, batch, s, heads, d, total, past, heads / kv, half] as List<i32>));
         attend_head.push(options.scale.to_bits());
@@ -1396,17 +1395,13 @@ impl WebGpuBackend {
         let biased = bias matches { Some(_) };
         self.dispatch_bound(&attend_operands, parts, attended, attend_head, |bindings| ShaderKey::Attend([
             bindings, d, half > 0, biased,
-        ]), [gx, groups.div_ceil(i32::max(gx, 1)), 1]);
+        ]), [gx, gy, 1]);
 
         let out = self.allocated(rows * d, false);
-        let rx = i32::min(rows, MAX_GROUPS);
+        let [rx, ry] = spread(rows);
         let joined = [contiguous(parts, 0, [attended])] as List<DeviceTensor>;
         let join_head: List<u32> = [rows as u32, rx as u32, total.div_ceil(LANES) as u32, d as u32];
-        self.dispatch_bound(&joined, out, rows * d, join_head, |bindings| ShaderKey::AttendJoin(bindings), [
-            rx,
-            rows.div_ceil(i32::max(rx, 1)),
-            1,
-        ]);
+        self.dispatch_bound(&joined, out, rows * d, join_head, |bindings| ShaderKey::AttendJoin(bindings), [rx, ry, 1]);
         return Option::Some([contiguous(out, 0, [batch, s, heads * d]), present_k, present_v]);
     }
 
@@ -2047,22 +2042,20 @@ impl Backend for WebGpuBackend {
         let out = self.allocated(lanes, false);
         let parts = lane.div_ceil(ARG_MAX_PART);
         let groups = lanes * parts;
-        let gx = i32::min(groups, MAX_GROUPS);
+        let [gx, gy] = spread(groups);
         let mut head: List<u32> = [];
         push_all(&mut head, &([groups, gx, lane, parts] as List<i32>));
         push_all(&mut head, &moved.extents);
         if parts == 1 {
             self.dispatch_bound(&operands, out, lanes, head, |bindings| ShaderKey::ArgMax([bindings, rank, Whole]), [
-                gx,
-                lanes.div_ceil(gx),
-                1,
+                gx, gy, 1,
             ]);
         } else {
             let pairs = self.allocated(2 * groups, false);
             self.dispatch_bound(&operands, pairs, 2 * groups, head, |bindings| ShaderKey::ArgMax(
                 [bindings, rank, Parts],
-            ), [gx, groups.div_ceil(gx), 1]);
-            let lx = i32::min(lanes, MAX_GROUPS);
+            ), [gx, gy, 1]);
+            let [lx, ly] = spread(lanes);
             let combine = [contiguous(pairs, 0, [2 * groups])] as List<DeviceTensor>;
             let mut combined = head;
             combined[0] = lanes as u32;
@@ -2073,7 +2066,7 @@ impl Backend for WebGpuBackend {
                 lanes,
                 combined,
                 |bindings| ShaderKey::ArgMax([bindings, rank, Combine]),
-                [lx, lanes.div_ceil(lx), 1],
+                [lx, ly, 1],
             );
         }
         let mut extents = view.extents;
@@ -2361,7 +2354,12 @@ fn internal_strides(over_result: &List<i32>, a: &List<i32>, b: &List<i32>, batch
 /// The workgroups covering `count` invocations of `LANES` each: as many as one
 /// dimension takes along `x`, the rest along `y`.
 fn grid(count: i32) -> [i32, i32] {
-    let groups = count.div_ceil(LANES);
+    return spread(count.div_ceil(LANES));
+}
+
+/// `groups` workgroups as a grid of rows of at most `MAX_GROUPS`: the
+/// workgroups per row, and the rows.
+fn spread(groups: i32) -> [i32, i32] {
     let x = i32::min(groups, MAX_GROUPS);
     return [x, if x == 0 { 0 } else { groups.div_ceil(x) }];
 }
@@ -2410,12 +2408,18 @@ fn push_view(params: &mut List<u32>, offset: i32, strides: &List<i32>) {
 fn buffers_wgsl(bindings: i32, half: Option<i32>) -> String {
     let mut out = "";
     for let k of 0..<bindings {
-        let element = if half == Option::Some(k) { "u32" } else { "f32" };
-        out.push_str(`@group(0) @binding(${k}) var<storage, read> o${k}: array<${element}>;\n`);
+        out.push_str(
+            `@group(0) @binding(${k}) var<storage, read> o${k}: array<${word_wgsl(half == Option::Some(k))}>;\n`,
+        );
     }
     out.push_str(`@group(0) @binding(${bindings}) var<storage, read_write> out: array<f32>;\n`);
     out.push_str(`@group(0) @binding(${bindings + 1}) var<storage, read> p: array<u32>;\n`);
     return out;
+}
+
+/// The WGSL type of a buffer's words: `u32` where they hold bf16 pairs.
+fn word_wgsl(half: bool) -> String {
+    return if half { "u32" } else { "f32" };
 }
 
 /// The f32 at the element index `index`, a `u32`, of the buffer `buffer`: an
@@ -2997,7 +3001,7 @@ fn copy_shader(rank: i32, half: bool) -> String {
     let from = 2 + rank;
     let to = from + rank + 1;
     let source = index_wgsl(from, 0, rank, "c", `bitcast<i32>(p[${from}])`);
-    return `@group(0) @binding(0) var<storage, read> src: array<${if half { "u32" } else { "f32" }}>;
+    return `@group(0) @binding(0) var<storage, read> src: array<${word_wgsl(half)}>;
 @group(0) @binding(1) var<storage, read_write> dst: array<f32>;
 @group(0) @binding(2) var<storage, read> p: array<u32>;
 
@@ -3027,7 +3031,7 @@ fn gather_shader(rank: i32, axis: i32, half: bool) -> String {
     let first = along + 1;
     let out = first + 1;
     let source = index_wgsl(data, 0, rank, "c", `bitcast<i32>(p[${data}])`);
-    return `@group(0) @binding(0) var<storage, read> data: array<${if half { "u32" } else { "f32" }}>;
+    return `@group(0) @binding(0) var<storage, read> data: array<${word_wgsl(half)}>;
 @group(0) @binding(1) var<storage, read> indices: array<u32>;
 @group(0) @binding(2) var<storage, read_write> out: array<f32>;
 @group(0) @binding(3) var<storage, read> p: array<u32>;
@@ -3135,7 +3139,7 @@ fn narrow_product_shader(
             }
 `;
     } else {
-        let pair = `            let w = o${bindings[1]}[u32(b_base + i32(k) * b_inner + i32(col) * b_col) >> 1u];
+        let pair = `            let w = o${bindings[1]}[${right_index_wgsl("k")} >> 1u];
             let v0 = bitcast<f32>(w << 16u);
             let v1 = bitcast<f32>(w & 0xFFFF0000u);
 `;
@@ -3227,7 +3231,13 @@ fn right_binding(bindings: &List<i32>, half: bool) -> Option<i32> {
 
 /// A product's right matrix at the inner index `k` and column `col`.
 fn right_wgsl(bindings: &List<i32>, half: bool, k: String) -> String {
-    return element_wgsl(`o${bindings[1]}`, `u32(b_base + i32(${k}) * b_inner + i32(col) * b_col)`, half);
+    return element_wgsl(`o${bindings[1]}`, right_index_wgsl(k), half);
+}
+
+/// The element index, a `u32`, of a product's right matrix at the inner index
+/// `k` and column `col`.
+fn right_index_wgsl(k: String) -> String {
+    return `u32(b_base + i32(${k}) * b_inner + i32(col) * b_col)`;
 }
 
 /// The columns one workgroup of [`narrow_product_shader`] computes, whose
