@@ -18,32 +18,80 @@ impl Span {
     }
 }
 
-internal fn push_chars(out: &mut String, chars: &List<char>, start: i32, end: i32) {
-    let mut bytes = 0;
-    for let mut i = start; i < end; i += 1 {
-        bytes += chars[i].len_utf8();
+internal fn utf8_len(lead: u8) -> i32 {
+    if lead < 0x80 {
+        return 1;
     }
-    out.reserve(bytes);
-    for let mut i = start; i < end; i += 1 {
-        out.push(chars[i]);
+    if lead < 0xE0 {
+        return 2;
     }
+    if lead < 0xF0 {
+        return 3;
+    }
+    return 4;
 }
 
-internal fn chars_text(chars: &List<char>, start: i32, end: i32) -> String {
-    let mut s = String::new();
-    push_chars(&mut s, chars, start, end);
-    return s;
+internal fn is_utf8_continuation(b: u8) -> bool {
+    return b & 0xC0 == 0x80;
 }
 
-internal fn push_chars_escaped(out: &mut String, chars: &List<char>, start: i32, end: i32) {
+internal fn char_at(src: &StrSlice, pos: i32) -> char
+    contract 0 <= pos < src.len()
+{
+    let b = unchecked src.byte_at(pos);
+    if b < 0x80 {
+        return b as char;
+    }
+    return src.char_at_byte(pos);
+}
+
+internal fn char_end(src: &StrSlice, pos: i32) -> i32
+    contract 0 <= pos < src.len()
+{
+    return pos + utf8_len(unchecked src.byte_at(pos));
+}
+
+internal fn char_start_before(src: &StrSlice, pos: i32) -> i32
+    contract 0 < pos <= src.len()
+{
+    let mut i = pos - 1;
+    while i > 0 && is_utf8_continuation(unchecked src.byte_at(i)) {
+        i -= 1;
+    }
+    return i;
+}
+
+internal fn char_count(src: &StrSlice, start: i32, end: i32) -> i32
+    contract 0 <= start <= end <= src.len()
+{
+    let mut n = 0;
     for let mut i = start; i < end; i += 1 {
-        match chars[i] {
-            '\n' => out.push_str("\\n"),
-            '\r' => out.push_str("\\r"),
-            '\t' => out.push_str("\\t"),
-            c => out.push(c),
+        if !is_utf8_continuation(unchecked src.byte_at(i)) {
+            n += 1;
         }
     }
+    return n;
+}
+
+internal fn span_text(src: &StrSlice, start: i32, end: i32) -> String {
+    return src.slice(start, end).to_string();
+}
+
+internal fn push_escaped(out: &mut String, src: &StrSlice, start: i32, end: i32) {
+    let mut run = start;
+    for let mut i = start; i < end; i += 1 {
+        let b = unchecked src.byte_at(i);
+        if b matches { b'\n' | b'\r' | b'\t' } {
+            out.push_str(unchecked src.slice(run, i));
+            out.push_str(match b {
+                b'\n' => "\\n",
+                b'\r' => "\\r",
+                _ => "\\t",
+            });
+            run = i + 1;
+        }
+    }
+    out.push_str(unchecked src.slice(run, end));
 }
 
 internal fn kind_set_has(set: &List<i32>, kind: i32) -> bool {
@@ -72,27 +120,26 @@ internal fn with_expected<S: AsStrSlice>(message: S, expected: &List<String>) ->
     return out;
 }
 
-internal fn char_pos_in_line(chars: &List<char>, i: i32) -> i32 {
-    let mut j = if i < chars.len() { i } else { chars.len() };
-    let mut col = 0;
-    while j > 0 && chars[j - 1] != '\n' {
-        col += 1;
-        j -= 1;
+internal fn char_pos_in_line(src: &StrSlice, pos: i32) -> i32 {
+    let end = i32::min(pos, src.len());
+    let mut line_start = end;
+    while line_start > 0 && unchecked src.byte_at(line_start - 1) != b'\n' {
+        line_start -= 1;
     }
-    return col;
+    return char_count(src, line_start, end);
 }
 
-internal fn line_starts(chars: &List<char>) -> List<i32> {
+internal fn line_starts(src: &StrSlice) -> List<i32> {
     let mut starts: List<i32> = [0];
-    for let mut i = 0; i < chars.len(); i += 1 {
-        if chars[i] == '\n' {
+    for let mut i = 0; i < src.len(); i += 1 {
+        if unchecked src.byte_at(i) == b'\n' {
             starts.push(i + 1);
         }
     }
     return starts;
 }
 
-internal fn line_col_at(starts: &List<i32>, pos: i32) -> [i32, i32] {
+internal fn line_col_at(src: &StrSlice, starts: &List<i32>, pos: i32) -> [i32, i32] {
     let mut lo = 0;
     let mut hi = starts.len() - 1;
     while lo < hi {
@@ -103,7 +150,7 @@ internal fn line_col_at(starts: &List<i32>, pos: i32) -> [i32, i32] {
             hi = mid - 1;
         }
     }
-    return [lo + 1, pos - starts[lo]];
+    return [lo + 1, char_count(src, starts[lo], pos)];
 }
 
 pub flags TokenFlags {
@@ -118,7 +165,7 @@ pub struct TokenStream {
     pub ends: List<i32>,
     pub triv_lo: List<i32>,
     pub triv_hi: List<i32>,
-    pub chars: &List<char>,
+    pub src: StrSlice,
     pub triv_kinds: List<i32>,
     pub triv_starts: List<i32>,
     pub triv_ends: List<i32>,
@@ -128,15 +175,15 @@ pub struct TokenStream {
 }
 
 impl TokenStream {
-    internal fn new(chars: &List<char>) -> TokenStream {
-        let cap = chars.len() / 4 + 1;
+    internal fn new(src: StrSlice) -> TokenStream {
+        let cap = src.len() / 4 + 1;
         return TokenStream {
             kinds: List::with_capacity(cap),
             starts: List::with_capacity(cap),
             ends: List::with_capacity(cap),
             triv_lo: List::with_capacity(cap),
             triv_hi: List::with_capacity(cap),
-            chars,
+            src,
             triv_kinds: List::with_capacity(cap),
             triv_starts: List::with_capacity(cap),
             triv_ends: List::with_capacity(cap),
@@ -249,15 +296,15 @@ impl TokenStream {
     }
 
     pub fn token_text(&self, i: i32) -> String {
-        return chars_text(self.chars, self.starts[i], self.ends[i]);
+        return span_text(&self.src, self.starts[i], self.ends[i]);
     }
 
     pub fn push_token_text(&self, out: &mut String, i: i32) {
-        push_chars(out, self.chars, self.starts[i], self.ends[i]);
+        out.push_str(self.src.slice(self.starts[i], self.ends[i]));
     }
 
     pub fn push_token_text_escaped(&self, out: &mut String, i: i32) {
-        push_chars_escaped(out, self.chars, self.starts[i], self.ends[i]);
+        push_escaped(out, &self.src, self.starts[i], self.ends[i]);
     }
 
     pub fn rule_text(&self, start_tok: i32, end_tok: i32) -> String {
@@ -266,7 +313,7 @@ impl TokenStream {
             if i > start_tok {
                 for let mut j = self.triv_lo[i]; j < self.triv_hi[i]; j += 1 {
                     if self.triv_chans[j] != 0 {
-                        push_chars(&mut out, self.chars, self.triv_starts[j], self.triv_ends[j]);
+                        out.push_str(self.src.slice(self.triv_starts[j], self.triv_ends[j]));
                     }
                 }
             }
@@ -371,7 +418,7 @@ impl Display for Diagnostic {
 
 fn lex_error_at(tokens: &TokenStream, i: i32) -> Diagnostic {
     let mut message = String::from("token recognition error at: '");
-    push_chars_escaped(&mut message, tokens.chars, tokens.starts[i], tokens.ends[i]);
+    push_escaped(&mut message, &tokens.src, tokens.starts[i], tokens.ends[i]);
     message.push('\'');
     return Diagnostic::error(
         DiagnosticCode::LexError,
@@ -396,13 +443,13 @@ internal fn merge_lex_errors(tokens: &TokenStream, diagnostics: &mut List<Diagno
     *diagnostics = merged;
 }
 
-internal fn resolve_positions(diagnostics: &mut List<Diagnostic>, chars: &List<char>) {
+internal fn resolve_positions(diagnostics: &mut List<Diagnostic>, src: &StrSlice) {
     if diagnostics.is_empty() {
         return;
     }
-    let starts = line_starts(chars);
+    let starts = line_starts(src);
     for let mut i = 0; i < diagnostics.len(); i += 1 {
-        let lc = line_col_at(&starts, diagnostics[i].span.start);
+        let lc = line_col_at(src, &starts, diagnostics[i].span.start);
         diagnostics[i].line = lc.0;
         diagnostics[i].col = lc.1;
     }
@@ -871,8 +918,26 @@ fn render_node(
     return c;
 }
 
+struct CharIndexCursor {
+    byte: i32,
+    char: i32,
+}
+
+impl CharIndexCursor {
+    fn advance_to(&mut self, src: &StrSlice, byte: i32) -> i32 {
+        if byte < self.byte {
+            self.byte = 0;
+            self.char = 0;
+        }
+        self.char += char_count(src, self.byte, byte);
+        self.byte = byte;
+        return self.char;
+    }
+}
+
 pub fn to_lexer_string(tokens: &TokenStream, eof_kind: i32) -> String {
-    let starts = line_starts(tokens.chars);
+    let starts = line_starts(&tokens.src);
+    let mut cursor = CharIndexCursor { byte: 0, char: 0 };
     let mut out = String::with_capacity(tokens.output.len() + tokens.len() * 32);
     out.push_str(&tokens.output);
     let mut index = 0;
@@ -889,6 +954,7 @@ pub fn to_lexer_string(tokens: &TokenStream, eof_kind: i32) -> String {
                     tokens.triv_ends[t],
                     tokens.triv_chans[t],
                     &starts,
+                    &mut cursor,
                     index,
                     eof_kind,
                 );
@@ -903,6 +969,7 @@ pub fn to_lexer_string(tokens: &TokenStream, eof_kind: i32) -> String {
             tokens.ends[i],
             0,
             &starts,
+            &mut cursor,
             index,
             eof_kind,
         );
@@ -919,17 +986,20 @@ fn emit_lexer_token(
     end: i32,
     channel: i32,
     starts: &List<i32>,
+    cursor: &mut CharIndexCursor,
     index: i32,
     eof_kind: i32,
 ) {
     let is_eof = kind == eof_kind;
     let type_id = if is_eof { -1 } else { kind + 1 };
-    let lc = line_col_at(starts, start);
-    out.push_str(`[@${index},${start}:${end - 1}='`);
+    let lc = line_col_at(&tokens.src, starts, start);
+    let first = cursor.advance_to(&tokens.src, start);
+    let stop = first + char_count(&tokens.src, start, end) - 1;
+    out.push_str(`[@${index},${first}:${stop}='`);
     if is_eof {
         out.push_str("<EOF>");
     } else {
-        push_chars_escaped(out, tokens.chars, start, end);
+        push_escaped(out, &tokens.src, start, end);
     }
     out.push_str(`',<${type_id}>,`);
     if channel != 0 {
@@ -939,22 +1009,31 @@ fn emit_lexer_token(
 }
 
 pub struct LexerView {
-    chars: &List<char>,
+    src: &StrSlice,
     start: i32,
     pos: i32,
 }
 
 impl LexerView {
     pub fn la(&self, k: i32) -> i32 {
-        let i = if k > 0 { self.pos + k - 1 } else { self.pos + k };
-        if i < 0 || i >= self.chars.len() {
-            return -1;
+        let mut i = self.pos;
+        for let mut step = 1; step < k; step += 1 {
+            if i >= self.src.len() {
+                return -1;
+            }
+            i = char_end(self.src, i);
         }
-        return self.chars[i] as i32;
+        for let mut step = 0; step > k; step -= 1 {
+            if i == 0 {
+                return -1;
+            }
+            i = char_start_before(self.src, i);
+        }
+        return self.char_at(i);
     }
 
     pub fn text(&self) -> String {
-        return chars_text(self.chars, self.start, self.pos);
+        return span_text(self.src, self.start, self.pos);
     }
 
     pub fn start(&self) -> i32 {
@@ -966,14 +1045,14 @@ impl LexerView {
     }
 
     pub fn char_at(&self, i: i32) -> i32 {
-        if i < 0 || i >= self.chars.len() {
+        if i < 0 || i >= self.src.len() || !self.src.is_char_boundary(i) {
             return -1;
         }
-        return self.chars[i] as i32;
+        return char_at(self.src, i) as i32;
     }
 
     pub fn input_len(&self) -> i32 {
-        return self.chars.len();
+        return self.src.len();
     }
 }
 pub global TK_OPEN: i32 = 0;
@@ -997,7 +1076,7 @@ pub interface JsBase {
 }
 
 pub struct Lexer {
-    chars: List<char>,
+    src: StrSlice,
     pos: i32,
     act_output: String = "",
     act_type: i32 = -1,
@@ -1008,11 +1087,11 @@ pub struct Lexer {
 
 impl Lexer {
     fn new<S: AsStrSlice>(input: S) -> Lexer {
-        return Lexer { chars: input.to_chars(), pos: 0 };
+        return Lexer { src: input.as_str_slice(), pos: 0 };
     }
 
     fn at_end(&self) -> bool {
-        return self.pos >= self.chars.len();
+        return self.pos >= self.src.len();
     }
 
     pub fn emit(&mut self, s: String) {
@@ -1044,45 +1123,45 @@ impl Lexer {
 }
 
 fn apply_OPEN_actions(lx: &mut Lexer, start: i32, end: i32) with JsBase {
-    let chars = &lx.chars;
+    let src = &lx.src;
     let mut pos = start;
-    if pos >= chars.len() || chars[pos] != '{' { return; }
+    if pos >= src.len() || unchecked src.byte_at(pos) != b'{' { return; }
     pos += 1;
-    JsBase::process_open(LexerView { chars, start, pos }, lx);
+    JsBase::process_open(LexerView { src, start, pos }, lx);
 }
 
 fn apply_CLOSE_actions(lx: &mut Lexer, start: i32, end: i32) with JsBase {
-    let chars = &lx.chars;
+    let src = &lx.src;
     let mut pos = start;
-    if pos >= chars.len() || chars[pos] != '}' { return; }
+    if pos >= src.len() || unchecked src.byte_at(pos) != b'}' { return; }
     pos += 1;
-    JsBase::process_close(LexerView { chars, start, pos }, lx);
+    JsBase::process_close(LexerView { src, start, pos }, lx);
 }
 
-fn try_OPEN(chars: &List<char>, start: i32) -> i32 {
+fn try_OPEN(src: &StrSlice, start: i32) -> i32 {
     let mut pos = start;
-    if pos >= chars.len() || chars[pos] != '{' { return -1; }
-    pos += 1;
-    return pos;
-}
-
-fn try_CLOSE(chars: &List<char>, start: i32) -> i32 {
-    let mut pos = start;
-    if pos >= chars.len() || chars[pos] != '}' { return -1; }
+    if pos >= src.len() || unchecked src.byte_at(pos) != b'{' { return -1; }
     pos += 1;
     return pos;
 }
 
-fn try_NAME(chars: &List<char>, start: i32) -> i32 with JsBase {
+fn try_CLOSE(src: &StrSlice, start: i32) -> i32 {
     let mut pos = start;
-    if !JsBase::names_enabled(LexerView { chars, start, pos }) { return -1; }
-    if pos >= chars.len() { return -1; }
-    if !(chars[pos] matches { 'a'..='z' }) { return -1; }
+    if pos >= src.len() || unchecked src.byte_at(pos) != b'}' { return -1; }
+    pos += 1;
+    return pos;
+}
+
+fn try_NAME(src: &StrSlice, start: i32) -> i32 with JsBase {
+    let mut pos = start;
+    if !JsBase::names_enabled(LexerView { src, start, pos }) { return -1; }
+    if pos >= src.len() { return -1; }
+    if !(unchecked src.byte_at(pos) matches { b'a'..=b'z' }) { return -1; }
     pos += 1;
     loop {
         rep_0: {
-            if pos >= chars.len() { break rep_0; }
-            if !(chars[pos] matches { 'a'..='z' }) { break rep_0; }
+            if pos >= src.len() { break rep_0; }
+            if !(unchecked src.byte_at(pos) matches { b'a'..=b'z' }) { break rep_0; }
             pos += 1;
             continue;
         }
@@ -1091,15 +1170,15 @@ fn try_NAME(chars: &List<char>, start: i32) -> i32 with JsBase {
     return pos;
 }
 
-fn try_ID(chars: &List<char>, start: i32) -> i32 {
+fn try_ID(src: &StrSlice, start: i32) -> i32 {
     let mut pos = start;
-    if pos >= chars.len() { return -1; }
-    if !(chars[pos] matches { 'a'..='z' }) { return -1; }
+    if pos >= src.len() { return -1; }
+    if !(unchecked src.byte_at(pos) matches { b'a'..=b'z' }) { return -1; }
     pos += 1;
     loop {
         rep_2: {
-            if pos >= chars.len() { break rep_2; }
-            if !(chars[pos] matches { 'a'..='z' }) { break rep_2; }
+            if pos >= src.len() { break rep_2; }
+            if !(unchecked src.byte_at(pos) matches { b'a'..=b'z' }) { break rep_2; }
             pos += 1;
             continue;
         }
@@ -1108,15 +1187,15 @@ fn try_ID(chars: &List<char>, start: i32) -> i32 {
     return pos;
 }
 
-fn try_WS(chars: &List<char>, start: i32) -> i32 {
+fn try_WS(src: &StrSlice, start: i32) -> i32 {
     let mut pos = start;
-    if pos >= chars.len() { return -1; }
-    if !(chars[pos] matches { ' ' | '\t' | '\r' | '\n' }) { return -1; }
+    if pos >= src.len() { return -1; }
+    if !(unchecked src.byte_at(pos) matches { b' ' | b'\x09' | b'\x0d' | b'\x0a' }) { return -1; }
     pos += 1;
     loop {
         rep_4: {
-            if pos >= chars.len() { break rep_4; }
-            if !(chars[pos] matches { ' ' | '\t' | '\r' | '\n' }) { break rep_4; }
+            if pos >= src.len() { break rep_4; }
+            if !(unchecked src.byte_at(pos) matches { b' ' | b'\x09' | b'\x0d' | b'\x0a' }) { break rep_4; }
             pos += 1;
             continue;
         }
@@ -1127,7 +1206,7 @@ fn try_WS(chars: &List<char>, start: i32) -> i32 {
 
 pub fn tokenize<S: AsStrSlice>(input: S) -> TokenStream with JsBase {
     let mut lexer = Lexer::new(input);
-    let mut ts = TokenStream::new(&lexer.chars);
+    let mut ts = TokenStream::new(lexer.src);
     let mut triv_lo = ts.trivia_mark();
     let mut more_start: i32 = -1;
     while !lexer.at_end() {
@@ -1137,34 +1216,35 @@ pub fn tokenize<S: AsStrSlice>(input: S) -> TokenStream with JsBase {
         let mut end: i32 = -1;
         let mut best_act: i32 = -1;
         let mut best_act_skip = false;
-        let first_char = lexer.chars[start];
+        let first_char = char_at(&lexer.src, start);
         let mut best_more = false;
         let mut best_channel: i32 = 0;
         match first_char {
             '\t' | '\n' | '\r' | ' ' => {
-                end = try_WS(&lexer.chars, start);
+                end = try_WS(&lexer.src, start);
                 if end > best_end { best_end = end; best_kind = TK_WS; best_more = false; best_channel = 0; best_act = -1; }
             },
             'a'..='z' => {
-                end = try_NAME(&lexer.chars, start);
+                end = try_NAME(&lexer.src, start);
                 if end > best_end { best_end = end; best_kind = TK_NAME; best_more = false; best_channel = 0; best_act = -1; }
-                end = try_ID(&lexer.chars, start);
+                end = try_ID(&lexer.src, start);
                 if end > best_end { best_end = end; best_kind = TK_ID; best_more = false; best_channel = 0; best_act = -1; }
             },
             '{' => {
-                end = try_OPEN(&lexer.chars, start);
+                end = try_OPEN(&lexer.src, start);
                 if end > best_end { best_end = end; best_kind = TK_OPEN; best_more = false; best_channel = 0; best_act = 0; }
             },
             '}' => {
-                end = try_CLOSE(&lexer.chars, start);
+                end = try_CLOSE(&lexer.src, start);
                 if end > best_end { best_end = end; best_kind = TK_CLOSE; best_more = false; best_channel = 0; best_act = 1; }
             },
             _ => {},
         }
         if best_end <= start {
-            let _ = ts.push_token_flagged(TK_ERROR, start, start + 1, triv_lo, ts.trivia_mark(), TokenFlags::LexError);
+            let error_end = char_end(&lexer.src, start);
+            let _ = ts.push_token_flagged(TK_ERROR, start, error_end, triv_lo, ts.trivia_mark(), TokenFlags::LexError);
             triv_lo = ts.trivia_mark();
-            lexer.pos = start + 1;
+            lexer.pos = error_end;
         } else {
             if best_act >= 0 {
                 lexer.reset_actions(best_kind, best_channel);
@@ -1181,7 +1261,7 @@ pub fn tokenize<S: AsStrSlice>(input: S) -> TokenStream with JsBase {
             let tok_start = if more_start >= 0 { more_start } else { start };
             let is_skip = best_kind matches { TK_WS } || best_act_skip;
             if !is_skip && !best_more {
-                best_kind = JsBase::emit(LexerView { chars: &lexer.chars, start: tok_start, pos: best_end }, best_kind, best_channel);
+                best_kind = JsBase::emit(LexerView { src: &lexer.src, start: tok_start, pos: best_end }, best_kind, best_channel);
             }
             if best_more {
                 if more_start < 0 { more_start = start; }

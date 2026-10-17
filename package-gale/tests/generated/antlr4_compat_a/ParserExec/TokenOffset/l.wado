@@ -15,32 +15,80 @@ impl Span {
     }
 }
 
-internal fn push_chars(out: &mut String, chars: &List<char>, start: i32, end: i32) {
-    let mut bytes = 0;
-    for let mut i = start; i < end; i += 1 {
-        bytes += chars[i].len_utf8();
+internal fn utf8_len(lead: u8) -> i32 {
+    if lead < 0x80 {
+        return 1;
     }
-    out.reserve(bytes);
-    for let mut i = start; i < end; i += 1 {
-        out.push(chars[i]);
+    if lead < 0xE0 {
+        return 2;
     }
+    if lead < 0xF0 {
+        return 3;
+    }
+    return 4;
 }
 
-internal fn chars_text(chars: &List<char>, start: i32, end: i32) -> String {
-    let mut s = String::new();
-    push_chars(&mut s, chars, start, end);
-    return s;
+internal fn is_utf8_continuation(b: u8) -> bool {
+    return b & 0xC0 == 0x80;
 }
 
-internal fn push_chars_escaped(out: &mut String, chars: &List<char>, start: i32, end: i32) {
+internal fn char_at(src: &StrSlice, pos: i32) -> char
+    contract 0 <= pos < src.len()
+{
+    let b = unchecked src.byte_at(pos);
+    if b < 0x80 {
+        return b as char;
+    }
+    return src.char_at_byte(pos);
+}
+
+internal fn char_end(src: &StrSlice, pos: i32) -> i32
+    contract 0 <= pos < src.len()
+{
+    return pos + utf8_len(unchecked src.byte_at(pos));
+}
+
+internal fn char_start_before(src: &StrSlice, pos: i32) -> i32
+    contract 0 < pos <= src.len()
+{
+    let mut i = pos - 1;
+    while i > 0 && is_utf8_continuation(unchecked src.byte_at(i)) {
+        i -= 1;
+    }
+    return i;
+}
+
+internal fn char_count(src: &StrSlice, start: i32, end: i32) -> i32
+    contract 0 <= start <= end <= src.len()
+{
+    let mut n = 0;
     for let mut i = start; i < end; i += 1 {
-        match chars[i] {
-            '\n' => out.push_str("\\n"),
-            '\r' => out.push_str("\\r"),
-            '\t' => out.push_str("\\t"),
-            c => out.push(c),
+        if !is_utf8_continuation(unchecked src.byte_at(i)) {
+            n += 1;
         }
     }
+    return n;
+}
+
+internal fn span_text(src: &StrSlice, start: i32, end: i32) -> String {
+    return src.slice(start, end).to_string();
+}
+
+internal fn push_escaped(out: &mut String, src: &StrSlice, start: i32, end: i32) {
+    let mut run = start;
+    for let mut i = start; i < end; i += 1 {
+        let b = unchecked src.byte_at(i);
+        if b matches { b'\n' | b'\r' | b'\t' } {
+            out.push_str(unchecked src.slice(run, i));
+            out.push_str(match b {
+                b'\n' => "\\n",
+                b'\r' => "\\r",
+                _ => "\\t",
+            });
+            run = i + 1;
+        }
+    }
+    out.push_str(unchecked src.slice(run, end));
 }
 
 internal fn kind_set_has(set: &List<i32>, kind: i32) -> bool {
@@ -69,27 +117,26 @@ internal fn with_expected<S: AsStrSlice>(message: S, expected: &List<String>) ->
     return out;
 }
 
-internal fn char_pos_in_line(chars: &List<char>, i: i32) -> i32 {
-    let mut j = if i < chars.len() { i } else { chars.len() };
-    let mut col = 0;
-    while j > 0 && chars[j - 1] != '\n' {
-        col += 1;
-        j -= 1;
+internal fn char_pos_in_line(src: &StrSlice, pos: i32) -> i32 {
+    let end = i32::min(pos, src.len());
+    let mut line_start = end;
+    while line_start > 0 && unchecked src.byte_at(line_start - 1) != b'\n' {
+        line_start -= 1;
     }
-    return col;
+    return char_count(src, line_start, end);
 }
 
-internal fn line_starts(chars: &List<char>) -> List<i32> {
+internal fn line_starts(src: &StrSlice) -> List<i32> {
     let mut starts: List<i32> = [0];
-    for let mut i = 0; i < chars.len(); i += 1 {
-        if chars[i] == '\n' {
+    for let mut i = 0; i < src.len(); i += 1 {
+        if unchecked src.byte_at(i) == b'\n' {
             starts.push(i + 1);
         }
     }
     return starts;
 }
 
-internal fn line_col_at(starts: &List<i32>, pos: i32) -> [i32, i32] {
+internal fn line_col_at(src: &StrSlice, starts: &List<i32>, pos: i32) -> [i32, i32] {
     let mut lo = 0;
     let mut hi = starts.len() - 1;
     while lo < hi {
@@ -100,7 +147,7 @@ internal fn line_col_at(starts: &List<i32>, pos: i32) -> [i32, i32] {
             hi = mid - 1;
         }
     }
-    return [lo + 1, pos - starts[lo]];
+    return [lo + 1, char_count(src, starts[lo], pos)];
 }
 
 pub flags TokenFlags {
@@ -115,7 +162,7 @@ pub struct TokenStream {
     pub ends: List<i32>,
     pub triv_lo: List<i32>,
     pub triv_hi: List<i32>,
-    pub chars: &List<char>,
+    pub src: StrSlice,
     pub triv_kinds: List<i32>,
     pub triv_starts: List<i32>,
     pub triv_ends: List<i32>,
@@ -125,15 +172,15 @@ pub struct TokenStream {
 }
 
 impl TokenStream {
-    internal fn new(chars: &List<char>) -> TokenStream {
-        let cap = chars.len() / 4 + 1;
+    internal fn new(src: StrSlice) -> TokenStream {
+        let cap = src.len() / 4 + 1;
         return TokenStream {
             kinds: List::with_capacity(cap),
             starts: List::with_capacity(cap),
             ends: List::with_capacity(cap),
             triv_lo: List::with_capacity(cap),
             triv_hi: List::with_capacity(cap),
-            chars,
+            src,
             triv_kinds: List::with_capacity(cap),
             triv_starts: List::with_capacity(cap),
             triv_ends: List::with_capacity(cap),
@@ -246,15 +293,15 @@ impl TokenStream {
     }
 
     pub fn token_text(&self, i: i32) -> String {
-        return chars_text(self.chars, self.starts[i], self.ends[i]);
+        return span_text(&self.src, self.starts[i], self.ends[i]);
     }
 
     pub fn push_token_text(&self, out: &mut String, i: i32) {
-        push_chars(out, self.chars, self.starts[i], self.ends[i]);
+        out.push_str(self.src.slice(self.starts[i], self.ends[i]));
     }
 
     pub fn push_token_text_escaped(&self, out: &mut String, i: i32) {
-        push_chars_escaped(out, self.chars, self.starts[i], self.ends[i]);
+        push_escaped(out, &self.src, self.starts[i], self.ends[i]);
     }
 
     pub fn rule_text(&self, start_tok: i32, end_tok: i32) -> String {
@@ -263,7 +310,7 @@ impl TokenStream {
             if i > start_tok {
                 for let mut j = self.triv_lo[i]; j < self.triv_hi[i]; j += 1 {
                     if self.triv_chans[j] != 0 {
-                        push_chars(&mut out, self.chars, self.triv_starts[j], self.triv_ends[j]);
+                        out.push_str(self.src.slice(self.triv_starts[j], self.triv_ends[j]));
                     }
                 }
             }
@@ -368,7 +415,7 @@ impl Display for Diagnostic {
 
 fn lex_error_at(tokens: &TokenStream, i: i32) -> Diagnostic {
     let mut message = String::from("token recognition error at: '");
-    push_chars_escaped(&mut message, tokens.chars, tokens.starts[i], tokens.ends[i]);
+    push_escaped(&mut message, &tokens.src, tokens.starts[i], tokens.ends[i]);
     message.push('\'');
     return Diagnostic::error(
         DiagnosticCode::LexError,
@@ -393,13 +440,13 @@ internal fn merge_lex_errors(tokens: &TokenStream, diagnostics: &mut List<Diagno
     *diagnostics = merged;
 }
 
-internal fn resolve_positions(diagnostics: &mut List<Diagnostic>, chars: &List<char>) {
+internal fn resolve_positions(diagnostics: &mut List<Diagnostic>, src: &StrSlice) {
     if diagnostics.is_empty() {
         return;
     }
-    let starts = line_starts(chars);
+    let starts = line_starts(src);
     for let mut i = 0; i < diagnostics.len(); i += 1 {
-        let lc = line_col_at(&starts, diagnostics[i].span.start);
+        let lc = line_col_at(src, &starts, diagnostics[i].span.start);
         diagnostics[i].line = lc.0;
         diagnostics[i].col = lc.1;
     }
@@ -868,8 +915,26 @@ fn render_node(
     return c;
 }
 
+struct CharIndexCursor {
+    byte: i32,
+    char: i32,
+}
+
+impl CharIndexCursor {
+    fn advance_to(&mut self, src: &StrSlice, byte: i32) -> i32 {
+        if byte < self.byte {
+            self.byte = 0;
+            self.char = 0;
+        }
+        self.char += char_count(src, self.byte, byte);
+        self.byte = byte;
+        return self.char;
+    }
+}
+
 pub fn to_lexer_string(tokens: &TokenStream, eof_kind: i32) -> String {
-    let starts = line_starts(tokens.chars);
+    let starts = line_starts(&tokens.src);
+    let mut cursor = CharIndexCursor { byte: 0, char: 0 };
     let mut out = String::with_capacity(tokens.output.len() + tokens.len() * 32);
     out.push_str(&tokens.output);
     let mut index = 0;
@@ -886,6 +951,7 @@ pub fn to_lexer_string(tokens: &TokenStream, eof_kind: i32) -> String {
                     tokens.triv_ends[t],
                     tokens.triv_chans[t],
                     &starts,
+                    &mut cursor,
                     index,
                     eof_kind,
                 );
@@ -900,6 +966,7 @@ pub fn to_lexer_string(tokens: &TokenStream, eof_kind: i32) -> String {
             tokens.ends[i],
             0,
             &starts,
+            &mut cursor,
             index,
             eof_kind,
         );
@@ -916,17 +983,20 @@ fn emit_lexer_token(
     end: i32,
     channel: i32,
     starts: &List<i32>,
+    cursor: &mut CharIndexCursor,
     index: i32,
     eof_kind: i32,
 ) {
     let is_eof = kind == eof_kind;
     let type_id = if is_eof { -1 } else { kind + 1 };
-    let lc = line_col_at(starts, start);
-    out.push_str(`[@${index},${start}:${end - 1}='`);
+    let lc = line_col_at(&tokens.src, starts, start);
+    let first = cursor.advance_to(&tokens.src, start);
+    let stop = first + char_count(&tokens.src, start, end) - 1;
+    out.push_str(`[@${index},${first}:${stop}='`);
     if is_eof {
         out.push_str("<EOF>");
     } else {
-        push_chars_escaped(out, tokens.chars, start, end);
+        push_escaped(out, &tokens.src, start, end);
     }
     out.push_str(`',<${type_id}>,`);
     if channel != 0 {
@@ -1151,416 +1221,417 @@ pub global TK_LIT_65: i32 = 67;
 pub global TK_LIT_66: i32 = 68;
 
 struct Lexer {
-    chars: List<char>,
+    src: StrSlice,
     pos: i32,
 }
 
 impl Lexer {
     fn new<S: AsStrSlice>(input: S) -> Lexer {
-        return Lexer { chars: input.to_chars(), pos: 0 };
+        return Lexer { src: input.as_str_slice(), pos: 0 };
     }
 
     fn at_end(&self) -> bool {
-        return self.pos >= self.chars.len();
+        return self.pos >= self.src.len();
     }
 }
 
-fn try_WS(chars: &List<char>, start: i32) -> i32 {
+fn try_WS(src: &StrSlice, start: i32) -> i32 {
     let mut pos = start;
-    if pos >= chars.len() { return -1; }
-    if !(chars[pos] matches { '\n' | ' ' }) { return -1; }
+    if pos >= src.len() { return -1; }
+    if !(unchecked src.byte_at(pos) matches { b'\x0a' | b' ' }) { return -1; }
     pos += 1;
     return pos;
 }
 
-fn try_lit_1(chars: &List<char>, start: i32) -> i32 {
-    if start + 1 > chars.len() || chars[start] != '1' { return -1; }
+fn try_lit_1(src: &StrSlice, start: i32) -> i32 {
+    if start + 1 > src.len() || unchecked src.byte_at(start) != b'1' { return -1; }
     return start + 1;
 }
 
-fn try_lit_2(chars: &List<char>, start: i32) -> i32 {
-    if start + 1 > chars.len() || chars[start] != '2' { return -1; }
+fn try_lit_2(src: &StrSlice, start: i32) -> i32 {
+    if start + 1 > src.len() || unchecked src.byte_at(start) != b'2' { return -1; }
     return start + 1;
 }
 
-fn try_lit_3(chars: &List<char>, start: i32) -> i32 {
-    if start + 1 > chars.len() || chars[start] != '3' { return -1; }
+fn try_lit_3(src: &StrSlice, start: i32) -> i32 {
+    if start + 1 > src.len() || unchecked src.byte_at(start) != b'3' { return -1; }
     return start + 1;
 }
 
-fn try_lit_4(chars: &List<char>, start: i32) -> i32 {
-    if start + 1 > chars.len() || chars[start] != '4' { return -1; }
+fn try_lit_4(src: &StrSlice, start: i32) -> i32 {
+    if start + 1 > src.len() || unchecked src.byte_at(start) != b'4' { return -1; }
     return start + 1;
 }
 
-fn try_lit_5(chars: &List<char>, start: i32) -> i32 {
-    if start + 1 > chars.len() || chars[start] != '5' { return -1; }
+fn try_lit_5(src: &StrSlice, start: i32) -> i32 {
+    if start + 1 > src.len() || unchecked src.byte_at(start) != b'5' { return -1; }
     return start + 1;
 }
 
-fn try_lit_6(chars: &List<char>, start: i32) -> i32 {
-    if start + 1 > chars.len() || chars[start] != '6' { return -1; }
+fn try_lit_6(src: &StrSlice, start: i32) -> i32 {
+    if start + 1 > src.len() || unchecked src.byte_at(start) != b'6' { return -1; }
     return start + 1;
 }
 
-fn try_lit_7(chars: &List<char>, start: i32) -> i32 {
-    if start + 1 > chars.len() || chars[start] != '7' { return -1; }
+fn try_lit_7(src: &StrSlice, start: i32) -> i32 {
+    if start + 1 > src.len() || unchecked src.byte_at(start) != b'7' { return -1; }
     return start + 1;
 }
 
-fn try_lit_8(chars: &List<char>, start: i32) -> i32 {
-    if start + 1 > chars.len() || chars[start] != '8' { return -1; }
+fn try_lit_8(src: &StrSlice, start: i32) -> i32 {
+    if start + 1 > src.len() || unchecked src.byte_at(start) != b'8' { return -1; }
     return start + 1;
 }
 
-fn try_lit_9(chars: &List<char>, start: i32) -> i32 {
-    if start + 1 > chars.len() || chars[start] != '9' { return -1; }
+fn try_lit_9(src: &StrSlice, start: i32) -> i32 {
+    if start + 1 > src.len() || unchecked src.byte_at(start) != b'9' { return -1; }
     return start + 1;
 }
 
-fn try_lit_10(chars: &List<char>, start: i32) -> i32 {
-    if start + 2 > chars.len() || chars[start] != '1' || chars[start + 1] != '0' { return -1; }
+fn try_lit_10(src: &StrSlice, start: i32) -> i32 {
+    if start + 2 > src.len() || unchecked src.byte_at(start) != b'1' || unchecked src.byte_at(start + 1) != b'0' { return -1; }
     return start + 2;
 }
 
-fn try_lit_11(chars: &List<char>, start: i32) -> i32 {
-    if start + 2 > chars.len() || chars[start] != '1' || chars[start + 1] != '1' { return -1; }
+fn try_lit_11(src: &StrSlice, start: i32) -> i32 {
+    if start + 2 > src.len() || unchecked src.byte_at(start) != b'1' || unchecked src.byte_at(start + 1) != b'1' { return -1; }
     return start + 2;
 }
 
-fn try_lit_12(chars: &List<char>, start: i32) -> i32 {
-    if start + 2 > chars.len() || chars[start] != '1' || chars[start + 1] != '2' { return -1; }
+fn try_lit_12(src: &StrSlice, start: i32) -> i32 {
+    if start + 2 > src.len() || unchecked src.byte_at(start) != b'1' || unchecked src.byte_at(start + 1) != b'2' { return -1; }
     return start + 2;
 }
 
-fn try_lit_13(chars: &List<char>, start: i32) -> i32 {
-    if start + 2 > chars.len() || chars[start] != '1' || chars[start + 1] != '3' { return -1; }
+fn try_lit_13(src: &StrSlice, start: i32) -> i32 {
+    if start + 2 > src.len() || unchecked src.byte_at(start) != b'1' || unchecked src.byte_at(start + 1) != b'3' { return -1; }
     return start + 2;
 }
 
-fn try_lit_14(chars: &List<char>, start: i32) -> i32 {
-    if start + 2 > chars.len() || chars[start] != '1' || chars[start + 1] != '4' { return -1; }
+fn try_lit_14(src: &StrSlice, start: i32) -> i32 {
+    if start + 2 > src.len() || unchecked src.byte_at(start) != b'1' || unchecked src.byte_at(start + 1) != b'4' { return -1; }
     return start + 2;
 }
 
-fn try_lit_15(chars: &List<char>, start: i32) -> i32 {
-    if start + 2 > chars.len() || chars[start] != '1' || chars[start + 1] != '5' { return -1; }
+fn try_lit_15(src: &StrSlice, start: i32) -> i32 {
+    if start + 2 > src.len() || unchecked src.byte_at(start) != b'1' || unchecked src.byte_at(start + 1) != b'5' { return -1; }
     return start + 2;
 }
 
-fn try_lit_16(chars: &List<char>, start: i32) -> i32 {
-    if start + 2 > chars.len() || chars[start] != '1' || chars[start + 1] != '6' { return -1; }
+fn try_lit_16(src: &StrSlice, start: i32) -> i32 {
+    if start + 2 > src.len() || unchecked src.byte_at(start) != b'1' || unchecked src.byte_at(start + 1) != b'6' { return -1; }
     return start + 2;
 }
 
-fn try_lit_17(chars: &List<char>, start: i32) -> i32 {
-    if start + 2 > chars.len() || chars[start] != '1' || chars[start + 1] != '7' { return -1; }
+fn try_lit_17(src: &StrSlice, start: i32) -> i32 {
+    if start + 2 > src.len() || unchecked src.byte_at(start) != b'1' || unchecked src.byte_at(start + 1) != b'7' { return -1; }
     return start + 2;
 }
 
-fn try_lit_18(chars: &List<char>, start: i32) -> i32 {
-    if start + 2 > chars.len() || chars[start] != '1' || chars[start + 1] != '8' { return -1; }
+fn try_lit_18(src: &StrSlice, start: i32) -> i32 {
+    if start + 2 > src.len() || unchecked src.byte_at(start) != b'1' || unchecked src.byte_at(start + 1) != b'8' { return -1; }
     return start + 2;
 }
 
-fn try_lit_19(chars: &List<char>, start: i32) -> i32 {
-    if start + 2 > chars.len() || chars[start] != '1' || chars[start + 1] != '9' { return -1; }
+fn try_lit_19(src: &StrSlice, start: i32) -> i32 {
+    if start + 2 > src.len() || unchecked src.byte_at(start) != b'1' || unchecked src.byte_at(start + 1) != b'9' { return -1; }
     return start + 2;
 }
 
-fn try_lit_20(chars: &List<char>, start: i32) -> i32 {
-    if start + 2 > chars.len() || chars[start] != '2' || chars[start + 1] != '0' { return -1; }
+fn try_lit_20(src: &StrSlice, start: i32) -> i32 {
+    if start + 2 > src.len() || unchecked src.byte_at(start) != b'2' || unchecked src.byte_at(start + 1) != b'0' { return -1; }
     return start + 2;
 }
 
-fn try_lit_21(chars: &List<char>, start: i32) -> i32 {
-    if start + 2 > chars.len() || chars[start] != '2' || chars[start + 1] != '1' { return -1; }
+fn try_lit_21(src: &StrSlice, start: i32) -> i32 {
+    if start + 2 > src.len() || unchecked src.byte_at(start) != b'2' || unchecked src.byte_at(start + 1) != b'1' { return -1; }
     return start + 2;
 }
 
-fn try_lit_22(chars: &List<char>, start: i32) -> i32 {
-    if start + 2 > chars.len() || chars[start] != '2' || chars[start + 1] != '2' { return -1; }
+fn try_lit_22(src: &StrSlice, start: i32) -> i32 {
+    if start + 2 > src.len() || unchecked src.byte_at(start) != b'2' || unchecked src.byte_at(start + 1) != b'2' { return -1; }
     return start + 2;
 }
 
-fn try_lit_23(chars: &List<char>, start: i32) -> i32 {
-    if start + 2 > chars.len() || chars[start] != '2' || chars[start + 1] != '3' { return -1; }
+fn try_lit_23(src: &StrSlice, start: i32) -> i32 {
+    if start + 2 > src.len() || unchecked src.byte_at(start) != b'2' || unchecked src.byte_at(start + 1) != b'3' { return -1; }
     return start + 2;
 }
 
-fn try_lit_24(chars: &List<char>, start: i32) -> i32 {
-    if start + 2 > chars.len() || chars[start] != '2' || chars[start + 1] != '4' { return -1; }
+fn try_lit_24(src: &StrSlice, start: i32) -> i32 {
+    if start + 2 > src.len() || unchecked src.byte_at(start) != b'2' || unchecked src.byte_at(start + 1) != b'4' { return -1; }
     return start + 2;
 }
 
-fn try_lit_25(chars: &List<char>, start: i32) -> i32 {
-    if start + 2 > chars.len() || chars[start] != '2' || chars[start + 1] != '5' { return -1; }
+fn try_lit_25(src: &StrSlice, start: i32) -> i32 {
+    if start + 2 > src.len() || unchecked src.byte_at(start) != b'2' || unchecked src.byte_at(start + 1) != b'5' { return -1; }
     return start + 2;
 }
 
-fn try_lit_26(chars: &List<char>, start: i32) -> i32 {
-    if start + 2 > chars.len() || chars[start] != '2' || chars[start + 1] != '6' { return -1; }
+fn try_lit_26(src: &StrSlice, start: i32) -> i32 {
+    if start + 2 > src.len() || unchecked src.byte_at(start) != b'2' || unchecked src.byte_at(start + 1) != b'6' { return -1; }
     return start + 2;
 }
 
-fn try_lit_27(chars: &List<char>, start: i32) -> i32 {
-    if start + 2 > chars.len() || chars[start] != '2' || chars[start + 1] != '7' { return -1; }
+fn try_lit_27(src: &StrSlice, start: i32) -> i32 {
+    if start + 2 > src.len() || unchecked src.byte_at(start) != b'2' || unchecked src.byte_at(start + 1) != b'7' { return -1; }
     return start + 2;
 }
 
-fn try_lit_28(chars: &List<char>, start: i32) -> i32 {
-    if start + 2 > chars.len() || chars[start] != '2' || chars[start + 1] != '8' { return -1; }
+fn try_lit_28(src: &StrSlice, start: i32) -> i32 {
+    if start + 2 > src.len() || unchecked src.byte_at(start) != b'2' || unchecked src.byte_at(start + 1) != b'8' { return -1; }
     return start + 2;
 }
 
-fn try_lit_29(chars: &List<char>, start: i32) -> i32 {
-    if start + 2 > chars.len() || chars[start] != '2' || chars[start + 1] != '9' { return -1; }
+fn try_lit_29(src: &StrSlice, start: i32) -> i32 {
+    if start + 2 > src.len() || unchecked src.byte_at(start) != b'2' || unchecked src.byte_at(start + 1) != b'9' { return -1; }
     return start + 2;
 }
 
-fn try_lit_30(chars: &List<char>, start: i32) -> i32 {
-    if start + 2 > chars.len() || chars[start] != '3' || chars[start + 1] != '0' { return -1; }
+fn try_lit_30(src: &StrSlice, start: i32) -> i32 {
+    if start + 2 > src.len() || unchecked src.byte_at(start) != b'3' || unchecked src.byte_at(start + 1) != b'0' { return -1; }
     return start + 2;
 }
 
-fn try_lit_31(chars: &List<char>, start: i32) -> i32 {
-    if start + 2 > chars.len() || chars[start] != '3' || chars[start + 1] != '1' { return -1; }
+fn try_lit_31(src: &StrSlice, start: i32) -> i32 {
+    if start + 2 > src.len() || unchecked src.byte_at(start) != b'3' || unchecked src.byte_at(start + 1) != b'1' { return -1; }
     return start + 2;
 }
 
-fn try_lit_32(chars: &List<char>, start: i32) -> i32 {
-    if start + 2 > chars.len() || chars[start] != '3' || chars[start + 1] != '2' { return -1; }
+fn try_lit_32(src: &StrSlice, start: i32) -> i32 {
+    if start + 2 > src.len() || unchecked src.byte_at(start) != b'3' || unchecked src.byte_at(start + 1) != b'2' { return -1; }
     return start + 2;
 }
 
-fn try_lit_33(chars: &List<char>, start: i32) -> i32 {
-    if start + 2 > chars.len() || chars[start] != '3' || chars[start + 1] != '3' { return -1; }
+fn try_lit_33(src: &StrSlice, start: i32) -> i32 {
+    if start + 2 > src.len() || unchecked src.byte_at(start) != b'3' || unchecked src.byte_at(start + 1) != b'3' { return -1; }
     return start + 2;
 }
 
-fn try_lit_34(chars: &List<char>, start: i32) -> i32 {
-    if start + 2 > chars.len() || chars[start] != '3' || chars[start + 1] != '4' { return -1; }
+fn try_lit_34(src: &StrSlice, start: i32) -> i32 {
+    if start + 2 > src.len() || unchecked src.byte_at(start) != b'3' || unchecked src.byte_at(start + 1) != b'4' { return -1; }
     return start + 2;
 }
 
-fn try_lit_35(chars: &List<char>, start: i32) -> i32 {
-    if start + 2 > chars.len() || chars[start] != '3' || chars[start + 1] != '5' { return -1; }
+fn try_lit_35(src: &StrSlice, start: i32) -> i32 {
+    if start + 2 > src.len() || unchecked src.byte_at(start) != b'3' || unchecked src.byte_at(start + 1) != b'5' { return -1; }
     return start + 2;
 }
 
-fn try_lit_36(chars: &List<char>, start: i32) -> i32 {
-    if start + 2 > chars.len() || chars[start] != '3' || chars[start + 1] != '6' { return -1; }
+fn try_lit_36(src: &StrSlice, start: i32) -> i32 {
+    if start + 2 > src.len() || unchecked src.byte_at(start) != b'3' || unchecked src.byte_at(start + 1) != b'6' { return -1; }
     return start + 2;
 }
 
-fn try_lit_37(chars: &List<char>, start: i32) -> i32 {
-    if start + 2 > chars.len() || chars[start] != '3' || chars[start + 1] != '7' { return -1; }
+fn try_lit_37(src: &StrSlice, start: i32) -> i32 {
+    if start + 2 > src.len() || unchecked src.byte_at(start) != b'3' || unchecked src.byte_at(start + 1) != b'7' { return -1; }
     return start + 2;
 }
 
-fn try_lit_38(chars: &List<char>, start: i32) -> i32 {
-    if start + 2 > chars.len() || chars[start] != '3' || chars[start + 1] != '8' { return -1; }
+fn try_lit_38(src: &StrSlice, start: i32) -> i32 {
+    if start + 2 > src.len() || unchecked src.byte_at(start) != b'3' || unchecked src.byte_at(start + 1) != b'8' { return -1; }
     return start + 2;
 }
 
-fn try_lit_39(chars: &List<char>, start: i32) -> i32 {
-    if start + 2 > chars.len() || chars[start] != '3' || chars[start + 1] != '9' { return -1; }
+fn try_lit_39(src: &StrSlice, start: i32) -> i32 {
+    if start + 2 > src.len() || unchecked src.byte_at(start) != b'3' || unchecked src.byte_at(start + 1) != b'9' { return -1; }
     return start + 2;
 }
 
-fn try_lit_40(chars: &List<char>, start: i32) -> i32 {
-    if start + 2 > chars.len() || chars[start] != '4' || chars[start + 1] != '0' { return -1; }
+fn try_lit_40(src: &StrSlice, start: i32) -> i32 {
+    if start + 2 > src.len() || unchecked src.byte_at(start) != b'4' || unchecked src.byte_at(start + 1) != b'0' { return -1; }
     return start + 2;
 }
 
-fn try_lit_41(chars: &List<char>, start: i32) -> i32 {
-    if start + 2 > chars.len() || chars[start] != '4' || chars[start + 1] != '1' { return -1; }
+fn try_lit_41(src: &StrSlice, start: i32) -> i32 {
+    if start + 2 > src.len() || unchecked src.byte_at(start) != b'4' || unchecked src.byte_at(start + 1) != b'1' { return -1; }
     return start + 2;
 }
 
-fn try_lit_42(chars: &List<char>, start: i32) -> i32 {
-    if start + 2 > chars.len() || chars[start] != '4' || chars[start + 1] != '2' { return -1; }
+fn try_lit_42(src: &StrSlice, start: i32) -> i32 {
+    if start + 2 > src.len() || unchecked src.byte_at(start) != b'4' || unchecked src.byte_at(start + 1) != b'2' { return -1; }
     return start + 2;
 }
 
-fn try_lit_43(chars: &List<char>, start: i32) -> i32 {
-    if start + 2 > chars.len() || chars[start] != '4' || chars[start + 1] != '3' { return -1; }
+fn try_lit_43(src: &StrSlice, start: i32) -> i32 {
+    if start + 2 > src.len() || unchecked src.byte_at(start) != b'4' || unchecked src.byte_at(start + 1) != b'3' { return -1; }
     return start + 2;
 }
 
-fn try_lit_44(chars: &List<char>, start: i32) -> i32 {
-    if start + 2 > chars.len() || chars[start] != '4' || chars[start + 1] != '4' { return -1; }
+fn try_lit_44(src: &StrSlice, start: i32) -> i32 {
+    if start + 2 > src.len() || unchecked src.byte_at(start) != b'4' || unchecked src.byte_at(start + 1) != b'4' { return -1; }
     return start + 2;
 }
 
-fn try_lit_45(chars: &List<char>, start: i32) -> i32 {
-    if start + 2 > chars.len() || chars[start] != '4' || chars[start + 1] != '5' { return -1; }
+fn try_lit_45(src: &StrSlice, start: i32) -> i32 {
+    if start + 2 > src.len() || unchecked src.byte_at(start) != b'4' || unchecked src.byte_at(start + 1) != b'5' { return -1; }
     return start + 2;
 }
 
-fn try_lit_46(chars: &List<char>, start: i32) -> i32 {
-    if start + 2 > chars.len() || chars[start] != '4' || chars[start + 1] != '6' { return -1; }
+fn try_lit_46(src: &StrSlice, start: i32) -> i32 {
+    if start + 2 > src.len() || unchecked src.byte_at(start) != b'4' || unchecked src.byte_at(start + 1) != b'6' { return -1; }
     return start + 2;
 }
 
-fn try_lit_47(chars: &List<char>, start: i32) -> i32 {
-    if start + 2 > chars.len() || chars[start] != '4' || chars[start + 1] != '7' { return -1; }
+fn try_lit_47(src: &StrSlice, start: i32) -> i32 {
+    if start + 2 > src.len() || unchecked src.byte_at(start) != b'4' || unchecked src.byte_at(start + 1) != b'7' { return -1; }
     return start + 2;
 }
 
-fn try_lit_48(chars: &List<char>, start: i32) -> i32 {
-    if start + 2 > chars.len() || chars[start] != '4' || chars[start + 1] != '8' { return -1; }
+fn try_lit_48(src: &StrSlice, start: i32) -> i32 {
+    if start + 2 > src.len() || unchecked src.byte_at(start) != b'4' || unchecked src.byte_at(start + 1) != b'8' { return -1; }
     return start + 2;
 }
 
-fn try_lit_49(chars: &List<char>, start: i32) -> i32 {
-    if start + 2 > chars.len() || chars[start] != '4' || chars[start + 1] != '9' { return -1; }
+fn try_lit_49(src: &StrSlice, start: i32) -> i32 {
+    if start + 2 > src.len() || unchecked src.byte_at(start) != b'4' || unchecked src.byte_at(start + 1) != b'9' { return -1; }
     return start + 2;
 }
 
-fn try_lit_50(chars: &List<char>, start: i32) -> i32 {
-    if start + 2 > chars.len() || chars[start] != '5' || chars[start + 1] != '0' { return -1; }
+fn try_lit_50(src: &StrSlice, start: i32) -> i32 {
+    if start + 2 > src.len() || unchecked src.byte_at(start) != b'5' || unchecked src.byte_at(start + 1) != b'0' { return -1; }
     return start + 2;
 }
 
-fn try_lit_51(chars: &List<char>, start: i32) -> i32 {
-    if start + 2 > chars.len() || chars[start] != '5' || chars[start + 1] != '1' { return -1; }
+fn try_lit_51(src: &StrSlice, start: i32) -> i32 {
+    if start + 2 > src.len() || unchecked src.byte_at(start) != b'5' || unchecked src.byte_at(start + 1) != b'1' { return -1; }
     return start + 2;
 }
 
-fn try_lit_52(chars: &List<char>, start: i32) -> i32 {
-    if start + 2 > chars.len() || chars[start] != '5' || chars[start + 1] != '2' { return -1; }
+fn try_lit_52(src: &StrSlice, start: i32) -> i32 {
+    if start + 2 > src.len() || unchecked src.byte_at(start) != b'5' || unchecked src.byte_at(start + 1) != b'2' { return -1; }
     return start + 2;
 }
 
-fn try_lit_53(chars: &List<char>, start: i32) -> i32 {
-    if start + 2 > chars.len() || chars[start] != '5' || chars[start + 1] != '3' { return -1; }
+fn try_lit_53(src: &StrSlice, start: i32) -> i32 {
+    if start + 2 > src.len() || unchecked src.byte_at(start) != b'5' || unchecked src.byte_at(start + 1) != b'3' { return -1; }
     return start + 2;
 }
 
-fn try_lit_54(chars: &List<char>, start: i32) -> i32 {
-    if start + 2 > chars.len() || chars[start] != '5' || chars[start + 1] != '4' { return -1; }
+fn try_lit_54(src: &StrSlice, start: i32) -> i32 {
+    if start + 2 > src.len() || unchecked src.byte_at(start) != b'5' || unchecked src.byte_at(start + 1) != b'4' { return -1; }
     return start + 2;
 }
 
-fn try_lit_55(chars: &List<char>, start: i32) -> i32 {
-    if start + 2 > chars.len() || chars[start] != '5' || chars[start + 1] != '5' { return -1; }
+fn try_lit_55(src: &StrSlice, start: i32) -> i32 {
+    if start + 2 > src.len() || unchecked src.byte_at(start) != b'5' || unchecked src.byte_at(start + 1) != b'5' { return -1; }
     return start + 2;
 }
 
-fn try_lit_56(chars: &List<char>, start: i32) -> i32 {
-    if start + 2 > chars.len() || chars[start] != '5' || chars[start + 1] != '6' { return -1; }
+fn try_lit_56(src: &StrSlice, start: i32) -> i32 {
+    if start + 2 > src.len() || unchecked src.byte_at(start) != b'5' || unchecked src.byte_at(start + 1) != b'6' { return -1; }
     return start + 2;
 }
 
-fn try_lit_57(chars: &List<char>, start: i32) -> i32 {
-    if start + 2 > chars.len() || chars[start] != '5' || chars[start + 1] != '7' { return -1; }
+fn try_lit_57(src: &StrSlice, start: i32) -> i32 {
+    if start + 2 > src.len() || unchecked src.byte_at(start) != b'5' || unchecked src.byte_at(start + 1) != b'7' { return -1; }
     return start + 2;
 }
 
-fn try_lit_58(chars: &List<char>, start: i32) -> i32 {
-    if start + 2 > chars.len() || chars[start] != '5' || chars[start + 1] != '8' { return -1; }
+fn try_lit_58(src: &StrSlice, start: i32) -> i32 {
+    if start + 2 > src.len() || unchecked src.byte_at(start) != b'5' || unchecked src.byte_at(start + 1) != b'8' { return -1; }
     return start + 2;
 }
 
-fn try_lit_59(chars: &List<char>, start: i32) -> i32 {
-    if start + 2 > chars.len() || chars[start] != '5' || chars[start + 1] != '9' { return -1; }
+fn try_lit_59(src: &StrSlice, start: i32) -> i32 {
+    if start + 2 > src.len() || unchecked src.byte_at(start) != b'5' || unchecked src.byte_at(start + 1) != b'9' { return -1; }
     return start + 2;
 }
 
-fn try_lit_60(chars: &List<char>, start: i32) -> i32 {
-    if start + 2 > chars.len() || chars[start] != '6' || chars[start + 1] != '0' { return -1; }
+fn try_lit_60(src: &StrSlice, start: i32) -> i32 {
+    if start + 2 > src.len() || unchecked src.byte_at(start) != b'6' || unchecked src.byte_at(start + 1) != b'0' { return -1; }
     return start + 2;
 }
 
-fn try_lit_61(chars: &List<char>, start: i32) -> i32 {
-    if start + 2 > chars.len() || chars[start] != '6' || chars[start + 1] != '1' { return -1; }
+fn try_lit_61(src: &StrSlice, start: i32) -> i32 {
+    if start + 2 > src.len() || unchecked src.byte_at(start) != b'6' || unchecked src.byte_at(start + 1) != b'1' { return -1; }
     return start + 2;
 }
 
-fn try_lit_62(chars: &List<char>, start: i32) -> i32 {
-    if start + 2 > chars.len() || chars[start] != '6' || chars[start + 1] != '2' { return -1; }
+fn try_lit_62(src: &StrSlice, start: i32) -> i32 {
+    if start + 2 > src.len() || unchecked src.byte_at(start) != b'6' || unchecked src.byte_at(start + 1) != b'2' { return -1; }
     return start + 2;
 }
 
-fn try_lit_63(chars: &List<char>, start: i32) -> i32 {
-    if start + 2 > chars.len() || chars[start] != '6' || chars[start + 1] != '3' { return -1; }
+fn try_lit_63(src: &StrSlice, start: i32) -> i32 {
+    if start + 2 > src.len() || unchecked src.byte_at(start) != b'6' || unchecked src.byte_at(start + 1) != b'3' { return -1; }
     return start + 2;
 }
 
-fn try_lit_64(chars: &List<char>, start: i32) -> i32 {
-    if start + 2 > chars.len() || chars[start] != '6' || chars[start + 1] != '4' { return -1; }
+fn try_lit_64(src: &StrSlice, start: i32) -> i32 {
+    if start + 2 > src.len() || unchecked src.byte_at(start) != b'6' || unchecked src.byte_at(start + 1) != b'4' { return -1; }
     return start + 2;
 }
 
-fn try_lit_65(chars: &List<char>, start: i32) -> i32 {
-    if start + 2 > chars.len() || chars[start] != '6' || chars[start + 1] != '5' { return -1; }
+fn try_lit_65(src: &StrSlice, start: i32) -> i32 {
+    if start + 2 > src.len() || unchecked src.byte_at(start) != b'6' || unchecked src.byte_at(start + 1) != b'5' { return -1; }
     return start + 2;
 }
 
-fn try_lit_66(chars: &List<char>, start: i32) -> i32 {
-    if start + 2 > chars.len() || chars[start] != '6' || chars[start + 1] != '6' { return -1; }
+fn try_lit_66(src: &StrSlice, start: i32) -> i32 {
+    if start + 2 > src.len() || unchecked src.byte_at(start) != b'6' || unchecked src.byte_at(start + 1) != b'6' { return -1; }
     return start + 2;
 }
 
 pub fn tokenize<S: AsStrSlice>(input: S) -> TokenStream {
     let mut lexer = Lexer::new(input);
-    let mut ts = TokenStream::new(&lexer.chars);
+    let mut ts = TokenStream::new(lexer.src);
     let mut triv_lo = ts.trivia_mark();
     while !lexer.at_end() {
         let start = lexer.pos;
         let mut best_end: i32 = -1;
         let mut best_kind: i32 = TK_ERROR;
         let mut end: i32 = -1;
-        let first_char = lexer.chars[start];
+        let first_char = char_at(&lexer.src, start);
         match first_char {
             '\n' | ' ' => {
-                end = try_WS(&lexer.chars, start);
+                end = try_WS(&lexer.src, start);
                 if end > best_end { best_end = end; best_kind = TK_WS; }
             },
             '1' => {
-                end = try_lit_1(&lexer.chars, start);
+                end = try_lit_1(&lexer.src, start);
                 if end > best_end { best_end = end; best_kind = TK_LIT_1; }
-                let second_char = if start + 1 < lexer.chars.len() { lexer.chars[start + 1] } else { '\u{0}' };
+                let second_at = char_end(&lexer.src, start);
+                let second_char = if second_at < lexer.src.len() { char_at(&lexer.src, second_at) } else { '\u{0}' };
                 match second_char {
                     '0' => {
-                        end = try_lit_10(&lexer.chars, start);
+                        end = try_lit_10(&lexer.src, start);
                         if end > best_end { best_end = end; best_kind = TK_LIT_10; }
                     },
                     '1' => {
-                        end = try_lit_11(&lexer.chars, start);
+                        end = try_lit_11(&lexer.src, start);
                         if end > best_end { best_end = end; best_kind = TK_LIT_11; }
                     },
                     '2' => {
-                        end = try_lit_12(&lexer.chars, start);
+                        end = try_lit_12(&lexer.src, start);
                         if end > best_end { best_end = end; best_kind = TK_LIT_12; }
                     },
                     '3' => {
-                        end = try_lit_13(&lexer.chars, start);
+                        end = try_lit_13(&lexer.src, start);
                         if end > best_end { best_end = end; best_kind = TK_LIT_13; }
                     },
                     '4' => {
-                        end = try_lit_14(&lexer.chars, start);
+                        end = try_lit_14(&lexer.src, start);
                         if end > best_end { best_end = end; best_kind = TK_LIT_14; }
                     },
                     '5' => {
-                        end = try_lit_15(&lexer.chars, start);
+                        end = try_lit_15(&lexer.src, start);
                         if end > best_end { best_end = end; best_kind = TK_LIT_15; }
                     },
                     '6' => {
-                        end = try_lit_16(&lexer.chars, start);
+                        end = try_lit_16(&lexer.src, start);
                         if end > best_end { best_end = end; best_kind = TK_LIT_16; }
                     },
                     '7' => {
-                        end = try_lit_17(&lexer.chars, start);
+                        end = try_lit_17(&lexer.src, start);
                         if end > best_end { best_end = end; best_kind = TK_LIT_17; }
                     },
                     '8' => {
-                        end = try_lit_18(&lexer.chars, start);
+                        end = try_lit_18(&lexer.src, start);
                         if end > best_end { best_end = end; best_kind = TK_LIT_18; }
                     },
                     '9' => {
-                        end = try_lit_19(&lexer.chars, start);
+                        end = try_lit_19(&lexer.src, start);
                         if end > best_end { best_end = end; best_kind = TK_LIT_19; }
                     },
                     _ => {
@@ -1568,48 +1639,49 @@ pub fn tokenize<S: AsStrSlice>(input: S) -> TokenStream {
                 }
             },
             '2' => {
-                end = try_lit_2(&lexer.chars, start);
+                end = try_lit_2(&lexer.src, start);
                 if end > best_end { best_end = end; best_kind = TK_LIT_2; }
-                let second_char = if start + 1 < lexer.chars.len() { lexer.chars[start + 1] } else { '\u{0}' };
+                let second_at = char_end(&lexer.src, start);
+                let second_char = if second_at < lexer.src.len() { char_at(&lexer.src, second_at) } else { '\u{0}' };
                 match second_char {
                     '0' => {
-                        end = try_lit_20(&lexer.chars, start);
+                        end = try_lit_20(&lexer.src, start);
                         if end > best_end { best_end = end; best_kind = TK_LIT_20; }
                     },
                     '1' => {
-                        end = try_lit_21(&lexer.chars, start);
+                        end = try_lit_21(&lexer.src, start);
                         if end > best_end { best_end = end; best_kind = TK_LIT_21; }
                     },
                     '2' => {
-                        end = try_lit_22(&lexer.chars, start);
+                        end = try_lit_22(&lexer.src, start);
                         if end > best_end { best_end = end; best_kind = TK_LIT_22; }
                     },
                     '3' => {
-                        end = try_lit_23(&lexer.chars, start);
+                        end = try_lit_23(&lexer.src, start);
                         if end > best_end { best_end = end; best_kind = TK_LIT_23; }
                     },
                     '4' => {
-                        end = try_lit_24(&lexer.chars, start);
+                        end = try_lit_24(&lexer.src, start);
                         if end > best_end { best_end = end; best_kind = TK_LIT_24; }
                     },
                     '5' => {
-                        end = try_lit_25(&lexer.chars, start);
+                        end = try_lit_25(&lexer.src, start);
                         if end > best_end { best_end = end; best_kind = TK_LIT_25; }
                     },
                     '6' => {
-                        end = try_lit_26(&lexer.chars, start);
+                        end = try_lit_26(&lexer.src, start);
                         if end > best_end { best_end = end; best_kind = TK_LIT_26; }
                     },
                     '7' => {
-                        end = try_lit_27(&lexer.chars, start);
+                        end = try_lit_27(&lexer.src, start);
                         if end > best_end { best_end = end; best_kind = TK_LIT_27; }
                     },
                     '8' => {
-                        end = try_lit_28(&lexer.chars, start);
+                        end = try_lit_28(&lexer.src, start);
                         if end > best_end { best_end = end; best_kind = TK_LIT_28; }
                     },
                     '9' => {
-                        end = try_lit_29(&lexer.chars, start);
+                        end = try_lit_29(&lexer.src, start);
                         if end > best_end { best_end = end; best_kind = TK_LIT_29; }
                     },
                     _ => {
@@ -1617,48 +1689,49 @@ pub fn tokenize<S: AsStrSlice>(input: S) -> TokenStream {
                 }
             },
             '3' => {
-                end = try_lit_3(&lexer.chars, start);
+                end = try_lit_3(&lexer.src, start);
                 if end > best_end { best_end = end; best_kind = TK_LIT_3; }
-                let second_char = if start + 1 < lexer.chars.len() { lexer.chars[start + 1] } else { '\u{0}' };
+                let second_at = char_end(&lexer.src, start);
+                let second_char = if second_at < lexer.src.len() { char_at(&lexer.src, second_at) } else { '\u{0}' };
                 match second_char {
                     '0' => {
-                        end = try_lit_30(&lexer.chars, start);
+                        end = try_lit_30(&lexer.src, start);
                         if end > best_end { best_end = end; best_kind = TK_LIT_30; }
                     },
                     '1' => {
-                        end = try_lit_31(&lexer.chars, start);
+                        end = try_lit_31(&lexer.src, start);
                         if end > best_end { best_end = end; best_kind = TK_LIT_31; }
                     },
                     '2' => {
-                        end = try_lit_32(&lexer.chars, start);
+                        end = try_lit_32(&lexer.src, start);
                         if end > best_end { best_end = end; best_kind = TK_LIT_32; }
                     },
                     '3' => {
-                        end = try_lit_33(&lexer.chars, start);
+                        end = try_lit_33(&lexer.src, start);
                         if end > best_end { best_end = end; best_kind = TK_LIT_33; }
                     },
                     '4' => {
-                        end = try_lit_34(&lexer.chars, start);
+                        end = try_lit_34(&lexer.src, start);
                         if end > best_end { best_end = end; best_kind = TK_LIT_34; }
                     },
                     '5' => {
-                        end = try_lit_35(&lexer.chars, start);
+                        end = try_lit_35(&lexer.src, start);
                         if end > best_end { best_end = end; best_kind = TK_LIT_35; }
                     },
                     '6' => {
-                        end = try_lit_36(&lexer.chars, start);
+                        end = try_lit_36(&lexer.src, start);
                         if end > best_end { best_end = end; best_kind = TK_LIT_36; }
                     },
                     '7' => {
-                        end = try_lit_37(&lexer.chars, start);
+                        end = try_lit_37(&lexer.src, start);
                         if end > best_end { best_end = end; best_kind = TK_LIT_37; }
                     },
                     '8' => {
-                        end = try_lit_38(&lexer.chars, start);
+                        end = try_lit_38(&lexer.src, start);
                         if end > best_end { best_end = end; best_kind = TK_LIT_38; }
                     },
                     '9' => {
-                        end = try_lit_39(&lexer.chars, start);
+                        end = try_lit_39(&lexer.src, start);
                         if end > best_end { best_end = end; best_kind = TK_LIT_39; }
                     },
                     _ => {
@@ -1666,48 +1739,49 @@ pub fn tokenize<S: AsStrSlice>(input: S) -> TokenStream {
                 }
             },
             '4' => {
-                end = try_lit_4(&lexer.chars, start);
+                end = try_lit_4(&lexer.src, start);
                 if end > best_end { best_end = end; best_kind = TK_LIT_4; }
-                let second_char = if start + 1 < lexer.chars.len() { lexer.chars[start + 1] } else { '\u{0}' };
+                let second_at = char_end(&lexer.src, start);
+                let second_char = if second_at < lexer.src.len() { char_at(&lexer.src, second_at) } else { '\u{0}' };
                 match second_char {
                     '0' => {
-                        end = try_lit_40(&lexer.chars, start);
+                        end = try_lit_40(&lexer.src, start);
                         if end > best_end { best_end = end; best_kind = TK_LIT_40; }
                     },
                     '1' => {
-                        end = try_lit_41(&lexer.chars, start);
+                        end = try_lit_41(&lexer.src, start);
                         if end > best_end { best_end = end; best_kind = TK_LIT_41; }
                     },
                     '2' => {
-                        end = try_lit_42(&lexer.chars, start);
+                        end = try_lit_42(&lexer.src, start);
                         if end > best_end { best_end = end; best_kind = TK_LIT_42; }
                     },
                     '3' => {
-                        end = try_lit_43(&lexer.chars, start);
+                        end = try_lit_43(&lexer.src, start);
                         if end > best_end { best_end = end; best_kind = TK_LIT_43; }
                     },
                     '4' => {
-                        end = try_lit_44(&lexer.chars, start);
+                        end = try_lit_44(&lexer.src, start);
                         if end > best_end { best_end = end; best_kind = TK_LIT_44; }
                     },
                     '5' => {
-                        end = try_lit_45(&lexer.chars, start);
+                        end = try_lit_45(&lexer.src, start);
                         if end > best_end { best_end = end; best_kind = TK_LIT_45; }
                     },
                     '6' => {
-                        end = try_lit_46(&lexer.chars, start);
+                        end = try_lit_46(&lexer.src, start);
                         if end > best_end { best_end = end; best_kind = TK_LIT_46; }
                     },
                     '7' => {
-                        end = try_lit_47(&lexer.chars, start);
+                        end = try_lit_47(&lexer.src, start);
                         if end > best_end { best_end = end; best_kind = TK_LIT_47; }
                     },
                     '8' => {
-                        end = try_lit_48(&lexer.chars, start);
+                        end = try_lit_48(&lexer.src, start);
                         if end > best_end { best_end = end; best_kind = TK_LIT_48; }
                     },
                     '9' => {
-                        end = try_lit_49(&lexer.chars, start);
+                        end = try_lit_49(&lexer.src, start);
                         if end > best_end { best_end = end; best_kind = TK_LIT_49; }
                     },
                     _ => {
@@ -1715,48 +1789,49 @@ pub fn tokenize<S: AsStrSlice>(input: S) -> TokenStream {
                 }
             },
             '5' => {
-                end = try_lit_5(&lexer.chars, start);
+                end = try_lit_5(&lexer.src, start);
                 if end > best_end { best_end = end; best_kind = TK_LIT_5; }
-                let second_char = if start + 1 < lexer.chars.len() { lexer.chars[start + 1] } else { '\u{0}' };
+                let second_at = char_end(&lexer.src, start);
+                let second_char = if second_at < lexer.src.len() { char_at(&lexer.src, second_at) } else { '\u{0}' };
                 match second_char {
                     '0' => {
-                        end = try_lit_50(&lexer.chars, start);
+                        end = try_lit_50(&lexer.src, start);
                         if end > best_end { best_end = end; best_kind = TK_LIT_50; }
                     },
                     '1' => {
-                        end = try_lit_51(&lexer.chars, start);
+                        end = try_lit_51(&lexer.src, start);
                         if end > best_end { best_end = end; best_kind = TK_LIT_51; }
                     },
                     '2' => {
-                        end = try_lit_52(&lexer.chars, start);
+                        end = try_lit_52(&lexer.src, start);
                         if end > best_end { best_end = end; best_kind = TK_LIT_52; }
                     },
                     '3' => {
-                        end = try_lit_53(&lexer.chars, start);
+                        end = try_lit_53(&lexer.src, start);
                         if end > best_end { best_end = end; best_kind = TK_LIT_53; }
                     },
                     '4' => {
-                        end = try_lit_54(&lexer.chars, start);
+                        end = try_lit_54(&lexer.src, start);
                         if end > best_end { best_end = end; best_kind = TK_LIT_54; }
                     },
                     '5' => {
-                        end = try_lit_55(&lexer.chars, start);
+                        end = try_lit_55(&lexer.src, start);
                         if end > best_end { best_end = end; best_kind = TK_LIT_55; }
                     },
                     '6' => {
-                        end = try_lit_56(&lexer.chars, start);
+                        end = try_lit_56(&lexer.src, start);
                         if end > best_end { best_end = end; best_kind = TK_LIT_56; }
                     },
                     '7' => {
-                        end = try_lit_57(&lexer.chars, start);
+                        end = try_lit_57(&lexer.src, start);
                         if end > best_end { best_end = end; best_kind = TK_LIT_57; }
                     },
                     '8' => {
-                        end = try_lit_58(&lexer.chars, start);
+                        end = try_lit_58(&lexer.src, start);
                         if end > best_end { best_end = end; best_kind = TK_LIT_58; }
                     },
                     '9' => {
-                        end = try_lit_59(&lexer.chars, start);
+                        end = try_lit_59(&lexer.src, start);
                         if end > best_end { best_end = end; best_kind = TK_LIT_59; }
                     },
                     _ => {
@@ -1764,36 +1839,37 @@ pub fn tokenize<S: AsStrSlice>(input: S) -> TokenStream {
                 }
             },
             '6' => {
-                end = try_lit_6(&lexer.chars, start);
+                end = try_lit_6(&lexer.src, start);
                 if end > best_end { best_end = end; best_kind = TK_LIT_6; }
-                let second_char = if start + 1 < lexer.chars.len() { lexer.chars[start + 1] } else { '\u{0}' };
+                let second_at = char_end(&lexer.src, start);
+                let second_char = if second_at < lexer.src.len() { char_at(&lexer.src, second_at) } else { '\u{0}' };
                 match second_char {
                     '0' => {
-                        end = try_lit_60(&lexer.chars, start);
+                        end = try_lit_60(&lexer.src, start);
                         if end > best_end { best_end = end; best_kind = TK_LIT_60; }
                     },
                     '1' => {
-                        end = try_lit_61(&lexer.chars, start);
+                        end = try_lit_61(&lexer.src, start);
                         if end > best_end { best_end = end; best_kind = TK_LIT_61; }
                     },
                     '2' => {
-                        end = try_lit_62(&lexer.chars, start);
+                        end = try_lit_62(&lexer.src, start);
                         if end > best_end { best_end = end; best_kind = TK_LIT_62; }
                     },
                     '3' => {
-                        end = try_lit_63(&lexer.chars, start);
+                        end = try_lit_63(&lexer.src, start);
                         if end > best_end { best_end = end; best_kind = TK_LIT_63; }
                     },
                     '4' => {
-                        end = try_lit_64(&lexer.chars, start);
+                        end = try_lit_64(&lexer.src, start);
                         if end > best_end { best_end = end; best_kind = TK_LIT_64; }
                     },
                     '5' => {
-                        end = try_lit_65(&lexer.chars, start);
+                        end = try_lit_65(&lexer.src, start);
                         if end > best_end { best_end = end; best_kind = TK_LIT_65; }
                     },
                     '6' => {
-                        end = try_lit_66(&lexer.chars, start);
+                        end = try_lit_66(&lexer.src, start);
                         if end > best_end { best_end = end; best_kind = TK_LIT_66; }
                     },
                     _ => {
@@ -1801,23 +1877,24 @@ pub fn tokenize<S: AsStrSlice>(input: S) -> TokenStream {
                 }
             },
             '7' => {
-                end = try_lit_7(&lexer.chars, start);
+                end = try_lit_7(&lexer.src, start);
                 if end > best_end { best_end = end; best_kind = TK_LIT_7; }
             },
             '8' => {
-                end = try_lit_8(&lexer.chars, start);
+                end = try_lit_8(&lexer.src, start);
                 if end > best_end { best_end = end; best_kind = TK_LIT_8; }
             },
             '9' => {
-                end = try_lit_9(&lexer.chars, start);
+                end = try_lit_9(&lexer.src, start);
                 if end > best_end { best_end = end; best_kind = TK_LIT_9; }
             },
             _ => {},
         }
         if best_end <= start {
-            let _ = ts.push_token_flagged(TK_ERROR, start, start + 1, triv_lo, ts.trivia_mark(), TokenFlags::LexError);
+            let error_end = char_end(&lexer.src, start);
+            let _ = ts.push_token_flagged(TK_ERROR, start, error_end, triv_lo, ts.trivia_mark(), TokenFlags::LexError);
             triv_lo = ts.trivia_mark();
-            lexer.pos = start + 1;
+            lexer.pos = error_end;
         } else {
             let tok_start = start;
             let is_skip = best_kind matches { TK_WS };
@@ -1959,7 +2036,7 @@ fn kind_names(kinds: &List<i32>) -> List<String> {
 impl Parser {
     fn new(tokens: TokenStream) -> Parser {
         let kinds = tokens.kinds.to_array();
-        return Parser { tokens, kinds, pos: 0, pending: null, recovering: false, speculating: false, max_errors: i32::MAX, site: -1, sites: [], failed_expected: [], recovery_pos: -1, recovered_failures: [], b: TreeBuilder::with_capacity(tokens.len() * 4), diagnostics: [], line_starts: line_starts(tokens.chars) };
+        return Parser { tokens, kinds, pos: 0, pending: null, recovering: false, speculating: false, max_errors: i32::MAX, site: -1, sites: [], failed_expected: [], recovery_pos: -1, recovered_failures: [], b: TreeBuilder::with_capacity(tokens.len() * 4), diagnostics: [], line_starts: line_starts(&tokens.src) };
     }
 
     fn emit(&mut self, s: String) {
@@ -1979,14 +2056,14 @@ impl Parser {
         let mut acc: i32 = 0;
         let mut neg = false;
         let mut j = sp.start;
-        if j < sp.end && self.tokens.chars[j] == '-' {
+        if j < sp.end && self.tokens.src.byte_at(j) == b'-' {
             neg = true;
             j += 1;
         }
         while j < sp.end {
-            let c = self.tokens.chars[j];
+            let c = self.tokens.src.byte_at(j);
             if c.is_ascii_digit() {
-                acc = acc * 10 + (c as i32 - '0' as i32);
+                acc = acc * 10 + (c - b'0') as i32;
             }
             j += 1;
         }
@@ -1994,11 +2071,11 @@ impl Parser {
     }
 
     fn token_line(&self, i: i32) -> i32 {
-        return line_col_at(&self.line_starts, self.tokens.starts[i]).0;
+        return line_col_at(&self.tokens.src, &self.line_starts, self.tokens.starts[i]).0;
     }
 
     fn token_col(&self, i: i32) -> i32 {
-        return line_col_at(&self.line_starts, self.tokens.starts[i]).1;
+        return line_col_at(&self.tokens.src, &self.line_starts, self.tokens.starts[i]).1;
     }
 
     fn token_start(&self, i: i32) -> i32 {
@@ -2017,8 +2094,7 @@ impl Parser {
     }
 
     fn text_span(&self, start: i32, end: i32) -> String {
-        let hi = if end < self.tokens.chars.len() { end } else { self.tokens.chars.len() };
-        return chars_text(self.tokens.chars, start, hi);
+        return span_text(&self.tokens.src, start, i32::min(end, self.tokens.src.len()));
     }
 
     fn text_between(&self, lo: i32, hi: i32) -> String {
@@ -2030,7 +2106,7 @@ impl Parser {
     }
 
     fn input_text(&self) -> String {
-        return self.text_span(0, self.tokens.chars.len());
+        return self.text_span(0, self.tokens.src.len());
     }
 
     fn rule_string_tree(&self) -> String {
@@ -2404,7 +2480,7 @@ fn _run_parse_entry<S: AsStrSlice>(input: S, max_errors: i32, entry: fn(&mut Par
         p.commit_pending();
     }
     merge_lex_errors(&p.tokens, &mut p.diagnostics, max_errors);
-    resolve_positions(&mut p.diagnostics, p.tokens.chars);
+    resolve_positions(&mut p.diagnostics, &p.tokens.src);
     return ParseResult { cst: p.b.finish(), tokens: p.tokens, diagnostics: p.diagnostics, output: p.tokens.output };
 }
 
