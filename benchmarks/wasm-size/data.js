@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1792214686753,
+  "lastUpdate": 1792241558007,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -67729,6 +67729,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/814bbca1eb4714e2df2b0b54b7cbc965a23466d0"
         },
         "date": 1792214685817,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 2955,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 7382,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 20208,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 298222,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "98bc07749f76cfc441864586e209979c4c80ce4c",
+          "message": "Merge pull request #2373 from wado-lang/claude/project-thread-1qxska\n\nfeat(kiln): e2e fixtures run Kiln generators, testing Kiln end to end",
+          "timestamp": "2026-10-17T21:31:34+09:00",
+          "tree_id": "7d67e64942f98ae5a9638c26af0a97e7e67791f5",
+          "url": "https://github.com/wado-lang/wado/commit/98bc07749f76cfc441864586e209979c4c80ce4c"
+        },
+        "date": 1792241557344,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
