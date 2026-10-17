@@ -614,7 +614,11 @@ fn a_package_reached_by_a_path_then_declared_is_one_package() {
     );
     fs::write(b.join("src/x.wado"), "pub struct Token { pub v: i32 }\n").unwrap();
     let a = root.join("a");
-    library(&a, "\"lib:b\" = { path = \"../b\" }\n", "pub fn unused() {}\n");
+    library(
+        &a,
+        "\"lib:b\" = { path = \"../b\" }\n",
+        "pub fn unused() {}\n",
+    );
     fs::write(
         a.join("src/y.wado"),
         "use { make } from \"lib:b\";\nuse { Token } from \"../../b/src/x.wado\";\n\

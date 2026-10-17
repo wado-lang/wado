@@ -222,7 +222,9 @@ fn physical(path: &Path) -> PathBuf {
     let path = absolutize(path);
     for ancestor in path.ancestors() {
         if let Ok(real) = std::fs::canonicalize(ancestor) {
-            let rest = path.strip_prefix(ancestor).expect("an ancestor prefixes its path");
+            let rest = path
+                .strip_prefix(ancestor)
+                .expect("an ancestor prefixes its path");
             return normalize_path(&real.join(rest));
         }
     }
@@ -272,7 +274,13 @@ impl PackageWalk {
                 continue;
             }
             match discovery::lib_package(&entry) {
-                Some((root, manifest)) => return Some(WalkedPackage { lib, root, manifest }),
+                Some((root, manifest)) => {
+                    return Some(WalkedPackage {
+                        lib,
+                        root,
+                        manifest,
+                    });
+                }
                 None => {
                     index.packages.insert(lib, DependencyIndex::default());
                 }

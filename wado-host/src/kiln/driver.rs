@@ -1037,7 +1037,9 @@ pub async fn harvest_invocations(
 /// has resolved its generator through its own package: clauses that resolve
 /// alike are one invocation, and two naming one `from` that resolve apart
 /// cannot both generate it, so they are reported.
-pub fn merge_across_packages(invocations: Vec<Invocation>) -> Result<Vec<Invocation>, Vec<Diagnostic>> {
+pub fn merge_across_packages(
+    invocations: Vec<Invocation>,
+) -> Result<Vec<Invocation>, Vec<Diagnostic>> {
     let mut merged: Vec<Invocation> = Vec::new();
     let mut diagnostics = Vec::new();
     for invocation in invocations {

@@ -10,8 +10,8 @@ use std::sync::Mutex;
 
 use indexmap::IndexMap;
 use wado_compiler::compiler_host::{
-    CompilerHost, DependencyIndex, Diagnostic, GeneratorOutputFile, GeneratorRequest, GeneratorResponse,
-    GeneratorRunnerError, SourceError,
+    CompilerHost, DependencyIndex, Diagnostic, GeneratorOutputFile, GeneratorRequest,
+    GeneratorResponse, GeneratorRunnerError, SourceError,
 };
 use wado_compiler::kiln::{DeclSite, GeneratorModule, Invocation, InvocationPath};
 use wado_host::kiln::driver::{

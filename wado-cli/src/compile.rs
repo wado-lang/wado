@@ -752,8 +752,9 @@ pub(crate) async fn prepare_kiln(
     }
     let mut invocations = ours;
     rewrite_local_dir_modules(&mut invocations, &manifest_root).map_err(manifest_error)?;
-    let invocations = merge_across_packages(invocations)
-        .map_err(|disagreements| PipelineError::InlineClause(emit_counting_errors(host, disagreements)))?;
+    let invocations = merge_across_packages(invocations).map_err(|disagreements| {
+        PipelineError::InlineClause(emit_counting_errors(host, disagreements))
+    })?;
     // A generator's outputs are products of this run, not a tree moving under
     // it. Declared here but applied when the watch is asked, so the order
     // fixtures compile in does not matter.
