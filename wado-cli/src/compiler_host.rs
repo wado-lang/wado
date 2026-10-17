@@ -37,13 +37,21 @@ pub struct FilesystemCompilerHost {
     /// How far a build may go to acquire what the packages it reaches depend
     /// on. `None` where nothing is to be acquired, so every index is offline.
     acquisition: Option<Acquisition>,
-    /// Each package a walk placed modules in that no manifest declares, by its
-    /// root. Shared with every sibling host, so the compile reads the index the
-    /// Kiln walk's acquisition left.
-    undeclared: Arc<Mutex<IndexMap<String, UndeclaredPackage>>>,
+    /// Each package a walk placed modules in that no manifest declares. Shared
+    /// with every sibling host, so the compile reads the index the Kiln walk's
+    /// acquisition left.
+    undeclared: Arc<Mutex<IndexMap<PackageRead, UndeclaredPackage>>>,
     /// The resident set at each open span's start, innermost last, so a span's
     /// end line says how far it moved.
     span_rss: Mutex<Vec<Option<RssSample>>>,
+}
+
+/// The package at `root` as a host based at `base` reads it: its index spells
+/// each dependency from that base.
+#[derive(Clone, PartialEq, Eq, Hash)]
+pub struct PackageRead {
+    pub base: PathBuf,
+    pub root: String,
 }
 
 /// The index an undeclared package is answered: offline until acquired.
@@ -103,21 +111,23 @@ impl FilesystemCompilerHost {
     /// The tier to acquire at, and each undeclared package a walk reached that
     /// is not yet acquired, with the offline index it was answered.
     #[must_use]
-    pub fn unacquired_packages(&self) -> Option<(Acquisition, Vec<(String, DependencyIndex)>)> {
+    pub fn unacquired_packages(
+        &self,
+    ) -> Option<(Acquisition, Vec<(PackageRead, DependencyIndex)>)> {
         let tier = self.acquisition?;
         let unacquired = lock(&self.undeclared)
             .iter()
-            .filter_map(|(root, package)| match package {
-                UndeclaredPackage::Offline(index) => Some((root.clone(), index.clone())),
+            .filter_map(|(read, package)| match package {
+                UndeclaredPackage::Offline(index) => Some((read.clone(), index.clone())),
                 UndeclaredPackage::Acquired(_) => None,
             })
             .collect();
         Some((tier, unacquired))
     }
 
-    /// Answer `index` for the undeclared package at `root` from now on.
-    pub fn adopt_acquired(&self, root: String, index: DependencyIndex) {
-        lock(&self.undeclared).insert(root, UndeclaredPackage::Acquired(index));
+    /// Answer `index` for the undeclared package `read` from now on.
+    pub fn adopt_acquired(&self, read: PackageRead, index: DependencyIndex) {
+        lock(&self.undeclared).insert(read, UndeclaredPackage::Acquired(index));
     }
 
     /// Share one [`RunCache`] across hosts, so a `wado test` run resolves and
@@ -325,16 +335,17 @@ impl CompilerHost for FilesystemCompilerHost {
         for file in resolution_inputs(Path::new(root)) {
             self.run.depend_on_file(&file);
         }
+        let read = PackageRead {
+            base: self.base_path().to_path_buf(),
+            root: root.to_string(),
+        };
         let mut undeclared = lock(&self.undeclared);
-        if let Some(UndeclaredPackage::Acquired(index)) = undeclared.get(root) {
+        if let Some(UndeclaredPackage::Acquired(index)) = undeclared.get(&read) {
             return index.clone();
         }
         let offline = self.inner.package_index(root);
         if self.acquisition.is_some() {
-            undeclared.insert(
-                root.to_string(),
-                UndeclaredPackage::Offline(offline.clone()),
-            );
+            undeclared.insert(read, UndeclaredPackage::Offline(offline.clone()));
         }
         offline
     }

@@ -545,33 +545,34 @@ async fn acquire_undeclared_packages(host: &FilesystemCompilerHost) -> Result<bo
         return Ok(false);
     };
     let mut resolved_more = false;
-    for (root, offline) in unacquired {
+    for (read, offline) in unacquired {
+        let root = Path::new(&read.root);
         // A manifest that cannot be read names nothing to acquire, and its
         // offline index already says why.
-        let acquired = match manifest_in(Path::new(&root)) {
-            Ok(Some(manifest)) => {
-                acquired_index(&manifest, Path::new(&root), host.base_path(), tier).await?
-            }
+        let acquired = match manifest_in(root) {
+            Ok(Some(manifest)) => acquired_index(&manifest, root, &read.base, tier).await?,
             Ok(None) | Err(_) => offline.clone(),
         };
         resolved_more |= resolves_more(&offline, &acquired);
-        host.adopt_acquired(root, acquired);
+        host.adopt_acquired(read, acquired);
     }
     Ok(resolved_more)
 }
 
-/// Whether `acquired` resolves a dependency `offline` does not.
+/// Whether `acquired` resolves a dependency `offline` does not. Acquisition
+/// only adds resolutions, so the count says it, whatever a newly reached
+/// package leaves unresolved of its own.
 fn resolves_more(
     offline: &wado_compiler::DependencyIndex,
     acquired: &wado_compiler::DependencyIndex,
 ) -> bool {
-    unresolved_count(acquired) < unresolved_count(offline)
+    resolved_count(acquired) > resolved_count(offline)
 }
 
-/// How many dependencies `index` and the packages it reaches leave unresolved.
-fn unresolved_count(index: &wado_compiler::DependencyIndex) -> usize {
-    let reached = index.packages.values().map(|p| p.unresolved.len());
-    index.unresolved.len() + reached.sum::<usize>()
+/// How many dependencies `index` and the packages it reaches resolve.
+fn resolved_count(index: &wado_compiler::DependencyIndex) -> usize {
+    let own = index.resolved.len() + index.components.len();
+    own + index.packages.values().map(resolved_count).sum::<usize>()
 }
 
 /// Add to `index.packages` the package of each entry module in `entries`, and
