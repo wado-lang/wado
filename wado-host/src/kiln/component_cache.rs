@@ -13,9 +13,8 @@ use crate::sync::lock;
 
 /// AOT-compiled generator [`Component`]s, keyed by wasm SHA-256.
 ///
-/// AOT dominates generator execution (~7s for a 432KB generator; see
-/// [`compile_component`]), so a generator must be compiled once, not once per
-/// fixture. A `wado test` run shares one cache across every per-fixture host,
+/// AOT dominates generator execution (see [`compile_component`]), so a
+/// generator must be compiled once, not once per fixture. A `wado test` run shares one cache across every per-fixture host,
 /// and so does an e2e run. In-memory only — a disk `.cwasm` cache would be a
 /// trust-the-disk code-injection vector. Every `Component` comes from one
 /// engine, which the cache creates on first use.

@@ -1,9 +1,9 @@
-//! Mutex locking policy for the CLI and the hosts it shares.
+//! Mutex locking policy for the CLI and the hosts it shares with the tests.
 
 use std::sync::{Mutex, MutexGuard, PoisonError};
 
 /// Lock `mutex`, recovering the guard if a previous holder panicked. Every
-/// production mutex in the CLI goes through here: propagating poison would
+/// production mutex in the CLI and this crate goes through here: propagating poison would
 /// kill the `EpochTicker` and `serve`'s epoch thread, and with them timeout
 /// enforcement.
 pub fn lock<T>(mutex: &Mutex<T>) -> MutexGuard<'_, T> {

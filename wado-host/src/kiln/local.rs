@@ -14,8 +14,8 @@ use wado_compiler::{Code, CompilerHost, CompilerOptions, Diagnostic, OptLevel, S
 
 use super::component_cache::ComponentCache;
 use super::driver::{
-    GeneratorProvider, PipelineError, ProviderError, ResolvedGenerator, harvest_invocations,
-    run_pipeline,
+    GeneratorProvider, PipelineError, ProviderError, ResolvedGenerator, emit_counting_errors,
+    harvest_invocations, run_pipeline,
 };
 use super::runtime::generator_engine;
 use crate::StubHost;
@@ -76,7 +76,7 @@ async fn run(
         &mut IndexSet::default(),
     )
     .await;
-    let clause_errors = report_errors(host, diagnostics);
+    let clause_errors = emit_counting_errors(host, diagnostics);
     if clause_errors > 0 {
         return Err(PipelineError::InlineClause(clause_errors));
     }
@@ -84,7 +84,7 @@ async fn run(
         return Ok(InvocationIndex::default());
     }
 
-    let root = entry_file.parent().unwrap_or(Path::new("."));
+    let root = entry_file.parent().expect("an entry names a file");
     let mut provider = LocalGenerators::default();
     for invocation in &invocations {
         if !provider
@@ -102,23 +102,11 @@ async fn run(
     let mut index = run_pipeline(root, host, &provider, invocations, true)
         .await?
         .invocations;
-    let conflicts = report_errors(host, remap_decl_files(&mut index, &identities));
+    let conflicts = emit_counting_errors(host, remap_decl_files(&mut index, &identities));
     if conflicts > 0 {
         return Err(PipelineError::RedirectConflict(conflicts));
     }
     Ok(index)
-}
-
-/// Emit `diagnostics` through `host`, answering how many are errors.
-fn report_errors(host: &StubHost, diagnostics: Vec<Diagnostic>) -> usize {
-    let errors = diagnostics
-        .iter()
-        .filter(|d| d.severity == Severity::Error)
-        .count();
-    for diagnostic in diagnostics {
-        host.emit_diagnostic(diagnostic);
-    }
-    errors
 }
 
 /// Generators compiled before the pipeline asks for them. A compile's future
@@ -156,7 +144,11 @@ async fn compile_generator(
     let source = std::fs::read_to_string(&file).map_err(|e| ProviderError::Internal {
         message: format!("kiln: cannot read generator `{}`: {e}", file.display()),
     })?;
-    let host = StubHost::new(file.parent().unwrap_or(root).to_path_buf());
+    let host = StubHost::new(
+        file.parent()
+            .expect("a generator names a file")
+            .to_path_buf(),
+    );
     let name = file
         .file_name()
         .expect("a generator names a file")

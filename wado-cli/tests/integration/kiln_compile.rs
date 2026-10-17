@@ -728,8 +728,8 @@ fn spec_module_without_build_dependency_surfaces_unsupported() {
 /// Many kiln invocations in a real project share a single generator
 /// (one `parser_gen` package, N grammars). Each call into
 /// `CompilerHost::run_generator` used to rebuild the wasmtime
-/// `Component` from scratch — i.e. ~7s of cranelift AOT per grammar
-/// for a 432KB generator. The host now caches compiled `Component`s
+/// `Component` from scratch, a cranelift AOT per grammar, which
+/// dominates the run. The host now caches compiled `Component`s
 /// by wasm-bytes SHA-256, so the second `run_generator` for the same
 /// bytes must not re-invoke cranelift.
 #[test]

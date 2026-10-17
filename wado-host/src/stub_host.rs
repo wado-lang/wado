@@ -12,7 +12,7 @@ use wado_compiler::{
 use wado_lsp::FilesystemCompilerHost;
 
 use crate::kiln::component_cache::ComponentCache;
-use crate::kiln::runtime::{self, KilnRunPolicy, relay_diagnostic};
+use crate::kiln::runtime::{generate_for, probe_for};
 
 /// What a [`StubHost`] answers in place of the environment.
 #[derive(Debug, Default, Clone)]
@@ -116,12 +116,7 @@ impl CompilerHost for StubHost {
         request: GeneratorRequest,
     ) -> Result<GeneratorResponse, GeneratorRunnerError> {
         let (engine, component) = self.component(component_wasm)?;
-        let (outcome, diagnostics) =
-            runtime::run_generator(&engine, &component, request, KilnRunPolicy::default()).await;
-        for diagnostic in diagnostics {
-            relay_diagnostic(self, diagnostic);
-        }
-        outcome
+        generate_for(self, &engine, &component, request).await
     }
 
     async fn probe_generator(
@@ -130,12 +125,7 @@ impl CompilerHost for StubHost {
         request: &GeneratorRequest,
     ) -> Result<Vec<Option<u64>>, GeneratorRunnerError> {
         let (engine, component) = self.component(component_wasm)?;
-        let (outcome, diagnostics) =
-            runtime::run_probe(&engine, &component, request, KilnRunPolicy::default()).await;
-        for diagnostic in diagnostics {
-            relay_diagnostic(self, diagnostic);
-        }
-        outcome
+        probe_for(self, &engine, &component, request).await
     }
 }
 

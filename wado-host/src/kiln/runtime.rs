@@ -412,9 +412,9 @@ pub fn generator_engine() -> anyhow::Result<Engine> {
 }
 
 /// Build a wasmtime [`Component`] from raw bytes. Cranelift-AOT
-/// dominates here (~7s on a 432KB generator), so the host caches the
-/// result across invocations that share the same bytes — see
-/// [`crate::compiler_host::FilesystemCompilerHost`].
+/// dominates a generator's run, so the host caches the result across
+/// invocations that share the same bytes — see
+/// [`super::component_cache::ComponentCache`].
 pub fn compile_component(
     engine: &Engine,
     component_wasm: &[u8],
@@ -597,8 +597,44 @@ pub async fn run_probe(
     (outcome, emitted)
 }
 
-/// Report a generator's diagnostic through `host`, which owns how it reads.
-pub fn relay_diagnostic<H: CompilerHost + ?Sized>(host: &H, diag: GeneratorDiagnostic) {
+/// [`run_generator`] under the default policy, for a host's
+/// [`CompilerHost::run_generator`].
+pub async fn generate_for<H: CompilerHost + ?Sized>(
+    host: &H,
+    engine: &Engine,
+    component: &Component,
+    request: GeneratorRequest,
+) -> Result<GeneratorResponse, GeneratorRunnerError> {
+    let (outcome, diagnostics) =
+        run_generator(engine, component, request, KilnRunPolicy::default()).await;
+    relay_diagnostics(host, diagnostics);
+    outcome
+}
+
+/// [`run_probe`] under the default policy, for a host's
+/// [`CompilerHost::probe_generator`].
+pub async fn probe_for<H: CompilerHost + ?Sized>(
+    host: &H,
+    engine: &Engine,
+    component: &Component,
+    request: &GeneratorRequest,
+) -> Result<Vec<Option<u64>>, GeneratorRunnerError> {
+    let (outcome, diagnostics) =
+        run_probe(engine, component, request, KilnRunPolicy::default()).await;
+    relay_diagnostics(host, diagnostics);
+    outcome
+}
+
+/// Report a generator's diagnostics through `host`. The runtime has no host to
+/// print through, so they surface here, before the outcome propagates: a
+/// failing generator does not swallow the explanation.
+fn relay_diagnostics<H: CompilerHost + ?Sized>(host: &H, diagnostics: Vec<GeneratorDiagnostic>) {
+    for diagnostic in diagnostics {
+        relay_diagnostic(host, diagnostic);
+    }
+}
+
+fn relay_diagnostic<H: CompilerHost + ?Sized>(host: &H, diag: GeneratorDiagnostic) {
     use wado_compiler::{Code, Diagnostic, DiagnosticSpan, Severity};
     let severity = match diag.level {
         GeneratorDiagnosticLevel::Error => Severity::Error,

@@ -957,7 +957,10 @@ pub async fn harvest_invocations(
     };
     // A loader identity is anchored on the entry's directory, so that is what
     // an import joins onto.
-    let entry_dir = entry_file.parent().unwrap_or(Path::new(".")).to_path_buf();
+    let entry_dir = entry_file
+        .parent()
+        .expect("an entry names a file")
+        .to_path_buf();
     let harvest = harvest_module_graph(
         entry_key,
         entry_identity,
@@ -974,6 +977,21 @@ pub async fn harvest_invocations(
         "",
     );
     (invocations, harvest.identities, diagnostics)
+}
+
+/// Emit `diagnostics` through `host`, answering how many are errors.
+pub fn emit_counting_errors<H: CompilerHost + ?Sized>(
+    host: &H,
+    diagnostics: Vec<Diagnostic>,
+) -> usize {
+    let errors = diagnostics
+        .iter()
+        .filter(|d| d.severity == Severity::Error)
+        .count();
+    for diagnostic in diagnostics {
+        host.emit_diagnostic(diagnostic);
+    }
+    errors
 }
 
 /// Run the full Kiln pipeline for the given inline invocations: resolve

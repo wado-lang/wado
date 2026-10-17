@@ -17,7 +17,7 @@ use crate::rss::RssSample;
 use crate::run_cache::RunCache;
 use crate::runtime::create_fuel_engine;
 use wado_host::kiln::driver::KilnSpan;
-use wado_host::kiln::runtime::{self as kiln_runtime, KilnRunPolicy};
+use wado_host::kiln::runtime::{generate_for, probe_for};
 use wado_host::sync::lock;
 
 /// The engine a generator runs on under `wado`: the CLI's own configuration,
@@ -298,16 +298,7 @@ impl CompilerHost for FilesystemCompilerHost {
     ) -> Result<GeneratorResponse, GeneratorRunnerError> {
         let (engine, component) = self.aot(component_wasm)?;
         let _span = KilnSpan::new(self, "kiln/generate");
-        let (outcome, diagnostics) =
-            kiln_runtime::run_generator(&engine, &component, request, KilnRunPolicy::default())
-                .await;
-        // `run_generator` has no host to print through, so its diagnostics
-        // surface here — before `outcome` propagates, so a failing generator
-        // does not swallow the explanation.
-        for diag in diagnostics {
-            kiln_runtime::relay_diagnostic(self, diag);
-        }
-        outcome
+        generate_for(self, &engine, &component, request).await
     }
 
     async fn probe_generator(
@@ -317,12 +308,7 @@ impl CompilerHost for FilesystemCompilerHost {
     ) -> Result<Vec<Option<u64>>, GeneratorRunnerError> {
         let (engine, component) = self.aot(component_wasm)?;
         let _span = KilnSpan::new(self, "kiln/probe");
-        let (outcome, diagnostics) =
-            kiln_runtime::run_probe(&engine, &component, request, KilnRunPolicy::default()).await;
-        for diag in diagnostics {
-            kiln_runtime::relay_diagnostic(self, diag);
-        }
-        outcome
+        probe_for(self, &engine, &component, request).await
     }
 }
 

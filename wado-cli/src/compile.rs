@@ -24,7 +24,9 @@ use crate::metadata_embed::{clean_git_revision, embed_metadata_sections};
 use crate::run_cache::RunCache;
 use crate::wit::default_interface_name;
 use wado_compiler::world_registry::WorldSurface;
-use wado_host::kiln::driver::{PipelineError, PipelineOutcome, harvest_invocations, run_pipeline};
+use wado_host::kiln::driver::{
+    PipelineError, PipelineOutcome, emit_counting_errors, harvest_invocations, run_pipeline,
+};
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum OutputFormat {
@@ -676,13 +678,7 @@ pub(crate) async fn prepare_kiln(
     // Fail on a malformed clause here, with its own diagnostics, so the clear
     // error is not buried under the downstream failure of the unredirected
     // `use` falling through to the lexer.
-    let inline_errors = inline_diagnostics
-        .iter()
-        .filter(|d| d.severity == wado_compiler::Severity::Error)
-        .count();
-    for d in inline_diagnostics {
-        wado_compiler::CompilerHost::emit_diagnostic(host, d);
-    }
+    let inline_errors = emit_counting_errors(host, inline_diagnostics);
     if inline_errors > 0 {
         return Err(PipelineError::InlineClause(inline_errors));
     }
@@ -1023,15 +1019,10 @@ fn remap_and_report_conflicts(
     identities: &wado_compiler::hashmap::IndexMap<String, String>,
     host: &FilesystemCompilerHost,
 ) -> usize {
-    let conflicts = wado_compiler::kiln::remap_decl_files(index, identities);
-    let errors = conflicts
-        .iter()
-        .filter(|d| d.severity == wado_compiler::Severity::Error)
-        .count();
-    for d in conflicts {
-        wado_compiler::CompilerHost::emit_diagnostic(host, d);
-    }
-    errors
+    emit_counting_errors(
+        host,
+        wado_compiler::kiln::remap_decl_files(index, identities),
+    )
 }
 
 /// Walk up from `entry_file` looking for the nearest `wado.toml`: `None` when
