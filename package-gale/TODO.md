@@ -29,6 +29,16 @@ Entries state the symptom, how to reproduce it, and anything already measured �
   - The jar parses `if (…) {…}`, `try {…}` and `for (…)` statements as `expressionStatement` wherever that also scans, and Gale parses them as `ifStatement`, `tryStatement` and `iterationStatement`.
 - [ ] **A lexer alternation whose arms stop at different lengths can pick an arm the rest of the token cannot follow.** `A : ('q' ('y' | 'yz') | 'w') 'h' ;` lexes `qyzh` as four tokens, and so does `B : 'k' ('y' | 'yz')? 'h' ;` on `kyzh`; the jar gives one token each. A fragment whose body is such an alternation, or a single-alternative group or fragment ending in one, lexes as the jar does (`lexer_alt_suffix_shapes.g4`).
 - [ ] **A lexer rule called from a rule that folds case differently takes the first arm of its alternation.** With `A : B 'z' ; B options { caseInsensitive = true; } : 'a' | 'ab' ;`, `abz` lexes as `B:a` and two errors, and `ab` as `B:a` and an error; the jar gives `A:abz` and `B:ab`. The same grammar with the option on both rules, or on neither, lexes as the jar does.
+- [ ] **`gale gen` accepts grammars the jar rejects, and none of them is listed as a superset in `antlr4-compatibility.md`.** Each grammar below is otherwise valid. The jar (4.13.2) refuses each with the error shown, and `gale gen` generates a parser with no diagnostic. Checked 2026-10-17.
+  - A lexer rule in a `parser grammar` (`parser grammar P; s : A EOF ; A : 'a' ;`). The jar gives error(52), "lexer rule A not allowed in parser". Gale emits `A` as a token.
+  - A parser rule in a `lexer grammar` (`lexer grammar L; A : 'a' ; foo : 'b' ;`). The jar gives error(53), "parser rule foo not allowed in lexer". Gale emits `foo` as the token `TK_foo`.
+  - A `catch [...] { }` or `finally { }` after a lexer rule (`A : 'a' ; catch [Exception e] { }`). The jar gives error(50). Gale drops the clause.
+  - A string literal inside `tokens { }` (`tokens { 'x' }`). The jar gives error(50). Gale drops the entry.
+  - An option without `=` (`options { a b; }`). The jar gives error(50), "missing ASSIGN at 'b'". Gale drops the option.
+  - `returns` with no `[...]` after it (`s returns : A EOF ;`). The jar gives error(50).
+  - An argument on a token reference (`s : A[3] EOF ;`). The jar gives error(50). Gale drops the argument.
+  - An unterminated property escape in a char set (`A : [\p{L] ;`). The jar gives error(156), "invalid escape sequence". Gale reads it as `\p{L}`.
+  - A channel number past `i32` (`-> channel(99999999999)`). The jar gives error(177), "not a recognized channel name". Gale accepts it, and the channel it assigns is the number wrapped to 32 bits.
 
 ### Robustness on hostile input
 
@@ -36,7 +46,26 @@ Entries state the symptom, how to reproduce it, and anything already measured �
 
 ### Pipeline and tooling correctness
 
-Empty right now.
+These were found by reading the code. None has a reproducing test yet, so each entry names the input shape to try first.
+
+- [ ] **java2wado refuses a Java action body that holds a comment.** Its tokenizer has no rule for `//` or `/* */`, so `{ x++; // note }` is reported as `UnsupportedAction` and dropped. Comments are common in real grammars' actions.
+- [ ] **java2wado drops the last character of an unterminated string literal.** On `{ System.out.println("abc); }` it takes `"ab` as the string's text and reports nothing.
+- [ ] **Two scanners of Wado template literals disagree on a template nested in `${ }`.** On a body holding `` `a${ `}` }b` ``, the `$`-attribute scanner and the superClass call scanner can end the outer template at different places. Only the superClass scanner knows that a backtick inside `${ }` opens a template of its own.
+- [ ] **A Wado `@members` field initializer holding a template literal with `${ }` may be cut short.** The member scanner steps over a template as a plain quoted string, so a backtick inside `${ }` ends it early.
+- [ ] **A rule argument list splits wrongly when an initializer holds `<`.** `[int x = a < b, int y]` may read as one declaration, because the `<` is counted as an opening bracket and hides the comma.
+- [ ] **An assert message names the wrong function.** In `superclass.wado`, the assert after `match_delim` in `scan_template` says `match_brace`.
+
+### Duplication
+
+Each item is two or more pieces of code computing the same answer. A fix to one copy does not reach the others, and where the copies already differ, they give different answers on the same input.
+
+- [ ] **Left-recursion classifiers.** `lr_util.wado` (`is_left_recursive`, `is_self_ref_element`), `lower.wado` (`alt_is_left_recursive`, `element_is_self_ref`) and `action_translate.wado` (`rule_is_left_recursive`) each test whether an alternative opens with a self-reference. All three read the surface IR. The header of `lr_util.wado` says lowering needs its own copies because it runs before `LoweredGrammar` exists, which no longer explains anything.
+- [ ] **Transitive rule-reference walks over lexer elements.** `elem_refs_rule` in `latn.wado` answers what `refs_self(..., through_tokens = true)` in `lexer_gen.wado` answers. More walks of the same shape, each with its own visited list, sit in `latn.wado`, `lexer_gen.wado` and `superclass.wado`. `elem_calls_super` in `superclass.wado` also looks up rules by hand instead of calling `find_lexer_rule`.
+- [ ] **Char-range complement.** `complement_ranges` in `latn.wado` (with a hand-written insertion sort) and `complement_char_ranges` in `g4/unicode.wado`.
+- [ ] **String, comment and template scanners.** `scan_template` in `superclass.wado`, `scan_template` in `attr_scan.wado`, `skip_span` / `skip_quoted` in `wado_members.wado` (which redo `g4/scan.wado`), and `literal_end` in `gen_util.wado`. The two template entries under "Pipeline and tooling correctness" come from these copies disagreeing.
+- [ ] **`$name(.member)?` scanning.** `scan_refs` in `attr_scan.wado` and `scan_attr_ref` in `java2wado/jlexer.wado`.
+- [ ] **Small text helpers.** `skip_ws` is in `wado_members.wado`, `superclass.wado` and `g4/action_templates.wado`. A whole-word test is in `wado_members.wado` (`word_at`, which skips the left-boundary check), `superclass.wado` (`word_at`) and `g4/action_strip.wado` (`starts_with_word`). Copying a char range into a `String` is in `runtime/lex.wado` (`push_chars`, `chars_text`), `text.wado` (`push_range`, `collect_range`) and `push_span` in both `g4/action_templates.wado` and `g4/action_strip.wado`. `push_unique` in `highlight_gen.wado` repeats `list_util.wado`.
+- [ ] **Context wrappers.** `emit_context.wado` and `lower_context.wado` both define `set_current_rule_index`, `has_current_rule`, `current_rule_index`, `current_rule_name`, `alt_has_gate`, `alt_scan_gate_conditions`, `rule_overlap` and `intern_follow_mask` with the same bodies. Their `predicate_site` differs on purpose (`gate_conditions.wado` explains why).
 
 ## Stage C — action / predicate execution
 
