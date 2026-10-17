@@ -2,7 +2,7 @@
 //! ask its environment, for compiling the e2e fixtures outside `wado`.
 
 use std::path::PathBuf;
-use std::sync::Arc;
+use std::sync::{Arc, OnceLock};
 
 use indexmap::IndexMap;
 use wado_compiler::{
@@ -32,40 +32,29 @@ pub struct HostStubs {
 pub struct StubHost {
     filesystem: FilesystemCompilerHost,
     stubs: HostStubs,
-    /// Where generators run, once [`Self::with_generators`] gives a cache.
-    /// Without one the host cannot run a generator, as the trait's default.
-    generators: Option<Arc<ComponentCache>>,
+    /// The generator components the process shares, so a run of many fixtures
+    /// compiles each generator once.
+    generators: Arc<ComponentCache>,
 }
 
 impl StubHost {
     /// A host loading sources relative to `base_path`, with nothing stubbed.
     #[must_use]
     pub fn new(base_path: PathBuf) -> Self {
+        static GENERATORS: OnceLock<Arc<ComponentCache>> = OnceLock::new();
         wado_lsp::install_stderr_trace_sink();
         Self {
             filesystem: FilesystemCompilerHost::new(base_path),
             stubs: HostStubs::default(),
-            generators: None,
+            generators: GENERATORS.get_or_init(Arc::default).clone(),
         }
     }
 
-    /// This host, running Kiln generators on the components `cache` holds.
-    #[must_use]
-    pub fn with_generators(mut self, cache: Arc<ComponentCache>) -> Self {
-        self.generators = Some(cache);
-        self
-    }
-
-    /// The generator component for `wasm` and its engine, or `Unsupported`
-    /// when this host was given no cache.
     fn component(
         &self,
         wasm: &[u8],
     ) -> Result<(wasmtime::Engine, wasmtime::component::Component), GeneratorRunnerError> {
-        self.generators
-            .as_ref()
-            .ok_or(GeneratorRunnerError::Unsupported)?
-            .get_or_compile(wasm)
+        self.generators.get_or_compile(wasm)
     }
 
     /// This host, answering from `stubs` what a real host would ask its

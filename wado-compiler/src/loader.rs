@@ -1898,7 +1898,7 @@ impl<'a, H: CompilerHost> ModuleLoader<'a, H> {
             severity: Severity::Error,
             code: Code::KilnNoGeneratedModule,
             message: format!(
-                "kiln: no generated module for `use ... from \"{}\"` — its generator \
+                "kiln: no generated module for `use ... from {:?}` — its generator \
                  declared no output for this schema, or ran under a different name \
                  than the one this module imports",
                 use_decl.source.value,

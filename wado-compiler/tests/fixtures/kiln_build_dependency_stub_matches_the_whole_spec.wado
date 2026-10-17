@@ -1,0 +1,16 @@
+// A stub names one generator file, so a submodule of its nickname is not it.
+
+use { greeting } from "./sub/kiln/value.schema"
+    with {
+        generator: {
+            module: "lib:gen/sub",
+            options: { verbose: false },
+        },
+    };
+
+test {
+    assert greeting() == "hi";
+}
+
+__DATA__
+{"build_dependencies": {"lib:gen": "./sub/kiln/options/verbose_generator.wado"}, "compile_error": "kiln: generator `lib:gen/sub` is neither a `./` path nor a stubbed build dependency"}

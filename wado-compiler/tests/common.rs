@@ -32,7 +32,7 @@ use wado_compiler::{
     OptLevel,
 };
 use wado_host::engine::default_config;
-use wado_host::kiln::local::{generators, run_local_generators};
+use wado_host::kiln::local::run_local_generators;
 use wado_host::timezone;
 pub use wado_host::tls_trust::install_default_crypto_provider;
 pub use wado_host::{HostStubs, StubHost};
@@ -391,6 +391,9 @@ pub fn capped_engine(memory_cap: usize) -> Engine {
     pooling.total_component_instances(16);
 
     let mut config = base_config();
+    // The pool caps the GC heap too, which `default_config`'s start overruns.
+    // Zero is wasmtime's own default.
+    config.gc_heap_initial_size(0);
     config.allocation_strategy(InstanceAllocationStrategy::Pooling(pooling));
     Engine::new(&config).expect("build capped engine")
 }
@@ -402,10 +405,6 @@ pub fn capped_engine(memory_cap: usize) -> Engine {
 pub fn engine() -> &'static Engine {
     ENGINE.get_or_init(|| {
         let mut config = base_config();
-        // Honor the `metadata.code.branch_hint` custom section the compiler
-        // emits for `builtin::cold_path()`, matching the wado CLI runtime so
-        // the e2e suite validates the hints it produces.
-        config.wasm_branch_hinting(true);
         config.wasm_backtrace_details(wasmtime::WasmBacktraceDetails::Enable);
         // Enable epoch-based interruption for timeout enforcement
         config.epoch_interruption(true);
@@ -1094,9 +1093,7 @@ pub fn compile_capturing_diagnostics(
         "the harness runs the source's generators for its redirect index"
     );
     let base_path = path.parent().map(Path::to_path_buf).unwrap_or_default();
-    let host = StubHost::new(base_path)
-        .with_stubs(stubs)
-        .with_generators(generators());
+    let host = StubHost::new(base_path).with_stubs(stubs);
     let filename = display_filename
         .map(std::borrow::Cow::Borrowed)
         .unwrap_or_else(|| path.to_string_lossy());

@@ -4,34 +4,23 @@
 //! directory as the package root.
 
 use std::path::{Path, PathBuf};
-use std::sync::{Arc, Mutex, OnceLock};
+use std::sync::Mutex;
 
 use indexmap::IndexMap;
 use wado_compiler::hashmap::IndexSet;
 use wado_compiler::kiln::inline::default_output_dir;
 use wado_compiler::kiln::{
     GeneratorModule, Invocation, InvocationIndex, InvocationPath, content_hash, generator_identity,
-    hex_digest, remap_decl_files, spec_key,
+    hex_digest, remap_decl_files,
 };
 use wado_compiler::{Code, CompilerHost, Diagnostic, Severity};
 
-use super::component_cache::ComponentCache;
 use super::driver::{
     GeneratorProvider, PipelineError, ProviderError, ResolvedGenerator, emit_counting_errors,
     generator_compile_options, generator_cycle, harvest_invocations, run_pipeline,
 };
 use crate::sync::lock;
 use crate::{HostStubs, StubHost};
-
-/// The generator components the process shares, so a run of many fixtures
-/// compiles each generator once. Give it to a host with
-/// [`StubHost::with_generators`].
-pub fn generators() -> Arc<ComponentCache> {
-    static GENERATORS: OnceLock<Arc<ComponentCache>> = OnceLock::new();
-    GENERATORS
-        .get_or_init(|| Arc::new(ComponentCache::default()))
-        .clone()
-}
 
 /// Run the generators the module graph under `entry_file`, whose text is
 /// `entry_source`, declares, and answer the redirect index the compile of
@@ -168,14 +157,17 @@ fn refuse_own_output_dirs(invocations: &[Invocation]) -> Vec<Diagnostic> {
 
 /// Point each clause naming a stubbed `[build-dependencies]` nickname at the
 /// generator file the stub names, as `wado` points one at its package's
-/// generator entry. A nickname the stubs lack stays a spec, which no fixture
-/// runs.
+/// generator entry. A stub matches the spec as written, so a version or a
+/// submodule the stub does not spell leaves it a spec, which no fixture runs.
 fn resolve_build_dependencies(invocations: &mut [Invocation], stubs: &HostStubs) {
     for invocation in invocations {
         let GeneratorModule::Spec(spec) = &invocation.module else {
             continue;
         };
-        if let Some(file) = stubs.build_dependencies.get(spec_key(&spec.spec)) {
+        if spec.version.is_some() {
+            continue;
+        }
+        if let Some(file) = stubs.build_dependencies.get(&spec.spec) {
             invocation.module = GeneratorModule::LocalPath(InvocationPath::normalize(file));
         }
     }
@@ -318,9 +310,7 @@ async fn nested_invocations(
     chain: &[String],
 ) -> Result<InvocationIndex, ProviderError> {
     let chain = [chain, &[generator.key.to_string()]].concat();
-    let host = StubHost::new(root.to_path_buf())
-        .with_stubs(stubs.clone())
-        .with_generators(generators());
+    let host = StubHost::new(root.to_path_buf()).with_stubs(stubs.clone());
     Box::pin(run(root, generator, &host, &chain))
         .await
         .map_err(|error| {

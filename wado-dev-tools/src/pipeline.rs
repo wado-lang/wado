@@ -6,7 +6,7 @@ use wado_compiler::hashmap::{IndexMap, IndexSet};
 
 use wado_compiler::OptLevel;
 use wado_host::StubHost;
-use wado_host::kiln::local::{generators, run_local_generators};
+use wado_host::kiln::local::run_local_generators;
 
 use crate::data_section::{FixtureCompile, read_fixture_compile, should_skip_file};
 use crate::template::Template;
@@ -520,9 +520,7 @@ async fn render_phases(
 
     // On the stubs the e2e harness runs it with, so a golden records the
     // program its test runs.
-    let kiln_host = StubHost::new(base_path.clone())
-        .with_stubs(inputs.host_stubs())
-        .with_generators(generators());
+    let kiln_host = StubHost::new(base_path.clone()).with_stubs(inputs.host_stubs());
     let Some(invocations) = run_local_generators(path, source, input_path, &kiln_host).await else {
         let e = diagnostics_summary(&kiln_host, "kiln failed");
         for p in phases {
