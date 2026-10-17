@@ -668,6 +668,7 @@ pub(crate) async fn prepare_kiln(
         .as_ref()
         .map(|p| p.root.clone())
         .unwrap_or(entry_dir);
+    let dependencies = host.dependency_index();
     let Harvested {
         invocations,
         identities,
@@ -678,6 +679,7 @@ pub(crate) async fn prepare_kiln(
         entry_identity,
         &manifest_root,
         host,
+        &dependencies,
         settled,
     )
     .await;
@@ -700,7 +702,6 @@ pub(crate) async fn prepare_kiln(
         return Ok(None);
     }
     let manifest = project.map_or_else(empty_manifest, |p| p.manifest);
-    let dependencies = host.dependency_index();
     let (theirs, mut ours): (Vec<_>, Vec<_>) = invocations
         .into_iter()
         .partition(|inv| packages.contains_key(&inv.decl_site().module));
@@ -1117,6 +1118,7 @@ async fn collect_inline_invocations_for_entry_with_identities(
     entry_identity: Option<&str>,
     manifest_root: &Path,
     host: &FilesystemCompilerHost,
+    dependencies: &wado_compiler::DependencyIndex,
     settled: &mut Settled,
 ) -> Harvested {
     // The identity must be byte-identical to the name the compile that follows
@@ -1144,7 +1146,7 @@ async fn collect_inline_invocations_for_entry_with_identities(
         &entry_identity,
         entry.ast,
         settled,
-        &host.dependency_index(),
+        dependencies,
         |path| host.package_root(path),
         async |identity| fs::read_to_string(entry_dir.join(identity)).ok(),
     )
@@ -1522,6 +1524,7 @@ mod kiln_dir_module_tests {
                 None,
                 root,
                 &host,
+                &host.dependency_index(),
                 &mut Settled::default(),
             ));
         (

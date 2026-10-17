@@ -305,8 +305,11 @@ impl ModuleSourceInterner {
         name: &str,
         file: &str,
     ) -> Result<ModuleSource, ExportRefusal> {
-        let lib = self.dependencies_of(importer).resolved.get(name);
-        let Some(lib) = lib.cloned() else {
+        let dependencies = self.dependencies_of(importer);
+        let Some(lib) = dependencies.resolved.get(name).cloned() else {
+            if dependencies.components.contains_key(name) {
+                return Err(ExportRefusal::Component);
+            }
             return Err(ExportRefusal::NoSuchPackage);
         };
         let exports = &self.package(&lib).exports;
@@ -468,6 +471,8 @@ impl WasmAssetKind {
 pub enum ExportRefusal {
     /// The importer's package declares no source dependency by that name.
     NoSuchPackage,
+    /// The package is a prebuilt component, which carries no files.
+    Component,
     /// The package's `[package].exports` lists no such file, whether or not it
     /// is there. `spelled_alike` is an entry differing from it in case alone.
     NotExported { spelled_alike: Option<String> },
@@ -1113,6 +1118,25 @@ mod tests {
         assert!(!is_bundled_specifier("./libm.wat"));
         assert!(!is_bundled_specifier("dep:../greet/src/lib.wado"));
         assert!(!is_bundled_specifier("https://example.com/x.wasm"));
+    }
+
+    #[test]
+    fn a_prebuilt_component_exports_no_file() {
+        let mut interner = ModuleSourceInterner::new();
+        let mut index = DependencyIndex::default();
+        index
+            .components
+            .insert("acme:geo".to_string(), "geo.wasm".to_string());
+        interner.set_dependencies(index);
+        let entry = interner.entry_point("main.wado");
+        assert_eq!(
+            interner.resolve_exported_file(&entry, "acme:geo", "src/shapes.wado"),
+            Err(ExportRefusal::Component),
+        );
+        assert_eq!(
+            interner.resolve_exported_file(&entry, "acme:other", "src/shapes.wado"),
+            Err(ExportRefusal::NoSuchPackage),
+        );
     }
 
     #[test]

@@ -82,7 +82,7 @@ pub enum LoadError {
     UnexportedFile {
         package: String,
         file: String,
-        spelled_alike: Option<String>,
+        refusal: ExportRefusal,
     },
     /// Wasm-asset import (`with { type: "wat"|"wasm" }`) failed validation.
     WasmImport {
@@ -188,12 +188,22 @@ impl std::fmt::Display for LoadError {
             LoadError::UnexportedFile {
                 package,
                 file,
-                spelled_alike,
+                refusal,
             } => {
                 write!(f, "package `{package}` exports no file `{file}`")?;
-                match spelled_alike {
-                    Some(entry) => write!(f, "; it exports `{entry}`, which differs in case"),
-                    None => Ok(()),
+                match refusal {
+                    ExportRefusal::NotExported {
+                        spelled_alike: Some(entry),
+                    } => write!(f, "; it exports `{entry}`, which differs in case"),
+                    ExportRefusal::NotExported {
+                        spelled_alike: None,
+                    } => Ok(()),
+                    ExportRefusal::Component => {
+                        write!(f, "; it is a prebuilt component, which carries no files")
+                    }
+                    ExportRefusal::NoSuchPackage => {
+                        unreachable!("an undeclared package is reported as undeclared")
+                    }
                 }
             }
             LoadError::WasmImport {
@@ -1961,14 +1971,15 @@ impl<'a, H: CompilerHost> ModuleLoader<'a, H> {
 
         let exported_file = split_exported_file(import_source);
         if let Some((package, file)) = exported_file
-            && let Err(ExportRefusal::NotExported { spelled_alike }) = self
+            && let Err(refusal) = self
                 .interner
                 .resolve_exported_file(from_module_source, package, file)
+            && refusal != ExportRefusal::NoSuchPackage
         {
             return Err(LoadError::UnexportedFile {
                 package: package.to_string(),
                 file: file.to_string(),
-                spelled_alike,
+                refusal,
             });
         }
         let name = exported_file.map_or(import_source, |(package, _)| package);
