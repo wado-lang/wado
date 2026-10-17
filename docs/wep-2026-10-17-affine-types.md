@@ -176,6 +176,14 @@ struct have no declaration to mark, so they are inferred: each is affine when
 something it holds is. A `resource` is affine unless it declares
 `linearity = "unrestricted"`, as today.
 
+A generic type is affine or copyable per instantiation. Its `affine`
+parameters declare which: `Option<affine T>` is affine where `T` is and
+copyable where it is not, so `Option<Fields>` is move-only and `Option<i32>` is
+not. A field typed by such a parameter is not "an affine value" for the rule
+above, which asks about a field whose type is affine in every instantiation.
+`affine struct` on a generic type makes every instantiation move-only, as
+`AsyncCall` needs.
+
 A parameter with `affine` admits an affine argument. The body is checked at its
 definition to treat the parameter as affine. A parameter without it is
 copyable, and `dup::<Fields>` is a type error at the instantiation, which names
@@ -232,9 +240,14 @@ A reference to an affine value is first-class, as every reference is. It may be
 bound, stored, returned and captured, and a list or a record may hold one.
 
 What keeps it from dangling is the handle's representation. An affine resource
-is a cell: a GC object holding the handle and whether it is live.
+is a cell: a GC object holding the handle and whether it is live. A handle is
+held by one live cell at a time.
 
-- A move hands the cell on.
+- A move into a place that has no cell of its own hands the cell on.
+- A move into a cell that exists, as `*r = value` does, drops the handle the
+  target held, takes the value's handle into the target, and marks the
+  value's cell dead. A reference to the value's old place then traps rather
+  than reach a handle another cell owns.
 - A drop marks it dead, and so does a transfer as `own` across the boundary.
 - A `borrow` an export receives is a cell marked dead when the export returns.
 - Every use reads the handle through the cell. A use of a dead cell traps with
@@ -245,8 +258,10 @@ need different guarantees: ownership decides when a drop happens, which a trap
 cannot, while a reference only needs never to reach a dead handle. A reused
 index is never reached either, since a dead cell no longer holds one.
 
-The cell is also the box D6 asks for. `*r = value` through a `&mut R` drops the
-handle the cell holds and stores the new one.
+The cell is also the box D6 asks for, and it is a GC reference, so an affine
+resource is `Ref` and `RefMut` as a struct is. `&list[i]` and `&mut list[i]`
+reach an element's cell, and `*r = value` through either is the move into a
+cell above.
 
 The optimizer may represent a resource as its bare handle wherever it proves no
 use reaches the cell dead, as it may keep a primitive unboxed. The trap is the
@@ -294,7 +309,9 @@ What casts did, the following do instead:
   dropped at scope exit, since a holder's drop is synthesized field by field.
 - `..base` consumes `base`. A field the literal lists replaces the one `base`
   carried, which is dropped.
-- An assignment into a field or an element drops what it replaces. Unchanged.
+- An assignment into a field drops what it replaces, as today. An assignment
+  into an element of a `List<affine T>` does too, which today's `list[i] = x`
+  does not.
 
 A type that implements `Drop` gives up no field on its own: neither a partial
 move nor `..base` over it is allowed. Its `drop` relies on the fields it was
@@ -304,8 +321,11 @@ built with, as SE-0429 holds for a type with a `deinit`.
 
 When a value is dropped is unchanged in substance: an owned, unmoved affine
 value is dropped at scope exit on every path; a store drops what it replaces; a
-discarded value is dropped. The rule now has nothing to exclude, since no
-copyable container holds an affine value. A panic drops nothing.
+discarded value is dropped. Two holders join the rule. A `List<affine T>` drops
+its elements when it is dropped, and a store into one of them drops what it
+replaces; today a `List` holding a resource does neither. Nothing else is
+excluded, since no copyable container holds an affine value. A panic drops
+nothing.
 
 What a drop does is the type's `Drop`:
 
@@ -362,9 +382,10 @@ included, and `cancel_write` returns nothing.
 
 A caller that ignores the result discards the rest, and the rule for a
 discarded value drops it at the end of the statement. Nothing leaks, and
-nothing obliges the caller to look. `StreamWrite` loses its `count`, which
-`data.len() - rest.len()` states. The optimizer may skip building a `rest` no
-one reads.
+nothing obliges the caller to look. `StreamWrite` loses its `count`: the
+caller knows how many it offered, and `rest.len()` says how many came back. An
+affine caller reads the length before the write, since `data` is moved by it.
+The optimizer may skip building a `rest` no one reads.
 
 ### Standard library
 
@@ -374,8 +395,8 @@ one reads.
 - `Future<affine T>` and `Stream<affine T>`, with their writable ends. A
   future carries an affine payload today
   (`Future<Result<Option<Trailers>, ErrorCode>>`), and a stream does too
-  (`Stream<TcpSocket>`). The read side needs nothing new: `StreamChunk<T>`
-  holds a `List<T>`.
+  (`Stream<TcpSocket>`). `StreamChunk<affine T>` carries the read side's
+  `List<T>`.
 - `AsyncCall<affine T>` holds a real `Subtask` rather than a raw `i32` it
   casts into one at each use:
 
@@ -392,9 +413,11 @@ one reads.
   second call is a compile error and the shared `__cm_ended` flag goes. Its
   `Drop` cancels a subtask nobody awaited before dropping it, and frees the
   buffer.
-- `affine trait`: `Drop`, `Iterator`, `IntoIterator`, `Eq`, `Inspect` and
-  `Display`. A resource implements `Eq` and `Inspect` today, and a list
-  iterated by value is an affine iterator.
+- `affine trait`: `Drop`, `Iterator`, `IntoIterator`, `Eq`, `Inspect`,
+  `Display`, `Ref`, `RefMut`, `IndexRef`, `IndexRefMut` and `IndexAssign`. A
+  resource implements `Eq` and `Inspect` today, a list iterated by value is an
+  affine iterator, and `List<affine T>` is indexed through the last three.
+  `IndexValue` stays unmarked, since a read by value is a copy.
 - `List<affine T>`. A method is available for an affine element when an
   `impl<affine T> List<T>` declares it, and the definition-site check holds
   its body to moving elements. The rest stay in `impl<T> List<T>`, for a
@@ -431,7 +454,13 @@ In [WEP: Resource Ownership](./wep-2026-05-21-resource-ownership.md):
   the type system excludes what they could not see.
 - Value-copy elision is unaffected: it serves copyable types, and an affine
   type never reaches a copy site.
-- The known gap "An integer casts to an affine resource" is closed.
+- Its known gaps on resources close: "A call through `&mut` that copies", "A
+  generic body copies a type parameter", "Some resource holders are not
+  move-checked or dropped", "A resource field moves out of its holder", "An
+  integer casts to an affine resource" and "A `Stream` or `Future` handle
+  nothing drops". So does the store through a reference or into an element in
+  "What cleanup does not reach". The rest of that section stands, and so do
+  its gaps on value-copy elision, which serves copyable types only.
 
 In [WEP: Reference Representation](./wep-2026-06-13-reference-representation.md),
 D6 is settled: a resource is boxed, and the box is its cell.
@@ -461,7 +490,8 @@ an affine type implements `Drop`.
    over a type that implements it.
 5. [ ] `List<affine T>`: the methods that move elements in
    `impl<affine T> List<T>`, `IntoIterator::into_iter(self)`, and
-   `Iterator`'s `affine type Item`.
+   `Iterator`'s `affine type Item`. The list drops its elements, and a store
+   into an element drops what it replaces.
 6. [ ] No cast between an affine resource and an integer: synthesis splits
    and lifts the `stream-new` / `future-new` pair, the raw-handle builtins
    take and return resources, `ResourceId::of`, and the test doubles in
@@ -478,10 +508,17 @@ an affine type implements `Drop`.
    deliver, in every case the result reports, and the stdlib's write loops
    (`write_all`) read `rest` rather than `count`.
 10. [ ] Instantiation rule: an affine argument for an unmarked parameter is a
-    type error naming the parameter. `Option`, `Result`, `Future`, `Stream`,
-    `AsyncCall` and `List` are marked by then.
-11. [ ] Withdraw the receiver-kind rule and the TIR copy check from #2364, and
-    the `resource_copy_out_of_reference_error` fixture with it.
+    type error naming the parameter. First the stdlib generics take `affine`
+    on their parameters: `Option`, `Result`, `Future`, `FutureWritable`,
+    `Stream`, `StreamWritable`, `StreamChunk`, `FutureWrite`, `StreamWrite`,
+    `AsyncCall` and `List`. The rule then names every other generic the
+    corpus instantiates with an affine argument, and each is marked or
+    rewritten.
+11. [ ] Withdraw the receiver-kind rule and the TIR copy check from #2364. The
+    `resource_copy_out_of_reference_error` fixture stays, its expectations
+    rewritten to the definition-site check: `list[0]`, a generic `&self`
+    getter and `list.last().unwrap()` still copy an element out of a
+    `List<Fields>`.
 12. [ ] Cleanup drops a `Stream` and a `Future` the body does not move, which
     it excludes today
     ([A `Stream` or `Future` handle nothing drops](./wep-2026-05-21-resource-ownership.md#a-stream-or-future-handle-nothing-drops)).
@@ -508,8 +545,16 @@ drop.
 
 Unchanged from
 [WEP: Resource Ownership](./wep-2026-05-21-resource-ownership.md#known-gaps):
-a panic drops nothing; a generic resource a user module declares is not
-checked; web handles leak.
+
+- A panic drops nothing.
+- A generic resource a user module declares is not checked.
+- Web handles leak.
+- A resource a closure body binds, or a temporary it references, is never
+  dropped.
+- Moving one resource field out of a temporary aggregate (`make().a`) drops
+  nothing else the temporary owns.
+- An aggregate that holds itself and names a type parameter (`Node<T>` in a
+  body generic over `T`) is not dropped past its first level.
 
 ## References
 
