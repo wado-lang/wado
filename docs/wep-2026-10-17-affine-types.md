@@ -454,7 +454,8 @@ the call. So `AsyncCall` records the delivery in `resolved`:
   ```
 
   `wait(self)` and `cancel(self)` take the subtask out and consume it, so a
-  second call is a compile error and the shared `__cm_ended` flag goes. `resolved` is
+  second call is a compile error and the shared `__cm_ended` flag goes.
+  `resolved` records
   [the delivered resolution](#an-async-call-records-a-delivered-resolution).
 - `affine trait`: `Drop`, `ForOf`, `From<affine T>`, `Eq<affine Rhs = Self>`,
   `Inspect`, `Display`, `Ref`, `RefMut`, `IndexRef`, `IndexRefMut` and
@@ -490,9 +491,10 @@ through today.
 | `stream.read(n)`, `read_to_end()`, `write_all` | `Stream<T>`, `StreamWritable<T>` and their impls                                         | the resources and the impls                    |
 | `future.read()`, `writer.write(v)`             | `Future<T>`, `FutureWritable<T>`                                                         | the resources                                  |
 
-The stock leaves some unmarked. `Sequence`, `AsSlice`, `IndexValue`, `Hash`,
-`Ord`, `Default`, `SliceValueIter`, `SliceWindows` and `SliceChunks` read or
-hand out elements by value. `StreamWritable::write_raw_all(Slice<T>)` is for a
+The stock leaves some unmarked. `Sequence`, `AsSlice`, `IndexValue`,
+`SliceValueIter`, `SliceWindows` and `SliceChunks` hand out elements by value.
+`Hash`, `Ord` and `Default` serve maps, sorting and `List::default`, which no
+operation above reaches. `StreamWritable::write_raw_all(Slice<T>)` is for a
 copyable element only: the Component Model lifts the elements a slice views
 while the writer keeps them, which leaves two owners.
 
