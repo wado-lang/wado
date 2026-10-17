@@ -5,7 +5,7 @@
 
 use crate::ast::AttrValue;
 use crate::kiln::cache::{encode_options_canonical, encode_written_options};
-use crate::kiln::inline::DEFAULT_INLINE_OUTPUT_DIR_PREFIX;
+use crate::kiln::inline::default_output_dir;
 use crate::kiln::options_check::CanonicalOptions;
 use crate::token::Span;
 use std::fmt;
@@ -262,10 +262,7 @@ impl Invocation {
     /// Write into the consuming build's tree, whatever `output_dir` the clause
     /// gives: a clause of another package never writes to that package's.
     pub fn write_into_consumer(&mut self) {
-        let synthetic_id = &self.decl_site().synthetic_id;
-        self.output_dir = InvocationPath::normalize(&format!(
-            "{DEFAULT_INLINE_OUTPUT_DIR_PREFIX}/{synthetic_id}"
-        ));
+        self.output_dir = default_output_dir(&self.decl_site().synthetic_id);
     }
 
     /// Canonical byte encoding of [`Self::options`], for the invocation cache

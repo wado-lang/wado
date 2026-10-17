@@ -25,6 +25,14 @@ use super::options_check::{CanonicalOptions, OptionsAnchor, clause_error, valida
 /// under `build/kiln/<synthetic_id>` unless it declares its own `output_dir`.
 pub const DEFAULT_INLINE_OUTPUT_DIR_PREFIX: &str = "build/kiln";
 
+/// The output directory of the clause `synthetic_id` names, where it declares
+/// none of its own.
+pub(super) fn default_output_dir(synthetic_id: &str) -> InvocationPath {
+    InvocationPath::normalize(&format!(
+        "{DEFAULT_INLINE_OUTPUT_DIR_PREFIX}/{synthetic_id}"
+    ))
+}
+
 /// The fields a `generator` object may carry.
 const GENERATOR_FIELDS: [&str; 6] = [
     "module",
@@ -401,11 +409,7 @@ fn lower_inline(
     );
     let synthetic_id = format!("kiln-{}", &digest[..16]);
 
-    let output_dir = output_dir_override.unwrap_or_else(|| {
-        InvocationPath::normalize(&format!(
-            "{DEFAULT_INLINE_OUTPUT_DIR_PREFIX}/{synthetic_id}"
-        ))
-    });
+    let output_dir = output_dir_override.unwrap_or_else(|| default_output_dir(&synthetic_id));
 
     Ok(Invocation {
         decl_sites: vec![DeclSite {
