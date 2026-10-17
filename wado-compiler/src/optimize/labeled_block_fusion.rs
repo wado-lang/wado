@@ -1413,11 +1413,10 @@ fn bind_exit_value(
     label: &str,
     local: u32,
     type_id: TypeId,
-    value: Operand,
+    mut value: Operand,
     span: Span,
 ) -> Vec<StmtId> {
     let mut out = Vec::new();
-    let mut value = value;
     if let Operand::Expr(e) = value
         && has_break_to(engine.body, NodeRef::Expr(e), label)
     {
