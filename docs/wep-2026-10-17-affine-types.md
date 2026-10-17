@@ -257,8 +257,12 @@ What casts did, the following do instead:
 - A builtin that passes a handle across states it in its signature:
   `call_indirect_stdout_write_via_stream(rx: Stream<u8>) -> Future<…>`, not
   `(rx: i32) -> i32`. The move check then sees `rx` handed over.
-- An identity that owns nothing is a `ResourceId`, read by `r.id()` through
-  `&self`. It is a copyable value with `Eq` and `Ord`, so it keys a map, and
+- An identity that owns nothing is a `ResourceId`, read by
+  `ResourceId::of(&r)`. It takes a reference to any affine resource, and
+  anything else is a type error. It is a static function rather than a method
+  so that it takes no name from any resource: a method `id` would collide with
+  one a resource declares, and a WIT-generated binding cannot rename its own.
+  A `ResourceId` is a copyable value with `Eq` and `Ord`, so it keys a map, and
   nothing converts it back into a resource. It names a live resource only: a
   dropped one's identity may come back for a later one, as a `Waitable`'s
   does.
@@ -335,7 +339,7 @@ one reads.
   `affine type`.
 - `Slice<T>`, `TreeMap<K, V>`, `HashMap<K, V>`, `TreeSet<T>` and their
   iterators stay unmarked.
-- `ResourceId`, and `id(&self) -> ResourceId` on every affine resource.
+- `ResourceId`, with `ResourceId::of(&r)` over every affine resource.
 
 `wado-from-idl` declares `affine` every record and variant it generates that
 holds an affine resource.
@@ -385,7 +389,7 @@ D6 is settled: a resource is boxed, and the box is its cell.
    `Iterator`'s `affine type Item`.
 5. [ ] No cast between an affine resource and an integer: synthesis splits
    and lifts the `stream-new` / `future-new` pair, the raw-handle builtins
-   take and return resources, `ResourceId` and `id`, and the test doubles in
+   take and return resources, `ResourceId::of`, and the test doubles in
    `core:kiln`, `core:cli` and `package-gale` return real handles. It comes
    before the cell, which a cast would have to allocate, and before cleanup
    drops a `Stream`, which `log_stdout` would then drop twice.
