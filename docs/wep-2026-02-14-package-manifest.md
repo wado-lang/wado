@@ -721,15 +721,15 @@ repository-directory = "packages/cli"
 
 `[workspace.package]` holds metadata shared by every member. Inheritance is automatic — unlike dependencies, members do not write `{ workspace = true }`. Override depends on the field:
 
-| Field          | Inheritance                     | Member override          |
-| -------------- | ------------------------------- | ------------------------ |
-| `version`      | Forced                          | Error if set in a member |
-| `repository`   | Forced                          | Error if set in a member |
-| `namespace`    | Forced                          | Error if set in a member |
-| `license`      | Default                         | Allowed                  |
+| Field          | Inheritance                              | Member override          |
+| -------------- | ---------------------------------------- | ------------------------ |
+| `version`      | Forced                                   | Error if set in a member |
+| `repository`   | Forced                                   | Error if set in a member |
+| `namespace`    | Forced                                   | Error if set in a member |
+| `license`      | Default                                  | Allowed                  |
 | `license-file` | Default (path relative to the workspace) | Allowed                  |
-| `authors`      | Default                         | Allowed                  |
-| `wado-version` | Default                         | Allowed                  |
+| `authors`      | Default                                  | Allowed                  |
+| `wado-version` | Default                                  | Allowed                  |
 
 Only these seven fields are inheritable; any other key (`name`, `lib`, `description`, `homepage`, `documentation`, `repository-directory`, `publish`) is package-specific. A member that re-declares a forced field is an error (`version is inherited from [workspace.package]; remove it here`) — see the [Lockstep Contract](#lockstep-contract).
 

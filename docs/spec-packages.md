@@ -616,15 +616,15 @@ authors = ["Alice <alice@example.com>"]
 `[workspace.package]` holds metadata every member inherits, with no marker in
 the member. A member inherits the fields in one of two ways:
 
-| Field          | Inheritance                                              |
-| -------------- | -------------------------------------------------------- |
-| `version`      | Forced: a member that sets the field is an error         |
-| `repository`   | Forced                                                   |
-| `namespace`    | Forced                                                   |
-| `license`      | A default the member may replace                         |
+| Field          | Inheritance                                                               |
+| -------------- | ------------------------------------------------------------------------- |
+| `version`      | Forced: a member that sets the field is an error                          |
+| `repository`   | Forced                                                                    |
+| `namespace`    | Forced                                                                    |
+| `license`      | A default the member may replace                                          |
 | `license-file` | A default the member may replace; resolved from the workspace's directory |
-| `authors`      | A default the member may replace                         |
-| `wado-version` | A default the member may replace                         |
+| `authors`      | A default the member may replace                                          |
+| `wado-version` | A default the member may replace                                          |
 
 Forcing the identity fields keeps every member on one version, from one
 repository, under one namespace. `license` and `license-file` are one setting: a

@@ -823,7 +823,10 @@ authors = ["Alice"]
             "[package]\nname = \"root-pkg\"\nversion = \"0.1.0\"\n",
         );
         let refused = |err: DiscoveryError| {
-            matches!(err, DiscoveryError::Parse(ManifestError::PackageInWorkspace))
+            matches!(
+                err,
+                DiscoveryError::Parse(ManifestError::PackageInWorkspace)
+            )
         };
         assert!(refused(discover(tmp.path()).unwrap_err()));
         assert!(refused(workspace_in(tmp.path()).unwrap_err()));
@@ -832,7 +835,10 @@ authors = ["Alice"]
     #[test]
     fn no_package_encloses_a_file_under_a_workspace() {
         let tmp = tempfile::tempdir().unwrap();
-        write(&tmp.path().join("wado.toml"), "[package]\nname = \"outer\"\n");
+        write(
+            &tmp.path().join("wado.toml"),
+            "[package]\nname = \"outer\"\n",
+        );
         let workspace = tmp.path().join("ws");
         write(&workspace.join(WORKSPACE_FILENAME), WS_ROOT);
         fs::create_dir_all(workspace.join("tools")).unwrap();

@@ -34,8 +34,8 @@ use crate::build::{BuildTarget, build_world_components, declared_worlds};
 use crate::compile::world_path_segment;
 use crate::knobs::{CompileKnobs, EmbedOptions, OptLevel};
 use crate::manifest::{
-    ProjectManifest, discover, emit_manifest_warnings, governing_workspace_root_dir,
-    workspace_in, workspace_member_dirs,
+    ProjectManifest, discover, emit_manifest_warnings, governing_workspace_root_dir, workspace_in,
+    workspace_member_dirs,
 };
 use crate::metadata_embed::working_tree_dirty;
 
@@ -194,11 +194,7 @@ async fn publish_workspace(
             .map_err(CliExit::error)?
             .ok_or_else(|| CliExit::error(format!("no wado.toml in member {}", dir.display())))?;
         emit_manifest_warnings(&project);
-        let label = dir
-            .strip_prefix(root)
-            .unwrap_or(&dir)
-            .display()
-            .to_string();
+        let label = dir.strip_prefix(root).unwrap_or(&dir).display().to_string();
         candidates.push((label, project));
     }
 

@@ -45,25 +45,26 @@ pub struct WorkspaceManifest {
 impl WorkspaceManifest {
     #[must_use]
     pub fn warnings(&self) -> Vec<ManifestWarning> {
-        let unknown_package_fields = self
-            .workspace
-            .package
-            .as_ref()
-            .map(|p| p.unknown_fields.as_slice())
-            .unwrap_or_default();
-        self.unknown_sections
+        let mut warnings: Vec<ManifestWarning> = self
+            .unknown_sections
             .iter()
-            .map(|field| (None, field))
-            .chain(
-                unknown_package_fields
-                    .iter()
-                    .map(|field| (Some("workspace.package".to_string()), field)),
-            )
-            .map(|(section, field)| ManifestWarning::UnknownField {
-                section,
+            .map(|field| ManifestWarning::UnknownField {
+                section: None,
                 field: field.clone(),
             })
-            .collect()
+            .collect();
+        for field in self
+            .workspace
+            .package
+            .iter()
+            .flat_map(|p| &p.unknown_fields)
+        {
+            warnings.push(ManifestWarning::UnknownField {
+                section: Some("workspace.package".to_string()),
+                field: field.clone(),
+            });
+        }
+        warnings
     }
 }
 
@@ -704,7 +705,10 @@ fn convert_raw(raw: RawManifest) -> Result<Manifest, ManifestError> {
 pub fn resolve_member(member_toml: &str, workspace_toml: &str) -> Result<Manifest, ManifestError> {
     let mut member_raw: RawManifest =
         toml::from_str(member_toml).map_err(|e| ManifestError::Toml(e.to_string()))?;
-    let ws_pkg = workspace_toml.parse::<WorkspaceManifest>()?.workspace.package;
+    let ws_pkg = workspace_toml
+        .parse::<WorkspaceManifest>()?
+        .workspace
+        .package;
     let inherited_unknown_fields = ws_pkg
         .as_ref()
         .map(|p| p.unknown_fields.clone())

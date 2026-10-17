@@ -887,7 +887,11 @@ fn test_modules_in_no_package_share_one_scope() {
     for dir in ["script", "lib", "app", "pkg"] {
         std::fs::create_dir_all(ws.join(dir)).unwrap();
     }
-    std::fs::write(ws.join("wado-workspace.toml"), "[workspace]\nmembers = []\n").unwrap();
+    std::fs::write(
+        ws.join("wado-workspace.toml"),
+        "[workspace]\nmembers = []\n",
+    )
+    .unwrap();
     std::fs::write(
         ws.join("lib/x.wado"),
         "internal fn x() -> i32 { return 1; }\n",
@@ -1486,7 +1490,9 @@ fn test_test_reruns_a_passed_file_once_a_package_boundary_moves() {
         "[package]\nname = \"inner\"\nversion = \"0.1.0\"\n",
     )
     .unwrap();
-    run().failure().stdout(predicate::str::contains("cached:").not());
+    run()
+        .failure()
+        .stdout(predicate::str::contains("cached:").not());
 }
 
 /// The package a module is in is the one its file is in on disk, `..` taken

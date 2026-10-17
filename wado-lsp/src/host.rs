@@ -109,8 +109,8 @@ impl FilesystemCompilerHost {
         self.buffer().push(diagnostic);
     }
 
-    /// [`CompilerHost::package_root`], telling `probed` each manifest path the
-    /// walk looks at and whether one is there. The walk starts from the
+    /// [`CompilerHost::package_root`], telling `probed` each file the walk
+    /// looks for and whether one is there. The walk starts from the
     /// module's directory as the OS resolves it, `..` after a symlink
     /// included, since that is the directory [`CompilerHost::load_source`]
     /// reads from. A directory that does not exist has no root, and the load

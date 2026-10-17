@@ -40,8 +40,8 @@ pub struct CompileInputs {
     #[serde(default)]
     pub dependencies: IndexMap<String, String>,
     /// Stubbed package roots, each a directory relative to the fixture
-    /// directory that stands where a `wado.toml` would. Empty declares no
-    /// package boundary.
+    /// directory that stands where a `wado.toml` would. Empty leaves every
+    /// module in no package.
     #[serde(default)]
     pub package_roots: Vec<String>,
     /// Override the `--param-unknown` policy level (`error` / `warn` / `ignore`).

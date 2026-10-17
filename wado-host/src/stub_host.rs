@@ -86,9 +86,10 @@ impl CompilerHost for StubHost {
         self.stubs
             .package_roots
             .iter()
-            .filter(|root| dir.starts_with(normalize_path(&base.join(root))))
-            .max_by_key(|root| normalize_path(&base.join(root)).components().count())
-            .cloned()
+            .map(|root| (root, normalize_path(&base.join(root))))
+            .filter(|(_, abs)| dir.starts_with(abs))
+            .max_by_key(|(_, abs)| abs.components().count())
+            .map(|(root, _)| root.clone())
     }
 
     fn dependency_index(&self) -> DependencyIndex {
