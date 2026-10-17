@@ -4,16 +4,17 @@
 use crate::ast::{AstId, AstVisitor, Expr, SelfKind, UnaryOp, walk_expr};
 use crate::semantics::Semantics;
 use crate::symbol::SymbolKind;
+use crate::tir::TypeId;
 
 /// One way an expression may write.
 pub(crate) enum WriteSite<'e> {
     /// The place an assignment, a `&mut`, or a method taking `&mut self`
     /// writes.
     Place(&'e Expr),
-    /// An operand handed to a call whose value reaches a `&mut`, which the
-    /// callee may write through. A receiver counts only beneath the reference
-    /// its method takes, since a `&self` method cannot write the receiver
-    /// itself.
+    /// An operand handed to a call as a parameter that reaches a `&mut`, which
+    /// the callee may write through. A receiver counts only beneath the
+    /// reference its method takes, since a `&self` method cannot write the
+    /// receiver itself.
     Lent(&'e Expr),
     /// The callee of a call that is not a declared function: a function value,
     /// `fn` or `fn mut`, which may write through a `&mut` it captured.
@@ -45,9 +46,22 @@ impl<F: FnMut(WriteSite<'_>)> Sites<'_, F> {
         })
     }
 
-    fn lend(&mut self, args: &[Expr]) {
-        for arg in args {
-            if self.reaches_mut_ref(arg, false) {
+    /// Reports each argument of the call at `id` that hands its callee the
+    /// means to write. That is the parameter's type, where the callee is
+    /// known: a `&mut T` bound to a `&T` gives it no more than `T` holds.
+    fn lend(&mut self, id: AstId, args: &[Expr]) {
+        let params: Vec<&[TypeId]> = self
+            .sem
+            .callee_param_types_at(id)
+            .filter(|params| params.len() == args.len())
+            .collect();
+        for (i, arg) in args.iter().enumerate() {
+            let lent = if params.is_empty() {
+                self.reaches_mut_ref(arg, false)
+            } else {
+                params.iter().any(|params| self.sem.reaches_mut_ref(params[i]))
+            };
+            if lent {
                 (self.found)(WriteSite::Lent(arg));
             }
         }
@@ -62,14 +76,14 @@ impl<F: FnMut(WriteSite<'_>)> Sites<'_, F> {
         } else if self.reaches_mut_ref(receiver, true) {
             (self.found)(WriteSite::Lent(receiver));
         }
-        self.lend(args);
+        self.lend(id, args);
     }
 
-    fn call(&mut self, callee: &Expr, args: &[Expr]) {
+    fn call(&mut self, callee: &Expr, args: &[Expr], id: AstId) {
         if self.is_function_value(callee) {
             (self.found)(WriteSite::Opaque(callee));
         }
-        self.lend(args);
+        self.lend(id, args);
     }
 
     /// Whether `callee` is a value of function type rather than a path to a
@@ -95,8 +109,8 @@ impl<F: FnMut(WriteSite<'_>)> AstVisitor for Sites<'_, F> {
                 (self.found)(WriteSite::Place(&unary.expr));
             }
             Expr::MethodCall(call) => self.method_call(&call.receiver, &call.args, call.id),
-            Expr::Call(call) => self.call(&call.callee, &call.args),
-            Expr::StaticMethodCall(call) => self.lend(&call.args),
+            Expr::Call(call) => self.call(&call.callee, &call.args, call.id),
+            Expr::StaticMethodCall(call) => self.lend(call.id, &call.args),
             _ => {}
         }
         walk_expr(self, expr);

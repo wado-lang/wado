@@ -104,8 +104,10 @@ compile error. So is taking `&mut` of one, calling a method that takes
 `&mut self` on one, and calling a function value other than a closure the
 clause writes: a `fn`, like a `fn mut`, may write through a `&mut` it captured. A value the clause binds is its own only if
 it holds no `&mut`, resource, or function value, since a copy of one shares what
-that points to. A call may be handed a value holding one only as an argument
-written `&mut x`, where `x` is the clause's own.
+that points to. A call may be handed a value holding one only where the
+parameter takes nothing that can write, as a `&T` taking a `&mut T` does when
+`T` holds none, or as a closure the clause writes, or as an argument written
+`&mut x`, where `x` is the clause's own.
 
 > Not yet implemented: a function a clause calls may write a mutable global.
 

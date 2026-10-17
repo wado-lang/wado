@@ -446,6 +446,10 @@ API waits for a program outside the standard library that needs one.
   error.
 - A function a clause calls may write a mutable global: global access is not
   tracked yet, so nothing tells the clause's check that it does.
+- A clause cannot call a method on a value holding a resource or a function
+  value, even one that only reads a field. Such a method may perform a host
+  call or call the function without declaring an effect (#2369), and the check
+  reads no body.
 - A clause that takes `&mut` of a value it declares and hands the reference on
   through a local, rather than as the argument `&mut x`, is rejected, though
   the write lands in the clause's own value.

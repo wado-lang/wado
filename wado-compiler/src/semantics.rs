@@ -541,6 +541,24 @@ impl Semantics {
         self.facts_at(ModuleSemantics::METHOD_DISPATCH, id)
     }
 
+    /// The parameter types the callee of the call at `id` takes, one list per
+    /// walk that resolved it, with this call's type arguments substituted.
+    /// A list may lead with the receiver where the call spells it as an
+    /// argument, so a reader pairs it with the arguments only where the
+    /// lengths agree.
+    pub(crate) fn callee_param_types_at(&self, id: AstId) -> impl Iterator<Item = &[TypeId]> {
+        let methods = self
+            .method_dispatches_at(id)
+            .map(|dispatch| dispatch.param_types.as_slice());
+        let statics = self
+            .facts_at(ModuleSemantics::STATIC_METHOD_DISPATCH, id)
+            .map(|dispatch| dispatch.param_types.as_slice());
+        let calls = self
+            .facts_at(ModuleSemantics::CALL_PARAM_TYPES, id)
+            .map(Vec::as_slice);
+        methods.chain(statics).chain(calls)
+    }
+
     /// Stable public view onto the recorded method-dispatch decision:
     /// `(resolved_function_name, defining_module, self_kind_str)`, or `None` for
     /// a synthetic or short-circuited call path. In-crate consumers read the

@@ -3218,14 +3218,10 @@ impl<'a> PurityWalker<'a> {
             // A `&mut place` operand is that place's `Place` site. Any other
             // operand reaching a `&mut` passes on one the clause did not take.
             WriteSite::Lent(Expr::Unary(unary)) if unary.op == ast::UnaryOp::MutRef => {}
-            WriteSite::Lent(operand) => self.flag_mutate(operand),
             // A closure the clause writes is walked with it, so its writes are
-            // judged where they stand.
-            WriteSite::Opaque(Expr::Closure(_)) => {}
-            WriteSite::Opaque(callee)
-                if self
-                    .binding_span(callee)
-                    .is_some_and(|span| self.clause_closures.contains(&span)) => {}
+            // judged where they stand, wherever it is called.
+            WriteSite::Lent(value) | WriteSite::Opaque(value) if self.is_clause_closure(value) => {}
+            WriteSite::Lent(operand) => self.flag_mutate(operand),
             WriteSite::Opaque(callee) => {
                 let name = unparse_expr_source(callee);
                 self.flag(Impurity::CallValue(name), callee.span());
@@ -3270,6 +3266,15 @@ impl<'a> PurityWalker<'a> {
         };
         self.binding_span(expr)
             .is_some_and(|span| clause.start <= span.start && span.end <= clause.end)
+    }
+
+    /// Whether `expr` is a closure the clause being walked writes, or a
+    /// binding it initializes with one.
+    fn is_clause_closure(&self, expr: &Expr) -> bool {
+        matches!(expr, Expr::Closure(_))
+            || self
+                .binding_span(expr)
+                .is_some_and(|span| self.clause_closures.contains(&span))
     }
 
     /// Where the binding `expr` names is declared.
