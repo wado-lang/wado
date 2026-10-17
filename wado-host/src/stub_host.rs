@@ -96,6 +96,9 @@ impl CompilerHost for StubHost {
         let mut index = DependencyIndex::default();
         for (name, lib) in &self.stubs.dependencies {
             index.resolved.insert(name.clone(), lib.clone());
+            index
+                .packages
+                .insert(lib.clone(), DependencyIndex::default());
         }
         index
     }

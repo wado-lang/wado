@@ -11,7 +11,7 @@ use crate::ast::{
 };
 use crate::compiler_host::Diagnostic;
 use crate::hashmap::IndexMap;
-use crate::name::resolve_module_path;
+use crate::name::{is_package_namespace, resolve_module_path};
 use crate::path::is_cwd_relative;
 
 use super::cache::{encode_written_options, hex_digest};
@@ -577,11 +577,8 @@ fn lower_module_specifier(
     // or a `lib:nickname` indirection. Both carry a `<segment>:` prefix; the
     // compiler does not interpret the body here — the host resolves it against
     // `[build-dependencies]`, dispatching on the matched entry's source.
-    if let Some(colon) = spec.find(':')
-        && colon > 0
-        && spec[..colon]
-            .chars()
-            .all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '-')
+    if let Some((namespace, _)) = spec.split_once(':')
+        && is_package_namespace(namespace)
     {
         return Some(GeneratorModule::Spec(GeneratorSpec {
             spec: spec.to_string(),

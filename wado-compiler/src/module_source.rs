@@ -13,6 +13,7 @@ use crate::primitive::PrimitiveType;
 use crate::stdlib::{ALL_CORE_WASM_ASSETS, BINDING_MODULE_PATHS, CORE_MODULE_PATHS};
 use std::fmt;
 use std::sync::{Arc, LazyLock};
+use unicode_normalization::UnicodeNormalization;
 
 /// Sentinel `Arc<str>` for `ModuleSource::default()` placeholders.
 /// Distinct identity from any real interned core name (no real module
@@ -263,15 +264,18 @@ impl ModuleSourceInterner {
     /// The dependencies a bare-name import in `importer` resolves against: its
     /// own package's where it is a dependency's module, else the entry's.
     fn dependencies_of(&self, importer: &ModuleSource) -> &DependencyIndex {
-        static NONE: LazyLock<DependencyIndex> = LazyLock::new(DependencyIndex::default);
         match importer {
-            ModuleSource::Dependency { pkg, .. } => self
-                .dependencies
-                .packages
-                .get(pkg.as_str())
-                .unwrap_or(&NONE),
+            ModuleSource::Dependency { pkg, .. } => self.package(pkg.as_str()),
             _ => &self.dependencies,
         }
+    }
+
+    /// The index of the source dependency whose entry module is `lib`.
+    fn package(&self, lib: &str) -> &DependencyIndex {
+        self.dependencies
+            .packages
+            .get(lib)
+            .expect("a host indexes the package of every source dependency it resolves")
     }
 
     /// Resolve a bare dependency name imported by `importer` to its entry
@@ -284,6 +288,31 @@ impl ModuleSourceInterner {
     ) -> Option<ModuleSource> {
         let path = self.dependencies_of(importer).resolved.get(name)?.clone();
         Some(self.dependency(&path))
+    }
+
+    /// Resolve the file `file` of the source dependency `name`, imported by
+    /// `importer` as `"<name>/<file>"`, where the dependency's
+    /// `[package].exports` lists it. Compared after NFC, case exactly.
+    pub fn resolve_exported_file(
+        &mut self,
+        importer: &ModuleSource,
+        name: &str,
+        file: &str,
+    ) -> Result<ModuleSource, ExportRefusal> {
+        let lib = self.dependencies_of(importer).resolved.get(name);
+        let Some(lib) = lib.cloned() else {
+            return Err(ExportRefusal::NoSuchPackage);
+        };
+        let exports = &self.package(&lib).exports;
+        let file: String = file.nfc().collect();
+        let Some(path) = exports.get(&file).cloned() else {
+            let lowered = file.to_lowercase();
+            let spelled_alike = exports.keys().find(|e| e.to_lowercase() == lowered);
+            return Err(ExportRefusal::NotExported {
+                spelled_alike: spelled_alike.cloned(),
+            });
+        };
+        Ok(self.dependency_module(&lib, &path))
     }
 
     /// Resolve a coordinate imported by `importer` to a *prebuilt component*
@@ -426,6 +455,16 @@ impl WasmAssetKind {
             Self::Wasm => "wasm",
         }
     }
+}
+
+/// Why a `"<package>/<file>"` reference names no module.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ExportRefusal {
+    /// The importer's package declares no source dependency by that name.
+    NoSuchPackage,
+    /// The package's `[package].exports` lists no such file, whether or not it
+    /// is there. `spelled_alike` is an entry differing from it in case alone.
+    NotExported { spelled_alike: Option<String> },
 }
 
 /// A CM package namespace the compiler ships bindings for. Reserved because it

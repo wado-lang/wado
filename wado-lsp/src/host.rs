@@ -199,19 +199,34 @@ pub fn dependency_index_from(
     base: &Path,
 ) -> DependencyIndex {
     let base_abs = absolutize(base);
-    let (mut index, mut pending) = package_index(manifest, manifest_dir, &base_abs);
+    let (mut index, entries) = package_index(manifest, manifest_dir, &base_abs);
+    index_packages(&mut index, entries, base);
+    index
+}
+
+/// The key `index.resolved` names the source dependency whose entry module is
+/// `entry` by: its path relative to `base`, the base `load_source` joins against.
+#[must_use]
+pub fn dependency_key(entry: &Path, base: &Path) -> String {
+    relative_path(&absolutize(base), &normalize_path(&absolutize(entry)))
+}
+
+/// Add to `index.packages` the package of each source dependency entry module
+/// in `entries`, and of each source dependency those reach, at any depth.
+pub fn index_packages(index: &mut DependencyIndex, mut entries: Vec<PathBuf>, base: &Path) {
+    let base_abs = absolutize(base);
     let mut next = 0;
-    while let Some(entry) = pending.get(next).cloned() {
+    while let Some(entry) = entries.get(next).cloned() {
         next += 1;
-        let lib = relative_path(&base_abs, &entry);
+        let lib = dependency_key(&entry, base);
         if index.packages.contains_key(&lib) {
             continue;
         }
         let own = match discovery::nearest_manifest_dir(&entry) {
             Some(dir) => match read_manifest(&dir) {
                 Ok(manifest) => {
-                    let (own, entries) = package_index(&manifest, &dir, &base_abs);
-                    pending.extend(entries);
+                    let (own, reached) = package_index(&manifest, &dir, &base_abs);
+                    entries.extend(reached);
                     own
                 }
                 Err(error) => unreadable_manifest(&dir, error),
@@ -220,7 +235,6 @@ pub fn dependency_index_from(
         };
         index.packages.insert(lib, own);
     }
-    index
 }
 
 /// One package's index, without `packages`, and the absolute entry module of
@@ -230,19 +244,23 @@ fn package_index(
     manifest_dir: &Path,
     base_abs: &Path,
 ) -> (DependencyIndex, Vec<PathBuf>) {
+    let root = normalize_path(&absolutize(manifest_dir));
+    let exports = manifest.package.iter().flat_map(|p| &p.exports);
     let mut index = DependencyIndex {
         manifest: Some(DependencyManifest {
             path: manifest_path(manifest_dir),
             error: None,
         }),
+        exports: exports
+            .map(|entry| (entry.clone(), relative_path(base_abs, &root.join(entry))))
+            .collect(),
         ..DependencyIndex::default()
     };
     let mut entries = Vec::new();
     for (name, entry) in discovery::resolve_all(manifest, manifest_dir) {
         match entry {
             Ok(DependencyEntry::Source(path)) => {
-                let path = normalize_path(&absolutize(&path));
-                index.resolved.insert(name, relative_path(base_abs, &path));
+                index.resolved.insert(name, dependency_key(&path, base_abs));
                 entries.push(path);
             }
             Ok(DependencyEntry::Component(path)) => {

@@ -610,6 +610,9 @@ pub struct DependencyIndex {
     /// which its modules' bare-name imports resolve. Flat: an inner index's
     /// own `packages` is empty.
     pub packages: hashmap::IndexMap<String, DependencyIndex>,
+    /// The files the package's own `[package].exports` offers, each
+    /// NFC-normalized entry → its path relative to the host base.
+    pub exports: hashmap::IndexMap<String, String>,
 }
 
 /// The `wado.toml` a [`DependencyIndex`] was read from.

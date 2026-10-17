@@ -335,17 +335,121 @@ fn an_undeclared_alias_names_the_manifest() {
 /// Write a package at `dir` whose `src/lib.wado` is `lib`, with the
 /// `[dependencies]` lines in `deps`.
 fn library(dir: &std::path::Path, deps: &str, lib: &str) {
+    exporting_library(dir, &[], deps, lib);
+}
+
+/// [`library`], whose `[package].exports` lists `exports`.
+fn exporting_library(dir: &std::path::Path, exports: &[&str], deps: &str, lib: &str) {
     fs::create_dir_all(dir.join("src")).unwrap();
     let name = dir.file_name().unwrap().to_str().unwrap();
+    let exports = exports
+        .iter()
+        .map(|e| format!("{e:?}"))
+        .collect::<Vec<_>>()
+        .join(", ");
     fs::write(
         dir.join("wado.toml"),
         format!(
-            "[package]\nname = \"{name}\"\nversion = \"0.1.0\"\nlib = \"src/lib.wado\"\n\n\
-             [dependencies]\n{deps}"
+            "[package]\nname = \"{name}\"\nversion = \"0.1.0\"\nlib = \"src/lib.wado\"\n\
+             exports = [{exports}]\n\n[dependencies]\n{deps}"
         ),
     )
     .unwrap();
     fs::write(dir.join("src/lib.wado"), lib).unwrap();
+}
+
+/// A dependency's exported submodule is imported by `"<package>/<file>"`,
+/// offers its `pub` items, resolves its own imports as a module of that
+/// package, and is one module with the file its `lib` entry reaches.
+#[test]
+fn an_exported_file_is_imported_by_package_and_path() {
+    let tmp = tempfile::tempdir().unwrap();
+    let root = tmp.path();
+    library(
+        &root.join("leaf"),
+        "",
+        "pub fn leaf() -> i32 { return 1; }\n",
+    );
+    let shapes = root.join("shapes");
+    exporting_library(
+        &shapes,
+        &["src/point.wado"],
+        "\"lib:leaf\" = { path = \"../leaf\" }\n",
+        "pub use { Point } from \"./point.wado\";\n",
+    );
+    fs::write(
+        shapes.join("src/point.wado"),
+        "use { leaf } from \"lib:leaf\";\n\
+         pub struct Point { pub x: i32 }\n\
+         pub fn origin() -> Point { return Point { x: leaf() - 1 }; }\n",
+    )
+    .unwrap();
+    library(
+        &root.join("app"),
+        "\"lib:shapes\" = { path = \"../shapes\" }\n",
+        "use { Point } from \"lib:shapes\";\n\
+         use { origin } from \"lib:shapes/src/point.wado\";\n\
+         pub fn api() -> i32 { let p: Point = origin(); return p.x; }\n",
+    );
+    wado_in(&root.join("app"))
+        .args(["check", "src/lib.wado"])
+        .assert()
+        .success();
+}
+
+/// A file the allowlist does not name is refused at package granularity,
+/// whether or not it is there, and a case-only mismatch names the entry.
+#[test]
+fn an_unlisted_file_is_refused_by_package() {
+    let tmp = tempfile::tempdir().unwrap();
+    let root = tmp.path();
+    let shapes = root.join("shapes");
+    exporting_library(&shapes, &["src/Point.wado"], "", "pub fn f() {}\n");
+    fs::write(shapes.join("src/Point.wado"), "pub fn g() {}\n").unwrap();
+    fs::write(shapes.join("src/hidden.wado"), "pub fn h() {}\n").unwrap();
+    let app = root.join("app");
+    let check = |specifier: &str| {
+        library(
+            &app,
+            "\"lib:shapes\" = { path = \"../shapes\" }\n",
+            &format!("use {{ g }} from \"{specifier}\";\npub fn api() {{ g(); }}\n"),
+        );
+        wado_in(&app)
+            .args(["check", "src/lib.wado"])
+            .assert()
+            .failure()
+    };
+    for file in ["src/hidden.wado", "src/missing.wado"] {
+        check(&format!("lib:shapes/{file}")).stderr(predicate::str::contains(format!(
+            "package `lib:shapes` exports no file `{file}`\n"
+        )));
+    }
+    check("lib:shapes/src/point.wado").stderr(predicate::str::contains(
+        "package `lib:shapes` exports no file `src/point.wado`; \
+         it exports `src/Point.wado`, which differs in case",
+    ));
+    check("lib:other/src/Point.wado").stderr(predicate::str::contains(
+        "dependency 'lib:other' is not declared in [dependencies] of ",
+    ));
+}
+
+/// A namespace may carry `-`, as a manifest name does.
+#[test]
+fn an_undeclared_hyphenated_namespace_names_the_manifest() {
+    let tmp = tempfile::tempdir().unwrap();
+    let app = tmp.path().join("app");
+    library(
+        &app,
+        "",
+        "use { f } from \"wado-lang:absent\";\npub fn api() { f(); }\n",
+    );
+    wado_in(&app)
+        .args(["check", "src/lib.wado"])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains(
+            "dependency 'wado-lang:absent' is not declared in [dependencies] of ",
+        ));
 }
 
 /// A dependency's bare import resolves against its own `[dependencies]`, at

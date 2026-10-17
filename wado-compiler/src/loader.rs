@@ -20,11 +20,13 @@ use crate::kiln::InvocationIndex;
 use crate::lexer::{LexError, lex};
 use crate::logger::Logger;
 use crate::module_source::{
-    CmNamespace, ModuleSource, ModuleSourceInterner, WasmAssetKind, is_bundled_specifier,
+    CmNamespace, ExportRefusal, ModuleSource, ModuleSourceInterner, WasmAssetKind,
+    is_bundled_specifier,
 };
 use crate::name::{
-    canonicalize_entry_point, decl_file_of, entry_dir_of, resolve_import_with_invocations,
-    resolve_local_identity, resolve_module_path,
+    canonicalize_entry_point, decl_file_of, entry_dir_of, is_package_namespace,
+    resolve_import_with_invocations, resolve_local_identity, resolve_module_path,
+    split_exported_file,
 };
 use crate::parser::Parser;
 use crate::path::{is_cwd_relative, normalize};
@@ -74,6 +76,14 @@ pub enum LoadError {
     /// dependency could not be resolved to an entry module (e.g. its package
     /// declares no `[package].lib`). `reason` explains why.
     DependencyUnresolved { name: String, reason: String },
+    /// `"<package>/<file>"` names a file the package's `[package].exports`
+    /// does not list. Worded at package granularity, so it never says whether
+    /// the file is there.
+    UnexportedFile {
+        package: String,
+        file: String,
+        spelled_alike: Option<String>,
+    },
     /// Wasm-asset import (`with { type: "wat"|"wasm" }`) failed validation.
     WasmImport {
         module_source: ModuleSource,
@@ -175,6 +185,17 @@ impl std::fmt::Display for LoadError {
             LoadError::DependencyUnresolved { name, reason } => {
                 write!(f, "cannot resolve dependency '{name}': {reason}")
             }
+            LoadError::UnexportedFile {
+                package,
+                file,
+                spelled_alike,
+            } => {
+                write!(f, "package `{package}` exports no file `{file}`")?;
+                match spelled_alike {
+                    Some(entry) => write!(f, "; it exports `{entry}`, which differs in case"),
+                    None => Ok(()),
+                }
+            }
             LoadError::WasmImport {
                 module_source,
                 message,
@@ -225,7 +246,8 @@ impl LoadError {
             LoadError::ModuleNotFound { .. }
             | LoadError::UndeclaredDependency { .. }
             | LoadError::InvalidModulePath { .. }
-            | LoadError::DependencyUnresolved { .. } => Code::ModuleNotFound,
+            | LoadError::DependencyUnresolved { .. }
+            | LoadError::UnexportedFile { .. } => Code::ModuleNotFound,
         }
     }
 }
@@ -1946,14 +1968,28 @@ impl<'a, H: CompilerHost> ModuleLoader<'a, H> {
             return Ok(self.interner.local(&path));
         }
 
+        let exported_file = split_exported_file(import_source);
+        if let Some((package, file)) = exported_file
+            && let Err(ExportRefusal::NotExported { spelled_alike }) = self
+                .interner
+                .resolve_exported_file(from_module_source, package, file)
+        {
+            return Err(LoadError::UnexportedFile {
+                package: package.to_string(),
+                file: file.to_string(),
+                spelled_alike,
+            });
+        }
+        let name = exported_file.map_or(import_source, |(package, _)| package);
+
         // Declared but unresolvable (e.g. missing `[package].lib`): report
         // why, instead of a generic "invalid module path".
         if let Some(reason) = self
             .interner
-            .unresolved_dependency(from_module_source, import_source)
+            .unresolved_dependency(from_module_source, name)
         {
             return Err(LoadError::DependencyUnresolved {
-                name: import_source.to_string(),
+                name: name.to_string(),
                 reason: reason.to_string(),
             });
         }
@@ -1964,25 +2000,19 @@ impl<'a, H: CompilerHost> ModuleLoader<'a, H> {
         }) = manifest
         {
             return Err(LoadError::DependencyUnresolved {
-                name: import_source.to_string(),
+                name: name.to_string(),
                 reason: format!("{path} is invalid: {error}"),
             });
         }
 
         // A namespaced import (xxx:yyy) names a dependency
-        if let Some(colon_pos) = import_source.find(':') {
-            let namespace = &import_source[..colon_pos];
-            // Ensure it's a valid identifier-like namespace (not a URL scheme)
-            if !namespace.is_empty()
-                && namespace
-                    .chars()
-                    .all(|c| c.is_ascii_alphanumeric() || c == '_')
-            {
-                return Err(LoadError::UndeclaredDependency {
-                    name: import_source.to_string(),
-                    manifest: manifest.map(|m| m.path.clone()),
-                });
-            }
+        if let Some((namespace, _)) = name.split_once(':')
+            && is_package_namespace(namespace)
+        {
+            return Err(LoadError::UndeclaredDependency {
+                name: name.to_string(),
+                manifest: manifest.map(|m| m.path.clone()),
+            });
         }
 
         // Invalid module path (no recognized prefix)

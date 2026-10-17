@@ -552,7 +552,6 @@ mod tests {
     const READY: &str = "[package]\nnamespace = \"org\"\nname = \"app\"\nversion = \"0.1.0\"\ndescription = \"d\"\nrepository = \"https://x/y\"\nlicense = \"MIT\"\nauthors = [\"A\"]\n";
 
     #[test]
-    #[test]
     fn classify_ready_package() {
         let m = manifest(READY);
         assert_matches!(classify(&m, Path::new(".")), Verdict::Ready(c) if c == "org:app@0.1.0");

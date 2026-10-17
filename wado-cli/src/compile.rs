@@ -7,6 +7,7 @@ use wado_manifest::DependencySource;
 
 use lexopt::Arg::Value;
 use wado_compiler::{Diagnostic, Severity, wit_bundle};
+use wado_lsp::host::{dependency_key, index_packages};
 
 use crate::args::{self, CliExit};
 use crate::build_dep::{GENERATOR_WORLD_FQ, locked_generator_versions, spec_key};
@@ -533,7 +534,9 @@ async fn manifest_and_component_index(
         let inline_git = resolve_inline_git_dependencies(source, tier).await?;
         for (name, path) in inline_git.resolved {
             index.unresolved.swap_remove(&name);
-            bind_once(&mut index.resolved, name, path)?;
+            let entry = PathBuf::from(path);
+            bind_once(&mut index.resolved, name, dependency_key(&entry, base_path))?;
+            index_packages(&mut index, vec![entry], base_path);
         }
         for (name, reason) in inline_git.unresolved {
             index.unresolved.insert(name, reason);
