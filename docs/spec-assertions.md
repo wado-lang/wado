@@ -100,14 +100,17 @@ fn half(n: i32) -> i32
 A clause writes only the values it creates. A build may skip the clause, so a
 write reaching anything else would make what the call computes depend on the
 build. Writing a parameter, a global, or anything through a reference is a
-compile error. So is taking `&mut` of one, calling a method that takes
-`&mut self` on one, and calling a function value other than a closure the
-clause writes: a `fn`, like a `fn mut`, may write through a `&mut` it captured. A value the clause binds is its own only if
-it holds no `&mut`, resource, or function value, since a copy of one shares what
-that points to. A call may be handed a value holding one only where the
-parameter takes nothing that can write, as a `&T` taking a `&mut T` does when
-`T` holds none, or as a closure the clause writes, or as an argument written
-`&mut x`, where `x` is the clause's own.
+compile error. So is taking `&mut` of one, and calling a method that takes
+`&mut self` on one. A value the clause binds is its own only if it holds no
+`&mut`, resource, or function value, since a copy of one shares what that
+points to.
+
+A callee may be handed such a value only where it cannot write through it: a
+`&mut T` bound to a `&T` parameter, where `T` holds none of them, or a closure
+the clause writes, whose body this rule covers. An argument written `&mut x`,
+where `x` is the clause's own, is handed on as well. Calling a function value
+follows the same rule: a `fn`, like a `fn mut`, may write through a `&mut` it
+captured, so only a closure the clause writes may be called.
 
 > Not yet implemented: a function a clause calls may write a mutable global.
 

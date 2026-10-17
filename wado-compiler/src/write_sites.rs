@@ -59,7 +59,9 @@ impl<F: FnMut(WriteSite<'_>)> Sites<'_, F> {
             let lent = if params.is_empty() {
                 self.reaches_mut_ref(arg, false)
             } else {
-                params.iter().any(|params| self.sem.reaches_mut_ref(params[i]))
+                params
+                    .iter()
+                    .any(|params| self.sem.reaches_mut_ref(params[i]))
             };
             if lent {
                 (self.found)(WriteSite::Lent(arg));
