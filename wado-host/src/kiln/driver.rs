@@ -850,6 +850,23 @@ pub enum PipelineError {
     Manifest(Box<dyn std::error::Error + Send + Sync>),
 }
 
+impl PipelineError {
+    /// Whether the host has been told of this failure diagnostic by
+    /// diagnostic, so reporting it once more would say it twice.
+    #[must_use]
+    pub fn is_reported(&self) -> bool {
+        match self {
+            PipelineError::InlineClause(_) | PipelineError::RedirectConflict(_) => true,
+            PipelineError::Driver(_)
+            | PipelineError::Execute { .. }
+            | PipelineError::Provider { .. }
+            | PipelineError::Io { .. }
+            | PipelineError::MetadataSave { .. }
+            | PipelineError::Manifest(_) => false,
+        }
+    }
+}
+
 impl std::fmt::Display for PipelineError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {

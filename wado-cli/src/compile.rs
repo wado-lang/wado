@@ -831,13 +831,10 @@ fn manifest_error(error: DiscoveryError) -> PipelineError {
 
 /// How `wado <subcommand>` exits on a Kiln pipeline failure.
 pub(crate) fn pipeline_exit(error: PipelineError, subcommand: &str) -> CliExit {
-    match error {
-        // A malformed inline clause and a redirect conflict are reported as
-        // diagnostics already.
-        PipelineError::InlineClause(_) | PipelineError::RedirectConflict(_) => {
-            CliExit::silent_failure(1)
-        }
-        other => CliExit::error(format!("wado {subcommand}: {other}")),
+    if error.is_reported() {
+        CliExit::silent_failure(1)
+    } else {
+        CliExit::error(format!("wado {subcommand}: {error}"))
     }
 }
 

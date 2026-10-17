@@ -1,0 +1,20 @@
+//! The outer generator names its own generator by `[build-dependencies]`
+//! nickname, which is resolved against the project root, not against here.
+
+use { Error, OutputFile, Request, Response } from "core:kiln";
+use { answer } from "./value.txt"
+    with {
+        generator: { module: "lib:inner" },
+    };
+
+export fn generate(req: Request) -> Result<Response, Error> {
+    let _ = req.primary.path;
+    let files: List<OutputFile> = [
+        OutputFile {
+            path: "model.wado",
+            content: `pub fn model() -> i32 { return ${answer()}; }\n`,
+            is_entry: true,
+        },
+    ];
+    return Result::Ok(Response { files });
+}

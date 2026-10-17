@@ -1,0 +1,18 @@
+// Fixtures share one output tree, and a pipeline deletes what it did not write
+// in each output directory it wrote, so a clause naming its own `output_dir` is
+// refused, even one inside `build/kiln/`.
+
+use { hello } from "./sub/kiln/value.schema"
+    with {
+        generator: {
+            module: "./sub/kiln/text_generator.wado",
+            output_dir: "./build/kiln/shared",
+        },
+    };
+
+test {
+    assert hello() == 7;
+}
+
+__DATA__
+{"compile_error": "kiln: `sub/kiln/value.schema` names its own `output_dir`, which a fixture cannot"}

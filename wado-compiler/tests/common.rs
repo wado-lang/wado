@@ -31,7 +31,7 @@ use wado_compiler::{
     CompileError, CompileFailure, CompilerHost, CompilerOptions, Diagnostic, InMemoryCompilerHost,
     OptLevel,
 };
-use wado_host::engine::{DEFAULT_COLLECTOR, enable_wasm_features};
+use wado_host::engine::default_config;
 use wado_host::kiln::local::{generators, run_local_generators};
 use wado_host::timezone;
 pub use wado_host::tls_trust::install_default_crypto_provider;
@@ -373,16 +373,11 @@ pub fn report_fuel_used<T>(store: &mut Store<T>, label: &str, timeout_ms: u64) {
     report_fuel(label, budget.saturating_sub(store.get_fuel().unwrap_or(0)));
 }
 
-/// The Wasm features every test engine runs with. [`engine`] adds metering and
-/// backtraces on top of these, [`capped_engine`] a pooling memory cap.
+/// What `wado` runs a program with, at minimal Cranelift optimization for
+/// faster compilation. [`engine`] adds metering and backtraces on top,
+/// [`capped_engine`] a pooling memory cap.
 fn base_config() -> Config {
-    let mut config = Config::new();
-    enable_wasm_features(&mut config);
-    // The collector users actually get.
-    config.collector(DEFAULT_COLLECTOR);
-    // Minimal optimization, for faster compilation in tests.
-    config.cranelift_opt_level(wasmtime::OptLevel::None);
-    config
+    default_config(wasmtime::OptLevel::None)
 }
 
 /// An engine whose guest linear memory is capped at `memory_cap` bytes, so an

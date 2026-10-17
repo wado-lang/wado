@@ -1,12 +1,10 @@
 //! A generator that uses a generator, end to end: `wado run` over a project
 //! whose generator's own source imports a module Kiln produces.
 //!
-//! That such a project builds, through a path or a `[build-dependencies]`
-//! nickname, and that a cycle is refused, are e2e fixtures
-//! (`kiln_generator_uses_a_generator`,
-//! `kiln_nested_clause_names_a_build_dependency`, `kiln_generator_cycle`).
-//! These tests pin what a fixture cannot state: rebuilding after an edit, the
-//! generator's own package manifest, the output tree on disk, and `wado check`.
+//! The e2e fixtures (`kiln_generator_uses_a_generator`,
+//! `kiln_nested_clause_names_a_build_dependency`, `kiln_generator_cycle`) state
+//! the same rules through the harness's own provider. These run `wado`'s: its
+//! nickname resolution and its cycle check are code of its own.
 //!
 //! See WEP 2026-04-12 §"A generator may use a generator".
 
@@ -64,6 +62,42 @@ fn editing_the_innermost_input_rebuilds_the_generator() {
     assert!(
         stdout.contains("model 7"),
         "editing what the inner generator reads must rebuild the outer one, got: {stdout}"
+    );
+}
+
+/// A generator's own clause may name a `[build-dependencies]` nickname, whose
+/// path is spelled against the project root while the clause resolves against
+/// the generator's own directory.
+#[test]
+fn a_nested_clause_resolves_a_build_dependency_nickname() {
+    let project = fixture("kiln_nested_build_dep");
+
+    let out = run_project(project.path());
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    assert!(
+        out.status.success(),
+        "a nested `lib:` specifier must resolve:\n{}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    assert!(
+        stdout.contains("model 99"),
+        "the nickname-resolved generator must produce the value, got: {stdout}"
+    );
+}
+
+#[test]
+fn a_generator_cycle_is_reported_naming_the_invocations() {
+    let project = fixture("kiln_nested_cycle");
+
+    let out = run_project(project.path());
+    let stderr = String::from_utf8_lossy(&out.stderr);
+    assert!(
+        !out.status.success(),
+        "a generator cycle must stop the build"
+    );
+    assert!(
+        stderr.contains("cycle") && stderr.contains("cyclic.wado"),
+        "the cycle must be reported naming the generator in it, got: {stderr}"
     );
 }
 

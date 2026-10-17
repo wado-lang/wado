@@ -104,16 +104,24 @@ pub fn emit_corpus_to(out: &str) {
     eprintln!("corpus: {} files", corpus.len());
 }
 
-/// Every tracked `.wado` file under [`CORPUS_ROOTS`], sorted, so both sides
-/// walk the same list in the same order. Shared with
+/// Every `.wado` file under [`CORPUS_ROOTS`] that git does not ignore, sorted,
+/// so both sides walk the same list in the same order. Shared with
 /// [`crate::highlight_corpus`], which compares what each side colours over the
 /// same files.
 ///
-/// Tracked, because a build writes `.wado` files into these trees too (Kiln
-/// outputs under `build/`), and CI's checkout holds none of them.
+/// Not ignored, because a build writes `.wado` files into these trees too
+/// (Kiln outputs under `build/`), and CI's checkout holds none of them. A file
+/// not yet added counts, and one deleted but still tracked does not.
 pub fn collect_corpus() -> Vec<String> {
     let output = std::process::Command::new("git")
-        .args(["ls-files", "-z", "--"])
+        .args([
+            "ls-files",
+            "-z",
+            "--cached",
+            "--others",
+            "--exclude-standard",
+            "--",
+        ])
         .args(CORPUS_ROOTS)
         .output()
         .unwrap_or_else(|e| panic!("running git ls-files: {e}"));
@@ -126,6 +134,7 @@ pub fn collect_corpus() -> Vec<String> {
         .expect("git prints paths as UTF-8")
         .split('\0')
         .filter(|path| Path::new(path).extension().is_some_and(|e| e == "wado"))
+        .filter(|path| Path::new(path).is_file())
         .map(str::to_string)
         .collect();
     paths.sort();

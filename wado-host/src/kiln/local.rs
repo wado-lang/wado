@@ -6,6 +6,7 @@
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex, OnceLock};
 
+use indexmap::IndexMap;
 use wado_compiler::hashmap::IndexSet;
 use wado_compiler::kiln::inline::DEFAULT_INLINE_OUTPUT_DIR_PREFIX;
 use wado_compiler::kiln::{
@@ -131,28 +132,30 @@ async fn run(
 }
 
 fn emit_pipeline_error(host: &StubHost, error: PipelineError) {
-    match error {
-        // Reported clause by clause already.
-        PipelineError::InlineClause(_) | PipelineError::RedirectConflict(_) => {}
-        error => host.emit_diagnostic(Diagnostic {
+    if !error.is_reported() {
+        host.emit_diagnostic(Diagnostic {
             severity: Severity::Error,
             code: Code::Log,
             message: error.to_string(),
             span: None,
-        }),
+        });
     }
 }
 
 /// Every fixture in a directory shares its root, and a pipeline deletes the
-/// generated files in each output directory it did not write. A directory of
-/// the invocation's own is one no other fixture reconciles.
+/// generated files in each output directory it did not write. Only the
+/// directory a clause gets by default is its own.
 fn refuse_own_output_dirs(invocations: &[Invocation]) -> Vec<Diagnostic> {
     invocations
         .iter()
         .filter(|i| {
-            !i.output_dir
-                .as_str()
-                .starts_with(DEFAULT_INLINE_OUTPUT_DIR_PREFIX)
+            !i.decl_sites.iter().any(|site| {
+                i.output_dir
+                    == InvocationPath::normalize(&format!(
+                        "{DEFAULT_INLINE_OUTPUT_DIR_PREFIX}/{}",
+                        site.synthetic_id
+                    ))
+            })
         })
         .map(|i| Diagnostic {
             severity: Severity::Error,
@@ -212,11 +215,13 @@ async fn compile_generator(
     stubs: &HostStubs,
     chain: &[String],
 ) -> Result<ResolvedGenerator, ProviderError> {
-    static COMPILED: Mutex<Vec<(PathBuf, String, ResolvedGenerator)>> = Mutex::new(Vec::new());
+    static COMPILED: Mutex<Vec<(CompileKey, ResolvedGenerator)>> = Mutex::new(Vec::new());
 
-    let unsupported = |message: String| Err(ProviderError::Unsupported { message });
+    // Unsupported is the pipeline's word for a generator this host cannot
+    // run, which it lets pass as stale. These are a fixture's mistakes.
+    let refused = |message: String| Err(ProviderError::Internal { message });
     let GeneratorModule::LocalPath(path) = module else {
-        return unsupported(format!(
+        return refused(format!(
             "kiln: generator `{}` is neither a `./` path nor a stubbed build dependency, \
              the kinds a fixture runs",
             generator_identity(module)
@@ -224,7 +229,7 @@ async fn compile_generator(
     };
     let file = root.join(path.as_str());
     if file.is_dir() {
-        return unsupported(format!(
+        return refused(format!(
             "kiln: generator `{}` is a package directory; a fixture names its `.wado` file",
             path.as_str()
         ));
@@ -235,20 +240,34 @@ async fn compile_generator(
     let source = std::fs::read_to_string(&file).map_err(|e| ProviderError::Internal {
         message: format!("kiln: cannot read generator `{}`: {e}", file.display()),
     })?;
+    // The generator's own clauses resolve their nicknames through the stubs.
+    let key = CompileKey {
+        file,
+        source,
+        build_dependencies: stubs.build_dependencies.clone(),
+    };
     let cached = lock(&COMPILED)
         .iter()
-        .find(|(f, s, _)| f == &file && s == &source)
-        .map(|(_, _, resolved)| resolved.clone());
+        .find(|(k, _)| k == &key)
+        .map(|(_, resolved)| resolved.clone());
     if let Some(resolved) = cached {
         return Ok(resolved);
     }
     let resolved =
-        compile_generator_source(root, &file, path.as_str(), &source, stubs, chain).await?;
+        compile_generator_source(root, &key.file, path.as_str(), &key.source, stubs, chain).await?;
     let mut compiled = lock(&COMPILED);
-    if !compiled.iter().any(|(f, s, _)| f == &file && s == &source) {
-        compiled.push((file, source, resolved.clone()));
+    if !compiled.iter().any(|(k, _)| k == &key) {
+        compiled.push((key, resolved.clone()));
     }
     Ok(resolved)
+}
+
+/// What a compiled generator is a function of.
+#[derive(PartialEq)]
+struct CompileKey {
+    file: PathBuf,
+    source: String,
+    build_dependencies: IndexMap<String, String>,
 }
 
 /// `source`, the text of the generator `file` at `path` from `root`, compiled

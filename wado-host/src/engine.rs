@@ -1,5 +1,7 @@
 //! The wasmtime configuration every host of Wado's output shares, so a program
-//! runs under the e2e harness as it does under `wado`.
+//! runs under the e2e harness as it does under `wado`. `wado-run-webgpu`, a
+//! workspace of its own, cannot depend on it, so its `engine_config` restates
+//! it and must change with it.
 
 use wasmtime::{Collector, Config, Engine, OptLevel};
 
