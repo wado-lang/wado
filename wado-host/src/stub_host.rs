@@ -113,6 +113,11 @@ impl CompilerHost for StubHost {
             .map(|(root, _)| root.clone())
     }
 
+    /// A stubbed package declares no dependencies of its own.
+    fn package_index(&self, _root: &str) -> DependencyIndex {
+        DependencyIndex::default()
+    }
+
     fn dependency_index(&self) -> DependencyIndex {
         let mut index = DependencyIndex::default();
         for (name, lib) in &self.stubs.dependencies {

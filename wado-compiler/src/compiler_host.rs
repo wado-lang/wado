@@ -567,17 +567,16 @@ pub trait CompilerHost: Send + Sync {
     /// module's directory alone, so the loader asks once per directory. `None`
     /// where the module is in no package, as every module is on a host
     /// without a filesystem.
-    fn package_root(&self, _path: &str) -> Option<String> {
-        None
-    }
+    ///
+    /// Required, as is [`Self::package_index`]: a host wrapping another that
+    /// left either to a default would place every module outside its package.
+    fn package_root(&self, path: &str) -> Option<String>;
 
     /// The index of the package rooted at `root`, as [`Self::package_root`]
     /// names it, built as [`Self::dependency_index`] builds the entry's. Asked
     /// for a package a module lies in that no manifest declares, once per
-    /// package. Empty by default.
-    fn package_index(&self, _root: &str) -> DependencyIndex {
-        DependencyIndex::default()
-    }
+    /// package.
+    fn package_index(&self, root: &str) -> DependencyIndex;
 
     /// Read an environment variable at compile time, for `#[param(from_env =
     /// "...")]` resolution (see `wep-2026-04-26-compile-time-params.md`).
@@ -854,6 +853,15 @@ impl CompilerHost for InMemoryCompilerHost {
 
     /// Nothing caches what an in-memory compile depended on.
     fn stdlib_module_read(&self, _import_path: &str) {}
+
+    /// No manifest is served from memory, so no module lies in a package.
+    fn package_root(&self, _path: &str) -> Option<String> {
+        None
+    }
+
+    fn package_index(&self, root: &str) -> DependencyIndex {
+        unreachable!("no module lies in a package, so none is asked for: {root}")
+    }
 }
 
 #[cfg(test)]

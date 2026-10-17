@@ -10,7 +10,7 @@ use std::sync::Mutex;
 
 use indexmap::IndexMap;
 use wado_compiler::compiler_host::{
-    CompilerHost, Diagnostic, GeneratorOutputFile, GeneratorRequest, GeneratorResponse,
+    CompilerHost, DependencyIndex, Diagnostic, GeneratorOutputFile, GeneratorRequest, GeneratorResponse,
     GeneratorRunnerError, SourceError,
 };
 use wado_compiler::kiln::{DeclSite, GeneratorModule, Invocation, InvocationPath};
@@ -92,6 +92,14 @@ impl CompilerHost for StubHost {
     }
 
     fn stdlib_module_read(&self, _import_path: &str) {}
+
+    fn package_root(&self, _path: &str) -> Option<String> {
+        None
+    }
+
+    fn package_index(&self, root: &str) -> DependencyIndex {
+        unreachable!("no module lies in a package: {root}")
+    }
 
     async fn run_generator(
         &self,

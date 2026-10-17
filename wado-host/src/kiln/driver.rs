@@ -1528,6 +1528,14 @@ mod tests {
 
             fn stdlib_module_read(&self, _import_path: &str) {}
 
+            fn package_root(&self, _path: &str) -> Option<String> {
+                None
+            }
+
+            fn package_index(&self, root: &str) -> DependencyIndex {
+                unreachable!("no module lies in a package: {root}")
+            }
+
             async fn run_generator(
                 &self,
                 _wasm: &[u8],
@@ -1770,6 +1778,14 @@ mod tests {
             fn emit_diagnostic(&self, _d: Diagnostic) {}
 
             fn stdlib_module_read(&self, _import_path: &str) {}
+
+            fn package_root(&self, _path: &str) -> Option<String> {
+                None
+            }
+
+            fn package_index(&self, root: &str) -> DependencyIndex {
+                unreachable!("no module lies in a package: {root}")
+            }
         }
 
         fn runtime() -> tokio::runtime::Runtime {
@@ -1821,6 +1837,12 @@ mod tests {
                 }
                 fn emit_diagnostic(&self, _d: Diagnostic) {}
                 fn stdlib_module_read(&self, _import_path: &str) {}
+                fn package_root(&self, _path: &str) -> Option<String> {
+                    None
+                }
+                fn package_index(&self, root: &str) -> DependencyIndex {
+                    unreachable!("no module lies in a package: {root}")
+                }
                 async fn run_generator(
                     &self,
                     _wasm: &[u8],
