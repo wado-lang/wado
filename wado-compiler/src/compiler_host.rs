@@ -556,6 +556,15 @@ pub trait CompilerHost: Send + Sync {
         false
     }
 
+    /// The root of the package the module at `path` lies in: the directory of
+    /// the nearest `wado.toml` above it, in whatever form the host names
+    /// directories. Two modules share a package exactly when they answer the
+    /// same root. `None` where no manifest encloses `path`, and on a host
+    /// without a filesystem, which by default declares no package boundary.
+    fn package_root(&self, _path: &str) -> Option<String> {
+        None
+    }
+
     /// Read an environment variable at compile time, for `#[param(from_env =
     /// "...")]` resolution (see `wep-2026-04-26-compile-time-params.md`).
     ///

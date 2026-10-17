@@ -137,8 +137,13 @@ pub struct ModuleSourceInterner {
     package_roots: hashmap::IndexMap<InternedStr, InternedStr>,
     /// Generated module URI → the package importing it, one for all its importers.
     redirect_packages: hashmap::IndexMap<InternedStr, PackageId>,
-    /// The package of the entry point and its local modules.
+    /// The package of the entry point and the local modules inside its root.
     root_package: PackageId,
+    /// The entry's package root, as the host answers it. `None` declares no
+    /// boundary: every local module is in the entry's package.
+    root_dir: Option<String>,
+    /// Each local module the host has placed, and its package.
+    local_packages: hashmap::IndexMap<InternedStr, PackageId>,
 }
 
 impl ModuleSourceInterner {
@@ -149,6 +154,8 @@ impl ModuleSourceInterner {
             package_roots: hashmap::IndexMap::default(),
             redirect_packages: hashmap::IndexMap::default(),
             root_package: PackageId::Root,
+            root_dir: None,
+            local_packages: hashmap::IndexMap::default(),
         }
     }
 
@@ -160,6 +167,31 @@ impl ModuleSourceInterner {
     /// stdlib test is.
     pub fn join_core_package(&mut self) {
         self.root_package = PackageId::Core;
+    }
+
+    /// Bound the entry's package at `root_dir`, its package root as the host
+    /// answers it.
+    pub fn set_root_dir(&mut self, root_dir: Option<String>) {
+        self.root_dir = root_dir;
+    }
+
+    /// Whether the local module at `path` waits on its package root, which the
+    /// host answers once per path.
+    #[must_use]
+    pub fn needs_placing(&self, path: &InternedStr) -> bool {
+        self.root_dir.is_some() && !self.local_packages.contains_key(path)
+    }
+
+    /// Place the local module at `path` in the package rooted at
+    /// `package_root`, or in one of its own where no manifest encloses it.
+    pub fn place_local(&mut self, path: &str, package_root: Option<String>) {
+        let package = match package_root {
+            Some(root) if self.root_dir.as_ref() == Some(&root) => self.root_package.clone(),
+            Some(root) => PackageId::Path(self.intern(&root)),
+            None => PackageId::Path(self.intern(path)),
+        };
+        let path = self.intern(path);
+        self.local_packages.insert(path, package);
     }
 
     /// A dependency's entry module: it is its own package root.
@@ -240,10 +272,12 @@ impl ModuleSourceInterner {
         self.binding(CmNamespace::Wasi, interface)
     }
     pub fn local(&mut self, path: &str) -> ModuleSource {
-        ModuleSource::Local {
-            path: self.intern(path),
-            package: self.root_package.clone(),
-        }
+        let path = self.intern(path);
+        let package = match self.local_packages.get(&path) {
+            Some(package) => package.clone(),
+            None => self.root_package.clone(),
+        };
+        ModuleSource::Local { path, package }
     }
 
     /// A remote package's entry module: it is its own package root.
@@ -401,8 +435,8 @@ pub enum ModuleSource {
     Local {
         /// Relative path (e.g., "./geometry.wado", "./utils/helper.wado")
         path: InternedStr,
-        /// The entry's package, which a relative import stays in. Not part of
-        /// identity, which is `path`.
+        /// The entry's package, unless the module lies outside the entry's
+        /// package root. Not part of identity, which is `path`.
         package: PackageId,
     },
     /// A module of a dependency package, resolved from a bare-name
@@ -464,18 +498,23 @@ pub enum ModuleSource {
 /// The package a [`ModuleSource`] belongs to. Visibility enforcement keys on
 /// this: `internal` items reach any module with the same `PackageId`; `pub`
 /// items reach across package boundaries. `core` and each bundled CM namespace
-/// are their own independent package; the entry point and its local modules
-/// form the `Root` package being compiled, unless the host serves the stdlib's
-/// `core` tree ([`CompilerHost::serves_core`]), where they join `Core`.
+/// are their own independent package; the entry point and the local modules
+/// inside its package root form the `Root` package being compiled, unless the
+/// host serves the stdlib's `core` tree ([`CompilerHost::serves_core`]), where
+/// they join `Core`.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum PackageId {
     Core,
     Binding(CmNamespace),
-    /// Entry point, its local modules, and wasm assets bundled into the same
-    /// component.
+    /// Entry point, the local modules inside its package root, and wasm assets
+    /// bundled into the same component.
     Root,
     Dependency(InternedStr),
     Remote(InternedStr),
+    /// A local module's package other than the entry's: the root
+    /// [`CompilerHost::package_root`] answers for it, or the module's own path
+    /// where no manifest encloses it.
+    Path(InternedStr),
 }
 
 impl ModuleSource {
@@ -768,14 +807,17 @@ impl ModuleSource {
     }
 
     /// Whether the entry package owns this module: the entry point and the
-    /// local modules it reaches. A dependency, `core:` / `wasi:`, a remote and
-    /// a Kiln-generated module are all someone else's source. These are the
-    /// modules a lint reports in.
+    /// local modules it reaches inside its package root. A dependency,
+    /// `core:` / `wasi:`, a remote, a Kiln-generated module and a local module
+    /// of another package are all someone else's source. These are the modules
+    /// a lint reports in.
     #[must_use]
     pub fn is_entry_package(&self) -> bool {
         match self {
             Self::EntryPoint { .. } => true,
-            Self::Local { .. } => self.is_user_authored(),
+            Self::Local { package, .. } => {
+                !matches!(package, PackageId::Path(_)) && self.is_user_authored()
+            }
             _ => false,
         }
     }
@@ -1180,6 +1222,34 @@ mod tests {
         assert!(dep_a.same_package(&dep_a2));
         assert!(!dep_a.same_package(&dep_b));
         assert!(!dep_a.same_package(&local_a));
+    }
+
+    #[test]
+    fn a_local_module_outside_the_package_root_is_another_package() {
+        let mut interner = ModuleSourceInterner::new();
+        interner.set_root_dir(Some("/app".to_string()));
+        let inside = interner.intern("./a.wado");
+        assert!(interner.needs_placing(&inside));
+        interner.place_local("./a.wado", Some("/app".to_string()));
+        interner.place_local("../other/o.wado", Some("/other".to_string()));
+        interner.place_local("../other/p.wado", Some("/other".to_string()));
+        interner.place_local("../loose/s.wado", None);
+        interner.place_local("../loose/t.wado", None);
+        assert!(!interner.needs_placing(&inside));
+
+        let entry = interner.entry_point("main.wado");
+        let a = interner.local("./a.wado");
+        let o = interner.local("../other/o.wado");
+        let s = interner.local("../loose/s.wado");
+        assert!(a.same_package(&entry));
+        assert!(!o.same_package(&entry));
+        assert!(o.same_package(&interner.local("../other/p.wado")));
+        assert!(!s.same_package(&entry));
+        assert!(!s.same_package(&interner.local("../loose/t.wado")));
+        assert!(a.is_entry_package() && !o.is_entry_package() && !s.is_entry_package());
+
+        let unbounded = ModuleSourceInterner::new();
+        assert!(!unbounded.needs_placing(&inside));
     }
 
     #[test]

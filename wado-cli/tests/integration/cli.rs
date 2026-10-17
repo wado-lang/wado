@@ -757,6 +757,106 @@ fn test_check_reports_no_lint_in_a_dependency() {
     }
 }
 
+/// A file outside the package's directory belongs to the package whose
+/// manifest encloses it, or is a package of its own where none does. Its items
+/// are not the consumer's to lint, and its `internal` items stay in its package.
+#[test]
+fn test_a_file_outside_the_package_is_another_package() {
+    let tmp = tempfile::tempdir().unwrap();
+    let other = tmp.path().join("other");
+    std::fs::create_dir_all(&other).unwrap();
+    std::fs::write(
+        other.join("wado.toml"),
+        "[package]\nname = \"other\"\nnamespace = \"wado\"\nversion = \"0.1.0\"\n",
+    )
+    .unwrap();
+    std::fs::write(
+        other.join("o.wado"),
+        "use { base } from \"./p.wado\";\n\
+         pub fn o() -> i32 { return base(); }\n\
+         internal fn o_internal() -> i32 { return 2; }\n\
+         pub fn o_unused() {}\n\
+         fn o_dead() {}\n",
+    )
+    .unwrap();
+    std::fs::write(
+        other.join("p.wado"),
+        "internal fn base() -> i32 { return 1; }\n",
+    )
+    .unwrap();
+    let loose = tmp.path().join("loose");
+    std::fs::create_dir_all(&loose).unwrap();
+    std::fs::write(
+        loose.join("s.wado"),
+        "pub fn s() -> i32 { return 3; }\nfn s_dead() {}\n",
+    )
+    .unwrap();
+    let app = tmp.path().join("app");
+    std::fs::create_dir_all(&app).unwrap();
+    std::fs::write(
+        app.join("wado.toml"),
+        "[package]\nname = \"app\"\nnamespace = \"wado\"\nversion = \"0.1.0\"\nlib = \"lib.wado\"\n",
+    )
+    .unwrap();
+    std::fs::write(
+        app.join("lib.wado"),
+        "use { o } from \"../other/o.wado\";\n\
+         use { s } from \"../loose/s.wado\";\n\
+         pub fn api() -> i32 { return o() + s(); }\n",
+    )
+    .unwrap();
+
+    for args in [&["check"][..], &["check", "lib.wado"]] {
+        wado()
+            .current_dir(&app)
+            .args(args)
+            .assert()
+            .success()
+            .stderr(predicate::str::contains("never used").not())
+            .stderr(predicate::str::contains("unused").not());
+    }
+
+    std::fs::write(
+        app.join("lib.wado"),
+        "use { o_internal } from \"../other/o.wado\";\n\
+         pub fn api() -> i32 { return o_internal(); }\n",
+    )
+    .unwrap();
+    wado()
+        .current_dir(&app)
+        .args(["check", "lib.wado"])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains(
+            "symbol 'o_internal' is `internal` to '../other/o.wado' and cannot be imported from another package",
+        ));
+}
+
+/// An entry under no manifest declares no package boundary, so every file it
+/// reaches is in its package.
+#[test]
+fn test_an_entry_under_no_manifest_reaches_internal_items_anywhere() {
+    let tmp = tempfile::tempdir().unwrap();
+    std::fs::create_dir_all(tmp.path().join("script")).unwrap();
+    std::fs::create_dir_all(tmp.path().join("lib")).unwrap();
+    std::fs::write(
+        tmp.path().join("lib/x.wado"),
+        "internal fn x() -> i32 { return 1; }\n",
+    )
+    .unwrap();
+    std::fs::write(
+        tmp.path().join("script/main.wado"),
+        "use { x } from \"../lib/x.wado\";\nexport fn run() { assert x() == 1; }\n",
+    )
+    .unwrap();
+
+    wado()
+        .current_dir(tmp.path().join("script"))
+        .args(["check", "main.wado"])
+        .assert()
+        .success();
+}
+
 /// A module the package's code reaches is the package's own, whether or not
 /// `wado test` runs it.
 #[test]

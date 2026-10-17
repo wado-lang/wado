@@ -23,8 +23,8 @@ use crate::module_source::{
     CmNamespace, ModuleSource, ModuleSourceInterner, WasmAssetKind, is_bundled_specifier,
 };
 use crate::name::{
-    decl_file_of, entry_dir_of, resolve_import_with_invocations, resolve_local_identity,
-    resolve_module_path,
+    canonicalize_entry_point, decl_file_of, entry_dir_of, resolve_import_with_invocations,
+    resolve_local_identity, resolve_module_path,
 };
 use crate::parser::Parser;
 use crate::path::{is_cwd_relative, normalize};
@@ -1395,6 +1395,12 @@ impl<'a, H: CompilerHost> ModuleLoader<'a, H> {
             &tentative_entry_source.source_path(),
         )?
         .unwrap_or(tentative_entry_source);
+        if let ModuleSource::EntryPoint { filename, .. } = &entry_module_source {
+            let root_dir = self
+                .host
+                .package_root(&canonicalize_entry_point(filename));
+            self.interner.set_root_dir(root_dir);
+        }
         self.entry_module_source = Some(entry_module_source.clone());
 
         let entry_name = entry_module_source.to_string();
@@ -1921,8 +1927,11 @@ impl<'a, H: CompilerHost> ModuleLoader<'a, H> {
             self.entry_module_source.as_ref(),
             &self.invocations,
         );
-        if !matches!(resolved, ModuleSource::Local { .. }) || is_cwd_relative(import_source) {
+        if !matches!(resolved, ModuleSource::Local { .. }) {
             return Ok(resolved);
+        }
+        if is_cwd_relative(import_source) {
+            return Ok(self.placed(resolved));
         }
 
         // Declared but unresolvable (e.g. missing `[package].lib`): report
@@ -1967,6 +1976,20 @@ impl<'a, H: CompilerHost> ModuleLoader<'a, H> {
         Err(LoadError::InvalidModulePath {
             path: import_source.to_string(),
         })
+    }
+
+    /// `local` in the package the host places it in, asking once per module.
+    fn placed(&mut self, local: ModuleSource) -> ModuleSource {
+        let ModuleSource::Local { path, .. } = &local else {
+            unreachable!("only a local module is placed");
+        };
+        if !local.is_user_authored() || !self.interner.needs_placing(path) {
+            return local;
+        }
+        let path = path.to_string();
+        let package_root = self.host.package_root(&path);
+        self.interner.place_local(&path, package_root);
+        self.interner.local(&path)
     }
 
     /// Get source code for a module

@@ -686,6 +686,10 @@ impl CompilerHost for SilentHost {
         self.inner.serves_core()
     }
 
+    fn package_root(&self, path: &str) -> Option<String> {
+        self.inner.package_root(path)
+    }
+
     fn env_var(&self, name: &str) -> Option<String> {
         self.inner.env_var(name)
     }

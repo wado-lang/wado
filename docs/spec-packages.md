@@ -13,7 +13,13 @@ A package bounds how far `internal` reaches
 fall into packages this way:
 
 - The entry module, every local module it reaches through `./` / `../`
-  imports, and the Wasm assets those modules import form one package.
+  imports inside its package root, and the Wasm assets those modules import
+  form one package. The package root is the directory of the nearest
+  `wado.toml` above the entry. An entry with no `wado.toml` above it has no
+  package root, and every local module it reaches is in its package.
+- A local module outside the entry's package root is in the package of the
+  nearest `wado.toml` above it. With no `wado.toml` above it, the module is a
+  package of its own. Either way it is another package, as a dependency is.
 - Each dependency is a package. A relative import inside a dependency stays in
   that dependency's package.
 - `core:*`, which is one package, and `wasi:*`, which is another. A test of

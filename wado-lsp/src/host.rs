@@ -149,6 +149,12 @@ impl CompilerHost for FilesystemCompilerHost {
         is_in_dev_stdlib_core(&self.base_path)
     }
 
+    fn package_root(&self, path: &str) -> Option<String> {
+        let file = normalize_path(&absolutize(&self.base_path.join(path)));
+        let dir = discovery::nearest_manifest_dir(file.parent()?)?;
+        Some(dir.display().to_string())
+    }
+
     /// The language service recompiles on every edit and caches no outcome.
     fn stdlib_module_read(&self, _import_path: &str) {}
 }
