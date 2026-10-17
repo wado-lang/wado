@@ -1558,7 +1558,7 @@ mod tests {
             .insert("../b/lib.wado".to_string(), manifest("/b/wado.toml"));
         let host = TestPackages {
             root: |path: &str| match path.split('/').nth(1) {
-                Some(".") | Some("main.wado") => Some("/app".to_string()),
+                Some("." | "main.wado") => Some("/app".to_string()),
                 Some(name) => Some(format!("/{name}")),
                 None => None,
             },
