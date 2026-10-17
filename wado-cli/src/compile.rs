@@ -19,12 +19,6 @@ use crate::dep_component::{
     resolve_inline_git_dependencies,
 };
 use crate::git::materialize;
-<<<<<<< HEAD
-use crate::kiln_driver::{PipelineError, PipelineOutcome, ProviderError};
-||||||| b49ce59e1
-use crate::kiln_driver::{PipelineError, PipelineOutcome};
-=======
->>>>>>> origin/main
 use crate::kiln_provider::{CliGeneratorProvider, RegistryContext, relative_to};
 use crate::knobs::{CompileKnobOpt, CompileKnobs, EmbedOpt, EmbedOptions};
 use crate::manifest;
@@ -34,7 +28,8 @@ use crate::run_cache::RunCache;
 use crate::wit::default_interface_name;
 use wado_compiler::world_registry::WorldSurface;
 use wado_host::kiln::driver::{
-    PipelineError, PipelineOutcome, emit_counting_errors, harvest_invocations, run_pipeline,
+    Harvested, PipelineError, PipelineOutcome, ProviderError, emit_counting_errors,
+    harvest_invocations, run_pipeline,
 };
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
@@ -773,12 +768,10 @@ pub(crate) async fn prepare_kiln(
         return Ok(None);
     }
     let manifest = project.map_or_else(empty_manifest, |p| p.manifest);
-<<<<<<< HEAD
     let (theirs, mut ours): (Vec<_>, Vec<_>) = invocations
         .into_iter()
         .partition(|inv| packages.contains_key(&inv.decl_site().module));
-    rewrite_build_dep_modules(&mut ours, &manifest, &manifest_root)
-        .map_err(PipelineError::Manifest)?;
+    rewrite_build_dep_modules(&mut ours, &manifest, &manifest_root).map_err(manifest_error)?;
     let mut package_manifests = wado_compiler::hashmap::IndexMap::default();
     for mut invocation in theirs {
         let path = packages[&invocation.decl_site().module].as_deref();
@@ -786,7 +779,7 @@ pub(crate) async fn prepare_kiln(
             let root = path.and_then(|path| Path::new(path).parent());
             let manifest = match root {
                 Some(root) => manifest_in(root)
-                    .map_err(PipelineError::Manifest)?
+                    .map_err(manifest_error)?
                     .map(|m| (root.to_path_buf(), m)),
                 None => None,
             };
@@ -798,16 +791,7 @@ pub(crate) async fn prepare_kiln(
         ours.push(invocation);
     }
     let mut invocations = ours;
-    rewrite_local_dir_modules(&mut invocations, &manifest_root).map_err(PipelineError::Manifest)?;
-||||||| b49ce59e1
-    rewrite_build_dep_modules(&mut invocations, &manifest, &manifest_root)
-        .map_err(PipelineError::Manifest)?;
-    rewrite_local_dir_modules(&mut invocations, &manifest_root).map_err(PipelineError::Manifest)?;
-=======
-    rewrite_build_dep_modules(&mut invocations, &manifest, &manifest_root)
-        .map_err(manifest_error)?;
     rewrite_local_dir_modules(&mut invocations, &manifest_root).map_err(manifest_error)?;
->>>>>>> origin/main
     // A generator's outputs are products of this run, not a tree moving under
     // it. Declared here but applied when the watch is asked, so the order
     // fixtures compile in does not matter.
@@ -1047,7 +1031,7 @@ fn adopt_dependency_invocation(
     invocation.module = match &dep.source {
         DependencySource::Path { .. } => {
             let Some(local) = build_dep_generator_local_path(key, manifest, package_root)
-                .map_err(PipelineError::Manifest)?
+                .map_err(manifest_error)?
             else {
                 return Err(unsupported(format!(
                     "kiln: build-dependency `{key}` of {declared_in} declares no \
@@ -1173,19 +1157,6 @@ pub fn empty_manifest() -> wado_manifest::Manifest {
     }
 }
 
-/// The inline Kiln invocations of an entry and every module it reaches.
-#[derive(Default)]
-struct Harvested {
-    invocations: Vec<wado_compiler::kiln::Invocation>,
-    /// Harvest key → loader identity, which the caller rewrites the redirect
-    /// index through ([`wado_compiler::kiln::remap_decl_files`]).
-    identities: wado_compiler::hashmap::IndexMap<String, String>,
-    /// Harvest key → the `wado.toml` of the package the module belongs to,
-    /// where that is not the entry's ([`wado_compiler::kiln::Harvest::packages`]).
-    packages: wado_compiler::hashmap::IndexMap<String, Option<String>>,
-    diagnostics: Vec<wado_compiler::Diagnostic>,
-}
-
 /// Harvest inline Kiln invocations from `entry_file` and every Wado module it
 /// reaches through `host`, its own and its source dependencies'.
 ///
@@ -1212,71 +1183,16 @@ async fn collect_inline_invocations_for_entry_with_identities(
     let Ok(entry_source) = fs::read_to_string(entry_file) else {
         return Harvested::default();
     };
-<<<<<<< HEAD
-    let Ok(entry) = wado_compiler::parse(&entry_source).into_fail_fast() else {
-        return Harvested::default();
-    };
-    // A loader identity is anchored on the entry's directory, so that is what
-    // an import joins onto.
-    let entry_dir = entry_file.parent().unwrap_or(Path::new(".")).to_path_buf();
-    let harvest = wado_compiler::kiln::harvest_module_graph(
-        &entry_key,
-||||||| b49ce59e1
-    let Ok(entry) = wado_compiler::parse(&entry_source).into_fail_fast() else {
-        return Default::default();
-    };
-    // A loader identity is anchored on the entry's directory, so that is what
-    // an import joins onto.
-    let entry_dir = entry_file.parent().unwrap_or(Path::new(".")).to_path_buf();
-    let harvest = wado_compiler::kiln::harvest_module_graph(
-        &entry_key,
-=======
     harvest_invocations(
         entry_file,
         &entry_source,
->>>>>>> origin/main
         &entry_identity,
         &entry_key,
         settled,
-<<<<<<< HEAD
         dependencies,
         host,
-        async |identity| fs::read_to_string(entry_dir.join(identity)).ok(),
-||||||| b49ce59e1
-        async |identity| fs::read_to_string(entry_dir.join(identity)).ok(),
-=======
->>>>>>> origin/main
     )
-<<<<<<< HEAD
-    .await;
-    settled.extend(harvest.modules.keys().cloned());
-
-    let descriptors = wado_compiler::hashmap::IndexMap::default();
-    let (invocations, diagnostics) = wado_compiler::kiln::collect_inline_invocations(
-        harvest.modules.iter().map(|(k, v)| (k.as_str(), v)),
-        &descriptors,
-        "",
-    );
-    Harvested {
-        invocations,
-        identities: harvest.identities,
-        packages: harvest.packages,
-        diagnostics,
-    }
-||||||| b49ce59e1
-    .await;
-    settled.extend(harvest.modules.keys().cloned());
-
-    let descriptors = wado_compiler::hashmap::IndexMap::default();
-    let (invocations, diagnostics) = wado_compiler::kiln::collect_inline_invocations(
-        harvest.modules.iter().map(|(k, v)| (k.as_str(), v)),
-        &descriptors,
-        "",
-    );
-    (invocations, harvest.identities, diagnostics)
-=======
     .await
->>>>>>> origin/main
 }
 
 /// Remap `index` to loader identities via [`wado_compiler::kiln::remap_decl_files`], emit any

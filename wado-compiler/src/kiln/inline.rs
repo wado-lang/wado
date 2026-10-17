@@ -34,14 +34,6 @@ pub fn default_output_dir(synthetic_id: &str) -> InvocationPath {
     ))
 }
 
-/// The output directory of the clause `synthetic_id` names, where it declares
-/// none of its own.
-pub(super) fn default_output_dir(synthetic_id: &str) -> InvocationPath {
-    InvocationPath::normalize(&format!(
-        "{DEFAULT_INLINE_OUTPUT_DIR_PREFIX}/{synthetic_id}"
-    ))
-}
-
 /// The fields a `generator` object may carry.
 const GENERATOR_FIELDS: [&str; 6] = [
     "module",

@@ -13,15 +13,7 @@ use wado_compiler::{
 };
 
 use crate::args::DEFAULT_LOG_LEVEL;
-<<<<<<< HEAD
-use crate::kiln_driver::KilnSpan;
-use crate::kiln_runtime::{self, KilnRunPolicy};
 use crate::manifest::resolution_inputs;
-||||||| b49ce59e1
-use crate::kiln_driver::KilnSpan;
-use crate::kiln_runtime::{self, KilnRunPolicy};
-=======
->>>>>>> origin/main
 use crate::rss::RssSample;
 use crate::run_cache::RunCache;
 use wado_host::kiln::driver::KilnSpan;

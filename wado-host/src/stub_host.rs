@@ -23,16 +23,12 @@ pub struct HostStubs {
     /// The `[dependencies]` a bare `use ... from "name"` binds to: name → the
     /// dependency's `[package].lib` path, relative to the host's base.
     pub dependencies: IndexMap<String, String>,
-<<<<<<< HEAD
     /// The directories, relative to the host's base, that stand where a
     /// `wado.toml` would.
     pub package_roots: Vec<String>,
-||||||| b49ce59e1
-=======
     /// The `[build-dependencies]` a clause's `module: "lib:name"` names: the
     /// nickname → the generator's `.wado` file, relative to the host's base.
     pub build_dependencies: IndexMap<String, String>,
->>>>>>> origin/main
 }
 
 /// A [`FilesystemCompilerHost`] that answers the dependency index and the
