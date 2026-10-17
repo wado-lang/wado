@@ -169,6 +169,12 @@ tuple, a newtype and an anonymous struct have no declaration to mark, so they
 are inferred: each is affine when something it holds is. A `resource` is
 affine unless it declares `linearity = "unrestricted"`, as today.
 
+A type that holds no resource may be declared `affine` too. `AsyncCall<T>` is
+one: it holds its CM subtask as a raw `i32` and a result buffer to free, and
+today every copy shares a `&mut bool` so that a second `wait` panics with
+`AsyncCall used after wait or cancel`. Declared `affine`, its `wait` and
+`cancel` take `self`, and the second call is a compile error.
+
 A parameter with `affine` admits an affine argument. The body is checked at its
 definition to treat the parameter as affine. A parameter without it is
 copyable, and `dup::<Fields>` is a type error at the instantiation, which names
@@ -254,8 +260,10 @@ affine value. A panic drops nothing.
 - `Option<affine T>` and `Result<affine T, affine E>`, with `take` and
   `replace` on `Option`. `unwrap`, `expect`, `unwrap_or`, `map`, `map_err` and
   `ok_or` keep their by-value `self`.
-- `Future<affine T>` and `AsyncCall<affine T>`: a future carries an affine
-  payload today (`Future<Result<Option<Trailers>, ErrorCode>>`).
+- `Future<affine T>`: a future carries an affine payload today
+  (`Future<Result<Option<Trailers>, ErrorCode>>`).
+- `affine struct AsyncCall<affine T>`, with `wait(self)` and `cancel(self)`,
+  and without the `__cm_ended` flag.
 - `List<affine T>`. A method is available for an affine element when an
   `impl<affine T> List<T>` declares it, and the definition-site check holds
   its body to moving elements. The rest stay in `impl<T> List<T>`, for a
@@ -375,8 +383,10 @@ answered. Its read side needs nothing new: `StreamChunk<T>` holds a
 
 - Whether a trait may declare its `Self` affine, so that a trait method can be
   written over an affine `Self`.
-- Whether `affine struct` on a type that holds no resource is admitted now, or
-  later when a use appears.
+- What dropping an affine type that holds no resource does. Its synthesized
+  drop reaches no resource, so an `AsyncCall` nobody waits on drops nothing,
+  neither its subtask nor its buffer. Whether such a type may declare its own
+  `fn drop(self)` is not decided.
 
 ## References
 
