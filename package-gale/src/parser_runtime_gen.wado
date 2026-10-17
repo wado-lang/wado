@@ -665,27 +665,29 @@ pub fn gen_parser_struct<S: AsStrSlice>(
         w.end();
         w.blank();
 
-        // `_input.LA(k)` — the token kind k positions ahead (k=1 is current).
-        let mut fla = FnSpec::new("la", api);
-        fla.set_receiver("&self");
-        fla.add_param("k", "i32");
-        fla.set_return_type("i32");
-        fla.emit_begin(w);
-        w.line("return self.peek_at(k - 1);");
-        w.end();
-        w.blank();
-
-        // `_input.LT(k)` — the stream index k positions ahead, clamped to the
-        // final (EOF) token so a lookahead past end stays in bounds.
+        // `_input.LT(k)` — the stream index of ANTLR's `LT(k)`: `LT(1)` is the
+        // current token and `LT(-1)` the last consumed one, so a negative `k`
+        // counts back from `pos` with no zero between. Clamped to the stream,
+        // so a lookahead past the end lands on the EOF token.
         let mut flt = FnSpec::new("lt", api);
         flt.set_receiver("&self");
         flt.add_param("k", "i32");
         flt.set_return_type("i32");
         flt.emit_begin(w);
-        w.line("let idx = self.pos + k - 1;");
+        w.line("let idx = if k > 0 { self.pos + k - 1 } else { self.pos + k };");
         w.line("if idx >= self.kinds.len() { return self.kinds.len() - 1; }");
         w.line("if idx < 0 { return 0; }");
         w.line("return idx;");
+        w.end();
+        w.blank();
+
+        // `_input.LA(k)` — the kind of `LT(k)`.
+        let mut fla = FnSpec::new("la", api);
+        fla.set_receiver("&self");
+        fla.add_param("k", "i32");
+        fla.set_return_type("i32");
+        fla.emit_begin(w);
+        w.line("return self.kinds[self.lt(k)];");
         w.end();
         w.blank();
 
