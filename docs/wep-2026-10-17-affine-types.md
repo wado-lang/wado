@@ -130,11 +130,11 @@ consumption) and SE-0432 (`switch`), are:
   admits a noncopyable conformer.
 - A noncopyable type may declare a `deinit`. A copyable one may not, since
   every copy would run it.
-- A parameter is `borrowing`, `inout` or `consuming`; a method's `self` is the
-  same three.
+- A parameter is `borrowing`, `inout` or `consuming`; a method is
+  `borrowing`, `mutating` or `consuming` of its `self`.
 - An unconsumed value is destroyed at the end of its scope.
-- A local or a consumed `self` may give up one field; the rest are destroyed
-  with it.
+- A local or a consumed `self` may give up its fields one at a time. It is no
+  longer usable as a whole, and what it still holds is destroyed with it.
 - `Optional` and `Result` accept noncopyable payloads. `Optional.take()` moves
   the payload out.
 
@@ -248,8 +248,10 @@ match ergonomics that bind references out of a `&x` scrutinee, consume nothing.
 `matches` reads its scrutinee by reference. `if let`, `while let`, `let-else`
 and `?` are matches and follow the same rule.
 
-A field may be moved out of a local holder: `let f = h.f;` consumes `h.f`,
-and `h` as a whole with it. `..base` consumes `base`: a field the literal lists
+A field may be moved out of a local holder, as SE-0429 allows: `let f = h.f;`
+consumes `h.f`, after which `h` is not usable as a whole, each other field may
+still be moved out once, and what `h` still holds drops at scope exit.
+`..base` consumes `base`: a field the literal lists
 replaces the one `base` carried, which is dropped. A type that implements
 `Drop` gives up no field this way, as SE-0429 holds for a type with a `deinit`:
 its `drop` relies on the fields it was built with.
@@ -264,10 +266,14 @@ today. A resource is a box holding its handle. A variant or a tuple that is
 affine is wrapped in a box. A place that holds an affine value, whether a
 local, a field or an element, is a nullable reference to the object.
 
-Three operations act on places and objects:
+Four operations act on places and objects:
 
 - A move stores the reference in the destination and writes null into the
   source.
+- A store through a reference, `*r = value`, moves the content of the value's
+  object into the object `r` names, after dropping what that object held, and
+  zeroes the value's object. A reference to the value's old object then traps,
+  and `r` keeps naming the object it did.
 - A drop runs the type's `Drop` and then zeroes the object: a box's handle
   becomes 0, which the Component Model never issues, since index 0 of a handle
   table is reserved; an aggregate's fields become null.
@@ -292,9 +298,8 @@ What follows for references:
 - A reference is to the object, as `&s` is to a struct today. It follows the
   object through a move, and it sees the drop: `let r = &f; eat(f); r.has()`
   traps in `has`, because `eat` dropped `f` and zeroed its box.
-- `*r = value` through a reference replaces the object's content and drops the
-  old content, as the write-back of `*r = s2` does for a struct. The value's
-  own object is zeroed by the move, so a reference to it traps too.
+- `*r = value` is the store above, as the write-back of `*r = s2` is for a
+  struct today.
 - A `borrow` an export receives arrives in a box that synthesis zeroes when
   the export returns. A reference that escaped the export traps.
 - `&mut` of an affine variant field or element is the variant's box, a real
@@ -401,19 +406,21 @@ The Component Model traps on `future.drop-writable` before the end is done,
 and nothing a drop could write stands in for the value the reader waits for.
 A trap there is better than the alternative, a reader that waits forever. So a
 `?` or an early `return` between `Future::new()` and the write is a trap
-rather than a leak. A cancelled write leaves the end unwritten too: the
-Component Model returns it to idle, not done. A program that cancels a future
-write writes again before the end is dropped.
+rather than a leak.
 
 ### A write returns what it did not deliver
 
-The Component Model leaves with the writer what a write did not deliver. Three
+The Component Model leaves with the writer what a write did not deliver. Two
 cases do not deliver everything:
 
 - a `stream.write` the reader took only a prefix of, while the stream stays
   open;
-- a write of either kind the reader dropped before (`Dropped`);
-- a cancelled write of either kind (`Cancelled`).
+- a write of either kind the reader dropped before (`Dropped`).
+
+A cancelled write would be a third, but
+[cancellation stays unreachable](./wep-2026-07-25-async-stream-canonical.md#cancellation-stays-unreachable):
+the bindings return only once a copy has settled, and `cancel_write` can only
+trap.
 
 A copyable writer still has its own copy of what was left. An affine one has
 nothing, so the write hands it back:
@@ -428,8 +435,7 @@ struct StreamWrite<affine T> { result: CopyResult, rest: List<T> }
 
 The write takes what it is given and returns the rest. That is exactly the part
 of the buffer the Component Model leaves in the writer's table. A write blocks
-until its copy ends, so the write call reports every case, a cancellation
-included, and `cancel_write` returns nothing.
+until its copy ends, so the write call reports every case.
 
 A caller that ignores the result discards the rest, and the rule for a
 discarded value drops it at the end of the statement. Nothing leaks, and
@@ -511,18 +517,25 @@ reference, not two.
 The rules above decide what the standard library marks. A trait an affine type
 implements is an `affine trait`, and so is a trait whose associated type is
 affine. A generic type that holds an affine argument marks the parameter, and
-so does a method whose own parameter takes one (`Option::map<U>`). A method
-that reads an element by value stays in an `impl<T>`, for a copyable element
-only; a `List<affine T>` reaches a method through an `impl<affine T> List<T>`
-that declares it. The instantiation rule names every generic the corpus
+so does a method whose own parameter takes one (`Option::map<U>`). A method of
+`List<T>` that only moves elements, or touches none (`len`, `push`, `pop`,
+`insert`, `remove`), moves from `impl<T> List<T>` to `impl<affine T> List<T>`,
+which reaches every element type; one that reads an element by value stays,
+for a copyable element only. Two inherent blocks may not both declare one
+name for a receiver they share
+([Where the order applies](./wep-2026-09-01-trait-resolution.md#where-the-order-applies)),
+so a method lives in one of the two. The instantiation rule names every generic the corpus
 instantiates with an affine argument, and each is marked or rewritten.
 
 What the rules leave unmarked, and why:
 
 - `Iterator` and `IntoIterator`, above.
 - `Sequence`, `AsSlice` and `IndexValue`: `at`, `get`, `first`, `last` and
-  `index_value` hand an element out by value. `List<affine T>` declares `len`,
-  `is_empty` and `iter_ref` itself.
+  `index_value` hand an element out by value. `is_empty` and `iter_ref`, which
+  `Sequence` and `AsSlice` provide as defaults today, become inherent methods
+  of `List` in `impl<affine T> List<T>`. The body rule reports a by-value
+  `list[i]` on an affine element before resolution looks for `IndexValue`, so
+  the diagnostic names the copy, not a missing impl.
 - `TreeMap<K, V>`, `HashMap<K, V>` and `TreeSet<T>`: a known gap below.
 
 What changes shape:
@@ -628,9 +641,10 @@ benign ones.
   one in a `Node<T>` and an unmoved `Stream` are dropped; `*r = value` through
   `&mut R`.
 - [ ] `builtin::replace`, `Option::take` and `Option::replace`, the storage
-  builtins moving for an affine element, `impl<affine T> List<T>` with `len`,
-  `is_empty`, `iter_ref`, `push`, `pop`, `insert` and `remove`, and `&mut`
-  of an affine variant element and field as a place. `opt.take()` on
+  builtins moving for an affine element, the methods of `List` that read no
+  element by value moved into `impl<affine T> List<T>` with `is_empty` and
+  `iter_ref` beside them, and `&mut` of an affine variant element and field as
+  a place. `opt.take()` on
   `list[i]` is the fixture.
 - [ ] `Drop`: a resource's `fn drop(self)` as its impl, a user impl on an
   affine type, the fields left at the end of `drop` dropped one by one, a drop
