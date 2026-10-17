@@ -40,6 +40,12 @@ test "find_this_calls ignores strings and comments" {
     assert calls[0].name == "z";
 }
 
+test "an unclosed this call is no call" {
+    assert find_this_calls("this.m(").is_empty();
+    assert find_this_calls("x(this.m(a, b)").len() == 1;
+    assert body_names_this("this.m(");
+}
+
 test "find_this_calls ignores a bare field access without a call" {
     let calls = find_this_calls("this.field + 1");
     assert calls.is_empty();

@@ -84,8 +84,11 @@ pub fn scan_template(chars: &List<char>, pos: i32, n: i32) -> [i32, List<[i32, i
             return [i + 1, holes];
         }
         if chars[i] == '$' && i + 1 < n && chars[i + 1] == '{' {
-            let close = match_delim(chars, i + 1, n, '{', '}');
-            holes.push([i + 2, i32::max(i + 2, close - 1)]);
+            let Some(close) = match_delim(chars, i + 1, n, '{', '}') else {
+                holes.push([i + 2, n]);
+                return [n, holes];
+            };
+            holes.push([i + 2, close - 1]);
             i = close;
             continue;
         }
@@ -107,8 +110,8 @@ pub fn wado_opaque_end(chars: &List<char>, i: i32, n: i32) -> Option<i32> {
 }
 
 /// In Wado code, the index just past the delimiter matching the `open_ch` at
-/// `open`, or `n` when it never closes.
-pub fn match_delim(chars: &List<char>, open: i32, n: i32, open_ch: char, close_ch: char) -> i32 {
+/// `open`, or `null` when it never closes.
+pub fn match_delim(chars: &List<char>, open: i32, n: i32, open_ch: char, close_ch: char) -> Option<i32> {
     let mut depth = 0;
     let mut i = open;
     while i < n {
@@ -122,12 +125,12 @@ pub fn match_delim(chars: &List<char>, open: i32, n: i32, open_ch: char, close_c
         } else if c == close_ch {
             depth -= 1;
             if depth == 0 {
-                return i + 1;
+                return Option::Some(i + 1);
             }
         }
         i += 1;
     }
-    return n;
+    return null;
 }
 
 /// The spans of `chars` between the commas no bracket encloses, each trimmed,

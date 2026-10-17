@@ -366,8 +366,8 @@ fn call_at<S: AsStrSlice, S1: AsStrSlice>(
     if paren >= n || chars[paren] != '(' {
         return null;
     }
-    let name = collect_range(chars, name_start, name_end);
-    return Option::Some([name, match_delim(chars, paren, n, '(', ')')]);
+    let close = match_delim(chars, paren, n, '(', ')')?;
+    return Option::Some([collect_range(chars, name_start, name_end), close]);
 }
 
 fn scan_ident(chars: &List<char>, start: i32, n: i32) -> i32 {
