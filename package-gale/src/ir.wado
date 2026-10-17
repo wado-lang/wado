@@ -212,9 +212,9 @@ pub struct Grammar {
     pub lexer_superclass: String = "",
     pub parser_superclass: String = "",
     /// The first rule of the kind this grammar's header forbids: a lexer rule
-    /// in a `parser grammar`, a parser rule in a `lexer grammar`. The jar
-    /// rejects it in a grammar compiled on its own and accepts it in an
-    /// imported one, so only a grammar no import names reports it.
+    /// in a `parser grammar`, a parser rule in a `lexer grammar`. Whether it is
+    /// an error depends on what imports the grammar (`import.md`), so the
+    /// parse records it and `check_admission` decides.
     pub misplaced_rule: Option<ParseError> = null,
 }
 

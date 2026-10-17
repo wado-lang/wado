@@ -613,7 +613,7 @@ impl G4Parser {
         return Result::Ok(out);
     }
 
-    /// The integer literal at the cursor, rejected past `max`.
+    /// The integer literal at the cursor, rejected past `i32::MAX`.
     fn take_i32_literal(&mut self) -> Result<i32, ParseError> {
         let tok = self.advance();
         return match i32::from_str(&tok.text) {

@@ -50,7 +50,12 @@ A mode that an override emptied is discarded, and the remaining modes are renumb
 
 ## What is rejected
 
-`import Foo = Bar;`. ANTLR4's aliased form names the delegate for qualified action references (`gFoo.x`), and Gale has no counterpart for those. Accepting it while dropping what the alias means would be worse than refusing it, so it is a loud error for now. Closing that is queued in [`TODO.md`](./TODO.md); it is the one place Gale rejects a grammar ANTLR4 compiles.
+As the jar does:
+
+- A `lexer grammar` or `parser grammar` importing a grammar of another kind (its error 111). A combined grammar imports any kind.
+- A rule its grammar's header forbids, such as a lexer rule in a `parser grammar` (errors 52 and 53). Every rule lands under the root's kind, so a grammar that a combined grammar reaches through imports is exempt.
+
+Unlike the jar: `import Foo = Bar;`. ANTLR4's aliased form names the delegate for qualified action references (`gFoo.x`), and Gale has no counterpart for those. Accepting it while dropping what the alias means would be worse than refusing it, so it is a loud error for now. Closing that is queued in [`TODO.md`](./TODO.md); it is the one place Gale rejects a grammar ANTLR4 compiles.
 
 ## Embedding a language
 
