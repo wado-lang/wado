@@ -358,7 +358,8 @@ pub affine trait Drop with () {
 
 A field-by-field drop is wrong for some types. `AsyncCall` is one: a
 `Subtask` traps on `drop` until it resolves, so an unawaited call must cancel
-it first, and its result buffer is linear memory no resource frees.
+it first. Its result buffer is linear memory no resource frees, and a result
+the callee returned holds handles that only a lift reaches.
 
 A `FutureWritable` dropped before its write traps, with a message naming it.
 The Component Model traps on `future.drop-writable` before the end is done,
@@ -418,16 +419,33 @@ The optimizer may skip building a `rest` no one reads.
   ```wado
   affine struct AsyncCall<affine T> {
       subtask: Option<Subtask>,   // None where the call completed synchronously
-      status: i32,
+      resolved: &mut bool,        // the subtask's resolution has been delivered
       buffer: ResultBuffer,       // the linear memory the result is lifted from
       lift: fn(i32) -> T,
   }
   ```
 
   `wait(self)` and `cancel(self)` take the subtask out and consume it, so a
-  second call is a compile error and the shared `__cm_ended` flag goes. Its
-  `Drop` cancels a subtask nobody awaited before dropping it, and frees the
-  buffer.
+  second call is a compile error and the shared `__cm_ended` flag goes.
+
+  The Component Model delivers a subtask's resolution once, through the first
+  waitable set that reports it. Waiting for it again never returns, and
+  `subtask.cancel` traps. A program that joins a call to its own set and waits
+  there has received the resolution before it calls `wait` or `cancel` or drops
+  the call. So the call records the delivery:
+
+- `join` registers `resolved` under the subtask's waitable handle, in a
+  table `core` keeps. The entry goes when the subtask is dropped.
+- `WaitableSet::wait` and `poll` become guest functions over the canon
+  built-ins. A subtask event whose payload says resolved sets the flag
+  registered for its handle.
+- `wait` waits only where `resolved` is false.
+- `cancel` and `Drop` cancel only where it is false. `Subtask::cancel`
+  returns the state `subtask.cancel` reports, which it discards today. Where
+  the subtask returned, before the cancel or during it, its result is in the
+  buffer: they lift it and drop it, which drops the handles it owns. Then
+  they drop the subtask and free the buffer.
+
 - `affine trait`: `Drop`, `ForOf`, `Eq`, `Inspect`, `Display`, `Ref`,
   `RefMut`, `IndexRef`, `IndexRefMut` and `IndexAssign`. A resource implements
   `Eq` and `Inspect` today, a list is walked by `ForOf`, and
@@ -593,7 +611,10 @@ benign ones.
   lifts the `stream-new` / `future-new` pair, the raw-handle builtins take and
   return resources, `ResourceId::of`, and the test doubles in `core:kiln`,
   `core:cli` and `package-gale` return real handles. `AsyncCall` holds a
-  `Subtask`, with its `Drop`. It comes before the cell, which a cast would have
+  `Subtask`, with its `Drop` and the `resolved` flag that `join` registers and
+  `WaitableSet::wait` sets. A fixture joins a call to its own set, waits there,
+  and then drops the call, which neither hangs nor traps and drops the
+  result's handles. It comes before the cell, which a cast would have
   to allocate, and before cleanup drops a `Stream`, which `log_stdout` would
   then drop twice.
 - [ ] The handle cell: the representation, the trap, the `borrow` an export
