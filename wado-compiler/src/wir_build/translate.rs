@@ -1215,15 +1215,24 @@ impl FunctionTranslator<'_, '_> {
 
     /// One argument as N values, taken off a multi-value call's results or a
     /// literal's own initialisers — also where an inlined block ends in one,
-    /// after its leading statements. Anything else spills once and reads it
-    /// back.
+    /// after its leading statements, and where a split `&S` references one.
+    /// Anything else spills once and reads it back.
     fn split_argument(
         &mut self,
         op: Operand,
         fields: &[(String, TypeId)],
     ) -> (Vec<WirInstr>, Vec<WirInstr>) {
         let mut lead: Vec<StmtId> = Vec::new();
-        if let Some(expr) = block_tail(self.body, op, &mut lead).as_expr() {
+        let mut tail = block_tail(self.body, op, &mut lead);
+        if let Some(e) = tail.as_expr()
+            && let ExprKind::Unary {
+                op: NirUnaryOp::Ref,
+                expr,
+            } = self.body.exprs[e].kind
+        {
+            tail = block_tail(self.body, expr, &mut lead);
+        }
+        if let Some(expr) = tail.as_expr() {
             match &self.body.exprs[expr].kind {
                 ExprKind::Call { func_id, .. }
                     if self
@@ -1236,12 +1245,13 @@ impl FunctionTranslator<'_, '_> {
                     instrs.extend(bind);
                     return (instrs, local_reads(&bound));
                 }
+                // A split `&S` takes only the fields its callee reads, so the
+                // literal may write more: each still runs where it stands.
                 ExprKind::StructLiteral {
                     fields: written, ..
-                } if written.len() == fields.len()
-                    && fields
-                        .iter()
-                        .all(|(n, _)| written.iter().any(|f| f.name == *n)) =>
+                } if fields
+                    .iter()
+                    .all(|(n, _)| written.iter().any(|f| f.name == *n)) =>
                 {
                     let written = written.clone();
                     let mut instrs = self.translate_stmts(&lead);
@@ -1256,6 +1266,52 @@ impl FunctionTranslator<'_, '_> {
         let (prelude, read_whole) = self.spill_operand(op, "$mv_arg");
         let reads = self.field_reads(op, &read_whole, fields);
         (prelude, reads)
+    }
+
+    /// The split locals holding `fields`, where `op` reads, or references, a
+    /// local that arrived or was bound field by field. Its aggregate was never
+    /// built, so these are the only place its fields are.
+    fn split_local_fields(
+        &self,
+        op: Operand,
+        fields: &[(String, TypeId)],
+    ) -> Option<Vec<WirInstr>> {
+        let index = match op {
+            Operand::Value(v) => match self.body.values.kind(v) {
+                ValueKind::Opaque(oid) => match self.body.values.opaque_source(*oid)? {
+                    OpaqueSource::Local(index) => index,
+                    OpaqueSource::Expr(e) => {
+                        return self.split_local_fields(Operand::Expr(e), fields);
+                    }
+                },
+                _ => return None,
+            },
+            Operand::Expr(e) => match self.body.exprs[e].kind {
+                ExprKind::Local { index, .. } => index,
+                ExprKind::Unary {
+                    op: NirUnaryOp::Ref,
+                    expr,
+                } => return self.split_local_fields(expr, fields),
+                _ => return None,
+            },
+        };
+        let splits = self.multi_value_split_locals.get(&index)?;
+        Some(
+            fields
+                .iter()
+                .map(|(name, _)| {
+                    let (local, ty) = splits.get(name).unwrap_or_else(|| {
+                        panic!(
+                            "[WIR] split local {index} carries no field `{name}` its callee takes"
+                        )
+                    });
+                    WirInstr::LocalGet {
+                        name: local.clone(),
+                        result_ty: ty.clone(),
+                    }
+                })
+                .collect(),
+        )
     }
 
     /// A read of each of `fields` off `whole`, the value `op` evaluates to.
@@ -2297,8 +2353,11 @@ impl FunctionTranslator<'_, '_> {
                 // reads its fields there; otherwise the value is taken where
                 // it stands, as a later argument may rebind the local, and a
                 // split `&S` still reads its fields at the call, after every
-                // write.
-                if local_read[i] && !spilled {
+                // write. A local already split is bound once, so its fields
+                // read the same wherever the call reads them.
+                if let Some(reads) = self.split_local_fields(op, &param.fields) {
+                    call_args.extend(reads);
+                } else if local_read[i] && !spilled {
                     let whole = self.translate_operand(op);
                     call_args.extend(self.field_reads(op, &whole, &param.fields));
                 } else {

@@ -1,0 +1,72 @@
+// A `&S` parameter takes the multi-value ABI past an early return, and through
+// a callee that hands it on whole to another such parameter, so `&View { … }`
+// built at the call reaches the chain as its fields and is never allocated.
+//
+// The shape is `f64::from_str`: `parse_float_bits(&s.as_str_slice(), …)`
+// guards an empty view, then hands it to `parse_text_bits`, which guards again.
+
+struct View {
+    data: &List<u8>,
+    start: i32,
+    end: i32,
+}
+
+#[inline("never")]
+fn digit_sum(v: &View) -> i32 {
+    let n = v.end - v.start;
+    if n == 0 {
+        return -1;
+    }
+    let mut sum = 0;
+    for let i of 0..<n {
+        sum += (v.data[v.start + i] - b'0') as i32;
+    }
+    return sum;
+}
+
+#[inline("never")]
+fn checked_sum(v: &View) -> i32 {
+    if v.end < v.start {
+        return -2;
+    }
+    return digit_sum(v);
+}
+
+// Only `start` and `end` are read here, and `digit_sum` takes all three: the
+// forwarded call widens what this one takes.
+#[inline("never")]
+fn ordered_sum(v: &View) -> i32 {
+    if v.end <= v.start {
+        return 0;
+    }
+    return checked_sum(v);
+}
+
+export fn run() {
+    let data: List<u8> = builtin::black_box([b'1', b'2', b'3', b'4', b'5']);
+    let r1 = digit_sum(&View { data: &data, start: builtin::black_box(1), end: 4 });
+    assert r1 == 9;
+    let r2 = digit_sum(&View { data: &data, start: builtin::black_box(2), end: 2 });
+    assert r2 == -1;
+    let r3 = checked_sum(&View { data: &data, start: builtin::black_box(0), end: 5 });
+    assert r3 == 15;
+    let r4 = checked_sum(&View { data: &data, start: builtin::black_box(3), end: 1 });
+    assert r4 == -2;
+    let r5 = ordered_sum(&View { data: &data, start: builtin::black_box(0), end: 2 });
+    assert r5 == 3;
+    let r6 = ordered_sum(&View { data: &data, start: builtin::black_box(2), end: 2 });
+    assert r6 == 0;
+}
+
+__DATA__
+{
+    "stdout": "",
+    "wir_expect:O2": [
+        "digit_sum\" = fn(ref \"core:prelude//List<u8>\", i32, i32) -> i32",
+        "checked_sum\" = fn(ref \"core:prelude//List<u8>\", i32, i32) -> i32",
+        "ordered_sum\" = fn(ref \"core:prelude//List<u8>\", i32, i32) -> i32"
+    ],
+    "wir_not_expect:O2": [
+        "struct.new \"opt_multi_value_param_ref_literal.wado//View\""
+    ]
+}
