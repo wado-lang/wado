@@ -36,6 +36,7 @@ const FUSED_PAYLOAD: &str = "fused_payload";
 const FUSED_SLOT: &str = "fused_slot";
 const SROA_SLOT: &str = "sroa_slot";
 const SROA_AGG: &str = "sroa_agg";
+const HOISTED_VALUE: &str = "hoisted_value";
 
 /// Block-level fusion rule for the unified post-inline peephole session.
 /// The rule keeps no per-function state: every precondition is re-derived from
@@ -98,8 +99,47 @@ impl Rule for LabeledBlockFusionRule {
             engine.note_elided_local(temp);
             return true;
         }
-        false
+        (0..stmts.len() - 1).any(|i| thread_bound_block(engine, block, &stmts, i))
     }
+}
+
+/// `let t = LB; let v = match t { … };` → `let v = match LB { … };`, threaded:
+/// the shape an inlined `unwrap` leaves, whose arms the value-discarding fusion
+/// above does not take. The consumer is the next statement, its whole value is
+/// the match, and the match evaluates `t` first, so `LB` runs where the `let`
+/// did.
+fn thread_bound_block(engine: &mut Engine, block: BlockId, stmts: &[StmtId], i: usize) -> bool {
+    let StmtKind::Let {
+        local_index: temp,
+        value: Operand::Expr(lb),
+        ..
+    } = engine.body.stmts[stmts[i]].kind
+    else {
+        return false;
+    };
+    let Some(match_id) = consumer_match(engine.body, stmts[i + 1]) else {
+        return false;
+    };
+    let ExprKind::Match {
+        expr: Operand::Expr(scrut),
+        ..
+    } = engine.body.exprs[match_id].kind
+    else {
+        return false;
+    };
+    if !is_local(engine.body, scrut, temp) || body_uses(engine, temp) != 1 {
+        return false;
+    }
+    let Some(plan) = plan_threading_of(engine.body, match_id, lb, engine.locals()) else {
+        return false;
+    };
+    assert!(engine.redirect_expr(scrut, Operand::Expr(lb)));
+    let mut kept = stmts.to_vec();
+    kept.remove(i);
+    engine.set_block_stmts(block, kept);
+    engine.note_elided_local(temp);
+    perform_threading(engine, match_id, plan);
+    true
 }
 
 /// Whether `consumer` is a `match` with a value of its own. A unit one, or an
@@ -578,9 +618,6 @@ trait ExitSink {
     /// Handle one `break <label>: value` exit. Returning `false` aborts the
     /// walk with an overall `false`.
     fn visit(&mut self, body: &Body, value: Option<Operand>) -> bool;
-    /// Descend structurally into `Match` / `Switch` arms (the coverage the
-    /// threading rewrite handles) rather than treating the node as opaque.
-    fn descend_branches(&self) -> bool;
 }
 
 /// One `break label` exit, with what encloses it inside the labeled block.
@@ -632,6 +669,9 @@ impl<S: ExitSink> ExitWalk<'_, S> {
         ok
     }
 
+    /// Every rewrite replaces an exit in the block holding it, so an exit under
+    /// any expression is one it reaches. `Ok(f()?)` inlined puts the `?` exit
+    /// inside the other exit's payload.
     fn stmt(&mut self, body: &Body, s: StmtId) -> bool {
         match &body.stmts[s].kind {
             StmtKind::Break {
@@ -642,18 +682,9 @@ impl<S: ExitSink> ExitWalk<'_, S> {
                     stmt: s,
                     scope: self.scope.clone(),
                 });
-                self.sink.visit(body, *value)
+                self.sink.visit(body, *value) && self.children(body, NodeRef::Stmt(s))
             }
             StmtKind::LabeledBlock { label: l, .. } if l == self.label => true,
-            StmtKind::If {
-                condition,
-                then_block,
-                else_block,
-            } => {
-                self.operand(body, *condition)
-                    && self.block(body, *then_block)
-                    && else_block.is_none_or(|eb| self.block(body, eb))
-            }
             StmtKind::Loop { body: b } => {
                 self.scope.loops += 1;
                 let ok = self.block(body, *b);
@@ -661,19 +692,14 @@ impl<S: ExitSink> ExitWalk<'_, S> {
                 ok
             }
             StmtKind::LabeledBlock { label, block, .. } => self.labeled(body, label, *block),
-            StmtKind::Let { value, .. } | StmtKind::LetDestructure { value, .. } => {
-                self.operand(body, *value)
-            }
-            StmtKind::Expr(op) => self.operand(body, *op),
-            StmtKind::Return { value } | StmtKind::Break { value, .. } => {
-                value.is_none_or(|v| self.operand(body, v))
-            }
-            StmtKind::Continue => true,
+            StmtKind::If { .. }
+            | StmtKind::Let { .. }
+            | StmtKind::LetDestructure { .. }
+            | StmtKind::Expr(_)
+            | StmtKind::Return { .. }
+            | StmtKind::Break { .. }
+            | StmtKind::Continue => self.children(body, NodeRef::Stmt(s)),
         }
-    }
-
-    fn operand(&mut self, body: &Body, op: Operand) -> bool {
-        op.as_expr().is_none_or(|e| self.expr(body, e))
     }
 
     fn expr(&mut self, body: &Body, e: ExprId) -> bool {
@@ -681,34 +707,47 @@ impl<S: ExitSink> ExitWalk<'_, S> {
             ExprKind::LabeledBlock {
                 label: l, block, ..
             } => l == self.label || self.labeled(body, l, *block),
-            ExprKind::If {
-                condition,
-                then_branch,
-                else_branch,
-            } => {
-                self.operand(body, *condition)
-                    && self.block(body, *then_branch)
-                    && else_branch.is_none_or(|eb| self.block(body, eb))
-            }
-            ExprKind::Match { expr, arms } if self.sink.descend_branches() => {
-                self.operand(body, *expr)
-                    && arms.iter().all(|arm| {
-                        self.operand(body, arm.body)
-                            && arm.guard.is_none_or(|g| self.operand(body, g))
-                    })
-            }
-            ExprKind::Switch {
-                scrutinee,
-                arms,
-                default,
-                ..
-            } if self.sink.descend_branches() => {
-                self.operand(body, *scrutinee)
-                    && arms.iter().all(|b| self.block(body, *b))
-                    && self.block(body, *default)
-            }
-            // Opaque expression: an exit hidden inside is one no rewrite reaches.
-            _ => !has_break_to(body, NodeRef::Expr(e), self.label),
+            ExprKind::Dead
+            | ExprKind::PackedArray(_)
+            | ExprKind::Local { .. }
+            | ExprKind::GlobalVarGet { .. }
+            | ExprKind::GlobalVarSet { .. }
+            | ExprKind::Binary { .. }
+            | ExprKind::Unary { .. }
+            | ExprKind::Assign { .. }
+            | ExprKind::Cast { .. }
+            | ExprKind::Call { .. }
+            | ExprKind::CmRawCall { .. }
+            | ExprKind::FieldAccess { .. }
+            | ExprKind::Index { .. }
+            | ExprKind::If { .. }
+            | ExprKind::Match { .. }
+            | ExprKind::StructLiteral { .. }
+            | ExprKind::TupleLiteral { .. }
+            | ExprKind::ArrayLiteral { .. }
+            | ExprKind::IndirectCall { .. }
+            | ExprKind::ClosureToCanonical { .. }
+            | ExprKind::VariantConstruct { .. }
+            | ExprKind::EnumConstruct { .. }
+            | ExprKind::VariantTag { .. }
+            | ExprKind::VariantTest { .. }
+            | ExprKind::VariantPayload { .. }
+            | ExprKind::Switch { .. } => self.children(body, NodeRef::Expr(e)),
+        }
+    }
+
+    fn children(&mut self, body: &Body, node: NodeRef) -> bool {
+        let mut ok = true;
+        body.for_each_child(node, |c| ok = ok && self.node(body, c));
+        ok
+    }
+
+    fn node(&mut self, body: &Body, node: NodeRef) -> bool {
+        match node {
+            NodeRef::Expr(e) => self.expr(body, e),
+            NodeRef::Block(b) => self.block(body, b),
+            NodeRef::Stmt(s) => self.stmt(body, s),
+            NodeRef::Pat(_) => true,
         }
     }
 }
@@ -824,10 +863,8 @@ fn replace_exits(
 
 /// [`ExitSink`] for `check_lb_breaks_and_get_payload`: every `break L:` must
 /// carry `null` or a `VariantConstruct`, and the matching case's payload type
-/// is recorded. Value-discarding fusion does not descend `Match` / `Switch`
-/// (kept opaque, as before) but rejects any hidden break.
+/// is recorded.
 struct BreakChecker<'a> {
-    label: &'a str,
     case_index: u32,
     payload_type: &'a mut Option<TypeId>,
 }
@@ -851,21 +888,12 @@ impl ExitSink for BreakChecker<'_> {
             return false;
         };
         let (ci, payload) = (*ci, *payload);
-        if let Some(p) = payload
-            && p.as_expr()
-                .is_some_and(|pe| has_break_to(body, NodeRef::Expr(pe), self.label))
-        {
-            return false;
-        }
         if ci == self.case_index
             && let Some(p) = payload
         {
             *self.payload_type = Some(body.operand_type(p));
         }
         true
-    }
-    fn descend_branches(&self) -> bool {
-        false
     }
 }
 
@@ -879,7 +907,6 @@ fn check_lb_breaks_and_get_payload(
 ) -> Option<(TypeId, Vec<Exit>)> {
     let mut payload_type: Option<TypeId> = None;
     let mut sink = BreakChecker {
-        label,
         case_index,
         payload_type: &mut payload_type,
     };
@@ -892,7 +919,6 @@ fn check_lb_breaks_and_get_payload(
 /// takes, so fusion can pick the arm for it, and whose dropped elements are
 /// pure. An exit keeps exactly the slots the arm it selects reads.
 struct TaggedTupleChecker<'a> {
-    label: &'a str,
     tags: &'a [Option<i128>],
     arm_reads: &'a [IndexSet<u32>],
 }
@@ -912,22 +938,14 @@ impl ExitSink for TaggedTupleChecker<'_> {
         if read.iter().any(|k| *k as usize >= elements.len()) {
             return false;
         }
+        // A skeleton element the arm reads is relocated into a `let`; one it
+        // does not read is dropped, which only a pure one survives unchanged
+        // (the `None` an `Ok` exit carries).
         elements.iter().enumerate().all(|(i, op)| {
-            let Some(oe) = op.as_expr() else {
-                // A promoted value is pure and carries no exit.
-                return true;
-            };
-            // A skeleton element the arm reads is relocated into a `let`; one
-            // it does not read is dropped, which only a pure one survives
-            // unchanged (the `None` an `Ok` exit carries). Either way it must
-            // not carry its own exit, which would move with it.
-            (read.contains(&u32::try_from(i).expect("tuple arity"))
-                || is_pure_nontrapping_operand_typed(body, *op, None))
-                && !has_break_to(body, NodeRef::Expr(oe), self.label)
+            op.as_expr().is_none()
+                || read.contains(&u32::try_from(i).expect("tuple arity"))
+                || is_pure_nontrapping_operand_typed(body, *op, None)
         })
-    }
-    fn descend_branches(&self) -> bool {
-        false
     }
 }
 
@@ -938,11 +956,7 @@ fn check_lb_breaks_are_tagged_tuples(
     tags: &[Option<i128>],
     arm_reads: &[IndexSet<u32>],
 ) -> Option<Vec<Exit>> {
-    let mut sink = TaggedTupleChecker {
-        label,
-        tags,
-        arm_reads,
-    };
+    let mut sink = TaggedTupleChecker { tags, arm_reads };
     walk_exits(body, block, label, &mut sink)
 }
 
@@ -1176,6 +1190,7 @@ fn count_variant_payload_uses_in_block(
 /// Everything the transform needs to rewrite one labeled block's exits into the
 /// consumer's arms.
 struct Fusion<'a> {
+    label: &'a str,
     fused_label: &'a str,
     temp_local: u32,
     /// The consumer's arms in order, `None` for one that does nothing.
@@ -1284,6 +1299,7 @@ fn perform_fusion(
     enclosed.extend(arms.iter().flatten().map(|b| NodeRef::Block(*b)));
     let fused_label = fresh_label(engine.body, fused_block_label(&info.label), &enclosed);
     let fusion = Fusion {
+        label: &info.label,
         fused_label: &fused_label,
         temp_local: info.temp_local,
         arms,
@@ -1389,6 +1405,57 @@ fn bind_value(engine: &mut Engine, value: FusedValue) -> BoundValue {
     }
 }
 
+/// `let local = value;`. Every exit binds the same `local`, so a value holding
+/// a nested exit goes through a local of its own first: the nested exit's `let`
+/// would otherwise run inside its own initializer.
+fn bind_exit_value(
+    engine: &mut Engine,
+    label: &str,
+    local: u32,
+    type_id: TypeId,
+    mut value: Operand,
+    span: Span,
+) -> Vec<StmtId> {
+    let mut out = Vec::new();
+    if let Operand::Expr(e) = value
+        && has_break_to(engine.body, NodeRef::Expr(e), label)
+    {
+        let hoisted = engine.alloc_minted_local(HOISTED_VALUE, type_id, /* is_mut */ false);
+        out.push(let_stmt(engine, hoisted, type_id, value, span));
+        let name = engine.local_name(hoisted);
+        value = Operand::Expr(engine.alloc_expr(
+            ExprKind::Local {
+                index: hoisted,
+                name,
+            },
+            type_id,
+            span,
+        ));
+    }
+    out.push(let_stmt(engine, local, type_id, value, span));
+    out
+}
+
+fn let_stmt(
+    engine: &mut Engine,
+    local: u32,
+    type_id: TypeId,
+    value: Operand,
+    span: Span,
+) -> StmtId {
+    engine.alloc_stmt(
+        StmtKind::Let {
+            name: engine.local_name(local),
+            local_index: local,
+            is_mut: false,
+            type_id,
+            value,
+            skip_value_copy: false,
+        },
+        span,
+    )
+}
+
 fn emit_variant_payload_let(engine: &mut Engine, vc: ExprId, f: &Fusion, out: &mut Vec<StmtId>) {
     let BoundValue::Variant {
         payload_local,
@@ -1402,18 +1469,14 @@ fn emit_variant_payload_let(engine: &mut Engine, vc: ExprId, f: &Fusion, out: &m
         unreachable!("guarded by the caller's case-index filter")
     };
     let value = payload.unwrap_or_else(|| engine.const_operand(ValueKind::Unit, payload_type));
-    let stmt = engine.alloc_stmt(
-        StmtKind::Let {
-            name: engine.local_name(payload_local),
-            local_index: payload_local,
-            is_mut: false,
-            type_id: payload_type,
-            value,
-            skip_value_copy: false,
-        },
+    out.extend(bind_exit_value(
+        engine,
+        f.label,
+        payload_local,
+        payload_type,
+        value,
         f.span,
-    );
-    out.push(stmt);
+    ));
 }
 
 /// The payload of a break whose case the fused arm does not take, kept as a
@@ -1458,18 +1521,14 @@ fn emit_slot_lets(
         .filter(|slot| arm_reads[arm].contains(&slot.field_index))
     {
         let value = elements[slot.field_index as usize];
-        let stmt = engine.alloc_stmt(
-            StmtKind::Let {
-                name: engine.local_name(slot.local_index),
-                local_index: slot.local_index,
-                is_mut: false,
-                type_id: slot.type_id,
-                value,
-                skip_value_copy: false,
-            },
+        out.extend(bind_exit_value(
+            engine,
+            f.label,
+            slot.local_index,
+            slot.type_id,
+            value,
             f.span,
-        );
-        out.push(stmt);
+        ));
     }
 }
 
@@ -1795,10 +1854,23 @@ struct ThreadPlan {
 }
 
 fn plan_threading(body: &Body, id: ExprId, locals: &[NirLocal]) -> Option<ThreadPlan> {
-    let ExprKind::Match { expr: scrut, arms } = &body.exprs[id].kind else {
+    let ExprKind::Match { expr: scrut, .. } = &body.exprs[id].kind else {
         return None;
     };
-    let scrut = scrut.as_expr()?;
+    plan_threading_of(body, id, scrut.as_expr()?, locals)
+}
+
+/// [`plan_threading`] for the match `id` with `scrut` as its scrutinee, which
+/// it need not hold yet.
+fn plan_threading_of(
+    body: &Body,
+    id: ExprId,
+    scrut: ExprId,
+    locals: &[NirLocal],
+) -> Option<ThreadPlan> {
+    let ExprKind::Match { arms, .. } = &body.exprs[id].kind else {
+        return None;
+    };
     let ExprKind::LabeledBlock {
         label,
         block: lb_block,
@@ -1891,11 +1963,8 @@ fn selected_arm(body: &Body, exit: StmtId, arms: &[ArmInfo]) -> usize {
 }
 
 /// [`ExitSink`] for threading: resolves each `break L:` exit to the arm it
-/// selects and checks the arm's payload binding type. Descends `Match` /
-/// `Switch` arms (the threading transform rewrites them) and rejects any hidden
-/// break.
+/// selects and checks the arm's payload binding type.
 struct ExitValidator<'a> {
-    label: &'a str,
     arms: &'a [ArmInfo],
     locals: &'a [NirLocal],
 }
@@ -1915,12 +1984,6 @@ impl ExitSink for ExitValidator<'_> {
             return false;
         };
         let (case_index, payload) = (*case_index, *payload);
-        if payload.is_some_and(|p| {
-            p.as_expr()
-                .is_some_and(|e| has_break_to(body, NodeRef::Expr(e), self.label))
-        }) {
-            return false;
-        }
         let Some(idx) = select_arm(self.arms, case_index) else {
             return false;
         };
@@ -1938,9 +2001,6 @@ impl ExitSink for ExitValidator<'_> {
         }
         true
     }
-    fn descend_branches(&self) -> bool {
-        true
-    }
 }
 
 /// Validate every `break L:` exit, mirroring the value-discarding
@@ -1953,11 +2013,7 @@ fn validate_exits_in_block(
     arms: &[ArmInfo],
     locals: &[NirLocal],
 ) -> Option<Vec<Exit>> {
-    let mut sink = ExitValidator {
-        label,
-        arms,
-        locals,
-    };
+    let mut sink = ExitValidator { arms, locals };
     walk_exits(body, block, label, &mut sink)
 }
 
@@ -2021,20 +2077,15 @@ fn thread_exit(
     // (source order: the payload evaluates at the break, before dispatch).
     if let Some(b_local) = binding {
         let payload_op = payload.expect("guarded by plan_threading");
-        let local = &engine.locals()[b_local as usize];
-        let (name, type_id) = (local.name.clone(), local.type_id);
-        let let_stmt = engine.alloc_stmt(
-            StmtKind::Let {
-                name,
-                local_index: b_local,
-                is_mut: false,
-                type_id,
-                value: payload_op,
-                skip_value_copy: false,
-            },
+        let type_id = engine.locals()[b_local as usize].type_id;
+        out.extend(bind_exit_value(
+            engine,
+            &plan.label,
+            b_local,
+            type_id,
+            payload_op,
             span,
-        );
-        out.push(let_stmt);
+        ));
     } else if let Some(p) = payload
         && p.as_expr().is_some()
     {
@@ -2216,7 +2267,6 @@ fn plan_slot_temp_sroa(
     // scalar, which value semantics copy for free.
     let materializable = pads.iter().all(|p| !matches!(p, Pad::NoneOf(_)));
     let mut sink = SlotExitChecker {
-        label: &label,
         widest,
         wanted: fields.iter().map(|(field_index, _)| *field_index).collect(),
         materializable,
@@ -2256,8 +2306,7 @@ fn plan_slot_temp_sroa(
 
 /// [`ExitSink`] for the slot rule. A literal exit hands over its own operands,
 /// anything else the aggregate, which the rewrite binds and projects.
-struct SlotExitChecker<'a> {
-    label: &'a str,
+struct SlotExitChecker {
     widest: usize,
     /// The field indices the consumer projects. A struct literal's fields are
     /// named rather than positional, so width says nothing about which are
@@ -2269,7 +2318,7 @@ struct SlotExitChecker<'a> {
     saw_materialize: bool,
 }
 
-impl SlotExitChecker<'_> {
+impl SlotExitChecker {
     /// A named struct is decomposed only when the reads cover every field.
     ///
     /// A `[tag, slots…]` tuple is a carrier `sroa_variant_return` made and
@@ -2291,14 +2340,11 @@ impl SlotExitChecker<'_> {
     }
 }
 
-impl ExitSink for SlotExitChecker<'_> {
+impl ExitSink for SlotExitChecker {
     fn visit(&mut self, body: &Body, value: Option<Operand>) -> bool {
         let Some(e) = value.and_then(Operand::as_expr) else {
             return false;
         };
-        if has_break_to(body, NodeRef::Expr(e), self.label) {
-            return false;
-        }
         match &body.exprs[e].kind {
             ExprKind::TupleLiteral { elements } => elements.len() > self.widest,
             ExprKind::StructLiteral { fields, .. } => {
@@ -2318,9 +2364,6 @@ impl ExitSink for SlotExitChecker<'_> {
                 self.materializable
             }
         }
-    }
-    fn descend_branches(&self) -> bool {
-        true
     }
 }
 

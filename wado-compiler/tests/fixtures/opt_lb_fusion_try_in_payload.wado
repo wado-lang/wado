@@ -1,0 +1,78 @@
+// `Ok(f(x)?)` inlined leaves its `?` exit nested inside the payload of the
+// block's other exit: `L: { break L: Ok(… { … break L: Err(e) … } …) }`. Every
+// consumer still takes both exits, so no `Result` or `Option` is built, nor
+// the `[tag, slots…]` tuple `sroa_variant_return` hands one over as.
+use { println, Stdout } from "core:cli";
+
+// The loop keeps `trailing_zeros` out of line, as `parse_float_bits` is.
+fn trailing_zeros(n: i32) -> Result<i32, String> {
+    if n == 0 {
+        return Result::Err("zero");
+    }
+    let mut k = 0;
+    while (n >> k) & 1 == 0 {
+        k += 1;
+    }
+    return Result::Ok(k);
+}
+
+fn bit(n: i32) -> Result<i32, String> {
+    return Result::Ok(1 << trailing_zeros(n)?);
+}
+
+fn add(a: i32, b: i32) -> i32 {
+    return a + b;
+}
+
+// The exit sits in a call argument.
+fn bit_plus_one(n: i32) -> Result<i32, String> {
+    return Result::Ok(add(1, trailing_zeros(n)?));
+}
+
+// The nested exit takes the same arm as the one enclosing it.
+fn clamp_low(n: i32) -> Option<i32> {
+    return Option::Some(if n < 3 {
+        return Option::Some(3);
+    } else {
+        n
+    });
+}
+
+// `let r = L: { … }; let v = match r { … }`, the shape an inlined `unwrap` leaves.
+fn show_unwrap(n: i32) -> String {
+    return `bit ${bit(n).unwrap()}`;
+}
+
+// `let r = L: { … }; if VariantTest(r) { … }`, value-discarding.
+fn show_if_let(n: i32) -> String {
+    if let Ok(v) = bit_plus_one(n) {
+        return `plus ${v}`;
+    }
+    return "none";
+}
+
+fn show_clamp(n: i32) -> String {
+    return match clamp_low(n) {
+        Some(v) => `clamp ${v + builtin::black_box(0)}`,
+        None => "none",
+    };
+}
+
+export fn run() with Stdout {
+    println(show_unwrap(builtin::black_box(12)));
+    println(show_unwrap(builtin::black_box(1)));
+    println(show_if_let(builtin::black_box(8)));
+    println(show_if_let(builtin::black_box(0)));
+    println(show_clamp(builtin::black_box(1)));
+    println(show_clamp(builtin::black_box(5)));
+}
+
+__DATA__
+{
+    "stdout": "bit 4\nbit 1\nplus 4\nnone\nclamp 3\nclamp 5\n",
+    "wir_not_expect:O2": [
+        "struct.new \"core:prelude/types.wado//Result<i32,core:prelude/string.wado/String>::Ok\"",
+        "struct.new \"core:prelude/types.wado//Option<i32>::Some\"",
+        "struct.new \"tuple//[i32, i32"
+    ]
+}

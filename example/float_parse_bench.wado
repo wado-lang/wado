@@ -1,0 +1,88 @@
+// Throughput of `f32::from_str` and `f64::from_str` on the shortest text of
+// random floats: random bits taken as a float, every finite one kept, so the
+// inputs span the whole exponent range at full round-trip precision.
+//
+// Each type is parsed from two spellings of the same values. `${x}` writes
+// plain decimal, so most of a text is the zeros placing its digits (164 bytes
+// on average for f64) and the digit scan is the cost. `${x:e}` writes the same
+// digits with an exponent, which leaves the rounding as the cost.
+//
+// The texts are built once, outside the timed loop, from `Xoshiro256pp` with
+// seed zero, so every run parses the same inputs.
+
+use { Stdout } from "core:cli";
+use { Benchmark } from "core:benchmark";
+use { Seed, Seedable, Rng, Xoshiro256pp } from "core:prng";
+use { MonotonicClock } from "wasi:clocks";
+
+global INPUT_COUNT: i32 = 10000;
+
+fn random_f64s() -> List<f64> {
+    let mut rng = Xoshiro256pp::from_seed(Seed::from_u64(0));
+    let mut values: List<f64> = [];
+    while values.len() < INPUT_COUNT {
+        let x = f64::from_bits(rng.next_u64());
+        if x.is_finite() {
+            values.push(x);
+        }
+    }
+    return values;
+}
+
+fn random_f32s() -> List<f32> {
+    let mut rng = Xoshiro256pp::from_seed(Seed::from_u64(0));
+    let mut values: List<f32> = [];
+    while values.len() < INPUT_COUNT {
+        let x = f32::from_bits(rng.next_u64() as u32);
+        if x.is_finite() {
+            values.push(x);
+        }
+    }
+    return values;
+}
+
+fn parse_f64_all(texts: &List<String>) -> u64 {
+    let mut acc: u64 = 0;
+    for let t of texts {
+        acc ^= f64::from_str(t).unwrap().to_bits();
+    }
+    return acc;
+}
+
+fn parse_f32_all(texts: &List<String>) -> u32 {
+    let mut acc: u32 = 0;
+    for let t of texts {
+        acc ^= f32::from_str(t).unwrap().to_bits();
+    }
+    return acc;
+}
+
+export fn run() with (Stdout, MonotonicClock) {
+    let mut bench = Benchmark {
+        name: `float from_str, ${INPUT_COUNT} random shortest texts per iteration`,
+        work_per_iter: Option::Some(INPUT_COUNT as f64),
+        unit: "floats",
+    };
+
+    let f64s = random_f64s();
+    let f32s = random_f32s();
+    // Shortest text round-trips, so every phase parses back the drawn bits.
+    let mut f64_bits: u64 = 0;
+    for let x of f64s {
+        f64_bits ^= x.to_bits();
+    }
+    let mut f32_bits: u32 = 0;
+    for let x of f32s {
+        f32_bits ^= x.to_bits();
+    }
+
+    let f64_plain = f64s.into_iter().map(|x| `${x}`).collect();
+    let f64_exp = f64s.into_iter().map(|x| `${x:e}`).collect();
+    let f32_plain = f32s.into_iter().map(|x| `${x}`).collect();
+    let f32_exp = f32s.into_iter().map(|x| `${x:e}`).collect();
+
+    assert bench.run("f64::from_str, plain decimal", || parse_f64_all(&f64_plain)) == f64_bits;
+    assert bench.run("f64::from_str, exponent", || parse_f64_all(&f64_exp)) == f64_bits;
+    assert bench.run("f32::from_str, plain decimal", || parse_f32_all(&f32_plain)) == f32_bits;
+    assert bench.run("f32::from_str, exponent", || parse_f32_all(&f32_exp)) == f32_bits;
+}
