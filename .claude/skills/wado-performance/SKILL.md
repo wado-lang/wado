@@ -328,35 +328,17 @@ runs from `benchmark/`, must be absolute.
 
 ### Counting fuel
 
-`wado run --report-fuel` reports the wasmtime fuel the guest spent, about one
-unit per Wasm instruction. It is deterministic and ignores the host, so **one
-run per arm is the whole measurement**. Do not repeat it, take a best of N, or
-wait for an idle host. The guest's code decides it, not the `wado` binary that
-runs it, so a dev build counts what a release build counts.
+Fuel counts the Wasm instructions the guest ran (about one unit each). It does
+not depend on the host, so one run per arm is enough, even on a noisy machine.
+It counts instructions, not time: GC and other host work are left out.
 
-It needs a fixed amount of work. `core:benchmark` repeats until a time budget
-runs out, so its fuel changes with the host. Write a probe that runs the phase a
-fixed number of times, chosen by an argument. Run it once more with an argument
-that runs only the setup, and subtract that run to price one phase.
+Write a program that runs the code under test a fixed number of times; the
+`core:benchmark` harness repeats by time, so its fuel varies. Subtract a run
+that does only the setup.
 
-Fuel counts instructions, not time. It does not price what the host does for
-the guest, such as a GC collection. So it answers rank 2 of "What decides
-adoption" below exactly, and an allocation-bound row still needs the clock.
-
-Reach for it first when the clock is noisy. Gale's switch from a `List<char>`
-to byte offsets read +170% on `sqlite_parse` and +1050% on `syntax_highlight`
-from one timed run per arm. That came from the host: this VM ran the same
-binary at 0.84 ms/iter and at 7.1 ms/iter in one session. Fuel, per iteration:
-
-| Phase                         | Base   | Head   | Change |
-| ----------------------------- | ------ | ------ | ------ |
-| `tokenize`                    | 2.29M  | 1.74M  | +31%   |
-| `parse` (includes `tokenize`) | 8.58M  | 8.03M  | +6.8%  |
-| `highlight_result`            | 3.30M  | 3.09M  | +6.9%  |
-| `highlight`                   | 11.89M | 11.12M | +6.9%  |
-
-The phases also attribute the saving. `parse` minus `tokenize` is 6.29M in both
-arms, so the lexer accounts for all of it.
+```sh
+wado run -O2 --report-fuel probe.wado
+```
 
 ### A/B-ing a compiler change
 
