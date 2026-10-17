@@ -1,0 +1,14 @@
+// A Kiln generator that writes its input back out as the entry module, so the
+// schema it reads is the Wado source it emits.
+
+use { Request, Response, OutputFile, Error, read_text } from "core:kiln";
+
+export fn generate(req: Request) -> Result<Response, Error> {
+    return Result::Ok(Response {
+        files: [OutputFile {
+            path: "out.wado",
+            content: read_text(req.primary.content).unwrap(),
+            is_entry: true,
+        }],
+    });
+}

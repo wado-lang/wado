@@ -317,7 +317,7 @@ fn webgpu_import(engine: &Engine, component: &Component) -> Option<String> {
 }
 
 /// The GC heap `wado run` starts a guest with, `DEFAULT_GC_HEAP_INITIAL_SIZE`
-/// in `wado-cli/src/runtime.rs`. wasmtime collects before it grows, so a heap
+/// in `wado-host/src/engine.rs`. wasmtime collects before it grows, so a heap
 /// starting at zero pays a full trace at every doubling up to the working set.
 const GC_HEAP_INITIAL_SIZE: u64 = 256 << 20;
 
@@ -329,6 +329,7 @@ fn engine_config(opt_level: OptLevel) -> Config {
     config.wasm_component_model_gc(true);
     config.wasm_component_model_more_async_builtins(true);
     config.wasm_component_model_async_stackful(true);
+    config.wasm_component_model_error_context(true);
     config.wasm_component_model_map(true);
     config.wasm_branch_hinting(true);
     config.collector(Collector::Copying);

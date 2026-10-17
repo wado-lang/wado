@@ -1,0 +1,26 @@
+// A function value may write through a `&mut` it captured, `fn` and `fn mut`
+// alike, and so may a copy of one the clause binds.
+fn guarded(f: fn() -> bool, n: i32) -> i32
+    contract f()
+{
+    return n;
+}
+
+fn copied(f: fn mut() -> bool, n: i32) -> i32
+    contract calling: { let mut g = f; g() }
+{
+    return n;
+}
+
+export fn run() {
+    let mut seen = 0;
+    let r = &mut seen;
+    let _ = guarded(|| { *r += 1; return true; }, 1);
+    let _ = copied(|| { seen += 1; return true; }, 1);
+}
+
+__DATA__
+{
+  "compile_error": ":4:14: analysis error: contract clause cannot call 'f', which may write what it captured; 10:40: contract clause cannot call 'g', which may write what it captured",
+  "compile_error_codes": ["CONTRACT_WRITE"]
+}

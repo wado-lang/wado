@@ -1,0 +1,18 @@
+// A Kiln generator declaring one required `verbose` option.
+
+use { Request, Response, OutputFile, Error } from "core:kiln";
+
+export struct Options {
+    pub verbose: bool,
+}
+
+export fn generate(req: Request<Options>) -> Result<Response, Error> {
+    let _ = req.options.verbose;
+    return Result::Ok(Response {
+        files: [OutputFile {
+            path: "greeting.wado",
+            content: "pub fn greeting() -> String { return \"hi\"; }",
+            is_entry: true,
+        }],
+    });
+}

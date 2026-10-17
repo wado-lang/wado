@@ -6,14 +6,16 @@ use crate::common::{block_on, in_memory_host};
 use wado_compiler::semantics::semantics;
 use wado_compiler::{INDIRECT_CALLEE, Impurity, PureContext, check_purity_semantic};
 
-/// Purity callees reported for `source`, whatever the position.
+/// The names purity violations report for `source`, whatever the position.
 fn violations(source: &str) -> Vec<String> {
     reported(source)
         .into_iter()
         .map(|(_, impurity)| match impurity {
-            Impurity::Call(callee) | Impurity::Dispatch(callee) | Impurity::Install(callee) => {
-                callee
-            }
+            Impurity::Call(name)
+            | Impurity::Dispatch(name)
+            | Impurity::Install(name)
+            | Impurity::Mutate(name)
+            | Impurity::CallValue(name) => name,
         })
         .collect()
 }

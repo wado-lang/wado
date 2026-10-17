@@ -25,3 +25,14 @@ The native host pieces that `wado-cli`, `wado-dev-tools`, and
 - `fixture.rs` — `CompileInputs`, the `__DATA__` keys that say how to compile a
   fixture. The e2e harness and the golden dumps both read them, so a golden
   records the program its test runs.
+- `kiln/` — the Kiln pipeline (`driver.rs`), the generator runtime
+  (`runtime.rs`), the compiled-component cache (`component_cache.rs`), and the
+  per-invocation cache state (`metadata.rs`). `wado` feeds the pipeline its own
+  generator provider; `local.rs` feeds it the generators a fixture names,
+  each compiled after its own invocations have run.
+- `sync.rs` — how production code locks a mutex: recover a poisoned guard. Test
+  mocks may still `unwrap`.
+- `atomic_write.rs` — write a file through a staged sibling and a rename.
+- `engine.rs` — the Wasm features and GC defaults every wasmtime engine takes,
+  so the e2e harness runs a program as `wado` does, and the fuel-metered engine
+  generators and `core:eval` run on.

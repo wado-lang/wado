@@ -1,0 +1,17 @@
+// A relative `output_dir` says where it is relative to, as every Kiln path
+// does: a bare `generated` is refused.
+
+use { hello } from "./sub/kiln/value.schema"
+    with {
+        generator: {
+            module: "./sub/kiln/text_generator.wado",
+            output_dir: "generated",
+        },
+    };
+
+test {
+    assert hello() == 7;
+}
+
+__DATA__
+{"compile_error": "must be a relative path starting with `./` or `../`"}

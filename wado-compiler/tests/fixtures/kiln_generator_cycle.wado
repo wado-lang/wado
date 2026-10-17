@@ -1,0 +1,14 @@
+// A generator whose source reaches itself through its own clause has no order
+// to run in. The cycle is reported naming the generator in it.
+
+use { model } from "./sub/kiln/value.schema"
+    with {
+        generator: { module: "./sub/kiln/cycle/cyclic.wado" },
+    };
+
+test {
+    assert model() == 1;
+}
+
+__DATA__
+{"compile_error": "kiln: generator cycle: sub/kiln/cycle/cyclic.wado -> sub/kiln/cycle/cyclic.wado"}

@@ -39,11 +39,19 @@ pub struct CompileInputs {
     /// relative to the fixture directory. Each entry is its own package.
     #[serde(default)]
     pub dependencies: IndexMap<String, String>,
+<<<<<<< HEAD
     /// Stubbed package roots, each a directory relative to the fixture
     /// directory that stands where a `wado.toml` would. Empty leaves every
     /// module in no package.
     #[serde(default)]
     pub package_roots: Vec<String>,
+||||||| b49ce59e1
+=======
+    /// Stubbed path `[build-dependencies]`: nickname → the generator's `.wado`
+    /// file, relative to the fixture directory.
+    #[serde(default)]
+    pub build_dependencies: IndexMap<String, String>,
+>>>>>>> origin/main
     /// Override the `--param-unknown` policy level (`error` / `warn` / `ignore`).
     #[serde(default, deserialize_with = "policy_level")]
     pub param_unknown: Option<ParamPolicyLevel>,
@@ -71,7 +79,12 @@ impl CompileInputs {
         HostStubs {
             env: self.param_env.clone(),
             dependencies: self.dependencies.clone(),
+<<<<<<< HEAD
             package_roots: self.package_roots.clone(),
+||||||| b49ce59e1
+=======
+            build_dependencies: self.build_dependencies.clone(),
+>>>>>>> origin/main
         }
     }
 

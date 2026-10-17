@@ -1,0 +1,22 @@
+// A Kiln generator whose `greeting()` spells out the map option it was given.
+
+use { Request, Response, OutputFile, Error } from "core:kiln";
+use { TreeMap } from "core:collections";
+
+export struct Options {
+    pub sizes: TreeMap<String, i32>,
+}
+
+export fn generate(req: Request<Options>) -> Result<Response, Error> {
+    let mut spelled: List<String> = [];
+    for let [k, v] of req.options.sizes.entries() {
+        spelled.push(`${k}=${v}`);
+    }
+    return Result::Ok(Response {
+        files: [OutputFile {
+            path: "greeting.wado",
+            content: `pub fn greeting() -> String { return "${spelled.join(",")}"; }`,
+            is_entry: true,
+        }],
+    });
+}

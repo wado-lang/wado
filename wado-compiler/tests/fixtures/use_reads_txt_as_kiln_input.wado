@@ -1,0 +1,11 @@
+// With `generator`, a Kiln generator reads the file, `.txt` or not, and the
+// `use` binds against the module it writes.
+
+use { number } from "./sub/use_reads_txt_as_kiln_input.txt"
+    with {
+        generator: { module: "./sub/use_reads_txt_as_kiln_input_generator.wado" },
+    };
+
+test "a .txt file under generator is a generator's input" {
+    assert number() == 7;
+}

@@ -1,0 +1,20 @@
+// A generator declaring no options takes none, so a key stops the build before
+// the generator runs: it never runs on options its use site did not write.
+
+use { greeting } from "./sub/kiln/value.schema"
+    with {
+        generator: {
+            module: "./sub/kiln/options/optionless_generator.wado",
+            options: { verbsoe: false },
+        },
+    };
+
+test {
+    assert greeting() == "hi";
+}
+
+__DATA__
+{
+    "compile_error": ":8:24: analysis error: kiln: unknown options field `options.verbsoe`",
+    "compile_errors_not_contains": ["generator host error"]
+}

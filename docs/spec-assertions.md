@@ -97,6 +97,33 @@ fn half(n: i32) -> i32
 }
 ```
 
+A clause writes only the values it creates. A build may skip the clause, so a
+write reaching anything else would make what the call computes depend on the
+build. Writing a parameter, a global, or anything through a reference is a
+compile error. So is taking `&mut` of one, and calling a method that takes
+`&mut self` on one. A value the clause binds is its own only if it holds no
+`&mut`, resource, or function value, since a copy of one shares what that
+points to.
+
+A callee may be handed such a value only where it cannot write through it: a
+`&mut T` bound to a `&T` parameter, where `T` holds none of them, or a closure
+the clause writes, whose body this rule covers. An argument written `&mut x`,
+where `x` is the clause's own, is handed on as well. Calling a function value
+follows the same rule: a `fn`, like a `fn mut`, may write through a `&mut` it
+captured, so only a closure the clause writes may be called.
+
+> Not yet implemented: a function a clause calls may write a mutable global.
+
+<!-- {"fixture":"error_contract_mutates_param.wado"} -->
+
+```wado
+fn doubled(mut n: i32) -> i32
+    contract doubling: { n = n * 2; true }
+{
+    return n;
+}
+```
+
 The clauses are checked in the order written, and the first that fails traps,
 so a later clause may rely on the earlier ones.
 
@@ -166,9 +193,9 @@ wado compile -O2 -f contract-checks app.wado    # checks
 
 A trait method's clauses are written on the trait's declaration, one without a
 body included, and bind every impl of the method and the trait's default body.
-An impl of such a method writes no clause; one that does is a compile error. A
-call through a bound checks the trait's clauses, and `unchecked` vouches for
-them.
+An impl of a method whose trait states clauses writes none; one that does is a
+compile error. A call through a bound checks the trait's clauses, and
+`unchecked` vouches for them.
 
 An impl of a trait method that declares no clause may state its own. A call
 checks them however it reaches the impl, through a bound included. `unchecked`

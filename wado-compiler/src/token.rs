@@ -427,6 +427,12 @@ impl Span {
         )
     }
 
+    /// Whether `inner` lies within this span, in the same parse.
+    #[must_use]
+    pub fn encloses(&self, inner: &Span) -> bool {
+        self.space == inner.space && self.start <= inner.start && inner.end <= self.end
+    }
+
     /// Create a span assuming single-line ASCII content.
     /// `end_column` defaults to `column + (end - start)`, which is correct for
     /// single-line tokens whose byte length equals their column width.

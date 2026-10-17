@@ -347,16 +347,43 @@ is read:
    type: `"wasm"` as a Wasm binary, `"wat"` as Wasm text.
 3. Otherwise it is read as Wado source.
 
-So a file named like a grammar is still Wado source when the `use` says
-nothing else:
+So a `.txt` file is Wado source when the `use` says nothing else:
 
-<!-- {"fixture": "use_reads_wado_whatever_the_extension.wado"} -->
+<!-- {"fixture": "use_reads_txt_as_wado.wado"} -->
 
 ```wado
-use { greeting } from "./sub/use_reads_wado_whatever_the_extension.g4";
+use { greeting } from "./sub/use_reads_txt_as_wado.txt";
 
-test "a file of any extension is read as Wado source" {
+test "a .txt file is read as Wado source" {
     assert greeting() == "read as Wado";
+}
+```
+
+The same extension is Wasm text under `type: "wat"`:
+
+<!-- {"fixture": "use_reads_txt_as_wat.wado"} -->
+
+```wado
+use { answer } from "./sub/use_reads_txt_as_wat.txt" with { type: "wat" };
+
+test "a .txt file under type wat is read as Wasm text" {
+    assert answer() == 42;
+}
+```
+
+And under `generator`, it is the generator's input, and the `use` binds against
+the module the generator writes:
+
+<!-- {"fixture": "use_reads_txt_as_kiln_input.wado"} -->
+
+```wado
+use { number } from "./sub/use_reads_txt_as_kiln_input.txt"
+    with {
+        generator: { module: "./sub/use_reads_txt_as_kiln_input_generator.wado" },
+    };
+
+test "a .txt file under generator is a generator's input" {
+    assert number() == 7;
 }
 ```
 

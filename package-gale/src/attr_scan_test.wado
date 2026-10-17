@@ -73,3 +73,11 @@ test "find_attr_refs stops member at a non-identifier after the dot" {
     assert refs[0].member matches { None }, "no member for $a.5";
     assert refs[0].end == 2;
 }
+
+test "a template inside a template hole does not end the outer one" {
+    // `$y` is the outer template's text, so it names nothing.
+    assert find_attr_refs("`${ `}` }$y`").is_empty();
+    let refs = find_attr_refs("`${ `}` }${$z}`");
+    assert refs.len() == 1;
+    assert refs[0].name == "z";
+}

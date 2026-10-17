@@ -459,7 +459,7 @@ fn metadata_with_traversal_paths_is_cache_miss() {
 fn missing_output_is_cache_miss() {
     futures::executor::block_on(async {
         // Cache says the output exists, but the file is gone.
-        // CLI parity: `wado_cli::kiln_driver::cache_matches` treats
+        // CLI parity: `wado_host::kiln::driver::cache_matches` treats
         // an unreadable output as a miss; the LSP must do the same
         // rather than redirect into thin air.
         let fixture = build_fixture(FixtureSpec::default());

@@ -1,0 +1,14 @@
+// A Kiln generator that writes a file but marks it not the entry, so nothing
+// redirects the `use` that named it.
+
+use { Request, Response, OutputFile, Error } from "core:kiln";
+
+export fn generate(req: Request) -> Result<Response, Error> {
+    return Result::Ok(Response {
+        files: [OutputFile {
+            path: "out.wado",
+            content: "pub fn hello() -> i32 { return 1; }",
+            is_entry: false,
+        }],
+    });
+}

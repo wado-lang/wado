@@ -15,7 +15,7 @@ use crate::compile::CompileFlags;
 use crate::knobs::{CompileKnobOpt, CompileKnobs, RuntimeKnobOpt, RuntimeKnobs};
 use crate::manifest;
 use crate::runtime::{self, ProfileMode, Ticker};
-use crate::sync::lock;
+use wado_host::sync::lock;
 
 pub struct RunOptions {
     pub input: String,

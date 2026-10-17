@@ -17,8 +17,9 @@ use {
     VALS_LOCAL,
     MIN_PREC_LOCAL,
 } from "./ident.wado";
-use { is_self_ref_element } from "./lr_util.wado";
+use { rule_is_left_recursive } from "./lr_util.wado";
 use { push_unique } from "./list_util.wado";
+use { skip_ws } from "./g4/scan.wado";
 
 /// Name of a rule's value-channel struct (`e` -> `EVals`).
 pub fn vals_struct_name(rule: &ParserRule) -> String {
@@ -100,10 +101,7 @@ pub fn ref_is_call_ctx<S: AsStrSlice>(ref_text: S) -> bool {
 /// parens — that ref is spliced on its own.
 fn swallow_trailing_call(chars: &List<char>, end: i32) -> i32 {
     let n = chars.len();
-    let mut j = end;
-    while j < n && chars[j].is_ascii_whitespace() {
-        j += 1;
-    }
+    let j = skip_ws(chars, end, n);
     if j >= n || chars[j] != '(' {
         return end;
     }
@@ -539,10 +537,7 @@ pub fn body_mode_attr_use<S: AsStrSlice>(body: S, out: &mut ModeAttrUse) {
 /// assigns, a compound one does both. `$x` is a leaf, so nothing but the
 /// operator right after it can make the site a write.
 fn attr_ref_use(chars: &List<char>, r: &AttrRef) -> AttrUse {
-    let mut j = r.end;
-    while j < chars.len() && chars[j].is_ascii_whitespace() {
-        j += 1;
-    }
+    let j = skip_ws(chars, r.end, chars.len());
     if j >= chars.len() {
         return AttrUse::Read;
     }
@@ -677,15 +672,6 @@ fn is_arg<S: AsStrSlice>(rule: &ParserRule, name: S) -> bool {
 /// read the channel — a caller might.
 pub fn rule_returns_vals(rule: &ParserRule) -> bool {
     return rule_value_channel_ready(rule);
-}
-
-/// Whether any alternative is directly left-recursive (its first element
-/// references the rule itself). Mirrors lowering's LR classification at the
-/// surface level so the value-channel decision can exclude LR rules without a
-/// lowered `Rule`.
-pub fn rule_is_left_recursive(rule: &ParserRule) -> bool {
-    return rule.alternatives.iter_ref().any(|alt| !alt.elements.is_empty()
-        && is_self_ref_element(&alt.elements[0], &rule.name));
 }
 
 /// Whether a rule exposes an emittable value channel: a returns / locals field

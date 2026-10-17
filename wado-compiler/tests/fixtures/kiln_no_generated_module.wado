@@ -1,0 +1,14 @@
+// A `use` that no invocation produced a module for reports Kiln's own error,
+// never a parse of the schema as Wado.
+
+use { hello } from "./sub/kiln/value.schema"
+    with {
+        generator: { module: "./sub/kiln/no_entry_generator.wado" },
+    };
+
+test {
+    assert hello() == 1;
+}
+
+__DATA__
+{"compile_error": "kiln: no generated module for `use ... from \"./sub/kiln/value.schema\"`","compile_errors_not_contains": ["parse error"]}

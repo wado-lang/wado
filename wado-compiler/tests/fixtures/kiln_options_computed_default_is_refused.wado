@@ -1,0 +1,16 @@
+// An options default a call computes is not a literal, even a call taking one.
+
+use { greeting } from "./sub/kiln/value.schema"
+    with {
+        generator: {
+            module: "./sub/kiln/options/computed_default_generator.wado",
+            options: {},
+        },
+    };
+
+test {
+    assert greeting() == "a,a";
+}
+
+__DATA__
+{"compile_error": "default value must be a literal matching the declared type"}

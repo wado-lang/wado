@@ -36,7 +36,15 @@
 //! idempotent. An unknown `<IDENT(...)>` is left verbatim and reported in
 //! `warnings` — loud, never a silent guess.
 
-use { scan_string, scan_line_comment, scan_block_comment, is_id_start_char, is_id_continue_char } from "./scan.wado";
+use {
+    scan_string,
+    scan_line_comment,
+    scan_block_comment,
+    skip_ws,
+    is_id_start_char,
+    is_id_continue_char,
+} from "./scan.wado";
+use { push_range } from "../text.wado";
 
 pub struct ExpandOutcome {
     pub text: String,
@@ -55,7 +63,7 @@ pub fn expand_action_templates<S: AsStrSlice>(src: S) -> ExpandOutcome {
             // A `'...'` grammar string is copied verbatim (never a template).
             '\'' => {
                 let end = scan_string(&chars, i);
-                push_span(&mut out, &chars, i, end);
+                push_range(&mut out, &chars, i, end);
                 i = end;
                 continue;
             },
@@ -101,13 +109,13 @@ pub fn expand_action_templates<S: AsStrSlice>(src: S) -> ExpandOutcome {
             },
             '/' && i + 1 < n && chars[i + 1] == '/' => {
                 let end = scan_line_comment(&chars, i);
-                push_span(&mut out, &chars, i, end);
+                push_range(&mut out, &chars, i, end);
                 i = end;
                 continue;
             },
             '/' && i + 1 < n && chars[i + 1] == '*' => {
                 let end = scan_block_comment(&chars, i);
-                push_span(&mut out, &chars, i, end);
+                push_range(&mut out, &chars, i, end);
                 i = end;
                 continue;
             },
@@ -176,7 +184,7 @@ fn is_template_start(chars: &List<char>, lt: i32) -> bool {
 /// Parse and expand one `<chain>` starting at the '<'.
 fn eval_template(chars: &List<char>, lt: i32) -> Result<Expanded, String> {
     let chain = eval_chain(chars, lt + 1)?;
-    let mut j = skip_ws(chars, chain.end);
+    let mut j = skip_ws(chars, chain.end, chars.len());
     if j >= chars.len() || chars[j] != '>' {
         return Result::Err(`template at index ${lt}: expected '>' to close the reference`);
     }
@@ -188,9 +196,9 @@ fn eval_chain(chars: &List<char>, start: i32) -> Result<Expanded, String> {
     let n = chars.len();
     let mut current = eval_call(chars, start, null)?;
     loop {
-        let j = skip_ws(chars, current.end);
+        let j = skip_ws(chars, current.end, n);
         if j < n && chars[j] == ':' {
-            let k = skip_ws(chars, j + 1);
+            let k = skip_ws(chars, j + 1, n);
             current = eval_call(chars, k, Option::Some(current.text))?;
             continue;
         }
@@ -215,14 +223,14 @@ fn eval_call(chars: &List<char>, start: i32, receiver: Option<String>) -> Result
     }
     j += 1;
     let mut args: List<String> = [];
-    j = skip_ws(chars, j);
+    j = skip_ws(chars, j, n);
     if j < n && chars[j] != ')' {
         loop {
             let arg = eval_arg(chars, j)?;
             args.push(arg.text);
-            j = skip_ws(chars, arg.end);
+            j = skip_ws(chars, arg.end, n);
             if j < n && chars[j] == ',' {
-                j = skip_ws(chars, j + 1);
+                j = skip_ws(chars, j + 1, n);
                 continue;
             }
             break;
@@ -500,21 +508,4 @@ fn require_args<S: AsStrSlice>(args: &List<String>, count: i32, name: S) -> Resu
         return Result::Err(`template helper '${name}' expects ${count} argument(s), got ${args.len()}`);
     }
     return Result::Ok(());
-}
-
-fn skip_ws(chars: &List<char>, pos: i32) -> i32 {
-    let n = chars.len();
-    let mut i = pos;
-    while i < n && chars[i].is_ascii_whitespace() {
-        i += 1;
-    }
-    return i;
-}
-
-fn push_span(out: &mut String, chars: &List<char>, start: i32, end: i32) {
-    let mut i = start;
-    while i < end {
-        out.push(chars[i]);
-        i += 1;
-    }
 }

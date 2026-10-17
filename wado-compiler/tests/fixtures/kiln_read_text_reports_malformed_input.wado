@@ -1,0 +1,15 @@
+// `read_text` over an input that is not UTF-8 answers an error, which the
+// generator reports as its diagnostic. In the schema, 0xE6 leads a three-byte
+// sequence that 0x41 cannot continue.
+
+use { hello } from "./sub/kiln/malformed_utf8.schema"
+    with {
+        generator: { module: "./sub/kiln/text_generator.wado" },
+    };
+
+test {
+    assert hello() == 7;
+}
+
+__DATA__
+{"compile_error": "schema is not text"}

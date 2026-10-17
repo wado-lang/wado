@@ -15,12 +15,12 @@ use sha2::{Digest, Sha256};
 use wado_compiler::hashmap::IndexMap;
 use wado_lsp::host::discovery::{absolutize, normalize_path};
 
-use crate::cache::write_atomic;
 use crate::compile::build_dir;
 use crate::fingerprint::{Input, binary_digest, hash_field};
 use crate::kiln_provider::hex32;
 use crate::manifest::package_root;
-use crate::sync::lock;
+use wado_host::atomic_write::write_atomic;
+use wado_host::sync::lock;
 
 /// The interfaces that hand a test nothing: output, its types, and exit.
 /// Every other import is an effect whose answer can change between runs (a

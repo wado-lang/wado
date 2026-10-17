@@ -57,7 +57,7 @@ use {
     sort_group_by_element_count,
 } from "./alt_grouping.wado";
 use { gate_assignment } from "./scan_gate.wado";
-use { rule_type_name, literal_field_name, dedup_name, strip_suffix } from "./gen_util.wado";
+use { rule_type_name, literal_field_name, dedup_name } from "./gen_util.wado";
 use {
     not_element_field_name,
     case_names_for_rule,
@@ -82,7 +82,12 @@ use { rule_has_at_end_conflict } from "./rule_overlap.wado";
 use { GrammarAnalysis, close_over_callers, is_nullable } from "./grammar_analysis.wado";
 use { GenSettings } from "./gen_settings.wado";
 use { FOLLOW_MASK_MAX_K } from "./table_registry.wado";
-use { compute_prefix_self_ref_min_prec } from "./lr_util.wado";
+use {
+    alt_is_left_recursive,
+    compute_prefix_self_ref_min_prec,
+    element_is_self_ref,
+    rule_is_left_recursive,
+} from "./lr_util.wado";
 use {
     LoweredGrammar,
     Rule,
@@ -568,7 +573,7 @@ fn lower_rule(rule: &ParserRule, ctx: &mut LowerContext) -> Rule {
     if rule.alternatives.len() == 1 {
         return Rule::Simple(lower_simple_rule(rule, ctx));
     }
-    if has_left_recursive_alt(rule) {
+    if rule_is_left_recursive(rule) {
         return Rule::LeftRecursive(lower_lr_rule(rule, ctx));
     }
     return Rule::MultiAlt(lower_multi_alt_rule(rule, ctx));
@@ -1316,7 +1321,7 @@ fn lower_lr_alt(
     // threaded in by `lower_lr_rule` so they are computed once, not
     // once per LR alt.
     let type_name = rule.type_name;
-    let base = strip_suffix(&type_name, "Node");
+    let base = type_name.strip_suffix("Node").unwrap();
     let case_name = case_names[alt_index];
     let struct_name = `${base}${case_name}`;
 
@@ -1692,14 +1697,6 @@ fn join_kind_list(indices: &List<i32>) -> String {
     return out;
 }
 
-/// Whether the rule has at least one directly-left-recursive
-/// alternative. Mirrors `parser_gen::is_left_recursive`'s shallow
-/// first-element check (ANTLR4 only rewrites direct LR; deep LR is
-/// out of contract — see `vendor/antlr4/doc/left-recursion.md`).
-fn has_left_recursive_alt(rule: &ParserRule) -> bool {
-    return rule.alternatives.iter_ref().any(|alt| alt_is_left_recursive(alt, &rule.name));
-}
-
 /// FieldDecl for the leading self-reference element of an LR alt
 /// (the element ANTLR4's left-recursion rewrite strips from the parse
 /// path). The element is constrained by `alt_is_left_recursive` to a
@@ -1720,21 +1717,6 @@ fn lr_prefix_field_decl<S: AsStrSlice>(elem: &Element, rule_name: S) -> FieldDec
             FieldDecl { name: lab.field_name, type_str: inner_type, kind: kind };
         },
         _ => panic("lr_prefix_field_decl: LR alt's first element must be a self-ref RuleRef (possibly labeled)"),
-    };
-}
-
-fn alt_is_left_recursive<S: AsStrSlice>(alt: &Alternative, rule_name: S) -> bool {
-    if alt.elements.is_empty() {
-        return false;
-    }
-    return element_is_self_ref(&alt.elements[0], rule_name);
-}
-
-pub fn element_is_self_ref<S: AsStrSlice>(elem: &Element, rule_name: S) -> bool {
-    return match *elem {
-        RuleRef(r) => r.name == rule_name.as_str_slice(),
-        Label(lab) => element_is_self_ref(&lab.element, rule_name),
-        TokenRef(_) | Literal(_) | Group(_) | Repeat(_) | Wildcard(_) | Not(_) => false,
     };
 }
 
@@ -2687,7 +2669,7 @@ fn lower_alt_body(
     let mut case_name: String = "";
     let mut struct_name: String = type_name;
     if rule.alternatives.len() != 1 {
-        let base = strip_suffix(&type_name, "Node");
+        let base = type_name.strip_suffix("Node").unwrap();
         case_name = case_names[idx];
         struct_name = `${base}${case_names[idx]}`;
     }

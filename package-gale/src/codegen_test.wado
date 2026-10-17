@@ -853,7 +853,7 @@ test "metadata comment formats string and int option values" {
         channels: [],
         options: [
             GrammarOption { name: "tokenVocab", value: OptionValue::Str("foo.g4") },
-            GrammarOption { name: "k", value: OptionValue::Int(3) },
+            GrammarOption { name: "k", value: OptionValue::Int("3") },
             GrammarOption { name: "init", value: OptionValue::Action(ActionSource { text: "some code;" }) },
         ],
         named_actions: [],
@@ -2985,6 +2985,17 @@ WS : [ \\t]+ -> skip ;
     assert got == "a b => (s (e a) (e b)) [3 13 ]\n";
 }
 
+test "a `<` in a call argument is a comparison, not a bracket" {
+    let got = parses("grammar T;
+s : a=n e[$a.v < 2, $a.v] EOF ;
+n returns [int v] : ID { $v = 1; } ;
+e[boolean x, int y] : ID { System.out.print($x + \" \" + $y); } ;
+ID : [a-z]+ ;
+WS : [ \\t]+ -> skip ;
+", "s", ["a b"]);
+    assert got == "a b => (s (n a) (e b)) [true 1]\n";
+}
+
 // `args` scopes the gate for its own extent (`locals` + `@init` / `@after`), so
 // the ban on the braced form resumes after the `)`; the scan has to restore it
 // the same way or it disagrees with the parse about the head's tail.
@@ -3452,6 +3463,29 @@ s : ( {this.ok()}? A | B )* EOF ;
 A : 'a' ; B : 'b' ;
 ", "show_with(true, \"ab\");\nshow_with(false, \"ab\");\nshow_with(false, \"b\");\n", SHOW_WITH_PBASE);
     assert got == "true ab => (s a b)\nfalse ab => error\nfalse b => (s b)\n";
+}
+
+test "a negative offset to `_input.LT` and `_input.LA` counts back from the last consumed token" {
+    let got = parses(
+        "grammar T;
+s : A {System.out.println(_input.LA(-1) != _input.LA(1));} B {System.out.println(_input.LT(-1).getText() + _input.LT(-2).getText());} EOF ;
+A : 'a' ; B : 'b' ;
+",
+        "s",
+        ["ab"],
+    );
+    assert got == "ab => (s a b) [true\nba\n]\n";
+}
+
+test "a diagnostic names a literal-alias token by its literal, whether it was missing or expected" {
+    let got = printed("grammar T;
+s : A LB B EOF | B (LB | RB) EOF ;
+A : 'a' ; B : 'b' ; LB : '{' ; RB : '}' ;
+", "for let input of [\"ab\", \"bb\"] {
+    for let d of &parse(input).diagnostics { println(d.message); }
+}
+");
+    assert got == "missing '{'\nexpected '{' or '}'; no viable alternative\n";
 }
 
 test "past a shared first token, the next tokens pick the alternative through groups, loops, labels, optionals, sets and rule calls" {

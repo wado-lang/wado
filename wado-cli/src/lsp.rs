@@ -8,7 +8,7 @@ use wado_manifest::RegistryComponentNeed;
 
 use crate::args::{self, CliExit};
 use crate::dep_component::pull_component;
-use crate::sync::lock;
+use wado_host::sync::lock;
 
 #[derive(Debug)]
 pub struct LspOptions {}

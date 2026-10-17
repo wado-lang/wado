@@ -18,9 +18,10 @@ use indexmap::IndexMap;
 use wado_manifest::dependency::registry_lock_id;
 use wado_manifest::{DependencySource, LockFile, LockedPackage, Manifest, registry_url};
 
-use crate::cache::{generator_path, write_atomic};
+use crate::cache::generator_path;
 use crate::oci;
 use crate::registry::parse_version_tag;
+use wado_host::atomic_write::write_atomic;
 
 /// The specifier grammar lives with [`wado_compiler::kiln::GeneratorSpec`], the
 /// type that carries it: the LSP resolves the same `module:` string against the

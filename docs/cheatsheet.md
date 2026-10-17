@@ -891,7 +891,7 @@ every build; a call marked `unchecked` vouches for it, and only a build under
 
 ```wado
 fn half(n: i32) -> i32
-    contract n % 2 == 0, "n must be even"   // any number; no effects
+    contract n % 2 == 0, "n must be even"   // any number; no effects or writes
 {
     return n / 2;
 }
@@ -901,7 +901,8 @@ unchecked half(4);   // the caller vouches; checked only under -f contract-check
 
 trait Pick {
     fn pick(&self, i: i32) -> i32
-        contract i >= 0;   // binds every impl, which writes no clause of its own
+        contract i >= 0;   // binds every impl, which then writes no clause
+    fn peek(&self, i: i32) -> i32;   // states none: an impl may state its own
 }
 ```
 

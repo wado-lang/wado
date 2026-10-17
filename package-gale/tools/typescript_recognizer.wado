@@ -42,11 +42,11 @@ impl TypeScriptParserBase for TsParserBase {
     /// No line break between the token just consumed and the next one — what
     /// JavaScript's automatic semicolon insertion turns on.
     fn not_line_terminator(&self, p: &Parser) -> bool {
-        resume p.token_line(p.lt(1)) == p.token_line(p.lt(0));
+        resume p.token_line(p.lt(1)) == p.token_line(p.lt(-1));
     }
 
     fn line_terminator_ahead(&self, p: &Parser) -> bool {
-        resume p.token_line(p.lt(1)) != p.token_line(p.lt(0));
+        resume p.token_line(p.lt(1)) != p.token_line(p.lt(-1));
     }
 
     fn close_brace(&self, p: &Parser) -> bool {
@@ -61,7 +61,7 @@ impl TypeScriptParserBase for TsParserBase {
 
     /// The token just consumed is `a0` — `for (x of xs)` asks it of `of`.
     fn p(&self, p: &Parser, a0: String) -> bool {
-        resume p.token_text(p.lt(0)) == a0;
+        resume p.token_text(p.lt(-1)) == a0;
     }
 
     /// The next token is `a0` — a getter / setter asks it of `get` / `set`.

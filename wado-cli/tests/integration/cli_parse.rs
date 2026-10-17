@@ -268,7 +268,7 @@ fn run_gc_heap_initial_defaults() {
     let opts = wado_cli::run::parse_args(parser).unwrap();
     assert_eq!(
         opts.runtime.gc_heap_initial_size,
-        wado_cli::runtime::DEFAULT_GC_HEAP_INITIAL_SIZE
+        wado_host::engine::DEFAULT_GC_HEAP_INITIAL_SIZE
     );
 }
 

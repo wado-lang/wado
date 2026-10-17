@@ -1,0 +1,40 @@
+// A clause may hand a callee what it cannot write through: a `&mut` bound to a
+// `&T` parameter, where `T` holds no `&mut`, and a closure the clause writes,
+// whose body is checked with the clause.
+use { println, Stdout } from "core:cli";
+
+struct Counter { n: i32 }
+
+fn readable(c: &Counter) -> bool {
+    return c.n >= 0;
+}
+
+impl Counter {
+    fn at_least(&self, other: &Counter) -> bool {
+        return self.n >= other.n;
+    }
+}
+
+fn ticked(c: &mut Counter) -> i32
+    contract readable(c) && c.at_least(c)
+{
+    c.n += 1;
+    return c.n;
+}
+
+fn all_positive(xs: List<i32>) -> i32
+    contract xs.into_iter().all(|x| x > 0)
+{
+    return xs.len();
+}
+
+export fn run() with Stdout {
+    let mut c = Counter { n: 1 };
+    let xs: List<i32> = [1, 2];
+    println(`${ticked(&mut c)} ${unchecked ticked(&mut c)} ${all_positive(xs)}`);
+}
+
+__DATA__
+{
+    "stdout": "2 3 2\n"
+}

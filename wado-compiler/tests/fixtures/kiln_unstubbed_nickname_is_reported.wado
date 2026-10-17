@@ -1,0 +1,14 @@
+// A nickname the fixture stubs no generator for is reported as such, not as a
+// generator this host cannot run.
+
+use { hello } from "./sub/kiln/value.schema"
+    with {
+        generator: { module: "lib:missing" },
+    };
+
+test {
+    assert hello() == 7;
+}
+
+__DATA__
+{"compile_error": "kiln: generator `lib:missing` is neither a `./` path nor a stubbed build dependency"}

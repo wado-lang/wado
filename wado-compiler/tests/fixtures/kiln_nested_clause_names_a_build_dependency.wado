@@ -1,0 +1,15 @@
+// A generator's own clause may name a `[build-dependencies]` nickname. Its path
+// is spelled against the project root, while the clause resolves against the
+// generator's own directory.
+
+use { model } from "./sub/kiln/value.schema"
+    with {
+        generator: { module: "./sub/kiln/nested_build_dep/outer.wado" },
+    };
+
+test {
+    assert model() == 99;
+}
+
+__DATA__
+{"test": {}, "build_dependencies": {"lib:inner": "./sub/kiln/text_generator.wado"}}

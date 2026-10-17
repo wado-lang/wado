@@ -2,16 +2,12 @@
 //!
 //! A path written in a `.wado` file (`from`, `generator.inputs`,
 //! `generator.output_dir`) must resolve relative to that file — the same rule
-//! every other Wado path follows. These tests pin three consequences:
-//!
-//! 1. A consumer in a subdirectory reads *its own* sibling schema, not a
-//!    same-named file at the project root.
-//! 2. Two consumers in different directories that both write `from
-//!    "./grammar.g4"` get distinct default `output_dir`s instead of clobbering
-//!    each other (the original collision the `output_dir` override worked
-//!    around).
-//! 3. Two consumers that do name one schema share its invocation, and each
-//!    still resolves its own import through it.
+//! every other Wado path follows. That sibling consumers each read their own
+//! same-named schema, and that a bare `output_dir` is refused, are e2e
+//! fixtures (`kiln_sibling_consumers_read_their_own_schema`,
+//! `kiln_output_dir_must_start_with_dot`). These tests pin what a fixture
+//! cannot state: that two consumers naming one schema run it once, and where
+//! an explicit `output_dir` writes.
 
 use std::fs;
 
@@ -78,34 +74,6 @@ export fn run() with Stdout {
 "#,
     )
     .unwrap();
-}
-
-#[test]
-fn sibling_consumers_resolve_their_own_schema() {
-    let tmp = tempfile::tempdir().unwrap();
-    let root = tmp.path();
-    write_project(root);
-
-    // feat1 reads feat1/grammar.g4 (→1), feat2 reads feat2/grammar.g4 (→2).
-    // With the resolution bug both collapse to one invocation reading a single
-    // "grammar.g4", so this prints the wrong sum (or fails to find the file).
-    wado_in(root)
-        .args(["run", "src/main.wado"])
-        .assert()
-        .success()
-        .stdout(predicate::str::contains("3"));
-
-    // Distinct default output dirs: one generated entry per consumer.
-    let kiln_dir = root.join("build/kiln");
-    let out_files: Vec<_> = walk(&kiln_dir)
-        .into_iter()
-        .filter(|p| p.file_name().is_some_and(|n| n == "out.wado"))
-        .collect();
-    assert_eq!(
-        out_files.len(),
-        2,
-        "each sibling consumer must get its own generated entry, got {out_files:?}"
-    );
 }
 
 /// Two modules declaring the same clause for the same schema collapse into one
@@ -203,28 +171,6 @@ fn explicit_output_dir_is_relative_to_declaring_file() {
         root.join("src/feat1/generated/out.wado").exists(),
         "`./`-relative output_dir must resolve relative to the declaring .wado file"
     );
-}
-
-#[test]
-fn bare_relative_paths_are_rejected() {
-    let tmp = tempfile::tempdir().unwrap();
-    let root = tmp.path();
-    write_project(root);
-
-    // A bare (non-`./`) output_dir is rejected: relative paths must be explicit.
-    fs::write(
-        root.join("src/feat1/mod.wado"),
-        "use { hello } from \"./grammar.g4\"\n    with {\n        generator: {\n            module: \"../gen.wado\",\n            output_dir: \"generated\",\n        },\n    };\n\npub fn v1() -> i32 { return hello(); }\n",
-    )
-    .unwrap();
-
-    wado_in(root)
-        .args(["run", "src/main.wado"])
-        .assert()
-        .failure()
-        .stderr(predicate::str::contains(
-            "must be a relative path starting with `./` or `../`",
-        ));
 }
 
 fn walk(dir: &std::path::Path) -> Vec<std::path::PathBuf> {

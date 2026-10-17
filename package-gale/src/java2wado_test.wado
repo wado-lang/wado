@@ -977,3 +977,16 @@ test "java members: a String field or parameter makes `+` concatenate in a metho
     assert m.methods[0].source == "fn show(&mut self, n: i32) { self.emit(`${self.label}${n}`); }";
     assert m.methods[1].source == "fn tag(&mut self, s: String, n: i32) { self.emit(`${s}${n}`); }";
 }
+
+test "java action: a comment translates to nothing" {
+    let line = java_action("x++; // note\n", "a : ID ;", false);
+    let block = java_action("x++; /* note */", "a : ID ;", false);
+    let plain = java_action("x++;", "a : ID ;", false);
+    assert line == plain;
+    assert block == plain;
+}
+
+test "java: an unterminated string literal is a loud error" {
+    assert java_action_res("System.out.println(\"abc); ", "a : ID ;", false).is_err();
+    assert java_pred_res("this.s == \"ab", "a : ID ;", false).is_err();
+}

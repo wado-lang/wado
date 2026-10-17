@@ -1,0 +1,21 @@
+// A Kiln generator whose wide options are declared in a submodule the entry
+// re-exports from.
+
+use { Request, Response, OutputFile, Error } from "core:kiln";
+pub use { Options } from "./wide_options.wado";
+
+export fn generate(req: Request<Options>) -> Result<Response, Error> {
+    let mut spelled: List<String> = [];
+    for let [k, v] of req.options.sizes.entries() {
+        spelled.push(`${k}=${v}`);
+    }
+    let o = &req.options;
+    let rule = &o.rules[0];
+    return Result::Ok(Response {
+        files: [OutputFile {
+            path: "greeting.wado",
+            content: `pub fn greeting() -> String { return "${spelled.join(",")};${rule.pattern}=${rule.axes.join(",")};${o.on}"; }`,
+            is_entry: true,
+        }],
+    });
+}

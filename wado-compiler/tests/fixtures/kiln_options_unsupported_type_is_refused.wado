@@ -1,0 +1,20 @@
+// An `Options` field no options table can express stops the generator's own
+// compile, so the generator never runs with the field left out.
+
+use { greeting } from "./sub/kiln/value.schema"
+    with {
+        generator: {
+            module: "./sub/kiln/options/unsupported_type_generator.wado",
+            options: {},
+        },
+    };
+
+test {
+    assert greeting() == "hi";
+}
+
+__DATA__
+{
+    "compile_error": "is not supported in generator options",
+    "compile_errors_not_contains": ["missing required options field"]
+}

@@ -23,7 +23,16 @@ use super::options_check::{CanonicalOptions, OptionsAnchor, clause_error, valida
 
 /// Default output-directory prefix for inline invocations: each clause lands
 /// under `build/kiln/<synthetic_id>` unless it declares its own `output_dir`.
-pub const DEFAULT_INLINE_OUTPUT_DIR_PREFIX: &str = "build/kiln";
+const DEFAULT_INLINE_OUTPUT_DIR_PREFIX: &str = "build/kiln";
+
+/// Where the clause named `synthetic_id` writes when it declares no
+/// `output_dir`.
+#[must_use]
+pub fn default_output_dir(synthetic_id: &str) -> InvocationPath {
+    InvocationPath::normalize(&format!(
+        "{DEFAULT_INLINE_OUTPUT_DIR_PREFIX}/{synthetic_id}"
+    ))
+}
 
 /// The output directory of the clause `synthetic_id` names, where it declares
 /// none of its own.

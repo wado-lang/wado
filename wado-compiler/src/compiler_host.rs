@@ -126,6 +126,9 @@ pub enum Code {
     /// A default value, a global initializer or a contract clause that performs
     /// an effect
     EffectNotAllowed,
+    /// A contract clause that writes, or hands a callee the means to write,
+    /// state it did not create
+    ContractWrite,
     /// Unknown type name
     UnknownType,
     /// A generic type whose instances name ever larger instances of
@@ -314,6 +317,7 @@ impl std::fmt::Display for Code {
             Code::MissingEffect => "MISSING_EFFECT",
             Code::EffectNotInTrait => "EFFECT_NOT_IN_TRAIT",
             Code::EffectNotAllowed => "EFFECT_NOT_ALLOWED",
+            Code::ContractWrite => "CONTRACT_WRITE",
             Code::UnknownType => "UNKNOWN_TYPE",
             Code::ExpandingRecursion => "EXPANDING_RECURSION",
             Code::InvalidCast => "INVALID_CAST",

@@ -225,7 +225,7 @@ impl TirRefVisitor for ForHeaders<'_, '_> {
                     .filter(|(index, declared)| {
                         declared.is_mut
                             && self.bound.contains(index)
-                            && encloses(&loop_span, &declared.span)
+                            && loop_span.encloses(&declared.span)
                     })
                     .map(|(index, _)| index)
                     .collect::<Vec<_>>();
@@ -481,10 +481,6 @@ impl TirRefVisitor for Scan {
             self.writes.push(Event { local, at });
         }
     }
-}
-
-fn encloses(outer: &Span, inner: &Span) -> bool {
-    outer.space == inner.space && outer.start <= inner.start && inner.end <= outer.end
 }
 
 /// Whether `body` reads slot `slot` through a dereference: the binding was

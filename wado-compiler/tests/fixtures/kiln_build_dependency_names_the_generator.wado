@@ -1,0 +1,17 @@
+// A clause may name its generator by a `[build-dependencies]` nickname instead
+// of a path.
+
+use { greeting } from "./sub/kiln/value.schema"
+    with {
+        generator: {
+            module: "lib:gen",
+            options: { verbose: false },
+        },
+    };
+
+test {
+    assert greeting() == "hi";
+}
+
+__DATA__
+{"test": {}, "build_dependencies": {"lib:gen": "./sub/kiln/options/verbose_generator.wado"}}

@@ -19,15 +19,23 @@ use crate::dep_component::{
     resolve_inline_git_dependencies,
 };
 use crate::git::materialize;
+<<<<<<< HEAD
 use crate::kiln_driver::{PipelineError, PipelineOutcome, ProviderError};
+||||||| b49ce59e1
+use crate::kiln_driver::{PipelineError, PipelineOutcome};
+=======
+>>>>>>> origin/main
 use crate::kiln_provider::{CliGeneratorProvider, RegistryContext, relative_to};
 use crate::knobs::{CompileKnobOpt, CompileKnobs, EmbedOpt, EmbedOptions};
+use crate::manifest;
 use crate::manifest::{DiscoveryError, absolute, manifest_in, openable_dir, resolution_inputs};
 use crate::metadata_embed::{clean_git_revision, embed_metadata_sections};
 use crate::run_cache::RunCache;
 use crate::wit::default_interface_name;
-use crate::{kiln_driver, manifest};
 use wado_compiler::world_registry::WorldSurface;
+use wado_host::kiln::driver::{
+    PipelineError, PipelineOutcome, emit_counting_errors, harvest_invocations, run_pipeline,
+};
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum OutputFormat {
@@ -756,13 +764,7 @@ pub(crate) async fn prepare_kiln(
     // Fail on a malformed clause here, with its own diagnostics, so the clear
     // error is not buried under the downstream failure of the unredirected
     // `use` falling through to the lexer.
-    let inline_errors = inline_diagnostics
-        .iter()
-        .filter(|d| d.severity == wado_compiler::Severity::Error)
-        .count();
-    for d in inline_diagnostics {
-        wado_compiler::CompilerHost::emit_diagnostic(host, d);
-    }
+    let inline_errors = emit_counting_errors(host, inline_diagnostics);
     if inline_errors > 0 {
         return Err(PipelineError::InlineClause(inline_errors));
     }
@@ -771,6 +773,7 @@ pub(crate) async fn prepare_kiln(
         return Ok(None);
     }
     let manifest = project.map_or_else(empty_manifest, |p| p.manifest);
+<<<<<<< HEAD
     let (theirs, mut ours): (Vec<_>, Vec<_>) = invocations
         .into_iter()
         .partition(|inv| packages.contains_key(&inv.decl_site().module));
@@ -796,6 +799,15 @@ pub(crate) async fn prepare_kiln(
     }
     let mut invocations = ours;
     rewrite_local_dir_modules(&mut invocations, &manifest_root).map_err(PipelineError::Manifest)?;
+||||||| b49ce59e1
+    rewrite_build_dep_modules(&mut invocations, &manifest, &manifest_root)
+        .map_err(PipelineError::Manifest)?;
+    rewrite_local_dir_modules(&mut invocations, &manifest_root).map_err(PipelineError::Manifest)?;
+=======
+    rewrite_build_dep_modules(&mut invocations, &manifest, &manifest_root)
+        .map_err(manifest_error)?;
+    rewrite_local_dir_modules(&mut invocations, &manifest_root).map_err(manifest_error)?;
+>>>>>>> origin/main
     // A generator's outputs are products of this run, not a tree moving under
     // it. Declared here but applied when the watch is asked, so the order
     // fixtures compile in does not matter.
@@ -829,7 +841,7 @@ pub(crate) async fn prepare_kiln(
 impl KilnSetup {
     /// Run the harvested invocations, writing what they produce.
     pub(crate) async fn run(&mut self) -> Result<PipelineOutcome, PipelineError> {
-        kiln_driver::run_pipeline(
+        run_pipeline(
             &self.manifest_root,
             &self.host,
             &self.provider,
@@ -931,15 +943,16 @@ pub(crate) async fn build_load(
     Ok((host, outcome.invocations))
 }
 
+fn manifest_error(error: DiscoveryError) -> PipelineError {
+    PipelineError::Manifest(Box::new(error))
+}
+
 /// How `wado <subcommand>` exits on a Kiln pipeline failure.
 pub(crate) fn pipeline_exit(error: PipelineError, subcommand: &str) -> CliExit {
-    match error {
-        // A malformed inline clause and a redirect conflict are reported as
-        // diagnostics already.
-        PipelineError::InlineClause(_) | PipelineError::RedirectConflict(_) => {
-            CliExit::silent_failure(1)
-        }
-        other => CliExit::error(format!("wado {subcommand}: {other}")),
+    if error.is_reported() {
+        CliExit::silent_failure(1)
+    } else {
+        CliExit::error(format!("wado {subcommand}: {error}"))
     }
 }
 
@@ -955,7 +968,7 @@ pub(crate) async fn run_nested_pipeline(
     // A generator shipped as a package names its dependencies in its own
     // manifest, so that is the project. The rest is the outer run's.
     let run = &KilnRun {
-        project: load_nearest_manifest(entry_file).map_err(PipelineError::Manifest)?,
+        project: load_nearest_manifest(entry_file).map_err(manifest_error)?,
         ..outer.clone()
     };
     // Its own root, so nothing the outer walk settled.
@@ -1195,11 +1208,11 @@ async fn collect_inline_invocations_for_entry_with_identities(
     // own directory, so it always contains the entry.
     let entry_key = relative_to(&absolute(manifest_root), &absolute(entry_file))
         .expect("the entry lies under the root it was resolved from");
-    // An unreadable entry, or one whose parse recovered from an error, harvests
-    // nothing; the compile that follows reports it.
+    // An unreadable entry harvests nothing; the compile that follows reports it.
     let Ok(entry_source) = fs::read_to_string(entry_file) else {
         return Harvested::default();
     };
+<<<<<<< HEAD
     let Ok(entry) = wado_compiler::parse(&entry_source).into_fail_fast() else {
         return Harvested::default();
     };
@@ -1208,13 +1221,33 @@ async fn collect_inline_invocations_for_entry_with_identities(
     let entry_dir = entry_file.parent().unwrap_or(Path::new(".")).to_path_buf();
     let harvest = wado_compiler::kiln::harvest_module_graph(
         &entry_key,
+||||||| b49ce59e1
+    let Ok(entry) = wado_compiler::parse(&entry_source).into_fail_fast() else {
+        return Default::default();
+    };
+    // A loader identity is anchored on the entry's directory, so that is what
+    // an import joins onto.
+    let entry_dir = entry_file.parent().unwrap_or(Path::new(".")).to_path_buf();
+    let harvest = wado_compiler::kiln::harvest_module_graph(
+        &entry_key,
+=======
+    harvest_invocations(
+        entry_file,
+        &entry_source,
+>>>>>>> origin/main
         &entry_identity,
-        entry.ast,
+        &entry_key,
         settled,
+<<<<<<< HEAD
         dependencies,
         host,
         async |identity| fs::read_to_string(entry_dir.join(identity)).ok(),
+||||||| b49ce59e1
+        async |identity| fs::read_to_string(entry_dir.join(identity)).ok(),
+=======
+>>>>>>> origin/main
     )
+<<<<<<< HEAD
     .await;
     settled.extend(harvest.modules.keys().cloned());
 
@@ -1230,6 +1263,20 @@ async fn collect_inline_invocations_for_entry_with_identities(
         packages: harvest.packages,
         diagnostics,
     }
+||||||| b49ce59e1
+    .await;
+    settled.extend(harvest.modules.keys().cloned());
+
+    let descriptors = wado_compiler::hashmap::IndexMap::default();
+    let (invocations, diagnostics) = wado_compiler::kiln::collect_inline_invocations(
+        harvest.modules.iter().map(|(k, v)| (k.as_str(), v)),
+        &descriptors,
+        "",
+    );
+    (invocations, harvest.identities, diagnostics)
+=======
+    .await
+>>>>>>> origin/main
 }
 
 /// Remap `index` to loader identities via [`wado_compiler::kiln::remap_decl_files`], emit any
@@ -1241,15 +1288,10 @@ fn remap_and_report_conflicts(
     identities: &wado_compiler::hashmap::IndexMap<String, String>,
     host: &FilesystemCompilerHost,
 ) -> usize {
-    let conflicts = wado_compiler::kiln::remap_decl_files(index, identities);
-    let errors = conflicts
-        .iter()
-        .filter(|d| d.severity == wado_compiler::Severity::Error)
-        .count();
-    for d in conflicts {
-        wado_compiler::CompilerHost::emit_diagnostic(host, d);
-    }
-    errors
+    emit_counting_errors(
+        host,
+        wado_compiler::kiln::remap_decl_files(index, identities),
+    )
 }
 
 /// Walk up from `entry_file` looking for the nearest `wado.toml`: `None` when
