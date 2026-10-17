@@ -114,16 +114,11 @@ impl EvalHost {
     fn key(&self, source: &str, fuel: u64, deps: &Dependencies) -> [u8; 32] {
         let mut hasher = Sha256::new();
         hasher.update(self.compiler_digest);
-        for entries in [
-            &deps.index.resolved,
-            &deps.index.components,
-            &deps.index.unresolved,
-        ] {
-            hasher.update((entries.len() as u64).to_le_bytes());
-            for (name, entry) in entries {
-                hash_field(&mut hasher, name.as_bytes());
-                hash_field(&mut hasher, entry.as_bytes());
-            }
+        hash_index(&mut hasher, &deps.index);
+        hasher.update((deps.index.packages.len() as u64).to_le_bytes());
+        for (lib, package) in &deps.index.packages {
+            hash_field(&mut hasher, lib.as_bytes());
+            hash_index(&mut hasher, package);
         }
         hash_field(
             &mut hasher,
@@ -347,7 +342,12 @@ impl Dependencies {
                 .keys()
                 .map(|entry| dependency_root(&absolute(entry)))
                 .collect(),
-            components: index.components.values().map(absolute).collect(),
+            components: [&index]
+                .into_iter()
+                .chain(index.packages.values())
+                .flat_map(|package| package.components.values())
+                .map(absolute)
+                .collect(),
             caller_root: Some(normalize_path(&absolutize(&project.root))),
             cache_dir: Some(build_dir(&project.root).join("eval")),
             base,
@@ -365,6 +365,17 @@ impl Dependencies {
                         .as_ref()
                         .is_some_and(|caller| caller.starts_with(root) && file.starts_with(caller))
             })
+    }
+}
+
+/// Hash what one package's index binds, its `packages` aside.
+fn hash_index(hasher: &mut Sha256, index: &DependencyIndex) {
+    for entries in [&index.resolved, &index.components, &index.unresolved] {
+        hasher.update((entries.len() as u64).to_le_bytes());
+        for (name, entry) in entries {
+            hash_field(hasher, name.as_bytes());
+            hash_field(hasher, entry.as_bytes());
+        }
     }
 }
 

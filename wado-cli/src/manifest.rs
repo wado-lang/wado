@@ -81,15 +81,15 @@ pub(crate) fn workspace_in(dir: &Path) -> Result<Option<WorkspaceManifest>, Disc
     content.parse().map(Some).map_err(DiscoveryError::Parse)
 }
 
-/// The files besides sources that decide how `project` resolves its imports:
-/// for it and each path dependency at any depth, the manifest, which names the
-/// package's entry and its own dependencies, the lock, and the workspace file
-/// governing it. A git dependency's checkout is immutable, so nothing in it is
-/// watched.
-pub(crate) fn resolution_inputs(project: &ProjectManifest) -> Vec<PathBuf> {
+/// The files besides sources that decide how the package at `root` resolves
+/// its imports: for it and each path dependency at any depth, the manifest,
+/// which names the package's entry and its own dependencies, the lock, and the
+/// workspace file governing it. A git dependency's checkout is immutable, so
+/// nothing in it is watched.
+pub(crate) fn resolution_inputs(root: &Path) -> Vec<PathBuf> {
     let mut files = Vec::new();
     let mut seen = BTreeSet::new();
-    let mut pending = vec![project.root.clone()];
+    let mut pending = vec![root.to_path_buf()];
     while let Some(root) = pending.pop() {
         if !seen.insert(fs::canonicalize(&root).unwrap_or_else(|_| root.clone())) {
             continue;

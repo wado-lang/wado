@@ -16,6 +16,7 @@ use wado_compiler::{
 use crate::args::DEFAULT_LOG_LEVEL;
 use crate::kiln_driver::KilnSpan;
 use crate::kiln_runtime::{self, KilnRunPolicy};
+use crate::manifest::resolution_inputs;
 use crate::rss::RssSample;
 use crate::run_cache::RunCache;
 use crate::runtime::create_fuel_engine;
@@ -357,6 +358,9 @@ impl CompilerHost for FilesystemCompilerHost {
     }
 
     fn package_index(&self, root: &str) -> wado_compiler::DependencyIndex {
+        for file in resolution_inputs(Path::new(root)) {
+            self.run.depend_on_file(&file);
+        }
         self.inner.package_index(root)
     }
 

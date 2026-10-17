@@ -399,6 +399,70 @@ fn inline_git_source_in_a_single_file_script() {
         .stdout(predicate::str::contains("hello from inline git"));
 }
 
+/// An inline git source's own git dependency is materialized, as a declared
+/// one's is.
+#[test]
+fn an_inline_git_sources_git_dependency_is_materialized() {
+    let tmp = tempfile::tempdir().unwrap();
+    let root = tmp.path();
+    let cache = root.join("wado-cache");
+    let repo = |dir: &Path, manifest: &str, lib: &str| {
+        fs::create_dir_all(dir.join("src")).unwrap();
+        fs::write(dir.join("wado.toml"), manifest).unwrap();
+        fs::write(dir.join("src/lib.wado"), lib).unwrap();
+        git(dir, &["init", "-q", "-b", "main"]);
+    };
+    let commit = |dir: &Path| {
+        git(dir, &["add", "-A"]);
+        git(dir, &["commit", "-q", "-m", "init"]);
+    };
+
+    let greet = root.join("greet");
+    repo(
+        &greet,
+        "[package]\nname = \"greet\"\nversion = \"0.1.0\"\nlib = \"src/lib.wado\"\n",
+        "pub fn hello() -> String {\n    return \"hello through inline mid\";\n}\n",
+    );
+    commit(&greet);
+    let mid = root.join("mid");
+    repo(
+        &mid,
+        &format!(
+            "[package]\nname = \"mid\"\nversion = \"0.1.0\"\nlib = \"src/lib.wado\"\n\n\
+             [dependencies]\n\"lib:greet\" = {{ git = \"file://{}\", ref = \"main\" }}\n",
+            greet.display()
+        ),
+        "use { hello } from \"lib:greet\";\npub fn mid() -> String { return hello(); }\n",
+    );
+    wado_in(&mid)
+        .env("WADO_ROOT", &cache)
+        .arg("update")
+        .assert()
+        .success();
+    commit(&mid);
+
+    let script_dir = root.join("script");
+    fs::create_dir_all(&script_dir).unwrap();
+    fs::write(
+        script_dir.join("main.wado"),
+        format!(
+            "use {{ println, Stdout }} from \"core:cli\";\n\
+             use {{ mid }} from \"lib:mid\" with {{ git: \"file://{}\", ref: \"main\" }};\n\n\
+             export fn run() with Stdout {{\n    println(mid());\n}}\n",
+            mid.display()
+        ),
+    )
+    .unwrap();
+    // A fresh cache, so nothing `update` materialized for `mid` is warm.
+    let cold = root.join("cold-cache");
+    wado_in(&script_dir)
+        .env("WADO_ROOT", &cold)
+        .args(["run", "main.wado"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("hello through inline mid"));
+}
+
 /// Checking a package reads each member's inline sources as a file of its own:
 /// a member ending in `__DATA__` hides nothing in the next one.
 #[test]

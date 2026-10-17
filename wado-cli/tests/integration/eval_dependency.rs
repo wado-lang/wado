@@ -218,6 +218,101 @@ export fn run() with Stdout { println(greet()); }`).unwrap();
         .success();
 }
 
+/// A dependency's own registry dependency is served as the caller's is.
+#[test]
+fn an_evaluated_program_reaches_a_dependencys_registry_dependency() {
+    let tmp = tempfile::tempdir().unwrap();
+    let cache = tmp.path().join("cache");
+    let lib = tmp.path().join("lib");
+    fs::create_dir_all(lib.join("src")).unwrap();
+    fs::write(
+        lib.join("wado.toml"),
+        "[package]\nname = \"demo-lib\"\nnamespace = \"acme\"\nversion = \"0.1.2\"\nlib = \"src/lib.wado\"\n",
+    )
+    .unwrap();
+    fs::write(
+        lib.join("src/lib.wado"),
+        "export fn greet() -> String { return \"hi through greet\"; }\n",
+    )
+    .unwrap();
+    wado_in(&lib).args(["build", "--lib"]).assert().success();
+    let cached = cache.join("ghcr.io/acme/demo-lib/0.1.2");
+    fs::create_dir_all(&cached).unwrap();
+    fs::copy(lib.join("build/lib.wasm"), cached.join("component.wasm")).unwrap();
+
+    write_packages(tmp.path(), "unused", "hi through greet");
+    let greet = tmp.path().join("greet");
+    fs::write(
+        greet.join("wado.toml"),
+        "[package]\nname = \"greet\"\nversion = \"0.1.0\"\nlib = \"src/lib.wado\"\n\n\
+         [registries]\ndefault = \"oci://ghcr.io\"\n\n\
+         [dependencies]\n\"acme:demo-lib\" = { version = \"^0.1\" }\n",
+    )
+    .unwrap();
+    fs::write(
+        greet.join("src/lib.wado"),
+        "use { greet } from \"acme:demo-lib\";\npub fn hello() -> String { return greet(); }\n",
+    )
+    .unwrap();
+    wado_in(&tmp.path().join("app"))
+        .env("WADO_ROOT", &cache)
+        .args(["test", "app_test.wado"])
+        .assert()
+        .success();
+}
+
+/// What a dependency's own manifest binds keys the cached outcome, as the
+/// caller's does.
+#[test]
+fn rebinding_a_dependencys_dependency_misses_the_cache() {
+    let tmp = tempfile::tempdir().unwrap();
+    let app = tmp.path().join("app");
+    write_packages(tmp.path(), "hello", "hello");
+    for (name, says) in [("one", "s"), ("two", "`${s}!`")] {
+        let leaf = tmp.path().join(name);
+        fs::create_dir_all(leaf.join("src")).unwrap();
+        fs::write(
+            leaf.join("wado.toml"),
+            format!("[package]\nname = \"{name}\"\nversion = \"0.1.0\"\nlib = \"src/lib.wado\"\n"),
+        )
+        .unwrap();
+        fs::write(
+            leaf.join("src/lib.wado"),
+            format!("pub fn part(s: String) -> String {{ return {says}; }}\n"),
+        )
+        .unwrap();
+    }
+    let greet = tmp.path().join("greet");
+    let bind = |leaf: &str| {
+        fs::write(
+            greet.join("wado.toml"),
+            format!(
+                "[package]\nname = \"greet\"\nversion = \"0.1.0\"\nlib = \"src/lib.wado\"\n\n\
+                 [dependencies]\n\"lib:leaf\" = {{ path = \"../{leaf}\" }}\n"
+            ),
+        )
+        .unwrap();
+    };
+    bind("one");
+    fs::write(
+        greet.join("src/lib.wado"),
+        "use { part } from \"lib:leaf\";\npub fn hello() -> String { return part(\"hello\"); }\n",
+    )
+    .unwrap();
+    write_expectation(&app, Some("hello"));
+    wado_in(&app)
+        .args(["test", "app_test.wado"])
+        .assert()
+        .success();
+
+    bind("two");
+    write_expectation(&app, Some("hello!"));
+    wado_in(&app)
+        .args(["test", "app_test.wado"])
+        .assert()
+        .success();
+}
+
 #[test]
 fn a_caller_inside_its_dependency_reads_none_of_its_own_files() {
     let tmp = tempfile::tempdir().unwrap();

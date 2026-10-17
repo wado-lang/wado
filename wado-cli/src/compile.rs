@@ -362,7 +362,7 @@ pub async fn try_compile_with_run_cache(
     // otherwise miss the one file the caller named.
     base_host.run_cache().observe(path, source.as_bytes());
     if let Some(project) = &manifest_pair {
-        for file in resolution_inputs(project) {
+        for file in resolution_inputs(&project.root) {
             base_host.run_cache().depend_on_file(&file);
         }
     }
@@ -486,26 +486,14 @@ async fn manifest_and_component_index(
     tier: Acquisition,
 ) -> Result<wado_compiler::DependencyIndex, String> {
     // Acquire for every package of the build, the consumer's and each source
-    // dependency's at any depth, before indexing, so the offline pass below
-    // finds their git worktrees warm. A package is acquired before its own
-    // dependencies are listed, since a git one only resolves once materialized.
-    let mut acquired = Vec::new();
+    // dependency's at any depth, inline ones included, before indexing it, so
+    // the offline pass finds their git worktrees warm.
+    let mut acquired = Acquired::default();
     let mut index = match project {
         Some(project) => {
             let own = acquire_package(&project.manifest, &project.root, tier).await?;
-            let mut pending = source_entries(&project.manifest, &project.root);
-            let mut seen = BTreeSet::new();
-            while let Some(entry) = pending.pop() {
-                let lib = dependency_key(&entry, base_path);
-                if !seen.insert(lib.clone()) {
-                    continue;
-                }
-                let Some((root, manifest)) = lib_package(&entry) else {
-                    continue;
-                };
-                acquired.push((lib, acquire_package(&manifest, &root, tier).await?));
-                pending.extend(source_entries(&manifest, &root));
-            }
+            let entries = source_entries(&project.manifest, &project.root);
+            acquired.reach(entries, base_path, tier).await?;
             let mut index =
                 wado_lsp::host::dependency_index_from(&project.manifest, &project.root, base_path);
             adopt_components(&mut index, own);
@@ -513,13 +501,6 @@ async fn manifest_and_component_index(
         }
         None => wado_compiler::DependencyIndex::default(),
     };
-    for (lib, fetched) in acquired {
-        let package = index.packages.get_mut(&lib);
-        adopt_components(
-            package.expect("the index holds each package the walk reached"),
-            fetched,
-        );
-    }
 
     let manifest = project.map(|p| &p.manifest);
     for source in sources {
@@ -537,6 +518,7 @@ async fn manifest_and_component_index(
             index.unresolved.swap_remove(&name);
             let entry = PathBuf::from(path);
             bind_once(&mut index.resolved, name, dependency_key(&entry, base_path))?;
+            acquired.reach(vec![entry.clone()], base_path, tier).await?;
             index_packages(&mut index, vec![entry], base_path);
         }
         for (name, reason) in inline_git.unresolved {
@@ -544,7 +526,49 @@ async fn manifest_and_component_index(
         }
     }
 
+    for (lib, fetched) in acquired.fetched {
+        let package = index.packages.get_mut(&lib);
+        adopt_components(
+            package.expect("the index holds each package the walk reached"),
+            fetched,
+        );
+    }
     Ok(index)
+}
+
+/// What acquisition fetched for each source dependency it reached, by the key
+/// `DependencyIndex::packages` names it by.
+#[derive(Default)]
+struct Acquired {
+    seen: BTreeSet<String>,
+    fetched: Vec<(String, Resolution)>,
+}
+
+impl Acquired {
+    /// Acquire the package of each entry module in `pending`, and of each
+    /// source dependency those reach, at any depth. A package is acquired
+    /// before its own dependencies are listed, since a git one only resolves
+    /// once materialized.
+    async fn reach(
+        &mut self,
+        mut pending: Vec<PathBuf>,
+        base_path: &Path,
+        tier: Acquisition,
+    ) -> Result<(), String> {
+        while let Some(entry) = pending.pop() {
+            let lib = dependency_key(&entry, base_path);
+            if !self.seen.insert(lib.clone()) {
+                continue;
+            }
+            let Some((root, manifest)) = lib_package(&entry) else {
+                continue;
+            };
+            let fetched = acquire_package(&manifest, &root, tier).await?;
+            self.fetched.push((lib, fetched));
+            pending.extend(source_entries(&manifest, &root));
+        }
+        Ok(())
+    }
 }
 
 /// Acquire per `tier` what the package at `root`, whose manifest is
