@@ -10,7 +10,7 @@ use {
     scan_block_comment,
 } from "../g4/scan.wado";
 use { collect_range } from "../text.wado";
-use { attr_ref_at } from "../attr_scan.wado";
+use { attr_ref_span } from "../attr_scan.wado";
 
 pub variant JToken {
     Ident(String),
@@ -48,9 +48,9 @@ pub fn tokenize_java<S: AsStrSlice>(body: S) -> Result<List<JToken>, String> {
             i = e;
             continue;
         }
-        if let Some(r) = attr_ref_at(&chars, i, n) {
-            out.push(JToken::Attr(collect_range(&chars, i, r.end)));
-            i = r.end;
+        if let Some([_, end]) = attr_ref_span(&chars, i, n) {
+            out.push(JToken::Attr(collect_range(&chars, i, end)));
+            i = end;
             continue;
         }
         if is_id_start_char(c) {

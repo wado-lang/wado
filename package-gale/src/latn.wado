@@ -28,7 +28,7 @@ use {
     find_lexer_rule,
 } from "./ir.wado";
 use { Atn, AtnState, AtnTransition } from "./atn.wado";
-use { complement_code_points } from "./g4/unicode.wado";
+use { complement_code_points, CODE_POINT_MAX } from "./g4/unicode.wado";
 use {
     resolve_ci,
     fold_range_ci,
@@ -56,9 +56,6 @@ use {
 } from "./runtime/atn.wado";
 use { HashMap } from "core:collections";
 use { GALE_SEED } from "./hash_seed.wado";
-
-/// Highest Unicode scalar value; the upper bound of a `.` / negated set.
-global CHAR_MAX: i32 = 0x10FFFF;
 
 /// Result of building the lexer ATN: the NFA, a `name -> latn rule index`
 /// map (every reachable rule, so RuleRef targets resolve), and the names of
@@ -454,7 +451,7 @@ fn build_element(b: &mut LatnBuilder, elem: &LexerElement) -> [i32, i32] {
         CharRange(r) => ranges_segment(b, &ci_ranges(b.ci, r.0, r.1)),
         CharClass(cc) => ranges_segment(b, &class_ranges(&cc, b.ci)),
         AnyChar => ranges_segment(b, &[
-            [0, CHAR_MAX],
+            [0, CODE_POINT_MAX],
         ]),
         Not(n) => {
             let pos = positive_ranges(&n.element, b.ci);

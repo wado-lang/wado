@@ -1,4 +1,11 @@
-use { scan_line_comment, scan_block_comment, scan_string, scan_char_class, scan_balanced } from "./scan.wado";
+use {
+    scan_line_comment,
+    scan_block_comment,
+    scan_string,
+    scan_char_class,
+    scan_balanced,
+    split_top_level_commas,
+} from "./scan.wado";
 
 fn chars_of<S: AsStrSlice>(s: S) -> List<char> {
     return s.chars().collect();
@@ -99,4 +106,18 @@ test "scan_balanced nests brackets for arg-actions" {
 test "scan_balanced returns None when unterminated" {
     let c = chars_of("{ never closed");
     assert scan_balanced(&c, 0, '{', '}') matches { None };
+}
+
+test "split_top_level_commas reads `<` as a comparison outside a type" {
+    let args = split_top_level_commas(&chars_of("a < 2, b > 1, f(x, y)"), false);
+    assert args == ["a < 2", "b > 1", "f(x, y)"];
+}
+
+test "split_top_level_commas keeps a type's arguments in one piece" {
+    let args = split_top_level_commas(&chars_of(
+        "m as Pair<i32, i32>, List::<A, B>::new(), |p: Pair<A, B>| p, || -> Pair<A, B> { x }",
+    ), false);
+    assert args == ["m as Pair<i32, i32>", "List::<A, B>::new()", "|p: Pair<A, B>| p", "|| -> Pair<A, B> { x }"];
+    let decls = split_top_level_commas(&chars_of("TreeMap<String, i32> m, i32 n = a < b"), true);
+    assert decls == ["TreeMap<String, i32> m", "i32 n = a < b"];
 }

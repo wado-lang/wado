@@ -1073,6 +1073,12 @@ rule : ID ;";
     assert_option_int(&g.options[0], 3);
 }
 
+test "an integer option value of any length is accepted" {
+    // The jar keeps the digits as text and only warns of an unknown option.
+    let g = parse("grammar Test;\noptions { k = 99999999999999999999; }\nrule : ID ;").unwrap();
+    assert g.options[0].value matches { Int("99999999999999999999") };
+}
+
 test "grammar option with action-block value round-trips the body" {
     let input = "grammar Test;
 options { language = {some code;} ; }
@@ -1885,6 +1891,17 @@ e : a=e op=('+'|'-') b=e  {}<p=3>{pred}?<fail='Message'>
     assert_option_str(&alt.options[1], "Message");
 }
 
+test "parse_checked rejects a rule its header forbids, which parse leaves to composition" {
+    // The jar's error(52) / error(53). A delegate a combined grammar imports is
+    // exempt, so `parse` alone cannot decide it.
+    let parser_g = "parser grammar P;\ns : A ;\nB : 'b' ;";
+    let lexer_g = "lexer grammar L;\nA : 'a' ;\nfoo : A ;";
+    assert parse_checked(parser_g) matches { Err(e) && e.message == "lexer rule B not allowed in parser" };
+    assert parse_checked(lexer_g) matches { Err(e) && e.message == "parser rule foo not allowed in lexer" };
+    assert parse(parser_g) matches { Ok(_) };
+    assert parse(lexer_g) matches { Ok(_) };
+}
+
 test "parse_checked rejects undefined parser rule reference" {
     let input = "grammar Test;
 root : undef_rule ;
@@ -2060,7 +2077,7 @@ fn assert_option_str<S: AsStrSlice>(opt: &GrammarOption, expected: S) {
 
 fn assert_option_int(opt: &GrammarOption, expected: i64) {
     if let Int(n) = &opt.value {
-        assert *n == expected;
+        assert *n == `${expected}`;
     } else {
         panic(`option '${opt.name}': expected Int, got other`);
     }

@@ -34,7 +34,7 @@ use {
 } from "./superclass.wado";
 use { MemberDecls, members_present } from "./java2wado/jmembers.wado";
 use { action_language_is_emittable } from "./java2wado.wado";
-use { clip_to_scalars, scalar_count, SCALAR_COUNT } from "./g4/unicode.wado";
+use { clip_to_scalars, complement_code_points, scalar_count, SCALAR_COUNT } from "./g4/unicode.wado";
 use { is_ident_char } from "./text.wado";
 use {
     ModeAttrUse,
@@ -3231,13 +3231,7 @@ fn add_following_chars(
     if lead.nullable {
         acc.may_end = true;
     }
-    acc.ranges.extend(&if lead.negated {
-        ranges_minus(&[
-            [0, 0x10FFFF],
-        ], &lead.ranges);
-    } else {
-        lead.ranges;
-    });
+    acc.ranges.extend(&if lead.negated { complement_code_points(&lead.ranges) } else { lead.ranges });
     return true;
 }
 

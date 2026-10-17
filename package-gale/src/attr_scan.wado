@@ -83,23 +83,25 @@ fn scan_refs(chars: &List<char>, start: i32, end: i32, out: &mut List<AttrRef>) 
 /// The `$ident(.ident)?` reference starting at `pos`, or `null` where `pos`
 /// holds no `$` followed by an identifier.
 pub fn attr_ref_at(chars: &List<char>, pos: i32, end: i32) -> Option<AttrRef> {
+    let [name_end, ref_end] = attr_ref_span(chars, pos, end)?;
+    let name = collect_range(chars, pos + 1, name_end);
+    if ref_end == name_end {
+        return Option::Some(AttrRef { name, start: pos, end: name_end });
+    }
+    let member = Option::Some(collect_range(chars, name_end + 1, ref_end));
+    return Option::Some(AttrRef { name, member, start: pos, end: ref_end });
+}
+
+/// `attr_ref_at`'s name end and reference end, without copying either part.
+pub fn attr_ref_span(chars: &List<char>, pos: i32, end: i32) -> Option<[i32, i32]> {
     if !(chars[pos] == '$' && pos + 1 < end && is_id_start_char(chars[pos + 1])) {
         return null;
     }
     let name_end = ident_end(chars, pos + 1, end);
-    let name = collect_range(chars, pos + 1, name_end);
     if name_end + 1 < end && chars[name_end] == '.' && is_id_start_char(chars[name_end + 1]) {
-        let member_end = ident_end(chars, name_end + 1, end);
-        return Option::Some(
-            AttrRef {
-                name,
-                member: Option::Some(collect_range(chars, name_end + 1, member_end)),
-                start: pos,
-                end: member_end,
-            },
-        );
+        return Option::Some([name_end, ident_end(chars, name_end + 1, end)]);
     }
-    return Option::Some(AttrRef { name, start: pos, end: name_end });
+    return Option::Some([name_end, name_end]);
 }
 
 fn ident_end(chars: &List<char>, start: i32, end: i32) -> i32 {

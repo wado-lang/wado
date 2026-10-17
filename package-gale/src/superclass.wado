@@ -32,6 +32,7 @@ use {
     scan_template,
     wado_opaque_end,
     match_delim,
+    split_top_level_commas,
     skip_ws,
     text_at,
     word_at,
@@ -244,34 +245,8 @@ fn call_args(chars: &List<char>, start: i32, close: i32) -> List<String> {
             break;
         }
     }
-    let mut out: List<String> = [];
-    let mut depth = 0;
-    let mut arg_start = open + 1;
-    let mut i = open + 1;
-    while i + 1 < close {
-        if let Some(end) = wado_opaque_end(chars, i, close) {
-            i = end;
-            continue;
-        }
-        match chars[i] {
-            '(' | '[' | '{' => depth += 1,
-            ')' | ']' | '}' => depth -= 1,
-            ',' => {
-                if depth == 0 {
-                    out.push(collect_range(chars, arg_start, i).trim().to_string());
-                    arg_start = i + 1;
-                }
-            },
-            _ => {
-            },
-        }
-        i += 1;
-    }
-    let last = collect_range(chars, arg_start, close - 1).trim();
-    if !last.is_empty() || !out.is_empty() {
-        out.push(last.to_string());
-    }
-    return out;
+    let inner: List<char> = collect_range(chars, open + 1, close - 1).chars().collect();
+    return split_top_level_commas(&inner, false);
 }
 
 /// Whether `text` is one whole string literal, not an expression that merely

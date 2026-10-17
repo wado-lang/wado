@@ -21,8 +21,8 @@ pub variant OptionValue {
     /// Single-quoted string literal value, with the surrounding quotes
     /// stripped: `'foo.g4'` → `Str("foo.g4")`.
     Str(String),
-    /// Decimal integer literal.
-    Int(i64),
+    /// Decimal integer literal, as written: the jar bounds no option's value.
+    Int(String),
     /// Host-language action block `{ ... }`. Carries the raw body between
     /// the braces (delimiters excluded) plus its source span; Gale does not
     /// parse action-language code.
@@ -1402,7 +1402,7 @@ pub fn compose_grammars(grammars: List<Grammar>) -> Result<Grammar, ParseError> 
 }
 
 /// Every name some grammar's `import` lists, in first-declaration order.
-pub fn imported_names(grammars: &List<Grammar>) -> List<String> {
+fn imported_names(grammars: &List<Grammar>) -> List<String> {
     let mut names: List<String> = [];
     for let g of grammars {
         dedup_append_arr(&mut names, &g.imports);

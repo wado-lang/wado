@@ -42,7 +42,6 @@ use {
     check_rule_shapes,
     synthesize_implicit_tokens,
     compose_grammars,
-    imported_names,
     superclass_bases,
 } from "../ir.wado";
 use { G4Token, Token } from "./token.wado";
@@ -615,11 +614,11 @@ impl G4Parser {
     }
 
     /// The integer literal at the cursor, rejected past `max`.
-    fn take_int_literal(&mut self, max: i64) -> Result<i64, ParseError> {
+    fn take_i32_literal(&mut self) -> Result<i32, ParseError> {
         let tok = self.advance();
-        return match i64::from_str(&tok.text) {
-            Ok(v) && v <= max => Result::Ok(v),
-            _ => Result::Err(ParseError::new(`${tok.text} is out of range`, tok.span, [`at most ${max}`])),
+        return match i32::from_str(&tok.text) {
+            Ok(v) => Result::Ok(v),
+            Err(_) => Result::Err(ParseError::new(`${tok.text} is out of range`, tok.span, [`at most ${i32::MAX}`])),
         };
     }
 
@@ -630,7 +629,7 @@ impl G4Parser {
             return Result::Ok(OptionValue::Str(body));
         }
         if self.is_kind(G4Token::IntLit) {
-            return Result::Ok(OptionValue::Int(self.take_int_literal(i64::MAX)?));
+            return Result::Ok(OptionValue::Int(self.advance().text));
         }
         if self.is_kind(G4Token::LBrace) {
             let body = self.extract_action('{', '}');
@@ -1229,7 +1228,7 @@ impl G4Parser {
     /// A channel number that fits `i32`, or a channel name.
     fn parse_channel_arg(&mut self) -> Result<i32, ParseError> {
         if self.is_kind(G4Token::IntLit) {
-            return Result::Ok(self.take_int_literal(i32::MAX as i64)? as i32);
+            return Result::Ok(self.take_i32_literal()?);
         }
         let arg = self.expect(G4Token::Identifier)?;
         if arg.text == "DEFAULT_TOKEN_CHANNEL" {
@@ -1706,17 +1705,60 @@ fn finish_grammar(grammar: &mut Grammar) -> Result<(), ParseError> {
 
 #[allow(dead_code)]
 pub fn parse_checked<S: AsStrSlice>(input: S) -> Result<Grammar, ParseError> {
-    let mut grammar = parse(input)?;
-    check_rule_kinds(&grammar)?;
+    let grammars: List<Grammar> = [parse(input)?];
+    if let Err([_, e]) = check_admission(&grammars) {
+        return Result::Err(e);
+    }
+    let mut grammar = grammars[0];
     finish_grammar(&mut grammar)?;
     return Result::<Grammar, ParseError>::Ok(grammar);
 }
 
-/// The misplaced rule a grammar compiled as a root reports.
-fn check_rule_kinds(grammar: &Grammar) -> Result<(), ParseError> {
-    return match &grammar.misplaced_rule {
-        Some(e) => Result::Err(*e),
-        None => Result::Ok(()),
+/// What the jar refuses per input before composing, with the offending input's
+/// index: a lexer or parser grammar importing another kind, and a rule its own
+/// header forbids. Every rule lands under the root's kind, so a grammar a
+/// combined one reaches through imports is exempt from the second.
+fn check_admission(grammars: &List<Grammar>) -> Result<(), [i32, ParseError]> {
+    let mut under_combined: List<String> = [];
+    for let g of grammars {
+        if g.kind matches { Combined } {
+            mark_imports(&g.imports, grammars, &mut under_combined);
+        }
+    }
+    for let mut i = 0; i < grammars.len(); i += 1 {
+        let g = &grammars[i];
+        if !g.kind matches { Combined } {
+            for let name of &g.imports {
+                if let Some(d) = grammars.iter_ref().find(|d| d.name == *name) && d.kind != g.kind {
+                    let msg = `${kind_word(&g.kind)} grammar ${g.name} cannot import ${kind_word(&d.kind)} grammar ${d.name}`;
+                    return Result::Err([i, ParseError::new(msg, Span::new(0, 0), ["a grammar of the same kind"])]);
+                }
+            }
+        }
+        if let Some(e) = &g.misplaced_rule && !under_combined.contains(&g.name) {
+            return Result::Err([i, *e]);
+        }
+    }
+    return Result::Ok(());
+}
+
+fn mark_imports(imports: &List<String>, grammars: &List<Grammar>, marked: &mut List<String>) {
+    for let name of imports {
+        if marked.contains(name) {
+            continue;
+        }
+        marked.push(*name);
+        if let Some(d) = grammars.iter_ref().find(|d| d.name == *name) {
+            mark_imports(&d.imports, grammars, marked);
+        }
+    }
+}
+
+fn kind_word(kind: &GrammarKind) -> String {
+    return match kind {
+        Combined => "combined",
+        Lexer => "lexer",
+        Parser => "parser",
     };
 }
 
@@ -1738,14 +1780,8 @@ pub fn assemble_grammar(inputs: &List<[String, String]>) -> Result<Grammar, Asse
             },
         }
     }
-    let delegates = imported_names(&grammars);
-    for let g of &grammars {
-        if delegates.contains(&g.name) {
-            continue;
-        }
-        if let Err(e) = check_rule_kinds(g) {
-            return Result::Err(AssembleError::Parse([g.source_files[0], e.full_message()]));
-        }
+    if let Err([i, e]) = check_admission(&grammars) {
+        return Result::Err(AssembleError::Parse([grammars[i].source_files[0], e.full_message()]));
     }
     let mut merged = match compose_grammars(grammars) {
         Ok(g) => g,

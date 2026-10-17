@@ -600,9 +600,10 @@ test "pipeline: assemble_grammar composes a master with its imported delegate" {
     assert g.source_files == ["M.g4", "S.g4"];
 }
 
-test "pipeline: a rule its header forbids is rejected in a root grammar only" {
-    // The jar gives error(52) / error(53) for each compiled on its own, and
-    // accepts both once imported into a combined grammar.
+test "pipeline: a rule its header forbids is rejected unless a combined grammar imports it" {
+    // The jar gives error(52) / error(53) for each compiled on its own, or
+    // imported by a grammar of its own kind, and accepts both once a combined
+    // grammar imports them, directly or through a delegate.
     let roots: List<String> = ["parser grammar P;\ns : A EOF ;\nA : 'a' ;", "lexer grammar L;\nA : 'a' ;\nfoo : A ;"];
     for let src of &roots {
         let inputs: List<[String, String]> = [
@@ -610,6 +611,25 @@ test "pipeline: a rule its header forbids is rejected in a root grammar only" {
         ];
         assert assemble_grammar(&inputs) matches { Err(Parse(_)) }, *src;
     }
+    let same_kind: List<List<[String, String]>> = [
+        [
+            ["M.g4", "lexer grammar M;\nimport L;\nA : 'a' ;"],
+            ["L.g4", "lexer grammar L;\nB : 'b' ;\nfoo : B ;"],
+        ],
+        [
+            ["M.g4", "parser grammar M;\nimport P;\ns : t ;"],
+            ["P.g4", "parser grammar P;\nt : A ;\nB : 'b' ;"],
+        ],
+    ];
+    for let inputs of &same_kind {
+        assert assemble_grammar(inputs) matches { Err(Parse(_)) }, inputs[1].1;
+    }
+    let transitive: List<[String, String]> = [
+        ["M.g4", "grammar M;\nimport P;\ns : t EOF ;\nA : 'a' ;"],
+        ["P.g4", "parser grammar P;\nimport Q;\nt : A u ;"],
+        ["Q.g4", "parser grammar Q;\nu : A ;\nB : 'b' ;"],
+    ];
+    assert assemble_grammar(&transitive) matches { Ok(_) };
     let parser_delegate: List<[String, String]> = [
         ["M.g4", "grammar M;\nimport S;\ns : x INT ;"],
         ["S.g4", "parser grammar S;\nx : 'x' INT ;\nINT : '0'..'9'+ ;"],
@@ -621,6 +641,32 @@ test "pipeline: a rule its header forbids is rejected in a root grammar only" {
     ];
     let g = assemble_grammar(&lexer_delegate).unwrap();
     assert g.parser_rules.iter_ref().any(|r| r.name == "foo");
+}
+
+test "pipeline: a lexer or parser grammar imports only its own kind" {
+    // The jar's error(111); a combined grammar imports any kind.
+    let bad: List<List<[String, String]>> = [
+        [
+            ["M.g4", "lexer grammar M;\nimport D;\nA : 'a' ;"],
+            ["D.g4", "grammar D;\nB : 'b' ;"],
+        ],
+        [
+            ["M.g4", "parser grammar M;\nimport D;\ns : A ;"],
+            ["D.g4", "lexer grammar D;\nB : 'b' ;"],
+        ],
+        [
+            ["M.g4", "parser grammar M;\nimport D;\ns : A ;"],
+            ["D.g4", "grammar D;\nt : A ;"],
+        ],
+    ];
+    for let inputs of &bad {
+        assert assemble_grammar(inputs) matches { Err(Parse(_)) }, inputs[0].1;
+    }
+    let combined_imports_combined: List<[String, String]> = [
+        ["M.g4", "grammar M;\nimport D;\ns : t EOF ;\nA : 'a' ;"],
+        ["D.g4", "grammar D;\nt : A ;"],
+    ];
+    assert assemble_grammar(&combined_imports_combined) matches { Ok(_) };
 }
 
 test "pipeline: assemble_grammar rejects an import naming no supplied input" {

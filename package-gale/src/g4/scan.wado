@@ -147,7 +147,7 @@ pub fn split_top_level_commas(chars: &List<char>, declarations: bool) -> List<St
         }
         let c = chars[i];
         if c matches { '(' | '[' | '{' }
-            || c == '<' && (in_type || i >= 2 && chars[i - 1] == ':' && chars[i - 2] == ':') {
+            || c == '<' && (in_type || open.last() == Option::Some('<') || opens_type_args(chars, i)) {
             open.push(c);
         } else if c matches { ')' | ']' | '}' } || c == '>' && open.last() == Option::Some('<') && chars[i - 1] != '-' {
             open.pop();
@@ -168,6 +168,32 @@ pub fn split_top_level_commas(chars: &List<char>, declarations: bool) -> List<St
         out.push(last);
     }
     return out;
+}
+
+/// Whether the `<` at `lt` follows a turbofish `::`, or a path where Wado
+/// expects a type: after `as`, a single `:` or `->`.
+fn opens_type_args(chars: &List<char>, lt: i32) -> bool {
+    if text_at(chars, lt - 2, lt, "::") {
+        return true;
+    }
+    let mut j = ident_start(chars, lt);
+    while text_at(chars, j - 2, j, "::") {
+        j = ident_start(chars, j - 2);
+    }
+    while j > 0 && chars[j - 1].is_ascii_whitespace() {
+        j -= 1;
+    }
+    return word_at(chars, j - 2, j, "as")
+        || text_at(chars, j - 2, j, "->")
+        || text_at(chars, j - 1, j, ":") && !text_at(chars, j - 2, j, "::");
+}
+
+fn ident_start(chars: &List<char>, end: i32) -> i32 {
+    let mut j = end;
+    while j > 0 && is_id_continue_char(chars[j - 1]) {
+        j -= 1;
+    }
+    return j;
 }
 
 fn collect_trimmed(chars: &List<char>, start: i32, end: i32) -> String {

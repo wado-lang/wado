@@ -7,6 +7,7 @@ use {
     is_id_start_char,
     is_id_continue_char,
 } from "./scan.wado";
+use { CODE_POINT_MAX } from "./unicode.wado";
 
 pub struct G4Lexer {
     chars: &List<char>,
@@ -293,8 +294,6 @@ pub fn scalar_or_replacement(code: i32) -> char {
     return unchecked char::from_i32(code);
 }
 
-global MAX_CODE_POINT: i32 = 0x10FFFF;
-
 /// Raw code point of a `\uXXXX` / `\u{…}` escape body (`pos` enters past the
 /// `u`), or `INVALID_ESCAPE`. Surrogates come back verbatim.
 pub fn resolve_unicode_escape_code(chars: &List<char>, pos: &mut i32) -> i32 {
@@ -317,19 +316,19 @@ fn resolve_braced_escape_code(chars: &List<char>, pos: &mut i32) -> i32 {
     if closed {
         *pos += 1;
     }
-    if n == 0 || !closed || val > MAX_CODE_POINT {
+    if n == 0 || !closed || val > CODE_POINT_MAX {
         return INVALID_ESCAPE;
     }
     return val;
 }
 
 /// The value and length of the hex run at `pos`, taking at most `limit` digits.
-/// The value stops climbing at `MAX_CODE_POINT`, so no run overflows.
+/// The value stops climbing at `CODE_POINT_MAX`, so no run overflows.
 fn scan_hex_digits(chars: &List<char>, pos: &mut i32, limit: i32) -> [i32, i32] {
     let mut val = 0;
     let mut n = 0;
     while n < limit && *pos < chars.len() && chars[*pos].is_hexdigit() {
-        if val <= MAX_CODE_POINT {
+        if val <= CODE_POINT_MAX {
             val = val * 16 + unchecked chars[*pos].hex_digit_value();
         }
         *pos += 1;
