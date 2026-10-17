@@ -38,7 +38,7 @@ Entries state the symptom, how to reproduce it, and anything already measured â€
   - `returns` with no `[...]` after it (`s returns : A EOF ;`). The jar gives error(50).
   - An argument on a token reference (`s : A[3] EOF ;`). The jar gives error(50). Gale drops the argument.
   - An unterminated property escape in a char set (`A : [\p{L] ;`). The jar gives error(156), "invalid escape sequence". Gale reads it as `\p{L}`.
-  - A channel number past `i32` (`-> channel(99999999999)`). The jar gives error(177), "not a recognized channel name". Gale accepts it, and the channel it assigns is the number wrapped to 32 bits.
+  - A channel number past `i32` (`-> channel(99999999999)`). The jar gives error(177), "not a recognized channel name". Gale accepts it.
 
 ### Robustness on hostile input
 
@@ -49,7 +49,7 @@ Entries state the symptom, how to reproduce it, and anything already measured â€
 These were found by reading the code. None has a reproducing test yet, so each entry names the input shape to try first.
 
 - [ ] **java2wado refuses a Java action body that holds a comment.** Its tokenizer has no rule for `//` or `/* */`, so `{ x++; // note }` is reported as `UnsupportedAction` and dropped. Comments are common in real grammars' actions.
-- [ ] **java2wado drops the last character of an unterminated string literal.** On `{ System.out.println("abc); }` it takes `"ab` as the string's text and reports nothing.
+- [ ] **java2wado drops the last character of an unterminated string literal.** On `{ System.out.println("abc); }` it takes the rest of the body, less its last character, as the string's text and reports nothing.
 - [ ] **Two scanners of Wado template literals disagree on a template nested in `${ }`.** On a body holding `` `a${ `}` }b` ``, the `$`-attribute scanner and the superClass call scanner can end the outer template at different places. Only the superClass scanner knows that a backtick inside `${ }` opens a template of its own.
 - [ ] **A Wado `@members` field initializer holding a template literal with `${ }` may be cut short.** The member scanner steps over a template as a plain quoted string, so a backtick inside `${ }` ends it early.
 - [ ] **A rule argument list splits wrongly when an initializer holds `<`.** `[int x = a < b, int y]` may read as one declaration, because the `<` is counted as an opening bracket and hides the comma.
@@ -59,7 +59,7 @@ These were found by reading the code. None has a reproducing test yet, so each e
 
 Each item is two or more pieces of code computing the same answer. A fix to one copy does not reach the others, and where the copies already differ, they give different answers on the same input.
 
-- [ ] **Left-recursion classifiers.** `lr_util.wado` (`is_left_recursive`, `is_self_ref_element`), `lower.wado` (`alt_is_left_recursive`, `element_is_self_ref`) and `action_translate.wado` (`rule_is_left_recursive`) each test whether an alternative opens with a self-reference. All three read the surface IR. The header of `lr_util.wado` says lowering needs its own copies because it runs before `LoweredGrammar` exists, which no longer explains anything.
+- [ ] **Left-recursion classifiers.** `lr_util.wado` (`is_left_recursive`, `is_self_ref_element`), `lower.wado` (`alt_is_left_recursive`, `element_is_self_ref`) and `action_translate.wado` (`rule_is_left_recursive`) each test whether an alternative opens with a self-reference. All three read the surface IR, so the reason the header of `lr_util.wado` gives for lowering's copies (it runs before `LoweredGrammar` exists) does not hold.
 - [ ] **Transitive rule-reference walks over lexer elements.** `elem_refs_rule` in `latn.wado` answers what `refs_self(..., through_tokens = true)` in `lexer_gen.wado` answers. More walks of the same shape, each with its own visited list, sit in `latn.wado`, `lexer_gen.wado` and `superclass.wado`. `elem_calls_super` in `superclass.wado` also looks up rules by hand instead of calling `find_lexer_rule`.
 - [ ] **Char-range complement.** `complement_ranges` in `latn.wado` (with a hand-written insertion sort) and `complement_char_ranges` in `g4/unicode.wado`.
 - [ ] **String, comment and template scanners.** `scan_template` in `superclass.wado`, `scan_template` in `attr_scan.wado`, `skip_span` / `skip_quoted` in `wado_members.wado` (which redo `g4/scan.wado`), and `literal_end` in `gen_util.wado`. The two template entries under "Pipeline and tooling correctness" come from these copies disagreeing.
