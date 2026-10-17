@@ -160,8 +160,8 @@ pub variant Option<affine T> { None, Some(T) }  // permission: T may be affine
 fn apply<T, effect E>(f: fn(T) -> T with E, x: T) -> T with E { … }
 fn dup<T>(x: T) -> [T, T] { … }              // unmarked: T is copyable
 
-affine trait Iterator { affine type Item; … }  // a trait for its Self, and
-                                                // an associated type
+affine trait ForOf { affine type Item; … }  // a trait for its Self, and
+                                             // an associated type
 ```
 
 `affine` is a keyword, as `effect` is, and stands in the same place: before a
@@ -420,23 +420,65 @@ The optimizer may skip building a `rest` no one reads.
   second call is a compile error and the shared `__cm_ended` flag goes. Its
   `Drop` cancels a subtask nobody awaited before dropping it, and frees the
   buffer.
-- `affine trait`: `Drop`, `Iterator`, `IntoIterator`, `Eq`, `Inspect`,
-  `Display`, `Ref`, `RefMut`, `IndexRef`, `IndexRefMut` and `IndexAssign`. A
-  resource implements `Eq` and `Inspect` today, a list iterated by value is an
-  affine iterator, and `List<affine T>` is indexed through the last three.
-  `IndexValue` stays unmarked, since a read by value is a copy.
+- `affine trait`: `Drop`, `ForOf`, `Eq`, `Inspect`, `Display`, `Ref`,
+  `RefMut`, `IndexRef`, `IndexRefMut` and `IndexAssign`. A resource implements
+  `Eq` and `Inspect` today, a drained list is walked by `ForOf`, and
+  `List<affine T>` is indexed through the last three. `IndexValue` stays
+  unmarked, since a read by value is a copy.
 - `List<affine T>`. A method is available for an affine element when an
   `impl<affine T> List<T>` declares it, and the definition-site check holds
   its body to moving elements. The rest stay in `impl<T> List<T>`, for a
-  copyable element only. Iterating a list by value consumes it, so
-  `IntoIterator::into_iter` takes `self` by value and `Iterator::Item` is an
-  `affine type`.
-- `Slice<T>`, `TreeMap<K, V>`, `HashMap<K, V>`, `TreeSet<T>` and their
-  iterators stay unmarked.
+  copyable element only.
+- `Iterator`, `IntoIterator`, `Slice<T>`, `TreeMap<K, V>`, `HashMap<K, V>`,
+  `TreeSet<T>` and their iterators stay unmarked.
 - `ResourceId`, with `ResourceId::of(&r)` over every affine resource.
 
 `wado-from-idl` declares `affine` every record and variant it generates that
 holds an affine resource.
+
+### `for-of` dispatches to `ForOf`
+
+`for-of` is syntax, and like `+` it dispatches to a trait named for it:
+
+```wado
+pub affine trait ForOf with _ {
+    affine type Item;
+    affine type State;
+    fn start(self) -> Self::State;
+    fn next(state: &mut Self::State) -> Option<Self::Item>;
+}
+
+impl<I: IntoIterator> ForOf for I { … }   // every iterable walks as today
+```
+
+`for let x of e` calls `ForOf::start(e)` once and then `ForOf::next` on the
+state until it returns `None`. Through the blanket impl, every type that
+implements `IntoIterator` walks as it does today, so no existing loop changes.
+
+`Iterator` and `IntoIterator` stay unmarked. Their adapters take `&self` and
+copy it, and `find`, `filter`, `min_by_key` and `max_by_key` hand an element to
+a closure by value and then keep it. Marking the traits would make every one of
+those an error, and the fix, a predicate over `&Item`, rewrites the closures
+passed to them and turns `iter_ref()` chains into `&&T`. Swift's `Sequence`
+does not accept a noncopyable element either.
+
+An affine element is walked one of two ways:
+
+| Written                             | Element | API                 | Why                                                                                                                                                  |
+| ----------------------------------- | ------- | ------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `for x of list.drain()`             | `T`     | `for-of` and `next` | `drain(self)` consumes the list and returns an affine `ListDrain<T>` that implements `ForOf`. Leaving the loop early drops the elements not reached. |
+| `for x of &list`, `list.iter_ref()` | `&T`    | all of `Iterator`   | A reference iterator holds only references, so it is copyable whatever its element, and implements the unmarked `Iterator`.                          |
+| `for x of list`                     | ―       | a type error        | `impl<T> IntoIterator for List<T>` is unmarked. The error names `drain()` and `&list`.                                                               |
+
+The second row is where `find` and `filter` reach an affine element: the
+iterator's `Item` is `&T` already, so a predicate takes it by value with one
+reference, not two.
+
+`List` does not implement `ForOf` itself. An `impl<affine T> ForOf for List<T>`
+names the list's head, so the impl ranking puts it above the blanket for every
+element type, `List<i32>` included, and its by-value `start` would copy a list
+the program still reads after the loop. Today's loop reads the list's storage in
+place. So consuming a list is the explicit `drain()`.
 
 ### Web handles
 
@@ -497,9 +539,10 @@ benign ones.
    affine type, the fields left at the end of `drop` dropped one by one, a
    drop that performs no effect but a `#[benign]` one, and no partial move or
    `..base` over a type that implements it.
-5. [ ] `List<affine T>`: the methods that move elements in
-   `impl<affine T> List<T>`, `IntoIterator::into_iter(self)`, and
-   `Iterator`'s `affine type Item`. The list drops its elements, and a store
+5. [ ] `ForOf` and `List<affine T>`: `for-of` lowers through `ForOf`, with the
+   blanket impl over `IntoIterator`; the methods that move elements in
+   `impl<affine T> List<T>`, `drain()` and `ListDrain<T>`, and `&list`
+   iteration over an affine element. The list drops its elements, and a store
    into an element drops what it replaces.
 6. [ ] No cast between an affine resource and an integer: synthesis splits
    and lifts the `stream-new` / `future-new` pair, the raw-handle builtins
@@ -535,8 +578,9 @@ benign ones.
     naming it. A fixture pins the `?` between `Future::new()` and the write.
 13. [ ] Spec: rewrite
     [Resource Ownership](./spec-components.md#resource-ownership), the
-    resource paragraph of [Memory Model](./spec-memory.md), and the cheatsheet.
-    Amend the WEPs above.
+    resource paragraph of [Memory Model](./spec-memory.md),
+    [For-Of Loop](./spec-control-flow.md#for-of-loop) over `ForOf`, and the
+    cheatsheet. Amend the WEPs above.
 
 ## Known gaps
 
@@ -545,6 +589,12 @@ benign ones.
 `TreeMap<K, V>`, `HashMap<K, V>` and `TreeSet<T>` with an affine element are
 type errors. A program keyed on affine values keeps them in a `List` and the
 keys beside it.
+
+### No adapter takes an affine element by value
+
+`map`, `filter`, `collect` and the rest are `Iterator`'s, which an affine
+element does not reach by value. A program that transforms drained elements
+writes the loop.
 
 ### A closure cannot own an affine value
 
