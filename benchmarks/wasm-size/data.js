@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1792273474994,
+  "lastUpdate": 1792274895158,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -67905,6 +67905,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/7c84efba9c2054e3091300683989b78fff563605"
         },
         "date": 1792273473976,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 2955,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 7382,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 20208,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 298222,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "aa8fbf23ebc0b06075f7c37dff1d6d992532aecf",
+          "message": "Merge pull request #2374 from wado-lang/ccr-2653837d-us5z8i\n\nfeat(packages): every package resolves against its own manifest, at any depth",
+          "timestamp": "2026-10-18T06:41:52+09:00",
+          "tree_id": "821595e10d86346415714d1e2db1ea2bf0b5c29a",
+          "url": "https://github.com/wado-lang/wado/commit/aa8fbf23ebc0b06075f7c37dff1d6d992532aecf"
+        },
+        "date": 1792274894417,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
