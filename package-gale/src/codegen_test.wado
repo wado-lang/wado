@@ -3455,10 +3455,14 @@ A : 'a' ; B : 'b' ;
 }
 
 test "a negative offset to `_input.LT` and `_input.LA` counts back from the last consumed token" {
-    let got = parses("grammar T;
+    let got = parses(
+        "grammar T;
 s : A {System.out.println(_input.LA(-1) != _input.LA(1));} B {System.out.println(_input.LT(-1).getText() + _input.LT(-2).getText());} EOF ;
 A : 'a' ; B : 'b' ;
-", "s", ["ab"]);
+",
+        "s",
+        ["ab"],
+    );
     assert got == "ab => (s a b) [true\nba\n]\n";
 }
 

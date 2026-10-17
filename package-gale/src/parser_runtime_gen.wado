@@ -666,9 +666,8 @@ pub fn gen_parser_struct<S: AsStrSlice>(
         w.blank();
 
         // `_input.LT(k)` — the stream index of ANTLR's `LT(k)`: `LT(1)` is the
-        // current token and `LT(-1)` the last consumed one, so a negative `k`
-        // counts back from `pos` with no zero between. Clamped to the stream,
-        // so a lookahead past the end lands on the EOF token.
+        // current token and `LT(-1)` the last consumed one. Clamped to the
+        // stream, so a lookahead past the end lands on the EOF token.
         let mut flt = FnSpec::new("lt", api);
         flt.set_receiver("&self");
         flt.add_param("k", "i32");
