@@ -386,3 +386,38 @@ fn span_rss_suffix(rss: Option<RssSample>, start: Option<RssSample>) -> String {
     rss.map(|rss| rss.suffix(start.as_ref()))
         .unwrap_or_default()
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// An index is spelled from the base of the host that read it, so a
+    /// sibling at another base never answers one acquired at this one.
+    #[test]
+    fn an_acquired_index_is_answered_only_at_the_base_it_was_acquired_from() {
+        let tmp = tempfile::tempdir().unwrap();
+        let package = tmp.path().join("pkg");
+        std::fs::create_dir_all(&package).unwrap();
+        std::fs::write(
+            package.join("wado.toml"),
+            "[package]\nname = \"pkg\"\nversion = \"0.1.0\"\n",
+        )
+        .unwrap();
+        let root = package.display().to_string();
+        let host = FilesystemCompilerHost::silent(tmp.path().join("a")).acquiring(Acquisition::Build);
+        let sibling = host.rebased(tmp.path().join("b"));
+
+        host.package_index(&root);
+        let (_, unacquired) = host.unacquired_packages().unwrap();
+        let mut acquired = DependencyIndex::default();
+        acquired
+            .resolved
+            .insert("lib:marker".to_string(), "marker.wado".to_string());
+        for (package, _) in unacquired {
+            host.adopt_acquired(package, acquired.clone());
+        }
+
+        assert!(host.package_index(&root).resolved.contains_key("lib:marker"));
+        assert!(!sibling.package_index(&root).resolved.contains_key("lib:marker"));
+    }
+}

@@ -546,19 +546,26 @@ async fn acquire_undeclared_packages(host: &FilesystemCompilerHost) -> Result<bo
     };
     let mut resolved_more = false;
     for (root, offline) in unacquired {
-        let was_unresolved = unresolved_count(&offline);
         // A manifest that cannot be read names nothing to acquire, and its
         // offline index already says why.
         let acquired = match manifest_in(Path::new(&root)) {
             Ok(Some(manifest)) => {
                 acquired_index(&manifest, Path::new(&root), host.base_path(), tier).await?
             }
-            Ok(None) | Err(_) => offline,
+            Ok(None) | Err(_) => offline.clone(),
         };
-        resolved_more |= unresolved_count(&acquired) < was_unresolved;
+        resolved_more |= resolves_more(&offline, &acquired);
         host.adopt_acquired(root, acquired);
     }
     Ok(resolved_more)
+}
+
+/// Whether `acquired` resolves a dependency `offline` does not.
+fn resolves_more(
+    offline: &wado_compiler::DependencyIndex,
+    acquired: &wado_compiler::DependencyIndex,
+) -> bool {
+    unresolved_count(acquired) < unresolved_count(offline)
 }
 
 /// How many dependencies `index` and the packages it reaches leave unresolved.
@@ -1504,6 +1511,35 @@ mod world_segment_tests {
         assert_eq!(world_path_segment("wasi:cli/command"), "wasi-cli-command");
         assert_eq!(world_path_segment("wasi:http/service"), "wasi-http-service");
         assert_eq!(world_path_segment("foo:bar/baz@1.2.3"), "foo-bar-baz");
+    }
+}
+
+#[cfg(test)]
+mod acquisition_tests {
+    use super::resolves_more;
+    use wado_compiler::DependencyIndex;
+
+    /// Acquiring a package can resolve one dependency and reach another that
+    /// is unresolved: the walk still has modules it did not see.
+    #[test]
+    fn a_resolved_dependency_counts_though_its_package_leaves_one_unresolved() {
+        let mut offline = DependencyIndex::default();
+        offline
+            .unresolved
+            .insert("lib:greet".to_string(), "not cached".to_string());
+        let mut greet = DependencyIndex::default();
+        greet
+            .unresolved
+            .insert("lib:far".to_string(), "not cached".to_string());
+        let mut acquired = DependencyIndex::default();
+        acquired
+            .resolved
+            .insert("lib:greet".to_string(), "greet/src/lib.wado".to_string());
+        acquired
+            .packages
+            .insert("greet/src/lib.wado".to_string(), greet);
+        assert!(resolves_more(&offline, &acquired));
+        assert!(!resolves_more(&offline, &offline));
     }
 }
 
