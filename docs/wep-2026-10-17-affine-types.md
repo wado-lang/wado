@@ -275,9 +275,11 @@ Four operations act on places and objects:
   zeroes the value's object, as the write-back of `*r = s2` does for a struct
   today. A reference to the value's old object then traps, and `r` keeps
   naming the object it did. Where the value's object is the one `r` names
-  (`let r = &mut x; let v = x; *r = v;`), the store drops it: the move into
-  `v` nulled the only place that owned it, and a reference owns nothing. The
-  next use through `r` traps.
+  (`let r = &mut x; let v = x; *r = v;`), the store traps with a message
+  naming the resource: the move into `v` nulled the only place that owned
+  the object, a reference owns nothing, so no place could own it after the
+  store, and a reference that outlives the move out of its place is the
+  dangling reference this WEP turns into a trap.
 - A drop runs the type's `Drop` and then zeroes the object: a box's handle
   becomes 0, which the Component Model never issues, since index 0 of a handle
   table is reserved; an aggregate's fields become null.
