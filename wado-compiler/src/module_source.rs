@@ -181,8 +181,8 @@ pub struct ModuleSourceInterner {
     root_dir: Option<String>,
     /// Each path dependency's package root → its entry module.
     dependency_roots: hashmap::IndexMap<String, String>,
-    /// Each path dependency whose root a path reached before any manifest
-    /// declared it, → that root: the package keeps the identity its first
+    /// The root of each path dependency that a path reached before any
+    /// manifest declared it, by lib: the package keeps the identity its first
     /// modules were given.
     reached_first: hashmap::IndexMap<String, InternedStr>,
     /// Each local module the host has placed, and its package. A module in a
