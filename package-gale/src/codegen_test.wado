@@ -777,6 +777,18 @@ ANY : [\\u0000-\\u{10FFFF}] ;";
     assert got == "ab => A:a ANY:b\n";
 }
 
+test "a lexer steps over multi-byte chars whole" {
+    let input = "lexer grammar Test;
+CAFE : 'café' ;
+GREEK : [α-ω]+ ;
+ID : [a-z]+ ;
+DOT : '.' . ;
+NOT_SPACE : ~[ a-zα-ω]+ ;
+WS : ' ' -> skip ;";
+    let got = lexes(input, ["café caf αβγ abc 日本 .é"]);
+    assert got == "café caf αβγ abc 日本 .é => CAFE:café ID:caf GREEK:αβγ ID:abc NOT_SPACE:日本 DOT:.é\n";
+}
+
 test "lexer rule caseInsensitive=true enables CI when grammar-level absent" {
     let input = "lexer grammar Test;
 KW options { caseInsensitive = true; } : 'go' ;
