@@ -212,7 +212,9 @@ trailers_tx.write(Result::Ok(null));
   `waitable-set.wait` that reports it. After that, `wait` on the call waits for
   an event that never comes, and `cancel` traps, since `subtask.cancel` traps
   once the resolution was delivered. Nothing in `AsyncCall` records the
-  delivery.
+  delivery. Once
+  [WEP: Affine Types](./wep-2026-10-17-affine-types.md#standard-library) gives
+  `AsyncCall` a `Drop` that cancels, dropping such a call traps too.
 - TLS trust store configuration for outgoing HTTPS requests from `wado run`.
   wasmtime-wasi-http 43.0.1's `WasiHttpHooks::send_request` signature uses
   `pub(crate)` types (`HttpResult`, `HttpError`, `body::UnsyncBoxBody`), so

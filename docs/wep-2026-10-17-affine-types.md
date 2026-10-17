@@ -359,10 +359,9 @@ What casts did, the following do instead:
   does.
 - A test double returns a real handle, from `Stream::<u8>::new()`, where it
   used to return `0 as Stream<u8>`. A double that returns a future, as
-  `MockStdio::write_via_stream` does, keeps the writable end. It writes it once
-  the caller has dropped the reader, when the write reports `Dropped` at once
-  and leaves the end done, and drops it then. A write before that would block
-  on a reader nobody runs, and a drop before it traps.
+  `MockStdio::write_via_stream` does, keeps the writable end, and the test ends
+  it: a handler runs only until its `resume`, a write inside it would block on
+  a reader nobody runs, and an end dropped unwritten traps.
 
 ### Drop
 
@@ -554,11 +553,11 @@ What changes shape:
 
   `wait(self)` and `cancel(self)` take the subtask and the buffer and consume
   them, so a second call is a compile error and the shared `__cm_ended` flag
-  goes. Its `Drop` cancels a subtask nobody awaited, since a `Subtask` traps on
-  `drop` until it resolves, lifts and drops a result the callee returned, which
-  owns handles only a lift reaches, and frees the buffer. A call that was
-  joined to a set and reported there cannot be ended, today or after this WEP:
-  that is
+  goes. Its `Drop` leaves any set the subtask was joined to, as `cancel` does
+  today, and cancels it, since a `Subtask` traps on `drop` until it resolves;
+  then it lifts and drops a result the callee returned, which owns handles
+  only a lift reaches, and frees the buffer. A call a set already reported
+  cannot be ended, today or after this WEP, and its drop traps: that is
   [a gap of the `AsyncCall` WEP](./wep-2026-04-22-subtask-generic.md#known-gaps).
 - `ResourceId`, with `ResourceId::of(&r)` over every affine resource.
 - `wado-from-idl` declares `affine` every record and variant it generates that
