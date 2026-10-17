@@ -50,7 +50,7 @@ pub fn classify_multi_value_params(project: &mut NirPackage, exec: &Arc<Executor
     true
 }
 
-/// A parameter of one function and its index in the function store.
+/// A parameter: its function's index in the function store, then its own.
 type ParamKey = (usize, usize);
 
 /// A parameter the multi-value ABI fits, as far as its own body says.
@@ -182,15 +182,16 @@ fn collect_candidates(
             }
             // One read past an early exit costs a `&S` a load on the path that
             // skips it, which the struct a caller no longer builds outweighs.
+            let read_names = reads.fields.iter().map(|&name| name.to_string()).collect();
             out.insert(
                 (func_idx, param_idx),
                 Candidate {
                     aggregate,
                     through_ref,
-                    reads: reads.fields.iter().map(|&name| name.to_string()).collect(),
+                    reads: read_names,
                     forwards: reads.forwards,
                     field_types: all_types,
-                    field_names: all_names.clone(),
+                    field_names: all_names,
                 },
             );
         }
