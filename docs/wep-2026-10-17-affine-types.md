@@ -309,9 +309,6 @@ What casts did, the following do instead:
   dropped at scope exit, since a holder's drop is synthesized field by field.
 - `..base` consumes `base`. A field the literal lists replaces the one `base`
   carried, which is dropped.
-- An assignment into a field drops what it replaces, as today. An assignment
-  into an element of a `List<affine T>` does too, which today's `list[i] = x`
-  does not.
 
 A type that implements `Drop` gives up no field on its own: neither a partial
 move nor `..base` over it is allowed. Its `drop` relies on the fields it was
@@ -321,9 +318,9 @@ built with, as SE-0429 holds for a type with a `deinit`.
 
 When a value is dropped is unchanged in substance: an owned, unmoved affine
 value is dropped at scope exit on every path; a store drops what it replaces; a
-discarded value is dropped. Two holders join the rule. A `List<affine T>` drops
-its elements when it is dropped, and a store into one of them drops what it
-replaces; today a `List` holding a resource does neither. Nothing else is
+discarded value is dropped. A `List<affine T>` joins the rule: it drops its
+elements when it is dropped, and a store into an element drops what it
+replaces. Today a `List` holding a resource does neither. Nothing else is
 excluded, since no copyable container holds an affine value. A panic drops
 nothing.
 
