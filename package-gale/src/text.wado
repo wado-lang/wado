@@ -1,8 +1,5 @@
-//! Char-range copies and the identifier alphabet, shared by every text scanner.
-//! The copies are the generated parser's own, under the contract the generator
-//! states.
-
-use { push_chars, chars_text } from "./runtime/lex.wado";
+//! Char-range copies and the identifier alphabet, shared by every text scanner
+//! of the generator itself.
 
 /// Whether `c` can be part of an identifier in Wado or generated text.
 pub fn is_ident_char(c: char) -> bool {
@@ -34,12 +31,21 @@ pub fn ident_words<S: AsStrSlice>(text: S) -> List<String> {
 pub fn collect_range(chars: &List<char>, start: i32, end: i32) -> String
     contract end >= start
 {
-    return chars_text(chars, start, end);
+    let mut s = String::new();
+    push_range(&mut s, chars, start, end);
+    return s;
 }
 
 /// Append `chars[start..end]` to `out`.
 pub fn push_range(out: &mut String, chars: &List<char>, start: i32, end: i32)
     contract end >= start
 {
-    push_chars(out, chars, start, end);
+    let mut bytes = 0;
+    for let mut i = start; i < end; i += 1 {
+        bytes += chars[i].len_utf8();
+    }
+    out.reserve(bytes);
+    for let mut i = start; i < end; i += 1 {
+        out.push(chars[i]);
+    }
 }

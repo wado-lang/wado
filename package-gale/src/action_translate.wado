@@ -358,7 +358,7 @@ pub struct LexerAttrEnv {
 }
 
 /// Translate a lexer predicate / action body (identity translator): resolve
-/// lexer `$`-attributes to expressions over the match fn's `chars` / `start` /
+/// lexer `$`-attributes to expressions over the match fn's `src` / `start` /
 /// `pos` and the `lx` commit latches, leaving the surrounding host text (already
 /// Wado) verbatim. An unresolved `$`-reference is a loud error, so codegen never
 /// emits one. A `$`-free body (`pos - start == 4`) passes through unchanged.
@@ -381,22 +381,22 @@ pub fn translate_lexer_body<S: AsStrSlice>(body: S, env: &LexerAttrEnv) -> Resul
     return Result::Ok(splice_attrs(body, &refs, &replacements));
 }
 
-/// The match-fn expression for the text matched so far (`chars[start..pos]`),
+/// The match-fn expression for the text matched so far (`src[start..pos]`),
 /// which is what both `$text` and Java's `getText()` mean in a lexer body.
 pub fn lexer_matched_text_expr() -> String {
-    return "chars_text(chars, start, pos)";
+    return "span_text(src, start, pos)";
 }
 
 /// The match-fn expression for the live match cursor's column within its line
-/// (ANTLR4's `getCharPositionInLine()`).
+/// (ANTLR4's `getCharPositionInLine()`), counted in chars as ANTLR4 counts it.
 pub fn lexer_cursor_column_expr() -> String {
-    return "char_pos_in_line(chars, pos)";
+    return "char_pos_in_line(src, pos)";
 }
 
 /// The match-fn expression for the column the token started at (ANTLR4's
 /// `_tokenStartCharPositionInLine`).
 pub fn lexer_token_start_column_expr() -> String {
-    return "char_pos_in_line(chars, start)";
+    return "char_pos_in_line(src, start)";
 }
 
 /// How a `$`-reference is used at its site. `$mode`'s read and its write land on

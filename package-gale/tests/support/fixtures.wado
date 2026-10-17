@@ -133,10 +133,9 @@ pub fn lexer_dump<S: AsStrSlice>(input: S) -> String {
 }
 
 /// A TokenStream over `src` from `[kind, start, end]` token specs (no
-/// trivia). The returned stream refers to a fresh char list; GC keeps it alive.
+/// trivia), the bounds byte offsets.
 pub fn stream_of<S: AsStrSlice>(src: S, specs: List<[i32, i32, i32]>) -> TokenStream {
-    let chars: List<char> = src.chars().collect();
-    let mut ts = TokenStream::new(&chars);
+    let mut ts = TokenStream::new(src.as_str_slice());
     for let s of &specs {
         let lo = ts.trivia_mark();
         ts.push_token(s.0, s.1, s.2, lo, ts.trivia_mark());

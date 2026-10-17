@@ -1,8 +1,12 @@
 use {
     Span,
     TokenStream,
-    chars_text,
-    push_chars_escaped,
+    span_text,
+    push_escaped,
+    char_at,
+    char_end,
+    char_start_before,
+    char_count,
     char_pos_in_line,
     line_starts,
     line_col_at,
@@ -27,8 +31,7 @@ test "to_lexer_string interleaves non-default-channel trivia in source order" {
     // in the following token's leading_trivia. ANTLR4 still emits it into the
     // stream in source order with a `channel=N` attribute and a sequential
     // index. Mirrors `LexerExec/ReservedWordsEscaping`.
-    let chars: List<char> = "ab".chars().collect();
-    let mut ts = TokenStream::new(&chars);
+    let mut ts = TokenStream::new("ab".as_str_slice());
     let lo_a = ts.trivia_mark();
     ts.push_token(0, 0, 1, lo_a, ts.trivia_mark());  // 'a', channel 0
     let lo_eof = ts.trivia_mark();
@@ -46,8 +49,7 @@ test "to_lexer_string skips default-channel (skip) trivia without consuming an i
     // Skip tokens also land in leading_trivia but carry channel 0; ANTLR4
     // discards them entirely, so they must neither appear in the dump nor
     // advance the `@index` counter.
-    let chars: List<char> = "a c".chars().collect();
-    let mut ts = TokenStream::new(&chars);
+    let mut ts = TokenStream::new("a c".as_str_slice());
     let lo_a = ts.trivia_mark();
     ts.push_token(0, 0, 1, lo_a, ts.trivia_mark());  // 'a'
     let lo_c = ts.trivia_mark();
@@ -69,8 +71,7 @@ test "Span::new creates span" {
 test "TokenStream push_token keeps parallel arrays in lockstep and reads back" {
     // Source "ab c": tokens 'a'(0..1), 'b'(1..2), 'c'(3..4); a single space
     // (1 char) is leading trivia of 'c'.
-    let chars: List<char> = "ab c".chars().collect();
-    let mut ts = TokenStream::new(&chars);
+    let mut ts = TokenStream::new("ab c".as_str_slice());
 
     let lo0 = ts.trivia_mark();
     ts.push_token(10, 0, 1, lo0, ts.trivia_mark());
@@ -97,8 +98,7 @@ test "TokenStream push_token keeps parallel arrays in lockstep and reads back" {
 }
 
 test "TokenStream empty-text token reports empty (EOF sentinel)" {
-    let chars: List<char> = "x".chars().collect();
-    let mut ts = TokenStream::new(&chars);
+    let mut ts = TokenStream::new("x".as_str_slice());
     let lo = ts.trivia_mark();
     ts.push_token(0, 1, 1, lo, ts.trivia_mark());
     assert ts.is_empty_text(0);
@@ -114,29 +114,70 @@ test "with_expected composes the expected set with the message" {
     assert with_expected(`unexpected token "for"`, &[]) == `unexpected token "for"`;
 }
 
-test "chars_text copies a window of non-ASCII chars" {
-    let chars: List<char> = "aé日🎉b".chars().collect();
-    assert chars_text(&chars, 1, 4) == "é日🎉";
-    assert chars_text(&chars, 2, 2) == "";
+test "span_text copies a byte window of non-ASCII chars" {
+    let src = "aé日🎉b".as_str_slice();
+    assert span_text(&src, 1, 10) == "é日🎉";
+    assert span_text(&src, 3, 3) == "";
 }
 
-test "push_chars_escaped escapes the whitespace control chars" {
-    let chars: List<char> = "a\nb\tc\r".chars().collect();
+test "the char steps decode one UTF-8 char at a time" {
+    let src = "aé日🎉b".as_str_slice();
+    let mut starts: List<i32> = [];
+    let mut decoded: List<char> = [];
+    for let mut i = 0; i < src.len(); i = char_end(&src, i) {
+        starts.push(i);
+        decoded.push(char_at(&src, i));
+    }
+    assert starts == [0, 1, 3, 6, 10];
+    assert decoded == ['a', 'é', '日', '🎉', 'b'];
+    let mut back: List<i32> = [];
+    for let mut i = src.len(); i > 0; i = char_start_before(&src, i) {
+        back.push(char_start_before(&src, i));
+    }
+    assert back == [10, 6, 3, 1, 0];
+    assert char_count(&src, 0, src.len()) == 5;
+    assert char_count(&src, 1, 6) == 2;
+}
+
+test "push_escaped escapes the whitespace control chars" {
+    let src = "a\nb\tc\ré".as_str_slice();
     let mut out = String::new();
-    push_chars_escaped(&mut out, &chars, 0, chars.len());
-    assert out == "a\\nb\\tc\\r";
+    push_escaped(&mut out, &src, 0, src.len());
+    assert out == "a\\nb\\tc\\ré";
 }
 
 test "line_col_at answers from the line starts" {
-    let chars: List<char> = "ab\ncd\n\ne".chars().collect();
-    let starts = line_starts(&chars);
-    assert line_col_at(&starts, 0) == [1, 0];
-    assert line_col_at(&starts, 1) == [1, 1];
-    assert line_col_at(&starts, 3) == [2, 0];
-    assert line_col_at(&starts, 6) == [3, 0];
-    assert line_col_at(&starts, 7) == [4, 0];
-    assert line_col_at(&starts, 8) == [4, 1];
-    assert char_pos_in_line(&chars, 4) == 1;
+    let src = "ab\ncd\n\ne".as_str_slice();
+    let starts = line_starts(&src);
+    assert line_col_at(&src, &starts, 0) == [1, 0];
+    assert line_col_at(&src, &starts, 1) == [1, 1];
+    assert line_col_at(&src, &starts, 3) == [2, 0];
+    assert line_col_at(&src, &starts, 6) == [3, 0];
+    assert line_col_at(&src, &starts, 7) == [4, 0];
+    assert line_col_at(&src, &starts, 8) == [4, 1];
+    assert char_pos_in_line(&src, 4) == 1;
+}
+
+test "a column counts chars, not bytes" {
+    let src = "é\n日🎉x".as_str_slice();
+    let starts = line_starts(&src);
+    assert line_col_at(&src, &starts, 10) == [2, 2];
+    assert char_pos_in_line(&src, 10) == 2;
+}
+
+test "to_lexer_string reports char indices over a byte-offset stream" {
+    let mut ts = TokenStream::new("日本 x".as_str_slice());
+    let lo = ts.trivia_mark();
+    ts.push_token(0, 0, 6, lo, ts.trivia_mark());
+    let lo_x = ts.trivia_mark();
+    ts.push_trivia(1, 6, 7, 0);
+    ts.push_token(0, 7, 8, lo_x, ts.trivia_mark());
+    ts.push_token(2, 8, 8, ts.trivia_mark(), ts.trivia_mark());
+    let expected = "[@0,0:1='日本',<1>,1:0]
+[@1,3:3='x',<1>,1:3]
+[@2,4:3='<EOF>',<-1>,1:4]
+";
+    assert to_lexer_string(&ts, 2) == expected;
 }
 
 test "kind_set_has reads the bitset words the generator emits" {
@@ -260,8 +301,7 @@ test "hl_cover_unvisited keeps what the walk took and sorts the merge" {
 
 test "HighlightVisitor handles trivia" {
     let mapping = mapping_of(["comment", "keyword"], [0, 1]);
-    let chars: List<char> = "0123456789a".chars().collect();
-    let mut ts = TokenStream::new(&chars);
+    let mut ts = TokenStream::new("0123456789a".as_str_slice());
     let lo = ts.trivia_mark();
     ts.push_trivia(0, 0, 8, 0);  // "/* hi */" comment trivia
     ts.push_token(1, 9, 11, lo, ts.trivia_mark());  // "if" keyword

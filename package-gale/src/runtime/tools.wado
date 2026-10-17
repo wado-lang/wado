@@ -1,7 +1,25 @@
-use { TokenStream, line_starts, line_col_at, push_chars_escaped } from "./lex.wado";
+use { TokenStream, line_starts, line_col_at, push_escaped, char_count } from "./lex.wado";
+
+struct CharIndexCursor {
+    byte: i32,
+    char: i32,
+}
+
+impl CharIndexCursor {
+    fn advance_to(&mut self, src: &StrSlice, byte: i32) -> i32 {
+        if byte < self.byte {
+            self.byte = 0;
+            self.char = 0;
+        }
+        self.char += char_count(src, self.byte, byte);
+        self.byte = byte;
+        return self.char;
+    }
+}
 
 pub fn to_lexer_string(tokens: &TokenStream, eof_kind: i32) -> String {
-    let starts = line_starts(tokens.chars);
+    let starts = line_starts(&tokens.src);
+    let mut cursor = CharIndexCursor { byte: 0, char: 0 };
     let mut out = String::with_capacity(tokens.output.len() + tokens.len() * 32);
     out.push_str(&tokens.output);
     let mut index = 0;
@@ -18,6 +36,7 @@ pub fn to_lexer_string(tokens: &TokenStream, eof_kind: i32) -> String {
                     tokens.triv_ends[t],
                     tokens.triv_chans[t],
                     &starts,
+                    &mut cursor,
                     index,
                     eof_kind,
                 );
@@ -32,6 +51,7 @@ pub fn to_lexer_string(tokens: &TokenStream, eof_kind: i32) -> String {
             tokens.ends[i],
             0,
             &starts,
+            &mut cursor,
             index,
             eof_kind,
         );
@@ -48,17 +68,20 @@ fn emit_lexer_token(
     end: i32,
     channel: i32,
     starts: &List<i32>,
+    cursor: &mut CharIndexCursor,
     index: i32,
     eof_kind: i32,
 ) {
     let is_eof = kind == eof_kind;
     let type_id = if is_eof { -1 } else { kind + 1 };
-    let lc = line_col_at(starts, start);
-    out.push_str(`[@${index},${start}:${end - 1}='`);
+    let lc = line_col_at(&tokens.src, starts, start);
+    let first = cursor.advance_to(&tokens.src, start);
+    let stop = first + char_count(&tokens.src, start, end) - 1;
+    out.push_str(`[@${index},${first}:${stop}='`);
     if is_eof {
         out.push_str("<EOF>");
     } else {
-        push_chars_escaped(out, tokens.chars, start, end);
+        push_escaped(out, &tokens.src, start, end);
     }
     out.push_str(`',<${type_id}>,`);
     if channel != 0 {

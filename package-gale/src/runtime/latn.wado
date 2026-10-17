@@ -2,6 +2,7 @@
 
 use { HashMap, HashSet, HashSeed } from "core:collections";
 use { AtnSim, ATN_RULE_STOP, ATN_TR_ATOM, ATN_TR_NOT_ATOM, ATN_TR_WILDCARD, ATN_TR_RULE } from "./atn.wado";
+use { char_at, char_end } from "./lex.wado";
 
 global LATN_SEED: HashSeed = HashSeed::fixed(0xA4093822299F31D0, 0x082EFA98EC4E6C89);
 
@@ -135,7 +136,7 @@ fn latn_closure(
     }
 }
 
-internal fn latn_match(sim: &AtnSim, start_rule: i32, chars: &List<char>, start: i32, longest: bool) -> i32 {
+internal fn latn_match(sim: &AtnSim, start_rule: i32, src: &StrSlice, start: i32, longest: bool) -> i32 {
     let mut best = -1;
     let mut stacks = LatnStacks { parent: [], ret: [], ids: HashMap::<i64, i32>::with_seed(LATN_SEED) };
     let mut open: List<i32> = [];
@@ -148,7 +149,7 @@ internal fn latn_match(sim: &AtnSim, start_rule: i32, chars: &List<char>, start:
     let mut nlist: List<LThread> = [];
     let mut pos = start;
     loop {
-        let cur = if pos < chars.len() { chars[pos] as i32 } else { -1 };
+        let cur = if pos < src.len() { char_at(src, pos) as i32 } else { -1 };
         nlist.clear();
         visited.next_step();
         let mut i = 0;
@@ -194,7 +195,7 @@ internal fn latn_match(sim: &AtnSim, start_rule: i32, chars: &List<char>, start:
         let spent = clist;
         clist = nlist;
         nlist = spent;
-        pos += 1;
+        pos = char_end(src, pos);
     }
     return best;
 }

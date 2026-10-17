@@ -807,10 +807,10 @@ DIGITS : [0-9]+ ;
 SEMI : ';' ;";
     let output = gen_source(input);
     // Digit range must not be duplicated.
-    assert output.contains("'0'..='9'");
+    assert output.contains("matches { b'0'..=b'9' }");
     // Non-letter literal must not be duplicated — plain mismatch form.
-    assert output.contains("chars[pos] != ';'");
-    assert !output.contains("chars[pos].eq_ignore_ascii_case(");
+    assert output.contains("unchecked src.byte_at(pos) != b';'");
+    assert !output.contains("b';' | b';'");
 }
 
 test "metadata comment lists grammar-level options" {
@@ -2545,7 +2545,7 @@ WS : ' ' -> skip ;
 ");
     assert src.contains("fn hit(view: LexerView, lx: &mut Lexer);"), "an action op returns unit and reaches the lexer";
     assert src.contains("fn apply_A_actions(lx: &mut Lexer, start: i32, end: i32) with B"), "the replay carries the base effect";
-    assert src.contains("B::hit(LexerView { chars, start, pos }, lx);"), "the action op is called from the replay";
+    assert src.contains("B::hit(LexerView { src, start, pos }, lx);"), "the action op is called from the replay";
     assert src.contains("fn try_A(chars: &List<char>, start: i32) -> i32 {"), "a match fn with no predicate op stays effect-free";
 }
 
@@ -2623,7 +2623,7 @@ WS : ' ' -> skip ;
 ");
     assert !src.contains("best_channel"), "the channel machinery stays off";
     assert src.contains(
-        "best_kind = B::emit(LexerView { chars: &lexer.chars, start: tok_start, pos: best_end }, best_kind, 0);",
+        "best_kind = B::emit(LexerView { src: &lexer.src, start: tok_start, pos: best_end }, best_kind, 0);",
     ), "the hook takes the default channel";
 }
 
