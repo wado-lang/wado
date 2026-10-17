@@ -45,7 +45,7 @@ use {
 use { MemberDecls } from "./java2wado/jmembers.wado";
 use { AltBinding } from "./attr_resolve.wado";
 use { find_attr_refs } from "./attr_scan.wado";
-use { opaque_span_end } from "./superclass.wado";
+use { split_top_level_commas } from "./g4/scan.wado";
 use { escape_ident, PARSER_HANDLE } from "./ident.wado";
 
 /// The callee-local parameter name a rule argument binds to. `escape_ident`
@@ -117,7 +117,8 @@ pub fn call_args(rc: &RuleCallOp, ctx: &mut EmitContext) -> List<String> {
         },
     };
     let mut out: List<String> = [];
-    for let e of &split_top_level_commas(&src.text) {
+    let arg_chars: List<char> = src.text.chars().collect();
+    for let e of &split_top_level_commas(&arg_chars, false) {
         let code = match translate_caller_arg(e, ctx) {
             Some(c) => c,
             None => *e,
@@ -226,46 +227,6 @@ fn translate_gate_body<S: AsStrSlice>(
 /// A gate body is `<member> = <int literal>` and the `$L` of its scope, neither
 /// of which reads an alternative's labels.
 global NO_GATE_BINDINGS: List<AltBinding> = [];
-
-/// Split an argument-action text on commas that are not nested inside
-/// parentheses / brackets / braces / angle brackets, so `f(a, b), c` splits
-/// into `f(a, b)` and `c`. String / char literals are skipped.
-fn split_top_level_commas<S: AsStrSlice>(text: S) -> List<String> {
-    let mut out: List<String> = [];
-    let mut cur = String::new();
-    let mut depth = 0;
-    let chars: List<char> = text.chars().collect();
-    let mut i = 0;
-    while i < chars.len() {
-        // `a["x,y"]` passes one argument, not two.
-        if let Some(end) = opaque_span_end(&chars, i, chars.len()) {
-            while i < end {
-                cur.push(chars[i]);
-                i += 1;
-            }
-            continue;
-        }
-        let c = chars[i];
-        if c matches { '(' | '[' | '{' | '<' } {
-            depth += 1;
-        } else if c matches { ')' | ']' | '}' | '>' } {
-            if depth > 0 {
-                depth -= 1;
-            }
-        } else if c == ',' && depth == 0 {
-            out.push(cur.trim().to_string());
-            cur = String::new();
-            i += 1;
-            continue;
-        }
-        cur.push(c);
-        i += 1;
-    }
-    if !cur.trim().is_empty() {
-        out.push(cur.trim().to_string());
-    }
-    return out;
-}
 
 /// Declare the parser's base effect on a generated parse function. Every one
 /// carries it — a predicate can sit in any rule; scan fns evaluate none.

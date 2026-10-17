@@ -18,7 +18,10 @@ use {
     is_id_start_char,
     is_id_continue_char,
     is_rule_name_upper,
+    skip_ws,
+    word_at,
 } from "./scan.wado";
+use { push_range } from "../text.wado";
 
 /// ANTLR's `currentRuleType`: which recognizer the rule being scanned belongs
 /// to, `Unknown` between rules.
@@ -63,7 +66,7 @@ pub fn strip_action_bodies<S: AsStrSlice>(grammar: S) -> String {
             // `.g4` lexer doesn't recognise `"..."` outside actions, so
             // only single-quote strings need top-level skip protection.
             let end = scan_string(&chars, i);
-            push_span(&mut out, &chars, i, end);
+            push_range(&mut out, &chars, i, end);
             prequel_open = false;
             i = end;
             continue;
@@ -81,21 +84,21 @@ pub fn strip_action_bodies<S: AsStrSlice>(grammar: S) -> String {
                 scan_balanced(&chars, i, '[', ']');
             };
             let end = region_end(scanned, n);
-            push_span(&mut out, &chars, i, end);
+            push_range(&mut out, &chars, i, end);
             prequel_open = false;
             i = end;
             continue;
         }
         if c == '/' && i + 1 < n && chars[i + 1] == '/' {
             let end = scan_line_comment(&chars, i);
-            push_span(&mut out, &chars, i, end);
+            push_range(&mut out, &chars, i, end);
             prequel_open = false;
             i = end;
             continue;
         }
         if c == '/' && i + 1 < n && chars[i + 1] == '*' {
             let end = scan_block_comment(&chars, i);
-            push_span(&mut out, &chars, i, end);
+            push_range(&mut out, &chars, i, end);
             prequel_open = false;
             i = end;
             continue;
@@ -119,9 +122,7 @@ pub fn strip_action_bodies<S: AsStrSlice>(grammar: S) -> String {
                         }
                     }
                 }
-                while j < n && chars[j].is_ascii_whitespace() {
-                    j += 1;
-                }
+                j = skip_ws(&chars, j, n);
                 if j < n && chars[j] == '{' {
                     if let Some(end) = scan_balanced(&chars, j, '{', '}') {
                         i = end;
@@ -134,17 +135,11 @@ pub fn strip_action_bodies<S: AsStrSlice>(grammar: S) -> String {
             i += 1;
             continue;
         }
-        if c == 'c' && starts_with_word(&chars, i, "catch") {
-            let mut j = i + 5;
-            while j < n && chars[j].is_ascii_whitespace() {
-                j += 1;
-            }
+        if c == 'c' && word_at(&chars, i, n, "catch") {
+            let j = skip_ws(&chars, i + 5, n);
             if j < n && chars[j] == '[' {
                 if let Some(bracket_end) = scan_balanced(&chars, j, '[', ']') {
-                    let mut k = bracket_end;
-                    while k < n && chars[k].is_ascii_whitespace() {
-                        k += 1;
-                    }
+                    let k = skip_ws(&chars, bracket_end, n);
                     if k < n && chars[k] == '{' {
                         if let Some(end) = scan_balanced(&chars, k, '{', '}') {
                             i = end;
@@ -154,11 +149,8 @@ pub fn strip_action_bodies<S: AsStrSlice>(grammar: S) -> String {
                 }
             }
         }
-        if c == 'f' && starts_with_word(&chars, i, "finally") {
-            let mut j = i + 7;
-            while j < n && chars[j].is_ascii_whitespace() {
-                j += 1;
-            }
+        if c == 'f' && word_at(&chars, i, n, "finally") {
+            let j = skip_ws(&chars, i + 7, n);
             if j < n && chars[j] == '{' {
                 if let Some(end) = scan_balanced(&chars, j, '{', '}') {
                     i = end;
@@ -173,7 +165,7 @@ pub fn strip_action_bodies<S: AsStrSlice>(grammar: S) -> String {
             // inside them never read as a rule name.
             if prequel_open {
                 let end = region_end(scanned, n);
-                push_span(&mut out, &chars, i, end);
+                push_range(&mut out, &chars, i, end);
                 prequel_open = false;
                 i = end;
                 continue;
@@ -201,12 +193,12 @@ pub fn strip_action_bodies<S: AsStrSlice>(grammar: S) -> String {
                 j += 1;
             }
             let mut word = String::with_capacity(j - i);
-            push_span(&mut word, &chars, i, j);
+            push_range(&mut word, &chars, i, j);
             prequel_open = PREQUEL_KEYWORDS.contains(&word);
             if rule_type matches { RuleType::Unknown } && !GRAMMAR_KEYWORDS.contains(&word) {
                 rule_type = if is_rule_name_upper(c) { RuleType::Lexer } else { RuleType::Parser };
             }
-            push_span(&mut out, &chars, i, j);
+            push_range(&mut out, &chars, i, j);
             i = j;
             continue;
         }
@@ -225,32 +217,4 @@ fn region_end(scanned: Option<i32>, n: i32) -> i32 {
         Some(e) => e,
         None => n,
     };
-}
-
-fn push_span(out: &mut String, chars: &List<char>, start: i32, end: i32) {
-    let mut i = start;
-    while i < end {
-        out.push(chars[i]);
-        i += 1;
-    }
-}
-
-fn starts_with_word<S: AsStrSlice>(chars: &List<char>, i: i32, word: S) -> bool {
-    let w: List<char> = word.chars().collect();
-    let wn = w.len();
-    if i + wn > chars.len() {
-        return false;
-    }
-    if i > 0 && is_id_continue_char(chars[i - 1]) {
-        return false;
-    }
-    for let mut k = 0; k < wn; k += 1 {
-        if chars[i + k] != w[k] {
-            return false;
-        }
-    }
-    if i + wn < chars.len() && is_id_continue_char(chars[i + wn]) {
-        return false;
-    }
-    return true;
 }

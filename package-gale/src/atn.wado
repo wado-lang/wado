@@ -24,7 +24,8 @@
 
 use { Grammar, ParserRule, Alternative, Element, RepeatKind } from "./ir.wado";
 use { LoweredGrammar, LeftRecursiveRule, LrAlt } from "./gir.wado";
-use { element_is_self_ref, lr_operand_prec } from "./lower.wado";
+use { lr_operand_prec } from "./lower.wado";
+use { element_is_self_ref } from "./lr_util.wado";
 use {
     ATN_BASIC,
     ATN_RULE_START,
@@ -609,7 +610,7 @@ fn push_u16(bytes: &mut ByteList, v: i32)
 /// `label`/`follow` need this width, not `u16`: the *parser* ATN uses `label`
 /// as a small token-kind index, but the *lexer* ATN (`latn.wado`) reuses the
 /// same fields for a Unicode scalar range (`label` = low, `follow` = high,
-/// up to `CHAR_MAX` = `0x10FFFF`) — one shared decoder, so the field must
+/// up to `CODE_POINT_MAX` = `0x10FFFF`) — one shared decoder, so the field must
 /// fit its widest use.
 fn push_u24(bytes: &mut ByteList, v: i32)
     contract 0 <= v <= 16777215

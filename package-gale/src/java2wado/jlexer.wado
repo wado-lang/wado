@@ -2,8 +2,15 @@
 //! attribute reference lexes as one opaque `Attr` token (resolved later by the
 //! language-independent attribute engine); string literals keep raw escapes.
 
-use { is_id_start_char, is_id_continue_char, scan_string } from "../g4/scan.wado";
+use {
+    is_id_start_char,
+    is_id_continue_char,
+    scan_closed_string,
+    scan_line_comment,
+    scan_block_comment,
+} from "../g4/scan.wado";
 use { collect_range } from "../text.wado";
+use { attr_ref_span } from "../attr_scan.wado";
 
 pub variant JToken {
     Ident(String),
@@ -25,16 +32,25 @@ pub fn tokenize_java<S: AsStrSlice>(body: S) -> Result<List<JToken>, String> {
             i += 1;
             continue;
         }
+        if c == '/' && i + 1 < n && chars[i + 1] == '/' {
+            i = scan_line_comment(&chars, i);
+            continue;
+        }
+        if c == '/' && i + 1 < n && chars[i + 1] == '*' {
+            i = scan_block_comment(&chars, i);
+            continue;
+        }
         if c == '"' {
-            let e = scan_string(&chars, i);
+            let Some(e) = scan_closed_string(&chars, i) else {
+                return Result::Err("java2wado: unterminated string literal in action body");
+            };
             out.push(JToken::Str(collect_range(&chars, i + 1, e - 1)));
             i = e;
             continue;
         }
-        if c == '$' && i + 1 < n && is_id_start_char(chars[i + 1]) {
-            let e = scan_attr_ref(&chars, i, n);
-            out.push(JToken::Attr(collect_range(&chars, i, e)));
-            i = e;
+        if let Some([_, end]) = attr_ref_span(&chars, i, n) {
+            out.push(JToken::Attr(collect_range(&chars, i, end)));
+            i = end;
             continue;
         }
         if is_id_start_char(c) {
@@ -66,22 +82,6 @@ pub fn tokenize_java<S: AsStrSlice>(body: S) -> Result<List<JToken>, String> {
         }
     }
     return Result::Ok(out);
-}
-
-/// `pos` at the `$`; returns one past the last char of the `$name(.member)?`.
-fn scan_attr_ref(chars: &List<char>, pos: i32, n: i32) -> i32 {
-    let mut j = pos + 1;
-    while j < n && is_id_continue_char(chars[j]) {
-        j += 1;
-    }
-    if j + 1 < n && chars[j] == '.' && is_id_start_char(chars[j + 1]) {
-        let mut k = j + 1;
-        while k < n && is_id_continue_char(chars[k]) {
-            k += 1;
-        }
-        return k;
-    }
-    return j;
 }
 
 /// Longest operator / punctuation token at `pos` (two-char before one-char).

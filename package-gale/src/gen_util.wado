@@ -1,5 +1,5 @@
 use { FOLLOW_PARAM, symbol_char_names, char_hex_name } from "./ident.wado";
-use { is_id_continue_char } from "./g4/scan.wado";
+use { is_id_continue_char, scan_closed_string } from "./g4/scan.wado";
 use { collect_range } from "./text.wado";
 pub use { escape_ident, escape_case, to_pascal_case, to_snake_case, to_lower } from "./ident.wado";
 use { CodeWriter } from "lib:wadopoet";
@@ -50,26 +50,6 @@ pub fn literal_field_name<S: AsStrSlice>(text: S) -> String {
             result.push_str("u");
             result.push_str(&char_hex_name(c));
         }
-    }
-    return result;
-}
-
-pub fn strip_suffix<S: AsStrSlice, S1: AsStrSlice>(s: S, suffix: S1) -> String {
-    let s_chars: List<char> = s.chars().collect();
-    let suffix_chars: List<char> = suffix.chars().collect();
-    let s_len = s_chars.len();
-    let suf_len = suffix_chars.len();
-    if s_len < suf_len {
-        return s.to_string();
-    }
-    for let mut i = 0; i < suf_len; i += 1 {
-        if s_chars[s_len - suf_len + i] != suffix_chars[i] {
-            return s.to_string();
-        }
-    }
-    let mut result = String::with_capacity(s.len());
-    for let mut i = 0; i < s_len - suf_len; i += 1 {
-        result.push(s_chars[i]);
     }
     return result;
 }
@@ -278,7 +258,7 @@ fn operand_end(chars: &List<char>, start: i32) -> i32 {
         let end = if c matches { '(' | '[' } {
             delimited_end(chars, i);
         } else if c matches { '"' | '\'' } && !atom {
-            literal_end(chars, i);
+            scan_closed_string(chars, i).unwrap_or(-1);
         } else if c == '<' && i >= 2 && chars[i - 1] == ':' && chars[i - 2] == ':' {
             delimited_end(chars, i);
         } else if is_id_continue_char(c) || c matches { '.' | ':' } {
@@ -304,7 +284,7 @@ fn delimited_end(chars: &List<char>, open: i32) -> i32 {
     while i < chars.len() {
         let c = chars[i];
         if c matches { '"' | '\'' } {
-            i = literal_end(chars, i);
+            i = scan_closed_string(chars, i).unwrap_or(-1);
             if i < 0 {
                 return -1;
             }
@@ -339,18 +319,4 @@ fn spaced_operator_at(chars: &List<char>, at: i32, first: char, second: char) ->
         && chars[at + 1] == first
         && chars[at + 2] == second
         && chars[at + 3] == ' ';
-}
-
-/// The index past the string or char literal opening at `start`, or -1 where
-/// it never closes.
-fn literal_end(chars: &List<char>, start: i32) -> i32 {
-    let quote = chars[start];
-    let mut i = start + 1;
-    while i < chars.len() {
-        if chars[i] == quote {
-            return i + 1;
-        }
-        i += if chars[i] == '\\' { 2 } else { 1 };
-    }
-    return -1;
 }

@@ -23,8 +23,22 @@ use {
     LexerNotElement,
     NamedAction,
     is_lexer_members,
+    find_lexer_rule,
 } from "./ir.wado";
-use { scan_string, scan_line_comment, scan_block_comment, is_id_start_char, is_id_continue_char } from "./g4/scan.wado";
+use {
+    scan_string,
+    scan_line_comment,
+    scan_block_comment,
+    scan_template,
+    wado_opaque_end,
+    match_delim,
+    split_top_level_commas,
+    skip_ws,
+    text_at,
+    word_at,
+    is_id_start_char,
+    is_id_continue_char,
+} from "./g4/scan.wado";
 use { CodeWriter } from "lib:wadopoet";
 use { to_snake_case } from "./ident.wado";
 use { collect_range, push_range } from "./text.wado";
@@ -202,7 +216,7 @@ pub fn body_names_this<S: AsStrSlice>(body: S) -> bool {
             i = end;
             continue;
         }
-        if word_at(&chars, i, n, &THIS_WORD) {
+        if word_at(&chars, i, n, "this") {
             return true;
         }
         i += 1;
@@ -213,74 +227,11 @@ pub fn body_names_this<S: AsStrSlice>(body: S) -> bool {
 /// The end of the inert span starting at `i` — a string, a comment, or a
 /// template's literal text — with the `${ ... }` code spans inside it.
 fn inert_at(chars: &List<char>, i: i32, n: i32) -> [i32, List<[i32, i32]>] {
+    if chars[i] == '`' {
+        return scan_template(chars, i, n);
+    }
     let none: List<[i32, i32]> = [];
-    return match chars[i] {
-        '"' | '\'' => [scan_string(chars, i), none],
-        '`' => scan_template(chars, i, n),
-        '/' && i + 1 < n && chars[i + 1] == '/' => [scan_line_comment(chars, i), none],
-        '/' && i + 1 < n && chars[i + 1] == '*' => [scan_block_comment(chars, i), none],
-        _ => [i, none],
-    };
-}
-
-/// Split a template literal at `i` into `[end, spans]`: past the closing
-/// backtick, and the `${ ... }` bodies. Only the text between them is inert.
-fn scan_template(chars: &List<char>, i: i32, n: i32) -> [i32, List<[i32, i32]>] {
-    let mut spans: List<[i32, i32]> = [];
-    let mut k = i + 1;
-    while k < n {
-        if chars[k] == '\\' && k + 1 < n {
-            k += 2;
-            continue;
-        }
-        if chars[k] == '`' {
-            return [k + 1, spans];
-        }
-        if chars[k] == '$' && k + 1 < n && chars[k + 1] == '{' {
-            let close = match_delim(chars, k + 1, n, '{', '}');
-            assert close > k + 1, "match_brace never returns before the brace it opened";
-            spans.push([k + 2, close - 1]);
-            k = close;
-            continue;
-        }
-        k += 1;
-    }
-    return [n, spans];
-}
-
-/// The end of the string or template span opening at `i`, or `null` where none
-/// does. What a scanner must step over whole: a delimiter, a comma, or a quote
-/// inside one is text, not structure.
-pub fn opaque_span_end(chars: &List<char>, i: i32, n: i32) -> Option<i32> {
-    return match chars[i] {
-        '"' | '\'' => Option::Some(scan_string(chars, i)),
-        '`' => Option::Some(scan_template(chars, i, n).0),
-        _ => null,
-    };
-}
-
-/// Scan to the delimiter matching the one at `open`, or `n` when unbalanced —
-/// a body the g4 parser would already have rejected.
-fn match_delim(chars: &List<char>, open: i32, n: i32, open_ch: char, close_ch: char) -> i32 {
-    let mut depth = 0;
-    let mut i = open;
-    while i < n {
-        if let Some(end) = opaque_span_end(chars, i, n) {
-            i = end;
-            continue;
-        }
-        let c = chars[i];
-        if c == open_ch {
-            depth += 1;
-        } else if c == close_ch {
-            depth -= 1;
-            if depth == 0 {
-                return i + 1;
-            }
-        }
-        i += 1;
-    }
-    return n;
+    return [wado_opaque_end(chars, i, n).unwrap_or(i), none];
 }
 
 /// The arguments the call spanning `[start, close)` passes, split on its
@@ -294,34 +245,8 @@ fn call_args(chars: &List<char>, start: i32, close: i32) -> List<String> {
             break;
         }
     }
-    let mut out: List<String> = [];
-    let mut depth = 0;
-    let mut arg_start = open + 1;
-    let mut i = open + 1;
-    while i + 1 < close {
-        if let Some(end) = opaque_span_end(chars, i, close) {
-            i = end;
-            continue;
-        }
-        match chars[i] {
-            '(' | '[' | '{' => depth += 1,
-            ')' | ']' | '}' => depth -= 1,
-            ',' => {
-                if depth == 0 {
-                    out.push(collect_range(chars, arg_start, i).trim().to_string());
-                    arg_start = i + 1;
-                }
-            },
-            _ => {
-            },
-        }
-        i += 1;
-    }
-    let last = collect_range(chars, arg_start, close - 1).trim();
-    if !last.is_empty() || !out.is_empty() {
-        out.push(last.to_string());
-    }
-    return out;
+    let inner: List<char> = collect_range(chars, open + 1, close - 1).chars().collect();
+    return split_top_level_commas(&inner, false);
 }
 
 /// Whether `text` is one whole string literal, not an expression that merely
@@ -409,28 +334,30 @@ fn call_param_types(args: &List<String>) -> Option<List<String>> {
 /// the matching `)`. Else `null`. Shared by op collection and the call-site
 /// rewrite, so both agree on what a call is and where it ends.
 fn this_call_at(chars: &List<char>, i: i32, n: i32) -> Option<[String, i32]> {
-    return call_at(chars, i, n, &THIS_WORD, &DOT_SEP);
+    return call_at(chars, i, n, "this", ".");
 }
 
 /// The rewritten form: `Foo::<method>(...)`. Recognizing it too keeps
 /// `body_is_base_calls_only` answering the same across the rewrite.
-fn base_call_at(chars: &List<char>, i: i32, n: i32, base: &List<char>) -> Option<[String, i32]> {
-    return call_at(chars, i, n, base, &PATH_SEP);
+fn base_call_at<S: AsStrSlice>(chars: &List<char>, i: i32, n: i32, base: S) -> Option<[String, i32]> {
+    return call_at(chars, i, n, base, "::");
 }
 
-global THIS_WORD: List<char> = ['t', 'h', 'i', 's'];
-global DOT_SEP: List<char> = ['.'];
-global PATH_SEP: List<char> = [':', ':'];
-
-fn call_at(chars: &List<char>, i: i32, n: i32, receiver: &List<char>, sep: &List<char>) -> Option<[String, i32]> {
+fn call_at<S: AsStrSlice, S1: AsStrSlice>(
+    chars: &List<char>,
+    i: i32,
+    n: i32,
+    receiver: S,
+    sep: S1,
+) -> Option<[String, i32]> {
     if !word_at(chars, i, n, receiver) {
         return null;
     }
-    let after = skip_ws(chars, i + receiver.len(), n);
+    let after = skip_ws(chars, i + receiver.chars().count(), n);
     if !text_at(chars, after, n, sep) {
         return null;
     }
-    let name_start = skip_ws(chars, after + sep.len(), n);
+    let name_start = skip_ws(chars, after + sep.chars().count(), n);
     let name_end = scan_ident(chars, name_start, n);
     if name_end == name_start {
         return null;
@@ -439,32 +366,8 @@ fn call_at(chars: &List<char>, i: i32, n: i32, receiver: &List<char>, sep: &List
     if paren >= n || chars[paren] != '(' {
         return null;
     }
-    let name = collect_range(chars, name_start, name_end);
-    return Option::Some([name, match_delim(chars, paren, n, '(', ')')]);
-}
-
-/// Whether `word` sits at `i` as a whole word (not part of a longer ident).
-fn word_at(chars: &List<char>, i: i32, n: i32, word: &List<char>) -> bool {
-    if !text_at(chars, i, n, word) {
-        return false;
-    }
-    if i > 0 && is_id_continue_char(chars[i - 1]) {
-        return false;
-    }
-    let end = i + word.len();
-    return !(end < n && is_id_continue_char(chars[end]));
-}
-
-fn text_at(chars: &List<char>, i: i32, n: i32, text: &List<char>) -> bool {
-    if i < 0 || i + text.len() > n {
-        return false;
-    }
-    for let mut k = 0; k < text.len(); k += 1 {
-        if chars[i + k] != text[k] {
-            return false;
-        }
-    }
-    return true;
+    let close = match_delim(chars, paren, n, '(', ')')?;
+    return Option::Some([collect_range(chars, name_start, name_end), close]);
 }
 
 fn scan_ident(chars: &List<char>, start: i32, n: i32) -> i32 {
@@ -473,14 +376,6 @@ fn scan_ident(chars: &List<char>, start: i32, n: i32) -> i32 {
     }
     let mut i = start + 1;
     while i < n && is_id_continue_char(chars[i]) {
-        i += 1;
-    }
-    return i;
-}
-
-fn skip_ws(chars: &List<char>, start: i32, n: i32) -> i32 {
-    let mut i = start;
-    while i < n && chars[i].is_ascii_whitespace() {
         i += 1;
     }
     return i;
@@ -581,7 +476,6 @@ pub fn collect_lexer_super_ops(grammar: &Grammar) -> List<SuperOp> {
 /// the answer does not move across the rewrite.
 pub fn body_is_base_calls_only<S: AsStrSlice, S1: AsStrSlice>(body: S, base_name: S1) -> bool {
     let chars: List<char> = body.chars().collect();
-    let base: List<char> = base_name.chars().collect();
     let n = chars.len();
     let mut i = 0;
     while i < n {
@@ -602,7 +496,7 @@ pub fn body_is_base_calls_only<S: AsStrSlice, S1: AsStrSlice>(body: S, base_name
             i = close;
             continue;
         }
-        if let Some([_, close]) = base_call_at(&chars, i, n, &base) {
+        if let Some([_, close]) = base_call_at(&chars, i, n, base_name) {
             i = close;
             continue;
         }
@@ -845,10 +739,8 @@ fn elem_calls_super<S: AsStrSlice>(
             return elem_calls_super(&n.element, all_rules, needle, actions, visited);
         },
         RuleRef(name) => {
-            for let r of all_rules {
-                if r.name == *name {
-                    return rule_calls_super(r, all_rules, needle, actions, visited);
-                }
+            if let Some(r) = find_lexer_rule(all_rules, name) {
+                return rule_calls_super(r, all_rules, needle, actions, visited);
             }
         },
         _ => {

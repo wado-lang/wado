@@ -1,21 +1,21 @@
-//! Surface-IR classifiers for direct left recursion. Pulled out of
-//! `parser_gen.wado` so the LR-related decisions are isolable from
-//! the rest of emit. `lower.wado` has its own copies of these
-//! checks (`alt_is_left_recursive`, `element_is_self_ref`,
-//! `find_last_self_ref_idx`) because lower runs before the
-//! `LoweredGrammar` exists — these surface-IR helpers remain for
-//! the legacy emit-time call sites in `parser_gen.wado` and the
-//! prefix-precedence math that the variant pass still consults.
+//! Surface-IR classifiers for direct left recursion: the one answer lowering,
+//! emit, action translation and the scan gate all read.
 
 use { Alternative, Element, ParserRule } from "./ir.wado";
 
 /// True iff the alternative starts with a self-reference to the
 /// enclosing rule. Mirrors ANTLR4's direct-LR detection.
-fn is_left_recursive<S: AsStrSlice>(alt: &Alternative, rule_name: S) -> bool {
-    if alt.elements.len() == 0 {
+pub fn alt_is_left_recursive<S: AsStrSlice>(alt: &Alternative, rule_name: S) -> bool {
+    if alt.elements.is_empty() {
         return false;
     }
-    return is_self_ref_element(&alt.elements[0], rule_name);
+    return element_is_self_ref(&alt.elements[0], rule_name);
+}
+
+/// Whether any alternative is directly left-recursive. ANTLR4 rewrites only
+/// direct LR (`vendor/antlr4/doc/left-recursion.md`).
+pub fn rule_is_left_recursive(rule: &ParserRule) -> bool {
+    return rule.alternatives.iter_ref().any(|alt| alt_is_left_recursive(alt, &rule.name));
 }
 
 /// True iff the alternative matches ANTLR4's `prefix` shape from
@@ -34,21 +34,19 @@ fn is_left_recursive<S: AsStrSlice>(alt: &Alternative, rule_name: S) -> bool {
 /// Gale's IR has already stripped action bodies and semantic predicates,
 /// so the upstream `epsilonElement*` tail collapses to the empty case.
 fn is_prefix_alt<S: AsStrSlice>(alt: &Alternative, rule_name: S) -> bool {
-    if is_left_recursive(alt, rule_name) {
+    if alt_is_left_recursive(alt, rule_name) {
         return false;
     }
     if alt.elements.len() == 0 {
         return false;
     }
     let last_idx = alt.elements.len() - 1;
-    return is_self_ref_element(&alt.elements[last_idx], rule_name);
+    return element_is_self_ref(&alt.elements[last_idx], rule_name);
 }
 
-/// True iff the element is a direct RuleRef to `rule_name` (possibly
-/// wrapped in a single `Label`). Mirrors `is_left_recursive`'s use of
-/// `unwrap_label` so labeled self-refs at the alt tail (e.g. `b=e`)
-/// are still recognised.
-pub fn is_self_ref_element<S: AsStrSlice>(elem: &Element, rule_name: S) -> bool {
+/// True iff the element is a RuleRef to `rule_name`, possibly labeled, so a
+/// labeled self-ref (`b=e`) is still recognised.
+pub fn element_is_self_ref<S: AsStrSlice>(elem: &Element, rule_name: S) -> bool {
     if let RuleRef(r) = unwrap_label(elem) {
         return r.name == rule_name.as_str_slice();
     }
@@ -91,7 +89,7 @@ pub fn compute_prefix_self_ref_min_prec(rule: &ParserRule, alt_index: i32) -> i3
     let mut lr_after = 0;
     let mut has_any_lr = false;
     for let mut i = 0; i < alts.len(); i += 1 {
-        if is_left_recursive(&alts[i], rule_name) {
+        if alt_is_left_recursive(&alts[i], rule_name) {
             has_any_lr = true;
             if i > alt_index {
                 lr_after += 1;

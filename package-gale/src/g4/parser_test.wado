@@ -647,16 +647,6 @@ rule : ID ;";
     assert g.channels[1] == "CHAN_B";
 }
 
-test "channels block tolerates ANTLR3-style numbered assignments" {
-    let input = "lexer grammar Test;
-channels { CHAN_A = 1, CHAN_B = 2 }
-WS : ' ' -> channel(CHAN_A) ;";
-    let g = parse(input).unwrap();
-    assert g.channels.len() == 2;
-    assert g.channels[0] == "CHAN_A";
-    assert g.channels[1] == "CHAN_B";
-}
-
 test "a channel declared twice is one channel" {
     // ANTLR4 accepts the repeat; the name still means one channel id.
     let input = "lexer grammar Test;
@@ -974,14 +964,6 @@ expr : ID ; catch [E1 e] { h1(e); } catch [E2 e] { h2(e); } finally { done(); }"
     assert g.parser_rules.len() == 1;
 }
 
-test "lexer rule with locals" {
-    let input = "grammar Test;
-INT locals [int n] : [0-9]+ ;";
-    let g = parse(input).unwrap();
-    assert g.lexer_rules.len() == 1;
-    assert g.lexer_rules[0].name == "INT";
-}
-
 test "private rule modifier" {
     let input = "grammar Test;
 public expr : ID ;
@@ -1089,6 +1071,12 @@ rule : ID ;";
     assert g.options.len() == 1;
     assert g.options[0].name == "k";
     assert_option_int(&g.options[0], 3);
+}
+
+test "an integer option value of any length is accepted" {
+    // The jar keeps the digits as text and only warns of an unknown option.
+    let g = parse("grammar Test;\noptions { k = 99999999999999999999; }\nrule : ID ;").unwrap();
+    assert g.options[0].value matches { Int("99999999999999999999") };
 }
 
 test "grammar option with action-block value round-trips the body" {
@@ -1574,24 +1562,6 @@ channels { FOO, BAR
     assert result matches { Err(_) }, "expected unterminated channels block to be rejected";
 }
 
-test "tokens block trailing junk is tolerated then closed" {
-    let input = "grammar Test;
-tokens { FOO, 42, BAR }
-r : FOO ;";
-    let g = parse(input).unwrap();
-    assert g.parser_rules.len() == 1;
-}
-
-test "channels block trailing junk is tolerated then closed" {
-    let input = "lexer grammar Test;
-channels { COMMENTS ; DOCS }
-WS : ' ' -> channel(COMMENTS) ;";
-    let g = parse(input).unwrap();
-    assert g.channels.len() == 2;
-    assert g.channels[0] == "COMMENTS";
-    assert g.channels[1] == "DOCS";
-}
-
 test "parser rule tilde applied to block" {
     let input = "grammar Test;
 noise : ~( 'a' | 'b' | 'c' ) ;";
@@ -1728,26 +1698,6 @@ expr [ ] : ID ;";
     let g = parse(input).unwrap();
     assert g.parser_rules.len() == 1;
     assert g.parser_rules[0].name == "expr";
-}
-
-test "tokens block with numbered assignments" {
-    let input = "grammar Test;
-tokens { FOO = 1, BAR = 2 }
-expr : ID ;";
-    let g = parse(input).unwrap();
-    assert g.parser_rules.len() == 1;
-    let mut saw_foo = false;
-    let mut saw_bar = false;
-    for let r of &g.lexer_rules {
-        if r.name == "FOO" && r.is_virtual {
-            saw_foo = true;
-        }
-        if r.name == "BAR" && r.is_virtual {
-            saw_bar = true;
-        }
-    }
-    assert saw_foo, "tokens{} block must still register FOO as virtual token";
-    assert saw_bar, "tokens{} block must still register BAR as virtual token";
 }
 
 test "alt-prefix angle options attach to the alternative" {
@@ -1901,14 +1851,6 @@ r : ID<p=3>* ;";
     }
 }
 
-test "malformed angle block does not panic" {
-    let input = "grammar Test;
-r : A<foo=> ;";
-    let g = parse(input).unwrap();
-    assert g.parser_rules.len() == 1;
-    assert g.parser_rules[0].alternatives.len() == 1;
-}
-
 test "element options on action block attach to the alternative" {
     let input = "grammar T;
 e : a=e op=('+'|'-') b=e {}<p=3>
@@ -1947,6 +1889,17 @@ e : a=e op=('+'|'-') b=e  {}<p=3>{pred}?<fail='Message'>
     assert_option_int(&alt.options[0], 3);
     assert alt.options[1].name == "fail";
     assert_option_str(&alt.options[1], "Message");
+}
+
+test "parse_checked rejects a rule its header forbids, which parse leaves to composition" {
+    // The jar's error(52) / error(53). A delegate a combined grammar imports is
+    // exempt, so `parse` alone cannot decide it.
+    let parser_g = "parser grammar P;\ns : A ;\nB : 'b' ;";
+    let lexer_g = "lexer grammar L;\nA : 'a' ;\nfoo : A ;";
+    assert parse_checked(parser_g) matches { Err(e) && e.message == "lexer rule B not allowed in parser" };
+    assert parse_checked(lexer_g) matches { Err(e) && e.message == "parser rule foo not allowed in lexer" };
+    assert parse(parser_g) matches { Ok(_) };
+    assert parse(lexer_g) matches { Ok(_) };
 }
 
 test "parse_checked rejects undefined parser rule reference" {
@@ -2124,7 +2077,7 @@ fn assert_option_str<S: AsStrSlice>(opt: &GrammarOption, expected: S) {
 
 fn assert_option_int(opt: &GrammarOption, expected: i64) {
     if let Int(n) = &opt.value {
-        assert *n == expected;
+        assert *n == `${expected}`;
     } else {
         panic(`option '${opt.name}': expected Int, got other`);
     }
@@ -2516,4 +2469,64 @@ X : [\\p{Nd}-] ;");
 X : [-\\p{Nd}] ;");
     assert class_admits(&leading, '0');
     assert class_admits(&leading, '-');
+}
+
+test "a grammar the jar rejects is rejected" {
+    // Each is otherwise valid, and the jar (4.13.2) refuses each.
+    let bad: List<String> = [
+        "grammar G;\ns : A EOF ;\nA : 'a' ;\ncatch [Exception e] { }", "grammar G;\ns : A EOF ;\nA : 'a' ;\nfinally { }",
+        "grammar G;\ntokens { 'x' }\ns : A EOF ;\nA : 'a' ;", "grammar G;\noptions { a b; }\ns : A EOF ;\nA : 'a' ;",
+        "grammar G;\ns returns : A EOF ;\nA : 'a' ;", "grammar G;\ns locals : A EOF ;\nA : 'a' ;",
+        "grammar G;\ns : A[3] EOF ;\nA : 'a' ;", "grammar G;\ns : A EOF ;\nA : [\\p{L] ;",
+        "lexer grammar L;\nA : 'a' -> channel(99999999999) ;",
+    ];
+    for let src of &bad {
+        assert parse(*src) matches { Err(_) }, *src;
+    }
+}
+
+test "a lexer rule takes options and nothing else before its colon" {
+    let bad: List<String> = [
+        "grammar G;\ns : A EOF ;\nA returns [int x] : 'a' ;", "grammar G;\ns : A EOF ;\nA @init{} : 'a' ;",
+        "grammar G;\ns : A EOF ;\nA [int x] : 'a' ;", "grammar G;\nINT locals [int n] : [0-9]+ ;",
+    ];
+    for let src of &bad {
+        assert parse(*src) matches { Err(_) }, *src;
+    }
+    assert parse("grammar G;\ns : A EOF ;\nA options { caseInsensitive = true; } : 'a' ;") matches { Ok(_) };
+}
+
+test "the jar's punctuation in prequel blocks is required" {
+    // `;` after each option, `,` between names and none trailing, `[...]`
+    // after `catch`, `{...}` after `finally`, and `:` after a block's options.
+    let bad: List<String> = [
+        "grammar G;\noptions { a = b }\ns : A EOF ;\nA : 'a' ;", "grammar G;\noptions { a = ; }\ns : A EOF ;\nA : 'a' ;",
+        "grammar G;\ntokens { B C }\ns : A EOF ;\nA : 'a' ;", "grammar G;\ntokens { B = 3 }\ns : A EOF ;\nA : 'a' ;",
+        "grammar G;\ntokens { B, }\ns : A EOF ;\nA : 'a' ;", "grammar G;\nchannels { X Y }\ns : A EOF ;\nA : 'a' ;",
+        "grammar G;\ns : A EOF ;\ncatch { }\nA : 'a' ;", "grammar G;\ns : A EOF ;\nfinally\nA : 'a' ;",
+        "grammar G;\ns : (options { greedy = false; } A) EOF ;\nA : 'a' ;",
+        "grammar G;\ntokens { FOO, 42, BAR }\nr : FOO ;",
+        "lexer grammar L;\nchannels { C ; D }\nWS : ' ' -> channel(C) ;",
+        "lexer grammar L;\nchannels { C = 1, D = 2 }\nWS : ' ' -> channel(C) ;", "grammar G;\nr : A<foo=> ;\nA : 'a' ;",
+    ];
+    for let src of &bad {
+        assert parse(*src) matches { Err(_) }, *src;
+    }
+}
+
+test "an integer option past i32 and a channel at i32::MAX are accepted" {
+    assert parse("grammar G;\noptions { a = 99999999999; }\ns : A EOF ;\nA : 'a' ;") matches { Ok(_) };
+    let g = parse("lexer grammar L;\nA : 'a' -> channel(2147483647) ;").unwrap();
+    assert g.lexer_rules[0].channel == i32::MAX;
+}
+
+test "a `<` in an argument's initializer is a comparison, not a bracket" {
+    // The jar declares `int x = a < b` and `int y`.
+    let g = parse("grammar G;\ns[int x = a < b, int y] : A EOF ;\nA : 'a' ;").unwrap();
+    let args = &g.parser_rules[0].args;
+    assert args.len() == 2;
+    assert args[0].name == "x";
+    assert args[1].name == "y";
+    let generic = parse("grammar G;\ns[Map<K, V> m, int y] : A EOF ;\nA : 'a' ;").unwrap();
+    assert generic.parser_rules[0].args.len() == 2;
 }

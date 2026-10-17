@@ -34,7 +34,7 @@ use {
 } from "./superclass.wado";
 use { MemberDecls, members_present } from "./java2wado/jmembers.wado";
 use { action_language_is_emittable } from "./java2wado.wado";
-use { clip_to_scalars, scalar_count, SCALAR_COUNT } from "./g4/unicode.wado";
+use { clip_to_scalars, complement_code_points, scalar_count, SCALAR_COUNT } from "./g4/unicode.wado";
 use { is_ident_char } from "./text.wado";
 use {
     ModeAttrUse,
@@ -1290,17 +1290,20 @@ pub fn lexer_alts_contested(arms: &List<LexerAlternative>, rules: &List<LexerRul
 /// fragment), which is what keeps it from being inlined at its use sites.
 pub fn fragment_is_recursive(rule: &LexerRule, all_rules: &List<LexerRule>) -> bool {
     let mut visited: List<String> = [];
-    return refs_self(&rule.name, &rule.body, all_rules, false, &mut visited);
+    return lexer_alts_reach(&rule.name, &rule.body, all_rules, false, &mut visited);
 }
 
 /// `fragment_is_recursive` through token rules too, which a splice inlines as
 /// it does fragments.
 fn lexer_rule_reaches_self(rule: &LexerRule, all_rules: &List<LexerRule>) -> bool {
     let mut visited: List<String> = [];
-    return refs_self(&rule.name, &rule.body, all_rules, true, &mut visited);
+    return lexer_alts_reach(&rule.name, &rule.body, all_rules, true, &mut visited);
 }
 
-fn refs_self<S: AsStrSlice>(
+/// Whether `alts` reference the rule `target`, directly or through the
+/// fragments they call (and the token rules, under `through_tokens`).
+/// `visited` guards rule cycles.
+pub fn lexer_alts_reach<S: AsStrSlice>(
     target: S,
     alts: &List<LexerAlternative>,
     all_rules: &List<LexerRule>,
@@ -1309,7 +1312,7 @@ fn refs_self<S: AsStrSlice>(
 ) -> bool {
     for let alt of alts {
         for let elem of &alt.elements {
-            if elem_refs_self(target, elem, all_rules, through_tokens, visited) {
+            if lexer_elem_reaches(target, elem, all_rules, through_tokens, visited) {
                 return true;
             }
         }
@@ -1317,7 +1320,8 @@ fn refs_self<S: AsStrSlice>(
     return false;
 }
 
-fn elem_refs_self<S: AsStrSlice>(
+/// `lexer_alts_reach` for one element.
+pub fn lexer_elem_reaches<S: AsStrSlice>(
     target: S,
     elem: &LexerElement,
     all_rules: &List<LexerRule>,
@@ -1339,18 +1343,18 @@ fn elem_refs_self<S: AsStrSlice>(
                 find_fragment(all_rules, &name);
             };
             if let Some(f) = callee {
-                return refs_self(target, &f.body, all_rules, through_tokens, visited);
+                return lexer_alts_reach(target, &f.body, all_rules, through_tokens, visited);
             }
             return false;
         },
         Group(alts) => {
-            return refs_self(target, &alts, all_rules, through_tokens, visited);
+            return lexer_alts_reach(target, &alts, all_rules, through_tokens, visited);
         },
         Repeat(rep) => {
-            return elem_refs_self(target, &rep.element, all_rules, through_tokens, visited);
+            return lexer_elem_reaches(target, &rep.element, all_rules, through_tokens, visited);
         },
         Not(not_elem) => {
-            return elem_refs_self(target, &not_elem.element, all_rules, through_tokens, visited);
+            return lexer_elem_reaches(target, &not_elem.element, all_rules, through_tokens, visited);
         },
         _ => {
             return false;
@@ -3227,13 +3231,7 @@ fn add_following_chars(
     if lead.nullable {
         acc.may_end = true;
     }
-    acc.ranges.extend(&if lead.negated {
-        ranges_minus(&[
-            [0, 0x10FFFF],
-        ], &lead.ranges);
-    } else {
-        lead.ranges;
-    });
+    acc.ranges.extend(&if lead.negated { complement_code_points(&lead.ranges) } else { lead.ranges });
     return true;
 }
 

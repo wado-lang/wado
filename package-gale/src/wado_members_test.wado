@@ -107,3 +107,9 @@ test "translate_wado_members names a generic method by what precedes its type pa
     let m = translate_wado_members("fn pick<T>(&mut self, x: T) -> T { return x; }").unwrap();
     assert m.methods.len() == 1 && m.methods[0].name == "pick" && m.methods[0].mutates;
 }
+
+test "translate_wado_members keeps a template holding a template whole" {
+    let m = translate_wado_members("label: String = `${ `;` }`; n: i32 = 0").unwrap();
+    assert m.fields.len() == 2;
+    assert m.fields[0].init == "`${ `;` }`";
+}

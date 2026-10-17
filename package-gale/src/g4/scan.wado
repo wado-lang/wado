@@ -14,6 +14,7 @@
 
 use icu from "core:icu";
 use { BinaryProperty } from "core:icu";
+use { collect_range } from "../text.wado";
 
 /// Scan a `//` line comment. `pos` must point at the first `/`. Returns
 /// the index of the terminating `\n` (which it excludes), or `chars.len()`.
@@ -45,6 +46,11 @@ pub fn scan_block_comment(chars: &List<char>, pos: i32) -> i32 {
 /// quote. Honors `\` escapes. Returns the index just past the closing
 /// quote, or `chars.len()` if unterminated.
 pub fn scan_string(chars: &List<char>, pos: i32) -> i32 {
+    return scan_closed_string(chars, pos).unwrap_or(chars.len());
+}
+
+/// `scan_string`, with an unterminated string reported as `None`.
+pub fn scan_closed_string(chars: &List<char>, pos: i32) -> Option<i32> {
     let n = chars.len();
     let quote = chars[pos];
     let mut i = pos + 1;
@@ -56,10 +62,145 @@ pub fn scan_string(chars: &List<char>, pos: i32) -> i32 {
         }
         i += 1;
         if c == quote {
-            return i;
+            return Option::Some(i);
         }
     }
-    return n;
+    return null;
+}
+
+/// Scan a Wado template literal. `pos` must point at the opening backtick.
+/// Returns the index just past the closing backtick, or `n` if unterminated,
+/// and the span of each `${ ... }` body. A hole is Wado code, so a string,
+/// comment or template inside it is stepped over whole.
+pub fn scan_template(chars: &List<char>, pos: i32, n: i32) -> [i32, List<[i32, i32]>] {
+    let mut holes: List<[i32, i32]> = [];
+    let mut i = pos + 1;
+    while i < n {
+        if chars[i] == '\\' && i + 1 < n {
+            i += 2;
+            continue;
+        }
+        if chars[i] == '`' {
+            return [i + 1, holes];
+        }
+        if chars[i] == '$' && i + 1 < n && chars[i + 1] == '{' {
+            let Some(close) = match_delim(chars, i + 1, n, '{', '}') else {
+                holes.push([i + 2, n]);
+                return [n, holes];
+            };
+            holes.push([i + 2, close - 1]);
+            i = close;
+            continue;
+        }
+        i += 1;
+    }
+    return [n, holes];
+}
+
+/// The end of the Wado string, char, template or comment opening at `i`, or
+/// `null` where none does: what a scan of Wado code steps over whole.
+pub fn wado_opaque_end(chars: &List<char>, i: i32, n: i32) -> Option<i32> {
+    return match chars[i] {
+        '"' | '\'' => Option::Some(scan_string(chars, i)),
+        '`' => Option::Some(scan_template(chars, i, n).0),
+        '/' && i + 1 < n && chars[i + 1] == '/' => Option::Some(scan_line_comment(chars, i)),
+        '/' && i + 1 < n && chars[i + 1] == '*' => Option::Some(scan_block_comment(chars, i)),
+        _ => null,
+    };
+}
+
+/// In Wado code, the index just past the delimiter matching the `open_ch` at
+/// `open`, or `null` when it never closes.
+pub fn match_delim(chars: &List<char>, open: i32, n: i32, open_ch: char, close_ch: char) -> Option<i32> {
+    let mut depth = 0;
+    let mut i = open;
+    while i < n {
+        if let Some(end) = wado_opaque_end(chars, i, n) {
+            i = end;
+            continue;
+        }
+        let c = chars[i];
+        if c == open_ch {
+            depth += 1;
+        } else if c == close_ch {
+            depth -= 1;
+            if depth == 0 {
+                return Option::Some(i + 1);
+            }
+        }
+        i += 1;
+    }
+    return null;
+}
+
+/// The spans of `chars` between the commas no bracket encloses, each trimmed,
+/// an empty last one dropped. `<` is a comparison unless it opens a type's
+/// arguments: after `::`, or anywhere in a declaration's type, before its `=`.
+pub fn split_top_level_commas(chars: &List<char>, declarations: bool) -> List<String> {
+    let n = chars.len();
+    let mut out: List<String> = [];
+    let mut open: List<char> = [];
+    let mut seg_start = 0;
+    let mut in_type = declarations;
+    let mut i = 0;
+    while i < n {
+        if let Some(end) = wado_opaque_end(chars, i, n) {
+            i = end;
+            continue;
+        }
+        let c = chars[i];
+        if c matches { '(' | '[' | '{' }
+            || c == '<' && (in_type || open.last() == Option::Some('<') || opens_type_args(chars, i)) {
+            open.push(c);
+        } else if c matches { ')' | ']' | '}' } || c == '>' && open.last() == Option::Some('<') && chars[i - 1] != '-' {
+            open.pop();
+        } else if open.is_empty()
+            && c == '='
+            && !(i + 1 < n && chars[i + 1] == '=')
+            && !(i > 0 && chars[i - 1] matches { '!' | '<' | '>' | '=' }) {
+            in_type = false;
+        } else if open.is_empty() && c == ',' {
+            out.push(collect_trimmed(chars, seg_start, i));
+            seg_start = i + 1;
+            in_type = declarations;
+        }
+        i += 1;
+    }
+    let last = collect_trimmed(chars, seg_start, n);
+    if !last.is_empty() {
+        out.push(last);
+    }
+    return out;
+}
+
+/// Whether the `<` at `lt` follows a turbofish `::`, or a path where Wado
+/// expects a type: after `as`, a single `:` or `->`.
+fn opens_type_args(chars: &List<char>, lt: i32) -> bool {
+    if text_at(chars, lt - 2, lt, "::") {
+        return true;
+    }
+    let mut j = ident_start(chars, lt);
+    while text_at(chars, j - 2, j, "::") {
+        j = ident_start(chars, j - 2);
+    }
+    while j > 0 && chars[j - 1].is_ascii_whitespace() {
+        j -= 1;
+    }
+    return word_at(chars, j - 2, j, "as")
+        || text_at(chars, j - 2, j, "->")
+        || text_at(chars, j - 1, j, ":") && !text_at(chars, j - 2, j, "::");
+}
+
+fn ident_start(chars: &List<char>, end: i32) -> i32 {
+    let mut j = end;
+    while j > 0 && is_id_continue_char(chars[j - 1]) {
+        j -= 1;
+    }
+    return j;
+}
+
+fn collect_trimmed(chars: &List<char>, start: i32, end: i32) -> String {
+    return collect_range(chars, start, end).trim().to_string();
 }
 
 /// Scan an ANTLR4 char class `[...]`. `pos` must point at the opening `[`.
@@ -118,6 +259,42 @@ pub fn scan_balanced(chars: &List<char>, open_idx: i32, open: char, close: char)
         }
     }
     return null;
+}
+
+/// Past the ASCII whitespace from `start`, stopping at `n`.
+pub fn skip_ws(chars: &List<char>, start: i32, n: i32) -> i32 {
+    let mut i = start;
+    while i < n && chars[i].is_ascii_whitespace() {
+        i += 1;
+    }
+    return i;
+}
+
+/// Whether `text` sits at `i`, ending by `n`.
+pub fn text_at<S: AsStrSlice>(chars: &List<char>, i: i32, n: i32, text: S) -> bool {
+    if i < 0 {
+        return false;
+    }
+    let mut k = i;
+    for let c of text.chars() {
+        if k >= n || chars[k] != c {
+            return false;
+        }
+        k += 1;
+    }
+    return true;
+}
+
+/// Whether `word` sits at `i` as a whole word, not part of a longer name.
+pub fn word_at<S: AsStrSlice>(chars: &List<char>, i: i32, n: i32, word: S) -> bool {
+    if !text_at(chars, i, n, word) {
+        return false;
+    }
+    if i > 0 && is_id_continue_char(chars[i - 1]) {
+        return false;
+    }
+    let end = i + word.chars().count();
+    return !(end < n && is_id_continue_char(chars[end]));
 }
 
 /// ANTLR4's `NameStartChar` (`vendor/antlr4/doc/lexicon.md`), which is XML's:

@@ -21,8 +21,8 @@ pub variant OptionValue {
     /// Single-quoted string literal value, with the surrounding quotes
     /// stripped: `'foo.g4'` → `Str("foo.g4")`.
     Str(String),
-    /// Decimal integer literal.
-    Int(i64),
+    /// Decimal integer literal, as written: the jar bounds no option's value.
+    Int(String),
     /// Host-language action block `{ ... }`. Carries the raw body between
     /// the braces (delimiters excluded) plus its source span; Gale does not
     /// parse action-language code.
@@ -211,6 +211,11 @@ pub struct Grammar {
     /// `options` — answer which base a call site reaches.
     pub lexer_superclass: String = "",
     pub parser_superclass: String = "",
+    /// The first rule of the kind this grammar's header forbids: a lexer rule
+    /// in a `parser grammar`, a parser rule in a `lexer grammar`. Whether it is
+    /// an error depends on what imports the grammar (`import.md`), so the
+    /// parse records it and `check_admission` decides.
+    pub misplaced_rule: Option<ParseError> = null,
 }
 
 /// The `[lexer, parser]` bases a grammar declares: a `lexer grammar` names the
