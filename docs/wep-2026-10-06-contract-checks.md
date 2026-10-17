@@ -189,7 +189,7 @@ names no result and no old value.
 A condition performs no effect. It may call a function that has a contract of
 its own; that call is an ordinary call, checked unless it is marked.
 
-A condition also writes only what it declares itself. A skipped clause must
+A condition also writes only the values it creates. A skipped clause must
 leave the call computing what a checked one computes, and a write to a
 parameter, a global, or anything a reference reaches shows in one build and not
 the other. The first implementation admitted such a write: a clause doubling its
@@ -431,7 +431,8 @@ API waits for a program outside the standard library that needs one.
 10. A clause writing what it does not declare is a compile error. Done. The
     purity check reads the clause's writes from `write_sites.rs`, which the
     `self_comparison` lint shares, and keeps those landing in a value the clause
-    declares. Lowering then copies an argument from the caller's place and
+    creates that holds no `&mut`, resource, or function value. A function value
+    is never called, `fn` included: it may write through a `&mut` it captured. Lowering then copies an argument from the caller's place and
     evaluates a failed clause again for its report without a parameter having
     changed.
 

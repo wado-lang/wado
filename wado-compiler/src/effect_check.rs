@@ -179,9 +179,9 @@ pub enum Impurity {
     /// A `contract` clause writes, or lends `&mut` to, the named binding it
     /// did not declare.
     Mutate(String),
-    /// A `contract` clause calls the named `fn mut` it did not declare, which
-    /// writes what that closure captured.
-    CallMut(String),
+    /// A `contract` clause calls the named function value, which may write
+    /// through a `&mut` it captured, `fn` and `fn mut` alike.
+    CallValue(String),
 }
 
 /// One impurity, at the position that must not hold it.
@@ -216,12 +216,12 @@ impl From<PurityError> for Diagnostic {
                 ),
             ),
             Impurity::Mutate(name) => (
-                Code::ImmutableAssignment,
-                format!("{noun} cannot mutate '{name}', which it did not declare"),
+                Code::ContractWrite,
+                format!("{noun} cannot mutate '{name}', which reaches state it did not create"),
             ),
-            Impurity::CallMut(name) => (
-                Code::ImmutableAssignment,
-                format!("{noun} cannot call '{name}', a `fn mut` it did not declare"),
+            Impurity::CallValue(name) => (
+                Code::ContractWrite,
+                format!("{noun} cannot call '{name}', which may write what it captured"),
             ),
         };
         Diagnostic {
@@ -3193,19 +3193,17 @@ impl<'a> PurityWalker<'a> {
             // operand reaching a `&mut` passes on one the clause did not take.
             WriteSite::Lent(Expr::Unary(unary)) if unary.op == ast::UnaryOp::MutRef => {}
             WriteSite::Lent(operand) => self.flag_mutate(operand),
-            // A plain `fn` writes nothing it captured.
             WriteSite::Opaque(callee) => {
-                if self.is_fn_mut(callee) && !self.declared_in_clause(callee) {
-                    let name = unparse_expr_source(callee);
-                    self.flag(Impurity::CallMut(name), callee.span());
-                }
+                let name = unparse_expr_source(callee);
+                self.flag(Impurity::CallValue(name), callee.span());
             }
         }
     }
 
-    /// Flags a write to `place` unless the clause declares the value it lands
-    /// in. A write through a reference lands outside whatever holds the
-    /// reference, so it is flagged wherever the reference came from.
+    /// Flags a write to `place` unless it lands in a value the clause created
+    /// and that holds nothing able to write elsewhere. A copy of a value
+    /// holding a `&mut` shares what that `&mut` points to, wherever the copy
+    /// is bound.
     fn flag_write(&mut self, place: &Expr) {
         let owned = match place {
             Expr::FieldAccess(access) if !self.is_reference(&access.expr) => {
@@ -3214,11 +3212,11 @@ impl<'a> PurityWalker<'a> {
             Expr::Index(index) if !self.is_reference(&index.expr) => {
                 return self.flag_write(&index.expr);
             }
-            Expr::Ident(_) => self.declared_in_clause(place) && !self.is_reference(place),
+            Expr::Ident(_) => self.declared_in_clause(place) && !self.reaches_mut_ref(place),
             Expr::FieldAccess(_) | Expr::Index(_) => false,
             Expr::Unary(unary) if unary.op == ast::UnaryOp::Deref => false,
             // A value the clause computed, which nothing outside it holds.
-            _ => !self.is_reference(place),
+            _ => !self.reaches_mut_ref(place),
         };
         if !owned {
             self.flag_mutate(place);
@@ -3245,20 +3243,15 @@ impl<'a> PurityWalker<'a> {
     }
 
     fn is_reference(&self, expr: &Expr) -> bool {
-        self.has_type(expr, TypeTable::is_reference_shaped)
-    }
-
-    fn is_fn_mut(&self, expr: &Expr) -> bool {
-        self.has_type(expr, |types, ty| {
-            matches!(types.get(ty), ResolvedType::Function { is_mut: true, .. })
-        })
-    }
-
-    /// Whether any walk that reached `expr` gave it a type `test` accepts.
-    fn has_type(&self, expr: &Expr, test: impl Fn(&TypeTable, TypeId) -> bool) -> bool {
         expr_types_of(expr, self.sem)
             .into_iter()
-            .any(|ty| test(&self.sem.types, ty))
+            .any(|ty| self.sem.types.is_reference_shaped(ty))
+    }
+
+    fn reaches_mut_ref(&self, expr: &Expr) -> bool {
+        expr_types_of(expr, self.sem)
+            .into_iter()
+            .any(|ty| self.sem.reaches_mut_ref(ty))
     }
 
     fn flag(&mut self, impurity: Impurity, span: Span) {

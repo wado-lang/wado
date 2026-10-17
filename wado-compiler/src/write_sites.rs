@@ -3,6 +3,7 @@
 
 use crate::ast::{AstId, AstVisitor, Expr, SelfKind, UnaryOp, walk_expr};
 use crate::semantics::Semantics;
+use crate::symbol::SymbolKind;
 
 /// One way an expression may write.
 pub(crate) enum WriteSite<'e> {
@@ -14,8 +15,8 @@ pub(crate) enum WriteSite<'e> {
     /// its method takes, since a `&self` method cannot write the receiver
     /// itself.
     Lent(&'e Expr),
-    /// The callee of a call that is not a declared function, such as a
-    /// `fn mut` closure, which may write what it captured.
+    /// The callee of a call that is not a declared function: a function value,
+    /// `fn` or `fn mut`, which may write through a `&mut` it captured.
     Opaque(&'e Expr),
     /// The receiver of a method call with no recorded dispatch, which nothing
     /// can see into.
@@ -65,18 +66,27 @@ impl<F: FnMut(WriteSite<'_>)> Sites<'_, F> {
     }
 
     fn call(&mut self, callee: &Expr, args: &[Expr]) {
-        let declared = match callee {
-            Expr::Ident(ident) => self
-                .sem
-                .referenced_symbol(ident.id)
-                .and_then(|def| self.sem.function_at(def))
-                .is_some(),
-            _ => false,
-        };
-        if !declared {
+        if self.is_function_value(callee) {
             (self.found)(WriteSite::Opaque(callee));
         }
         self.lend(args);
+    }
+
+    /// Whether `callee` is a value of function type rather than a path to a
+    /// declared function or method.
+    fn is_function_value(&self, callee: &Expr) -> bool {
+        let Expr::Ident(ident) = callee else {
+            return true;
+        };
+        self.sem
+            .referenced_symbol(ident.id)
+            .and_then(|def| self.sem.symbol_at(def))
+            .is_some_and(|symbol| {
+                matches!(
+                    symbol.kind,
+                    SymbolKind::Variable(_) | SymbolKind::Global(_)
+                )
+            })
     }
 }
 

@@ -1,0 +1,27 @@
+// A copy the clause binds shares what a `&mut` in the original points to, so
+// a `&mut self` method on the copy writes the caller's state.
+struct Holder { r: &mut i32 }
+
+impl Holder {
+    fn poke(&mut self) -> bool {
+        *self.r += 1;
+        return true;
+    }
+}
+
+fn poked(h: Holder) -> i32
+    contract poking: { let mut copy = h; copy.poke() }
+{
+    return *h.r;
+}
+
+export fn run() {
+    let mut n = 1;
+    let _ = poked(Holder { r: &mut n });
+}
+
+__DATA__
+{
+  "compile_error": ":13:42: analysis error: contract clause cannot mutate 'copy', which reaches state it did not create",
+  "compile_error_codes": ["CONTRACT_WRITE"]
+}
