@@ -12,8 +12,8 @@ use std::task::{Context, Poll, Waker};
 
 use crate::ast;
 use crate::compiler_host::{
-    CompilerHost, Diagnostic, GeneratorRequest, GeneratorResponse, GeneratorRunnerError, LogLevel,
-    SourceError,
+    CompilerHost, DependencyIndex, Diagnostic, GeneratorRequest, GeneratorResponse,
+    GeneratorRunnerError, LogLevel, SourceError,
 };
 use crate::defs::{DefId, DefKind};
 use crate::elaborator::liveness::LivenessScope;
@@ -285,6 +285,15 @@ impl CompilerHost for SnapshotHost {
     /// The snapshot is the stdlib itself, shared by every compile, each of
     /// which reports the modules it takes.
     fn stdlib_module_read(&self, _import_path: &str) {}
+
+    /// The stdlib lies in no package a manifest roots.
+    fn package_root(&self, _path: &str) -> Option<String> {
+        None
+    }
+
+    fn package_index(&self, root: &str) -> DependencyIndex {
+        unreachable!("no module lies in a package, so none is asked for: {root}")
+    }
 
     async fn run_generator(
         &self,

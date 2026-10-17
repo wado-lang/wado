@@ -29,10 +29,11 @@
 
 use std::path::Path;
 
+use wado_compiler::hashmap::IndexMap;
 use wado_compiler::kiln::metadata::{
     FileHash, METADATA_VERSION, Metadata, OutputEntry, metadata_filename,
 };
-use wado_compiler::kiln::{content_hash, hex_digest};
+use wado_compiler::kiln::{collect_inline_invocations, content_hash, hex_digest};
 use wado_lsp::{Engine, FilesystemCompilerHost, Severity};
 
 const SCHEMA_BODY: &str = "// dummy calc grammar — body content is irrelevant\n";
@@ -226,6 +227,76 @@ fn clause_in_an_imported_module_redirects() {
 
         assert_redirected_clean(&diags);
     });
+}
+
+/// A clause of another package's file looks for its artifact where a build
+/// writes it, in the consumer's `build/kiln`, not at its own `output_dir`.
+#[test]
+fn another_packages_clause_reads_the_consumers_build() {
+    futures::executor::block_on(async {
+        let fixture = build_fixture(FixtureSpec::default());
+        let dep = fixture.root.path().join("dep");
+        std::fs::create_dir_all(dep.join("grammars")).unwrap();
+        std::fs::write(
+            dep.join("wado.toml"),
+            "[package]\nname = \"dep\"\nversion = \"0.0.0\"\n",
+        )
+        .unwrap();
+        std::fs::write(dep.join("grammars/calc.g4"), SCHEMA_BODY).unwrap();
+        std::fs::write(dep.join("lib.wado"), format!("pub {CLAUSE}")).unwrap();
+        let lib = wado_compiler::parse(&format!("pub {CLAUSE}")).ast;
+        let (invocations, _) =
+            collect_inline_invocations([("dep/lib.wado", &lib)], &IndexMap::default(), "");
+        let out_dir = format!("build/kiln/{}", invocations[0].decl_site().synthetic_id);
+        write_artifact(
+            &fixture.root.path().join(&out_dir),
+            "dep/grammars/calc.g4",
+            &format!("{out_dir}/calc.wado"),
+        );
+
+        let entry_text =
+            "use { parse } from \"./dep/lib.wado\";\nfn run() {\n    let _x = parse();\n}\n";
+        let entry_uri = format!("file://{}", fixture.root.path().join("main.wado").display());
+        let host = FilesystemCompilerHost::new(fixture.root.path().to_path_buf());
+        let mut engine = Engine::new();
+        engine.open_document(&entry_uri, entry_text.to_string());
+
+        let diags = engine.diagnostics(&entry_uri, &host).await;
+
+        assert_redirected_clean(&diags);
+    });
+}
+
+/// The generated module and its metadata in `dir`, for the schema `primary`,
+/// the output at `output`, both spelled from the consumer root.
+fn write_artifact(dir: &Path, primary: &str, output: &str) {
+    std::fs::create_dir_all(dir).unwrap();
+    std::fs::write(dir.join("calc.wado"), GENERATED_BODY).unwrap();
+    let metadata = Metadata {
+        version: METADATA_VERSION,
+        invocation: "kiln-test".to_string(),
+        generator: "fake:gen@0.1".to_string(),
+        invoked_as: String::new(),
+        generator_source_hash: String::new(),
+        primary: FileHash {
+            path: primary.to_string(),
+            hash: hex_sha256(SCHEMA_BODY.as_bytes()),
+            extent: None,
+            use_type: None,
+        },
+        inputs: Vec::new(),
+        options_hash: hex_sha256(&[]),
+        outputs: vec![OutputEntry {
+            path: output.to_string(),
+            hash: hex_sha256(GENERATED_BODY.as_bytes()),
+            entry: true,
+        }],
+    };
+    std::fs::write(
+        dir.join(metadata_filename(primary)),
+        serde_json::to_string_pretty(&metadata).unwrap(),
+    )
+    .unwrap();
 }
 
 #[test]

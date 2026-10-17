@@ -13,7 +13,8 @@ specification.
 ## What it does
 
 - `Manifest` — parse + validate `wado.toml` (`[package]`, `[world]`,
-  `[registries]`, `[dependencies]`, `[workspace]`, …).
+  `[registries]`, `[dependencies]`, …).
+- `WorkspaceManifest` — parse + validate `wado-workspace.toml`.
 - `LockFile` — read/write `wado.lock`.
 - `resolve(manifest, provider)` — walk the dependency graph through a
   `DependencyProvider` and produce locked packages.

@@ -4,15 +4,16 @@
 //! canonicalised into an `Arc<str>` through [`ModuleSourceInterner`], so `clone`
 //! / `eq` / `hash` are O(1) and well-known names need no interner at all.
 
-use crate::compiler_host::{DependencyIndex, DependencyManifest};
+use crate::compiler_host::{CompilerHost, DependencyIndex, DependencyManifest};
 use crate::hashmap;
 use crate::intern::{InternedStr, StringInterner};
-use crate::name::{DeclaredHead, effect_namespace};
+use crate::name::{DeclaredHead, effect_namespace, module_parent_dir};
 use crate::path::is_cwd_relative;
 use crate::primitive::PrimitiveType;
 use crate::stdlib::{ALL_CORE_WASM_ASSETS, BINDING_MODULE_PATHS, CORE_MODULE_PATHS};
 use std::fmt;
 use std::sync::{Arc, LazyLock};
+use unicode_normalization::UnicodeNormalization;
 
 /// Sentinel `Arc<str>` for `ModuleSource::default()` placeholders.
 /// Distinct identity from any real interned core name (no real module
@@ -119,6 +120,42 @@ static STDLIB_NAME_ARCS: LazyLock<Vec<Arc<str>>> = LazyLock::new(|| {
     arcs
 });
 
+/// What placing a module asks the host: the [`CompilerHost`] methods of the
+/// same names.
+pub trait PackageHost {
+    fn package_root(&self, path: &str) -> Option<String>;
+    fn package_index(&self, root: &str) -> DependencyIndex;
+}
+
+impl<H: CompilerHost> PackageHost for H {
+    fn package_root(&self, path: &str) -> Option<String> {
+        CompilerHost::package_root(self, path)
+    }
+
+    fn package_index(&self, root: &str) -> DependencyIndex {
+        CompilerHost::package_index(self, root)
+    }
+}
+
+/// A [`PackageHost`] answering roots from `root` and indexes from `indexes`,
+/// empty for a root it does not list.
+#[cfg(test)]
+pub(crate) struct TestPackages<F> {
+    pub root: F,
+    pub indexes: hashmap::IndexMap<String, DependencyIndex>,
+}
+
+#[cfg(test)]
+impl<F: Fn(&str) -> Option<String>> PackageHost for TestPackages<F> {
+    fn package_root(&self, path: &str) -> Option<String> {
+        (self.root)(path)
+    }
+
+    fn package_index(&self, root: &str) -> DependencyIndex {
+        self.indexes.get(root).cloned().unwrap_or_default()
+    }
+}
+
 /// Interner for `ModuleSource` payloads. Wraps a generic
 /// [`StringInterner`] and adopts every well-known
 /// `LazyLock<Arc<str>>` static (`PLACEHOLDER_NAME`, `CORE_PRELUDE`, ...)
@@ -137,8 +174,28 @@ pub struct ModuleSourceInterner {
     package_roots: hashmap::IndexMap<InternedStr, InternedStr>,
     /// Generated module URI → the package importing it, one for all its importers.
     redirect_packages: hashmap::IndexMap<InternedStr, PackageId>,
-    /// The package of the entry point and its local modules.
+    /// The package of the entry point and the local modules inside its root.
     root_package: PackageId,
+    /// The entry's package root, as the host answers it. `None` where the entry
+    /// is in no package, and so shares its scope with every module in none.
+    root_dir: Option<String>,
+    /// Each path dependency's package root → its entry module.
+    dependency_roots: hashmap::IndexMap<String, String>,
+    /// The root of each path dependency that a path reached before any
+    /// manifest declared it, by lib: the package keeps the identity its first
+    /// modules were given.
+    reached_first: hashmap::IndexMap<String, InternedStr>,
+    /// Each local module the host has placed, and its package. A module in a
+    /// path dependency's root is placed in that dependency.
+    local_packages: hashmap::IndexMap<InternedStr, PackageId>,
+    /// Each package a placed module lies in that no manifest declares, by its
+    /// root, and the index its own `wado.toml` declares.
+    undeclared_packages: hashmap::IndexMap<InternedStr, DependencyIndex>,
+    /// What a module in no package declares: nothing.
+    no_dependencies: DependencyIndex,
+    /// Each directory a placed module lies in, and the package root the host
+    /// answered for it.
+    dir_roots: hashmap::IndexMap<String, Option<String>>,
 }
 
 impl ModuleSourceInterner {
@@ -149,6 +206,13 @@ impl ModuleSourceInterner {
             package_roots: hashmap::IndexMap::default(),
             redirect_packages: hashmap::IndexMap::default(),
             root_package: PackageId::Root,
+            root_dir: None,
+            dependency_roots: hashmap::IndexMap::default(),
+            reached_first: hashmap::IndexMap::default(),
+            local_packages: hashmap::IndexMap::default(),
+            undeclared_packages: hashmap::IndexMap::default(),
+            no_dependencies: DependencyIndex::default(),
+            dir_roots: hashmap::IndexMap::default(),
         }
     }
 
@@ -162,6 +226,95 @@ impl ModuleSourceInterner {
         self.root_package = PackageId::Core;
     }
 
+    /// The entry module of each path dependency, at any depth.
+    pub fn dependency_libs(&self) -> impl Iterator<Item = &str> {
+        let direct = self.dependencies.resolved.values();
+        let transitive = self.dependencies.packages.keys();
+        direct.chain(transitive).map(String::as_str)
+    }
+
+    /// Bound the package of the entry at `entry` and of each path dependency at
+    /// the root `package_root` answers for it. A single-file dependency has no
+    /// manifest, so it claims no root: the tree around it is not its package.
+    pub fn bound_packages(&mut self, entry: &str, host: &impl PackageHost) {
+        let libs: Vec<String> = self.dependency_libs().map(str::to_string).collect();
+        self.bound_dependency_roots(libs, host);
+        self.root_dir = host.package_root(entry);
+    }
+
+    /// Claim the root of each package among `libs` that has a manifest.
+    fn bound_dependency_roots(&mut self, libs: Vec<String>, host: &impl PackageHost) {
+        for lib in libs {
+            if self.package(&lib).manifest.is_some()
+                && let Some(root) = host.package_root(&lib)
+            {
+                let interned = self.intern(&root);
+                if self.undeclared_packages.contains_key(&interned) {
+                    self.reached_first.insert(lib.clone(), interned);
+                }
+                self.dependency_roots.insert(root, lib);
+            }
+        }
+    }
+
+    /// The local module at `path`, placed in its package first if it waits on
+    /// one. The host is asked for the root of a directory no placed module lies
+    /// in, so once per directory, and for the index of a package no manifest
+    /// declares, once per package.
+    pub fn place(&mut self, path: &str, host: &impl PackageHost) -> ModuleSource {
+        let interned = self.intern(path);
+        if !self.local_packages.contains_key(&interned) {
+            let root = match self.dir_roots.get(module_parent_dir(path)) {
+                Some(root) => root.clone(),
+                None => host.package_root(path),
+            };
+            self.place_local(path, root, host);
+        }
+        self.local(path)
+    }
+
+    /// Place the local module at `path` in the package rooted at
+    /// `package_root`, or with the modules in no package where it is `None`.
+    fn place_local(&mut self, path: &str, package_root: Option<String>, host: &impl PackageHost) {
+        self.dir_roots
+            .insert(module_parent_dir(path).to_string(), package_root.clone());
+        let package = if package_root == self.root_dir {
+            self.root_package.clone()
+        } else if let Some(root) = package_root {
+            // An undeclared package can claim a root for a package it depends
+            // on after modules of that root were placed: those keep it Path.
+            let interned = self.intern(&root);
+            let undeclared = self.undeclared_packages.contains_key(&interned);
+            match self.dependency_roots.get(&root).cloned() {
+                Some(lib) if !undeclared => PackageId::Dependency(self.intern(&lib)),
+                _ => PackageId::Path(self.undeclared_package(&root, host)),
+            }
+        } else {
+            PackageId::Unpackaged
+        };
+        let path = self.intern(path);
+        self.local_packages.insert(path, package);
+    }
+
+    /// The package rooted at `root` that no manifest declares, indexed on
+    /// first sight along with every package it reaches.
+    fn undeclared_package(&mut self, root: &str, host: &impl PackageHost) -> InternedStr {
+        let root = self.intern(root);
+        if !self.undeclared_packages.contains_key(&root) {
+            let mut index = host.package_index(&root);
+            let mut reached = Vec::new();
+            for (lib, package) in std::mem::take(&mut index.packages) {
+                if !self.dependencies.packages.contains_key(&lib) {
+                    self.dependencies.packages.insert(lib.clone(), package);
+                    reached.push(lib);
+                }
+            }
+            self.undeclared_packages.insert(root.clone(), index);
+            self.bound_dependency_roots(reached, host);
+        }
+        root
+    }
+
     /// A dependency's entry module: it is its own package root.
     pub fn dependency(&mut self, path: &str) -> ModuleSource {
         self.dependency_module(path, path)
@@ -170,10 +323,24 @@ impl ModuleSourceInterner {
     /// A non-entry module of the dependency package rooted at `pkg`, elected
     /// by [`Self::elect_package_root`] so one file reached two ways stays one
     /// module in one package.
+    ///
+    /// A package a path reached first stays the [`PackageId::Path`] its first
+    /// modules were placed in, so each module of it is a placed local one.
     pub fn dependency_module(&mut self, pkg: &str, path: &str) -> ModuleSource {
         let path = self.intern(path);
+        if let Some(root) = self.reached_first.get(pkg) {
+            let package = PackageId::Path(root.clone());
+            self.local_packages.insert(path.clone(), package.clone());
+            return ModuleSource::Local { path, package };
+        }
         let pkg = self.elect_package_root(&path, pkg);
         ModuleSource::Dependency { pkg, path }
+    }
+
+    /// Whether the local module at `path` has been placed in its package.
+    #[must_use]
+    pub fn is_placed(&self, path: &InternedStr) -> bool {
+        self.local_packages.contains_key(path)
     }
 
     /// The package root for `path`. A module is reachable under more than one
@@ -194,31 +361,94 @@ impl ModuleSourceInterner {
         self.package_roots[path].clone()
     }
 
-    /// Resolve a bare dependency name to its entry module `ModuleSource`, if
-    /// declared in `[dependencies]` and successfully resolved.
-    pub fn resolve_dependency(&mut self, name: &str) -> Option<ModuleSource> {
-        let path = self.dependencies.resolved.get(name)?.clone();
+    /// The dependencies a bare-name import in `importer` resolves against: its
+    /// own package's, and none where it lies in no package but the entry does.
+    fn dependencies_of(&self, importer: &ModuleSource) -> &DependencyIndex {
+        match importer.package_id() {
+            PackageId::Dependency(lib) => self.package(lib.as_str()),
+            PackageId::Path(root) => &self.undeclared_packages[&root],
+            PackageId::Unpackaged => &self.no_dependencies,
+            PackageId::Root | PackageId::Core | PackageId::Binding(_) | PackageId::Remote(_) => {
+                &self.dependencies
+            }
+        }
+    }
+
+    /// The index of the source dependency whose entry module is `lib`.
+    fn package(&self, lib: &str) -> &DependencyIndex {
+        self.dependencies
+            .packages
+            .get(lib)
+            .expect("a host indexes the package of every source dependency it resolves")
+    }
+
+    /// Resolve a bare dependency name imported by `importer` to its entry
+    /// module `ModuleSource`, if its package declares it in `[dependencies]`
+    /// and it resolved.
+    pub fn resolve_dependency(
+        &mut self,
+        importer: &ModuleSource,
+        name: &str,
+    ) -> Option<ModuleSource> {
+        let path = self.dependencies_of(importer).resolved.get(name)?.clone();
         Some(self.dependency(&path))
     }
 
-    /// Resolve a coordinate to a *prebuilt component* dependency's `ModuleSource`
-    /// (a registry dependency fetched as a `.wasm`), imported across the CM
-    /// boundary like a `with { type: "wasm" }` asset.
-    pub fn resolve_component_dependency(&mut self, name: &str) -> Option<ModuleSource> {
-        let path = self.dependencies.components.get(name)?.clone();
+    /// Resolve the file `file` of the source dependency `name`, imported by
+    /// `importer` as `"<name>/<file>"`, where the dependency's
+    /// `[package].exports` lists it. Compared after NFC, case exactly. `None`
+    /// where `importer`'s package declares no dependency `name`.
+    pub fn resolve_exported_file(
+        &mut self,
+        importer: &ModuleSource,
+        name: &str,
+        file: &str,
+    ) -> Option<Result<ModuleSource, ExportRefusal>> {
+        let dependencies = self.dependencies_of(importer);
+        let Some(lib) = dependencies.resolved.get(name).cloned() else {
+            return dependencies
+                .components
+                .contains_key(name)
+                .then_some(Err(ExportRefusal::Component));
+        };
+        let exports = &self.package(&lib).exports;
+        let file: String = file.nfc().collect();
+        let Some(path) = exports.get(&file).cloned() else {
+            let lowered = file.to_lowercase();
+            let spelled_alike = exports.keys().find(|e| e.to_lowercase() == lowered);
+            return Some(Err(ExportRefusal::NotExported {
+                spelled_alike: spelled_alike.cloned(),
+            }));
+        };
+        Some(Ok(self.dependency_module(&lib, &path)))
+    }
+
+    /// Resolve a coordinate imported by `importer` to a *prebuilt component*
+    /// dependency's `ModuleSource` (a registry dependency fetched as a
+    /// `.wasm`), imported across the CM boundary like a `with { type: "wasm" }`
+    /// asset.
+    pub fn resolve_component_dependency(
+        &mut self,
+        importer: &ModuleSource,
+        name: &str,
+    ) -> Option<ModuleSource> {
+        let path = self.dependencies_of(importer).components.get(name)?.clone();
         Some(self.wasm(&path, WasmAssetKind::Wasm))
     }
 
-    /// The reason a *declared* dependency could not be resolved, if any.
+    /// The reason a dependency `importer`'s package *declares* could not be
+    /// resolved, if any.
     #[must_use]
-    pub fn unresolved_dependency(&self, name: &str) -> Option<&str> {
-        self.dependencies.unresolved.get(name).map(String::as_str)
+    pub fn unresolved_dependency(&self, importer: &ModuleSource, name: &str) -> Option<&str> {
+        let unresolved = &self.dependencies_of(importer).unresolved;
+        unresolved.get(name).map(String::as_str)
     }
 
-    /// The `wado.toml` the dependencies were read from, if one governs the entry.
+    /// The `wado.toml` `importer`'s dependencies were read from, if one governs
+    /// its package.
     #[must_use]
-    pub fn dependency_manifest(&self) -> Option<&DependencyManifest> {
-        self.dependencies.manifest.as_ref()
+    pub fn dependency_manifest(&self, importer: &ModuleSource) -> Option<&DependencyManifest> {
+        self.dependencies_of(importer).manifest.as_ref()
     }
 
     pub fn intern(&mut self, s: &str) -> InternedStr {
@@ -240,10 +470,16 @@ impl ModuleSourceInterner {
         self.binding(CmNamespace::Wasi, interface)
     }
     pub fn local(&mut self, path: &str) -> ModuleSource {
-        ModuleSource::Local {
-            path: self.intern(path),
-            package: self.root_package.clone(),
-        }
+        let path = self.intern(path);
+        let package = match self.local_packages.get(&path) {
+            Some(PackageId::Dependency(lib)) => {
+                let lib = lib.clone();
+                return self.dependency_module(&lib, &path);
+            }
+            Some(package) => package.clone(),
+            None => self.root_package.clone(),
+        };
+        ModuleSource::Local { path, package }
     }
 
     /// A remote package's entry module: it is its own package root.
@@ -329,6 +565,16 @@ impl WasmAssetKind {
     }
 }
 
+/// Why a `"<package>/<file>"` reference names no module.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ExportRefusal {
+    /// The package is a prebuilt component, which carries no files.
+    Component,
+    /// The package's `[package].exports` lists no such file, whether or not it
+    /// is there. `spelled_alike` is an entry differing from it in case alone.
+    NotExported { spelled_alike: Option<String> },
+}
+
 /// A CM package namespace the compiler ships bindings for. Reserved because it
 /// is bundled: `wep-2026-06-17-package-module-syntax.md`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -401,8 +647,8 @@ pub enum ModuleSource {
     Local {
         /// Relative path (e.g., "./geometry.wado", "./utils/helper.wado")
         path: InternedStr,
-        /// The entry's package, which a relative import stays in. Not part of
-        /// identity, which is `path`.
+        /// The entry's package, unless the module lies outside the entry's
+        /// package root. Not part of identity, which is `path`.
         package: PackageId,
     },
     /// A module of a dependency package, resolved from a bare-name
@@ -464,18 +710,25 @@ pub enum ModuleSource {
 /// The package a [`ModuleSource`] belongs to. Visibility enforcement keys on
 /// this: `internal` items reach any module with the same `PackageId`; `pub`
 /// items reach across package boundaries. `core` and each bundled CM namespace
-/// are their own independent package; the entry point and its local modules
-/// form the `Root` package being compiled, unless the host serves the stdlib's
-/// `core` tree ([`CompilerHost::serves_core`]), where they join `Core`.
+/// are their own independent package; the entry point and the local modules
+/// inside its package root form the `Root` package being compiled, unless the
+/// host serves the stdlib's `core` tree ([`CompilerHost::serves_core`]), where
+/// they join `Core`.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum PackageId {
     Core,
     Binding(CmNamespace),
-    /// Entry point, its local modules, and wasm assets bundled into the same
-    /// component.
+    /// Entry point, the local modules inside its package root, and wasm assets
+    /// bundled into the same component.
     Root,
     Dependency(InternedStr),
     Remote(InternedStr),
+    /// A local module's package other than the entry's, named by the root
+    /// [`CompilerHost::package_root`] answers for it.
+    Path(InternedStr),
+    /// The local modules in no package, where the entry is in one. They share
+    /// one scope, as they do with an entry in no package, which is `Root`.
+    Unpackaged,
 }
 
 impl ModuleSource {
@@ -768,14 +1021,18 @@ impl ModuleSource {
     }
 
     /// Whether the entry package owns this module: the entry point and the
-    /// local modules it reaches. A dependency, `core:` / `wasi:`, a remote and
-    /// a Kiln-generated module are all someone else's source. These are the
-    /// modules a lint reports in.
+    /// local modules it reaches inside its package root. A dependency,
+    /// `core:` / `wasi:`, a remote, a Kiln-generated module and a local module
+    /// of another package are all someone else's source. These are the modules
+    /// a lint reports in.
     #[must_use]
     pub fn is_entry_package(&self) -> bool {
         match self {
             Self::EntryPoint { .. } => true,
-            Self::Local { .. } => self.is_user_authored(),
+            Self::Local { package, .. } => {
+                !matches!(package, PackageId::Path(_) | PackageId::Unpackaged)
+                    && self.is_user_authored()
+            }
             _ => false,
         }
     }
@@ -961,6 +1218,25 @@ mod tests {
     }
 
     #[test]
+    fn a_prebuilt_component_exports_no_file() {
+        let mut interner = ModuleSourceInterner::new();
+        let mut index = DependencyIndex::default();
+        index
+            .components
+            .insert("acme:geo".to_string(), "geo.wasm".to_string());
+        interner.set_dependencies(index);
+        let entry = interner.entry_point("main.wado");
+        assert_eq!(
+            interner.resolve_exported_file(&entry, "acme:geo", "src/shapes.wado"),
+            Some(Err(ExportRefusal::Component)),
+        );
+        assert_eq!(
+            interner.resolve_exported_file(&entry, "acme:other", "src/shapes.wado"),
+            None,
+        );
+    }
+
+    #[test]
     fn dependency_identity_is_the_resolved_path() {
         let mut interner = ModuleSourceInterner::new();
         let a = interner.dependency("../greet/src/lib.wado");
@@ -1008,18 +1284,34 @@ mod tests {
             "broken".to_string(),
             "declares no [package].lib".to_string(),
         );
+        let mut greet = DependencyIndex::default();
+        greet
+            .resolved
+            .insert("leaf".to_string(), "../leaf/lib.wado".to_string());
+        index
+            .packages
+            .insert("../greet/src/lib.wado".to_string(), greet);
         interner.set_dependencies(index);
+        let entry = interner.entry_point("main.wado");
+        let greet = interner.dependency("../greet/src/lib.wado");
         assert_eq!(
-            interner.resolve_dependency("greet"),
-            Some(interner.dependency("../greet/src/lib.wado"))
+            interner.resolve_dependency(&entry, "greet"),
+            Some(greet.clone())
         );
-        assert_eq!(interner.resolve_dependency("missing"), None);
+        assert_eq!(interner.resolve_dependency(&entry, "missing"), None);
         // Declared-but-unresolved entries surface their reason instead.
-        assert_eq!(interner.resolve_dependency("broken"), None);
+        assert_eq!(interner.resolve_dependency(&entry, "broken"), None);
         assert_eq!(
-            interner.unresolved_dependency("broken"),
+            interner.unresolved_dependency(&entry, "broken"),
             Some("declares no [package].lib")
         );
+        // A dependency resolves against its own `[dependencies]` alone.
+        assert_eq!(
+            interner.resolve_dependency(&greet, "leaf"),
+            Some(interner.dependency("../leaf/lib.wado"))
+        );
+        assert_eq!(interner.resolve_dependency(&entry, "leaf"), None);
+        assert_eq!(interner.resolve_dependency(&greet, "greet"), None);
     }
 
     #[test]
@@ -1180,6 +1472,132 @@ mod tests {
         assert!(dep_a.same_package(&dep_a2));
         assert!(!dep_a.same_package(&dep_b));
         assert!(!dep_a.same_package(&local_a));
+    }
+
+    #[test]
+    fn a_local_module_outside_the_package_root_is_another_package() {
+        let root_of = |path: &str| match path.rsplit_once('/').map(|(dir, _)| dir) {
+            Some(".") => Some("/app".to_string()),
+            Some("../other") => Some("/other".to_string()),
+            _ => None,
+        };
+        let root = TestPackages {
+            root: root_of,
+            indexes: hashmap::IndexMap::default(),
+        };
+        let asked = std::cell::Cell::new(0);
+        let mut other = DependencyIndex::default();
+        other
+            .resolved
+            .insert("lib:leaf".to_string(), "../leaf/lib.wado".to_string());
+        other
+            .packages
+            .insert("../leaf/lib.wado".to_string(), DependencyIndex::default());
+        let counting = TestPackages {
+            root: |p: &str| {
+                asked.set(asked.get() + 1);
+                root_of(p)
+            },
+            indexes: [("/other".to_string(), other)].into_iter().collect(),
+        };
+        let mut interner = ModuleSourceInterner::new();
+        interner.bound_packages("./main.wado", &root);
+        let a = interner.place("./a.wado", &counting);
+        let o = interner.place("../other/o.wado", &counting);
+        let p = interner.place("../other/p.wado", &counting);
+        let s = interner.place("../loose/s.wado", &counting);
+        let t = interner.place("../loose/t.wado", &counting);
+        assert_eq!(interner.place("./a.wado", &counting), a);
+        assert_eq!(asked.get(), 3, "once per directory");
+
+        // Each resolves against its own package's manifest, and one in no
+        // package against none.
+        assert!(interner.resolve_dependency(&o, "lib:leaf").is_some());
+        assert!(interner.resolve_dependency(&s, "lib:leaf").is_none());
+        assert!(interner.resolve_dependency(&a, "lib:leaf").is_none());
+
+        let entry = interner.entry_point("main.wado");
+        assert!(a.same_package(&entry));
+        assert!(!o.same_package(&entry));
+        assert!(o.same_package(&p));
+        assert!(!s.same_package(&entry));
+        assert!(s.same_package(&t));
+        assert!(a.is_entry_package() && !o.is_entry_package() && !s.is_entry_package());
+
+        let mut unpackaged = ModuleSourceInterner::new();
+        unpackaged.bound_packages("../loose/main.wado", &root);
+        let loose = unpackaged.place("../loose/s.wado", &root);
+        let other = unpackaged.place("../other/o.wado", &root);
+        let entry = unpackaged.entry_point("main.wado");
+        assert!(loose.same_package(&entry) && loose.is_entry_package());
+        assert!(!other.same_package(&entry));
+
+        // A dependency whose package has a manifest claims its root; a
+        // single-file one, which has none, claims nothing around it.
+        let with_dep = |lib: &str, manifest: Option<DependencyManifest>| {
+            let mut interner = ModuleSourceInterner::new();
+            let mut index = DependencyIndex::default();
+            index
+                .resolved
+                .insert("lib:other".to_string(), lib.to_string());
+            let package = DependencyIndex {
+                manifest,
+                ..DependencyIndex::default()
+            };
+            index.packages.insert(lib.to_string(), package);
+            interner.set_dependencies(index);
+            interner.bound_packages("./main.wado", &root);
+            interner
+        };
+        let manifest = DependencyManifest {
+            path: "/other/wado.toml".to_string(),
+            error: None,
+        };
+        let mut packaged = with_dep("../other/lib.wado", Some(manifest));
+        let o = packaged.place("../other/o.wado", &root);
+        assert!(o.same_package(&packaged.dependency("../other/lib.wado")));
+        assert!(matches!(o, ModuleSource::Dependency { .. }));
+        let mut single = with_dep("../other/single.wado", None);
+        let o = single.place("../other/o.wado", &root);
+        assert!(!o.same_package(&single.dependency("../other/single.wado")));
+        assert!(matches!(o, ModuleSource::Local { .. }));
+    }
+
+    #[test]
+    fn a_package_keeps_the_identity_it_was_first_placed_under() {
+        let manifest = |path: &str| DependencyIndex {
+            manifest: Some(DependencyManifest {
+                path: path.to_string(),
+                error: None,
+            }),
+            ..DependencyIndex::default()
+        };
+        // `a` depends on `b`, so placing a module of `a` claims `b`'s root.
+        let mut a = manifest("/a/wado.toml");
+        a.resolved
+            .insert("lib:b".to_string(), "../b/lib.wado".to_string());
+        a.packages
+            .insert("../b/lib.wado".to_string(), manifest("/b/wado.toml"));
+        let host = TestPackages {
+            root: |path: &str| match path.split('/').nth(1) {
+                Some("." | "main.wado") => Some("/app".to_string()),
+                Some(name) => Some(format!("/{name}")),
+                None => None,
+            },
+            indexes: [
+                ("/a".to_string(), a),
+                ("/b".to_string(), manifest("/b/wado.toml")),
+            ]
+            .into_iter()
+            .collect(),
+        };
+        let mut interner = ModuleSourceInterner::new();
+        interner.bound_packages("./main.wado", &host);
+        let x = interner.place("../b/x.wado", &host);
+        interner.place("../a/y.wado", &host);
+        let z = interner.place("../b/sub/z.wado", &host);
+        assert!(x.same_package(&z));
+        assert!(matches!(z, ModuleSource::Local { .. }));
     }
 
     #[test]

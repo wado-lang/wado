@@ -15,24 +15,27 @@
 //! its `WKG_OCI_USERNAME` / `WKG_OCI_PASSWORD` override; Wado stores no
 //! credentials.
 //!
-//! In a workspace, publishing is gated to the workspace root: it publishes every
-//! publishable member together at the shared (force-inherited) version against
-//! the root's `[registries]`, so the registry can never end up with members at
-//! mismatched versions. Running it from a member directory is an error pointing
-//! at the root.
+//! In a workspace, publishing is gated to the directory of `wado-workspace.toml`:
+//! it publishes every publishable member together at the shared
+//! (force-inherited) version against the workspace's `[registries]`, so the
+//! registry can never end up with members at mismatched versions. Running it
+//! from a member directory is an error pointing at the workspace.
 
 use std::fmt::Write as _;
 use std::path::Path;
 use std::process::Command;
 
-use wado_manifest::{Manifest, Package, PublishError, validate_for_publish};
+use unicode_normalization::UnicodeNormalization;
+use wado_manifest::{
+    Manifest, Package, PublishError, WORKSPACE_FILENAME, WorkspaceManifest, validate_for_publish,
+};
 
 use crate::args::{self, CliExit};
 use crate::build::{BuildTarget, build_world_components, declared_worlds};
 use crate::compile::world_path_segment;
 use crate::knobs::{CompileKnobs, EmbedOptions, OptLevel};
 use crate::manifest::{
-    ProjectManifest, discover, emit_manifest_warnings, governing_workspace_root_dir,
+    ProjectManifest, discover, emit_manifest_warnings, governing_workspace_root_dir, workspace_in,
     workspace_member_dirs,
 };
 use crate::metadata_embed::working_tree_dirty;
@@ -110,14 +113,23 @@ pub fn parse_args(mut parser: lexopt::Parser) -> Result<PublishOptions, CliExit>
 pub async fn run(opts: PublishOptions) -> Result<(), CliExit> {
     let cwd = std::env::current_dir()
         .map_err(|e| CliExit::error(format!("cannot get current directory: {e}")))?;
-    let project = discover(&cwd)
-        .map_err(CliExit::error)?
-        .ok_or_else(|| CliExit::error("no wado.toml found"))?;
-
-    if project.manifest.workspace.is_some() {
-        return publish_workspace(&project, opts.dry_run).await;
+    if let Some(workspace) = workspace_in(&cwd).map_err(CliExit::error)? {
+        return publish_workspace(&cwd, &workspace, opts.dry_run).await;
     }
-    if let Some(root) = governing_workspace_root_dir(&project.root).map_err(CliExit::error)? {
+    let Some(project) = discover(&cwd).map_err(CliExit::error)? else {
+        let enclosing = cwd
+            .ancestors()
+            .find(|dir| dir.join(WORKSPACE_FILENAME).is_file());
+        return Err(CliExit::error(match enclosing {
+            Some(root) => format!(
+                "no wado.toml found; to publish the workspace, run `wado publish` from its \
+                 root:\n  {}",
+                root.display()
+            ),
+            None => "no wado.toml found".to_string(),
+        }));
+    };
+    if let Some(root) = governing_workspace_root_dir(&project.root) {
         return Err(CliExit::error(format!(
             "this package belongs to a workspace; run `wado publish` from the workspace \
              root to publish all members together at the shared version:\n  {}",
@@ -142,7 +154,8 @@ enum Verdict {
     Failed(Vec<PublishError>),
 }
 
-fn classify(manifest: &Manifest) -> Verdict {
+/// The verdict on the package whose `wado.toml` in `root` parsed to `manifest`.
+fn classify(manifest: &Manifest, root: &Path) -> Verdict {
     let Some(pkg) = manifest.package.as_ref() else {
         return Verdict::NotAPackage;
     };
@@ -152,7 +165,15 @@ fn classify(manifest: &Manifest) -> Verdict {
     let Some(namespace) = pkg.namespace.as_deref() else {
         return Verdict::Skipped("no namespace".to_string());
     };
-    let problems = validate_for_publish(manifest);
+    let mut problems = validate_for_publish(manifest);
+    problems.extend(
+        pkg.exports
+            .iter()
+            .filter(|entry| !carries_file(root, entry))
+            .map(|entry| PublishError::MissingExport {
+                entry: entry.clone(),
+            }),
+    );
     if problems.is_empty() {
         Verdict::Ready(format!("{namespace}:{}@{}", pkg.name, pkg.version))
     } else {
@@ -160,8 +181,32 @@ fn classify(manifest: &Manifest) -> Verdict {
     }
 }
 
+/// Whether the package at `root` carries the file `entry` names, spelled as
+/// `entry` spells it: a case-insensitive filesystem answers for any casing, and
+/// a consumer's may not.
+fn carries_file(root: &Path, entry: &str) -> bool {
+    let mut dir = root.to_path_buf();
+    for segment in entry.split('/') {
+        let Ok(names) = std::fs::read_dir(&dir) else {
+            return false;
+        };
+        let spelled = names
+            .filter_map(Result::ok)
+            .map(|e| e.file_name())
+            .find(|name| {
+                name.to_str()
+                    .is_some_and(|name| name.nfc().eq(segment.chars()))
+            });
+        let Some(name) = spelled else {
+            return false;
+        };
+        dir.push(name);
+    }
+    dir.is_file()
+}
+
 async fn publish_single(project: &ProjectManifest, dry_run: bool) -> Result<(), CliExit> {
-    match classify(&project.manifest) {
+    match classify(&project.manifest, &project.root) {
         Verdict::Ready(coord) => {
             publish_ready(&[(coord, project)], &project.manifest.registries, dry_run).await
         }
@@ -176,35 +221,24 @@ async fn publish_single(project: &ProjectManifest, dry_run: bool) -> Result<(), 
     }
 }
 
-async fn publish_workspace(root: &ProjectManifest, dry_run: bool) -> Result<(), CliExit> {
-    emit_manifest_warnings(root);
-    let members = root
-        .manifest
-        .workspace
-        .as_ref()
-        .map(|w| w.members.as_slice())
-        .unwrap_or_default();
-    let member_dirs = workspace_member_dirs(&root.root, members);
+async fn publish_workspace(
+    root: &Path,
+    workspace: &WorkspaceManifest,
+    dry_run: bool,
+) -> Result<(), CliExit> {
+    for w in workspace.warnings() {
+        eprintln!("warning: {}: {w}", root.join(WORKSPACE_FILENAME).display());
+    }
+    let member_dirs = workspace_member_dirs(root, &workspace.workspace.members);
 
-    // Keep each candidate's `ProjectManifest` so a non-dry-run publish can build
-    // it; the root's own `[package]` (if any) publishes alongside the members.
-    let mut candidates: Vec<(String, ProjectManifest)> = vec![(
-        ".".to_string(),
-        ProjectManifest {
-            manifest: root.manifest.clone(),
-            root: root.root.clone(),
-        },
-    )];
+    // Keep each candidate's `ProjectManifest` so a non-dry-run publish can build it.
+    let mut candidates: Vec<(String, ProjectManifest)> = Vec::new();
     for dir in member_dirs {
         let project = discover(&dir)
             .map_err(CliExit::error)?
             .ok_or_else(|| CliExit::error(format!("no wado.toml in member {}", dir.display())))?;
         emit_manifest_warnings(&project);
-        let label = dir
-            .strip_prefix(&root.root)
-            .unwrap_or(&dir)
-            .display()
-            .to_string();
+        let label = dir.strip_prefix(root).unwrap_or(&dir).display().to_string();
         candidates.push((label, project));
     }
 
@@ -212,7 +246,7 @@ async fn publish_workspace(root: &ProjectManifest, dry_run: bool) -> Result<(), 
     let mut skipped: Vec<(String, String)> = Vec::new();
     let mut failed: Vec<(String, Vec<PublishError>)> = Vec::new();
     for (label, project) in &candidates {
-        match classify(&project.manifest) {
+        match classify(&project.manifest, &project.root) {
             Verdict::NotAPackage => {}
             Verdict::Skipped(reason) => skipped.push((label.clone(), reason)),
             Verdict::Ready(coord) => ready.push((coord, project)),
@@ -237,9 +271,9 @@ async fn publish_workspace(root: &ProjectManifest, dry_run: bool) -> Result<(), 
         return Err(CliExit::error("no publishable packages in this workspace"));
     }
 
-    // Publish is a root-only operation, so every member resolves against the
-    // workspace root's `[registries]`, not its own.
-    publish_ready(&ready, &root.manifest.registries, dry_run).await?;
+    // Publish is a workspace-only operation, so every member resolves against
+    // the workspace's `[registries]`, not its own.
+    publish_ready(&ready, &workspace.registries, dry_run).await?;
     if dry_run {
         let coords: Vec<&str> = ready.iter().map(|(c, _)| c.as_str()).collect();
         eprintln!(
@@ -525,34 +559,53 @@ mod tests {
         toml.parse().unwrap()
     }
 
+    const READY: &str = "[package]\nnamespace = \"org\"\nname = \"app\"\nversion = \"0.1.0\"\ndescription = \"d\"\nrepository = \"https://x/y\"\nlicense = \"MIT\"\nauthors = [\"A\"]\n";
+
     #[test]
     fn classify_ready_package() {
-        let m = manifest(
-            "[package]\nnamespace = \"org\"\nname = \"app\"\nversion = \"0.1.0\"\ndescription = \"d\"\nrepository = \"https://x/y\"\nlicense = \"MIT\"\nauthors = [\"A\"]\n",
-        );
-        assert_matches!(classify(&m), Verdict::Ready(c) if c == "org:app@0.1.0");
+        let m = manifest(READY);
+        assert_matches!(classify(&m, Path::new(".")), Verdict::Ready(c) if c == "org:app@0.1.0");
+    }
+
+    #[test]
+    fn classify_failed_when_an_export_is_not_carried_as_spelled() {
+        let tmp = tempfile::tempdir().unwrap();
+        std::fs::create_dir(tmp.path().join("grammar")).unwrap();
+        std::fs::write(tmp.path().join("grammar/Wado.g4"), "").unwrap();
+        std::fs::write(tmp.path().join("cafe\u{301}.txt"), "").unwrap();
+        let with = |exports: &str| manifest(&format!("{READY}exports = [{exports}]\n"));
+
+        let carried = with("\"grammar/Wado.g4\", \"caf\u{e9}.txt\"");
+        assert_matches!(classify(&carried, tmp.path()), Verdict::Ready(_));
+        for missing in ["grammar/wado.g4", "grammar/Other.g4", "Grammar/Wado.g4"] {
+            let m = with(&format!("\"{missing}\""));
+            assert_matches!(
+                classify(&m, tmp.path()),
+                Verdict::Failed(p) if p == [PublishError::MissingExport { entry: missing.to_string() }]
+            );
+        }
     }
 
     #[test]
     fn classify_skips_publish_false_and_no_namespace() {
         let no_ns = manifest("[package]\nname = \"app\"\nversion = \"0.1.0\"\n");
-        assert_matches!(classify(&no_ns), Verdict::Skipped(r) if r == "no namespace");
+        assert_matches!(classify(&no_ns, Path::new(".")), Verdict::Skipped(r) if r == "no namespace");
         let opted_out = manifest(
             "[package]\nnamespace = \"org\"\nname = \"app\"\nversion = \"0.1.0\"\npublish = false\n",
         );
-        assert_matches!(classify(&opted_out), Verdict::Skipped(r) if r == "publish = false");
+        assert_matches!(classify(&opted_out, Path::new(".")), Verdict::Skipped(r) if r == "publish = false");
     }
 
     #[test]
     fn classify_failed_when_metadata_missing() {
         let m = manifest("[package]\nnamespace = \"org\"\nname = \"app\"\nversion = \"0.1.0\"\n");
-        assert_matches!(classify(&m), Verdict::Failed(p) if !p.is_empty());
+        assert_matches!(classify(&m, Path::new(".")), Verdict::Failed(p) if !p.is_empty());
     }
 
     #[test]
-    fn classify_not_a_package_for_workspace_only_manifest() {
-        let m = manifest("[workspace]\nmembers = [\"packages/*\"]\n");
-        assert_matches!(classify(&m), Verdict::NotAPackage);
+    fn classify_not_a_package_without_a_package_table() {
+        let m = manifest("[registries]\ndefault = \"oci://ghcr.io\"\n");
+        assert_matches!(classify(&m, Path::new(".")), Verdict::NotAPackage);
     }
 
     fn ready_manifest_with_registry(registry: &str) -> Manifest {

@@ -39,7 +39,7 @@ jobs:
           echo "tag=$tag"         >> "$GITHUB_OUTPUT"
           echo "version=${tag#v}" >> "$GITHUB_OUTPUT"
 
-      - name: Verify Cargo.toml and wado.toml versions match the tag
+      - name: Verify Cargo.toml and wado-workspace.toml versions match the tag
         shell: bash
         run: |
           version="${{ steps.v.outputs.version }}"
@@ -60,10 +60,10 @@ jobs:
             ' "$1"
           }
           cargo_v="$(workspace_version Cargo.toml)"
-          wado_v="$(workspace_version wado.toml)"
+          wado_v="$(workspace_version wado-workspace.toml)"
           fail=0
           [ "$cargo_v" = "$version" ] || { echo "::error::Cargo.toml [workspace.package].version '$cargo_v' != tag '$version'"; fail=1; }
-          [ "$wado_v"  = "$version" ] || { echo "::error::wado.toml [workspace.package].version '$wado_v' != tag '$version'"; fail=1; }
+          [ "$wado_v"  = "$version" ] || { echo "::error::wado-workspace.toml [workspace.package].version '$wado_v' != tag '$version'"; fail=1; }
           exit $fail
 
   build:

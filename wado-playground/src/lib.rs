@@ -29,7 +29,9 @@ use std::future::Future;
 use std::task::{Context, Poll, Waker};
 
 use wado_compiler::compiler_host::{CompilerHost, Diagnostic, InMemoryCompilerHost, SourceError};
-use wado_compiler::{Code, CompilerOptions, LogLevel, OptLevel, Severity, compile_with_options};
+use wado_compiler::{
+    Code, CompilerOptions, DependencyIndex, LogLevel, OptLevel, Severity, compile_with_options,
+};
 use wado_lsp::Engine;
 use wado_lsp::host::install_dev_stdlib;
 use wado_lsp::server::dispatch::{Lifecycle, dispatch};
@@ -95,6 +97,14 @@ impl<F: Fn(&str) + Send + Sync> CompilerHost for ProgressHost<F> {
 
     fn stdlib_module_read(&self, import_path: &str) {
         self.inner.stdlib_module_read(import_path);
+    }
+
+    fn package_root(&self, path: &str) -> Option<String> {
+        self.inner.package_root(path)
+    }
+
+    fn package_index(&self, root: &str) -> DependencyIndex {
+        self.inner.package_index(root)
     }
 }
 

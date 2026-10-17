@@ -30,7 +30,8 @@ use std::sync::Arc;
 
 use wado_compiler::ast::AttrValue;
 use wado_compiler::compiler_host::{
-    CompilerHost, GeneratorInputFile, GeneratorRequest, GeneratorRunnerError, SourceError,
+    CompilerHost, DependencyIndex, GeneratorInputFile, GeneratorRequest, GeneratorRunnerError,
+    SourceError,
 };
 use wado_compiler::hashmap::{IndexMap, IndexSet};
 #[cfg(test)]
@@ -41,6 +42,7 @@ use wado_compiler::kiln::{
     content_hash, file_hash, generator_identity, harvest_module_graph, has_generated_marker,
     hex_digest, validate_options,
 };
+use wado_compiler::module_source::PackageHost;
 use wado_compiler::{Code, CompilerOptions, Diagnostic, OptLevel, Severity};
 
 use super::metadata::{
@@ -949,11 +951,23 @@ impl<H: CompilerHost> Drop for KilnSpan<'_, H> {
     }
 }
 
+/// The inline Kiln invocations of an entry and every module it reaches.
+#[derive(Default)]
+pub struct Harvested {
+    pub invocations: Vec<Invocation>,
+    /// Harvest key → loader identity, which the caller rewrites the redirect
+    /// index through ([`wado_compiler::kiln::remap_decl_files`]).
+    pub identities: IndexMap<String, String>,
+    /// Harvest key → the `wado.toml` of the package the module belongs to,
+    /// where that is not the entry's ([`wado_compiler::kiln::Harvest::packages`]).
+    pub packages: IndexMap<String, Option<String>>,
+    pub diagnostics: Vec<Diagnostic>,
+}
+
 /// The inline invocations declared by `entry_source`, the text of `entry_file`
-/// the compile that follows reads, and the local `.wado`
-/// modules it reaches past those in `settled`, which gains them, plus the
-/// `harvest_key → loader_identity` map the caller rewrites the redirect index
-/// through ([`wado_compiler::kiln::remap_decl_files`]).
+/// the compile that follows reads, and every Wado module it reaches through
+/// `host` past those in `settled`, which gains them: its own and its source
+/// dependencies' in `dependencies`.
 ///
 /// `entry_identity` must be byte-identical to the name the compile that follows
 /// gives its entry, since that is what the loader interns the redirect under.
@@ -966,11 +980,13 @@ pub async fn harvest_invocations(
     entry_identity: &str,
     entry_key: &str,
     settled: &mut IndexSet<String>,
-) -> (Vec<Invocation>, IndexMap<String, String>, Vec<Diagnostic>) {
+    dependencies: &DependencyIndex,
+    host: &impl PackageHost,
+) -> Harvested {
     // An entry whose parse recovered from an error harvests nothing; the
     // compile that follows reports it.
     let Ok(entry) = wado_compiler::parse(entry_source).into_fail_fast() else {
-        return Default::default();
+        return Harvested::default();
     };
     // A loader identity is anchored on the entry's directory, so that is what
     // an import joins onto.
@@ -983,17 +999,82 @@ pub async fn harvest_invocations(
         entry_identity,
         entry.ast,
         settled,
+        dependencies,
+        host,
         async |identity| std::fs::read_to_string(entry_dir.join(identity)).ok(),
     )
     .await;
     settled.extend(harvest.modules.keys().cloned());
 
-    let (invocations, diagnostics) = collect_inline_invocations(
-        harvest.modules.iter().map(|(k, v)| (k.as_str(), v)),
-        &IndexMap::default(),
-        "",
-    );
-    (invocations, harvest.identities, diagnostics)
+    // A clause names its generator through its own package's manifest, so two
+    // packages' clauses merge only once each has resolved
+    // ([`merge_across_packages`]).
+    let mut by_package = IndexMap::<Option<&Option<String>>, Vec<_>>::default();
+    for (key, module) in &harvest.modules {
+        let package = harvest.packages.get(key);
+        by_package
+            .entry(package)
+            .or_default()
+            .push((key.as_str(), module));
+    }
+    let mut invocations = Vec::new();
+    let mut diagnostics = Vec::new();
+    for modules in by_package.into_values() {
+        let (mut collected, mut reported) =
+            collect_inline_invocations(modules, &IndexMap::default(), "");
+        invocations.append(&mut collected);
+        diagnostics.append(&mut reported);
+    }
+    Harvested {
+        invocations,
+        identities: harvest.identities,
+        packages: harvest.packages,
+        diagnostics,
+    }
+}
+
+/// Merge the invocations of [`harvest_invocations`]' packages once each clause
+/// has resolved its generator through its own package: clauses that resolve
+/// alike are one invocation, and two naming one `from` that resolve apart
+/// cannot both generate it, so they are reported.
+pub fn merge_across_packages(
+    invocations: Vec<Invocation>,
+) -> Result<Vec<Invocation>, Vec<Diagnostic>> {
+    let mut merged: Vec<Invocation> = Vec::new();
+    let mut diagnostics = Vec::new();
+    for invocation in invocations {
+        let tuple = invocation.identity_tuple();
+        if let Some(existing) = merged.iter_mut().find(|m| m.identity_tuple() == tuple) {
+            for site in invocation.decl_sites {
+                if !existing.decl_sites.contains(&site) {
+                    existing.decl_sites.push(site);
+                }
+            }
+            continue;
+        }
+        if let Some(existing) = merged.iter().find(|m| m.from == invocation.from) {
+            diagnostics.push(Diagnostic {
+                severity: Severity::Error,
+                code: Code::Log,
+                message: format!(
+                    "kiln: generator clauses of two packages disagree for `from = \"{}\"` \
+                     (first in {}, second in {}): each resolves its generator through its \
+                     own package's [build-dependencies]",
+                    invocation.from.as_str(),
+                    existing.decl_site().module,
+                    invocation.decl_site().module,
+                ),
+                span: None,
+            });
+            continue;
+        }
+        merged.push(invocation);
+    }
+    if diagnostics.is_empty() {
+        Ok(merged)
+    } else {
+        Err(diagnostics)
+    }
 }
 
 /// How every host compiles a generator, with `invocations` redirecting the
@@ -1505,6 +1586,14 @@ mod tests {
 
             fn stdlib_module_read(&self, _import_path: &str) {}
 
+            fn package_root(&self, _path: &str) -> Option<String> {
+                None
+            }
+
+            fn package_index(&self, root: &str) -> DependencyIndex {
+                unreachable!("no module lies in a package: {root}")
+            }
+
             async fn run_generator(
                 &self,
                 _wasm: &[u8],
@@ -1747,6 +1836,14 @@ mod tests {
             fn emit_diagnostic(&self, _d: Diagnostic) {}
 
             fn stdlib_module_read(&self, _import_path: &str) {}
+
+            fn package_root(&self, _path: &str) -> Option<String> {
+                None
+            }
+
+            fn package_index(&self, root: &str) -> DependencyIndex {
+                unreachable!("no module lies in a package: {root}")
+            }
         }
 
         fn runtime() -> tokio::runtime::Runtime {
@@ -1798,6 +1895,12 @@ mod tests {
                 }
                 fn emit_diagnostic(&self, _d: Diagnostic) {}
                 fn stdlib_module_read(&self, _import_path: &str) {}
+                fn package_root(&self, _path: &str) -> Option<String> {
+                    None
+                }
+                fn package_index(&self, root: &str) -> DependencyIndex {
+                    unreachable!("no module lies in a package: {root}")
+                }
                 async fn run_generator(
                     &self,
                     _wasm: &[u8],

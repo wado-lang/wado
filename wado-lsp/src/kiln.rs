@@ -48,6 +48,8 @@ pub async fn prepare_invocations<H: CompilerHost>(
         entry_filename,
         entry_ast.clone(),
         &wado_compiler::hashmap::IndexSet::default(),
+        &host.dependency_index(),
+        host,
         async |identity| {
             let bytes = host.load_source(identity).await.ok()?;
             String::from_utf8(bytes).ok()
@@ -59,7 +61,7 @@ pub async fn prepare_invocations<H: CompilerHost>(
     let manifest_root_str = manifest_root.to_string_lossy();
     // Emitting the clause diagnostics here is what reaches the editor: no later
     // phase re-runs this collector, and each snapshot builds once.
-    let (invocations, diagnostics) = collect_inline_invocations(
+    let (mut invocations, diagnostics) = collect_inline_invocations(
         harvest.modules.iter().map(|(k, ast)| (k.as_str(), ast)),
         &descriptors,
         &manifest_root_str,
@@ -67,8 +69,16 @@ pub async fn prepare_invocations<H: CompilerHost>(
     for diagnostic in diagnostics {
         host.emit_diagnostic(diagnostic);
     }
+    for invocation in &mut invocations {
+        if harvest
+            .packages
+            .contains_key(&invocation.decl_site().module)
+        {
+            invocation.write_into_consumer();
+        }
+    }
 
-    options::check_all(&invocations, &manifest_root, host).await;
+    options::check_all(&invocations, &manifest_root, &harvest.packages, host).await;
 
     if let Some(index) = override_index {
         return index;
@@ -192,7 +202,9 @@ async fn resolve_invocation<H: CompilerHost>(
     Ok(path_to_kiln_uri(&canonicalized(abs_entry)))
 }
 
-/// The nearest ancestor of `start` whose `wado.toml` the host can load.
+/// The nearest ancestor of `start` whose `wado.toml` the host can load, short
+/// of a `wado-workspace.toml`, as [`crate::host::discovery::nearest_manifest_dir`]
+/// walks.
 ///
 /// A relative `start` — every non-`file:` document URI — has no workspace to
 /// anchor against and yields `None` rather than walking the process's cwd.
@@ -205,6 +217,10 @@ async fn nearest_manifest_dir<H: CompilerHost>(start: &Path, host: &H) -> Option
         let manifest = dir.join(wado_manifest::MANIFEST_FILENAME);
         if host.source_exists(&manifest.display().to_string()).await {
             return Some(dir);
+        }
+        let workspace = dir.join(wado_manifest::WORKSPACE_FILENAME);
+        if host.source_exists(&workspace.display().to_string()).await {
+            return None;
         }
     }
     None

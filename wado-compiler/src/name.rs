@@ -1866,6 +1866,26 @@ pub fn decl_file_of(source: &ModuleSource) -> &str {
     }
 }
 
+/// Whether `segment`, written before a `:`, is a package namespace or `lib`:
+/// a manifest name, never a URL scheme's `//`.
+#[must_use]
+pub fn is_package_namespace(segment: &str) -> bool {
+    !segment.is_empty()
+        && segment
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '-')
+}
+
+/// Split a reference to a file a package exports, `"<package>/<file>"`, where
+/// `<package>` is a coordinate (`ns:pkg[@ver]`) or a `lib:` nickname. Neither
+/// carries a `/`, so the first one starts the file.
+#[must_use]
+pub fn split_exported_file(specifier: &str) -> Option<(&str, &str)> {
+    let (package, file) = specifier.split_once('/')?;
+    let (namespace, name) = package.split_once(':')?;
+    (is_package_namespace(namespace) && !name.is_empty()).then_some((package, file))
+}
+
 /// Resolve an import source, a Kiln invocation's redirect first. The one
 /// resolver the loader, analysis and the elaborator share.
 pub fn resolve_import_with_invocations(
@@ -1923,30 +1943,37 @@ pub fn resolve_import_with_entry(
         }
     }
 
-    // Dependency name (`use { … } from "router"` / `from "ns:pkg"`): resolve
-    // against `[dependencies]` before treating it as a relative sibling file.
-    // Only the consuming project resolves its own `[dependencies]`; a bare
-    // import from within a dependency must not bind to the consumer's deps. A
-    // path dependency is Wado source; a registry dependency is a prebuilt
-    // component imported across the CM boundary.
-    if !relative && !matches!(from_module, ModuleSource::Dependency { .. }) {
-        if let Some(dep) = interner.resolve_dependency(import_source) {
-            return dep;
-        }
-        if let Some(component) = interner.resolve_component_dependency(import_source) {
-            return component;
+    // Dependency name (`use { … } from "router"` / `from "ns:pkg"`), or a file
+    // one exports (`from "ns:pkg/src/x.wado"`): resolve against the
+    // `[dependencies]` of the importer's own package, never the consumer's on
+    // a dependency's behalf. A path dependency is Wado source; a registry
+    // dependency is a prebuilt component imported across the CM boundary.
+    if !relative {
+        if let Some((package, file)) = split_exported_file(import_source) {
+            if let Some(Ok(module)) = interner.resolve_exported_file(from_module, package, file) {
+                return module;
+            }
+        } else {
+            if let Some(dep) = interner.resolve_dependency(from_module, import_source) {
+                return dep;
+            }
+            if let Some(component) =
+                interner.resolve_component_dependency(from_module, import_source)
+            {
+                return component;
+            }
         }
     }
 
-    if relative
-        && let ModuleSource::Local {
-            path: from_path, ..
-        } = from_module
-    {
-        let resolved =
-            resolve_local_identity(&entry_dir_of(entry_module), Some(from_path), import_source);
-        // If this resolves to the entry module's canonical name, return the
-        // entry ModuleSource to maintain a single type identity.
+    let importer = match from_module {
+        ModuleSource::Local { path, .. } if relative => Some(Some(path.as_str())),
+        ModuleSource::EntryPoint { .. } => Some(None),
+        _ => None,
+    };
+    if let Some(importer) = importer {
+        let resolved = resolve_local_identity(&entry_dir_of(entry_module), importer, import_source);
+        // A path back to the entry, from any module the entry itself included,
+        // names the entry, so it keeps a single type identity.
         if let Some(entry) = entry_module {
             let entry_canonical = match entry {
                 ModuleSource::EntryPoint { filename, .. } => canonicalize_entry_point(filename),
@@ -1956,11 +1983,6 @@ pub fn resolve_import_with_entry(
                 return entry.clone();
             }
         }
-        return interner.local(&resolved);
-    }
-
-    if matches!(from_module, ModuleSource::EntryPoint { .. }) {
-        let resolved = resolve_local_identity(&entry_dir_of(entry_module), None, import_source);
         return interner.local(&resolved);
     }
 
@@ -2615,6 +2637,11 @@ mod tests {
         index
             .resolved
             .insert("logger".to_string(), "../logger/src/lib.wado".to_string());
+        for lib in ["../logger/src/lib.wado", "../greet/src/lib.wado"] {
+            index
+                .packages
+                .insert(lib.to_string(), DependencyIndex::default());
+        }
         interner.set_dependencies(index);
         let entry = interner.entry_point("main.wado");
         // From the consuming project, a bare name binds to its dependency.

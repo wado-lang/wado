@@ -676,6 +676,14 @@ impl CompilerHost for SilentHost {
         self.inner.serves_core()
     }
 
+    fn package_root(&self, path: &str) -> Option<String> {
+        self.inner.package_root(path)
+    }
+
+    fn package_index(&self, root: &str) -> wado_compiler::DependencyIndex {
+        self.inner.package_index(root)
+    }
+
     fn env_var(&self, name: &str) -> Option<String> {
         self.inner.env_var(name)
     }

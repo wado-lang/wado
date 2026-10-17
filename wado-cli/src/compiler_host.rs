@@ -13,6 +13,7 @@ use wado_compiler::{
 };
 
 use crate::args::DEFAULT_LOG_LEVEL;
+use crate::manifest::resolution_inputs;
 use crate::rss::RssSample;
 use crate::run_cache::RunCache;
 use wado_host::kiln::driver::KilnSpan;
@@ -261,6 +262,23 @@ impl CompilerHost for FilesystemCompilerHost {
 
     fn serves_core(&self) -> bool {
         self.inner.serves_core()
+    }
+
+    fn package_root(&self, path: &str) -> Option<String> {
+        self.inner.package_root_probing(path, |manifest, found| {
+            if found {
+                self.run.depend_on_file(manifest);
+            } else {
+                self.run.observe_absent(manifest);
+            }
+        })
+    }
+
+    fn package_index(&self, root: &str) -> wado_compiler::DependencyIndex {
+        for file in resolution_inputs(Path::new(root)) {
+            self.run.depend_on_file(&file);
+        }
+        self.inner.package_index(root)
     }
 
     fn env_var(&self, name: &str) -> Option<String> {

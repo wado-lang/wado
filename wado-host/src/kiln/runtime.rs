@@ -730,6 +730,14 @@ mod tests {
         fn emit_diagnostic(&self, _diagnostic: wado_compiler::Diagnostic) {}
 
         fn stdlib_module_read(&self, _import_path: &str) {}
+
+        fn package_root(&self, _path: &str) -> Option<String> {
+            None
+        }
+
+        fn package_index(&self, root: &str) -> wado_compiler::DependencyIndex {
+            unreachable!("no module lies in a package: {root}")
+        }
     }
 
     #[test]

@@ -281,6 +281,23 @@ module directly.
 A consumer whose generated code calls the generator's runtime library also lists
 the package under `[dependencies]` ([Runtime Libraries](#runtime-libraries)).
 
+### A Dependency's Generators
+
+A build runs the clauses of every source dependency it compiles, at any depth.
+Such a clause names its generator through the dependency's own
+`[build-dependencies]`, so the consumer declares none of them. Its output is
+written into the consumer's `build/kiln`, whatever `output_dir` the clause
+gives, and the dependency's tree is never written to. A clause in another
+package's file reached by a path is that package's, declared as a dependency or
+not.
+
+A dependency that commits its output ships it with the `<primary>.kiln.json`
+beside it, and a consuming build uses that output without running the generator
+([WEP: Package File Exports](./wep-2026-09-06-package-file-exports.md)).
+
+> Not yet implemented: a consuming build runs the generator even where the
+> dependency commits its output.
+
 ## Authoring a Generator
 
 ### The Generator World

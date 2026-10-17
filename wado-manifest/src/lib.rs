@@ -13,8 +13,8 @@ pub use dependency::RegistryComponentNeed;
 pub use lockfile::{LockFile, LockFileError, LockedPackage};
 pub use manifest::{
     Dependency, DependencySource, FormatSettings, GitPin, Manifest, ManifestError, ManifestWarning,
-    Package, TestSettings, Workspace, WorkspacePackage, WorldEntry, read_workspace_members,
-    registry_url, resolve_member,
+    Package, TestSettings, Workspace, WorkspaceManifest, WorkspacePackage, WorldEntry,
+    read_workspace_members, registry_url, resolve_member,
 };
 pub use metadata::{
     LICENSE_SECTION, MetadataSection, REPOSITORY_DIRECTORY_SECTION, license_ref_id,
@@ -26,4 +26,4 @@ pub use provider::{
 pub use resolve::{ResolveError, resolve};
 pub use validate::{PublishError, validate_for_publish};
 pub use version::{Version, VersionError, VersionSpecifier};
-pub use workspace::{MANIFEST_FILENAME, WALK_MATCH_OPTIONS};
+pub use workspace::{MANIFEST_FILENAME, WALK_MATCH_OPTIONS, WORKSPACE_FILENAME};

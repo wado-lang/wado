@@ -22,6 +22,7 @@ use wado_compiler::hashmap::IndexMap;
 use wado_compiler::{
     CompilerHost, CompilerOptions, DependencyIndex, Diagnostic, Severity, SourceError,
 };
+use wado_lsp::FilesystemCompilerHost;
 use wado_lsp::host::dependency_index_from;
 use wado_lsp::host::discovery::{absolutize, normalize_path};
 
@@ -30,6 +31,7 @@ use crate::compile::{build_dir, load_nearest_manifest, render_error_diagnostics}
 use crate::fingerprint::{Input, compiler_digest, hash_field};
 use crate::kiln_provider::hex32;
 use crate::knobs::CompileKnobs;
+use crate::manifest::resolution_inputs;
 use crate::runtime::CAPTURED_STDIO_CAPACITY;
 use wado_host::atomic_write::write_atomic;
 use wado_host::engine::{DEFAULT_GC_HEAP_INITIAL_SIZE, fuel_engine};
@@ -115,16 +117,11 @@ impl EvalHost {
     fn key(&self, source: &str, fuel: u64, deps: &Dependencies) -> [u8; 32] {
         let mut hasher = Sha256::new();
         hasher.update(self.compiler_digest);
-        for entries in [
-            &deps.index.resolved,
-            &deps.index.components,
-            &deps.index.unresolved,
-        ] {
-            hasher.update((entries.len() as u64).to_le_bytes());
-            for (name, entry) in entries {
-                hash_field(&mut hasher, name.as_bytes());
-                hash_field(&mut hasher, entry.as_bytes());
-            }
+        hash_index(&mut hasher, &deps.index);
+        hasher.update((deps.index.packages.len() as u64).to_le_bytes());
+        for (lib, package) in &deps.index.packages {
+            hash_field(&mut hasher, lib.as_bytes());
+            hash_index(&mut hasher, package);
         }
         hash_field(
             &mut hasher,
@@ -344,11 +341,16 @@ impl Dependencies {
         let absolute = |entry: &String| normalize_path(&absolutize(&base.join(entry)));
         Self {
             roots: index
-                .resolved
-                .values()
-                .map(|entry| dependency_root(&absolute(entry)))
+                .packages
+                .iter()
+                .map(|(entry, package)| dependency_root(&absolute(entry), package))
                 .collect(),
-            components: index.components.values().map(absolute).collect(),
+            components: [&index]
+                .into_iter()
+                .chain(index.packages.values())
+                .flat_map(|package| package.components.values())
+                .map(absolute)
+                .collect(),
             caller_root: Some(normalize_path(&absolutize(&project.root))),
             cache_dir: Some(build_dir(&project.root).join("eval")),
             base,
@@ -369,30 +371,46 @@ impl Dependencies {
     }
 }
 
-/// The directory a dependency whose entry module is `entry` reads from: its
-/// package's root where `entry` is that package's `lib`, and otherwise the
-/// directory holding `entry`, a single-file dependency.
-fn dependency_root(entry: &Path) -> PathBuf {
-    let directory = entry
-        .parent()
-        .expect("an entry module is a file, so it has a parent")
-        .to_path_buf();
-    let Ok(Some(package)) = load_nearest_manifest(entry) else {
-        return directory;
+/// Hash what one package's index binds, its `packages` aside. Destructured
+/// whole, so a field added to the index is one this has to hash.
+fn hash_index(hasher: &mut Sha256, index: &DependencyIndex) {
+    let DependencyIndex {
+        resolved,
+        components,
+        unresolved,
+        manifest,
+        packages: _,
+        exports,
+    } = index;
+    for entries in [resolved, components, unresolved, exports] {
+        hasher.update((entries.len() as u64).to_le_bytes());
+        for (name, entry) in entries {
+            hash_field(hasher, name.as_bytes());
+            hash_field(hasher, entry.as_bytes());
+        }
+    }
+    let manifest = manifest.as_ref().map(|m| (&m.path, &m.error));
+    hash_field(hasher, format!("{manifest:?}").as_bytes());
+}
+
+/// The directory a dependency whose entry module is `entry` and whose index is
+/// `package` reads from: the root of its manifest, and otherwise the directory
+/// holding `entry`, a single-file dependency.
+fn dependency_root(entry: &Path, package: &DependencyIndex) -> PathBuf {
+    let dir = match &package.manifest {
+        Some(manifest) => Path::new(&manifest.path),
+        None => entry,
     };
-    let root = normalize_path(&absolutize(&package.root));
-    let is_lib = package
-        .manifest
-        .package
-        .as_ref()
-        .and_then(|p| p.lib.as_ref())
-        .is_some_and(|lib| normalize_path(&root.join(lib)) == entry);
-    if is_lib { root } else { directory }
+    dir.parent()
+        .expect("a manifest or an entry module is a file, so it has a parent")
+        .to_path_buf()
 }
 
 /// The compiler host an evaluated program compiles on: it serves the files of
 /// the calling package's dependencies and records each one it reads.
 struct DependencyHost {
+    /// Answers which package a module lies in, as a compile of the caller does.
+    packages: FilesystemCompilerHost,
     deps: Arc<Dependencies>,
     diagnostics: Mutex<Vec<Diagnostic>>,
     read: Mutex<Vec<Input>>,
@@ -401,10 +419,17 @@ struct DependencyHost {
 impl DependencyHost {
     fn new(deps: Arc<Dependencies>) -> Self {
         Self {
+            packages: FilesystemCompilerHost::new(deps.base.clone()),
             deps,
             diagnostics: Mutex::default(),
             read: Mutex::default(),
         }
+    }
+
+    /// Record `file` as an input, present or not.
+    fn observe(&self, file: &Path) {
+        let bytes = std::fs::read(file).ok();
+        lock(&self.read).push(Input::of(file.to_path_buf(), bytes.as_deref()));
     }
 }
 
@@ -441,6 +466,18 @@ impl CompilerHost for DependencyHost {
 
     fn dependency_index(&self) -> DependencyIndex {
         self.deps.index.clone()
+    }
+
+    fn package_root(&self, path: &str) -> Option<String> {
+        self.packages
+            .package_root_probing(path, |manifest, _| self.observe(manifest))
+    }
+
+    fn package_index(&self, root: &str) -> DependencyIndex {
+        for file in resolution_inputs(Path::new(root)) {
+            self.observe(&file);
+        }
+        self.packages.package_index(root)
     }
 
     /// An outcome is keyed by [`compiler_digest`], which covers the whole

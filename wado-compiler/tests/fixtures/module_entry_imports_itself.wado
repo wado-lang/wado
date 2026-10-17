@@ -1,0 +1,14 @@
+// The entry importing itself reaches the entry, not a second copy of it.
+
+use { helper as again } from "./module_entry_imports_itself.wado";
+
+pub fn helper() -> i32 {
+    return 1;
+}
+
+test {
+    assert again() == helper();
+}
+
+__DATA__
+{"test": {}}

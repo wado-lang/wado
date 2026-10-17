@@ -39,6 +39,11 @@ pub struct CompileInputs {
     /// relative to the fixture directory. Each entry is its own package.
     #[serde(default)]
     pub dependencies: IndexMap<String, String>,
+    /// Stubbed package roots, each a directory relative to the fixture
+    /// directory that stands where a `wado.toml` would. Empty leaves every
+    /// module in no package.
+    #[serde(default)]
+    pub package_roots: Vec<String>,
     /// Stubbed path `[build-dependencies]`: nickname → the generator's `.wado`
     /// file, relative to the fixture directory.
     #[serde(default)]
@@ -70,6 +75,7 @@ impl CompileInputs {
         HostStubs {
             env: self.param_env.clone(),
             dependencies: self.dependencies.clone(),
+            package_roots: self.package_roots.clone(),
             build_dependencies: self.build_dependencies.clone(),
         }
     }

@@ -16,8 +16,9 @@ use wado_compiler::kiln::{
 use wado_compiler::{Code, CompilerHost, Diagnostic, Severity};
 
 use super::driver::{
-    GeneratorProvider, PipelineError, ProviderError, ResolvedGenerator, emit_counting_errors,
-    generator_compile_options, generator_cycle, harvest_invocations, run_pipeline,
+    GeneratorProvider, Harvested, PipelineError, ProviderError, ResolvedGenerator,
+    emit_counting_errors, generator_compile_options, generator_cycle, harvest_invocations,
+    merge_across_packages, run_pipeline,
 };
 use crate::sync::lock;
 use crate::{HostStubs, StubHost};
@@ -75,12 +76,19 @@ async fn run(
     host: &StubHost,
     chain: &[String],
 ) -> Result<InvocationIndex, PipelineError> {
-    let (mut invocations, identities, diagnostics) = harvest_invocations(
+    let Harvested {
+        mut invocations,
+        identities,
+        diagnostics,
+        ..
+    } = harvest_invocations(
         entry.file,
         entry.source,
         entry.identity,
         entry.key,
         &mut IndexSet::default(),
+        &host.dependency_index(),
+        host,
     )
     .await;
     let clause_errors = emit_counting_errors(host, diagnostics);
@@ -95,6 +103,9 @@ async fn run(
         return Err(PipelineError::InlineClause(shared_dirs));
     }
     resolve_build_dependencies(&mut invocations, host.stubs());
+    let invocations = merge_across_packages(invocations).map_err(|disagreements| {
+        PipelineError::InlineClause(emit_counting_errors(host, disagreements))
+    })?;
 
     let mut provider = LocalGenerators::default();
     for invocation in &invocations {

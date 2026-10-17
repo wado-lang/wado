@@ -12,8 +12,15 @@ A package bounds how far `internal` reaches
 ([Package Boundary](./spec-traits.md#package-boundary)). A program's modules
 fall into packages this way:
 
-- The entry module, every local module it reaches through `./` / `../`
-  imports, and the Wasm assets those modules import form one package.
+- A local module is in the package of the nearest `wado.toml` above it, whose
+  directory is the package root. The search stops at a `wado-workspace.toml`
+  ([Workspaces](#workspaces)), so a module under a workspace that no package
+  holds is in none, whatever lies above the workspace.
+- The entry module, the local modules in its package, and the Wasm assets
+  those modules import form the package being compiled. Any other package a
+  local module is in is another package, as a dependency is.
+- The modules in no package share one scope, as a package does, and an entry
+  in no package is in that scope.
 - Each dependency is a package. A relative import inside a dependency stays in
   that dependency's package.
 - `core:*`, which is one package, and `wasi:*`, which is another. A test of
@@ -63,14 +70,14 @@ The manifest holds these tables:
 | `[dev-dependencies]`   | The packages only its development needs              | [Dependencies](#dependencies)                           |
 | `[build-dependencies]` | The Kiln generators its imports run                  | [Kiln Generators](./spec-kiln.md#manifest)              |
 | `[registries]`         | Names for the registries its dependencies come from  | [Registries](#registries)                               |
-| `[workspace]`          | The packages developed together with it              | [Workspaces](#workspaces)                               |
 | `[test]`               | Which files `wado test` discovers                    | [Test Discovery](./spec-testing.md#test-discovery)      |
 | `[format]`             | Which files `wado format` discovers                  | [Wado Formatter](./formatter.md)                        |
 
 A key the manifest does not define draws a warning and is ignored. This holds at
 the top level, in `[package]`, in `[workspace.package]`, and in the table form of
 a `[world]` entry. A misspelled key is reported, and the build goes on. Every
-other mistake in a manifest is an error.
+other mistake in a manifest is an error. `[workspace]` is one: it belongs in a
+`wado-workspace.toml` ([Workspaces](#workspaces)), and the error says so.
 
 ```toml
 [package]
@@ -103,22 +110,23 @@ authors = ["Alice <alice@acme.example>"]
 wado-version = ">=0.5"
 ```
 
-| Field                  | Type     | Required | Meaning                                                            |
-| ---------------------- | -------- | -------- | ------------------------------------------------------------------ |
-| `name`                 | string   | yes      | The package's name                                                 |
-| `version`              | string   | yes      | The package's version, in semantic versioning (`0.2.0`)            |
-| `namespace`            | string   | no       | The organization or person the package belongs to                  |
-| `lib`                  | string   | no       | The entry module of the package's library world                    |
-| `description`          | string   | no       | A short summary                                                    |
-| `homepage`             | string   | no       | The home page URL; `repository` when absent                        |
-| `repository`           | string   | no       | The source repository URL, without a subdirectory                  |
-| `repository-directory` | string   | no       | The package's directory inside `repository`                        |
-| `documentation`        | string   | no       | The documentation URL; `repository` when absent                    |
-| `license`              | string   | no       | An SPDX license expression                                         |
-| `license-file`         | string   | no       | A file holding a license that has no SPDX identifier               |
-| `authors`              | string[] | no       | The people or organization responsible                             |
-| `wado-version`         | string   | no       | The compiler versions that can build the package (`>=0.5`)         |
-| `publish`              | bool     | no       | `false` keeps the package from being published; `true` when absent |
+| Field                  | Type     | Required | Meaning                                                                     |
+| ---------------------- | -------- | -------- | --------------------------------------------------------------------------- |
+| `name`                 | string   | yes      | The package's name                                                          |
+| `version`              | string   | yes      | The package's version, in semantic versioning (`0.2.0`)                     |
+| `namespace`            | string   | no       | The organization or person the package belongs to                           |
+| `lib`                  | string   | no       | The entry module of the package's library world                             |
+| `exports`              | string[] | no       | Further files other packages may import ([Exported Files](#exported-files)) |
+| `description`          | string   | no       | A short summary                                                             |
+| `homepage`             | string   | no       | The home page URL; `repository` when absent                                 |
+| `repository`           | string   | no       | The source repository URL, without a subdirectory                           |
+| `repository-directory` | string   | no       | The package's directory inside `repository`                                 |
+| `documentation`        | string   | no       | The documentation URL; `repository` when absent                             |
+| `license`              | string   | no       | An SPDX license expression                                                  |
+| `license-file`         | string   | no       | A file holding a license that has no SPDX identifier                        |
+| `authors`              | string[] | no       | The people or organization responsible                                      |
+| `wado-version`         | string   | no       | The compiler versions that can build the package (`>=0.5`)                  |
+| `publish`              | bool     | no       | `false` keeps the package from being published; `true` when absent          |
 
 `name` and `namespace` are each 1 to 64 characters from `[a-zA-Z0-9_-]`. The
 two together, `namespace:name`, are the package's coordinate: its identity in a
@@ -395,7 +403,8 @@ A package offers other packages its library world
 is the file `[package].lib` names, and a specifier that names the package
 imports that module. A dependency without `[package].lib` cannot be imported,
 unless it is a single `.wado` file named by a path source, which is its own
-entry module.
+entry module. Such a file is a package with no manifest, whatever package's
+tree holds it, so it declares no dependencies of its own.
 
 These two files are a package `geo`, with `lib = "src/lib.wado"`:
 
@@ -473,6 +482,30 @@ file in the package reaches a consumer only when the entry module re-exports it.
 use { Square, perimeter } from "lib:geo";   // error: `perimeter` is `pub` in a file the entry does not re-export
 ```
 
+### Exported Files
+
+`[package].exports` lists further files a consumer may import, each by its path
+from the package root:
+
+```toml
+[package]
+name = "geo"
+lib = "src/lib.wado"
+exports = ["src/shapes.wado"]
+```
+
+A consumer names an exported file as `"<specifier>/<path>"`, such as
+`"lib:geo/src/shapes.wado"`, and may import every `pub` item in it. A file that
+`lib` and `exports` both reach is one module, so its types are the same types
+either way.
+
+- An entry is a relative path with an extension. It has no empty, `.` or `..`
+  segment, no `\` and no leading `/`, and no entry is listed twice.
+- The path in a specifier is compared to the entries after NFC normalization,
+  with case compared exactly. A path no entry names is an error naming the
+  package, whether or not the file exists.
+- `wado publish` refuses a list naming a file the package does not carry.
+
 ### Source Dependencies
 
 A `path` or `git` dependency is Wado source. It is compiled into the consuming
@@ -521,8 +554,12 @@ test {
 }
 ```
 
-A consumer's `[dependencies]` do not reach into its dependencies. A `use` inside
-a dependency never resolves against them.
+A `use` resolves against the manifest of the package its module belongs to. A
+`use` inside a dependency resolves against that dependency's own
+`[dependencies]`, never the consumer's. A consumer cannot import a dependency's
+dependency without declaring it in its own manifest. The same holds for a file
+reached by a path: it belongs to the package whose tree holds it, declared as a
+dependency or not, and a file in no package declares nothing.
 
 ### The Library World as a Component
 
@@ -589,9 +626,11 @@ A path dependency has no entry.
 
 ## Workspaces
 
-A workspace is a set of packages developed together. Its root `wado.toml` has a
-`[workspace]` table, whose `members` lists the member directories as glob
-patterns:
+A workspace is a set of packages developed together. It is not a package itself:
+it is declared by a `wado-workspace.toml`, which has no `[package]`, and no
+`wado.toml` shares its directory. Its `[workspace]` table's `members` lists the
+member directories as glob patterns, so a package under the workspace that
+`members` leaves out is in no workspace:
 
 ```toml
 [workspace]
@@ -608,15 +647,15 @@ authors = ["Alice <alice@example.com>"]
 `[workspace.package]` holds metadata every member inherits, with no marker in
 the member. A member inherits the fields in one of two ways:
 
-| Field          | Inheritance                                              |
-| -------------- | -------------------------------------------------------- |
-| `version`      | Forced: a member that sets the field is an error         |
-| `repository`   | Forced                                                   |
-| `namespace`    | Forced                                                   |
-| `license`      | A default the member may replace                         |
-| `license-file` | A default the member may replace; resolved from the root |
-| `authors`      | A default the member may replace                         |
-| `wado-version` | A default the member may replace                         |
+| Field          | Inheritance                                                               |
+| -------------- | ------------------------------------------------------------------------- |
+| `version`      | Forced: a member that sets the field is an error                          |
+| `repository`   | Forced                                                                    |
+| `namespace`    | Forced                                                                    |
+| `license`      | A default the member may replace                                          |
+| `license-file` | A default the member may replace; resolved from the workspace's directory |
+| `authors`      | A default the member may replace                                          |
+| `wado-version` | A default the member may replace                                          |
 
 Forcing the identity fields keeps every member on one version, from one
 repository, under one namespace. `license` and `license-file` are one setting: a
@@ -631,8 +670,9 @@ lib = "src/lib.wado"
 ```
 
 Any other `[package]` field belongs to the member. A key in `[workspace.package]`
-that is not one of the seven draws the unknown-key warning. The root may also
-have a `[package]` of its own, which inherits nothing.
+that is not one of the seven draws the unknown-key warning. Besides
+`[workspace]`, the file holds only `[registries]`, which publishing the
+workspace resolves every member against.
 
 ## Publishing
 
