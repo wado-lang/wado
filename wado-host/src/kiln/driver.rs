@@ -995,6 +995,19 @@ pub fn generator_compile_options(invocations: InvocationIndex) -> CompilerOption
     }
 }
 
+/// The cycle `generator` closes when it is compiled inside `active`, the
+/// generators being compiled around it, outermost first. A generator whose
+/// source reaches itself has no order to run in.
+#[must_use]
+pub fn generator_cycle(active: &[String], generator: &str) -> Option<ProviderError> {
+    let start = active.iter().position(|a| a == generator)?;
+    let mut cycle: Vec<&str> = active[start..].iter().map(String::as_str).collect();
+    cycle.push(generator);
+    Some(ProviderError::Internal {
+        message: format!("kiln: generator cycle: {}", cycle.join(" -> ")),
+    })
+}
+
 /// Emit `diagnostics` through `host`, answering how many are errors.
 pub fn emit_counting_errors<H: CompilerHost + ?Sized>(
     host: &H,

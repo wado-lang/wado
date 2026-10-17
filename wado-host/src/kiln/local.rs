@@ -17,7 +17,7 @@ use wado_compiler::{Code, CompilerHost, Diagnostic, Severity};
 use super::component_cache::ComponentCache;
 use super::driver::{
     GeneratorProvider, PipelineError, ProviderError, ResolvedGenerator, emit_counting_errors,
-    generator_compile_options, harvest_invocations, run_pipeline,
+    generator_compile_options, generator_cycle, harvest_invocations, run_pipeline,
 };
 use crate::sync::lock;
 use crate::{HostStubs, StubHost};
@@ -229,12 +229,8 @@ async fn compile_generator(
             path.as_str()
         ));
     }
-    if let Some(start) = chain.iter().position(|active| active == path.as_str()) {
-        let mut cycle: Vec<&str> = chain[start..].iter().map(String::as_str).collect();
-        cycle.push(path.as_str());
-        return Err(ProviderError::Internal {
-            message: format!("kiln: generator cycle: {}", cycle.join(" -> ")),
-        });
+    if let Some(cycle) = generator_cycle(chain, path.as_str()) {
+        return Err(cycle);
     }
     let source = std::fs::read_to_string(&file).map_err(|e| ProviderError::Internal {
         message: format!("kiln: cannot read generator `{}`: {e}", file.display()),

@@ -63,6 +63,7 @@ use crate::run_cache::RunCache;
 use wado_host::atomic_write::write_atomic;
 use wado_host::kiln::driver::{
     GeneratorProvider, PipelineError, ProviderError, ResolvedGenerator, generator_compile_options,
+    generator_cycle,
 };
 use wado_host::sync::lock;
 
@@ -534,12 +535,8 @@ impl ActiveGenerator {
     fn enter(chain: &Arc<Mutex<Vec<String>>>, path: &Path) -> Result<Self, ProviderError> {
         let entry = normalize_path(path).to_string_lossy().to_string();
         let mut held = lock(chain);
-        if let Some(start) = held.iter().position(|active| active == &entry) {
-            let mut cycle: Vec<&str> = held[start..].iter().map(String::as_str).collect();
-            cycle.push(&entry);
-            return Err(ProviderError::Internal {
-                message: format!("kiln: generator cycle: {}", cycle.join(" -> ")),
-            });
+        if let Some(cycle) = generator_cycle(&held, &entry) {
+            return Err(cycle);
         }
         held.push(entry);
         drop(held);
