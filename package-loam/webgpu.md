@@ -105,6 +105,16 @@ nothing still names those buffers. The exception is a buffer the pass
 retained, which lives through the next pass: Gemma's attention cache stays on
 the device from one token to the next.
 
+A released buffer is a spare, and the next pass takes one of the size it asks
+for before it makes one, the spares in the order the last pass made them. A
+pass of a model asks for the sizes the one before it did, so each dispatch
+binds the buffers the same dispatch bound a pass before, and finds the bind
+group that one made. Making a bind group cost the host 5.5 µs and a buffer
+1.7 µs, against 1.9 µs for setting the pipeline and bind group and
+dispatching. A spare the pass does not take, and a bind group it does not
+bind, is dropped at the next `begin`, so what grows with the sequence, as an
+attention cache does, holds no more than two passes' worth.
+
 ### A product weight is kept column by column, in bf16 where that loses nothing
 
 `keep_rhs` writes a weight column by column, so the inner axis of a product is
@@ -227,8 +237,8 @@ GPT-2 (124M)'s twelve take 126.
 device. Its time per token is recorded against `Cpu` and against onnxruntime,
 which is run as a program and never read.
 
-Memory planning, a buffer reused once the tensor in it is dead, waits for a
-measurement that shows allocation matters.
+Memory planning within a pass, a buffer reused once the tensor in it is dead,
+waits for a measurement that shows a pass's footprint matters.
 
 ## Plan
 
@@ -258,18 +268,21 @@ example's `generate.mjs` on `onnxruntime-node`, on the CPU.
 
 | Model        | Backend         | Time a token, onnxruntime's as 1 | Dispatches a token | Read backs a token |
 | ------------ | --------------- | -------------------------------- | ------------------ | ------------------ |
-| GPT-2 (124M) | `WebGpuBackend` | 3.3                              | 127                | 1                  |
+| GPT-2 (124M) | `WebGpuBackend` | 2.5                              | 128                | 1                  |
 | GPT-2 (124M) | `Cpu`           | 18                               |                    |                    |
-| Gemma 3 270M | `WebGpuBackend` | 0.34                             | 275                | 1                  |
+| Gemma 3 270M | `WebGpuBackend` | 0.19                             | 276                | 1                  |
 | Gemma 3 270M | `Cpu`           | 5.0                              |                    |                    |
 | either       | onnxruntime     | 1                                |                    |                    |
 
-GPT-2's dispatches are the 126 kernels the layer table predicts and one
-`arg_max`. On llvmpipe, which binds 128 MiB at most, its head runs in two
+GPT-2's dispatches are the 126 kernels the layer table predicts and
+`arg_max`'s two: one workgroup reduces each part of 4096 logits, and another
+the parts. On llvmpipe, which binds 128 MiB at most, its head runs in two
 chunks, its weight being the 154 MB embedding.
 
 Gemma's token cost the host more than the device until the dispatches shared
 one compute pass and one parameter buffer, `wado run-webgpu` built wasmtime and
 wgpu-core optimized, and `arg_max` replaced reading back the logits. Each
 roughly halved it. The products of a few rows then took it from 0.65 to 0.45,
-and submitting every 32 dispatches to 0.34.
+submitting every 32 dispatches to 0.34, keeping the product weights column by
+column in bf16 to 0.28, splitting `arg_max`'s lane over the device to 0.25,
+and reusing buffers and bind groups to 0.19.

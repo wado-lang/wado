@@ -26,7 +26,7 @@ use {
     operand,
     row_extents,
 } from "./tensor.wado";
-use { TreeMap, TreeSet } from "core:collections";
+use { HashMap, TreeMap, TreeSet } from "core:collections";
 use {
     Webgpu,
     Gpu,
@@ -96,12 +96,81 @@ pub struct PlacedRead<Axes> {
 /// which it cannot do for a resource held bare.
 struct Slot {
     buffer: GpuBuffer,
+    words: i32,
+    /// Unique among the buffers the backend has made, so a cached bind group
+    /// never names a buffer made in the place of the one it bound.
+    id: i32,
 }
 
-/// A buffer an earlier pass retained, at the slot it was made at.
+/// A buffer an earlier pass retained: the slot it was made at, and its place
+/// in `buffers`.
 struct Carried {
     slot: i32,
-    buffer: GpuBuffer,
+    at: i32,
+}
+
+/// A buffer no tensor holds, at its place in `buffers`.
+struct Spare {
+    at: i32,
+    words: i32,
+}
+
+/// Values at places that stay theirs while they live, so a place can name
+/// one, and a place a dropped value left is the next one's.
+struct Places<T> {
+    held: List<Option<T>>,
+    vacant: List<i32>,
+}
+
+impl<T> Places<T> {
+    fn new() -> Places<T> {
+        return Places { held: [], vacant: [] };
+    }
+
+    /// `value`'s place.
+    fn put(&mut self, value: T) -> i32 {
+        let Some(at) = self.vacant.pop() else {
+            self.held.push(Option::Some(value));
+            return self.held.len() - 1;
+        };
+        self.replace(at, Option::Some(value));
+        return at;
+    }
+
+    fn get(&self, at: i32) -> &T {
+        let Some(value) = &self.held[at] else {
+            unreachable();
+        };
+        return value;
+    }
+
+    fn get_mut(&mut self, at: i32) -> &mut T {
+        let Some(value) = &mut self.held[at] else {
+            unreachable();
+        };
+        return value;
+    }
+
+    /// Drops the value at `at`.
+    fn remove(&mut self, at: i32) {
+        self.replace(at, null);
+        self.vacant.push(at);
+    }
+
+    fn replace(&mut self, at: i32, value: Option<T>) {
+        self.held.push(value);
+        self.held.swap(at, self.held.len() - 1);
+        self.held.pop();
+    }
+}
+
+/// A bind group a dispatch made, which a later dispatch binding the same
+/// spans to the same shader reuses.
+struct CachedGroup {
+    group: GpuBindGroup,
+    key: List<i32>,
+    /// The last pass a dispatch bound it in.
+    used: i32,
 }
 
 /// A compiled shader, held as `Slot` holds a buffer.
@@ -127,11 +196,6 @@ struct Parameters {
     written: i32,
 }
 
-/// A bind group of a recorded dispatch, held until the dispatch is submitted.
-struct Bound {
-    group: GpuBindGroup,
-}
-
 /// The kernels on a WebGPU device, and on the CPU where no shader is written.
 pub struct WebGpuBackend {
     device: GpuDevice,
@@ -141,8 +205,17 @@ pub struct WebGpuBackend {
     compiled: TreeMap<ShaderKey, i32>,
     /// The buffers `keep` wrote, which live as long as the backend.
     kept: List<Slot>,
-    /// The buffers of the current pass, which `begin` releases.
-    pass: List<Slot>,
+    /// Every other buffer: of the current pass, carried into it, or spare.
+    buffers: Places<Slot>,
+    /// The places in `buffers` of the last pass's buffers that nothing
+    /// retained, in the order it made them, for this pass to make its own
+    /// of. A pass makes the buffers the one before it made, so its dispatches
+    /// bind the same buffers, and find their bind groups made. `begin` drops
+    /// a spare no buffer of the pass took.
+    spare: List<Spare>,
+    /// The places in `buffers` of the current pass's buffers, which `begin`
+    /// releases.
+    pass: List<i32>,
     /// The slot of `pass[0]`. Each pass numbers its buffers after the last
     /// one's, so a slot never names two buffers.
     pass_start: i32,
@@ -153,7 +226,15 @@ pub struct WebGpuBackend {
     carried: List<Carried>,
     /// The commands recorded and not yet submitted: none, or one encoder.
     recording: List<Recording>,
-    bound: List<Bound>,
+    /// The dispatches recorded and not yet submitted.
+    unsubmitted: i32,
+    /// Each bind group made, and its place by its key: the shader's place in
+    /// `pipelines`, then each span's buffer `id`, first word and words.
+    groups: Places<CachedGroup>,
+    group_at: HashMap<List<i32>, i32>,
+    /// The passes `begin` has started.
+    passes: i32,
+    next_id: i32,
     /// The parameters of this pass's dispatches: none before the first.
     parameters: Option<Parameters>,
     /// The storage buffers one shader binds, less its output and parameters.
@@ -247,12 +328,18 @@ impl WebGpuBackend {
             pipelines: [],
             compiled: TreeMap::new(),
             kept: [],
+            buffers: Places::new(),
+            spare: [],
             pass: [],
             pass_start: 0,
             retaining: TreeSet::new(),
             carried: [],
             recording: [],
-            bound: [],
+            unsubmitted: 0,
+            groups: Places::new(),
+            group_at: HashMap::new(),
+            passes: 0,
+            next_id: 0,
             parameters: null,
             max_operands: saturated(buffers as u64) - 2,
             max_binding: saturated(bytes),
@@ -302,34 +389,64 @@ impl WebGpuBackend {
     /// The buffer at `slot`: a kept one where it is negative, one of the pass
     /// otherwise.
     fn buffer(&self, slot: i32) -> &GpuBuffer {
+        return &self.slot(slot).buffer;
+    }
+
+    fn slot(&self, slot: i32) -> &Slot {
         if slot < 0 {
-            return &self.kept[-slot - 1].buffer;
+            return &self.kept[-slot - 1];
         }
+        return self.buffers.get(self.place(slot));
+    }
+
+    /// The place in `buffers` of the pass's or a carried buffer.
+    fn place(&self, slot: i32) -> i32 {
         if slot >= self.pass_start {
-            return &self.pass[slot - self.pass_start].buffer;
+            return self.pass[slot - self.pass_start];
         }
         for let c of &self.carried {
             if c.slot == slot {
-                return &c.buffer;
+                return c.at;
             }
         }
         panic("loam: a tensor of an earlier pass is read after `begin`, and that pass did not retain it");
     }
 
-    /// A new buffer of `count` 32-bit words, and its slot.
+    /// A buffer of `count` 32-bit words, and its slot: a spare of that size,
+    /// or a new one. A spare's words are what its last pass left.
     fn allocated(&mut self, count: i32, kept: bool) -> i32 with (GpuDevice, GpuBuffer) {
+        if kept {
+            self.kept.push(self.created(count));
+            return -self.kept.len();
+        }
+        let mut at = -1;
+        for let i of 0..<self.spare.len() {
+            if self.spare[i].words == count {
+                at = self.spare.remove(i).at;
+                break;
+            }
+        }
+        if at < 0 {
+            at = self.buffers.put(self.created(count));
+        }
+        self.pass.push(at);
+        return self.pass_start + self.pass.len() - 1;
+    }
+
+    fn created(&mut self, count: i32) -> Slot with (GpuDevice, GpuBuffer) {
         let buffer = self.device.create_buffer(GpuBufferDescriptor {
             size: byte_size(count),
             usage: GpuBufferUsage::Storage | GpuBufferUsage::CopySrc | GpuBufferUsage::CopyDst,
             mapped_at_creation: null,
             label: null,
         });
-        if kept {
-            self.kept.push(Slot { buffer });
-            return -self.kept.len();
-        }
-        self.pass.push(Slot { buffer });
-        return self.pass_start + self.pass.len() - 1;
+        self.next_id += 1;
+        return Slot { buffer, words: count, id: self.next_id };
+    }
+
+    /// Makes the buffer at `at` in `buffers` a spare.
+    fn release(&mut self, at: i32) {
+        self.spare.push(Spare { at, words: self.buffers.get(at).words });
     }
 
     /// A new buffer of `count` 32-bit words, `word(i)` the `i`th, and its
@@ -550,7 +667,7 @@ impl WebGpuBackend {
         return List::<f32>::from_le_bytes(bytes as ByteList)[0..<count].to_list();
     }
 
-    /// Submits every command recorded, and lets their bind groups go.
+    /// Submits every command recorded.
     fn flush(
         &mut self,
     ) with (GpuQueue, GpuCommandEncoder, GpuCommandBuffer, GpuBindGroup, GpuBuffer, GpuComputePassEncoder) {
@@ -561,8 +678,7 @@ impl WebGpuBackend {
             let commands = encoder.finish(Option::Some(GpuCommandBufferDescriptor { label: null }));
             self.queue.submit([&commands]);
         }
-        while let Some(_) = self.bound.pop() {
-        }
+        self.unsubmitted = 0;
     }
 
     /// `t` with its f32 elements in row-major order from its offset: `t`
@@ -622,24 +738,19 @@ impl WebGpuBackend {
         };
         let mut all = spans;
         all.push(self.parameter_span(&params));
-        let mut entries: List<GpuBindGroupEntry> = [];
-        for let [i, s] of all.into_iter().enumerate() {
+        let mut bound: List<i32> = [found];
+        for let s of &all {
             assert s.first % self.alignment == 0 && s.count <= self.max_binding;
-            entries.push(GpuBindGroupEntry {
-                binding: i as u32 as GpuIndex32,
-                resource: GpuBindingResource::GpuBufferBinding(GpuBufferBinding {
-                    buffer: self.buffer(s.slot),
-                    offset: Option::Some((s.first * 4) as u64 as GpuSize64),
-                    size: Option::Some(byte_size(s.count)),
-                }),
-            });
+            bound.push(self.slot(s.slot).id);
+            bound.push(s.first);
+            bound.push(s.count);
         }
-        let pipeline = &self.pipelines[found];
-        let group = self.device.create_bind_group(GpuBindGroupDescriptor {
-            layout: &pipeline.layout,
-            entries,
-            label: null,
-        });
+        let at = match self.group_at.get(bound) {
+            Some(at) => at,
+            None => self.bind_group(found, &all, bound),
+        };
+        let cached = self.groups.get_mut(at);
+        cached.used = self.passes;
         if self.recording.is_empty() {
             let encoder = self.device.create_command_encoder(Option::Some(GpuCommandEncoderDescriptor { label: null }));
             let pass = encoder.begin_compute_pass(Option::Some(GpuComputePassDescriptor {
@@ -649,8 +760,8 @@ impl WebGpuBackend {
             self.recording.push(Recording { encoder, pass });
         }
         let pass = &self.recording[0].pass;
-        pass.set_pipeline(&pipeline.compiled);
-        let Ok(_) = pass.set_bind_group(0, Option::Some(&group), null, null, null) else {
+        pass.set_pipeline(&self.pipelines[found].compiled);
+        let Ok(_) = pass.set_bind_group(0, Option::Some(&cached.group), null, null, null) else {
             panic("loam: a kernel's buffers did not bind");
         };
         pass.dispatch_workgroups(
@@ -658,10 +769,40 @@ impl WebGpuBackend {
             Option::Some(y as u32 as GpuSize32),
             Option::Some(z as u32 as GpuSize32),
         );
-        self.bound.push(Bound { group });
-        if self.bound.len() >= SUBMIT_EVERY {
+        self.unsubmitted += 1;
+        if self.unsubmitted >= SUBMIT_EVERY {
             self.flush();
         }
+    }
+
+    /// A new bind group of `spans` to the shader at `pipeline`, cached under
+    /// `key`, and its place in `groups`.
+    fn bind_group(
+        &mut self,
+        pipeline: i32,
+        spans: &List<Span>,
+        key: List<i32>,
+    ) -> i32 with (GpuDevice, GpuBuffer, GpuBindGroupLayout, GpuBindGroup) {
+        let mut entries: List<GpuBindGroupEntry> = [];
+        for let i of 0..<spans.len() {
+            let s = spans[i];
+            entries.push(GpuBindGroupEntry {
+                binding: i as u32 as GpuIndex32,
+                resource: GpuBindingResource::GpuBufferBinding(GpuBufferBinding {
+                    buffer: self.buffer(s.slot),
+                    offset: Option::Some((s.first * 4) as u64 as GpuSize64),
+                    size: Option::Some(byte_size(s.count)),
+                }),
+            });
+        }
+        let group = self.device.create_bind_group(GpuBindGroupDescriptor {
+            layout: &self.pipelines[pipeline].layout,
+            entries,
+            label: null,
+        });
+        let at = self.groups.put(CachedGroup { group, key, used: self.passes });
+        self.group_at[key] = at;
+        return at;
     }
 
     /// `op` over `operands` into a new tensor of `extents`, or `None` where the
@@ -1318,26 +1459,41 @@ impl Backend for WebGpuBackend {
 
     /// Submits what the pass before recorded and releases its buffers, so a
     /// tensor of that pass is no longer one to read, but for those it
-    /// retained, which live through this pass.
+    /// retained, which live through this pass. A spare it did not take, and
+    /// a bind group it did not bind, are dropped.
     fn begin(&mut self) with (GpuQueue, GpuCommandEncoder, GpuCommandBuffer, GpuBindGroup, GpuBuffer) {
         self.flush();
         self.parameters = null;
+        while let Some(s) = self.spare.pop() {
+            self.buffers.remove(s.at);
+        }
         let mut carried: List<Carried> = [];
         let start = self.pass_start;
         self.pass_start += self.pass.len();
-        while let Some(s) = self.pass.pop() {
-            let slot = start + self.pass.len();
-            if self.retaining.contains(slot) {
-                carried.push(Carried { slot, buffer: s.buffer });
+        for let i of 0..<self.pass.len() {
+            if self.retaining.contains(start + i) {
+                carried.push(Carried { slot: start + i, at: self.pass[i] });
+            } else {
+                self.release(self.pass[i]);
             }
         }
-        while let Some(c) = self.carried.pop() {
+        self.pass = [];
+        for let c of self.carried {
             if self.retaining.contains(c.slot) {
                 carried.push(c);
+            } else {
+                self.release(c.at);
             }
         }
         self.carried = carried;
         self.retaining = TreeSet::new();
+        for let at of 0..<self.groups.held.len() {
+            if let Some(g) = &self.groups.held[at] && g.used < self.passes {
+                self.group_at.remove(g.key);
+                self.groups.remove(at);
+            }
+        }
+        self.passes += 1;
     }
 
     fn retain<E: Element, Axes>(&mut self, t: &Placed<E, Axes>) {
