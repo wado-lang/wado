@@ -21,6 +21,8 @@
 
 use std::path::{Path, PathBuf};
 
+use crate::atomic_write::write_atomic;
+
 pub use wado_compiler::kiln::metadata::{
     FileHash, METADATA_VERSION, Metadata, OutputEntry, metadata_filename,
 };
@@ -76,7 +78,8 @@ pub fn load(
     Ok(Some(metadata))
 }
 
-/// Write the metadata file, creating the parent directory if needed.
+/// Write the metadata file, creating the parent directory if needed. Atomic,
+/// since two compiles of one entry may write it at once.
 pub fn save(
     manifest_root: &Path,
     output_dir: &str,
@@ -84,17 +87,11 @@ pub fn save(
     metadata: &Metadata,
 ) -> Result<(), MetadataError> {
     let path = metadata_path(manifest_root, output_dir, primary);
-    if let Some(parent) = path.parent() {
-        std::fs::create_dir_all(parent).map_err(|source| MetadataError::Io {
-            path: parent.to_path_buf(),
-            source,
-        })?;
-    }
     let json =
         serde_json::to_string_pretty(metadata).map_err(|source| MetadataError::Serialize {
             source: source.to_string(),
         })?;
-    std::fs::write(&path, json).map_err(|source| MetadataError::Io { path, source })
+    write_atomic(&path, json.as_bytes()).map_err(|source| MetadataError::Io { path, source })
 }
 
 #[derive(Debug)]

@@ -2,8 +2,8 @@
 //! the golden dumps run one: generators named by a `./` path, compiled from
 //! source, with the entry's directory as the package root.
 
-use std::path::Path;
-use std::sync::{Arc, OnceLock};
+use std::path::{Path, PathBuf};
+use std::sync::{Arc, Mutex, OnceLock};
 
 use wado_compiler::hashmap::IndexSet;
 use wado_compiler::kiln::{
@@ -19,6 +19,7 @@ use super::driver::{
 };
 use super::runtime::generator_engine;
 use crate::StubHost;
+use crate::sync::lock;
 
 /// The generator components the process shares, so a run of many fixtures
 /// compiles each generator once. Give it to a host with
@@ -30,8 +31,9 @@ pub fn generators() -> Arc<ComponentCache> {
         .clone()
 }
 
-/// Run the generators the module graph under `entry_file` declares, and answer
-/// the redirect index the compile of `entry_identity` that follows takes.
+/// Run the generators the module graph under `entry_file`, whose text is
+/// `entry_source`, declares, and answer the redirect index the compile of
+/// `entry_identity` that follows takes.
 ///
 /// The outputs land under the entry's directory, in `build/kiln/` unless a
 /// clause names its own `output_dir`, as `wado` writes them for a file outside
@@ -41,10 +43,11 @@ pub fn generators() -> Arc<ComponentCache> {
 /// `None` when the pipeline failed, which `host` has been told why.
 pub async fn run_local_generators(
     entry_file: &Path,
+    entry_source: &str,
     entry_identity: &str,
     host: &StubHost,
 ) -> Option<InvocationIndex> {
-    match run(entry_file, entry_identity, host).await {
+    match run(entry_file, entry_source, entry_identity, host).await {
         Ok(index) => Some(index),
         // Reported clause by clause already.
         Err(PipelineError::InlineClause(_) | PipelineError::RedirectConflict(_)) => None,
@@ -62,6 +65,7 @@ pub async fn run_local_generators(
 
 async fn run(
     entry_file: &Path,
+    entry_source: &str,
     entry_identity: &str,
     host: &StubHost,
 ) -> Result<InvocationIndex, PipelineError> {
@@ -71,6 +75,7 @@ async fn run(
         .to_string_lossy();
     let (invocations, identities, diagnostics) = harvest_invocations(
         entry_file,
+        entry_source,
         entry_identity,
         &entry_key,
         &mut IndexSet::default(),
@@ -126,24 +131,52 @@ impl GeneratorProvider for LocalGenerators {
     }
 }
 
-/// `module` compiled to a generator component. A generator's own Kiln
-/// invocations are not run.
+/// The generator `module` names, compiled once per process for each text of
+/// its file: a run reads files that do not change under it, so neither does
+/// what they compile to.
 async fn compile_generator(
     root: &Path,
     module: &GeneratorModule,
 ) -> Result<ResolvedGenerator, ProviderError> {
+    static COMPILED: Mutex<Vec<(PathBuf, String, Result<ResolvedGenerator, ProviderError>)>> =
+        Mutex::new(Vec::new());
+
+    let unsupported = |message: String| Err(ProviderError::Unsupported { message });
     let GeneratorModule::LocalPath(path) = module else {
-        return Err(ProviderError::Unsupported {
-            message: format!(
-                "kiln: generator `{}` is not a `./` path, the only kind a fixture runs",
-                generator_identity(module)
-            ),
-        });
+        return unsupported(format!(
+            "kiln: generator `{}` is not a `./` path, the only kind a fixture runs",
+            generator_identity(module)
+        ));
     };
     let file = root.join(path.as_str());
+    if file.is_dir() {
+        return unsupported(format!(
+            "kiln: generator `{}` is a package directory; a fixture names its `.wado` file",
+            path.as_str()
+        ));
+    }
     let source = std::fs::read_to_string(&file).map_err(|e| ProviderError::Internal {
         message: format!("kiln: cannot read generator `{}`: {e}", file.display()),
     })?;
+    let cached = lock(&COMPILED)
+        .iter()
+        .find(|(f, s, _)| f == &file && s == &source)
+        .map(|(_, _, resolved)| resolved.clone());
+    if let Some(resolved) = cached {
+        return resolved;
+    }
+    let resolved = compile_generator_source(&file, path.as_str(), &source).await;
+    lock(&COMPILED).push((file, source, resolved.clone()));
+    resolved
+}
+
+/// `source`, the text of the generator `file`, compiled to a component. A
+/// generator's own Kiln invocations are not run.
+async fn compile_generator_source(
+    file: &Path,
+    path: &str,
+    source: &str,
+) -> Result<ResolvedGenerator, ProviderError> {
     let host = StubHost::new(
         file.parent()
             .expect("a generator names a file")
@@ -158,12 +191,11 @@ async fn compile_generator(
         target_world: Some(GENERATOR_WORLD_FQ.to_string()),
         ..CompilerOptions::default()
     };
-    let compiled = wado_compiler::compile_with_options(&source, &host, Some(&name), options)
+    let compiled = wado_compiler::compile_with_options(source, &host, Some(&name), options)
         .await
         .map_err(|_| ProviderError::Internal {
             message: format!(
-                "kiln: generator `{}` does not compile:\n{}",
-                path.as_str(),
+                "kiln: generator `{path}` does not compile:\n{}",
                 host.diagnostics()
                     .iter()
                     .filter(|d| d.severity == Severity::Error)

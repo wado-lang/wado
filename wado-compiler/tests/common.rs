@@ -31,6 +31,7 @@ use wado_compiler::{
     CompileError, CompileFailure, CompilerHost, CompilerOptions, Diagnostic, InMemoryCompilerHost,
     OptLevel,
 };
+use wado_host::engine::{DEFAULT_COLLECTOR, enable_wasm_features};
 use wado_host::kiln::local::{generators, run_local_generators};
 use wado_host::timezone;
 pub use wado_host::tls_trust::install_default_crypto_provider;
@@ -376,14 +377,9 @@ pub fn report_fuel_used<T>(store: &mut Store<T>, label: &str, timeout_ms: u64) {
 /// backtraces on top of these, [`capped_engine`] a pooling memory cap.
 fn base_config() -> Config {
     let mut config = Config::new();
-    config.wasm_component_model_gc(true);
-    config.wasm_component_model_more_async_builtins(true);
-    config.wasm_component_model_async_stackful(true);
-    config.wasm_component_model_error_context(true);
-    config.wasm_component_model_map(true);
-    // Match the wado CLI's default collector so the suite exercises the
-    // collector users actually get (see `runtime::DEFAULT_COLLECTOR`).
-    config.collector(wasmtime::Collector::Copying);
+    enable_wasm_features(&mut config);
+    // The collector users actually get.
+    config.collector(DEFAULT_COLLECTOR);
     // Minimal optimization, for faster compilation in tests.
     config.cranelift_opt_level(wasmtime::OptLevel::None);
     config
@@ -1098,6 +1094,10 @@ pub fn compile_capturing_diagnostics(
     stubs: HostStubs,
 ) -> CapturedCompile {
     use wado_compiler::Severity;
+    assert!(
+        options.invocations.is_empty(),
+        "the harness runs the source's generators for its redirect index"
+    );
     let base_path = path.parent().map(Path::to_path_buf).unwrap_or_default();
     let host = StubHost::new(base_path)
         .with_stubs(stubs)
@@ -1108,7 +1108,7 @@ pub fn compile_capturing_diagnostics(
 
     let result = runtime()
         .block_on(async {
-            let invocations = run_local_generators(path, &filename, &host)
+            let invocations = run_local_generators(path, source, &filename, &host)
                 .await
                 .ok_or(())?;
             wado_compiler::compile_with_options(

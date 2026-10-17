@@ -15,16 +15,9 @@ use wado_compiler::{
 use crate::args::DEFAULT_LOG_LEVEL;
 use crate::rss::RssSample;
 use crate::run_cache::RunCache;
-use crate::runtime::create_fuel_engine;
 use wado_host::kiln::driver::KilnSpan;
 use wado_host::kiln::runtime::{generate_for, probe_for};
 use wado_host::sync::lock;
-
-/// The engine a generator runs on under `wado`: the CLI's own configuration,
-/// metering fuel.
-pub fn kiln_engine() -> anyhow::Result<wasmtime::Engine> {
-    create_fuel_engine(wasmtime::OptLevel::Speed)
-}
 
 pub struct FilesystemCompilerHost {
     inner: Arc<wado_lsp::FilesystemCompilerHost>,

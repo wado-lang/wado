@@ -19,10 +19,10 @@ use sha2::{Digest, Sha256};
 use wado_compiler::hashmap::IndexMap;
 use wado_lsp::host::discovery::{absolutize, normalize_path};
 
-use crate::compiler_host::kiln_engine;
 use crate::fingerprint::Input;
 use wado_host::kiln::component_cache::ComponentCache;
 use wado_host::kiln::driver::ResolvedGenerator;
+use wado_host::kiln::runtime::generator_engine;
 use wado_host::sync::lock;
 
 /// Everything one CLI run shares across the files it processes.
@@ -37,7 +37,7 @@ pub struct RunCache {
 impl Default for RunCache {
     fn default() -> Self {
         let cache = Self {
-            components: Arc::new(ComponentCache::new(kiln_engine)),
+            components: Arc::new(ComponentCache::new(generator_engine)),
             generators: Arc::default(),
             inputs: Arc::default(),
             reads: None,

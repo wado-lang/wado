@@ -931,7 +931,8 @@ impl<H: CompilerHost> Drop for KilnSpan<'_, H> {
     }
 }
 
-/// The inline invocations declared by `entry_file` and the local `.wado`
+/// The inline invocations declared by `entry_source`, the text of `entry_file`
+/// the compile that follows reads, and the local `.wado`
 /// modules it reaches past those in `settled`, which gains them, plus the
 /// `harvest_key → loader_identity` map the caller rewrites the redirect index
 /// through ([`wado_compiler::kiln::remap_decl_files`]).
@@ -943,16 +944,14 @@ impl<H: CompilerHost> Drop for KilnSpan<'_, H> {
 /// generator.
 pub async fn harvest_invocations(
     entry_file: &Path,
+    entry_source: &str,
     entry_identity: &str,
     entry_key: &str,
     settled: &mut IndexSet<String>,
 ) -> (Vec<Invocation>, IndexMap<String, String>, Vec<Diagnostic>) {
-    // An unreadable entry, or one whose parse recovered from an error, harvests
-    // nothing; the compile that follows reports it.
-    let Ok(entry_source) = std::fs::read_to_string(entry_file) else {
-        return Default::default();
-    };
-    let Ok(entry) = wado_compiler::parse(&entry_source).into_fail_fast() else {
+    // An entry whose parse recovered from an error harvests nothing; the
+    // compile that follows reports it.
+    let Ok(entry) = wado_compiler::parse(entry_source).into_fail_fast() else {
         return Default::default();
     };
     // A loader identity is anchored on the entry's directory, so that is what

@@ -518,8 +518,12 @@ async fn render_phases(
     } = read_fixture_compile(source, default_world).unwrap_or_else(|e| panic!("{input_path}: {e}"));
     let params = inputs.param_inputs();
 
-    let kiln_host = StubHost::new(base_path.clone()).with_generators(generators());
-    let Some(invocations) = run_local_generators(path, input_path, &kiln_host).await else {
+    // On the stubs the e2e harness runs it with, so a golden records the
+    // program its test runs.
+    let kiln_host = StubHost::new(base_path.clone())
+        .with_stubs(inputs.host_stubs())
+        .with_generators(generators());
+    let Some(invocations) = run_local_generators(path, source, input_path, &kiln_host).await else {
         let e = diagnostics_summary(&kiln_host, "kiln failed");
         for p in phases {
             out.insert(*p, Err(e.clone()));

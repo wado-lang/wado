@@ -1007,7 +1007,18 @@ async fn collect_inline_invocations_for_entry_with_identities(
     // own directory, so it always contains the entry.
     let entry_key = relative_to(&absolute(manifest_root), &absolute(entry_file))
         .expect("the entry lies under the root it was resolved from");
-    harvest_invocations(entry_file, &entry_identity, &entry_key, settled).await
+    // An unreadable entry harvests nothing; the compile that follows reports it.
+    let Ok(entry_source) = fs::read_to_string(entry_file) else {
+        return Default::default();
+    };
+    harvest_invocations(
+        entry_file,
+        &entry_source,
+        &entry_identity,
+        &entry_key,
+        settled,
+    )
+    .await
 }
 
 /// Remap `index` to loader identities via [`wado_compiler::kiln::remap_decl_files`], emit any
