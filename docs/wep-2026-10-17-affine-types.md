@@ -134,10 +134,10 @@ fn dup<T>(x: T) -> [T, T] { … }      // unmarked: T is copyable
 
 In declaration position, `impl Affine for X;` says `X` is move-only. A struct
 or a variant that holds an affine resource, directly or through a field or a
-payload, must write it, or the declaration is an error that names the field. A
-type that holds none may write it too, and is then a move-only value type. A
-tuple and a newtype cannot write it, so they are inferred: a tuple is affine
-when an element is, a newtype when its base is.
+payload, must write it, or the declaration is an error that names the field.
+A tuple and a newtype do not write it, and writing it on one is an error. They
+are inferred instead: a tuple is affine when an element is, a newtype when its
+base is.
 
 In permission position, `T: Affine` says an argument for `T` may be affine.
 Every type satisfies it, so `Option<i32>` is unchanged. What changes is the
@@ -161,27 +161,37 @@ A binding whose type is affine, or is a `T: Affine`, may be:
 
 It may not be read twice. The move check already states that for a resource;
 it now states it for every affine type, generic `T` included, at the
-definition. A read that would copy — a second use after a move, a `*r`, an
-`r.f`, a `list[i]`, a capture by a closure — is the error.
+definition. The error is any read that would copy:
+
+- a second use after a move;
+- a `*r` or an `r.f` read by value through a reference;
+- a `list[i]`;
+- a capture by a closure.
 
 The check runs on the `Semantics` layer, so it has spans and reaches the
 editor, and it needs no instantiation to run.
 
 ### Second-class references
 
-A `&R` or `&mut R` whose referent type is affine exists only between a call's
-argument and the parameter that receives it. It cannot be bound by a `let`,
-stored in a field or an element, returned, or captured by a closure, and `*r`
-is not a by-value expression. A `&T` whose referent is not affine is unchanged
-and stays first-class.
+A `&R` or `&mut R` whose referent type is affine may stand in two positions:
+
+- a parameter, the receiver included, which the call's argument fills;
+- a binding made by a `match`, `if let` or `while let` whose scrutinee is a
+  reference.
+
+Each lasts no longer than the call or the arm that holds it. A `&R` may not be
+bound by a `let`, stored in a field or an element, returned, or captured by a
+closure, and `*r` is not a by-value expression. A `&T` whose referent is not
+affine is unchanged and stays first-class.
 
 `&mut R` keeps its one write: `*r = value` replaces the referent and drops what
 it held. That is the store rule cleanup already applies to a binding.
 
-A `match` over a reference binds references, so an arm may read a payload
-where it stands. A `match` over an affine value by value consumes it, and each
-arm owns what it binds. The two forms are SE-0432's borrowing and consuming
-`switch`, and they are told apart by the scrutinee's type, not by a keyword.
+The second position is SE-0432's borrowing `switch`: a `match` over a
+reference binds references, so an arm reads a payload where it stands. A
+`match` over an affine value by value is the consuming `switch`: it consumes
+the value, and each arm owns what it binds. The scrutinee's type tells the two
+apart, not a keyword.
 
 ### Ways out of a place
 
@@ -209,9 +219,8 @@ affine value. A panic drops nothing.
 - `Future<T: Affine>`, `Stream<T>`, `AsyncCall<T: Affine>`: a future carries an
   affine payload today (`Future<Result<Option<Trailers>, ErrorCode>>`).
 - `List<T>`, `Slice<T>`, `TreeMap<K, V>`, `HashMap<K, V>`, `TreeSet<T>` and
-  every iterator stay unmarked. `List<Fields>` is a type error. A collection
-  of affine values is a later WEP, under
-  [Known gaps](#a-collection-of-affine-values).
+  every iterator stay unmarked. `List<Fields>` is a type error
+  ([A collection of affine values](#a-collection-of-affine-values)).
 - Stdlib generics that hold a `T` by value in state the type system cannot see
   (an iterator's `repr`, a map's log) are the reason the list above is short.
 
@@ -248,7 +257,8 @@ of resources" is withdrawn: `List<File>` does not exist.
    panic is P0 and does not wait for the rest.
 2. [ ] `Affine` in the prelude, sealed. Declaration rule: a struct or variant
    holding an affine value without the marker is an error naming the field;
-   a tuple and a newtype infer. Fixtures for each, and `resource_*` fixtures
+   a tuple and a newtype infer, and the marker on one is an error. Fixtures
+   for each, and `resource_*` fixtures
    updated to declare their holders.
 3. [ ] Instantiation rule: an affine argument for an unmarked parameter is a
    type error naming the parameter. `Option`, `Result`, `Future`, `Stream`,
@@ -276,19 +286,16 @@ of resources" is withdrawn: `List<File>` does not exist.
 
 ### A collection of affine values
 
-`List<R>` is a type error, and nothing replaces it. A program that opens many
+`List<R>` is a type error, and nothing replaces it. A program cannot hold a
+number of affine values that is known only at run time. One that opens many
 files holds them in a struct, an `Option` per slot, or opens them one at a
-time. What a list of affine values needs — an element moved in and out with
-no copy, iteration that borrows, a drop over every element — is a WEP of its
-own. Swift has no `Array` of noncopyable values either, and shipped a fixed
-`InlineArray` and a borrowing `Span` first.
+time. Swift has no `Array` of noncopyable values either.
 
 ### A closure cannot hold an affine value
 
 A closure captures by reference, and a reference to an affine value is
-second-class, so a closure may not capture one. Swift admits a consuming
-capture; Wado does not yet, and a program hands the value in as a parameter
-instead.
+second-class, so a closure may not capture one. A program hands the value in
+as a parameter instead. Swift admits a capture that consumes the value.
 
 ### The rest
 
@@ -299,8 +306,6 @@ checked; `5 as Counter` mints a handle nothing owns; web handles leak.
 
 ## Open questions
 
-- Whether a closure should be allowed to take an affine value by moving it in,
-  and whether the closure is then itself affine.
 - Whether a trait may bound `Self` with `Affine`, so that a trait method can
   be written over an affine `Self`.
 - Whether `impl Affine for X;` on a type that holds no resource is worth
