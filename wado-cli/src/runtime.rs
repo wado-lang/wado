@@ -25,7 +25,7 @@ use crate::coverage_host::{CoverageHits, add_to_linker as add_coverage_to_linker
 use crate::eval_host::{EvalSession, add_to_linker as add_eval_to_linker};
 use crate::http_hooks::WadoHttpHooks;
 use crate::knobs::RuntimeKnobs;
-use wado_host::engine::enable_wasm_features;
+use wado_host::engine::default_config;
 use wado_host::sync::lock;
 use wado_host::timezone::add_to_linker;
 use wado_host::tls_trust::{build_root_cert_store, install_default_crypto_provider};
@@ -438,19 +438,13 @@ pub fn parse_gc_heap_size(s: &str) -> Result<u64, String> {
         .ok_or_else(|| format!("GC heap size '{s}' does not fit in 64 bits"))
 }
 
-/// Create a wasmtime Config with all required Wasm features enabled.
+/// [`default_config`] under the runtime knobs and profiling mode a run chose.
 #[must_use]
 pub fn create_config(opt_level: OptLevel, profile: &ProfileMode, knobs: RuntimeKnobs) -> Config {
-    let mut config = Config::new();
-    enable_wasm_features(&mut config);
+    let mut config = default_config(opt_level);
     config.collector(knobs.collector);
-    // wasmtime collects before it grows, so a heap starting at zero doubles its
-    // way up to the working set and pays a full trace at every rung. The 4 GiB
-    // of address space is reserved either way: this commits, it does not map.
     config.gc_heap_initial_size(knobs.gc_heap_initial_size);
     config.consume_fuel(knobs.report_fuel);
-
-    config.cranelift_opt_level(opt_level);
 
     match profile {
         ProfileMode::None => {}
@@ -479,21 +473,6 @@ pub fn create_engine(
     knobs: RuntimeKnobs,
 ) -> Result<Engine> {
     Ok(Engine::new(&create_config(opt_level, profile, knobs))?)
-}
-
-/// Create a wasmtime Engine that consumes fuel, for a guest run under a budget:
-/// a Kiln generator, or a program `core:eval` evaluates.
-///
-/// Differs from [`create_engine`] by enabling fuel consumption, without which
-/// `Store::set_fuel` is rejected by the runtime.
-///
-/// # Errors
-///
-/// Returns an error if the engine cannot be created with the given configuration.
-pub fn create_fuel_engine(opt_level: OptLevel) -> Result<Engine> {
-    let mut config = create_config(opt_level, &ProfileMode::None, RuntimeKnobs::default());
-    config.consume_fuel(true);
-    Ok(Engine::new(&config)?)
 }
 
 /// Create a wasmtime Engine for test execution with epoch interruption enabled,

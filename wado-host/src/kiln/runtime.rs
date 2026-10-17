@@ -28,7 +28,7 @@ use wado_compiler::{
     GeneratorRunnerError, GeneratorSourceSpan,
 };
 
-use crate::engine::{DEFAULT_COLLECTOR, DEFAULT_GC_HEAP_INITIAL_SIZE, enable_wasm_features};
+use crate::engine::fuel_engine;
 use crate::sync::lock;
 
 wasmtime::component::bindgen!({
@@ -400,13 +400,7 @@ fn as_u64(v: &CanonicalValue) -> Option<u64> {
 ///
 /// Fails when wasmtime rejects the configuration.
 pub fn generator_engine() -> anyhow::Result<Engine> {
-    let mut config = wasmtime::Config::new();
-    enable_wasm_features(&mut config);
-    config.collector(DEFAULT_COLLECTOR);
-    config.gc_heap_initial_size(DEFAULT_GC_HEAP_INITIAL_SIZE);
-    config.consume_fuel(true);
-    config.cranelift_opt_level(wasmtime::OptLevel::Speed);
-    Ok(Engine::new(&config)?)
+    fuel_engine(wasmtime::OptLevel::Speed)
 }
 
 /// Build a wasmtime [`Component`] from raw bytes. Cranelift-AOT

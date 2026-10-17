@@ -33,4 +33,5 @@ The native host pieces that `wado-cli`, `wado-dev-tools`, and
   mocks may still `unwrap`.
 - `atomic_write.rs` — write a file through a staged sibling and a rename.
 - `engine.rs` — the Wasm features and GC defaults every wasmtime engine takes,
-  so the e2e harness runs a program as `wado` does.
+  so the e2e harness runs a program as `wado` does, and the fuel-metered engine
+  generators and `core:eval` run on.

@@ -261,6 +261,15 @@ fn a_service_has_a_program_name() {
     assert!(body.contains(&expected), "body: {body:?}");
 }
 
+/// The compiler lowers `ErrorContext` to the Component Model's error-context
+/// builtins, which wasmtime refuses to load unless that feature is enabled.
+#[test]
+fn a_service_may_use_error_context() {
+    let (_guard, port, _stderr) = start_serve("serve_error_context.wado", &[]);
+    let (status, _body) = http_get(port, "/", Duration::from_secs(10));
+    assert_eq!(status, 200);
+}
+
 /// A guest stuck in pure wasm past `--timeout` should trap (via
 /// `set_epoch_deadline`) and the client should see a 504 — not a connection
 /// drop, not a 500, not a hang.

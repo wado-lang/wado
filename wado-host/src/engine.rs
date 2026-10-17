@@ -1,7 +1,7 @@
 //! The wasmtime configuration every host of Wado's output shares, so a program
 //! runs under the e2e harness as it does under `wado`.
 
-use wasmtime::{Collector, Config};
+use wasmtime::{Collector, Config, Engine, OptLevel};
 
 /// wado's default GC collector.
 ///
@@ -27,4 +27,32 @@ pub fn enable_wasm_features(config: &mut Config) {
     // lay out hinted branches (from `builtin::cold_path()`) for the
     // predicted-taken path.
     config.wasm_branch_hinting(true);
+}
+
+/// A configuration with every Wasm feature [`enable_wasm_features`] lists and
+/// the default GC, compiling at `opt_level`.
+#[must_use]
+pub fn default_config(opt_level: OptLevel) -> Config {
+    let mut config = Config::new();
+    enable_wasm_features(&mut config);
+    config.collector(DEFAULT_COLLECTOR);
+    // wasmtime collects before it grows, so a heap starting at zero doubles its
+    // way up to the working set and pays a full trace at every rung. The 4 GiB
+    // of address space is reserved either way: this commits, it does not map.
+    config.gc_heap_initial_size(DEFAULT_GC_HEAP_INITIAL_SIZE);
+    config.cranelift_opt_level(opt_level);
+    config
+}
+
+/// An engine on [`default_config`] that consumes fuel, for a guest run under a
+/// budget: a Kiln generator, or a program `core:eval` evaluates. Without fuel
+/// consumption the runtime rejects `Store::set_fuel`.
+///
+/// # Errors
+///
+/// Fails when wasmtime rejects the configuration.
+pub fn fuel_engine(opt_level: OptLevel) -> anyhow::Result<Engine> {
+    let mut config = default_config(opt_level);
+    config.consume_fuel(true);
+    Ok(Engine::new(&config)?)
 }

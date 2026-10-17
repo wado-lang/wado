@@ -36,11 +36,12 @@ use wado_compiler::hashmap::{IndexMap, IndexSet};
 #[cfg(test)]
 use wado_compiler::kiln::DeclSite;
 use wado_compiler::kiln::{
-    FileHash, GeneratedHeader, GeneratorModule, Invocation, InvocationPath, OptionsAnchor,
-    OptionsDescriptor, Plan, PlanError, collect_inline_invocations, content_hash, file_hash,
-    generator_identity, harvest_module_graph, has_generated_marker, hex_digest, validate_options,
+    FileHash, GENERATOR_WORLD_FQ, GeneratedHeader, GeneratorModule, Invocation, InvocationIndex,
+    InvocationPath, OptionsAnchor, OptionsDescriptor, Plan, PlanError, collect_inline_invocations,
+    content_hash, file_hash, generator_identity, harvest_module_graph, has_generated_marker,
+    hex_digest, validate_options,
 };
-use wado_compiler::{Code, Diagnostic, Severity};
+use wado_compiler::{Code, CompilerOptions, Diagnostic, OptLevel, Severity};
 
 use super::metadata::{
     self as kiln_metadata, FileHash as MetaFileHash, METADATA_VERSION, Metadata,
@@ -976,6 +977,22 @@ pub async fn harvest_invocations(
         "",
     );
     (invocations, harvest.identities, diagnostics)
+}
+
+/// How every host compiles a generator, with `invocations` redirecting the
+/// generator's own Kiln imports.
+#[must_use]
+pub fn generator_compile_options(invocations: InvocationIndex) -> CompilerOptions {
+    CompilerOptions {
+        // A generator's opt level never reaches the artifact, so all it buys
+        // is generation speed: on `Wado.g4`, O1 generates 1.2× slower than O2
+        // and compiles in 0.6× the time. The `kiln/generate` and `kiln/aot`
+        // spans re-measure this.
+        opt_level: OptLevel::O1,
+        target_world: Some(GENERATOR_WORLD_FQ.to_string()),
+        invocations,
+        ..CompilerOptions::default()
+    }
 }
 
 /// Emit `diagnostics` through `host`, answering how many are errors.

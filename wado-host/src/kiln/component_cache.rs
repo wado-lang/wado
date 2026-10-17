@@ -8,20 +8,19 @@ use wasmtime::component::Component;
 
 use wado_compiler::GeneratorRunnerError;
 
-use super::runtime::compile_component;
+use super::runtime::{compile_component, generator_engine};
 use crate::sync::lock;
 
 /// AOT-compiled generator [`Component`]s, keyed by wasm SHA-256.
 ///
 /// AOT dominates generator execution (see [`compile_component`]), so a
-/// generator must be compiled once, not once per fixture. A `wado test` run shares one cache across every per-fixture host,
-/// and so does an e2e run. In-memory only — a disk `.cwasm` cache would be a
-/// trust-the-disk code-injection vector. Every `Component` comes from one
-/// engine, which the cache creates on first use.
+/// generator must be compiled once, not once per fixture. A `wado test` run
+/// shares one cache across every per-fixture host, and so does an e2e run.
+/// In-memory only — a disk `.cwasm` cache would be a trust-the-disk
+/// code-injection vector. Every `Component` comes from one
+/// [`generator_engine`], which the cache creates on first use.
+#[derive(Default)]
 pub struct ComponentCache {
-    /// Builds the engine the components compile for. The host owns its
-    /// configuration, so a generator runs as the host's own wasm does.
-    make_engine: fn() -> anyhow::Result<Engine>,
     engine: OnceLock<Engine>,
     /// One slot per generator wasm, its mutex held across that component's AOT
     /// compile so concurrent callers wait rather than each compiling. The list
@@ -33,25 +32,13 @@ pub struct ComponentCache {
 }
 
 impl ComponentCache {
-    /// An empty cache whose engine `make_engine` builds. The engine must
-    /// consume fuel: a generator's store is given its budget as fuel.
-    #[must_use]
-    pub fn new(make_engine: fn() -> anyhow::Result<Engine>) -> Self {
-        Self {
-            make_engine,
-            engine: OnceLock::new(),
-            slots: Mutex::default(),
-            compile_count: AtomicUsize::new(0),
-        }
-    }
-
     /// Lazily-created shared engine; run components on the engine that
     /// [`Self::get_or_compile`] returns alongside them.
     fn engine(&self) -> Result<Engine, GeneratorRunnerError> {
         if let Some(engine) = self.engine.get() {
             return Ok(engine.clone());
         }
-        let engine = (self.make_engine)().map_err(|error| {
+        let engine = generator_engine().map_err(|error| {
             GeneratorRunnerError::Host(format!("failed to create kiln wasmtime engine: {error}"))
         })?;
         // First `set` wins; always clone from the stored value.

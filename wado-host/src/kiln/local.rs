@@ -6,18 +6,18 @@ use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex, OnceLock};
 
 use wado_compiler::hashmap::IndexSet;
+use wado_compiler::kiln::inline::DEFAULT_INLINE_OUTPUT_DIR_PREFIX;
 use wado_compiler::kiln::{
-    GENERATOR_WORLD_FQ, GeneratorModule, InvocationIndex, content_hash, generator_identity,
-    hex_digest, remap_decl_files,
+    GeneratorModule, InvocationIndex, content_hash, generator_identity, hex_digest,
+    remap_decl_files,
 };
-use wado_compiler::{Code, CompilerHost, CompilerOptions, Diagnostic, OptLevel, Severity};
+use wado_compiler::{Code, CompilerHost, Diagnostic, Severity};
 
 use super::component_cache::ComponentCache;
 use super::driver::{
     GeneratorProvider, PipelineError, ProviderError, ResolvedGenerator, emit_counting_errors,
-    harvest_invocations, run_pipeline,
+    generator_compile_options, harvest_invocations, run_pipeline,
 };
-use super::runtime::generator_engine;
 use crate::StubHost;
 use crate::sync::lock;
 
@@ -27,7 +27,7 @@ use crate::sync::lock;
 pub fn generators() -> Arc<ComponentCache> {
     static GENERATORS: OnceLock<Arc<ComponentCache>> = OnceLock::new();
     GENERATORS
-        .get_or_init(|| Arc::new(ComponentCache::new(generator_engine)))
+        .get_or_init(|| Arc::new(ComponentCache::default()))
         .clone()
 }
 
@@ -88,6 +88,33 @@ async fn run(
     if invocations.is_empty() {
         return Ok(InvocationIndex::default());
     }
+    // Every fixture in a directory shares its root, and a pipeline deletes the
+    // generated files in each output directory it did not write. A directory
+    // of the invocation's own is one no other fixture reconciles.
+    let shared_dirs = emit_counting_errors(
+        host,
+        invocations
+            .iter()
+            .filter(|i| {
+                !i.output_dir
+                    .as_str()
+                    .starts_with(DEFAULT_INLINE_OUTPUT_DIR_PREFIX)
+            })
+            .map(|i| Diagnostic {
+                severity: Severity::Error,
+                code: Code::Log,
+                message: format!(
+                    "kiln: `{}` names its own `output_dir`, which a fixture cannot: \
+                     other fixtures in its directory would delete what it writes",
+                    i.from.as_str()
+                ),
+                span: None,
+            })
+            .collect(),
+    );
+    if shared_dirs > 0 {
+        return Err(PipelineError::InlineClause(shared_dirs));
+    }
 
     let root = entry_file.parent().expect("an entry names a file");
     let mut provider = LocalGenerators::default();
@@ -133,7 +160,8 @@ impl GeneratorProvider for LocalGenerators {
 
 /// The generator `module` names, compiled once per process for each text of
 /// its file: a run reads files that do not change under it, so neither does
-/// what they compile to.
+/// what they compile to. Fixtures reaching a cold entry together each compile
+/// it, which costs time once and changes no result.
 async fn compile_generator(
     root: &Path,
     module: &GeneratorModule,
@@ -166,7 +194,10 @@ async fn compile_generator(
         return resolved;
     }
     let resolved = compile_generator_source(&file, path.as_str(), &source).await;
-    lock(&COMPILED).push((file, source, resolved.clone()));
+    let mut compiled = lock(&COMPILED);
+    if !compiled.iter().any(|(f, s, _)| f == &file && s == &source) {
+        compiled.push((file, source, resolved.clone()));
+    }
     resolved
 }
 
@@ -186,11 +217,7 @@ async fn compile_generator_source(
         .file_name()
         .expect("a generator names a file")
         .to_string_lossy();
-    let options = CompilerOptions {
-        opt_level: OptLevel::O1,
-        target_world: Some(GENERATOR_WORLD_FQ.to_string()),
-        ..CompilerOptions::default()
-    };
+    let options = generator_compile_options(InvocationIndex::default());
     let compiled = wado_compiler::compile_with_options(source, &host, Some(&name), options)
         .await
         .map_err(|_| ProviderError::Internal {
