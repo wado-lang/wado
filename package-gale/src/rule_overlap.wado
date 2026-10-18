@@ -120,12 +120,7 @@ fn prediction_routes(node: &PredictionNode, rule_name: &String, follow: &RuleFol
 
 /// Whether a rule's prediction among its overlap groups `g` reaches a
 /// decision the simulator makes (`ambiguity_routes`).
-pub fn rule_has_at_end_conflict(
-    rule: &ParserRule,
-    g: &RuleOverlap,
-    analysis: &mut GrammarAnalysis,
-    follow: &RuleFollow,
-) -> bool {
+pub fn overlap_routes(rule: &ParserRule, g: &RuleOverlap, analysis: &mut GrammarAnalysis, follow: &RuleFollow) -> bool {
     for let group of &g.groups {
         if group.len() > 1 {
             let tree = build_group_prediction_tree(

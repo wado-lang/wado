@@ -198,6 +198,22 @@ fn divergences(jar: &Tree, gale: &Tree) -> List<Divergence> {
     return out;
 }
 
+/// The first leaf where the two trees cover different tokens.
+fn first_leaf_mismatch(jar: &Tree, gale: &Tree) -> Option<i32> {
+    if jar.leaves == gale.leaves {
+        return null;
+    }
+    let mut at = 0;
+    while at < jar.leaves.len() && at < gale.leaves.len() && jar.leaves[at] == gale.leaves[at] {
+        at += 1;
+    }
+    return Some(at);
+}
+
+fn leaf_or_end(t: &Tree, at: i32) -> String {
+    return if at < t.leaves.len() { `'${t.leaves[at]}'` } else { "the end" };
+}
+
 fn read_tree(path: &String) -> Tree with (Preopens, Stderr, Exit) {
     let Ok(text) = fs::read_to_string(path) else {
         eprintln(`tree_diff: cannot read ${path}`);
@@ -214,12 +230,15 @@ export fn run() with (Stdout, Stderr, Environment, Preopens, Exit) {
     }
     let jar = read_tree(&paths[0]);
     let gale = read_tree(&paths[1]);
-    if jar.leaves != gale.leaves {
-        let mut at = 0;
-        while at < jar.leaves.len() && at < gale.leaves.len() && jar.leaves[at] == gale.leaves[at] {
-            at += 1;
-        }
-        eprintln(`tree_diff: the trees cover different tokens from leaf ${at}; spans after it do not line up`);
+    // Spans name leaves by position, so past a mismatch they compare nothing.
+    if let Some(at) = first_leaf_mismatch(&jar, &gale) {
+        eprintln(
+            `tree_diff: the trees cover different tokens from leaf ${at}: jar ${leaf_or_end(&jar, at)}, gale ${leaf_or_end(
+                &gale,
+                at,
+            )}`,
+        );
+        exit(1);
     }
     let found = divergences(&jar, &gale);
     for let d of &found {
@@ -270,5 +289,13 @@ test "a moved subtree is one divergence" {
 
 test "identical trees agree" {
     let t = parse_tree(&"(s (e a) ;)");
+    assert first_leaf_mismatch(&t, &t) matches { None };
     assert divergences(&t, &t).is_empty();
+}
+
+test "trees over different tokens mismatch where they part" {
+    let jar = parse_tree(&"(s (e a) ;)");
+    let gale = parse_tree(&"(s (e a) (e b) ;)");
+    assert first_leaf_mismatch(&jar, &gale) == Some(1);
+    assert first_leaf_mismatch(&jar, &parse_tree(&"(s (e a))")) == Some(1);
 }
