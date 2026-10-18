@@ -1935,8 +1935,6 @@ impl CmMethodRewriter<'_> {
     }
 }
 
-/// Drop and cancel are the canonical import itself, so the parameterized name
-/// is the whole binding. Read and write move a payload and need a generated one.
 /// `end.drop()` on a stream or future end of type `end_type`: the call a user
 /// writes, which this pass binds once the end's payload is known. A scope-exit
 /// drop is one (WEP: Affine Types).
@@ -1980,6 +1978,8 @@ pub(crate) fn end_drop_call(end: TirExpr, end_type: TypeId, tt: &TypeTable) -> T
     )
 }
 
+/// Drop and cancel are the canonical import itself, so the parameterized name
+/// is the whole binding. Read and write move a payload and need a generated one.
 fn is_drop_or_cancel(cm_name: &str) -> bool {
     let (_, op) = cm_name.split_once('-').unwrap_or_default();
     matches!(

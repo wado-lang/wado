@@ -53,7 +53,10 @@ fn gateway(req: Request) -> [Response, FutureWritable<Result<Option<Trailers>, E
     };
 }
 
-fn respond(status: StatusCode, headers: List<[String, String]>) -> [Response, FutureWritable<Result<Option<Trailers>, ErrorCode>>] {
+fn respond(
+    status: StatusCode,
+    headers: List<[String, String]>,
+) -> [Response, FutureWritable<Result<Option<Trailers>, ErrorCode>>] {
     let fields = Headers::new();
     for let [name, value] of headers {
         let _ = fields.append(name as FieldName, value.bytes().collect() as FieldValue);
@@ -123,7 +126,10 @@ fn get(path: String) -> [Request, FutureWritable<Result<Option<Trailers>, ErrorC
 }
 
 // Drops a response the gateway answered, then ends what nothing reads any more.
-fn finish(answer: [Response, FutureWritable<Result<Option<Trailers>, ErrorCode>>], request_end: FutureWritable<Result<Option<Trailers>, ErrorCode>>) {
+fn finish(
+    answer: [Response, FutureWritable<Result<Option<Trailers>, ErrorCode>>],
+    request_end: FutureWritable<Result<Option<Trailers>, ErrorCode>>,
+) {
     let [response, response_end] = answer;
     builtin::drop(response);
     end_trailers(response_end);
@@ -139,7 +145,9 @@ fn header_text(resp: &Response, name: String) -> String {
 test "/status pings the upstream and reports its status" {
     let mut upstream = MockUpstream { status: 204 };
     let [req, req_end] = get("/status");
-    let answer = with Client => &mut upstream do { gateway(req) };
+    let answer = with Client => &mut upstream do {
+        gateway(req);
+    };
     assert answer.0.get_status_code() == 200;
     assert header_text(&answer.0, "x-upstream-status") == "204";
     let hits: List<String> = ["/health"];
@@ -151,7 +159,9 @@ test "/status pings the upstream and reports its status" {
 test "unknown path is 404 and never touches the upstream" {
     let mut upstream = MockUpstream {};
     let [req, req_end] = get("/nope");
-    let answer = with Client => &mut upstream do { gateway(req) };
+    let answer = with Client => &mut upstream do {
+        gateway(req);
+    };
     assert answer.0.get_status_code() == 404;
     assert upstream.hits.is_empty();
     finish(answer, req_end);
@@ -160,7 +170,9 @@ test "unknown path is 404 and never touches the upstream" {
 test "upstream connection failure maps to 502" {
     let dead = DeadUpstream {};
     let [req, req_end] = get("/status");
-    let answer = with Client => &dead do { gateway(req) };
+    let answer = with Client => &dead do {
+        gateway(req);
+    };
     assert answer.0.get_status_code() == 502;
     finish(answer, req_end);
 }

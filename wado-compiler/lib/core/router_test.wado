@@ -683,9 +683,10 @@ test "router: re-registering a dynamic route" {
 
 // Matches a request for `path`. Its trailers end is written once the request
 // is dropped: an end dropped unwritten traps, and a write waits for its reader.
-fn match_get(r: &Router<i32>, path: Option<String>) -> Option<&RouteMatch<i32>>
-    with (Fields, Request, Future, FutureWritable)
-{
+fn match_get(
+    r: &Router<i32>,
+    path: Option<String>,
+) -> Option<&RouteMatch<i32>> with (Fields, Request, Future, FutureWritable) {
     let [trailers, end] = Future::<Result<Option<Trailers>, ErrorCode>>::new();
     let [req, _] = Request::new(Headers::new(), null, trailers, null);
     req.set_path_with_query(path);

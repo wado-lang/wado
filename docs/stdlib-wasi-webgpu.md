@@ -1504,7 +1504,7 @@
 
 ##### `alpha_mode: Option<GpuCanvasAlphaMode>`
 
-#### `pub struct GpuCanvasConfigurationOwned`
+#### `pub affine struct GpuCanvasConfigurationOwned`
 
 ##### `device: GpuDevice`
 
@@ -1520,7 +1520,7 @@
 
 ##### `alpha_mode: Option<GpuCanvasAlphaMode>`
 
-#### `pub struct GpuFragmentState`
+#### `pub affine struct GpuFragmentState`
 
 ##### `targets: List<Option<GpuColorTargetState>>`
 
@@ -1530,7 +1530,7 @@
 
 ##### `constants: Option<RecordGpuPipelineConstantValue>`
 
-#### `pub struct GpuProgrammableStage`
+#### `pub affine struct GpuProgrammableStage`
 
 ##### `module: &GpuShaderModule`
 
@@ -1538,7 +1538,7 @@
 
 ##### `constants: Option<RecordGpuPipelineConstantValue>`
 
-#### `pub struct GpuComputePipelineDescriptor`
+#### `pub affine struct GpuComputePipelineDescriptor`
 
 ##### `compute: GpuProgrammableStage`
 
@@ -1546,7 +1546,7 @@
 
 ##### `label: Option<String>`
 
-#### `pub struct GpuVertexState`
+#### `pub affine struct GpuVertexState`
 
 ##### `buffers: Option<List<Option<GpuVertexBufferLayout>>>`
 
@@ -1556,7 +1556,7 @@
 
 ##### `constants: Option<RecordGpuPipelineConstantValue>`
 
-#### `pub struct GpuRenderPipelineDescriptor`
+#### `pub affine struct GpuRenderPipelineDescriptor`
 
 ##### `vertex: GpuVertexState`
 
@@ -1572,7 +1572,7 @@
 
 ##### `label: Option<String>`
 
-#### `pub struct GpuDeviceDescriptor`
+#### `pub affine struct GpuDeviceDescriptor`
 
 ##### `required_features: Option<List<GpuFeatureName>>`
 

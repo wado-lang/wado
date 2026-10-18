@@ -1390,8 +1390,7 @@ fn fixup_abstract_struct_fields(ctx: &mut WirContext<'_>) {
                             let wir_type =
                                 ctx.type_id_to_wir_type_pending(type_table, elem_type_id);
                             if !is_abstract_ref(&wir_type) {
-                                resolved =
-                                    Some(ctx.slot_type(type_table, elem_type_id, wir_type));
+                                resolved = Some(ctx.slot_type(type_table, elem_type_id, wir_type));
                                 break;
                             }
                         }

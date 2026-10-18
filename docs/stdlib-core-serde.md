@@ -224,7 +224,7 @@ with no distinct byte-string form keeps working unchanged.
 
 `#[compiler_item("serializer_begin_variant")]`
 
-### `pub trait Serialize with ()`
+### `pub affine trait Serialize with ()`
 
 #### `fn serialize<S: Serializer>(&self, s: &mut S) -> Result<(), SerializeError>`
 
@@ -425,7 +425,7 @@ What this format does when the wire repeats a field or key.
 
 #### `fn deserialize_any<V: Visitor>(&mut self, visitor: &mut V) -> Result<V::Value, DeserializeError>`
 
-### `pub trait Deserialize with ()`
+### `pub affine trait Deserialize with ()`
 
 #### `fn deserialize<D: Deserializer>(d: &mut D) -> Result<Self, DeserializeError>`
 

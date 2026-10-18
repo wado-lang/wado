@@ -3479,10 +3479,7 @@ impl TypeTable {
                 def: StructDef::Decl(def),
                 type_args,
             }
-            | ResolvedType::GenericInstance {
-                def,
-                type_args,
-            } => {
+            | ResolvedType::GenericInstance { def, type_args } => {
                 if self.is_tuple_def(*def) {
                     (None, &[], type_args.clone())
                 } else if let Some(fields) = self

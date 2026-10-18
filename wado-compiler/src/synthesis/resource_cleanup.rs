@@ -23,8 +23,8 @@ use crate::synthesis::SynthesisError;
 use crate::synthesis::cm_binding::end_drop_call;
 use crate::synthesis::common;
 use crate::synthesis::common::{
-    assign, builtin_call, cm_canonical_call, expr_stmt, if_stmt, let_stmt,
-    local_ref, not_expr, synth_span,
+    assign, builtin_call, cm_canonical_call, expr_stmt, if_stmt, let_stmt, local_ref, not_expr,
+    synth_span,
 };
 use crate::tir;
 use crate::tir::{
@@ -719,8 +719,8 @@ fn drop_if_held(place: TirExpr, type_id: TypeId, cx: &mut Cx) -> Vec<TirStmt> {
     )]
 }
 
-/// Drop a value produced and discarded in statement position. Anything but a
-/// local is spilled first: a structural drop reads its scrutinee once per
+/// Drop a value nothing keeps: one discarded in statement position, or handed
+/// to `builtin::drop`. Anything but a local is spilled first: a structural drop reads its scrutinee once per
 /// field, which would evaluate the expression again each time.
 fn drop_discarded(value: TirExpr, cx: &mut Cx) -> Vec<TirStmt> {
     let type_id = value.type_id;
@@ -951,9 +951,8 @@ fn elab_scope(
 /// innermost first.
 fn take_temporaries(cx: &mut Cx, first: usize) -> Vec<Live> {
     let scope = cx.scopes.last_mut().expect("a scope is open");
-    let (temporaries, kept): (Vec<Live>, Vec<Live>) = scope
-        .drain(first..)
-        .partition(|live| live.temporary);
+    let (temporaries, kept): (Vec<Live>, Vec<Live>) =
+        scope.drain(first..).partition(|live| live.temporary);
     scope.extend(kept);
     temporaries.into_iter().rev().collect()
 }
@@ -1438,7 +1437,11 @@ fn elab_expr(expr: &mut TirExpr, consuming: bool, cx: &mut Cx) {
     }
     if let Some(value) = dropped {
         let drops = drop_discarded(value, cx);
-        *expr = TirExpr::new(TirExprKind::Block(TirBlock::new(drops, span)), type_id, span);
+        *expr = TirExpr::new(
+            TirExprKind::Block(TirBlock::new(drops, span)),
+            type_id,
+            span,
+        );
     }
 }
 
@@ -1541,7 +1544,9 @@ fn take_field(expr: &mut TirExpr, cx: &mut Cx) {
         let TirExprKind::Block(block) = &mut expr.kind else {
             unreachable!("`take_place` leaves a block");
         };
-        block.stmts.insert(0, let_stmt(&name, local, type_id, value));
+        block
+            .stmts
+            .insert(0, let_stmt(&name, local, type_id, value));
         return;
     }
     elab_expr(base, false, cx);
@@ -1571,14 +1576,15 @@ fn is_temporary(kind: &TirExprKind, cx: &Cx) -> bool {
 
 /// Move the referenced temporary `expr` into a fresh local, in place and so in
 /// evaluation order (`{ let $temp = expr; $temp }`), owned until the statement
-/// holding it ends.
-fn spill_temporary(expr: &mut TirExpr, cx: &mut Cx) {
+/// holding it ends. Returns the local.
+fn spill_temporary(expr: &mut TirExpr, cx: &mut Cx) -> TirExpr {
     let type_id = expr.type_id;
     let (local, name) = spill_as_local(expr, cx);
     let value = std::mem::replace(expr, local_ref(local, &name, type_id));
     wrap_in_block(expr, |read| {
         vec![let_stmt(&name, local, type_id, value), expr_stmt(read)]
     });
+    local_ref(local, &name, type_id)
 }
 
 /// Declare a local owned by the statement holding `expr`, to hold the
@@ -1656,10 +1662,7 @@ fn elab_match(scrutinee: &mut TirExpr, arms: &mut [TirMatchArm], cx: &mut Cx) {
             Some((*scrutinee).clone())
         } else if is_temporary(&scrutinee.kind, cx) {
             elab_expr(scrutinee, true, cx);
-            let type_id = scrutinee.type_id;
-            let (local, name) = spill_as_local(scrutinee, cx);
-            let value = std::mem::replace(scrutinee, local_ref(local, &name, type_id));
-            Some(spill_before(scrutinee, local, &name, value))
+            Some(spill_temporary(scrutinee, cx))
         } else {
             elab_expr(scrutinee, true, cx);
             None
@@ -1669,9 +1672,7 @@ fn elab_match(scrutinee: &mut TirExpr, arms: &mut [TirMatchArm], cx: &mut Cx) {
         None
     };
     for (arm, arm_bindings) in arms.iter_mut().zip(bindings) {
-        let emptied = (!arm_bindings.is_empty())
-            .then(|| place.clone())
-            .flatten();
+        let emptied = (!arm_bindings.is_empty()).then(|| place.clone()).flatten();
         cx.scopes.push(Vec::new());
         if let Some(guard) = arm.guard.as_mut() {
             elab_expr_scope(guard, cx);
@@ -1689,17 +1690,7 @@ fn elab_match(scrutinee: &mut TirExpr, arms: &mut [TirMatchArm], cx: &mut Cx) {
     }
 }
 
-/// Turn `scrutinee`, a read of the spilled local, into a block that binds the
-/// local to `value` first, and return the place the arms empty.
-fn spill_before(scrutinee: &mut TirExpr, local: u32, name: &str, value: TirExpr) -> TirExpr {
-    let type_id = scrutinee.type_id;
-    wrap_in_block(scrutinee, |read| {
-        vec![let_stmt(name, local, type_id, value), expr_stmt(read)]
-    });
-    local_ref(local, name, type_id)
-}
-
-/// The arm body `body` as a block, leaving a unit in its place.
+/// `body`, an arm's or a closure's, as a block, leaving a unit in its place.
 fn into_block(body: &mut TirExpr) -> TirBlock {
     let span = body.span;
     let taken = std::mem::replace(body, TirExpr::new(TirExprKind::Unit, body.type_id, span));
