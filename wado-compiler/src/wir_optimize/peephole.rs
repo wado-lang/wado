@@ -125,9 +125,14 @@ impl WirRefVisitor for CopyCollector<'_> {
         {
             match value.as_ref() {
                 // `source` must be single-assignment, so its value is invariant
-                // across the function. A parameter with no definition qualifies.
+                // across the function. A parameter's incoming value is one
+                // assignment, so it qualifies only with no definition.
                 WirInstr::LocalGet { name: source, .. }
-                    if alias != source && self.counts.get(source).is_none_or(|&n| n <= 1) =>
+                    if alias != source
+                        && self
+                            .counts
+                            .get(source)
+                            .is_none_or(|&n| n == 1 && !self.params.contains(source)) =>
                 {
                     self.candidates
                         .insert(alias.clone(), CopySource::Local(source.clone()));
