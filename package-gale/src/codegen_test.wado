@@ -789,6 +789,52 @@ WS : ' ' -> skip ;";
     assert got == "café caf αβγ abc 日本 .é => CAFE:café ID:caf GREEK:αβγ ID:abc NOT_SPACE:日本 DOT:.é\n";
 }
 
+// Pins "Positions an action reads are byte offsets" in antlr4-compatibility.md:
+// `$index` counts bytes where the jar counts chars (4 here), while `$pos`,
+// `getCharPositionInLine()` and `getText()` answer as the jar does.
+test "a lexer action reads byte positions and char columns" {
+    let input = "lexer grammar L;
+E : 'é' ;
+AB : 'ab' {
+    System.out.println($index);
+    System.out.println($pos);
+    System.out.println(getCharPositionInLine());
+    System.out.println(getText());
+} ;
+WS : ' ' -> skip ;";
+    assert lexes(input, ["é ab"]) == "é ab => E:é AB:ab [5\n4\n4\nab\n]\n";
+}
+
+test "a lexer base reads byte positions through LexerView" {
+    let items = `struct Probe {
+    log: List<String>,
+}
+
+impl B for Probe {
+    fn hit(&mut self, view: LexerView, lx: &mut Lexer) {
+        let at = view.start();
+        self.log.push(\`\${at} \${view.pos()} \${view.input_len()} \${view.char_at(0)} \${view.char_at(at)} \${view.la(-1)} \${view.text()}\`);
+        resume ();
+    }
+}
+
+fn probe(input: String) with Stdout {
+    let mut base = Probe { log: [] };
+    with B => &mut base do {
+        let _ = tokenize(input);
+    };
+    println(base.log.join(","));
+}
+`;
+    let got = printed("lexer grammar L;
+options { superClass = B; language = Wado; }
+E : 'é' ;
+AB : 'ab' { this.hit() } ;
+WS : ' ' -> skip ;
+", "probe(\"é ab\");\n", items);
+    assert got == "3 5 5 233 97 98 ab\n";
+}
+
 test "lexer rule caseInsensitive=true enables CI when grammar-level absent" {
     let input = "lexer grammar Test;
 KW options { caseInsensitive = true; } : 'go' ;
