@@ -1114,6 +1114,13 @@ The simulator's state machine is embedded in the generated parser only
 when a grammar needs it (inspect it with `gale dump --atn`); a grammar
 that needs none carries none and is byte-for-byte unaffected.
 
+These sites are the default, `atn: "auto"`. The `atn` generator option moves
+the line, as "Choosing the simulator" in the [README](./README.md) states.
+`"always"` adds every group decision and every `?` `*` `+` whose body and
+continuation can start on one token (`repeat_contested`), the two sites above
+included. `"never"` leaves 3 and 6 to the tournament and the continuation scan,
+and refuses a grammar that holds 1, 2, 4 or 5.
+
 ### Known approximation gaps
 
 The loop-entry decision is an approximation, held to one rule: **never

@@ -1982,7 +1982,8 @@ fn gen_scan_op_repeat<S: AsStrSlice>(
         return;
     }
 
-    if re.kind matches { Optional } && optional_asks_simulator(re.non_greedy, re.atn_decides, re.gate_caller_follow, ctx) {
+    if re.kind matches { Optional }
+        && optional_asks_simulator(re.non_greedy, re.atn_decides, re.gate_caller_follow, ctx) {
         w.begin(`if ${atn_enters_cond(ctx, re.atn_decision, re.non_greedy, "tokens", "pos")}`);
         gen_scan_iteration(w, re, &loop_admits, ctx, false);
         w.end();
@@ -4776,8 +4777,7 @@ impl OptionalGroup {
 /// `identifierName singleExpression?`, which the stack says the `new` still
 /// owes as its arguments.
 fn optional_asks_simulator(non_greedy: bool, atn_decides: bool, gate_caller_follow: bool, ctx: &EmitContext) -> bool {
-    return ctx.plan.needs_atn
-        && (non_greedy || atn_decides || gate_caller_follow && ctx.current_rule_asks_simulator());
+    return ctx.plan.needs_atn && (non_greedy || atn_decides || gate_caller_follow && ctx.current_rule_asks_simulator());
 }
 
 /// Runtime entry condition for a repeat's next iteration: the ATN simulator

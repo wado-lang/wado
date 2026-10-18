@@ -780,7 +780,12 @@ WS : ' ' -> skip ;
 
 test "atn always lets the simulator decide a contested repeat" {
     let got = parses_each(CONTESTED_REPEATS_G4, [
-        ["s", "a b"], ["s", "a a a b"], ["t", "c d d"], ["t", "c d d d"], ["u", "a a b"], ["u", "a b a b"],
+        ["s", "a b"],
+        ["s", "a a a b"],
+        ["t", "c d d"],
+        ["t", "c d d d"],
+        ["u", "a a b"],
+        ["u", "a b a b"],
     ], &GenerateOptions { atn: AtnMode::Always });
     assert got == "a b => (s (a a) b)
 a a a b => (s (a a) (a a) (a a) b)
@@ -797,7 +802,9 @@ r : A?? A B ;
 A : 'a' ;
 B : 'b' ;
 ", &GenerateOptions { atn: AtnMode::Never });
-    let refusals: List<String> = never.diagnostics.iter_ref().filter(|d: &Diagnostic| d.kind matches { SimulatorRequired }).map(
+    let refusals: List<String> = never.diagnostics.iter_ref().filter(
+        |d: &Diagnostic| d.kind matches { SimulatorRequired },
+    ).map(
         |d: &Diagnostic| `${d.owner.label()}: ${d.message}`,
     ).collect();
     assert refusals == ["rule 'r': a non-greedy `??` only the ATN simulator decides, and `atn: \"never\"` refuses it"];
