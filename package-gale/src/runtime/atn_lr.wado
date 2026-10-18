@@ -31,8 +31,13 @@ internal fn atn_with_lr_tables(sim: AtnSim) -> AtnSim {
 
 fn atn_compute_collapse(sim: &mut AtnSim) {
     let nstates = sim.state_kind.len();
+    sim.state_collapse_target = List::filled(nstates, false);
     for let mut st = 0; st < nstates; st += 1 {
-        sim.state_collapse_to.push(atn_lr_entry_reached(sim, st));
+        let entry = atn_lr_entry_reached(sim, st);
+        sim.state_collapse_to.push(entry);
+        if entry >= 0 {
+            sim.state_collapse_target[entry] = true;
+        }
     }
 }
 

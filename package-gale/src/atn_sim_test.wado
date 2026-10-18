@@ -383,6 +383,44 @@ test "a prediction settled inside the visible frames reads no hidden caller" {
     assert !state.reveal_callers(hidden);
 }
 
+global TWO_SITES_G4: String = "grammar E;
+prog : top D ;
+top : (r B | Q r) C ;
+r : A | A B ;
+A : 'a' ;
+B : 'b' ;
+C : 'c' ;
+D : 'd' ;
+Q : 'q' ;
+";
+
+// The predictions a parse caches answer the caller stack they were asked under.
+// On `a b c`, `r` takes `a` at the `r B` call site and `a b` after `q`.
+test "a cached prediction answers only its own caller stack" {
+    let mut g = parse(TWO_SITES_G4).unwrap();
+    assign_atn_call_sites(&mut g);
+    let atn = build_atn(&g);
+    let tk = TokenKinds::build(&g);
+    let eof = tk.id_of("TK_EOF");
+    let sim = decode(&atn);
+    let d = rule_block_decision(&atn, 2);
+    let csr = &atn.call_site_returns;
+    let kinds = ([
+        tk.id_of("TK_A"),
+        tk.id_of("TK_B"),
+        tk.id_of("TK_C"),
+        tk.id_of("TK_D"),
+        eof,
+    ] as List<i32>).to_array();
+    let mut state = AtnPredictor::new();
+    for let round of 0..<2 {
+        state.stack = [-1, csr[0], csr[1]];
+        assert state.predict(&sim, d, &kinds, 0, eof, 0, &[]) == 0, `round ${round}`;
+        state.stack = [-1, csr[0], csr[2]];
+        assert state.predict(&sim, d, &kinds, 0, eof, 0, &[]) == 1, `round ${round}`;
+    }
+}
+
 // P4.1: the rewritten LR loop-entry form is walkable. A naive
 // pre-rewrite ATN (`expr -> RuleRef(expr) ...` at position 0) would
 // left-recurse forever in `atn_closure`; the precedence-climbing rewrite
