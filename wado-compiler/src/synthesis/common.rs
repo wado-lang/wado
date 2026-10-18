@@ -179,9 +179,15 @@ pub fn handle_bits(handle: TirExpr) -> TirExpr {
     )
 }
 
+/// The scalar a resource handle is, where `type_id` is a resource, a reference
+/// to one, or a newtype over either.
+pub fn handle_scalar(tt: &TypeTable, type_id: TypeId) -> Option<TypeId> {
+    tt.handle_scalar(peel_newtypes(tt, tt.peel_refs(type_id)))
+}
+
 /// Whether `type_id` is an affine resource, or a reference to one.
 pub fn is_affine_resource(tt: &TypeTable, type_id: TypeId) -> bool {
-    tt.is_resource_object(peel_newtypes(tt, tt.peel_refs(type_id)))
+    handle_scalar(tt, type_id) == Some(TypeTable::I32)
 }
 
 /// The `i32` handle `value` holds where it is an affine resource, or a

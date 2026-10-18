@@ -28,7 +28,7 @@ use crate::tir_visitor::{TirMutVisitor, TirRefVisitor};
 use crate::canonical::{CanonicalIntrinsic, CmDecl, CmFuturePayload, CmStreamPayload};
 use crate::synthesis::common::{
     alloc_named_local, assign, binary, block, break_stmt, builtin_call, cast, cm_canonical_call,
-    entry_call, expr_stmt, i32_const, i64_const, if_stmt, internal_call, let_mut_stmt, let_stmt,
+    entry_call, expr_stmt, handle_scalar, i32_const, i64_const, if_stmt, internal_call, let_mut_stmt, let_stmt,
     local_ref, loop_stmt, option_none, option_some, return_stmt, synth_span,
 };
 
@@ -1852,11 +1852,6 @@ impl CmMethodRewriter<'_> {
             }
         };
     }
-}
-
-/// The scalar a resource handle is, where `type_id` is one.
-fn handle_scalar(tt: &TypeTable, type_id: TypeId) -> Option<TypeId> {
-    tt.handle_scalar(peel_newtypes(tt, tt.peel_refs(type_id)))
 }
 
 impl CmMethodRewriter<'_> {
