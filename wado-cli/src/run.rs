@@ -137,7 +137,7 @@ pub fn parse_args(mut parser: lexopt::Parser) -> Result<RunOptions, CliExit> {
     let mut dirs = args::DirGrants::default();
     let mut program_args: Vec<String> = Vec::new();
     let mut runtime_knobs = RuntimeKnobs::default();
-    let mut knobs = CompileKnobs::default();
+    let mut knobs = CompileKnobs::compile_and_run();
 
     // Whether a `--` has already ended this command's options. Only the one
     // that does that job is `wado run`'s; any other belongs to the guest.

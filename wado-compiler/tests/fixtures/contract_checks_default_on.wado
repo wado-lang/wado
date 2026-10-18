@@ -1,5 +1,5 @@
-// Outside the test world, a build at `-O0` checks the contract of a call
-// marked `unchecked`, so a slice past the view traps.
+// Outside the test world, a build at `-O0` or `-O1` checks the contract of a
+// call marked `unchecked`, so a slice past the view traps.
 
 use { println, Stdout } from "core:cli";
 
@@ -11,6 +11,6 @@ export fn run() with Stdout {
 
 __DATA__
 {
-    "only_opt": ["O0"],
+    "only_opt": ["O0", "O1"],
     "trapped": true
 }

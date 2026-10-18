@@ -190,6 +190,13 @@ fn format_usage() -> String {
     )
     .unwrap();
     writeln!(buf).unwrap();
+    writeln!(
+        buf,
+        "The service builds at -O1 by default, for development: it checks the\n\
+         contract of every call marked `unchecked`. Pass -O2 to serve what ships."
+    )
+    .unwrap();
+    writeln!(buf).unwrap();
     writeln!(buf, "Options:").unwrap();
     write!(
         buf,
@@ -241,7 +248,7 @@ pub fn parse_args(mut parser: lexopt::Parser) -> Result<ServeOptions, CliExit> {
     let mut recycle_requests: u64 = DEFAULT_RECYCLE_REQUESTS;
     let mut max_concurrency: Option<usize> = None;
     let mut profile = ProfileMode::None;
-    let mut knobs = CompileKnobs::default();
+    let mut knobs = CompileKnobs::compile_and_run();
 
     while let Some(arg) = args::next_arg(&mut parser)? {
         if let Some(k) = args::match_opt(&arg, Opt::KNOBS, |k| k.spec()) {

@@ -20,13 +20,18 @@ since removing it changes what the program does.
 
 ## Optimization Levels
 
-| Flag            | Iterations | Inline threshold | Notes                                                 |
-| --------------- | ---------- | ---------------- | ----------------------------------------------------- |
-| `-O0`           | 0          | N/A              | Part of the pipeline; see [Pipeline](#pipeline)       |
-| `-O1`           | 2          | 4                |                                                       |
-| `-O2` (default) | 15         | 16               |                                                       |
-| `-O3`           | 20         | 26               |                                                       |
-| `-Os`           | 15         | 16               | Strips the name section; a failed `assert` only traps |
+| Flag    | Iterations | Inline threshold | Contract checks | Notes                                                 |
+| ------- | ---------- | ---------------- | --------------- | ----------------------------------------------------- |
+| `-O0`   | 0          | N/A              | on              | Part of the pipeline; see [Pipeline](#pipeline)       |
+| `-O1`   | 2          | 4                | on              | The default of `wado run` and `wado serve`            |
+| `-O2`   | 15         | 16               | off             | The default of every other subcommand                 |
+| `-O3`   | 20         | 26               | off             |                                                       |
+| `-Os`   | 15         | 16               | off             | Strips the name section; a failed `assert` only traps |
+
+The levels differ in what a program does, not only in its speed: below `-O2`, a
+call marked `unchecked` traps when it breaks its contract. The test world checks
+at every level. See
+[Contract Checks](./spec-assertions.md#contract-checks).
 
 The inline threshold bounds what one inlined copy adds to its caller. That is
 the Wasm instructions on the callee's hot path, less the call it replaces.

@@ -138,7 +138,7 @@ start_server() {
   assert_port_free "$(server_url "$key")/status"
   case "$key" in
     wado)
-      "${SERVER_PIN[@]}" "$WADO_BIN" serve --addr "127.0.0.1:${WADO_PORT}" \
+      "${SERVER_PIN[@]}" "$WADO_BIN" serve -O2 --addr "127.0.0.1:${WADO_PORT}" \
         --workers "$workers" app.wado >/dev/null 2>&1 &
       PIDS+=($!)
       ;;
