@@ -56,7 +56,7 @@ type "functype//diverging_operand.wado/$cm_export__run" = fn();  // TypeId(17)
 
 type "functype//core:rt/write_string_to_stream$dae[add_newline]" = fn(i32, ref Array<u8>, i32);  // TypeId(18)
 
-type "functype//core:rt/panic" = fn(ref "core:prelude/string.wado//String");  // TypeId(19)
+type "functype//core:rt/panic" = fn(ref Array<u8>, i32);  // TypeId(19)
 
 type "functype//core:rt/cm_stream_write_raw_all_u8" = fn(i32, ref Array<u8>, i32, i32) -> "core:prelude/types.wado//enum:CopyResult";  // TypeId(20)
 
@@ -109,7 +109,7 @@ fn "diverging_operand.wado/run"() with Stdout {
         $mv_arg_2 = global:diverging_operand.wado::$const_obj_6;
         "core:rt/write_string_to_stream$dae[add_newline]"(tx_54, $mv_arg_2.repr, $mv_arg_2.used);
         "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(rx_53);
-        "core:rt/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(97), used: 1 });
+        "core:rt/panic"(array.new_fixed<u8>(97), 1);
         unreachable;
         rx_53 = builtin::i32_wrap_i64(local.tee packed_52("wasi/stream-new"()));
         tx_54 = builtin::i32_wrap_i64(packed_52 >> 32_i64);
@@ -117,16 +117,16 @@ fn "diverging_operand.wado/run"() with Stdout {
         $mv_arg_2 = global:diverging_operand.wado::$const_obj_6;
         "core:rt/write_string_to_stream$dae[add_newline]"(tx_54, $mv_arg_2.repr, $mv_arg_2.used);
         "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(rx_53);
-        drop(struct.new "diverging_operand.wado//Q" { p: rx_53 = builtin::i32_wrap_i64(local.tee packed_52("wasi/stream-new"())); tx_54 = builtin::i32_wrap_i64(packed_52 >> 32_i64); rx_53 = "diverging_operand.wado/$cm_binding__Stdout_write_via_stream"(rx_53); $mv_arg_2 = global:diverging_operand.wado::$const_obj_6; "core:rt/write_string_to_stream$dae[add_newline]"(tx_54, $mv_arg_2.repr, $mv_arg_2.used); "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(rx_53); struct.new "diverging_operand.wado//Late" { x: 1 }, n: "core:rt/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(98), used: 1 }); unreachable, m: rx_53 = builtin::i32_wrap_i64(local.tee packed_52("wasi/stream-new"())); tx_54 = builtin::i32_wrap_i64(packed_52 >> 32_i64); rx_53 = "diverging_operand.wado/$cm_binding__Stdout_write_via_stream"(rx_53); $mv_arg_2 = global:diverging_operand.wado::$const_obj_6; "core:rt/write_string_to_stream$dae[add_newline]"(tx_54, $mv_arg_2.repr, $mv_arg_2.used); "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(rx_53); struct.new "diverging_operand.wado//Late" { x: 1 } });
-        drop(struct.new "tuple//[diverging_operand.wado/Late, i32, diverging_operand.wado/Late]" { 0: rx_53 = builtin::i32_wrap_i64(local.tee packed_52("wasi/stream-new"())); tx_54 = builtin::i32_wrap_i64(packed_52 >> 32_i64); rx_53 = "diverging_operand.wado/$cm_binding__Stdout_write_via_stream"(rx_53); $mv_arg_2 = global:diverging_operand.wado::$const_obj_6; "core:rt/write_string_to_stream$dae[add_newline]"(tx_54, $mv_arg_2.repr, $mv_arg_2.used); "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(rx_53); struct.new "diverging_operand.wado//Late" { x: 1 }, 1: "core:rt/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(99), used: 1 }); unreachable, 2: rx_53 = builtin::i32_wrap_i64(local.tee packed_52("wasi/stream-new"())); tx_54 = builtin::i32_wrap_i64(packed_52 >> 32_i64); rx_53 = "diverging_operand.wado/$cm_binding__Stdout_write_via_stream"(rx_53); $mv_arg_2 = global:diverging_operand.wado::$const_obj_6; "core:rt/write_string_to_stream$dae[add_newline]"(tx_54, $mv_arg_2.repr, $mv_arg_2.used); "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(rx_53); struct.new "diverging_operand.wado//Late" { x: 1 } });
-        drop(struct.new "tuple//[diverging_operand.wado/Late, !, diverging_operand.wado/Late]" { 0: rx_53 = builtin::i32_wrap_i64(local.tee packed_52("wasi/stream-new"())); tx_54 = builtin::i32_wrap_i64(packed_52 >> 32_i64); rx_53 = "diverging_operand.wado/$cm_binding__Stdout_write_via_stream"(rx_53); $mv_arg_2 = global:diverging_operand.wado::$const_obj_6; "core:rt/write_string_to_stream$dae[add_newline]"(tx_54, $mv_arg_2.repr, $mv_arg_2.used); "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(rx_53); struct.new "diverging_operand.wado//Late" { x: 1 }, 2: ref.as_non_null("core:rt/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(100), used: 1 }); unreachable), rx_53 = builtin::i32_wrap_i64(local.tee packed_52("wasi/stream-new"())); tx_54 = builtin::i32_wrap_i64(packed_52 >> 32_i64); rx_53 = "diverging_operand.wado/$cm_binding__Stdout_write_via_stream"(rx_53); $mv_arg_2 = global:diverging_operand.wado::$const_obj_6; "core:rt/write_string_to_stream$dae[add_newline]"(tx_54, $mv_arg_2.repr, $mv_arg_2.used); "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(rx_53); struct.new "diverging_operand.wado//Late" { x: 1 } });
+        drop(struct.new "diverging_operand.wado//Q" { p: rx_53 = builtin::i32_wrap_i64(local.tee packed_52("wasi/stream-new"())); tx_54 = builtin::i32_wrap_i64(packed_52 >> 32_i64); rx_53 = "diverging_operand.wado/$cm_binding__Stdout_write_via_stream"(rx_53); $mv_arg_2 = global:diverging_operand.wado::$const_obj_6; "core:rt/write_string_to_stream$dae[add_newline]"(tx_54, $mv_arg_2.repr, $mv_arg_2.used); "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(rx_53); struct.new "diverging_operand.wado//Late" { x: 1 }, n: "core:rt/panic"(array.new_fixed<u8>(98), 1); unreachable, m: rx_53 = builtin::i32_wrap_i64(local.tee packed_52("wasi/stream-new"())); tx_54 = builtin::i32_wrap_i64(packed_52 >> 32_i64); rx_53 = "diverging_operand.wado/$cm_binding__Stdout_write_via_stream"(rx_53); $mv_arg_2 = global:diverging_operand.wado::$const_obj_6; "core:rt/write_string_to_stream$dae[add_newline]"(tx_54, $mv_arg_2.repr, $mv_arg_2.used); "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(rx_53); struct.new "diverging_operand.wado//Late" { x: 1 } });
+        drop(struct.new "tuple//[diverging_operand.wado/Late, i32, diverging_operand.wado/Late]" { 0: rx_53 = builtin::i32_wrap_i64(local.tee packed_52("wasi/stream-new"())); tx_54 = builtin::i32_wrap_i64(packed_52 >> 32_i64); rx_53 = "diverging_operand.wado/$cm_binding__Stdout_write_via_stream"(rx_53); $mv_arg_2 = global:diverging_operand.wado::$const_obj_6; "core:rt/write_string_to_stream$dae[add_newline]"(tx_54, $mv_arg_2.repr, $mv_arg_2.used); "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(rx_53); struct.new "diverging_operand.wado//Late" { x: 1 }, 1: "core:rt/panic"(array.new_fixed<u8>(99), 1); unreachable, 2: rx_53 = builtin::i32_wrap_i64(local.tee packed_52("wasi/stream-new"())); tx_54 = builtin::i32_wrap_i64(packed_52 >> 32_i64); rx_53 = "diverging_operand.wado/$cm_binding__Stdout_write_via_stream"(rx_53); $mv_arg_2 = global:diverging_operand.wado::$const_obj_6; "core:rt/write_string_to_stream$dae[add_newline]"(tx_54, $mv_arg_2.repr, $mv_arg_2.used); "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(rx_53); struct.new "diverging_operand.wado//Late" { x: 1 } });
+        drop(struct.new "tuple//[diverging_operand.wado/Late, !, diverging_operand.wado/Late]" { 0: rx_53 = builtin::i32_wrap_i64(local.tee packed_52("wasi/stream-new"())); tx_54 = builtin::i32_wrap_i64(packed_52 >> 32_i64); rx_53 = "diverging_operand.wado/$cm_binding__Stdout_write_via_stream"(rx_53); $mv_arg_2 = global:diverging_operand.wado::$const_obj_6; "core:rt/write_string_to_stream$dae[add_newline]"(tx_54, $mv_arg_2.repr, $mv_arg_2.used); "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(rx_53); struct.new "diverging_operand.wado//Late" { x: 1 }, 2: ref.as_non_null("core:rt/panic"(array.new_fixed<u8>(100), 1); unreachable), rx_53 = builtin::i32_wrap_i64(local.tee packed_52("wasi/stream-new"())); tx_54 = builtin::i32_wrap_i64(packed_52 >> 32_i64); rx_53 = "diverging_operand.wado/$cm_binding__Stdout_write_via_stream"(rx_53); $mv_arg_2 = global:diverging_operand.wado::$const_obj_6; "core:rt/write_string_to_stream$dae[add_newline]"(tx_54, $mv_arg_2.repr, $mv_arg_2.used); "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(rx_53); struct.new "diverging_operand.wado//Late" { x: 1 } });
         rx_53 = builtin::i32_wrap_i64(local.tee packed_52("wasi/stream-new"()));
         tx_54 = builtin::i32_wrap_i64(packed_52 >> 32_i64);
         rx_53 = "diverging_operand.wado/$cm_binding__Stdout_write_via_stream"(rx_53);
         $mv_arg_2 = global:diverging_operand.wado::$const_obj_6;
         "core:rt/write_string_to_stream$dae[add_newline]"(tx_54, $mv_arg_2.repr, $mv_arg_2.used);
         "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(rx_53);
-        "core:rt/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(101), used: 1 });
+        "core:rt/panic"(array.new_fixed<u8>(101), 1);
         unreachable;
         rx_53 = builtin::i32_wrap_i64(local.tee packed_52("wasi/stream-new"()));
         tx_54 = builtin::i32_wrap_i64(packed_52 >> 32_i64);
@@ -141,7 +141,7 @@ fn "diverging_operand.wado/run"() with Stdout {
     $mv_arg_2 = global:diverging_operand.wado::$const_obj_6;
     "core:rt/write_string_to_stream$dae[add_newline]"(tx_54, $mv_arg_2.repr, $mv_arg_2.used);
     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(rx_53);
-    "core:rt/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("unset"), used: 5 });
+    "core:rt/panic"(array.new_data<u8>("unset"), 5);
     unreachable;
 }
 
@@ -165,14 +165,14 @@ fn "core:rt/write_string_to_stream$dae[add_newline]"(tx, $mv$message$repr, $mv$m
     "wasi/stream-drop-writable"(tx);
 }
 
-fn "core:rt/panic"(message) {
+fn "core:rt/panic"($mv$message$repr, $mv$message$used) {
     let packed: i64;
     let rx_7: i32;
     let tx_8: i32;
     rx_7 = builtin::i32_wrap_i64(local.tee packed("wasi/stream-new"()));
     tx_8 = builtin::i32_wrap_i64(packed >> 32_i64);
     rx_7 = "wasi/wasi:cli/Stderr::write_via_stream"(rx_7);
-    "core:rt/write_string_to_stream$dae[add_newline]"(tx_8, message.repr, message.used);
+    "core:rt/write_string_to_stream$dae[add_newline]"(tx_8, $mv$message$repr, $mv$message$used);
     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(rx_7);
     cold_path;
     unreachable;

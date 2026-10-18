@@ -58,16 +58,15 @@ struct Bytes {
 }
 
 // The bounds check on `b.data[b.start]` branches to a panic, which never
-// returns: neither what it prints nor where it branches is seen past it, so
-// the fields stay read on every path that goes on.
+// returns: what it prints is not seen past it.
 #[inline("never")]
 fn first_byte(b: &Bytes) -> i32 {
     let n = b.end - b.start;
     return b.data[b.start] as i32 + n;
 }
 
-// The branch may return before it panics, so `p.a` and `p.b` are not read
-// on every path that goes on: the reference stays whole.
+// The branch may return before it panics, so `p.a` and `p.b` are not read on
+// every path. A field read on some path is loaded at the call all the same.
 #[inline("never")]
 fn returns_before_panic(p: &Pair, c: bool, d: bool) -> i32 {
     if c {
@@ -94,8 +93,7 @@ fn next_at(q: &Queue) -> i32 {
 }
 
 // Inlined, `next_at` leaves its panic branch inside a block, where `q.cap` is
-// read on the panic path alone, as at the top level: the reference stays
-// whole rather than load `cap` at every call.
+// read on the panic path alone: it is loaded at every call too.
 #[inline("never")]
 fn advanced(q: &Queue) -> i32 {
     return q.step * 2 + next_at(q);
@@ -107,8 +105,9 @@ fn through_mut(w: &mut Pair) -> i32 {
     return total_plus(w, bump_a(w));
 }
 
-// `p.b` is read only past an early return, so splitting would load it at
-// every call where the callee loads it on one path: the reference stays whole.
+// `p.b` is read only past an early return. Splitting loads it at every call
+// where the callee loads it on one path, a load that costs less than the
+// struct a caller would otherwise build.
 #[inline("never")]
 fn guarded(p: &Pair) -> i32 {
     if p.a < 0 {
@@ -181,9 +180,9 @@ __DATA__
         "span_head\" = fn(i32, i32) -> i32",
         "with_stream\" = fn(i32, i32) -> i32",
         "first_byte\" = fn(ref \"core:prelude//List<u8>\", i32, i32) -> i32",
-        "guarded\" = fn(ref \"opt_multi_value_param_ref.wado//Pair\") -> i32",
-        "advanced\" = fn(ref \"opt_multi_value_param_ref.wado//Queue\") -> i32",
-        "returns_before_panic\" = fn(ref \"opt_multi_value_param_ref.wado//Pair\", bool, bool) -> i32",
+        "guarded\" = fn(i32, i32) -> i32",
+        "advanced\" = fn(i32, i32, i32) -> i32",
+        "returns_before_panic\" = fn(i32, i32, bool, bool) -> i32",
         "store_then_read\" = fn(ref \"opt_multi_value_param_ref.wado//Pair\", ref \"opt_multi_value_param_ref.wado//Pair\") -> i32",
         "read_around_a_callee\" = fn(ref \"opt_multi_value_param_ref.wado//Pair\", ref \"opt_multi_value_param_ref.wado//Pair\") -> i32"
     ],

@@ -328,7 +328,7 @@ type "functype//resource_result_unwrap_extract.wado/$value_copy$[core:prelude/st
 
 type "functype//core:rt/write_string_to_stream$dae[add_newline]" = fn(i32, ref Array<u8>, i32);  // TypeId(66)
 
-type "functype//core:rt/panic" = fn(ref "core:prelude/string.wado//String");  // TypeId(67)
+type "functype//core:rt/panic" = fn(ref Array<u8>, i32);  // TypeId(67)
 
 type "functype//core:rt/cm_stream_write_raw_all_u8" = fn(i32, ref Array<u8>, i32, i32) -> "core:prelude/types.wado//enum:CopyResult";  // TypeId(68)
 
@@ -453,7 +453,8 @@ fn "resource_result_unwrap_extract.wado/$cm_binding__Fields_from_list"(entries) 
     drop($array_clone_dst_2);
     if @unlikely((local.tee $array_clone_i_4(entries.used) < 0) | ($array_clone_i_4 > 134217727)) {
         cold_path;
-        "core:rt/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("a buffer's length is negative or past what linear memory can address"), used: 68 });
+        let $mv_field_6: ref Array<u8>;
+        "core:rt/panic"(local.tee $mv_field_6(array.new_data<u8>("a buffer's length is negative or past what linear memory can address")), 68);
         unreachable;
     }
     $array_clone_len_3 = "mem/realloc"(0, 0, 4, $array_clone_i_4 * 16);
@@ -465,68 +466,67 @@ fn "resource_result_unwrap_extract.wado/$cm_binding__Fields_from_list"(entries) 
             break_if b3 $entries_i >= $array_clone_i_4;
             $entries_addr = $array_clone_len_3 + ($entries_i * 16);
             $array_clone_src_1 = builtin::array_new<ref "tuple//[core:prelude/string.wado/String, core:prelude/list.wado/List<u8>]">($licm_used_89);
-            let $array_clone_i_9: i32;
-            $array_clone_i_9 = 0;
+            let $array_clone_i_11: i32;
+            $array_clone_i_11 = 0;
             $array_clone_deep_prefix: block {
                 l5: loop {
-                    break_if $array_clone_deep_prefix $array_clone_i_9 >= $licm_used_89;
-                    $array_clone_elem_5 = builtin::array_get_value<ref "tuple//[core:prelude/string.wado/String, core:prelude/list.wado/List<u8>]">($array_clone_dst_2, $array_clone_i_9);
-                    builtin::array_set<ref "tuple//[core:prelude/string.wado/String, core:prelude/list.wado/List<u8>]">($array_clone_src_1, $array_clone_i_9, (if ref.is_null($array_clone_elem_5) -> ref null "tuple//[core:prelude/string.wado/String, core:prelude/list.wado/List<u8>]" {
+                    break_if $array_clone_deep_prefix $array_clone_i_11 >= $licm_used_89;
+                    $array_clone_elem_5 = builtin::array_get_value<ref "tuple//[core:prelude/string.wado/String, core:prelude/list.wado/List<u8>]">($array_clone_dst_2, $array_clone_i_11);
+                    builtin::array_set<ref "tuple//[core:prelude/string.wado/String, core:prelude/list.wado/List<u8>]">($array_clone_src_1, $array_clone_i_11, (if ref.is_null($array_clone_elem_5) -> ref null "tuple//[core:prelude/string.wado/String, core:prelude/list.wado/List<u8>]" {
                         $array_clone_elem_5;
                     } else {
                         "resource_result_unwrap_extract.wado/$value_copy$[core:prelude/string.wado/String,core:prelude/list.wado/List<u8>]"(ref.as_non_null($array_clone_elem_5));
                     }));
-                    $array_clone_i_9 = $array_clone_i_9 + 1;
+                    $array_clone_i_11 = $array_clone_i_11 + 1;
                     continue l5;
                 };
             };
             v_49 = local.tee v_40(builtin::array_get_value<ref "tuple//[core:prelude/string.wado/String, core:prelude/list.wado/List<u8>]">($array_clone_src_1, $entries_i)).0;
-            let $array_clone_src_11: ref Array<u8>;
-            $array_clone_src_11 = v_49.repr;
-            $array_clone_i_9 = v_49.used;
-            let $array_clone_dst_12: ref Array<u8>;
-            builtin::array_copy<u8>(local.tee $array_clone_dst_12(builtin::array_new<u8>($array_clone_i_9)), 0, $array_clone_src_11, 0, $array_clone_i_9);
-            $array_clone_src_11 = local.tee v_50(v_40.1).repr;
+            let $array_clone_src_13: ref Array<u8>;
+            $array_clone_src_13 = v_49.repr;
+            $array_clone_i_11 = v_49.used;
+            let $array_clone_dst_14: ref Array<u8>;
+            builtin::array_copy<u8>(local.tee $array_clone_dst_14(builtin::array_new<u8>($array_clone_i_11)), 0, $array_clone_src_13, 0, $array_clone_i_11);
+            $array_clone_src_13 = local.tee v_50(v_40.1).repr;
             $load_10 = v_50.used;
-            let $array_clone_dst_15: ref Array<u8>;
-            builtin::array_copy<u8>(local.tee $array_clone_dst_15(builtin::array_new<u8>($load_10)), 0, $array_clone_src_11, 0, $load_10);
-            builtin::array_copy<u8>(local.tee $array_clone_src_11(builtin::array_new<u8>($array_clone_i_9)), 0, $array_clone_dst_12, 0, $array_clone_i_9);
-            ptr_54 = "mem/realloc"(0, 0, 1, $array_clone_i_9);
+            let $array_clone_dst_17: ref Array<u8>;
+            builtin::array_copy<u8>(local.tee $array_clone_dst_17(builtin::array_new<u8>($load_10)), 0, $array_clone_src_13, 0, $load_10);
+            builtin::array_copy<u8>(local.tee $array_clone_src_13(builtin::array_new<u8>($array_clone_i_11)), 0, $array_clone_dst_14, 0, $array_clone_i_11);
+            ptr_54 = "mem/realloc"(0, 0, 1, $array_clone_i_11);
             i_62 = 0;
             b7: block {
                 l8: loop {
-                    break_if b7 i_62 >= $array_clone_i_9;
-                    builtin::store_u8(ptr_54 + i_62, builtin::array_get_value_u8($array_clone_src_11, i_62));
+                    break_if b7 i_62 >= $array_clone_i_11;
+                    builtin::store_u8(ptr_54 + i_62, builtin::array_get_value_u8($array_clone_src_13, i_62));
                     i_62 = i_62 + 1;
                     continue l8;
                 };
             };
-            $packed = builtin::i64_extend_i32_u(ptr_54) | (builtin::i64_extend_i32_s($array_clone_i_9) << 32_i64);
+            $packed = builtin::i64_extend_i32_u(ptr_54) | (builtin::i64_extend_i32_s($array_clone_i_11) << 32_i64);
             builtin::store_i32($entries_addr, builtin::i32_wrap_i64($packed));
             builtin::store_i32($entries_addr + 4, builtin::i32_wrap_i64($packed >> 32_i64));
-            let $array_clone_dst_21: ref Array<u8>;
-            builtin::array_copy<u8>(local.tee $array_clone_dst_21(builtin::array_new<u8>($load_10)), 0, $array_clone_dst_15, 0, $load_10);
-            drop($array_clone_dst_21);
+            builtin::array_copy<u8>(local.tee $mv_field_6(builtin::array_new<u8>($load_10)), 0, $array_clone_dst_17, 0, $load_10);
+            drop($mv_field_6);
             if @unlikely(($load_10 < 0) | ($load_10 > 2147483647)) {
                 cold_path;
-                "core:rt/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("a buffer's length is negative or past what linear memory can address"), used: 68 });
+                "core:rt/panic"(array.new_data<u8>("a buffer's length is negative or past what linear memory can address"), 68);
                 unreachable;
             }
-            $array_clone_i_9 = "mem/realloc"(0, 0, 1, $load_10);
+            $array_clone_i_11 = "mem/realloc"(0, 0, 1, $load_10);
             ptr_54 = 0;
             b10: block {
                 l11: loop {
                     break_if b10 ptr_54 >= $load_10;
-                    $list_addr = $array_clone_i_9 + ptr_54;
-                    let $array_clone_dst_24: ref Array<u8>;
-                    builtin::array_copy<u8>(local.tee $array_clone_dst_24(builtin::array_new<u8>($load_10)), 0, $array_clone_dst_15, 0, $load_10);
-                    $list_elem = builtin::array_get_value<u8>($array_clone_dst_24, ptr_54);
+                    $list_addr = $array_clone_i_11 + ptr_54;
+                    let $array_clone_dst_28: ref Array<u8>;
+                    builtin::array_copy<u8>(local.tee $array_clone_dst_28(builtin::array_new<u8>($load_10)), 0, $array_clone_dst_17, 0, $load_10);
+                    $list_elem = builtin::array_get_value<u8>($array_clone_dst_28, ptr_54);
                     builtin::store_u8($list_addr, $list_elem);
                     ptr_54 = ptr_54 + 1;
                     continue l11;
                 };
             };
-            builtin::store_i32($entries_addr + 8, $array_clone_i_9);
+            builtin::store_i32($entries_addr + 8, $array_clone_i_11);
             builtin::store_i32(($entries_addr + 8) + 4, $load_10);
             $entries_i = $entries_i + 1;
             continue l4;
@@ -550,17 +550,17 @@ fn "resource_result_unwrap_extract.wado/$cm_binding__Fields_from_list"(entries) 
             $local_20 = ref.null none;
             if $array_clone_i_4 != 0 {
                 $array_clone_i_4 = builtin::load_i32((($list_elem + 4) + 4) + 4);
-                $array_clone_dst_24 = builtin::array_new<u8>(local.tee $array_clone_len_3(builtin::load_i32(((($list_elem + 4) + 4) + 4) + 4)));
+                $array_clone_dst_28 = builtin::array_new<u8>(local.tee $array_clone_len_3(builtin::load_i32(((($list_elem + 4) + 4) + 4) + 4)));
                 $list_addr = 0;
                 b18: block {
                     l19: loop {
                         break_if b18 $list_addr >= $array_clone_len_3;
-                        builtin::array_set_u8($array_clone_dst_24, $list_addr, builtin::load_u8($array_clone_i_4 + $list_addr));
+                        builtin::array_set_u8($array_clone_dst_28, $list_addr, builtin::load_u8($array_clone_i_4 + $list_addr));
                         $list_addr = $list_addr + 1;
                         continue l19;
                     };
                 };
-                v_49 = struct.new "core:prelude/string.wado//String" { repr: $array_clone_dst_24, used: $array_clone_len_3 };
+                v_49 = struct.new "core:prelude/string.wado//String" { repr: $array_clone_dst_28, used: $array_clone_len_3 };
                 if $array_clone_len_3 > 0 {
                     drop("mem/realloc"($array_clone_i_4, $array_clone_len_3, 1, 0));
                 }
@@ -995,14 +995,14 @@ fn "core:rt/write_string_to_stream$dae[add_newline]"(tx, $mv$message$repr, $mv$m
     "wasi/stream-drop-writable"(tx);
 }
 
-fn "core:rt/panic"(message) {
+fn "core:rt/panic"($mv$message$repr, $mv$message$used) {
     let packed: i64;
     let rx_8: i32;
     let tx_9: i32;
     rx_8 = builtin::i32_wrap_i64(local.tee packed("wasi/stream-new"()));
     tx_9 = builtin::i32_wrap_i64(packed >> 32_i64);
     rx_8 = "wasi/wasi:cli/Stderr::write_via_stream"(rx_8);
-    "core:rt/write_string_to_stream$dae[add_newline]"(tx_9, message.repr, message.used);
+    "core:rt/write_string_to_stream$dae[add_newline]"(tx_9, $mv$message$repr, $mv$message$used);
     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(rx_8);
     cold_path;
     unreachable;
@@ -1461,7 +1461,14 @@ fn "core:prelude/types.wado/core/prelude/types.wado/unwrap_failed<wasi:http/type
     let $local_3: ref "core:prelude/format.wado//Formatter";
     let $fuse_at_5: i32;
     cold_path;
-    "core:rt/panic"($fuse_at_5 = "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"(local.tee $local_2(struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(34), used: 0 }), 2 + $mv$msg$used); builtin::array_copy<u8>(local.tee $load_0($local_2.repr), $fuse_at_5, $mv$msg$repr, 0, $mv$msg$used); $mv$msg$used = $fuse_at_5 + $mv$msg$used; $mv$msg$repr = array.new_fixed<u8>(58, 32); builtin::array_copy<u8>($load_0, $mv$msg$used, $mv$msg$repr, 0, 2); $local_3 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::new"($local_2); "core:prelude/traits.wado/wasi:http/types.wado/HeaderError^core:prelude/traits.wado/Inspect::inspect$sroa[self.value]"(value, $local_3); $local_2);
+    $fuse_at_5 = "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"(local.tee $local_2(struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(34), used: 0 }), 2 + $mv$msg$used);
+    builtin::array_copy<u8>(local.tee $load_0($local_2.repr), $fuse_at_5, $mv$msg$repr, 0, $mv$msg$used);
+    $mv$msg$used = $fuse_at_5 + $mv$msg$used;
+    $mv$msg$repr = array.new_fixed<u8>(58, 32);
+    builtin::array_copy<u8>($load_0, $mv$msg$used, $mv$msg$repr, 0, 2);
+    $local_3 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::new"($local_2);
+    "core:prelude/traits.wado/wasi:http/types.wado/HeaderError^core:prelude/traits.wado/Inspect::inspect$sroa[self.value]"(value, $local_3);
+    "core:rt/panic"($local_2.repr, $local_2.used);
     unreachable;
 }
 
