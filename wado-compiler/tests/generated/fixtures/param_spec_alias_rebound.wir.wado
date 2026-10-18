@@ -30,7 +30,7 @@ type "functype//wasi/waitable-set-wait" = fn(i32, i32) -> i32;  // TypeId(9)
 
 type "functype//wasi/wasi:cli/Stdout::write_via_stream" = fn(i32) -> i32;  // TypeId(10)
 
-type "functype//param_spec_alias_rebound.wado/describe" = fn(ref "param_spec_alias_rebound.wado//Config", i32) -> i32;  // TypeId(11)
+type "functype//param_spec_alias_rebound.wado/describe" = fn(bool, i32, i32) -> i32;  // TypeId(11)
 
 type "functype//param_spec_alias_rebound.wado/pick" = fn(ref "param_spec_alias_rebound.wado//Config") -> ref "param_spec_alias_rebound.wado//Config";  // TypeId(12)
 
@@ -77,9 +77,9 @@ import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 
 global global:param_spec_alias_rebound.wado::$const_obj_3: ref Array<u8> = array.new_fixed<u8>(32);
 
-fn "param_spec_alias_rebound.wado/describe"(cfg, n) {
-    if cfg.verbose {
-        return n * cfg.level;
+fn "param_spec_alias_rebound.wado/describe"($mv$cfg$verbose, $mv$cfg$level, n) {
+    if $mv$cfg$verbose {
+        return n * $mv$cfg$level;
     }
     return n;
 }
@@ -100,7 +100,7 @@ fn "param_spec_alias_rebound.wado/run"() with Stdout {
     let $sroa_$f_buf_75: ref "core:prelude/string.wado//String";
     n_0 = black_box(7);
     $sroa_$f_buf_75 = local.tee $local_1(struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(33), used: 0 });
-    is_negative_20 = local.tee self_10(cfg_13 = struct.new "param_spec_alias_rebound.wado//Config" { verbose: 1, level: 3 }; other_14 = struct.new "param_spec_alias_rebound.wado//Config" { verbose: 1, level: 3 }; local.tee r_15(cfg_13).level = 9; local.tee r_15(other_14).level = 3; "param_spec_alias_rebound.wado/describe"(cfg_13, n_0)) < 0;
+    is_negative_20 = local.tee self_10(cfg_13 = struct.new "param_spec_alias_rebound.wado//Config" { verbose: 1, level: 3 }; other_14 = struct.new "param_spec_alias_rebound.wado//Config" { verbose: 1, level: 3 }; local.tee r_15(cfg_13).level = 9; local.tee r_15(other_14).level = 3; "param_spec_alias_rebound.wado/describe"(1, cfg_13.level, n_0)) < 0;
     self_10 = "core:prelude/primitive.wado/count_digits_u64"(local.tee x_24(x_24 = builtin::i64_extend_i32_s(self_10); select i64(x_24 < 0_i64, 0_i64 - x_24, x_24)));
     is_negative_20 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$sroa[self.buf]$dae[alt_prefix]"($sroa_$f_buf_75, is_negative_20, self_10);
     "core:prelude/primitive.wado/write_decimal_digits"($sroa_$f_buf_75.repr, is_negative_20, x_24, self_10);
@@ -112,7 +112,7 @@ fn "param_spec_alias_rebound.wado/run"() with Stdout {
     $local_1.used = self_10;
     builtin::array_copy<u8>($local_1.repr, is_negative_20, global:param_spec_alias_rebound.wado::$const_obj_3, 0, 1);
     $sroa_$f_buf_75 = $local_1;
-    is_negative_20 = local.tee n_0(cfg_13 = struct.new "param_spec_alias_rebound.wado//Config" { verbose: 1, level: 3 }; r_15 = struct.new "param_spec_alias_rebound.wado//Config" { verbose: 1, level: 3 }; local.tee other_14(cfg_13).level = 9; local.tee other_14("param_spec_alias_rebound.wado/pick"(r_15)).level = 3; "param_spec_alias_rebound.wado/describe"(cfg_13, n_0)) < 0;
+    is_negative_20 = local.tee n_0(cfg_13 = struct.new "param_spec_alias_rebound.wado//Config" { verbose: 1, level: 3 }; r_15 = struct.new "param_spec_alias_rebound.wado//Config" { verbose: 1, level: 3 }; local.tee other_14(cfg_13).level = 9; local.tee other_14("param_spec_alias_rebound.wado/pick"(r_15)).level = 3; "param_spec_alias_rebound.wado/describe"(1, cfg_13.level, n_0)) < 0;
     n_0 = "core:prelude/primitive.wado/count_digits_u64"(local.tee x_24(x_24 = builtin::i64_extend_i32_s(n_0); select i64(x_24 < 0_i64, 0_i64 - x_24, x_24)));
     is_negative_20 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$sroa[self.buf]$dae[alt_prefix]"($sroa_$f_buf_75, is_negative_20, n_0);
     "core:prelude/primitive.wado/write_decimal_digits"($sroa_$f_buf_75.repr, is_negative_20, x_24, n_0);
