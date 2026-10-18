@@ -56,6 +56,7 @@ mod store_load_forward;
 mod string_push;
 mod tmpl_hoist;
 mod tuple_projection;
+mod unsigned_range_check;
 mod value_copy;
 mod value_copy_demote;
 
@@ -344,6 +345,10 @@ pub fn optimize(
         // reshapes conditions out of matcher form.
         run_pass("nir/loop_version_bce", &mut project, profiler, |p| {
             loop_version_bce::version_loops(p, &mut descriptors, &exec)
+        });
+        // After every bounds-check eliminator, which read the signed halves.
+        run_pass("nir/unsigned_range_check", &mut project, profiler, |p| {
+            unsigned_range_check::fuse_unsigned_range_checks(p)
         });
     }
 

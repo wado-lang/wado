@@ -20,8 +20,8 @@ use crate::nir_package::NirPackage;
 use crate::nir_value_graph::{ValueId, ValueKind};
 use crate::optimize::alias::{CallImmutability, builder_alias_sets, first_param_types};
 use crate::optimize::arena_query::{
-    WriteRoot, binary_parts, is_pure_nontrapping_expr_typed, is_pure_operand, operand_local,
-    operand_read_locals, storage_root, write_root,
+    Place, WriteRoot, binary_parts, is_pure_nontrapping_expr_typed, is_pure_operand,
+    operand_local, operand_read_locals, place_path, storage_root, write_root,
 };
 use crate::optimize::gate::{FunctionGate, GatedPass};
 use crate::optimize::value_copy::mutation::{MutationOracle, Witness, expr_witnesses};
@@ -487,7 +487,7 @@ fn parse_resolved_bound(engine: &Engine, binds: &Binds, op: Operand) -> Option<B
 
 /// Whether `op` (through copy temps) reads the length of a `List` or `String`,
 /// which the runtime keeps in `0..2^31`. Any other `i32` field may be negative.
-fn is_seq_length(engine: &Engine, binds: &Binds, op: Operand) -> bool {
+pub(super) fn is_seq_length(engine: &Engine, binds: &Binds, op: Operand) -> bool {
     let op = resolve(engine, binds, peel_capture_block(engine, binds, op));
     let (field_index, receiver_type) = match op {
         Operand::Expr(e) => match &engine.body.exprs[e].kind {
@@ -1237,22 +1237,88 @@ fn structural_loop_guard(
         .then(|| induction_entry(engine, binds, parent, loop_stmt, loop_body, var))
         .flatten()
         .map(|lo| Floor { var, lo, alone, hi });
+    // A `let c = var` under the guard holds what the guard proved of `var` for
+    // as long as `c` is unwritten, past a later write to `var`: a range loop
+    // reads its index from such a copy after stepping the counter.
+    let mut guarded = vec![var];
+    // The same `goff == 0` the floor rests on: a guard on a wrapping `var + goff`
+    // caps nothing.
+    let cap = hi.filter(|_| goff == 0);
     let mut changed = false;
     for &s in stmts.iter().skip(guard_idx + 1) {
-        if stmt_modifies(engine, s, var, bound) {
+        guarded.retain(|&v| !stmt_modifies(engine, s, v, bound));
+        if guarded.is_empty() {
             break;
         }
-        changed |= match strategy {
-            GuardStrategy::SameOffset => {
-                eliminate_checks_in_node(engine, NodeRef::Stmt(s), var, goff, bound, binds, floor)
+        for &v in &guarded {
+            let floor = floor.map(|f| Floor { var: v, ..f });
+            let node = NodeRef::Stmt(s);
+            if let Some(cap) = cap {
+                changed |= refute_past_cap(engine, node, binds, v, cap);
             }
-            GuardStrategy::LeLocal(gbl) => {
-                eliminate_le_checks_in_node(engine, NodeRef::Stmt(s), var, gbl, binds, floor)
-            }
-            GuardStrategy::ConstUb(ub) => {
-                eliminate_const_ub_checks_in_node(engine, NodeRef::Stmt(s), var, ub, binds, floor)
-            }
+            changed |= match strategy {
+                GuardStrategy::SameOffset => {
+                    eliminate_checks_in_node(engine, node, v, goff, bound, binds, floor)
+                }
+                GuardStrategy::LeLocal(gbl) => {
+                    eliminate_le_checks_in_node(engine, node, v, gbl, binds, floor)
+                }
+                GuardStrategy::ConstUb(ub) => {
+                    eliminate_const_ub_checks_in_node(engine, node, v, ub, binds, floor)
+                }
+            };
+        }
+        if let StmtKind::Let {
+            local_index, value, ..
+        } = engine.body.stmts[s].kind
+            && operand_local(engine.body, value).is_some_and(|v| guarded.contains(&v))
+        {
+            guarded.push(local_index);
+        }
+    }
+    changed
+}
+
+/// Drive to `false` every `if` condition in `node` that asks whether `var`
+/// reached past `cap`, the most a dominating guard leaves it: `var == C`,
+/// `var > C` or `var >= C` with `C` above what `var` can hold there. A range's
+/// step tests `current == T::MAX` under a guard that already rules it out.
+fn refute_past_cap(engine: &mut Engine, node: NodeRef, binds: &Binds, var: u32, cap: i64) -> bool {
+    let mut holders: Vec<(NodeRef, Operand)> = Vec::new();
+    engine.body.for_each_live_node_under(node, |n| {
+        let Some((cond, ..)) = if_parts(engine, n) else {
+            return;
         };
+        let Some((left, op, right)) = binary_parts(engine.body, resolve(engine, binds, cond)) else {
+            return;
+        };
+        let (konst, op) = if parse_var_offset(engine, binds, left) == Some((var, 0)) {
+            (right, op)
+        } else if parse_var_offset(engine, binds, right) == Some((var, 0)) {
+            let mirrored = match op {
+                NirBinaryOp::Lt => NirBinaryOp::Gt,
+                NirBinaryOp::LtEq => NirBinaryOp::GtEq,
+                other => other,
+            };
+            (left, mirrored)
+        } else {
+            return;
+        };
+        let Some(c) = parse_const_i64(engine, binds, konst) else {
+            return;
+        };
+        let past = match op {
+            NirBinaryOp::Eq | NirBinaryOp::GtEq => c > cap,
+            NirBinaryOp::Gt => c >= cap,
+            _ => false,
+        };
+        if past && is_pure_operand(engine.body, cond) {
+            holders.push((n, cond));
+        }
+    });
+    let changed = !holders.is_empty();
+    for (holder, cond) in holders {
+        eliminate_condition(engine, holder, cond);
     }
     changed
 }
@@ -1691,22 +1757,75 @@ fn process_block(engine: &mut Engine, block: BlockId, binds: &Binds) -> bool {
     // for a later statement's checks while no statement since the guard has
     // modified `var` / `bound` (`stmt_modifies`), then dropped when one does.
     let mut seguards: Vec<(u32, i64, BoundKey)> = Vec::new();
+    // The places an early exit `if a >= b { exit }` left below their type's
+    // most, `a < b` holding past it. A place needs no bound to be capped, so a
+    // field the bounds keys cannot name (`self.inner.start`) is one too.
+    let mut capped: Vec<(Place, i64)> = Vec::new();
     let stmts = engine.body.blocks[block].stmts.clone();
     for s in stmts {
+        let node = NodeRef::Stmt(s);
         for &(var, k, bound) in &seguards {
             if !stmt_modifies(engine, s, var, bound) {
-                changed |=
-                    eliminate_checks_in_node(engine, NodeRef::Stmt(s), var, k, bound, binds, None);
+                changed |= eliminate_checks_in_node(engine, node, var, k, bound, binds, None);
+            }
+        }
+        for ((root, fields), cap) in capped.clone() {
+            if fields.is_empty() && !modifies_any_root(engine, node, &[root]) {
+                changed |= refute_past_cap(engine, node, binds, root, cap);
             }
         }
         changed |= apply_dominating_if(engine, s, binds);
         changed |= process_stmt(engine, block, s, binds);
         seguards.retain(|&(var, _, bound)| !stmt_modifies(engine, s, var, bound));
+        capped.retain(|((root, _), _)| !modifies_any_root(engine, node, &[*root]));
+        // As at a loop guard, a `let c = var` carries what is proven of `var`.
+        if let StmtKind::Let {
+            local_index, value, ..
+        } = engine.body.stmts[s].kind
+        {
+            if let Some(copied) = operand_local(engine.body, value) {
+                let copies: Vec<_> = seguards
+                    .iter()
+                    .filter(|&&(var, ..)| var == copied)
+                    .map(|&(_, k, bound)| (local_index, k, bound))
+                    .collect();
+                seguards.extend(copies);
+            }
+            let read = value.as_expr().and_then(|e| place_path(engine.body, e));
+            if let Some(&(_, cap)) = capped.iter().find(|(place, _)| Some(place) == read.as_ref()) {
+                capped.push(((local_index, Vec::new()), cap));
+            }
+        }
         if let Some(fact) = recognize_early_exit(engine, s, binds) {
             seguards.push(fact);
         }
+        capped.extend(exit_cap(engine, binds, s));
     }
     changed
+}
+
+/// The place an early exit `if a >= b { exit }` leaves below its type's most,
+/// and that most less one.
+fn exit_cap(engine: &Engine, binds: &Binds, s: StmtId) -> Option<(Place, i64)> {
+    let StmtKind::If {
+        condition,
+        then_block,
+        else_block: None,
+    } = engine.body.stmts[s].kind
+    else {
+        return None;
+    };
+    if !block_always_exits(engine, then_block) || !is_pure_operand(engine.body, condition) {
+        return None;
+    }
+    let (left, _) = ge_check_operands(engine, binds, condition)?;
+    let read = resolve(engine, binds, left).as_expr()?;
+    let place = place_path(engine.body, read)?;
+    let types = engine.value_graph_type_table()?;
+    let (_, max) = types
+        .primitive_head(engine.body.exprs[read].type_id)?
+        .int_range()?;
+    Some((place, i64::try_from(max).ok()? - 1))
 }
 
 fn process_stmt(engine: &mut Engine, parent: BlockId, s: StmtId, binds: &Binds) -> bool {
@@ -2001,7 +2120,7 @@ fn index_upper_bound(engine: &Engine, binds: &Binds, op: Operand) -> Option<i64>
     Some(then_const.max(else_ub))
 }
 
-fn operand_same(engine: &Engine, binds: &Binds, a: Operand, b: Operand) -> bool {
+pub(super) fn operand_same(engine: &Engine, binds: &Binds, a: Operand, b: Operand) -> bool {
     match (resolve(engine, binds, a), resolve(engine, binds, b)) {
         (Operand::Expr(ea), Operand::Expr(eb)) => {
             ea == eb
@@ -2022,45 +2141,185 @@ fn operand_same(engine: &Engine, binds: &Binds, a: Operand, b: Operand) -> bool 
 // Redundant bounds-check elimination (forward, dominating panic-guards)
 // ---------------------------------------------------------------------------
 
-/// A proven fact `var + j < bound` for every `j` in `lo..=hi`, held while
-/// walking in execution order.
+/// What [`rbce_walk`] holds proven at a point of the walk. A bound on a local
+/// is on its unwrapped value, which is what lets a check at one offset speak
+/// for another: `xs[i + 3]` passing puts `i` in `-3..len - 3`, and `xs[i]`
+/// passing then leaves `i + 1` and `i + 2` in range with no check of their own.
 #[derive(Clone, Copy)]
-struct ProvenLt {
-    var: u32,
-    lo: i64,
-    hi: i64,
-    bound: BoundKey,
+enum Fact {
+    /// `key >= lo`: a local's floor, or a length's from an `if` condition.
+    Floor { key: BoundKey, lo: i64 },
+    /// `var <= hi`. A passed lower half `lo <= var + j` leaves it, since the
+    /// sum it tested did not wrap.
+    Max { var: u32, hi: i64 },
+    /// `var + c < bound`, unwrapped. `var` is `None` for a constant index `c`.
+    Ceil {
+        var: Option<u32>,
+        bound: BoundKey,
+        c: i64,
+    },
+    /// `var + j < bound` held of the sum as it wrapped: it proves that same
+    /// check again and nothing else.
+    Exact { var: u32, j: i64, bound: BoundKey },
 }
 
-impl ProvenLt {
-    /// A passed guard proves its own offset only: Wado add wraps, so
-    /// `var + off < bound` holds of a wrapped sum while `var + j` is large.
-    fn exact(var: u32, off: i64, bound: BoundKey) -> Self {
-        Self {
-            var,
-            lo: off,
-            hi: off,
-            bound,
+/// The range of `var`'s signed integer type. An unsigned index has no lower
+/// half to prove, and its wrap is not the one these facts reason about.
+fn signed_range(engine: &Engine, var: u32) -> Option<(i64, i64)> {
+    let types = engine.value_graph_type_table()?;
+    let (min, max) = types
+        .primitive_head(engine.locals()[var as usize].type_id)?
+        .int_range()?;
+    let (min, max) = (i64::try_from(min).ok()?, i64::try_from(max).ok()?);
+    (min < 0).then_some((min, max))
+}
+
+/// The proven range of `var`'s value, inside its type's `range`. A ceiling
+/// against a bound of `var`'s own type caps `var` under that type's most.
+fn var_span(facts: &[Fact], var: u32, (tmin, tmax): (i64, i64)) -> (i64, i64) {
+    let (mut lo, mut hi) = (tmin, tmax);
+    for f in facts {
+        match *f {
+            Fact::Floor {
+                key: BoundKey::Local(v),
+                lo: l,
+            } if v == var => lo = lo.max(l),
+            Fact::Max { var: v, hi: h } if v == var => hi = hi.min(h),
+            Fact::Ceil {
+                var: Some(v),
+                bound,
+                c,
+            } if v == var => {
+                let most = match bound {
+                    BoundKey::Const(b) => b,
+                    BoundKey::Local(_) | BoundKey::Field(..) => tmax,
+                };
+                hi = hi.min(most.saturating_sub(c).saturating_sub(1));
+            }
+            Fact::Floor { .. } | Fact::Max { .. } | Fact::Ceil { .. } | Fact::Exact { .. } => {}
+        }
+    }
+    (lo, hi)
+}
+
+/// Whether `var + j` cannot wrap for any `var` in `span`.
+fn offset_in_range((lo, hi): (i64, i64), j: i64, (tmin, tmax): (i64, i64)) -> bool {
+    lo.checked_add(j).is_some_and(|l| l >= tmin) && hi.checked_add(j).is_some_and(|h| h <= tmax)
+}
+
+/// A check's index: a local plus an offset, or a constant.
+#[derive(Clone, Copy)]
+enum Index {
+    Var(u32, i64),
+    Const(i64),
+}
+
+fn parse_index(engine: &Engine, binds: &Binds, op: Operand) -> Option<Index> {
+    if let Some(c) = parse_const_i64(engine, binds, op) {
+        return Some(Index::Const(c));
+    }
+    parse_var_offset(engine, binds, op).map(|(var, j)| Index::Var(var, j))
+}
+
+/// Whether `facts` prove one conjunct of a check.
+fn conjunct_proven(engine: &Engine, binds: &Binds, facts: &[Fact], part: Conjunct) -> bool {
+    match part {
+        Conjunct::AtLeast(var, j, lo) => signed_range(engine, var).is_some_and(|range| {
+            let span = var_span(facts, var, range);
+            offset_in_range(span, j, range) && span.0 + j >= lo
+        }),
+        Conjunct::Lt(left, right) => {
+            let (Some(index), Some(bound)) = (
+                parse_index(engine, binds, left),
+                parse_bound(engine, binds, right),
+            ) else {
+                return false;
+            };
+            match index {
+                Index::Const(c) => {
+                    floor_of(facts, bound).is_some_and(|lo| lo > c)
+                        || facts.iter().any(|f| {
+                            matches!(*f, Fact::Ceil { var: None, bound: b, c: have }
+                                if b == bound && have >= c)
+                        })
+                }
+                Index::Var(var, j) => {
+                    let exact = facts.iter().any(|f| {
+                        matches!(*f, Fact::Exact { var: v, j: k, bound: b }
+                            if v == var && k == j && b == bound)
+                    });
+                    exact
+                        || signed_range(engine, var).is_some_and(|range| {
+                            let span = var_span(facts, var, range);
+                            offset_in_range(span, j, range)
+                                && (facts.iter().any(|f| {
+                                    matches!(*f, Fact::Ceil { var: Some(v), bound: b, c }
+                                        if v == var && b == bound && c >= j)
+                                }) || matches!(bound, BoundKey::Const(b) if span.1 + j < b))
+                        })
+                }
+            }
         }
     }
 }
 
-/// What [`rbce_walk`] holds proven at a point of the walk.
-#[derive(Clone, Copy)]
-enum Fact {
-    Lt(ProvenLt),
-    /// `key >= lo`: a range check's lower half, or an `if` condition's.
-    Floor {
-        key: BoundKey,
-        lo: i64,
-    },
-}
-
-/// True if some fact refutes the check `var + j >= bound`.
-fn facts_refute(facts: &[Fact], var: u32, j: i64, bound: BoundKey) -> bool {
-    facts.iter().any(|f| {
-        matches!(f, Fact::Lt(f) if f.var == var && f.bound == bound && (f.lo..=f.hi).contains(&j))
-    })
+/// The facts a passed check leaves, its lower halves first: a floor rules out
+/// the wrap an upper half's ceiling must not rest on.
+fn learn_conjuncts(engine: &Engine, binds: &Binds, facts: &mut Vec<Fact>, parts: &[Conjunct]) {
+    let (lowers, uppers): (Vec<Conjunct>, Vec<Conjunct>) = parts
+        .iter()
+        .partition(|p| matches!(p, Conjunct::AtLeast(..)));
+    for part in lowers {
+        let Conjunct::AtLeast(var, j, lo) = part else {
+            unreachable!("partitioned above");
+        };
+        let Some((tmin, tmax)) = signed_range(engine, var) else {
+            continue;
+        };
+        // Saturating weakens the floor, which stays true.
+        let floor = Fact::Floor {
+            key: BoundKey::Local(var),
+            lo: lo.saturating_sub(j),
+        };
+        if offset_in_range(var_span(facts, var, (tmin, tmax)), j, (tmin, tmax)) {
+            facts.push(floor);
+        } else if j > 0 && lo >= tmin + j {
+            // A sum past `tmax` wraps to at most `tmin + j - 1`, which fails
+            // `lo <= var + j`: this one passed unwrapped.
+            facts.push(floor);
+            facts.push(Fact::Max { var, hi: tmax - j });
+        }
+    }
+    for part in uppers {
+        let Conjunct::Lt(left, right) = part else {
+            unreachable!("partitioned above");
+        };
+        let (Some(index), Some(bound)) = (
+            parse_index(engine, binds, left),
+            parse_bound(engine, binds, right),
+        ) else {
+            continue;
+        };
+        match index {
+            Index::Const(c) => facts.push(Fact::Ceil {
+                var: None,
+                bound,
+                c,
+            }),
+            Index::Var(var, j) => {
+                facts.push(Fact::Exact { var, j, bound });
+                if let Some(range) = signed_range(engine, var)
+                    && offset_in_range(var_span(facts, var, range), j, range)
+                {
+                    facts.push(Fact::Ceil {
+                        var: Some(var),
+                        bound,
+                        c: j,
+                    });
+                }
+            }
+        }
+    }
 }
 
 /// The greatest proven floor under `key`.
@@ -2077,38 +2336,15 @@ fn floor_of(facts: &[Fact], key: BoundKey) -> Option<i64> {
 /// Drop every fact whose `var` / `bound` root `node` may modify (conservative:
 /// a false "modifies" only keeps a fact, never invents one).
 fn invalidate(engine: &Engine, node: NodeRef, facts: &mut Vec<Fact>) {
+    let kept = |key: BoundKey| {
+        bound_root(key).is_none_or(|root| !modifies_any_root(engine, node, &[root]))
+    };
     facts.retain(|f| match *f {
-        Fact::Lt(lt) => !node_modifies(engine, node, lt.var, lt.bound),
-        Fact::Floor { key, .. } => {
-            bound_root(key).is_none_or(|root| !modifies_any_root(engine, node, &[root]))
-        }
+        Fact::Floor { key, .. } => kept(key),
+        Fact::Max { var, .. } => kept(BoundKey::Local(var)),
+        Fact::Ceil { var, bound, .. } => var.is_none_or(|v| kept(BoundKey::Local(v))) && kept(bound),
+        Fact::Exact { var, bound, .. } => !node_modifies(engine, node, var, bound),
     });
-}
-
-/// The facts one conjunct of a passed check proves, `None` when it proves
-/// nothing this walk can hold. A floor needs no offset: `var + off >= f` says
-/// nothing of `var` once the add may wrap.
-fn conjunct_fact(engine: &Engine, binds: &Binds, part: Conjunct) -> Option<Fact> {
-    match part {
-        Conjunct::Lt(left, right) => {
-            let (var, off) = parse_var_offset(engine, binds, left)?;
-            let bound = parse_bound(engine, binds, right)?;
-            Some(Fact::Lt(ProvenLt::exact(var, off, bound)))
-        }
-        Conjunct::AtLeast(var, 0, lo) => Some(Fact::Floor {
-            key: BoundKey::Local(var),
-            lo,
-        }),
-        Conjunct::AtLeast(..) => None,
-    }
-}
-
-/// Whether `facts` already prove `fact`.
-fn fact_holds(facts: &[Fact], fact: Fact) -> bool {
-    match fact {
-        Fact::Lt(lt) => facts_refute(facts, lt.var, lt.lo, lt.bound),
-        Fact::Floor { key, lo } => floor_of(facts, key).is_some_and(|have| have >= lo),
-    }
 }
 
 /// The floors an `if` condition proves inside its `then` branch: each conjunct
@@ -2148,22 +2384,27 @@ fn sub_const(engine: &Engine, binds: &Binds, op: Operand) -> Option<(Operand, i6
 }
 
 /// The facts a `let idx = <seq>.len() - k` (k >= 1) proves, as in the
-/// `arr.last()` idiom: `idx + j < len` for `j < k`, and `idx >= lo - k` where
-/// `len >= lo` is already proven.
+/// `arr.last()` idiom: `idx + k - 1 < len`, and `idx >= lo - k` where `len >= lo`
+/// is proven, `0` being always.
 fn push_len_minus_facts(engine: &Engine, binds: &Binds, node: NodeRef, facts: &mut Vec<Fact>) {
-    let Some(lt) = len_minus_fact(engine, binds, node) else {
+    let Some((idx, k, bound)) = len_minus_fact(engine, binds, node) else {
         return;
     };
-    if let Some(lo) = floor_of(facts, lt.bound) {
-        facts.push(Fact::Floor {
-            key: BoundKey::Local(lt.var),
-            lo: lo - (lt.hi + 1),
-        });
-    }
-    facts.push(Fact::Lt(lt));
+    let lo = floor_of(facts, bound).unwrap_or(0).max(0);
+    facts.push(Fact::Floor {
+        key: BoundKey::Local(idx),
+        lo: lo - k,
+    });
+    facts.push(Fact::Ceil {
+        var: Some(idx),
+        bound,
+        c: k - 1,
+    });
 }
 
-fn len_minus_fact(engine: &Engine, binds: &Binds, node: NodeRef) -> Option<ProvenLt> {
+/// The `(idx, k, len)` of a `let idx = <seq>.len() - k` with `k >= 1`. A length
+/// is in `0..2^31`, so the difference does not wrap.
+fn len_minus_fact(engine: &Engine, binds: &Binds, node: NodeRef) -> Option<(u32, i64, BoundKey)> {
     let NodeRef::Stmt(s) = node else {
         return None;
     };
@@ -2175,18 +2416,11 @@ fn len_minus_fact(engine: &Engine, binds: &Binds, node: NodeRef) -> Option<Prove
     };
     let (local_index, value) = (*local_index, *value);
     let (minuend, k) = sub_const(engine, binds, value)?;
-    if k < 1 {
+    if !(1..=i64::from(i32::MAX)).contains(&k) {
         return None;
     }
     let bound = parse_bound(engine, binds, minuend)?;
-    // `idx + j` is `len - k + j`: below `len` for `j < k`, and unwrapped while
-    // `j >= i32::MIN + k`, since `len >= 0`.
-    is_seq_length(engine, binds, minuend).then_some(ProvenLt {
-        var: local_index,
-        lo: i64::from(i32::MIN) + k,
-        hi: k - 1,
-        bound,
-    })
+    is_seq_length(engine, binds, minuend).then_some((local_index, k, bound))
 }
 
 /// The constant a `+ 1` counting loop's variable enters at, when the enclosing
@@ -2229,7 +2463,8 @@ pub(super) fn induction_step(
 ) -> Option<InductionStep> {
     let step = sole_unconditional_write(engine, loop_body, var, None)?;
     if let Some((v, k)) = parse_var_offset(engine, binds, step) {
-        return (v == var).then_some(InductionStep::Const(k));
+        return (v == var || is_snapshot_before_write(engine, loop_body, v, var))
+            .then_some(InductionStep::Const(k));
     }
     let Operand::Expr(e) = resolve(engine, binds, step) else {
         return None;
@@ -2247,6 +2482,20 @@ pub(super) fn induction_step(
     }
     let rhs = peel_capture_block(engine, binds, *right);
     operand_local(engine.body, rhs).map(InductionStep::Local)
+}
+
+/// Whether `copy` holds `var`'s value where `block` first writes `var`: its
+/// one write before then is `let copy = var`. A range loop steps its counter
+/// from such a copy, which the copy bindings cannot see through once the copy
+/// is read again past the step.
+fn is_snapshot_before_write(engine: &Engine, block: BlockId, copy: u32, var: u32) -> bool {
+    let first_write = engine.body.blocks[block]
+        .stmts
+        .iter()
+        .copied()
+        .find(|&s| write_count(engine, s, var) > 0);
+    sole_unconditional_write(engine, block, copy, first_write)
+        .is_some_and(|value| operand_local(engine.body, value) == Some(var))
 }
 
 /// The operand `block` writes to `var` when exactly one of its own statements
@@ -2397,21 +2646,27 @@ fn rbce_walk(
     frames: &mut Frames,
 ) -> bool {
     if let Some(cond) = panic_guard_check(engine, node) {
-        // A check passed proves every conjunct of it, and one whose conjuncts
-        // are all proven already is dead.
-        let proven: Option<Vec<Fact>> = check_conjuncts(engine, binds, cond).and_then(|parts| {
-            parts
-                .into_iter()
-                .map(|p| conjunct_fact(engine, binds, p))
-                .collect()
-        });
-        if let Some(proven) = proven {
-            if proven.iter().all(|&f| fact_holds(facts, f)) {
+        // A check passed proves every conjunct of it. One whose conjuncts are
+        // all proven already is dead, and a proven one drops out of the rest.
+        if let Some(parts) = check_conjuncts(engine, binds, cond) {
+            if parts
+                .iter()
+                .all(|&p| conjunct_proven(engine, binds, facts, p))
+            {
                 eliminate_condition(engine, node, cond);
                 return true;
             }
-            facts.extend(proven);
-            return false;
+            // One per check, as in `refute_panic_checks`: dropping one reshapes
+            // the `&` tree the other slots name.
+            let changed = written_conjuncts(engine, cond)
+                .into_iter()
+                .find(|slot| {
+                    classify_conjunct(engine, binds, slot.operand)
+                        .is_some_and(|p| conjunct_proven(engine, binds, facts, p))
+                })
+                .is_some_and(|slot| slot.drop_from_check(engine));
+            learn_conjuncts(engine, binds, facts, &parts);
+            return changed;
         }
         if let Some(ce) = cond.as_expr() {
             return rbce_walk(engine, NodeRef::Expr(ce), facts, binds, frames);
