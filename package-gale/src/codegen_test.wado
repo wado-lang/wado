@@ -377,17 +377,17 @@ Y : 'Y' ;
 }
 
 test "an alternative's scan helper is emitted once for the scan and the parse" {
-    // Alt 0 is contested in `scan_r`, so the scan side emits its function; the
-    // parse side's tournament scans it too, and must call that function.
+    // Alt 0 is contested in `scan_r`, which the group in `s` scans, so the scan
+    // side emits its function; the parse side's tournament scans it too, and
+    // must call that function.
     let input = "grammar T;
-s : r EOF ;
-r : a X | A a Y | B a Z ;
-a : (A|B)+ ;
-A : 'A' ;
-B : 'B' ;
+s : (r X | r Y) EOF ;
+r : ID '=' e | e ;
+e : ID | INT ;
+ID : [a-z]+ ;
+INT : [0-9]+ ;
 X : 'X' ;
 Y : 'Y' ;
-Z : 'Z' ;
 ";
     let output = gen_source(input);
     assert output.split("fn scan_r__alt_0(").count() == 2, "defined once";
@@ -397,8 +397,7 @@ Z : 'Z' ;
 test "a scan never re-tests a token its guard already proved" {
     // `(',' b)*` enters on `','`, and `('*' | '/')` is one token out of two.
     let input = "grammar T;
-s : r EOF ;
-r : a | a X ;
+s : (a | a X) EOF ;
 a : b (',' b)* ('*' | '/') ;
 b : Y ;
 X : 'X' ;
@@ -695,21 +694,21 @@ B : 'B' ;
 }
 
 test "trace option instruments the scan tournament and alt picks" {
-    // `b X` vs `b Y` hides the deciding token inside `b`, so this is the scan
-    // tournament; trace shows each alt's scan length and the winner.
+    // `Z X` vs `b` share `Z`, and no caller continues on `X`. A second `Z`
+    // matches no branch of the static tree, so the scan tournament decides;
+    // trace shows each alt's scan length and the winner.
     let input = "grammar T;
 r : a EOF ;
-a : b X
-  | b Y
+a : Z X
+  | b
   ;
-b : Z Z ;
+b : Z | X ;
 X : 'X' ;
-Y : 'Y' ;
 Z : 'Z' ;
 ";
-    let log = traced(input, "parse_r(\"ZZY\")");
+    let log = traced(input, "parse_r(\"ZZ\")");
     assert log.contains("scan a alt#0: fail rule=a alt=0 end=-1
-TRACE gale.trace:       scan a alt#1: -> @3 rule=a alt=1 end=3
+TRACE gale.trace:       scan a alt#1: -> @1 rule=a alt=1 end=1
 TRACE gale.trace:       pick a alt#1 rule=a alt=1
 ");
 
@@ -1298,12 +1297,12 @@ test "a tail optional enters only where its body can match" {
 test "an optional probe that scans the rest of an alternative ends its scan" {
     let output = gen_source("
 grammar T;
-s : a ';' ;
-a : 'b'? c | c 'd' ;
+s : (a ';' | a 'e') ;
+a : 'b'? c ;
 c : 'b'* 'c' 'c' ;
 WS : ' ' -> skip ;
 ");
-    let body = extract_fn_body(&output, "fn scan_a__alt_0(");
+    let body = extract_fn_body(&output, "fn scan_a(");
     assert body.contains("cont_done_"), "a probe that holds scans `c` once";
 }
 
@@ -1761,10 +1760,10 @@ test "dispatch branches sharing a sub-dispatch are emitted once" {
 }
 
 // Alts 0 and 1 share `A` and `B`, which the token after them tells apart. `s`
-// scans `e` to choose between its alternatives, so `scan_e` is emitted.
+// scans `e` to choose between its group's alternatives, so `scan_e` is emitted.
 global REPEATED_SCAN_ALT_G4: String = "
 grammar T;
-s : e X EOF | e Y EOF ;
+s : (e X | e Y) EOF ;
 X : 'x' ;
 Y : 'y' ;
 e : f '(' ')' | n | K ;
@@ -2943,12 +2942,11 @@ test "a tournament leaves a simulable gate to the candidate's scan" {
     int noStruct = 0;
 }
 start : r EOF ;
-r : {noStruct == 0}? ID xs
-  | ID xs RB
+r : {noStruct == 0}? ID LB
+  | ID LB X
   | LB {noStruct = 1;} r {noStruct = 0;} RB
   ;
-xs : LB+ ;
-ID : 'x' ; LB : '(' ; RB : ')' ;
+ID : 'x' ; LB : '(' ; RB : ')' ; X : 'y' ;
 WS : [ \\t\\r\\n]+ -> skip ;
 ");
     assert out.contains("let _sd_p_0 = "), "the grammar must reach a tournament";
