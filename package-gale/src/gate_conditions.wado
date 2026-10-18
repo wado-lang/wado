@@ -112,22 +112,33 @@ pub fn alt_scan_gate_conditions(
         if a.before_index != 0 || a.kind matches { Action } {
             continue;
         }
-        let rendered = match gate_condition_for(a, settings, analysis, site, &SCAN_GATE_HANDLE) {
-            Some(c) => c,
-            None => {
-                return String::new();
-            },
-        };
-        let code = scan_gate_condition(&rendered, &settings.scan_gate_fields);
-        if !reads_only_scan_gate_fields(&code, &settings.scan_gate_fields) {
+        let Some(code) = scan_gate_condition_for(a, settings, analysis, site) else {
             return String::new();
-        }
+        };
         conds.push(code);
     }
     if conds.is_empty() {
         return String::new();
     }
     return join_gate_conds(&conds);
+}
+
+/// `gate_condition_for` rendered against the scan's copy of the members, or
+/// `null` where it reads anything else.
+pub fn scan_gate_condition_for(
+    a: &AltAction,
+    settings: &GenSettings,
+    analysis: &GrammarAnalysis,
+    site: &PredicateSite,
+) -> Option<String> {
+    let Some(rendered) = gate_condition_for(a, settings, analysis, site, &SCAN_GATE_HANDLE) else {
+        return null;
+    };
+    let code = scan_gate_condition(&rendered, &settings.scan_gate_fields);
+    if !reads_only_scan_gate_fields(&code, &settings.scan_gate_fields) {
+        return null;
+    }
+    return Some(code);
 }
 
 /// The name of a predicate's standalone fn (`pred_<action_id>`).

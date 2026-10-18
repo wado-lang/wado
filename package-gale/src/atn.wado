@@ -417,7 +417,7 @@ fn build_alternation(
     for let mut i = 0; i < alts.len(); i += 1 {
         let operand_prec = if operand_precs.is_empty() { 0 } else { operand_precs[i] };
         let seg = build_sequence(b, &alts[i].elements, rule, rule_index, operand_prec);
-        b.add_eps(start, seg.0);
+        b.add_eps(start, guard_with_predicates(b, &alts[i], rule, seg.0));
         b.add_eps(seg.1, end);
     }
     if alts.is_empty() {
@@ -425,6 +425,21 @@ fn build_alternation(
         b.add_eps(start, end);
     }
     return [start, end];
+}
+
+/// The state ahead of `entry` an alternative is entered at: one epsilon edge
+/// per predicate at its left edge, each labelled with the predicate's action
+/// id. Prediction closes an edge whose predicate is false at the decision, and
+/// every other reader sees a plain epsilon.
+fn guard_with_predicates(b: &mut AtnBuilder, alt: &Alternative, rule: i32, entry: i32) -> i32 {
+    let mut at = entry;
+    let preds = alt.left_edge_predicates();
+    for let mut k = preds.len() - 1; k >= 0; k -= 1 {
+        let s = b.new_state(ATN_BASIC, rule);
+        b.add_trans(s, AtnTransition { kind: ATN_TR_EPSILON, target: at, label: preds[k].source.action_id });
+        at = s;
+    }
+    return at;
 }
 
 /// Build a sequence of elements, threading each element's exit into the
@@ -789,6 +804,8 @@ pub fn dump_atn(atn: &Atn, grammar: &Grammar) -> String {
                 detail = ` rule=${t.label} follow=s${t.follow} prec=${t.prec}`;
             } else if t.kind == ATN_TR_PRECEDENCE {
                 detail = ` prec=${t.prec}`;
+            } else if t.kind == ATN_TR_EPSILON && t.label >= 0 {
+                detail = ` pred=${t.label}`;
             }
             out.push_str(`    -${trans_kind_name(t.kind)}-> s${t.target}${detail}\n`);
         }

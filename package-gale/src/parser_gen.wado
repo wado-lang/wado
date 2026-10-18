@@ -7212,9 +7212,9 @@ fn gen_group_branch_body(
     gen_group_scan_dispatch(w, alts, g_op_alts, g_op_scan_alts, &sorted_group, kind, ctx, name_counts);
 }
 
-/// `let _atn_alt`: the simulator's pick at rule-body decision `dec`, with each
-/// alternative whose gate is false disabled. The parse and a scan both pick
-/// here. Each gate names the alternative by its number at `dec`.
+/// `let _atn_alt`: the simulator's pick at rule-body decision `dec`, with the
+/// edge of each predicate whose gate is false closed (`atn_decision_gates`).
+/// The parse and a scan both pick here.
 fn gen_atn_body_pick<S: AsStrSlice, S1: AsStrSlice>(
     w: &mut CodeWriter,
     dec: i32,
@@ -7227,30 +7227,30 @@ fn gen_atn_body_pick<S: AsStrSlice, S1: AsStrSlice>(
         w.line(`let _atn_alt = ${atn_predict_call(dec, tokens, pos, ctx)};`);
         return;
     }
-    w.line("let mut _atn_disabled: List<i32> = [];");
+    w.line("let mut _atn_false: List<i32> = [];");
     for let g of gates {
-        w.line(`if ${negate_cond(&g.1)} { _atn_disabled.push(${g.0}); }`);
+        w.line(`if ${negate_cond(&g.1)} { _atn_false.push(${g.0}); }`);
     }
-    w.line(`let _atn_alt = ${atn_predict_call(dec, tokens, pos, ctx, "_atn_disabled")};`);
+    w.line(`let _atn_alt = ${atn_predict_call(dec, tokens, pos, ctx, "_atn_false")};`);
 }
 
 /// The simulator's pick at decision `atn_dec`, over `tokens` at `pos`, with the
-/// alternatives the list `disabled` names left out. Only a verdict nothing
-/// disables is kept for the parse.
+/// edges of the predicates the list `false_preds` names closed. Only a verdict
+/// no predicate decided is kept for the parse.
 fn atn_predict_call<S: AsStrSlice, S1: AsStrSlice>(
     atn_dec: i32,
     tokens: S,
     pos: S1,
     ctx: &EmitContext,
-    disabled: String = "",
+    false_preds: String = "",
 ) -> String
     contract ctx.current_rule_asks_simulator(), "a scan call pushes a return state only toward a rule marked as asking the simulator"
 {
     let prec = atn_prec_arg(ctx);
-    if disabled.is_empty() {
+    if false_preds.is_empty() {
         return `atn_predict_once(&ATN_SIM, ${atn_dec}, ${ctx.atn_arg()}, ${tokens}, ${pos}, TK_EOF, ${prec})`;
     }
-    return `${ctx.atn_path()}.predict(&ATN_SIM, ${atn_dec}, ${tokens}, ${pos}, TK_EOF, ${prec}, &${disabled})`;
+    return `${ctx.atn_path()}.predict(&ATN_SIM, ${atn_dec}, ${tokens}, ${pos}, TK_EOF, ${prec}, &${false_preds})`;
 }
 
 /// A group deciding between alternatives. Under `SimpleCst` each alternative is
@@ -7876,10 +7876,7 @@ fn gen_prediction_code_inner<S: AsStrSlice, S1: AsStrSlice>(
                 let Some(numbers) = ctx.atn_body_alt_numbers(&sorted_indices) else {
                     unreachable();
                 };
-                let number_of = |idx: i32| numbers[sorted_indices.iter_ref().position(|i| *i == idx).unwrap()];
-                let gates: List<[i32, String]> = atn_decision_gates(&a.alts, alts, ctx, in_scan).iter_ref().map(
-                    |g| [number_of(g.0), g.1],
-                ).collect();
+                let gates = atn_decision_gates(&a.alts, alts, ctx, in_scan);
                 let dec = ctx.plan.atn_rule_body_decision(ctx.cursor.current_rule_index());
                 if in_scan {
                     gen_atn_body_pick(w, dec, &gates, "tokens", "pos", ctx);
