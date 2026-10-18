@@ -1,0 +1,15 @@
+// A move empties the place it leaves, so scope exit drops the end once, where
+// it ended up: a second drop of the handle would trap (WEP: Affine Types).
+affine struct Holder { rx: Stream<u8> }
+
+fn keep(rx: Stream<u8>) -> Holder {
+    return Holder { rx };
+}
+
+test {
+    let [rx, tx] = Stream::<u8>::new();
+    let h = keep(rx);
+    let Holder { rx: inner } = h;
+    inner.drop();
+    assert tx.write([1]).result == CopyResult::Dropped;
+}

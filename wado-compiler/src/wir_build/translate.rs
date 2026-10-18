@@ -1697,9 +1697,10 @@ impl FunctionTranslator<'_, '_> {
     fn translate_deref_assign(&mut self, ref_expr: Operand, val: WirInstr) -> WirInstr {
         let recv = self.translate_operand(ref_expr);
         let wir_type = self.wir_type(self.operand_type_id(ref_expr));
-        let WirType::Ref { type_id, .. } = wir_type else {
+        let WirType::Ref { type_id, .. } = &wir_type else {
             panic!("[WIR] deref-assign referent expected Ref WirType, got {wir_type:?}");
         };
+        let type_id = type_id.clone();
         let Some(WirTypeDef::Struct(st)) = self.ctx.types.get(type_id.index() as usize) else {
             panic!("[WIR] deref-assign referent is not a struct type: {type_id:?}");
         };
@@ -1713,10 +1714,8 @@ impl FunctionTranslator<'_, '_> {
         // not clash with the lower path's `$deref_ref_{nir_idx}` temps.
         let ref_local = self.fresh_local("$expr_deref_ref");
         let val_local = self.fresh_local("$expr_deref_val");
-        let ref_ty = WirType::Ref {
-            type_id: type_id.clone(),
-            nullable: false,
-        };
+        // An affine referent's slot is nullable (WEP: Affine Types).
+        let ref_ty = wir_type.clone();
         let mut instrs = Vec::with_capacity(4 + fields.len());
         instrs.extend(declare_and_set_local(
             ref_local.clone(),

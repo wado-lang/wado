@@ -1,0 +1,9 @@
+// A stream end nothing moved drops where its scope ends, so the writer then
+// sees the reader gone (WEP: Affine Types).
+test {
+    let [rx, tx] = Stream::<u8>::new();
+    scope: {
+        let held = rx;
+    }
+    assert tx.write([1]).result == CopyResult::Dropped;
+}

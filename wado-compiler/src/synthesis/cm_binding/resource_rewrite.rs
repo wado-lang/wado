@@ -1914,6 +1914,49 @@ impl CmMethodRewriter<'_> {
 
 /// Drop and cancel are the canonical import itself, so the parameterized name
 /// is the whole binding. Read and write move a payload and need a generated one.
+/// `end.drop()` on a stream or future end of type `end_type`: the call a user
+/// writes, which this pass binds once the end's payload is known. A scope-exit
+/// drop is one (WEP: Affine Types).
+pub(crate) fn end_drop_call(end: TirExpr, end_type: TypeId, tt: &TypeTable) -> TirExpr {
+    let head = peel_newtypes(tt, end_type);
+    let is = |item| tt.is_compiler_item_type(head, item);
+    let cm_name = if is(CompilerItem::Stream) {
+        "stream-drop-readable"
+    } else if is(CompilerItem::StreamWritable) {
+        "stream-drop-writable"
+    } else if is(CompilerItem::Future) {
+        "future-drop-readable"
+    } else {
+        assert!(
+            is(CompilerItem::FutureWritable),
+            "a generic resource is a stream or future end"
+        );
+        "future-drop-writable"
+    };
+    let def = tt.nominal_def(head).expect("an end is a declared resource");
+    let type_args: Vec<_> = tt
+        .generic_type_args(head)
+        .expect("an end names its payload")
+        .iter()
+        .map(|arg| tt.fq_type_name(*arg))
+        .collect();
+    let mut info = LocalMethodName::new(tt.fq_base_type_name(head), None, "drop".to_string())
+        .with_struct_type_args(&type_args);
+    info.cm_name = Some(cm_name.to_string());
+    let func = FunctionRef {
+        module_source: tt.def_module(def).clone(),
+        name: info.to_mangled_name(),
+        template: None,
+        monomorph_info: None,
+        method_info: Some(info),
+    };
+    TirExpr::new(
+        TirExprKind::method_call(Box::new(end), func, vec![], vec![]),
+        TypeTable::UNIT,
+        synth_span(),
+    )
+}
+
 fn is_drop_or_cancel(cm_name: &str) -> bool {
     let (_, op) = cm_name.split_once('-').unwrap_or_default();
     matches!(

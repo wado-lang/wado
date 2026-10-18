@@ -456,6 +456,14 @@ pub fn black_box<T>(value: T) -> T;
 #[side_effect(none)]
 pub fn is_uninitialized<T>(value: &T) -> bool;
 
+/// True where the place `value` reads holds no affine object: a move emptied
+/// it (WEP: Affine Types). Resource drop synthesis guards each drop with it.
+/// It reads the place by value, since a reference to a variant is a box that
+/// is never null.
+#[storage(none)]
+#[side_effect(none)]
+pub fn is_moved<T>(value: T) -> bool;
+
 /// Marks the enclosing code path as cold (rarely executed). `cold_path()` is a
 /// statement placed inside a branch body, so it works anywhere — an `if` /
 /// `if let` / `match` arm, or as the cold fall-through after a guard clause —

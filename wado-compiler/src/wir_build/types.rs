@@ -297,8 +297,7 @@ fn register_struct(
             if matches!(ty, WirType::Unit) {
                 return None;
             }
-            // Struct fields use non-nullable refs.
-            let ty = ty.as_nonnull();
+            let ty = ctx.slot_type(type_table, f.type_id, ty);
             Some(WirField {
                 name: f.name.clone(),
                 ty,
@@ -687,8 +686,7 @@ fn register_tuple_types(ctx: &mut WirContext<'_>) {
                         if matches!(ty, WirType::Unit) {
                             return None;
                         }
-                        // Tuple fields use non-nullable refs
-                        let ty = ty.as_nonnull();
+                        let ty = ctx.slot_type(type_table, elem_type_id, ty);
                         Some(WirField {
                             name: format!("{i}"),
                             ty,
@@ -1364,8 +1362,7 @@ fn fixup_abstract_struct_fields(ctx: &mut WirContext<'_>) {
                         let field_type_id = tir_field.type_id;
                         let wir_type = ctx.type_id_to_wir_type_pending(type_table, field_type_id);
                         if !is_abstract_ref(&wir_type) {
-                            // Make struct fields non-nullable (same as register_struct).
-                            resolved = Some(wir_type.as_nonnull());
+                            resolved = Some(ctx.slot_type(type_table, field_type_id, wir_type));
                             break;
                         }
                     }
@@ -1393,8 +1390,8 @@ fn fixup_abstract_struct_fields(ctx: &mut WirContext<'_>) {
                             let wir_type =
                                 ctx.type_id_to_wir_type_pending(type_table, elem_type_id);
                             if !is_abstract_ref(&wir_type) {
-                                // Make tuple fields non-nullable.
-                                resolved = Some(wir_type.as_nonnull());
+                                resolved =
+                                    Some(ctx.slot_type(type_table, elem_type_id, wir_type));
                                 break;
                             }
                         }
@@ -1454,7 +1451,7 @@ fn fixup_abstract_struct_fields(ctx: &mut WirContext<'_>) {
                         wir_idx,
                         case_idx,
                         payload_idx,
-                        new_ty.as_nonnull(),
+                        ctx.slot_type(type_table, tir_payload_id, new_ty),
                     ));
                 }
             }
@@ -1514,7 +1511,8 @@ fn fixup_abstract_struct_fields(ctx: &mut WirContext<'_>) {
             if is_abstract_ref(&payload_ty) {
                 continue; // Still abstract; can't resolve
             }
-            case_struct_fixups.push((case_struct_idx, field_idx, payload_ty.as_nonnull()));
+            // The payload's own slot type, affine or not, as the variant states it.
+            case_struct_fixups.push((case_struct_idx, field_idx, payload_ty));
         }
     }
     for (type_idx, field_idx, new_type) in case_struct_fixups {

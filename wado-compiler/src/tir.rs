@@ -1175,6 +1175,10 @@ pub struct TypeTable {
     /// index, payload TypeId)`. Payload ids are in the declaring template's
     /// terms; unit cases use `TypeTable::UNIT`.
     variant_case_index: IndexMap<DefId, Vec<(String, u32, TypeId)>>,
+    /// Struct field types by declaration and instance arguments, a template's
+    /// (no arguments) in its own terms: what [`Self::holds_affine_resource`]
+    /// reads.
+    struct_field_index: IndexMap<(DefId, Vec<TypeId>), Vec<TypeId>>,
     /// Every struct shape the compiler minted, by [`AnonStructId`].
     anon_structs: Vec<AnonEntry>,
     /// Dedup for the above: the same shape in the same module is one id.
@@ -1328,6 +1332,7 @@ impl TypeTable {
             bound_driven_synth_requests: IndexSet::default(),
             impl_targets: IndexMap::default(),
             variant_case_index: IndexMap::default(),
+            struct_field_index: IndexMap::default(),
             anon_structs: Vec::new(),
             anon_struct_index: IndexMap::default(),
             anon_struct_mangles: IndexSet::default(),
@@ -3421,6 +3426,108 @@ impl TypeTable {
     /// Case templates of a variant declaration (see `variant_case_index`).
     pub fn variant_template_cases(&self, def: DefId) -> Option<&[(String, u32, TypeId)]> {
         self.variant_case_index.get(&def).map(Vec::as_slice)
+    }
+
+    /// Register the field types of a struct declaration instantiated with
+    /// `args` (none for the template) for [`Self::holds_affine_resource`].
+    pub fn register_struct_fields(&mut self, def: DefId, args: Vec<TypeId>, fields: Vec<TypeId>) {
+        self.struct_field_index.insert((def, args), fields);
+    }
+
+    /// Whether a value of `ty` is, or holds at any depth, an affine resource:
+    /// what makes each place holding one a nullable reference to its object
+    /// (WEP: Affine Types). A reference, a function and an unrestricted
+    /// handle hold none.
+    #[must_use]
+    pub fn holds_affine_resource(&self, ty: TypeId) -> bool {
+        self.holds_affine_in(ty, &[], &mut Vec::new())
+    }
+
+    /// [`Self::holds_affine_resource`] inside a template whose type parameters
+    /// hold one where `params` says. `open` is the declarations the walk is
+    /// inside, each with its `params`: one reached again with the same answers
+    /// adds nothing, which ends polymorphic recursion.
+    fn holds_affine_in(
+        &self,
+        ty: TypeId,
+        params: &[bool],
+        open: &mut Vec<(DefId, Vec<bool>)>,
+    ) -> bool {
+        let ty = self.representation_head(ty);
+        let (def, args, members): (Option<DefId>, &[TypeId], Vec<TypeId>) = match self.get(ty) {
+            ResolvedType::TypeParam { index, .. } => {
+                return params.get(*index as usize).copied().unwrap_or(false);
+            }
+            ResolvedType::Resource { .. } | ResolvedType::GenericResource { .. } => {
+                return self.is_resource_object(ty);
+            }
+            ResolvedType::BuiltinArray(elem) => {
+                return self.holds_affine_in(*elem, params, open);
+            }
+            ResolvedType::Struct {
+                def: StructDef::Anon(shape),
+                ..
+            } => (
+                None,
+                &[],
+                self.anon_struct_fields(*shape)
+                    .iter()
+                    .map(|(_, ty)| *ty)
+                    .collect(),
+            ),
+            ResolvedType::Struct {
+                def: StructDef::Decl(def),
+                type_args,
+            }
+            | ResolvedType::GenericInstance {
+                def,
+                type_args,
+            } => {
+                if self.is_tuple_def(*def) {
+                    (None, &[], type_args.clone())
+                } else if let Some(fields) = self
+                    .struct_field_index
+                    .get(&(*def, type_args.clone()))
+                    .or_else(|| self.struct_field_index.get(&(*def, Vec::new())))
+                {
+                    // An instance's own fields are concrete, so the arguments
+                    // its template would read are only the recursion guard's.
+                    (Some(*def), type_args.as_slice(), fields.clone())
+                } else if let Some(cases) = self.variant_case_index.get(def) {
+                    let payloads = cases.iter().map(|(_, _, payload)| *payload).collect();
+                    (Some(*def), type_args.as_slice(), payloads)
+                } else {
+                    return false;
+                }
+            }
+            ResolvedType::Variant { def } => match self.variant_case_index.get(def) {
+                Some(cases) => (
+                    Some(*def),
+                    &[],
+                    cases.iter().map(|(_, _, payload)| *payload).collect(),
+                ),
+                None => return false,
+            },
+            _ => return false,
+        };
+        let Some(def) = def else {
+            return members
+                .into_iter()
+                .any(|member| self.holds_affine_in(member, params, open));
+        };
+        let inner: Vec<bool> = args
+            .iter()
+            .map(|&arg| self.holds_affine_in(arg, params, open))
+            .collect();
+        if open.iter().any(|(d, p)| *d == def && *p == inner) {
+            return false;
+        }
+        open.push((def, inner.clone()));
+        let held = members
+            .into_iter()
+            .any(|member| self.holds_affine_in(member, &inner, open));
+        open.pop();
+        held
     }
 
     /// Find a variant type by (name, `module_source`) pair via `intern_map` (O(1)).

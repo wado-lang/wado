@@ -625,7 +625,9 @@ impl<'a> Analyzer<'a> {
     }
 
     /// Note `assign`, writing `target`, for `in_place_assigns` when the place
-    /// holds an in-place type; its writes are those recorded since `start`.
+    /// holds an in-place type; its writes are those recorded since `start`. A
+    /// move emptying an affine place stores `null`, which repoints: the object
+    /// it held is the destination's now (WEP: Affine Types).
     fn note_assign_site(
         &mut self,
         assign: &TirExpr,
@@ -633,7 +635,12 @@ impl<'a> Analyzer<'a> {
         start: usize,
         live: &IndexSet<u32>,
     ) {
-        if self.type_table.is_in_place_aggregate(target.type_id) {
+        let TirExprKind::Assign { value, .. } = &assign.kind else {
+            unreachable!("an assign site is an `Assign`");
+        };
+        if !matches!(value.kind, TirExprKind::Null)
+            && self.type_table.is_in_place_aggregate(target.type_id)
+        {
             self.note_site(assign.span, target, false, start, live);
         }
     }

@@ -13,7 +13,7 @@ use crate::name::{StructName, wir_enum_type_key, wir_type_key};
 use crate::nir::{FuncId, FuncRef};
 use crate::nir_package::NirPackage;
 use crate::primitive::PrimitiveType;
-use crate::tir::{ResolvedType, TypeId, TypeTable};
+use crate::tir::{ResolvedType, TypeId, TypeKey, TypeTable};
 use crate::wir::{
     CmImportViolation, TraitBoundViolation, WasmModuleFunc, WasmModuleInfo, WirAbstractHeapType,
     WirComponent, WirData, WirExport, WirField, WirFuncId, WirFuncType, WirFunction, WirGlobal,
@@ -102,6 +102,8 @@ pub struct WirContext<'a> {
     /// place, so a reference to the resource sees a store through another
     /// (WEP: Affine Types). Set while types register, before any is looked up.
     pub handle_box: Option<WirTypeId>,
+    /// What [`TypeTable::holds_affine_resource`] has answered, by type.
+    affine: RefCell<IndexMap<TypeKey, bool>>,
     /// Map from element `TypeId` to `WirTypeId` for raw GC array types.
     pub array_type_map: IndexMap<TypeId, WirTypeId>,
     /// Map from element type name to `WirTypeId` (dedup for arrays).
@@ -337,6 +339,7 @@ impl<'a> WirContext<'a> {
             type_map: IndexMap::default(),
             struct_type_map: IndexMap::default(),
             handle_box: None,
+            affine: RefCell::default(),
             array_type_map: IndexMap::default(),
             array_type_by_name: IndexMap::default(),
             tuple_type_map: IndexMap::default(),
@@ -755,7 +758,42 @@ impl<'a> WirContext<'a> {
         self.lookup_wir_type(type_table, type_id).ok()
     }
 
+    /// Whether a place holding a `type_id` is nullable: it holds an affine
+    /// value, which a move empties (WEP: Affine Types).
+    pub fn is_affine(&self, type_table: &TypeTable, type_id: TypeId) -> bool {
+        let key = type_table.type_key(type_id);
+        if let Some(&affine) = self.affine.borrow().get(&key) {
+            return affine;
+        }
+        let affine = type_table.holds_affine_resource(type_id);
+        self.affine.borrow_mut().insert(key, affine);
+        affine
+    }
+
+    /// `ty`, the WIR type of a field, element or payload of type `type_id`, as
+    /// that slot holds it: non-nullable, but for an affine value.
+    pub fn slot_type(&self, type_table: &TypeTable, type_id: TypeId, ty: WirType) -> WirType {
+        if self.is_affine(type_table, type_id) {
+            ty.as_nullable()
+        } else {
+            ty.as_nonnull()
+        }
+    }
+
     fn lookup_wir_type(
+        &self,
+        type_table: &TypeTable,
+        type_id: TypeId,
+    ) -> Result<WirType, UnregisteredType> {
+        let wir = self.lookup_wir_shape(type_table, type_id)?;
+        Ok(if self.is_affine(type_table, type_id) {
+            wir.as_nullable()
+        } else {
+            wir
+        })
+    }
+
+    fn lookup_wir_shape(
         &self,
         type_table: &TypeTable,
         type_id: TypeId,
