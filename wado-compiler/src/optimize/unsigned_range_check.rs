@@ -62,8 +62,7 @@ impl UnsignedRangeCheckRule<'_> {
         let (left, kind, right) = binary_parts(engine.body, resolve(engine, &self.binds, op))?;
         match kind {
             NirBinaryOp::Lt | NirBinaryOp::LtEq => Some((left, kind, right)),
-            NirBinaryOp::Gt => Some((right, NirBinaryOp::Lt, left)),
-            NirBinaryOp::GtEq => Some((right, NirBinaryOp::LtEq, left)),
+            NirBinaryOp::Gt | NirBinaryOp::GtEq => Some((right, kind.converse()?, left)),
             _ => None,
         }
     }
@@ -133,10 +132,12 @@ impl UnsignedRangeCheckRule<'_> {
         {
             return None;
         }
-        [(left, right), (right, left)].into_iter().find_map(|(zero, bound)| {
-            let x = self.zero_side(engine, zero, shape)?;
-            self.bound_side(engine, bound, x, shape)
-        })
+        [(left, right), (right, left)]
+            .into_iter()
+            .find_map(|(zero, bound)| {
+                let x = self.zero_side(engine, zero, shape)?;
+                self.bound_side(engine, bound, x, shape)
+            })
     }
 }
 
@@ -149,7 +150,7 @@ impl Rule for UnsignedRangeCheckRule<'_> {
             return false;
         };
         let span = engine.body.exprs[id].span;
-        let cast =|engine: &mut Engine, expr| {
+        let cast = |engine: &mut Engine, expr| {
             Operand::Expr(engine.alloc_expr(
                 ExprKind::Cast {
                     expr,

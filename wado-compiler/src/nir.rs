@@ -207,6 +207,19 @@ impl NirBinaryOp {
         })
     }
 
+    /// The comparison that answers the same with its operands swapped:
+    /// `a < b` is `b > a`. `None` for an op that is not one of the six.
+    pub fn converse(self) -> Option<Self> {
+        Some(match self {
+            Self::Eq | Self::NotEq => self,
+            Self::Lt => Self::Gt,
+            Self::LtEq => Self::GtEq,
+            Self::Gt => Self::Lt,
+            Self::GtEq => Self::LtEq,
+            _ => return None,
+        })
+    }
+
     /// Whether this op may trap, whatever its operands. Integer `Div` / `Mod`
     /// trap on a zero divisor (and `MIN / -1`); every other binary op is total.
     /// The one listing every pass that deletes or moves an operation consults.

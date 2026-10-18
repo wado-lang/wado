@@ -949,26 +949,29 @@ impl Monomorphizer {
         right: &TirExpr,
         type_table: &TypeTable,
     ) -> Option<TirExprKind> {
-        let (call, case) = match (&left.kind, &right.kind) {
-            (TirExprKind::Call { .. }, TirExprKind::EnumConstruct { .. }) => (left, right),
-            (TirExprKind::EnumConstruct { .. }, TirExprKind::Call { .. }) => (right, left),
+        let (func, args, enum_type, case_index) = match (&left.kind, &right.kind) {
+            (
+                TirExprKind::Call { func, args, .. },
+                TirExprKind::EnumConstruct {
+                    enum_type,
+                    case_index,
+                    ..
+                },
+            )
+            | (
+                TirExprKind::EnumConstruct {
+                    enum_type,
+                    case_index,
+                    ..
+                },
+                TirExprKind::Call { func, args, .. },
+            ) => (func, args, enum_type, case_index),
             _ => return None,
-        };
-        let TirExprKind::EnumConstruct {
-            enum_type,
-            case_index,
-            ..
-        } = &case.kind
-        else {
-            unreachable!("matched above");
         };
         let ordering = type_table.compiler_item_def(CompilerItem::Ordering)?;
         if !matches!(type_table.get(*enum_type), ResolvedType::Enum { def } if *def == ordering) {
             return None;
         }
-        let TirExprKind::Call { func, args, .. } = &call.kind else {
-            unreachable!("matched above");
-        };
         let info = func.method_info.as_ref()?;
         let trait_decl = info.trait_name.as_ref().and_then(FqTraitName::canonical)?;
         let item = type_table

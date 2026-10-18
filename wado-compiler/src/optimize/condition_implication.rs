@@ -20,8 +20,8 @@ use crate::nir_package::NirPackage;
 use crate::nir_value_graph::{ValueId, ValueKind};
 use crate::optimize::alias::{CallImmutability, builder_alias_sets, first_param_types};
 use crate::optimize::arena_query::{
-    Place, WriteRoot, binary_parts, is_pure_nontrapping_expr_typed, is_pure_operand,
-    operand_local, operand_read_locals, place_path, storage_root, write_root,
+    Place, WriteRoot, binary_parts, is_pure_nontrapping_expr_typed, is_pure_operand, operand_local,
+    operand_read_locals, place_path, storage_root, write_root,
 };
 use crate::optimize::gate::{FunctionGate, GatedPass};
 use crate::optimize::value_copy::mutation::{MutationOracle, Witness, expr_witnesses};
@@ -1289,18 +1289,16 @@ fn refute_past_cap(engine: &mut Engine, node: NodeRef, binds: &Binds, var: u32, 
         let Some((cond, ..)) = if_parts(engine, n) else {
             return;
         };
-        let Some((left, op, right)) = binary_parts(engine.body, resolve(engine, binds, cond)) else {
+        let Some((left, op, right)) = binary_parts(engine.body, resolve(engine, binds, cond))
+        else {
             return;
         };
         let (konst, op) = if parse_var_offset(engine, binds, left) == Some((var, 0)) {
             (right, op)
-        } else if parse_var_offset(engine, binds, right) == Some((var, 0)) {
-            let mirrored = match op {
-                NirBinaryOp::Lt => NirBinaryOp::Gt,
-                NirBinaryOp::LtEq => NirBinaryOp::GtEq,
-                other => other,
-            };
-            (left, mirrored)
+        } else if parse_var_offset(engine, binds, right) == Some((var, 0))
+            && let Some(converse) = op.converse()
+        {
+            (left, converse)
         } else {
             return;
         };
@@ -1769,7 +1767,7 @@ fn process_block(engine: &mut Engine, block: BlockId, binds: &Binds) -> bool {
                 changed |= eliminate_checks_in_node(engine, node, var, k, bound, binds, None);
             }
         }
-        for ((root, fields), cap) in capped.clone() {
+        for &((root, ref fields), cap) in &capped {
             if fields.is_empty() && !modifies_any_root(engine, node, &[root]) {
                 changed |= refute_past_cap(engine, node, binds, root, cap);
             }
@@ -1792,7 +1790,10 @@ fn process_block(engine: &mut Engine, block: BlockId, binds: &Binds) -> bool {
                 seguards.extend(copies);
             }
             let read = value.as_expr().and_then(|e| place_path(engine.body, e));
-            if let Some(&(_, cap)) = capped.iter().find(|(place, _)| Some(place) == read.as_ref()) {
+            if let Some(&(_, cap)) = capped
+                .iter()
+                .find(|(place, _)| Some(place) == read.as_ref())
+            {
                 capped.push(((local_index, Vec::new()), cap));
             }
         }
@@ -2342,7 +2343,9 @@ fn invalidate(engine: &Engine, node: NodeRef, facts: &mut Vec<Fact>) {
     facts.retain(|f| match *f {
         Fact::Floor { key, .. } => kept(key),
         Fact::Max { var, .. } => kept(BoundKey::Local(var)),
-        Fact::Ceil { var, bound, .. } => var.is_none_or(|v| kept(BoundKey::Local(v))) && kept(bound),
+        Fact::Ceil { var, bound, .. } => {
+            var.is_none_or(|v| kept(BoundKey::Local(v))) && kept(bound)
+        }
         Fact::Exact { var, bound, .. } => !node_modifies(engine, node, var, bound),
     });
 }
