@@ -104,13 +104,7 @@ type "functype//core:prelude/primitive.wado/count_digits_u64" = fn(u64) -> i32; 
 
 type "functype//core:rt/write_string_to_stream$dae[add_newline]" = fn(ref "core:prelude//$Resource", ref Array<u8>, i32);  // TypeId(33)
 
-<<<<<<< HEAD
-type "functype//core:rt/panic" = fn(ref "core:prelude/string.wado//String");  // TypeId(34)
-||||||| aa8fbf23e
-type "functype//core:rt/panic" = fn(ref "core:prelude/string.wado//String");  // TypeId(33)
-=======
-type "functype//core:rt/panic" = fn(ref Array<u8>, i32);  // TypeId(33)
->>>>>>> origin/main
+type "functype//core:rt/panic" = fn(ref Array<u8>, i32);  // TypeId(34)
 
 type "functype//core:rt/cm_stream_write_raw_all_u8" = fn(i32, ref Array<u8>, i32, i32) -> "core:prelude/types.wado//enum:CopyResult";  // TypeId(35)
 
@@ -198,50 +192,50 @@ global global:spec_traits_combinators.wado::$const_obj_6: ref Array<i32> = array
 fn "spec_traits_combinators.wado/$test_0"() {
     let elements_17: ref Array<i32>;
     let self_18: ref "core:prelude/traits.wado//IterMap<core:prelude/slice.wado/SliceValueIter<i32>,fn mut(i32)->i32>";
+    let self_20: ref "core:prelude/slice.wado//SliceValueIter<i32>";
     let f_21: ref "spec_traits_combinators.wado//$Closure_0";
     let result_23: ref "core:prelude//List<i32>";
     let self_37: ref "core:prelude/traits.wado//IterFilter<core:prelude/slice.wado/SliceValueIter<i32>,fn mut(i32)->bool>";
     let pred_40: ref "spec_traits_combinators.wado//$Closure_1";
     let pred_71: ref "spec_traits_combinators.wado//$Closure_3";
-    let f_73: ref "spec_traits_combinators.wado//$Closure_4";
     let $licm_repr_98: ref Array<i32>;
-    let elements_107: ref Array<i32>;
-    let used_110: i32;
-    let used_142: i32;
-    let $sroa_v_pred_149: ref struct;
-    elements_17 = array.new_fixed<i32>(1, 2, 3, 4, 5);
+    let elements_106: ref Array<i32>;
+    let used_109: i32;
+    let used_137: i32;
+    let $sroa_self_f_149: ref struct;
+    self_20 = struct.new "core:prelude/slice.wado//SliceValueIter<i32>" { repr: local.tee elements_17(array.new_fixed<i32>(1, 2, 3, 4, 5)), index: 0, end: 5 };
     f_21 = struct.new "spec_traits_combinators.wado//$Closure_0" {  };
-    self_18 = struct.new "core:prelude/traits.wado//IterMap<core:prelude/slice.wado/SliceValueIter<i32>,fn mut(i32)->i32>" { inner: struct.new "core:prelude/slice.wado//SliceValueIter<i32>" { repr: elements_17, index: 0, end: 5 }, f: struct.new "canonical//CanonicalClosure_0" { env: f_21, func: ref.func "closure/spec_traits_combinators.wado/$closure_wrapper_0" } };
-    result_23 = struct.new "core:prelude//List<i32>" { repr: local.tee elements_107(array.new_fixed<i32>()), used: 0 };
+    self_18 = struct.new "core:prelude/traits.wado//IterMap<core:prelude/slice.wado/SliceValueIter<i32>,fn mut(i32)->i32>" { inner: self_20, f: struct.new "canonical//CanonicalClosure_0" { env: f_21, func: ref.func "closure/spec_traits_combinators.wado/$closure_wrapper_0" } };
+    result_23 = struct.new "core:prelude//List<i32>" { repr: local.tee elements_106(array.new_fixed<i32>()), used: 0 };
     b0: block {
         l1: loop {
             let $mv$$local_3_25$0: i32;
             let $mv$$local_3_25$1: i32;
             multivalue_bind [$mv$$local_3_25$0, $mv$$local_3_25$1] = "core:prelude/traits.wado/core:prelude/traits.wado/IterMap<core:prelude/slice.wado/SliceValueIter<i32>,fn mut(i32)->i32>^core:prelude/traits.wado/Iterator::next$sroa[return]"(self_18);
             if $mv$$local_3_25$0 == 1 {
-                if @unlikely(local.tee used_110(result_23.used) >= builtin::array_len(result_23.repr)) {
+                if @unlikely(local.tee used_109(result_23.used) >= builtin::array_len(result_23.repr)) {
                     cold_path;
                     "core:prelude/list.wado/core:prelude/list.wado/List<i32>::grow"(result_23);
                 }
-                builtin::array_set<i32>(result_23.repr, used_110, $mv$$local_3_25$1);
-                result_23.used = used_110 + 1;
+                builtin::array_set<i32>(result_23.repr, used_109, $mv$$local_3_25$1);
+                result_23.used = used_109 + 1;
             } else {
                 break b0;
             }
             continue l1;
         };
     };
-    elements_107 = global:spec_traits_combinators.wado::$const_obj_6;
-    if @unlikely(local.tee used_110($inline_core_prelude_array_wado_seq_eq_i32__7: block -> bool {
-        if local.tee used_110(result_23.used) != 5 {
+    elements_106 = global:spec_traits_combinators.wado::$const_obj_6;
+    if @unlikely(local.tee used_109($inline_core_prelude_array_wado_seq_eq_i32__7: block -> bool {
+        if local.tee used_109(result_23.used) != 5 {
             break $inline_core_prelude_array_wado_seq_eq_i32__7: 0;
         }
         $mv$$local_3_25$1 = 0;
         $licm_repr_98 = result_23.repr;
         b6: block {
             l7: loop {
-                break_if b6 $mv$$local_3_25$1 >= used_110;
-                if builtin::array_get_value<i32>($licm_repr_98, $mv$$local_3_25$1) != builtin::array_get_value<i32>(elements_107, $mv$$local_3_25$1) {
+                break_if b6 $mv$$local_3_25$1 >= used_109;
+                if builtin::array_get_value<i32>($licm_repr_98, $mv$$local_3_25$1) != builtin::array_get_value<i32>(elements_106, $mv$$local_3_25$1) {
                     break $inline_core_prelude_array_wado_seq_eq_i32__7: 0;
                 }
                 $mv$$local_3_25$1 = $mv$$local_3_25$1 + 1;
@@ -254,13 +248,14 @@ fn "spec_traits_combinators.wado/$test_0"() {
         "spec_traits_combinators.wado/$test_0$cold3"(result_23);
         unreachable;
     }
+    self_20 = struct.new "core:prelude/slice.wado//SliceValueIter<i32>" { repr: elements_17, index: 0, end: 5 };
     pred_40 = struct.new "spec_traits_combinators.wado//$Closure_1" {  };
-    self_37 = struct.new "core:prelude/traits.wado//IterFilter<core:prelude/slice.wado/SliceValueIter<i32>,fn mut(i32)->bool>" { inner: struct.new "core:prelude/slice.wado//SliceValueIter<i32>" { repr: elements_17, index: 0, end: 5 }, pred: struct.new "canonical//CanonicalClosure_1" { env: pred_40, func: ref.func "closure/spec_traits_combinators.wado/$closure_wrapper_1" } };
+    self_37 = struct.new "core:prelude/traits.wado//IterFilter<core:prelude/slice.wado/SliceValueIter<i32>,fn mut(i32)->bool>" { inner: self_20, pred: struct.new "canonical//CanonicalClosure_1" { env: pred_40, func: ref.func "closure/spec_traits_combinators.wado/$closure_wrapper_1" } };
     result_23 = struct.new "core:prelude//List<i32>" { repr: local.tee $licm_repr_98(array.new_fixed<i32>()), used: 0 };
     b9: block {
         l10: loop {
-            multivalue_bind [used_110, $mv$$local_3_25$1] = "core:prelude/traits.wado/core:prelude/traits.wado/IterFilter<core:prelude/slice.wado/SliceValueIter<i32>,fn mut(i32)->bool>^core:prelude/traits.wado/Iterator::next$sroa[return]"(self_37);
-            if used_110 == 1 {
+            multivalue_bind [used_109, $mv$$local_3_25$1] = "core:prelude/traits.wado/core:prelude/traits.wado/IterFilter<core:prelude/slice.wado/SliceValueIter<i32>,fn mut(i32)->bool>^core:prelude/traits.wado/Iterator::next$sroa[return]"(self_37);
+            if used_109 == 1 {
                 if @unlikely(local.tee $mv$$local_3_25$0(result_23.used) >= builtin::array_len(result_23.repr)) {
                     cold_path;
                     "core:prelude/list.wado/core:prelude/list.wado/List<i32>::grow"(result_23);
@@ -274,16 +269,16 @@ fn "spec_traits_combinators.wado/$test_0"() {
         };
     };
     $licm_repr_98 = global:spec_traits_combinators.wado::$const_obj_5;
-    if @unlikely(local.tee used_110($inline_core_prelude_array_wado_seq_eq_i32__14: block -> bool {
-        if local.tee used_110(result_23.used) != 2 {
+    if @unlikely(local.tee used_109($inline_core_prelude_array_wado_seq_eq_i32__14: block -> bool {
+        if local.tee used_109(result_23.used) != 2 {
             break $inline_core_prelude_array_wado_seq_eq_i32__14: 0;
         }
         $mv$$local_3_25$1 = 0;
-        elements_107 = result_23.repr;
+        elements_106 = result_23.repr;
         b15: block {
             l16: loop {
-                break_if b15 $mv$$local_3_25$1 >= used_110;
-                if builtin::array_get_value<i32>(elements_107, $mv$$local_3_25$1) != builtin::array_get_value<i32>($licm_repr_98, $mv$$local_3_25$1) {
+                break_if b15 $mv$$local_3_25$1 >= used_109;
+                if builtin::array_get_value<i32>(elements_106, $mv$$local_3_25$1) != builtin::array_get_value<i32>($licm_repr_98, $mv$$local_3_25$1) {
                     break $inline_core_prelude_array_wado_seq_eq_i32__14: 0;
                 }
                 $mv$$local_3_25$1 = $mv$$local_3_25$1 + 1;
@@ -296,27 +291,26 @@ fn "spec_traits_combinators.wado/$test_0"() {
         "spec_traits_combinators.wado/$test_0$cold2"(result_23);
         unreachable;
     }
+    self_20 = struct.new "core:prelude/slice.wado//SliceValueIter<i32>" { repr: elements_17, index: 0, end: 5 };
     pred_71 = struct.new "spec_traits_combinators.wado//$Closure_3" {  };
-    f_73 = struct.new "spec_traits_combinators.wado//$Closure_4" {  };
-    $sroa_v_pred_149 = struct.new "canonical//CanonicalClosure_1" { env: pred_71, func: ref.func "closure/spec_traits_combinators.wado/$closure_wrapper_2" };
-    self_37 = struct.new "core:prelude/traits.wado//IterFilter<core:prelude/slice.wado/SliceValueIter<i32>,fn mut(i32)->bool>" { inner: struct.new "core:prelude/slice.wado//SliceValueIter<i32>" { repr: elements_17, index: 0, end: 5 }, pred: $sroa_v_pred_149 };
-    $sroa_v_pred_149 = struct.new "canonical//CanonicalClosure_0" { env: f_73, func: ref.func "closure/spec_traits_combinators.wado/$closure_wrapper_3" };
+    self_37 = struct.new "core:prelude/traits.wado//IterFilter<core:prelude/slice.wado/SliceValueIter<i32>,fn mut(i32)->bool>" { inner: self_20, pred: struct.new "canonical//CanonicalClosure_1" { env: pred_71, func: ref.func "closure/spec_traits_combinators.wado/$closure_wrapper_2" } };
+    $sroa_self_f_149 = struct.new "canonical//CanonicalClosure_0" { env: struct.new "spec_traits_combinators.wado//$Closure_4" {  }, func: ref.func "closure/spec_traits_combinators.wado/$closure_wrapper_3" };
     result_23 = struct.new "core:prelude//List<i32>" { repr: local.tee elements_17(array.new_fixed<i32>()), used: 0 };
     b18: block {
         l19: loop {
-            $fused_$inline_core_prelude_traits_wado_IterMap_core_prelude_traits_wado_IterFilter_core_prelude_slice_wado_SliceValueIter_i32__fn_mut_i32___bool__fn_mut_i32___i32__core_prelude_traits_wado_Iterator__next_sroa_return__13: block {
-                multivalue_bind [used_110, $mv$$local_3_25$1] = "core:prelude/traits.wado/core:prelude/traits.wado/IterFilter<core:prelude/slice.wado/SliceValueIter<i32>,fn mut(i32)->bool>^core:prelude/traits.wado/Iterator::next$sroa[return]"(self_37);
-                if used_110 == 1 {
+            $fused_$inline_core_prelude_traits_wado_IterMap_core_prelude_traits_wado_IterFilter_core_prelude_slice_wado_SliceValueIter_i32__fn_mut_i32___bool__fn_mut_i32___i32__core_prelude_traits_wado_Iterator__next_sroa_return__9: block {
+                multivalue_bind [used_109, $mv$$local_3_25$1] = "core:prelude/traits.wado/core:prelude/traits.wado/IterFilter<core:prelude/slice.wado/SliceValueIter<i32>,fn mut(i32)->bool>^core:prelude/traits.wado/Iterator::next$sroa[return]"(self_37);
+                if used_109 == 1 {
                     $mv$$local_3_25$0 = block -> i32 {
                         let $indirect_call_1: ref "canonical//CanonicalClosure_0";
-                        call_ref "functype/$canonical_closure_fn_0"($indirect_call_1.func, local.tee $indirect_call_1(ref.cast "canonical//CanonicalClosure_0"($sroa_v_pred_149)).env, $mv$$local_3_25$1);
+                        call_ref "functype/$canonical_closure_fn_0"($indirect_call_1.func, local.tee $indirect_call_1(ref.cast "canonical//CanonicalClosure_0"($sroa_self_f_149)).env, $mv$$local_3_25$1);
                     };
-                    if @unlikely(local.tee used_142(result_23.used) >= builtin::array_len(result_23.repr)) {
+                    if @unlikely(local.tee used_137(result_23.used) >= builtin::array_len(result_23.repr)) {
                         cold_path;
                         "core:prelude/list.wado/core:prelude/list.wado/List<i32>::grow"(result_23);
                     }
-                    builtin::array_set<i32>(result_23.repr, used_142, $mv$$local_3_25$0);
-                    break $fused_$inline_core_prelude_traits_wado_IterMap_core_prelude_traits_wado_IterFilter_core_prelude_slice_wado_SliceValueIter_i32__fn_mut_i32___bool__fn_mut_i32___i32__core_prelude_traits_wado_Iterator__next_sroa_return__13: result_23.used = used_142 + 1;
+                    builtin::array_set<i32>(result_23.repr, used_137, $mv$$local_3_25$0);
+                    break $fused_$inline_core_prelude_traits_wado_IterMap_core_prelude_traits_wado_IterFilter_core_prelude_slice_wado_SliceValueIter_i32__fn_mut_i32___bool__fn_mut_i32___i32__core_prelude_traits_wado_Iterator__next_sroa_return__9: result_23.used = used_137 + 1;
                 } else {
                 }
                 break b18;
@@ -325,19 +319,19 @@ fn "spec_traits_combinators.wado/$test_0"() {
         };
     };
     elements_17 = global:spec_traits_combinators.wado::$const_obj_4;
-    if @unlikely(local.tee used_142($inline_core_prelude_array_wado_seq_eq_i32__26: block -> bool {
-        if local.tee used_142(result_23.used) != 3 {
+    if @unlikely(local.tee used_137($inline_core_prelude_array_wado_seq_eq_i32__26: block -> bool {
+        if local.tee used_137(result_23.used) != 3 {
             break $inline_core_prelude_array_wado_seq_eq_i32__26: 0;
         }
-        used_110 = 0;
+        used_109 = 0;
         $licm_repr_98 = result_23.repr;
         b25: block {
             l26: loop {
-                break_if b25 used_110 >= used_142;
-                if builtin::array_get_value<i32>($licm_repr_98, used_110) != builtin::array_get_value<i32>(elements_17, used_110) {
+                break_if b25 used_109 >= used_137;
+                if builtin::array_get_value<i32>($licm_repr_98, used_109) != builtin::array_get_value<i32>(elements_17, used_109) {
                     break $inline_core_prelude_array_wado_seq_eq_i32__26: 0;
                 }
-                used_110 = used_110 + 1;
+                used_109 = used_109 + 1;
                 continue l26;
             };
         };
@@ -576,37 +570,15 @@ fn "core:rt/write_string_to_stream$dae[add_newline]"(tx, $mv$message$repr, $mv$m
     "wasi/stream-drop-writable"(tx.value);
 }
 
-<<<<<<< HEAD
-fn "core:rt/panic"(message) {
+fn "core:rt/panic"($mv$message$repr, $mv$message$used) {
     let $cm_pair_4: i64;
     let $sroa_$pattern_temp_0_0_6: i32;
     let $sroa_$pattern_temp_0_1_7: ref "core:prelude//$Resource";
     $sroa_$pattern_temp_0_0_6 = builtin::i32_wrap_i64(local.tee $cm_pair_4("wasi/stream-new"()));
     $sroa_$pattern_temp_0_1_7 = struct.new "core:prelude//$Resource" { value: builtin::i32_wrap_i64($cm_pair_4 >> 32_i64) };
     $sroa_$pattern_temp_0_0_6 = "wasi/wasi:cli/Stderr::write_via_stream"($sroa_$pattern_temp_0_0_6);
-    "core:rt/write_string_to_stream$dae[add_newline]"($sroa_$pattern_temp_0_1_7, message.repr, message.used);
+    "core:rt/write_string_to_stream$dae[add_newline]"($sroa_$pattern_temp_0_1_7, $mv$message$repr, $mv$message$used);
     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"($sroa_$pattern_temp_0_0_6);
-||||||| aa8fbf23e
-fn "core:rt/panic"(message) {
-    let packed: i64;
-    let rx_8: i32;
-    let tx_9: i32;
-    rx_8 = builtin::i32_wrap_i64(local.tee packed("wasi/stream-new"()));
-    tx_9 = builtin::i32_wrap_i64(packed >> 32_i64);
-    rx_8 = "wasi/wasi:cli/Stderr::write_via_stream"(rx_8);
-    "core:rt/write_string_to_stream$dae[add_newline]"(tx_9, message.repr, message.used);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(rx_8);
-=======
-fn "core:rt/panic"($mv$message$repr, $mv$message$used) {
-    let packed: i64;
-    let rx_8: i32;
-    let tx_9: i32;
-    rx_8 = builtin::i32_wrap_i64(local.tee packed("wasi/stream-new"()));
-    tx_9 = builtin::i32_wrap_i64(packed >> 32_i64);
-    rx_8 = "wasi/wasi:cli/Stderr::write_via_stream"(rx_8);
-    "core:rt/write_string_to_stream$dae[add_newline]"(tx_9, $mv$message$repr, $mv$message$used);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(rx_8);
->>>>>>> origin/main
     cold_path;
     unreachable;
 }

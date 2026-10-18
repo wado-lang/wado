@@ -31,13 +31,7 @@ type "functype//wasi/waitable-set-wait" = fn(i32, i32) -> i32;  // TypeId(10)
 
 type "functype//wasi/wasi:cli/Stdout::write_via_stream" = fn(i32) -> i32;  // TypeId(11)
 
-<<<<<<< HEAD
-type "functype//const_object_globalization_value_arg_call.wado/encode_key" = fn(ref "core:prelude/string.wado//String") -> ref "core:prelude/string.wado//String";  // TypeId(12)
-||||||| aa8fbf23e
-type "functype//const_object_globalization_value_arg_call.wado/encode_key" = fn(ref "core:prelude/string.wado//String") -> ref "core:prelude/string.wado//String";  // TypeId(11)
-=======
-type "functype//const_object_globalization_value_arg_call.wado/encode_key" = fn(ref Array<u8>, i32) -> ref "core:prelude/string.wado//String";  // TypeId(11)
->>>>>>> origin/main
+type "functype//const_object_globalization_value_arg_call.wado/encode_key" = fn(ref Array<u8>, i32) -> ref "core:prelude/string.wado//String";  // TypeId(12)
 
 type "functype//const_object_globalization_value_arg_call.wado/byte_total" = fn(ref Array<u8>, i32) -> i32;  // TypeId(13)
 
@@ -181,83 +175,31 @@ fn "const_object_globalization_value_arg_call.wado/run"() with Stdout {
             continue l8;
         };
     };
-<<<<<<< HEAD
-    $mv_arg_1 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
-    $sroa_$iter_0_start_43 = acc < 0;
-||||||| aa8fbf23e
-    $mv_arg_1 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
-    $sroa_$iter_0_start_46 = acc < 0;
-=======
     $mv_arg_3 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
-    $sroa_$iter_0_start_46 = acc < 0;
->>>>>>> origin/main
+    $sroa_$iter_0_start_43 = acc < 0;
     acc = "core:prelude/primitive.wado/count_digits_u64"(local.tee x(x = builtin::i64_extend_i32_s(acc); select i64(x < 0_i64, 0_i64 - x, x)));
-<<<<<<< HEAD
     if $sroa_$iter_0_start_43 {
-        if @unlikely(local.tee $sroa_$iter_0_start_43(0 + 1) > builtin::array_len($mv_arg_1.repr)) {
-||||||| aa8fbf23e
-    if $sroa_$iter_0_start_46 {
-        if @unlikely(local.tee $sroa_$iter_0_start_46(0 + 1) > builtin::array_len($mv_arg_1.repr)) {
-=======
-    if $sroa_$iter_0_start_46 {
-        if @unlikely(local.tee $sroa_$iter_0_start_46(0 + 1) > builtin::array_len($mv_arg_3.repr)) {
->>>>>>> origin/main
+        if @unlikely(local.tee $sroa_$iter_0_start_43(0 + 1) > builtin::array_len($mv_arg_3.repr)) {
             cold_path;
-<<<<<<< HEAD
-            "core:prelude/string.wado/core:prelude/string.wado/String::grow"($mv_arg_1, $sroa_$iter_0_start_43);
-||||||| aa8fbf23e
-            "core:prelude/string.wado/core:prelude/string.wado/String::grow"($mv_arg_1, $sroa_$iter_0_start_46);
-=======
-            "core:prelude/string.wado/core:prelude/string.wado/String::grow"($mv_arg_3, $sroa_$iter_0_start_46);
->>>>>>> origin/main
+            "core:prelude/string.wado/core:prelude/string.wado/String::grow"($mv_arg_3, $sroa_$iter_0_start_43);
         }
-<<<<<<< HEAD
-        current = $mv_arg_1.used;
-        $mv_arg_1.used = $sroa_$iter_0_start_43;
-        builtin::array_set_u8($mv_arg_1.repr, current, 45);
-||||||| aa8fbf23e
-        current = $mv_arg_1.used;
-        $mv_arg_1.used = $sroa_$iter_0_start_46;
-        builtin::array_set_u8($mv_arg_1.repr, current, 45);
-=======
         current = $mv_arg_3.used;
-        $mv_arg_3.used = $sroa_$iter_0_start_46;
+        $mv_arg_3.used = $sroa_$iter_0_start_43;
         builtin::array_set_u8($mv_arg_3.repr, current, 45);
->>>>>>> origin/main
     } else {
     }
     if @unlikely(local.tee current($mv_arg_3.used + acc) > builtin::array_len($mv_arg_3.repr)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"($mv_arg_3, current);
     }
-<<<<<<< HEAD
-    $sroa_$iter_0_start_43 = $mv_arg_1.used;
-    $mv_arg_1.used = current;
-    "core:prelude/primitive.wado/write_decimal_digits"($mv_arg_1.repr, $sroa_$iter_0_start_43, x, acc);
+    $sroa_$iter_0_start_43 = $mv_arg_3.used;
+    $mv_arg_3.used = current;
+    "core:prelude/primitive.wado/write_decimal_digits"($mv_arg_3.repr, $sroa_$iter_0_start_43, x, acc);
     $sroa_$pattern_temp_0_0_33 = struct.new "core:prelude//$Resource" { value: builtin::i32_wrap_i64(local.tee x("wasi/stream-new"())) };
     $sroa_$pattern_temp_0_1_34 = struct.new "core:prelude//$Resource" { value: builtin::i32_wrap_i64(x >> 32_i64) };
     $sroa_$pattern_temp_0_0_33 = "const_object_globalization_value_arg_call.wado/$cm_binding__Stdout_write_via_stream"($sroa_$pattern_temp_0_0_33);
-    "core:rt/write_string_to_stream$dae[add_newline]"($sroa_$pattern_temp_0_1_34, $mv_arg_1.repr, $mv_arg_1.used);
+    "core:rt/write_string_to_stream$dae[add_newline]"($sroa_$pattern_temp_0_1_34, $mv_arg_3.repr, $mv_arg_3.used);
     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"($sroa_$pattern_temp_0_0_33.value);
-||||||| aa8fbf23e
-    $sroa_$iter_0_start_46 = $mv_arg_1.used;
-    $mv_arg_1.used = current;
-    "core:prelude/primitive.wado/write_decimal_digits"($mv_arg_1.repr, $sroa_$iter_0_start_46, x, acc);
-    acc = builtin::i32_wrap_i64(local.tee x("wasi/stream-new"()));
-    $sroa_$iter_0_start_46 = builtin::i32_wrap_i64(x >> 32_i64);
-    acc = "const_object_globalization_value_arg_call.wado/$cm_binding__Stdout_write_via_stream"(acc);
-    "core:rt/write_string_to_stream$dae[add_newline]"($sroa_$iter_0_start_46, $mv_arg_1.repr, $mv_arg_1.used);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(acc);
-=======
-    $sroa_$iter_0_start_46 = $mv_arg_3.used;
-    $mv_arg_3.used = current;
-    "core:prelude/primitive.wado/write_decimal_digits"($mv_arg_3.repr, $sroa_$iter_0_start_46, x, acc);
-    acc = builtin::i32_wrap_i64(local.tee x("wasi/stream-new"()));
-    $sroa_$iter_0_start_46 = builtin::i32_wrap_i64(x >> 32_i64);
-    acc = "const_object_globalization_value_arg_call.wado/$cm_binding__Stdout_write_via_stream"(acc);
-    "core:rt/write_string_to_stream$dae[add_newline]"($sroa_$iter_0_start_46, $mv_arg_3.repr, $mv_arg_3.used);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(acc);
->>>>>>> origin/main
 }
 
 fn "const_object_globalization_value_arg_call.wado/$cm_binding__Stdout_write_via_stream"(data) with Stdout {

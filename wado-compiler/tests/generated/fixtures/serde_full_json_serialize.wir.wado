@@ -156,21 +156,9 @@ type "functype//core:prelude/primitive.wado/count_digits_u64" = fn(u64) -> i32; 
 
 type "functype//core:rt/write_string_to_stream$dae[add_newline]" = fn(ref "core:prelude//$Resource", ref Array<u8>, i32);  // TypeId(43)
 
-<<<<<<< HEAD
-type "functype//core:rt/log_stderr" = fn(ref "core:prelude/string.wado//String");  // TypeId(44)
-||||||| aa8fbf23e
-type "functype//core:rt/log_stderr" = fn(ref "core:prelude/string.wado//String");  // TypeId(43)
-=======
-type "functype//core:rt/log_stderr" = fn(ref Array<u8>, i32);  // TypeId(43)
->>>>>>> origin/main
+type "functype//core:rt/log_stderr" = fn(ref Array<u8>, i32);  // TypeId(44)
 
-<<<<<<< HEAD
-type "functype//core:rt/panic" = fn(ref "core:prelude/string.wado//String");  // TypeId(45)
-||||||| aa8fbf23e
-type "functype//core:rt/panic" = fn(ref "core:prelude/string.wado//String");  // TypeId(44)
-=======
-type "functype//core:rt/panic" = fn(ref Array<u8>, i32);  // TypeId(44)
->>>>>>> origin/main
+type "functype//core:rt/panic" = fn(ref Array<u8>, i32);  // TypeId(45)
 
 type "functype//core:rt/cm_stream_write_raw_all_u8" = fn(i32, ref Array<u8>, i32, i32) -> "core:prelude/types.wado//enum:CopyResult";  // TypeId(46)
 
@@ -313,63 +301,23 @@ fn "serde_full_json_serialize.wado/run"() with Stdout {
     "core:rt/write_string_to_stream$dae[add_newline]"($sroa_$pattern_temp_0_1_78, writer_12.repr, writer_12.used);
     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"($sroa_$pattern_temp_0_0_77.value);
     user = struct.new "serde_full_json_serialize.wado//User" { name: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Alice"), used: 5 }, age: 30, active: 1, location: struct.new "serde_full_json_serialize.wado//Point" { x: 10, y: 20 }, tags: struct.new "core:prelude//List<core:prelude/string.wado/String>" { repr: array.new_fixed<ref "core:prelude/string.wado//String">(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("admin"), used: 5 }, struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(117, 115, 101, 114), used: 4 }), used: 2 } };
-<<<<<<< HEAD
     writer_44 = struct.new "serde_full_json_serialize.wado//JsonWriter" { buf: struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 } };
-    drop("serde_full_json_serialize.wado/serde_full_json_serialize.wado/User^serde_full_json_serialize.wado/Serialize::serialize<serde_full_json_serialize.wado/JsonSerializer>$spec0$sroa[s.w]"(user, writer_44));
+    drop("serde_full_json_serialize.wado/serde_full_json_serialize.wado/User^serde_full_json_serialize.wado/Serialize::serialize<serde_full_json_serialize.wado/JsonSerializer>$spec0$sroa[s.w]"(user.name, user.location, user.tags, writer_44));
     writer_12 = writer_44.buf;
     $sroa_$pattern_temp_0_0_77 = struct.new "core:prelude//$Resource" { value: builtin::i32_wrap_i64(local.tee $cm_pair_4_9("wasi/stream-new"())) };
     $sroa_$pattern_temp_0_1_78 = struct.new "core:prelude//$Resource" { value: builtin::i32_wrap_i64($cm_pair_4_9 >> 32_i64) };
     $sroa_$pattern_temp_0_0_77 = "serde_full_json_serialize.wado/$cm_binding__Stdout_write_via_stream"($sroa_$pattern_temp_0_0_77);
     "core:rt/write_string_to_stream$dae[add_newline]"($sroa_$pattern_temp_0_1_78, writer_12.repr, writer_12.used);
     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"($sroa_$pattern_temp_0_0_77.value);
-||||||| aa8fbf23e
-    writer_49 = struct.new "serde_full_json_serialize.wado//JsonWriter" { buf: struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 } };
-    drop("serde_full_json_serialize.wado/serde_full_json_serialize.wado/User^serde_full_json_serialize.wado/Serialize::serialize<serde_full_json_serialize.wado/JsonSerializer>$spec0$sroa[s.w]"(user, writer_49));
-    writer_11 = writer_49.buf;
-    rx_20 = builtin::i32_wrap_i64(local.tee packed_19("wasi/stream-new"()));
-    tx_21 = builtin::i32_wrap_i64(packed_19 >> 32_i64);
-    rx_20 = "serde_full_json_serialize.wado/$cm_binding__Stdout_write_via_stream"(rx_20);
-    "core:rt/write_string_to_stream$dae[add_newline]"(tx_21, writer_11.repr, writer_11.used);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(rx_20);
-=======
-    writer_49 = struct.new "serde_full_json_serialize.wado//JsonWriter" { buf: struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 } };
-    drop("serde_full_json_serialize.wado/serde_full_json_serialize.wado/User^serde_full_json_serialize.wado/Serialize::serialize<serde_full_json_serialize.wado/JsonSerializer>$spec0$sroa[s.w]"(user.name, user.location, user.tags, writer_49));
-    writer_11 = writer_49.buf;
-    rx_20 = builtin::i32_wrap_i64(local.tee packed_19("wasi/stream-new"()));
-    tx_21 = builtin::i32_wrap_i64(packed_19 >> 32_i64);
-    rx_20 = "serde_full_json_serialize.wado/$cm_binding__Stdout_write_via_stream"(rx_20);
-    "core:rt/write_string_to_stream$dae[add_newline]"(tx_21, writer_11.repr, writer_11.used);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(rx_20);
->>>>>>> origin/main
     user = struct.new "serde_full_json_serialize.wado//User" { name: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(66, 111, 98), used: 3 }, age: 25, active: 0, location: ref.null none, tags: struct.new "core:prelude//List<core:prelude/string.wado/String>" { repr: array.new_fixed<ref "core:prelude/string.wado//String">(), used: 0 } };
-<<<<<<< HEAD
     writer_44 = struct.new "serde_full_json_serialize.wado//JsonWriter" { buf: struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 } };
-    drop("serde_full_json_serialize.wado/serde_full_json_serialize.wado/User^serde_full_json_serialize.wado/Serialize::serialize<serde_full_json_serialize.wado/JsonSerializer>$spec1$sroa[s.w]"(user, writer_44));
+    drop("serde_full_json_serialize.wado/serde_full_json_serialize.wado/User^serde_full_json_serialize.wado/Serialize::serialize<serde_full_json_serialize.wado/JsonSerializer>$spec1$sroa[s.w]"(user.name, user.location, user.tags, writer_44));
     writer_12 = writer_44.buf;
     $sroa_$pattern_temp_0_0_77 = struct.new "core:prelude//$Resource" { value: builtin::i32_wrap_i64(local.tee $cm_pair_4_9("wasi/stream-new"())) };
     $sroa_$pattern_temp_0_1_78 = struct.new "core:prelude//$Resource" { value: builtin::i32_wrap_i64($cm_pair_4_9 >> 32_i64) };
     $sroa_$pattern_temp_0_0_77 = "serde_full_json_serialize.wado/$cm_binding__Stdout_write_via_stream"($sroa_$pattern_temp_0_0_77);
     "core:rt/write_string_to_stream$dae[add_newline]"($sroa_$pattern_temp_0_1_78, writer_12.repr, writer_12.used);
     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"($sroa_$pattern_temp_0_0_77.value);
-||||||| aa8fbf23e
-    writer_49 = struct.new "serde_full_json_serialize.wado//JsonWriter" { buf: struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 } };
-    drop("serde_full_json_serialize.wado/serde_full_json_serialize.wado/User^serde_full_json_serialize.wado/Serialize::serialize<serde_full_json_serialize.wado/JsonSerializer>$spec1$sroa[s.w]"(user, writer_49));
-    writer_11 = writer_49.buf;
-    rx_20 = builtin::i32_wrap_i64(local.tee packed_19("wasi/stream-new"()));
-    tx_21 = builtin::i32_wrap_i64(packed_19 >> 32_i64);
-    rx_20 = "serde_full_json_serialize.wado/$cm_binding__Stdout_write_via_stream"(rx_20);
-    "core:rt/write_string_to_stream$dae[add_newline]"(tx_21, writer_11.repr, writer_11.used);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(rx_20);
-=======
-    writer_49 = struct.new "serde_full_json_serialize.wado//JsonWriter" { buf: struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 } };
-    drop("serde_full_json_serialize.wado/serde_full_json_serialize.wado/User^serde_full_json_serialize.wado/Serialize::serialize<serde_full_json_serialize.wado/JsonSerializer>$spec1$sroa[s.w]"(user.name, user.location, user.tags, writer_49));
-    writer_11 = writer_49.buf;
-    rx_20 = builtin::i32_wrap_i64(local.tee packed_19("wasi/stream-new"()));
-    tx_21 = builtin::i32_wrap_i64(packed_19 >> 32_i64);
-    rx_20 = "serde_full_json_serialize.wado/$cm_binding__Stdout_write_via_stream"(rx_20);
-    "core:rt/write_string_to_stream$dae[add_newline]"(tx_21, writer_11.repr, writer_11.used);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(rx_20);
->>>>>>> origin/main
 }
 
 fn "serde_full_json_serialize.wado/$cm_binding__Stdout_write_via_stream"(data) with Stdout {
@@ -753,33 +701,15 @@ fn "core:rt/write_string_to_stream$dae[add_newline]"(tx, $mv$message$repr, $mv$m
     "wasi/stream-drop-writable"(tx.value);
 }
 
-<<<<<<< HEAD
-fn "core:rt/log_stderr"(message) {
+fn "core:rt/log_stderr"($mv$message$repr, $mv$message$used) {
     let $cm_pair_4: i64;
     let $sroa_$pattern_temp_0_0_6: i32;
     let $sroa_$pattern_temp_0_1_7: ref "core:prelude//$Resource";
     $sroa_$pattern_temp_0_0_6 = builtin::i32_wrap_i64(local.tee $cm_pair_4("wasi/stream-new"()));
     $sroa_$pattern_temp_0_1_7 = struct.new "core:prelude//$Resource" { value: builtin::i32_wrap_i64($cm_pair_4 >> 32_i64) };
     $sroa_$pattern_temp_0_0_6 = "wasi/wasi:cli/Stderr::write_via_stream"($sroa_$pattern_temp_0_0_6);
-    "core:rt/write_string_to_stream$dae[add_newline]"($sroa_$pattern_temp_0_1_7, message.repr, message.used);
+    "core:rt/write_string_to_stream$dae[add_newline]"($sroa_$pattern_temp_0_1_7, $mv$message$repr, $mv$message$used);
     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"($sroa_$pattern_temp_0_0_6);
-||||||| aa8fbf23e
-fn "core:rt/log_stderr"(message) {
-    let $mv$$pattern_temp_0$0: i32;
-    let $mv$$pattern_temp_0$1: i32;
-    multivalue_bind [$mv$$pattern_temp_0$0, $mv$$pattern_temp_0$1] = "core:rt/core/rt/cm_stream_pair<u8>"("wasi/stream-new"());
-    $mv$$pattern_temp_0$0 = "wasi/wasi:cli/Stderr::write_via_stream"($mv$$pattern_temp_0$0);
-    "core:rt/write_string_to_stream$dae[add_newline]"($mv$$pattern_temp_0$1, message.repr, message.used);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"($mv$$pattern_temp_0$0);
-=======
-fn "core:rt/log_stderr"($mv$message$repr, $mv$message$used) {
-    let $mv$$pattern_temp_0$0: i32;
-    let $mv$$pattern_temp_0$1: i32;
-    multivalue_bind [$mv$$pattern_temp_0$0, $mv$$pattern_temp_0$1] = "core:rt/core/rt/cm_stream_pair<u8>"("wasi/stream-new"());
-    $mv$$pattern_temp_0$0 = "wasi/wasi:cli/Stderr::write_via_stream"($mv$$pattern_temp_0$0);
-    "core:rt/write_string_to_stream$dae[add_newline]"($mv$$pattern_temp_0$1, $mv$message$repr, $mv$message$used);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"($mv$$pattern_temp_0$0);
->>>>>>> origin/main
 }
 
 fn "core:rt/panic"($mv$message$repr, $mv$message$used) {

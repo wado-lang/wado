@@ -110,13 +110,7 @@ type "functype//reflect_variant_members.wado/$cm_export__$test_2_construct_build
 
 type "functype//reflect_variant_members.wado/$cm_export__$test_trap_3_extract_on_a_non_live_case_traps" = fn();  // TypeId(28)
 
-<<<<<<< HEAD
-type "functype//reflect_variant_members.wado/$test_1_extract_returns_the_typed_payload$cold0" = fn(ref "core:prelude/string.wado//String");  // TypeId(29)
-||||||| aa8fbf23e
-type "functype//reflect_variant_members.wado/$test_1_extract_returns_the_typed_payload$cold0" = fn(ref "core:prelude/string.wado//String");  // TypeId(28)
-=======
-type "functype//reflect_variant_members.wado/$test_1_extract_returns_the_typed_payload$cold0" = fn(ref Array<u8>, i32);  // TypeId(28)
->>>>>>> origin/main
+type "functype//reflect_variant_members.wado/$test_1_extract_returns_the_typed_payload$cold0" = fn(ref Array<u8>, i32);  // TypeId(29)
 
 type "functype//reflect_variant_members.wado/$test_2_construct_builds_each_case$cold1" = fn(ref "reflect_variant_members.wado//Shape");  // TypeId(30)
 
@@ -158,13 +152,7 @@ type "functype//core:prelude/primitive.wado/fmt_float_special" = fn(ref "core:pr
 
 type "functype//core:rt/write_string_to_stream$dae[add_newline]" = fn(ref "core:prelude//$Resource", ref Array<u8>, i32);  // TypeId(49)
 
-<<<<<<< HEAD
-type "functype//core:rt/panic" = fn(ref "core:prelude/string.wado//String");  // TypeId(50)
-||||||| aa8fbf23e
-type "functype//core:rt/panic" = fn(ref "core:prelude/string.wado//String");  // TypeId(49)
-=======
-type "functype//core:rt/panic" = fn(ref Array<u8>, i32);  // TypeId(49)
->>>>>>> origin/main
+type "functype//core:rt/panic" = fn(ref Array<u8>, i32);  // TypeId(50)
 
 type "functype//core:rt/cm_stream_write_raw_all_u8" = fn(i32, ref Array<u8>, i32, i32) -> "core:prelude/types.wado//enum:CopyResult";  // TypeId(51)
 
@@ -1470,37 +1458,15 @@ fn "core:rt/write_string_to_stream$dae[add_newline]"(tx, $mv$message$repr, $mv$m
     "wasi/stream-drop-writable"(tx.value);
 }
 
-<<<<<<< HEAD
-fn "core:rt/panic"(message) {
+fn "core:rt/panic"($mv$message$repr, $mv$message$used) {
     let $cm_pair_4: i64;
     let $sroa_$pattern_temp_0_0_6: i32;
     let $sroa_$pattern_temp_0_1_7: ref "core:prelude//$Resource";
     $sroa_$pattern_temp_0_0_6 = builtin::i32_wrap_i64(local.tee $cm_pair_4("wasi/stream-new"()));
     $sroa_$pattern_temp_0_1_7 = struct.new "core:prelude//$Resource" { value: builtin::i32_wrap_i64($cm_pair_4 >> 32_i64) };
     $sroa_$pattern_temp_0_0_6 = "wasi/wasi:cli/Stderr::write_via_stream"($sroa_$pattern_temp_0_0_6);
-    "core:rt/write_string_to_stream$dae[add_newline]"($sroa_$pattern_temp_0_1_7, message.repr, message.used);
+    "core:rt/write_string_to_stream$dae[add_newline]"($sroa_$pattern_temp_0_1_7, $mv$message$repr, $mv$message$used);
     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"($sroa_$pattern_temp_0_0_6);
-||||||| aa8fbf23e
-fn "core:rt/panic"(message) {
-    let packed: i64;
-    let rx_8: i32;
-    let tx_9: i32;
-    rx_8 = builtin::i32_wrap_i64(local.tee packed("wasi/stream-new"()));
-    tx_9 = builtin::i32_wrap_i64(packed >> 32_i64);
-    rx_8 = "wasi/wasi:cli/Stderr::write_via_stream"(rx_8);
-    "core:rt/write_string_to_stream$dae[add_newline]"(tx_9, message.repr, message.used);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(rx_8);
-=======
-fn "core:rt/panic"($mv$message$repr, $mv$message$used) {
-    let packed: i64;
-    let rx_8: i32;
-    let tx_9: i32;
-    rx_8 = builtin::i32_wrap_i64(local.tee packed("wasi/stream-new"()));
-    tx_9 = builtin::i32_wrap_i64(packed >> 32_i64);
-    rx_8 = "wasi/wasi:cli/Stderr::write_via_stream"(rx_8);
-    "core:rt/write_string_to_stream$dae[add_newline]"(tx_9, $mv$message$repr, $mv$message$used);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(rx_8);
->>>>>>> origin/main
     cold_path;
     unreachable;
 }

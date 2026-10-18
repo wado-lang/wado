@@ -1172,13 +1172,14 @@ fn "httpbin.wado/route"($mv$request$method, $mv$request$path_with_query, $mv$req
     let $v3_seen_283: bool;
     let $v4_284: bool;
     let part_350: ref Array<u8>;
+    let self_395: ref "core:prelude/string.wado//StrCharIter";
     let f: ref "httpbin.wado//$Closure_0";
     let b_402: ref Array<u8>;
     let self_418: ref "core:collections/entries.wado//EntryLog<core:prelude/string.wado/String,core:value/Value>";
     let e_421: i32;
     let b_424: i32;
     let $sroa_$base_0_body_549: ref "core:prelude/string.wado//String";
-    let $hfs_call_575: ref "httpbin.wado//MockResponse";
+    let $hfs_call_571: ref "httpbin.wado//MockResponse";
     let $match_scrut_1: ref null "tuple//[core:prelude/string.wado/StrSlice, core:prelude/string.wado/StrSlice]";
     path = local.tee $pattern_temp_0((if ref.is_null(local.tee $match_scrut_1($inline_core_prelude_string_wado_StrSlice__split_once_core_prelude_string_wado_String__1: block -> ref null "tuple//[core:prelude/string.wado/StrSlice, core:prelude/string.wado/StrSlice]" {
         self_274 = struct.new "core:prelude/string.wado//StrSlice" { repr: local.tee repr_271($mv$request$path_with_query.repr), start: 0, end: $mv$request$path_with_query.used };
@@ -1341,8 +1342,9 @@ fn "httpbin.wado/route"($mv$request$method, $mv$request$path_with_query, $mv$req
             builtin::array_copy<u8>(local.tee $array_clone_dst_29(builtin::array_new<u8>($load_37)), 0, $array_clone_src_28, 0, $load_37);
             $mv$$local_69$0 = $mv$$local_69$0 + 1;
             self_48 = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(47), used: 1 };
+            self_395 = struct.new "core:prelude/string.wado//StrCharIter" { repr: $array_clone_dst_29, used: $load_37, byte_index: 0 };
             f = struct.new "httpbin.wado//$Closure_0" {  };
-            other_49 = "core:prelude/string.wado/core:prelude/string.wado/String::from_iter<core:prelude/traits.wado/IterMap<core:prelude/string.wado/StrCharIter,fn mut(char)->char>>"(struct.new "core:prelude/traits.wado//IterMap<core:prelude/string.wado/StrCharIter,fn mut(char)->char>" { inner: struct.new "core:prelude/string.wado//StrCharIter" { repr: $array_clone_dst_29, used: $load_37, byte_index: 0 }, f: struct.new "canonical//CanonicalClosure_0" { env: f, func: ref.func "closure/httpbin.wado/$closure_wrapper_0" } });
+            other_49 = "core:prelude/string.wado/core:prelude/string.wado/String::from_iter<core:prelude/traits.wado/IterMap<core:prelude/string.wado/StrCharIter,fn mut(char)->char>>"(struct.new "core:prelude/traits.wado//IterMap<core:prelude/string.wado/StrCharIter,fn mut(char)->char>" { inner: self_395, f: struct.new "canonical//CanonicalClosure_0" { env: f, func: ref.func "closure/httpbin.wado/$closure_wrapper_0" } });
             "core:prelude/string.wado/core:prelude/string.wado/String::push_str<&core:prelude/string.wado/String>"(local.tee result(struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(1 + other_49.used), used: 0 }), self_48);
             "core:prelude/string.wado/core:prelude/string.wado/String::push_str<&core:prelude/string.wado/String>"(result, other_49);
             if $inline_core_prelude_array_wado_seq_eq_u8__14: block -> bool {
@@ -1428,9 +1430,9 @@ fn "httpbin.wado/route"($mv$request$method, $mv$request$path_with_query, $mv$req
                     $iter_0.index = $mv$$local_69$0;
                     return struct.new "httpbin.wado//MockResponse" { status: 405, content_type: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("application/json"), used: 16 }, body: $sroa_$base_0_body_549 };
                 }
-                $hfs_call_575 = "httpbin.wado/echo"($mv$request$method, $mv$request$path_with_query, $mv$request$headers, $mv$request$body, path, query.repr, query.used, $mv$$local_69$1);
+                $hfs_call_571 = "httpbin.wado/echo"($mv$request$method, $mv$request$path_with_query, $mv$request$headers, $mv$request$body, path, query.repr, query.used, $mv$$local_69$1);
                 $iter_0.index = $mv$$local_69$0;
-                return $hfs_call_575;
+                return $hfs_call_571;
             }
             continue l75;
         };

@@ -179,13 +179,7 @@ type "functype//core:prelude/primitive.wado/count_digits_u64" = fn(u64) -> i32; 
 
 type "functype//core:rt/write_string_to_stream$dae[add_newline]" = fn(ref "core:prelude//$Resource", ref Array<u8>, i32);  // TypeId(64)
 
-<<<<<<< HEAD
-type "functype//core:rt/panic" = fn(ref "core:prelude/string.wado//String");  // TypeId(65)
-||||||| aa8fbf23e
-type "functype//core:rt/panic" = fn(ref "core:prelude/string.wado//String");  // TypeId(64)
-=======
-type "functype//core:rt/panic" = fn(ref Array<u8>, i32);  // TypeId(64)
->>>>>>> origin/main
+type "functype//core:rt/panic" = fn(ref Array<u8>, i32);  // TypeId(65)
 
 type "functype//core:rt/cm_stream_write_raw_all_u8" = fn(i32, ref Array<u8>, i32, i32) -> "core:prelude/types.wado//enum:CopyResult";  // TypeId(66)
 
@@ -519,23 +513,23 @@ fn "bug_for_of_pattern_match_ergonomics.wado/$test_7_enumerate_over__list"() {
     let $match_9: ref null "tuple//[i32, &bug_for_of_pattern_match_ergonomics.wado/P]";
     let idx: i32;
     let ref_val: ref "bug_for_of_pattern_match_ergonomics.wado//P";
-    let $sroa_$iter_0_count_29: i32;
-    let $sroa_$sroa_$iter_0_inner_28_index_31: i32;
-    let $sroa_v_repr_33: ref "Array<bug_for_of_pattern_match_ergonomics.wado/P>";
+    let $sroa_$iter_0_count_28: i32;
+    let $sroa_self_repr_29: ref "Array<bug_for_of_pattern_match_ergonomics.wado/P>";
+    let $sroa_self_index_30: i32;
     ps = struct.new "core:prelude//List<bug_for_of_pattern_match_ergonomics.wado/P>" { repr: array.new_fixed<ref "bug_for_of_pattern_match_ergonomics.wado//P">(struct.new "bug_for_of_pattern_match_ergonomics.wado//P" { x: 1, y: 2 }, struct.new "bug_for_of_pattern_match_ergonomics.wado//P" { x: 3, y: 4 }), used: 2 };
     s = 0;
-    $sroa_v_repr_33 = ps.repr;
-    $sroa_$sroa_$iter_0_inner_28_index_31 = 0;
-    $sroa_$iter_0_count_29 = 0;
+    $sroa_self_repr_29 = ps.repr;
+    $sroa_self_index_30 = 0;
+    $sroa_$iter_0_count_28 = 0;
     b41: block {
         l42: loop {
             if ref.is_null(local.tee $match_9($inline_core_prelude_traits_wado_IterEnumerate_core_prelude_slice_wado_SliceRefIter_bug_for_of_pattern_match_ergonomics_wado_P___core_prelude_traits_wado_Iterator__next_4: block -> ref null "tuple//[i32, &bug_for_of_pattern_match_ergonomics.wado/P]" {
                 $fused_$inline_core_prelude_slice_wado_SliceRefIter_bug_for_of_pattern_match_ergonomics_wado_P__core_prelude_traits_wado_Iterator__next_5: block {
-                    break_if $fused_$inline_core_prelude_slice_wado_SliceRefIter_bug_for_of_pattern_match_ergonomics_wado_P__core_prelude_traits_wado_Iterator__next_5 $sroa_$sroa_$iter_0_inner_28_index_31 >= 2;
-                    ref_val = builtin::array_get_value<ref "bug_for_of_pattern_match_ergonomics.wado//P">($sroa_v_repr_33, $sroa_$sroa_$iter_0_inner_28_index_31);
-                    $sroa_$sroa_$iter_0_inner_28_index_31 = $sroa_$sroa_$iter_0_inner_28_index_31 + 1;
-                    idx = $sroa_$iter_0_count_29;
-                    $sroa_$iter_0_count_29 = $sroa_$iter_0_count_29 + 1;
+                    break_if $fused_$inline_core_prelude_slice_wado_SliceRefIter_bug_for_of_pattern_match_ergonomics_wado_P__core_prelude_traits_wado_Iterator__next_5 $sroa_self_index_30 >= 2;
+                    ref_val = builtin::array_get_value<ref "bug_for_of_pattern_match_ergonomics.wado//P">($sroa_self_repr_29, $sroa_self_index_30);
+                    $sroa_self_index_30 = $sroa_self_index_30 + 1;
+                    idx = $sroa_$iter_0_count_28;
+                    $sroa_$iter_0_count_28 = $sroa_$iter_0_count_28 + 1;
                     break $inline_core_prelude_traits_wado_IterEnumerate_core_prelude_slice_wado_SliceRefIter_bug_for_of_pattern_match_ergonomics_wado_P___core_prelude_traits_wado_Iterator__next_4: struct.new "tuple//[i32, &bug_for_of_pattern_match_ergonomics.wado/P]" { 0: idx, 1: ref_val };
                 };
                 break $inline_core_prelude_traits_wado_IterEnumerate_core_prelude_slice_wado_SliceRefIter_bug_for_of_pattern_match_ergonomics_wado_P___core_prelude_traits_wado_Iterator__next_4: ref.null none;
@@ -1382,37 +1376,15 @@ fn "core:rt/write_string_to_stream$dae[add_newline]"(tx, $mv$message$repr, $mv$m
     "wasi/stream-drop-writable"(tx.value);
 }
 
-<<<<<<< HEAD
-fn "core:rt/panic"(message) {
+fn "core:rt/panic"($mv$message$repr, $mv$message$used) {
     let $cm_pair_4: i64;
     let $sroa_$pattern_temp_0_0_6: i32;
     let $sroa_$pattern_temp_0_1_7: ref "core:prelude//$Resource";
     $sroa_$pattern_temp_0_0_6 = builtin::i32_wrap_i64(local.tee $cm_pair_4("wasi/stream-new"()));
     $sroa_$pattern_temp_0_1_7 = struct.new "core:prelude//$Resource" { value: builtin::i32_wrap_i64($cm_pair_4 >> 32_i64) };
     $sroa_$pattern_temp_0_0_6 = "wasi/wasi:cli/Stderr::write_via_stream"($sroa_$pattern_temp_0_0_6);
-    "core:rt/write_string_to_stream$dae[add_newline]"($sroa_$pattern_temp_0_1_7, message.repr, message.used);
+    "core:rt/write_string_to_stream$dae[add_newline]"($sroa_$pattern_temp_0_1_7, $mv$message$repr, $mv$message$used);
     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"($sroa_$pattern_temp_0_0_6);
-||||||| aa8fbf23e
-fn "core:rt/panic"(message) {
-    let packed: i64;
-    let rx_8: i32;
-    let tx_9: i32;
-    rx_8 = builtin::i32_wrap_i64(local.tee packed("wasi/stream-new"()));
-    tx_9 = builtin::i32_wrap_i64(packed >> 32_i64);
-    rx_8 = "wasi/wasi:cli/Stderr::write_via_stream"(rx_8);
-    "core:rt/write_string_to_stream$dae[add_newline]"(tx_9, message.repr, message.used);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(rx_8);
-=======
-fn "core:rt/panic"($mv$message$repr, $mv$message$used) {
-    let packed: i64;
-    let rx_8: i32;
-    let tx_9: i32;
-    rx_8 = builtin::i32_wrap_i64(local.tee packed("wasi/stream-new"()));
-    tx_9 = builtin::i32_wrap_i64(packed >> 32_i64);
-    rx_8 = "wasi/wasi:cli/Stderr::write_via_stream"(rx_8);
-    "core:rt/write_string_to_stream$dae[add_newline]"(tx_9, $mv$message$repr, $mv$message$used);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(rx_8);
->>>>>>> origin/main
     cold_path;
     unreachable;
 }

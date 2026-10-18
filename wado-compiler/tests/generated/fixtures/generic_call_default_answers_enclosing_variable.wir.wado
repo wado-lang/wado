@@ -121,33 +121,15 @@ type "functype//core:prelude/primitive.wado/write_decimal_digits" = fn(ref Array
 
 type "functype//core:prelude/primitive.wado/count_digits_u64" = fn(u64) -> i32;  // TypeId(38)
 
-<<<<<<< HEAD
-type "functype//core:prelude/types.wado/write_copy_is_final" = fn(ref "core:prelude/types.wado//StreamWrite") -> bool;  // TypeId(39)
-||||||| aa8fbf23e
-type "functype//core:prelude/types.wado/write_copy_is_final" = fn(ref "core:prelude/types.wado//StreamWrite") -> bool;  // TypeId(38)
-=======
-type "functype//core:prelude/types.wado/write_copy_is_final" = fn(i32, "core:prelude/types.wado//enum:CopyResult") -> bool;  // TypeId(38)
->>>>>>> origin/main
+type "functype//core:prelude/types.wado/write_copy_is_final" = fn(i32, "core:prelude/types.wado//enum:CopyResult") -> bool;  // TypeId(39)
 
 type "functype//core:rt/gc_array_to_memory" = fn(ref Array<u8>, i32, i32, i32);  // TypeId(40)
 
 type "functype//core:rt/write_string_to_stream$dae[add_newline]" = fn(ref "core:prelude//$Resource", ref Array<u8>, i32);  // TypeId(41)
 
-<<<<<<< HEAD
-type "functype//core:rt/log_stderr" = fn(ref "core:prelude/string.wado//String");  // TypeId(42)
-||||||| aa8fbf23e
-type "functype//core:rt/log_stderr" = fn(ref "core:prelude/string.wado//String");  // TypeId(41)
-=======
-type "functype//core:rt/log_stderr" = fn(ref Array<u8>, i32);  // TypeId(41)
->>>>>>> origin/main
+type "functype//core:rt/log_stderr" = fn(ref Array<u8>, i32);  // TypeId(42)
 
-<<<<<<< HEAD
-type "functype//core:rt/panic" = fn(ref "core:prelude/string.wado//String");  // TypeId(43)
-||||||| aa8fbf23e
-type "functype//core:rt/panic" = fn(ref "core:prelude/string.wado//String");  // TypeId(42)
-=======
-type "functype//core:rt/panic" = fn(ref Array<u8>, i32);  // TypeId(42)
->>>>>>> origin/main
+type "functype//core:rt/panic" = fn(ref Array<u8>, i32);  // TypeId(43)
 
 type "functype//core:rt/cm_lower_list_u8" = fn(ref Array<u8>, i32, i32) -> i64;  // TypeId(44)
 
@@ -242,6 +224,8 @@ import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 import fn wasi/stream-new from "wasi/stream-new";
 import fn wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code from "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code";
 
+global global:generic_call_default_answers_enclosing_variable.wado::$const_obj_11: ref Array<i64> = array.new_fixed<i64>(1_i64, 2_i64);
+
 fn "generic_call_default_answers_enclosing_variable.wado/$test_0_through_a_call"() {
     let $v0: i64;
     let $v2: i32;
@@ -250,60 +234,62 @@ fn "generic_call_default_answers_enclosing_variable.wado/$test_0_through_a_call"
     let $v3_seen: bool;
     let elements_25: ref Array<i64>;
     let self_27: ref "core:prelude/traits.wado//IterMap<core:prelude/slice.wado/SliceValueIter<i64>,fn mut(i64)->generic_call_default_answers_enclosing_variable.wado/P>";
+    let self_29: ref "core:prelude/slice.wado//SliceValueIter<i64>";
     let f_30: ref "generic_call_default_answers_enclosing_variable.wado//$Closure_2";
     let result_32: ref "core:prelude//List<generic_call_default_answers_enclosing_variable.wado/P>";
     let item_33: ref "generic_call_default_answers_enclosing_variable.wado//P";
     let $local_3_34: ref null "generic_call_default_answers_enclosing_variable.wado//P";
     let f_39: ref "generic_call_default_answers_enclosing_variable.wado//$Closure_3";
     let result_41: ref "core:prelude//List<generic_call_default_answers_enclosing_variable.wado/P>";
-    let used_61: i32;
-    elements_25 = array.new_fixed<i64>(1_i64, 2_i64);
+    let used_60: i32;
+    self_29 = struct.new "core:prelude/slice.wado//SliceValueIter<i64>" { repr: local.tee elements_25(array.new_fixed<i64>(1_i64, 2_i64)), index: 0, end: 2 };
     f_30 = struct.new "generic_call_default_answers_enclosing_variable.wado//$Closure_2" {  };
-    self_27 = struct.new "core:prelude/traits.wado//IterMap<core:prelude/slice.wado/SliceValueIter<i64>,fn mut(i64)->generic_call_default_answers_enclosing_variable.wado/P>" { inner: struct.new "core:prelude/slice.wado//SliceValueIter<i64>" { repr: elements_25, index: 0, end: 2 }, f: struct.new "canonical//CanonicalClosure_0" { env: f_30, func: ref.func "closure/generic_call_default_answers_enclosing_variable.wado/$closure_wrapper_1" } };
+    self_27 = struct.new "core:prelude/traits.wado//IterMap<core:prelude/slice.wado/SliceValueIter<i64>,fn mut(i64)->generic_call_default_answers_enclosing_variable.wado/P>" { inner: self_29, f: struct.new "canonical//CanonicalClosure_0" { env: f_30, func: ref.func "closure/generic_call_default_answers_enclosing_variable.wado/$closure_wrapper_1" } };
     result_32 = struct.new "core:prelude//List<generic_call_default_answers_enclosing_variable.wado/P>" { repr: array.new_fixed<ref "generic_call_default_answers_enclosing_variable.wado//P">(), used: 0 };
     b0: block {
         l1: loop {
             if ref.is_null(local.tee $local_3_34("core:prelude/traits.wado/core:prelude/traits.wado/IterMap<core:prelude/slice.wado/SliceValueIter<i64>,fn mut(i64)->generic_call_default_answers_enclosing_variable.wado/P>^core:prelude/traits.wado/Iterator::next"(self_27))) == 0 {
                 item_33 = ref.as_non_null($local_3_34);
-                if @unlikely(local.tee used_61(result_32.used) >= builtin::array_len(result_32.repr)) {
+                if @unlikely(local.tee used_60(result_32.used) >= builtin::array_len(result_32.repr)) {
                     cold_path;
                     "core:prelude/list.wado/core:prelude/list.wado/List<generic_call_default_answers_enclosing_variable.wado/P>::grow"(result_32);
                 }
-                builtin::array_set<ref "generic_call_default_answers_enclosing_variable.wado//P">(result_32.repr, used_61, item_33);
-                result_32.used = used_61 + 1;
+                builtin::array_set<ref "generic_call_default_answers_enclosing_variable.wado//P">(result_32.repr, used_60, item_33);
+                result_32.used = used_60 + 1;
             } else {
                 break b0;
             }
             continue l1;
         };
     };
+    self_29 = struct.new "core:prelude/slice.wado//SliceValueIter<i64>" { repr: elements_25, index: 0, end: 2 };
     f_39 = struct.new "generic_call_default_answers_enclosing_variable.wado//$Closure_3" {  };
-    self_27 = struct.new "core:prelude/traits.wado//IterMap<core:prelude/slice.wado/SliceValueIter<i64>,fn mut(i64)->generic_call_default_answers_enclosing_variable.wado/P>" { inner: struct.new "core:prelude/slice.wado//SliceValueIter<i64>" { repr: elements_25, index: 0, end: 2 }, f: struct.new "canonical//CanonicalClosure_0" { env: f_39, func: ref.func "closure/generic_call_default_answers_enclosing_variable.wado/$closure_wrapper_2" } };
+    self_27 = struct.new "core:prelude/traits.wado//IterMap<core:prelude/slice.wado/SliceValueIter<i64>,fn mut(i64)->generic_call_default_answers_enclosing_variable.wado/P>" { inner: self_29, f: struct.new "canonical//CanonicalClosure_0" { env: f_39, func: ref.func "closure/generic_call_default_answers_enclosing_variable.wado/$closure_wrapper_2" } };
     result_41 = struct.new "core:prelude//List<generic_call_default_answers_enclosing_variable.wado/P>" { repr: array.new_fixed<ref "generic_call_default_answers_enclosing_variable.wado//P">(), used: 0 };
     b4: block {
         l5: loop {
             if ref.is_null(local.tee $local_3_34("core:prelude/traits.wado/core:prelude/traits.wado/IterMap<core:prelude/slice.wado/SliceValueIter<i64>,fn mut(i64)->generic_call_default_answers_enclosing_variable.wado/P>^core:prelude/traits.wado/Iterator::next"(self_27))) == 0 {
                 item_33 = ref.as_non_null($local_3_34);
-                if @unlikely(local.tee used_61(result_41.used) >= builtin::array_len(result_41.repr)) {
+                if @unlikely(local.tee used_60(result_41.used) >= builtin::array_len(result_41.repr)) {
                     cold_path;
                     "core:prelude/list.wado/core:prelude/list.wado/List<generic_call_default_answers_enclosing_variable.wado/P>::grow"(result_41);
                 }
-                builtin::array_set<ref "generic_call_default_answers_enclosing_variable.wado//P">(result_41.repr, used_61, item_33);
-                result_41.used = used_61 + 1;
+                builtin::array_set<ref "generic_call_default_answers_enclosing_variable.wado//P">(result_41.repr, used_60, item_33);
+                result_41.used = used_60 + 1;
             } else {
                 break b4;
             }
             continue l5;
         };
     };
-    used_61 = local.tee $v0(used_61 = result_32.used; if @unlikely(1 >= used_61) {
+    used_60 = local.tee $v0(used_60 = result_32.used; if @unlikely(1 >= used_60) {
         cold_path;
-        "generic_call_default_answers_enclosing_variable.wado/$test_0_through_a_call$cold1$dae[$contract_arg_0]"(used_61);
+        "generic_call_default_answers_enclosing_variable.wado/$test_0_through_a_call$cold1$dae[$contract_arg_0]"(used_60);
         unreachable;
     }; builtin::array_get_value<ref "generic_call_default_answers_enclosing_variable.wado//P">(result_32.repr, 1).c) == 2_i64;
     $v2_seen = 0;
     $v3_seen = 0;
-    if @unlikely((if used_61 -> i32 {
+    if @unlikely((if used_60 -> i32 {
         $v3 = $v2 = result_41.used; $v2_seen = 1; $v2 == 2;
         $v3_seen = 1;
         $v3;
@@ -311,7 +297,7 @@ fn "generic_call_default_answers_enclosing_variable.wado/$test_0_through_a_call"
         0;
     }) == 0) {
         cold_path;
-        "generic_call_default_answers_enclosing_variable.wado/$test_0_through_a_call$cold0"($v0, used_61, $v2, $v2_seen, $v3, $v3_seen);
+        "generic_call_default_answers_enclosing_variable.wado/$test_0_through_a_call$cold0"($v0, used_60, $v2, $v2_seen, $v3, $v3_seen);
         unreachable;
     }
 }
@@ -325,11 +311,10 @@ fn "generic_call_default_answers_enclosing_variable.wado/$test_1_through_a_closu
     let $v1_21: i32;
     let $v1_29: i32;
     let v_40: ref "core:prelude//List<generic_call_default_answers_enclosing_variable.wado/P>";
+    let self_62: ref "core:prelude/slice.wado//SliceValueIter<i64>";
     let f_63: ref "generic_call_default_answers_enclosing_variable.wado//$Closure_5";
-    let f_74: ref "generic_call_default_answers_enclosing_variable.wado//$Closure_1";
-    let $sroa_v_repr_76: ref Array<i64>;
-    $sroa_v_repr_76 = array.new_fixed<i64>(1_i64, 2_i64);
-    $v1_21 = local.tee $v0($v1_21 = local.tee v_40(ref.as_non_null(f_63 = struct.new "generic_call_default_answers_enclosing_variable.wado//$Closure_5" {  }; "core:prelude/traits.wado/core:prelude/traits.wado/IterMap<core:prelude/slice.wado/SliceValueIter<i64>,fn mut(i64)->generic_call_default_answers_enclosing_variable.wado/P>^core:prelude/traits.wado/Iterator::collect<core:prelude/list.wado/List<generic_call_default_answers_enclosing_variable.wado/P>>"(struct.new "core:prelude/traits.wado//IterMap<core:prelude/slice.wado/SliceValueIter<i64>,fn mut(i64)->generic_call_default_answers_enclosing_variable.wado/P>" { inner: struct.new "core:prelude/slice.wado//SliceValueIter<i64>" { repr: $sroa_v_repr_76, index: 0, end: 2 }, f: struct.new "canonical//CanonicalClosure_0" { env: f_63, func: ref.func "closure/generic_call_default_answers_enclosing_variable.wado/$closure_wrapper_3" } }))).used; if @unlikely(1 >= $v1_21) {
+    let f_73: ref "generic_call_default_answers_enclosing_variable.wado//$Closure_1";
+    $v1_21 = local.tee $v0($v1_21 = local.tee v_40(ref.as_non_null(self_62 = struct.new "core:prelude/slice.wado//SliceValueIter<i64>" { repr: global:generic_call_default_answers_enclosing_variable.wado::$const_obj_11, index: 0, end: 2 }; f_63 = struct.new "generic_call_default_answers_enclosing_variable.wado//$Closure_5" {  }; "core:prelude/traits.wado/core:prelude/traits.wado/IterMap<core:prelude/slice.wado/SliceValueIter<i64>,fn mut(i64)->generic_call_default_answers_enclosing_variable.wado/P>^core:prelude/traits.wado/Iterator::collect<core:prelude/list.wado/List<generic_call_default_answers_enclosing_variable.wado/P>>"(struct.new "core:prelude/traits.wado//IterMap<core:prelude/slice.wado/SliceValueIter<i64>,fn mut(i64)->generic_call_default_answers_enclosing_variable.wado/P>" { inner: self_62, f: struct.new "canonical//CanonicalClosure_0" { env: f_63, func: ref.func "closure/generic_call_default_answers_enclosing_variable.wado/$closure_wrapper_3" } }))).used; if @unlikely(1 >= $v1_21) {
         cold_path;
         "generic_call_default_answers_enclosing_variable.wado/$test_1_through_a_closure$cold2$dae[$contract_arg_1]"($v1_21);
         unreachable;
@@ -337,7 +322,7 @@ fn "generic_call_default_answers_enclosing_variable.wado/$test_1_through_a_closu
     $v2_seen = 0;
     $v3_seen = 0;
     if @unlikely(local.tee $v1_29((if $v1_21 -> i32 {
-        $v3 = $v2 = $sroa_v_repr_76 = array.new_fixed<i64>(1_i64, 2_i64); f_74 = struct.new "generic_call_default_answers_enclosing_variable.wado//$Closure_1" {  }; $v1_29 = local.tee v_40("core:prelude/traits.wado/core:prelude/traits.wado/IterMap<core:prelude/slice.wado/SliceValueIter<i64>,fn mut(i64)->generic_call_default_answers_enclosing_variable.wado/P>^core:prelude/traits.wado/Iterator::collect<core:prelude/list.wado/List<generic_call_default_answers_enclosing_variable.wado/P>>"(struct.new "core:prelude/traits.wado//IterMap<core:prelude/slice.wado/SliceValueIter<i64>,fn mut(i64)->generic_call_default_answers_enclosing_variable.wado/P>" { inner: struct.new "core:prelude/slice.wado//SliceValueIter<i64>" { repr: $sroa_v_repr_76, index: 0, end: 2 }, f: struct.new "canonical//CanonicalClosure_0" { env: f_74, func: ref.func "closure/generic_call_default_answers_enclosing_variable.wado/$closure_wrapper_0" } })).used; if @unlikely(0 >= $v1_29) {
+        $v3 = $v2 = self_62 = struct.new "core:prelude/slice.wado//SliceValueIter<i64>" { repr: global:generic_call_default_answers_enclosing_variable.wado::$const_obj_11, index: 0, end: 2 }; f_73 = struct.new "generic_call_default_answers_enclosing_variable.wado//$Closure_1" {  }; $v1_29 = local.tee v_40("core:prelude/traits.wado/core:prelude/traits.wado/IterMap<core:prelude/slice.wado/SliceValueIter<i64>,fn mut(i64)->generic_call_default_answers_enclosing_variable.wado/P>^core:prelude/traits.wado/Iterator::collect<core:prelude/list.wado/List<generic_call_default_answers_enclosing_variable.wado/P>>"(struct.new "core:prelude/traits.wado//IterMap<core:prelude/slice.wado/SliceValueIter<i64>,fn mut(i64)->generic_call_default_answers_enclosing_variable.wado/P>" { inner: self_62, f: struct.new "canonical//CanonicalClosure_0" { env: f_73, func: ref.func "closure/generic_call_default_answers_enclosing_variable.wado/$closure_wrapper_0" } })).used; if @unlikely(0 >= $v1_29) {
             cold_path;
             "generic_call_default_answers_enclosing_variable.wado/$test_1_through_a_closure$cold1$dae[$contract_arg_3]"($v1_29);
             unreachable;
@@ -669,33 +654,15 @@ fn "core:rt/write_string_to_stream$dae[add_newline]"(tx, $mv$message$repr, $mv$m
     "wasi/stream-drop-writable"(tx.value);
 }
 
-<<<<<<< HEAD
-fn "core:rt/log_stderr"(message) {
+fn "core:rt/log_stderr"($mv$message$repr, $mv$message$used) {
     let $cm_pair_4: i64;
     let $sroa_$pattern_temp_0_0_6: i32;
     let $sroa_$pattern_temp_0_1_7: ref "core:prelude//$Resource";
     $sroa_$pattern_temp_0_0_6 = builtin::i32_wrap_i64(local.tee $cm_pair_4("wasi/stream-new"()));
     $sroa_$pattern_temp_0_1_7 = struct.new "core:prelude//$Resource" { value: builtin::i32_wrap_i64($cm_pair_4 >> 32_i64) };
     $sroa_$pattern_temp_0_0_6 = "wasi/wasi:cli/Stderr::write_via_stream"($sroa_$pattern_temp_0_0_6);
-    "core:rt/write_string_to_stream$dae[add_newline]"($sroa_$pattern_temp_0_1_7, message.repr, message.used);
+    "core:rt/write_string_to_stream$dae[add_newline]"($sroa_$pattern_temp_0_1_7, $mv$message$repr, $mv$message$used);
     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"($sroa_$pattern_temp_0_0_6);
-||||||| aa8fbf23e
-fn "core:rt/log_stderr"(message) {
-    let $mv$$pattern_temp_0$0: i32;
-    let $mv$$pattern_temp_0$1: i32;
-    multivalue_bind [$mv$$pattern_temp_0$0, $mv$$pattern_temp_0$1] = "core:rt/core/rt/cm_stream_pair<u8>"("wasi/stream-new"());
-    $mv$$pattern_temp_0$0 = "wasi/wasi:cli/Stderr::write_via_stream"($mv$$pattern_temp_0$0);
-    "core:rt/write_string_to_stream$dae[add_newline]"($mv$$pattern_temp_0$1, message.repr, message.used);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"($mv$$pattern_temp_0$0);
-=======
-fn "core:rt/log_stderr"($mv$message$repr, $mv$message$used) {
-    let $mv$$pattern_temp_0$0: i32;
-    let $mv$$pattern_temp_0$1: i32;
-    multivalue_bind [$mv$$pattern_temp_0$0, $mv$$pattern_temp_0$1] = "core:rt/core/rt/cm_stream_pair<u8>"("wasi/stream-new"());
-    $mv$$pattern_temp_0$0 = "wasi/wasi:cli/Stderr::write_via_stream"($mv$$pattern_temp_0$0);
-    "core:rt/write_string_to_stream$dae[add_newline]"($mv$$pattern_temp_0$1, $mv$message$repr, $mv$message$used);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"($mv$$pattern_temp_0$0);
->>>>>>> origin/main
 }
 
 fn "core:rt/panic"($mv$message$repr, $mv$message$used) {
