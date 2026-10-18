@@ -2,7 +2,7 @@
 //! operation owes before it can emit anything.
 
 use { Extent } from "./extent.wado";
-use { Condition, Poly, owe } from "./poly.wado";
+use { Condition, Poly, owe_equal } from "./poly.wado";
 
 /// Whether a regrouping that has consumed `consumed` elements per step must
 /// take another part to reach `produced`: fewer, where both are numbers, and a
@@ -373,10 +373,8 @@ impl Shape {
         let mut conditions: List<Condition> = [];
         let difference = l.try_sub(&r)?.presumed(&mut conditions)?;
         let condition = `axis ${left.name} is ${l} on the left and ${r} on the right, and the two must be one length`;
-        for let slack of [difference, Poly::constant(0).try_sub(&difference)?] {
-            if owe(&mut conditions, op, &slack, condition).is_err() {
-                return null;
-            }
+        if owe_equal(&mut conditions, op, &difference, &Poly::constant(0), condition).is_err() {
+            return null;
         }
         return Option::Some(conditions);
     }

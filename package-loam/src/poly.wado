@@ -128,6 +128,18 @@ pub fn owe(conditions: &mut List<Condition>, site: &String, slack: &Poly, condit
     return Result::Ok(());
 }
 
+/// Owe `a == b` at `site`, as `owe` owes each of `a - b` and `b - a`.
+pub fn owe_equal(conditions: &mut List<Condition>, site: &String, a: &Poly, b: &Poly, condition: String) -> Result<(), String> {
+    let [Some(above), Some(below)] = [
+        a.try_sub(b),
+        b.try_sub(a),
+    ] else {
+        return Result::Err(`${*a} - ${*b} leaves i64`);
+    };
+    owe(conditions, site, &above, condition)?;
+    return owe(conditions, site, &below, condition);
+}
+
 /// `owe` for `Poly::presumed`: whether the reading holds, which it does not
 /// where no input meets it or no polynomial holds the slack.
 fn owes(conditions: &mut List<Condition>, origin: &String, slack: Option<Poly>, condition: String) -> bool {
