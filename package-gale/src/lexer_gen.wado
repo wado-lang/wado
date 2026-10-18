@@ -3617,7 +3617,7 @@ fn gen_lexer_leaf<S: AsStrSlice>(w: &mut CodeWriter, elem: &LexerElement, fail_a
         },
         AnyChar => {
             w.line(`if pos >= src.len() { ${fail_action}; }`);
-            w.line("pos = char_end(src, pos);");
+            w.line("pos = src.ceil_char_boundary(pos + 1);");
         },
         RuleRef(name) => {
             if name == "EOF" {
@@ -3655,7 +3655,7 @@ fn gen_char_class<S: AsStrSlice>(w: &mut CodeWriter, cc: &CharClass, fail_action
     if !cc.negated && ranges_are_ascii(&cc.ranges) {
         w.line("pos += 1;");
     } else {
-        w.line("pos = char_end(src, pos);");
+        w.line("pos = src.ceil_char_boundary(pos + 1);");
     }
 }
 
@@ -3941,7 +3941,7 @@ fn gen_lexer_not<S: AsStrSlice>(
     w.end();
     w.line(`pos = not_saved_${id};`);
     w.line(`if not_matched_${id} { ${fail_action}; }`);
-    w.line("pos = char_end(src, pos);");
+    w.line("pos = src.ceil_char_boundary(pos + 1);");
 }
 
 pub fn find_fragment<S: AsStrSlice>(all_rules: &List<LexerRule>, name: S) -> Option<&LexerRule> {
@@ -5364,7 +5364,7 @@ fn gen_second_char_dispatch(
     gen_group_calls(w, calls, &leading, needs_extras, has_actions, has_members);
     // Past the end, only a call that can end after one char matches, and the
     // NUL a missing char reads as runs every such call whichever arm it lands in.
-    w.line("let second_at = char_end(&lexer.src, start);");
+    w.line("let second_at = lexer.src.ceil_char_boundary(start + 1);");
     w.line("let second_char = if second_at < lexer.src.len() { char_at(&lexer.src, second_at) } else { '\\u{0}' };");
     w.begin("match second_char");
     for let arm of &arms {
@@ -5612,7 +5612,7 @@ fn gen_tokenize_fn<S: AsStrSlice>(
         String::from("best_end <= start");
     };
     w.begin(`if ${no_match_guard}`);
-    w.line("let error_end = char_end(&lexer.src, start);");
+    w.line("let error_end = lexer.src.ceil_char_boundary(start + 1);");
     w.line(
         "let _ = ts.push_token_flagged(TK_ERROR, start, error_end, triv_lo, ts.trivia_mark(), TokenFlags::LexError);",
     );

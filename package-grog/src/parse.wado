@@ -28,7 +28,7 @@ pub fn read<S: AsStrSlice>(source: S) -> Result<ProtoFile, String> {
     let mut reader = Reader {
         s: &result.cst,
         toks: &result.tokens,
-        starts: protobuf::line_starts(result.tokens.chars),
+        starts: protobuf::line_starts(&result.tokens.src),
         messages: [],
         enums: [],
     };
@@ -297,7 +297,7 @@ impl Reader {
     }
 
     fn line(&self, node: i32) -> i32 {
-        return protobuf::line_col_at(&self.starts, self.s.span(node).start).0;
+        return protobuf::line_at(&self.starts, self.s.span(node).start);
     }
 
     fn child(&self, node: i32, kind: protobuf::NodeKind) -> i32 {

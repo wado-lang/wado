@@ -2,7 +2,7 @@
 
 use { HashMap, HashSet, HashSeed } from "core:collections";
 use { AtnSim, ATN_RULE_STOP, ATN_TR_ATOM, ATN_TR_NOT_ATOM, ATN_TR_WILDCARD, ATN_TR_RULE } from "./atn.wado";
-use { char_at, char_end } from "./lex.wado";
+use { char_at } from "./lex.wado";
 
 global LATN_SEED: HashSeed = HashSeed::fixed(0xA4093822299F31D0, 0x082EFA98EC4E6C89);
 
@@ -195,7 +195,7 @@ internal fn latn_match(sim: &AtnSim, start_rule: i32, src: &StrSlice, start: i32
         let spent = clist;
         clist = nlist;
         nlist = spent;
-        pos = char_end(src, pos);
+        pos = src.ceil_char_boundary(pos + 1);
     }
     return best;
 }

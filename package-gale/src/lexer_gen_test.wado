@@ -193,9 +193,11 @@ test "gen_lexer: an alternation of single chars is one class test" {
 test "gen_lexer: an ASCII class reads one byte, any other class decodes a char" {
     let out = lexer_source("lexer grammar L; A : [a-z] ; B : [é] ; C : ~[a] ;");
     assert out.contains("if !(unchecked src.byte_at(pos) matches { b'a'..=b'z' }) { return -1; }\n    pos += 1;");
-    assert out.contains("if !(char_at(src, pos) matches { 'é' }) { return -1; }\n    pos = char_end(src, pos);");
     assert out.contains(
-        "if (unchecked src.byte_at(pos) matches { b'a' }) { return -1; }\n    pos = char_end(src, pos);",
+        "if !(char_at(src, pos) matches { 'é' }) { return -1; }\n    pos = src.ceil_char_boundary(pos + 1);",
+    );
+    assert out.contains(
+        "if (unchecked src.byte_at(pos) matches { b'a' }) { return -1; }\n    pos = src.ceil_char_boundary(pos + 1);",
     );
 }
 

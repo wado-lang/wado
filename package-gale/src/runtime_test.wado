@@ -4,8 +4,6 @@ use {
     span_text,
     push_escaped,
     char_at,
-    char_end,
-    char_start_before,
     char_count,
     char_pos_in_line,
     line_starts,
@@ -120,21 +118,13 @@ test "span_text copies a byte window of non-ASCII chars" {
     assert span_text(&src, 3, 3) == "";
 }
 
-test "the char steps decode one UTF-8 char at a time" {
+test "char_at decodes the UTF-8 char at a boundary" {
     let src = "aé日🎉b".as_str_slice();
-    let mut starts: List<i32> = [];
     let mut decoded: List<char> = [];
-    for let mut i = 0; i < src.len(); i = char_end(&src, i) {
-        starts.push(i);
+    for let mut i = 0; i < src.len(); i = src.ceil_char_boundary(i + 1) {
         decoded.push(char_at(&src, i));
     }
-    assert starts == [0, 1, 3, 6, 10];
     assert decoded == ['a', 'é', '日', '🎉', 'b'];
-    let mut back: List<i32> = [];
-    for let mut i = src.len(); i > 0; i = char_start_before(&src, i) {
-        back.push(char_start_before(&src, i));
-    }
-    assert back == [10, 6, 3, 1, 0];
     assert char_count(&src, 0, src.len()) == 5;
     assert char_count(&src, 1, 6) == 2;
 }
@@ -166,16 +156,24 @@ test "a column counts chars, not bytes" {
 }
 
 test "to_lexer_string reports char indices over a byte-offset stream" {
-    let mut ts = TokenStream::new("日本 x".as_str_slice());
+    let mut ts = TokenStream::new("日本 x\né y".as_str_slice());
     let lo = ts.trivia_mark();
     ts.push_token(0, 0, 6, lo, ts.trivia_mark());
     let lo_x = ts.trivia_mark();
     ts.push_trivia(1, 6, 7, 0);
     ts.push_token(0, 7, 8, lo_x, ts.trivia_mark());
-    ts.push_token(2, 8, 8, ts.trivia_mark(), ts.trivia_mark());
+    let lo_e = ts.trivia_mark();
+    ts.push_trivia(1, 8, 9, 0);
+    ts.push_token(0, 9, 11, lo_e, ts.trivia_mark());
+    let lo_y = ts.trivia_mark();
+    ts.push_trivia(1, 11, 12, 0);
+    ts.push_token(0, 12, 13, lo_y, ts.trivia_mark());
+    ts.push_token(2, 13, 13, ts.trivia_mark(), ts.trivia_mark());
     let expected = "[@0,0:1='日本',<1>,1:0]
 [@1,3:3='x',<1>,1:3]
-[@2,4:3='<EOF>',<-1>,1:4]
+[@2,5:5='é',<1>,2:0]
+[@3,7:7='y',<1>,2:2]
+[@4,8:7='<EOF>',<-1>,2:3]
 ";
     assert to_lexer_string(&ts, 2) == expected;
 }

@@ -1,4 +1,4 @@
-use { char_at, char_end, char_start_before, span_text } from "./lex.wado";
+use { char_at, span_text } from "./lex.wado";
 
 pub struct LexerView {
     src: &StrSlice,
@@ -13,13 +13,13 @@ impl LexerView {
             if i >= self.src.len() {
                 return -1;
             }
-            i = char_end(self.src, i);
+            i = self.src.ceil_char_boundary(i + 1);
         }
         for let mut step = 0; step > k; step -= 1 {
             if i == 0 {
                 return -1;
             }
-            i = char_start_before(self.src, i);
+            i = self.src.floor_char_boundary(i - 1);
         }
         return self.char_at(i);
     }

@@ -16,12 +16,12 @@ pub fn push_shifted(out: &mut List<Highlight>, captures: &List<Highlight>, offse
     }
 }
 
-fn push_escaped_upto(out: &mut String, source: &String, at: &mut i32, end: i32) {
+fn push_escaped_upto(out: &mut String, source: &StrSlice, at: &mut i32, end: i32) {
     let mut run = *at;
     for let mut i = *at; i < end; i += 1 {
-        let b = source.byte_at(i);
+        let b = unchecked source.byte_at(i);
         if b matches { b'&' | b'<' | b'>' | b'"' } {
-            out.push_str(source.as_str_slice().slice(run, i));
+            out.push_str(unchecked source.slice(run, i));
             out.push_str(match b {
                 b'&' => "&amp;",
                 b'<' => "&lt;",
@@ -31,7 +31,7 @@ fn push_escaped_upto(out: &mut String, source: &String, at: &mut i32, end: i32) 
             run = i + 1;
         }
     }
-    out.push_str(source.as_str_slice().slice(run, end));
+    out.push_str(unchecked source.slice(run, end));
     *at = end;
 }
 
@@ -40,6 +40,7 @@ fn push_escaped_upto(out: &mut String, source: &String, at: &mut i32, end: i32) 
 /// Captures of one class that touch share a span: a template literal is a
 /// token per character.
 pub fn render_html(source: &String, captures: &List<Highlight>) -> String {
+    let src = &source.as_str_slice();
     let mut out = String::with_capacity(source.len() * 5);
     let mut at = 0;
     let mut open: Option<String> = null;
@@ -50,17 +51,17 @@ pub fn render_html(source: &String, captures: &List<Highlight>) -> String {
             if open matches { Some(_) } {
                 out.push_str("</span>");
             }
-            push_escaped_upto(&mut out, source, &mut at, cap.start);
+            push_escaped_upto(&mut out, src, &mut at, cap.start);
             out.push_str("<span class=\"");
             out.push_str(&cap.class);
             out.push_str("\">");
             open = Option::Some(cap.class);
         }
-        push_escaped_upto(&mut out, source, &mut at, cap.end);
+        push_escaped_upto(&mut out, src, &mut at, cap.end);
     }
     if open matches { Some(_) } {
         out.push_str("</span>");
     }
-    push_escaped_upto(&mut out, source, &mut at, source.len());
+    push_escaped_upto(&mut out, src, &mut at, src.len());
     return out;
 }

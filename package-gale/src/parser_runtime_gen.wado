@@ -641,7 +641,7 @@ pub fn gen_parser_struct<S: AsStrSlice>(
         fln.add_param("i", "i32");
         fln.set_return_type("i32");
         fln.emit_begin(w);
-        w.line("return line_col_at(&self.tokens.src, &self.line_starts, self.tokens.starts[i]).0;");
+        w.line("return line_at(&self.line_starts, self.tokens.starts[i]);");
         w.end();
         w.blank();
 
@@ -698,7 +698,7 @@ pub fn gen_parser_struct<S: AsStrSlice>(
         fts.add_param("end", "i32");
         fts.set_return_type("String");
         fts.emit_begin(w);
-        w.line("return span_text(&self.tokens.src, start, i32::min(end, self.tokens.src.len()));");
+        w.line("return span_text(&self.tokens.src, start, end);");
         w.end();
         w.blank();
 

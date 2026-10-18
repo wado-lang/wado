@@ -98,7 +98,7 @@ fn locate(src: &StrSlice, roots: &List<[i32, String]>) -> List<InlinePath> {
             if b == b'\n' {
                 line += 1;
                 column = 1;
-            } else if b & 0xC0 != 0x80 {
+            } else if src.is_char_boundary(i) {
                 column += 1;
             }
             i += 1;

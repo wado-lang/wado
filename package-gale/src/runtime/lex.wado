@@ -15,23 +15,6 @@ impl Span {
     }
 }
 
-internal fn utf8_len(lead: u8) -> i32 {
-    if lead < 0x80 {
-        return 1;
-    }
-    if lead < 0xE0 {
-        return 2;
-    }
-    if lead < 0xF0 {
-        return 3;
-    }
-    return 4;
-}
-
-internal fn is_utf8_continuation(b: u8) -> bool {
-    return b & 0xC0 == 0x80;
-}
-
 internal fn char_at(src: &StrSlice, pos: i32) -> char
     contract 0 <= pos < src.len()
 {
@@ -42,28 +25,12 @@ internal fn char_at(src: &StrSlice, pos: i32) -> char
     return src.char_at_byte(pos);
 }
 
-internal fn char_end(src: &StrSlice, pos: i32) -> i32
-    contract 0 <= pos < src.len()
-{
-    return pos + utf8_len(unchecked src.byte_at(pos));
-}
-
-internal fn char_start_before(src: &StrSlice, pos: i32) -> i32
-    contract 0 < pos <= src.len()
-{
-    let mut i = pos - 1;
-    while i > 0 && is_utf8_continuation(unchecked src.byte_at(i)) {
-        i -= 1;
-    }
-    return i;
-}
-
 internal fn char_count(src: &StrSlice, start: i32, end: i32) -> i32
     contract 0 <= start <= end <= src.len()
 {
     let mut n = 0;
     for let mut i = start; i < end; i += 1 {
-        if !is_utf8_continuation(unchecked src.byte_at(i)) {
+        if src.is_char_boundary(i) {
             n += 1;
         }
     }
@@ -136,7 +103,7 @@ internal fn line_starts(src: &StrSlice) -> List<i32> {
     return starts;
 }
 
-internal fn line_col_at(src: &StrSlice, starts: &List<i32>, pos: i32) -> [i32, i32] {
+internal fn line_at(starts: &List<i32>, pos: i32) -> i32 {
     let mut lo = 0;
     let mut hi = starts.len() - 1;
     while lo < hi {
@@ -147,7 +114,12 @@ internal fn line_col_at(src: &StrSlice, starts: &List<i32>, pos: i32) -> [i32, i
             hi = mid - 1;
         }
     }
-    return [lo + 1, char_count(src, starts[lo], pos)];
+    return lo + 1;
+}
+
+internal fn line_col_at(src: &StrSlice, starts: &List<i32>, pos: i32) -> [i32, i32] {
+    let line = line_at(starts, pos);
+    return [line, char_count(src, starts[line - 1], pos)];
 }
 
 pub flags TokenFlags {
