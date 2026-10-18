@@ -1352,10 +1352,6 @@ pub fn attention_options(node: &Node) -> Result<AttentionOptions, InferError> {
     });
 }
 
-/// Whether `node` was given its operand `index`.
-pub fn has_operand(node: &Node, index: i32) -> bool {
-    return index < node.inputs.len() && node.inputs[index] != "";
-}
 
 /// The first present cache a `GroupQueryAttention` names, whose layout names
 /// the positions both caches hold.
@@ -1378,11 +1374,11 @@ fn attention(
 ) -> Result<List<Shape>, InferError> {
     let options = attention_options(node)?;
     for let index of [1, 2, 3, 4] {
-        if !has_operand(node, index) {
+        if !node.has_operand(index) {
             return Result::Err(refusal(node, `operand ${index} is absent, which only a packed or pastless form leaves`));
         }
     }
-    if has_operand(node, POSITION_IDS) || node.inputs.len() > ATTENTION_BIAS + 1 {
+    if node.has_operand(POSITION_IDS) || node.inputs.len() > ATTENTION_BIAS + 1 {
         return Result::Err(refusal(node, "position ids, sinks, cache scales and norm weights are not supported"));
     }
     let ranked = |index: i32, rank: i32| -> Result<Shape, InferError> {
@@ -1434,7 +1430,7 @@ fn attention(
         owe_equal(node, owed, &l, &last, "seqlens_k must be one short of the total")?;
     }
     if options.rotary {
-        if !has_operand(node, ROTARY_COS) || !has_operand(node, ROTARY_SIN) {
+        if !node.has_operand(ROTARY_COS) || !node.has_operand(ROTARY_SIN) {
             return Result::Err(refusal(node, "do_rotary needs the cos and sin caches"));
         }
         for let index of [ROTARY_COS, ROTARY_SIN] {
@@ -1446,7 +1442,7 @@ fn attention(
             owe(node, owed, slack, "the rotary cache must reach every position")?;
         }
     }
-    if has_operand(node, ATTENTION_BIAS) {
+    if node.has_operand(ATTENTION_BIAS) {
         let bias = ranked(ATTENTION_BIAS, 4)?;
         owe_equal(node, owed, &bias.axes[2].extent.poly(), &sequence, "the bias must cover the sequence")?;
         owe_equal(node, owed, &bias.axes[3].extent.poly(), &total, "the bias must cover the past and the sequence")?;
@@ -1679,10 +1675,9 @@ fn grouped_inputs(node: &Node, input: &Axis, per_group: &Axis, group: i32) -> Re
     return Result::Ok(Axis { name: input.name, extent });
 }
 
-/// Whether a `Gemm` was given its `C` operand, or a `Conv` its `B`. ONNX
-/// writes an absent optional operand as an empty name, or omits it.
+/// Whether a `Gemm` was given its `C` operand, or a `Conv` its `B`.
 pub fn has_bias(node: &Node) -> bool {
-    return node.inputs.len() >= 3 && node.inputs[2] != "";
+    return node.has_operand(2);
 }
 
 /// `Gemm`'s `alpha`, `beta`, `transA` and `transB`, each defaulted as ONNX

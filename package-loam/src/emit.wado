@@ -34,7 +34,6 @@ use {
     gather_axis,
     gemm_options,
     has_bias,
-    has_operand,
     is_reduction,
     named_present,
     range_bounds,
@@ -1131,18 +1130,18 @@ fn attention_call(node: &Node, checked: &Checked, exprs: &Operands) -> String {
     let k = shapes[node.inputs[1]];
     let past = shapes[node.inputs[3]];
     let total = shapes[named_present(node).unwrap()].axes[2].name;
-    let optional = |index: i32| if has_operand(node, index) {
+    let optional = |index: i32| if node.has_operand(index) {
         `Option::Some(${exprs.reference(&node.inputs[index])})`;
     } else {
         "null";
     };
-    let [pos, half] = if has_operand(node, ROTARY_COS) {
+    let [pos, half] = if node.has_operand(ROTARY_COS) {
         let cache = shapes[node.inputs[ROTARY_COS]];
         [cache.axes[0].name, cache.axes[1].name];
     } else {
         [q.axes[1].name, past.axes[3].name];
     };
-    let [bias_batch, bias_heads] = if has_operand(node, ATTENTION_BIAS) {
+    let [bias_batch, bias_heads] = if node.has_operand(ATTENTION_BIAS) {
         let bias = shapes[node.inputs[ATTENTION_BIAS]];
         [bias.axes[0].name, bias.axes[1].name];
     } else {

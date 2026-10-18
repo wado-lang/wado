@@ -917,7 +917,7 @@ pub fn axes_of(
     index: i32,
     attr: String,
 ) -> Result<Option<List<i64>>, String> {
-    if index < node.inputs.len() && node.inputs[index] != "" {
+    if node.has_operand(index) {
         return ints_of(&operand_known(node, known, index)?).map(|v| Option::Some(v));
     }
     let Some(a) = node.attr(attr) else {
@@ -940,7 +940,7 @@ pub fn polys_at(
     index: i32,
     attr: String,
 ) -> Result<Option<List<Poly>>, String> {
-    if index < node.inputs.len() && node.inputs[index] != "" {
+    if node.has_operand(index) {
         return operand_polys(node, known, index).map(|v| Option::Some(v));
     }
     return axes_of(node, known, index, attr).map(

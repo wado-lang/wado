@@ -390,6 +390,12 @@ impl Node {
         return self.inputs.position(|input| input == "").unwrap_or(self.inputs.len());
     }
 
+    /// Whether the node was given operand `index`. ONNX writes an absent
+    /// optional operand as an empty name, or omits it.
+    pub fn has_operand(&self, index: i32) -> bool {
+        return index < self.inputs.len() && self.inputs[index] != "";
+    }
+
     /// The attribute `name`, where the node carries it.
     pub fn attr<S: AsStrSlice>(&self, name: S) -> Option<Attr> {
         for let a of self.attrs {
