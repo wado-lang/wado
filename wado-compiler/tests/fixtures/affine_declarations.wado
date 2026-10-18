@@ -1,8 +1,5 @@
 // A declaration holding an affine value says so with `affine`; a tuple, an
 // anonymous struct and a newtype have no declaration to mark and infer it.
-// Each is move-only, which the move check holds to.
-
-use { println, Stdout } from "core:cli";
 
 pub resource Counter {
     fn bump(&self);
@@ -24,19 +21,12 @@ affine struct Bag {
 
 type Wrapped = Holder;
 
-fn describe(s: &Slot) -> String {
-    return match s {
-        Empty => "empty",
-        Held(h) => `held ${h.n}`,
-    };
-}
-
-export fn run() with Stdout {
+test {
     let slot: Slot = Empty;
-    println(describe(&slot));
+    assert slot matches { Empty };
     let bag = Bag { items: [] };
-    println(`${bag.items.len()}`);
+    assert bag.items.is_empty();
 }
 
 __DATA__
-{"stdout": "empty\n0\n"}
+{}

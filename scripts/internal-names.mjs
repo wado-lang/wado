@@ -14,7 +14,7 @@ import { rustFiles, stringLiterals } from "./rust-source.mjs";
 const ALLOWED = new Map([
   ["__DATA__", "the data-section marker, which source spells"],
   ["__", "the legacy prefix itself, testing a source-level field name"],
-  ["__cm_packed", "a field lib/core/prelude/types.wado declares"],
+  ["__cm_subtask","a field lib/core/prelude/types.wado declares"],
   ["__cm_outptr", "a field lib/core/prelude/types.wado declares"],
   ["__cm_size", "a field lib/core/prelude/types.wado declares"],
   ["__cm_align", "a field lib/core/prelude/types.wado declares"],

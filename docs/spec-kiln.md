@@ -399,7 +399,7 @@ export generate: func(
 <!-- {"source": "wado-compiler/lib/core/kiln.wado"} -->
 
 ```wado
-pub struct Request<T = NoOptions> {
+pub affine struct Request<T = NoOptions> {
     pub primary: InputFile,
     pub inputs: List<InputFile>,
     /// How the use site named this generator: its `module:` specifier as

@@ -1232,6 +1232,13 @@ affine struct Bag {
 }
 
 type Wrapped = Holder;
+
+test {
+    let slot: Slot = Empty;
+    assert slot matches { Empty };
+    let bag = Bag { items: [] };
+    assert bag.items.is_empty();
+}
 ```
 
 Rationale: [WEP: Affine Types](./wep-2026-10-17-affine-types.md).
