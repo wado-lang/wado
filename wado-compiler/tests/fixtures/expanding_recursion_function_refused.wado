@@ -1,0 +1,20 @@
+// A generic function that calls itself at a type built over its own type
+// parameter needs an instance for every depth, so it is refused rather than
+// instantiated forever.
+
+fn walk<S: AsStrSlice>(n: i32, s: S) -> i32 {
+    if n == 0 {
+        return s.len();
+    }
+    return walk(n - 1, &s);
+}
+
+export fn run() {
+    assert walk(3, "a") == 1;
+}
+
+__DATA__
+{
+    "compile_error": "expanding_recursion_function_refused.wado:5:1: analysis error: 'walk' reaches itself through a type argument built over its own type parameter, so each instance needs a larger one and they never end",
+    "compile_error_codes": ["EXPANDING_RECURSION"]
+}

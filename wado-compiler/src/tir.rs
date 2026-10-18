@@ -5950,6 +5950,17 @@ impl TypeTable {
         }
     }
 
+    /// How deep `id` nests types inside one another: 1 for a type built over
+    /// nothing, and one more than its deepest constituent otherwise.
+    pub fn nesting_depth(&self, id: TypeId) -> usize {
+        let mut deepest = 0;
+        self.any_constituent(id, &mut |t| {
+            deepest = deepest.max(self.nesting_depth(t));
+            false
+        });
+        deepest + 1
+    }
+
     /// Whether `f` holds of any type `id` is built over, through the
     /// constructors a use site substitutes into (`Self::subst_rec`).
     fn any_constituent(&self, id: TypeId, f: &mut dyn FnMut(TypeId) -> bool) -> bool {

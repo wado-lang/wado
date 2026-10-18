@@ -148,7 +148,7 @@ pub use lexer::{LexError, LexErrorKind, LexResult, lex, lex_in};
 pub use loader::{LoadError, LoadResult, ModuleLoader};
 pub use lower::lower;
 pub use module_source::ModuleSource;
-use monomorphize::lower_instance_patterns;
+use monomorphize::{Monomorphization, lower_instance_patterns};
 pub use monomorphize::monomorphize;
 pub use optimize::{OptLevel, optimize};
 pub use package::Package;
@@ -272,6 +272,18 @@ pub(crate) fn bail_with<H: CompilerHost>(
 }
 
 /// Report each synthesis failure, at what it concerns where it names that.
+/// Bail where a run of `mono` refused a template whose instances never end.
+fn refuse_expanding_instances<H: CompilerHost>(
+    mono: &Monomorphization,
+    logger: &Logger<'_, H>,
+) -> Result<(), Bail> {
+    let Some((module, diagnostic)) = mono.expanding_recursion() else {
+        return Ok(());
+    };
+    let _ = logger.error_in(&module, diagnostic);
+    Err(Bail)
+}
+
 fn bail_with_synthesis<H: CompilerHost>(
     logger: &Logger<'_, H>,
     errors: Vec<SynthesisError>,
@@ -2069,6 +2081,7 @@ fn compile_after_load<H: CompilerHost>(
         let _span = logger.span("monomorphize");
         lower::contract_checks::check_marked_calls(&flat);
         let mut mono = monomorphize(&mut flat);
+        refuse_expanding_instances(&mono, logger)?;
         #[cfg(debug_assertions)]
         link::assert_no_stub_shadowing(&flat.functions, "monomorphize");
 
@@ -2083,6 +2096,7 @@ fn compile_after_load<H: CompilerHost>(
         synthesis::effect_dispatch::rewrite_resource_calls_monomorphized(&mut flat);
         synthesis::cm_binding::rewrite_async_primitives_monomorphized(&mut flat, validated);
         mono.resume(&mut flat);
+        refuse_expanding_instances(&mono, logger)?;
         synthesis::traits::synthesize_monomorphized_fn_inspect_stubs(&mut flat);
     }
 
@@ -2546,12 +2560,14 @@ pub async fn dump_with_host_and_world<H: CompilerHost>(
                 let _span = logger.span("monomorphize");
                 lower::contract_checks::check_marked_calls(&flat);
                 let mut mono = monomorphize(&mut flat);
+                refuse_expanding_instances(&mono, &logger)?;
                 let validated =
                     synthesis::cm_binding::reject_unresolvable_payloads_monomorphized(&flat)
                         .map_err(|message| bail_with(&logger, Code::UnsupportedFeature, message))?;
                 synthesis::effect_dispatch::rewrite_resource_calls_monomorphized(&mut flat);
                 synthesis::cm_binding::rewrite_async_primitives_monomorphized(&mut flat, validated);
                 mono.resume(&mut flat);
+                refuse_expanding_instances(&mono, &logger)?;
                 synthesis::traits::synthesize_monomorphized_fn_inspect_stubs(&mut flat);
             }
             lower_instance_patterns(&flat, &logger)?;
