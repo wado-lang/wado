@@ -18,23 +18,6 @@ impl Span {
     }
 }
 
-internal fn utf8_len(lead: u8) -> i32 {
-    if lead < 0x80 {
-        return 1;
-    }
-    if lead < 0xE0 {
-        return 2;
-    }
-    if lead < 0xF0 {
-        return 3;
-    }
-    return 4;
-}
-
-internal fn is_utf8_continuation(b: u8) -> bool {
-    return b & 0xC0 == 0x80;
-}
-
 internal fn char_at(src: &StrSlice, pos: i32) -> char
     contract 0 <= pos < src.len()
 {
@@ -45,28 +28,12 @@ internal fn char_at(src: &StrSlice, pos: i32) -> char
     return src.char_at_byte(pos);
 }
 
-internal fn char_end(src: &StrSlice, pos: i32) -> i32
-    contract 0 <= pos < src.len()
-{
-    return pos + utf8_len(unchecked src.byte_at(pos));
-}
-
-internal fn char_start_before(src: &StrSlice, pos: i32) -> i32
-    contract 0 < pos <= src.len()
-{
-    let mut i = pos - 1;
-    while i > 0 && is_utf8_continuation(unchecked src.byte_at(i)) {
-        i -= 1;
-    }
-    return i;
-}
-
 internal fn char_count(src: &StrSlice, start: i32, end: i32) -> i32
     contract 0 <= start <= end <= src.len()
 {
     let mut n = 0;
     for let mut i = start; i < end; i += 1 {
-        if !is_utf8_continuation(unchecked src.byte_at(i)) {
+        if src.is_char_boundary(i) {
             n += 1;
         }
     }
@@ -139,7 +106,7 @@ internal fn line_starts(src: &StrSlice) -> List<i32> {
     return starts;
 }
 
-internal fn line_col_at(src: &StrSlice, starts: &List<i32>, pos: i32) -> [i32, i32] {
+internal fn line_at(starts: &List<i32>, pos: i32) -> i32 {
     let mut lo = 0;
     let mut hi = starts.len() - 1;
     while lo < hi {
@@ -150,7 +117,12 @@ internal fn line_col_at(src: &StrSlice, starts: &List<i32>, pos: i32) -> [i32, i
             hi = mid - 1;
         }
     }
-    return [lo + 1, char_count(src, starts[lo], pos)];
+    return lo + 1;
+}
+
+internal fn line_col_at(src: &StrSlice, starts: &List<i32>, pos: i32) -> [i32, i32] {
+    let line = line_at(starts, pos);
+    return [line, char_count(src, starts[line - 1], pos)];
 }
 
 pub flags TokenFlags {
@@ -918,26 +890,31 @@ fn render_node(
     return c;
 }
 
-struct CharIndexCursor {
+struct SourceCursor {
     byte: i32,
     char: i32,
+    line: i32,
+    line_char: i32,
 }
 
-impl CharIndexCursor {
-    fn advance_to(&mut self, src: &StrSlice, byte: i32) -> i32 {
-        if byte < self.byte {
-            self.byte = 0;
-            self.char = 0;
+impl SourceCursor {
+    fn advance_to(&mut self, src: &StrSlice, byte: i32) {
+        assert byte >= self.byte, "to_lexer_string visits tokens in source order";
+        for let mut i = self.byte; i < byte; i += 1 {
+            if src.is_char_boundary(i) {
+                self.char += 1;
+            }
+            if unchecked src.byte_at(i) == b'\n' {
+                self.line += 1;
+                self.line_char = self.char;
+            }
         }
-        self.char += char_count(src, self.byte, byte);
         self.byte = byte;
-        return self.char;
     }
 }
 
 pub fn to_lexer_string(tokens: &TokenStream, eof_kind: i32) -> String {
-    let starts = line_starts(&tokens.src);
-    let mut cursor = CharIndexCursor { byte: 0, char: 0 };
+    let mut cursor = SourceCursor { byte: 0, char: 0, line: 1, line_char: 0 };
     let mut out = String::with_capacity(tokens.output.len() + tokens.len() * 32);
     out.push_str(&tokens.output);
     let mut index = 0;
@@ -953,7 +930,6 @@ pub fn to_lexer_string(tokens: &TokenStream, eof_kind: i32) -> String {
                     tokens.triv_starts[t],
                     tokens.triv_ends[t],
                     tokens.triv_chans[t],
-                    &starts,
                     &mut cursor,
                     index,
                     eof_kind,
@@ -968,7 +944,6 @@ pub fn to_lexer_string(tokens: &TokenStream, eof_kind: i32) -> String {
             tokens.starts[i],
             tokens.ends[i],
             0,
-            &starts,
             &mut cursor,
             index,
             eof_kind,
@@ -985,15 +960,14 @@ fn emit_lexer_token(
     start: i32,
     end: i32,
     channel: i32,
-    starts: &List<i32>,
-    cursor: &mut CharIndexCursor,
+    cursor: &mut SourceCursor,
     index: i32,
     eof_kind: i32,
 ) {
     let is_eof = kind == eof_kind;
     let type_id = if is_eof { -1 } else { kind + 1 };
-    let lc = line_col_at(&tokens.src, starts, start);
-    let first = cursor.advance_to(&tokens.src, start);
+    cursor.advance_to(&tokens.src, start);
+    let first = cursor.char;
     let stop = first + char_count(&tokens.src, start, end) - 1;
     out.push_str(`[@${index},${first}:${stop}='`);
     if is_eof {
@@ -1005,7 +979,7 @@ fn emit_lexer_token(
     if channel != 0 {
         out.push_str(`channel=${channel},`);
     }
-    out.push_str(`${lc.0}:${lc.1}]\n`);
+    out.push_str(`${cursor.line}:${first - cursor.line_char}]\n`);
 }
 pub global TK_A: i32 = 0;
 pub global TK_B: i32 = 1;
@@ -1075,7 +1049,7 @@ pub fn tokenize<S: AsStrSlice>(input: S) -> TokenStream {
             _ => {},
         }
         if best_end <= start {
-            let error_end = char_end(&lexer.src, start);
+            let error_end = lexer.src.ceil_char_boundary(start + 1);
             let _ = ts.push_token_flagged(TK_ERROR, start, error_end, triv_lo, ts.trivia_mark(), TokenFlags::LexError);
             triv_lo = ts.trivia_mark();
             lexer.pos = error_end;
@@ -1191,7 +1165,7 @@ impl Parser {
     }
 
     fn token_line(&self, i: i32) -> i32 {
-        return line_col_at(&self.tokens.src, &self.line_starts, self.tokens.starts[i]).0;
+        return line_at(&self.line_starts, self.tokens.starts[i]);
     }
 
     fn token_col(&self, i: i32) -> i32 {
@@ -1214,7 +1188,7 @@ impl Parser {
     }
 
     fn text_span(&self, start: i32, end: i32) -> String {
-        return span_text(&self.tokens.src, start, i32::min(end, self.tokens.src.len()));
+        return span_text(&self.tokens.src, start, end);
     }
 
     fn text_between(&self, lo: i32, hi: i32) -> String {

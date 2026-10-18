@@ -20,23 +20,6 @@ impl Span {
     }
 }
 
-internal fn utf8_len(lead: u8) -> i32 {
-    if lead < 0x80 {
-        return 1;
-    }
-    if lead < 0xE0 {
-        return 2;
-    }
-    if lead < 0xF0 {
-        return 3;
-    }
-    return 4;
-}
-
-internal fn is_utf8_continuation(b: u8) -> bool {
-    return b & 0xC0 == 0x80;
-}
-
 internal fn char_at(src: &StrSlice, pos: i32) -> char
     contract 0 <= pos < src.len()
 {
@@ -47,28 +30,12 @@ internal fn char_at(src: &StrSlice, pos: i32) -> char
     return src.char_at_byte(pos);
 }
 
-internal fn char_end(src: &StrSlice, pos: i32) -> i32
-    contract 0 <= pos < src.len()
-{
-    return pos + utf8_len(unchecked src.byte_at(pos));
-}
-
-internal fn char_start_before(src: &StrSlice, pos: i32) -> i32
-    contract 0 < pos <= src.len()
-{
-    let mut i = pos - 1;
-    while i > 0 && is_utf8_continuation(unchecked src.byte_at(i)) {
-        i -= 1;
-    }
-    return i;
-}
-
 internal fn char_count(src: &StrSlice, start: i32, end: i32) -> i32
     contract 0 <= start <= end <= src.len()
 {
     let mut n = 0;
     for let mut i = start; i < end; i += 1 {
-        if !is_utf8_continuation(unchecked src.byte_at(i)) {
+        if src.is_char_boundary(i) {
             n += 1;
         }
     }
@@ -141,7 +108,7 @@ internal fn line_starts(src: &StrSlice) -> List<i32> {
     return starts;
 }
 
-internal fn line_col_at(src: &StrSlice, starts: &List<i32>, pos: i32) -> [i32, i32] {
+internal fn line_at(starts: &List<i32>, pos: i32) -> i32 {
     let mut lo = 0;
     let mut hi = starts.len() - 1;
     while lo < hi {
@@ -152,7 +119,12 @@ internal fn line_col_at(src: &StrSlice, starts: &List<i32>, pos: i32) -> [i32, i
             hi = mid - 1;
         }
     }
-    return [lo + 1, char_count(src, starts[lo], pos)];
+    return lo + 1;
+}
+
+internal fn line_col_at(src: &StrSlice, starts: &List<i32>, pos: i32) -> [i32, i32] {
+    let line = line_at(starts, pos);
+    return [line, char_count(src, starts[line - 1], pos)];
 }
 
 pub flags TokenFlags {
@@ -920,26 +892,31 @@ fn render_node(
     return c;
 }
 
-struct CharIndexCursor {
+struct SourceCursor {
     byte: i32,
     char: i32,
+    line: i32,
+    line_char: i32,
 }
 
-impl CharIndexCursor {
-    fn advance_to(&mut self, src: &StrSlice, byte: i32) -> i32 {
-        if byte < self.byte {
-            self.byte = 0;
-            self.char = 0;
+impl SourceCursor {
+    fn advance_to(&mut self, src: &StrSlice, byte: i32) {
+        assert byte >= self.byte, "to_lexer_string visits tokens in source order";
+        for let mut i = self.byte; i < byte; i += 1 {
+            if src.is_char_boundary(i) {
+                self.char += 1;
+            }
+            if unchecked src.byte_at(i) == b'\n' {
+                self.line += 1;
+                self.line_char = self.char;
+            }
         }
-        self.char += char_count(src, self.byte, byte);
         self.byte = byte;
-        return self.char;
     }
 }
 
 pub fn to_lexer_string(tokens: &TokenStream, eof_kind: i32) -> String {
-    let starts = line_starts(&tokens.src);
-    let mut cursor = CharIndexCursor { byte: 0, char: 0 };
+    let mut cursor = SourceCursor { byte: 0, char: 0, line: 1, line_char: 0 };
     let mut out = String::with_capacity(tokens.output.len() + tokens.len() * 32);
     out.push_str(&tokens.output);
     let mut index = 0;
@@ -955,7 +932,6 @@ pub fn to_lexer_string(tokens: &TokenStream, eof_kind: i32) -> String {
                     tokens.triv_starts[t],
                     tokens.triv_ends[t],
                     tokens.triv_chans[t],
-                    &starts,
                     &mut cursor,
                     index,
                     eof_kind,
@@ -970,7 +946,6 @@ pub fn to_lexer_string(tokens: &TokenStream, eof_kind: i32) -> String {
             tokens.starts[i],
             tokens.ends[i],
             0,
-            &starts,
             &mut cursor,
             index,
             eof_kind,
@@ -987,15 +962,14 @@ fn emit_lexer_token(
     start: i32,
     end: i32,
     channel: i32,
-    starts: &List<i32>,
-    cursor: &mut CharIndexCursor,
+    cursor: &mut SourceCursor,
     index: i32,
     eof_kind: i32,
 ) {
     let is_eof = kind == eof_kind;
     let type_id = if is_eof { -1 } else { kind + 1 };
-    let lc = line_col_at(&tokens.src, starts, start);
-    let first = cursor.advance_to(&tokens.src, start);
+    cursor.advance_to(&tokens.src, start);
+    let first = cursor.char;
     let stop = first + char_count(&tokens.src, start, end) - 1;
     out.push_str(`[@${index},${first}:${stop}='`);
     if is_eof {
@@ -1007,7 +981,7 @@ fn emit_lexer_token(
     if channel != 0 {
         out.push_str(`channel=${channel},`);
     }
-    out.push_str(`${lc.0}:${lc.1}]\n`);
+    out.push_str(`${cursor.line}:${first - cursor.line_char}]\n`);
 }
 
 internal global FOLLOW_MAX_DEPTH: i32 = 4;
@@ -1492,7 +1466,7 @@ internal fn latn_match(sim: &AtnSim, start_rule: i32, src: &StrSlice, start: i32
         let spent = clist;
         clist = nlist;
         nlist = spent;
-        pos = char_end(src, pos);
+        pos = src.ceil_char_boundary(pos + 1);
     }
     return best;
 }
@@ -1679,7 +1653,7 @@ fn try_Comment(src: &StrSlice, start: i32) -> i32 {
         rep_0: {
             if pos >= src.len() { break rep_0; }
             if (unchecked src.byte_at(pos) matches { b'*' }) { break rep_0; }
-            pos = char_end(src, pos);
+            pos = src.ceil_char_boundary(pos + 1);
             continue;
         }
         break;
@@ -1699,12 +1673,12 @@ fn try_Comment(src: &StrSlice, start: i32) -> i32 {
         rep_3: {
             if pos >= src.len() { break rep_3; }
             if (unchecked src.byte_at(pos) matches { b'/' | b'*' }) { break rep_3; }
-            pos = char_end(src, pos);
+            pos = src.ceil_char_boundary(pos + 1);
             loop {
                 rep_4: {
                     if pos >= src.len() { break rep_4; }
                     if (unchecked src.byte_at(pos) matches { b'*' }) { break rep_4; }
-                    pos = char_end(src, pos);
+                    pos = src.ceil_char_boundary(pos + 1);
                     continue;
                 }
                 break;
@@ -8697,7 +8671,7 @@ fn try_Function_(src: &StrSlice, start: i32) -> i32 {
 fn try_UnexpectedCharacter(src: &StrSlice, start: i32) -> i32 {
     let mut pos = start;
     if pos >= src.len() { return -1; }
-    pos = char_end(src, pos);
+    pos = src.ceil_char_boundary(pos + 1);
     return pos;
 }
 
@@ -14716,7 +14690,7 @@ fn frag_Nonascii(src: &StrSlice, start: i32) -> i32 {
     let mut pos = start;
     if pos >= src.len() { return -1; }
     if (unchecked src.byte_at(pos) matches { b'\x00'..=b'\x7f' }) { return -1; }
-    pos = char_end(src, pos);
+    pos = src.ceil_char_boundary(pos + 1);
     return pos;
 }
 
@@ -14736,7 +14710,7 @@ fn frag_Escape(src: &StrSlice, start: i32) -> i32 {
             pos += 1;
             if pos >= src.len() { break alts_621_1; }
             if (unchecked src.byte_at(pos) matches { b'\x0d' | b'\x0a' | b'\x0c' | b'0'..=b'9' | b'a'..=b'f' | b'A'..=b'F' }) { break alts_621_1; }
-            pos = char_end(src, pos);
+            pos = src.ceil_char_boundary(pos + 1);
             break alts_done_621;
         }
         return -1;
@@ -15058,7 +15032,7 @@ pub fn tokenize<S: AsStrSlice>(input: S) -> TokenStream {
                 if end > best_end { best_end = end; best_kind = TK_Space; best_channel = 0; }
                 end = try_Ident(&lexer.src, start);
                 if end > best_end { best_end = end; best_kind = TK_Ident; best_channel = 0; }
-                let second_at = char_end(&lexer.src, start);
+                let second_at = lexer.src.ceil_char_boundary(start + 1);
                 let second_char = if second_at < lexer.src.len() { char_at(&lexer.src, second_at) } else { '\u{0}' };
                 match second_char {
                     '\u{0}'..='\t' | '\u{b}' | '\u{e}'..='\'' | '(' | ')'..=',' | '-' | '.'..='/' | '0'..='9' | ':'..='@' | 'A'..='F' | 'G'..='Z' | '[' | '\\' | ']'..='^' | '_' | '`' | 'a'..='f' | 'g'..='z' | '{'..='\u{7f}' | '\u{80}'..='\u{10ffff}' => {
@@ -15072,7 +15046,7 @@ pub fn tokenize<S: AsStrSlice>(input: S) -> TokenStream {
             '\u{b}' | '\u{e}'..='\u{1f}' | '%'..='&' | '?' | 'B'..='E' | 'G'..='M' | 'P'..='S' | 'V'..='Z' | '_'..='`' | 'b' | 'd'..='e' | 'g'..='m' | 'q'..='s' | 'w'..='z' => {
                 end = try_Ident(&lexer.src, start);
                 if end > best_end { best_end = end; best_kind = TK_Ident; best_channel = 0; }
-                let second_at = char_end(&lexer.src, start);
+                let second_at = lexer.src.ceil_char_boundary(start + 1);
                 let second_char = if second_at < lexer.src.len() { char_at(&lexer.src, second_at) } else { '\u{0}' };
                 match second_char {
                     '\u{0}'..='\t' | '\u{b}' | '\u{e}'..='\'' | '(' | ')'..=',' | '-' | '.'..='/' | '0'..='9' | ':'..='@' | 'A'..='F' | 'G'..='Z' | '[' | '\\' | ']'..='^' | '_' | '`' | 'a'..='f' | 'g'..='z' | '{'..='\u{7f}' | '\u{80}'..='\u{10ffff}' => {
@@ -15084,7 +15058,7 @@ pub fn tokenize<S: AsStrSlice>(input: S) -> TokenStream {
                 }
             },
             '!' => {
-                let second_at = char_end(&lexer.src, start);
+                let second_at = lexer.src.ceil_char_boundary(start + 1);
                 let second_char = if second_at < lexer.src.len() { char_at(&lexer.src, second_at) } else { '\u{0}' };
                 match second_char {
                     '\u{0}'..='\u{8}' | '\u{b}' | '\u{e}'..='\u{1f}' | '!'..='\'' | '(' | ')'..=',' | '-' | '.' | '0'..='9' | ':'..='@' | 'A'..='F' | 'G'..='H' | 'J'..='Z' | '[' | ']'..='^' | '_' | '`' | 'a'..='f' | 'g'..='h' | 'j'..='z' | '{'..='\u{7f}' | '\u{80}'..='\u{10ffff}' => {
@@ -15110,7 +15084,7 @@ pub fn tokenize<S: AsStrSlice>(input: S) -> TokenStream {
                 }
             },
             '"' | '\'' => {
-                let second_at = char_end(&lexer.src, start);
+                let second_at = lexer.src.ceil_char_boundary(start + 1);
                 let second_char = if second_at < lexer.src.len() { char_at(&lexer.src, second_at) } else { '\u{0}' };
                 match second_char {
                     '\u{0}'..='\t' | '\u{b}' | '\u{e}'..='\'' | '(' | ')'..=',' | '-' | '.'..='/' | '0'..='9' | ':'..='@' | 'A'..='F' | 'G'..='Z' | '[' | '\\' | ']'..='^' | '_' | '`' | 'a'..='f' | 'g'..='z' | '{'..='\u{7f}' | '\u{80}'..='\u{10ffff}' => {
@@ -15128,7 +15102,7 @@ pub fn tokenize<S: AsStrSlice>(input: S) -> TokenStream {
                 }
             },
             '#' => {
-                let second_at = char_end(&lexer.src, start);
+                let second_at = lexer.src.ceil_char_boundary(start + 1);
                 let second_char = if second_at < lexer.src.len() { char_at(&lexer.src, second_at) } else { '\u{0}' };
                 match second_char {
                     '\u{0}'..='\t' | '\u{b}' | '\u{e}'..='\'' | '(' | ')'..=',' | '.'..='/' | ':'..='@' | '[' | ']'..='^' | '`' | '{'..='\u{7f}' => {
@@ -15152,7 +15126,7 @@ pub fn tokenize<S: AsStrSlice>(input: S) -> TokenStream {
                 }
             },
             '$' => {
-                let second_at = char_end(&lexer.src, start);
+                let second_at = lexer.src.ceil_char_boundary(start + 1);
                 let second_char = if second_at < lexer.src.len() { char_at(&lexer.src, second_at) } else { '\u{0}' };
                 match second_char {
                     '\u{0}'..='\t' | '\u{b}' | '\u{e}'..='\'' | '(' | ')'..=',' | '-' | '.'..='/' | '0'..='9' | ':'..='<' | '>'..='@' | 'A'..='F' | 'G'..='Z' | '[' | '\\' | ']'..='^' | '_' | '`' | 'a'..='f' | 'g'..='z' | '{'..='\u{7f}' | '\u{80}'..='\u{10ffff}' => {
@@ -15180,7 +15154,7 @@ pub fn tokenize<S: AsStrSlice>(input: S) -> TokenStream {
                 if end > best_end { best_end = end; best_kind = TK_OpenParen; best_channel = 0; }
                 end = try_Ident(&lexer.src, start);
                 if end > best_end { best_end = end; best_kind = TK_Ident; best_channel = 0; }
-                let second_at = char_end(&lexer.src, start);
+                let second_at = lexer.src.ceil_char_boundary(start + 1);
                 let second_char = if second_at < lexer.src.len() { char_at(&lexer.src, second_at) } else { '\u{0}' };
                 match second_char {
                     '\u{0}'..='\t' | '\u{b}' | '\u{e}'..='\'' | '(' | ')'..=',' | '-' | '.'..='/' | '0'..='9' | ':'..='@' | 'A'..='F' | 'G'..='Z' | '[' | '\\' | ']'..='^' | '_' | '`' | 'a'..='f' | 'g'..='z' | '{'..='\u{7f}' | '\u{80}'..='\u{10ffff}' => {
@@ -15196,7 +15170,7 @@ pub fn tokenize<S: AsStrSlice>(input: S) -> TokenStream {
                 if end > best_end { best_end = end; best_kind = TK_CloseParen; best_channel = 0; }
                 end = try_Ident(&lexer.src, start);
                 if end > best_end { best_end = end; best_kind = TK_Ident; best_channel = 0; }
-                let second_at = char_end(&lexer.src, start);
+                let second_at = lexer.src.ceil_char_boundary(start + 1);
                 let second_char = if second_at < lexer.src.len() { char_at(&lexer.src, second_at) } else { '\u{0}' };
                 match second_char {
                     '\u{0}'..='\t' | '\u{b}' | '\u{e}'..='\'' | '(' | ')'..=',' | '-' | '.'..='/' | '0'..='9' | ':'..='@' | 'A'..='F' | 'G'..='Z' | '[' | '\\' | ']'..='^' | '_' | '`' | 'a'..='f' | 'g'..='z' | '{'..='\u{7f}' | '\u{80}'..='\u{10ffff}' => {
@@ -15210,7 +15184,7 @@ pub fn tokenize<S: AsStrSlice>(input: S) -> TokenStream {
             '*' => {
                 end = try_Multiply(&lexer.src, start);
                 if end > best_end { best_end = end; best_kind = TK_Multiply; best_channel = 0; }
-                let second_at = char_end(&lexer.src, start);
+                let second_at = lexer.src.ceil_char_boundary(start + 1);
                 let second_char = if second_at < lexer.src.len() { char_at(&lexer.src, second_at) } else { '\u{0}' };
                 match second_char {
                     '\u{0}'..='\t' | '\u{b}' | '\u{e}'..='\'' | '(' | ')'..=',' | '-' | '.'..='/' | '0'..='9' | ':'..='<' | '>'..='@' | 'A'..='F' | 'G'..='Z' | '[' | '\\' | ']'..='^' | '_' | '`' | 'a'..='f' | 'g'..='z' | '{'..='\u{7f}' | '\u{80}'..='\u{10ffff}' => {
@@ -15238,7 +15212,7 @@ pub fn tokenize<S: AsStrSlice>(input: S) -> TokenStream {
                 if end > best_end { best_end = end; best_kind = TK_Plus; best_channel = 0; }
                 end = try_Ident(&lexer.src, start);
                 if end > best_end { best_end = end; best_kind = TK_Ident; best_channel = 0; }
-                let second_at = char_end(&lexer.src, start);
+                let second_at = lexer.src.ceil_char_boundary(start + 1);
                 let second_char = if second_at < lexer.src.len() { char_at(&lexer.src, second_at) } else { '\u{0}' };
                 match second_char {
                     '\u{0}'..='\t' | '\u{b}' | '\u{e}'..='\'' | '(' | ')'..=',' | '-' | '.'..='/' | '0'..='9' | ':'..='@' | 'A'..='F' | 'G'..='Z' | '[' | '\\' | ']'..='^' | '_' | '`' | 'a'..='f' | 'g'..='z' | '{'..='\u{7f}' | '\u{80}'..='\u{10ffff}' => {
@@ -15254,7 +15228,7 @@ pub fn tokenize<S: AsStrSlice>(input: S) -> TokenStream {
                 if end > best_end { best_end = end; best_kind = TK_Comma; best_channel = 0; }
                 end = try_Ident(&lexer.src, start);
                 if end > best_end { best_end = end; best_kind = TK_Ident; best_channel = 0; }
-                let second_at = char_end(&lexer.src, start);
+                let second_at = lexer.src.ceil_char_boundary(start + 1);
                 let second_char = if second_at < lexer.src.len() { char_at(&lexer.src, second_at) } else { '\u{0}' };
                 match second_char {
                     '\u{0}'..='\t' | '\u{b}' | '\u{e}'..='\'' | '(' | ')'..=',' | '-' | '.'..='/' | '0'..='9' | ':'..='@' | 'A'..='F' | 'G'..='Z' | '[' | '\\' | ']'..='^' | '_' | '`' | 'a'..='f' | 'g'..='z' | '{'..='\u{7f}' | '\u{80}'..='\u{10ffff}' => {
@@ -15266,7 +15240,7 @@ pub fn tokenize<S: AsStrSlice>(input: S) -> TokenStream {
                 }
             },
             '-' => {
-                let second_at = char_end(&lexer.src, start);
+                let second_at = lexer.src.ceil_char_boundary(start + 1);
                 let second_char = if second_at < lexer.src.len() { char_at(&lexer.src, second_at) } else { '\u{0}' };
                 match second_char {
                     '\u{0}'..='\t' | '\u{b}' | '\u{e}'..='\'' | '(' | ')'..=',' | '.'..='/' | '0'..='9' | ':'..='@' | 'A'..='F' | 'G'..='Z' | '[' | '\\' | ']'..='^' | '_' | '`' | 'a'..='f' | 'g'..='z' | '{'..='\u{7f}' | '\u{80}'..='\u{10ffff}' => {
@@ -15300,7 +15274,7 @@ pub fn tokenize<S: AsStrSlice>(input: S) -> TokenStream {
             '.' => {
                 end = try_Dot(&lexer.src, start);
                 if end > best_end { best_end = end; best_kind = TK_Dot; best_channel = 0; }
-                let second_at = char_end(&lexer.src, start);
+                let second_at = lexer.src.ceil_char_boundary(start + 1);
                 let second_char = if second_at < lexer.src.len() { char_at(&lexer.src, second_at) } else { '\u{0}' };
                 match second_char {
                     '\u{0}'..='\t' | '\u{b}' | '\u{e}'..='$' | '&'..='\'' | '(' | ')'..=',' | '/' | ':'..='@' | '[' | ']'..='^' | '`' | '{'..='\u{7f}' => {
@@ -15364,7 +15338,7 @@ pub fn tokenize<S: AsStrSlice>(input: S) -> TokenStream {
             '/' => {
                 end = try_Divide(&lexer.src, start);
                 if end > best_end { best_end = end; best_kind = TK_Divide; best_channel = 0; }
-                let second_at = char_end(&lexer.src, start);
+                let second_at = lexer.src.ceil_char_boundary(start + 1);
                 let second_char = if second_at < lexer.src.len() { char_at(&lexer.src, second_at) } else { '\u{0}' };
                 match second_char {
                     '\u{0}'..='\t' | '\u{b}' | '\u{e}'..='\'' | '(' | ')' | '+'..=',' | '-' | '.'..='/' | '0'..='9' | ':'..='@' | 'A'..='F' | 'G'..='Z' | '[' | '\\' | ']'..='^' | '_' | '`' | 'a'..='f' | 'g'..='z' | '{'..='\u{7f}' | '\u{80}'..='\u{10ffff}' => {
@@ -15388,7 +15362,7 @@ pub fn tokenize<S: AsStrSlice>(input: S) -> TokenStream {
                 }
             },
             '0'..='9' => {
-                let second_at = char_end(&lexer.src, start);
+                let second_at = lexer.src.ceil_char_boundary(start + 1);
                 let second_char = if second_at < lexer.src.len() { char_at(&lexer.src, second_at) } else { '\u{0}' };
                 match second_char {
                     '\u{0}'..='\t' | '\u{b}' | '\u{e}'..='$' | '&'..='\'' | '(' | ')'..=',' | '/' | ':'..='@' | '[' | ']'..='^' | '`' | '{'..='\u{7f}' => {
@@ -15452,7 +15426,7 @@ pub fn tokenize<S: AsStrSlice>(input: S) -> TokenStream {
             ':' => {
                 end = try_Colon(&lexer.src, start);
                 if end > best_end { best_end = end; best_kind = TK_Colon; best_channel = 0; }
-                let second_at = char_end(&lexer.src, start);
+                let second_at = lexer.src.ceil_char_boundary(start + 1);
                 let second_char = if second_at < lexer.src.len() { char_at(&lexer.src, second_at) } else { '\u{0}' };
                 match second_char {
                     '\u{0}'..='\t' | '\u{b}' | '\u{e}'..='\'' | '(' | ')'..=',' | '-' | '.'..='/' | '0'..='9' | ':'..='@' | 'A'..='F' | 'G'..='M' | 'O'..='Z' | '[' | ']'..='^' | '_' | '`' | 'a'..='f' | 'g'..='m' | 'o'..='z' | '{'..='\u{7f}' | '\u{80}'..='\u{10ffff}' => {
@@ -15480,7 +15454,7 @@ pub fn tokenize<S: AsStrSlice>(input: S) -> TokenStream {
                 if end > best_end { best_end = end; best_kind = TK_SemiColon; best_channel = 0; }
                 end = try_Ident(&lexer.src, start);
                 if end > best_end { best_end = end; best_kind = TK_Ident; best_channel = 0; }
-                let second_at = char_end(&lexer.src, start);
+                let second_at = lexer.src.ceil_char_boundary(start + 1);
                 let second_char = if second_at < lexer.src.len() { char_at(&lexer.src, second_at) } else { '\u{0}' };
                 match second_char {
                     '\u{0}'..='\t' | '\u{b}' | '\u{e}'..='\'' | '(' | ')'..=',' | '-' | '.'..='/' | '0'..='9' | ':'..='@' | 'A'..='F' | 'G'..='Z' | '[' | '\\' | ']'..='^' | '_' | '`' | 'a'..='f' | 'g'..='z' | '{'..='\u{7f}' | '\u{80}'..='\u{10ffff}' => {
@@ -15492,7 +15466,7 @@ pub fn tokenize<S: AsStrSlice>(input: S) -> TokenStream {
                 }
             },
             '<' => {
-                let second_at = char_end(&lexer.src, start);
+                let second_at = lexer.src.ceil_char_boundary(start + 1);
                 let second_char = if second_at < lexer.src.len() { char_at(&lexer.src, second_at) } else { '\u{0}' };
                 match second_char {
                     '\u{0}'..='\t' | '\u{b}' | '\u{e}'..=' ' | '"'..='\'' | '(' | ')'..=',' | '-' | '.'..='/' | '0'..='9' | ':'..='@' | 'A'..='F' | 'G'..='Z' | '[' | '\\' | ']'..='^' | '_' | '`' | 'a'..='f' | 'g'..='z' | '{'..='\u{7f}' | '\u{80}'..='\u{10ffff}' => {
@@ -15520,7 +15494,7 @@ pub fn tokenize<S: AsStrSlice>(input: S) -> TokenStream {
                 if end > best_end { best_end = end; best_kind = TK_Equal; best_channel = 0; }
                 end = try_Ident(&lexer.src, start);
                 if end > best_end { best_end = end; best_kind = TK_Ident; best_channel = 0; }
-                let second_at = char_end(&lexer.src, start);
+                let second_at = lexer.src.ceil_char_boundary(start + 1);
                 let second_char = if second_at < lexer.src.len() { char_at(&lexer.src, second_at) } else { '\u{0}' };
                 match second_char {
                     '\u{0}'..='\t' | '\u{b}' | '\u{e}'..='\'' | '(' | ')'..=',' | '-' | '.'..='/' | '0'..='9' | ':'..='@' | 'A'..='F' | 'G'..='Z' | '[' | '\\' | ']'..='^' | '_' | '`' | 'a'..='f' | 'g'..='z' | '{'..='\u{7f}' | '\u{80}'..='\u{10ffff}' => {
@@ -15536,7 +15510,7 @@ pub fn tokenize<S: AsStrSlice>(input: S) -> TokenStream {
                 if end > best_end { best_end = end; best_kind = TK_Greater; best_channel = 0; }
                 end = try_Ident(&lexer.src, start);
                 if end > best_end { best_end = end; best_kind = TK_Ident; best_channel = 0; }
-                let second_at = char_end(&lexer.src, start);
+                let second_at = lexer.src.ceil_char_boundary(start + 1);
                 let second_char = if second_at < lexer.src.len() { char_at(&lexer.src, second_at) } else { '\u{0}' };
                 match second_char {
                     '\u{0}'..='\t' | '\u{b}' | '\u{e}'..='\'' | '(' | ')'..=',' | '-' | '.'..='/' | '0'..='9' | ':'..='@' | 'A'..='F' | 'G'..='Z' | '[' | '\\' | ']'..='^' | '_' | '`' | 'a'..='f' | 'g'..='z' | '{'..='\u{7f}' | '\u{80}'..='\u{10ffff}' => {
@@ -15548,7 +15522,7 @@ pub fn tokenize<S: AsStrSlice>(input: S) -> TokenStream {
                 }
             },
             '@' => {
-                let second_at = char_end(&lexer.src, start);
+                let second_at = lexer.src.ceil_char_boundary(start + 1);
                 let second_char = if second_at < lexer.src.len() { char_at(&lexer.src, second_at) } else { '\u{0}' };
                 match second_char {
                     '\u{0}'..='\t' | '\u{b}' | '\u{e}'..='\'' | '(' | ')'..=',' | '.'..='/' | '0'..='9' | ':'..='@' | '[' | ']'..='^' | '`' | '{'..='\u{7f}' => {
@@ -15704,7 +15678,7 @@ pub fn tokenize<S: AsStrSlice>(input: S) -> TokenStream {
                 }
             },
             'A' | 'a' => {
-                let second_at = char_end(&lexer.src, start);
+                let second_at = lexer.src.ceil_char_boundary(start + 1);
                 let second_char = if second_at < lexer.src.len() { char_at(&lexer.src, second_at) } else { '\u{0}' };
                 match second_char {
                     '\u{0}'..='\t' | '\u{b}' | '\u{e}'..='\'' | '(' | ')'..=',' | '-' | '.'..='/' | '1'..='3' | '5' | '7'..='9' | ':'..='@' | 'A'..='F' | 'G'..='M' | 'O'..='Z' | '[' | ']'..='^' | '_' | '`' | 'a'..='f' | 'g'..='m' | 'o'..='z' | '{'..='\u{7f}' | '\u{80}'..='\u{10ffff}' => {
@@ -15728,7 +15702,7 @@ pub fn tokenize<S: AsStrSlice>(input: S) -> TokenStream {
                 }
             },
             'F' | 'f' => {
-                let second_at = char_end(&lexer.src, start);
+                let second_at = lexer.src.ceil_char_boundary(start + 1);
                 let second_char = if second_at < lexer.src.len() { char_at(&lexer.src, second_at) } else { '\u{0}' };
                 match second_char {
                     '\u{0}'..='\t' | '\u{b}' | '\u{e}'..='\'' | '(' | ')'..=',' | '-' | '.'..='/' | '1'..='3' | '5' | '7'..='9' | ':'..='@' | 'A'..='F' | 'G'..='Q' | 'S'..='Z' | '[' | ']'..='^' | '_' | '`' | 'a'..='f' | 'g'..='q' | 's'..='z' | '{'..='\u{7f}' | '\u{80}'..='\u{10ffff}' => {
@@ -15752,7 +15726,7 @@ pub fn tokenize<S: AsStrSlice>(input: S) -> TokenStream {
                 }
             },
             'N' | 'n' => {
-                let second_at = char_end(&lexer.src, start);
+                let second_at = lexer.src.ceil_char_boundary(start + 1);
                 let second_char = if second_at < lexer.src.len() { char_at(&lexer.src, second_at) } else { '\u{0}' };
                 match second_char {
                     '\u{0}'..='\t' | '\u{b}' | '\u{e}'..='\'' | '(' | ')'..=',' | '-' | '.'..='/' | '1'..='3' | '5' | '7'..='9' | ':'..='@' | 'A'..='F' | 'G'..='M' | 'P'..='Z' | '[' | ']'..='^' | '_' | '`' | 'a'..='f' | 'g'..='m' | 'p'..='z' | '{'..='\u{7f}' | '\u{80}'..='\u{10ffff}' => {
@@ -15776,7 +15750,7 @@ pub fn tokenize<S: AsStrSlice>(input: S) -> TokenStream {
                 }
             },
             'O' | 'o' => {
-                let second_at = char_end(&lexer.src, start);
+                let second_at = lexer.src.ceil_char_boundary(start + 1);
                 let second_char = if second_at < lexer.src.len() { char_at(&lexer.src, second_at) } else { '\u{0}' };
                 match second_char {
                     '\u{0}'..='\t' | '\u{b}' | '\u{e}'..='\'' | '(' | ')'..=',' | '-' | '.'..='/' | '1'..='3' | '5' | '7'..='9' | ':'..='@' | 'A'..='F' | 'G'..='M' | 'P'..='Q' | 'S'..='Z' | '[' | ']'..='^' | '_' | '`' | 'a'..='f' | 'g'..='m' | 'p'..='q' | 's'..='z' | '{'..='\u{7f}' | '\u{80}'..='\u{10ffff}' => {
@@ -15818,7 +15792,7 @@ pub fn tokenize<S: AsStrSlice>(input: S) -> TokenStream {
                 }
             },
             'T' | 't' => {
-                let second_at = char_end(&lexer.src, start);
+                let second_at = lexer.src.ceil_char_boundary(start + 1);
                 let second_char = if second_at < lexer.src.len() { char_at(&lexer.src, second_at) } else { '\u{0}' };
                 match second_char {
                     '\u{0}'..='\t' | '\u{b}' | '\u{e}'..='\'' | '(' | ')'..=',' | '-' | '.'..='/' | '1'..='4' | '6' | '8'..='9' | ':'..='@' | 'A'..='F' | 'G'..='N' | 'P'..='S' | 'U'..='Z' | '[' | ']'..='^' | '_' | '`' | 'a'..='f' | 'g'..='n' | 'p'..='s' | 'u'..='z' | '{'..='\u{7f}' | '\u{80}'..='\u{10ffff}' => {
@@ -15842,7 +15816,7 @@ pub fn tokenize<S: AsStrSlice>(input: S) -> TokenStream {
                 }
             },
             'U' => {
-                let second_at = char_end(&lexer.src, start);
+                let second_at = lexer.src.ceil_char_boundary(start + 1);
                 let second_char = if second_at < lexer.src.len() { char_at(&lexer.src, second_at) } else { '\u{0}' };
                 match second_char {
                     '\u{0}'..='\t' | '\u{b}' | '\u{e}'..='\'' | '(' | ')'..='*' | ',' | '-' | '.'..='/' | '1'..='4' | '6' | '8'..='9' | ':'..='@' | 'A'..='F' | 'G'..='Q' | 'S'..='T' | 'V'..='Z' | '[' | ']'..='^' | '_' | '`' | 'a'..='f' | 'g'..='q' | 's'..='t' | 'v'..='z' | '{'..='\u{7f}' | '\u{80}'..='\u{10ffff}' => {
@@ -15878,7 +15852,7 @@ pub fn tokenize<S: AsStrSlice>(input: S) -> TokenStream {
                 if end > best_end { best_end = end; best_kind = TK_OpenBracket; best_channel = 0; }
                 end = try_Ident(&lexer.src, start);
                 if end > best_end { best_end = end; best_kind = TK_Ident; best_channel = 0; }
-                let second_at = char_end(&lexer.src, start);
+                let second_at = lexer.src.ceil_char_boundary(start + 1);
                 let second_char = if second_at < lexer.src.len() { char_at(&lexer.src, second_at) } else { '\u{0}' };
                 match second_char {
                     '\u{0}'..='\t' | '\u{b}' | '\u{e}'..='\'' | '(' | ')'..=',' | '-' | '.'..='/' | '0'..='9' | ':'..='@' | 'A'..='F' | 'G'..='Z' | '[' | '\\' | ']'..='^' | '_' | '`' | 'a'..='f' | 'g'..='z' | '{'..='\u{7f}' | '\u{80}'..='\u{10ffff}' => {
@@ -15890,7 +15864,7 @@ pub fn tokenize<S: AsStrSlice>(input: S) -> TokenStream {
                 }
             },
             '\\' => {
-                let second_at = char_end(&lexer.src, start);
+                let second_at = lexer.src.ceil_char_boundary(start + 1);
                 let second_char = if second_at < lexer.src.len() { char_at(&lexer.src, second_at) } else { '\u{0}' };
                 match second_char {
                     '\u{0}'..='\t' | '\u{b}' | '\u{e}'..='\'' | '(' | ')'..=',' | '-' | '.'..='/' | '1'..='3' | '8'..='9' | ':'..='@' | 'A'..='F' | 'G'..='M' | 'P'..='Q' | 'S' | 'V'..='Z' | '[' | ']'..='^' | '_' | '`' | 'a'..='f' | 'g'..='m' | 'p'..='q' | 's' | 'v'..='z' | '{'..='\u{7f}' | '\u{80}'..='\u{10ffff}' => {
@@ -16010,7 +15984,7 @@ pub fn tokenize<S: AsStrSlice>(input: S) -> TokenStream {
                 if end > best_end { best_end = end; best_kind = TK_CloseBracket; best_channel = 0; }
                 end = try_Ident(&lexer.src, start);
                 if end > best_end { best_end = end; best_kind = TK_Ident; best_channel = 0; }
-                let second_at = char_end(&lexer.src, start);
+                let second_at = lexer.src.ceil_char_boundary(start + 1);
                 let second_char = if second_at < lexer.src.len() { char_at(&lexer.src, second_at) } else { '\u{0}' };
                 match second_char {
                     '\u{0}'..='\t' | '\u{b}' | '\u{e}'..='\'' | '(' | ')'..=',' | '-' | '.'..='/' | '0'..='9' | ':'..='@' | 'A'..='F' | 'G'..='Z' | '[' | '\\' | ']'..='^' | '_' | '`' | 'a'..='f' | 'g'..='z' | '{'..='\u{7f}' | '\u{80}'..='\u{10ffff}' => {
@@ -16022,7 +15996,7 @@ pub fn tokenize<S: AsStrSlice>(input: S) -> TokenStream {
                 }
             },
             '^' => {
-                let second_at = char_end(&lexer.src, start);
+                let second_at = lexer.src.ceil_char_boundary(start + 1);
                 let second_char = if second_at < lexer.src.len() { char_at(&lexer.src, second_at) } else { '\u{0}' };
                 match second_char {
                     '\u{0}'..='\t' | '\u{b}' | '\u{e}'..='\'' | '(' | ')'..=',' | '-' | '.'..='/' | '0'..='9' | ':'..='<' | '>'..='@' | 'A'..='F' | 'G'..='Z' | '[' | '\\' | ']'..='^' | '_' | '`' | 'a'..='f' | 'g'..='z' | '{'..='\u{7f}' | '\u{80}'..='\u{10ffff}' => {
@@ -16046,7 +16020,7 @@ pub fn tokenize<S: AsStrSlice>(input: S) -> TokenStream {
                 }
             },
             'c' => {
-                let second_at = char_end(&lexer.src, start);
+                let second_at = lexer.src.ceil_char_boundary(start + 1);
                 let second_char = if second_at < lexer.src.len() { char_at(&lexer.src, second_at) } else { '\u{0}' };
                 match second_char {
                     '\u{0}'..='\t' | '\u{b}' | '\u{e}'..='\'' | '(' | ')'..=',' | '-' | '.'..='/' | '0'..='9' | ':'..='@' | 'A'..='F' | 'G'..='Z' | '[' | '\\' | ']'..='^' | '_' | '`' | 'b'..='f' | 'g'..='z' | '{'..='\u{7f}' | '\u{80}'..='\u{10ffff}' => {
@@ -16070,7 +16044,7 @@ pub fn tokenize<S: AsStrSlice>(input: S) -> TokenStream {
                 }
             },
             'p' => {
-                let second_at = char_end(&lexer.src, start);
+                let second_at = lexer.src.ceil_char_boundary(start + 1);
                 let second_char = if second_at < lexer.src.len() { char_at(&lexer.src, second_at) } else { '\u{0}' };
                 match second_char {
                     '\u{0}'..='\t' | '\u{b}' | '\u{e}'..='\'' | '(' | ')'..=',' | '-' | '.'..='/' | '0'..='9' | ':'..='@' | 'A'..='F' | 'G'..='Z' | '[' | '\\' | ']'..='^' | '_' | '`' | 'a'..='f' | 'g'..='q' | 's'..='z' | '{'..='\u{7f}' | '\u{80}'..='\u{10ffff}' => {
@@ -16094,7 +16068,7 @@ pub fn tokenize<S: AsStrSlice>(input: S) -> TokenStream {
                 }
             },
             'u' => {
-                let second_at = char_end(&lexer.src, start);
+                let second_at = lexer.src.ceil_char_boundary(start + 1);
                 let second_char = if second_at < lexer.src.len() { char_at(&lexer.src, second_at) } else { '\u{0}' };
                 match second_char {
                     '\u{0}'..='\t' | '\u{b}' | '\u{e}'..='\'' | '(' | ')'..='*' | ',' | '-' | '.'..='/' | '1'..='4' | '6' | '8'..='9' | ':'..='@' | 'A'..='F' | 'G'..='Q' | 'S'..='T' | 'V'..='Z' | '[' | ']'..='^' | '_' | '`' | 'a'..='f' | 'g'..='q' | 's'..='t' | 'v'..='z' | '{'..='\u{7f}' | '\u{80}'..='\u{10ffff}' => {
@@ -16136,7 +16110,7 @@ pub fn tokenize<S: AsStrSlice>(input: S) -> TokenStream {
                 }
             },
             'v' => {
-                let second_at = char_end(&lexer.src, start);
+                let second_at = lexer.src.ceil_char_boundary(start + 1);
                 let second_char = if second_at < lexer.src.len() { char_at(&lexer.src, second_at) } else { '\u{0}' };
                 match second_char {
                     '\u{0}'..='\t' | '\u{b}' | '\u{e}'..='\'' | '(' | ')'..=',' | '-' | '.'..='/' | '0'..='9' | ':'..='@' | 'A'..='F' | 'G'..='Z' | '[' | '\\' | ']'..='^' | '_' | '`' | 'b'..='f' | 'g'..='z' | '{'..='\u{7f}' | '\u{80}'..='\u{10ffff}' => {
@@ -16164,7 +16138,7 @@ pub fn tokenize<S: AsStrSlice>(input: S) -> TokenStream {
                 if end > best_end { best_end = end; best_kind = TK_OpenBrace; best_channel = 0; }
                 end = try_Ident(&lexer.src, start);
                 if end > best_end { best_end = end; best_kind = TK_Ident; best_channel = 0; }
-                let second_at = char_end(&lexer.src, start);
+                let second_at = lexer.src.ceil_char_boundary(start + 1);
                 let second_char = if second_at < lexer.src.len() { char_at(&lexer.src, second_at) } else { '\u{0}' };
                 match second_char {
                     '\u{0}'..='\t' | '\u{b}' | '\u{e}'..='\'' | '(' | ')'..=',' | '-' | '.'..='/' | '0'..='9' | ':'..='@' | 'A'..='F' | 'G'..='Z' | '[' | '\\' | ']'..='^' | '_' | '`' | 'a'..='f' | 'g'..='z' | '{'..='\u{7f}' | '\u{80}'..='\u{10ffff}' => {
@@ -16178,7 +16152,7 @@ pub fn tokenize<S: AsStrSlice>(input: S) -> TokenStream {
             '|' => {
                 end = try_Pipe(&lexer.src, start);
                 if end > best_end { best_end = end; best_kind = TK_Pipe; best_channel = 0; }
-                let second_at = char_end(&lexer.src, start);
+                let second_at = lexer.src.ceil_char_boundary(start + 1);
                 let second_char = if second_at < lexer.src.len() { char_at(&lexer.src, second_at) } else { '\u{0}' };
                 match second_char {
                     '\u{0}'..='\t' | '\u{b}' | '\u{e}'..='\'' | '(' | ')'..='*' | ',' | '-' | '.'..='/' | '0'..='9' | ':'..='<' | '>'..='@' | 'A'..='F' | 'G'..='Z' | '[' | '\\' | ']'..='^' | '_' | '`' | 'a'..='f' | 'g'..='z' | '{'..='\u{7f}' | '\u{80}'..='\u{10ffff}' => {
@@ -16214,7 +16188,7 @@ pub fn tokenize<S: AsStrSlice>(input: S) -> TokenStream {
                 if end > best_end { best_end = end; best_kind = TK_CloseBrace; best_channel = 0; }
                 end = try_Ident(&lexer.src, start);
                 if end > best_end { best_end = end; best_kind = TK_Ident; best_channel = 0; }
-                let second_at = char_end(&lexer.src, start);
+                let second_at = lexer.src.ceil_char_boundary(start + 1);
                 let second_char = if second_at < lexer.src.len() { char_at(&lexer.src, second_at) } else { '\u{0}' };
                 match second_char {
                     '\u{0}'..='\t' | '\u{b}' | '\u{e}'..='\'' | '(' | ')'..=',' | '-' | '.'..='/' | '0'..='9' | ':'..='@' | 'A'..='F' | 'G'..='Z' | '[' | '\\' | ']'..='^' | '_' | '`' | 'a'..='f' | 'g'..='z' | '{'..='\u{7f}' | '\u{80}'..='\u{10ffff}' => {
@@ -16226,7 +16200,7 @@ pub fn tokenize<S: AsStrSlice>(input: S) -> TokenStream {
                 }
             },
             '~' => {
-                let second_at = char_end(&lexer.src, start);
+                let second_at = lexer.src.ceil_char_boundary(start + 1);
                 let second_char = if second_at < lexer.src.len() { char_at(&lexer.src, second_at) } else { '\u{0}' };
                 match second_char {
                     '\u{0}'..='\t' | '\u{b}' | '\u{e}'..='\'' | '(' | ')'..=',' | '-' | '.'..='/' | '0'..='9' | ':'..='<' | '>'..='@' | 'A'..='F' | 'G'..='Z' | '[' | '\\' | ']'..='^' | '_' | '`' | 'a'..='f' | 'g'..='z' | '{'..='\u{7f}' | '\u{80}'..='\u{10ffff}' => {
@@ -16258,7 +16232,7 @@ pub fn tokenize<S: AsStrSlice>(input: S) -> TokenStream {
             _ => {
                 end = try_Ident(&lexer.src, start);
                 if end > best_end { best_end = end; best_kind = TK_Ident; best_channel = 0; }
-                let second_at = char_end(&lexer.src, start);
+                let second_at = lexer.src.ceil_char_boundary(start + 1);
                 let second_char = if second_at < lexer.src.len() { char_at(&lexer.src, second_at) } else { '\u{0}' };
                 match second_char {
                     '\u{0}'..='\t' | '\u{b}' | '\u{e}'..='\'' | '(' | ')'..=',' | '-' | '.'..='/' | '0'..='9' | ':'..='@' | 'A'..='F' | 'G'..='Z' | '[' | '\\' | ']'..='^' | '_' | '`' | 'a'..='f' | 'g'..='z' | '{'..='\u{7f}' | '\u{80}'..='\u{10ffff}' => {
@@ -16275,7 +16249,7 @@ pub fn tokenize<S: AsStrSlice>(input: S) -> TokenStream {
             if end > best_end { best_end = end; best_kind = TK_UnexpectedCharacter; best_channel = 2; }
         }
         if best_end <= start {
-            let error_end = char_end(&lexer.src, start);
+            let error_end = lexer.src.ceil_char_boundary(start + 1);
             let _ = ts.push_token_flagged(TK_ERROR, start, error_end, triv_lo, ts.trivia_mark(), TokenFlags::LexError);
             triv_lo = ts.trivia_mark();
             lexer.pos = error_end;

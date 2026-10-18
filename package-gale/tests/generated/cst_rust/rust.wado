@@ -23,23 +23,6 @@ impl Span {
     }
 }
 
-internal fn utf8_len(lead: u8) -> i32 {
-    if lead < 0x80 {
-        return 1;
-    }
-    if lead < 0xE0 {
-        return 2;
-    }
-    if lead < 0xF0 {
-        return 3;
-    }
-    return 4;
-}
-
-internal fn is_utf8_continuation(b: u8) -> bool {
-    return b & 0xC0 == 0x80;
-}
-
 internal fn char_at(src: &StrSlice, pos: i32) -> char
     contract 0 <= pos < src.len()
 {
@@ -50,28 +33,12 @@ internal fn char_at(src: &StrSlice, pos: i32) -> char
     return src.char_at_byte(pos);
 }
 
-internal fn char_end(src: &StrSlice, pos: i32) -> i32
-    contract 0 <= pos < src.len()
-{
-    return pos + utf8_len(unchecked src.byte_at(pos));
-}
-
-internal fn char_start_before(src: &StrSlice, pos: i32) -> i32
-    contract 0 < pos <= src.len()
-{
-    let mut i = pos - 1;
-    while i > 0 && is_utf8_continuation(unchecked src.byte_at(i)) {
-        i -= 1;
-    }
-    return i;
-}
-
 internal fn char_count(src: &StrSlice, start: i32, end: i32) -> i32
     contract 0 <= start <= end <= src.len()
 {
     let mut n = 0;
     for let mut i = start; i < end; i += 1 {
-        if !is_utf8_continuation(unchecked src.byte_at(i)) {
+        if src.is_char_boundary(i) {
             n += 1;
         }
     }
@@ -144,7 +111,7 @@ internal fn line_starts(src: &StrSlice) -> List<i32> {
     return starts;
 }
 
-internal fn line_col_at(src: &StrSlice, starts: &List<i32>, pos: i32) -> [i32, i32] {
+internal fn line_at(starts: &List<i32>, pos: i32) -> i32 {
     let mut lo = 0;
     let mut hi = starts.len() - 1;
     while lo < hi {
@@ -155,7 +122,12 @@ internal fn line_col_at(src: &StrSlice, starts: &List<i32>, pos: i32) -> [i32, i
             hi = mid - 1;
         }
     }
-    return [lo + 1, char_count(src, starts[lo], pos)];
+    return lo + 1;
+}
+
+internal fn line_col_at(src: &StrSlice, starts: &List<i32>, pos: i32) -> [i32, i32] {
+    let line = line_at(starts, pos);
+    return [line, char_count(src, starts[line - 1], pos)];
 }
 
 pub flags TokenFlags {
@@ -923,23 +895,31 @@ fn render_node(
     return c;
 }
 
-struct CharIndexCursor {
+struct SourceCursor {
     byte: i32,
     char: i32,
+    line: i32,
+    line_char: i32,
 }
 
-impl CharIndexCursor {
-    fn advance_to(&mut self, src: &StrSlice, byte: i32) -> i32 {
+impl SourceCursor {
+    fn advance_to(&mut self, src: &StrSlice, byte: i32) {
         assert byte >= self.byte, "to_lexer_string visits tokens in source order";
-        self.char += char_count(src, self.byte, byte);
+        for let mut i = self.byte; i < byte; i += 1 {
+            if src.is_char_boundary(i) {
+                self.char += 1;
+            }
+            if unchecked src.byte_at(i) == b'\n' {
+                self.line += 1;
+                self.line_char = self.char;
+            }
+        }
         self.byte = byte;
-        return self.char;
     }
 }
 
 pub fn to_lexer_string(tokens: &TokenStream, eof_kind: i32) -> String {
-    let starts = line_starts(&tokens.src);
-    let mut cursor = CharIndexCursor { byte: 0, char: 0 };
+    let mut cursor = SourceCursor { byte: 0, char: 0, line: 1, line_char: 0 };
     let mut out = String::with_capacity(tokens.output.len() + tokens.len() * 32);
     out.push_str(&tokens.output);
     let mut index = 0;
@@ -955,7 +935,6 @@ pub fn to_lexer_string(tokens: &TokenStream, eof_kind: i32) -> String {
                     tokens.triv_starts[t],
                     tokens.triv_ends[t],
                     tokens.triv_chans[t],
-                    &starts,
                     &mut cursor,
                     index,
                     eof_kind,
@@ -970,7 +949,6 @@ pub fn to_lexer_string(tokens: &TokenStream, eof_kind: i32) -> String {
             tokens.starts[i],
             tokens.ends[i],
             0,
-            &starts,
             &mut cursor,
             index,
             eof_kind,
@@ -987,15 +965,14 @@ fn emit_lexer_token(
     start: i32,
     end: i32,
     channel: i32,
-    starts: &List<i32>,
-    cursor: &mut CharIndexCursor,
+    cursor: &mut SourceCursor,
     index: i32,
     eof_kind: i32,
 ) {
     let is_eof = kind == eof_kind;
     let type_id = if is_eof { -1 } else { kind + 1 };
-    let lc = line_col_at(&tokens.src, starts, start);
-    let first = cursor.advance_to(&tokens.src, start);
+    cursor.advance_to(&tokens.src, start);
+    let first = cursor.char;
     let stop = first + char_count(&tokens.src, start, end) - 1;
     out.push_str(`[@${index},${first}:${stop}='`);
     if is_eof {
@@ -1007,7 +984,7 @@ fn emit_lexer_token(
     if channel != 0 {
         out.push_str(`channel=${channel},`);
     }
-    out.push_str(`${lc.0}:${lc.1}]\n`);
+    out.push_str(`${cursor.line}:${first - cursor.line_char}]\n`);
 }
 
 pub struct LexerView {
@@ -1023,13 +1000,13 @@ impl LexerView {
             if i >= self.src.len() {
                 return -1;
             }
-            i = char_end(self.src, i);
+            i = self.src.ceil_char_boundary(i + 1);
         }
         for let mut step = 0; step > k; step -= 1 {
             if i == 0 {
                 return -1;
             }
-            i = char_start_before(self.src, i);
+            i = self.src.floor_char_boundary(i - 1);
         }
         return self.char_at(i);
     }
@@ -1596,7 +1573,7 @@ internal fn latn_match(sim: &AtnSim, start_rule: i32, src: &StrSlice, start: i32
         let spent = clist;
         clist = nlist;
         nlist = spent;
-        pos = char_end(src, pos);
+        pos = src.ceil_char_boundary(pos + 1);
     }
     return best;
 }
@@ -1814,12 +1791,12 @@ fn try_NON_KEYWORD_IDENTIFIER(src: &StrSlice, start: i32) -> i32 {
             pos = alts_saved_0;
             if pos >= src.len() { break alts_0_0; }
             if !in_char_set_0(char_at(src, pos)) { break alts_0_0; }
-            pos = char_end(src, pos);
+            pos = src.ceil_char_boundary(pos + 1);
             loop {
                 rep_1: {
                     if pos >= src.len() { break rep_1; }
                     if !in_char_set_1(char_at(src, pos)) { break rep_1; }
-                    pos = char_end(src, pos);
+                    pos = src.ceil_char_boundary(pos + 1);
                     continue;
                 }
                 break;
@@ -1832,12 +1809,12 @@ fn try_NON_KEYWORD_IDENTIFIER(src: &StrSlice, start: i32) -> i32 {
             pos += 1;
             if pos >= src.len() { break alts_0_1; }
             if !in_char_set_1(char_at(src, pos)) { break alts_0_1; }
-            pos = char_end(src, pos);
+            pos = src.ceil_char_boundary(pos + 1);
             loop {
                 rep_2: {
                     if pos >= src.len() { break rep_2; }
                     if !in_char_set_1(char_at(src, pos)) { break rep_2; }
-                    pos = char_end(src, pos);
+                    pos = src.ceil_char_boundary(pos + 1);
                     continue;
                 }
                 break;
@@ -1876,7 +1853,7 @@ fn try_LINE_COMMENT(src: &StrSlice, start: i32) -> i32 {
                 pos = alts_saved_5;
                 if pos >= src.len() { break alts_5_0; }
                 if (unchecked src.byte_at(pos) matches { b'/' | b'!' | b'\x0d' | b'\x0a' }) { break alts_5_0; }
-                pos = char_end(src, pos);
+                pos = src.ceil_char_boundary(pos + 1);
                 break alts_done_5;
             }
             alts_5_1: {
@@ -1893,7 +1870,7 @@ fn try_LINE_COMMENT(src: &StrSlice, start: i32) -> i32 {
             rep_6: {
                 if pos >= src.len() { break rep_6; }
                 if (unchecked src.byte_at(pos) matches { b'\x0d' | b'\x0a' }) { break rep_6; }
-                pos = char_end(src, pos);
+                pos = src.ceil_char_boundary(pos + 1);
                 continue;
             }
             break;
@@ -1929,7 +1906,7 @@ fn try_INNER_LINE_DOC(src: &StrSlice, start: i32) -> i32 {
         rep_7: {
             if pos >= src.len() { break rep_7; }
             if (unchecked src.byte_at(pos) matches { b'\x0a' | b'\x0d' }) { break rep_7; }
-            pos = char_end(src, pos);
+            pos = src.ceil_char_boundary(pos + 1);
             continue;
         }
         break;
@@ -1954,12 +1931,12 @@ fn try_OUTER_LINE_DOC(src: &StrSlice, start: i32) -> i32 {
     opt_8: {
         if pos >= src.len() { break opt_8; }
         if (unchecked src.byte_at(pos) matches { b'/' | b'\x0d' | b'\x0a' }) { break opt_8; }
-        pos = char_end(src, pos);
+        pos = src.ceil_char_boundary(pos + 1);
         loop {
             rep_9: {
                 if pos >= src.len() { break rep_9; }
                 if (unchecked src.byte_at(pos) matches { b'\x0a' | b'\x0d' }) { break rep_9; }
-                pos = char_end(src, pos);
+                pos = src.ceil_char_boundary(pos + 1);
                 continue;
             }
             break;
@@ -1987,12 +1964,12 @@ fn try_SHEBANG(src: &StrSlice, start: i32) -> i32 with RustLexerBase {
     pos += 1;
     if pos >= src.len() { return -1; }
     if (unchecked src.byte_at(pos) matches { b'[' | b'\x0d' | b'\x0a' }) { return -1; }
-    pos = char_end(src, pos);
+    pos = src.ceil_char_boundary(pos + 1);
     loop {
         rep_11: {
             if pos >= src.len() { break rep_11; }
             if (unchecked src.byte_at(pos) matches { b'\x0d' | b'\x0a' }) { break rep_11; }
-            pos = char_end(src, pos);
+            pos = src.ceil_char_boundary(pos + 1);
             continue;
         }
         break;
@@ -2004,7 +1981,7 @@ fn try_WHITESPACE(src: &StrSlice, start: i32) -> i32 {
     let mut pos = start;
     if pos >= src.len() { return -1; }
     if !(char_at(src, pos) matches { ' ' | '\u{a0}' | '\u{1680}' | '\u{2000}'..='\u{200a}' | '\u{202f}' | '\u{205f}' | '\u{3000}' }) { return -1; }
-    pos = char_end(src, pos);
+    pos = src.ceil_char_boundary(pos + 1);
     return pos;
 }
 
@@ -2042,7 +2019,7 @@ fn try_CHAR_LITERAL(src: &StrSlice, start: i32) -> i32 {
             pos = alts_saved_13;
             if pos >= src.len() { break alts_13_0; }
             if (unchecked src.byte_at(pos) matches { b'\'' | b'\\' | b'\x0a' | b'\x0d' | b'\x09' }) { break alts_13_0; }
-            pos = char_end(src, pos);
+            pos = src.ceil_char_boundary(pos + 1);
             break alts_done_13;
         }
         alts_13_1: {
@@ -2083,7 +2060,7 @@ fn try_STRING_LITERAL(src: &StrSlice, start: i32) -> i32 {
                     pos = alts_saved_15;
                     if pos >= src.len() { break alts_15_0; }
                     if (unchecked src.byte_at(pos) matches { b'"' | b'\\' }) { break alts_15_0; }
-                    pos = char_end(src, pos);
+                    pos = src.ceil_char_boundary(pos + 1);
                     break alts_done_15;
                 }
                 alts_15_1: {
@@ -2138,7 +2115,7 @@ fn try_BYTE_LITERAL(src: &StrSlice, start: i32) -> i32 {
             pos = alts_saved_16;
             if pos >= src.len() { break alts_16_0; }
             if (unchecked src.byte_at(pos) matches { b'\'' | b'\\' }) { break alts_16_0; }
-            pos = char_end(src, pos);
+            pos = src.ceil_char_boundary(pos + 1);
             break alts_done_16;
         }
         alts_16_1: {
@@ -2175,7 +2152,7 @@ fn try_BYTE_STRING_LITERAL(src: &StrSlice, start: i32) -> i32 {
                     pos = alts_saved_18;
                     if pos >= src.len() { break alts_18_0; }
                     if (unchecked src.byte_at(pos) matches { b'"' | b'\\' }) { break alts_18_0; }
-                    pos = char_end(src, pos);
+                    pos = src.ceil_char_boundary(pos + 1);
                     break alts_done_18;
                 }
                 alts_18_1: {
@@ -3329,7 +3306,7 @@ pub fn tokenize<S: AsStrSlice>(input: S) -> TokenStream with RustLexerBase {
             '!' => {
                 end = try_NOT(&lexer.src, start);
                 if end > best_end { best_end = end; best_kind = TK_NOT; best_channel = 0; }
-                let second_at = char_end(&lexer.src, start);
+                let second_at = lexer.src.ceil_char_boundary(start + 1);
                 let second_char = if second_at < lexer.src.len() { char_at(&lexer.src, second_at) } else { '\u{0}' };
                 match second_char {
                     '=' => {
@@ -3345,7 +3322,7 @@ pub fn tokenize<S: AsStrSlice>(input: S) -> TokenStream with RustLexerBase {
                 if end > best_end { best_end = end; best_kind = TK_STRING_LITERAL; best_channel = 0; }
             },
             '#' => {
-                let second_at = char_end(&lexer.src, start);
+                let second_at = lexer.src.ceil_char_boundary(start + 1);
                 let second_char = if second_at < lexer.src.len() { char_at(&lexer.src, second_at) } else { '\u{0}' };
                 match second_char {
                     '!' | '#' => {
@@ -3359,7 +3336,7 @@ pub fn tokenize<S: AsStrSlice>(input: S) -> TokenStream with RustLexerBase {
                 if end > best_end { best_end = end; best_kind = TK_POUND; best_channel = 0; }
             },
             '$' => {
-                let second_at = char_end(&lexer.src, start);
+                let second_at = lexer.src.ceil_char_boundary(start + 1);
                 let second_char = if second_at < lexer.src.len() { char_at(&lexer.src, second_at) } else { '\u{0}' };
                 match second_char {
                     'c' => {
@@ -3375,7 +3352,7 @@ pub fn tokenize<S: AsStrSlice>(input: S) -> TokenStream with RustLexerBase {
             '%' => {
                 end = try_PERCENT(&lexer.src, start);
                 if end > best_end { best_end = end; best_kind = TK_PERCENT; best_channel = 0; }
-                let second_at = char_end(&lexer.src, start);
+                let second_at = lexer.src.ceil_char_boundary(start + 1);
                 let second_char = if second_at < lexer.src.len() { char_at(&lexer.src, second_at) } else { '\u{0}' };
                 match second_char {
                     '=' => {
@@ -3389,7 +3366,7 @@ pub fn tokenize<S: AsStrSlice>(input: S) -> TokenStream with RustLexerBase {
             '&' => {
                 end = try_AND(&lexer.src, start);
                 if end > best_end { best_end = end; best_kind = TK_AND; best_channel = 0; }
-                let second_at = char_end(&lexer.src, start);
+                let second_at = lexer.src.ceil_char_boundary(start + 1);
                 let second_char = if second_at < lexer.src.len() { char_at(&lexer.src, second_at) } else { '\u{0}' };
                 match second_char {
                     '&' => {
@@ -3405,7 +3382,7 @@ pub fn tokenize<S: AsStrSlice>(input: S) -> TokenStream with RustLexerBase {
                 }
             },
             '\'' => {
-                let second_at = char_end(&lexer.src, start);
+                let second_at = lexer.src.ceil_char_boundary(start + 1);
                 let second_char = if second_at < lexer.src.len() { char_at(&lexer.src, second_at) } else { '\u{0}' };
                 match second_char {
                     '\u{0}'..='\u{8}' | '\u{b}'..='\u{c}' | '\u{e}'..='&' | '('..='@' | '['..='^' | '`' | '{'..='©' | '«'..='´' | '¶'..='¹' | '»'..='¿' | '×' | '÷' | '˂'..='˅' | '˒'..='˟' | '˥'..='˫' | '˭' | '˯'..='\u{36f}' | '͵' | '\u{378}'..='\u{379}' | ';' | '\u{380}'..='΅' | '·' | '\u{38b}' | '\u{38d}' | '\u{3a2}' | '϶' | '҂'..='\u{489}' | '\u{530}' | '\u{557}'..='\u{558}' | '՚'..='՟' | '։'..='\u{5cf}' | '\u{5eb}'..='\u{5ee}' | '׳'..='؟' | '\u{64b}'..='٭' | '\u{670}' | '۔' | '\u{6d6}'..='\u{6e4}' | '\u{6e7}'..='\u{6ed}' | '۰'..='۹' | '۽'..='۾' | '܀'..='\u{70f}' | '\u{711}' | '\u{730}'..='\u{74c}' | '\u{7a6}'..='\u{7b0}' | '\u{7b2}'..='߉' | '\u{7eb}'..='\u{7f3}' | '߶'..='߹' | '\u{7fb}'..='߿' | '\u{816}'..='\u{819}' | '\u{81b}'..='\u{823}' | '\u{825}'..='\u{827}' | '\u{829}'..='\u{83f}' | '\u{859}'..='\u{85f}' | '\u{86b}'..='\u{86f}' | '࢈' | '\u{890}'..='\u{89f}' | '\u{8ca}'..='\u{903}' | '\u{93a}'..='\u{93c}' | '\u{93e}'..='\u{94f}' | '\u{951}'..='\u{957}' | '\u{962}'..='॰' | '\u{981}'..='\u{984}' | '\u{98d}'..='\u{98e}' | '\u{991}'..='\u{992}' | '\u{9a9}' | '\u{9b1}' | '\u{9b3}'..='\u{9b5}' | '\u{9ba}'..='\u{9bc}' | '\u{9be}'..='\u{9cd}' | '\u{9cf}'..='\u{9db}' | '\u{9de}' | '\u{9e2}'..='৯' | '৲'..='৻' | '৽'..='\u{a04}' | '\u{a0b}'..='\u{a0e}' | '\u{a11}'..='\u{a12}' | '\u{a29}' | '\u{a31}' | '\u{a34}' | '\u{a37}' | '\u{a3a}'..='\u{a58}' | '\u{a5d}' | '\u{a5f}'..='\u{a71}' | '\u{a75}'..='\u{a84}' | '\u{a8e}' | '\u{a92}' | '\u{aa9}' | '\u{ab1}' | '\u{ab4}' | '\u{aba}'..='\u{abc}' | '\u{abe}'..='\u{acf}' | '\u{ad1}'..='\u{adf}' | '\u{ae2}'..='\u{af8}' | '\u{afa}'..='\u{b04}' | '\u{b0d}'..='\u{b0e}' | '\u{b11}'..='\u{b12}' | '\u{b29}' | '\u{b31}' | '\u{b34}' | '\u{b3a}'..='\u{b3c}' | '\u{b3e}'..='\u{b5b}' | '\u{b5e}' | '\u{b62}'..='୰' | '୲'..='\u{b82}' | '\u{b84}' | '\u{b8b}'..='\u{b8d}' | '\u{b91}' | '\u{b96}'..='\u{b98}' | '\u{b9b}' | '\u{b9d}' | '\u{ba0}'..='\u{ba2}' | '\u{ba5}'..='\u{ba7}' | '\u{bab}'..='\u{bad}' | '\u{bba}'..='\u{bcf}' | '\u{bd1}'..='\u{c04}' | '\u{c0d}' | '\u{c11}' | '\u{c29}' | '\u{c3a}'..='\u{c3c}' | '\u{c3e}'..='\u{c57}' | '\u{c5b}' | '\u{c5e}'..='\u{c5f}' | '\u{c62}'..='౿' | '\u{c81}'..='಄' | '\u{c8d}' | '\u{c91}' | '\u{ca9}' | '\u{cb4}' | '\u{cba}'..='\u{cbc}' | '\u{cbe}'..='\u{cdb}' | '\u{cdf}' | '\u{ce2}'..='\u{cf0}' | '\u{cf3}'..='\u{d03}' | '\u{d0d}' | '\u{d11}' | '\u{d3b}'..='\u{d3c}' | '\u{d3e}'..='\u{d4d}' | '൏'..='\u{d53}' | '\u{d57}'..='൞' | '\u{d62}'..='൹' | '\u{d80}'..='\u{d84}' | '\u{d97}'..='\u{d99}' | '\u{db2}' | '\u{dbc}' | '\u{dbe}'..='\u{dbf}' | '\u{dc7}'..='\u{e00}' | '\u{e31}' | '\u{e34}'..='฿' | '\u{e47}'..='\u{e80}' | '\u{e83}' | '\u{e85}' | '\u{e8b}' | '\u{ea4}' | '\u{ea6}' | '\u{eb1}' | '\u{eb4}'..='\u{ebc}' | '\u{ebe}'..='\u{ebf}' | '\u{ec5}' | '\u{ec7}'..='\u{edb}' | '\u{ee0}'..='\u{eff}' | '༁'..='\u{f3f}' | '\u{f48}' | '\u{f6d}'..='\u{f87}' | '\u{f8d}'..='\u{fff}' | '\u{102b}'..='\u{103e}' | '၀'..='၏' | '\u{1056}'..='\u{1059}' | '\u{105e}'..='\u{1060}' | '\u{1062}'..='\u{1064}' | '\u{1067}'..='\u{106d}' | '\u{1071}'..='\u{1074}' | '\u{1082}'..='\u{108d}' | '\u{108f}'..='႟' | '\u{10c6}' | '\u{10c8}'..='\u{10cc}' | '\u{10ce}'..='\u{10cf}' | '჻' | '\u{1249}' | '\u{124e}'..='\u{124f}' | '\u{1257}' | '\u{1259}' | '\u{125e}'..='\u{125f}' | '\u{1289}' | '\u{128e}'..='\u{128f}' | '\u{12b1}' | '\u{12b6}'..='\u{12b7}' | '\u{12bf}' | '\u{12c1}' | '\u{12c6}'..='\u{12c7}' | '\u{12d7}' | '\u{1311}' | '\u{1316}'..='\u{1317}' | '\u{135b}'..='\u{137f}' | '᎐'..='\u{139f}' | '\u{13f6}'..='\u{13f7}' | '\u{13fe}'..='᐀' | '᙭'..='᙮' | '\u{1680}' | '᚛'..='\u{169f}' | '᛫'..='᛭' | '\u{16f9}'..='\u{16ff}' | '\u{1712}'..='\u{171e}' | '\u{1732}'..='\u{173f}' | '\u{1752}'..='\u{175f}' | '\u{176d}' | '\u{1771}'..='\u{177f}' | '\u{17b4}'..='៖' | '៘'..='៛' | '\u{17dd}'..='\u{181f}' | '\u{1879}'..='\u{187f}' | '\u{18a9}' | '\u{18ab}'..='\u{18af}' | '\u{18f6}'..='\u{18ff}' | '\u{191f}'..='᥏' | '\u{196e}'..='\u{196f}' | '\u{1975}'..='\u{197f}' | '\u{19ac}'..='\u{19af}' | '\u{19ca}'..='᧿' | '\u{1a17}'..='᨟' | '\u{1a55}'..='᪦' | '᪨'..='\u{1b04}' | '\u{1b34}'..='\u{1b44}' | '\u{1b4d}'..='\u{1b82}' | '\u{1ba1}'..='\u{1bad}' | '᮰'..='᮹' | '\u{1be6}'..='᯿' | '\u{1c24}'..='\u{1c4c}' | '᱐'..='᱙' | '᱾'..='᱿' | '\u{1c8b}'..='\u{1c8f}' | '\u{1cbb}'..='\u{1cbc}' | '᳀'..='\u{1ce8}' | '\u{1ced}' | '\u{1cf4}' | '\u{1cf7}'..='\u{1cf9}' | '\u{1cfb}'..='\u{1cff}' | '\u{1dc0}'..='\u{1dff}' | '\u{1f16}'..='\u{1f17}' | '\u{1f1e}'..='\u{1f1f}' | '\u{1f46}'..='\u{1f47}' | '\u{1f4e}'..='\u{1f4f}' | '\u{1f58}' | '\u{1f5a}' | '\u{1f5c}' | '\u{1f5e}' | '\u{1f7e}'..='\u{1f7f}' | '\u{1fb5}' | '᾽' | '᾿'..='῁' | '\u{1fc5}' | '῍'..='῏' | '\u{1fd4}'..='\u{1fd5}' | '\u{1fdc}'..='῟' | '῭'..='\u{1ff1}' | '\u{1ff5}' | '´'..='⁰' | '\u{2072}'..='⁾' | '₀'..='\u{208f}' | '\u{209d}'..='℁' | '℃'..='℆' | '℈'..='℉' | '℔' | '№'..='℗' | '℞'..='℣' | '℥' | '℧' | '℩' | '℺'..='℻' | '⅀'..='⅄' | '⅊'..='⅍' | '⅏'..='⅟' | '↉'..='⯿' | '⳥'..='⳪' | '\u{2cef}'..='\u{2cf1}' | '\u{2cf4}'..='⳿' | '\u{2d26}' | '\u{2d28}'..='\u{2d2c}' | '\u{2d2e}'..='\u{2d2f}' | '\u{2d68}'..='\u{2d6e}' | '⵰'..='\u{2d7f}' | '\u{2d97}'..='\u{2d9f}' | '\u{2da7}' | '\u{2daf}' | '\u{2db7}' | '\u{2dbf}' | '\u{2dc7}' | '\u{2dcf}' | '\u{2dd7}' | '\u{2ddf}'..='⸮' | '⸰'..='〄' | '〈'..='〠' | '\u{302a}'..='〰' | '〶'..='〷' | '〽'..='\u{3040}' | '\u{3097}'..='\u{309a}' | '゠' | '・' | '\u{3100}'..='\u{3104}' | '\u{3130}' | '\u{318f}'..='㆟' | '㇀'..='㇯' | '㈀'..='㏿' | '䷀'..='䷿' | '\u{a48d}'..='\u{a4cf}' | '꓾'..='꓿' | '꘍'..='꘏' | '꘠'..='꘩' | '\u{a62c}'..='\u{a63f}' | '\u{a66f}'..='꙾' | '\u{a69e}'..='\u{a69f}' | '\u{a6f0}'..='꜖' | '꜠'..='꜡' | '꞉'..='꞊' | '\u{a7dd}'..='\u{a7f0}' | '\u{a802}' | '\u{a806}' | '\u{a80b}' | '\u{a823}'..='\u{a83f}' | '꡴'..='\u{a881}' | '\u{a8b4}'..='\u{a8f1}' | '꣸'..='꣺' | '꣼' | '\u{a8ff}'..='꤉' | '\u{a926}'..='꤯' | '\u{a947}'..='꥟' | '\u{a97d}'..='\u{a983}' | '\u{a9b3}'..='\u{a9ce}' | '꧐'..='꧟' | '\u{a9e5}' | '꧰'..='꧹' | '\u{a9ff}' | '\u{aa29}'..='\u{aa3f}' | '\u{aa43}' | '\u{aa4c}'..='꩟' | '꩷'..='꩹' | '\u{aa7b}'..='\u{aa7d}' | '\u{aab0}' | '\u{aab2}'..='\u{aab4}' | '\u{aab7}'..='\u{aab8}' | '\u{aabe}'..='\u{aabf}' | '\u{aac1}' | '\u{aac3}'..='\u{aada}' | '꫞'..='꫟' | '\u{aaeb}'..='꫱' | '\u{aaf5}'..='\u{ab00}' | '\u{ab07}'..='\u{ab08}' | '\u{ab0f}'..='\u{ab10}' | '\u{ab17}'..='\u{ab1f}' | '\u{ab27}' | '\u{ab2f}' | '꭛' | '꭪'..='\u{ab6f}' | '\u{abe3}'..='\u{abff}' | '\u{d7a4}'..='\u{d7af}' | '\u{d7c7}'..='\u{d7ca}' | '\u{d7fc}'..='\u{f8ff}' | '\u{fa6e}'..='\u{fa6f}' | '\u{fada}'..='\u{faff}' | '\u{fb07}'..='\u{fb12}' | '\u{fb18}'..='\u{fb1c}' | '\u{fb1e}' | '﬩' | '\u{fb37}' | '\u{fb3d}' | '\u{fb3f}' | '\u{fb42}' | '\u{fb45}' | '﮲'..='﯒' | '﴾'..='﵏' | '﶐'..='﶑' | '﷈'..='\u{fdef}' | '﷼'..='\u{fe6f}' | '\u{fe75}' | '\u{fefd}'..='＠' | '［'..='｀' | '｛'..='･' | '\u{ffbf}'..='\u{ffc1}' | '\u{ffc8}'..='\u{ffc9}' | '\u{ffd0}'..='\u{ffd1}' | '\u{ffd8}'..='\u{ffd9}' | '\u{ffdd}'..='\u{ffff}' | '\u{1000c}' | '\u{10027}' | '\u{1003b}' | '\u{1003e}' | '\u{1004e}'..='\u{1004f}' | '\u{1005e}'..='\u{1007f}' | '\u{100fb}'..='𐄿' | '𐅵'..='\u{1027f}' | '\u{1029d}'..='\u{1029f}' | '\u{102d1}'..='\u{102ff}' | '𐌠'..='\u{1032c}' | '\u{1034b}'..='\u{1034f}' | '\u{10376}'..='\u{1037f}' | '\u{1039e}'..='𐎟' | '\u{103c4}'..='\u{103c7}' | '𐏐' | '\u{103d6}'..='\u{103ff}' | '\u{1049e}'..='\u{104af}' | '\u{104d4}'..='\u{104d7}' | '\u{104fc}'..='\u{104ff}' | '\u{10528}'..='\u{1052f}' | '\u{10564}'..='𐕯' | '\u{1057b}' | '\u{1058b}' | '\u{10593}' | '\u{10596}' | '\u{105a2}' | '\u{105b2}' | '\u{105ba}' | '\u{105bd}'..='\u{105bf}' | '\u{105f4}'..='\u{105ff}' | '\u{10737}'..='\u{1073f}' | '\u{10756}'..='\u{1075f}' | '\u{10768}'..='\u{1077f}' | '\u{10786}' | '\u{107b1}' | '\u{107bb}'..='\u{107ff}' | '\u{10806}'..='\u{10807}' | '\u{10809}' | '\u{10836}' | '\u{10839}'..='\u{1083b}' | '\u{1083d}'..='\u{1083e}' | '\u{10856}'..='𐡟' | '𐡷'..='𐡿' | '\u{1089f}'..='\u{108df}' | '\u{108f3}' | '\u{108f6}'..='𐣿' | '𐤖'..='𐤟' | '\u{1093a}'..='𐤿' | '\u{1095a}'..='\u{1097f}' | '\u{109b8}'..='𐦽' | '𐧀'..='𐧿' | '\u{10a01}'..='\u{10a0f}' | '\u{10a14}' | '\u{10a18}' | '\u{10a36}'..='\u{10a5f}' | '𐩽'..='𐩿' | '𐪝'..='\u{10abf}' | '𐫈' | '\u{10ae5}'..='\u{10aff}' | '\u{10b36}'..='𐬿' | '\u{10b56}'..='𐭟' | '\u{10b73}'..='𐭿' | '\u{10b92}'..='\u{10bff}' | '\u{10c49}'..='\u{10c7f}' | '\u{10cb3}'..='\u{10cbf}' | '\u{10cf3}'..='𐳿' | '\u{10d24}'..='𐵉' | '\u{10d66}'..='𐵮' | '\u{10d86}'..='\u{10e7f}' | '\u{10eaa}'..='\u{10eaf}' | '\u{10eb2}'..='\u{10ec1}' | '\u{10ec8}'..='\u{10eff}' | '𐼝'..='𐼦' | '\u{10f28}'..='\u{10f2f}' | '\u{10f46}'..='\u{10f6f}' | '\u{10f82}'..='\u{10faf}' | '𐿅'..='\u{10fdf}' | '\u{10ff7}'..='\u{11002}' | '\u{11038}'..='\u{11070}' | '\u{11073}'..='\u{11074}' | '\u{11076}'..='\u{11082}' | '\u{110b0}'..='\u{110cf}' | '\u{110e9}'..='\u{11102}' | '\u{11127}'..='𑅃' | '\u{11145}'..='\u{11146}' | '\u{11148}'..='\u{1114f}' | '\u{11173}'..='𑅵' | '\u{11177}'..='\u{11182}' | '\u{111b3}'..='\u{111c0}' | '𑇅'..='𑇙' | '𑇛' | '𑇝'..='\u{111ff}' | '\u{11212}' | '\u{1122c}'..='\u{1123e}' | '\u{11241}'..='\u{1127f}' | '\u{11287}' | '\u{11289}' | '\u{1128e}' | '\u{1129e}' | '𑊩'..='\u{112af}' | '\u{112df}'..='\u{11304}' | '\u{1130d}'..='\u{1130e}' | '\u{11311}'..='\u{11312}' | '\u{11329}' | '\u{11331}' | '\u{11334}' | '\u{1133a}'..='\u{1133c}' | '\u{1133e}'..='\u{1134f}' | '\u{11351}'..='\u{1135c}' | '\u{11362}'..='\u{1137f}' | '\u{1138a}' | '\u{1138c}'..='\u{1138d}' | '\u{1138f}' | '\u{113b6}' | '\u{113b8}'..='\u{113d0}' | '\u{113d2}' | '𑏔'..='\u{113ff}' | '\u{11435}'..='\u{11446}' | '𑑋'..='\u{1145e}' | '\u{11462}'..='\u{1147f}' | '\u{114b0}'..='\u{114c3}' | '𑓆' | '\u{114c8}'..='\u{1157f}' | '\u{115af}'..='𑗗' | '\u{115dc}'..='\u{115ff}' | '\u{11630}'..='𑙃' | '\u{11645}'..='\u{1167f}' | '\u{116ab}'..='\u{116b7}' | '𑚹'..='\u{116ff}' | '\u{1171b}'..='𑜿' | '\u{11747}'..='\u{117ff}' | '\u{1182c}'..='\u{1189f}' | '𑣠'..='\u{118fe}' | '\u{11907}'..='\u{11908}' | '\u{1190a}'..='\u{1190b}' | '\u{11914}' | '\u{11917}' | '\u{11930}'..='\u{1193e}' | '\u{11940}' | '\u{11942}'..='\u{1199f}' | '\u{119a8}'..='\u{119a9}' | '\u{119d1}'..='\u{119e0}' | '𑧢' | '\u{119e4}'..='\u{119ff}' | '\u{11a01}'..='\u{11a0a}' | '\u{11a33}'..='\u{11a39}' | '\u{11a3b}'..='\u{11a4f}' | '\u{11a51}'..='\u{11a5b}' | '\u{11a8a}'..='𑪜' | '𑪞'..='\u{11aaf}' | '\u{11af9}'..='\u{11bbf}' | '𑯡'..='\u{11bff}' | '\u{11c09}' | '\u{11c2f}'..='\u{11c3f}' | '𑱁'..='𑱱' | '\u{11c90}'..='\u{11cff}' | '\u{11d07}' | '\u{11d0a}' | '\u{11d31}'..='\u{11d45}' | '\u{11d47}'..='\u{11d5f}' | '\u{11d66}' | '\u{11d69}' | '\u{11d8a}'..='\u{11d97}' | '\u{11d99}'..='\u{11daf}' | '\u{11ddc}'..='\u{11edf}' | '\u{11ef3}'..='\u{11f01}' | '\u{11f03}' | '\u{11f11}' | '\u{11f34}'..='\u{11faf}' | '\u{11fb1}'..='𑿿' | '\u{1239a}'..='\u{123ff}' | '\u{1246f}'..='\u{1247f}' | '\u{12544}'..='\u{12f8f}' | '𒿱'..='\u{12fff}' | '\u{13430}'..='\u{13440}' | '\u{13447}'..='\u{1345f}' | '\u{143fb}'..='\u{143ff}' | '\u{14647}'..='\u{160ff}' | '\u{1611e}'..='\u{167ff}' | '\u{16a39}'..='\u{16a3f}' | '\u{16a5f}'..='𖩯' | '\u{16abf}'..='\u{16acf}' | '\u{16aee}'..='\u{16aff}' | '\u{16b30}'..='𖬿' | '𖭄'..='\u{16b62}' | '\u{16b78}'..='\u{16b7c}' | '\u{16b90}'..='\u{16d3f}' | '𖵭'..='\u{16e3f}' | '𖺀'..='\u{16e9f}' | '\u{16eb9}'..='\u{16eba}' | '\u{16ed4}'..='\u{16eff}' | '\u{16f4b}'..='\u{16f4f}' | '\u{16f51}'..='\u{16f92}' | '\u{16fa0}'..='\u{16fdf}' | '𖿢' | '\u{16fe4}'..='\u{16ff1}' | '\u{16ff7}'..='\u{16fff}' | '\u{18cd6}'..='\u{18cfe}' | '\u{18d1f}'..='\u{18d7f}' | '\u{18df3}'..='\u{1afef}' | '\u{1aff4}' | '\u{1affc}' | '\u{1afff}' | '\u{1b123}'..='\u{1b131}' | '\u{1b133}'..='\u{1b14f}' | '\u{1b153}'..='\u{1b154}' | '\u{1b156}'..='\u{1b163}' | '\u{1b168}'..='\u{1b16f}' | '\u{1b2fc}'..='\u{1bbff}' | '\u{1bc6b}'..='\u{1bc6f}' | '\u{1bc7d}'..='\u{1bc7f}' | '\u{1bc89}'..='\u{1bc8f}' | '\u{1bc9a}'..='\u{1d3ff}' | '\u{1d455}' | '\u{1d49d}' | '\u{1d4a0}'..='\u{1d4a1}' | '\u{1d4a3}'..='\u{1d4a4}' | '\u{1d4a7}'..='\u{1d4a8}' | '\u{1d4ad}' | '\u{1d4ba}' | '\u{1d4bc}' | '\u{1d4c4}' | '\u{1d506}' | '\u{1d50b}'..='\u{1d50c}' | '\u{1d515}' | '\u{1d51d}' | '\u{1d53a}' | '\u{1d53f}' | '\u{1d545}' | '\u{1d547}'..='\u{1d549}' | '\u{1d551}' | '\u{1d6a6}'..='\u{1d6a7}' | '𝛁' | '𝛛' | '𝛻' | '𝜕' | '𝜵' | '𝝏' | '𝝯' | '𝞉' | '𝞩' | '𝟃' | '\u{1d7cc}'..='\u{1deff}' | '\u{1df1f}'..='\u{1df24}' | '\u{1df2b}'..='\u{1e02f}' | '\u{1e06e}'..='\u{1e0ff}' | '\u{1e12d}'..='\u{1e136}' | '\u{1e13e}'..='\u{1e14d}' | '𞅏'..='\u{1e28f}' | '\u{1e2ae}'..='\u{1e2bf}' | '\u{1e2ec}'..='\u{1e4cf}' | '\u{1e4ec}'..='\u{1e5cf}' | '\u{1e5ee}'..='\u{1e5ef}' | '𞗱'..='\u{1e6bf}' | '\u{1e6df}' | '\u{1e6e3}' | '\u{1e6e6}' | '\u{1e6ee}'..='\u{1e6ef}' | '\u{1e6f5}'..='\u{1e6fd}' | '\u{1e700}'..='\u{1e7df}' | '\u{1e7e7}' | '\u{1e7ec}' | '\u{1e7ef}' | '\u{1e7ff}' | '\u{1e8c5}'..='\u{1e8ff}' | '\u{1e944}'..='\u{1e94a}' | '\u{1e94c}'..='\u{1edff}' | '\u{1ee04}' | '\u{1ee20}' | '\u{1ee23}' | '\u{1ee25}'..='\u{1ee26}' | '\u{1ee28}' | '\u{1ee33}' | '\u{1ee38}' | '\u{1ee3a}' | '\u{1ee3c}'..='\u{1ee41}' | '\u{1ee43}'..='\u{1ee46}' | '\u{1ee48}' | '\u{1ee4a}' | '\u{1ee4c}' | '\u{1ee50}' | '\u{1ee53}' | '\u{1ee55}'..='\u{1ee56}' | '\u{1ee58}' | '\u{1ee5a}' | '\u{1ee5c}' | '\u{1ee5e}' | '\u{1ee60}' | '\u{1ee63}' | '\u{1ee65}'..='\u{1ee66}' | '\u{1ee6b}' | '\u{1ee73}' | '\u{1ee78}' | '\u{1ee7d}' | '\u{1ee7f}' | '\u{1ee8a}' | '\u{1ee9c}'..='\u{1eea0}' | '\u{1eea4}' | '\u{1eeaa}' | '\u{1eebc}'..='\u{1ffff}' | '\u{2a6e0}'..='\u{2a6ff}' | '\u{2b81e}'..='\u{2b81f}' | '\u{2ceae}'..='\u{2ceaf}' | '\u{2ebe1}'..='\u{2ebef}' | '\u{2ee5e}'..='\u{2f7ff}' | '\u{2fa1e}'..='\u{2ffff}' | '\u{3134b}'..='\u{3134f}' | '\u{3347a}'..='\u{10ffff}' => {
@@ -3449,7 +3426,7 @@ pub fn tokenize<S: AsStrSlice>(input: S) -> TokenStream with RustLexerBase {
             '*' => {
                 end = try_STAR(&lexer.src, start);
                 if end > best_end { best_end = end; best_kind = TK_STAR; best_channel = 0; }
-                let second_at = char_end(&lexer.src, start);
+                let second_at = lexer.src.ceil_char_boundary(start + 1);
                 let second_char = if second_at < lexer.src.len() { char_at(&lexer.src, second_at) } else { '\u{0}' };
                 match second_char {
                     '=' => {
@@ -3463,7 +3440,7 @@ pub fn tokenize<S: AsStrSlice>(input: S) -> TokenStream with RustLexerBase {
             '+' => {
                 end = try_PLUS(&lexer.src, start);
                 if end > best_end { best_end = end; best_kind = TK_PLUS; best_channel = 0; }
-                let second_at = char_end(&lexer.src, start);
+                let second_at = lexer.src.ceil_char_boundary(start + 1);
                 let second_char = if second_at < lexer.src.len() { char_at(&lexer.src, second_at) } else { '\u{0}' };
                 match second_char {
                     '=' => {
@@ -3481,7 +3458,7 @@ pub fn tokenize<S: AsStrSlice>(input: S) -> TokenStream with RustLexerBase {
             '-' => {
                 end = try_MINUS(&lexer.src, start);
                 if end > best_end { best_end = end; best_kind = TK_MINUS; best_channel = 0; }
-                let second_at = char_end(&lexer.src, start);
+                let second_at = lexer.src.ceil_char_boundary(start + 1);
                 let second_char = if second_at < lexer.src.len() { char_at(&lexer.src, second_at) } else { '\u{0}' };
                 match second_char {
                     '=' => {
@@ -3499,7 +3476,7 @@ pub fn tokenize<S: AsStrSlice>(input: S) -> TokenStream with RustLexerBase {
             '.' => {
                 end = try_DOT(&lexer.src, start);
                 if end > best_end { best_end = end; best_kind = TK_DOT; best_channel = 0; }
-                let second_at = char_end(&lexer.src, start);
+                let second_at = lexer.src.ceil_char_boundary(start + 1);
                 let second_char = if second_at < lexer.src.len() { char_at(&lexer.src, second_at) } else { '\u{0}' };
                 match second_char {
                     '.' => {
@@ -3515,7 +3492,7 @@ pub fn tokenize<S: AsStrSlice>(input: S) -> TokenStream with RustLexerBase {
                 }
             },
             '/' => {
-                let second_at = char_end(&lexer.src, start);
+                let second_at = lexer.src.ceil_char_boundary(start + 1);
                 let second_char = if second_at < lexer.src.len() { char_at(&lexer.src, second_at) } else { '\u{0}' };
                 match second_char {
                     '*' => {
@@ -3559,7 +3536,7 @@ pub fn tokenize<S: AsStrSlice>(input: S) -> TokenStream with RustLexerBase {
             ':' => {
                 end = try_COLON(&lexer.src, start);
                 if end > best_end { best_end = end; best_kind = TK_COLON; best_channel = 0; }
-                let second_at = char_end(&lexer.src, start);
+                let second_at = lexer.src.ceil_char_boundary(start + 1);
                 let second_char = if second_at < lexer.src.len() { char_at(&lexer.src, second_at) } else { '\u{0}' };
                 match second_char {
                     ':' => {
@@ -3575,7 +3552,7 @@ pub fn tokenize<S: AsStrSlice>(input: S) -> TokenStream with RustLexerBase {
                 if end > best_end { best_end = end; best_kind = TK_SEMI; best_channel = 0; }
             },
             '<' => {
-                let second_at = char_end(&lexer.src, start);
+                let second_at = lexer.src.ceil_char_boundary(start + 1);
                 let second_char = if second_at < lexer.src.len() { char_at(&lexer.src, second_at) } else { '\u{0}' };
                 match second_char {
                     '<' => {
@@ -3599,7 +3576,7 @@ pub fn tokenize<S: AsStrSlice>(input: S) -> TokenStream with RustLexerBase {
             '=' => {
                 end = try_EQ(&lexer.src, start);
                 if end > best_end { best_end = end; best_kind = TK_EQ; best_channel = 0; }
-                let second_at = char_end(&lexer.src, start);
+                let second_at = lexer.src.ceil_char_boundary(start + 1);
                 let second_char = if second_at < lexer.src.len() { char_at(&lexer.src, second_at) } else { '\u{0}' };
                 match second_char {
                     '=' => {
@@ -3615,7 +3592,7 @@ pub fn tokenize<S: AsStrSlice>(input: S) -> TokenStream with RustLexerBase {
                 }
             },
             '>' => {
-                let second_at = char_end(&lexer.src, start);
+                let second_at = lexer.src.ceil_char_boundary(start + 1);
                 let second_char = if second_at < lexer.src.len() { char_at(&lexer.src, second_at) } else { '\u{0}' };
                 match second_char {
                     '=' => {
@@ -3659,7 +3636,7 @@ pub fn tokenize<S: AsStrSlice>(input: S) -> TokenStream with RustLexerBase {
             '^' => {
                 end = try_CARET(&lexer.src, start);
                 if end > best_end { best_end = end; best_kind = TK_CARET; best_channel = 0; }
-                let second_at = char_end(&lexer.src, start);
+                let second_at = lexer.src.ceil_char_boundary(start + 1);
                 let second_char = if second_at < lexer.src.len() { char_at(&lexer.src, second_at) } else { '\u{0}' };
                 match second_char {
                     '=' => {
@@ -3679,7 +3656,7 @@ pub fn tokenize<S: AsStrSlice>(input: S) -> TokenStream with RustLexerBase {
             'b' => {
                 end = try_NON_KEYWORD_IDENTIFIER(&lexer.src, start);
                 if end > best_end { best_end = end; best_kind = TK_NON_KEYWORD_IDENTIFIER; best_channel = 0; }
-                let second_at = char_end(&lexer.src, start);
+                let second_at = lexer.src.ceil_char_boundary(start + 1);
                 let second_char = if second_at < lexer.src.len() { char_at(&lexer.src, second_at) } else { '\u{0}' };
                 match second_char {
                     '"' => {
@@ -3701,7 +3678,7 @@ pub fn tokenize<S: AsStrSlice>(input: S) -> TokenStream with RustLexerBase {
             'r' => {
                 end = try_NON_KEYWORD_IDENTIFIER(&lexer.src, start);
                 if end > best_end { best_end = end; best_kind = TK_NON_KEYWORD_IDENTIFIER; best_channel = 0; }
-                let second_at = char_end(&lexer.src, start);
+                let second_at = lexer.src.ceil_char_boundary(start + 1);
                 let second_char = if second_at < lexer.src.len() { char_at(&lexer.src, second_at) } else { '\u{0}' };
                 match second_char {
                     '"' => {
@@ -3725,7 +3702,7 @@ pub fn tokenize<S: AsStrSlice>(input: S) -> TokenStream with RustLexerBase {
             '|' => {
                 end = try_OR(&lexer.src, start);
                 if end > best_end { best_end = end; best_kind = TK_OR; best_channel = 0; }
-                let second_at = char_end(&lexer.src, start);
+                let second_at = lexer.src.ceil_char_boundary(start + 1);
                 let second_char = if second_at < lexer.src.len() { char_at(&lexer.src, second_at) } else { '\u{0}' };
                 match second_char {
                     '=' => {
@@ -3745,7 +3722,7 @@ pub fn tokenize<S: AsStrSlice>(input: S) -> TokenStream with RustLexerBase {
                 if end > best_end { best_end = end; best_kind = TK_RCURLYBRACE; best_channel = 0; }
             },
             '\u{feff}' => {
-                let second_at = char_end(&lexer.src, start);
+                let second_at = lexer.src.ceil_char_boundary(start + 1);
                 let second_char = if second_at < lexer.src.len() { char_at(&lexer.src, second_at) } else { '\u{0}' };
                 match second_char {
                     '!' | '#' => {
@@ -3759,7 +3736,7 @@ pub fn tokenize<S: AsStrSlice>(input: S) -> TokenStream with RustLexerBase {
             _ => {},
         }
         if best_end <= start {
-            let error_end = char_end(&lexer.src, start);
+            let error_end = lexer.src.ceil_char_boundary(start + 1);
             let _ = ts.push_token_flagged(TK_ERROR, start, error_end, triv_lo, ts.trivia_mark(), TokenFlags::LexError);
             triv_lo = ts.trivia_mark();
             lexer.pos = error_end;
@@ -4314,7 +4291,7 @@ impl Parser {
     }
 
     pub fn token_line(&self, i: i32) -> i32 {
-        return line_col_at(&self.tokens.src, &self.line_starts, self.tokens.starts[i]).0;
+        return line_at(&self.line_starts, self.tokens.starts[i]);
     }
 
     pub fn token_col(&self, i: i32) -> i32 {
@@ -4337,7 +4314,7 @@ impl Parser {
     }
 
     pub fn text_span(&self, start: i32, end: i32) -> String {
-        return span_text(&self.tokens.src, start, i32::min(end, self.tokens.src.len()));
+        return span_text(&self.tokens.src, start, end);
     }
 
     pub fn text_between(&self, lo: i32, hi: i32) -> String {

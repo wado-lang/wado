@@ -20,23 +20,6 @@ impl Span {
     }
 }
 
-internal fn utf8_len(lead: u8) -> i32 {
-    if lead < 0x80 {
-        return 1;
-    }
-    if lead < 0xE0 {
-        return 2;
-    }
-    if lead < 0xF0 {
-        return 3;
-    }
-    return 4;
-}
-
-internal fn is_utf8_continuation(b: u8) -> bool {
-    return b & 0xC0 == 0x80;
-}
-
 internal fn char_at(src: &StrSlice, pos: i32) -> char
     contract 0 <= pos < src.len()
 {
@@ -47,28 +30,12 @@ internal fn char_at(src: &StrSlice, pos: i32) -> char
     return src.char_at_byte(pos);
 }
 
-internal fn char_end(src: &StrSlice, pos: i32) -> i32
-    contract 0 <= pos < src.len()
-{
-    return pos + utf8_len(unchecked src.byte_at(pos));
-}
-
-internal fn char_start_before(src: &StrSlice, pos: i32) -> i32
-    contract 0 < pos <= src.len()
-{
-    let mut i = pos - 1;
-    while i > 0 && is_utf8_continuation(unchecked src.byte_at(i)) {
-        i -= 1;
-    }
-    return i;
-}
-
 internal fn char_count(src: &StrSlice, start: i32, end: i32) -> i32
     contract 0 <= start <= end <= src.len()
 {
     let mut n = 0;
     for let mut i = start; i < end; i += 1 {
-        if !is_utf8_continuation(unchecked src.byte_at(i)) {
+        if src.is_char_boundary(i) {
             n += 1;
         }
     }
@@ -141,7 +108,7 @@ internal fn line_starts(src: &StrSlice) -> List<i32> {
     return starts;
 }
 
-internal fn line_col_at(src: &StrSlice, starts: &List<i32>, pos: i32) -> [i32, i32] {
+internal fn line_at(starts: &List<i32>, pos: i32) -> i32 {
     let mut lo = 0;
     let mut hi = starts.len() - 1;
     while lo < hi {
@@ -152,7 +119,12 @@ internal fn line_col_at(src: &StrSlice, starts: &List<i32>, pos: i32) -> [i32, i
             hi = mid - 1;
         }
     }
-    return [lo + 1, char_count(src, starts[lo], pos)];
+    return lo + 1;
+}
+
+internal fn line_col_at(src: &StrSlice, starts: &List<i32>, pos: i32) -> [i32, i32] {
+    let line = line_at(starts, pos);
+    return [line, char_count(src, starts[line - 1], pos)];
 }
 
 pub flags TokenFlags {
@@ -920,23 +892,31 @@ fn render_node(
     return c;
 }
 
-struct CharIndexCursor {
+struct SourceCursor {
     byte: i32,
     char: i32,
+    line: i32,
+    line_char: i32,
 }
 
-impl CharIndexCursor {
-    fn advance_to(&mut self, src: &StrSlice, byte: i32) -> i32 {
+impl SourceCursor {
+    fn advance_to(&mut self, src: &StrSlice, byte: i32) {
         assert byte >= self.byte, "to_lexer_string visits tokens in source order";
-        self.char += char_count(src, self.byte, byte);
+        for let mut i = self.byte; i < byte; i += 1 {
+            if src.is_char_boundary(i) {
+                self.char += 1;
+            }
+            if unchecked src.byte_at(i) == b'\n' {
+                self.line += 1;
+                self.line_char = self.char;
+            }
+        }
         self.byte = byte;
-        return self.char;
     }
 }
 
 pub fn to_lexer_string(tokens: &TokenStream, eof_kind: i32) -> String {
-    let starts = line_starts(&tokens.src);
-    let mut cursor = CharIndexCursor { byte: 0, char: 0 };
+    let mut cursor = SourceCursor { byte: 0, char: 0, line: 1, line_char: 0 };
     let mut out = String::with_capacity(tokens.output.len() + tokens.len() * 32);
     out.push_str(&tokens.output);
     let mut index = 0;
@@ -952,7 +932,6 @@ pub fn to_lexer_string(tokens: &TokenStream, eof_kind: i32) -> String {
                     tokens.triv_starts[t],
                     tokens.triv_ends[t],
                     tokens.triv_chans[t],
-                    &starts,
                     &mut cursor,
                     index,
                     eof_kind,
@@ -967,7 +946,6 @@ pub fn to_lexer_string(tokens: &TokenStream, eof_kind: i32) -> String {
             tokens.starts[i],
             tokens.ends[i],
             0,
-            &starts,
             &mut cursor,
             index,
             eof_kind,
@@ -984,15 +962,14 @@ fn emit_lexer_token(
     start: i32,
     end: i32,
     channel: i32,
-    starts: &List<i32>,
-    cursor: &mut CharIndexCursor,
+    cursor: &mut SourceCursor,
     index: i32,
     eof_kind: i32,
 ) {
     let is_eof = kind == eof_kind;
     let type_id = if is_eof { -1 } else { kind + 1 };
-    let lc = line_col_at(&tokens.src, starts, start);
-    let first = cursor.advance_to(&tokens.src, start);
+    cursor.advance_to(&tokens.src, start);
+    let first = cursor.char;
     let stop = first + char_count(&tokens.src, start, end) - 1;
     out.push_str(`[@${index},${first}:${stop}='`);
     if is_eof {
@@ -1004,7 +981,7 @@ fn emit_lexer_token(
     if channel != 0 {
         out.push_str(`channel=${channel},`);
     }
-    out.push_str(`${lc.0}:${lc.1}]\n`);
+    out.push_str(`${cursor.line}:${first - cursor.line_char}]\n`);
 }
 
 pub struct LexerView {
@@ -1020,13 +997,13 @@ impl LexerView {
             if i >= self.src.len() {
                 return -1;
             }
-            i = char_end(self.src, i);
+            i = self.src.ceil_char_boundary(i + 1);
         }
         for let mut step = 0; step > k; step -= 1 {
             if i == 0 {
                 return -1;
             }
-            i = char_start_before(self.src, i);
+            i = self.src.floor_char_boundary(i - 1);
         }
         return self.char_at(i);
     }
@@ -2674,7 +2651,7 @@ fn try_MultiLineComment(src: &StrSlice, start: i32) -> i32 {
         }
         pos = ng_saved_5;
         if pos >= src.len() { return -1; }
-        pos = char_end(src, pos);
+        pos = src.ceil_char_boundary(pos + 1);
     }
     return pos;
 }
@@ -2689,7 +2666,7 @@ fn try_SingleLineComment(src: &StrSlice, start: i32) -> i32 {
         rep_6: {
             if pos >= src.len() { break rep_6; }
             if (char_at(src, pos) matches { '\r' | '\n' | '\u{2028}' | '\u{2029}' }) { break rep_6; }
-            pos = char_end(src, pos);
+            pos = src.ceil_char_boundary(pos + 1);
             continue;
         }
         break;
@@ -3716,12 +3693,12 @@ fn try_WhiteSpaces(src: &StrSlice, start: i32) -> i32 {
     let mut pos = start;
     if pos >= src.len() { return -1; }
     if !(char_at(src, pos) matches { '\t' | '\u{b}' | '\u{c}' | ' ' | '\u{a0}' }) { return -1; }
-    pos = char_end(src, pos);
+    pos = src.ceil_char_boundary(pos + 1);
     loop {
         rep_29: {
             if pos >= src.len() { break rep_29; }
             if !(char_at(src, pos) matches { '\t' | '\u{b}' | '\u{c}' | ' ' | '\u{a0}' }) { break rep_29; }
-            pos = char_end(src, pos);
+            pos = src.ceil_char_boundary(pos + 1);
             continue;
         }
         break;
@@ -3733,7 +3710,7 @@ fn try_LineTerminator(src: &StrSlice, start: i32) -> i32 {
     let mut pos = start;
     if pos >= src.len() { return -1; }
     if !(char_at(src, pos) matches { '\r' | '\n' | '\u{2028}' | '\u{2029}' }) { return -1; }
-    pos = char_end(src, pos);
+    pos = src.ceil_char_boundary(pos + 1);
     return pos;
 }
 
@@ -3764,7 +3741,7 @@ fn try_HtmlComment(src: &StrSlice, start: i32) -> i32 {
         }
         pos = ng_saved_31;
         if pos >= src.len() { return -1; }
-        pos = char_end(src, pos);
+        pos = src.ceil_char_boundary(pos + 1);
     }
     return pos;
 }
@@ -3806,7 +3783,7 @@ fn try_CDataComment(src: &StrSlice, start: i32) -> i32 {
         }
         pos = ng_saved_32;
         if pos >= src.len() { return -1; }
-        pos = char_end(src, pos);
+        pos = src.ceil_char_boundary(pos + 1);
     }
     return pos;
 }
@@ -3814,7 +3791,7 @@ fn try_CDataComment(src: &StrSlice, start: i32) -> i32 {
 fn try_UnexpectedCharacter(src: &StrSlice, start: i32) -> i32 {
     let mut pos = start;
     if pos >= src.len() { return -1; }
-    pos = char_end(src, pos);
+    pos = src.ceil_char_boundary(pos + 1);
     return pos;
 }
 
@@ -3823,7 +3800,7 @@ fn try_TemplateStringEscapeAtom(src: &StrSlice, start: i32) -> i32 {
     if pos >= src.len() || unchecked src.byte_at(pos) != b'\\' { return -1; }
     pos += 1;
     if pos >= src.len() { return -1; }
-    pos = char_end(src, pos);
+    pos = src.ceil_char_boundary(pos + 1);
     return pos;
 }
 
@@ -3847,7 +3824,7 @@ fn try_TemplateStringAtom(src: &StrSlice, start: i32) -> i32 {
     let mut pos = start;
     if pos >= src.len() { return -1; }
     if (unchecked src.byte_at(pos) matches { b'`' | b'\\' }) { return -1; }
-    pos = char_end(src, pos);
+    pos = src.ceil_char_boundary(pos + 1);
     return pos;
 }
 
@@ -3859,7 +3836,7 @@ fn frag_RegularExpressionFirstChar(src: &StrSlice, start: i32) -> i32 {
             pos = alts_saved_33;
             if pos >= src.len() { break alts_33_0; }
             if (char_at(src, pos) matches { '*' | '\r' | '\n' | '\u{2028}' | '\u{2029}' | '\\' | '/' | '[' }) { break alts_33_0; }
-            pos = char_end(src, pos);
+            pos = src.ceil_char_boundary(pos + 1);
             break alts_done_33;
         }
         alts_33_1: {
@@ -3899,7 +3876,7 @@ fn frag_RegularExpressionChar(src: &StrSlice, start: i32) -> i32 {
             pos = alts_saved_35;
             if pos >= src.len() { break alts_35_0; }
             if (char_at(src, pos) matches { '\r' | '\n' | '\u{2028}' | '\u{2029}' | '\\' | '/' | '[' }) { break alts_35_0; }
-            pos = char_end(src, pos);
+            pos = src.ceil_char_boundary(pos + 1);
             break alts_done_35;
         }
         alts_35_1: {
@@ -3945,21 +3922,21 @@ fn frag_IdentifierPart(src: &StrSlice, start: i32) -> i32 {
             pos = alts_saved_37;
             if pos >= src.len() { break alts_37_1; }
             if !in_char_set_0(char_at(src, pos)) { break alts_37_1; }
-            pos = char_end(src, pos);
+            pos = src.ceil_char_boundary(pos + 1);
             break alts_done_37;
         }
         alts_37_2: {
             pos = alts_saved_37;
             if pos >= src.len() { break alts_37_2; }
             if !in_char_set_1(char_at(src, pos)) { break alts_37_2; }
-            pos = char_end(src, pos);
+            pos = src.ceil_char_boundary(pos + 1);
             break alts_done_37;
         }
         alts_37_3: {
             pos = alts_saved_37;
             if pos >= src.len() { break alts_37_3; }
             if !(char_at(src, pos) matches { '_' | '‿'..='⁀' | '⁔' | '︳'..='︴' | '﹍'..='﹏' | '＿' }) { break alts_37_3; }
-            pos = char_end(src, pos);
+            pos = src.ceil_char_boundary(pos + 1);
             break alts_done_37;
         }
         alts_37_4: {
@@ -4043,7 +4020,7 @@ fn frag_IdentifierStart(src: &StrSlice, start: i32) -> i32 {
             pos = alts_saved_43;
             if pos >= src.len() { break alts_43_0; }
             if !in_char_set_2(char_at(src, pos)) { break alts_43_0; }
-            pos = char_end(src, pos);
+            pos = src.ceil_char_boundary(pos + 1);
             break alts_done_43;
         }
         alts_43_1: {
@@ -4074,7 +4051,7 @@ fn frag_DoubleStringCharacter(src: &StrSlice, start: i32) -> i32 {
             pos = alts_saved_44;
             if pos >= src.len() { break alts_44_0; }
             if (unchecked src.byte_at(pos) matches { b'"' | b'\\' | b'\x0d' | b'\x0a' }) { break alts_44_0; }
-            pos = char_end(src, pos);
+            pos = src.ceil_char_boundary(pos + 1);
             break alts_done_44;
         }
         alts_44_1: {
@@ -4104,7 +4081,7 @@ fn frag_SingleStringCharacter(src: &StrSlice, start: i32) -> i32 {
             pos = alts_saved_45;
             if pos >= src.len() { break alts_45_0; }
             if (unchecked src.byte_at(pos) matches { b'\'' | b'\\' | b'\x0d' | b'\x0a' }) { break alts_45_0; }
-            pos = char_end(src, pos);
+            pos = src.ceil_char_boundary(pos + 1);
             break alts_done_45;
         }
         alts_45_1: {
@@ -4132,7 +4109,7 @@ fn frag_RegularExpressionBackslashSequence(src: &StrSlice, start: i32) -> i32 {
     pos += 1;
     if pos >= src.len() { return -1; }
     if (char_at(src, pos) matches { '\r' | '\n' | '\u{2028}' | '\u{2029}' }) { return -1; }
-    pos = char_end(src, pos);
+    pos = src.ceil_char_boundary(pos + 1);
     return pos;
 }
 
@@ -4144,7 +4121,7 @@ fn frag_RegularExpressionClassChar(src: &StrSlice, start: i32) -> i32 {
             pos = alts_saved_46;
             if pos >= src.len() { break alts_46_0; }
             if (char_at(src, pos) matches { '\r' | '\n' | '\u{2028}' | '\u{2029}' | ']' | '\\' }) { break alts_46_0; }
-            pos = char_end(src, pos);
+            pos = src.ceil_char_boundary(pos + 1);
             break alts_done_46;
         }
         alts_46_1: {
@@ -4255,12 +4232,12 @@ fn frag_LineContinuation(src: &StrSlice, start: i32) -> i32 {
     pos += 1;
     if pos >= src.len() { return -1; }
     if !(char_at(src, pos) matches { '\r' | '\n' | '\u{2028}' | '\u{2029}' }) { return -1; }
-    pos = char_end(src, pos);
+    pos = src.ceil_char_boundary(pos + 1);
     loop {
         rep_51: {
             if pos >= src.len() { break rep_51; }
             if !(char_at(src, pos) matches { '\r' | '\n' | '\u{2028}' | '\u{2029}' }) { break rep_51; }
-            pos = char_end(src, pos);
+            pos = src.ceil_char_boundary(pos + 1);
             continue;
         }
         break;
@@ -4330,7 +4307,7 @@ fn frag_NonEscapeCharacter(src: &StrSlice, start: i32) -> i32 {
     let mut pos = start;
     if pos >= src.len() { return -1; }
     if (unchecked src.byte_at(pos) matches { b'\'' | b'"' | b'\\' | b'b' | b'f' | b'n' | b'r' | b't' | b'v' | b'0'..=b'9' | b'x' | b'u' | b'\x0d' | b'\x0a' }) { return -1; }
-    pos = char_end(src, pos);
+    pos = src.ceil_char_boundary(pos + 1);
     return pos;
 }
 
@@ -4533,7 +4510,7 @@ pub fn tokenize<S: AsStrSlice>(input: S) -> TokenStream with TypeScriptLexerBase
                 '!' => {
                     end = try_Not(&lexer.src, start);
                     if end > best_end { best_end = end; best_kind = TK_Not; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 0; best_act = -1; }
-                    let second_at = char_end(&lexer.src, start);
+                    let second_at = lexer.src.ceil_char_boundary(start + 1);
                     let second_char = if second_at < lexer.src.len() { char_at(&lexer.src, second_at) } else { '\u{0}' };
                     match second_char {
                         '=' => {
@@ -4547,7 +4524,7 @@ pub fn tokenize<S: AsStrSlice>(input: S) -> TokenStream with TypeScriptLexerBase
                     }
                 },
                 '"' | '\'' => {
-                    let second_at = char_end(&lexer.src, start);
+                    let second_at = lexer.src.ceil_char_boundary(start + 1);
                     let second_char = if second_at < lexer.src.len() { char_at(&lexer.src, second_at) } else { '\u{0}' };
                     match second_char {
                         '\u{0}'..='\t' | '\u{b}'..='\u{c}' | '\u{e}'..='\u{10ffff}' => {
@@ -4569,7 +4546,7 @@ pub fn tokenize<S: AsStrSlice>(input: S) -> TokenStream with TypeScriptLexerBase
                 '%' => {
                     end = try_Modulus(&lexer.src, start);
                     if end > best_end { best_end = end; best_kind = TK_Modulus; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 0; best_act = -1; }
-                    let second_at = char_end(&lexer.src, start);
+                    let second_at = lexer.src.ceil_char_boundary(start + 1);
                     let second_char = if second_at < lexer.src.len() { char_at(&lexer.src, second_at) } else { '\u{0}' };
                     match second_char {
                         '=' => {
@@ -4583,7 +4560,7 @@ pub fn tokenize<S: AsStrSlice>(input: S) -> TokenStream with TypeScriptLexerBase
                 '&' => {
                     end = try_BitAnd(&lexer.src, start);
                     if end > best_end { best_end = end; best_kind = TK_BitAnd; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 0; best_act = -1; }
-                    let second_at = char_end(&lexer.src, start);
+                    let second_at = lexer.src.ceil_char_boundary(start + 1);
                     let second_char = if second_at < lexer.src.len() { char_at(&lexer.src, second_at) } else { '\u{0}' };
                     match second_char {
                         '&' => {
@@ -4609,7 +4586,7 @@ pub fn tokenize<S: AsStrSlice>(input: S) -> TokenStream with TypeScriptLexerBase
                 '*' => {
                     end = try_Multiply(&lexer.src, start);
                     if end > best_end { best_end = end; best_kind = TK_Multiply; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 0; best_act = -1; }
-                    let second_at = char_end(&lexer.src, start);
+                    let second_at = lexer.src.ceil_char_boundary(start + 1);
                     let second_char = if second_at < lexer.src.len() { char_at(&lexer.src, second_at) } else { '\u{0}' };
                     match second_char {
                         '*' => {
@@ -4627,7 +4604,7 @@ pub fn tokenize<S: AsStrSlice>(input: S) -> TokenStream with TypeScriptLexerBase
                     }
                 },
                 '+' => {
-                    let second_at = char_end(&lexer.src, start);
+                    let second_at = lexer.src.ceil_char_boundary(start + 1);
                     let second_char = if second_at < lexer.src.len() { char_at(&lexer.src, second_at) } else { '\u{0}' };
                     match second_char {
                         '+' => {
@@ -4653,7 +4630,7 @@ pub fn tokenize<S: AsStrSlice>(input: S) -> TokenStream with TypeScriptLexerBase
                     if end > best_end { best_end = end; best_kind = TK_Comma; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 0; best_act = -1; }
                 },
                 '-' => {
-                    let second_at = char_end(&lexer.src, start);
+                    let second_at = lexer.src.ceil_char_boundary(start + 1);
                     let second_char = if second_at < lexer.src.len() { char_at(&lexer.src, second_at) } else { '\u{0}' };
                     match second_char {
                         '-' => {
@@ -4675,7 +4652,7 @@ pub fn tokenize<S: AsStrSlice>(input: S) -> TokenStream with TypeScriptLexerBase
                     }
                 },
                 '.' => {
-                    let second_at = char_end(&lexer.src, start);
+                    let second_at = lexer.src.ceil_char_boundary(start + 1);
                     let second_char = if second_at < lexer.src.len() { char_at(&lexer.src, second_at) } else { '\u{0}' };
                     match second_char {
                         '.' => {
@@ -4691,7 +4668,7 @@ pub fn tokenize<S: AsStrSlice>(input: S) -> TokenStream with TypeScriptLexerBase
                     if end > best_end { best_end = end; best_kind = TK_DecimalLiteral; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 0; best_act = -1; }
                 },
                 '/' => {
-                    let second_at = char_end(&lexer.src, start);
+                    let second_at = lexer.src.ceil_char_boundary(start + 1);
                     let second_char = if second_at < lexer.src.len() { char_at(&lexer.src, second_at) } else { '\u{0}' };
                     match second_char {
                         '\u{0}'..='\t' | '\u{b}'..='\u{c}' | '\u{e}'..=')' | '+'..='.' | '0'..='<' | '>'..='‧' | '\u{202a}'..='\u{10ffff}' => {
@@ -4729,7 +4706,7 @@ pub fn tokenize<S: AsStrSlice>(input: S) -> TokenStream with TypeScriptLexerBase
                 '0' => {
                     end = try_DecimalLiteral(&lexer.src, start);
                     if end > best_end { best_end = end; best_kind = TK_DecimalLiteral; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 0; best_act = -1; }
-                    let second_at = char_end(&lexer.src, start);
+                    let second_at = lexer.src.ceil_char_boundary(start + 1);
                     let second_char = if second_at < lexer.src.len() { char_at(&lexer.src, second_at) } else { '\u{0}' };
                     match second_char {
                         '0'..='7' => {
@@ -4767,7 +4744,7 @@ pub fn tokenize<S: AsStrSlice>(input: S) -> TokenStream with TypeScriptLexerBase
                 '1'..='9' => {
                     end = try_DecimalLiteral(&lexer.src, start);
                     if end > best_end { best_end = end; best_kind = TK_DecimalLiteral; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 0; best_act = -1; }
-                    let second_at = char_end(&lexer.src, start);
+                    let second_at = lexer.src.ceil_char_boundary(start + 1);
                     let second_char = if second_at < lexer.src.len() { char_at(&lexer.src, second_at) } else { '\u{0}' };
                     match second_char {
                         '0'..='9' | '_' | 'n' => {
@@ -4787,7 +4764,7 @@ pub fn tokenize<S: AsStrSlice>(input: S) -> TokenStream with TypeScriptLexerBase
                     if end > best_end { best_end = end; best_kind = TK_SemiColon; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 0; best_act = -1; }
                 },
                 '<' => {
-                    let second_at = char_end(&lexer.src, start);
+                    let second_at = lexer.src.ceil_char_boundary(start + 1);
                     let second_char = if second_at < lexer.src.len() { char_at(&lexer.src, second_at) } else { '\u{0}' };
                     match second_char {
                         '!' => {
@@ -4821,7 +4798,7 @@ pub fn tokenize<S: AsStrSlice>(input: S) -> TokenStream with TypeScriptLexerBase
                 '=' => {
                     end = try_Assign(&lexer.src, start);
                     if end > best_end { best_end = end; best_kind = TK_Assign; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 0; best_act = -1; }
-                    let second_at = char_end(&lexer.src, start);
+                    let second_at = lexer.src.ceil_char_boundary(start + 1);
                     let second_char = if second_at < lexer.src.len() { char_at(&lexer.src, second_at) } else { '\u{0}' };
                     match second_char {
                         '=' => {
@@ -4841,7 +4818,7 @@ pub fn tokenize<S: AsStrSlice>(input: S) -> TokenStream with TypeScriptLexerBase
                 '>' => {
                     end = try_MoreThan(&lexer.src, start);
                     if end > best_end { best_end = end; best_kind = TK_MoreThan; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 0; best_act = -1; }
-                    let second_at = char_end(&lexer.src, start);
+                    let second_at = lexer.src.ceil_char_boundary(start + 1);
                     let second_char = if second_at < lexer.src.len() { char_at(&lexer.src, second_at) } else { '\u{0}' };
                     match second_char {
                         '=' => {
@@ -4861,7 +4838,7 @@ pub fn tokenize<S: AsStrSlice>(input: S) -> TokenStream with TypeScriptLexerBase
                 '?' => {
                     end = try_QuestionMark(&lexer.src, start);
                     if end > best_end { best_end = end; best_kind = TK_QuestionMark; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 0; best_act = -1; }
-                    let second_at = char_end(&lexer.src, start);
+                    let second_at = lexer.src.ceil_char_boundary(start + 1);
                     let second_char = if second_at < lexer.src.len() { char_at(&lexer.src, second_at) } else { '\u{0}' };
                     match second_char {
                         '.' => {
@@ -4893,7 +4870,7 @@ pub fn tokenize<S: AsStrSlice>(input: S) -> TokenStream with TypeScriptLexerBase
                 '^' => {
                     end = try_BitXOr(&lexer.src, start);
                     if end > best_end { best_end = end; best_kind = TK_BitXOr; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 0; best_act = -1; }
-                    let second_at = char_end(&lexer.src, start);
+                    let second_at = lexer.src.ceil_char_boundary(start + 1);
                     let second_char = if second_at < lexer.src.len() { char_at(&lexer.src, second_at) } else { '\u{0}' };
                     match second_char {
                         '=' => {
@@ -4909,7 +4886,7 @@ pub fn tokenize<S: AsStrSlice>(input: S) -> TokenStream with TypeScriptLexerBase
                     if end > best_end { best_end = end; best_kind = TK_BackTick; best_push_mode = 1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 0; best_act = 3; }
                 },
                 'f' => {
-                    let second_at = char_end(&lexer.src, start);
+                    let second_at = lexer.src.ceil_char_boundary(start + 1);
                     let second_char = if second_at < lexer.src.len() { char_at(&lexer.src, second_at) } else { '\u{0}' };
                     match second_char {
                         'a' => {
@@ -4941,7 +4918,7 @@ pub fn tokenize<S: AsStrSlice>(input: S) -> TokenStream with TypeScriptLexerBase
                     if end > best_end { best_end = end; best_kind = TK_Identifier; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 0; best_act = -1; }
                 },
                 't' => {
-                    let second_at = char_end(&lexer.src, start);
+                    let second_at = lexer.src.ceil_char_boundary(start + 1);
                     let second_char = if second_at < lexer.src.len() { char_at(&lexer.src, second_at) } else { '\u{0}' };
                     match second_char {
                         'a' => {
@@ -4973,7 +4950,7 @@ pub fn tokenize<S: AsStrSlice>(input: S) -> TokenStream with TypeScriptLexerBase
                     if end > best_end { best_end = end; best_kind = TK_Identifier; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 0; best_act = -1; }
                 },
                 'y' => {
-                    let second_at = char_end(&lexer.src, start);
+                    let second_at = lexer.src.ceil_char_boundary(start + 1);
                     let second_char = if second_at < lexer.src.len() { char_at(&lexer.src, second_at) } else { '\u{0}' };
                     match second_char {
                         'i' => {
@@ -4993,7 +4970,7 @@ pub fn tokenize<S: AsStrSlice>(input: S) -> TokenStream with TypeScriptLexerBase
                 '|' => {
                     end = try_BitOr(&lexer.src, start);
                     if end > best_end { best_end = end; best_kind = TK_BitOr; best_push_mode = -1; best_pop_mode = false; best_set_mode = -1; best_more = false; best_channel = 0; best_act = -1; }
-                    let second_at = char_end(&lexer.src, start);
+                    let second_at = lexer.src.ceil_char_boundary(start + 1);
                     let second_char = if second_at < lexer.src.len() { char_at(&lexer.src, second_at) } else { '\u{0}' };
                     match second_char {
                         '=' => {
@@ -5027,7 +5004,7 @@ pub fn tokenize<S: AsStrSlice>(input: S) -> TokenStream with TypeScriptLexerBase
         } else if current_mode == 1 {
             match first_char {
                 '$' => {
-                    let second_at = char_end(&lexer.src, start);
+                    let second_at = lexer.src.ceil_char_boundary(start + 1);
                     let second_char = if second_at < lexer.src.len() { char_at(&lexer.src, second_at) } else { '\u{0}' };
                     match second_char {
                         '{' => {
@@ -5063,7 +5040,7 @@ pub fn tokenize<S: AsStrSlice>(input: S) -> TokenStream with TypeScriptLexerBase
             }
         }
         if best_end < start || (best_end == start && best_push_mode < 0 && !best_pop_mode && best_set_mode < 0) {
-            let error_end = char_end(&lexer.src, start);
+            let error_end = lexer.src.ceil_char_boundary(start + 1);
             let _ = ts.push_token_flagged(TK_ERROR, start, error_end, triv_lo, ts.trivia_mark(), TokenFlags::LexError);
             triv_lo = ts.trivia_mark();
             lexer.pos = error_end;
@@ -5801,7 +5778,7 @@ impl Parser {
     }
 
     pub fn token_line(&self, i: i32) -> i32 {
-        return line_col_at(&self.tokens.src, &self.line_starts, self.tokens.starts[i]).0;
+        return line_at(&self.line_starts, self.tokens.starts[i]);
     }
 
     pub fn token_col(&self, i: i32) -> i32 {
@@ -5824,7 +5801,7 @@ impl Parser {
     }
 
     pub fn text_span(&self, start: i32, end: i32) -> String {
-        return span_text(&self.tokens.src, start, i32::min(end, self.tokens.src.len()));
+        return span_text(&self.tokens.src, start, end);
     }
 
     pub fn text_between(&self, lo: i32, hi: i32) -> String {
