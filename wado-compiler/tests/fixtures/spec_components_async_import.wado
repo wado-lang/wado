@@ -12,34 +12,53 @@ fn fetch(req: Request) -> Result<Response, ErrorCode> with Client {
 
 test {
     let mut mock = MockClient {};
-    let response = with Client => &mut mock do { fetch(new_request()) };
-    assert response matches { Ok(_) };
+    let fetched = with Client => &mut mock do { fetch(mock.new_request()) matches { Ok(_) } };
+    assert fetched;
+    mock.end_writes();
 }
 
-struct MockClient {}
-
-fn new_request() -> Request {
-    let [trailers, _tx] = Future::<Result<Option<Trailers>, ErrorCode>>::new();
-    let [req, _done] = Request::new(Headers::new(), null, trailers, null);
-    return req;
+// Nothing reads the trailers of what the mock makes, and an end dropped
+// unwritten traps, so the mock keeps each writable end until the test is done.
+affine struct MockClient {
+    ends: List<FutureWritable<Result<Option<Trailers>, ErrorCode>>> = [],
 }
 
-fn canned_response() -> Response {
-    let [trailers, _tx] = Future::<Result<Option<Trailers>, ErrorCode>>::new();
-    let [resp, _done] = Response::new(Headers::new(), null, trailers);
-    return resp;
+impl MockClient {
+    fn new_request(&mut self) -> Request {
+        let [trailers, end] = Future::<Result<Option<Trailers>, ErrorCode>>::new();
+        self.ends.push(end);
+        let [req, _done] = Request::new(Headers::new(), null, trailers, null);
+        return req;
+    }
+
+    fn canned_response(&mut self) -> Response {
+        let [trailers, end] = Future::<Result<Option<Trailers>, ErrorCode>>::new();
+        self.ends.push(end);
+        let [resp, _done] = Response::new(Headers::new(), null, trailers);
+        return resp;
+    }
+
+    fn end_writes(&mut self) {
+        while let Some(end) = self.ends.pop() {
+            end.write(Result::<Option<Trailers>, ErrorCode>::Ok(null));
+        }
+    }
 }
 
 impl Client for MockClient {
     fn send(&mut self, request: Request) -> Result<Response, ErrorCode> {
-        resume Result::<Response, ErrorCode>::Ok(canned_response());
+        resume Result::<Response, ErrorCode>::Ok(self.canned_response());
     }
 }
 
 test {
     let mut mock = MockClient {};
     with Client => &mut mock do {
-        let call = Client::send(new_request());
+        let call = Client::send(mock.new_request());
         assert call.wait() matches { Ok(_) };   // completed already
     };
+    mock.end_writes();
 }
+
+__DATA__
+{"test": {}}

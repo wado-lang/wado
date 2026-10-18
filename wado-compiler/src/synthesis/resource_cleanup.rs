@@ -1241,6 +1241,7 @@ fn elab_expr(expr: &mut TirExpr, consuming: bool, cx: &mut Cx) {
     }
     let type_id = expr.type_id;
     let span = expr.span;
+    let mut dropped = None;
     match &mut expr.kind {
         TirExprKind::Local { .. } => {
             if consuming && cx.carries_resource(type_id) {
@@ -1312,6 +1313,13 @@ fn elab_expr(expr: &mut TirExpr, consuming: bool, cx: &mut Cx) {
             }
             for arg in rest {
                 elab_expr(&mut arg.expr, true, cx);
+            }
+            if func.is_builtin_named("drop") {
+                let (_, [arg]) = args.split_mut() else {
+                    unreachable!("`builtin::drop` takes one value");
+                };
+                let unit = TirExpr::new(TirExprKind::Unit, TypeTable::UNIT, span);
+                dropped = Some(std::mem::replace(&mut arg.expr, unit));
             }
         }
         TirExprKind::CmRawCall { args, .. } => {
@@ -1427,6 +1435,10 @@ fn elab_expr(expr: &mut TirExpr, consuming: bool, cx: &mut Cx) {
         | TirExprKind::FuncRef { .. }
         | TirExprKind::Capture { .. }
         | TirExprKind::EnumConstruct { .. } => {}
+    }
+    if let Some(value) = dropped {
+        let drops = drop_discarded(value, cx);
+        *expr = TirExpr::new(TirExprKind::Block(TirBlock::new(drops, span)), type_id, span);
     }
 }
 

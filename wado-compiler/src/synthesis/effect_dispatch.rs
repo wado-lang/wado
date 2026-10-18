@@ -2718,25 +2718,11 @@ fn rewrite_calls_in_expr(expr: &mut TirExpr, ctx: &RewriteCtx<'_>) {
                 }
             {
                 let return_type = expr.type_id;
-                // The wrapper's first parameter is the resource receiver
-                // typed as `&Self` (gap-3). User method-call receivers
-                // arrive as the resource value (e.g. `tx:
-                // StreamWritable<u8>`) rather than `&StreamWritable<u8>`,
-                // so wrap with `&` to match the wrapper's signature
-                // before forwarding.
-                let receiver_value = receiver.clone();
-                let is_already_ref = matches!(
-                    ctx.type_table.borrow().get(receiver_value.type_id),
-                    ResolvedType::Ref(_) | ResolvedType::MutRef(_)
-                );
-                let receiver_arg = if is_already_ref {
-                    receiver_value
-                } else {
-                    let ref_type_id = ctx.type_table.borrow_mut().make_ref(receiver_value.type_id);
-                    ref_expr(receiver_value, ref_type_id, expr.span)
-                };
+                // The receiver keeps its shape: `&r` for a `&self` operation,
+                // and `r` itself for one taking `self`, whose wrapper takes the
+                // end by value (WEP: Affine Types).
                 let mut all_args: Vec<CallArg> = Vec::with_capacity(args.len() + 1);
-                all_args.push(CallArg::new(receiver_arg, false));
+                all_args.push(CallArg::new(receiver.clone(), false));
                 all_args.extend(args.iter().cloned());
                 pick_resource_wrapper(resource, cm_name, &type_args, ctx).map(|wrapper| {
                     wrapper_call(wrapper, all_args, return_type, expr.span, ctx.entry_source)

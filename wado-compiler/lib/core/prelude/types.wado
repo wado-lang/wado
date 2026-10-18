@@ -221,9 +221,10 @@ pub resource Future<T> {
 /// Opaque i32 handle managed by the runtime.
 #[compiler_item("future_writable")]
 pub resource FutureWritable<T> {
-    /// Fulfill the future with a value.
+    /// Fulfill the future with a value. A writable end is written once, so the
+    /// write consumes it.
     #[cm("future-write")]
-    fn write(&self, value: T);
+    fn write(self, value: T);
 
     /// Cancel an in-progress write. Blocks until cancellation completes.
     /// Traps if this end is still joined to a `WaitableSet` — leave the set

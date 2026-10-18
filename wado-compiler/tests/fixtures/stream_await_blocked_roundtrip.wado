@@ -6,7 +6,7 @@
 use { Request, Response, ErrorCode, Fields, Headers, Trailers } from "wasi:http";
 
 export async fn handle(request: Request) -> Result<Response, ErrorCode> {
-    let [res_future, _res_tx] = Future::<Result<(), ErrorCode>>::new();
+    let [res_future, res_tx] = Future::<Result<(), ErrorCode>>::new();
     let [body_stream, _trailers] = Request::consume_body(request, res_future);
 
     let mut body: List<u8> = [];
@@ -20,6 +20,7 @@ export async fn handle(request: Request) -> Result<Response, ErrorCode> {
         }
     }
     body_stream.drop();
+    res_tx.write(Result::<(), ErrorCode>::Ok(()));
 
     let [trailers_future, trailers_tx] = Future::<Result<Option<Trailers>, ErrorCode>>::new();
     let [resp_rx, resp_tx] = Stream::<u8>::new();

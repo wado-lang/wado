@@ -464,6 +464,10 @@ pub fn is_uninitialized<T>(value: &T) -> bool;
 #[side_effect(none)]
 pub fn is_moved<T>(value: T) -> bool;
 
+/// Drop `value` where it is called (WEP: Affine Types). Resource drop synthesis
+/// replaces the call with the drop of what it takes.
+pub fn drop<affine T>(value: T);
+
 /// Marks the enclosing code path as cold (rarely executed). `cold_path()` is a
 /// statement placed inside a branch body, so it works anywhere — an `if` /
 /// `if let` / `match` arm, or as the cold fall-through after a guard clause —

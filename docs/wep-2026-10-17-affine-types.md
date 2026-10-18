@@ -832,6 +832,15 @@ A closure captures by reference, so it may use an affine value but never owns
 one. A closure that outlives the value's owner reaches a zeroed object on its
 first use after the drop, and what that does is unspecified.
 
+### A scalar future write does not wait for its reader
+
+A write blocks until its copy ends only for the HTTP trailers and transmission
+results. Every other `FutureWritable` write returns once the copy starts, since
+a reader in the same instance would deadlock a writer waiting on it. Such a
+write cannot report what the reader did. An end whose copy is still pending
+cannot be dropped, so the write leaves it to the host, and the handle lives
+until the instance ends.
+
 ### A panic drops nothing
 
 A trap unwinds nothing in Wasm, so a resource owned at a panic is held until

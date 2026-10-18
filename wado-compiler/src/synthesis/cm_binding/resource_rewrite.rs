@@ -789,21 +789,20 @@ fn free_cm_buffer(
 fn synthesize_future_write_func(payload_type_id: TypeId, ctx: &SynthCtx) -> TirFunction {
     let cm_interface_registry = ctx.cm_interface_registry;
     let type_table = ctx.type_table;
-    let (func_name, write_name, cm_package, payload_ast, size, align, awaits_reader) = {
+    let (func_name, write_name, drop_name, cm_package, payload_ast, size, align, awaits_reader) = {
         let tt = type_table.borrow();
         let func_name = future_write_func_name(&tt, payload_type_id);
         let payload = classify_future_payload(&tt, payload_type_id);
         let write_name = CanonicalIntrinsic::FutureWrite(payload.clone());
+        let drop_name = CanonicalIntrinsic::FutureDropWritable(payload.clone());
         let cm_package = future_payload_package(&payload);
         let payload_ast = payload_ast_type(payload_type_id, &tt, cm_interface_registry);
         let (size, align) = cm_layout_i32(&payload_ast, cm_interface_registry);
-        let awaits_reader = matches!(
-            payload,
-            CmFuturePayload::Trailers | CmFuturePayload::Transmission(_)
-        );
+        let awaits_reader = payload.write_awaits_reader();
         (
             func_name,
             write_name,
+            drop_name,
             cm_package,
             payload_ast,
             size,
@@ -898,6 +897,12 @@ fn synthesize_future_write_func(payload_type_id: TypeId, ctx: &SynthCtx) -> TirF
         ),
     ));
 
+    // The write consumes the end (WEP: Affine Types).
+    let drop_end = expr_stmt(cm_canonical_call(
+        drop_name,
+        vec![local_ref(handle_idx, "handle", TypeTable::I32)],
+        TypeTable::UNIT,
+    ));
     if awaits_reader {
         stmts.push(await_if_blocked(written_idx, "$written", handle_idx));
         stmts.push(free_cm_buffer(
@@ -906,6 +911,24 @@ fn synthesize_future_write_func(payload_type_id: TypeId, ctx: &SynthCtx) -> TirF
             align,
             &mut next_local,
             &mut locals,
+        ));
+        stmts.push(drop_end);
+    } else {
+        // An end whose copy is pending cannot be dropped, and waiting for the
+        // reader would deadlock one in this instance, so the end is left to the
+        // host (WEP: Affine Types, known gaps).
+        stmts.push(if_stmt(
+            binary(
+                TirBinaryOp::NotEq,
+                local_ref(written_idx, "$written", TypeTable::I32),
+                i32_const(CM_BLOCKED),
+                TypeTable::BOOL,
+            ),
+            TirBlock {
+                stmts: vec![drop_end],
+                span: synth_span(),
+            },
+            None,
         ));
     }
 

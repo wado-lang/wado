@@ -180,8 +180,9 @@ fn fetch(req: Request) -> Result<Response, ErrorCode> with Client {
 
 test {
     let mut mock = MockClient {};
-    let response = with Client => &mut mock do { fetch(new_request()) };
-    assert response matches { Ok(_) };
+    let fetched = with Client => &mut mock do { fetch(mock.new_request()) matches { Ok(_) } };
+    assert fetched;
+    mock.end_writes();
 }
 ```
 
@@ -215,16 +216,17 @@ returns the value at once.
 ```wado
 impl Client for MockClient {
     fn send(&mut self, request: Request) -> Result<Response, ErrorCode> {
-        resume Result::<Response, ErrorCode>::Ok(canned_response());
+        resume Result::<Response, ErrorCode>::Ok(self.canned_response());
     }
 }
 
 test {
     let mut mock = MockClient {};
     with Client => &mut mock do {
-        let call = Client::send(new_request());
+        let call = Client::send(mock.new_request());
         assert call.wait() matches { Ok(_) };   // completed already
     };
+    mock.end_writes();
 }
 ```
 

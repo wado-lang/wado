@@ -212,6 +212,15 @@ pub enum CmFuturePayload {
     Value(CmPayloadType),
 }
 
+impl CmFuturePayload {
+    /// Whether a write waits for its reader. The rest return at once and leave
+    /// the copy pending, since a reader in the same instance would deadlock a
+    /// writer waiting on it.
+    pub fn write_awaits_reader(&self) -> bool {
+        matches!(self, Self::Trailers | Self::Transmission(_))
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum CanonicalIntrinsic {
     StreamNew(CmStreamPayload),

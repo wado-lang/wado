@@ -186,10 +186,11 @@ fn parse_url(request: &Request) -> Url {
 /// The request body, decoded from its `Content-Encoding`, or the reply refusing it.
 fn read_body_from_request(request: Request) -> Result<String, RouteResponse> {
     let coding = field_list(&request.get_headers(), "content-encoding");
-    let [res_future, _res_tx] = Future::<Result<(), ErrorCode>>::new();
+    let [res_future, res_tx] = Future::<Result<(), ErrorCode>>::new();
     let [body_stream, _trailers] = Request::consume_body(request, res_future);
     let buf = body_stream.read_to_end_bytes();
     body_stream.drop();
+    res_tx.write(Result::Ok(()));
     return match decode_content(&coding, buf) {
         Ok(decoded) => Result::Ok(String::try_from_utf8(decoded).unwrap_or("")),
         Err(UnsupportedCoding(c)) => Result::Err(RouteResponse {

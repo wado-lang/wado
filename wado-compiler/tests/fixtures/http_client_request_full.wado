@@ -90,13 +90,14 @@ export async fn handle(request: Request) -> Result<Response, ErrorCode>
     };
 
     // Read upstream response body
-    let [res_future, _res_tx] = Future::<Result<(), ErrorCode>>::new();
+    let [res_future, res_tx] = Future::<Result<(), ErrorCode>>::new();
     let [body_stream, _upstream_trailers] = Response::consume_body(upstream, res_future);
     let body = match String::try_from_utf8(body_stream.read_to_end_bytes()) {
         Ok(s) => s,
         Err(_) => panic("invalid utf-8"),
     };
     body_stream.drop();
+    res_tx.write(Result::<(), ErrorCode>::Ok(()));
 
     // Build response
     let [resp_trailers_future, resp_trailers_tx] = Future::<Result<Option<Trailers>, ErrorCode>>::new();
