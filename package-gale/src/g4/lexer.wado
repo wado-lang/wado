@@ -1,6 +1,6 @@
 use { Span, char_at } from "../runtime/lex.wado";
 use { G4Token, Token } from "./token.wado";
-use { scan_line_comment, scan_block_comment, scan_char_class, name_end } from "./scan.wado";
+use { comment_end, scan_char_class, name_end } from "./scan.wado";
 use { CODE_POINT_MAX } from "./unicode.wado";
 
 pub struct G4Lexer {
@@ -39,16 +39,13 @@ impl G4Lexer {
     fn skip_whitespace_and_comments(&mut self) {
         loop {
             self.skip_whitespace();
-            if self.at_end() || self.src.byte_at(self.pos) != b'/' {
+            if self.at_end() {
                 break;
             }
-            match self.byte_after(1) {
-                Some(b'/') => self.pos = scan_line_comment(self.src, self.pos),
-                Some(b'*') => self.pos = scan_block_comment(self.src, self.pos),
-                _ => {
-                    break;
-                },
-            }
+            let Some(end) = comment_end(self.src, self.pos, self.src.len()) else {
+                break;
+            };
+            self.pos = end;
         }
     }
 

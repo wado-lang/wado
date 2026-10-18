@@ -1,6 +1,5 @@
 use { MemberField, MemberMethod, MemberDecls } from "./java2wado/jmembers.wado";
-use { is_ident_byte } from "./text.wado";
-use { wado_opaque_end, skip_ws, word_at } from "./g4/scan.wado";
+use { wado_opaque_end, comment_end, skip_ws, word_at, ident_end } from "./g4/scan.wado";
 
 pub fn translate_wado_members<S: AsStrSlice>(body: S) -> Result<MemberDecls, String> {
     let src = body.as_str_slice();
@@ -39,21 +38,13 @@ fn method_head(src: &StrSlice, start: i32, paren: i32, n: i32) -> [String, bool]
         i = skip_ws(src, i + 3, n);
     }
     i = skip_ws(src, i + 2, n);
-    let name = src.slice(i, ident_byte_end(src, i, n)).to_string();
+    let name = src.slice(i, ident_end(src, i, n)).to_string();
     let mut r = skip_ws(src, paren + 1, n);
     if !word_at(src, r, n, "&mut") {
         return [name, false];
     }
     r = skip_ws(src, r + 4, n);
     return [name, word_at(src, r, n, "self")];
-}
-
-fn ident_byte_end(src: &StrSlice, start: i32, n: i32) -> i32 {
-    let mut i = start;
-    while i < n && is_ident_byte(src.byte_at(i)) {
-        i += 1;
-    }
-    return i;
 }
 
 /// Past what separates two members (whitespace, `;` and comments), and where
@@ -65,7 +56,7 @@ fn skip_ws_semi(src: &StrSlice, start: i32, n: i32) -> [i32, i32] {
         let b = src.byte_at(i);
         if b.is_ascii_whitespace() || b == b';' {
             i += 1;
-        } else if b == b'/' && i + 1 < n && src.byte_at(i + 1) matches { b'/' | b'*' } {
+        } else if let Some(end) = comment_end(src, i, n) {
             if is_doc_comment(src, i, n) {
                 if doc_start < 0 {
                     doc_start = i;
@@ -73,7 +64,7 @@ fn skip_ws_semi(src: &StrSlice, start: i32, n: i32) -> [i32, i32] {
             } else {
                 doc_start = -1;
             }
-            i = skip_span(src, i, n);
+            i = end;
         } else {
             break;
         }
@@ -161,7 +152,7 @@ fn parse_field(src: &StrSlice, start: i32, n: i32, fields: &mut List<MemberField
         i = skip_ws(src, i + 3, n);
     }
     let name_start = i;
-    i = ident_byte_end(src, i, n);
+    i = ident_end(src, i, n);
     if i == name_start {
         return Result::Err("gale: Wado @members: expected a field name");
     }

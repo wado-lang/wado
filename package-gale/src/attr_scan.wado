@@ -10,7 +10,7 @@
 //! reference onto a rule's attribute environment (labels, args, returns,
 //! specials) is a later resolution step that consumes these.
 
-use { scan_string, scan_line_comment, scan_block_comment, scan_template, name_end } from "./g4/scan.wado";
+use { scan_string, comment_end, scan_template, name_end } from "./g4/scan.wado";
 
 /// A raw `$name` or `$name.member` attribute reference located in a
 /// fragment, with its byte span within the fragment text (`start` points
@@ -55,12 +55,8 @@ fn scan_refs(src: &StrSlice, start: i32, end: i32, out: &mut List<AttrRef>) {
             i = after;
             continue;
         }
-        if b == b'/' && i + 1 < end && src.byte_at(i + 1) == b'/' {
-            i = scan_line_comment(src, i);
-            continue;
-        }
-        if b == b'/' && i + 1 < end && src.byte_at(i + 1) == b'*' {
-            i = scan_block_comment(src, i);
+        if let Some(after) = comment_end(src, i, end) {
+            i = after;
             continue;
         }
         if let Some(r) = attr_ref_at(src, i, end) {

@@ -27,8 +27,7 @@ use {
 } from "./ir.wado";
 use {
     scan_string,
-    scan_line_comment,
-    scan_block_comment,
+    comment_end,
     scan_template,
     wado_opaque_end,
     match_delim,
@@ -330,7 +329,7 @@ fn call_param_types(args: &List<String>) -> Option<List<String>> {
 }
 
 /// If a `this.<method>(` call starts at `i` (whitespace allowed between
-/// tokens), returns `[method, close]`: the method name and the index just past
+/// tokens), returns `[method, close]`: the method name and the offset just past
 /// the matching `)`. Else `null`. Shared by op collection and the call-site
 /// rewrite, so both agree on what a call is and where it ends.
 fn this_call_at(src: &StrSlice, i: i32, n: i32) -> Option<[String, i32]> {
@@ -468,12 +467,8 @@ pub fn body_is_base_calls_only<S: AsStrSlice, S1: AsStrSlice>(body: S, base_name
             continue;
         }
         // A comment is not host code; the rewrite copies it through verbatim.
-        if b == b'/' && i + 1 < n && src.byte_at(i + 1) == b'/' {
-            i = scan_line_comment(&src, i);
-            continue;
-        }
-        if b == b'/' && i + 1 < n && src.byte_at(i + 1) == b'*' {
-            i = scan_block_comment(&src, i);
+        if let Some(end) = comment_end(&src, i, n) {
+            i = end;
             continue;
         }
         if let Some([_, close]) = this_call_at(&src, i, n) {

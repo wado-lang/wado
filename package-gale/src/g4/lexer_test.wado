@@ -190,6 +190,18 @@ test "span positions are correct" {
     assert tokens[1].span.end == 5;
 }
 
+test "spans are byte offsets past multi-byte chars" {
+    let tokens = tokenize("'é' 日本 § x");
+    assert_token(&tokens[0], G4Token::StringLit, "é");
+    assert tokens[0].span.start == 0 && tokens[0].span.end == 4;
+    assert_token(&tokens[1], G4Token::Identifier, "日本");
+    assert tokens[1].span.start == 5 && tokens[1].span.end == 11;
+    assert_token(&tokens[2], G4Token::UnexpectedChar, "§");
+    assert tokens[2].span.start == 12 && tokens[2].span.end == 14;
+    assert_token(&tokens[3], G4Token::Identifier, "x");
+    assert tokens[3].span.start == 15;
+}
+
 test "antlr format comments are skipped" {
     let tokens = tokenize("// $antlr-format some options\nfoo");
     assert_token(&tokens[0], G4Token::Identifier, "foo");

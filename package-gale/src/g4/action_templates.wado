@@ -36,7 +36,7 @@
 //! idempotent. An unknown `<IDENT(...)>` is left verbatim and reported in
 //! `warnings` — loud, never a silent guess.
 
-use { scan_string, scan_line_comment, scan_block_comment, skip_ws, copy_char, name_end } from "./scan.wado";
+use { scan_string, comment_end, skip_ws, copy_char, name_end } from "./scan.wado";
 
 pub struct ExpandOutcome {
     pub text: String,
@@ -50,6 +50,11 @@ pub fn expand_action_templates<S: AsStrSlice>(text: S) -> ExpandOutcome {
     let mut warnings: List<String> = [];
     let mut i = 0;
     while i < n {
+        if let Some(end) = comment_end(&src, i, n) {
+            out.push_str(src.slice(i, end));
+            i = end;
+            continue;
+        }
         match src.byte_at(i) {
             // A `'...'` grammar string is copied verbatim (never a template).
             b'\'' => {
@@ -94,18 +99,6 @@ pub fn expand_action_templates<S: AsStrSlice>(text: S) -> ExpandOutcome {
                     }
                     i = copy_char(&mut out, &src, i);
                 }
-                continue;
-            },
-            b'/' && i + 1 < n && src.byte_at(i + 1) == b'/' => {
-                let end = scan_line_comment(&src, i);
-                out.push_str(src.slice(i, end));
-                i = end;
-                continue;
-            },
-            b'/' && i + 1 < n && src.byte_at(i + 1) == b'*' => {
-                let end = scan_block_comment(&src, i);
-                out.push_str(src.slice(i, end));
-                i = end;
                 continue;
             },
             b'<' && i + 1 < n && src.byte_at(i + 1) == b'!' => {

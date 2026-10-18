@@ -1,6 +1,5 @@
 use { FOLLOW_PARAM, symbol_char_names, char_hex_name } from "./ident.wado";
-use { is_id_continue_char, scan_closed_string } from "./g4/scan.wado";
-use { char_at } from "./runtime/lex.wado";
+use { ident_end, scan_closed_string } from "./g4/scan.wado";
 pub use { escape_ident, escape_case, to_pascal_case, to_snake_case, to_lower } from "./ident.wado";
 use { CodeWriter } from "lib:wadopoet";
 
@@ -259,10 +258,14 @@ fn operand_end(src: &StrSlice, start: i32) -> i32 {
             scan_closed_string(src, i).unwrap_or(-1);
         } else if b == b'<' && i >= 2 && src.byte_at(i - 1) == b':' && src.byte_at(i - 2) == b':' {
             delimited_end(src, i);
-        } else if b matches { b'.' | b':' } || is_id_continue_char(char_at(src, i)) {
-            src.ceil_char_boundary(i + 1);
+        } else if b matches { b'.' | b':' } {
+            i + 1;
         } else {
-            break;
+            let name = ident_end(src, i, n);
+            if name == i {
+                break;
+            }
+            name;
         };
         if end < 0 {
             return -1;

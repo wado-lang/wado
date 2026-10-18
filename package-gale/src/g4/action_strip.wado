@@ -12,8 +12,7 @@
 use {
     scan_string,
     scan_char_class,
-    scan_line_comment,
-    scan_block_comment,
+    comment_end,
     scan_balanced,
     copy_char,
     name_end,
@@ -91,8 +90,7 @@ pub fn strip_action_bodies<S: AsStrSlice>(grammar: S) -> String {
             i = end;
             continue;
         }
-        if b == b'/' && i + 1 < n && src.byte_at(i + 1) matches { b'/' | b'*' } {
-            let end = if src.byte_at(i + 1) == b'/' { scan_line_comment(&src, i) } else { scan_block_comment(&src, i) };
+        if let Some(end) = comment_end(&src, i, n) {
             out.push_str(src.slice(i, end));
             prequel_open = false;
             i = end;

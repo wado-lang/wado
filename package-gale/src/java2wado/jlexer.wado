@@ -2,7 +2,7 @@
 //! attribute reference lexes as one opaque `Attr` token (resolved later by the
 //! language-independent attribute engine); string literals keep raw escapes.
 
-use { name_end, scan_closed_string, scan_line_comment, scan_block_comment } from "../g4/scan.wado";
+use { name_end, scan_closed_string, comment_end } from "../g4/scan.wado";
 use { char_at } from "../runtime/lex.wado";
 use { attr_ref_span } from "../attr_scan.wado";
 
@@ -26,12 +26,8 @@ pub fn tokenize_java<S: AsStrSlice>(body: S) -> Result<List<JToken>, String> {
             i += 1;
             continue;
         }
-        if b == b'/' && i + 1 < n && src.byte_at(i + 1) == b'/' {
-            i = scan_line_comment(&src, i);
-            continue;
-        }
-        if b == b'/' && i + 1 < n && src.byte_at(i + 1) == b'*' {
-            i = scan_block_comment(&src, i);
+        if let Some(end) = comment_end(&src, i, n) {
+            i = end;
             continue;
         }
         if b == b'"' {

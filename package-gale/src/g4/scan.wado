@@ -22,7 +22,7 @@ use { char_at } from "../runtime/lex.wado";
 
 /// Scan a `//` line comment. `pos` must point at the first `/`. Returns
 /// the offset of the terminating `\n` (which it excludes), or `src.len()`.
-pub fn scan_line_comment(src: &StrSlice, pos: i32) -> i32 {
+fn scan_line_comment(src: &StrSlice, pos: i32) -> i32 {
     let n = src.len();
     let mut i = pos + 2;
     while i < n && src.byte_at(i) != b'\n' {
@@ -34,7 +34,7 @@ pub fn scan_line_comment(src: &StrSlice, pos: i32) -> i32 {
 /// Scan a `/* ... */` block comment. `pos` must point at the first `/`.
 /// Returns the offset just past the closing `*/`, or `src.len()` if
 /// unterminated.
-pub fn scan_block_comment(src: &StrSlice, pos: i32) -> i32 {
+fn scan_block_comment(src: &StrSlice, pos: i32) -> i32 {
     let n = src.len();
     let mut i = pos + 2;
     while i + 1 < n {
@@ -44,6 +44,19 @@ pub fn scan_block_comment(src: &StrSlice, pos: i32) -> i32 {
         i += 1;
     }
     return n;
+}
+
+/// The end of the `//` or `/* */` comment opening at `i`, or `null` where none
+/// does.
+pub fn comment_end(src: &StrSlice, i: i32, n: i32) -> Option<i32> {
+    if src.byte_at(i) != b'/' || i + 1 >= n {
+        return null;
+    }
+    return match src.byte_at(i + 1) {
+        b'/' => Option::Some(scan_line_comment(src, i)),
+        b'*' => Option::Some(scan_block_comment(src, i)),
+        _ => null,
+    };
 }
 
 /// Scan a `'...'` or `"..."` host string. `pos` must point at the opening
@@ -108,9 +121,7 @@ pub fn wado_opaque_end(src: &StrSlice, i: i32, n: i32) -> Option<i32> {
     return match src.byte_at(i) {
         b'"' | b'\'' => Option::Some(scan_string(src, i)),
         b'`' => Option::Some(scan_template(src, i, n).0),
-        b'/' && i + 1 < n && src.byte_at(i + 1) == b'/' => Option::Some(scan_line_comment(src, i)),
-        b'/' && i + 1 < n && src.byte_at(i + 1) == b'*' => Option::Some(scan_block_comment(src, i)),
-        _ => null,
+        _ => comment_end(src, i, n),
     };
 }
 
@@ -216,7 +227,7 @@ pub fn ident_start(src: &StrSlice, end: i32) -> i32 {
 pub fn ident_end(src: &StrSlice, start: i32, n: i32) -> i32 {
     let mut j = start;
     while j < n && is_id_continue_char(char_at(src, j)) {
-        j = src.ceil_char_boundary(j + 1);
+        j = if src.byte_at(j) < 0x80 { j + 1 } else { src.ceil_char_boundary(j + 1) };
     }
     return j;
 }
@@ -266,12 +277,10 @@ pub fn scan_balanced(src: &StrSlice, open_idx: i32, open: u8, close: u8) -> Opti
     let mut depth = 1;
     while i < n {
         let b = src.byte_at(i);
-        if b == b'"' || b == b'\'' {
+        if let Some(end) = comment_end(src, i, n) {
+            i = end;
+        } else if b == b'"' || b == b'\'' {
             i = scan_string(src, i);
-        } else if b == b'/' && i + 1 < n && src.byte_at(i + 1) == b'/' {
-            i = scan_line_comment(src, i);
-        } else if b == b'/' && i + 1 < n && src.byte_at(i + 1) == b'*' {
-            i = scan_block_comment(src, i);
         } else if b == open {
             depth += 1;
             i += 1;
@@ -330,7 +339,7 @@ pub fn word_at<S: AsStrSlice>(src: &StrSlice, i: i32, n: i32, word: S) -> bool {
 /// ANTLR4's `NameStartChar` (`vendor/antlr4/doc/lexicon.md`), which is XML's:
 /// a fixed range list rather than a Unicode property, so it is written out
 /// rather than asked of `core:icu`.
-pub fn is_id_start_char(c: char) -> bool {
+fn is_id_start_char(c: char) -> bool {
     if c.is_ascii_alphabetic() || c == '_' {
         return true;
     }
@@ -358,7 +367,7 @@ pub fn is_rule_name_upper(c: char) -> bool {
 }
 
 /// ANTLR4's `NameChar`.
-pub fn is_id_continue_char(c: char) -> bool {
+fn is_id_continue_char(c: char) -> bool {
     if is_id_start_char(c) || c.is_ascii_digit() {
         return true;
     }
