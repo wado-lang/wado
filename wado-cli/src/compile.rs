@@ -474,7 +474,7 @@ pub(crate) async fn attach_manifest_and_component_deps(
     tier: Acquisition,
 ) -> Result<FilesystemCompilerHost, String> {
     let index = manifest_and_component_index(project, base_path, sources, tier).await?;
-    Ok(base_host.with_dependency_index(index))
+    Ok(base_host.with_dependency_index(index).acquiring(tier))
 }
 
 /// Build the [`DependencyIndex`] for `project` (path deps + offline registry
@@ -491,14 +491,7 @@ async fn manifest_and_component_index(
     // dependency's at any depth, inline ones included, before indexing it, so
     // the offline pass finds their git worktrees warm.
     let mut index = match project {
-        Some(project) => {
-            let own = acquire_package(&project.manifest, &project.root, tier).await?;
-            let (mut index, entries) =
-                wado_lsp::host::package_index(&project.manifest, &project.root, base_path);
-            adopt_components(&mut index, own);
-            acquire_and_index(&mut index, entries, base_path, tier).await?;
-            index
-        }
+        Some(project) => acquired_index(&project.manifest, &project.root, base_path, tier).await?,
         None => wado_compiler::DependencyIndex::default(),
     };
 
@@ -525,6 +518,63 @@ async fn manifest_and_component_index(
         }
     }
     Ok(index)
+}
+
+/// The index of the package at `root`, whose manifest is `manifest`, keyed from
+/// `base_path`, with what it and each source dependency it reaches depend on
+/// acquired per `tier`.
+async fn acquired_index(
+    manifest: &wado_manifest::Manifest,
+    root: &Path,
+    base_path: &Path,
+    tier: Acquisition,
+) -> Result<wado_compiler::DependencyIndex, String> {
+    let own = acquire_package(manifest, root, tier).await?;
+    let (mut index, entries) = wado_lsp::host::package_index(manifest, root, base_path);
+    adopt_components(&mut index, own);
+    acquire_and_index(&mut index, entries, base_path, tier).await?;
+    Ok(index)
+}
+
+/// Acquire what each package a walk through `host` reached, and no manifest
+/// declares, depends on, as the declared ones were before the walk. True when
+/// that resolved a dependency the walk found unresolved, so the walk saw less
+/// than is there.
+async fn acquire_undeclared_packages(host: &FilesystemCompilerHost) -> Result<bool, String> {
+    let Some((tier, unacquired)) = host.unacquired_packages() else {
+        return Ok(false);
+    };
+    let mut resolved_more = false;
+    for (read, offline) in unacquired {
+        let root = Path::new(&read.root);
+        // A manifest that cannot be read names nothing to acquire, and its
+        // offline index already says why.
+        let acquired = if let Ok(Some(manifest)) = manifest_in(root) {
+            acquired_index(&manifest, root, &read.base, tier).await?
+        } else {
+            host.adopt_acquired(read, offline);
+            continue;
+        };
+        resolved_more |= resolves_more(&offline, &acquired);
+        host.adopt_acquired(read, acquired);
+    }
+    Ok(resolved_more)
+}
+
+/// Whether `acquired` resolves a dependency `offline` does not. Acquisition
+/// only adds resolutions, so the count says it, whatever a newly reached
+/// package leaves unresolved of its own.
+fn resolves_more(
+    offline: &wado_compiler::DependencyIndex,
+    acquired: &wado_compiler::DependencyIndex,
+) -> bool {
+    resolved_count(acquired) > resolved_count(offline)
+}
+
+/// How many dependencies `index` and the packages it reaches resolve.
+fn resolved_count(index: &wado_compiler::DependencyIndex) -> usize {
+    let own = index.resolved.len() + index.components.len();
+    own + index.packages.values().map(resolved_count).sum::<usize>()
 }
 
 /// Add to `index.packages` the package of each entry module in `entries`, and
@@ -701,20 +751,32 @@ pub(crate) async fn prepare_kiln(
         .map(|p| p.root.clone())
         .unwrap_or(entry_dir);
     let dependencies = host.dependency_index();
+    // A walk acquiring an undeclared package's dependencies may reach modules
+    // it could not before, so it walks again until it reaches nothing new.
+    let unwalked = settled.clone();
     let Harvested {
         invocations,
         identities,
         packages,
         diagnostics: inline_diagnostics,
-    } = collect_inline_invocations_for_entry_with_identities(
-        entry_file,
-        entry_identity,
-        &manifest_root,
-        host,
-        &dependencies,
-        settled,
-    )
-    .await;
+    } = loop {
+        let harvested = collect_inline_invocations_for_entry_with_identities(
+            entry_file,
+            entry_identity,
+            &manifest_root,
+            host,
+            &dependencies,
+            settled,
+        )
+        .await;
+        if !acquire_undeclared_packages(host)
+            .await
+            .map_err(PipelineError::Acquisition)?
+        {
+            break harvested;
+        }
+        settled.clone_from(&unwalked);
+    };
 
     // Fail on a malformed clause here, with its own diagnostics, so the clear
     // error is not buried under the downstream failure of the unredirected
@@ -1452,6 +1514,35 @@ mod world_segment_tests {
         assert_eq!(world_path_segment("wasi:cli/command"), "wasi-cli-command");
         assert_eq!(world_path_segment("wasi:http/service"), "wasi-http-service");
         assert_eq!(world_path_segment("foo:bar/baz@1.2.3"), "foo-bar-baz");
+    }
+}
+
+#[cfg(test)]
+mod acquisition_tests {
+    use super::resolves_more;
+    use wado_compiler::DependencyIndex;
+
+    /// Acquiring a package can resolve one dependency and reach another that
+    /// is unresolved: the walk still has modules it did not see.
+    #[test]
+    fn a_resolved_dependency_counts_though_its_package_leaves_one_unresolved() {
+        let mut offline = DependencyIndex::default();
+        offline
+            .unresolved
+            .insert("lib:greet".to_string(), "not cached".to_string());
+        let mut greet = DependencyIndex::default();
+        greet
+            .unresolved
+            .insert("lib:far".to_string(), "not cached".to_string());
+        let mut acquired = DependencyIndex::default();
+        acquired
+            .resolved
+            .insert("lib:greet".to_string(), "greet/src/lib.wado".to_string());
+        acquired
+            .packages
+            .insert("greet/src/lib.wado".to_string(), greet);
+        assert!(resolves_more(&offline, &acquired));
+        assert!(!resolves_more(&offline, &offline));
     }
 }
 
