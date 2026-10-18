@@ -81,13 +81,12 @@ pub(super) fn resolve_panic_ids(project: &NirPackage) -> hashmap::IndexSet<FuncI
         .collect()
 }
 
-/// The callees a call to which does nothing a trap would hide: a returning one
-/// nothing outside the program observes (an unobservable builtin, a value
-/// copy), and a panic callee that reports nothing but a failed contract. That
-/// is a contract report, a bodyless trap such as `builtin::unreachable` (all a
-/// contract check calls under `-f bare-asserts`), and a function doing nothing
-/// else but call one, as `cold_outline` leaves. The driver hands the result to
-/// the engine via [`Engine::set_quiet_callee_ids`].
+/// The callees that do nothing a trap would hide. One that returns is an
+/// unobservable builtin or a value copy. One that traps reports nothing but a
+/// failed contract: a contract report, a bodyless trap such as
+/// `builtin::unreachable` (all a contract check calls under `-f bare-asserts`),
+/// or a function doing nothing else but call one, as `cold_outline` leaves. The
+/// driver hands the result to the engine via [`Engine::set_quiet_callee_ids`].
 pub(super) fn resolve_quiet_callee_ids(
     project: &NirPackage,
     panic_ids: &hashmap::IndexSet<FuncId>,

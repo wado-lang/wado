@@ -9477,8 +9477,8 @@ impl BuiltinDeclaration {
     }
 
     /// Whether nothing outside the program can tell the call ran: it writes no
-    /// field, and its side effect is stated. An `opaque` one hands over no
-    /// storage and still completes a task (`task_return`) or writes a stream.
+    /// field, and its side effect is stated. An `opaque` one may be handed no
+    /// storage and still complete a task (`task_return`) or write a stream.
     pub fn is_unobservable(&self) -> bool {
         !self.facts.is_opaque() && self.writes_no_field()
     }
