@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1792274895158,
+  "lastUpdate": 1792283082916,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -67949,6 +67949,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/aa8fbf23ebc0b06075f7c37dff1d6d992532aecf"
         },
         "date": 1792274894417,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 2955,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 7382,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 20208,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 298222,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "a8a7b722c675786f8031b3501ca0837a8d83e99d",
+          "message": "Merge pull request #2377 from wado-lang/loam-webgpu-bf16-weights\n\nperf(loam): run Gemma 3 on WebGPU twice as fast, its weights in bf16",
+          "timestamp": "2026-10-18T09:07:53+09:00",
+          "tree_id": "b61d1ea62b81ce1b7d23b68c8518aab910b28c01",
+          "url": "https://github.com/wado-lang/wado/commit/a8a7b722c675786f8031b3501ca0837a8d83e99d"
+        },
+        "date": 1792283081893,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
