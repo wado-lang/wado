@@ -231,6 +231,9 @@ pub variant DiagnosticKind {
     /// A `fragment_entries` option names a parser rule that does not exist. The
     /// name is skipped; other entries still apply.
     FragmentEntry,
+    /// Under `atn: "never"`, a decision only the runtime ATN simulator makes.
+    /// No parser is built from such a grammar.
+    SimulatorRequired,
 }
 
 /// The level a build reports `kind` at, or `null` for one it does not report.
@@ -248,6 +251,7 @@ pub fn diagnostic_level(kind: &DiagnosticKind) -> Option<Level> {
         OptionalScanGuardFallback => null,
         OverlapTournament => Option::Some(Level::Info),
         UnsupportedAction | HighlightQuery | FragmentEntry => Option::Some(Level::Warn),
+        SimulatorRequired => Option::Some(Level::Error),
     };
 }
 
@@ -1014,6 +1018,10 @@ pub struct RepeatOp {
     /// recomputed so the two emit walkers and the scan side cannot answer
     /// it differently.
     pub static_exit_undecided: bool = false,
+    /// The simulator decides whether each iteration enters: a non-greedy
+    /// loop's exit no lookahead locates, or, under `atn: "always"`, any
+    /// Repeat whose body and continuation can start on one token.
+    pub atn_decides: bool = false,
     /// For a loop the simulator decides, the only tokens it needs asking
     /// about; any other enters. Empty where every token asks.
     pub atn_asked_kinds: List<i32> = [],
@@ -1325,7 +1333,8 @@ pub struct ScanRepeatElement {
     pub probe_asks_caller: bool = false,
     pub probe_contested: bool = false,
     pub static_exit_undecided: bool = false,
-    /// Mirrors `RepeatOp.atn_asked_kinds`.
+    /// Mirrors `RepeatOp.atn_decides` and `RepeatOp.atn_asked_kinds`.
+    pub atn_decides: bool = false,
     pub atn_asked_kinds: List<i32> = [],
     pub probe_viable: List<i32> = [],
     /// Mirrors `RepeatOp.body_scannable`. The probe entry gate reads it on

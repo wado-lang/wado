@@ -15,6 +15,7 @@ use {
 } from "./ir.wado";
 use { generate, GenerateOptions, GeneratedOutput } from "./codegen.wado";
 use { Diagnostic } from "./gir.wado";
+use { AtnMode } from "./gen_settings.wado";
 use { parse_highlight_query } from "./highlight_query.wado";
 use { parse, parse_checked } from "./g4/parser.wado";
 use { count_occurrences } from "../tests/support/text.wado";
@@ -48,18 +49,27 @@ fn diagnostics_saying<S: AsStrSlice>(out: &GeneratedOutput, text: S) -> i32 {
 /// What the parser generated from `grammar` makes of each input to `rule`, one
 /// line each: `input => tree`, or `error`, then any action output. The error's
 /// wording is left out: compatibility covers what is rejected, not how it reads.
-fn parses<S: AsStrSlice>(grammar: S, rule: String, inputs: List<String>) -> String {
-    return parses_each(grammar, inputs.into_iter().map(|input| [rule, input]).collect());
+fn parses<S: AsStrSlice>(
+    grammar: S,
+    rule: String,
+    inputs: List<String>,
+    options: &GenerateOptions = &DEFAULT_OPTIONS,
+) -> String {
+    return parses_each(grammar, inputs.into_iter().map(|input| [rule, input]).collect(), options);
 }
 
 /// `parses` for a grammar with several entry rules: each `[rule, input]` pair,
 /// one line each.
-fn parses_each<S: AsStrSlice>(grammar: S, cases: List<[String, String]>) -> String {
+fn parses_each<S: AsStrSlice>(
+    grammar: S,
+    cases: List<[String, String]>,
+    options: &GenerateOptions = &DEFAULT_OPTIONS,
+) -> String {
     let mut body = String::new();
     for let [rule, input] of cases {
         body.push_str(wado`show("${input}", parse_${rule}("${input}"));\n`);
     }
-    return printed(grammar, body, SHOW_FN);
+    return run_beside(gen_with(grammar, options).source, body, SHOW_FN).stdout;
 }
 
 /// The tokens the lexer generated from `grammar` makes of each input, one line
@@ -717,6 +727,80 @@ TRACE gale.trace:       pick a alt#1 rule=a alt=1
     assert !plain.contains("trace_scan_alt");
     assert !plain.contains("trace_pick");
     assert !plain.contains("trace_try");
+}
+
+// `b` hides the token that tells `b X` from `b`, so the static tree gives up.
+global OPAQUE_PREFIX_G4: String = "grammar T;
+r : a EOF ;
+a : b X | b ;
+b : Z Z ;
+X : 'X' ;
+Z : 'Z' ;
+";
+
+test "atn never leaves an ambiguity the simulator decides by default to the tournament" {
+    assert gen_source(OPAQUE_PREFIX_G4).contains("atn_predict_once(&ATN_SIM, ");
+    let never = gen_with(OPAQUE_PREFIX_G4, &GenerateOptions { atn: AtnMode::Never });
+    assert !never.source.contains("ATN_SIM");
+    assert never.source.contains("let _sd_p_0 = scan_a__alt_0(");
+    assert !never.diagnostics.iter_ref().any(|d: &Diagnostic| d.kind matches { SimulatorRequired });
+}
+
+// `(a | a B)` shares `a`, which hides the deciding token. The tournament takes
+// the longest scan, `a B`, and strands the `B` the rule still owes.
+global GROUP_LONGEST_G4: String = "grammar G;
+s : (a | a B) B EOF ;
+a : A+ ;
+A : 'a' ;
+B : 'b' ;
+WS : ' ' -> skip ;
+";
+
+test "atn always lets the simulator decide a group" {
+    let inputs: List<String> = ["a b", "a b b"];
+    assert parses(GROUP_LONGEST_G4, "s", inputs) == "a b => error\na b b => (s (a a) b b)\n";
+    let always = parses(GROUP_LONGEST_G4, "s", inputs, &GenerateOptions { atn: AtnMode::Always });
+    assert always == "a b => (s (a a) b)\na b b => (s (a a) b b)\n";
+}
+
+// Each repeat's body can start what follows it, so its first token does not say
+// whether it enters. The trees are the jar's.
+global CONTESTED_REPEATS_G4: String = "grammar R;
+s : a* a B EOF ;
+t : C c? c EOF ;
+u : (A | B)+ A B EOF ;
+a : A ;
+c : D+ ;
+A : 'a' ;
+B : 'b' ;
+C : 'c' ;
+D : 'd' ;
+WS : ' ' -> skip ;
+";
+
+test "atn always lets the simulator decide a contested repeat" {
+    let got = parses_each(CONTESTED_REPEATS_G4, [
+        ["s", "a b"], ["s", "a a a b"], ["t", "c d d"], ["t", "c d d d"], ["u", "a a b"], ["u", "a b a b"],
+    ], &GenerateOptions { atn: AtnMode::Always });
+    assert got == "a b => (s (a a) b)
+a a a b => (s (a a) (a a) (a a) b)
+c d d => (t c (c d) (c d))
+c d d d => (t c (c d d) (c d))
+a a b => (u a a b)
+a b a b => (u a b a b)
+";
+}
+
+test "atn never refuses a decision only the simulator makes" {
+    let never = gen_with("grammar T;
+r : A?? A B ;
+A : 'a' ;
+B : 'b' ;
+", &GenerateOptions { atn: AtnMode::Never });
+    let refusals: List<String> = never.diagnostics.iter_ref().filter(|d: &Diagnostic| d.kind matches { SimulatorRequired }).map(
+        |d: &Diagnostic| `${d.owner.label()}: ${d.message}`,
+    ).collect();
+    assert refusals == ["rule 'r': a non-greedy `??` only the ATN simulator decides, and `atn: \"never\"` refuses it"];
 }
 
 test "trace suppresses the pick line for all-single-token rules" {

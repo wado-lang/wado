@@ -603,7 +603,7 @@ fn lower_multi_alt_rule(rule: &ParserRule, ctx: &mut LowerContext) -> MultiAltRu
     // The scan of a rule whose choice the simulator makes consults it as the
     // parse does.
     if ctx.choice_routes(rule, all_indices, true) {
-        ctx.mark_asks_simulator();
+        ctx.mark_asks_simulator("the choice among the alternatives");
     }
     return MultiAltRule {
         header,
@@ -675,10 +675,11 @@ fn lower_lr_rule(rule: &ParserRule, ctx: &mut LowerContext) -> LeftRecursiveRule
     // suffix the full context gives the caller (`new Map<T>()` in a TypeScript
     // initializer: `()` is the `new`'s, not a call suffix).
     let suffix_classes = lr_suffix_classes(rule, &lr_alts, ctx);
-    let atn_class = ctx.choice_routes(rule, non_lr_indices, false)
+    let atom_routes = ctx.choice_routes(rule, non_lr_indices, false);
+    let atn_class = atom_routes
         || lr_rule_is_atn_class(rule, &non_lr_indices, &lr_alts, &suffix_classes, &mut ctx.analysis);
     if atn_class {
-        ctx.mark_needs_lr_atn();
+        ctx.mark_needs_lr_atn(if atom_routes { "the atom choice" } else { "the left-recursion loop's choice of suffix" });
     }
 
     // `valid_lr_alts` must line up with the ATN precedence-edge list (which
@@ -1925,20 +1926,26 @@ fn with_scan_group_atn_site(
     return ScanElement::Group(sg);
 }
 
-/// `g`'s decision site where its empty alternative shares a branch with another,
-/// so only the simulator can tell which the rest of the input takes; else -1.
+/// `g`'s decision site where only the simulator can tell which alternative the
+/// rest of the input takes: its empty alternative shares a branch with another,
+/// or, under `atn: "always"`, any two share one. Else -1.
 fn group_atn_site(
     g: &GroupElement,
     classes: &List<AltClass>,
     admits: &Option<EmptyAltAdmits>,
     ctx: &mut LowerContext,
 ) -> i32 {
-    let Some(e) = admits else {
-        return -1;
-    };
+    let always = ctx.settings.atn matches { Always };
     for let branch of &decision_partition(classes) {
-        if branch.alts.len() > 1 && branch.alts.contains(&e.alt_index) {
-            ctx.mark_asks_simulator();
+        if branch.alts.len() < 2 {
+            continue;
+        }
+        if let Some(e) = admits && branch.alts.contains(&e.alt_index) {
+            ctx.mark_asks_simulator("a group's choice between its empty alternative and another");
+            return g.atn_decision;
+        }
+        if always {
+            ctx.mark_asks_simulator("a group's choice among alternatives sharing a first token");
             return g.atn_decision;
         }
     }
@@ -2243,6 +2250,7 @@ fn rebind_scan_repeat_caller_follow(
             probe_asks_caller: stamps.probe.asks_caller,
             probe_contested: stamps.probe_contested,
             static_exit_undecided: stamps.static_exit_undecided,
+            atn_decides: stamps.atn_decides,
             atn_asked_kinds: stamps.atn_asked_kinds,
             probe_viable: stamps.probe.viable,
             duties: stamps.duties,
@@ -3579,7 +3587,7 @@ fn lower_repeat_op<S: AsStrSlice>(
             // Always `Plain` — the specialised Optional strategies are
             // greedy-only (`opt_specialised` is computed only under
             // `!non_greedy`).
-            ctx.mark_asks_simulator();
+            ctx.mark_asks_simulator("a non-greedy `??`");
             RepeatStrategy::Plain;
         } else {
             compute_non_greedy_strategy(body_elem, outer_follow, ctx);
@@ -4105,8 +4113,25 @@ pub fn non_greedy_static_undecided(
 /// No lookahead says where it stops: exiting is viable only where the whole rest
 /// of the input matches, which ANTLR4 predicts on, so the runtime simulator
 /// decides each exit on the parse and the scan alike.
-pub fn non_greedy_exit_by_atn(non_greedy: bool, kind: RepeatKind, body: &Admits) -> bool {
+fn non_greedy_exit_by_atn(non_greedy: bool, kind: RepeatKind, body: &Admits) -> bool {
     return non_greedy && kind matches { Star | Plus } && admits_is_everything(body);
+}
+
+/// Whether a Repeat's body and what follows it in its alternative can start on
+/// one token, so its first token does not say whether it enters. Past the
+/// alternative's end the caller continues, which is unknown here, so a Repeat
+/// whose rest can match empty counts as contested.
+fn repeat_contested(
+    body_admits: &Admits,
+    caller_follow_first: &List<i32>,
+    alt_elements: &List<Element>,
+    index: i32,
+    ctx: &mut LowerContext,
+    reaches_rule_tail: bool,
+) -> bool {
+    return admits_is_everything(body_admits)
+        || sets_overlap(&admits_kinds(body_admits), caller_follow_first)
+        || reaches_rule_tail && ctx.analysis.tail_is_nullable_deep(alt_elements, index + 1);
 }
 
 /// Rebuild a `RepeatOp` with fresh `caller_follow_first` /
@@ -4146,6 +4171,7 @@ fn patch_repeat_op_caller_follow<S: AsStrSlice>(
         probe_asks_caller: stamps.probe.asks_caller,
         probe_contested: stamps.probe_contested,
         static_exit_undecided: stamps.static_exit_undecided,
+        atn_decides: stamps.atn_decides,
         atn_asked_kinds: stamps.atn_asked_kinds,
         probe_viable: stamps.probe.viable,
         duties: stamps.duties,
@@ -4158,6 +4184,7 @@ struct RepeatExitStamps {
     probe: ContinuationProbe,
     probe_contested: bool,
     static_exit_undecided: bool,
+    atn_decides: bool,
     atn_asked_kinds: List<i32>,
     duties: IterationDuties,
 }
@@ -4207,11 +4234,15 @@ fn lower_repeat_exit_stamps<S: AsStrSlice>(
     rule_name: S,
 ) -> RepeatExitStamps {
     let by_atn = non_greedy_exit_by_atn(non_greedy, kind, body_admits);
+    let contested = ctx.settings.atn matches { Always }
+        && repeat_contested(body_admits, caller_follow_first, alt_elements, index, ctx, reaches_rule_tail);
     if by_atn {
-        ctx.mark_asks_simulator();
+        ctx.mark_asks_simulator("a non-greedy loop's exit");
+    } else if contested {
+        ctx.mark_asks_simulator("a repeat whose body and continuation can start on one token");
     }
     return RepeatExitStamps {
-        probe: if by_atn {
+        probe: if by_atn || contested {
             ContinuationProbe {};
         } else {
             lower_continuation_probe(non_greedy, kind, alt_elements, index, ctx, reaches_rule_tail, rule_name);
@@ -4231,6 +4262,7 @@ fn lower_repeat_exit_stamps<S: AsStrSlice>(
             body_second,
             caller_follow_second,
         ),
+        atn_decides: by_atn || contested,
         atn_asked_kinds: if by_atn {
             atn_asked_kinds(&alt_elements[index], caller_follow_first, alt_elements, index, ctx);
         } else {

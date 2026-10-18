@@ -56,7 +56,7 @@ use {
 use { gen_highlight } from "./highlight_gen.wado";
 use { HighlightRule } from "./highlight_query.wado";
 use { GrammarAnalysis } from "./grammar_analysis.wado";
-use { GenSettings } from "./gen_settings.wado";
+use { AtnMode, GenSettings } from "./gen_settings.wado";
 use { push_unique } from "./list_util.wado";
 use { LowerContext } from "./lower_context.wado";
 use { plan_parser } from "./parser_plan.wado";
@@ -86,6 +86,8 @@ pub struct GenerateOptions {
     /// Rule names a fragment is a sequence of, for tooling; empty is
     /// byte-identical.
     pub fragment_entries: List<String> = [],
+    /// Which decisions the parser asks the runtime ATN simulator; see `AtnMode`.
+    pub atn: AtnMode = AtnMode::Auto,
 }
 
 /// Result of a codegen pass: the generated `.wado` source plus every
@@ -257,7 +259,7 @@ pub fn generate(grammar: &mut Grammar, options: &GenerateOptions) -> GeneratedOu
     let mut diagnostics = Diagnostics {};
     let ActionContext { settings, lexer_members, parser_members } = install_action_context(
         grammar,
-        GenSettings { trace: options.trace, fragment_entries: options.fragment_entries },
+        GenSettings { atn: options.atn, trace: options.trace, fragment_entries: options.fragment_entries },
         &mut diagnostics,
     );
     // Read off the `.g4` bodies, which staging is about to translate away.

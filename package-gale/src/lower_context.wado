@@ -4,7 +4,7 @@
 //! (`LowerMarks`) the parser plan is decided from.
 
 use { Alternative, ParserRule } from "./ir.wado";
-use { Diagnostics, Rule } from "./gir.wado";
+use { DiagnosticKind, DiagnosticOwner, Diagnostics, Rule } from "./gir.wado";
 use { RuleOverlap, overlap_groups_of, overlap_routes, rule_overlap_groups } from "./rule_overlap.wado";
 use { GrammarAnalysis } from "./grammar_analysis.wado";
 use { GenSettings } from "./gen_settings.wado";
@@ -128,16 +128,24 @@ impl LowerContext {
         self.marks.caller_follow_gate = true;
     }
 
-    /// Record a decision the simulator makes in the rule being lowered.
-    pub fn mark_asks_simulator(&mut self) {
+    /// Record a decision the simulator makes in the rule being lowered, `what`
+    /// naming it. Under `atn: "never"` it is the refusal.
+    pub fn mark_asks_simulator<S: AsStrSlice>(&mut self, what: S) {
         let idx = self.current_rule_index();
         self.marks.mark_asks_simulator(idx);
+        if self.settings.atn matches { Never } {
+            self.diagnostics.warn(
+                &DiagnosticOwner::rule_dispatch(self.current_rule_name()),
+                DiagnosticKind::SimulatorRequired,
+                `${what} only the ATN simulator decides, and \`atn: "never"\` refuses it`,
+            );
+        }
     }
 
     /// Record an ATN-class LR rule: its loop decision reads the LR tables.
-    pub fn mark_needs_lr_atn(&mut self) {
+    pub fn mark_needs_lr_atn<S: AsStrSlice>(&mut self, what: S) {
         self.marks.needs_lr_atn = true;
-        self.mark_asks_simulator();
+        self.mark_asks_simulator(what);
     }
 
     /// Record that the rule being lowered reads the continuation it was called
@@ -201,6 +209,6 @@ impl LowerContext {
     pub fn choice_routes(&mut self, rule: &ParserRule, alt_indices: List<i32>, multi_alt: bool) -> bool {
         let has_gate = |alt: &Alternative| self.alt_has_gate(alt);
         let overlap = overlap_groups_of(rule, alt_indices, multi_alt, &mut self.analysis, &self.follow, has_gate);
-        return overlap_routes(rule, &overlap, &mut self.analysis, &self.follow);
+        return overlap_routes(rule, &overlap, &mut self.analysis, &self.follow, self.settings.atn);
     }
 }

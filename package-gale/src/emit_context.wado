@@ -378,7 +378,7 @@ impl EmitContext {
         return self.plan.needs_atn
             && self.plan.atn_rule_body_decision(self.cursor.current_rule_index()) >= 0
             && self.atn_body_alt_numbers(&a.alts) matches { Some(_) }
-            && ambiguity_routes(a, rule_name, &self.follow);
+            && ambiguity_routes(a, rule_name, &self.follow, self.settings.atn);
     }
 
     /// The number the simulator answers each of the current rule's `alts` by
