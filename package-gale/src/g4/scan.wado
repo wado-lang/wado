@@ -1,40 +1,44 @@
-//! Char-level scanners shared across the g4 frontend.
+//! Byte-level scanners shared across the g4 frontend.
 //!
 //! `.g4` source embeds host-language regions (action bodies `{...}`,
-//! arg-actions `[...]`) that the byte-level lexer cannot delimit on its
-//! own: a `}` or `]` may sit inside a host string or comment, or the
-//! brackets may nest. These scanners walk the raw char buffer with the
-//! awareness each region needs, with one implementation per concern so a
-//! fix to string- or comment-handling lands in a single place.
+//! arg-actions `[...]`) that the lexer cannot delimit on its own: a `}` or
+//! `]` may sit inside a host string or comment, or the brackets may nest.
+//! These scanners walk the UTF-8 source with the awareness each region needs,
+//! with one implementation per concern so a fix to string- or
+//! comment-handling lands in a single place.
 //!
-//! Each scanner takes `pos` at the opening element and returns the index
+//! Every position is a byte offset. Each delimiter they look for is ASCII, and
+//! no byte of a multi-byte char is, so a scan may step one byte at a time and
+//! still stop only on a char boundary.
+//!
+//! Each scanner takes `pos` at the opening element and returns the offset
 //! just past what it consumed. The two-delimiter scanners report an
 //! unterminated region as `None`; comment/string scanners run to
 //! end-of-input (ANTLR4 tolerates unterminated comments).
 
 use icu from "core:icu";
 use { BinaryProperty } from "core:icu";
-use { collect_range } from "../text.wado";
+use { char_at } from "../runtime/lex.wado";
 
 /// Scan a `//` line comment. `pos` must point at the first `/`. Returns
-/// the index of the terminating `\n` (which it excludes), or `chars.len()`.
-pub fn scan_line_comment(chars: &List<char>, pos: i32) -> i32 {
-    let n = chars.len();
+/// the offset of the terminating `\n` (which it excludes), or `src.len()`.
+pub fn scan_line_comment(src: &StrSlice, pos: i32) -> i32 {
+    let n = src.len();
     let mut i = pos + 2;
-    while i < n && chars[i] != '\n' {
+    while i < n && src.byte_at(i) != b'\n' {
         i += 1;
     }
     return i;
 }
 
 /// Scan a `/* ... */` block comment. `pos` must point at the first `/`.
-/// Returns the index just past the closing `*/`, or `chars.len()` if
+/// Returns the offset just past the closing `*/`, or `src.len()` if
 /// unterminated.
-pub fn scan_block_comment(chars: &List<char>, pos: i32) -> i32 {
-    let n = chars.len();
+pub fn scan_block_comment(src: &StrSlice, pos: i32) -> i32 {
+    let n = src.len();
     let mut i = pos + 2;
     while i + 1 < n {
-        if chars[i] == '*' && chars[i + 1] == '/' {
+        if src.byte_at(i) == b'*' && src.byte_at(i + 1) == b'/' {
             return i + 2;
         }
         i += 1;
@@ -43,25 +47,25 @@ pub fn scan_block_comment(chars: &List<char>, pos: i32) -> i32 {
 }
 
 /// Scan a `'...'` or `"..."` host string. `pos` must point at the opening
-/// quote. Honors `\` escapes. Returns the index just past the closing
-/// quote, or `chars.len()` if unterminated.
-pub fn scan_string(chars: &List<char>, pos: i32) -> i32 {
-    return scan_closed_string(chars, pos).unwrap_or(chars.len());
+/// quote. Honors `\` escapes. Returns the offset just past the closing
+/// quote, or `src.len()` if unterminated.
+pub fn scan_string(src: &StrSlice, pos: i32) -> i32 {
+    return scan_closed_string(src, pos).unwrap_or(src.len());
 }
 
 /// `scan_string`, with an unterminated string reported as `None`.
-pub fn scan_closed_string(chars: &List<char>, pos: i32) -> Option<i32> {
-    let n = chars.len();
-    let quote = chars[pos];
+pub fn scan_closed_string(src: &StrSlice, pos: i32) -> Option<i32> {
+    let n = src.len();
+    let quote = src.byte_at(pos);
     let mut i = pos + 1;
     while i < n {
-        let c = chars[i];
-        if c == '\\' && i + 1 < n {
+        let b = src.byte_at(i);
+        if b == b'\\' && i + 1 < n {
             i += 2;
             continue;
         }
         i += 1;
-        if c == quote {
+        if b == quote {
             return Option::Some(i);
         }
     }
@@ -69,22 +73,23 @@ pub fn scan_closed_string(chars: &List<char>, pos: i32) -> Option<i32> {
 }
 
 /// Scan a Wado template literal. `pos` must point at the opening backtick.
-/// Returns the index just past the closing backtick, or `n` if unterminated,
+/// Returns the offset just past the closing backtick, or `n` if unterminated,
 /// and the span of each `${ ... }` body. A hole is Wado code, so a string,
 /// comment or template inside it is stepped over whole.
-pub fn scan_template(chars: &List<char>, pos: i32, n: i32) -> [i32, List<[i32, i32]>] {
+pub fn scan_template(src: &StrSlice, pos: i32, n: i32) -> [i32, List<[i32, i32]>] {
     let mut holes: List<[i32, i32]> = [];
     let mut i = pos + 1;
     while i < n {
-        if chars[i] == '\\' && i + 1 < n {
+        let b = src.byte_at(i);
+        if b == b'\\' && i + 1 < n {
             i += 2;
             continue;
         }
-        if chars[i] == '`' {
+        if b == b'`' {
             return [i + 1, holes];
         }
-        if chars[i] == '$' && i + 1 < n && chars[i + 1] == '{' {
-            let Some(close) = match_delim(chars, i + 1, n, '{', '}') else {
+        if b == b'$' && i + 1 < n && src.byte_at(i + 1) == b'{' {
+            let Some(close) = match_delim(src, i + 1, n, b'{', b'}') else {
                 holes.push([i + 2, n]);
                 return [n, holes];
             };
@@ -99,30 +104,30 @@ pub fn scan_template(chars: &List<char>, pos: i32, n: i32) -> [i32, List<[i32, i
 
 /// The end of the Wado string, char, template or comment opening at `i`, or
 /// `null` where none does: what a scan of Wado code steps over whole.
-pub fn wado_opaque_end(chars: &List<char>, i: i32, n: i32) -> Option<i32> {
-    return match chars[i] {
-        '"' | '\'' => Option::Some(scan_string(chars, i)),
-        '`' => Option::Some(scan_template(chars, i, n).0),
-        '/' && i + 1 < n && chars[i + 1] == '/' => Option::Some(scan_line_comment(chars, i)),
-        '/' && i + 1 < n && chars[i + 1] == '*' => Option::Some(scan_block_comment(chars, i)),
+pub fn wado_opaque_end(src: &StrSlice, i: i32, n: i32) -> Option<i32> {
+    return match src.byte_at(i) {
+        b'"' | b'\'' => Option::Some(scan_string(src, i)),
+        b'`' => Option::Some(scan_template(src, i, n).0),
+        b'/' && i + 1 < n && src.byte_at(i + 1) == b'/' => Option::Some(scan_line_comment(src, i)),
+        b'/' && i + 1 < n && src.byte_at(i + 1) == b'*' => Option::Some(scan_block_comment(src, i)),
         _ => null,
     };
 }
 
-/// In Wado code, the index just past the delimiter matching the `open_ch` at
+/// In Wado code, the offset just past the delimiter matching the `open_b` at
 /// `open`, or `null` when it never closes.
-pub fn match_delim(chars: &List<char>, open: i32, n: i32, open_ch: char, close_ch: char) -> Option<i32> {
+pub fn match_delim(src: &StrSlice, open: i32, n: i32, open_b: u8, close_b: u8) -> Option<i32> {
     let mut depth = 0;
     let mut i = open;
     while i < n {
-        if let Some(end) = wado_opaque_end(chars, i, n) {
+        if let Some(end) = wado_opaque_end(src, i, n) {
             i = end;
             continue;
         }
-        let c = chars[i];
-        if c == open_ch {
+        let b = src.byte_at(i);
+        if b == open_b {
             depth += 1;
-        } else if c == close_ch {
+        } else if b == close_b {
             depth -= 1;
             if depth == 0 {
                 return Option::Some(i + 1);
@@ -133,94 +138,107 @@ pub fn match_delim(chars: &List<char>, open: i32, n: i32, open_ch: char, close_c
     return null;
 }
 
-/// The spans of `chars` between the commas no bracket encloses, each trimmed,
+/// The spans of `src` between the commas no bracket encloses, each trimmed,
 /// an empty last one dropped. `<` is a comparison unless it opens a type's
 /// arguments: after `::`, or anywhere in a declaration's type, before its `=`.
-pub fn split_top_level_commas(chars: &List<char>, declarations: bool) -> List<String> {
-    let n = chars.len();
+pub fn split_top_level_commas(src: &StrSlice, declarations: bool) -> List<String> {
+    let n = src.len();
     let mut out: List<String> = [];
-    let mut open: List<char> = [];
+    let mut open: List<u8> = [];
     let mut seg_start = 0;
     let mut in_type = declarations;
     let mut i = 0;
     while i < n {
-        if let Some(end) = wado_opaque_end(chars, i, n) {
+        if let Some(end) = wado_opaque_end(src, i, n) {
             i = end;
             continue;
         }
-        let c = chars[i];
-        if c matches { '(' | '[' | '{' }
-            || c == '<' && (in_type || open.last() == Option::Some('<') || opens_type_args(chars, i)) {
-            open.push(c);
-        } else if c matches { ')' | ']' | '}' } || c == '>' && open.last() == Option::Some('<') && chars[i - 1] != '-' {
+        let b = src.byte_at(i);
+        if b matches { b'(' | b'[' | b'{' }
+            || b == b'<' && (in_type || open.last() == Option::Some(b'<') || opens_type_args(src, i)) {
+            open.push(b);
+        } else if b matches { b')' | b']' | b'}' }
+            || b == b'>' && open.last() == Option::Some(b'<') && src.byte_at(i - 1) != b'-' {
             open.pop();
         } else if open.is_empty()
-            && c == '='
-            && !(i + 1 < n && chars[i + 1] == '=')
-            && !(i > 0 && chars[i - 1] matches { '!' | '<' | '>' | '=' }) {
+            && b == b'='
+            && !(i + 1 < n && src.byte_at(i + 1) == b'=')
+            && !(i > 0 && src.byte_at(i - 1) matches { b'!' | b'<' | b'>' | b'=' }) {
             in_type = false;
-        } else if open.is_empty() && c == ',' {
-            out.push(collect_trimmed(chars, seg_start, i));
+        } else if open.is_empty() && b == b',' {
+            out.push(src.slice(seg_start, i).trim().to_string());
             seg_start = i + 1;
             in_type = declarations;
         }
         i += 1;
     }
-    let last = collect_trimmed(chars, seg_start, n);
+    let last = src.slice(seg_start, n).trim();
     if !last.is_empty() {
-        out.push(last);
+        out.push(last.to_string());
     }
     return out;
 }
 
 /// Whether the `<` at `lt` follows a turbofish `::`, or a path where Wado
 /// expects a type: after `as`, a single `:` or `->`.
-fn opens_type_args(chars: &List<char>, lt: i32) -> bool {
-    if text_at(chars, lt - 2, lt, "::") {
+fn opens_type_args(src: &StrSlice, lt: i32) -> bool {
+    if text_at(src, lt - 2, lt, "::") {
         return true;
     }
-    let mut j = ident_start(chars, lt);
-    while text_at(chars, j - 2, j, "::") {
-        j = ident_start(chars, j - 2);
+    let mut j = ident_start(src, lt);
+    while text_at(src, j - 2, j, "::") {
+        j = ident_start(src, j - 2);
     }
-    while j > 0 && chars[j - 1].is_ascii_whitespace() {
+    while j > 0 && src.byte_at(j - 1).is_ascii_whitespace() {
         j -= 1;
     }
-    return word_at(chars, j - 2, j, "as")
-        || text_at(chars, j - 2, j, "->")
-        || text_at(chars, j - 1, j, ":") && !text_at(chars, j - 2, j, "::");
+    return word_at(src, j - 2, j, "as")
+        || text_at(src, j - 2, j, "->")
+        || text_at(src, j - 1, j, ":") && !text_at(src, j - 2, j, "::");
 }
 
-fn ident_start(chars: &List<char>, end: i32) -> i32 {
+/// The start of the identifier ending at `end`, which is `end` itself when
+/// none does.
+pub fn ident_start(src: &StrSlice, end: i32) -> i32 {
     let mut j = end;
-    while j > 0 && is_id_continue_char(chars[j - 1]) {
-        j -= 1;
+    while j > 0 {
+        let prev = src.floor_char_boundary(j - 1);
+        if !is_id_continue_char(char_at(src, prev)) {
+            break;
+        }
+        j = prev;
     }
     return j;
 }
 
-fn collect_trimmed(chars: &List<char>, start: i32, end: i32) -> String {
-    return collect_range(chars, start, end).trim().to_string();
+/// The end of the identifier starting at `start`, which is `start` itself when
+/// none does.
+pub fn ident_end(src: &StrSlice, start: i32, n: i32) -> i32 {
+    let mut j = start;
+    while j < n && is_id_continue_char(char_at(src, j)) {
+        j = src.ceil_char_boundary(j + 1);
+    }
+    return j;
 }
 
 /// Scan an ANTLR4 char class `[...]`. `pos` must point at the opening `[`.
 /// Per the char-set lexicon, only `\X` escapes are recognized and the
 /// first unescaped `]` ends the set: brackets do not nest and host
-/// strings/comments are not interpreted. Returns the index just past the
+/// strings/comments are not interpreted. Returns the offset just past the
 /// closing `]`, or `None` if unterminated.
-pub fn scan_char_class(chars: &List<char>, pos: i32) -> Option<i32> {
-    let n = chars.len();
+pub fn scan_char_class(src: &StrSlice, pos: i32) -> Option<i32> {
+    let n = src.len();
     let mut i = pos + 1;
     while i < n {
-        let c = chars[i];
+        let b = src.byte_at(i);
         i += 1;
-        if c == '\\' {
+        if b == b'\\' {
             if i < n {
                 i += 1;
             }
             continue;
         }
-        if c == ']' {
+        if b == b']' {
             return Option::<i32>::Some(i);
         }
     }
@@ -231,24 +249,24 @@ pub fn scan_char_class(chars: &List<char>, pos: i32) -> Option<i32> {
 /// (`{...}` action body, `[...]` arg-action). `open_idx` must point at
 /// the opening delimiter. Host strings and `//` / `/* */` comments are
 /// skipped so a delimiter inside them does not affect depth; `open` /
-/// `close` nest. Returns the index just past the matching `close`, or
+/// `close` nest. Returns the offset just past the matching `close`, or
 /// `None` if depth never returns to zero before end-of-input.
-pub fn scan_balanced(chars: &List<char>, open_idx: i32, open: char, close: char) -> Option<i32> {
-    let n = chars.len();
+pub fn scan_balanced(src: &StrSlice, open_idx: i32, open: u8, close: u8) -> Option<i32> {
+    let n = src.len();
     let mut i = open_idx + 1;
     let mut depth = 1;
     while i < n {
-        let c = chars[i];
-        if c == '"' || c == '\'' {
-            i = scan_string(chars, i);
-        } else if c == '/' && i + 1 < n && chars[i + 1] == '/' {
-            i = scan_line_comment(chars, i);
-        } else if c == '/' && i + 1 < n && chars[i + 1] == '*' {
-            i = scan_block_comment(chars, i);
-        } else if c == open {
+        let b = src.byte_at(i);
+        if b == b'"' || b == b'\'' {
+            i = scan_string(src, i);
+        } else if b == b'/' && i + 1 < n && src.byte_at(i + 1) == b'/' {
+            i = scan_line_comment(src, i);
+        } else if b == b'/' && i + 1 < n && src.byte_at(i + 1) == b'*' {
+            i = scan_block_comment(src, i);
+        } else if b == open {
             depth += 1;
             i += 1;
-        } else if c == close {
+        } else if b == close {
             depth -= 1;
             i += 1;
             if depth == 0 {
@@ -261,40 +279,43 @@ pub fn scan_balanced(chars: &List<char>, open_idx: i32, open: char, close: char)
     return null;
 }
 
+/// Append the char at `i` to `out`, returning the offset past it.
+pub fn copy_char(out: &mut String, src: &StrSlice, i: i32) -> i32 {
+    let next = src.ceil_char_boundary(i + 1);
+    out.push_str(src.slice(i, next));
+    return next;
+}
+
 /// Past the ASCII whitespace from `start`, stopping at `n`.
-pub fn skip_ws(chars: &List<char>, start: i32, n: i32) -> i32 {
+pub fn skip_ws(src: &StrSlice, start: i32, n: i32) -> i32 {
     let mut i = start;
-    while i < n && chars[i].is_ascii_whitespace() {
+    while i < n && src.byte_at(i).is_ascii_whitespace() {
         i += 1;
     }
     return i;
 }
 
 /// Whether `text` sits at `i`, ending by `n`.
-pub fn text_at<S: AsStrSlice>(chars: &List<char>, i: i32, n: i32, text: S) -> bool {
-    if i < 0 {
+pub fn text_at<S: AsStrSlice>(src: &StrSlice, i: i32, n: i32, text: S) -> bool {
+    let t = text.as_str_slice();
+    if i < 0 || i + t.len() > n {
         return false;
     }
-    let mut k = i;
-    for let c of text.chars() {
-        if k >= n || chars[k] != c {
+    for let mut k = 0; k < t.len(); k += 1 {
+        if src.byte_at(i + k) != t.byte_at(k) {
             return false;
         }
-        k += 1;
     }
     return true;
 }
 
 /// Whether `word` sits at `i` as a whole word, not part of a longer name.
-pub fn word_at<S: AsStrSlice>(chars: &List<char>, i: i32, n: i32, word: S) -> bool {
-    if !text_at(chars, i, n, word) {
+pub fn word_at<S: AsStrSlice>(src: &StrSlice, i: i32, n: i32, word: S) -> bool {
+    let w = word.as_str_slice();
+    if !text_at(src, i, n, w) {
         return false;
     }
-    if i > 0 && is_id_continue_char(chars[i - 1]) {
-        return false;
-    }
-    let end = i + word.chars().count();
-    return !(end < n && is_id_continue_char(chars[end]));
+    return ident_start(src, i) == i && ident_end(src, i + w.len(), n) == i + w.len();
 }
 
 /// ANTLR4's `NameStartChar` (`vendor/antlr4/doc/lexicon.md`), which is XML's:

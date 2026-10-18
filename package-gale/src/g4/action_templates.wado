@@ -41,29 +41,29 @@ use {
     scan_line_comment,
     scan_block_comment,
     skip_ws,
+    copy_char,
+    ident_end,
     is_id_start_char,
-    is_id_continue_char,
 } from "./scan.wado";
-use { push_range } from "../text.wado";
+use { char_at } from "../runtime/lex.wado";
 
 pub struct ExpandOutcome {
     pub text: String,
     pub warnings: List<String>,
 }
 
-pub fn expand_action_templates<S: AsStrSlice>(src: S) -> ExpandOutcome {
-    let chars: List<char> = src.chars().collect();
-    let n = chars.len();
-    let mut out = String::with_capacity(src.len());
+pub fn expand_action_templates<S: AsStrSlice>(text: S) -> ExpandOutcome {
+    let src = text.as_str_slice();
+    let n = src.len();
+    let mut out = String::with_capacity(n);
     let mut warnings: List<String> = [];
     let mut i = 0;
     while i < n {
-        let c = chars[i];
-        match c {
+        match src.byte_at(i) {
             // A `'...'` grammar string is copied verbatim (never a template).
-            '\'' => {
-                let end = scan_string(&chars, i);
-                push_range(&mut out, &chars, i, end);
+            b'\'' => {
+                let end = scan_string(&src, i);
+                out.push_str(src.slice(i, end));
                 i = end;
                 continue;
             },
@@ -73,20 +73,19 @@ pub fn expand_action_templates<S: AsStrSlice>(src: S) -> ExpandOutcome {
             // template). Walk it expanding templates but treating `'` as a
             // literal char, so an apostrophe never opens a string that would
             // swallow a later `<template>`.
-            '[' => {
-                out.push(c);
+            b'[' => {
+                out.push_str("[");
                 i += 1;
                 let mut depth = 1;
                 while i < n && depth > 0 {
-                    let d = chars[i];
-                    if d == '\\' && i + 1 < n {
-                        out.push(d);
-                        out.push(chars[i + 1]);
-                        i += 2;
+                    let d = src.byte_at(i);
+                    if d == b'\\' && i + 1 < n {
+                        out.push_str("\\");
+                        i = copy_char(&mut out, &src, i + 1);
                         continue;
                     }
-                    if d == '<' && is_template_start(&chars, i) {
-                        match eval_template(&chars, i) {
+                    if d == b'<' && is_template_start(&src, i) {
+                        match eval_template(&src, i) {
                             Ok(expanded) => {
                                 out.push_str(&expanded.text);
                                 i = expanded.end;
@@ -97,34 +96,33 @@ pub fn expand_action_templates<S: AsStrSlice>(src: S) -> ExpandOutcome {
                             },
                         }
                     }
-                    if d == '[' {
+                    if d == b'[' {
                         depth += 1;
-                    } else if d == ']' {
+                    } else if d == b']' {
                         depth -= 1;
                     }
-                    out.push(d);
-                    i += 1;
+                    i = copy_char(&mut out, &src, i);
                 }
                 continue;
             },
-            '/' && i + 1 < n && chars[i + 1] == '/' => {
-                let end = scan_line_comment(&chars, i);
-                push_range(&mut out, &chars, i, end);
+            b'/' && i + 1 < n && src.byte_at(i + 1) == b'/' => {
+                let end = scan_line_comment(&src, i);
+                out.push_str(src.slice(i, end));
                 i = end;
                 continue;
             },
-            '/' && i + 1 < n && chars[i + 1] == '*' => {
-                let end = scan_block_comment(&chars, i);
-                push_range(&mut out, &chars, i, end);
+            b'/' && i + 1 < n && src.byte_at(i + 1) == b'*' => {
+                let end = scan_block_comment(&src, i);
+                out.push_str(src.slice(i, end));
                 i = end;
                 continue;
             },
-            '<' && i + 1 < n && chars[i + 1] == '!' => {
-                i = scan_st_comment(&chars, i);
+            b'<' && i + 1 < n && src.byte_at(i + 1) == b'!' => {
+                i = scan_st_comment(&src, i);
                 continue;
             },
-            '<' && is_template_start(&chars, i) => {
-                match eval_template(&chars, i) {
+            b'<' && is_template_start(&src, i) => {
+                match eval_template(&src, i) {
                     Ok(expanded) => {
                         out.push_str(&expanded.text);
                         i = expanded.end;
@@ -139,20 +137,19 @@ pub fn expand_action_templates<S: AsStrSlice>(src: S) -> ExpandOutcome {
             _ => {
             },
         }
-        out.push(c);
-        i += 1;
+        i = copy_char(&mut out, &src, i);
     }
     return ExpandOutcome { text: out, warnings };
 }
 
 /// Scan a `<! ... !>` StringTemplate comment. `pos` must point at the `<`.
-/// Returns the index just past the closing `!>`, or `chars.len()` if
+/// Returns the offset just past the closing `!>`, or `src.len()` if
 /// unterminated.
-fn scan_st_comment(chars: &List<char>, pos: i32) -> i32 {
-    let n = chars.len();
+fn scan_st_comment(src: &StrSlice, pos: i32) -> i32 {
+    let n = src.len();
     let mut i = pos + 2;
     while i + 1 < n {
-        if chars[i] == '!' && chars[i + 1] == '>' {
+        if src.byte_at(i) == b'!' && src.byte_at(i + 1) == b'>' {
             return i + 2;
         }
         i += 1;
@@ -162,44 +159,42 @@ fn scan_st_comment(chars: &List<char>, pos: i32) -> i32 {
 
 struct Expanded {
     text: String,
-    /// Index just past the closing '>'.
+    /// Offset just past the closing '>'.
     end: i32,
 }
 
 /// A '<' opens a template only when an identifier followed by '(' comes
 /// next. This keeps `<assoc=right>`, `<EOF>`, `<p=3>`, and comparison
 /// operators out of the template path without tracking regions.
-fn is_template_start(chars: &List<char>, lt: i32) -> bool {
-    let n = chars.len();
-    let mut j = lt + 1;
-    if j >= n || !is_id_start_char(chars[j]) {
+fn is_template_start(src: &StrSlice, lt: i32) -> bool {
+    let n = src.len();
+    let j = lt + 1;
+    if j >= n || !is_id_start_char(char_at(src, j)) {
         return false;
     }
-    while j < n && is_id_continue_char(chars[j]) {
-        j += 1;
-    }
-    return j < n && chars[j] == '(';
+    let end = ident_end(src, j, n);
+    return end < n && src.byte_at(end) == b'(';
 }
 
 /// Parse and expand one `<chain>` starting at the '<'.
-fn eval_template(chars: &List<char>, lt: i32) -> Result<Expanded, String> {
-    let chain = eval_chain(chars, lt + 1)?;
-    let mut j = skip_ws(chars, chain.end, chars.len());
-    if j >= chars.len() || chars[j] != '>' {
-        return Result::Err(`template at index ${lt}: expected '>' to close the reference`);
+fn eval_template(src: &StrSlice, lt: i32) -> Result<Expanded, String> {
+    let chain = eval_chain(src, lt + 1)?;
+    let j = skip_ws(src, chain.end, src.len());
+    if j >= src.len() || src.byte_at(j) != b'>' {
+        return Result::Err(`template at offset ${lt}: expected '>' to close the reference`);
     }
     return Result::Ok(Expanded { text: chain.text, end: j + 1 });
 }
 
 /// Parse and expand `call (':' call)*` starting at an identifier.
-fn eval_chain(chars: &List<char>, start: i32) -> Result<Expanded, String> {
-    let n = chars.len();
-    let mut current = eval_call(chars, start, null)?;
+fn eval_chain(src: &StrSlice, start: i32) -> Result<Expanded, String> {
+    let n = src.len();
+    let mut current = eval_call(src, start, null)?;
     loop {
-        let j = skip_ws(chars, current.end, n);
-        if j < n && chars[j] == ':' {
-            let k = skip_ws(chars, j + 1, n);
-            current = eval_call(chars, k, Option::Some(current.text))?;
+        let j = skip_ws(src, current.end, n);
+        if j < n && src.byte_at(j) == b':' {
+            let k = skip_ws(src, j + 1, n);
+            current = eval_call(src, k, Option::Some(current.text))?;
             continue;
         }
         return Result::Ok(Expanded { text: current.text, end: current.end });
@@ -207,65 +202,60 @@ fn eval_chain(chars: &List<char>, start: i32) -> Result<Expanded, String> {
 }
 
 /// Parse `IDENT '(' args ')'` at `start` and expand it against the table.
-fn eval_call(chars: &List<char>, start: i32, receiver: Option<String>) -> Result<Expanded, String> {
-    let n = chars.len();
-    let mut j = start;
-    if j >= n || !is_id_start_char(chars[j]) {
-        return Result::Err(`template call at index ${start}: expected a helper name`);
+fn eval_call(src: &StrSlice, start: i32, receiver: Option<String>) -> Result<Expanded, String> {
+    let n = src.len();
+    if start >= n || !is_id_start_char(char_at(src, start)) {
+        return Result::Err(`template call at offset ${start}: expected a helper name`);
     }
-    let mut name = String::with_capacity(16);
-    while j < n && is_id_continue_char(chars[j]) {
-        name.push(chars[j]);
-        j += 1;
-    }
-    if j >= n || chars[j] != '(' {
+    let mut j = ident_end(src, start, n);
+    let name = src.slice(start, j);
+    if j >= n || src.byte_at(j) != b'(' {
         return Result::Err(`template helper '${name}': expected '('`);
     }
     j += 1;
     let mut args: List<String> = [];
-    j = skip_ws(chars, j, n);
-    if j < n && chars[j] != ')' {
+    j = skip_ws(src, j, n);
+    if j < n && src.byte_at(j) != b')' {
         loop {
-            let arg = eval_arg(chars, j)?;
+            let arg = eval_arg(src, j)?;
             args.push(arg.text);
-            j = skip_ws(chars, arg.end, n);
-            if j < n && chars[j] == ',' {
-                j = skip_ws(chars, j + 1, n);
+            j = skip_ws(src, arg.end, n);
+            if j < n && src.byte_at(j) == b',' {
+                j = skip_ws(src, j + 1, n);
                 continue;
             }
             break;
         }
     }
-    if j >= n || chars[j] != ')' {
+    if j >= n || src.byte_at(j) != b')' {
         return Result::Err(`template helper '${name}': expected ')'`);
     }
-    let text = expand_helper(&name, &receiver, &args)?;
+    let text = expand_helper(name, &receiver, &args)?;
     return Result::Ok(Expanded { text, end: j + 1 });
 }
 
 /// Parse one argument: a `"..."` code-text string, a `{...}` subtemplate
 /// block, or a nested helper chain.
-fn eval_arg(chars: &List<char>, start: i32) -> Result<Expanded, String> {
-    let n = chars.len();
-    let c = chars[start];
-    if c == '"' {
+fn eval_arg(src: &StrSlice, start: i32) -> Result<Expanded, String> {
+    let n = src.len();
+    let b = src.byte_at(start);
+    if b == b'"' {
         let mut text = String::with_capacity(16);
         let mut j = start + 1;
         while j < n {
-            if chars[j] == '\\' && j + 1 < n && (chars[j + 1] == '"' || chars[j + 1] == '\\') {
-                text.push(chars[j + 1]);
-                j += 2;
+            let d = src.byte_at(j);
+            if d == b'\\' && j + 1 < n && src.byte_at(j + 1) matches { b'"' | b'\\' } {
+                j = copy_char(&mut text, src, j + 1);
                 continue;
             }
-            if chars[j] == '"' {
+            if d == b'"' {
                 return Result::Ok(Expanded { text, end: j + 1 });
             }
-            text.push(chars[j]);
-            j += 1;
+            j = copy_char(&mut text, src, j);
         }
-        return Result::Err(`template string argument at index ${start} is unterminated`);
+        return Result::Err(`template string argument at offset ${start} is unterminated`);
     }
-    if c == '{' {
+    if b == b'{' {
         // Subtemplate: literal text with nested `<template>` references.
         // Balance inner `{`/`}` so a literal brace in the body (host code
         // like `if (x) { y; }`) does not close the argument early.
@@ -273,32 +263,32 @@ fn eval_arg(chars: &List<char>, start: i32) -> Result<Expanded, String> {
         let mut j = start + 1;
         let mut depth = 1;
         while j < n {
-            if chars[j] == '<' && is_template_start(chars, j) {
-                let nested = eval_template(chars, j)?;
+            let d = src.byte_at(j);
+            if d == b'<' && is_template_start(src, j) {
+                let nested = eval_template(src, j)?;
                 text.push_str(&nested.text);
                 j = nested.end;
                 continue;
             }
-            if chars[j] == '{' {
+            if d == b'{' {
                 depth += 1;
-            } else if chars[j] == '}' {
+            } else if d == b'}' {
                 depth -= 1;
                 if depth == 0 {
                     break;
                 }
             }
-            text.push(chars[j]);
-            j += 1;
+            j = copy_char(&mut text, src, j);
         }
         if j >= n {
-            return Result::Err(`template block argument at index ${start} is unterminated`);
+            return Result::Err(`template block argument at offset ${start} is unterminated`);
         }
         return Result::Ok(Expanded { text, end: j + 1 });
     }
-    if is_id_start_char(c) {
-        return eval_chain(chars, start);
+    if is_id_start_char(char_at(src, start)) {
+        return eval_chain(src, start);
     }
-    return Result::Err(`template argument at index ${start}: expected a string, block, or helper call`);
+    return Result::Err(`template argument at offset ${start}: expected a string, block, or helper call`);
 }
 
 /// The Java-target expansion table. `recv` is the chained receiver

@@ -46,15 +46,15 @@ use {
 } from "../ir.wado";
 use { G4Token, Token } from "./token.wado";
 use {
-    tokenize_chars,
+    tokenize,
     resolve_unicode_escape_code,
     string_literal_code_points,
     decode_shared_escape,
     INVALID_ESCAPE,
 } from "./lexer.wado";
-use { collect_range } from "../text.wado";
+use { char_at } from "../runtime/lex.wado";
 use { push_unique } from "../list_util.wado";
-use { scan_balanced, split_top_level_commas, is_id_continue_char, is_rule_name_upper, skip_ws } from "./scan.wado";
+use { scan_balanced, split_top_level_commas, ident_start, is_rule_name_upper, skip_ws } from "./scan.wado";
 use {
     clip_to_scalars,
     complement_char_ranges,
@@ -64,7 +64,7 @@ use {
 
 pub struct G4Parser {
     tokens: List<Token>,
-    chars: List<char>,
+    src: StrSlice,
     pos: i32,
     channels: List<String>,
     options: List<GrammarOption>,
@@ -230,10 +230,10 @@ fn is_valid_lexer_not_element(elem: &LexerElement) -> bool {
 }
 
 impl G4Parser {
-    pub fn new(tokens: List<Token>, chars: List<char>) -> G4Parser {
+    pub fn new(tokens: List<Token>, src: StrSlice) -> G4Parser {
         return G4Parser {
             tokens,
-            chars,
+            src,
             pos: 0,
             channels: [],
             options: [],
@@ -632,7 +632,7 @@ impl G4Parser {
             return Result::Ok(OptionValue::Int(self.advance().text));
         }
         if self.is_kind(G4Token::LBrace) {
-            let body = self.extract_action('{', '}');
+            let body = self.extract_action(b'{', b'}');
             return Result::Ok(OptionValue::Action(body));
         }
         if self.is_kind(G4Token::Identifier) {
@@ -670,7 +670,7 @@ impl G4Parser {
         }
         let mut body = ActionSource {};
         if self.is_kind(G4Token::LBrace) {
-            body = self.extract_action('{', '}');
+            body = self.extract_action(b'{', b'}');
         }
         return NamedAction { scope, name, body };
     }
@@ -683,24 +683,18 @@ impl G4Parser {
         return Result::<(), ParseError>::Ok(());
     }
 
-    fn extract_action(&mut self, open: char, close: char) -> ActionSource {
+    fn extract_action(&mut self, open: u8, close: u8) -> ActionSource {
         let tok = self.peek();
         let start = tok.span.start;
-        let end = scan_balanced_or_end(&self.chars, start, open, close);
+        let end = scan_balanced(&self.src, start, open, close).unwrap_or(self.src.len());
         self.advance();
         while !self.at_eof() && self.tokens[self.pos].span.start < end {
             self.pos += 1;
         }
         let body_start = start + 1;
         let body_end = if end > start + 1 { end - 1 } else { start + 1 };
-        let mut body = String::with_capacity(body_end - body_start);
-        let mut i = body_start;
-        while i < body_end {
-            body.push(self.chars[i]);
-            i += 1;
-        }
         return ActionSource {
-            text: body,
+            text: self.src.slice(body_start, body_end).to_string(),
             span: Span { start, end },
             action_id: -1,
         };
@@ -799,7 +793,7 @@ impl G4Parser {
         let mut p = RulePrequel {};
         loop {
             if self.is_kind(G4Token::CharClass) {
-                let act = self.extract_action('[', ']');
+                let act = self.extract_action(b'[', b']');
                 for let d of parse_attr_decls(&act.text, act.span) {
                     p.args.push(d);
                 }
@@ -907,7 +901,7 @@ impl G4Parser {
             return Result::Err(ParseError::new(`expected ${what}`, self.peek().span, [what.to_string()]));
         }
         return Result::Ok(
-            if kind matches { CharClass } { self.extract_action('[', ']') } else { self.extract_action('{', '}') },
+            if kind matches { CharClass } { self.extract_action(b'[', b']') } else { self.extract_action(b'{', b'}') },
         );
     }
 
@@ -925,7 +919,7 @@ impl G4Parser {
     }
 
     fn capture_alt_action(&mut self, before_index: i32) -> AltAction {
-        let source = self.extract_action('{', '}');
+        let source = self.extract_action(b'{', b'}');
         let mut kind = ActionKind::Action;
         if self.is_kind(G4Token::Question) {
             kind = ActionKind::Predicate;
@@ -1011,7 +1005,7 @@ impl G4Parser {
             }
             let mut arg_action: Option<ActionSource> = null;
             if self.is_kind(G4Token::CharClass) {
-                arg_action = Option::<ActionSource>::Some(self.extract_action('[', ']'));
+                arg_action = Option::<ActionSource>::Some(self.extract_action(b'[', b']'));
             }
             let mut options: List<GrammarOption> = [];
             if self.is_kind(G4Token::LAngle) {
@@ -1378,8 +1372,8 @@ impl G4Parser {
                 }
                 // From source, not the token text: that already collapsed an
                 // unpaired surrogate escape to U+FFFD.
-                let lo = string_literal_code_points(&self.chars, start_span)[0];
-                let hi = string_literal_code_points(&self.chars, end_tok.span)[0];
+                let lo = string_literal_code_points(&self.src, start_span)[0];
+                let hi = string_literal_code_points(&self.src, end_tok.span)[0];
                 return Result::<LexerElement, ParseError>::Ok(scalar_char_range(lo, hi));
             }
             return Result::<LexerElement, ParseError>::Ok(LexerElement::Literal(text));
@@ -1449,40 +1443,40 @@ impl G4Parser {
     }
 }
 
-fn advance_char(chars: &List<char>, pos: &mut i32) -> char {
-    let c = chars[*pos];
-    *pos += 1;
+fn advance_char(src: &StrSlice, pos: &mut i32) -> char {
+    let c = char_at(src, *pos);
+    *pos = src.ceil_char_boundary(*pos + 1);
     return c;
 }
 
 /// Code point of the next char-set item, escapes resolved, or
 /// `INVALID_ESCAPE`. Surrogates come back verbatim, for `clip_to_scalars`.
-fn resolve_char_code(chars: &List<char>, pos: &mut i32) -> i32 {
-    let c = advance_char(chars, pos);
+fn resolve_char_code(src: &StrSlice, pos: &mut i32) -> i32 {
+    let c = advance_char(src, pos);
     if c != '\\' {
         return c as i32;
     }
-    let ec = advance_char(chars, pos);
+    let ec = advance_char(src, pos);
     return match ec {
-        'u' => resolve_unicode_escape_code(chars, pos),
+        'u' => resolve_unicode_escape_code(src, pos),
         '-' | ']' => ec as i32,
         _ => decode_shared_escape(ec),
     };
 }
 
 /// True when `\p{` / `\P{` opens at `pos`, inside a class ending at `end`.
-fn at_property_escape(chars: &List<char>, pos: i32, end: i32) -> bool {
+fn at_property_escape(src: &StrSlice, pos: i32, end: i32) -> bool {
     return pos + 2 < end
-        && chars[pos] == '\\'
-        && (chars[pos + 1] == 'p' || chars[pos + 1] == 'P')
-        && chars[pos + 2] == '{';
+        && src.byte_at(pos) == b'\\'
+        && src.byte_at(pos + 1) matches { b'p' | b'P' }
+        && src.byte_at(pos + 2) == b'{';
 }
 
 /// True when the `-` at `pos` joins two bounds rather than standing for
 /// itself. A `-` last in the set has nothing to its right, so it is an
 /// ordinary character — the line ANTLR4 draws too (`[\p{Nd}-]` is fine).
-fn opens_char_range(chars: &List<char>, pos: i32, end: i32) -> bool {
-    return pos < end && chars[pos] == '-' && pos + 1 < end;
+fn opens_char_range(src: &StrSlice, pos: i32, end: i32) -> bool {
+    return pos + 1 < end && src.byte_at(pos) == b'-';
 }
 
 /// The error for a `\p{...}` used as a range bound. ANTLR4 reports the same
@@ -1499,16 +1493,16 @@ fn property_range_error(span: Span) -> ParseError {
 
 /// The next char-set item, or the `error(156)` ANTLR4 reports for an escape
 /// the lexicon does not define. `class_span` places the error in the source.
-fn take_char_code(chars: &List<char>, pos: &mut i32, class_span: Span) -> Result<i32, ParseError> {
+fn take_char_code(src: &StrSlice, pos: &mut i32, class_span: Span) -> Result<i32, ParseError> {
     let start = *pos;
-    let code = resolve_char_code(chars, pos);
+    let code = resolve_char_code(src, pos);
     if code != INVALID_ESCAPE {
         return Result::<i32, ParseError>::Ok(code);
     }
     let expected: List<String> = ["a defined escape sequence"];
     return Result::<i32, ParseError>::Err(
         ParseError::new(
-            `invalid escape sequence ${collect_range(chars, start, *pos)}`,
+            `invalid escape sequence ${src.slice(start, *pos)}`,
             Span::new(class_span.start + start, class_span.start + *pos),
             expected,
         ),
@@ -1516,31 +1510,30 @@ fn take_char_code(chars: &List<char>, pos: &mut i32, class_span: Span) -> Result
 }
 
 fn parse_char_class<S: AsStrSlice>(text: S, span: Span) -> Result<CharClass, ParseError> {
-    let chars = text.chars().collect();
-    let end = chars.len() - 1;
+    let src = text.as_str_slice();
+    let end = src.len() - 1;
     let mut pos = 1;
     let mut ranges: List<CharRange> = [];
 
     while pos < end {
-        if at_property_escape(&chars, pos, end) {
-            let complement = chars[pos + 1] == 'P';
+        if at_property_escape(&src, pos, end) {
+            let complement = src.byte_at(pos + 1) == b'P';
             let start = pos;
             pos += 3;
-            let mut prop = String::with_capacity(16);
-            while pos < end && chars[pos] != '}' {
-                prop.push(chars[pos]);
+            while pos < end && src.byte_at(pos) != b'}' {
                 pos += 1;
             }
             if pos == end {
                 let expected: List<String> = ["`}` closing the property"];
                 return Result::Err(
                     ParseError::new(
-                        `invalid escape sequence ${collect_range(&chars, start, end)}`,
+                        `invalid escape sequence ${src.slice(start, end)}`,
                         Span::new(span.start + start, span.start + end),
                         expected,
                     ),
                 );
             }
+            let prop = src.slice(start + 3, pos).to_string();
             pos += 1;
             let mut prop_ranges: List<CharRange> = [];
             if !expand_unicode_property(&prop, &mut prop_ranges) {
@@ -1549,7 +1542,7 @@ fn parse_char_class<S: AsStrSlice>(text: S, span: Span) -> Result<CharClass, Par
                     ParseError::new(unsupported_property_message(&prop), span, expected),
                 );
             }
-            if opens_char_range(&chars, pos, end) {
+            if opens_char_range(&src, pos, end) {
                 return Result::<CharClass, ParseError>::Err(property_range_error(span));
             }
             let items = if complement { complement_char_ranges(&prop_ranges) } else { prop_ranges };
@@ -1559,13 +1552,13 @@ fn parse_char_class<S: AsStrSlice>(text: S, span: Span) -> Result<CharClass, Par
             continue;
         }
 
-        let c = take_char_code(&chars, &mut pos, span)?;
-        if opens_char_range(&chars, pos, end) {
-            advance_char(&chars, &mut pos);
-            if at_property_escape(&chars, pos, end) {
+        let c = take_char_code(&src, &mut pos, span)?;
+        if opens_char_range(&src, pos, end) {
+            pos += 1;
+            if at_property_escape(&src, pos, end) {
                 return Result::<CharClass, ParseError>::Err(property_range_error(span));
             }
-            let c2 = take_char_code(&chars, &mut pos, span)?;
+            let c2 = take_char_code(&src, &mut pos, span)?;
             clip_to_scalars(&mut ranges, c, c2);
         } else {
             clip_to_scalars(&mut ranges, c, c);
@@ -1634,9 +1627,8 @@ struct RulePrequel {
 }
 
 fn parse_attr_decls<S: AsStrSlice>(body: S, list_span: Span) -> List<AttrDecl> {
-    let chars: List<char> = body.chars().collect();
     let mut out: List<AttrDecl> = [];
-    for let seg of &split_top_level_commas(&chars, true) {
+    for let seg of &split_top_level_commas(&body.as_str_slice(), true) {
         if let Some(d) = split_attr_decl(seg, list_span) {
             out.push(d);
         }
@@ -1645,14 +1637,13 @@ fn parse_attr_decls<S: AsStrSlice>(body: S, list_span: Span) -> List<AttrDecl> {
 }
 
 fn split_attr_decl<S: AsStrSlice>(seg: S, span: Span) -> Option<AttrDecl> {
-    let chars: List<char> = seg.chars().collect();
-    let full = chars.len();
+    let src = seg.as_str_slice();
+    let full = src.len();
     let mut n = full;
     for let mut k = 0; k < full; k += 1 {
-        if chars[k] == '=' {
-            let prev_cmp = k > 0
-                && (chars[k - 1] == '!' || chars[k - 1] == '<' || chars[k - 1] == '>' || chars[k - 1] == '=');
-            let next_eq = k + 1 < full && chars[k + 1] == '=';
+        if src.byte_at(k) == b'=' {
+            let prev_cmp = k > 0 && src.byte_at(k - 1) matches { b'!' | b'<' | b'>' | b'=' };
+            let next_eq = k + 1 < full && src.byte_at(k + 1) == b'=';
             if !prev_cmp && !next_eq {
                 n = k;
                 break;
@@ -1660,36 +1651,26 @@ fn split_attr_decl<S: AsStrSlice>(seg: S, span: Span) -> Option<AttrDecl> {
         }
     }
     let mut end = n;
-    while end > 0 && chars[end - 1].is_ascii_whitespace() {
+    while end > 0 && src.byte_at(end - 1).is_ascii_whitespace() {
         end -= 1;
     }
     if end == 0 {
         return null;
     }
-    let mut name_start = end;
-    while name_start > 0 && is_id_continue_char(chars[name_start - 1]) {
-        name_start -= 1;
-    }
-    let name = collect_range(&chars, name_start, end);
+    let name_start = ident_start(&src, end);
+    let name = src.slice(name_start, end).to_string();
     let mut type_end = name_start;
-    while type_end > 0 && chars[type_end - 1].is_ascii_whitespace() {
+    while type_end > 0 && src.byte_at(type_end - 1).is_ascii_whitespace() {
         type_end -= 1;
     }
-    let type_text = collect_range(&chars, skip_ws(&chars, 0, type_end), type_end);
+    let type_text = src.slice(skip_ws(&src, 0, type_end), type_end).to_string();
     return Option::<AttrDecl>::Some(AttrDecl { type_text, name, span });
 }
 
-fn scan_balanced_or_end(chars: &List<char>, start: i32, open: char, close: char) -> i32 {
-    return match scan_balanced(chars, start, open, close) {
-        Some(end) => end,
-        None => chars.len(),
-    };
-}
-
 pub fn parse<S: AsStrSlice>(input: S) -> Result<Grammar, ParseError> {
-    let chars: List<char> = input.chars().collect();
-    let tokens = tokenize_chars(&chars);
-    let mut parser = G4Parser::new(tokens, chars);
+    let src = input.as_str_slice();
+    let tokens = tokenize(&src);
+    let mut parser = G4Parser::new(tokens, src);
     return parser.parse_grammar();
 }
 

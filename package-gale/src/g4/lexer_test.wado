@@ -1,12 +1,8 @@
 use { G4Token, Token } from "./token.wado";
-use { tokenize_chars } from "./lexer.wado";
+use { tokenize as tokenize_src } from "./lexer.wado";
 
-/// Test convenience wrapper: collect a `String` into a char buffer and
-/// tokenize it. Production callers use `tokenize_chars` directly to
-/// share the buffer with the parser.
 fn tokenize<S: AsStrSlice>(input: S) -> List<Token> {
-    let chars: List<char> = input.chars().collect();
-    return tokenize_chars(&chars);
+    return tokenize_src(&input.as_str_slice());
 }
 
 fn assert_token<S: AsStrSlice>(tok: &Token, expected_kind: G4Token, expected_text: S) {

@@ -36,12 +36,13 @@ use {
     skip_ws,
     text_at,
     word_at,
+    copy_char,
+    ident_end,
     is_id_start_char,
-    is_id_continue_char,
 } from "./g4/scan.wado";
+use { char_at } from "./runtime/lex.wado";
 use { CodeWriter } from "lib:wadopoet";
 use { to_snake_case } from "./ident.wado";
-use { collect_range, push_range } from "./text.wado";
 
 /// One synthesized effect operation, from a distinct `this.<method>` call site.
 /// `is_predicate` distinguishes a `{...}?` predicate call from a `{...}` action.
@@ -167,24 +168,24 @@ fn non_empty<S: AsStrSlice>(s: S) -> Option<String> {
 /// and comment text — but not a template's `${ ... }`, which is code. Only the
 /// `this.` receiver is a superClass call; `m()` or `other.m()` is not.
 pub fn find_this_calls<S: AsStrSlice>(body: S) -> List<SuperCall> {
-    let chars: List<char> = body.chars().collect();
-    let n = chars.len();
+    let src = body.as_str_slice();
+    let n = src.len();
     let mut out: List<SuperCall> = [];
     let mut i = 0;
     while i < n {
-        let [end, spans] = inert_at(&chars, i, n);
+        let [end, spans] = inert_at(&src, i, n);
         if end > i {
             for let s of &spans {
-                for let c of &find_this_calls(&collect_range(&chars, s.0, s.1)) {
+                for let c of &find_this_calls(src.slice(s.0, s.1)) {
                     out.push(*c);
                 }
             }
             i = end;
             continue;
         }
-        i = match this_call_at(&chars, i, n) {
+        i = match this_call_at(&src, i, n) {
             Some([name, close]) => {
-                let args = call_args(&chars, i, close);
+                let args = call_args(&src, i, close);
                 // The rewrite descends into an argument, so the operations a
                 // nested call needs have to be collected from there too.
                 for let a of &args {
@@ -204,19 +205,19 @@ pub fn find_this_calls<S: AsStrSlice>(body: S) -> List<SuperCall> {
 /// Whether the body names `this` at all — a call, a field read, or the bare
 /// word. Wado has no such name, so nothing here can be emitted as written.
 pub fn body_names_this<S: AsStrSlice>(body: S) -> bool {
-    let chars: List<char> = body.chars().collect();
-    let n = chars.len();
+    let src = body.as_str_slice();
+    let n = src.len();
     let mut i = 0;
     while i < n {
-        let [end, spans] = inert_at(&chars, i, n);
+        let [end, spans] = inert_at(&src, i, n);
         if end > i {
-            if spans.iter_ref().any(|s: &[i32, i32]| body_names_this(&collect_range(&chars, s.0, s.1))) {
+            if spans.iter_ref().any(|s: &[i32, i32]| body_names_this(src.slice(s.0, s.1))) {
                 return true;
             }
             i = end;
             continue;
         }
-        if word_at(&chars, i, n, "this") {
+        if word_at(&src, i, n, "this") {
             return true;
         }
         i += 1;
@@ -226,65 +227,66 @@ pub fn body_names_this<S: AsStrSlice>(body: S) -> bool {
 
 /// The end of the inert span starting at `i` — a string, a comment, or a
 /// template's literal text — with the `${ ... }` code spans inside it.
-fn inert_at(chars: &List<char>, i: i32, n: i32) -> [i32, List<[i32, i32]>] {
-    if chars[i] == '`' {
-        return scan_template(chars, i, n);
+fn inert_at(src: &StrSlice, i: i32, n: i32) -> [i32, List<[i32, i32]>] {
+    if src.byte_at(i) == b'`' {
+        return scan_template(src, i, n);
     }
     let none: List<[i32, i32]> = [];
-    return [wado_opaque_end(chars, i, n).unwrap_or(i), none];
+    return [wado_opaque_end(src, i, n).unwrap_or(i), none];
 }
 
 /// The arguments the call spanning `[start, close)` passes, split on its
 /// top-level commas. Only the receiver and the method name precede the first
 /// `(`, so that one opens the argument list.
-fn call_args(chars: &List<char>, start: i32, close: i32) -> List<String> {
+fn call_args(src: &StrSlice, start: i32, close: i32) -> List<String> {
     let mut open = start;
     for let mut i = start; i < close; i += 1 {
-        if chars[i] == '(' {
+        if src.byte_at(i) == b'(' {
             open = i;
             break;
         }
     }
-    let inner: List<char> = collect_range(chars, open + 1, close - 1).chars().collect();
-    return split_top_level_commas(&inner, false);
+    return split_top_level_commas(&src.slice(open + 1, close - 1), false);
 }
 
 /// Whether `text` is one whole string literal, not an expression that merely
 /// starts and ends with a quote (`"a" + x + "b"`) — that one has no evident
 /// type, and splicing it would emit the host expression verbatim.
 fn is_string_literal<S: AsStrSlice>(text: S) -> bool {
-    let chars: List<char> = text.chars().collect();
-    if chars.len() < 2 || chars[0] != '"' || chars[chars.len() - 1] != '"' {
+    let src = text.as_str_slice();
+    let n = src.len();
+    if n < 2 || src.byte_at(0) != b'"' || src.byte_at(n - 1) != b'"' {
         return false;
     }
-    return scan_string(&chars, 0) == chars.len();
+    return scan_string(&src, 0) == n;
 }
 
 /// The same question for a Wado template literal, which is a `String` however
 /// its holes evaluate.
 fn is_template_literal<S: AsStrSlice>(text: S) -> bool {
-    let chars: List<char> = text.chars().collect();
-    if chars.len() < 2 || chars[0] != '`' || chars[chars.len() - 1] != '`' {
+    let src = text.as_str_slice();
+    let n = src.len();
+    if n < 2 || src.byte_at(0) != b'`' || src.byte_at(n - 1) != b'`' {
         return false;
     }
-    return scan_template(&chars, 0, chars.len()).0 == chars.len();
+    return scan_template(&src, 0, n).0 == n;
 }
 
 /// Whether the digit run from `first` is an `i32`. A literal outside the range
 /// would be spliced into an `i32` parameter and fail to compile, so it has no
 /// evident type either. Equal-length decimal runs compare lexicographically.
-fn fits_i32(digits: &List<char>, first: i32, negative: bool) -> bool {
+fn fits_i32(digits: &StrSlice, first: i32, negative: bool) -> bool {
     let mut start = first;
-    while start + 1 < digits.len() && digits[start] == '0' {
+    while start + 1 < digits.len() && digits.byte_at(start) == b'0' {
         start += 1;
     }
-    let limit: List<char> = (if negative { "2147483648" } else { "2147483647" }).chars().collect();
+    let limit = (if negative { "2147483648" } else { "2147483647" }).as_str_slice();
     if digits.len() - start != limit.len() {
         return digits.len() - start < limit.len();
     }
     for let mut i = 0; i < limit.len(); i += 1 {
-        if digits[start + i] != limit[i] {
-            return digits[start + i] < limit[i];
+        if digits.byte_at(start + i) != limit.byte_at(i) {
+            return digits.byte_at(start + i) < limit.byte_at(i);
         }
     }
     return true;
@@ -302,10 +304,10 @@ fn literal_arg_type<S: AsStrSlice>(text: S) -> Option<String> {
     if text == "true" || text == "false" {
         return Option::Some("bool");
     }
-    let digits: List<char> = text.chars().collect();
-    let negative = digits[0] == '-';
+    let digits = text.as_str_slice();
+    let negative = digits.byte_at(0) == b'-';
     let first = if negative { 1 } else { 0 };
-    if digits.len() > first && digits.iter_ref().skip(first).all(|c: &char| *c matches { '0'..='9' }) {
+    if digits.len() > first && digits.slice(first, digits.len()).bytes().all(|b: u8| b.is_ascii_digit()) {
         if !fits_i32(&digits, first, negative) {
             return null;
         }
@@ -333,52 +335,35 @@ fn call_param_types(args: &List<String>) -> Option<List<String>> {
 /// tokens), returns `[method, close]`: the method name and the index just past
 /// the matching `)`. Else `null`. Shared by op collection and the call-site
 /// rewrite, so both agree on what a call is and where it ends.
-fn this_call_at(chars: &List<char>, i: i32, n: i32) -> Option<[String, i32]> {
-    return call_at(chars, i, n, "this", ".");
+fn this_call_at(src: &StrSlice, i: i32, n: i32) -> Option<[String, i32]> {
+    return call_at(src, i, n, "this", ".");
 }
 
 /// The rewritten form: `Foo::<method>(...)`. Recognizing it too keeps
 /// `body_is_base_calls_only` answering the same across the rewrite.
-fn base_call_at<S: AsStrSlice>(chars: &List<char>, i: i32, n: i32, base: S) -> Option<[String, i32]> {
-    return call_at(chars, i, n, base, "::");
+fn base_call_at<S: AsStrSlice>(src: &StrSlice, i: i32, n: i32, base: S) -> Option<[String, i32]> {
+    return call_at(src, i, n, base, "::");
 }
 
-fn call_at<S: AsStrSlice, S1: AsStrSlice>(
-    chars: &List<char>,
-    i: i32,
-    n: i32,
-    receiver: S,
-    sep: S1,
-) -> Option<[String, i32]> {
-    if !word_at(chars, i, n, receiver) {
+fn call_at<S: AsStrSlice, S1: AsStrSlice>(src: &StrSlice, i: i32, n: i32, receiver: S, sep: S1) -> Option<[String, i32]> {
+    if !word_at(src, i, n, receiver) {
         return null;
     }
-    let after = skip_ws(chars, i + receiver.chars().count(), n);
-    if !text_at(chars, after, n, sep) {
+    let after = skip_ws(src, i + receiver.len(), n);
+    if !text_at(src, after, n, sep) {
         return null;
     }
-    let name_start = skip_ws(chars, after + sep.chars().count(), n);
-    let name_end = scan_ident(chars, name_start, n);
-    if name_end == name_start {
+    let name_start = skip_ws(src, after + sep.len(), n);
+    if name_start >= n || !is_id_start_char(char_at(src, name_start)) {
         return null;
     }
-    let paren = skip_ws(chars, name_end, n);
-    if paren >= n || chars[paren] != '(' {
+    let name_end = ident_end(src, name_start, n);
+    let paren = skip_ws(src, name_end, n);
+    if paren >= n || src.byte_at(paren) != b'(' {
         return null;
     }
-    let close = match_delim(chars, paren, n, '(', ')')?;
-    return Option::Some([collect_range(chars, name_start, name_end), close]);
-}
-
-fn scan_ident(chars: &List<char>, start: i32, n: i32) -> i32 {
-    if start >= n || !is_id_start_char(chars[start]) {
-        return start;
-    }
-    let mut i = start + 1;
-    while i < n && is_id_continue_char(chars[i]) {
-        i += 1;
-    }
-    return i;
+    let close = match_delim(src, paren, n, b'(', b')')?;
+    return Option::Some([src.slice(name_start, name_end).to_string(), close]);
 }
 
 /// Add a scanned call to the op set; the first occurrence of a name fixes its
@@ -475,28 +460,29 @@ pub fn collect_lexer_super_ops(grammar: &Grammar) -> List<SuperOp> {
 /// host code around the call needs that translator. Both forms are accepted so
 /// the answer does not move across the rewrite.
 pub fn body_is_base_calls_only<S: AsStrSlice, S1: AsStrSlice>(body: S, base_name: S1) -> bool {
-    let chars: List<char> = body.chars().collect();
-    let n = chars.len();
+    let src = body.as_str_slice();
+    let n = src.len();
     let mut i = 0;
     while i < n {
-        if chars[i].is_ascii_whitespace() || chars[i] == ';' {
+        let b = src.byte_at(i);
+        if b.is_ascii_whitespace() || b == b';' {
             i += 1;
             continue;
         }
         // A comment is not host code; the rewrite copies it through verbatim.
-        if chars[i] == '/' && i + 1 < n && chars[i + 1] == '/' {
-            i = scan_line_comment(&chars, i);
+        if b == b'/' && i + 1 < n && src.byte_at(i + 1) == b'/' {
+            i = scan_line_comment(&src, i);
             continue;
         }
-        if chars[i] == '/' && i + 1 < n && chars[i + 1] == '*' {
-            i = scan_block_comment(&chars, i);
+        if b == b'/' && i + 1 < n && src.byte_at(i + 1) == b'*' {
+            i = scan_block_comment(&src, i);
             continue;
         }
-        if let Some([_, close]) = this_call_at(&chars, i, n) {
+        if let Some([_, close]) = this_call_at(&src, i, n) {
             i = close;
             continue;
         }
-        if let Some([_, close]) = base_call_at(&chars, i, n, base_name) {
+        if let Some([_, close]) = base_call_at(&src, i, n, base_name) {
             i = close;
             continue;
         }
@@ -843,39 +829,36 @@ fn rewrite_lexer_elem<S: AsStrSlice>(elem: &LexerElement, base_name: S) -> Lexer
 /// Replace each `this.<method>(...)` call in `body` with the ambient operation
 /// call for `site`, over the same spans `find_this_calls` reads.
 pub fn rewrite_this_calls<S: AsStrSlice, S1: AsStrSlice>(body: S, base_name: S1, site: SuperSite) -> String {
-    let chars: List<char> = body.chars().collect();
-    let n = chars.len();
+    let src = body.as_str_slice();
+    let n = src.len();
     let mut out = String::with_capacity(n + 8);
     let mut i = 0;
     while i < n {
-        let [end, spans] = inert_at(&chars, i, n);
+        let [end, spans] = inert_at(&src, i, n);
         if end > i {
             let mut cur = i;
             for let s of &spans {
-                push_range(&mut out, &chars, cur, s.0);
-                out.push_str(&rewrite_this_calls(&collect_range(&chars, s.0, s.1), base_name, site));
+                out.push_str(src.slice(cur, s.0));
+                out.push_str(&rewrite_this_calls(src.slice(s.0, s.1), base_name, site));
                 cur = s.1;
             }
-            push_range(&mut out, &chars, cur, end);
+            out.push_str(src.slice(cur, end));
             i = end;
             continue;
         }
-        i = match this_call_at(&chars, i, n) {
+        i = match this_call_at(&src, i, n) {
             Some([method, close]) => {
                 // An argument is a body of its own: a call nested in one has to
                 // reach its operation too, or `this` survives into generated
                 // Wado, where nothing receives it.
                 let mut args: List<String> = [];
-                for let a of &call_args(&chars, i, close) {
+                for let a of &call_args(&src, i, close) {
                     args.push(rewrite_this_calls(a, base_name, site));
                 }
                 out.push_str(&super_call_expr(base_name, &method, site, &args));
                 close;
             },
-            None => {
-                out.push(chars[i]);
-                i + 1;
-            },
+            None => copy_char(&mut out, &src, i),
         };
     }
     return out;

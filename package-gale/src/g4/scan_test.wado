@@ -5,10 +5,13 @@ use {
     scan_char_class,
     scan_balanced,
     split_top_level_commas,
+    word_at,
+    ident_start,
+    ident_end,
 } from "./scan.wado";
 
-fn chars_of<S: AsStrSlice>(s: S) -> List<char> {
-    return s.chars().collect();
+fn chars_of<S: AsStrSlice>(s: S) -> StrSlice {
+    return s.as_str_slice();
 }
 
 test "scan_line_comment stops at the newline" {
@@ -75,37 +78,37 @@ test "scan_char_class returns None when unterminated" {
 
 test "scan_balanced handles a simple brace block" {
     let c = chars_of("{ x } rest");
-    assert scan_balanced(&c, 0, '{', '}') matches { Some(5) };
+    assert scan_balanced(&c, 0, b'{', b'}') matches { Some(5) };
 }
 
 test "scan_balanced nests braces" {
     let c = chars_of("{ if (x) { y } } rest");
-    assert scan_balanced(&c, 0, '{', '}') matches { Some(16) };
+    assert scan_balanced(&c, 0, b'{', b'}') matches { Some(16) };
 }
 
 test "scan_balanced ignores a close inside a string" {
     let c = chars_of("{ s = \"}\" } rest");
-    assert scan_balanced(&c, 0, '{', '}') matches { Some(11) };
+    assert scan_balanced(&c, 0, b'{', b'}') matches { Some(11) };
 }
 
 test "scan_balanced ignores a close inside a line comment" {
     let c = chars_of("{ // }\n}");
-    assert scan_balanced(&c, 0, '{', '}') matches { Some(8) };
+    assert scan_balanced(&c, 0, b'{', b'}') matches { Some(8) };
 }
 
 test "scan_balanced ignores a close inside a block comment" {
     let c = chars_of("{ /* } */ }");
-    assert scan_balanced(&c, 0, '{', '}') matches { Some(11) };
+    assert scan_balanced(&c, 0, b'{', b'}') matches { Some(11) };
 }
 
 test "scan_balanced nests brackets for arg-actions" {
     let c = chars_of("[int[] arr] rest");
-    assert scan_balanced(&c, 0, '[', ']') matches { Some(11) };
+    assert scan_balanced(&c, 0, b'[', b']') matches { Some(11) };
 }
 
 test "scan_balanced returns None when unterminated" {
     let c = chars_of("{ never closed");
-    assert scan_balanced(&c, 0, '{', '}') matches { None };
+    assert scan_balanced(&c, 0, b'{', b'}') matches { None };
 }
 
 test "split_top_level_commas reads `<` as a comparison outside a type" {
@@ -120,4 +123,24 @@ test "split_top_level_commas keeps a type's arguments in one piece" {
     assert args == ["m as Pair<i32, i32>", "List::<A, B>::new()", "|p: Pair<A, B>| p", "|| -> Pair<A, B> { x }"];
     let decls = split_top_level_commas(&chars_of("TreeMap<String, i32> m, i32 n = a < b"), true);
     assert decls == ["TreeMap<String, i32> m", "i32 n = a < b"];
+}
+
+test "scanners return byte offsets past multi-byte chars" {
+    assert scan_string(&chars_of("'日本' x"), 0) == 8;
+    assert scan_balanced(&chars_of("{ é } x"), 0, b'{', b'}') matches { Some(6) };
+    assert split_top_level_commas(&chars_of("f(\"é,\"), 日本 as Pair<é, b>"), false) == [
+        "f(\"é,\")", "日本 as Pair<é, b>",
+    ];
+}
+
+test "an identifier's ends step over multi-byte name chars" {
+    let s = chars_of("x.日本ab+");
+    assert ident_start(&s, 10) == 2;
+    assert ident_end(&s, 2, s.len()) == 10;
+}
+
+test "word_at reads a multi-byte name char as part of the word" {
+    let s = chars_of("éthis this");
+    assert !word_at(&s, 2, s.len(), "this");
+    assert word_at(&s, 7, s.len(), "this");
 }
