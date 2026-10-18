@@ -1504,7 +1504,6 @@ impl Parser {
         self.expect(&TokenKind::Colon)?;
         let ty = self.parse_type()?;
 
-        // Initializer (required)
         self.expect(&TokenKind::Eq)?;
         let initializer = self.parse_detached_expr(DetachedPosition::GlobalInitializer)?;
 
