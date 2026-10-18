@@ -619,7 +619,9 @@ What changes shape:
   [a gap of the `AsyncCall` WEP](./wep-2026-04-22-subtask-generic.md#known-gaps).
 - `ResourceId`, with `ResourceId::of<R: AffineResource>(&r)`. `AffineResource`
   is a sealed marker the compiler states for every affine resource, so the
-  bound is what makes anything else a type error.
+  bound is what makes anything else a type error. It names the resource
+  rather than the affinity: an `affine struct` holds no handle and does not
+  implement it.
 - `wado-from-idl` declares `affine` every record and variant it generates that
   holds an affine resource.
 
