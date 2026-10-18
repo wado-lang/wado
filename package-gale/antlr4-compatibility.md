@@ -484,14 +484,10 @@ the two disagree. A line diff of the printed trees counts one misplaced
 subtree as many hunks, so the tool compares rule spans over the tokens and
 reports each divergence once, with the outermost rule each side built there.
 
-```sh
-scripts/antlr4-oracle.sh --lexer tests/grammars/TypeScriptLexer.g4 \
-    --super tests/grammars/java/TypeScriptLexerBase.java \
-    --super tests/grammars/java/TypeScriptParserBase.java \
-    tests/grammars/TypeScriptParser.g4 program < input.ts > target/jar.tree
-wado run tools/typescript_tree.wado -- input.ts > target/gale.tree
-wado run tools/tree_diff.wado -- target/jar.tree target/gale.tree
-```
+`mise run oracle-gale-typescript [file.ts]` runs all three, on the
+benchmark input when no file is named, and installs the Java the jar needs.
+`scripts/oracle-typescript.sh` holds the commands and keeps both trees under
+`target/oracle-typescript/`.
 
 #### The Unicode properties are not oracled
 
