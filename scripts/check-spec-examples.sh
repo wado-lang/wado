@@ -26,6 +26,5 @@ if [ "${#corpus[@]}" -gt 0 ]; then
     git ls-files 'docs/spec-*.md' > "${list}"
 fi
 
-# `-O1`, for the reason `check-rust-paths.sh` gives.
-exec scripts/dev-bin.sh wado run -O1 package-gale-highlight-wado/tools/spec_examples.wado -- \
+exec scripts/dev-bin.sh wado run package-gale-highlight-wado/tools/spec_examples.wado -- \
     "${corpus[@]}" "$@"

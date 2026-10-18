@@ -62,6 +62,8 @@ const DENIED = [
   "$HOME/bin/sed -i x f",
   "cat <<-EOF\n\tEOF\nsed -i x f\n\tEOF",
   "sudo sh <<'EOF'\nawk 1 f\nEOF",
+  'while pgrep -f "cargo build" >/dev/null; do sleep 5; done',
+  "pgrep -af cargo",
 ];
 
 const ALLOWED = [
@@ -98,6 +100,7 @@ const ALLOWED = [
   "$(mise which node) --version",
   "CARGO=$HOME/.cargo/bin/cargo; $CARGO test",
   "cat <<EOF\n EOF\nsed -i x f\nEOF",
+  "grep -n pgrep AGENTS.md",
 ];
 
 test("denies a forbidden command word", () => {
@@ -123,4 +126,5 @@ test("gives the reason of the ban that applies", () => {
   assert.match(denialReason("nohup cargo test &")!, /background/);
   assert.match(denialReason("perl -pi -e x f")!, /editing tools/);
   assert.match(denialReason("setsid cargo test")!, /background/);
+  assert.match(denialReason("pgrep -f cargo")!, /matches itself/);
 });

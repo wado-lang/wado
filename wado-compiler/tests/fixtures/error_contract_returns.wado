@@ -1,0 +1,16 @@
+// A clause runs at the call, apart from the body, so a `return` in it would
+// leave the caller, and only in a build that checks the clause.
+fn f(n: i32) -> i32
+    contract early: { if n < 0 { return 99; } true }
+{
+    return n;
+}
+
+export fn run() {
+    let _ = f(1);
+}
+
+__DATA__
+{
+  "compile_error": ":4:34: parse error: `return` cannot leave a contract clause: it runs apart from the code around it"
+}

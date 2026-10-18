@@ -242,7 +242,7 @@ fn run_basic() {
     let parser = Parser::from_args(&["input.wado"]);
     let opts = wado_cli::run::parse_args(parser).unwrap();
     assert_eq!(opts.input, "input.wado");
-    assert_eq!(opts.knobs.opt_level, OptLevel::O2);
+    assert_eq!(opts.knobs.opt_level, OptLevel::O1);
     // Default: current dir is preopened
     assert_eq!(
         opts.preopened_dirs,
@@ -410,6 +410,7 @@ fn serve_basic() {
     let opts = wado_cli::serve::parse_args(parser).unwrap();
     assert_eq!(opts.input, "input.wado");
     assert_eq!(opts.addr, "0.0.0.0:8080");
+    assert_eq!(opts.knobs.opt_level, OptLevel::O1);
 }
 
 #[test]

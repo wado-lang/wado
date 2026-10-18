@@ -38,8 +38,8 @@ pub struct CodegenFlags {
 
     /// Check the contract of a call marked `unchecked`: `lower::contract_checks`
     /// keeps or deletes the checks of each `unchecked` twin. An unmarked call
-    /// checks in every build. On in the test world and at `-O0`, off otherwise
-    /// (see [`CodegenFlags::for_build`]).
+    /// checks in every build. On in the test world and at `-O0` and `-O1`, off
+    /// otherwise (see [`CodegenFlags::for_build`]).
     pub contract_checks: bool,
 }
 
@@ -58,13 +58,13 @@ impl CodegenFlags {
     /// The defaults for a build, before any `-f` flag is applied.
     ///
     /// Identical to [`CodegenFlags::default`] except that `-Os` turns
-    /// [`bare_asserts`](Self::bare_asserts) on, and the test world or `-O0`
-    /// turns [`contract_checks`](Self::contract_checks) on.
+    /// [`bare_asserts`](Self::bare_asserts) on, and the test world, `-O0` or
+    /// `-O1` turns [`contract_checks`](Self::contract_checks) on.
     #[must_use]
     pub fn for_build(opt_level: OptLevel, test_world: bool) -> Self {
         Self {
             bare_asserts: matches!(opt_level, OptLevel::Os),
-            contract_checks: test_world || matches!(opt_level, OptLevel::O0),
+            contract_checks: test_world || matches!(opt_level, OptLevel::O0 | OptLevel::O1),
             ..Self::default()
         }
     }
@@ -188,18 +188,18 @@ mod tests {
     }
 
     #[test]
-    fn contract_checks_default_on_in_the_test_world_and_at_o0() {
-        for opt_level in [
-            OptLevel::O0,
-            OptLevel::O1,
-            OptLevel::O2,
-            OptLevel::O3,
-            OptLevel::Os,
+    fn contract_checks_default_on_in_the_test_world_and_below_o2() {
+        for (opt_level, checks) in [
+            (OptLevel::O0, true),
+            (OptLevel::O1, true),
+            (OptLevel::O2, false),
+            (OptLevel::O3, false),
+            (OptLevel::Os, false),
         ] {
             assert!(CodegenFlags::for_build(opt_level, true).contract_checks);
             assert_eq!(
                 CodegenFlags::for_build(opt_level, false).contract_checks,
-                opt_level == OptLevel::O0
+                checks
             );
         }
     }

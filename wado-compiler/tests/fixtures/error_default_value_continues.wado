@@ -1,0 +1,16 @@
+// A default is evaluated at each call, so a `continue` in it would reach a
+// loop around the call.
+fn f(x: i32 = pick: { if builtin::black_box(true) { continue; } 1 }) -> i32 {
+    return x;
+}
+
+export fn run() {
+    for let _ of 0..<2 {
+        let _ = f();
+    }
+}
+
+__DATA__
+{
+  "compile_error": ":3:53: parse error: `continue` cannot leave a default value: it runs apart from the code around it"
+}

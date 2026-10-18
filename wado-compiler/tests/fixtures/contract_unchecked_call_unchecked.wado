@@ -1,4 +1,4 @@
-// A build without contract checks (a CLI program above -O0) skips the check of
+// A build without contract checks (a CLI program above -O1) skips the check of
 // a call marked `unchecked`, and only that one: the unmarked call still traps,
 // reporting the clause's message.
 use { println, Stdout } from "core:cli";
@@ -16,7 +16,7 @@ export fn run() with Stdout {
 
 __DATA__
 {
-    "only_opt": ["O1", "O2", "O3", "Os"],
+    "only_opt": ["O2", "O3", "Os"],
     "stdout": "3\n",
     "stderr_contains": ["n must be even"],
     "trapped": true
