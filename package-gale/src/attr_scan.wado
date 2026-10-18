@@ -10,19 +10,11 @@
 //! reference onto a rule's attribute environment (labels, args, returns,
 //! specials) is a later resolution step that consumes these.
 
-use {
-    scan_string,
-    scan_line_comment,
-    scan_block_comment,
-    scan_template,
-    is_id_start_char,
-    is_id_continue_char,
-} from "./g4/scan.wado";
-use { collect_range } from "./text.wado";
+use { scan_string, comment_end, scan_template, name_end } from "./g4/scan.wado";
 
 /// A raw `$name` or `$name.member` attribute reference located in a
-/// fragment, with its char span within the fragment text (`start` points
-/// at the `$`, `end` is one past the last char of the reference).
+/// fragment, with its byte span within the fragment text (`start` points
+/// at the `$`, `end` is one past the last byte of the reference).
 pub struct AttrRef {
     pub name: String,
     /// The `.member` suffix (`text`, `int`, a `returns` field, ...), or
@@ -40,38 +32,34 @@ pub struct AttrRef {
 /// substitute — a literal `$` in template text is not a reference. A lone
 /// `$` not followed by an identifier is host text.
 pub fn find_attr_refs<S: AsStrSlice>(body: S) -> List<AttrRef> {
-    let chars: List<char> = body.chars().collect();
+    let src = body.as_str_slice();
     let mut out: List<AttrRef> = [];
-    scan_refs(&chars, 0, chars.len(), &mut out);
+    scan_refs(&src, 0, src.len(), &mut out);
     return out;
 }
 
-fn scan_refs(chars: &List<char>, start: i32, end: i32, out: &mut List<AttrRef>) {
+fn scan_refs(src: &StrSlice, start: i32, end: i32, out: &mut List<AttrRef>) {
     let mut i = start;
     while i < end {
-        let c = chars[i];
-        if c == '\'' || c == '"' {
-            i = scan_string(chars, i);
+        let b = src.byte_at(i);
+        if b == b'\'' || b == b'"' {
+            i = scan_string(src, i);
             continue;
         }
-        if c == '`' {
+        if b == b'`' {
             // Only the holes are code; the template's text never names a reference.
-            let [after, holes] = scan_template(chars, i, end);
+            let [after, holes] = scan_template(src, i, end);
             for let h of &holes {
-                scan_refs(chars, h.0, h.1, out);
+                scan_refs(src, h.0, h.1, out);
             }
             i = after;
             continue;
         }
-        if c == '/' && i + 1 < end && chars[i + 1] == '/' {
-            i = scan_line_comment(chars, i);
+        if let Some(after) = comment_end(src, i, end) {
+            i = after;
             continue;
         }
-        if c == '/' && i + 1 < end && chars[i + 1] == '*' {
-            i = scan_block_comment(chars, i);
-            continue;
-        }
-        if let Some(r) = attr_ref_at(chars, i, end) {
+        if let Some(r) = attr_ref_at(src, i, end) {
             i = r.end;
             out.push(r);
             continue;
@@ -82,32 +70,30 @@ fn scan_refs(chars: &List<char>, start: i32, end: i32, out: &mut List<AttrRef>) 
 
 /// The `$ident(.ident)?` reference starting at `pos`, or `null` where `pos`
 /// holds no `$` followed by an identifier.
-pub fn attr_ref_at(chars: &List<char>, pos: i32, end: i32) -> Option<AttrRef> {
-    let [name_end, ref_end] = attr_ref_span(chars, pos, end)?;
-    let name = collect_range(chars, pos + 1, name_end);
-    if ref_end == name_end {
-        return Option::Some(AttrRef { name, start: pos, end: name_end });
+pub fn attr_ref_at(src: &StrSlice, pos: i32, end: i32) -> Option<AttrRef> {
+    let [name_stop, ref_end] = attr_ref_span(src, pos, end)?;
+    let name = src.slice(pos + 1, name_stop).to_string();
+    if ref_end == name_stop {
+        return Option::Some(AttrRef { name, start: pos, end: name_stop });
     }
-    let member = Option::Some(collect_range(chars, name_end + 1, ref_end));
+    let member = Option::Some(src.slice(name_stop + 1, ref_end).to_string());
     return Option::Some(AttrRef { name, member, start: pos, end: ref_end });
 }
 
 /// `attr_ref_at`'s name end and reference end, without copying either part.
-pub fn attr_ref_span(chars: &List<char>, pos: i32, end: i32) -> Option<[i32, i32]> {
-    if !(chars[pos] == '$' && pos + 1 < end && is_id_start_char(chars[pos + 1])) {
+pub fn attr_ref_span(src: &StrSlice, pos: i32, end: i32) -> Option<[i32, i32]> {
+    if src.byte_at(pos) != b'$' {
         return null;
     }
-    let name_end = ident_end(chars, pos + 1, end);
-    if name_end + 1 < end && chars[name_end] == '.' && is_id_start_char(chars[name_end + 1]) {
-        return Option::Some([name_end, ident_end(chars, name_end + 1, end)]);
+    let name = name_end(src, pos + 1, end);
+    if name == pos + 1 {
+        return null;
     }
-    return Option::Some([name_end, name_end]);
-}
-
-fn ident_end(chars: &List<char>, start: i32, end: i32) -> i32 {
-    let mut i = start;
-    while i < end && is_id_continue_char(chars[i]) {
-        i += 1;
+    if name < end && src.byte_at(name) == b'.' {
+        let member = name_end(src, name + 1, end);
+        if member > name + 1 {
+            return Option::Some([name, member]);
+        }
     }
-    return i;
+    return Option::Some([name, name]);
 }

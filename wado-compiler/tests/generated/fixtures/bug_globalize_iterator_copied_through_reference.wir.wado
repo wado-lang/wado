@@ -76,7 +76,7 @@ type "functype//bug_globalize_iterator_copied_through_reference.wado/run$cold0" 
 
 type "functype//bug_globalize_iterator_copied_through_reference.wado/weigh$sroa[name.used]" = fn(i32, i32) -> i32;  // TypeId(23)
 
-type "functype//core:cli/println" = fn(ref "core:prelude/string.wado//String");  // TypeId(24)
+type "functype//core:cli/println" = fn(ref Array<u8>, i32);  // TypeId(24)
 
 type "functype//core:prelude/primitive.wado/write_decimal_digits" = fn(ref Array<u8>, i32, u64, i32);  // TypeId(25)
 
@@ -188,19 +188,27 @@ fn "bug_globalize_iterator_copied_through_reference.wado/run$cold0"() with Stdou
     let self_3: i32;
     let f_4: ref "core:prelude/format.wado//Formatter";
     let other: ref "core:prelude/string.wado//String";
-    "core:cli/println"($local_1 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::new"(local.tee $local_0(struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(33), used: 0 })); self_3 = "bug_globalize_iterator_copied_through_reference.wado/count"(); f_4 = $local_1; "core:prelude/primitive.wado/i32::fmt_decimal$sroa[self.value]"(self_3, f_4); other = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(32), used: 1 }; "core:prelude/string.wado/core:prelude/string.wado/String::internal_push_string$spec0"($local_0, other); $local_1 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::new"($local_0); "core:prelude/primitive.wado/i32::fmt_decimal$sroa[self.value]"(local.tee self_3("bug_globalize_iterator_copied_through_reference.wado/count"()), $local_1); $local_0);
+    $local_1 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::new"(local.tee $local_0(struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(33), used: 0 }));
+    self_3 = "bug_globalize_iterator_copied_through_reference.wado/count"();
+    f_4 = $local_1;
+    "core:prelude/primitive.wado/i32::fmt_decimal$sroa[self.value]"(self_3, f_4);
+    other = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(32), used: 1 };
+    "core:prelude/string.wado/core:prelude/string.wado/String::internal_push_string$spec0"($local_0, other);
+    $local_1 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::new"($local_0);
+    "core:prelude/primitive.wado/i32::fmt_decimal$sroa[self.value]"(local.tee self_3("bug_globalize_iterator_copied_through_reference.wado/count"()), $local_1);
+    "core:cli/println"($local_0.repr, $local_0.used);
 }
 
 fn "bug_globalize_iterator_copied_through_reference.wado/weigh$sroa[name.used]"(i, name) {
     return black_box(i) + name;
 }
 
-fn "core:cli/println"(message) with Stdout {
+fn "core:cli/println"($mv$message$repr, $mv$message$used) with Stdout {
     let $mv$$pattern_temp_0$0: i32;
     let $mv$$pattern_temp_0$1: i32;
     multivalue_bind [$mv$$pattern_temp_0$0, $mv$$pattern_temp_0$1] = "core:rt/core/rt/cm_stream_pair<u8>"("wasi/stream-new"());
     $mv$$pattern_temp_0$0 = "bug_globalize_iterator_copied_through_reference.wado/$cm_binding__Stdout_write_via_stream"($mv$$pattern_temp_0$0);
-    "core:rt/write_string_to_stream$dae[add_newline]"($mv$$pattern_temp_0$1, message.repr, message.used);
+    "core:rt/write_string_to_stream$dae[add_newline]"($mv$$pattern_temp_0$1, $mv$message$repr, $mv$message$used);
     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"($mv$$pattern_temp_0$0);
 }
 

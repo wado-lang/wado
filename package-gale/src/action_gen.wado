@@ -125,8 +125,7 @@ pub fn call_args(rc: &RuleCallOp, ctx: &mut EmitContext) -> List<String> {
         },
     };
     let mut out: List<String> = [];
-    let arg_chars: List<char> = src.text.chars().collect();
-    for let e of &split_top_level_commas(&arg_chars, false) {
+    for let e of &split_top_level_commas(&src.text.as_str_slice(), false) {
         let code = match translate_caller_arg(e, ctx) {
             Some(c) => c,
             None => *e,

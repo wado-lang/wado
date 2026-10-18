@@ -94,7 +94,7 @@ type "functype//effect_interface_default_body.wado/$initialize_module" = fn();  
 
 type "functype//effect_interface_default_body.wado/$initialize_modules$cold0" = fn();  // TypeId(31)
 
-type "functype//core:rt/panic" = fn(ref "core:prelude/string.wado//String");  // TypeId(32)
+type "functype//core:rt/panic" = fn(ref Array<u8>, i32);  // TypeId(32)
 
 type "functype//core:rt/cm_stream_write_raw_all_u8" = fn(i32, ref Array<u8>, i32, i32) -> "core:prelude/types.wado//enum:CopyResult";  // TypeId(33)
 
@@ -274,13 +274,13 @@ fn "effect_interface_default_body.wado/run"() with Stdout, Log {
         if @likely(ref.is_null(local.tee $local_1_69(global:effect_interface_default_body.wado::$effect_effect_interface_default_body.wado/Log)) == 0) {
             global:effect_interface_default_body.wado::$effect_effect_interface_default_body.wado/Log = local.tee $local_2_15(ref.as_non_null($local_1_69)).outer;
             n_41 = block -> bool {
-                let $indirect_call_11: ref "canonical//CanonicalClosure_2";
-                call_ref "functype/$canonical_closure_fn_2"($indirect_call_11.func, local.tee $indirect_call_11(ref.cast "canonical//CanonicalClosure_2"($local_2_15.op_required)).env, 1);
+                let $indirect_call_13: ref "canonical//CanonicalClosure_2";
+                call_ref "functype/$canonical_closure_fn_2"($indirect_call_13.func, local.tee $indirect_call_13(ref.cast "canonical//CanonicalClosure_2"($local_2_15.op_required)).env, 1);
             };
             global:effect_interface_default_body.wado::$effect_effect_interface_default_body.wado/Log = $local_1_69;
             break $inline__effect_dispatch__effect_interface_default_body_wado_Log__required_51: n_41;
         } else {
-            "core:rt/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("no handler installed for `Log::required`"), used: 40 });
+            "core:rt/panic"(local.tee $array_clone_src_3(array.new_data<u8>("no handler installed for `Log::required`")), 40);
             unreachable;
         }
         unreachable;
@@ -450,14 +450,14 @@ fn "effect_interface_default_body.wado/$initialize_modules$cold0"() {
     global:effect_interface_default_body.wado::$modules_initialized = 1;
 }
 
-fn "core:rt/panic"(message) {
+fn "core:rt/panic"($mv$message$repr, $mv$message$used) {
     let packed: i64;
     let rx_7: i32;
     let tx_8: i32;
     rx_7 = builtin::i32_wrap_i64(local.tee packed("wasi/stream-new"()));
     tx_8 = builtin::i32_wrap_i64(packed >> 32_i64);
     rx_7 = "wasi/wasi:cli/Stderr::write_via_stream"(rx_7);
-    "core:rt/write_string_to_stream$spec0$dae[add_newline]"(tx_8, message.repr, message.used);
+    "core:rt/write_string_to_stream$spec0$dae[add_newline]"(tx_8, $mv$message$repr, $mv$message$used);
     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(rx_7);
     cold_path;
     unreachable;
@@ -681,13 +681,13 @@ fn "effect_interface_default_body.wado/effect_interface_default_body.wado/$Closu
         if @likely(ref.is_null(local.tee $local_1(global:effect_interface_default_body.wado::$effect_effect_interface_default_body.wado/Log)) == 0) {
             global:effect_interface_default_body.wado::$effect_effect_interface_default_body.wado/Log = local.tee $local_2(ref.as_non_null($local_1)).outer;
             level = block -> bool {
-                let $indirect_call_1: ref "canonical//CanonicalClosure_2";
-                call_ref "functype/$canonical_closure_fn_2"($indirect_call_1.func, local.tee $indirect_call_1(ref.cast "canonical//CanonicalClosure_2"($local_2.op_required)).env, level);
+                let $indirect_call_3: ref "canonical//CanonicalClosure_2";
+                call_ref "functype/$canonical_closure_fn_2"($indirect_call_3.func, local.tee $indirect_call_3(ref.cast "canonical//CanonicalClosure_2"($local_2.op_required)).env, level);
             };
             global:effect_interface_default_body.wado::$effect_effect_interface_default_body.wado/Log = $local_1;
             break $inline__effect_dispatch__effect_interface_default_body_wado_Log__required_0: level;
         } else {
-            "core:rt/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("no handler installed for `Log::required`"), used: 40 });
+            "core:rt/panic"(array.new_data<u8>("no handler installed for `Log::required`"), 40);
             unreachable;
         }
         unreachable;
