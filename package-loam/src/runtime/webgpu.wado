@@ -87,18 +87,18 @@ pub struct PlacedRead<Axes> {
 
 /// A buffer the backend owns. A struct, so a list hands one out by reference,
 /// which it cannot do for a resource held bare.
-struct Slot {
+affine struct Slot {
     buffer: GpuBuffer,
 }
 
 /// A buffer an earlier pass retained, at the slot it was made at.
-struct Carried {
+affine struct Carried {
     slot: i32,
     buffer: GpuBuffer,
 }
 
 /// A compiled shader, held as `Slot` holds a buffer.
-struct Pipeline {
+affine struct Pipeline {
     compiled: GpuComputePipeline,
     layout: GpuBindGroupLayout,
 }
@@ -106,7 +106,7 @@ struct Pipeline {
 /// The encoder recording a pass's commands until they are submitted, and the
 /// one compute pass every dispatch goes into. A compute pass makes each
 /// dispatch see what the ones before it wrote.
-struct Recording {
+affine struct Recording {
     encoder: GpuCommandEncoder,
     pass: GpuComputePassEncoder,
 }
@@ -121,12 +121,12 @@ struct Parameters {
 }
 
 /// A bind group of a recorded dispatch, held until the dispatch is submitted.
-struct Bound {
+affine struct Bound {
     group: GpuBindGroup,
 }
 
 /// The kernels on a WebGPU device, and on the CPU where no shader is written.
-pub struct WebGpuBackend {
+pub affine struct WebGpuBackend {
     device: GpuDevice,
     queue: GpuQueue,
     pipelines: List<Pipeline>,

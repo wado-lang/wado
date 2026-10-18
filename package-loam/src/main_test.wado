@@ -91,7 +91,7 @@ impl KilnHost for Host {
 
 /// The entry module the Kiln generator builds from `primary`, `[path, content,
 /// type]`, under `options`.
-fn kiln(primary: [String, ByteList, String], options: Options) -> String {
+fn kiln(primary: [String, ByteList, String], options: Options) -> String with (Stream, StreamWritable) {
     let [path, content, type] = primary;
     let mut inputs = Inputs { content };
     // Made before `Inputs` is installed, since it traps on `new`.
