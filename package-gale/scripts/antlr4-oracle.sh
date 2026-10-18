@@ -326,7 +326,7 @@ fi
 
 # Generate Java sources. -no-listener avoids emitting Listener
 # scaffolding we don't need.
-if ! java -jar "$JAR_PATH" -Dlanguage=Java -no-listener -o "$WORK_DIR" -lib "$WORK_DIR" "${GRAMMAR_FILES[@]}" >"$WORK_DIR/antlr.log" 2>&1; then
+if ! java -jar "$JAR_PATH" -Dlanguage=Java -no-listener -o "$WORK_DIR" "${GRAMMAR_FILES[@]}" >"$WORK_DIR/antlr.log" 2>&1; then
     echo "oracle: antlr4 codegen failed; see $WORK_DIR/antlr.log" >&2
     cat "$WORK_DIR/antlr.log" >&2
     exit 1

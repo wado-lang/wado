@@ -39,11 +39,15 @@ fn is_name_byte(b: u8) -> bool {
 /// `(` reaches here followed by a space or `)`, and one inside a string
 /// literal (`"(0, 60]"`) by a character no rule name starts with. A string
 /// whose text is `(` and a rule-shaped word, then a space, still reads as a
-/// node; the unclosed node it leaves fails the closing assert loudly.
+/// node, and `parse_tree` panics on the node it leaves unclosed.
 fn rule_name_end(text: &String, i: i32) -> Option<i32> {
     let n = text.len();
     let first = i + 1;
-    if first >= n || !is_name_byte(text.byte_at(first)) || text.byte_at(first) >= b'0' && text.byte_at(first) <= b'9' {
+    if first >= n {
+        return null;
+    }
+    let c = text.byte_at(first);
+    if !is_name_byte(c) || c >= b'0' && c <= b'9' {
         return null;
     }
     let mut j = first;
@@ -126,11 +130,13 @@ fn span_key(s: &Span) -> String {
     return `${s.rule}@${s.start}-${s.end}`;
 }
 
+/// The outermost rule each side built over a run of tokens, `None` on the
+/// side whose spans there the other side shares.
 struct Divergence {
     start: i32,
     end: i32,
-    jar_rule: String,
-    gale_rule: String,
+    jar_rule: Option<String>,
+    gale_rule: Option<String>,
 }
 
 /// The spans of `side` that `other` lacks, tagged with which side has them
@@ -174,19 +180,19 @@ fn divergences(jar: &Tree, gale: &Tree) -> List<Divergence> {
             if s.end > d.end {
                 d.end = s.end;
             }
-            if from_jar && d.jar_rule == "-" {
-                d.jar_rule = s.rule;
+            if from_jar && d.jar_rule matches { None } {
+                d.jar_rule = Some(s.rule);
             }
-            if !from_jar && d.gale_rule == "-" {
-                d.gale_rule = s.rule;
+            if !from_jar && d.gale_rule matches { None } {
+                d.gale_rule = Some(s.rule);
             }
             continue;
         }
         out.push(Divergence {
             start: s.start,
             end: s.end,
-            jar_rule: if from_jar { s.rule } else { "-" },
-            gale_rule: if from_jar { "-" } else { s.rule },
+            jar_rule: if from_jar { Some(s.rule) } else { null },
+            gale_rule: if from_jar { null } else { Some(s.rule) },
         });
     }
     return out;
@@ -224,9 +230,8 @@ export fn run() with (Stdout, Stderr, Environment, Preopens, Exit) {
             }
             text.push_str(&jar.leaves[k]);
         }
-        println(`[${d.start}] jar:${d.jar_rule} gale:${d.gale_rule} | ${text.substr_bytes(0, text.floor_char_boundary(
-            120,
-        ))}`);
+        let shown = text.substr_bytes(0, text.floor_char_boundary(120));
+        println(`[${d.start}] jar:${d.jar_rule.unwrap_or("-")} gale:${d.gale_rule.unwrap_or("-")} | ${shown}`);
     }
     println(`${found.len()} divergence(s)`);
 }
@@ -259,8 +264,8 @@ test "a moved subtree is one divergence" {
     let found = divergences(&jar, &gale);
     assert found.len() == 1;
     assert found[0].start == 0 && found[0].end == 3;
-    assert found[0].jar_rule == "st";
-    assert found[0].gale_rule == "st";
+    assert found[0].jar_rule == Some("st");
+    assert found[0].gale_rule == Some("st");
 }
 
 test "identical trees agree" {
