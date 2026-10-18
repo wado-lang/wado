@@ -1,0 +1,27 @@
+//! Prints the parse tree Gale's TypeScript parser builds for each file named,
+//! in the `toStringTree` form `scripts/antlr4-oracle.sh` prints the jar's.
+//! `tools/tree_diff.wado` compares the two.
+//!
+//! ```sh
+//! wado run package-gale/tools/typescript_tree.wado -- input.ts > gale.tree
+//! ```
+
+use { println, args, Stdout, Environment } from "core:cli";
+use fs from "core:fs";
+use { Preopens } from "core:fs";
+use ts from "../tests/grammars/TypeScriptLexer.g4"
+    with {
+        generator: {
+            module: "../src/generator.wado",
+            inputs: ["../tests/grammars/TypeScriptParser.g4"],
+            output_dir: "../tests/generated/cst_typescript",
+        },
+    };
+use { parse_typescript } from "./typescript_recognizer.wado";
+
+export fn run() with (Stdout, Environment, Preopens) {
+    for let path of args() {
+        let source = fs::read_to_string(&path).unwrap();
+        println(ts::to_string_tree(&parse_typescript(&source)));
+    }
+}

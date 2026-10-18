@@ -70,9 +70,11 @@ impl TypeScriptParserBase for TsParserBase {
     }
 }
 
-// A hand-written TypeScriptLexerBase port, installed around every recognizer
-// call: the action ops carry the brace / template state the predicate ops read,
-// and the `emit` hook carries the last default-channel token.
+// The Wado twin of `grammars/java/TypeScriptLexerBase.java`, which
+// `antlr4-oracle.sh --super` runs ANTLR4 against. Edit both or neither.
+// Installed around every recognizer call: the action ops carry the brace /
+// template state the predicate ops read, and the `emit` hook carries the last
+// default-channel token.
 //
 // `IsStrictMode` still sees only the `'use strict'` literal the lexer passes,
 // not the parser's notion of scope (see TODO.md, Stage C).

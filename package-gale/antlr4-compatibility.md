@@ -439,9 +439,9 @@ Adding a grammar is config + a cases file, but only for a **clean single
 combined grammar with `WS -> skip`**. Out of scope, with reasons recorded
 in `regen-oracle.sh`:
 
-- split lexer/parser grammars — `antlr4-oracle.sh` takes one `.g4`, so
-  RustParser and TypeScriptParser have no reachable token vocabulary
-  (their lexers do oracle on their own, see below);
+- split lexer/parser grammars — `regen-oracle.sh` hands the oracle one
+  `.g4`. The oracle itself takes the pair through `--lexer`, which is how
+  the TypeScript comparison below runs;
 - grammars that emit whitespace as tree tokens (css3's `ws`) — their
   trees are whitespace-sensitive, so css3 stays pinned by parse-success
   (`driver_cst_css3_test`), not tree equality.
@@ -474,6 +474,24 @@ its answer of `ID` is still wrong. Agreement is evidence about the
 stubbed predicates, never about the base class.
 
 `scripts/antlr4-oracle-selftest.sh` pins both paths.
+
+#### Comparing a whole TypeScript file
+
+TypeScript has both twins in `tests/grammars/java/`, so the jar parses a
+whole file under the specification Gale runs. `tools/typescript_tree.wado`
+prints Gale's tree for the same file, and `tools/tree_diff.wado` lists where
+the two disagree. A line diff of the printed trees counts one misplaced
+subtree as many hunks, so the tool compares rule spans over the tokens and
+reports each divergence once, with the outermost rule each side built there.
+
+```sh
+scripts/antlr4-oracle.sh --lexer tests/grammars/TypeScriptLexer.g4 \
+    --super tests/grammars/java/TypeScriptLexerBase.java \
+    --super tests/grammars/java/TypeScriptParserBase.java \
+    tests/grammars/TypeScriptParser.g4 program < input.ts > target/jar.tree
+wado run tools/typescript_tree.wado -- input.ts > target/gale.tree
+wado run tools/tree_diff.wado -- target/jar.tree target/gale.tree
+```
 
 #### The Unicode properties are not oracled
 
@@ -1247,7 +1265,8 @@ triage state) live under `package-gale/tests/antlr4-compat/`:
 | `tests/generated/antlr4_compat_b/`         | Kiln-generated parsers for Stage B and Stage B′ drivers (committed; shared)                                                                 |
 | `tests/antlr4-compat/status.toml`          | Manually maintained triage state                                                                                                            |
 | `scripts/antlr4-oracle.sh`                 | Black-box wrapper around the published ANTLR4 jar. Caches the jar under `~/.cache/gale/`. Run at extract time only — CI does not need it.   |
-| `scripts/antlr4-oracle-selftest.sh`        | Behaviour checks for that wrapper: the `--super` answers, and that `--probe-super` never yields pinnable output. Needs java.                |
+| `scripts/antlr4-oracle-selftest.sh`        | Behaviour checks for that wrapper: the `--super` and `--lexer` answers, and that `--probe-super` never yields pinnable output. Needs java.  |
+| `tools/tree_diff.wado`                     | Lists where the jar's parse tree and Gale's disagree, once per divergence rather than per line.                                             |
 | `tests/grammars/java/`                     | Base classes for `superClass` grammars, each the Java twin of a Wado `impl` in the matching driver test. Fed to `antlr4-oracle.sh --super`. |
 
 ### Triage states (`status.toml`)

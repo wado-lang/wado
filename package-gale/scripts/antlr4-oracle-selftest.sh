@@ -103,6 +103,19 @@ check "a clean-looking probe is still refused" 'A : B ;' 3 '' \
 same answer under both predicate polarities' \
     -- --tokens --probe-super tests/grammars/ANTLRv4Lexer.g4
 
+# A split pair answers through --lexer, each half against its own base. The
+# jar reads `if (a)` as a call of an identifier `if`, since
+# expressionStatement precedes ifStatement and both readings parse.
+TS_LEXER_BASE="tests/grammars/java/TypeScriptLexerBase.java"
+TS_PARSER_BASE="tests/grammars/java/TypeScriptParserBase.java"
+check "split pair tree" 'if (a) { b; }' 0 '(expressionSequence (singleExpression (identifierName (reservedWord (keyword if)))' '' \
+    -- --lexer tests/grammars/TypeScriptLexer.g4 --super "$TS_LEXER_BASE" --super "$TS_PARSER_BASE" \
+    tests/grammars/TypeScriptParser.g4 program
+check "split pair misnamed" 'x' 1 '' 'must be named <N>Parser and <N>Lexer' \
+    -- --lexer tests/grammars/JSON.g4 --super "$TS_PARSER_BASE" tests/grammars/TypeScriptParser.g4 program
+check "split pair takes no --tokens" 'x' 1 '' 'takes neither --tokens' \
+    -- --tokens --lexer tests/grammars/TypeScriptLexer.g4 tests/grammars/TypeScriptParser.g4
+
 # Stub-generation shapes no corpus grammar reaches today. They are all one
 # `.g4` line away, so keep them pinned here rather than in tests/grammars/.
 FIXTURES=$(mktemp -d)
