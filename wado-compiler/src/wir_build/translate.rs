@@ -1276,25 +1276,7 @@ impl FunctionTranslator<'_, '_> {
         op: Operand,
         fields: &[(String, TypeId)],
     ) -> Option<Vec<WirInstr>> {
-        let index = match op {
-            Operand::Value(v) => match self.body.values.kind(v) {
-                ValueKind::Opaque(oid) => match self.body.values.opaque_source(*oid)? {
-                    OpaqueSource::Local(index) => index,
-                    OpaqueSource::Expr(e) => {
-                        return self.split_local_fields(Operand::Expr(e), fields);
-                    }
-                },
-                _ => return None,
-            },
-            Operand::Expr(e) => match self.body.exprs[e].kind {
-                ExprKind::Local { index, .. } => index,
-                ExprKind::Unary {
-                    op: NirUnaryOp::Ref,
-                    expr,
-                } => return self.split_local_fields(expr, fields),
-                _ => return None,
-            },
-        };
+        let index = self.body.argument_local(op)?;
         let splits = self.multi_value_split_locals.get(&index)?;
         Some(
             fields
@@ -2294,7 +2276,18 @@ impl FunctionTranslator<'_, '_> {
         split: &IndexMap<usize, SplitParam>,
         value_block: bool,
     ) -> (Vec<WirInstr>, Vec<WirInstr>) {
-        let local_read: Vec<bool> = ordered.iter().map(|&op| self.reads_a_local(op)).collect();
+        // A split local's fields are locals bound once, so handing it on reads
+        // them alone, wherever the call reads them.
+        let local_read: Vec<bool> = ordered
+            .iter()
+            .map(|&op| {
+                self.reads_a_local(op)
+                    || self
+                        .body
+                        .argument_local(op)
+                        .is_some_and(|l| self.multi_value_split_locals.contains_key(&l))
+            })
+            .collect();
         // Whether evaluating each argument runs code: a local read runs none,
         // and a promoted value none unless its tree names an extraction source.
         let runs_code: Vec<bool> = ordered
@@ -2353,8 +2346,7 @@ impl FunctionTranslator<'_, '_> {
                 // reads its fields there; otherwise the value is taken where
                 // it stands, as a later argument may rebind the local, and a
                 // split `&S` still reads its fields at the call, after every
-                // write. A local already split is bound once, so its fields
-                // read the same wherever the call reads them.
+                // write.
                 if let Some(reads) = self.split_local_fields(op, &param.fields) {
                     call_args.extend(reads);
                 } else if local_read[i] && !spilled {

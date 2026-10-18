@@ -7,7 +7,7 @@ use std::sync::Arc;
 use cranelift_entity::EntityRef;
 
 use crate::hashmap::{IndexMap, IndexSet};
-use crate::nir::{NirFunction, NirUnaryOp, ParamAbi, aggregate_field_info};
+use crate::nir::{NirFunction, ParamAbi, aggregate_field_info};
 use crate::nir_arena::{Body, ExprId, ExprKind, NodeRef, Operand};
 use crate::nir_package::NirPackage;
 use crate::nir_value_graph::{OpaqueSource, ValueId, ValueKind};
@@ -119,12 +119,19 @@ fn settle_forwards(candidates: &mut IndexMap<ParamKey, Candidate>, type_table: &
     let mut changed = false;
     for key in keys {
         let c = &candidates[&key];
-        let shape = type_table.type_key(c.aggregate);
+        if c.forwards.is_empty() {
+            continue;
+        }
         let mut reads = c.reads.clone();
         let agrees = c.forwards.iter().all(|f| {
             candidates.get(f).is_some_and(|g| {
+                // The argument is the local itself, or a reference to it.
+                assert_eq!(
+                    type_table.type_key(g.aggregate),
+                    type_table.type_key(c.aggregate)
+                );
                 reads.extend(g.reads.iter().cloned());
-                g.through_ref == c.through_ref && type_table.type_key(g.aggregate) == shape
+                g.through_ref == c.through_ref
             })
         });
         if !agrees {
@@ -177,7 +184,7 @@ fn collect_candidates(
                 field_names: &all_names,
             };
             let reads = scope.read_anywhere();
-            if reads.whole {
+            if reads.whole || !may_fit(&reads, through_ref, &all_types, &all_names, type_table) {
                 continue;
             }
             // One read past an early exit costs a `&S` a load on the path that
@@ -197,6 +204,30 @@ fn collect_candidates(
         }
     }
     out
+}
+
+/// Whether a parameter read as `reads` may still take the ABI once its
+/// forwards settle, which only add reads: what fails here never comes to fit,
+/// and dropping it early can spare the whole-program write summary.
+fn may_fit(
+    reads: &Reads<'_>,
+    through_ref: bool,
+    all_types: &[TypeId],
+    all_names: &[String],
+    type_table: &TypeTable,
+) -> bool {
+    if !through_ref {
+        return splittable(all_types, type_table);
+    }
+    let read: Vec<TypeId> = all_types
+        .iter()
+        .zip(all_names)
+        .filter(|(_, name)| reads.fields.contains(name.as_str()))
+        .map(|(&ty, _)| ty)
+        .collect();
+    read.len() <= MAX_PARAM_FIELDS
+        && (read.len() >= 2 || !reads.forwards.is_empty())
+        && read.iter().all(|&t| is_eligible_field_type(t, type_table))
 }
 
 /// Whether `field_types` fit the ABI: within its width, and each taking a Wasm
@@ -288,7 +319,8 @@ struct ReadWalk<'s, 'b, 'a> {
     reads: Reads<'a>,
     whole_reads: Vec<ExprId>,
     field_subjects: IndexMap<ExprId, &'a str>,
-    forwarded_subjects: IndexMap<ExprId, ParamKey>,
+    /// The call arguments that hand the local on whole.
+    forwarded: IndexSet<Operand>,
     values_seen: IndexSet<ValueId>,
     sources_seen: IndexSet<ExprId>,
 }
@@ -301,7 +333,7 @@ impl<'s, 'b, 'a> ReadWalk<'s, 'b, 'a> {
             reads: Reads::default(),
             whole_reads: Vec::new(),
             field_subjects: IndexMap::default(),
-            forwarded_subjects: IndexMap::default(),
+            forwarded: IndexSet::default(),
             values_seen: IndexSet::default(),
             sources_seen: IndexSet::default(),
         }
@@ -319,14 +351,16 @@ impl<'s, 'b, 'a> ReadWalk<'s, 'b, 'a> {
     fn node(&mut self, root: NodeRef) {
         let body = self.scope.body;
         body.walk_nodes_under::<()>(root, |node| {
-            let forwarded = match node {
-                NodeRef::Expr(e) => self.forwards_of(e),
-                NodeRef::Stmt(_) | NodeRef::Block(_) | NodeRef::Pat(_) => IndexSet::default(),
-            };
+            if let NodeRef::Expr(e) = node {
+                if self.forwarded.contains(&Operand::Expr(e)) {
+                    return ControlFlow::Continue(false);
+                }
+                self.record_forwards(e);
+            }
             let mut values = Vec::new();
             body.for_each_operand(node, |op| values.extend(op.as_value()));
             for v in values {
-                if !forwarded.contains(&v) {
+                if !self.forwarded.contains(&Operand::Value(v)) {
                     self.value(v);
                 }
             }
@@ -338,45 +372,18 @@ impl<'s, 'b, 'a> ReadWalk<'s, 'b, 'a> {
     }
 
     /// Record each argument of the call at `e` that hands the local on whole,
-    /// as a reference or as itself, and answer the promoted ones, which the
-    /// value walk would otherwise count as a whole read.
-    fn forwards_of(&mut self, e: ExprId) -> IndexSet<ValueId> {
+    /// which the walk then leaves out of the reads.
+    fn record_forwards(&mut self, e: ExprId) {
         let body = self.scope.body;
-        let mut promoted = IndexSet::default();
         let ExprKind::Call { func_id, args, .. } = &body.exprs[e].kind else {
-            return promoted;
+            return;
         };
         for (param_idx, arg) in args.iter().enumerate() {
-            if arg.is_mut {
-                continue;
-            }
-            let key = (func_id.index(), param_idx);
-            match arg.expr {
-                Operand::Value(v) => {
-                    if let ValueKind::Opaque(oid) = body.values.kind(v)
-                        && body.values.opaque_source(*oid)
-                            == Some(OpaqueSource::Local(self.scope.local))
-                    {
-                        promoted.insert(v);
-                        self.reads.forwards.insert(key);
-                    }
-                }
-                Operand::Expr(mut a) => {
-                    if let ExprKind::Unary {
-                        op: NirUnaryOp::Ref,
-                        expr: Operand::Expr(inner),
-                    } = body.exprs[a].kind
-                    {
-                        a = inner;
-                    }
-                    if matches!(body.exprs[a].kind, ExprKind::Local { index, .. } if index == self.scope.local)
-                    {
-                        self.forwarded_subjects.insert(a, key);
-                    }
-                }
+            if !arg.is_mut && body.argument_local(arg.expr) == Some(self.scope.local) {
+                self.forwarded.insert(arg.expr);
+                self.reads.forwards.insert((func_id.index(), param_idx));
             }
         }
-        promoted
     }
 
     fn expr(&mut self, e: ExprId) {
@@ -401,12 +408,11 @@ impl<'s, 'b, 'a> ReadWalk<'s, 'b, 'a> {
 
     fn finish(mut self) -> Reads<'a> {
         for e in self.whole_reads {
-            if let Some(&name) = self.field_subjects.get(&e) {
-                self.reads.fields.insert(name);
-            } else if let Some(&key) = self.forwarded_subjects.get(&e) {
-                self.reads.forwards.insert(key);
-            } else {
-                self.reads.whole = true;
+            match self.field_subjects.get(&e) {
+                Some(&name) => {
+                    self.reads.fields.insert(name);
+                }
+                None => self.reads.whole = true,
             }
         }
         self.reads
