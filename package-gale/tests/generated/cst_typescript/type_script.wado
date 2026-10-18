@@ -1220,10 +1220,6 @@ internal struct AtnSim {
     internal state_collapse_to: List<i32> = [],
     internal state_collapse_target: List<bool> = [],
     internal state_call_prec: List<i32>,
-    internal stop_rule: List<i32>,
-    internal rule_return_start: List<i32>,
-    internal rule_return_count: List<i32>,
-    internal rule_return: List<i32>,
 }
 
 fn atn_read_u8(bytes: &ByteList, pos: i32) -> i32 {
@@ -1306,42 +1302,12 @@ internal fn atn_decode(bytes: &ByteList) -> AtnSim {
     }
 
     let mut state_call_prec = List::filled(nstates, 0);
-    let mut rule_return_count = List::filled(nrules, 0);
     for let mut j = 0; j < ntrans_total; j += 1 {
         if tr_kind[j] == ATN_TR_RULE {
             assert tr_follow[j] >= 0, "a rule transition returns to a follow state";
             state_call_prec[tr_follow[j]] = tr_prec[j];
-            if tr_target[j] >= 0 {
-                rule_return_count[tr_label[j]] += 1;
-            }
         }
     }
-    let mut rule_return_start: List<i32> = List::with_capacity(nrules);
-    let mut nreturns = 0;
-    for let n of &rule_return_count {
-        rule_return_start.push(nreturns);
-        nreturns += *n;
-    }
-    let mut rule_return = List::filled(nreturns, -1);
-    let mut filled = List::filled(nrules, 0);
-    for let mut j = 0; j < ntrans_total; j += 1 {
-        if tr_kind[j] == ATN_TR_RULE && tr_target[j] >= 0 {
-            let callee = tr_label[j];
-            rule_return[rule_return_start[callee] + filled[callee]] = tr_follow[j];
-            filled[callee] += 1;
-        }
-    }
-
-    let stop_rule = atn_stop_rules(
-        nrules,
-        &rule_start,
-        &state_kind,
-        &state_tr_start,
-        &state_tr_count,
-        &tr_kind,
-        &tr_target,
-        &tr_follow,
-    );
 
     return AtnSim {
         state_kind,
@@ -1355,43 +1321,7 @@ internal fn atn_decode(bytes: &ByteList) -> AtnSim {
         decision_state,
         rule_start,
         state_call_prec,
-        stop_rule,
-        rule_return_start,
-        rule_return_count,
-        rule_return,
     };
-}
-
-fn atn_stop_rules(
-    nrules: i32,
-    rule_start: &List<i32>,
-    state_kind: &List<i32>,
-    state_tr_start: &List<i32>,
-    state_tr_count: &List<i32>,
-    tr_kind: &List<i32>,
-    tr_target: &List<i32>,
-    tr_follow: &List<i32>,
-) -> List<i32> {
-    let mut rule_of = List::filled(state_kind.len(), -1);
-    let mut stop_rule = List::filled(state_kind.len(), -1);
-    let mut work: List<i32> = [];
-    for let mut r = 0; r < nrules; r += 1 {
-        rule_of[rule_start[r]] = r;
-        work.push(rule_start[r]);
-        while let Some(st) = work.pop() {
-            if state_kind[st] == ATN_RULE_STOP {
-                stop_rule[st] = r;
-            }
-            for let mut j = state_tr_start[st]; j < state_tr_start[st] + state_tr_count[st]; j += 1 {
-                let next = if tr_kind[j] == ATN_TR_RULE { tr_follow[j] } else { tr_target[j] };
-                if next >= 0 && rule_of[next] < 0 {
-                    rule_of[next] = r;
-                    work.push(next);
-                }
-            }
-        }
-    }
-    return stop_rule;
 }
 
 global ATN_ACCEPT_EOF: i32 = -2;
@@ -1409,15 +1339,11 @@ global CFG_KEY_STATE_SLOT: i32 = 1048576;
 global CTX_BOUNDARY: i32 = -3;
 global CTX_UNKNOWN_RETURN: i32 = -4;
 global CTX_HIDDEN_RETURN: i32 = -5;
-global CTX_CALLER_RETURN: i32 = -7;
-global CTX_ANY_RETURN: i32 = -8;
 
 global CTX_EMPTY: i32 = 0;
 global CTX_UNKNOWN: i32 = 1;
-global CTX_ANY_CALLER: i32 = 2;
-global CTX_ANY_STACK: i32 = 3;
 
-global ATN_NEEDS_CALLERS: i32 = -6;
+global ATN_READS_HIDDEN: i32 = -6;
 global ATN_FAILED_ALT: i32 = 1024;
 
 global ATN_DFA_UNDECIDED: i32 = -7;
@@ -1504,30 +1430,7 @@ impl AtnPredictor {
     ) -> [i32, i32]
         contract self.stack.len() >= self.floor, "a scan returns before its caller pops the frames below its floor"
     {
-        let len = self.stack.len();
-        if false && atn_callers_known(&self.stack) {
-            let mut visible = 0;
-            while visible < len {
-                let alt = atn_predict_window(
-                    &mut ATN_DFA,
-                    sim,
-                    decision,
-                    &self.stack,
-                    len - visible,
-                    tokens,
-                    pos,
-                    eof,
-                    min_prec,
-                    false_preds,
-                );
-                if alt != ATN_NEEDS_CALLERS {
-                    return [alt, len - visible];
-                }
-                let floor_window = len - self.floor;
-                let wider = if visible == 0 { 1 } else { visible * 2 };
-                visible = if visible < floor_window { i32::min(wider, floor_window) } else { wider };
-            }
-        } else if self.floor > 0 {
+        if self.floor > 0 {
             let alt = atn_predict_above(
                 &mut ATN_DFA,
                 sim,
@@ -1540,7 +1443,7 @@ impl AtnPredictor {
                 min_prec,
                 false_preds,
             );
-            if alt != ATN_NEEDS_CALLERS {
+            if alt != ATN_READS_HIDDEN {
                 return [alt, self.floor];
             }
         }
@@ -1680,7 +1583,6 @@ struct CtxArena {
     intern_next: List<i32>,
     merge_cache: AtnKeyMap,
     cover_cache: AtnKeyMap,
-    escapes: List<i32>,
     node_limit: i32,
 }
 
@@ -1704,14 +1606,11 @@ impl CtxArena {
             intern_next: [],
             merge_cache: AtnKeyMap::new(),
             cover_cache: AtnKeyMap::new(),
-            escapes: [],
             node_limit: ATN_ARENA_CAP,
         };
         let empty = arena.push(CTX_BOUNDARY, 0, CTX_EMPTY);
         let unknown = arena.push(CTX_UNKNOWN_RETURN, 0, CTX_EMPTY);
-        let caller = arena.push(CTX_CALLER_RETURN, 0, CTX_EMPTY);
-        let any = arena.push(CTX_ANY_RETURN, 0, CTX_EMPTY);
-        assert empty == CTX_EMPTY && unknown == CTX_UNKNOWN && caller == CTX_ANY_CALLER && any == CTX_ANY_STACK, "the fixed contexts are the arena's first nodes";
+        assert empty == CTX_EMPTY && unknown == CTX_UNKNOWN, "the bottom and unknown-caller contexts are the arena's first nodes";
         return arena;
     }
 
@@ -1723,33 +1622,13 @@ impl CtxArena {
         self.node_limit = self.node_count() + ATN_ARENA_CAP;
     }
 
-    fn reaches_any_stack(&mut self, node: i32) -> bool {
-        while self.escapes.len() <= node {
-            self.escapes.push(-1);
-        }
-        if self.escapes[node] < 0 {
-            let s = self.node_start[node];
-            let mut escapes = false;
-            for let mut e = s; e < s + self.node_len[node] && !escapes; e += 1 {
-                let r = self.ret[e];
-                escapes = r == CTX_ANY_RETURN || r >= 0 && self.reaches_any_stack(self.parent[e]);
-            }
-            self.escapes[node] = if escapes { 1 } else { 0 };
-        }
-        return self.escapes[node] == 1;
-    }
-
     fn push_caller_stack(&mut self, sim: &AtnSim, rstk: &List<i32>, floor: i32) -> i32 {
         if rstk.is_empty() {
             return CTX_UNKNOWN;
         }
-        let below = if floor > 0 { self.push(CTX_HIDDEN_RETURN, 0, CTX_EMPTY) } else { CTX_EMPTY };
-        return self.push_frames(sim, rstk, floor, below);
-    }
-
-    fn push_frames(&mut self, sim: &AtnSim, rstk: &List<i32>, from: i32, below: i32) -> i32 {
-        let mut ctx = below;
-        for let mut k = from; k < rstk.len(); k += 1 {
+        assert floor == 0 || sim.state_collapse_to.is_empty(), "a collapse into a caller loop reads the callers a floor hides";
+        let mut ctx = if floor > 0 { self.push(CTX_HIDDEN_RETURN, 0, CTX_EMPTY) } else { CTX_EMPTY };
+        for let mut k = floor; k < rstk.len(); k += 1 {
             if rstk[k] >= 0 {
                 ctx = self.push(rstk[k], atn_invocation_prec(sim, rstk, k - 1), ctx);
             } else if k > 0 {
@@ -2081,7 +1960,7 @@ fn atn_expand(
         return;
     }
     if sim.state_kind[cur.state] == ATN_RULE_STOP {
-        atn_pop(sim, arena, cur, scratch);
+        atn_pop(arena, cur, scratch);
         return;
     }
     if atn_state_consumes(sim, cur.state) {
@@ -2154,20 +2033,13 @@ fn atn_edge_collapses(sim: &AtnSim, arena: &CtxArena, e: i32, cur: &AtnConfig) -
     return r >= 0 && sim.state_collapse_to[r] == cur.state && cur.pr >= arena.rpr[e];
 }
 
-fn atn_pop(sim: &AtnSim, arena: &mut CtxArena, cur: &AtnConfig, scratch: &mut ClosureScratch) {
+fn atn_pop(arena: &mut CtxArena, cur: &AtnConfig, scratch: &mut ClosureScratch) {
     let s = arena.node_start[cur.pctx];
     let n = arena.node_len[cur.pctx];
     for let mut e = s; e < s + n; e += 1 {
         let r = arena.ret[e];
         if r == CTX_BOUNDARY {
             scratch.rset.add(arena, ATN_ACCEPT_EOF, cur.alt, cur.pr, CTX_EMPTY);
-        } else if r == CTX_CALLER_RETURN || r == CTX_ANY_RETURN {
-            scratch.rset.add(arena, ATN_ACCEPT_EOF, cur.alt, cur.pr, CTX_EMPTY);
-            let rule = sim.stop_rule[cur.state];
-            let first = sim.rule_return_start[rule];
-            for let mut i = first; i < first + sim.rule_return_count[rule]; i += 1 {
-                scratch.work.push(AtnConfig { state: sim.rule_return[i], alt: cur.alt, pctx: CTX_ANY_STACK, pr: 0 });
-            }
         } else if r == CTX_UNKNOWN_RETURN {
             scratch.rset.add(arena, cur.state, cur.alt, cur.pr, CTX_UNKNOWN);
         } else if r == CTX_HIDDEN_RETURN {
@@ -2323,52 +2195,8 @@ fn atn_predict_above(
 ) -> i32 {
     dfa.make_room(sim);
     let caller = dfa.arena.push_caller_stack(sim, rule_stack, floor);
-    return atn_predict_from(dfa, sim, decision, caller, tokens, start_pos, eof, min_prec, false_preds, false);
-}
-
-fn atn_predict_window(
-    dfa: &mut AtnDfa,
-    sim: &AtnSim,
-    decision: i32,
-    rule_stack: &List<i32>,
-    from: i32,
-    tokens: &Array<i32>,
-    start_pos: i32,
-    eof: i32,
-    min_prec: i32,
-    false_preds: &List<i32>,
-) -> i32 {
-    dfa.make_room(sim);
-    let caller = dfa.arena.push_frames(sim, rule_stack, from, CTX_ANY_CALLER);
-    return atn_predict_from(dfa, sim, decision, caller, tokens, start_pos, eof, min_prec, false_preds, true);
-}
-
-fn atn_callers_known(rule_stack: &List<i32>) -> bool {
-    if rule_stack.is_empty() {
-        return false;
-    }
-    for let mut k = 1; k < rule_stack.len(); k += 1 {
-        if rule_stack[k] < 0 {
-            return false;
-        }
-    }
-    return true;
-}
-
-fn atn_predict_from(
-    dfa: &mut AtnDfa,
-    sim: &AtnSim,
-    decision: i32,
-    caller: i32,
-    tokens: &Array<i32>,
-    start_pos: i32,
-    eof: i32,
-    min_prec: i32,
-    false_preds: &List<i32>,
-    any_caller: bool,
-) -> i32 {
     dfa.arena.open_budget();
-    let mut s = dfa.start_state(sim, decision, caller, min_prec, false_preds, any_caller);
+    let mut s = dfa.start_state(sim, decision, caller, min_prec, false_preds);
     let mut fallback = -1;
     let mut pos = start_pos;
     loop {
@@ -2383,9 +2211,6 @@ fn atn_predict_from(
         let token = if pos < tokens.len() { tokens[pos] } else { eof };
         if token == eof {
             let survivors = atn_unique_alts(&atn_move(sim, &dfa.state_configs[s], eof, eof));
-            if dfa.state_any_caller[s] {
-                return if survivors.len() == 1 { atn_resolve(&survivors) } else { ATN_NEEDS_CALLERS };
-            }
             return if survivors.is_empty() { fallback } else { atn_resolve(&survivors) };
         }
         s = dfa.step(sim, s, token, eof);
@@ -2399,7 +2224,6 @@ struct AtnDfa {
     state_configs: List<List<AtnConfig>>,
     state_verdict: List<i32>,
     state_first: List<i32>,
-    state_any_caller: List<bool>,
     state_key_start: List<i32>,
     state_key_len: List<i32>,
     same_hash_next: List<i32>,
@@ -2417,7 +2241,6 @@ impl AtnDfa {
             state_configs: [],
             state_verdict: [],
             state_first: [],
-            state_any_caller: [],
             state_key_start: [],
             state_key_len: [],
             same_hash_next: [],
@@ -2439,15 +2262,7 @@ impl AtnDfa {
         }
     }
 
-    fn start_state(
-        &mut self,
-        sim: &AtnSim,
-        decision: i32,
-        caller: i32,
-        min_prec: i32,
-        false_preds: &List<i32>,
-        any_caller: bool,
-    ) -> i32 {
+    fn start_state(&mut self, sim: &AtnSim, decision: i32, caller: i32, min_prec: i32, false_preds: &List<i32>) -> i32 {
         let from = self.keys.len();
         self.keys.push(ATN_DFA_START_KEY);
         self.keys.push(decision);
@@ -2468,7 +2283,7 @@ impl AtnDfa {
             seeds.push(AtnConfig { state: sim.tr_target[start + j], alt: j, pctx: caller, pr: min_prec });
         }
         let configs = atn_closure(sim, &mut self.arena, &seeds, &mut self.scratch, dstate, false_preds);
-        return self.add_state(sim, configs, from, any_caller);
+        return self.add_state(sim, configs, from);
     }
 
     fn step(&mut self, sim: &AtnSim, s: i32, token: i32, eof: i32) -> i32
@@ -2480,9 +2295,7 @@ impl AtnDfa {
             return cached;
         }
         let moved = atn_move(sim, &self.state_configs[s], token, eof);
-        let any_caller = self.state_any_caller[s];
         let from = self.keys.len();
-        self.keys.push(if any_caller { 1 } else { 0 });
         for let c of &moved {
             self.keys.push(c.state);
             self.keys.push(c.alt);
@@ -2492,7 +2305,7 @@ impl AtnDfa {
         let mut next = self.state_keyed_from(from);
         if next < 0 {
             let configs = atn_closure(sim, &mut self.arena, &moved, &mut self.scratch);
-            next = self.add_state(sim, configs, from, any_caller);
+            next = self.add_state(sim, configs, from);
         }
         self.edges.set(edge, next);
         return next;
@@ -2531,39 +2344,20 @@ impl AtnDfa {
         return true;
     }
 
-    fn add_state(&mut self, sim: &AtnSim, configs: List<AtnConfig>, key_from: i32, any_caller: bool) -> i32 {
+    fn add_state(&mut self, sim: &AtnSim, configs: List<AtnConfig>, key_from: i32) -> i32 {
         let s = self.state_configs.len();
         let n = self.keys.len() - key_from;
         let h = self.hash_keys(key_from, n);
         let alts = atn_unique_alts(&configs);
         self.state_first.push(atn_resolve(&alts));
-        let verdict = if any_caller {
-            self.any_caller_verdict(sim, &configs, &alts);
-        } else {
-            self.verdict_of(sim, &configs, alts);
-        };
+        let verdict = self.verdict_of(sim, &configs, alts);
         self.state_verdict.push(verdict);
-        self.state_any_caller.push(any_caller);
         self.state_configs.push(configs);
         self.state_key_start.push(key_from);
         self.state_key_len.push(n);
         self.same_hash_next.push(self.index.get(h));
         self.index.set(h, s);
         return s;
-    }
-
-    fn any_caller_verdict(&mut self, sim: &AtnSim, configs: &List<AtnConfig>, alts: &List<i32>) -> i32 {
-        if alts.len() == 1 {
-            return atn_resolve(alts);
-        }
-        if alts.is_empty() || atn_resolve(alts) < 0 || atn_all_at_end(sim, configs) {
-            return ATN_NEEDS_CALLERS;
-        }
-        if atn_min_alt_covers_rest(&mut self.arena, configs, alts[0]) {
-            let escaped = configs.iter_ref().any(|c| c.state == ATN_ACCEPT_EOF || self.arena.reaches_any_stack(c.pctx));
-            return if escaped { ATN_NEEDS_CALLERS } else { alts[0] };
-        }
-        return ATN_DFA_UNDECIDED;
     }
 
     fn verdict_of(&mut self, sim: &AtnSim, configs: &List<AtnConfig>, alts: List<i32>) -> i32 {
@@ -2575,7 +2369,7 @@ impl AtnDfa {
                 }
             }
             alive.sort();
-            return if atn_one_alt(&alive) { atn_resolve(&alive) } else { ATN_NEEDS_CALLERS };
+            return if atn_one_alt(&alive) { atn_resolve(&alive) } else { ATN_READS_HIDDEN };
         }
         if alts.is_empty() {
             return ATN_DFA_DEAD;
