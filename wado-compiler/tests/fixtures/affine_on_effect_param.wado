@@ -1,0 +1,10 @@
+// `affine` admits an affine type argument; an effect parameter takes none.
+fn run_with<affine effect E>(f: fn() with E) with E {
+    f();
+}
+
+export fn run() {
+}
+
+__DATA__
+{"compile_error": ":2:13: parse error: `affine` admits an affine type argument, so it marks no effect parameter"}

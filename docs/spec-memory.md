@@ -241,7 +241,7 @@ ref_eq(&f, &g);                 // false or true: two places holding one closure
 
 ### Method Receiver: `self` by Value
 
-A method receiver is `&self` or `&mut self`. Bare `self` (by value) is allowed only on a resource, on an aggregate that holds one, or on a generic type, since its type arguments may be resources (`Option<T>::unwrap(self)`). A trait's method counts as generic, since its `Self` is a type parameter (`Iterator::map(self, f)`), and every impl of it takes the receiver the trait declares:
+A method receiver is `&self` or `&mut self`. Bare `self` (by value) is allowed only on a resource, on an aggregate that holds one, or on a generic type, since its type arguments may be resources (`Option<T>::unwrap(self)`):
 
 <!-- {"fixture":"spec_memory_values.wado"} -->
 
@@ -270,6 +270,8 @@ impl Point {
 ```
 
 A by-value `self` is passed as any parameter is. A receiver holding an affine resource moves into the method, so the caller's binding cannot be used afterward, which is how the resource is consumed (see [Resource Ownership](./spec-components.md#resource-ownership)). Any other receiver is copied, so `Option<i32>::unwrap` leaves its binding usable.
+
+A trait's method counts as generic, since its `Self` is a type parameter, so it may take `self` by value (`Iterator::map(self, f)`). Every impl of it takes the receiver the trait declares.
 
 ### `mut` Parameters
 

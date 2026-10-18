@@ -14,6 +14,7 @@ use crate::semantics::Semantics;
 use crate::symbol::SymbolKind;
 use crate::tir::{ResolvedType, TypeId};
 use crate::token::Span;
+use crate::unparse::unparse_type_into;
 
 #[derive(Debug, Clone)]
 pub struct ResourceMoveError {
@@ -128,8 +129,7 @@ pub fn check_resource_moves_semantic(sem: &Semantics) -> Vec<ResourceMoveError> 
     out
 }
 
-/// The `affine` type parameters in scope: an item's, its enclosing impl's or
-/// trait's, and `Self` in an `affine trait`.
+/// The names of `params` declared `affine`.
 fn affine_params<'a>(params: impl IntoIterator<Item = &'a GenericParam>) -> Vec<String> {
     params
         .into_iter()
@@ -194,7 +194,7 @@ impl Checker<'_> {
             checker: self,
             affine_params,
             moved: IndexMap::default(),
-            pinned: IndexMap::default(),
+            guard_bindings: IndexSet::default(),
             closure_locals: None,
             suppress: 0,
         };
@@ -256,18 +256,15 @@ impl Checker<'_> {
         if t.is_affine || !self.impl_self_is_affine(b, scope) {
             return;
         }
+        let mut type_name = String::new();
+        unparse_type_into(&b.ty, &mut type_name);
         self.push(
             MoveError::UnmarkedTraitImpl {
-                type_name: self.sem.types.type_name(self.impl_self_type(b).unwrap()),
+                type_name,
                 trait_name: t.name.clone(),
             },
             trait_type.span(),
         );
-    }
-
-    fn impl_self_type(&self, b: &ImplBlock) -> Option<TypeId> {
-        let decl = self.sem.declaration_of(&b.ty)?;
-        self.sem.types.type_of_symbol(&decl.id())
     }
 
     /// Whether the implementing type is affine: affine in every instantiation,
@@ -278,7 +275,9 @@ impl Checker<'_> {
         let names_affine_param = mentioned.iter().any(|name| scope.contains(name));
         names_affine_param
             || self
-                .impl_self_type(b)
+                .sem
+                .declaration_of(&b.ty)
+                .and_then(|decl| self.sem.types.type_of_symbol(&decl.id()))
                 .is_some_and(|ty| self.sem.is_affine(ty, &[]))
     }
 }
@@ -301,11 +300,8 @@ enum LoopHead<'a> {
     Binding(&'a Pattern),
 }
 
-/// Why a binding may be read but not moved where it is pinned.
-#[derive(Clone, Copy)]
-enum Pinned {
-    Guard,
-}
+/// Each moved place, a binding and a field path into it, with where it moved.
+type Moves = IndexMap<(AstId, Vec<String>), Span>;
 
 /// A place a body reads: a binding and the field path into it (`h.f.g`).
 struct PlacePath<'e> {
@@ -318,8 +314,9 @@ struct MoveWalker<'a, 'c> {
     affine_params: Vec<String>,
     /// Each moved place: a binding and the field path moved out of it, empty
     /// for the binding as a whole.
-    moved: IndexMap<(AstId, Vec<String>), Span>,
-    pinned: IndexMap<AstId, Pinned>,
+    moved: Moves,
+    /// The bindings of the arm whose guard is being walked.
+    guard_bindings: IndexSet<AstId>,
     /// Inside a closure body, the bindings it declares itself; every other
     /// local it names is a capture.
     closure_locals: Option<IndexSet<AstId>>,
@@ -353,11 +350,7 @@ impl MoveWalker<'_, '_> {
         self.moved
             .iter()
             .find_map(|((moved_def, moved_path), span)| {
-                let overlaps = *moved_def == def
-                    && moved_path
-                        .iter()
-                        .zip(path)
-                        .all(|(moved, read)| moved == read);
+                let overlaps = *moved_def == def && paths_overlap(moved_path, path);
                 overlaps.then_some(*span)
             })
     }
@@ -433,7 +426,7 @@ impl MoveWalker<'_, '_> {
             self.report(MoveError::MoveOutOfReference { type_name }, expr.span());
             return;
         }
-        if let Some(Pinned::Guard) = self.pinned.get(&def) {
+        if self.guard_bindings.contains(&def) {
             self.report(MoveError::GuardMove { name }, place.root.span);
             return;
         }
@@ -461,14 +454,16 @@ impl MoveWalker<'_, '_> {
         self.sem().types.type_name(ty)
     }
 
-    /// The bindings a place assignment gives new values: the place and every
+    /// Forgets the moves an assignment to `place` refills: the place and every
     /// place inside it.
     fn clear_place(&mut self, place: &PlacePath<'_>) {
         let Some(def) = self.sem().referenced_symbol(place.root.id) else {
             return;
         };
         self.moved.retain(|(moved_def, moved_path), _| {
-            *moved_def != def || !moved_path.starts_with_strs(&place.fields)
+            *moved_def != def
+                || moved_path.len() < place.fields.len()
+                || !paths_overlap(moved_path, &place.fields)
         });
     }
 
@@ -623,7 +618,7 @@ impl MoveWalker<'_, '_> {
             checker: &mut *self.checker,
             affine_params: self.affine_params.clone(),
             moved: self.moved.clone(),
-            pinned: self.pinned.clone(),
+            guard_bindings: self.guard_bindings.clone(),
             closure_locals: Some(locals),
             suppress: self.suppress,
         };
@@ -782,7 +777,7 @@ impl MoveWalker<'_, '_> {
             None => false,
         };
         if !then_div {
-            self.union_into(then_moved);
+            merge_moves(&mut self.moved, then_moved);
         }
         else_block.is_some() && then_div && else_div
     }
@@ -796,20 +791,17 @@ impl MoveWalker<'_, '_> {
             self.moved.clone_from(&base);
             self.bind_pattern(&arm.pattern);
             if let Some(guard) = &arm.guard {
-                let saved = self.pinned.clone();
+                let saved = self.guard_bindings.clone();
                 for_each_pattern_binding(&arm.pattern, &mut |id| {
-                    self.pinned.insert(id, Pinned::Guard);
+                    self.guard_bindings.insert(id);
                 });
                 self.visit_expr(guard);
-                self.pinned = saved;
+                self.guard_bindings = saved;
             }
             let diverged = self.visit_expr_diverges(&arm.body);
             if !diverged {
                 all_diverge = false;
-                let arm_moved = std::mem::take(&mut self.moved);
-                for (place, span) in arm_moved {
-                    merged.entry(place).or_insert(span);
-                }
+                merge_moves(&mut merged, std::mem::take(&mut self.moved));
             }
         }
         self.moved = merged;
@@ -857,21 +849,17 @@ impl MoveWalker<'_, '_> {
             }
         }
     }
+}
 
-    fn union_into(&mut self, other: IndexMap<(AstId, Vec<String>), Span>) {
-        for (place, span) in other {
-            self.moved.entry(place).or_insert(span);
-        }
+/// Each place moved on a path that reaches the join, keeping the first move.
+fn merge_moves(into: &mut Moves, from: Moves) {
+    for (place, span) in from {
+        into.entry(place).or_insert(span);
     }
 }
 
-/// Whether a field path starts with `prefix`.
-trait StartsWithStrs {
-    fn starts_with_strs(&self, prefix: &[&str]) -> bool;
-}
-
-impl StartsWithStrs for Vec<String> {
-    fn starts_with_strs(&self, prefix: &[&str]) -> bool {
-        self.len() >= prefix.len() && self.iter().zip(prefix).all(|(a, b)| a == b)
-    }
+/// Whether one field path holds the other: they agree as far as the shorter
+/// one goes.
+fn paths_overlap(moved: &[String], read: &[&str]) -> bool {
+    moved.iter().zip(read).all(|(m, r)| m == r)
 }

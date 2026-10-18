@@ -1,0 +1,21 @@
+// A blanket impl over an `affine` parameter implements the trait for affine
+// types, so the trait must be an `affine trait`.
+affine trait Tagged with () {
+    fn tag(&self) -> i32;
+}
+
+trait Named with () {
+    fn name(&self) -> String;
+}
+
+impl<affine T: Tagged> Named for T {
+    fn name(&self) -> String {
+        return "any";
+    }
+}
+
+export fn run() {
+}
+
+__DATA__
+{"compile_error": ":11:24: analysis error: `T` is affine, so it implements only an `affine trait`, and `Named` is not one"}
