@@ -1,0 +1,14 @@
+// A field default is evaluated where the struct literal is, so a `return` in
+// it would leave the function building the struct.
+struct S {
+    x: i32 = pick: { if builtin::black_box(true) { return 3; } 1 },
+}
+
+export fn run() {
+    let _ = S {};
+}
+
+__DATA__
+{
+  "compile_error": ":4:52: parse error: `return` cannot leave a default value: it runs apart from the code around it"
+}
