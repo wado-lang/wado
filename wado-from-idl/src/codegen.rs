@@ -152,7 +152,8 @@ impl WadoCodeGenerator {
         if let Some(ref attr) = s.cm_attr {
             self.writeln(&format!("#[cm(\"{attr}\")]"));
         }
-        self.writeln(&format!("pub struct {} {{", s.name));
+        let affine = if s.is_affine { "affine " } else { "" };
+        self.writeln(&format!("pub {affine}struct {} {{", s.name));
         self.indent += 1;
 
         for field in &s.fields {
@@ -174,7 +175,8 @@ impl WadoCodeGenerator {
         if let Some(ref attr) = v.cm_attr {
             self.writeln(&format!("#[cm(\"{attr}\")]"));
         }
-        self.writeln(&format!("pub variant {} {{", v.name));
+        let affine = if v.is_affine { "affine " } else { "" };
+        self.writeln(&format!("pub {affine}variant {} {{", v.name));
         self.indent += 1;
 
         for case in &v.cases {

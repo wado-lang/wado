@@ -27,17 +27,34 @@ pub enum ResourceMoveError {
         span: Span,
         module: String,
     },
+    /// A named struct or variant holding an affine value without `affine`.
+    AffineUndeclared {
+        keyword: &'static str,
+        name: String,
+        /// The field or case that holds it.
+        member: String,
+        span: Span,
+        module: String,
+    },
+    /// A named struct or variant declared `affine` that holds no affine value.
+    AffineHoldsNothing {
+        keyword: &'static str,
+        name: String,
+        span: Span,
+        module: String,
+    },
 }
 
 impl From<ResourceMoveError> for Diagnostic {
     fn from(e: ResourceMoveError) -> Self {
-        let (message, span, module) = match e {
+        let (code, message, span, module) = match e {
             ResourceMoveError::UseAfterMove {
                 name,
                 use_span,
                 move_span,
                 module,
             } => (
+                Code::TypeMismatch,
                 format!(
                     "resource `{name}` used after it was moved (moved at {}:{})",
                     move_span.line, move_span.column,
@@ -50,8 +67,36 @@ impl From<ResourceMoveError> for Diagnostic {
                 span,
                 module,
             } => (
+                Code::TypeMismatch,
                 format!(
                     "cannot move resource `{type_name}` out of a reference; take `self` by value to consume it, or return a freshly created resource"
+                ),
+                span,
+                module,
+            ),
+            ResourceMoveError::AffineUndeclared {
+                keyword,
+                name,
+                member,
+                span,
+                module,
+            } => (
+                Code::AffineDeclaration,
+                format!(
+                    "`{name}` holds an affine value in `{member}`, so it must be declared `affine {keyword}`"
+                ),
+                span,
+                module,
+            ),
+            ResourceMoveError::AffineHoldsNothing {
+                keyword,
+                name,
+                span,
+                module,
+            } => (
+                Code::AffineDeclaration,
+                format!(
+                    "`{name}` holds no affine value, so it cannot be declared `affine {keyword}`"
                 ),
                 span,
                 module,
@@ -59,7 +104,7 @@ impl From<ResourceMoveError> for Diagnostic {
         };
         Diagnostic {
             severity: Severity::Error,
-            code: Code::TypeMismatch,
+            code,
             message,
             span: Some(DiagnosticSpan::from_span(&span, Some(&module))),
         }
@@ -70,6 +115,9 @@ impl From<ResourceMoveError> for Diagnostic {
 pub fn check_resource_moves_semantic(sem: &Semantics) -> Vec<ResourceMoveError> {
     let mut out = Vec::new();
     for (src, module) in &sem.modules {
+        for item in &module.items {
+            check_affine_declaration(sem, src, item, &mut out);
+        }
         if !src.is_user_authored() {
             continue;
         }
@@ -78,6 +126,53 @@ pub fn check_resource_moves_semantic(sem: &Semantics) -> Vec<ResourceMoveError> 
         }
     }
     out
+}
+
+/// A named struct or variant is declared `affine` exactly when a field or a
+/// case holds an affine value in every instantiation (WEP: Affine Types).
+fn check_affine_declaration(
+    sem: &Semantics,
+    module: &ModuleSource,
+    item: &Item,
+    out: &mut Vec<ResourceMoveError>,
+) {
+    let (keyword, id, name, name_span, is_affine, members): (_, _, _, _, _, Vec<&str>) =
+        match item {
+            Item::Struct(s) => (
+                "struct",
+                s.id,
+                &s.name,
+                s.name_span,
+                s.is_affine,
+                s.fields.iter().map(|f| f.name.as_str()).collect(),
+            ),
+            Item::Variant(v) => (
+                "variant",
+                v.id,
+                &v.name,
+                v.name_span,
+                v.is_affine,
+                v.cases.iter().map(|c| c.name.as_str()).collect(),
+            ),
+            _ => return,
+        };
+    let module = module.source_path();
+    match (sem.first_affine_member(id), is_affine) {
+        (Some(index), false) => out.push(ResourceMoveError::AffineUndeclared {
+            keyword,
+            name: name.clone(),
+            member: members[index].to_string(),
+            span: name_span,
+            module,
+        }),
+        (None, true) => out.push(ResourceMoveError::AffineHoldsNothing {
+            keyword,
+            name: name.clone(),
+            span: name_span,
+            module,
+        }),
+        _ => {}
+    }
 }
 
 fn check_item(
@@ -287,7 +382,10 @@ impl ReferenceChecker<'_> {
             Stmt::ForOf(s) => self.walk_block(&s.body),
             Stmt::Match(m) => self.walk_match(&m.expr, &m.arms),
             Stmt::LabeledBlock(lb) => self.walk_block(&lb.block),
-            Stmt::Item(item) => check_item(self.sem, self.module, item, self.out),
+            Stmt::Item(item) => {
+                check_affine_declaration(self.sem, self.module, item, self.out);
+                check_item(self.sem, self.module, item, self.out);
+            }
             _ => {}
         }
     }

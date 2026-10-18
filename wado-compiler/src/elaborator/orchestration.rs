@@ -930,6 +930,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             CompilerItem::Member,
             CompilerItem::Ref,
             CompilerItem::RefMut,
+            CompilerItem::AffineResource,
         ] {
             let Some(sealed) = type_table.borrow().compiler_items().trait_def(sealed_item) else {
                 continue;

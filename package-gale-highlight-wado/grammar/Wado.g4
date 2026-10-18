@@ -161,7 +161,7 @@ withItem
     ;
 
 structDecl
-    : 'struct' typeName genericParams? '{' fieldList? '}'
+    : 'affine'? 'struct' typeName genericParams? '{' fieldList? '}'
     ;
 
 fieldList
@@ -197,7 +197,7 @@ flagsCase
     ;
 
 variantDecl
-    : 'variant' typeName genericParams? '{' variantCaseList? '}'
+    : 'affine'? 'variant' typeName genericParams? '{' variantCaseList? '}'
     ;
 
 variantCaseList
@@ -334,7 +334,7 @@ memberName
     | 'import' | 'export' | 'assert' | 'global' | 'const' | 'matches'
     | 'true' | 'false' | 'null' | 'trap' | 'forward' | 'Self'
     | 'test' | 'do' | 'task' | 'extends' | 'internal' | 'resume' | 'self'
-    | 'contract' | 'unchecked'
+    | 'contract' | 'unchecked' | 'affine'
     ;
 
 block

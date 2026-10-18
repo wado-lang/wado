@@ -245,6 +245,14 @@ fn agrees_with_target(ty: TypeId, target: TypeId) -> bool {
 /// The reason a cast naming an unrestricted resource is refused: its handle is
 /// an `f64`, and only a type pattern moves it down the `extends` chain.
 fn handle_cast_hint(tt: &TypeTable, source: TypeId, target: TypeId) -> Option<String> {
+    let is_affine_handle =
+        |ty| tt.handle_scalar(tt.representation_head(ty)) == Some(TypeTable::I32);
+    if is_affine_handle(source) != is_affine_handle(target) {
+        return Some(
+            "an affine resource converts to no other type; `ResourceId::of(&r)` reads its identity"
+                .to_string(),
+        );
+    }
     let other = match (
         tt.is_unrestricted_handle(source),
         tt.is_unrestricted_handle(target),

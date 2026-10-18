@@ -1067,6 +1067,7 @@ impl<'a> Unparser<'a> {
         self.output
             .push_str(type_decl_keyword(s.visibility, s.is_export));
 
+        self.emit_kw_if(s.is_affine, "affine ");
         self.output.push_str("struct ");
         self.output.push_str(&s.name);
         self.unparse_generic_params(&s.type_params);
@@ -1157,6 +1158,7 @@ impl<'a> Unparser<'a> {
         self.output
             .push_str(type_decl_keyword(v.visibility, v.is_export));
 
+        self.emit_kw_if(v.is_affine, "affine ");
         self.output.push_str("variant ");
         self.output.push_str(&v.name);
         self.unparse_generic_params(&v.type_params);
@@ -3758,7 +3760,11 @@ pub fn unparse_variant_header(v: &VariantDecl) -> String {
     let mut out = String::new();
     emit_decl_header(
         type_decl_keyword(v.visibility, v.is_export),
-        "variant ",
+        if v.is_affine {
+            "affine variant "
+        } else {
+            "variant "
+        },
         &v.name,
         &v.type_params,
         &mut out,
@@ -3815,7 +3821,11 @@ pub fn unparse_struct_signature(s: &StructDecl, public_only: bool) -> String {
     let mut out = String::new();
     emit_decl_header(
         type_decl_keyword(s.visibility, s.is_export),
-        "struct ",
+        if s.is_affine {
+            "affine struct "
+        } else {
+            "struct "
+        },
         &s.name,
         &s.type_params,
         &mut out,

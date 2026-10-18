@@ -589,6 +589,17 @@ impl Semantics {
             .carries_resource(type_id)
     }
 
+    /// The index of the first field or case of the struct or variant declared
+    /// at `decl` that holds an affine value in every instantiation.
+    pub(crate) fn first_affine_member(&self, decl: AstId) -> Option<usize> {
+        let type_id = self.types.type_of_symbol(&decl)?;
+        self.state
+            .as_ref()
+            .expect("the affine declaration check runs on annotated semantics")
+            .tysys
+            .first_affine_member(type_id)
+    }
+
     /// Whether a value of `type_id` reaches a `&mut` a call handed it may write
     /// through. Without the annotate state nothing is known, so any may.
     pub(crate) fn reaches_mut_ref(&self, type_id: TypeId) -> bool {

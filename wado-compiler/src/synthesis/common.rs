@@ -8,6 +8,7 @@
 use crate::call_args::CallArgs;
 use crate::canonical::{CanonicalIntrinsic, CmCallTarget};
 use crate::compiler_item::{CompilerItem, CompilerItems};
+use crate::component_model::peel_newtypes;
 use crate::hashmap::IndexSet;
 
 use crate::ast::Visibility;
@@ -176,6 +177,22 @@ pub fn handle_bits(handle: TirExpr) -> TirExpr {
         TypeTable::U64,
         span,
     )
+}
+
+/// Whether `type_id` is an affine resource, or a reference to one.
+pub fn is_affine_resource(tt: &TypeTable, type_id: TypeId) -> bool {
+    tt.is_resource_object(peel_newtypes(tt, tt.peel_refs(type_id)))
+}
+
+/// The `i32` handle `value` holds where it is an affine resource, or a
+/// reference to one; `value` itself otherwise. The cast is what reads the
+/// handle out of the resource's object (WEP: Affine Types).
+pub fn affine_handle(value: TirExpr, tt: &TypeTable) -> TirExpr {
+    if is_affine_resource(tt, value.type_id) {
+        cast(value, TypeTable::I32)
+    } else {
+        value
+    }
 }
 
 /// The `f64` an unrestricted handle is outside the guest: its bits, reinterpreted.

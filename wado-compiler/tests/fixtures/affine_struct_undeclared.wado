@@ -1,0 +1,18 @@
+// A named struct holding an affine value is declared `affine`, so the
+// declaration says what a reader of every use would otherwise have to find.
+
+pub resource Counter {
+    fn bump(&self);
+}
+
+struct Holder {
+    n: i32,
+    c: Counter,
+}
+
+export fn run() {
+    assert true;
+}
+
+__DATA__
+{"compile_error": ":8:8: analysis error: `Holder` holds an affine value in `c`, so it must be declared `affine struct`"}

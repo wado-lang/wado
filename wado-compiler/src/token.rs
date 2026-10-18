@@ -116,6 +116,7 @@ pub enum TokenKind {
     Effect,
     Interface,
     Reactive,
+    Affine,
     Struct,
     Enum,
     Variant,
@@ -301,6 +302,7 @@ impl fmt::Display for TokenKind {
             | Self::Effect
             | Self::Interface
             | Self::Reactive
+            | Self::Affine
             | Self::Struct
             | Self::Enum
             | Self::Variant

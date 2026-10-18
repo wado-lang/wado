@@ -98,6 +98,10 @@ pub struct WirContext<'a> {
     pub type_map: IndexMap<String, WirTypeId>,
     /// Map from `StructName` to `WirTypeId` (for struct lookup by qualified name).
     pub struct_type_map: IndexMap<StructName, WirTypeId>,
+    /// `$Resource`, the object an affine resource is: its handle, mutable in
+    /// place, so a reference to the resource sees a store through another
+    /// (WEP: Affine Types). Set while types register, before any is looked up.
+    pub handle_box: Option<WirTypeId>,
     /// Map from element `TypeId` to `WirTypeId` for raw GC array types.
     pub array_type_map: IndexMap<TypeId, WirTypeId>,
     /// Map from element type name to `WirTypeId` (dedup for arrays).
@@ -332,6 +336,7 @@ impl<'a> WirContext<'a> {
             types: Vec::new(),
             type_map: IndexMap::default(),
             struct_type_map: IndexMap::default(),
+            handle_box: None,
             array_type_map: IndexMap::default(),
             array_type_by_name: IndexMap::default(),
             tuple_type_map: IndexMap::default(),
@@ -675,6 +680,12 @@ impl<'a> WirContext<'a> {
         WirType::non_null_ref(type_id.clone())
     }
 
+    pub fn handle_box(&self) -> &WirTypeId {
+        self.handle_box
+            .as_ref()
+            .expect("`$Resource` registers before any type is looked up")
+    }
+
     /// Find a registered tuple whose elements have the same WIR types as
     /// `elements`, ignoring `TypeId` identity. CM binding synthesis interns its
     /// own `TypeId`s for element types that already have a registered tuple.
@@ -903,10 +914,11 @@ impl<'a> WirContext<'a> {
                 self.lookup_wir_type(type_table, *base_type)?
             }
             ResolvedType::Resource { .. } | ResolvedType::GenericResource { .. } => {
-                let scalar = type_table
-                    .handle_scalar(type_id)
-                    .expect("a resource is a handle");
-                self.lookup_wir_type(type_table, scalar)?
+                if type_table.is_unrestricted_handle(type_id) {
+                    self.lookup_wir_type(type_table, TypeTable::U64)?
+                } else {
+                    Self::ref_to(self.handle_box())
+                }
             }
             // Flags are bitmasks stored as i32
             ResolvedType::Flags { .. } => WirType::I32,

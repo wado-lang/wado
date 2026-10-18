@@ -30,25 +30,6 @@ use {
     write_copy_is_final,
 } from "core:prelude/types.wado";
 
-/// Split a packed `future.new` result (`readable | writable << 32`) into the
-/// `[Future<T>, FutureWritable<T>]` pair. The parameterized canonical call is
-/// emitted by CM-binding synthesis; this is the Wado-level handle split.
-#[compiler_item("cm_future_pair")]
-internal fn cm_future_pair<T>(packed: i64) -> [Future<T>, FutureWritable<T>] {
-    let rx = packed as i32;
-    let tx = (packed >> 32) as i32;
-    return [rx as Future<T>, tx as FutureWritable<T>];
-}
-
-/// Split a packed `stream.new` result into the `[Stream<T>, StreamWritable<T>]`
-/// pair. See [`cm_future_pair`].
-#[compiler_item("cm_stream_pair")]
-internal fn cm_stream_pair<T>(packed: i64) -> [Stream<T>, StreamWritable<T>] {
-    let rx = packed as i32;
-    let tx = (packed >> 32) as i32;
-    return [rx as Stream<T>, tx as StreamWritable<T>];
-}
-
 /// Copies bytes from linear memory to a new GC array.
 internal fn memory_to_gc_array(ptr: i32, len: i32) -> Array<u8> {
     let mut arr: Array<u8> = builtin::array_new(len);
@@ -90,12 +71,7 @@ internal fn write_string_to_stream(tx: StreamWritable<u8>, message: String, add_
     tx.drop();
 }
 
-/// Drop a write_via_stream Future handle to signal completion.
-/// Uses CLI ErrorCode type for the Future parameterization.
 use { ErrorCode as CliErrorCode } from "wasi:cli/types.wado";
-internal fn drop_cli_write_future(future: Future<Result<(), CliErrorCode>>) {
-    future.drop();
-}
 
 /// Logs a message with newline to stdout (ambient, no effect required).
 /// Uses builtin::call_indirect_* to bypass the effect system — this is
@@ -104,9 +80,9 @@ internal fn drop_cli_write_future(future: Future<Result<(), CliErrorCode>>) {
 pub fn log_stdout(message: String) {
     let [rx, tx] = Stream::<u8>::new();
 
-    let future_handle = builtin::call_indirect_stdout_write_via_stream(rx as i32);
+    let written = builtin::call_indirect_stdout_write_via_stream::<Result<(), CliErrorCode>>(rx);
     write_string_to_stream(tx, message, true);
-    drop_cli_write_future(future_handle as Future<Result<(), CliErrorCode>>);
+    written.drop();
 }
 
 /// Logs a message with newline to stderr (ambient, no effect required).
@@ -116,9 +92,9 @@ pub fn log_stdout(message: String) {
 pub fn log_stderr(message: String) {
     let [rx, tx] = Stream::<u8>::new();
 
-    let future_handle = builtin::call_indirect_stderr_write_via_stream(rx as i32);
+    let written = builtin::call_indirect_stderr_write_via_stream::<Result<(), CliErrorCode>>(rx);
     write_string_to_stream(tx, message, true);
-    drop_cli_write_future(future_handle as Future<Result<(), CliErrorCode>>);
+    written.drop();
 }
 
 /// Logs a message to stderr and traps.

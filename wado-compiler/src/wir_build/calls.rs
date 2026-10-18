@@ -863,6 +863,15 @@ impl FunctionTranslator<'_, '_> {
 
             "i32_as_char" => Some(self.translate_operand(args[0].expr)),
 
+            "resource_handle" => {
+                assert!(
+                    self.is_handle_box(self.operand_type_id(args[0].expr)),
+                    "`AffineResource` bounds `resource_handle` to an affine resource"
+                );
+                let resource = self.translate_operand(args[0].expr);
+                Some(self.handle_of(resource))
+            }
+
             "call_indirect_stdout_write_via_stream" | "call_indirect_stderr_write_via_stream" => {
                 // The ambient panic / assert-diagnostic path never forces its
                 // own import. DCE registers `Std{out,err}::write_via_stream` in
@@ -879,14 +888,12 @@ impl FunctionTranslator<'_, '_> {
                 let key = MangledName::wasi_import(wasi_func_name);
                 match self.ctx.func_map.get(&key).cloned() {
                     Some(func_id) => {
-                        let call_args: Vec<WirInstr> = args
-                            .iter()
-                            .map(|a| self.translate_operand(a.expr))
-                            .collect();
-                        Some(WirInstr::Call {
+                        let rx = self.translate_operand(args[0].expr);
+                        let call = WirInstr::Call {
                             func_id,
-                            args: call_args,
-                        })
+                            args: vec![self.handle_of(rx)],
+                        };
+                        Some(self.handle_box_of(call))
                     }
                     None => Some(WirInstr::Unreachable),
                 }

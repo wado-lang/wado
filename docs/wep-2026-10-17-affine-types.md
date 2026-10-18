@@ -617,7 +617,9 @@ What changes shape:
   only a lift reaches, and frees the buffer. A call a set already reported
   cannot be ended, today or after this WEP, and its drop traps: that is
   [a gap of the `AsyncCall` WEP](./wep-2026-04-22-subtask-generic.md#known-gaps).
-- `ResourceId`, with `ResourceId::of(&r)` over every affine resource.
+- `ResourceId`, with `ResourceId::of<R: AffineResource>(&r)`. `AffineResource`
+  is a sealed marker the compiler states for every affine resource, so the
+  bound is what makes anything else a type error.
 - `wado-from-idl` declares `affine` every record and variant it generates that
   holds an affine resource.
 
@@ -698,6 +700,12 @@ In [WEP: Resource Ownership](./wep-2026-05-21-resource-ownership.md):
   not reach" closes but for the panic. The rest of that section stands, and so
   do its gaps on value-copy elision.
 
+In [WEP: A Function Without `with` Performs No Effects](./wep-2026-09-30-effect-free-functions.md),
+"Waiting where the call starts" widens. An `AsyncCall` holds its `Subtask`,
+and a resource grants its effects to whatever holds it, so a function handed a
+call through its signature waits on it without declaring them, as one starting
+it does.
+
 In [WEP: Reference Representation](./wep-2026-06-13-reference-representation.md),
 D6 is settled: a resource is boxed, and the box is its object.
 
@@ -715,7 +723,7 @@ declares the destructor's effects is withdrawn: a drop's effects are benign.
 
 ## Roadmap
 
-- [ ] Fix the `*r = value` panic through `&mut R` with a fixture. A compiler
+- [x] Fix the `*r = value` panic through `&mut R` with a fixture. A compiler
   panic is P0 and does not wait for the rest.
 - [ ] `affine` as a keyword on `struct` and `variant`. A named declaration
   holding an affine value or implementing `Drop` without it is an error naming
@@ -731,7 +739,7 @@ declares the destructor's effects is withdrawn: a drop's effects are benign.
   affine type implementing an unmarked trait is an error at the impl. The
   prelude traits an affine type implements are marked, and `Inspect`'s
   derivation walks an affine struct by reference.
-- [ ] No cast between an affine resource and an integer: synthesis splits and
+- [x] No cast between an affine resource and an integer: synthesis splits and
   lifts the `stream-new` / `future-new` pair, the raw-handle builtins take and
   return resources, `ResourceId::of`, and the test doubles in `core:kiln`,
   `core:cli` and `package-gale` return real handles, made outside a `..trap`

@@ -127,7 +127,7 @@ fn lower_to_flat_inner(
             let (scalar, flat_value) = if ctx.type_table.borrow().is_unrestricted_handle(type_id) {
                 (TypeTable::F64, handle_to_f64(value))
             } else {
-                (TypeTable::I32, value)
+                (TypeTable::I32, cast(value, TypeTable::I32))
             };
             let local = alloc_local(next_local, locals, scalar);
             stmts.push(let_stmt("$flat", local, scalar, flat_value));
@@ -863,7 +863,7 @@ pub(super) fn synthesize_lift_from_flat_params(
                     {
                         return (handle_from_f64(handle.0, target_type_id), 1);
                     }
-                    handle
+                    (cast(handle.0, target_type_id), handle.1)
                 }
                 other @ (ResolvedType::Never
                 | ResolvedType::Newtype { .. }
@@ -994,7 +994,13 @@ pub(super) fn synthesize_lift_from_flat_params(
                 )
             }
             // Stream<T>, Future<T>, Own<T>, Borrow<T> — i32 handles
-            _ => (local_ref(flat_param_locals[0], "$p", TypeTable::I32), 1),
+            _ => (
+                cast(
+                    local_ref(flat_param_locals[0], "$p", TypeTable::I32),
+                    target_type_id,
+                ),
+                1,
+            ),
         },
         Type::Tuple(elems) if elems.is_empty() => unreachable!("{EMPTY_TUPLE_AT_BOUNDARY}"),
         Type::Tuple(elems) => {

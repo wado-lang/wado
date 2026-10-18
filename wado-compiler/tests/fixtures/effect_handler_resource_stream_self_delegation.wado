@@ -23,9 +23,10 @@ struct BaseStream {
 }
 
 impl Stream<u8> for BaseStream {
+    // A real pair, which the outer dispatch chain makes, since an integer
+    // converts to no resource.
     fn new(&mut self) -> [Stream<u8>, StreamWritable<u8>] {
-        let id: i32 = 0;
-        resume [id as Stream<u8>, id as StreamWritable<u8>]
+        resume Stream::<u8>::new()
     }
     fn read(&mut self, this: &Stream<u8>, max: i32) -> StreamChunk<u8> {
         let _ = this;

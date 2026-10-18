@@ -146,6 +146,18 @@ impl TypeSystem {
         holds_resource(self, type_id)
     }
 
+    /// The index of the first field or case of the declaration `type_id` whose
+    /// type is affine in every instantiation: one a type parameter reaches
+    /// holds nothing here.
+    pub(crate) fn first_affine_member(&self, type_id: TypeId) -> Option<usize> {
+        let Held::Members { members, .. } = self.held(type_id) else {
+            return None;
+        };
+        members
+            .into_iter()
+            .position(|member| holds_resource(self, member))
+    }
+
     /// Whether a value of `type_id` reaches a `&mut`, through which a call
     /// handed it may write: one it is or holds at any depth, or one behind a
     /// function or resource, whose captures and state no type shows.
@@ -813,6 +825,11 @@ impl HeldTypes for TypeSystem {
                 }
             }
             ResolvedType::Ref(_) | ResolvedType::MutRef(_) => Held::Nothing,
+            ResolvedType::BuiltinArray(element) => Held::Members {
+                decl: None,
+                args: Vec::new(),
+                members: vec![element],
+            },
             _ => {
                 if let Some(elements) = self.type_table.borrow().as_tuple(base) {
                     return Held::Members {

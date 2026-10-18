@@ -1617,6 +1617,40 @@ impl FunctionTranslator<'_, '_> {
         }
     }
 
+    /// Whether a value of `type_id` is an affine resource's `$Resource` object,
+    /// which the Component Model sees only as the handle inside it.
+    pub(super) fn is_handle_box(&self, type_id: TypeId) -> bool {
+        matches!(
+            self.wir_type(type_id),
+            WirType::Ref { type_id, .. } if type_id == *self.ctx.handle_box()
+        )
+    }
+
+    /// The type a core function the Component Model provides takes for a
+    /// value of `type_id`: a resource as its handle.
+    fn core_wir_type(&self, type_id: TypeId) -> WirType {
+        if self.is_handle_box(type_id) {
+            WirType::I32
+        } else {
+            self.wir_type(type_id)
+        }
+    }
+
+    /// The handle an affine resource's box holds.
+    pub(super) fn handle_of(&self, resource: WirInstr) -> WirInstr {
+        WirInstr::StructGet {
+            type_id: self.ctx.handle_box().clone(),
+            field_name: "value".to_string(),
+            expr: Box::new(resource),
+            result_ty: WirType::I32,
+        }
+    }
+
+    /// A new box holding `handle`, the object an affine resource is.
+    pub(super) fn handle_box_of(&self, handle: WirInstr) -> WirInstr {
+        self.struct_new(self.ctx.handle_box().clone(), vec![handle])
+    }
+
     /// Translate `*r = v` for an in-place aggregate referent by copying `v` into
     /// the shared handle field by field, through two temps so each side is
     /// evaluated once. Only the expression-position shape (`let u = (*r = v);`)
@@ -3034,8 +3068,19 @@ impl FunctionTranslator<'_, '_> {
             ExprKind::EnumConstruct { case_index, .. } => WirInstr::I32Const(*case_index as i32),
 
             ExprKind::CmRawCall { target, args, .. } => {
-                let translated_args: Vec<WirInstr> =
-                    args.iter().map(|a| self.translate_operand(*a)).collect();
+                // The core function takes and returns a resource as its handle.
+                let translated_args: Vec<WirInstr> = args
+                    .iter()
+                    .map(|a| {
+                        let arg = self.translate_operand(*a);
+                        if self.is_handle_box(self.operand_type_id(*a)) {
+                            self.handle_of(arg)
+                        } else {
+                            arg
+                        }
+                    })
+                    .collect();
+                let returns_handle = self.is_handle_box(expr.type_id);
                 let import_name = target.import_name();
                 // The core import is the canonical's to type, not the call
                 // site's: a cancel answers with the `u32` its copy ended on
@@ -3061,17 +3106,15 @@ impl FunctionTranslator<'_, '_> {
                     };
                     let params: Vec<WirType> = args
                         .iter()
-                        .map(|a| {
-                            self.ctx
-                                .type_id_to_wir_type(self.type_table, self.operand_type_id(*a))
-                        })
+                        .map(|a| self.core_wir_type(self.operand_type_id(*a)))
                         .collect();
-                    let mut results =
-                        if expr.type_id == TypeTable::UNIT || expr.type_id == TypeTable::NEVER {
-                            vec![]
-                        } else {
-                            vec![self.ctx.type_id_to_wir_type(self.type_table, expr.type_id)]
-                        };
+                    let mut results = if expr.type_id == TypeTable::UNIT
+                        || expr.type_id == TypeTable::NEVER
+                    {
+                        vec![]
+                    } else {
+                        vec![self.core_wir_type(expr.type_id)]
+                    };
                     if discards_result {
                         assert!(results.is_empty(), "a UNIT call declares no result");
                         results.push(WirType::I32);
@@ -3085,6 +3128,8 @@ impl FunctionTranslator<'_, '_> {
                 };
                 if discards_result {
                     WirInstr::Drop(Box::new(call))
+                } else if returns_handle {
+                    self.handle_box_of(call)
                 } else {
                     call
                 }

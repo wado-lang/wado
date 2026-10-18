@@ -110,6 +110,35 @@ impl WirMutVisitor for ElideWriteOnly<'_> {
             self.changed = true;
             return;
         }
+        // A dropped sequence drops only its value: `drop({ s; v })` is
+        // `s; drop(v)`, which exposes `v` to the rules above and below.
+        if let WirInstr::Drop(value) = instr
+            && let WirInstr::Seq(stmts) = value.as_mut()
+            && let Some(last) = stmts.pop()
+        {
+            let mut stmts = std::mem::take(stmts);
+            stmts.push(WirInstr::Drop(Box::new(last)));
+            *instr = WirInstr::Seq(stmts);
+            self.changed = true;
+            self.visit_instr(instr);
+            return;
+        }
+        // A dropped allocation or conversion keeps only what its operands do:
+        // `drop(struct.new { call(), x })` is `drop(call()); drop(x)`. A
+        // discarded `stream.new` / `future.new` pair is this shape.
+        if let WirInstr::Drop(value) = instr
+            && let Some(operands) = discarded_operands(value)
+        {
+            *instr = WirInstr::Seq(
+                operands
+                    .into_iter()
+                    .map(|operand| WirInstr::Drop(Box::new(operand)))
+                    .collect(),
+            );
+            self.changed = true;
+            self.visit_instr(instr);
+            return;
+        }
         // Full recursion: statement lists also hide in value positions (an
         // if-expression arm inside a `LocalSet` value, a `Seq` inside a call
         // argument), and a write-only `LocalSet` there is just as dead.
@@ -117,11 +146,26 @@ impl WirMutVisitor for ElideWriteOnly<'_> {
     }
 }
 
+/// The operands of `value`, in evaluation order, where `value` itself neither
+/// traps nor has an effect, so discarding it leaves only theirs.
+fn discarded_operands(value: &mut WirInstr) -> Option<Vec<WirInstr>> {
+    match value {
+        WirInstr::StructNew { fields, .. } => Some(std::mem::take(fields)),
+        WirInstr::I32WrapI64(operand)
+        | WirInstr::I64ExtendI32S(operand)
+        | WirInstr::I64ExtendI32U(operand) => {
+            Some(vec![std::mem::replace(operand.as_mut(), WirInstr::Nop)])
+        }
+        _ => None,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::wir::{WirLocals, WirType};
+    use crate::wir::{WirFuncId, WirLocals, WirType, WirTypeId};
     use std::assert_matches;
+    use std::rc::Rc;
 
     fn lget(name: &str) -> WirInstr {
         WirInstr::LocalGet {
@@ -169,6 +213,31 @@ mod tests {
         );
         // The sink itself is write-only and goes.
         assert_matches!(body[1], WirInstr::Nop);
+    }
+
+    /// A dropped allocation keeps only its operands' effects.
+    #[test]
+    fn dropped_struct_new_keeps_only_its_operands_effects() {
+        let call = WirInstr::Call {
+            func_id: WirFuncId::new(0, Rc::from("f")),
+            args: vec![],
+        };
+        let mut body = vec![WirInstr::Drop(Box::new(WirInstr::StructNew {
+            type_id: WirTypeId::new(0, Rc::from("pair")),
+            fields: vec![WirInstr::I32WrapI64(Box::new(call)), lget("x")],
+        }))];
+        assert!(elide_write_only_locals_in_body(
+            &mut body,
+            &Nullability::new(&WirLocals::default())
+        ));
+        let WirInstr::Seq(stmts) = &body[0] else {
+            panic!("expected the operands' drops, got {:?}", body[0]);
+        };
+        assert_matches!(
+            stmts.as_slice(),
+            [WirInstr::Seq(call), WirInstr::Nop]
+                if matches!(call.as_slice(), [WirInstr::Drop(c)] if matches!(**c, WirInstr::Call { .. }))
+        );
     }
 
     /// A tee of a local nothing else reads becomes the value it stores.

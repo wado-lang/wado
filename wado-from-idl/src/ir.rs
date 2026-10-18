@@ -129,6 +129,8 @@ pub struct WadoStruct {
     pub name: String,
     pub doc_comment: Option<String>,
     pub cm_attr: Option<String>,
+    /// Declared `affine`: it holds an `own` handle, a stream or a future.
+    pub is_affine: bool,
     pub fields: Vec<WadoField>,
 }
 
@@ -146,6 +148,8 @@ pub struct WadoVariant {
     pub name: String,
     pub doc_comment: Option<String>,
     pub cm_attr: Option<String>,
+    /// Declared `affine`: it holds an `own` handle, a stream or a future.
+    pub is_affine: bool,
     pub cases: Vec<WadoVariantCase>,
 }
 

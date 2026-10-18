@@ -1202,6 +1202,40 @@ variant Nested<T> {
 }
 ```
 
+## Affine Types
+
+An affine type is move-only: a value of it is used at most once. An affine
+resource is one, and so is every type that holds one at any depth.
+
+A named `struct` or `variant` that holds an affine value in a field or a case
+is declared `affine`. One that holds none may not be. Either mismatch is an
+error naming the declaration (`AFFINE_DECLARATION`). A field typed by a type
+parameter holds nothing for this rule, since the parameter is copyable unless
+an instantiation says otherwise. A tuple, an anonymous struct and a newtype have
+no declaration to mark, so each is affine when something it holds is.
+
+<!-- {"fixture":"affine_declarations.wado"} -->
+
+```wado
+affine struct Holder {
+    c: Counter,
+    n: i32,
+}
+
+affine variant Slot {
+    Empty,
+    Held(Holder),
+}
+
+affine struct Bag {
+    items: List<Counter>,
+}
+
+type Wrapped = Holder;
+```
+
+Rationale: [WEP: Affine Types](./wep-2026-10-17-affine-types.md).
+
 ## Generic Type Inference
 
 Wado infers type arguments for struct literals, variant constructors, and generic function and method calls. It uses two complementary mechanisms.

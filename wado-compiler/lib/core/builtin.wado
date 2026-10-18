@@ -20,6 +20,7 @@
 use { Formatter } from "core:prelude/format.wado";
 use { i128 } from "core:prelude/int128.wado";
 use { ByteList } from "core:prelude/bytes.wado";
+use { Future, Stream } from "core:prelude/types.wado";
 
 /// Completes the current task with a `result<>`, flattened to its one
 /// discriminant: 0 for Ok. Any other result delivers through its own canon.
@@ -688,23 +689,27 @@ pub fn context_set(slot: i32, value: i32);
 #[side_effect(opaque)]
 pub fn task_cancel();
 
+/// The handle `r` holds, read without moving it. `ResourceId::of` bounds `R`
+/// to an affine resource.
+#[storage(none)]
+#[side_effect(read)]
+pub fn resource_handle<R>(r: &R) -> i32;
+
 /// Calls stdout's write_via_stream indirectly (ambient, no effect required).
-/// Returns the subtask handle for the async operation.
 /// Internal only: used by core:rt for ambient logging (panic, assert).
 /// Public API should use Stdout::write_via_stream() through the effect system.
 /// It calls the Component Model import, so it may suspend as one does.
 #[storage(none)]
 #[side_effect(opaque, suspend)]
-pub fn call_indirect_stdout_write_via_stream(rx: i32) -> i32;
+pub fn call_indirect_stdout_write_via_stream<T>(rx: Stream<u8>) -> Future<T>;
 
 /// Calls stderr's write_via_stream indirectly (ambient, no effect required).
-/// Returns the subtask handle for the async operation.
 /// Internal only: used by core:rt for ambient logging (panic, assert).
 /// Public API should use Stderr::write_via_stream() through the effect system.
 /// It calls the Component Model import, so it may suspend as one does.
 #[storage(none)]
 #[side_effect(opaque, suspend)]
-pub fn call_indirect_stderr_write_via_stream(rx: i32) -> i32;
+pub fn call_indirect_stderr_write_via_stream<T>(rx: Stream<u8>) -> Future<T>;
 /// Absolute value of f32
 /// Maps to Wasm f32.abs instruction
 #[storage(none)]

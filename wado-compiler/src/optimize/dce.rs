@@ -439,12 +439,21 @@ fn resolve_imports(
         }
     }
 
-    let reaches_intrinsic = |prefix: &str| {
-        reachable.iter().any(|func_id| {
-            matches!(func_id, FunctionId::Free(f)
-                if f.module_source.is_core_builtin() && f.name.starts_with(prefix))
+    // Asked of the declaration, so a monomorphized builtin answers by the name
+    // it was declared under.
+    let reached_intrinsics: Vec<String> = project
+        .functions
+        .iter()
+        .map(|func| func.borrow())
+        .filter(|func| reachable.contains(&function_id_for(func)))
+        .filter_map(|func| {
+            FunctionRef::from_resolved(&func, func.module_source.clone())
+                .intrinsic()
+                .map(str::to_string)
         })
-    };
+        .collect();
+    let reaches_intrinsic =
+        |prefix: &str| reached_intrinsics.iter().any(|name| name.starts_with(prefix));
 
     // A sink-less world (`--lib`, kiln) leaves the ambient builtin unimported,
     // and `calls.rs` lowers it to `unreachable` off the `func_map` this fills.

@@ -186,6 +186,8 @@ pub enum CompilerItem {
     Future,
     /// `FutureWritable<T>` — the write end of a CM future.
     FutureWritable,
+    /// `Subtask` — the subtask an async import call runs as.
+    Subtask,
     /// `Stream<T>` — the CM stream handle a `stream` type lowers to.
     Stream,
     /// `StreamWritable<T>` — the write end of a CM stream.
@@ -253,6 +255,9 @@ pub enum CompilerItem {
     /// minus the replace-on-assign ones: `variant` / `fn`); its `Output: RefMut`
     /// bound gates `IndexRefMut`.
     RefMut,
+    /// `AffineResource` — sealed marker every affine resource holds, so
+    /// `ResourceId::of` takes one and nothing else.
+    AffineResource,
     /// The indexing and literal-builder traits `a[i]`, `a[i] = v`, `&mut a[i]`
     /// and a literal dispatch to.
     IndexValue,
@@ -658,10 +663,6 @@ pub enum CompilerItem {
     HandleClass,
     /// `core:rt::inspect_handle`.
     InspectHandle,
-    /// `core:rt::cm_future_pair`.
-    CmFuturePair,
-    /// `core:rt::cm_stream_pair`.
-    CmStreamPair,
     /// `core:rt::memory_to_gc_string`.
     MemoryToGcString,
     /// `core:rt::cm_lower_string`.
@@ -771,6 +772,7 @@ impl CompilerItem {
         Self::AsyncCall,
         Self::Future,
         Self::FutureWritable,
+        Self::Subtask,
         Self::Stream,
         Self::StreamWritable,
         Self::ByteList,
@@ -782,6 +784,7 @@ impl CompilerItem {
         Self::Member,
         Self::Ref,
         Self::RefMut,
+        Self::AffineResource,
         Self::IndexValue,
         Self::IndexRef,
         Self::IndexRefMut,
@@ -941,8 +944,6 @@ impl CompilerItem {
         Self::CoverageProbe,
         Self::HandleClass,
         Self::InspectHandle,
-        Self::CmFuturePair,
-        Self::CmStreamPair,
         Self::MemoryToGcString,
         Self::CmLowerString,
         Self::CmLowerArrayU8,
@@ -1016,6 +1017,7 @@ impl CompilerItem {
             Self::AsyncCall => "async_call",
             Self::Future => "future",
             Self::FutureWritable => "future_writable",
+            Self::Subtask => "subtask",
             Self::Stream => "stream",
             Self::StreamWritable => "stream_writable",
             Self::ByteList => "byte_list",
@@ -1027,6 +1029,7 @@ impl CompilerItem {
             Self::Member => "member",
             Self::Ref => "ref",
             Self::RefMut => "ref_mut",
+            Self::AffineResource => "affine_resource",
             Self::IndexValue => "index_value",
             Self::IndexRef => "index_ref",
             Self::IndexRefMut => "index_ref_mut",
@@ -1129,8 +1132,6 @@ impl CompilerItem {
             Self::CoverageProbe => "coverage_probe",
             Self::HandleClass => "handle_class",
             Self::InspectHandle => "inspect_handle",
-            Self::CmFuturePair => "cm_future_pair",
-            Self::CmStreamPair => "cm_stream_pair",
             Self::MemoryToGcString => "memory_to_gc_string",
             Self::CmLowerString => "cm_lower_string",
             Self::CmLowerArrayU8 => "cm_lower_array_u8",
@@ -1243,8 +1244,6 @@ impl CompilerItem {
             | Self::CoverageProbe
             | Self::HandleClass
             | Self::InspectHandle
-            | Self::CmFuturePair
-            | Self::CmStreamPair
             | Self::MemoryToGcString
             | Self::CmLowerString
             | Self::CmLowerArrayU8
@@ -1318,6 +1317,7 @@ impl CompilerItem {
             | Self::AsyncCall
             | Self::Future
             | Self::FutureWritable
+            | Self::Subtask
             | Self::Stream
             | Self::StreamWritable
             | Self::ByteList
@@ -1329,6 +1329,7 @@ impl CompilerItem {
             | Self::Member
             | Self::Ref
             | Self::RefMut
+            | Self::AffineResource
             | Self::IndexValue
             | Self::IndexRef
             | Self::IndexRefMut
@@ -1526,8 +1527,6 @@ impl CompilerItem {
             | Self::CoverageProbe
             | Self::HandleClass
             | Self::InspectHandle
-            | Self::CmFuturePair
-            | Self::CmStreamPair
             | Self::MemoryToGcString
             | Self::CmLowerString
             | Self::CmLowerArrayU8
@@ -1572,9 +1571,11 @@ impl CompilerItem {
             | Self::ReflectTemplateHole
             | Self::Slice
             | Self::AsyncCall => CompilerItemKind::Struct,
-            Self::Future | Self::FutureWritable | Self::Stream | Self::StreamWritable => {
-                CompilerItemKind::Resource
-            }
+            Self::Future
+            | Self::FutureWritable
+            | Self::Stream
+            | Self::StreamWritable
+            | Self::Subtask => CompilerItemKind::Resource,
             Self::ByteList | Self::ByteSlice => CompilerItemKind::Newtype,
             Self::Option | Self::Result => CompilerItemKind::Variant,
             Self::Ordering | Self::Alignment | Self::CaseStyle | Self::CopyResult => {
@@ -1596,6 +1597,7 @@ impl CompilerItem {
             | Self::Member
             | Self::Ref
             | Self::RefMut
+            | Self::AffineResource
             | Self::IndexValue
             | Self::IndexRef
             | Self::IndexRefMut

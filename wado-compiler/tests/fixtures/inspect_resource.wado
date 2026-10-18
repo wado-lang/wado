@@ -1,17 +1,19 @@
-// Plain resources inspect as `Name#0x<hex>` (WEP: Inspect > Resource).
-internal resource Widget {
-    fn poke(&self);
-}
-
+// Plain resources inspect as `Name#0x<hex>` (WEP: Inspect > Resource). The
+// host picks the handle, so only the shape is pinned.
 test "resource inspect renders the handle in hex" {
-    assert `${(255 as Widget):?}` == "Widget#0xff";
-    assert `${(16 as Widget):?}` == "Widget#0x10";
-    assert `${(0 as Widget):?}` == "Widget#0x0";
+    let [rx, tx] = Stream::<u8>::new();
+    assert `${rx:?}`.starts_with("Stream<u8>#0x");
+    tx.drop();
+    rx.drop();
 }
 
 test "resource flows through Result::unwrap_err inspect" {
-    let r: Result<i32, Widget> = Result::<i32, Widget>::Err(0xab as Widget);
-    assert `${r.unwrap_err():?}` == "Widget#0xab";
+    let [rx, tx] = Stream::<u8>::new();
+    let shown = `${tx:?}`;
+    assert shown.starts_with("StreamWritable<u8>#0x");
+    let r: Result<i32, StreamWritable<u8>> = Result::<i32, StreamWritable<u8>>::Err(tx);
+    assert `${r.unwrap_err():?}` == shown;
+    rx.drop();
 }
 
 __DATA__

@@ -163,7 +163,9 @@ call and returns an `AsyncCall<T>` at once. The caller decides when to wait:
 A function or closure that starts an async call also holds the effects these
 methods declare, so it may later wait on that call without declaring them. A
 closure is a body of its own: a call it starts grants nothing to the function
-around it.
+around it. A call owns its `Subtask`, so a function handed one through its
+signature holds them too
+([Resources as Effects](./spec-effects.md#resources-as-effects)).
 
 <!-- {"fixture":"spec_components_async_import.wado"} -->
 
@@ -184,20 +186,20 @@ test {
 ```
 
 An `AsyncCall<T>` is used once: `wait` or `cancel` ends the call, and a later
-`wait`, `cancel` or `join` on it traps. A copy names the same call, so it ends
-with the original. `join` only registers the call with the set, so the caller
-still owes the `wait` or `cancel` that ends it. A call never waited on nor
-cancelled leaks its subtask handle and result buffer.
+`wait`, `cancel` or `join` on it traps. A call owns its `Subtask`, so
+assigning one moves it ([Affine Types](./wep-2026-10-17-affine-types.md)).
+`join` only registers the call with the set, so the caller still owes the
+`wait` or `cancel` that ends it. A call never waited on nor cancelled leaks its
+subtask handle and result buffer.
 
-<!-- {"fixture":"async_call_copy_shares_end.wado"} -->
+<!-- {"fixture":"async_call_moves.wado"} -->
 
 ```wado
 with Fetch => &Canned {} do {
     let call = Fetch::get("/abc");
-    let copy = call;
-    assert call.wait() == 4;
-    println("waited");
-    copy.cancel();             // traps: the call ended at `wait`
+    let moved = call;
+    assert call.wait() == 4;   // error: `call` moved to `moved`
+    println(`${moved.wait()}`);
 }
 ```
 
@@ -324,7 +326,7 @@ Returning a resource reached through a `&` or `&mut` parameter, `&self` included
 <!-- {"fixture":"spec_components_move_out_of_reference.wado"} -->
 
 ```wado
-struct Holder { f: Fields }
+affine struct Holder { f: Fields }
 
 impl Holder {
     fn peek(&self) -> Fields {

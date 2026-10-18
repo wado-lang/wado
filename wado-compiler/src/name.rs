@@ -505,6 +505,10 @@ pub fn cm_name_key(cm_name: &str) -> String {
 /// convention — there is no Wado-side declaration to anchor it to.
 pub const CLOSURE_STRUCT_PREFIX: &str = "$Closure_";
 
+/// The WIR struct an affine resource is: the object holding its handle. Not a
+/// `Box<i32>`, which the optimizer scalarizes as a value with no identity.
+pub const RESOURCE_OBJECT_STRUCT: &str = "$Resource";
+
 /// The name closure `functor_id`'s functor struct is interned under.
 #[must_use]
 pub fn closure_functor_struct_name(functor_id: u32) -> String {

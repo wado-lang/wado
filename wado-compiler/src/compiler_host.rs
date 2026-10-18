@@ -106,6 +106,8 @@ pub enum Code {
     TraitNotImported,
     /// A trait or `impl` declaration that cannot stand as written
     TraitDeclInvalid,
+    /// A declaration whose `affine` mark disagrees with what it holds
+    AffineDeclaration,
     /// A receiver whose mode or presence does not match the declaration
     ReceiverMismatch,
     /// A struct literal whose fields do not match the declaration
@@ -308,6 +310,7 @@ impl std::fmt::Display for Code {
             Code::AmbiguousCandidate => "AMBIGUOUS_CANDIDATE",
             Code::TraitNotImported => "TRAIT_NOT_IMPORTED",
             Code::TraitDeclInvalid => "TRAIT_DECL_INVALID",
+            Code::AffineDeclaration => "AFFINE_DECLARATION",
             Code::ReceiverMismatch => "RECEIVER_MISMATCH",
             Code::StructFieldMismatch => "STRUCT_FIELD_MISMATCH",
             Code::MissingReturn => "MISSING_RETURN",

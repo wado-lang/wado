@@ -17,6 +17,7 @@ use crate::ir::{
 };
 use crate::naming;
 use crate::naming::{to_snake_case, to_upper_camel_case, to_wado_identifier};
+use wado_compiler::wit_consume::wit_holds_affine;
 
 pub struct Transformer<'a> {
     resolve: &'a Resolve,
@@ -528,6 +529,10 @@ impl<'a> Transformer<'a> {
             name,
             doc_comment,
             cm_attr: Some(cm_attr),
+            is_affine: r
+                .fields
+                .iter()
+                .any(|field| wit_holds_affine(self.resolve, field.ty)),
             fields,
         })
     }
@@ -555,6 +560,11 @@ impl<'a> Transformer<'a> {
             name,
             doc_comment,
             cm_attr: Some(cm_attr),
+            is_affine: v
+                .cases
+                .iter()
+                .filter_map(|case| case.ty)
+                .any(|ty| wit_holds_affine(self.resolve, ty)),
             cases,
         })
     }

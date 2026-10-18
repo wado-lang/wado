@@ -8,6 +8,7 @@ use { String } from "core:prelude/string.wado";
 use { List } from "core:prelude/list.wado";
 use { Slice } from "core:prelude/slice.wado";
 use { ByteList } from "core:prelude/bytes.wado";
+use { AffineResource } from "core:prelude/traits.wado";
 
 
 /// Tuple type family declaration — establishes `core:prelude` as the owner of all tuple types.
@@ -171,6 +172,21 @@ impl<T, E> Result<T, E> {
 impl<T> Default for Option<T> {
     pub fn default() -> Option<T> {
         return null;
+    }
+}
+
+/// The identity of a live affine resource, which owns nothing. A dropped
+/// resource's identity may come back for a later one, since the host reuses a
+/// freed handle index. Nothing converts it back into a resource.
+pub struct ResourceId {
+    handle: i32,
+}
+
+impl ResourceId {
+    /// The identity of `r`. A static function rather than a method, so it
+    /// takes no name from any resource.
+    pub fn of<R: AffineResource>(r: &R) -> ResourceId {
+        return ResourceId { handle: builtin::resource_handle(r) };
     }
 }
 
@@ -443,11 +459,11 @@ pub resource WaitableSet {
 /// can succeed.
 ///
 /// Correct lifecycle:
-///   let subtask = handle as Subtask;
 ///   subtask.join(&ws);
 ///   ws.wait();
 ///   subtask.drop();  // removes from ws
 ///   ws.drop();       // safe — no children
+#[compiler_item("subtask")]
 pub resource Subtask {
     /// Drop a completed subtask. Automatically unjoins from its WaitableSet.
     /// Traps if the subtask has not yet resolved.
@@ -471,8 +487,8 @@ pub resource Subtask {
 /// `AsyncCall<T>` pairs the raw CM subtask handle with the linear-memory
 /// buffer into which the host writes the async result. `wait` blocks until
 /// the call returns and takes the lifted result; `cancel` aborts the
-/// in-flight call. Either one ends the call, for every copy of the value; a
-/// call that neither ends leaks its handle and buffer.
+/// in-flight call. Either one ends the call; a call that neither ends leaks
+/// its handle and buffer.
 ///
 /// The subtask begins running the moment the adapter returns, so writes to
 /// stream parameters (e.g. a request body) made after the adapter call and
@@ -488,12 +504,12 @@ pub resource Subtask {
 /// let resp = task.wait();             // block for response
 /// ```
 #[compiler_item("async_call")]
-pub struct AsyncCall<T> {
+pub affine struct AsyncCall<T> {
     // CM-ABI plumbing populated by the synthesised `__cm_binding__*`
     // adapter via a TIR-level `StructLiteral` (which bypasses field
     // visibility); kept non-`pub` so user code cannot peek or forge.
-    /// Raw CM subtask handle packed as `(subtask_handle << 4) | status`.
-    __cm_packed: i32,
+    /// The subtask the call runs as, or None where it completed synchronously.
+    __cm_subtask: Option<Subtask>,
     /// Pointer to the linear-memory buffer holding the async result.
     __cm_outptr: i32,
     /// Size of the result buffer (for realloc-based free).
@@ -509,11 +525,6 @@ pub struct AsyncCall<T> {
 }
 
 impl<T> AsyncCall<T> {
-    /// The subtask handle, or 0 where the call completed synchronously.
-    fn subtask_handle(&self) -> i32 {
-        return cm_packed_upper(self.__cm_packed);
-    }
-
     /// Traps where an earlier `wait` or `cancel` ended this call, since its
     /// handle is dropped and its result buffer freed.
     fn ensure_live(&self) {
@@ -533,9 +544,7 @@ impl<T> AsyncCall<T> {
     /// on it, or on a copy of it, traps.
     pub fn wait(&self) -> T with (Subtask, WaitableSet) {
         self.end();
-        let handle = self.subtask_handle();
-        if handle != 0 {
-            let raw = handle as Subtask;
+        if let Some(raw) = self.__cm_subtask {
             let ws = WaitableSet::new();
             raw.join(&ws);
             loop {
@@ -556,12 +565,10 @@ impl<T> AsyncCall<T> {
     /// partially-written result is discarded. It ends the call as `wait` does.
     pub fn cancel(&self) with Subtask {
         self.end();
-        let handle = self.subtask_handle();
-        if handle != 0 {
+        if let Some(raw) = self.__cm_subtask {
             // `subtask.cancel` traps on a waitable still in a set. Joining set 0
             // leaves whatever set it is in, whether or not the caller joined one.
-            builtin::waitable_join(handle, 0);
-            let raw = handle as Subtask;
+            builtin::waitable_join(builtin::resource_handle(&raw), 0);
             raw.cancel();
             raw.drop();
         }
@@ -575,8 +582,7 @@ impl<T> AsyncCall<T> {
     /// `wait`/`cancel` on this `AsyncCall<T>`.
     pub fn join(&self, set: &WaitableSet) -> Waitable with Subtask {
         self.ensure_live();
-        let raw = self.subtask_handle() as Subtask;
-        return raw.join(set);
+        return self.__cm_subtask.unwrap().join(set);
     }
 }
 

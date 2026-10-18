@@ -4622,6 +4622,8 @@ pub struct StructDecl {
     pub visibility: Visibility,
     /// `export`: the package's Component Model interface publishes it.
     pub is_export: bool,
+    /// `affine struct`: the type is move-only.
+    pub is_affine: bool,
     /// Generic type parameters: `struct Pair<T, U> { ... }`
     pub type_params: Vec<GenericParam>,
     pub fields: Vec<StructField>,
@@ -4733,6 +4735,8 @@ pub struct VariantDecl {
     pub visibility: Visibility,
     /// `export`: the package's Component Model interface publishes it.
     pub is_export: bool,
+    /// `affine variant`: the type is move-only.
+    pub is_affine: bool,
     /// Generic type parameters: `variant Option<T> { Some(T), None }`
     pub type_params: Vec<GenericParam>,
     pub cases: Vec<VariantCase>,

@@ -1,0 +1,18 @@
+// A named variant holding an affine value in a case is declared `affine`,
+// whatever container the case carries it in.
+
+pub resource Counter {
+    fn bump(&self);
+}
+
+variant Slot {
+    Empty,
+    Held(List<Counter>),
+}
+
+export fn run() {
+    assert true;
+}
+
+__DATA__
+{"compile_error": ":8:9: analysis error: `Slot` holds an affine value in `Held`, so it must be declared `affine variant`"}

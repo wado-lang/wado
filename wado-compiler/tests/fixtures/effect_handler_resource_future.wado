@@ -21,12 +21,11 @@ struct MockFuture {
 
 impl Future<i32> for MockFuture {
     fn new(&mut self) -> [Future<i32>, FutureWritable<i32>] {
-        // Hand out a fake handle pair. Both ends share the
-        // MockFuture's `stored` slot, so a write through the
-        // FutureWritable end is observed by a read on the Future
-        // end without a concurrent runtime task.
-        let id: i32 = 0;
-        resume [id as Future<i32>, id as FutureWritable<i32>]
+        // A real pair, which the outer dispatch chain makes, since an integer
+        // converts to no resource. Both ends share the MockFuture's `stored`
+        // slot, so a write through the FutureWritable end is observed by a
+        // read on the Future end without a concurrent runtime task.
+        resume Future::<i32>::new()
     }
     fn read(&mut self, this: &Future<i32>) -> Option<i32> {
         let _ = this;

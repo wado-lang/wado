@@ -325,6 +325,13 @@ impl CanonicalIntrinsic {
         )
     }
 
+    /// Whether the intrinsic creates both ends of a stream or future, packed in
+    /// one `i64` as `readable | writable << 32`.
+    #[must_use]
+    pub fn creates_pair(&self) -> bool {
+        matches!(self, Self::StreamNew(_) | Self::FutureNew(_))
+    }
+
     /// The stream intrinsic a payload-less base name denotes, at `payload`.
     /// The one place a `stream-*` name maps to its variant.
     pub fn stream_op(base: &str, payload: CmStreamPayload) -> Option<Self> {

@@ -602,6 +602,12 @@ impl FunctionTranslator<'_, '_> {
         }
 
         let inner_instr = self.translate_operand(inner);
+        if self.is_handle_box(from_type) && !self.is_handle_box(to_type) {
+            return self.handle_of(inner_instr);
+        }
+        if self.is_handle_box(to_type) && !self.is_handle_box(from_type) {
+            return self.handle_box_of(inner_instr);
+        }
         let from = match self.type_table.get(from_type) {
             // A discriminant and a bitmask are unsigned i32s, so they convert
             // as a `u32` does.

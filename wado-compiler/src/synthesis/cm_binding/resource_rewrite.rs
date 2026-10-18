@@ -15,11 +15,11 @@ use crate::hashmap::{IndexMap, IndexSet};
 use crate::module_source::{ModuleSource, ModuleSourceInterner};
 use crate::name::{
     LocalMethodName, cm_future_read_func_name, cm_future_write_func_name, cm_stream_read_func_name,
-    cm_stream_read_value_func_name, cm_stream_write_func_name, to_cm_name,
+    cm_stream_read_value_func_name, cm_stream_write_func_name, minted_name, to_cm_name,
 };
 use crate::package::Package;
 use crate::tir::{
-    CallArg, FunctionKind, FunctionRef, InlineHint, MonomorphInfo, ResolvedType, TirBinaryOp,
+    CallArg, FrameLocals, FunctionKind, FunctionRef, InlineHint, MonomorphInfo, ResolvedType, TirBinaryOp,
     TirBlock, TirExpr, TirExprKind, TirFunction, TirLocal, TirParam, TirStmt, TirStmtKind, TypeId,
     TypeTable,
 };
@@ -27,9 +27,9 @@ use crate::tir_visitor::{TirMutVisitor, TirRefVisitor};
 
 use crate::canonical::{CanonicalIntrinsic, CmDecl, CmFuturePayload, CmStreamPayload};
 use crate::synthesis::common::{
-    alloc_named_local, assign, binary, break_stmt, builtin_call, cast, cm_canonical_call,
-    entry_call, expr_stmt, i32_const, if_stmt, internal_call, let_mut_stmt, let_stmt, local_ref,
-    loop_stmt, option_none, option_some, return_stmt, synth_span,
+    alloc_named_local, assign, binary, block, break_stmt, builtin_call, cast, cm_canonical_call,
+    entry_call, expr_stmt, i32_const, i64_const, if_stmt, internal_call, let_mut_stmt, let_stmt,
+    local_ref, loop_stmt, option_none, option_some, return_stmt, synth_span,
 };
 
 use super::synthesize_lift;
@@ -1655,13 +1655,9 @@ fn cm_binding_function(cm_name: &str) -> Option<BindingTarget> {
         return Some(BindingTarget::Internal(binding));
     }
     let intrinsic = CanonicalIntrinsic::from_import_name(cm_name)?;
-    // A constructor hands back both ends packed in an i64, so the canonical
-    // alone is not the binding: `rewrite_cm_new` splits the pair.
-    let is_pair = matches!(
-        intrinsic,
-        CanonicalIntrinsic::StreamNew(_) | CanonicalIntrinsic::FutureNew(_)
-    );
-    (!is_pair).then_some(BindingTarget::Canonical(intrinsic))
+    // A constructor's call carries the payload its name needs, so
+    // `rewrite_cm_new` binds it.
+    (!intrinsic.creates_pair()).then_some(BindingTarget::Canonical(intrinsic))
 }
 
 /// Rewrite all #[cm("...")] resource method calls in the project.
@@ -1669,29 +1665,20 @@ fn rewrite_cm_resource_methods(sites: &BindingSites<'_>) {
     let type_table = sites.type_table.borrow();
     for func_rc in &sites.functions {
         let mut func = func_rc.borrow_mut();
+        let func = &mut *func;
         if let Some(body) = &mut func.body {
-            rewrite_cm_methods_in_block(
-                body,
-                &type_table,
-                &sites.entry_module_source,
-                sites.cm_interface_registry,
-            );
+            CmMethodRewriter {
+                tt: &type_table,
+                entry_source: &sites.entry_module_source,
+                cm_interface_registry: sites.cm_interface_registry,
+                frame: FrameLocals::Function {
+                    locals: &mut func.locals,
+                    local_count: &mut func.local_count,
+                },
+            }
+            .visit_block(body);
         }
     }
-}
-
-fn rewrite_cm_methods_in_block(
-    block: &mut TirBlock,
-    tt: &TypeTable,
-    entry_source: &ModuleSource,
-    cm_interface_registry: &CmInterfaceRegistry,
-) {
-    CmMethodRewriter {
-        tt,
-        entry_source,
-        cm_interface_registry,
-    }
-    .visit_block(block);
 }
 
 /// Rewrites `#[cm("...")]` resource method calls into the appropriate
@@ -1702,6 +1689,8 @@ struct CmMethodRewriter<'a> {
     tt: &'a TypeTable,
     entry_source: &'a ModuleSource,
     cm_interface_registry: &'a CmInterfaceRegistry,
+    /// The enclosing frame's locals, which a constructor's split grows.
+    frame: FrameLocals<'a>,
 }
 
 impl TirMutVisitor for CmMethodRewriter<'_> {
@@ -1721,6 +1710,25 @@ impl TirMutVisitor for CmMethodRewriter<'_> {
     }
 
     fn visit_expr(&mut self, expr: &mut TirExpr) {
+        if let TirExprKind::Closure {
+            params,
+            body,
+            body_locals,
+            ..
+        } = &mut expr.kind
+        {
+            CmMethodRewriter {
+                tt: self.tt,
+                entry_source: self.entry_source,
+                cm_interface_registry: self.cm_interface_registry,
+                frame: FrameLocals::Closure {
+                    params: params.as_slice(),
+                    body_locals,
+                },
+            }
+            .visit_expr(body);
+            return;
+        }
         // Recurse first so nested CM calls are rewritten before this node.
         self.walk_expr(expr);
 
@@ -1739,11 +1747,8 @@ impl TirMutVisitor for CmMethodRewriter<'_> {
             return;
         }
 
-        // future-new / stream-new: emit the payload-parameterized canonical as a
-        // `CmRawCall` (returns the packed i64) and pass it to the `core:rt` pair
-        // splitter, which casts the two halves to the readable/writable handles.
         if matches!(cm_name.as_str(), "future-new" | "stream-new") {
-            rewrite_cm_new(expr, self.tt, cm_name == "future-new");
+            self.rewrite_cm_new(expr, cm_name == "future-new");
             return;
         }
         if cm_name == "future-write"
@@ -1815,34 +1820,33 @@ impl TirMutVisitor for CmMethodRewriter<'_> {
 
 impl CmMethodRewriter<'_> {
     /// Rewrite a CM call — `recv.method(args)` or `Type::method(args)` — to a
-    /// builtin/internal call, casting the handle it operates on to the scalar the
+    /// builtin/internal call, casting each handle it passes to the scalar the
     /// canonical import takes.
     fn rewrite_call(&self, expr: &mut TirExpr, target: BindingTarget) {
         let TirExprKind::Call { args, .. } = &mut expr.kind else {
             return;
         };
-        let mut taken_args: Vec<TirExpr> = std::mem::take(args)
+        let taken_args: Vec<TirExpr> = std::mem::take(args)
             .into_vec()
             .into_iter()
-            .map(|a| a.expr)
+            .map(|a| match handle_scalar(self.tt, a.expr.type_id) {
+                Some(scalar) => cast(a.expr, scalar),
+                None => a.expr,
+            })
             .collect();
-        if let Some(handle) = taken_args.first_mut()
-            && let Some(scalar) = handle_scalar(self.tt, handle.type_id)
-        {
-            let taken = std::mem::replace(
-                handle,
-                TirExpr::new(TirExprKind::Unit, TypeTable::UNIT, synth_span()),
-            );
-            *handle = cast(taken, scalar);
-        }
 
         *expr = match target {
             BindingTarget::Canonical(intrinsic) => {
                 cm_canonical_call(intrinsic, taken_args, expr.type_id)
             }
-            BindingTarget::Internal(item) => {
-                internal_call(item.attr_name(), taken_args, expr.type_id)
-            }
+            // A `core:rt` binding returns a resource as its bare handle.
+            BindingTarget::Internal(item) => match handle_scalar(self.tt, expr.type_id) {
+                Some(scalar) => cast(
+                    internal_call(item.attr_name(), taken_args, scalar),
+                    expr.type_id,
+                ),
+                None => internal_call(item.attr_name(), taken_args, expr.type_id),
+            },
             BindingTarget::Entry(name) => {
                 entry_call(&name, taken_args, expr.type_id, self.entry_source.clone())
             }
@@ -1850,65 +1854,66 @@ impl CmMethodRewriter<'_> {
     }
 }
 
-/// The scalar a resource handle is, where `type_id` is one. `args[0]` is one
-/// exactly where the member declares a receiver: a constructor's first argument
-/// is a value (`ErrorContext::new(message)`), which casting would corrupt.
+/// The scalar a resource handle is, where `type_id` is one.
 fn handle_scalar(tt: &TypeTable, type_id: TypeId) -> Option<TypeId> {
     tt.handle_scalar(peel_newtypes(tt, tt.peel_refs(type_id)))
 }
 
-/// Rewrite a `Future::<T>::new()` / `Stream::<T>::new()` static call into
-/// `rt::cm_{future,stream}_pair::<T>(<canonical-new CmRawCall>)`. The canonical
-/// name is parameterized by the payload (computed here from the call's concrete
-/// type arg); the i64 handle split lives in `core:rt`.
-fn rewrite_cm_new(expr: &mut TirExpr, tt: &TypeTable, is_future: bool) {
-    let TirExprKind::Call { func, .. } = &expr.kind else {
-        return;
-    };
-    let Some(payload_tid) = func
-        .monomorph_info
-        .as_ref()
-        .and_then(|m| m.impl_type_args.first().copied())
-    else {
-        return;
-    };
-    let (canonical, item) = if is_future {
-        let payload = classify_future_payload(tt, payload_tid);
-        (
-            CanonicalIntrinsic::FutureNew(payload),
-            CompilerItem::CmFuturePair,
-        )
-    } else {
-        let payload = classify_stream_payload(tt, payload_tid);
-        (
-            CanonicalIntrinsic::StreamNew(payload),
-            CompilerItem::CmStreamPair,
-        )
-    };
-    let helper = item.attr_name();
-    let template = tt.compiler_items().require_template(item);
-    let result_type = expr.type_id;
-    let packed = cm_canonical_call(canonical, vec![], TypeTable::I64);
-    *expr = TirExpr::new(
-        TirExprKind::Call {
-            func: Box::new(FunctionRef {
-                module_source: ModuleSource::rt(),
-                name: helper.to_string(),
-                template: Some(template),
-                monomorph_info: Some(MonomorphInfo {
-                    generic_name: helper.to_string(),
-                    impl_type_args: vec![payload_tid],
-                    method_type_args: vec![],
-                    is_blanket: false,
-                }),
-                method_info: None,
-            }),
-            type_args: vec![payload_tid],
-            args: CallArgs::free(vec![CallArg::new(packed, false)]),
-        },
-        result_type,
-        synth_span(),
-    );
+impl CmMethodRewriter<'_> {
+    /// Rewrite a `Future::<T>::new()` / `Stream::<T>::new()` static call into
+    /// the canonical that creates the pair, parameterized by the call's
+    /// payload. The canonical returns both ends packed in an `i64`
+    /// (`readable | writable << 32`), and each half is lifted to its end:
+    /// `{ let packed = new(); [packed as i32 as R, (packed >> 32) as i32 as W] }`.
+    fn rewrite_cm_new(&mut self, expr: &mut TirExpr, is_future: bool) {
+        let TirExprKind::Call { func, .. } = &expr.kind else {
+            return;
+        };
+        let Some(payload_tid) = func
+            .monomorph_info
+            .as_ref()
+            .and_then(|m| m.impl_type_args.first().copied())
+        else {
+            return;
+        };
+        let canonical = if is_future {
+            CanonicalIntrinsic::FutureNew(classify_future_payload(self.tt, payload_tid))
+        } else {
+            CanonicalIntrinsic::StreamNew(classify_stream_payload(self.tt, payload_tid))
+        };
+        let pair_type = expr.type_id;
+        let Some(&[readable, writable]) = self.tt.as_tuple(pair_type).as_deref() else {
+            unreachable!("a stream or future constructor returns its two ends");
+        };
+        let name = minted_name("cm_pair", self.frame.next_index());
+        let packed = self.frame.alloc(name.clone(), TypeTable::I64);
+        let half = |shift: i64, end: TypeId| {
+            let packed = local_ref(packed, &name, TypeTable::I64);
+            let bits = if shift == 0 {
+                packed
+            } else {
+                binary(TirBinaryOp::Shr, packed, i64_const(shift), TypeTable::I64)
+            };
+            cast(cast(bits, TypeTable::I32), end)
+        };
+        let ends = TirExpr::new(
+            TirExprKind::TupleLiteral {
+                elements: vec![half(0, readable), half(32, writable)],
+            },
+            pair_type,
+            synth_span(),
+        );
+        let stmts = vec![
+            let_stmt(
+                &name,
+                packed,
+                TypeTable::I64,
+                cm_canonical_call(canonical, vec![], TypeTable::I64),
+            ),
+            expr_stmt(ends),
+        ];
+        *expr = TirExpr::new(TirExprKind::Block(block(stmts)), pair_type, synth_span());
+    }
 }
 
 /// Drop and cancel are the canonical import itself, so the parameterized name

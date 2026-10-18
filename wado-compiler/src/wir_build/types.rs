@@ -20,10 +20,10 @@ use crate::hashmap::{IndexMap, IndexSet};
 use super::context::WirContext;
 use crate::compiler_item::CompilerItem;
 use crate::name::{
-    mangle_builtin_array_type, mangle_generic_name, wir_enum_type_key, wir_tuple_type_key,
-    wir_type_key, wir_variant_case_key,
+    RESOURCE_OBJECT_STRUCT, mangle_builtin_array_type, mangle_generic_name, wir_enum_type_key,
+    wir_tuple_type_key, wir_type_key, wir_variant_case_key,
 };
-use crate::wir::WirAbstractHeapType;
+use crate::wir::{WirAbstractHeapType, WirTypeId};
 use crate::{hashmap, tir};
 
 /// A type declaration in topological order (struct or variant).
@@ -532,6 +532,31 @@ fn register_box_structs(ctx: &mut WirContext<'_>) {
     // Option<Stream>, Option<Future>, etc., where the inner type maps to i32 at the
     // Wasm level but there's no explicit Option<i32> usage in the source code.
     ensure_box_type(ctx, "i32", WirType::I32);
+    ctx.handle_box = Some(register_resource_object(ctx));
+}
+
+/// The struct an affine resource is (WEP: Affine Types).
+fn register_resource_object(ctx: &mut WirContext<'_>) -> WirTypeId {
+    let module_source = ModuleSource::prelude();
+    let fq = wir_type_key(&module_source, RESOURCE_OBJECT_STRUCT);
+    ctx.register_type(
+        fq.clone(),
+        WirTypeDef::Struct(WirStructType {
+            name: WirName { fq },
+            fields: vec![WirField {
+                name: "value".to_string(),
+                ty: WirType::I32,
+                mutable: true,
+            }],
+            meta: WirMeta {
+                module_source: Some(module_source),
+                ..WirMeta::default()
+            },
+            generic_origin: None,
+            newtype_origin: None,
+            supertype: None,
+        }),
+    )
 }
 
 /// Ensure a `Box<T>` struct type exists for the given primitive name.

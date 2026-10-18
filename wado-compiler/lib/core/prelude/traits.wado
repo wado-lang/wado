@@ -658,6 +658,12 @@ pub trait Ref with () {
 pub trait RefMut with () {
 }
 
+/// Marker every affine resource holds, and nothing else. Sealed and
+/// compiler-stated; user impls are rejected. See WEP: Affine Types.
+#[compiler_item("affine_resource")]
+pub trait AffineResource with () {
+}
+
 /// Immutable reference indexing: `&container[i]` reads through this.
 /// `Output: Ref` — only a reference element can be handed out by reference; a
 /// value element is read through `IndexValue`.

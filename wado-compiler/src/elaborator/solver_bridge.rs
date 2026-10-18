@@ -1155,7 +1155,7 @@ impl SolverBridge {
         Self::derive_all(tysys, lowering, program, members, handles);
         Self::name_derived_impls(data, lowering, program, named_from);
         Self::state_reflect_facts(tysys, data, &shape_kinds, table, lowering, program);
-        Self::state_type_facts(tysys, data, lowering, program);
+        Self::state_type_facts(tysys, data, table, lowering, program);
         stated
     }
 
@@ -1647,13 +1647,14 @@ impl SolverBridge {
         }
     }
 
-    /// Two of the things the compiler reads off a type rather than off an
-    /// impl: a plain `enum`'s `Display`, and a defaulted struct's `Default`.
-    /// Each is a fact stated of a declaration, so it answers for every instance
-    /// and from every module.
+    /// The things the compiler reads off a type rather than off an impl: a
+    /// plain `enum`'s `Display`, a defaulted struct's `Default`, and an affine
+    /// resource's `AffineResource`. Each is a fact stated of a declaration, so
+    /// it answers for every instance and from every module.
     fn state_type_facts(
         tysys: &TypeSystem,
         data: &DataDecls,
+        table: &TypeTable,
         lowering: &Lowering,
         program: &mut Program,
     ) {
@@ -1682,6 +1683,12 @@ impl SolverBridge {
         for (&def, info) in &data.struct_fields {
             if info.auto_derives_default() {
                 fact(def, CompilerItem::Default);
+            }
+        }
+
+        for &def in data.resource_types.keys() {
+            if !table.is_unrestricted_resource(def) {
+                fact(def, CompilerItem::AffineResource);
             }
         }
     }

@@ -623,6 +623,7 @@ impl Parser {
                 | T::Global
                 | T::Pub
                 | T::Export
+                | T::Affine
         )
     }
 
@@ -639,7 +640,7 @@ impl Parser {
     /// question answers the same way past a run of attributes.
     fn local_item_starts_at(&self, at: usize) -> bool {
         match self.peek_nth(at).kind {
-            T::Struct | T::Enum | T::Variant | T::Impl | T::Trait => true,
+            T::Struct | T::Enum | T::Variant | T::Impl | T::Trait | T::Affine => true,
             T::Flags | T::Type => matches!(self.peek_nth(at + 1).kind, TokenKind::Ident(_)),
             _ => false,
         }
@@ -1386,6 +1387,17 @@ impl Parser {
             false
         };
 
+        let is_affine = self.check(&TokenKind::Affine);
+        if is_affine {
+            let span = self.advance().span;
+            if !matches!(self.peek_kind(), TokenKind::Struct | TokenKind::Variant) {
+                return Err(ParseError {
+                    message: "`affine` declares a `struct` or a `variant`".to_string(),
+                    span,
+                });
+            }
+        }
+
         if !self.check(&TokenKind::Resource) {
             reject_resource_linearity(&attrs)?;
         }
@@ -1424,13 +1436,13 @@ impl Parser {
                 .parse_interface_decl(visibility, attrs)
                 .map(Item::Interface),
             TokenKind::Struct => self
-                .parse_struct_decl(visibility, has_export, attrs)
+                .parse_struct_decl(visibility, has_export, is_affine, attrs)
                 .map(Item::Struct),
             TokenKind::Enum => self
                 .parse_enum_decl(visibility, has_export, attrs)
                 .map(Item::Enum),
             TokenKind::Variant => self
-                .parse_variant_decl(visibility, has_export, attrs)
+                .parse_variant_decl(visibility, has_export, is_affine, attrs)
                 .map(Item::Variant),
             TokenKind::Flags => self
                 .parse_flags_decl(visibility, has_export, attrs)
@@ -5941,6 +5953,7 @@ impl Parser {
         &mut self,
         visibility: Visibility,
         is_export: bool,
+        is_affine: bool,
         attrs: Vec<Attribute>,
     ) -> ParseResult<StructDecl> {
         let id = self.alloc_ast_id();
@@ -5963,6 +5976,7 @@ impl Parser {
             name_span,
             visibility,
             is_export,
+            is_affine,
             type_params,
             fields,
             attrs,
@@ -6145,6 +6159,7 @@ impl Parser {
         &mut self,
         visibility: Visibility,
         is_export: bool,
+        is_affine: bool,
         attrs: Vec<Attribute>,
     ) -> ParseResult<VariantDecl> {
         let id = self.alloc_ast_id();
@@ -6174,6 +6189,7 @@ impl Parser {
             name_span,
             visibility,
             is_export,
+            is_affine,
             type_params,
             cases,
             attrs,
