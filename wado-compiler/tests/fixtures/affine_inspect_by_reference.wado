@@ -1,0 +1,14 @@
+// Inspect walks an affine struct by reference, so the struct is still whole
+// after it is printed.
+affine struct Holder { rx: Stream<u8>, n: i32 }
+
+test {
+    let [rx, tx] = Stream::<u8>::new();
+    let h = Holder { rx, n: 3 };
+    let s = `${h:?}`;
+    assert s.starts_with("Holder { rx: Stream<u8>#0x");
+    let Holder { rx: r, n } = h;
+    assert n == 3;
+    r.drop();
+    tx.drop();
+}

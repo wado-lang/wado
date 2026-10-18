@@ -733,14 +733,16 @@ declares the destructor's effects is withdrawn: a drop's effects are benign.
   tuple, a newtype and an anonymous struct infer. `wado-from-idl` emits it, and
   the generated stdlib is regenerated. `resource_*` fixtures declare their
   holders.
-- [ ] `affine` on a type parameter, an associated type and a trait, with the
+- [x] `affine` on a type parameter, an associated type and a trait, with the
   definition-site check: the move check runs over its bindings as over
   resource bindings, over patterns (a guard by reference, a failed match
   consuming nothing), over globals, over closure bodies, over the standard
   library, and over a marked trait's default bodies with `Self` affine. An
   affine type implementing an unmarked trait is an error at the impl. The
   prelude traits an affine type implements are marked, and `Inspect`'s
-  derivation walks an affine struct by reference.
+  derivation walks an affine struct by reference. A trait's method may take
+  `self` by value, so `Iterator`'s adapters take `self` rather than copying
+  `*self`.
 - [x] No cast between an affine resource and an integer: synthesis splits and
   lifts the `stream-new` / `future-new` pair, the raw-handle builtins take and
   return resources, `ResourceId::of`, and the test doubles in `core:kiln`,
