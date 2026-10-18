@@ -18,6 +18,14 @@ const FORBIDDEN = [
       "nohup, setsid and disown are forbidden (AGENTS.md > Tooling): a detached job notifies" +
       " nobody when it exits. Run a long job through the harness's background mechanism.",
   },
+  {
+    pattern: /^(pgrep|pkill)$/,
+    reason:
+      "pgrep and pkill are forbidden (AGENTS.md > Tooling): `-f` matches itself, since the" +
+      " shell running it carries the pattern in its own command line, so a wait on it never" +
+      " ends and a kill hits its own shell. Wait for the harness's background notification," +
+      " and stop a job with `kill` on the pid it names.",
+  },
 ];
 
 /** Why the command is denied, or null when it runs nothing forbidden. */
