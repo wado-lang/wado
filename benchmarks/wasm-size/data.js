@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1792289016649,
+  "lastUpdate": 1792291021181,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -68081,6 +68081,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/d6943734aa884bd8dfc8e89992c84b84325bade2"
         },
         "date": 1792289016205,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 2955,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 7382,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 20208,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 288929,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "d9c34852b2a547e1ba535d90a2215122e1845e6c",
+          "message": "Merge pull request #2380 from wado-lang/loam-audit-fixes\n\nfix(loam): fold only what the build knows, and round a folded half Range",
+          "timestamp": "2026-10-18T11:19:12+09:00",
+          "tree_id": "27d71e0b404abfb25dc30c254e37175a8b4b7190",
+          "url": "https://github.com/wado-lang/wado/commit/d9c34852b2a547e1ba535d90a2215122e1845e6c"
+        },
+        "date": 1792291020110,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
