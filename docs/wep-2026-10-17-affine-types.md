@@ -405,6 +405,10 @@ pub affine trait Drop with () {
 - A type without an impl drops its fields one by one, in declaration order,
   as today. A `List<affine T>` drops its elements, which a `List` holding a
   resource does not do today.
+- `builtin::drop<affine T>(value: T)` drops any value where it is called. It
+  takes `value` and ends, so the scope-exit drop of the parameter does the
+  work. `x.drop()` names a type's `Drop` impl, so a type without one, and an
+  `affine T` in a generic body, is dropped by name this way.
 - A type with an impl runs its `drop`. The body may move fields out of `self`,
   and whatever is left at its end is dropped field by field. `self` is never
   dropped as a whole again, which would run `drop` once more.
@@ -755,12 +759,13 @@ declares the destructor's effects is withdrawn: a drop's effects are benign.
 - [ ] `Drop`: a resource's `fn drop(self)` as its impl, a user impl on an
   affine type, the fields left at the end of `drop` dropped one by one, a
   drop's effects benign, no partial move or `..base` over a type that
-  implements it, a generic `T` dropped the way its type drops, and a
+  implements it, a generic `T` dropped the way its type drops,
+  `builtin::drop`, and a
   `FutureWritable` dropped before its write trapping with a message naming
   it. A fixture pins the `?` between `Future::new()` and the write, and one
   pins that a handler counting a resource's drops sees a scope-exit drop.
-- [ ] `Future::read(self)` and `FutureWritable::write(self, value)`; a second
-  read or write is a use after move.
+- [ ] `Future::read(self)` and `FutureWritable::write(self, value)`. A fixture
+  pins a second read as a use after move.
 - [ ] `ForOf`: `for-of` passes its operand by value to `ForOf::start`, with
   `List`'s impl over `ListCursor<T>` and the blanket impl over `IntoIterator`.
   A fixture pins that elision shares a list the loop's body does not write: no
@@ -814,13 +819,6 @@ consumes writes the loop.
 A closure captures by reference, so it may use an affine value but never owns
 one. A closure that outlives the value's owner reaches a zeroed object on its
 first use after the drop, and what that does is unspecified.
-
-### No written drop for a type without `Drop`
-
-`x.drop()` names the `Drop` impl, so it is written only on a type that has
-one. An affine struct or variant without an impl, and an `affine T` in a
-generic body, drop at scope exit or by being moved into a function that
-discards them, but have no drop to call by name.
 
 ### A panic drops nothing
 
