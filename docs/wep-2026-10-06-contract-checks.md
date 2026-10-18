@@ -41,10 +41,10 @@ is for. It already pays for that with the `debug` allocator.
 `wado run` and `wado serve` default to `-O1`, so a program being developed is
 checked without asking. They compile what they run at once, and the compile
 counts against the run: `-O2` costs more there than it saves, as the corpus
-checks that run Gale tools at `-O1` found. A build that ships comes from
-`wado compile` or `wado build`, which default to `-O2`. The checks first
-defaulted on at `-O0` alone, and `wado run` at `-O2` left them off in the loop
-where a developer meets a violation first.
+checks that run Gale tools found before they moved to `-O1`. A build that ships
+comes from `wado compile` or `wado build`, which default to `-O2`. The checks
+first defaulted on at `-O0` alone, and `wado run` at `-O2` left them off in the
+loop where a developer meets a violation first.
 
 ### No program writes a removable check
 

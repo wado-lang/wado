@@ -114,8 +114,7 @@ run = """
 set -xe -o pipefail
 mkdir -p package-wadopoet/build
 scripts/dev-bin.sh wado syntax --format json -o package-wadopoet/build/syntax.json
-# `-O1`, for the reason `scripts/check-rust-paths.sh` gives.
-scripts/dev-bin.sh wado run -O1 package-wadopoet/scripts/gen_vocabulary.wado -- package-wadopoet/build/syntax.json > package-wadopoet/src/vocabulary.wado
+scripts/dev-bin.sh wado run package-wadopoet/scripts/gen_vocabulary.wado -- package-wadopoet/build/syntax.json > package-wadopoet/src/vocabulary.wado
 """
 
 [tasks.check-wadopoet-vocabulary]

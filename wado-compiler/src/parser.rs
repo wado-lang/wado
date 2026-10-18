@@ -7431,7 +7431,7 @@ impl EscapingJump {
     }
 }
 
-impl ast::AstVisitor for EscapingJump {
+impl AstVisitor for EscapingJump {
     fn visit_stmt(&mut self, stmt: &Stmt) {
         if self.found.is_some() {
             return;

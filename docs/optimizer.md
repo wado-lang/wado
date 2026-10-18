@@ -29,9 +29,8 @@ since removing it changes what the program does.
 | `-Os`   | 15         | 16               | off             | Strips the name section; a failed `assert` only traps |
 
 The levels differ in what a program does, not only in its speed: below `-O2`, a
-call marked `unchecked` traps when it breaks its contract. The test world checks
-at every level. See
-[Contract Checks](./spec-assertions.md#contract-checks).
+call marked `unchecked` traps when it breaks its contract (see
+[Contract Checks](./spec-assertions.md#contract-checks)).
 
 The inline threshold bounds what one inlined copy adds to its caller. That is
 the Wasm instructions on the callee's hot path, less the call it replaces.

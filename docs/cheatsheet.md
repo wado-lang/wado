@@ -900,7 +900,7 @@ fn half(n: i32) -> i32
 }
 
 half(4);             // checked, always
-unchecked half(4);   // the caller vouches; checked only where contracts are
+unchecked half(4);   // the caller vouches; checked only where the build checks
 
 trait Pick {
     fn pick(&self, i: i32) -> i32

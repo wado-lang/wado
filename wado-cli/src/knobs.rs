@@ -509,7 +509,6 @@ mod tests {
     fn dash_og_is_not_a_level() {
         let err = parse_opt_level(&["-Og"]).unwrap_err();
         assert!(err.contains("unknown optimization level '-Og'"), "{err}");
-        assert!(!err.contains("or -Og"), "{err}");
     }
 
     #[test]

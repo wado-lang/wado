@@ -28,7 +28,5 @@ if [ "${#corpus[@]}" -gt 0 ]; then
     git ls-files '*.rs' > "${list}"
 fi
 
-# The tool is compiled on every run, and `-O2` takes longer to compile than it
-# saves in running; `-O1` is the fastest end to end.
-exec scripts/dev-bin.sh wado run -O1 package-gale/tools/rust_inline_paths.wado -- \
+exec scripts/dev-bin.sh wado run package-gale/tools/rust_inline_paths.wado -- \
     "${corpus[@]}" "$@"
