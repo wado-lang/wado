@@ -2397,7 +2397,7 @@ fn widen_site(engine: &mut Engine, facts: &mut Vec<Fact>, index: Index, bound: B
         // `bound >= 0` ([`record_sites`]), so `bound - d` stays in the type for
         // a `d` the type holds.
         let d = k - site.at;
-        if !int_range(engine, ty).is_some_and(|(_, tmax)| d <= tmax) {
+        if int_range(engine, ty).is_none_or(|(_, tmax)| d > tmax) {
             return false;
         }
         let d = int(engine, ty, d);
@@ -2406,15 +2406,14 @@ fn widen_site(engine: &mut Engine, facts: &mut Vec<Fact>, index: Index, bound: B
             op: NirBinaryOp::Sub,
             right: d,
         };
-        match site.sub {
-            Some(sub) => engine.replace_expr_kind(sub, difference),
-            None => {
-                let span = engine.body.exprs[site.cmp].span;
-                let sub = engine.alloc_expr(difference, ty, span);
-                let right = Operand::Expr(sub);
-                engine.replace_expr_kind(site.cmp, ExprKind::Binary { left, op, right });
-                site.sub = Some(sub);
-            }
+        if let Some(sub) = site.sub {
+            engine.replace_expr_kind(sub, difference)
+        } else {
+            let span = engine.body.exprs[site.cmp].span;
+            let sub = engine.alloc_expr(difference, ty, span);
+            let right = Operand::Expr(sub);
+            engine.replace_expr_kind(site.cmp, ExprKind::Binary { left, op, right });
+            site.sub = Some(sub);
         }
     }
     site.reach = k;
