@@ -1454,7 +1454,13 @@ fn attention(
         ] as List<[i32, Poly]> {
             let extent = bias.axes[i].extent.poly();
             if extent.as_constant() != Option::Some(1) {
-                owe_equal(node, owed, &extent, &along, "the bias's first two extents must be 1 or the batch's and heads'")?;
+                owe_equal(
+                    node,
+                    owed,
+                    &extent,
+                    &along,
+                    "the bias's first two extents must be 1 or the batch's and heads'",
+                )?;
             }
         }
     }
@@ -1831,10 +1837,7 @@ fn operands_given(
     shapes: &TreeMap<String, Shape>,
 ) -> Result<(), InferError> {
     if let Some(needed) = required_operands(&node.op) {
-        let mut given = 0;
-        while given < node.inputs.len() && node.inputs[given] != "" {
-            given += 1;
-        }
+        let given = node.leading_operands();
         if given < needed {
             builtin::cold_path();
             return Result::Err(InferError::OperandCount(OperandCountConflict {

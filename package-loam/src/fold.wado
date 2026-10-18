@@ -748,7 +748,10 @@ fn expand(x: &Known, shape: &Known) -> Result<Option<Known>, String> {
     let Some(extents) = broadcast_extents(&x.extents, &target) else {
         return Result::Err(`extents ${x.extents:?} do not broadcast to ${target:?}`);
     };
-    return Result::Ok(Option::Some(Known { ..*x, extents, elements: picked(&x.elements, &positions(&x.extents, &extents)) }));
+    return Result::Ok(Option::Some(Known { ..*x, extents, elements: picked(
+        &x.elements,
+        &positions(&x.extents, &extents),
+    ) }));
 }
 
 /// B's extents, followed by an extent of 1 for each of A's axes after it where

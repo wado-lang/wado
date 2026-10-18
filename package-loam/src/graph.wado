@@ -384,6 +384,12 @@ impl Node {
         return read;
     }
 
+    /// How many operands the node gives before the first it leaves absent,
+    /// which ONNX writes as an empty name.
+    pub fn leading_operands(&self) -> i32 {
+        return self.inputs.position(|input| input == "").unwrap_or(self.inputs.len());
+    }
+
     /// The attribute `name`, where the node carries it.
     pub fn attr<S: AsStrSlice>(&self, name: S) -> Option<Attr> {
         for let a of self.attrs {
@@ -549,7 +555,7 @@ fn function_body(node: &Node) -> Result<Option<List<Node>>, String> {
         },
     };
     let site = node.site();
-    let given = node.inputs.position(|input| input == "").unwrap_or(node.inputs.len());
+    let given = node.leading_operands();
     if given < needed {
         return Result::Err(`${site}: reads ${needed} operands and was given ${given}`);
     }
