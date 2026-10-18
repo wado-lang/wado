@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1792297340550,
+  "lastUpdate": 1792304012612,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -68213,6 +68213,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/83c0a9ed71df345cecbe0bcf900e7e71c8310c5f"
         },
         "date": 1792297340163,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 2955,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 7382,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 20128,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 289935,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "63de94d26e7261dd09af54123b0363b06ebbd11e",
+          "message": "Merge pull request #2382 from wado-lang/ccr-774de69a-ujtj93\n\nrefactor(gale): scan .g4 sources and action bodies as UTF-8 bytes",
+          "timestamp": "2026-10-18T14:53:51+09:00",
+          "tree_id": "5ef4eb5c5959f77de7eb3149129767835da210bf",
+          "url": "https://github.com/wado-lang/wado/commit/63de94d26e7261dd09af54123b0363b06ebbd11e"
+        },
+        "date": 1792304011711,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
