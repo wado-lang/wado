@@ -16,8 +16,9 @@ pub use instance_patterns::lower_instance_patterns;
 use std::cell::RefCell;
 use std::rc::Rc;
 
-use crate::compiler_host::{Code, Diagnostic, DiagnosticSpan, Severity};
+use crate::compiler_host::Diagnostic;
 use crate::defs::DefId;
+use crate::elaborator::TypeError;
 use crate::flat_package::FlatPackage;
 use crate::hashmap::IndexMap;
 use crate::module_source::ModuleSource;
@@ -138,21 +139,14 @@ impl Monomorphization {
     }
 
     /// The error refusing a template whose instances never end, with the
-    /// module declaring it: struct and variant declarations are refused alike
-    /// before this, by the elaborator.
+    /// module declaring it.
     pub fn expanding_recursion(&self) -> Option<(ModuleSource, Diagnostic)> {
         let template = self.monomorphizer.expanding.as_ref()?;
-        let diagnostic = Diagnostic {
-            severity: Severity::Error,
-            code: Code::ExpandingRecursion,
-            message: format!(
-                "'{}' reaches itself through a type argument built over its own type \
-                 parameter, so each instance needs a larger one and they never end",
-                template.name
-            ),
-            span: Some(DiagnosticSpan::from_span(&template.span, None)),
+        let error = TypeError::ExpandingRecursion {
+            name: template.name.clone(),
+            span: template.span,
         };
-        Some((template.module_source.clone(), diagnostic))
+        Some((template.module_source.clone(), error.into()))
     }
 
     fn run(&mut self, flat: &mut FlatPackage) {

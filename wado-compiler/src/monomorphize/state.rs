@@ -144,8 +144,7 @@ pub(super) struct Monomorphizer {
 pub(super) const MAX_INSTANCE_TYPE_DEPTH: usize = 64;
 
 /// A template whose instances never end, as the diagnostic names it.
-#[derive(Clone)]
-pub struct ExpandingTemplate {
+pub(super) struct ExpandingTemplate {
     pub module_source: ModuleSource,
     pub name: String,
     pub span: Span,
@@ -289,10 +288,14 @@ impl Monomorphizer {
             self.functions.instantiated.insert(key, mangled_name);
             return false;
         }
-        self.functions.instantiated_homes.insert(home, template.clone());
+        self.functions
+            .instantiated_homes
+            .insert(home, template.clone());
         self.functions
             .instantiated
             .insert(key.clone(), mangled_name);
+        // Named but never queued: the calls still rewrite onto the name, and
+        // the pipeline bails before anything reads the missing body.
         if Self::nests_past_bound(&key, type_table) {
             if self.expanding.is_none() {
                 let func = self

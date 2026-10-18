@@ -148,8 +148,8 @@ pub use lexer::{LexError, LexErrorKind, LexResult, lex, lex_in};
 pub use loader::{LoadError, LoadResult, ModuleLoader};
 pub use lower::lower;
 pub use module_source::ModuleSource;
-use monomorphize::{Monomorphization, lower_instance_patterns};
 pub use monomorphize::monomorphize;
+use monomorphize::{Monomorphization, lower_instance_patterns};
 pub use optimize::{OptLevel, optimize};
 pub use package::Package;
 pub use parser::{ParseError, Parser};
@@ -271,7 +271,6 @@ pub(crate) fn bail_with<H: CompilerHost>(
     Bail
 }
 
-/// Report each synthesis failure, at what it concerns where it names that.
 /// Bail where a run of `mono` refused a template whose instances never end.
 fn refuse_expanding_instances<H: CompilerHost>(
     mono: &Monomorphization,
@@ -284,6 +283,7 @@ fn refuse_expanding_instances<H: CompilerHost>(
     Err(Bail)
 }
 
+/// Report each synthesis failure, at what it concerns where it names that.
 fn bail_with_synthesis<H: CompilerHost>(
     logger: &Logger<'_, H>,
     errors: Vec<SynthesisError>,
