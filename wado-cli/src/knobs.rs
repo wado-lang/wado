@@ -55,17 +55,17 @@ impl OptLevel {
 pub fn parse_opt_level_arg(parser: &mut Parser) -> Result<OptLevel, CliExit> {
     let Some(val) = parser.optional_value() else {
         return Err(CliExit::error(
-            "-O requires a level. Use -O0, -O1, -O2, -O3, -Os, or -Og",
+            "-O requires a level. Use -O0, -O1, -O2, -O3, or -Os",
         ));
     };
     match val.to_string_lossy().as_ref() {
-        "0" | "g" => Ok(OptLevel::O0),
+        "0" => Ok(OptLevel::O0),
         "1" => Ok(OptLevel::O1),
         "2" => Ok(OptLevel::O2),
         "3" => Ok(OptLevel::O3),
         "s" => Ok(OptLevel::Os),
         other => Err(CliExit::error(format!(
-            "unknown optimization level '-O{other}'. Use -O0, -O1, -O2, -O3, -Os, or -Og"
+            "unknown optimization level '-O{other}'. Use -O0, -O1, -O2, -O3, or -Os"
         ))),
     }
 }
@@ -500,10 +500,16 @@ mod tests {
             ("-O2", OptLevel::O2),
             ("-O3", OptLevel::O3),
             ("-Os", OptLevel::Os),
-            ("-Og", OptLevel::O0),
         ] {
             assert_eq!(parse_opt_level(&[arg]), Ok(expected), "failed for {arg}");
         }
+    }
+
+    #[test]
+    fn dash_og_is_not_a_level() {
+        let err = parse_opt_level(&["-Og"]).unwrap_err();
+        assert!(err.contains("unknown optimization level '-Og'"), "{err}");
+        assert!(!err.contains("or -Og"), "{err}");
     }
 
     #[test]
