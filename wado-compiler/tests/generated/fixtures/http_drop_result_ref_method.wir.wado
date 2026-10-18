@@ -424,7 +424,8 @@ fn "http_drop_result_ref_method.wado/$cm_binding__Fields_from_list"(entries) wit
         };
     };
     drop($array_clone_dst_2);
-    if @unlikely((local.tee $array_clone_i_4(entries.used) < 0) | ($array_clone_i_4 > 134217727)) {
+    $array_clone_i_4 = entries.used;
+    if @unlikely(134217727 <u $array_clone_i_4) {
         cold_path;
         let $mv_field_6: ref Array<u8>;
         "core:rt/panic"(local.tee $mv_field_6(array.new_data<u8>("a buffer's length is negative or past what linear memory can address")), 68);
@@ -480,7 +481,7 @@ fn "http_drop_result_ref_method.wado/$cm_binding__Fields_from_list"(entries) wit
             builtin::store_i32($entries_addr + 4, builtin::i32_wrap_i64($packed >> 32_i64));
             builtin::array_copy<u8>(local.tee $mv_field_6(builtin::array_new<u8>($load_10)), 0, $array_clone_dst_17, 0, $load_10);
             drop($mv_field_6);
-            if @unlikely(($load_10 < 0) | ($load_10 > 2147483647)) {
+            if @unlikely(2147483647 <u $load_10) {
                 cold_path;
                 "core:rt/panic"(array.new_data<u8>("a buffer's length is negative or past what linear memory can address"), 68);
                 unreachable;

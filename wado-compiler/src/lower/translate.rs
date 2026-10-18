@@ -3119,6 +3119,7 @@ fn convert_function_kind(kind: &tir::FunctionKind) -> nir::FunctionKind {
         tir::FunctionKind::ValueCopy { type_id } => {
             nir::FunctionKind::ValueCopy { type_id: *type_id }
         }
+        tir::FunctionKind::ContractReport => nir::FunctionKind::ContractReport,
         tir::FunctionKind::FnCanonicalDispatch { arity, return_type } => {
             nir::FunctionKind::FnCanonicalDispatch {
                 arity: *arity,
