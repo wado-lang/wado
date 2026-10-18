@@ -113,13 +113,12 @@ pub(super) fn resolve_quiet_callee_ids(
                 let f = f.borrow();
                 let id =
                     f.id.filter(|id| panic_ids.contains(id) && !quiet.contains(id))?;
-                let reports_nothing_else = match &f.body {
-                    _ if matches!(f.kind, FunctionKind::ContractReport) => true,
-                    None => false,
-                    Some(body) => subtree_quiet(body, NodeRef::Block(body.root()), |callee| {
-                        quiet.contains(&callee)
-                    }),
-                };
+                let reports_nothing_else = matches!(f.kind, FunctionKind::ContractReport)
+                    || f.body.as_ref().is_some_and(|body| {
+                        subtree_quiet(body, NodeRef::Block(body.root()), |callee| {
+                            quiet.contains(&callee)
+                        })
+                    });
                 reports_nothing_else.then_some(id)
             })
             .collect();
