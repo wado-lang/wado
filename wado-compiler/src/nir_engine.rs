@@ -353,8 +353,8 @@ pub struct Engine<'a> {
     /// default) means "no callee is a panic". Set via
     /// [`Engine::set_panic_callee_ids`].
     panic_callee_ids: Option<&'a IndexSet<FuncId>>,
-    /// The panic callees that report nothing but a failed contract: a contract
-    /// report, or a bodyless trap. Set via [`Engine::set_quiet_trap_ids`].
+    /// The panic callees that report nothing but a failed contract, supplied by
+    /// `condition_implication`. Set via [`Engine::set_quiet_trap_ids`].
     quiet_trap_ids: Option<&'a IndexSet<FuncId>>,
     /// [`FuncId`]s of pure builtin intrinsics (`array_get_value`, `array_len`, …),
     /// supplied by a value-graph pass so the builder knows such a call writes no

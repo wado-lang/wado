@@ -91,15 +91,7 @@ pub(super) fn resolve_quiet_trap_ids(
     panic_ids: &hashmap::IndexSet<FuncId>,
 ) -> hashmap::IndexSet<FuncId> {
     let pure_builtins = project.pure_builtin_callee_ids();
-    let mut quiet: hashmap::IndexSet<FuncId> = project
-        .functions
-        .iter()
-        .filter_map(|f| {
-            let f = f.borrow();
-            let base = matches!(f.kind, FunctionKind::ContractReport) || f.body.is_none();
-            f.id.filter(|id| base && panic_ids.contains(id))
-        })
-        .collect();
+    let mut quiet: hashmap::IndexSet<FuncId> = hashmap::IndexSet::default();
     loop {
         let grown: Vec<FuncId> = project
             .functions
@@ -108,12 +100,15 @@ pub(super) fn resolve_quiet_trap_ids(
                 let f = f.borrow();
                 let id =
                     f.id.filter(|id| panic_ids.contains(id) && !quiet.contains(id))?;
-                let body = f.body.as_ref()?;
-                subtree_quiet(body, NodeRef::Block(body.root()), |callee| {
-                    quiet.contains(&callee)
-                        || (pure_builtins.contains(&callee) && !panic_ids.contains(&callee))
-                })
-                .then_some(id)
+                let reports_nothing_else = match &f.body {
+                    _ if matches!(f.kind, FunctionKind::ContractReport) => true,
+                    None => true,
+                    Some(body) => subtree_quiet(body, NodeRef::Block(body.root()), |callee| {
+                        quiet.contains(&callee)
+                            || (pure_builtins.contains(&callee) && !panic_ids.contains(&callee))
+                    }),
+                };
+                reports_nothing_else.then_some(id)
             })
             .collect();
         if grown.is_empty() {
