@@ -2,16 +2,16 @@
 // moves.
 use { Fields } from "wasi:http";
 
+affine struct Holder {
+    f: Fields,
+}
+
 affine trait Named {
     fn name(&self) -> String;
 
     fn shout(&self) -> String {
         return `${self.name()}!`;
     }
-}
-
-affine struct Holder {
-    f: Fields,
 }
 
 impl Named for Holder {

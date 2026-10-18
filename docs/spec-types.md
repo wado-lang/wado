@@ -1251,6 +1251,11 @@ associated type written `affine type Item;` is affine the same way.
 fn wrap<affine T>(x: T) -> Option<T> {
     return Option::Some(x);
 }
+
+test {
+    let f = wrap(Fields::new()).unwrap();
+    assert f.copy_all().is_empty();
+}
 ```
 
 An affine type implements only an `affine trait`, whose default bodies are
@@ -1267,6 +1272,17 @@ affine trait Named {
     fn shout(&self) -> String {
         return `${self.name()}!`;
     }
+}
+
+impl Named for Holder {
+    fn name(&self) -> String {
+        return "holder";
+    }
+}
+
+test {
+    let h = Holder { f: Fields::new() };
+    assert h.shout() == "holder!";
 }
 ```
 
