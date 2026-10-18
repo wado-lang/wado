@@ -37,10 +37,8 @@ use {
     text_at,
     word_at,
     copy_char,
-    ident_end,
-    is_id_start_char,
+    name_end,
 } from "./g4/scan.wado";
-use { char_at } from "./runtime/lex.wado";
 use { CodeWriter } from "lib:wadopoet";
 use { to_snake_case } from "./ident.wado";
 
@@ -354,16 +352,16 @@ fn call_at<S: AsStrSlice, S1: AsStrSlice>(src: &StrSlice, i: i32, n: i32, receiv
         return null;
     }
     let name_start = skip_ws(src, after + sep.len(), n);
-    if name_start >= n || !is_id_start_char(char_at(src, name_start)) {
+    let name_stop = name_end(src, name_start, n);
+    if name_stop == name_start {
         return null;
     }
-    let name_end = ident_end(src, name_start, n);
-    let paren = skip_ws(src, name_end, n);
+    let paren = skip_ws(src, name_stop, n);
     if paren >= n || src.byte_at(paren) != b'(' {
         return null;
     }
     let close = match_delim(src, paren, n, b'(', b')')?;
-    return Option::Some([src.slice(name_start, name_end).to_string(), close]);
+    return Option::Some([src.slice(name_start, name_stop).to_string(), close]);
 }
 
 /// Add a scanned call to the op set; the first occurrence of a name fixes its

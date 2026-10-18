@@ -1,6 +1,6 @@
 use { Span, char_at } from "../runtime/lex.wado";
 use { G4Token, Token } from "./token.wado";
-use { scan_line_comment, scan_block_comment, scan_char_class, ident_end, is_id_start_char } from "./scan.wado";
+use { scan_line_comment, scan_block_comment, scan_char_class, name_end } from "./scan.wado";
 use { CODE_POINT_MAX } from "./unicode.wado";
 
 pub struct G4Lexer {
@@ -123,10 +123,10 @@ impl G4Lexer {
         return self.owned_token(G4Token::IntLit, start, self.pos);
     }
 
-    fn read_identifier(&mut self) -> Token {
+    fn read_identifier(&mut self, end: i32) -> Token {
         let start = self.pos;
-        self.pos = ident_end(self.src, start, self.src.len());
-        let text = self.src.slice(start, self.pos).to_string();
+        self.pos = end;
+        let text = self.src.slice(start, end).to_string();
         // Hard keywords only: `grammar` and `fragment` introduce structural
         // constructs that the parser disambiguates by token kind. Lexer command
         // names like `skip`, `channel`, `mode`, `more`, `pushMode`, `popMode`,
@@ -155,8 +155,9 @@ impl G4Lexer {
         if b == b'[' {
             return self.read_char_class();
         }
-        if is_id_start_char(char_at(self.src, self.pos)) {
-            return self.read_identifier();
+        let name = name_end(self.src, start, self.src.len());
+        if name > start {
+            return self.read_identifier(name);
         }
         if b.is_ascii_digit() {
             return self.read_int_literal();

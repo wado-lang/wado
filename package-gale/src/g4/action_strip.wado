@@ -16,8 +16,7 @@ use {
     scan_block_comment,
     scan_balanced,
     copy_char,
-    ident_end,
-    is_id_start_char,
+    name_end,
     is_rule_name_upper,
     skip_ws,
     word_at,
@@ -103,14 +102,10 @@ pub fn strip_action_bodies<S: AsStrSlice>(grammar: S) -> String {
             // Named actions: `@id { … }` or `@scope::id { … }`. Strip
             // the prefix and its body together. If no `{` follows,
             // fall through and copy the `@` verbatim.
-            let mut j = i + 1;
-            if j < n && is_id_start_char(char_at(&src, j)) {
-                j = ident_end(&src, j, n);
+            let mut j = name_end(&src, i + 1, n);
+            if j > i + 1 {
                 if j + 1 < n && src.byte_at(j) == b':' && src.byte_at(j + 1) == b':' {
-                    j += 2;
-                    if j < n && is_id_start_char(char_at(&src, j)) {
-                        j = ident_end(&src, j, n);
-                    }
+                    j = name_end(&src, j + 2, n);
                 }
                 j = skip_ws(&src, j, n);
                 if j < n && src.byte_at(j) == b'{' {
@@ -177,13 +172,12 @@ pub fn strip_action_bodies<S: AsStrSlice>(grammar: S) -> String {
                 },
             }
         }
-        let c = char_at(&src, i);
-        if is_id_start_char(c) {
-            let j = ident_end(&src, i, n);
+        let j = name_end(&src, i, n);
+        if j > i {
             let word = src.slice(i, j);
             prequel_open = PREQUEL_KEYWORDS.contains_str(word);
             if rule_type matches { RuleType::Unknown } && !GRAMMAR_KEYWORDS.contains_str(word) {
-                rule_type = if is_rule_name_upper(c) { RuleType::Lexer } else { RuleType::Parser };
+                rule_type = if is_rule_name_upper(char_at(&src, i)) { RuleType::Lexer } else { RuleType::Parser };
             }
             out.push_str(word);
             i = j;

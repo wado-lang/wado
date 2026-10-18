@@ -36,16 +36,7 @@
 //! idempotent. An unknown `<IDENT(...)>` is left verbatim and reported in
 //! `warnings` — loud, never a silent guess.
 
-use {
-    scan_string,
-    scan_line_comment,
-    scan_block_comment,
-    skip_ws,
-    copy_char,
-    ident_end,
-    is_id_start_char,
-} from "./scan.wado";
-use { char_at } from "../runtime/lex.wado";
+use { scan_string, scan_line_comment, scan_block_comment, skip_ws, copy_char, name_end } from "./scan.wado";
 
 pub struct ExpandOutcome {
     pub text: String,
@@ -168,12 +159,8 @@ struct Expanded {
 /// operators out of the template path without tracking regions.
 fn is_template_start(src: &StrSlice, lt: i32) -> bool {
     let n = src.len();
-    let j = lt + 1;
-    if j >= n || !is_id_start_char(char_at(src, j)) {
-        return false;
-    }
-    let end = ident_end(src, j, n);
-    return end < n && src.byte_at(end) == b'(';
+    let end = name_end(src, lt + 1, n);
+    return end > lt + 1 && end < n && src.byte_at(end) == b'(';
 }
 
 /// Parse and expand one `<chain>` starting at the '<'.
@@ -204,10 +191,10 @@ fn eval_chain(src: &StrSlice, start: i32) -> Result<Expanded, String> {
 /// Parse `IDENT '(' args ')'` at `start` and expand it against the table.
 fn eval_call(src: &StrSlice, start: i32, receiver: Option<String>) -> Result<Expanded, String> {
     let n = src.len();
-    if start >= n || !is_id_start_char(char_at(src, start)) {
+    let mut j = name_end(src, start, n);
+    if j == start {
         return Result::Err(`template call at offset ${start}: expected a helper name`);
     }
-    let mut j = ident_end(src, start, n);
     let name = src.slice(start, j);
     if j >= n || src.byte_at(j) != b'(' {
         return Result::Err(`template helper '${name}': expected '('`);
@@ -285,7 +272,7 @@ fn eval_arg(src: &StrSlice, start: i32) -> Result<Expanded, String> {
         }
         return Result::Ok(Expanded { text, end: j + 1 });
     }
-    if is_id_start_char(char_at(src, start)) {
+    if name_end(src, start, n) > start {
         return eval_chain(src, start);
     }
     return Result::Err(`template argument at offset ${start}: expected a string, block, or helper call`);

@@ -2,7 +2,7 @@
 //! attribute reference lexes as one opaque `Attr` token (resolved later by the
 //! language-independent attribute engine); string literals keep raw escapes.
 
-use { ident_end, is_id_start_char, scan_closed_string, scan_line_comment, scan_block_comment } from "../g4/scan.wado";
+use { name_end, scan_closed_string, scan_line_comment, scan_block_comment } from "../g4/scan.wado";
 use { char_at } from "../runtime/lex.wado";
 use { attr_ref_span } from "../attr_scan.wado";
 
@@ -47,11 +47,10 @@ pub fn tokenize_java<S: AsStrSlice>(body: S) -> Result<List<JToken>, String> {
             i = end;
             continue;
         }
-        let c = char_at(&src, i);
-        if is_id_start_char(c) {
-            let j = ident_end(&src, i, n);
-            out.push(JToken::Ident(src.slice(i, j).to_string()));
-            i = j;
+        let name = name_end(&src, i, n);
+        if name > i {
+            out.push(JToken::Ident(src.slice(i, name).to_string()));
+            i = name;
             continue;
         }
         if b.is_ascii_digit() {
@@ -69,7 +68,7 @@ pub fn tokenize_java<S: AsStrSlice>(body: S) -> Result<List<JToken>, String> {
                 out.push(JToken::Punct(p));
             },
             None => {
-                return Result::Err(`java2wado: unexpected character '${c}' in action body`);
+                return Result::Err(`java2wado: unexpected character '${char_at(&src, i)}' in action body`);
             },
         }
     }

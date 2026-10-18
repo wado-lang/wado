@@ -221,6 +221,15 @@ pub fn ident_end(src: &StrSlice, start: i32, n: i32) -> i32 {
     return j;
 }
 
+/// The end of the name starting at `start`: a NameStartChar, then NameChars.
+/// `start` itself when no name starts there.
+pub fn name_end(src: &StrSlice, start: i32, n: i32) -> i32 {
+    if start >= n || !is_id_start_char(char_at(src, start)) {
+        return start;
+    }
+    return ident_end(src, start, n);
+}
+
 /// Scan an ANTLR4 char class `[...]`. `pos` must point at the opening `[`.
 /// Per the char-set lexicon, only `\X` escapes are recognized and the
 /// first unescaped `]` ends the set: brackets do not nest and host

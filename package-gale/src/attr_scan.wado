@@ -10,15 +10,7 @@
 //! reference onto a rule's attribute environment (labels, args, returns,
 //! specials) is a later resolution step that consumes these.
 
-use {
-    scan_string,
-    scan_line_comment,
-    scan_block_comment,
-    scan_template,
-    ident_end,
-    is_id_start_char,
-} from "./g4/scan.wado";
-use { char_at } from "./runtime/lex.wado";
+use { scan_string, scan_line_comment, scan_block_comment, scan_template, name_end } from "./g4/scan.wado";
 
 /// A raw `$name` or `$name.member` attribute reference located in a
 /// fragment, with its byte span within the fragment text (`start` points
@@ -83,23 +75,29 @@ fn scan_refs(src: &StrSlice, start: i32, end: i32, out: &mut List<AttrRef>) {
 /// The `$ident(.ident)?` reference starting at `pos`, or `null` where `pos`
 /// holds no `$` followed by an identifier.
 pub fn attr_ref_at(src: &StrSlice, pos: i32, end: i32) -> Option<AttrRef> {
-    let [name_end, ref_end] = attr_ref_span(src, pos, end)?;
-    let name = src.slice(pos + 1, name_end).to_string();
-    if ref_end == name_end {
-        return Option::Some(AttrRef { name, start: pos, end: name_end });
+    let [name_stop, ref_end] = attr_ref_span(src, pos, end)?;
+    let name = src.slice(pos + 1, name_stop).to_string();
+    if ref_end == name_stop {
+        return Option::Some(AttrRef { name, start: pos, end: name_stop });
     }
-    let member = Option::Some(src.slice(name_end + 1, ref_end).to_string());
+    let member = Option::Some(src.slice(name_stop + 1, ref_end).to_string());
     return Option::Some(AttrRef { name, member, start: pos, end: ref_end });
 }
 
 /// `attr_ref_at`'s name end and reference end, without copying either part.
 pub fn attr_ref_span(src: &StrSlice, pos: i32, end: i32) -> Option<[i32, i32]> {
-    if !(src.byte_at(pos) == b'$' && pos + 1 < end && is_id_start_char(char_at(src, pos + 1))) {
+    if src.byte_at(pos) != b'$' {
         return null;
     }
-    let name_end = ident_end(src, pos + 1, end);
-    if name_end + 1 < end && src.byte_at(name_end) == b'.' && is_id_start_char(char_at(src, name_end + 1)) {
-        return Option::Some([name_end, ident_end(src, name_end + 1, end)]);
+    let name = name_end(src, pos + 1, end);
+    if name == pos + 1 {
+        return null;
     }
-    return Option::Some([name_end, name_end]);
+    if name < end && src.byte_at(name) == b'.' {
+        let member = name_end(src, name + 1, end);
+        if member > name + 1 {
+            return Option::Some([name, member]);
+        }
+    }
+    return Option::Some([name, name]);
 }
