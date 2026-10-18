@@ -21,7 +21,7 @@ const FORBIDDEN = [
   {
     pattern: /^pgrep$/,
     reason:
-      "pgrep is forbidden (AGENTS.md > Tooling): `-f` matches itself, since the shell running" +
+      "pgrep is forbidden: `-f` matches itself, since the shell running" +
       " it carries the pattern in its own command line, so a wait on it never ends. Wait for" +
       " the harness's background notification instead.",
   },

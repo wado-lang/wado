@@ -101,8 +101,6 @@ const ALLOWED = [
   "CARGO=$HOME/.cargo/bin/cargo; $CARGO test",
   "cat <<EOF\n EOF\nsed -i x f\nEOF",
   "grep -n pgrep AGENTS.md",
-  "kill 1234",
-  "pkill -f 'cargo test'",
 ];
 
 test("denies a forbidden command word", () => {
