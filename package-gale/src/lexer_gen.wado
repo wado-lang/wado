@@ -426,7 +426,7 @@ pub fn lexer_surface(
 fn gen_lexer_struct(w: &mut CodeWriter, members: &MemberDecls, surface: &LexerSurface) {
     let vis = if surface.base_driven { Vis::Pub } else { Vis::Private };
     let mut s = StructSpec::new("Lexer", vis);
-    s.add_field("chars", "List<char>");
+    s.add_field("src", "StrSlice");
     s.add_field("pos", "i32");
     for let mf of &members.fields {
         s.add_field_default(&mf.name, &mf.ty, &mf.init);
@@ -462,7 +462,7 @@ fn gen_lexer_struct(w: &mut CodeWriter, members: &MemberDecls, surface: &LexerSu
     f.add_param("input", "S");
     f.set_return_type("Lexer");
     f.emit_begin(w);
-    w.line("return Lexer { chars: input.to_chars(), pos: 0 };");
+    w.line("return Lexer { src: input.as_str_slice(), pos: 0 };");
     w.end();
     w.blank();
 
@@ -470,7 +470,7 @@ fn gen_lexer_struct(w: &mut CodeWriter, members: &MemberDecls, surface: &LexerSu
     f2.set_receiver("&self");
     f2.set_return_type("bool");
     f2.emit_begin(w);
-    w.line("return self.pos >= self.chars.len();");
+    w.line("return self.pos >= self.src.len();");
     w.end();
 
     if surface.commit_latches {
@@ -707,7 +707,8 @@ fn gen_lexer_fragment_fn<S: AsStrSlice>(
     end_lexer_matcher(w, rule, &frag.plan, &LexerEmit { all_rules, ci: frag.key.ci, hm }, ea);
 }
 
-/// Open a matcher `fn_name(chars, start) -> i32` over `rule`'s text.
+/// Open a matcher `fn_name(src, start) -> i32` over `rule`'s text. Positions are
+/// byte offsets into `src`, so a step consumes one char's UTF-8 bytes.
 fn begin_lexer_matcher<S: AsStrSlice, S1: AsStrSlice>(
     w: &mut CodeWriter,
     fn_name: S,
@@ -720,23 +721,23 @@ fn begin_lexer_matcher<S: AsStrSlice, S1: AsStrSlice>(
     if hm {
         f.add_param("lx", "&Lexer");
     } else {
-        f.add_param("chars", "&List<char>");
+        f.add_param("src", "&StrSlice");
     }
     f.add_param("start", "i32");
     f.set_return_type("i32");
-    // A `Foo::op(LexerView { chars, .. })` call in the body is what makes the
+    // A `Foo::op(LexerView { src, .. })` call in the body is what makes the
     // generated function carry `with Foo`.
     if !sc_name.is_empty() && lexer_rule_match_calls_super(rule, all_rules, sc_name) {
         f.add_effect(sc_name);
     }
     f.emit_begin(w);
     if hm {
-        w.line("let chars = &lx.chars;");
+        w.line("let src = &lx.src;");
     }
 }
 
 /// What every emit inside one matcher reads and none changes. `hm` says the
-/// grammar has members, so the matcher reads its chars through `lx: &Lexer`.
+/// grammar has members, so the matcher reads its input through `lx: &Lexer`.
 struct LexerEmit {
     all_rules: &List<LexerRule>,
     ci: bool,
@@ -1426,7 +1427,7 @@ fn gen_lexer_match_fn<S: AsStrSlice>(
     // delegate to the runtime lexer simulator.
     if let Some(idx) = atn_class.get(rule.name) {
         let longest = !lexer_rule_has_non_greedy(rule, all_rules);
-        w.line(`return latn_match(&LATN_SIM, ${idx}, chars, start, ${longest});`);
+        w.line(`return latn_match(&LATN_SIM, ${idx}, src, start, ${longest});`);
         w.end();
         w.blank();
         return;
@@ -1441,7 +1442,7 @@ fn gen_lexer_match_fn<S: AsStrSlice>(
 /// Emit each semantic predicate at position `before` as a guard
 /// (`if !(cond) { <fail_action>; }`) in a lexer rule's match fn. The condition
 /// is the staged body (`stage_lexer_bodies` resolved its lexer `$`-attributes
-/// against the match fn's `chars` / `start` / `pos`). `fail_action` is
+/// against the match fn's `src` / `start` / `pos`). `fail_action` is
 /// `return -1` for a single-alt rule and `break <label>` inside a multi-alt
 /// rule / group / fragment (a false predicate falls through to the next alt).
 /// `gen_lexer_alt_seq` drives this over every `before_index` (alt-initial, mid,
@@ -1674,7 +1675,7 @@ fn gen_lexer_apply_replay_body(
     ci: bool,
     has_members: bool,
 ) {
-    w.line("let chars = &lx.chars;");
+    w.line("let src = &lx.src;");
     w.line("let mut pos = start;");
     // `ea` here only re-selects the arm the match took; a single-alt body has
     // nothing to select, so it never re-evaluates a predicate.
@@ -3578,7 +3579,7 @@ fn gen_lexer_elem<S: AsStrSlice>(
 }
 
 fn gen_lexer_call<S: AsStrSlice, S1: AsStrSlice>(w: &mut CodeWriter, fn_name: S, fail_action: S1, hm: bool) {
-    let call_ctx = if hm { "lx" } else { "chars" };
+    let call_ctx = if hm { "lx" } else { "src" };
     w.line(`pos = ${fn_name}(${call_ctx}, pos);`);
     w.line(`if pos < 0 { ${fail_action}; }`);
 }
@@ -3600,33 +3601,27 @@ fn elem_inlined_body(elem: &LexerElement, all_rules: &List<LexerRule>) -> List<L
 fn gen_lexer_leaf<S: AsStrSlice>(w: &mut CodeWriter, elem: &LexerElement, fail_action: S, ci: bool, hm: bool) {
     match *elem {
         Literal(text) => {
-            let chars: List<char> = text.chars().collect();
-            for let mut i = 0; i < chars.len(); i += 1 {
-                let mismatch = gen_char_mismatch(`chars[pos]`, chars[i], ci);
-                w.line(`if pos >= chars.len() || ${mismatch} { ${fail_action}; }`);
-                w.line("pos += 1;");
+            for let c of text.chars() {
+                let n = c.len_utf8();
+                let bound = if n == 1 { String::from("pos >= src.len()") } else { `pos + ${n} > src.len()` };
+                let mismatch = literal_char_mismatches("pos", 0, c, ci).join(" || ");
+                w.line(`if ${bound} || ${mismatch} { ${fail_action}; }`);
+                w.line(`pos += ${n};`);
             }
         },
         CharRange(pair) => {
-            if ci {
-                gen_char_class(w, &folded_class(pair.0, pair.1, ci), fail_action);
-            } else {
-                w.line(
-                    `if pos >= chars.len() || !(chars[pos] matches { ${char_pat(pair.0, pair.1)} }) { ${fail_action}; }`,
-                );
-                w.line("pos += 1;");
-            }
+            gen_char_class(w, &folded_class(pair.0, pair.1, ci), fail_action);
         },
         CharClass(cc) => {
             gen_char_class(w, &folded_char_class(&cc, ci), fail_action);
         },
         AnyChar => {
-            w.line(`if pos >= chars.len() { ${fail_action}; }`);
-            w.line("pos += 1;");
+            w.line(`if pos >= src.len() { ${fail_action}; }`);
+            w.line("pos = src.ceil_char_boundary(pos + 1);");
         },
         RuleRef(name) => {
             if name == "EOF" {
-                w.line(`if pos < chars.len() { ${fail_action}; }`);
+                w.line(`if pos < src.len() { ${fail_action}; }`);
             } else {
                 gen_lexer_call(w, &lexer_try_fn_name(&name), fail_action, hm);
             }
@@ -3646,30 +3641,91 @@ fn folded_char_class(cc: &CharClass, ci: bool) -> CharClass {
     return CharClass { ranges: expanded, negated: cc.negated };
 }
 
+/// One char step: fail unless the char at the cursor is in `cc`, then move past
+/// it. A positive class of ASCII ranges is tested on the byte alone and moves
+/// one byte, since no byte of a multi-byte UTF-8 char is ASCII.
 fn gen_char_class<S: AsStrSlice>(w: &mut CodeWriter, cc: &CharClass, fail_action: S) {
-    w.line(`if pos >= chars.len() { ${fail_action}; }`);
+    w.line(`if pos >= src.len() { ${fail_action}; }`);
     let cond = char_class_disjunction(w, cc);
     if cc.negated {
         w.line(`if ${cond} { ${fail_action}; }`);
     } else {
         w.line(`if !${cond} { ${fail_action}; }`);
     }
-    w.line("pos += 1;");
+    if !cc.negated && ranges_are_ascii(&cc.ranges) {
+        w.line("pos += 1;");
+    } else {
+        w.line("pos = src.ceil_char_boundary(pos + 1);");
+    }
+}
+
+fn ranges_are_ascii(ranges: &List<CharRange>) -> bool {
+    return ranges.iter_ref().all(|r| (r.end as u32) < 0x80);
+}
+
+/// The expression reading the byte at `base + offset`.
+fn src_byte<S: AsStrSlice>(base: S, offset: i32) -> String {
+    return if offset == 0 { `unchecked src.byte_at(${base})` } else { `unchecked src.byte_at(${base} + ${offset})` };
+}
+
+/// A byte or byte-range pattern for generated source.
+fn byte_pat(start: u32, end: u32) -> String {
+    if start == end {
+        return byte_lit(start);
+    }
+    return `${byte_lit(start)}..=${byte_lit(end)}`;
+}
+
+fn byte_lit(b: u32) -> String {
+    if b == 0x27 || b == 0x5C {
+        return `b'\\${b as u8 as char}'`;
+    }
+    if 0x20 <= b <= 0x7E {
+        return `b'${b as u8 as char}'`;
+    }
+    return `b'\\x${b:02x}'`;
+}
+
+/// The tests that fail unless the UTF-8 bytes of `c` sit at `base + offset`,
+/// ASCII letters folded under `ci`. The caller has checked the bytes are there.
+fn literal_char_mismatches<S: AsStrSlice>(base: S, offset: i32, c: char, ci: bool) -> List<String> {
+    let code = c as u32;
+    if code < 0x80 {
+        let lower = c.to_ascii_lowercase();
+        let upper = c.to_ascii_uppercase();
+        let read = src_byte(base, offset);
+        if ci && lower != upper {
+            return [`!(${read} matches { ${byte_lit(lower as u32)} | ${byte_lit(upper as u32)} })`];
+        }
+        return [`${read} != ${byte_lit(code)}`];
+    }
+    let encoded = String::from(c);
+    let mut out: List<String> = [];
+    for let mut i = 0; i < encoded.len(); i += 1 {
+        out.push(`${src_byte(base, offset + i)} != ${byte_lit(unchecked encoded.byte_at(i) as u32)}`);
+    }
+    return out;
 }
 
 /// A class with more ranges than this is tested by a function defined once,
 /// rather than spelled out at every site: `\p{L}` alone is hundreds.
 global SHARED_CHAR_SET_MIN_RANGES: i32 = 16;
 
-/// `(chars[pos] matches { 'x' | 'lo'..='hi' | ... })` for a char class, or a
-/// call to the shared function testing a large one: an operand `!` applies to.
+/// Whether the char at `pos` is in `cc`'s ranges, as an operand `!` applies to:
+/// a `matches` on the byte when every range is ASCII (a multi-byte char's lead
+/// byte is in none of them), on the decoded char otherwise, or a call to the
+/// shared function testing a large class.
 fn char_class_disjunction(w: &mut CodeWriter, cc: &CharClass) -> String {
     if cc.ranges.len() == 0 {
         return "false";
     }
+    if ranges_are_ascii(&cc.ranges) {
+        let pattern = cc.ranges.iter_ref().map(|r| byte_pat(r.start as u32, r.end as u32)).collect().join(" | ");
+        return `(${src_byte("pos", 0)} matches { ${pattern} })`;
+    }
     let pattern = || cc.ranges.iter_ref().map(|r| char_pat(r.start, r.end)).collect().join(" | ");
     if cc.ranges.len() <= SHARED_CHAR_SET_MIN_RANGES {
-        return `(chars[pos] matches { ${pattern()} })`;
+        return `(char_at(src, pos) matches { ${pattern()} })`;
     }
     let key = cc.ranges.iter_ref().map(|r| `${r.start as u32:x}-${r.end as u32:x}`).collect().join(",");
     let name = w.hoist_fn(
@@ -3677,7 +3733,7 @@ fn char_class_disjunction(w: &mut CodeWriter, cc: &CharClass) -> String {
         "in_char_set_",
         |name: &String| `fn ${*name}(c: char) -> bool {\n    return c matches { ${pattern()} };\n}\n\n`,
     );
-    return `${name}(chars[pos])`;
+    return `${name}(char_at(src, pos))`;
 }
 
 fn gen_lexer_repeat<S: AsStrSlice>(
@@ -3876,7 +3932,7 @@ fn gen_lexer_not<S: AsStrSlice>(
 ) {
     let id = w.next_id();
     let label = `not_${id}`;
-    w.line(`if pos >= chars.len() { ${fail_action}; }`);
+    w.line(`if pos >= src.len() { ${fail_action}; }`);
     w.line(`let not_saved_${id} = pos;`);
     w.line(`let mut not_matched_${id} = false;`);
     w.begin(`${label}:`);
@@ -3885,7 +3941,7 @@ fn gen_lexer_not<S: AsStrSlice>(
     w.end();
     w.line(`pos = not_saved_${id};`);
     w.line(`if not_matched_${id} { ${fail_action}; }`);
-    w.line("pos += 1;");
+    w.line("pos = src.ceil_char_boundary(pos + 1);");
 }
 
 pub fn find_fragment<S: AsStrSlice>(all_rules: &List<LexerRule>, name: S) -> Option<&LexerRule> {
@@ -4416,7 +4472,7 @@ fn gen_keyword_classifier_fn(w: &mut CodeWriter, keywords: &List<KeywordInfo>) {
         return;
     }
     let mut f = FnSpec::new("classify_keyword");
-    f.add_param("chars", "&List<char>");
+    f.add_param("src", "&StrSlice");
     f.add_param("start", "i32");
     f.add_param("end", "i32");
     f.set_return_type("i32");
@@ -4502,10 +4558,11 @@ fn keyword_arms(group: &List<KeywordInfo>, pos: i32) -> List<KeywordArm> {
         let members: List<KeywordInfo> = group.iter_ref().filter(|kw| keyword_accepts(kw, pos).contains(c)).map(
             |kw| *kw,
         ).collect();
+        let pattern = byte_lit(*c as u32);
         if let Some(i) = arms.iter_ref().position(|a| a.keywords == members) {
-            arms[i].pattern.push_str(` | '${*c}'`);
+            arms[i].pattern.push_str(` | ${pattern}`);
         } else {
-            arms.push(KeywordArm { pattern: `'${*c}'`, keywords: members });
+            arms.push(KeywordArm { pattern, keywords: members });
         }
     }
     return arms;
@@ -4523,27 +4580,19 @@ fn keyword_char_at(kw: &KeywordInfo, pos: i32) -> char {
     return unchecked kw.text.byte_at(pos) as char;
 }
 
+/// A keyword is ASCII (`is_ident_char`), so its char at `pos` is the token's
+/// byte at `start + pos`, and a token of another byte length is no keyword.
 fn keyword_char_access(pos: i32) -> String {
-    return if pos == 0 { "chars[start]" } else { `chars[start + ${pos}]` };
+    return src_byte("start", pos);
 }
 
 fn keyword_char_test(kw: &KeywordInfo, pos: i32) -> String {
     let access = keyword_char_access(pos);
     let c = keyword_char_at(kw, pos);
     if kw.char_ci[pos] {
-        return wado`${access}.eq_ignore_ascii_case(&'${c}')`;
+        return `(${access}).eq_ignore_ascii_case(&${byte_lit(c as u32)})`;
     }
-    return wado`${access} == '${c}'`;
-}
-
-fn gen_char_mismatch<S: AsStrSlice>(access: S, c: char, ci: bool) -> String {
-    let lower = c.to_ascii_lowercase();
-    let upper = c.to_ascii_uppercase();
-    let expr = access.to_string();
-    if ci && lower != upper {
-        return wado`!${expr}.eq_ignore_ascii_case(&'${lower}')`;
-    }
-    return `${expr} != ${char_pat(c, c)}`;
+    return `${access} == ${byte_lit(c as u32)}`;
 }
 
 /// A char or range pattern for generated source, escaping any char past ASCII
@@ -4607,28 +4656,28 @@ fn quoted_char(c: char) -> String {
 
 fn gen_literal_match_fns(w: &mut CodeWriter, lit_tokens: &List<LitToken>, ci: bool, hm: bool) {
     for let lit of lit_tokens {
-        let chars: List<char> = lit.text.chars().collect();
         let fn_name = lit_try_fn_name(&lit.const_name);
         let mut f = FnSpec::new(&fn_name);
         if hm {
             f.add_param("lx", "&Lexer");
         } else {
-            f.add_param("chars", "&List<char>");
+            f.add_param("src", "&StrSlice");
         }
         f.add_param("start", "i32");
         f.set_return_type("i32");
         f.emit_begin(w);
         if hm {
-            w.line("let chars = &lx.chars;");
+            w.line("let src = &lx.src;");
         }
-        let len = chars.len();
+        let len = lit.text.len();
         assert len > 0, "a literal token has text";
         let mut mismatches: List<String> = [];
-        for let mut i = 0; i < len; i += 1 {
-            let at = if i == 0 { String::from("start") } else { `start + ${i}` };
-            mismatches.push(gen_char_mismatch(`chars[${at}]`, chars[i], ci));
+        let mut offset = 0;
+        for let c of lit.text.chars() {
+            mismatches.extend(&literal_char_mismatches("start", offset, c, ci));
+            offset += c.len_utf8();
         }
-        w.line(`if start + ${len} > chars.len() || ${mismatches.join(" || ")} { return -1; }`);
+        w.line(`if start + ${len} > src.len() || ${mismatches.join(" || ")} { return -1; }`);
         w.line(`return start + ${len};`);
         w.end();
         w.blank();
@@ -5315,7 +5364,8 @@ fn gen_second_char_dispatch(
     gen_group_calls(w, calls, &leading, needs_extras, has_actions, has_members);
     // Past the end, only a call that can end after one char matches, and the
     // NUL a missing char reads as runs every such call whichever arm it lands in.
-    w.line("let second_char = if start + 1 < lexer.chars.len() { lexer.chars[start + 1] } else { '\\u{0}' };");
+    w.line("let second_at = lexer.src.ceil_char_boundary(start + 1);");
+    w.line("let second_char = if second_at < lexer.src.len() { char_at(&lexer.src, second_at) } else { '\\u{0}' };");
     w.begin("match second_char");
     for let arm of &arms {
         let middle: List<i32> = arm.calls.iter_value().filter(|m| !leading.contains(&m) && !trailing.contains(&m)).collect(
@@ -5388,7 +5438,7 @@ fn gen_group_calls(
     has_actions: bool,
     has_members: bool,
 ) {
-    let ctx = if has_members { "&lexer" } else { "&lexer.chars" };
+    let ctx = if has_members { "&lexer" } else { "&lexer.src" };
     // Uniform `try_*` call per candidate (keep the longest match). Single-char
     // literals are not hand-inlined — the wado compiler folds the tiny bodies.
     for let call_idx of indices {
@@ -5457,7 +5507,7 @@ fn gen_tokenize_fn<S: AsStrSlice>(
     // Struct-of-arrays token storage: the lexer pushes flat i32s, never a
     // per-token aggregate. `triv_lo` marks where the current token's leading
     // trivia begins; it advances to the next mark after each emitted token.
-    w.line("let mut ts = TokenStream::new(&lexer.chars);");
+    w.line("let mut ts = TokenStream::new(lexer.src);");
     w.line("let mut triv_lo = ts.trivia_mark();");
 
     if has_more_rules {
@@ -5486,7 +5536,7 @@ fn gen_tokenize_fn<S: AsStrSlice>(
         // exists — skip is otherwise decided by `best_kind`).
         w.line("let mut best_act_skip = false;");
     }
-    w.line("let first_char = lexer.chars[start];");
+    w.line("let first_char = char_at(&lexer.src, start);");
 
     if use_modes {
         w.line("let mut best_push_mode: i32 = -1;");
@@ -5562,11 +5612,12 @@ fn gen_tokenize_fn<S: AsStrSlice>(
         String::from("best_end <= start");
     };
     w.begin(`if ${no_match_guard}`);
+    w.line("let error_end = lexer.src.ceil_char_boundary(start + 1);");
     w.line(
-        "let _ = ts.push_token_flagged(TK_ERROR, start, start + 1, triv_lo, ts.trivia_mark(), TokenFlags::LexError);",
+        "let _ = ts.push_token_flagged(TK_ERROR, start, error_end, triv_lo, ts.trivia_mark(), TokenFlags::LexError);",
     );
     w.line("triv_lo = ts.trivia_mark();");
-    w.line("lexer.pos = start + 1;");
+    w.line("lexer.pos = error_end;");
     w.else_begin("else");
     if !keywords.is_empty() {
         let kinds = keyword_carrier_kinds(lexer_rules, routes, keywords, grammar_opts);
@@ -5586,7 +5637,7 @@ fn gen_tokenize_fn<S: AsStrSlice>(
             dropped.push_str(" best_act = -1;");
         }
         w.begin(`if ${gate}`);
-        w.line("let kw_kind = classify_keyword(&lexer.chars, start, best_end);");
+        w.line("let kw_kind = classify_keyword(&lexer.src, start, best_end);");
         w.line(`if kw_kind >= 0 { best_kind = kw_kind;${dropped} }`);
         w.end();
     }

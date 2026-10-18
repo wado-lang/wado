@@ -18,32 +18,47 @@ impl Span {
     }
 }
 
-internal fn push_chars(out: &mut String, chars: &List<char>, start: i32, end: i32) {
-    let mut bytes = 0;
-    for let mut i = start; i < end; i += 1 {
-        bytes += chars[i].len_utf8();
+internal fn char_at(src: &StrSlice, pos: i32) -> char
+    contract 0 <= pos < src.len()
+{
+    let b = unchecked src.byte_at(pos);
+    if b < 0x80 {
+        return b as char;
     }
-    out.reserve(bytes);
-    for let mut i = start; i < end; i += 1 {
-        out.push(chars[i]);
-    }
+    return src.char_at_byte(pos);
 }
 
-internal fn chars_text(chars: &List<char>, start: i32, end: i32) -> String {
-    let mut s = String::new();
-    push_chars(&mut s, chars, start, end);
-    return s;
-}
-
-internal fn push_chars_escaped(out: &mut String, chars: &List<char>, start: i32, end: i32) {
+internal fn char_count(src: &StrSlice, start: i32, end: i32) -> i32
+    contract 0 <= start <= end <= src.len()
+{
+    let mut n = 0;
     for let mut i = start; i < end; i += 1 {
-        match chars[i] {
-            '\n' => out.push_str("\\n"),
-            '\r' => out.push_str("\\r"),
-            '\t' => out.push_str("\\t"),
-            c => out.push(c),
+        if src.is_char_boundary(i) {
+            n += 1;
         }
     }
+    return n;
+}
+
+internal fn span_text(src: &StrSlice, start: i32, end: i32) -> String {
+    return src.slice(start, end).to_string();
+}
+
+internal fn push_escaped(out: &mut String, src: &StrSlice, start: i32, end: i32) {
+    let mut run = start;
+    for let mut i = start; i < end; i += 1 {
+        let b = unchecked src.byte_at(i);
+        if b matches { b'\n' | b'\r' | b'\t' } {
+            out.push_str(unchecked src.slice(run, i));
+            out.push_str(match b {
+                b'\n' => "\\n",
+                b'\r' => "\\r",
+                _ => "\\t",
+            });
+            run = i + 1;
+        }
+    }
+    out.push_str(unchecked src.slice(run, end));
 }
 
 internal fn kind_set_has(set: &List<i32>, kind: i32) -> bool {
@@ -72,27 +87,26 @@ internal fn with_expected<S: AsStrSlice>(message: S, expected: &List<String>) ->
     return out;
 }
 
-internal fn char_pos_in_line(chars: &List<char>, i: i32) -> i32 {
-    let mut j = if i < chars.len() { i } else { chars.len() };
-    let mut col = 0;
-    while j > 0 && chars[j - 1] != '\n' {
-        col += 1;
-        j -= 1;
+internal fn char_pos_in_line(src: &StrSlice, pos: i32) -> i32 {
+    let end = i32::min(pos, src.len());
+    let mut line_start = end;
+    while line_start > 0 && unchecked src.byte_at(line_start - 1) != b'\n' {
+        line_start -= 1;
     }
-    return col;
+    return char_count(src, line_start, end);
 }
 
-internal fn line_starts(chars: &List<char>) -> List<i32> {
+internal fn line_starts(src: &StrSlice) -> List<i32> {
     let mut starts: List<i32> = [0];
-    for let mut i = 0; i < chars.len(); i += 1 {
-        if chars[i] == '\n' {
+    for let mut i = 0; i < src.len(); i += 1 {
+        if unchecked src.byte_at(i) == b'\n' {
             starts.push(i + 1);
         }
     }
     return starts;
 }
 
-internal fn line_col_at(starts: &List<i32>, pos: i32) -> [i32, i32] {
+internal fn line_at(starts: &List<i32>, pos: i32) -> i32 {
     let mut lo = 0;
     let mut hi = starts.len() - 1;
     while lo < hi {
@@ -103,7 +117,12 @@ internal fn line_col_at(starts: &List<i32>, pos: i32) -> [i32, i32] {
             hi = mid - 1;
         }
     }
-    return [lo + 1, pos - starts[lo]];
+    return lo + 1;
+}
+
+internal fn line_col_at(src: &StrSlice, starts: &List<i32>, pos: i32) -> [i32, i32] {
+    let line = line_at(starts, pos);
+    return [line, char_count(src, starts[line - 1], pos)];
 }
 
 pub flags TokenFlags {
@@ -118,7 +137,7 @@ pub struct TokenStream {
     pub ends: List<i32>,
     pub triv_lo: List<i32>,
     pub triv_hi: List<i32>,
-    pub chars: &List<char>,
+    pub src: StrSlice,
     pub triv_kinds: List<i32>,
     pub triv_starts: List<i32>,
     pub triv_ends: List<i32>,
@@ -128,15 +147,15 @@ pub struct TokenStream {
 }
 
 impl TokenStream {
-    internal fn new(chars: &List<char>) -> TokenStream {
-        let cap = chars.len() / 4 + 1;
+    internal fn new(src: StrSlice) -> TokenStream {
+        let cap = src.len() / 4 + 1;
         return TokenStream {
             kinds: List::with_capacity(cap),
             starts: List::with_capacity(cap),
             ends: List::with_capacity(cap),
             triv_lo: List::with_capacity(cap),
             triv_hi: List::with_capacity(cap),
-            chars,
+            src,
             triv_kinds: List::with_capacity(cap),
             triv_starts: List::with_capacity(cap),
             triv_ends: List::with_capacity(cap),
@@ -249,15 +268,15 @@ impl TokenStream {
     }
 
     pub fn token_text(&self, i: i32) -> String {
-        return chars_text(self.chars, self.starts[i], self.ends[i]);
+        return span_text(&self.src, self.starts[i], self.ends[i]);
     }
 
     pub fn push_token_text(&self, out: &mut String, i: i32) {
-        push_chars(out, self.chars, self.starts[i], self.ends[i]);
+        out.push_str(self.src.slice(self.starts[i], self.ends[i]));
     }
 
     pub fn push_token_text_escaped(&self, out: &mut String, i: i32) {
-        push_chars_escaped(out, self.chars, self.starts[i], self.ends[i]);
+        push_escaped(out, &self.src, self.starts[i], self.ends[i]);
     }
 
     pub fn rule_text(&self, start_tok: i32, end_tok: i32) -> String {
@@ -266,7 +285,7 @@ impl TokenStream {
             if i > start_tok {
                 for let mut j = self.triv_lo[i]; j < self.triv_hi[i]; j += 1 {
                     if self.triv_chans[j] != 0 {
-                        push_chars(&mut out, self.chars, self.triv_starts[j], self.triv_ends[j]);
+                        out.push_str(self.src.slice(self.triv_starts[j], self.triv_ends[j]));
                     }
                 }
             }
@@ -371,7 +390,7 @@ impl Display for Diagnostic {
 
 fn lex_error_at(tokens: &TokenStream, i: i32) -> Diagnostic {
     let mut message = String::from("token recognition error at: '");
-    push_chars_escaped(&mut message, tokens.chars, tokens.starts[i], tokens.ends[i]);
+    push_escaped(&mut message, &tokens.src, tokens.starts[i], tokens.ends[i]);
     message.push('\'');
     return Diagnostic::error(
         DiagnosticCode::LexError,
@@ -396,13 +415,13 @@ internal fn merge_lex_errors(tokens: &TokenStream, diagnostics: &mut List<Diagno
     *diagnostics = merged;
 }
 
-internal fn resolve_positions(diagnostics: &mut List<Diagnostic>, chars: &List<char>) {
+internal fn resolve_positions(diagnostics: &mut List<Diagnostic>, src: &StrSlice) {
     if diagnostics.is_empty() {
         return;
     }
-    let starts = line_starts(chars);
+    let starts = line_starts(src);
     for let mut i = 0; i < diagnostics.len(); i += 1 {
-        let lc = line_col_at(&starts, diagnostics[i].span.start);
+        let lc = line_col_at(src, &starts, diagnostics[i].span.start);
         diagnostics[i].line = lc.0;
         diagnostics[i].col = lc.1;
     }
@@ -871,8 +890,31 @@ fn render_node(
     return c;
 }
 
+struct SourceCursor {
+    byte: i32,
+    char: i32,
+    line: i32,
+    line_char: i32,
+}
+
+impl SourceCursor {
+    fn advance_to(&mut self, src: &StrSlice, byte: i32) {
+        assert byte >= self.byte, "to_lexer_string visits tokens in source order";
+        for let mut i = self.byte; i < byte; i += 1 {
+            if src.is_char_boundary(i) {
+                self.char += 1;
+            }
+            if unchecked src.byte_at(i) == b'\n' {
+                self.line += 1;
+                self.line_char = self.char;
+            }
+        }
+        self.byte = byte;
+    }
+}
+
 pub fn to_lexer_string(tokens: &TokenStream, eof_kind: i32) -> String {
-    let starts = line_starts(tokens.chars);
+    let mut cursor = SourceCursor { byte: 0, char: 0, line: 1, line_char: 0 };
     let mut out = String::with_capacity(tokens.output.len() + tokens.len() * 32);
     out.push_str(&tokens.output);
     let mut index = 0;
@@ -888,7 +930,7 @@ pub fn to_lexer_string(tokens: &TokenStream, eof_kind: i32) -> String {
                     tokens.triv_starts[t],
                     tokens.triv_ends[t],
                     tokens.triv_chans[t],
-                    &starts,
+                    &mut cursor,
                     index,
                     eof_kind,
                 );
@@ -902,7 +944,7 @@ pub fn to_lexer_string(tokens: &TokenStream, eof_kind: i32) -> String {
             tokens.starts[i],
             tokens.ends[i],
             0,
-            &starts,
+            &mut cursor,
             index,
             eof_kind,
         );
@@ -918,24 +960,26 @@ fn emit_lexer_token(
     start: i32,
     end: i32,
     channel: i32,
-    starts: &List<i32>,
+    cursor: &mut SourceCursor,
     index: i32,
     eof_kind: i32,
 ) {
     let is_eof = kind == eof_kind;
     let type_id = if is_eof { -1 } else { kind + 1 };
-    let lc = line_col_at(starts, start);
-    out.push_str(`[@${index},${start}:${end - 1}='`);
+    cursor.advance_to(&tokens.src, start);
+    let first = cursor.char;
+    let stop = first + char_count(&tokens.src, start, end) - 1;
+    out.push_str(`[@${index},${first}:${stop}='`);
     if is_eof {
         out.push_str("<EOF>");
     } else {
-        push_chars_escaped(out, tokens.chars, start, end);
+        push_escaped(out, &tokens.src, start, end);
     }
     out.push_str(`',<${type_id}>,`);
     if channel != 0 {
         out.push_str(`channel=${channel},`);
     }
-    out.push_str(`${lc.0}:${lc.1}]\n`);
+    out.push_str(`${cursor.line}:${first - cursor.line_char}]\n`);
 }
 
 internal global FOLLOW_MAX_DEPTH: i32 = 4;
@@ -1166,39 +1210,39 @@ pub global TK_EOF: i32 = 23;
 pub global TK_ERROR: i32 = 24;
 
 struct Lexer {
-    chars: List<char>,
+    src: StrSlice,
     pos: i32,
 }
 
 impl Lexer {
     fn new<S: AsStrSlice>(input: S) -> Lexer {
-        return Lexer { chars: input.to_chars(), pos: 0 };
+        return Lexer { src: input.as_str_slice(), pos: 0 };
     }
 
     fn at_end(&self) -> bool {
-        return self.pos >= self.chars.len();
+        return self.pos >= self.src.len();
     }
 }
 
-fn try_HTML_COMMENT(chars: &List<char>, start: i32) -> i32 {
+fn try_HTML_COMMENT(src: &StrSlice, start: i32) -> i32 {
     let mut pos = start;
-    if pos >= chars.len() || chars[pos] != '<' { return -1; }
+    if pos >= src.len() || unchecked src.byte_at(pos) != b'<' { return -1; }
     pos += 1;
-    if pos >= chars.len() || chars[pos] != '!' { return -1; }
+    if pos >= src.len() || unchecked src.byte_at(pos) != b'!' { return -1; }
     pos += 1;
-    if pos >= chars.len() || chars[pos] != '-' { return -1; }
+    if pos >= src.len() || unchecked src.byte_at(pos) != b'-' { return -1; }
     pos += 1;
-    if pos >= chars.len() || chars[pos] != '-' { return -1; }
+    if pos >= src.len() || unchecked src.byte_at(pos) != b'-' { return -1; }
     pos += 1;
     loop {
         let ng_saved_0 = pos;
         let mut ng_exit_0 = false;
         ng_0: {
-            if pos >= chars.len() || chars[pos] != '-' { break ng_0; }
+            if pos >= src.len() || unchecked src.byte_at(pos) != b'-' { break ng_0; }
             pos += 1;
-            if pos >= chars.len() || chars[pos] != '-' { break ng_0; }
+            if pos >= src.len() || unchecked src.byte_at(pos) != b'-' { break ng_0; }
             pos += 1;
-            if pos >= chars.len() || chars[pos] != '>' { break ng_0; }
+            if pos >= src.len() || unchecked src.byte_at(pos) != b'>' { break ng_0; }
             pos += 1;
             ng_exit_0 = true;
         }
@@ -1206,27 +1250,27 @@ fn try_HTML_COMMENT(chars: &List<char>, start: i32) -> i32 {
             break;
         }
         pos = ng_saved_0;
-        if pos >= chars.len() { return -1; }
-        pos += 1;
+        if pos >= src.len() { return -1; }
+        pos = src.ceil_char_boundary(pos + 1);
     }
     return pos;
 }
 
-fn try_HTML_CONDITIONAL_COMMENT(chars: &List<char>, start: i32) -> i32 {
+fn try_HTML_CONDITIONAL_COMMENT(src: &StrSlice, start: i32) -> i32 {
     let mut pos = start;
-    if pos >= chars.len() || chars[pos] != '<' { return -1; }
+    if pos >= src.len() || unchecked src.byte_at(pos) != b'<' { return -1; }
     pos += 1;
-    if pos >= chars.len() || chars[pos] != '!' { return -1; }
+    if pos >= src.len() || unchecked src.byte_at(pos) != b'!' { return -1; }
     pos += 1;
-    if pos >= chars.len() || chars[pos] != '[' { return -1; }
+    if pos >= src.len() || unchecked src.byte_at(pos) != b'[' { return -1; }
     pos += 1;
     loop {
         let ng_saved_1 = pos;
         let mut ng_exit_1 = false;
         ng_1: {
-            if pos >= chars.len() || chars[pos] != ']' { break ng_1; }
+            if pos >= src.len() || unchecked src.byte_at(pos) != b']' { break ng_1; }
             pos += 1;
-            if pos >= chars.len() || chars[pos] != '>' { break ng_1; }
+            if pos >= src.len() || unchecked src.byte_at(pos) != b'>' { break ng_1; }
             pos += 1;
             ng_exit_1 = true;
         }
@@ -1234,29 +1278,29 @@ fn try_HTML_CONDITIONAL_COMMENT(chars: &List<char>, start: i32) -> i32 {
             break;
         }
         pos = ng_saved_1;
-        if pos >= chars.len() { return -1; }
-        pos += 1;
+        if pos >= src.len() { return -1; }
+        pos = src.ceil_char_boundary(pos + 1);
     }
     return pos;
 }
 
-fn try_XML(chars: &List<char>, start: i32) -> i32 {
+fn try_XML(src: &StrSlice, start: i32) -> i32 {
     let mut pos = start;
-    if pos >= chars.len() || chars[pos] != '<' { return -1; }
+    if pos >= src.len() || unchecked src.byte_at(pos) != b'<' { return -1; }
     pos += 1;
-    if pos >= chars.len() || chars[pos] != '?' { return -1; }
+    if pos >= src.len() || unchecked src.byte_at(pos) != b'?' { return -1; }
     pos += 1;
-    if pos >= chars.len() || chars[pos] != 'x' { return -1; }
+    if pos >= src.len() || unchecked src.byte_at(pos) != b'x' { return -1; }
     pos += 1;
-    if pos >= chars.len() || chars[pos] != 'm' { return -1; }
+    if pos >= src.len() || unchecked src.byte_at(pos) != b'm' { return -1; }
     pos += 1;
-    if pos >= chars.len() || chars[pos] != 'l' { return -1; }
+    if pos >= src.len() || unchecked src.byte_at(pos) != b'l' { return -1; }
     pos += 1;
     loop {
         let ng_saved_2 = pos;
         let mut ng_exit_2 = false;
         ng_2: {
-            if pos >= chars.len() || chars[pos] != '>' { break ng_2; }
+            if pos >= src.len() || unchecked src.byte_at(pos) != b'>' { break ng_2; }
             pos += 1;
             ng_exit_2 = true;
         }
@@ -1264,41 +1308,41 @@ fn try_XML(chars: &List<char>, start: i32) -> i32 {
             break;
         }
         pos = ng_saved_2;
-        if pos >= chars.len() { return -1; }
-        pos += 1;
+        if pos >= src.len() { return -1; }
+        pos = src.ceil_char_boundary(pos + 1);
     }
     return pos;
 }
 
-fn try_CDATA(chars: &List<char>, start: i32) -> i32 {
+fn try_CDATA(src: &StrSlice, start: i32) -> i32 {
     let mut pos = start;
-    if pos >= chars.len() || chars[pos] != '<' { return -1; }
+    if pos >= src.len() || unchecked src.byte_at(pos) != b'<' { return -1; }
     pos += 1;
-    if pos >= chars.len() || chars[pos] != '!' { return -1; }
+    if pos >= src.len() || unchecked src.byte_at(pos) != b'!' { return -1; }
     pos += 1;
-    if pos >= chars.len() || chars[pos] != '[' { return -1; }
+    if pos >= src.len() || unchecked src.byte_at(pos) != b'[' { return -1; }
     pos += 1;
-    if pos >= chars.len() || chars[pos] != 'C' { return -1; }
+    if pos >= src.len() || unchecked src.byte_at(pos) != b'C' { return -1; }
     pos += 1;
-    if pos >= chars.len() || chars[pos] != 'D' { return -1; }
+    if pos >= src.len() || unchecked src.byte_at(pos) != b'D' { return -1; }
     pos += 1;
-    if pos >= chars.len() || chars[pos] != 'A' { return -1; }
+    if pos >= src.len() || unchecked src.byte_at(pos) != b'A' { return -1; }
     pos += 1;
-    if pos >= chars.len() || chars[pos] != 'T' { return -1; }
+    if pos >= src.len() || unchecked src.byte_at(pos) != b'T' { return -1; }
     pos += 1;
-    if pos >= chars.len() || chars[pos] != 'A' { return -1; }
+    if pos >= src.len() || unchecked src.byte_at(pos) != b'A' { return -1; }
     pos += 1;
-    if pos >= chars.len() || chars[pos] != '[' { return -1; }
+    if pos >= src.len() || unchecked src.byte_at(pos) != b'[' { return -1; }
     pos += 1;
     loop {
         let ng_saved_3 = pos;
         let mut ng_exit_3 = false;
         ng_3: {
-            if pos >= chars.len() || chars[pos] != ']' { break ng_3; }
+            if pos >= src.len() || unchecked src.byte_at(pos) != b']' { break ng_3; }
             pos += 1;
-            if pos >= chars.len() || chars[pos] != ']' { break ng_3; }
+            if pos >= src.len() || unchecked src.byte_at(pos) != b']' { break ng_3; }
             pos += 1;
-            if pos >= chars.len() || chars[pos] != '>' { break ng_3; }
+            if pos >= src.len() || unchecked src.byte_at(pos) != b'>' { break ng_3; }
             pos += 1;
             ng_exit_3 = true;
         }
@@ -1306,23 +1350,23 @@ fn try_CDATA(chars: &List<char>, start: i32) -> i32 {
             break;
         }
         pos = ng_saved_3;
-        if pos >= chars.len() { return -1; }
-        pos += 1;
+        if pos >= src.len() { return -1; }
+        pos = src.ceil_char_boundary(pos + 1);
     }
     return pos;
 }
 
-fn try_DTD(chars: &List<char>, start: i32) -> i32 {
+fn try_DTD(src: &StrSlice, start: i32) -> i32 {
     let mut pos = start;
-    if pos >= chars.len() || chars[pos] != '<' { return -1; }
+    if pos >= src.len() || unchecked src.byte_at(pos) != b'<' { return -1; }
     pos += 1;
-    if pos >= chars.len() || chars[pos] != '!' { return -1; }
+    if pos >= src.len() || unchecked src.byte_at(pos) != b'!' { return -1; }
     pos += 1;
     loop {
         let ng_saved_4 = pos;
         let mut ng_exit_4 = false;
         ng_4: {
-            if pos >= chars.len() || chars[pos] != '>' { break ng_4; }
+            if pos >= src.len() || unchecked src.byte_at(pos) != b'>' { break ng_4; }
             pos += 1;
             ng_exit_4 = true;
         }
@@ -1330,29 +1374,29 @@ fn try_DTD(chars: &List<char>, start: i32) -> i32 {
             break;
         }
         pos = ng_saved_4;
-        if pos >= chars.len() { return -1; }
-        pos += 1;
+        if pos >= src.len() { return -1; }
+        pos = src.ceil_char_boundary(pos + 1);
     }
     return pos;
 }
 
-fn try_SCRIPTLET(chars: &List<char>, start: i32) -> i32 {
+fn try_SCRIPTLET(src: &StrSlice, start: i32) -> i32 {
     let mut pos = start;
     let alts_saved_5 = pos;
     alts_done_5: {
         alts_5_0: {
             pos = alts_saved_5;
-            if pos >= chars.len() || chars[pos] != '<' { break alts_5_0; }
+            if pos >= src.len() || unchecked src.byte_at(pos) != b'<' { break alts_5_0; }
             pos += 1;
-            if pos >= chars.len() || chars[pos] != '?' { break alts_5_0; }
+            if pos >= src.len() || unchecked src.byte_at(pos) != b'?' { break alts_5_0; }
             pos += 1;
             loop {
                 let ng_saved_6 = pos;
                 let mut ng_exit_6 = false;
                 ng_6: {
-                    if pos >= chars.len() || chars[pos] != '?' { break ng_6; }
+                    if pos >= src.len() || unchecked src.byte_at(pos) != b'?' { break ng_6; }
                     pos += 1;
-                    if pos >= chars.len() || chars[pos] != '>' { break ng_6; }
+                    if pos >= src.len() || unchecked src.byte_at(pos) != b'>' { break ng_6; }
                     pos += 1;
                     ng_exit_6 = true;
                 }
@@ -1360,24 +1404,24 @@ fn try_SCRIPTLET(chars: &List<char>, start: i32) -> i32 {
                     break;
                 }
                 pos = ng_saved_6;
-                if pos >= chars.len() { break alts_5_0; }
-                pos += 1;
+                if pos >= src.len() { break alts_5_0; }
+                pos = src.ceil_char_boundary(pos + 1);
             }
             break alts_done_5;
         }
         alts_5_1: {
             pos = alts_saved_5;
-            if pos >= chars.len() || chars[pos] != '<' { break alts_5_1; }
+            if pos >= src.len() || unchecked src.byte_at(pos) != b'<' { break alts_5_1; }
             pos += 1;
-            if pos >= chars.len() || chars[pos] != '%' { break alts_5_1; }
+            if pos >= src.len() || unchecked src.byte_at(pos) != b'%' { break alts_5_1; }
             pos += 1;
             loop {
                 let ng_saved_7 = pos;
                 let mut ng_exit_7 = false;
                 ng_7: {
-                    if pos >= chars.len() || chars[pos] != '%' { break ng_7; }
+                    if pos >= src.len() || unchecked src.byte_at(pos) != b'%' { break ng_7; }
                     pos += 1;
-                    if pos >= chars.len() || chars[pos] != '>' { break ng_7; }
+                    if pos >= src.len() || unchecked src.byte_at(pos) != b'>' { break ng_7; }
                     pos += 1;
                     ng_exit_7 = true;
                 }
@@ -1385,8 +1429,8 @@ fn try_SCRIPTLET(chars: &List<char>, start: i32) -> i32 {
                     break;
                 }
                 pos = ng_saved_7;
-                if pos >= chars.len() { break alts_5_1; }
-                pos += 1;
+                if pos >= src.len() { break alts_5_1; }
+                pos = src.ceil_char_boundary(pos + 1);
             }
             break alts_done_5;
         }
@@ -1395,29 +1439,29 @@ fn try_SCRIPTLET(chars: &List<char>, start: i32) -> i32 {
     return pos;
 }
 
-fn try_SEA_WS(chars: &List<char>, start: i32) -> i32 {
+fn try_SEA_WS(src: &StrSlice, start: i32) -> i32 {
     let mut pos = start;
     let alts_saved_9 = pos;
     alts_done_9: {
         alts_9_0: {
             pos = alts_saved_9;
-            if pos >= chars.len() || chars[pos] != ' ' { break alts_9_0; }
+            if pos >= src.len() || unchecked src.byte_at(pos) != b' ' { break alts_9_0; }
             pos += 1;
             break alts_done_9;
         }
         alts_9_1: {
             pos = alts_saved_9;
-            if pos >= chars.len() || chars[pos] != '\t' { break alts_9_1; }
+            if pos >= src.len() || unchecked src.byte_at(pos) != b'\x09' { break alts_9_1; }
             pos += 1;
             break alts_done_9;
         }
         alts_9_2: {
             pos = alts_saved_9;
             opt_10: {
-                if pos >= chars.len() || chars[pos] != '\r' { break opt_10; }
+                if pos >= src.len() || unchecked src.byte_at(pos) != b'\x0d' { break opt_10; }
                 pos += 1;
             }
-            if pos >= chars.len() || chars[pos] != '\n' { break alts_9_2; }
+            if pos >= src.len() || unchecked src.byte_at(pos) != b'\x0a' { break alts_9_2; }
             pos += 1;
             break alts_done_9;
         }
@@ -1430,23 +1474,23 @@ fn try_SEA_WS(chars: &List<char>, start: i32) -> i32 {
             alts_done_12: {
                 alts_12_0: {
                     pos = alts_saved_12;
-                    if pos >= chars.len() || chars[pos] != ' ' { break alts_12_0; }
+                    if pos >= src.len() || unchecked src.byte_at(pos) != b' ' { break alts_12_0; }
                     pos += 1;
                     break alts_done_12;
                 }
                 alts_12_1: {
                     pos = alts_saved_12;
-                    if pos >= chars.len() || chars[pos] != '\t' { break alts_12_1; }
+                    if pos >= src.len() || unchecked src.byte_at(pos) != b'\x09' { break alts_12_1; }
                     pos += 1;
                     break alts_done_12;
                 }
                 alts_12_2: {
                     pos = alts_saved_12;
                     opt_13: {
-                        if pos >= chars.len() || chars[pos] != '\r' { break opt_13; }
+                        if pos >= src.len() || unchecked src.byte_at(pos) != b'\x0d' { break opt_13; }
                         pos += 1;
                     }
-                    if pos >= chars.len() || chars[pos] != '\n' { break alts_12_2; }
+                    if pos >= src.len() || unchecked src.byte_at(pos) != b'\x0a' { break alts_12_2; }
                     pos += 1;
                     break alts_done_12;
                 }
@@ -1460,27 +1504,27 @@ fn try_SEA_WS(chars: &List<char>, start: i32) -> i32 {
     return pos;
 }
 
-fn try_SCRIPT_OPEN(chars: &List<char>, start: i32) -> i32 {
+fn try_SCRIPT_OPEN(src: &StrSlice, start: i32) -> i32 {
     let mut pos = start;
-    if pos >= chars.len() || chars[pos] != '<' { return -1; }
+    if pos >= src.len() || unchecked src.byte_at(pos) != b'<' { return -1; }
     pos += 1;
-    if pos >= chars.len() || chars[pos] != 's' { return -1; }
+    if pos >= src.len() || unchecked src.byte_at(pos) != b's' { return -1; }
     pos += 1;
-    if pos >= chars.len() || chars[pos] != 'c' { return -1; }
+    if pos >= src.len() || unchecked src.byte_at(pos) != b'c' { return -1; }
     pos += 1;
-    if pos >= chars.len() || chars[pos] != 'r' { return -1; }
+    if pos >= src.len() || unchecked src.byte_at(pos) != b'r' { return -1; }
     pos += 1;
-    if pos >= chars.len() || chars[pos] != 'i' { return -1; }
+    if pos >= src.len() || unchecked src.byte_at(pos) != b'i' { return -1; }
     pos += 1;
-    if pos >= chars.len() || chars[pos] != 'p' { return -1; }
+    if pos >= src.len() || unchecked src.byte_at(pos) != b'p' { return -1; }
     pos += 1;
-    if pos >= chars.len() || chars[pos] != 't' { return -1; }
+    if pos >= src.len() || unchecked src.byte_at(pos) != b't' { return -1; }
     pos += 1;
     loop {
         let ng_saved_14 = pos;
         let mut ng_exit_14 = false;
         ng_14: {
-            if pos >= chars.len() || chars[pos] != '>' { break ng_14; }
+            if pos >= src.len() || unchecked src.byte_at(pos) != b'>' { break ng_14; }
             pos += 1;
             ng_exit_14 = true;
         }
@@ -1488,31 +1532,31 @@ fn try_SCRIPT_OPEN(chars: &List<char>, start: i32) -> i32 {
             break;
         }
         pos = ng_saved_14;
-        if pos >= chars.len() { return -1; }
-        pos += 1;
+        if pos >= src.len() { return -1; }
+        pos = src.ceil_char_boundary(pos + 1);
     }
     return pos;
 }
 
-fn try_STYLE_OPEN(chars: &List<char>, start: i32) -> i32 {
+fn try_STYLE_OPEN(src: &StrSlice, start: i32) -> i32 {
     let mut pos = start;
-    if pos >= chars.len() || chars[pos] != '<' { return -1; }
+    if pos >= src.len() || unchecked src.byte_at(pos) != b'<' { return -1; }
     pos += 1;
-    if pos >= chars.len() || chars[pos] != 's' { return -1; }
+    if pos >= src.len() || unchecked src.byte_at(pos) != b's' { return -1; }
     pos += 1;
-    if pos >= chars.len() || chars[pos] != 't' { return -1; }
+    if pos >= src.len() || unchecked src.byte_at(pos) != b't' { return -1; }
     pos += 1;
-    if pos >= chars.len() || chars[pos] != 'y' { return -1; }
+    if pos >= src.len() || unchecked src.byte_at(pos) != b'y' { return -1; }
     pos += 1;
-    if pos >= chars.len() || chars[pos] != 'l' { return -1; }
+    if pos >= src.len() || unchecked src.byte_at(pos) != b'l' { return -1; }
     pos += 1;
-    if pos >= chars.len() || chars[pos] != 'e' { return -1; }
+    if pos >= src.len() || unchecked src.byte_at(pos) != b'e' { return -1; }
     pos += 1;
     loop {
         let ng_saved_15 = pos;
         let mut ng_exit_15 = false;
         ng_15: {
-            if pos >= chars.len() || chars[pos] != '>' { break ng_15; }
+            if pos >= src.len() || unchecked src.byte_at(pos) != b'>' { break ng_15; }
             pos += 1;
             ng_exit_15 = true;
         }
@@ -1520,29 +1564,29 @@ fn try_STYLE_OPEN(chars: &List<char>, start: i32) -> i32 {
             break;
         }
         pos = ng_saved_15;
-        if pos >= chars.len() { return -1; }
-        pos += 1;
+        if pos >= src.len() { return -1; }
+        pos = src.ceil_char_boundary(pos + 1);
     }
     return pos;
 }
 
-fn try_TAG_OPEN(chars: &List<char>, start: i32) -> i32 {
+fn try_TAG_OPEN(src: &StrSlice, start: i32) -> i32 {
     let mut pos = start;
-    if pos >= chars.len() || chars[pos] != '<' { return -1; }
+    if pos >= src.len() || unchecked src.byte_at(pos) != b'<' { return -1; }
     pos += 1;
     return pos;
 }
 
-fn try_HTML_TEXT(chars: &List<char>, start: i32) -> i32 {
+fn try_HTML_TEXT(src: &StrSlice, start: i32) -> i32 {
     let mut pos = start;
-    if pos >= chars.len() { return -1; }
-    if (chars[pos] matches { '<' }) { return -1; }
-    pos += 1;
+    if pos >= src.len() { return -1; }
+    if (unchecked src.byte_at(pos) matches { b'<' }) { return -1; }
+    pos = src.ceil_char_boundary(pos + 1);
     loop {
         rep_16: {
-            if pos >= chars.len() { break rep_16; }
-            if (chars[pos] matches { '<' }) { break rep_16; }
-            pos += 1;
+            if pos >= src.len() { break rep_16; }
+            if (unchecked src.byte_at(pos) matches { b'<' }) { break rep_16; }
+            pos = src.ceil_char_boundary(pos + 1);
             continue;
         }
         break;
@@ -1550,46 +1594,46 @@ fn try_HTML_TEXT(chars: &List<char>, start: i32) -> i32 {
     return pos;
 }
 
-fn try_TAG_CLOSE(chars: &List<char>, start: i32) -> i32 {
+fn try_TAG_CLOSE(src: &StrSlice, start: i32) -> i32 {
     let mut pos = start;
-    if pos >= chars.len() || chars[pos] != '>' { return -1; }
+    if pos >= src.len() || unchecked src.byte_at(pos) != b'>' { return -1; }
     pos += 1;
     return pos;
 }
 
-fn try_TAG_SLASH_CLOSE(chars: &List<char>, start: i32) -> i32 {
+fn try_TAG_SLASH_CLOSE(src: &StrSlice, start: i32) -> i32 {
     let mut pos = start;
-    if pos >= chars.len() || chars[pos] != '/' { return -1; }
+    if pos >= src.len() || unchecked src.byte_at(pos) != b'/' { return -1; }
     pos += 1;
-    if pos >= chars.len() || chars[pos] != '>' { return -1; }
+    if pos >= src.len() || unchecked src.byte_at(pos) != b'>' { return -1; }
     pos += 1;
     return pos;
 }
 
-fn try_TAG_SLASH(chars: &List<char>, start: i32) -> i32 {
+fn try_TAG_SLASH(src: &StrSlice, start: i32) -> i32 {
     let mut pos = start;
-    if pos >= chars.len() || chars[pos] != '/' { return -1; }
+    if pos >= src.len() || unchecked src.byte_at(pos) != b'/' { return -1; }
     pos += 1;
     return pos;
 }
 
-fn try_TAG_EQUALS(chars: &List<char>, start: i32) -> i32 {
+fn try_TAG_EQUALS(src: &StrSlice, start: i32) -> i32 {
     let mut pos = start;
-    if pos >= chars.len() || chars[pos] != '=' { return -1; }
+    if pos >= src.len() || unchecked src.byte_at(pos) != b'=' { return -1; }
     pos += 1;
     return pos;
 }
 
-fn try_TAG_NAME(chars: &List<char>, start: i32) -> i32 {
+fn try_TAG_NAME(src: &StrSlice, start: i32) -> i32 {
     let mut pos = start;
-    if pos >= chars.len() { return -1; }
-    if !(chars[pos] matches { ':' | 'A'..='Z' | 'a'..='z' | '⁰'..='\u{218f}' | 'Ⰰ'..='\u{2fef}' | '、'..='\u{d7ff}' | '豈'..='﷏' | 'ﷰ'..='�' }) { return -1; }
-    pos += 1;
+    if pos >= src.len() { return -1; }
+    if !(char_at(src, pos) matches { ':' | 'A'..='Z' | 'a'..='z' | '⁰'..='\u{218f}' | 'Ⰰ'..='\u{2fef}' | '、'..='\u{d7ff}' | '豈'..='﷏' | 'ﷰ'..='�' }) { return -1; }
+    pos = src.ceil_char_boundary(pos + 1);
     loop {
         rep_18: {
-            if pos >= chars.len() { break rep_18; }
-            if !(chars[pos] matches { '-'..='.' | '0'..=':' | 'A'..='Z' | '_' | 'a'..='z' | '·' | '\u{300}'..='\u{36f}' | '‿'..='⁀' | '⁰'..='\u{218f}' | 'Ⰰ'..='\u{2fef}' | '、'..='\u{d7ff}' | '豈'..='﷏' | 'ﷰ'..='�' }) { break rep_18; }
-            pos += 1;
+            if pos >= src.len() { break rep_18; }
+            if !(char_at(src, pos) matches { '-'..='.' | '0'..=':' | 'A'..='Z' | '_' | 'a'..='z' | '·' | '\u{300}'..='\u{36f}' | '‿'..='⁀' | '⁰'..='\u{218f}' | 'Ⰰ'..='\u{2fef}' | '、'..='\u{d7ff}' | '豈'..='﷏' | 'ﷰ'..='�' }) { break rep_18; }
+            pos = src.ceil_char_boundary(pos + 1);
             continue;
         }
         break;
@@ -1597,37 +1641,37 @@ fn try_TAG_NAME(chars: &List<char>, start: i32) -> i32 {
     return pos;
 }
 
-fn try_TAG_WHITESPACE(chars: &List<char>, start: i32) -> i32 {
+fn try_TAG_WHITESPACE(src: &StrSlice, start: i32) -> i32 {
     let mut pos = start;
-    if pos >= chars.len() { return -1; }
-    if !(chars[pos] matches { ' ' | '\t' | '\r' | '\n' }) { return -1; }
+    if pos >= src.len() { return -1; }
+    if !(unchecked src.byte_at(pos) matches { b' ' | b'\x09' | b'\x0d' | b'\x0a' }) { return -1; }
     pos += 1;
     return pos;
 }
 
-fn try_SCRIPT_BODY(chars: &List<char>, start: i32) -> i32 {
+fn try_SCRIPT_BODY(src: &StrSlice, start: i32) -> i32 {
     let mut pos = start;
     loop {
         let ng_saved_19 = pos;
         let mut ng_exit_19 = false;
         ng_19: {
-            if pos >= chars.len() || chars[pos] != '<' { break ng_19; }
+            if pos >= src.len() || unchecked src.byte_at(pos) != b'<' { break ng_19; }
             pos += 1;
-            if pos >= chars.len() || chars[pos] != '/' { break ng_19; }
+            if pos >= src.len() || unchecked src.byte_at(pos) != b'/' { break ng_19; }
             pos += 1;
-            if pos >= chars.len() || chars[pos] != 's' { break ng_19; }
+            if pos >= src.len() || unchecked src.byte_at(pos) != b's' { break ng_19; }
             pos += 1;
-            if pos >= chars.len() || chars[pos] != 'c' { break ng_19; }
+            if pos >= src.len() || unchecked src.byte_at(pos) != b'c' { break ng_19; }
             pos += 1;
-            if pos >= chars.len() || chars[pos] != 'r' { break ng_19; }
+            if pos >= src.len() || unchecked src.byte_at(pos) != b'r' { break ng_19; }
             pos += 1;
-            if pos >= chars.len() || chars[pos] != 'i' { break ng_19; }
+            if pos >= src.len() || unchecked src.byte_at(pos) != b'i' { break ng_19; }
             pos += 1;
-            if pos >= chars.len() || chars[pos] != 'p' { break ng_19; }
+            if pos >= src.len() || unchecked src.byte_at(pos) != b'p' { break ng_19; }
             pos += 1;
-            if pos >= chars.len() || chars[pos] != 't' { break ng_19; }
+            if pos >= src.len() || unchecked src.byte_at(pos) != b't' { break ng_19; }
             pos += 1;
-            if pos >= chars.len() || chars[pos] != '>' { break ng_19; }
+            if pos >= src.len() || unchecked src.byte_at(pos) != b'>' { break ng_19; }
             pos += 1;
             ng_exit_19 = true;
         }
@@ -1635,23 +1679,23 @@ fn try_SCRIPT_BODY(chars: &List<char>, start: i32) -> i32 {
             break;
         }
         pos = ng_saved_19;
-        if pos >= chars.len() { return -1; }
-        pos += 1;
+        if pos >= src.len() { return -1; }
+        pos = src.ceil_char_boundary(pos + 1);
     }
     return pos;
 }
 
-fn try_SCRIPT_SHORT_BODY(chars: &List<char>, start: i32) -> i32 {
+fn try_SCRIPT_SHORT_BODY(src: &StrSlice, start: i32) -> i32 {
     let mut pos = start;
     loop {
         let ng_saved_20 = pos;
         let mut ng_exit_20 = false;
         ng_20: {
-            if pos >= chars.len() || chars[pos] != '<' { break ng_20; }
+            if pos >= src.len() || unchecked src.byte_at(pos) != b'<' { break ng_20; }
             pos += 1;
-            if pos >= chars.len() || chars[pos] != '/' { break ng_20; }
+            if pos >= src.len() || unchecked src.byte_at(pos) != b'/' { break ng_20; }
             pos += 1;
-            if pos >= chars.len() || chars[pos] != '>' { break ng_20; }
+            if pos >= src.len() || unchecked src.byte_at(pos) != b'>' { break ng_20; }
             pos += 1;
             ng_exit_20 = true;
         }
@@ -1659,33 +1703,33 @@ fn try_SCRIPT_SHORT_BODY(chars: &List<char>, start: i32) -> i32 {
             break;
         }
         pos = ng_saved_20;
-        if pos >= chars.len() { return -1; }
-        pos += 1;
+        if pos >= src.len() { return -1; }
+        pos = src.ceil_char_boundary(pos + 1);
     }
     return pos;
 }
 
-fn try_STYLE_BODY(chars: &List<char>, start: i32) -> i32 {
+fn try_STYLE_BODY(src: &StrSlice, start: i32) -> i32 {
     let mut pos = start;
     loop {
         let ng_saved_21 = pos;
         let mut ng_exit_21 = false;
         ng_21: {
-            if pos >= chars.len() || chars[pos] != '<' { break ng_21; }
+            if pos >= src.len() || unchecked src.byte_at(pos) != b'<' { break ng_21; }
             pos += 1;
-            if pos >= chars.len() || chars[pos] != '/' { break ng_21; }
+            if pos >= src.len() || unchecked src.byte_at(pos) != b'/' { break ng_21; }
             pos += 1;
-            if pos >= chars.len() || chars[pos] != 's' { break ng_21; }
+            if pos >= src.len() || unchecked src.byte_at(pos) != b's' { break ng_21; }
             pos += 1;
-            if pos >= chars.len() || chars[pos] != 't' { break ng_21; }
+            if pos >= src.len() || unchecked src.byte_at(pos) != b't' { break ng_21; }
             pos += 1;
-            if pos >= chars.len() || chars[pos] != 'y' { break ng_21; }
+            if pos >= src.len() || unchecked src.byte_at(pos) != b'y' { break ng_21; }
             pos += 1;
-            if pos >= chars.len() || chars[pos] != 'l' { break ng_21; }
+            if pos >= src.len() || unchecked src.byte_at(pos) != b'l' { break ng_21; }
             pos += 1;
-            if pos >= chars.len() || chars[pos] != 'e' { break ng_21; }
+            if pos >= src.len() || unchecked src.byte_at(pos) != b'e' { break ng_21; }
             pos += 1;
-            if pos >= chars.len() || chars[pos] != '>' { break ng_21; }
+            if pos >= src.len() || unchecked src.byte_at(pos) != b'>' { break ng_21; }
             pos += 1;
             ng_exit_21 = true;
         }
@@ -1693,23 +1737,23 @@ fn try_STYLE_BODY(chars: &List<char>, start: i32) -> i32 {
             break;
         }
         pos = ng_saved_21;
-        if pos >= chars.len() { return -1; }
-        pos += 1;
+        if pos >= src.len() { return -1; }
+        pos = src.ceil_char_boundary(pos + 1);
     }
     return pos;
 }
 
-fn try_STYLE_SHORT_BODY(chars: &List<char>, start: i32) -> i32 {
+fn try_STYLE_SHORT_BODY(src: &StrSlice, start: i32) -> i32 {
     let mut pos = start;
     loop {
         let ng_saved_22 = pos;
         let mut ng_exit_22 = false;
         ng_22: {
-            if pos >= chars.len() || chars[pos] != '<' { break ng_22; }
+            if pos >= src.len() || unchecked src.byte_at(pos) != b'<' { break ng_22; }
             pos += 1;
-            if pos >= chars.len() || chars[pos] != '/' { break ng_22; }
+            if pos >= src.len() || unchecked src.byte_at(pos) != b'/' { break ng_22; }
             pos += 1;
-            if pos >= chars.len() || chars[pos] != '>' { break ng_22; }
+            if pos >= src.len() || unchecked src.byte_at(pos) != b'>' { break ng_22; }
             pos += 1;
             ng_exit_22 = true;
         }
@@ -1717,17 +1761,17 @@ fn try_STYLE_SHORT_BODY(chars: &List<char>, start: i32) -> i32 {
             break;
         }
         pos = ng_saved_22;
-        if pos >= chars.len() { return -1; }
-        pos += 1;
+        if pos >= src.len() { return -1; }
+        pos = src.ceil_char_boundary(pos + 1);
     }
     return pos;
 }
 
-fn try_ATTVALUE_VALUE(chars: &List<char>, start: i32) -> i32 {
+fn try_ATTVALUE_VALUE(src: &StrSlice, start: i32) -> i32 {
     let mut pos = start;
     loop {
         rep_23: {
-            if pos >= chars.len() || chars[pos] != ' ' { break rep_23; }
+            if pos >= src.len() || unchecked src.byte_at(pos) != b' ' { break rep_23; }
             pos += 1;
             continue;
         }
@@ -1737,31 +1781,31 @@ fn try_ATTVALUE_VALUE(chars: &List<char>, start: i32) -> i32 {
     let mut alts_best_24 = -1;
     alts_24_0: {
         pos = alts_saved_24;
-        pos = frag_DOUBLE_QUOTE_STRING(chars, pos);
+        pos = frag_DOUBLE_QUOTE_STRING(src, pos);
         if pos < 0 { break alts_24_0; }
         if pos > alts_best_24 { alts_best_24 = pos; }
     }
     alts_24_1: {
         pos = alts_saved_24;
-        pos = frag_SINGLE_QUOTE_STRING(chars, pos);
+        pos = frag_SINGLE_QUOTE_STRING(src, pos);
         if pos < 0 { break alts_24_1; }
         if pos > alts_best_24 { alts_best_24 = pos; }
     }
     alts_24_2: {
         pos = alts_saved_24;
-        pos = frag_ATTCHARS(chars, pos);
+        pos = frag_ATTCHARS(src, pos);
         if pos < 0 { break alts_24_2; }
         if pos > alts_best_24 { alts_best_24 = pos; }
     }
     alts_24_3: {
         pos = alts_saved_24;
-        pos = frag_HEXCHARS(chars, pos);
+        pos = frag_HEXCHARS(src, pos);
         if pos < 0 { break alts_24_3; }
         if pos > alts_best_24 { alts_best_24 = pos; }
     }
     alts_24_4: {
         pos = alts_saved_24;
-        pos = frag_DECCHARS(chars, pos);
+        pos = frag_DECCHARS(src, pos);
         if pos < 0 { break alts_24_4; }
         if pos > alts_best_24 { alts_best_24 = pos; }
     }
@@ -1770,37 +1814,37 @@ fn try_ATTVALUE_VALUE(chars: &List<char>, start: i32) -> i32 {
     return pos;
 }
 
-fn try_ATTRIBUTE(chars: &List<char>, start: i32) -> i32 {
+fn try_ATTRIBUTE(src: &StrSlice, start: i32) -> i32 {
     let mut pos = start;
     let alts_saved_25 = pos;
     let mut alts_best_25 = -1;
     alts_25_0: {
         pos = alts_saved_25;
-        pos = frag_DOUBLE_QUOTE_STRING(chars, pos);
+        pos = frag_DOUBLE_QUOTE_STRING(src, pos);
         if pos < 0 { break alts_25_0; }
         if pos > alts_best_25 { alts_best_25 = pos; }
     }
     alts_25_1: {
         pos = alts_saved_25;
-        pos = frag_SINGLE_QUOTE_STRING(chars, pos);
+        pos = frag_SINGLE_QUOTE_STRING(src, pos);
         if pos < 0 { break alts_25_1; }
         if pos > alts_best_25 { alts_best_25 = pos; }
     }
     alts_25_2: {
         pos = alts_saved_25;
-        pos = frag_ATTCHARS(chars, pos);
+        pos = frag_ATTCHARS(src, pos);
         if pos < 0 { break alts_25_2; }
         if pos > alts_best_25 { alts_best_25 = pos; }
     }
     alts_25_3: {
         pos = alts_saved_25;
-        pos = frag_HEXCHARS(chars, pos);
+        pos = frag_HEXCHARS(src, pos);
         if pos < 0 { break alts_25_3; }
         if pos > alts_best_25 { alts_best_25 = pos; }
     }
     alts_25_4: {
         pos = alts_saved_25;
-        pos = frag_DECCHARS(chars, pos);
+        pos = frag_DECCHARS(src, pos);
         if pos < 0 { break alts_25_4; }
         if pos > alts_best_25 { alts_best_25 = pos; }
     }
@@ -1809,74 +1853,74 @@ fn try_ATTRIBUTE(chars: &List<char>, start: i32) -> i32 {
     return pos;
 }
 
-fn frag_DOUBLE_QUOTE_STRING(chars: &List<char>, start: i32) -> i32 {
+fn frag_DOUBLE_QUOTE_STRING(src: &StrSlice, start: i32) -> i32 {
     let mut pos = start;
-    if pos >= chars.len() || chars[pos] != '"' { return -1; }
+    if pos >= src.len() || unchecked src.byte_at(pos) != b'"' { return -1; }
     pos += 1;
     loop {
         rep_26: {
-            if pos >= chars.len() { break rep_26; }
-            if (chars[pos] matches { '<' | '"' }) { break rep_26; }
-            pos += 1;
+            if pos >= src.len() { break rep_26; }
+            if (unchecked src.byte_at(pos) matches { b'<' | b'"' }) { break rep_26; }
+            pos = src.ceil_char_boundary(pos + 1);
             continue;
         }
         break;
     }
-    if pos >= chars.len() || chars[pos] != '"' { return -1; }
+    if pos >= src.len() || unchecked src.byte_at(pos) != b'"' { return -1; }
     pos += 1;
     return pos;
 }
 
-fn frag_SINGLE_QUOTE_STRING(chars: &List<char>, start: i32) -> i32 {
+fn frag_SINGLE_QUOTE_STRING(src: &StrSlice, start: i32) -> i32 {
     let mut pos = start;
-    if pos >= chars.len() || chars[pos] != '\'' { return -1; }
+    if pos >= src.len() || unchecked src.byte_at(pos) != b'\'' { return -1; }
     pos += 1;
     loop {
         rep_27: {
-            if pos >= chars.len() { break rep_27; }
-            if (chars[pos] matches { '<' | '\'' }) { break rep_27; }
-            pos += 1;
+            if pos >= src.len() { break rep_27; }
+            if (unchecked src.byte_at(pos) matches { b'<' | b'\'' }) { break rep_27; }
+            pos = src.ceil_char_boundary(pos + 1);
             continue;
         }
         break;
     }
-    if pos >= chars.len() || chars[pos] != '\'' { return -1; }
+    if pos >= src.len() || unchecked src.byte_at(pos) != b'\'' { return -1; }
     pos += 1;
     return pos;
 }
 
-fn frag_ATTCHARS(chars: &List<char>, start: i32) -> i32 {
+fn frag_ATTCHARS(src: &StrSlice, start: i32) -> i32 {
     let mut pos = start;
-    if pos >= chars.len() { return -1; }
-    if !(chars[pos] matches { '#' | '+'..=';' | '=' | '?' | 'A'..='Z' | '_' | 'a'..='z' }) { return -1; }
+    if pos >= src.len() { return -1; }
+    if !(unchecked src.byte_at(pos) matches { b'#' | b'+'..=b';' | b'=' | b'?' | b'A'..=b'Z' | b'_' | b'a'..=b'z' }) { return -1; }
     pos += 1;
     loop {
         rep_28: {
-            if pos >= chars.len() { break rep_28; }
-            if !(chars[pos] matches { '#' | '+'..=';' | '=' | '?' | 'A'..='Z' | '_' | 'a'..='z' }) { break rep_28; }
+            if pos >= src.len() { break rep_28; }
+            if !(unchecked src.byte_at(pos) matches { b'#' | b'+'..=b';' | b'=' | b'?' | b'A'..=b'Z' | b'_' | b'a'..=b'z' }) { break rep_28; }
             pos += 1;
             continue;
         }
         break;
     }
     opt_30: {
-        if pos >= chars.len() || chars[pos] != ' ' { break opt_30; }
+        if pos >= src.len() || unchecked src.byte_at(pos) != b' ' { break opt_30; }
         pos += 1;
     }
     return pos;
 }
 
-fn frag_HEXCHARS(chars: &List<char>, start: i32) -> i32 {
+fn frag_HEXCHARS(src: &StrSlice, start: i32) -> i32 {
     let mut pos = start;
-    if pos >= chars.len() || chars[pos] != '#' { return -1; }
+    if pos >= src.len() || unchecked src.byte_at(pos) != b'#' { return -1; }
     pos += 1;
-    if pos >= chars.len() { return -1; }
-    if !(chars[pos] matches { '0'..='9' | 'a'..='f' | 'A'..='F' }) { return -1; }
+    if pos >= src.len() { return -1; }
+    if !(unchecked src.byte_at(pos) matches { b'0'..=b'9' | b'a'..=b'f' | b'A'..=b'F' }) { return -1; }
     pos += 1;
     loop {
         rep_31: {
-            if pos >= chars.len() { break rep_31; }
-            if !(chars[pos] matches { '0'..='9' | 'a'..='f' | 'A'..='F' }) { break rep_31; }
+            if pos >= src.len() { break rep_31; }
+            if !(unchecked src.byte_at(pos) matches { b'0'..=b'9' | b'a'..=b'f' | b'A'..=b'F' }) { break rep_31; }
             pos += 1;
             continue;
         }
@@ -1885,22 +1929,22 @@ fn frag_HEXCHARS(chars: &List<char>, start: i32) -> i32 {
     return pos;
 }
 
-fn frag_DECCHARS(chars: &List<char>, start: i32) -> i32 {
+fn frag_DECCHARS(src: &StrSlice, start: i32) -> i32 {
     let mut pos = start;
-    if pos >= chars.len() { return -1; }
-    if !(chars[pos] matches { '0'..='9' }) { return -1; }
+    if pos >= src.len() { return -1; }
+    if !(unchecked src.byte_at(pos) matches { b'0'..=b'9' }) { return -1; }
     pos += 1;
     loop {
         rep_33: {
-            if pos >= chars.len() { break rep_33; }
-            if !(chars[pos] matches { '0'..='9' }) { break rep_33; }
+            if pos >= src.len() { break rep_33; }
+            if !(unchecked src.byte_at(pos) matches { b'0'..=b'9' }) { break rep_33; }
             pos += 1;
             continue;
         }
         break;
     }
     opt_35: {
-        if pos >= chars.len() || chars[pos] != '%' { break opt_35; }
+        if pos >= src.len() || unchecked src.byte_at(pos) != b'%' { break opt_35; }
         pos += 1;
     }
     return pos;
@@ -1908,7 +1952,7 @@ fn frag_DECCHARS(chars: &List<char>, start: i32) -> i32 {
 
 pub fn tokenize<S: AsStrSlice>(input: S) -> TokenStream {
     let mut lexer = Lexer::new(input);
-    let mut ts = TokenStream::new(&lexer.chars);
+    let mut ts = TokenStream::new(lexer.src);
     let mut triv_lo = ts.trivia_mark();
     let mut mode_stack: List<i32> = [];
     let mut current_mode: i32 = 0;
@@ -1917,103 +1961,105 @@ pub fn tokenize<S: AsStrSlice>(input: S) -> TokenStream {
         let mut best_end: i32 = -1;
         let mut best_kind: i32 = TK_ERROR;
         let mut end: i32 = -1;
-        let first_char = lexer.chars[start];
+        let first_char = char_at(&lexer.src, start);
         let mut best_push_mode: i32 = -1;
         let mut best_pop_mode = false;
         let mut best_channel: i32 = 0;
         if current_mode == 0 {
             match first_char {
                 '\t' | '\n' | '\r' | ' ' => {
-                    end = try_SEA_WS(&lexer.chars, start);
+                    end = try_SEA_WS(&lexer.src, start);
                     if end > best_end { best_end = end; best_kind = TK_SEA_WS; best_push_mode = -1; best_pop_mode = false; best_channel = 0; }
-                    end = try_HTML_TEXT(&lexer.chars, start);
+                    end = try_HTML_TEXT(&lexer.src, start);
                     if end > best_end { best_end = end; best_kind = TK_HTML_TEXT; best_push_mode = -1; best_pop_mode = false; best_channel = 0; }
                 },
                 '\u{b}'..='\u{c}' | '\u{e}'..='\u{1f}' | '!'..=';' => {
-                    end = try_HTML_TEXT(&lexer.chars, start);
+                    end = try_HTML_TEXT(&lexer.src, start);
                     if end > best_end { best_end = end; best_kind = TK_HTML_TEXT; best_push_mode = -1; best_pop_mode = false; best_channel = 0; }
                 },
                 '<' => {
-                    let second_char = if start + 1 < lexer.chars.len() { lexer.chars[start + 1] } else { '\u{0}' };
+                    let second_at = lexer.src.ceil_char_boundary(start + 1);
+                    let second_char = if second_at < lexer.src.len() { char_at(&lexer.src, second_at) } else { '\u{0}' };
                     match second_char {
                         '!' => {
-                            end = try_HTML_COMMENT(&lexer.chars, start);
+                            end = try_HTML_COMMENT(&lexer.src, start);
                             if end > best_end { best_end = end; best_kind = TK_HTML_COMMENT; best_push_mode = -1; best_pop_mode = false; best_channel = 0; }
-                            end = try_HTML_CONDITIONAL_COMMENT(&lexer.chars, start);
+                            end = try_HTML_CONDITIONAL_COMMENT(&lexer.src, start);
                             if end > best_end { best_end = end; best_kind = TK_HTML_CONDITIONAL_COMMENT; best_push_mode = -1; best_pop_mode = false; best_channel = 0; }
-                            end = try_CDATA(&lexer.chars, start);
+                            end = try_CDATA(&lexer.src, start);
                             if end > best_end { best_end = end; best_kind = TK_CDATA; best_push_mode = -1; best_pop_mode = false; best_channel = 0; }
-                            end = try_DTD(&lexer.chars, start);
+                            end = try_DTD(&lexer.src, start);
                             if end > best_end { best_end = end; best_kind = TK_DTD; best_push_mode = -1; best_pop_mode = false; best_channel = 0; }
                         },
                         '%' => {
-                            end = try_SCRIPTLET(&lexer.chars, start);
+                            end = try_SCRIPTLET(&lexer.src, start);
                             if end > best_end { best_end = end; best_kind = TK_SCRIPTLET; best_push_mode = -1; best_pop_mode = false; best_channel = 0; }
                         },
                         '?' => {
-                            end = try_XML(&lexer.chars, start);
+                            end = try_XML(&lexer.src, start);
                             if end > best_end { best_end = end; best_kind = TK_XML; best_push_mode = -1; best_pop_mode = false; best_channel = 0; }
-                            end = try_SCRIPTLET(&lexer.chars, start);
+                            end = try_SCRIPTLET(&lexer.src, start);
                             if end > best_end { best_end = end; best_kind = TK_SCRIPTLET; best_push_mode = -1; best_pop_mode = false; best_channel = 0; }
                         },
                         's' => {
-                            end = try_SCRIPT_OPEN(&lexer.chars, start);
+                            end = try_SCRIPT_OPEN(&lexer.src, start);
                             if end > best_end { best_end = end; best_kind = TK_SCRIPT_OPEN; best_push_mode = 1; best_pop_mode = false; best_channel = 0; }
-                            end = try_STYLE_OPEN(&lexer.chars, start);
+                            end = try_STYLE_OPEN(&lexer.src, start);
                             if end > best_end { best_end = end; best_kind = TK_STYLE_OPEN; best_push_mode = 2; best_pop_mode = false; best_channel = 0; }
                         },
                         _ => {
                         },
                     }
-                    end = try_TAG_OPEN(&lexer.chars, start);
+                    end = try_TAG_OPEN(&lexer.src, start);
                     if end > best_end { best_end = end; best_kind = TK_TAG_OPEN; best_push_mode = 3; best_pop_mode = false; best_channel = 0; }
-                    end = try_HTML_TEXT(&lexer.chars, start);
+                    end = try_HTML_TEXT(&lexer.src, start);
                     if end > best_end { best_end = end; best_kind = TK_HTML_TEXT; best_push_mode = -1; best_pop_mode = false; best_channel = 0; }
                 },
                 _ => {
-                    end = try_HTML_TEXT(&lexer.chars, start);
+                    end = try_HTML_TEXT(&lexer.src, start);
                     if end > best_end { best_end = end; best_kind = TK_HTML_TEXT; best_push_mode = -1; best_pop_mode = false; best_channel = 0; }
                 },
             }
         } else if current_mode == 1 {
-            end = try_SCRIPT_BODY(&lexer.chars, start);
+            end = try_SCRIPT_BODY(&lexer.src, start);
             if end > best_end { best_end = end; best_kind = TK_SCRIPT_BODY; best_push_mode = -1; best_pop_mode = true; best_channel = 0; }
-            end = try_SCRIPT_SHORT_BODY(&lexer.chars, start);
+            end = try_SCRIPT_SHORT_BODY(&lexer.src, start);
             if end > best_end { best_end = end; best_kind = TK_SCRIPT_SHORT_BODY; best_push_mode = -1; best_pop_mode = true; best_channel = 0; }
         } else if current_mode == 2 {
-            end = try_STYLE_BODY(&lexer.chars, start);
+            end = try_STYLE_BODY(&lexer.src, start);
             if end > best_end { best_end = end; best_kind = TK_STYLE_BODY; best_push_mode = -1; best_pop_mode = true; best_channel = 0; }
-            end = try_STYLE_SHORT_BODY(&lexer.chars, start);
+            end = try_STYLE_SHORT_BODY(&lexer.src, start);
             if end > best_end { best_end = end; best_kind = TK_STYLE_SHORT_BODY; best_push_mode = -1; best_pop_mode = true; best_channel = 0; }
         } else if current_mode == 3 {
             match first_char {
                 '\t' | '\n' | '\r' | ' ' => {
-                    end = try_TAG_WHITESPACE(&lexer.chars, start);
+                    end = try_TAG_WHITESPACE(&lexer.src, start);
                     if end > best_end { best_end = end; best_kind = TK_TAG_WHITESPACE; best_push_mode = -1; best_pop_mode = false; best_channel = 1; }
                 },
                 '/' => {
-                    let second_char = if start + 1 < lexer.chars.len() { lexer.chars[start + 1] } else { '\u{0}' };
+                    let second_at = lexer.src.ceil_char_boundary(start + 1);
+                    let second_char = if second_at < lexer.src.len() { char_at(&lexer.src, second_at) } else { '\u{0}' };
                     match second_char {
                         '>' => {
-                            end = try_TAG_SLASH_CLOSE(&lexer.chars, start);
+                            end = try_TAG_SLASH_CLOSE(&lexer.src, start);
                             if end > best_end { best_end = end; best_kind = TK_TAG_SLASH_CLOSE; best_push_mode = -1; best_pop_mode = true; best_channel = 0; }
                         },
                         _ => {
                         },
                     }
-                    end = try_TAG_SLASH(&lexer.chars, start);
+                    end = try_TAG_SLASH(&lexer.src, start);
                     if end > best_end { best_end = end; best_kind = TK_TAG_SLASH; best_push_mode = -1; best_pop_mode = false; best_channel = 0; }
                 },
                 ':' | 'A'..='Z' | 'a'..='z' | '⁰'..='\u{218f}' | 'Ⰰ'..='\u{2fef}' | '、'..='\u{d7ff}' | '豈'..='﷏' | 'ﷰ'..='�' => {
-                    end = try_TAG_NAME(&lexer.chars, start);
+                    end = try_TAG_NAME(&lexer.src, start);
                     if end > best_end { best_end = end; best_kind = TK_TAG_NAME; best_push_mode = -1; best_pop_mode = false; best_channel = 0; }
                 },
                 '=' => {
-                    end = try_TAG_EQUALS(&lexer.chars, start);
+                    end = try_TAG_EQUALS(&lexer.src, start);
                     if end > best_end { best_end = end; best_kind = TK_TAG_EQUALS; best_push_mode = 4; best_pop_mode = false; best_channel = 0; }
                 },
                 '>' => {
-                    end = try_TAG_CLOSE(&lexer.chars, start);
+                    end = try_TAG_CLOSE(&lexer.src, start);
                     if end > best_end { best_end = end; best_kind = TK_TAG_CLOSE; best_push_mode = -1; best_pop_mode = true; best_channel = 0; }
                 },
                 _ => {},
@@ -2021,22 +2067,23 @@ pub fn tokenize<S: AsStrSlice>(input: S) -> TokenStream {
         } else if current_mode == 4 {
             match first_char {
                 ' ' => {
-                    end = try_ATTVALUE_VALUE(&lexer.chars, start);
+                    end = try_ATTVALUE_VALUE(&lexer.src, start);
                     if end > best_end { best_end = end; best_kind = TK_ATTVALUE_VALUE; best_push_mode = -1; best_pop_mode = true; best_channel = 0; }
                 },
                 '"' | '#' | '\'' | '+' | ',' | '-' | '.' | '/' | '0'..='9' | ':' | ';' | '=' | '?' | 'A'..='Z' | '_' | 'a'..='z' => {
-                    end = try_ATTVALUE_VALUE(&lexer.chars, start);
+                    end = try_ATTVALUE_VALUE(&lexer.src, start);
                     if end > best_end { best_end = end; best_kind = TK_ATTVALUE_VALUE; best_push_mode = -1; best_pop_mode = true; best_channel = 0; }
-                    end = try_ATTRIBUTE(&lexer.chars, start);
+                    end = try_ATTRIBUTE(&lexer.src, start);
                     if end > best_end { best_end = end; best_kind = TK_ATTRIBUTE; best_push_mode = -1; best_pop_mode = false; best_channel = 0; }
                 },
                 _ => {},
             }
         }
         if best_end < start || (best_end == start && best_push_mode < 0 && !best_pop_mode) {
-            let _ = ts.push_token_flagged(TK_ERROR, start, start + 1, triv_lo, ts.trivia_mark(), TokenFlags::LexError);
+            let error_end = lexer.src.ceil_char_boundary(start + 1);
+            let _ = ts.push_token_flagged(TK_ERROR, start, error_end, triv_lo, ts.trivia_mark(), TokenFlags::LexError);
             triv_lo = ts.trivia_mark();
-            lexer.pos = start + 1;
+            lexer.pos = error_end;
         } else {
             let tok_start = start;
             if best_channel != 0 {
@@ -3327,7 +3374,7 @@ fn _run_parse_entry<S: AsStrSlice>(input: S, max_errors: i32, entry: fn(&mut Par
         p.commit_pending();
     }
     merge_lex_errors(&p.tokens, &mut p.diagnostics, max_errors);
-    resolve_positions(&mut p.diagnostics, p.tokens.chars);
+    resolve_positions(&mut p.diagnostics, &p.tokens.src);
     return ParseResult { cst: p.b.finish(), tokens: p.tokens, diagnostics: p.diagnostics };
 }
 

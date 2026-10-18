@@ -326,6 +326,20 @@ dev, then settle any row whose work is building an object graph on release.
 Scratch files below go in `scratchpad/`. A path handed to the harness, which
 runs from `benchmark/`, must be absolute.
 
+### Counting fuel
+
+Fuel counts the Wasm instructions the guest ran (about one unit each). It does
+not depend on the host, so one run per arm is enough, even on a noisy machine.
+It counts instructions, not time: GC and other host work are left out.
+
+Write a program that runs the code under test a fixed number of times; the
+`core:benchmark` harness repeats by time, so its fuel varies. Subtract a run
+that does only the setup.
+
+```sh
+wado run -O2 --report-fuel probe.wado
+```
+
 ### A/B-ing a compiler change
 
 Build the head arm first: every command below compares against
@@ -505,9 +519,10 @@ default, and that benchmark opts in through `gc_heap_flags` in
    **smaller wasm**. This is the only question wasm size answers.
 4. **Anything else** → drop it, and write it up in `dead-ends.md`.
 
-Only a WIR diff decides case 2. Diff the two `wado dump -O2` outputs and read
-what the hot function issues per iteration — a run of N capacity checks collapsed
-to one, a call gone from a loop body. Nothing else establishes "fewer
+Only a WIR diff or a fuel count decides case 2. Diff the two `wado dump -O2`
+outputs and read what the hot function issues per iteration — a run of N
+capacity checks collapsed to one, a call gone from a loop body. Fuel counts
+what actually ran (see "Counting fuel"). Nothing else establishes "fewer
 instructions": not the dump's line count, and not the wasm byte count.
 
 **Neither wasm size nor dump size correlates with speed.** Smaller output is

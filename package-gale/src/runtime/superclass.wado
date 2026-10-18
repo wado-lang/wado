@@ -1,22 +1,31 @@
-use { chars_text } from "./lex.wado";
+use { char_at, span_text } from "./lex.wado";
 
 pub struct LexerView {
-    chars: &List<char>,
+    src: &StrSlice,
     start: i32,
     pos: i32,
 }
 
 impl LexerView {
     pub fn la(&self, k: i32) -> i32 {
-        let i = if k > 0 { self.pos + k - 1 } else { self.pos + k };
-        if i < 0 || i >= self.chars.len() {
-            return -1;
+        let mut i = self.pos;
+        for let mut step = 1; step < k; step += 1 {
+            if i >= self.src.len() {
+                return -1;
+            }
+            i = self.src.ceil_char_boundary(i + 1);
         }
-        return self.chars[i] as i32;
+        for let mut step = 0; step > k; step -= 1 {
+            if i == 0 {
+                return -1;
+            }
+            i = self.src.floor_char_boundary(i - 1);
+        }
+        return self.char_at(i);
     }
 
     pub fn text(&self) -> String {
-        return chars_text(self.chars, self.start, self.pos);
+        return span_text(self.src, self.start, self.pos);
     }
 
     pub fn start(&self) -> i32 {
@@ -28,13 +37,13 @@ impl LexerView {
     }
 
     pub fn char_at(&self, i: i32) -> i32 {
-        if i < 0 || i >= self.chars.len() {
+        if i < 0 || i >= self.src.len() {
             return -1;
         }
-        return self.chars[i] as i32;
+        return char_at(self.src, i) as i32;
     }
 
     pub fn input_len(&self) -> i32 {
-        return self.chars.len();
+        return self.src.len();
     }
 }

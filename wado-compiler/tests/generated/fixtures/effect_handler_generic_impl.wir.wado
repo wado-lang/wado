@@ -93,11 +93,11 @@ type "functype//effect_handler_generic_impl.wado/$cm_export__$test_1_generic_imp
 
 type "functype//effect_handler_generic_impl.wado/$cm_export__$test_2_bundled_form_enumerates_effects_from_a_generic_impl" = fn();  // TypeId(27)
 
-type "functype//effect_handler_generic_impl.wado/$test_0_generic_impl_handles_an_effect_for_holder_i32_$cold0" = fn(ref "core:prelude/string.wado//String");  // TypeId(28)
+type "functype//effect_handler_generic_impl.wado/$test_0_generic_impl_handles_an_effect_for_holder_i32_$cold0" = fn(ref Array<u8>, i32);  // TypeId(28)
 
-type "functype//effect_handler_generic_impl.wado/$test_1_generic_impl_handles_an_effect_for_holder_string_$cold0" = fn(ref "core:prelude/string.wado//String");  // TypeId(29)
+type "functype//effect_handler_generic_impl.wado/$test_1_generic_impl_handles_an_effect_for_holder_string_$cold0" = fn(ref Array<u8>, i32);  // TypeId(29)
 
-type "functype//effect_handler_generic_impl.wado/$test_2_bundled_form_enumerates_effects_from_a_generic_impl$cold0" = fn(ref "core:prelude/string.wado//String");  // TypeId(30)
+type "functype//effect_handler_generic_impl.wado/$test_2_bundled_form_enumerates_effects_from_a_generic_impl$cold0" = fn(ref Array<u8>, i32);  // TypeId(30)
 
 type "functype//core:prelude/primitive.wado/write_decimal_digits" = fn(ref Array<u8>, i32, u64, i32);  // TypeId(31)
 
@@ -225,7 +225,7 @@ fn "effect_handler_generic_impl.wado/$test_0_generic_impl_handles_an_effect_for_
         break $inline_core_prelude_array_wado_seq_eq_u8__4: 1;
     }) == 0) {
         cold_path;
-        "effect_handler_generic_impl.wado/$test_0_generic_impl_handles_an_effect_for_holder_i32_$cold0"(struct.new "core:prelude/string.wado//String" { repr: $array_clone_src_3, used: $av_27 });
+        "effect_handler_generic_impl.wado/$test_0_generic_impl_handles_an_effect_for_holder_i32_$cold0"($array_clone_src_3, $av_27);
         unreachable;
     }
 }
@@ -279,7 +279,7 @@ fn "effect_handler_generic_impl.wado/$test_1_generic_impl_handles_an_effect_for_
         break $inline_core_prelude_array_wado_seq_eq_u8__4: 1;
     }) == 0) {
         cold_path;
-        "effect_handler_generic_impl.wado/$test_1_generic_impl_handles_an_effect_for_holder_string_$cold0"(struct.new "core:prelude/string.wado//String" { repr: $array_clone_src_3, used: $av_27 });
+        "effect_handler_generic_impl.wado/$test_1_generic_impl_handles_an_effect_for_holder_string_$cold0"($array_clone_src_3, $av_27);
         unreachable;
     }
 }
@@ -333,7 +333,7 @@ fn "effect_handler_generic_impl.wado/$test_2_bundled_form_enumerates_effects_fro
         break $inline_core_prelude_array_wado_seq_eq_u8__4: 1;
     }) == 0) {
         cold_path;
-        "effect_handler_generic_impl.wado/$test_2_bundled_form_enumerates_effects_from_a_generic_impl$cold0"(struct.new "core:prelude/string.wado//String" { repr: $array_clone_src_3, used: $av_27 });
+        "effect_handler_generic_impl.wado/$test_2_bundled_form_enumerates_effects_from_a_generic_impl$cold0"($array_clone_src_3, $av_27);
         unreachable;
     }
 }
@@ -353,7 +353,7 @@ fn "effect_handler_generic_impl.wado/$cm_export__$test_2_bundled_form_enumerates
     "wasi/task-return"(0);
 }
 
-fn "effect_handler_generic_impl.wado/$test_0_generic_impl_handles_an_effect_for_holder_i32_$cold0"(s) {
+fn "effect_handler_generic_impl.wado/$test_0_generic_impl_handles_an_effect_for_holder_i32_$cold0"($mv$s$repr, $mv$s$used) {
     let $load_0: ref Array<u8>;
     let $local_3: ref "core:prelude/string.wado//String";
     let $fuse_at_10: i32;
@@ -387,13 +387,13 @@ condition: s == \"hi bob\"
     $fuse_at_10 = $fuse_at_10 + 26;
     $load_0 = array.new_fixed<u8>(115, 58, 32);
     builtin::array_copy<u8>($sroa_s_repr_49, $fuse_at_10, $load_0, 0, 3);
-    "core:prelude/format.wado/core/prelude/format.wado/inspect_text<core:prelude/string.wado/String>"("core:prelude/format.wado/core:prelude/format.wado/Formatter::new"($local_3), s.repr, s.used);
-    "core:prelude/string.wado/core:prelude/string.wado/String^core:prelude/string.wado/AsStrSlice::internal_append_to$spec1"(local.tee s(struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 }), $local_3);
+    "core:prelude/format.wado/core/prelude/format.wado/inspect_text<core:prelude/string.wado/String>"("core:prelude/format.wado/core:prelude/format.wado/Formatter::new"($local_3), $mv$s$repr, $mv$s$used);
+    "core:prelude/string.wado/core:prelude/string.wado/String^core:prelude/string.wado/AsStrSlice::internal_append_to$spec1"(struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 }, $local_3);
     "core:rt/panic"($local_3.repr, $local_3.used);
     unreachable;
 }
 
-fn "effect_handler_generic_impl.wado/$test_1_generic_impl_handles_an_effect_for_holder_string_$cold0"(s) {
+fn "effect_handler_generic_impl.wado/$test_1_generic_impl_handles_an_effect_for_holder_string_$cold0"($mv$s$repr, $mv$s$used) {
     let $load_0: ref Array<u8>;
     let $local_3: ref "core:prelude/string.wado//String";
     let $fuse_at_10: i32;
@@ -427,13 +427,13 @@ condition: s == \"hi ann\"
     $fuse_at_10 = $fuse_at_10 + 26;
     $load_0 = array.new_fixed<u8>(115, 58, 32);
     builtin::array_copy<u8>($sroa_s_repr_49, $fuse_at_10, $load_0, 0, 3);
-    "core:prelude/format.wado/core/prelude/format.wado/inspect_text<core:prelude/string.wado/String>"("core:prelude/format.wado/core:prelude/format.wado/Formatter::new"($local_3), s.repr, s.used);
-    "core:prelude/string.wado/core:prelude/string.wado/String^core:prelude/string.wado/AsStrSlice::internal_append_to$spec1"(local.tee s(struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 }), $local_3);
+    "core:prelude/format.wado/core/prelude/format.wado/inspect_text<core:prelude/string.wado/String>"("core:prelude/format.wado/core:prelude/format.wado/Formatter::new"($local_3), $mv$s$repr, $mv$s$used);
+    "core:prelude/string.wado/core:prelude/string.wado/String^core:prelude/string.wado/AsStrSlice::internal_append_to$spec1"(struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 }, $local_3);
     "core:rt/panic"($local_3.repr, $local_3.used);
     unreachable;
 }
 
-fn "effect_handler_generic_impl.wado/$test_2_bundled_form_enumerates_effects_from_a_generic_impl$cold0"(s) {
+fn "effect_handler_generic_impl.wado/$test_2_bundled_form_enumerates_effects_from_a_generic_impl$cold0"($mv$s$repr, $mv$s$used) {
     let $load_0: ref Array<u8>;
     let $local_3: ref "core:prelude/string.wado//String";
     let $fuse_at_10: i32;
@@ -467,8 +467,8 @@ condition: s == \"hi cy\"
     $fuse_at_10 = $fuse_at_10 + 25;
     $load_0 = array.new_fixed<u8>(115, 58, 32);
     builtin::array_copy<u8>($sroa_s_repr_49, $fuse_at_10, $load_0, 0, 3);
-    "core:prelude/format.wado/core/prelude/format.wado/inspect_text<core:prelude/string.wado/String>"("core:prelude/format.wado/core:prelude/format.wado/Formatter::new"($local_3), s.repr, s.used);
-    "core:prelude/string.wado/core:prelude/string.wado/String^core:prelude/string.wado/AsStrSlice::internal_append_to$spec1"(local.tee s(struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 }), $local_3);
+    "core:prelude/format.wado/core/prelude/format.wado/inspect_text<core:prelude/string.wado/String>"("core:prelude/format.wado/core:prelude/format.wado/Formatter::new"($local_3), $mv$s$repr, $mv$s$used);
+    "core:prelude/string.wado/core:prelude/string.wado/String^core:prelude/string.wado/AsStrSlice::internal_append_to$spec1"(struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 }, $local_3);
     "core:rt/panic"($local_3.repr, $local_3.used);
     unreachable;
 }

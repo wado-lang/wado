@@ -134,6 +134,18 @@ failed.
 `line` / `col` are resolved once per parse. The line index behind them is built
 only when there is a diagnostic.
 
+## Positions
+
+The lexer reads the input as UTF-8 bytes and never copies it into a
+`List<char>`. `TokenStream.src` is a `StrSlice` over the input, and every
+position the parser exposes is a byte offset into it: a `Span`, a token's start
+and end, a highlight capture, and `start` / `pos` in a lexer action or a
+`LexerView`. A byte offset slices the source directly.
+
+Where ANTLR4 prints a position, Gale prints chars as it does. What differs from
+ANTLR4 is in
+["Positions an action reads are byte offsets"](./antlr4-compatibility.md#positions-an-action-reads-are-byte-offsets).
+
 ## Public API
 
 ```

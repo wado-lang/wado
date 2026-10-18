@@ -59,7 +59,7 @@ type "functype//core:prelude/primitive.wado/count_digits_u64" = fn(u64) -> i32; 
 
 type "functype//core:rt/write_string_to_stream$dae[add_newline]" = fn(i32, ref Array<u8>, i32);  // TypeId(21)
 
-type "functype//core:rt/panic" = fn(ref "core:prelude/string.wado//String");  // TypeId(22)
+type "functype//core:rt/panic" = fn(ref Array<u8>, i32);  // TypeId(22)
 
 type "functype//core:rt/cm_stream_write_raw_all_u8" = fn(i32, ref Array<u8>, i32, i32) -> "core:prelude/types.wado//enum:CopyResult";  // TypeId(23)
 
@@ -113,13 +113,13 @@ fn "effect_handler_xmod_shadowed_effect.wado/run"() with Stdout {
         if @likely(ref.is_null(local.tee $local_0(global:effect_handler_xmod_shadowed_effect.wado::$effect_./sub/effect_handler_xmod_shadowed_effect_handler.wado/Remote)) == 0) {
             global:effect_handler_xmod_shadowed_effect.wado::$effect_./sub/effect_handler_xmod_shadowed_effect_handler.wado/Remote = local.tee $d_./sub/effect_handler_xmod_shadowed_effect_handler.wado/Remote(ref.as_non_null($local_0)).outer;
             $local_2_11 = block -> i32 {
-                let $indirect_call_1: ref "canonical//CanonicalClosure_0";
-                call_ref "functype/$canonical_closure_fn_0"($indirect_call_1.func, local.tee $indirect_call_1(ref.cast "canonical//CanonicalClosure_0"($d_./sub/effect_handler_xmod_shadowed_effect_handler.wado/Remote.op_emit)).env);
+                let $indirect_call_3: ref "canonical//CanonicalClosure_0";
+                call_ref "functype/$canonical_closure_fn_0"($indirect_call_3.func, local.tee $indirect_call_3(ref.cast "canonical//CanonicalClosure_0"($d_./sub/effect_handler_xmod_shadowed_effect_handler.wado/Remote.op_emit)).env);
             };
             global:effect_handler_xmod_shadowed_effect.wado::$effect_./sub/effect_handler_xmod_shadowed_effect_handler.wado/Remote = $local_0;
             break $inline__effect_dispatch____sub_effect_handler_xmod_shadowed_effect_handler_wado_Remote__emit_1: $local_2_11;
         } else {
-            "core:rt/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("no handler installed for `Remote::emit`"), used: 39 });
+            "core:rt/panic"(array.new_data<u8>("no handler installed for `Remote::emit`"), 39);
             unreachable;
         }
         unreachable;
@@ -264,14 +264,14 @@ fn "core:rt/write_string_to_stream$dae[add_newline]"(tx, $mv$message$repr, $mv$m
     "wasi/stream-drop-writable"(tx);
 }
 
-fn "core:rt/panic"(message) {
+fn "core:rt/panic"($mv$message$repr, $mv$message$used) {
     let packed: i64;
     let rx_7: i32;
     let tx_8: i32;
     rx_7 = builtin::i32_wrap_i64(local.tee packed("wasi/stream-new"()));
     tx_8 = builtin::i32_wrap_i64(packed >> 32_i64);
     rx_7 = "wasi/wasi:cli/Stderr::write_via_stream"(rx_7);
-    "core:rt/write_string_to_stream$dae[add_newline]"(tx_8, message.repr, message.used);
+    "core:rt/write_string_to_stream$dae[add_newline]"(tx_8, $mv$message$repr, $mv$message$used);
     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(rx_7);
     cold_path;
     unreachable;

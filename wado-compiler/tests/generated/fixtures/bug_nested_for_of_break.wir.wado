@@ -108,7 +108,7 @@ type "functype//core:prelude/primitive.wado/count_digits_u64" = fn(u64) -> i32; 
 
 type "functype//core:rt/write_string_to_stream$dae[add_newline]" = fn(i32, ref Array<u8>, i32);  // TypeId(29)
 
-type "functype//core:rt/panic" = fn(ref "core:prelude/string.wado//String");  // TypeId(30)
+type "functype//core:rt/panic" = fn(ref Array<u8>, i32);  // TypeId(30)
 
 type "functype//core:rt/cm_stream_write_raw_all_u8" = fn(i32, ref Array<u8>, i32, i32) -> "core:prelude/types.wado//enum:CopyResult";  // TypeId(31)
 
@@ -158,7 +158,7 @@ type "functype//core:prelude/string.wado/core:prelude/string.wado/String::push_s
 
 type "functype//core:prelude/list.wado/core:prelude/list.wado/List<bug_nested_for_of_break.wado/State>^core:prelude/traits.wado/Inspect::inspect" = fn(ref "core:prelude//List<bug_nested_for_of_break.wado/State>", ref "core:prelude/format.wado//Formatter");  // TypeId(54)
 
-type "functype//core:prelude/traits.wado/bug_nested_for_of_break.wado/State^core:prelude/traits.wado/Inspect::inspect" = fn(ref "bug_nested_for_of_break.wado//State", ref "core:prelude/format.wado//Formatter");  // TypeId(55)
+type "functype//core:prelude/traits.wado/bug_nested_for_of_break.wado/State^core:prelude/traits.wado/Inspect::inspect" = fn(i32, i32, i32, ref "core:prelude//List<bug_nested_for_of_break.wado/Transition>", ref "core:prelude/format.wado//Formatter");  // TypeId(55)
 
 type "functype//core:prelude/list.wado/core:prelude/list.wado/List<bug_nested_for_of_break.wado/Transition>^core:prelude/traits.wado/Inspect::inspect" = fn(ref "core:prelude//List<bug_nested_for_of_break.wado/Transition>", ref "core:prelude/format.wado//Formatter");  // TypeId(56)
 
@@ -255,9 +255,46 @@ fn "bug_nested_for_of_break.wado/$test_0_nested_for_of_with_break_selects_the_pr
         break $inline_loop_entry_decision_spec0_dae_rule__0: -1;
     }) != 1) {
         cold_path;
-        "core:rt/panic"(end_173 = "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"(local.tee $local_5(struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(197), used: 0 }), 119); $load_8 = $local_5.repr; $sroa_s_repr_112 = array.new_data<u8>("Assertion failed in "); builtin::array_copy<u8>($load_8, end_173, $sroa_s_repr_112, 0, 20); has_prec_151 = end_173 + 20; $sroa_s_repr_112 = array.new_data<u8>("$test_0_nested_for_of_with_break_selects_the_precedence_loop_entry"); builtin::array_copy<u8>($load_8, has_prec_151, $sroa_s_repr_112, 0, 66); has_prec_151 = end_173 + 86; $sroa_s_repr_112 = array.new_fixed<u8>(32, 97, 116, 32); builtin::array_copy<u8>($load_8, has_prec_151, $sroa_s_repr_112, 0, 4); has_prec_151 = end_173 + 90; $sroa_s_repr_112 = array.new_data<u8>("bug_nested_for_of_break.wado"); builtin::array_copy<u8>($load_8, has_prec_151, $sroa_s_repr_112, 0, 28); end_173 = end_173 + 118; $sroa_s_repr_112 = array.new_fixed<u8>(58); builtin::array_copy<u8>($load_8, end_173, $sroa_s_repr_112, 0, 1); f_40 = local.tee $local_6_6("core:prelude/format.wado/core:prelude/format.wado/Formatter::new"($local_5)); "core:prelude/primitive.wado/i32::fmt_decimal$sroa[self.value]"(67, f_40); end_173 = "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"($local_5, 57); $sroa_s_repr_112 = $local_5.repr; $load_8 = array.new_data<u8>("
+        end_173 = "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"(local.tee $local_5(struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(197), used: 0 }), 119);
+        $load_8 = $local_5.repr;
+        $sroa_s_repr_112 = array.new_data<u8>("Assertion failed in ");
+        builtin::array_copy<u8>($load_8, end_173, $sroa_s_repr_112, 0, 20);
+        has_prec_151 = end_173 + 20;
+        $sroa_s_repr_112 = array.new_data<u8>("$test_0_nested_for_of_with_break_selects_the_precedence_loop_entry");
+        builtin::array_copy<u8>($load_8, has_prec_151, $sroa_s_repr_112, 0, 66);
+        has_prec_151 = end_173 + 86;
+        $sroa_s_repr_112 = array.new_fixed<u8>(32, 97, 116, 32);
+        builtin::array_copy<u8>($load_8, has_prec_151, $sroa_s_repr_112, 0, 4);
+        has_prec_151 = end_173 + 90;
+        $sroa_s_repr_112 = array.new_data<u8>("bug_nested_for_of_break.wado");
+        builtin::array_copy<u8>($load_8, has_prec_151, $sroa_s_repr_112, 0, 28);
+        end_173 = end_173 + 118;
+        $sroa_s_repr_112 = array.new_fixed<u8>(58);
+        builtin::array_copy<u8>($load_8, end_173, $sroa_s_repr_112, 0, 1);
+        f_40 = local.tee $local_6_6("core:prelude/format.wado/core:prelude/format.wado/Formatter::new"($local_5));
+        "core:prelude/primitive.wado/i32::fmt_decimal$sroa[self.value]"(67, f_40);
+        end_173 = "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"($local_5, 57);
+        $sroa_s_repr_112 = $local_5.repr;
+        $load_8 = array.new_data<u8>("
 condition: loop_entry_decision(&states, 0) == 1
-"); builtin::array_copy<u8>($sroa_s_repr_112, end_173, $load_8, 0, 49); end_173 = end_173 + 49; $load_8 = array.new_data<u8>("states: "); builtin::array_copy<u8>($sroa_s_repr_112, end_173, $load_8, 0, 8); $local_6_6 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::new"($local_5); "core:prelude/list.wado/core:prelude/list.wado/List<bug_nested_for_of_break.wado/State>^core:prelude/traits.wado/Inspect::inspect"(struct.new "core:prelude//List<bug_nested_for_of_break.wado/State>" { repr: array.new_fixed<ref "bug_nested_for_of_break.wado//State">(struct.new "bug_nested_for_of_break.wado//State" { kind: 9, rule: 0, decision: 0, transitions: struct.new "core:prelude//List<bug_nested_for_of_break.wado/Transition>" { repr: array.new_fixed<ref "bug_nested_for_of_break.wado//Transition">(struct.new "bug_nested_for_of_break.wado//Transition" { kind: 1 }, struct.new "bug_nested_for_of_break.wado//Transition" { kind: 2 }), used: 2 } }, struct.new "bug_nested_for_of_break.wado//State" { kind: 9, rule: 0, decision: 1, transitions: struct.new "core:prelude//List<bug_nested_for_of_break.wado/Transition>" { repr: array.new_fixed<ref "bug_nested_for_of_break.wado//Transition">(struct.new "bug_nested_for_of_break.wado//Transition" { kind: 1 }, struct.new "bug_nested_for_of_break.wado//Transition" { kind: 5 }), used: 2 } }), used: 2 }, $local_6_6); end_173 = "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"($local_5, 34); $load_8 = $local_5.repr; $sroa_s_repr_112 = array.new_fixed<u8>(10); builtin::array_copy<u8>($load_8, end_173, $sroa_s_repr_112, 0, 1); end_173 = end_173 + 1; $sroa_s_repr_112 = array.new_data<u8>("loop_entry_decision(&states, 0): "); builtin::array_copy<u8>($load_8, end_173, $sroa_s_repr_112, 0, 33); $local_6_6 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::new"($local_5); "core:prelude/primitive.wado/i32::fmt_decimal$sroa[self.value]"($sroa_$iter_1_index_34_181, $local_6_6); "core:prelude/string.wado/core:prelude/string.wado/String^core:prelude/string.wado/AsStrSlice::internal_append_to$spec3"(struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 }, $local_5); $local_5);
+");
+        builtin::array_copy<u8>($sroa_s_repr_112, end_173, $load_8, 0, 49);
+        end_173 = end_173 + 49;
+        $load_8 = array.new_data<u8>("states: ");
+        builtin::array_copy<u8>($sroa_s_repr_112, end_173, $load_8, 0, 8);
+        $local_6_6 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::new"($local_5);
+        "core:prelude/list.wado/core:prelude/list.wado/List<bug_nested_for_of_break.wado/State>^core:prelude/traits.wado/Inspect::inspect"(struct.new "core:prelude//List<bug_nested_for_of_break.wado/State>" { repr: array.new_fixed<ref "bug_nested_for_of_break.wado//State">(struct.new "bug_nested_for_of_break.wado//State" { kind: 9, rule: 0, decision: 0, transitions: struct.new "core:prelude//List<bug_nested_for_of_break.wado/Transition>" { repr: array.new_fixed<ref "bug_nested_for_of_break.wado//Transition">(struct.new "bug_nested_for_of_break.wado//Transition" { kind: 1 }, struct.new "bug_nested_for_of_break.wado//Transition" { kind: 2 }), used: 2 } }, struct.new "bug_nested_for_of_break.wado//State" { kind: 9, rule: 0, decision: 1, transitions: struct.new "core:prelude//List<bug_nested_for_of_break.wado/Transition>" { repr: array.new_fixed<ref "bug_nested_for_of_break.wado//Transition">(struct.new "bug_nested_for_of_break.wado//Transition" { kind: 1 }, struct.new "bug_nested_for_of_break.wado//Transition" { kind: 5 }), used: 2 } }), used: 2 }, $local_6_6);
+        end_173 = "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"($local_5, 34);
+        $load_8 = $local_5.repr;
+        $sroa_s_repr_112 = array.new_fixed<u8>(10);
+        builtin::array_copy<u8>($load_8, end_173, $sroa_s_repr_112, 0, 1);
+        end_173 = end_173 + 1;
+        $sroa_s_repr_112 = array.new_data<u8>("loop_entry_decision(&states, 0): ");
+        builtin::array_copy<u8>($load_8, end_173, $sroa_s_repr_112, 0, 33);
+        $local_6_6 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::new"($local_5);
+        "core:prelude/primitive.wado/i32::fmt_decimal$sroa[self.value]"($sroa_$iter_1_index_34_181, $local_6_6);
+        "core:prelude/string.wado/core:prelude/string.wado/String^core:prelude/string.wado/AsStrSlice::internal_append_to$spec3"(struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 }, $local_5);
+        "core:rt/panic"($local_5.repr, $local_5.used);
         unreachable;
     }
     if @unlikely(local.tee $sroa_$iter_1_index_34_181($inline_loop_entry_decision_spec1_dae_rule__1: block -> i32 {
@@ -294,9 +331,46 @@ condition: loop_entry_decision(&states, 0) == 1
         break $inline_loop_entry_decision_spec1_dae_rule__1: -1;
     }) != -1) {
         cold_path;
-        "core:rt/panic"(end_173 = "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"(local.tee $local_5(struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(198), used: 0 }), 119); $sroa_s_repr_112 = $local_5.repr; $load_8 = array.new_data<u8>("Assertion failed in "); builtin::array_copy<u8>($sroa_s_repr_112, end_173, $load_8, 0, 20); has_prec_151 = end_173 + 20; $load_8 = array.new_data<u8>("$test_0_nested_for_of_with_break_selects_the_precedence_loop_entry"); builtin::array_copy<u8>($sroa_s_repr_112, has_prec_151, $load_8, 0, 66); has_prec_151 = end_173 + 86; $load_8 = array.new_fixed<u8>(32, 97, 116, 32); builtin::array_copy<u8>($sroa_s_repr_112, has_prec_151, $load_8, 0, 4); has_prec_151 = end_173 + 90; $load_8 = array.new_data<u8>("bug_nested_for_of_break.wado"); builtin::array_copy<u8>($sroa_s_repr_112, has_prec_151, $load_8, 0, 28); end_173 = end_173 + 118; $load_8 = array.new_fixed<u8>(58); builtin::array_copy<u8>($sroa_s_repr_112, end_173, $load_8, 0, 1); f_40 = local.tee $local_6_6("core:prelude/format.wado/core:prelude/format.wado/Formatter::new"($local_5)); "core:prelude/primitive.wado/i32::fmt_decimal$sroa[self.value]"(69, f_40); end_173 = "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"($local_5, 58); $load_8 = $local_5.repr; $sroa_s_repr_112 = array.new_data<u8>("
+        end_173 = "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"(local.tee $local_5(struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(198), used: 0 }), 119);
+        $sroa_s_repr_112 = $local_5.repr;
+        $load_8 = array.new_data<u8>("Assertion failed in ");
+        builtin::array_copy<u8>($sroa_s_repr_112, end_173, $load_8, 0, 20);
+        has_prec_151 = end_173 + 20;
+        $load_8 = array.new_data<u8>("$test_0_nested_for_of_with_break_selects_the_precedence_loop_entry");
+        builtin::array_copy<u8>($sroa_s_repr_112, has_prec_151, $load_8, 0, 66);
+        has_prec_151 = end_173 + 86;
+        $load_8 = array.new_fixed<u8>(32, 97, 116, 32);
+        builtin::array_copy<u8>($sroa_s_repr_112, has_prec_151, $load_8, 0, 4);
+        has_prec_151 = end_173 + 90;
+        $load_8 = array.new_data<u8>("bug_nested_for_of_break.wado");
+        builtin::array_copy<u8>($sroa_s_repr_112, has_prec_151, $load_8, 0, 28);
+        end_173 = end_173 + 118;
+        $load_8 = array.new_fixed<u8>(58);
+        builtin::array_copy<u8>($sroa_s_repr_112, end_173, $load_8, 0, 1);
+        f_40 = local.tee $local_6_6("core:prelude/format.wado/core:prelude/format.wado/Formatter::new"($local_5));
+        "core:prelude/primitive.wado/i32::fmt_decimal$sroa[self.value]"(69, f_40);
+        end_173 = "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"($local_5, 58);
+        $load_8 = $local_5.repr;
+        $sroa_s_repr_112 = array.new_data<u8>("
 condition: loop_entry_decision(&states, 7) == -1
-"); builtin::array_copy<u8>($load_8, end_173, $sroa_s_repr_112, 0, 50); end_173 = end_173 + 50; $sroa_s_repr_112 = array.new_data<u8>("states: "); builtin::array_copy<u8>($load_8, end_173, $sroa_s_repr_112, 0, 8); $local_6_6 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::new"($local_5); "core:prelude/list.wado/core:prelude/list.wado/List<bug_nested_for_of_break.wado/State>^core:prelude/traits.wado/Inspect::inspect"(struct.new "core:prelude//List<bug_nested_for_of_break.wado/State>" { repr: array.new_fixed<ref "bug_nested_for_of_break.wado//State">(struct.new "bug_nested_for_of_break.wado//State" { kind: 9, rule: 0, decision: 0, transitions: struct.new "core:prelude//List<bug_nested_for_of_break.wado/Transition>" { repr: array.new_fixed<ref "bug_nested_for_of_break.wado//Transition">(struct.new "bug_nested_for_of_break.wado//Transition" { kind: 1 }, struct.new "bug_nested_for_of_break.wado//Transition" { kind: 2 }), used: 2 } }, struct.new "bug_nested_for_of_break.wado//State" { kind: 9, rule: 0, decision: 1, transitions: struct.new "core:prelude//List<bug_nested_for_of_break.wado/Transition>" { repr: array.new_fixed<ref "bug_nested_for_of_break.wado//Transition">(struct.new "bug_nested_for_of_break.wado//Transition" { kind: 1 }, struct.new "bug_nested_for_of_break.wado//Transition" { kind: 5 }), used: 2 } }), used: 2 }, $local_6_6); end_173 = "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"($local_5, 34); $sroa_s_repr_112 = $local_5.repr; $load_8 = array.new_fixed<u8>(10); builtin::array_copy<u8>($sroa_s_repr_112, end_173, $load_8, 0, 1); end_173 = end_173 + 1; $load_8 = array.new_data<u8>("loop_entry_decision(&states, 7): "); builtin::array_copy<u8>($sroa_s_repr_112, end_173, $load_8, 0, 33); $local_6_6 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::new"($local_5); "core:prelude/primitive.wado/i32::fmt_decimal$sroa[self.value]"($sroa_$iter_1_index_34_181, $local_6_6); "core:prelude/string.wado/core:prelude/string.wado/String^core:prelude/string.wado/AsStrSlice::internal_append_to$spec3"(struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 }, $local_5); $local_5);
+");
+        builtin::array_copy<u8>($load_8, end_173, $sroa_s_repr_112, 0, 50);
+        end_173 = end_173 + 50;
+        $sroa_s_repr_112 = array.new_data<u8>("states: ");
+        builtin::array_copy<u8>($load_8, end_173, $sroa_s_repr_112, 0, 8);
+        $local_6_6 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::new"($local_5);
+        "core:prelude/list.wado/core:prelude/list.wado/List<bug_nested_for_of_break.wado/State>^core:prelude/traits.wado/Inspect::inspect"(struct.new "core:prelude//List<bug_nested_for_of_break.wado/State>" { repr: array.new_fixed<ref "bug_nested_for_of_break.wado//State">(struct.new "bug_nested_for_of_break.wado//State" { kind: 9, rule: 0, decision: 0, transitions: struct.new "core:prelude//List<bug_nested_for_of_break.wado/Transition>" { repr: array.new_fixed<ref "bug_nested_for_of_break.wado//Transition">(struct.new "bug_nested_for_of_break.wado//Transition" { kind: 1 }, struct.new "bug_nested_for_of_break.wado//Transition" { kind: 2 }), used: 2 } }, struct.new "bug_nested_for_of_break.wado//State" { kind: 9, rule: 0, decision: 1, transitions: struct.new "core:prelude//List<bug_nested_for_of_break.wado/Transition>" { repr: array.new_fixed<ref "bug_nested_for_of_break.wado//Transition">(struct.new "bug_nested_for_of_break.wado//Transition" { kind: 1 }, struct.new "bug_nested_for_of_break.wado//Transition" { kind: 5 }), used: 2 } }), used: 2 }, $local_6_6);
+        end_173 = "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"($local_5, 34);
+        $sroa_s_repr_112 = $local_5.repr;
+        $load_8 = array.new_fixed<u8>(10);
+        builtin::array_copy<u8>($sroa_s_repr_112, end_173, $load_8, 0, 1);
+        end_173 = end_173 + 1;
+        $load_8 = array.new_data<u8>("loop_entry_decision(&states, 7): ");
+        builtin::array_copy<u8>($sroa_s_repr_112, end_173, $load_8, 0, 33);
+        $local_6_6 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::new"($local_5);
+        "core:prelude/primitive.wado/i32::fmt_decimal$sroa[self.value]"($sroa_$iter_1_index_34_181, $local_6_6);
+        "core:prelude/string.wado/core:prelude/string.wado/String^core:prelude/string.wado/AsStrSlice::internal_append_to$spec3"(struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 }, $local_5);
+        "core:rt/panic"($local_5.repr, $local_5.used);
         unreachable;
     }
 }
@@ -318,9 +392,46 @@ fn "bug_nested_for_of_break.wado/$cm_export__$test_1_inner_break_stops_at_the_fi
     let $sroa_s_repr_57: ref Array<u8>;
     if @unlikely(local.tee $v1("bug_nested_for_of_break.wado/loop_entry_decision$spec2$dae[rule]"(local.tee states(struct.new "core:prelude//List<bug_nested_for_of_break.wado/State>" { repr: array.new_fixed<ref "bug_nested_for_of_break.wado//State">(struct.new "bug_nested_for_of_break.wado//State" { kind: 9, rule: 3, decision: 4, transitions: struct.new "core:prelude//List<bug_nested_for_of_break.wado/Transition>" { repr: array.new_fixed<ref "bug_nested_for_of_break.wado//Transition">(struct.new "bug_nested_for_of_break.wado//Transition" { kind: 5 }, struct.new "bug_nested_for_of_break.wado//Transition" { kind: 1 }), used: 2 } }), used: 1 }))) != 4) {
         cold_path;
-        "core:rt/panic"($fuse_at_5 = "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"(local.tee $local_3(struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(197), used: 0 }), 107); $load_0 = $local_3.repr; $sroa_s_repr_57 = array.new_data<u8>("Assertion failed in "); builtin::array_copy<u8>($load_0, $fuse_at_5, $sroa_s_repr_57, 0, 20); offset_16 = $fuse_at_5 + 20; $sroa_s_repr_57 = array.new_data<u8>("$test_1_inner_break_stops_at_the_first_precedence_edge"); builtin::array_copy<u8>($load_0, offset_16, $sroa_s_repr_57, 0, 54); offset_16 = $fuse_at_5 + 74; $sroa_s_repr_57 = array.new_fixed<u8>(32, 97, 116, 32); builtin::array_copy<u8>($load_0, offset_16, $sroa_s_repr_57, 0, 4); offset_16 = $fuse_at_5 + 78; $sroa_s_repr_57 = array.new_data<u8>("bug_nested_for_of_break.wado"); builtin::array_copy<u8>($load_0, offset_16, $sroa_s_repr_57, 0, 28); $fuse_at_5 = $fuse_at_5 + 106; $sroa_s_repr_57 = array.new_fixed<u8>(58); builtin::array_copy<u8>($load_0, $fuse_at_5, $sroa_s_repr_57, 0, 1); f_32 = local.tee $local_4("core:prelude/format.wado/core:prelude/format.wado/Formatter::new"($local_3)); "core:prelude/primitive.wado/i32::fmt_decimal$sroa[self.value]"(84, f_32); $fuse_at_5 = "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"($local_3, 57); $sroa_s_repr_57 = $local_3.repr; $load_0 = array.new_data<u8>("
+        $fuse_at_5 = "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"(local.tee $local_3(struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(197), used: 0 }), 107);
+        $load_0 = $local_3.repr;
+        $sroa_s_repr_57 = array.new_data<u8>("Assertion failed in ");
+        builtin::array_copy<u8>($load_0, $fuse_at_5, $sroa_s_repr_57, 0, 20);
+        offset_16 = $fuse_at_5 + 20;
+        $sroa_s_repr_57 = array.new_data<u8>("$test_1_inner_break_stops_at_the_first_precedence_edge");
+        builtin::array_copy<u8>($load_0, offset_16, $sroa_s_repr_57, 0, 54);
+        offset_16 = $fuse_at_5 + 74;
+        $sroa_s_repr_57 = array.new_fixed<u8>(32, 97, 116, 32);
+        builtin::array_copy<u8>($load_0, offset_16, $sroa_s_repr_57, 0, 4);
+        offset_16 = $fuse_at_5 + 78;
+        $sroa_s_repr_57 = array.new_data<u8>("bug_nested_for_of_break.wado");
+        builtin::array_copy<u8>($load_0, offset_16, $sroa_s_repr_57, 0, 28);
+        $fuse_at_5 = $fuse_at_5 + 106;
+        $sroa_s_repr_57 = array.new_fixed<u8>(58);
+        builtin::array_copy<u8>($load_0, $fuse_at_5, $sroa_s_repr_57, 0, 1);
+        f_32 = local.tee $local_4("core:prelude/format.wado/core:prelude/format.wado/Formatter::new"($local_3));
+        "core:prelude/primitive.wado/i32::fmt_decimal$sroa[self.value]"(84, f_32);
+        $fuse_at_5 = "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"($local_3, 57);
+        $sroa_s_repr_57 = $local_3.repr;
+        $load_0 = array.new_data<u8>("
 condition: loop_entry_decision(&states, 3) == 4
-"); builtin::array_copy<u8>($sroa_s_repr_57, $fuse_at_5, $load_0, 0, 49); $fuse_at_5 = $fuse_at_5 + 49; $load_0 = array.new_data<u8>("states: "); builtin::array_copy<u8>($sroa_s_repr_57, $fuse_at_5, $load_0, 0, 8); $local_4 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::new"($local_3); "core:prelude/list.wado/core:prelude/list.wado/List<bug_nested_for_of_break.wado/State>^core:prelude/traits.wado/Inspect::inspect"(states, $local_4); $fuse_at_5 = "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"($local_3, 34); $load_0 = $local_3.repr; $sroa_s_repr_57 = array.new_fixed<u8>(10); builtin::array_copy<u8>($load_0, $fuse_at_5, $sroa_s_repr_57, 0, 1); $fuse_at_5 = $fuse_at_5 + 1; $sroa_s_repr_57 = array.new_data<u8>("loop_entry_decision(&states, 3): "); builtin::array_copy<u8>($load_0, $fuse_at_5, $sroa_s_repr_57, 0, 33); $local_4 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::new"($local_3); "core:prelude/primitive.wado/i32::fmt_decimal$sroa[self.value]"($v1, $local_4); "core:prelude/string.wado/core:prelude/string.wado/String^core:prelude/string.wado/AsStrSlice::internal_append_to$spec3"(struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 }, $local_3); $local_3);
+");
+        builtin::array_copy<u8>($sroa_s_repr_57, $fuse_at_5, $load_0, 0, 49);
+        $fuse_at_5 = $fuse_at_5 + 49;
+        $load_0 = array.new_data<u8>("states: ");
+        builtin::array_copy<u8>($sroa_s_repr_57, $fuse_at_5, $load_0, 0, 8);
+        $local_4 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::new"($local_3);
+        "core:prelude/list.wado/core:prelude/list.wado/List<bug_nested_for_of_break.wado/State>^core:prelude/traits.wado/Inspect::inspect"(states, $local_4);
+        $fuse_at_5 = "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"($local_3, 34);
+        $load_0 = $local_3.repr;
+        $sroa_s_repr_57 = array.new_fixed<u8>(10);
+        builtin::array_copy<u8>($load_0, $fuse_at_5, $sroa_s_repr_57, 0, 1);
+        $fuse_at_5 = $fuse_at_5 + 1;
+        $sroa_s_repr_57 = array.new_data<u8>("loop_entry_decision(&states, 3): ");
+        builtin::array_copy<u8>($load_0, $fuse_at_5, $sroa_s_repr_57, 0, 33);
+        $local_4 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::new"($local_3);
+        "core:prelude/primitive.wado/i32::fmt_decimal$sroa[self.value]"($v1, $local_4);
+        "core:prelude/string.wado/core:prelude/string.wado/String^core:prelude/string.wado/AsStrSlice::internal_append_to$spec3"(struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 }, $local_3);
+        "core:rt/panic"($local_3.repr, $local_3.used);
         unreachable;
     }
     "wasi/task-return"(0);
@@ -473,14 +584,14 @@ fn "core:rt/write_string_to_stream$dae[add_newline]"(tx, $mv$message$repr, $mv$m
     "wasi/stream-drop-writable"(tx);
 }
 
-fn "core:rt/panic"(message) {
+fn "core:rt/panic"($mv$message$repr, $mv$message$used) {
     let packed: i64;
     let rx_8: i32;
     let tx_9: i32;
     rx_8 = builtin::i32_wrap_i64(local.tee packed("wasi/stream-new"()));
     tx_9 = builtin::i32_wrap_i64(packed >> 32_i64);
     rx_8 = "wasi/wasi:cli/Stderr::write_via_stream"(rx_8);
-    "core:rt/write_string_to_stream$dae[add_newline]"(tx_9, message.repr, message.used);
+    "core:rt/write_string_to_stream$dae[add_newline]"(tx_9, $mv$message$repr, $mv$message$used);
     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(rx_8);
     cold_path;
     unreachable;
@@ -568,7 +679,8 @@ fn "core:prelude/array.wado/core/prelude/array.wado/write_seq_inspect<bug_nested
                 self_7 = f.buf;
                 "core:prelude/string.wado/core:prelude/string.wado/String^core:prelude/string.wado/AsStrSlice::internal_append_to$spec0"(local.tee other_12(struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(44, 32), used: 2 }), self_7);
             }
-            "core:prelude/traits.wado/bug_nested_for_of_break.wado/State^core:prelude/traits.wado/Inspect::inspect"(builtin::array_get_value<ref "bug_nested_for_of_break.wado//State">(repr, i), f);
+            let $mv_arg_1: ref "bug_nested_for_of_break.wado//State";
+            "core:prelude/traits.wado/bug_nested_for_of_break.wado/State^core:prelude/traits.wado/Inspect::inspect"(local.tee $mv_arg_1(builtin::array_get_value<ref "bug_nested_for_of_break.wado//State">(repr, i)).kind, $mv_arg_1.rule, $mv_arg_1.decision, $mv_arg_1.transitions, f);
             shown = shown + 1;
             i = i + 1;
             continue l59;
@@ -612,7 +724,8 @@ fn "core:prelude/array.wado/core/prelude/array.wado/write_seq_inspect_alt<bug_ne
                 break b65;
             }
             "core:prelude/format.wado/core:prelude/format.wado/Formatter::write_newline_indent"(f);
-            "core:prelude/traits.wado/bug_nested_for_of_break.wado/State^core:prelude/traits.wado/Inspect::inspect"(builtin::array_get_value<ref "bug_nested_for_of_break.wado//State">(repr, i), f);
+            let $mv_arg_4: ref "bug_nested_for_of_break.wado//State";
+            "core:prelude/traits.wado/bug_nested_for_of_break.wado/State^core:prelude/traits.wado/Inspect::inspect"(local.tee $mv_arg_4(builtin::array_get_value<ref "bug_nested_for_of_break.wado//State">(repr, i)).kind, $mv_arg_4.rule, $mv_arg_4.decision, $mv_arg_4.transitions, f);
             "core:prelude/string.wado/core:prelude/string.wado/String::push_ascii_byte"(local.tee self_7(f.buf), 44);
             shown = shown + 1;
             i = i + 1;
@@ -772,9 +885,51 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::set_byte_at$contra
     let offset_30: i32;
     let f_38: ref "core:prelude/format.wado//Formatter";
     let $sroa_s_repr_55: ref Array<u8>;
+<<<<<<< HEAD
     "core:rt/panic"($fuse_at_7 = "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"(local.tee $local_7(struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(144), used: 0 }), 42); $load_0 = $local_7.repr; $sroa_s_repr_55 = array.new_data<u8>("Contract of "); builtin::array_copy<u8>($load_0, $fuse_at_7, $sroa_s_repr_55, 0, 12); offset_17 = $fuse_at_7 + 12; $sroa_s_repr_55 = array.new_data<u8>("String::set_byte_at"); builtin::array_copy<u8>($load_0, offset_17, $sroa_s_repr_55, 0, 19); $fuse_at_7 = $fuse_at_7 + 31; $sroa_s_repr_55 = array.new_data<u8>(" failed at "); builtin::array_copy<u8>($load_0, $fuse_at_7, $sroa_s_repr_55, 0, 11); $fuse_at_7 = $site.used; offset_17 = "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"($local_7, 43 + $fuse_at_7); builtin::array_copy<u8>(local.tee $sroa_s_repr_55($local_7.repr), offset_17, $site.repr, 0, $fuse_at_7); offset_30 = offset_17 + $fuse_at_7; $load_0 = array.new_data<u8>("
+||||||| dd1961cbb
+    "core:rt/panic"($fuse_at_7 = "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"(local.tee $local_7(struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(144), used: 0 }), 42); $load_0 = $local_7.repr; $sroa_s_repr_55 = array.new_data<u8>("Contract of "); builtin::array_copy<u8>($load_0, $fuse_at_7, $sroa_s_repr_55, 0, 12); offset_17 = $fuse_at_7 + 12; $sroa_s_repr_55 = array.new_data<u8>("String::set_byte_at"); builtin::array_copy<u8>($load_0, offset_17, $sroa_s_repr_55, 0, 19); $fuse_at_7 = $fuse_at_7 + 31; $sroa_s_repr_55 = array.new_data<u8>(" failed at "); builtin::array_copy<u8>($load_0, $fuse_at_7, $sroa_s_repr_55, 0, 11); $fuse_at_7 = "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"($local_7, 43 + $mv$$site$used); builtin::array_copy<u8>(local.tee $sroa_s_repr_55($local_7.repr), $fuse_at_7, $mv$$site$repr, 0, $mv$$site$used); offset_17 = $fuse_at_7 + $mv$$site$used; $mv$$site$repr = array.new_data<u8>("
+=======
+    $fuse_at_7 = "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"(local.tee $local_7(struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(144), used: 0 }), 42);
+    $load_0 = $local_7.repr;
+    $sroa_s_repr_55 = array.new_data<u8>("Contract of ");
+    builtin::array_copy<u8>($load_0, $fuse_at_7, $sroa_s_repr_55, 0, 12);
+    offset_17 = $fuse_at_7 + 12;
+    $sroa_s_repr_55 = array.new_data<u8>("String::set_byte_at");
+    builtin::array_copy<u8>($load_0, offset_17, $sroa_s_repr_55, 0, 19);
+    $fuse_at_7 = $fuse_at_7 + 31;
+    $sroa_s_repr_55 = array.new_data<u8>(" failed at ");
+    builtin::array_copy<u8>($load_0, $fuse_at_7, $sroa_s_repr_55, 0, 11);
+    $fuse_at_7 = "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"($local_7, 43 + $mv$$site$used);
+    builtin::array_copy<u8>(local.tee $sroa_s_repr_55($local_7.repr), $fuse_at_7, $mv$$site$repr, 0, $mv$$site$used);
+    offset_17 = $fuse_at_7 + $mv$$site$used;
+    $mv$$site$repr = array.new_data<u8>("
+>>>>>>> origin/main
 condition: 0 <= index < self.len()
+<<<<<<< HEAD
 "); builtin::array_copy<u8>($sroa_s_repr_55, offset_30, $load_0, 0, 36); $fuse_at_7 = offset_17 + (36 + $fuse_at_7); $load_0 = array.new_data<u8>("index: "); builtin::array_copy<u8>($sroa_s_repr_55, $fuse_at_7, $load_0, 0, 7); f_38 = local.tee $local_8("core:prelude/format.wado/core:prelude/format.wado/Formatter::new"($local_7)); "core:prelude/primitive.wado/i32::fmt_decimal$sroa[self.value]"(index, f_38); index = "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"($local_7, 13); $load_0 = $local_7.repr; $sroa_s_repr_55 = array.new_fixed<u8>(10); builtin::array_copy<u8>($load_0, index, $sroa_s_repr_55, 0, 1); index = index + 1; $sroa_s_repr_55 = array.new_data<u8>("self.len(): "); builtin::array_copy<u8>($load_0, index, $sroa_s_repr_55, 0, 12); $local_8 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::new"($local_7); "core:prelude/primitive.wado/i32::fmt_decimal$sroa[self.value]"($v1, $local_8); "core:prelude/string.wado/core:prelude/string.wado/String^core:prelude/string.wado/AsStrSlice::internal_append_to$spec3"(local.tee $site(struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 }), $local_7); $local_7);
+||||||| dd1961cbb
+"); builtin::array_copy<u8>($sroa_s_repr_55, offset_17, $mv$$site$repr, 0, 36); $mv$$site$used = $fuse_at_7 + (36 + $mv$$site$used); $mv$$site$repr = array.new_data<u8>("index: "); builtin::array_copy<u8>($sroa_s_repr_55, $mv$$site$used, $mv$$site$repr, 0, 7); f_38 = local.tee $local_8("core:prelude/format.wado/core:prelude/format.wado/Formatter::new"($local_7)); "core:prelude/primitive.wado/i32::fmt_decimal$sroa[self.value]"(index, f_38); index = "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"($local_7, 13); $mv$$site$repr = $local_7.repr; $sroa_s_repr_55 = array.new_fixed<u8>(10); builtin::array_copy<u8>($mv$$site$repr, index, $sroa_s_repr_55, 0, 1); index = index + 1; $sroa_s_repr_55 = array.new_data<u8>("self.len(): "); builtin::array_copy<u8>($mv$$site$repr, index, $sroa_s_repr_55, 0, 12); $local_8 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::new"($local_7); "core:prelude/primitive.wado/i32::fmt_decimal$sroa[self.value]"($v1, $local_8); "core:prelude/string.wado/core:prelude/string.wado/String^core:prelude/string.wado/AsStrSlice::internal_append_to$spec3"(struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 }, $local_7); $local_7);
+=======
+");
+    builtin::array_copy<u8>($sroa_s_repr_55, offset_17, $mv$$site$repr, 0, 36);
+    $mv$$site$used = $fuse_at_7 + (36 + $mv$$site$used);
+    $mv$$site$repr = array.new_data<u8>("index: ");
+    builtin::array_copy<u8>($sroa_s_repr_55, $mv$$site$used, $mv$$site$repr, 0, 7);
+    f_38 = local.tee $local_8("core:prelude/format.wado/core:prelude/format.wado/Formatter::new"($local_7));
+    "core:prelude/primitive.wado/i32::fmt_decimal$sroa[self.value]"(index, f_38);
+    index = "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"($local_7, 13);
+    $mv$$site$repr = $local_7.repr;
+    $sroa_s_repr_55 = array.new_fixed<u8>(10);
+    builtin::array_copy<u8>($mv$$site$repr, index, $sroa_s_repr_55, 0, 1);
+    index = index + 1;
+    $sroa_s_repr_55 = array.new_data<u8>("self.len(): ");
+    builtin::array_copy<u8>($mv$$site$repr, index, $sroa_s_repr_55, 0, 12);
+    $local_8 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::new"($local_7);
+    "core:prelude/primitive.wado/i32::fmt_decimal$sroa[self.value]"($v1, $local_8);
+    "core:prelude/string.wado/core:prelude/string.wado/String^core:prelude/string.wado/AsStrSlice::internal_append_to$spec3"(struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 }, $local_7);
+    "core:rt/panic"($local_7.repr, $local_7.used);
+>>>>>>> origin/main
     unreachable;
 }
 
@@ -1496,10 +1651,10 @@ fn "core:prelude/list.wado/core:prelude/list.wado/List<bug_nested_for_of_break.w
     });
 }
 
-fn "core:prelude/traits.wado/bug_nested_for_of_break.wado/State^core:prelude/traits.wado/Inspect::inspect"(self, f) {
+fn "core:prelude/traits.wado/bug_nested_for_of_break.wado/State^core:prelude/traits.wado/Inspect::inspect"($mv$self$kind, $mv$self$rule, $mv$self$decision, $mv$self$transitions, f) {
     let self_15: ref "core:prelude/string.wado//String";
     if f.alternate {
-        "core:prelude/traits.wado/core/prelude/traits.wado/inspect_struct_alternate<bug_nested_for_of_break.wado/State,[i32,i32,i32,core:prelude/list.wado/List<bug_nested_for_of_break.wado/Transition>]>"(self.kind, self.rule, self.decision, self.transitions, f);
+        "core:prelude/traits.wado/core/prelude/traits.wado/inspect_struct_alternate<bug_nested_for_of_break.wado/State,[i32,i32,i32,core:prelude/list.wado/List<bug_nested_for_of_break.wado/Transition>]>"($mv$self$kind, $mv$self$rule, $mv$self$decision, $mv$self$transitions, f);
         return;
     }
     "core:prelude/traits.wado/core/prelude/traits.wado/write_struct_head<bug_nested_for_of_break.wado/State>$sroa[f.buf]"(f.buf);
@@ -1514,28 +1669,28 @@ fn "core:prelude/traits.wado/bug_nested_for_of_break.wado/State^core:prelude/tra
     "core:prelude/string.wado/core:prelude/string.wado/String::push_str<&core:prelude/string.wado/String>"(f.buf, self_15);
     self_15 = f.buf;
     "core:prelude/string.wado/core:prelude/string.wado/String^core:prelude/string.wado/AsStrSlice::internal_append_to$spec0"(struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(58, 32), used: 2 }, self_15);
-    "core:prelude/primitive.wado/i32::fmt_decimal$sroa[self.value]"(self.kind, f);
+    "core:prelude/primitive.wado/i32::fmt_decimal$sroa[self.value]"($mv$self$kind, f);
     self_15 = f.buf;
     "core:prelude/string.wado/core:prelude/string.wado/String^core:prelude/string.wado/AsStrSlice::internal_append_to$spec0"(struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(44, 32), used: 2 }, self_15);
     self_15 = $mv$$tuple_0$1.field_name;
     "core:prelude/string.wado/core:prelude/string.wado/String::push_str<&core:prelude/string.wado/String>"(f.buf, self_15);
     self_15 = f.buf;
     "core:prelude/string.wado/core:prelude/string.wado/String^core:prelude/string.wado/AsStrSlice::internal_append_to$spec0"(struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(58, 32), used: 2 }, self_15);
-    "core:prelude/primitive.wado/i32::fmt_decimal$sroa[self.value]"(self.rule, f);
+    "core:prelude/primitive.wado/i32::fmt_decimal$sroa[self.value]"($mv$self$rule, f);
     self_15 = f.buf;
     "core:prelude/string.wado/core:prelude/string.wado/String^core:prelude/string.wado/AsStrSlice::internal_append_to$spec0"(struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(44, 32), used: 2 }, self_15);
     self_15 = $mv$$tuple_0$2.field_name;
     "core:prelude/string.wado/core:prelude/string.wado/String::push_str<&core:prelude/string.wado/String>"(f.buf, self_15);
     self_15 = f.buf;
     "core:prelude/string.wado/core:prelude/string.wado/String^core:prelude/string.wado/AsStrSlice::internal_append_to$spec0"(struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(58, 32), used: 2 }, self_15);
-    "core:prelude/primitive.wado/i32::fmt_decimal$sroa[self.value]"(self.decision, f);
+    "core:prelude/primitive.wado/i32::fmt_decimal$sroa[self.value]"($mv$self$decision, f);
     self_15 = f.buf;
     "core:prelude/string.wado/core:prelude/string.wado/String^core:prelude/string.wado/AsStrSlice::internal_append_to$spec0"(struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(44, 32), used: 2 }, self_15);
     self_15 = $mv$$tuple_0$3.field_name;
     "core:prelude/string.wado/core:prelude/string.wado/String::push_str<&core:prelude/string.wado/String>"(f.buf, self_15);
     self_15 = f.buf;
     "core:prelude/string.wado/core:prelude/string.wado/String^core:prelude/string.wado/AsStrSlice::internal_append_to$spec0"(struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(58, 32), used: 2 }, self_15);
-    "core:prelude/list.wado/core:prelude/list.wado/List<bug_nested_for_of_break.wado/Transition>^core:prelude/traits.wado/Inspect::inspect"(self.transitions, f);
+    "core:prelude/list.wado/core:prelude/list.wado/List<bug_nested_for_of_break.wado/Transition>^core:prelude/traits.wado/Inspect::inspect"($mv$self$transitions, f);
     self_15 = f.buf;
     "core:prelude/string.wado/core:prelude/string.wado/String^core:prelude/string.wado/AsStrSlice::internal_append_to$spec0"(struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(32, 125), used: 2 }, self_15);
 }

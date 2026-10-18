@@ -25,8 +25,7 @@ fn match_rule<S: AsStrSlice, S1: AsStrSlice, S2: AsStrSlice>(
     let blob = atn_blob_bytes(&built.atn);
     let sim = atn_decode(&blob);
     let idx = built.rule_index.get_str(rule).unwrap();
-    let chars: List<char> = input.chars().collect();
-    return latn_match(&sim, idx, &chars, 0, longest);
+    return latn_match(&sim, idx, &input.as_str_slice(), 0, longest);
 }
 
 global PLUS_G: String = "lexer grammar L;

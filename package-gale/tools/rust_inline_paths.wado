@@ -83,7 +83,9 @@ fn path_roots(result: &rust::ParseResult) -> List<[i32, String]> {
     return out;
 }
 
-fn locate(chars: &List<char>, roots: &List<[i32, String]>) -> List<InlinePath> {
+/// Each root's line and column, the column counted in chars. The roots are byte
+/// offsets into `src`.
+fn locate(src: &StrSlice, roots: &List<[i32, String]>) -> List<InlinePath> {
     let mut out: List<InlinePath> = List::with_capacity(roots.len());
     let mut line = 1;
     let mut column = 1;
@@ -92,10 +94,11 @@ fn locate(chars: &List<char>, roots: &List<[i32, String]>) -> List<InlinePath> {
         let at = roots[k].0;
         assert at >= i, "path roots must arrive in source order";
         while i < at {
-            if chars[i] == '\n' {
+            let b = src.byte_at(i);
+            if b == b'\n' {
                 line += 1;
                 column = 1;
-            } else {
+            } else if src.is_char_boundary(i) {
                 column += 1;
             }
             i += 1;
@@ -113,7 +116,7 @@ pub fn find_inline_paths<S: AsStrSlice>(source: S) -> Result<List<InlinePath>, S
         let first = result.diagnostics[0];
         return Result::Err(`${first.message} at ${first.rule_path()}`);
     }
-    return Result::Ok(locate(result.tokens.chars, &path_roots(&result)));
+    return Result::Ok(locate(&result.tokens.src, &path_roots(&result)));
 }
 
 /// The inline paths `path` carries. A file that cannot be read or parsed lands
