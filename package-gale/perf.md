@@ -668,12 +668,14 @@ would have settled it — relevant when reasoning about the scan/predict hot
 path. Full context in `TODO.md` ("Soundness and compatibility divergence") and
 `antlr4-compatibility.md` (prediction design, soundness invariants).
 
-**A memoised ATN / lookahead DFA is a last resort.** It was the named lever for
-an LR mid operand and for the ambiguous `rule?` below before each closed on the
-compiled scan instead. It is unmeasured in Gale, but ANTLR4's lookahead DFA
-_is_ that cache and still parses this grammar and input at 216.991 ms/iter
-against Gale's 2.535 (`benchmark/README.md`). Reach for the scan and the
-runtime FOLLOW gate first.
+**The simulator is the last resort, and a wrong parse is worse than it.** Reach
+for the scan and the runtime FOLLOW gate first. A decision neither settles as
+ANTLR4 does goes to the simulator, whatever it costs, and its cost is then the
+thing to work on. A lookahead DFA memoising predictions across positions, as
+ANTLR4's does, is the lever for that, and nothing blocks it now that
+`core:collections` has a `HashMap`. It is unmeasured in Gale; ANTLR4 with that
+cache parses this grammar and input at 216.991 ms/iter against Gale's 2.535
+(`benchmark/README.md`), so it does not by itself close the gap to the scan.
 
 - **A tournament asks the simulator once per alternative it scans**
   (`DropLoopEntryBranchInLRRule_4`). Each loop-entry prediction there looks

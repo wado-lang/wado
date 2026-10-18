@@ -592,6 +592,22 @@ ID : [a-z]+ ;
     assert !body.contains("p.expect(TK_LIT_DOT");
 }
 
+test "a ternary's last operand climbs past a suffix that opens with its `?`" {
+    // TypeScript's `singleExpression '?'? '.' identifierName` beside its
+    // ternary. Trees from the jar.
+    let got = parses("grammar T;
+s : e EOF ;
+e : e '?'? '.' ID | e '*' e | e '?' e ':' e | ID ;
+ID : [a-z]+ ;
+WS : ' ' -> skip ;
+", "s", ["a ? s : x * y", "a ? s : x . y", "a ? s : x", "a ? . b"]);
+    assert got == "a ? s : x * y => (s (e (e a) ? (e s) : (e (e x) * (e y))))
+a ? s : x . y => (s (e (e a) ? (e s) : (e (e x) . y)))
+a ? s : x => (s (e (e a) ? (e s) : (e x)))
+a ? . b => (s (e (e a) ? . b))
+";
+}
+
 test "a prefix operator set takes the token its arm tested" {
     let input = "grammar T;
 s : e EOF ;

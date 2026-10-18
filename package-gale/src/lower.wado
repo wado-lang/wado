@@ -1485,7 +1485,10 @@ fn is_right_associative_alt(alt: &Alternative) -> bool {
 }
 
 /// The precedence floor of `alt`'s operands, raised past any higher alt whose
-/// suffix starts with one of `alt`'s own delimiters.
+/// suffix starts with a delimiter an operand of `alt` must leave behind (`AND`
+/// in `e BETWEEN e AND e`). The operator right after the leading `e` follows
+/// none of `alt`'s operands, so a higher suffix sharing it (`e '?'? '.' ID`
+/// beside `e '?' e ':' e`) raises nothing.
 fn compute_lr_conflict_min_prec(
     alt: &Alternative,
     own_prec: i32,
@@ -1497,7 +1500,7 @@ fn compute_lr_conflict_min_prec(
     let mut min_prec = lr_trailing_prec(own_prec, is_right_associative_alt(alt));
 
     let mut fixed_tokens: List<i32> = [];
-    for let mut ei = 1; ei < alt.elements.len(); ei += 1 {
+    for let mut ei = 2; ei < alt.elements.len(); ei += 1 {
         if let Some(t) = fixed_token_kind(&alt.elements[ei], &mut ctx.analysis) {
             fixed_tokens.push(t);
         }
