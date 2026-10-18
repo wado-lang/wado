@@ -1,6 +1,6 @@
-// `xs[i]` and `xs[i + 3]` passing put `i` in `0..len - 3`, so `xs[i + 1]` and
-// `xs[i + 2]` need no check: the shape an unrolled loop body takes once its
-// ends are read first.
+// `xs[i]` takes `xs[i + 3]`'s check, which puts `i` in `0..len - 3`, so
+// `xs[i + 1]` and `xs[i + 2]` need no check either: the shape an unrolled loop
+// body takes once its ends are read first.
 
 use { println, Stdout } from "core:cli";
 
@@ -19,13 +19,13 @@ __DATA__
     "stdout": "14\n",
     "wir_scope": "window",
     "wir_expect:O2": [
-        "if @unlikely(i >=u ",
-        "(i + 3) >=u $load_{})",
+        "(i < ($load_{n} - 3))) == 0)",
         "builtin::array_get_value<i32>($load_{r}, i + 1)",
         "builtin::array_get_value<i32>($load_{r}, i + 2)"
     ],
     "wir_not_expect:O2": [
         "(i + 1) >=",
-        "(i + 2) >="
+        "(i + 2) >=",
+        "(i + 3) >="
     ]
 }
