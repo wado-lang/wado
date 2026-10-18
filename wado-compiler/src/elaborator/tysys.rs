@@ -798,6 +798,10 @@ fn reaches(
 }
 
 impl HeldTypes for TypeSystem {
+    fn key(&self, type_id: TypeId) -> TypeKey {
+        self.type_table.borrow().type_key(type_id)
+    }
+
     fn held(&self, type_id: TypeId) -> Held {
         let (base, resolved) = {
             let table = self.type_table.borrow();
