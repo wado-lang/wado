@@ -1,0 +1,24 @@
+// Monomorphization folds `a.cmp(&b) == Ordering::Less` on a float into the
+// float's `<`, which is the same total order: every NaN equal to itself and
+// above +Inf, and -0.0 equal to 0.0.
+
+use { println, Stdout } from "core:cli";
+
+fn lt<T: Ord>(a: T, b: T) -> bool { return a < b; }
+fn eq<T: Ord>(a: T, b: T) -> bool { return a.cmp(&b) == Ordering::Equal; }
+fn ne<T: Ord>(a: T, b: T) -> bool { return a.cmp(&b) != Ordering::Equal; }
+fn gt<T: Ord>(a: T, b: T) -> bool { return a.cmp(&b) == Ordering::Greater; }
+
+export fn run() with Stdout {
+    let n: f64 = builtin::black_box(f64::NAN);
+    let inf: f64 = builtin::black_box(f64::INFINITY);
+    let z: f64 = builtin::black_box(-0.0);
+    println(`${lt(n, inf)} ${lt(inf, n)} ${eq(n, n)} ${ne(n, n)} ${gt(n, inf)} ${eq(z, 0.0)}`);
+    let m: f32 = builtin::black_box(f32::NAN);
+    println(`${lt(m, 1.0 as f32)} ${eq(m, m)} ${gt(m, f32::INFINITY)}`);
+}
+
+__DATA__
+{
+    "stdout": "false true true false true true\nfalse true true\n"
+}

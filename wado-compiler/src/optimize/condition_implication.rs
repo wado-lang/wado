@@ -25,7 +25,7 @@ use crate::optimize::arena_query::{
 };
 use crate::optimize::gate::{FunctionGate, GatedPass};
 use crate::optimize::value_copy::mutation::{MutationOracle, Witness, expr_witnesses};
-use crate::tir::{TypeId, TypeTable};
+use crate::tir::{BuiltinDeclaration, TypeId, TypeTable};
 use crate::{hashmap, nir_arena};
 
 /// Run condition implication at the body root on an existing engine session.
@@ -81,17 +81,31 @@ pub(super) fn resolve_panic_ids(project: &NirPackage) -> hashmap::IndexSet<FuncI
         .collect()
 }
 
-/// The panic callees that report nothing but a failed contract: a contract
-/// report, a bodyless trap such as `builtin::unreachable` (all a contract check
-/// calls under `-f bare-asserts`), and a function doing nothing else but call
-/// one, as `cold_outline` leaves. The driver hands the result to the engine via
-/// [`Engine::set_quiet_trap_ids`].
-pub(super) fn resolve_quiet_trap_ids(
+/// The callees a call to which does nothing a trap would hide: a returning one
+/// nothing outside the program observes (an unobservable builtin, a value
+/// copy), and a panic callee that reports nothing but a failed contract. That
+/// is a contract report, a bodyless trap such as `builtin::unreachable` (all a
+/// contract check calls under `-f bare-asserts`), and a function doing nothing
+/// else but call one, as `cold_outline` leaves. The driver hands the result to
+/// the engine via [`Engine::set_quiet_callee_ids`].
+pub(super) fn resolve_quiet_callee_ids(
     project: &NirPackage,
     panic_ids: &hashmap::IndexSet<FuncId>,
 ) -> hashmap::IndexSet<FuncId> {
-    let pure_builtins = project.pure_builtin_callee_ids();
-    let mut quiet: hashmap::IndexSet<FuncId> = hashmap::IndexSet::default();
+    let mut quiet: hashmap::IndexSet<FuncId> = project
+        .functions
+        .iter()
+        .filter_map(|f| {
+            let f = f.borrow();
+            let id = f.id.filter(|id| !panic_ids.contains(id))?;
+            (f.is_value_copy()
+                || project
+                    .builtin_declarations
+                    .get(&*f)
+                    .is_some_and(BuiltinDeclaration::is_unobservable))
+            .then_some(id)
+        })
+        .collect();
     loop {
         let grown: Vec<FuncId> = project
             .functions
@@ -105,7 +119,6 @@ pub(super) fn resolve_quiet_trap_ids(
                     None => true,
                     Some(body) => subtree_quiet(body, NodeRef::Block(body.root()), |callee| {
                         quiet.contains(&callee)
-                            || (pure_builtins.contains(&callee) && !panic_ids.contains(&callee))
                     }),
                 };
                 reports_nothing_else.then_some(id)
@@ -132,7 +145,7 @@ pub(super) fn eliminate_post_promote(project: &mut NirPackage, gate: &mut Functi
     let first_param_types = first_param_types(project);
     let call_immutability = CallImmutability::new(project, &type_table, gate.exec());
     let panic_ids = resolve_panic_ids(project);
-    let quiet_trap_ids = resolve_quiet_trap_ids(project, &panic_ids);
+    let quiet_callee_ids = resolve_quiet_callee_ids(project, &panic_ids);
     let pure_builtin_callees = project.pure_builtin_callee_ids();
     let type_table = &*type_table;
     let functions = &project.functions;
@@ -165,7 +178,7 @@ pub(super) fn eliminate_post_promote(project: &mut NirPackage, gate: &mut Functi
         engine.set_value_graph_type_table(type_table);
         engine.set_param_locals(param_locals);
         engine.set_panic_callee_ids(&panic_ids);
-        engine.set_quiet_trap_ids(&quiet_trap_ids);
+        engine.set_quiet_callee_ids(&quiet_callee_ids);
         engine.set_pure_builtin_callees(&pure_builtin_callees);
         eliminate_at_root(&mut engine)
     })
@@ -2428,15 +2441,10 @@ fn widen_site(engine: &mut Engine, facts: &mut Vec<Fact>, index: Index, bound: B
 /// reports nothing but a failed contract. A check moved across it traps only
 /// where the program would have trapped anyway.
 fn is_quiet(engine: &Engine, node: NodeRef) -> bool {
-    subtree_quiet(engine.body, node, |id| {
-        engine.is_quiet_trap_callee(id)
-            || (engine.is_pure_builtin_callee(id) && !engine.is_panic_callee(id))
-    })
+    subtree_quiet(engine.body, node, |id| engine.is_quiet_callee(id))
 }
 
-/// [`is_quiet`] over `body`, with `quiet_call` saying which callees qualify. A
-/// pure builtin that cannot return may still be a function that prints first,
-/// so only a quiet trap among those does.
+/// [`is_quiet`] over `body`, with `quiet_call` saying which callees qualify.
 fn subtree_quiet(body: &Body, node: NodeRef, quiet_call: impl Fn(FuncId) -> bool) -> bool {
     let mut quiet = true;
     body.for_each_live_node_under(node, |n| {

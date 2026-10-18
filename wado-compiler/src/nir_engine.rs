@@ -353,9 +353,9 @@ pub struct Engine<'a> {
     /// default) means "no callee is a panic". Set via
     /// [`Engine::set_panic_callee_ids`].
     panic_callee_ids: Option<&'a IndexSet<FuncId>>,
-    /// The panic callees that report nothing but a failed contract, supplied by
-    /// `condition_implication`. Set via [`Engine::set_quiet_trap_ids`].
-    quiet_trap_ids: Option<&'a IndexSet<FuncId>>,
+    /// The callees that do nothing a trap would hide, supplied by
+    /// `condition_implication`. Set via [`Engine::set_quiet_callee_ids`].
+    quiet_callee_ids: Option<&'a IndexSet<FuncId>>,
     /// [`FuncId`]s of pure builtin intrinsics (`array_get_value`, `array_len`, …),
     /// supplied by a value-graph pass so the builder knows such a call writes no
     /// heap — the call node no longer carries a `FunctionRef` to classify by.
@@ -394,7 +394,7 @@ impl<'a> Engine<'a> {
             ctfe_builtins: None,
             vg_type_table: None,
             panic_callee_ids: None,
-            quiet_trap_ids: None,
+            quiet_callee_ids: None,
             pure_builtin_callees: None,
             promoted_reads: OnceCell::new(),
         };
@@ -756,15 +756,16 @@ impl<'a> Engine<'a> {
         self.panic_callee_ids = Some(ids);
     }
 
-    /// See [`Engine::is_quiet_trap_callee`].
-    pub fn set_quiet_trap_ids(&mut self, ids: &'a IndexSet<FuncId>) {
-        self.quiet_trap_ids = Some(ids);
+    /// See [`Engine::is_quiet_callee`].
+    pub fn set_quiet_callee_ids(&mut self, ids: &'a IndexSet<FuncId>) {
+        self.quiet_callee_ids = Some(ids);
     }
 
-    /// Whether a call to `func_id` traps having reported nothing but a failed
+    /// Whether a call to `func_id` either returns with nothing outside the
+    /// program observing it, or traps having reported nothing but a failed
     /// contract. `false` when no set was supplied.
-    pub fn is_quiet_trap_callee(&self, func_id: FuncId) -> bool {
-        self.quiet_trap_ids.is_some_and(|s| s.contains(&func_id))
+    pub fn is_quiet_callee(&self, func_id: FuncId) -> bool {
+        self.quiet_callee_ids.is_some_and(|s| s.contains(&func_id))
     }
 
     /// Supply the pure-builtin callee ids so the value-graph build classifies a

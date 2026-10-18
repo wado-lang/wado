@@ -30,7 +30,7 @@ use crate::nir_value_graph::ValuePool;
 use crate::optimize::alias::{CallImmutability, builder_alias_sets, first_param_types};
 use crate::optimize::arena_query::storage_root;
 use crate::optimize::condition_implication::{
-    eliminate_at_root, resolve_panic_ids, resolve_quiet_trap_ids,
+    eliminate_at_root, resolve_panic_ids, resolve_quiet_callee_ids,
 };
 use crate::optimize::heap_effect::{Effect, HeapEffects, HeapEffectsCache, LazyHeapFrame};
 
@@ -201,7 +201,7 @@ pub fn apply_licm(
     let first_param_types = first_param_types(project);
     let call_immutability = CallImmutability::new(project, &type_table, gate.exec());
     let panic_ids = resolve_panic_ids(project);
-    let quiet_trap_ids = resolve_quiet_trap_ids(project, &panic_ids);
+    let quiet_callee_ids = resolve_quiet_callee_ids(project, &panic_ids);
     let pure_builtin_callees = project.pure_builtin_callee_ids();
     let effects = heap.effects(project, &type_table, gate);
     let type_table = &*type_table;
@@ -242,7 +242,7 @@ pub fn apply_licm(
         engine.set_value_graph_type_table(type_table);
         engine.set_param_locals(params.iter().map(|p| p.local_index).collect());
         engine.set_panic_callee_ids(&panic_ids);
-        engine.set_quiet_trap_ids(&quiet_trap_ids);
+        engine.set_quiet_callee_ids(&quiet_callee_ids);
         engine.set_pure_builtin_callees(&pure_builtin_callees);
         let licm_changed = engine.run(&[&rule]);
         // Condition implication shares licm's session: licm hoists only

@@ -9475,6 +9475,13 @@ impl BuiltinDeclaration {
                     && !self.facts.is_opaque()
                     && self.mut_params.is_subset(&self.ranged_params))
     }
+
+    /// Whether nothing outside the program can tell the call ran: it writes no
+    /// field, and its side effect is stated. An `opaque` one hands over no
+    /// storage and still completes a task (`task_return`) or writes a stream.
+    pub fn is_unobservable(&self) -> bool {
+        !self.facts.is_opaque() && self.writes_no_field()
+    }
 }
 
 /// All a declaration lookup reads of a call. TIR and NIR each carry their own
