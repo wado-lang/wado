@@ -42,9 +42,9 @@ type "functype//array_bounds_widen_user_panic.wado/$cm_export__run" = fn();  // 
 
 type "functype//core:rt/write_string_to_stream$dae[add_newline]" = fn(i32, ref Array<u8>, i32);  // TypeId(16)
 
-type "functype//core:rt/log_stderr" = fn(ref "core:prelude/string.wado//String");  // TypeId(17)
+type "functype//core:rt/log_stderr" = fn(ref Array<u8>, i32);  // TypeId(17)
 
-type "functype//core:rt/panic" = fn(ref "core:prelude/string.wado//String");  // TypeId(18)
+type "functype//core:rt/panic" = fn(ref Array<u8>, i32);  // TypeId(18)
 
 type "functype//core:rt/cm_stream_write_raw_all_u8" = fn(i32, ref Array<u8>, i32, i32) -> "core:prelude/types.wado//enum:CopyResult";  // TypeId(19)
 
@@ -79,19 +79,19 @@ fn "array_bounds_widen_user_panic.wado/guarded$dae[return]"(xs, i) with Stdout {
     let packed: i64;
     if @unlikely(i >= local.tee $load_0(xs.used)) {
         cold_path;
-        "core:rt/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(65), used: 1 });
+        "core:rt/panic"(array.new_fixed<u8>(65), 1);
         unreachable;
     }
     if @unlikely((i + 1) >= $load_0) {
         $load_0 = builtin::i32_wrap_i64(local.tee packed("wasi/stream-new"()));
         i = builtin::i32_wrap_i64(packed >> 32_i64);
         $load_0 = "array_bounds_widen_user_panic.wado/$cm_binding__Stdout_write_via_stream"($load_0);
-        let $mv_arg_2: ref "core:prelude/string.wado//String";
-        $mv_arg_2 = global:array_bounds_widen_user_panic.wado::$const_obj_0;
-        "core:rt/write_string_to_stream$dae[add_newline]"(i, $mv_arg_2.repr, $mv_arg_2.used);
+        let $mv_arg_4: ref "core:prelude/string.wado//String";
+        $mv_arg_4 = global:array_bounds_widen_user_panic.wado::$const_obj_0;
+        "core:rt/write_string_to_stream$dae[add_newline]"(i, $mv_arg_4.repr, $mv_arg_4.used);
         "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"($load_0);
         cold_path;
-        "core:rt/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(66), used: 1 });
+        "core:rt/panic"(array.new_fixed<u8>(66), 1);
         unreachable;
     }
     return;
@@ -117,17 +117,17 @@ fn "core:rt/write_string_to_stream$dae[add_newline]"(tx, $mv$message$repr, $mv$m
     "wasi/stream-drop-writable"(tx);
 }
 
-fn "core:rt/log_stderr"(message) {
+fn "core:rt/log_stderr"($mv$message$repr, $mv$message$used) {
     let $mv$$pattern_temp_0$0: i32;
     let $mv$$pattern_temp_0$1: i32;
     multivalue_bind [$mv$$pattern_temp_0$0, $mv$$pattern_temp_0$1] = "core:rt/core/rt/cm_stream_pair<u8>"("wasi/stream-new"());
     $mv$$pattern_temp_0$0 = "wasi/wasi:cli/Stderr::write_via_stream"($mv$$pattern_temp_0$0);
-    "core:rt/write_string_to_stream$dae[add_newline]"($mv$$pattern_temp_0$1, message.repr, message.used);
+    "core:rt/write_string_to_stream$dae[add_newline]"($mv$$pattern_temp_0$1, $mv$message$repr, $mv$message$used);
     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"($mv$$pattern_temp_0$0);
 }
 
-fn "core:rt/panic"(message) {
-    "core:rt/log_stderr"(message);
+fn "core:rt/panic"($mv$message$repr, $mv$message$used) {
+    "core:rt/log_stderr"($mv$message$repr, $mv$message$used);
     cold_path;
     unreachable;
 }
