@@ -53,7 +53,7 @@ type "functype//const_object_globalization_cold.wado/$cm_export__run" = fn();  /
 
 type "functype//const_object_globalization_cold.wado/run$cold0" = fn();  // TypeId(18)
 
-type "functype//core:cli/println" = fn(ref "core:prelude/string.wado//String");  // TypeId(19)
+type "functype//core:cli/println" = fn(ref Array<u8>, i32);  // TypeId(19)
 
 type "functype//core:prelude/primitive.wado/write_decimal_digits" = fn(ref Array<u8>, i32, u64, i32);  // TypeId(20)
 
@@ -132,13 +132,15 @@ fn "const_object_globalization_cold.wado/byte_sum"($mv$s$repr, $mv$s$used, extra
 fn "const_object_globalization_cold.wado/rare"() with Stdout {
     let $local_0: ref "core:prelude/string.wado//String";
     let $local_1: ref "core:prelude/format.wado//Formatter";
-    "core:cli/println"($local_1 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::new"(local.tee $local_0(struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 })); "core:prelude/primitive.wado/i32::fmt_into$sroa[self.value]"(block -> i32 {
-        let $mv_arg_1: ref "core:prelude/string.wado//String";
-        $mv_arg_1 = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(114, 97, 114, 101), used: 4 };
-        let $arg_spill_2: i32;
-        $arg_spill_2 = black_box(0);
-        "const_object_globalization_cold.wado/byte_sum"($mv_arg_1.repr, 4, $arg_spill_2);
-    }, $local_1); $local_0);
+    $local_1 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::new"(local.tee $local_0(struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 }));
+    "core:prelude/primitive.wado/i32::fmt_into$sroa[self.value]"(block -> i32 {
+        let $mv_field_1: ref Array<u8>;
+        $mv_field_1 = array.new_fixed<u8>(114, 97, 114, 101);
+        let $arg_spill_3: i32;
+        $arg_spill_3 = black_box(0);
+        "const_object_globalization_cold.wado/byte_sum"($mv_field_1, 4, $arg_spill_3);
+    }, $local_1);
+    "core:cli/println"($local_0.repr, $local_0.used);
 }
 
 fn "const_object_globalization_cold.wado/run"() with Stdout {
@@ -195,24 +197,26 @@ fn "const_object_globalization_cold.wado/$cm_export__run"() {
 fn "const_object_globalization_cold.wado/run$cold0"() with Stdout {
     let $local_2: ref "core:prelude/string.wado//String";
     let $local_3: ref "core:prelude/format.wado//Formatter";
-    "core:cli/println"($local_3 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::new"(local.tee $local_2(struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 })); "core:prelude/primitive.wado/i32::fmt_into$sroa[self.value]"(block -> i32 {
-        let $mv_arg_1: ref "core:prelude/string.wado//String";
-        $mv_arg_1 = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(99, 111, 108, 100), used: 4 };
-        let $arg_spill_2: i32;
-        $arg_spill_2 = black_box(0);
-        "const_object_globalization_cold.wado/byte_sum"($mv_arg_1.repr, 4, $arg_spill_2);
-    }, $local_3); $local_2);
+    $local_3 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::new"(local.tee $local_2(struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 }));
+    "core:prelude/primitive.wado/i32::fmt_into$sroa[self.value]"(block -> i32 {
+        let $mv_field_1: ref Array<u8>;
+        $mv_field_1 = array.new_fixed<u8>(99, 111, 108, 100);
+        let $arg_spill_3: i32;
+        $arg_spill_3 = black_box(0);
+        "const_object_globalization_cold.wado/byte_sum"($mv_field_1, 4, $arg_spill_3);
+    }, $local_3);
+    "core:cli/println"($local_2.repr, $local_2.used);
     "const_object_globalization_cold.wado/rare"();
 }
 
-fn "core:cli/println"(message) with Stdout {
+fn "core:cli/println"($mv$message$repr, $mv$message$used) with Stdout {
     let packed: i64;
     let rx_6: i32;
     let tx_7: i32;
     rx_6 = builtin::i32_wrap_i64(local.tee packed("wasi/stream-new"()));
     tx_7 = builtin::i32_wrap_i64(packed >> 32_i64);
     rx_6 = "const_object_globalization_cold.wado/$cm_binding__Stdout_write_via_stream"(rx_6);
-    "core:rt/write_string_to_stream$dae[add_newline]"(tx_7, message.repr, message.used);
+    "core:rt/write_string_to_stream$dae[add_newline]"(tx_7, $mv$message$repr, $mv$message$used);
     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(rx_6);
 }
 

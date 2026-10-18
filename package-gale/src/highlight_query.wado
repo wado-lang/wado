@@ -11,6 +11,8 @@
 //! accept. Name resolution against the grammar happens later in
 //! `highlight_gen`; this module is purely syntactic.
 
+use { char_at } from "./runtime/lex.wado";
+
 /// The token side of a highlight rule: either a lexer rule name `(NAME)` or a
 /// literal token `"text"`.
 pub variant TokenSelector {
@@ -48,8 +50,9 @@ struct Lexeme {
     col: i32,
 }
 
+/// `pos` is a byte offset; `line` and `col` count chars, as an editor does.
 struct Lexer {
-    chars: List<char>,
+    src: StrSlice,
     pos: i32,
     line: i32,
     col: i32,
@@ -57,20 +60,20 @@ struct Lexer {
 
 impl Lexer {
     fn new<S: AsStrSlice>(src: S) -> Lexer {
-        return Lexer { chars: src.chars().collect(), pos: 0, line: 1, col: 1 };
+        return Lexer { src: src.as_str_slice(), pos: 0, line: 1, col: 1 };
     }
 
     fn at_end(&self) -> bool {
-        return self.pos >= self.chars.len();
+        return self.pos >= self.src.len();
     }
 
     fn peek_char(&self) -> char {
-        return self.chars[self.pos];
+        return char_at(&self.src, self.pos);
     }
 
     fn bump(&mut self) -> char {
-        let c = self.chars[self.pos];
-        self.pos += 1;
+        let c = self.peek_char();
+        self.pos = self.src.ceil_char_boundary(self.pos + 1);
         if c == '\n' {
             self.line += 1;
             self.col = 1;

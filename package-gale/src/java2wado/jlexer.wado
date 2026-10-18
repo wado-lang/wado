@@ -2,14 +2,8 @@
 //! attribute reference lexes as one opaque `Attr` token (resolved later by the
 //! language-independent attribute engine); string literals keep raw escapes.
 
-use {
-    is_id_start_char,
-    is_id_continue_char,
-    scan_closed_string,
-    scan_line_comment,
-    scan_block_comment,
-} from "../g4/scan.wado";
-use { collect_range } from "../text.wado";
+use { name_end, scan_closed_string, comment_end } from "../g4/scan.wado";
+use { char_at } from "../runtime/lex.wado";
 use { attr_ref_span } from "../attr_scan.wado";
 
 pub variant JToken {
@@ -22,62 +16,55 @@ pub variant JToken {
 }
 
 pub fn tokenize_java<S: AsStrSlice>(body: S) -> Result<List<JToken>, String> {
-    let chars: List<char> = body.chars().collect();
-    let n = chars.len();
+    let src = body.as_str_slice();
+    let n = src.len();
     let mut out: List<JToken> = [];
     let mut i = 0;
     while i < n {
-        let c = chars[i];
-        if c.is_ascii_whitespace() {
+        let b = src.byte_at(i);
+        if b.is_ascii_whitespace() {
             i += 1;
             continue;
         }
-        if c == '/' && i + 1 < n && chars[i + 1] == '/' {
-            i = scan_line_comment(&chars, i);
-            continue;
-        }
-        if c == '/' && i + 1 < n && chars[i + 1] == '*' {
-            i = scan_block_comment(&chars, i);
-            continue;
-        }
-        if c == '"' {
-            let Some(e) = scan_closed_string(&chars, i) else {
-                return Result::Err("java2wado: unterminated string literal in action body");
-            };
-            out.push(JToken::Str(collect_range(&chars, i + 1, e - 1)));
-            i = e;
-            continue;
-        }
-        if let Some([_, end]) = attr_ref_span(&chars, i, n) {
-            out.push(JToken::Attr(collect_range(&chars, i, end)));
+        if let Some(end) = comment_end(&src, i, n) {
             i = end;
             continue;
         }
-        if is_id_start_char(c) {
+        if b == b'"' {
+            let Some(e) = scan_closed_string(&src, i) else {
+                return Result::Err("java2wado: unterminated string literal in action body");
+            };
+            out.push(JToken::Str(src.slice(i + 1, e - 1).to_string()));
+            i = e;
+            continue;
+        }
+        if let Some([_, end]) = attr_ref_span(&src, i, n) {
+            out.push(JToken::Attr(src.slice(i, end).to_string()));
+            i = end;
+            continue;
+        }
+        let name = name_end(&src, i, n);
+        if name > i {
+            out.push(JToken::Ident(src.slice(i, name).to_string()));
+            i = name;
+            continue;
+        }
+        if b.is_ascii_digit() {
             let mut j = i + 1;
-            while j < n && is_id_continue_char(chars[j]) {
+            while j < n && src.byte_at(j).is_ascii_digit() {
                 j += 1;
             }
-            out.push(JToken::Ident(collect_range(&chars, i, j)));
+            out.push(JToken::Int(src.slice(i, j).to_string()));
             i = j;
             continue;
         }
-        if c.is_ascii_digit() {
-            let mut j = i + 1;
-            while j < n && chars[j].is_ascii_digit() {
-                j += 1;
-            }
-            out.push(JToken::Int(collect_range(&chars, i, j)));
-            i = j;
-            continue;
-        }
-        match scan_punct(&chars, i, n) {
+        match scan_punct(&src, i, n) {
             Some(p) => {
-                i += p.chars().count();
+                i += p.len();
                 out.push(JToken::Punct(p));
             },
             None => {
-                return Result::Err(`java2wado: unexpected character '${c}' in action body`);
+                return Result::Err(`java2wado: unexpected character '${char_at(&src, i)}' in action body`);
             },
         }
     }
@@ -85,18 +72,16 @@ pub fn tokenize_java<S: AsStrSlice>(body: S) -> Result<List<JToken>, String> {
 }
 
 /// Longest operator / punctuation token at `pos` (two-char before one-char).
-fn scan_punct(chars: &List<char>, pos: i32, n: i32) -> Option<String> {
+fn scan_punct(src: &StrSlice, pos: i32, n: i32) -> Option<String> {
     if pos + 1 < n {
-        let two = collect_range(chars, pos, pos + 2);
-        if is_two_char_op(&two) {
-            return Option::Some(two);
+        let two = src.slice(pos, src.ceil_char_boundary(pos + 2));
+        if is_two_char_op(two) {
+            return Option::Some(two.to_string());
         }
     }
-    let c = chars[pos];
-    if is_one_char_punct(c) {
-        let mut s = String::with_capacity(1);
-        s.push(c);
-        return Option::Some(s);
+    let b = src.byte_at(pos);
+    if is_one_char_punct(b) {
+        return Option::Some(src.slice(pos, pos + 1).to_string());
     }
     return null;
 }
@@ -105,22 +90,6 @@ fn is_two_char_op<S: AsStrSlice>(s: S) -> bool {
     return s matches { "==" | "!=" | ">=" | "<=" | "&&" | "||" | "+=" | "-=" | "*=" | "/=" | "++" | "--" };
 }
 
-fn is_one_char_punct(c: char) -> bool {
-    return c == '+'
-        || c == '-'
-        || c == '*'
-        || c == '/'
-        || c == '%'
-        || c == '<'
-        || c == '>'
-        || c == '!'
-        || c == '='
-        || c == '.'
-        || c == ','
-        || c == ':'
-        || c == ';'
-        || c == '('
-        || c == ')'
-        || c == '{'
-        || c == '}';
+fn is_one_char_punct(b: u8) -> bool {
+    return b matches { b'+' | b'-' | b'*' | b'/' | b'%' | b'<' | b'>' | b'!' | b'=' | b'.' | b',' | b':' | b';' | b'(' | b')' | b'{' | b'}' };
 }

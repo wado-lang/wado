@@ -1,49 +1,38 @@
-use { Span } from "../runtime/lex.wado";
-use { collect_range } from "../text.wado";
+use { Span, char_at } from "../runtime/lex.wado";
 use { G4Token, Token } from "./token.wado";
-use {
-    scan_line_comment,
-    scan_block_comment,
-    scan_char_class,
-    is_id_start_char,
-    is_id_continue_char,
-} from "./scan.wado";
+use { comment_end, scan_char_class, name_end } from "./scan.wado";
 use { CODE_POINT_MAX } from "./unicode.wado";
 
 pub struct G4Lexer {
-    chars: &List<char>,
+    src: &StrSlice,
     pos: i32,
 }
 
 impl G4Lexer {
-    pub fn new(chars: &List<char>) -> G4Lexer {
-        return G4Lexer { chars, pos: 0 };
+    pub fn new(src: &StrSlice) -> G4Lexer {
+        return G4Lexer { src, pos: 0 };
     }
 
     /// A token whose text is a copy of the source span `[start, end)`.
     fn owned_token(&self, kind: G4Token, start: i32, end: i32) -> Token {
-        return Token::new(kind.code(), collect_range(self.chars, start, end), Span::new(start, end));
+        return Token::new(kind.code(), self.src.slice(start, end).to_string(), Span::new(start, end));
     }
 
     fn at_end(&self) -> bool {
-        return self.pos >= self.chars.len();
+        return self.pos >= self.src.len();
     }
 
-    fn peek_at(&self, offset: i32) -> Option<char> {
+    fn byte_after(&self, offset: i32) -> Option<u8> {
         let i = self.pos + offset;
-        if i >= self.chars.len() {
+        if i >= self.src.len() {
             return null;
         }
-        return Option::<char>::Some(self.chars[i]);
+        return Option::<u8>::Some(self.src.byte_at(i));
     }
 
     fn skip_whitespace(&mut self) {
-        while !self.at_end() {
-            if self.chars[self.pos].is_ascii_whitespace() {
-                self.pos += 1;
-            } else {
-                break;
-            }
+        while !self.at_end() && self.src.byte_at(self.pos).is_ascii_whitespace() {
+            self.pos += 1;
         }
     }
 
@@ -53,19 +42,10 @@ impl G4Lexer {
             if self.at_end() {
                 break;
             }
-            let c = self.chars[self.pos];
-            if c == '/' {
-                if let Some(next) = self.peek_at(1) {
-                    if next == '/' {
-                        self.pos = scan_line_comment(self.chars, self.pos);
-                        continue;
-                    } else if next == '*' {
-                        self.pos = scan_block_comment(self.chars, self.pos);
-                        continue;
-                    }
-                }
-            }
-            break;
+            let Some(end) = comment_end(self.src, self.pos, self.src.len()) else {
+                break;
+            };
+            self.pos = end;
         }
     }
 
@@ -74,6 +54,7 @@ impl G4Lexer {
         self.pos += 1;
         // The one token whose text is not its source span: escapes are resolved.
         let mut text = String::new();
+        let mut run = self.pos;
         // The literal is scanned to its closing quote either way, so the next
         // token starts where it would have; only the kind and the span change.
         let mut bad: Option<Span> = null;
@@ -81,17 +62,22 @@ impl G4Lexer {
             if self.at_end() {
                 return self.owned_token(G4Token::UnterminatedString, start, self.pos);
             }
-            let c = self.chars[self.pos];
-            self.pos += 1;
-            if c == '\'' {
+            let b = self.src.byte_at(self.pos);
+            if b == b'\'' {
+                text.push_str(self.src.slice(run, self.pos));
+                self.pos += 1;
                 if let Some(esc) = bad {
                     return self.owned_token(G4Token::InvalidEscape, esc.start, esc.end);
                 }
                 return Token::new(G4Token::StringLit.code(), text, Span::new(start, self.pos));
-            } else if c == '\\' && !self.at_end() {
+            }
+            if b == b'\\' && self.pos + 1 < self.src.len() {
+                text.push_str(self.src.slice(run, self.pos));
+                self.pos += 1;
                 self.read_string_escape(&mut text, &mut bad);
+                run = self.pos;
             } else {
-                text.push(c);
+                self.pos += 1;
             }
         }
     }
@@ -99,7 +85,7 @@ impl G4Lexer {
     fn read_string_escape(&mut self, text: &mut String, bad: &mut Option<Span>) {
         let esc_start = self.pos - 1;
         let mut p = self.pos;
-        let cp = decode_string_escape(self.chars, &mut p);
+        let cp = decode_string_escape(self.src, &mut p);
         self.pos = p;
         if cp == INVALID_ESCAPE {
             if *bad matches { None } {
@@ -114,13 +100,13 @@ impl G4Lexer {
         // `scan_char_class` handles the ANTLR4 char-set lexicon; the text is
         // a verbatim copy of its source span, so emit an owned token.
         let start = self.pos;
-        match scan_char_class(self.chars, start) {
+        match scan_char_class(self.src, start) {
             Some(end) => {
                 self.pos = end;
                 return self.owned_token(G4Token::CharClass, start, end);
             },
             None => {
-                self.pos = self.chars.len();
+                self.pos = self.src.len();
                 return self.owned_token(G4Token::UnterminatedCharClass, start, self.pos);
             },
         }
@@ -128,18 +114,16 @@ impl G4Lexer {
 
     fn read_int_literal(&mut self) -> Token {
         let start = self.pos;
-        while !self.at_end() && '0' <= self.chars[self.pos] <= '9' {
+        while !self.at_end() && self.src.byte_at(self.pos).is_ascii_digit() {
             self.pos += 1;
         }
         return self.owned_token(G4Token::IntLit, start, self.pos);
     }
 
-    fn read_identifier(&mut self) -> Token {
+    fn read_identifier(&mut self, end: i32) -> Token {
         let start = self.pos;
-        while !self.at_end() && is_id_continue_char(self.chars[self.pos]) {
-            self.pos += 1;
-        }
-        let text = collect_range(self.chars, start, self.pos);
+        self.pos = end;
+        let text = self.src.slice(start, end).to_string();
         // Hard keywords only: `grammar` and `fragment` introduce structural
         // constructs that the parser disambiguates by token kind. Lexer command
         // names like `skip`, `channel`, `mode`, `more`, `pushMode`, `popMode`,
@@ -161,68 +145,67 @@ impl G4Lexer {
             return self.owned_token(G4Token::Eof, self.pos, self.pos);
         }
         let start = self.pos;
-        let c = self.chars[self.pos];
-        if c == '\'' {
+        let b = self.src.byte_at(self.pos);
+        if b == b'\'' {
             return self.read_string_literal();
         }
-        if c == '[' {
+        if b == b'[' {
             return self.read_char_class();
         }
-        if is_id_start_char(c) {
-            return self.read_identifier();
+        let name = name_end(self.src, start, self.src.len());
+        if name > start {
+            return self.read_identifier(name);
         }
-        if '0' <= c <= '9' {
+        if b.is_ascii_digit() {
             return self.read_int_literal();
         }
-        if c == '+' && self.peek_at(1) matches { Some('=') } {
+        if b == b'+' && self.byte_after(1) matches { Some(b'=') } {
             self.pos += 2;
             return self.owned_token(G4Token::PlusAssign, start, self.pos);
         }
-        if c == ':' && self.peek_at(1) matches { Some(':') } {
+        if b == b':' && self.byte_after(1) matches { Some(b':') } {
             self.pos += 2;
             return self.owned_token(G4Token::ColonColon, start, self.pos);
         }
         // One token, as in ANTLR4: `. .` is two wildcards, never a range.
-        if c == '.' && self.peek_at(1) matches { Some('.') } {
+        if b == b'.' && self.byte_after(1) matches { Some(b'.') } {
             self.pos += 2;
             return self.owned_token(G4Token::Range, start, self.pos);
         }
-        self.pos += 1;
-        let kind = match c {
-            ':' => G4Token::Colon,
-            ';' => G4Token::Semicolon,
-            '|' => G4Token::Pipe,
-            '(' => G4Token::LParen,
-            ')' => G4Token::RParen,
-            '*' => G4Token::Star,
-            '+' => G4Token::Plus,
-            '?' => G4Token::Question,
-            '.' => G4Token::Dot,
-            '~' => G4Token::Tilde,
-            '=' => G4Token::Assign,
-            '#' => G4Token::Hash,
-            '{' => G4Token::LBrace,
-            '}' => G4Token::RBrace,
-            ',' => G4Token::Comma,
-            '@' => G4Token::At,
-            '<' => G4Token::LAngle,
-            '>' => G4Token::RAngle,
-            '-' && !self.at_end() && self.chars[self.pos] == '>' => {
-                self.pos += 1;
-                return self.owned_token(G4Token::Arrow, start, self.pos);
-            },
-            _ => {
-                return self.owned_token(G4Token::UnexpectedChar, start, self.pos);
-            },
+        if b == b'-' && self.byte_after(1) matches { Some(b'>') } {
+            self.pos += 2;
+            return self.owned_token(G4Token::Arrow, start, self.pos);
+        }
+        self.pos = self.src.ceil_char_boundary(start + 1);
+        let kind = match b {
+            b':' => G4Token::Colon,
+            b';' => G4Token::Semicolon,
+            b'|' => G4Token::Pipe,
+            b'(' => G4Token::LParen,
+            b')' => G4Token::RParen,
+            b'*' => G4Token::Star,
+            b'+' => G4Token::Plus,
+            b'?' => G4Token::Question,
+            b'.' => G4Token::Dot,
+            b'~' => G4Token::Tilde,
+            b'=' => G4Token::Assign,
+            b'#' => G4Token::Hash,
+            b'{' => G4Token::LBrace,
+            b'}' => G4Token::RBrace,
+            b',' => G4Token::Comma,
+            b'@' => G4Token::At,
+            b'<' => G4Token::LAngle,
+            b'>' => G4Token::RAngle,
+            _ => G4Token::UnexpectedChar,
         };
         return self.owned_token(kind, start, self.pos);
     }
 }
 
-/// Tokenize an already-collected char buffer, which `parse` shares with the
-/// parser. Token text is owned, so the tokens do not alias `chars`.
-pub fn tokenize_chars(chars: &List<char>) -> List<Token> {
-    let mut lexer = G4Lexer::new(chars);
+/// Tokenize a `.g4` source, which `parse` shares with the parser. Token text
+/// is owned, so the tokens do not alias `src`.
+pub fn tokenize(src: &StrSlice) -> List<Token> {
+    let mut lexer = G4Lexer::new(src);
     let mut tokens: List<Token> = [];
     loop {
         let tok = lexer.next_token();
@@ -241,11 +224,11 @@ pub global INVALID_ESCAPE: i32 = -1;
 
 /// One escape body — the chars *after* the `\` — as a code point, or
 /// `INVALID_ESCAPE`. `pos` enters at the escape character and leaves past it.
-pub fn decode_string_escape(chars: &List<char>, pos: &mut i32) -> i32 {
-    let ec = chars[*pos];
-    *pos += 1;
+pub fn decode_string_escape(src: &StrSlice, pos: &mut i32) -> i32 {
+    let ec = char_at(src, *pos);
+    *pos = src.ceil_char_boundary(*pos + 1);
     return match ec {
-        'u' => resolve_unicode_escape_code(chars, pos),
+        'u' => resolve_unicode_escape_code(src, pos),
         '\'' => ec as i32,
         _ => decode_shared_escape(ec),
     };
@@ -268,15 +251,15 @@ pub fn decode_shared_escape(ec: char) -> i32 {
 /// (`'…'`, quotes included). Unlike the token text, an unpaired surrogate
 /// escape survives as its own code point rather than collapsing to U+FFFD —
 /// a char-range endpoint must not silently become a different, matchable char.
-pub fn string_literal_code_points(chars: &List<char>, span: Span) -> List<i32> {
+pub fn string_literal_code_points(src: &StrSlice, span: Span) -> List<i32> {
     let mut out: List<i32> = [];
     let mut pos = span.start + 1;
     let last = span.end - 1;
     while pos < last {
-        let c = chars[pos];
-        pos += 1;
+        let c = char_at(src, pos);
+        pos = src.ceil_char_boundary(pos + 1);
         if c == '\\' && pos < last {
-            let cp = decode_string_escape(chars, &mut pos);
+            let cp = decode_string_escape(src, &mut pos);
             assert cp != INVALID_ESCAPE, "a literal carrying an undefined escape lexes as InvalidEscape, so no StringLit reaches here with one";
             out.push(cp);
         } else {
@@ -297,12 +280,12 @@ pub fn scalar_or_replacement(code: i32) -> char {
 
 /// Raw code point of a `\uXXXX` / `\u{…}` escape body (`pos` enters past the
 /// `u`), or `INVALID_ESCAPE`. Surrogates come back verbatim.
-pub fn resolve_unicode_escape_code(chars: &List<char>, pos: &mut i32) -> i32 {
-    if *pos < chars.len() && chars[*pos] == '{' {
+pub fn resolve_unicode_escape_code(src: &StrSlice, pos: &mut i32) -> i32 {
+    if *pos < src.len() && src.byte_at(*pos) == b'{' {
         *pos += 1;
-        return resolve_braced_escape_code(chars, pos);
+        return resolve_braced_escape_code(src, pos);
     }
-    let [val, n] = scan_hex_digits(chars, pos, 4);
+    let [val, n] = scan_hex_digits(src, pos, 4);
     if n < 4 {
         return INVALID_ESCAPE;
     }
@@ -311,9 +294,9 @@ pub fn resolve_unicode_escape_code(chars: &List<char>, pos: &mut i32) -> i32 {
 
 /// The `\u{…}` body past its `{`. The whole form is consumed before anything is
 /// decided, so a caller reporting `pos` names the escape and not a prefix.
-fn resolve_braced_escape_code(chars: &List<char>, pos: &mut i32) -> i32 {
-    let [val, n] = scan_hex_digits(chars, pos, i32::MAX);
-    let closed = *pos < chars.len() && chars[*pos] == '}';
+fn resolve_braced_escape_code(src: &StrSlice, pos: &mut i32) -> i32 {
+    let [val, n] = scan_hex_digits(src, pos, i32::MAX);
+    let closed = *pos < src.len() && src.byte_at(*pos) == b'}';
     if closed {
         *pos += 1;
     }
@@ -325,12 +308,12 @@ fn resolve_braced_escape_code(chars: &List<char>, pos: &mut i32) -> i32 {
 
 /// The value and length of the hex run at `pos`, taking at most `limit` digits.
 /// The value stops climbing at `CODE_POINT_MAX`, so no run overflows.
-fn scan_hex_digits(chars: &List<char>, pos: &mut i32, limit: i32) -> [i32, i32] {
+fn scan_hex_digits(src: &StrSlice, pos: &mut i32, limit: i32) -> [i32, i32] {
     let mut val = 0;
     let mut n = 0;
-    while n < limit && *pos < chars.len() && chars[*pos].is_hexdigit() {
+    while n < limit && *pos < src.len() && src.byte_at(*pos).is_hexdigit() {
         if val <= CODE_POINT_MAX {
-            val = val * 16 + unchecked chars[*pos].hex_digit_value();
+            val = val * 16 + unchecked (src.byte_at(*pos) as char).hex_digit_value();
         }
         *pos += 1;
         n += 1;

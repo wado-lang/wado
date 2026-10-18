@@ -12,27 +12,26 @@
 //! the expression mapping keeps both trivially testable.
 
 use { ResolvedAttr } from "./attr_resolve.wado";
-use { push_range } from "./text.wado";
 
-/// Rewrite `body`, replacing each `ResolvedAttr`'s `[start, end)` char span
+/// Rewrite `body`, replacing each `ResolvedAttr`'s `[start, end)` byte span
 /// with the corresponding entry in `replacements`. `refs` must be in
 /// ascending, non-overlapping span order (as `attr_resolve` produces them)
 /// and the same length as `replacements`.
 pub fn splice_attrs<S: AsStrSlice>(body: S, refs: &List<ResolvedAttr>, replacements: &List<String>) -> String
     contract refs.len() == replacements.len(), "one replacement per attribute reference"
 {
-    let chars: List<char> = body.chars().collect();
-    let n = chars.len();
-    let mut out = String::with_capacity(body.len());
+    let src = body.as_str_slice();
+    let n = src.len();
+    let mut out = String::with_capacity(n);
     let mut cursor = 0;
     for let mut i = 0; i < refs.len(); i += 1 {
         let r = &refs[i];
         assert r.start >= cursor, "splice_attrs: refs must be ascending and non-overlapping";
         assert r.end <= n, "splice_attrs: ref span exceeds body";
-        push_range(&mut out, &chars, cursor, r.start);
+        out.push_str(src.slice(cursor, r.start));
         out.push_str(&replacements[i]);
         cursor = r.end;
     }
-    push_range(&mut out, &chars, cursor, n);
+    out.push_str(src.slice(cursor, n));
     return out;
 }

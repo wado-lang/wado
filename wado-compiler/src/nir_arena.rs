@@ -20,7 +20,7 @@ use crate::module_source::ModuleSource;
 use crate::name::{is_template_block, minted_name};
 use crate::nir::{FuncId, NirBinaryOp, NirLiteralPattern, NirLocal, NirUnaryOp};
 use crate::nir_value_graph::builder::ValueGraphBuild;
-use crate::nir_value_graph::{ValueId, ValueKind, ValuePool};
+use crate::nir_value_graph::{OpaqueSource, ValueId, ValueKind, ValuePool};
 use crate::primitive::PrimitiveType;
 use crate::tir::{TypeId, TypeTable};
 use crate::token::Span;
@@ -2042,6 +2042,28 @@ impl Body {
             out.push(Some(v));
         }
         Some(out)
+    }
+
+    /// The local an argument hands over whole: one it reads, bare or as the
+    /// promoted value standing for such a read, or references with `&`.
+    pub fn argument_local(&self, op: Operand) -> Option<u32> {
+        match op {
+            Operand::Expr(e) => match self.exprs[e].kind {
+                ExprKind::Local { index, .. } => Some(index),
+                ExprKind::Unary {
+                    op: NirUnaryOp::Ref,
+                    expr,
+                } => self.argument_local(expr),
+                _ => None,
+            },
+            Operand::Value(v) => match self.values.kind(v) {
+                ValueKind::Opaque(oid) => match self.values.opaque_source(*oid)? {
+                    OpaqueSource::Local(index) => Some(index),
+                    OpaqueSource::Expr(e) => self.argument_local(Operand::Expr(e)),
+                },
+                _ => None,
+            },
+        }
     }
 
     /// The operand of `block`'s last statement, where that statement is an `Expr`.

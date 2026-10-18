@@ -49,7 +49,7 @@ type "functype//inline_cold_function.wado/$cm_export__run" = fn();  // TypeId(15
 
 type "functype//inline_cold_function.wado/run$cold0" = fn(i32);  // TypeId(16)
 
-type "functype//core:cli/println" = fn(ref "core:prelude/string.wado//String");  // TypeId(17)
+type "functype//core:cli/println" = fn(ref Array<u8>, i32);  // TypeId(17)
 
 type "functype//core:prelude/primitive.wado/write_decimal_digits" = fn(ref Array<u8>, i32, u64, i32);  // TypeId(18)
 
@@ -123,15 +123,16 @@ fn "inline_cold_function.wado/$cm_export__run"() {
 }
 
 fn "inline_cold_function.wado/run$cold0"(v) with Stdout {
-    "core:cli/println"("inline_cold_function.wado/report"(v));
+    let $mv_arg_1: ref "core:prelude/string.wado//String";
+    "core:cli/println"(local.tee $mv_arg_1("inline_cold_function.wado/report"(v)).repr, $mv_arg_1.used);
 }
 
-fn "core:cli/println"(message) with Stdout {
+fn "core:cli/println"($mv$message$repr, $mv$message$used) with Stdout {
     let $mv$$pattern_temp_0$0: i32;
     let $mv$$pattern_temp_0$1: i32;
     multivalue_bind [$mv$$pattern_temp_0$0, $mv$$pattern_temp_0$1] = "core:rt/core/rt/cm_stream_pair<u8>"("wasi/stream-new"());
     $mv$$pattern_temp_0$0 = "inline_cold_function.wado/$cm_binding__Stdout_write_via_stream"($mv$$pattern_temp_0$0);
-    "core:rt/write_string_to_stream$dae[add_newline]"($mv$$pattern_temp_0$1, message.repr, message.used);
+    "core:rt/write_string_to_stream$dae[add_newline]"($mv$$pattern_temp_0$1, $mv$message$repr, $mv$message$used);
     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"($mv$$pattern_temp_0$0);
 }
 

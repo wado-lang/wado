@@ -14,6 +14,16 @@ e returns [int v] : ID ;
     assert out == " vals.v = a.v; ";
 }
 
+test "splice_attrs cuts at the byte spans find_attr_refs reports past multi-byte text" {
+    let g = parse("grammar T;
+r : x=ID ;
+").unwrap();
+    let body = " s = \"é\"; $x.text; ";
+    let refs = resolve_attrs(body, &g.parser_rules[0], &g.parser_rules).unwrap();
+    let repls: List<String> = ["A"];
+    assert splice_attrs(body, &refs, &repls) == " s = \"é\"; A; ";
+}
+
 test "splice_attrs leaves a ref-free body verbatim" {
     let body = " p.emit(\"hi\"); ";
     let out = splice_attrs(body, &[], &[]);

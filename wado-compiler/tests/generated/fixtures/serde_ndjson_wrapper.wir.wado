@@ -62,7 +62,7 @@ type "functype//core:prelude/string.wado/core:prelude/string.wado/String::grow" 
 
 type "functype//core:prelude/string.wado/core:prelude/string.wado/String::push" = fn(ref "core:prelude/string.wado//String", char);  // TypeId(23)
 
-type "functype//core:prelude/string.wado/core:prelude/string.wado/String^core:prelude/traits.wado/Add::add" = fn(ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String") -> ref "core:prelude/string.wado//String";  // TypeId(24)
+type "functype//core:prelude/string.wado/core:prelude/string.wado/String^core:prelude/traits.wado/Add::add" = fn(ref Array<u8>, i32, ref Array<u8>, i32) -> ref "core:prelude/string.wado//String";  // TypeId(24)
 
 type "functype//core:serde/serde_ndjson_wrapper.wado/Message^core:serde/Serialize::serialize<core:json/JsonSerializer>$sroa[self.ok,s.buf]" = fn(bool, ref "core:prelude/string.wado//String") -> ref null "core:serde//SerializeError";  // TypeId(25)
 
@@ -104,14 +104,22 @@ fn "serde_ndjson_wrapper.wado/$cm_export__run"() {
     let packed: i64;
     let tx_12: i32;
     let s: ref "core:prelude/string.wado//String";
-    s = "core:prelude/string.wado/core:prelude/string.wado/String^core:prelude/traits.wado/Add::add"(let $mv$$vr_2$0: i32; let $mv$$vr_2$1: ref null "core:prelude/string.wado//String"; let $mv$$vr_2$2: ref null "core:serde//SerializeError"; multivalue_bind [$mv$$vr_2$0, $mv$$vr_2$1, $mv$$vr_2$2] = "core:json/core/json/to_string<serde_ndjson_wrapper.wado/Message>$sroa[value.ok,return]$spec0$dae[value]"(global:core:builtin::$unit_case$core:prelude/types.wado//Option<char>$0); (if $mv$$vr_2$0 == 0 -> ref "core:prelude/string.wado//String" {
-        local.tee s(ref.as_non_null($mv$$vr_2$1));
-    } else if @likely($mv$$vr_2$0 == 1) -> ref "core:prelude/string.wado//String" {
-        struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(110, 117, 108, 108), used: 4 };
-    } else {
-        unreachable;
-    }), struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 });
-    s = struct.new "core:prelude/string.wado//String" { repr: let $array_clone_src_1: ref Array<u8>; $array_clone_src_1 = s.repr; $mv$$vr_2$0 = s.used; let $array_clone_dst_2: ref Array<u8>; builtin::array_copy<u8>(local.tee $array_clone_dst_2(builtin::array_new<u8>($mv$$vr_2$0)), 0, $array_clone_src_1, 0, $mv$$vr_2$0); $array_clone_dst_2, used: $mv$$vr_2$0 };
+    s = struct.new "core:prelude/string.wado//String" { repr: $mv_field_2 = local.tee s(block -> ref "core:prelude/string.wado//String" {
+        let $mv$$vr_2$0: i32;
+        let $mv$$vr_2$1: ref null "core:prelude/string.wado//String";
+        let $mv$$vr_2$2: ref null "core:serde//SerializeError";
+        multivalue_bind [$mv$$vr_2$0, $mv$$vr_2$1, $mv$$vr_2$2] = "core:json/core/json/to_string<serde_ndjson_wrapper.wado/Message>$sroa[value.ok,return]$spec0$dae[value]"(global:core:builtin::$unit_case$core:prelude/types.wado//Option<char>$0);
+        s = (if $mv$$vr_2$0 == 0 -> ref "core:prelude/string.wado//String" {
+            local.tee s(ref.as_non_null($mv$$vr_2$1));
+        } else if @likely($mv$$vr_2$0 == 1) -> ref "core:prelude/string.wado//String" {
+            struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(110, 117, 108, 108), used: 4 };
+        } else {
+            unreachable;
+        });
+        let $mv_field_2: ref Array<u8>;
+        $mv_field_2 = array.new_fixed<u8>(10);
+        "core:prelude/string.wado/core:prelude/string.wado/String^core:prelude/traits.wado/Add::add"(s.repr, s.used, $mv_field_2, 1);
+    }).repr; $mv$$vr_2$0 = s.used; let $array_clone_dst_5: ref Array<u8>; builtin::array_copy<u8>(local.tee $array_clone_dst_5(builtin::array_new<u8>($mv$$vr_2$0)), 0, $mv_field_2, 0, $mv$$vr_2$0); $array_clone_dst_5, used: $mv$$vr_2$0 };
     $mv$$vr_2$0 = builtin::i32_wrap_i64(local.tee packed("wasi/stream-new"()));
     tx_12 = builtin::i32_wrap_i64(packed >> 32_i64);
     $mv$$vr_2$0 = "serde_ndjson_wrapper.wado/$cm_binding__Stdout_write_via_stream"($mv$$vr_2$0);
@@ -163,17 +171,17 @@ fn "core:rt/cm_stream_write_raw_all_u8"(handle, $mv$data$repr, $mv$data$start, $
     if local.tee $mv$data$end($mv$data$end - $mv$data$start) == 0 {
         return 0;
     }
-    ptr_13 = builtin::i32_wrap_i64(ptr_13 = "mem/realloc"(0, 0, 1, $mv$data$end); i = 0; b7: block {
-        l8: loop {
-            break_if b7 i >= $mv$data$end;
+    ptr_13 = builtin::i32_wrap_i64(ptr_13 = "mem/realloc"(0, 0, 1, $mv$data$end); i = 0; b8: block {
+        l9: loop {
+            break_if b8 i >= $mv$data$end;
             builtin::store_u8(ptr_13 + i, builtin::array_get_value_u8($mv$data$repr, $mv$data$start + i));
             i = i + 1;
-            continue l8;
+            continue l9;
         };
     }; builtin::i64_extend_i32_u(ptr_13) | (builtin::i64_extend_i32_s($mv$data$end) << 32_i64));
     i = 0;
     block {
-        l10: loop {
+        l11: loop {
             ptr_15 = ptr_13 + i;
             count_16 = $mv$data$end - i;
             if local.tee count_16("wasi/stream-write"(handle, ptr_15, select i32(count_16 < 268435455, count_16, 268435455))) == -1 {
@@ -203,7 +211,7 @@ fn "core:rt/cm_stream_write_raw_all_u8"(handle, $mv$data$repr, $mv$data$start, $
                 drop("mem/realloc"(ptr_13, $mv$data$end, 1, 0));
                 return count_16;
             }
-            continue l10;
+            continue l11;
         };
     };
 }
@@ -328,31 +336,29 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::push"(self, c) {
     };
 }
 
-fn "core:prelude/string.wado/core:prelude/string.wado/String^core:prelude/traits.wado/Add::add"(self, other) {
-    let $load_0: i32;
+fn "core:prelude/string.wado/core:prelude/string.wado/String^core:prelude/traits.wado/Add::add"($mv$self$repr, $mv$self$used, $mv$other$repr, $mv$other$used) {
     let result: ref "core:prelude/string.wado//String";
     let start_19: i32;
-    let start_34: i32;
-    result = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(local.tee $load_0(self.used) + other.used), used: 0 };
+    result = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>($mv$self$used + $mv$other$used), used: 0 };
     $inline_core_prelude_string_wado_String__internal_push_string_6: block {
-        break_if $inline_core_prelude_string_wado_String__internal_push_string_6 $load_0 == 0;
-        if @unlikely($load_0 > builtin::array_len(result.repr)) {
+        break_if $inline_core_prelude_string_wado_String__internal_push_string_6 $mv$self$used == 0;
+        if @unlikely($mv$self$used > builtin::array_len(result.repr)) {
             cold_path;
-            "core:prelude/string.wado/core:prelude/string.wado/String::grow"(result, $load_0);
+            "core:prelude/string.wado/core:prelude/string.wado/String::grow"(result, $mv$self$used);
         }
         start_19 = result.used;
-        result.used = $load_0;
-        builtin::array_copy<u8>(result.repr, start_19, self.repr, 0, $load_0);
+        result.used = $mv$self$used;
+        builtin::array_copy<u8>(result.repr, start_19, $mv$self$repr, 0, $mv$self$used);
     };
     $inline_core_prelude_string_wado_String__internal_push_string_12: block {
-        break_if $inline_core_prelude_string_wado_String__internal_push_string_12 local.tee $load_0(other.used) == 0;
-        if @unlikely(local.tee start_19(result.used + $load_0) > builtin::array_len(result.repr)) {
+        break_if $inline_core_prelude_string_wado_String__internal_push_string_12 $mv$other$used == 0;
+        if @unlikely(local.tee $mv$self$used(result.used + $mv$other$used) > builtin::array_len(result.repr)) {
             cold_path;
-            "core:prelude/string.wado/core:prelude/string.wado/String::grow"(result, start_19);
+            "core:prelude/string.wado/core:prelude/string.wado/String::grow"(result, $mv$self$used);
         }
-        start_34 = result.used;
-        result.used = start_19;
-        builtin::array_copy<u8>(result.repr, start_34, other.repr, 0, $load_0);
+        start_19 = result.used;
+        result.used = $mv$self$used;
+        builtin::array_copy<u8>(result.repr, start_19, $mv$other$repr, 0, $mv$other$used);
     };
     return result;
 }
