@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1792336869745,
+  "lastUpdate": 1792360283637,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -68301,6 +68301,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/e560f2d035be5ea925164946ed7f2b19c7d5ee41"
         },
         "date": 1792336868801,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 2955,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 7313,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 19774,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 288295,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "274383f7e4df1f4b7c2733379cfa2ad29f368f27",
+          "message": "Merge pull request #2386 from wado-lang/ccr-4f61238b-2aifw6\n\nfix(contract): keep jumps inside detached expressions and check contracts under wado run",
+          "timestamp": "2026-10-19T06:31:20+09:00",
+          "tree_id": "dbe69059ab6902d2816580c03c2694c309773b80",
+          "url": "https://github.com/wado-lang/wado/commit/274383f7e4df1f4b7c2733379cfa2ad29f368f27"
+        },
+        "date": 1792360282736,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
