@@ -2616,25 +2616,6 @@ struct CdVals {
     mode: i32 = 0,
 }
 
-fn scan_xg(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor) -> i32 {
-    let start = pos;
-    let mut pos = pos;
-    let kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
-    if kind == TK_LIT_a {
-        let mut _atn_disabled: List<i32> = [];
-        if !( false ) { _atn_disabled.push(0); }
-        let _atn_alt = atn.predict(&ATN_SIM, 10, tokens, pos, TK_EOF, 0, &_atn_disabled);
-        if _atn_alt < 0 {
-            return -1;
-        }
-        if _atn_alt == 1 {
-            return scan_xg__alt_1(tokens, start, atn);
-        }
-        return scan_xg__alt_0(tokens, start, atn);
-    }
-    return -1;
-}
-
 fn _parse_takes__inner(p: &mut Parser) -> () {
     p.site = 0;
     p.atn_ret_pending = 28;
@@ -3075,23 +3056,6 @@ fn _parse_scanned__inner_alt_0(p: &mut Parser) -> () {
     return;
 }
 
-fn scan_scanned__alt_0(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor) -> i32 {
-    let mut pos = pos;
-    atn.stack.push(133);
-    pos = scan_xg(tokens, pos, atn);
-    atn.stack.pop();
-    if pos < 0 { return -1; }
-    if pos < tokens.len() && tokens[pos] == TK_LIT_c {
-        pos += 1;
-    }
-    while pos < tokens.len() && tokens[pos] == TK_LIT_k {
-        pos += 1;
-    }
-    if pos >= tokens.len() || tokens[pos] != TK_LIT_x { return -1; }
-    pos += 1;
-    return pos;
-}
-
 fn _parse_scanned__inner_alt_1(p: &mut Parser) -> () {
     p.site = 6;
     p.atn_ret_pending = 147;
@@ -3112,42 +3076,12 @@ fn _parse_scanned__inner_alt_1(p: &mut Parser) -> () {
     return;
 }
 
-fn scan_scanned__alt_1(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor) -> i32 {
-    let mut pos = pos;
-    atn.stack.push(147);
-    pos = scan_xg(tokens, pos, atn);
-    atn.stack.pop();
-    if pos < 0 { return -1; }
-    if pos < tokens.len() && tokens[pos] == TK_LIT_c {
-        pos += 1;
-    }
-    while pos < tokens.len() && tokens[pos] == TK_LIT_k {
-        pos += 1;
-    }
-    if pos >= tokens.len() || tokens[pos] != TK_LIT_y { return -1; }
-    pos += 1;
-    return pos;
-}
-
 fn _parse_scanned__inner(p: &mut Parser) -> () {
     if !kind_set_has(&SYNC_2, p.kinds[p.pos]) { builtin::cold_path(); p.sync_alts(&SYNC_2, &EXPECTED_2); }
     let kind = p.peek_kind();
     if kind == TK_LIT_a {
-        let _sd_tokens = &p.kinds;
-        let _sd_pos = p.pos;
-        let _sd_p_0 = scan_scanned__alt_0(_sd_tokens, _sd_pos, &mut p.atn);
-        let _sd_p_1 = scan_scanned__alt_1(_sd_tokens, _sd_pos, &mut p.atn);
-        let mut _sd_best_i: i32 = -1;
-        let mut _sd_best_p: i32 = -1;
-        if _sd_p_0 > _sd_best_p {
-            _sd_best_p = _sd_p_0;
-            _sd_best_i = 0;
-        }
-        if _sd_p_1 > _sd_best_p {
-            _sd_best_p = _sd_p_1;
-            _sd_best_i = 1;
-        }
-        if _sd_best_i == 0 {
+        let _atn_alt = atn_predict_once(&ATN_SIM, 5, &mut p.atn, &p.kinds, p.pos, TK_EOF, 0);
+        if _atn_alt == 0 {
             return _parse_scanned__inner_alt_0(p);
         }
         return _parse_scanned__inner_alt_1(p);
@@ -3184,16 +3118,6 @@ fn _parse_xg__inner_alt_0(p: &mut Parser) -> () {
     return;
 }
 
-fn scan_xg__alt_0(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor) -> i32 {
-    let mut pos = pos;
-    if !( false ) { return -1; }
-    if pos >= tokens.len() || tokens[pos] != TK_LIT_a { return -1; }
-    pos += 1;
-    if pos >= tokens.len() || tokens[pos] != TK_LIT_b { return -1; }
-    pos += 1;
-    return pos;
-}
-
 fn _parse_xg__inner_alt_1(p: &mut Parser) -> () {
     p.expect(TK_LIT_a, &SYNC_0, false);
     p.expect(TK_LIT_b, &SYNC_1, false);
@@ -3202,17 +3126,6 @@ fn _parse_xg__inner_alt_1(p: &mut Parser) -> () {
          p.emit("abc"); 
     }
     return;
-}
-
-fn scan_xg__alt_1(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor) -> i32 {
-    let mut pos = pos;
-    if pos >= tokens.len() || tokens[pos] != TK_LIT_a { return -1; }
-    pos += 1;
-    if pos >= tokens.len() || tokens[pos] != TK_LIT_b { return -1; }
-    pos += 1;
-    if pos >= tokens.len() || tokens[pos] != TK_LIT_c { return -1; }
-    pos += 1;
-    return pos;
 }
 
 fn _parse_xg__inner(p: &mut Parser) -> () {

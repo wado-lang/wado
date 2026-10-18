@@ -2020,10 +2020,11 @@ fn atn_pop(arena: &mut CtxArena, cur: &AtnConfig, work: &mut List<AtnConfig>, rs
 
 fn atn_move(sim: &AtnSim, configs: &List<AtnConfig>, token: i32, eof: i32) -> List<AtnConfig> {
     let mut out: List<AtnConfig> = [];
+    let mut ended: List<AtnConfig> = [];
     for let c of configs {
         if c.state == ATN_ACCEPT_EOF {
             if token == eof {
-                out.push(*c);
+                ended.push(*c);
             }
             continue;
         }
@@ -2049,6 +2050,12 @@ fn atn_move(sim: &AtnSim, configs: &List<AtnConfig>, token: i32, eof: i32) -> Li
                 out.push(AtnConfig { state: sim.tr_target[start + j], alt: c.alt, pctx: c.pctx, pr: c.pr });
             }
         }
+    }
+    if out.iter_ref().any(|c| sim.state_kind[c.state] != ATN_RULE_STOP) {
+        return out;
+    }
+    for let c of ended {
+        out.push(c);
     }
     return out;
 }
@@ -2417,10 +2424,6 @@ fn atn_state_cont_admits(sim: &AtnSim, state: i32, t: i32, eof: i32) -> bool {
     return false;
 }
 
-fn atn_state_cont_open_ended(sim: &AtnSim, state: i32) -> bool {
-    return sim.state_cont_first_open[state] || sim.state_cont_neg_count[state] > 0;
-}
-
 internal fn atn_lr_loop_decision(
     sim: &AtnSim,
     atn: &mut AtnPredictor,
@@ -2436,24 +2439,22 @@ internal fn atn_lr_loop_decision(
     let c = sim.state_tr_count[dstate];
     let exit_alt = c - 1;
     let mut enter = -1;
-    let mut open_contest = false;
+    let mut contested = false;
     for let mut j = 0; j < c; j += 1 {
         if sim.tr_kind[s + j] == ATN_TR_PRECEDENCE
             && sim.tr_prec[s + j] >= min_prec
             && atn_state_cont_admits(sim, sim.tr_target[s + j], t, eof) {
-            if enter < 0 {
-                enter = j;
-            } else if atn_state_cont_open_ended(sim, sim.tr_target[s + enter])
-                || atn_state_cont_open_ended(sim, sim.tr_target[s + j]) {
-                open_contest = true;
+            if enter >= 0 {
+                contested = true;
                 break;
             }
+            enter = j;
         }
     }
     if enter < 0 {
         return exit_alt;
     }
-    if !open_contest && !atn_caller_contests(sim, &atn.stack, dstate, t, eof, min_prec) {
+    if !contested && !atn_caller_contests(sim, &atn.stack, dstate, t, eof, min_prec) {
         return enter;
     }
     let alt = atn_predict_once(sim, decision, atn, tokens, pos, eof, min_prec);
@@ -9861,71 +9862,7 @@ fn scan_expression(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, atn: &mut
     let mut pos = scan_expression_atom(tokens, pos, gate, atn, min_prec, follow);
     if pos < 0 { return -1; }
     loop {
-        let mut _atn_alt = atn_lr_loop_decision(&ATN_SIM, atn, 184, tokens, pos, TK_EOF, min_prec);
-        if _atn_alt == 0 || _atn_alt == 1 || _atn_alt == 2 || _atn_alt == 3 {
-            let mut _lr_best: i32 = -1;
-            let lr_pre_0_gate = *gate;
-            let mut _lr_s_0: i32 = -1;
-            if 21 >= min_prec {
-                *gate = lr_pre_0_gate;
-                _lr_s_0 = scan_expression_lr_3(tokens, pos, gate, atn, min_prec, follow);
-            }
-            let mut _lr_s_1: i32 = -1;
-            if 20 >= min_prec {
-                *gate = lr_pre_0_gate;
-                _lr_s_1 = scan_expression_lr_4(tokens, pos, gate, atn, min_prec, follow);
-            }
-            let mut _lr_s_2: i32 = -1;
-            if 19 >= min_prec {
-                *gate = lr_pre_0_gate;
-                _lr_s_2 = scan_expression_lr_5(tokens, pos, gate, atn, min_prec, follow);
-            }
-            let mut _lr_s_3: i32 = -1;
-            if 18 >= min_prec {
-                *gate = lr_pre_0_gate;
-                _lr_s_3 = scan_expression_lr_6(tokens, pos, gate, atn, min_prec, follow);
-            }
-            *gate = lr_pre_0_gate;
-            if _lr_s_0 > _lr_best {
-                _lr_best = _lr_s_0;
-                _atn_alt = 0;
-            }
-            if _lr_s_1 > _lr_best {
-                _lr_best = _lr_s_1;
-                _atn_alt = 1;
-            }
-            if _lr_s_2 > _lr_best {
-                _lr_best = _lr_s_2;
-                _atn_alt = 2;
-            }
-            if _lr_s_3 > _lr_best {
-                _lr_best = _lr_s_3;
-                _atn_alt = 3;
-            }
-        }
-        if _atn_alt == 10 || _atn_alt == 14 {
-            let mut _lr_best: i32 = -1;
-            let lr_pre_10_gate = *gate;
-            let mut _lr_s_10: i32 = -1;
-            if 11 >= min_prec {
-                *gate = lr_pre_10_gate;
-                _lr_s_10 = scan_expression_lr_17(tokens, pos, gate, atn, min_prec, follow);
-            }
-            let mut _lr_s_14: i32 = -1;
-            if 7 >= min_prec {
-                *gate = lr_pre_10_gate;
-                _lr_s_14 = scan_expression_lr_21(tokens, pos, gate, atn, min_prec, follow);
-            }
-            *gate = lr_pre_10_gate;
-            if _lr_s_10 > _lr_best {
-                _lr_best = _lr_s_10;
-                _atn_alt = 10;
-            }
-            if _lr_s_14 > _lr_best {
-                _lr_best = _lr_s_14;
-                _atn_alt = 14;
-            }
-        }
+        let _atn_alt = atn_lr_loop_decision(&ATN_SIM, atn, 184, tokens, pos, TK_EOF, min_prec);
         if _atn_alt == 0 {
             pos = scan_expression_lr_3(tokens, pos, gate, atn, min_prec, follow);
             if pos < 0 { return -1; }
@@ -20778,67 +20715,7 @@ fn _parse_expression__inner(p: &mut Parser, follow: i64 = 0, min_prec: i32 = 0) 
     p.b.finish_node(p.last_end());
     loop {
         if p.recovering { break; }
-        let mut _atn_alt = atn_lr_loop_decision(&ATN_SIM, &mut p.atn, 184, &p.kinds, p.pos, TK_EOF, min_prec);
-        if _atn_alt == 0 || _atn_alt == 1 || _atn_alt == 2 || _atn_alt == 3 {
-            let mut _lr_best: i32 = -1;
-            let mut _lr_s_0: i32 = -1;
-            if 21 >= min_prec {
-                p.scan_gate.no_struct = p.no_struct;
-                _lr_s_0 = scan_expression_lr_3(&p.kinds, p.pos, &mut p.scan_gate, &mut p.atn, min_prec, follow);
-            }
-            let mut _lr_s_1: i32 = -1;
-            if 20 >= min_prec {
-                p.scan_gate.no_struct = p.no_struct;
-                _lr_s_1 = scan_expression_lr_4(&p.kinds, p.pos, &mut p.scan_gate, &mut p.atn, min_prec, follow);
-            }
-            let mut _lr_s_2: i32 = -1;
-            if 19 >= min_prec {
-                p.scan_gate.no_struct = p.no_struct;
-                _lr_s_2 = scan_expression_lr_5(&p.kinds, p.pos, &mut p.scan_gate, &mut p.atn, min_prec, follow);
-            }
-            let mut _lr_s_3: i32 = -1;
-            if 18 >= min_prec {
-                p.scan_gate.no_struct = p.no_struct;
-                _lr_s_3 = scan_expression_lr_6(&p.kinds, p.pos, &mut p.scan_gate, &mut p.atn, min_prec, follow);
-            }
-            if _lr_s_0 > _lr_best {
-                _lr_best = _lr_s_0;
-                _atn_alt = 0;
-            }
-            if _lr_s_1 > _lr_best {
-                _lr_best = _lr_s_1;
-                _atn_alt = 1;
-            }
-            if _lr_s_2 > _lr_best {
-                _lr_best = _lr_s_2;
-                _atn_alt = 2;
-            }
-            if _lr_s_3 > _lr_best {
-                _lr_best = _lr_s_3;
-                _atn_alt = 3;
-            }
-        }
-        if _atn_alt == 10 || _atn_alt == 14 {
-            let mut _lr_best: i32 = -1;
-            let mut _lr_s_10: i32 = -1;
-            if 11 >= min_prec {
-                p.scan_gate.no_struct = p.no_struct;
-                _lr_s_10 = scan_expression_lr_17(&p.kinds, p.pos, &mut p.scan_gate, &mut p.atn, min_prec, follow);
-            }
-            let mut _lr_s_14: i32 = -1;
-            if 7 >= min_prec {
-                p.scan_gate.no_struct = p.no_struct;
-                _lr_s_14 = scan_expression_lr_21(&p.kinds, p.pos, &mut p.scan_gate, &mut p.atn, min_prec, follow);
-            }
-            if _lr_s_10 > _lr_best {
-                _lr_best = _lr_s_10;
-                _atn_alt = 10;
-            }
-            if _lr_s_14 > _lr_best {
-                _lr_best = _lr_s_14;
-                _atn_alt = 14;
-            }
-        }
+        let _atn_alt = atn_lr_loop_decision(&ATN_SIM, &mut p.atn, 184, &p.kinds, p.pos, TK_EOF, min_prec);
         let _lr_pos0 = p.pos;
         if _atn_alt == 0 {
             p.b.start_node_at(_cp, RK_EXPRESSION, _start);

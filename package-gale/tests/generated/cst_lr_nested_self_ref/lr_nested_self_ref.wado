@@ -2462,12 +2462,13 @@ fn atn_caller_contests(sim: &AtnSim, rule_stack: &List<i32>, dstate: i32, t: i32
                 return true;
             }
             mp = caller_mp;
+        } else if atn_state_cont_admits(sim, ret, t, eof) {
+            return true;
         }
-        if sim.state_cont_nullable[ret] {
-            i -= 1;
-            continue;
+        if !sim.state_cont_nullable[ret] {
+            return false;
         }
-        return atn_state_cont_admits(sim, ret, t, eof);
+        i -= 1;
     }
     return false;
 }

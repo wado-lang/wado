@@ -705,10 +705,11 @@ fn atn_pop(arena: &mut CtxArena, cur: &AtnConfig, work: &mut List<AtnConfig>, rs
 
 fn atn_move(sim: &AtnSim, configs: &List<AtnConfig>, token: i32, eof: i32) -> List<AtnConfig> {
     let mut out: List<AtnConfig> = [];
+    let mut ended: List<AtnConfig> = [];
     for let c of configs {
         if c.state == ATN_ACCEPT_EOF {
             if token == eof {
-                out.push(*c);
+                ended.push(*c);
             }
             continue;
         }
@@ -734,6 +735,12 @@ fn atn_move(sim: &AtnSim, configs: &List<AtnConfig>, token: i32, eof: i32) -> Li
                 out.push(AtnConfig { state: sim.tr_target[start + j], alt: c.alt, pctx: c.pctx, pr: c.pr });
             }
         }
+    }
+    if out.iter_ref().any(|c| sim.state_kind[c.state] != ATN_RULE_STOP) {
+        return out;
+    }
+    for let c of ended {
+        out.push(c);
     }
     return out;
 }
@@ -884,6 +891,10 @@ fn atn_predict_above(
         prev = alts;
         let token = if pos < tokens.len() { tokens[pos] } else { eof };
         let moved = atn_move(sim, &configs, token, eof);
+        if token == eof {
+            let survivors = atn_unique_alts(&moved);
+            return atn_first_enabled_alt(if survivors.is_empty() { &alts } else { &survivors }, disabled_alts);
+        }
         pos += 1;
         configs = atn_closure(sim, &mut arena, &moved, &mut scratch);
     }

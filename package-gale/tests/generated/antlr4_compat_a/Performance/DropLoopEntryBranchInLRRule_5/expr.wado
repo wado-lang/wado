@@ -2316,12 +2316,13 @@ fn atn_caller_contests(sim: &AtnSim, rule_stack: &List<i32>, dstate: i32, t: i32
                 return true;
             }
             mp = caller_mp;
+        } else if atn_state_cont_admits(sim, ret, t, eof) {
+            return true;
         }
-        if sim.state_cont_nullable[ret] {
-            i -= 1;
-            continue;
+        if !sim.state_cont_nullable[ret] {
+            return false;
         }
-        return atn_state_cont_admits(sim, ret, t, eof);
+        i -= 1;
     }
     return false;
 }
@@ -3068,17 +3069,6 @@ fn _parse_stat__inner_alt_0(p: &mut Parser) -> () {
     return;
 }
 
-fn scan_stat__alt_0(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor) -> i32 {
-    let mut pos = pos;
-    atn.stack.push(8);
-    pos = scan_expr(tokens, pos, atn, 0);
-    atn.stack.pop();
-    if pos < 0 { return -1; }
-    if pos >= tokens.len() || tokens[pos] != TK_LIT_SEMI { return -1; }
-    pos += 1;
-    return pos;
-}
-
 fn _parse_stat__inner_alt_1(p: &mut Parser) -> () {
     p.site = 1;
     p.atn_ret_pending = 13;
@@ -3087,36 +3077,12 @@ fn _parse_stat__inner_alt_1(p: &mut Parser) -> () {
     return;
 }
 
-fn scan_stat__alt_1(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor) -> i32 {
-    let mut pos = pos;
-    atn.stack.push(13);
-    pos = scan_expr(tokens, pos, atn, 0);
-    atn.stack.pop();
-    if pos < 0 { return -1; }
-    if pos >= tokens.len() || tokens[pos] != TK_LIT_DOT { return -1; }
-    pos += 1;
-    return pos;
-}
-
 fn _parse_stat__inner(p: &mut Parser) -> () {
     if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { builtin::cold_path(); p.sync_alts(&SYNC_0, &EXPECTED_0); }
     let kind = p.peek_kind();
     if _kind_set_0(kind) {
-        let _sd_tokens = &p.kinds;
-        let _sd_pos = p.pos;
-        let _sd_p_0 = scan_stat__alt_0(_sd_tokens, _sd_pos, &mut p.atn);
-        let _sd_p_1 = scan_stat__alt_1(_sd_tokens, _sd_pos, &mut p.atn);
-        let mut _sd_best_i: i32 = -1;
-        let mut _sd_best_p: i32 = -1;
-        if _sd_p_0 > _sd_best_p {
-            _sd_best_p = _sd_p_0;
-            _sd_best_i = 0;
-        }
-        if _sd_p_1 > _sd_best_p {
-            _sd_best_p = _sd_p_1;
-            _sd_best_i = 1;
-        }
-        if _sd_best_i == 0 {
+        let _atn_alt = atn_predict_once(&ATN_SIM, 0, &mut p.atn, &p.kinds, p.pos, TK_EOF, 0);
+        if _atn_alt == 0 {
             return _parse_stat__inner_alt_0(p);
         }
         return _parse_stat__inner_alt_1(p);

@@ -603,8 +603,7 @@ fn lower_multi_alt_rule(rule: &ParserRule, ctx: &mut LowerContext) -> MultiAltRu
     // The scan of a rule whose choice the simulator makes consults it as the
     // parse does.
     if ctx.choice_routes(rule, all_indices, true) {
-        let idx = ctx.current_rule_index();
-        ctx.marks.mark_asks_simulator(idx);
+        ctx.mark_asks_simulator();
     }
     return MultiAltRule {
         header,
@@ -672,17 +671,11 @@ fn lower_lr_rule(rule: &ParserRule, ctx: &mut LowerContext) -> LeftRecursiveRule
     // shape), when a suffix can open on a `.` / `~X`, or when a self-ref
     // nested in a suffix's subrule can meet a loop operator.
     // Route such a rule's loop-entry through the runtime simulator. So too a
-    // rule whose atom choice the simulator makes: it predicts the atom under
-    // the invocation's `min_prec`, so the body functions take it, and the
-    // static loop would take a suffix the full context gives the caller
-    // (`new Map<T>()` in a TypeScript initializer: `()` is the `new`'s, not a
-    // call suffix).
+    // rule whose atom choice the simulator makes: the static loop would take a
+    // suffix the full context gives the caller (`new Map<T>()` in a TypeScript
+    // initializer: `()` is the `new`'s, not a call suffix).
     let suffix_classes = lr_suffix_classes(rule, &lr_alts, ctx);
-    let atom_routes = ctx.choice_routes(rule, non_lr_indices, false);
-    if atom_routes {
-        ctx.mark_body_predicts();
-    }
-    let atn_class = atom_routes
+    let atn_class = ctx.choice_routes(rule, non_lr_indices, false)
         || lr_rule_is_atn_class(rule, &non_lr_indices, &lr_alts, &suffix_classes, &mut ctx.analysis);
     if atn_class {
         ctx.mark_needs_lr_atn();
@@ -1542,11 +1535,9 @@ fn compute_lr_dispatch_data(lr_alts: &List<LrAlt>, suffix_classes: &List<AltClas
         // dispatches via the simulator (`_atn_alt == i`, no static gate), so it
         // keeps EVERY real suffix — the same set the ATN precedence-edge list
         // builds, so the simulator's edge index lines up with these branches
-        // and their `scan_X_lr_N` helpers. `groups` is read by both paths — the
-        // static dispatch branches on it, the ATN path re-picks within a
-        // multi-member one (`emit_lr_atn_group_repick`). An open-ended suffix
-        // stays out of every group: the simulator itself decides between it and
-        // another suffix admitting the token, as ANTLR4 does.
+        // and their `scan_X_lr_N` helpers. Only the static dispatch reads
+        // `groups`: the simulator decides between suffixes admitting one token,
+        // as ANTLR4 does.
         let skip = if atn_class { lr.suffix.ops.is_empty() } else { lr.suffix_first.is_empty() };
         if skip {
             continue;
@@ -1947,7 +1938,7 @@ fn group_atn_site(
     };
     for let branch of &decision_partition(classes) {
         if branch.alts.len() > 1 && branch.alts.contains(&e.alt_index) {
-            ctx.mark_body_predicts();
+            ctx.mark_asks_simulator();
             return g.atn_decision;
         }
     }
@@ -3588,7 +3579,7 @@ fn lower_repeat_op<S: AsStrSlice>(
             // Always `Plain` — the specialised Optional strategies are
             // greedy-only (`opt_specialised` is computed only under
             // `!non_greedy`).
-            ctx.mark_body_predicts();
+            ctx.mark_asks_simulator();
             RepeatStrategy::Plain;
         } else {
             compute_non_greedy_strategy(body_elem, outer_follow, ctx);
@@ -4217,7 +4208,7 @@ fn lower_repeat_exit_stamps<S: AsStrSlice>(
 ) -> RepeatExitStamps {
     let by_atn = non_greedy_exit_by_atn(non_greedy, kind, body_admits);
     if by_atn {
-        ctx.mark_body_predicts();
+        ctx.mark_asks_simulator();
     }
     return RepeatExitStamps {
         probe: if by_atn {

@@ -56,7 +56,6 @@ pub struct ParserPlan {
     /// `ATN_SIM` carries the LR tables `atn_lr_loop_decision` reads.
     pub needs_lr_atn: bool = false,
     rule_asks_simulator: List<bool> = [],
-    rule_body_predicts: List<bool> = [],
     /// A call to the rule can reach one that asks the simulator, so the call
     /// pushes the return state the prediction reads.
     rule_reaches_simulator: List<bool> = [],
@@ -133,7 +132,6 @@ pub fn plan_parser(
         needs_atn,
         needs_lr_atn: marks.needs_lr_atn,
         rule_asks_simulator: marks.rule_asks_simulator,
-        rule_body_predicts: marks.rule_body_predicts,
         rule_reaches_simulator: close_over_callers(&analysis.scannable_callees(), marks.rule_asks_simulator),
         scan_memo: !marks.needs_lr_atn && (rescanned.contains(&true) || any_lr),
         rescanned,
@@ -160,7 +158,6 @@ impl ParserPlan {
         let none = List::<bool>::filled(rule_count, false);
         return ParserPlan {
             rule_asks_simulator: none,
-            rule_body_predicts: none,
             rule_reaches_simulator: none,
             rescanned: none,
         };
@@ -182,10 +179,6 @@ impl ParserPlan {
         return self.rule_asks_simulator[rule];
     }
 
-    /// Whether the simulator decides inside rule `rule`'s body.
-    pub fn rule_body_predicts(&self, rule: i32) -> bool {
-        return self.rule_body_predicts[rule];
-    }
 
     /// Whether a call to rule `rule` can reach a decision the simulator
     /// decides, so the scan pushes the return state the prediction reads.

@@ -1129,20 +1129,16 @@ left-recursive rule are covered by fixtures (`lr_complement_op.g4`,
 continuation falls back to the complete simulator rather than guess. The
 mechanism and the full edge list live with the ATN runtime module.
 
-Two enter edges sharing a first lookahead token are settled without it. The
-loop decision tests one token against each continuation's FIRST set and takes
-the first edge admitting it, so it reports such alternatives in grammar order
-rather than by which one matches — strictly weaker than the second-token
-sub-dispatch the static LR path applies to the same question. The simulator is
-there for the enter-or-exit verdict, which needs full context; which member of
-the group to enter does not, and is re-taken from the scan twins by longest
-match, ties to the first alternative. Fixture: `lr_atn_shared_op.g4`. A suffix
-that can start with a `.` or `~X` joins no group. Where it and another suffix
-both admit the token, the simulator decides between them with full context, as
-ANTLR4 does: `expr 'd' 'd'` does not take the `d` only `expr .` can complete, and
-the earlier of two suffixes that both reach the end wins
-(`lr_open_ended_rule_suffix.g4`, `lr_complement_op.g4`). The longest scan would
-answer both wrongly.
+The loop decision tests one token against each continuation's FIRST set. Where
+one enter edge admits it, that edge is the answer. Where two do, the simulator
+decides between them with full context, as ANTLR4 does: the lowest suffix the
+rest of the input admits. Fixture: `lr_atn_shared_op.g4` (`not like` against
+`not in`). A scan of the suffixes would answer three shapes wrongly:
+`expr 'd' 'd'` does not take the `d` only `expr .` can complete, the earlier of
+two suffixes that both reach the end wins (`lr_open_ended_rule_suffix.g4`,
+`lr_complement_op.g4`), and Rust's `x < <T as Tr>::C` takes `shl` because the
+predicate in `shl : LT {this.NextLT()}? LT` follows a token, which prediction
+does not see (`driver_cst_rust_test`).
 
 When the simulator predicts exit, the enclosing invocations of the same loop at
 the same position exit too, unless one of them could enter there on an operator

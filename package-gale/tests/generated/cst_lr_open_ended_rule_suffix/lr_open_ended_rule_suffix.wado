@@ -1818,10 +1818,11 @@ fn atn_pop(arena: &mut CtxArena, cur: &AtnConfig, work: &mut List<AtnConfig>, rs
 
 fn atn_move(sim: &AtnSim, configs: &List<AtnConfig>, token: i32, eof: i32) -> List<AtnConfig> {
     let mut out: List<AtnConfig> = [];
+    let mut ended: List<AtnConfig> = [];
     for let c of configs {
         if c.state == ATN_ACCEPT_EOF {
             if token == eof {
-                out.push(*c);
+                ended.push(*c);
             }
             continue;
         }
@@ -1847,6 +1848,12 @@ fn atn_move(sim: &AtnSim, configs: &List<AtnConfig>, token: i32, eof: i32) -> Li
                 out.push(AtnConfig { state: sim.tr_target[start + j], alt: c.alt, pctx: c.pctx, pr: c.pr });
             }
         }
+    }
+    if out.iter_ref().any(|c| sim.state_kind[c.state] != ATN_RULE_STOP) {
+        return out;
+    }
+    for let c of ended {
+        out.push(c);
     }
     return out;
 }
@@ -2215,10 +2222,6 @@ fn atn_state_cont_admits(sim: &AtnSim, state: i32, t: i32, eof: i32) -> bool {
     return false;
 }
 
-fn atn_state_cont_open_ended(sim: &AtnSim, state: i32) -> bool {
-    return sim.state_cont_first_open[state] || sim.state_cont_neg_count[state] > 0;
-}
-
 internal fn atn_lr_loop_decision(
     sim: &AtnSim,
     atn: &mut AtnPredictor,
@@ -2234,24 +2237,22 @@ internal fn atn_lr_loop_decision(
     let c = sim.state_tr_count[dstate];
     let exit_alt = c - 1;
     let mut enter = -1;
-    let mut open_contest = false;
+    let mut contested = false;
     for let mut j = 0; j < c; j += 1 {
         if sim.tr_kind[s + j] == ATN_TR_PRECEDENCE
             && sim.tr_prec[s + j] >= min_prec
             && atn_state_cont_admits(sim, sim.tr_target[s + j], t, eof) {
-            if enter < 0 {
-                enter = j;
-            } else if atn_state_cont_open_ended(sim, sim.tr_target[s + enter])
-                || atn_state_cont_open_ended(sim, sim.tr_target[s + j]) {
-                open_contest = true;
+            if enter >= 0 {
+                contested = true;
                 break;
             }
+            enter = j;
         }
     }
     if enter < 0 {
         return exit_alt;
     }
-    if !open_contest && !atn_caller_contests(sim, &atn.stack, dstate, t, eof, min_prec) {
+    if !contested && !atn_caller_contests(sim, &atn.stack, dstate, t, eof, min_prec) {
         return enter;
     }
     let alt = atn_predict_once(sim, decision, atn, tokens, pos, eof, min_prec);
@@ -2316,12 +2317,13 @@ fn atn_caller_contests(sim: &AtnSim, rule_stack: &List<i32>, dstate: i32, t: i32
                 return true;
             }
             mp = caller_mp;
+        } else if atn_state_cont_admits(sim, ret, t, eof) {
+            return true;
         }
-        if sim.state_cont_nullable[ret] {
-            i -= 1;
-            continue;
+        if !sim.state_cont_nullable[ret] {
+            return false;
         }
-        return atn_state_cont_admits(sim, ret, t, eof);
+        i -= 1;
     }
     return false;
 }
@@ -2816,102 +2818,10 @@ impl Parser {
     }
 }
 
-fn scan_e_atom(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor) -> i32 {
-    let mut pos = pos;
-    if pos >= tokens.len() || tokens[pos] != TK_C { return -1; }
-    pos += 1;
-    return pos;
-}
-
-fn scan_e_lr_0(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor) -> i32 {
-    let mut pos = pos;
-    let gp_3 = pos;
-    let mut sg_3_best = -1;
-    pos = gp_3;
-    sg_3_0: {
-        pos = scan_w(tokens, pos, atn);
-        if pos < 0 { break sg_3_0; }
-        if pos > sg_3_best { sg_3_best = pos; }
-    }
-    pos = gp_3;
-    sg_3_1: {
-        if pos >= tokens.len() || tokens[pos] != TK_A { break sg_3_1; }
-        pos += 1;
-        if pos > sg_3_best { sg_3_best = pos; }
-    }
-    if sg_3_best >= 0 {
-        pos = sg_3_best;
-    } else {
-        return -1;
-    }
-    return pos;
-}
-
-fn scan_e(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, min_prec: i32 = 0) -> i32 {
-    let mut pos = scan_e_atom(tokens, pos, atn);
-    if pos < 0 { return -1; }
-    loop {
-        let _atn_alt = atn_lr_loop_decision(&ATN_SIM, atn, 0, tokens, pos, TK_EOF, min_prec);
-        if _atn_alt == 0 {
-            pos = scan_e_lr_0(tokens, pos, atn);
-            if pos < 0 { return -1; }
-        } else {
-            break;
-        }
-    }
-    return pos;
-}
-
 fn scan_w(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos] == TK_EOF { return -1; }
     pos += 1;
-    return pos;
-}
-
-fn scan_f_atom(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor) -> i32 {
-    let mut pos = pos;
-    if pos >= tokens.len() || tokens[pos] != TK_C { return -1; }
-    pos += 1;
-    return pos;
-}
-
-fn scan_f_lr_0(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor) -> i32 {
-    let mut pos = pos;
-    let gp_2 = pos;
-    let mut sg_2_best = -1;
-    pos = gp_2;
-    sg_2_0: {
-        pos = scan_v(tokens, pos, atn);
-        if pos < 0 { break sg_2_0; }
-        if pos > sg_2_best { sg_2_best = pos; }
-    }
-    pos = gp_2;
-    sg_2_1: {
-        if pos >= tokens.len() || tokens[pos] != TK_A { break sg_2_1; }
-        pos += 1;
-        if pos > sg_2_best { sg_2_best = pos; }
-    }
-    if sg_2_best >= 0 {
-        pos = sg_2_best;
-    } else {
-        return -1;
-    }
-    return pos;
-}
-
-fn scan_f(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, min_prec: i32 = 0) -> i32 {
-    let mut pos = scan_f_atom(tokens, pos, atn);
-    if pos < 0 { return -1; }
-    loop {
-        let _atn_alt = atn_lr_loop_decision(&ATN_SIM, atn, 2, tokens, pos, TK_EOF, min_prec);
-        if _atn_alt == 0 {
-            pos = scan_f_lr_0(tokens, pos, atn);
-            if pos < 0 { return -1; }
-        } else {
-            break;
-        }
-    }
     return pos;
 }
 
@@ -2944,52 +2854,6 @@ fn scan_v(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor) -> i32 {
     return pos;
 }
 
-fn scan_g_atom(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor) -> i32 {
-    let mut pos = pos;
-    if pos >= tokens.len() || tokens[pos] != TK_C { return -1; }
-    pos += 1;
-    return pos;
-}
-
-fn scan_g_lr_0(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor) -> i32 {
-    let mut pos = pos;
-    let gp_1 = pos;
-    let mut sg_1_best = -1;
-    pos = gp_1;
-    sg_1_0: {
-        pos = scan_n(tokens, pos, atn);
-        if pos < 0 { break sg_1_0; }
-        if pos > sg_1_best { sg_1_best = pos; }
-    }
-    pos = gp_1;
-    sg_1_1: {
-        if pos >= tokens.len() || tokens[pos] != TK_A { break sg_1_1; }
-        pos += 1;
-        if pos > sg_1_best { sg_1_best = pos; }
-    }
-    if sg_1_best >= 0 {
-        pos = sg_1_best;
-    } else {
-        return -1;
-    }
-    return pos;
-}
-
-fn scan_g(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, min_prec: i32 = 0) -> i32 {
-    let mut pos = scan_g_atom(tokens, pos, atn);
-    if pos < 0 { return -1; }
-    loop {
-        let _atn_alt = atn_lr_loop_decision(&ATN_SIM, atn, 5, tokens, pos, TK_EOF, min_prec);
-        if _atn_alt == 0 {
-            pos = scan_g_lr_0(tokens, pos, atn);
-            if pos < 0 { return -1; }
-        } else {
-            break;
-        }
-    }
-    return pos;
-}
-
 fn scan_n(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos] == TK_EOF || tokens[pos] == TK_A { return -1; }
@@ -2997,14 +2861,14 @@ fn scan_n(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor) -> i32 {
     return pos;
 }
 
-fn scan_h_atom(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor) -> i32 {
+fn scan_h_atom(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, min_prec: i32) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos] != TK_C { return -1; }
     pos += 1;
     return pos;
 }
 
-fn scan_h_lr_0(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor) -> i32 {
+fn scan_h_lr_0(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, min_prec: i32) -> i32 {
     let mut pos = pos;
     let gp_0 = pos;
     let mut sg_0_best = -1;
@@ -3029,148 +2893,15 @@ fn scan_h_lr_0(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor) -> i32 {
 }
 
 fn scan_h(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, min_prec: i32 = 0) -> i32 {
-    let mut pos = scan_h_atom(tokens, pos, atn);
+    let mut pos = scan_h_atom(tokens, pos, atn, min_prec);
     if pos < 0 { return -1; }
     loop {
         let _atn_alt = atn_lr_loop_decision(&ATN_SIM, atn, 7, tokens, pos, TK_EOF, min_prec);
         if _atn_alt == 0 {
-            let _lr_end = scan_h_lr_0(tokens, pos, atn);
+            let _lr_end = scan_h_lr_0(tokens, pos, atn, min_prec);
             if _lr_end < 0 { return -1; }
             if _lr_end == pos { break; }
             pos = _lr_end;
-        } else {
-            break;
-        }
-    }
-    return pos;
-}
-
-fn scan_k_atom(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor) -> i32 {
-    let mut pos = pos;
-    if pos >= tokens.len() || tokens[pos] != TK_C { return -1; }
-    pos += 1;
-    return pos;
-}
-
-fn scan_k_lr_0(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor) -> i32 {
-    let mut pos = pos;
-    let mut cont_done_0 = false;
-    if pos < tokens.len() && tokens[pos] == TK_B {
-        let sp = pos;
-        pos += 1;
-        if pos < 0 {
-            pos = sp;
-        } else {
-            let mut opt_ok: bool = false;
-            opt_probe: {
-                if pos >= tokens.len() || tokens[pos] == TK_EOF { break opt_probe; }
-                pos += 1;
-                opt_ok = true;
-            }
-            if opt_ok {
-                cont_done_0 = true;
-            } else {
-                pos = sp;
-            }
-        }
-    }
-    if !cont_done_0 {
-        if pos >= tokens.len() || tokens[pos] == TK_EOF { return -1; }
-        pos += 1;
-    }
-    return pos;
-}
-
-fn scan_k(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, min_prec: i32 = 0) -> i32 {
-    let mut pos = scan_k_atom(tokens, pos, atn);
-    if pos < 0 { return -1; }
-    loop {
-        let _atn_alt = atn_lr_loop_decision(&ATN_SIM, atn, 9, tokens, pos, TK_EOF, min_prec);
-        if _atn_alt == 0 {
-            pos = scan_k_lr_0(tokens, pos, atn);
-            if pos < 0 { return -1; }
-        } else {
-            break;
-        }
-    }
-    return pos;
-}
-
-fn scan_m_atom(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor) -> i32 {
-    let mut pos = pos;
-    if pos >= tokens.len() || tokens[pos] != TK_C { return -1; }
-    pos += 1;
-    return pos;
-}
-
-fn scan_m_lr_0(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor) -> i32 {
-    let mut pos = pos;
-    if pos >= tokens.len() || tokens[pos] != TK_D { return -1; }
-    pos += 1;
-    if pos >= tokens.len() || tokens[pos] != TK_D { return -1; }
-    pos += 1;
-    return pos;
-}
-
-fn scan_m_lr_1(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor) -> i32 {
-    let mut pos = pos;
-    pos = scan_w(tokens, pos, atn);
-    if pos < 0 { return -1; }
-    return pos;
-}
-
-fn scan_m(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, min_prec: i32 = 0) -> i32 {
-    let mut pos = scan_m_atom(tokens, pos, atn);
-    if pos < 0 { return -1; }
-    loop {
-        let _atn_alt = atn_lr_loop_decision(&ATN_SIM, atn, 11, tokens, pos, TK_EOF, min_prec);
-        if _atn_alt == 0 {
-            pos = scan_m_lr_0(tokens, pos, atn);
-            if pos < 0 { return -1; }
-        } else if _atn_alt == 1 {
-            pos = scan_m_lr_1(tokens, pos, atn);
-            if pos < 0 { return -1; }
-        } else {
-            break;
-        }
-    }
-    return pos;
-}
-
-fn scan_q_atom(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor) -> i32 {
-    let mut pos = pos;
-    if pos >= tokens.len() || tokens[pos] != TK_C { return -1; }
-    pos += 1;
-    return pos;
-}
-
-fn scan_q_lr_0(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor) -> i32 {
-    let mut pos = pos;
-    pos = scan_w(tokens, pos, atn);
-    if pos < 0 { return -1; }
-    return pos;
-}
-
-fn scan_q_lr_1(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor) -> i32 {
-    let mut pos = pos;
-    if pos >= tokens.len() || tokens[pos] != TK_D { return -1; }
-    pos += 1;
-    if pos >= tokens.len() || tokens[pos] != TK_D { return -1; }
-    pos += 1;
-    return pos;
-}
-
-fn scan_q(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, min_prec: i32 = 0) -> i32 {
-    let mut pos = scan_q_atom(tokens, pos, atn);
-    if pos < 0 { return -1; }
-    loop {
-        let _atn_alt = atn_lr_loop_decision(&ATN_SIM, atn, 12, tokens, pos, TK_EOF, min_prec);
-        if _atn_alt == 0 {
-            pos = scan_q_lr_0(tokens, pos, atn);
-            if pos < 0 { return -1; }
-        } else if _atn_alt == 1 {
-            pos = scan_q_lr_1(tokens, pos, atn);
-            if pos < 0 { return -1; }
         } else {
             break;
         }
@@ -3635,7 +3366,7 @@ fn _parse_h__inner(p: &mut Parser, min_prec: i32 = 0) -> () {
         let _atn_alt = atn_lr_loop_decision(&ATN_SIM, &mut p.atn, 7, &p.kinds, p.pos, TK_EOF, min_prec);
         let _lr_pos0 = p.pos;
         if _atn_alt == 0 {
-            if scan_h_lr_0(&p.kinds, p.pos, &mut p.atn) == p.pos { break; }
+            if scan_h_lr_0(&p.kinds, p.pos, &mut p.atn, min_prec) == p.pos { break; }
             p.b.start_node_at(_cp, RK_H, _start);
             let mut gd_winner: i32 = -1;
             let mut gd_best: i32 = -1;
