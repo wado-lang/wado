@@ -15,32 +15,47 @@ impl Span {
     }
 }
 
-internal fn push_chars(out: &mut String, chars: &List<char>, start: i32, end: i32) {
-    let mut bytes = 0;
-    for let mut i = start; i < end; i += 1 {
-        bytes += chars[i].len_utf8();
+internal fn char_at(src: &StrSlice, pos: i32) -> char
+    contract 0 <= pos < src.len()
+{
+    let b = unchecked src.byte_at(pos);
+    if b < 0x80 {
+        return b as char;
     }
-    out.reserve(bytes);
-    for let mut i = start; i < end; i += 1 {
-        out.push(chars[i]);
-    }
+    return src.char_at_byte(pos);
 }
 
-internal fn chars_text(chars: &List<char>, start: i32, end: i32) -> String {
-    let mut s = String::new();
-    push_chars(&mut s, chars, start, end);
-    return s;
-}
-
-internal fn push_chars_escaped(out: &mut String, chars: &List<char>, start: i32, end: i32) {
+internal fn char_count(src: &StrSlice, start: i32, end: i32) -> i32
+    contract 0 <= start <= end <= src.len()
+{
+    let mut n = 0;
     for let mut i = start; i < end; i += 1 {
-        match chars[i] {
-            '\n' => out.push_str("\\n"),
-            '\r' => out.push_str("\\r"),
-            '\t' => out.push_str("\\t"),
-            c => out.push(c),
+        if src.is_char_boundary(i) {
+            n += 1;
         }
     }
+    return n;
+}
+
+internal fn span_text(src: &StrSlice, start: i32, end: i32) -> String {
+    return src.slice(start, end).to_string();
+}
+
+internal fn push_escaped(out: &mut String, src: &StrSlice, start: i32, end: i32) {
+    let mut run = start;
+    for let mut i = start; i < end; i += 1 {
+        let b = unchecked src.byte_at(i);
+        if b matches { b'\n' | b'\r' | b'\t' } {
+            out.push_str(unchecked src.slice(run, i));
+            out.push_str(match b {
+                b'\n' => "\\n",
+                b'\r' => "\\r",
+                _ => "\\t",
+            });
+            run = i + 1;
+        }
+    }
+    out.push_str(unchecked src.slice(run, end));
 }
 
 internal fn kind_set_has(set: &List<i32>, kind: i32) -> bool {
@@ -69,27 +84,26 @@ internal fn with_expected<S: AsStrSlice>(message: S, expected: &List<String>) ->
     return out;
 }
 
-internal fn char_pos_in_line(chars: &List<char>, i: i32) -> i32 {
-    let mut j = if i < chars.len() { i } else { chars.len() };
-    let mut col = 0;
-    while j > 0 && chars[j - 1] != '\n' {
-        col += 1;
-        j -= 1;
+internal fn char_pos_in_line(src: &StrSlice, pos: i32) -> i32 {
+    let end = i32::min(pos, src.len());
+    let mut line_start = end;
+    while line_start > 0 && unchecked src.byte_at(line_start - 1) != b'\n' {
+        line_start -= 1;
     }
-    return col;
+    return char_count(src, line_start, end);
 }
 
-internal fn line_starts(chars: &List<char>) -> List<i32> {
+internal fn line_starts(src: &StrSlice) -> List<i32> {
     let mut starts: List<i32> = [0];
-    for let mut i = 0; i < chars.len(); i += 1 {
-        if chars[i] == '\n' {
+    for let mut i = 0; i < src.len(); i += 1 {
+        if unchecked src.byte_at(i) == b'\n' {
             starts.push(i + 1);
         }
     }
     return starts;
 }
 
-internal fn line_col_at(starts: &List<i32>, pos: i32) -> [i32, i32] {
+internal fn line_at(starts: &List<i32>, pos: i32) -> i32 {
     let mut lo = 0;
     let mut hi = starts.len() - 1;
     while lo < hi {
@@ -100,7 +114,12 @@ internal fn line_col_at(starts: &List<i32>, pos: i32) -> [i32, i32] {
             hi = mid - 1;
         }
     }
-    return [lo + 1, pos - starts[lo]];
+    return lo + 1;
+}
+
+internal fn line_col_at(src: &StrSlice, starts: &List<i32>, pos: i32) -> [i32, i32] {
+    let line = line_at(starts, pos);
+    return [line, char_count(src, starts[line - 1], pos)];
 }
 
 pub flags TokenFlags {
@@ -115,7 +134,7 @@ pub struct TokenStream {
     pub ends: List<i32>,
     pub triv_lo: List<i32>,
     pub triv_hi: List<i32>,
-    pub chars: &List<char>,
+    pub src: StrSlice,
     pub triv_kinds: List<i32>,
     pub triv_starts: List<i32>,
     pub triv_ends: List<i32>,
@@ -125,15 +144,15 @@ pub struct TokenStream {
 }
 
 impl TokenStream {
-    internal fn new(chars: &List<char>) -> TokenStream {
-        let cap = chars.len() / 4 + 1;
+    internal fn new(src: StrSlice) -> TokenStream {
+        let cap = src.len() / 4 + 1;
         return TokenStream {
             kinds: List::with_capacity(cap),
             starts: List::with_capacity(cap),
             ends: List::with_capacity(cap),
             triv_lo: List::with_capacity(cap),
             triv_hi: List::with_capacity(cap),
-            chars,
+            src,
             triv_kinds: List::with_capacity(cap),
             triv_starts: List::with_capacity(cap),
             triv_ends: List::with_capacity(cap),
@@ -246,15 +265,15 @@ impl TokenStream {
     }
 
     pub fn token_text(&self, i: i32) -> String {
-        return chars_text(self.chars, self.starts[i], self.ends[i]);
+        return span_text(&self.src, self.starts[i], self.ends[i]);
     }
 
     pub fn push_token_text(&self, out: &mut String, i: i32) {
-        push_chars(out, self.chars, self.starts[i], self.ends[i]);
+        out.push_str(self.src.slice(self.starts[i], self.ends[i]));
     }
 
     pub fn push_token_text_escaped(&self, out: &mut String, i: i32) {
-        push_chars_escaped(out, self.chars, self.starts[i], self.ends[i]);
+        push_escaped(out, &self.src, self.starts[i], self.ends[i]);
     }
 
     pub fn rule_text(&self, start_tok: i32, end_tok: i32) -> String {
@@ -263,7 +282,7 @@ impl TokenStream {
             if i > start_tok {
                 for let mut j = self.triv_lo[i]; j < self.triv_hi[i]; j += 1 {
                     if self.triv_chans[j] != 0 {
-                        push_chars(&mut out, self.chars, self.triv_starts[j], self.triv_ends[j]);
+                        out.push_str(self.src.slice(self.triv_starts[j], self.triv_ends[j]));
                     }
                 }
             }
@@ -368,7 +387,7 @@ impl Display for Diagnostic {
 
 fn lex_error_at(tokens: &TokenStream, i: i32) -> Diagnostic {
     let mut message = String::from("token recognition error at: '");
-    push_chars_escaped(&mut message, tokens.chars, tokens.starts[i], tokens.ends[i]);
+    push_escaped(&mut message, &tokens.src, tokens.starts[i], tokens.ends[i]);
     message.push('\'');
     return Diagnostic::error(
         DiagnosticCode::LexError,
@@ -393,13 +412,13 @@ internal fn merge_lex_errors(tokens: &TokenStream, diagnostics: &mut List<Diagno
     *diagnostics = merged;
 }
 
-internal fn resolve_positions(diagnostics: &mut List<Diagnostic>, chars: &List<char>) {
+internal fn resolve_positions(diagnostics: &mut List<Diagnostic>, src: &StrSlice) {
     if diagnostics.is_empty() {
         return;
     }
-    let starts = line_starts(chars);
+    let starts = line_starts(src);
     for let mut i = 0; i < diagnostics.len(); i += 1 {
-        let lc = line_col_at(&starts, diagnostics[i].span.start);
+        let lc = line_col_at(src, &starts, diagnostics[i].span.start);
         diagnostics[i].line = lc.0;
         diagnostics[i].col = lc.1;
     }
@@ -868,8 +887,31 @@ fn render_node(
     return c;
 }
 
+struct SourceCursor {
+    byte: i32,
+    char: i32,
+    line: i32,
+    line_char: i32,
+}
+
+impl SourceCursor {
+    fn advance_to(&mut self, src: &StrSlice, byte: i32) {
+        assert byte >= self.byte, "to_lexer_string visits tokens in source order";
+        for let mut i = self.byte; i < byte; i += 1 {
+            if src.is_char_boundary(i) {
+                self.char += 1;
+            }
+            if unchecked src.byte_at(i) == b'\n' {
+                self.line += 1;
+                self.line_char = self.char;
+            }
+        }
+        self.byte = byte;
+    }
+}
+
 pub fn to_lexer_string(tokens: &TokenStream, eof_kind: i32) -> String {
-    let starts = line_starts(tokens.chars);
+    let mut cursor = SourceCursor { byte: 0, char: 0, line: 1, line_char: 0 };
     let mut out = String::with_capacity(tokens.output.len() + tokens.len() * 32);
     out.push_str(&tokens.output);
     let mut index = 0;
@@ -885,7 +927,7 @@ pub fn to_lexer_string(tokens: &TokenStream, eof_kind: i32) -> String {
                     tokens.triv_starts[t],
                     tokens.triv_ends[t],
                     tokens.triv_chans[t],
-                    &starts,
+                    &mut cursor,
                     index,
                     eof_kind,
                 );
@@ -899,7 +941,7 @@ pub fn to_lexer_string(tokens: &TokenStream, eof_kind: i32) -> String {
             tokens.starts[i],
             tokens.ends[i],
             0,
-            &starts,
+            &mut cursor,
             index,
             eof_kind,
         );
@@ -915,24 +957,26 @@ fn emit_lexer_token(
     start: i32,
     end: i32,
     channel: i32,
-    starts: &List<i32>,
+    cursor: &mut SourceCursor,
     index: i32,
     eof_kind: i32,
 ) {
     let is_eof = kind == eof_kind;
     let type_id = if is_eof { -1 } else { kind + 1 };
-    let lc = line_col_at(starts, start);
-    out.push_str(`[@${index},${start}:${end - 1}='`);
+    cursor.advance_to(&tokens.src, start);
+    let first = cursor.char;
+    let stop = first + char_count(&tokens.src, start, end) - 1;
+    out.push_str(`[@${index},${first}:${stop}='`);
     if is_eof {
         out.push_str("<EOF>");
     } else {
-        push_chars_escaped(out, tokens.chars, start, end);
+        push_escaped(out, &tokens.src, start, end);
     }
     out.push_str(`',<${type_id}>,`);
     if channel != 0 {
         out.push_str(`channel=${channel},`);
     }
-    out.push_str(`${lc.0}:${lc.1}]\n`);
+    out.push_str(`${cursor.line}:${first - cursor.line_char}]\n`);
 }
 pub global TK_WORD: i32 = 0;
 pub global TK_NUM: i32 = 1;
@@ -941,30 +985,30 @@ pub global TK_EOF: i32 = 3;
 pub global TK_ERROR: i32 = 4;
 
 struct Lexer {
-    chars: List<char>,
+    src: StrSlice,
     pos: i32,
 }
 
 impl Lexer {
     fn new<S: AsStrSlice>(input: S) -> Lexer {
-        return Lexer { chars: input.to_chars(), pos: 0 };
+        return Lexer { src: input.as_str_slice(), pos: 0 };
     }
 
     fn at_end(&self) -> bool {
-        return self.pos >= self.chars.len();
+        return self.pos >= self.src.len();
     }
 }
 
-fn try_WORD(chars: &List<char>, start: i32) -> i32 {
+fn try_WORD(src: &StrSlice, start: i32) -> i32 {
     let mut pos = start;
-    if pos >= chars.len() { return -1; }
-    if !in_char_set_0(chars[pos]) { return -1; }
-    pos += 1;
+    if pos >= src.len() { return -1; }
+    if !in_char_set_0(char_at(src, pos)) { return -1; }
+    pos = src.ceil_char_boundary(pos + 1);
     loop {
         rep_0: {
-            if pos >= chars.len() { break rep_0; }
-            if !in_char_set_0(chars[pos]) { break rep_0; }
-            pos += 1;
+            if pos >= src.len() { break rep_0; }
+            if !in_char_set_0(char_at(src, pos)) { break rep_0; }
+            pos = src.ceil_char_boundary(pos + 1);
             continue;
         }
         break;
@@ -972,16 +1016,16 @@ fn try_WORD(chars: &List<char>, start: i32) -> i32 {
     return pos;
 }
 
-fn try_NUM(chars: &List<char>, start: i32) -> i32 {
+fn try_NUM(src: &StrSlice, start: i32) -> i32 {
     let mut pos = start;
-    if pos >= chars.len() { return -1; }
-    if !in_char_set_1(chars[pos]) { return -1; }
-    pos += 1;
+    if pos >= src.len() { return -1; }
+    if !in_char_set_1(char_at(src, pos)) { return -1; }
+    pos = src.ceil_char_boundary(pos + 1);
     loop {
         rep_2: {
-            if pos >= chars.len() { break rep_2; }
-            if !in_char_set_1(chars[pos]) { break rep_2; }
-            pos += 1;
+            if pos >= src.len() { break rep_2; }
+            if !in_char_set_1(char_at(src, pos)) { break rep_2; }
+            pos = src.ceil_char_boundary(pos + 1);
             continue;
         }
         break;
@@ -989,11 +1033,11 @@ fn try_NUM(chars: &List<char>, start: i32) -> i32 {
     return pos;
 }
 
-fn try_SPACE(chars: &List<char>, start: i32) -> i32 {
+fn try_SPACE(src: &StrSlice, start: i32) -> i32 {
     let mut pos = start;
-    if pos >= chars.len() { return -1; }
-    if !(chars[pos] matches { ' ' | '\u{a0}' | '\u{1680}' | '\u{2000}'..='\u{200a}' | '\u{202f}' | '\u{205f}' | '\u{3000}' }) { return -1; }
-    pos += 1;
+    if pos >= src.len() { return -1; }
+    if !(char_at(src, pos) matches { ' ' | '\u{a0}' | '\u{1680}' | '\u{2000}'..='\u{200a}' | '\u{202f}' | '\u{205f}' | '\u{3000}' }) { return -1; }
+    pos = src.ceil_char_boundary(pos + 1);
     return pos;
 }
 
@@ -1007,33 +1051,34 @@ fn in_char_set_1(c: char) -> bool {
 
 pub fn tokenize<S: AsStrSlice>(input: S) -> TokenStream {
     let mut lexer = Lexer::new(input);
-    let mut ts = TokenStream::new(&lexer.chars);
+    let mut ts = TokenStream::new(lexer.src);
     let mut triv_lo = ts.trivia_mark();
     while !lexer.at_end() {
         let start = lexer.pos;
         let mut best_end: i32 = -1;
         let mut best_kind: i32 = TK_ERROR;
         let mut end: i32 = -1;
-        let first_char = lexer.chars[start];
+        let first_char = char_at(&lexer.src, start);
         match first_char {
             ' ' | '\u{a0}' | '\u{1680}' | '\u{2000}'..='\u{200a}' | '\u{202f}' | '\u{205f}' | '\u{3000}' => {
-                end = try_SPACE(&lexer.chars, start);
+                end = try_SPACE(&lexer.src, start);
                 if end > best_end { best_end = end; best_kind = TK_SPACE; }
             },
             '0'..='9' | '٠'..='٩' | '۰'..='۹' | '߀'..='߉' | '०'..='९' | '০'..='৯' | '੦'..='੯' | '૦'..='૯' | '୦'..='୯' | '௦'..='௯' | '౦'..='౯' | '೦'..='೯' | '൦'..='൯' | '෦'..='෯' | '๐'..='๙' | '໐'..='໙' | '༠'..='༩' | '၀'..='၉' | '႐'..='႙' | '០'..='៩' | '᠐'..='᠙' | '᥆'..='᥏' | '᧐'..='᧙' | '᪀'..='᪉' | '᪐'..='᪙' | '᭐'..='᭙' | '᮰'..='᮹' | '᱀'..='᱉' | '᱐'..='᱙' | '꘠'..='꘩' | '꣐'..='꣙' | '꤀'..='꤉' | '꧐'..='꧙' | '꧰'..='꧹' | '꩐'..='꩙' | '꯰'..='꯹' | '０'..='９' | '𐒠'..='𐒩' | '𐴰'..='𐴹' | '𐵀'..='𐵉' | '𑁦'..='𑁯' | '𑃰'..='𑃹' | '𑄶'..='𑄿' | '𑇐'..='𑇙' | '𑋰'..='𑋹' | '𑑐'..='𑑙' | '𑓐'..='𑓙' | '𑙐'..='𑙙' | '𑛀'..='𑛉' | '𑛐'..='𑛣' | '𑜰'..='𑜹' | '𑣠'..='𑣩' | '𑥐'..='𑥙' | '𑯰'..='𑯹' | '𑱐'..='𑱙' | '𑵐'..='𑵙' | '𑶠'..='𑶩' | '𑷠'..='𑷩' | '𑽐'..='𑽙' | '𖄰'..='𖄹' | '𖩠'..='𖩩' | '𖫀'..='𖫉' | '𖭐'..='𖭙' | '𖵰'..='𖵹' | '𜳰'..='𜳹' | '𝟎'..='𝟿' | '𞅀'..='𞅉' | '𞋰'..='𞋹' | '𞓰'..='𞓹' | '𞗱'..='𞗺' | '𞥐'..='𞥙' | '🯰'..='🯹' => {
-                end = try_NUM(&lexer.chars, start);
+                end = try_NUM(&lexer.src, start);
                 if end > best_end { best_end = end; best_kind = TK_NUM; }
             },
             'A'..='Z' | 'a'..='z' | 'ª' | 'µ' | 'º' | 'À'..='Ö' | 'Ø'..='ö' | 'ø'..='ˁ' | 'ˆ'..='ˑ' | 'ˠ'..='ˤ' | 'ˬ' | 'ˮ' | 'Ͱ'..='ʹ' | 'Ͷ'..='ͷ' | 'ͺ'..='ͽ' | 'Ϳ' | 'Ά' | 'Έ'..='Ί' | 'Ό' | 'Ύ'..='Ρ' | 'Σ'..='ϵ' | 'Ϸ'..='ҁ' | 'Ҋ'..='ԯ' | 'Ա'..='Ֆ' | 'ՙ' | 'ՠ'..='ֈ' | 'א'..='ת' | 'ׯ'..='ײ' | 'ؠ'..='ي' | 'ٮ'..='ٯ' | 'ٱ'..='ۓ' | 'ە' | 'ۥ'..='ۦ' | 'ۮ'..='ۯ' | 'ۺ'..='ۼ' | 'ۿ' | 'ܐ' | 'ܒ'..='ܯ' | 'ݍ'..='ޥ' | 'ޱ' | 'ߊ'..='ߪ' | 'ߴ'..='ߵ' | 'ߺ' | 'ࠀ'..='ࠕ' | 'ࠚ' | 'ࠤ' | 'ࠨ' | 'ࡀ'..='ࡘ' | 'ࡠ'..='ࡪ' | 'ࡰ'..='ࢇ' | 'ࢉ'..='࢏' | 'ࢠ'..='ࣉ' | 'ऄ'..='ह' | 'ऽ' | 'ॐ' | 'क़'..='ॡ' | 'ॱ'..='ঀ' | 'অ'..='ঌ' | 'এ'..='ঐ' | 'ও'..='ন' | 'প'..='র' | 'ল' | 'শ'..='হ' | 'ঽ' | 'ৎ' | 'ড়'..='ঢ়' | 'য়'..='ৡ' | 'ৰ'..='ৱ' | 'ৼ' | 'ਅ'..='ਊ' | 'ਏ'..='ਐ' | 'ਓ'..='ਨ' | 'ਪ'..='ਰ' | 'ਲ'..='ਲ਼' | 'ਵ'..='ਸ਼' | 'ਸ'..='ਹ' | 'ਖ਼'..='ੜ' | 'ਫ਼' | 'ੲ'..='ੴ' | 'અ'..='ઍ' | 'એ'..='ઑ' | 'ઓ'..='ન' | 'પ'..='ર' | 'લ'..='ળ' | 'વ'..='હ' | 'ઽ' | 'ૐ' | 'ૠ'..='ૡ' | 'ૹ' | 'ଅ'..='ଌ' | 'ଏ'..='ଐ' | 'ଓ'..='ନ' | 'ପ'..='ର' | 'ଲ'..='ଳ' | 'ଵ'..='ହ' | 'ଽ' | 'ଡ଼'..='ଢ଼' | 'ୟ'..='ୡ' | 'ୱ' | 'ஃ' | 'அ'..='ஊ' | 'எ'..='ஐ' | 'ஒ'..='க' | 'ங'..='ச' | 'ஜ' | 'ஞ'..='ட' | 'ண'..='த' | 'ந'..='ப' | 'ம'..='ஹ' | 'ௐ' | 'అ'..='ఌ' | 'ఎ'..='ఐ' | 'ఒ'..='న' | 'ప'..='హ' | 'ఽ' | 'ౘ'..='ౚ' | '౜'..='ౝ' | 'ౠ'..='ౡ' | 'ಀ' | 'ಅ'..='ಌ' | 'ಎ'..='ಐ' | 'ಒ'..='ನ' | 'ಪ'..='ಳ' | 'ವ'..='ಹ' | 'ಽ' | '೜'..='ೞ' | 'ೠ'..='ೡ' | 'ೱ'..='ೲ' | 'ഄ'..='ഌ' | 'എ'..='ഐ' | 'ഒ'..='ഺ' | 'ഽ' | 'ൎ' | 'ൔ'..='ൖ' | 'ൟ'..='ൡ' | 'ൺ'..='ൿ' | 'අ'..='ඖ' | 'ක'..='න' | 'ඳ'..='ර' | 'ල' | 'ව'..='ෆ' | 'ก'..='ะ' | 'า'..='ำ' | 'เ'..='ๆ' | 'ກ'..='ຂ' | 'ຄ' | 'ຆ'..='ຊ' | 'ຌ'..='ຣ' | 'ລ' | 'ວ'..='ະ' | 'າ'..='ຳ' | 'ຽ' | 'ເ'..='ໄ' | 'ໆ' | 'ໜ'..='ໟ' | 'ༀ' | 'ཀ'..='ཇ' | 'ཉ'..='ཬ' | 'ྈ'..='ྌ' | 'က'..='ဪ' | 'ဿ' | 'ၐ'..='ၕ' | 'ၚ'..='ၝ' | 'ၡ' | 'ၥ'..='ၦ' | 'ၮ'..='ၰ' | 'ၵ'..='ႁ' | 'ႎ' | 'Ⴀ'..='Ⴥ' | 'Ⴧ' | 'Ⴭ' | 'ა'..='ჺ' | 'ჼ'..='ቈ' | 'ቊ'..='ቍ' | 'ቐ'..='ቖ' | 'ቘ' | 'ቚ'..='ቝ' | 'በ'..='ኈ' | 'ኊ'..='ኍ' | 'ነ'..='ኰ' | 'ኲ'..='ኵ' | 'ኸ'..='ኾ' | 'ዀ' | 'ዂ'..='ዅ' | 'ወ'..='ዖ' | 'ዘ'..='ጐ' | 'ጒ'..='ጕ' | 'ጘ'..='ፚ' | 'ᎀ'..='ᎏ' | 'Ꭰ'..='Ᏽ' | 'ᏸ'..='ᏽ' | 'ᐁ'..='ᙬ' | 'ᙯ'..='ᙿ' | 'ᚁ'..='ᚚ' | 'ᚠ'..='ᛪ' | 'ᛱ'..='ᛸ' | 'ᜀ'..='ᜑ' | 'ᜟ'..='ᜱ' | 'ᝀ'..='ᝑ' | 'ᝠ'..='ᝬ' | 'ᝮ'..='ᝰ' | 'ក'..='ឳ' | 'ៗ' | 'ៜ' | 'ᠠ'..='ᡸ' | 'ᢀ'..='ᢄ' | 'ᢇ'..='ᢨ' | 'ᢪ' | 'ᢰ'..='ᣵ' | 'ᤀ'..='ᤞ' | 'ᥐ'..='ᥭ' | 'ᥰ'..='ᥴ' | 'ᦀ'..='ᦫ' | 'ᦰ'..='ᧉ' | 'ᨀ'..='ᨖ' | 'ᨠ'..='ᩔ' | 'ᪧ' | 'ᬅ'..='ᬳ' | 'ᭅ'..='ᭌ' | 'ᮃ'..='ᮠ' | 'ᮮ'..='ᮯ' | 'ᮺ'..='ᯥ' | 'ᰀ'..='ᰣ' | 'ᱍ'..='ᱏ' | 'ᱚ'..='ᱽ' | 'ᲀ'..='ᲊ' | 'Ა'..='Ჺ' | 'Ჽ'..='Ჿ' | 'ᳩ'..='ᳬ' | 'ᳮ'..='ᳳ' | 'ᳵ'..='ᳶ' | 'ᳺ' | 'ᴀ'..='ᶿ' | 'Ḁ'..='ἕ' | 'Ἐ'..='Ἕ' | 'ἠ'..='ὅ' | 'Ὀ'..='Ὅ' | 'ὐ'..='ὗ' | 'Ὑ' | 'Ὓ' | 'Ὕ' | 'Ὗ'..='ώ' | 'ᾀ'..='ᾴ' | 'ᾶ'..='ᾼ' | 'ι' | 'ῂ'..='ῄ' | 'ῆ'..='ῌ' | 'ῐ'..='ΐ' | 'ῖ'..='Ί' | 'ῠ'..='Ῥ' | 'ῲ'..='ῴ' | 'ῶ'..='ῼ' | 'ⁱ' | 'ⁿ' | 'ₐ'..='ₜ' | 'ℂ' | 'ℇ' | 'ℊ'..='ℓ' | 'ℕ' | 'ℙ'..='ℝ' | 'ℤ' | 'Ω' | 'ℨ' | 'K'..='ℭ' | 'ℯ'..='ℹ' | 'ℼ'..='ℿ' | 'ⅅ'..='ⅉ' | 'ⅎ' | 'Ↄ'..='ↄ' | 'Ⰰ'..='ⳤ' | 'Ⳬ'..='ⳮ' | 'Ⳳ'..='ⳳ' | 'ⴀ'..='ⴥ' | 'ⴧ' | 'ⴭ' | 'ⴰ'..='ⵧ' | 'ⵯ' | 'ⶀ'..='ⶖ' | 'ⶠ'..='ⶦ' | 'ⶨ'..='ⶮ' | 'ⶰ'..='ⶶ' | 'ⶸ'..='ⶾ' | 'ⷀ'..='ⷆ' | 'ⷈ'..='ⷎ' | 'ⷐ'..='ⷖ' | 'ⷘ'..='ⷞ' | 'ⸯ' | '々'..='〆' | '〱'..='〵' | '〻'..='〼' | 'ぁ'..='ゖ' | 'ゝ'..='ゟ' | 'ァ'..='ヺ' | 'ー'..='ヿ' | 'ㄅ'..='ㄯ' | 'ㄱ'..='ㆎ' | 'ㆠ'..='ㆿ' | 'ㇰ'..='ㇿ' | '㐀'..='䶿' | '一'..='ꒌ' | 'ꓐ'..='ꓽ' | 'ꔀ'..='ꘌ' | 'ꘐ'..='ꘟ' | 'ꘪ'..='ꘫ' | 'Ꙁ'..='ꙮ' | 'ꙿ'..='ꚝ' | 'ꚠ'..='ꛥ' | 'ꜗ'..='ꜟ' | 'Ꜣ'..='ꞈ' | 'Ꞌ'..='Ƛ' | '꟱'..='ꠁ' | 'ꠃ'..='ꠅ' | 'ꠇ'..='ꠊ' | 'ꠌ'..='ꠢ' | 'ꡀ'..='ꡳ' | 'ꢂ'..='ꢳ' | 'ꣲ'..='ꣷ' | 'ꣻ' | 'ꣽ'..='ꣾ' | 'ꤊ'..='ꤥ' | 'ꤰ'..='ꥆ' | 'ꥠ'..='ꥼ' | 'ꦄ'..='ꦲ' | 'ꧏ' | 'ꧠ'..='ꧤ' | 'ꧦ'..='ꧯ' | 'ꧺ'..='ꧾ' | 'ꨀ'..='ꨨ' | 'ꩀ'..='ꩂ' | 'ꩄ'..='ꩋ' | 'ꩠ'..='ꩶ' | 'ꩺ' | 'ꩾ'..='ꪯ' | 'ꪱ' | 'ꪵ'..='ꪶ' | 'ꪹ'..='ꪽ' | 'ꫀ' | 'ꫂ' | 'ꫛ'..='ꫝ' | 'ꫠ'..='ꫪ' | 'ꫲ'..='ꫴ' | 'ꬁ'..='ꬆ' | 'ꬉ'..='ꬎ' | 'ꬑ'..='ꬖ' | 'ꬠ'..='ꬦ' | 'ꬨ'..='ꬮ' | 'ꬰ'..='ꭚ' | 'ꭜ'..='ꭩ' | 'ꭰ'..='ꯢ' | '가'..='힣' | 'ힰ'..='ퟆ' | 'ퟋ'..='ퟻ' | '豈'..='舘' | '並'..='龎' | 'ﬀ'..='ﬆ' | 'ﬓ'..='ﬗ' | 'יִ' | 'ײַ'..='ﬨ' | 'שׁ'..='זּ' | 'טּ'..='לּ' | 'מּ' | 'נּ'..='סּ' | 'ףּ'..='פּ' | 'צּ'..='ﮱ' | 'ﯓ'..='ﴽ' | 'ﵐ'..='ﶏ' | 'ﶒ'..='ﷇ' | 'ﷰ'..='ﷻ' | 'ﹰ'..='ﹴ' | 'ﹶ'..='ﻼ' | 'Ａ'..='Ｚ' | 'ａ'..='ｚ' | 'ｦ'..='ﾾ' | 'ￂ'..='ￇ' | 'ￊ'..='ￏ' | 'ￒ'..='ￗ' | 'ￚ'..='ￜ' | '𐀀'..='𐀋' | '𐀍'..='𐀦' | '𐀨'..='𐀺' | '𐀼'..='𐀽' | '𐀿'..='𐁍' | '𐁐'..='𐁝' | '𐂀'..='𐃺' | '𐊀'..='𐊜' | '𐊠'..='𐋐' | '𐌀'..='𐌟' | '𐌭'..='𐍀' | '𐍂'..='𐍉' | '𐍐'..='𐍵' | '𐎀'..='𐎝' | '𐎠'..='𐏃' | '𐏈'..='𐏏' | '𐐀'..='𐒝' | '𐒰'..='𐓓' | '𐓘'..='𐓻' | '𐔀'..='𐔧' | '𐔰'..='𐕣' | '𐕰'..='𐕺' | '𐕼'..='𐖊' | '𐖌'..='𐖒' | '𐖔'..='𐖕' | '𐖗'..='𐖡' | '𐖣'..='𐖱' | '𐖳'..='𐖹' | '𐖻'..='𐖼' | '𐗀'..='𐗳' | '𐘀'..='𐜶' | '𐝀'..='𐝕' | '𐝠'..='𐝧' | '𐞀'..='𐞅' | '𐞇'..='𐞰' | '𐞲'..='𐞺' | '𐠀'..='𐠅' | '𐠈' | '𐠊'..='𐠵' | '𐠷'..='𐠸' | '𐠼' | '𐠿'..='𐡕' | '𐡠'..='𐡶' | '𐢀'..='𐢞' | '𐣠'..='𐣲' | '𐣴'..='𐣵' | '𐤀'..='𐤕' | '𐤠'..='𐤹' | '𐥀'..='𐥙' | '𐦀'..='𐦷' | '𐦾'..='𐦿' | '𐨀' | '𐨐'..='𐨓' | '𐨕'..='𐨗' | '𐨙'..='𐨵' | '𐩠'..='𐩼' | '𐪀'..='𐪜' | '𐫀'..='𐫇' | '𐫉'..='𐫤' | '𐬀'..='𐬵' | '𐭀'..='𐭕' | '𐭠'..='𐭲' | '𐮀'..='𐮑' | '𐰀'..='𐱈' | '𐲀'..='𐲲' | '𐳀'..='𐳲' | '𐴀'..='𐴣' | '𐵊'..='𐵥' | '𐵯'..='𐶅' | '𐺀'..='𐺩' | '𐺰'..='𐺱' | '𐻂'..='𐻇' | '𐼀'..='𐼜' | '𐼧' | '𐼰'..='𐽅' | '𐽰'..='𐾁' | '𐾰'..='𐿄' | '𐿠'..='𐿶' | '𑀃'..='𑀷' | '𑁱'..='𑁲' | '𑁵' | '𑂃'..='𑂯' | '𑃐'..='𑃨' | '𑄃'..='𑄦' | '𑅄' | '𑅇' | '𑅐'..='𑅲' | '𑅶' | '𑆃'..='𑆲' | '𑇁'..='𑇄' | '𑇚' | '𑇜' | '𑈀'..='𑈑' | '𑈓'..='𑈫' | '𑈿'..='𑉀' | '𑊀'..='𑊆' | '𑊈' | '𑊊'..='𑊍' | '𑊏'..='𑊝' | '𑊟'..='𑊨' | '𑊰'..='𑋞' | '𑌅'..='𑌌' | '𑌏'..='𑌐' | '𑌓'..='𑌨' | '𑌪'..='𑌰' | '𑌲'..='𑌳' | '𑌵'..='𑌹' | '𑌽' | '𑍐' | '𑍝'..='𑍡' | '𑎀'..='𑎉' | '𑎋' | '𑎎' | '𑎐'..='𑎵' | '𑎷' | '𑏑' | '𑏓' | '𑐀'..='𑐴' | '𑑇'..='𑑊' | '𑑟'..='𑑡' | '𑒀'..='𑒯' | '𑓄'..='𑓅' | '𑓇' | '𑖀'..='𑖮' | '𑗘'..='𑗛' | '𑘀'..='𑘯' | '𑙄' | '𑚀'..='𑚪' | '𑚸' | '𑜀'..='𑜚' | '𑝀'..='𑝆' | '𑠀'..='𑠫' | '𑢠'..='𑣟' | '𑣿'..='𑤆' | '𑤉' | '𑤌'..='𑤓' | '𑤕'..='𑤖' | '𑤘'..='𑤯' | '𑤿' | '𑥁' | '𑦠'..='𑦧' | '𑦪'..='𑧐' | '𑧡' | '𑧣' | '𑨀' | '𑨋'..='𑨲' | '𑨺' | '𑩐' | '𑩜'..='𑪉' | '𑪝' | '𑪰'..='𑫸' | '𑯀'..='𑯠' | '𑰀'..='𑰈' | '𑰊'..='𑰮' | '𑱀' | '𑱲'..='𑲏' | '𑴀'..='𑴆' | '𑴈'..='𑴉' | '𑴋'..='𑴰' | '𑵆' | '𑵠'..='𑵥' | '𑵧'..='𑵨' | '𑵪'..='𑶉' | '𑶘' | '𑶰'..='𑷛' | '𑻠'..='𑻲' | '𑼂' | '𑼄'..='𑼐' | '𑼒'..='𑼳' | '𑾰' | '𒀀'..='𒎙' | '𒒀'..='𒕃' | '𒾐'..='𒿰' | '𓀀'..='𓐯' | '𓑁'..='𓑆' | '𓑠'..='𔏺' | '𔐀'..='𔙆' | '𖄀'..='𖄝' | '𖠀'..='𖨸' | '𖩀'..='𖩞' | '𖩰'..='𖪾' | '𖫐'..='𖫭' | '𖬀'..='𖬯' | '𖭀'..='𖭃' | '𖭣'..='𖭷' | '𖭽'..='𖮏' | '𖵀'..='𖵬' | '𖹀'..='𖹿' | '𖺠'..='𖺸' | '𖺻'..='𖻓' | '𖼀'..='𖽊' | '𖽐' | '𖾓'..='𖾟' | '𖿠'..='𖿡' | '𖿣' | '𖿲'..='𖿳' | '𗀀'..='𘳕' | '𘳿'..='𘴞' | '𘶀'..='𘷲' | '𚿰'..='𚿳' | '𚿵'..='𚿻' | '𚿽'..='𚿾' | '𛀀'..='𛄢' | '𛄲' | '𛅐'..='𛅒' | '𛅕' | '𛅤'..='𛅧' | '𛅰'..='𛋻' | '𛰀'..='𛱪' | '𛱰'..='𛱼' | '𛲀'..='𛲈' | '𛲐'..='𛲙' | '𝐀'..='𝑔' | '𝑖'..='𝒜' | '𝒞'..='𝒟' | '𝒢' | '𝒥'..='𝒦' | '𝒩'..='𝒬' | '𝒮'..='𝒹' | '𝒻' | '𝒽'..='𝓃' | '𝓅'..='𝔅' | '𝔇'..='𝔊' | '𝔍'..='𝔔' | '𝔖'..='𝔜' | '𝔞'..='𝔹' | '𝔻'..='𝔾' | '𝕀'..='𝕄' | '𝕆' | '𝕊'..='𝕐' | '𝕒'..='𝚥' | '𝚨'..='𝛀' | '𝛂'..='𝛚' | '𝛜'..='𝛺' | '𝛼'..='𝜔' | '𝜖'..='𝜴' | '𝜶'..='𝝎' | '𝝐'..='𝝮' | '𝝰'..='𝞈' | '𝞊'..='𝞨' | '𝞪'..='𝟂' | '𝟄'..='𝟋' | '𝼀'..='𝼞' | '𝼥'..='𝼪' | '𞀰'..='𞁭' | '𞄀'..='𞄬' | '𞄷'..='𞄽' | '𞅎' | '𞊐'..='𞊭' | '𞋀'..='𞋫' | '𞓐'..='𞓫' | '𞗐'..='𞗭' | '𞗰' | '𞛀'..='𞛞' | '𞛠'..='𞛢' | '𞛤'..='𞛥' | '𞛧'..='𞛭' | '𞛰'..='𞛴' | '𞛾'..='𞛿' | '𞟠'..='𞟦' | '𞟨'..='𞟫' | '𞟭'..='𞟮' | '𞟰'..='𞟾' | '𞠀'..='𞣄' | '𞤀'..='𞥃' | '𞥋' | '𞸀'..='𞸃' | '𞸅'..='𞸟' | '𞸡'..='𞸢' | '𞸤' | '𞸧' | '𞸩'..='𞸲' | '𞸴'..='𞸷' | '𞸹' | '𞸻' | '𞹂' | '𞹇' | '𞹉' | '𞹋' | '𞹍'..='𞹏' | '𞹑'..='𞹒' | '𞹔' | '𞹗' | '𞹙' | '𞹛' | '𞹝' | '𞹟' | '𞹡'..='𞹢' | '𞹤' | '𞹧'..='𞹪' | '𞹬'..='𞹲' | '𞹴'..='𞹷' | '𞹹'..='𞹼' | '𞹾' | '𞺀'..='𞺉' | '𞺋'..='𞺛' | '𞺡'..='𞺣' | '𞺥'..='𞺩' | '𞺫'..='𞺻' | '𠀀'..='𪛟' | '𪜀'..='𫠝' | '𫠠'..='𬺭' | '𬺰'..='𮯠' | '𮯰'..='𮹝' | '丽'..='𪘀' | '𰀀'..='𱍊' | '𱍐'..='𳑹' => {
-                end = try_WORD(&lexer.chars, start);
+                end = try_WORD(&lexer.src, start);
                 if end > best_end { best_end = end; best_kind = TK_WORD; }
             },
             _ => {},
         }
         if best_end <= start {
-            let _ = ts.push_token_flagged(TK_ERROR, start, start + 1, triv_lo, ts.trivia_mark(), TokenFlags::LexError);
+            let error_end = lexer.src.ceil_char_boundary(start + 1);
+            let _ = ts.push_token_flagged(TK_ERROR, start, error_end, triv_lo, ts.trivia_mark(), TokenFlags::LexError);
             triv_lo = ts.trivia_mark();
-            lexer.pos = start + 1;
+            lexer.pos = error_end;
         } else {
             let tok_start = start;
             let is_skip = best_kind matches { TK_SPACE };
@@ -1463,7 +1508,7 @@ fn _run_parse_entry<S: AsStrSlice>(input: S, max_errors: i32, entry: fn(&mut Par
         p.commit_pending();
     }
     merge_lex_errors(&p.tokens, &mut p.diagnostics, max_errors);
-    resolve_positions(&mut p.diagnostics, p.tokens.chars);
+    resolve_positions(&mut p.diagnostics, &p.tokens.src);
     return ParseResult { cst: p.b.finish(), tokens: p.tokens, diagnostics: p.diagnostics };
 }
 

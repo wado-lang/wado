@@ -638,7 +638,7 @@ A : 'a' { System.out.println(${*body}); } ;
         let msgs = stage_lexer_bodies(&mut g, &lang, &NO_MEMBERS);
         assert msgs.is_empty();
         let staged = g.lexer_rules[0].body[0].actions[0].source.text;
-        assert staged.contains("chars_text(chars, start, pos)");
+        assert staged.contains("span_text(src, start, pos)");
     }
 
     // And in a parser body both are the rule's own consumed span.

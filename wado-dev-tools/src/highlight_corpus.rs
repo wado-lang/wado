@@ -323,26 +323,6 @@ fn compiler_pieces(source: &str) -> Vec<Piece> {
         .collect()
 }
 
-/// Move the Gale side onto byte offsets.
-///
-/// Its runtime scans a `List<char>`, so every span it reports is a codepoint
-/// index. The two agree on any ASCII file and drift from the first multi-byte
-/// character onward, which reads as wholesale disagreement rather than as an
-/// encoding mismatch — `if` lining up with the `->` ten characters later.
-fn to_byte_offsets(source: &str, pieces: &[Piece]) -> Vec<Piece> {
-    let mut byte_of_char: Vec<usize> = source.char_indices().map(|(at, _)| at).collect();
-    byte_of_char.push(source.len());
-    let at = |index: usize| byte_of_char.get(index).copied().unwrap_or(source.len());
-    pieces
-        .iter()
-        .map(|piece| Piece {
-            start: at(piece.start),
-            end: at(piece.end),
-            ..*piece
-        })
-        .collect()
-}
-
 /// 1-based line number of byte offset `at`.
 fn line_of(source: &str, at: usize) -> u32 {
     let end = at.min(source.len());
@@ -461,8 +441,7 @@ fn compare_with_gale(gale_tsv: &str, report_path: Option<&str>) {
             continue;
         };
         compared += 1;
-        let gale_pieces = to_byte_offsets(&source, &theirs.pieces);
-        let (found, refined) = diverge(path, &source, &compiler_pieces(&source), &gale_pieces);
+        let (found, refined) = diverge(path, &source, &compiler_pieces(&source), &theirs.pieces);
         refinements += refined;
         divergences.extend(found);
     }
@@ -667,18 +646,5 @@ mod tests {
         let (found, _) = diverge("t.wado", "let", &mine, &[]);
         assert_eq!(found.len(), 1, "{found:?}");
         assert!(found[0].is_gated());
-    }
-
-    /// Gale's spans are codepoint offsets; the compiler's are bytes. They agree
-    /// on ASCII and drift from the first multi-byte character onward.
-    #[test]
-    fn gale_offsets_convert_from_codepoints_to_bytes() {
-        let source = "//あ\nlet x = 1;";
-        // `let` is codepoints 4..7; `あ` is three bytes, so it is bytes 6..9.
-        let converted = to_byte_offsets(source, &[piece(4, 7, Class::Keyword)]);
-        assert_eq!(
-            source.get(converted[0].start..converted[0].end),
-            Some("let")
-        );
     }
 }

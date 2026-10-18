@@ -777,6 +777,64 @@ ANY : [\\u0000-\\u{10FFFF}] ;";
     assert got == "ab => A:a ANY:b\n";
 }
 
+test "a lexer steps over multi-byte chars whole" {
+    let input = "lexer grammar Test;
+CAFE : 'café' ;
+GREEK : [α-ω]+ ;
+ID : [a-z]+ ;
+DOT : '.' . ;
+NOT_SPACE : ~[ a-zα-ω]+ ;
+WS : ' ' -> skip ;";
+    let got = lexes(input, ["café caf αβγ abc 日本 .é"]);
+    assert got == "café caf αβγ abc 日本 .é => CAFE:café ID:caf GREEK:αβγ ID:abc NOT_SPACE:日本 DOT:.é\n";
+}
+
+// Pins "Positions an action reads are byte offsets" in antlr4-compatibility.md:
+// `$index` counts bytes where the jar counts chars (4 here), while `$pos`,
+// `getCharPositionInLine()` and `getText()` answer as the jar does.
+test "a lexer action reads byte positions and char columns" {
+    let input = "lexer grammar L;
+E : 'é' ;
+AB : 'ab' {
+    System.out.println($index);
+    System.out.println($pos);
+    System.out.println(getCharPositionInLine());
+    System.out.println(getText());
+} ;
+WS : ' ' -> skip ;";
+    assert lexes(input, ["é ab"]) == "é ab => E:é AB:ab [5\n4\n4\nab\n]\n";
+}
+
+test "a lexer base reads byte positions through LexerView" {
+    let items = `struct Probe {
+    log: List<String>,
+}
+
+impl B for Probe {
+    fn hit(&mut self, view: LexerView, lx: &mut Lexer) {
+        let at = view.start();
+        self.log.push(\`\${at} \${view.pos()} \${view.input_len()} \${view.char_at(0)} \${view.char_at(at)} \${view.la(-1)} \${view.text()}\`);
+        resume ();
+    }
+}
+
+fn probe(input: String) with Stdout {
+    let mut base = Probe { log: [] };
+    with B => &mut base do {
+        let _ = tokenize(input);
+    };
+    println(base.log.join(","));
+}
+`;
+    let got = printed("lexer grammar L;
+options { superClass = B; language = Wado; }
+E : 'é' ;
+AB : 'ab' { this.hit() } ;
+WS : ' ' -> skip ;
+", "probe(\"é ab\");\n", items);
+    assert got == "3 5 5 233 97 98 ab\n";
+}
+
 test "lexer rule caseInsensitive=true enables CI when grammar-level absent" {
     let input = "lexer grammar Test;
 KW options { caseInsensitive = true; } : 'go' ;
@@ -807,10 +865,10 @@ DIGITS : [0-9]+ ;
 SEMI : ';' ;";
     let output = gen_source(input);
     // Digit range must not be duplicated.
-    assert output.contains("'0'..='9'");
+    assert output.contains("matches { b'0'..=b'9' }");
     // Non-letter literal must not be duplicated — plain mismatch form.
-    assert output.contains("chars[pos] != ';'");
-    assert !output.contains("chars[pos].eq_ignore_ascii_case(");
+    assert output.contains("unchecked src.byte_at(pos) != b';'");
+    assert !output.contains("b';' | b';'");
 }
 
 test "metadata comment lists grammar-level options" {
@@ -2545,8 +2603,8 @@ WS : ' ' -> skip ;
 ");
     assert src.contains("fn hit(view: LexerView, lx: &mut Lexer);"), "an action op returns unit and reaches the lexer";
     assert src.contains("fn apply_A_actions(lx: &mut Lexer, start: i32, end: i32) with B"), "the replay carries the base effect";
-    assert src.contains("B::hit(LexerView { chars, start, pos }, lx);"), "the action op is called from the replay";
-    assert src.contains("fn try_A(chars: &List<char>, start: i32) -> i32 {"), "a match fn with no predicate op stays effect-free";
+    assert src.contains("B::hit(LexerView { src, start, pos }, lx);"), "the action op is called from the replay";
+    assert src.contains("fn try_A(src: &StrSlice, start: i32) -> i32 {"), "a match fn with no predicate op stays effect-free";
 }
 
 test "a superClass action op reaches the lexer mode state" {
@@ -2623,7 +2681,7 @@ WS : ' ' -> skip ;
 ");
     assert !src.contains("best_channel"), "the channel machinery stays off";
     assert src.contains(
-        "best_kind = B::emit(LexerView { chars: &lexer.chars, start: tok_start, pos: best_end }, best_kind, 0);",
+        "best_kind = B::emit(LexerView { src: &lexer.src, start: tok_start, pos: best_end }, best_kind, 0);",
     ), "the hook takes the default channel";
 }
 

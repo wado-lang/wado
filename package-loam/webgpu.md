@@ -66,18 +66,23 @@ runs.
   `u32` when it runs.
 - The convolutions and `max_pool` stay on the CPU. No model step 14 targets
   has them. `expand` is a view, each stretched axis read through a stride of 0.
-- `group_query_attention`, which Gemma 3 has and GPT-2 does not, is two
+- `group_query_attention`, which Gemma 3 has and GPT-2 does not, is three
   dispatches. One writes the present keys and values into one buffer, the new
-  keys turned by the rotary tables. The other attends each query row in a
-  workgroup of its own: the turned query, its scores, their softmax and the
-  values they weigh. `conformance/webgpu_attention.wado` holds it to `Cpu`.
+  keys turned by the rotary tables. The next attends each query row over each
+  part of `LANES` positions in a workgroup of its own: the turned query, its scores,
+  their weights against the part's greatest, and the values they weigh. The
+  last joins a row's parts, rescaling each to the row's greatest score. Gemma's
+  step over one token has 4 query rows, so a workgroup a row left the device idle
+  and grew slower with the sequence: at 600 positions a token took 1.9 times
+  as long as with the parts. `conformance/webgpu_attention.wado` holds it to `Cpu`.
 - A product of at most four rows, as a step over one token makes, does not
   run in 16 by 16 tiles, which would leave 15 of 16 lanes idle. Each workgroup
   computes a run of columns, its lanes splitting the inner axis. The lanes
   that read the weight together read where it is contiguous: one row's run of
   columns, or one column of a transposed weight, such as Gemma's head.
-- `arg_max` ranks each lane in a workgroup of its own and reads back one index
-  per lane, as an f32, which holds a vocabulary's indices exactly. A language
+- `arg_max` ranks each part of 4096 elements of a lane in a workgroup of its
+  own, then a lane's parts in another, and reads back one index per lane, as
+  an f32, which holds a vocabulary's indices exactly. A language
   model picking its next token then reads back one index, not the vocabulary's
   logits.
 - The device's limits are requested at the adapter's own, and a dispatch binds
@@ -104,6 +109,33 @@ reads its outputs before the next pass, and `forward` has downloaded them, so
 nothing still names those buffers. The exception is a buffer the pass
 retained, which lives through the next pass: Gemma's attention cache stays on
 the device from one token to the next.
+
+A released buffer is a spare, and the next pass takes one of the size it asks
+for before it makes one, the spares in the order the last pass made them. A
+pass of a model asks for the sizes the one before it did, so each dispatch
+binds the buffers the same dispatch bound a pass before, and finds the bind
+group that one made. Making a bind group cost the host 2.9 times what setting
+the pipeline and bind group and dispatching did, and making a buffer 0.9
+times. A spare the pass does not take, and a bind group it does not
+bind, is dropped at the next `begin`, so what grows with the sequence, as an
+attention cache does, holds no more than two passes' worth.
+
+### A product weight is kept column by column, in bf16 where that loses nothing
+
+`keep_rhs` writes a weight column by column, so the inner axis of a product is
+the contiguous one. A weight one binding does not hold is kept row by row, so
+a product can run over chunks of its inner axis. A product of a few rows then gives each column a run of
+lanes splitting the inner axis. Kept row by row, a lane takes a column, and a
+layer's products of 256 to 2048 columns ran in 4 to 32 workgroups, leaving most
+of the device idle.
+
+It writes the weight in bf16 when every value's low 16 bits are zero, two
+elements to a word. A model released in bf16 and exported in f32 has such
+weights: every product weight of Gemma 3 (270M) and its embedding do. The
+product, gather and copy shaders widen each element as they read it, so the
+results are the ones f32 storage gives, and every other kernel reads f32 only.
+The weights take half the device memory, and a lane of a product of a few rows
+reads two elements a word.
 
 ### Fusion is chosen for dispatches
 
@@ -211,8 +243,8 @@ GPT-2 (124M)'s twelve take 126.
 device. Its time per token is recorded against `Cpu` and against onnxruntime,
 which is run as a program and never read.
 
-Memory planning, a buffer reused once the tensor in it is dead, waits for a
-measurement that shows allocation matters.
+Memory planning within a pass, a buffer reused once the tensor in it is dead,
+waits for a measurement that shows a pass's footprint matters.
 
 ## Plan
 
@@ -242,18 +274,21 @@ example's `generate.mjs` on `onnxruntime-node`, on the CPU.
 
 | Model        | Backend         | Time a token, onnxruntime's as 1 | Dispatches a token | Read backs a token |
 | ------------ | --------------- | -------------------------------- | ------------------ | ------------------ |
-| GPT-2 (124M) | `WebGpuBackend` | 3.3                              | 127                | 1                  |
+| GPT-2 (124M) | `WebGpuBackend` | 2.5                              | 128                | 1                  |
 | GPT-2 (124M) | `Cpu`           | 18                               |                    |                    |
-| Gemma 3 270M | `WebGpuBackend` | 0.34                             | 275                | 1                  |
+| Gemma 3 270M | `WebGpuBackend` | 0.19                             | 294                | 1                  |
 | Gemma 3 270M | `Cpu`           | 5.0                              |                    |                    |
 | either       | onnxruntime     | 1                                |                    |                    |
 
-GPT-2's dispatches are the 126 kernels the layer table predicts and one
-`arg_max`. On llvmpipe, which binds 128 MiB at most, its head runs in two
+GPT-2's dispatches are the 126 kernels the layer table predicts and
+`arg_max`'s two: one workgroup reduces each part of 4096 logits, and another
+the parts. On llvmpipe, which binds 128 MiB at most, its head runs in two
 chunks, its weight being the 154 MB embedding.
 
 Gemma's token cost the host more than the device until the dispatches shared
 one compute pass and one parameter buffer, `wado run-webgpu` built wasmtime and
 wgpu-core optimized, and `arg_max` replaced reading back the logits. Each
 roughly halved it. The products of a few rows then took it from 0.65 to 0.45,
-and submitting every 32 dispatches to 0.34.
+submitting every 32 dispatches to 0.34, keeping the product weights column by
+column in bf16 to 0.28, splitting `arg_max`'s lane over the device to 0.25,
+and reusing buffers and bind groups to 0.19.

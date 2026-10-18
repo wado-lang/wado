@@ -34,9 +34,10 @@ use {
     element_of,
     is_binary_elementwise,
     is_unary_operator,
+    operands_short,
     trailing_axes,
 } from "./graph.wado";
-use { Condition, Poly, owe as owe_at } from "./poly.wado";
+use { Condition, Poly, owe as owe_at, owe_equal as owe_equal_at } from "./poly.wado";
 use { from_end, spatial_extents } from "./runtime/tensor.wado";
 use { Schema } from "./schema.wado";
 use { Geometry, ints, window_over } from "./window.wado";
@@ -182,9 +183,7 @@ impl Display for NodeConflict {
 
 impl Display for OperandCountConflict {
     fn fmt(&self, f: &mut Formatter) {
-        f.write_str(
-            `${self.node} = ${self.op}: reads ${self.needed} operands and was given ${self.given}`,
-        );
+        f.write_str(`${self.node} = ${self.op}: ${operands_short(self.needed, self.given)}`);
     }
 }
 
@@ -306,6 +305,11 @@ pub struct Checked {
 /// `owe_at` the node, which a graph wrong for every input stops at.
 fn owe(node: &Node, owed: &mut List<Condition>, slack: Poly, condition: String) -> Result<(), InferError> {
     return owe_at(owed, &node.site(), &slack, condition).map_err(|reason| refusal(node, reason));
+}
+
+/// `owe_equal_at` the node.
+fn owe_equal(node: &Node, owed: &mut List<Condition>, a: &Poly, b: &Poly, condition: String) -> Result<(), InferError> {
+    return owe_equal_at(owed, &node.site(), a, b, condition).map_err(|reason| refusal(node, reason));
 }
 
 /// Check a graph. Producing a shape for every tensor a kernel reads is what
@@ -746,19 +750,8 @@ fn merge_declared(vi: &ValueInfo, produced: &Shape, owed: &mut List<Condition>) 
             // The graph states a length the nodes only carried a polynomial
             // for, and a consumer of the shape table is owed the constant.
             Symbolic(p) => {
-                let stated = Poly::constant(declared as i64);
                 let condition = `axis ${axis.name} must be ${declared}, as the graph declares`;
-                match [
-                    p.try_sub(&stated),
-                    stated.try_sub(&p),
-                ] {
-                    [Some(above), Some(below)] => {
-                        owe_at(owed, &vi.name, &above, condition).is_ok()
-                            && owe_at(owed, &vi.name, &below, condition).is_ok();
-                    },
-                    // A difference no polynomial holds is one the build cannot owe.
-                    _ => false,
-                }
+                owe_equal_at(owed, &vi.name, &p, &Poly::constant(declared as i64), condition).is_ok();
             },
             Unstated => unreachable(),
         };
@@ -1104,8 +1097,7 @@ pub fn split_parts(
         Some(presumed) => owed.extend(&presumed),
         None => {
             let exact = `the parts sum to ${sum}, which must be axis ${axis}'s ${whole}`;
-            owe(node, owed, difference(node, &sum, &whole)?, exact)?;
-            owe(node, owed, difference(node, &whole, &sum)?, exact)?;
+            owe_equal(node, owed, &sum, &whole, exact)?;
         },
     }
     return Result::Ok(sizes);
@@ -1360,10 +1352,6 @@ pub fn attention_options(node: &Node) -> Result<AttentionOptions, InferError> {
     });
 }
 
-/// Whether `node` was given its operand `index`.
-pub fn has_operand(node: &Node, index: i32) -> bool {
-    return index < node.inputs.len() && node.inputs[index] != "";
-}
 
 /// The first present cache a `GroupQueryAttention` names, whose layout names
 /// the positions both caches hold.
@@ -1386,11 +1374,11 @@ fn attention(
 ) -> Result<List<Shape>, InferError> {
     let options = attention_options(node)?;
     for let index of [1, 2, 3, 4] {
-        if !has_operand(node, index) {
+        if !node.has_operand(index) {
             return Result::Err(refusal(node, `operand ${index} is absent, which only a packed or pastless form leaves`));
         }
     }
-    if has_operand(node, POSITION_IDS) || node.inputs.len() > ATTENTION_BIAS + 1 {
+    if node.has_operand(POSITION_IDS) || node.inputs.len() > ATTENTION_BIAS + 1 {
         return Result::Err(refusal(node, "position ids, sinks, cache scales and norm weights are not supported"));
     }
     let ranked = |index: i32, rank: i32| -> Result<Shape, InferError> {
@@ -1410,13 +1398,16 @@ fn attention(
     let Static(dim) = past_k.axes[3].extent else {
         return Result::Err(refusal(node, "the head's extent must be a number"));
     };
-    let stated = |axis: &Axis, extent: i32, into: &mut List<Condition>| agree_at(node, axis, &Axis {
-        ..*axis,
-        extent: Extent::Static(extent),
-    }, into);
-    stated(&q.axes[2], options.heads * dim, owed)?;
-    stated(&k.axes[2], options.kv_heads * dim, owed)?;
-    stated(&past_k.axes[1], options.kv_heads, owed)?;
+    // Wide, since heads times the head may pass any extent.
+    let stated = |axis: &Axis, extent: i64, into: &mut List<Condition>| -> Result<(), InferError> {
+        let Some(e) = Extent::of(Poly::constant(extent)) else {
+            return Result::Err(refusal(node, `axis ${axis.name} would be ${extent} long, which no axis is`));
+        };
+        return agree_at(node, axis, &Axis { ..*axis, extent: e }, into);
+    };
+    stated(&q.axes[2], options.heads as i64 * dim as i64, owed)?;
+    stated(&k.axes[2], options.kv_heads as i64 * dim as i64, owed)?;
+    stated(&past_k.axes[1], options.kv_heads as i64, owed)?;
     for let i of 0..<3 {
         agree_at(node, &k.axes[i], &v.axes[i], owed)?;
     }
@@ -1430,47 +1421,44 @@ fn attention(
     let Some(total) = past_k.axes[2].extent.poly().try_add(&sequence) else {
         return Result::Err(refusal(node, "the past and the sequence are more than a length holds"));
     };
-    let equal = |a: &Poly, b: &Poly, condition: String, into: &mut List<Condition>| -> Result<(), InferError> {
-        let [Some(above), Some(below)] = [
-            a.try_sub(b),
-            b.try_sub(a),
-        ] else {
-            return Result::Err(refusal(node, condition));
-        };
-        owe(node, into, above, condition)?;
-        return owe(node, into, below, condition);
-    };
     let given = |index: i32| operand_polys(node, known, index).map_err(|reason| refusal(node, reason));
     for let t of given(6)? {
-        equal(&t, &total, "total_sequence_length must be the past and the sequence", owed)?;
+        owe_equal(node, owed, &t, &total, "total_sequence_length must be the past and the sequence")?;
     }
+    let last = difference(node, &total, &Poly::constant(1))?;
     for let l of given(5)? {
-        equal(&l.try_add(&Poly::constant(1)).unwrap(), &total, "seqlens_k must be one short of the total", owed)?;
+        owe_equal(node, owed, &l, &last, "seqlens_k must be one short of the total")?;
     }
     if options.rotary {
-        if !has_operand(node, ROTARY_COS) || !has_operand(node, ROTARY_SIN) {
+        if !node.has_operand(ROTARY_COS) || !node.has_operand(ROTARY_SIN) {
             return Result::Err(refusal(node, "do_rotary needs the cos and sin caches"));
         }
         for let index of [ROTARY_COS, ROTARY_SIN] {
             let cache = ranked(index, 2)?;
-            stated(&cache.axes[1], dim / 2, owed)?;
+            stated(&cache.axes[1], dim as i64 / 2, owed)?;
             let Some(slack) = cache.axes[0].extent.poly().try_sub(&total) else {
                 return Result::Err(refusal(node, "the rotary cache must reach every position"));
             };
             owe(node, owed, slack, "the rotary cache must reach every position")?;
         }
     }
-    if has_operand(node, ATTENTION_BIAS) {
+    if node.has_operand(ATTENTION_BIAS) {
         let bias = ranked(ATTENTION_BIAS, 4)?;
-        equal(&bias.axes[2].extent.poly(), &sequence, "the bias must cover the sequence", owed)?;
-        equal(&bias.axes[3].extent.poly(), &total, "the bias must cover the past and the sequence", owed)?;
+        owe_equal(node, owed, &bias.axes[2].extent.poly(), &sequence, "the bias must cover the sequence")?;
+        owe_equal(node, owed, &bias.axes[3].extent.poly(), &total, "the bias must cover the past and the sequence")?;
         for let [i, along] of [
             [0, q.axes[0].extent.poly()],
             [1, Poly::constant(options.heads as i64)],
         ] as List<[i32, Poly]> {
             let extent = bias.axes[i].extent.poly();
             if extent.as_constant() != Option::Some(1) {
-                equal(&extent, &along, "the bias's first two extents must be 1 or the batch's and heads'", owed)?;
+                owe_equal(
+                    node,
+                    owed,
+                    &extent,
+                    &along,
+                    "the bias's first two extents must be 1 or the batch's and heads'",
+                )?;
             }
         }
     }
@@ -1687,10 +1675,9 @@ fn grouped_inputs(node: &Node, input: &Axis, per_group: &Axis, group: i32) -> Re
     return Result::Ok(Axis { name: input.name, extent });
 }
 
-/// Whether a `Gemm` was given its `C` operand, or a `Conv` its `B`. ONNX
-/// writes an absent optional operand as an empty name, or omits it.
+/// Whether a `Gemm` was given its `C` operand, or a `Conv` its `B`.
 pub fn has_bias(node: &Node) -> bool {
-    return node.inputs.len() >= 3 && node.inputs[2] != "";
+    return node.has_operand(2);
 }
 
 /// `Gemm`'s `alpha`, `beta`, `transA` and `transB`, each defaulted as ONNX
@@ -1847,10 +1834,7 @@ fn operands_given(
     shapes: &TreeMap<String, Shape>,
 ) -> Result<(), InferError> {
     if let Some(needed) = required_operands(&node.op) {
-        let mut given = 0;
-        while given < node.inputs.len() && node.inputs[given] != "" {
-            given += 1;
-        }
+        let given = node.leading_operands();
         if given < needed {
             builtin::cold_path();
             return Result::Err(InferError::OperandCount(OperandCountConflict {

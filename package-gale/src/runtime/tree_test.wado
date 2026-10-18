@@ -32,8 +32,7 @@ test "push_token leaves flags zero" {
 }
 
 test "push_synthetic appends a zero-width synthetic token" {
-    let chars: List<char> = "a".chars().collect();
-    let mut ts = TokenStream::new(&chars);
+    let mut ts = TokenStream::new("a".as_str_slice());
     let lo = ts.trivia_mark();
     ts.push_token(0, 0, 1, lo, ts.trivia_mark());
     let syn = ts.push_synthetic(7, 1);
@@ -141,8 +140,7 @@ test "set_alt stamps the innermost open node" {
 // === TreeBuilder: error tokens ===
 
 test "missing terminal becomes a Missing child and marks the node incomplete" {
-    let chars: List<char> = "a +".chars().collect();
-    let mut ts = TokenStream::new(&chars);
+    let mut ts = TokenStream::new("a +".as_str_slice());
     let lo0 = ts.trivia_mark();
     ts.push_token(0, 0, 1, lo0, ts.trivia_mark());  // 'a'  ID
     let lo1 = ts.trivia_mark();
@@ -358,7 +356,7 @@ test "ParseResult has_errors when an error diagnostic is present" {
 // === Diagnostic ===
 
 test "Diagnostic::error carries what was wanted and found, positions resolve later" {
-    let chars: List<char> = "(a,\n  b)".chars().collect();
+    let src = "(a,\n  b)".as_str_slice();
     let mut diags: List<Diagnostic> = [
         Diagnostic::error(
             DiagnosticCode::MissingToken,
@@ -375,7 +373,7 @@ test "Diagnostic::error carries what was wanted and found, positions resolve lat
     assert d.found == 5;
     assert d.recovery matches { Inserted };
     assert d.line == 1 && d.col == 0;
-    resolve_positions(&mut diags, &chars);
+    resolve_positions(&mut diags, &src);
     assert diags[0].line == 2 && diags[0].col == 2;
     assert `${diags[0]}` == "error[missing-token] at 2:2: missing ','";
 }
@@ -387,8 +385,7 @@ test "rule_path renders an innermost-first stack outermost-first" {
 }
 
 test "merge_lex_errors merges each lex-error token in source order, up to the cap" {
-    let chars: List<char> = "a#b$".chars().collect();
-    let mut ts = TokenStream::new(&chars);
+    let mut ts = TokenStream::new("a#b$".as_str_slice());
     ts.push_token(0, 0, 1, 0, 0);
     let _ = ts.push_token_flagged(9, 1, 2, 0, 0, TokenFlags::LexError);
     ts.push_token(0, 2, 3, 0, 0);
@@ -415,8 +412,7 @@ test "merge_lex_errors merges each lex-error token in source order, up to the ca
 }
 
 test "merge_lex_errors keeps the earliest errors when the parse reported out of order" {
-    let chars: List<char> = "ab#cd".chars().collect();
-    let mut ts = TokenStream::new(&chars);
+    let mut ts = TokenStream::new("ab#cd".as_str_slice());
     ts.push_token(0, 0, 1, 0, 0);
     ts.push_token(0, 1, 2, 0, 0);
     let _ = ts.push_token_flagged(9, 2, 3, 0, 0, TokenFlags::LexError);

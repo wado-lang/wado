@@ -235,7 +235,7 @@ type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::pre
 
 type "functype//core:prelude/list.wado/core:prelude/list.wado/List<i32>::grow" = fn(ref "core:prelude//List<i32>");  // TypeId(95)
 
-type "functype//core:collections/treemap.wado/core:collections/treemap.wado/TreeMap<core:prelude/string.wado/String,index_trait.wado/Bag>::find_index" = fn(ref "core:collections/treemap.wado//TreeMap<core:prelude/string.wado/String,index_trait.wado/Bag>", ref "core:prelude/string.wado//String") -> i32;  // TypeId(96)
+type "functype//core:collections/treemap.wado/core:collections/treemap.wado/TreeMap<core:prelude/string.wado/String,index_trait.wado/Bag>::find_index" = fn(ref "core:collections/entries.wado//EntryLog<core:prelude/string.wado/String,index_trait.wado/Bag>", ref Array<i32>, ref "Array<core:prelude/string.wado/String>", ref Array<i32>, ref Array<i32>, i32, i32, ref "core:prelude/string.wado//String") -> i32;  // TypeId(96)
 
 type "functype//core:collections/treemap.wado/core:collections/treemap.wado/TreeMap<core:prelude/string.wado/String,index_trait.wado/Bag>::search_node" = fn(ref "Array<core:prelude/string.wado/String>", ref Array<i32>, i32, ref Array<u8>, i32) -> i32;  // TypeId(97)
 
@@ -346,6 +346,7 @@ fn "index_trait.wado/$test_14_a_reference_typed_key_coerces_the_subscript"() {
 }
 
 fn "index_trait.wado/$test_15_treemap_hands_out__mut_v_for_refmut_values"() {
+    let $load_36: ref "core:collections/entries.wado//EntryLog<core:prelude/string.wado/String,index_trait.wado/Bag>";
     let m: ref "core:collections/treemap.wado//TreeMap<core:prelude/string.wado/String,index_trait.wado/Bag>";
     let value_21: ref "index_trait.wado//Bag";
     let elements: ref Array<i32>;
@@ -365,7 +366,7 @@ fn "index_trait.wado/$test_15_treemap_hands_out__mut_v_for_refmut_values"() {
         }
         "core:collections/entries.wado/core:collections/entries.wado/EntryLog<core:prelude/string.wado/String,index_trait.wado/Bag>::push"(m.log, key_24, value_21);
     };
-    if @unlikely(local.tee existing(local.tee self_30(key_24 = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(97), used: 1 }; if @unlikely(local.tee existing("core:collections/treemap.wado/core:collections/treemap.wado/TreeMap<core:prelude/string.wado/String,index_trait.wado/Bag>::find_index"(m, key_24)) < 0) {
+    if @unlikely(local.tee existing(local.tee self_30(key_24 = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(97), used: 1 }; if @unlikely(local.tee existing("core:collections/treemap.wado/core:collections/treemap.wado/TreeMap<core:prelude/string.wado/String,index_trait.wado/Bag>::find_index"(m.log, m.slots, m.nkeys, m.kids, m.lens, m.root, m.height, key_24)) < 0) {
         cold_path;
         "core:collections/entries.wado/core:collections/entries.wado/EntryLog<core:prelude/string.wado/String,index_trait.wado/Bag>::found$cold0$dae[self,e]"(key_24);
         unreachable;
@@ -375,7 +376,7 @@ fn "index_trait.wado/$test_15_treemap_hands_out__mut_v_for_refmut_values"() {
     }
     builtin::array_set<i32>(self_30.repr, existing, 1);
     self_30.used = existing + 1;
-    if @unlikely(local.tee existing(local.tee self_30(key_24 = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(97), used: 1 }; if @unlikely(local.tee existing("core:collections/treemap.wado/core:collections/treemap.wado/TreeMap<core:prelude/string.wado/String,index_trait.wado/Bag>::find_index"(m, key_24)) < 0) {
+    if @unlikely(local.tee existing(local.tee self_30(key_24 = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(97), used: 1 }; if @unlikely(local.tee existing("core:collections/treemap.wado/core:collections/treemap.wado/TreeMap<core:prelude/string.wado/String,index_trait.wado/Bag>::find_index"(m.log, m.slots, m.nkeys, m.kids, m.lens, m.root, m.height, key_24)) < 0) {
         cold_path;
         "core:collections/entries.wado/core:collections/entries.wado/EntryLog<core:prelude/string.wado/String,index_trait.wado/Bag>::found$cold0$dae[self,e]"(key_24);
         unreachable;
@@ -386,12 +387,12 @@ fn "index_trait.wado/$test_15_treemap_hands_out__mut_v_for_refmut_values"() {
     builtin::array_set<i32>(self_30.repr, existing, 2);
     self_30.used = existing + 1;
     key_24 = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(97), used: 1 };
-    if @unlikely(local.tee existing("core:collections/treemap.wado/core:collections/treemap.wado/TreeMap<core:prelude/string.wado/String,index_trait.wado/Bag>::find_index"(m, key_24)) < 0) {
+    if @unlikely(local.tee existing("core:collections/treemap.wado/core:collections/treemap.wado/TreeMap<core:prelude/string.wado/String,index_trait.wado/Bag>::find_index"(m.log, m.slots, m.nkeys, m.kids, m.lens, m.root, m.height, key_24)) < 0) {
         cold_path;
         "core:collections/entries.wado/core:collections/entries.wado/EntryLog<core:prelude/string.wado/String,index_trait.wado/Bag>::found$cold0$dae[self,e]"(key_24);
         unreachable;
     }
-    value_21 = builtin::array_get_value<ref "index_trait.wado//Bag">(m.log.values, existing);
+    value_21 = builtin::array_get_value<ref "index_trait.wado//Bag">(local.tee $load_36(m.log).values, existing);
     existing = 0;
     end_64 = local.tee self_30(value_21.items).used;
     elements = self_30.repr;
@@ -411,7 +412,7 @@ fn "index_trait.wado/$test_15_treemap_hands_out__mut_v_for_refmut_values"() {
         unreachable;
     }
     key_24 = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(97), used: 1 };
-    if @unlikely(local.tee existing("core:collections/treemap.wado/core:collections/treemap.wado/TreeMap<core:prelude/string.wado/String,index_trait.wado/Bag>::find_index"(m, key_24)) < 0) {
+    if @unlikely(local.tee existing("core:collections/treemap.wado/core:collections/treemap.wado/TreeMap<core:prelude/string.wado/String,index_trait.wado/Bag>::find_index"($load_36, m.slots, m.nkeys, m.kids, m.lens, m.root, m.height, key_24)) < 0) {
         cold_path;
         "core:collections/entries.wado/core:collections/entries.wado/EntryLog<core:prelude/string.wado/String,index_trait.wado/Bag>::found$cold0$dae[self,e]"(key_24);
         unreachable;
@@ -422,17 +423,17 @@ fn "index_trait.wado/$test_15_treemap_hands_out__mut_v_for_refmut_values"() {
     }
     builtin::array_set<i32>(self_30.repr, existing, 3);
     self_30.used = existing + 1;
-    if @unlikely(local.tee existing(local.tee self_30(key_24 = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(97), used: 1 }; if @unlikely(local.tee existing("core:collections/treemap.wado/core:collections/treemap.wado/TreeMap<core:prelude/string.wado/String,index_trait.wado/Bag>::find_index"(m, key_24)) < 0) {
+    if @unlikely(local.tee existing(local.tee self_30(key_24 = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(97), used: 1 }; if @unlikely(local.tee existing("core:collections/treemap.wado/core:collections/treemap.wado/TreeMap<core:prelude/string.wado/String,index_trait.wado/Bag>::find_index"(m.log, m.slots, m.nkeys, m.kids, m.lens, m.root, m.height, key_24)) < 0) {
         cold_path;
         "core:collections/entries.wado/core:collections/entries.wado/EntryLog<core:prelude/string.wado/String,index_trait.wado/Bag>::found$cold0$dae[self,e]"(key_24);
         unreachable;
-    }; builtin::array_get_value<ref "index_trait.wado//Bag">(m.log.values, existing).items).used) != 3) {
+    }; builtin::array_get_value<ref "index_trait.wado//Bag">(local.tee $load_36(m.log).values, existing).items).used) != 3) {
         cold_path;
         "index_trait.wado/$test_15_treemap_hands_out__mut_v_for_refmut_values$cold1"(existing);
         unreachable;
     }
     key_24 = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(97), used: 1 };
-    if @unlikely(local.tee existing("core:collections/treemap.wado/core:collections/treemap.wado/TreeMap<core:prelude/string.wado/String,index_trait.wado/Bag>::find_index"(m, key_24)) < 0) {
+    if @unlikely(local.tee existing("core:collections/treemap.wado/core:collections/treemap.wado/TreeMap<core:prelude/string.wado/String,index_trait.wado/Bag>::find_index"($load_36, m.slots, m.nkeys, m.kids, m.lens, m.root, m.height, key_24)) < 0) {
         cold_path;
         "core:collections/entries.wado/core:collections/entries.wado/EntryLog<core:prelude/string.wado/String,index_trait.wado/Bag>::found$cold0$dae[self,e]"(key_24);
         unreachable;
@@ -3031,34 +3032,25 @@ fn "core:prelude/list.wado/core:prelude/list.wado/List<i32>::grow"(self) {
     self.repr = new_repr;
 }
 
-fn "core:collections/treemap.wado/core:collections/treemap.wado/TreeMap<core:prelude/string.wado/String,index_trait.wado/Bag>::find_index"(self, key) {
-    let n: i32;
+fn "core:collections/treemap.wado/core:collections/treemap.wado/TreeMap<core:prelude/string.wado/String,index_trait.wado/Bag>::find_index"($mv$self$log, $mv$self$slots, $mv$self$nkeys, $mv$self$kids, $mv$self$lens, $mv$self$root, $mv$self$height, key) {
     let depth: i32;
     let pos: i32;
     let e: i32;
-    let $licm_slots_12: ref Array<i32>;
-    let $licm_log_13: ref "core:collections/entries.wado//EntryLog<core:prelude/string.wado/String,index_trait.wado/Bag>";
-    let $licm_height_14: i32;
-    let $licm_kids_15: ref Array<i32>;
     let $licm_alive_16: ref Array<bool>;
-    if local.tee n(self.root) == -1 {
+    if $mv$self$root == -1 {
         return -1;
     }
     depth = 0;
-    $licm_slots_12 = self.slots;
-    $licm_log_13 = self.log;
-    $licm_height_14 = self.height;
-    $licm_kids_15 = self.kids;
-    $licm_alive_16 = $licm_log_13.alive;
+    $licm_alive_16 = $mv$self$log.alive;
     block {
         l266: loop {
-            if local.tee pos("core:collections/treemap.wado/core:collections/treemap.wado/TreeMap<core:prelude/string.wado/String,index_trait.wado/Bag>::search_node"(self.nkeys, self.lens, n, key.repr, key.used)) >= 0 {
-                return select i32(builtin::array_get_value<bool>($licm_alive_16, e), local.tee e(builtin::array_get_value<i32>($licm_slots_12, (n * 31) + pos)), -1);
+            if local.tee pos("core:collections/treemap.wado/core:collections/treemap.wado/TreeMap<core:prelude/string.wado/String,index_trait.wado/Bag>::search_node"($mv$self$nkeys, $mv$self$lens, $mv$self$root, key.repr, key.used)) >= 0 {
+                return select i32(builtin::array_get_value<bool>($licm_alive_16, e), local.tee e(builtin::array_get_value<i32>($mv$self$slots, ($mv$self$root * 31) + pos)), -1);
             }
-            if depth == $licm_height_14 {
+            if depth == $mv$self$height {
                 return -1;
             }
-            n = builtin::array_get_value<i32>($licm_kids_15, ((n * 32) - 1) - pos);
+            $mv$self$root = builtin::array_get_value<i32>($mv$self$kids, (($mv$self$root * 32) - 1) - pos);
             depth = depth + 1;
             continue l266;
         };

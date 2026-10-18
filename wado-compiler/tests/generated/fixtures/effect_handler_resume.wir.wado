@@ -63,7 +63,13 @@ type "functype//core:prelude/primitive.wado/count_digits_u64" = fn(u64) -> i32; 
 
 type "functype//core:rt/write_string_to_stream$dae[add_newline]" = fn(ref "core:prelude//$Resource", ref Array<u8>, i32);  // TypeId(22)
 
+<<<<<<< HEAD
 type "functype//core:rt/panic" = fn(ref "core:prelude/string.wado//String");  // TypeId(23)
+||||||| aa8fbf23e
+type "functype//core:rt/panic" = fn(ref "core:prelude/string.wado//String");  // TypeId(22)
+=======
+type "functype//core:rt/panic" = fn(ref Array<u8>, i32);  // TypeId(22)
+>>>>>>> origin/main
 
 type "functype//core:rt/cm_stream_write_raw_all_u8" = fn(i32, ref Array<u8>, i32, i32) -> "core:prelude/types.wado//enum:CopyResult";  // TypeId(24)
 
@@ -122,13 +128,13 @@ fn "effect_handler_resume.wado/run"() with Stdout {
         if @likely(ref.is_null(local.tee $local_0_8(global:effect_handler_resume.wado::$effect_effect_handler_resume.wado/Counter)) == 0) {
             global:effect_handler_resume.wado::$effect_effect_handler_resume.wado/Counter = local.tee $d_effect_handler_resume.wado/Counter(ref.as_non_null($local_0_8)).outer;
             $local_2_10 = block -> i32 {
-                let $indirect_call_1: ref "canonical//CanonicalClosure_0";
-                call_ref "functype/$canonical_closure_fn_0"($indirect_call_1.func, local.tee $indirect_call_1(ref.cast "canonical//CanonicalClosure_0"($d_effect_handler_resume.wado/Counter.op_next)).env);
+                let $indirect_call_3: ref "canonical//CanonicalClosure_0";
+                call_ref "functype/$canonical_closure_fn_0"($indirect_call_3.func, local.tee $indirect_call_3(ref.cast "canonical//CanonicalClosure_0"($d_effect_handler_resume.wado/Counter.op_next)).env);
             };
             global:effect_handler_resume.wado::$effect_effect_handler_resume.wado/Counter = $local_0_8;
             break $inline__effect_dispatch__effect_handler_resume_wado_Counter__next_1: $local_2_10;
         } else {
-            "core:rt/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("no handler installed for `Counter::next`"), used: 40 });
+            "core:rt/panic"(array.new_data<u8>("no handler installed for `Counter::next`"), 40);
             unreachable;
         }
         unreachable;
@@ -137,12 +143,12 @@ fn "effect_handler_resume.wado/run"() with Stdout {
         if @likely(ref.is_null(local.tee $local_0_8(global:effect_handler_resume.wado::$effect_effect_handler_resume.wado/Counter)) == 0) {
             global:effect_handler_resume.wado::$effect_effect_handler_resume.wado/Counter = local.tee $d_effect_handler_resume.wado/Counter(ref.as_non_null($local_0_8)).outer;
             $local_2_13 = block -> i32 {
-                call_ref "functype/$canonical_closure_fn_0"($indirect_call_1.func, local.tee $indirect_call_1(ref.cast "canonical//CanonicalClosure_0"($d_effect_handler_resume.wado/Counter.op_next)).env);
+                call_ref "functype/$canonical_closure_fn_0"($indirect_call_3.func, local.tee $indirect_call_3(ref.cast "canonical//CanonicalClosure_0"($d_effect_handler_resume.wado/Counter.op_next)).env);
             };
             global:effect_handler_resume.wado::$effect_effect_handler_resume.wado/Counter = $local_0_8;
             break $inline__effect_dispatch__effect_handler_resume_wado_Counter__next_2: $local_2_13;
         } else {
-            "core:rt/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("no handler installed for `Counter::next`"), used: 40 });
+            "core:rt/panic"(array.new_data<u8>("no handler installed for `Counter::next`"), 40);
             unreachable;
         }
         unreachable;
@@ -301,6 +307,7 @@ fn "core:rt/write_string_to_stream$dae[add_newline]"(tx, $mv$message$repr, $mv$m
     "wasi/stream-drop-writable"(tx.value);
 }
 
+<<<<<<< HEAD
 fn "core:rt/panic"(message) {
     let $cm_pair_4: i64;
     let $sroa_$pattern_temp_0_0_7: i32;
@@ -310,6 +317,27 @@ fn "core:rt/panic"(message) {
     $sroa_$pattern_temp_0_0_7 = "wasi/wasi:cli/Stderr::write_via_stream"($sroa_$pattern_temp_0_0_7);
     "core:rt/write_string_to_stream$dae[add_newline]"($sroa_$pattern_temp_0_1_8, message.repr, message.used);
     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"($sroa_$pattern_temp_0_0_7);
+||||||| aa8fbf23e
+fn "core:rt/panic"(message) {
+    let packed: i64;
+    let rx_7: i32;
+    let tx_8: i32;
+    rx_7 = builtin::i32_wrap_i64(local.tee packed("wasi/stream-new"()));
+    tx_8 = builtin::i32_wrap_i64(packed >> 32_i64);
+    rx_7 = "wasi/wasi:cli/Stderr::write_via_stream"(rx_7);
+    "core:rt/write_string_to_stream$dae[add_newline]"(tx_8, message.repr, message.used);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(rx_7);
+=======
+fn "core:rt/panic"($mv$message$repr, $mv$message$used) {
+    let packed: i64;
+    let rx_7: i32;
+    let tx_8: i32;
+    rx_7 = builtin::i32_wrap_i64(local.tee packed("wasi/stream-new"()));
+    tx_8 = builtin::i32_wrap_i64(packed >> 32_i64);
+    rx_7 = "wasi/wasi:cli/Stderr::write_via_stream"(rx_7);
+    "core:rt/write_string_to_stream$dae[add_newline]"(tx_8, $mv$message$repr, $mv$message$used);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(rx_7);
+>>>>>>> origin/main
     cold_path;
     unreachable;
 }

@@ -82,7 +82,13 @@ type "functype//core:prelude/primitive.wado/count_digits_u64" = fn(u64) -> i32; 
 
 type "functype//core:rt/write_string_to_stream$dae[add_newline]" = fn(ref "core:prelude//$Resource", ref Array<u8>, i32);  // TypeId(27)
 
+<<<<<<< HEAD
 type "functype//core:rt/panic" = fn(ref "core:prelude/string.wado//String");  // TypeId(28)
+||||||| aa8fbf23e
+type "functype//core:rt/panic" = fn(ref "core:prelude/string.wado//String");  // TypeId(27)
+=======
+type "functype//core:rt/panic" = fn(ref Array<u8>, i32);  // TypeId(27)
+>>>>>>> origin/main
 
 type "functype//core:rt/cm_stream_write_raw_all_u8" = fn(i32, ref Array<u8>, i32, i32) -> "core:prelude/types.wado//enum:CopyResult";  // TypeId(29)
 
@@ -268,6 +274,7 @@ fn "core:rt/write_string_to_stream$dae[add_newline]"(tx, $mv$message$repr, $mv$m
     "wasi/stream-drop-writable"(tx.value);
 }
 
+<<<<<<< HEAD
 fn "core:rt/panic"(message) {
     let $cm_pair_4: i64;
     let $sroa_$pattern_temp_0_0_7: i32;
@@ -277,6 +284,27 @@ fn "core:rt/panic"(message) {
     $sroa_$pattern_temp_0_0_7 = "wasi/wasi:cli/Stderr::write_via_stream"($sroa_$pattern_temp_0_0_7);
     "core:rt/write_string_to_stream$dae[add_newline]"($sroa_$pattern_temp_0_1_8, message.repr, message.used);
     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"($sroa_$pattern_temp_0_0_7);
+||||||| aa8fbf23e
+fn "core:rt/panic"(message) {
+    let packed: i64;
+    let rx_7: i32;
+    let tx_8: i32;
+    rx_7 = builtin::i32_wrap_i64(local.tee packed("wasi/stream-new"()));
+    tx_8 = builtin::i32_wrap_i64(packed >> 32_i64);
+    rx_7 = "wasi/wasi:cli/Stderr::write_via_stream"(rx_7);
+    "core:rt/write_string_to_stream$dae[add_newline]"(tx_8, message.repr, message.used);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(rx_7);
+=======
+fn "core:rt/panic"($mv$message$repr, $mv$message$used) {
+    let packed: i64;
+    let rx_7: i32;
+    let tx_8: i32;
+    rx_7 = builtin::i32_wrap_i64(local.tee packed("wasi/stream-new"()));
+    tx_8 = builtin::i32_wrap_i64(packed >> 32_i64);
+    rx_7 = "wasi/wasi:cli/Stderr::write_via_stream"(rx_7);
+    "core:rt/write_string_to_stream$dae[add_newline]"(tx_8, $mv$message$repr, $mv$message$used);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(rx_7);
+>>>>>>> origin/main
     cold_path;
     unreachable;
 }
@@ -371,11 +399,11 @@ fn "closure_handler_body.wado/closure_handler_body.wado/$Closure_0::$call"(self)
         message = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(104, 105), used: 2 };
         if @likely(ref.is_null(local.tee $local_1_6(global:closure_handler_body.wado::$effect_closure_handler_body.wado/Log)) == 0) {
             global:closure_handler_body.wado::$effect_closure_handler_body.wado/Log = local.tee $d_closure_handler_body.wado/Log(ref.as_non_null($local_1_6)).outer;
-            let $indirect_call_1: ref "canonical//CanonicalClosure_1";
-            call_ref "functype/$canonical_closure_fn_1"($indirect_call_1.func, local.tee $indirect_call_1(ref.cast "canonical//CanonicalClosure_1"($d_closure_handler_body.wado/Log.op_emit)).env, message);
+            let $indirect_call_3: ref "canonical//CanonicalClosure_1";
+            call_ref "functype/$canonical_closure_fn_1"($indirect_call_3.func, local.tee $indirect_call_3(ref.cast "canonical//CanonicalClosure_1"($d_closure_handler_body.wado/Log.op_emit)).env, message);
             break $inline__effect_dispatch__closure_handler_body_wado_Log__emit_0: global:closure_handler_body.wado::$effect_closure_handler_body.wado/Log = $local_1_6;
         } else {
-            "core:rt/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("no handler installed for `Log::emit`"), used: 36 });
+            "core:rt/panic"(array.new_data<u8>("no handler installed for `Log::emit`"), 36);
             unreachable;
         }
     };
@@ -405,11 +433,11 @@ fn "closure_handler_body.wado/closure_handler_body.wado/$Closure_2::$call"(self)
         message_5 = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(104, 105), used: 2 };
         if @likely(ref.is_null(local.tee $local_1_6(global:closure_handler_body.wado::$effect_closure_handler_body.wado/Log)) == 0) {
             global:closure_handler_body.wado::$effect_closure_handler_body.wado/Log = local.tee $d_closure_handler_body.wado/Log(ref.as_non_null($local_1_6)).outer;
-            let $indirect_call_1: ref "canonical//CanonicalClosure_1";
-            call_ref "functype/$canonical_closure_fn_1"($indirect_call_1.func, local.tee $indirect_call_1(ref.cast "canonical//CanonicalClosure_1"($d_closure_handler_body.wado/Log.op_emit)).env, message_5);
+            let $indirect_call_3: ref "canonical//CanonicalClosure_1";
+            call_ref "functype/$canonical_closure_fn_1"($indirect_call_3.func, local.tee $indirect_call_3(ref.cast "canonical//CanonicalClosure_1"($d_closure_handler_body.wado/Log.op_emit)).env, message_5);
             break $inline__effect_dispatch__closure_handler_body_wado_Log__emit_0: global:closure_handler_body.wado::$effect_closure_handler_body.wado/Log = $local_1_6;
         } else {
-            "core:rt/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("no handler installed for `Log::emit`"), used: 36 });
+            "core:rt/panic"(array.new_data<u8>("no handler installed for `Log::emit`"), 36);
             unreachable;
         }
     };
@@ -417,10 +445,10 @@ fn "closure_handler_body.wado/closure_handler_body.wado/$Closure_2::$call"(self)
         message_5 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("there"), used: 5 };
         if @likely(ref.is_null(local.tee $local_1_6(global:closure_handler_body.wado::$effect_closure_handler_body.wado/Log)) == 0) {
             global:closure_handler_body.wado::$effect_closure_handler_body.wado/Log = local.tee $d_closure_handler_body.wado/Log(ref.as_non_null($local_1_6)).outer;
-            call_ref "functype/$canonical_closure_fn_1"($indirect_call_1.func, local.tee $indirect_call_1(ref.cast "canonical//CanonicalClosure_1"($d_closure_handler_body.wado/Log.op_emit)).env, message_5);
+            call_ref "functype/$canonical_closure_fn_1"($indirect_call_3.func, local.tee $indirect_call_3(ref.cast "canonical//CanonicalClosure_1"($d_closure_handler_body.wado/Log.op_emit)).env, message_5);
             break $inline__effect_dispatch__closure_handler_body_wado_Log__emit_1: global:closure_handler_body.wado::$effect_closure_handler_body.wado/Log = $local_1_6;
         } else {
-            "core:rt/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("no handler installed for `Log::emit`"), used: 36 });
+            "core:rt/panic"(array.new_data<u8>("no handler installed for `Log::emit`"), 36);
             unreachable;
         }
     };

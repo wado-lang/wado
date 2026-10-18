@@ -221,7 +221,7 @@ test "body_is_base_calls_only accepts both the source and the rewritten call for
     assert body_is_base_calls_only("this.processOpenBrace();", "B");
     assert body_is_base_calls_only(" this.a(); this.b() ", "B");
     // The same body after `rewrite_lexer_superclass_calls` — the answer must not move.
-    assert body_is_base_calls_only("B::process_open_brace(LexerView { chars, start, pos });", "B");
+    assert body_is_base_calls_only("B::process_open_brace(LexerView { src, start, pos });", "B");
 }
 
 test "body_is_base_calls_only rejects host code around the call" {
@@ -229,7 +229,7 @@ test "body_is_base_calls_only rejects host code around the call" {
     assert !body_is_base_calls_only("this.a() && x > 0", "B");
     assert !body_is_base_calls_only("System.out.println(\"x\");", "B");
     // Another base's call is host code as far as this grammar is concerned.
-    assert !body_is_base_calls_only("C::m(LexerView { chars, start, pos });", "B");
+    assert !body_is_base_calls_only("C::m(LexerView { src, start, pos });", "B");
 }
 
 test "body_is_base_calls_only sees past a comment" {
@@ -290,24 +290,24 @@ test "an action op receives the lexer, a predicate op does not" {
 }
 
 test "super_call_expr passes a LexerView built from the match-fn locals" {
-    assert super_call_expr("LexerBase", "isRegexPossible", SuperSite::LexerPredicate, &[]) == "LexerBase::is_regex_possible(LexerView { chars, start, pos })";
+    assert super_call_expr("LexerBase", "isRegexPossible", SuperSite::LexerPredicate, &[]) == "LexerBase::is_regex_possible(LexerView { src, start, pos })";
 }
 
 test "super_call_expr hands an action op the lexer alongside the view" {
-    assert super_call_expr("LexerAdaptor", "handleEndArgument", SuperSite::LexerAction, &[]) == "LexerAdaptor::handle_end_argument(LexerView { chars, start, pos }, lx)";
+    assert super_call_expr("LexerAdaptor", "handleEndArgument", SuperSite::LexerAction, &[]) == "LexerAdaptor::handle_end_argument(LexerView { src, start, pos }, lx)";
 }
 
 test "rewrite_this_calls maps this.m() to the ambient op with a view" {
-    assert rewrite_this_calls("this.isOk()", "B", SuperSite::LexerPredicate) == "B::is_ok(LexerView { chars, start, pos })";
-    assert rewrite_this_calls("this.a() && x > 0", "B", SuperSite::LexerPredicate) == "B::a(LexerView { chars, start, pos }) && x > 0";
+    assert rewrite_this_calls("this.isOk()", "B", SuperSite::LexerPredicate) == "B::is_ok(LexerView { src, start, pos })";
+    assert rewrite_this_calls("this.a() && x > 0", "B", SuperSite::LexerPredicate) == "B::a(LexerView { src, start, pos }) && x > 0";
 }
 
 test "rewrite_this_calls threads the lexer through an action body" {
-    assert rewrite_this_calls("this.hit();", "B", SuperSite::LexerAction) == "B::hit(LexerView { chars, start, pos }, lx);";
+    assert rewrite_this_calls("this.hit();", "B", SuperSite::LexerAction) == "B::hit(LexerView { src, start, pos }, lx);";
 }
 
 test "rewrite_this_calls carries the original arguments through" {
-    assert rewrite_this_calls("this.check(1, 2)", "B", SuperSite::LexerPredicate) == "B::check(LexerView { chars, start, pos }, 1, 2)";
+    assert rewrite_this_calls("this.check(1, 2)", "B", SuperSite::LexerPredicate) == "B::check(LexerView { src, start, pos }, 1, 2)";
 }
 
 test "rewrite_this_calls leaves strings and non-this text untouched" {

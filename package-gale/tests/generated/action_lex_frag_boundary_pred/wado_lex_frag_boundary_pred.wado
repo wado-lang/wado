@@ -18,32 +18,47 @@ impl Span {
     }
 }
 
-internal fn push_chars(out: &mut String, chars: &List<char>, start: i32, end: i32) {
-    let mut bytes = 0;
-    for let mut i = start; i < end; i += 1 {
-        bytes += chars[i].len_utf8();
+internal fn char_at(src: &StrSlice, pos: i32) -> char
+    contract 0 <= pos < src.len()
+{
+    let b = unchecked src.byte_at(pos);
+    if b < 0x80 {
+        return b as char;
     }
-    out.reserve(bytes);
-    for let mut i = start; i < end; i += 1 {
-        out.push(chars[i]);
-    }
+    return src.char_at_byte(pos);
 }
 
-internal fn chars_text(chars: &List<char>, start: i32, end: i32) -> String {
-    let mut s = String::new();
-    push_chars(&mut s, chars, start, end);
-    return s;
-}
-
-internal fn push_chars_escaped(out: &mut String, chars: &List<char>, start: i32, end: i32) {
+internal fn char_count(src: &StrSlice, start: i32, end: i32) -> i32
+    contract 0 <= start <= end <= src.len()
+{
+    let mut n = 0;
     for let mut i = start; i < end; i += 1 {
-        match chars[i] {
-            '\n' => out.push_str("\\n"),
-            '\r' => out.push_str("\\r"),
-            '\t' => out.push_str("\\t"),
-            c => out.push(c),
+        if src.is_char_boundary(i) {
+            n += 1;
         }
     }
+    return n;
+}
+
+internal fn span_text(src: &StrSlice, start: i32, end: i32) -> String {
+    return src.slice(start, end).to_string();
+}
+
+internal fn push_escaped(out: &mut String, src: &StrSlice, start: i32, end: i32) {
+    let mut run = start;
+    for let mut i = start; i < end; i += 1 {
+        let b = unchecked src.byte_at(i);
+        if b matches { b'\n' | b'\r' | b'\t' } {
+            out.push_str(unchecked src.slice(run, i));
+            out.push_str(match b {
+                b'\n' => "\\n",
+                b'\r' => "\\r",
+                _ => "\\t",
+            });
+            run = i + 1;
+        }
+    }
+    out.push_str(unchecked src.slice(run, end));
 }
 
 internal fn kind_set_has(set: &List<i32>, kind: i32) -> bool {
@@ -72,27 +87,26 @@ internal fn with_expected<S: AsStrSlice>(message: S, expected: &List<String>) ->
     return out;
 }
 
-internal fn char_pos_in_line(chars: &List<char>, i: i32) -> i32 {
-    let mut j = if i < chars.len() { i } else { chars.len() };
-    let mut col = 0;
-    while j > 0 && chars[j - 1] != '\n' {
-        col += 1;
-        j -= 1;
+internal fn char_pos_in_line(src: &StrSlice, pos: i32) -> i32 {
+    let end = i32::min(pos, src.len());
+    let mut line_start = end;
+    while line_start > 0 && unchecked src.byte_at(line_start - 1) != b'\n' {
+        line_start -= 1;
     }
-    return col;
+    return char_count(src, line_start, end);
 }
 
-internal fn line_starts(chars: &List<char>) -> List<i32> {
+internal fn line_starts(src: &StrSlice) -> List<i32> {
     let mut starts: List<i32> = [0];
-    for let mut i = 0; i < chars.len(); i += 1 {
-        if chars[i] == '\n' {
+    for let mut i = 0; i < src.len(); i += 1 {
+        if unchecked src.byte_at(i) == b'\n' {
             starts.push(i + 1);
         }
     }
     return starts;
 }
 
-internal fn line_col_at(starts: &List<i32>, pos: i32) -> [i32, i32] {
+internal fn line_at(starts: &List<i32>, pos: i32) -> i32 {
     let mut lo = 0;
     let mut hi = starts.len() - 1;
     while lo < hi {
@@ -103,7 +117,12 @@ internal fn line_col_at(starts: &List<i32>, pos: i32) -> [i32, i32] {
             hi = mid - 1;
         }
     }
-    return [lo + 1, pos - starts[lo]];
+    return lo + 1;
+}
+
+internal fn line_col_at(src: &StrSlice, starts: &List<i32>, pos: i32) -> [i32, i32] {
+    let line = line_at(starts, pos);
+    return [line, char_count(src, starts[line - 1], pos)];
 }
 
 pub flags TokenFlags {
@@ -118,7 +137,7 @@ pub struct TokenStream {
     pub ends: List<i32>,
     pub triv_lo: List<i32>,
     pub triv_hi: List<i32>,
-    pub chars: &List<char>,
+    pub src: StrSlice,
     pub triv_kinds: List<i32>,
     pub triv_starts: List<i32>,
     pub triv_ends: List<i32>,
@@ -128,15 +147,15 @@ pub struct TokenStream {
 }
 
 impl TokenStream {
-    internal fn new(chars: &List<char>) -> TokenStream {
-        let cap = chars.len() / 4 + 1;
+    internal fn new(src: StrSlice) -> TokenStream {
+        let cap = src.len() / 4 + 1;
         return TokenStream {
             kinds: List::with_capacity(cap),
             starts: List::with_capacity(cap),
             ends: List::with_capacity(cap),
             triv_lo: List::with_capacity(cap),
             triv_hi: List::with_capacity(cap),
-            chars,
+            src,
             triv_kinds: List::with_capacity(cap),
             triv_starts: List::with_capacity(cap),
             triv_ends: List::with_capacity(cap),
@@ -249,15 +268,15 @@ impl TokenStream {
     }
 
     pub fn token_text(&self, i: i32) -> String {
-        return chars_text(self.chars, self.starts[i], self.ends[i]);
+        return span_text(&self.src, self.starts[i], self.ends[i]);
     }
 
     pub fn push_token_text(&self, out: &mut String, i: i32) {
-        push_chars(out, self.chars, self.starts[i], self.ends[i]);
+        out.push_str(self.src.slice(self.starts[i], self.ends[i]));
     }
 
     pub fn push_token_text_escaped(&self, out: &mut String, i: i32) {
-        push_chars_escaped(out, self.chars, self.starts[i], self.ends[i]);
+        push_escaped(out, &self.src, self.starts[i], self.ends[i]);
     }
 
     pub fn rule_text(&self, start_tok: i32, end_tok: i32) -> String {
@@ -266,7 +285,7 @@ impl TokenStream {
             if i > start_tok {
                 for let mut j = self.triv_lo[i]; j < self.triv_hi[i]; j += 1 {
                     if self.triv_chans[j] != 0 {
-                        push_chars(&mut out, self.chars, self.triv_starts[j], self.triv_ends[j]);
+                        out.push_str(self.src.slice(self.triv_starts[j], self.triv_ends[j]));
                     }
                 }
             }
@@ -371,7 +390,7 @@ impl Display for Diagnostic {
 
 fn lex_error_at(tokens: &TokenStream, i: i32) -> Diagnostic {
     let mut message = String::from("token recognition error at: '");
-    push_chars_escaped(&mut message, tokens.chars, tokens.starts[i], tokens.ends[i]);
+    push_escaped(&mut message, &tokens.src, tokens.starts[i], tokens.ends[i]);
     message.push('\'');
     return Diagnostic::error(
         DiagnosticCode::LexError,
@@ -396,13 +415,13 @@ internal fn merge_lex_errors(tokens: &TokenStream, diagnostics: &mut List<Diagno
     *diagnostics = merged;
 }
 
-internal fn resolve_positions(diagnostics: &mut List<Diagnostic>, chars: &List<char>) {
+internal fn resolve_positions(diagnostics: &mut List<Diagnostic>, src: &StrSlice) {
     if diagnostics.is_empty() {
         return;
     }
-    let starts = line_starts(chars);
+    let starts = line_starts(src);
     for let mut i = 0; i < diagnostics.len(); i += 1 {
-        let lc = line_col_at(&starts, diagnostics[i].span.start);
+        let lc = line_col_at(src, &starts, diagnostics[i].span.start);
         diagnostics[i].line = lc.0;
         diagnostics[i].col = lc.1;
     }
@@ -871,8 +890,31 @@ fn render_node(
     return c;
 }
 
+struct SourceCursor {
+    byte: i32,
+    char: i32,
+    line: i32,
+    line_char: i32,
+}
+
+impl SourceCursor {
+    fn advance_to(&mut self, src: &StrSlice, byte: i32) {
+        assert byte >= self.byte, "to_lexer_string visits tokens in source order";
+        for let mut i = self.byte; i < byte; i += 1 {
+            if src.is_char_boundary(i) {
+                self.char += 1;
+            }
+            if unchecked src.byte_at(i) == b'\n' {
+                self.line += 1;
+                self.line_char = self.char;
+            }
+        }
+        self.byte = byte;
+    }
+}
+
 pub fn to_lexer_string(tokens: &TokenStream, eof_kind: i32) -> String {
-    let starts = line_starts(tokens.chars);
+    let mut cursor = SourceCursor { byte: 0, char: 0, line: 1, line_char: 0 };
     let mut out = String::with_capacity(tokens.output.len() + tokens.len() * 32);
     out.push_str(&tokens.output);
     let mut index = 0;
@@ -888,7 +930,7 @@ pub fn to_lexer_string(tokens: &TokenStream, eof_kind: i32) -> String {
                     tokens.triv_starts[t],
                     tokens.triv_ends[t],
                     tokens.triv_chans[t],
-                    &starts,
+                    &mut cursor,
                     index,
                     eof_kind,
                 );
@@ -902,7 +944,7 @@ pub fn to_lexer_string(tokens: &TokenStream, eof_kind: i32) -> String {
             tokens.starts[i],
             tokens.ends[i],
             0,
-            &starts,
+            &mut cursor,
             index,
             eof_kind,
         );
@@ -918,24 +960,26 @@ fn emit_lexer_token(
     start: i32,
     end: i32,
     channel: i32,
-    starts: &List<i32>,
+    cursor: &mut SourceCursor,
     index: i32,
     eof_kind: i32,
 ) {
     let is_eof = kind == eof_kind;
     let type_id = if is_eof { -1 } else { kind + 1 };
-    let lc = line_col_at(starts, start);
-    out.push_str(`[@${index},${start}:${end - 1}='`);
+    cursor.advance_to(&tokens.src, start);
+    let first = cursor.char;
+    let stop = first + char_count(&tokens.src, start, end) - 1;
+    out.push_str(`[@${index},${first}:${stop}='`);
     if is_eof {
         out.push_str("<EOF>");
     } else {
-        push_chars_escaped(out, tokens.chars, start, end);
+        push_escaped(out, &tokens.src, start, end);
     }
     out.push_str(`',<${type_id}>,`);
     if channel != 0 {
         out.push_str(`channel=${channel},`);
     }
-    out.push_str(`${lc.0}:${lc.1}]\n`);
+    out.push_str(`${cursor.line}:${first - cursor.line_char}]\n`);
 }
 pub global TK_KW: i32 = 0;
 pub global TK_ID: i32 = 1;
@@ -944,31 +988,31 @@ pub global TK_EOF: i32 = 3;
 pub global TK_ERROR: i32 = 4;
 
 struct Lexer {
-    chars: List<char>,
+    src: StrSlice,
     pos: i32,
 }
 
 impl Lexer {
     fn new<S: AsStrSlice>(input: S) -> Lexer {
-        return Lexer { chars: input.to_chars(), pos: 0 };
+        return Lexer { src: input.as_str_slice(), pos: 0 };
     }
 
     fn at_end(&self) -> bool {
-        return self.pos >= self.chars.len();
+        return self.pos >= self.src.len();
     }
 }
 
-fn try_KW(chars: &List<char>, start: i32) -> i32 {
+fn try_KW(src: &StrSlice, start: i32) -> i32 {
     let mut pos = start;
     let mut la_end_0: i32 = -1;
-    if pos >= chars.len() { return -1; }
-    if !(chars[pos] matches { 'a'..='z' }) { return -1; }
+    if pos >= src.len() { return -1; }
+    if !(unchecked src.byte_at(pos) matches { b'a'..=b'z' }) { return -1; }
     pos += 1;
     loop {
         let mut la_tot_1: i32 = -1;
         let peek_save_2 = pos;
         peek_2: {
-            if !( chars_text(chars, start, pos) == "cat" ) { break peek_2; }
+            if !( span_text(src, start, pos) == "cat" ) { break peek_2; }
             la_tot_1 = pos;
         }
         pos = peek_save_2;
@@ -977,8 +1021,8 @@ fn try_KW(chars: &List<char>, start: i32) -> i32 {
         }
         let la_saved_0 = pos;
         la_rep_0: {
-            if pos >= chars.len() { break la_rep_0; }
-            if !(chars[pos] matches { 'a'..='z' }) { break la_rep_0; }
+            if pos >= src.len() { break la_rep_0; }
+            if !(unchecked src.byte_at(pos) matches { b'a'..=b'z' }) { break la_rep_0; }
             pos += 1;
             continue;
         }
@@ -992,15 +1036,15 @@ fn try_KW(chars: &List<char>, start: i32) -> i32 {
     return pos;
 }
 
-fn try_ID(chars: &List<char>, start: i32) -> i32 {
+fn try_ID(src: &StrSlice, start: i32) -> i32 {
     let mut pos = start;
-    if pos >= chars.len() { return -1; }
-    if !(chars[pos] matches { 'a'..='z' }) { return -1; }
+    if pos >= src.len() { return -1; }
+    if !(unchecked src.byte_at(pos) matches { b'a'..=b'z' }) { return -1; }
     pos += 1;
     loop {
         rep_3: {
-            if pos >= chars.len() { break rep_3; }
-            if !(chars[pos] matches { 'a'..='z' }) { break rep_3; }
+            if pos >= src.len() { break rep_3; }
+            if !(unchecked src.byte_at(pos) matches { b'a'..=b'z' }) { break rep_3; }
             pos += 1;
             continue;
         }
@@ -1009,40 +1053,41 @@ fn try_ID(chars: &List<char>, start: i32) -> i32 {
     return pos;
 }
 
-fn try_WS(chars: &List<char>, start: i32) -> i32 {
+fn try_WS(src: &StrSlice, start: i32) -> i32 {
     let mut pos = start;
-    if pos >= chars.len() || chars[pos] != ' ' { return -1; }
+    if pos >= src.len() || unchecked src.byte_at(pos) != b' ' { return -1; }
     pos += 1;
     return pos;
 }
 
 pub fn tokenize<S: AsStrSlice>(input: S) -> TokenStream {
     let mut lexer = Lexer::new(input);
-    let mut ts = TokenStream::new(&lexer.chars);
+    let mut ts = TokenStream::new(lexer.src);
     let mut triv_lo = ts.trivia_mark();
     while !lexer.at_end() {
         let start = lexer.pos;
         let mut best_end: i32 = -1;
         let mut best_kind: i32 = TK_ERROR;
         let mut end: i32 = -1;
-        let first_char = lexer.chars[start];
+        let first_char = char_at(&lexer.src, start);
         match first_char {
             ' ' => {
-                end = try_WS(&lexer.chars, start);
+                end = try_WS(&lexer.src, start);
                 if end > best_end { best_end = end; best_kind = TK_WS; }
             },
             'a'..='z' => {
-                end = try_KW(&lexer.chars, start);
+                end = try_KW(&lexer.src, start);
                 if end > best_end { best_end = end; best_kind = TK_KW; }
-                end = try_ID(&lexer.chars, start);
+                end = try_ID(&lexer.src, start);
                 if end > best_end { best_end = end; best_kind = TK_ID; }
             },
             _ => {},
         }
         if best_end <= start {
-            let _ = ts.push_token_flagged(TK_ERROR, start, start + 1, triv_lo, ts.trivia_mark(), TokenFlags::LexError);
+            let error_end = lexer.src.ceil_char_boundary(start + 1);
+            let _ = ts.push_token_flagged(TK_ERROR, start, error_end, triv_lo, ts.trivia_mark(), TokenFlags::LexError);
             triv_lo = ts.trivia_mark();
-            lexer.pos = start + 1;
+            lexer.pos = error_end;
         } else {
             let tok_start = start;
             let is_skip = best_kind matches { TK_WS };
@@ -1120,7 +1165,7 @@ fn kind_names(kinds: &List<i32>) -> List<String> {
 impl Parser {
     fn new(tokens: TokenStream) -> Parser {
         let kinds = tokens.kinds.to_array();
-        return Parser { tokens, kinds, pos: 0, pending: null, recovering: false, speculating: false, max_errors: i32::MAX, site: -1, sites: [], failed_expected: [], recovery_pos: -1, recovered_failures: [], b: TreeBuilder::with_capacity(tokens.len() * 4), diagnostics: [], line_starts: line_starts(tokens.chars) };
+        return Parser { tokens, kinds, pos: 0, pending: null, recovering: false, speculating: false, max_errors: i32::MAX, site: -1, sites: [], failed_expected: [], recovery_pos: -1, recovered_failures: [], b: TreeBuilder::with_capacity(tokens.len() * 4), diagnostics: [], line_starts: line_starts(&tokens.src) };
     }
 
     fn emit(&mut self, s: String) {
@@ -1140,14 +1185,14 @@ impl Parser {
         let mut acc: i32 = 0;
         let mut neg = false;
         let mut j = sp.start;
-        if j < sp.end && self.tokens.chars[j] == '-' {
+        if j < sp.end && self.tokens.src.byte_at(j) == b'-' {
             neg = true;
             j += 1;
         }
         while j < sp.end {
-            let c = self.tokens.chars[j];
+            let c = self.tokens.src.byte_at(j);
             if c.is_ascii_digit() {
-                acc = acc * 10 + (c as i32 - '0' as i32);
+                acc = acc * 10 + (c - b'0') as i32;
             }
             j += 1;
         }
@@ -1155,11 +1200,11 @@ impl Parser {
     }
 
     fn token_line(&self, i: i32) -> i32 {
-        return line_col_at(&self.line_starts, self.tokens.starts[i]).0;
+        return line_at(&self.line_starts, self.tokens.starts[i]);
     }
 
     fn token_col(&self, i: i32) -> i32 {
-        return line_col_at(&self.line_starts, self.tokens.starts[i]).1;
+        return line_col_at(&self.tokens.src, &self.line_starts, self.tokens.starts[i]).1;
     }
 
     fn token_start(&self, i: i32) -> i32 {
@@ -1178,8 +1223,7 @@ impl Parser {
     }
 
     fn text_span(&self, start: i32, end: i32) -> String {
-        let hi = if end < self.tokens.chars.len() { end } else { self.tokens.chars.len() };
-        return chars_text(self.tokens.chars, start, hi);
+        return span_text(&self.tokens.src, start, end);
     }
 
     fn text_between(&self, lo: i32, hi: i32) -> String {
@@ -1191,7 +1235,7 @@ impl Parser {
     }
 
     fn input_text(&self) -> String {
-        return self.text_span(0, self.tokens.chars.len());
+        return self.text_span(0, self.tokens.src.len());
     }
 
     fn rule_string_tree(&self) -> String {
@@ -1568,7 +1612,7 @@ fn _run_parse_entry<S: AsStrSlice>(input: S, max_errors: i32, entry: fn(&mut Par
         p.commit_pending();
     }
     merge_lex_errors(&p.tokens, &mut p.diagnostics, max_errors);
-    resolve_positions(&mut p.diagnostics, p.tokens.chars);
+    resolve_positions(&mut p.diagnostics, &p.tokens.src);
     return ParseResult { cst: p.b.finish(), tokens: p.tokens, diagnostics: p.diagnostics, output: p.tokens.output };
 }
 

@@ -773,11 +773,7 @@ pub fn slice_axis<E, ..Pre, In, Out, ..Post>(
     step: i64,
 ) -> Tensor<E, [..Pre, Out, ..Post]> {
     let extent = t.extents[axis];
-    assert length >= 0;
-    if length > 0 {
-        let last = start + (length - 1) as i64 * step;
-        assert 0 <= start < extent as i64 && 0 <= last < extent as i64;
-    }
+    assert slices_within(extent, start, length, step);
     let outer = element_count(&t.extents[0..<axis].to_list());
     let inner = element_count(&t.extents[axis + 1..<t.extents.len()].to_list());
     let mut out = List::<E>::with_capacity(outer * length * inner);
@@ -792,6 +788,16 @@ pub fn slice_axis<E, ..Pre, In, Out, ..Post>(
     let mut extents = t.extents;
     extents[axis] = length;
     return Tensor { data: out, extents };
+}
+
+/// Whether `length` positions from `start`, `step` apart, all lie within an
+/// axis of `extent`, as `slice_axis` reads them.
+pub fn slices_within(extent: i32, start: i64, length: i32, step: i64) -> bool {
+    if length <= 0 {
+        return length == 0;
+    }
+    let last = start + (length - 1) as i64 * step;
+    return 0 <= start < extent as i64 && 0 <= last < extent as i64;
 }
 
 /// `a` and then `b` along `axis`, the two meeting on every other axis, as
@@ -831,19 +837,7 @@ pub fn lift<E, In, Out>(t: &Tensor<E, In>, rank: i32) -> Tensor<E, Out>
 /// `t` broadcast to `extents`, which it must broadcast to, as `Expand` does.
 pub fn expand<E, In, Out>(t: &Tensor<E, In>, extents: List<i32>) -> Tensor<E, Out> {
     assert broadcast_extents(&t.extents, &extents) == Option::Some(extents), "the operand broadcasts to the extents";
-    let steps = stretched_carries(&t.extents, &extents);
-    let count = element_count(&extents);
-    let mut data = List::<E>::with_capacity(count);
-    let mut index = List::<i32>::filled(extents.len(), 0);
-    let mut at = 0;
-    for let _ of 0..<count {
-        data.push(t.data[at]);
-        let axis = advance(&mut index, &extents);
-        if axis >= 0 {
-            at += steps[axis];
-        }
-    }
-    return Tensor { data, extents };
+    return Tensor { data: stretched_to(&t.data, &t.extents, &extents), extents };
 }
 
 /// Moves a row-major `index` over `extents` one position on and returns the
@@ -1325,12 +1319,19 @@ pub fn reduce<Axes>(t: &Tensor<f32, Axes>, axes: List<i32>, init: f32, op: fn(f3
 
 /// `reduce` to the mean of the elements along `axes`.
 pub fn reduce_mean<Axes>(t: &Tensor<f32, Axes>, axes: List<i32>) -> Tensor<f32, Axes> {
-    let mut count: f32 = 1.0;
-    for let axis of axes {
-        count *= t.extents[axis] as f32;
-    }
+    let count = reduced_count(&t.extents, &axes);
     let sum = reduce(t, axes, 0.0, |x, y| x + y);
     return map(&sum, |v| v / count);
+}
+
+/// How many elements of a tensor of `extents` a reduction along `axes` folds
+/// into each of its own, which a mean divides by.
+pub fn reduced_count(extents: &List<i32>, axes: &List<i32>) -> f32 {
+    let mut count: f32 = 1.0;
+    for let axis of *axes {
+        count *= extents[axis] as f32;
+    }
+    return count;
 }
 
 /// ONNX's `ArgMax` keeping its axis: the index along `axis` of each lane's
@@ -2026,10 +2027,10 @@ impl Finish {
 }
 
 /// `data`, of `from`, repeated over `to` where `from` stretches.
-fn stretched_to(data: &List<f32>, from: &List<i32>, to: &List<i32>) -> List<f32> {
+fn stretched_to<E>(data: &List<E>, from: &List<i32>, to: &List<i32>) -> List<E> {
     let count = element_count(to);
     let steps = stretched_carries(from, to);
-    let mut out = List::<f32>::with_capacity(count);
+    let mut out = List::<E>::with_capacity(count);
     let mut index = List::<i32>::filled(to.len(), 0);
     let mut at = 0;
     for let _ of 0..<count {

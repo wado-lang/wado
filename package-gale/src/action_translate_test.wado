@@ -228,7 +228,7 @@ e @after { p.emit($ctx.toStringTree()); } : e '+' e | INT ;
 
 test "a lexer body maps $text to the matched slice" {
     let out = translate_lexer_body(" $text == \"enum\" ", &PRED_ATTRS).unwrap();
-    assert out == " chars_text(chars, start, pos) == \"enum\" ";
+    assert out == " span_text(src, start, pos) == \"enum\" ";
 }
 
 test "a lexer body with no $-reference passes through verbatim" {
@@ -257,7 +257,7 @@ test "wado_type_default covers the corpus surface" {
 test "a lexer body reads $index and $pos off the match window" {
     // `wado_lex_attrs.g4`: `$index` is the cursor, `$pos` its column in the line.
     let out = translate_lexer_body(" if $index - start == 2 && $pos >= 1 { $type = TK_B } ", &LexerAttrEnv {}).unwrap();
-    assert out == " if pos - start == 2 && char_pos_in_line(chars, pos) >= 1 { lx.act_type = TK_B } ";
+    assert out == " if pos - start == 2 && char_pos_in_line(src, pos) >= 1 { lx.act_type = TK_B } ";
 }
 
 test "translate reads an unlabeled rule reference's value channel" {

@@ -173,7 +173,7 @@ fn gen_run_parse_entry(w: &mut CodeWriter, ctx: &EmitContext) {
     w.line("p.commit_pending();");
     w.end();
     w.line("merge_lex_errors(&p.tokens, &mut p.diagnostics, max_errors);");
-    w.line("resolve_positions(&mut p.diagnostics, p.tokens.chars);");
+    w.line("resolve_positions(&mut p.diagnostics, &p.tokens.src);");
     if ctx.settings.emit_actions {
         // Lexer prints precede parser prints in the one sink, as on ANTLR4's stdout.
         w.line(
@@ -570,7 +570,7 @@ pub fn gen_parser_struct<S: AsStrSlice>(
     }
     init.push_str(", b: TreeBuilder::with_capacity(tokens.len() * 4), diagnostics: []");
     if emit_actions {
-        init.push_str(", line_starts: line_starts(tokens.chars)");
+        init.push_str(", line_starts: line_starts(&tokens.src)");
     }
     if scan_memo matches { Some(_) } {
         init.push_str(`, ${SCAN_MEMO_HANDLE}: ScanMemo::new(kinds.len())`);
@@ -621,14 +621,14 @@ pub fn gen_parser_struct<S: AsStrSlice>(
         w.line("let mut acc: i32 = 0;");
         w.line("let mut neg = false;");
         w.line("let mut j = sp.start;");
-        w.begin("if j < sp.end && self.tokens.chars[j] == '-'");
+        w.begin("if j < sp.end && self.tokens.src.byte_at(j) == b'-'");
         w.line("neg = true;");
         w.line("j += 1;");
         w.end();
         w.begin("while j < sp.end");
-        w.line("let c = self.tokens.chars[j];");
+        w.line("let c = self.tokens.src.byte_at(j);");
         w.begin("if c.is_ascii_digit()");
-        w.line("acc = acc * 10 + (c as i32 - '0' as i32);");
+        w.line("acc = acc * 10 + (c - b'0') as i32;");
         w.end();
         w.line("j += 1;");
         w.end();
@@ -641,7 +641,7 @@ pub fn gen_parser_struct<S: AsStrSlice>(
         fln.add_param("i", "i32");
         fln.set_return_type("i32");
         fln.emit_begin(w);
-        w.line("return line_col_at(&self.line_starts, self.tokens.starts[i]).0;");
+        w.line("return line_at(&self.line_starts, self.tokens.starts[i]);");
         w.end();
         w.blank();
 
@@ -650,7 +650,7 @@ pub fn gen_parser_struct<S: AsStrSlice>(
         fcol.add_param("i", "i32");
         fcol.set_return_type("i32");
         fcol.emit_begin(w);
-        w.line("return line_col_at(&self.line_starts, self.tokens.starts[i]).1;");
+        w.line("return line_col_at(&self.tokens.src, &self.line_starts, self.tokens.starts[i]).1;");
         w.end();
         w.blank();
 
@@ -698,8 +698,7 @@ pub fn gen_parser_struct<S: AsStrSlice>(
         fts.add_param("end", "i32");
         fts.set_return_type("String");
         fts.emit_begin(w);
-        w.line("let hi = if end < self.tokens.chars.len() { end } else { self.tokens.chars.len() };");
-        w.line("return chars_text(self.tokens.chars, start, hi);");
+        w.line("return span_text(&self.tokens.src, start, end);");
         w.end();
         w.blank();
 
@@ -734,7 +733,7 @@ pub fn gen_parser_struct<S: AsStrSlice>(
         fit.set_receiver("&self");
         fit.set_return_type("String");
         fit.emit_begin(w);
-        w.line("return self.text_span(0, self.tokens.chars.len());");
+        w.line("return self.text_span(0, self.tokens.src.len());");
         w.end();
         w.blank();
 

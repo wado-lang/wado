@@ -119,7 +119,7 @@ type "functype//core:prelude/format.wado/core/prelude/format.wado/inspect_text<c
 
 type "functype//core:prelude/list.wado/core:prelude/list.wado/List<bug_copy_prop_method_array_literal_arg.wado/Token>^core:prelude/traits.wado/IndexValue<i32>::index_value$contract_report0" = fn(i32, i32, ref Array<u8>, i32);  // TypeId(36)
 
-type "functype//core:prelude/traits.wado/core/prelude/traits.wado/inspect_struct_alternate<bug_copy_prop_method_array_literal_arg.wado/Err,[core:prelude/string.wado/String]>$sroa[v.msg]" = fn(ref "core:prelude/string.wado//String", ref "core:prelude/format.wado//Formatter");  // TypeId(37)
+type "functype//core:prelude/traits.wado/core/prelude/traits.wado/inspect_struct_alternate<bug_copy_prop_method_array_literal_arg.wado/Err,[core:prelude/string.wado/String]>$sroa[v.msg]" = fn(ref Array<u8>, i32, ref "core:prelude/format.wado//Formatter");  // TypeId(37)
 
 type "functype//core:prelude/traits.wado/core/prelude/traits.wado/write_struct_head<bug_copy_prop_method_array_literal_arg.wado/Err>$sroa[f.buf]" = fn(ref "core:prelude/string.wado//String");  // TypeId(38)
 
@@ -884,7 +884,7 @@ fn "core:prelude/list.wado/core:prelude/list.wado/List<bug_copy_prop_method_arra
     unreachable;
 }
 
-fn "core:prelude/traits.wado/core/prelude/traits.wado/inspect_struct_alternate<bug_copy_prop_method_array_literal_arg.wado/Err,[core:prelude/string.wado/String]>$sroa[v.msg]"(v, f) {
+fn "core:prelude/traits.wado/core/prelude/traits.wado/inspect_struct_alternate<bug_copy_prop_method_array_literal_arg.wado/Err,[core:prelude/string.wado/String]>$sroa[v.msg]"($mv$v$repr, $mv$v$used, f) {
     let $load_4: ref Array<u8>;
     let f_8: ref "core:prelude/string.wado//String";
     let new_used_25: i32;
@@ -951,46 +951,46 @@ fn "core:prelude/traits.wado/core/prelude/traits.wado/inspect_struct_alternate<b
     start_26 = f_8.used;
     f_8.used = new_used_25;
     builtin::array_copy<u8>(f_8.repr, start_26, global:core:prelude/traits.wado::$const_obj_46, 0, 2);
-    "core:prelude/format.wado/core/prelude/format.wado/inspect_text<core:prelude/string.wado/String>"(f, v.repr, v.used);
-    if @unlikely(local.tee start_26(local.tee v(f.buf).used + 1) > builtin::array_len(v.repr)) {
+    "core:prelude/format.wado/core/prelude/format.wado/inspect_text<core:prelude/string.wado/String>"(f, $mv$v$repr, $mv$v$used);
+    if @unlikely(local.tee $mv$v$used(local.tee f_8(f.buf).used + 1) > builtin::array_len(f_8.repr)) {
         cold_path;
-        "core:prelude/string.wado/core:prelude/string.wado/String::grow"(v, start_26);
+        "core:prelude/string.wado/core:prelude/string.wado/String::grow"(f_8, $mv$v$used);
     }
-    new_used_25 = v.used;
-    v.used = start_26;
-    builtin::array_copy<u8>(v.repr, new_used_25, global:core:prelude/traits.wado::$const_obj_45, 0, 1);
+    start_26 = f_8.used;
+    f_8.used = $mv$v$used;
+    builtin::array_copy<u8>(f_8.repr, start_26, global:core:prelude/traits.wado::$const_obj_45, 0, 1);
     f.indent = f.indent - 1;
-    if @unlikely(local.tee new_used_25(local.tee v(f.buf).used + 1) > builtin::array_len(v.repr)) {
+    if @unlikely(local.tee start_26(local.tee f_8(f.buf).used + 1) > builtin::array_len(f_8.repr)) {
         cold_path;
-        "core:prelude/string.wado/core:prelude/string.wado/String::grow"(v, new_used_25);
+        "core:prelude/string.wado/core:prelude/string.wado/String::grow"(f_8, start_26);
     }
-    start_26 = v.used;
-    v.used = new_used_25;
-    builtin::array_set_u8(v.repr, start_26, 10);
-    start_26 = 0;
-    new_used_25 = f.indent;
-    v = f.buf;
+    $mv$v$used = f_8.used;
+    f_8.used = start_26;
+    builtin::array_set_u8(f_8.repr, $mv$v$used, 10);
+    $mv$v$used = 0;
+    start_26 = f.indent;
+    f_8 = f.buf;
     b89: block {
         l90: loop {
-            break_if b89 start_26 >= new_used_25;
-            if @unlikely(local.tee start_78(v.used + 2) > builtin::array_len(v.repr)) {
+            break_if b89 $mv$v$used >= start_26;
+            if @unlikely(local.tee new_used_25(f_8.used + 2) > builtin::array_len(f_8.repr)) {
                 cold_path;
-                "core:prelude/string.wado/core:prelude/string.wado/String::grow"(v, start_78);
+                "core:prelude/string.wado/core:prelude/string.wado/String::grow"(f_8, new_used_25);
             }
-            new_used_77 = v.used;
-            v.used = start_78;
-            builtin::array_copy<u8>(v.repr, new_used_77, global:core:prelude/traits.wado::$const_obj_44, 0, 2);
-            start_26 = start_26 + 1;
+            start_78 = f_8.used;
+            f_8.used = new_used_25;
+            builtin::array_copy<u8>(f_8.repr, start_78, global:core:prelude/traits.wado::$const_obj_44, 0, 2);
+            $mv$v$used = $mv$v$used + 1;
             continue l90;
         };
     };
-    if @unlikely(local.tee start_26(local.tee v(f.buf).used + 1) > builtin::array_len(v.repr)) {
+    if @unlikely(local.tee start_26(local.tee f_8(f.buf).used + 1) > builtin::array_len(f_8.repr)) {
         cold_path;
-        "core:prelude/string.wado/core:prelude/string.wado/String::grow"(v, start_26);
+        "core:prelude/string.wado/core:prelude/string.wado/String::grow"(f_8, start_26);
     }
-    new_used_25 = v.used;
-    v.used = start_26;
-    builtin::array_copy<u8>(v.repr, new_used_25, global:core:prelude/traits.wado::$const_obj_43, 0, 1);
+    $mv$v$used = f_8.used;
+    f_8.used = start_26;
+    builtin::array_copy<u8>(f_8.repr, $mv$v$used, global:core:prelude/traits.wado::$const_obj_43, 0, 1);
     return;
 }
 
@@ -1488,7 +1488,7 @@ fn "core:prelude/traits.wado/bug_copy_prop_method_array_literal_arg.wado/Err^cor
     let field_6: ref "core:prelude/traits.wado//StructField<bug_copy_prop_method_array_literal_arg.wado/Err,core:prelude/string.wado/String>";
     let self_12: ref "core:prelude/string.wado//String";
     if f.alternate {
-        "core:prelude/traits.wado/core/prelude/traits.wado/inspect_struct_alternate<bug_copy_prop_method_array_literal_arg.wado/Err,[core:prelude/string.wado/String]>$sroa[v.msg]"(self, f);
+        "core:prelude/traits.wado/core/prelude/traits.wado/inspect_struct_alternate<bug_copy_prop_method_array_literal_arg.wado/Err,[core:prelude/string.wado/String]>$sroa[v.msg]"(self.repr, self.used, f);
         return;
     }
     "core:prelude/traits.wado/core/prelude/traits.wado/write_struct_head<bug_copy_prop_method_array_literal_arg.wado/Err>$sroa[f.buf]"(f.buf);

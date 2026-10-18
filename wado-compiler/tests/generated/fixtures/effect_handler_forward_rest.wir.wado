@@ -112,7 +112,13 @@ type "functype//core:prelude/primitive.wado/count_digits_u64" = fn(u64) -> i32; 
 
 type "functype//core:rt/write_string_to_stream$dae[add_newline]" = fn(ref "core:prelude//$Resource", ref Array<u8>, i32);  // TypeId(35)
 
+<<<<<<< HEAD
 type "functype//core:rt/panic" = fn(ref "core:prelude/string.wado//String");  // TypeId(36)
+||||||| aa8fbf23e
+type "functype//core:rt/panic" = fn(ref "core:prelude/string.wado//String");  // TypeId(35)
+=======
+type "functype//core:rt/panic" = fn(ref Array<u8>, i32);  // TypeId(35)
+>>>>>>> origin/main
 
 type "functype//core:rt/cm_stream_write_raw_all_u8" = fn(i32, ref Array<u8>, i32, i32) -> "core:prelude/types.wado//enum:CopyResult";  // TypeId(37)
 
@@ -199,13 +205,14 @@ fn "effect_handler_forward_rest.wado/run"() with Stdout {
         if @likely(ref.is_null(local.tee $local_1_23(global:effect_handler_forward_rest.wado::$effect_effect_handler_forward_rest.wado/Log)) == 0) {
             global:effect_handler_forward_rest.wado::$effect_effect_handler_forward_rest.wado/Log = local.tee $d_effect_handler_forward_rest.wado/Log_13(ref.as_non_null($local_1_23)).outer;
             $local_3_25 = block -> bool {
-                let $indirect_call_1: ref "canonical//CanonicalClosure_0";
-                call_ref "functype/$canonical_closure_fn_0"($indirect_call_1.func, local.tee $indirect_call_1(ref.cast "canonical//CanonicalClosure_0"($d_effect_handler_forward_rest.wado/Log_13.op_enabled)).env, 2);
+                let $indirect_call_3: ref "canonical//CanonicalClosure_0";
+                call_ref "functype/$canonical_closure_fn_0"($indirect_call_3.func, local.tee $indirect_call_3(ref.cast "canonical//CanonicalClosure_0"($d_effect_handler_forward_rest.wado/Log_13.op_enabled)).env, 2);
             };
             global:effect_handler_forward_rest.wado::$effect_effect_handler_forward_rest.wado/Log = $local_1_23;
             break $inline__effect_dispatch__effect_handler_forward_rest_wado_Log__enabled_2: $local_3_25;
         } else {
-            "core:rt/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("no handler installed for `Log::enabled`"), used: 39 });
+            let $mv_field_1: ref Array<u8>;
+            "core:rt/panic"(local.tee $mv_field_1(array.new_data<u8>("no handler installed for `Log::enabled`")), 39);
             unreachable;
         }
         unreachable;
@@ -214,11 +221,11 @@ fn "effect_handler_forward_rest.wado/run"() with Stdout {
             message_26 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("hello"), used: 5 };
             if @likely(ref.is_null(local.tee $local_1_23(global:effect_handler_forward_rest.wado::$effect_effect_handler_forward_rest.wado/Log)) == 0) {
                 global:effect_handler_forward_rest.wado::$effect_effect_handler_forward_rest.wado/Log = local.tee $d_effect_handler_forward_rest.wado/Log_13(ref.as_non_null($local_1_23)).outer;
-                let $indirect_call_2: ref "canonical//CanonicalClosure_1";
-                call_ref "functype/$canonical_closure_fn_1"($indirect_call_2.func, local.tee $indirect_call_2(ref.cast "canonical//CanonicalClosure_1"($d_effect_handler_forward_rest.wado/Log_13.op_emit)).env, message_26);
+                let $indirect_call_6: ref "canonical//CanonicalClosure_1";
+                call_ref "functype/$canonical_closure_fn_1"($indirect_call_6.func, local.tee $indirect_call_6(ref.cast "canonical//CanonicalClosure_1"($d_effect_handler_forward_rest.wado/Log_13.op_emit)).env, message_26);
                 break $inline__effect_dispatch__effect_handler_forward_rest_wado_Log__emit_3: global:effect_handler_forward_rest.wado::$effect_effect_handler_forward_rest.wado/Log = $local_1_23;
             } else {
-                "core:rt/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("no handler installed for `Log::emit`"), used: 36 });
+                "core:rt/panic"(local.tee $mv_field_1(array.new_data<u8>("no handler installed for `Log::emit`")), 36);
                 unreachable;
             }
         };
@@ -227,12 +234,12 @@ fn "effect_handler_forward_rest.wado/run"() with Stdout {
         if @likely(ref.is_null(local.tee $local_1_23(global:effect_handler_forward_rest.wado::$effect_effect_handler_forward_rest.wado/Log)) == 0) {
             global:effect_handler_forward_rest.wado::$effect_effect_handler_forward_rest.wado/Log = local.tee $d_effect_handler_forward_rest.wado/Log_13(ref.as_non_null($local_1_23)).outer;
             $local_3_25 = block -> bool {
-                call_ref "functype/$canonical_closure_fn_0"($indirect_call_1.func, local.tee $indirect_call_1(ref.cast "canonical//CanonicalClosure_0"($d_effect_handler_forward_rest.wado/Log_13.op_enabled)).env, 0);
+                call_ref "functype/$canonical_closure_fn_0"($indirect_call_3.func, local.tee $indirect_call_3(ref.cast "canonical//CanonicalClosure_0"($d_effect_handler_forward_rest.wado/Log_13.op_enabled)).env, 0);
             };
             global:effect_handler_forward_rest.wado::$effect_effect_handler_forward_rest.wado/Log = $local_1_23;
             break $inline__effect_dispatch__effect_handler_forward_rest_wado_Log__enabled_4: $local_3_25;
         } else {
-            "core:rt/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("no handler installed for `Log::enabled`"), used: 39 });
+            "core:rt/panic"(local.tee $mv_field_1(array.new_data<u8>("no handler installed for `Log::enabled`")), 39);
             unreachable;
         }
         unreachable;
@@ -241,10 +248,10 @@ fn "effect_handler_forward_rest.wado/run"() with Stdout {
             message_26 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("dropped"), used: 7 };
             if @likely(ref.is_null(local.tee $local_1_23(global:effect_handler_forward_rest.wado::$effect_effect_handler_forward_rest.wado/Log)) == 0) {
                 global:effect_handler_forward_rest.wado::$effect_effect_handler_forward_rest.wado/Log = local.tee $d_effect_handler_forward_rest.wado/Log_13(ref.as_non_null($local_1_23)).outer;
-                call_ref "functype/$canonical_closure_fn_1"($indirect_call_2.func, local.tee $indirect_call_2(ref.cast "canonical//CanonicalClosure_1"($d_effect_handler_forward_rest.wado/Log_13.op_emit)).env, message_26);
+                call_ref "functype/$canonical_closure_fn_1"($indirect_call_6.func, local.tee $indirect_call_6(ref.cast "canonical//CanonicalClosure_1"($d_effect_handler_forward_rest.wado/Log_13.op_emit)).env, message_26);
                 break $inline__effect_dispatch__effect_handler_forward_rest_wado_Log__emit_5: global:effect_handler_forward_rest.wado::$effect_effect_handler_forward_rest.wado/Log = $local_1_23;
             } else {
-                "core:rt/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("no handler installed for `Log::emit`"), used: 36 });
+                "core:rt/panic"(local.tee $mv_field_1(array.new_data<u8>("no handler installed for `Log::emit`")), 36);
                 unreachable;
             }
         };
@@ -283,6 +290,7 @@ fn "effect_handler_forward_rest.wado/run"() with Stdout {
         "effect_handler_forward_rest.wado/run$cold0$dae[$contract_arg_0]"($local_3_25);
         unreachable;
     }
+<<<<<<< HEAD
     $local_3_25 = local.tee message_26(builtin::array_get_value<ref "core:prelude/string.wado//String">($load_28.repr, 0)).used;
     message_26 = struct.new "core:prelude/string.wado//String" { repr: let $array_clone_src_5: ref Array<u8>; $array_clone_src_5 = message_26.repr; let $array_clone_dst_6: ref Array<u8>; builtin::array_copy<u8>(local.tee $array_clone_dst_6(builtin::array_new<u8>($local_3_25)), 0, $array_clone_src_5, 0, $local_3_25); $array_clone_dst_6, used: $local_3_25 };
     $sroa_$pattern_temp_0_0_77 = struct.new "core:prelude//$Resource" { value: builtin::i32_wrap_i64(local.tee x("wasi/stream-new"())) };
@@ -290,6 +298,23 @@ fn "effect_handler_forward_rest.wado/run"() with Stdout {
     $sroa_$pattern_temp_0_0_77 = "effect_handler_forward_rest.wado/$cm_binding__Stdout_write_via_stream"($sroa_$pattern_temp_0_0_77);
     "core:rt/write_string_to_stream$dae[add_newline]"($sroa_$pattern_temp_0_1_78, message_26.repr, $local_3_25);
     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"($sroa_$pattern_temp_0_0_77.value);
+||||||| aa8fbf23e
+    $local_3_25 = local.tee message_26(builtin::array_get_value<ref "core:prelude/string.wado//String">($load_27.repr, 0)).used;
+    message_26 = struct.new "core:prelude/string.wado//String" { repr: let $array_clone_src_5: ref Array<u8>; $array_clone_src_5 = message_26.repr; let $array_clone_dst_6: ref Array<u8>; builtin::array_copy<u8>(local.tee $array_clone_dst_6(builtin::array_new<u8>($local_3_25)), 0, $array_clone_src_5, 0, $local_3_25); $array_clone_dst_6, used: $local_3_25 };
+    is_negative_50 = builtin::i32_wrap_i64(local.tee x("wasi/stream-new"()));
+    start_123 = builtin::i32_wrap_i64(x >> 32_i64);
+    is_negative_50 = "effect_handler_forward_rest.wado/$cm_binding__Stdout_write_via_stream"(is_negative_50);
+    "core:rt/write_string_to_stream$dae[add_newline]"(start_123, message_26.repr, $local_3_25);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(is_negative_50);
+=======
+    $local_3_25 = local.tee message_26(builtin::array_get_value<ref "core:prelude/string.wado//String">($load_27.repr, 0)).used;
+    message_26 = struct.new "core:prelude/string.wado//String" { repr: $mv_field_1 = message_26.repr; let $array_clone_dst_14: ref Array<u8>; builtin::array_copy<u8>(local.tee $array_clone_dst_14(builtin::array_new<u8>($local_3_25)), 0, $mv_field_1, 0, $local_3_25); $array_clone_dst_14, used: $local_3_25 };
+    is_negative_50 = builtin::i32_wrap_i64(local.tee x("wasi/stream-new"()));
+    start_123 = builtin::i32_wrap_i64(x >> 32_i64);
+    is_negative_50 = "effect_handler_forward_rest.wado/$cm_binding__Stdout_write_via_stream"(is_negative_50);
+    "core:rt/write_string_to_stream$dae[add_newline]"(start_123, message_26.repr, $local_3_25);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(is_negative_50);
+>>>>>>> origin/main
 }
 
 fn "effect_handler_forward_rest.wado/$cm_binding__Stdout_write_via_stream"(data) with Stdout {
@@ -404,6 +429,7 @@ fn "core:rt/write_string_to_stream$dae[add_newline]"(tx, $mv$message$repr, $mv$m
     "wasi/stream-drop-writable"(tx.value);
 }
 
+<<<<<<< HEAD
 fn "core:rt/panic"(message) {
     let $cm_pair_4: i64;
     let $sroa_$pattern_temp_0_0_7: i32;
@@ -413,6 +439,27 @@ fn "core:rt/panic"(message) {
     $sroa_$pattern_temp_0_0_7 = "wasi/wasi:cli/Stderr::write_via_stream"($sroa_$pattern_temp_0_0_7);
     "core:rt/write_string_to_stream$dae[add_newline]"($sroa_$pattern_temp_0_1_8, message.repr, message.used);
     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"($sroa_$pattern_temp_0_0_7);
+||||||| aa8fbf23e
+fn "core:rt/panic"(message) {
+    let packed: i64;
+    let rx_7: i32;
+    let tx_8: i32;
+    rx_7 = builtin::i32_wrap_i64(local.tee packed("wasi/stream-new"()));
+    tx_8 = builtin::i32_wrap_i64(packed >> 32_i64);
+    rx_7 = "wasi/wasi:cli/Stderr::write_via_stream"(rx_7);
+    "core:rt/write_string_to_stream$dae[add_newline]"(tx_8, message.repr, message.used);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(rx_7);
+=======
+fn "core:rt/panic"($mv$message$repr, $mv$message$used) {
+    let packed: i64;
+    let rx_7: i32;
+    let tx_8: i32;
+    rx_7 = builtin::i32_wrap_i64(local.tee packed("wasi/stream-new"()));
+    tx_8 = builtin::i32_wrap_i64(packed >> 32_i64);
+    rx_7 = "wasi/wasi:cli/Stderr::write_via_stream"(rx_7);
+    "core:rt/write_string_to_stream$dae[add_newline]"(tx_8, $mv$message$repr, $mv$message$used);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(rx_7);
+>>>>>>> origin/main
     cold_path;
     unreachable;
 }
@@ -480,9 +527,39 @@ fn "core:prelude/list.wado/core:prelude/list.wado/List<core:prelude/string.wado/
     let offset_16: i32;
     let f_37: ref "core:prelude/format.wado//Formatter";
     let $sroa_s_repr_55: ref Array<u8>;
-    "core:rt/panic"($fuse_at_7 = "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"(local.tee $local_6(struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(144), used: 0 }), 40); $load_0 = $local_6.repr; $sroa_s_repr_55 = array.new_data<u8>("Contract of "); builtin::array_copy<u8>($load_0, $fuse_at_7, $sroa_s_repr_55, 0, 12); offset_16 = $fuse_at_7 + 12; $sroa_s_repr_55 = array.new_data<u8>("List::index_value"); builtin::array_copy<u8>($load_0, offset_16, $sroa_s_repr_55, 0, 17); $fuse_at_7 = $fuse_at_7 + 29; $sroa_s_repr_55 = array.new_data<u8>(" failed at "); builtin::array_copy<u8>($load_0, $fuse_at_7, $sroa_s_repr_55, 0, 11); $fuse_at_7 = "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"($local_6, 43 + $mv$$site$used); builtin::array_copy<u8>(local.tee $sroa_s_repr_55($local_6.repr), $fuse_at_7, $mv$$site$repr, 0, $mv$$site$used); offset_16 = $fuse_at_7 + $mv$$site$used; $mv$$site$repr = array.new_data<u8>("
+    $fuse_at_7 = "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"(local.tee $local_6(struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(144), used: 0 }), 40);
+    $load_0 = $local_6.repr;
+    $sroa_s_repr_55 = array.new_data<u8>("Contract of ");
+    builtin::array_copy<u8>($load_0, $fuse_at_7, $sroa_s_repr_55, 0, 12);
+    offset_16 = $fuse_at_7 + 12;
+    $sroa_s_repr_55 = array.new_data<u8>("List::index_value");
+    builtin::array_copy<u8>($load_0, offset_16, $sroa_s_repr_55, 0, 17);
+    $fuse_at_7 = $fuse_at_7 + 29;
+    $sroa_s_repr_55 = array.new_data<u8>(" failed at ");
+    builtin::array_copy<u8>($load_0, $fuse_at_7, $sroa_s_repr_55, 0, 11);
+    $fuse_at_7 = "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"($local_6, 43 + $mv$$site$used);
+    builtin::array_copy<u8>(local.tee $sroa_s_repr_55($local_6.repr), $fuse_at_7, $mv$$site$repr, 0, $mv$$site$used);
+    offset_16 = $fuse_at_7 + $mv$$site$used;
+    $mv$$site$repr = array.new_data<u8>("
 condition: 0 <= index < self.len()
-"); builtin::array_copy<u8>($sroa_s_repr_55, offset_16, $mv$$site$repr, 0, 36); $mv$$site$used = $fuse_at_7 + (36 + $mv$$site$used); $mv$$site$repr = array.new_data<u8>("index: "); builtin::array_copy<u8>($sroa_s_repr_55, $mv$$site$used, $mv$$site$repr, 0, 7); f_37 = local.tee $local_7("core:prelude/format.wado/core:prelude/format.wado/Formatter::new"($local_6)); "core:prelude/primitive.wado/i32::fmt_decimal$sroa[self.value]"(0, f_37); $mv$$site$used = "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"($local_6, 13); $mv$$site$repr = $local_6.repr; $sroa_s_repr_55 = array.new_fixed<u8>(10); builtin::array_copy<u8>($mv$$site$repr, $mv$$site$used, $sroa_s_repr_55, 0, 1); $mv$$site$used = $mv$$site$used + 1; $sroa_s_repr_55 = array.new_data<u8>("self.len(): "); builtin::array_copy<u8>($mv$$site$repr, $mv$$site$used, $sroa_s_repr_55, 0, 12); $local_7 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::new"($local_6); "core:prelude/primitive.wado/i32::fmt_decimal$sroa[self.value]"($v1, $local_7); "core:prelude/string.wado/core:prelude/string.wado/String^core:prelude/string.wado/AsStrSlice::internal_append_to$spec0"(struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 }, $local_6); $local_6);
+");
+    builtin::array_copy<u8>($sroa_s_repr_55, offset_16, $mv$$site$repr, 0, 36);
+    $mv$$site$used = $fuse_at_7 + (36 + $mv$$site$used);
+    $mv$$site$repr = array.new_data<u8>("index: ");
+    builtin::array_copy<u8>($sroa_s_repr_55, $mv$$site$used, $mv$$site$repr, 0, 7);
+    f_37 = local.tee $local_7("core:prelude/format.wado/core:prelude/format.wado/Formatter::new"($local_6));
+    "core:prelude/primitive.wado/i32::fmt_decimal$sroa[self.value]"(0, f_37);
+    $mv$$site$used = "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"($local_6, 13);
+    $mv$$site$repr = $local_6.repr;
+    $sroa_s_repr_55 = array.new_fixed<u8>(10);
+    builtin::array_copy<u8>($mv$$site$repr, $mv$$site$used, $sroa_s_repr_55, 0, 1);
+    $mv$$site$used = $mv$$site$used + 1;
+    $sroa_s_repr_55 = array.new_data<u8>("self.len(): ");
+    builtin::array_copy<u8>($mv$$site$repr, $mv$$site$used, $sroa_s_repr_55, 0, 12);
+    $local_7 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::new"($local_6);
+    "core:prelude/primitive.wado/i32::fmt_decimal$sroa[self.value]"($v1, $local_7);
+    "core:prelude/string.wado/core:prelude/string.wado/String^core:prelude/string.wado/AsStrSlice::internal_append_to$spec0"(struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 }, $local_6);
+    "core:rt/panic"($local_6.repr, $local_6.used);
     unreachable;
 }
 
@@ -861,13 +938,13 @@ fn "effect_handler_forward_rest.wado/effect_handler_forward_rest.wado/$Closure_2
         if @likely(ref.is_null(local.tee $local_1(global:effect_handler_forward_rest.wado::$effect_effect_handler_forward_rest.wado/Log)) == 0) {
             global:effect_handler_forward_rest.wado::$effect_effect_handler_forward_rest.wado/Log = local.tee $local_2(ref.as_non_null($local_1)).outer;
             level = block -> bool {
-                let $indirect_call_1: ref "canonical//CanonicalClosure_0";
-                call_ref "functype/$canonical_closure_fn_0"($indirect_call_1.func, local.tee $indirect_call_1(ref.cast "canonical//CanonicalClosure_0"($local_2.op_enabled)).env, level);
+                let $indirect_call_3: ref "canonical//CanonicalClosure_0";
+                call_ref "functype/$canonical_closure_fn_0"($indirect_call_3.func, local.tee $indirect_call_3(ref.cast "canonical//CanonicalClosure_0"($local_2.op_enabled)).env, level);
             };
             global:effect_handler_forward_rest.wado::$effect_effect_handler_forward_rest.wado/Log = $local_1;
             break $inline__effect_dispatch__effect_handler_forward_rest_wado_Log__enabled_0: level;
         } else {
-            "core:rt/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("no handler installed for `Log::enabled`"), used: 39 });
+            "core:rt/panic"(array.new_data<u8>("no handler installed for `Log::enabled`"), 39);
             unreachable;
         }
         unreachable;
@@ -880,11 +957,11 @@ fn "effect_handler_forward_rest.wado/effect_handler_forward_rest.wado/$Closure_3
     $inline__effect_dispatch__effect_handler_forward_rest_wado_Log__emit_0: block {
         if @likely(ref.is_null(local.tee $local_1(global:effect_handler_forward_rest.wado::$effect_effect_handler_forward_rest.wado/Log)) == 0) {
             global:effect_handler_forward_rest.wado::$effect_effect_handler_forward_rest.wado/Log = local.tee $local_2(ref.as_non_null($local_1)).outer;
-            let $indirect_call_1: ref "canonical//CanonicalClosure_1";
-            call_ref "functype/$canonical_closure_fn_1"($indirect_call_1.func, local.tee $indirect_call_1(ref.cast "canonical//CanonicalClosure_1"($local_2.op_emit)).env, message);
+            let $indirect_call_3: ref "canonical//CanonicalClosure_1";
+            call_ref "functype/$canonical_closure_fn_1"($indirect_call_3.func, local.tee $indirect_call_3(ref.cast "canonical//CanonicalClosure_1"($local_2.op_emit)).env, message);
             break $inline__effect_dispatch__effect_handler_forward_rest_wado_Log__emit_0: global:effect_handler_forward_rest.wado::$effect_effect_handler_forward_rest.wado/Log = $local_1;
         } else {
-            "core:rt/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("no handler installed for `Log::emit`"), used: 36 });
+            "core:rt/panic"(array.new_data<u8>("no handler installed for `Log::emit`"), 36);
             unreachable;
         }
     };
@@ -897,13 +974,13 @@ fn "effect_handler_forward_rest.wado/effect_handler_forward_rest.wado/$Closure_4
         if @likely(ref.is_null(local.tee $local_1(global:effect_handler_forward_rest.wado::$effect_effect_handler_forward_rest.wado/Log)) == 0) {
             global:effect_handler_forward_rest.wado::$effect_effect_handler_forward_rest.wado/Log = local.tee $local_2(ref.as_non_null($local_1)).outer;
             level = block -> bool {
-                let $indirect_call_1: ref "canonical//CanonicalClosure_0";
-                call_ref "functype/$canonical_closure_fn_0"($indirect_call_1.func, local.tee $indirect_call_1(ref.cast "canonical//CanonicalClosure_0"($local_2.op_enabled)).env, level);
+                let $indirect_call_3: ref "canonical//CanonicalClosure_0";
+                call_ref "functype/$canonical_closure_fn_0"($indirect_call_3.func, local.tee $indirect_call_3(ref.cast "canonical//CanonicalClosure_0"($local_2.op_enabled)).env, level);
             };
             global:effect_handler_forward_rest.wado::$effect_effect_handler_forward_rest.wado/Log = $local_1;
             break $inline__effect_dispatch__effect_handler_forward_rest_wado_Log__enabled_0: level;
         } else {
-            "core:rt/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("no handler installed for `Log::enabled`"), used: 39 });
+            "core:rt/panic"(array.new_data<u8>("no handler installed for `Log::enabled`"), 39);
             unreachable;
         }
         unreachable;
@@ -957,11 +1034,11 @@ fn "effect_handler_forward_rest.wado/effect_handler_forward_rest.wado/$Closure_5
         };
         if @likely(ref.is_null(local.tee $local_1(global:effect_handler_forward_rest.wado::$effect_effect_handler_forward_rest.wado/Log)) == 0) {
             global:effect_handler_forward_rest.wado::$effect_effect_handler_forward_rest.wado/Log = local.tee $local_2_7(ref.as_non_null($local_1)).outer;
-            let $indirect_call_4: ref "canonical//CanonicalClosure_1";
-            call_ref "functype/$canonical_closure_fn_1"($indirect_call_4.func, local.tee $indirect_call_4(ref.cast "canonical//CanonicalClosure_1"($local_2_7.op_emit)).env, $local_2_4);
+            let $indirect_call_6: ref "canonical//CanonicalClosure_1";
+            call_ref "functype/$canonical_closure_fn_1"($indirect_call_6.func, local.tee $indirect_call_6(ref.cast "canonical//CanonicalClosure_1"($local_2_7.op_emit)).env, $local_2_4);
             break $inline__effect_dispatch__effect_handler_forward_rest_wado_Log__emit_1: global:effect_handler_forward_rest.wado::$effect_effect_handler_forward_rest.wado/Log = $local_1;
         } else {
-            "core:rt/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("no handler installed for `Log::emit`"), used: 36 });
+            "core:rt/panic"(local.tee $array_clone_dst_2(array.new_data<u8>("no handler installed for `Log::emit`")), 36);
             unreachable;
         }
     };

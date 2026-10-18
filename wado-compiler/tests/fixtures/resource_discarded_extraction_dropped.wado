@@ -1,0 +1,35 @@
+// A resource a call takes out through `&mut` and nothing binds is dropped where
+// the statement discards it, as a fresh resource discarded there is: the
+// `Option` `pop` returns, the one a function returns from it, and the
+// `Option` of an `Option` popped from a list of them.
+
+use { Request, Response, ErrorCode, Fields, Headers, Trailers } from "wasi:http";
+
+fn take_last(list: &mut List<Fields>) -> Option<Fields> {
+    return list.pop();
+}
+
+fn discard() with Fields {
+    let mut list: List<Fields> = [];
+    list.push(Fields::new());
+    list.push(Fields::new());
+    list.pop();
+    take_last(&mut list);
+    assert list.is_empty();
+
+    let mut held: List<Option<Fields>> = [];
+    held.push(Option::Some(Fields::new()));
+    held.pop();
+    assert held.is_empty();
+}
+
+export async fn handle(request: Request) -> Result<Response, ErrorCode> {
+    discard();
+    let [trailers, trailers_tx] = Future::<Result<Option<Trailers>, ErrorCode>>::new();
+    let [response, _sent] = Response::new(Headers::new(), null, trailers);
+    task return Result::<Response, ErrorCode>::Ok(response);
+    trailers_tx.write(Result::<Option<Trailers>, ErrorCode>::Ok(null));
+}
+
+__DATA__
+{"wasi:http/service": {"status": 200}}

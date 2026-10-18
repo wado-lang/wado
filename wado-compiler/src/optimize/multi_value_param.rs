@@ -4,9 +4,11 @@
 use std::ops::ControlFlow;
 use std::sync::Arc;
 
+use cranelift_entity::EntityRef;
+
 use crate::hashmap::{IndexMap, IndexSet};
-use crate::nir::{NirBinaryOp, NirFunction, ParamAbi, aggregate_field_info};
-use crate::nir_arena::{Body, ExprId, ExprKind, NodeRef, Operand, StmtId, StmtKind};
+use crate::nir::{NirFunction, ParamAbi, aggregate_field_info};
+use crate::nir_arena::{Body, ExprId, ExprKind, NodeRef, Operand};
 use crate::nir_package::NirPackage;
 use crate::nir_value_graph::{OpaqueSource, ValueId, ValueKind};
 use crate::parallel::Executor;
@@ -23,37 +25,124 @@ const MAX_PARAM_FIELDS: usize = 8;
 /// Set `param_abi` on every parameter that can take one Wasm slot per field.
 /// Runs after every transformation, so it sees the final NIR shape.
 pub fn classify_multi_value_params(project: &mut NirPackage, exec: &Arc<Executor>) -> bool {
-    let candidates = {
+    let abis = {
         let type_table = project.type_table.borrow();
         let mut candidates = collect_candidates(project, &type_table);
         // A `&S` arrives as the fields its referent held at the call, so
         // nothing the call runs may write an `S` the callee reads after. The
         // whole-program summary that answers it is built only for one.
-        if candidates.values().any(|c| c.referent.is_some()) {
+        if candidates.values().any(|c| c.through_ref) {
             let gate = FunctionGate::new(project, exec);
             let mut cache = HeapEffectsCache::default();
             let heap = cache.effects(project, &type_table, &gate);
             candidates.retain(|&(func_idx, _), c| {
-                c.referent
-                    .is_none_or(|referent| !heap.function_may_write(func_idx, referent))
+                !c.through_ref || !heap.function_may_write(func_idx, c.aggregate)
             });
         }
-        candidates
+        settle(candidates, &type_table)
     };
-    if candidates.is_empty() {
+    if abis.is_empty() {
         return false;
     }
-    for ((func_idx, param_idx), c) in candidates {
-        project.functions[func_idx].borrow_mut().params[param_idx].param_abi = c.abi;
+    for ((func_idx, param_idx), abi) in abis {
+        project.functions[func_idx].borrow_mut().params[param_idx].param_abi = abi;
     }
     true
 }
 
+/// A parameter: its function's index in the function store, then its own.
+type ParamKey = (usize, usize);
+
 /// A parameter the multi-value ABI fits, as far as its own body says.
 struct Candidate {
-    abi: ParamAbi,
-    /// The type a `&S` refers to, which nothing the call runs may write.
-    referent: Option<TypeId>,
+    /// The struct or tuple the parameter holds, or refers to.
+    aggregate: TypeId,
+    through_ref: bool,
+    field_types: Vec<TypeId>,
+    field_names: Vec<String>,
+    /// The fields the body reads, by name.
+    reads: IndexSet<String>,
+    /// The parameters it hands the local to whole, which take the ABI only
+    /// together with it: the call then passes on the fields it arrived in.
+    forwards: IndexSet<ParamKey>,
+}
+
+impl Candidate {
+    /// The fields a call hands over: every one for an aggregate taken by
+    /// value, which often arrives as a literal or a multi-value result, and
+    /// only those read for a `&S`, whose fields are loaded at every call.
+    fn taken(&self) -> (Vec<TypeId>, Vec<String>) {
+        self.field_types
+            .iter()
+            .zip(&self.field_names)
+            .filter(|(_, name)| !self.through_ref || self.reads.contains(name.as_str()))
+            .map(|(&ty, name)| (ty, name.clone()))
+            .unzip()
+    }
+}
+
+/// The candidates that take the ABI, and the fields each takes. A forward
+/// keeps its caller only while its callee stays, and widens what the caller
+/// takes to what the callee does, so both are settled together: the reads
+/// grow to a fixpoint first, so no width is judged before it is final.
+fn settle(
+    mut candidates: IndexMap<ParamKey, Candidate>,
+    type_table: &TypeTable,
+) -> IndexMap<ParamKey, ParamAbi> {
+    loop {
+        while settle_forwards(&mut candidates, type_table) {}
+        let before = candidates.len();
+        candidates.retain(|_, c| splittable(&c.taken().0, type_table));
+        if candidates.len() == before {
+            break;
+        }
+    }
+    candidates
+        .into_iter()
+        .map(|(key, c)| {
+            let (field_types, field_names) = c.taken();
+            let abi = ParamAbi::MultiValue {
+                field_types,
+                field_names,
+                through_ref: c.through_ref,
+            };
+            (key, abi)
+        })
+        .collect()
+}
+
+/// One round over the forwards: drop a candidate whose callee does not take
+/// the ABI on the same shape, and widen one to the reads of its callees.
+/// Whether anything changed.
+fn settle_forwards(candidates: &mut IndexMap<ParamKey, Candidate>, type_table: &TypeTable) -> bool {
+    let keys: Vec<ParamKey> = candidates.keys().copied().collect();
+    let mut changed = false;
+    for key in keys {
+        let c = &candidates[&key];
+        if c.forwards.is_empty() {
+            continue;
+        }
+        let mut reads = c.reads.clone();
+        let agrees = c.forwards.iter().all(|f| {
+            candidates.get(f).is_some_and(|g| {
+                // The argument is the local itself, or a reference to it.
+                assert_eq!(
+                    type_table.type_key(g.aggregate),
+                    type_table.type_key(c.aggregate)
+                );
+                reads.extend(g.reads.iter().cloned());
+                g.through_ref == c.through_ref
+            })
+        });
+        if !agrees {
+            candidates.shift_remove(&key);
+            changed = true;
+        } else if reads.len() > c.reads.len() {
+            candidates[&key].reads = reads;
+            changed = true;
+        }
+    }
+    changed
 }
 
 /// Whether the ABI of `f`'s parameters is its own to choose: every caller is a
@@ -65,7 +154,7 @@ fn chooses_param_abi(f: &NirFunction) -> bool {
 fn collect_candidates(
     project: &NirPackage,
     type_table: &TypeTable,
-) -> IndexMap<(usize, usize), Candidate> {
+) -> IndexMap<ParamKey, Candidate> {
     let mut out = IndexMap::default();
     for (func_idx, func_rc) in project.functions.iter().enumerate() {
         let func = func_rc.borrow();
@@ -89,50 +178,56 @@ fn collect_candidates(
             else {
                 continue;
             };
-            // A by-value argument is often a literal or a multi-value result,
-            // which hands over every field, so it takes them all.
-            if !through_ref && !splittable(&all_types, type_table) {
-                continue;
-            }
             let scope = ParamScope {
                 body,
-                type_table,
                 local: param.local_index,
                 field_names: &all_names,
             };
             let reads = scope.read_anywhere();
-            if reads.whole {
+            if reads.whole || !may_fit(&reads, through_ref, &all_types, &all_names, type_table) {
                 continue;
             }
-            // A reference's fields are loaded at every call, so it takes those the
-            // callee reads and no other, and only where it reads each on every
-            // path: one read past an early exit costs a load where it is not.
-            if through_ref && !reads.fields.is_subset(&scope.read_on_entry()) {
-                continue;
-            }
-            let (field_types, field_names): (Vec<TypeId>, Vec<String>) = all_types
-                .into_iter()
-                .zip(&all_names)
-                .filter(|(_, name)| !through_ref || reads.fields.contains(name.as_str()))
-                .map(|(ty, name)| (ty, name.clone()))
-                .unzip();
-            if through_ref && !splittable(&field_types, type_table) {
-                continue;
-            }
+            // One read past an early exit costs a `&S` a load on the path that
+            // skips it, which the struct a caller no longer builds outweighs.
+            let read_names = reads.fields.iter().map(|&name| name.to_string()).collect();
             out.insert(
                 (func_idx, param_idx),
                 Candidate {
-                    abi: ParamAbi::MultiValue {
-                        field_types,
-                        field_names,
-                        through_ref,
-                    },
-                    referent: through_ref.then_some(aggregate),
+                    aggregate,
+                    through_ref,
+                    reads: read_names,
+                    forwards: reads.forwards,
+                    field_types: all_types,
+                    field_names: all_names,
                 },
             );
         }
     }
     out
+}
+
+/// Whether a parameter read as `reads` may still take the ABI once its
+/// forwards settle, which only add reads: what fails here never comes to fit,
+/// and dropping it early can spare the whole-program write summary.
+fn may_fit(
+    reads: &Reads<'_>,
+    through_ref: bool,
+    all_types: &[TypeId],
+    all_names: &[String],
+    type_table: &TypeTable,
+) -> bool {
+    if !through_ref {
+        return splittable(all_types, type_table);
+    }
+    let read: Vec<TypeId> = all_types
+        .iter()
+        .zip(all_names)
+        .filter(|(_, name)| reads.fields.contains(name.as_str()))
+        .map(|(&ty, _)| ty)
+        .collect();
+    read.len() <= MAX_PARAM_FIELDS
+        && (read.len() >= 2 || !reads.forwards.is_empty())
+        && read.iter().all(|&t| is_eligible_field_type(t, type_table))
 }
 
 /// Whether `field_types` fit the ABI: within its width, and each taking a Wasm
@@ -150,63 +245,14 @@ fn splittable(field_types: &[TypeId], type_table: &TypeTable) -> bool {
 /// `field_names`, and the questions asked of how that body reads it.
 struct ParamScope<'b, 'a> {
     body: &'b Body,
-    type_table: &'b TypeTable,
     local: u32,
     field_names: &'a [String],
 }
 
 impl<'a> ParamScope<'_, 'a> {
-    /// The fields read on every path through the body that goes on: those
-    /// its statements read before the first one that branches, jumps or
-    /// loops.
-    fn read_on_entry(&self) -> IndexSet<&'a str> {
-        let body = self.body;
-        let mut out = IndexSet::default();
-        for &s in &body.blocks[body.root()].stmts {
-            let (evaluated, ends_prefix) = match &body.stmts[s].kind {
-                StmtKind::Let { value, .. }
-                | StmtKind::Expr(value)
-                | StmtKind::LetDestructure { value, .. } => (Some(*value), false),
-                StmtKind::Return { value } => (*value, true),
-                StmtKind::If { condition, .. } => (Some(*condition), !self.only_one_way_on(s)),
-                StmtKind::Loop { .. }
-                | StmtKind::Break { .. }
-                | StmtKind::Continue
-                | StmtKind::LabeledBlock { .. } => break,
-            };
-            if let Some(op) = evaluated {
-                let mut walk = ReadWalk::new(self, Walk::Entry);
-                walk.operand(op);
-                let reads = walk.finish();
-                if reads.branches {
-                    break;
-                }
-                out.extend(reads.fields);
-            }
-            if ends_prefix {
-                break;
-            }
-        }
-        out
-    }
-
-    /// Whether the `if` at `s` leaves one way on: it has no `else`, and its
-    /// branch ends unseen ([`Body::ends_unseen`]).
-    fn only_one_way_on(&self, s: StmtId) -> bool {
-        let StmtKind::If {
-            then_block,
-            else_block: None,
-            ..
-        } = self.body.stmts[s].kind
-        else {
-            return false;
-        };
-        self.body.ends_unseen(then_block, self.type_table)
-    }
-
     /// Every read of the parameter anywhere in the body.
     fn read_anywhere(&self) -> Reads<'a> {
-        let mut walk = ReadWalk::new(self, Walk::All);
+        let mut walk = ReadWalk::new(self);
         walk.node(NodeRef::Block(self.body.root()));
         walk.finish()
     }
@@ -245,14 +291,6 @@ impl<'a> ParamScope<'_, 'a> {
                     }
                     false
                 }
-                // Extracted as an `if` over the right side.
-                ValueKind::Binary {
-                    op: NirBinaryOp::And | NirBinaryOp::Or,
-                    ..
-                } => {
-                    reads.branches = true;
-                    true
-                }
                 ValueKind::FieldAccess { .. }
                 | ValueKind::Binary { .. }
                 | ValueKind::Unary { .. }
@@ -273,48 +311,31 @@ impl<'a> ParamScope<'_, 'a> {
     }
 }
 
-/// Which reads a [`ReadWalk`] collects.
-#[derive(Clone, Copy, PartialEq, Eq)]
-enum Walk {
-    /// Every read, on any path: what the split has to hand over.
-    All,
-    /// The reads on every path that goes on. A branch that never returns is
-    /// left out, as `read_on_entry` leaves it out at the top level, and
-    /// anything else that branches is reported.
-    Entry,
-}
-
 /// One walk over nodes and the value trees and extraction sources their
 /// promoted operands name, folding what it finds into one [`Reads`].
 struct ReadWalk<'s, 'b, 'a> {
     scope: &'s ParamScope<'b, 'a>,
-    walk: Walk,
     names: IndexSet<&'a str>,
     reads: Reads<'a>,
     whole_reads: Vec<ExprId>,
     field_subjects: IndexMap<ExprId, &'a str>,
+    /// The call arguments that hand the local on whole.
+    forwarded: IndexSet<ExprId>,
     values_seen: IndexSet<ValueId>,
     sources_seen: IndexSet<ExprId>,
 }
 
 impl<'s, 'b, 'a> ReadWalk<'s, 'b, 'a> {
-    fn new(scope: &'s ParamScope<'b, 'a>, walk: Walk) -> Self {
+    fn new(scope: &'s ParamScope<'b, 'a>) -> Self {
         Self {
             scope,
-            walk,
             names: scope.field_names.iter().map(String::as_str).collect(),
             reads: Reads::default(),
             whole_reads: Vec::new(),
             field_subjects: IndexMap::default(),
+            forwarded: IndexSet::default(),
             values_seen: IndexSet::default(),
             sources_seen: IndexSet::default(),
-        }
-    }
-
-    fn operand(&mut self, op: Operand) {
-        match op {
-            Operand::Expr(e) => self.node(NodeRef::Expr(e)),
-            Operand::Value(v) => self.value(v),
         }
     }
 
@@ -330,55 +351,58 @@ impl<'s, 'b, 'a> ReadWalk<'s, 'b, 'a> {
     fn node(&mut self, root: NodeRef) {
         let body = self.scope.body;
         body.walk_nodes_under::<()>(root, |node| {
+            // A promoted read of the local is one value wherever it appears,
+            // so only this call's own argument slots skip it.
+            let mut forwarded_values = Vec::new();
+            if let NodeRef::Expr(e) = node {
+                if self.forwarded.contains(&e) {
+                    return ControlFlow::Continue(false);
+                }
+                forwarded_values = self.record_forwards(e);
+            }
             let mut values = Vec::new();
             body.for_each_operand(node, |op| values.extend(op.as_value()));
             for v in values {
-                self.value(v);
-            }
-            let descend = match node {
-                NodeRef::Stmt(s) => self.stmt(s),
-                NodeRef::Expr(e) => {
-                    self.expr(e);
-                    true
+                if let Some(i) = forwarded_values.iter().position(|&f| f == v) {
+                    forwarded_values.swap_remove(i);
+                } else {
+                    self.value(v);
                 }
-                NodeRef::Block(_) | NodeRef::Pat(_) => true,
-            };
-            ControlFlow::Continue(descend)
+            }
+            if let NodeRef::Expr(e) = node {
+                self.expr(e);
+            }
+            ControlFlow::Continue(true)
         });
     }
 
-    /// Whether the walk goes on into `s`. An entry walk takes only the
-    /// condition of an `if` that leaves one way on.
-    fn stmt(&mut self, s: StmtId) -> bool {
+    /// Record each argument of the call at `e` that hands the local on whole,
+    /// which the walk then leaves out of the reads, and answer the promoted
+    /// ones.
+    fn record_forwards(&mut self, e: ExprId) -> Vec<ValueId> {
         let body = self.scope.body;
-        if self.walk == Walk::All {
-            return true;
-        }
-        if self.scope.only_one_way_on(s) {
-            if let StmtKind::If {
-                condition: Operand::Expr(e),
-                ..
-            } = body.stmts[s].kind
-            {
-                self.node(NodeRef::Expr(e));
+        let mut values = Vec::new();
+        let ExprKind::Call { func_id, args, .. } = &body.exprs[e].kind else {
+            return values;
+        };
+        for (param_idx, arg) in args.iter().enumerate() {
+            if !arg.is_mut && body.argument_local(arg.expr) == Some(self.scope.local) {
+                match arg.expr {
+                    Operand::Expr(a) => {
+                        self.forwarded.insert(a);
+                    }
+                    Operand::Value(v) => values.push(v),
+                }
+                self.reads.forwards.insert((func_id.index(), param_idx));
             }
-            return false;
         }
-        self.reads.branches |= !matches!(
-            body.stmts[s].kind,
-            StmtKind::Let { .. }
-                | StmtKind::Expr(_)
-                | StmtKind::LetDestructure { .. }
-                | StmtKind::LabeledBlock { .. }
-        );
-        true
+        values
     }
 
     fn expr(&mut self, e: ExprId) {
-        let body = self.scope.body;
         // Every other kind reads the parameter, if at all, through a `Local`
         // in its subtree, which this walk reaches on its own.
-        match &body.exprs[e].kind {
+        match &self.scope.body.exprs[e].kind {
             ExprKind::Local { index, .. } if *index == self.scope.local => self.whole_reads.push(e),
             ExprKind::FieldAccess {
                 expr: inner,
@@ -391,13 +415,6 @@ impl<'s, 'b, 'a> ReadWalk<'s, 'b, 'a> {
                     self.field_subjects.insert(inner, name);
                 }
             }
-            ExprKind::If { .. }
-            | ExprKind::Match { .. }
-            | ExprKind::Switch { .. }
-            | ExprKind::Binary {
-                op: NirBinaryOp::And | NirBinaryOp::Or,
-                ..
-            } => self.reads.branches |= self.walk == Walk::Entry,
             _ => {}
         }
     }
@@ -420,11 +437,9 @@ impl<'s, 'b, 'a> ReadWalk<'s, 'b, 'a> {
 struct Reads<'a> {
     /// The fields it reads off the local.
     fields: IndexSet<&'a str>,
+    /// The parameters it hands the local to whole.
+    forwards: IndexSet<ParamKey>,
     /// It reads the local whole: an aggregate rebuilt from split locals is not
     /// the one the caller passed.
     whole: bool,
-    /// Some evaluation takes a path another skips: a branch, a jump, a loop, or
-    /// the right side of a short-circuit `&&` / `||`. A block an inlined call
-    /// left holds none of these.
-    branches: bool,
 }

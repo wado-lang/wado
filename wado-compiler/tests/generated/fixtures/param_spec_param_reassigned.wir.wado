@@ -34,7 +34,13 @@ type "functype//wasi/waitable-set-wait" = fn(i32, i32) -> i32;  // TypeId(10)
 
 type "functype//wasi/wasi:cli/Stdout::write_via_stream" = fn(i32) -> i32;  // TypeId(11)
 
+<<<<<<< HEAD
 type "functype//param_spec_param_reassigned.wado/describe" = fn(ref "param_spec_param_reassigned.wado//Config", i32) -> i32;  // TypeId(12)
+||||||| aa8fbf23e
+type "functype//param_spec_param_reassigned.wado/describe" = fn(ref "param_spec_param_reassigned.wado//Config", i32) -> i32;  // TypeId(11)
+=======
+type "functype//param_spec_param_reassigned.wado/describe" = fn(bool, i32, i32) -> i32;  // TypeId(11)
+>>>>>>> origin/main
 
 type "functype//param_spec_param_reassigned.wado/reassigned" = fn(ref "param_spec_param_reassigned.wado//Config", i32) -> i32;  // TypeId(13)
 
@@ -83,25 +89,25 @@ import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 
 global global:param_spec_param_reassigned.wado::$const_obj_3: ref Array<u8> = array.new_fixed<u8>(32);
 
-fn "param_spec_param_reassigned.wado/describe"(cfg, n) {
-    if cfg.verbose {
-        return n * cfg.level;
+fn "param_spec_param_reassigned.wado/describe"($mv$cfg$verbose, $mv$cfg$level, n) {
+    if $mv$cfg$verbose {
+        return n * $mv$cfg$level;
     }
     return n;
 }
 
 fn "param_spec_param_reassigned.wado/reassigned"(cfg, n) {
     let before: i32;
-    before = "param_spec_param_reassigned.wado/describe"(cfg, n);
+    before = "param_spec_param_reassigned.wado/describe"(cfg.verbose, cfg.level, n);
     cfg = struct.new "param_spec_param_reassigned.wado//Config" { verbose: 1, level: 9 };
-    return (before * 1000) + "param_spec_param_reassigned.wado/describe"(cfg, n);
+    return (before * 1000) + "param_spec_param_reassigned.wado/describe"(1, 9, n);
 }
 
 fn "param_spec_param_reassigned.wado/rebound"(p, n) {
     let before: i32;
-    before = "param_spec_param_reassigned.wado/describe"(p, n);
+    before = "param_spec_param_reassigned.wado/describe"(p.verbose, p.level, n);
     p = struct.new "param_spec_param_reassigned.wado//Config" { verbose: 1, level: 9 };
-    return (before * 1000) + "param_spec_param_reassigned.wado/describe"(p, n);
+    return (before * 1000) + "param_spec_param_reassigned.wado/describe"(1, 9, n);
 }
 
 fn "param_spec_param_reassigned.wado/run"() with Stdout {
