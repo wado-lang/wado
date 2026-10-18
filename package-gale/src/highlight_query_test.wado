@@ -88,6 +88,14 @@ test "reject nesting deeper than one rule context" {
     assert msg.contains("deeper than one");
 }
 
+test "an error's column counts chars past a multi-byte literal" {
+    let Err(e) = parse_highlight_query(&"\"日本\" @x %") else {
+        panic("expected a parse error");
+    };
+    assert e.message == "unexpected character '%'";
+    assert e.line == 1 && e.col == 9;
+}
+
 test "reject a pattern with no capture" {
     let msg = parse_err("(STRING)");
     assert msg.contains("@capture");

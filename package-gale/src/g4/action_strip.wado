@@ -12,16 +12,15 @@
 use {
     scan_string,
     scan_char_class,
-    scan_line_comment,
-    scan_block_comment,
+    comment_end,
     scan_balanced,
-    is_id_start_char,
-    is_id_continue_char,
+    copy_char,
+    name_end,
     is_rule_name_upper,
     skip_ws,
     word_at,
 } from "./scan.wado";
-use { push_range } from "../text.wado";
+use { char_at } from "../runtime/lex.wado";
 
 /// ANTLR's `currentRuleType`: which recognizer the rule being scanned belongs
 /// to, `Unknown` between rules.
@@ -43,9 +42,9 @@ global GRAMMAR_KEYWORDS: List<String> = [
 ];
 
 pub fn strip_action_bodies<S: AsStrSlice>(grammar: S) -> String {
-    let chars: List<char> = grammar.chars().collect();
-    let n = chars.len();
-    let mut out = String::with_capacity(grammar.len());
+    let src = grammar.as_str_slice();
+    let n = src.len();
+    let mut out = String::with_capacity(n);
     let mut rule_type = RuleType::Unknown;
     // Set only by the identifier branch, and cleared by every other token:
     // ANTLR's `OPTIONS : 'options' WSNLCHARS* '{'` admits whitespace before
@@ -54,24 +53,24 @@ pub fn strip_action_bodies<S: AsStrSlice>(grammar: S) -> String {
     let mut prequel_open = false;
     let mut i = 0;
     while i < n {
-        let c = chars[i];
-        if c == ';' {
+        let b = src.byte_at(i);
+        if b == b';' {
             rule_type = RuleType::Unknown;
             prequel_open = false;
-            out.push(c);
+            out.push_str(";");
             i += 1;
             continue;
         }
-        if c == '\'' {
+        if b == b'\'' {
             // `.g4` lexer doesn't recognise `"..."` outside actions, so
             // only single-quote strings need top-level skip protection.
-            let end = scan_string(&chars, i);
-            push_range(&mut out, &chars, i, end);
+            let end = scan_string(&src, i);
+            out.push_str(src.slice(i, end));
             prequel_open = false;
             i = end;
             continue;
         }
-        if c == '[' {
+        if b == b'[' {
             // Both regions are copied verbatim; only where they end differs.
             // A lexer rule's char set does not nest — a literal `[` inside is
             // content, so depth tracking would run past the real `]` for sets
@@ -79,69 +78,53 @@ pub fn strip_action_bodies<S: AsStrSlice>(grammar: S) -> String {
             // Anywhere else the brackets are an argument list, which nests, so
             // a `[]` host type does not end it.
             let scanned = if rule_type matches { RuleType::Lexer } {
-                scan_char_class(&chars, i);
+                scan_char_class(&src, i);
             } else {
-                scan_balanced(&chars, i, '[', ']');
+                scan_balanced(&src, i, b'[', b']');
             };
-            let end = region_end(scanned, n);
-            push_range(&mut out, &chars, i, end);
+            // Left unterminated, a region runs to end-of-input, as ANTLR4's
+            // lexer treats it.
+            let end = scanned.unwrap_or(n);
+            out.push_str(src.slice(i, end));
             prequel_open = false;
             i = end;
             continue;
         }
-        if c == '/' && i + 1 < n && chars[i + 1] == '/' {
-            let end = scan_line_comment(&chars, i);
-            push_range(&mut out, &chars, i, end);
+        if let Some(end) = comment_end(&src, i, n) {
+            out.push_str(src.slice(i, end));
             prequel_open = false;
             i = end;
             continue;
         }
-        if c == '/' && i + 1 < n && chars[i + 1] == '*' {
-            let end = scan_block_comment(&chars, i);
-            push_range(&mut out, &chars, i, end);
-            prequel_open = false;
-            i = end;
-            continue;
-        }
-        if c == '@' {
+        if b == b'@' {
             // Named actions: `@id { … }` or `@scope::id { … }`. Strip
             // the prefix and its body together. If no `{` follows,
             // fall through and copy the `@` verbatim.
-            let mut j = i + 1;
-            if j < n && is_id_start_char(chars[j]) {
-                j += 1;
-                while j < n && is_id_continue_char(chars[j]) {
-                    j += 1;
+            let mut j = name_end(&src, i + 1, n);
+            if j > i + 1 {
+                if j + 1 < n && src.byte_at(j) == b':' && src.byte_at(j + 1) == b':' {
+                    j = name_end(&src, j + 2, n);
                 }
-                if j + 1 < n && chars[j] == ':' && chars[j + 1] == ':' {
-                    j += 2;
-                    if j < n && is_id_start_char(chars[j]) {
-                        j += 1;
-                        while j < n && is_id_continue_char(chars[j]) {
-                            j += 1;
-                        }
-                    }
-                }
-                j = skip_ws(&chars, j, n);
-                if j < n && chars[j] == '{' {
-                    if let Some(end) = scan_balanced(&chars, j, '{', '}') {
+                j = skip_ws(&src, j, n);
+                if j < n && src.byte_at(j) == b'{' {
+                    if let Some(end) = scan_balanced(&src, j, b'{', b'}') {
                         i = end;
                         continue;
                     }
                 }
             }
-            out.push(c);
+            out.push_str("@");
             prequel_open = false;
             i += 1;
             continue;
         }
-        if c == 'c' && word_at(&chars, i, n, "catch") {
-            let j = skip_ws(&chars, i + 5, n);
-            if j < n && chars[j] == '[' {
-                if let Some(bracket_end) = scan_balanced(&chars, j, '[', ']') {
-                    let k = skip_ws(&chars, bracket_end, n);
-                    if k < n && chars[k] == '{' {
-                        if let Some(end) = scan_balanced(&chars, k, '{', '}') {
+        if b == b'c' && word_at(&src, i, n, "catch") {
+            let j = skip_ws(&src, i + 5, n);
+            if j < n && src.byte_at(j) == b'[' {
+                if let Some(bracket_end) = scan_balanced(&src, j, b'[', b']') {
+                    let k = skip_ws(&src, bracket_end, n);
+                    if k < n && src.byte_at(k) == b'{' {
+                        if let Some(end) = scan_balanced(&src, k, b'{', b'}') {
                             i = end;
                             continue;
                         }
@@ -149,23 +132,23 @@ pub fn strip_action_bodies<S: AsStrSlice>(grammar: S) -> String {
                 }
             }
         }
-        if c == 'f' && word_at(&chars, i, n, "finally") {
-            let j = skip_ws(&chars, i + 7, n);
-            if j < n && chars[j] == '{' {
-                if let Some(end) = scan_balanced(&chars, j, '{', '}') {
+        if b == b'f' && word_at(&src, i, n, "finally") {
+            let j = skip_ws(&src, i + 7, n);
+            if j < n && src.byte_at(j) == b'{' {
+                if let Some(end) = scan_balanced(&src, j, b'{', b'}') {
                     i = end;
                     continue;
                 }
             }
         }
-        if c == '{' {
-            let scanned = scan_balanced(&chars, i, '{', '}');
+        if b == b'{' {
+            let scanned = scan_balanced(&src, i, b'{', b'}');
             // `tokens { … }`, `options { … }`, `channels { … }` are grammar
             // prequels, not action bodies — keep them whole, so the names
             // inside them never read as a rule name.
             if prequel_open {
-                let end = region_end(scanned, n);
-                push_range(&mut out, &chars, i, end);
+                let end = scanned.unwrap_or(n);
+                out.push_str(src.slice(i, end));
                 prequel_open = false;
                 i = end;
                 continue;
@@ -174,47 +157,34 @@ pub fn strip_action_bodies<S: AsStrSlice>(grammar: S) -> String {
                 Some(end) => {
                     let mut k = end;
                     // `{…}?` is a semantic predicate — strip the `?` too.
-                    if k < n && chars[k] == '?' {
+                    if k < n && src.byte_at(k) == b'?' {
                         k += 1;
                     }
                     i = k;
                     continue;
                 },
                 None => {
-                    out.push(c);
+                    out.push_str("{");
                     i += 1;
                     continue;
                 },
             }
         }
-        if is_id_start_char(c) {
-            let mut j = i + 1;
-            while j < n && is_id_continue_char(chars[j]) {
-                j += 1;
+        let j = name_end(&src, i, n);
+        if j > i {
+            let word = src.slice(i, j);
+            prequel_open = PREQUEL_KEYWORDS.contains_str(word);
+            if rule_type matches { RuleType::Unknown } && !GRAMMAR_KEYWORDS.contains_str(word) {
+                rule_type = if is_rule_name_upper(char_at(&src, i)) { RuleType::Lexer } else { RuleType::Parser };
             }
-            let mut word = String::with_capacity(j - i);
-            push_range(&mut word, &chars, i, j);
-            prequel_open = PREQUEL_KEYWORDS.contains(&word);
-            if rule_type matches { RuleType::Unknown } && !GRAMMAR_KEYWORDS.contains(&word) {
-                rule_type = if is_rule_name_upper(c) { RuleType::Lexer } else { RuleType::Parser };
-            }
-            push_range(&mut out, &chars, i, j);
+            out.push_str(word);
             i = j;
             continue;
         }
-        if !c.is_ascii_whitespace() {
+        if !b.is_ascii_whitespace() {
             prequel_open = false;
         }
-        out.push(c);
-        i += 1;
+        i = copy_char(&mut out, &src, i);
     }
     return out;
-}
-
-/// A region left unterminated runs to end-of-input, as ANTLR4's lexer treats it.
-fn region_end(scanned: Option<i32>, n: i32) -> i32 {
-    return match scanned {
-        Some(e) => e,
-        None => n,
-    };
 }

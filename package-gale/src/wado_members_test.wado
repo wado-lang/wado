@@ -15,6 +15,12 @@ test "translate_wado_members parses a defaulted field" {
     assert m.methods.is_empty();
 }
 
+test "translate_wado_members keeps a name with multi-byte chars whole" {
+    let m = translate_wado_members("é: i32 = 0; fn éa(&self) {}").unwrap();
+    assert m.fields[0].name == "é";
+    assert m.methods[0].name == "éa";
+}
+
 test "translate_wado_members parses several fields and a method" {
     let src = "depth: i32 = 0; tag: String = \"\";\nfn deeper(&mut self) { self.depth += 1; }";
     let m = translate_wado_members(&src).unwrap();

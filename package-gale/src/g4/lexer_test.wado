@@ -1,12 +1,8 @@
 use { G4Token, Token } from "./token.wado";
-use { tokenize_chars } from "./lexer.wado";
+use { tokenize as tokenize_src } from "./lexer.wado";
 
-/// Test convenience wrapper: collect a `String` into a char buffer and
-/// tokenize it. Production callers use `tokenize_chars` directly to
-/// share the buffer with the parser.
 fn tokenize<S: AsStrSlice>(input: S) -> List<Token> {
-    let chars: List<char> = input.chars().collect();
-    return tokenize_chars(&chars);
+    return tokenize_src(&input.as_str_slice());
 }
 
 fn assert_token<S: AsStrSlice>(tok: &Token, expected_kind: G4Token, expected_text: S) {
@@ -192,6 +188,18 @@ test "span positions are correct" {
     assert tokens[0].span.end == 2;
     assert tokens[1].span.start == 3;
     assert tokens[1].span.end == 5;
+}
+
+test "spans are byte offsets past multi-byte chars" {
+    let tokens = tokenize("'é' 日本 § x");
+    assert_token(&tokens[0], G4Token::StringLit, "é");
+    assert tokens[0].span.start == 0 && tokens[0].span.end == 4;
+    assert_token(&tokens[1], G4Token::Identifier, "日本");
+    assert tokens[1].span.start == 5 && tokens[1].span.end == 11;
+    assert_token(&tokens[2], G4Token::UnexpectedChar, "§");
+    assert tokens[2].span.start == 12 && tokens[2].span.end == 14;
+    assert_token(&tokens[3], G4Token::Identifier, "x");
+    assert tokens[3].span.start == 15;
 }
 
 test "antlr format comments are skipped" {
