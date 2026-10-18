@@ -1241,6 +1241,35 @@ test {
 }
 ```
 
+A type parameter written `affine T` admits an affine type argument, and its
+body is checked with `T` affine: a value of `T` moves at most once. An
+associated type written `affine type Item;` is affine the same way.
+
+<!-- {"fixture":"affine_param_moves_once.wado"} -->
+
+```wado
+fn wrap<affine T>(x: T) -> Option<T> {
+    return Option::Some(x);
+}
+```
+
+An affine type implements only an `affine trait`, whose default bodies are
+checked with `Self` affine. A trait without the mark may copy `Self` in a
+default body, so implementing it for an affine type is an error at the impl
+(`AFFINE_DECLARATION`).
+
+<!-- {"fixture":"affine_impl_of_affine_trait.wado"} -->
+
+```wado
+affine trait Named {
+    fn name(&self) -> String;
+
+    fn shout(&self) -> String {
+        return `${self.name()}!`;
+    }
+}
+```
+
 Rationale: [WEP: Affine Types](./wep-2026-10-17-affine-types.md).
 
 ## Generic Type Inference

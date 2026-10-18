@@ -452,8 +452,11 @@ fn resolve_imports(
                 .map(str::to_string)
         })
         .collect();
-    let reaches_intrinsic =
-        |prefix: &str| reached_intrinsics.iter().any(|name| name.starts_with(prefix));
+    let reaches_intrinsic = |prefix: &str| {
+        reached_intrinsics
+            .iter()
+            .any(|name| name.starts_with(prefix))
+    };
 
     // A sink-less world (`--lib`, kiln) leaves the ambient builtin unimported,
     // and `calls.rs` lowers it to `unreachable` off the `func_map` this fills.

@@ -1390,9 +1390,12 @@ impl Parser {
         let is_affine = self.check(&TokenKind::Affine);
         if is_affine {
             let span = self.advance().span;
-            if !matches!(self.peek_kind(), TokenKind::Struct | TokenKind::Variant) {
+            if !matches!(
+                self.peek_kind(),
+                TokenKind::Struct | TokenKind::Variant | TokenKind::Trait
+            ) {
                 return Err(ParseError {
-                    message: "`affine` declares a `struct` or a `variant`".to_string(),
+                    message: "`affine` declares a `struct`, a `variant` or a `trait`".to_string(),
                     span,
                 });
             }
@@ -1449,7 +1452,9 @@ impl Parser {
                 .map(Item::Flags),
             TokenKind::Type => self.parse_type_decl(visibility, has_export, attrs),
             TokenKind::Impl => self.parse_impl_block(attrs).map(Item::Impl),
-            TokenKind::Trait => self.parse_trait_decl(visibility, attrs).map(Item::Trait),
+            TokenKind::Trait => self
+                .parse_trait_decl(visibility, is_affine, attrs)
+                .map(Item::Trait),
             TokenKind::Resource => self
                 .parse_resource_decl(visibility, attrs)
                 .map(Item::Resource),
@@ -5761,6 +5766,11 @@ impl Parser {
             let attrs = self.parse_attributes()?;
             let start_span = self.peek().span;
 
+            let is_affine = self.check(&TokenKind::Affine);
+            if is_affine {
+                self.advance();
+            }
+
             // Parse effect parameter: `effect E`
             let is_effect = if self.check(&TokenKind::Effect) {
                 self.advance();
@@ -5768,6 +5778,13 @@ impl Parser {
             } else {
                 false
             };
+
+            if is_affine && is_effect {
+                return Err(self.error_at_span(
+                    start_span,
+                    "`affine` admits an affine type argument, so it marks no effect parameter",
+                ));
+            }
 
             // Parse type pack parameter: `..T`
             let is_pack = if self.check_dot_dot_or_ellipsis() {
@@ -5819,6 +5836,7 @@ impl Parser {
                 name,
                 name_span,
                 is_effect,
+                is_affine,
                 is_pack,
                 bounds,
                 default,
@@ -6536,6 +6554,7 @@ impl Parser {
                         name: param_name.clone(),
                         name_span: param_name_span,
                         is_effect: false,
+                        is_affine: false,
                         is_pack: false,
                         bounds,
                         default: None,
@@ -6573,6 +6592,7 @@ impl Parser {
     fn parse_trait_decl(
         &mut self,
         visibility: Visibility,
+        is_affine: bool,
         attrs: Vec<Attribute>,
     ) -> ParseResult<TraitDecl> {
         let id = self.alloc_ast_id();
@@ -6610,10 +6630,21 @@ impl Parser {
         while !self.check(&TokenKind::RBrace) && !self.is_at_end() {
             let attrs = self.parse_attributes()?;
 
-            // Check if this is an associated type declaration: `type Name;` or `type Name: Bound1 + Bound2;`
-            if self.check(&TokenKind::Type) {
+            // An associated type declaration: `type Name;`, `affine type Name;`
+            // or `type Name: Bound1 + Bound2;`
+            let assoc_is_affine = self.check(&TokenKind::Affine);
+            if assoc_is_affine && !matches!(self.peek_nth(1).kind, TokenKind::Type) {
+                return Err(self.error_at_span(
+                    self.peek().span,
+                    "`affine` in a trait marks an associated type: `affine type Name;`",
+                ));
+            }
+            if self.check(&TokenKind::Type) || assoc_is_affine {
                 let type_span = self.peek().span;
                 let assoc_id = self.alloc_ast_id();
+                if assoc_is_affine {
+                    self.advance();
+                }
                 self.advance();
                 let assoc_name = self.consume_ident()?;
                 let type_params = self.parse_generic_params()?;
@@ -6627,6 +6658,7 @@ impl Parser {
                 associated_types.push(AssociatedTypeDecl {
                     id: assoc_id,
                     name: assoc_name,
+                    is_affine: assoc_is_affine,
                     type_params,
                     bounds,
                     span: type_span.merge(&end),
@@ -6675,6 +6707,7 @@ impl Parser {
             name,
             name_span,
             visibility,
+            is_affine,
             head,
             type_params,
             supertraits,
@@ -6736,6 +6769,7 @@ impl Parser {
             name: EFFECT_HOLE.to_string(),
             name_span: span,
             is_effect: true,
+            is_affine: false,
             is_pack: false,
             bounds: Vec::new(),
             default: None,

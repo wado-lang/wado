@@ -743,7 +743,9 @@ pub fn wit_holds_affine(resolve: &Resolve, ty: WitType) -> bool {
         | TypeDefKind::FixedLengthList(t, _)
         | TypeDefKind::Type(t) => holds(t),
         TypeDefKind::Map(k, v) => holds(k) || holds(v),
-        TypeDefKind::Result(r) => r.ok.as_ref().is_some_and(holds) || r.err.as_ref().is_some_and(holds),
+        TypeDefKind::Result(r) => {
+            r.ok.as_ref().is_some_and(holds) || r.err.as_ref().is_some_and(holds)
+        }
     }
 }
 

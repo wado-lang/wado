@@ -1,0 +1,18 @@
+// A value of an `affine type` projection moves at most once, in any body that
+// names it.
+affine trait Source with () {
+    affine type Item;
+
+    fn next(&mut self) -> Self::Item;
+}
+
+fn both<S: Source>(s: &mut S) -> [S::Item, S::Item] {
+    let item = s.next();
+    return [item, item];
+}
+
+export fn run() {
+}
+
+__DATA__
+{"compile_error": ":11:19: analysis error: affine value `item` used after it was moved (moved at 11:13)"}

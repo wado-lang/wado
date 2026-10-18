@@ -1,0 +1,18 @@
+// The prelude traits whose default bodies copy no `Self` are `affine trait`s,
+// so an affine type implements them.
+use { Fields } from "wasi:http";
+
+affine struct Holder {
+    f: Fields,
+}
+
+impl Display for Holder {
+    fn fmt(&self, f: &mut Formatter) {
+        f.write_str("holder");
+    }
+}
+
+test {
+    let h = Holder { f: Fields::new() };
+    assert `${h}` == "holder";
+}

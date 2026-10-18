@@ -1,0 +1,25 @@
+// A by-value pattern consumes its scrutinee as the arm is entered, so the
+// scrutinee is gone after the `match`.
+use { Fields } from "wasi:http";
+
+affine variant Slot {
+    Empty,
+    Held(Fields),
+}
+
+fn eat(f: Fields) {
+}
+
+fn take(s: Slot) {
+    match s {
+        Held(f) => eat(f),
+        Empty => {},
+    }
+    let _ = s;
+}
+
+export fn run() {
+}
+
+__DATA__
+{"compile_error": ":18:13: analysis error: affine value `s` used after it was moved (moved at 14:11)"}

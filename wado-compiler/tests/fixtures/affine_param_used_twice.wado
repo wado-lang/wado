@@ -1,0 +1,12 @@
+// An `affine` type parameter is checked at its definition: the body may read
+// it once, as it may a resource.
+
+fn dup<affine T>(x: T) -> [T, T] {
+    return [x, x];
+}
+
+export fn run() {
+}
+
+__DATA__
+{"compile_error": ":5:16: analysis error: affine value `x` used after it was moved (moved at 5:13)"}

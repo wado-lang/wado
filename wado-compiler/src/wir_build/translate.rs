@@ -3108,13 +3108,12 @@ impl FunctionTranslator<'_, '_> {
                         .iter()
                         .map(|a| self.core_wir_type(self.operand_type_id(*a)))
                         .collect();
-                    let mut results = if expr.type_id == TypeTable::UNIT
-                        || expr.type_id == TypeTable::NEVER
-                    {
-                        vec![]
-                    } else {
-                        vec![self.core_wir_type(expr.type_id)]
-                    };
+                    let mut results =
+                        if expr.type_id == TypeTable::UNIT || expr.type_id == TypeTable::NEVER {
+                            vec![]
+                        } else {
+                            vec![self.core_wir_type(expr.type_id)]
+                        };
                     if discards_result {
                         assert!(results.is_empty(), "a UNIT call declares no result");
                         results.push(WirType::I32);

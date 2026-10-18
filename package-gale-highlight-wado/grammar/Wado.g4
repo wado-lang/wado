@@ -209,7 +209,7 @@ variantCase
     ;
 
 traitDecl
-    : 'trait' typeName genericParams? (':' traitBounds)? withClause? '{' traitMember* '}'
+    : 'affine'? 'trait' typeName genericParams? (':' traitBounds)? withClause? '{' traitMember* '}'
     ;
 
 interfaceDecl
@@ -238,7 +238,7 @@ traitMember
     ;
 
 traitMemberBody
-    : 'type' name genericParams? (':' traitBounds)? ';'
+    : 'affine'? 'type' name genericParams? (':' traitBounds)? ';'
     | functionDecl
     ;
 
@@ -269,7 +269,7 @@ genericParams
     ;
 
 genericParam
-    : '..'? 'effect'? name (':' traitBounds)? ('=' typeRef)?
+    : 'affine'? '..'? 'effect'? name (':' traitBounds)? ('=' typeRef)?
     ;
 
 traitBounds

@@ -1,0 +1,12 @@
+// An `affine` type parameter admits an affine argument, and a body that moves
+// it once is accepted.
+use { Fields } from "wasi:http";
+
+fn wrap<affine T>(x: T) -> Option<T> {
+    return Option::Some(x);
+}
+
+test {
+    let f = wrap(Fields::new()).unwrap();
+    assert f.copy_all().is_empty();
+}

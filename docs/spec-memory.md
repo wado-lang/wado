@@ -241,7 +241,7 @@ ref_eq(&f, &g);                 // false or true: two places holding one closure
 
 ### Method Receiver: `self` by Value
 
-A method receiver is `&self` or `&mut self`. Bare `self` (by value) is allowed only on a resource, on an aggregate that holds one, or on a generic type, since its type arguments may be resources (`Option<T>::unwrap(self)`):
+A method receiver is `&self` or `&mut self`. Bare `self` (by value) is allowed only on a resource, on an aggregate that holds one, or on a generic type, since its type arguments may be resources (`Option<T>::unwrap(self)`). A trait's method counts as generic, since its `Self` is a type parameter (`Iterator::map(self, f)`), and every impl of it takes the receiver the trait declares:
 
 <!-- {"fixture":"spec_memory_values.wado"} -->
 

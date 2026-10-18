@@ -15,10 +15,11 @@ use crate::tir::{
 };
 
 use crate::synthesis::common::{
-    affine_handle, alloc_local, assign, binary, block, bool_lit, break_stmt, builtin_call, case_chain, cast,
-    cm_raw_call, expr_stmt, generic_method_call, handle_from_f64, handle_to_f64, i32_const,
-    if_stmt, internal_call, is_affine_resource, let_mut_stmt, let_stmt, local_ref, loop_stmt, mut_ref_expr,
-    option_none, option_some, return_stmt, split_packed_ptr_len, synth_span,
+    affine_handle, alloc_local, assign, binary, block, bool_lit, break_stmt, builtin_call,
+    case_chain, cast, cm_raw_call, expr_stmt, generic_method_call, handle_from_f64, handle_to_f64,
+    i32_const, if_stmt, internal_call, is_affine_resource, let_mut_stmt, let_stmt, local_ref,
+    loop_stmt, mut_ref_expr, option_none, option_some, return_stmt, split_packed_ptr_len,
+    synth_span,
 };
 
 use super::lift::{lift_variant_from_disc, materialize_if_needed, synthesize_lift};
@@ -265,7 +266,11 @@ fn lift_subtask(
         let tt = type_table.borrow();
         (
             option_none(option_type, tt.compiler_items()),
-            option_some(cast(handle(), subtask_type), option_type, tt.compiler_items()),
+            option_some(
+                cast(handle(), subtask_type),
+                option_type,
+                tt.compiler_items(),
+            ),
         )
     };
     let result = || local_ref(result_local, "$subtask", option_type);

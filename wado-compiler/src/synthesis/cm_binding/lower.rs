@@ -15,16 +15,17 @@ use crate::tir::{
 };
 
 use crate::synthesis::common::{
-    affine_handle, alloc_local, assign, binary, block, break_stmt, builtin_call, cast, deref_expr, expr_stmt,
-    generic_method_call, generic_method_call_monomorphized, handle_to_f64, i32_const, i64_const,
-    if_stmt, internal_call, let_mut_stmt, let_stmt, local_ref, loop_stmt, split_packed_ptr_len,
-    synth_span,
+    affine_handle, alloc_local, assign, binary, block, break_stmt, builtin_call, cast, deref_expr,
+    expr_stmt, generic_method_call, generic_method_call_monomorphized, handle_to_f64, i32_const,
+    i64_const, if_stmt, internal_call, let_mut_stmt, let_stmt, local_ref, loop_stmt,
+    split_packed_ptr_len, synth_span,
 };
 
 use super::types::{
-    LowerContext, OPTION_OR_RESULT_CASES, binary_add, cm_discriminant_byte_size, cm_layout_i32,
-    cm_held_type_to_type_id, cm_val_type_from_type_id, coerce_flat_lower, disc_store_op, field_access,
-    flatten_param_type, kebab_to_pascal, scalar_store_op, variant_tag, variant_test,
+    LowerContext, OPTION_OR_RESULT_CASES, binary_add, cm_discriminant_byte_size,
+    cm_held_type_to_type_id, cm_layout_i32, cm_val_type_from_type_id, coerce_flat_lower,
+    disc_store_op, field_access, flatten_param_type, kebab_to_pascal, scalar_store_op, variant_tag,
+    variant_test,
 };
 use crate::compiler_item::CompilerItem;
 use crate::name::{FqTypeName, UNIT_TYPE_NAME};
@@ -409,7 +410,12 @@ pub(super) fn synthesize_lower_wasi_variant_to_memory(
             let payload = case.payload.map(|ty| {
                 let tid = {
                     let mut tt = ctx.type_table.borrow_mut();
-                    cm_held_type_to_type_id(&ty, &mut tt, ctx.cm_interface_registry, ctx.wasi_package)
+                    cm_held_type_to_type_id(
+                        &ty,
+                        &mut tt,
+                        ctx.cm_interface_registry,
+                        ctx.wasi_package,
+                    )
                 };
                 (ty, tid)
             });

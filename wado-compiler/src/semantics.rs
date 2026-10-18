@@ -579,14 +579,14 @@ impl Semantics {
         ))
     }
 
-    /// Whether `type_id` is, or holds at any depth, an affine resource, which
-    /// makes a binding of it move-only.
-    pub(crate) fn carries_resource(&self, type_id: TypeId) -> bool {
+    /// Whether a value of `type_id` is move-only in a body whose `affine` type
+    /// parameters are `affine_params`.
+    pub(crate) fn is_affine(&self, type_id: TypeId, affine_params: &[String]) -> bool {
         self.state
             .as_ref()
-            .expect("the resource move check runs on annotated semantics")
+            .expect("the move check runs on annotated semantics")
             .tysys
-            .carries_resource(type_id)
+            .is_affine(type_id, affine_params)
     }
 
     /// The index of the first field or case of the struct or variant declared
@@ -801,10 +801,14 @@ impl Semantics {
     /// inherent block.
     #[must_use]
     pub fn implemented(&self, b: &ImplBlock) -> Option<&Item> {
+        self.declaration_of(b.trait_type.as_ref()?)
+    }
+
+    /// The item declaring the head of `ty`: `Option` for `Option<T>`.
+    #[must_use]
+    pub fn declaration_of(&self, ty: &ast::Type) -> Option<&Item> {
         let resolutions = self.resolutions()?;
-        let id = resolutions
-            .defs()
-            .ast_id(resolutions.head_decl(b.trait_type.as_ref()?)?);
+        let id = resolutions.defs().ast_id(resolutions.head_decl(ty)?);
         let module = self.modules.get(self.module_of_id(id)?)?;
         module.items.iter().find(|item| item.id() == id)
     }

@@ -4527,6 +4527,8 @@ pub struct GenericParam {
     pub name_span: Span,
     /// Whether this is an effect parameter (`effect E`)
     pub is_effect: bool,
+    /// Whether this parameter admits an affine argument (`affine T`)
+    pub is_affine: bool,
     /// Whether this is a type pack parameter (`..T`)
     pub is_pack: bool,
     /// Trait bounds (e.g., `Ord`, `Builder<Output = T>`)
@@ -4819,6 +4821,8 @@ pub struct BuiltinTypeDecl {
 pub struct AssociatedTypeDecl {
     pub id: AstId,
     pub name: String,
+    /// `affine type Item;`: an impl may bind an affine type.
+    pub is_affine: bool,
     /// The associated type's own parameters (`E` in `type Buf<E>;`), which a
     /// projection supplies.
     pub type_params: Vec<GenericParam>,
@@ -4918,6 +4922,9 @@ pub struct TraitDecl {
     /// Span of the trait name identifier.
     pub name_span: Span,
     pub visibility: Visibility,
+    /// `affine trait`: an affine type may implement it, and its default
+    /// bodies are checked with `Self` affine.
+    pub is_affine: bool,
     /// The `with` clause on the head: what every impl of this trait may do.
     pub head: TraitHead,
     pub type_params: Vec<GenericParam>,

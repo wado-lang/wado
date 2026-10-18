@@ -540,9 +540,8 @@ impl<T> AsyncCall<T> {
 
     /// Wait for the subtask to complete and return the lifted result.
     /// Drops the CM subtask handle and frees the result buffer before
-    /// returning, which ends the call: any later `wait`, `cancel` or `join`
-    /// on it, or on a copy of it, traps.
-    pub fn wait(&self) -> T with (Subtask, WaitableSet) {
+    /// returning.
+    pub fn wait(self) -> T with (Subtask, WaitableSet) {
         self.end();
         if let Some(raw) = self.__cm_subtask {
             let ws = WaitableSet::new();
@@ -562,8 +561,8 @@ impl<T> AsyncCall<T> {
     }
 
     /// Cancel the in-flight subtask and free the result buffer. Any
-    /// partially-written result is discarded. It ends the call as `wait` does.
-    pub fn cancel(&self) with Subtask {
+    /// partially-written result is discarded.
+    pub fn cancel(self) with Subtask {
         self.end();
         if let Some(raw) = self.__cm_subtask {
             // `subtask.cancel` traps on a waitable still in a set. Joining set 0
@@ -582,7 +581,10 @@ impl<T> AsyncCall<T> {
     /// `wait`/`cancel` on this `AsyncCall<T>`.
     pub fn join(&self, set: &WaitableSet) -> Waitable with Subtask {
         self.ensure_live();
-        return self.__cm_subtask.unwrap().join(set);
+        let Some(raw) = &self.__cm_subtask else {
+            panic("AsyncCall::join on a call that completed synchronously");
+        };
+        return raw.join(set);
     }
 }
 

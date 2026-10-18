@@ -727,9 +727,9 @@ declares the destructor's effects is withdrawn: a drop's effects are benign.
 
 - [x] Fix the `*r = value` panic through `&mut R` with a fixture. A compiler
   panic is P0 and does not wait for the rest.
-- [ ] `affine` as a keyword on `struct` and `variant`. A named declaration
-  holding an affine value or implementing `Drop` without it is an error naming
-  the field or the impl, and one doing neither with it is an error too; a
+- [x] `affine` as a keyword on `struct` and `variant`. A named declaration
+  holding an affine value without it is an error naming the field, and one
+  holding none with it is an error too; a
   tuple, a newtype and an anonymous struct infer. `wado-from-idl` emits it, and
   the generated stdlib is regenerated. `resource_*` fixtures declare their
   holders.
@@ -767,7 +767,7 @@ declares the destructor's effects is withdrawn: a drop's effects are benign.
   a place. `opt.take()` on
   `list[i]` is the fixture.
 - [ ] `Drop`: a resource's `fn drop(self)` as its impl, a user impl on an
-  affine type, the fields left at the end of `drop` dropped one by one, a
+  affine type and an error naming the impl on any other, the fields left at the end of `drop` dropped one by one, a
   drop's effects benign, no partial move or `..base` over a type that
   implements it, a generic `T` dropped the way its type drops,
   `builtin::drop`, and a

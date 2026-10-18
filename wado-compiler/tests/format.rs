@@ -203,8 +203,21 @@ fn test_format_keeps_affine_declarations() {
         "    Empty,\n",
         "    Held(Fields),\n",
         "}\n",
+        "\n",
+        "affine trait Source {\n",
+        "    affine type Item;\n",
+        "\n",
+        "    fn next(&mut self) -> Self::Item;\n",
+        "}\n",
+        "\n",
+        "fn wrap<affine T>(x: T) -> Option<T> {\n",
+        "    return Option::Some(x);\n",
+        "}\n",
     );
-    assert_eq!(wado_compiler::format(source).expect("format failed"), source);
+    assert_eq!(
+        wado_compiler::format(source).expect("format failed"),
+        source
+    );
     assert_format_preserves_ast(source);
 }
 

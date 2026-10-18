@@ -1,4 +1,5 @@
-// `cancel` ends an `AsyncCall` as `wait` does, so a `join` after it traps.
+// `cancel` consumes an `AsyncCall` as `wait` does, so a `join` after it is a
+// use after move.
 
 use { MonotonicClock } from "wasi:clocks";
 
@@ -10,4 +11,4 @@ export fn run() with (MonotonicClock, WaitableSet) {
 }
 
 __DATA__
-{"stderr_contains": ["AsyncCall used after wait or cancel"], "trapped": true}
+{"compile_error": ":10:5: analysis error: affine value `call` used after it was moved (moved at 8:5)"}

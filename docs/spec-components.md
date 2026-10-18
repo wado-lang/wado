@@ -308,20 +308,28 @@ fn eat(c: Counter) { }
 
 fn misuse(c: Counter, d: Counter) {
     eat(c);          // moves `c`
-    c.bump();        // ERROR: resource `c` used after it was moved
+    c.bump();        // ERROR: affine value `c` used after it was moved
     d.consume();     // a by-value `self` moves `d` too
 }
 ```
 
 The check follows control flow. A move on one branch of an `if` or `match` counts after the branches meet, unless that branch diverges. A move inside a loop body is a use after move on the next iteration. A new `let` of the name, or an assignment to it, makes it usable again.
 
-A value that holds an affine resource, directly or through a field, element or payload, is move-only in the same way. It moves as a whole: a resource is not moved out of it on its own, so a consuming method (below) is how one is taken out.
+A value that holds an affine resource, directly or through a field, element or payload, is move-only in the same way. The check tracks each place, a binding or a field path under it: moving `h.f` out of an owned `h` leaves its other fields usable, and a later use of `h` or `h.f` is a use after move.
+
+Three positions never move an affine value:
+
+- A closure body sees its captures by reference.
+- A `match` guard sees the arm's bindings by reference.
+- A global is never read by value, since no check follows it across functions.
+
+A `match` or `if let` consumes its scrutinee when an arm is entered. A refutable pattern that fails consumes nothing, so the `else` of an `if let` or a `let ... else` may still use it.
 
 A method consumes a resource through a bare `self` receiver, and takes a reference to it through `&self` or `&mut self` (see [Method Receiver: `self` by Value](./spec-memory.md#method-receiver-self-by-value)). `Option` and `Result` take `self` by value in `unwrap`, `expect`, `unwrap_or`, `unwrap_err` and `expect_err`, so extracting a resource consumes the container and leaves the resource with one owner.
 
 #### No Move Out of a Reference
 
-Returning a resource reached through a `&` or `&mut` parameter, `&self` included, is a compile error. A reference leaves its referent with its owner, so the returned resource would have a second owner. The rule covers a field read, a dereference, a `match` binding over the referenced value, and a `let` bound from any of these. A resource the function produces itself may be returned.
+Reading an affine value by value through a `&` or `&mut`, `&self` included, is a compile error. A reference leaves its referent with its owner, so the value read would have a second owner. The rule covers a field read through a reference and a dereference, wherever the value goes: returned, passed, bound or stored. Reading it where it stands (`self.f.has(name)`) takes no ownership and is allowed.
 
 <!-- {"fixture":"spec_components_move_out_of_reference.wado"} -->
 
@@ -330,7 +338,7 @@ affine struct Holder { f: Fields }
 
 impl Holder {
     fn peek(&self) -> Fields {
-        return self.f;       // ERROR: cannot move resource `Fields` out of a reference
+        return self.f;       // ERROR: cannot move affine type `Fields` out of a reference
     }
 }
 ```

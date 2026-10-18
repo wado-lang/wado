@@ -2957,7 +2957,9 @@ impl<H: CompilerHost> TypeParamScope<'_, '_, H> {
         // method's lexical scope with earlier parameters already bound.
         assert_eq!(param_types.len(), func.params.len());
         for (param, &type_id) in func.params.iter().zip(param_types.iter()) {
-            if param.self_kind == ast::SelfKind::Value {
+            // A trait method's receiver is declared against `Self`, a generic
+            // type, so the trait's declaration decides it for every impl.
+            if param.self_kind == ast::SelfKind::Value && trait_name.is_none() {
                 self.check_self_by_value(type_id, param.span);
             }
             self.bind_fn_param(param, type_id, &func.type_params, &mut ctx);

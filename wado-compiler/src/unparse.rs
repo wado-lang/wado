@@ -1116,6 +1116,7 @@ impl<'a> Unparser<'a> {
         }
         self.delimited("<", ">", written_params(params), |s, param| {
             s.emit_inline_attrs(&param.attrs);
+            s.emit_kw_if(param.is_affine, "affine ");
             s.emit_kw_if(param.is_effect, "effect ");
             s.emit_kw_if(param.is_pack, "..");
             s.output.push_str(&param.name);
@@ -1305,6 +1306,7 @@ impl<'a> Unparser<'a> {
         self.emit_outer_attrs(t.id, &t.attrs);
         self.emit_visibility(t.visibility);
 
+        self.emit_kw_if(t.is_affine, "affine ");
         self.output.push_str("trait ");
         self.output.push_str(&t.name);
         self.unparse_generic_params(&t.type_params);
@@ -1336,6 +1338,7 @@ impl<'a> Unparser<'a> {
         let (id, span, attrs) = (member.id(), member.span(), member.attrs());
         match member {
             Member::Declared(assoc) => self.emit_member(id, span, attrs, |this| {
+                this.emit_kw_if(assoc.is_affine, "affine ");
                 this.output.push_str("type ");
                 this.output.push_str(&assoc.name);
                 this.unparse_generic_params(&assoc.type_params);
@@ -3788,7 +3791,11 @@ pub fn unparse_trait_header(t: &TraitDecl) -> String {
     let mut out = String::new();
     emit_decl_header(
         t.visibility.keyword(),
-        "trait ",
+        if t.is_affine {
+            "affine trait "
+        } else {
+            "trait "
+        },
         &t.name,
         &t.type_params,
         &mut out,
@@ -4018,6 +4025,7 @@ pub fn unparse_generic_params_into(params: &[GenericParam], output: &mut String)
         return;
     }
     delimited_into("<", ">", written_params(params), output, |param, o| {
+        emit_kw_if_into(param.is_affine, "affine ", o);
         emit_kw_if_into(param.is_effect, "effect ", o);
         emit_kw_if_into(param.is_pack, "..", o);
         o.push_str(&param.name);

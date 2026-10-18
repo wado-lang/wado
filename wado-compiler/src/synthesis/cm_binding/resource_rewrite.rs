@@ -19,17 +19,18 @@ use crate::name::{
 };
 use crate::package::Package;
 use crate::tir::{
-    CallArg, FrameLocals, FunctionKind, FunctionRef, InlineHint, MonomorphInfo, ResolvedType, TirBinaryOp,
-    TirBlock, TirExpr, TirExprKind, TirFunction, TirLocal, TirParam, TirStmt, TirStmtKind, TypeId,
-    TypeTable,
+    CallArg, FrameLocals, FunctionKind, FunctionRef, InlineHint, MonomorphInfo, ResolvedType,
+    TirBinaryOp, TirBlock, TirExpr, TirExprKind, TirFunction, TirLocal, TirParam, TirStmt,
+    TirStmtKind, TypeId, TypeTable,
 };
 use crate::tir_visitor::{TirMutVisitor, TirRefVisitor};
 
 use crate::canonical::{CanonicalIntrinsic, CmDecl, CmFuturePayload, CmStreamPayload};
 use crate::synthesis::common::{
     alloc_named_local, assign, binary, block, break_stmt, builtin_call, cast, cm_canonical_call,
-    entry_call, expr_stmt, handle_scalar, i32_const, i64_const, if_stmt, internal_call, let_mut_stmt, let_stmt,
-    local_ref, loop_stmt, option_none, option_some, return_stmt, synth_span,
+    entry_call, expr_stmt, handle_scalar, i32_const, i64_const, if_stmt, internal_call,
+    let_mut_stmt, let_stmt, local_ref, loop_stmt, option_none, option_some, return_stmt,
+    synth_span,
 };
 
 use super::synthesize_lift;
