@@ -146,6 +146,41 @@ ids, and the visited set is a stamp per state. An ATN-routed JSON string rule
 went from 402 KB/s to 3.6 MB/s. What is left is the closure walk itself, which a
 DFA cache would remove (see "What's next").
 
+### The simulator keeps its predictions for the program's life
+
+A prediction's closures took 95% of a Rust parse once the simulator decided
+every ambiguity. `AtnDfa` in `src/runtime/atn_predict.wado` now keeps them, as
+ANTLR4's DFA does. A state is the closure of the configurations a token moved
+into it, interned by those configurations, with one edge per token. A start
+state is keyed by the decision, the caller context, `min_prec` and the false
+predicates. The cache and its context arena are a global of the generated
+module, so they outlive one parse, and they reset together at
+`ATN_DFA_NODE_CAP` context nodes.
+
+A parse after the first is almost all cache hits. The first pays every closure,
+and that is the open cost:
+
+| 13 KB input | `main` | first parse, before | first parse | later parses |
+| ----------- | -----: | ------------------: | ----------: | -----------: |
+| CSS         | 1.7 ms |               87 ms |       20 ms |       2.8 ms |
+| SQLite      | 0.7 ms |              940 ms |      340 ms |       6.7 ms |
+| Rust        | 1.9 ms |               2.1 s |      0.77 s |       6.5 ms |
+| TypeScript  | 2.4 ms |               4.9 s |       6.1 s |       9.3 ms |
+
+`main` and "before" are the `gale-parse` benchmarks (`benchmark/<grammar>`).
+"Before" is the simulator without the cache. The other two columns time three
+`parse` calls in one program. TypeScript's first parse is slower than without
+the cache, because the arena and its maps grow for the whole parse instead of
+starting empty per prediction. That also times out its benchmark's
+`input parses` test.
+
+Revealing the caller stack in growing windows (0, 1, 2, 4… innermost frames,
+every caller assumed below them) settled 96% of Rust's predictions without the
+whole stack. It doubled the first parse and gained nothing after it: a window
+with no frames returns into every call site of the rule, so its closures are
+the largest. The 586-file Rust corpus took 6 m 35 s with the windows and
+5 m 22 s without them.
+
 ### Nesting no longer doubles the scan (landed, 2026-09)
 
 Scan time used to double with each level of nesting. In Rust's `f(f(…))`, the
@@ -671,11 +706,11 @@ path. Full context in `TODO.md` ("Soundness and compatibility divergence") and
 **The simulator is the last resort, and a wrong parse is worse than it.** Reach
 for the scan and the runtime FOLLOW gate first. A decision neither settles as
 ANTLR4 does goes to the simulator, whatever it costs, and its cost is then the
-thing to work on. A lookahead DFA memoising predictions across positions, as
-ANTLR4's does, is the lever for that, and nothing blocks it now that
-`core:collections` has a `HashMap`. It is unmeasured in Gale; ANTLR4 with that
-cache parses this grammar and input at 216.991 ms/iter against Gale's 2.535
-(`benchmark/README.md`), so it does not by itself close the gap to the scan.
+thing to work on. The lookahead DFA ("The simulator keeps its predictions for
+the program's life") is the lever that landed. ANTLR4 with its DFA parses this
+grammar and input at 216.991 ms/iter against Gale's 2.535
+(`benchmark/README.md`), so a cache does not by itself close the gap to the
+scan.
 
 - **A tournament asks the simulator once per alternative it scans**
   (`DropLoopEntryBranchInLRRule_4`). Each loop-entry prediction there looks
@@ -693,8 +728,9 @@ cache parses this grammar and input at 216.991 ms/iter against Gale's 2.535
 - **Ambiguous greedy `rule?` and non-greedy `*?` / `+?` min-match — closed on
   the scan, not the simulator (2026-07).** The simulator answer was implemented
   and reverted at release `sqlite_parse` **2.604 → 402.372 ms/iter (155×)**:
-  one prediction is a full closure over the grammar, and neither bounding the
-  lookahead nor gating it brought that down. What shipped decides the ambiguity
+  one prediction was a full closure over the grammar, before the simulator
+  cached its predictions, and neither bounding the lookahead nor gating it
+  brought that down. What shipped decides the ambiguity
   with the compiled scan instead — a greedy `?` scans its body then the
   continuation before entering, a non-greedy loop scans the continuation before
   exiting. Where the scan runs out — the rule's tail — the verdict conjoins

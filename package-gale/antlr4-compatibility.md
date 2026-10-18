@@ -1102,9 +1102,9 @@ Two more sites _would_ belong here on correctness grounds and are left out on
 cost — the ambiguous decisions of the section above: an ambiguous greedy `rule?`
 in a rule 6 does not reach (fixture `ll_opt_greedy_ambig.g4`) and a non-greedy `*?` / `+?` loop over a
 narrower body that no lookahead separates (`ll_non_greedy_plus_loop.g4`,
-SQLite's `name+?`). A prediction per occurrence
-costs a full closure over the grammar, which took SQLite's DDL-heavy benchmark
-corpus from 2.6 ms to 402 ms per parse; neither gating it behind the ambiguous
+SQLite's `name+?`). Before the simulator cached its predictions, a prediction
+per occurrence cost a full closure over the grammar, which took SQLite's
+DDL-heavy benchmark corpus from 2.6 ms to 402 ms per parse; neither gating it behind the ambiguous
 lookahead nor bounding the lookahead recovers that. The two are also coupled —
 entering `type_name?` is only right if `name+?` can then take the second name,
 so landing one alone turns an accepted input into an error. The measurements and
@@ -1147,8 +1147,10 @@ so every continuation the caller's enter reaches, the callee's reached as well,
 and the callee's all died. So the verdict is recorded for each such caller in
 turn, and a caller with an operator of its own asks the simulator itself.
 
-Which gaps stay static is a cost decision as much as a correctness one — one
-prediction is a full closure over the grammar; see [`perf.md`](./perf.md).
+Which gaps stay static is a cost decision as much as a correctness one. The
+simulator keeps each prediction for the program's life, as ANTLR4's DFA does,
+so a later parse reuses what an earlier one computed, but a first parse still
+pays a full closure per new question; see [`perf.md`](./perf.md).
 
 ## Lexer ATN — rules one pass cannot decide
 
