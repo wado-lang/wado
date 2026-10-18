@@ -4,107 +4,111 @@
 
 enum core:prelude/types.wado//enum:CopyResult { Completed = 0, Dropped = 1, Cancelled = 2 };  // TypeId(0)
 
-array Array<u8> (mut u8);  // TypeId(1)
+struct core:prelude//$Resource {  // TypeId(1)
+    mut value: i32,
+}
 
-struct core:prelude/string.wado//String {  // TypeId(2)
+array Array<u8> (mut u8);  // TypeId(2)
+
+struct core:prelude/string.wado//String {  // TypeId(3)
     mut repr: ref Array<u8>,
     mut used: i32,
 }
 
-struct effect_interface_default_partial_handler.wado//$Closure_5 {  // TypeId(3)}
+struct effect_interface_default_partial_handler.wado//$Closure_5 {  // TypeId(4)}
 
-struct effect_interface_default_partial_handler.wado//$Closure_4 {  // TypeId(4)}
+struct effect_interface_default_partial_handler.wado//$Closure_4 {  // TypeId(5)}
 
-struct effect_interface_default_partial_handler.wado//$Closure_2 {  // TypeId(5)}
+struct effect_interface_default_partial_handler.wado//$Closure_2 {  // TypeId(6)}
 
-struct effect_interface_default_partial_handler.wado//$Closure_1 {  // TypeId(6)}
+struct effect_interface_default_partial_handler.wado//$Closure_1 {  // TypeId(7)}
 
-struct effect_interface_default_partial_handler.wado//$Dispatch_effect_interface_default_partial_handler.wado/Calc {  // TypeId(7)
+struct effect_interface_default_partial_handler.wado//$Dispatch_effect_interface_default_partial_handler.wado/Calc {  // TypeId(8)
     mut outer: ref null "effect_interface_default_partial_handler.wado//$Dispatch_effect_interface_default_partial_handler.wado/Calc",
     mut op_one: ref struct,
     mut op_two: ref struct,
     mut op_who: ref struct,
 }
 
-struct effect_interface_default_partial_handler.wado//Mock {  // TypeId(8)}
+struct effect_interface_default_partial_handler.wado//Mock {  // TypeId(9)}
 
-struct effect_interface_default_partial_handler.wado//$Closure_3 {  // TypeId(9)
+struct effect_interface_default_partial_handler.wado//$Closure_3 {  // TypeId(10)
     mut $capture_0: ref "effect_interface_default_partial_handler.wado//Mock",
 }
 
-struct effect_interface_default_partial_handler.wado//Only {  // TypeId(10)}
+struct effect_interface_default_partial_handler.wado//Only {  // TypeId(11)}
 
-struct effect_interface_default_partial_handler.wado//$Closure_0 {  // TypeId(11)
+struct effect_interface_default_partial_handler.wado//$Closure_0 {  // TypeId(12)
     mut $capture_0: ref "effect_interface_default_partial_handler.wado//Only",
 }
 
-type "functype/$canonical_closure_fn_0" = fn(ref null struct) -> i32;  // TypeId(12)
+type "functype/$canonical_closure_fn_0" = fn(ref null struct) -> i32;  // TypeId(13)
 
-struct canonical//CanonicalClosure_0 {  // TypeId(13)
+struct canonical//CanonicalClosure_0 {  // TypeId(14)
     env: ref null struct,
     func: ref "functype/$canonical_closure_fn_0",
 }
 
-type "functype/$canonical_closure_fn_1" = fn(ref null struct) -> ref "core:prelude/string.wado//String";  // TypeId(14)
+type "functype/$canonical_closure_fn_1" = fn(ref null struct) -> ref "core:prelude/string.wado//String";  // TypeId(15)
 
-struct canonical//CanonicalClosure_1 {  // TypeId(15)
+struct canonical//CanonicalClosure_1 {  // TypeId(16)
     env: ref null struct,
     func: ref "functype/$canonical_closure_fn_1",
 }
 
-type "functype//mem/realloc" = fn(i32, i32, i32, i32) -> i32;  // TypeId(16)
+type "functype//mem/realloc" = fn(i32, i32, i32, i32) -> i32;  // TypeId(17)
 
-type "functype//wasi/stream-write" = fn(i32, i32, i32) -> i32;  // TypeId(17)
+type "functype//wasi/stream-write" = fn(i32, i32, i32) -> i32;  // TypeId(18)
 
-type "functype//wasi/waitable-join" = fn(i32, i32);  // TypeId(18)
+type "functype//wasi/waitable-join" = fn(i32, i32);  // TypeId(19)
 
-type "functype//wasi/waitable-set-drop" = fn(i32);  // TypeId(19)
+type "functype//wasi/waitable-set-drop" = fn(i32);  // TypeId(20)
 
-type "functype//wasi/waitable-set-new" = fn() -> i32;  // TypeId(20)
+type "functype//wasi/waitable-set-new" = fn() -> i32;  // TypeId(21)
 
-type "functype//wasi/waitable-set-wait" = fn(i32, i32) -> i32;  // TypeId(21)
+type "functype//wasi/waitable-set-wait" = fn(i32, i32) -> i32;  // TypeId(22)
 
-type "functype//wasi/wasi:cli/Stdout::write_via_stream" = fn(i32) -> i32;  // TypeId(22)
+type "functype//wasi/wasi:cli/Stdout::write_via_stream" = fn(i32) -> i32;  // TypeId(23)
 
-type "functype//effect_interface_default_partial_handler.wado/run" = fn();  // TypeId(23)
+type "functype//effect_interface_default_partial_handler.wado/run" = fn();  // TypeId(24)
 
-type "functype//effect_interface_default_partial_handler.wado/$cm_binding__Stdout_write_via_stream" = fn(i32) -> i32;  // TypeId(24)
+type "functype//effect_interface_default_partial_handler.wado/$cm_binding__Stdout_write_via_stream" = fn(ref "core:prelude//$Resource") -> ref "core:prelude//$Resource";  // TypeId(25)
 
-type "functype//effect_interface_default_partial_handler.wado/$cm_export__run" = fn();  // TypeId(25)
+type "functype//effect_interface_default_partial_handler.wado/$cm_export__run" = fn();  // TypeId(26)
 
-type "functype//core:prelude/primitive.wado/write_decimal_digits" = fn(ref Array<u8>, i32, u64, i32);  // TypeId(26)
+type "functype//core:prelude/primitive.wado/write_decimal_digits" = fn(ref Array<u8>, i32, u64, i32);  // TypeId(27)
 
-type "functype//core:prelude/primitive.wado/count_digits_u64" = fn(u64) -> i32;  // TypeId(27)
+type "functype//core:prelude/primitive.wado/count_digits_u64" = fn(u64) -> i32;  // TypeId(28)
 
-type "functype//core:rt/write_string_to_stream$dae[add_newline]" = fn(i32, ref Array<u8>, i32);  // TypeId(28)
+type "functype//core:rt/write_string_to_stream$dae[add_newline]" = fn(ref "core:prelude//$Resource", ref Array<u8>, i32);  // TypeId(29)
 
-type "functype//core:rt/cm_stream_write_raw_all_u8" = fn(i32, ref Array<u8>, i32, i32) -> "core:prelude/types.wado//enum:CopyResult";  // TypeId(29)
+type "functype//core:rt/cm_stream_write_raw_all_u8" = fn(i32, ref Array<u8>, i32, i32) -> "core:prelude/types.wado//enum:CopyResult";  // TypeId(30)
 
-type "functype//core:prelude/string.wado/core:prelude/string.wado/String::realloc_to" = fn(ref "core:prelude/string.wado//String", i32);  // TypeId(30)
+type "functype//core:prelude/string.wado/core:prelude/string.wado/String::realloc_to" = fn(ref "core:prelude/string.wado//String", i32);  // TypeId(31)
 
-type "functype//core:prelude/string.wado/core:prelude/string.wado/String::grow" = fn(ref "core:prelude/string.wado//String", i32);  // TypeId(31)
+type "functype//core:prelude/string.wado/core:prelude/string.wado/String::grow" = fn(ref "core:prelude/string.wado//String", i32);  // TypeId(32)
 
-type "functype//effect_interface_default_partial_handler.wado/effect_interface_default_partial_handler.wado/$Closure_0::$call$dae[self]" = fn() -> i32;  // TypeId(32)
+type "functype//effect_interface_default_partial_handler.wado/effect_interface_default_partial_handler.wado/$Closure_0::$call$dae[self]" = fn() -> i32;  // TypeId(33)
 
-type "functype//effect_interface_default_partial_handler.wado/effect_interface_default_partial_handler.wado/$Closure_1::$call$dae[self]" = fn() -> i32;  // TypeId(33)
+type "functype//effect_interface_default_partial_handler.wado/effect_interface_default_partial_handler.wado/$Closure_1::$call$dae[self]" = fn() -> i32;  // TypeId(34)
 
-type "functype//effect_interface_default_partial_handler.wado/effect_interface_default_partial_handler.wado/$Closure_2::$call$dae[self]" = fn() -> ref "core:prelude/string.wado//String";  // TypeId(34)
+type "functype//effect_interface_default_partial_handler.wado/effect_interface_default_partial_handler.wado/$Closure_2::$call$dae[self]" = fn() -> ref "core:prelude/string.wado//String";  // TypeId(35)
 
-type "functype//effect_interface_default_partial_handler.wado/effect_interface_default_partial_handler.wado/$Closure_3::$call$dae[self]" = fn() -> i32;  // TypeId(35)
+type "functype//effect_interface_default_partial_handler.wado/effect_interface_default_partial_handler.wado/$Closure_3::$call$dae[self]" = fn() -> i32;  // TypeId(36)
 
-type "functype//effect_interface_default_partial_handler.wado/effect_interface_default_partial_handler.wado/$Closure_4::$call$dae[self]" = fn() -> i32;  // TypeId(36)
+type "functype//effect_interface_default_partial_handler.wado/effect_interface_default_partial_handler.wado/$Closure_4::$call$dae[self]" = fn() -> i32;  // TypeId(37)
 
-type "functype//effect_interface_default_partial_handler.wado/effect_interface_default_partial_handler.wado/$Closure_5::$call$dae[self]" = fn() -> ref "core:prelude/string.wado//String";  // TypeId(37)
+type "functype//effect_interface_default_partial_handler.wado/effect_interface_default_partial_handler.wado/$Closure_5::$call$dae[self]" = fn() -> ref "core:prelude/string.wado//String";  // TypeId(38)
 
-type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$sroa[self.buf]$dae[alt_prefix]" = fn(ref "core:prelude/string.wado//String", bool, i32) -> i32;  // TypeId(38)
+type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$sroa[self.buf]$dae[alt_prefix]" = fn(ref "core:prelude/string.wado//String", bool, i32) -> i32;  // TypeId(39)
 
-type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(39)
+type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(40)
 
-type "functype//wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code" = fn(i32);  // TypeId(40)
+type "functype//wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code" = fn(i32);  // TypeId(41)
 
-type "functype//wasi/task-return" = fn(i32);  // TypeId(41)
+type "functype//wasi/task-return" = fn(i32);  // TypeId(42)
 
-type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(42)
+type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(43)
 
 import fn mem/realloc from "mem/realloc";
 import fn wasi/stream-write from "wasi/stream-write";
@@ -127,53 +131,55 @@ fn "effect_interface_default_partial_handler.wado/run"() with Stdout {
     let $local_2_2: ref "core:prelude/string.wado//String";
     let $save_effect_interface_default_partial_handler.wado/Calc_9: ref null "effect_interface_default_partial_handler.wado//$Dispatch_effect_interface_default_partial_handler.wado/Calc";
     let $d_effect_interface_default_partial_handler.wado/Calc_10: ref "effect_interface_default_partial_handler.wado//$Dispatch_effect_interface_default_partial_handler.wado/Calc";
-    let $local_0_23: ref null "effect_interface_default_partial_handler.wado//$Dispatch_effect_interface_default_partial_handler.wado/Calc";
-    let $local_2_25: i32;
-    let is_negative_30: bool;
-    let x_34: i64;
+    let $local_0_24: ref null "effect_interface_default_partial_handler.wado//$Dispatch_effect_interface_default_partial_handler.wado/Calc";
+    let $local_2_26: i32;
+    let is_negative_31: bool;
+    let x_35: i64;
+    let $sroa_$pattern_temp_0_0_104: ref "core:prelude//$Resource";
+    let $sroa_$pattern_temp_0_1_105: ref "core:prelude//$Resource";
     o = struct.new "effect_interface_default_partial_handler.wado//Only" {  };
     global:effect_interface_default_partial_handler.wado::$effect_effect_interface_default_partial_handler.wado/Calc = local.tee $d_effect_interface_default_partial_handler.wado/Calc_10(struct.new "effect_interface_default_partial_handler.wado//$Dispatch_effect_interface_default_partial_handler.wado/Calc" { outer: local.tee $save_effect_interface_default_partial_handler.wado/Calc_9(global:effect_interface_default_partial_handler.wado::$effect_effect_interface_default_partial_handler.wado/Calc), op_one: struct.new "canonical//CanonicalClosure_0" { env: struct.new "effect_interface_default_partial_handler.wado//$Closure_0" { $capture_0: o }, func: ref.func "closure/effect_interface_default_partial_handler.wado/$closure_wrapper_0" }, op_two: struct.new "canonical//CanonicalClosure_0" { env: struct.new "effect_interface_default_partial_handler.wado//$Closure_1" {  }, func: ref.func "closure/effect_interface_default_partial_handler.wado/$closure_wrapper_1" }, op_who: struct.new "canonical//CanonicalClosure_1" { env: struct.new "effect_interface_default_partial_handler.wado//$Closure_2" {  }, func: ref.func "closure/effect_interface_default_partial_handler.wado/$closure_wrapper_2" } });
     $local_2_2 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
-    is_negative_30 = local.tee $local_2_25($inline__effect_dispatch__effect_interface_default_partial_handler_wado_Calc__one_5: block -> i32 {
-        if ref.is_null(local.tee $local_0_23(global:effect_interface_default_partial_handler.wado::$effect_effect_interface_default_partial_handler.wado/Calc)) == 0 {
-            global:effect_interface_default_partial_handler.wado::$effect_effect_interface_default_partial_handler.wado/Calc = local.tee $d_effect_interface_default_partial_handler.wado/Calc_10(ref.as_non_null($local_0_23)).outer;
-            $local_2_25 = block -> i32 {
+    is_negative_31 = local.tee $local_2_26($inline__effect_dispatch__effect_interface_default_partial_handler_wado_Calc__one_5: block -> i32 {
+        if ref.is_null(local.tee $local_0_24(global:effect_interface_default_partial_handler.wado::$effect_effect_interface_default_partial_handler.wado/Calc)) == 0 {
+            global:effect_interface_default_partial_handler.wado::$effect_effect_interface_default_partial_handler.wado/Calc = local.tee $d_effect_interface_default_partial_handler.wado/Calc_10(ref.as_non_null($local_0_24)).outer;
+            $local_2_26 = block -> i32 {
                 let $indirect_call_1: ref "canonical//CanonicalClosure_0";
                 call_ref "functype/$canonical_closure_fn_0"($indirect_call_1.func, local.tee $indirect_call_1(ref.cast "canonical//CanonicalClosure_0"($d_effect_interface_default_partial_handler.wado/Calc_10.op_one)).env);
             };
-            global:effect_interface_default_partial_handler.wado::$effect_effect_interface_default_partial_handler.wado/Calc = $local_0_23;
-            break $inline__effect_dispatch__effect_interface_default_partial_handler_wado_Calc__one_5: $local_2_25;
+            global:effect_interface_default_partial_handler.wado::$effect_effect_interface_default_partial_handler.wado/Calc = $local_0_24;
+            break $inline__effect_dispatch__effect_interface_default_partial_handler_wado_Calc__one_5: $local_2_26;
         } else {
             break $inline__effect_dispatch__effect_interface_default_partial_handler_wado_Calc__one_5: 1;
         }
         unreachable;
     }) < 0;
-    $local_2_25 = "core:prelude/primitive.wado/count_digits_u64"(local.tee x_34(x_34 = builtin::i64_extend_i32_s($local_2_25); select i64(x_34 < 0_i64, 0_i64 - x_34, x_34)));
-    is_negative_30 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$sroa[self.buf]$dae[alt_prefix]"($local_2_2, is_negative_30, $local_2_25);
-    "core:prelude/primitive.wado/write_decimal_digits"($local_2_2.repr, is_negative_30, x_34, $local_2_25);
-    $local_2_25 = builtin::i32_wrap_i64(local.tee x_34("wasi/stream-new"()));
-    is_negative_30 = builtin::i32_wrap_i64(x_34 >> 32_i64);
-    $local_2_25 = "effect_interface_default_partial_handler.wado/$cm_binding__Stdout_write_via_stream"($local_2_25);
-    "core:rt/write_string_to_stream$dae[add_newline]"(is_negative_30, $local_2_2.repr, $local_2_2.used);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"($local_2_25);
+    $local_2_26 = "core:prelude/primitive.wado/count_digits_u64"(local.tee x_35(x_35 = builtin::i64_extend_i32_s($local_2_26); select i64(x_35 < 0_i64, 0_i64 - x_35, x_35)));
+    is_negative_31 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$sroa[self.buf]$dae[alt_prefix]"($local_2_2, is_negative_31, $local_2_26);
+    "core:prelude/primitive.wado/write_decimal_digits"($local_2_2.repr, is_negative_31, x_35, $local_2_26);
+    $sroa_$pattern_temp_0_0_104 = struct.new "core:prelude//$Resource" { value: builtin::i32_wrap_i64(local.tee x_35("wasi/stream-new"())) };
+    $sroa_$pattern_temp_0_1_105 = struct.new "core:prelude//$Resource" { value: builtin::i32_wrap_i64(x_35 >> 32_i64) };
+    $sroa_$pattern_temp_0_0_104 = "effect_interface_default_partial_handler.wado/$cm_binding__Stdout_write_via_stream"($sroa_$pattern_temp_0_0_104);
+    "core:rt/write_string_to_stream$dae[add_newline]"($sroa_$pattern_temp_0_1_105, $local_2_2.repr, $local_2_2.used);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"($sroa_$pattern_temp_0_0_104.value);
     $local_2_2 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
-    is_negative_30 = local.tee $local_2_25($inline__effect_dispatch__effect_interface_default_partial_handler_wado_Calc__two_17: block -> i32 {
-        if ref.is_null(local.tee $local_0_23(global:effect_interface_default_partial_handler.wado::$effect_effect_interface_default_partial_handler.wado/Calc)) == 0 {
-            global:effect_interface_default_partial_handler.wado::$effect_effect_interface_default_partial_handler.wado/Calc = local.tee $d_effect_interface_default_partial_handler.wado/Calc_10(ref.as_non_null($local_0_23)).outer;
-            $local_2_25 = block -> i32 {
+    is_negative_31 = local.tee $local_2_26($inline__effect_dispatch__effect_interface_default_partial_handler_wado_Calc__two_15: block -> i32 {
+        if ref.is_null(local.tee $local_0_24(global:effect_interface_default_partial_handler.wado::$effect_effect_interface_default_partial_handler.wado/Calc)) == 0 {
+            global:effect_interface_default_partial_handler.wado::$effect_effect_interface_default_partial_handler.wado/Calc = local.tee $d_effect_interface_default_partial_handler.wado/Calc_10(ref.as_non_null($local_0_24)).outer;
+            $local_2_26 = block -> i32 {
                 call_ref "functype/$canonical_closure_fn_0"($indirect_call_1.func, local.tee $indirect_call_1(ref.cast "canonical//CanonicalClosure_0"($d_effect_interface_default_partial_handler.wado/Calc_10.op_two)).env);
             };
-            global:effect_interface_default_partial_handler.wado::$effect_effect_interface_default_partial_handler.wado/Calc = $local_0_23;
-            break $inline__effect_dispatch__effect_interface_default_partial_handler_wado_Calc__two_17: $local_2_25;
+            global:effect_interface_default_partial_handler.wado::$effect_effect_interface_default_partial_handler.wado/Calc = $local_0_24;
+            break $inline__effect_dispatch__effect_interface_default_partial_handler_wado_Calc__two_15: $local_2_26;
         } else {
-            break $inline__effect_dispatch__effect_interface_default_partial_handler_wado_Calc__two_17: $inline__effect_dispatch__effect_interface_default_partial_handler_wado_Calc__one_1: block -> i32 {
-                if ref.is_null(local.tee $local_0_23(global:effect_interface_default_partial_handler.wado::$effect_effect_interface_default_partial_handler.wado/Calc)) == 0 {
-                    global:effect_interface_default_partial_handler.wado::$effect_effect_interface_default_partial_handler.wado/Calc = local.tee $d_effect_interface_default_partial_handler.wado/Calc_10(ref.as_non_null($local_0_23)).outer;
-                    $local_2_25 = block -> i32 {
+            break $inline__effect_dispatch__effect_interface_default_partial_handler_wado_Calc__two_15: $inline__effect_dispatch__effect_interface_default_partial_handler_wado_Calc__one_1: block -> i32 {
+                if ref.is_null(local.tee $local_0_24(global:effect_interface_default_partial_handler.wado::$effect_effect_interface_default_partial_handler.wado/Calc)) == 0 {
+                    global:effect_interface_default_partial_handler.wado::$effect_effect_interface_default_partial_handler.wado/Calc = local.tee $d_effect_interface_default_partial_handler.wado/Calc_10(ref.as_non_null($local_0_24)).outer;
+                    $local_2_26 = block -> i32 {
                         call_ref "functype/$canonical_closure_fn_0"($indirect_call_1.func, local.tee $indirect_call_1(ref.cast "canonical//CanonicalClosure_0"($d_effect_interface_default_partial_handler.wado/Calc_10.op_one)).env);
                     };
-                    global:effect_interface_default_partial_handler.wado::$effect_effect_interface_default_partial_handler.wado/Calc = $local_0_23;
-                    break $inline__effect_dispatch__effect_interface_default_partial_handler_wado_Calc__one_1: $local_2_25;
+                    global:effect_interface_default_partial_handler.wado::$effect_effect_interface_default_partial_handler.wado/Calc = $local_0_24;
+                    break $inline__effect_dispatch__effect_interface_default_partial_handler_wado_Calc__one_1: $local_2_26;
                 } else {
                     break $inline__effect_dispatch__effect_interface_default_partial_handler_wado_Calc__one_1: 1;
                 }
@@ -182,63 +188,63 @@ fn "effect_interface_default_partial_handler.wado/run"() with Stdout {
         }
         unreachable;
     }) < 0;
-    $local_2_25 = "core:prelude/primitive.wado/count_digits_u64"(local.tee x_34(x_34 = builtin::i64_extend_i32_s($local_2_25); select i64(x_34 < 0_i64, 0_i64 - x_34, x_34)));
-    is_negative_30 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$sroa[self.buf]$dae[alt_prefix]"($local_2_2, is_negative_30, $local_2_25);
-    "core:prelude/primitive.wado/write_decimal_digits"($local_2_2.repr, is_negative_30, x_34, $local_2_25);
-    $local_2_25 = builtin::i32_wrap_i64(local.tee x_34("wasi/stream-new"()));
-    is_negative_30 = builtin::i32_wrap_i64(x_34 >> 32_i64);
-    $local_2_25 = "effect_interface_default_partial_handler.wado/$cm_binding__Stdout_write_via_stream"($local_2_25);
-    "core:rt/write_string_to_stream$dae[add_newline]"(is_negative_30, $local_2_2.repr, $local_2_2.used);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"($local_2_25);
-    $local_2_2 = $inline__effect_dispatch__effect_interface_default_partial_handler_wado_Calc__who_27: block -> ref "core:prelude/string.wado//String" {
-        if ref.is_null(local.tee $local_0_23(global:effect_interface_default_partial_handler.wado::$effect_effect_interface_default_partial_handler.wado/Calc)) == 0 {
-            global:effect_interface_default_partial_handler.wado::$effect_effect_interface_default_partial_handler.wado/Calc = local.tee $d_effect_interface_default_partial_handler.wado/Calc_10(ref.as_non_null($local_0_23)).outer;
+    $local_2_26 = "core:prelude/primitive.wado/count_digits_u64"(local.tee x_35(x_35 = builtin::i64_extend_i32_s($local_2_26); select i64(x_35 < 0_i64, 0_i64 - x_35, x_35)));
+    is_negative_31 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$sroa[self.buf]$dae[alt_prefix]"($local_2_2, is_negative_31, $local_2_26);
+    "core:prelude/primitive.wado/write_decimal_digits"($local_2_2.repr, is_negative_31, x_35, $local_2_26);
+    $sroa_$pattern_temp_0_0_104 = struct.new "core:prelude//$Resource" { value: builtin::i32_wrap_i64(local.tee x_35("wasi/stream-new"())) };
+    $sroa_$pattern_temp_0_1_105 = struct.new "core:prelude//$Resource" { value: builtin::i32_wrap_i64(x_35 >> 32_i64) };
+    $sroa_$pattern_temp_0_0_104 = "effect_interface_default_partial_handler.wado/$cm_binding__Stdout_write_via_stream"($sroa_$pattern_temp_0_0_104);
+    "core:rt/write_string_to_stream$dae[add_newline]"($sroa_$pattern_temp_0_1_105, $local_2_2.repr, $local_2_2.used);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"($sroa_$pattern_temp_0_0_104.value);
+    $local_2_2 = $inline__effect_dispatch__effect_interface_default_partial_handler_wado_Calc__who_23: block -> ref "core:prelude/string.wado//String" {
+        if ref.is_null(local.tee $local_0_24(global:effect_interface_default_partial_handler.wado::$effect_effect_interface_default_partial_handler.wado/Calc)) == 0 {
+            global:effect_interface_default_partial_handler.wado::$effect_effect_interface_default_partial_handler.wado/Calc = local.tee $d_effect_interface_default_partial_handler.wado/Calc_10(ref.as_non_null($local_0_24)).outer;
             $local_2_2 = block -> ref "core:prelude/string.wado//String" {
                 let $indirect_call_4: ref "canonical//CanonicalClosure_1";
                 call_ref "functype/$canonical_closure_fn_1"($indirect_call_4.func, local.tee $indirect_call_4(ref.cast "canonical//CanonicalClosure_1"($d_effect_interface_default_partial_handler.wado/Calc_10.op_who)).env);
             };
-            global:effect_interface_default_partial_handler.wado::$effect_effect_interface_default_partial_handler.wado/Calc = $local_0_23;
-            break $inline__effect_dispatch__effect_interface_default_partial_handler_wado_Calc__who_27: $local_2_2;
+            global:effect_interface_default_partial_handler.wado::$effect_effect_interface_default_partial_handler.wado/Calc = $local_0_24;
+            break $inline__effect_dispatch__effect_interface_default_partial_handler_wado_Calc__who_23: $local_2_2;
         } else {
-            break $inline__effect_dispatch__effect_interface_default_partial_handler_wado_Calc__who_27: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Calc::who"), used: 9 };
+            break $inline__effect_dispatch__effect_interface_default_partial_handler_wado_Calc__who_23: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Calc::who"), used: 9 };
         }
         unreachable;
     };
-    $local_2_25 = builtin::i32_wrap_i64(local.tee x_34("wasi/stream-new"()));
-    is_negative_30 = builtin::i32_wrap_i64(x_34 >> 32_i64);
-    $local_2_25 = "effect_interface_default_partial_handler.wado/$cm_binding__Stdout_write_via_stream"($local_2_25);
-    "core:rt/write_string_to_stream$dae[add_newline]"(is_negative_30, $local_2_2.repr, $local_2_2.used);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"($local_2_25);
+    $sroa_$pattern_temp_0_0_104 = struct.new "core:prelude//$Resource" { value: builtin::i32_wrap_i64(local.tee x_35("wasi/stream-new"())) };
+    $sroa_$pattern_temp_0_1_105 = struct.new "core:prelude//$Resource" { value: builtin::i32_wrap_i64(x_35 >> 32_i64) };
+    $sroa_$pattern_temp_0_0_104 = "effect_interface_default_partial_handler.wado/$cm_binding__Stdout_write_via_stream"($sroa_$pattern_temp_0_0_104);
+    "core:rt/write_string_to_stream$dae[add_newline]"($sroa_$pattern_temp_0_1_105, $local_2_2.repr, $local_2_2.used);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"($sroa_$pattern_temp_0_0_104.value);
     global:effect_interface_default_partial_handler.wado::$effect_effect_interface_default_partial_handler.wado/Calc = $save_effect_interface_default_partial_handler.wado/Calc_9;
     m = struct.new "effect_interface_default_partial_handler.wado//Mock" {  };
     global:effect_interface_default_partial_handler.wado::$effect_effect_interface_default_partial_handler.wado/Calc = local.tee $d_effect_interface_default_partial_handler.wado/Calc_10(struct.new "effect_interface_default_partial_handler.wado//$Dispatch_effect_interface_default_partial_handler.wado/Calc" { outer: local.tee $save_effect_interface_default_partial_handler.wado/Calc_9(global:effect_interface_default_partial_handler.wado::$effect_effect_interface_default_partial_handler.wado/Calc), op_one: struct.new "canonical//CanonicalClosure_0" { env: struct.new "effect_interface_default_partial_handler.wado//$Closure_3" { $capture_0: m }, func: ref.func "closure/effect_interface_default_partial_handler.wado/$closure_wrapper_3" }, op_two: struct.new "canonical//CanonicalClosure_0" { env: struct.new "effect_interface_default_partial_handler.wado//$Closure_4" {  }, func: ref.func "closure/effect_interface_default_partial_handler.wado/$closure_wrapper_4" }, op_who: struct.new "canonical//CanonicalClosure_1" { env: struct.new "effect_interface_default_partial_handler.wado//$Closure_5" {  }, func: ref.func "closure/effect_interface_default_partial_handler.wado/$closure_wrapper_5" } });
     $local_2_2 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
-    is_negative_30 = local.tee $local_2_25($inline__effect_dispatch__effect_interface_default_partial_handler_wado_Calc__one_36: block -> i32 {
-        if ref.is_null(local.tee $local_0_23(global:effect_interface_default_partial_handler.wado::$effect_effect_interface_default_partial_handler.wado/Calc)) == 0 {
-            global:effect_interface_default_partial_handler.wado::$effect_effect_interface_default_partial_handler.wado/Calc = local.tee $d_effect_interface_default_partial_handler.wado/Calc_10(ref.as_non_null($local_0_23)).outer;
-            $local_2_25 = block -> i32 {
+    is_negative_31 = local.tee $local_2_26($inline__effect_dispatch__effect_interface_default_partial_handler_wado_Calc__one_30: block -> i32 {
+        if ref.is_null(local.tee $local_0_24(global:effect_interface_default_partial_handler.wado::$effect_effect_interface_default_partial_handler.wado/Calc)) == 0 {
+            global:effect_interface_default_partial_handler.wado::$effect_effect_interface_default_partial_handler.wado/Calc = local.tee $d_effect_interface_default_partial_handler.wado/Calc_10(ref.as_non_null($local_0_24)).outer;
+            $local_2_26 = block -> i32 {
                 call_ref "functype/$canonical_closure_fn_0"($indirect_call_1.func, local.tee $indirect_call_1(ref.cast "canonical//CanonicalClosure_0"($d_effect_interface_default_partial_handler.wado/Calc_10.op_one)).env);
             };
-            global:effect_interface_default_partial_handler.wado::$effect_effect_interface_default_partial_handler.wado/Calc = $local_0_23;
-            break $inline__effect_dispatch__effect_interface_default_partial_handler_wado_Calc__one_36: $local_2_25;
+            global:effect_interface_default_partial_handler.wado::$effect_effect_interface_default_partial_handler.wado/Calc = $local_0_24;
+            break $inline__effect_dispatch__effect_interface_default_partial_handler_wado_Calc__one_30: $local_2_26;
         } else {
-            break $inline__effect_dispatch__effect_interface_default_partial_handler_wado_Calc__one_36: 1;
+            break $inline__effect_dispatch__effect_interface_default_partial_handler_wado_Calc__one_30: 1;
         }
         unreachable;
     }) < 0;
-    $local_2_25 = "core:prelude/primitive.wado/count_digits_u64"(local.tee x_34(x_34 = builtin::i64_extend_i32_s($local_2_25); select i64(x_34 < 0_i64, 0_i64 - x_34, x_34)));
-    is_negative_30 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$sroa[self.buf]$dae[alt_prefix]"($local_2_2, is_negative_30, $local_2_25);
-    "core:prelude/primitive.wado/write_decimal_digits"($local_2_2.repr, is_negative_30, x_34, $local_2_25);
-    $local_2_25 = builtin::i32_wrap_i64(local.tee x_34("wasi/stream-new"()));
-    is_negative_30 = builtin::i32_wrap_i64(x_34 >> 32_i64);
-    $local_2_25 = "effect_interface_default_partial_handler.wado/$cm_binding__Stdout_write_via_stream"($local_2_25);
-    "core:rt/write_string_to_stream$dae[add_newline]"(is_negative_30, $local_2_2.repr, $local_2_2.used);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"($local_2_25);
+    $local_2_26 = "core:prelude/primitive.wado/count_digits_u64"(local.tee x_35(x_35 = builtin::i64_extend_i32_s($local_2_26); select i64(x_35 < 0_i64, 0_i64 - x_35, x_35)));
+    is_negative_31 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$sroa[self.buf]$dae[alt_prefix]"($local_2_2, is_negative_31, $local_2_26);
+    "core:prelude/primitive.wado/write_decimal_digits"($local_2_2.repr, is_negative_31, x_35, $local_2_26);
+    $sroa_$pattern_temp_0_0_104 = struct.new "core:prelude//$Resource" { value: builtin::i32_wrap_i64(local.tee x_35("wasi/stream-new"())) };
+    $sroa_$pattern_temp_0_1_105 = struct.new "core:prelude//$Resource" { value: builtin::i32_wrap_i64(x_35 >> 32_i64) };
+    $sroa_$pattern_temp_0_0_104 = "effect_interface_default_partial_handler.wado/$cm_binding__Stdout_write_via_stream"($sroa_$pattern_temp_0_0_104);
+    "core:rt/write_string_to_stream$dae[add_newline]"($sroa_$pattern_temp_0_1_105, $local_2_2.repr, $local_2_2.used);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"($sroa_$pattern_temp_0_0_104.value);
     global:effect_interface_default_partial_handler.wado::$effect_effect_interface_default_partial_handler.wado/Calc = $save_effect_interface_default_partial_handler.wado/Calc_9;
 }
 
 fn "effect_interface_default_partial_handler.wado/$cm_binding__Stdout_write_via_stream"(data) with Stdout {
-    return "wasi/wasi:cli/Stdout::write_via_stream"(data);
+    return struct.new "core:prelude//$Resource" { value: "wasi/wasi:cli/Stdout::write_via_stream"(data.value) };
 }
 
 fn "effect_interface_default_partial_handler.wado/$cm_export__run"() {
@@ -334,10 +340,12 @@ fn "core:rt/write_string_to_stream$dae[add_newline]"(tx, $mv$message$repr, $mv$m
     builtin::array_copy<u8>(local.tee new_repr(builtin::array_new<u8>($mv$message$used + 1)), 0, $mv$message$repr, 0, $mv$message$used);
     builtin::array_set_u8(new_repr, $mv$message$used, 10);
     drop(block -> "core:prelude/types.wado//enum:CopyResult" {
+        let $arg_spill_1: i32;
+        $arg_spill_1 = tx.value;
         $mv$message$used = $mv$message$used + 1;
-        "core:rt/cm_stream_write_raw_all_u8"(tx, new_repr, 0, $mv$message$used);
+        "core:rt/cm_stream_write_raw_all_u8"($arg_spill_1, new_repr, 0, $mv$message$used);
     });
-    "wasi/stream-drop-writable"(tx);
+    "wasi/stream-drop-writable"(tx.value);
 }
 
 fn "core:rt/cm_stream_write_raw_all_u8"(handle, $mv$data$repr, $mv$data$start, $mv$data$end) {

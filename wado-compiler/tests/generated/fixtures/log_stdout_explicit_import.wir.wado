@@ -46,22 +46,22 @@ import fn wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code 
 import fn wasi/task-return from "wasi/task-return";
 
 fn "log_stdout_explicit_import.wado/$cm_export__run"() {
-    let packed: i64;
-    let rx_6: i32;
-    let tx_7: i32;
+    let $cm_pair_4: i64;
     let new_repr: ref Array<u8>;
-    let $sroa_message_repr_25: ref Array<u8>;
-    $sroa_message_repr_25 = array.new_data<u8>("stdout logging works");
-    rx_6 = builtin::i32_wrap_i64(local.tee packed("wasi/stream-new"()));
-    tx_7 = builtin::i32_wrap_i64(packed >> 32_i64);
-    rx_6 = "wasi/wasi:cli/Stdout::write_via_stream"(rx_6);
-    builtin::array_copy<u8>(local.tee new_repr(builtin::array_new<u8>(21)), 0, $sroa_message_repr_25, 0, 20);
+    let $sroa_$pattern_temp_0_0_20: i32;
+    let $sroa_$pattern_temp_0_1_21: i32;
+    let $sroa_message_repr_22: ref Array<u8>;
+    $sroa_message_repr_22 = array.new_data<u8>("stdout logging works");
+    $sroa_$pattern_temp_0_0_20 = builtin::i32_wrap_i64(local.tee $cm_pair_4("wasi/stream-new"()));
+    $sroa_$pattern_temp_0_1_21 = builtin::i32_wrap_i64($cm_pair_4 >> 32_i64);
+    $sroa_$pattern_temp_0_0_20 = "wasi/wasi:cli/Stdout::write_via_stream"($sroa_$pattern_temp_0_0_20);
+    builtin::array_copy<u8>(local.tee new_repr(builtin::array_new<u8>(21)), 0, $sroa_message_repr_22, 0, 20);
     builtin::array_set_u8(new_repr, 20, 10);
     drop(block -> "core:prelude/types.wado//enum:CopyResult" {
-        "core:rt/cm_stream_write_raw_all_u8"(tx_7, new_repr, 0, 21);
+        "core:rt/cm_stream_write_raw_all_u8"($sroa_$pattern_temp_0_1_21, new_repr, 0, 21);
     });
-    "wasi/stream-drop-writable"(tx_7);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(rx_6);
+    "wasi/stream-drop-writable"($sroa_$pattern_temp_0_1_21);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"($sroa_$pattern_temp_0_0_20);
     "wasi/task-return"(0);
 }
 

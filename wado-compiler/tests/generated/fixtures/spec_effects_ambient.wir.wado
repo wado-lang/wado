@@ -93,22 +93,22 @@ import fn wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code 
 import fn wasi/task-return from "wasi/task-return";
 
 fn "spec_effects_ambient.wado/$cm_export__$test_0"() {
-    let packed: i64;
-    let rx_40: i32;
-    let tx_41: i32;
+    let $cm_pair_4: i64;
     let new_repr: ref Array<u8>;
-    let $sroa_message_repr_70: ref Array<u8>;
-    $sroa_message_repr_70 = array.new_data<u8>("computing 21");
-    rx_40 = builtin::i32_wrap_i64(local.tee packed("wasi/stream-new"()));
-    tx_41 = builtin::i32_wrap_i64(packed >> 32_i64);
-    rx_40 = "wasi/wasi:cli/Stderr::write_via_stream"(rx_40);
-    builtin::array_copy<u8>(local.tee new_repr(builtin::array_new<u8>(13)), 0, $sroa_message_repr_70, 0, 12);
+    let $sroa_$pattern_temp_0_0_54: i32;
+    let $sroa_$pattern_temp_0_1_55: i32;
+    let $sroa_message_repr_67: ref Array<u8>;
+    $sroa_message_repr_67 = array.new_data<u8>("computing 21");
+    $sroa_$pattern_temp_0_0_54 = builtin::i32_wrap_i64(local.tee $cm_pair_4("wasi/stream-new"()));
+    $sroa_$pattern_temp_0_1_55 = builtin::i32_wrap_i64($cm_pair_4 >> 32_i64);
+    $sroa_$pattern_temp_0_0_54 = "wasi/wasi:cli/Stderr::write_via_stream"($sroa_$pattern_temp_0_0_54);
+    builtin::array_copy<u8>(local.tee new_repr(builtin::array_new<u8>(13)), 0, $sroa_message_repr_67, 0, 12);
     builtin::array_set_u8(new_repr, 12, 10);
     drop(block -> "core:prelude/types.wado//enum:CopyResult" {
-        "core:rt/cm_stream_write_raw_all_u8"(tx_41, new_repr, 0, 13);
+        "core:rt/cm_stream_write_raw_all_u8"($sroa_$pattern_temp_0_1_55, new_repr, 0, 13);
     });
-    "wasi/stream-drop-writable"(tx_41);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(rx_40);
+    "wasi/stream-drop-writable"($sroa_$pattern_temp_0_1_55);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"($sroa_$pattern_temp_0_0_54);
     if @unlikely(42 != 42) {
         cold_path;
         "spec_effects_ambient.wado/$test_0$cold0"(42);
@@ -215,21 +215,21 @@ fn "core:prelude/primitive.wado/count_digits_u64"(val) {
 }
 
 fn "core:rt/log_stderr"($mv$message$repr, $mv$message$used) {
-    let packed: i64;
-    let rx_6: i32;
-    let tx_7: i32;
+    let $cm_pair_4: i64;
     let new_repr: ref Array<u8>;
-    rx_6 = builtin::i32_wrap_i64(local.tee packed("wasi/stream-new"()));
-    tx_7 = builtin::i32_wrap_i64(packed >> 32_i64);
-    rx_6 = "wasi/wasi:cli/Stderr::write_via_stream"(rx_6);
+    let $sroa_$pattern_temp_0_0_20: i32;
+    let $sroa_$pattern_temp_0_1_21: i32;
+    $sroa_$pattern_temp_0_0_20 = builtin::i32_wrap_i64(local.tee $cm_pair_4("wasi/stream-new"()));
+    $sroa_$pattern_temp_0_1_21 = builtin::i32_wrap_i64($cm_pair_4 >> 32_i64);
+    $sroa_$pattern_temp_0_0_20 = "wasi/wasi:cli/Stderr::write_via_stream"($sroa_$pattern_temp_0_0_20);
     builtin::array_copy<u8>(local.tee new_repr(builtin::array_new<u8>($mv$message$used + 1)), 0, $mv$message$repr, 0, $mv$message$used);
     builtin::array_set_u8(new_repr, $mv$message$used, 10);
     drop(block -> "core:prelude/types.wado//enum:CopyResult" {
         $mv$message$used = $mv$message$used + 1;
-        "core:rt/cm_stream_write_raw_all_u8"(tx_7, new_repr, 0, $mv$message$used);
+        "core:rt/cm_stream_write_raw_all_u8"($sroa_$pattern_temp_0_1_21, new_repr, 0, $mv$message$used);
     });
-    "wasi/stream-drop-writable"(tx_7);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(rx_6);
+    "wasi/stream-drop-writable"($sroa_$pattern_temp_0_1_21);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"($sroa_$pattern_temp_0_0_20);
 }
 
 fn "core:rt/panic"(message) {

@@ -4,63 +4,67 @@
 
 enum core:prelude/types.wado//enum:CopyResult { Completed = 0, Dropped = 1, Cancelled = 2 };  // TypeId(0)
 
-array Array<u8> (mut u8);  // TypeId(1)
+struct core:prelude//$Resource {  // TypeId(1)
+    mut value: i32,
+}
 
-struct core:prelude/string.wado//String {  // TypeId(2)
+array Array<u8> (mut u8);  // TypeId(2)
+
+struct core:prelude/string.wado//String {  // TypeId(3)
     mut repr: ref Array<u8>,
     mut used: i32,
 }
 
-struct tuple//[core:prelude/types.wado/Stream<u8>, core:prelude/types.wado/Future<core:prelude/types.wado/Result<(),wasi:tls/types.wado/Error>>] {  // TypeId(3)
-    mut 0: i32,
-    mut 1: i32,
+struct tuple//[core:prelude/types.wado/Stream<u8>, core:prelude/types.wado/Future<core:prelude/types.wado/Result<(),wasi:tls/types.wado/Error>>] {  // TypeId(4)
+    mut 0: ref "core:prelude//$Resource",
+    mut 1: ref "core:prelude//$Resource",
 }
 
-type "functype//mem/realloc" = fn(i32, i32, i32, i32) -> i32;  // TypeId(4)
+type "functype//mem/realloc" = fn(i32, i32, i32, i32) -> i32;  // TypeId(5)
 
-type "functype//wasi/stream-write" = fn(i32, i32, i32) -> i32;  // TypeId(5)
+type "functype//wasi/stream-write" = fn(i32, i32, i32) -> i32;  // TypeId(6)
 
-type "functype//wasi/waitable-join" = fn(i32, i32);  // TypeId(6)
+type "functype//wasi/waitable-join" = fn(i32, i32);  // TypeId(7)
 
-type "functype//wasi/waitable-set-drop" = fn(i32);  // TypeId(7)
+type "functype//wasi/waitable-set-drop" = fn(i32);  // TypeId(8)
 
-type "functype//wasi/waitable-set-new" = fn() -> i32;  // TypeId(8)
+type "functype//wasi/waitable-set-new" = fn() -> i32;  // TypeId(9)
 
-type "functype//wasi/waitable-set-wait" = fn(i32, i32) -> i32;  // TypeId(9)
+type "functype//wasi/waitable-set-wait" = fn(i32, i32) -> i32;  // TypeId(10)
 
-type "functype//wasi/wasi:cli/Stdout::write_via_stream" = fn(i32) -> i32;  // TypeId(10)
+type "functype//wasi/wasi:cli/Stdout::write_via_stream" = fn(i32) -> i32;  // TypeId(11)
 
-type "functype//wasi/wasi:tls/Connector::new" = fn() -> i32;  // TypeId(11)
+type "functype//wasi/wasi:tls/Connector::new" = fn() -> i32;  // TypeId(12)
 
-type "functype//wasi/wasi:tls/Connector::send" = fn(i32, i32, i32);  // TypeId(12)
+type "functype//wasi/wasi:tls/Connector::send" = fn(i32, i32, i32);  // TypeId(13)
 
-type "functype//wasi_tls_send_done_future.wado/run" = fn();  // TypeId(13)
+type "functype//wasi_tls_send_done_future.wado/run" = fn();  // TypeId(14)
 
-type "functype//wasi_tls_send_done_future.wado/$cm_binding__Stdout_write_via_stream" = fn(i32) -> i32;  // TypeId(14)
+type "functype//wasi_tls_send_done_future.wado/$cm_binding__Stdout_write_via_stream" = fn(ref "core:prelude//$Resource") -> ref "core:prelude//$Resource";  // TypeId(15)
 
-type "functype//wasi_tls_send_done_future.wado/$cm_binding__Connector_new" = fn() -> i32;  // TypeId(15)
+type "functype//wasi_tls_send_done_future.wado/$cm_binding__Connector_new" = fn() -> ref "core:prelude//$Resource";  // TypeId(16)
 
-type "functype//wasi_tls_send_done_future.wado/$cm_binding__Connector_send" = fn(i32, i32) -> ref "tuple//[core:prelude/types.wado/Stream<u8>, core:prelude/types.wado/Future<core:prelude/types.wado/Result<(),wasi:tls/types.wado/Error>>]";  // TypeId(16)
+type "functype//wasi_tls_send_done_future.wado/$cm_binding__Connector_send" = fn(ref "core:prelude//$Resource", ref "core:prelude//$Resource") -> ref "tuple//[core:prelude/types.wado/Stream<u8>, core:prelude/types.wado/Future<core:prelude/types.wado/Result<(),wasi:tls/types.wado/Error>>]";  // TypeId(17)
 
-type "functype//wasi_tls_send_done_future.wado/$cm_export__run" = fn();  // TypeId(17)
+type "functype//wasi_tls_send_done_future.wado/$cm_export__run" = fn();  // TypeId(18)
 
-type "functype//core:rt/write_string_to_stream$dae[add_newline]" = fn(i32, ref Array<u8>, i32);  // TypeId(18)
+type "functype//core:rt/write_string_to_stream$dae[add_newline]" = fn(ref "core:prelude//$Resource", ref Array<u8>, i32);  // TypeId(19)
 
-type "functype//core:rt/cm_stream_write_raw_all_u8" = fn(i32, ref Array<u8>, i32, i32) -> "core:prelude/types.wado//enum:CopyResult";  // TypeId(19)
+type "functype//core:rt/cm_stream_write_raw_all_u8" = fn(i32, ref Array<u8>, i32, i32) -> "core:prelude/types.wado//enum:CopyResult";  // TypeId(20)
 
-type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(20)
+type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(21)
 
-type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(21)
+type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(22)
 
-type "functype//wasi/stream-drop-readable" = fn(i32);  // TypeId(22)
+type "functype//wasi/stream-drop-readable" = fn(i32);  // TypeId(23)
 
-type "functype//wasi/future-drop-readable:val-result<_,own<wasi/tls/types.wado#error>>" = fn(i32);  // TypeId(23)
+type "functype//wasi/future-drop-readable:val-result<_,own<wasi/tls/types.wado#error>>" = fn(i32);  // TypeId(24)
 
-type "functype//wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code" = fn(i32);  // TypeId(24)
+type "functype//wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code" = fn(i32);  // TypeId(25)
 
-type "functype//wasi/resource-drop:wasi/tls/client.wado#connector" = fn(i32);  // TypeId(25)
+type "functype//wasi/resource-drop:wasi/tls/client.wado#connector" = fn(i32);  // TypeId(26)
 
-type "functype//wasi/task-return" = fn(i32);  // TypeId(26)
+type "functype//wasi/task-return" = fn(i32);  // TypeId(27)
 
 import fn mem/realloc from "mem/realloc";
 import fn wasi/stream-write from "wasi/stream-write";
@@ -83,44 +87,44 @@ import fn wasi/task-return from "wasi/task-return";
 global global:wasi_tls_send_done_future.wado::$const_obj_0: ref "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(115, 101, 110, 100, 32, 102, 117, 116, 117, 114, 101, 32, 100, 114, 111, 112, 112, 101, 100), used: 19 };
 
 fn "wasi_tls_send_done_future.wado/run"() with Stdout, Connector, Error {
-    let conn: i32;
-    let send_done: i32;
+    let conn: ref "core:prelude//$Resource";
+    let send_done: ref "core:prelude//$Resource";
+    let $cm_pair_5: i64;
     let $pattern_temp_1: ref "tuple//[core:prelude/types.wado/Stream<u8>, core:prelude/types.wado/Future<core:prelude/types.wado/Result<(),wasi:tls/types.wado/Error>>]";
-    let packed_7: i64;
-    let rx_8: i32;
-    let tx_9: i32;
+    let $sroa_$pattern_temp_0_0_17: ref "core:prelude//$Resource";
+    let $sroa_$pattern_temp_0_1_18: i32;
     conn = "wasi_tls_send_done_future.wado/$cm_binding__Connector_new"();
-    rx_8 = builtin::i32_wrap_i64(local.tee packed_7("wasi/stream-new"()));
-    tx_9 = builtin::i32_wrap_i64(packed_7 >> 32_i64);
-    rx_8 = local.tee $pattern_temp_1("wasi_tls_send_done_future.wado/$cm_binding__Connector_send"(conn, rx_8)).0;
+    $sroa_$pattern_temp_0_0_17 = struct.new "core:prelude//$Resource" { value: builtin::i32_wrap_i64(local.tee $cm_pair_5("wasi/stream-new"())) };
+    $sroa_$pattern_temp_0_1_18 = builtin::i32_wrap_i64($cm_pair_5 >> 32_i64);
+    $sroa_$pattern_temp_0_0_17 = local.tee $pattern_temp_1("wasi_tls_send_done_future.wado/$cm_binding__Connector_send"(conn, $sroa_$pattern_temp_0_0_17)).0;
     send_done = $pattern_temp_1.1;
-    "wasi/stream-drop-writable"(tx_9);
-    "wasi/stream-drop-readable"(rx_8);
-    "wasi/future-drop-readable:val-result<_,own<wasi/tls/types.wado#error>>"(send_done);
-    send_done = builtin::i32_wrap_i64(local.tee packed_7("wasi/stream-new"()));
-    rx_8 = builtin::i32_wrap_i64(packed_7 >> 32_i64);
+    "wasi/stream-drop-writable"($sroa_$pattern_temp_0_1_18);
+    "wasi/stream-drop-readable"($sroa_$pattern_temp_0_0_17.value);
+    "wasi/future-drop-readable:val-result<_,own<wasi/tls/types.wado#error>>"(send_done.value);
+    send_done = struct.new "core:prelude//$Resource" { value: builtin::i32_wrap_i64(local.tee $cm_pair_5("wasi/stream-new"())) };
+    $sroa_$pattern_temp_0_0_17 = struct.new "core:prelude//$Resource" { value: builtin::i32_wrap_i64($cm_pair_5 >> 32_i64) };
     send_done = "wasi_tls_send_done_future.wado/$cm_binding__Stdout_write_via_stream"(send_done);
     let $mv_arg_2: ref "core:prelude/string.wado//String";
     $mv_arg_2 = global:wasi_tls_send_done_future.wado::$const_obj_0;
-    "core:rt/write_string_to_stream$dae[add_newline]"(rx_8, $mv_arg_2.repr, $mv_arg_2.used);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(send_done);
-    "wasi/resource-drop:wasi/tls/client.wado#connector"(conn);
+    "core:rt/write_string_to_stream$dae[add_newline]"($sroa_$pattern_temp_0_0_17, $mv_arg_2.repr, $mv_arg_2.used);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(send_done.value);
+    "wasi/resource-drop:wasi/tls/client.wado#connector"(conn.value);
 }
 
 fn "wasi_tls_send_done_future.wado/$cm_binding__Stdout_write_via_stream"(data) with Stdout {
-    return "wasi/wasi:cli/Stdout::write_via_stream"(data);
+    return struct.new "core:prelude//$Resource" { value: "wasi/wasi:cli/Stdout::write_via_stream"(data.value) };
 }
 
 fn "wasi_tls_send_done_future.wado/$cm_binding__Connector_new"() with Connector {
-    return "wasi/wasi:tls/Connector::new"();
+    return struct.new "core:prelude//$Resource" { value: "wasi/wasi:tls/Connector::new"() };
 }
 
 fn "wasi_tls_send_done_future.wado/$cm_binding__Connector_send"(self, cleartext) with Connector {
     let $outptr: i32;
     $outptr = "mem/realloc"(0, 0, 4, 8);
-    "wasi/wasi:tls/Connector::send"(self, cleartext, $outptr);
-    cleartext = builtin::load_i32($outptr);
-    self = builtin::load_i32($outptr + 4);
+    "wasi/wasi:tls/Connector::send"(self.value, cleartext.value, $outptr);
+    cleartext = struct.new "core:prelude//$Resource" { value: builtin::load_i32($outptr) };
+    self = struct.new "core:prelude//$Resource" { value: builtin::load_i32($outptr + 4) };
     drop("mem/realloc"($outptr, 8, 4, 0));
     return struct.new "tuple//[core:prelude/types.wado/Stream<u8>, core:prelude/types.wado/Future<core:prelude/types.wado/Result<(),wasi:tls/types.wado/Error>>]" { 0: cleartext, 1: self };
 }
@@ -135,10 +139,12 @@ fn "core:rt/write_string_to_stream$dae[add_newline]"(tx, $mv$message$repr, $mv$m
     builtin::array_copy<u8>(local.tee new_repr(builtin::array_new<u8>($mv$message$used + 1)), 0, $mv$message$repr, 0, $mv$message$used);
     builtin::array_set_u8(new_repr, $mv$message$used, 10);
     drop(block -> "core:prelude/types.wado//enum:CopyResult" {
+        let $arg_spill_1: i32;
+        $arg_spill_1 = tx.value;
         $mv$message$used = $mv$message$used + 1;
-        "core:rt/cm_stream_write_raw_all_u8"(tx, new_repr, 0, $mv$message$used);
+        "core:rt/cm_stream_write_raw_all_u8"($arg_spill_1, new_repr, 0, $mv$message$used);
     });
-    "wasi/stream-drop-writable"(tx);
+    "wasi/stream-drop-writable"(tx.value);
 }
 
 fn "core:rt/cm_stream_write_raw_all_u8"(handle, $mv$data$repr, $mv$data$start, $mv$data$end) {

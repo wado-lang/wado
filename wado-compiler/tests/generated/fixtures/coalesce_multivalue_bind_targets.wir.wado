@@ -8,14 +8,18 @@ enum core:prelude/traits.wado//enum:Ordering { Less = 0, Equal = 1, Greater = 2 
 
 enum core:prelude/types.wado//enum:CopyResult { Completed = 0, Dropped = 1, Cancelled = 2 };  // TypeId(2)
 
-array Array<u8> (mut u8);  // TypeId(3)
+struct core:prelude//$Resource {  // TypeId(3)
+    mut value: i32,
+}
 
-struct core:prelude/string.wado//String {  // TypeId(4)
+array Array<u8> (mut u8);  // TypeId(4)
+
+struct core:prelude/string.wado//String {  // TypeId(5)
     mut repr: ref Array<u8>,
     mut used: i32,
 }
 
-struct core:prelude/format.wado//Formatter {  // TypeId(5)
+struct core:prelude/format.wado//Formatter {  // TypeId(6)
     mut fill: char,
     mut align: "core:prelude/format.wado//enum:Alignment",
     mut sign_plus: bool,
@@ -27,51 +31,49 @@ struct core:prelude/format.wado//Formatter {  // TypeId(5)
     mut buf: ref "core:prelude/string.wado//String",
 }
 
-struct core:prelude/int128.wado//i128 {  // TypeId(6)
+struct core:prelude/int128.wado//i128 {  // TypeId(7)
     mut low: u64,
     mut high: i64,
 }
 
-struct core:prelude/int128.wado//u128 {  // TypeId(7)
+struct core:prelude/int128.wado//u128 {  // TypeId(8)
     mut low: u64,
     mut high: u64,
 }
 
-type "functype//mem/realloc" = fn(i32, i32, i32, i32) -> i32;  // TypeId(8)
+type "functype//mem/realloc" = fn(i32, i32, i32, i32) -> i32;  // TypeId(9)
 
-type "functype//wasi/stream-write" = fn(i32, i32, i32) -> i32;  // TypeId(9)
+type "functype//wasi/stream-write" = fn(i32, i32, i32) -> i32;  // TypeId(10)
 
-type "functype//wasi/waitable-join" = fn(i32, i32);  // TypeId(10)
+type "functype//wasi/waitable-join" = fn(i32, i32);  // TypeId(11)
 
-type "functype//wasi/waitable-set-drop" = fn(i32);  // TypeId(11)
+type "functype//wasi/waitable-set-drop" = fn(i32);  // TypeId(12)
 
-type "functype//wasi/waitable-set-new" = fn() -> i32;  // TypeId(12)
+type "functype//wasi/waitable-set-new" = fn() -> i32;  // TypeId(13)
 
-type "functype//wasi/waitable-set-wait" = fn(i32, i32) -> i32;  // TypeId(13)
+type "functype//wasi/waitable-set-wait" = fn(i32, i32) -> i32;  // TypeId(14)
 
-type "functype//wasi/wasi:cli/Stderr::write_via_stream" = fn(i32) -> i32;  // TypeId(14)
+type "functype//wasi/wasi:cli/Stderr::write_via_stream" = fn(i32) -> i32;  // TypeId(15)
 
-type "functype//wasi/wasi:cli/Stdout::write_via_stream" = fn(i32) -> i32;  // TypeId(15)
+type "functype//wasi/wasi:cli/Stdout::write_via_stream" = fn(i32) -> i32;  // TypeId(16)
 
-type "functype//coalesce_multivalue_bind_targets.wado/run" = fn();  // TypeId(16)
+type "functype//coalesce_multivalue_bind_targets.wado/run" = fn();  // TypeId(17)
 
-type "functype//coalesce_multivalue_bind_targets.wado/$cm_binding__Stdout_write_via_stream" = fn(i32) -> i32;  // TypeId(17)
+type "functype//coalesce_multivalue_bind_targets.wado/$cm_binding__Stdout_write_via_stream" = fn(ref "core:prelude//$Resource") -> ref "core:prelude//$Resource";  // TypeId(18)
 
-type "functype//coalesce_multivalue_bind_targets.wado/$cm_export__run" = fn();  // TypeId(18)
+type "functype//coalesce_multivalue_bind_targets.wado/$cm_export__run" = fn();  // TypeId(19)
 
-type "functype//core:prelude/primitive.wado/write_decimal_digits" = fn(ref Array<u8>, i32, u64, i32);  // TypeId(19)
+type "functype//core:prelude/primitive.wado/write_decimal_digits" = fn(ref Array<u8>, i32, u64, i32);  // TypeId(20)
 
-type "functype//core:prelude/primitive.wado/count_digits_u64" = fn(u64) -> i32;  // TypeId(20)
+type "functype//core:prelude/primitive.wado/count_digits_u64" = fn(u64) -> i32;  // TypeId(21)
 
-type "functype//core:rt/write_string_to_stream$dae[add_newline]" = fn(i32, ref Array<u8>, i32);  // TypeId(21)
+type "functype//core:rt/write_string_to_stream$dae[add_newline]" = fn(ref "core:prelude//$Resource", ref Array<u8>, i32);  // TypeId(22)
 
-type "functype//core:rt/log_stderr" = fn(ref "core:prelude/string.wado//String");  // TypeId(22)
+type "functype//core:rt/log_stderr" = fn(ref "core:prelude/string.wado//String");  // TypeId(23)
 
-type "functype//core:rt/panic" = fn(ref "core:prelude/string.wado//String");  // TypeId(23)
+type "functype//core:rt/panic" = fn(ref "core:prelude/string.wado//String");  // TypeId(24)
 
-type "functype//core:rt/cm_stream_write_raw_all_u8" = fn(i32, ref Array<u8>, i32, i32) -> "core:prelude/types.wado//enum:CopyResult";  // TypeId(24)
-
-type "functype//core:rt/core/rt/cm_stream_pair<u8>" = fn(i64) -> [i32, i32];  // TypeId(25)
+type "functype//core:rt/cm_stream_write_raw_all_u8" = fn(i32, ref Array<u8>, i32, i32) -> "core:prelude/types.wado//enum:CopyResult";  // TypeId(25)
 
 type "functype//core:prelude/int128.wado/core:prelude/int128.wado/u128::div_rem_wide$contract_report0" = fn(u64, u64, ref Array<u8>, i32);  // TypeId(26)
 
@@ -134,51 +136,51 @@ fn "coalesce_multivalue_bind_targets.wado/run"() with Stdout {
     let other_4: ref "core:prelude/int128.wado//i128";
     let self_11: ref "core:prelude/int128.wado//u128";
     let other_12: ref "core:prelude/int128.wado//u128";
-    let rx_38: i32;
-    let tx_39: i32;
-    let lo_52: i64;
-    let hi_53: i64;
+    let $sroa_$pattern_temp_0_0_43: ref "core:prelude//$Resource";
+    let $sroa_$pattern_temp_0_1_44: ref "core:prelude//$Resource";
+    let lo_49: i64;
+    let hi_50: i64;
     self_3 = black_box(struct.new "core:prelude/int128.wado//i128" { low: 0_i64, high: -9223372036854775808_i64 });
     other_4 = black_box(struct.new "core:prelude/int128.wado//i128" { low: -1_i64, high: -1_i64 });
     self_11 = $inline_core_prelude_int128_wado_i128__abs_u128_6: block -> ref "core:prelude/int128.wado//u128" {
         if local.tee $load_0(self_3.high) < 0_i64 {
-            multivalue_bind [lo_52, hi_53] = i64.sub128(0_i64, 0_i64, self_3.low, $load_0);
-            break $inline_core_prelude_int128_wado_i128__abs_u128_6: struct.new "core:prelude/int128.wado//u128" { low: lo_52, high: hi_53 };
+            multivalue_bind [lo_49, hi_50] = i64.sub128(0_i64, 0_i64, self_3.low, $load_0);
+            break $inline_core_prelude_int128_wado_i128__abs_u128_6: struct.new "core:prelude/int128.wado//u128" { low: lo_49, high: hi_50 };
         }
         break $inline_core_prelude_int128_wado_i128__abs_u128_6: struct.new "core:prelude/int128.wado//u128" { low: self_3.low, high: $load_0 };
     };
     other_12 = $inline_core_prelude_int128_wado_i128__abs_u128_7: block -> ref "core:prelude/int128.wado//u128" {
         if local.tee $load_0(other_4.high) < 0_i64 {
-            multivalue_bind [hi_53, lo_52] = i64.sub128(0_i64, 0_i64, other_4.low, $load_0);
-            break $inline_core_prelude_int128_wado_i128__abs_u128_7: struct.new "core:prelude/int128.wado//u128" { low: hi_53, high: lo_52 };
+            multivalue_bind [hi_50, lo_49] = i64.sub128(0_i64, 0_i64, other_4.low, $load_0);
+            break $inline_core_prelude_int128_wado_i128__abs_u128_7: struct.new "core:prelude/int128.wado//u128" { low: hi_50, high: lo_49 };
         }
         break $inline_core_prelude_int128_wado_i128__abs_u128_7: struct.new "core:prelude/int128.wado//u128" { low: other_4.low, high: $load_0 };
     };
     multivalue_bind [other_12, self_11] = "core:prelude/int128.wado/core:prelude/int128.wado/u128::div_rem"(self_11, other_12);
     other_4 = struct.new "core:prelude/int128.wado//i128" { low: self_11.low, high: self_11.high };
     other_4 = (if self_3.high < 0_i64 -> ref "core:prelude/int128.wado//i128" {
-        multivalue_bind [$load_0, lo_52] = i64.sub128(0_i64, 0_i64, other_4.low, other_4.high);
-        struct.new "core:prelude/int128.wado//i128" { low: $load_0, high: lo_52 };
+        multivalue_bind [$load_0, lo_49] = i64.sub128(0_i64, 0_i64, other_4.low, other_4.high);
+        struct.new "core:prelude/int128.wado//i128" { low: $load_0, high: lo_49 };
     } else {
         other_4;
     });
     $local_1 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
     "core:prelude/int128.wado/core:prelude/int128.wado/u128::fmt_decimal_magnitude$spec0$sroa[f.buf]"($inline_core_prelude_int128_wado_i128__abs_u128_18: block -> ref "core:prelude/int128.wado//u128" {
-        if local.tee lo_52(other_4.high) < 0_i64 {
-            multivalue_bind [$load_0, hi_53] = i64.sub128(0_i64, 0_i64, other_4.low, lo_52);
-            break $inline_core_prelude_int128_wado_i128__abs_u128_18: struct.new "core:prelude/int128.wado//u128" { low: $load_0, high: hi_53 };
+        if local.tee lo_49(other_4.high) < 0_i64 {
+            multivalue_bind [$load_0, hi_50] = i64.sub128(0_i64, 0_i64, other_4.low, lo_49);
+            break $inline_core_prelude_int128_wado_i128__abs_u128_18: struct.new "core:prelude/int128.wado//u128" { low: $load_0, high: hi_50 };
         }
-        break $inline_core_prelude_int128_wado_i128__abs_u128_18: struct.new "core:prelude/int128.wado//u128" { low: other_4.low, high: lo_52 };
+        break $inline_core_prelude_int128_wado_i128__abs_u128_18: struct.new "core:prelude/int128.wado//u128" { low: other_4.low, high: lo_49 };
     }, $local_1, other_4.high < 0_i64);
-    rx_38 = builtin::i32_wrap_i64(local.tee lo_52("wasi/stream-new"()));
-    tx_39 = builtin::i32_wrap_i64(lo_52 >> 32_i64);
-    rx_38 = "coalesce_multivalue_bind_targets.wado/$cm_binding__Stdout_write_via_stream"(rx_38);
-    "core:rt/write_string_to_stream$dae[add_newline]"(tx_39, $local_1.repr, $local_1.used);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(rx_38);
+    $sroa_$pattern_temp_0_0_43 = struct.new "core:prelude//$Resource" { value: builtin::i32_wrap_i64(local.tee lo_49("wasi/stream-new"())) };
+    $sroa_$pattern_temp_0_1_44 = struct.new "core:prelude//$Resource" { value: builtin::i32_wrap_i64(lo_49 >> 32_i64) };
+    $sroa_$pattern_temp_0_0_43 = "coalesce_multivalue_bind_targets.wado/$cm_binding__Stdout_write_via_stream"($sroa_$pattern_temp_0_0_43);
+    "core:rt/write_string_to_stream$dae[add_newline]"($sroa_$pattern_temp_0_1_44, $local_1.repr, $local_1.used);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"($sroa_$pattern_temp_0_0_43.value);
 }
 
 fn "coalesce_multivalue_bind_targets.wado/$cm_binding__Stdout_write_via_stream"(data) with Stdout {
-    return "wasi/wasi:cli/Stdout::write_via_stream"(data);
+    return struct.new "core:prelude//$Resource" { value: "wasi/wasi:cli/Stdout::write_via_stream"(data.value) };
 }
 
 fn "coalesce_multivalue_bind_targets.wado/$cm_export__run"() {
@@ -274,19 +276,23 @@ fn "core:rt/write_string_to_stream$dae[add_newline]"(tx, $mv$message$repr, $mv$m
     builtin::array_copy<u8>(local.tee new_repr(builtin::array_new<u8>($mv$message$used + 1)), 0, $mv$message$repr, 0, $mv$message$used);
     builtin::array_set_u8(new_repr, $mv$message$used, 10);
     drop(block -> "core:prelude/types.wado//enum:CopyResult" {
+        let $arg_spill_1: i32;
+        $arg_spill_1 = tx.value;
         $mv$message$used = $mv$message$used + 1;
-        "core:rt/cm_stream_write_raw_all_u8"(tx, new_repr, 0, $mv$message$used);
+        "core:rt/cm_stream_write_raw_all_u8"($arg_spill_1, new_repr, 0, $mv$message$used);
     });
-    "wasi/stream-drop-writable"(tx);
+    "wasi/stream-drop-writable"(tx.value);
 }
 
 fn "core:rt/log_stderr"(message) {
-    let $mv$$pattern_temp_0$0: i32;
-    let $mv$$pattern_temp_0$1: i32;
-    multivalue_bind [$mv$$pattern_temp_0$0, $mv$$pattern_temp_0$1] = "core:rt/core/rt/cm_stream_pair<u8>"("wasi/stream-new"());
-    $mv$$pattern_temp_0$0 = "wasi/wasi:cli/Stderr::write_via_stream"($mv$$pattern_temp_0$0);
-    "core:rt/write_string_to_stream$dae[add_newline]"($mv$$pattern_temp_0$1, message.repr, message.used);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"($mv$$pattern_temp_0$0);
+    let $cm_pair_4: i64;
+    let $sroa_$pattern_temp_0_0_6: i32;
+    let $sroa_$pattern_temp_0_1_7: ref "core:prelude//$Resource";
+    $sroa_$pattern_temp_0_0_6 = builtin::i32_wrap_i64(local.tee $cm_pair_4("wasi/stream-new"()));
+    $sroa_$pattern_temp_0_1_7 = struct.new "core:prelude//$Resource" { value: builtin::i32_wrap_i64($cm_pair_4 >> 32_i64) };
+    $sroa_$pattern_temp_0_0_6 = "wasi/wasi:cli/Stderr::write_via_stream"($sroa_$pattern_temp_0_0_6);
+    "core:rt/write_string_to_stream$dae[add_newline]"($sroa_$pattern_temp_0_1_7, message.repr, message.used);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"($sroa_$pattern_temp_0_0_6);
 }
 
 fn "core:rt/panic"(message) {
@@ -348,10 +354,6 @@ fn "core:rt/cm_stream_write_raw_all_u8"(handle, $mv$data$repr, $mv$data$start, $
             continue l31;
         };
     };
-}
-
-fn "core:rt/core/rt/cm_stream_pair<u8>"(packed) {
-    return builtin::i32_wrap_i64(packed), builtin::i32_wrap_i64(packed >> 32_i64);
 }
 
 fn "core:prelude/int128.wado/core:prelude/int128.wado/u128::div_rem_wide$contract_report0"(hi, d, $mv$$site$repr, $mv$$site$used) {

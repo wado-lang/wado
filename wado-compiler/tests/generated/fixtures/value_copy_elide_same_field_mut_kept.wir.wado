@@ -337,21 +337,21 @@ fn "core:prelude/primitive.wado/count_digits_u64"(val) {
 }
 
 fn "core:rt/panic"($mv$message$repr, $mv$message$used) {
-    let packed: i64;
-    let rx_7: i32;
-    let tx_8: i32;
+    let $cm_pair_4: i64;
     let new_repr: ref Array<u8>;
-    rx_7 = builtin::i32_wrap_i64(local.tee packed("wasi/stream-new"()));
-    tx_8 = builtin::i32_wrap_i64(packed >> 32_i64);
-    rx_7 = "wasi/wasi:cli/Stderr::write_via_stream"(rx_7);
+    let $sroa_$pattern_temp_0_0_21: i32;
+    let $sroa_$pattern_temp_0_1_22: i32;
+    $sroa_$pattern_temp_0_0_21 = builtin::i32_wrap_i64(local.tee $cm_pair_4("wasi/stream-new"()));
+    $sroa_$pattern_temp_0_1_22 = builtin::i32_wrap_i64($cm_pair_4 >> 32_i64);
+    $sroa_$pattern_temp_0_0_21 = "wasi/wasi:cli/Stderr::write_via_stream"($sroa_$pattern_temp_0_0_21);
     builtin::array_copy<u8>(local.tee new_repr(builtin::array_new<u8>($mv$message$used + 1)), 0, $mv$message$repr, 0, $mv$message$used);
     builtin::array_set_u8(new_repr, $mv$message$used, 10);
     drop(block -> "core:prelude/types.wado//enum:CopyResult" {
         $mv$message$used = $mv$message$used + 1;
-        "core:rt/cm_stream_write_raw_all_u8"(tx_8, new_repr, 0, $mv$message$used);
+        "core:rt/cm_stream_write_raw_all_u8"($sroa_$pattern_temp_0_1_22, new_repr, 0, $mv$message$used);
     });
-    "wasi/stream-drop-writable"(tx_8);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(rx_7);
+    "wasi/stream-drop-writable"($sroa_$pattern_temp_0_1_22);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"($sroa_$pattern_temp_0_0_21);
     cold_path;
     unreachable;
 }
@@ -932,9 +932,7 @@ fn "value_copy_elide_same_field_mut_kept.wado/value_copy_elide_same_field_mut_ke
     let $array_clone_src_1: ref Array<i32>;
     $array_clone_src_1 = v.repr;
     $load_3 = v.used;
-    let $array_clone_dst_2: ref Array<i32>;
-    builtin::array_copy<i32>(local.tee $array_clone_dst_2(builtin::array_new<i32>($load_3)), 0, $array_clone_src_1, 0, $load_3);
-    drop($array_clone_dst_2);
+    builtin::array_copy<i32>(builtin::array_new<i32>($load_3), 0, $array_clone_src_1, 0, $load_3);
     if @unlikely(0 >= $load_0) {
         cold_path;
         "value_copy_elide_same_field_mut_kept.wado/value_copy_elide_same_field_mut_kept.wado/Store::snapshot_then_mutate$cold0$dae[self,$contract_arg_1]"($load_0);

@@ -4,78 +4,82 @@
 
 enum core:prelude/types.wado//enum:CopyResult { Completed = 0, Dropped = 1, Cancelled = 2 };  // TypeId(0)
 
-array Array<u8> (mut u8);  // TypeId(1)
+struct core:prelude//$Resource {  // TypeId(1)
+    mut value: i32,
+}
 
-struct core:prelude/string.wado//String {  // TypeId(2)
+array Array<u8> (mut u8);  // TypeId(2)
+
+struct core:prelude/string.wado//String {  // TypeId(3)
     mut repr: ref Array<u8>,
     mut used: i32,
 }
 
-struct member_import_operation_local_namesake.wado//$Closure_1 {  // TypeId(3)}
+struct member_import_operation_local_namesake.wado//$Closure_1 {  // TypeId(4)}
 
-struct member_import_operation_local_namesake.wado//$Closure_0 {  // TypeId(4)}
+struct member_import_operation_local_namesake.wado//$Closure_0 {  // TypeId(5)}
 
-struct member_import_operation_local_namesake.wado//$Dispatch_./sub/member_import_op_iface.wado/Greeting {  // TypeId(5)
+struct member_import_operation_local_namesake.wado//$Dispatch_./sub/member_import_op_iface.wado/Greeting {  // TypeId(6)
     mut outer: ref null "member_import_operation_local_namesake.wado//$Dispatch_./sub/member_import_op_iface.wado/Greeting",
     mut op_hello: ref struct,
     mut op_bye: ref struct,
 }
 
-type "functype/$canonical_closure_fn_0" = fn(ref null struct, ref "core:prelude/string.wado//String") -> ref "core:prelude/string.wado//String";  // TypeId(6)
+type "functype/$canonical_closure_fn_0" = fn(ref null struct, ref "core:prelude/string.wado//String") -> ref "core:prelude/string.wado//String";  // TypeId(7)
 
-struct canonical//CanonicalClosure_0 {  // TypeId(7)
+struct canonical//CanonicalClosure_0 {  // TypeId(8)
     env: ref null struct,
     func: ref "functype/$canonical_closure_fn_0",
 }
 
-type "functype/$canonical_closure_fn_1" = fn(ref null struct) -> ref "core:prelude/string.wado//String";  // TypeId(8)
+type "functype/$canonical_closure_fn_1" = fn(ref null struct) -> ref "core:prelude/string.wado//String";  // TypeId(9)
 
-struct canonical//CanonicalClosure_1 {  // TypeId(9)
+struct canonical//CanonicalClosure_1 {  // TypeId(10)
     env: ref null struct,
     func: ref "functype/$canonical_closure_fn_1",
 }
 
-type "functype//mem/realloc" = fn(i32, i32, i32, i32) -> i32;  // TypeId(10)
+type "functype//mem/realloc" = fn(i32, i32, i32, i32) -> i32;  // TypeId(11)
 
-type "functype//wasi/stream-write" = fn(i32, i32, i32) -> i32;  // TypeId(11)
+type "functype//wasi/stream-write" = fn(i32, i32, i32) -> i32;  // TypeId(12)
 
-type "functype//wasi/waitable-join" = fn(i32, i32);  // TypeId(12)
+type "functype//wasi/waitable-join" = fn(i32, i32);  // TypeId(13)
 
-type "functype//wasi/waitable-set-drop" = fn(i32);  // TypeId(13)
+type "functype//wasi/waitable-set-drop" = fn(i32);  // TypeId(14)
 
-type "functype//wasi/waitable-set-new" = fn() -> i32;  // TypeId(14)
+type "functype//wasi/waitable-set-new" = fn() -> i32;  // TypeId(15)
 
-type "functype//wasi/waitable-set-wait" = fn(i32, i32) -> i32;  // TypeId(15)
+type "functype//wasi/waitable-set-wait" = fn(i32, i32) -> i32;  // TypeId(16)
 
-type "functype//wasi/wasi:cli/Stdout::write_via_stream" = fn(i32) -> i32;  // TypeId(16)
+type "functype//wasi/wasi:cli/Stdout::write_via_stream" = fn(i32) -> i32;  // TypeId(17)
 
-type "functype//member_import_operation_local_namesake.wado/run" = fn();  // TypeId(17)
+type "functype//member_import_operation_local_namesake.wado/run" = fn();  // TypeId(18)
 
-type "functype//member_import_operation_local_namesake.wado/$cm_binding__Stdout_write_via_stream" = fn(i32) -> i32;  // TypeId(18)
+type "functype//member_import_operation_local_namesake.wado/$cm_binding__Stdout_write_via_stream" = fn(ref "core:prelude//$Resource") -> ref "core:prelude//$Resource";  // TypeId(19)
 
-type "functype//member_import_operation_local_namesake.wado/$cm_export__run" = fn();  // TypeId(19)
+type "functype//member_import_operation_local_namesake.wado/$cm_export__run" = fn();  // TypeId(20)
 
-type "functype//core:rt/write_string_to_stream$dae[add_newline]" = fn(i32, ref Array<u8>, i32);  // TypeId(20)
+type "functype//core:rt/write_string_to_stream$dae[add_newline]" = fn(ref "core:prelude//$Resource", ref Array<u8>, i32);  // TypeId(21)
 
-type "functype//core:rt/cm_stream_write_raw_all_u8" = fn(i32, ref Array<u8>, i32, i32) -> "core:prelude/types.wado//enum:CopyResult";  // TypeId(21)
+type "functype//core:rt/cm_stream_write_raw_all_u8" = fn(i32, ref Array<u8>, i32, i32) -> "core:prelude/types.wado//enum:CopyResult";  // TypeId(22)
 
-type "functype//core:prelude/string.wado/core:prelude/string.wado/String::realloc_to" = fn(ref "core:prelude/string.wado//String", i32);  // TypeId(22)
+type "functype//core:prelude/string.wado/core:prelude/string.wado/String::realloc_to" = fn(ref "core:prelude/string.wado//String", i32);  // TypeId(23)
 
-type "functype//core:prelude/string.wado/core:prelude/string.wado/String::grow" = fn(ref "core:prelude/string.wado//String", i32);  // TypeId(23)
+type "functype//core:prelude/string.wado/core:prelude/string.wado/String::grow" = fn(ref "core:prelude/string.wado//String", i32);  // TypeId(24)
 
-type "functype//core:prelude/string.wado/core:prelude/string.wado/String::push_str<core:prelude/string.wado/String>" = fn(ref "core:prelude/string.wado//String", ref Array<u8>, i32);  // TypeId(24)
+type "functype//core:prelude/string.wado/core:prelude/string.wado/String::push_str<core:prelude/string.wado/String>" = fn(ref "core:prelude/string.wado//String", ref Array<u8>, i32);  // TypeId(25)
 
-type "functype//member_import_operation_local_namesake.wado/member_import_operation_local_namesake.wado/$Closure_0::$call$dae[self]" = fn(ref "core:prelude/string.wado//String") -> ref "core:prelude/string.wado//String";  // TypeId(25)
+type "functype//member_import_operation_local_namesake.wado/member_import_operation_local_namesake.wado/$Closure_0::$call$dae[self]" = fn(ref "core:prelude/string.wado//String") -> ref "core:prelude/string.wado//String";  // TypeId(26)
 
-type "functype//member_import_operation_local_namesake.wado/member_import_operation_local_namesake.wado/$Closure_1::$call$dae[self]" = fn() -> ref "core:prelude/string.wado//String";  // TypeId(26)
+type "functype//member_import_operation_local_namesake.wado/member_import_operation_local_namesake.wado/$Closure_1::$call$dae[self]" = fn() -> ref "core:prelude/string.wado//String";  // TypeId(27)
 
-type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(27)
+type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(28)
 
-type "functype//wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code" = fn(i32);  // TypeId(28)
+type "functype//wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code" = fn(i32);  // TypeId(29)
 
-type "functype//wasi/task-return" = fn(i32);  // TypeId(29)
+type "functype//wasi/task-return" = fn(i32);  // TypeId(30)
 
-type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(30)
+type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(31)
 
 import fn mem/realloc from "mem/realloc";
 import fn wasi/stream-write from "wasi/stream-write";
@@ -96,76 +100,76 @@ global global:member_import_operation_local_namesake.wado::$const_obj_6: ref "co
 global global:member_import_operation_local_namesake.wado::$const_obj_8: ref Array<u8> = array.new_fixed<u8>(72, 69, 76, 76, 79, 32);
 
 fn "member_import_operation_local_namesake.wado/run"() with Stdout {
-    let name_11: ref "core:prelude/string.wado//String";
-    let $local_1_12: ref null "member_import_operation_local_namesake.wado//$Dispatch_./sub/member_import_op_iface.wado/Greeting";
-    let $local_2_13: ref "member_import_operation_local_namesake.wado//$Dispatch_./sub/member_import_op_iface.wado/Greeting";
-    let $local_3_14: ref "core:prelude/string.wado//String";
-    let packed_17: i64;
-    let rx_18: i32;
-    let tx_19: i32;
-    let $local_1_30: ref null "member_import_operation_local_namesake.wado//$Dispatch_./sub/member_import_op_iface.wado/Greeting";
-    $local_3_14 = $inline__effect_dispatch____sub_member_import_op_iface_wado_Greeting__hello_2: block -> ref "core:prelude/string.wado//String" {
-        name_11 = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(120), used: 1 };
-        if ref.is_null(local.tee $local_1_12(global:member_import_operation_local_namesake.wado::$effect_./sub/member_import_op_iface.wado/Greeting)) == 0 {
-            global:member_import_operation_local_namesake.wado::$effect_./sub/member_import_op_iface.wado/Greeting = local.tee $local_2_13(ref.as_non_null($local_1_12)).outer;
-            $local_3_14 = block -> ref "core:prelude/string.wado//String" {
+    let $cm_pair_4_10: i64;
+    let name_12: ref "core:prelude/string.wado//String";
+    let $local_1_13: ref null "member_import_operation_local_namesake.wado//$Dispatch_./sub/member_import_op_iface.wado/Greeting";
+    let $local_2_14: ref "member_import_operation_local_namesake.wado//$Dispatch_./sub/member_import_op_iface.wado/Greeting";
+    let $local_3_15: ref "core:prelude/string.wado//String";
+    let $local_1_28: ref null "member_import_operation_local_namesake.wado//$Dispatch_./sub/member_import_op_iface.wado/Greeting";
+    let $sroa_$pattern_temp_0_0_59: ref "core:prelude//$Resource";
+    let $sroa_$pattern_temp_0_1_60: ref "core:prelude//$Resource";
+    $local_3_15 = $inline__effect_dispatch____sub_member_import_op_iface_wado_Greeting__hello_2: block -> ref "core:prelude/string.wado//String" {
+        name_12 = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(120), used: 1 };
+        if ref.is_null(local.tee $local_1_13(global:member_import_operation_local_namesake.wado::$effect_./sub/member_import_op_iface.wado/Greeting)) == 0 {
+            global:member_import_operation_local_namesake.wado::$effect_./sub/member_import_op_iface.wado/Greeting = local.tee $local_2_14(ref.as_non_null($local_1_13)).outer;
+            $local_3_15 = block -> ref "core:prelude/string.wado//String" {
                 let $indirect_call_3: ref "canonical//CanonicalClosure_0";
-                call_ref "functype/$canonical_closure_fn_0"($indirect_call_3.func, local.tee $indirect_call_3(ref.cast "canonical//CanonicalClosure_0"($local_2_13.op_hello)).env, name_11);
+                call_ref "functype/$canonical_closure_fn_0"($indirect_call_3.func, local.tee $indirect_call_3(ref.cast "canonical//CanonicalClosure_0"($local_2_14.op_hello)).env, name_12);
             };
-            global:member_import_operation_local_namesake.wado::$effect_./sub/member_import_op_iface.wado/Greeting = $local_1_12;
-            break $inline__effect_dispatch____sub_member_import_op_iface_wado_Greeting__hello_2: $local_3_14;
+            global:member_import_operation_local_namesake.wado::$effect_./sub/member_import_op_iface.wado/Greeting = $local_1_13;
+            break $inline__effect_dispatch____sub_member_import_op_iface_wado_Greeting__hello_2: $local_3_15;
         } else {
-            $local_3_14 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(22), used: 0 };
+            $local_3_15 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(22), used: 0 };
             let $mv_arg_2: ref "core:prelude/string.wado//String";
             $mv_arg_2 = global:member_import_operation_local_namesake.wado::$const_obj_6;
-            "core:prelude/string.wado/core:prelude/string.wado/String::push_str<core:prelude/string.wado/String>"($local_3_14, $mv_arg_2.repr, $mv_arg_2.used);
-            "core:prelude/string.wado/core:prelude/string.wado/String::push_str<core:prelude/string.wado/String>"($local_3_14, name_11.repr, name_11.used);
-            $local_3_14;
+            "core:prelude/string.wado/core:prelude/string.wado/String::push_str<core:prelude/string.wado/String>"($local_3_15, $mv_arg_2.repr, $mv_arg_2.used);
+            "core:prelude/string.wado/core:prelude/string.wado/String::push_str<core:prelude/string.wado/String>"($local_3_15, name_12.repr, name_12.used);
+            $local_3_15;
             break $inline__effect_dispatch____sub_member_import_op_iface_wado_Greeting__hello_2;
         }
         unreachable;
     };
-    rx_18 = builtin::i32_wrap_i64(local.tee packed_17("wasi/stream-new"()));
-    tx_19 = builtin::i32_wrap_i64(packed_17 >> 32_i64);
-    rx_18 = "member_import_operation_local_namesake.wado/$cm_binding__Stdout_write_via_stream"(rx_18);
-    "core:rt/write_string_to_stream$dae[add_newline]"(tx_19, $local_3_14.repr, $local_3_14.used);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(rx_18);
-    global:member_import_operation_local_namesake.wado::$effect_./sub/member_import_op_iface.wado/Greeting = local.tee $local_2_13(struct.new "member_import_operation_local_namesake.wado//$Dispatch_./sub/member_import_op_iface.wado/Greeting" { outer: local.tee $local_1_12(global:member_import_operation_local_namesake.wado::$effect_./sub/member_import_op_iface.wado/Greeting), op_hello: struct.new "canonical//CanonicalClosure_0" { env: struct.new "member_import_operation_local_namesake.wado//$Closure_0" {  }, func: ref.func "closure/member_import_operation_local_namesake.wado/$closure_wrapper_0" }, op_bye: struct.new "canonical//CanonicalClosure_1" { env: struct.new "member_import_operation_local_namesake.wado//$Closure_1" {  }, func: ref.func "closure/member_import_operation_local_namesake.wado/$closure_wrapper_1" } });
-    name_11 = $inline__effect_dispatch____sub_member_import_op_iface_wado_Greeting__hello_8: block -> ref "core:prelude/string.wado//String" {
-        $local_3_14 = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(121), used: 1 };
-        if ref.is_null(local.tee $local_1_30(global:member_import_operation_local_namesake.wado::$effect_./sub/member_import_op_iface.wado/Greeting)) == 0 {
-            global:member_import_operation_local_namesake.wado::$effect_./sub/member_import_op_iface.wado/Greeting = local.tee $local_2_13(ref.as_non_null($local_1_30)).outer;
-            name_11 = block -> ref "core:prelude/string.wado//String" {
-                call_ref "functype/$canonical_closure_fn_0"($indirect_call_3.func, local.tee $indirect_call_3(ref.cast "canonical//CanonicalClosure_0"($local_2_13.op_hello)).env, $local_3_14);
+    $sroa_$pattern_temp_0_0_59 = struct.new "core:prelude//$Resource" { value: builtin::i32_wrap_i64(local.tee $cm_pair_4_10("wasi/stream-new"())) };
+    $sroa_$pattern_temp_0_1_60 = struct.new "core:prelude//$Resource" { value: builtin::i32_wrap_i64($cm_pair_4_10 >> 32_i64) };
+    $sroa_$pattern_temp_0_0_59 = "member_import_operation_local_namesake.wado/$cm_binding__Stdout_write_via_stream"($sroa_$pattern_temp_0_0_59);
+    "core:rt/write_string_to_stream$dae[add_newline]"($sroa_$pattern_temp_0_1_60, $local_3_15.repr, $local_3_15.used);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"($sroa_$pattern_temp_0_0_59.value);
+    global:member_import_operation_local_namesake.wado::$effect_./sub/member_import_op_iface.wado/Greeting = local.tee $local_2_14(struct.new "member_import_operation_local_namesake.wado//$Dispatch_./sub/member_import_op_iface.wado/Greeting" { outer: local.tee $local_1_13(global:member_import_operation_local_namesake.wado::$effect_./sub/member_import_op_iface.wado/Greeting), op_hello: struct.new "canonical//CanonicalClosure_0" { env: struct.new "member_import_operation_local_namesake.wado//$Closure_0" {  }, func: ref.func "closure/member_import_operation_local_namesake.wado/$closure_wrapper_0" }, op_bye: struct.new "canonical//CanonicalClosure_1" { env: struct.new "member_import_operation_local_namesake.wado//$Closure_1" {  }, func: ref.func "closure/member_import_operation_local_namesake.wado/$closure_wrapper_1" } });
+    name_12 = $inline__effect_dispatch____sub_member_import_op_iface_wado_Greeting__hello_6: block -> ref "core:prelude/string.wado//String" {
+        $local_3_15 = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(121), used: 1 };
+        if ref.is_null(local.tee $local_1_28(global:member_import_operation_local_namesake.wado::$effect_./sub/member_import_op_iface.wado/Greeting)) == 0 {
+            global:member_import_operation_local_namesake.wado::$effect_./sub/member_import_op_iface.wado/Greeting = local.tee $local_2_14(ref.as_non_null($local_1_28)).outer;
+            name_12 = block -> ref "core:prelude/string.wado//String" {
+                call_ref "functype/$canonical_closure_fn_0"($indirect_call_3.func, local.tee $indirect_call_3(ref.cast "canonical//CanonicalClosure_0"($local_2_14.op_hello)).env, $local_3_15);
             };
-            global:member_import_operation_local_namesake.wado::$effect_./sub/member_import_op_iface.wado/Greeting = $local_1_30;
-            break $inline__effect_dispatch____sub_member_import_op_iface_wado_Greeting__hello_8: name_11;
+            global:member_import_operation_local_namesake.wado::$effect_./sub/member_import_op_iface.wado/Greeting = $local_1_28;
+            break $inline__effect_dispatch____sub_member_import_op_iface_wado_Greeting__hello_6: name_12;
         } else {
-            name_11 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(22), used: 0 };
+            name_12 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(22), used: 0 };
             $mv_arg_2 = global:member_import_operation_local_namesake.wado::$const_obj_6;
-            "core:prelude/string.wado/core:prelude/string.wado/String::push_str<core:prelude/string.wado/String>"(name_11, $mv_arg_2.repr, $mv_arg_2.used);
-            "core:prelude/string.wado/core:prelude/string.wado/String::push_str<core:prelude/string.wado/String>"(name_11, $local_3_14.repr, $local_3_14.used);
-            name_11;
-            break $inline__effect_dispatch____sub_member_import_op_iface_wado_Greeting__hello_8;
+            "core:prelude/string.wado/core:prelude/string.wado/String::push_str<core:prelude/string.wado/String>"(name_12, $mv_arg_2.repr, $mv_arg_2.used);
+            "core:prelude/string.wado/core:prelude/string.wado/String::push_str<core:prelude/string.wado/String>"(name_12, $local_3_15.repr, $local_3_15.used);
+            name_12;
+            break $inline__effect_dispatch____sub_member_import_op_iface_wado_Greeting__hello_6;
         }
         unreachable;
     };
-    rx_18 = builtin::i32_wrap_i64(local.tee packed_17("wasi/stream-new"()));
-    tx_19 = builtin::i32_wrap_i64(packed_17 >> 32_i64);
-    rx_18 = "member_import_operation_local_namesake.wado/$cm_binding__Stdout_write_via_stream"(rx_18);
-    "core:rt/write_string_to_stream$dae[add_newline]"(tx_19, name_11.repr, name_11.used);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(rx_18);
-    global:member_import_operation_local_namesake.wado::$effect_./sub/member_import_op_iface.wado/Greeting = $local_1_12;
-    rx_18 = builtin::i32_wrap_i64(local.tee packed_17("wasi/stream-new"()));
-    tx_19 = builtin::i32_wrap_i64(packed_17 >> 32_i64);
-    rx_18 = "member_import_operation_local_namesake.wado/$cm_binding__Stdout_write_via_stream"(rx_18);
-    name_11 = global:member_import_operation_local_namesake.wado::$const_obj_5;
-    "core:rt/write_string_to_stream$dae[add_newline]"(tx_19, name_11.repr, name_11.used);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(rx_18);
+    $sroa_$pattern_temp_0_0_59 = struct.new "core:prelude//$Resource" { value: builtin::i32_wrap_i64(local.tee $cm_pair_4_10("wasi/stream-new"())) };
+    $sroa_$pattern_temp_0_1_60 = struct.new "core:prelude//$Resource" { value: builtin::i32_wrap_i64($cm_pair_4_10 >> 32_i64) };
+    $sroa_$pattern_temp_0_0_59 = "member_import_operation_local_namesake.wado/$cm_binding__Stdout_write_via_stream"($sroa_$pattern_temp_0_0_59);
+    "core:rt/write_string_to_stream$dae[add_newline]"($sroa_$pattern_temp_0_1_60, name_12.repr, name_12.used);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"($sroa_$pattern_temp_0_0_59.value);
+    global:member_import_operation_local_namesake.wado::$effect_./sub/member_import_op_iface.wado/Greeting = $local_1_13;
+    $sroa_$pattern_temp_0_0_59 = struct.new "core:prelude//$Resource" { value: builtin::i32_wrap_i64(local.tee $cm_pair_4_10("wasi/stream-new"())) };
+    $sroa_$pattern_temp_0_1_60 = struct.new "core:prelude//$Resource" { value: builtin::i32_wrap_i64($cm_pair_4_10 >> 32_i64) };
+    $sroa_$pattern_temp_0_0_59 = "member_import_operation_local_namesake.wado/$cm_binding__Stdout_write_via_stream"($sroa_$pattern_temp_0_0_59);
+    name_12 = global:member_import_operation_local_namesake.wado::$const_obj_5;
+    "core:rt/write_string_to_stream$dae[add_newline]"($sroa_$pattern_temp_0_1_60, name_12.repr, name_12.used);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"($sroa_$pattern_temp_0_0_59.value);
 }
 
 fn "member_import_operation_local_namesake.wado/$cm_binding__Stdout_write_via_stream"(data) with Stdout {
-    return "wasi/wasi:cli/Stdout::write_via_stream"(data);
+    return struct.new "core:prelude//$Resource" { value: "wasi/wasi:cli/Stdout::write_via_stream"(data.value) };
 }
 
 fn "member_import_operation_local_namesake.wado/$cm_export__run"() {
@@ -178,10 +182,12 @@ fn "core:rt/write_string_to_stream$dae[add_newline]"(tx, $mv$message$repr, $mv$m
     builtin::array_copy<u8>(local.tee new_repr(builtin::array_new<u8>($mv$message$used + 1)), 0, $mv$message$repr, 0, $mv$message$used);
     builtin::array_set_u8(new_repr, $mv$message$used, 10);
     drop(block -> "core:prelude/types.wado//enum:CopyResult" {
+        let $arg_spill_1: i32;
+        $arg_spill_1 = tx.value;
         $mv$message$used = $mv$message$used + 1;
-        "core:rt/cm_stream_write_raw_all_u8"(tx, new_repr, 0, $mv$message$used);
+        "core:rt/cm_stream_write_raw_all_u8"($arg_spill_1, new_repr, 0, $mv$message$used);
     });
-    "wasi/stream-drop-writable"(tx);
+    "wasi/stream-drop-writable"(tx.value);
 }
 
 fn "core:rt/cm_stream_write_raw_all_u8"(handle, $mv$data$repr, $mv$data$start, $mv$data$end) {

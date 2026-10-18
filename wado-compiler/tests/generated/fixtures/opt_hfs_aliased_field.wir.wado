@@ -4,91 +4,95 @@
 
 enum core:prelude/types.wado//enum:CopyResult { Completed = 0, Dropped = 1, Cancelled = 2 };  // TypeId(0)
 
-array Array<u8> (mut u8);  // TypeId(1)
+struct core:prelude//$Resource {  // TypeId(1)
+    mut value: i32,
+}
 
-struct core:prelude/string.wado//String {  // TypeId(2)
+array Array<u8> (mut u8);  // TypeId(2)
+
+struct core:prelude/string.wado//String {  // TypeId(3)
     mut repr: ref Array<u8>,
     mut used: i32,
 }
 
-struct opt_hfs_aliased_field.wado//C {  // TypeId(3)
+struct opt_hfs_aliased_field.wado//C {  // TypeId(4)
     mut n: i32,
     mut m: i32,
 }
 
-struct opt_hfs_aliased_field.wado//$Closure_0 {  // TypeId(4)
+struct opt_hfs_aliased_field.wado//$Closure_0 {  // TypeId(5)
     mut $capture_0: ref "opt_hfs_aliased_field.wado//C",
 }
 
-struct opt_hfs_aliased_field.wado//H {  // TypeId(5)
+struct opt_hfs_aliased_field.wado//H {  // TypeId(6)
     mut inner: ref "opt_hfs_aliased_field.wado//C",
     mut k: i32,
 }
 
-type "functype/$canonical_closure_fn_0" = fn(ref null struct);  // TypeId(6)
+type "functype/$canonical_closure_fn_0" = fn(ref null struct);  // TypeId(7)
 
-struct canonical//CanonicalClosure_0 {  // TypeId(7)
+struct canonical//CanonicalClosure_0 {  // TypeId(8)
     env: ref null struct,
     func: ref "functype/$canonical_closure_fn_0",
 }
 
-type "functype//mem/realloc" = fn(i32, i32, i32, i32) -> i32;  // TypeId(8)
+type "functype//mem/realloc" = fn(i32, i32, i32, i32) -> i32;  // TypeId(9)
 
-type "functype//wasi/stream-write" = fn(i32, i32, i32) -> i32;  // TypeId(9)
+type "functype//wasi/stream-write" = fn(i32, i32, i32) -> i32;  // TypeId(10)
 
-type "functype//wasi/waitable-join" = fn(i32, i32);  // TypeId(10)
+type "functype//wasi/waitable-join" = fn(i32, i32);  // TypeId(11)
 
-type "functype//wasi/waitable-set-drop" = fn(i32);  // TypeId(11)
+type "functype//wasi/waitable-set-drop" = fn(i32);  // TypeId(12)
 
-type "functype//wasi/waitable-set-new" = fn() -> i32;  // TypeId(12)
+type "functype//wasi/waitable-set-new" = fn() -> i32;  // TypeId(13)
 
-type "functype//wasi/waitable-set-wait" = fn(i32, i32) -> i32;  // TypeId(13)
+type "functype//wasi/waitable-set-wait" = fn(i32, i32) -> i32;  // TypeId(14)
 
-type "functype//wasi/wasi:cli/Stdout::write_via_stream" = fn(i32) -> i32;  // TypeId(14)
+type "functype//wasi/wasi:cli/Stdout::write_via_stream" = fn(i32) -> i32;  // TypeId(15)
 
-type "functype//opt_hfs_aliased_field.wado/through_param" = fn(ref "opt_hfs_aliased_field.wado//C", ref "opt_hfs_aliased_field.wado//C");  // TypeId(15)
+type "functype//opt_hfs_aliased_field.wado/through_param" = fn(ref "opt_hfs_aliased_field.wado//C", ref "opt_hfs_aliased_field.wado//C");  // TypeId(16)
 
-type "functype//opt_hfs_aliased_field.wado/touch" = fn(ref "opt_hfs_aliased_field.wado//H");  // TypeId(16)
+type "functype//opt_hfs_aliased_field.wado/touch" = fn(ref "opt_hfs_aliased_field.wado//H");  // TypeId(17)
 
-type "functype//opt_hfs_aliased_field.wado/through_container" = fn(ref "opt_hfs_aliased_field.wado//H", ref "opt_hfs_aliased_field.wado//C");  // TypeId(17)
+type "functype//opt_hfs_aliased_field.wado/through_container" = fn(ref "opt_hfs_aliased_field.wado//H", ref "opt_hfs_aliased_field.wado//C");  // TypeId(18)
 
-type "functype//opt_hfs_aliased_field.wado/through_closure" = fn(ref "opt_hfs_aliased_field.wado//C", ref struct);  // TypeId(18)
+type "functype//opt_hfs_aliased_field.wado/through_closure" = fn(ref "opt_hfs_aliased_field.wado//C", ref struct);  // TypeId(19)
 
-type "functype//opt_hfs_aliased_field.wado/poke" = fn();  // TypeId(19)
+type "functype//opt_hfs_aliased_field.wado/poke" = fn();  // TypeId(20)
 
-type "functype//opt_hfs_aliased_field.wado/through_global" = fn(ref "opt_hfs_aliased_field.wado//C");  // TypeId(20)
+type "functype//opt_hfs_aliased_field.wado/through_global" = fn(ref "opt_hfs_aliased_field.wado//C");  // TypeId(21)
 
-type "functype//opt_hfs_aliased_field.wado/run" = fn();  // TypeId(21)
+type "functype//opt_hfs_aliased_field.wado/run" = fn();  // TypeId(22)
 
-type "functype//opt_hfs_aliased_field.wado/$cm_binding__Stdout_write_via_stream" = fn(i32) -> i32;  // TypeId(22)
+type "functype//opt_hfs_aliased_field.wado/$cm_binding__Stdout_write_via_stream" = fn(ref "core:prelude//$Resource") -> ref "core:prelude//$Resource";  // TypeId(23)
 
-type "functype//opt_hfs_aliased_field.wado/$cm_export__run" = fn();  // TypeId(23)
+type "functype//opt_hfs_aliased_field.wado/$cm_export__run" = fn();  // TypeId(24)
 
-type "functype//opt_hfs_aliased_field.wado/$initialize_modules$cold0" = fn();  // TypeId(24)
+type "functype//opt_hfs_aliased_field.wado/$initialize_modules$cold0" = fn();  // TypeId(25)
 
-type "functype//core:prelude/primitive.wado/write_decimal_digits" = fn(ref Array<u8>, i32, u64, i32);  // TypeId(25)
+type "functype//core:prelude/primitive.wado/write_decimal_digits" = fn(ref Array<u8>, i32, u64, i32);  // TypeId(26)
 
-type "functype//core:prelude/primitive.wado/count_digits_u64" = fn(u64) -> i32;  // TypeId(26)
+type "functype//core:prelude/primitive.wado/count_digits_u64" = fn(u64) -> i32;  // TypeId(27)
 
-type "functype//core:rt/write_string_to_stream$dae[add_newline]" = fn(i32, ref Array<u8>, i32);  // TypeId(27)
+type "functype//core:rt/write_string_to_stream$dae[add_newline]" = fn(ref "core:prelude//$Resource", ref Array<u8>, i32);  // TypeId(28)
 
-type "functype//core:rt/cm_stream_write_raw_all_u8" = fn(i32, ref Array<u8>, i32, i32) -> "core:prelude/types.wado//enum:CopyResult";  // TypeId(28)
+type "functype//core:rt/cm_stream_write_raw_all_u8" = fn(i32, ref Array<u8>, i32, i32) -> "core:prelude/types.wado//enum:CopyResult";  // TypeId(29)
 
-type "functype//core:prelude/string.wado/core:prelude/string.wado/String::realloc_to" = fn(ref "core:prelude/string.wado//String", i32);  // TypeId(29)
+type "functype//core:prelude/string.wado/core:prelude/string.wado/String::realloc_to" = fn(ref "core:prelude/string.wado//String", i32);  // TypeId(30)
 
-type "functype//core:prelude/string.wado/core:prelude/string.wado/String::grow" = fn(ref "core:prelude/string.wado//String", i32);  // TypeId(30)
+type "functype//core:prelude/string.wado/core:prelude/string.wado/String::grow" = fn(ref "core:prelude/string.wado//String", i32);  // TypeId(31)
 
-type "functype//opt_hfs_aliased_field.wado/opt_hfs_aliased_field.wado/$Closure_0::$call" = fn(ref "opt_hfs_aliased_field.wado//$Closure_0");  // TypeId(31)
+type "functype//opt_hfs_aliased_field.wado/opt_hfs_aliased_field.wado/$Closure_0::$call" = fn(ref "opt_hfs_aliased_field.wado//$Closure_0");  // TypeId(32)
 
-type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$sroa[self.buf]$dae[alt_prefix]" = fn(ref "core:prelude/string.wado//String", bool, i32) -> i32;  // TypeId(32)
+type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$sroa[self.buf]$dae[alt_prefix]" = fn(ref "core:prelude/string.wado//String", bool, i32) -> i32;  // TypeId(33)
 
-type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(33)
+type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(34)
 
-type "functype//wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code" = fn(i32);  // TypeId(34)
+type "functype//wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code" = fn(i32);  // TypeId(35)
 
-type "functype//wasi/task-return" = fn(i32);  // TypeId(35)
+type "functype//wasi/task-return" = fn(i32);  // TypeId(36)
 
-type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(36)
+type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(37)
 
 import fn mem/realloc from "mem/realloc";
 import fn wasi/stream-write from "wasi/stream-write";
@@ -194,9 +198,11 @@ fn "opt_hfs_aliased_field.wado/run"() with Stdout {
     let a: ref "opt_hfs_aliased_field.wado//C";
     let h: ref "opt_hfs_aliased_field.wado//H";
     let $local_7: ref "core:prelude/string.wado//String";
-    let self_26: i32;
-    let is_negative_32: bool;
-    let x_36: i64;
+    let self_27: i32;
+    let is_negative_33: bool;
+    let x_37: i64;
+    let $sroa_$pattern_temp_0_0_157: ref "core:prelude//$Resource";
+    let $sroa_$pattern_temp_0_1_158: ref "core:prelude//$Resource";
     $inline__initialize_modules_0: block {
         break_if $inline__initialize_modules_0 @likely(global:opt_hfs_aliased_field.wado::$modules_initialized);
         cold_path;
@@ -204,83 +210,83 @@ fn "opt_hfs_aliased_field.wado/run"() with Stdout {
     };
     "opt_hfs_aliased_field.wado/through_param"(local.tee a(struct.new "opt_hfs_aliased_field.wado//C" { n: 0, m: 0 }), a);
     $local_7 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
-    is_negative_32 = local.tee self_26(a.n) < 0;
-    self_26 = "core:prelude/primitive.wado/count_digits_u64"(local.tee x_36(x_36 = builtin::i64_extend_i32_s(self_26); select i64(x_36 < 0_i64, 0_i64 - x_36, x_36)));
-    is_negative_32 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$sroa[self.buf]$dae[alt_prefix]"($local_7, is_negative_32, self_26);
-    "core:prelude/primitive.wado/write_decimal_digits"($local_7.repr, is_negative_32, x_36, self_26);
-    self_26 = builtin::i32_wrap_i64(local.tee x_36("wasi/stream-new"()));
-    is_negative_32 = builtin::i32_wrap_i64(x_36 >> 32_i64);
-    self_26 = "opt_hfs_aliased_field.wado/$cm_binding__Stdout_write_via_stream"(self_26);
-    "core:rt/write_string_to_stream$dae[add_newline]"(is_negative_32, $local_7.repr, $local_7.used);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(self_26);
+    is_negative_33 = local.tee self_27(a.n) < 0;
+    self_27 = "core:prelude/primitive.wado/count_digits_u64"(local.tee x_37(x_37 = builtin::i64_extend_i32_s(self_27); select i64(x_37 < 0_i64, 0_i64 - x_37, x_37)));
+    is_negative_33 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$sroa[self.buf]$dae[alt_prefix]"($local_7, is_negative_33, self_27);
+    "core:prelude/primitive.wado/write_decimal_digits"($local_7.repr, is_negative_33, x_37, self_27);
+    $sroa_$pattern_temp_0_0_157 = struct.new "core:prelude//$Resource" { value: builtin::i32_wrap_i64(local.tee x_37("wasi/stream-new"())) };
+    $sroa_$pattern_temp_0_1_158 = struct.new "core:prelude//$Resource" { value: builtin::i32_wrap_i64(x_37 >> 32_i64) };
+    $sroa_$pattern_temp_0_0_157 = "opt_hfs_aliased_field.wado/$cm_binding__Stdout_write_via_stream"($sroa_$pattern_temp_0_0_157);
+    "core:rt/write_string_to_stream$dae[add_newline]"($sroa_$pattern_temp_0_1_158, $local_7.repr, $local_7.used);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"($sroa_$pattern_temp_0_0_157.value);
     "opt_hfs_aliased_field.wado/through_container"(local.tee h(struct.new "opt_hfs_aliased_field.wado//H" { inner: struct.new "opt_hfs_aliased_field.wado//C" { n: 0, m: 0 }, k: 0 }), h.inner);
     $local_7 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
-    is_negative_32 = local.tee self_26(h.inner.n) < 0;
-    self_26 = "core:prelude/primitive.wado/count_digits_u64"(local.tee x_36(x_36 = builtin::i64_extend_i32_s(self_26); select i64(x_36 < 0_i64, 0_i64 - x_36, x_36)));
-    is_negative_32 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$sroa[self.buf]$dae[alt_prefix]"($local_7, is_negative_32, self_26);
-    "core:prelude/primitive.wado/write_decimal_digits"($local_7.repr, is_negative_32, x_36, self_26);
-    self_26 = builtin::i32_wrap_i64(local.tee x_36("wasi/stream-new"()));
-    is_negative_32 = builtin::i32_wrap_i64(x_36 >> 32_i64);
-    self_26 = "opt_hfs_aliased_field.wado/$cm_binding__Stdout_write_via_stream"(self_26);
-    "core:rt/write_string_to_stream$dae[add_newline]"(is_negative_32, $local_7.repr, $local_7.used);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(self_26);
+    is_negative_33 = local.tee self_27(h.inner.n) < 0;
+    self_27 = "core:prelude/primitive.wado/count_digits_u64"(local.tee x_37(x_37 = builtin::i64_extend_i32_s(self_27); select i64(x_37 < 0_i64, 0_i64 - x_37, x_37)));
+    is_negative_33 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$sroa[self.buf]$dae[alt_prefix]"($local_7, is_negative_33, self_27);
+    "core:prelude/primitive.wado/write_decimal_digits"($local_7.repr, is_negative_33, x_37, self_27);
+    $sroa_$pattern_temp_0_0_157 = struct.new "core:prelude//$Resource" { value: builtin::i32_wrap_i64(local.tee x_37("wasi/stream-new"())) };
+    $sroa_$pattern_temp_0_1_158 = struct.new "core:prelude//$Resource" { value: builtin::i32_wrap_i64(x_37 >> 32_i64) };
+    $sroa_$pattern_temp_0_0_157 = "opt_hfs_aliased_field.wado/$cm_binding__Stdout_write_via_stream"($sroa_$pattern_temp_0_0_157);
+    "core:rt/write_string_to_stream$dae[add_newline]"($sroa_$pattern_temp_0_1_158, $local_7.repr, $local_7.used);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"($sroa_$pattern_temp_0_0_157.value);
     "opt_hfs_aliased_field.wado/through_closure"(local.tee a(struct.new "opt_hfs_aliased_field.wado//C" { n: 0, m: 0 }), struct.new "canonical//CanonicalClosure_0" { env: struct.new "opt_hfs_aliased_field.wado//$Closure_0" { $capture_0: a }, func: ref.func "closure/opt_hfs_aliased_field.wado/$closure_wrapper_0" });
     $local_7 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
-    is_negative_32 = local.tee self_26(a.n) < 0;
-    self_26 = "core:prelude/primitive.wado/count_digits_u64"(local.tee x_36(x_36 = builtin::i64_extend_i32_s(self_26); select i64(x_36 < 0_i64, 0_i64 - x_36, x_36)));
-    is_negative_32 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$sroa[self.buf]$dae[alt_prefix]"($local_7, is_negative_32, self_26);
-    "core:prelude/primitive.wado/write_decimal_digits"($local_7.repr, is_negative_32, x_36, self_26);
-    self_26 = builtin::i32_wrap_i64(local.tee x_36("wasi/stream-new"()));
-    is_negative_32 = builtin::i32_wrap_i64(x_36 >> 32_i64);
-    self_26 = "opt_hfs_aliased_field.wado/$cm_binding__Stdout_write_via_stream"(self_26);
-    "core:rt/write_string_to_stream$dae[add_newline]"(is_negative_32, $local_7.repr, $local_7.used);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(self_26);
+    is_negative_33 = local.tee self_27(a.n) < 0;
+    self_27 = "core:prelude/primitive.wado/count_digits_u64"(local.tee x_37(x_37 = builtin::i64_extend_i32_s(self_27); select i64(x_37 < 0_i64, 0_i64 - x_37, x_37)));
+    is_negative_33 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$sroa[self.buf]$dae[alt_prefix]"($local_7, is_negative_33, self_27);
+    "core:prelude/primitive.wado/write_decimal_digits"($local_7.repr, is_negative_33, x_37, self_27);
+    $sroa_$pattern_temp_0_0_157 = struct.new "core:prelude//$Resource" { value: builtin::i32_wrap_i64(local.tee x_37("wasi/stream-new"())) };
+    $sroa_$pattern_temp_0_1_158 = struct.new "core:prelude//$Resource" { value: builtin::i32_wrap_i64(x_37 >> 32_i64) };
+    $sroa_$pattern_temp_0_0_157 = "opt_hfs_aliased_field.wado/$cm_binding__Stdout_write_via_stream"($sroa_$pattern_temp_0_0_157);
+    "core:rt/write_string_to_stream$dae[add_newline]"($sroa_$pattern_temp_0_1_158, $local_7.repr, $local_7.used);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"($sroa_$pattern_temp_0_0_157.value);
     "opt_hfs_aliased_field.wado/through_global"(global:opt_hfs_aliased_field.wado::G);
     $local_7 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
-    is_negative_32 = local.tee self_26(global:opt_hfs_aliased_field.wado::G.n) < 0;
-    self_26 = "core:prelude/primitive.wado/count_digits_u64"(local.tee x_36(x_36 = builtin::i64_extend_i32_s(self_26); select i64(x_36 < 0_i64, 0_i64 - x_36, x_36)));
-    is_negative_32 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$sroa[self.buf]$dae[alt_prefix]"($local_7, is_negative_32, self_26);
-    "core:prelude/primitive.wado/write_decimal_digits"($local_7.repr, is_negative_32, x_36, self_26);
-    self_26 = builtin::i32_wrap_i64(local.tee x_36("wasi/stream-new"()));
-    is_negative_32 = builtin::i32_wrap_i64(x_36 >> 32_i64);
-    self_26 = "opt_hfs_aliased_field.wado/$cm_binding__Stdout_write_via_stream"(self_26);
-    "core:rt/write_string_to_stream$dae[add_newline]"(is_negative_32, $local_7.repr, $local_7.used);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(self_26);
+    is_negative_33 = local.tee self_27(global:opt_hfs_aliased_field.wado::G.n) < 0;
+    self_27 = "core:prelude/primitive.wado/count_digits_u64"(local.tee x_37(x_37 = builtin::i64_extend_i32_s(self_27); select i64(x_37 < 0_i64, 0_i64 - x_37, x_37)));
+    is_negative_33 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$sroa[self.buf]$dae[alt_prefix]"($local_7, is_negative_33, self_27);
+    "core:prelude/primitive.wado/write_decimal_digits"($local_7.repr, is_negative_33, x_37, self_27);
+    $sroa_$pattern_temp_0_0_157 = struct.new "core:prelude//$Resource" { value: builtin::i32_wrap_i64(local.tee x_37("wasi/stream-new"())) };
+    $sroa_$pattern_temp_0_1_158 = struct.new "core:prelude//$Resource" { value: builtin::i32_wrap_i64(x_37 >> 32_i64) };
+    $sroa_$pattern_temp_0_0_157 = "opt_hfs_aliased_field.wado/$cm_binding__Stdout_write_via_stream"($sroa_$pattern_temp_0_0_157);
+    "core:rt/write_string_to_stream$dae[add_newline]"($sroa_$pattern_temp_0_1_158, $local_7.repr, $local_7.used);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"($sroa_$pattern_temp_0_0_157.value);
     a = local.tee h(struct.new "opt_hfs_aliased_field.wado//H" { inner: struct.new "opt_hfs_aliased_field.wado//C" { n: 0, m: 0 }, k: 0 }).inner;
-    self_26 = 0;
-    is_negative_32 = a.n;
+    self_27 = 0;
+    is_negative_33 = a.n;
     b8: block {
         l9: loop {
-            break_if b8 self_26 >= 3;
-            is_negative_32 = local.tee is_negative_32(is_negative_32 + 1);
-            a.n = is_negative_32;
+            break_if b8 self_27 >= 3;
+            is_negative_33 = local.tee is_negative_33(is_negative_33 + 1);
+            a.n = is_negative_33;
             "opt_hfs_aliased_field.wado/touch"(h);
-            is_negative_32 = local.tee is_negative_32(a.n);
-            self_26 = self_26 + 1;
-            a.n = is_negative_32;
+            is_negative_33 = local.tee is_negative_33(a.n);
+            self_27 = self_27 + 1;
+            a.n = is_negative_33;
             continue l9;
         };
     };
     $local_7 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
-    self_26 = local.tee is_negative_32(h.inner.n) < 0;
-    is_negative_32 = "core:prelude/primitive.wado/count_digits_u64"(local.tee x_36(x_36 = builtin::i64_extend_i32_s(is_negative_32); select i64(x_36 < 0_i64, 0_i64 - x_36, x_36)));
-    self_26 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$sroa[self.buf]$dae[alt_prefix]"($local_7, self_26, is_negative_32);
-    "core:prelude/primitive.wado/write_decimal_digits"($local_7.repr, self_26, x_36, is_negative_32);
-    is_negative_32 = builtin::i32_wrap_i64(local.tee x_36("wasi/stream-new"()));
-    self_26 = builtin::i32_wrap_i64(x_36 >> 32_i64);
-    is_negative_32 = "opt_hfs_aliased_field.wado/$cm_binding__Stdout_write_via_stream"(is_negative_32);
-    "core:rt/write_string_to_stream$dae[add_newline]"(self_26, $local_7.repr, $local_7.used);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(is_negative_32);
-    is_negative_32 = builtin::i32_wrap_i64(local.tee x_36("wasi/stream-new"()));
-    self_26 = builtin::i32_wrap_i64(x_36 >> 32_i64);
-    is_negative_32 = "opt_hfs_aliased_field.wado/$cm_binding__Stdout_write_via_stream"(is_negative_32);
+    self_27 = local.tee is_negative_33(h.inner.n) < 0;
+    is_negative_33 = "core:prelude/primitive.wado/count_digits_u64"(local.tee x_37(x_37 = builtin::i64_extend_i32_s(is_negative_33); select i64(x_37 < 0_i64, 0_i64 - x_37, x_37)));
+    self_27 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$sroa[self.buf]$dae[alt_prefix]"($local_7, self_27, is_negative_33);
+    "core:prelude/primitive.wado/write_decimal_digits"($local_7.repr, self_27, x_37, is_negative_33);
+    $sroa_$pattern_temp_0_0_157 = struct.new "core:prelude//$Resource" { value: builtin::i32_wrap_i64(local.tee x_37("wasi/stream-new"())) };
+    $sroa_$pattern_temp_0_1_158 = struct.new "core:prelude//$Resource" { value: builtin::i32_wrap_i64(x_37 >> 32_i64) };
+    $sroa_$pattern_temp_0_0_157 = "opt_hfs_aliased_field.wado/$cm_binding__Stdout_write_via_stream"($sroa_$pattern_temp_0_0_157);
+    "core:rt/write_string_to_stream$dae[add_newline]"($sroa_$pattern_temp_0_1_158, $local_7.repr, $local_7.used);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"($sroa_$pattern_temp_0_0_157.value);
+    $sroa_$pattern_temp_0_0_157 = struct.new "core:prelude//$Resource" { value: builtin::i32_wrap_i64(local.tee x_37("wasi/stream-new"())) };
+    $sroa_$pattern_temp_0_1_158 = struct.new "core:prelude//$Resource" { value: builtin::i32_wrap_i64(x_37 >> 32_i64) };
+    $sroa_$pattern_temp_0_0_157 = "opt_hfs_aliased_field.wado/$cm_binding__Stdout_write_via_stream"($sroa_$pattern_temp_0_0_157);
     $local_7 = global:opt_hfs_aliased_field.wado::$const_obj_3;
-    "core:rt/write_string_to_stream$dae[add_newline]"(self_26, $local_7.repr, $local_7.used);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(is_negative_32);
+    "core:rt/write_string_to_stream$dae[add_newline]"($sroa_$pattern_temp_0_1_158, $local_7.repr, $local_7.used);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"($sroa_$pattern_temp_0_0_157.value);
 }
 
 fn "opt_hfs_aliased_field.wado/$cm_binding__Stdout_write_via_stream"(data) with Stdout {
-    return "wasi/wasi:cli/Stdout::write_via_stream"(data);
+    return struct.new "core:prelude//$Resource" { value: "wasi/wasi:cli/Stdout::write_via_stream"(data.value) };
 }
 
 fn "opt_hfs_aliased_field.wado/$cm_export__run"() {
@@ -386,10 +392,12 @@ fn "core:rt/write_string_to_stream$dae[add_newline]"(tx, $mv$message$repr, $mv$m
     builtin::array_copy<u8>(local.tee new_repr(builtin::array_new<u8>($mv$message$used + 1)), 0, $mv$message$repr, 0, $mv$message$used);
     builtin::array_set_u8(new_repr, $mv$message$used, 10);
     drop(block -> "core:prelude/types.wado//enum:CopyResult" {
+        let $arg_spill_1: i32;
+        $arg_spill_1 = tx.value;
         $mv$message$used = $mv$message$used + 1;
-        "core:rt/cm_stream_write_raw_all_u8"(tx, new_repr, 0, $mv$message$used);
+        "core:rt/cm_stream_write_raw_all_u8"($arg_spill_1, new_repr, 0, $mv$message$used);
     });
-    "wasi/stream-drop-writable"(tx);
+    "wasi/stream-drop-writable"(tx.value);
 }
 
 fn "core:rt/cm_stream_write_raw_all_u8"(handle, $mv$data$repr, $mv$data$start, $mv$data$end) {

@@ -472,7 +472,6 @@ fn "result_mut_ref_side_effect.wado/parse_expr$sroa[return]"(p) {
     let $m1_363: i32;
     let $v1_364: i32;
     let v_369: ref "result_mut_ref_side_effect.wado//Token";
-    let v_371: ref "result_mut_ref_side_effect.wado//Token";
     let end_373: i32;
     let end_375: i32;
     let end_377: i32;
@@ -491,7 +490,6 @@ fn "result_mut_ref_side_effect.wado/parse_expr$sroa[return]"(p) {
     let end_437: i32;
     let end_446: i32;
     let v_484: ref "core:prelude/string.wado//String";
-    let v_485: ref "result_mut_ref_side_effect.wado//Span";
     $load_2 = $v1_234 = local.tee $load_0(p.tokens).used; $load_2 = p.pos; if @unlikely(((0 <= $load_2) & ($load_2 < $v1_234)) == 0) {
         cold_path;
         "result_mut_ref_side_effect.wado/result_mut_ref_side_effect.wado/Parser::peek$cold0"(p, $v1_234);
@@ -975,7 +973,10 @@ fn "result_mut_ref_side_effect.wado/parse_expr$sroa[return]"(p) {
                 } else {
                     saved_pos_106 = $v1_234;
                     opt_bt: block {
-                        drop(struct.new "result_mut_ref_side_effect.wado//Token" { kind: local.tee v_369("result_mut_ref_side_effect.wado/result_mut_ref_side_effect.wado/Parser::advance"(p)).kind, text: struct.new "core:prelude/string.wado//String" { repr: $array_clone_dst_2 = local.tee v_241(v_369.text).repr; builtin::array_copy<u8>(local.tee $array_clone_src_1(builtin::array_new<u8>(local.tee $load_31(v_241.used))), 0, $array_clone_dst_2, 0, $load_31); $array_clone_src_1, used: $load_31 }, span: struct.new "result_mut_ref_side_effect.wado//Span" { start: local.tee v_242(v_369.span).start, end: v_242.end } });
+                        drop(local.tee v_369("result_mut_ref_side_effect.wado/result_mut_ref_side_effect.wado/Parser::advance"(p)).kind);
+                        $array_clone_dst_2 = local.tee v_241(v_369.text).repr;
+                        builtin::array_copy<u8>(local.tee $array_clone_src_1(builtin::array_new<u8>(local.tee $load_31(v_241.used))), 0, $array_clone_dst_2, 0, $load_31);
+                        drop(local.tee v_242(v_369.span).start);
                         let $mv$r2_108$0: i32;
                         let $mv$r2_108$1: ref null "result_mut_ref_side_effect.wado//Token";
                         let $mv$r2_108$2: ref null "result_mut_ref_side_effect.wado//ParseError";
@@ -986,7 +987,11 @@ fn "result_mut_ref_side_effect.wado/parse_expr$sroa[return]"(p) {
                         }
                     };
                     p.pos = $v1_234;
-                    drop(struct.new "result_mut_ref_side_effect.wado//Token" { kind: local.tee v_371("result_mut_ref_side_effect.wado/result_mut_ref_side_effect.wado/Parser::advance"(p)).kind, text: v_484 = v_371.text; struct.new "core:prelude/string.wado//String" { repr: let $array_clone_src_7: ref Array<u8>; $array_clone_src_7 = v_484.repr; $load_38 = v_484.used; let $array_clone_dst_8: ref Array<u8>; builtin::array_copy<u8>(local.tee $array_clone_dst_8(builtin::array_new<u8>($load_38)), 0, $array_clone_src_7, 0, $load_38); $array_clone_dst_8, used: $load_38 }, span: struct.new "result_mut_ref_side_effect.wado//Span" { start: local.tee v_485(v_371.span).start, end: v_485.end } });
+                    v_484 = "result_mut_ref_side_effect.wado/result_mut_ref_side_effect.wado/Parser::advance"(p).text;
+                    let $array_clone_src_7: ref Array<u8>;
+                    $array_clone_src_7 = v_484.repr;
+                    $load_38 = v_484.used;
+                    builtin::array_copy<u8>(builtin::array_new<u8>($load_38), 0, $array_clone_src_7, 0, $load_38);
                 }
                 $qm_v_2 = struct.new "result_mut_ref_side_effect.wado//E::Alt10" { discriminant: 7, payload_0: struct.new "result_mut_ref_side_effect.wado//P10" { span: end_373 = "result_mut_ref_side_effect.wado/result_mut_ref_side_effect.wado/Parser::last_end"(p); struct.new "result_mut_ref_side_effect.wado//Span" { start: $load_2, end: end_373 }, expr: $qm_v_2, opt: k_not_86, tok: tok_89 } };
             } else if suffix_kind == 111 {
@@ -1559,21 +1564,21 @@ fn "core:prelude/primitive.wado/count_digits_u64"(val) {
 }
 
 fn "core:rt/panic"($mv$message$repr, $mv$message$used) {
-    let packed: i64;
-    let rx_7: i32;
-    let tx_8: i32;
+    let $cm_pair_4: i64;
     let new_repr: ref Array<u8>;
-    rx_7 = builtin::i32_wrap_i64(local.tee packed("wasi/stream-new"()));
-    tx_8 = builtin::i32_wrap_i64(packed >> 32_i64);
-    rx_7 = "wasi/wasi:cli/Stderr::write_via_stream"(rx_7);
+    let $sroa_$pattern_temp_0_0_21: i32;
+    let $sroa_$pattern_temp_0_1_22: i32;
+    $sroa_$pattern_temp_0_0_21 = builtin::i32_wrap_i64(local.tee $cm_pair_4("wasi/stream-new"()));
+    $sroa_$pattern_temp_0_1_22 = builtin::i32_wrap_i64($cm_pair_4 >> 32_i64);
+    $sroa_$pattern_temp_0_0_21 = "wasi/wasi:cli/Stderr::write_via_stream"($sroa_$pattern_temp_0_0_21);
     builtin::array_copy<u8>(local.tee new_repr(builtin::array_new<u8>($mv$message$used + 1)), 0, $mv$message$repr, 0, $mv$message$used);
     builtin::array_set_u8(new_repr, $mv$message$used, 10);
     drop(block -> "core:prelude/types.wado//enum:CopyResult" {
         $mv$message$used = $mv$message$used + 1;
-        "core:rt/cm_stream_write_raw_all_u8"(tx_8, new_repr, 0, $mv$message$used);
+        "core:rt/cm_stream_write_raw_all_u8"($sroa_$pattern_temp_0_1_22, new_repr, 0, $mv$message$used);
     });
-    "wasi/stream-drop-writable"(tx_8);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(rx_7);
+    "wasi/stream-drop-writable"($sroa_$pattern_temp_0_1_22);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"($sroa_$pattern_temp_0_0_21);
     cold_path;
     unreachable;
 }

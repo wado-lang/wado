@@ -6,14 +6,18 @@ enum core:prelude/format.wado//enum:Alignment { Left = 0, Center = 1, Right = 2 
 
 enum core:prelude/types.wado//enum:CopyResult { Completed = 0, Dropped = 1, Cancelled = 2 };  // TypeId(1)
 
-array Array<u8> (mut u8);  // TypeId(2)
+struct core:prelude//$Resource {  // TypeId(2)
+    mut value: i32,
+}
 
-struct core:prelude/string.wado//String {  // TypeId(3)
+array Array<u8> (mut u8);  // TypeId(3)
+
+struct core:prelude/string.wado//String {  // TypeId(4)
     mut repr: ref Array<u8>,
     mut used: i32,
 }
 
-struct core:prelude/format.wado//Formatter {  // TypeId(4)
+struct core:prelude/format.wado//Formatter {  // TypeId(5)
     mut fill: char,
     mut align: "core:prelude/format.wado//enum:Alignment",
     mut sign_plus: bool,
@@ -25,96 +29,94 @@ struct core:prelude/format.wado//Formatter {  // TypeId(4)
     mut buf: ref "core:prelude/string.wado//String",
 }
 
-struct effect_handler_self_delegation_cm.wado//$Closure_3 {  // TypeId(5)}
+struct effect_handler_self_delegation_cm.wado//$Closure_3 {  // TypeId(6)}
 
-struct effect_handler_self_delegation_cm.wado//$Closure_1 {  // TypeId(6)}
+struct effect_handler_self_delegation_cm.wado//$Closure_1 {  // TypeId(7)}
 
-struct effect_handler_self_delegation_cm.wado//$Dispatch_wasi:random/random.wado/Random {  // TypeId(7)
+struct effect_handler_self_delegation_cm.wado//$Dispatch_wasi:random/random.wado/Random {  // TypeId(8)
     mut outer: ref null "effect_handler_self_delegation_cm.wado//$Dispatch_wasi:random/random.wado/Random",
     mut op_get_random_bytes: ref struct,
     mut op_get_random_u64: ref struct,
 }
 
-struct effect_handler_self_delegation_cm.wado//DoublingRandom {  // TypeId(8)}
+struct effect_handler_self_delegation_cm.wado//DoublingRandom {  // TypeId(9)}
 
-struct effect_handler_self_delegation_cm.wado//$Closure_2 {  // TypeId(9)
+struct effect_handler_self_delegation_cm.wado//$Closure_2 {  // TypeId(10)
     mut $capture_0: ref "effect_handler_self_delegation_cm.wado//DoublingRandom",
 }
 
-struct effect_handler_self_delegation_cm.wado//FixedRandom {  // TypeId(10)
+struct effect_handler_self_delegation_cm.wado//FixedRandom {  // TypeId(11)
     mut byte: u8,
 }
 
-struct effect_handler_self_delegation_cm.wado//$Closure_0 {  // TypeId(11)
+struct effect_handler_self_delegation_cm.wado//$Closure_0 {  // TypeId(12)
     mut $capture_0: ref "effect_handler_self_delegation_cm.wado//FixedRandom",
 }
 
-struct core:prelude//List<u8> {  // TypeId(12)
+struct core:prelude//List<u8> {  // TypeId(13)
     mut repr: ref Array<u8>,
     mut used: i32,
 }
 
-type "functype/$canonical_closure_fn_0" = fn(ref null struct, u64) -> ref "core:prelude//List<u8>";  // TypeId(13)
+type "functype/$canonical_closure_fn_0" = fn(ref null struct, u64) -> ref "core:prelude//List<u8>";  // TypeId(14)
 
-struct canonical//CanonicalClosure_0 {  // TypeId(14)
+struct canonical//CanonicalClosure_0 {  // TypeId(15)
     env: ref null struct,
     func: ref "functype/$canonical_closure_fn_0",
 }
 
-type "functype/$canonical_closure_fn_1" = fn(ref null struct) -> u64;  // TypeId(15)
+type "functype/$canonical_closure_fn_1" = fn(ref null struct) -> u64;  // TypeId(16)
 
-struct canonical//CanonicalClosure_1 {  // TypeId(16)
+struct canonical//CanonicalClosure_1 {  // TypeId(17)
     env: ref null struct,
     func: ref "functype/$canonical_closure_fn_1",
 }
 
-type "functype//mem/realloc" = fn(i32, i32, i32, i32) -> i32;  // TypeId(17)
+type "functype//mem/realloc" = fn(i32, i32, i32, i32) -> i32;  // TypeId(18)
 
-type "functype//wasi/stream-write" = fn(i32, i32, i32) -> i32;  // TypeId(18)
+type "functype//wasi/stream-write" = fn(i32, i32, i32) -> i32;  // TypeId(19)
 
-type "functype//wasi/waitable-join" = fn(i32, i32);  // TypeId(19)
+type "functype//wasi/waitable-join" = fn(i32, i32);  // TypeId(20)
 
-type "functype//wasi/waitable-set-drop" = fn(i32);  // TypeId(20)
+type "functype//wasi/waitable-set-drop" = fn(i32);  // TypeId(21)
 
-type "functype//wasi/waitable-set-new" = fn() -> i32;  // TypeId(21)
+type "functype//wasi/waitable-set-new" = fn() -> i32;  // TypeId(22)
 
-type "functype//wasi/waitable-set-wait" = fn(i32, i32) -> i32;  // TypeId(22)
+type "functype//wasi/waitable-set-wait" = fn(i32, i32) -> i32;  // TypeId(23)
 
-type "functype//wasi/wasi:cli/Stderr::write_via_stream" = fn(i32) -> i32;  // TypeId(23)
+type "functype//wasi/wasi:cli/Stderr::write_via_stream" = fn(i32) -> i32;  // TypeId(24)
 
-type "functype//wasi/wasi:cli/Stdout::write_via_stream" = fn(i32) -> i32;  // TypeId(24)
+type "functype//wasi/wasi:cli/Stdout::write_via_stream" = fn(i32) -> i32;  // TypeId(25)
 
-type "functype//wasi/wasi:random/Random::get_random_bytes" = fn(i64, i32);  // TypeId(25)
+type "functype//wasi/wasi:random/Random::get_random_bytes" = fn(i64, i32);  // TypeId(26)
 
-type "functype//wasi/wasi:random/Random::get_random_u64" = fn() -> i64;  // TypeId(26)
+type "functype//wasi/wasi:random/Random::get_random_u64" = fn() -> i64;  // TypeId(27)
 
-type "functype//effect_handler_self_delegation_cm.wado/run" = fn();  // TypeId(27)
+type "functype//effect_handler_self_delegation_cm.wado/run" = fn();  // TypeId(28)
 
-type "functype//effect_handler_self_delegation_cm.wado/$cm_binding__Stdout_write_via_stream" = fn(i32) -> i32;  // TypeId(28)
+type "functype//effect_handler_self_delegation_cm.wado/$cm_binding__Stdout_write_via_stream" = fn(ref "core:prelude//$Resource") -> ref "core:prelude//$Resource";  // TypeId(29)
 
-type "functype//effect_handler_self_delegation_cm.wado/$cm_binding__Random_get_random_bytes" = fn(i64) -> ref "core:prelude//List<u8>";  // TypeId(29)
+type "functype//effect_handler_self_delegation_cm.wado/$cm_binding__Random_get_random_bytes" = fn(i64) -> ref "core:prelude//List<u8>";  // TypeId(30)
 
-type "functype//effect_handler_self_delegation_cm.wado/$cm_binding__Random_get_random_u64" = fn() -> u64;  // TypeId(30)
+type "functype//effect_handler_self_delegation_cm.wado/$cm_binding__Random_get_random_u64" = fn() -> u64;  // TypeId(31)
 
-type "functype//effect_handler_self_delegation_cm.wado/$cm_export__run" = fn();  // TypeId(31)
+type "functype//effect_handler_self_delegation_cm.wado/$cm_export__run" = fn();  // TypeId(32)
 
-type "functype//effect_handler_self_delegation_cm.wado/run$cold0$dae[$contract_arg_0]" = fn(i32);  // TypeId(32)
+type "functype//effect_handler_self_delegation_cm.wado/run$cold0$dae[$contract_arg_0]" = fn(i32);  // TypeId(33)
 
-type "functype//effect_handler_self_delegation_cm.wado/$cm_binding__Random_get_random_bytes$spec0" = fn(i64) -> ref "core:prelude//List<u8>";  // TypeId(33)
+type "functype//effect_handler_self_delegation_cm.wado/$cm_binding__Random_get_random_bytes$spec0" = fn(i64) -> ref "core:prelude//List<u8>";  // TypeId(34)
 
-type "functype//core:prelude/primitive.wado/write_decimal_digits" = fn(ref Array<u8>, i32, u64, i32);  // TypeId(34)
+type "functype//core:prelude/primitive.wado/write_decimal_digits" = fn(ref Array<u8>, i32, u64, i32);  // TypeId(35)
 
-type "functype//core:prelude/primitive.wado/count_digits_u64" = fn(u64) -> i32;  // TypeId(35)
+type "functype//core:prelude/primitive.wado/count_digits_u64" = fn(u64) -> i32;  // TypeId(36)
 
-type "functype//core:rt/write_string_to_stream$dae[add_newline]" = fn(i32, ref Array<u8>, i32);  // TypeId(36)
+type "functype//core:rt/write_string_to_stream$dae[add_newline]" = fn(ref "core:prelude//$Resource", ref Array<u8>, i32);  // TypeId(37)
 
-type "functype//core:rt/log_stderr" = fn(ref "core:prelude/string.wado//String");  // TypeId(37)
+type "functype//core:rt/log_stderr" = fn(ref "core:prelude/string.wado//String");  // TypeId(38)
 
-type "functype//core:rt/panic" = fn(ref "core:prelude/string.wado//String");  // TypeId(38)
+type "functype//core:rt/panic" = fn(ref "core:prelude/string.wado//String");  // TypeId(39)
 
-type "functype//core:rt/cm_stream_write_raw_all_u8" = fn(i32, ref Array<u8>, i32, i32) -> "core:prelude/types.wado//enum:CopyResult";  // TypeId(39)
-
-type "functype//core:rt/core/rt/cm_stream_pair<u8>" = fn(i64) -> [i32, i32];  // TypeId(40)
+type "functype//core:rt/cm_stream_write_raw_all_u8" = fn(i32, ref Array<u8>, i32, i32) -> "core:prelude/types.wado//enum:CopyResult";  // TypeId(40)
 
 type "functype//core:prelude/list.wado/core:prelude/list.wado/List<u8>^core:prelude/traits.wado/IndexValue<i32>::index_value$contract_report0$dae[index]" = fn(i32, ref Array<u8>, i32);  // TypeId(41)
 
@@ -183,10 +185,12 @@ fn "effect_handler_self_delegation_cm.wado/run"() with Stdout, Random {
     let $d_wasi:random/random.wado/Random_10: ref "effect_handler_self_delegation_cm.wado//$Dispatch_wasi:random/random.wado/Random";
     let $local_1: ref null "effect_handler_self_delegation_cm.wado//$Dispatch_wasi:random/random.wado/Random";
     let v_23: ref "core:prelude//List<u8>";
-    let is_negative_38: bool;
-    let digit_count_40: i32;
-    let x_42: i64;
-    let $sroa_$f_buf_98: ref "core:prelude/string.wado//String";
+    let is_negative_39: bool;
+    let digit_count_41: i32;
+    let x_43: i64;
+    let $sroa_$pattern_temp_0_0_83: ref "core:prelude//$Resource";
+    let $sroa_$pattern_temp_0_1_84: ref "core:prelude//$Resource";
+    let $sroa_$f_buf_95: ref "core:prelude/string.wado//String";
     inner = struct.new "effect_handler_self_delegation_cm.wado//FixedRandom" { byte: 7 };
     global:effect_handler_self_delegation_cm.wado::$effect_wasi:random/random.wado/Random = local.tee $d_wasi:random/random.wado/Random_10(struct.new "effect_handler_self_delegation_cm.wado//$Dispatch_wasi:random/random.wado/Random" { outer: local.tee $save_wasi:random/random.wado/Random_9(global:effect_handler_self_delegation_cm.wado::$effect_wasi:random/random.wado/Random), op_get_random_bytes: struct.new "canonical//CanonicalClosure_0" { env: struct.new "effect_handler_self_delegation_cm.wado//$Closure_0" { $capture_0: inner }, func: ref.func "closure/effect_handler_self_delegation_cm.wado/$closure_wrapper_0" }, op_get_random_u64: struct.new "canonical//CanonicalClosure_1" { env: struct.new "effect_handler_self_delegation_cm.wado//$Closure_1" {  }, func: ref.func "closure/effect_handler_self_delegation_cm.wado/$closure_wrapper_1" } });
     outer = struct.new "effect_handler_self_delegation_cm.wado//DoublingRandom" {  };
@@ -207,39 +211,39 @@ fn "effect_handler_self_delegation_cm.wado/run"() with Stdout, Random {
         unreachable;
     }).repr;
     builtin::array_copy<u8>(local.tee $array_clone_src_2(builtin::array_new<u8>(local.tee $load_5(v_23.used))), 0, $array_clone_dst_3, 0, $load_5);
-    $sroa_$f_buf_98 = local.tee $local_3_3(struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(33), used: 0 });
-    is_negative_38 = $load_5 < 0;
-    digit_count_40 = "core:prelude/primitive.wado/count_digits_u64"(local.tee x_42(x_42 = builtin::i64_extend_i32_s($load_5); select i64(x_42 < 0_i64, 0_i64 - x_42, x_42)));
-    is_negative_38 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$sroa[self.buf]$dae[alt_prefix]"($sroa_$f_buf_98, is_negative_38, digit_count_40);
-    "core:prelude/primitive.wado/write_decimal_digits"($sroa_$f_buf_98.repr, is_negative_38, x_42, digit_count_40);
-    if @unlikely(local.tee digit_count_40($local_3_3.used + 1) > builtin::array_len($local_3_3.repr)) {
+    $sroa_$f_buf_95 = local.tee $local_3_3(struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(33), used: 0 });
+    is_negative_39 = $load_5 < 0;
+    digit_count_41 = "core:prelude/primitive.wado/count_digits_u64"(local.tee x_43(x_43 = builtin::i64_extend_i32_s($load_5); select i64(x_43 < 0_i64, 0_i64 - x_43, x_43)));
+    is_negative_39 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$sroa[self.buf]$dae[alt_prefix]"($sroa_$f_buf_95, is_negative_39, digit_count_41);
+    "core:prelude/primitive.wado/write_decimal_digits"($sroa_$f_buf_95.repr, is_negative_39, x_43, digit_count_41);
+    if @unlikely(local.tee digit_count_41($local_3_3.used + 1) > builtin::array_len($local_3_3.repr)) {
         cold_path;
-        "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_3_3, digit_count_40);
+        "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_3_3, digit_count_41);
     }
-    is_negative_38 = $local_3_3.used;
-    $local_3_3.used = digit_count_40;
-    builtin::array_copy<u8>($local_3_3.repr, is_negative_38, global:effect_handler_self_delegation_cm.wado::$const_obj_6, 0, 1);
-    $sroa_$f_buf_98 = $local_3_3;
+    is_negative_39 = $local_3_3.used;
+    $local_3_3.used = digit_count_41;
+    builtin::array_copy<u8>($local_3_3.repr, is_negative_39, global:effect_handler_self_delegation_cm.wado::$const_obj_6, 0, 1);
+    $sroa_$f_buf_95 = $local_3_3;
     if @unlikely(0 >= $load_5) {
         cold_path;
         "effect_handler_self_delegation_cm.wado/run$cold0$dae[$contract_arg_0]"($load_5);
         unreachable;
     }
-    is_negative_38 = local.tee $load_5(builtin::array_get_value<u8>($array_clone_src_2, 0)) < 0;
-    $load_5 = "core:prelude/primitive.wado/count_digits_u64"(local.tee x_42(x_42 = builtin::i64_extend_i32_s($load_5); select i64(x_42 < 0_i64, 0_i64 - x_42, x_42)));
-    is_negative_38 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$sroa[self.buf]$dae[alt_prefix]"($sroa_$f_buf_98, is_negative_38, $load_5);
-    "core:prelude/primitive.wado/write_decimal_digits"($sroa_$f_buf_98.repr, is_negative_38, x_42, $load_5);
-    $load_5 = builtin::i32_wrap_i64(local.tee x_42("wasi/stream-new"()));
-    is_negative_38 = builtin::i32_wrap_i64(x_42 >> 32_i64);
-    $load_5 = "effect_handler_self_delegation_cm.wado/$cm_binding__Stdout_write_via_stream"($load_5);
-    "core:rt/write_string_to_stream$dae[add_newline]"(is_negative_38, $local_3_3.repr, $local_3_3.used);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"($load_5);
+    is_negative_39 = local.tee $load_5(builtin::array_get_value<u8>($array_clone_src_2, 0)) < 0;
+    $load_5 = "core:prelude/primitive.wado/count_digits_u64"(local.tee x_43(x_43 = builtin::i64_extend_i32_s($load_5); select i64(x_43 < 0_i64, 0_i64 - x_43, x_43)));
+    is_negative_39 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$sroa[self.buf]$dae[alt_prefix]"($sroa_$f_buf_95, is_negative_39, $load_5);
+    "core:prelude/primitive.wado/write_decimal_digits"($sroa_$f_buf_95.repr, is_negative_39, x_43, $load_5);
+    $sroa_$pattern_temp_0_0_83 = struct.new "core:prelude//$Resource" { value: builtin::i32_wrap_i64(local.tee x_43("wasi/stream-new"())) };
+    $sroa_$pattern_temp_0_1_84 = struct.new "core:prelude//$Resource" { value: builtin::i32_wrap_i64(x_43 >> 32_i64) };
+    $sroa_$pattern_temp_0_0_83 = "effect_handler_self_delegation_cm.wado/$cm_binding__Stdout_write_via_stream"($sroa_$pattern_temp_0_0_83);
+    "core:rt/write_string_to_stream$dae[add_newline]"($sroa_$pattern_temp_0_1_84, $local_3_3.repr, $local_3_3.used);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"($sroa_$pattern_temp_0_0_83.value);
     global:effect_handler_self_delegation_cm.wado::$effect_wasi:random/random.wado/Random = $save_wasi:random/random.wado/Random_6;
     global:effect_handler_self_delegation_cm.wado::$effect_wasi:random/random.wado/Random = $save_wasi:random/random.wado/Random_9;
 }
 
 fn "effect_handler_self_delegation_cm.wado/$cm_binding__Stdout_write_via_stream"(data) with Stdout {
-    return "wasi/wasi:cli/Stdout::write_via_stream"(data);
+    return struct.new "core:prelude//$Resource" { value: "wasi/wasi:cli/Stdout::write_via_stream"(data.value) };
 }
 
 fn "effect_handler_self_delegation_cm.wado/$cm_binding__Random_get_random_bytes"(max_len) with Random {
@@ -414,19 +418,23 @@ fn "core:rt/write_string_to_stream$dae[add_newline]"(tx, $mv$message$repr, $mv$m
     builtin::array_copy<u8>(local.tee new_repr(builtin::array_new<u8>($mv$message$used + 1)), 0, $mv$message$repr, 0, $mv$message$used);
     builtin::array_set_u8(new_repr, $mv$message$used, 10);
     drop(block -> "core:prelude/types.wado//enum:CopyResult" {
+        let $arg_spill_1: i32;
+        $arg_spill_1 = tx.value;
         $mv$message$used = $mv$message$used + 1;
-        "core:rt/cm_stream_write_raw_all_u8"(tx, new_repr, 0, $mv$message$used);
+        "core:rt/cm_stream_write_raw_all_u8"($arg_spill_1, new_repr, 0, $mv$message$used);
     });
-    "wasi/stream-drop-writable"(tx);
+    "wasi/stream-drop-writable"(tx.value);
 }
 
 fn "core:rt/log_stderr"(message) {
-    let $mv$$pattern_temp_0$0: i32;
-    let $mv$$pattern_temp_0$1: i32;
-    multivalue_bind [$mv$$pattern_temp_0$0, $mv$$pattern_temp_0$1] = "core:rt/core/rt/cm_stream_pair<u8>"("wasi/stream-new"());
-    $mv$$pattern_temp_0$0 = "wasi/wasi:cli/Stderr::write_via_stream"($mv$$pattern_temp_0$0);
-    "core:rt/write_string_to_stream$dae[add_newline]"($mv$$pattern_temp_0$1, message.repr, message.used);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"($mv$$pattern_temp_0$0);
+    let $cm_pair_4: i64;
+    let $sroa_$pattern_temp_0_0_6: i32;
+    let $sroa_$pattern_temp_0_1_7: ref "core:prelude//$Resource";
+    $sroa_$pattern_temp_0_0_6 = builtin::i32_wrap_i64(local.tee $cm_pair_4("wasi/stream-new"()));
+    $sroa_$pattern_temp_0_1_7 = struct.new "core:prelude//$Resource" { value: builtin::i32_wrap_i64($cm_pair_4 >> 32_i64) };
+    $sroa_$pattern_temp_0_0_6 = "wasi/wasi:cli/Stderr::write_via_stream"($sroa_$pattern_temp_0_0_6);
+    "core:rt/write_string_to_stream$dae[add_newline]"($sroa_$pattern_temp_0_1_7, message.repr, message.used);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"($sroa_$pattern_temp_0_0_6);
 }
 
 fn "core:rt/panic"(message) {
@@ -488,10 +496,6 @@ fn "core:rt/cm_stream_write_raw_all_u8"(handle, $mv$data$repr, $mv$data$start, $
             continue l39;
         };
     };
-}
-
-fn "core:rt/core/rt/cm_stream_pair<u8>"(packed) {
-    return builtin::i32_wrap_i64(packed), builtin::i32_wrap_i64(packed >> 32_i64);
 }
 
 fn "core:prelude/list.wado/core:prelude/list.wado/List<u8>^core:prelude/traits.wado/IndexValue<i32>::index_value$contract_report0$dae[index]"($v1, $mv$$site$repr, $mv$$site$used) {
