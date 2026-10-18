@@ -2338,8 +2338,8 @@ fn batch_axes_agree(left: &Shape, right: &Shape) -> bool
     return true;
 }
 
-/// Every axis name the checked graph uses, in first-seen order so the emitted
-/// module is stable across runs.
+/// Every axis name the checked graph uses, in the order stage 0 gave each
+/// tensor its shape, so the emitted module is stable across runs.
 fn axis_names(graph: &Graph, checked: &Checked) -> List<String> {
     let mut seen = TreeSet::<String>::new();
     let mut names: List<String> = [];

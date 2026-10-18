@@ -319,7 +319,7 @@ test "an initializer without inline values carries no data" {
 
 test "a function short of the operands its body reads stops the read" {
     let gelu = read(`agraph (float[2] X) => (float[2] Y) { Y = Gelu() }`).unwrap_err().reason;
-    assert gelu == "Y = Gelu: reads 1 operands and was given 0";
+    assert gelu == "Y = Gelu: reads 1 operand and was given 0";
     let norm = read(`agraph (float[2] X) => (float[2] Y) { Y = SimplifiedLayerNormalization(X) }`).unwrap_err().reason;
     assert norm == "Y = SimplifiedLayerNormalization: reads 2 operands and was given 1";
 }

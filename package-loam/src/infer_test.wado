@@ -393,7 +393,7 @@ test "GroupQueryAttention's sequence lengths are checked against its shapes" {
 test "GroupQueryAttention's heads times the head are counted past i32" {
     // 536870913 heads of 8 are 2^32 + 8, which an i32 product wraps to 8.
     let e = y_axes(attention("536870913", "3"), attention_layout()).unwrap_err();
-    assert e == "Y = com.microsoft.GroupQueryAttention: 4294967304 elements are more than a list holds";
+    assert e == "Y = com.microsoft.GroupQueryAttention: axis Embed would be 4294967304 long, which no axis is";
 }
 
 fn cache() -> List<LayoutRule> {

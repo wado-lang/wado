@@ -322,7 +322,7 @@ fn gather(data: &Known, indices: &Known, axis: i64) -> Result<Option<Known>, Str
     let leading = data.extents[0..<a].to_list();
     let trailing = data.extents[a + 1..<rank].to_list();
     let inner = element_count(&trailing);
-    let Some(wanted) = numbers(&polys_of(indices)?) else {
+    let Some(wanted) = numbers_of(indices)? else {
         return Result::Ok(null);
     };
     let mut picks: List<i32> = [];
@@ -639,7 +639,7 @@ fn range(start: &Known, limit: &Known, delta: &Known) -> Result<Option<Known>, S
             for let i of 0..<count {
                 values.push(s + i as f32 * d);
             }
-            // A half is stepped in f32 and rounded once at the end, as Range's
+            // A half is stepped in f32 and rounded once at the end, as Range-27's
             // default `stash_type` asks; `in_width` does the rounding.
             Result::Ok(Option::Some(Known {
                 extents: [count],
@@ -661,7 +661,7 @@ fn range(start: &Known, limit: &Known, delta: &Known) -> Result<Option<Known>, S
 /// `ConstantOfShape` of a shape the build knows every number of, or `None`
 /// where a symbol stands for one and the run fills it.
 fn constant_of_shape(node: &Node, shape: &Known) -> Result<Option<Known>, String> {
-    let Some(values) = numbers(&polys_of(shape)?) else {
+    let Some(values) = numbers_of(shape)? else {
         return Result::Ok(null);
     };
     let mut extents: List<i32> = [];
@@ -738,7 +738,7 @@ fn arithmetic(node: &Node, a: &Known, b: &Known) -> Result<Known, String> {
 /// `x` broadcast against the extents `shape` lists, as `Expand` does, or
 /// `None` where an extent only the run knows leaves it to the run.
 fn expand(x: &Known, shape: &Known) -> Result<Option<Known>, String> {
-    let Some(written) = numbers(&polys_of(shape)?) else {
+    let Some(written) = numbers_of(shape)? else {
         return Result::Ok(null);
     };
     let mut target: List<i32> = [];
@@ -893,6 +893,11 @@ fn polys_of(k: &Known) -> Result<List<Poly>, String> {
 fn ints_of(k: &Known) -> Result<List<i64>, String> {
     let values = polys_of(k)?;
     return numbers(&values).ok_or(`an operand read as numbers holds ${spelled(&values)}, which only the run knows`);
+}
+
+/// The numbers `k` holds, or `None` where a symbol stands for one.
+fn numbers_of(k: &Known) -> Result<Option<List<i64>>, String> {
+    return Result::Ok(numbers(&polys_of(k)?));
 }
 
 /// The numbers `values` holds, or `None` where a symbol stands for one.

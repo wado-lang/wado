@@ -34,6 +34,7 @@ use {
     element_of,
     is_binary_elementwise,
     is_unary_operator,
+    operands_short,
     trailing_axes,
 } from "./graph.wado";
 use { Condition, Poly, owe as owe_at, owe_equal as owe_equal_at } from "./poly.wado";
@@ -182,9 +183,7 @@ impl Display for NodeConflict {
 
 impl Display for OperandCountConflict {
     fn fmt(&self, f: &mut Formatter) {
-        f.write_str(
-            `${self.node} = ${self.op}: reads ${self.needed} operands and was given ${self.given}`,
-        );
+        f.write_str(`${self.node} = ${self.op}: ${operands_short(self.needed, self.given)}`);
     }
 }
 
@@ -1405,7 +1404,10 @@ fn attention(
     };
     // Wide, since heads times the head may pass any extent.
     let stated = |axis: &Axis, extent: i64, into: &mut List<Condition>| -> Result<(), InferError> {
-        return agree_at(node, axis, &Axis { ..*axis, extent: counted(node, Poly::constant(extent))? }, into);
+        let Some(e) = Extent::of(Poly::constant(extent)) else {
+            return Result::Err(refusal(node, `axis ${axis.name} would be ${extent} long, which no axis is`));
+        };
+        return agree_at(node, axis, &Axis { ..*axis, extent: e }, into);
     };
     stated(&q.axes[2], options.heads as i64 * dim as i64, owed)?;
     stated(&k.axes[2], options.kv_heads as i64 * dim as i64, owed)?;
