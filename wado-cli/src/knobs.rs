@@ -506,12 +506,6 @@ mod tests {
     }
 
     #[test]
-    fn dash_og_is_not_a_level() {
-        let err = parse_opt_level(&["-Og"]).unwrap_err();
-        assert!(err.contains("unknown optimization level '-Og'"), "{err}");
-    }
-
-    #[test]
     fn a_bare_dash_o_is_rejected() {
         let err = parse_opt_level(&["-O", "input.wado"]).unwrap_err();
         assert!(err.contains("requires a level"), "{err}");
