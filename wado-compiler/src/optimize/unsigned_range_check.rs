@@ -16,7 +16,7 @@ use crate::tir::{TypeId, TypeTable};
 
 use super::arena_query::{binary_parts, is_pure_nontrapping_operand_typed};
 use super::condition_implication::{
-    Binds, build_copy_bindings, is_seq_length, operand_same, parse_const_i64, resolve,
+    Binds, build_copy_bindings, is_seq_length, operand_same, parse_const_i64,
 };
 
 pub fn fuse_unsigned_range_checks(project: &mut NirPackage) -> bool {
@@ -57,9 +57,10 @@ enum Shape {
 
 impl UnsignedRangeCheckRule<'_> {
     /// `a op b` with `op` turned to `<` or `<=` by swapping the sides of a `>`
-    /// or `>=`.
+    /// or `>=`. Only a comparison written in place: the fused one takes over
+    /// its operands, which a `let`'s value still holds.
     fn ordered(&self, engine: &Engine, op: Operand) -> Option<(Operand, NirBinaryOp, Operand)> {
-        let (left, kind, right) = binary_parts(engine.body, resolve(engine, &self.binds, op))?;
+        let (left, kind, right) = binary_parts(engine.body, op)?;
         match kind {
             NirBinaryOp::Lt | NirBinaryOp::LtEq => Some((left, kind, right)),
             NirBinaryOp::Gt | NirBinaryOp::GtEq => Some((right, kind.converse()?, left)),

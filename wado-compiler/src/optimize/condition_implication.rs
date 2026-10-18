@@ -11,9 +11,9 @@ use cranelift_entity::EntityRef;
 use super::arena_query::local_written_by;
 use crate::compiler_item::SeqField;
 use crate::const_eval::Value;
-use crate::nir::{FuncId, FuncParts, NirBinaryOp, NirUnaryOp};
+use crate::nir::{FuncId, FuncParts, FunctionKind, NirBinaryOp, NirUnaryOp};
 use crate::nir_arena::{
-    BlockId, ExprId, ExprKind, NodeRef, Operand, PatId, PatKind, StmtId, StmtKind,
+    BlockId, Body, ExprId, ExprKind, NodeRef, Operand, PatId, PatKind, StmtId, StmtKind,
 };
 use crate::nir_engine::Engine;
 use crate::nir_package::NirPackage;
@@ -25,7 +25,7 @@ use crate::optimize::arena_query::{
 };
 use crate::optimize::gate::{FunctionGate, GatedPass};
 use crate::optimize::value_copy::mutation::{MutationOracle, Witness, expr_witnesses};
-use crate::tir::TypeTable;
+use crate::tir::{TypeId, TypeTable};
 use crate::{hashmap, nir_arena};
 
 /// Run condition implication at the body root on an existing engine session.
@@ -81,6 +81,48 @@ pub(super) fn resolve_panic_ids(project: &NirPackage) -> hashmap::IndexSet<FuncI
         .collect()
 }
 
+/// The panic callees that report nothing but a failed contract: a contract
+/// report, a bodyless trap such as `builtin::unreachable` (all a contract check
+/// calls under `-f bare-asserts`), and a function doing nothing else but call
+/// one, as `cold_outline` leaves. The driver hands the result to the engine via
+/// [`Engine::set_quiet_trap_ids`].
+pub(super) fn resolve_quiet_trap_ids(
+    project: &NirPackage,
+    panic_ids: &hashmap::IndexSet<FuncId>,
+) -> hashmap::IndexSet<FuncId> {
+    let pure_builtins = project.pure_builtin_callee_ids();
+    let mut quiet: hashmap::IndexSet<FuncId> = project
+        .functions
+        .iter()
+        .filter_map(|f| {
+            let f = f.borrow();
+            let base = matches!(f.kind, FunctionKind::ContractReport) || f.body.is_none();
+            f.id.filter(|id| base && panic_ids.contains(id))
+        })
+        .collect();
+    loop {
+        let grown: Vec<FuncId> = project
+            .functions
+            .iter()
+            .filter_map(|f| {
+                let f = f.borrow();
+                let id =
+                    f.id.filter(|id| panic_ids.contains(id) && !quiet.contains(id))?;
+                let body = f.body.as_ref()?;
+                subtree_quiet(body, NodeRef::Block(body.root()), |callee| {
+                    quiet.contains(&callee)
+                        || (pure_builtins.contains(&callee) && !panic_ids.contains(&callee))
+                })
+                .then_some(id)
+            })
+            .collect();
+        if grown.is_empty() {
+            return quiet;
+        }
+        quiet.extend(grown);
+    }
+}
+
 /// Standalone post-`promote_fields` run of the structural matcher.
 /// `promote_fields` freezes an invariant field read such as `arr.used` into an
 /// `Operand::Value`, but runs *after* the optimization loop, so the in-loop pass
@@ -95,6 +137,7 @@ pub(super) fn eliminate_post_promote(project: &mut NirPackage, gate: &mut Functi
     let first_param_types = first_param_types(project);
     let call_immutability = CallImmutability::new(project, &type_table, gate.exec());
     let panic_ids = resolve_panic_ids(project);
+    let quiet_trap_ids = resolve_quiet_trap_ids(project, &panic_ids);
     let pure_builtin_callees = project.pure_builtin_callee_ids();
     let type_table = &*type_table;
     let functions = &project.functions;
@@ -127,6 +170,7 @@ pub(super) fn eliminate_post_promote(project: &mut NirPackage, gate: &mut Functi
         engine.set_value_graph_type_table(type_table);
         engine.set_param_locals(param_locals);
         engine.set_panic_callee_ids(&panic_ids);
+        engine.set_quiet_trap_ids(&quiet_trap_ids);
         engine.set_pure_builtin_callees(&pure_builtin_callees);
         eliminate_at_root(&mut engine)
     })
@@ -1734,19 +1778,21 @@ pub(super) fn break_guard_cmp(
 /// after it, the surviving path has `var + K < bound` (structural,
 /// value_of-free). Returns `(var, K, bound)`.
 fn recognize_early_exit(engine: &Engine, s: StmtId, binds: &Binds) -> Option<(u32, i64, BoundKey)> {
+    parse_check(engine, binds, early_exit_condition(engine, s)?)
+}
+
+/// The condition of an early exit `if cond { exit }`: no `else`, and a `then`
+/// that always leaves, so `cond` is false past it.
+fn early_exit_condition(engine: &Engine, s: StmtId) -> Option<Operand> {
     let StmtKind::If {
         condition,
         then_block,
         else_block: None,
-    } = &engine.body.stmts[s].kind
+    } = engine.body.stmts[s].kind
     else {
         return None;
     };
-    let (cond, then_b) = (*condition, *then_block);
-    if !block_always_exits(engine, then_b) {
-        return None;
-    }
-    parse_check(engine, binds, cond)
+    block_always_exits(engine, then_block).then_some(condition)
 }
 
 fn process_block(engine: &mut Engine, block: BlockId, binds: &Binds) -> bool {
@@ -1808,25 +1854,13 @@ fn process_block(engine: &mut Engine, block: BlockId, binds: &Binds) -> bool {
 /// The place an early exit `if a >= b { exit }` leaves below its type's most,
 /// and that most less one.
 fn exit_cap(engine: &Engine, binds: &Binds, s: StmtId) -> Option<(Place, i64)> {
-    let StmtKind::If {
-        condition,
-        then_block,
-        else_block: None,
-    } = engine.body.stmts[s].kind
-    else {
-        return None;
-    };
-    if !block_always_exits(engine, then_block) || !is_pure_operand(engine.body, condition) {
-        return None;
-    }
+    // Pure, so the read it caps is the place's value after it too.
+    let condition = early_exit_condition(engine, s).filter(|&c| is_pure_operand(engine.body, c))?;
     let (left, _) = ge_check_operands(engine, binds, condition)?;
     let read = resolve(engine, binds, left).as_expr()?;
     let place = place_path(engine.body, read)?;
-    let types = engine.value_graph_type_table()?;
-    let (_, max) = types
-        .primitive_head(engine.body.exprs[read].type_id)?
-        .int_range()?;
-    Some((place, i64::try_from(max).ok()? - 1))
+    let (_, max) = int_range(engine, engine.body.exprs[read].type_id)?;
+    Some((place, max - 1))
 }
 
 fn process_stmt(engine: &mut Engine, parent: BlockId, s: StmtId, binds: &Binds) -> bool {
@@ -2194,15 +2228,17 @@ struct Site {
     sub: Option<ExprId>,
 }
 
-/// The range of `var`'s signed integer type. An unsigned index has no lower
-/// half to prove, and its wrap is not the one these facts reason about.
-fn signed_range(engine: &Engine, var: u32) -> Option<(i64, i64)> {
-    let types = engine.value_graph_type_table()?;
-    let (min, max) = types
-        .primitive_head(engine.locals()[var as usize].type_id)?
+/// The range of the integer type `ty`, when `i64` holds all of it.
+fn int_range(engine: &Engine, ty: TypeId) -> Option<(i64, i64)> {
+    let (min, max) = engine
+        .value_graph_type_table()?
+        .primitive_head(ty)?
         .int_range()?;
-    let (min, max) = (i64::try_from(min).ok()?, i64::try_from(max).ok()?);
-    (min < 0).then_some((min, max))
+    Some((i64::try_from(min).ok()?, i64::try_from(max).ok()?))
+}
+
+fn var_range(engine: &Engine, var: u32) -> Option<(i64, i64)> {
+    int_range(engine, engine.locals()[var as usize].type_id)
 }
 
 /// The proven range of `var`'s value, inside its type's `range`. A ceiling
@@ -2289,7 +2325,7 @@ fn check_comparisons(engine: &Engine, cond: Operand) -> Vec<ExprId> {
 
 /// Record a site for each upper half of the check `cond` just passed. A `var`
 /// index needs its sum proven unwrapped, the `Ceil` [`learn_conjuncts`] leaves,
-/// and a bound `bound - d` cannot wrap below: a length or a constant.
+/// and a bound `bound - d` cannot wrap below: a length or a constant `>= 0`.
 fn record_sites(engine: &Engine, binds: &Binds, cond: Operand, facts: &mut Vec<Fact>) {
     for cmp in check_comparisons(engine, cond) {
         let ExprKind::Binary { left, right, .. } = engine.body.exprs[cmp].kind else {
@@ -2309,7 +2345,7 @@ fn record_sites(engine: &Engine, binds: &Binds, cond: Operand, facts: &mut Vec<F
                         if v == var && b == bound && c == j)
                 });
                 let floored = is_seq_length(engine, binds, right)
-                    || parse_const_i64(engine, binds, right).is_some();
+                    || parse_const_i64(engine, binds, right).is_some_and(|b| b >= 0);
                 if !unwrapped || !floored {
                     continue;
                 }
@@ -2345,46 +2381,45 @@ fn widen_site(engine: &mut Engine, facts: &mut Vec<Fact>, index: Index, bound: B
     let ExprKind::Binary { left, op, right } = engine.body.exprs[site.cmp].kind else {
         unreachable!("a site's comparison is binary");
     };
-    let span = engine.body.exprs[site.cmp].span;
     let int =
         |engine: &mut Engine, ty, c: i64| engine.const_operand(ValueKind::Int(c as u64, ty), ty);
-    match (var, site.sub) {
+    if var.is_none() {
         // A constant index cannot wrap: it simply becomes the later one.
-        (None, _) => {
-            let ty = engine.body.operand_type(left);
-            let left = int(engine, ty, k);
-            engine.replace_expr_kind(site.cmp, ExprKind::Binary { left, op, right });
+        let ty = engine.body.operand_type(left);
+        let left = int(engine, ty, k);
+        engine.replace_expr_kind(site.cmp, ExprKind::Binary { left, op, right });
+    } else {
+        let bound_op = match site.sub {
+            Some(sub) => {
+                let ExprKind::Binary { left: bound_op, .. } = engine.body.exprs[sub].kind else {
+                    unreachable!("a site's `bound - d` is binary");
+                };
+                bound_op
+            }
+            None => right,
+        };
+        let ty = engine.body.operand_type(bound_op);
+        // `bound >= 0` ([`record_sites`]), so `bound - d` stays in the type for
+        // a `d` the type holds.
+        let d = k - site.at;
+        if !int_range(engine, ty).is_some_and(|(_, tmax)| d <= tmax) {
+            return false;
         }
-        (Some(_), None) => {
-            let ty = engine.body.operand_type(right);
-            let d = int(engine, ty, k - site.at);
-            let sub = engine.alloc_expr(
-                ExprKind::Binary {
-                    left: right,
-                    op: NirBinaryOp::Sub,
-                    right: d,
-                },
-                ty,
-                span,
-            );
-            let right = Operand::Expr(sub);
-            engine.replace_expr_kind(site.cmp, ExprKind::Binary { left, op, right });
-            site.sub = Some(sub);
-        }
-        (Some(_), Some(sub)) => {
-            let ExprKind::Binary { left: bound_op, .. } = engine.body.exprs[sub].kind else {
-                unreachable!("a site's `bound - d` is binary");
-            };
-            let ty = engine.body.operand_type(bound_op);
-            let d = int(engine, ty, k - site.at);
-            engine.replace_expr_kind(
-                sub,
-                ExprKind::Binary {
-                    left: bound_op,
-                    op: NirBinaryOp::Sub,
-                    right: d,
-                },
-            );
+        let d = int(engine, ty, d);
+        let difference = ExprKind::Binary {
+            left: bound_op,
+            op: NirBinaryOp::Sub,
+            right: d,
+        };
+        match site.sub {
+            Some(sub) => engine.replace_expr_kind(sub, difference),
+            None => {
+                let span = engine.body.exprs[site.cmp].span;
+                let sub = engine.alloc_expr(difference, ty, span);
+                let right = Operand::Expr(sub);
+                engine.replace_expr_kind(site.cmp, ExprKind::Binary { left, op, right });
+                site.sub = Some(sub);
+            }
         }
     }
     site.reach = k;
@@ -2393,24 +2428,33 @@ fn widen_site(engine: &mut Engine, facts: &mut Vec<Fact>, index: Index, bound: B
     true
 }
 
-/// Whether running `node` does nothing a trap would hide: no call that may do
-/// I/O, no exit, and no loop, which might not end. A check moved across it
-/// traps only where the program would have trapped anyway.
+/// Whether running `node` does nothing a trap would hide: no call that may
+/// report, print or exit, and no loop, which might not end. A trap it holds
+/// reports nothing but a failed contract. A check moved across it traps only
+/// where the program would have trapped anyway.
 fn is_quiet(engine: &Engine, node: NodeRef) -> bool {
+    subtree_quiet(engine.body, node, |id| {
+        engine.is_quiet_trap_callee(id)
+            || (engine.is_pure_builtin_callee(id) && !engine.is_panic_callee(id))
+    })
+}
+
+/// [`is_quiet`] over `body`, with `quiet_call` saying which callees qualify. A
+/// pure builtin that cannot return may still be a function that prints first,
+/// so only a quiet trap among those does.
+fn subtree_quiet(body: &Body, node: NodeRef, quiet_call: impl Fn(FuncId) -> bool) -> bool {
     let mut quiet = true;
-    engine.body.for_each_live_node_under(node, |n| {
+    body.for_each_live_node_under(node, |n| {
         quiet &= match n {
-            NodeRef::Expr(e) => match &engine.body.exprs[e].kind {
-                ExprKind::Call { func_id, .. } => {
-                    engine.is_panic_callee(*func_id) || engine.is_pure_builtin_callee(*func_id)
-                }
+            NodeRef::Expr(e) => match &body.exprs[e].kind {
+                ExprKind::Call { func_id, .. } => quiet_call(*func_id),
                 kind => !matches!(
                     kind,
                     ExprKind::IndirectCall { .. } | ExprKind::CmRawCall { .. }
                 ),
             },
             NodeRef::Stmt(s) => !matches!(
-                engine.body.stmts[s].kind,
+                body.stmts[s].kind,
                 StmtKind::Loop { .. }
                     | StmtKind::Return { .. }
                     | StmtKind::Break { .. }
@@ -2444,7 +2488,10 @@ fn parse_index(engine: &Engine, binds: &Binds, op: Operand) -> Option<Index> {
 /// Whether `facts` prove one conjunct of a check.
 fn conjunct_proven(engine: &Engine, binds: &Binds, facts: &[Fact], part: Conjunct) -> bool {
     match part {
-        Conjunct::AtLeast(var, j, lo) => signed_range(engine, var).is_some_and(|range| {
+        Conjunct::AtLeast(var, 0, lo) => {
+            floor_of(facts, BoundKey::Local(var)).is_some_and(|have| have >= lo)
+        }
+        Conjunct::AtLeast(var, j, lo) => var_range(engine, var).is_some_and(|range| {
             let span = var_span(facts, var, range);
             offset_in_range(span, j, range) && span.0 + j >= lo
         }),
@@ -2469,7 +2516,7 @@ fn conjunct_proven(engine: &Engine, binds: &Binds, facts: &[Fact], part: Conjunc
                             if v == var && k == j && b == bound)
                     });
                     exact
-                        || signed_range(engine, var).is_some_and(|range| {
+                        || var_range(engine, var).is_some_and(|range| {
                             let span = var_span(facts, var, range);
                             offset_in_range(span, j, range)
                                 && (facts.iter().any(|f| {
@@ -2493,13 +2540,17 @@ fn learn_conjuncts(engine: &Engine, binds: &Binds, facts: &mut Vec<Fact>, parts:
         let Conjunct::AtLeast(var, j, lo) = part else {
             unreachable!("partitioned above");
         };
-        let Some((tmin, tmax)) = signed_range(engine, var) else {
-            continue;
-        };
         // Saturating weakens the floor, which stays true.
         let floor = Fact::Floor {
             key: BoundKey::Local(var),
             lo: lo.saturating_sub(j),
+        };
+        if j == 0 {
+            facts.push(floor);
+            continue;
+        }
+        let Some((tmin, tmax)) = var_range(engine, var) else {
+            continue;
         };
         if offset_in_range(var_span(facts, var, (tmin, tmax)), j, (tmin, tmax)) {
             facts.push(floor);
@@ -2528,7 +2579,7 @@ fn learn_conjuncts(engine: &Engine, binds: &Binds, facts: &mut Vec<Fact>, parts:
             }),
             Index::Var(var, j) => {
                 facts.push(Fact::Exact { var, j, bound });
-                if let Some(range) = signed_range(engine, var)
+                if let Some(range) = var_range(engine, var)
                     && offset_in_range(var_span(facts, var, range), j, range)
                 {
                     facts.push(Fact::Ceil {
@@ -2556,20 +2607,30 @@ fn floor_of(facts: &[Fact], key: BoundKey) -> Option<i64> {
 /// Drop every fact whose `var` / `bound` root `node` may modify (conservative:
 /// a false "modifies" only keeps a fact, never invents one).
 fn invalidate(engine: &Engine, node: NodeRef, facts: &mut Vec<Fact>) {
-    let kept = |key: BoundKey| {
-        bound_root(key).is_none_or(|root| !modifies_any_root(engine, node, &[root]))
+    // Facts share a few roots, and each answer walks `node`.
+    let mut verdicts: Vec<(u32, bool)> = Vec::new();
+    let mut kept = |key: BoundKey| {
+        let Some(root) = bound_root(key) else {
+            return true;
+        };
+        if let Some(&(_, kept)) = verdicts.iter().find(|&&(r, _)| r == root) {
+            return kept;
+        }
+        let kept = !modifies_any_root(engine, node, &[root]);
+        verdicts.push((root, kept));
+        kept
     };
     let quiet = !facts.iter().any(|f| matches!(f, Fact::Site(_))) || is_quiet(engine, node);
     facts.retain(|f| match *f {
-        Fact::Site(site) => {
-            quiet && site.var.is_none_or(|v| kept(BoundKey::Local(v))) && kept(site.bound)
+        Fact::Site(Site { var, bound, .. }) => {
+            quiet && var.is_none_or(|v| kept(BoundKey::Local(v))) && kept(bound)
         }
-        Fact::Floor { key, .. } => kept(key),
-        Fact::Max { var, .. } => kept(BoundKey::Local(var)),
         Fact::Ceil { var, bound, .. } => {
             var.is_none_or(|v| kept(BoundKey::Local(v))) && kept(bound)
         }
-        Fact::Exact { var, bound, .. } => !node_modifies(engine, node, var, bound),
+        Fact::Floor { key, .. } => kept(key),
+        Fact::Max { var, .. } => kept(BoundKey::Local(var)),
+        Fact::Exact { var, bound, .. } => kept(BoundKey::Local(var)) && kept(bound),
     });
 }
 
@@ -2875,18 +2936,25 @@ fn rbce_walk(
         // A check passed proves every conjunct of it. One whose conjuncts are
         // all proven already is dead, and a proven one drops out of the rest.
         if let Some(parts) = check_conjuncts(engine, binds, cond) {
+            // Only a check whose failure reports nothing but a failed contract
+            // moves into another, or takes one in.
+            let movable = if_parts(engine, node)
+                .is_some_and(|(_, then_b, _)| is_quiet(engine, NodeRef::Block(then_b)));
             let mut widened = false;
-            for &part in &parts {
-                if let Conjunct::Lt(left, right) = part
-                    && !conjunct_proven(engine, binds, facts, part)
-                    && let (Some(index), Some(bound)) = (
-                        parse_index(engine, binds, left),
-                        parse_bound(engine, binds, right),
-                    )
-                {
-                    widened |= widen_site(engine, facts, index, bound);
+            if movable {
+                for &part in &parts {
+                    if let Conjunct::Lt(left, right) = part
+                        && !conjunct_proven(engine, binds, facts, part)
+                        && let (Some(index), Some(bound)) = (
+                            parse_index(engine, binds, left),
+                            parse_bound(engine, binds, right),
+                        )
+                    {
+                        widened |= widen_site(engine, facts, index, bound);
+                    }
                 }
             }
+            // A widening's ceiling also caps `var`, which can prove a lower half.
             if parts
                 .iter()
                 .all(|&p| conjunct_proven(engine, binds, facts, p))
@@ -2904,7 +2972,9 @@ fn rbce_walk(
                 })
                 .is_some_and(|slot| slot.drop_from_check(engine));
             learn_conjuncts(engine, binds, facts, &parts);
-            record_sites(engine, binds, cond, facts);
+            if movable {
+                record_sites(engine, binds, cond, facts);
+            }
             return changed || widened;
         }
         if let Some(ce) = cond.as_expr() {

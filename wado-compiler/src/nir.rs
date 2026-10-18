@@ -814,6 +814,10 @@ pub enum FunctionKind {
     /// `type_id`. Calls to such functions may be elided when the argument is
     /// provably fresh.
     ValueCopy { type_id: TypeId },
+    /// `F$contract_report{k}`: reports a failed `contract` clause, then traps.
+    /// A contract asks only that a violation trap, so a check calling one may
+    /// move ahead of another (`condition_implication`).
+    ContractReport,
     /// Auto-derived `fn(..)^Inspect::inspect` dispatch stub. Its NIR body is
     /// `unreachable()`, a placeholder making the call resolvable;
     /// WIR build recognises the kind and supplies a `call_ref` through the

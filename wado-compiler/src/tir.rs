@@ -9189,6 +9189,8 @@ pub enum FunctionKind {
     /// The `unchecked` twin of the function `of` declares: its body, with the
     /// `contract` clauses checked only under `-f contract-checks`.
     UncheckedTwin { of: DefId },
+    /// `F$contract_report{k}`: reports a failed `contract` clause, then traps.
+    ContractReport,
     /// Auto-derived `fn(..)^Inspect::inspect` dispatch stub. The TIR body is
     /// `unreachable()` — enough to register the function and resolve calls to
     /// it — and WIR build supplies the real one, a `call_ref` through
