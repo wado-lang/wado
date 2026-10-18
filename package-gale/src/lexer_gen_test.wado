@@ -186,21 +186,32 @@ test "gen_lexer: a catch-all declared first stays in the arms it ties in" {
 
 test "gen_lexer: an alternation of single chars is one class test" {
     let out = lexer_source("lexer grammar L; fragment D : [0-9] ; A : ('_' | D | 'a'..'c' | 'b') 'z' ;");
-    assert out.contains("matches { '0'..='9' | '_' | 'a'..='c' }");
+    assert out.contains("matches { b'0'..=b'9' | b'_' | b'a'..=b'c' }");
     assert !out.contains("alts_");
+}
+
+test "gen_lexer: an ASCII class reads one byte, any other class decodes a char" {
+    let out = lexer_source("lexer grammar L; A : [a-z] ; B : [é] ; C : ~[a] ;");
+    assert out.contains("if !(unchecked src.byte_at(pos) matches { b'a'..=b'z' }) { return -1; }\n    pos += 1;");
+    assert out.contains(
+        "if !(char_at(src, pos) matches { 'é' }) { return -1; }\n    pos = src.ceil_char_boundary(pos + 1);",
+    );
+    assert out.contains(
+        "if (unchecked src.byte_at(pos) matches { b'a' }) { return -1; }\n    pos = src.ceil_char_boundary(pos + 1);",
+    );
 }
 
 test "gen_lexer: a large class is one shared function, however many sites test it" {
     let set = "[a\\u00e0b\\u00e1c\\u00e2d\\u00e3e\\u00e4f\\u00e5g\\u00e6h\\u00e7i\\u00e8]";
     let out = lexer_source(`lexer grammar L; A : ${set} '1' ; B : ${set} '2' ; C : ${set}+ ;`);
     assert count_occurrences(&out, "fn in_char_set_0(c: char) -> bool {") == 1;
-    assert count_occurrences(&out, "in_char_set_0(chars[pos])") == 4;
+    assert count_occurrences(&out, "in_char_set_0(char_at(src, pos))") == 4;
     assert !out.contains("in_char_set_1");
 }
 
 test "gen_lexer: arm scoring matches the suffix at one site, whatever the arm count" {
     let out = lexer_source("lexer grammar L; I : ('a' | 'ab' | 'abc') 'bcd' ;");
-    assert count_occurrences(&out, "chars[pos] != 'd'") == 1;
+    assert count_occurrences(&out, "unchecked src.byte_at(pos) != b'd'") == 1;
 }
 
 test "gen_lexer: an optional element's block is labelled as one, not as a loop" {
@@ -210,15 +221,21 @@ test "gen_lexer: an optional element's block is labelled as one, not as a loop" 
 }
 
 test "gen_lexer: a char that prints as nothing is spelled as its escape" {
-    let out = lexer_source("lexer grammar L; WS : [\\u00A0\\u2000-\\u200A] ; BOM : '\\uFEFF' 'é' ;");
+    let out = lexer_source("lexer grammar L; WS : [\\u00A0\\u2000-\\u200A] ;");
     assert out.contains("matches { '\\u{a0}' | '\\u{2000}'..='\\u{200a}' }");
-    assert out.contains("chars[pos] != '\\u{feff}'");
-    assert out.contains("chars[pos] != 'é'");
+}
+
+test "gen_lexer: a literal past ASCII is matched as its UTF-8 bytes, one test per char" {
+    let out = lexer_source("lexer grammar L; BOM : '\\uFEFF' 'é' ;");
+    assert out.contains(
+        "if pos + 3 > src.len() || unchecked src.byte_at(pos) != b'\\xef' || unchecked src.byte_at(pos + 1) != b'\\xbb' || unchecked src.byte_at(pos + 2) != b'\\xbf' { return -1; }\n    pos += 3;",
+    );
+    assert out.contains("unchecked src.byte_at(pos) != b'\\xc3' || unchecked src.byte_at(pos + 1) != b'\\xa9'");
 }
 
 test "gen_lexer: a negated single char is one class test" {
     let out = lexer_source("lexer grammar L; S : '\"' ~'\"'* '\"' ;");
-    assert out.contains("if (chars[pos] matches { '\"' }) { break");
+    assert out.contains("if (unchecked src.byte_at(pos) matches { b'\"' }) { break");
     assert !out.contains("not_");
 }
 

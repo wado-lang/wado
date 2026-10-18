@@ -1,4 +1,5 @@
-use { Span, chars_text } from "../runtime/lex.wado";
+use { Span } from "../runtime/lex.wado";
+use { collect_range } from "../text.wado";
 use { G4Token, Token } from "./token.wado";
 use {
     scan_line_comment,
@@ -21,7 +22,7 @@ impl G4Lexer {
 
     /// A token whose text is a copy of the source span `[start, end)`.
     fn owned_token(&self, kind: G4Token, start: i32, end: i32) -> Token {
-        return Token::new(kind.code(), chars_text(self.chars, start, end), Span::new(start, end));
+        return Token::new(kind.code(), collect_range(self.chars, start, end), Span::new(start, end));
     }
 
     fn at_end(&self) -> bool {
@@ -138,7 +139,7 @@ impl G4Lexer {
         while !self.at_end() && is_id_continue_char(self.chars[self.pos]) {
             self.pos += 1;
         }
-        let text = chars_text(self.chars, start, self.pos);
+        let text = collect_range(self.chars, start, self.pos);
         // Hard keywords only: `grammar` and `fragment` introduce structural
         // constructs that the parser disambiguates by token kind. Lexer command
         // names like `skip`, `channel`, `mode`, `more`, `pushMode`, `popMode`,

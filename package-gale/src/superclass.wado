@@ -779,7 +779,7 @@ fn gen_super_hooks(w: &mut CodeWriter) {
 
 /// The tokenize-loop call to the `emit` hook, reading the loop's own locals.
 pub fn super_emit_hook_expr<S: AsStrSlice, S1: AsStrSlice>(base_name: S, channel: S1) -> String {
-    return `${base_name}::emit(LexerView { chars: &lexer.chars, start: tok_start, pos: best_end }, best_kind, ${channel})`;
+    return `${base_name}::emit(LexerView { src: &lexer.src, start: tok_start, pos: best_end }, best_kind, ${channel})`;
 }
 
 /// The ambient operation call for a call site, reading the locals in scope
@@ -791,8 +791,8 @@ pub fn super_call_expr<S: AsStrSlice, S1: AsStrSlice>(
     args: &List<String>,
 ) -> String {
     let recv = match site {
-        LexerPredicate => "LexerView { chars, start, pos }",
-        LexerAction => "LexerView { chars, start, pos }, lx",
+        LexerPredicate => "LexerView { src, start, pos }",
+        LexerAction => "LexerView { src, start, pos }, lx",
         ParserPredicate => "p",
     };
     return `${base_name}::${to_snake_case(method)}(${recv}${after_receiver(args)})`;

@@ -23,32 +23,47 @@ impl Span {
     }
 }
 
-internal fn push_chars(out: &mut String, chars: &List<char>, start: i32, end: i32) {
-    let mut bytes = 0;
-    for let mut i = start; i < end; i += 1 {
-        bytes += chars[i].len_utf8();
+internal fn char_at(src: &StrSlice, pos: i32) -> char
+    contract 0 <= pos < src.len()
+{
+    let b = unchecked src.byte_at(pos);
+    if b < 0x80 {
+        return b as char;
     }
-    out.reserve(bytes);
-    for let mut i = start; i < end; i += 1 {
-        out.push(chars[i]);
-    }
+    return src.char_at_byte(pos);
 }
 
-internal fn chars_text(chars: &List<char>, start: i32, end: i32) -> String {
-    let mut s = String::new();
-    push_chars(&mut s, chars, start, end);
-    return s;
-}
-
-internal fn push_chars_escaped(out: &mut String, chars: &List<char>, start: i32, end: i32) {
+internal fn char_count(src: &StrSlice, start: i32, end: i32) -> i32
+    contract 0 <= start <= end <= src.len()
+{
+    let mut n = 0;
     for let mut i = start; i < end; i += 1 {
-        match chars[i] {
-            '\n' => out.push_str("\\n"),
-            '\r' => out.push_str("\\r"),
-            '\t' => out.push_str("\\t"),
-            c => out.push(c),
+        if src.is_char_boundary(i) {
+            n += 1;
         }
     }
+    return n;
+}
+
+internal fn span_text(src: &StrSlice, start: i32, end: i32) -> String {
+    return src.slice(start, end).to_string();
+}
+
+internal fn push_escaped(out: &mut String, src: &StrSlice, start: i32, end: i32) {
+    let mut run = start;
+    for let mut i = start; i < end; i += 1 {
+        let b = unchecked src.byte_at(i);
+        if b matches { b'\n' | b'\r' | b'\t' } {
+            out.push_str(unchecked src.slice(run, i));
+            out.push_str(match b {
+                b'\n' => "\\n",
+                b'\r' => "\\r",
+                _ => "\\t",
+            });
+            run = i + 1;
+        }
+    }
+    out.push_str(unchecked src.slice(run, end));
 }
 
 internal fn kind_set_has(set: &List<i32>, kind: i32) -> bool {
@@ -77,27 +92,26 @@ internal fn with_expected<S: AsStrSlice>(message: S, expected: &List<String>) ->
     return out;
 }
 
-internal fn char_pos_in_line(chars: &List<char>, i: i32) -> i32 {
-    let mut j = if i < chars.len() { i } else { chars.len() };
-    let mut col = 0;
-    while j > 0 && chars[j - 1] != '\n' {
-        col += 1;
-        j -= 1;
+internal fn char_pos_in_line(src: &StrSlice, pos: i32) -> i32 {
+    let end = i32::min(pos, src.len());
+    let mut line_start = end;
+    while line_start > 0 && unchecked src.byte_at(line_start - 1) != b'\n' {
+        line_start -= 1;
     }
-    return col;
+    return char_count(src, line_start, end);
 }
 
-internal fn line_starts(chars: &List<char>) -> List<i32> {
+internal fn line_starts(src: &StrSlice) -> List<i32> {
     let mut starts: List<i32> = [0];
-    for let mut i = 0; i < chars.len(); i += 1 {
-        if chars[i] == '\n' {
+    for let mut i = 0; i < src.len(); i += 1 {
+        if unchecked src.byte_at(i) == b'\n' {
             starts.push(i + 1);
         }
     }
     return starts;
 }
 
-internal fn line_col_at(starts: &List<i32>, pos: i32) -> [i32, i32] {
+internal fn line_at(starts: &List<i32>, pos: i32) -> i32 {
     let mut lo = 0;
     let mut hi = starts.len() - 1;
     while lo < hi {
@@ -108,7 +122,12 @@ internal fn line_col_at(starts: &List<i32>, pos: i32) -> [i32, i32] {
             hi = mid - 1;
         }
     }
-    return [lo + 1, pos - starts[lo]];
+    return lo + 1;
+}
+
+internal fn line_col_at(src: &StrSlice, starts: &List<i32>, pos: i32) -> [i32, i32] {
+    let line = line_at(starts, pos);
+    return [line, char_count(src, starts[line - 1], pos)];
 }
 
 pub flags TokenFlags {
@@ -123,7 +142,7 @@ pub struct TokenStream {
     pub ends: List<i32>,
     pub triv_lo: List<i32>,
     pub triv_hi: List<i32>,
-    pub chars: &List<char>,
+    pub src: StrSlice,
     pub triv_kinds: List<i32>,
     pub triv_starts: List<i32>,
     pub triv_ends: List<i32>,
@@ -133,15 +152,15 @@ pub struct TokenStream {
 }
 
 impl TokenStream {
-    internal fn new(chars: &List<char>) -> TokenStream {
-        let cap = chars.len() / 4 + 1;
+    internal fn new(src: StrSlice) -> TokenStream {
+        let cap = src.len() / 4 + 1;
         return TokenStream {
             kinds: List::with_capacity(cap),
             starts: List::with_capacity(cap),
             ends: List::with_capacity(cap),
             triv_lo: List::with_capacity(cap),
             triv_hi: List::with_capacity(cap),
-            chars,
+            src,
             triv_kinds: List::with_capacity(cap),
             triv_starts: List::with_capacity(cap),
             triv_ends: List::with_capacity(cap),
@@ -254,15 +273,15 @@ impl TokenStream {
     }
 
     pub fn token_text(&self, i: i32) -> String {
-        return chars_text(self.chars, self.starts[i], self.ends[i]);
+        return span_text(&self.src, self.starts[i], self.ends[i]);
     }
 
     pub fn push_token_text(&self, out: &mut String, i: i32) {
-        push_chars(out, self.chars, self.starts[i], self.ends[i]);
+        out.push_str(self.src.slice(self.starts[i], self.ends[i]));
     }
 
     pub fn push_token_text_escaped(&self, out: &mut String, i: i32) {
-        push_chars_escaped(out, self.chars, self.starts[i], self.ends[i]);
+        push_escaped(out, &self.src, self.starts[i], self.ends[i]);
     }
 
     pub fn rule_text(&self, start_tok: i32, end_tok: i32) -> String {
@@ -271,7 +290,7 @@ impl TokenStream {
             if i > start_tok {
                 for let mut j = self.triv_lo[i]; j < self.triv_hi[i]; j += 1 {
                     if self.triv_chans[j] != 0 {
-                        push_chars(&mut out, self.chars, self.triv_starts[j], self.triv_ends[j]);
+                        out.push_str(self.src.slice(self.triv_starts[j], self.triv_ends[j]));
                     }
                 }
             }
@@ -376,7 +395,7 @@ impl Display for Diagnostic {
 
 fn lex_error_at(tokens: &TokenStream, i: i32) -> Diagnostic {
     let mut message = String::from("token recognition error at: '");
-    push_chars_escaped(&mut message, tokens.chars, tokens.starts[i], tokens.ends[i]);
+    push_escaped(&mut message, &tokens.src, tokens.starts[i], tokens.ends[i]);
     message.push('\'');
     return Diagnostic::error(
         DiagnosticCode::LexError,
@@ -401,13 +420,13 @@ internal fn merge_lex_errors(tokens: &TokenStream, diagnostics: &mut List<Diagno
     *diagnostics = merged;
 }
 
-internal fn resolve_positions(diagnostics: &mut List<Diagnostic>, chars: &List<char>) {
+internal fn resolve_positions(diagnostics: &mut List<Diagnostic>, src: &StrSlice) {
     if diagnostics.is_empty() {
         return;
     }
-    let starts = line_starts(chars);
+    let starts = line_starts(src);
     for let mut i = 0; i < diagnostics.len(); i += 1 {
-        let lc = line_col_at(&starts, diagnostics[i].span.start);
+        let lc = line_col_at(src, &starts, diagnostics[i].span.start);
         diagnostics[i].line = lc.0;
         diagnostics[i].col = lc.1;
     }
@@ -876,8 +895,31 @@ fn render_node(
     return c;
 }
 
+struct SourceCursor {
+    byte: i32,
+    char: i32,
+    line: i32,
+    line_char: i32,
+}
+
+impl SourceCursor {
+    fn advance_to(&mut self, src: &StrSlice, byte: i32) {
+        assert byte >= self.byte, "to_lexer_string visits tokens in source order";
+        for let mut i = self.byte; i < byte; i += 1 {
+            if src.is_char_boundary(i) {
+                self.char += 1;
+            }
+            if unchecked src.byte_at(i) == b'\n' {
+                self.line += 1;
+                self.line_char = self.char;
+            }
+        }
+        self.byte = byte;
+    }
+}
+
 pub fn to_lexer_string(tokens: &TokenStream, eof_kind: i32) -> String {
-    let starts = line_starts(tokens.chars);
+    let mut cursor = SourceCursor { byte: 0, char: 0, line: 1, line_char: 0 };
     let mut out = String::with_capacity(tokens.output.len() + tokens.len() * 32);
     out.push_str(&tokens.output);
     let mut index = 0;
@@ -893,7 +935,7 @@ pub fn to_lexer_string(tokens: &TokenStream, eof_kind: i32) -> String {
                     tokens.triv_starts[t],
                     tokens.triv_ends[t],
                     tokens.triv_chans[t],
-                    &starts,
+                    &mut cursor,
                     index,
                     eof_kind,
                 );
@@ -907,7 +949,7 @@ pub fn to_lexer_string(tokens: &TokenStream, eof_kind: i32) -> String {
             tokens.starts[i],
             tokens.ends[i],
             0,
-            &starts,
+            &mut cursor,
             index,
             eof_kind,
         );
@@ -923,43 +965,54 @@ fn emit_lexer_token(
     start: i32,
     end: i32,
     channel: i32,
-    starts: &List<i32>,
+    cursor: &mut SourceCursor,
     index: i32,
     eof_kind: i32,
 ) {
     let is_eof = kind == eof_kind;
     let type_id = if is_eof { -1 } else { kind + 1 };
-    let lc = line_col_at(starts, start);
-    out.push_str(`[@${index},${start}:${end - 1}='`);
+    cursor.advance_to(&tokens.src, start);
+    let first = cursor.char;
+    let stop = first + char_count(&tokens.src, start, end) - 1;
+    out.push_str(`[@${index},${first}:${stop}='`);
     if is_eof {
         out.push_str("<EOF>");
     } else {
-        push_chars_escaped(out, tokens.chars, start, end);
+        push_escaped(out, &tokens.src, start, end);
     }
     out.push_str(`',<${type_id}>,`);
     if channel != 0 {
         out.push_str(`channel=${channel},`);
     }
-    out.push_str(`${lc.0}:${lc.1}]\n`);
+    out.push_str(`${cursor.line}:${first - cursor.line_char}]\n`);
 }
 
 pub struct LexerView {
-    chars: &List<char>,
+    src: &StrSlice,
     start: i32,
     pos: i32,
 }
 
 impl LexerView {
     pub fn la(&self, k: i32) -> i32 {
-        let i = if k > 0 { self.pos + k - 1 } else { self.pos + k };
-        if i < 0 || i >= self.chars.len() {
-            return -1;
+        let mut i = self.pos;
+        for let mut step = 1; step < k; step += 1 {
+            if i >= self.src.len() {
+                return -1;
+            }
+            i = self.src.ceil_char_boundary(i + 1);
         }
-        return self.chars[i] as i32;
+        for let mut step = 0; step > k; step -= 1 {
+            if i == 0 {
+                return -1;
+            }
+            i = self.src.floor_char_boundary(i - 1);
+        }
+        return self.char_at(i);
     }
 
     pub fn text(&self) -> String {
-        return chars_text(self.chars, self.start, self.pos);
+        return span_text(self.src, self.start, self.pos);
     }
 
     pub fn start(&self) -> i32 {
@@ -971,14 +1024,14 @@ impl LexerView {
     }
 
     pub fn char_at(&self, i: i32) -> i32 {
-        if i < 0 || i >= self.chars.len() {
+        if i < 0 || i >= self.src.len() {
             return -1;
         }
-        return self.chars[i] as i32;
+        return char_at(self.src, i) as i32;
     }
 
     pub fn input_len(&self) -> i32 {
-        return self.chars.len();
+        return self.src.len();
     }
 }
 
@@ -1461,7 +1514,7 @@ fn latn_closure(
     }
 }
 
-internal fn latn_match(sim: &AtnSim, start_rule: i32, chars: &List<char>, start: i32, longest: bool) -> i32 {
+internal fn latn_match(sim: &AtnSim, start_rule: i32, src: &StrSlice, start: i32, longest: bool) -> i32 {
     let mut best = -1;
     let mut stacks = LatnStacks { parent: [], ret: [], ids: HashMap::<i64, i32>::with_seed(LATN_SEED) };
     let mut open: List<i32> = [];
@@ -1474,7 +1527,7 @@ internal fn latn_match(sim: &AtnSim, start_rule: i32, chars: &List<char>, start:
     let mut nlist: List<LThread> = [];
     let mut pos = start;
     loop {
-        let cur = if pos < chars.len() { chars[pos] as i32 } else { -1 };
+        let cur = if pos < src.len() { char_at(src, pos) as i32 } else { -1 };
         nlist.clear();
         visited.next_step();
         let mut i = 0;
@@ -1520,7 +1573,7 @@ internal fn latn_match(sim: &AtnSim, start_rule: i32, chars: &List<char>, start:
         let spent = clist;
         clist = nlist;
         nlist = spent;
-        pos += 1;
+        pos = src.ceil_char_boundary(pos + 1);
     }
     return best;
 }
@@ -1671,79 +1724,79 @@ pub interface RustLexerBase {
 }
 
 struct Lexer {
-    chars: List<char>,
+    src: StrSlice,
     pos: i32,
 }
 
 impl Lexer {
     fn new<S: AsStrSlice>(input: S) -> Lexer {
-        return Lexer { chars: input.to_chars(), pos: 0 };
+        return Lexer { src: input.as_str_slice(), pos: 0 };
     }
 
     fn at_end(&self) -> bool {
-        return self.pos >= self.chars.len();
+        return self.pos >= self.src.len();
     }
 }
 
-fn try_KW_STATICLIFETIME(chars: &List<char>, start: i32) -> i32 {
+fn try_KW_STATICLIFETIME(src: &StrSlice, start: i32) -> i32 {
     let mut pos = start;
-    if pos >= chars.len() || chars[pos] != '\'' { return -1; }
+    if pos >= src.len() || unchecked src.byte_at(pos) != b'\'' { return -1; }
     pos += 1;
-    if pos >= chars.len() || chars[pos] != 's' { return -1; }
+    if pos >= src.len() || unchecked src.byte_at(pos) != b's' { return -1; }
     pos += 1;
-    if pos >= chars.len() || chars[pos] != 't' { return -1; }
+    if pos >= src.len() || unchecked src.byte_at(pos) != b't' { return -1; }
     pos += 1;
-    if pos >= chars.len() || chars[pos] != 'a' { return -1; }
+    if pos >= src.len() || unchecked src.byte_at(pos) != b'a' { return -1; }
     pos += 1;
-    if pos >= chars.len() || chars[pos] != 't' { return -1; }
+    if pos >= src.len() || unchecked src.byte_at(pos) != b't' { return -1; }
     pos += 1;
-    if pos >= chars.len() || chars[pos] != 'i' { return -1; }
+    if pos >= src.len() || unchecked src.byte_at(pos) != b'i' { return -1; }
     pos += 1;
-    if pos >= chars.len() || chars[pos] != 'c' { return -1; }
+    if pos >= src.len() || unchecked src.byte_at(pos) != b'c' { return -1; }
     pos += 1;
     return pos;
 }
 
-fn try_KW_UNDERLINELIFETIME(chars: &List<char>, start: i32) -> i32 {
+fn try_KW_UNDERLINELIFETIME(src: &StrSlice, start: i32) -> i32 {
     let mut pos = start;
-    if pos >= chars.len() || chars[pos] != '\'' { return -1; }
+    if pos >= src.len() || unchecked src.byte_at(pos) != b'\'' { return -1; }
     pos += 1;
-    if pos >= chars.len() || chars[pos] != '_' { return -1; }
+    if pos >= src.len() || unchecked src.byte_at(pos) != b'_' { return -1; }
     pos += 1;
     return pos;
 }
 
-fn try_KW_DOLLARCRATE(chars: &List<char>, start: i32) -> i32 {
+fn try_KW_DOLLARCRATE(src: &StrSlice, start: i32) -> i32 {
     let mut pos = start;
-    if pos >= chars.len() || chars[pos] != '$' { return -1; }
+    if pos >= src.len() || unchecked src.byte_at(pos) != b'$' { return -1; }
     pos += 1;
-    if pos >= chars.len() || chars[pos] != 'c' { return -1; }
+    if pos >= src.len() || unchecked src.byte_at(pos) != b'c' { return -1; }
     pos += 1;
-    if pos >= chars.len() || chars[pos] != 'r' { return -1; }
+    if pos >= src.len() || unchecked src.byte_at(pos) != b'r' { return -1; }
     pos += 1;
-    if pos >= chars.len() || chars[pos] != 'a' { return -1; }
+    if pos >= src.len() || unchecked src.byte_at(pos) != b'a' { return -1; }
     pos += 1;
-    if pos >= chars.len() || chars[pos] != 't' { return -1; }
+    if pos >= src.len() || unchecked src.byte_at(pos) != b't' { return -1; }
     pos += 1;
-    if pos >= chars.len() || chars[pos] != 'e' { return -1; }
+    if pos >= src.len() || unchecked src.byte_at(pos) != b'e' { return -1; }
     pos += 1;
     return pos;
 }
 
-fn try_NON_KEYWORD_IDENTIFIER(chars: &List<char>, start: i32) -> i32 {
+fn try_NON_KEYWORD_IDENTIFIER(src: &StrSlice, start: i32) -> i32 {
     let mut pos = start;
     let alts_saved_0 = pos;
     alts_done_0: {
         alts_0_0: {
             pos = alts_saved_0;
-            if pos >= chars.len() { break alts_0_0; }
-            if !in_char_set_0(chars[pos]) { break alts_0_0; }
-            pos += 1;
+            if pos >= src.len() { break alts_0_0; }
+            if !in_char_set_0(char_at(src, pos)) { break alts_0_0; }
+            pos = src.ceil_char_boundary(pos + 1);
             loop {
                 rep_1: {
-                    if pos >= chars.len() { break rep_1; }
-                    if !in_char_set_1(chars[pos]) { break rep_1; }
-                    pos += 1;
+                    if pos >= src.len() { break rep_1; }
+                    if !in_char_set_1(char_at(src, pos)) { break rep_1; }
+                    pos = src.ceil_char_boundary(pos + 1);
                     continue;
                 }
                 break;
@@ -1752,16 +1805,16 @@ fn try_NON_KEYWORD_IDENTIFIER(chars: &List<char>, start: i32) -> i32 {
         }
         alts_0_1: {
             pos = alts_saved_0;
-            if pos >= chars.len() || chars[pos] != '_' { break alts_0_1; }
+            if pos >= src.len() || unchecked src.byte_at(pos) != b'_' { break alts_0_1; }
             pos += 1;
-            if pos >= chars.len() { break alts_0_1; }
-            if !in_char_set_1(chars[pos]) { break alts_0_1; }
-            pos += 1;
+            if pos >= src.len() { break alts_0_1; }
+            if !in_char_set_1(char_at(src, pos)) { break alts_0_1; }
+            pos = src.ceil_char_boundary(pos + 1);
             loop {
                 rep_2: {
-                    if pos >= chars.len() { break rep_2; }
-                    if !in_char_set_1(chars[pos]) { break rep_2; }
-                    pos += 1;
+                    if pos >= src.len() { break rep_2; }
+                    if !in_char_set_1(char_at(src, pos)) { break rep_2; }
+                    pos = src.ceil_char_boundary(pos + 1);
                     continue;
                 }
                 break;
@@ -1773,41 +1826,41 @@ fn try_NON_KEYWORD_IDENTIFIER(chars: &List<char>, start: i32) -> i32 {
     return pos;
 }
 
-fn try_RAW_IDENTIFIER(chars: &List<char>, start: i32) -> i32 {
+fn try_RAW_IDENTIFIER(src: &StrSlice, start: i32) -> i32 {
     let mut pos = start;
-    if pos >= chars.len() || chars[pos] != 'r' { return -1; }
+    if pos >= src.len() || unchecked src.byte_at(pos) != b'r' { return -1; }
     pos += 1;
-    if pos >= chars.len() || chars[pos] != '#' { return -1; }
+    if pos >= src.len() || unchecked src.byte_at(pos) != b'#' { return -1; }
     pos += 1;
-    pos = try_NON_KEYWORD_IDENTIFIER(chars, pos);
+    pos = try_NON_KEYWORD_IDENTIFIER(src, pos);
     if pos < 0 { return -1; }
     return pos;
 }
 
-fn try_LINE_COMMENT(chars: &List<char>, start: i32) -> i32 {
+fn try_LINE_COMMENT(src: &StrSlice, start: i32) -> i32 {
     let mut pos = start;
     let alts_saved_4 = pos;
     let mut alts_best_4 = -1;
     alts_4_0: {
         pos = alts_saved_4;
-        if pos >= chars.len() || chars[pos] != '/' { break alts_4_0; }
+        if pos >= src.len() || unchecked src.byte_at(pos) != b'/' { break alts_4_0; }
         pos += 1;
-        if pos >= chars.len() || chars[pos] != '/' { break alts_4_0; }
+        if pos >= src.len() || unchecked src.byte_at(pos) != b'/' { break alts_4_0; }
         pos += 1;
         let alts_saved_5 = pos;
         alts_done_5: {
             alts_5_0: {
                 pos = alts_saved_5;
-                if pos >= chars.len() { break alts_5_0; }
-                if (chars[pos] matches { '/' | '!' | '\r' | '\n' }) { break alts_5_0; }
-                pos += 1;
+                if pos >= src.len() { break alts_5_0; }
+                if (unchecked src.byte_at(pos) matches { b'/' | b'!' | b'\x0d' | b'\x0a' }) { break alts_5_0; }
+                pos = src.ceil_char_boundary(pos + 1);
                 break alts_done_5;
             }
             alts_5_1: {
                 pos = alts_saved_5;
-                if pos >= chars.len() || chars[pos] != '/' { break alts_5_1; }
+                if pos >= src.len() || unchecked src.byte_at(pos) != b'/' { break alts_5_1; }
                 pos += 1;
-                if pos >= chars.len() || chars[pos] != '/' { break alts_5_1; }
+                if pos >= src.len() || unchecked src.byte_at(pos) != b'/' { break alts_5_1; }
                 pos += 1;
                 break alts_done_5;
             }
@@ -1815,9 +1868,9 @@ fn try_LINE_COMMENT(chars: &List<char>, start: i32) -> i32 {
         }
         loop {
             rep_6: {
-                if pos >= chars.len() { break rep_6; }
-                if (chars[pos] matches { '\r' | '\n' }) { break rep_6; }
-                pos += 1;
+                if pos >= src.len() { break rep_6; }
+                if (unchecked src.byte_at(pos) matches { b'\x0d' | b'\x0a' }) { break rep_6; }
+                pos = src.ceil_char_boundary(pos + 1);
                 continue;
             }
             break;
@@ -1826,9 +1879,9 @@ fn try_LINE_COMMENT(chars: &List<char>, start: i32) -> i32 {
     }
     alts_4_1: {
         pos = alts_saved_4;
-        if pos >= chars.len() || chars[pos] != '/' { break alts_4_1; }
+        if pos >= src.len() || unchecked src.byte_at(pos) != b'/' { break alts_4_1; }
         pos += 1;
-        if pos >= chars.len() || chars[pos] != '/' { break alts_4_1; }
+        if pos >= src.len() || unchecked src.byte_at(pos) != b'/' { break alts_4_1; }
         pos += 1;
         if pos > alts_best_4 { alts_best_4 = pos; }
     }
@@ -1837,23 +1890,23 @@ fn try_LINE_COMMENT(chars: &List<char>, start: i32) -> i32 {
     return pos;
 }
 
-fn try_BLOCK_COMMENT(chars: &List<char>, start: i32) -> i32 {
-    return latn_match(&LATN_SIM, 0, chars, start, false);
+fn try_BLOCK_COMMENT(src: &StrSlice, start: i32) -> i32 {
+    return latn_match(&LATN_SIM, 0, src, start, false);
 }
 
-fn try_INNER_LINE_DOC(chars: &List<char>, start: i32) -> i32 {
+fn try_INNER_LINE_DOC(src: &StrSlice, start: i32) -> i32 {
     let mut pos = start;
-    if pos >= chars.len() || chars[pos] != '/' { return -1; }
+    if pos >= src.len() || unchecked src.byte_at(pos) != b'/' { return -1; }
     pos += 1;
-    if pos >= chars.len() || chars[pos] != '/' { return -1; }
+    if pos >= src.len() || unchecked src.byte_at(pos) != b'/' { return -1; }
     pos += 1;
-    if pos >= chars.len() || chars[pos] != '!' { return -1; }
+    if pos >= src.len() || unchecked src.byte_at(pos) != b'!' { return -1; }
     pos += 1;
     loop {
         rep_7: {
-            if pos >= chars.len() { break rep_7; }
-            if (chars[pos] matches { '\n' | '\r' }) { break rep_7; }
-            pos += 1;
+            if pos >= src.len() { break rep_7; }
+            if (unchecked src.byte_at(pos) matches { b'\x0a' | b'\x0d' }) { break rep_7; }
+            pos = src.ceil_char_boundary(pos + 1);
             continue;
         }
         break;
@@ -1861,29 +1914,29 @@ fn try_INNER_LINE_DOC(chars: &List<char>, start: i32) -> i32 {
     return pos;
 }
 
-fn try_INNER_BLOCK_DOC(chars: &List<char>, start: i32) -> i32 {
-    return latn_match(&LATN_SIM, 2, chars, start, false);
+fn try_INNER_BLOCK_DOC(src: &StrSlice, start: i32) -> i32 {
+    return latn_match(&LATN_SIM, 2, src, start, false);
 }
 
-fn try_OUTER_LINE_DOC(chars: &List<char>, start: i32) -> i32 {
+fn try_OUTER_LINE_DOC(src: &StrSlice, start: i32) -> i32 {
     let mut pos = start;
-    if pos >= chars.len() || chars[pos] != '/' { return -1; }
+    if pos >= src.len() || unchecked src.byte_at(pos) != b'/' { return -1; }
     pos += 1;
-    if pos >= chars.len() || chars[pos] != '/' { return -1; }
+    if pos >= src.len() || unchecked src.byte_at(pos) != b'/' { return -1; }
     pos += 1;
-    if pos >= chars.len() || chars[pos] != '/' { return -1; }
+    if pos >= src.len() || unchecked src.byte_at(pos) != b'/' { return -1; }
     pos += 1;
     let opt_saved_8 = pos;
     let mut opt_ok_8 = false;
     opt_8: {
-        if pos >= chars.len() { break opt_8; }
-        if (chars[pos] matches { '/' | '\r' | '\n' }) { break opt_8; }
-        pos += 1;
+        if pos >= src.len() { break opt_8; }
+        if (unchecked src.byte_at(pos) matches { b'/' | b'\x0d' | b'\x0a' }) { break opt_8; }
+        pos = src.ceil_char_boundary(pos + 1);
         loop {
             rep_9: {
-                if pos >= chars.len() { break rep_9; }
-                if (chars[pos] matches { '\n' | '\r' }) { break rep_9; }
-                pos += 1;
+                if pos >= src.len() { break rep_9; }
+                if (unchecked src.byte_at(pos) matches { b'\x0a' | b'\x0d' }) { break rep_9; }
+                pos = src.ceil_char_boundary(pos + 1);
                 continue;
             }
             break;
@@ -1894,29 +1947,29 @@ fn try_OUTER_LINE_DOC(chars: &List<char>, start: i32) -> i32 {
     return pos;
 }
 
-fn try_OUTER_BLOCK_DOC(chars: &List<char>, start: i32) -> i32 {
-    return latn_match(&LATN_SIM, 3, chars, start, false);
+fn try_OUTER_BLOCK_DOC(src: &StrSlice, start: i32) -> i32 {
+    return latn_match(&LATN_SIM, 3, src, start, false);
 }
 
-fn try_SHEBANG(chars: &List<char>, start: i32) -> i32 with RustLexerBase {
+fn try_SHEBANG(src: &StrSlice, start: i32) -> i32 with RustLexerBase {
     let mut pos = start;
-    if !RustLexerBase::sof(LexerView { chars, start, pos }) { return -1; }
+    if !RustLexerBase::sof(LexerView { src, start, pos }) { return -1; }
     opt_10: {
-        if pos >= chars.len() || chars[pos] != '\u{feff}' { break opt_10; }
-        pos += 1;
+        if pos + 3 > src.len() || unchecked src.byte_at(pos) != b'\xef' || unchecked src.byte_at(pos + 1) != b'\xbb' || unchecked src.byte_at(pos + 2) != b'\xbf' { break opt_10; }
+        pos += 3;
     }
-    if pos >= chars.len() || chars[pos] != '#' { return -1; }
+    if pos >= src.len() || unchecked src.byte_at(pos) != b'#' { return -1; }
     pos += 1;
-    if pos >= chars.len() || chars[pos] != '!' { return -1; }
+    if pos >= src.len() || unchecked src.byte_at(pos) != b'!' { return -1; }
     pos += 1;
-    if pos >= chars.len() { return -1; }
-    if (chars[pos] matches { '[' | '\r' | '\n' }) { return -1; }
-    pos += 1;
+    if pos >= src.len() { return -1; }
+    if (unchecked src.byte_at(pos) matches { b'[' | b'\x0d' | b'\x0a' }) { return -1; }
+    pos = src.ceil_char_boundary(pos + 1);
     loop {
         rep_11: {
-            if pos >= chars.len() { break rep_11; }
-            if (chars[pos] matches { '\r' | '\n' }) { break rep_11; }
-            pos += 1;
+            if pos >= src.len() { break rep_11; }
+            if (unchecked src.byte_at(pos) matches { b'\x0d' | b'\x0a' }) { break rep_11; }
+            pos = src.ceil_char_boundary(pos + 1);
             continue;
         }
         break;
@@ -1924,30 +1977,30 @@ fn try_SHEBANG(chars: &List<char>, start: i32) -> i32 with RustLexerBase {
     return pos;
 }
 
-fn try_WHITESPACE(chars: &List<char>, start: i32) -> i32 {
+fn try_WHITESPACE(src: &StrSlice, start: i32) -> i32 {
     let mut pos = start;
-    if pos >= chars.len() { return -1; }
-    if !(chars[pos] matches { ' ' | '\u{a0}' | '\u{1680}' | '\u{2000}'..='\u{200a}' | '\u{202f}' | '\u{205f}' | '\u{3000}' }) { return -1; }
-    pos += 1;
+    if pos >= src.len() { return -1; }
+    if !(char_at(src, pos) matches { ' ' | '\u{a0}' | '\u{1680}' | '\u{2000}'..='\u{200a}' | '\u{202f}' | '\u{205f}' | '\u{3000}' }) { return -1; }
+    pos = src.ceil_char_boundary(pos + 1);
     return pos;
 }
 
-fn try_NEWLINE(chars: &List<char>, start: i32) -> i32 {
+fn try_NEWLINE(src: &StrSlice, start: i32) -> i32 {
     let mut pos = start;
     let alts_saved_12 = pos;
     let mut alts_best_12 = -1;
     alts_12_0: {
         pos = alts_saved_12;
-        if pos >= chars.len() || chars[pos] != '\r' { break alts_12_0; }
+        if pos >= src.len() || unchecked src.byte_at(pos) != b'\x0d' { break alts_12_0; }
         pos += 1;
-        if pos >= chars.len() || chars[pos] != '\n' { break alts_12_0; }
+        if pos >= src.len() || unchecked src.byte_at(pos) != b'\x0a' { break alts_12_0; }
         pos += 1;
         if pos > alts_best_12 { alts_best_12 = pos; }
     }
     alts_12_1: {
         pos = alts_saved_12;
-        if pos >= chars.len() { break alts_12_1; }
-        if !(chars[pos] matches { '\r' | '\n' }) { break alts_12_1; }
+        if pos >= src.len() { break alts_12_1; }
+        if !(unchecked src.byte_at(pos) matches { b'\x0d' | b'\x0a' }) { break alts_12_1; }
         pos += 1;
         if pos > alts_best_12 { alts_best_12 = pos; }
     }
@@ -1956,47 +2009,47 @@ fn try_NEWLINE(chars: &List<char>, start: i32) -> i32 {
     return pos;
 }
 
-fn try_CHAR_LITERAL(chars: &List<char>, start: i32) -> i32 {
+fn try_CHAR_LITERAL(src: &StrSlice, start: i32) -> i32 {
     let mut pos = start;
-    if pos >= chars.len() || chars[pos] != '\'' { return -1; }
+    if pos >= src.len() || unchecked src.byte_at(pos) != b'\'' { return -1; }
     pos += 1;
     let alts_saved_13 = pos;
     alts_done_13: {
         alts_13_0: {
             pos = alts_saved_13;
-            if pos >= chars.len() { break alts_13_0; }
-            if (chars[pos] matches { '\'' | '\\' | '\n' | '\r' | '\t' }) { break alts_13_0; }
-            pos += 1;
+            if pos >= src.len() { break alts_13_0; }
+            if (unchecked src.byte_at(pos) matches { b'\'' | b'\\' | b'\x0a' | b'\x0d' | b'\x09' }) { break alts_13_0; }
+            pos = src.ceil_char_boundary(pos + 1);
             break alts_done_13;
         }
         alts_13_1: {
             pos = alts_saved_13;
-            pos = frag_QUOTE_ESCAPE(chars, pos);
+            pos = frag_QUOTE_ESCAPE(src, pos);
             if pos < 0 { break alts_13_1; }
             break alts_done_13;
         }
         alts_13_2: {
             pos = alts_saved_13;
-            pos = frag_ASCII_ESCAPE(chars, pos);
+            pos = frag_ASCII_ESCAPE(src, pos);
             if pos < 0 { break alts_13_2; }
             break alts_done_13;
         }
         alts_13_3: {
             pos = alts_saved_13;
-            pos = frag_UNICODE_ESCAPE(chars, pos);
+            pos = frag_UNICODE_ESCAPE(src, pos);
             if pos < 0 { break alts_13_3; }
             break alts_done_13;
         }
         return -1;
     }
-    if pos >= chars.len() || chars[pos] != '\'' { return -1; }
+    if pos >= src.len() || unchecked src.byte_at(pos) != b'\'' { return -1; }
     pos += 1;
     return pos;
 }
 
-fn try_STRING_LITERAL(chars: &List<char>, start: i32) -> i32 {
+fn try_STRING_LITERAL(src: &StrSlice, start: i32) -> i32 {
     let mut pos = start;
-    if pos >= chars.len() || chars[pos] != '"' { return -1; }
+    if pos >= src.len() || unchecked src.byte_at(pos) != b'"' { return -1; }
     pos += 1;
     loop {
         let rep_saved_14 = pos;
@@ -2005,32 +2058,32 @@ fn try_STRING_LITERAL(chars: &List<char>, start: i32) -> i32 {
             alts_done_15: {
                 alts_15_0: {
                     pos = alts_saved_15;
-                    if pos >= chars.len() { break alts_15_0; }
-                    if (chars[pos] matches { '"' | '\\' }) { break alts_15_0; }
-                    pos += 1;
+                    if pos >= src.len() { break alts_15_0; }
+                    if (unchecked src.byte_at(pos) matches { b'"' | b'\\' }) { break alts_15_0; }
+                    pos = src.ceil_char_boundary(pos + 1);
                     break alts_done_15;
                 }
                 alts_15_1: {
                     pos = alts_saved_15;
-                    pos = frag_QUOTE_ESCAPE(chars, pos);
+                    pos = frag_QUOTE_ESCAPE(src, pos);
                     if pos < 0 { break alts_15_1; }
                     break alts_done_15;
                 }
                 alts_15_2: {
                     pos = alts_saved_15;
-                    pos = frag_ASCII_ESCAPE(chars, pos);
+                    pos = frag_ASCII_ESCAPE(src, pos);
                     if pos < 0 { break alts_15_2; }
                     break alts_done_15;
                 }
                 alts_15_3: {
                     pos = alts_saved_15;
-                    pos = frag_UNICODE_ESCAPE(chars, pos);
+                    pos = frag_UNICODE_ESCAPE(src, pos);
                     if pos < 0 { break alts_15_3; }
                     break alts_done_15;
                 }
                 alts_15_4: {
                     pos = alts_saved_15;
-                    pos = frag_ESC_NEWLINE(chars, pos);
+                    pos = frag_ESC_NEWLINE(src, pos);
                     if pos < 0 { break alts_15_4; }
                     break alts_done_15;
                 }
@@ -2041,54 +2094,54 @@ fn try_STRING_LITERAL(chars: &List<char>, start: i32) -> i32 {
         pos = rep_saved_14;
         break;
     }
-    if pos >= chars.len() || chars[pos] != '"' { return -1; }
+    if pos >= src.len() || unchecked src.byte_at(pos) != b'"' { return -1; }
     pos += 1;
     return pos;
 }
 
-fn try_RAW_STRING_LITERAL(chars: &List<char>, start: i32) -> i32 {
-    return latn_match(&LATN_SIM, 4, chars, start, false);
+fn try_RAW_STRING_LITERAL(src: &StrSlice, start: i32) -> i32 {
+    return latn_match(&LATN_SIM, 4, src, start, false);
 }
 
-fn try_BYTE_LITERAL(chars: &List<char>, start: i32) -> i32 {
+fn try_BYTE_LITERAL(src: &StrSlice, start: i32) -> i32 {
     let mut pos = start;
-    if pos >= chars.len() || chars[pos] != 'b' { return -1; }
+    if pos >= src.len() || unchecked src.byte_at(pos) != b'b' { return -1; }
     pos += 1;
-    if pos >= chars.len() || chars[pos] != '\'' { return -1; }
+    if pos >= src.len() || unchecked src.byte_at(pos) != b'\'' { return -1; }
     pos += 1;
     let alts_saved_16 = pos;
     alts_done_16: {
         alts_16_0: {
             pos = alts_saved_16;
-            if pos >= chars.len() { break alts_16_0; }
-            if (chars[pos] matches { '\'' | '\\' }) { break alts_16_0; }
-            pos += 1;
+            if pos >= src.len() { break alts_16_0; }
+            if (unchecked src.byte_at(pos) matches { b'\'' | b'\\' }) { break alts_16_0; }
+            pos = src.ceil_char_boundary(pos + 1);
             break alts_done_16;
         }
         alts_16_1: {
             pos = alts_saved_16;
-            pos = frag_QUOTE_ESCAPE(chars, pos);
+            pos = frag_QUOTE_ESCAPE(src, pos);
             if pos < 0 { break alts_16_1; }
             break alts_done_16;
         }
         alts_16_2: {
             pos = alts_saved_16;
-            pos = frag_BYTE_ESCAPE(chars, pos);
+            pos = frag_BYTE_ESCAPE(src, pos);
             if pos < 0 { break alts_16_2; }
             break alts_done_16;
         }
         return -1;
     }
-    if pos >= chars.len() || chars[pos] != '\'' { return -1; }
+    if pos >= src.len() || unchecked src.byte_at(pos) != b'\'' { return -1; }
     pos += 1;
     return pos;
 }
 
-fn try_BYTE_STRING_LITERAL(chars: &List<char>, start: i32) -> i32 {
+fn try_BYTE_STRING_LITERAL(src: &StrSlice, start: i32) -> i32 {
     let mut pos = start;
-    if pos >= chars.len() || chars[pos] != 'b' { return -1; }
+    if pos >= src.len() || unchecked src.byte_at(pos) != b'b' { return -1; }
     pos += 1;
-    if pos >= chars.len() || chars[pos] != '"' { return -1; }
+    if pos >= src.len() || unchecked src.byte_at(pos) != b'"' { return -1; }
     pos += 1;
     loop {
         let rep_saved_17 = pos;
@@ -2097,20 +2150,20 @@ fn try_BYTE_STRING_LITERAL(chars: &List<char>, start: i32) -> i32 {
             alts_done_18: {
                 alts_18_0: {
                     pos = alts_saved_18;
-                    if pos >= chars.len() { break alts_18_0; }
-                    if (chars[pos] matches { '"' | '\\' }) { break alts_18_0; }
-                    pos += 1;
+                    if pos >= src.len() { break alts_18_0; }
+                    if (unchecked src.byte_at(pos) matches { b'"' | b'\\' }) { break alts_18_0; }
+                    pos = src.ceil_char_boundary(pos + 1);
                     break alts_done_18;
                 }
                 alts_18_1: {
                     pos = alts_saved_18;
-                    pos = frag_QUOTE_ESCAPE(chars, pos);
+                    pos = frag_QUOTE_ESCAPE(src, pos);
                     if pos < 0 { break alts_18_1; }
                     break alts_done_18;
                 }
                 alts_18_2: {
                     pos = alts_saved_18;
-                    pos = frag_BYTE_ESCAPE(chars, pos);
+                    pos = frag_BYTE_ESCAPE(src, pos);
                     if pos < 0 { break alts_18_2; }
                     break alts_done_18;
                 }
@@ -2121,16 +2174,16 @@ fn try_BYTE_STRING_LITERAL(chars: &List<char>, start: i32) -> i32 {
         pos = rep_saved_17;
         break;
     }
-    if pos >= chars.len() || chars[pos] != '"' { return -1; }
+    if pos >= src.len() || unchecked src.byte_at(pos) != b'"' { return -1; }
     pos += 1;
     return pos;
 }
 
-fn try_RAW_BYTE_STRING_LITERAL(chars: &List<char>, start: i32) -> i32 {
-    return latn_match(&LATN_SIM, 6, chars, start, false);
+fn try_RAW_BYTE_STRING_LITERAL(src: &StrSlice, start: i32) -> i32 {
+    return latn_match(&LATN_SIM, 6, src, start, false);
 }
 
-fn try_INTEGER_LITERAL(chars: &List<char>, start: i32) -> i32 {
+fn try_INTEGER_LITERAL(src: &StrSlice, start: i32) -> i32 {
     let mut pos = start;
     let la_saved_19 = pos;
     let mut la_reach_19: i32 = -1;
@@ -2138,28 +2191,28 @@ fn try_INTEGER_LITERAL(chars: &List<char>, start: i32) -> i32 {
     let mut la_arm_19_0: i32 = -1;
     la_alt_19_0: {
         pos = la_saved_19;
-        pos = try_DEC_LITERAL(chars, pos);
+        pos = try_DEC_LITERAL(src, pos);
         if pos < 0 { break la_alt_19_0; }
         la_arm_19_0 = pos;
     }
     let mut la_arm_19_1: i32 = -1;
     la_alt_19_1: {
         pos = la_saved_19;
-        pos = try_BIN_LITERAL(chars, pos);
+        pos = try_BIN_LITERAL(src, pos);
         if pos < 0 { break la_alt_19_1; }
         la_arm_19_1 = pos;
     }
     let mut la_arm_19_2: i32 = -1;
     la_alt_19_2: {
         pos = la_saved_19;
-        pos = try_OCT_LITERAL(chars, pos);
+        pos = try_OCT_LITERAL(src, pos);
         if pos < 0 { break la_alt_19_2; }
         la_arm_19_2 = pos;
     }
     let mut la_arm_19_3: i32 = -1;
     la_alt_19_3: {
         pos = la_saved_19;
-        pos = try_HEX_LITERAL(chars, pos);
+        pos = try_HEX_LITERAL(src, pos);
         if pos < 0 { break la_alt_19_3; }
         la_arm_19_3 = pos;
     }
@@ -2172,7 +2225,7 @@ fn try_INTEGER_LITERAL(chars: &List<char>, start: i32) -> i32 {
         let opt_saved_21 = pos;
         let mut opt_ok_21 = false;
         opt_21: {
-            pos = frag_INTEGER_SUFFIX(chars, pos);
+            pos = frag_INTEGER_SUFFIX(src, pos);
             if pos < 0 { break opt_21; }
             opt_ok_21 = true;
         }
@@ -2189,15 +2242,15 @@ fn try_INTEGER_LITERAL(chars: &List<char>, start: i32) -> i32 {
     return pos;
 }
 
-fn try_DEC_LITERAL(chars: &List<char>, start: i32) -> i32 {
+fn try_DEC_LITERAL(src: &StrSlice, start: i32) -> i32 {
     let mut pos = start;
-    if pos >= chars.len() { return -1; }
-    if !(chars[pos] matches { '0'..='9' }) { return -1; }
+    if pos >= src.len() { return -1; }
+    if !(unchecked src.byte_at(pos) matches { b'0'..=b'9' }) { return -1; }
     pos += 1;
     loop {
         rep_22: {
-            if pos >= chars.len() { break rep_22; }
-            if !(chars[pos] matches { '0'..='9' | '_' }) { break rep_22; }
+            if pos >= src.len() { break rep_22; }
+            if !(unchecked src.byte_at(pos) matches { b'0'..=b'9' | b'_' }) { break rep_22; }
             pos += 1;
             continue;
         }
@@ -2206,27 +2259,27 @@ fn try_DEC_LITERAL(chars: &List<char>, start: i32) -> i32 {
     return pos;
 }
 
-fn try_HEX_LITERAL(chars: &List<char>, start: i32) -> i32 {
+fn try_HEX_LITERAL(src: &StrSlice, start: i32) -> i32 {
     let mut pos = start;
-    if pos >= chars.len() || chars[pos] != '0' { return -1; }
+    if pos >= src.len() || unchecked src.byte_at(pos) != b'0' { return -1; }
     pos += 1;
-    if pos >= chars.len() || chars[pos] != 'x' { return -1; }
+    if pos >= src.len() || unchecked src.byte_at(pos) != b'x' { return -1; }
     pos += 1;
     loop {
         rep_23: {
-            if pos >= chars.len() || chars[pos] != '_' { break rep_23; }
+            if pos >= src.len() || unchecked src.byte_at(pos) != b'_' { break rep_23; }
             pos += 1;
             continue;
         }
         break;
     }
-    if pos >= chars.len() { return -1; }
-    if !(chars[pos] matches { '0'..='9' | 'A'..='F' | 'a'..='f' }) { return -1; }
+    if pos >= src.len() { return -1; }
+    if !(unchecked src.byte_at(pos) matches { b'0'..=b'9' | b'A'..=b'F' | b'a'..=b'f' }) { return -1; }
     pos += 1;
     loop {
         rep_24: {
-            if pos >= chars.len() { break rep_24; }
-            if !(chars[pos] matches { '0'..='9' | 'A'..='F' | '_' | 'a'..='f' }) { break rep_24; }
+            if pos >= src.len() { break rep_24; }
+            if !(unchecked src.byte_at(pos) matches { b'0'..=b'9' | b'A'..=b'F' | b'_' | b'a'..=b'f' }) { break rep_24; }
             pos += 1;
             continue;
         }
@@ -2235,27 +2288,27 @@ fn try_HEX_LITERAL(chars: &List<char>, start: i32) -> i32 {
     return pos;
 }
 
-fn try_OCT_LITERAL(chars: &List<char>, start: i32) -> i32 {
+fn try_OCT_LITERAL(src: &StrSlice, start: i32) -> i32 {
     let mut pos = start;
-    if pos >= chars.len() || chars[pos] != '0' { return -1; }
+    if pos >= src.len() || unchecked src.byte_at(pos) != b'0' { return -1; }
     pos += 1;
-    if pos >= chars.len() || chars[pos] != 'o' { return -1; }
+    if pos >= src.len() || unchecked src.byte_at(pos) != b'o' { return -1; }
     pos += 1;
     loop {
         rep_25: {
-            if pos >= chars.len() || chars[pos] != '_' { break rep_25; }
+            if pos >= src.len() || unchecked src.byte_at(pos) != b'_' { break rep_25; }
             pos += 1;
             continue;
         }
         break;
     }
-    if pos >= chars.len() { return -1; }
-    if !(chars[pos] matches { '0'..='7' }) { return -1; }
+    if pos >= src.len() { return -1; }
+    if !(unchecked src.byte_at(pos) matches { b'0'..=b'7' }) { return -1; }
     pos += 1;
     loop {
         rep_26: {
-            if pos >= chars.len() { break rep_26; }
-            if !(chars[pos] matches { '0'..='7' | '_' }) { break rep_26; }
+            if pos >= src.len() { break rep_26; }
+            if !(unchecked src.byte_at(pos) matches { b'0'..=b'7' | b'_' }) { break rep_26; }
             pos += 1;
             continue;
         }
@@ -2264,27 +2317,27 @@ fn try_OCT_LITERAL(chars: &List<char>, start: i32) -> i32 {
     return pos;
 }
 
-fn try_BIN_LITERAL(chars: &List<char>, start: i32) -> i32 {
+fn try_BIN_LITERAL(src: &StrSlice, start: i32) -> i32 {
     let mut pos = start;
-    if pos >= chars.len() || chars[pos] != '0' { return -1; }
+    if pos >= src.len() || unchecked src.byte_at(pos) != b'0' { return -1; }
     pos += 1;
-    if pos >= chars.len() || chars[pos] != 'b' { return -1; }
+    if pos >= src.len() || unchecked src.byte_at(pos) != b'b' { return -1; }
     pos += 1;
     loop {
         rep_27: {
-            if pos >= chars.len() || chars[pos] != '_' { break rep_27; }
+            if pos >= src.len() || unchecked src.byte_at(pos) != b'_' { break rep_27; }
             pos += 1;
             continue;
         }
         break;
     }
-    if pos >= chars.len() { return -1; }
-    if !(chars[pos] matches { '0' | '1' }) { return -1; }
+    if pos >= src.len() { return -1; }
+    if !(unchecked src.byte_at(pos) matches { b'0' | b'1' }) { return -1; }
     pos += 1;
     loop {
         rep_28: {
-            if pos >= chars.len() { break rep_28; }
-            if !(chars[pos] matches { '0' | '1' | '_' }) { break rep_28; }
+            if pos >= src.len() { break rep_28; }
+            if !(unchecked src.byte_at(pos) matches { b'0' | b'1' | b'_' }) { break rep_28; }
             pos += 1;
             continue;
         }
@@ -2293,30 +2346,30 @@ fn try_BIN_LITERAL(chars: &List<char>, start: i32) -> i32 {
     return pos;
 }
 
-fn try_FLOAT_LITERAL(chars: &List<char>, start: i32) -> i32 with RustLexerBase {
+fn try_FLOAT_LITERAL(src: &StrSlice, start: i32) -> i32 with RustLexerBase {
     let mut pos = start;
-    if !RustLexerBase::float_literal_possible(LexerView { chars, start, pos }) { return -1; }
+    if !RustLexerBase::float_literal_possible(LexerView { src, start, pos }) { return -1; }
     let alts_saved_29 = pos;
     let mut alts_best_29 = -1;
     alts_29_0: {
         pos = alts_saved_29;
-        pos = try_DEC_LITERAL(chars, pos);
+        pos = try_DEC_LITERAL(src, pos);
         if pos < 0 { break alts_29_0; }
-        if pos >= chars.len() || chars[pos] != '.' { break alts_29_0; }
+        if pos >= src.len() || unchecked src.byte_at(pos) != b'.' { break alts_29_0; }
         pos += 1;
-        if !RustLexerBase::float_dot_possible(LexerView { chars, start, pos }) { break alts_29_0; }
+        if !RustLexerBase::float_dot_possible(LexerView { src, start, pos }) { break alts_29_0; }
         if pos > alts_best_29 { alts_best_29 = pos; }
     }
     alts_29_1: {
         pos = alts_saved_29;
-        pos = try_DEC_LITERAL(chars, pos);
+        pos = try_DEC_LITERAL(src, pos);
         if pos < 0 { break alts_29_1; }
         let opt_saved_30 = pos;
         let mut opt_ok_30 = false;
         opt_30: {
-            if pos >= chars.len() || chars[pos] != '.' { break opt_30; }
+            if pos >= src.len() || unchecked src.byte_at(pos) != b'.' { break opt_30; }
             pos += 1;
-            pos = try_DEC_LITERAL(chars, pos);
+            pos = try_DEC_LITERAL(src, pos);
             if pos < 0 { break opt_30; }
             opt_ok_30 = true;
         }
@@ -2324,7 +2377,7 @@ fn try_FLOAT_LITERAL(chars: &List<char>, start: i32) -> i32 with RustLexerBase {
         let opt_saved_31 = pos;
         let mut opt_ok_31 = false;
         opt_31: {
-            pos = frag_FLOAT_EXPONENT(chars, pos);
+            pos = frag_FLOAT_EXPONENT(src, pos);
             if pos < 0 { break opt_31; }
             opt_ok_31 = true;
         }
@@ -2332,7 +2385,7 @@ fn try_FLOAT_LITERAL(chars: &List<char>, start: i32) -> i32 with RustLexerBase {
         let opt_saved_32 = pos;
         let mut opt_ok_32 = false;
         opt_32: {
-            pos = frag_FLOAT_SUFFIX(chars, pos);
+            pos = frag_FLOAT_SUFFIX(src, pos);
             if pos < 0 { break opt_32; }
             opt_ok_32 = true;
         }
@@ -2344,441 +2397,441 @@ fn try_FLOAT_LITERAL(chars: &List<char>, start: i32) -> i32 with RustLexerBase {
     return pos;
 }
 
-fn try_LIFETIME_OR_LABEL(chars: &List<char>, start: i32) -> i32 {
+fn try_LIFETIME_OR_LABEL(src: &StrSlice, start: i32) -> i32 {
     let mut pos = start;
-    if pos >= chars.len() || chars[pos] != '\'' { return -1; }
+    if pos >= src.len() || unchecked src.byte_at(pos) != b'\'' { return -1; }
     pos += 1;
-    pos = try_NON_KEYWORD_IDENTIFIER(chars, pos);
+    pos = try_NON_KEYWORD_IDENTIFIER(src, pos);
     if pos < 0 { return -1; }
     return pos;
 }
 
-fn try_PLUS(chars: &List<char>, start: i32) -> i32 {
+fn try_PLUS(src: &StrSlice, start: i32) -> i32 {
     let mut pos = start;
-    if pos >= chars.len() || chars[pos] != '+' { return -1; }
+    if pos >= src.len() || unchecked src.byte_at(pos) != b'+' { return -1; }
     pos += 1;
     return pos;
 }
 
-fn try_MINUS(chars: &List<char>, start: i32) -> i32 {
+fn try_MINUS(src: &StrSlice, start: i32) -> i32 {
     let mut pos = start;
-    if pos >= chars.len() || chars[pos] != '-' { return -1; }
+    if pos >= src.len() || unchecked src.byte_at(pos) != b'-' { return -1; }
     pos += 1;
     return pos;
 }
 
-fn try_STAR(chars: &List<char>, start: i32) -> i32 {
+fn try_STAR(src: &StrSlice, start: i32) -> i32 {
     let mut pos = start;
-    if pos >= chars.len() || chars[pos] != '*' { return -1; }
+    if pos >= src.len() || unchecked src.byte_at(pos) != b'*' { return -1; }
     pos += 1;
     return pos;
 }
 
-fn try_SLASH(chars: &List<char>, start: i32) -> i32 {
+fn try_SLASH(src: &StrSlice, start: i32) -> i32 {
     let mut pos = start;
-    if pos >= chars.len() || chars[pos] != '/' { return -1; }
+    if pos >= src.len() || unchecked src.byte_at(pos) != b'/' { return -1; }
     pos += 1;
     return pos;
 }
 
-fn try_PERCENT(chars: &List<char>, start: i32) -> i32 {
+fn try_PERCENT(src: &StrSlice, start: i32) -> i32 {
     let mut pos = start;
-    if pos >= chars.len() || chars[pos] != '%' { return -1; }
+    if pos >= src.len() || unchecked src.byte_at(pos) != b'%' { return -1; }
     pos += 1;
     return pos;
 }
 
-fn try_CARET(chars: &List<char>, start: i32) -> i32 {
+fn try_CARET(src: &StrSlice, start: i32) -> i32 {
     let mut pos = start;
-    if pos >= chars.len() || chars[pos] != '^' { return -1; }
+    if pos >= src.len() || unchecked src.byte_at(pos) != b'^' { return -1; }
     pos += 1;
     return pos;
 }
 
-fn try_NOT(chars: &List<char>, start: i32) -> i32 {
+fn try_NOT(src: &StrSlice, start: i32) -> i32 {
     let mut pos = start;
-    if pos >= chars.len() || chars[pos] != '!' { return -1; }
+    if pos >= src.len() || unchecked src.byte_at(pos) != b'!' { return -1; }
     pos += 1;
     return pos;
 }
 
-fn try_AND(chars: &List<char>, start: i32) -> i32 {
+fn try_AND(src: &StrSlice, start: i32) -> i32 {
     let mut pos = start;
-    if pos >= chars.len() || chars[pos] != '&' { return -1; }
+    if pos >= src.len() || unchecked src.byte_at(pos) != b'&' { return -1; }
     pos += 1;
     return pos;
 }
 
-fn try_OR(chars: &List<char>, start: i32) -> i32 {
+fn try_OR(src: &StrSlice, start: i32) -> i32 {
     let mut pos = start;
-    if pos >= chars.len() || chars[pos] != '|' { return -1; }
+    if pos >= src.len() || unchecked src.byte_at(pos) != b'|' { return -1; }
     pos += 1;
     return pos;
 }
 
-fn try_ANDAND(chars: &List<char>, start: i32) -> i32 {
+fn try_ANDAND(src: &StrSlice, start: i32) -> i32 {
     let mut pos = start;
-    if pos >= chars.len() || chars[pos] != '&' { return -1; }
+    if pos >= src.len() || unchecked src.byte_at(pos) != b'&' { return -1; }
     pos += 1;
-    if pos >= chars.len() || chars[pos] != '&' { return -1; }
+    if pos >= src.len() || unchecked src.byte_at(pos) != b'&' { return -1; }
     pos += 1;
     return pos;
 }
 
-fn try_OROR(chars: &List<char>, start: i32) -> i32 {
+fn try_OROR(src: &StrSlice, start: i32) -> i32 {
     let mut pos = start;
-    if pos >= chars.len() || chars[pos] != '|' { return -1; }
+    if pos >= src.len() || unchecked src.byte_at(pos) != b'|' { return -1; }
     pos += 1;
-    if pos >= chars.len() || chars[pos] != '|' { return -1; }
+    if pos >= src.len() || unchecked src.byte_at(pos) != b'|' { return -1; }
     pos += 1;
     return pos;
 }
 
-fn try_PLUSEQ(chars: &List<char>, start: i32) -> i32 {
+fn try_PLUSEQ(src: &StrSlice, start: i32) -> i32 {
     let mut pos = start;
-    if pos >= chars.len() || chars[pos] != '+' { return -1; }
+    if pos >= src.len() || unchecked src.byte_at(pos) != b'+' { return -1; }
     pos += 1;
-    if pos >= chars.len() || chars[pos] != '=' { return -1; }
+    if pos >= src.len() || unchecked src.byte_at(pos) != b'=' { return -1; }
     pos += 1;
     return pos;
 }
 
-fn try_MINUSEQ(chars: &List<char>, start: i32) -> i32 {
+fn try_MINUSEQ(src: &StrSlice, start: i32) -> i32 {
     let mut pos = start;
-    if pos >= chars.len() || chars[pos] != '-' { return -1; }
+    if pos >= src.len() || unchecked src.byte_at(pos) != b'-' { return -1; }
     pos += 1;
-    if pos >= chars.len() || chars[pos] != '=' { return -1; }
+    if pos >= src.len() || unchecked src.byte_at(pos) != b'=' { return -1; }
     pos += 1;
     return pos;
 }
 
-fn try_STAREQ(chars: &List<char>, start: i32) -> i32 {
+fn try_STAREQ(src: &StrSlice, start: i32) -> i32 {
     let mut pos = start;
-    if pos >= chars.len() || chars[pos] != '*' { return -1; }
+    if pos >= src.len() || unchecked src.byte_at(pos) != b'*' { return -1; }
     pos += 1;
-    if pos >= chars.len() || chars[pos] != '=' { return -1; }
+    if pos >= src.len() || unchecked src.byte_at(pos) != b'=' { return -1; }
     pos += 1;
     return pos;
 }
 
-fn try_SLASHEQ(chars: &List<char>, start: i32) -> i32 {
+fn try_SLASHEQ(src: &StrSlice, start: i32) -> i32 {
     let mut pos = start;
-    if pos >= chars.len() || chars[pos] != '/' { return -1; }
+    if pos >= src.len() || unchecked src.byte_at(pos) != b'/' { return -1; }
     pos += 1;
-    if pos >= chars.len() || chars[pos] != '=' { return -1; }
+    if pos >= src.len() || unchecked src.byte_at(pos) != b'=' { return -1; }
     pos += 1;
     return pos;
 }
 
-fn try_PERCENTEQ(chars: &List<char>, start: i32) -> i32 {
+fn try_PERCENTEQ(src: &StrSlice, start: i32) -> i32 {
     let mut pos = start;
-    if pos >= chars.len() || chars[pos] != '%' { return -1; }
+    if pos >= src.len() || unchecked src.byte_at(pos) != b'%' { return -1; }
     pos += 1;
-    if pos >= chars.len() || chars[pos] != '=' { return -1; }
+    if pos >= src.len() || unchecked src.byte_at(pos) != b'=' { return -1; }
     pos += 1;
     return pos;
 }
 
-fn try_CARETEQ(chars: &List<char>, start: i32) -> i32 {
+fn try_CARETEQ(src: &StrSlice, start: i32) -> i32 {
     let mut pos = start;
-    if pos >= chars.len() || chars[pos] != '^' { return -1; }
+    if pos >= src.len() || unchecked src.byte_at(pos) != b'^' { return -1; }
     pos += 1;
-    if pos >= chars.len() || chars[pos] != '=' { return -1; }
+    if pos >= src.len() || unchecked src.byte_at(pos) != b'=' { return -1; }
     pos += 1;
     return pos;
 }
 
-fn try_ANDEQ(chars: &List<char>, start: i32) -> i32 {
+fn try_ANDEQ(src: &StrSlice, start: i32) -> i32 {
     let mut pos = start;
-    if pos >= chars.len() || chars[pos] != '&' { return -1; }
+    if pos >= src.len() || unchecked src.byte_at(pos) != b'&' { return -1; }
     pos += 1;
-    if pos >= chars.len() || chars[pos] != '=' { return -1; }
+    if pos >= src.len() || unchecked src.byte_at(pos) != b'=' { return -1; }
     pos += 1;
     return pos;
 }
 
-fn try_OREQ(chars: &List<char>, start: i32) -> i32 {
+fn try_OREQ(src: &StrSlice, start: i32) -> i32 {
     let mut pos = start;
-    if pos >= chars.len() || chars[pos] != '|' { return -1; }
+    if pos >= src.len() || unchecked src.byte_at(pos) != b'|' { return -1; }
     pos += 1;
-    if pos >= chars.len() || chars[pos] != '=' { return -1; }
+    if pos >= src.len() || unchecked src.byte_at(pos) != b'=' { return -1; }
     pos += 1;
     return pos;
 }
 
-fn try_SHLEQ(chars: &List<char>, start: i32) -> i32 {
+fn try_SHLEQ(src: &StrSlice, start: i32) -> i32 {
     let mut pos = start;
-    if pos >= chars.len() || chars[pos] != '<' { return -1; }
+    if pos >= src.len() || unchecked src.byte_at(pos) != b'<' { return -1; }
     pos += 1;
-    if pos >= chars.len() || chars[pos] != '<' { return -1; }
+    if pos >= src.len() || unchecked src.byte_at(pos) != b'<' { return -1; }
     pos += 1;
-    if pos >= chars.len() || chars[pos] != '=' { return -1; }
+    if pos >= src.len() || unchecked src.byte_at(pos) != b'=' { return -1; }
     pos += 1;
     return pos;
 }
 
-fn try_SHREQ(chars: &List<char>, start: i32) -> i32 {
+fn try_SHREQ(src: &StrSlice, start: i32) -> i32 {
     let mut pos = start;
-    if pos >= chars.len() || chars[pos] != '>' { return -1; }
+    if pos >= src.len() || unchecked src.byte_at(pos) != b'>' { return -1; }
     pos += 1;
-    if pos >= chars.len() || chars[pos] != '>' { return -1; }
+    if pos >= src.len() || unchecked src.byte_at(pos) != b'>' { return -1; }
     pos += 1;
-    if pos >= chars.len() || chars[pos] != '=' { return -1; }
+    if pos >= src.len() || unchecked src.byte_at(pos) != b'=' { return -1; }
     pos += 1;
     return pos;
 }
 
-fn try_EQ(chars: &List<char>, start: i32) -> i32 {
+fn try_EQ(src: &StrSlice, start: i32) -> i32 {
     let mut pos = start;
-    if pos >= chars.len() || chars[pos] != '=' { return -1; }
+    if pos >= src.len() || unchecked src.byte_at(pos) != b'=' { return -1; }
     pos += 1;
     return pos;
 }
 
-fn try_EQEQ(chars: &List<char>, start: i32) -> i32 {
+fn try_EQEQ(src: &StrSlice, start: i32) -> i32 {
     let mut pos = start;
-    if pos >= chars.len() || chars[pos] != '=' { return -1; }
+    if pos >= src.len() || unchecked src.byte_at(pos) != b'=' { return -1; }
     pos += 1;
-    if pos >= chars.len() || chars[pos] != '=' { return -1; }
+    if pos >= src.len() || unchecked src.byte_at(pos) != b'=' { return -1; }
     pos += 1;
     return pos;
 }
 
-fn try_NE(chars: &List<char>, start: i32) -> i32 {
+fn try_NE(src: &StrSlice, start: i32) -> i32 {
     let mut pos = start;
-    if pos >= chars.len() || chars[pos] != '!' { return -1; }
+    if pos >= src.len() || unchecked src.byte_at(pos) != b'!' { return -1; }
     pos += 1;
-    if pos >= chars.len() || chars[pos] != '=' { return -1; }
+    if pos >= src.len() || unchecked src.byte_at(pos) != b'=' { return -1; }
     pos += 1;
     return pos;
 }
 
-fn try_GT(chars: &List<char>, start: i32) -> i32 {
+fn try_GT(src: &StrSlice, start: i32) -> i32 {
     let mut pos = start;
-    if pos >= chars.len() || chars[pos] != '>' { return -1; }
+    if pos >= src.len() || unchecked src.byte_at(pos) != b'>' { return -1; }
     pos += 1;
     return pos;
 }
 
-fn try_LT(chars: &List<char>, start: i32) -> i32 {
+fn try_LT(src: &StrSlice, start: i32) -> i32 {
     let mut pos = start;
-    if pos >= chars.len() || chars[pos] != '<' { return -1; }
+    if pos >= src.len() || unchecked src.byte_at(pos) != b'<' { return -1; }
     pos += 1;
     return pos;
 }
 
-fn try_GE(chars: &List<char>, start: i32) -> i32 {
+fn try_GE(src: &StrSlice, start: i32) -> i32 {
     let mut pos = start;
-    if pos >= chars.len() || chars[pos] != '>' { return -1; }
+    if pos >= src.len() || unchecked src.byte_at(pos) != b'>' { return -1; }
     pos += 1;
-    if pos >= chars.len() || chars[pos] != '=' { return -1; }
+    if pos >= src.len() || unchecked src.byte_at(pos) != b'=' { return -1; }
     pos += 1;
     return pos;
 }
 
-fn try_LE(chars: &List<char>, start: i32) -> i32 {
+fn try_LE(src: &StrSlice, start: i32) -> i32 {
     let mut pos = start;
-    if pos >= chars.len() || chars[pos] != '<' { return -1; }
+    if pos >= src.len() || unchecked src.byte_at(pos) != b'<' { return -1; }
     pos += 1;
-    if pos >= chars.len() || chars[pos] != '=' { return -1; }
+    if pos >= src.len() || unchecked src.byte_at(pos) != b'=' { return -1; }
     pos += 1;
     return pos;
 }
 
-fn try_AT(chars: &List<char>, start: i32) -> i32 {
+fn try_AT(src: &StrSlice, start: i32) -> i32 {
     let mut pos = start;
-    if pos >= chars.len() || chars[pos] != '@' { return -1; }
+    if pos >= src.len() || unchecked src.byte_at(pos) != b'@' { return -1; }
     pos += 1;
     return pos;
 }
 
-fn try_UNDERSCORE(chars: &List<char>, start: i32) -> i32 {
+fn try_UNDERSCORE(src: &StrSlice, start: i32) -> i32 {
     let mut pos = start;
-    if pos >= chars.len() || chars[pos] != '_' { return -1; }
+    if pos >= src.len() || unchecked src.byte_at(pos) != b'_' { return -1; }
     pos += 1;
     return pos;
 }
 
-fn try_DOT(chars: &List<char>, start: i32) -> i32 {
+fn try_DOT(src: &StrSlice, start: i32) -> i32 {
     let mut pos = start;
-    if pos >= chars.len() || chars[pos] != '.' { return -1; }
+    if pos >= src.len() || unchecked src.byte_at(pos) != b'.' { return -1; }
     pos += 1;
     return pos;
 }
 
-fn try_DOTDOT(chars: &List<char>, start: i32) -> i32 {
+fn try_DOTDOT(src: &StrSlice, start: i32) -> i32 {
     let mut pos = start;
-    if pos >= chars.len() || chars[pos] != '.' { return -1; }
+    if pos >= src.len() || unchecked src.byte_at(pos) != b'.' { return -1; }
     pos += 1;
-    if pos >= chars.len() || chars[pos] != '.' { return -1; }
+    if pos >= src.len() || unchecked src.byte_at(pos) != b'.' { return -1; }
     pos += 1;
     return pos;
 }
 
-fn try_DOTDOTDOT(chars: &List<char>, start: i32) -> i32 {
+fn try_DOTDOTDOT(src: &StrSlice, start: i32) -> i32 {
     let mut pos = start;
-    if pos >= chars.len() || chars[pos] != '.' { return -1; }
+    if pos >= src.len() || unchecked src.byte_at(pos) != b'.' { return -1; }
     pos += 1;
-    if pos >= chars.len() || chars[pos] != '.' { return -1; }
+    if pos >= src.len() || unchecked src.byte_at(pos) != b'.' { return -1; }
     pos += 1;
-    if pos >= chars.len() || chars[pos] != '.' { return -1; }
+    if pos >= src.len() || unchecked src.byte_at(pos) != b'.' { return -1; }
     pos += 1;
     return pos;
 }
 
-fn try_DOTDOTEQ(chars: &List<char>, start: i32) -> i32 {
+fn try_DOTDOTEQ(src: &StrSlice, start: i32) -> i32 {
     let mut pos = start;
-    if pos >= chars.len() || chars[pos] != '.' { return -1; }
+    if pos >= src.len() || unchecked src.byte_at(pos) != b'.' { return -1; }
     pos += 1;
-    if pos >= chars.len() || chars[pos] != '.' { return -1; }
+    if pos >= src.len() || unchecked src.byte_at(pos) != b'.' { return -1; }
     pos += 1;
-    if pos >= chars.len() || chars[pos] != '=' { return -1; }
+    if pos >= src.len() || unchecked src.byte_at(pos) != b'=' { return -1; }
     pos += 1;
     return pos;
 }
 
-fn try_COMMA(chars: &List<char>, start: i32) -> i32 {
+fn try_COMMA(src: &StrSlice, start: i32) -> i32 {
     let mut pos = start;
-    if pos >= chars.len() || chars[pos] != ',' { return -1; }
+    if pos >= src.len() || unchecked src.byte_at(pos) != b',' { return -1; }
     pos += 1;
     return pos;
 }
 
-fn try_SEMI(chars: &List<char>, start: i32) -> i32 {
+fn try_SEMI(src: &StrSlice, start: i32) -> i32 {
     let mut pos = start;
-    if pos >= chars.len() || chars[pos] != ';' { return -1; }
+    if pos >= src.len() || unchecked src.byte_at(pos) != b';' { return -1; }
     pos += 1;
     return pos;
 }
 
-fn try_COLON(chars: &List<char>, start: i32) -> i32 {
+fn try_COLON(src: &StrSlice, start: i32) -> i32 {
     let mut pos = start;
-    if pos >= chars.len() || chars[pos] != ':' { return -1; }
+    if pos >= src.len() || unchecked src.byte_at(pos) != b':' { return -1; }
     pos += 1;
     return pos;
 }
 
-fn try_PATHSEP(chars: &List<char>, start: i32) -> i32 {
+fn try_PATHSEP(src: &StrSlice, start: i32) -> i32 {
     let mut pos = start;
-    if pos >= chars.len() || chars[pos] != ':' { return -1; }
+    if pos >= src.len() || unchecked src.byte_at(pos) != b':' { return -1; }
     pos += 1;
-    if pos >= chars.len() || chars[pos] != ':' { return -1; }
+    if pos >= src.len() || unchecked src.byte_at(pos) != b':' { return -1; }
     pos += 1;
     return pos;
 }
 
-fn try_RARROW(chars: &List<char>, start: i32) -> i32 {
+fn try_RARROW(src: &StrSlice, start: i32) -> i32 {
     let mut pos = start;
-    if pos >= chars.len() || chars[pos] != '-' { return -1; }
+    if pos >= src.len() || unchecked src.byte_at(pos) != b'-' { return -1; }
     pos += 1;
-    if pos >= chars.len() || chars[pos] != '>' { return -1; }
+    if pos >= src.len() || unchecked src.byte_at(pos) != b'>' { return -1; }
     pos += 1;
     return pos;
 }
 
-fn try_FATARROW(chars: &List<char>, start: i32) -> i32 {
+fn try_FATARROW(src: &StrSlice, start: i32) -> i32 {
     let mut pos = start;
-    if pos >= chars.len() || chars[pos] != '=' { return -1; }
+    if pos >= src.len() || unchecked src.byte_at(pos) != b'=' { return -1; }
     pos += 1;
-    if pos >= chars.len() || chars[pos] != '>' { return -1; }
+    if pos >= src.len() || unchecked src.byte_at(pos) != b'>' { return -1; }
     pos += 1;
     return pos;
 }
 
-fn try_POUND(chars: &List<char>, start: i32) -> i32 {
+fn try_POUND(src: &StrSlice, start: i32) -> i32 {
     let mut pos = start;
-    if pos >= chars.len() || chars[pos] != '#' { return -1; }
+    if pos >= src.len() || unchecked src.byte_at(pos) != b'#' { return -1; }
     pos += 1;
     return pos;
 }
 
-fn try_DOLLAR(chars: &List<char>, start: i32) -> i32 {
+fn try_DOLLAR(src: &StrSlice, start: i32) -> i32 {
     let mut pos = start;
-    if pos >= chars.len() || chars[pos] != '$' { return -1; }
+    if pos >= src.len() || unchecked src.byte_at(pos) != b'$' { return -1; }
     pos += 1;
     return pos;
 }
 
-fn try_QUESTION(chars: &List<char>, start: i32) -> i32 {
+fn try_QUESTION(src: &StrSlice, start: i32) -> i32 {
     let mut pos = start;
-    if pos >= chars.len() || chars[pos] != '?' { return -1; }
+    if pos >= src.len() || unchecked src.byte_at(pos) != b'?' { return -1; }
     pos += 1;
     return pos;
 }
 
-fn try_LCURLYBRACE(chars: &List<char>, start: i32) -> i32 {
+fn try_LCURLYBRACE(src: &StrSlice, start: i32) -> i32 {
     let mut pos = start;
-    if pos >= chars.len() || chars[pos] != '{' { return -1; }
+    if pos >= src.len() || unchecked src.byte_at(pos) != b'{' { return -1; }
     pos += 1;
     return pos;
 }
 
-fn try_RCURLYBRACE(chars: &List<char>, start: i32) -> i32 {
+fn try_RCURLYBRACE(src: &StrSlice, start: i32) -> i32 {
     let mut pos = start;
-    if pos >= chars.len() || chars[pos] != '}' { return -1; }
+    if pos >= src.len() || unchecked src.byte_at(pos) != b'}' { return -1; }
     pos += 1;
     return pos;
 }
 
-fn try_LSQUAREBRACKET(chars: &List<char>, start: i32) -> i32 {
+fn try_LSQUAREBRACKET(src: &StrSlice, start: i32) -> i32 {
     let mut pos = start;
-    if pos >= chars.len() || chars[pos] != '[' { return -1; }
+    if pos >= src.len() || unchecked src.byte_at(pos) != b'[' { return -1; }
     pos += 1;
     return pos;
 }
 
-fn try_RSQUAREBRACKET(chars: &List<char>, start: i32) -> i32 {
+fn try_RSQUAREBRACKET(src: &StrSlice, start: i32) -> i32 {
     let mut pos = start;
-    if pos >= chars.len() || chars[pos] != ']' { return -1; }
+    if pos >= src.len() || unchecked src.byte_at(pos) != b']' { return -1; }
     pos += 1;
     return pos;
 }
 
-fn try_LPAREN(chars: &List<char>, start: i32) -> i32 {
+fn try_LPAREN(src: &StrSlice, start: i32) -> i32 {
     let mut pos = start;
-    if pos >= chars.len() || chars[pos] != '(' { return -1; }
+    if pos >= src.len() || unchecked src.byte_at(pos) != b'(' { return -1; }
     pos += 1;
     return pos;
 }
 
-fn try_RPAREN(chars: &List<char>, start: i32) -> i32 {
+fn try_RPAREN(src: &StrSlice, start: i32) -> i32 {
     let mut pos = start;
-    if pos >= chars.len() || chars[pos] != ')' { return -1; }
+    if pos >= src.len() || unchecked src.byte_at(pos) != b')' { return -1; }
     pos += 1;
     return pos;
 }
 
-fn frag_QUOTE_ESCAPE(chars: &List<char>, start: i32) -> i32 {
+fn frag_QUOTE_ESCAPE(src: &StrSlice, start: i32) -> i32 {
     let mut pos = start;
-    if pos >= chars.len() || chars[pos] != '\\' { return -1; }
+    if pos >= src.len() || unchecked src.byte_at(pos) != b'\\' { return -1; }
     pos += 1;
-    if pos >= chars.len() { return -1; }
-    if !(chars[pos] matches { '\'' | '"' }) { return -1; }
+    if pos >= src.len() { return -1; }
+    if !(unchecked src.byte_at(pos) matches { b'\'' | b'"' }) { return -1; }
     pos += 1;
     return pos;
 }
 
-fn frag_ASCII_ESCAPE(chars: &List<char>, start: i32) -> i32 {
+fn frag_ASCII_ESCAPE(src: &StrSlice, start: i32) -> i32 {
     let mut pos = start;
     let alts_saved_33 = pos;
     alts_done_33: {
         alts_33_0: {
             pos = alts_saved_33;
-            if pos >= chars.len() || chars[pos] != '\\' { break alts_33_0; }
+            if pos >= src.len() || unchecked src.byte_at(pos) != b'\\' { break alts_33_0; }
             pos += 1;
-            if pos >= chars.len() || chars[pos] != 'x' { break alts_33_0; }
+            if pos >= src.len() || unchecked src.byte_at(pos) != b'x' { break alts_33_0; }
             pos += 1;
-            if pos >= chars.len() { break alts_33_0; }
-            if !(chars[pos] matches { '0'..='7' }) { break alts_33_0; }
+            if pos >= src.len() { break alts_33_0; }
+            if !(unchecked src.byte_at(pos) matches { b'0'..=b'7' }) { break alts_33_0; }
             pos += 1;
-            if pos >= chars.len() { break alts_33_0; }
-            if !(chars[pos] matches { '0'..='9' | 'A'..='F' | 'a'..='f' }) { break alts_33_0; }
+            if pos >= src.len() { break alts_33_0; }
+            if !(unchecked src.byte_at(pos) matches { b'0'..=b'9' | b'A'..=b'F' | b'a'..=b'f' }) { break alts_33_0; }
             pos += 1;
             break alts_done_33;
         }
         alts_33_1: {
             pos = alts_saved_33;
-            pos = frag_COMMON_ESCAPE(chars, pos);
+            pos = frag_COMMON_ESCAPE(src, pos);
             if pos < 0 { break alts_33_1; }
             break alts_done_33;
         }
@@ -2787,77 +2840,77 @@ fn frag_ASCII_ESCAPE(chars: &List<char>, start: i32) -> i32 {
     return pos;
 }
 
-fn frag_UNICODE_ESCAPE(chars: &List<char>, start: i32) -> i32 {
+fn frag_UNICODE_ESCAPE(src: &StrSlice, start: i32) -> i32 {
     let mut pos = start;
-    if pos >= chars.len() || chars[pos] != '\\' { return -1; }
+    if pos >= src.len() || unchecked src.byte_at(pos) != b'\\' { return -1; }
     pos += 1;
-    if pos >= chars.len() || chars[pos] != 'u' { return -1; }
+    if pos >= src.len() || unchecked src.byte_at(pos) != b'u' { return -1; }
     pos += 1;
-    if pos >= chars.len() || chars[pos] != '{' { return -1; }
+    if pos >= src.len() || unchecked src.byte_at(pos) != b'{' { return -1; }
     pos += 1;
-    if pos >= chars.len() { return -1; }
-    if !(chars[pos] matches { '0'..='9' | 'A'..='F' | 'a'..='f' }) { return -1; }
+    if pos >= src.len() { return -1; }
+    if !(unchecked src.byte_at(pos) matches { b'0'..=b'9' | b'A'..=b'F' | b'a'..=b'f' }) { return -1; }
     pos += 1;
     opt_34: {
-        if pos >= chars.len() { break opt_34; }
-        if !(chars[pos] matches { '0'..='9' | 'A'..='F' | 'a'..='f' }) { break opt_34; }
+        if pos >= src.len() { break opt_34; }
+        if !(unchecked src.byte_at(pos) matches { b'0'..=b'9' | b'A'..=b'F' | b'a'..=b'f' }) { break opt_34; }
         pos += 1;
     }
     opt_35: {
-        if pos >= chars.len() { break opt_35; }
-        if !(chars[pos] matches { '0'..='9' | 'A'..='F' | 'a'..='f' }) { break opt_35; }
+        if pos >= src.len() { break opt_35; }
+        if !(unchecked src.byte_at(pos) matches { b'0'..=b'9' | b'A'..=b'F' | b'a'..=b'f' }) { break opt_35; }
         pos += 1;
     }
     opt_36: {
-        if pos >= chars.len() { break opt_36; }
-        if !(chars[pos] matches { '0'..='9' | 'A'..='F' | 'a'..='f' }) { break opt_36; }
+        if pos >= src.len() { break opt_36; }
+        if !(unchecked src.byte_at(pos) matches { b'0'..=b'9' | b'A'..=b'F' | b'a'..=b'f' }) { break opt_36; }
         pos += 1;
     }
     opt_37: {
-        if pos >= chars.len() { break opt_37; }
-        if !(chars[pos] matches { '0'..='9' | 'A'..='F' | 'a'..='f' }) { break opt_37; }
+        if pos >= src.len() { break opt_37; }
+        if !(unchecked src.byte_at(pos) matches { b'0'..=b'9' | b'A'..=b'F' | b'a'..=b'f' }) { break opt_37; }
         pos += 1;
     }
     opt_38: {
-        if pos >= chars.len() { break opt_38; }
-        if !(chars[pos] matches { '0'..='9' | 'A'..='F' | 'a'..='f' }) { break opt_38; }
+        if pos >= src.len() { break opt_38; }
+        if !(unchecked src.byte_at(pos) matches { b'0'..=b'9' | b'A'..=b'F' | b'a'..=b'f' }) { break opt_38; }
         pos += 1;
     }
-    if pos >= chars.len() || chars[pos] != '}' { return -1; }
+    if pos >= src.len() || unchecked src.byte_at(pos) != b'}' { return -1; }
     pos += 1;
     return pos;
 }
 
-fn frag_ESC_NEWLINE(chars: &List<char>, start: i32) -> i32 {
+fn frag_ESC_NEWLINE(src: &StrSlice, start: i32) -> i32 {
     let mut pos = start;
-    if pos >= chars.len() || chars[pos] != '\\' { return -1; }
+    if pos >= src.len() || unchecked src.byte_at(pos) != b'\\' { return -1; }
     pos += 1;
-    if pos >= chars.len() || chars[pos] != '\n' { return -1; }
+    if pos >= src.len() || unchecked src.byte_at(pos) != b'\x0a' { return -1; }
     pos += 1;
     return pos;
 }
 
-fn frag_BYTE_ESCAPE(chars: &List<char>, start: i32) -> i32 {
+fn frag_BYTE_ESCAPE(src: &StrSlice, start: i32) -> i32 {
     let mut pos = start;
     let alts_saved_39 = pos;
     alts_done_39: {
         alts_39_0: {
             pos = alts_saved_39;
-            if pos >= chars.len() || chars[pos] != '\\' { break alts_39_0; }
+            if pos >= src.len() || unchecked src.byte_at(pos) != b'\\' { break alts_39_0; }
             pos += 1;
-            if pos >= chars.len() || chars[pos] != 'x' { break alts_39_0; }
+            if pos >= src.len() || unchecked src.byte_at(pos) != b'x' { break alts_39_0; }
             pos += 1;
-            if pos >= chars.len() { break alts_39_0; }
-            if !(chars[pos] matches { '0'..='9' | 'A'..='F' | 'a'..='f' }) { break alts_39_0; }
+            if pos >= src.len() { break alts_39_0; }
+            if !(unchecked src.byte_at(pos) matches { b'0'..=b'9' | b'A'..=b'F' | b'a'..=b'f' }) { break alts_39_0; }
             pos += 1;
-            if pos >= chars.len() { break alts_39_0; }
-            if !(chars[pos] matches { '0'..='9' | 'A'..='F' | 'a'..='f' }) { break alts_39_0; }
+            if pos >= src.len() { break alts_39_0; }
+            if !(unchecked src.byte_at(pos) matches { b'0'..=b'9' | b'A'..=b'F' | b'a'..=b'f' }) { break alts_39_0; }
             pos += 1;
             break alts_done_39;
         }
         alts_39_1: {
             pos = alts_saved_39;
-            pos = frag_COMMON_ESCAPE(chars, pos);
+            pos = frag_COMMON_ESCAPE(src, pos);
             if pos < 0 { break alts_39_1; }
             break alts_done_39;
         }
@@ -2866,135 +2919,135 @@ fn frag_BYTE_ESCAPE(chars: &List<char>, start: i32) -> i32 {
     return pos;
 }
 
-fn frag_INTEGER_SUFFIX(chars: &List<char>, start: i32) -> i32 {
+fn frag_INTEGER_SUFFIX(src: &StrSlice, start: i32) -> i32 {
     let mut pos = start;
     let alts_saved_40 = pos;
     alts_done_40: {
         alts_40_0: {
             pos = alts_saved_40;
-            if pos >= chars.len() || chars[pos] != 'u' { break alts_40_0; }
+            if pos >= src.len() || unchecked src.byte_at(pos) != b'u' { break alts_40_0; }
             pos += 1;
-            if pos >= chars.len() || chars[pos] != '8' { break alts_40_0; }
+            if pos >= src.len() || unchecked src.byte_at(pos) != b'8' { break alts_40_0; }
             pos += 1;
             break alts_done_40;
         }
         alts_40_1: {
             pos = alts_saved_40;
-            if pos >= chars.len() || chars[pos] != 'u' { break alts_40_1; }
+            if pos >= src.len() || unchecked src.byte_at(pos) != b'u' { break alts_40_1; }
             pos += 1;
-            if pos >= chars.len() || chars[pos] != '1' { break alts_40_1; }
+            if pos >= src.len() || unchecked src.byte_at(pos) != b'1' { break alts_40_1; }
             pos += 1;
-            if pos >= chars.len() || chars[pos] != '6' { break alts_40_1; }
+            if pos >= src.len() || unchecked src.byte_at(pos) != b'6' { break alts_40_1; }
             pos += 1;
             break alts_done_40;
         }
         alts_40_2: {
             pos = alts_saved_40;
-            if pos >= chars.len() || chars[pos] != 'u' { break alts_40_2; }
+            if pos >= src.len() || unchecked src.byte_at(pos) != b'u' { break alts_40_2; }
             pos += 1;
-            if pos >= chars.len() || chars[pos] != '3' { break alts_40_2; }
+            if pos >= src.len() || unchecked src.byte_at(pos) != b'3' { break alts_40_2; }
             pos += 1;
-            if pos >= chars.len() || chars[pos] != '2' { break alts_40_2; }
+            if pos >= src.len() || unchecked src.byte_at(pos) != b'2' { break alts_40_2; }
             pos += 1;
             break alts_done_40;
         }
         alts_40_3: {
             pos = alts_saved_40;
-            if pos >= chars.len() || chars[pos] != 'u' { break alts_40_3; }
+            if pos >= src.len() || unchecked src.byte_at(pos) != b'u' { break alts_40_3; }
             pos += 1;
-            if pos >= chars.len() || chars[pos] != '6' { break alts_40_3; }
+            if pos >= src.len() || unchecked src.byte_at(pos) != b'6' { break alts_40_3; }
             pos += 1;
-            if pos >= chars.len() || chars[pos] != '4' { break alts_40_3; }
+            if pos >= src.len() || unchecked src.byte_at(pos) != b'4' { break alts_40_3; }
             pos += 1;
             break alts_done_40;
         }
         alts_40_4: {
             pos = alts_saved_40;
-            if pos >= chars.len() || chars[pos] != 'u' { break alts_40_4; }
+            if pos >= src.len() || unchecked src.byte_at(pos) != b'u' { break alts_40_4; }
             pos += 1;
-            if pos >= chars.len() || chars[pos] != '1' { break alts_40_4; }
+            if pos >= src.len() || unchecked src.byte_at(pos) != b'1' { break alts_40_4; }
             pos += 1;
-            if pos >= chars.len() || chars[pos] != '2' { break alts_40_4; }
+            if pos >= src.len() || unchecked src.byte_at(pos) != b'2' { break alts_40_4; }
             pos += 1;
-            if pos >= chars.len() || chars[pos] != '8' { break alts_40_4; }
+            if pos >= src.len() || unchecked src.byte_at(pos) != b'8' { break alts_40_4; }
             pos += 1;
             break alts_done_40;
         }
         alts_40_5: {
             pos = alts_saved_40;
-            if pos >= chars.len() || chars[pos] != 'u' { break alts_40_5; }
+            if pos >= src.len() || unchecked src.byte_at(pos) != b'u' { break alts_40_5; }
             pos += 1;
-            if pos >= chars.len() || chars[pos] != 's' { break alts_40_5; }
+            if pos >= src.len() || unchecked src.byte_at(pos) != b's' { break alts_40_5; }
             pos += 1;
-            if pos >= chars.len() || chars[pos] != 'i' { break alts_40_5; }
+            if pos >= src.len() || unchecked src.byte_at(pos) != b'i' { break alts_40_5; }
             pos += 1;
-            if pos >= chars.len() || chars[pos] != 'z' { break alts_40_5; }
+            if pos >= src.len() || unchecked src.byte_at(pos) != b'z' { break alts_40_5; }
             pos += 1;
-            if pos >= chars.len() || chars[pos] != 'e' { break alts_40_5; }
+            if pos >= src.len() || unchecked src.byte_at(pos) != b'e' { break alts_40_5; }
             pos += 1;
             break alts_done_40;
         }
         alts_40_6: {
             pos = alts_saved_40;
-            if pos >= chars.len() || chars[pos] != 'i' { break alts_40_6; }
+            if pos >= src.len() || unchecked src.byte_at(pos) != b'i' { break alts_40_6; }
             pos += 1;
-            if pos >= chars.len() || chars[pos] != '8' { break alts_40_6; }
+            if pos >= src.len() || unchecked src.byte_at(pos) != b'8' { break alts_40_6; }
             pos += 1;
             break alts_done_40;
         }
         alts_40_7: {
             pos = alts_saved_40;
-            if pos >= chars.len() || chars[pos] != 'i' { break alts_40_7; }
+            if pos >= src.len() || unchecked src.byte_at(pos) != b'i' { break alts_40_7; }
             pos += 1;
-            if pos >= chars.len() || chars[pos] != '1' { break alts_40_7; }
+            if pos >= src.len() || unchecked src.byte_at(pos) != b'1' { break alts_40_7; }
             pos += 1;
-            if pos >= chars.len() || chars[pos] != '6' { break alts_40_7; }
+            if pos >= src.len() || unchecked src.byte_at(pos) != b'6' { break alts_40_7; }
             pos += 1;
             break alts_done_40;
         }
         alts_40_8: {
             pos = alts_saved_40;
-            if pos >= chars.len() || chars[pos] != 'i' { break alts_40_8; }
+            if pos >= src.len() || unchecked src.byte_at(pos) != b'i' { break alts_40_8; }
             pos += 1;
-            if pos >= chars.len() || chars[pos] != '3' { break alts_40_8; }
+            if pos >= src.len() || unchecked src.byte_at(pos) != b'3' { break alts_40_8; }
             pos += 1;
-            if pos >= chars.len() || chars[pos] != '2' { break alts_40_8; }
+            if pos >= src.len() || unchecked src.byte_at(pos) != b'2' { break alts_40_8; }
             pos += 1;
             break alts_done_40;
         }
         alts_40_9: {
             pos = alts_saved_40;
-            if pos >= chars.len() || chars[pos] != 'i' { break alts_40_9; }
+            if pos >= src.len() || unchecked src.byte_at(pos) != b'i' { break alts_40_9; }
             pos += 1;
-            if pos >= chars.len() || chars[pos] != '6' { break alts_40_9; }
+            if pos >= src.len() || unchecked src.byte_at(pos) != b'6' { break alts_40_9; }
             pos += 1;
-            if pos >= chars.len() || chars[pos] != '4' { break alts_40_9; }
+            if pos >= src.len() || unchecked src.byte_at(pos) != b'4' { break alts_40_9; }
             pos += 1;
             break alts_done_40;
         }
         alts_40_10: {
             pos = alts_saved_40;
-            if pos >= chars.len() || chars[pos] != 'i' { break alts_40_10; }
+            if pos >= src.len() || unchecked src.byte_at(pos) != b'i' { break alts_40_10; }
             pos += 1;
-            if pos >= chars.len() || chars[pos] != '1' { break alts_40_10; }
+            if pos >= src.len() || unchecked src.byte_at(pos) != b'1' { break alts_40_10; }
             pos += 1;
-            if pos >= chars.len() || chars[pos] != '2' { break alts_40_10; }
+            if pos >= src.len() || unchecked src.byte_at(pos) != b'2' { break alts_40_10; }
             pos += 1;
-            if pos >= chars.len() || chars[pos] != '8' { break alts_40_10; }
+            if pos >= src.len() || unchecked src.byte_at(pos) != b'8' { break alts_40_10; }
             pos += 1;
             break alts_done_40;
         }
         alts_40_11: {
             pos = alts_saved_40;
-            if pos >= chars.len() || chars[pos] != 'i' { break alts_40_11; }
+            if pos >= src.len() || unchecked src.byte_at(pos) != b'i' { break alts_40_11; }
             pos += 1;
-            if pos >= chars.len() || chars[pos] != 's' { break alts_40_11; }
+            if pos >= src.len() || unchecked src.byte_at(pos) != b's' { break alts_40_11; }
             pos += 1;
-            if pos >= chars.len() || chars[pos] != 'i' { break alts_40_11; }
+            if pos >= src.len() || unchecked src.byte_at(pos) != b'i' { break alts_40_11; }
             pos += 1;
-            if pos >= chars.len() || chars[pos] != 'z' { break alts_40_11; }
+            if pos >= src.len() || unchecked src.byte_at(pos) != b'z' { break alts_40_11; }
             pos += 1;
-            if pos >= chars.len() || chars[pos] != 'e' { break alts_40_11; }
+            if pos >= src.len() || unchecked src.byte_at(pos) != b'e' { break alts_40_11; }
             pos += 1;
             break alts_done_40;
         }
@@ -3003,50 +3056,50 @@ fn frag_INTEGER_SUFFIX(chars: &List<char>, start: i32) -> i32 {
     return pos;
 }
 
-fn frag_FLOAT_EXPONENT(chars: &List<char>, start: i32) -> i32 {
+fn frag_FLOAT_EXPONENT(src: &StrSlice, start: i32) -> i32 {
     let mut pos = start;
-    if pos >= chars.len() { return -1; }
-    if !(chars[pos] matches { 'e' | 'E' }) { return -1; }
+    if pos >= src.len() { return -1; }
+    if !(unchecked src.byte_at(pos) matches { b'e' | b'E' }) { return -1; }
     pos += 1;
     opt_41: {
-        if pos >= chars.len() { break opt_41; }
-        if !(chars[pos] matches { '+' | '-' }) { break opt_41; }
+        if pos >= src.len() { break opt_41; }
+        if !(unchecked src.byte_at(pos) matches { b'+' | b'-' }) { break opt_41; }
         pos += 1;
     }
     loop {
         rep_42: {
-            if pos >= chars.len() || chars[pos] != '_' { break rep_42; }
+            if pos >= src.len() || unchecked src.byte_at(pos) != b'_' { break rep_42; }
             pos += 1;
             continue;
         }
         break;
     }
-    pos = try_DEC_LITERAL(chars, pos);
+    pos = try_DEC_LITERAL(src, pos);
     if pos < 0 { return -1; }
     return pos;
 }
 
-fn frag_FLOAT_SUFFIX(chars: &List<char>, start: i32) -> i32 {
+fn frag_FLOAT_SUFFIX(src: &StrSlice, start: i32) -> i32 {
     let mut pos = start;
     let alts_saved_43 = pos;
     alts_done_43: {
         alts_43_0: {
             pos = alts_saved_43;
-            if pos >= chars.len() || chars[pos] != 'f' { break alts_43_0; }
+            if pos >= src.len() || unchecked src.byte_at(pos) != b'f' { break alts_43_0; }
             pos += 1;
-            if pos >= chars.len() || chars[pos] != '3' { break alts_43_0; }
+            if pos >= src.len() || unchecked src.byte_at(pos) != b'3' { break alts_43_0; }
             pos += 1;
-            if pos >= chars.len() || chars[pos] != '2' { break alts_43_0; }
+            if pos >= src.len() || unchecked src.byte_at(pos) != b'2' { break alts_43_0; }
             pos += 1;
             break alts_done_43;
         }
         alts_43_1: {
             pos = alts_saved_43;
-            if pos >= chars.len() || chars[pos] != 'f' { break alts_43_1; }
+            if pos >= src.len() || unchecked src.byte_at(pos) != b'f' { break alts_43_1; }
             pos += 1;
-            if pos >= chars.len() || chars[pos] != '6' { break alts_43_1; }
+            if pos >= src.len() || unchecked src.byte_at(pos) != b'6' { break alts_43_1; }
             pos += 1;
-            if pos >= chars.len() || chars[pos] != '4' { break alts_43_1; }
+            if pos >= src.len() || unchecked src.byte_at(pos) != b'4' { break alts_43_1; }
             pos += 1;
             break alts_done_43;
         }
@@ -3055,12 +3108,12 @@ fn frag_FLOAT_SUFFIX(chars: &List<char>, start: i32) -> i32 {
     return pos;
 }
 
-fn frag_COMMON_ESCAPE(chars: &List<char>, start: i32) -> i32 {
+fn frag_COMMON_ESCAPE(src: &StrSlice, start: i32) -> i32 {
     let mut pos = start;
-    if pos >= chars.len() || chars[pos] != '\\' { return -1; }
+    if pos >= src.len() || unchecked src.byte_at(pos) != b'\\' { return -1; }
     pos += 1;
-    if pos >= chars.len() { return -1; }
-    if !(chars[pos] matches { 'n' | 'r' | 't' | '\\' | '0' }) { return -1; }
+    if pos >= src.len() { return -1; }
+    if !(unchecked src.byte_at(pos) matches { b'n' | b'r' | b't' | b'\\' | b'0' }) { return -1; }
     pos += 1;
     return pos;
 }
@@ -3073,17 +3126,17 @@ fn in_char_set_1(c: char) -> bool {
     return c matches { '0'..='9' | 'A'..='Z' | '_' | 'a'..='z' | 'ª' | 'µ' | '·' | 'º' | 'À'..='Ö' | 'Ø'..='ö' | 'ø'..='ˁ' | 'ˆ'..='ˑ' | 'ˠ'..='ˤ' | 'ˬ' | 'ˮ' | '\u{300}'..='ʹ' | 'Ͷ'..='ͷ' | 'ͺ'..='ͽ' | 'Ϳ' | 'Ά'..='Ί' | 'Ό' | 'Ύ'..='Ρ' | 'Σ'..='ϵ' | 'Ϸ'..='ҁ' | '\u{483}'..='\u{487}' | 'Ҋ'..='ԯ' | 'Ա'..='Ֆ' | 'ՙ' | 'ՠ'..='ֈ' | '\u{591}'..='\u{5bd}' | '\u{5bf}' | '\u{5c1}'..='\u{5c2}' | '\u{5c4}'..='\u{5c5}' | '\u{5c7}' | 'א'..='ת' | 'ׯ'..='ײ' | '\u{610}'..='\u{61a}' | 'ؠ'..='٩' | 'ٮ'..='ۓ' | 'ە'..='\u{6dc}' | '\u{6df}'..='\u{6e8}' | '\u{6ea}'..='ۼ' | 'ۿ' | 'ܐ'..='\u{74a}' | 'ݍ'..='ޱ' | '߀'..='ߵ' | 'ߺ' | '\u{7fd}' | 'ࠀ'..='\u{82d}' | 'ࡀ'..='\u{85b}' | 'ࡠ'..='ࡪ' | 'ࡰ'..='ࢇ' | 'ࢉ'..='࢏' | '\u{897}'..='\u{8e1}' | '\u{8e3}'..='\u{963}' | '०'..='९' | 'ॱ'..='\u{983}' | 'অ'..='ঌ' | 'এ'..='ঐ' | 'ও'..='ন' | 'প'..='র' | 'ল' | 'শ'..='হ' | '\u{9bc}'..='\u{9c4}' | '\u{9c7}'..='\u{9c8}' | '\u{9cb}'..='ৎ' | '\u{9d7}' | 'ড়'..='ঢ়' | 'য়'..='\u{9e3}' | '০'..='ৱ' | 'ৼ' | '\u{9fe}' | '\u{a01}'..='\u{a03}' | 'ਅ'..='ਊ' | 'ਏ'..='ਐ' | 'ਓ'..='ਨ' | 'ਪ'..='ਰ' | 'ਲ'..='ਲ਼' | 'ਵ'..='ਸ਼' | 'ਸ'..='ਹ' | '\u{a3c}' | '\u{a3e}'..='\u{a42}' | '\u{a47}'..='\u{a48}' | '\u{a4b}'..='\u{a4d}' | '\u{a51}' | 'ਖ਼'..='ੜ' | 'ਫ਼' | '੦'..='\u{a75}' | '\u{a81}'..='\u{a83}' | 'અ'..='ઍ' | 'એ'..='ઑ' | 'ઓ'..='ન' | 'પ'..='ર' | 'લ'..='ળ' | 'વ'..='હ' | '\u{abc}'..='\u{ac5}' | '\u{ac7}'..='\u{ac9}' | '\u{acb}'..='\u{acd}' | 'ૐ' | 'ૠ'..='\u{ae3}' | '૦'..='૯' | 'ૹ'..='\u{aff}' | '\u{b01}'..='\u{b03}' | 'ଅ'..='ଌ' | 'ଏ'..='ଐ' | 'ଓ'..='ନ' | 'ପ'..='ର' | 'ଲ'..='ଳ' | 'ଵ'..='ହ' | '\u{b3c}'..='\u{b44}' | '\u{b47}'..='\u{b48}' | '\u{b4b}'..='\u{b4d}' | '\u{b55}'..='\u{b57}' | 'ଡ଼'..='ଢ଼' | 'ୟ'..='\u{b63}' | '୦'..='୯' | 'ୱ' | '\u{b82}'..='ஃ' | 'அ'..='ஊ' | 'எ'..='ஐ' | 'ஒ'..='க' | 'ங'..='ச' | 'ஜ' | 'ஞ'..='ட' | 'ண'..='த' | 'ந'..='ப' | 'ம'..='ஹ' | '\u{bbe}'..='\u{bc2}' | '\u{bc6}'..='\u{bc8}' | '\u{bca}'..='\u{bcd}' | 'ௐ' | '\u{bd7}' | '௦'..='௯' | '\u{c00}'..='ఌ' | 'ఎ'..='ఐ' | 'ఒ'..='న' | 'ప'..='హ' | '\u{c3c}'..='\u{c44}' | '\u{c46}'..='\u{c48}' | '\u{c4a}'..='\u{c4d}' | '\u{c55}'..='\u{c56}' | 'ౘ'..='ౚ' | '౜'..='ౝ' | 'ౠ'..='\u{c63}' | '౦'..='౯' | 'ಀ'..='\u{c83}' | 'ಅ'..='ಌ' | 'ಎ'..='ಐ' | 'ಒ'..='ನ' | 'ಪ'..='ಳ' | 'ವ'..='ಹ' | '\u{cbc}'..='\u{cc4}' | '\u{cc6}'..='\u{cc8}' | '\u{cca}'..='\u{ccd}' | '\u{cd5}'..='\u{cd6}' | '೜'..='ೞ' | 'ೠ'..='\u{ce3}' | '೦'..='೯' | 'ೱ'..='\u{cf3}' | '\u{d00}'..='ഌ' | 'എ'..='ഐ' | 'ഒ'..='\u{d44}' | '\u{d46}'..='\u{d48}' | '\u{d4a}'..='ൎ' | 'ൔ'..='\u{d57}' | 'ൟ'..='\u{d63}' | '൦'..='൯' | 'ൺ'..='ൿ' | '\u{d81}'..='\u{d83}' | 'අ'..='ඖ' | 'ක'..='න' | 'ඳ'..='ර' | 'ල' | 'ව'..='ෆ' | '\u{dca}' | '\u{dcf}'..='\u{dd4}' | '\u{dd6}' | '\u{dd8}'..='\u{ddf}' | '෦'..='෯' | '\u{df2}'..='\u{df3}' | 'ก'..='\u{e3a}' | 'เ'..='\u{e4e}' | '๐'..='๙' | 'ກ'..='ຂ' | 'ຄ' | 'ຆ'..='ຊ' | 'ຌ'..='ຣ' | 'ລ' | 'ວ'..='ຽ' | 'ເ'..='ໄ' | 'ໆ' | '\u{ec8}'..='\u{ece}' | '໐'..='໙' | 'ໜ'..='ໟ' | 'ༀ' | '\u{f18}'..='\u{f19}' | '༠'..='༩' | '\u{f35}' | '\u{f37}' | '\u{f39}' | '\u{f3e}'..='ཇ' | 'ཉ'..='ཬ' | '\u{f71}'..='\u{f84}' | '\u{f86}'..='\u{f97}' | '\u{f99}'..='\u{fbc}' | '\u{fc6}' | 'က'..='၉' | 'ၐ'..='\u{109d}' | 'Ⴀ'..='Ⴥ' | 'Ⴧ' | 'Ⴭ' | 'ა'..='ჺ' | 'ჼ'..='ቈ' | 'ቊ'..='ቍ' | 'ቐ'..='ቖ' | 'ቘ' | 'ቚ'..='ቝ' | 'በ'..='ኈ' | 'ኊ'..='ኍ' | 'ነ'..='ኰ' | 'ኲ'..='ኵ' | 'ኸ'..='ኾ' | 'ዀ' | 'ዂ'..='ዅ' | 'ወ'..='ዖ' | 'ዘ'..='ጐ' | 'ጒ'..='ጕ' | 'ጘ'..='ፚ' | '\u{135d}'..='\u{135f}' | '፩'..='፱' | 'ᎀ'..='ᎏ' | 'Ꭰ'..='Ᏽ' | 'ᏸ'..='ᏽ' | 'ᐁ'..='ᙬ' | 'ᙯ'..='ᙿ' | 'ᚁ'..='ᚚ' | 'ᚠ'..='ᛪ' | 'ᛮ'..='ᛸ' | 'ᜀ'..='\u{1715}' | 'ᜟ'..='\u{1734}' | 'ᝀ'..='\u{1753}' | 'ᝠ'..='ᝬ' | 'ᝮ'..='ᝰ' | '\u{1772}'..='\u{1773}' | 'ក'..='\u{17d3}' | 'ៗ' | 'ៜ'..='\u{17dd}' | '០'..='៩' | '\u{180b}'..='\u{180d}' | '\u{180f}'..='᠙' | 'ᠠ'..='ᡸ' | 'ᢀ'..='ᢪ' | 'ᢰ'..='ᣵ' | 'ᤀ'..='ᤞ' | '\u{1920}'..='\u{192b}' | '\u{1930}'..='\u{193b}' | '᥆'..='ᥭ' | 'ᥰ'..='ᥴ' | 'ᦀ'..='ᦫ' | 'ᦰ'..='ᧉ' | '᧐'..='᧚' | 'ᨀ'..='\u{1a1b}' | 'ᨠ'..='\u{1a5e}' | '\u{1a60}'..='\u{1a7c}' | '\u{1a7f}'..='᪉' | '᪐'..='᪙' | 'ᪧ' | '\u{1ab0}'..='\u{1abd}' | '\u{1abf}'..='\u{1add}' | '\u{1ae0}'..='\u{1aeb}' | '\u{1b00}'..='ᭌ' | '᭐'..='᭙' | '\u{1b6b}'..='\u{1b73}' | '\u{1b80}'..='\u{1bf3}' | 'ᰀ'..='\u{1c37}' | '᱀'..='᱉' | 'ᱍ'..='ᱽ' | 'ᲀ'..='ᲊ' | 'Ა'..='Ჺ' | 'Ჽ'..='Ჿ' | '\u{1cd0}'..='\u{1cd2}' | '\u{1cd4}'..='ᳺ' | 'ᴀ'..='ἕ' | 'Ἐ'..='Ἕ' | 'ἠ'..='ὅ' | 'Ὀ'..='Ὅ' | 'ὐ'..='ὗ' | 'Ὑ' | 'Ὓ' | 'Ὕ' | 'Ὗ'..='ώ' | 'ᾀ'..='ᾴ' | 'ᾶ'..='ᾼ' | 'ι' | 'ῂ'..='ῄ' | 'ῆ'..='ῌ' | 'ῐ'..='ΐ' | 'ῖ'..='Ί' | 'ῠ'..='Ῥ' | 'ῲ'..='ῴ' | 'ῶ'..='ῼ' | '‿'..='⁀' | '⁔' | 'ⁱ' | 'ⁿ' | 'ₐ'..='ₜ' | '\u{20d0}'..='\u{20dc}' | '\u{20e1}' | '\u{20e5}'..='\u{20f0}' | 'ℂ' | 'ℇ' | 'ℊ'..='ℓ' | 'ℕ' | '℘'..='ℝ' | 'ℤ' | 'Ω' | 'ℨ' | 'K'..='ℹ' | 'ℼ'..='ℿ' | 'ⅅ'..='ⅉ' | 'ⅎ' | 'Ⅰ'..='ↈ' | 'Ⰰ'..='ⳤ' | 'Ⳬ'..='ⳳ' | 'ⴀ'..='ⴥ' | 'ⴧ' | 'ⴭ' | 'ⴰ'..='ⵧ' | 'ⵯ' | '\u{2d7f}'..='ⶖ' | 'ⶠ'..='ⶦ' | 'ⶨ'..='ⶮ' | 'ⶰ'..='ⶶ' | 'ⶸ'..='ⶾ' | 'ⷀ'..='ⷆ' | 'ⷈ'..='ⷎ' | 'ⷐ'..='ⷖ' | 'ⷘ'..='ⷞ' | '\u{2de0}'..='\u{2dff}' | 'ⸯ' | '々'..='〇' | '〡'..='\u{302f}' | '〱'..='〵' | '〸'..='〼' | 'ぁ'..='ゖ' | '\u{3099}'..='ゟ' | 'ァ'..='ヺ' | 'ー'..='ヿ' | 'ㄅ'..='ㄯ' | 'ㄱ'..='ㆎ' | 'ㆠ'..='ㆿ' | 'ㇰ'..='ㇿ' | '㐀'..='䶿' | '一'..='ꒌ' | 'ꓐ'..='ꓽ' | 'ꔀ'..='ꘌ' | 'ꘐ'..='ꘫ' | 'Ꙁ'..='\u{a66f}' | '\u{a674}'..='\u{a67d}' | 'ꙿ'..='\u{a6f1}' | 'ꜗ'..='ꜟ' | 'Ꜣ'..='ꞈ' | 'Ꞌ'..='Ƛ' | '꟱'..='\u{a827}' | '\u{a82c}' | 'ꡀ'..='ꡳ' | '\u{a880}'..='\u{a8c5}' | '꣐'..='꣙' | '\u{a8e0}'..='ꣷ' | 'ꣻ' | 'ꣽ'..='\u{a92d}' | 'ꤰ'..='\u{a953}' | 'ꥠ'..='ꥼ' | '\u{a980}'..='\u{a9c0}' | 'ꧏ'..='꧙' | 'ꧠ'..='ꧾ' | 'ꨀ'..='\u{aa36}' | 'ꩀ'..='\u{aa4d}' | '꩐'..='꩙' | 'ꩠ'..='ꩶ' | 'ꩺ'..='ꫂ' | 'ꫛ'..='ꫝ' | 'ꫠ'..='\u{aaef}' | 'ꫲ'..='\u{aaf6}' | 'ꬁ'..='ꬆ' | 'ꬉ'..='ꬎ' | 'ꬑ'..='ꬖ' | 'ꬠ'..='ꬦ' | 'ꬨ'..='ꬮ' | 'ꬰ'..='ꭚ' | 'ꭜ'..='ꭩ' | 'ꭰ'..='\u{abea}' | '\u{abec}'..='\u{abed}' | '꯰'..='꯹' | '가'..='힣' | 'ힰ'..='ퟆ' | 'ퟋ'..='ퟻ' | '豈'..='舘' | '並'..='龎' | 'ﬀ'..='ﬆ' | 'ﬓ'..='ﬗ' | 'יִ'..='ﬨ' | 'שׁ'..='זּ' | 'טּ'..='לּ' | 'מּ' | 'נּ'..='סּ' | 'ףּ'..='פּ' | 'צּ'..='ﮱ' | 'ﯓ'..='ﴽ' | 'ﵐ'..='ﶏ' | 'ﶒ'..='ﷇ' | 'ﷰ'..='ﷻ' | '\u{fe00}'..='\u{fe0f}' | '\u{fe20}'..='\u{fe2f}' | '︳'..='︴' | '﹍'..='﹏' | 'ﹰ'..='ﹴ' | 'ﹶ'..='ﻼ' | '０'..='９' | 'Ａ'..='Ｚ' | '＿' | 'ａ'..='ｚ' | 'ｦ'..='ﾾ' | 'ￂ'..='ￇ' | 'ￊ'..='ￏ' | 'ￒ'..='ￗ' | 'ￚ'..='ￜ' | '𐀀'..='𐀋' | '𐀍'..='𐀦' | '𐀨'..='𐀺' | '𐀼'..='𐀽' | '𐀿'..='𐁍' | '𐁐'..='𐁝' | '𐂀'..='𐃺' | '𐅀'..='𐅴' | '\u{101fd}' | '𐊀'..='𐊜' | '𐊠'..='𐋐' | '\u{102e0}' | '𐌀'..='𐌟' | '𐌭'..='𐍊' | '𐍐'..='\u{1037a}' | '𐎀'..='𐎝' | '𐎠'..='𐏃' | '𐏈'..='𐏏' | '𐏑'..='𐏕' | '𐐀'..='𐒝' | '𐒠'..='𐒩' | '𐒰'..='𐓓' | '𐓘'..='𐓻' | '𐔀'..='𐔧' | '𐔰'..='𐕣' | '𐕰'..='𐕺' | '𐕼'..='𐖊' | '𐖌'..='𐖒' | '𐖔'..='𐖕' | '𐖗'..='𐖡' | '𐖣'..='𐖱' | '𐖳'..='𐖹' | '𐖻'..='𐖼' | '𐗀'..='𐗳' | '𐘀'..='𐜶' | '𐝀'..='𐝕' | '𐝠'..='𐝧' | '𐞀'..='𐞅' | '𐞇'..='𐞰' | '𐞲'..='𐞺' | '𐠀'..='𐠅' | '𐠈' | '𐠊'..='𐠵' | '𐠷'..='𐠸' | '𐠼' | '𐠿'..='𐡕' | '𐡠'..='𐡶' | '𐢀'..='𐢞' | '𐣠'..='𐣲' | '𐣴'..='𐣵' | '𐤀'..='𐤕' | '𐤠'..='𐤹' | '𐥀'..='𐥙' | '𐦀'..='𐦷' | '𐦾'..='𐦿' | '𐨀'..='\u{10a03}' | '\u{10a05}'..='\u{10a06}' | '\u{10a0c}'..='𐨓' | '𐨕'..='𐨗' | '𐨙'..='𐨵' | '\u{10a38}'..='\u{10a3a}' | '\u{10a3f}' | '𐩠'..='𐩼' | '𐪀'..='𐪜' | '𐫀'..='𐫇' | '𐫉'..='\u{10ae6}' | '𐬀'..='𐬵' | '𐭀'..='𐭕' | '𐭠'..='𐭲' | '𐮀'..='𐮑' | '𐰀'..='𐱈' | '𐲀'..='𐲲' | '𐳀'..='𐳲' | '𐴀'..='\u{10d27}' | '𐴰'..='𐴹' | '𐵀'..='𐵥' | '\u{10d69}'..='\u{10d6d}' | '𐵯'..='𐶅' | '𐺀'..='𐺩' | '\u{10eab}'..='\u{10eac}' | '𐺰'..='𐺱' | '𐻂'..='𐻇' | '\u{10efa}'..='𐼜' | '𐼧' | '𐼰'..='\u{10f50}' | '𐽰'..='\u{10f85}' | '𐾰'..='𐿄' | '𐿠'..='𐿶' | '\u{11000}'..='\u{11046}' | '𑁦'..='𑁵' | '\u{1107f}'..='\u{110ba}' | '\u{110c2}' | '𑃐'..='𑃨' | '𑃰'..='𑃹' | '\u{11100}'..='\u{11134}' | '𑄶'..='𑄿' | '𑅄'..='𑅇' | '𑅐'..='\u{11173}' | '𑅶' | '\u{11180}'..='𑇄' | '\u{111c9}'..='\u{111cc}' | '\u{111ce}'..='𑇚' | '𑇜' | '𑈀'..='𑈑' | '𑈓'..='\u{11237}' | '\u{1123e}'..='\u{11241}' | '𑊀'..='𑊆' | '𑊈' | '𑊊'..='𑊍' | '𑊏'..='𑊝' | '𑊟'..='𑊨' | '𑊰'..='\u{112ea}' | '𑋰'..='𑋹' | '\u{11300}'..='\u{11303}' | '𑌅'..='𑌌' | '𑌏'..='𑌐' | '𑌓'..='𑌨' | '𑌪'..='𑌰' | '𑌲'..='𑌳' | '𑌵'..='𑌹' | '\u{1133b}'..='\u{11344}' | '\u{11347}'..='\u{11348}' | '\u{1134b}'..='\u{1134d}' | '𑍐' | '\u{11357}' | '𑍝'..='\u{11363}' | '\u{11366}'..='\u{1136c}' | '\u{11370}'..='\u{11374}' | '𑎀'..='𑎉' | '𑎋' | '𑎎' | '𑎐'..='𑎵' | '𑎷'..='\u{113c0}' | '\u{113c2}' | '\u{113c5}' | '\u{113c7}'..='\u{113ca}' | '\u{113cc}'..='𑏓' | '\u{113e1}'..='\u{113e2}' | '𑐀'..='𑑊' | '𑑐'..='𑑙' | '\u{1145e}'..='𑑡' | '𑒀'..='𑓅' | '𑓇' | '𑓐'..='𑓙' | '𑖀'..='\u{115b5}' | '\u{115b8}'..='\u{115c0}' | '𑗘'..='\u{115dd}' | '𑘀'..='\u{11640}' | '𑙄' | '𑙐'..='𑙙' | '𑚀'..='𑚸' | '𑛀'..='𑛉' | '𑛐'..='𑛣' | '𑜀'..='𑜚' | '\u{1171d}'..='\u{1172b}' | '𑜰'..='𑜹' | '𑝀'..='𑝆' | '𑠀'..='\u{1183a}' | '𑢠'..='𑣩' | '𑣿'..='𑤆' | '𑤉' | '𑤌'..='𑤓' | '𑤕'..='𑤖' | '𑤘'..='\u{11935}' | '\u{11937}'..='\u{11938}' | '\u{1193b}'..='\u{11943}' | '𑥐'..='𑥙' | '𑦠'..='𑦧' | '𑦪'..='\u{119d7}' | '\u{119da}'..='𑧡' | '𑧣'..='\u{119e4}' | '𑨀'..='\u{11a3e}' | '\u{11a47}' | '𑩐'..='\u{11a99}' | '𑪝' | '𑪰'..='𑫸' | '\u{11b60}'..='\u{11b67}' | '𑯀'..='𑯠' | '𑯰'..='𑯹' | '𑰀'..='𑰈' | '𑰊'..='\u{11c36}' | '\u{11c38}'..='𑱀' | '𑱐'..='𑱙' | '𑱲'..='𑲏' | '\u{11c92}'..='\u{11ca7}' | '\u{11ca9}'..='\u{11cb6}' | '𑴀'..='𑴆' | '𑴈'..='𑴉' | '𑴋'..='\u{11d36}' | '\u{11d3a}' | '\u{11d3c}'..='\u{11d3d}' | '\u{11d3f}'..='\u{11d47}' | '𑵐'..='𑵙' | '𑵠'..='𑵥' | '𑵧'..='𑵨' | '𑵪'..='\u{11d8e}' | '\u{11d90}'..='\u{11d91}' | '\u{11d93}'..='𑶘' | '𑶠'..='𑶩' | '𑶰'..='𑷛' | '𑷠'..='𑷩' | '𑻠'..='\u{11ef6}' | '\u{11f00}'..='𑼐' | '𑼒'..='\u{11f3a}' | '\u{11f3e}'..='\u{11f42}' | '𑽐'..='\u{11f5a}' | '𑾰' | '𒀀'..='𒎙' | '𒐀'..='𒑮' | '𒒀'..='𒕃' | '𒾐'..='𒿰' | '𓀀'..='𓐯' | '\u{13440}'..='\u{13455}' | '𓑠'..='𔏺' | '𔐀'..='𔙆' | '𖄀'..='𖄹' | '𖠀'..='𖨸' | '𖩀'..='𖩞' | '𖩠'..='𖩩' | '𖩰'..='𖪾' | '𖫀'..='𖫉' | '𖫐'..='𖫭' | '\u{16af0}'..='\u{16af4}' | '𖬀'..='\u{16b36}' | '𖭀'..='𖭃' | '𖭐'..='𖭙' | '𖭣'..='𖭷' | '𖭽'..='𖮏' | '𖵀'..='𖵬' | '𖵰'..='𖵹' | '𖹀'..='𖹿' | '𖺠'..='𖺸' | '𖺻'..='𖻓' | '𖼀'..='𖽊' | '\u{16f4f}'..='\u{16f87}' | '\u{16f8f}'..='𖾟' | '𖿠'..='𖿡' | '𖿣'..='\u{16fe4}' | '\u{16ff0}'..='𖿶' | '𗀀'..='𘳕' | '𘳿'..='𘴞' | '𘶀'..='𘷲' | '𚿰'..='𚿳' | '𚿵'..='𚿻' | '𚿽'..='𚿾' | '𛀀'..='𛄢' | '𛄲' | '𛅐'..='𛅒' | '𛅕' | '𛅤'..='𛅧' | '𛅰'..='𛋻' | '𛰀'..='𛱪' | '𛱰'..='𛱼' | '𛲀'..='𛲈' | '𛲐'..='𛲙' | '\u{1bc9d}'..='\u{1bc9e}' | '𜳰'..='𜳹' | '\u{1cf00}'..='\u{1cf2d}' | '\u{1cf30}'..='\u{1cf46}' | '\u{1d165}'..='\u{1d169}' | '\u{1d16d}'..='\u{1d172}' | '\u{1d17b}'..='\u{1d182}' | '\u{1d185}'..='\u{1d18b}' | '\u{1d1aa}'..='\u{1d1ad}' | '\u{1d242}'..='\u{1d244}' | '𝐀'..='𝑔' | '𝑖'..='𝒜' | '𝒞'..='𝒟' | '𝒢' | '𝒥'..='𝒦' | '𝒩'..='𝒬' | '𝒮'..='𝒹' | '𝒻' | '𝒽'..='𝓃' | '𝓅'..='𝔅' | '𝔇'..='𝔊' | '𝔍'..='𝔔' | '𝔖'..='𝔜' | '𝔞'..='𝔹' | '𝔻'..='𝔾' | '𝕀'..='𝕄' | '𝕆' | '𝕊'..='𝕐' | '𝕒'..='𝚥' | '𝚨'..='𝛀' | '𝛂'..='𝛚' | '𝛜'..='𝛺' | '𝛼'..='𝜔' | '𝜖'..='𝜴' | '𝜶'..='𝝎' | '𝝐'..='𝝮' | '𝝰'..='𝞈' | '𝞊'..='𝞨' | '𝞪'..='𝟂' | '𝟄'..='𝟋' | '𝟎'..='𝟿' | '\u{1da00}'..='\u{1da36}' | '\u{1da3b}'..='\u{1da6c}' | '\u{1da75}' | '\u{1da84}' | '\u{1da9b}'..='\u{1da9f}' | '\u{1daa1}'..='\u{1daaf}' | '𝼀'..='𝼞' | '𝼥'..='𝼪' | '\u{1e000}'..='\u{1e006}' | '\u{1e008}'..='\u{1e018}' | '\u{1e01b}'..='\u{1e021}' | '\u{1e023}'..='\u{1e024}' | '\u{1e026}'..='\u{1e02a}' | '𞀰'..='𞁭' | '\u{1e08f}' | '𞄀'..='𞄬' | '\u{1e130}'..='𞄽' | '𞅀'..='𞅉' | '𞅎' | '𞊐'..='\u{1e2ae}' | '𞋀'..='𞋹' | '𞓐'..='𞓹' | '𞗐'..='𞗺' | '𞛀'..='𞛞' | '𞛠'..='\u{1e6f5}' | '𞛾'..='𞛿' | '𞟠'..='𞟦' | '𞟨'..='𞟫' | '𞟭'..='𞟮' | '𞟰'..='𞟾' | '𞠀'..='𞣄' | '\u{1e8d0}'..='\u{1e8d6}' | '𞤀'..='𞥋' | '𞥐'..='𞥙' | '𞸀'..='𞸃' | '𞸅'..='𞸟' | '𞸡'..='𞸢' | '𞸤' | '𞸧' | '𞸩'..='𞸲' | '𞸴'..='𞸷' | '𞸹' | '𞸻' | '𞹂' | '𞹇' | '𞹉' | '𞹋' | '𞹍'..='𞹏' | '𞹑'..='𞹒' | '𞹔' | '𞹗' | '𞹙' | '𞹛' | '𞹝' | '𞹟' | '𞹡'..='𞹢' | '𞹤' | '𞹧'..='𞹪' | '𞹬'..='𞹲' | '𞹴'..='𞹷' | '𞹹'..='𞹼' | '𞹾' | '𞺀'..='𞺉' | '𞺋'..='𞺛' | '𞺡'..='𞺣' | '𞺥'..='𞺩' | '𞺫'..='𞺻' | '🯰'..='🯹' | '𠀀'..='𪛟' | '𪜀'..='𫠝' | '𫠠'..='𬺭' | '𬺰'..='𮯠' | '𮯰'..='𮹝' | '丽'..='𪘀' | '𰀀'..='𱍊' | '𱍐'..='𳑹' | '\u{e0100}'..='\u{e01ef}' };
 }
 
-fn classify_keyword(chars: &List<char>, start: i32, end: i32) -> i32 {
+fn classify_keyword(src: &StrSlice, start: i32, end: i32) -> i32 {
     match end - start {
         2 => {
-            match chars[start] {
-                'a' => { if chars[start + 1] == 's' { return TK_KW_AS; } },
-                'd' => { if chars[start + 1] == 'o' { return TK_KW_DO; } },
-                'f' => { if chars[start + 1] == 'n' { return TK_KW_FN; } },
-                'i' => {
-                    match chars[start + 1] {
-                        'f' => { return TK_KW_IF; },
-                        'n' => { return TK_KW_IN; },
+            match unchecked src.byte_at(start) {
+                b'a' => { if unchecked src.byte_at(start + 1) == b's' { return TK_KW_AS; } },
+                b'd' => { if unchecked src.byte_at(start + 1) == b'o' { return TK_KW_DO; } },
+                b'f' => { if unchecked src.byte_at(start + 1) == b'n' { return TK_KW_FN; } },
+                b'i' => {
+                    match unchecked src.byte_at(start + 1) {
+                        b'f' => { return TK_KW_IF; },
+                        b'n' => { return TK_KW_IN; },
                         _ => {},
                     }
                 },
@@ -3091,50 +3144,50 @@ fn classify_keyword(chars: &List<char>, start: i32, end: i32) -> i32 {
             }
         },
         3 => {
-            match chars[start] {
-                'b' => { if chars[start + 1] == 'o' && chars[start + 2] == 'x' { return TK_KW_BOX; } },
-                'd' => { if chars[start + 1] == 'y' && chars[start + 2] == 'n' { return TK_KW_DYN; } },
-                'f' => { if chars[start + 1] == 'o' && chars[start + 2] == 'r' { return TK_KW_FOR; } },
-                'l' => { if chars[start + 1] == 'e' && chars[start + 2] == 't' { return TK_KW_LET; } },
-                'm' => {
-                    match chars[start + 1] {
-                        'o' => { if chars[start + 2] == 'd' { return TK_KW_MOD; } },
-                        'u' => { if chars[start + 2] == 't' { return TK_KW_MUT; } },
+            match unchecked src.byte_at(start) {
+                b'b' => { if unchecked src.byte_at(start + 1) == b'o' && unchecked src.byte_at(start + 2) == b'x' { return TK_KW_BOX; } },
+                b'd' => { if unchecked src.byte_at(start + 1) == b'y' && unchecked src.byte_at(start + 2) == b'n' { return TK_KW_DYN; } },
+                b'f' => { if unchecked src.byte_at(start + 1) == b'o' && unchecked src.byte_at(start + 2) == b'r' { return TK_KW_FOR; } },
+                b'l' => { if unchecked src.byte_at(start + 1) == b'e' && unchecked src.byte_at(start + 2) == b't' { return TK_KW_LET; } },
+                b'm' => {
+                    match unchecked src.byte_at(start + 1) {
+                        b'o' => { if unchecked src.byte_at(start + 2) == b'd' { return TK_KW_MOD; } },
+                        b'u' => { if unchecked src.byte_at(start + 2) == b't' { return TK_KW_MUT; } },
                         _ => {},
                     }
                 },
-                'p' => { if chars[start + 1] == 'u' && chars[start + 2] == 'b' { return TK_KW_PUB; } },
-                'r' => {
-                    match chars[start + 1] {
-                        'a' => { if chars[start + 2] == 'w' { return TK_KW_RAW; } },
-                        'e' => { if chars[start + 2] == 'f' { return TK_KW_REF; } },
+                b'p' => { if unchecked src.byte_at(start + 1) == b'u' && unchecked src.byte_at(start + 2) == b'b' { return TK_KW_PUB; } },
+                b'r' => {
+                    match unchecked src.byte_at(start + 1) {
+                        b'a' => { if unchecked src.byte_at(start + 2) == b'w' { return TK_KW_RAW; } },
+                        b'e' => { if unchecked src.byte_at(start + 2) == b'f' { return TK_KW_REF; } },
                         _ => {},
                     }
                 },
-                't' => { if chars[start + 1] == 'r' && chars[start + 2] == 'y' { return TK_KW_TRY; } },
-                'u' => { if chars[start + 1] == 's' && chars[start + 2] == 'e' { return TK_KW_USE; } },
+                b't' => { if unchecked src.byte_at(start + 1) == b'r' && unchecked src.byte_at(start + 2) == b'y' { return TK_KW_TRY; } },
+                b'u' => { if unchecked src.byte_at(start + 1) == b's' && unchecked src.byte_at(start + 2) == b'e' { return TK_KW_USE; } },
                 _ => {},
             }
         },
         4 => {
-            match chars[start] {
-                'S' => { if chars[start + 1] == 'e' && chars[start + 2] == 'l' && chars[start + 3] == 'f' { return TK_KW_SELFTYPE; } },
-                'e' => {
-                    match chars[start + 1] {
-                        'l' => { if chars[start + 2] == 's' && chars[start + 3] == 'e' { return TK_KW_ELSE; } },
-                        'n' => { if chars[start + 2] == 'u' && chars[start + 3] == 'm' { return TK_KW_ENUM; } },
+            match unchecked src.byte_at(start) {
+                b'S' => { if unchecked src.byte_at(start + 1) == b'e' && unchecked src.byte_at(start + 2) == b'l' && unchecked src.byte_at(start + 3) == b'f' { return TK_KW_SELFTYPE; } },
+                b'e' => {
+                    match unchecked src.byte_at(start + 1) {
+                        b'l' => { if unchecked src.byte_at(start + 2) == b's' && unchecked src.byte_at(start + 3) == b'e' { return TK_KW_ELSE; } },
+                        b'n' => { if unchecked src.byte_at(start + 2) == b'u' && unchecked src.byte_at(start + 3) == b'm' { return TK_KW_ENUM; } },
                         _ => {},
                     }
                 },
-                'i' => { if chars[start + 1] == 'm' && chars[start + 2] == 'p' && chars[start + 3] == 'l' { return TK_KW_IMPL; } },
-                'l' => { if chars[start + 1] == 'o' && chars[start + 2] == 'o' && chars[start + 3] == 'p' { return TK_KW_LOOP; } },
-                'm' => { if chars[start + 1] == 'o' && chars[start + 2] == 'v' && chars[start + 3] == 'e' { return TK_KW_MOVE; } },
-                'p' => { if chars[start + 1] == 'r' && chars[start + 2] == 'i' && chars[start + 3] == 'v' { return TK_KW_PRIV; } },
-                's' => { if chars[start + 1] == 'e' && chars[start + 2] == 'l' && chars[start + 3] == 'f' { return TK_KW_SELFVALUE; } },
-                't' => {
-                    match chars[start + 1] {
-                        'r' => { if chars[start + 2] == 'u' && chars[start + 3] == 'e' { return TK_KW_TRUE; } },
-                        'y' => { if chars[start + 2] == 'p' && chars[start + 3] == 'e' { return TK_KW_TYPE; } },
+                b'i' => { if unchecked src.byte_at(start + 1) == b'm' && unchecked src.byte_at(start + 2) == b'p' && unchecked src.byte_at(start + 3) == b'l' { return TK_KW_IMPL; } },
+                b'l' => { if unchecked src.byte_at(start + 1) == b'o' && unchecked src.byte_at(start + 2) == b'o' && unchecked src.byte_at(start + 3) == b'p' { return TK_KW_LOOP; } },
+                b'm' => { if unchecked src.byte_at(start + 1) == b'o' && unchecked src.byte_at(start + 2) == b'v' && unchecked src.byte_at(start + 3) == b'e' { return TK_KW_MOVE; } },
+                b'p' => { if unchecked src.byte_at(start + 1) == b'r' && unchecked src.byte_at(start + 2) == b'i' && unchecked src.byte_at(start + 3) == b'v' { return TK_KW_PRIV; } },
+                b's' => { if unchecked src.byte_at(start + 1) == b'e' && unchecked src.byte_at(start + 2) == b'l' && unchecked src.byte_at(start + 3) == b'f' { return TK_KW_SELFVALUE; } },
+                b't' => {
+                    match unchecked src.byte_at(start + 1) {
+                        b'r' => { if unchecked src.byte_at(start + 2) == b'u' && unchecked src.byte_at(start + 3) == b'e' { return TK_KW_TRUE; } },
+                        b'y' => { if unchecked src.byte_at(start + 2) == b'p' && unchecked src.byte_at(start + 3) == b'e' { return TK_KW_TYPE; } },
                         _ => {},
                     }
                 },
@@ -3142,89 +3195,89 @@ fn classify_keyword(chars: &List<char>, start: i32, end: i32) -> i32 {
             }
         },
         5 => {
-            match chars[start] {
-                'a' => {
-                    match chars[start + 1] {
-                        's' => { if chars[start + 2] == 'y' && chars[start + 3] == 'n' && chars[start + 4] == 'c' { return TK_KW_ASYNC; } },
-                        'w' => { if chars[start + 2] == 'a' && chars[start + 3] == 'i' && chars[start + 4] == 't' { return TK_KW_AWAIT; } },
+            match unchecked src.byte_at(start) {
+                b'a' => {
+                    match unchecked src.byte_at(start + 1) {
+                        b's' => { if unchecked src.byte_at(start + 2) == b'y' && unchecked src.byte_at(start + 3) == b'n' && unchecked src.byte_at(start + 4) == b'c' { return TK_KW_ASYNC; } },
+                        b'w' => { if unchecked src.byte_at(start + 2) == b'a' && unchecked src.byte_at(start + 3) == b'i' && unchecked src.byte_at(start + 4) == b't' { return TK_KW_AWAIT; } },
                         _ => {},
                     }
                 },
-                'b' => { if chars[start + 1] == 'r' && chars[start + 2] == 'e' && chars[start + 3] == 'a' && chars[start + 4] == 'k' { return TK_KW_BREAK; } },
-                'c' => {
-                    match chars[start + 1] {
-                        'o' => { if chars[start + 2] == 'n' && chars[start + 3] == 's' && chars[start + 4] == 't' { return TK_KW_CONST; } },
-                        'r' => { if chars[start + 2] == 'a' && chars[start + 3] == 't' && chars[start + 4] == 'e' { return TK_KW_CRATE; } },
+                b'b' => { if unchecked src.byte_at(start + 1) == b'r' && unchecked src.byte_at(start + 2) == b'e' && unchecked src.byte_at(start + 3) == b'a' && unchecked src.byte_at(start + 4) == b'k' { return TK_KW_BREAK; } },
+                b'c' => {
+                    match unchecked src.byte_at(start + 1) {
+                        b'o' => { if unchecked src.byte_at(start + 2) == b'n' && unchecked src.byte_at(start + 3) == b's' && unchecked src.byte_at(start + 4) == b't' { return TK_KW_CONST; } },
+                        b'r' => { if unchecked src.byte_at(start + 2) == b'a' && unchecked src.byte_at(start + 3) == b't' && unchecked src.byte_at(start + 4) == b'e' { return TK_KW_CRATE; } },
                         _ => {},
                     }
                 },
-                'f' => {
-                    match chars[start + 1] {
-                        'a' => { if chars[start + 2] == 'l' && chars[start + 3] == 's' && chars[start + 4] == 'e' { return TK_KW_FALSE; } },
-                        'i' => { if chars[start + 2] == 'n' && chars[start + 3] == 'a' && chars[start + 4] == 'l' { return TK_KW_FINAL; } },
+                b'f' => {
+                    match unchecked src.byte_at(start + 1) {
+                        b'a' => { if unchecked src.byte_at(start + 2) == b'l' && unchecked src.byte_at(start + 3) == b's' && unchecked src.byte_at(start + 4) == b'e' { return TK_KW_FALSE; } },
+                        b'i' => { if unchecked src.byte_at(start + 2) == b'n' && unchecked src.byte_at(start + 3) == b'a' && unchecked src.byte_at(start + 4) == b'l' { return TK_KW_FINAL; } },
                         _ => {},
                     }
                 },
-                'm' => {
-                    if chars[start + 1] == 'a' {
-                        match chars[start + 2] {
-                            'c' => { if chars[start + 3] == 'r' && chars[start + 4] == 'o' { return TK_KW_MACRO; } },
-                            't' => { if chars[start + 3] == 'c' && chars[start + 4] == 'h' { return TK_KW_MATCH; } },
+                b'm' => {
+                    if unchecked src.byte_at(start + 1) == b'a' {
+                        match unchecked src.byte_at(start + 2) {
+                            b'c' => { if unchecked src.byte_at(start + 3) == b'r' && unchecked src.byte_at(start + 4) == b'o' { return TK_KW_MACRO; } },
+                            b't' => { if unchecked src.byte_at(start + 3) == b'c' && unchecked src.byte_at(start + 4) == b'h' { return TK_KW_MATCH; } },
                             _ => {},
                         }
                     }
                 },
-                's' => { if chars[start + 1] == 'u' && chars[start + 2] == 'p' && chars[start + 3] == 'e' && chars[start + 4] == 'r' { return TK_KW_SUPER; } },
-                't' => { if chars[start + 1] == 'r' && chars[start + 2] == 'a' && chars[start + 3] == 'i' && chars[start + 4] == 't' { return TK_KW_TRAIT; } },
-                'u' => { if chars[start + 1] == 'n' && chars[start + 2] == 'i' && chars[start + 3] == 'o' && chars[start + 4] == 'n' { return TK_KW_UNION; } },
-                'w' => {
-                    if chars[start + 1] == 'h' {
-                        match chars[start + 2] {
-                            'e' => { if chars[start + 3] == 'r' && chars[start + 4] == 'e' { return TK_KW_WHERE; } },
-                            'i' => { if chars[start + 3] == 'l' && chars[start + 4] == 'e' { return TK_KW_WHILE; } },
+                b's' => { if unchecked src.byte_at(start + 1) == b'u' && unchecked src.byte_at(start + 2) == b'p' && unchecked src.byte_at(start + 3) == b'e' && unchecked src.byte_at(start + 4) == b'r' { return TK_KW_SUPER; } },
+                b't' => { if unchecked src.byte_at(start + 1) == b'r' && unchecked src.byte_at(start + 2) == b'a' && unchecked src.byte_at(start + 3) == b'i' && unchecked src.byte_at(start + 4) == b't' { return TK_KW_TRAIT; } },
+                b'u' => { if unchecked src.byte_at(start + 1) == b'n' && unchecked src.byte_at(start + 2) == b'i' && unchecked src.byte_at(start + 3) == b'o' && unchecked src.byte_at(start + 4) == b'n' { return TK_KW_UNION; } },
+                b'w' => {
+                    if unchecked src.byte_at(start + 1) == b'h' {
+                        match unchecked src.byte_at(start + 2) {
+                            b'e' => { if unchecked src.byte_at(start + 3) == b'r' && unchecked src.byte_at(start + 4) == b'e' { return TK_KW_WHERE; } },
+                            b'i' => { if unchecked src.byte_at(start + 3) == b'l' && unchecked src.byte_at(start + 4) == b'e' { return TK_KW_WHILE; } },
                             _ => {},
                         }
                     }
                 },
-                'y' => { if chars[start + 1] == 'i' && chars[start + 2] == 'e' && chars[start + 3] == 'l' && chars[start + 4] == 'd' { return TK_KW_YIELD; } },
+                b'y' => { if unchecked src.byte_at(start + 1) == b'i' && unchecked src.byte_at(start + 2) == b'e' && unchecked src.byte_at(start + 3) == b'l' && unchecked src.byte_at(start + 4) == b'd' { return TK_KW_YIELD; } },
                 _ => {},
             }
         },
         6 => {
-            match chars[start] {
-                'b' => { if chars[start + 1] == 'e' && chars[start + 2] == 'c' && chars[start + 3] == 'o' && chars[start + 4] == 'm' && chars[start + 5] == 'e' { return TK_KW_BECOME; } },
-                'e' => { if chars[start + 1] == 'x' && chars[start + 2] == 't' && chars[start + 3] == 'e' && chars[start + 4] == 'r' && chars[start + 5] == 'n' { return TK_KW_EXTERN; } },
-                'r' => { if chars[start + 1] == 'e' && chars[start + 2] == 't' && chars[start + 3] == 'u' && chars[start + 4] == 'r' && chars[start + 5] == 'n' { return TK_KW_RETURN; } },
-                's' => {
-                    if chars[start + 1] == 't' {
-                        match chars[start + 2] {
-                            'a' => { if chars[start + 3] == 't' && chars[start + 4] == 'i' && chars[start + 5] == 'c' { return TK_KW_STATIC; } },
-                            'r' => { if chars[start + 3] == 'u' && chars[start + 4] == 'c' && chars[start + 5] == 't' { return TK_KW_STRUCT; } },
+            match unchecked src.byte_at(start) {
+                b'b' => { if unchecked src.byte_at(start + 1) == b'e' && unchecked src.byte_at(start + 2) == b'c' && unchecked src.byte_at(start + 3) == b'o' && unchecked src.byte_at(start + 4) == b'm' && unchecked src.byte_at(start + 5) == b'e' { return TK_KW_BECOME; } },
+                b'e' => { if unchecked src.byte_at(start + 1) == b'x' && unchecked src.byte_at(start + 2) == b't' && unchecked src.byte_at(start + 3) == b'e' && unchecked src.byte_at(start + 4) == b'r' && unchecked src.byte_at(start + 5) == b'n' { return TK_KW_EXTERN; } },
+                b'r' => { if unchecked src.byte_at(start + 1) == b'e' && unchecked src.byte_at(start + 2) == b't' && unchecked src.byte_at(start + 3) == b'u' && unchecked src.byte_at(start + 4) == b'r' && unchecked src.byte_at(start + 5) == b'n' { return TK_KW_RETURN; } },
+                b's' => {
+                    if unchecked src.byte_at(start + 1) == b't' {
+                        match unchecked src.byte_at(start + 2) {
+                            b'a' => { if unchecked src.byte_at(start + 3) == b't' && unchecked src.byte_at(start + 4) == b'i' && unchecked src.byte_at(start + 5) == b'c' { return TK_KW_STATIC; } },
+                            b'r' => { if unchecked src.byte_at(start + 3) == b'u' && unchecked src.byte_at(start + 4) == b'c' && unchecked src.byte_at(start + 5) == b't' { return TK_KW_STRUCT; } },
                             _ => {},
                         }
                     }
                 },
-                't' => { if chars[start + 1] == 'y' && chars[start + 2] == 'p' && chars[start + 3] == 'e' && chars[start + 4] == 'o' && chars[start + 5] == 'f' { return TK_KW_TYPEOF; } },
-                'u' => { if chars[start + 1] == 'n' && chars[start + 2] == 's' && chars[start + 3] == 'a' && chars[start + 4] == 'f' && chars[start + 5] == 'e' { return TK_KW_UNSAFE; } },
+                b't' => { if unchecked src.byte_at(start + 1) == b'y' && unchecked src.byte_at(start + 2) == b'p' && unchecked src.byte_at(start + 3) == b'e' && unchecked src.byte_at(start + 4) == b'o' && unchecked src.byte_at(start + 5) == b'f' { return TK_KW_TYPEOF; } },
+                b'u' => { if unchecked src.byte_at(start + 1) == b'n' && unchecked src.byte_at(start + 2) == b's' && unchecked src.byte_at(start + 3) == b'a' && unchecked src.byte_at(start + 4) == b'f' && unchecked src.byte_at(start + 5) == b'e' { return TK_KW_UNSAFE; } },
                 _ => {},
             }
         },
         7 => {
-            match chars[start] {
-                'u' => { if chars[start + 1] == 'n' && chars[start + 2] == 's' && chars[start + 3] == 'i' && chars[start + 4] == 'z' && chars[start + 5] == 'e' && chars[start + 6] == 'd' { return TK_KW_UNSIZED; } },
-                'v' => { if chars[start + 1] == 'i' && chars[start + 2] == 'r' && chars[start + 3] == 't' && chars[start + 4] == 'u' && chars[start + 5] == 'a' && chars[start + 6] == 'l' { return TK_KW_VIRTUAL; } },
+            match unchecked src.byte_at(start) {
+                b'u' => { if unchecked src.byte_at(start + 1) == b'n' && unchecked src.byte_at(start + 2) == b's' && unchecked src.byte_at(start + 3) == b'i' && unchecked src.byte_at(start + 4) == b'z' && unchecked src.byte_at(start + 5) == b'e' && unchecked src.byte_at(start + 6) == b'd' { return TK_KW_UNSIZED; } },
+                b'v' => { if unchecked src.byte_at(start + 1) == b'i' && unchecked src.byte_at(start + 2) == b'r' && unchecked src.byte_at(start + 3) == b't' && unchecked src.byte_at(start + 4) == b'u' && unchecked src.byte_at(start + 5) == b'a' && unchecked src.byte_at(start + 6) == b'l' { return TK_KW_VIRTUAL; } },
                 _ => {},
             }
         },
         8 => {
-            match chars[start] {
-                'a' => { if chars[start + 1] == 'b' && chars[start + 2] == 's' && chars[start + 3] == 't' && chars[start + 4] == 'r' && chars[start + 5] == 'a' && chars[start + 6] == 'c' && chars[start + 7] == 't' { return TK_KW_ABSTRACT; } },
-                'c' => { if chars[start + 1] == 'o' && chars[start + 2] == 'n' && chars[start + 3] == 't' && chars[start + 4] == 'i' && chars[start + 5] == 'n' && chars[start + 6] == 'u' && chars[start + 7] == 'e' { return TK_KW_CONTINUE; } },
-                'o' => { if chars[start + 1] == 'v' && chars[start + 2] == 'e' && chars[start + 3] == 'r' && chars[start + 4] == 'r' && chars[start + 5] == 'i' && chars[start + 6] == 'd' && chars[start + 7] == 'e' { return TK_KW_OVERRIDE; } },
+            match unchecked src.byte_at(start) {
+                b'a' => { if unchecked src.byte_at(start + 1) == b'b' && unchecked src.byte_at(start + 2) == b's' && unchecked src.byte_at(start + 3) == b't' && unchecked src.byte_at(start + 4) == b'r' && unchecked src.byte_at(start + 5) == b'a' && unchecked src.byte_at(start + 6) == b'c' && unchecked src.byte_at(start + 7) == b't' { return TK_KW_ABSTRACT; } },
+                b'c' => { if unchecked src.byte_at(start + 1) == b'o' && unchecked src.byte_at(start + 2) == b'n' && unchecked src.byte_at(start + 3) == b't' && unchecked src.byte_at(start + 4) == b'i' && unchecked src.byte_at(start + 5) == b'n' && unchecked src.byte_at(start + 6) == b'u' && unchecked src.byte_at(start + 7) == b'e' { return TK_KW_CONTINUE; } },
+                b'o' => { if unchecked src.byte_at(start + 1) == b'v' && unchecked src.byte_at(start + 2) == b'e' && unchecked src.byte_at(start + 3) == b'r' && unchecked src.byte_at(start + 4) == b'r' && unchecked src.byte_at(start + 5) == b'i' && unchecked src.byte_at(start + 6) == b'd' && unchecked src.byte_at(start + 7) == b'e' { return TK_KW_OVERRIDE; } },
                 _ => {},
             }
         },
-        11 => { if chars[start] == 'm' && chars[start + 1] == 'a' && chars[start + 2] == 'c' && chars[start + 3] == 'r' && chars[start + 4] == 'o' && chars[start + 5] == '_' && chars[start + 6] == 'r' && chars[start + 7] == 'u' && chars[start + 8] == 'l' && chars[start + 9] == 'e' && chars[start + 10] == 's' { return TK_KW_MACRORULES; } },
+        11 => { if unchecked src.byte_at(start) == b'm' && unchecked src.byte_at(start + 1) == b'a' && unchecked src.byte_at(start + 2) == b'c' && unchecked src.byte_at(start + 3) == b'r' && unchecked src.byte_at(start + 4) == b'o' && unchecked src.byte_at(start + 5) == b'_' && unchecked src.byte_at(start + 6) == b'r' && unchecked src.byte_at(start + 7) == b'u' && unchecked src.byte_at(start + 8) == b'l' && unchecked src.byte_at(start + 9) == b'e' && unchecked src.byte_at(start + 10) == b's' { return TK_KW_MACRORULES; } },
         _ => {},
     }
     return -1;
@@ -3232,31 +3285,32 @@ fn classify_keyword(chars: &List<char>, start: i32, end: i32) -> i32 {
 
 pub fn tokenize<S: AsStrSlice>(input: S) -> TokenStream with RustLexerBase {
     let mut lexer = Lexer::new(input);
-    let mut ts = TokenStream::new(&lexer.chars);
+    let mut ts = TokenStream::new(lexer.src);
     let mut triv_lo = ts.trivia_mark();
     while !lexer.at_end() {
         let start = lexer.pos;
         let mut best_end: i32 = -1;
         let mut best_kind: i32 = TK_ERROR;
         let mut end: i32 = -1;
-        let first_char = lexer.chars[start];
+        let first_char = char_at(&lexer.src, start);
         let mut best_channel: i32 = 0;
         match first_char {
             '\n' | '\r' => {
-                end = try_NEWLINE(&lexer.chars, start);
+                end = try_NEWLINE(&lexer.src, start);
                 if end > best_end { best_end = end; best_kind = TK_NEWLINE; best_channel = 1; }
             },
             ' ' | '\u{a0}' | '\u{1680}' | '\u{2000}'..='\u{200a}' | '\u{202f}' | '\u{205f}' | '\u{3000}' => {
-                end = try_WHITESPACE(&lexer.chars, start);
+                end = try_WHITESPACE(&lexer.src, start);
                 if end > best_end { best_end = end; best_kind = TK_WHITESPACE; best_channel = 1; }
             },
             '!' => {
-                end = try_NOT(&lexer.chars, start);
+                end = try_NOT(&lexer.src, start);
                 if end > best_end { best_end = end; best_kind = TK_NOT; best_channel = 0; }
-                let second_char = if start + 1 < lexer.chars.len() { lexer.chars[start + 1] } else { '\u{0}' };
+                let second_at = lexer.src.ceil_char_boundary(start + 1);
+                let second_char = if second_at < lexer.src.len() { char_at(&lexer.src, second_at) } else { '\u{0}' };
                 match second_char {
                     '=' => {
-                        end = try_NE(&lexer.chars, start);
+                        end = try_NE(&lexer.src, start);
                         if end > best_end { best_end = end; best_kind = TK_NE; best_channel = 0; }
                     },
                     _ => {
@@ -3264,42 +3318,45 @@ pub fn tokenize<S: AsStrSlice>(input: S) -> TokenStream with RustLexerBase {
                 }
             },
             '"' => {
-                end = try_STRING_LITERAL(&lexer.chars, start);
+                end = try_STRING_LITERAL(&lexer.src, start);
                 if end > best_end { best_end = end; best_kind = TK_STRING_LITERAL; best_channel = 0; }
             },
             '#' => {
-                let second_char = if start + 1 < lexer.chars.len() { lexer.chars[start + 1] } else { '\u{0}' };
+                let second_at = lexer.src.ceil_char_boundary(start + 1);
+                let second_char = if second_at < lexer.src.len() { char_at(&lexer.src, second_at) } else { '\u{0}' };
                 match second_char {
                     '!' | '#' => {
-                        end = try_SHEBANG(&lexer.chars, start);
+                        end = try_SHEBANG(&lexer.src, start);
                         if end > best_end { best_end = end; best_kind = TK_SHEBANG; best_channel = 1; }
                     },
                     _ => {
                     },
                 }
-                end = try_POUND(&lexer.chars, start);
+                end = try_POUND(&lexer.src, start);
                 if end > best_end { best_end = end; best_kind = TK_POUND; best_channel = 0; }
             },
             '$' => {
-                let second_char = if start + 1 < lexer.chars.len() { lexer.chars[start + 1] } else { '\u{0}' };
+                let second_at = lexer.src.ceil_char_boundary(start + 1);
+                let second_char = if second_at < lexer.src.len() { char_at(&lexer.src, second_at) } else { '\u{0}' };
                 match second_char {
                     'c' => {
-                        end = try_KW_DOLLARCRATE(&lexer.chars, start);
+                        end = try_KW_DOLLARCRATE(&lexer.src, start);
                         if end > best_end { best_end = end; best_kind = TK_KW_DOLLARCRATE; best_channel = 0; }
                     },
                     _ => {
                     },
                 }
-                end = try_DOLLAR(&lexer.chars, start);
+                end = try_DOLLAR(&lexer.src, start);
                 if end > best_end { best_end = end; best_kind = TK_DOLLAR; best_channel = 0; }
             },
             '%' => {
-                end = try_PERCENT(&lexer.chars, start);
+                end = try_PERCENT(&lexer.src, start);
                 if end > best_end { best_end = end; best_kind = TK_PERCENT; best_channel = 0; }
-                let second_char = if start + 1 < lexer.chars.len() { lexer.chars[start + 1] } else { '\u{0}' };
+                let second_at = lexer.src.ceil_char_boundary(start + 1);
+                let second_char = if second_at < lexer.src.len() { char_at(&lexer.src, second_at) } else { '\u{0}' };
                 match second_char {
                     '=' => {
-                        end = try_PERCENTEQ(&lexer.chars, start);
+                        end = try_PERCENTEQ(&lexer.src, start);
                         if end > best_end { best_end = end; best_kind = TK_PERCENTEQ; best_channel = 0; }
                     },
                     _ => {
@@ -3307,16 +3364,17 @@ pub fn tokenize<S: AsStrSlice>(input: S) -> TokenStream with RustLexerBase {
                 }
             },
             '&' => {
-                end = try_AND(&lexer.chars, start);
+                end = try_AND(&lexer.src, start);
                 if end > best_end { best_end = end; best_kind = TK_AND; best_channel = 0; }
-                let second_char = if start + 1 < lexer.chars.len() { lexer.chars[start + 1] } else { '\u{0}' };
+                let second_at = lexer.src.ceil_char_boundary(start + 1);
+                let second_char = if second_at < lexer.src.len() { char_at(&lexer.src, second_at) } else { '\u{0}' };
                 match second_char {
                     '&' => {
-                        end = try_ANDAND(&lexer.chars, start);
+                        end = try_ANDAND(&lexer.src, start);
                         if end > best_end { best_end = end; best_kind = TK_ANDAND; best_channel = 0; }
                     },
                     '=' => {
-                        end = try_ANDEQ(&lexer.chars, start);
+                        end = try_ANDEQ(&lexer.src, start);
                         if end > best_end { best_end = end; best_kind = TK_ANDEQ; best_channel = 0; }
                     },
                     _ => {
@@ -3324,32 +3382,33 @@ pub fn tokenize<S: AsStrSlice>(input: S) -> TokenStream with RustLexerBase {
                 }
             },
             '\'' => {
-                let second_char = if start + 1 < lexer.chars.len() { lexer.chars[start + 1] } else { '\u{0}' };
+                let second_at = lexer.src.ceil_char_boundary(start + 1);
+                let second_char = if second_at < lexer.src.len() { char_at(&lexer.src, second_at) } else { '\u{0}' };
                 match second_char {
                     '\u{0}'..='\u{8}' | '\u{b}'..='\u{c}' | '\u{e}'..='&' | '('..='@' | '['..='^' | '`' | '{'..='©' | '«'..='´' | '¶'..='¹' | '»'..='¿' | '×' | '÷' | '˂'..='˅' | '˒'..='˟' | '˥'..='˫' | '˭' | '˯'..='\u{36f}' | '͵' | '\u{378}'..='\u{379}' | ';' | '\u{380}'..='΅' | '·' | '\u{38b}' | '\u{38d}' | '\u{3a2}' | '϶' | '҂'..='\u{489}' | '\u{530}' | '\u{557}'..='\u{558}' | '՚'..='՟' | '։'..='\u{5cf}' | '\u{5eb}'..='\u{5ee}' | '׳'..='؟' | '\u{64b}'..='٭' | '\u{670}' | '۔' | '\u{6d6}'..='\u{6e4}' | '\u{6e7}'..='\u{6ed}' | '۰'..='۹' | '۽'..='۾' | '܀'..='\u{70f}' | '\u{711}' | '\u{730}'..='\u{74c}' | '\u{7a6}'..='\u{7b0}' | '\u{7b2}'..='߉' | '\u{7eb}'..='\u{7f3}' | '߶'..='߹' | '\u{7fb}'..='߿' | '\u{816}'..='\u{819}' | '\u{81b}'..='\u{823}' | '\u{825}'..='\u{827}' | '\u{829}'..='\u{83f}' | '\u{859}'..='\u{85f}' | '\u{86b}'..='\u{86f}' | '࢈' | '\u{890}'..='\u{89f}' | '\u{8ca}'..='\u{903}' | '\u{93a}'..='\u{93c}' | '\u{93e}'..='\u{94f}' | '\u{951}'..='\u{957}' | '\u{962}'..='॰' | '\u{981}'..='\u{984}' | '\u{98d}'..='\u{98e}' | '\u{991}'..='\u{992}' | '\u{9a9}' | '\u{9b1}' | '\u{9b3}'..='\u{9b5}' | '\u{9ba}'..='\u{9bc}' | '\u{9be}'..='\u{9cd}' | '\u{9cf}'..='\u{9db}' | '\u{9de}' | '\u{9e2}'..='৯' | '৲'..='৻' | '৽'..='\u{a04}' | '\u{a0b}'..='\u{a0e}' | '\u{a11}'..='\u{a12}' | '\u{a29}' | '\u{a31}' | '\u{a34}' | '\u{a37}' | '\u{a3a}'..='\u{a58}' | '\u{a5d}' | '\u{a5f}'..='\u{a71}' | '\u{a75}'..='\u{a84}' | '\u{a8e}' | '\u{a92}' | '\u{aa9}' | '\u{ab1}' | '\u{ab4}' | '\u{aba}'..='\u{abc}' | '\u{abe}'..='\u{acf}' | '\u{ad1}'..='\u{adf}' | '\u{ae2}'..='\u{af8}' | '\u{afa}'..='\u{b04}' | '\u{b0d}'..='\u{b0e}' | '\u{b11}'..='\u{b12}' | '\u{b29}' | '\u{b31}' | '\u{b34}' | '\u{b3a}'..='\u{b3c}' | '\u{b3e}'..='\u{b5b}' | '\u{b5e}' | '\u{b62}'..='୰' | '୲'..='\u{b82}' | '\u{b84}' | '\u{b8b}'..='\u{b8d}' | '\u{b91}' | '\u{b96}'..='\u{b98}' | '\u{b9b}' | '\u{b9d}' | '\u{ba0}'..='\u{ba2}' | '\u{ba5}'..='\u{ba7}' | '\u{bab}'..='\u{bad}' | '\u{bba}'..='\u{bcf}' | '\u{bd1}'..='\u{c04}' | '\u{c0d}' | '\u{c11}' | '\u{c29}' | '\u{c3a}'..='\u{c3c}' | '\u{c3e}'..='\u{c57}' | '\u{c5b}' | '\u{c5e}'..='\u{c5f}' | '\u{c62}'..='౿' | '\u{c81}'..='಄' | '\u{c8d}' | '\u{c91}' | '\u{ca9}' | '\u{cb4}' | '\u{cba}'..='\u{cbc}' | '\u{cbe}'..='\u{cdb}' | '\u{cdf}' | '\u{ce2}'..='\u{cf0}' | '\u{cf3}'..='\u{d03}' | '\u{d0d}' | '\u{d11}' | '\u{d3b}'..='\u{d3c}' | '\u{d3e}'..='\u{d4d}' | '൏'..='\u{d53}' | '\u{d57}'..='൞' | '\u{d62}'..='൹' | '\u{d80}'..='\u{d84}' | '\u{d97}'..='\u{d99}' | '\u{db2}' | '\u{dbc}' | '\u{dbe}'..='\u{dbf}' | '\u{dc7}'..='\u{e00}' | '\u{e31}' | '\u{e34}'..='฿' | '\u{e47}'..='\u{e80}' | '\u{e83}' | '\u{e85}' | '\u{e8b}' | '\u{ea4}' | '\u{ea6}' | '\u{eb1}' | '\u{eb4}'..='\u{ebc}' | '\u{ebe}'..='\u{ebf}' | '\u{ec5}' | '\u{ec7}'..='\u{edb}' | '\u{ee0}'..='\u{eff}' | '༁'..='\u{f3f}' | '\u{f48}' | '\u{f6d}'..='\u{f87}' | '\u{f8d}'..='\u{fff}' | '\u{102b}'..='\u{103e}' | '၀'..='၏' | '\u{1056}'..='\u{1059}' | '\u{105e}'..='\u{1060}' | '\u{1062}'..='\u{1064}' | '\u{1067}'..='\u{106d}' | '\u{1071}'..='\u{1074}' | '\u{1082}'..='\u{108d}' | '\u{108f}'..='႟' | '\u{10c6}' | '\u{10c8}'..='\u{10cc}' | '\u{10ce}'..='\u{10cf}' | '჻' | '\u{1249}' | '\u{124e}'..='\u{124f}' | '\u{1257}' | '\u{1259}' | '\u{125e}'..='\u{125f}' | '\u{1289}' | '\u{128e}'..='\u{128f}' | '\u{12b1}' | '\u{12b6}'..='\u{12b7}' | '\u{12bf}' | '\u{12c1}' | '\u{12c6}'..='\u{12c7}' | '\u{12d7}' | '\u{1311}' | '\u{1316}'..='\u{1317}' | '\u{135b}'..='\u{137f}' | '᎐'..='\u{139f}' | '\u{13f6}'..='\u{13f7}' | '\u{13fe}'..='᐀' | '᙭'..='᙮' | '\u{1680}' | '᚛'..='\u{169f}' | '᛫'..='᛭' | '\u{16f9}'..='\u{16ff}' | '\u{1712}'..='\u{171e}' | '\u{1732}'..='\u{173f}' | '\u{1752}'..='\u{175f}' | '\u{176d}' | '\u{1771}'..='\u{177f}' | '\u{17b4}'..='៖' | '៘'..='៛' | '\u{17dd}'..='\u{181f}' | '\u{1879}'..='\u{187f}' | '\u{18a9}' | '\u{18ab}'..='\u{18af}' | '\u{18f6}'..='\u{18ff}' | '\u{191f}'..='᥏' | '\u{196e}'..='\u{196f}' | '\u{1975}'..='\u{197f}' | '\u{19ac}'..='\u{19af}' | '\u{19ca}'..='᧿' | '\u{1a17}'..='᨟' | '\u{1a55}'..='᪦' | '᪨'..='\u{1b04}' | '\u{1b34}'..='\u{1b44}' | '\u{1b4d}'..='\u{1b82}' | '\u{1ba1}'..='\u{1bad}' | '᮰'..='᮹' | '\u{1be6}'..='᯿' | '\u{1c24}'..='\u{1c4c}' | '᱐'..='᱙' | '᱾'..='᱿' | '\u{1c8b}'..='\u{1c8f}' | '\u{1cbb}'..='\u{1cbc}' | '᳀'..='\u{1ce8}' | '\u{1ced}' | '\u{1cf4}' | '\u{1cf7}'..='\u{1cf9}' | '\u{1cfb}'..='\u{1cff}' | '\u{1dc0}'..='\u{1dff}' | '\u{1f16}'..='\u{1f17}' | '\u{1f1e}'..='\u{1f1f}' | '\u{1f46}'..='\u{1f47}' | '\u{1f4e}'..='\u{1f4f}' | '\u{1f58}' | '\u{1f5a}' | '\u{1f5c}' | '\u{1f5e}' | '\u{1f7e}'..='\u{1f7f}' | '\u{1fb5}' | '᾽' | '᾿'..='῁' | '\u{1fc5}' | '῍'..='῏' | '\u{1fd4}'..='\u{1fd5}' | '\u{1fdc}'..='῟' | '῭'..='\u{1ff1}' | '\u{1ff5}' | '´'..='⁰' | '\u{2072}'..='⁾' | '₀'..='\u{208f}' | '\u{209d}'..='℁' | '℃'..='℆' | '℈'..='℉' | '℔' | '№'..='℗' | '℞'..='℣' | '℥' | '℧' | '℩' | '℺'..='℻' | '⅀'..='⅄' | '⅊'..='⅍' | '⅏'..='⅟' | '↉'..='⯿' | '⳥'..='⳪' | '\u{2cef}'..='\u{2cf1}' | '\u{2cf4}'..='⳿' | '\u{2d26}' | '\u{2d28}'..='\u{2d2c}' | '\u{2d2e}'..='\u{2d2f}' | '\u{2d68}'..='\u{2d6e}' | '⵰'..='\u{2d7f}' | '\u{2d97}'..='\u{2d9f}' | '\u{2da7}' | '\u{2daf}' | '\u{2db7}' | '\u{2dbf}' | '\u{2dc7}' | '\u{2dcf}' | '\u{2dd7}' | '\u{2ddf}'..='⸮' | '⸰'..='〄' | '〈'..='〠' | '\u{302a}'..='〰' | '〶'..='〷' | '〽'..='\u{3040}' | '\u{3097}'..='\u{309a}' | '゠' | '・' | '\u{3100}'..='\u{3104}' | '\u{3130}' | '\u{318f}'..='㆟' | '㇀'..='㇯' | '㈀'..='㏿' | '䷀'..='䷿' | '\u{a48d}'..='\u{a4cf}' | '꓾'..='꓿' | '꘍'..='꘏' | '꘠'..='꘩' | '\u{a62c}'..='\u{a63f}' | '\u{a66f}'..='꙾' | '\u{a69e}'..='\u{a69f}' | '\u{a6f0}'..='꜖' | '꜠'..='꜡' | '꞉'..='꞊' | '\u{a7dd}'..='\u{a7f0}' | '\u{a802}' | '\u{a806}' | '\u{a80b}' | '\u{a823}'..='\u{a83f}' | '꡴'..='\u{a881}' | '\u{a8b4}'..='\u{a8f1}' | '꣸'..='꣺' | '꣼' | '\u{a8ff}'..='꤉' | '\u{a926}'..='꤯' | '\u{a947}'..='꥟' | '\u{a97d}'..='\u{a983}' | '\u{a9b3}'..='\u{a9ce}' | '꧐'..='꧟' | '\u{a9e5}' | '꧰'..='꧹' | '\u{a9ff}' | '\u{aa29}'..='\u{aa3f}' | '\u{aa43}' | '\u{aa4c}'..='꩟' | '꩷'..='꩹' | '\u{aa7b}'..='\u{aa7d}' | '\u{aab0}' | '\u{aab2}'..='\u{aab4}' | '\u{aab7}'..='\u{aab8}' | '\u{aabe}'..='\u{aabf}' | '\u{aac1}' | '\u{aac3}'..='\u{aada}' | '꫞'..='꫟' | '\u{aaeb}'..='꫱' | '\u{aaf5}'..='\u{ab00}' | '\u{ab07}'..='\u{ab08}' | '\u{ab0f}'..='\u{ab10}' | '\u{ab17}'..='\u{ab1f}' | '\u{ab27}' | '\u{ab2f}' | '꭛' | '꭪'..='\u{ab6f}' | '\u{abe3}'..='\u{abff}' | '\u{d7a4}'..='\u{d7af}' | '\u{d7c7}'..='\u{d7ca}' | '\u{d7fc}'..='\u{f8ff}' | '\u{fa6e}'..='\u{fa6f}' | '\u{fada}'..='\u{faff}' | '\u{fb07}'..='\u{fb12}' | '\u{fb18}'..='\u{fb1c}' | '\u{fb1e}' | '﬩' | '\u{fb37}' | '\u{fb3d}' | '\u{fb3f}' | '\u{fb42}' | '\u{fb45}' | '﮲'..='﯒' | '﴾'..='﵏' | '﶐'..='﶑' | '﷈'..='\u{fdef}' | '﷼'..='\u{fe6f}' | '\u{fe75}' | '\u{fefd}'..='＠' | '［'..='｀' | '｛'..='･' | '\u{ffbf}'..='\u{ffc1}' | '\u{ffc8}'..='\u{ffc9}' | '\u{ffd0}'..='\u{ffd1}' | '\u{ffd8}'..='\u{ffd9}' | '\u{ffdd}'..='\u{ffff}' | '\u{1000c}' | '\u{10027}' | '\u{1003b}' | '\u{1003e}' | '\u{1004e}'..='\u{1004f}' | '\u{1005e}'..='\u{1007f}' | '\u{100fb}'..='𐄿' | '𐅵'..='\u{1027f}' | '\u{1029d}'..='\u{1029f}' | '\u{102d1}'..='\u{102ff}' | '𐌠'..='\u{1032c}' | '\u{1034b}'..='\u{1034f}' | '\u{10376}'..='\u{1037f}' | '\u{1039e}'..='𐎟' | '\u{103c4}'..='\u{103c7}' | '𐏐' | '\u{103d6}'..='\u{103ff}' | '\u{1049e}'..='\u{104af}' | '\u{104d4}'..='\u{104d7}' | '\u{104fc}'..='\u{104ff}' | '\u{10528}'..='\u{1052f}' | '\u{10564}'..='𐕯' | '\u{1057b}' | '\u{1058b}' | '\u{10593}' | '\u{10596}' | '\u{105a2}' | '\u{105b2}' | '\u{105ba}' | '\u{105bd}'..='\u{105bf}' | '\u{105f4}'..='\u{105ff}' | '\u{10737}'..='\u{1073f}' | '\u{10756}'..='\u{1075f}' | '\u{10768}'..='\u{1077f}' | '\u{10786}' | '\u{107b1}' | '\u{107bb}'..='\u{107ff}' | '\u{10806}'..='\u{10807}' | '\u{10809}' | '\u{10836}' | '\u{10839}'..='\u{1083b}' | '\u{1083d}'..='\u{1083e}' | '\u{10856}'..='𐡟' | '𐡷'..='𐡿' | '\u{1089f}'..='\u{108df}' | '\u{108f3}' | '\u{108f6}'..='𐣿' | '𐤖'..='𐤟' | '\u{1093a}'..='𐤿' | '\u{1095a}'..='\u{1097f}' | '\u{109b8}'..='𐦽' | '𐧀'..='𐧿' | '\u{10a01}'..='\u{10a0f}' | '\u{10a14}' | '\u{10a18}' | '\u{10a36}'..='\u{10a5f}' | '𐩽'..='𐩿' | '𐪝'..='\u{10abf}' | '𐫈' | '\u{10ae5}'..='\u{10aff}' | '\u{10b36}'..='𐬿' | '\u{10b56}'..='𐭟' | '\u{10b73}'..='𐭿' | '\u{10b92}'..='\u{10bff}' | '\u{10c49}'..='\u{10c7f}' | '\u{10cb3}'..='\u{10cbf}' | '\u{10cf3}'..='𐳿' | '\u{10d24}'..='𐵉' | '\u{10d66}'..='𐵮' | '\u{10d86}'..='\u{10e7f}' | '\u{10eaa}'..='\u{10eaf}' | '\u{10eb2}'..='\u{10ec1}' | '\u{10ec8}'..='\u{10eff}' | '𐼝'..='𐼦' | '\u{10f28}'..='\u{10f2f}' | '\u{10f46}'..='\u{10f6f}' | '\u{10f82}'..='\u{10faf}' | '𐿅'..='\u{10fdf}' | '\u{10ff7}'..='\u{11002}' | '\u{11038}'..='\u{11070}' | '\u{11073}'..='\u{11074}' | '\u{11076}'..='\u{11082}' | '\u{110b0}'..='\u{110cf}' | '\u{110e9}'..='\u{11102}' | '\u{11127}'..='𑅃' | '\u{11145}'..='\u{11146}' | '\u{11148}'..='\u{1114f}' | '\u{11173}'..='𑅵' | '\u{11177}'..='\u{11182}' | '\u{111b3}'..='\u{111c0}' | '𑇅'..='𑇙' | '𑇛' | '𑇝'..='\u{111ff}' | '\u{11212}' | '\u{1122c}'..='\u{1123e}' | '\u{11241}'..='\u{1127f}' | '\u{11287}' | '\u{11289}' | '\u{1128e}' | '\u{1129e}' | '𑊩'..='\u{112af}' | '\u{112df}'..='\u{11304}' | '\u{1130d}'..='\u{1130e}' | '\u{11311}'..='\u{11312}' | '\u{11329}' | '\u{11331}' | '\u{11334}' | '\u{1133a}'..='\u{1133c}' | '\u{1133e}'..='\u{1134f}' | '\u{11351}'..='\u{1135c}' | '\u{11362}'..='\u{1137f}' | '\u{1138a}' | '\u{1138c}'..='\u{1138d}' | '\u{1138f}' | '\u{113b6}' | '\u{113b8}'..='\u{113d0}' | '\u{113d2}' | '𑏔'..='\u{113ff}' | '\u{11435}'..='\u{11446}' | '𑑋'..='\u{1145e}' | '\u{11462}'..='\u{1147f}' | '\u{114b0}'..='\u{114c3}' | '𑓆' | '\u{114c8}'..='\u{1157f}' | '\u{115af}'..='𑗗' | '\u{115dc}'..='\u{115ff}' | '\u{11630}'..='𑙃' | '\u{11645}'..='\u{1167f}' | '\u{116ab}'..='\u{116b7}' | '𑚹'..='\u{116ff}' | '\u{1171b}'..='𑜿' | '\u{11747}'..='\u{117ff}' | '\u{1182c}'..='\u{1189f}' | '𑣠'..='\u{118fe}' | '\u{11907}'..='\u{11908}' | '\u{1190a}'..='\u{1190b}' | '\u{11914}' | '\u{11917}' | '\u{11930}'..='\u{1193e}' | '\u{11940}' | '\u{11942}'..='\u{1199f}' | '\u{119a8}'..='\u{119a9}' | '\u{119d1}'..='\u{119e0}' | '𑧢' | '\u{119e4}'..='\u{119ff}' | '\u{11a01}'..='\u{11a0a}' | '\u{11a33}'..='\u{11a39}' | '\u{11a3b}'..='\u{11a4f}' | '\u{11a51}'..='\u{11a5b}' | '\u{11a8a}'..='𑪜' | '𑪞'..='\u{11aaf}' | '\u{11af9}'..='\u{11bbf}' | '𑯡'..='\u{11bff}' | '\u{11c09}' | '\u{11c2f}'..='\u{11c3f}' | '𑱁'..='𑱱' | '\u{11c90}'..='\u{11cff}' | '\u{11d07}' | '\u{11d0a}' | '\u{11d31}'..='\u{11d45}' | '\u{11d47}'..='\u{11d5f}' | '\u{11d66}' | '\u{11d69}' | '\u{11d8a}'..='\u{11d97}' | '\u{11d99}'..='\u{11daf}' | '\u{11ddc}'..='\u{11edf}' | '\u{11ef3}'..='\u{11f01}' | '\u{11f03}' | '\u{11f11}' | '\u{11f34}'..='\u{11faf}' | '\u{11fb1}'..='𑿿' | '\u{1239a}'..='\u{123ff}' | '\u{1246f}'..='\u{1247f}' | '\u{12544}'..='\u{12f8f}' | '𒿱'..='\u{12fff}' | '\u{13430}'..='\u{13440}' | '\u{13447}'..='\u{1345f}' | '\u{143fb}'..='\u{143ff}' | '\u{14647}'..='\u{160ff}' | '\u{1611e}'..='\u{167ff}' | '\u{16a39}'..='\u{16a3f}' | '\u{16a5f}'..='𖩯' | '\u{16abf}'..='\u{16acf}' | '\u{16aee}'..='\u{16aff}' | '\u{16b30}'..='𖬿' | '𖭄'..='\u{16b62}' | '\u{16b78}'..='\u{16b7c}' | '\u{16b90}'..='\u{16d3f}' | '𖵭'..='\u{16e3f}' | '𖺀'..='\u{16e9f}' | '\u{16eb9}'..='\u{16eba}' | '\u{16ed4}'..='\u{16eff}' | '\u{16f4b}'..='\u{16f4f}' | '\u{16f51}'..='\u{16f92}' | '\u{16fa0}'..='\u{16fdf}' | '𖿢' | '\u{16fe4}'..='\u{16ff1}' | '\u{16ff7}'..='\u{16fff}' | '\u{18cd6}'..='\u{18cfe}' | '\u{18d1f}'..='\u{18d7f}' | '\u{18df3}'..='\u{1afef}' | '\u{1aff4}' | '\u{1affc}' | '\u{1afff}' | '\u{1b123}'..='\u{1b131}' | '\u{1b133}'..='\u{1b14f}' | '\u{1b153}'..='\u{1b154}' | '\u{1b156}'..='\u{1b163}' | '\u{1b168}'..='\u{1b16f}' | '\u{1b2fc}'..='\u{1bbff}' | '\u{1bc6b}'..='\u{1bc6f}' | '\u{1bc7d}'..='\u{1bc7f}' | '\u{1bc89}'..='\u{1bc8f}' | '\u{1bc9a}'..='\u{1d3ff}' | '\u{1d455}' | '\u{1d49d}' | '\u{1d4a0}'..='\u{1d4a1}' | '\u{1d4a3}'..='\u{1d4a4}' | '\u{1d4a7}'..='\u{1d4a8}' | '\u{1d4ad}' | '\u{1d4ba}' | '\u{1d4bc}' | '\u{1d4c4}' | '\u{1d506}' | '\u{1d50b}'..='\u{1d50c}' | '\u{1d515}' | '\u{1d51d}' | '\u{1d53a}' | '\u{1d53f}' | '\u{1d545}' | '\u{1d547}'..='\u{1d549}' | '\u{1d551}' | '\u{1d6a6}'..='\u{1d6a7}' | '𝛁' | '𝛛' | '𝛻' | '𝜕' | '𝜵' | '𝝏' | '𝝯' | '𝞉' | '𝞩' | '𝟃' | '\u{1d7cc}'..='\u{1deff}' | '\u{1df1f}'..='\u{1df24}' | '\u{1df2b}'..='\u{1e02f}' | '\u{1e06e}'..='\u{1e0ff}' | '\u{1e12d}'..='\u{1e136}' | '\u{1e13e}'..='\u{1e14d}' | '𞅏'..='\u{1e28f}' | '\u{1e2ae}'..='\u{1e2bf}' | '\u{1e2ec}'..='\u{1e4cf}' | '\u{1e4ec}'..='\u{1e5cf}' | '\u{1e5ee}'..='\u{1e5ef}' | '𞗱'..='\u{1e6bf}' | '\u{1e6df}' | '\u{1e6e3}' | '\u{1e6e6}' | '\u{1e6ee}'..='\u{1e6ef}' | '\u{1e6f5}'..='\u{1e6fd}' | '\u{1e700}'..='\u{1e7df}' | '\u{1e7e7}' | '\u{1e7ec}' | '\u{1e7ef}' | '\u{1e7ff}' | '\u{1e8c5}'..='\u{1e8ff}' | '\u{1e944}'..='\u{1e94a}' | '\u{1e94c}'..='\u{1edff}' | '\u{1ee04}' | '\u{1ee20}' | '\u{1ee23}' | '\u{1ee25}'..='\u{1ee26}' | '\u{1ee28}' | '\u{1ee33}' | '\u{1ee38}' | '\u{1ee3a}' | '\u{1ee3c}'..='\u{1ee41}' | '\u{1ee43}'..='\u{1ee46}' | '\u{1ee48}' | '\u{1ee4a}' | '\u{1ee4c}' | '\u{1ee50}' | '\u{1ee53}' | '\u{1ee55}'..='\u{1ee56}' | '\u{1ee58}' | '\u{1ee5a}' | '\u{1ee5c}' | '\u{1ee5e}' | '\u{1ee60}' | '\u{1ee63}' | '\u{1ee65}'..='\u{1ee66}' | '\u{1ee6b}' | '\u{1ee73}' | '\u{1ee78}' | '\u{1ee7d}' | '\u{1ee7f}' | '\u{1ee8a}' | '\u{1ee9c}'..='\u{1eea0}' | '\u{1eea4}' | '\u{1eeaa}' | '\u{1eebc}'..='\u{1ffff}' | '\u{2a6e0}'..='\u{2a6ff}' | '\u{2b81e}'..='\u{2b81f}' | '\u{2ceae}'..='\u{2ceaf}' | '\u{2ebe1}'..='\u{2ebef}' | '\u{2ee5e}'..='\u{2f7ff}' | '\u{2fa1e}'..='\u{2ffff}' | '\u{3134b}'..='\u{3134f}' | '\u{3347a}'..='\u{10ffff}' => {
-                        end = try_CHAR_LITERAL(&lexer.chars, start);
+                        end = try_CHAR_LITERAL(&lexer.src, start);
                         if end > best_end { best_end = end; best_kind = TK_CHAR_LITERAL; best_channel = 0; }
                     },
                     'A'..='Z' | 'a'..='r' | 't'..='z' | 'ª' | 'µ' | 'º' | 'À'..='Ö' | 'Ø'..='ö' | 'ø'..='ˁ' | 'ˆ'..='ˑ' | 'ˠ'..='ˤ' | 'ˬ' | 'ˮ' | 'Ͱ'..='ʹ' | 'Ͷ'..='ͷ' | 'ͺ'..='ͽ' | 'Ϳ' | 'Ά' | 'Έ'..='Ί' | 'Ό' | 'Ύ'..='Ρ' | 'Σ'..='ϵ' | 'Ϸ'..='ҁ' | 'Ҋ'..='ԯ' | 'Ա'..='Ֆ' | 'ՙ' | 'ՠ'..='ֈ' | 'א'..='ת' | 'ׯ'..='ײ' | 'ؠ'..='ي' | 'ٮ'..='ٯ' | 'ٱ'..='ۓ' | 'ە' | 'ۥ'..='ۦ' | 'ۮ'..='ۯ' | 'ۺ'..='ۼ' | 'ۿ' | 'ܐ' | 'ܒ'..='ܯ' | 'ݍ'..='ޥ' | 'ޱ' | 'ߊ'..='ߪ' | 'ߴ'..='ߵ' | 'ߺ' | 'ࠀ'..='ࠕ' | 'ࠚ' | 'ࠤ' | 'ࠨ' | 'ࡀ'..='ࡘ' | 'ࡠ'..='ࡪ' | 'ࡰ'..='ࢇ' | 'ࢉ'..='࢏' | 'ࢠ'..='ࣉ' | 'ऄ'..='ह' | 'ऽ' | 'ॐ' | 'क़'..='ॡ' | 'ॱ'..='ঀ' | 'অ'..='ঌ' | 'এ'..='ঐ' | 'ও'..='ন' | 'প'..='র' | 'ল' | 'শ'..='হ' | 'ঽ' | 'ৎ' | 'ড়'..='ঢ়' | 'য়'..='ৡ' | 'ৰ'..='ৱ' | 'ৼ' | 'ਅ'..='ਊ' | 'ਏ'..='ਐ' | 'ਓ'..='ਨ' | 'ਪ'..='ਰ' | 'ਲ'..='ਲ਼' | 'ਵ'..='ਸ਼' | 'ਸ'..='ਹ' | 'ਖ਼'..='ੜ' | 'ਫ਼' | 'ੲ'..='ੴ' | 'અ'..='ઍ' | 'એ'..='ઑ' | 'ઓ'..='ન' | 'પ'..='ર' | 'લ'..='ળ' | 'વ'..='હ' | 'ઽ' | 'ૐ' | 'ૠ'..='ૡ' | 'ૹ' | 'ଅ'..='ଌ' | 'ଏ'..='ଐ' | 'ଓ'..='ନ' | 'ପ'..='ର' | 'ଲ'..='ଳ' | 'ଵ'..='ହ' | 'ଽ' | 'ଡ଼'..='ଢ଼' | 'ୟ'..='ୡ' | 'ୱ' | 'ஃ' | 'அ'..='ஊ' | 'எ'..='ஐ' | 'ஒ'..='க' | 'ங'..='ச' | 'ஜ' | 'ஞ'..='ட' | 'ண'..='த' | 'ந'..='ப' | 'ம'..='ஹ' | 'ௐ' | 'అ'..='ఌ' | 'ఎ'..='ఐ' | 'ఒ'..='న' | 'ప'..='హ' | 'ఽ' | 'ౘ'..='ౚ' | '౜'..='ౝ' | 'ౠ'..='ౡ' | 'ಀ' | 'ಅ'..='ಌ' | 'ಎ'..='ಐ' | 'ಒ'..='ನ' | 'ಪ'..='ಳ' | 'ವ'..='ಹ' | 'ಽ' | '೜'..='ೞ' | 'ೠ'..='ೡ' | 'ೱ'..='ೲ' | 'ഄ'..='ഌ' | 'എ'..='ഐ' | 'ഒ'..='ഺ' | 'ഽ' | 'ൎ' | 'ൔ'..='ൖ' | 'ൟ'..='ൡ' | 'ൺ'..='ൿ' | 'අ'..='ඖ' | 'ක'..='න' | 'ඳ'..='ර' | 'ල' | 'ව'..='ෆ' | 'ก'..='ะ' | 'า'..='ำ' | 'เ'..='ๆ' | 'ກ'..='ຂ' | 'ຄ' | 'ຆ'..='ຊ' | 'ຌ'..='ຣ' | 'ລ' | 'ວ'..='ະ' | 'າ'..='ຳ' | 'ຽ' | 'ເ'..='ໄ' | 'ໆ' | 'ໜ'..='ໟ' | 'ༀ' | 'ཀ'..='ཇ' | 'ཉ'..='ཬ' | 'ྈ'..='ྌ' | 'က'..='ဪ' | 'ဿ' | 'ၐ'..='ၕ' | 'ၚ'..='ၝ' | 'ၡ' | 'ၥ'..='ၦ' | 'ၮ'..='ၰ' | 'ၵ'..='ႁ' | 'ႎ' | 'Ⴀ'..='Ⴥ' | 'Ⴧ' | 'Ⴭ' | 'ა'..='ჺ' | 'ჼ'..='ቈ' | 'ቊ'..='ቍ' | 'ቐ'..='ቖ' | 'ቘ' | 'ቚ'..='ቝ' | 'በ'..='ኈ' | 'ኊ'..='ኍ' | 'ነ'..='ኰ' | 'ኲ'..='ኵ' | 'ኸ'..='ኾ' | 'ዀ' | 'ዂ'..='ዅ' | 'ወ'..='ዖ' | 'ዘ'..='ጐ' | 'ጒ'..='ጕ' | 'ጘ'..='ፚ' | 'ᎀ'..='ᎏ' | 'Ꭰ'..='Ᏽ' | 'ᏸ'..='ᏽ' | 'ᐁ'..='ᙬ' | 'ᙯ'..='ᙿ' | 'ᚁ'..='ᚚ' | 'ᚠ'..='ᛪ' | 'ᛮ'..='ᛰ' | 'ᛱ'..='ᛸ' | 'ᜀ'..='ᜑ' | 'ᜟ'..='ᜱ' | 'ᝀ'..='ᝑ' | 'ᝠ'..='ᝬ' | 'ᝮ'..='ᝰ' | 'ក'..='ឳ' | 'ៗ' | 'ៜ' | 'ᠠ'..='ᡸ' | 'ᢀ'..='ᢄ' | '\u{1885}'..='\u{1886}' | 'ᢇ'..='ᢨ' | 'ᢪ' | 'ᢰ'..='ᣵ' | 'ᤀ'..='ᤞ' | 'ᥐ'..='ᥭ' | 'ᥰ'..='ᥴ' | 'ᦀ'..='ᦫ' | 'ᦰ'..='ᧉ' | 'ᨀ'..='ᨖ' | 'ᨠ'..='ᩔ' | 'ᪧ' | 'ᬅ'..='ᬳ' | 'ᭅ'..='ᭌ' | 'ᮃ'..='ᮠ' | 'ᮮ'..='ᮯ' | 'ᮺ'..='ᯥ' | 'ᰀ'..='ᰣ' | 'ᱍ'..='ᱏ' | 'ᱚ'..='ᱽ' | 'ᲀ'..='ᲊ' | 'Ა'..='Ჺ' | 'Ჽ'..='Ჿ' | 'ᳩ'..='ᳬ' | 'ᳮ'..='ᳳ' | 'ᳵ'..='ᳶ' | 'ᳺ' | 'ᴀ'..='ᶿ' | 'Ḁ'..='ἕ' | 'Ἐ'..='Ἕ' | 'ἠ'..='ὅ' | 'Ὀ'..='Ὅ' | 'ὐ'..='ὗ' | 'Ὑ' | 'Ὓ' | 'Ὕ' | 'Ὗ'..='ώ' | 'ᾀ'..='ᾴ' | 'ᾶ'..='ᾼ' | 'ι' | 'ῂ'..='ῄ' | 'ῆ'..='ῌ' | 'ῐ'..='ΐ' | 'ῖ'..='Ί' | 'ῠ'..='Ῥ' | 'ῲ'..='ῴ' | 'ῶ'..='ῼ' | 'ⁱ' | 'ⁿ' | 'ₐ'..='ₜ' | 'ℂ' | 'ℇ' | 'ℊ'..='ℓ' | 'ℕ' | '℘' | 'ℙ'..='ℝ' | 'ℤ' | 'Ω' | 'ℨ' | 'K'..='ℭ' | '℮' | 'ℯ'..='ℹ' | 'ℼ'..='ℿ' | 'ⅅ'..='ⅉ' | 'ⅎ' | 'Ⅰ'..='ↂ' | 'Ↄ'..='ↄ' | 'ↅ'..='ↈ' | 'Ⰰ'..='ⳤ' | 'Ⳬ'..='ⳮ' | 'Ⳳ'..='ⳳ' | 'ⴀ'..='ⴥ' | 'ⴧ' | 'ⴭ' | 'ⴰ'..='ⵧ' | 'ⵯ' | 'ⶀ'..='ⶖ' | 'ⶠ'..='ⶦ' | 'ⶨ'..='ⶮ' | 'ⶰ'..='ⶶ' | 'ⶸ'..='ⶾ' | 'ⷀ'..='ⷆ' | 'ⷈ'..='ⷎ' | 'ⷐ'..='ⷖ' | 'ⷘ'..='ⷞ' | 'ⸯ' | '々'..='〆' | '〇' | '〡'..='〩' | '〱'..='〵' | '〸'..='〺' | '〻'..='〼' | 'ぁ'..='ゖ' | '゛'..='゜' | 'ゝ'..='ゟ' | 'ァ'..='ヺ' | 'ー'..='ヿ' | 'ㄅ'..='ㄯ' | 'ㄱ'..='ㆎ' | 'ㆠ'..='ㆿ' | 'ㇰ'..='ㇿ' | '㐀'..='䶿' | '一'..='ꒌ' | 'ꓐ'..='ꓽ' | 'ꔀ'..='ꘌ' | 'ꘐ'..='ꘟ' | 'ꘪ'..='ꘫ' | 'Ꙁ'..='ꙮ' | 'ꙿ'..='ꚝ' | 'ꚠ'..='ꛥ' | 'ꛦ'..='ꛯ' | 'ꜗ'..='ꜟ' | 'Ꜣ'..='ꞈ' | 'Ꞌ'..='Ƛ' | '꟱'..='ꠁ' | 'ꠃ'..='ꠅ' | 'ꠇ'..='ꠊ' | 'ꠌ'..='ꠢ' | 'ꡀ'..='ꡳ' | 'ꢂ'..='ꢳ' | 'ꣲ'..='ꣷ' | 'ꣻ' | 'ꣽ'..='ꣾ' | 'ꤊ'..='ꤥ' | 'ꤰ'..='ꥆ' | 'ꥠ'..='ꥼ' | 'ꦄ'..='ꦲ' | 'ꧏ' | 'ꧠ'..='ꧤ' | 'ꧦ'..='ꧯ' | 'ꧺ'..='ꧾ' | 'ꨀ'..='ꨨ' | 'ꩀ'..='ꩂ' | 'ꩄ'..='ꩋ' | 'ꩠ'..='ꩶ' | 'ꩺ' | 'ꩾ'..='ꪯ' | 'ꪱ' | 'ꪵ'..='ꪶ' | 'ꪹ'..='ꪽ' | 'ꫀ' | 'ꫂ' | 'ꫛ'..='ꫝ' | 'ꫠ'..='ꫪ' | 'ꫲ'..='ꫴ' | 'ꬁ'..='ꬆ' | 'ꬉ'..='ꬎ' | 'ꬑ'..='ꬖ' | 'ꬠ'..='ꬦ' | 'ꬨ'..='ꬮ' | 'ꬰ'..='ꭚ' | 'ꭜ'..='ꭩ' | 'ꭰ'..='ꯢ' | '가'..='힣' | 'ힰ'..='ퟆ' | 'ퟋ'..='ퟻ' | '豈'..='舘' | '並'..='龎' | 'ﬀ'..='ﬆ' | 'ﬓ'..='ﬗ' | 'יִ' | 'ײַ'..='ﬨ' | 'שׁ'..='זּ' | 'טּ'..='לּ' | 'מּ' | 'נּ'..='סּ' | 'ףּ'..='פּ' | 'צּ'..='ﮱ' | 'ﯓ'..='ﴽ' | 'ﵐ'..='ﶏ' | 'ﶒ'..='ﷇ' | 'ﷰ'..='ﷻ' | 'ﹰ'..='ﹴ' | 'ﹶ'..='ﻼ' | 'Ａ'..='Ｚ' | 'ａ'..='ｚ' | 'ｦ'..='ﾾ' | 'ￂ'..='ￇ' | 'ￊ'..='ￏ' | 'ￒ'..='ￗ' | 'ￚ'..='ￜ' | '𐀀'..='𐀋' | '𐀍'..='𐀦' | '𐀨'..='𐀺' | '𐀼'..='𐀽' | '𐀿'..='𐁍' | '𐁐'..='𐁝' | '𐂀'..='𐃺' | '𐅀'..='𐅴' | '𐊀'..='𐊜' | '𐊠'..='𐋐' | '𐌀'..='𐌟' | '𐌭'..='𐍀' | '𐍁' | '𐍂'..='𐍉' | '𐍊' | '𐍐'..='𐍵' | '𐎀'..='𐎝' | '𐎠'..='𐏃' | '𐏈'..='𐏏' | '𐏑'..='𐏕' | '𐐀'..='𐒝' | '𐒰'..='𐓓' | '𐓘'..='𐓻' | '𐔀'..='𐔧' | '𐔰'..='𐕣' | '𐕰'..='𐕺' | '𐕼'..='𐖊' | '𐖌'..='𐖒' | '𐖔'..='𐖕' | '𐖗'..='𐖡' | '𐖣'..='𐖱' | '𐖳'..='𐖹' | '𐖻'..='𐖼' | '𐗀'..='𐗳' | '𐘀'..='𐜶' | '𐝀'..='𐝕' | '𐝠'..='𐝧' | '𐞀'..='𐞅' | '𐞇'..='𐞰' | '𐞲'..='𐞺' | '𐠀'..='𐠅' | '𐠈' | '𐠊'..='𐠵' | '𐠷'..='𐠸' | '𐠼' | '𐠿'..='𐡕' | '𐡠'..='𐡶' | '𐢀'..='𐢞' | '𐣠'..='𐣲' | '𐣴'..='𐣵' | '𐤀'..='𐤕' | '𐤠'..='𐤹' | '𐥀'..='𐥙' | '𐦀'..='𐦷' | '𐦾'..='𐦿' | '𐨀' | '𐨐'..='𐨓' | '𐨕'..='𐨗' | '𐨙'..='𐨵' | '𐩠'..='𐩼' | '𐪀'..='𐪜' | '𐫀'..='𐫇' | '𐫉'..='𐫤' | '𐬀'..='𐬵' | '𐭀'..='𐭕' | '𐭠'..='𐭲' | '𐮀'..='𐮑' | '𐰀'..='𐱈' | '𐲀'..='𐲲' | '𐳀'..='𐳲' | '𐴀'..='𐴣' | '𐵊'..='𐵥' | '𐵯'..='𐶅' | '𐺀'..='𐺩' | '𐺰'..='𐺱' | '𐻂'..='𐻇' | '𐼀'..='𐼜' | '𐼧' | '𐼰'..='𐽅' | '𐽰'..='𐾁' | '𐾰'..='𐿄' | '𐿠'..='𐿶' | '𑀃'..='𑀷' | '𑁱'..='𑁲' | '𑁵' | '𑂃'..='𑂯' | '𑃐'..='𑃨' | '𑄃'..='𑄦' | '𑅄' | '𑅇' | '𑅐'..='𑅲' | '𑅶' | '𑆃'..='𑆲' | '𑇁'..='𑇄' | '𑇚' | '𑇜' | '𑈀'..='𑈑' | '𑈓'..='𑈫' | '𑈿'..='𑉀' | '𑊀'..='𑊆' | '𑊈' | '𑊊'..='𑊍' | '𑊏'..='𑊝' | '𑊟'..='𑊨' | '𑊰'..='𑋞' | '𑌅'..='𑌌' | '𑌏'..='𑌐' | '𑌓'..='𑌨' | '𑌪'..='𑌰' | '𑌲'..='𑌳' | '𑌵'..='𑌹' | '𑌽' | '𑍐' | '𑍝'..='𑍡' | '𑎀'..='𑎉' | '𑎋' | '𑎎' | '𑎐'..='𑎵' | '𑎷' | '𑏑' | '𑏓' | '𑐀'..='𑐴' | '𑑇'..='𑑊' | '𑑟'..='𑑡' | '𑒀'..='𑒯' | '𑓄'..='𑓅' | '𑓇' | '𑖀'..='𑖮' | '𑗘'..='𑗛' | '𑘀'..='𑘯' | '𑙄' | '𑚀'..='𑚪' | '𑚸' | '𑜀'..='𑜚' | '𑝀'..='𑝆' | '𑠀'..='𑠫' | '𑢠'..='𑣟' | '𑣿'..='𑤆' | '𑤉' | '𑤌'..='𑤓' | '𑤕'..='𑤖' | '𑤘'..='𑤯' | '𑤿' | '𑥁' | '𑦠'..='𑦧' | '𑦪'..='𑧐' | '𑧡' | '𑧣' | '𑨀' | '𑨋'..='𑨲' | '𑨺' | '𑩐' | '𑩜'..='𑪉' | '𑪝' | '𑪰'..='𑫸' | '𑯀'..='𑯠' | '𑰀'..='𑰈' | '𑰊'..='𑰮' | '𑱀' | '𑱲'..='𑲏' | '𑴀'..='𑴆' | '𑴈'..='𑴉' | '𑴋'..='𑴰' | '𑵆' | '𑵠'..='𑵥' | '𑵧'..='𑵨' | '𑵪'..='𑶉' | '𑶘' | '𑶰'..='𑷛' | '𑻠'..='𑻲' | '𑼂' | '𑼄'..='𑼐' | '𑼒'..='𑼳' | '𑾰' | '𒀀'..='𒎙' | '𒐀'..='𒑮' | '𒒀'..='𒕃' | '𒾐'..='𒿰' | '𓀀'..='𓐯' | '𓑁'..='𓑆' | '𓑠'..='𔏺' | '𔐀'..='𔙆' | '𖄀'..='𖄝' | '𖠀'..='𖨸' | '𖩀'..='𖩞' | '𖩰'..='𖪾' | '𖫐'..='𖫭' | '𖬀'..='𖬯' | '𖭀'..='𖭃' | '𖭣'..='𖭷' | '𖭽'..='𖮏' | '𖵀'..='𖵬' | '𖹀'..='𖹿' | '𖺠'..='𖺸' | '𖺻'..='𖻓' | '𖼀'..='𖽊' | '𖽐' | '𖾓'..='𖾟' | '𖿠'..='𖿡' | '𖿣' | '𖿲'..='𖿳' | '𖿴'..='𖿶' | '𗀀'..='𘳕' | '𘳿'..='𘴞' | '𘶀'..='𘷲' | '𚿰'..='𚿳' | '𚿵'..='𚿻' | '𚿽'..='𚿾' | '𛀀'..='𛄢' | '𛄲' | '𛅐'..='𛅒' | '𛅕' | '𛅤'..='𛅧' | '𛅰'..='𛋻' | '𛰀'..='𛱪' | '𛱰'..='𛱼' | '𛲀'..='𛲈' | '𛲐'..='𛲙' | '𝐀'..='𝑔' | '𝑖'..='𝒜' | '𝒞'..='𝒟' | '𝒢' | '𝒥'..='𝒦' | '𝒩'..='𝒬' | '𝒮'..='𝒹' | '𝒻' | '𝒽'..='𝓃' | '𝓅'..='𝔅' | '𝔇'..='𝔊' | '𝔍'..='𝔔' | '𝔖'..='𝔜' | '𝔞'..='𝔹' | '𝔻'..='𝔾' | '𝕀'..='𝕄' | '𝕆' | '𝕊'..='𝕐' | '𝕒'..='𝚥' | '𝚨'..='𝛀' | '𝛂'..='𝛚' | '𝛜'..='𝛺' | '𝛼'..='𝜔' | '𝜖'..='𝜴' | '𝜶'..='𝝎' | '𝝐'..='𝝮' | '𝝰'..='𝞈' | '𝞊'..='𝞨' | '𝞪'..='𝟂' | '𝟄'..='𝟋' | '𝼀'..='𝼞' | '𝼥'..='𝼪' | '𞀰'..='𞁭' | '𞄀'..='𞄬' | '𞄷'..='𞄽' | '𞅎' | '𞊐'..='𞊭' | '𞋀'..='𞋫' | '𞓐'..='𞓫' | '𞗐'..='𞗭' | '𞗰' | '𞛀'..='𞛞' | '𞛠'..='𞛢' | '𞛤'..='𞛥' | '𞛧'..='𞛭' | '𞛰'..='𞛴' | '𞛾'..='𞛿' | '𞟠'..='𞟦' | '𞟨'..='𞟫' | '𞟭'..='𞟮' | '𞟰'..='𞟾' | '𞠀'..='𞣄' | '𞤀'..='𞥃' | '𞥋' | '𞸀'..='𞸃' | '𞸅'..='𞸟' | '𞸡'..='𞸢' | '𞸤' | '𞸧' | '𞸩'..='𞸲' | '𞸴'..='𞸷' | '𞸹' | '𞸻' | '𞹂' | '𞹇' | '𞹉' | '𞹋' | '𞹍'..='𞹏' | '𞹑'..='𞹒' | '𞹔' | '𞹗' | '𞹙' | '𞹛' | '𞹝' | '𞹟' | '𞹡'..='𞹢' | '𞹤' | '𞹧'..='𞹪' | '𞹬'..='𞹲' | '𞹴'..='𞹷' | '𞹹'..='𞹼' | '𞹾' | '𞺀'..='𞺉' | '𞺋'..='𞺛' | '𞺡'..='𞺣' | '𞺥'..='𞺩' | '𞺫'..='𞺻' | '𠀀'..='𪛟' | '𪜀'..='𫠝' | '𫠠'..='𬺭' | '𬺰'..='𮯠' | '𮯰'..='𮹝' | '丽'..='𪘀' | '𰀀'..='𱍊' | '𱍐'..='𳑹' => {
-                        end = try_CHAR_LITERAL(&lexer.chars, start);
+                        end = try_CHAR_LITERAL(&lexer.src, start);
                         if end > best_end { best_end = end; best_kind = TK_CHAR_LITERAL; best_channel = 0; }
-                        end = try_LIFETIME_OR_LABEL(&lexer.chars, start);
+                        end = try_LIFETIME_OR_LABEL(&lexer.src, start);
                         if end > best_end { best_end = end; best_kind = TK_LIFETIME_OR_LABEL; best_channel = 0; }
                     },
                     '_' => {
-                        end = try_KW_UNDERLINELIFETIME(&lexer.chars, start);
+                        end = try_KW_UNDERLINELIFETIME(&lexer.src, start);
                         if end > best_end { best_end = end; best_kind = TK_KW_UNDERLINELIFETIME; best_channel = 0; }
-                        end = try_CHAR_LITERAL(&lexer.chars, start);
+                        end = try_CHAR_LITERAL(&lexer.src, start);
                         if end > best_end { best_end = end; best_kind = TK_CHAR_LITERAL; best_channel = 0; }
-                        end = try_LIFETIME_OR_LABEL(&lexer.chars, start);
+                        end = try_LIFETIME_OR_LABEL(&lexer.src, start);
                         if end > best_end { best_end = end; best_kind = TK_LIFETIME_OR_LABEL; best_channel = 0; }
                     },
                     's' => {
-                        end = try_KW_STATICLIFETIME(&lexer.chars, start);
+                        end = try_KW_STATICLIFETIME(&lexer.src, start);
                         if end > best_end { best_end = end; best_kind = TK_KW_STATICLIFETIME; best_channel = 0; }
-                        end = try_CHAR_LITERAL(&lexer.chars, start);
+                        end = try_CHAR_LITERAL(&lexer.src, start);
                         if end > best_end { best_end = end; best_kind = TK_CHAR_LITERAL; best_channel = 0; }
-                        end = try_LIFETIME_OR_LABEL(&lexer.chars, start);
+                        end = try_LIFETIME_OR_LABEL(&lexer.src, start);
                         if end > best_end { best_end = end; best_kind = TK_LIFETIME_OR_LABEL; best_channel = 0; }
                     },
                     _ => {
@@ -3357,20 +3416,21 @@ pub fn tokenize<S: AsStrSlice>(input: S) -> TokenStream with RustLexerBase {
                 }
             },
             '(' => {
-                end = try_LPAREN(&lexer.chars, start);
+                end = try_LPAREN(&lexer.src, start);
                 if end > best_end { best_end = end; best_kind = TK_LPAREN; best_channel = 0; }
             },
             ')' => {
-                end = try_RPAREN(&lexer.chars, start);
+                end = try_RPAREN(&lexer.src, start);
                 if end > best_end { best_end = end; best_kind = TK_RPAREN; best_channel = 0; }
             },
             '*' => {
-                end = try_STAR(&lexer.chars, start);
+                end = try_STAR(&lexer.src, start);
                 if end > best_end { best_end = end; best_kind = TK_STAR; best_channel = 0; }
-                let second_char = if start + 1 < lexer.chars.len() { lexer.chars[start + 1] } else { '\u{0}' };
+                let second_at = lexer.src.ceil_char_boundary(start + 1);
+                let second_char = if second_at < lexer.src.len() { char_at(&lexer.src, second_at) } else { '\u{0}' };
                 match second_char {
                     '=' => {
-                        end = try_STAREQ(&lexer.chars, start);
+                        end = try_STAREQ(&lexer.src, start);
                         if end > best_end { best_end = end; best_kind = TK_STAREQ; best_channel = 0; }
                     },
                     _ => {
@@ -3378,12 +3438,13 @@ pub fn tokenize<S: AsStrSlice>(input: S) -> TokenStream with RustLexerBase {
                 }
             },
             '+' => {
-                end = try_PLUS(&lexer.chars, start);
+                end = try_PLUS(&lexer.src, start);
                 if end > best_end { best_end = end; best_kind = TK_PLUS; best_channel = 0; }
-                let second_char = if start + 1 < lexer.chars.len() { lexer.chars[start + 1] } else { '\u{0}' };
+                let second_at = lexer.src.ceil_char_boundary(start + 1);
+                let second_char = if second_at < lexer.src.len() { char_at(&lexer.src, second_at) } else { '\u{0}' };
                 match second_char {
                     '=' => {
-                        end = try_PLUSEQ(&lexer.chars, start);
+                        end = try_PLUSEQ(&lexer.src, start);
                         if end > best_end { best_end = end; best_kind = TK_PLUSEQ; best_channel = 0; }
                     },
                     _ => {
@@ -3391,20 +3452,21 @@ pub fn tokenize<S: AsStrSlice>(input: S) -> TokenStream with RustLexerBase {
                 }
             },
             ',' => {
-                end = try_COMMA(&lexer.chars, start);
+                end = try_COMMA(&lexer.src, start);
                 if end > best_end { best_end = end; best_kind = TK_COMMA; best_channel = 0; }
             },
             '-' => {
-                end = try_MINUS(&lexer.chars, start);
+                end = try_MINUS(&lexer.src, start);
                 if end > best_end { best_end = end; best_kind = TK_MINUS; best_channel = 0; }
-                let second_char = if start + 1 < lexer.chars.len() { lexer.chars[start + 1] } else { '\u{0}' };
+                let second_at = lexer.src.ceil_char_boundary(start + 1);
+                let second_char = if second_at < lexer.src.len() { char_at(&lexer.src, second_at) } else { '\u{0}' };
                 match second_char {
                     '=' => {
-                        end = try_MINUSEQ(&lexer.chars, start);
+                        end = try_MINUSEQ(&lexer.src, start);
                         if end > best_end { best_end = end; best_kind = TK_MINUSEQ; best_channel = 0; }
                     },
                     '>' => {
-                        end = try_RARROW(&lexer.chars, start);
+                        end = try_RARROW(&lexer.src, start);
                         if end > best_end { best_end = end; best_kind = TK_RARROW; best_channel = 0; }
                     },
                     _ => {
@@ -3412,16 +3474,17 @@ pub fn tokenize<S: AsStrSlice>(input: S) -> TokenStream with RustLexerBase {
                 }
             },
             '.' => {
-                end = try_DOT(&lexer.chars, start);
+                end = try_DOT(&lexer.src, start);
                 if end > best_end { best_end = end; best_kind = TK_DOT; best_channel = 0; }
-                let second_char = if start + 1 < lexer.chars.len() { lexer.chars[start + 1] } else { '\u{0}' };
+                let second_at = lexer.src.ceil_char_boundary(start + 1);
+                let second_char = if second_at < lexer.src.len() { char_at(&lexer.src, second_at) } else { '\u{0}' };
                 match second_char {
                     '.' => {
-                        end = try_DOTDOT(&lexer.chars, start);
+                        end = try_DOTDOT(&lexer.src, start);
                         if end > best_end { best_end = end; best_kind = TK_DOTDOT; best_channel = 0; }
-                        end = try_DOTDOTDOT(&lexer.chars, start);
+                        end = try_DOTDOTDOT(&lexer.src, start);
                         if end > best_end { best_end = end; best_kind = TK_DOTDOTDOT; best_channel = 0; }
-                        end = try_DOTDOTEQ(&lexer.chars, start);
+                        end = try_DOTDOTEQ(&lexer.src, start);
                         if end > best_end { best_end = end; best_kind = TK_DOTDOTEQ; best_channel = 0; }
                     },
                     _ => {
@@ -3429,53 +3492,55 @@ pub fn tokenize<S: AsStrSlice>(input: S) -> TokenStream with RustLexerBase {
                 }
             },
             '/' => {
-                let second_char = if start + 1 < lexer.chars.len() { lexer.chars[start + 1] } else { '\u{0}' };
+                let second_at = lexer.src.ceil_char_boundary(start + 1);
+                let second_char = if second_at < lexer.src.len() { char_at(&lexer.src, second_at) } else { '\u{0}' };
                 match second_char {
                     '*' => {
-                        end = try_BLOCK_COMMENT(&lexer.chars, start);
+                        end = try_BLOCK_COMMENT(&lexer.src, start);
                         if end > best_end { best_end = end; best_kind = TK_BLOCK_COMMENT; best_channel = 1; }
-                        end = try_INNER_BLOCK_DOC(&lexer.chars, start);
+                        end = try_INNER_BLOCK_DOC(&lexer.src, start);
                         if end > best_end { best_end = end; best_kind = TK_INNER_BLOCK_DOC; best_channel = 1; }
-                        end = try_OUTER_BLOCK_DOC(&lexer.chars, start);
+                        end = try_OUTER_BLOCK_DOC(&lexer.src, start);
                         if end > best_end { best_end = end; best_kind = TK_OUTER_BLOCK_DOC; best_channel = 1; }
-                        end = try_SLASH(&lexer.chars, start);
+                        end = try_SLASH(&lexer.src, start);
                         if end > best_end { best_end = end; best_kind = TK_SLASH; best_channel = 0; }
                     },
                     '/' => {
-                        end = try_LINE_COMMENT(&lexer.chars, start);
+                        end = try_LINE_COMMENT(&lexer.src, start);
                         if end > best_end { best_end = end; best_kind = TK_LINE_COMMENT; best_channel = 1; }
-                        end = try_INNER_LINE_DOC(&lexer.chars, start);
+                        end = try_INNER_LINE_DOC(&lexer.src, start);
                         if end > best_end { best_end = end; best_kind = TK_INNER_LINE_DOC; best_channel = 1; }
-                        end = try_OUTER_LINE_DOC(&lexer.chars, start);
+                        end = try_OUTER_LINE_DOC(&lexer.src, start);
                         if end > best_end { best_end = end; best_kind = TK_OUTER_LINE_DOC; best_channel = 1; }
-                        end = try_SLASH(&lexer.chars, start);
+                        end = try_SLASH(&lexer.src, start);
                         if end > best_end { best_end = end; best_kind = TK_SLASH; best_channel = 0; }
                     },
                     '=' => {
-                        end = try_SLASH(&lexer.chars, start);
+                        end = try_SLASH(&lexer.src, start);
                         if end > best_end { best_end = end; best_kind = TK_SLASH; best_channel = 0; }
-                        end = try_SLASHEQ(&lexer.chars, start);
+                        end = try_SLASHEQ(&lexer.src, start);
                         if end > best_end { best_end = end; best_kind = TK_SLASHEQ; best_channel = 0; }
                     },
                     _ => {
-                        end = try_SLASH(&lexer.chars, start);
+                        end = try_SLASH(&lexer.src, start);
                         if end > best_end { best_end = end; best_kind = TK_SLASH; best_channel = 0; }
                     },
                 }
             },
             '0' | '1'..='9' => {
-                end = try_INTEGER_LITERAL(&lexer.chars, start);
+                end = try_INTEGER_LITERAL(&lexer.src, start);
                 if end > best_end { best_end = end; best_kind = TK_INTEGER_LITERAL; best_channel = 0; }
-                end = try_FLOAT_LITERAL(&lexer.chars, start);
+                end = try_FLOAT_LITERAL(&lexer.src, start);
                 if end > best_end { best_end = end; best_kind = TK_FLOAT_LITERAL; best_channel = 0; }
             },
             ':' => {
-                end = try_COLON(&lexer.chars, start);
+                end = try_COLON(&lexer.src, start);
                 if end > best_end { best_end = end; best_kind = TK_COLON; best_channel = 0; }
-                let second_char = if start + 1 < lexer.chars.len() { lexer.chars[start + 1] } else { '\u{0}' };
+                let second_at = lexer.src.ceil_char_boundary(start + 1);
+                let second_char = if second_at < lexer.src.len() { char_at(&lexer.src, second_at) } else { '\u{0}' };
                 match second_char {
                     ':' => {
-                        end = try_PATHSEP(&lexer.chars, start);
+                        end = try_PATHSEP(&lexer.src, start);
                         if end > best_end { best_end = end; best_kind = TK_PATHSEP; best_channel = 0; }
                     },
                     _ => {
@@ -3483,41 +3548,43 @@ pub fn tokenize<S: AsStrSlice>(input: S) -> TokenStream with RustLexerBase {
                 }
             },
             ';' => {
-                end = try_SEMI(&lexer.chars, start);
+                end = try_SEMI(&lexer.src, start);
                 if end > best_end { best_end = end; best_kind = TK_SEMI; best_channel = 0; }
             },
             '<' => {
-                let second_char = if start + 1 < lexer.chars.len() { lexer.chars[start + 1] } else { '\u{0}' };
+                let second_at = lexer.src.ceil_char_boundary(start + 1);
+                let second_char = if second_at < lexer.src.len() { char_at(&lexer.src, second_at) } else { '\u{0}' };
                 match second_char {
                     '<' => {
-                        end = try_SHLEQ(&lexer.chars, start);
+                        end = try_SHLEQ(&lexer.src, start);
                         if end > best_end { best_end = end; best_kind = TK_SHLEQ; best_channel = 0; }
-                        end = try_LT(&lexer.chars, start);
+                        end = try_LT(&lexer.src, start);
                         if end > best_end { best_end = end; best_kind = TK_LT; best_channel = 0; }
                     },
                     '=' => {
-                        end = try_LT(&lexer.chars, start);
+                        end = try_LT(&lexer.src, start);
                         if end > best_end { best_end = end; best_kind = TK_LT; best_channel = 0; }
-                        end = try_LE(&lexer.chars, start);
+                        end = try_LE(&lexer.src, start);
                         if end > best_end { best_end = end; best_kind = TK_LE; best_channel = 0; }
                     },
                     _ => {
-                        end = try_LT(&lexer.chars, start);
+                        end = try_LT(&lexer.src, start);
                         if end > best_end { best_end = end; best_kind = TK_LT; best_channel = 0; }
                     },
                 }
             },
             '=' => {
-                end = try_EQ(&lexer.chars, start);
+                end = try_EQ(&lexer.src, start);
                 if end > best_end { best_end = end; best_kind = TK_EQ; best_channel = 0; }
-                let second_char = if start + 1 < lexer.chars.len() { lexer.chars[start + 1] } else { '\u{0}' };
+                let second_at = lexer.src.ceil_char_boundary(start + 1);
+                let second_char = if second_at < lexer.src.len() { char_at(&lexer.src, second_at) } else { '\u{0}' };
                 match second_char {
                     '=' => {
-                        end = try_EQEQ(&lexer.chars, start);
+                        end = try_EQEQ(&lexer.src, start);
                         if end > best_end { best_end = end; best_kind = TK_EQEQ; best_channel = 0; }
                     },
                     '>' => {
-                        end = try_FATARROW(&lexer.chars, start);
+                        end = try_FATARROW(&lexer.src, start);
                         if end > best_end { best_end = end; best_kind = TK_FATARROW; best_channel = 0; }
                     },
                     _ => {
@@ -3525,53 +3592,55 @@ pub fn tokenize<S: AsStrSlice>(input: S) -> TokenStream with RustLexerBase {
                 }
             },
             '>' => {
-                let second_char = if start + 1 < lexer.chars.len() { lexer.chars[start + 1] } else { '\u{0}' };
+                let second_at = lexer.src.ceil_char_boundary(start + 1);
+                let second_char = if second_at < lexer.src.len() { char_at(&lexer.src, second_at) } else { '\u{0}' };
                 match second_char {
                     '=' => {
-                        end = try_GT(&lexer.chars, start);
+                        end = try_GT(&lexer.src, start);
                         if end > best_end { best_end = end; best_kind = TK_GT; best_channel = 0; }
-                        end = try_GE(&lexer.chars, start);
+                        end = try_GE(&lexer.src, start);
                         if end > best_end { best_end = end; best_kind = TK_GE; best_channel = 0; }
                     },
                     '>' => {
-                        end = try_SHREQ(&lexer.chars, start);
+                        end = try_SHREQ(&lexer.src, start);
                         if end > best_end { best_end = end; best_kind = TK_SHREQ; best_channel = 0; }
-                        end = try_GT(&lexer.chars, start);
+                        end = try_GT(&lexer.src, start);
                         if end > best_end { best_end = end; best_kind = TK_GT; best_channel = 0; }
                     },
                     _ => {
-                        end = try_GT(&lexer.chars, start);
+                        end = try_GT(&lexer.src, start);
                         if end > best_end { best_end = end; best_kind = TK_GT; best_channel = 0; }
                     },
                 }
             },
             '?' => {
-                end = try_QUESTION(&lexer.chars, start);
+                end = try_QUESTION(&lexer.src, start);
                 if end > best_end { best_end = end; best_kind = TK_QUESTION; best_channel = 0; }
             },
             '@' => {
-                end = try_AT(&lexer.chars, start);
+                end = try_AT(&lexer.src, start);
                 if end > best_end { best_end = end; best_kind = TK_AT; best_channel = 0; }
             },
             'A'..='Z' | 'a' | 'c'..='q' | 's'..='z' | 'ª' | 'µ' | 'º' | 'À'..='Ö' | 'Ø'..='ö' | 'ø'..='ˁ' | 'ˆ'..='ˑ' | 'ˠ'..='ˤ' | 'ˬ' | 'ˮ' | 'Ͱ'..='ʹ' | 'Ͷ'..='ͷ' | 'ͺ'..='ͽ' | 'Ϳ' | 'Ά' | 'Έ'..='Ί' | 'Ό' | 'Ύ'..='Ρ' | 'Σ'..='ϵ' | 'Ϸ'..='ҁ' | 'Ҋ'..='ԯ' | 'Ա'..='Ֆ' | 'ՙ' | 'ՠ'..='ֈ' | 'א'..='ת' | 'ׯ'..='ײ' | 'ؠ'..='ي' | 'ٮ'..='ٯ' | 'ٱ'..='ۓ' | 'ە' | 'ۥ'..='ۦ' | 'ۮ'..='ۯ' | 'ۺ'..='ۼ' | 'ۿ' | 'ܐ' | 'ܒ'..='ܯ' | 'ݍ'..='ޥ' | 'ޱ' | 'ߊ'..='ߪ' | 'ߴ'..='ߵ' | 'ߺ' | 'ࠀ'..='ࠕ' | 'ࠚ' | 'ࠤ' | 'ࠨ' | 'ࡀ'..='ࡘ' | 'ࡠ'..='ࡪ' | 'ࡰ'..='ࢇ' | 'ࢉ'..='࢏' | 'ࢠ'..='ࣉ' | 'ऄ'..='ह' | 'ऽ' | 'ॐ' | 'क़'..='ॡ' | 'ॱ'..='ঀ' | 'অ'..='ঌ' | 'এ'..='ঐ' | 'ও'..='ন' | 'প'..='র' | 'ল' | 'শ'..='হ' | 'ঽ' | 'ৎ' | 'ড়'..='ঢ়' | 'য়'..='ৡ' | 'ৰ'..='ৱ' | 'ৼ' | 'ਅ'..='ਊ' | 'ਏ'..='ਐ' | 'ਓ'..='ਨ' | 'ਪ'..='ਰ' | 'ਲ'..='ਲ਼' | 'ਵ'..='ਸ਼' | 'ਸ'..='ਹ' | 'ਖ਼'..='ੜ' | 'ਫ਼' | 'ੲ'..='ੴ' | 'અ'..='ઍ' | 'એ'..='ઑ' | 'ઓ'..='ન' | 'પ'..='ર' | 'લ'..='ળ' | 'વ'..='હ' | 'ઽ' | 'ૐ' | 'ૠ'..='ૡ' | 'ૹ' | 'ଅ'..='ଌ' | 'ଏ'..='ଐ' | 'ଓ'..='ନ' | 'ପ'..='ର' | 'ଲ'..='ଳ' | 'ଵ'..='ହ' | 'ଽ' | 'ଡ଼'..='ଢ଼' | 'ୟ'..='ୡ' | 'ୱ' | 'ஃ' | 'அ'..='ஊ' | 'எ'..='ஐ' | 'ஒ'..='க' | 'ங'..='ச' | 'ஜ' | 'ஞ'..='ட' | 'ண'..='த' | 'ந'..='ப' | 'ம'..='ஹ' | 'ௐ' | 'అ'..='ఌ' | 'ఎ'..='ఐ' | 'ఒ'..='న' | 'ప'..='హ' | 'ఽ' | 'ౘ'..='ౚ' | '౜'..='ౝ' | 'ౠ'..='ౡ' | 'ಀ' | 'ಅ'..='ಌ' | 'ಎ'..='ಐ' | 'ಒ'..='ನ' | 'ಪ'..='ಳ' | 'ವ'..='ಹ' | 'ಽ' | '೜'..='ೞ' | 'ೠ'..='ೡ' | 'ೱ'..='ೲ' | 'ഄ'..='ഌ' | 'എ'..='ഐ' | 'ഒ'..='ഺ' | 'ഽ' | 'ൎ' | 'ൔ'..='ൖ' | 'ൟ'..='ൡ' | 'ൺ'..='ൿ' | 'අ'..='ඖ' | 'ක'..='න' | 'ඳ'..='ර' | 'ල' | 'ව'..='ෆ' | 'ก'..='ะ' | 'า'..='ำ' | 'เ'..='ๆ' | 'ກ'..='ຂ' | 'ຄ' | 'ຆ'..='ຊ' | 'ຌ'..='ຣ' | 'ລ' | 'ວ'..='ະ' | 'າ'..='ຳ' | 'ຽ' | 'ເ'..='ໄ' | 'ໆ' | 'ໜ'..='ໟ' | 'ༀ' | 'ཀ'..='ཇ' | 'ཉ'..='ཬ' | 'ྈ'..='ྌ' | 'က'..='ဪ' | 'ဿ' | 'ၐ'..='ၕ' | 'ၚ'..='ၝ' | 'ၡ' | 'ၥ'..='ၦ' | 'ၮ'..='ၰ' | 'ၵ'..='ႁ' | 'ႎ' | 'Ⴀ'..='Ⴥ' | 'Ⴧ' | 'Ⴭ' | 'ა'..='ჺ' | 'ჼ'..='ቈ' | 'ቊ'..='ቍ' | 'ቐ'..='ቖ' | 'ቘ' | 'ቚ'..='ቝ' | 'በ'..='ኈ' | 'ኊ'..='ኍ' | 'ነ'..='ኰ' | 'ኲ'..='ኵ' | 'ኸ'..='ኾ' | 'ዀ' | 'ዂ'..='ዅ' | 'ወ'..='ዖ' | 'ዘ'..='ጐ' | 'ጒ'..='ጕ' | 'ጘ'..='ፚ' | 'ᎀ'..='ᎏ' | 'Ꭰ'..='Ᏽ' | 'ᏸ'..='ᏽ' | 'ᐁ'..='ᙬ' | 'ᙯ'..='ᙿ' | 'ᚁ'..='ᚚ' | 'ᚠ'..='ᛪ' | 'ᛮ'..='ᛰ' | 'ᛱ'..='ᛸ' | 'ᜀ'..='ᜑ' | 'ᜟ'..='ᜱ' | 'ᝀ'..='ᝑ' | 'ᝠ'..='ᝬ' | 'ᝮ'..='ᝰ' | 'ក'..='ឳ' | 'ៗ' | 'ៜ' | 'ᠠ'..='ᡸ' | 'ᢀ'..='ᢄ' | '\u{1885}'..='\u{1886}' | 'ᢇ'..='ᢨ' | 'ᢪ' | 'ᢰ'..='ᣵ' | 'ᤀ'..='ᤞ' | 'ᥐ'..='ᥭ' | 'ᥰ'..='ᥴ' | 'ᦀ'..='ᦫ' | 'ᦰ'..='ᧉ' | 'ᨀ'..='ᨖ' | 'ᨠ'..='ᩔ' | 'ᪧ' | 'ᬅ'..='ᬳ' | 'ᭅ'..='ᭌ' | 'ᮃ'..='ᮠ' | 'ᮮ'..='ᮯ' | 'ᮺ'..='ᯥ' | 'ᰀ'..='ᰣ' | 'ᱍ'..='ᱏ' | 'ᱚ'..='ᱽ' | 'ᲀ'..='ᲊ' | 'Ა'..='Ჺ' | 'Ჽ'..='Ჿ' | 'ᳩ'..='ᳬ' | 'ᳮ'..='ᳳ' | 'ᳵ'..='ᳶ' | 'ᳺ' | 'ᴀ'..='ᶿ' | 'Ḁ'..='ἕ' | 'Ἐ'..='Ἕ' | 'ἠ'..='ὅ' | 'Ὀ'..='Ὅ' | 'ὐ'..='ὗ' | 'Ὑ' | 'Ὓ' | 'Ὕ' | 'Ὗ'..='ώ' | 'ᾀ'..='ᾴ' | 'ᾶ'..='ᾼ' | 'ι' | 'ῂ'..='ῄ' | 'ῆ'..='ῌ' | 'ῐ'..='ΐ' | 'ῖ'..='Ί' | 'ῠ'..='Ῥ' | 'ῲ'..='ῴ' | 'ῶ'..='ῼ' | 'ⁱ' | 'ⁿ' | 'ₐ'..='ₜ' | 'ℂ' | 'ℇ' | 'ℊ'..='ℓ' | 'ℕ' | '℘' | 'ℙ'..='ℝ' | 'ℤ' | 'Ω' | 'ℨ' | 'K'..='ℭ' | '℮' | 'ℯ'..='ℹ' | 'ℼ'..='ℿ' | 'ⅅ'..='ⅉ' | 'ⅎ' | 'Ⅰ'..='ↂ' | 'Ↄ'..='ↄ' | 'ↅ'..='ↈ' | 'Ⰰ'..='ⳤ' | 'Ⳬ'..='ⳮ' | 'Ⳳ'..='ⳳ' | 'ⴀ'..='ⴥ' | 'ⴧ' | 'ⴭ' | 'ⴰ'..='ⵧ' | 'ⵯ' | 'ⶀ'..='ⶖ' | 'ⶠ'..='ⶦ' | 'ⶨ'..='ⶮ' | 'ⶰ'..='ⶶ' | 'ⶸ'..='ⶾ' | 'ⷀ'..='ⷆ' | 'ⷈ'..='ⷎ' | 'ⷐ'..='ⷖ' | 'ⷘ'..='ⷞ' | 'ⸯ' | '々'..='〆' | '〇' | '〡'..='〩' | '〱'..='〵' | '〸'..='〺' | '〻'..='〼' | 'ぁ'..='ゖ' | '゛'..='゜' | 'ゝ'..='ゟ' | 'ァ'..='ヺ' | 'ー'..='ヿ' | 'ㄅ'..='ㄯ' | 'ㄱ'..='ㆎ' | 'ㆠ'..='ㆿ' | 'ㇰ'..='ㇿ' | '㐀'..='䶿' | '一'..='ꒌ' | 'ꓐ'..='ꓽ' | 'ꔀ'..='ꘌ' | 'ꘐ'..='ꘟ' | 'ꘪ'..='ꘫ' | 'Ꙁ'..='ꙮ' | 'ꙿ'..='ꚝ' | 'ꚠ'..='ꛥ' | 'ꛦ'..='ꛯ' | 'ꜗ'..='ꜟ' | 'Ꜣ'..='ꞈ' | 'Ꞌ'..='Ƛ' | '꟱'..='ꠁ' | 'ꠃ'..='ꠅ' | 'ꠇ'..='ꠊ' | 'ꠌ'..='ꠢ' | 'ꡀ'..='ꡳ' | 'ꢂ'..='ꢳ' | 'ꣲ'..='ꣷ' | 'ꣻ' | 'ꣽ'..='ꣾ' | 'ꤊ'..='ꤥ' | 'ꤰ'..='ꥆ' | 'ꥠ'..='ꥼ' | 'ꦄ'..='ꦲ' | 'ꧏ' | 'ꧠ'..='ꧤ' | 'ꧦ'..='ꧯ' | 'ꧺ'..='ꧾ' | 'ꨀ'..='ꨨ' | 'ꩀ'..='ꩂ' | 'ꩄ'..='ꩋ' | 'ꩠ'..='ꩶ' | 'ꩺ' | 'ꩾ'..='ꪯ' | 'ꪱ' | 'ꪵ'..='ꪶ' | 'ꪹ'..='ꪽ' | 'ꫀ' | 'ꫂ' | 'ꫛ'..='ꫝ' | 'ꫠ'..='ꫪ' | 'ꫲ'..='ꫴ' | 'ꬁ'..='ꬆ' | 'ꬉ'..='ꬎ' | 'ꬑ'..='ꬖ' | 'ꬠ'..='ꬦ' | 'ꬨ'..='ꬮ' | 'ꬰ'..='ꭚ' | 'ꭜ'..='ꭩ' | 'ꭰ'..='ꯢ' | '가'..='힣' | 'ힰ'..='ퟆ' | 'ퟋ'..='ퟻ' | '豈'..='舘' | '並'..='龎' | 'ﬀ'..='ﬆ' | 'ﬓ'..='ﬗ' | 'יִ' | 'ײַ'..='ﬨ' | 'שׁ'..='זּ' | 'טּ'..='לּ' | 'מּ' | 'נּ'..='סּ' | 'ףּ'..='פּ' | 'צּ'..='ﮱ' | 'ﯓ'..='ﴽ' | 'ﵐ'..='ﶏ' | 'ﶒ'..='ﷇ' | 'ﷰ'..='ﷻ' | 'ﹰ'..='ﹴ' | 'ﹶ'..='ﻼ' | 'Ａ'..='Ｚ' | 'ａ'..='ｚ' | 'ｦ'..='ﾾ' | 'ￂ'..='ￇ' | 'ￊ'..='ￏ' | 'ￒ'..='ￗ' | 'ￚ'..='ￜ' | '𐀀'..='𐀋' | '𐀍'..='𐀦' | '𐀨'..='𐀺' | '𐀼'..='𐀽' | '𐀿'..='𐁍' | '𐁐'..='𐁝' | '𐂀'..='𐃺' | '𐅀'..='𐅴' | '𐊀'..='𐊜' | '𐊠'..='𐋐' | '𐌀'..='𐌟' | '𐌭'..='𐍀' | '𐍁' | '𐍂'..='𐍉' | '𐍊' | '𐍐'..='𐍵' | '𐎀'..='𐎝' | '𐎠'..='𐏃' | '𐏈'..='𐏏' | '𐏑'..='𐏕' | '𐐀'..='𐒝' | '𐒰'..='𐓓' | '𐓘'..='𐓻' | '𐔀'..='𐔧' | '𐔰'..='𐕣' | '𐕰'..='𐕺' | '𐕼'..='𐖊' | '𐖌'..='𐖒' | '𐖔'..='𐖕' | '𐖗'..='𐖡' | '𐖣'..='𐖱' | '𐖳'..='𐖹' | '𐖻'..='𐖼' | '𐗀'..='𐗳' | '𐘀'..='𐜶' | '𐝀'..='𐝕' | '𐝠'..='𐝧' | '𐞀'..='𐞅' | '𐞇'..='𐞰' | '𐞲'..='𐞺' | '𐠀'..='𐠅' | '𐠈' | '𐠊'..='𐠵' | '𐠷'..='𐠸' | '𐠼' | '𐠿'..='𐡕' | '𐡠'..='𐡶' | '𐢀'..='𐢞' | '𐣠'..='𐣲' | '𐣴'..='𐣵' | '𐤀'..='𐤕' | '𐤠'..='𐤹' | '𐥀'..='𐥙' | '𐦀'..='𐦷' | '𐦾'..='𐦿' | '𐨀' | '𐨐'..='𐨓' | '𐨕'..='𐨗' | '𐨙'..='𐨵' | '𐩠'..='𐩼' | '𐪀'..='𐪜' | '𐫀'..='𐫇' | '𐫉'..='𐫤' | '𐬀'..='𐬵' | '𐭀'..='𐭕' | '𐭠'..='𐭲' | '𐮀'..='𐮑' | '𐰀'..='𐱈' | '𐲀'..='𐲲' | '𐳀'..='𐳲' | '𐴀'..='𐴣' | '𐵊'..='𐵥' | '𐵯'..='𐶅' | '𐺀'..='𐺩' | '𐺰'..='𐺱' | '𐻂'..='𐻇' | '𐼀'..='𐼜' | '𐼧' | '𐼰'..='𐽅' | '𐽰'..='𐾁' | '𐾰'..='𐿄' | '𐿠'..='𐿶' | '𑀃'..='𑀷' | '𑁱'..='𑁲' | '𑁵' | '𑂃'..='𑂯' | '𑃐'..='𑃨' | '𑄃'..='𑄦' | '𑅄' | '𑅇' | '𑅐'..='𑅲' | '𑅶' | '𑆃'..='𑆲' | '𑇁'..='𑇄' | '𑇚' | '𑇜' | '𑈀'..='𑈑' | '𑈓'..='𑈫' | '𑈿'..='𑉀' | '𑊀'..='𑊆' | '𑊈' | '𑊊'..='𑊍' | '𑊏'..='𑊝' | '𑊟'..='𑊨' | '𑊰'..='𑋞' | '𑌅'..='𑌌' | '𑌏'..='𑌐' | '𑌓'..='𑌨' | '𑌪'..='𑌰' | '𑌲'..='𑌳' | '𑌵'..='𑌹' | '𑌽' | '𑍐' | '𑍝'..='𑍡' | '𑎀'..='𑎉' | '𑎋' | '𑎎' | '𑎐'..='𑎵' | '𑎷' | '𑏑' | '𑏓' | '𑐀'..='𑐴' | '𑑇'..='𑑊' | '𑑟'..='𑑡' | '𑒀'..='𑒯' | '𑓄'..='𑓅' | '𑓇' | '𑖀'..='𑖮' | '𑗘'..='𑗛' | '𑘀'..='𑘯' | '𑙄' | '𑚀'..='𑚪' | '𑚸' | '𑜀'..='𑜚' | '𑝀'..='𑝆' | '𑠀'..='𑠫' | '𑢠'..='𑣟' | '𑣿'..='𑤆' | '𑤉' | '𑤌'..='𑤓' | '𑤕'..='𑤖' | '𑤘'..='𑤯' | '𑤿' | '𑥁' | '𑦠'..='𑦧' | '𑦪'..='𑧐' | '𑧡' | '𑧣' | '𑨀' | '𑨋'..='𑨲' | '𑨺' | '𑩐' | '𑩜'..='𑪉' | '𑪝' | '𑪰'..='𑫸' | '𑯀'..='𑯠' | '𑰀'..='𑰈' | '𑰊'..='𑰮' | '𑱀' | '𑱲'..='𑲏' | '𑴀'..='𑴆' | '𑴈'..='𑴉' | '𑴋'..='𑴰' | '𑵆' | '𑵠'..='𑵥' | '𑵧'..='𑵨' | '𑵪'..='𑶉' | '𑶘' | '𑶰'..='𑷛' | '𑻠'..='𑻲' | '𑼂' | '𑼄'..='𑼐' | '𑼒'..='𑼳' | '𑾰' | '𒀀'..='𒎙' | '𒐀'..='𒑮' | '𒒀'..='𒕃' | '𒾐'..='𒿰' | '𓀀'..='𓐯' | '𓑁'..='𓑆' | '𓑠'..='𔏺' | '𔐀'..='𔙆' | '𖄀'..='𖄝' | '𖠀'..='𖨸' | '𖩀'..='𖩞' | '𖩰'..='𖪾' | '𖫐'..='𖫭' | '𖬀'..='𖬯' | '𖭀'..='𖭃' | '𖭣'..='𖭷' | '𖭽'..='𖮏' | '𖵀'..='𖵬' | '𖹀'..='𖹿' | '𖺠'..='𖺸' | '𖺻'..='𖻓' | '𖼀'..='𖽊' | '𖽐' | '𖾓'..='𖾟' | '𖿠'..='𖿡' | '𖿣' | '𖿲'..='𖿳' | '𖿴'..='𖿶' | '𗀀'..='𘳕' | '𘳿'..='𘴞' | '𘶀'..='𘷲' | '𚿰'..='𚿳' | '𚿵'..='𚿻' | '𚿽'..='𚿾' | '𛀀'..='𛄢' | '𛄲' | '𛅐'..='𛅒' | '𛅕' | '𛅤'..='𛅧' | '𛅰'..='𛋻' | '𛰀'..='𛱪' | '𛱰'..='𛱼' | '𛲀'..='𛲈' | '𛲐'..='𛲙' | '𝐀'..='𝑔' | '𝑖'..='𝒜' | '𝒞'..='𝒟' | '𝒢' | '𝒥'..='𝒦' | '𝒩'..='𝒬' | '𝒮'..='𝒹' | '𝒻' | '𝒽'..='𝓃' | '𝓅'..='𝔅' | '𝔇'..='𝔊' | '𝔍'..='𝔔' | '𝔖'..='𝔜' | '𝔞'..='𝔹' | '𝔻'..='𝔾' | '𝕀'..='𝕄' | '𝕆' | '𝕊'..='𝕐' | '𝕒'..='𝚥' | '𝚨'..='𝛀' | '𝛂'..='𝛚' | '𝛜'..='𝛺' | '𝛼'..='𝜔' | '𝜖'..='𝜴' | '𝜶'..='𝝎' | '𝝐'..='𝝮' | '𝝰'..='𝞈' | '𝞊'..='𝞨' | '𝞪'..='𝟂' | '𝟄'..='𝟋' | '𝼀'..='𝼞' | '𝼥'..='𝼪' | '𞀰'..='𞁭' | '𞄀'..='𞄬' | '𞄷'..='𞄽' | '𞅎' | '𞊐'..='𞊭' | '𞋀'..='𞋫' | '𞓐'..='𞓫' | '𞗐'..='𞗭' | '𞗰' | '𞛀'..='𞛞' | '𞛠'..='𞛢' | '𞛤'..='𞛥' | '𞛧'..='𞛭' | '𞛰'..='𞛴' | '𞛾'..='𞛿' | '𞟠'..='𞟦' | '𞟨'..='𞟫' | '𞟭'..='𞟮' | '𞟰'..='𞟾' | '𞠀'..='𞣄' | '𞤀'..='𞥃' | '𞥋' | '𞸀'..='𞸃' | '𞸅'..='𞸟' | '𞸡'..='𞸢' | '𞸤' | '𞸧' | '𞸩'..='𞸲' | '𞸴'..='𞸷' | '𞸹' | '𞸻' | '𞹂' | '𞹇' | '𞹉' | '𞹋' | '𞹍'..='𞹏' | '𞹑'..='𞹒' | '𞹔' | '𞹗' | '𞹙' | '𞹛' | '𞹝' | '𞹟' | '𞹡'..='𞹢' | '𞹤' | '𞹧'..='𞹪' | '𞹬'..='𞹲' | '𞹴'..='𞹷' | '𞹹'..='𞹼' | '𞹾' | '𞺀'..='𞺉' | '𞺋'..='𞺛' | '𞺡'..='𞺣' | '𞺥'..='𞺩' | '𞺫'..='𞺻' | '𠀀'..='𪛟' | '𪜀'..='𫠝' | '𫠠'..='𬺭' | '𬺰'..='𮯠' | '𮯰'..='𮹝' | '丽'..='𪘀' | '𰀀'..='𱍊' | '𱍐'..='𳑹' => {
-                end = try_NON_KEYWORD_IDENTIFIER(&lexer.chars, start);
+                end = try_NON_KEYWORD_IDENTIFIER(&lexer.src, start);
                 if end > best_end { best_end = end; best_kind = TK_NON_KEYWORD_IDENTIFIER; best_channel = 0; }
             },
             '[' => {
-                end = try_LSQUAREBRACKET(&lexer.chars, start);
+                end = try_LSQUAREBRACKET(&lexer.src, start);
                 if end > best_end { best_end = end; best_kind = TK_LSQUAREBRACKET; best_channel = 0; }
             },
             ']' => {
-                end = try_RSQUAREBRACKET(&lexer.chars, start);
+                end = try_RSQUAREBRACKET(&lexer.src, start);
                 if end > best_end { best_end = end; best_kind = TK_RSQUAREBRACKET; best_channel = 0; }
             },
             '^' => {
-                end = try_CARET(&lexer.chars, start);
+                end = try_CARET(&lexer.src, start);
                 if end > best_end { best_end = end; best_kind = TK_CARET; best_channel = 0; }
-                let second_char = if start + 1 < lexer.chars.len() { lexer.chars[start + 1] } else { '\u{0}' };
+                let second_at = lexer.src.ceil_char_boundary(start + 1);
+                let second_char = if second_at < lexer.src.len() { char_at(&lexer.src, second_at) } else { '\u{0}' };
                 match second_char {
                     '=' => {
-                        end = try_CARETEQ(&lexer.chars, start);
+                        end = try_CARETEQ(&lexer.src, start);
                         if end > best_end { best_end = end; best_kind = TK_CARETEQ; best_channel = 0; }
                     },
                     _ => {
@@ -3579,26 +3648,27 @@ pub fn tokenize<S: AsStrSlice>(input: S) -> TokenStream with RustLexerBase {
                 }
             },
             '_' => {
-                end = try_NON_KEYWORD_IDENTIFIER(&lexer.chars, start);
+                end = try_NON_KEYWORD_IDENTIFIER(&lexer.src, start);
                 if end > best_end { best_end = end; best_kind = TK_NON_KEYWORD_IDENTIFIER; best_channel = 0; }
-                end = try_UNDERSCORE(&lexer.chars, start);
+                end = try_UNDERSCORE(&lexer.src, start);
                 if end > best_end { best_end = end; best_kind = TK_UNDERSCORE; best_channel = 0; }
             },
             'b' => {
-                end = try_NON_KEYWORD_IDENTIFIER(&lexer.chars, start);
+                end = try_NON_KEYWORD_IDENTIFIER(&lexer.src, start);
                 if end > best_end { best_end = end; best_kind = TK_NON_KEYWORD_IDENTIFIER; best_channel = 0; }
-                let second_char = if start + 1 < lexer.chars.len() { lexer.chars[start + 1] } else { '\u{0}' };
+                let second_at = lexer.src.ceil_char_boundary(start + 1);
+                let second_char = if second_at < lexer.src.len() { char_at(&lexer.src, second_at) } else { '\u{0}' };
                 match second_char {
                     '"' => {
-                        end = try_BYTE_STRING_LITERAL(&lexer.chars, start);
+                        end = try_BYTE_STRING_LITERAL(&lexer.src, start);
                         if end > best_end { best_end = end; best_kind = TK_BYTE_STRING_LITERAL; best_channel = 0; }
                     },
                     '\'' => {
-                        end = try_BYTE_LITERAL(&lexer.chars, start);
+                        end = try_BYTE_LITERAL(&lexer.src, start);
                         if end > best_end { best_end = end; best_kind = TK_BYTE_LITERAL; best_channel = 0; }
                     },
                     'r' => {
-                        end = try_RAW_BYTE_STRING_LITERAL(&lexer.chars, start);
+                        end = try_RAW_BYTE_STRING_LITERAL(&lexer.src, start);
                         if end > best_end { best_end = end; best_kind = TK_RAW_BYTE_STRING_LITERAL; best_channel = 0; }
                     },
                     _ => {
@@ -3606,18 +3676,19 @@ pub fn tokenize<S: AsStrSlice>(input: S) -> TokenStream with RustLexerBase {
                 }
             },
             'r' => {
-                end = try_NON_KEYWORD_IDENTIFIER(&lexer.chars, start);
+                end = try_NON_KEYWORD_IDENTIFIER(&lexer.src, start);
                 if end > best_end { best_end = end; best_kind = TK_NON_KEYWORD_IDENTIFIER; best_channel = 0; }
-                let second_char = if start + 1 < lexer.chars.len() { lexer.chars[start + 1] } else { '\u{0}' };
+                let second_at = lexer.src.ceil_char_boundary(start + 1);
+                let second_char = if second_at < lexer.src.len() { char_at(&lexer.src, second_at) } else { '\u{0}' };
                 match second_char {
                     '"' => {
-                        end = try_RAW_STRING_LITERAL(&lexer.chars, start);
+                        end = try_RAW_STRING_LITERAL(&lexer.src, start);
                         if end > best_end { best_end = end; best_kind = TK_RAW_STRING_LITERAL; best_channel = 0; }
                     },
                     '#' => {
-                        end = try_RAW_IDENTIFIER(&lexer.chars, start);
+                        end = try_RAW_IDENTIFIER(&lexer.src, start);
                         if end > best_end { best_end = end; best_kind = TK_RAW_IDENTIFIER; best_channel = 0; }
-                        end = try_RAW_STRING_LITERAL(&lexer.chars, start);
+                        end = try_RAW_STRING_LITERAL(&lexer.src, start);
                         if end > best_end { best_end = end; best_kind = TK_RAW_STRING_LITERAL; best_channel = 0; }
                     },
                     _ => {
@@ -3625,20 +3696,21 @@ pub fn tokenize<S: AsStrSlice>(input: S) -> TokenStream with RustLexerBase {
                 }
             },
             '{' => {
-                end = try_LCURLYBRACE(&lexer.chars, start);
+                end = try_LCURLYBRACE(&lexer.src, start);
                 if end > best_end { best_end = end; best_kind = TK_LCURLYBRACE; best_channel = 0; }
             },
             '|' => {
-                end = try_OR(&lexer.chars, start);
+                end = try_OR(&lexer.src, start);
                 if end > best_end { best_end = end; best_kind = TK_OR; best_channel = 0; }
-                let second_char = if start + 1 < lexer.chars.len() { lexer.chars[start + 1] } else { '\u{0}' };
+                let second_at = lexer.src.ceil_char_boundary(start + 1);
+                let second_char = if second_at < lexer.src.len() { char_at(&lexer.src, second_at) } else { '\u{0}' };
                 match second_char {
                     '=' => {
-                        end = try_OREQ(&lexer.chars, start);
+                        end = try_OREQ(&lexer.src, start);
                         if end > best_end { best_end = end; best_kind = TK_OREQ; best_channel = 0; }
                     },
                     '|' => {
-                        end = try_OROR(&lexer.chars, start);
+                        end = try_OROR(&lexer.src, start);
                         if end > best_end { best_end = end; best_kind = TK_OROR; best_channel = 0; }
                     },
                     _ => {
@@ -3646,14 +3718,15 @@ pub fn tokenize<S: AsStrSlice>(input: S) -> TokenStream with RustLexerBase {
                 }
             },
             '}' => {
-                end = try_RCURLYBRACE(&lexer.chars, start);
+                end = try_RCURLYBRACE(&lexer.src, start);
                 if end > best_end { best_end = end; best_kind = TK_RCURLYBRACE; best_channel = 0; }
             },
             '\u{feff}' => {
-                let second_char = if start + 1 < lexer.chars.len() { lexer.chars[start + 1] } else { '\u{0}' };
+                let second_at = lexer.src.ceil_char_boundary(start + 1);
+                let second_char = if second_at < lexer.src.len() { char_at(&lexer.src, second_at) } else { '\u{0}' };
                 match second_char {
                     '!' | '#' => {
-                        end = try_SHEBANG(&lexer.chars, start);
+                        end = try_SHEBANG(&lexer.src, start);
                         if end > best_end { best_end = end; best_kind = TK_SHEBANG; best_channel = 1; }
                     },
                     _ => {
@@ -3663,16 +3736,17 @@ pub fn tokenize<S: AsStrSlice>(input: S) -> TokenStream with RustLexerBase {
             _ => {},
         }
         if best_end <= start {
-            let _ = ts.push_token_flagged(TK_ERROR, start, start + 1, triv_lo, ts.trivia_mark(), TokenFlags::LexError);
+            let error_end = lexer.src.ceil_char_boundary(start + 1);
+            let _ = ts.push_token_flagged(TK_ERROR, start, error_end, triv_lo, ts.trivia_mark(), TokenFlags::LexError);
             triv_lo = ts.trivia_mark();
-            lexer.pos = start + 1;
+            lexer.pos = error_end;
         } else {
             if best_kind == TK_NON_KEYWORD_IDENTIFIER {
-                let kw_kind = classify_keyword(&lexer.chars, start, best_end);
+                let kw_kind = classify_keyword(&lexer.src, start, best_end);
                 if kw_kind >= 0 { best_kind = kw_kind; best_channel = 0; }
             }
             let tok_start = start;
-            best_kind = RustLexerBase::emit(LexerView { chars: &lexer.chars, start: tok_start, pos: best_end }, best_kind, best_channel);
+            best_kind = RustLexerBase::emit(LexerView { src: &lexer.src, start: tok_start, pos: best_end }, best_kind, best_channel);
             if best_channel != 0 {
                 ts.push_trivia(best_kind, tok_start, best_end, best_channel);
             } else {
@@ -4182,7 +4256,7 @@ fn kind_names(kinds: &List<i32>) -> List<String> {
 impl Parser {
     fn new(tokens: TokenStream) -> Parser {
         let kinds = tokens.kinds.to_array();
-        return Parser { tokens, kinds, pos: 0, pending: null, recovering: false, speculating: false, max_errors: i32::MAX, site: -1, sites: [], failed_expected: [], recovery_pos: -1, recovered_failures: [], b: TreeBuilder::with_capacity(tokens.len() * 4), diagnostics: [], line_starts: line_starts(tokens.chars), memo: ScanMemo::new(kinds.len()) };
+        return Parser { tokens, kinds, pos: 0, pending: null, recovering: false, speculating: false, max_errors: i32::MAX, site: -1, sites: [], failed_expected: [], recovery_pos: -1, recovered_failures: [], b: TreeBuilder::with_capacity(tokens.len() * 4), diagnostics: [], line_starts: line_starts(&tokens.src), memo: ScanMemo::new(kinds.len()) };
     }
 
     pub fn emit(&mut self, s: String) {
@@ -4202,14 +4276,14 @@ impl Parser {
         let mut acc: i32 = 0;
         let mut neg = false;
         let mut j = sp.start;
-        if j < sp.end && self.tokens.chars[j] == '-' {
+        if j < sp.end && self.tokens.src.byte_at(j) == b'-' {
             neg = true;
             j += 1;
         }
         while j < sp.end {
-            let c = self.tokens.chars[j];
+            let c = self.tokens.src.byte_at(j);
             if c.is_ascii_digit() {
-                acc = acc * 10 + (c as i32 - '0' as i32);
+                acc = acc * 10 + (c - b'0') as i32;
             }
             j += 1;
         }
@@ -4217,11 +4291,11 @@ impl Parser {
     }
 
     pub fn token_line(&self, i: i32) -> i32 {
-        return line_col_at(&self.line_starts, self.tokens.starts[i]).0;
+        return line_at(&self.line_starts, self.tokens.starts[i]);
     }
 
     pub fn token_col(&self, i: i32) -> i32 {
-        return line_col_at(&self.line_starts, self.tokens.starts[i]).1;
+        return line_col_at(&self.tokens.src, &self.line_starts, self.tokens.starts[i]).1;
     }
 
     pub fn token_start(&self, i: i32) -> i32 {
@@ -4240,8 +4314,7 @@ impl Parser {
     }
 
     pub fn text_span(&self, start: i32, end: i32) -> String {
-        let hi = if end < self.tokens.chars.len() { end } else { self.tokens.chars.len() };
-        return chars_text(self.tokens.chars, start, hi);
+        return span_text(&self.tokens.src, start, end);
     }
 
     pub fn text_between(&self, lo: i32, hi: i32) -> String {
@@ -4253,7 +4326,7 @@ impl Parser {
     }
 
     pub fn input_text(&self) -> String {
-        return self.text_span(0, self.tokens.chars.len());
+        return self.text_span(0, self.tokens.src.len());
     }
 
     pub fn rule_string_tree(&self) -> String {
@@ -26566,7 +26639,7 @@ fn _run_parse_entry<S: AsStrSlice>(input: S, max_errors: i32, entry: fn(&mut Par
         p.commit_pending();
     }
     merge_lex_errors(&p.tokens, &mut p.diagnostics, max_errors);
-    resolve_positions(&mut p.diagnostics, p.tokens.chars);
+    resolve_positions(&mut p.diagnostics, &p.tokens.src);
     return ParseResult { cst: p.b.finish(), tokens: p.tokens, diagnostics: p.diagnostics, output: p.tokens.output };
 }
 

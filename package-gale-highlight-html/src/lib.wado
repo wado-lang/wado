@@ -45,7 +45,7 @@ fn highlights_in(language: Language, source: &String) -> List<Highlight> {
     };
 }
 
-/// An attribute whose value is a token of its own: the value spans characters
+/// An attribute whose value is a token of its own: the value spans bytes
 /// `[start, end)`, with any leading spaces and quotes.
 struct Attribute {
     name: String,
@@ -53,17 +53,13 @@ struct Attribute {
     end: i32,
 }
 
-fn text_of(chars: &List<char>, start: i32, end: i32) -> String {
-    let mut out = String::with_capacity(end - start);
-    for let i of start..<end {
-        out.push(chars[i]);
-    }
-    return out;
+fn text_of(src: &StrSlice, start: i32, end: i32) -> String {
+    return src.slice(start, end).to_string();
 }
 
 /// The attributes `name=value` in `tokens`, in source order. Whitespace is a
 /// hidden token, so the three are adjacent in the stream.
-fn attributes(tokens: &html::TokenStream, chars: &List<char>) -> List<Attribute> {
+fn attributes(tokens: &html::TokenStream, src: &StrSlice) -> List<Attribute> {
     let mut out: List<Attribute> = [];
     for let i of 2..<tokens.len() {
         if tokens.kind_at(i - 2) == html::TK_TAG_NAME
@@ -72,7 +68,7 @@ fn attributes(tokens: &html::TokenStream, chars: &List<char>) -> List<Attribute>
             let name = tokens.span_at(i - 2);
             let value = tokens.span_at(i);
             out.push(Attribute {
-                name: text_of(chars, name.start, name.end).to_ascii_lowercase(),
+                name: text_of(src, name.start, name.end).to_ascii_lowercase(),
                 start: value.start,
                 end: value.end,
             });
@@ -83,13 +79,13 @@ fn attributes(tokens: &html::TokenStream, chars: &List<char>) -> List<Attribute>
 
 /// The interior of an attribute value: past leading spaces and inside its
 /// quotes, if it has them.
-fn unquoted(chars: &List<char>, attr: &Attribute) -> [i32, i32] {
+fn unquoted(src: &StrSlice, attr: &Attribute) -> [i32, i32] {
     let mut start = attr.start;
-    while start < attr.end && chars[start] == ' ' {
+    while start < attr.end && src.byte_at(start) == b' ' {
         start += 1;
     }
     let mut end = attr.end;
-    if end - start >= 2 && chars[start] matches { '"' | '\'' } && chars[end - 1] == chars[start] {
+    if end - start >= 2 && src.byte_at(start) matches { b'"' | b'\'' } && src.byte_at(end - 1) == src.byte_at(start) {
         start += 1;
         end -= 1;
     }
@@ -98,13 +94,13 @@ fn unquoted(chars: &List<char>, attr: &Attribute) -> [i32, i32] {
 
 /// The language of a `<script>` by its `type`, as the HTML standard reads it:
 /// absent, empty, `module` or a JavaScript MIME type runs as JavaScript.
-fn script_language(chars: &List<char>, attrs: &List<Attribute>) -> Language {
+fn script_language(src: &StrSlice, attrs: &List<Attribute>) -> Language {
     for let attr of attrs {
         if attr.name != "type" {
             continue;
         }
-        let [start, end] = unquoted(chars, attr);
-        let ty = text_of(chars, start, end).trim().to_string().to_ascii_lowercase();
+        let [start, end] = unquoted(src, attr);
+        let ty = text_of(src, start, end).trim().to_string().to_ascii_lowercase();
         let essence = match ty.split_once(";") {
             Some([head, _]) => head.trim().to_string(),
             None => ty,
@@ -137,16 +133,16 @@ fn attribute_language(attr: &Attribute) -> Option<Language> {
 /// attributes. The grammar lexes the whole tag as one token, so it is lexed
 /// again with the element name masked: then it is an ordinary tag, its name and
 /// attributes captured like any other.
-fn open_tag(chars: &List<char>, start: i32, end: i32) -> [List<Highlight>, List<Attribute>] {
+fn open_tag(src: &StrSlice, start: i32, end: i32) -> [List<Highlight>, List<Attribute>] {
     let mut masked = String::with_capacity(end - start);
-    masked.push(chars[start]);
+    masked.push('<');
     let mut i = start + 1;
-    while i < end && chars[i].is_ascii_alphabetic() {
+    while i < end && src.byte_at(i).is_ascii_alphabetic() {
         masked.push('x');
         i += 1;
     }
-    masked.push_str(&text_of(chars, i, end));
-    let [highlights, attrs] = markup_of(&masked);
+    masked.push_str(src.slice(i, end));
+    let [highlights, attrs] = markup(&masked);
     let mut shifted_attrs: List<Attribute> = [];
     for let attr of &attrs {
         shifted_attrs.push(Attribute { name: attr.name, start: attr.start + start, end: attr.end + start });
@@ -158,26 +154,27 @@ fn open_tag(chars: &List<char>, start: i32, end: i32) -> [List<Highlight>, List<
 
 /// The highlights of an HTML text and the attributes it carries, embedded
 /// languages included.
-fn markup(source: &String, chars: &List<char>) -> [List<Highlight>, List<Attribute>] {
+fn markup(source: &String) -> [List<Highlight>, List<Attribute>] {
+    let src = &source.as_str_slice();
     let result = html::parse_html_document(source);
     let tokens = &result.tokens;
     let mut visitor = html::HighlightVisitor::new(&html::HIGHLIGHT_MAPPING);
     html::highlight_walk(&mut visitor, tokens, &result.cst);
     visitor.hl_cover_unvisited(tokens);
     let mut out: List<Highlight> = [];
-    let attrs = attributes(tokens, chars);
+    let attrs = attributes(tokens, src);
     // A capture an embedded language replaces, by its start.
     let mut replaced: List<i32> = [];
     for let attr of &attrs {
         let Some(language) = attribute_language(attr) else {
             continue;
         };
-        let [start, end] = unquoted(chars, attr);
+        let [start, end] = unquoted(src, attr);
         replaced.push(attr.start);
         if start > attr.start {
             out.push(Highlight { start: attr.start, end: start, class: "string" });
         }
-        push_shifted(&mut out, &highlights_in(language, &text_of(chars, start, end)), start);
+        push_shifted(&mut out, &highlights_in(language, &text_of(src, start, end)), start);
         if end < attr.end {
             out.push(Highlight { start: end, end: attr.end, class: "string" });
         }
@@ -196,35 +193,29 @@ fn markup(source: &String, chars: &List<char>) -> [List<Highlight>, List<Attribu
         let span = tokens.span_at(i);
         let kind = tokens.kind_at(i);
         if kind == html::TK_SCRIPT_OPEN || kind == html::TK_STYLE_OPEN {
-            let [tag, tag_attrs] = open_tag(chars, span.start, span.end);
+            let [tag, tag_attrs] = open_tag(src, span.start, span.end);
             out.extend(&tag);
-            body_language = if kind == html::TK_STYLE_OPEN { Language::Css } else { script_language(chars, &tag_attrs) };
+            body_language = if kind == html::TK_STYLE_OPEN { Language::Css } else { script_language(src, &tag_attrs) };
         } else if kind matches { html::TK_SCRIPT_BODY | html::TK_SCRIPT_SHORT_BODY | html::TK_STYLE_BODY | html::TK_STYLE_SHORT_BODY } {
-            out.extend(&embedded(chars, span.start, span.end, body_language));
+            out.extend(&embedded(src, span.start, span.end, body_language));
         }
     }
     out.sort_by(|a: &Highlight, b: &Highlight| a.start.cmp(&b.start));
     return [out, attrs];
 }
 
-/// `markup` of a fragment cut out of the page, in the fragment's positions.
-fn markup_of(text: &String) -> [List<Highlight>, List<Attribute>] {
-    let chars: List<char> = text.chars().collect();
-    return markup(text, &chars);
-}
-
 /// The highlights of a `<script>` / `<style>` body token: the text up to the
 /// closing tag in `language`, the closing tag as markup.
-fn embedded(chars: &List<char>, start: i32, end: i32, language: Language) -> List<Highlight> {
+fn embedded(src: &StrSlice, start: i32, end: i32, language: Language) -> List<Highlight> {
     let mut close = end;
-    while close > start && chars[close - 1] != '<' {
+    while close > start && src.byte_at(close - 1) != b'<' {
         close -= 1;
     }
     close -= 1;
     assert close >= start, "a body token ends with its closing tag";
     let mut out: List<Highlight> = [];
-    push_shifted(&mut out, &highlights_in(language, &text_of(chars, start, close)), start);
-    let [close_tag, _] = markup_of(&text_of(chars, close, end));
+    push_shifted(&mut out, &highlights_in(language, &text_of(src, start, close)), start);
+    let [close_tag, _] = markup(&text_of(src, close, end));
     push_shifted(&mut out, &close_tag, close);
     return out;
 }
@@ -233,7 +224,6 @@ fn embedded(chars: &List<char>, start: i32, end: i32, language: Language) -> Lis
 /// using the tree-sitter capture vocabulary. Never fails: an unparsable region
 /// is highlighted best-effort.
 export fn highlight(source: String) -> String {
-    let chars: List<char> = source.chars().collect();
-    let [highlights, _] = markup(&source, &chars);
-    return render_html(&chars, &highlights);
+    let [highlights, _] = markup(&source);
+    return render_html(&source, &highlights);
 }

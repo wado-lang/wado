@@ -135,7 +135,7 @@ impl CstStore {
     pub fn kind(&self, i: i32) -> NodeKind            // which rule built this node
     pub fn find_child(&self, i: i32, k: NodeKind) -> i32  // first child of that rule, -1 when none
     pub fn alt(&self, i: i32) -> i32                  // matched alternative, -1 when unstamped
-    pub fn span(&self, i: i32) -> Span
+    pub fn span(&self, i: i32) -> Span                // byte offsets into the input
     pub fn is_error(&self, i: i32) -> bool
 }
 ```
