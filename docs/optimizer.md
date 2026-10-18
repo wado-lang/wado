@@ -163,9 +163,13 @@ Loops and fields:
 
 - `licm` — hoist loop-invariant field reads and arithmetic out of a loop.
 - `condition_implication` — drop a bounds or range check a dominating
-  condition already decides, or the half of a range check it decides.
+  condition already decides, or the half of a range check it decides. A later
+  check on the same path, with nothing observable between, moves into an
+  earlier one: `a[i]; a[i + 1]; a[i + 2]` checks `i < len - 2` once.
 - `loop_version_bce` — split a loop into a check-free fast path and the
   original, and turn a fill loop into `array.fill`.
+- `unsigned_range_check` — fuse a remaining `0 <= i && i < n` into one unsigned
+  compare. It runs after the passes above, which read the two halves apart.
 - `tmpl_hoist` — reuse a template string's buffer across loop iterations.
 - `field_scalarize` — keep hot GC fields in locals across a loop.
 
@@ -251,7 +255,6 @@ Architectural work is tracked in
 - [ ] Factoring a conjunctive `if` chain into a decision tree.
 - [ ] Scalarizing a struct referenced by `&mut`.
 - [ ] Tail calls (`return_call`).
-- [ ] Bounds-check elimination across sequential accesses (`a[0]; a[1]; a[2]`).
 - [ ] Folding an effect-free call on constants whose callee exceeds the inline
   budget.
 - [ ] Removing an unused call by its callee's declared effects, without

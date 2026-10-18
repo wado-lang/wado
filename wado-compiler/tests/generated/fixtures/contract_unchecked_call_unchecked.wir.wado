@@ -47,7 +47,7 @@ type "functype//contract_unchecked_call_unchecked.wado/$cm_binding__Stdout_write
 
 type "functype//contract_unchecked_call_unchecked.wado/$cm_export__run" = fn();  // TypeId(15)
 
-type "functype//contract_unchecked_call_unchecked.wado/half$contract_report0" = fn(i32, i32, ref Array<u8>, i32);  // TypeId(16)
+type "functype//contract_unchecked_call_unchecked.wado/half$contract_report0" = fn(i32, i32, ref "core:prelude/string.wado//String");  // TypeId(16)
 
 type "functype//contract_unchecked_call_unchecked.wado/run$cold0" = fn(i32, i32);  // TypeId(17)
 
@@ -146,14 +146,14 @@ fn "contract_unchecked_call_unchecked.wado/$cm_export__run"() {
     "wasi/task-return"(0);
 }
 
-fn "contract_unchecked_call_unchecked.wado/half$contract_report0"($v1, n, $mv$$site$repr, $mv$$site$used) {
+fn "contract_unchecked_call_unchecked.wado/half$contract_report0"($v1, n, $site) {
     let $load_0: ref Array<u8>;
     let $local_3: ref "core:prelude/string.wado//String";
     let $local_4: ref "core:prelude/format.wado//Formatter";
     let $fuse_at_5: i32;
     let offset_15: i32;
+    let offset_28: i32;
     let f_44: ref "core:prelude/format.wado//Formatter";
-    let other: ref "core:prelude/string.wado//String";
     let $sroa_s_repr_63: ref Array<u8>;
     $fuse_at_5 = "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"(local.tee $local_3(struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(140), used: 0 }), 27);
     $load_0 = $local_3.repr;
@@ -165,43 +165,42 @@ fn "contract_unchecked_call_unchecked.wado/half$contract_report0"($v1, n, $mv$$s
     $fuse_at_5 = $fuse_at_5 + 16;
     $sroa_s_repr_63 = array.new_data<u8>(" failed at ");
     builtin::array_copy<u8>($load_0, $fuse_at_5, $sroa_s_repr_63, 0, 11);
-    $fuse_at_5 = "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"($local_3, 42 + $mv$$site$used);
-    builtin::array_copy<u8>(local.tee $sroa_s_repr_63($local_3.repr), $fuse_at_5, $mv$$site$repr, 0, $mv$$site$used);
-    offset_15 = $fuse_at_5 + $mv$$site$used;
-    $mv$$site$repr = array.new_fixed<u8>(58, 32);
-    builtin::array_copy<u8>($sroa_s_repr_63, offset_15, $mv$$site$repr, 0, 2);
-    offset_15 = $fuse_at_5 + (2 + $mv$$site$used);
-    $mv$$site$repr = array.new_data<u8>("n must be even");
-    builtin::array_copy<u8>($sroa_s_repr_63, offset_15, $mv$$site$repr, 0, 14);
-    offset_15 = $fuse_at_5 + (16 + $mv$$site$used);
-    $mv$$site$repr = array.new_data<u8>("
+    $fuse_at_5 = $site.used;
+    offset_15 = "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"($local_3, 42 + $fuse_at_5);
+    builtin::array_copy<u8>(local.tee $sroa_s_repr_63($local_3.repr), offset_15, $site.repr, 0, $fuse_at_5);
+    offset_28 = offset_15 + $fuse_at_5;
+    $load_0 = array.new_fixed<u8>(58, 32);
+    builtin::array_copy<u8>($sroa_s_repr_63, offset_28, $load_0, 0, 2);
+    offset_28 = offset_15 + (2 + $fuse_at_5);
+    $load_0 = array.new_data<u8>("n must be even");
+    builtin::array_copy<u8>($sroa_s_repr_63, offset_28, $load_0, 0, 14);
+    offset_28 = offset_15 + (16 + $fuse_at_5);
+    $load_0 = array.new_data<u8>("
 condition: n % 2 == 0
 ");
-    builtin::array_copy<u8>($sroa_s_repr_63, offset_15, $mv$$site$repr, 0, 23);
-    $mv$$site$used = $fuse_at_5 + (39 + $mv$$site$used);
-    $mv$$site$repr = array.new_fixed<u8>(110, 58, 32);
-    builtin::array_copy<u8>($sroa_s_repr_63, $mv$$site$used, $mv$$site$repr, 0, 3);
+    builtin::array_copy<u8>($sroa_s_repr_63, offset_28, $load_0, 0, 23);
+    $fuse_at_5 = offset_15 + (39 + $fuse_at_5);
+    $load_0 = array.new_fixed<u8>(110, 58, 32);
+    builtin::array_copy<u8>($sroa_s_repr_63, $fuse_at_5, $load_0, 0, 3);
     f_44 = local.tee $local_4("core:prelude/format.wado/core:prelude/format.wado/Formatter::new"($local_3));
     "core:prelude/primitive.wado/i32::fmt_decimal$sroa[self.value]"(n, f_44);
     n = "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"($local_3, 8);
-    $mv$$site$repr = $local_3.repr;
+    $load_0 = $local_3.repr;
     $sroa_s_repr_63 = array.new_fixed<u8>(10);
-    builtin::array_copy<u8>($mv$$site$repr, n, $sroa_s_repr_63, 0, 1);
+    builtin::array_copy<u8>($load_0, n, $sroa_s_repr_63, 0, 1);
     n = n + 1;
     $sroa_s_repr_63 = array.new_data<u8>("n % 2: ");
-    builtin::array_copy<u8>($mv$$site$repr, n, $sroa_s_repr_63, 0, 7);
+    builtin::array_copy<u8>($load_0, n, $sroa_s_repr_63, 0, 7);
     $local_4 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::new"($local_3);
     "core:prelude/primitive.wado/i32::fmt_decimal$sroa[self.value]"($v1, $local_4);
-    other = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 };
-    "core:prelude/string.wado/core:prelude/string.wado/String::internal_push_string$spec0"($local_3, other);
+    $site = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 };
+    "core:prelude/string.wado/core:prelude/string.wado/String::internal_push_string$spec0"($local_3, $site);
     "core:rt/panic"($local_3.repr, $local_3.used);
     unreachable;
 }
 
 fn "contract_unchecked_call_unchecked.wado/run$cold0"($contract_arg_0, $v1) with Stdout {
-    let $mv_field_3: ref Array<u8>;
-    $mv_field_3 = array.new_data<u8>("contract_unchecked_call_unchecked.wado:14");
-    "contract_unchecked_call_unchecked.wado/half$contract_report0"($v1, $contract_arg_0, $mv_field_3, 41);
+    "contract_unchecked_call_unchecked.wado/half$contract_report0"($v1, $contract_arg_0, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("contract_unchecked_call_unchecked.wado:14"), used: 41 });
     unreachable;
 }
 

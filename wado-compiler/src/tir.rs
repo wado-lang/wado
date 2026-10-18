@@ -9189,6 +9189,8 @@ pub enum FunctionKind {
     /// The `unchecked` twin of the function `of` declares: its body, with the
     /// `contract` clauses checked only under `-f contract-checks`.
     UncheckedTwin { of: DefId },
+    /// `F$contract_report{k}`: reports a failed `contract` clause, then traps.
+    ContractReport,
     /// Auto-derived `fn(..)^Inspect::inspect` dispatch stub. The TIR body is
     /// `unreachable()` — enough to register the function and resolve calls to
     /// it — and WIR build supplies the real one, a `call_ref` through
@@ -9472,6 +9474,13 @@ impl BuiltinDeclaration {
                 || self.facts.storage != Storage::Opaque
                     && !self.facts.is_opaque()
                     && self.mut_params.is_subset(&self.ranged_params))
+    }
+
+    /// Whether nothing outside the program can tell the call ran: it writes no
+    /// field, and its side effect is stated. An `opaque` one may be handed no
+    /// storage and still complete a task (`task_return`) or write a stream.
+    pub fn is_unobservable(&self) -> bool {
+        !self.facts.is_opaque() && self.writes_no_field()
     }
 }
 

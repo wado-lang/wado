@@ -143,6 +143,12 @@ message included. The report names the function and the call's position, since
 the call is what broke the contract. A call through a function value reports
 the clause's position instead, as the function cannot know who called it.
 
+A violation may trap sooner than the call that breaks the contract, at an
+earlier call on the same path with nothing observable between the two. The
+report then names that earlier call and its arguments. A contract promises only
+that a violation traps, so `xs[i]; xs[i + 1]; xs[i + 2]` may check
+`i + 2 < xs.len()` at `xs[i]`.
+
 <!-- {"fixture":"contract_call_site.wado", "assert": false} -->
 
 ```wado

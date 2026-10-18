@@ -2020,8 +2020,7 @@ mod cm_binding_tests {
     /// What each Component Model primitive binds to. The table is the
     /// specification; [`cm_binding_function`] derives it rather than listing it.
     /// `None` is left to a caller above it: the constructors to `rewrite_cm_new`,
-    /// the payload-carrying futures to the parameterized paths, and the task
-    /// and context builtins to WIR translate.
+    /// and the payload-carrying futures to the parameterized paths.
     const EXPECTED: &[(&str, Option<&str>)] = &[
         ("future-new", None),
         ("future-read", None),
@@ -2060,11 +2059,6 @@ mod cm_binding_tests {
             Some("internal cm_error_context_debug_message"),
         ),
         ("error-context-drop", Some("canonical error-context-drop")),
-        ("backpressure-inc", None),
-        ("backpressure-dec", None),
-        ("context-get", None),
-        ("context-set", None),
-        ("task-cancel", None),
     ];
 
     fn binding_of(cm_name: &str) -> Option<String> {

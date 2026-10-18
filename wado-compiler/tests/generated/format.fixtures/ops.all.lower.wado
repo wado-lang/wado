@@ -5805,10 +5805,10 @@ fn "core/prelude/array.wado/seq_cmp<u8>"(a: &Array<u8>, a_start: i32, a_end: i32
         $for_0_body: {
             let x: u8 = core::builtin::array_get_value::<u8>(a, (a_start + i));
             let y: u8 = core::builtin::array_get_value::<u8>(b, (b_start + i));
-            if (Box<u8> { value: x }."u8^core:prelude/traits.wado/Ord::cmp"(Box<u8> { value: y }) == Ordering::Less) {
+            if (x < y) {
                 return Ordering::Less;
             }
-            if (Box<u8> { value: x }."u8^core:prelude/traits.wado/Ord::cmp"(Box<u8> { value: y }) == Ordering::Greater) {
+            if (x > y) {
                 return Ordering::Greater;
             }
         }

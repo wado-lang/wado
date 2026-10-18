@@ -29,9 +29,9 @@ use crate::name::{
 };
 use crate::synthesis::common::builtin_call;
 use crate::tir::{
-    CallArg, FunctionRef, LetStorage, LocalFrame, TemplateId, TirBlock, TirExpr, TirExprKind,
-    TirFunction, TirLocal, TirParam, TirPattern, TirStmt, TirStmtKind, TirUnaryOp, TypeId,
-    TypeTable, assign_stmt,
+    CallArg, FunctionKind, FunctionRef, LetStorage, LocalFrame, TemplateId, TirBlock, TirExpr,
+    TirExprKind, TirFunction, TirLocal, TirParam, TirPattern, TirStmt, TirStmtKind, TirUnaryOp,
+    TypeId, TypeTable, assign_stmt,
 };
 use crate::tir_visitor::{TirMutVisitor, TirRefVisitor, remap_locals};
 
@@ -573,6 +573,7 @@ fn report_function(
         span,
     );
     report.params = params;
+    report.kind = FunctionKind::ContractReport;
     report
 }
 
