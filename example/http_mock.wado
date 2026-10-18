@@ -18,17 +18,15 @@
 use { Request, Response, ErrorCode, Headers, FieldName, FieldValue, Trailers, StatusCode } from "wasi:http";
 use { Client } from "wasi:http";
 
-// The writable end of a message's trailers. An end dropped unwritten traps, and
-// a write waits for its reader, so it is written once the message is done.
-type TrailersEnd = FutureWritable<Result<Option<Trailers>, ErrorCode>>;
-
-fn end_trailers(end: TrailersEnd) {
+// Ends a message's trailers. An end dropped unwritten traps, and a write waits
+// for its reader, so it is written once the message is done.
+fn end_trailers(end: FutureWritable<Result<Option<Trailers>, ErrorCode>>) {
     end.write(Result::<Option<Trailers>, ErrorCode>::Ok(null));
 }
 
 // A tiny gateway: `/status` reports the upstream health-check status in an
 // `x-upstream-status` response header, mapping upstream failures to 502.
-fn gateway(req: Request) -> [Response, TrailersEnd] with Client {
+fn gateway(req: Request) -> [Response, FutureWritable<Result<Option<Trailers>, ErrorCode>>] with Client {
     let path = match req.get_path_with_query() {
         Some(p) => p,
         None => "/",
@@ -55,7 +53,7 @@ fn gateway(req: Request) -> [Response, TrailersEnd] with Client {
     };
 }
 
-fn respond(status: StatusCode, headers: List<[String, String]>) -> [Response, TrailersEnd] {
+fn respond(status: StatusCode, headers: List<[String, String]>) -> [Response, FutureWritable<Result<Option<Trailers>, ErrorCode>>] {
     let fields = Headers::new();
     for let [name, value] of headers {
         let _ = fields.append(name as FieldName, value.bytes().collect() as FieldValue);
@@ -80,7 +78,7 @@ export async fn handle(request: Request) -> Result<Response, ErrorCode> with Cli
 affine struct MockUpstream {
     hits: List<String> = [],
     status: StatusCode = 200,
-    ends: List<TrailersEnd> = [],
+    ends: List<FutureWritable<Result<Option<Trailers>, ErrorCode>>> = [],
 }
 
 impl MockUpstream {
@@ -117,7 +115,7 @@ impl Client for DeadUpstream {
 
 // Serve-side mock: a real `Request` resource, constructed instead of
 // received from the network.
-fn get(path: String) -> [Request, TrailersEnd] {
+fn get(path: String) -> [Request, FutureWritable<Result<Option<Trailers>, ErrorCode>>] {
     let [trailers_rx, trailers_tx] = Future::<Result<Option<Trailers>, ErrorCode>>::new();
     let [req, _req_future] = Request::new(Headers::new(), null, trailers_rx, null);
     req.set_path_with_query(Option::<String>::Some(path));
@@ -125,7 +123,7 @@ fn get(path: String) -> [Request, TrailersEnd] {
 }
 
 // Drops a response the gateway answered, then ends what nothing reads any more.
-fn finish(answer: [Response, TrailersEnd], request_end: TrailersEnd) {
+fn finish(answer: [Response, FutureWritable<Result<Option<Trailers>, ErrorCode>>], request_end: FutureWritable<Result<Option<Trailers>, ErrorCode>>) {
     let [response, response_end] = answer;
     builtin::drop(response);
     end_trailers(response_end);
