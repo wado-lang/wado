@@ -527,7 +527,8 @@ assert found == 8;
 
 Some expressions run apart from the code written around them: a default value
 of a parameter or a field runs at each use, a global initializer runs before
-the first read, and a [contract clause](./spec-assertions.md#contract-checks)
+the first read, an associated constant's value runs where it is read, and a
+[contract clause](./spec-assertions.md#contract-checks)
 runs at each call. A jump in one of them must land inside it. `return`,
 `resume`, `task return` and `?` are compile errors there, and so is a `break`
 or `continue` that no loop or labeled block inside the expression binds.

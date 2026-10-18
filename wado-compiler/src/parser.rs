@@ -2395,7 +2395,7 @@ impl Parser {
         finder.visit_expr(expr);
         if let Some((jump, span)) = finder.found {
             let message = format!(
-                "`{jump}` cannot leave a {}: it runs apart from the code around it",
+                "`{jump}` cannot leave {}: it runs apart from the code around it",
                 position.noun()
             );
             self.errors.push(self.error_at_span(span, &message));
@@ -6465,7 +6465,8 @@ impl Parser {
                     self.expect(&TokenKind::Colon)?;
                     let const_ty = self.parse_type()?;
                     self.expect(&TokenKind::Eq)?;
-                    let const_value = self.parse_expr()?;
+                    let const_value =
+                        self.parse_detached_expr(DetachedPosition::AssociatedConst)?;
                     let end = self.expect(&TokenKind::Semicolon)?.span;
                     constants.push(AssociatedConst {
                         id: const_id,
@@ -7395,15 +7396,17 @@ fn serde_attr_advice(args: &[AttrArg]) -> String {
 enum DetachedPosition {
     DefaultValue,
     GlobalInitializer,
+    AssociatedConst,
     Contract,
 }
 
 impl DetachedPosition {
     fn noun(self) -> &'static str {
         match self {
-            Self::DefaultValue => "default value",
-            Self::GlobalInitializer => "global initializer",
-            Self::Contract => "contract clause",
+            Self::DefaultValue => "a default value",
+            Self::GlobalInitializer => "a global initializer",
+            Self::AssociatedConst => "an associated constant",
+            Self::Contract => "a contract clause",
         }
     }
 }
