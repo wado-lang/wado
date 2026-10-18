@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1792283082916,
+  "lastUpdate": 1792284199973,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -67993,6 +67993,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/a8a7b722c675786f8031b3501ca0837a8d83e99d"
         },
         "date": 1792283081893,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 2955,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 7382,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 20208,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 298222,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "dd1961cbbc08a5bca4f8491551592867ee73c5ed",
+          "message": "Merge pull request #2378 from wado-lang/ccr-2653837d-us5z8i\n\nfeat(packages): acquire the dependencies of a package reached only by a path",
+          "timestamp": "2026-10-18T09:24:04+09:00",
+          "tree_id": "753bd0adb45c9ceb0db8a64a1ccb6ef37c42cf6a",
+          "url": "https://github.com/wado-lang/wado/commit/dd1961cbbc08a5bca4f8491551592867ee73c5ed"
+        },
+        "date": 1792284199052,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
