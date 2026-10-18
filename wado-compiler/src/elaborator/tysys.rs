@@ -830,6 +830,10 @@ struct AffineParams<'a> {
 }
 
 impl HeldTypes for AffineParams<'_> {
+    fn key(&self, type_id: TypeId) -> TypeKey {
+        self.types.key(type_id)
+    }
+
     fn held(&self, type_id: TypeId) -> Held {
         let is_affine_param = match self.types.type_table.borrow().get(type_id) {
             ResolvedType::TypeParam { name, .. } => self.affine_params.contains(name),

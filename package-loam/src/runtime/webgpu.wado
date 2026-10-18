@@ -104,17 +104,9 @@ affine struct Slot {
     id: i32,
 }
 
-<<<<<<< HEAD
-/// A buffer an earlier pass retained, at the slot it was made at.
-affine struct Carried {
-||||||| aa8fbf23e
-/// A buffer an earlier pass retained, at the slot it was made at.
-struct Carried {
-=======
 /// A buffer an earlier pass retained: the slot it was made at, and its place
 /// in `buffers`.
 struct Carried {
->>>>>>> origin/main
     slot: i32,
     at: i32,
 }
@@ -178,7 +170,7 @@ impl<T> Places<T> {
 
 /// A bind group a dispatch made, which a later dispatch binding the same
 /// spans to the same shader reuses.
-struct CachedGroup {
+affine struct CachedGroup {
     group: GpuBindGroup,
     key: List<i32>,
     /// The last pass a dispatch bound it in.
@@ -208,20 +200,6 @@ struct Parameters {
     written: i32,
 }
 
-<<<<<<< HEAD
-/// A bind group of a recorded dispatch, held until the dispatch is submitted.
-affine struct Bound {
-    group: GpuBindGroup,
-}
-
-||||||| aa8fbf23e
-/// A bind group of a recorded dispatch, held until the dispatch is submitted.
-struct Bound {
-    group: GpuBindGroup,
-}
-
-=======
->>>>>>> origin/main
 /// The kernels on a WebGPU device, and on the CPU where no shader is written.
 pub affine struct WebGpuBackend {
     device: GpuDevice,
