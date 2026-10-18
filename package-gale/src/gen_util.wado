@@ -1,5 +1,5 @@
 use { FOLLOW_PARAM, symbol_char_names, char_hex_name } from "./ident.wado";
-use { ident_end, scan_closed_string } from "./g4/scan.wado";
+use { comment_end, ident_end, scan_closed_string } from "./g4/scan.wado";
 pub use { escape_ident, escape_case, to_pascal_case, to_snake_case, to_lower } from "./ident.wado";
 use { CodeWriter } from "lib:wadopoet";
 
@@ -293,7 +293,7 @@ fn delimited_end(src: &StrSlice, open: i32) -> i32 {
             }
             continue;
         }
-        if b == b'`' || b == b'/' && i + 1 < n && src.byte_at(i + 1) matches { b'/' | b'*' } {
+        if b == b'`' || comment_end(src, i, n) matches { Some(_) } {
             return -1;
         }
         if b matches { b'(' | b'[' | b'{' } || b == b'<' && angle {
