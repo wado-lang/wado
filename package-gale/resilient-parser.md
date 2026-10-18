@@ -142,10 +142,9 @@ position the parser exposes is a byte offset into it: a `Span`, a token's start
 and end, a highlight capture, and `start` / `pos` in a lexer action or a
 `LexerView`. A byte offset slices the source directly.
 
-ANTLR4 counts in chars where it shows a position, so Gale does too. A
-`Diagnostic`'s `col`, `$pos`, `getCharPositionInLine()` and the indices
-`to_lexer_string` prints are char counts, derived from the byte offsets when
-asked for.
+Where ANTLR4 prints a position, Gale prints chars as it does. What differs from
+ANTLR4 is in
+["Positions an action reads are byte offsets"](./antlr4-compatibility.md#positions-an-action-reads-are-byte-offsets).
 
 ## Public API
 

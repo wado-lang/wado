@@ -178,6 +178,30 @@ consumed, in the same place".
 
 `<missing X>` needs no normalisation — Gale's rendering already matches.
 
+### Positions an action reads are byte offsets
+
+The generated lexer reads the input as UTF-8 bytes, so a position is a byte
+offset into it. ANTLR4 counts chars. On ASCII input the two agree; on other
+input these differ from the jar:
+
+- `$index` (`getCharIndex()`), and `start` / `pos` in a lexer action.
+- `LexerView`'s `start()`, `pos()`, `char_at(i)` and `input_len()`, which a
+  `superClass` base reads. `char_at` traps at an offset inside a char.
+
+What ANTLR4 prints stays in chars: a `Diagnostic`'s `col`, `$pos`,
+`getCharPositionInLine()`, and the indices `to_lexer_string` prints. So do
+`getText()` and `la(k)`, which step whole chars.
+
+An action breaks only when it treats such a position as a char count, as
+`$index - start == 2` does over a multi-byte char. Comparing two positions, or
+slicing with them, works as before.
+
+Byte offsets bought the lexer about a quarter of its instructions (fuel, on
+`benchmark/sqlite_parse`'s input). If a real grammar's action needs char
+positions, the fix is to keep the scan in bytes and hand actions char positions:
+the lexer counts chars beside `pos` only in a grammar whose actions read a
+position, so a grammar without such actions keeps the byte-only scan.
+
 ## Stages of Compatibility
 
 The contract is verified at layered stages — A, B, C. Higher
