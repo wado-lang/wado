@@ -536,7 +536,8 @@ fn "http_fields_set.wado/$cm_binding__Fields_set"(self, name, value) with Fields
         };
     };
     drop($array_clone_dst_5);
-    if @unlikely((local.tee ptr_40(value.used) < 0) | (ptr_40 > 268435455)) {
+    ptr_40 = value.used;
+    if @unlikely(268435455 <u ptr_40) {
         cold_path;
         "core:rt/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("a buffer's length is negative or past what linear memory can address"), used: 68 });
         unreachable;
@@ -573,7 +574,7 @@ fn "http_fields_set.wado/$cm_binding__Fields_set"(self, name, value) with Fields
             builtin::array_copy<u8>(local.tee $array_clone_dst_15(builtin::array_new<u8>($array_clone_i_12)), 0, $array_clone_src_14, 0, $array_clone_i_12);
             builtin::array_copy<u8>(local.tee $array_clone_dst_2(builtin::array_new<u8>($array_clone_i_12)), 0, $array_clone_dst_15, 0, $array_clone_i_12);
             drop($array_clone_dst_2);
-            if @unlikely(($array_clone_i_12 < 0) | ($array_clone_i_12 > 2147483647)) {
+            if @unlikely(2147483647 <u $array_clone_i_12) {
                 cold_path;
                 "core:rt/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("a buffer's length is negative or past what linear memory can address"), used: 68 });
                 unreachable;
