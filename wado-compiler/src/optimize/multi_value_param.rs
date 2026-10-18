@@ -320,7 +320,7 @@ struct ReadWalk<'s, 'b, 'a> {
     whole_reads: Vec<ExprId>,
     field_subjects: IndexMap<ExprId, &'a str>,
     /// The call arguments that hand the local on whole.
-    forwarded: IndexSet<Operand>,
+    forwarded: IndexSet<ExprId>,
     values_seen: IndexSet<ValueId>,
     sources_seen: IndexSet<ExprId>,
 }
@@ -351,16 +351,21 @@ impl<'s, 'b, 'a> ReadWalk<'s, 'b, 'a> {
     fn node(&mut self, root: NodeRef) {
         let body = self.scope.body;
         body.walk_nodes_under::<()>(root, |node| {
+            // A promoted read of the local is one value wherever it appears,
+            // so only this call's own argument slots skip it.
+            let mut forwarded_values = Vec::new();
             if let NodeRef::Expr(e) = node {
-                if self.forwarded.contains(&Operand::Expr(e)) {
+                if self.forwarded.contains(&e) {
                     return ControlFlow::Continue(false);
                 }
-                self.record_forwards(e);
+                forwarded_values = self.record_forwards(e);
             }
             let mut values = Vec::new();
             body.for_each_operand(node, |op| values.extend(op.as_value()));
             for v in values {
-                if !self.forwarded.contains(&Operand::Value(v)) {
+                if let Some(i) = forwarded_values.iter().position(|&f| f == v) {
+                    forwarded_values.swap_remove(i);
+                } else {
                     self.value(v);
                 }
             }
@@ -372,18 +377,26 @@ impl<'s, 'b, 'a> ReadWalk<'s, 'b, 'a> {
     }
 
     /// Record each argument of the call at `e` that hands the local on whole,
-    /// which the walk then leaves out of the reads.
-    fn record_forwards(&mut self, e: ExprId) {
+    /// which the walk then leaves out of the reads, and answer the promoted
+    /// ones.
+    fn record_forwards(&mut self, e: ExprId) -> Vec<ValueId> {
         let body = self.scope.body;
+        let mut values = Vec::new();
         let ExprKind::Call { func_id, args, .. } = &body.exprs[e].kind else {
-            return;
+            return values;
         };
         for (param_idx, arg) in args.iter().enumerate() {
             if !arg.is_mut && body.argument_local(arg.expr) == Some(self.scope.local) {
-                self.forwarded.insert(arg.expr);
+                match arg.expr {
+                    Operand::Expr(a) => {
+                        self.forwarded.insert(a);
+                    }
+                    Operand::Value(v) => values.push(v),
+                }
                 self.reads.forwards.insert((func_id.index(), param_idx));
             }
         }
+        values
     }
 
     fn expr(&mut self, e: ExprId) {
