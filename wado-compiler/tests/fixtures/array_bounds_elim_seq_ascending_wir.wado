@@ -1,5 +1,7 @@
-// `xs[i]` passing puts `i` in `0..len`, so `i + 1` cannot be negative: each
-// later index checks only its upper half.
+// `xs[i]` and `xs[i + 2]` run on one straight path with nothing observable
+// between, so the first check takes the last's upper half: `i < len - 2`.
+// Either failing traps, and a contract asks only that a violation traps, so
+// `xs[i + 1]` and `xs[i + 2]` need no check of their own.
 
 use { println, Stdout } from "core:cli";
 
@@ -18,12 +20,10 @@ __DATA__
     "stdout": "9\n",
     "wir_scope": "ascending",
     "wir_expect:O2": [
-        "if @unlikely(i >=u ",
-        "(i + 1) >= $load_{n})",
-        "(i + 2) >= $load_{n})"
+        "$load_{n} - 2)"
     ],
     "wir_not_expect:O2": [
-        "0 > ",
-        "0 <= "
+        "(i + 1) >=",
+        "(i + 2) >="
     ]
 }

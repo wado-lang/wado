@@ -2149,10 +2149,16 @@ pub(super) fn operand_same(engine: &Engine, binds: &Binds, a: Operand, b: Operan
 #[derive(Clone, Copy)]
 enum Fact {
     /// `key >= lo`: a local's floor, or a length's from an `if` condition.
-    Floor { key: BoundKey, lo: i64 },
+    Floor {
+        key: BoundKey,
+        lo: i64,
+    },
     /// `var <= hi`. A passed lower half `lo <= var + j` leaves it, since the
     /// sum it tested did not wrap.
-    Max { var: u32, hi: i64 },
+    Max {
+        var: u32,
+        hi: i64,
+    },
     /// `var + c < bound`, unwrapped. `var` is `None` for a constant index `c`.
     Ceil {
         var: Option<u32>,
@@ -2161,7 +2167,31 @@ enum Fact {
     },
     /// `var + j < bound` held of the sum as it wrapped: it proves that same
     /// check again and nothing else.
-    Exact { var: u32, j: i64, bound: BoundKey },
+    Exact {
+        var: u32,
+        j: i64,
+        bound: BoundKey,
+    },
+    Site(Site),
+}
+
+/// A passed upper half `index < bound` that a later check on the same straight
+/// path may move into, while nothing observable runs between them. Either
+/// failing traps, and a contract asks only that a violation trap, not which
+/// access reports it: `xs[i]; xs[i + 1]; xs[i + 2]` checks `i < len - 2` once.
+#[derive(Clone, Copy)]
+struct Site {
+    /// The comparison: `index < bound`, or a bare check's `index >= bound`.
+    cmp: ExprId,
+    /// `None` for a constant index.
+    var: Option<u32>,
+    /// The index's offset from `var`, or the constant index.
+    at: i64,
+    /// The offset, or constant, the comparison now covers.
+    reach: i64,
+    bound: BoundKey,
+    /// The `bound - d` a widening of a `var` index wrote into `cmp`.
+    sub: Option<ExprId>,
 }
 
 /// The range of `var`'s signed integer type. An unsigned index has no lower
@@ -2197,10 +2227,199 @@ fn var_span(facts: &[Fact], var: u32, (tmin, tmax): (i64, i64)) -> (i64, i64) {
                 };
                 hi = hi.min(most.saturating_sub(c).saturating_sub(1));
             }
-            Fact::Floor { .. } | Fact::Max { .. } | Fact::Ceil { .. } | Fact::Exact { .. } => {}
+            Fact::Floor { .. }
+            | Fact::Max { .. }
+            | Fact::Ceil { .. }
+            | Fact::Exact { .. }
+            | Fact::Site(_) => {}
         }
     }
     (lo, hi)
+}
+
+/// The facts a conditional region starts from. A site stays behind: a check
+/// that may not run cannot move into one that does.
+fn branch_facts(facts: &[Fact]) -> Vec<Fact> {
+    facts
+        .iter()
+        .copied()
+        .filter(|f| !matches!(f, Fact::Site(_)))
+        .collect()
+}
+
+/// The comparisons a check's condition is made of, each with its index on the
+/// left and its bound on the right, as [`Site::cmp`] needs them.
+fn check_comparisons(engine: &Engine, cond: Operand) -> Vec<ExprId> {
+    let Operand::Expr(ce) = cond else {
+        return Vec::new();
+    };
+    match engine.body.exprs[ce].kind {
+        ExprKind::Binary {
+            op: NirBinaryOp::GtEq,
+            ..
+        } => vec![ce],
+        ExprKind::Unary {
+            op: NirUnaryOp::Not,
+            expr: Operand::Expr(inner),
+        } => {
+            let comparisons: Vec<ExprId> = if is_conjunction(engine, inner) {
+                written_conjuncts(engine, cond)
+                    .into_iter()
+                    .filter_map(|slot| slot.operand.as_expr())
+                    .collect()
+            } else {
+                vec![inner]
+            };
+            comparisons
+                .into_iter()
+                .filter(|&e| {
+                    matches!(
+                        engine.body.exprs[e].kind,
+                        ExprKind::Binary {
+                            op: NirBinaryOp::Lt,
+                            ..
+                        }
+                    )
+                })
+                .collect()
+        }
+        _ => Vec::new(),
+    }
+}
+
+/// Record a site for each upper half of the check `cond` just passed. A `var`
+/// index needs its sum proven unwrapped, the `Ceil` [`learn_conjuncts`] leaves,
+/// and a bound `bound - d` cannot wrap below: a length or a constant.
+fn record_sites(engine: &Engine, binds: &Binds, cond: Operand, facts: &mut Vec<Fact>) {
+    for cmp in check_comparisons(engine, cond) {
+        let ExprKind::Binary { left, right, .. } = engine.body.exprs[cmp].kind else {
+            unreachable!("a check comparison is binary");
+        };
+        let (Some(index), Some(bound)) = (
+            parse_index(engine, binds, left),
+            parse_bound(engine, binds, right),
+        ) else {
+            continue;
+        };
+        let (var, at) = match index {
+            Index::Const(c) => (None, c),
+            Index::Var(var, j) => {
+                let unwrapped = facts.iter().any(|f| {
+                    matches!(*f, Fact::Ceil { var: Some(v), bound: b, c }
+                        if v == var && b == bound && c == j)
+                });
+                let floored = is_seq_length(engine, binds, right)
+                    || parse_const_i64(engine, binds, right).is_some();
+                if !unwrapped || !floored {
+                    continue;
+                }
+                (Some(var), j)
+            }
+        };
+        facts.push(Fact::Site(Site {
+            cmp,
+            var,
+            at,
+            reach: at,
+            bound,
+            sub: None,
+        }));
+    }
+}
+
+/// Move the later upper half `index < bound` into a site that reaches less far,
+/// leaving the fact that proves it. `false` when no site covers it.
+fn widen_site(engine: &mut Engine, facts: &mut Vec<Fact>, index: Index, bound: BoundKey) -> bool {
+    let (var, k) = match index {
+        Index::Var(var, k) => (Some(var), k),
+        Index::Const(c) => (None, c),
+    };
+    let Some(slot) = facts.iter().position(
+        |f| matches!(*f, Fact::Site(s) if s.var == var && s.bound == bound && s.reach < k),
+    ) else {
+        return false;
+    };
+    let Fact::Site(mut site) = facts[slot] else {
+        unreachable!("found above");
+    };
+    let ExprKind::Binary { left, op, right } = engine.body.exprs[site.cmp].kind else {
+        unreachable!("a site's comparison is binary");
+    };
+    let span = engine.body.exprs[site.cmp].span;
+    let int =
+        |engine: &mut Engine, ty, c: i64| engine.const_operand(ValueKind::Int(c as u64, ty), ty);
+    match (var, site.sub) {
+        // A constant index cannot wrap: it simply becomes the later one.
+        (None, _) => {
+            let ty = engine.body.operand_type(left);
+            let left = int(engine, ty, k);
+            engine.replace_expr_kind(site.cmp, ExprKind::Binary { left, op, right });
+        }
+        (Some(_), None) => {
+            let ty = engine.body.operand_type(right);
+            let d = int(engine, ty, k - site.at);
+            let sub = engine.alloc_expr(
+                ExprKind::Binary {
+                    left: right,
+                    op: NirBinaryOp::Sub,
+                    right: d,
+                },
+                ty,
+                span,
+            );
+            let right = Operand::Expr(sub);
+            engine.replace_expr_kind(site.cmp, ExprKind::Binary { left, op, right });
+            site.sub = Some(sub);
+        }
+        (Some(_), Some(sub)) => {
+            let ExprKind::Binary { left: bound_op, .. } = engine.body.exprs[sub].kind else {
+                unreachable!("a site's `bound - d` is binary");
+            };
+            let ty = engine.body.operand_type(bound_op);
+            let d = int(engine, ty, k - site.at);
+            engine.replace_expr_kind(
+                sub,
+                ExprKind::Binary {
+                    left: bound_op,
+                    op: NirBinaryOp::Sub,
+                    right: d,
+                },
+            );
+        }
+    }
+    site.reach = k;
+    facts[slot] = Fact::Site(site);
+    facts.push(Fact::Ceil { var, bound, c: k });
+    true
+}
+
+/// Whether running `node` does nothing a trap would hide: no call that may do
+/// I/O, no exit, and no loop, which might not end. A check moved across it
+/// traps only where the program would have trapped anyway.
+fn is_quiet(engine: &Engine, node: NodeRef) -> bool {
+    let mut quiet = true;
+    engine.body.for_each_live_node_under(node, |n| {
+        quiet &= match n {
+            NodeRef::Expr(e) => match &engine.body.exprs[e].kind {
+                ExprKind::Call { func_id, .. } => {
+                    engine.is_panic_callee(*func_id) || engine.is_pure_builtin_callee(*func_id)
+                }
+                kind => !matches!(
+                    kind,
+                    ExprKind::IndirectCall { .. } | ExprKind::CmRawCall { .. }
+                ),
+            },
+            NodeRef::Stmt(s) => !matches!(
+                engine.body.stmts[s].kind,
+                StmtKind::Loop { .. }
+                    | StmtKind::Return { .. }
+                    | StmtKind::Break { .. }
+                    | StmtKind::Continue
+            ),
+            NodeRef::Block(_) | NodeRef::Pat(_) => true,
+        };
+    });
+    quiet
 }
 
 /// Whether `var + j` cannot wrap for any `var` in `span`.
@@ -2340,7 +2559,11 @@ fn invalidate(engine: &Engine, node: NodeRef, facts: &mut Vec<Fact>) {
     let kept = |key: BoundKey| {
         bound_root(key).is_none_or(|root| !modifies_any_root(engine, node, &[root]))
     };
+    let quiet = !facts.iter().any(|f| matches!(f, Fact::Site(_))) || is_quiet(engine, node);
     facts.retain(|f| match *f {
+        Fact::Site(site) => {
+            quiet && site.var.is_none_or(|v| kept(BoundKey::Local(v))) && kept(site.bound)
+        }
         Fact::Floor { key, .. } => kept(key),
         Fact::Max { var, .. } => kept(BoundKey::Local(var)),
         Fact::Ceil { var, bound, .. } => {
@@ -2652,6 +2875,18 @@ fn rbce_walk(
         // A check passed proves every conjunct of it. One whose conjuncts are
         // all proven already is dead, and a proven one drops out of the rest.
         if let Some(parts) = check_conjuncts(engine, binds, cond) {
+            let mut widened = false;
+            for &part in &parts {
+                if let Conjunct::Lt(left, right) = part
+                    && !conjunct_proven(engine, binds, facts, part)
+                    && let (Some(index), Some(bound)) = (
+                        parse_index(engine, binds, left),
+                        parse_bound(engine, binds, right),
+                    )
+                {
+                    widened |= widen_site(engine, facts, index, bound);
+                }
+            }
             if parts
                 .iter()
                 .all(|&p| conjunct_proven(engine, binds, facts, p))
@@ -2669,7 +2904,8 @@ fn rbce_walk(
                 })
                 .is_some_and(|slot| slot.drop_from_check(engine));
             learn_conjuncts(engine, binds, facts, &parts);
-            return changed;
+            record_sites(engine, binds, cond, facts);
+            return changed || widened;
         }
         if let Some(ce) = cond.as_expr() {
             return rbce_walk(engine, NodeRef::Expr(ce), facts, binds, frames);
@@ -2687,11 +2923,11 @@ fn rbce_walk(
         if let Some(ce) = cond.as_expr() {
             invalidate(engine, NodeRef::Expr(ce), &mut floors);
         }
-        let mut ft = facts.clone();
+        let mut ft = branch_facts(facts);
         ft.extend(floors);
         changed |= rbce_walk(engine, NodeRef::Block(then_b), &mut ft, binds, frames);
         if let Some(eb) = else_b {
-            let mut fe = facts.clone();
+            let mut fe = branch_facts(facts);
             changed |= rbce_walk(engine, NodeRef::Block(eb), &mut fe, binds, frames);
             invalidate(engine, NodeRef::Block(eb), facts);
         }
@@ -2706,7 +2942,7 @@ fn rbce_walk(
             invalidate(engine, NodeRef::Expr(le), facts);
         }
         if let Some(re) = right.as_expr() {
-            let mut fr = facts.clone();
+            let mut fr = branch_facts(facts);
             changed |= rbce_walk(engine, NodeRef::Expr(re), &mut fr, binds, frames);
             invalidate(engine, NodeRef::Expr(re), facts);
         }
@@ -2771,7 +3007,7 @@ fn rbce_walk(
                 changed |= rbce_walk(engine, c, facts, binds, frames);
                 invalidate(engine, c, facts);
             } else {
-                let mut arm = facts.clone();
+                let mut arm = branch_facts(facts);
                 changed |= rbce_walk(engine, c, &mut arm, binds, frames);
             }
         }

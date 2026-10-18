@@ -1,0 +1,15 @@
+// The first check, widened to `xs[i + 2]`'s upper half, traps where
+// `xs[i + 2]` would have: `i = 1` reaches past a length of 3.
+
+#[inline(never)]
+fn ascending(xs: &List<i32>, i: i32) -> i32 {
+    return xs[i] + xs[i + 1] + xs[i + 2];
+}
+
+export fn run() {
+    let xs: List<i32> = builtin::black_box([1, 2, 3]);
+    let _ = ascending(&xs, builtin::black_box(1));
+}
+
+__DATA__
+{"trapped": true}
