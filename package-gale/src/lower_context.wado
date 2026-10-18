@@ -5,7 +5,7 @@
 
 use { Alternative, ParserRule } from "./ir.wado";
 use { Diagnostics, Rule } from "./gir.wado";
-use { RuleOverlap, rule_overlap_groups } from "./rule_overlap.wado";
+use { RuleOverlap, overlap_groups_of, rule_has_at_end_conflict, rule_overlap_groups } from "./rule_overlap.wado";
 use { GrammarAnalysis } from "./grammar_analysis.wado";
 use { GenSettings } from "./gen_settings.wado";
 use { RuleFollow } from "./follow_env.wado";
@@ -200,5 +200,14 @@ impl LowerContext {
     pub fn rule_overlap(&mut self, rule: &ParserRule, lowered_rule: &Rule) -> RuleOverlap {
         let has_gate = |alt: &Alternative| self.alt_has_gate(alt);
         return rule_overlap_groups(rule, lowered_rule, &mut self.analysis, &self.follow, has_gate);
+    }
+
+    /// Whether the choice among the alternatives `alt_indices` of the rule
+    /// being lowered reaches a decision the simulator makes. `multi_alt` is
+    /// as for `rule_overlap::overlap_groups_of`.
+    pub fn choice_routes(&mut self, rule: &ParserRule, alt_indices: List<i32>, multi_alt: bool) -> bool {
+        let has_gate = |alt: &Alternative| self.alt_has_gate(alt);
+        let overlap = overlap_groups_of(rule, alt_indices, multi_alt, &mut self.analysis, &self.follow, has_gate);
+        return rule_has_at_end_conflict(rule, &overlap, &mut self.analysis, &self.follow);
     }
 }

@@ -1060,13 +1060,24 @@ the compiled fast path:**
    no simulator. A rule reachable only past a `.` / `~X` (whose follow set
    can't be enumerated) routes conservatively. A caller's scan of such a
    rule asks the simulator too, with the parse's caller stack
-   (`Parser.atn`), so the scan ends where the parse will. Every other
-   multi-alt ambiguity keeps the tournament, whose longest-match matches
-   ANTLR4 across the corpus. Regression fixtures:
+   (`Parser.atn`), so the scan ends where the parse will. In a grammar that
+   carries the simulator, every other ambiguity the prediction tree gives up
+   on goes to it as well (`ambiguity_routes`). The tournament picks the
+   longest scan, and ANTLR4 the lowest alternative the rest of the input
+   admits. The simulator disables an alternative whose predicate is false,
+   including one the alternative reaches at the left edge of a rule it opens
+   with: ANTLR4 finds those visible at the decision (`doc/predicates.md`).
+   A left-recursive rule whose atom choice reaches the simulator is routed as
+   in 1, in any grammar: its static loop would take a suffix the full context
+   gives the caller (TypeScript's `new Map<T>()`, where `()` is the `new`'s).
+   Regression fixtures:
    `tests/grammars/ll_longest_vs_context.g4`, `ll_at_end_nullable_gap.g4` and
    `ll_opaque_at_end_context.g4` (routed to the simulator),
    `ll_at_end_follow_disjoint.g4` and `ll_opaque_at_end_gap.g4` (stay on the
-   tournament), `ll_optional_non_greedy_multi.g4`.
+   tournament), `ll_optional_non_greedy_multi.g4`, and the tests in
+   `codegen_test.wado` "a predicate at the left edge of an invoked rule gates
+   an ATN-routed decision" and "a call after a prefix operand is the prefix's
+   own when only it can take one".
 4. A **group whose nullable alternative competes** with another for the
    tokens that follow the group (see "A nullable alternative is admitted by
    what follows the group" above).
@@ -1080,10 +1091,16 @@ the compiled fast path:**
    the body takes. The tests are in `codegen_test.wado`
    (`LR_SUFFIX_LOOPS` and "a non-greedy wildcard exits only where the whole
    rest of the input can match").
+6. A **greedy `?` whose entry the caller's FOLLOW gates**, in a rule that
+   asks the simulator anyway (`optional_asks_simulator`). The gate reads that
+   FOLLOW without the call stack, and a caller that passes none leaves it
+   entering wherever the body scans. TypeScript's `new E(a)` gave `(a)` to
+   the operand's `identifierName singleExpression?`, which the stack says the
+   `new` still owes as its arguments. Same test as 3.
 
 Two more sites _would_ belong here on correctness grounds and are left out on
 cost — the ambiguous decisions of the section above: an ambiguous greedy `rule?`
-(fixture `ll_opt_greedy_ambig.g4`) and a non-greedy `*?` / `+?` loop over a
+in a rule 6 does not reach (fixture `ll_opt_greedy_ambig.g4`) and a non-greedy `*?` / `+?` loop over a
 narrower body that no lookahead separates (`ll_non_greedy_plus_loop.g4`,
 SQLite's `name+?`). A prediction per occurrence
 costs a full closure over the grammar, which took SQLite's DDL-heavy benchmark

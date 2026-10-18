@@ -512,11 +512,13 @@ fn current_rule_is_multi_alt(ctx: &EmitContext) -> bool {
 }
 
 /// The gates an ATN-routed decision disables alternatives by: each gated alt of
-/// `amb_alts` with its condition, as the parse or a scan can evaluate it.
+/// `amb_alts` with its condition, as the parse or a scan can evaluate it. The
+/// parse's include the predicates the alternative reaches through the rules it
+/// opens with (`invoked_left_edge_predicates`).
 pub fn atn_decision_gates(
     amb_alts: &List<i32>,
     alts: &List<Alternative>,
-    ctx: &EmitContext,
+    ctx: &mut EmitContext,
     in_scan: bool,
 ) -> List<[i32, String]> {
     let mut gates: List<[i32, String]> = [];
@@ -536,8 +538,45 @@ pub fn atn_decision_gates(
                 gates.push([*idx, cond]);
             }
         }
+        for let a of &invoked_left_edge_predicates(&alts[*idx], ctx) {
+            need_predicate_fn(a, ctx);
+            gates.push([*idx, `${pred_fn_name(ctx.analysis.predicate_fn_id(a.source.action_id))}(p)`]);
+        }
     }
     return gates;
+}
+
+/// The predicates an alternative reaches at its left edge inside the rules it
+/// opens with, which ANTLR4 evaluates at the decision as it does the
+/// alternative's own: prediction sees a predicate it meets before any token or
+/// action (`doc/predicates.md`, "Finding Visible Predicates"). The walk follows
+/// a rule only while it has one alternative, since a predicate on one of
+/// several guards that path alone, and keeps those that read nothing but the
+/// parser, the only ones the caller's frame can evaluate.
+fn invoked_left_edge_predicates(alt: &Alternative, ctx: &EmitContext) -> List<AltAction> {
+    let mut out: List<AltAction> = [];
+    let mut at = *alt;
+    while !at.actions.iter_ref().any(|a| a.before_index == 0 && a.kind matches { Action }) {
+        let Some(RuleRef(r)) = at.elements.first() else {
+            break;
+        };
+        let Some(callee) = ctx.analysis.find_rule(&r.name) else {
+            break;
+        };
+        if callee.alternatives.len() != 1 {
+            break;
+        }
+        at = callee.alternatives[0];
+        for let a of &at.actions {
+            if a.before_index != 0 || a.kind matches { Action } {
+                break;
+            }
+            if body_needs_no_translator(&a.source.text, &ctx.settings) {
+                out.push(*a);
+            }
+        }
+    }
+    return out;
 }
 
 /// An alt's gateable alt-initial predicate conditions, translated, in grammar

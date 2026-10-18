@@ -5,7 +5,7 @@
 
 use { AltAction, Alternative, ParserRule } from "./ir.wado";
 use { Admits, Diagnostics, Rule, admits_or_everything } from "./gir.wado";
-use { RuleOverlap, rule_overlap_groups } from "./rule_overlap.wado";
+use { RuleOverlap, ambiguity_routes, rule_overlap_groups } from "./rule_overlap.wado";
 use { GrammarAnalysis } from "./grammar_analysis.wado";
 use { GenSettings } from "./gen_settings.wado";
 use { RuleFollow } from "./follow_env.wado";
@@ -18,6 +18,7 @@ use { rule_returns_vals } from "./action_translate.wado";
 use { SCAN_GATE_HANDLE, SCAN_GATE_FIELD, SCAN_GATE_TYPE } from "./scan_gate.wado";
 use { PARSER_HANDLE } from "./ident.wado";
 use { push_unique } from "./list_util.wado";
+use { alt_is_left_recursive } from "./lr_util.wado";
 use { sets_overlap } from "./token_kinds.wado";
 use { HashMap, HashSet } from "core:collections";
 use { GALE_SEED } from "./hash_seed.wado";
@@ -374,12 +375,32 @@ impl EmitContext {
 
     /// Whether an `Ambiguous` node's decision is a runtime-ATN prediction.
     pub fn ambiguous_routes_via_atn<S: AsStrSlice>(&self, a: &AmbiguousNode, rule_name: S) -> bool {
-        let idx = self.cursor.current_rule_index();
-        return a.reason matches { AtEndConflict }
-            && self.plan.needs_atn
-            && self.plan.lr_loop_entry_decision(idx) < 0
-            && self.plan.atn_rule_body_decision(idx) >= 0
-            && self.follow.at_end_conflict_routes(rule_name, &a.branch_tokens);
+        return self.plan.needs_atn
+            && self.plan.atn_rule_body_decision(self.cursor.current_rule_index()) >= 0
+            && self.atn_body_alt_numbers(&a.alts) matches { Some(_) }
+            && ambiguity_routes(a, rule_name, &self.follow);
+    }
+
+    /// The number the simulator answers each of the current rule's `alts` by
+    /// at its body decision, or `null` where that decision is not among them.
+    /// A left-recursive rule's body decision is its atom block, which numbers
+    /// the non-LR alternatives in order and holds no suffix.
+    pub fn atn_body_alt_numbers(&self, alts: &List<i32>) -> Option<List<i32>> {
+        let rule = self.current_rule();
+        let mut numbers: List<i32> = [];
+        for let idx of alts {
+            let mut number = 0;
+            for let i of 0..<*idx {
+                if !alt_is_left_recursive(&rule.alternatives[i], &rule.name) {
+                    number += 1;
+                }
+            }
+            if alt_is_left_recursive(&rule.alternatives[*idx], &rule.name) {
+                return null;
+            }
+            numbers.push(number);
+        }
+        return Option::Some(numbers);
     }
 
     /// Whether a `*` / `+` at decision `site` may exit on a token in `kinds`,

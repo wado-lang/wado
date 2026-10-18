@@ -78,7 +78,6 @@ use { dedup_append_arr, push_unique } from "./list_util.wado";
 use { sets_overlap, subtract_sets, union_kind_arrays } from "./token_kinds.wado";
 use { LitToken } from "./lexer_gen.wado";
 use { LowerContext, LowerMarks } from "./lower_context.wado";
-use { rule_has_at_end_conflict } from "./rule_overlap.wado";
 use { GrammarAnalysis, close_over_callers, is_nullable } from "./grammar_analysis.wado";
 use { GenSettings } from "./gen_settings.wado";
 use { FOLLOW_MASK_MAX_K } from "./table_registry.wado";
@@ -510,7 +509,6 @@ pub fn lower(grammar: &Grammar, lit_tokens: &List<LitToken>, ctx: &mut LowerCont
         parser_rules.push(lower_rule(rule, ctx));
     }
     ctx.marks.follow_rule_snakes = follow_rule_snakes(grammar, &ctx.analysis, &ctx.marks);
-    mark_at_end_conflicts_routed(grammar, &parser_rules, ctx);
     return LoweredGrammar {
         name: grammar.name,
         source_files: grammar.source_files,
@@ -523,24 +521,6 @@ pub fn lower(grammar: &Grammar, lit_tokens: &List<LitToken>, ctx: &mut LowerCont
         parser_rules,
         diagnostics: ctx.diagnostics.to_list(),
     };
-}
-
-/// Mark each rule whose at-end conflict routes to the simulator, which the scan
-/// of that rule then consults as the parse does. Needs every rule lowered, since
-/// the conflict is read off the lowered shape.
-fn mark_at_end_conflicts_routed(grammar: &Grammar, lowered: &List<Rule>, ctx: &mut LowerContext) {
-    for let mut r = 0; r < grammar.parser_rules.len(); r += 1 {
-        if !lowered[r] matches { MultiAlt(_) } {
-            continue;
-        }
-        ctx.set_current_rule_index(r);
-        let rule = &grammar.parser_rules[r];
-        let overlap = ctx.rule_overlap(rule, &lowered[r]);
-        if rule_has_at_end_conflict(rule, &overlap, &mut ctx.analysis, &ctx.follow) {
-            ctx.marks.mark_asks_simulator(r);
-        }
-    }
-    ctx.set_current_rule_index(-1);
 }
 
 /// Which rules carry the FOLLOW slots, by snake name. The rules that gate or
@@ -620,6 +600,12 @@ fn lower_multi_alt_rule(rule: &ParserRule, ctx: &mut LowerContext) -> MultiAltRu
     let owner = DiagnosticOwner::rule_dispatch(&rule.name);
     let classes = alt_classes(&all_indices, &rule.alternatives, &first_sets, &mut ctx.analysis);
     let dispatch = build_overlap_dispatch(&owner, &rule.alternatives, &all_indices, &classes, ctx);
+    // The scan of a rule whose choice the simulator makes consults it as the
+    // parse does.
+    if ctx.choice_routes(rule, all_indices, true) {
+        let idx = ctx.current_rule_index();
+        ctx.marks.mark_asks_simulator(idx);
+    }
     return MultiAltRule {
         header,
         alts,
@@ -685,9 +671,19 @@ fn lower_lr_rule(rule: &ParserRule, ctx: &mut LowerContext) -> LeftRecursiveRule
     // that overlaps an LR suffix-first (the `'between' expr 'and' expr`
     // shape), when a suffix can open on a `.` / `~X`, or when a self-ref
     // nested in a suffix's subrule can meet a loop operator.
-    // Route such a rule's loop-entry through the runtime simulator.
+    // Route such a rule's loop-entry through the runtime simulator. So too a
+    // rule whose atom choice the simulator makes: it predicts the atom under
+    // the invocation's `min_prec`, so the body functions take it, and the
+    // static loop would take a suffix the full context gives the caller
+    // (`new Map<T>()` in a TypeScript initializer: `()` is the `new`'s, not a
+    // call suffix).
     let suffix_classes = lr_suffix_classes(rule, &lr_alts, ctx);
-    let atn_class = lr_rule_is_atn_class(rule, &non_lr_indices, &lr_alts, &suffix_classes, &mut ctx.analysis);
+    let atom_routes = ctx.choice_routes(rule, non_lr_indices, false);
+    if atom_routes {
+        ctx.mark_body_predicts();
+    }
+    let atn_class = atom_routes
+        || lr_rule_is_atn_class(rule, &non_lr_indices, &lr_alts, &suffix_classes, &mut ctx.analysis);
     if atn_class {
         ctx.mark_needs_lr_atn();
     }

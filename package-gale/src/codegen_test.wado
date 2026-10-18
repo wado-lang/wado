@@ -3272,6 +3272,27 @@ x in a a => error
 ";
 }
 
+test "a call after a prefix operand is the prefix's own when only it can take one" {
+    let got = parses("grammar T;
+s : e ';' EOF ;
+e : e '.' ID
+  | 'new' e targs? args
+  | 'new' e targs?
+  | e args
+  | ID e?
+  | '(' e ')' ;
+targs : '<' ID '>' ;
+args : '(' (arg (',' arg)*)? ')' ;
+arg : e ;
+ID : [a-zA-Z]+ ;
+WS : [ \\t]+ -> skip ;
+", "s", ["new E(a);", "new E(a.b);", "new E(f(a));"]);
+    assert got == "new E(a); => (s (e new (e E) (args ( (arg (e a)) ))) ;)
+new E(a.b); => (s (e new (e E) (args ( (arg (e (e a) . b)) ))) ;)
+new E(f(a)); => (s (e new (e E) (args ( (arg (e f (e ( (e a) )))) ))) ;)
+";
+}
+
 test "a non-greedy optional in a left-recursive suffix leaves the else to its caller" {
     let got = parses("grammar T;
 s : e 'else' ID EOF ;
@@ -3477,6 +3498,49 @@ abcc => error
 abckx => (scanned (xg a b c) k x) [abcx]
 abcky => (scanned (xg a b c) k y) [abcy]
 ";
+}
+
+test "a let chain after a simulated operand leaves its `&&` to the chain" {
+    let got = parses("grammar T;
+s : 'match' ID '{' arm* '}' EOF ;
+arm : ID guard? '=>' '{' '}' ;
+guard : 'if' 'let' ID '=' e tail* | 'if' e tail* ;
+tail : '&&' 'let' ID '=' e ;
+e : e '&&' e
+  | e '.' ID
+  | p '!'
+  | p
+  ;
+p : ID ('::' ID)* ;
+ID : [a-zA-Z]+ ;
+WS : [ \\t]+ -> skip ;
+", "s", ["match x { a if b && let q = c => {} }", "match x { a if b && c => {} }"]);
+    assert got == "match x { a if b && let q = c => {} } => (s match x { (arm a (guard if (e (p b)) (tail && let q = (e (p c)))) => { }) })
+match x { a if b && c => {} } => (s match x { (arm a (guard if (e (e (p b)) && (e (p c)))) => { }) })
+";
+}
+
+// `x`'s first alternative opens with `g`, whose predicate prediction meets
+// before any token, so it decides `x` as one written on the alternative does.
+test "a predicate at the left edge of an invoked rule gates an ATN-routed decision" {
+    let got = parses_each("grammar T;
+options { language = Wado; }
+off : x 'c'* EOF ;
+x : g 'b'
+  | 'a' 'b' 'c'
+  ;
+g : { false }? 'a' ;
+on : y 'c'* EOF ;
+y : h 'b'
+  | 'a' 'b' 'c'
+  ;
+h : { true }? 'a' ;
+WS : ' ' -> skip ;
+", [
+        ["off", "abc"],
+        ["on", "abc"],
+    ]);
+    assert got == "abc => (off (x a b c))\nabc => (on (y (h a) b) c)\n";
 }
 
 test "a non-greedy loop in a left-recursive suffix stops where the rest of the suffix matches" {

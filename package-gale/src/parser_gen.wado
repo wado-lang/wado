@@ -2046,17 +2046,17 @@ fn gen_scan_op_repeat<S: AsStrSlice>(
         return;
     }
 
+    if re.kind matches { Optional } && optional_asks_simulator(re.non_greedy, re.gate_caller_follow, ctx) {
+        w.begin(`if ${atn_enters_cond(ctx, re.atn_decision, re.non_greedy, "tokens", "pos")}`);
+        gen_scan_iteration(w, re, &loop_admits, ctx, false);
+        w.end();
+        return;
+    }
     if scan_takes_optional_probe(re, ctx) {
         gen_scan_optional_probe(w, re, ctx);
         return;
     }
     if let Optional = re.kind {
-        if re.non_greedy {
-            w.begin(`if ${atn_enters_cond(ctx, re.atn_decision, "tokens", "pos")}`);
-            gen_scan_iteration(w, re, &loop_admits, ctx, false);
-            w.end();
-            return;
-        }
         // OptionalLookahead doesn't reach this path (it's a
         // ScanElement::OptionalLookahead, not a ScanElement::Repeat).
         let body_is_rulecall = re.body matches { RuleCall(_) };
@@ -4472,8 +4472,8 @@ fn gen_op_optional(
     nc: &mut List<[String, i32]>,
     follow_gate: bool,
 ) {
-    if r.non_greedy && ctx.plan.needs_atn {
-        w.begin(`if ${atn_enters_cond(ctx, r.atn_decision, "&p.kinds", "p.pos")}`);
+    if optional_asks_simulator(r.non_greedy, r.gate_caller_follow, ctx) {
+        w.begin(`if ${atn_enters_cond(ctx, r.atn_decision, r.non_greedy, "&p.kinds", "p.pos")}`);
         gen_op(w, &r.body, ctx, nc);
         w.end();
         return;
@@ -4741,8 +4741,8 @@ fn gen_op_repeat_optional_group(
     let _ = dedup_name(&rep_op.field, name_counts);
     let opt = OptionalGroup { rep_op, g_op, g_elem, inner: &rep.element };
 
-    if rep.non_greedy && ctx.plan.needs_atn {
-        opt.gen_present(w, ctx, &atn_enters_cond(ctx, rep_op.atn_decision, "&p.kinds", "p.pos"));
+    if optional_asks_simulator(rep.non_greedy, rep_op.gate_caller_follow, ctx) {
+        opt.gen_present(w, ctx, &atn_enters_cond(ctx, rep_op.atn_decision, rep.non_greedy, "&p.kinds", "p.pos"));
         return;
     }
     if optional_probe_decides(rep_op, ctx) {
@@ -4828,17 +4828,33 @@ impl OptionalGroup {
     }
 }
 
-/// Runtime entry condition for a non-greedy repeat's next iteration: the ATN
-/// simulator decides enter vs exit with full context. The exact ATN decision
-/// number is stamped at compile time (`RepeatElement.atn_decision` ->
+/// Whether the simulator decides if this `?` enters: a `??` always, and a
+/// greedy one whose entry the caller's FOLLOW gates, in a rule that asks the
+/// simulator anyway. The gate reads that FOLLOW without the call stack, and
+/// where a caller passes none it enters whenever the body scans: TypeScript's
+/// `new E(a)` gave `(a)` to the operand's `identifierName singleExpression?`,
+/// which the stack says the `new` still owes as its arguments.
+fn optional_asks_simulator(non_greedy: bool, gate_caller_follow: bool, ctx: &EmitContext) -> bool {
+    return ctx.plan.needs_atn && (non_greedy || gate_caller_follow && ctx.current_rule_asks_simulator());
+}
+
+/// Runtime entry condition for a repeat's next iteration: the ATN simulator
+/// decides enter vs exit with full context. The exact ATN decision number is
+/// stamped at compile time (`RepeatElement.atn_decision` ->
 /// `Atn.decision_sites`), so each repeat predicts its own decision, however
-/// many one rule holds. A non-greedy repeat's edges are ordered
-/// `[exit=0, enter=1]` (`build_repeat`), so ENTER iff the simulator returns
-/// alt 1.
-fn atn_enters_cond<S: AsStrSlice, S1: AsStrSlice>(ctx: &EmitContext, site: i32, tokens: S, pos: S1) -> String {
+/// many one rule holds. `build_repeat` orders a greedy repeat's edges
+/// `[enter=0, exit=1]` and a non-greedy one's `[exit=0, enter=1]`.
+fn atn_enters_cond<S: AsStrSlice, S1: AsStrSlice>(
+    ctx: &EmitContext,
+    site: i32,
+    non_greedy: bool,
+    tokens: S,
+    pos: S1,
+) -> String {
     let decision = ctx.plan.atn_decision_site(site);
     assert decision >= 0, "a repeat the simulator decides marked the grammar as needing the ATN, which numbers every repeat's decision";
-    return `${atn_predict_call(decision, tokens, pos, ctx)} == 1`;
+    let enter = if non_greedy { 1 } else { 0 };
+    return `${atn_predict_call(decision, tokens, pos, ctx)} == ${enter}`;
 }
 
 /// `atn_enters_cond` for a loop, asking the simulator only about `asked`
@@ -4851,7 +4867,7 @@ fn atn_loop_enters_cond<S: AsStrSlice, S1: AsStrSlice, S2: AsStrSlice>(
     tokens: S1,
     pos: S2,
 ) -> String {
-    let predicts = atn_enters_cond(ctx, site, tokens, pos);
+    let predicts = atn_enters_cond(ctx, site, true, tokens, pos);
     if asked.is_empty() {
         return predicts;
     }
@@ -5505,24 +5521,21 @@ fn gen_op_repeat_with_follow_override(
     follow: &List<i32>,
 ) {
     gen_decision_sync(w, ctx, ctx.plan.decision_entry_expect(rep.atn_decision), "sync_enter");
-    if rep.non_greedy {
-        // A `??` asks the simulator, as under the op-only walker
+    if let Optional = rep.kind {
+        // The simulator decides as under the op-only walker
         // (`gen_op_optional`); a group body's emitters ask it themselves.
-        if let Optional = rep.kind {
-            if rep_op.body_shape matches { LeafRuleCall | LeafOther } {
-                let _ = dedup_name(&rep_op.field, name_counts);
-                let enters = atn_enters_cond(ctx, rep_op.atn_decision, "&p.kinds", "p.pos");
-                gen_optional_present(w, &rep_op.body, "", &enters, ctx, &NO_KINDS);
-            } else {
-                gen_op_repeat_optional_greedy(w, rep, rep_op, ctx, name_counts, follow);
-            }
-            return;
+        if optional_asks_simulator(rep.non_greedy, rep_op.gate_caller_follow, ctx)
+            && rep_op.body_shape matches { LeafRuleCall | LeafOther } {
+            let _ = dedup_name(&rep_op.field, name_counts);
+            let enters = atn_enters_cond(ctx, rep_op.atn_decision, rep.non_greedy, "&p.kinds", "p.pos");
+            gen_optional_present(w, &rep_op.body, "", &enters, ctx, &NO_KINDS);
+        } else {
+            gen_op_repeat_optional_greedy(w, rep, rep_op, ctx, name_counts, follow);
         }
-        gen_op_repeat_non_greedy(w, rep, rep_op, ctx, name_counts, follow);
         return;
     }
-    if let Optional = rep.kind {
-        gen_op_repeat_optional_greedy(w, rep, rep_op, ctx, name_counts, follow);
+    if rep.non_greedy {
+        gen_op_repeat_non_greedy(w, rep, rep_op, ctx, name_counts, follow);
         return;
     }
     // Star / Plus, greedy.
@@ -7274,7 +7287,8 @@ fn gen_group_branch_body(
 }
 
 /// `let _atn_alt`: the simulator's pick at rule-body decision `dec`, with each
-/// alternative whose gate is false disabled. The parse and a scan both pick here.
+/// alternative whose gate is false disabled. The parse and a scan both pick
+/// here. Each gate names the alternative by its number at `dec`.
 fn gen_atn_body_pick<S: AsStrSlice, S1: AsStrSlice>(
     w: &mut CodeWriter,
     dec: i32,
@@ -7282,9 +7296,7 @@ fn gen_atn_body_pick<S: AsStrSlice, S1: AsStrSlice>(
     tokens: S,
     pos: S1,
     ctx: &EmitContext,
-)
-    contract atn_prec_arg(ctx) == "0", "a rule-body decision belongs to a rule that climbs no precedence"
-{
+) {
     if gates.is_empty() {
         w.line(`let _atn_alt = ${atn_predict_call(dec, tokens, pos, ctx)};`);
         return;
@@ -7573,7 +7585,9 @@ fn lr_scan_local(lr_idx: i32) -> String {
 
 /// Run the alternative `var` names, for the parse tournament (`_sd_best_i`)
 /// and the ATN route (`_atn_alt`). The last alt runs untested: where `var`
-/// matched nothing, its parse reports the mismatch.
+/// matched nothing, its parse reports the mismatch. `var` holds the
+/// alternative's index, or where `numbers` is given, the number at the same
+/// position.
 fn emit_index_pick_dispatch<S: AsStrSlice, S1: AsStrSlice, S2: AsStrSlice>(
     w: &mut CodeWriter,
     side: PickSide,
@@ -7582,12 +7596,13 @@ fn emit_index_pick_dispatch<S: AsStrSlice, S1: AsStrSlice, S2: AsStrSlice>(
     fn_name: S1,
     rule_display: S2,
     ctx: &EmitContext,
+    numbers: &List<i32> = sorted_indices,
 ) {
     emit_trace_pick(w, side, &rule_display, &var, ctx);
     // The last index needs no test: the tail below is the same call.
     for let mut i = 0; i < sorted_indices.len() - 1; i += 1 {
         let idx = sorted_indices[i];
-        w.begin(`if ${var} == ${idx}`);
+        w.begin(`if ${var} == ${numbers[i]}`);
         emit_leaf_pick(w, side, &fn_name, idx, ctx);
         w.end();
     }
@@ -7932,7 +7947,13 @@ fn gen_prediction_code_inner<S: AsStrSlice, S1: AsStrSlice>(
             if ctx.ambiguous_routes_via_atn(a, rule_display) {
                 let in_scan = side matches { Scan };
                 assert !in_scan || ctx.plan.needs_atn, "a scan picks through the ATN only where every scan takes its state by `&mut`";
-                let gates = atn_decision_gates(&a.alts, alts, ctx, in_scan);
+                let Some(numbers) = ctx.atn_body_alt_numbers(&sorted_indices) else {
+                    unreachable();
+                };
+                let number_of = |idx: i32| numbers[sorted_indices.iter_ref().position(|i| *i == idx).unwrap()];
+                let gates: List<[i32, String]> = atn_decision_gates(&a.alts, alts, ctx, in_scan).iter_ref().map(
+                    |g| [number_of(g.0), g.1],
+                ).collect();
                 let dec = ctx.plan.atn_rule_body_decision(ctx.cursor.current_rule_index());
                 if in_scan {
                     gen_atn_body_pick(w, dec, &gates, "tokens", "pos", ctx);
@@ -7946,7 +7967,7 @@ fn gen_prediction_code_inner<S: AsStrSlice, S1: AsStrSlice>(
                     emit_no_viable_pick(w, side, ctx);
                     w.end();
                 }
-                emit_index_pick_dispatch(w, side, "_atn_alt", &sorted_indices, fn_name, rule_display, ctx);
+                emit_index_pick_dispatch(w, side, "_atn_alt", &sorted_indices, fn_name, rule_display, ctx, &numbers);
                 return;
             }
             // Every alternative reaching codegen scans in full:

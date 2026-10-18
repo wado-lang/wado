@@ -66,8 +66,9 @@ pub struct ParserPlan {
     rescanned: List<bool> = [],
     /// The ATN decision of each rule's LR loop entry, -1 for a rule with none.
     lr_loop_entry_decisions: List<i32> = [],
-    /// The ATN decision of each rule's top-level alternation, which an
-    /// `AtEndConflict` site predicts at; -1 for a single-alt or LR rule.
+    /// The ATN decision of each rule's top-level alternation, which a routed
+    /// `Ambiguous` site predicts at; -1 for a single-alt rule. An LR rule's is
+    /// its atom block's, whose alternatives are the rule's non-LR ones in order.
     atn_rule_body_decisions: List<i32> = [],
     /// By surface call site (`RuleRefElement.atn_call_site`), the ATN return
     /// state a rule call pushes. Empty without the ATN.
@@ -117,12 +118,8 @@ pub fn plan_parser(
     let mut body_decs: List<i32> = [];
     if needs_atn {
         for let mut r = 0; r < rule_count; r += 1 {
-            let lr_dec = lr_loop_entry_decision(atn, r);
-            lr_decs.push(lr_dec);
-            // -1 for LR rules: the atom-block decision's edge indices exclude the
-            // LR alts, so they would not equal the grammar alt indices `_alt_N`
-            // uses (AtEndConflict routing is non-LR only).
-            body_decs.push(if lr_dec >= 0 { -1 } else { rule_body_decision(atn, r) });
+            lr_decs.push(lr_loop_entry_decision(atn, r));
+            body_decs.push(rule_body_decision(atn, r));
         }
     }
     let mut binding_reads: List<Option<List<String>>> = [];
@@ -207,7 +204,7 @@ impl ParserPlan {
     }
 
     /// The ATN decision number for `rule`'s top-level alternation, or -1 if
-    /// single-alt / unbuilt. Used to route an `AtEndConflict` site to the simulator.
+    /// single-alt / unbuilt. A routed `Ambiguous` site predicts at it.
     pub fn atn_rule_body_decision(&self, rule: i32) -> i32 {
         return entry_or_none(&self.atn_rule_body_decisions, rule);
     }
