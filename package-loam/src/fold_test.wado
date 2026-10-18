@@ -129,12 +129,15 @@ test "an integer quotient truncates toward zero, and one over a symbol only wher
     assert fold(&node("Div", ["S", "U"], []), &k, &runtime([])).unwrap_err() == "N / -2 truncates, which the build computes only for a dividend never negative over a positive number";
 }
 
-test "half arithmetic rounds each result to the half it is stored as" {
-    let half = |v: f32, stored: Stored| Known {
+fn half(v: f32, stored: Stored) -> Known {
+    return Known {
         extents: [1],
         elements: Elements::Floats([v]),
         stored,
     };
+}
+
+test "half arithmetic rounds each result to the half it is stored as" {
     let tiny: f32 = 0.00048828125;
     let k = knowns([
         ["A", half(1.0, Stored::Float16)],
@@ -144,6 +147,25 @@ test "half arithmetic rounds each result to the half it is stored as" {
     ]);
     assert folded(node("Add", ["A", "B"], []), k) == half(1.0, Stored::Float16);
     assert folded(node("Add", ["C", "D"], []), k) == half(1.0, Stored::BFloat16);
+}
+
+test "a half Range counts and steps in f32, then rounds each element to the half" {
+    // 0x2E66, the half nearest 0.1.
+    let tenth: f32 = 0.0999755859375;
+    let k = knowns([
+        ["S", half(0.0, Stored::Float16)],
+        ["L", half(1.0, Stored::Float16)],
+        ["D", half(tenth, Stored::Float16)],
+    ]);
+    let r = folded(node("Range", ["S", "L", "D"], []), k);
+    assert r.stored == Stored::Float16;
+    assert r.extents == [11];
+    let Floats(v) = r.elements else {
+        unreachable();
+    };
+    // 3 and 5 tenths fall halfway between two halves, and round to even.
+    assert v[3] == 0.2998046875;
+    assert v[5] == 0.5;
 }
 
 test "an axis list naming one axis twice, once from the end, stops the build" {

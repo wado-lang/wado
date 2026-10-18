@@ -639,9 +639,12 @@ fn range(start: &Known, limit: &Known, delta: &Known) -> Result<Option<Known>, S
             for let i of 0..<count {
                 values.push(s + i as f32 * d);
             }
+            // A half is stepped in f32 and rounded once at the end, as Range's
+            // default `stash_type` asks; `in_width` does the rounding.
             Result::Ok(Option::Some(Known {
                 extents: [count],
                 elements: Elements::Floats(values),
+                stored: start.stored,
             }));
         },
         _ => {
