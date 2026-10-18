@@ -2020,8 +2020,9 @@ mod cm_binding_tests {
     /// What each Component Model primitive binds to. The table is the
     /// specification; [`cm_binding_function`] derives it rather than listing it.
     /// `None` is left to a caller above it: the constructors to `rewrite_cm_new`,
-    /// the payload-carrying futures to the parameterized paths, and the task
-    /// and context builtins to WIR translate.
+    /// and the payload-carrying futures to the parameterized paths. The
+    /// backpressure, context and `task-cancel` primitives bind to nothing yet;
+    /// only the stdlib may call a `#[cm]` member, and none does.
     const EXPECTED: &[(&str, Option<&str>)] = &[
         ("future-new", None),
         ("future-read", None),
