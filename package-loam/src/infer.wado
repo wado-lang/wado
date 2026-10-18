@@ -1410,13 +1410,13 @@ fn attention(
     let Static(dim) = past_k.axes[3].extent else {
         return Result::Err(refusal(node, "the head's extent must be a number"));
     };
-    let stated = |axis: &Axis, extent: i32, into: &mut List<Condition>| agree_at(node, axis, &Axis {
-        ..*axis,
-        extent: Extent::Static(extent),
-    }, into);
-    stated(&q.axes[2], options.heads * dim, owed)?;
-    stated(&k.axes[2], options.kv_heads * dim, owed)?;
-    stated(&past_k.axes[1], options.kv_heads, owed)?;
+    // Wide, since heads times the head may pass any extent.
+    let stated = |axis: &Axis, extent: i64, into: &mut List<Condition>| -> Result<(), InferError> {
+        return agree_at(node, axis, &Axis { ..*axis, extent: counted(node, Poly::constant(extent))? }, into);
+    };
+    stated(&q.axes[2], options.heads as i64 * dim as i64, owed)?;
+    stated(&k.axes[2], options.kv_heads as i64 * dim as i64, owed)?;
+    stated(&past_k.axes[1], options.kv_heads as i64, owed)?;
     for let i of 0..<3 {
         agree_at(node, &k.axes[i], &v.axes[i], owed)?;
     }
@@ -1444,8 +1444,9 @@ fn attention(
     for let t of given(6)? {
         equal(&t, &total, "total_sequence_length must be the past and the sequence", owed)?;
     }
+    let last = difference(node, &total, &Poly::constant(1))?;
     for let l of given(5)? {
-        equal(&l.try_add(&Poly::constant(1)).unwrap(), &total, "seqlens_k must be one short of the total", owed)?;
+        equal(&l, &last, "seqlens_k must be one short of the total", owed)?;
     }
     if options.rotary {
         if !has_operand(node, ROTARY_COS) || !has_operand(node, ROTARY_SIN) {
@@ -1453,7 +1454,7 @@ fn attention(
         }
         for let index of [ROTARY_COS, ROTARY_SIN] {
             let cache = ranked(index, 2)?;
-            stated(&cache.axes[1], dim / 2, owed)?;
+            stated(&cache.axes[1], dim as i64 / 2, owed)?;
             let Some(slack) = cache.axes[0].extent.poly().try_sub(&total) else {
                 return Result::Err(refusal(node, "the rotary cache must reach every position"));
             };

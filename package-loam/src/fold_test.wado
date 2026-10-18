@@ -205,6 +205,39 @@ test "a Range or Slice bound only the run knows leaves the node to the run" {
     assert fold(&node("Slice", ["M", "Starts", "Ends"], []), &k, &runtime([])).unwrap() matches { None };
 }
 
+test "a known tensor read through numbers only the run knows is left to the run" {
+    let k = knowns([
+        ["C", floats([1, 4], [1.0, 2.0, 3.0, 4.0])],
+        [
+            "S",
+            Known {
+                extents: [2],
+                elements: Elements::integers([
+                    Poly::symbol(&"N"),
+                    Poly::constant(4),
+                ]),
+            },
+        ],
+        [
+            "R",
+            Known {
+                extents: [2],
+                elements: Elements::integers([
+                    Poly::symbol(&"N"),
+                    Poly::constant(-1),
+                ]),
+            },
+        ],
+        [
+            "I",
+            Known { extents: [], elements: Elements::integers([Poly::symbol(&"N")]) },
+        ],
+    ]);
+    assert fold(&node("Expand", ["C", "S"], []), &k, &runtime([])).unwrap() matches { None };
+    assert fold(&node("Reshape", ["C", "R"], []), &k, &runtime([])).unwrap() matches { None };
+    assert fold(&node("Gather", ["C", "I"], [attr("axis", ["1"])]), &k, &runtime([])).unwrap() matches { None };
+}
+
 test "Gather with a scalar index drops the axis" {
     let k = knowns([
         ["S", ints([3], [2, 3, 4])],

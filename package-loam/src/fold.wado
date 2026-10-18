@@ -72,14 +72,20 @@ fn evaluated(
     let x = &operands[0];
     let folded = match op.as_str_slice() {
         "Identity" => *x,
-        "Gather" => gather(x, &operands[1], int_attr(node, "axis", 0)?)?,
-        "Reshape" | "Unsqueeze" | "Squeeze" => regrouped(node, known, x)?,
+        "Gather" => {
+            return gather(x, &operands[1], int_attr(node, "axis", 0)?);
+        },
+        "Reshape" | "Unsqueeze" | "Squeeze" => {
+            return regrouped(node, known, x);
+        },
         "Concat" => concat(&operands, required_int_attr(node, "axis")?)?,
         "ConstantOfShape" => {
             return constant_of_shape(node, x);
         },
         "Add" | "Sub" | "Mul" | "Div" | "Pow" => arithmetic(node, x, &operands[1])?,
-        "Expand" => expand(x, &operands[1])?,
+        "Expand" => {
+            return expand(x, &operands[1]);
+        },
         "Slice" => {
             return slice(x, node, known);
         },
@@ -96,21 +102,21 @@ fn evaluated(
     return Result::Ok(Option::Some(folded));
 }
 
-/// A known tensor regrouped. It holds a number of elements, so a target that
-/// leaves an extent symbolic cannot take them.
-fn regrouped(node: &Node, known: &TreeMap<String, Known>, x: &Known) -> Result<Known, String> {
+/// A known tensor regrouped, or `None` where the target leaves an extent
+/// symbolic, which the run checks the known count against.
+fn regrouped(node: &Node, known: &TreeMap<String, Known>, x: &Known) -> Result<Option<Known>, String> {
     let input: List<Extent> = x.extents.into_iter().map(|e| Extent::Static(e)).collect();
     let mut extents: List<i32> = [];
     // Only a symbolic target owes, and one leaves an extent symbolic below.
     let mut owed: List<Condition> = [];
     for let e of regrouped_extents(node, known, &input, &mut owed)? {
         let Static(n) = e else {
-            return Result::Err(`extent ${e} of the target leaves ${x.len()} elements no fixed shape`);
+            return Result::Ok(null);
         };
         extents.push(n);
     }
     assert owed.is_empty();
-    return Result::Ok(Known { ..*x, extents });
+    return Result::Ok(Option::Some(Known { ..*x, extents }));
 }
 
 /// The extents a regrouping gives `input`: `Reshape`'s target, or `input` with
@@ -308,14 +314,17 @@ fn clamped(i: i64, extent: i64, lo: i64, hi: i64) -> i64 {
     return i64::min(i64::max(from_end(i, extent), lo), hi);
 }
 
-fn gather(data: &Known, indices: &Known, axis: i64) -> Result<Known, String> {
+/// `Gather`, or `None` where an index only the run knows leaves it to the run.
+fn gather(data: &Known, indices: &Known, axis: i64) -> Result<Option<Known>, String> {
     let rank = data.extents.len();
     let a = axis_index(axis, rank)?;
     let along = data.extents[a];
     let leading = data.extents[0..<a].to_list();
     let trailing = data.extents[a + 1..<rank].to_list();
     let inner = element_count(&trailing);
-    let wanted = ints_of(indices)?;
+    let Some(wanted) = numbers(&polys_of(indices)?) else {
+        return Result::Ok(null);
+    };
     let mut picks: List<i32> = [];
     for let o of 0..<element_count(&leading) {
         for let index of wanted {
@@ -331,7 +340,7 @@ fn gather(data: &Known, indices: &Known, axis: i64) -> Result<Known, String> {
     let mut extents = leading;
     extents.extend(&indices.extents);
     extents.extend(&trailing);
-    return Result::Ok(Known { ..*data, extents, elements: picked(&data.elements, &picks) });
+    return Result::Ok(Option::Some(Known { ..*data, extents, elements: picked(&data.elements, &picks) }));
 }
 
 /// For each output axis of an `Unsqueeze` or `Squeeze`, the operand axis it
@@ -723,10 +732,14 @@ fn arithmetic(node: &Node, a: &Known, b: &Known) -> Result<Known, String> {
     return Result::Ok(Known { extents, elements, stored: a.stored });
 }
 
-/// `x` broadcast against the extents `shape` lists, as `Expand` does.
-fn expand(x: &Known, shape: &Known) -> Result<Known, String> {
+/// `x` broadcast against the extents `shape` lists, as `Expand` does, or
+/// `None` where an extent only the run knows leaves it to the run.
+fn expand(x: &Known, shape: &Known) -> Result<Option<Known>, String> {
+    let Some(written) = numbers(&polys_of(shape)?) else {
+        return Result::Ok(null);
+    };
     let mut target: List<i32> = [];
-    for let e of ints_of(shape)? {
+    for let e of written {
         if !(0 <= e <= i32::MAX as i64) {
             return Result::Err(`the target's extent ${e} is no length`);
         }
@@ -735,7 +748,7 @@ fn expand(x: &Known, shape: &Known) -> Result<Known, String> {
     let Some(extents) = broadcast_extents(&x.extents, &target) else {
         return Result::Err(`extents ${x.extents:?} do not broadcast to ${target:?}`);
     };
-    return Result::Ok(Known { ..*x, extents, elements: picked(&x.elements, &positions(&x.extents, &extents)) });
+    return Result::Ok(Option::Some(Known { ..*x, extents, elements: picked(&x.elements, &positions(&x.extents, &extents)) }));
 }
 
 /// B's extents, followed by an extent of 1 for each of A's axes after it where

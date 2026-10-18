@@ -541,7 +541,18 @@ pub global GROUP_QUERY_ATTENTION: String = "com.microsoft.GroupQueryAttention";
 ///   last axis: `x / √(mean(x²) + epsilon) · scale`, the function ONNX's
 ///   `RMSNormalization` (opset 23) defines.
 fn function_body(node: &Node) -> Result<Option<List<Node>>, String> {
+    let needed = match node.op.as_str_slice() {
+        "Gelu" => 1,
+        "SimplifiedLayerNormalization" => 2,
+        _ => {
+            return Result::Ok(null);
+        },
+    };
     let site = node.site();
+    let given = node.inputs.position(|input| input == "").unwrap_or(node.inputs.len());
+    if given < needed {
+        return Result::Err(`${site}: reads ${needed} operands and was given ${given}`);
+    }
     let attr_error = |e: AttrError| `${site}: ${e}`;
     let mut body = FunctionBody { prefix: node.outputs.first().unwrap_or(node.op), nodes: [] };
     if node.op == "Gelu" {
@@ -561,25 +572,22 @@ fn function_body(node: &Node) -> Result<Option<List<Node>>, String> {
         body.output("Mul", [half, body.binary("Add", &inner, &body.constant(1.0))], node);
         return Result::Ok(Option::Some(body.nodes));
     }
-    if node.op == "SimplifiedLayerNormalization" {
-        if node.int_attr("axis", -1).map_err(attr_error)? != -1 {
-            return Result::Err(`${site}: only the last axis normalizes`);
-        }
-        let [x, scale] = [node.inputs[0], node.inputs[1]];
-        let epsilon = node.float_attr("epsilon", 1e-5).map_err(attr_error)?;
-        let square = body.binary("Mul", &x, &x);
-        let mean = body.node("ReduceMean", [square], [
-            Attr {
-                name: "axes",
-                values: ["-1"],
-                is_list: true,
-            },
-        ]);
-        let root = body.unary("Sqrt", &body.binary("Add", &mean, &body.constant(epsilon)));
-        body.output("Mul", [body.binary("Div", &x, &root), scale], node);
-        return Result::Ok(Option::Some(body.nodes));
+    if node.int_attr("axis", -1).map_err(attr_error)? != -1 {
+        return Result::Err(`${site}: only the last axis normalizes`);
     }
-    return Result::Ok(null);
+    let [x, scale] = [node.inputs[0], node.inputs[1]];
+    let epsilon = node.float_attr("epsilon", 1e-5).map_err(attr_error)?;
+    let square = body.binary("Mul", &x, &x);
+    let mean = body.node("ReduceMean", [square], [
+        Attr {
+            name: "axes",
+            values: ["-1"],
+            is_list: true,
+        },
+    ]);
+    let root = body.unary("Sqrt", &body.binary("Add", &mean, &body.constant(epsilon)));
+    body.output("Mul", [body.binary("Div", &x, &root), scale], node);
+    return Result::Ok(Option::Some(body.nodes));
 }
 
 /// A function's body as it is written out, each tensor named under `prefix`.
