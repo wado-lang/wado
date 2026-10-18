@@ -64,7 +64,6 @@ const DENIED = [
   "sudo sh <<'EOF'\nawk 1 f\nEOF",
   'while pgrep -f "cargo build" >/dev/null; do sleep 5; done',
   "pgrep -af cargo",
-  "pkill -f 'cargo test'",
 ];
 
 const ALLOWED = [
@@ -103,6 +102,7 @@ const ALLOWED = [
   "cat <<EOF\n EOF\nsed -i x f\nEOF",
   "grep -n pgrep AGENTS.md",
   "kill 1234",
+  "pkill -f 'cargo test'",
 ];
 
 test("denies a forbidden command word", () => {
