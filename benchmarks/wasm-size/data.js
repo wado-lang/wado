@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1792296076620,
+  "lastUpdate": 1792297340550,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -68189,6 +68189,50 @@ window.BENCHMARK_DATA = {
           {
             "name": "sqlite_highlight",
             "value": 288929,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "83c0a9ed71df345cecbe0bcf900e7e71c8310c5f",
+          "message": "Merge pull request #2381 from wado-lang/ccr-760f99a9-12qjc2\n\nperf(nir): pass a &S read past an early exit as its fields, so f64::from_str allocates no StrSlice",
+          "timestamp": "2026-10-18T12:46:14+09:00",
+          "tree_id": "c3897238c7eb9156a919b0ef6747468a4f035180",
+          "url": "https://github.com/wado-lang/wado/commit/83c0a9ed71df345cecbe0bcf900e7e71c8310c5f"
+        },
+        "date": 1792297340163,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 2955,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 7382,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 20128,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 289935,
             "unit": "bytes"
           }
         ]
