@@ -199,8 +199,8 @@ slicing with them, works as before.
 Byte offsets bought the lexer about a quarter of its instructions (fuel, on
 `benchmark/sqlite_parse`'s input). If a real grammar's action needs char
 positions, the fix is to keep the scan in bytes and hand actions char positions:
-the lexer counts chars beside `pos` only in a grammar whose actions read a
-position, so a grammar without such actions keeps the byte-only scan.
+the lexer would count chars beside `pos` only in a grammar whose actions read a
+position, so a grammar without such actions would keep the byte-only scan.
 
 ## Stages of Compatibility
 
