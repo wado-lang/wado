@@ -34,7 +34,6 @@ use {
     gather_axis,
     gemm_options,
     has_bias,
-    has_operand,
     is_reduction,
     named_present,
     range_bounds,
@@ -1131,18 +1130,18 @@ fn attention_call(node: &Node, checked: &Checked, exprs: &Operands) -> String {
     let k = shapes[node.inputs[1]];
     let past = shapes[node.inputs[3]];
     let total = shapes[named_present(node).unwrap()].axes[2].name;
-    let optional = |index: i32| if has_operand(node, index) {
+    let optional = |index: i32| if node.has_operand(index) {
         `Option::Some(${exprs.reference(&node.inputs[index])})`;
     } else {
         "null";
     };
-    let [pos, half] = if has_operand(node, ROTARY_COS) {
+    let [pos, half] = if node.has_operand(ROTARY_COS) {
         let cache = shapes[node.inputs[ROTARY_COS]];
         [cache.axes[0].name, cache.axes[1].name];
     } else {
         [q.axes[1].name, past.axes[3].name];
     };
-    let [bias_batch, bias_heads] = if has_operand(node, ATTENTION_BIAS) {
+    let [bias_batch, bias_heads] = if node.has_operand(ATTENTION_BIAS) {
         let bias = shapes[node.inputs[ATTENTION_BIAS]];
         [bias.axes[0].name, bias.axes[1].name];
     } else {
@@ -2338,34 +2337,23 @@ fn batch_axes_agree(left: &Shape, right: &Shape) -> bool
     return true;
 }
 
-/// Every axis name the checked graph uses, in first-seen order so the emitted
-/// module is stable across runs.
+/// Every axis name the checked graph uses, in the order stage 0 gave each
+/// tensor its shape, so the emitted module is stable across runs.
 fn axis_names(graph: &Graph, checked: &Checked) -> List<String> {
-    let shapes = &checked.shapes;
     let mut seen = TreeSet::<String>::new();
     let mut names: List<String> = [];
-    for let vi of &graph.inputs {
-        push_axes(&mut names, &mut seen, shapes, &vi.name);
-    }
-    for let vi of &graph.initializers {
-        push_axes(&mut names, &mut seen, shapes, &vi.name);
-    }
-    for let node of &graph.nodes {
-        for let output of node.outputs {
-            push_axes(&mut names, &mut seen, shapes, &output);
-        }
-    }
-    push_branch_axes(&mut names, &mut seen, graph, checked);
+    push_scope_axes(&mut names, &mut seen, graph, checked);
     return names;
 }
 
-/// The axes every tensor in each `If`'s branches carries.
-fn push_branch_axes(names: &mut List<String>, seen: &mut TreeSet<String>, graph: &Graph, checked: &Checked) {
+/// The axes every tensor a scope gave a shape carries, a constant a kernel
+/// reads among them, then those of each `If`'s branches.
+fn push_scope_axes(names: &mut List<String>, seen: &mut TreeSet<String>, graph: &Graph, checked: &Checked) {
+    for let [_, shape] of checked.shapes.entries() {
+        push_markers(names, seen, &shape.axes);
+    }
     for let [branch_graph, branch] of branches_of(graph, checked) {
-        for let [_, shape] of branch.shapes.entries() {
-            push_markers(names, seen, &shape.axes);
-        }
-        push_branch_axes(names, seen, &branch_graph, &branch);
+        push_scope_axes(names, seen, &branch_graph, &branch);
     }
 }
 
@@ -2384,13 +2372,6 @@ fn branches_of(graph: &Graph, checked: &Checked) -> List<[Graph, Checked]> {
     return found;
 }
 
-
-fn push_axes(names: &mut List<String>, seen: &mut TreeSet<String>, shapes: &TreeMap<String, Shape>, tensor: &String) {
-    let Some(shape) = shapes.get(*tensor) else {
-        return;
-    };
-    push_markers(names, seen, &shape.axes);
-}
 
 /// A merged axis is spelled with its parts' markers, so the parts are what the
 /// module declares.

@@ -384,6 +384,18 @@ impl Node {
         return read;
     }
 
+    /// How many operands the node gives before the first it leaves absent,
+    /// which ONNX writes as an empty name.
+    pub fn leading_operands(&self) -> i32 {
+        return self.inputs.position(|input| input == "").unwrap_or(self.inputs.len());
+    }
+
+    /// Whether the node was given operand `index`. ONNX writes an absent
+    /// optional operand as an empty name, or omits it.
+    pub fn has_operand(&self, index: i32) -> bool {
+        return index < self.inputs.len() && self.inputs[index] != "";
+    }
+
     /// The attribute `name`, where the node carries it.
     pub fn attr<S: AsStrSlice>(&self, name: S) -> Option<Attr> {
         for let a of self.attrs {
@@ -501,7 +513,7 @@ pub fn upgraded(nodes: List<Node>, opset: Option<i64>) -> Result<List<Node>, Str
     for let read of nodes {
         let node = Node { ..read, attrs: upgraded_subgraphs(read.attrs, opset)? };
         if is_binary_elementwise(&node.op) && node.attr("axis") matches { Some(_) } {
-            let aligns = version < 7 && node.int_attr("broadcast", 0).map_err(|e| `${node.site()}: ${e}`)? != 0;
+            let aligns = version < 7 && node.int_attr("broadcast", 0).map_err(|e| at_node(&node, e))? != 0;
             if !aligns {
                 out.push(Node { ..node, attrs: node.attrs.into_iter().filter(|a| a.name != "axis").collect() });
                 continue;
@@ -541,45 +553,68 @@ pub global GROUP_QUERY_ATTENTION: String = "com.microsoft.GroupQueryAttention";
 ///   last axis: `x / √(mean(x²) + epsilon) · scale`, the function ONNX's
 ///   `RMSNormalization` (opset 23) defines.
 fn function_body(node: &Node) -> Result<Option<List<Node>>, String> {
-    let site = node.site();
-    let attr_error = |e: AttrError| `${site}: ${e}`;
+    let [needed, write]: [i32, fn(&Node, &mut FunctionBody) -> Result<(), String>] = match node.op.as_str_slice() {
+        "Gelu" => [1, gelu],
+        "SimplifiedLayerNormalization" => [2, rms_normalization],
+        _ => {
+            return Result::Ok(null);
+        },
+    };
+    let given = node.leading_operands();
+    if given < needed {
+        return Result::Err(`${node.site()}: ${operands_short(needed, given)}`);
+    }
     let mut body = FunctionBody { prefix: node.outputs.first().unwrap_or(node.op), nodes: [] };
-    if node.op == "Gelu" {
-        let x = node.inputs[0];
-        let inner = match node.string_attr("approximate", "none").map_err(attr_error)?.as_str_slice() {
-            "none" => body.unary("Erf", &body.binary("Mul", &x, &body.constant(f32::sqrt(0.5)))),
-            "tanh" => {
-                let cube = body.binary("Mul", &body.binary("Mul", &x, &x), &x);
-                let widened = body.binary("Add", &x, &body.binary("Mul", &cube, &body.constant(0.044715)));
-                body.unary("Tanh", &body.binary("Mul", &widened, &body.constant(f32::sqrt(2.0 / f32::PI))));
-            },
-            other => {
-                return Result::Err(`${site}: approximate ${other} is neither none nor tanh`);
-            },
-        };
-        let half = body.binary("Mul", &x, &body.constant(0.5));
-        body.output("Mul", [half, body.binary("Add", &inner, &body.constant(1.0))], node);
-        return Result::Ok(Option::Some(body.nodes));
+    write(node, &mut body)?;
+    return Result::Ok(Option::Some(body.nodes));
+}
+
+/// Why a node given `given` leading operands cannot be one reading `needed`.
+pub fn operands_short(needed: i32, given: i32) -> String {
+    let noun = if needed == 1 { "operand" } else { "operands" };
+    return `reads ${needed} ${noun} and was given ${given}`;
+}
+
+/// An attribute `node` cannot read as written, said at the node.
+fn at_node(node: &Node, e: AttrError) -> String {
+    return `${node.site()}: ${e}`;
+}
+
+fn gelu(node: &Node, body: &mut FunctionBody) -> Result<(), String> {
+    let x = node.inputs[0];
+    let inner = match node.string_attr("approximate", "none").map_err(|e| at_node(node, e))?.as_str_slice() {
+        "none" => body.unary("Erf", &body.binary("Mul", &x, &body.constant(f32::sqrt(0.5)))),
+        "tanh" => {
+            let cube = body.binary("Mul", &body.binary("Mul", &x, &x), &x);
+            let widened = body.binary("Add", &x, &body.binary("Mul", &cube, &body.constant(0.044715)));
+            body.unary("Tanh", &body.binary("Mul", &widened, &body.constant(f32::sqrt(2.0 / f32::PI))));
+        },
+        other => {
+            return Result::Err(`${node.site()}: approximate ${other} is neither none nor tanh`);
+        },
+    };
+    let half = body.binary("Mul", &x, &body.constant(0.5));
+    body.output("Mul", [half, body.binary("Add", &inner, &body.constant(1.0))], node);
+    return Result::Ok(());
+}
+
+fn rms_normalization(node: &Node, body: &mut FunctionBody) -> Result<(), String> {
+    if node.int_attr("axis", -1).map_err(|e| at_node(node, e))? != -1 {
+        return Result::Err(`${node.site()}: only the last axis normalizes`);
     }
-    if node.op == "SimplifiedLayerNormalization" {
-        if node.int_attr("axis", -1).map_err(attr_error)? != -1 {
-            return Result::Err(`${site}: only the last axis normalizes`);
-        }
-        let [x, scale] = [node.inputs[0], node.inputs[1]];
-        let epsilon = node.float_attr("epsilon", 1e-5).map_err(attr_error)?;
-        let square = body.binary("Mul", &x, &x);
-        let mean = body.node("ReduceMean", [square], [
-            Attr {
-                name: "axes",
-                values: ["-1"],
-                is_list: true,
-            },
-        ]);
-        let root = body.unary("Sqrt", &body.binary("Add", &mean, &body.constant(epsilon)));
-        body.output("Mul", [body.binary("Div", &x, &root), scale], node);
-        return Result::Ok(Option::Some(body.nodes));
-    }
-    return Result::Ok(null);
+    let [x, scale] = [node.inputs[0], node.inputs[1]];
+    let epsilon = node.float_attr("epsilon", 1e-5).map_err(|e| at_node(node, e))?;
+    let square = body.binary("Mul", &x, &x);
+    let mean = body.node("ReduceMean", [square], [
+        Attr {
+            name: "axes",
+            values: ["-1"],
+            is_list: true,
+        },
+    ]);
+    let root = body.unary("Sqrt", &body.binary("Add", &mean, &body.constant(epsilon)));
+    body.output("Mul", [body.binary("Div", &x, &root), scale], node);
+    return Result::Ok(());
 }
 
 /// A function's body as it is written out, each tensor named under `prefix`.

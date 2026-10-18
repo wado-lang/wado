@@ -359,6 +359,43 @@ test "a Split size past the axis stops the build rather than wrapping into it" {
     assert y_axes(source, qkv()).unwrap_err() == "Q = Split: a part is 4294967304, which must lie within axis 2's 24, and it is not";
 }
 
+/// One query head over a past of three positions, its sequence lengths `L`
+/// and `T`.
+fn attention(heads: String, seqlens: String) -> String {
+    return `g (float[1, 1, 8] Q, float[1, 1, 8] K, float[1, 1, 8] V, float[1, 1, 3, 8] PK, float[1, 1, 3, 8] PV)
+        => (float[1, 1, 8] Y) {
+        L = Constant<value_ints = [${seqlens}]>()
+        T = Constant<value_ints = [4]>()
+        Y, PY, VY = com.microsoft.GroupQueryAttention<num_heads = ${heads}, kv_num_heads = 1>(Q, K, V, PK, PV, L, T)
+    }`;
+}
+
+fn attention_layout() -> List<LayoutRule> {
+    return [
+        rule("Q", ["Batch", "Seq", "Embed"]),
+        rule("K", ["Batch", "Seq", "Embed"]),
+        rule("V", ["Batch", "Seq", "Embed"]),
+        rule("Y", ["Batch", "Seq", "Embed"]),
+        rule("PK", ["Batch", "Kv", "Past", "Head"]),
+        rule("PV", ["Batch", "Kv", "Past", "Head"]),
+        rule("PY", ["Batch", "Kv", "Total", "Head"]),
+        rule("VY", ["Batch", "Kv", "Total", "Head"]),
+    ];
+}
+
+test "GroupQueryAttention's sequence lengths are checked against its shapes" {
+    let ok = y_axes(attention("1", "3"), attention_layout());
+    assert ok == Result::Ok("Batch=1,Seq=1,Embed=8"), `${ok:?}`;
+    let e = y_axes(attention("1", "9223372036854775807"), attention_layout()).unwrap_err();
+    assert e == "Y = com.microsoft.GroupQueryAttention: seqlens_k must be one short of the total, and it is not";
+}
+
+test "GroupQueryAttention's heads times the head are counted past i32" {
+    // 536870913 heads of 8 are 2^32 + 8, which an i32 product wraps to 8.
+    let e = y_axes(attention("536870913", "3"), attention_layout()).unwrap_err();
+    assert e == "Y = com.microsoft.GroupQueryAttention: axis Embed would be 4294967304 long, which no axis is";
+}
+
 fn cache() -> List<LayoutRule> {
     return [
         rule("P", ["Batch", "Past", "Dim"]),

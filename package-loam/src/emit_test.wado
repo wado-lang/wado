@@ -377,6 +377,25 @@ test "every axis the graph mentions becomes a marker type" {
     assert out.contains("pub struct Hidden {}");
 }
 
+test "an axis only a graph constant names becomes a marker type" {
+    let source = "
+g (float[N, 2] X) => (float[N, 2] Y)
+<bool[1, 2] M = {1, 0}>
+{
+    Y = Where(M, X, X)
+}
+";
+    let layout: List<LayoutRule> = [
+        rule("X", ["Batch", "In"]),
+        rule("Y", ["Batch", "In"]),
+        rule("M", ["One", "In"]),
+    ];
+    let out = generate(source, layout).unwrap();
+
+    assert out.contains("Tensor<bool, [One, In]>");
+    assert out.contains("pub struct One {}");
+}
+
 test "a name a Wado identifier cannot carry is sanitized" {
     let source = `
 g (float[N, 2] "/model/input.0") => (float[N, 2] out)

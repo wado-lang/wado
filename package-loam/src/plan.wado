@@ -14,7 +14,7 @@ use {
     is_unary_operator,
     settled,
 } from "./graph.wado";
-use { Checked, gemm_options, is_reduction, reduced_axes, softmax_lane, transpose_perm } from "./infer.wado";
+use { Checked, gemm_options, has_bias, is_reduction, reduced_axes, softmax_lane, transpose_perm } from "./infer.wado";
 use { Shape } from "./shape.wado";
 
 /// What `forward` does for one node.
@@ -168,7 +168,7 @@ fn read_at(readers: &mut TreeMap<String, List<i32>>, tensor: &String, at: i32) {
 /// Whether a `Gemm`'s bias, if it has one, is one value per column, so it
 /// reads the same under the leading axes as under the flattened rows.
 fn bias_per_column(node: &Node, checked: &Checked) -> bool {
-    if node.inputs.len() < 3 || node.inputs[2] == "" {
+    if !has_bias(node) {
         return true;
     }
     let c = &checked.shapes[node.inputs[2]];
