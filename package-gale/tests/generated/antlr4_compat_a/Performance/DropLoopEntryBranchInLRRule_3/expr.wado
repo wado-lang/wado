@@ -3476,17 +3476,8 @@ fn atn_decide_0(atn: &mut AtnPredictor, tokens: &Array<i32>, pos: i32, min_prec:
                             if pos + 2 < tokens.len() {
                                 match tokens[pos + 2] {
                                     TK_ID => {
-                                        if pos + 3 < tokens.len() {
-                                            match tokens[pos + 3] {
-                                                TK_LIT_SEMI => {
-                                                    return 0;
-                                                },
-                                                TK_LIT_DOT => {
-                                                    return 1;
-                                                },
-                                                _ => {},
-                                            };
-                                        }
+                                        let alt = atn_decide_0_19(tokens, pos);
+                                        if alt >= 0 { return alt; }
                                     },
                                     _ => {},
                                 };
@@ -3536,17 +3527,8 @@ fn atn_decide_0(atn: &mut AtnPredictor, tokens: &Array<i32>, pos: i32, min_prec:
                             if pos + 2 < tokens.len() {
                                 match tokens[pos + 2] {
                                     TK_ID => {
-                                        if pos + 3 < tokens.len() {
-                                            match tokens[pos + 3] {
-                                                TK_LIT_SEMI => {
-                                                    return 0;
-                                                },
-                                                TK_LIT_DOT => {
-                                                    return 1;
-                                                },
-                                                _ => {},
-                                            };
-                                        }
+                                        let alt = atn_decide_0_19(tokens, pos);
+                                        if alt >= 0 { return alt; }
                                     },
                                     _ => {},
                                 };
@@ -3560,6 +3542,21 @@ fn atn_decide_0(atn: &mut AtnPredictor, tokens: &Array<i32>, pos: i32, min_prec:
         };
     }
     return atn_predict_once(&ATN_SIM, 0, atn, tokens, pos, TK_EOF, min_prec);
+}
+
+fn atn_decide_0_19(tokens: &Array<i32>, pos: i32) -> i32 {
+    if pos + 3 < tokens.len() {
+        match tokens[pos + 3] {
+            TK_LIT_SEMI => {
+                return 0;
+            },
+            TK_LIT_DOT => {
+                return 1;
+            },
+            _ => {},
+        };
+    }
+    return -1;
 }
 
 fn atn_lr_decide_2(atn: &mut AtnPredictor, tokens: &Array<i32>, pos: i32, min_prec: i32) -> i32 {

@@ -25373,17 +25373,8 @@ fn atn_decide_46(atn: &mut AtnPredictor, tokens: &Array<i32>, pos: i32, min_prec
                 if pos + 1 < tokens.len() {
                     match tokens[pos + 1] {
                         TK_CloseBracket => {
-                            if pos + 2 < tokens.len() {
-                                match tokens[pos + 2] {
-                                    TK_CloseParen | TK_Comma => {
-                                        return 0;
-                                    },
-                                    TK_Assign | TK_QuestionMark => {
-                                        return 1;
-                                    },
-                                    _ => {},
-                                };
-                            }
+                            let alt = atn_decide_46_8(tokens, pos);
+                            if alt >= 0 { return alt; }
                         },
                         _ => {},
                     };
@@ -25393,17 +25384,8 @@ fn atn_decide_46(atn: &mut AtnPredictor, tokens: &Array<i32>, pos: i32, min_prec
                 if pos + 1 < tokens.len() {
                     match tokens[pos + 1] {
                         TK_CloseBrace => {
-                            if pos + 2 < tokens.len() {
-                                match tokens[pos + 2] {
-                                    TK_CloseParen | TK_Comma => {
-                                        return 0;
-                                    },
-                                    TK_Assign | TK_QuestionMark => {
-                                        return 1;
-                                    },
-                                    _ => {},
-                                };
-                            }
+                            let alt = atn_decide_46_8(tokens, pos);
+                            if alt >= 0 { return alt; }
                         },
                         _ => {},
                     };
@@ -25432,17 +25414,8 @@ fn atn_decide_46(atn: &mut AtnPredictor, tokens: &Array<i32>, pos: i32, min_prec
                             return 1;
                         },
                         TK_NullLiteral | TK_BooleanLiteral | TK_Break | TK_Do | TK_Instanceof | TK_Typeof | TK_Case | TK_Else | TK_New | TK_Var | TK_Catch | TK_Finally | TK_Return | TK_Void | TK_Continue | TK_For | TK_Switch | TK_While | TK_Debugger | TK_Function_ | TK_This | TK_With | TK_Default | TK_If | TK_Throw | TK_Delete | TK_In | TK_Try | TK_As | TK_From | TK_ReadOnly | TK_Async | TK_Await | TK_Yield | TK_Class | TK_Enum | TK_Extends | TK_Super | TK_Const | TK_Export | TK_Import | TK_Implements | TK_Let | TK_Private | TK_Public | TK_Interface | TK_Package | TK_Protected | TK_Static | TK_Any | TK_Number | TK_Never | TK_Boolean | TK_String | TK_Unique | TK_Symbol | TK_Undefined | TK_Object | TK_Of | TK_KeyOf | TK_TypeAlias | TK_Constructor | TK_Namespace | TK_Require | TK_Module | TK_Abstract | TK_Identifier => {
-                            if pos + 2 < tokens.len() {
-                                match tokens[pos + 2] {
-                                    TK_CloseParen | TK_Comma => {
-                                        return 0;
-                                    },
-                                    TK_Assign | TK_QuestionMark => {
-                                        return 1;
-                                    },
-                                    _ => {},
-                                };
-                            }
+                            let alt = atn_decide_46_8(tokens, pos);
+                            if alt >= 0 { return alt; }
                         },
                         _ => {},
                     };
@@ -25452,6 +25425,21 @@ fn atn_decide_46(atn: &mut AtnPredictor, tokens: &Array<i32>, pos: i32, min_prec
         };
     }
     return atn_predict_once(&ATN_SIM, 46, atn, tokens, pos, TK_EOF, min_prec);
+}
+
+fn atn_decide_46_8(tokens: &Array<i32>, pos: i32) -> i32 {
+    if pos + 2 < tokens.len() {
+        match tokens[pos + 2] {
+            TK_CloseParen | TK_Comma => {
+                return 0;
+            },
+            TK_Assign | TK_QuestionMark => {
+                return 1;
+            },
+            _ => {},
+        };
+    }
+    return -1;
 }
 
 fn atn_decide_90(atn: &mut AtnPredictor, tokens: &Array<i32>, pos: i32, min_prec: i32) -> i32 {
@@ -26181,41 +26169,23 @@ fn atn_decide_116(atn: &mut AtnPredictor, tokens: &Array<i32>, pos: i32, min_pre
                             if pos + 2 < tokens.len() {
                                 match tokens[pos + 2] {
                                     TK_CloseBracket => {
-                                        if pos + 3 < tokens.len() {
-                                            match tokens[pos + 3] {
-                                                TK_CloseBrace => {
-                                                    return 1;
-                                                },
-                                                _ => {},
-                                            };
-                                        }
+                                        let alt = atn_decide_116_63(tokens, pos);
+                                        if alt >= 0 { return alt; }
                                     },
                                     _ => {},
                                 };
                             }
                         },
                         TK_CloseBracket => {
-                            if pos + 2 < tokens.len() {
-                                match tokens[pos + 2] {
-                                    TK_MultiLineComment | TK_SingleLineComment | TK_CloseBracket | TK_CloseParen | TK_TemplateCloseBrace | TK_Assign | TK_QuestionMark | TK_QuestionMarkDot | TK_Colon | TK_Ellipsis | TK_Dot | TK_Multiply | TK_Divide | TK_Modulus | TK_Power | TK_NullCoalesce | TK_Hashtag | TK_LeftShiftArithmetic | TK_MoreThan | TK_LessThanEquals | TK_GreaterThanEquals | TK_Equals_ | TK_NotEquals | TK_IdentityEquals | TK_IdentityNotEquals | TK_BitAnd | TK_BitXOr | TK_BitOr | TK_And | TK_Or | TK_MultiplyAssign | TK_DivideAssign | TK_ModulusAssign | TK_PlusAssign | TK_MinusAssign | TK_LeftShiftArithmeticAssign | TK_RightShiftArithmeticAssign | TK_RightShiftLogicalAssign | TK_BitAndAssign | TK_BitXorAssign | TK_BitOrAssign | TK_PowerAssign | TK_NullishCoalescingAssign | TK_ARROW | TK_Is | TK_WhiteSpaces | TK_LineTerminator | TK_HtmlComment | TK_CDataComment | TK_UnexpectedCharacter | TK_TemplateStringEscapeAtom | TK_TemplateStringStartExpression | TK_TemplateStringAtom | TK_BackTickInside | TK_EOF | TK_ERROR => {},
-                                    _ => {
-                                        return 1;
-                                    },
-                                };
-                            }
+                            let alt = atn_decide_116_10(tokens, pos);
+                            if alt >= 0 { return alt; }
                         },
                         TK_Comma => {
                             if pos + 2 < tokens.len() {
                                 match tokens[pos + 2] {
                                     TK_CloseBracket => {
-                                        if pos + 3 < tokens.len() {
-                                            match tokens[pos + 3] {
-                                                TK_CloseBrace => {
-                                                    return 1;
-                                                },
-                                                _ => {},
-                                            };
-                                        }
+                                        let alt = atn_decide_116_63(tokens, pos);
+                                        if alt >= 0 { return alt; }
                                     },
                                     _ => {},
                                 };
@@ -26225,14 +26195,8 @@ fn atn_decide_116(atn: &mut AtnPredictor, tokens: &Array<i32>, pos: i32, min_pre
                             if pos + 2 < tokens.len() {
                                 match tokens[pos + 2] {
                                     TK_CloseBracket => {
-                                        if pos + 3 < tokens.len() {
-                                            match tokens[pos + 3] {
-                                                TK_CloseBrace => {
-                                                    return 1;
-                                                },
-                                                _ => {},
-                                            };
-                                        }
+                                        let alt = atn_decide_116_63(tokens, pos);
+                                        if alt >= 0 { return alt; }
                                     },
                                     _ => {},
                                 };
@@ -26242,14 +26206,8 @@ fn atn_decide_116(atn: &mut AtnPredictor, tokens: &Array<i32>, pos: i32, min_pre
                             if pos + 2 < tokens.len() {
                                 match tokens[pos + 2] {
                                     TK_CloseBracket => {
-                                        if pos + 3 < tokens.len() {
-                                            match tokens[pos + 3] {
-                                                TK_CloseBrace => {
-                                                    return 1;
-                                                },
-                                                _ => {},
-                                            };
-                                        }
+                                        let alt = atn_decide_116_63(tokens, pos);
+                                        if alt >= 0 { return alt; }
                                     },
                                     _ => {},
                                 };
@@ -26259,14 +26217,8 @@ fn atn_decide_116(atn: &mut AtnPredictor, tokens: &Array<i32>, pos: i32, min_pre
                             if pos + 2 < tokens.len() {
                                 match tokens[pos + 2] {
                                     TK_CloseBracket => {
-                                        if pos + 3 < tokens.len() {
-                                            match tokens[pos + 3] {
-                                                TK_CloseBrace => {
-                                                    return 1;
-                                                },
-                                                _ => {},
-                                            };
-                                        }
+                                        let alt = atn_decide_116_63(tokens, pos);
+                                        if alt >= 0 { return alt; }
                                     },
                                     _ => {},
                                 };
@@ -26276,14 +26228,8 @@ fn atn_decide_116(atn: &mut AtnPredictor, tokens: &Array<i32>, pos: i32, min_pre
                             if pos + 2 < tokens.len() {
                                 match tokens[pos + 2] {
                                     TK_CloseBracket => {
-                                        if pos + 3 < tokens.len() {
-                                            match tokens[pos + 3] {
-                                                TK_CloseBrace => {
-                                                    return 1;
-                                                },
-                                                _ => {},
-                                            };
-                                        }
+                                        let alt = atn_decide_116_63(tokens, pos);
+                                        if alt >= 0 { return alt; }
                                     },
                                     _ => {},
                                 };
@@ -26293,14 +26239,8 @@ fn atn_decide_116(atn: &mut AtnPredictor, tokens: &Array<i32>, pos: i32, min_pre
                             if pos + 2 < tokens.len() {
                                 match tokens[pos + 2] {
                                     TK_CloseBracket => {
-                                        if pos + 3 < tokens.len() {
-                                            match tokens[pos + 3] {
-                                                TK_CloseBrace => {
-                                                    return 1;
-                                                },
-                                                _ => {},
-                                            };
-                                        }
+                                        let alt = atn_decide_116_63(tokens, pos);
+                                        if alt >= 0 { return alt; }
                                     },
                                     _ => {},
                                 };
@@ -26310,14 +26250,8 @@ fn atn_decide_116(atn: &mut AtnPredictor, tokens: &Array<i32>, pos: i32, min_pre
                             if pos + 2 < tokens.len() {
                                 match tokens[pos + 2] {
                                     TK_CloseBracket => {
-                                        if pos + 3 < tokens.len() {
-                                            match tokens[pos + 3] {
-                                                TK_CloseBrace => {
-                                                    return 1;
-                                                },
-                                                _ => {},
-                                            };
-                                        }
+                                        let alt = atn_decide_116_63(tokens, pos);
+                                        if alt >= 0 { return alt; }
                                     },
                                     _ => {},
                                 };
@@ -26327,14 +26261,8 @@ fn atn_decide_116(atn: &mut AtnPredictor, tokens: &Array<i32>, pos: i32, min_pre
                             if pos + 2 < tokens.len() {
                                 match tokens[pos + 2] {
                                     TK_CloseBracket => {
-                                        if pos + 3 < tokens.len() {
-                                            match tokens[pos + 3] {
-                                                TK_CloseBrace => {
-                                                    return 1;
-                                                },
-                                                _ => {},
-                                            };
-                                        }
+                                        let alt = atn_decide_116_63(tokens, pos);
+                                        if alt >= 0 { return alt; }
                                     },
                                     _ => {},
                                 };
@@ -26344,14 +26272,8 @@ fn atn_decide_116(atn: &mut AtnPredictor, tokens: &Array<i32>, pos: i32, min_pre
                             if pos + 2 < tokens.len() {
                                 match tokens[pos + 2] {
                                     TK_CloseBracket => {
-                                        if pos + 3 < tokens.len() {
-                                            match tokens[pos + 3] {
-                                                TK_CloseBrace => {
-                                                    return 1;
-                                                },
-                                                _ => {},
-                                            };
-                                        }
+                                        let alt = atn_decide_116_63(tokens, pos);
+                                        if alt >= 0 { return alt; }
                                     },
                                     _ => {},
                                 };
@@ -26361,14 +26283,8 @@ fn atn_decide_116(atn: &mut AtnPredictor, tokens: &Array<i32>, pos: i32, min_pre
                             if pos + 2 < tokens.len() {
                                 match tokens[pos + 2] {
                                     TK_CloseBracket => {
-                                        if pos + 3 < tokens.len() {
-                                            match tokens[pos + 3] {
-                                                TK_CloseBrace => {
-                                                    return 1;
-                                                },
-                                                _ => {},
-                                            };
-                                        }
+                                        let alt = atn_decide_116_63(tokens, pos);
+                                        if alt >= 0 { return alt; }
                                     },
                                     _ => {},
                                 };
@@ -26378,14 +26294,8 @@ fn atn_decide_116(atn: &mut AtnPredictor, tokens: &Array<i32>, pos: i32, min_pre
                             if pos + 2 < tokens.len() {
                                 match tokens[pos + 2] {
                                     TK_CloseBracket => {
-                                        if pos + 3 < tokens.len() {
-                                            match tokens[pos + 3] {
-                                                TK_CloseBrace => {
-                                                    return 1;
-                                                },
-                                                _ => {},
-                                            };
-                                        }
+                                        let alt = atn_decide_116_63(tokens, pos);
+                                        if alt >= 0 { return alt; }
                                     },
                                     _ => {},
                                 };
@@ -26395,14 +26305,8 @@ fn atn_decide_116(atn: &mut AtnPredictor, tokens: &Array<i32>, pos: i32, min_pre
                             if pos + 2 < tokens.len() {
                                 match tokens[pos + 2] {
                                     TK_CloseBracket => {
-                                        if pos + 3 < tokens.len() {
-                                            match tokens[pos + 3] {
-                                                TK_CloseBrace => {
-                                                    return 1;
-                                                },
-                                                _ => {},
-                                            };
-                                        }
+                                        let alt = atn_decide_116_63(tokens, pos);
+                                        if alt >= 0 { return alt; }
                                     },
                                     _ => {},
                                 };
@@ -26412,14 +26316,8 @@ fn atn_decide_116(atn: &mut AtnPredictor, tokens: &Array<i32>, pos: i32, min_pre
                             if pos + 2 < tokens.len() {
                                 match tokens[pos + 2] {
                                     TK_CloseBracket => {
-                                        if pos + 3 < tokens.len() {
-                                            match tokens[pos + 3] {
-                                                TK_CloseBrace => {
-                                                    return 1;
-                                                },
-                                                _ => {},
-                                            };
-                                        }
+                                        let alt = atn_decide_116_63(tokens, pos);
+                                        if alt >= 0 { return alt; }
                                     },
                                     _ => {},
                                 };
@@ -26433,14 +26331,8 @@ fn atn_decide_116(atn: &mut AtnPredictor, tokens: &Array<i32>, pos: i32, min_pre
                 if pos + 1 < tokens.len() {
                     match tokens[pos + 1] {
                         TK_CloseBrace => {
-                            if pos + 2 < tokens.len() {
-                                match tokens[pos + 2] {
-                                    TK_MultiLineComment | TK_SingleLineComment | TK_CloseBracket | TK_CloseParen | TK_TemplateCloseBrace | TK_Assign | TK_QuestionMark | TK_QuestionMarkDot | TK_Colon | TK_Ellipsis | TK_Dot | TK_Multiply | TK_Divide | TK_Modulus | TK_Power | TK_NullCoalesce | TK_Hashtag | TK_LeftShiftArithmetic | TK_MoreThan | TK_LessThanEquals | TK_GreaterThanEquals | TK_Equals_ | TK_NotEquals | TK_IdentityEquals | TK_IdentityNotEquals | TK_BitAnd | TK_BitXOr | TK_BitOr | TK_And | TK_Or | TK_MultiplyAssign | TK_DivideAssign | TK_ModulusAssign | TK_PlusAssign | TK_MinusAssign | TK_LeftShiftArithmeticAssign | TK_RightShiftArithmeticAssign | TK_RightShiftLogicalAssign | TK_BitAndAssign | TK_BitXorAssign | TK_BitOrAssign | TK_PowerAssign | TK_NullishCoalescingAssign | TK_ARROW | TK_Is | TK_WhiteSpaces | TK_LineTerminator | TK_HtmlComment | TK_CDataComment | TK_UnexpectedCharacter | TK_TemplateStringEscapeAtom | TK_TemplateStringStartExpression | TK_TemplateStringAtom | TK_BackTickInside | TK_EOF | TK_ERROR => {},
-                                    _ => {
-                                        return 1;
-                                    },
-                                };
-                            }
+                            let alt = atn_decide_116_10(tokens, pos);
+                            if alt >= 0 { return alt; }
                         },
                         _ => {},
                     };
@@ -26456,6 +26348,30 @@ fn atn_decide_116(atn: &mut AtnPredictor, tokens: &Array<i32>, pos: i32, min_pre
         };
     }
     return atn_predict_once(&ATN_SIM, 116, atn, tokens, pos, TK_EOF, min_prec);
+}
+
+fn atn_decide_116_10(tokens: &Array<i32>, pos: i32) -> i32 {
+    if pos + 2 < tokens.len() {
+        match tokens[pos + 2] {
+            TK_MultiLineComment | TK_SingleLineComment | TK_CloseBracket | TK_CloseParen | TK_TemplateCloseBrace | TK_Assign | TK_QuestionMark | TK_QuestionMarkDot | TK_Colon | TK_Ellipsis | TK_Dot | TK_Multiply | TK_Divide | TK_Modulus | TK_Power | TK_NullCoalesce | TK_Hashtag | TK_LeftShiftArithmetic | TK_MoreThan | TK_LessThanEquals | TK_GreaterThanEquals | TK_Equals_ | TK_NotEquals | TK_IdentityEquals | TK_IdentityNotEquals | TK_BitAnd | TK_BitXOr | TK_BitOr | TK_And | TK_Or | TK_MultiplyAssign | TK_DivideAssign | TK_ModulusAssign | TK_PlusAssign | TK_MinusAssign | TK_LeftShiftArithmeticAssign | TK_RightShiftArithmeticAssign | TK_RightShiftLogicalAssign | TK_BitAndAssign | TK_BitXorAssign | TK_BitOrAssign | TK_PowerAssign | TK_NullishCoalescingAssign | TK_ARROW | TK_Is | TK_WhiteSpaces | TK_LineTerminator | TK_HtmlComment | TK_CDataComment | TK_UnexpectedCharacter | TK_TemplateStringEscapeAtom | TK_TemplateStringStartExpression | TK_TemplateStringAtom | TK_BackTickInside | TK_EOF | TK_ERROR => {},
+            _ => {
+                return 1;
+            },
+        };
+    }
+    return -1;
+}
+
+fn atn_decide_116_63(tokens: &Array<i32>, pos: i32) -> i32 {
+    if pos + 3 < tokens.len() {
+        match tokens[pos + 3] {
+            TK_CloseBrace => {
+                return 1;
+            },
+            _ => {},
+        };
+    }
+    return -1;
 }
 
 fn atn_decide_118(atn: &mut AtnPredictor, tokens: &Array<i32>, pos: i32, min_prec: i32) -> i32 {
@@ -27813,14 +27729,8 @@ fn atn_decide_230(atn: &mut AtnPredictor, tokens: &Array<i32>, pos: i32, min_pre
                 if pos + 1 < tokens.len() {
                     match tokens[pos + 1] {
                         TK_Colon => {
-                            if pos + 2 < tokens.len() {
-                                match tokens[pos + 2] {
-                                    TK_CloseBrace => {
-                                        return 19;
-                                    },
-                                    _ => {},
-                                };
-                            }
+                            let alt = atn_decide_230_265(tokens, pos);
+                            if alt >= 0 { return alt; }
                         },
                         TK_ARROW => {
                             return 0;
@@ -27839,14 +27749,8 @@ fn atn_decide_230(atn: &mut AtnPredictor, tokens: &Array<i32>, pos: i32, min_pre
                             return 19;
                         },
                         TK_Colon => {
-                            if pos + 2 < tokens.len() {
-                                match tokens[pos + 2] {
-                                    TK_CloseBrace => {
-                                        return 19;
-                                    },
-                                    _ => {},
-                                };
-                            }
+                            let alt = atn_decide_230_265(tokens, pos);
+                            if alt >= 0 { return alt; }
                         },
                         TK_ARROW => {
                             return 0;
@@ -27862,14 +27766,8 @@ fn atn_decide_230(atn: &mut AtnPredictor, tokens: &Array<i32>, pos: i32, min_pre
                             return 19;
                         },
                         TK_Colon => {
-                            if pos + 2 < tokens.len() {
-                                match tokens[pos + 2] {
-                                    TK_CloseBrace => {
-                                        return 19;
-                                    },
-                                    _ => {},
-                                };
-                            }
+                            let alt = atn_decide_230_265(tokens, pos);
+                            if alt >= 0 { return alt; }
                         },
                         TK_ARROW => {
                             return 0;
@@ -27885,14 +27783,8 @@ fn atn_decide_230(atn: &mut AtnPredictor, tokens: &Array<i32>, pos: i32, min_pre
                             return 19;
                         },
                         TK_Colon => {
-                            if pos + 2 < tokens.len() {
-                                match tokens[pos + 2] {
-                                    TK_CloseBrace => {
-                                        return 19;
-                                    },
-                                    _ => {},
-                                };
-                            }
+                            let alt = atn_decide_230_265(tokens, pos);
+                            if alt >= 0 { return alt; }
                         },
                         TK_ARROW => {
                             return 0;
@@ -27905,14 +27797,8 @@ fn atn_decide_230(atn: &mut AtnPredictor, tokens: &Array<i32>, pos: i32, min_pre
                 if pos + 1 < tokens.len() {
                     match tokens[pos + 1] {
                         TK_Colon => {
-                            if pos + 2 < tokens.len() {
-                                match tokens[pos + 2] {
-                                    TK_CloseBrace => {
-                                        return 19;
-                                    },
-                                    _ => {},
-                                };
-                            }
+                            let alt = atn_decide_230_265(tokens, pos);
+                            if alt >= 0 { return alt; }
                         },
                         TK_ARROW => {
                             return 0;
@@ -27954,14 +27840,8 @@ fn atn_decide_230(atn: &mut AtnPredictor, tokens: &Array<i32>, pos: i32, min_pre
                             return 19;
                         },
                         TK_Colon => {
-                            if pos + 2 < tokens.len() {
-                                match tokens[pos + 2] {
-                                    TK_CloseBrace => {
-                                        return 19;
-                                    },
-                                    _ => {},
-                                };
-                            }
+                            let alt = atn_decide_230_265(tokens, pos);
+                            if alt >= 0 { return alt; }
                         },
                         TK_ARROW => {
                             return 0;
@@ -27977,14 +27857,8 @@ fn atn_decide_230(atn: &mut AtnPredictor, tokens: &Array<i32>, pos: i32, min_pre
                             return 19;
                         },
                         TK_Colon => {
-                            if pos + 2 < tokens.len() {
-                                match tokens[pos + 2] {
-                                    TK_CloseBrace => {
-                                        return 19;
-                                    },
-                                    _ => {},
-                                };
-                            }
+                            let alt = atn_decide_230_265(tokens, pos);
+                            if alt >= 0 { return alt; }
                         },
                         TK_ARROW => {
                             return 0;
@@ -28000,14 +27874,8 @@ fn atn_decide_230(atn: &mut AtnPredictor, tokens: &Array<i32>, pos: i32, min_pre
                             return 19;
                         },
                         TK_Colon => {
-                            if pos + 2 < tokens.len() {
-                                match tokens[pos + 2] {
-                                    TK_CloseBrace => {
-                                        return 19;
-                                    },
-                                    _ => {},
-                                };
-                            }
+                            let alt = atn_decide_230_265(tokens, pos);
+                            if alt >= 0 { return alt; }
                         },
                         TK_ARROW => {
                             return 0;
@@ -28046,14 +27914,8 @@ fn atn_decide_230(atn: &mut AtnPredictor, tokens: &Array<i32>, pos: i32, min_pre
                 if pos + 1 < tokens.len() {
                     match tokens[pos + 1] {
                         TK_Colon => {
-                            if pos + 2 < tokens.len() {
-                                match tokens[pos + 2] {
-                                    TK_CloseBrace => {
-                                        return 19;
-                                    },
-                                    _ => {},
-                                };
-                            }
+                            let alt = atn_decide_230_265(tokens, pos);
+                            if alt >= 0 { return alt; }
                         },
                         TK_ARROW => {
                             return 0;
@@ -28092,6 +27954,18 @@ fn atn_decide_230(atn: &mut AtnPredictor, tokens: &Array<i32>, pos: i32, min_pre
         };
     }
     return atn_predict_once(&ATN_SIM, 230, atn, tokens, pos, TK_EOF, min_prec);
+}
+
+fn atn_decide_230_265(tokens: &Array<i32>, pos: i32) -> i32 {
+    if pos + 2 < tokens.len() {
+        match tokens[pos + 2] {
+            TK_CloseBrace => {
+                return 19;
+            },
+            _ => {},
+        };
+    }
+    return -1;
 }
 
 fn atn_decide_234(atn: &mut AtnPredictor, tokens: &Array<i32>, pos: i32, min_prec: i32) -> i32 {
@@ -28146,14 +28020,8 @@ fn atn_decide_235(atn: &mut AtnPredictor, tokens: &Array<i32>, pos: i32, min_pre
                             }
                         },
                         TK_Comma => {
-                            if pos + 2 < tokens.len() {
-                                match tokens[pos + 2] {
-                                    TK_CloseBracket | TK_CloseParen | TK_CloseBrace | TK_Comma => {
-                                        return 0;
-                                    },
-                                    _ => {},
-                                };
-                            }
+                            let alt = atn_decide_235_88(tokens, pos);
+                            if alt >= 0 { return alt; }
                         },
                         _ => {},
                     };
@@ -28206,14 +28074,8 @@ fn atn_decide_235(atn: &mut AtnPredictor, tokens: &Array<i32>, pos: i32, min_pre
                             return 0;
                         },
                         TK_Comma => {
-                            if pos + 2 < tokens.len() {
-                                match tokens[pos + 2] {
-                                    TK_CloseBracket | TK_CloseParen | TK_CloseBrace | TK_Comma => {
-                                        return 0;
-                                    },
-                                    _ => {},
-                                };
-                            }
+                            let alt = atn_decide_235_88(tokens, pos);
+                            if alt >= 0 { return alt; }
                         },
                         _ => {},
                     };
@@ -28226,14 +28088,8 @@ fn atn_decide_235(atn: &mut AtnPredictor, tokens: &Array<i32>, pos: i32, min_pre
                             return 0;
                         },
                         TK_Comma => {
-                            if pos + 2 < tokens.len() {
-                                match tokens[pos + 2] {
-                                    TK_CloseBracket | TK_CloseParen | TK_CloseBrace | TK_Comma => {
-                                        return 0;
-                                    },
-                                    _ => {},
-                                };
-                            }
+                            let alt = atn_decide_235_88(tokens, pos);
+                            if alt >= 0 { return alt; }
                         },
                         _ => {},
                     };
@@ -28246,14 +28102,8 @@ fn atn_decide_235(atn: &mut AtnPredictor, tokens: &Array<i32>, pos: i32, min_pre
                             return 0;
                         },
                         TK_Comma => {
-                            if pos + 2 < tokens.len() {
-                                match tokens[pos + 2] {
-                                    TK_CloseBracket | TK_CloseParen | TK_CloseBrace | TK_Comma => {
-                                        return 0;
-                                    },
-                                    _ => {},
-                                };
-                            }
+                            let alt = atn_decide_235_88(tokens, pos);
+                            if alt >= 0 { return alt; }
                         },
                         _ => {},
                     };
@@ -28266,14 +28116,8 @@ fn atn_decide_235(atn: &mut AtnPredictor, tokens: &Array<i32>, pos: i32, min_pre
                             return 0;
                         },
                         TK_Comma => {
-                            if pos + 2 < tokens.len() {
-                                match tokens[pos + 2] {
-                                    TK_CloseBracket | TK_CloseParen | TK_CloseBrace | TK_Comma => {
-                                        return 0;
-                                    },
-                                    _ => {},
-                                };
-                            }
+                            let alt = atn_decide_235_88(tokens, pos);
+                            if alt >= 0 { return alt; }
                         },
                         _ => {},
                     };
@@ -28286,14 +28130,8 @@ fn atn_decide_235(atn: &mut AtnPredictor, tokens: &Array<i32>, pos: i32, min_pre
                             return 0;
                         },
                         TK_Comma => {
-                            if pos + 2 < tokens.len() {
-                                match tokens[pos + 2] {
-                                    TK_CloseBracket | TK_CloseParen | TK_CloseBrace | TK_Comma => {
-                                        return 0;
-                                    },
-                                    _ => {},
-                                };
-                            }
+                            let alt = atn_decide_235_88(tokens, pos);
+                            if alt >= 0 { return alt; }
                         },
                         _ => {},
                     };
@@ -28306,14 +28144,8 @@ fn atn_decide_235(atn: &mut AtnPredictor, tokens: &Array<i32>, pos: i32, min_pre
                             return 0;
                         },
                         TK_Comma => {
-                            if pos + 2 < tokens.len() {
-                                match tokens[pos + 2] {
-                                    TK_CloseBracket | TK_CloseParen | TK_CloseBrace | TK_Comma => {
-                                        return 0;
-                                    },
-                                    _ => {},
-                                };
-                            }
+                            let alt = atn_decide_235_88(tokens, pos);
+                            if alt >= 0 { return alt; }
                         },
                         _ => {},
                     };
@@ -28326,14 +28158,8 @@ fn atn_decide_235(atn: &mut AtnPredictor, tokens: &Array<i32>, pos: i32, min_pre
                             return 0;
                         },
                         TK_Comma => {
-                            if pos + 2 < tokens.len() {
-                                match tokens[pos + 2] {
-                                    TK_CloseBracket | TK_CloseParen | TK_CloseBrace | TK_Comma => {
-                                        return 0;
-                                    },
-                                    _ => {},
-                                };
-                            }
+                            let alt = atn_decide_235_88(tokens, pos);
+                            if alt >= 0 { return alt; }
                         },
                         _ => {},
                     };
@@ -28346,14 +28172,8 @@ fn atn_decide_235(atn: &mut AtnPredictor, tokens: &Array<i32>, pos: i32, min_pre
                             return 0;
                         },
                         TK_Comma => {
-                            if pos + 2 < tokens.len() {
-                                match tokens[pos + 2] {
-                                    TK_CloseBracket | TK_CloseParen | TK_CloseBrace | TK_Comma => {
-                                        return 0;
-                                    },
-                                    _ => {},
-                                };
-                            }
+                            let alt = atn_decide_235_88(tokens, pos);
+                            if alt >= 0 { return alt; }
                         },
                         _ => {},
                     };
@@ -28366,14 +28186,8 @@ fn atn_decide_235(atn: &mut AtnPredictor, tokens: &Array<i32>, pos: i32, min_pre
                             return 0;
                         },
                         TK_Comma => {
-                            if pos + 2 < tokens.len() {
-                                match tokens[pos + 2] {
-                                    TK_CloseBracket | TK_CloseParen | TK_CloseBrace | TK_Comma => {
-                                        return 0;
-                                    },
-                                    _ => {},
-                                };
-                            }
+                            let alt = atn_decide_235_88(tokens, pos);
+                            if alt >= 0 { return alt; }
                         },
                         _ => {},
                     };
@@ -28386,14 +28200,8 @@ fn atn_decide_235(atn: &mut AtnPredictor, tokens: &Array<i32>, pos: i32, min_pre
                             return 0;
                         },
                         TK_Comma => {
-                            if pos + 2 < tokens.len() {
-                                match tokens[pos + 2] {
-                                    TK_CloseBracket | TK_CloseParen | TK_CloseBrace | TK_Comma => {
-                                        return 0;
-                                    },
-                                    _ => {},
-                                };
-                            }
+                            let alt = atn_decide_235_88(tokens, pos);
+                            if alt >= 0 { return alt; }
                         },
                         _ => {},
                     };
@@ -28406,14 +28214,8 @@ fn atn_decide_235(atn: &mut AtnPredictor, tokens: &Array<i32>, pos: i32, min_pre
                             return 0;
                         },
                         TK_Comma => {
-                            if pos + 2 < tokens.len() {
-                                match tokens[pos + 2] {
-                                    TK_CloseBracket | TK_CloseParen | TK_CloseBrace | TK_Comma => {
-                                        return 0;
-                                    },
-                                    _ => {},
-                                };
-                            }
+                            let alt = atn_decide_235_88(tokens, pos);
+                            if alt >= 0 { return alt; }
                         },
                         _ => {},
                     };
@@ -28426,14 +28228,8 @@ fn atn_decide_235(atn: &mut AtnPredictor, tokens: &Array<i32>, pos: i32, min_pre
                             return 0;
                         },
                         TK_Comma => {
-                            if pos + 2 < tokens.len() {
-                                match tokens[pos + 2] {
-                                    TK_CloseBracket | TK_CloseParen | TK_CloseBrace | TK_Comma => {
-                                        return 0;
-                                    },
-                                    _ => {},
-                                };
-                            }
+                            let alt = atn_decide_235_88(tokens, pos);
+                            if alt >= 0 { return alt; }
                         },
                         _ => {},
                     };
@@ -28446,14 +28242,8 @@ fn atn_decide_235(atn: &mut AtnPredictor, tokens: &Array<i32>, pos: i32, min_pre
                             return 0;
                         },
                         TK_Comma => {
-                            if pos + 2 < tokens.len() {
-                                match tokens[pos + 2] {
-                                    TK_CloseBracket | TK_CloseParen | TK_CloseBrace | TK_Comma => {
-                                        return 0;
-                                    },
-                                    _ => {},
-                                };
-                            }
+                            let alt = atn_decide_235_88(tokens, pos);
+                            if alt >= 0 { return alt; }
                         },
                         _ => {},
                     };
@@ -28466,14 +28256,8 @@ fn atn_decide_235(atn: &mut AtnPredictor, tokens: &Array<i32>, pos: i32, min_pre
                             return 0;
                         },
                         TK_Comma => {
-                            if pos + 2 < tokens.len() {
-                                match tokens[pos + 2] {
-                                    TK_CloseBracket | TK_CloseParen | TK_CloseBrace | TK_Comma => {
-                                        return 0;
-                                    },
-                                    _ => {},
-                                };
-                            }
+                            let alt = atn_decide_235_88(tokens, pos);
+                            if alt >= 0 { return alt; }
                         },
                         _ => {},
                     };
@@ -28486,14 +28270,8 @@ fn atn_decide_235(atn: &mut AtnPredictor, tokens: &Array<i32>, pos: i32, min_pre
                             return 0;
                         },
                         TK_Comma => {
-                            if pos + 2 < tokens.len() {
-                                match tokens[pos + 2] {
-                                    TK_CloseBracket | TK_CloseParen | TK_CloseBrace | TK_Comma => {
-                                        return 0;
-                                    },
-                                    _ => {},
-                                };
-                            }
+                            let alt = atn_decide_235_88(tokens, pos);
+                            if alt >= 0 { return alt; }
                         },
                         _ => {},
                     };
@@ -28506,14 +28284,8 @@ fn atn_decide_235(atn: &mut AtnPredictor, tokens: &Array<i32>, pos: i32, min_pre
                             return 0;
                         },
                         TK_Comma => {
-                            if pos + 2 < tokens.len() {
-                                match tokens[pos + 2] {
-                                    TK_CloseBracket | TK_CloseParen | TK_CloseBrace | TK_Comma => {
-                                        return 0;
-                                    },
-                                    _ => {},
-                                };
-                            }
+                            let alt = atn_decide_235_88(tokens, pos);
+                            if alt >= 0 { return alt; }
                         },
                         _ => {},
                     };
@@ -28526,14 +28298,8 @@ fn atn_decide_235(atn: &mut AtnPredictor, tokens: &Array<i32>, pos: i32, min_pre
                             return 0;
                         },
                         TK_Comma => {
-                            if pos + 2 < tokens.len() {
-                                match tokens[pos + 2] {
-                                    TK_CloseBracket | TK_CloseParen | TK_CloseBrace | TK_Comma => {
-                                        return 0;
-                                    },
-                                    _ => {},
-                                };
-                            }
+                            let alt = atn_decide_235_88(tokens, pos);
+                            if alt >= 0 { return alt; }
                         },
                         _ => {},
                     };
@@ -28546,14 +28312,8 @@ fn atn_decide_235(atn: &mut AtnPredictor, tokens: &Array<i32>, pos: i32, min_pre
                             return 0;
                         },
                         TK_Comma => {
-                            if pos + 2 < tokens.len() {
-                                match tokens[pos + 2] {
-                                    TK_CloseBracket | TK_CloseParen | TK_CloseBrace | TK_Comma => {
-                                        return 0;
-                                    },
-                                    _ => {},
-                                };
-                            }
+                            let alt = atn_decide_235_88(tokens, pos);
+                            if alt >= 0 { return alt; }
                         },
                         _ => {},
                     };
@@ -28566,14 +28326,8 @@ fn atn_decide_235(atn: &mut AtnPredictor, tokens: &Array<i32>, pos: i32, min_pre
                             return 0;
                         },
                         TK_Comma => {
-                            if pos + 2 < tokens.len() {
-                                match tokens[pos + 2] {
-                                    TK_CloseBracket | TK_CloseParen | TK_CloseBrace | TK_Comma => {
-                                        return 0;
-                                    },
-                                    _ => {},
-                                };
-                            }
+                            let alt = atn_decide_235_88(tokens, pos);
+                            if alt >= 0 { return alt; }
                         },
                         _ => {},
                     };
@@ -28586,14 +28340,8 @@ fn atn_decide_235(atn: &mut AtnPredictor, tokens: &Array<i32>, pos: i32, min_pre
                             return 0;
                         },
                         TK_Comma => {
-                            if pos + 2 < tokens.len() {
-                                match tokens[pos + 2] {
-                                    TK_CloseBracket | TK_CloseParen | TK_CloseBrace | TK_Comma => {
-                                        return 0;
-                                    },
-                                    _ => {},
-                                };
-                            }
+                            let alt = atn_decide_235_88(tokens, pos);
+                            if alt >= 0 { return alt; }
                         },
                         _ => {},
                     };
@@ -28606,14 +28354,8 @@ fn atn_decide_235(atn: &mut AtnPredictor, tokens: &Array<i32>, pos: i32, min_pre
                             return 0;
                         },
                         TK_Comma => {
-                            if pos + 2 < tokens.len() {
-                                match tokens[pos + 2] {
-                                    TK_CloseBracket | TK_CloseParen | TK_CloseBrace | TK_Comma => {
-                                        return 0;
-                                    },
-                                    _ => {},
-                                };
-                            }
+                            let alt = atn_decide_235_88(tokens, pos);
+                            if alt >= 0 { return alt; }
                         },
                         _ => {},
                     };
@@ -28626,14 +28368,8 @@ fn atn_decide_235(atn: &mut AtnPredictor, tokens: &Array<i32>, pos: i32, min_pre
                             return 0;
                         },
                         TK_Comma => {
-                            if pos + 2 < tokens.len() {
-                                match tokens[pos + 2] {
-                                    TK_CloseBracket | TK_CloseParen | TK_CloseBrace | TK_Comma => {
-                                        return 0;
-                                    },
-                                    _ => {},
-                                };
-                            }
+                            let alt = atn_decide_235_88(tokens, pos);
+                            if alt >= 0 { return alt; }
                         },
                         _ => {},
                     };
@@ -28646,14 +28382,8 @@ fn atn_decide_235(atn: &mut AtnPredictor, tokens: &Array<i32>, pos: i32, min_pre
                             return 0;
                         },
                         TK_Comma => {
-                            if pos + 2 < tokens.len() {
-                                match tokens[pos + 2] {
-                                    TK_CloseBracket | TK_CloseParen | TK_CloseBrace | TK_Comma => {
-                                        return 0;
-                                    },
-                                    _ => {},
-                                };
-                            }
+                            let alt = atn_decide_235_88(tokens, pos);
+                            if alt >= 0 { return alt; }
                         },
                         _ => {},
                     };
@@ -28666,14 +28396,8 @@ fn atn_decide_235(atn: &mut AtnPredictor, tokens: &Array<i32>, pos: i32, min_pre
                             return 0;
                         },
                         TK_Comma => {
-                            if pos + 2 < tokens.len() {
-                                match tokens[pos + 2] {
-                                    TK_CloseBracket | TK_CloseParen | TK_CloseBrace | TK_Comma => {
-                                        return 0;
-                                    },
-                                    _ => {},
-                                };
-                            }
+                            let alt = atn_decide_235_88(tokens, pos);
+                            if alt >= 0 { return alt; }
                         },
                         _ => {},
                     };
@@ -28716,14 +28440,8 @@ fn atn_decide_235(atn: &mut AtnPredictor, tokens: &Array<i32>, pos: i32, min_pre
                             return 0;
                         },
                         TK_Comma => {
-                            if pos + 2 < tokens.len() {
-                                match tokens[pos + 2] {
-                                    TK_CloseBracket | TK_CloseParen | TK_CloseBrace | TK_Comma => {
-                                        return 0;
-                                    },
-                                    _ => {},
-                                };
-                            }
+                            let alt = atn_decide_235_88(tokens, pos);
+                            if alt >= 0 { return alt; }
                         },
                         _ => {},
                     };
@@ -28746,14 +28464,8 @@ fn atn_decide_235(atn: &mut AtnPredictor, tokens: &Array<i32>, pos: i32, min_pre
                             return 0;
                         },
                         TK_Comma => {
-                            if pos + 2 < tokens.len() {
-                                match tokens[pos + 2] {
-                                    TK_CloseBracket | TK_CloseParen | TK_CloseBrace | TK_Comma => {
-                                        return 0;
-                                    },
-                                    _ => {},
-                                };
-                            }
+                            let alt = atn_decide_235_88(tokens, pos);
+                            if alt >= 0 { return alt; }
                         },
                         _ => {},
                     };
@@ -28766,14 +28478,8 @@ fn atn_decide_235(atn: &mut AtnPredictor, tokens: &Array<i32>, pos: i32, min_pre
                             return 0;
                         },
                         TK_Comma => {
-                            if pos + 2 < tokens.len() {
-                                match tokens[pos + 2] {
-                                    TK_CloseBracket | TK_CloseParen | TK_CloseBrace | TK_Comma => {
-                                        return 0;
-                                    },
-                                    _ => {},
-                                };
-                            }
+                            let alt = atn_decide_235_88(tokens, pos);
+                            if alt >= 0 { return alt; }
                         },
                         _ => {},
                     };
@@ -28786,14 +28492,8 @@ fn atn_decide_235(atn: &mut AtnPredictor, tokens: &Array<i32>, pos: i32, min_pre
                             return 0;
                         },
                         TK_Comma => {
-                            if pos + 2 < tokens.len() {
-                                match tokens[pos + 2] {
-                                    TK_CloseBracket | TK_CloseParen | TK_CloseBrace | TK_Comma => {
-                                        return 0;
-                                    },
-                                    _ => {},
-                                };
-                            }
+                            let alt = atn_decide_235_88(tokens, pos);
+                            if alt >= 0 { return alt; }
                         },
                         _ => {},
                     };
@@ -28806,14 +28506,8 @@ fn atn_decide_235(atn: &mut AtnPredictor, tokens: &Array<i32>, pos: i32, min_pre
                             return 0;
                         },
                         TK_Comma => {
-                            if pos + 2 < tokens.len() {
-                                match tokens[pos + 2] {
-                                    TK_CloseBracket | TK_CloseParen | TK_CloseBrace | TK_Comma => {
-                                        return 0;
-                                    },
-                                    _ => {},
-                                };
-                            }
+                            let alt = atn_decide_235_88(tokens, pos);
+                            if alt >= 0 { return alt; }
                         },
                         _ => {},
                     };
@@ -28826,14 +28520,8 @@ fn atn_decide_235(atn: &mut AtnPredictor, tokens: &Array<i32>, pos: i32, min_pre
                             return 0;
                         },
                         TK_Comma => {
-                            if pos + 2 < tokens.len() {
-                                match tokens[pos + 2] {
-                                    TK_CloseBracket | TK_CloseParen | TK_CloseBrace | TK_Comma => {
-                                        return 0;
-                                    },
-                                    _ => {},
-                                };
-                            }
+                            let alt = atn_decide_235_88(tokens, pos);
+                            if alt >= 0 { return alt; }
                         },
                         _ => {},
                     };
@@ -28846,14 +28534,8 @@ fn atn_decide_235(atn: &mut AtnPredictor, tokens: &Array<i32>, pos: i32, min_pre
                             return 0;
                         },
                         TK_Comma => {
-                            if pos + 2 < tokens.len() {
-                                match tokens[pos + 2] {
-                                    TK_CloseBracket | TK_CloseParen | TK_CloseBrace | TK_Comma => {
-                                        return 0;
-                                    },
-                                    _ => {},
-                                };
-                            }
+                            let alt = atn_decide_235_88(tokens, pos);
+                            if alt >= 0 { return alt; }
                         },
                         _ => {},
                     };
@@ -28918,6 +28600,18 @@ fn atn_decide_235(atn: &mut AtnPredictor, tokens: &Array<i32>, pos: i32, min_pre
     return atn_predict_once(&ATN_SIM, 235, atn, tokens, pos, TK_EOF, min_prec);
 }
 
+fn atn_decide_235_88(tokens: &Array<i32>, pos: i32) -> i32 {
+    if pos + 2 < tokens.len() {
+        match tokens[pos + 2] {
+            TK_CloseBracket | TK_CloseParen | TK_CloseBrace | TK_Comma => {
+                return 0;
+            },
+            _ => {},
+        };
+    }
+    return -1;
+}
+
 fn atn_decide_236(atn: &mut AtnPredictor, tokens: &Array<i32>, pos: i32, min_prec: i32) -> i32 {
     if pos < tokens.len() {
         match tokens[pos] {
@@ -28948,14 +28642,8 @@ fn atn_decide_236(atn: &mut AtnPredictor, tokens: &Array<i32>, pos: i32, min_pre
                             }
                         },
                         TK_Comma => {
-                            if pos + 2 < tokens.len() {
-                                match tokens[pos + 2] {
-                                    TK_CloseBracket | TK_CloseParen | TK_CloseBrace | TK_Comma => {
-                                        return 0;
-                                    },
-                                    _ => {},
-                                };
-                            }
+                            let alt = atn_decide_236_88(tokens, pos);
+                            if alt >= 0 { return alt; }
                         },
                         _ => {},
                     };
@@ -28968,14 +28656,8 @@ fn atn_decide_236(atn: &mut AtnPredictor, tokens: &Array<i32>, pos: i32, min_pre
                             return 0;
                         },
                         TK_Comma => {
-                            if pos + 2 < tokens.len() {
-                                match tokens[pos + 2] {
-                                    TK_CloseBracket | TK_CloseParen | TK_CloseBrace | TK_Comma => {
-                                        return 0;
-                                    },
-                                    _ => {},
-                                };
-                            }
+                            let alt = atn_decide_236_88(tokens, pos);
+                            if alt >= 0 { return alt; }
                         },
                         _ => {},
                     };
@@ -28988,14 +28670,8 @@ fn atn_decide_236(atn: &mut AtnPredictor, tokens: &Array<i32>, pos: i32, min_pre
                             return 0;
                         },
                         TK_Comma => {
-                            if pos + 2 < tokens.len() {
-                                match tokens[pos + 2] {
-                                    TK_CloseBracket | TK_CloseParen | TK_CloseBrace | TK_Comma => {
-                                        return 0;
-                                    },
-                                    _ => {},
-                                };
-                            }
+                            let alt = atn_decide_236_88(tokens, pos);
+                            if alt >= 0 { return alt; }
                         },
                         _ => {},
                     };
@@ -29008,14 +28684,8 @@ fn atn_decide_236(atn: &mut AtnPredictor, tokens: &Array<i32>, pos: i32, min_pre
                             return 0;
                         },
                         TK_Comma => {
-                            if pos + 2 < tokens.len() {
-                                match tokens[pos + 2] {
-                                    TK_CloseBracket | TK_CloseParen | TK_CloseBrace | TK_Comma => {
-                                        return 0;
-                                    },
-                                    _ => {},
-                                };
-                            }
+                            let alt = atn_decide_236_88(tokens, pos);
+                            if alt >= 0 { return alt; }
                         },
                         _ => {},
                     };
@@ -29028,14 +28698,8 @@ fn atn_decide_236(atn: &mut AtnPredictor, tokens: &Array<i32>, pos: i32, min_pre
                             return 0;
                         },
                         TK_Comma => {
-                            if pos + 2 < tokens.len() {
-                                match tokens[pos + 2] {
-                                    TK_CloseBracket | TK_CloseParen | TK_CloseBrace | TK_Comma => {
-                                        return 0;
-                                    },
-                                    _ => {},
-                                };
-                            }
+                            let alt = atn_decide_236_88(tokens, pos);
+                            if alt >= 0 { return alt; }
                         },
                         _ => {},
                     };
@@ -29048,14 +28712,8 @@ fn atn_decide_236(atn: &mut AtnPredictor, tokens: &Array<i32>, pos: i32, min_pre
                             return 0;
                         },
                         TK_Comma => {
-                            if pos + 2 < tokens.len() {
-                                match tokens[pos + 2] {
-                                    TK_CloseBracket | TK_CloseParen | TK_CloseBrace | TK_Comma => {
-                                        return 0;
-                                    },
-                                    _ => {},
-                                };
-                            }
+                            let alt = atn_decide_236_88(tokens, pos);
+                            if alt >= 0 { return alt; }
                         },
                         _ => {},
                     };
@@ -29068,14 +28726,8 @@ fn atn_decide_236(atn: &mut AtnPredictor, tokens: &Array<i32>, pos: i32, min_pre
                             return 0;
                         },
                         TK_Comma => {
-                            if pos + 2 < tokens.len() {
-                                match tokens[pos + 2] {
-                                    TK_CloseBracket | TK_CloseParen | TK_CloseBrace | TK_Comma => {
-                                        return 0;
-                                    },
-                                    _ => {},
-                                };
-                            }
+                            let alt = atn_decide_236_88(tokens, pos);
+                            if alt >= 0 { return alt; }
                         },
                         _ => {},
                     };
@@ -29088,14 +28740,8 @@ fn atn_decide_236(atn: &mut AtnPredictor, tokens: &Array<i32>, pos: i32, min_pre
                             return 0;
                         },
                         TK_Comma => {
-                            if pos + 2 < tokens.len() {
-                                match tokens[pos + 2] {
-                                    TK_CloseBracket | TK_CloseParen | TK_CloseBrace | TK_Comma => {
-                                        return 0;
-                                    },
-                                    _ => {},
-                                };
-                            }
+                            let alt = atn_decide_236_88(tokens, pos);
+                            if alt >= 0 { return alt; }
                         },
                         _ => {},
                     };
@@ -29108,14 +28754,8 @@ fn atn_decide_236(atn: &mut AtnPredictor, tokens: &Array<i32>, pos: i32, min_pre
                             return 0;
                         },
                         TK_Comma => {
-                            if pos + 2 < tokens.len() {
-                                match tokens[pos + 2] {
-                                    TK_CloseBracket | TK_CloseParen | TK_CloseBrace | TK_Comma => {
-                                        return 0;
-                                    },
-                                    _ => {},
-                                };
-                            }
+                            let alt = atn_decide_236_88(tokens, pos);
+                            if alt >= 0 { return alt; }
                         },
                         _ => {},
                     };
@@ -29128,14 +28768,8 @@ fn atn_decide_236(atn: &mut AtnPredictor, tokens: &Array<i32>, pos: i32, min_pre
                             return 0;
                         },
                         TK_Comma => {
-                            if pos + 2 < tokens.len() {
-                                match tokens[pos + 2] {
-                                    TK_CloseBracket | TK_CloseParen | TK_CloseBrace | TK_Comma => {
-                                        return 0;
-                                    },
-                                    _ => {},
-                                };
-                            }
+                            let alt = atn_decide_236_88(tokens, pos);
+                            if alt >= 0 { return alt; }
                         },
                         _ => {},
                     };
@@ -29148,14 +28782,8 @@ fn atn_decide_236(atn: &mut AtnPredictor, tokens: &Array<i32>, pos: i32, min_pre
                             return 0;
                         },
                         TK_Comma => {
-                            if pos + 2 < tokens.len() {
-                                match tokens[pos + 2] {
-                                    TK_CloseBracket | TK_CloseParen | TK_CloseBrace | TK_Comma => {
-                                        return 0;
-                                    },
-                                    _ => {},
-                                };
-                            }
+                            let alt = atn_decide_236_88(tokens, pos);
+                            if alt >= 0 { return alt; }
                         },
                         _ => {},
                     };
@@ -29168,14 +28796,8 @@ fn atn_decide_236(atn: &mut AtnPredictor, tokens: &Array<i32>, pos: i32, min_pre
                             return 0;
                         },
                         TK_Comma => {
-                            if pos + 2 < tokens.len() {
-                                match tokens[pos + 2] {
-                                    TK_CloseBracket | TK_CloseParen | TK_CloseBrace | TK_Comma => {
-                                        return 0;
-                                    },
-                                    _ => {},
-                                };
-                            }
+                            let alt = atn_decide_236_88(tokens, pos);
+                            if alt >= 0 { return alt; }
                         },
                         _ => {},
                     };
@@ -29188,14 +28810,8 @@ fn atn_decide_236(atn: &mut AtnPredictor, tokens: &Array<i32>, pos: i32, min_pre
                             return 0;
                         },
                         TK_Comma => {
-                            if pos + 2 < tokens.len() {
-                                match tokens[pos + 2] {
-                                    TK_CloseBracket | TK_CloseParen | TK_CloseBrace | TK_Comma => {
-                                        return 0;
-                                    },
-                                    _ => {},
-                                };
-                            }
+                            let alt = atn_decide_236_88(tokens, pos);
+                            if alt >= 0 { return alt; }
                         },
                         _ => {},
                     };
@@ -29208,14 +28824,8 @@ fn atn_decide_236(atn: &mut AtnPredictor, tokens: &Array<i32>, pos: i32, min_pre
                             return 0;
                         },
                         TK_Comma => {
-                            if pos + 2 < tokens.len() {
-                                match tokens[pos + 2] {
-                                    TK_CloseBracket | TK_CloseParen | TK_CloseBrace | TK_Comma => {
-                                        return 0;
-                                    },
-                                    _ => {},
-                                };
-                            }
+                            let alt = atn_decide_236_88(tokens, pos);
+                            if alt >= 0 { return alt; }
                         },
                         _ => {},
                     };
@@ -29228,14 +28838,8 @@ fn atn_decide_236(atn: &mut AtnPredictor, tokens: &Array<i32>, pos: i32, min_pre
                             return 0;
                         },
                         TK_Comma => {
-                            if pos + 2 < tokens.len() {
-                                match tokens[pos + 2] {
-                                    TK_CloseBracket | TK_CloseParen | TK_CloseBrace | TK_Comma => {
-                                        return 0;
-                                    },
-                                    _ => {},
-                                };
-                            }
+                            let alt = atn_decide_236_88(tokens, pos);
+                            if alt >= 0 { return alt; }
                         },
                         _ => {},
                     };
@@ -29248,14 +28852,8 @@ fn atn_decide_236(atn: &mut AtnPredictor, tokens: &Array<i32>, pos: i32, min_pre
                             return 0;
                         },
                         TK_Comma => {
-                            if pos + 2 < tokens.len() {
-                                match tokens[pos + 2] {
-                                    TK_CloseBracket | TK_CloseParen | TK_CloseBrace | TK_Comma => {
-                                        return 0;
-                                    },
-                                    _ => {},
-                                };
-                            }
+                            let alt = atn_decide_236_88(tokens, pos);
+                            if alt >= 0 { return alt; }
                         },
                         _ => {},
                     };
@@ -29268,14 +28866,8 @@ fn atn_decide_236(atn: &mut AtnPredictor, tokens: &Array<i32>, pos: i32, min_pre
                             return 0;
                         },
                         TK_Comma => {
-                            if pos + 2 < tokens.len() {
-                                match tokens[pos + 2] {
-                                    TK_CloseBracket | TK_CloseParen | TK_CloseBrace | TK_Comma => {
-                                        return 0;
-                                    },
-                                    _ => {},
-                                };
-                            }
+                            let alt = atn_decide_236_88(tokens, pos);
+                            if alt >= 0 { return alt; }
                         },
                         _ => {},
                     };
@@ -29288,14 +28880,8 @@ fn atn_decide_236(atn: &mut AtnPredictor, tokens: &Array<i32>, pos: i32, min_pre
                             return 0;
                         },
                         TK_Comma => {
-                            if pos + 2 < tokens.len() {
-                                match tokens[pos + 2] {
-                                    TK_CloseBracket | TK_CloseParen | TK_CloseBrace | TK_Comma => {
-                                        return 0;
-                                    },
-                                    _ => {},
-                                };
-                            }
+                            let alt = atn_decide_236_88(tokens, pos);
+                            if alt >= 0 { return alt; }
                         },
                         _ => {},
                     };
@@ -29308,14 +28894,8 @@ fn atn_decide_236(atn: &mut AtnPredictor, tokens: &Array<i32>, pos: i32, min_pre
                             return 0;
                         },
                         TK_Comma => {
-                            if pos + 2 < tokens.len() {
-                                match tokens[pos + 2] {
-                                    TK_CloseBracket | TK_CloseParen | TK_CloseBrace | TK_Comma => {
-                                        return 0;
-                                    },
-                                    _ => {},
-                                };
-                            }
+                            let alt = atn_decide_236_88(tokens, pos);
+                            if alt >= 0 { return alt; }
                         },
                         _ => {},
                     };
@@ -29328,14 +28908,8 @@ fn atn_decide_236(atn: &mut AtnPredictor, tokens: &Array<i32>, pos: i32, min_pre
                             return 0;
                         },
                         TK_Comma => {
-                            if pos + 2 < tokens.len() {
-                                match tokens[pos + 2] {
-                                    TK_CloseBracket | TK_CloseParen | TK_CloseBrace | TK_Comma => {
-                                        return 0;
-                                    },
-                                    _ => {},
-                                };
-                            }
+                            let alt = atn_decide_236_88(tokens, pos);
+                            if alt >= 0 { return alt; }
                         },
                         _ => {},
                     };
@@ -29348,14 +28922,8 @@ fn atn_decide_236(atn: &mut AtnPredictor, tokens: &Array<i32>, pos: i32, min_pre
                             return 0;
                         },
                         TK_Comma => {
-                            if pos + 2 < tokens.len() {
-                                match tokens[pos + 2] {
-                                    TK_CloseBracket | TK_CloseParen | TK_CloseBrace | TK_Comma => {
-                                        return 0;
-                                    },
-                                    _ => {},
-                                };
-                            }
+                            let alt = atn_decide_236_88(tokens, pos);
+                            if alt >= 0 { return alt; }
                         },
                         _ => {},
                     };
@@ -29368,14 +28936,8 @@ fn atn_decide_236(atn: &mut AtnPredictor, tokens: &Array<i32>, pos: i32, min_pre
                             return 0;
                         },
                         TK_Comma => {
-                            if pos + 2 < tokens.len() {
-                                match tokens[pos + 2] {
-                                    TK_CloseBracket | TK_CloseParen | TK_CloseBrace | TK_Comma => {
-                                        return 0;
-                                    },
-                                    _ => {},
-                                };
-                            }
+                            let alt = atn_decide_236_88(tokens, pos);
+                            if alt >= 0 { return alt; }
                         },
                         _ => {},
                     };
@@ -29388,14 +28950,8 @@ fn atn_decide_236(atn: &mut AtnPredictor, tokens: &Array<i32>, pos: i32, min_pre
                             return 0;
                         },
                         TK_Comma => {
-                            if pos + 2 < tokens.len() {
-                                match tokens[pos + 2] {
-                                    TK_CloseBracket | TK_CloseParen | TK_CloseBrace | TK_Comma => {
-                                        return 0;
-                                    },
-                                    _ => {},
-                                };
-                            }
+                            let alt = atn_decide_236_88(tokens, pos);
+                            if alt >= 0 { return alt; }
                         },
                         _ => {},
                     };
@@ -29408,14 +28964,8 @@ fn atn_decide_236(atn: &mut AtnPredictor, tokens: &Array<i32>, pos: i32, min_pre
                             return 0;
                         },
                         TK_Comma => {
-                            if pos + 2 < tokens.len() {
-                                match tokens[pos + 2] {
-                                    TK_CloseBracket | TK_CloseParen | TK_CloseBrace | TK_Comma => {
-                                        return 0;
-                                    },
-                                    _ => {},
-                                };
-                            }
+                            let alt = atn_decide_236_88(tokens, pos);
+                            if alt >= 0 { return alt; }
                         },
                         _ => {},
                     };
@@ -29428,14 +28978,8 @@ fn atn_decide_236(atn: &mut AtnPredictor, tokens: &Array<i32>, pos: i32, min_pre
                             return 0;
                         },
                         TK_Comma => {
-                            if pos + 2 < tokens.len() {
-                                match tokens[pos + 2] {
-                                    TK_CloseBracket | TK_CloseParen | TK_CloseBrace | TK_Comma => {
-                                        return 0;
-                                    },
-                                    _ => {},
-                                };
-                            }
+                            let alt = atn_decide_236_88(tokens, pos);
+                            if alt >= 0 { return alt; }
                         },
                         _ => {},
                     };
@@ -29478,14 +29022,8 @@ fn atn_decide_236(atn: &mut AtnPredictor, tokens: &Array<i32>, pos: i32, min_pre
                             return 0;
                         },
                         TK_Comma => {
-                            if pos + 2 < tokens.len() {
-                                match tokens[pos + 2] {
-                                    TK_CloseBracket | TK_CloseParen | TK_CloseBrace | TK_Comma => {
-                                        return 0;
-                                    },
-                                    _ => {},
-                                };
-                            }
+                            let alt = atn_decide_236_88(tokens, pos);
+                            if alt >= 0 { return alt; }
                         },
                         _ => {},
                     };
@@ -29508,14 +29046,8 @@ fn atn_decide_236(atn: &mut AtnPredictor, tokens: &Array<i32>, pos: i32, min_pre
                             return 0;
                         },
                         TK_Comma => {
-                            if pos + 2 < tokens.len() {
-                                match tokens[pos + 2] {
-                                    TK_CloseBracket | TK_CloseParen | TK_CloseBrace | TK_Comma => {
-                                        return 0;
-                                    },
-                                    _ => {},
-                                };
-                            }
+                            let alt = atn_decide_236_88(tokens, pos);
+                            if alt >= 0 { return alt; }
                         },
                         _ => {},
                     };
@@ -29528,14 +29060,8 @@ fn atn_decide_236(atn: &mut AtnPredictor, tokens: &Array<i32>, pos: i32, min_pre
                             return 0;
                         },
                         TK_Comma => {
-                            if pos + 2 < tokens.len() {
-                                match tokens[pos + 2] {
-                                    TK_CloseBracket | TK_CloseParen | TK_CloseBrace | TK_Comma => {
-                                        return 0;
-                                    },
-                                    _ => {},
-                                };
-                            }
+                            let alt = atn_decide_236_88(tokens, pos);
+                            if alt >= 0 { return alt; }
                         },
                         _ => {},
                     };
@@ -29548,14 +29074,8 @@ fn atn_decide_236(atn: &mut AtnPredictor, tokens: &Array<i32>, pos: i32, min_pre
                             return 0;
                         },
                         TK_Comma => {
-                            if pos + 2 < tokens.len() {
-                                match tokens[pos + 2] {
-                                    TK_CloseBracket | TK_CloseParen | TK_CloseBrace | TK_Comma => {
-                                        return 0;
-                                    },
-                                    _ => {},
-                                };
-                            }
+                            let alt = atn_decide_236_88(tokens, pos);
+                            if alt >= 0 { return alt; }
                         },
                         _ => {},
                     };
@@ -29568,14 +29088,8 @@ fn atn_decide_236(atn: &mut AtnPredictor, tokens: &Array<i32>, pos: i32, min_pre
                             return 0;
                         },
                         TK_Comma => {
-                            if pos + 2 < tokens.len() {
-                                match tokens[pos + 2] {
-                                    TK_CloseBracket | TK_CloseParen | TK_CloseBrace | TK_Comma => {
-                                        return 0;
-                                    },
-                                    _ => {},
-                                };
-                            }
+                            let alt = atn_decide_236_88(tokens, pos);
+                            if alt >= 0 { return alt; }
                         },
                         _ => {},
                     };
@@ -29588,14 +29102,8 @@ fn atn_decide_236(atn: &mut AtnPredictor, tokens: &Array<i32>, pos: i32, min_pre
                             return 0;
                         },
                         TK_Comma => {
-                            if pos + 2 < tokens.len() {
-                                match tokens[pos + 2] {
-                                    TK_CloseBracket | TK_CloseParen | TK_CloseBrace | TK_Comma => {
-                                        return 0;
-                                    },
-                                    _ => {},
-                                };
-                            }
+                            let alt = atn_decide_236_88(tokens, pos);
+                            if alt >= 0 { return alt; }
                         },
                         _ => {},
                     };
@@ -29608,14 +29116,8 @@ fn atn_decide_236(atn: &mut AtnPredictor, tokens: &Array<i32>, pos: i32, min_pre
                             return 0;
                         },
                         TK_Comma => {
-                            if pos + 2 < tokens.len() {
-                                match tokens[pos + 2] {
-                                    TK_CloseBracket | TK_CloseParen | TK_CloseBrace | TK_Comma => {
-                                        return 0;
-                                    },
-                                    _ => {},
-                                };
-                            }
+                            let alt = atn_decide_236_88(tokens, pos);
+                            if alt >= 0 { return alt; }
                         },
                         _ => {},
                     };
@@ -29678,6 +29180,18 @@ fn atn_decide_236(atn: &mut AtnPredictor, tokens: &Array<i32>, pos: i32, min_pre
         };
     }
     return atn_predict_once(&ATN_SIM, 236, atn, tokens, pos, TK_EOF, min_prec);
+}
+
+fn atn_decide_236_88(tokens: &Array<i32>, pos: i32) -> i32 {
+    if pos + 2 < tokens.len() {
+        match tokens[pos + 2] {
+            TK_CloseBracket | TK_CloseParen | TK_CloseBrace | TK_Comma => {
+                return 0;
+            },
+            _ => {},
+        };
+    }
+    return -1;
 }
 
 fn atn_decide_241(atn: &mut AtnPredictor, tokens: &Array<i32>, pos: i32, min_prec: i32) -> i32 {
@@ -29765,14 +29279,8 @@ fn atn_decide_244(atn: &mut AtnPredictor, tokens: &Array<i32>, pos: i32, min_pre
                             if pos + 2 < tokens.len() {
                                 match tokens[pos + 2] {
                                     TK_Comma => {
-                                        if pos + 3 < tokens.len() {
-                                            match tokens[pos + 3] {
-                                                TK_CloseBracket | TK_CloseParen | TK_CloseBrace | TK_Comma => {
-                                                    return 1;
-                                                },
-                                                _ => {},
-                                            };
-                                        }
+                                        let alt = atn_decide_244_235(tokens, pos);
+                                        if alt >= 0 { return alt; }
                                     },
                                     TK_MultiLineComment | TK_SingleLineComment | TK_OpenBracket | TK_Ellipsis | TK_Hashtag | TK_LessThan | TK_MoreThan | TK_BitAnd | TK_BitOr | TK_Package | TK_Protected | TK_Static | TK_Any | TK_Number | TK_Never | TK_Boolean | TK_String | TK_Unique | TK_Symbol | TK_Undefined | TK_Object | TK_Of | TK_KeyOf | TK_TypeAlias | TK_Constructor | TK_Namespace | TK_Require | TK_Module | TK_Declare | TK_Abstract | TK_Is | TK_At | TK_Identifier | TK_StringLiteral | TK_BackTick | TK_WhiteSpaces | TK_LineTerminator | TK_HtmlComment | TK_CDataComment | TK_UnexpectedCharacter | TK_TemplateStringEscapeAtom | TK_TemplateStringStartExpression | TK_TemplateStringAtom | TK_BackTickInside | TK_EOF | TK_ERROR => {},
                                     _ => {
@@ -29785,14 +29293,8 @@ fn atn_decide_244(atn: &mut AtnPredictor, tokens: &Array<i32>, pos: i32, min_pre
                             if pos + 2 < tokens.len() {
                                 match tokens[pos + 2] {
                                     TK_Comma => {
-                                        if pos + 3 < tokens.len() {
-                                            match tokens[pos + 3] {
-                                                TK_CloseBracket | TK_CloseParen | TK_CloseBrace | TK_Comma => {
-                                                    return 1;
-                                                },
-                                                _ => {},
-                                            };
-                                        }
+                                        let alt = atn_decide_244_235(tokens, pos);
+                                        if alt >= 0 { return alt; }
                                     },
                                     TK_MultiLineComment | TK_SingleLineComment | TK_OpenBracket | TK_Ellipsis | TK_Hashtag | TK_LessThan | TK_MoreThan | TK_BitAnd | TK_BitOr | TK_Package | TK_Protected | TK_Static | TK_Any | TK_Number | TK_Never | TK_Boolean | TK_String | TK_Unique | TK_Symbol | TK_Undefined | TK_Object | TK_Of | TK_KeyOf | TK_TypeAlias | TK_Constructor | TK_Namespace | TK_Require | TK_Module | TK_Declare | TK_Abstract | TK_Is | TK_At | TK_Identifier | TK_StringLiteral | TK_BackTick | TK_WhiteSpaces | TK_LineTerminator | TK_HtmlComment | TK_CDataComment | TK_UnexpectedCharacter | TK_TemplateStringEscapeAtom | TK_TemplateStringStartExpression | TK_TemplateStringAtom | TK_BackTickInside | TK_EOF | TK_ERROR => {},
                                     _ => {
@@ -29828,14 +29330,8 @@ fn atn_decide_244(atn: &mut AtnPredictor, tokens: &Array<i32>, pos: i32, min_pre
                                         return 1;
                                     },
                                     TK_Comma => {
-                                        if pos + 3 < tokens.len() {
-                                            match tokens[pos + 3] {
-                                                TK_CloseBracket | TK_CloseParen | TK_CloseBrace | TK_Comma => {
-                                                    return 1;
-                                                },
-                                                _ => {},
-                                            };
-                                        }
+                                        let alt = atn_decide_244_235(tokens, pos);
+                                        if alt >= 0 { return alt; }
                                     },
                                     _ => {},
                                 };
@@ -29845,14 +29341,8 @@ fn atn_decide_244(atn: &mut AtnPredictor, tokens: &Array<i32>, pos: i32, min_pre
                             if pos + 2 < tokens.len() {
                                 match tokens[pos + 2] {
                                     TK_Comma => {
-                                        if pos + 3 < tokens.len() {
-                                            match tokens[pos + 3] {
-                                                TK_CloseBracket | TK_CloseParen | TK_CloseBrace | TK_Comma => {
-                                                    return 1;
-                                                },
-                                                _ => {},
-                                            };
-                                        }
+                                        let alt = atn_decide_244_235(tokens, pos);
+                                        if alt >= 0 { return alt; }
                                     },
                                     TK_MultiLineComment | TK_SingleLineComment | TK_OpenBracket | TK_Ellipsis | TK_Dot | TK_Hashtag | TK_LessThan | TK_MoreThan | TK_BitAnd | TK_BitOr | TK_Package | TK_Protected | TK_Static | TK_Any | TK_Number | TK_Never | TK_Boolean | TK_String | TK_Unique | TK_Symbol | TK_Undefined | TK_Object | TK_Of | TK_KeyOf | TK_TypeAlias | TK_Constructor | TK_Namespace | TK_Require | TK_Module | TK_Declare | TK_Abstract | TK_Is | TK_At | TK_Identifier | TK_StringLiteral | TK_BackTick | TK_WhiteSpaces | TK_LineTerminator | TK_HtmlComment | TK_CDataComment | TK_UnexpectedCharacter | TK_TemplateStringEscapeAtom | TK_TemplateStringStartExpression | TK_TemplateStringAtom | TK_BackTickInside | TK_EOF | TK_ERROR => {},
                                     _ => {
@@ -29868,14 +29358,8 @@ fn atn_decide_244(atn: &mut AtnPredictor, tokens: &Array<i32>, pos: i32, min_pre
                                         return 1;
                                     },
                                     TK_Comma => {
-                                        if pos + 3 < tokens.len() {
-                                            match tokens[pos + 3] {
-                                                TK_CloseBracket | TK_CloseParen | TK_CloseBrace | TK_Comma => {
-                                                    return 1;
-                                                },
-                                                _ => {},
-                                            };
-                                        }
+                                        let alt = atn_decide_244_235(tokens, pos);
+                                        if alt >= 0 { return alt; }
                                     },
                                     _ => {},
                                 };
@@ -29888,14 +29372,8 @@ fn atn_decide_244(atn: &mut AtnPredictor, tokens: &Array<i32>, pos: i32, min_pre
                                         return 1;
                                     },
                                     TK_Comma => {
-                                        if pos + 3 < tokens.len() {
-                                            match tokens[pos + 3] {
-                                                TK_CloseBracket | TK_CloseParen | TK_CloseBrace | TK_Comma => {
-                                                    return 1;
-                                                },
-                                                _ => {},
-                                            };
-                                        }
+                                        let alt = atn_decide_244_235(tokens, pos);
+                                        if alt >= 0 { return alt; }
                                     },
                                     _ => {},
                                 };
@@ -29905,14 +29383,8 @@ fn atn_decide_244(atn: &mut AtnPredictor, tokens: &Array<i32>, pos: i32, min_pre
                             if pos + 2 < tokens.len() {
                                 match tokens[pos + 2] {
                                     TK_Comma => {
-                                        if pos + 3 < tokens.len() {
-                                            match tokens[pos + 3] {
-                                                TK_CloseBracket | TK_CloseParen | TK_CloseBrace | TK_Comma => {
-                                                    return 1;
-                                                },
-                                                _ => {},
-                                            };
-                                        }
+                                        let alt = atn_decide_244_235(tokens, pos);
+                                        if alt >= 0 { return alt; }
                                     },
                                     TK_MultiLineComment | TK_SingleLineComment | TK_OpenBracket | TK_Ellipsis | TK_Dot | TK_Hashtag | TK_LessThan | TK_MoreThan | TK_BitAnd | TK_BitOr | TK_Package | TK_Protected | TK_Static | TK_Any | TK_Number | TK_Never | TK_Boolean | TK_String | TK_Unique | TK_Symbol | TK_Undefined | TK_Object | TK_Of | TK_KeyOf | TK_TypeAlias | TK_Constructor | TK_Namespace | TK_Require | TK_Module | TK_Declare | TK_Abstract | TK_Is | TK_At | TK_Identifier | TK_StringLiteral | TK_BackTick | TK_WhiteSpaces | TK_LineTerminator | TK_HtmlComment | TK_CDataComment | TK_UnexpectedCharacter | TK_TemplateStringEscapeAtom | TK_TemplateStringStartExpression | TK_TemplateStringAtom | TK_BackTickInside | TK_EOF | TK_ERROR => {},
                                     _ => {
@@ -29925,14 +29397,8 @@ fn atn_decide_244(atn: &mut AtnPredictor, tokens: &Array<i32>, pos: i32, min_pre
                             if pos + 2 < tokens.len() {
                                 match tokens[pos + 2] {
                                     TK_Comma => {
-                                        if pos + 3 < tokens.len() {
-                                            match tokens[pos + 3] {
-                                                TK_CloseBracket | TK_CloseParen | TK_CloseBrace | TK_Comma => {
-                                                    return 1;
-                                                },
-                                                _ => {},
-                                            };
-                                        }
+                                        let alt = atn_decide_244_235(tokens, pos);
+                                        if alt >= 0 { return alt; }
                                     },
                                     TK_MultiLineComment | TK_SingleLineComment | TK_OpenBracket | TK_OpenParen | TK_OpenBrace | TK_Ellipsis | TK_Dot | TK_Hashtag | TK_LessThan | TK_MoreThan | TK_BitAnd | TK_BitOr | TK_NullLiteral | TK_BooleanLiteral | TK_DecimalLiteral | TK_Typeof | TK_Void | TK_This | TK_As | TK_From | TK_Async | TK_Yield | TK_Package | TK_Protected | TK_Static | TK_Any | TK_Number | TK_Never | TK_Boolean | TK_String | TK_Unique | TK_Symbol | TK_Undefined | TK_Object | TK_Of | TK_KeyOf | TK_TypeAlias | TK_Constructor | TK_Namespace | TK_Require | TK_Module | TK_Declare | TK_Abstract | TK_Is | TK_At | TK_Identifier | TK_StringLiteral | TK_BackTick | TK_WhiteSpaces | TK_LineTerminator | TK_HtmlComment | TK_CDataComment | TK_UnexpectedCharacter | TK_TemplateStringEscapeAtom | TK_TemplateStringStartExpression | TK_TemplateStringAtom | TK_BackTickInside | TK_EOF | TK_ERROR => {},
                                     _ => {
@@ -29954,6 +29420,18 @@ fn atn_decide_244(atn: &mut AtnPredictor, tokens: &Array<i32>, pos: i32, min_pre
     return atn_predict_once(&ATN_SIM, 244, atn, tokens, pos, TK_EOF, min_prec);
 }
 
+fn atn_decide_244_235(tokens: &Array<i32>, pos: i32) -> i32 {
+    if pos + 3 < tokens.len() {
+        match tokens[pos + 3] {
+            TK_CloseBracket | TK_CloseParen | TK_CloseBrace | TK_Comma => {
+                return 1;
+            },
+            _ => {},
+        };
+    }
+    return -1;
+}
+
 fn atn_decide_250(atn: &mut AtnPredictor, tokens: &Array<i32>, pos: i32, min_prec: i32) -> i32 {
     if pos < tokens.len() {
         match tokens[pos] {
@@ -29964,14 +29442,8 @@ fn atn_decide_250(atn: &mut AtnPredictor, tokens: &Array<i32>, pos: i32, min_pre
                             return 0;
                         },
                         TK_Colon => {
-                            if pos + 2 < tokens.len() {
-                                match tokens[pos + 2] {
-                                    TK_CloseBrace => {
-                                        return 0;
-                                    },
-                                    _ => {},
-                                };
-                            }
+                            let alt = atn_decide_250_41(tokens, pos);
+                            if alt >= 0 { return alt; }
                         },
                         TK_ARROW => {
                             return 1;
@@ -29984,14 +29456,8 @@ fn atn_decide_250(atn: &mut AtnPredictor, tokens: &Array<i32>, pos: i32, min_pre
                 if pos + 1 < tokens.len() {
                     match tokens[pos + 1] {
                         TK_Colon => {
-                            if pos + 2 < tokens.len() {
-                                match tokens[pos + 2] {
-                                    TK_CloseBrace => {
-                                        return 0;
-                                    },
-                                    _ => {},
-                                };
-                            }
+                            let alt = atn_decide_250_41(tokens, pos);
+                            if alt >= 0 { return alt; }
                         },
                         TK_ARROW => {
                             return 1;
@@ -30040,14 +29506,8 @@ fn atn_decide_250(atn: &mut AtnPredictor, tokens: &Array<i32>, pos: i32, min_pre
                             return 0;
                         },
                         TK_Colon => {
-                            if pos + 2 < tokens.len() {
-                                match tokens[pos + 2] {
-                                    TK_CloseBrace => {
-                                        return 0;
-                                    },
-                                    _ => {},
-                                };
-                            }
+                            let alt = atn_decide_250_41(tokens, pos);
+                            if alt >= 0 { return alt; }
                         },
                         TK_ARROW => {
                             return 1;
@@ -30073,6 +29533,18 @@ fn atn_decide_250(atn: &mut AtnPredictor, tokens: &Array<i32>, pos: i32, min_pre
         };
     }
     return atn_predict_once(&ATN_SIM, 250, atn, tokens, pos, TK_EOF, min_prec);
+}
+
+fn atn_decide_250_41(tokens: &Array<i32>, pos: i32) -> i32 {
+    if pos + 2 < tokens.len() {
+        match tokens[pos + 2] {
+            TK_CloseBrace => {
+                return 0;
+            },
+            _ => {},
+        };
+    }
+    return -1;
 }
 
 fn atn_decide_251(atn: &mut AtnPredictor, tokens: &Array<i32>, pos: i32, min_prec: i32) -> i32 {
