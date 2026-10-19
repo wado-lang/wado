@@ -783,7 +783,7 @@ declares the destructor's effects is withdrawn: a drop's effects are benign.
   `FutureWritable` dropped before its write trapping with a message naming
   it. A fixture pins the `?` between `Future::new()` and the write, and one
   pins that a handler counting a resource's drops sees a scope-exit drop.
-- [ ] `Future::read(self)` and `FutureWritable::write(self, value)`. A fixture
+- [x] `Future::read(self)` and `FutureWritable::write(self, value)`. A fixture
   pins a second read as a use after move.
 - [ ] `ForOf`: `for-of` passes its operand by value to `ForOf::start`, with
   `List`'s impl over `ListCursor<T>` and the blanket impl over `IntoIterator`.
