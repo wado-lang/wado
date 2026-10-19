@@ -230,9 +230,10 @@ an all-zero seed.
   order, and the output holds no seed.
 - [x] Map and list literals coerce to `HashMap<String, V>` and `HashSet<T>`.
   Done when a literal and a spread keep source order, last write wins.
-- [x] Gale uses `HashMap` and `HashSet`, under a fixed seed wherever the
-  generator reaches. Done when `GaleMap` and `GaleSet` are deleted and the
-  generator still compiles.
+- [x] Gale uses `HashMap` and `HashSet`. Done when `GaleMap` and `GaleSet` are
+  deleted and the generator still compiles.
+- [x] Gale and Wadopoet build their maps with `new()`. Done when their fixed
+  seeds are deleted and their generators still compile.
 
 ## Known gaps
 

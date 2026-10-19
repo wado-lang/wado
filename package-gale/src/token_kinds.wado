@@ -20,7 +20,6 @@ use {
 use { token_slot_order, collect_literal_tokens } from "./lexer_gen.wado";
 use { dedup_append_arr } from "./list_util.wado";
 use { HashMap } from "core:collections";
-use { GALE_SEED } from "./hash_seed.wado";
 
 /// Bidirectional token-kind table: `id <-> "TK_*" name`. Built once from
 /// `token_slot_order`; the single long-term home for the `TK_*` strings.
@@ -40,8 +39,8 @@ impl TokenKinds {
     pub fn empty() -> TokenKinds {
         return TokenKinds {
             names: [],
-            by_name: HashMap::<String, i32>::with_seed(GALE_SEED),
-            lit_names: HashMap::<String, String>::with_seed(GALE_SEED),
+            by_name: HashMap::<String, i32>::new(),
+            lit_names: HashMap::<String, String>::new(),
         };
     }
 
@@ -71,8 +70,8 @@ impl TokenKinds {
         let lit_tokens = collect_literal_tokens(&grammar.parser_rules);
         let slots = token_slot_order(&grammar.lexer_rules, &lit_tokens);
         let mut names: List<String> = [];
-        let mut by_name = HashMap::<String, i32>::with_seed(GALE_SEED);
-        let mut lit_names = HashMap::<String, String>::with_seed(GALE_SEED);
+        let mut by_name = HashMap::<String, i32>::new();
+        let mut lit_names = HashMap::<String, String>::new();
         for let lit of &lit_tokens {
             lit_names[lit.text] = lit.const_name;
         }

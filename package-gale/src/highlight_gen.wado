@@ -7,7 +7,6 @@ use { GenSettings } from "./gen_settings.wado";
 use { Diagnostics, DiagnosticKind, DiagnosticOwner } from "./gir.wado";
 use { rule_kind_const } from "./gen_util.wado";
 use { HashMap } from "core:collections";
-use { GALE_SEED } from "./hash_seed.wado";
 
 /// `highlight`: the query compiled into the `HIGHLIGHT_MAPPING` global, then
 /// `highlight_walk` over the CST with `hl_cover_unvisited` for what the tree
@@ -110,8 +109,8 @@ struct ResolvedQuery {
 }
 
 fn build_kind_index(lexer_rules: &List<LexerRule>, lit_tokens: &List<LitToken>, slots: &List<TokenSlot>) -> KindIndex {
-    let mut by_name = HashMap::<String, i32>::with_seed(GALE_SEED);
-    let mut by_literal = HashMap::<String, i32>::with_seed(GALE_SEED);
+    let mut by_name = HashMap::<String, i32>::new();
+    let mut by_literal = HashMap::<String, i32>::new();
     for let mut i = 0; i < slots.len(); i += 1 {
         match &slots[i] {
             Rule(ri) => by_name[lexer_rules[*ri].name] = i,
@@ -278,7 +277,7 @@ fn resolve_query(
     diagnostics: &mut Diagnostics,
 ) -> ResolvedQuery {
     let mut resolved = ResolvedQuery {
-        default_by_kind: HashMap::<i32, String>::with_seed(GALE_SEED),
+        default_by_kind: HashMap::<i32, String>::new(),
         overrides: [],
         rule_captures: [],
     };
@@ -385,7 +384,7 @@ fn gen_highlight_mapping(
     let idx = build_kind_index(lexer_rules, lit_tokens, &slots);
     let resolved = resolve_query(parser_rules, &idx, query, diagnostics);
     let vocabulary = resolved.vocabulary();
-    let mut capture_ids = HashMap::<String, i32>::with_seed(GALE_SEED);
+    let mut capture_ids = HashMap::<String, i32>::new();
     let mut classes: List<String> = [];
     for let mut i = 0; i < vocabulary.len(); i += 1 {
         capture_ids[vocabulary[i]] = i;

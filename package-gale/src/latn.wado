@@ -55,7 +55,6 @@ use {
     ATN_TR_RULE,
 } from "./runtime/atn.wado";
 use { HashMap } from "core:collections";
-use { GALE_SEED } from "./hash_seed.wado";
 
 /// Result of building the lexer ATN: the NFA, a `name -> latn rule index`
 /// map (every reachable rule, so RuleRef targets resolve), and the names of
@@ -342,7 +341,7 @@ pub fn build_latn(grammar: &Grammar) -> LatnResult {
         states: [],
         rule_start: [],
         rule_stop: [],
-        name_to_idx: HashMap::<String, i32>::with_seed(GALE_SEED),
+        name_to_idx: HashMap::<String, i32>::new(),
         ci: false,
     };
     for let mut i = 0; i < incl.len(); i += 1 {

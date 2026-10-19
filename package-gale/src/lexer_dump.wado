@@ -33,7 +33,6 @@ use {
 use { grammar_needs_latn, build_latn } from "./latn.wado";
 use { canonicalize_for_analysis } from "./codegen.wado";
 use { HashMap } from "core:collections";
-use { GALE_SEED } from "./hash_seed.wado";
 
 /// Read-only inputs every walk step needs. Assembled once from the grammar,
 /// exactly as `generate` assembles them for `gen_lexer`.
@@ -117,7 +116,7 @@ pub fn render_lexer_dump(assembled: &Grammar) -> String {
 /// The lexer-ATN routing map, built exactly as `generate` builds it: nothing
 /// unless some rule is ATN-class, then one entry per such rule.
 fn latn_rule_indices(grammar: &Grammar) -> HashMap<String, i32> {
-    let mut out = HashMap::<String, i32>::with_seed(GALE_SEED);
+    let mut out = HashMap::<String, i32>::new();
     if !grammar_needs_latn(grammar) {
         return out;
     }

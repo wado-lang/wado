@@ -7,7 +7,6 @@
 //! is simply left unstyled.
 
 use { HashMap } from "core:collections";
-use { GALE_SEED } from "../hash_seed.wado";
 
 /// A capture-class -> CSS color map. Keys are tree-sitter capture names (dotted
 /// names such as `constant.builtin` are allowed); values are any CSS color.
@@ -18,7 +17,7 @@ pub struct Theme {
 impl Theme {
     /// An empty theme. Build one up with `set`, or start from `default_theme`.
     pub fn new() -> Theme {
-        return Theme { colors: HashMap::<String, String>::with_seed(GALE_SEED) };
+        return Theme { colors: HashMap::<String, String>::new() };
     }
 
     /// Assign `color` to capture class `class`; last write wins.
