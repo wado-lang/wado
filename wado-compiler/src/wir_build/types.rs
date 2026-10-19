@@ -288,7 +288,6 @@ fn register_struct(
         }
     }
 
-    let is_box = is_box_instance(tir_struct, type_table);
     let fields: Vec<WirField> = tir_struct
         .fields
         .iter()
@@ -298,11 +297,7 @@ fn register_struct(
             if matches!(ty, WirType::Unit) {
                 return None;
             }
-            let ty = if is_box {
-                ctx.unboxed_slot_type(type_table, f.type_id, ty)
-            } else {
-                ctx.slot_type(type_table, f.type_id, ty)
-            };
+            let ty = field_slot_type(ctx, tir_struct, type_table, f.type_id, ty);
             Some(WirField {
                 name: f.name.clone(),
                 ty,
@@ -527,6 +522,22 @@ fn is_box_instance(s: &NirStruct, type_table: &TypeTable) -> bool {
         && s.def
             .decl()
             .is_some_and(|def| type_table.is_compiler_item(def, CompilerItem::Box))
+}
+
+/// `ty`, the WIR type of a field of `s` of type `type_id`, as the field holds
+/// it. A box's `value` holds the value itself, or a box would hold a box.
+fn field_slot_type(
+    ctx: &WirContext<'_>,
+    s: &NirStruct,
+    type_table: &TypeTable,
+    type_id: TypeId,
+    ty: WirType,
+) -> WirType {
+    if is_box_instance(s, type_table) {
+        ctx.unboxed_slot_type(type_table, type_id, ty)
+    } else {
+        ctx.slot_type(type_table, type_id, ty)
+    }
 }
 
 fn register_box_structs(ctx: &mut WirContext<'_>) {
@@ -1376,11 +1387,13 @@ fn fixup_abstract_struct_fields(ctx: &mut WirContext<'_>) {
                         let field_type_id = tir_field.type_id;
                         let wir_type = ctx.type_id_to_wir_type_pending(type_table, field_type_id);
                         if !is_abstract_ref(&wir_type) {
-                            resolved = Some(if is_box_instance(tir_struct, type_table) {
-                                ctx.unboxed_slot_type(type_table, field_type_id, wir_type)
-                            } else {
-                                ctx.slot_type(type_table, field_type_id, wir_type)
-                            });
+                            resolved = Some(field_slot_type(
+                                ctx,
+                                tir_struct,
+                                type_table,
+                                field_type_id,
+                                wir_type,
+                            ));
                             break;
                         }
                     }
