@@ -12,8 +12,8 @@ inputs and compares. `light/` holds one larger model, read by the protobuf
 reader's own tests rather than compiled.
 
 These are committed rather than read out of the `vendor/onnx` submodule, which
-is absent wherever it is not initialized. The Loam WEP says why under the
-conformance suite.
+is absent wherever it is not initialized. Loam's [`TODO.md`](../../TODO.md)
+says why under Conformance.
 
 `mise run sync-onnx-data` fetches them. It reads the tests for which files to
 take, so naming a new model in a test and running it is the whole step. It also
