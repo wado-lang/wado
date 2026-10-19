@@ -85,8 +85,8 @@ leaves this file, and `design.md` states what it built.
     a checkpoint's bytes from a file into a device buffer through
     `wasi:filesystem` and `write-buffer-with-copy`, and that speed sets what a
     weight the device does not hold costs. Finished when `design.md` records it
-    on an RTX 4060 Ti of 8 GB, with the file in the page cache and out of it, beside the
-    command that measured it.
+    on an RTX 4060 Ti of 8 GB, with the file in the page cache and out of it,
+    beside the command that measured it.
 18. [ ] Experts held on demand. An expert is one slice along the first axis of
     each `QMoE` input the operator's definition indexes by expert, so no model
     is named. The device holds as many experts as a budget the caller sets. The
@@ -312,8 +312,8 @@ guest runs on one thread, since shared-everything threads is at phase 1, and
 `core:simd` loads no vector from a `List`. So the host's cores wait while an
 expert crosses to the device.
 
-No Loam model has run on a phone. The host there is wasmtime embedded in an
-Android app through JNI, and none exists yet; wasmtime supports
+No Loam model has run on a phone. The host there will be wasmtime embedded in an
+Android app through JNI, and no such host exists. wasmtime supports
 `aarch64-linux-android` at tier 3. A phone's GPU shares its memory with the rest
 of the system, so the budget its experts get there is unknown.
 
