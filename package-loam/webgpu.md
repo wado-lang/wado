@@ -191,7 +191,8 @@ elementwise.
 The CPU evaluates a row group one row at a time, each step a loop over the row.
 A row sum adds from 0.0 in the row's order, and a row maximum folds from
 negative infinity, as `reduce_sum` and `softmax` do. So a fused module still
-computes what the unfused one does, bit for bit.
+computes what the unfused one does, bit for bit, though the WEP promises only a
+tolerance.
 
 #### `Where` over f32 is elementwise
 
