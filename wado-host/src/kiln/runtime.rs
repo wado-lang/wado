@@ -17,7 +17,7 @@ use std::sync::{Arc, Mutex};
 
 use anyhow::Result;
 use rand::SeedableRng;
-use rand::rngs::StdRng;
+use rand::rngs::ChaCha12Rng;
 use wasmtime::component::types::{ComponentItem, Type};
 use wasmtime::component::{Component, Func, HasSelf, Instance, Linker, StreamReader, Val};
 use wasmtime::{Engine, Store};
@@ -71,11 +71,12 @@ impl WasiRandomView for KilnHostState {
 
 /// `wasi:random` for one instance, drawing the same values on every run so
 /// that a generator stays a function of its invocation. The seeds are
-/// arbitrary; only their being fixed matters.
+/// arbitrary; only their being fixed matters. ChaCha12 is named rather than
+/// `StdRng`, whose output rand does not promise to keep across versions.
 fn fixed_seed_random() -> WasiCtx {
     WasiCtx::builder()
-        .secure_random(StdRng::seed_from_u64(1))
-        .insecure_random(StdRng::seed_from_u64(2))
+        .secure_random(ChaCha12Rng::from_seed([1; 32]))
+        .insecure_random(ChaCha12Rng::from_seed([2; 32]))
         .insecure_random_seed(3)
         .build()
 }
