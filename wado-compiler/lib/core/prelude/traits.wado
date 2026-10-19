@@ -1357,6 +1357,17 @@ impl<affine I: Iterator, U, effect E, F: fn mut(I::Item) -> U with E> Iterator f
     }
 }
 
+// Its own impl: through the blanket one over `Iterator`, `into_iter` is
+// charged the effects of the function the adapter holds.
+impl<I: Iterator, U, effect E, F: fn mut(I::Item) -> U with E> IntoIterator for IterMap<I, F> {
+    type Item = U;
+    type Iter = IterMap<I, F>;
+
+    fn into_iter(&self) -> IterMap<I, F> {
+        return *self;
+    }
+}
+
 /// Generic filter iterator adapter that wraps any Iterator. Its type carries
 /// the predicate's, so advancing it performs what the predicate does.
 pub struct IterFilter<affine I: Iterator, F> {
@@ -1377,6 +1388,16 @@ impl<affine I: Iterator, effect E, F: fn mut(I::Item) -> bool with E> Iterator f
                 return null;
             }
         }
+    }
+}
+
+// Its own impl, as `IterMap`'s is.
+impl<I: Iterator, effect E, F: fn mut(I::Item) -> bool with E> IntoIterator for IterFilter<I, F> {
+    type Item = I::Item;
+    type Iter = IterFilter<I, F>;
+
+    fn into_iter(&self) -> IterFilter<I, F> {
+        return *self;
     }
 }
 
