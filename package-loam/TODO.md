@@ -67,8 +67,9 @@ leaves this file, and `design.md` states what it built.
    token. Every row reads the state's cache, which keeps its batch of one
    rather than being copied for each row. The graph gives the past and the new
    tokens one batch axis, and `forward` checks that the inputs agree on it
-   (see Axis Identity Is a Type, Extents Are Values), so a past of batch one
-   beside n rows departs from that check. Finished when `design.md` records the
+   (see Axis Identity Is a Type, Extents Are Values). This item changes that
+   check to admit a past of batch one beside n rows, which every row's
+   attention reads. Finished when `design.md` records the
    time n questions take as rows of one pass as a ratio to the time they take
    one after another, for several n and questions of different lengths, and
    each probability lies within the tolerance of the one its question gets
