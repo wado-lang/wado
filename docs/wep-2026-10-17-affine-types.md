@@ -750,23 +750,25 @@ declares the destructor's effects is withdrawn: a drop's effects are benign.
   handler's `with`. This comes before the
   next item, whose scope-exit drop would otherwise drop a second time the
   `Stream` that `log_stdout` hands over through a cast today.
-- [ ] The object and its places: an affine variant or tuple is boxed, a move
-  writes null into its source, a drop zeroes the object, an `own` lowered to
-  the host zeroes its box, scope exit drops what is not null in reverse
-  declaration order, a container drops the slots that are not null, and an
-  assignment to a place holding an object writes into it. The cleanup pass
-  retires, and with it its exclusion of a `Stream` and a `Future` the body
-  does not move
+- [x] The object and its places: a move writes null into its source, a drop
+  zeroes the object, an `own` lowered to the host zeroes its box, scope exit
+  drops what is not null in reverse declaration order, a container drops the
+  slots that are not null, and an assignment to a place holding an object
+  writes into it. The cleanup pass retires, and with it its exclusion of a
+  `Stream` and a `Future` the body does not move
   ([A `Stream` or `Future` handle nothing drops](./wep-2026-05-21-resource-ownership.md#a-stream-or-future-handle-nothing-drops)).
-  An export's `borrow` is zeroed at return. Fixtures: a resource bound in a
-  closure body, one under `make().a`, one in a `Node<T>` and an unmoved
-  `Stream` are dropped; `*r = value` through `&mut R`; `x = value` seen
-  through a reference taken before it.
+  No export receives a `borrow` yet, since `&R` has no value representation in
+  an export's signature, so none is zeroed at return. An affine variant's box
+  is the next item's, since only `&mut` of its field or element needs one: a
+  local or a field holding it is already a nullable reference to a GC object.
+  Fixtures: a resource bound in a closure body, one under `make().a`, one in a
+  `Node<T>` and an unmoved `Stream` are dropped; `*r = value` through `&mut R`;
+  `x = value` seen through a reference taken before it.
 - [ ] `builtin::replace`, `Option::take` and `Option::replace`, the storage
   builtins moving for an affine element, the methods of `List` that read no
   element by value moved into `impl<affine T> List<T>` with `is_empty` and
   `iter_ref` beside them, and `&mut` of an affine variant element and field as
-  a place. `opt.take()` on
+  a place, the variant wrapped in a box. `opt.take()` on
   `list[i]` is the fixture.
 - [ ] `Drop`: a resource's `fn drop(self)` as its impl, a user impl on an
   affine type and an error naming the impl on any other, the fields left at the end of `drop` dropped one by one, a
