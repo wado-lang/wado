@@ -926,7 +926,9 @@ pub fn can_write_in_place(assign: &TirExpr, type_table: &tir::TypeTable) -> bool
     };
     let ty = target.type_id;
     let affine_object = type_table.holds_affine_resource(ty) && type_table.as_tuple(ty).is_none();
-    !matches!(value.kind, TirExprKind::Null) && !affine_object && type_table.is_in_place_aggregate(ty)
+    !matches!(value.kind, TirExprKind::Null)
+        && !affine_object
+        && type_table.is_in_place_aggregate(ty)
 }
 
 /// The assignments that write in place in a body the ownership walk does not

@@ -343,11 +343,16 @@ reference. `builtin::replace(r: &mut T, v: T) -> T` stores `v` where `r` points
 and returns what was there, and the move check trusts it. It is what
 `ptr::read` and `ptr::write` are to Rust's `mem::replace`. `Option::take` is
 `replace(self, None)`, and `Option::replace` is `replace` itself. The storage
-builtins of `Array` move for an affine element: `array_get` writes null into
-the slot it read, and `array_set` drops what it replaces. These builtins are
-the places `core` is trusted rather than checked. So `pop`, `remove`,
-`insert` and the cursor `for-of` walks are written as they are for a copyable
-element, and the definition-site check holds their bodies to moves.
+builtins of `Array` move for an affine element: `array_take` writes null into
+the slot it read, `array_set` drops what it replaces, `array_move` writes null
+into the slots it leaves, and `array_release` drops what it releases.
+`array_get_value` stays a read, since `&self` methods such as `Inspect`'s reach
+it, and moving there would empty the container being looked at. These builtins
+are the places `core` is trusted rather than checked. So `pop`, `remove`,
+`insert`, `swap` and the cursor `for-of` walks are written once for both kinds
+of element, reading with `array_take`, and the definition-site check holds
+their bodies to moves. A generic body is elaborated once per instance, after
+monomorphization, so what it owns drops the way its instance's type drops.
 
 The optimizer may drop the null store of a move it proves dead, and may
 represent a resource by its bare handle where it proves no reference reaches

@@ -15,9 +15,9 @@ use crate::compiler_host::Code;
 use crate::compiler_item::{CompilerItem, SeqField};
 use crate::component_model::CmInterfaceRegistry;
 use crate::defs::DefId;
+use crate::flat_package::FlatPackage;
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::module_source::ModuleSource;
-use crate::flat_package::FlatPackage;
 use crate::name::{DROP_GLUE_PREFIX, checked_name, drop_glue_name, minted_name};
 use crate::package::Package;
 use crate::resource_holding::{Held, HeldTypes, holds_resource};
@@ -610,19 +610,25 @@ pub fn elaborate_resource_drops(project: &mut Package) -> Vec<SynthesisError> {
 /// What every callee in `flat` reveals about ownership, read before
 /// monomorphization replaces the generic signatures it is read from.
 pub fn instance_callee_facts(flat: &FlatPackage) -> CalleeFacts {
+    with_flat_resources(flat, |resources| {
+        let mut callees = CalleeFacts::default();
+        for func_rc in &flat.functions {
+            callees.record(&func_rc.borrow(), resources);
+        }
+        callees
+    })
+}
+
+/// Run `f` with the [`Resources`] of `flat`.
+fn with_flat_resources<R>(flat: &FlatPackage, f: impl FnOnce(Resources) -> R) -> R {
     let struct_fields = tir::struct_fields(&flat.structs);
     let answers = RefCell::default();
-    let resources = Resources {
+    f(Resources {
         tt: &flat.type_table,
         reg: &flat.cm_interface_registry,
         struct_fields: &struct_fields,
         answers: &answers,
-    };
-    let mut callees = CalleeFacts::default();
-    for func_rc in &flat.functions {
-        callees.record(&func_rc.borrow(), resources);
-    }
-    callees
+    })
 }
 
 /// Elaborate the drops of every instance among `flat.functions` from `first`
@@ -630,14 +636,21 @@ pub fn instance_callee_facts(flat: &FlatPackage) -> CalleeFacts {
 /// generic body makes is the instantiation rule's to refuse, so none is
 /// refused here.
 pub fn elaborate_instance_drops(flat: &mut FlatPackage, first: usize, callees: &CalleeFacts) {
-    let struct_fields = tir::struct_fields(&flat.structs);
-    let answers = RefCell::default();
-    let resources = Resources {
-        tt: &flat.type_table,
-        reg: &flat.cm_interface_registry,
-        struct_fields: &struct_fields,
-        answers: &answers,
-    };
+    let glue_functions = with_flat_resources(flat, |resources| {
+        elaborate_instances(flat, first, resources, callees)
+    });
+    flat.functions
+        .extend(glue_functions.into_iter().map(|f| Rc::new(RefCell::new(f))));
+}
+
+/// Elaborate the instances `elaborate_instance_drops` names, returning the
+/// glue they call that does not exist yet.
+fn elaborate_instances(
+    flat: &FlatPackage,
+    first: usize,
+    resources: Resources,
+    callees: &CalleeFacts,
+) -> Vec<TirFunction> {
     let mut glue = DropGlue {
         entry: flat.entry_module_source.clone(),
         called: IndexMap::default(),
@@ -663,8 +676,7 @@ pub fn elaborate_instance_drops(flat: &mut FlatPackage, first: usize, callees: &
     }
     let glue_functions = build_called_glue(resources, callees, &mut glue, &mut refused);
     assert!(refused.is_empty(), "an instance refuses no copy");
-    flat.functions
-        .extend(glue_functions.into_iter().map(|f| Rc::new(RefCell::new(f))));
+    glue_functions
 }
 
 /// Build the glue called so far and not built already. A glue body can call
@@ -840,9 +852,9 @@ impl TirRefVisitor for ResourceProbe<'_> {
             return;
         }
         let moves = matches!(&expr.kind, TirExprKind::Call { func, args, .. }
-            if func.intrinsic().is_some_and(|name| {
-                MovingBuiltin::named(name, args.first().map(|arg| &arg.expr), self.resources).is_some()
-            }));
+        if func.intrinsic().is_some_and(|name| {
+            MovingBuiltin::named(name, args.first().map(|arg| &arg.expr), self.resources).is_some()
+        }));
         if moves || self.resources.carried_by(expr.type_id) {
             self.found = true;
             return;
@@ -1574,9 +1586,9 @@ fn elab_expr(expr: &mut TirExpr, consuming: bool, cx: &mut Cx) {
             for arg in rest {
                 elab_expr(&mut arg.expr, true, cx);
             }
-            moving = func
-                .intrinsic()
-                .and_then(|name| MovingBuiltin::named(name, args.first().map(|arg| &arg.expr), cx.resources));
+            moving = func.intrinsic().and_then(|name| {
+                MovingBuiltin::named(name, args.first().map(|arg| &arg.expr), cx.resources)
+            });
             if func.is_builtin_named("drop") {
                 let (_, [arg]) = args.split_mut() else {
                     unreachable!("`builtin::drop` takes one value");
@@ -1737,19 +1749,11 @@ impl MovingBuiltin {
     /// The moving builtin `name` names, given its first argument `first`; an
     /// array builtin over an element that is not affine moves nothing.
     fn named(name: &str, first: Option<&TirExpr>, resources: Resources) -> Option<MovingBuiltin> {
-        if name == "replace" {
-            return Some(MovingBuiltin::Replace);
-        }
-        let build: fn(TypeId) -> MovingBuiltin = match name {
-            "array_take" => |elem| MovingBuiltin::Take {
-                elem,
-                affine: false,
-            },
-            "array_set" => MovingBuiltin::Set,
-            "array_move" => |_| MovingBuiltin::Move,
-            "array_release" => MovingBuiltin::Release,
+        match name {
+            "replace" => return Some(MovingBuiltin::Replace),
+            "array_take" | "array_set" | "array_move" | "array_release" => {}
             _ => return None,
-        };
+        }
         let array = first.expect("an array builtin takes its array first");
         let elem = {
             let tt = resources.tt.borrow();
@@ -1759,10 +1763,13 @@ impl MovingBuiltin {
             }
         };
         let affine = resources.carried_by(elem);
-        match build(elem) {
-            MovingBuiltin::Take { elem, .. } => Some(MovingBuiltin::Take { elem, affine }),
-            moving => affine.then_some(moving),
-        }
+        Some(match name {
+            "array_take" => MovingBuiltin::Take { elem, affine },
+            _ if !affine => return None,
+            "array_set" => MovingBuiltin::Set(elem),
+            "array_move" => MovingBuiltin::Move,
+            _ => MovingBuiltin::Release(elem),
+        })
     }
 }
 
@@ -1793,7 +1800,11 @@ fn elab_moving_builtin(expr: &mut TirExpr, builtin: MovingBuiltin, cx: &mut Cx) 
             if affine {
                 let (local, local_name) = cx.alloc_local(elem, "taken");
                 stmts.push(let_stmt(&local_name, local, elem, read));
-                stmts.push(release_slots(&args[0], args[1].clone(), common::i32_const(1)));
+                stmts.push(release_slots(
+                    &args[0],
+                    args[1].clone(),
+                    common::i32_const(1),
+                ));
                 Some(local_ref(local, &local_name, elem))
             } else {
                 Some(read)
@@ -1862,14 +1873,12 @@ fn vacate_moved(args: &[TirExpr]) -> Vec<TirStmt> {
     let int = |op, left: &TirExpr, right: &TirExpr| {
         binary(op, left.clone(), right.clone(), TypeTable::I32)
     };
-    let min = |a: TirExpr, b: TirExpr| {
-        let less = binary(TirBinaryOp::Lt, a.clone(), b.clone(), TypeTable::BOOL);
+    let lesser = |a: TirExpr, b: TirExpr, op| {
+        let less = binary(op, a.clone(), b.clone(), TypeTable::BOOL);
         builtin_call("select", vec![less, a, b], TypeTable::I32)
     };
-    let max = |a: TirExpr, b: TirExpr| {
-        let less = binary(TirBinaryOp::Lt, a.clone(), b.clone(), TypeTable::BOOL);
-        builtin_call("select", vec![less, b, a], TypeTable::I32)
-    };
+    let min = |a, b| lesser(a, b, TirBinaryOp::Lt);
+    let max = |a, b| lesser(a, b, TirBinaryOp::Gt);
     let span = synth_span();
     // Moving right leaves `src_offset..min(dst_offset, src_end)`; moving left
     // leaves `max(dst_end, src_offset)..src_end`.
