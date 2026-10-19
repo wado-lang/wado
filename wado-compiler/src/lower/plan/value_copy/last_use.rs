@@ -913,15 +913,20 @@ fn collect_local_roots(expr: &TirExpr, out: &mut IndexSet<u32>) {
 
 /// Whether `assign` stores a value of an in-place type, so that it writes in
 /// place where a reference holds its storage. A move emptying an affine place
-/// stores `null`, which repoints: the object it held is the destination's now
-/// (WEP: Affine Types). The sites are keyed by span, which synthesized
-/// assignments share, so lowering asks this again of each one it expands.
+/// stores `null`, which repoints: the object it held is the destination's now.
+/// An affine struct or list is an object, whose stores resource drop synthesis
+/// has already written into it where its place was not null, so one left is
+/// to a null place, and repoints too (WEP: Affine Types). The sites are keyed
+/// by span, which synthesized assignments share, so lowering asks this again
+/// of each one it expands.
 #[must_use]
 pub fn can_write_in_place(assign: &TirExpr, type_table: &tir::TypeTable) -> bool {
     let TirExprKind::Assign { target, value } = &assign.kind else {
         unreachable!("an assign site is an `Assign`");
     };
-    !matches!(value.kind, TirExprKind::Null) && type_table.is_in_place_aggregate(target.type_id)
+    let ty = target.type_id;
+    let affine_object = type_table.holds_affine_resource(ty) && type_table.as_tuple(ty).is_none();
+    !matches!(value.kind, TirExprKind::Null) && !affine_object && type_table.is_in_place_aggregate(ty)
 }
 
 /// The assignments that write in place in a body the ownership walk does not

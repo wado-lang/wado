@@ -3454,6 +3454,10 @@ impl TypeTable {
         open: &mut Vec<(DefId, Vec<bool>)>,
     ) -> bool {
         let ty = self.representation_head(ty);
+        // `List` is the compiler's, so no struct registers its fields.
+        if let Some(elem) = self.list_element(ty) {
+            return self.holds_affine_in(elem, params, open);
+        }
         let (def, args, members): (Option<DefId>, &[TypeId], Vec<TypeId>) = match self.get(ty) {
             ResolvedType::TypeParam { index, .. } => {
                 return params.get(*index as usize).copied().unwrap_or(false);
