@@ -804,8 +804,9 @@ impl MoveWalker<'_, '_> {
                 self.visit_loop(&head, &s.body, s.update.as_ref());
                 false
             }
+            // The loop owns what it walks (WEP: Affine Types).
             Stmt::ForOf(s) => {
-                self.visit_expr(&s.iterable);
+                self.visit_value(&s.iterable);
                 self.visit_loop(&LoopHead::Binding(&s.binding), &s.body, None);
                 false
             }

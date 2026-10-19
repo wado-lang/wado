@@ -333,6 +333,9 @@ pub enum CompilerItem {
     /// `core:prelude/traits::IntoIterator` — the trait a `for-of` loop's
     /// subject must implement.
     IntoIterator,
+    /// `core:prelude/traits::ForOf` — what a `for-of` loop over a value
+    /// passes it to.
+    ForOf,
     /// `core:prelude/traits::LiteralSpread` — what `..base` inside a literal
     /// merges through.
     LiteralSpread,
@@ -827,6 +830,7 @@ impl CompilerItem {
         Self::FieldSchema,
         Self::Iterator,
         Self::IntoIterator,
+        Self::ForOf,
         Self::LiteralSpread,
         Self::Display,
         Self::Inspect,
@@ -1075,6 +1079,7 @@ impl CompilerItem {
             Self::FieldSchema => "field_schema",
             Self::Iterator => "iterator",
             Self::IntoIterator => "into_iterator",
+            Self::ForOf => "for_of",
             Self::LiteralSpread => "literal_spread",
             Self::Display => "display",
             Self::Inspect => "inspect",
@@ -1438,7 +1443,8 @@ impl CompilerItem {
             | Self::LowerExp
             | Self::UpperExp
             | Self::Iterator
-            | Self::IntoIterator => true,
+            | Self::IntoIterator
+            | Self::ForOf => true,
             // Kiln generator world only.
             Self::KilnRequest | Self::KilnNoOptions => world == "core:kiln/generator",
             // Loaded only when the user imports `core:collections`.
@@ -1638,6 +1644,7 @@ impl CompilerItem {
             | Self::FieldSchema
             | Self::Iterator
             | Self::IntoIterator
+            | Self::ForOf
             | Self::Display
             | Self::Inspect
             | Self::Binary

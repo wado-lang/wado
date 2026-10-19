@@ -316,7 +316,7 @@ impl TypeSystem {
     }
 
     /// The operator trait a dispatch means, as a requirement the bound search must match.
-    fn required_operator_trait(&self, item: CompilerItem) -> Option<RequiredTrait> {
+    pub(super) fn required_compiler_trait(&self, item: CompilerItem) -> Option<RequiredTrait> {
         Some(self.required_trait(self.compiler_trait_def(item)?))
     }
 }
@@ -1749,7 +1749,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         rhs: Option<TypeId>,
         span: Span,
     ) -> Option<(FqTraitName, MethodInfo)> {
-        let required = self.tysys.required_operator_trait(item);
+        let required = self.tysys.required_compiler_trait(item);
         let args = match rhs {
             Some(rhs) => ArgSource::Types(vec![self.tysys.type_table.borrow_mut().make_ref(rhs)]),
             None => ArgSource::NoArguments,

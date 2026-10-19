@@ -419,7 +419,7 @@ impl<H: CompilerHost> TypeParamScope<'_, '_, H> {
         is_pack: bool,
         bounds: Vec<String>,
         projected: bool,
-        decl: Option<ast::AstId>,
+        decl: Option<&ast::GenericParam>,
     ) -> TirTypeParam {
         let type_id = {
             let mut table = self.tysys.type_table.borrow_mut();
@@ -429,14 +429,10 @@ impl<H: CompilerHost> TypeParamScope<'_, '_, H> {
                 table.make_type_param(name.to_string(), index)
             }
         };
-        self.annotate_ctx.trait_ctx.type_params.insert(
-            name.to_string(),
-            BinderInScope {
-                index,
-                type_id,
-                decl,
-            },
-        );
+        self.annotate_ctx
+            .trait_ctx
+            .type_params
+            .insert(name.to_string(), BinderInScope::of(index, type_id, decl));
         TirTypeParam {
             name: name.to_string(),
             is_effect: false,
@@ -569,7 +565,7 @@ impl<H: CompilerHost> TypeParamScope<'_, '_, H> {
                     false,
                     bounds,
                     false,
-                    Some(declared.id),
+                    Some(declared),
                 ));
                 continue;
             }
@@ -583,7 +579,7 @@ impl<H: CompilerHost> TypeParamScope<'_, '_, H> {
                     declared.is_pack,
                     bounds,
                     true,
-                    Some(declared.id),
+                    Some(declared),
                 ));
             }
         }
@@ -720,7 +716,7 @@ impl<H: CompilerHost> TypeParamScope<'_, '_, H> {
                 param.is_pack,
                 bounds,
                 false,
-                Some(param.id),
+                Some(param),
             ));
         }
         self.bind_fn_bound_params(impl_declared_params);
@@ -996,7 +992,7 @@ impl<H: CompilerHost> TypeParamScope<'_, '_, H> {
             let bounds = ScopedBound::pin_declared(param, self.self_binding());
             self.bind_param(
                 &param.name,
-                BinderInScope::declared(idx, type_id, param.id),
+                BinderInScope::declared(idx, type_id, param),
                 bounds,
             );
             // Only push *real* type params (TypeParam-ids) into the

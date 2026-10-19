@@ -1698,19 +1698,16 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// taking a new meaning goes through `Scope::bind_param`, which drops them.
     fn bind_type_param(
         scope: &mut scope::TypeParamScope<'_, '_, H>,
-        decl: Option<ast::AstId>,
+        decl: Option<&ast::GenericParam>,
         name: &str,
         slot: u32,
         type_id: TypeId,
     ) {
-        scope.annotate_ctx.trait_ctx.type_params.insert(
-            name.to_string(),
-            BinderInScope {
-                index: slot,
-                type_id,
-                decl,
-            },
-        );
+        scope
+            .annotate_ctx
+            .trait_ctx
+            .type_params
+            .insert(name.to_string(), BinderInScope::of(slot, type_id, decl));
     }
 
     /// The lists a `Type::method(...)` call checks and pads against. Every
@@ -2001,7 +1998,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     let Some(&bound) = filled.get(&slot) else {
                         continue;
                     };
-                    Self::bind_type_param(&mut scope, Some(param.id), &param.name, slot, bound);
+                    Self::bind_type_param(&mut scope, Some(param), &param.name, slot, bound);
                 }
             }
             // For variadic pack params (..T in impl<..T> Trait for [..T]),
@@ -2199,7 +2196,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 let index = scope.declared_slot(type_param_id);
                 scope.bind_param(
                     &type_param.name,
-                    BinderInScope::declared(index, type_param_id, type_param.id),
+                    BinderInScope::declared(index, type_param_id, type_param),
                     ScopedBound::pin_declared(type_param, self_binding),
                 );
             }

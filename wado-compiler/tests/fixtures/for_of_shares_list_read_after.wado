@@ -1,0 +1,21 @@
+// `for-of` passes its list by value, and a list the body does not write is
+// shared with the loop rather than copied, though it is read after the loop
+// (WEP: Affine Types).
+
+use { println, Stdout } from "core:cli";
+
+export fn run() with Stdout {
+    let xs: List<i32> = builtin::black_box([1, 2, 3]);
+    let mut sum = 0;
+    for let x of xs {
+        sum += x;
+    }
+    println(`${sum} ${xs.len()}`);
+}
+
+__DATA__
+{
+    "stdout": "6 3\n",
+    "wir_not_expect:O0": ["$value_copy$"],
+    "wir_not_expect:O2": ["$value_copy$"]
+}

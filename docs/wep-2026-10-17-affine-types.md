@@ -513,37 +513,32 @@ pub affine trait ForOf with _ {
     affine type Item;
     affine type State;
     fn start(self) -> Self::State;
-    fn next(state: &mut Self::State) -> Option<Self::Item>;
 }
 
 impl<affine T> ForOf for List<T> { … }  // State = ListCursor<T>, Item = T
-impl<I: IntoIterator> ForOf for I { … }  // every other iterable
 ```
 
-`for let x of e` passes `e` to `ForOf::start` by value, as any argument is
-passed, and then calls `ForOf::next` on the state until it returns `None`. The
-loop owns what it walks. An affine operand moves into the loop, and leaving the
-loop early drops the elements it did not reach. A copyable operand the program
-reads after the loop is copied, as an argument is. `List`'s impl names its
-head, so it ranks above the blanket for every element type.
-
-Removing that copy is the job of
-[value-copy elision](./wep-2026-05-21-resource-ownership.md#value-copy-elision-the-second-client):
-
-| After the loop, the operand is | The body writes it | Elision   | Against today                                  |
-| ------------------------------ | ------------------ | --------- | ---------------------------------------------- |
-| not read                       | ―                  | move      | no copy, and each element moves into `x`       |
-| read                           | no                 | share     | the same: the loop reads the operand's storage |
-| read                           | yes                | deep copy | one more copy of the list                      |
-
-Sharing holds because the state never writes the list. A `ListCursor<T>` is the
-list and a position: `next` reads the element at the position through
-`array_get`, which moves it out for an affine element, and advances. The
+`for let x of e` over an affine `e` passes `e` to `ForOf::start` by value, as
+any argument is passed, and then calls the state's
+`next(&mut self) -> Option<Item>` until it returns `None`. The loop owns what it
+walks: the operand moves into the loop, and leaving the loop early drops the
+elements it did not reach. A `ListCursor<T>` is the list and a position: `next`
+moves the element at the position out through `array_take` and advances. The
 cursor's drop drops the list, and the list drops the slots that are not null.
 
-So a loop walks the value its operand held when the loop began. A body that
-writes an element the loop has not reached no longer sees the write, and a body
-that shrinks the list no longer breaks the contract of its views.
+`next` is the state's own method rather than a member of the trait, so that
+`ListCursor<T>` need not implement the unmarked `Iterator` with an affine
+`Item`. No blanket impl over `IntoIterator` exists. It would only forward to
+`into_iter`, and resolving through it leaves the item type of a generic
+iterator as an unnormalized projection.
+
+A copyable operand, or one whose type does not implement `ForOf`, walks its
+`IntoIterator` as before. Moving a copyable list into the loop costs a copy of
+any list the program reads after the loop:
+[value-copy elision](./wep-2026-05-21-resource-ownership.md#value-copy-elision-the-second-client)
+does not share a parameter the callee stores into the value it returns, here
+the cursor. So a loop over a copyable list still sees a write its body makes to
+an element it has not reached.
 
 A tuple is not walked through `ForOf`: `for-of` over a tuple stays unrolled at
 compile time, one body per element. The operand still passes by value, so over
@@ -792,11 +787,12 @@ declares the destructor's effects is withdrawn: a drop's effects are benign.
   pins that a handler counting a resource's drops sees a scope-exit drop.
 - [x] `Future::read(self)` and `FutureWritable::write(self, value)`. A fixture
   pins a second read as a use after move.
-- [ ] `ForOf`: `for-of` passes its operand by value to `ForOf::start`, with
-  `List`'s impl over `ListCursor<T>` and the blanket impl over `IntoIterator`.
-  A fixture pins that elision shares a list the loop's body does not write: no
-  `$value_copy$` in the output. The fixtures that relied on a body's write
-  being seen by the loop are rewritten.
+- [x] `ForOf`: `for-of` passes an affine operand by value to `ForOf::start`,
+  with `List`'s impl over `ListCursor<T>`, and walks any other through
+  `IntoIterator`. The move check consumes the operand and refuses `*r`.
+  Fixtures pin a list consumed with an early `break`, the use after the move,
+  `*r`, and a copyable list read after the loop with no `$value_copy$` in the
+  output.
 - [x] `AsyncCall` holds an `Option<Subtask>` and an `Option<ResultBuffer>`,
   with `wait(self)`, `cancel(self)` and its `Drop`. The fixture drops a call
   nobody awaited.
@@ -827,6 +823,16 @@ declares the destructor's effects is withdrawn: a drop's effects are benign.
   value the loop began with, and the cheatsheet. Amend the WEPs above.
 
 ## Known gaps
+
+### A loop over a copyable list shares it
+
+`for-of` moves only an affine operand into the loop. Over a copyable list it
+walks `IntoIterator`, whose iterator reads the list's storage, so a body's
+write to an element the loop has not reached is seen, and a body that shrinks
+the list breaks the contract of its views. Moving every operand would make the
+loop walk the value it began with, at the cost of a copy of each list read
+after the loop, since value-copy elision does not share a parameter stored into
+a returned value.
 
 ### Maps and sets of affine values
 

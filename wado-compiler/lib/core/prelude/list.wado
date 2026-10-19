@@ -16,6 +16,7 @@ use {
     IndexValue,
     IndexAssign,
     IntoIterator,
+    ForOf,
     FromIterator,
     From,
     Display,
@@ -544,6 +545,34 @@ impl<T> IndexValue<RangeInclusive<i32>> for List<T> {
 
     fn index_value(&self, range: RangeInclusive<i32>) -> Slice<T> {
         return self.slice(range.start, range.end + 1);
+    }
+}
+
+/// The state `for-of` walks a list with: the list and a position. `next` moves
+/// an affine element out of its slot and copies a copyable one, so the cursor
+/// never writes a list it shares; dropping it drops the elements not reached.
+pub struct ListCursor<affine T> {
+    list: List<T>,
+    at: i32,
+}
+
+impl<affine T> ListCursor<T> {
+    pub fn next(&mut self) -> Option<T> {
+        if self.at >= self.list.used {
+            return null;
+        }
+        let item = builtin::array_take(&mut self.list.repr, self.at);
+        self.at += 1;
+        return Option::Some(item);
+    }
+}
+
+impl<affine T> ForOf for List<T> {
+    type Item = T;
+    type State = ListCursor<T>;
+
+    fn start(self) -> ListCursor<T> {
+        return ListCursor { list: self, at: 0 };
     }
 }
 

@@ -1578,6 +1578,19 @@ impl<I: Iterator> IntoIterator for I {
     }
 }
 
+/// What `for let x of e` walks when `e` is a value of a type implementing it:
+/// the loop passes `e` to `start` and calls the state's
+/// `next(&mut self) -> Option<Item>` until it answers `None`. The loop owns
+/// what it walks, so an affine element moves into the binding once. Any other
+/// iterable is walked through its `IntoIterator`.
+#[compiler_item("for_of")]
+pub affine trait ForOf with _ {
+    affine type Item;
+    affine type State;
+
+    fn start(self) -> Self::State;
+}
+
 /// Infallible conversion trait.
 /// Implement this to define how to convert from type `T` into `Self`.
 /// Usage: `TargetType::from(value)` — the target type is always explicit.

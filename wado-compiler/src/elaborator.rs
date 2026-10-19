@@ -240,7 +240,7 @@ impl<H: CompilerHost> scope::TypeParamScope<'_, '_, H> {
             );
             self.bind_param(
                 &param.name,
-                scope::BinderInScope::declared(slot, type_id, param.id),
+                scope::BinderInScope::declared(slot, type_id, param),
                 Vec::new(),
             );
         }
