@@ -31,7 +31,7 @@ use { GrammarAnalysis } from "./grammar_analysis.wado";
 /// How many tokens a DFA reads before it leaves the decision to the simulator.
 global SLL_MAX_DEPTH: i32 = 4;
 /// How many states one decision's DFA may hold before the rest asks.
-global SLL_MAX_STATES: i32 = 256;
+global SLL_MAX_STATES: i32 = 1024;
 /// How many configurations one decision's exploration may expand before the
 /// rest of it is left to the simulator. It bounds generation time.
 global SLL_DECISION_BUDGET: i32 = 2000000;
@@ -71,9 +71,10 @@ pub struct SllEdge {
     pub to: i32,
 }
 
-/// A decision's DFA. Node 0 is the start.
+/// A decision's DFA over token kinds `0..kinds`. Node 0 is the start.
 pub struct SllDfa {
     pub nodes: List<SllNode>,
+    pub kinds: i32,
 }
 
 struct SllConfig {
@@ -359,7 +360,7 @@ impl SllExplorer {
     pub fn explore(&mut self, decision: i32) -> SllDfa {
         self.budget = SLL_DECISION_BUDGET;
         let Some(start) = self.start_closure(self.atn.decision_state[decision]) else {
-            return SllDfa { nodes: [SllNode::Ask] };
+            return SllDfa { nodes: [SllNode::Ask], kinds: self.atn.num_tokens };
         };
         let mut nodes: List<SllNode> = [SllNode::Ask];
         let mut configs: List<List<SllConfig>> = [start];
@@ -400,7 +401,7 @@ impl SllExplorer {
             }
             nodes[n] = SllNode::Branch(edges);
         }
-        return SllDfa { nodes: prune_asking(nodes) };
+        return SllDfa { nodes: prune_asking(nodes), kinds: self.atn.num_tokens };
     }
 }
 
@@ -429,20 +430,35 @@ fn add_edge(edges: &mut List<SllEdge>, token: i32, to: i32) {
     edges.push(SllEdge { tokens: [token], to });
 }
 
-/// The DFA with every node that can only ask turned into `Ask`, and the edges
-/// to one dropped.
+/// The DFA with every node that can only ask turned into `Ask`, the edges to
+/// one dropped, and the edges to one alternative merged into one edge.
 fn prune_asking(nodes: List<SllNode>) -> List<SllNode> {
     let mut out = nodes;
+    let mut node_of_alt = HashMap::<i32, i32>::with_seed(GALE_SEED);
+    for let mut n = 0; n < out.len(); n += 1 {
+        if let Alt(a) = &out[n] && !node_of_alt.contains_key(*a) {
+            node_of_alt[*a] = n;
+        }
+    }
     let mut changed = true;
     while changed {
         changed = false;
         for let mut n = 0; n < out.len(); n += 1 {
             if let Branch(edges) = &out[n] {
-                let kept: List<SllEdge> = edges.iter_ref().filter(|e: &SllEdge| !(out[e.to] matches { Ask })).map(
-                    |e: &SllEdge| *e,
-                ).collect();
-                if kept.len() != edges.len() {
-                    out[n] = if kept.is_empty() { SllNode::Ask } else { SllNode::Branch(kept) };
+                let mut kept: List<SllEdge> = [];
+                for let e of edges {
+                    let to = if let Alt(a) = &out[e.to] { node_of_alt[*a] } else { e.to };
+                    if !(out[to] matches { Ask }) {
+                        for let t of &e.tokens {
+                            add_edge(&mut kept, *t, to);
+                        }
+                    }
+                }
+                if kept.is_empty() {
+                    out[n] = SllNode::Ask;
+                    changed = true;
+                } else if kept != *edges {
+                    out[n] = SllNode::Branch(kept);
                     changed = true;
                 }
             }
@@ -527,6 +543,17 @@ pub fn gen_atn_verified_fn(w: &mut CodeWriter) {
     w.blank();
 }
 
+/// The kinds among `0..kinds` that no edge of `edges` names.
+fn asking_tokens(edges: &List<SllEdge>, kinds: i32) -> List<i32> {
+    let mut named = List::<bool>::filled(kinds, false);
+    for let e of edges {
+        for let t of &e.tokens {
+            named[*t] = true;
+        }
+    }
+    return (0..<kinds).filter(|k| !named[k]).collect();
+}
+
 /// `answer` renders what a decided alternative is returned as.
 fn gen_sll_node(w: &mut CodeWriter, dfa: &SllDfa, node: i32, depth: i32, analysis: &GrammarAnalysis, answer: &fn(i32) -> String) {
     match &dfa.nodes[node] {
@@ -537,12 +564,28 @@ fn gen_sll_node(w: &mut CodeWriter, dfa: &SllDfa, node: i32, depth: i32, analysi
             let at = if depth == 0 { "pos" } else { `pos + ${depth}` };
             w.begin(`if ${at} < tokens.len()`);
             w.begin(`match tokens[${at}]`);
-            for let e of edges {
-                w.begin(`${analysis.token_names_of(&e.tokens).join(" | ")} =>`);
-                gen_sll_node(w, dfa, e.to, depth + 1, analysis, answer);
+            // The widest edge takes `_` where the tokens that ask are fewer to
+            // name: a DFA over an expression reads a keyword set at many nodes.
+            let asking = asking_tokens(edges, dfa.kinds);
+            let widest = (0..<edges.len()).max_by_key(|i| edges[i].tokens.len()).unwrap();
+            let fallback = if edges[widest].tokens.len() > asking.len() { widest } else { -1 };
+            for let mut i = 0; i < edges.len(); i += 1 {
+                if i != fallback {
+                    w.begin(`${analysis.token_names_of(&edges[i].tokens).join(" | ")} =>`);
+                    gen_sll_node(w, dfa, edges[i].to, depth + 1, analysis, answer);
+                    w.end_with(",");
+                }
+            }
+            if fallback < 0 {
+                w.line("_ => {},");
+            } else {
+                if !asking.is_empty() {
+                    w.line(`${analysis.token_names_of(&asking).join(" | ")} => {},`);
+                }
+                w.begin("_ =>");
+                gen_sll_node(w, dfa, edges[fallback].to, depth + 1, analysis, answer);
                 w.end_with(",");
             }
-            w.line("_ => {},");
             w.end_with(";");
             w.end();
         },
