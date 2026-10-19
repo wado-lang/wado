@@ -237,6 +237,20 @@ impl<affine T> List<T> {
         return self.used == 0;
     }
 
+    /// Moves the elements from `at` on into a new list, keeping the first `at`.
+    #[compiler_item("list_split_off")]
+    internal fn split_off(&mut self, at: i32) -> List<T>
+        contract 0 <= at <= self.len()
+    {
+        let n = self.used - at;
+        let mut tail = List::<T>::with_capacity(n);
+        for let i of 0..<n {
+            tail.push(builtin::array_take(&mut self.repr, at + i));
+        }
+        self.used = at;
+        return tail;
+    }
+
     /// The elements, each by reference.
     pub fn iter_ref(&self) -> SliceRefIter<T> {
         return SliceRefIter::internal_new(&self.repr, 0, self.used);

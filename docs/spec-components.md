@@ -244,6 +244,11 @@ fn first_ready() -> String with MonotonicClock {
     };
     return `${name} first, ${set.len()} left`;
 }
+
+export fn run() with (Stdout, MonotonicClock) {
+    assert first_ready() == "short first, 1 left";
+    println("set dropped");
+}
 ```
 
 #### Handling an Async Operation

@@ -12,16 +12,18 @@ test "a write to a stream whose reader is gone reports the drop" {
     let [rx, tx] = Stream::<u8>::new();
     rx.drop();
     let written = tx.write([1, 2]);
-    assert written.count == 0;
+    assert written.rest == [1, 2];
     assert written.result == CopyResult::Dropped;
     assert tx.write_raw_all(([] as List<u8>).as_slice()) == CopyResult::Completed;
     tx.drop();
 }
 
-test "a future whose reader is gone takes its value and drops" {
+test "a future whose reader is gone hands its value back" {
     let [rx, tx] = Future::<i32>::new();
     rx.drop();
-    tx.write(1);
+    let written = tx.write(1);
+    assert written.rest == Option::Some(1);
+    assert written.result == CopyResult::Dropped;
 }
 
 test "an empty waitable set has nothing to poll" {

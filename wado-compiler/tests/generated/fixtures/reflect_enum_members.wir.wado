@@ -157,13 +157,13 @@ type "functype//core:prelude/string.wado/&core:prelude/string.wado/String^core:p
 
 type "functype//core:prelude/traits.wado/core:prelude/traits.wado/EnumCase<reflect_enum_members.wado/Color>^core:prelude/traits.wado/Inspect::inspect" = fn(i32, "reflect_enum_members.wado//enum:Color", ref "core:prelude/string.wado//String", ref null "core:prelude/string.wado//String", ref "core:prelude/format.wado//Formatter");  // TypeId(60)
 
-type "functype//core:prelude/primitive.wado/i32::fmt_decimal$sroa[self.value]" = fn(i32, ref "core:prelude/format.wado//Formatter");  // TypeId(61)
+type "functype//core:prelude/traits.wado/core:prelude/traits.wado/CaseStyle^core:prelude/traits.wado/Inspect::inspect$sroa[self.value,f.buf]" = fn("core:prelude/traits.wado//enum:CaseStyle", ref "core:prelude/string.wado//String");  // TypeId(61)
 
-type "functype//core:prelude/primitive.wado/u32::fmt_decimal$sroa[self.value]" = fn(u32, ref "core:prelude/format.wado//Formatter");  // TypeId(62)
+type "functype//core:prelude/primitive.wado/i32::fmt_decimal$sroa[self.value]" = fn(i32, ref "core:prelude/format.wado//Formatter");  // TypeId(62)
 
-type "functype//core:prelude/traits.wado/reflect_enum_members.wado/Color^core:prelude/traits.wado/Inspect::inspect$sroa[self.value,f.buf]" = fn("reflect_enum_members.wado//enum:Color", ref "core:prelude/string.wado//String");  // TypeId(63)
+type "functype//core:prelude/primitive.wado/u32::fmt_decimal$sroa[self.value]" = fn(u32, ref "core:prelude/format.wado//Formatter");  // TypeId(63)
 
-type "functype//core:prelude/traits.wado/core:prelude/traits.wado/CaseStyle^core:prelude/traits.wado/Inspect::inspect$sroa[self.value,f.buf]" = fn("core:prelude/traits.wado//enum:CaseStyle", ref "core:prelude/string.wado//String");  // TypeId(64)
+type "functype//core:prelude/traits.wado/reflect_enum_members.wado/Color^core:prelude/traits.wado/Inspect::inspect$sroa[self.value,f.buf]" = fn("reflect_enum_members.wado//enum:Color", ref "core:prelude/string.wado//String");  // TypeId(64)
 
 type "functype//core:prelude/string.wado/core:prelude/string.wado/String^core:prelude/string.wado/AsStrSlice::internal_append_to$spec0" = fn(ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String");  // TypeId(65)
 
@@ -203,8 +203,8 @@ global global:reflect_enum_members.wado::$const_obj_15: ref Array<u8> = array.ne
 global mut global:reflect_enum_members.wado::$const_obj_16: ref null "tuple//[core:prelude/traits.wado/EnumCase<reflect_enum_members.wado/Color>, core:prelude/traits.wado/EnumCase<reflect_enum_members.wado/Color>, core:prelude/traits.wado/EnumCase<reflect_enum_members.wado/Color>]" = ref.null none;
 global global:core:prelude/format.wado::$const_obj_39: ref Array<u8> = array.new_fixed<u8>(46, 46, 46);
 global global:core:prelude/format.wado::$const_obj_40: ref Array<u8> = array.new_fixed<u8>(92, 117, 123);
-global global:core:prelude/traits.wado::$const_obj_69: ref Array<u8> = array.new_fixed<u8>(58, 58);
-global mut global:core:prelude/traits.wado::$const_obj_72: ref null "tuple//[core:prelude/traits.wado/EnumCase<reflect_enum_members.wado/Color>, core:prelude/traits.wado/EnumCase<reflect_enum_members.wado/Color>, core:prelude/traits.wado/EnumCase<reflect_enum_members.wado/Color>]" = ref.null none;
+global global:core:prelude/traits.wado::$const_obj_70: ref Array<u8> = array.new_fixed<u8>(58, 58);
+global mut global:core:prelude/traits.wado::$const_obj_73: ref null "tuple//[core:prelude/traits.wado/EnumCase<reflect_enum_members.wado/Color>, core:prelude/traits.wado/EnumCase<reflect_enum_members.wado/Color>, core:prelude/traits.wado/EnumCase<reflect_enum_members.wado/Color>]" = ref.null none;
 
 fn "reflect_enum_members.wado/$test_2_wire_name_resolves_a_case_tag_via_the_shared_member_helper"() {
     let $local_10: ref "core:prelude/string.wado//String";
@@ -644,54 +644,60 @@ fn "core:rt/panic"($mv$message$repr, $mv$message$used) {
 }
 
 fn "core:rt/cm_stream_write_raw_all_u8"(handle, $mv$data$repr, $mv$data$start, $mv$data$end) {
-    let ptr_13: i32;
-    let ptr_17: i32;
-    let count_18: i32;
+    let written: i32;
+    let delivered_6: i32;
+    let result_7: "core:prelude/types.wado//enum:CopyResult";
+    let ptr_19: i32;
+    let count_24: i32;
+    let result_25: i32;
+    let ws: i32;
     let evt_ptr: i32;
-    let status_28: i32;
+    let status_33: i32;
     let i: i32;
     if local.tee $mv$data$end($mv$data$end - $mv$data$start) == 0 {
         return 0;
     }
-    ptr_13 = builtin::i32_wrap_i64(ptr_13 = "mem/realloc"(0, 0, 1, $mv$data$end); i = 0; b55: block {
+    ptr_19 = builtin::i32_wrap_i64(ptr_19 = "mem/realloc"(0, 0, 1, $mv$data$end); i = 0; b55: block {
         l56: loop {
             break_if b55 i >= $mv$data$end;
-            builtin::store_u8(ptr_13 + i, builtin::array_get_value_u8($mv$data$repr, $mv$data$start + i));
+            builtin::store_u8(ptr_19 + i, builtin::array_get_value_u8($mv$data$repr, $mv$data$start + i));
             i = i + 1;
             continue l56;
         };
-    }; builtin::i64_extend_i32_u(ptr_13) | (builtin::i64_extend_i32_s($mv$data$end) << 32_i64));
+    }; builtin::i64_extend_i32_u(ptr_19) | (builtin::i64_extend_i32_s($mv$data$end) << 32_i64));
     i = 0;
     block {
         l58: loop {
-            ptr_17 = ptr_13 + i;
-            count_18 = $mv$data$end - i;
-            if local.tee count_18("wasi/stream-write"(handle, ptr_17, select i32(count_18 < 268435455, count_18, 268435455))) == -1 {
-                $mv$data$start = "wasi/waitable-set-new"();
-                "wasi/waitable-join"(handle, $mv$data$start);
-                evt_ptr = "mem/realloc"(0, 0, 4, 8);
-                drop("wasi/waitable-set-wait"($mv$data$start, evt_ptr));
-                status_28 = builtin::load_i32(evt_ptr + 4);
-                drop("mem/realloc"(evt_ptr, 8, 4, 0));
-                "wasi/waitable-join"(handle, 0);
-                "wasi/waitable-set-drop"($mv$data$start);
-                count_18 = status_28;
-            }
-            ptr_17 = count_18 >>u 4;
-            count_18 = $inline_cm_copy_result_5: block -> "core:prelude/types.wado//enum:CopyResult" {
+            delivered_6 = local.tee written($inline_cm_stream_write_once_1: block -> i32 {
+                $mv$data$start = ptr_19 + i;
+                count_24 = $mv$data$end - i;
+                if local.tee result_25("wasi/stream-write"(handle, $mv$data$start, select i32(count_24 < 268435455, count_24, 268435455))) == -1 {
+                    ws = "wasi/waitable-set-new"();
+                    "wasi/waitable-join"(handle, ws);
+                    evt_ptr = "mem/realloc"(0, 0, 4, 8);
+                    drop("wasi/waitable-set-wait"(ws, evt_ptr));
+                    status_33 = builtin::load_i32(evt_ptr + 4);
+                    drop("mem/realloc"(evt_ptr, 8, 4, 0));
+                    "wasi/waitable-join"(handle, 0);
+                    "wasi/waitable-set-drop"(ws);
+                    break $inline_cm_stream_write_once_1: status_33;
+                }
+                break $inline_cm_stream_write_once_1: result_25;
+            }) >>u 4;
+            result_7 = $inline_cm_copy_result_4: block -> "core:prelude/types.wado//enum:CopyResult" {
                 let $match_scrut_0: i32;
-                if local.tee $match_scrut_0(count_18 & 15) == 0 {
-                    break $inline_cm_copy_result_5: 0;
+                if local.tee $match_scrut_0(written & 15) == 0 {
+                    break $inline_cm_copy_result_4: 0;
                 } else if $match_scrut_0 == 1 {
-                    break $inline_cm_copy_result_5: 1;
+                    break $inline_cm_copy_result_4: 1;
                 } else {
                 }
-                break $inline_cm_copy_result_5: 2;
+                break $inline_cm_copy_result_4: 2;
             };
-            i = i + ptr_17;
-            if ((count_18 != 0) | (ptr_17 <= 0)) | (i >= $mv$data$end) {
-                drop("mem/realloc"(ptr_13, $mv$data$end, 1, 0));
-                return count_18;
+            i = i + delivered_6;
+            if ((result_7 != 0) | (delivered_6 <= 0)) | (i >= $mv$data$end) {
+                drop("mem/realloc"(ptr_19, $mv$data$end, 1, 0));
+                return result_7;
             }
             continue l58;
         };
@@ -2001,79 +2007,6 @@ fn "core:prelude/traits.wado/core:prelude/traits.wado/EnumCase<reflect_enum_memb
     "core:prelude/traits.wado/struct_close"(f);
 }
 
-fn "core:prelude/primitive.wado/i32::fmt_decimal$sroa[self.value]"(self, f) {
-    let is_negative: bool;
-    let x: i64;
-    is_negative = self < 0;
-    self = "core:prelude/primitive.wado/count_digits_u64"(local.tee x(x = builtin::i64_extend_i32_s(self); select i64(x < 0_i64, 0_i64 - x, x)));
-    is_negative = block -> i32 {
-        let $mv_field_3: ref Array<u8>;
-        $mv_field_3 = builtin::array_new<u8>(0);
-        "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>"(f, is_negative, $mv_field_3, 0, self);
-    };
-    "core:prelude/primitive.wado/write_decimal_digits"(f.buf.repr, is_negative, x, self);
-}
-
-fn "core:prelude/primitive.wado/u32::fmt_decimal$sroa[self.value]"(self, f) {
-    let value: u64;
-    let offset: i32;
-    self = "core:prelude/primitive.wado/count_digits_u64"(local.tee value(builtin::i64_extend_i32_u(self)));
-    offset = block -> i32 {
-        let $mv_field_3: ref Array<u8>;
-        $mv_field_3 = builtin::array_new<u8>(0);
-        "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>"(f, 0, $mv_field_3, 0, self);
-    };
-    "core:prelude/primitive.wado/write_decimal_digits"(f.buf.repr, offset, value, self);
-}
-
-fn "core:prelude/traits.wado/reflect_enum_members.wado/Color^core:prelude/traits.wado/Inspect::inspect$sroa[self.value,f.buf]"(self, f) {
-    let new_used_63: i32;
-    let start_64: i32;
-    if ref.is_null(global:core:prelude/traits.wado::$const_obj_72) {
-        let $mv_0_1: ref "core:prelude/traits.wado//EnumCase<reflect_enum_members.wado/Color>";
-        let $mv_1_2: ref "core:prelude/traits.wado//EnumCase<reflect_enum_members.wado/Color>";
-        let $mv_2_3: ref "core:prelude/traits.wado//EnumCase<reflect_enum_members.wado/Color>";
-        multivalue_bind [$mv_0_1, $mv_1_2, $mv_2_3] = "reflect_enum_members.wado/reflect_enum_members.wado/Color^core:prelude/traits.wado/ReflectEnum::members"();
-        global:core:prelude/traits.wado::$const_obj_72 = struct.new "tuple//[core:prelude/traits.wado/EnumCase<reflect_enum_members.wado/Color>, core:prelude/traits.wado/EnumCase<reflect_enum_members.wado/Color>, core:prelude/traits.wado/EnumCase<reflect_enum_members.wado/Color>]" { 0: $mv_0_1, 1: $mv_1_2, 2: $mv_2_3 };
-    }
-    $mv_2_3 = global:core:prelude/traits.wado::$const_obj_72.0;
-    if self == 0 {
-        "core:prelude/string.wado/&core:prelude/string.wado/String^core:prelude/string.wado/AsStrSlice::internal_append_to"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Color"), used: 5 }, f);
-        if @unlikely(local.tee new_used_63(f.used + 2) > builtin::array_len(f.repr)) {
-            cold_path;
-            "core:prelude/string.wado/core:prelude/string.wado/String::grow"(f, new_used_63);
-        }
-        start_64 = f.used;
-        f.used = new_used_63;
-        builtin::array_copy<u8>(f.repr, start_64, global:core:prelude/traits.wado::$const_obj_69, 0, 2);
-        "core:prelude/string.wado/&core:prelude/string.wado/String^core:prelude/string.wado/AsStrSlice::internal_append_to"($mv_2_3.case_name, f);
-    }
-    $mv_2_3 = global:core:prelude/traits.wado::$const_obj_72.1;
-    if self == 1 {
-        "core:prelude/string.wado/&core:prelude/string.wado/String^core:prelude/string.wado/AsStrSlice::internal_append_to"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Color"), used: 5 }, f);
-        if @unlikely(local.tee start_64(f.used + 2) > builtin::array_len(f.repr)) {
-            cold_path;
-            "core:prelude/string.wado/core:prelude/string.wado/String::grow"(f, start_64);
-        }
-        new_used_63 = f.used;
-        f.used = start_64;
-        builtin::array_copy<u8>(f.repr, new_used_63, global:core:prelude/traits.wado::$const_obj_69, 0, 2);
-        "core:prelude/string.wado/&core:prelude/string.wado/String^core:prelude/string.wado/AsStrSlice::internal_append_to"($mv_2_3.case_name, f);
-    }
-    $mv_2_3 = global:core:prelude/traits.wado::$const_obj_72.2;
-    if self == 2 {
-        "core:prelude/string.wado/&core:prelude/string.wado/String^core:prelude/string.wado/AsStrSlice::internal_append_to"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Color"), used: 5 }, f);
-        if @unlikely(local.tee self(f.used + 2) > builtin::array_len(f.repr)) {
-            cold_path;
-            "core:prelude/string.wado/core:prelude/string.wado/String::grow"(f, self);
-        }
-        new_used_63 = f.used;
-        f.used = self;
-        builtin::array_copy<u8>(f.repr, new_used_63, global:core:prelude/traits.wado::$const_obj_69, 0, 2);
-        "core:prelude/string.wado/&core:prelude/string.wado/String^core:prelude/string.wado/AsStrSlice::internal_append_to"($mv_2_3.case_name, f);
-    }
-}
-
 fn "core:prelude/traits.wado/core:prelude/traits.wado/CaseStyle^core:prelude/traits.wado/Inspect::inspect$sroa[self.value,f.buf]"(self, f) {
     let $mv$$tuple_0$0: ref "core:prelude/traits.wado//EnumCase<core:prelude/traits.wado/CaseStyle>";
     let $mv$$tuple_0$1: ref "core:prelude/traits.wado//EnumCase<core:prelude/traits.wado/CaseStyle>";
@@ -2117,6 +2050,79 @@ fn "core:prelude/traits.wado/core:prelude/traits.wado/CaseStyle^core:prelude/tra
         "core:prelude/string.wado/&core:prelude/string.wado/String^core:prelude/string.wado/AsStrSlice::internal_append_to"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("CaseStyle"), used: 9 }, f);
         "core:prelude/string.wado/core:prelude/string.wado/String^core:prelude/string.wado/AsStrSlice::internal_append_to$spec0"(struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(58, 58), used: 2 }, f);
         "core:prelude/string.wado/&core:prelude/string.wado/String^core:prelude/string.wado/AsStrSlice::internal_append_to"($mv$$tuple_0$6.case_name, f);
+    }
+}
+
+fn "core:prelude/primitive.wado/i32::fmt_decimal$sroa[self.value]"(self, f) {
+    let is_negative: bool;
+    let x: i64;
+    is_negative = self < 0;
+    self = "core:prelude/primitive.wado/count_digits_u64"(local.tee x(x = builtin::i64_extend_i32_s(self); select i64(x < 0_i64, 0_i64 - x, x)));
+    is_negative = block -> i32 {
+        let $mv_field_3: ref Array<u8>;
+        $mv_field_3 = builtin::array_new<u8>(0);
+        "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>"(f, is_negative, $mv_field_3, 0, self);
+    };
+    "core:prelude/primitive.wado/write_decimal_digits"(f.buf.repr, is_negative, x, self);
+}
+
+fn "core:prelude/primitive.wado/u32::fmt_decimal$sroa[self.value]"(self, f) {
+    let value: u64;
+    let offset: i32;
+    self = "core:prelude/primitive.wado/count_digits_u64"(local.tee value(builtin::i64_extend_i32_u(self)));
+    offset = block -> i32 {
+        let $mv_field_3: ref Array<u8>;
+        $mv_field_3 = builtin::array_new<u8>(0);
+        "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>"(f, 0, $mv_field_3, 0, self);
+    };
+    "core:prelude/primitive.wado/write_decimal_digits"(f.buf.repr, offset, value, self);
+}
+
+fn "core:prelude/traits.wado/reflect_enum_members.wado/Color^core:prelude/traits.wado/Inspect::inspect$sroa[self.value,f.buf]"(self, f) {
+    let new_used_63: i32;
+    let start_64: i32;
+    if ref.is_null(global:core:prelude/traits.wado::$const_obj_73) {
+        let $mv_0_1: ref "core:prelude/traits.wado//EnumCase<reflect_enum_members.wado/Color>";
+        let $mv_1_2: ref "core:prelude/traits.wado//EnumCase<reflect_enum_members.wado/Color>";
+        let $mv_2_3: ref "core:prelude/traits.wado//EnumCase<reflect_enum_members.wado/Color>";
+        multivalue_bind [$mv_0_1, $mv_1_2, $mv_2_3] = "reflect_enum_members.wado/reflect_enum_members.wado/Color^core:prelude/traits.wado/ReflectEnum::members"();
+        global:core:prelude/traits.wado::$const_obj_73 = struct.new "tuple//[core:prelude/traits.wado/EnumCase<reflect_enum_members.wado/Color>, core:prelude/traits.wado/EnumCase<reflect_enum_members.wado/Color>, core:prelude/traits.wado/EnumCase<reflect_enum_members.wado/Color>]" { 0: $mv_0_1, 1: $mv_1_2, 2: $mv_2_3 };
+    }
+    $mv_2_3 = global:core:prelude/traits.wado::$const_obj_73.0;
+    if self == 0 {
+        "core:prelude/string.wado/&core:prelude/string.wado/String^core:prelude/string.wado/AsStrSlice::internal_append_to"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Color"), used: 5 }, f);
+        if @unlikely(local.tee new_used_63(f.used + 2) > builtin::array_len(f.repr)) {
+            cold_path;
+            "core:prelude/string.wado/core:prelude/string.wado/String::grow"(f, new_used_63);
+        }
+        start_64 = f.used;
+        f.used = new_used_63;
+        builtin::array_copy<u8>(f.repr, start_64, global:core:prelude/traits.wado::$const_obj_70, 0, 2);
+        "core:prelude/string.wado/&core:prelude/string.wado/String^core:prelude/string.wado/AsStrSlice::internal_append_to"($mv_2_3.case_name, f);
+    }
+    $mv_2_3 = global:core:prelude/traits.wado::$const_obj_73.1;
+    if self == 1 {
+        "core:prelude/string.wado/&core:prelude/string.wado/String^core:prelude/string.wado/AsStrSlice::internal_append_to"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Color"), used: 5 }, f);
+        if @unlikely(local.tee start_64(f.used + 2) > builtin::array_len(f.repr)) {
+            cold_path;
+            "core:prelude/string.wado/core:prelude/string.wado/String::grow"(f, start_64);
+        }
+        new_used_63 = f.used;
+        f.used = start_64;
+        builtin::array_copy<u8>(f.repr, new_used_63, global:core:prelude/traits.wado::$const_obj_70, 0, 2);
+        "core:prelude/string.wado/&core:prelude/string.wado/String^core:prelude/string.wado/AsStrSlice::internal_append_to"($mv_2_3.case_name, f);
+    }
+    $mv_2_3 = global:core:prelude/traits.wado::$const_obj_73.2;
+    if self == 2 {
+        "core:prelude/string.wado/&core:prelude/string.wado/String^core:prelude/string.wado/AsStrSlice::internal_append_to"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Color"), used: 5 }, f);
+        if @unlikely(local.tee self(f.used + 2) > builtin::array_len(f.repr)) {
+            cold_path;
+            "core:prelude/string.wado/core:prelude/string.wado/String::grow"(f, self);
+        }
+        new_used_63 = f.used;
+        f.used = self;
+        builtin::array_copy<u8>(f.repr, new_used_63, global:core:prelude/traits.wado::$const_obj_70, 0, 2);
+        "core:prelude/string.wado/&core:prelude/string.wado/String^core:prelude/string.wado/AsStrSlice::internal_append_to"($mv_2_3.case_name, f);
     }
 }
 

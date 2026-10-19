@@ -366,25 +366,27 @@ internal fn cm_stream_read_u8(handle: i32, max: i32) -> StreamChunk<u8> {
 /// CM adapter for stream.write(data) on Stream<u8>: one copy, reporting what
 /// the reader took. `StreamWritable::write_all` is the loop over it.
 #[compiler_item("cm_stream_write_u8")]
-internal fn cm_stream_write_u8(handle: i32, data: List<u8>) -> StreamWrite {
+internal fn cm_stream_write_u8(handle: i32, data: List<u8>) -> StreamWrite<u8> {
+    let mut data = data;
     let packed = cm_lower_array_u8(data);
     let ptr = packed as i32;
     let len = (packed >> 32) as i32;
     let written = cm_stream_write_once(handle, ptr, len);
     let freed = builtin::realloc(ptr, len, 1, 0);
-    return written;
+    return StreamWrite {
+        rest: data.split_off(cm_packed_count(written)),
+        result: cm_copy_result(written),
+    };
 }
 
-/// One `stream.write` of up to `count` elements from `ptr`, awaiting a BLOCKED copy.
-internal fn cm_stream_write_once(handle: i32, ptr: i32, count: i32) -> StreamWrite {
-    let mut result = builtin::stream_write(handle, ptr, cm_copy_count(count));
+/// One `stream.write` of up to `count` elements from `ptr`, awaiting a BLOCKED
+/// copy. Returns the packed result.
+internal fn cm_stream_write_once(handle: i32, ptr: i32, count: i32) -> i32 {
+    let result = builtin::stream_write(handle, ptr, cm_copy_count(count));
     if result == -1 {
-        result = cm_await_blocked(handle);
+        return cm_await_blocked(handle);
     }
-    return StreamWrite {
-        count: cm_packed_count(result),
-        result: cm_copy_result(result),
-    };
+    return result;
 }
 
 /// CM adapter for stream.write_raw_all(slice) on Stream<u8>. The slice is
@@ -399,10 +401,12 @@ internal fn cm_stream_write_raw_all_u8(handle: i32, data: Slice<u8>) -> CopyResu
     let mut taken = 0;
     loop {
         let written = cm_stream_write_once(handle, ptr + taken, len - taken);
-        taken += written.count;
-        if write_copy_is_final(&written) || taken >= len {
+        let delivered = cm_packed_count(written);
+        let result = cm_copy_result(written);
+        taken += delivered;
+        if write_copy_is_final(result, delivered) || taken >= len {
             let freed = builtin::realloc(ptr, len, 1, 0);
-            return written.result;
+            return result;
         }
     }
 }
@@ -443,12 +447,6 @@ internal fn cm_waitable_set_wait(ws: i32) -> WaitEvent {
     let payload = builtin::i32_load(out_ptr + 4);
     let freed = builtin::realloc(out_ptr, 8, 4, 0);
     return WaitEvent { code, handle: evt_handle, payload: payload as u32 };
-}
-
-#[compiler_item("cm_waitable_join")]
-internal fn cm_waitable_join(handle: i32, ws: i32) -> i32 {
-    builtin::waitable_join(handle, ws);
-    return handle;
 }
 
 #[compiler_item("cm_waitable_set_poll")]

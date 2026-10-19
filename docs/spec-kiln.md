@@ -429,21 +429,19 @@ record input-file {
 
 `read_all` and `read_text` read a whole file
 ([`core:kiln`](./stdlib-core-kiln.md)). Gale reads every input as text, and
-reports one that is not UTF-8 as an invalid schema. A stream is outside drop
-elaboration, so it drops the streams it has not read before it returns:
+reports one that is not UTF-8 as an invalid schema. Each file moves out of the
+list as it is read, so the return drops the streams of the files left unread:
 
 <!-- {"source": "package-gale/src/generator.wado"} -->
 
 ```wado
-let text = match read_text(file.content) {
-    Ok(text) => text,
-    Err(e) => {
-        for let rest of files[i + 1..<files.len()].to_list() {
-            rest.content.drop();
-        }
-        return Result::Err(Error::InvalidSchema(`gale: '${file.path}' is not UTF-8: ${e}`));
-    },
-};
+while let Some(file) = pending.pop() {
+    let text = match read_text(file.content) {
+        Ok(text) => text,
+        Err(e) => {
+            return Result::Err(Error::InvalidSchema(`gale: '${file.path}' is not UTF-8: ${e}`));
+        },
+    };
 ```
 
 A generator that needs only a prefix reads the stream itself and drops it early.

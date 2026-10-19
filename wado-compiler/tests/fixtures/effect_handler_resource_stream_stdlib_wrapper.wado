@@ -40,13 +40,12 @@ impl Stream<u8> for MockStream {
 }
 
 impl StreamWritable<u8> for MockStream {
-    fn write(&mut self, this: &StreamWritable<u8>, data: List<u8>) -> StreamWrite {
+    fn write(&mut self, this: &StreamWritable<u8>, data: List<u8>) -> StreamWrite<u8> {
         let _ = this;
-        let count = data.len();
         for let b of data {
             self.log.push(b);
         }
-        resume StreamWrite { count: count, result: CopyResult::Completed }
+        resume StreamWrite { rest: [], result: CopyResult::Completed }
     }
     fn write_raw_all(&mut self, this: &StreamWritable<u8>, data: Slice<u8>) -> CopyResult {
         let _ = this;

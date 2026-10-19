@@ -231,13 +231,13 @@ type "functype//mut_ref_write_back_variant_field.wado/$test_14_a_destructuring_l
 
 type "functype//mut_ref_write_back_variant_field.wado/takes_a_snapshot$sroa[seen.n]" = fn(i32, ref "core:prelude/types.wado//Box<mut_ref_write_back_variant_field.wado/Payload>");  // TypeId(89)
 
-type "functype//mut_ref_write_back_variant_field.wado/appends$sroa[p.value]" = fn(ref null "core:prelude/string.wado//String");  // TypeId(90)
+type "functype//mut_ref_write_back_variant_field.wado/forwards_a_reference_field$sroa[v.slot]" = fn(ref "core:prelude/types.wado//Box<mut_ref_write_back_variant_field.wado/Payload>");  // TypeId(90)
 
-type "functype//mut_ref_write_back_variant_field.wado/forwards_a_reference_field$sroa[v.slot]" = fn(ref "core:prelude/types.wado//Box<mut_ref_write_back_variant_field.wado/Payload>");  // TypeId(91)
+type "functype//mut_ref_write_back_variant_field.wado/appends$sroa[p.value]" = fn(ref null "core:prelude/string.wado//String");  // TypeId(91)
 
-type "functype//mut_ref_write_back_variant_field.wado/$case_extract$mut_ref_write_back_variant_field.wado/Payload$core:prelude/string.wado/String$sroa[v.value]" = fn(ref null "core:prelude/string.wado//String", i32) -> ref "core:prelude/string.wado//String";  // TypeId(92)
+type "functype//mut_ref_write_back_variant_field.wado/mutate_payload$sroa[p.value]" = fn(ref null "core:prelude/string.wado//String");  // TypeId(92)
 
-type "functype//mut_ref_write_back_variant_field.wado/mutate_payload$sroa[p.value]" = fn(ref null "core:prelude/string.wado//String");  // TypeId(93)
+type "functype//mut_ref_write_back_variant_field.wado/$case_extract$mut_ref_write_back_variant_field.wado/Payload$core:prelude/string.wado/String$sroa[v.value]" = fn(ref null "core:prelude/string.wado//String", i32) -> ref "core:prelude/string.wado//String";  // TypeId(93)
 
 type "functype//core:prelude/primitive.wado/write_decimal_digits" = fn(ref Array<u8>, i32, u64, i32);  // TypeId(94)
 
@@ -1686,6 +1686,10 @@ fn "mut_ref_write_back_variant_field.wado/takes_a_snapshot$sroa[seen.n]"(seen, p
     p.value = $local_2 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 }; is_negative = seen < 0; seen = "core:prelude/primitive.wado/count_digits_u64"(local.tee x(x = builtin::i64_extend_i32_s(seen); select i64(x < 0_i64, 0_i64 - x, x))); is_negative = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$sroa[self.buf]$dae[alt_prefix]"($local_2, is_negative, seen); "core:prelude/primitive.wado/write_decimal_digits"($local_2.repr, is_negative, x, seen); $local_2;
 }
 
+fn "mut_ref_write_back_variant_field.wado/forwards_a_reference_field$sroa[v.slot]"(v) {
+    "mut_ref_write_back_variant_field.wado/replace"(v);
+}
+
 fn "mut_ref_write_back_variant_field.wado/appends$sroa[p.value]"(p) {
     let $load_2: ref Array<u8>;
     let s_1: ref "core:prelude/string.wado//String";
@@ -1712,8 +1716,16 @@ fn "mut_ref_write_back_variant_field.wado/appends$sroa[p.value]"(p) {
     }
 }
 
-fn "mut_ref_write_back_variant_field.wado/forwards_a_reference_field$sroa[v.slot]"(v) {
-    "mut_ref_write_back_variant_field.wado/replace"(v);
+fn "mut_ref_write_back_variant_field.wado/mutate_payload$sroa[p.value]"(p) {
+    let s: ref "core:prelude/string.wado//String";
+    let $sroa_$deref_val_3_repr_4: ref Array<u8>;
+    if ref.is_null(p) == 0 {
+        s = ref.as_non_null(p);
+        $sroa_$deref_val_3_repr_4 = array.new_fixed<u8>(122, 122);
+        s.repr = $sroa_$deref_val_3_repr_4;
+        s.used = 2;
+    } else {
+    }
 }
 
 fn "mut_ref_write_back_variant_field.wado/$case_extract$mut_ref_write_back_variant_field.wado/Payload$core:prelude/string.wado/String$sroa[v.value]"(v, index) {
@@ -1725,18 +1737,6 @@ fn "mut_ref_write_back_variant_field.wado/$case_extract$mut_ref_write_back_varia
     } else {
         unreachable;
     });
-}
-
-fn "mut_ref_write_back_variant_field.wado/mutate_payload$sroa[p.value]"(p) {
-    let s: ref "core:prelude/string.wado//String";
-    let $sroa_$deref_val_3_repr_4: ref Array<u8>;
-    if ref.is_null(p) == 0 {
-        s = ref.as_non_null(p);
-        $sroa_$deref_val_3_repr_4 = array.new_fixed<u8>(122, 122);
-        s.repr = $sroa_$deref_val_3_repr_4;
-        s.used = 2;
-    } else {
-    }
 }
 
 fn "core:prelude/primitive.wado/write_decimal_digits"(arr, offset, val, digit_count) {
@@ -1868,54 +1868,60 @@ fn "core:rt/panic"($mv$message$repr, $mv$message$used) {
 }
 
 fn "core:rt/cm_stream_write_raw_all_u8"(handle, $mv$data$repr, $mv$data$start, $mv$data$end) {
-    let ptr_13: i32;
-    let ptr_17: i32;
-    let count_18: i32;
+    let written: i32;
+    let delivered_6: i32;
+    let result_7: "core:prelude/types.wado//enum:CopyResult";
+    let ptr_19: i32;
+    let count_24: i32;
+    let result_25: i32;
+    let ws: i32;
     let evt_ptr: i32;
-    let status_28: i32;
+    let status_33: i32;
     let i: i32;
     if local.tee $mv$data$end($mv$data$end - $mv$data$start) == 0 {
         return 0;
     }
-    ptr_13 = builtin::i32_wrap_i64(ptr_13 = "mem/realloc"(0, 0, 1, $mv$data$end); i = 0; b127: block {
+    ptr_19 = builtin::i32_wrap_i64(ptr_19 = "mem/realloc"(0, 0, 1, $mv$data$end); i = 0; b127: block {
         l128: loop {
             break_if b127 i >= $mv$data$end;
-            builtin::store_u8(ptr_13 + i, builtin::array_get_value_u8($mv$data$repr, $mv$data$start + i));
+            builtin::store_u8(ptr_19 + i, builtin::array_get_value_u8($mv$data$repr, $mv$data$start + i));
             i = i + 1;
             continue l128;
         };
-    }; builtin::i64_extend_i32_u(ptr_13) | (builtin::i64_extend_i32_s($mv$data$end) << 32_i64));
+    }; builtin::i64_extend_i32_u(ptr_19) | (builtin::i64_extend_i32_s($mv$data$end) << 32_i64));
     i = 0;
     block {
         l130: loop {
-            ptr_17 = ptr_13 + i;
-            count_18 = $mv$data$end - i;
-            if local.tee count_18("wasi/stream-write"(handle, ptr_17, select i32(count_18 < 268435455, count_18, 268435455))) == -1 {
-                $mv$data$start = "wasi/waitable-set-new"();
-                "wasi/waitable-join"(handle, $mv$data$start);
-                evt_ptr = "mem/realloc"(0, 0, 4, 8);
-                drop("wasi/waitable-set-wait"($mv$data$start, evt_ptr));
-                status_28 = builtin::load_i32(evt_ptr + 4);
-                drop("mem/realloc"(evt_ptr, 8, 4, 0));
-                "wasi/waitable-join"(handle, 0);
-                "wasi/waitable-set-drop"($mv$data$start);
-                count_18 = status_28;
-            }
-            ptr_17 = count_18 >>u 4;
-            count_18 = $inline_cm_copy_result_5: block -> "core:prelude/types.wado//enum:CopyResult" {
+            delivered_6 = local.tee written($inline_cm_stream_write_once_1: block -> i32 {
+                $mv$data$start = ptr_19 + i;
+                count_24 = $mv$data$end - i;
+                if local.tee result_25("wasi/stream-write"(handle, $mv$data$start, select i32(count_24 < 268435455, count_24, 268435455))) == -1 {
+                    ws = "wasi/waitable-set-new"();
+                    "wasi/waitable-join"(handle, ws);
+                    evt_ptr = "mem/realloc"(0, 0, 4, 8);
+                    drop("wasi/waitable-set-wait"(ws, evt_ptr));
+                    status_33 = builtin::load_i32(evt_ptr + 4);
+                    drop("mem/realloc"(evt_ptr, 8, 4, 0));
+                    "wasi/waitable-join"(handle, 0);
+                    "wasi/waitable-set-drop"(ws);
+                    break $inline_cm_stream_write_once_1: status_33;
+                }
+                break $inline_cm_stream_write_once_1: result_25;
+            }) >>u 4;
+            result_7 = $inline_cm_copy_result_4: block -> "core:prelude/types.wado//enum:CopyResult" {
                 let $match_scrut_0: i32;
-                if local.tee $match_scrut_0(count_18 & 15) == 0 {
-                    break $inline_cm_copy_result_5: 0;
+                if local.tee $match_scrut_0(written & 15) == 0 {
+                    break $inline_cm_copy_result_4: 0;
                 } else if $match_scrut_0 == 1 {
-                    break $inline_cm_copy_result_5: 1;
+                    break $inline_cm_copy_result_4: 1;
                 } else {
                 }
-                break $inline_cm_copy_result_5: 2;
+                break $inline_cm_copy_result_4: 2;
             };
-            i = i + ptr_17;
-            if ((count_18 != 0) | (ptr_17 <= 0)) | (i >= $mv$data$end) {
-                drop("mem/realloc"(ptr_13, $mv$data$end, 1, 0));
-                return count_18;
+            i = i + delivered_6;
+            if ((result_7 != 0) | (delivered_6 <= 0)) | (i >= $mv$data$end) {
+                drop("mem/realloc"(ptr_19, $mv$data$end, 1, 0));
+                return result_7;
             }
             continue l130;
         };

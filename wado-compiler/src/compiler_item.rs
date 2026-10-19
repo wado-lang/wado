@@ -436,6 +436,8 @@ pub enum CompilerItem {
     /// `List::new` + a sequence of `.push(...)` calls into
     /// `array.new_fixed`.
     ListPush,
+    /// `List<T>::split_off` — what a stream write did not deliver, moved out.
+    ListSplitOff,
     /// `List<T>::with_capacity` — the buffer a `list<T>` lift fills.
     ListWithCapacity,
     /// `List<T>::len` — the element count a `list<T>` lower sizes its buffer by.
@@ -683,8 +685,11 @@ pub enum CompilerItem {
     CopyResult,
     /// `core:prelude/types::StreamChunk`, what one `Stream::read` copied.
     StreamChunk,
-    /// `core:prelude/types::StreamWrite`, what one `StreamWritable::write` copied.
+    /// `core:prelude/types::StreamWrite`, what one `StreamWritable::write` did
+    /// not deliver.
     StreamWrite,
+    /// `core:prelude/types::FutureWrite`, likewise for `FutureWritable::write`.
+    FutureWrite,
     /// `core:rt::cm_copy_result`.
     CmCopyResult,
     /// `core:rt::cm_copy_count`.
@@ -705,8 +710,6 @@ pub enum CompilerItem {
     CmErrorContextDebugMessage,
     /// `core:rt::cm_waitable_set_wait`.
     CmWaitableSetWait,
-    /// `core:rt::cm_waitable_join`.
-    CmWaitableJoin,
     /// `core:rt::cm_waitable_set_poll`.
     CmWaitableSetPoll,
     /// `core:rt::f16_widen` — the exact `f32`; lowers `f16 as T`.
@@ -761,6 +764,7 @@ impl CompilerItem {
         Self::CopyResult,
         Self::StreamChunk,
         Self::StreamWrite,
+        Self::FutureWrite,
         Self::CaseStyle,
         Self::Default,
         Self::Drop,
@@ -860,6 +864,7 @@ impl CompilerItem {
         Self::CaseStyleKebab,
         Self::CaseStyleScreamingKebab,
         Self::ListPush,
+        Self::ListSplitOff,
         Self::ListWithCapacity,
         Self::ListLen,
         Self::ListIndexValue,
@@ -966,7 +971,6 @@ impl CompilerItem {
         Self::CmErrorContextNew,
         Self::CmErrorContextDebugMessage,
         Self::CmWaitableSetWait,
-        Self::CmWaitableJoin,
         Self::CmWaitableSetPoll,
         Self::F16Widen,
         Self::Bf16Widen,
@@ -1008,6 +1012,7 @@ impl CompilerItem {
             Self::CopyResult => "copy_result",
             Self::StreamChunk => "stream_chunk",
             Self::StreamWrite => "stream_write",
+            Self::FutureWrite => "future_write",
             Self::CaseStyle => "case_style",
             Self::Default => "default",
             Self::Drop => "drop",
@@ -1107,6 +1112,7 @@ impl CompilerItem {
             Self::CaseStyleKebab => "case_style_kebab",
             Self::CaseStyleScreamingKebab => "case_style_screaming_kebab",
             Self::ListPush => "list_push",
+            Self::ListSplitOff => "list_split_off",
             Self::ListWithCapacity => "list_with_capacity",
             Self::ListLen => "list_len",
             Self::ListIndexValue => "list_index_value",
@@ -1156,7 +1162,6 @@ impl CompilerItem {
             Self::CmErrorContextNew => "cm_error_context_new",
             Self::CmErrorContextDebugMessage => "cm_error_context_debug_message",
             Self::CmWaitableSetWait => "cm_waitable_set_wait",
-            Self::CmWaitableJoin => "cm_waitable_join",
             Self::CmWaitableSetPoll => "cm_waitable_set_poll",
             Self::F16Widen => "f16_widen",
             Self::Bf16Widen => "bf16_widen",
@@ -1268,7 +1273,6 @@ impl CompilerItem {
             | Self::CmErrorContextNew
             | Self::CmErrorContextDebugMessage
             | Self::CmWaitableSetWait
-            | Self::CmWaitableJoin
             | Self::CmWaitableSetPoll
             | Self::F16Widen
             | Self::Bf16Widen
@@ -1303,6 +1307,7 @@ impl CompilerItem {
             | Self::CopyResult
             | Self::StreamChunk
             | Self::StreamWrite
+            | Self::FutureWrite
             | Self::CaseStyle
             | Self::CaseStyleIdentity
             | Self::CaseStyleCamel
@@ -1349,6 +1354,7 @@ impl CompilerItem {
             | Self::Ord
             | Self::From
             | Self::ListPush
+            | Self::ListSplitOff
             | Self::ListWithCapacity
             | Self::ListLen
             | Self::ListIndexValue
@@ -1555,7 +1561,6 @@ impl CompilerItem {
             | Self::CmErrorContextNew
             | Self::CmErrorContextDebugMessage
             | Self::CmWaitableSetWait
-            | Self::CmWaitableJoin
             | Self::CmWaitableSetPoll
             | Self::F16Widen
             | Self::Bf16Widen
@@ -1594,7 +1599,7 @@ impl CompilerItem {
             Self::Ordering | Self::Alignment | Self::CaseStyle | Self::CopyResult => {
                 CompilerItemKind::Enum
             }
-            Self::StreamChunk | Self::StreamWrite => CompilerItemKind::Struct,
+            Self::StreamChunk | Self::StreamWrite | Self::FutureWrite => CompilerItemKind::Struct,
             Self::SerializeError | Self::DeserializeError => CompilerItemKind::Struct,
             Self::SerializeErrorKind | Self::DeserializeErrorKind => CompilerItemKind::Enum,
             Self::Formatter => CompilerItemKind::Struct,
@@ -1654,6 +1659,7 @@ impl CompilerItem {
             | Self::Shr
             | Self::UpperExp => CompilerItemKind::Trait,
             Self::ListPush
+            | Self::ListSplitOff
             | Self::ListWithCapacity
             | Self::ListLen
             | Self::ListIndexValue

@@ -28,9 +28,9 @@ use crate::tir_visitor::{TirMutVisitor, TirRefVisitor};
 use crate::canonical::{CanonicalIntrinsic, CmDecl, CmFuturePayload, CmStreamPayload};
 use crate::synthesis::common::{
     alloc_named_local, assign, binary, block, break_stmt, builtin_call, cast, cm_canonical_call,
-    entry_call, expr_stmt, handle_scalar, i32_const, i64_const, if_stmt, internal_call,
-    let_mut_stmt, let_stmt, local_ref, loop_stmt, option_none, option_some, return_stmt,
-    synth_span,
+    entry_call, expr_stmt, generic_method_call, handle_scalar, i32_const, i64_const, if_stmt,
+    internal_call, let_mut_stmt, let_stmt, local_ref, loop_stmt, option_none, option_some,
+    return_stmt, synth_span,
 };
 
 use super::synthesize_lift;
@@ -55,6 +55,9 @@ use crate::{ast, tir};
 /// pack their result as `(count << 4) | status`, with `-1` meaning BLOCKED.
 const CM_PACKED_STATUS_MASK: i32 = 0xF;
 const CM_BLOCKED: i32 = -1;
+/// The `CopyResult` statuses a packed CM copy result carries.
+const CM_COMPLETED: i32 = 0;
+const CM_DROPPED: i32 = 1;
 
 /// `cm_packed_count(result)`: the element count of a packed CM async result.
 fn packed_count(result: TirExpr) -> TirExpr {
@@ -88,8 +91,9 @@ fn copy_result_of(packed: TirExpr, type_table: &RefCell<TypeTable>) -> TirExpr {
     )
 }
 
-/// `StreamChunk { items, result }` / `StreamWrite { count, result }` — what a
-/// copy moved, paired with how it ended. Field order follows the declaration.
+/// `StreamChunk { items, result }` / `StreamWrite { rest, result }` — what a
+/// copy moved or left, paired with how it ended. Field order follows the
+/// declaration.
 fn copy_report_literal(
     type_id: TypeId,
     item: CompilerItem,
@@ -139,15 +143,15 @@ fn stream_chunk_literal(
 
 fn stream_write_literal(
     write_type_id: TypeId,
-    count: TirExpr,
+    rest: TirExpr,
     result: TirExpr,
     type_table: &RefCell<TypeTable>,
 ) -> TirExpr {
     copy_report_literal(
         write_type_id,
         CompilerItem::StreamWrite,
-        "count",
-        count,
+        "rest",
+        rest,
         result,
         type_table,
     )
@@ -593,7 +597,7 @@ fn synthesize_stream_write_func(elem_type_id: TypeId, ctx: &SynthCtx) -> TirFunc
         &mut locals,
         Some("data".to_string()),
         list_type_id,
-        false,
+        true,
     );
 
     // Lower the list into a CM element buffer: (ptr, element count).
@@ -612,8 +616,8 @@ fn synthesize_stream_write_func(elem_type_id: TypeId, ctx: &SynthCtx) -> TirFunc
     );
     stmts.extend(lower_stmts);
 
-    // One copy. A reader may take only a prefix, which the returned count
-    // reports; `StreamWritable::write_all` is the loop that finishes a buffer.
+    // One copy. A reader may take only a prefix, and the rest is returned;
+    // `StreamWritable::write_all` is the loop that finishes a buffer.
     let result_idx = alloc_named_local(
         &mut next_local,
         &mut locals,
@@ -668,12 +672,29 @@ fn synthesize_stream_write_func(elem_type_id: TypeId, ctx: &SynthCtx) -> TirFunc
         ),
     ));
 
-    let write_type_id = type_table
-        .borrow_mut()
-        .make_compiler_struct(CompilerItem::StreamWrite);
+    // The delivered prefix now belongs to the reader, so `data` keeps it and
+    // is never dropped: a binding is synthesized after drops are elaborated.
+    let (write_type_id, list_head, split_off) = {
+        let mut tt = type_table.borrow_mut();
+        let write_type_id = tt.make_stream_write(elem_type_id);
+        let list_head = tt.compiler_struct_fq_name(CompilerItem::List);
+        let split_off = tt
+            .compiler_items()
+            .require_template(CompilerItem::ListSplitOff);
+        (write_type_id, list_head, split_off)
+    };
+    let rest = generic_method_call(
+        local_ref(data_idx, "data", list_type_id),
+        &list_head,
+        "split_off",
+        ModuleSource::list(),
+        split_off,
+        vec![packed_count(result_ref())],
+        list_type_id,
+    );
     stmts.push(return_stmt(Some(stream_write_literal(
         write_type_id,
-        packed_count(result_ref()),
+        rest,
         copy_result_of(result_ref(), type_table),
         type_table,
     ))));
@@ -703,7 +724,7 @@ fn synthesize_stream_write_func(elem_type_id: TypeId, ctx: &SynthCtx) -> TirFunc
                 name: "data".to_string(),
                 local_index: data_idx,
                 type_id: list_type_id,
-                is_mut: false,
+                is_mut: true,
                 is_mut_ref: false,
                 span: synth_span(),
             },
@@ -876,14 +897,10 @@ fn synthesize_future_write_func(payload_type_id: TypeId, ctx: &SynthCtx) -> TirF
         &mut locals,
         Some("$written".to_string()),
         TypeTable::I32,
-        awaits_reader,
+        true,
     );
-    let write_binding = if awaits_reader {
-        let_mut_stmt
-    } else {
-        let_stmt
-    };
-    stmts.push(write_binding(
+    let written = || local_ref(written_idx, "$written", TypeTable::I32);
+    stmts.push(let_mut_stmt(
         "$written",
         written_idx,
         TypeTable::I32,
@@ -916,21 +933,64 @@ fn synthesize_future_write_func(payload_type_id: TypeId, ctx: &SynthCtx) -> TirF
     } else {
         // An end whose copy is pending cannot be dropped, and waiting for the
         // reader would deadlock one in this instance, so the end is left to the
-        // host (WEP: Affine Types, known gaps).
+        // host, which delivers the value (WEP: Affine Types, known gaps).
         stmts.push(if_stmt(
-            binary(
-                TirBinaryOp::NotEq,
-                local_ref(written_idx, "$written", TypeTable::I32),
-                i32_const(CM_BLOCKED),
-                TypeTable::BOOL,
-            ),
-            TirBlock {
-                stmts: vec![drop_end],
-                span: synth_span(),
-            },
-            None,
+            is_blocked(written()),
+            block(vec![expr_stmt(assign(written(), i32_const(CM_COMPLETED)))]),
+            Some(block(vec![drop_end])),
         ));
     }
+
+    // The value is the reader's unless the reader dropped first. A binding is
+    // synthesized after drops are elaborated, so a delivered `value` is never
+    // dropped here.
+    let (write_type_id, option_type_id) = {
+        let mut tt = type_table.borrow_mut();
+        (
+            tt.make_future_write(payload_type_id),
+            tt.make_option(payload_type_id),
+        )
+    };
+    let rest_idx = alloc_named_local(
+        &mut next_local,
+        &mut locals,
+        Some("$rest".to_string()),
+        option_type_id,
+        true,
+    );
+    let rest = || local_ref(rest_idx, "$rest", option_type_id);
+    let (none, some) = {
+        let tt = type_table.borrow();
+        let value = local_ref(value_idx, "value", payload_type_id);
+        (
+            option_none(option_type_id, tt.compiler_items()),
+            option_some(value, option_type_id, tt.compiler_items()),
+        )
+    };
+    stmts.push(let_mut_stmt("$rest", rest_idx, option_type_id, none));
+    stmts.push(if_stmt(
+        binary(
+            TirBinaryOp::Eq,
+            binary(
+                TirBinaryOp::BitAnd,
+                written(),
+                i32_const(CM_PACKED_STATUS_MASK),
+                TypeTable::I32,
+            ),
+            i32_const(CM_DROPPED),
+            TypeTable::BOOL,
+        ),
+        block(vec![expr_stmt(assign(rest(), some))]),
+        None,
+    ));
+    stmts.push(return_stmt(Some(copy_report_literal(
+        write_type_id,
+        CompilerItem::FutureWrite,
+        "rest",
+        rest(),
+        copy_result_of(written(), type_table),
+        type_table,
+    ))));
 
     TirFunction {
         module_source: ModuleSource::default(),
@@ -962,7 +1022,7 @@ fn synthesize_future_write_func(payload_type_id: TypeId, ctx: &SynthCtx) -> TirF
                 span: synth_span(),
             },
         ],
-        return_type: TypeTable::UNIT,
+        return_type: write_type_id,
         task_return_type: None,
         effects: vec![],
         immediates: vec![],
@@ -1681,8 +1741,6 @@ fn internal_cm_binding(cm_name: &str) -> Option<CompilerItem> {
         "error-context-debug-message" => CompilerItem::CmErrorContextDebugMessage,
         "waitable-set-wait" => CompilerItem::CmWaitableSetWait,
         "waitable-set-poll" => CompilerItem::CmWaitableSetPoll,
-        // Void canonical; the binding returns the handle as a `Waitable`.
-        "waitable-join" => CompilerItem::CmWaitableJoin,
         _ => return None,
     })
 }
@@ -2206,7 +2264,6 @@ mod cm_binding_tests {
         ("waitable-set-wait", Some("internal cm_waitable_set_wait")),
         ("waitable-set-poll", Some("internal cm_waitable_set_poll")),
         ("waitable-set-drop", Some("canonical waitable-set-drop")),
-        ("waitable-join", Some("internal cm_waitable_join")),
         ("subtask-drop", Some("canonical subtask-drop")),
         ("subtask-cancel", Some("canonical subtask-cancel")),
         ("error-context-new", Some("internal cm_error_context_new")),

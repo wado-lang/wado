@@ -43,13 +43,12 @@ impl Stream<u8> for BaseStream {
 }
 
 impl StreamWritable<u8> for BaseStream {
-    fn write(&mut self, this: &StreamWritable<u8>, data: List<u8>) -> StreamWrite {
+    fn write(&mut self, this: &StreamWritable<u8>, data: List<u8>) -> StreamWrite<u8> {
         let _ = this;
-        let count = data.len();
         for let b of data {
             self.buf.push(b);
         }
-        resume StreamWrite { count: count, result: CopyResult::Completed }
+        resume StreamWrite { rest: [], result: CopyResult::Completed }
     }
     fn drop(&mut self, this: &StreamWritable<u8>) {
         let _ = this;
@@ -78,7 +77,7 @@ impl Stream<u8> for LoggingStream {
 }
 
 impl StreamWritable<u8> for LoggingStream {
-    fn write(&mut self, this: &StreamWritable<u8>, data: List<u8>) -> StreamWrite {
+    fn write(&mut self, this: &StreamWritable<u8>, data: List<u8>) -> StreamWrite<u8> {
         self.writes += 1;
         let inner = this.write(data); // -> BaseStream via outer handler
         resume inner

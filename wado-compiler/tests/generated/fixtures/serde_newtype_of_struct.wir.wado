@@ -721,21 +721,21 @@ type "functype//core:prelude/primitive.wado/i64::fmt_decimal$sroa[self.value]" =
 
 type "functype//core:prelude/primitive.wado/char^core:prelude/traits.wado/Display::fmt$sroa[self.value]" = fn(char, ref "core:prelude/format.wado//Formatter");  // TypeId(274)
 
-type "functype//core:prelude/traits.wado/core:serde/DeserializeErrorKind^core:prelude/traits.wado/Inspect::inspect$sroa[self.value,f.buf]" = fn("core:serde//enum:DeserializeErrorKind", ref "core:prelude/string.wado//String");  // TypeId(275)
+type "functype//core:prelude/traits.wado/serde_newtype_of_struct.wado/Age^core:prelude/traits.wado/Inspect::inspect$sroa[self.value]" = fn(i32, ref "core:prelude/format.wado//Formatter");  // TypeId(275)
 
-type "functype//core:prelude/traits.wado/serde_newtype_of_struct.wado/Age^core:prelude/traits.wado/Inspect::inspect$sroa[self.value]" = fn(i32, ref "core:prelude/format.wado//Formatter");  // TypeId(276)
+type "functype//core:prelude/traits.wado/serde_newtype_of_struct.wado/Tone^core:prelude/traits.wado/Inspect::inspect$sroa[self.value,f.buf]" = fn("serde_newtype_of_struct.wado//enum:Tone", ref "core:prelude/string.wado//String");  // TypeId(276)
 
-type "functype//core:prelude/traits.wado/serde_newtype_of_struct.wado/Tone^core:prelude/traits.wado/Inspect::inspect$sroa[self.value,f.buf]" = fn("serde_newtype_of_struct.wado//enum:Tone", ref "core:prelude/string.wado//String");  // TypeId(277)
+type "functype//core:prelude/traits.wado/serde_newtype_of_struct.wado/Shade^core:prelude/traits.wado/Inspect::inspect$sroa[self.value,f.buf]" = fn("serde_newtype_of_struct.wado//enum:Tone", ref "core:prelude/string.wado//String");  // TypeId(277)
 
-type "functype//core:prelude/traits.wado/serde_newtype_of_struct.wado/Shade^core:prelude/traits.wado/Inspect::inspect$sroa[self.value,f.buf]" = fn("serde_newtype_of_struct.wado//enum:Tone", ref "core:prelude/string.wado//String");  // TypeId(278)
+type "functype//core:prelude/traits.wado/serde_newtype_of_struct.wado/Perm^core:prelude/traits.wado/Inspect::inspect$sroa[self.value,f.buf]" = fn(u32, ref "core:prelude/string.wado//String");  // TypeId(278)
 
-type "functype//core:prelude/traits.wado/serde_newtype_of_struct.wado/Perm^core:prelude/traits.wado/Inspect::inspect$sroa[self.value,f.buf]" = fn(u32, ref "core:prelude/string.wado//String");  // TypeId(279)
+type "functype//core:prelude/traits.wado/serde_newtype_of_struct.wado/M^core:prelude/traits.wado/Inspect::inspect$sroa[self.value,f.buf]" = fn(u32, ref "core:prelude/string.wado//String");  // TypeId(279)
 
-type "functype//core:prelude/traits.wado/serde_newtype_of_struct.wado/M^core:prelude/traits.wado/Inspect::inspect$sroa[self.value,f.buf]" = fn(u32, ref "core:prelude/string.wado//String");  // TypeId(280)
+type "functype//core:prelude/traits.wado/serde_newtype_of_struct.wado/Color^core:prelude/traits.wado/Inspect::inspect$sroa[self.value,f.buf]" = fn("serde_newtype_of_struct.wado//enum:Color", ref "core:prelude/string.wado//String");  // TypeId(280)
 
-type "functype//core:prelude/traits.wado/serde_newtype_of_struct.wado/Color^core:prelude/traits.wado/Inspect::inspect$sroa[self.value,f.buf]" = fn("serde_newtype_of_struct.wado//enum:Color", ref "core:prelude/string.wado//String");  // TypeId(281)
+type "functype//core:prelude/traits.wado/serde_newtype_of_struct.wado/C^core:prelude/traits.wado/Inspect::inspect$sroa[self.value,f.buf]" = fn("serde_newtype_of_struct.wado//enum:Color", ref "core:prelude/string.wado//String");  // TypeId(281)
 
-type "functype//core:prelude/traits.wado/serde_newtype_of_struct.wado/C^core:prelude/traits.wado/Inspect::inspect$sroa[self.value,f.buf]" = fn("serde_newtype_of_struct.wado//enum:Color", ref "core:prelude/string.wado//String");  // TypeId(282)
+type "functype//core:prelude/traits.wado/core:serde/DeserializeErrorKind^core:prelude/traits.wado/Inspect::inspect$sroa[self.value,f.buf]" = fn("core:serde//enum:DeserializeErrorKind", ref "core:prelude/string.wado//String");  // TypeId(282)
 
 type "functype//core:prelude/traits.wado/core:serde/SerializeErrorKind^core:prelude/traits.wado/Inspect::inspect$sroa[self.value,f.buf]" = fn("core:serde//enum:SerializeErrorKind", ref "core:prelude/string.wado//String");  // TypeId(283)
 
@@ -2871,54 +2871,60 @@ fn "core:rt/unreachable"() {
 }
 
 fn "core:rt/cm_stream_write_raw_all_u8"(handle, $mv$data$repr, $mv$data$start, $mv$data$end) {
-    let ptr_13: i32;
+    let written: i32;
+    let delivered_6: i32;
+    let result_7: "core:prelude/types.wado//enum:CopyResult";
     let ptr_15: i32;
-    let count_16: i32;
+    let count_18: i32;
+    let result_19: i32;
+    let ws: i32;
     let evt_ptr: i32;
-    let status_23: i32;
+    let status_25: i32;
     let i: i32;
     if local.tee $mv$data$end($mv$data$end - $mv$data$start) == 0 {
         return 0;
     }
-    ptr_13 = builtin::i32_wrap_i64(ptr_13 = "mem/realloc"(0, 0, 1, $mv$data$end); i = 0; b184: block {
+    ptr_15 = builtin::i32_wrap_i64(ptr_15 = "mem/realloc"(0, 0, 1, $mv$data$end); i = 0; b184: block {
         l185: loop {
             break_if b184 i >= $mv$data$end;
-            builtin::store_u8(ptr_13 + i, builtin::array_get_value_u8($mv$data$repr, $mv$data$start + i));
+            builtin::store_u8(ptr_15 + i, builtin::array_get_value_u8($mv$data$repr, $mv$data$start + i));
             i = i + 1;
             continue l185;
         };
-    }; builtin::i64_extend_i32_u(ptr_13) | (builtin::i64_extend_i32_s($mv$data$end) << 32_i64));
+    }; builtin::i64_extend_i32_u(ptr_15) | (builtin::i64_extend_i32_s($mv$data$end) << 32_i64));
     i = 0;
     block {
         l187: loop {
-            ptr_15 = ptr_13 + i;
-            count_16 = $mv$data$end - i;
-            if local.tee count_16("wasi/stream-write"(handle, ptr_15, select i32(count_16 < 268435455, count_16, 268435455))) == -1 {
-                $mv$data$start = "wasi/waitable-set-new"();
-                "wasi/waitable-join"(handle, $mv$data$start);
-                evt_ptr = "mem/realloc"(0, 0, 4, 8);
-                drop("wasi/waitable-set-wait"($mv$data$start, evt_ptr));
-                status_23 = builtin::load_i32(evt_ptr + 4);
-                drop("mem/realloc"(evt_ptr, 8, 4, 0));
-                "wasi/waitable-join"(handle, 0);
-                "wasi/waitable-set-drop"($mv$data$start);
-                count_16 = status_23;
-            }
-            ptr_15 = count_16 >>u 4;
-            count_16 = $inline_cm_copy_result_8: block -> "core:prelude/types.wado//enum:CopyResult" {
+            delivered_6 = local.tee written($inline_cm_stream_write_once_4: block -> i32 {
+                $mv$data$start = ptr_15 + i;
+                count_18 = $mv$data$end - i;
+                if local.tee result_19("wasi/stream-write"(handle, $mv$data$start, select i32(count_18 < 268435455, count_18, 268435455))) == -1 {
+                    ws = "wasi/waitable-set-new"();
+                    "wasi/waitable-join"(handle, ws);
+                    evt_ptr = "mem/realloc"(0, 0, 4, 8);
+                    drop("wasi/waitable-set-wait"(ws, evt_ptr));
+                    status_25 = builtin::load_i32(evt_ptr + 4);
+                    drop("mem/realloc"(evt_ptr, 8, 4, 0));
+                    "wasi/waitable-join"(handle, 0);
+                    "wasi/waitable-set-drop"(ws);
+                    break $inline_cm_stream_write_once_4: status_25;
+                }
+                break $inline_cm_stream_write_once_4: result_19;
+            }) >>u 4;
+            result_7 = $inline_cm_copy_result_9: block -> "core:prelude/types.wado//enum:CopyResult" {
                 let $match_scrut_0: i32;
-                if local.tee $match_scrut_0(count_16 & 15) == 0 {
-                    break $inline_cm_copy_result_8: 0;
+                if local.tee $match_scrut_0(written & 15) == 0 {
+                    break $inline_cm_copy_result_9: 0;
                 } else if $match_scrut_0 == 1 {
-                    break $inline_cm_copy_result_8: 1;
+                    break $inline_cm_copy_result_9: 1;
                 } else {
                 }
-                break $inline_cm_copy_result_8: 2;
+                break $inline_cm_copy_result_9: 2;
             };
-            i = i + ptr_15;
-            if ((count_16 != 0) | (ptr_15 <= 0)) | (i >= $mv$data$end) {
-                drop("mem/realloc"(ptr_13, $mv$data$end, 1, 0));
-                return count_16;
+            i = i + delivered_6;
+            if ((result_7 != 0) | (delivered_6 <= 0)) | (i >= $mv$data$end) {
+                drop("mem/realloc"(ptr_15, $mv$data$end, 1, 0));
+                return result_7;
             }
             continue l187;
         };
@@ -10220,100 +10226,6 @@ fn "core:prelude/primitive.wado/char^core:prelude/traits.wado/Display::fmt$sroa[
     }
 }
 
-fn "core:prelude/traits.wado/core:serde/DeserializeErrorKind^core:prelude/traits.wado/Inspect::inspect$sroa[self.value,f.buf]"(self, f) {
-    let $tuple_0: ref "tuple//[core:prelude/traits.wado/EnumCase<core:serde/DeserializeErrorKind>, core:prelude/traits.wado/EnumCase<core:serde/DeserializeErrorKind>, core:prelude/traits.wado/EnumCase<core:serde/DeserializeErrorKind>, core:prelude/traits.wado/EnumCase<core:serde/DeserializeErrorKind>, core:prelude/traits.wado/EnumCase<core:serde/DeserializeErrorKind>, core:prelude/traits.wado/EnumCase<core:serde/DeserializeErrorKind>, core:prelude/traits.wado/EnumCase<core:serde/DeserializeErrorKind>, core:prelude/traits.wado/EnumCase<core:serde/DeserializeErrorKind>, core:prelude/traits.wado/EnumCase<core:serde/DeserializeErrorKind>, core:prelude/traits.wado/EnumCase<core:serde/DeserializeErrorKind>, core:prelude/traits.wado/EnumCase<core:serde/DeserializeErrorKind>]";
-    let case_4: ref "core:prelude/traits.wado//EnumCase<core:serde/DeserializeErrorKind>";
-    let s_18: ref "core:prelude/string.wado//String";
-    case_4 = local.tee $tuple_0("core:serde/core:serde/DeserializeErrorKind^core:prelude/traits.wado/ReflectEnum::members"()).0;
-    if self == 0 {
-        s_18 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("DeserializeErrorKind"), used: 20 };
-        "core:prelude/string.wado/core:prelude/string.wado/String::push_str<&core:prelude/string.wado/String>"(f, s_18);
-        "core:prelude/string.wado/core:prelude/string.wado/String^core:prelude/string.wado/AsStrSlice::internal_append_to$spec3"(local.tee s_18(struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(58, 58), used: 2 }), f);
-        s_18 = case_4.case_name;
-        "core:prelude/string.wado/core:prelude/string.wado/String::push_str<&core:prelude/string.wado/String>"(f, s_18);
-    }
-    case_4 = $tuple_0.1;
-    if self == 1 {
-        s_18 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("DeserializeErrorKind"), used: 20 };
-        "core:prelude/string.wado/core:prelude/string.wado/String::push_str<&core:prelude/string.wado/String>"(f, s_18);
-        "core:prelude/string.wado/core:prelude/string.wado/String^core:prelude/string.wado/AsStrSlice::internal_append_to$spec3"(local.tee s_18(struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(58, 58), used: 2 }), f);
-        s_18 = case_4.case_name;
-        "core:prelude/string.wado/core:prelude/string.wado/String::push_str<&core:prelude/string.wado/String>"(f, s_18);
-    }
-    case_4 = $tuple_0.2;
-    if self == 2 {
-        s_18 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("DeserializeErrorKind"), used: 20 };
-        "core:prelude/string.wado/core:prelude/string.wado/String::push_str<&core:prelude/string.wado/String>"(f, s_18);
-        "core:prelude/string.wado/core:prelude/string.wado/String^core:prelude/string.wado/AsStrSlice::internal_append_to$spec3"(local.tee s_18(struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(58, 58), used: 2 }), f);
-        s_18 = case_4.case_name;
-        "core:prelude/string.wado/core:prelude/string.wado/String::push_str<&core:prelude/string.wado/String>"(f, s_18);
-    }
-    case_4 = $tuple_0.3;
-    if self == 3 {
-        s_18 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("DeserializeErrorKind"), used: 20 };
-        "core:prelude/string.wado/core:prelude/string.wado/String::push_str<&core:prelude/string.wado/String>"(f, s_18);
-        "core:prelude/string.wado/core:prelude/string.wado/String^core:prelude/string.wado/AsStrSlice::internal_append_to$spec3"(local.tee s_18(struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(58, 58), used: 2 }), f);
-        s_18 = case_4.case_name;
-        "core:prelude/string.wado/core:prelude/string.wado/String::push_str<&core:prelude/string.wado/String>"(f, s_18);
-    }
-    case_4 = $tuple_0.4;
-    if self == 4 {
-        s_18 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("DeserializeErrorKind"), used: 20 };
-        "core:prelude/string.wado/core:prelude/string.wado/String::push_str<&core:prelude/string.wado/String>"(f, s_18);
-        "core:prelude/string.wado/core:prelude/string.wado/String^core:prelude/string.wado/AsStrSlice::internal_append_to$spec3"(local.tee s_18(struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(58, 58), used: 2 }), f);
-        s_18 = case_4.case_name;
-        "core:prelude/string.wado/core:prelude/string.wado/String::push_str<&core:prelude/string.wado/String>"(f, s_18);
-    }
-    case_4 = $tuple_0.5;
-    if self == 5 {
-        s_18 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("DeserializeErrorKind"), used: 20 };
-        "core:prelude/string.wado/core:prelude/string.wado/String::push_str<&core:prelude/string.wado/String>"(f, s_18);
-        "core:prelude/string.wado/core:prelude/string.wado/String^core:prelude/string.wado/AsStrSlice::internal_append_to$spec3"(local.tee s_18(struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(58, 58), used: 2 }), f);
-        s_18 = case_4.case_name;
-        "core:prelude/string.wado/core:prelude/string.wado/String::push_str<&core:prelude/string.wado/String>"(f, s_18);
-    }
-    case_4 = $tuple_0.6;
-    if self == 6 {
-        s_18 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("DeserializeErrorKind"), used: 20 };
-        "core:prelude/string.wado/core:prelude/string.wado/String::push_str<&core:prelude/string.wado/String>"(f, s_18);
-        "core:prelude/string.wado/core:prelude/string.wado/String^core:prelude/string.wado/AsStrSlice::internal_append_to$spec3"(local.tee s_18(struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(58, 58), used: 2 }), f);
-        s_18 = case_4.case_name;
-        "core:prelude/string.wado/core:prelude/string.wado/String::push_str<&core:prelude/string.wado/String>"(f, s_18);
-    }
-    case_4 = $tuple_0.7;
-    if self == 7 {
-        s_18 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("DeserializeErrorKind"), used: 20 };
-        "core:prelude/string.wado/core:prelude/string.wado/String::push_str<&core:prelude/string.wado/String>"(f, s_18);
-        "core:prelude/string.wado/core:prelude/string.wado/String^core:prelude/string.wado/AsStrSlice::internal_append_to$spec3"(local.tee s_18(struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(58, 58), used: 2 }), f);
-        s_18 = case_4.case_name;
-        "core:prelude/string.wado/core:prelude/string.wado/String::push_str<&core:prelude/string.wado/String>"(f, s_18);
-    }
-    case_4 = $tuple_0.8;
-    if self == 8 {
-        s_18 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("DeserializeErrorKind"), used: 20 };
-        "core:prelude/string.wado/core:prelude/string.wado/String::push_str<&core:prelude/string.wado/String>"(f, s_18);
-        "core:prelude/string.wado/core:prelude/string.wado/String^core:prelude/string.wado/AsStrSlice::internal_append_to$spec3"(local.tee s_18(struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(58, 58), used: 2 }), f);
-        s_18 = case_4.case_name;
-        "core:prelude/string.wado/core:prelude/string.wado/String::push_str<&core:prelude/string.wado/String>"(f, s_18);
-    }
-    case_4 = $tuple_0.9;
-    if self == 9 {
-        s_18 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("DeserializeErrorKind"), used: 20 };
-        "core:prelude/string.wado/core:prelude/string.wado/String::push_str<&core:prelude/string.wado/String>"(f, s_18);
-        "core:prelude/string.wado/core:prelude/string.wado/String^core:prelude/string.wado/AsStrSlice::internal_append_to$spec3"(local.tee s_18(struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(58, 58), used: 2 }), f);
-        s_18 = case_4.case_name;
-        "core:prelude/string.wado/core:prelude/string.wado/String::push_str<&core:prelude/string.wado/String>"(f, s_18);
-    }
-    case_4 = $tuple_0.10;
-    if self == 10 {
-        s_18 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("DeserializeErrorKind"), used: 20 };
-        "core:prelude/string.wado/core:prelude/string.wado/String::push_str<&core:prelude/string.wado/String>"(f, s_18);
-        "core:prelude/string.wado/core:prelude/string.wado/String^core:prelude/string.wado/AsStrSlice::internal_append_to$spec3"(local.tee s_18(struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(58, 58), used: 2 }), f);
-        s_18 = case_4.case_name;
-        "core:prelude/string.wado/core:prelude/string.wado/String::push_str<&core:prelude/string.wado/String>"(f, s_18);
-    }
-}
-
 fn "core:prelude/traits.wado/serde_newtype_of_struct.wado/Age^core:prelude/traits.wado/Inspect::inspect$sroa[self.value]"(self, f) {
     let self_5: ref "core:prelude/string.wado//String";
     "core:prelude/primitive.wado/i32::fmt_into$sroa[self.value]"(self, f);
@@ -10506,6 +10418,100 @@ fn "core:prelude/traits.wado/serde_newtype_of_struct.wado/C^core:prelude/traits.
     "core:prelude/string.wado/core:prelude/string.wado/String^core:prelude/string.wado/AsStrSlice::internal_append_to$spec4"(local.tee other(struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(32, 97, 115, 32), used: 4 }), f);
     other = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(67), used: 1 };
     "core:prelude/string.wado/core:prelude/string.wado/String::push_str<&core:prelude/string.wado/String>"(f, other);
+}
+
+fn "core:prelude/traits.wado/core:serde/DeserializeErrorKind^core:prelude/traits.wado/Inspect::inspect$sroa[self.value,f.buf]"(self, f) {
+    let $tuple_0: ref "tuple//[core:prelude/traits.wado/EnumCase<core:serde/DeserializeErrorKind>, core:prelude/traits.wado/EnumCase<core:serde/DeserializeErrorKind>, core:prelude/traits.wado/EnumCase<core:serde/DeserializeErrorKind>, core:prelude/traits.wado/EnumCase<core:serde/DeserializeErrorKind>, core:prelude/traits.wado/EnumCase<core:serde/DeserializeErrorKind>, core:prelude/traits.wado/EnumCase<core:serde/DeserializeErrorKind>, core:prelude/traits.wado/EnumCase<core:serde/DeserializeErrorKind>, core:prelude/traits.wado/EnumCase<core:serde/DeserializeErrorKind>, core:prelude/traits.wado/EnumCase<core:serde/DeserializeErrorKind>, core:prelude/traits.wado/EnumCase<core:serde/DeserializeErrorKind>, core:prelude/traits.wado/EnumCase<core:serde/DeserializeErrorKind>]";
+    let case_4: ref "core:prelude/traits.wado//EnumCase<core:serde/DeserializeErrorKind>";
+    let s_18: ref "core:prelude/string.wado//String";
+    case_4 = local.tee $tuple_0("core:serde/core:serde/DeserializeErrorKind^core:prelude/traits.wado/ReflectEnum::members"()).0;
+    if self == 0 {
+        s_18 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("DeserializeErrorKind"), used: 20 };
+        "core:prelude/string.wado/core:prelude/string.wado/String::push_str<&core:prelude/string.wado/String>"(f, s_18);
+        "core:prelude/string.wado/core:prelude/string.wado/String^core:prelude/string.wado/AsStrSlice::internal_append_to$spec3"(local.tee s_18(struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(58, 58), used: 2 }), f);
+        s_18 = case_4.case_name;
+        "core:prelude/string.wado/core:prelude/string.wado/String::push_str<&core:prelude/string.wado/String>"(f, s_18);
+    }
+    case_4 = $tuple_0.1;
+    if self == 1 {
+        s_18 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("DeserializeErrorKind"), used: 20 };
+        "core:prelude/string.wado/core:prelude/string.wado/String::push_str<&core:prelude/string.wado/String>"(f, s_18);
+        "core:prelude/string.wado/core:prelude/string.wado/String^core:prelude/string.wado/AsStrSlice::internal_append_to$spec3"(local.tee s_18(struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(58, 58), used: 2 }), f);
+        s_18 = case_4.case_name;
+        "core:prelude/string.wado/core:prelude/string.wado/String::push_str<&core:prelude/string.wado/String>"(f, s_18);
+    }
+    case_4 = $tuple_0.2;
+    if self == 2 {
+        s_18 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("DeserializeErrorKind"), used: 20 };
+        "core:prelude/string.wado/core:prelude/string.wado/String::push_str<&core:prelude/string.wado/String>"(f, s_18);
+        "core:prelude/string.wado/core:prelude/string.wado/String^core:prelude/string.wado/AsStrSlice::internal_append_to$spec3"(local.tee s_18(struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(58, 58), used: 2 }), f);
+        s_18 = case_4.case_name;
+        "core:prelude/string.wado/core:prelude/string.wado/String::push_str<&core:prelude/string.wado/String>"(f, s_18);
+    }
+    case_4 = $tuple_0.3;
+    if self == 3 {
+        s_18 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("DeserializeErrorKind"), used: 20 };
+        "core:prelude/string.wado/core:prelude/string.wado/String::push_str<&core:prelude/string.wado/String>"(f, s_18);
+        "core:prelude/string.wado/core:prelude/string.wado/String^core:prelude/string.wado/AsStrSlice::internal_append_to$spec3"(local.tee s_18(struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(58, 58), used: 2 }), f);
+        s_18 = case_4.case_name;
+        "core:prelude/string.wado/core:prelude/string.wado/String::push_str<&core:prelude/string.wado/String>"(f, s_18);
+    }
+    case_4 = $tuple_0.4;
+    if self == 4 {
+        s_18 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("DeserializeErrorKind"), used: 20 };
+        "core:prelude/string.wado/core:prelude/string.wado/String::push_str<&core:prelude/string.wado/String>"(f, s_18);
+        "core:prelude/string.wado/core:prelude/string.wado/String^core:prelude/string.wado/AsStrSlice::internal_append_to$spec3"(local.tee s_18(struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(58, 58), used: 2 }), f);
+        s_18 = case_4.case_name;
+        "core:prelude/string.wado/core:prelude/string.wado/String::push_str<&core:prelude/string.wado/String>"(f, s_18);
+    }
+    case_4 = $tuple_0.5;
+    if self == 5 {
+        s_18 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("DeserializeErrorKind"), used: 20 };
+        "core:prelude/string.wado/core:prelude/string.wado/String::push_str<&core:prelude/string.wado/String>"(f, s_18);
+        "core:prelude/string.wado/core:prelude/string.wado/String^core:prelude/string.wado/AsStrSlice::internal_append_to$spec3"(local.tee s_18(struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(58, 58), used: 2 }), f);
+        s_18 = case_4.case_name;
+        "core:prelude/string.wado/core:prelude/string.wado/String::push_str<&core:prelude/string.wado/String>"(f, s_18);
+    }
+    case_4 = $tuple_0.6;
+    if self == 6 {
+        s_18 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("DeserializeErrorKind"), used: 20 };
+        "core:prelude/string.wado/core:prelude/string.wado/String::push_str<&core:prelude/string.wado/String>"(f, s_18);
+        "core:prelude/string.wado/core:prelude/string.wado/String^core:prelude/string.wado/AsStrSlice::internal_append_to$spec3"(local.tee s_18(struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(58, 58), used: 2 }), f);
+        s_18 = case_4.case_name;
+        "core:prelude/string.wado/core:prelude/string.wado/String::push_str<&core:prelude/string.wado/String>"(f, s_18);
+    }
+    case_4 = $tuple_0.7;
+    if self == 7 {
+        s_18 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("DeserializeErrorKind"), used: 20 };
+        "core:prelude/string.wado/core:prelude/string.wado/String::push_str<&core:prelude/string.wado/String>"(f, s_18);
+        "core:prelude/string.wado/core:prelude/string.wado/String^core:prelude/string.wado/AsStrSlice::internal_append_to$spec3"(local.tee s_18(struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(58, 58), used: 2 }), f);
+        s_18 = case_4.case_name;
+        "core:prelude/string.wado/core:prelude/string.wado/String::push_str<&core:prelude/string.wado/String>"(f, s_18);
+    }
+    case_4 = $tuple_0.8;
+    if self == 8 {
+        s_18 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("DeserializeErrorKind"), used: 20 };
+        "core:prelude/string.wado/core:prelude/string.wado/String::push_str<&core:prelude/string.wado/String>"(f, s_18);
+        "core:prelude/string.wado/core:prelude/string.wado/String^core:prelude/string.wado/AsStrSlice::internal_append_to$spec3"(local.tee s_18(struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(58, 58), used: 2 }), f);
+        s_18 = case_4.case_name;
+        "core:prelude/string.wado/core:prelude/string.wado/String::push_str<&core:prelude/string.wado/String>"(f, s_18);
+    }
+    case_4 = $tuple_0.9;
+    if self == 9 {
+        s_18 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("DeserializeErrorKind"), used: 20 };
+        "core:prelude/string.wado/core:prelude/string.wado/String::push_str<&core:prelude/string.wado/String>"(f, s_18);
+        "core:prelude/string.wado/core:prelude/string.wado/String^core:prelude/string.wado/AsStrSlice::internal_append_to$spec3"(local.tee s_18(struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(58, 58), used: 2 }), f);
+        s_18 = case_4.case_name;
+        "core:prelude/string.wado/core:prelude/string.wado/String::push_str<&core:prelude/string.wado/String>"(f, s_18);
+    }
+    case_4 = $tuple_0.10;
+    if self == 10 {
+        s_18 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("DeserializeErrorKind"), used: 20 };
+        "core:prelude/string.wado/core:prelude/string.wado/String::push_str<&core:prelude/string.wado/String>"(f, s_18);
+        "core:prelude/string.wado/core:prelude/string.wado/String^core:prelude/string.wado/AsStrSlice::internal_append_to$spec3"(local.tee s_18(struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(58, 58), used: 2 }), f);
+        s_18 = case_4.case_name;
+        "core:prelude/string.wado/core:prelude/string.wado/String::push_str<&core:prelude/string.wado/String>"(f, s_18);
+    }
 }
 
 fn "core:prelude/traits.wado/core:serde/SerializeErrorKind^core:prelude/traits.wado/Inspect::inspect$sroa[self.value,f.buf]"(self, f) {

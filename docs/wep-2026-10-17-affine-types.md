@@ -485,8 +485,8 @@ nothing, so the write hands it back:
 fn write(self, value: T) -> FutureWrite<T>;        // FutureWritable<affine T>
 fn write(&self, data: List<T>) -> StreamWrite<T>;  // StreamWritable<affine T>
 
-struct FutureWrite<affine T> { result: CopyResult, rest: Option<T> }
-struct StreamWrite<affine T> { result: CopyResult, rest: List<T> }
+struct FutureWrite<affine T> { rest: Option<T>, result: CopyResult }
+struct StreamWrite<affine T> { rest: List<T>, result: CopyResult }
 ```
 
 The write takes what it is given and returns the rest. That is exactly the part
@@ -804,7 +804,7 @@ declares the destructor's effects is withdrawn: a drop's effects are benign.
   returning `Ready<W>`, and its `Drop` dropping the members first.
   `Waitable = i32`, `WaitEvent.handle` and the `join` methods go. Fixtures: a
   set waiting on two calls through a variant, and a set dropped with members.
-- [ ] `FutureWrite<T>` and `StreamWrite<T>`: a write returns what it did not
+- [x] `FutureWrite<T>` and `StreamWrite<T>`: a write returns what it did not
   deliver, in every case the result reports, and the stdlib's write loops
   (`write_all`) read `rest` rather than `count`.
 - [ ] Instantiation rule: an affine argument for an unmarked parameter is a
@@ -851,7 +851,8 @@ first use after the drop, and what that does is unspecified.
 A write blocks until its copy ends only for the HTTP trailers and transmission
 results. Every other `FutureWritable` write returns once the copy starts, since
 a reader in the same instance would deadlock a writer waiting on it. Such a
-write cannot report what the reader did. An end whose copy is still pending
+write cannot report what the reader did, so one still pending reports
+`Completed` with no `rest`. An end whose copy is still pending
 cannot be dropped, so the write leaves it to the host, and the handle lives
 until the instance ends.
 

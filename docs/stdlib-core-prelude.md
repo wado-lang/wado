@@ -1002,12 +1002,13 @@ Drop the readable end of the future.
 Writable end of an async value (WASI Component Model future).
 Opaque i32 handle managed by the runtime.
 
-#### `fn write(self, value: T)`
+#### `fn write(self, value: T) -> FutureWrite<T>`
 
 `#[cm("future-write")]`
 
 Fulfill the future with a value. A writable end is written once, so the
-write consumes it.
+write consumes it. A reader that dropped first leaves the value in
+`rest`.
 
 #### `fn cancel_write(&self)`
 
@@ -1072,13 +1073,13 @@ doubling past half the address space is what a large file cannot afford.
 
 Writable end of an async sequence (WASI Component Model stream).
 
-#### `fn write(&self, data: List<T>) -> StreamWrite`
+#### `fn write(&self, data: List<T>) -> StreamWrite<T>`
 
 `#[cm("stream-write")]`
 
 One Component Model copy of `data`, blocking until the reader takes at
-least one element or drops. The reader may take a prefix, so the count
-can be short of `data.len()`. Writing to an end whose result was
+least one element or drops. The reader may take a prefix, and what it
+left comes back as `rest`. Writing to an end whose result was
 `Dropped` traps, and an empty `data` is the CM's readiness signal, which
 blocks until a reader rendezvouses rather than writing nothing.
 `write_all` is the loop that finishes the buffer.
@@ -4405,12 +4406,21 @@ elements and the peer's drop together, so `result` is what says more follows.
 
 #### `result: CopyResult`
 
-### `pub struct StreamWrite`
+### `pub struct StreamWrite<affine T>`
 
-What one `StreamWritable::write` copied, and how that copy ended. A reader
-may take a prefix, so `count` can be short of what was offered.
+What one `StreamWritable::write` did not deliver, and how its copy ended.
+A reader may take a prefix, and the elements it left come back in `rest`.
 
-#### `count: i32`
+#### `rest: List<T>`
+
+#### `result: CopyResult`
+
+### `pub struct FutureWrite<affine T>`
+
+What `FutureWritable::write` did not deliver, and how its copy ended: the
+value comes back in `rest` where the reader dropped first.
+
+#### `rest: Option<T>`
 
 #### `result: CopyResult`
 

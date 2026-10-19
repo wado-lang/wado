@@ -3118,6 +3118,16 @@ impl TypeTable {
         self.make_generic_instance(def, vec![elem])
     }
 
+    pub fn make_stream_write(&mut self, elem: TypeId) -> TypeId {
+        let def = self.require_compiler_item_def(CompilerItem::StreamWrite);
+        self.make_generic_instance(def, vec![elem])
+    }
+
+    pub fn make_future_write(&mut self, payload: TypeId) -> TypeId {
+        let def = self.require_compiler_item_def(CompilerItem::FutureWrite);
+        self.make_generic_instance(def, vec![payload])
+    }
+
     /// Create a `AsyncCall<T>` generic struct instance type.
     ///
     /// Unlike `Future<T>` and `Stream<T>` (which are CM handle resources),

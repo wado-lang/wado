@@ -40,11 +40,11 @@ impl Future<i32> for MockFuture {
 }
 
 impl FutureWritable<i32> for MockFuture {
-    fn write(&mut self, this: &FutureWritable<i32>, value: i32) {
+    fn write(&mut self, this: &FutureWritable<i32>, value: i32) -> FutureWrite<i32> {
         let _ = this;
         self.stored = Option::Some(value);
         self.write_count += 1;
-        resume ()
+        resume FutureWrite { rest: null, result: CopyResult::Completed }
     }
     fn drop(&mut self, this: &FutureWritable<i32>) {
         let _ = this;
