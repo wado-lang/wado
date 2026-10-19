@@ -96,12 +96,11 @@ leaves this file, and `design.md` states what it built.
     above, serves its rows the same way. An expert the device does not hold is
     loaded, never computed by the guest. A guest runs on one thread, since
     shared-everything threads is at phase 1, and `core:simd` loads no vector
-    from a `List`. Where the budget
-    holds fewer than all the experts, the host reads back which experts a layer
-    routes to before it runs them. So the host waits once a layer, which The
-    MVP Is Tier 1 Only says a `QMoE` spares it. Finished when
-    `operators_test.wado` holds a `QMoE` to onnxruntime with a budget of half
-    its experts.
+    from a `List`. Where the budget holds fewer than all the experts, the host
+    reads back which experts a layer routes to before it runs them. So the host
+    waits once a layer, which The MVP Is Tier 1 Only says a `QMoE` spares it.
+    Finished when `operators_test.wado` holds a `QMoE` to onnxruntime with a
+    budget of half its experts.
 19. [ ] gpt-oss-20b, a mixture of experts. Finished when `example/gpt-oss-20b/`
     continues a prompt with the tokens onnxruntime picks from onnx-community's
     `q4f16` export, under `wado run-webgpu` on a device with 8 GB, with no
