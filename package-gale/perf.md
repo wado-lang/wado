@@ -258,6 +258,28 @@ parser generated before and after):
 
 Rust and TypeScript run predicates, so their parsers do not change.
 
+### A tournament skips the candidates ANTLR4 never takes (landed, 2026-10)
+
+SQLite's `sql_stmt` scanned four SELECT statements for every `SELECT`.
+`simple_select_stmt` is `factored_select_stmt` without its compound loop, and
+`select_stmt` is the same statement over a copy of `select_core`. ANTLR4
+resolves the ambiguity to the earliest of them, so the two later ones never
+win. `alt_subsumption` finds such an alternative from the grammar alone, and
+the decision leaves it out. The scan memo could not share the work instead:
+each candidate passes `select_core` a different FOLLOW, which the memo key
+holds.
+
+Measured as the section above measures:
+
+| grammar |   before |    after |
+| ------- | -------: | -------: |
+| SQLite  | 0.790 ms | 0.696 ms |
+| css3    | 1.800 ms | 1.799 ms |
+
+Rust and TypeScript (their `benchmark/` drivers, one after the other) stay
+within 1%: what they lose is an ATN decision or two between keywords that an
+`identifier` alternative already matches.
+
 ### Standing rules (measured)
 
 The four rules these benchmarks established — live set over allocation count,

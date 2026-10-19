@@ -14858,13 +14858,7 @@ fn scan_macro_identifier_like_token(tokens: &Array<i32>, pos: i32, gate: &mut Sc
     let mut pos = pos;
     let kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
     if _kind_set_171(kind) {
-        if kind == TK_KW_MACRORULES {
-            let _atn_alt = atn_decide_377(atn, tokens, pos, 0);
-            if _atn_alt == 1 {
-                return scan_macro_identifier_like_token__alt_1(tokens, start, gate, atn, memo);
-            }
-            return scan_macro_identifier_like_token__alt_2(tokens, start, gate, atn, memo);
-        } else if _kind_set_172(kind) {
+        if _kind_set_172(kind) {
             return scan_macro_identifier_like_token__alt_1(tokens, start, gate, atn, memo);
         } else if kind == TK_KW_UNION {
             let _atn_alt = atn_decide_377(atn, tokens, pos, 0);
@@ -29463,31 +29457,11 @@ fn scan_macro_identifier_like_token__alt_1(tokens: &Array<i32>, pos: i32, gate: 
     return pos;
 }
 
-fn _parse_macro_identifier_like_token__inner_alt_2(p: &mut Parser) -> () with RustParserBase {
-    p.expect(TK_KW_MACRORULES, &EMPTY_SYNC, true);
-    return;
-}
-
-fn scan_macro_identifier_like_token__alt_2(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, atn: &mut AtnPredictor, memo: &mut ScanMemo<ScanGate>) -> i32 {
-    let mut pos = pos;
-    if pos >= tokens.len() || tokens[pos] != TK_KW_MACRORULES { return -1; }
-    pos += 1;
-    return pos;
-}
-
 fn _parse_macro_identifier_like_token__inner(p: &mut Parser) -> () with RustParserBase {
     if !kind_set_has(&SYNC_170, p.kinds[p.pos]) { builtin::cold_path(); p.sync_alts(&SYNC_170, &EXPECTED_170); }
     let kind = p.peek_kind();
     if _kind_set_171(kind) {
-        if kind == TK_KW_MACRORULES {
-            let _atn_alt = atn_decide_377(&mut p.atn, &p.kinds, p.pos, 0);
-            if _atn_alt == 1 {
-                p.site = 577;
-                p.atn_ret_pending = 3715;
-                return _parse_identifier(p);
-            }
-            return _parse_macro_identifier_like_token__inner_alt_2(p);
-        } else if _kind_set_172(kind) {
+        if _kind_set_172(kind) {
             p.site = 577;
             p.atn_ret_pending = 3715;
             return _parse_identifier(p);
@@ -31172,7 +31146,7 @@ fn _kind_set_171(k: i32) -> bool {
 }
 
 fn _kind_set_172(k: i32) -> bool {
-    return k matches { TK_KW_RAW | TK_NON_KEYWORD_IDENTIFIER | TK_RAW_IDENTIFIER };
+    return k matches { TK_KW_MACRORULES | TK_KW_RAW | TK_NON_KEYWORD_IDENTIFIER | TK_RAW_IDENTIFIER };
 }
 
 fn _kind_set_173(k: i32) -> bool {

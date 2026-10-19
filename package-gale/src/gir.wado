@@ -570,6 +570,9 @@ pub variant AltClass {
     /// as these tokens, of which it may have none (`( A | | B )`).
     /// `apply_empty_alt_admits` resolves it to `Selects(tokens ∪ follow)`.
     Nullable(List<i32>),
+    /// Never taken: an earlier alternative of the decision matches whatever
+    /// this one does (`alt_subsumption`), and the decision belongs to it.
+    Subsumed,
 }
 
 pub fn alt_class_is_open_ended(c: &AltClass) -> bool {
@@ -597,6 +600,7 @@ pub fn alt_class_first_set(c: &AltClass) -> List<i32> {
         Selects(tokens) => *tokens,
         Nullable(tokens) => *tokens,
         OpenEnded(tokens) => *tokens,
+        Subsumed => [],
     };
 }
 

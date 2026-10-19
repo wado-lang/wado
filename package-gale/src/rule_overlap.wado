@@ -10,6 +10,7 @@ use { alt_classes, compute_overlap_groups_of } from "./alt_grouping.wado";
 use { AmbiguousNode, PredictionNode, build_group_prediction_tree } from "./prediction.wado";
 use { dedup_append_arr } from "./list_util.wado";
 use { AtnMode } from "./gen_settings.wado";
+use { rule_is_left_recursive } from "./lr_util.wado";
 
 /// How a rule's non-LR alternatives group: the one answer the at-end conflict
 /// detection, the multi-alt emit and the dump all read, so none can drift.
@@ -75,7 +76,13 @@ pub fn overlap_groups_of(
         let mut visiting: List<String> = [];
         first_sets.push(analysis.first_of_alt(&rule.alternatives[idx], &mut visiting));
     }
-    let mut classes = alt_classes(&non_lr_indices, &rule.alternatives, &first_sets, analysis);
+    let mut classes = alt_classes(
+        &non_lr_indices,
+        &rule.alternatives,
+        rule_is_left_recursive(rule),
+        &first_sets,
+        analysis,
+    );
     let gated = non_lr_indices.iter_ref().any(|i: &i32| has_gate(&rule.alternatives[*i]));
     let end_follow: List<i32> = if multi_alt && !gated { follow.for_probe(&rule.name) } else { [] };
     admit_rule_follow_into_nullable(&mut classes, &mut first_sets, &end_follow);

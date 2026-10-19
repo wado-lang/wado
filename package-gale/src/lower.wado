@@ -641,7 +641,13 @@ fn lower_multi_alt_rule(rule: &ParserRule, ctx: &mut LowerContext) -> MultiAltRu
     }
 
     let owner = DiagnosticOwner::rule_dispatch(&rule.name);
-    let classes = alt_classes(&all_indices, &rule.alternatives, &first_sets, &mut ctx.analysis);
+    let classes = alt_classes(
+        &all_indices,
+        &rule.alternatives,
+        rule_is_left_recursive(rule),
+        &first_sets,
+        &mut ctx.analysis,
+    );
     let dispatch = build_overlap_dispatch(&owner, &rule.alternatives, &all_indices, &classes, ctx);
     // The scan of a rule whose choice the simulator makes consults it as the
     // parse does.
@@ -1321,7 +1327,13 @@ fn lower_lr_atom(rule: &ParserRule, non_lr_indices: &List<i32>, ctx: &mut LowerC
     }
 
     let owner = DiagnosticOwner { rule: rule.name, site: DiagnosticSite::LrAtomDispatch };
-    let classes = alt_classes(non_lr_indices, &rule.alternatives, &first_sets, &mut ctx.analysis);
+    let classes = alt_classes(
+        non_lr_indices,
+        &rule.alternatives,
+        rule_is_left_recursive(rule),
+        &first_sets,
+        &mut ctx.analysis,
+    );
     let dispatch = build_overlap_dispatch(&owner, &rule.alternatives, non_lr_indices, &classes, ctx);
     return MultiAltRule {
         header,
@@ -1615,7 +1627,7 @@ fn build_direct_dispatch(
     ctx: &mut LowerContext,
 ) -> MultiAltDispatch {
     let slots = identity_slots(alts.len());
-    return direct_dispatch(&alt_classes(&slots, alts, first_sets, &mut ctx.analysis), &slots);
+    return direct_dispatch(&alt_classes(&slots, alts, false, first_sets, &mut ctx.analysis), &slots);
 }
 
 /// The token-led chain itself: one branch per class, in `indices` order. Emit
@@ -1625,7 +1637,9 @@ fn direct_dispatch(classes: &List<AltClass>, indices: &List<i32>) -> MultiAltDis
 {
     let mut branches: List<DispatchBranch> = [];
     for let mut k = 0; k < indices.len(); k += 1 {
-        branches.push(DispatchBranch { alt_class: classes[k], alt_index: indices[k] });
+        if !classes[k] matches { Subsumed } {
+            branches.push(DispatchBranch { alt_class: classes[k], alt_index: indices[k] });
+        }
     }
     return MultiAltDispatch::Direct(DirectDispatch { branches });
 }
@@ -1685,8 +1699,10 @@ fn build_overlap_dispatch(
     );
 
     let mut sorted: List<i32> = [];
-    for let idx of indices {
-        sorted.push(*idx);
+    for let k of 0..<n_indices {
+        if !classes[k] matches { Subsumed } {
+            sorted.push(indices[k]);
+        }
     }
     sort_group_by_element_count(&mut sorted, alts);
     return MultiAltDispatch::Tournament(TournamentDispatch { alts: sorted });

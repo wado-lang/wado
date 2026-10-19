@@ -7271,7 +7271,7 @@ fn scan_type_name(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, memo: &
         if _atn_alt == 0 {
             return scan_type_name__alt_0(tokens, start, atn, memo, follow);
         }
-        return scan_type_name__alt_1(tokens, start, atn, memo, follow);
+        return scan_namespace_name(tokens, start, atn, memo, follow);
     }
     return -1;
 }
@@ -8309,9 +8309,7 @@ fn scan_namespace_declaration(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredic
     }
     if pos >= tokens.len() || tokens[pos] != TK_Namespace { return -1; }
     pos += 1;
-    atn.stack.push(1046);
     pos = scan_namespace_name(tokens, pos, atn, memo, FOLLOW_MASK_29);
-    atn.stack.pop();
     if pos < 0 { return -1; }
     if pos >= tokens.len() || tokens[pos] != TK_OpenBrace { return -1; }
     pos += 1;
@@ -8593,7 +8591,7 @@ fn scan_statement(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, memo: &
                 return scan_statement__alt_8(tokens, start, atn, memo, follow);
             }
             if _atn_alt == 13 {
-                return scan_statement__alt_13(tokens, start, atn, memo, follow);
+                return scan_continue_statement(tokens, start, atn, memo, follow);
             }
             return scan_statement__alt_23(tokens, start, atn, memo, follow);
         } else if kind == TK_Break {
@@ -8602,7 +8600,7 @@ fn scan_statement(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, memo: &
                 return scan_statement__alt_8(tokens, start, atn, memo, follow);
             }
             if _atn_alt == 14 {
-                return scan_statement__alt_14(tokens, start, atn, memo, follow);
+                return scan_break_statement(tokens, start, atn, memo, follow);
             }
             return scan_statement__alt_23(tokens, start, atn, memo, follow);
         } else if kind == TK_Return {
@@ -9510,9 +9508,7 @@ fn scan_variable_declaration(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredict
         let sgk_74 = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
         if _kind_set_76(sgk_74) {
             sg_74_0: {
-                atn.stack.push(1486);
                 pos = scan_identifier_or_key_word(tokens, pos, atn, memo);
-                atn.stack.pop();
                 if pos < 0 { break sg_74_0; }
                 break sg_74_done;
             }
@@ -12247,18 +12243,7 @@ fn scan_identifier_or_key_word(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredi
     let start = pos;
     let mut pos = pos;
     let kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
-    if _kind_set_1(kind) {
-        if kind == TK_TypeAlias {
-            let _atn_alt = atn_decide_271(atn, tokens, pos, 0);
-            if _atn_alt == 0 {
-                return scan_identifier_or_key_word__alt_0(tokens, start, atn, memo);
-            }
-            return scan_identifier_or_key_word__alt_1(tokens, start, atn, memo);
-        } else if _kind_set_121(kind) {
-            return scan_identifier_or_key_word__alt_0(tokens, start, atn, memo);
-        }
-    }
-    if kind == TK_Require {
+    if _kind_set_76(kind) {
         pos = start + 1;
         return pos;
     }
@@ -13137,15 +13122,6 @@ fn scan_type_name__alt_0(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, 
     let mut pos = pos;
     if pos >= tokens.len() || !_kind_set_1(tokens[pos]) { return -1; }
     pos += 1;
-    return pos;
-}
-
-fn scan_type_name__alt_1(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, memo: &mut ScanMemo<()>, follow: i64 = 0) -> i32 {
-    let mut pos = pos;
-    atn.stack.push(538);
-    pos = scan_namespace_name(tokens, pos, atn, memo, follow);
-    atn.stack.pop();
-    if pos < 0 { return -1; }
     return pos;
 }
 
@@ -15476,24 +15452,6 @@ fn scan_statement__alt_12(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor,
     let mut pos = pos;
     atn.stack.push(1163);
     pos = scan_iteration_statement(tokens, pos, atn, memo, follow);
-    atn.stack.pop();
-    if pos < 0 { return -1; }
-    return pos;
-}
-
-fn scan_statement__alt_13(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, memo: &mut ScanMemo<()>, follow: i64 = 0) -> i32 {
-    let mut pos = pos;
-    atn.stack.push(1165);
-    pos = scan_continue_statement(tokens, pos, atn, memo, follow);
-    atn.stack.pop();
-    if pos < 0 { return -1; }
-    return pos;
-}
-
-fn scan_statement__alt_14(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, memo: &mut ScanMemo<()>, follow: i64 = 0) -> i32 {
-    let mut pos = pos;
-    atn.stack.push(1167);
-    pos = scan_break_statement(tokens, pos, atn, memo, follow);
     atn.stack.pop();
     if pos < 0 { return -1; }
     return pos;
@@ -21051,12 +21009,7 @@ fn _parse_property_assignment__inner_alt_5(p: &mut Parser, follow: i64 = 0) -> (
 }
 
 fn scan_property_assignment__alt_5(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, memo: &mut ScanMemo<()>, follow: i64 = 0) -> i32 {
-    let mut pos = pos;
-    atn.stack.push(2407);
-    pos = scan_identifier_or_key_word(tokens, pos, atn, memo);
-    atn.stack.pop();
-    if pos < 0 { return -1; }
-    return pos;
+    return scan_identifier_or_key_word(tokens, pos, atn, memo);
 }
 
 fn _parse_property_assignment__inner_alt_6(p: &mut Parser, follow: i64 = 0) -> () with TypeScriptParserBase {
@@ -23406,44 +23359,15 @@ fn _parse_identifier(p: &mut Parser) -> () with TypeScriptParserBase {
     p.sites.pop();
 }
 
-fn scan_identifier_or_key_word__alt_0(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, memo: &mut ScanMemo<()>) -> i32 {
-    let mut pos = pos;
-    if pos >= tokens.len() || !_kind_set_1(tokens[pos]) { return -1; }
-    pos += 1;
-    return pos;
-}
-
-fn _parse_identifier_or_key_word__inner_alt_1(p: &mut Parser) -> () with TypeScriptParserBase {
-    p.expect(TK_TypeAlias, &EMPTY_SYNC, true);
-    return;
-}
-
-fn scan_identifier_or_key_word__alt_1(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, memo: &mut ScanMemo<()>) -> i32 {
-    let mut pos = pos;
-    if pos >= tokens.len() || tokens[pos] != TK_TypeAlias { return -1; }
-    pos += 1;
-    return pos;
-}
-
 fn _parse_identifier_or_key_word__inner(p: &mut Parser) -> () with TypeScriptParserBase {
     if !kind_set_has(&SYNC_132, p.kinds[p.pos]) { builtin::cold_path(); p.sync_alts(&SYNC_132, &EXPECTED_132); }
     let kind = p.peek_kind();
     if _kind_set_1(kind) {
-        if kind == TK_TypeAlias {
-            let _atn_alt = atn_decide_271(&mut p.atn, &p.kinds, p.pos, 0);
-            if _atn_alt == 0 {
-                p.site = 508;
-                p.atn_ret_pending = 3028;
-                return _parse_identifier(p);
-            }
-            return _parse_identifier_or_key_word__inner_alt_1(p);
-        } else if _kind_set_121(kind) {
-            p.site = 508;
-            p.atn_ret_pending = 3028;
-            return _parse_identifier(p);
-        }
-    }
-    if kind == TK_Require {
+        p.site = 508;
+        p.atn_ret_pending = 3028;
+        _parse_identifier(p);
+        return;
+    } else if _kind_set_121(kind) {
         p.take();
         return;
     }
@@ -24751,7 +24675,7 @@ fn _kind_set_120(k: i32) -> bool {
 }
 
 fn _kind_set_121(k: i32) -> bool {
-    return k matches { TK_Abstract | TK_Any | TK_As | TK_Async | TK_Boolean | TK_Constructor | TK_From | TK_Identifier | TK_KeyOf | TK_Namespace | TK_Never | TK_Number | TK_Object | TK_Of | TK_String | TK_Symbol | TK_Undefined | TK_Unique | TK_Yield };
+    return k matches { TK_Require | TK_TypeAlias };
 }
 
 fn _kind_set_122(k: i32) -> bool {
@@ -42950,21 +42874,6 @@ fn atn_decide_269(atn: &mut AtnPredictor, tokens: &Array<i32>, pos: i32, min_pre
         };
     }
     return atn_predict_once(&ATN_SIM, 269, atn, tokens, pos, TK_EOF, min_prec);
-}
-
-fn atn_decide_271(atn: &mut AtnPredictor, tokens: &Array<i32>, pos: i32, min_prec: i32) -> i32 {
-    if pos < tokens.len() {
-        match tokens[pos] {
-            TK_As | TK_From | TK_Async | TK_Yield | TK_Any | TK_Number | TK_Never | TK_Boolean | TK_String | TK_Unique | TK_Symbol | TK_Undefined | TK_Object | TK_Of | TK_KeyOf | TK_Constructor | TK_Namespace | TK_Abstract | TK_Identifier | TK_TypeAlias => {
-                return 0;
-            },
-            TK_Require => {
-                return 2;
-            },
-            _ => {},
-        };
-    }
-    return atn_predict_once(&ATN_SIM, 271, atn, tokens, pos, TK_EOF, min_prec);
 }
 
 fn atn_lr_decide_12(atn: &mut AtnPredictor, tokens: &Array<i32>, pos: i32, min_prec: i32, follow: i64 = 0) -> i32 {

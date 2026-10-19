@@ -1,0 +1,49 @@
+use { subsumed_alts } from "./alt_subsumption.wado";
+use { GrammarAnalysis } from "./grammar_analysis.wado";
+use { identity_slots } from "./alt_grouping.wado";
+use { parse } from "./g4/parser.wado";
+
+/// The subsumption verdicts over the alternatives of `rule`'s first group.
+fn subsumed_in<S: AsStrSlice>(src: S, rule: S) -> List<bool> {
+    let g = parse(src).unwrap();
+    let mut an = GrammarAnalysis::new(&g.parser_rules);
+    let r = an.find_rule(rule).unwrap();
+    let Group(grp) = &r.alternatives[0].elements[0] else {
+        unreachable();
+    };
+    let alts = grp.alternatives;
+    return subsumed_alts(&identity_slots(alts.len()), &alts, false, &mut an);
+}
+
+// SQLite's `sql_stmt` over its four SELECT statements.
+global SELECTS_G4: String = "grammar T;
+s : (compound | factored | simple | sel) EOF ;
+compound : w? core ( (U A? | I) core )+ order? ;
+factored : w? core ( op core )* order? ;
+simple : w? core order? ;
+sel : w? core2 ( op core2 )* order? ;
+core : S e (C e)* ;
+core2 : S e (C e)* ;
+op : U | U A | I ;
+order : (O B ID (C ID)*)? ;
+w : W ;
+e : e '+' e | ID ;
+";
+
+test "an alternative an earlier one embeds, or one over a copy of its rule, is subsumed" {
+    let got = subsumed_in(SELECTS_G4, "s");
+    assert got == [false, false, true, true], `${got:?}`;
+}
+
+test "an alternative matching more than the earlier one is not subsumed" {
+    assert subsumed_in("grammar T;\ns : (A | A B? | A B) ;\n", "s") == [false, false, true];
+}
+
+test "a predicate keeps an alternative" {
+    assert subsumed_in("grammar T;\ns : ({p()}? A B? | A) ;\n", "s") == [false, false];
+}
+
+test "a left-recursive rule's body is never unfolded" {
+    let src = "grammar T;\ns : (e | f) ;\ne : e '+' e | ID ;\nf : f '+' f | ID ;\n";
+    assert subsumed_in(src, "s") == [false, false];
+}

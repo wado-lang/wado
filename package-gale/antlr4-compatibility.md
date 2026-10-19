@@ -575,6 +575,11 @@ parse's choice: a scan that chose differently would accept an input the parse
 rejects, or the reverse. So only how each side reads a token and commits
 differs.
 
+An alternative whose language an earlier one contains is never a candidate
+(`alt_subsumption`): wherever it matches, the earlier one matches too, and
+ANTLR4 resolves that ambiguity to the earlier one. SQLite's
+`simple_select_stmt` is `factored_select_stmt` without its compound loop.
+
 Where the tree gives up, every candidate is scanned from the same start and
 the greatest successful end wins. A scan-length tie resolves to the lowest
 grammar alternative — ANTLR4's ambiguity resolution (SQLite's single-table

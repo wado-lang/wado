@@ -17,6 +17,7 @@ use {
     alt_class_first_set,
     alt_class_is_open_ended,
 } from "./gir.wado";
+use { subsumed_alts } from "./alt_subsumption.wado";
 use { dedup_append_arr } from "./list_util.wado";
 use { sets_overlap } from "./token_kinds.wado";
 
@@ -227,17 +228,24 @@ pub fn alt_is_open_ended(alt: &Alternative, analysis: &mut GrammarAnalysis) -> b
 
 /// The classification of each alternative a partition covers, in the index
 /// space its first sets are in; `alt_of` maps a slot to its alternative.
+/// `ranked` is `subsumed_alts`'s: `alts` are a left-recursive rule's own.
 pub fn alt_classes(
     alt_of: &List<i32>,
     alts: &List<Alternative>,
+    ranked: bool,
     first_sets: &List<List<i32>>,
     analysis: &mut GrammarAnalysis,
 ) -> List<AltClass>
     contract alt_of.len() == first_sets.len(), "one alternative per first set"
 {
+    let subsumed = subsumed_alts(alt_of, alts, ranked, analysis);
     let mut out: List<AltClass> = [];
     for let mut slot = 0; slot < alt_of.len(); slot += 1 {
-        out.push(alt_class(&alts[alt_of[slot]], &first_sets[slot], analysis));
+        out.push(if subsumed[slot] {
+            AltClass::Subsumed;
+        } else {
+            alt_class(&alts[alt_of[slot]], &first_sets[slot], analysis);
+        });
     }
     return out;
 }
@@ -245,9 +253,11 @@ pub fn alt_classes(
 /// `alt_classes` over a whole alternative list, for a caller with no first
 /// sets to hand and no subset to map.
 pub fn alt_classes_of(alts: &List<Alternative>, analysis: &mut GrammarAnalysis) -> List<AltClass> {
+    let slots = identity_slots(alts.len());
+    let subsumed = subsumed_alts(&slots, alts, false, analysis);
     let mut out: List<AltClass> = [];
-    for let alt of alts {
-        out.push(alt_class_of(alt, analysis));
+    for let slot of slots {
+        out.push(if subsumed[slot] { AltClass::Subsumed } else { alt_class_of(&alts[slot], analysis) });
     }
     return out;
 }
@@ -268,14 +278,25 @@ pub fn identity_slots(n: i32) -> List<i32> {
 /// `ID` not followed by `=` is why committing on the kind check is wrong.
 pub fn compute_overlap_groups_of(classes: &List<AltClass>) -> List<List<i32>> {
     let n = classes.len();
-    if n >= 2 && classes.iter_ref().any(|c: &AltClass| alt_class_is_open_ended(c)) {
-        return [identity_slots(n)];
+    let groups: List<List<i32>> = if n >= 2 && classes.iter_ref().any(|c: &AltClass| alt_class_is_open_ended(c)) {
+        [identity_slots(n)];
+    } else {
+        let mut first_sets: List<List<i32>> = [];
+        for let c of classes {
+            first_sets.push(alt_class_first_set(c));
+        }
+        compute_overlap_groups(&first_sets);
+    };
+    // A subsumed alternative is in no branch: no lookahead decides for it.
+    let mut out: List<List<i32>> = [];
+    for let g of &groups {
+        let kept: List<i32> = g.iter_ref().filter(|slot| !classes[*slot] matches { Subsumed }).map(|slot| *slot).collect(
+        );
+        if !kept.is_empty() {
+            out.push(kept);
+        }
     }
-    let mut first_sets: List<List<i32>> = [];
-    for let c of classes {
-        first_sets.push(alt_class_first_set(c));
-    }
-    return compute_overlap_groups(&first_sets);
+    return out;
 }
 
 pub fn compute_overlap_groups(first_sets: &List<List<i32>>) -> List<List<i32>> {

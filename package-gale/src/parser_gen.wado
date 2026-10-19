@@ -79,6 +79,7 @@ use {
     sort_group_by_mandatory_count_desc,
     sort_group_by_element_count,
 } from "./alt_grouping.wado";
+use { rule_is_left_recursive } from "./lr_util.wado";
 use {
     Admits,
     admits_enumerated,
@@ -8233,7 +8234,13 @@ fn gen_multi_alt_body_alt<S: AsStrSlice>(
     // last or the alternatives after it are dead. The partition is over the
     // non-LR alternatives, so groups and verdicts are slots into
     // `non_lr_indices`.
-    let classes = alt_classes(non_lr_indices, &rule.alternatives, &og.first_sets, &mut ctx.analysis);
+    let classes = alt_classes(
+        non_lr_indices,
+        &rule.alternatives,
+        rule_is_left_recursive(rule),
+        &og.first_sets,
+        &mut ctx.analysis,
+    );
     let mut admits: List<Admits> = [];
     let mut untestable: List<bool> = [];
     for let group of &og.groups {

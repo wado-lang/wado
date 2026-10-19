@@ -1592,6 +1592,25 @@ test "a loop speculates only where the parse runs no action" {
     assert !gen_source(&with_predicate).contains("let sp_pending"), "`speculating` skips a predicate";
 }
 
+// SQLite's SELECT statements: `simple` is `factored` without its loop.
+global SUBSUMED_ALT_G4: String = "
+grammar T;
+s : (compound | factored | simple) ';' EOF ;
+compound : core ('u' core)+ order? ;
+factored : core ('u' core)* order? ;
+simple : core order? ;
+core : 's' ID (',' ID)* ;
+order : 'o' ID ;
+ID : [a-z]+ ;
+WS : ' ' -> skip ;
+";
+
+test "a tournament leaves out an alternative an earlier one subsumes" {
+    let got = parses(SUBSUMED_ALT_G4, "s", ["s a ;", "s a , b u s c o d ;", "s a o b ;"]);
+    assert got == "s a ; => (s (factored (core s a)) ;)\ns a , b u s c o d ; => (s (compound (core s a , b) u (core s c) (order o d)) ;)\ns a o b ; => (s (factored (core s a) (order o b)) ;)\n";
+    assert !gen_source(SUBSUMED_ALT_G4).contains("scan_simple("), "ANTLR4 never takes `simple`, so nothing scans it";
+}
+
 global LOOP_ENTERS_WHILE_VIABLE_G4: String = "
 grammar T;
 s : 'fn' ty '{' '}' EOF ;
