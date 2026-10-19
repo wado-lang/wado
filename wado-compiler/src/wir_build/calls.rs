@@ -874,7 +874,11 @@ impl FunctionTranslator<'_, '_> {
             "i32_as_char" => Some(self.translate_operand(args[0].expr)),
 
             "ambient_stdout_available" | "ambient_stderr_available" => {
-                let writes = self.ctx.package.ambient_stdio().writes(ambient_stream(builtin_name));
+                let writes = self
+                    .ctx
+                    .package
+                    .ambient_stdio()
+                    .writes(ambient_stream(builtin_name));
                 Some(WirInstr::I32Const(i32::from(writes)))
             }
 

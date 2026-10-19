@@ -695,9 +695,10 @@ impl NirPackage {
     /// Whether the target world provides an ambient sink for the given stdio
     /// interface (`Stdout` / `Stderr`) used by the `log_*` (panic /
     /// assert-diagnostic) path. True for the test world and any world importing
-    /// the interface; false for `--lib` and kiln, where the ambient path traps
-    /// silently instead of forcing the import. Each stream is gated on its own
-    /// interface so a world importing only one is not mis-gated by the other.
+    /// the interface; false for `--lib` and kiln, where the ambient path writes
+    /// only a stream the program imports anyway ([`AmbientStdio`]). Each stream
+    /// is gated on its own interface so a world importing only one is not
+    /// mis-gated by the other.
     pub fn provides_ambient_stdio_sink(&self, interface_name: &str) -> bool {
         self.is_test_world() || self.world_imports_interface(interface_name)
     }
