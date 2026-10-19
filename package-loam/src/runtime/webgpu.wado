@@ -119,12 +119,12 @@ struct Spare {
 
 /// Values at places that stay theirs while they live, so a place can name
 /// one, and a place a dropped value left is the next one's.
-struct Places<T> {
+struct Places<affine T> {
     held: List<Option<T>>,
     vacant: List<i32>,
 }
 
-impl<T> Places<T> {
+impl<affine T> Places<T> {
     fn new() -> Places<T> {
         return Places { held: [], vacant: [] };
     }
