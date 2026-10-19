@@ -1,12 +1,13 @@
 # Loam TODO
 
-Open work on Loam. [`AGENTS.md`](./AGENTS.md) says how to work here, and
-[WEP: Loam](../docs/wep-2026-09-20-loam.md) holds the design. A section name
-below, such as A Decoder's Cache Is One Value, is one of the WEP's.
+Open work on Loam. [`AGENTS.md`](./AGENTS.md) says how to work here.
+[WEP: Loam](../docs/wep-2026-09-20-loam.md) and [`design.md`](./design.md) hold
+the design. A section name below, such as A Decoder's Cache Is One Value, is one
+of the WEP's.
 
 The roadmap is ordered, and each item says what finishing it means. A known gap
-says what is missing and what it admits, not how to close it. Closed work
-belongs in commit history.
+says what is missing and what it admits, not how to close it. A finished item
+leaves this file, and `design.md` states what it built.
 
 ## Roadmap
 
@@ -80,13 +81,34 @@ belongs in commit history.
     each path's logits from onnxruntime's is recorded.
 16. [ ] onnxruntime's `QMoE`, and a `GroupQueryAttention` with attention
     sinks. Finished when `operators_test.wado` holds each to onnxruntime.
-17. [ ] gpt-oss-20b, a mixture of experts. Finished when `example/gpt-oss-20b/`
+17. [ ] The speed at which a weight reaches the device. `wado run-webgpu` moves
+    a checkpoint's bytes from a file into a device buffer through
+    `wasi:filesystem` and `write-buffer-with-copy`, and that speed sets what a
+    weight the device does not hold costs. Finished when `design.md` records it
+    on an RTX 4060, with the file in the page cache and out of it, beside the
+    command that measured it.
+18. [ ] Experts held on demand. An expert is one slice along the first axis of
+    each of a `QMoE`'s expert inputs: its weights, scales, biases and zero
+    points, as the operator defines them, so no model is named. The device holds
+    as many experts as a budget the caller sets. The rest stay in the checkpoint
+    until a token routes to one, and the guest's heap only passes an expert
+    through. This is what item 13 does for a table's rows, with the device as
+    the place an expert is held. Finished when gpt-oss-20b runs with a budget of
+    half its experts, and `design.md` records how often a routed expert was
+    already held, with the eviction order it chose and why.
+19. [ ] Experts loaded ahead. While one layer runs, the nodes that compute the
+    next `QMoE`'s `router_probs` from its `input` are applied to this layer's
+    `input`, and the experts they pick load before a token routes to them. A
+    wrong guess costs a load, never a token. Finished when `design.md` records
+    how often a routed expert was already held with and without it, and the
+    tokens are unchanged.
+20. [ ] gpt-oss-20b, a mixture of experts. Finished when `example/gpt-oss-20b/`
     continues a prompt with the tokens onnxruntime picks, under
-    `wado run-webgpu` from onnx-community's `q4f16` export, with no `layout`
-    option and no line that names a layer.
-18. [ ] The StableHLO front end. Finished when the MLP exported from JAX checks
+    `wado run-webgpu` on a device of 8 GB from onnx-community's `q4f16` export,
+    with no `layout` option and no line that names a layer.
+21. [ ] The StableHLO front end. Finished when the MLP exported from JAX checks
     and runs through the same pipeline as its ONNX form.
-19. [ ] int4. `DequantizeLinear` with a `block_size` fused into the `MatMul` it
+22. [ ] int4. `DequantizeLinear` with a `block_size` fused into the `MatMul` it
     feeds, which is what makes a model small enough to download. Finished when
     an int4 checkpoint from GPTQ or AWQ produces the f16 checkpoint's output
     within tolerance.
@@ -284,6 +306,15 @@ device's own copy. Under `wado run-webgpu`, whose wasmtime is a generation
 behind `wado run`'s, a loop allocating per element (`map` and `collect`) runs
 twenty times slower than under `wado run`. The backend writes its own loops for
 that reason.
+
+An expert the device does not hold is loaded, never computed by the guest. A
+guest runs on one thread, since shared-everything threads is at phase 1, and
+`core:simd` loads no vector from a `List`. So the host's cores wait while an
+expert crosses to the device.
+
+No Loam model has run on a phone. A phone's GPU shares its memory with the rest
+of the system, so the budget its experts get there is unknown, and so is which
+host runs the guest.
 
 Every `WebGpuBackend` method spells the same ten `wasi:webgpu` resources, since
 an impl method's `with _` resolves to nothing at a caller.

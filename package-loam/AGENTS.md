@@ -1,10 +1,11 @@
 # Loam Development Guide
 
 Loam compiles an ONNX graph into Wado source through Kiln. The design lives in
-[WEP: Loam](../docs/wep-2026-09-20-loam.md), and the tokenizer's in
-[tokenizer.md](./tokenizer.md). The WEP is complete: the roadmap and the known
-gaps are in [TODO.md](./TODO.md), and further work on Loam changes this
-directory alone.
+[WEP: Loam](../docs/wep-2026-09-20-loam.md) up to the WEP's completion, and in
+[design.md](./design.md) for what was built after it. The tokenizer's design is
+in [tokenizer.md](./tokenizer.md). The roadmap and the known gaps are in
+[TODO.md](./TODO.md). A finished item leaves it, and its design goes into
+design.md. Further work on Loam changes this directory alone.
 
 ## Sources
 
