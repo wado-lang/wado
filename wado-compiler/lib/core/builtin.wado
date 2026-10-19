@@ -659,9 +659,8 @@ pub fn subtask_drop(handle: i32);
 #[side_effect(opaque, suspend)]
 pub fn subtask_cancel(handle: i32);
 
-/// Join a waitable (subtask/stream/future) to a waitable set.
-/// Returns a Waitable token.  The canonical returns void; we return
-/// the original handle so callers can use it as the Waitable identity.
+/// Join a waitable (subtask/stream/future) to a waitable set, or leave its
+/// set where `ws` is 0.
 #[canonical("wasi", "waitable-join")]
 #[storage(none)]
 #[side_effect(opaque)]

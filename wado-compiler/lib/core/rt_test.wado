@@ -25,9 +25,8 @@ test "a future whose reader is gone takes its value and drops" {
 }
 
 test "an empty waitable set has nothing to poll" {
-    let ws = WaitableSet::new();
+    let mut ws = WaitableSet::<Subtask>::new();
     assert ws.poll() matches { None };
-    ws.drop();
 }
 
 test "log_stdout writes without an effect" {
