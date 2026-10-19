@@ -1,0 +1,58 @@
+// A local declared without a value, a reference to which a call may keep,
+// takes each assignment in place behind a flag that says whether it holds
+// storage yet. The in-place branch of the first assignment reads the local
+// before anything is written to it, and never runs.
+//
+// The value graph used to take the unit placeholder of `let x: P;` for the
+// local's value. That read then stamped `P` on the placeholder, and the
+// declaration lowered to a `local.set` of nothing: invalid Wasm.
+struct P {
+    a: i32,
+    b: i32,
+}
+
+fn read_after(n: i32) -> i32 {
+    let mut x: P;
+    x = P { a: 1, b: 1 };
+    let r = &x;
+    builtin::black_box(r);
+    x = P { a: 5, b: n };
+    return r.a + r.b;
+}
+
+fn unread_after(n: i32) -> i32 {
+    let mut x: P;
+    x = P { a: 1, b: 1 };
+    let r = &x;
+    builtin::black_box(r);
+    x = P { a: 5, b: n };
+    return n;
+}
+
+fn first_assigned_in_an_arm(n: i32) -> i32 {
+    let mut x: P;
+    match n {
+        _ => x = P { a: 1, b: 1 },
+    }
+    let r = &x;
+    while builtin::black_box(false) {
+        builtin::black_box(r);
+    }
+    x = P { a: 5, b: n };
+    return r.sum();
+}
+
+impl P {
+    fn sum(&self) -> i32 {
+        return self.a + self.b;
+    }
+}
+
+test "the reference reads the reassigned value" {
+    assert read_after(5) == 10;
+    assert first_assigned_in_an_arm(5) == 10;
+}
+
+test "no read follows the reassignment" {
+    assert unread_after(5) == 5;
+}

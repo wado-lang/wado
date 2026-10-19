@@ -1017,12 +1017,23 @@ impl<'a> Builder<'a> {
         self.stmt_entry_version.insert(stmt, self.heap_state.next);
         match self.body.stmts[stmt].kind.clone() {
             StmtKind::Let {
-                local_index, value, ..
+                local_index,
+                type_id,
+                value,
+                ..
             } => {
-                let v = self.walk_operand(value).unwrap_or_else(|| {
-                    self.pool
-                        .fresh_opaque_with_source(OpaqueSource::Local(local_index))
-                });
+                // `let x: T;` binds a unit placeholder, not a value of `T`: a
+                // read before the first assignment (only a dead one can) would
+                // stamp `T` on the placeholder's id.
+                let declared_without_value =
+                    type_id != TypeTable::UNIT && self.operand_type(value) == TypeTable::UNIT;
+                let v = self
+                    .walk_operand(value)
+                    .filter(|_| !declared_without_value)
+                    .unwrap_or_else(|| {
+                        self.pool
+                            .fresh_opaque_with_source(OpaqueSource::Local(local_index))
+                    });
                 self.set_local_value(local_index, v);
                 // `let x = S { f: lit, … }` binds `x` to a fresh opaque; seed
                 // each pure field so a later `x.f` read forwards the literal.

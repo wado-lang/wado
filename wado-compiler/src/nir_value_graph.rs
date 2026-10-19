@@ -624,6 +624,10 @@ impl ValuePool {
     /// promotion). Idempotent; a later call overwrites.
     #[inline]
     pub fn set_type(&mut self, id: ValueId, type_id: TypeId) {
+        assert!(
+            type_id == TypeTable::UNIT || !matches!(self.values[id.0 as usize], ValueKind::Unit),
+            "a unit value is never retyped, here as {type_id:?}"
+        );
         self.types[id.0 as usize] = Some(type_id);
     }
 
