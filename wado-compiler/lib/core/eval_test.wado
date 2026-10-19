@@ -59,6 +59,16 @@ export fn run() with Stdout {
     assert out.stdout == "found\n";
 }
 
+test "an insecure draw runs" {
+    let out = eval(`use { println, Stdout } from "core:cli";
+use { Insecure } from "wasi:random";
+export fn run() with (Stdout, Insecure) {
+    println(\`\${Insecure::get_insecure_random_u64()}\`);
+}`).unwrap();
+    assert out.status matches { Exited(0) };
+    assert !out.stdout.is_empty();
+}
+
 test "fuel bounds the run" {
     let out = eval(`export fn run() { let mut i = 0; loop { i += 1; } }`, 10_000).unwrap();
     assert out.status matches { OutOfFuel };

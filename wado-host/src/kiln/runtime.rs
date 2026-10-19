@@ -21,8 +21,7 @@ use wasmtime::component::types::{ComponentItem, Type};
 use wasmtime::component::{Component, Func, HasSelf, Instance, Linker, StreamReader, Val};
 use wasmtime::{Engine, Store};
 use wasmtime_wasi::WasiCtx;
-use wasmtime_wasi::p3::bindings::random::{insecure, insecure_seed};
-use wasmtime_wasi::random::{WasiRandom, WasiRandomCtx, WasiRandomView};
+use wasmtime_wasi::random::{WasiRandomCtx, WasiRandomView};
 
 use wado_compiler::kiln::{CanonicalOptions, CanonicalValue};
 use wado_compiler::name::to_cm_name;
@@ -33,7 +32,7 @@ use wado_compiler::{
 };
 
 use crate::engine::fuel_engine;
-use crate::random::fixed_insecure_random;
+use crate::random;
 use crate::sync::lock;
 
 wasmtime::component::bindgen!({
@@ -145,17 +144,14 @@ async fn instantiate(
 ) -> Result<(Store<KilnHostState>, Instance), GeneratorRunnerError> {
     let mut linker: Linker<KilnHostState> = Linker::new(engine);
     kiln_host::add_to_linker::<_, HasSelf<_>>(&mut linker, |s| s)
-        .and_then(|()| insecure::add_to_linker::<_, WasiRandom>(&mut linker, KilnHostState::random))
-        .and_then(|()| {
-            insecure_seed::add_to_linker::<_, WasiRandom>(&mut linker, KilnHostState::random)
-        })
+        .and_then(|()| random::add_to_linker(&mut linker))
         .map_err(|e| GeneratorRunnerError::Host(format!("linker setup: {e:#}")))?;
 
     let mut store = Store::new(
         engine,
         KilnHostState {
             diagnostics,
-            wasi: fixed_insecure_random(&mut WasiCtx::builder()).build(),
+            wasi: random::fixed_seed(&mut WasiCtx::builder()).build(),
         },
     );
     let fuel = if policy.fuel == 0 {
