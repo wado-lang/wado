@@ -88,14 +88,14 @@ leaves this file, and `design.md` states what it built.
     on an RTX 4060, with the file in the page cache and out of it, beside the
     command that measured it.
 18. [ ] Experts held on demand. An expert is one slice along the first axis of
-    each of a `QMoE`'s expert inputs: its weights, scales, biases and zero
-    points, as the operator defines them, so no model is named. The device holds
-    as many experts as a budget the caller sets. The rest stay in the checkpoint
-    until a token routes to one, and the guest's heap only passes an expert
-    through. This is what item 13 does for a table's rows, with the device as
-    the place an expert is held. Finished when gpt-oss-20b runs with a budget of
-    half its experts, and `design.md` records how often a routed expert was
-    already held, with the eviction order it chose and why.
+    each `QMoE` input the operator's definition indexes by expert, so no model
+    is named. The device holds as many experts as a budget the caller sets. The
+    rest stay in the checkpoint until a token routes to one, and the guest's
+    heap only passes an expert through. This is what item 13 does for a table's
+    rows, with the device as the place an expert is held. Finished when
+    gpt-oss-20b runs with a budget of half its experts, and `design.md` records
+    how often a routed expert was already held, with the eviction order it chose
+    and why.
 19. [ ] Experts loaded ahead. While one layer runs, the nodes that compute the
     next `QMoE`'s `router_probs` from its `input` are applied to this layer's
     `input`, and the experts they pick load before a token routes to them. A
@@ -103,9 +103,9 @@ leaves this file, and `design.md` states what it built.
     how often a routed expert was already held with and without it, and the
     tokens are unchanged.
 20. [ ] gpt-oss-20b, a mixture of experts. Finished when `example/gpt-oss-20b/`
-    continues a prompt with the tokens onnxruntime picks, under
-    `wado run-webgpu` on a device of 8 GB from onnx-community's `q4f16` export,
-    with no `layout` option and no line that names a layer.
+    continues a prompt with the tokens onnxruntime picks from onnx-community's
+    `q4f16` export, under `wado run-webgpu` on a device with 8 GB, with no
+    `layout` option and no line that names a layer.
 21. [ ] The StableHLO front end. Finished when the MLP exported from JAX checks
     and runs through the same pipeline as its ONNX form.
 22. [ ] int4. `DequantizeLinear` with a `block_size` fused into the `MatMul` it
