@@ -24,7 +24,7 @@ internal struct Box<T> {
 /// Optional value - either None or Some(T). The derived order puts None first,
 /// as Rust's does.
 #[compiler_item("option")]
-pub variant Option<T> {
+pub variant Option<affine T> {
     #[compiler_item("option_none")]
     None,
     #[compiler_item("option_some")]
@@ -33,13 +33,23 @@ pub variant Option<T> {
 
 /// Result type - either Ok(T) or Err(E)
 #[compiler_item("result")]
-pub variant Result<T, E> {
+pub variant Result<affine T, affine E> {
     #[compiler_item("result_ok")]
     Ok(T),
     #[compiler_item("result_err")]
     Err(E),
 }
-impl<T> Option<T> {
+impl<affine T> Option<T> {
+    /// Takes the value out, leaving None in its place.
+    pub fn take(&mut self) -> Option<T> {
+        return builtin::replace(self, null);
+    }
+
+    /// Puts `value` in, returning what was there.
+    pub fn replace(&mut self, value: T) -> Option<T> {
+        return builtin::replace(self, Option::Some(value));
+    }
+
     /// Returns the contained value, panicking if None.
     pub fn unwrap(self) -> T {
         if let Some(v) = self {
@@ -65,7 +75,7 @@ impl<T> Option<T> {
     }
 
     /// Applies `f` to the contained value, leaving None untouched.
-    pub fn map<U>(self, mut f: fn mut(T) -> U with _) -> Option<U> with _ {
+    pub fn map<affine U>(self, mut f: fn mut(T) -> U with _) -> Option<U> with _ {
         return match self {
             Some(v) => Option::<U>::Some(f(v)),
             None => Option::<U>::None,
@@ -73,7 +83,7 @@ impl<T> Option<T> {
     }
 
     /// Converts to a Result, mapping None to `Err(err)`.
-    pub fn ok_or<E>(self, err: E) -> Result<T, E> {
+    pub fn ok_or<affine E>(self, err: E) -> Result<T, E> {
         return match self {
             Some(v) => Result::<T, E>::Ok(v),
             None => Result::<T, E>::Err(err),
@@ -94,11 +104,11 @@ impl<T> Option<T> {
 }
 
 /// Cold slow path for `unwrap`/`expect` failures: traps with `${msg}: ${value:?}`.
-internal fn unwrap_failed<V>(msg: String, value: V) -> ! {
+internal fn unwrap_failed<affine V>(msg: String, value: V) -> ! {
     panic(`${msg}: ${value:?}`);
 }
 
-impl<T, E> Result<T, E> {
+impl<affine T, affine E> Result<T, E> {
     /// Returns the contained Ok value, panicking (with the Err value) if Err.
     pub fn unwrap(self) -> T {
         return match self {
@@ -109,7 +119,7 @@ impl<T, E> Result<T, E> {
 
     /// Returns true if this is an Ok value.
     pub fn is_ok(&self) -> bool {
-        return *self matches { Ok(_) };
+        return self matches { Ok(_) };
     }
 
     /// Returns true if this is an Err value.
@@ -150,7 +160,7 @@ impl<T, E> Result<T, E> {
     }
 
     /// Applies `f` to the contained Ok value, leaving an Err untouched.
-    pub fn map<U>(self, mut f: fn mut(T) -> U with _) -> Result<U, E> with _ {
+    pub fn map<affine U>(self, mut f: fn mut(T) -> U with _) -> Result<U, E> with _ {
         return match self {
             Ok(v) => Result::<U, E>::Ok(f(v)),
             Err(e) => Result::<U, E>::Err(e),
@@ -158,7 +168,7 @@ impl<T, E> Result<T, E> {
     }
 
     /// Applies `f` to the contained Err value, leaving an Ok untouched.
-    pub fn map_err<F>(self, mut f: fn mut(E) -> F with _) -> Result<T, F> with _ {
+    pub fn map_err<affine F>(self, mut f: fn mut(E) -> F with _) -> Result<T, F> with _ {
         return match self {
             Ok(v) => Result::<T, F>::Ok(v),
             Err(e) => Result::<T, F>::Err(f(e)),
@@ -169,19 +179,7 @@ impl<T, E> Result<T, E> {
     pub fn unwrap_or_else(&self);
 }
 
-impl<affine T> Option<T> {
-    /// Takes the value out, leaving None in its place.
-    pub fn take(&mut self) -> Option<T> {
-        return builtin::replace(self, null);
-    }
-
-    /// Puts `value` in, returning what was there.
-    pub fn replace(&mut self, value: T) -> Option<T> {
-        return builtin::replace(self, Option::Some(value));
-    }
-}
-
-impl<T> Default for Option<T> {
+impl<affine T> Default for Option<T> {
     pub fn default() -> Option<T> {
         return null;
     }
@@ -197,7 +195,7 @@ pub struct ResourceId {
 impl ResourceId {
     /// The identity of `r`. A static function rather than a method, so it
     /// takes no name from any resource.
-    pub fn of<R: AffineResource>(r: &R) -> ResourceId {
+    pub fn of<affine R: AffineResource>(r: &R) -> ResourceId {
         return ResourceId { handle: builtin::resource_handle(r) };
     }
 }

@@ -1258,6 +1258,47 @@ test {
 }
 ```
 
+A type parameter without the mark may be copied in its body. An affine
+argument for one is an error at the instantiation naming the parameter
+(`AFFINE_ARGUMENT`), whether the parameter is a function's or a type
+declaration's.
+
+<!-- {"fixture":"affine_argument_for_unmarked_param.wado"} -->
+
+```wado
+fn dup<T>(x: T) -> [T, T] {
+    return [x, x];
+}
+
+export fn run() {
+    let pair = dup(Fields { n: 1 });
+}
+```
+
+An `impl` whose type parameter is unmarked does not apply to an affine
+argument, so its methods are not found on that instance. `List<affine T>`
+moves its elements in `push`, `pop` and `remove`, and copies them in `first`,
+`last` and the rest of `Sequence`, which a list of affine elements lacks.
+
+<!-- {"fixture":"affine_argument_misses_unmarked_impl.wado"} -->
+
+```wado
+struct Cell<affine T> {
+    value: T,
+}
+
+impl<T> Cell<T> {
+    fn twice(&self) -> [T, T] {
+        return [self.value, self.value];
+    }
+}
+
+export fn run() {
+    let cell = Cell { value: Fields { n: 1 } };
+    let pair = cell.twice();
+}
+```
+
 An affine type implements only an `affine trait`, whose default bodies are
 checked with `Self` affine. A trait without the mark may copy `Self` in a
 default body, so implementing it for an affine type is an error at the impl

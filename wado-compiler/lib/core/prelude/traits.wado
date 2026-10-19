@@ -164,7 +164,7 @@ pub enum CaseStyle {
 /// The attr-reading face of a reflected member. Sealed and
 /// compiler-synthesized; user impls are rejected. See WEP 2026-06-13.
 #[compiler_item("member")]
-pub trait Member with () {
+pub affine trait Member with () {
     /// The source field name.
     #[compiler_item("member_name")]
     fn name(&self) -> String;
@@ -286,14 +286,14 @@ pub trait ReflectTemplate: Reflect with () {
 /// variant value and its payload in both directions.
 /// See WEP 2026-06-13 §3e.
 #[compiler_item("variant_case")]
-pub struct VariantCase<T, P> {
+pub struct VariantCase<affine T, affine P> {
     index: i32,
     case_name: String,
     wire_override: Option<String>,
     is_unit: bool,
 }
 
-impl<T, P> VariantCase<T, P> {
+impl<affine T, affine P> VariantCase<T, P> {
     /// The case's tag.
     pub fn discriminant(&self) -> i32 {
         return self.index;
@@ -309,11 +309,6 @@ impl<T, P> VariantCase<T, P> {
         return builtin::variant_tag(v) == self.index;
     }
 
-    /// The payload of this case in `v`. Traps unless `holds(v)`.
-    pub fn extract(&self, v: &T) -> P {
-        return builtin::variant_case_extract(v, self.index);
-    }
-
     /// Builds this case around `payload`.
     pub fn construct(&self, payload: P) -> T {
         return builtin::variant_case_construct(payload, self.index);
@@ -325,7 +320,14 @@ impl<T, P> VariantCase<T, P> {
     }
 }
 
-impl<T, P> Member for VariantCase<T, P> {
+impl<affine T, P> VariantCase<T, P> {
+    /// The payload of this case in `v`. Traps unless `holds(v)`.
+    pub fn extract(&self, v: &T) -> P {
+        return builtin::variant_case_extract(v, self.index);
+    }
+}
+
+impl<affine T, affine P> Member for VariantCase<T, P> {
     fn name(&self) -> String {
         return self.case_name;
     }
@@ -479,7 +481,7 @@ pub fn format<T: ReflectTemplate<Holes = [..V]>, ..V>(t: T) -> String {
 /// A field handle minted by `ReflectStruct::members()`: the field type `F` is
 /// static, and `get` reads the field's value out of a struct. See WEP 2026-06-13.
 #[compiler_item("struct_field")]
-pub struct StructField<T, F> {
+pub struct StructField<affine T, affine F> {
     index: i32,
     field_name: String,
     wire_override: Option<String>,
@@ -487,7 +489,7 @@ pub struct StructField<T, F> {
     is_secret: bool,
 }
 
-impl<T, F> StructField<T, F> {
+impl<affine T, affine F> StructField<T, F> {
     /// The field's declaration index.
     pub fn index(&self) -> i32 {
         return self.index;
@@ -502,14 +504,16 @@ impl<T, F> StructField<T, F> {
     pub fn is_secret(&self) -> bool {
         return self.is_secret;
     }
+}
 
+impl<affine T, F> StructField<T, F> {
     /// The value of this field in `v`.
     pub fn get(&self, v: &T) -> F {
         return builtin::struct_field_get(v, self.index);
     }
 }
 
-impl<T, F> Member for StructField<T, F> {
+impl<affine T, affine F> Member for StructField<T, F> {
     fn name(&self) -> String {
         return self.field_name;
     }
@@ -576,7 +580,7 @@ internal fn struct_close(f: &mut Formatter) {
     f.write_str(" }");
 }
 
-impl<T, F> Inspect for StructField<T, F> {
+impl<affine T, affine F> Inspect for StructField<T, F> {
     fn inspect(&self, f: &mut Formatter) {
         struct_open(f, "StructField");
         struct_field(f, "index", true);
@@ -598,7 +602,7 @@ impl<T, F> Inspect for StructField<T, F> {
     }
 }
 
-impl<T, P> Inspect for VariantCase<T, P> {
+impl<affine T, affine P> Inspect for VariantCase<T, P> {
     fn inspect(&self, f: &mut Formatter) {
         struct_open(f, "VariantCase");
         struct_field(f, "index", true);
@@ -673,12 +677,21 @@ pub trait RefMut with () {
 pub trait AffineResource with () {
 }
 
+/// Marker of a type no value of which is affine, so a copy of one is sound:
+/// what an `impl`'s parameter not declared `affine` admits. The compiler
+/// states it of primitives, function values and every declaration not
+/// declared `affine`; the prelude states it of `Array` and tuples. See WEP:
+/// Affine Types.
+#[compiler_item("copyable")]
+internal trait Copyable with () {
+}
+
 /// Immutable reference indexing: `&container[i]` reads through this.
 /// `Output: Ref` — only a reference element can be handed out by reference; a
 /// value element is read through `IndexValue`.
 #[compiler_item("index_ref")]
-pub trait IndexRef<IndexType> with () {
-    type Output: Ref;
+pub affine trait IndexRef<IndexType> with () {
+    affine type Output: Ref;
 
     /// Returns a reference to the element at the given index.
     fn index_ref(&self, index: IndexType) -> &Self::Output;
@@ -688,8 +701,8 @@ pub trait IndexRef<IndexType> with () {
 /// `Output: RefMut` — the element must be mutated in place, so a replace-on-assign
 /// element (`variant`, `fn`) cannot be handed out mutably by reference.
 #[compiler_item("index_ref_mut")]
-pub trait IndexRefMut<IndexType> with () {
-    type Output: RefMut;
+pub affine trait IndexRefMut<IndexType> with () {
+    affine type Output: RefMut;
 
     /// Returns a mutable reference to the element at the given index.
     fn index_ref_mut(&mut self, index: IndexType) -> &mut Self::Output;
@@ -699,8 +712,8 @@ pub trait IndexRefMut<IndexType> with () {
 /// Separate from `IndexRefMut`: a scalar element has no addressable cell, so
 /// writing it by value is a distinct operation from handing out a `&mut`.
 #[compiler_item("index_assign")]
-pub trait IndexAssign<IndexType> with () {
-    type Output;
+pub affine trait IndexAssign<IndexType> with () {
+    affine type Output;
 
     /// Assigns a value to the element at the given index.
     fn index_assign(&mut self, index: IndexType, value: Self::Output);
@@ -861,7 +874,7 @@ pub affine trait Inspect with () {
 /// elided and reported with a trailing `, ..`.
 /// The alternate (`#`) rendering the struct `Inspect` hands off to:
 /// `Name {\n  field: value,\n}`, one field per indented line.
-fn inspect_struct_alternate<S: ReflectStruct<FieldTypes = [..F]>, ..F: Inspect>(v: &S, f: &mut Formatter) {
+fn inspect_struct_alternate<affine S: ReflectStruct<FieldTypes = [..F]>, ..F: Inspect>(v: &S, f: &mut Formatter) {
     let mut wrote_field = false;
     let mut has_secret = false;
     for let field of ReflectStruct::<S>::members() {
@@ -898,7 +911,7 @@ fn inspect_struct_alternate<S: ReflectStruct<FieldTypes = [..F]>, ..F: Inspect>(
 
 /// The name a struct's debug form opens with, and the space after it. An
 /// anonymous struct has none, so it reads as the literal that built it.
-fn write_struct_head<S: Reflect>(f: &mut Formatter) {
+fn write_struct_head<affine S: Reflect>(f: &mut Formatter) {
     let name = Reflect::<S>::type_name();
     if !name.is_empty() {
         f.write_str(&name);
@@ -906,7 +919,7 @@ fn write_struct_head<S: Reflect>(f: &mut Formatter) {
     }
 }
 
-impl<S: ReflectStruct<FieldTypes = [..F]>, ..F: Inspect> Inspect for S {
+impl<affine S: ReflectStruct<FieldTypes = [..F]>, ..F: Inspect> Inspect for S {
     fn inspect(&self, f: &mut Formatter) {
         if f.alternate {
             inspect_struct_alternate(self, f);
@@ -975,7 +988,7 @@ fn inspect_variant_payload<P: Inspect>(payload: &P, f: &mut Formatter) {
 
 /// Variant debug formatting derived over `ReflectVariant` (WEP 2026-06-13):
 /// write `Name::Case`, then the payload in parens unless the case is unit.
-impl<V: ReflectVariant<CasePayloads = [..P]>, ..P: Inspect> Inspect for V {
+impl<affine V: ReflectVariant<CasePayloads = [..P]>, ..P: Inspect> Inspect for V {
     fn inspect(&self, f: &mut Formatter) {
         for let case of ReflectVariant::<V>::members() {
             if case.holds(self) {

@@ -271,6 +271,7 @@ mod tests {
             params: vec![ParamDef {
                 bounds: bounds.map(ParamBound::bare).to_vec(),
                 pins: bounds.map(pin).to_vec(),
+                copyable: false,
             }],
             ..concrete(TR, SolverType::Param(0))
         };

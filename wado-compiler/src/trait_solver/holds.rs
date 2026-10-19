@@ -372,6 +372,15 @@ impl Query<'_> {
                 Binding::One(ty) => vec![ty],
                 Binding::Pack(elems) => elems.iter().collect(),
             };
+            // The marker owes no body, so its answer's requests are dropped.
+            if param.copyable
+                && let Some(copyable) = program.copyable
+                && !elements
+                    .iter()
+                    .all(|element| self.holds(element, copyable, &[]).is_some())
+            {
+                return None;
+            }
             for bound in &param.bounds {
                 for element in &elements {
                     // The bound writes its arguments in the impl's own
@@ -1676,6 +1685,7 @@ mod tests {
                         assoc: OUTPUT,
                         ty: SolverType::Param(0),
                     }],
+                    copyable: false,
                 }],
                 ..concrete(PRODUCT, SolverType::Param(0))
             })
@@ -1724,6 +1734,7 @@ mod tests {
                             assoc: OUTPUT,
                             ty: SolverType::Param(1),
                         }],
+                        copyable: false,
                     },
                     ParamDef::default(),
                 ],
@@ -1779,6 +1790,7 @@ mod tests {
                             assoc: FIELDS,
                             ty: SolverType::Tuple(vec![SolverType::Pack(1)]),
                         }],
+                        copyable: false,
                     },
                     ParamDef::bounded(vec![ARBITRARY]),
                 ],

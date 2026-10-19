@@ -323,6 +323,18 @@ pub(super) struct TraitContext {
     pub(super) impl_owner: Option<(DefId, Option<ast::AstId>)>,
 }
 
+impl TraitContext {
+    /// The type parameters in scope declared `affine T`, which a body treats
+    /// as move-only.
+    pub(super) fn affine_params(&self) -> Vec<String> {
+        self.type_params
+            .iter()
+            .filter(|(_, binder)| binder.is_affine)
+            .map(|(name, _)| name.clone())
+            .collect()
+    }
+}
+
 /// Everything [`Elaborator::set_self_binding`] installs, so a scoped install
 /// takes and restores what `Self` means as one.
 pub(super) struct SelfFrame {

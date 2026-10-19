@@ -262,6 +262,9 @@ pub enum CompilerItem {
     /// `AffineResource` — sealed marker every affine resource holds, so
     /// `ResourceId::of` takes one and nothing else.
     AffineResource,
+    /// `Copyable` — sealed marker of a type no value of which is affine: what
+    /// an impl's parameter not declared `affine` admits (WEP: Affine Types).
+    Copyable,
     /// The indexing and literal-builder traits `a[i]`, `a[i] = v`, `&mut a[i]`
     /// and a literal dispatch to.
     IndexValue,
@@ -798,6 +801,7 @@ impl CompilerItem {
         Self::Ref,
         Self::RefMut,
         Self::AffineResource,
+        Self::Copyable,
         Self::IndexValue,
         Self::IndexRef,
         Self::IndexRefMut,
@@ -1047,6 +1051,7 @@ impl CompilerItem {
             Self::Ref => "ref",
             Self::RefMut => "ref_mut",
             Self::AffineResource => "affine_resource",
+            Self::Copyable => "copyable",
             Self::IndexValue => "index_value",
             Self::IndexRef => "index_ref",
             Self::IndexRefMut => "index_ref_mut",
@@ -1350,6 +1355,7 @@ impl CompilerItem {
             | Self::Ref
             | Self::RefMut
             | Self::AffineResource
+            | Self::Copyable
             | Self::IndexValue
             | Self::IndexRef
             | Self::IndexRefMut
@@ -1623,6 +1629,7 @@ impl CompilerItem {
             | Self::Ref
             | Self::RefMut
             | Self::AffineResource
+            | Self::Copyable
             | Self::IndexValue
             | Self::IndexRef
             | Self::IndexRefMut

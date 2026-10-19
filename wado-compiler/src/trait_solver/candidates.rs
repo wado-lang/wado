@@ -762,6 +762,7 @@ mod tests {
                             assoc: AssocId(0),
                             ty: decl(I32),
                         }],
+                        copyable: false,
                     }],
                     ..concrete(TR, SolverType::Param(0))
                 }),

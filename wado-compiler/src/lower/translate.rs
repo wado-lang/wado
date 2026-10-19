@@ -1143,6 +1143,11 @@ impl FunctionTranslator<'_, '_> {
             .borrow()
             .as_list(list.type_id)
             .expect("`index_assign` is a `List` method");
+        // An affine element is an object, which resource drop synthesis has
+        // written the call to drop and fill (WEP: Affine Types).
+        if self.base.type_table.borrow().holds_affine_resource(element) {
+            return None;
+        }
         let span = call.span;
 
         let list_idx = self.alloc_local(list.type_id, "$list".to_string());

@@ -72,7 +72,7 @@ pub fn copy_value<T>(value: T) -> T;
 /// Used by `VariantCase::holds` (WEP 2026-06-13 §3e); lowered to a direct tag read.
 #[storage(none)]
 #[side_effect(none)]
-pub fn variant_tag<T>(v: &T) -> i32;
+pub fn variant_tag<affine T>(v: &T) -> i32;
 
 /// Extracts the payload of variant case `index` from `v` as `P`.
 /// Traps unless `v`'s live case is `index`. Lowering rewrites each
@@ -80,26 +80,26 @@ pub fn variant_tag<T>(v: &T) -> i32;
 /// synthesized alongside `ReflectVariant` (WEP 2026-06-13 §3e).
 #[storage(part_of_args)]
 #[side_effect(trap)]
-pub fn variant_case_extract<T, P>(v: &T, index: i32) -> P;
+pub fn variant_case_extract<affine T, P>(v: &T, index: i32) -> P;
 
 /// Builds variant case `index` of `T` around `payload`.
 /// Rewritten by lowering like `variant_case_extract`.
 #[storage(holds_args)]
 #[side_effect(none)]
-pub fn variant_case_construct<T, P>(payload: P, index: i32) -> T;
+pub fn variant_case_construct<affine T, affine P>(payload: P, index: i32) -> T;
 
 /// Builds the one case of variant `V` whose payload is `P` around `value`.
 /// The body the compiler writes for `impl From<P> for V;`; a `V` with no such
 /// case, or more than one, is reported at the call.
 #[storage(holds_args)]
 #[side_effect(none)]
-pub fn wrap_in_case<V, P>(value: P) -> V;
+pub fn wrap_in_case<affine V, affine P>(value: P) -> V;
 
 /// Reads field `index` of struct `v`. Rewritten by lowering to a direct
 /// field access (WEP 2026-06-13 §2). Used by `StructField::get`.
 #[storage(part_of_args)]
 #[side_effect(none)]
-pub fn struct_field_get<T, F>(v: &T, index: i32) -> F;
+pub fn struct_field_get<affine T, F>(v: &T, index: i32) -> F;
 
 /// Reads hole `index` of template `t` as `V`, dereferencing a hole held by
 /// handle. Rewritten by lowering to the per-(shape, hole-type) helper
@@ -117,14 +117,14 @@ pub fn hole_get<T, V>(t: &T, index: i32) -> V;
 /// other fact states yet.
 #[storage(none)]
 #[side_effect(opaque, suspend)]
-pub fn hole_fmt<T>(t: &T, index: i32, f: &mut Formatter);
+pub fn hole_fmt<affine T>(t: &T, index: i32, f: &mut Formatter);
 
 /// Returns the length of a GC array. `array.len` reads the header, so the
 /// element type is irrelevant — but it must still be *named*, or every caller
 /// with a `&Array<T>` is checked against an element type it does not have.
 #[storage(none)]
 #[side_effect(none)]
-pub fn array_len<T>(arr: &Array<T>) -> i32;
+pub fn array_len<affine T>(arr: &Array<T>) -> i32;
 
 /// Returns a byte from a u8 array at the given index.
 #[storage(none)]
@@ -139,7 +139,7 @@ pub fn array_set_u8(arr: &mut Array<u8>, idx: i32, value: u8);
 /// Creates a new Array<T> with given length, initialized to default values.
 #[storage(fresh, len = len)]
 #[side_effect(trap, negative = len)]
-pub fn array_new<T>(len: i32) -> Array<T>;
+pub fn array_new<affine T>(len: i32) -> Array<T>;
 
 /// An `Array<T>` read from a byte literal as little-endian `T`s, built as a
 /// constant by the compiler. `T` is a numeric primitive.
@@ -158,26 +158,26 @@ pub fn array_get_value<T>(arr: &Array<T>, idx: i32) -> T;
 /// expands the call.
 #[storage(part_of_args)]
 #[side_effect(trap, outside = [arr], at = [idx], unset = arr)]
-pub fn array_take<T>(arr: &mut Array<T>, idx: i32) -> T;
+pub fn array_take<affine T>(arr: &mut Array<T>, idx: i32) -> T;
 
 /// Returns a reference to the element at `idx`. A `Ref` element is aliased in
 /// place; a scalar yields a read-only boxed snapshot (the `&T` read model), so
 /// this is sound to read for every `T` — hence no `Ref` bound.
 #[storage(part_of_args)]
 #[side_effect(trap, outside = [arr], at = [idx], unset = arr)]
-pub fn array_get_ref<T>(arr: &Array<T>, idx: i32) -> &T;
+pub fn array_get_ref<affine T>(arr: &Array<T>, idx: i32) -> &T;
 
 /// Returns a mutable reference to the element at `idx`, for in-place mutation.
 /// Bounded `T: RefMut`: a `&mut` to a scalar would box a copy with no write-back,
 /// so only in-place-mutable elements can be handed out mutably.
 #[storage(part_of_args)]
 #[side_effect(trap, outside = [arr], at = [idx], unset = arr)]
-pub fn array_get_ref_mut<T: RefMut>(arr: &mut Array<T>, idx: i32) -> &mut T;
+pub fn array_get_ref_mut<affine T: RefMut>(arr: &mut Array<T>, idx: i32) -> &mut T;
 
 /// Sets an element in a Array<T> at the given index.
 #[storage(stores_args)]
 #[side_effect(trap, outside = [arr], at = [idx])]
-pub fn array_set<T>(arr: &mut Array<T>, idx: i32, value: T);
+pub fn array_set<affine T>(arr: &mut Array<T>, idx: i32, value: T);
 
 /// Copies `len` elements from src[src_offset..] to dst[dst_offset..], each as
 /// a value copy makes it, as if through a buffer. A value-typed element costs
@@ -192,7 +192,7 @@ pub fn array_copy<T>(dst: &mut Array<T>, dst_offset: i32, src: &Array<T>, src_of
 /// collection grows or shifts its backing array.
 #[storage(stores_args)]
 #[side_effect(trap, outside = [dst, src], at = [dst_offset, src_offset], count = len)]
-pub fn array_move<T>(dst: &mut Array<T>, dst_offset: i32, src: &Array<T>, src_offset: i32, len: i32);
+pub fn array_move<affine T>(dst: &mut Array<T>, dst_offset: i32, src: &Array<T>, src_offset: i32, len: i32);
 
 /// Allocates a new Array<T> and copies every element of `src` into
 /// it. Used by the synthesized `$value_copy$` functions to deep-copy raw
@@ -231,7 +231,7 @@ pub fn array_fill<T>(arr: &mut Array<T>, offset: i32, value: T, len: i32);
 /// second does not.
 #[storage(none)]
 #[side_effect(trap, outside = [arr], at = [offset], count = len)]
-pub fn array_release<T>(arr: &mut Array<T>, offset: i32, len: i32);
+pub fn array_release<affine T>(arr: &mut Array<T>, offset: i32, len: i32);
 
 /// Loads an i32 from linear memory (Wasm i32.load).
 #[storage(none)]
@@ -452,7 +452,7 @@ pub fn unreachable() -> !;
 /// work it names.
 #[storage(part_of_args)]
 #[side_effect(black_box)]
-pub fn black_box<T>(value: T) -> T;
+pub fn black_box<affine T>(value: T) -> T;
 
 /// True while a lazy-initialized global still holds its `null` placeholder.
 ///
@@ -461,7 +461,7 @@ pub fn black_box<T>(value: T) -> T;
 /// instead of asserting it away. Any other reference reads as initialized.
 #[storage(none)]
 #[side_effect(none)]
-pub fn is_uninitialized<T>(value: &T) -> bool;
+pub fn is_uninitialized<affine T>(value: &T) -> bool;
 
 /// True where the place `value` reads holds no affine object: a move emptied
 /// it (WEP: Affine Types). Resource drop synthesis guards each drop with it.
@@ -469,7 +469,7 @@ pub fn is_uninitialized<T>(value: &T) -> bool;
 /// is never null.
 #[storage(none)]
 #[side_effect(none)]
-pub fn is_moved<T>(value: T) -> bool;
+pub fn is_moved<affine T>(value: T) -> bool;
 
 /// Drop `value` where it is called (WEP: Affine Types). Resource drop synthesis
 /// replaces the call with the drop of what it takes.
@@ -726,7 +726,7 @@ pub fn task_cancel();
 /// to an affine resource.
 #[storage(none)]
 #[side_effect(read)]
-pub fn resource_handle<R>(r: &R) -> i32;
+pub fn resource_handle<affine R>(r: &R) -> i32;
 
 /// Write 0, which the Component Model never issues, into the box `r`: what an
 /// object holds once its content moved into another (WEP: Affine Types).

@@ -48,7 +48,7 @@ use { AsByteSlice, FromLeBytes } from "core:prelude/bytes.wado";
 /// not read those slots: what it reads is unspecified, some value of `T` or a
 /// trap.
 #[compiler_item("list")]
-pub struct List<T> {
+pub struct List<affine T> {
     repr: Array<T>,
     used: i32,
 }
@@ -386,7 +386,7 @@ impl<T> IndexValue<i32> for List<T> {
     }
 }
 
-impl<T> IndexAssign<i32> for List<T> {
+impl<affine T> IndexAssign<i32> for List<T> {
     type Output = T;
 
     #[compiler_item("list_index_assign")]
@@ -396,7 +396,7 @@ impl<T> IndexAssign<i32> for List<T> {
     }
 }
 
-impl<T: Ref> IndexRef<i32> for List<T> {
+impl<affine T: Ref> IndexRef<i32> for List<T> {
     type Output = T;
 
     fn index_ref(&self, index: i32) -> &T
@@ -406,7 +406,7 @@ impl<T: Ref> IndexRef<i32> for List<T> {
     }
 }
 
-impl<T: RefMut> IndexRefMut<i32> for List<T> {
+impl<affine T: RefMut> IndexRefMut<i32> for List<T> {
     type Output = T;
 
     fn index_ref_mut(&mut self, index: i32) -> &mut T
@@ -650,13 +650,14 @@ impl<T> FromIterator for List<T> {
 
 // `[e0, e1, …]` as a `List<T>`: the literal is the backing array already, so
 // the list is its spine over it (WEP 2026-08-24).
-impl<T> From<Array<T>> for List<T> {
+impl<affine T> From<Array<T>> for List<T> {
     fn from(elements: Array<T>) -> List<T> {
-        return List { repr: elements, used: builtin::array_len(&elements) };
+        let used = builtin::array_len(&elements);
+        return List { repr: elements, used };
     }
 }
 
-impl<T> Default for List<T> {
+impl<affine T> Default for List<T> {
     pub fn default() -> List<T> {
         return [] as List<T>;
     }

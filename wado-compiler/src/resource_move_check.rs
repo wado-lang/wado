@@ -443,6 +443,20 @@ impl MoveWalker<'_, '_> {
         }
     }
 
+    /// Whether `expr` is a container's element, or a field of one at any
+    /// depth. A tuple's `t[0]` is its field `t.0`, no element.
+    fn roots_in_element(&self, expr: &Expr) -> bool {
+        match expr {
+            Expr::Index(ix) => !self.sem().expression_type(ix.expr.id()).is_some_and(|ty| {
+                let types = &self.sem().types;
+                matches!(types.get(types.peel_refs(ty)), ResolvedType::GenericInstance { def, .. }
+                    if types.is_tuple_def(*def))
+            }),
+            Expr::FieldAccess(fa) => self.roots_in_element(&fa.expr),
+            _ => false,
+        }
+    }
+
     /// Whether `expr` is a reference, so a field read through it reads the
     /// referent.
     fn is_reference(&self, expr: &Expr) -> bool {
@@ -579,9 +593,15 @@ impl MoveWalker<'_, '_> {
             }
             return;
         }
+        // An element is read through the container's `&self`, which keeps it.
         let out_of_reference = match expr {
             Expr::Unary(u) if u.op == ast::UnaryOp::Deref => Some(&u.expr),
-            Expr::FieldAccess(fa) if self.path_through_reference(expr) => Some(&fa.expr),
+            Expr::FieldAccess(fa)
+                if self.path_through_reference(expr) || self.roots_in_element(&fa.expr) =>
+            {
+                Some(&fa.expr)
+            }
+            _ if self.roots_in_element(expr) => Some(expr),
             _ => None,
         };
         match out_of_reference {

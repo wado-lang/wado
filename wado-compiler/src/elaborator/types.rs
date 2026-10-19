@@ -687,6 +687,14 @@ pub enum TypeError {
         unmet: BoundUnmet,
     },
 
+    /// An affine type argument for a type parameter not declared `affine`,
+    /// whose body may copy it (WEP: Affine Types).
+    AffineArgument {
+        type_name: String,
+        param_name: String,
+        span: Span,
+    },
+
     /// An explicit `impl Eq for T;` / `impl Ord for T;` marker was written,
     /// but `T` is not structurally eligible — some field/case does not
     /// itself implement the trait. Unlike [`Self::TraitBoundNotSatisfied`]
@@ -1950,6 +1958,17 @@ impl TypeError {
                         "type '{type_name}' does not implement trait '{trait_name}' required by bound on '{param_name}'"
                     ),
                     reason,
+                ),
+                *span,
+            ),
+            TypeError::AffineArgument {
+                type_name,
+                param_name,
+                span,
+            } => (
+                Code::AffineArgument,
+                format!(
+                    "affine type '{type_name}' given for '{param_name}', which may be copied; `affine {param_name}` would admit it"
                 ),
                 *span,
             ),

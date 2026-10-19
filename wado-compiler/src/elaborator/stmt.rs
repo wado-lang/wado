@@ -2848,17 +2848,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // loop owns what it walks. A copyable one walks its `IntoIterator`,
         // whose iterator shares the operand's storage where a moved one would
         // cost a copy of a list read after the loop (WEP: Affine Types).
-        let affine_params: Vec<String> = self
-            .annotate_ctx
-            .trait_ctx
-            .type_params
-            .iter()
-            .filter(|(_, binder)| binder.is_affine)
-            .map(|(name, _)| name.clone())
-            .collect();
-        let walks_value = self
-            .tysys
-            .is_affine(into_iter_receiver_type, &affine_params)
+        let walks_value = self.tysys.is_affine(
+            into_iter_receiver_type,
+            &self.annotate_ctx.trait_ctx.affine_params(),
+        )
             && self
                 .tysys
                 .compiler_trait(CompilerItem::ForOf)

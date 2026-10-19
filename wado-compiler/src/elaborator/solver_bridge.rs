@@ -479,6 +479,14 @@ impl Lowering {
         *def
     }
 
+    fn decl_key(&self, head: TypeDeclId) -> &DeclKey {
+        let (key, _) = self
+            .decls
+            .get_index(head.0 as usize)
+            .expect("a lowered head is interned");
+        key
+    }
+
     fn known_assoc(&self, trait_: TraitDeclId, name: &str) -> Option<AssocId> {
         self.assocs
             .get(&(trait_, name.to_string()))
@@ -817,7 +825,10 @@ pub(super) fn lower_impls<'a>(
             .type_params
             .iter()
             .map(|p| {
-                let mut def = ParamDef::default();
+                let mut def = ParamDef {
+                    copyable: !p.is_affine,
+                    ..ParamDef::default()
+                };
                 for b in &p.bounds {
                     let Some(bound) = resolutions.bound_decl(b) else {
                         continue;
@@ -1029,6 +1040,7 @@ impl SolverBridge {
         lowering.tuple = table.compiler_item_def(CompilerItem::Tuple);
         program.tuple = lowering.tuple.map(|def| lowering.type_decl(def));
         Self::intern_declarations(tysys, modules, &mut lowering);
+        program.copyable = Self::derived_trait(tysys, &mut lowering, CompilerItem::Copyable);
         let derivation_sources = Self::derivation_sources(tysys);
         for (&def, &kind) in &derivation_sources {
             if let Some(trait_) = tysys.trait_env.impl_headers[&def].trait_def() {
@@ -1059,6 +1071,8 @@ impl SolverBridge {
             pair_comparisons(&mut program, eq, ord);
         }
         let mut bridge = Self { program, lowering };
+        // Before the declarations, whose derived `Copyable` reads them.
+        bridge.state_copyable_facts();
         let shapes = bridge.shapes(modules);
         bridge.state_declarations(tysys, &tysys.data, &table, shapes, ImplId(0));
         let heads: Vec<TypeDeclId> = (0..bridge.lowering.decls.len())
@@ -1066,6 +1080,31 @@ impl SolverBridge {
             .collect();
         bridge.state_ref_facts(tysys, &table, &heads);
         bridge
+    }
+
+    /// A primitive and a function value copy. An `Array` copies where its
+    /// element does, which the prelude states as an impl. Every builtin head
+    /// is interned with the lowering.
+    fn state_copyable_facts(&mut self) {
+        let Some(copyable) = self.program.copyable else {
+            return;
+        };
+        for index in 0..self.lowering.decls.len() {
+            let head = TypeDeclId(u32::try_from(index).expect("fewer than 2^32 declarations"));
+            let copies = match self.lowering.decl_key(head) {
+                DeclKey::Builtin(name) => name != TypeTable::ARRAY_TYPE_NAME,
+                DeclKey::FnShape { .. } => true,
+                DeclKey::Def(_)
+                | DeclKey::AnonymousStruct
+                | DeclKey::TemplateShape
+                | DeclKey::UndeclaredEffect => false,
+            };
+            if copies {
+                self.program
+                    .facts
+                    .insert((head, copyable), Fact { visible_from: None });
+            }
+        }
     }
 
     /// State the structs and newtypes a block declares, once annotate has
@@ -1152,7 +1191,7 @@ impl SolverBridge {
             .collect();
         members.extend(shapes.into_iter().map(|(shape, _)| shape));
         stated.extend(members.iter().chain(&handles).map(|decl| decl.id));
-        Self::derive_all(tysys, lowering, program, members, handles);
+        Self::derive_all(tysys, table, lowering, program, members, handles);
         Self::name_derived_impls(data, lowering, program, named_from);
         Self::state_reflect_facts(tysys, data, &shape_kinds, table, lowering, program);
         Self::state_type_facts(tysys, data, table, lowering, program);
@@ -1228,12 +1267,8 @@ impl SolverBridge {
             let (Some(trait_), SolverType::Decl(head, _)) = (def.trait_, &def.target) else {
                 continue;
             };
-            let (key, _) = lowering
-                .decls
-                .get_index(head.0 as usize)
-                .expect("a lowered head is interned");
             if let Some(&source) =
-                kind_of(key).and_then(|kind| lowering.derivation_source.get(&(trait_, kind)))
+                kind_of(lowering.decl_key(*head)).and_then(|kind| lowering.derivation_source.get(&(trait_, kind)))
             {
                 lowering.impl_defs.insert(id, source);
             }
@@ -1358,8 +1393,13 @@ impl SolverBridge {
             let id = lowering.trait_decl(inspect);
             program.traits.entry(id).or_default().holds_for_all = true;
         }
-        // A reference is itself the thing a `Ref` bound asks for.
-        let holds_of_a_reference: Vec<DefId> = [CompilerItem::Ref, CompilerItem::RefMut]
+        // A reference is itself the thing a `Ref` bound asks for, and copies
+        // whatever it points to.
+        let holds_of_a_reference: Vec<DefId> = [
+            CompilerItem::Ref,
+            CompilerItem::RefMut,
+            CompilerItem::Copyable,
+        ]
             .into_iter()
             .filter_map(|item| tysys.compiler_trait_def(item))
             .collect();
@@ -1399,11 +1439,13 @@ impl SolverBridge {
                 .assoc_types
                 .iter()
                 .map(|assoc| {
+                    let copyable = program.copyable.filter(|_| !assoc.is_affine);
                     let bounds = assoc
                         .bounds
                         .iter()
                         .filter_map(|b| tysys.resolutions.bound_decl(b))
                         .map(|def| lowering.trait_decl(def))
+                        .chain(copyable)
                         .collect();
                     (lowering.assoc(id, &assoc.name), bounds)
                 })
@@ -1550,6 +1592,7 @@ impl SolverBridge {
     /// `eq` gives no `Ord` (spec-traits.md §Derivation Policy).
     fn derive_all(
         tysys: &TypeSystem,
+        table: &TypeTable,
         lowering: &mut Lowering,
         program: &mut Program,
         mut declarations: Vec<Declaration>,
@@ -1570,6 +1613,15 @@ impl SolverBridge {
                 other => unreachable!("{other:?} is not derived"),
             };
             derive(program, trait_, eligible);
+        }
+        if let Some(copyable) = program.copyable {
+            let unrestricted: Vec<Declaration> = declarations
+                .into_iter()
+                .filter(|decl| {
+                    !matches!(lowering.decl_key(decl.id), DeclKey::Def(def) if table.is_affine_decl(*def))
+                })
+                .collect();
+            derive(program, copyable, &unrestricted);
         }
     }
 
@@ -1712,10 +1764,7 @@ impl SolverBridge {
         };
         let is_variant = |def: DefId| tysys.data.variant_cases.contains_key(&def);
         for &head in heads {
-            let (key, _) = lowering
-                .decls
-                .get_index(head.0 as usize)
-                .expect("a stated head is interned");
+            let key = lowering.decl_key(head);
             let (is_ref, is_ref_mut) = match key {
                 DeclKey::Def(_)
                 | DeclKey::Builtin(_)
@@ -1901,6 +1950,11 @@ impl SolverBridge {
                         })
                 });
             let mut ids = Vec::new();
+            if !binder.is_affine
+                && let Some(copyable) = self.program.copyable
+            {
+                ids.push(ParamBound::bare(copyable));
+            }
             for stated in declared.chain(scoped) {
                 match stated {
                     Ok(bound) => ids.push(bound),

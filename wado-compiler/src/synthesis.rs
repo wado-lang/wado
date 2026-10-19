@@ -131,10 +131,7 @@ pub fn synthesize(project: Package) -> Result<Package, Vec<SynthesisError>> {
     // never transferred. Runs before CM-binding synthesis, whose rewrite of
     // resource method calls would obscure the reference-vs-transfer distinction.
     let mut project = project;
-    let refused = resource_cleanup::elaborate_resource_drops(&mut project);
-    if !refused.is_empty() {
-        return Err(refused);
-    }
+    resource_cleanup::elaborate_resource_drops(&mut project);
     effect_dispatch::rewrite_resource_drops(&project);
 
     let project = cm_binding::generate_adapters(project)?;

@@ -1,0 +1,21 @@
+// An affine argument for a type parameter not declared `affine` is a type
+// error at the instantiation: the body may copy it (WEP: Affine Types).
+
+affine struct Fields {
+    n: i32,
+}
+
+impl Drop for Fields {
+    fn drop(self) {}
+}
+
+fn dup<T>(x: T) -> [T, T] {
+    return [x, x];
+}
+
+export fn run() {
+    let pair = dup(Fields { n: 1 });
+}
+
+__DATA__
+{"compile_error": ":17:16: type error: affine type 'Fields' given for 'T', which may be copied; `affine T` would admit it"}

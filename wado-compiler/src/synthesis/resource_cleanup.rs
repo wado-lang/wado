@@ -10,7 +10,6 @@
 use std::cell::RefCell;
 use std::rc::Rc;
 
-use crate::compiler_host::Code;
 use crate::compiler_item::{CompilerItem, SeqField};
 use crate::component_model::CmInterfaceRegistry;
 use crate::defs::DefId;
@@ -20,7 +19,6 @@ use crate::module_source::ModuleSource;
 use crate::name::{DROP_GLUE_PREFIX, Receiver, checked_name, drop_glue_name, minted_name};
 use crate::package::Package;
 use crate::resource_holding::{Held, HeldTypes, holds_resource};
-use crate::synthesis::SynthesisError;
 use crate::synthesis::cm_binding::{end_drop_call, resource_drop_call};
 use crate::synthesis::common;
 use crate::synthesis::common::{
@@ -79,7 +77,6 @@ struct BreakTarget {
 
 struct Cx<'a> {
     resources: Resources<'a>,
-    callees: &'a CalleeFacts,
     /// The frame's local slots after its first `local_base`: a closure's
     /// parameters precede its body locals and are not listed.
     locals: &'a mut Vec<TirLocal>,
@@ -95,10 +92,6 @@ struct Cx<'a> {
     glue: &'a mut DropGlue,
     /// The module of the function being elaborated.
     module: ModuleSource,
-    refused: &'a mut Vec<SynthesisError>,
-    /// Whether a copy out of a shared reference is refused: an instance's
-    /// copies are the instantiation rule's.
-    refuses_copies: bool,
     /// The `self` of a `Drop::drop` body, which drops what it still holds field
     /// by field: dropping it whole would run `drop` again.
     drop_self: Option<u32>,
@@ -140,24 +133,6 @@ impl Cx<'_> {
             .last_mut()
             .expect("a function body opens a scope")
             .push(live);
-    }
-
-    /// Refuse a call at `span` that copies a `type_id` holding a resource out
-    /// of a shared reference: the copy would be a second owner of its handle.
-    fn refuse_copy(&mut self, type_id: TypeId, span: Span) {
-        if !self.refuses_copies {
-            return;
-        }
-        let type_name = self.resources.tt.borrow().type_name(type_id);
-        self.refused.push(SynthesisError {
-            code: Code::TypeMismatch,
-            message: format!(
-                "cannot copy resource `{type_name}` out of a reference; a call through `&` \
-                 leaves it in place, so take it out through `&mut`, as `pop` or `remove` do"
-            ),
-            span: Some(span),
-            module: Some(Box::new(self.module.clone())),
-        });
     }
 
     /// How many scopes are open outside the target a `break label` (or, with
@@ -462,116 +437,15 @@ impl TirRefVisitor for PatternBindings<'_> {
     }
 }
 
-/// What a call reveals about ownership, by callee. Each set holds
-/// [`callee_key`]s, which a generic function shares with its instantiations.
-#[derive(Default)]
-pub struct CalleeFacts {
-    /// Functions that copy their result out of a shared reference: it names a
-    /// type parameter some `&` parameter stores and no `&mut` one does, as
-    /// `List::index_value` does. The referenced storage keeps what was copied,
-    /// so the result is no temporary of the caller's, and taking one that
-    /// holds a resource is refused (WEP 2026-05-21, "A call through a shared
-    /// reference copies"). Through a `&mut` a call extracts instead, as
-    /// `List::pop` does, and the caller owns its result.
-    copy_returning: IndexSet<String>,
-}
-
-impl CalleeFacts {
-    fn record(&mut self, func: &TirFunction, resources: Resources) {
-        let key = callee_key(&FunctionRef::from_resolved(
-            func,
-            func.module_source.clone(),
-        ));
-        let params: Vec<ResolvedType> = {
-            let tt = resources.tt.borrow();
-            func.params
-                .iter()
-                .map(|param| tt.get(param.type_id).clone())
-                .collect()
-        };
-        let stores = Stores {
-            resources,
-            params: resources.tt.borrow().type_param_indices(func.return_type),
-        };
-        let mut reads_shared = false;
-        let mut reads_exclusive = false;
-        for param in &params {
-            match param {
-                ResolvedType::Ref(inner) => reads_shared |= holds_resource(&stores, *inner),
-                ResolvedType::MutRef(inner) => {
-                    reads_exclusive |= holds_resource(&stores, *inner);
-                }
-                _ => {}
-            }
-        }
-        if reads_shared && !reads_exclusive {
-            self.copy_returning.insert(key);
-        }
-    }
-}
-
-/// Whether a type stores a value of one of `params`, for [`CalleeFacts`],
-/// asked through [`holds_resource`] with such a value as the resource it
-/// counts: in a field, an element or a payload, or behind a reference. A function type
-/// produces its result rather than storing it, so `AsyncCall<T>`, which holds
-/// only a `fn(i32) -> T`, stores no `T`.
-struct Stores<'a> {
-    resources: Resources<'a>,
-    params: IndexSet<u32>,
-}
-
-impl HeldTypes for Stores<'_> {
-    fn key(&self, type_id: TypeId) -> TypeKey {
-        self.resources.key(type_id)
-    }
-
-    fn held(&self, type_id: TypeId) -> Held {
-        let resolved = self.resources.tt.borrow().get(type_id).clone();
-        match resolved {
-            // Another parameter is a type whose layout nothing knows yet, so it
-            // may store the result: a reflected field getter reads one out of
-            // a `&S`.
-            ResolvedType::TypeParam { .. } | ResolvedType::TypePack { .. }
-                if !self.params.is_empty() =>
-            {
-                Held::Resource
-            }
-            ResolvedType::TypeParam { .. } | ResolvedType::TypePack { .. } => Held::Nothing,
-            ResolvedType::Ref(inner)
-            | ResolvedType::MutRef(inner)
-            | ResolvedType::BuiltinArray(inner) => Held::Members {
-                decl: None,
-                args: Vec::new(),
-                members: vec![inner],
-            },
-            _ => match self.resources.held(type_id) {
-                Held::Resource => Held::Nothing,
-                held => held,
-            },
-        }
-    }
-}
-
-/// The key [`CalleeFacts`] files a callee under: a method's
-/// [`base_dispatch_key`](crate::name::LocalMethodName::base_dispatch_key), or
-/// a free function's full name.
-fn callee_key(func: &FunctionRef) -> String {
-    match &func.method_info {
-        Some(info) => info.base_dispatch_key(),
-        None => func.full_name(),
-    }
-}
-
-/// Entry point: elaborate resource drops for every function in the project,
-/// and return the calls refused for copying a resource out of a reference.
-pub fn elaborate_resource_drops(project: &mut Package) -> Vec<SynthesisError> {
+/// Entry point: elaborate resource drops for every function in the project.
+pub fn elaborate_resource_drops(project: &mut Package) {
     let Some(type_table) = project
         .tir_modules
         .values()
         .next()
         .map(|m| m.type_table.clone())
     else {
-        return Vec::new();
+        return;
     };
     let struct_fields: StructFields = project
         .tir_modules
@@ -593,19 +467,11 @@ pub fn elaborate_resource_drops(project: &mut Package) -> Vec<SynthesisError> {
         answers: &answers,
     };
 
-    let mut callees = CalleeFacts::default();
-    for module in project.tir_modules.values() {
-        for func_rc in &module.functions {
-            callees.record(&func_rc.borrow(), resources);
-        }
-    }
-
     let mut glue = DropGlue {
         entry: project.entry_module_source.clone(),
         called: IndexMap::default(),
         prebuilt: IndexSet::default(),
     };
-    let mut refused = Vec::new();
     // A generic body is elaborated once per instance, where its types are
     // known: see `elaborate_instance_drops`.
     for module in project.tir_modules.values() {
@@ -613,16 +479,10 @@ pub fn elaborate_resource_drops(project: &mut Package) -> Vec<SynthesisError> {
             if func_rc.borrow().is_template() {
                 continue;
             }
-            elaborate_function(
-                &mut func_rc.borrow_mut(),
-                resources,
-                &callees,
-                &mut glue,
-                &mut refused,
-            );
+            elaborate_function(&mut func_rc.borrow_mut(), resources, &mut glue);
         }
     }
-    let glue_functions = build_called_glue(resources, &callees, &mut glue, &mut refused);
+    let glue_functions = build_called_glue(resources, &mut glue);
     let entry = project
         .tir_modules
         .get_mut(&project.entry_module_source)
@@ -630,7 +490,6 @@ pub fn elaborate_resource_drops(project: &mut Package) -> Vec<SynthesisError> {
     for function in glue_functions {
         entry.functions.push(Rc::new(RefCell::new(function)));
     }
-    refused
 }
 
 /// What monomorphization takes out of a [`FlatPackage`] that elaborating its
@@ -663,18 +522,6 @@ impl Generics {
     }
 }
 
-/// What every callee in `flat` reveals about ownership, read before
-/// monomorphization replaces the generic signatures it is read from.
-pub fn instance_callee_facts(flat: &FlatPackage, generics: &Generics) -> CalleeFacts {
-    with_flat_resources(flat, generics, |resources| {
-        let mut callees = CalleeFacts::default();
-        for func_rc in &flat.functions {
-            callees.record(&func_rc.borrow(), resources);
-        }
-        callees
-    })
-}
-
 /// Run `f` with the [`Resources`] of `flat`.
 fn with_flat_resources<R>(
     flat: &FlatPackage,
@@ -694,17 +541,10 @@ fn with_flat_resources<R>(
 }
 
 /// Elaborate the drops of every instance among `flat.functions` from `first`
-/// on, a generic body whose types are now known (WEP: Affine Types). A copy a
-/// generic body makes is the instantiation rule's to refuse, so none is
-/// refused here.
-pub fn elaborate_instance_drops(
-    flat: &mut FlatPackage,
-    first: usize,
-    callees: &CalleeFacts,
-    generics: &Generics,
-) {
+/// on, a generic body whose types are now known (WEP: Affine Types).
+pub fn elaborate_instance_drops(flat: &mut FlatPackage, first: usize, generics: &Generics) {
     let glue_functions = with_flat_resources(flat, generics, |resources| {
-        elaborate_instances(flat, first, resources, callees)
+        elaborate_instances(flat, first, resources)
     });
     flat.functions
         .extend(glue_functions.into_iter().map(|f| Rc::new(RefCell::new(f))));
@@ -712,12 +552,7 @@ pub fn elaborate_instance_drops(
 
 /// Elaborate the instances `elaborate_instance_drops` names, returning the
 /// glue they call that does not exist yet.
-fn elaborate_instances(
-    flat: &FlatPackage,
-    first: usize,
-    resources: Resources,
-    callees: &CalleeFacts,
-) -> Vec<TirFunction> {
+fn elaborate_instances(flat: &FlatPackage, first: usize, resources: Resources) -> Vec<TirFunction> {
     let mut glue = DropGlue {
         entry: flat.entry_module_source.clone(),
         called: IndexMap::default(),
@@ -728,32 +563,18 @@ fn elaborate_instances(
             .filter(|name| name.starts_with(DROP_GLUE_PREFIX))
             .collect(),
     };
-    let mut refused = Vec::new();
     for func_rc in &flat.functions[first..] {
         if func_rc.borrow().monomorph_info.is_none() {
             continue;
         }
-        elaborate_function(
-            &mut func_rc.borrow_mut(),
-            resources,
-            callees,
-            &mut glue,
-            &mut refused,
-        );
+        elaborate_function(&mut func_rc.borrow_mut(), resources, &mut glue);
     }
-    let glue_functions = build_called_glue(resources, callees, &mut glue, &mut refused);
-    assert!(refused.is_empty(), "an instance refuses no copy");
-    glue_functions
+    build_called_glue(resources, &mut glue)
 }
 
 /// Build the glue called so far and not built already. A glue body can call
 /// glue of its own, so the list grows while it is built.
-fn build_called_glue(
-    resources: Resources,
-    callees: &CalleeFacts,
-    glue: &mut DropGlue,
-    refused: &mut Vec<SynthesisError>,
-) -> Vec<TirFunction> {
+fn build_called_glue(resources: Resources, glue: &mut DropGlue) -> Vec<TirFunction> {
     let mut glue_functions = Vec::new();
     let mut next = 0;
     while let Some((name, type_id)) = glue
@@ -765,9 +586,7 @@ fn build_called_glue(
         if glue.prebuilt.contains(&name) {
             continue;
         }
-        glue_functions.push(build_drop_glue(
-            name, type_id, resources, callees, glue, refused,
-        ));
+        glue_functions.push(build_drop_glue(name, type_id, resources, glue));
     }
     glue_functions
 }
@@ -778,9 +597,7 @@ fn build_drop_glue(
     name: String,
     type_id: TypeId,
     resources: Resources,
-    callees: &CalleeFacts,
     glue: &mut DropGlue,
-    refused: &mut Vec<SynthesisError>,
 ) -> TirFunction {
     let entry = glue.entry.clone();
     let params = vec![TirParam {
@@ -795,7 +612,6 @@ fn build_drop_glue(
     let mut local_count = locals.len() as u32;
     let mut cx = Cx {
         resources,
-        callees,
         locals: &mut locals,
         local_base: 0,
         local_count: Some(&mut local_count),
@@ -804,8 +620,6 @@ fn build_drop_glue(
         expanding: Vec::new(),
         glue,
         module: entry.clone(),
-        refused,
-        refuses_copies: true,
         drop_self: None,
     };
     let value = local_ref(0, "value", type_id);
@@ -829,13 +643,7 @@ fn build_drop_glue(
 }
 
 /// Elaborate resource drops for a single function body.
-fn elaborate_function(
-    func: &mut TirFunction,
-    resources: Resources,
-    callees: &CalleeFacts,
-    glue: &mut DropGlue,
-    refused: &mut Vec<SynthesisError>,
-) {
+fn elaborate_function(func: &mut TirFunction, resources: Resources, glue: &mut DropGlue) {
     if forwards_to_twin(func) {
         return;
     }
@@ -846,7 +654,6 @@ fn elaborate_function(
         locals,
         local_count,
         module_source,
-        monomorph_info,
         ..
     } = func
     else {
@@ -873,7 +680,6 @@ fn elaborate_function(
 
     let mut cx = Cx {
         resources,
-        callees,
         locals,
         local_base: 0,
         local_count: Some(local_count),
@@ -882,8 +688,6 @@ fn elaborate_function(
         expanding: Vec::new(),
         glue,
         module: module_source.clone(),
-        refused,
-        refuses_copies: monomorph_info.is_none(),
         drop_self,
     };
     elab_scope(body, owned, TemporaryScope::Statement, &mut cx);
@@ -1683,7 +1487,7 @@ fn elab_value_expr(mut expr: TirExpr, cx: &mut Cx) -> TirExpr {
 /// The match is exhaustive so a new `TirExprKind` cannot silently escape
 /// ownership accounting: a missed move drops twice, a missed reference leaks.
 fn elab_expr(expr: &mut TirExpr, consuming: bool, cx: &mut Cx) {
-    if !consuming && is_temporary(&expr.kind, cx) && cx.carries_resource(expr.type_id) {
+    if !consuming && is_temporary(&expr.kind) && cx.carries_resource(expr.type_id) {
         elab_expr(expr, true, cx);
         spill_temporary(expr, cx);
         return;
@@ -1743,14 +1547,9 @@ fn elab_expr(expr: &mut TirExpr, consuming: bool, cx: &mut Cx) {
         }
 
         TirExprKind::Call { func, args, .. } => {
-            let key = callee_key(func);
-            // Only a copy something takes is a second owner: one that is only
-            // read where it stands (`list[0].has(…)`) is owned by nothing.
-            if consuming && cx.callees.copy_returning.contains(&key) && cx.carries_resource(type_id)
-            {
-                cx.refuse_copy(type_id, span);
-            }
             let (receiver, rest) = args.split_mut();
+            // `is_moved` reads the place it tests; taking it would empty it.
+            let consumes_args = !func.is_builtin_named("is_moved");
             if let Some(receiver) = receiver {
                 // A `&self` method auto-references its receiver, and a
                 // by-value `self` takes it as written, transferring it.
@@ -1763,7 +1562,7 @@ fn elab_expr(expr: &mut TirExpr, consuming: bool, cx: &mut Cx) {
                 }
             }
             for arg in rest {
-                elab_expr(&mut arg.expr, true, cx);
+                elab_expr(&mut arg.expr, consumes_args, cx);
             }
             moving = func.intrinsic().and_then(|name| {
                 MovingBuiltin::named(name, args.first().map(|arg| &arg.expr), cx.resources)
@@ -1802,8 +1601,7 @@ fn elab_expr(expr: &mut TirExpr, consuming: bool, cx: &mut Cx) {
             elab_expr(value, true, cx);
             stores = cx.carries_resource(target.type_id);
         }
-        // An element read leaves its container whole; a copy out of one is
-        // the refused call's to report.
+        // An element read leaves its container whole.
         TirExprKind::Index { expr: base, index } => {
             elab_expr(base, false, cx);
             elab_expr(index, true, cx);
@@ -1916,7 +1714,8 @@ enum MovingBuiltin {
     /// `array_take`: reads a slot, and empties it where the element is affine.
     /// Like `replace`, it expands for every type.
     Take { elem: TypeId, affine: bool },
-    /// `array_set`: drops what the slot held.
+    /// `array_set`: drops what the slot held, and writes into the object a
+    /// slot holding one holds.
     Set(TypeId),
     /// `array_move`: empties the source slots the destination does not cover.
     Move,
@@ -1997,8 +1796,14 @@ fn elab_moving_builtin(expr: &mut TirExpr, builtin: MovingBuiltin, cx: &mut Cx) 
                 elem,
                 read_slot(&args[0], args[1].clone(), elem),
             ));
-            stmts.extend(drop_if_held(local_ref(local, &local_name, elem), elem, cx));
-            stmts.push(expr_stmt(raw(&args)));
+            let held = local_ref(local, &local_name, elem);
+            if cx.resources.is_object(elem) {
+                let repoint = expr_stmt(raw(&args));
+                stmts.push(store_into_object(held, args[2].clone(), repoint, cx));
+            } else {
+                stmts.extend(drop_if_held(held, elem, cx));
+                stmts.push(expr_stmt(raw(&args)));
+            }
             None
         }
         MovingBuiltin::Move => {
@@ -2180,7 +1985,6 @@ fn elab_closure(
     }
     let mut inner = Cx {
         resources: cx.resources,
-        callees: cx.callees,
         locals: body_locals,
         local_base: params.len() as u32,
         local_count: None,
@@ -2189,8 +1993,6 @@ fn elab_closure(
         expanding: Vec::new(),
         glue: cx.glue,
         module: cx.module.clone(),
-        refused: cx.refused,
-        refuses_copies: cx.refuses_copies,
         drop_self: None,
     };
     let mut block = into_block(body);
@@ -2241,7 +2043,7 @@ fn take_field(expr: &mut TirExpr, cx: &mut Cx) {
         take_place(expr, cx);
         return;
     }
-    if is_temporary(&base.kind, cx) {
+    if is_temporary(&base.kind) {
         elab_expr(base, true, cx);
         let type_id = base.type_id;
         let (local, name) = spill_as_local(base, cx);
@@ -2260,13 +2062,11 @@ fn take_field(expr: &mut TirExpr, cx: &mut Cx) {
 
 /// Whether evaluating `kind` produces a fresh value rather than reading a
 /// place. Referencing such a value leaves it with no owner but the statement.
-fn is_temporary(kind: &TirExprKind, cx: &Cx) -> bool {
-    if let TirExprKind::Call { func, .. } = kind {
-        return !cx.callees.copy_returning.contains(&callee_key(func));
-    }
+fn is_temporary(kind: &TirExprKind) -> bool {
     matches!(
         kind,
-        TirExprKind::CmRawCall { .. }
+        TirExprKind::Call { .. }
+            | TirExprKind::CmRawCall { .. }
             | TirExprKind::IndirectCall { .. }
             | TirExprKind::StructLiteral { .. }
             | TirExprKind::TupleLiteral { .. }
@@ -2355,21 +2155,8 @@ fn elab_store(expr: &mut TirExpr, cx: &mut Cx) {
             }
         }
         None if is_object => {
-            let mut write = drop_value(target.clone(), type_id, cx);
-            let ref_ty = cx.resources.tt.borrow_mut().make_mut_ref(type_id);
-            let into = common::deref_expr(
-                common::mut_ref_expr(target.clone(), ref_ty, span),
-                type_id,
-                span,
-            );
-            write.push(expr_stmt(assign(into, stored.clone())));
-            write.extend(zero_object(stored.clone(), cx));
-            let moved = builtin_call("is_moved", vec![target.clone()], TypeTable::BOOL);
-            stmts.push(if_stmt(
-                moved,
-                TirBlock::new(vec![expr_stmt(assign(target, stored))], span),
-                Some(TirBlock::new(write, span)),
-            ));
+            let repoint = expr_stmt(assign(target.clone(), stored.clone()));
+            stmts.push(store_into_object(target, stored, repoint, cx));
         }
         None => {
             stmts.extend(drop_if_held(target.clone(), type_id, cx));
@@ -2381,6 +2168,29 @@ fn elab_store(expr: &mut TirExpr, cx: &mut Cx) {
         TypeTable::UNIT,
         span,
     );
+}
+
+/// Drop what the object `place` holds and move `stored`'s content into it, so
+/// every reference to the place sees it, zeroing `stored`'s own object. Where a
+/// move emptied `place`, `repoint` stores the reference instead.
+fn store_into_object(place: TirExpr, stored: TirExpr, repoint: TirStmt, cx: &mut Cx) -> TirStmt {
+    let span = place.span;
+    let type_id = place.type_id;
+    let mut write = drop_value(place.clone(), type_id, cx);
+    let ref_ty = cx.resources.tt.borrow_mut().make_mut_ref(type_id);
+    let into = common::deref_expr(
+        common::mut_ref_expr(place.clone(), ref_ty, span),
+        type_id,
+        span,
+    );
+    write.push(expr_stmt(assign(into, stored.clone())));
+    write.extend(zero_object(stored, cx));
+    let moved = builtin_call("is_moved", vec![place], TypeTable::BOOL);
+    if_stmt(
+        moved,
+        TirBlock::new(vec![repoint], span),
+        Some(TirBlock::new(write, span)),
+    )
 }
 
 /// Trap where a store through a reference would move `stored` into the object
@@ -2461,7 +2271,7 @@ fn elab_match(scrutinee: &mut TirExpr, arms: &mut [TirMatchArm], cx: &mut Cx) {
         if is_place(scrutinee, cx) {
             elab_expr(scrutinee, false, cx);
             Some((*scrutinee).clone())
-        } else if is_temporary(&scrutinee.kind, cx) {
+        } else if is_temporary(&scrutinee.kind) {
             elab_expr(scrutinee, true, cx);
             Some(spill_temporary(scrutinee, cx))
         } else {

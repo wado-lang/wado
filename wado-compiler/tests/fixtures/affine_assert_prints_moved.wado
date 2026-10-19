@@ -1,0 +1,29 @@
+// An `assert` prints an affine operand the condition moved as moved, where
+// reading it would reach an emptied place (WEP: Affine Types).
+
+affine struct Tok {
+    n: i32,
+}
+
+impl Drop for Tok {
+    fn drop(self) {}
+}
+
+fn eat(t: Tok) -> i32 {
+    return t.n;
+}
+
+export fn run() {
+    let t = Tok { n: 1 };
+    assert eat(t) == 2;
+}
+
+__DATA__
+{
+    "trapped": true,
+    "stderr_contains": [
+        "condition: eat(t) == 2",
+        "t: <moved>",
+        "eat(t): 1"
+    ]
+}

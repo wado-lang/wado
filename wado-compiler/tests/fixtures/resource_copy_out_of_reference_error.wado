@@ -1,11 +1,11 @@
-// A generic call that reads its result through a shared reference copies it
-// out of storage the reference keeps (WEP 2026-05-21, "A call through a shared
-// reference copies"). Instantiated with a resource, the copy would be a second
-// owner of one move-only handle, so taking its result is rejected: `list[0]`,
-// a stdlib accessor, and a user's own generic `&self` getter alike. A copy
-// only read where it stands has no owner, and is allowed.
+// A generic reaches an affine value through a reference only where its
+// parameter is declared `affine` (WEP: Affine Types). A user's own `&self`
+// getter over an unmarked `T` is not instantiated with a resource, and
+// `list.last()` is not found, since `Sequence`, which declares it, is
+// implemented for a copyable element only. `list[0]` read by value is a move
+// out of a reference, which `spec_components_copy_out_of_reference` states.
 
-use { Request, Response, ErrorCode, Fields, Headers, Trailers, FieldName } from "wasi:http";
+use { Request, Response, ErrorCode, Fields, Headers, Trailers } from "wasi:http";
 
 struct Shelf<T> {
     items: List<T>,
@@ -22,11 +22,7 @@ fn eat(fields: Fields) {
 
 fn copy() with Fields {
     let list: List<Fields> = [Fields::new()];
-    assert !list[0].has("a" as FieldName);
-    let indexed = list[0];
-    eat(indexed);
     let shelf = Shelf { items: [Fields::new()] };
-    eat(shelf.first());
     eat(list.last().unwrap());
 }
 
@@ -40,11 +36,10 @@ export async fn handle(request: Request) -> Result<Response, ErrorCode> {
 
 __DATA__
 {
-  "compile_error_codes": ["TYPE_MISMATCH"],
-  "compile_error_count": 3,
-  "compile_error": "cannot copy resource",
+  "compile_error_codes": ["AFFINE_ARGUMENT", "METHOD_NOT_FOUND"],
+  "compile_error_count": 2,
   "compile_errors_contains": [
-    "cannot copy resource `Fields` out of a reference",
-    "cannot copy resource `Option<Fields>` out of a reference"
+    ":25:17: type error: affine type 'Fields' given for 'T', which may be copied; `affine T` would admit it",
+    ":26:9: type error: no method 'last' found on type 'List<Fields>'"
   ]
 }
