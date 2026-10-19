@@ -476,3 +476,42 @@ test "count empty" {
     let arr: List<i32> = [];
     assert arr.iter_value().count() == 0;
 }
+
+global mut ITERATOR_TEST_DROPS: i32 = 0;
+
+affine struct IteratorTestToken {
+    id: i32,
+}
+
+impl Drop for IteratorTestToken {
+    fn drop(self) {
+        ITERATOR_TEST_DROPS += 1;
+    }
+}
+
+affine struct Countdown {
+    left: i32,
+    token: IteratorTestToken,
+}
+
+impl Iterator for Countdown {
+    type Item = i32;
+
+    fn next(&mut self) -> Option<i32> {
+        if self.left == 0 {
+            return null;
+        }
+        self.left -= 1;
+        return Option::Some(self.left);
+    }
+}
+
+test "for-of moves an affine iterator into the loop" {
+    let it = Countdown { left: 3, token: IteratorTestToken { id: 1 } };
+    let mut seen: List<i32> = [];
+    for let x of it {
+        seen.push(x);
+    }
+    assert seen == [2, 1, 0];
+    assert ITERATOR_TEST_DROPS == 1;
+}
