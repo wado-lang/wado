@@ -145,8 +145,13 @@ pub fn analyze_ownership(
         }
     }
 
-    let in_place_assigns =
-        a.in_place_assigns(func, &paths, &reference_copies, &plan.observed_fields);
+    let in_place_assigns = a.in_place_assigns(
+        func,
+        &paths,
+        &reference_copies,
+        &plan.observed_fields,
+        &ReferencePoints::of(body, &IndexSet::default(), plan),
+    );
 
     let fresh = a.owned_locals(func, oracle, type_table);
 
@@ -911,9 +916,136 @@ fn collect_local_roots(expr: &TirExpr, out: &mut IndexSet<u32>) {
     W(out).visit_expr(expr);
 }
 
+/// Where a forward walk over a body first takes a reference to each local, and
+/// where each assignment site runs. An assignment to a local no reference can
+/// precede writes storage nothing else reaches, so it repoints.
+///
+/// A reference is taken only where an expression names its local: by `&`, as
+/// the receiver of a `&self` / `&mut self` method, or by a closure's capture.
+/// What a repeated body references counts from where it starts, since the next
+/// turn brings it before every site the body runs.
+struct ReferencePoints {
+    first: IndexMap<u32, usize>,
+    sites: IndexMap<Span, usize>,
+}
+
+impl ReferencePoints {
+    /// Walk `body`, with `held` referenced before it starts.
+    fn of(body: &TirBlock, held: &IndexSet<u32>, plan: &ValueCopyPlan) -> Self {
+        let mut walk = ReferenceWalk::new(held, plan);
+        walk.visit_block(body);
+        walk.points
+    }
+
+    /// Whether a reference to `local` may exist where the assignment at `site`
+    /// runs.
+    fn referenced_at(&self, local: u32, site: Span) -> bool {
+        let at = self
+            .sites
+            .get(&site)
+            .expect("the walk meets every assignment site");
+        self.first.get(&local).is_some_and(|first| first <= at)
+    }
+}
+
+struct ReferenceWalk<'a> {
+    plan: &'a ValueCopyPlan,
+    position: usize,
+    points: ReferencePoints,
+}
+
+impl<'a> ReferenceWalk<'a> {
+    fn new(held: &IndexSet<u32>, plan: &'a ValueCopyPlan) -> Self {
+        Self {
+            plan,
+            position: 0,
+            points: ReferencePoints {
+                first: held.iter().map(|local| (*local, 0)).collect(),
+                sites: IndexMap::default(),
+            },
+        }
+    }
+
+    fn reference(&mut self, local: u32) {
+        self.points.first.entry(local).or_insert(self.position);
+    }
+
+    /// Reference from here every local a body that runs again references.
+    fn reference_repeated(&mut self, visit: impl FnOnce(&mut ReferenceWalk<'a>)) {
+        let mut repeated = ReferenceWalk::new(&IndexSet::default(), self.plan);
+        visit(&mut repeated);
+        for local in repeated.points.first.into_keys() {
+            self.reference(local);
+        }
+    }
+}
+
+impl TirRefVisitor for ReferenceWalk<'_> {
+    fn visit_stmt(&mut self, stmt: &TirStmt) {
+        if let TirStmtKind::Loop { body } | TirStmtKind::VariadicForOf { body, .. } = &stmt.kind {
+            self.reference_repeated(|walk| walk.visit_block(body));
+        }
+        self.walk_stmt(stmt);
+    }
+
+    fn visit_expr(&mut self, expr: &TirExpr) {
+        self.position += 1;
+        match &expr.kind {
+            // A closure body is a frame of its own; its captures are this
+            // frame's locals, and it holds them.
+            TirExprKind::Closure { captures, .. } => {
+                for local in capture_source_locals(captures) {
+                    self.reference(local);
+                }
+                return;
+            }
+            TirExprKind::Unary {
+                op: TirUnaryOp::Ref | TirUnaryOp::MutRef,
+                expr: place,
+            } => {
+                if let Some(root) = place::place_root(place) {
+                    self.reference(root);
+                }
+            }
+            TirExprKind::Call { func, .. }
+                if self
+                    .plan
+                    .ref_receiver_methods
+                    .contains(&func.module_source, &func.name) =>
+            {
+                if let Some(root) = expr
+                    .kind
+                    .call_receiver()
+                    .and_then(|(receiver, _)| place::place_root(receiver))
+                {
+                    self.reference(root);
+                }
+            }
+            TirExprKind::VariadicTupleComprehension { .. }
+            | TirExprKind::TypePackExpansion { .. } => {
+                self.reference_repeated(|walk| walk.walk_expr(expr));
+            }
+            _ => {}
+        }
+        self.walk_expr(expr);
+        let is_site = match &expr.kind {
+            TirExprKind::Assign { .. } => true,
+            TirExprKind::Call { func, .. } => self
+                .plan
+                .list_element_assigns
+                .contains(&func.module_source, &func.name),
+            _ => false,
+        };
+        if is_site {
+            let at = self.points.sites.entry(expr.span).or_insert(self.position);
+            *at = (*at).max(self.position);
+        }
+    }
+}
+
 /// The assignments that write in place in a body the ownership walk does not
 /// read, answered without liveness: every one but to a place rooted at a local
-/// of this frame that nothing references or captures, and to that a field some
+/// of this frame that no reference reaches yet, and to that a field some
 /// reference anywhere may observe.
 #[must_use]
 pub fn unanalyzed_in_place_assigns(
@@ -926,21 +1058,26 @@ pub fn unanalyzed_in_place_assigns(
         type_table: &'a TypeTable,
         observed: &'a ObservedFields,
         list_element_assigns: &'a FuncKeySet,
-        held: IndexSet<u32>,
+        references: ReferencePoints,
         out: IndexSet<Span>,
     }
     impl Scan<'_> {
-        /// Whether assigning `place` writes in place, as the walk decides it
-        /// without liveness. Past a reference, the caller's references decide,
-        /// through the field `owner` holding the place's storage, and with no
-        /// such field anything may hold it.
-        fn writes_in_place(&self, place: &TirExpr, owner: Option<(TypeId, u32)>) -> bool {
+        /// Whether assigning `place` at `site` writes in place, as the walk
+        /// decides it without liveness. Past a reference, the caller's
+        /// references decide, through the field `owner` holding the place's
+        /// storage, and with no such field anything may hold it.
+        fn writes_in_place(
+            &self,
+            place: &TirExpr,
+            owner: Option<(TypeId, u32)>,
+            site: Span,
+        ) -> bool {
             match place::place_root(place) {
                 None => true,
                 Some(root) if is_reference_local(self.func, root, self.type_table) => {
                     owner.is_none_or(|(ty, field)| self.observed.contains(ty, field))
                 }
-                Some(root) => self.held.contains(&root),
+                Some(root) => self.references.referenced_at(root, site),
             }
         }
 
@@ -973,46 +1110,17 @@ pub fn unanalyzed_in_place_assigns(
                         .as_list(receiver.type_id)
                         .is_some_and(|element| self.type_table.is_in_place_aggregate(element));
                     let list = place::unwrap_ref(receiver);
-                    if in_place_elements && self.writes_in_place(list, self.owning_field(list)) {
+                    if in_place_elements
+                        && self.writes_in_place(list, self.owning_field(list), expr.span)
+                    {
                         self.out.insert(expr.span);
                     }
                 }
                 TirExprKind::Assign { target, .. }
                     if self.type_table.is_in_place_aggregate(target.type_id)
-                        && self.writes_in_place(target, self.owning_field(target)) =>
+                        && self.writes_in_place(target, self.owning_field(target), expr.span) =>
                 {
                     self.out.insert(expr.span);
-                }
-                _ => {}
-            }
-            self.walk_expr(expr);
-        }
-    }
-    /// Every local the body references: by `&`, as the receiver of a `&self`
-    /// method, or by a closure's capture.
-    struct Referenced<'a> {
-        ref_receiver_methods: &'a FuncKeySet,
-        locals: IndexSet<u32>,
-    }
-    impl TirRefVisitor for Referenced<'_> {
-        fn visit_expr(&mut self, expr: &TirExpr) {
-            match &expr.kind {
-                TirExprKind::Closure { captures, .. } => {
-                    self.locals.extend(capture_source_locals(captures));
-                    return;
-                }
-                TirExprKind::Unary {
-                    op: TirUnaryOp::Ref | TirUnaryOp::MutRef,
-                    expr: place,
-                } => self.locals.extend(place::place_root(place)),
-                TirExprKind::Call { func, .. }
-                    if self
-                        .ref_receiver_methods
-                        .contains(&func.module_source, &func.name) =>
-                {
-                    if let Some((receiver, _)) = expr.kind.call_receiver() {
-                        self.locals.extend(place::place_root(receiver));
-                    }
                 }
                 _ => {}
             }
@@ -1022,17 +1130,12 @@ pub fn unanalyzed_in_place_assigns(
     let Some(body) = &func.body else {
         return IndexSet::default();
     };
-    let mut referenced = Referenced {
-        ref_receiver_methods: &plan.ref_receiver_methods,
-        locals: func.address_taken_locals.clone(),
-    };
-    referenced.visit_block(body);
     let mut scan = Scan {
         func,
         type_table,
         observed: &plan.observed_fields,
         list_element_assigns: &plan.list_element_assigns,
-        held: referenced.locals,
+        references: ReferencePoints::of(body, &func.address_taken_locals, plan),
         out: IndexSet::default(),
     };
     scan.visit_block(body);
@@ -1624,16 +1727,17 @@ impl Analyzer<'_> {
 
     /// The assignments that write in place, each turning the writes it recorded
     /// from a repoint into a write inside the storage. Every place asks the
-    /// references this body takes to it: one a holder outlives, or one whose
-    /// holder is readable after the assignment. A place past a reference is the
-    /// caller's as well, so it also asks the references other bodies may hold
-    /// across the call that reaches this one.
+    /// references this body takes to it before the assignment: one a holder
+    /// outlives, or one whose holder is readable after the assignment. A place
+    /// past a reference is the caller's as well, so it also asks the references
+    /// other bodies may hold across the call that reaches this one.
     fn in_place_assigns(
         &mut self,
         func: &TirFunction,
         paths: &IndexMap<u32, Vec<AccessPath>>,
         reference_copies: &[(u32, u32)],
         observed: &ObservedFields,
+        references: &ReferencePoints,
     ) -> IndexSet<Span> {
         let (holds, readable_anywhere) = self.holder_graph(paths, reference_copies);
         let mut out = IndexSet::default();
@@ -1646,6 +1750,9 @@ impl Analyzer<'_> {
                 continue;
             };
             let external = site.through_ref || is_reference_local(func, root, self.type_table);
+            if !external && !references.referenced_at(root, site.span) {
+                continue;
+            }
             let readable = readable_storage(paths, &site.live);
             // Which of the root's fields a reference still holds after the site:
             // `None` stands for the whole root, or a reference too imprecise to
