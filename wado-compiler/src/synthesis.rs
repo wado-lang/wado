@@ -135,6 +135,7 @@ pub fn synthesize(project: Package) -> Result<Package, Vec<SynthesisError>> {
     if !refused.is_empty() {
         return Err(refused);
     }
+    effect_dispatch::rewrite_resource_drops(&project);
 
     let project = cm_binding::generate_adapters(project)?;
     Ok(project)

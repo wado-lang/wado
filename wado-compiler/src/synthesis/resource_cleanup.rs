@@ -18,7 +18,7 @@ use crate::defs::DefId;
 use crate::flat_package::FlatPackage;
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::module_source::ModuleSource;
-use crate::name::{DROP_GLUE_PREFIX, checked_name, drop_glue_name, minted_name};
+use crate::name::{DROP_GLUE_PREFIX, Receiver, checked_name, drop_glue_name, minted_name};
 use crate::package::Package;
 use crate::resource_holding::{Held, HeldTypes, holds_resource};
 use crate::synthesis::SynthesisError;
@@ -101,6 +101,9 @@ struct Cx<'a> {
     /// Whether a copy out of a shared reference is refused: an instance's
     /// copies are the instantiation rule's.
     refuses_copies: bool,
+    /// The `self` of a `Drop::drop` body, which drops what it still holds field
+    /// by field: dropping it whole would run `drop` again.
+    drop_self: Option<u32>,
 }
 
 /// The drop glue functions called so far, by name, each with the type it
@@ -197,11 +200,12 @@ enum Layout<'a> {
         fields: Vec<(u32, String, TypeId)>,
     },
     /// An aggregate, instantiating `decl` with `args` where it has a
-    /// declaration.
+    /// declaration, and dropped by `drop_impl` where it implements `Drop`.
     Holder {
         decl: Option<DefId>,
         args: Vec<TypeId>,
         parts: Parts,
+        drop_impl: Option<&'a FunctionRef>,
     },
     /// Nothing this pass drops.
     Opaque,
@@ -232,6 +236,8 @@ struct Resources<'a> {
     tt: &'a RefCell<TypeTable>,
     reg: &'a CmInterfaceRegistry,
     struct_fields: &'a StructFields,
+    /// Each type's `Drop::drop`, by the type's declaration.
+    drop_impls: &'a DropImpls,
     /// What [`Self::carried_by`] has answered, by type.
     answers: &'a RefCell<IndexMap<TypeKey, bool>>,
 }
@@ -287,6 +293,7 @@ impl<'a> Resources<'a> {
                 decl: None,
                 args: Vec::new(),
                 parts: Parts::Fields(fields),
+                drop_impl: None,
             };
         }
         // A generic struct's instance is a `GenericInstance`, as a generic
@@ -349,7 +356,13 @@ impl<'a> Resources<'a> {
                 fields,
             };
         }
-        Layout::Holder { decl, args, parts }
+        let drop_impl = decl.and_then(|decl| self.drop_impls.get(&decl));
+        Layout::Holder {
+            decl,
+            args,
+            parts,
+            drop_impl,
+        }
     }
 
     /// Whether a place holding a `type_id` holds an object that a store writes
@@ -387,13 +400,19 @@ impl HeldTypes for Resources<'_> {
 
     fn held(&self, type_id: TypeId) -> Held {
         match self.layout(type_id) {
-            Layout::Resource(..) | Layout::End => Held::Resource,
+            Layout::Resource(..)
+            | Layout::End
+            | Layout::Holder {
+                drop_impl: Some(_), ..
+            } => Held::Resource,
             Layout::List { decl, elem, .. } => Held::Members {
                 decl,
                 args: vec![elem],
                 members: vec![elem],
             },
-            Layout::Holder { decl, args, parts } => Held::Members {
+            Layout::Holder {
+                decl, args, parts, ..
+            } => Held::Members {
                 decl,
                 args,
                 members: parts.types(),
@@ -559,11 +578,19 @@ pub fn elaborate_resource_drops(project: &mut Package) -> Vec<SynthesisError> {
         .values()
         .flat_map(|module| tir::struct_fields(&module.structs))
         .collect();
+    let drop_impls = drop_impls(
+        project
+            .tir_modules
+            .values()
+            .flat_map(|module| &module.functions),
+        &type_table.borrow(),
+    );
     let answers = RefCell::default();
     let resources = Resources {
         tt: &type_table,
         reg: &project.cm_interface_registry,
         struct_fields: &struct_fields,
+        drop_impls: &drop_impls,
         answers: &answers,
     };
 
@@ -622,11 +649,13 @@ pub fn instance_callee_facts(flat: &FlatPackage) -> CalleeFacts {
 /// Run `f` with the [`Resources`] of `flat`.
 fn with_flat_resources<R>(flat: &FlatPackage, f: impl FnOnce(Resources) -> R) -> R {
     let struct_fields = tir::struct_fields(&flat.structs);
+    let drop_impls = drop_impls(&flat.functions, &flat.type_table.borrow());
     let answers = RefCell::default();
     f(Resources {
         tt: &flat.type_table,
         reg: &flat.cm_interface_registry,
         struct_fields: &struct_fields,
+        drop_impls: &drop_impls,
         answers: &answers,
     })
 }
@@ -739,6 +768,7 @@ fn build_drop_glue(
         module: entry.clone(),
         refused,
         refuses_copies: true,
+        drop_self: None,
     };
     let value = local_ref(0, "value", type_id);
     let stmts = match cx.resources.layout(type_id) {
@@ -767,6 +797,7 @@ fn elaborate_function(
     if forwards_to_twin(func) {
         return;
     }
+    let implements_drop = drop_impl_of(func, &resources.tt.borrow()).is_some();
     let TirFunction {
         body: Some(body),
         params,
@@ -779,6 +810,7 @@ fn elaborate_function(
     else {
         return;
     };
+    let drop_self = implements_drop.then(|| params[0].local_index);
 
     // A parameter that owns a resource is a local of the body's scope, so it
     // drops at the body's end unless the body moves it. A by-value `self` is
@@ -810,8 +842,43 @@ fn elaborate_function(
         module: module_source.clone(),
         refused,
         refuses_copies: monomorph_info.is_none(),
+        drop_self,
     };
     elab_scope(body, owned, TemporaryScope::Statement, &mut cx);
+}
+
+/// Each type's `Drop::drop`, by the type's declaration.
+type DropImpls = IndexMap<DefId, FunctionRef>;
+
+/// The `Drop::drop` impls among `functions`.
+fn drop_impls<'f>(
+    functions: impl IntoIterator<Item = &'f Rc<RefCell<TirFunction>>>,
+    tt: &TypeTable,
+) -> DropImpls {
+    functions
+        .into_iter()
+        .filter_map(|func_rc| {
+            let func = func_rc.borrow();
+            let implementor = drop_impl_of(&func, tt)?;
+            Some((
+                implementor,
+                FunctionRef::from_resolved(&func, func.module_source.clone()),
+            ))
+        })
+        .collect()
+}
+
+/// The type `func` implements `Drop` for, where `func` is that impl's `drop`.
+fn drop_impl_of(func: &TirFunction, tt: &TypeTable) -> Option<DefId> {
+    let info = func.method_info.as_ref()?;
+    let implemented = info.trait_name.as_ref()?.canonical()?;
+    if !tt.is_compiler_item(implemented, CompilerItem::Drop) {
+        return None;
+    }
+    let Receiver::Type(implementor) = info.receiver() else {
+        unreachable!("an impl names the type it implements a trait for");
+    };
+    implementor.head().def()
 }
 
 /// Whether `func` is its `contract` clauses and a call handing every parameter
@@ -877,13 +944,27 @@ impl TirRefVisitor for ResourceProbe<'_> {
 fn drop_lives(lives: &[Live], cx: &mut Cx) -> Vec<TirStmt> {
     lives
         .iter()
-        .flat_map(|live| drop_if_held(live.place(), live.type_id, cx))
+        .flat_map(|live| {
+            if cx.drop_self != Some(live.local) {
+                return drop_if_held(live.place(), live.type_id, cx);
+            }
+            let Layout::Holder { parts, .. } = cx.resources.layout(live.type_id) else {
+                unreachable!("only a holder implements `Drop`");
+            };
+            let drops = drop_parts(live.place(), live.type_id, parts, cx);
+            unless_moved(live.place(), drops)
+        })
         .collect()
 }
 
 /// Drop what the place `place` holds, where a move has not emptied it.
 fn drop_if_held(place: TirExpr, type_id: TypeId, cx: &mut Cx) -> Vec<TirStmt> {
     let drops = drop_value(place.clone(), type_id, cx);
+    unless_moved(place, drops)
+}
+
+/// `drops`, run where a move has not emptied `place`.
+fn unless_moved(place: TirExpr, drops: Vec<TirStmt>) -> Vec<TirStmt> {
     if drops.is_empty() {
         return drops;
     }
@@ -929,21 +1010,33 @@ fn drop_value(scrutinee: TirExpr, type_id: TypeId, cx: &mut Cx) -> Vec<TirStmt> 
             &cx.resources.tt.borrow(),
         ))],
         Layout::List { .. } => drop_through_glue(scrutinee, type_id, cx),
-        Layout::Holder { parts, .. } => {
-            let key = cx.resources.tt.borrow().type_key(type_id);
-            if cx.expanding.contains(&key) {
-                return drop_through_glue(scrutinee, type_id, cx);
-            }
-            cx.expanding.push(key);
-            let stmts = match parts {
-                Parts::Fields(fields) => drop_projected(scrutinee, &fields, cx),
-                Parts::Cases(cases) => drop_variant(scrutinee, type_id, &cases, cx),
-            };
-            cx.expanding.pop();
-            stmts
-        }
+        Layout::Holder {
+            drop_impl: Some(drop_impl),
+            ..
+        } => vec![expr_stmt(TirExpr::new(
+            TirExprKind::method_call(Box::new(scrutinee), drop_impl.clone(), vec![], vec![]),
+            TypeTable::UNIT,
+            synth_span(),
+        ))],
+        Layout::Holder { parts, .. } => drop_parts(scrutinee, type_id, parts, cx),
         Layout::Opaque => Vec::new(),
     }
+}
+
+/// Drop each part of `scrutinee`, a holder of type `type_id`, and not the
+/// holder as a whole.
+fn drop_parts(scrutinee: TirExpr, type_id: TypeId, parts: Parts, cx: &mut Cx) -> Vec<TirStmt> {
+    let key = cx.resources.tt.borrow().type_key(type_id);
+    if cx.expanding.contains(&key) {
+        return drop_through_glue(scrutinee, type_id, cx);
+    }
+    cx.expanding.push(key);
+    let stmts = match parts {
+        Parts::Fields(fields) => drop_projected(scrutinee, &fields, cx),
+        Parts::Cases(cases) => drop_variant(scrutinee, type_id, &cases, cx),
+    };
+    cx.expanding.pop();
+    stmts
 }
 
 /// Drop `scrutinee`, a holder already being expanded, by calling its drop
@@ -2012,6 +2105,7 @@ fn elab_closure(
         module: cx.module.clone(),
         refused: cx.refused,
         refuses_copies: cx.refuses_copies,
+        drop_self: None,
     };
     let mut block = into_block(body);
     elab_scope(&mut block, owned, TemporaryScope::Statement, &mut inner);

@@ -2537,21 +2537,48 @@ fn build_wrapper_indexes(
     (user_to_wrapper, cm_to_wrappers)
 }
 
+/// The resource half of [`rewrite_call_sites_to_wrappers`] again, for the
+/// drops `resource_cleanup` inserts after it: an installed handler sees a
+/// scope-exit drop as it sees one the user wrote (WEP: Affine Types).
+pub fn rewrite_resource_drops(project: &Package) {
+    for module in project.tir_modules.values() {
+        rewrite_resource_calls(
+            &module.functions,
+            &project.resource_wrappers,
+            &module.type_table,
+            &project.entry_module_source,
+        );
+    }
+}
+
 /// Post-monomorphize half of [`rewrite_call_sites_to_wrappers`]: a `#[cm]` call
 /// whose receiver was a type parameter matched no instantiation until now.
 pub fn rewrite_resource_calls_monomorphized(flat: &mut FlatPackage) {
-    if flat.resource_wrappers.is_empty() {
+    rewrite_resource_calls(
+        &flat.functions,
+        &flat.resource_wrappers,
+        &flat.type_table,
+        &flat.entry_module_source,
+    );
+}
+
+fn rewrite_resource_calls(
+    functions: &[std::rc::Rc<std::cell::RefCell<TirFunction>>],
+    cm_to_wrappers: &ResourceWrapperIndex,
+    type_table: &std::rc::Rc<std::cell::RefCell<TypeTable>>,
+    entry_source: &ModuleSource,
+) {
+    if cm_to_wrappers.is_empty() {
         return;
     }
-    let entry_source = flat.entry_module_source.clone();
     let no_user_effect_calls = IndexMap::default();
     let ctx = RewriteCtx {
         user_to_wrapper: &no_user_effect_calls,
-        cm_to_wrappers: &flat.resource_wrappers,
-        type_table: flat.type_table.clone(),
-        entry_source: &entry_source,
+        cm_to_wrappers,
+        type_table: type_table.clone(),
+        entry_source,
     };
-    rewrite_calls_in_functions(&flat.functions, &ctx);
+    rewrite_calls_in_functions(functions, &ctx);
 }
 
 /// Read-only context threaded through the call-site rewriter. Bundles

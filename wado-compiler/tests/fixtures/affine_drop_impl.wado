@@ -1,0 +1,107 @@
+// A drop runs the type's `Drop` (WEP: Affine Types): at scope exit, when
+// called by name, through `builtin::drop`, and for a field of a holder that
+// has no impl. What a `drop` body leaves in `self` drops field by field, and
+// a field it moves out drops where it goes.
+
+use { println, Stdout } from "core:cli";
+
+global mut DROPS: i32 = 0;
+
+affine struct Guard {
+    id: i32,
+}
+
+impl Drop for Guard {
+    fn drop(self) {
+        DROPS += self.id;
+    }
+}
+
+affine struct Pair {
+    a: Guard,
+    b: Guard,
+}
+
+affine struct Keeper {
+    inner: Guard,
+}
+
+impl Drop for Keeper {
+    fn drop(self) {
+        DROPS += 1;
+    }
+}
+
+affine struct Giver {
+    inner: Guard,
+}
+
+impl Drop for Giver {
+    fn drop(self) {
+        give(self.inner);
+    }
+}
+
+global mut GIVEN: i32 = 0;
+
+fn give(g: Guard) {
+    GIVEN += g.id;
+}
+
+fn scope_exit() {
+    let _g = Guard { id: 1 };
+}
+
+fn moved_out() -> Guard {
+    let g = Guard { id: 2 };
+    return g;
+}
+
+fn by_name() {
+    let g = Guard { id: 3 };
+    g.drop();
+}
+
+fn through_builtin() {
+    builtin::drop(Guard { id: 4 });
+}
+
+fn holder() {
+    let _p = Pair { a: Guard { id: 10 }, b: Guard { id: 20 } };
+}
+
+fn keeper() {
+    let _k = Keeper { inner: Guard { id: 100 } };
+}
+
+fn giver() {
+    let _g = Giver { inner: Guard { id: 1000 } };
+}
+
+fn report(what: String) with Stdout {
+    println(`${what}: drops=${DROPS} given=${GIVEN}`);
+    DROPS = 0;
+    GIVEN = 0;
+}
+
+export fn run() with Stdout {
+    scope_exit();
+    report("scope exit");
+    let kept = moved_out();
+    report("moved out");
+    kept.drop();
+    report("kept");
+    by_name();
+    report("by name");
+    through_builtin();
+    report("builtin");
+    holder();
+    report("holder");
+    keeper();
+    report("keeper");
+    giver();
+    report("giver");
+}
+
+__DATA__
+{"stdout": "scope exit: drops=1 given=0\nmoved out: drops=0 given=0\nkept: drops=2 given=0\nby name: drops=3 given=0\nbuiltin: drops=4 given=0\nholder: drops=30 given=0\nkeeper: drops=101 given=0\ngiver: drops=1000 given=1000\n"}

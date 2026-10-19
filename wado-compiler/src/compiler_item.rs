@@ -220,6 +220,8 @@ pub enum CompilerItem {
     // ── Traits ────────────────────────────────────────────────────────
     /// `Default` — `Default::default()` synthesis anchor.
     Default,
+    /// `Drop` — what a drop of an affine value runs (WEP: Affine Types).
+    Drop,
     /// `FromLeBytes` — whose prelude impls a folded `List::from_le_bytes` reads.
     FromLeBytes,
     /// `Reflect` — the identity root every reflected kind sits under, carrying
@@ -759,6 +761,7 @@ impl CompilerItem {
         Self::StreamWrite,
         Self::CaseStyle,
         Self::Default,
+        Self::Drop,
         Self::FromLeBytes,
         Self::Reflect,
         Self::ReflectStruct,
@@ -1004,6 +1007,7 @@ impl CompilerItem {
             Self::StreamWrite => "stream_write",
             Self::CaseStyle => "case_style",
             Self::Default => "default",
+            Self::Drop => "drop",
             Self::FromLeBytes => "from_le_bytes",
             Self::Reflect => "reflect",
             Self::ReflectStruct => "reflect_struct",
@@ -1304,6 +1308,7 @@ impl CompilerItem {
             | Self::CaseStyleKebab
             | Self::CaseStyleScreamingKebab
             | Self::Default
+            | Self::Drop
             | Self::FromLeBytes
             | Self::Reflect
             | Self::ReflectStruct
@@ -1586,6 +1591,7 @@ impl CompilerItem {
             Self::SerializeErrorKind | Self::DeserializeErrorKind => CompilerItemKind::Enum,
             Self::Formatter => CompilerItemKind::Struct,
             Self::Default
+            | Self::Drop
             | Self::FromLeBytes
             | Self::Reflect
             | Self::ReflectStruct

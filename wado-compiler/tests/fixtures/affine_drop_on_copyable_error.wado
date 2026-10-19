@@ -1,0 +1,17 @@
+// Only an affine type implements `Drop`: a copyable one would run it for
+// every copy (WEP: Affine Types).
+
+struct Point {
+    x: i32,
+}
+
+impl Drop for Point {
+    fn drop(self) {}
+}
+
+test {
+    assert Point { x: 1 }.x == 1;
+}
+
+__DATA__
+{"compile_error": ":8:6: analysis error: `Point` is copyable, so it cannot implement `Drop`: every copy would run it"}

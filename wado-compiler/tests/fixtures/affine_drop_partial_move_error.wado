@@ -1,0 +1,31 @@
+// A type that implements `Drop` gives up no field, as SE-0429 holds for a
+// type with a `deinit`: its `drop` relies on the fields it was built with
+// (WEP: Affine Types).
+
+affine struct Guard {
+    id: i32,
+}
+
+impl Drop for Guard {
+    fn drop(self) {}
+}
+
+affine struct Holder {
+    guard: Guard,
+}
+
+impl Drop for Holder {
+    fn drop(self) {}
+}
+
+fn take(h: Holder) -> Guard {
+    return h.guard;
+}
+
+test {
+    let g = take(Holder { guard: Guard { id: 1 } });
+    assert g.id == 1;
+}
+
+__DATA__
+{"compile_error": ":22:12: analysis error: `Holder` implements `Drop`, so no field moves out of it: its `drop` relies on the fields it was built with"}

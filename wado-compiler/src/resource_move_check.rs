@@ -8,6 +8,7 @@ use crate::ast::{
     GenericParam, IdentExpr, ImplBlock, Item, Pattern, Stmt, TraitDecl, for_each_pattern_binding,
 };
 use crate::compiler_host::{Code, Diagnostic, DiagnosticSpan, Severity};
+use crate::compiler_item::CompilerItem;
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::module_source::ModuleSource;
 use crate::semantics::Semantics;
@@ -50,6 +51,12 @@ enum MoveError {
         type_name: String,
         trait_name: String,
     },
+    /// A copyable type implementing `Drop`, which every copy would run.
+    DropOnCopyable { type_name: String },
+    /// A field moved out of a value whose type implements `Drop`.
+    DropPartialMove { type_name: String },
+    /// `..base` over a type that implements `Drop`.
+    DropSpread { type_name: String },
 }
 
 impl From<ResourceMoveError> for Diagnostic {
@@ -103,6 +110,22 @@ impl From<ResourceMoveError> for Diagnostic {
                     "`{type_name}` is affine, so it implements only an `affine trait`, and `{trait_name}` is not one"
                 ),
             ),
+            MoveError::DropOnCopyable { type_name } => (
+                Code::AffineDeclaration,
+                format!("`{type_name}` is copyable, so it cannot implement `Drop`: every copy would run it"),
+            ),
+            MoveError::DropPartialMove { type_name } => (
+                Code::TypeMismatch,
+                format!(
+                    "`{type_name}` implements `Drop`, so no field moves out of it: its `drop` relies on the fields it was built with"
+                ),
+            ),
+            MoveError::DropSpread { type_name } => (
+                Code::TypeMismatch,
+                format!(
+                    "`{type_name}` implements `Drop`, so `..base` cannot take fields from it: its `drop` relies on the fields it was built with"
+                ),
+            ),
         };
         Diagnostic {
             severity: Severity::Error,
@@ -115,11 +138,13 @@ impl From<ResourceMoveError> for Diagnostic {
 
 #[must_use]
 pub fn check_resource_moves_semantic(sem: &Semantics) -> Vec<ResourceMoveError> {
+    let drops = Drops::of(sem);
     let mut out = Vec::new();
     for (src, module) in &sem.modules {
         let mut checker = Checker {
             sem,
             module: src,
+            drops: &drops,
             out: &mut out,
         };
         for item in &module.items {
@@ -127,6 +152,41 @@ pub fn check_resource_moves_semantic(sem: &Semantics) -> Vec<ResourceMoveError> 
         }
     }
     out
+}
+
+/// The `Drop` trait and the declarations of the types implementing it.
+struct Drops {
+    trait_id: AstId,
+    implementors: IndexSet<AstId>,
+}
+
+impl Drops {
+    fn of(sem: &Semantics) -> Drops {
+        let trait_def = sem
+            .types
+            .compiler_item_def(CompilerItem::Drop)
+            .expect("the prelude declares `Drop`");
+        let mut drops = Drops {
+            trait_id: sem.types.defs().ast_id(trait_def),
+            implementors: IndexSet::default(),
+        };
+        drops.implementors = sem
+            .modules
+            .values()
+            .flat_map(|module| &module.items)
+            .filter_map(|item| match item {
+                Item::Impl(b) if drops.implemented_by(b, sem) => {
+                    sem.declaration_of(&b.ty).map(Item::id)
+                }
+                _ => None,
+            })
+            .collect();
+        drops
+    }
+
+    fn implemented_by(&self, b: &ImplBlock, sem: &Semantics) -> bool {
+        sem.implemented(b).map(Item::id) == Some(self.trait_id)
+    }
 }
 
 /// The names of `params` declared `affine`.
@@ -141,6 +201,7 @@ fn affine_params<'a>(params: impl IntoIterator<Item = &'a GenericParam>) -> Vec<
 struct Checker<'a> {
     sem: &'a Semantics,
     module: &'a ModuleSource,
+    drops: &'a Drops,
     out: &'a mut Vec<ResourceMoveError>,
 }
 
@@ -156,43 +217,45 @@ impl Checker<'_> {
     fn check_item(&mut self, item: &Item) {
         self.check_affine_declaration(item);
         match item {
-            Item::Function(func) => self.check_function(func, &[]),
+            Item::Function(func) => self.check_function(func, &[], false),
             Item::Impl(b) => {
                 let scope = affine_params(&b.type_params);
                 self.check_impl_trait(b, &scope);
+                let drop_body = self.drops.implemented_by(b, self.sem);
                 for method in &b.methods {
-                    self.check_function(method, &scope);
+                    self.check_function(method, &scope, drop_body);
                 }
             }
             Item::Trait(t) => {
                 let scope = trait_scope(t);
                 for method in &t.methods {
-                    self.check_function(method, &scope);
+                    self.check_function(method, &scope, false);
                 }
             }
             Item::Interface(i) => {
                 for method in &i.methods {
-                    self.check_function(method, &[]);
+                    self.check_function(method, &[], false);
                 }
             }
-            Item::Test(test) => self.check_body(&test.body, Vec::new()),
+            Item::Test(test) => self.check_body(&test.body, Vec::new(), false),
             _ => {}
         }
     }
 
-    fn check_function(&mut self, func: &Function, outer: &[String]) {
+    fn check_function(&mut self, func: &Function, outer: &[String], drop_body: bool) {
         let Some(body) = &func.body else {
             return;
         };
         let mut scope = outer.to_vec();
         scope.extend(affine_params(&func.type_params));
-        self.check_body(body, scope);
+        self.check_body(body, scope, drop_body);
     }
 
-    fn check_body(&mut self, body: &Block, affine_params: Vec<String>) {
+    fn check_body(&mut self, body: &Block, affine_params: Vec<String>, drop_body: bool) {
         let mut walker = MoveWalker {
             checker: self,
             affine_params,
+            drop_body,
             moved: IndexMap::default(),
             guard_bindings: IndexSet::default(),
             closure_locals: None,
@@ -233,7 +296,7 @@ impl Checker<'_> {
                 },
                 name_span,
             ),
-            (None, true) => self.push(
+            (None, true) if !self.drops.implementors.contains(&id) => self.push(
                 MoveError::AffineHoldsNothing {
                     keyword,
                     name: name.clone(),
@@ -253,11 +316,17 @@ impl Checker<'_> {
         let Some(Item::Trait(t)) = self.sem.implemented(b) else {
             return;
         };
+        let mut type_name = String::new();
+        unparse_type_into(&b.ty, &mut type_name);
+        if t.id == self.drops.trait_id {
+            if !self.impl_self_is_affine(b, scope) {
+                self.push(MoveError::DropOnCopyable { type_name }, trait_type.span());
+            }
+            return;
+        }
         if t.is_affine || !self.impl_self_is_affine(b, scope) {
             return;
         }
-        let mut type_name = String::new();
-        unparse_type_into(&b.ty, &mut type_name);
         self.push(
             MoveError::UnmarkedTraitImpl {
                 type_name,
@@ -312,6 +381,8 @@ struct PlacePath<'e> {
 struct MoveWalker<'a, 'c> {
     checker: &'c mut Checker<'a>,
     affine_params: Vec<String>,
+    /// Whether this is a `Drop::drop` body, which may move fields out of `self`.
+    drop_body: bool,
     /// Each moved place: a binding and the field path moved out of it, empty
     /// for the binding as a whole.
     moved: Moves,
@@ -442,6 +513,7 @@ impl MoveWalker<'_, '_> {
             self.report(MoveError::UseAfterMove { name, moved_at }, place.root.span);
             return;
         }
+        self.refuse_move_out_of_drop(expr);
         let path = place.fields.iter().map(|f| (*f).to_string()).collect();
         self.moved.insert((def, path), place.root.span);
     }
@@ -452,6 +524,35 @@ impl MoveWalker<'_, '_> {
             .expression_type(expr.id())
             .expect("an affine read has a type");
         self.sem().types.type_name(ty)
+    }
+
+    /// Refuse a move of the field `expr` names out of a holder whose type
+    /// implements `Drop`, at any depth. The `self` of a `Drop::drop` body is the
+    /// one holder a field may leave: what `drop` leaves behind drops field by
+    /// field.
+    fn refuse_move_out_of_drop(&mut self, mut expr: &Expr) {
+        while let Expr::FieldAccess(fa) = expr {
+            let holder = &fa.expr;
+            let own_self = self.drop_body && matches!(&**holder, Expr::Ident(id) if id.name == "self");
+            if !own_self && self.implements_drop(holder) {
+                let type_name = self.type_name_of(holder);
+                self.report(MoveError::DropPartialMove { type_name }, expr.span());
+            }
+            expr = holder;
+        }
+    }
+
+    fn implements_drop(&self, expr: &Expr) -> bool {
+        let types = &self.sem().types;
+        self.sem()
+            .expression_type(expr.id())
+            .and_then(|ty| types.nominal_def(ty))
+            .is_some_and(|def| {
+                self.checker
+                    .drops
+                    .implementors
+                    .contains(&types.defs().ast_id(def))
+            })
     }
 
     /// Forgets the moves an assignment to `place` refills: the place and every
@@ -541,6 +642,12 @@ impl MoveWalker<'_, '_> {
             Expr::TryOp(t) => self.visit_value(&t.expr),
 
             Expr::StructLiteral(s) => {
+                if let Some(spread) = s.spreads.first()
+                    && self.implements_drop(expr)
+                {
+                    let type_name = self.type_name_of(expr);
+                    self.report(MoveError::DropSpread { type_name }, spread.expr.span());
+                }
                 for spread in &s.spreads {
                     self.visit_value(&spread.expr);
                 }
