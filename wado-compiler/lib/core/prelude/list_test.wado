@@ -807,3 +807,37 @@ test "collecting a slice's values copies the elements" {
     out[0].push(1);
     assert src[1].is_empty();
 }
+
+global mut LIST_TEST_DROPS: i32 = 0;
+
+affine struct ListTestToken {
+    id: i32,
+}
+
+impl Drop for ListTestToken {
+    fn drop(self) {
+        LIST_TEST_DROPS += 1;
+    }
+}
+
+test "for-of moves affine elements out and drops the ones a break skips" {
+    let tokens: List<ListTestToken> = [ListTestToken { id: 1 }, ListTestToken { id: 2 }, ListTestToken { id: 3 }];
+    let mut seen = 0;
+    for let t of tokens {
+        seen += t.id;
+        if t.id == 2 {
+            break;
+        }
+    }
+    assert seen == 3;
+    assert LIST_TEST_DROPS == 3;
+}
+
+fn first_through_as_slice<S: AsSlice<Elem = i32>>(s: &S) -> i32 {
+    return *s.iter_ref().next().unwrap();
+}
+
+test "AsSlice::iter_ref reaches a list through the bound" {
+    let xs: List<i32> = [7, 8];
+    assert first_through_as_slice(&xs) == 7;
+}
