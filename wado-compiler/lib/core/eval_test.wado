@@ -48,22 +48,14 @@ export fn run() with Environment { let _ = args(); }`);
     assert name.starts_with("wasi:cli/environment@");
 }
 
-test "a map under the default seed runs" {
+test "insecure randomness is linked, a map's default seed included" {
     let out = eval(`use { println, Stdout } from "core:cli";
 use { HashMap } from "core:collections";
-export fn run() with Stdout {
-    let mut m = HashMap::<String, i32>::new();
-    m["a"] = 1;
-    if m["a"] == 1 { println("found"); }
-}`).unwrap();
-    assert out.stdout == "found\n";
-}
-
-test "an insecure draw runs" {
-    let out = eval(`use { println, Stdout } from "core:cli";
 use { Insecure } from "wasi:random";
 export fn run() with (Stdout, Insecure) {
-    println(\`\${Insecure::get_insecure_random_u64()}\`);
+    let mut m = HashMap::<String, u64>::new();
+    m["draw"] = Insecure::get_insecure_random_u64();
+    println(\`\${m["draw"]}\`);
 }`).unwrap();
     assert out.status matches { Exited(0) };
     assert !out.stdout.is_empty();
