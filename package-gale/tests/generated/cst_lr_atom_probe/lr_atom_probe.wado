@@ -2159,6 +2159,22 @@ fn atn_predict_above(
     min_prec: i32,
     false_preds: &List<i32>,
 ) -> i32 {
+    let [alt, _] = atn_predict_walk(dfa, sim, decision, rule_stack, floor, tokens, start_pos, eof, min_prec, false_preds);
+    return alt;
+}
+
+fn atn_predict_walk(
+    dfa: &mut AtnDfa,
+    sim: &AtnSim,
+    decision: i32,
+    rule_stack: &List<i32>,
+    floor: i32,
+    tokens: &Array<i32>,
+    start_pos: i32,
+    eof: i32,
+    min_prec: i32,
+    false_preds: &List<i32>,
+) -> [i32, bool] {
     dfa.make_room(sim);
     let caller = dfa.arena.push_caller_stack(sim, rule_stack, floor);
     dfa.arena.open_budget();
@@ -2168,16 +2184,16 @@ fn atn_predict_above(
     loop {
         let verdict = dfa.state_verdict[s];
         if verdict == ATN_DFA_DEAD {
-            return fallback;
+            return [fallback, false];
         }
         if verdict != ATN_DFA_UNDECIDED {
-            return verdict;
+            return [verdict, true];
         }
         fallback = dfa.state_first[s];
         let token = if pos < tokens.len() { tokens[pos] } else { eof };
         if token == eof {
             let survivors = atn_unique_alts(&atn_move(sim, &dfa.state_configs[s], eof, eof));
-            return if survivors.is_empty() { fallback } else { atn_resolve(&survivors) };
+            return if survivors.is_empty() { [fallback, false] } else { [atn_resolve(&survivors), true] };
         }
         s = dfa.step(sim, s, token, eof);
         pos += 1;
@@ -2522,7 +2538,7 @@ fn atn_cont_first(sim: &AtnSim, state: i32, visited: &mut List<i32>, out: &mut L
     return open;
 }
 
-fn atn_state_cont_admits(sim: &AtnSim, state: i32, t: i32, eof: i32) -> bool {
+internal fn atn_state_cont_admits(sim: &AtnSim, state: i32, t: i32, eof: i32) -> bool {
     let any_but = sim.state_cont_any_but[state];
     if t != eof && (any_but == ATN_CONT_ANY || any_but >= 0 && t != any_but) {
         return true;
@@ -3274,7 +3290,7 @@ fn scan_e(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, min_prec: i32 =
     let mut pos = scan_e_atom(tokens, pos, atn, min_prec);
     if pos < 0 { return -1; }
     loop {
-        let _atn_alt = atn_lr_loop_decision(&ATN_SIM, atn, 4, tokens, pos, TK_EOF, min_prec);
+        let _atn_alt = atn_lr_decide_4(atn, tokens, pos, min_prec);
         if _atn_alt == 0 {
             pos = scan_e_lr_0(tokens, pos, atn, min_prec);
             if pos < 0 { return -1; }
@@ -3570,7 +3586,7 @@ fn _parse_e__inner(p: &mut Parser, min_prec: i32 = 0) -> () {
     p.b.finish_node(p.last_end());
     loop {
         if p.recovering { break; }
-        let _atn_alt = atn_lr_loop_decision(&ATN_SIM, &mut p.atn, 4, &p.kinds, p.pos, TK_EOF, min_prec);
+        let _atn_alt = atn_lr_decide_4(&mut p.atn, &p.kinds, p.pos, min_prec);
         let _lr_pos0 = p.pos;
         if _atn_alt == 0 {
             p.b.start_node_at(_cp, RK_E, _start);
@@ -3815,5 +3831,18 @@ fn atn_decide_1(atn: &mut AtnPredictor, tokens: &Array<i32>, pos: i32, min_prec:
         };
     }
     return atn_predict_once(&ATN_SIM, 1, atn, tokens, pos, TK_EOF, min_prec);
+}
+
+fn atn_lr_decide_4(atn: &mut AtnPredictor, tokens: &Array<i32>, pos: i32, min_prec: i32, follow: i64 = 0) -> i32 {
+    if pos < tokens.len() {
+        match tokens[pos] {
+            TK_LIT_PLUS => {
+                if min_prec > 1 { return 1; }
+                if !follow_admits(tokens, pos, follow, &FOLLOW_SETS, TK_EOF) { return 0; }
+            },
+            _ => { return 1; },
+        };
+    }
+    return atn_lr_loop_decision(&ATN_SIM, atn, 4, tokens, pos, TK_EOF, min_prec);
 }
 

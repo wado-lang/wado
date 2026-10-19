@@ -2212,6 +2212,22 @@ fn atn_predict_above(
     min_prec: i32,
     false_preds: &List<i32>,
 ) -> i32 {
+    let [alt, _] = atn_predict_walk(dfa, sim, decision, rule_stack, floor, tokens, start_pos, eof, min_prec, false_preds);
+    return alt;
+}
+
+fn atn_predict_walk(
+    dfa: &mut AtnDfa,
+    sim: &AtnSim,
+    decision: i32,
+    rule_stack: &List<i32>,
+    floor: i32,
+    tokens: &Array<i32>,
+    start_pos: i32,
+    eof: i32,
+    min_prec: i32,
+    false_preds: &List<i32>,
+) -> [i32, bool] {
     dfa.make_room(sim);
     let caller = dfa.arena.push_caller_stack(sim, rule_stack, floor);
     dfa.arena.open_budget();
@@ -2221,16 +2237,16 @@ fn atn_predict_above(
     loop {
         let verdict = dfa.state_verdict[s];
         if verdict == ATN_DFA_DEAD {
-            return fallback;
+            return [fallback, false];
         }
         if verdict != ATN_DFA_UNDECIDED {
-            return verdict;
+            return [verdict, true];
         }
         fallback = dfa.state_first[s];
         let token = if pos < tokens.len() { tokens[pos] } else { eof };
         if token == eof {
             let survivors = atn_unique_alts(&atn_move(sim, &dfa.state_configs[s], eof, eof));
-            return if survivors.is_empty() { fallback } else { atn_resolve(&survivors) };
+            return if survivors.is_empty() { [fallback, false] } else { [atn_resolve(&survivors), true] };
         }
         s = dfa.step(sim, s, token, eof);
         pos += 1;
@@ -2575,7 +2591,7 @@ fn atn_cont_first(sim: &AtnSim, state: i32, visited: &mut List<i32>, out: &mut L
     return open;
 }
 
-fn atn_state_cont_admits(sim: &AtnSim, state: i32, t: i32, eof: i32) -> bool {
+internal fn atn_state_cont_admits(sim: &AtnSim, state: i32, t: i32, eof: i32) -> bool {
     let any_but = sim.state_cont_any_but[state];
     if t != eof && (any_but == ATN_CONT_ANY || any_but >= 0 && t != any_but) {
         return true;
@@ -6948,7 +6964,7 @@ fn scan_primary_type(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, foll
     let mut pos = scan_primary_type_atom(tokens, pos, atn, min_prec, follow);
     if pos < 0 { return -1; }
     loop {
-        let _atn_alt = atn_lr_loop_decision(&ATN_SIM, atn, 12, tokens, pos, TK_EOF, min_prec);
+        let _atn_alt = atn_lr_decide_12(atn, tokens, pos, min_prec, follow);
         if _atn_alt == 0 {
             pos = scan_primary_type_lr_4(tokens, pos, atn, min_prec, follow);
             if pos < 0 { return -1; }
@@ -11587,7 +11603,7 @@ fn scan_single_expression(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor,
     let mut pos = scan_single_expression_atom(tokens, pos, atn, min_prec, follow);
     if pos < 0 { return -1; }
     loop {
-        let _atn_alt = atn_lr_loop_decision(&ATN_SIM, atn, 237, tokens, pos, TK_EOF, min_prec);
+        let _atn_alt = atn_lr_decide_237(atn, tokens, pos, min_prec, follow);
         if _atn_alt == 0 {
             pos = scan_single_expression_lr_2(tokens, pos, atn, min_prec, follow);
             if pos < 0 { return -1; }
@@ -12693,7 +12709,7 @@ fn _parse_primary_type__inner(p: &mut Parser, follow: i64 = 0, min_prec: i32 = 0
     p.b.finish_node(p.last_end());
     loop {
         if p.recovering { break; }
-        let _atn_alt = atn_lr_loop_decision(&ATN_SIM, &mut p.atn, 12, &p.kinds, p.pos, TK_EOF, min_prec);
+        let _atn_alt = atn_lr_decide_12(&mut p.atn, &p.kinds, p.pos, min_prec, follow);
         let _lr_pos0 = p.pos;
         if _atn_alt == 0 {
             p.b.start_node_at(_cp, RK_PRIMARY_TYPE, _start);
@@ -21980,7 +21996,7 @@ fn _parse_single_expression__inner(p: &mut Parser, follow: i64 = 0, min_prec: i3
     p.b.finish_node(p.last_end());
     loop {
         if p.recovering { break; }
-        let _atn_alt = atn_lr_loop_decision(&ATN_SIM, &mut p.atn, 237, &p.kinds, p.pos, TK_EOF, min_prec);
+        let _atn_alt = atn_lr_decide_237(&mut p.atn, &p.kinds, p.pos, min_prec, follow);
         let _lr_pos0 = p.pos;
         if _atn_alt == 0 {
             p.b.start_node_at(_cp, RK_SINGLE_EXPRESSION, _start);
@@ -90190,5 +90206,116 @@ fn atn_decide_271(atn: &mut AtnPredictor, tokens: &Array<i32>, pos: i32, min_pre
         };
     }
     return atn_predict_once(&ATN_SIM, 271, atn, tokens, pos, TK_EOF, min_prec);
+}
+
+fn atn_lr_decide_12(atn: &mut AtnPredictor, tokens: &Array<i32>, pos: i32, min_prec: i32, follow: i64 = 0) -> i32 {
+    if pos < tokens.len() {
+        match tokens[pos] {
+            TK_OpenBracket => {
+                if min_prec > 1 { return 1; }
+                if !follow_admits(tokens, pos, follow, &FOLLOW_SETS, TK_EOF) { return 0; }
+            },
+            _ => { return 1; },
+        };
+    }
+    return atn_lr_loop_decision(&ATN_SIM, atn, 12, tokens, pos, TK_EOF, min_prec);
+}
+
+fn atn_lr_decide_237(atn: &mut AtnPredictor, tokens: &Array<i32>, pos: i32, min_prec: i32, follow: i64 = 0) -> i32 {
+    if pos < tokens.len() {
+        match tokens[pos] {
+            TK_OpenBracket => {
+                if min_prec > 27 { return 27; }
+                if !follow_admits(tokens, pos, follow, &FOLLOW_SETS, TK_EOF) { return 0; }
+            },
+            TK_OpenParen => {
+                if min_prec > 23 { return 27; }
+                if !follow_admits(tokens, pos, follow, &FOLLOW_SETS, TK_EOF) { return 4; }
+            },
+            TK_Assign => {
+                if min_prec > 5 { return 27; }
+                if !follow_admits(tokens, pos, follow, &FOLLOW_SETS, TK_EOF) { return 22; }
+            },
+            TK_PlusPlus => {
+                if min_prec > 22 { return 27; }
+                if !follow_admits(tokens, pos, follow, &FOLLOW_SETS, TK_EOF) { return 5; }
+            },
+            TK_MinusMinus => {
+                if min_prec > 21 { return 27; }
+                if !follow_admits(tokens, pos, follow, &FOLLOW_SETS, TK_EOF) { return 6; }
+            },
+            TK_Plus | TK_Minus => {
+                if min_prec > 18 { return 27; }
+                if !follow_admits(tokens, pos, follow, &FOLLOW_SETS, TK_EOF) { return 9; }
+            },
+            TK_Multiply | TK_Divide | TK_Modulus => {
+                if min_prec > 19 { return 27; }
+                if !follow_admits(tokens, pos, follow, &FOLLOW_SETS, TK_EOF) { return 8; }
+            },
+            TK_Power => {
+                if min_prec > 20 { return 27; }
+                if !follow_admits(tokens, pos, follow, &FOLLOW_SETS, TK_EOF) { return 7; }
+            },
+            TK_NullCoalesce => {
+                if min_prec > 17 { return 27; }
+                if !follow_admits(tokens, pos, follow, &FOLLOW_SETS, TK_EOF) { return 10; }
+            },
+            TK_LeftShiftArithmetic => {
+                if min_prec > 16 { return 27; }
+                if !follow_admits(tokens, pos, follow, &FOLLOW_SETS, TK_EOF) { return 11; }
+            },
+            TK_LessThan | TK_LessThanEquals | TK_GreaterThanEquals => {
+                if min_prec > 15 { return 27; }
+                if !follow_admits(tokens, pos, follow, &FOLLOW_SETS, TK_EOF) { return 12; }
+            },
+            TK_Equals_ | TK_NotEquals | TK_IdentityEquals | TK_IdentityNotEquals => {
+                if min_prec > 12 { return 27; }
+                if !follow_admits(tokens, pos, follow, &FOLLOW_SETS, TK_EOF) { return 15; }
+            },
+            TK_BitAnd => {
+                if min_prec > 11 { return 27; }
+                if !follow_admits(tokens, pos, follow, &FOLLOW_SETS, TK_EOF) { return 16; }
+            },
+            TK_BitXOr => {
+                if min_prec > 10 { return 27; }
+                if !follow_admits(tokens, pos, follow, &FOLLOW_SETS, TK_EOF) { return 17; }
+            },
+            TK_BitOr => {
+                if min_prec > 9 { return 27; }
+                if !follow_admits(tokens, pos, follow, &FOLLOW_SETS, TK_EOF) { return 18; }
+            },
+            TK_And => {
+                if min_prec > 8 { return 27; }
+                if !follow_admits(tokens, pos, follow, &FOLLOW_SETS, TK_EOF) { return 19; }
+            },
+            TK_Or => {
+                if min_prec > 7 { return 27; }
+                if !follow_admits(tokens, pos, follow, &FOLLOW_SETS, TK_EOF) { return 20; }
+            },
+            TK_MultiplyAssign | TK_DivideAssign | TK_ModulusAssign | TK_PlusAssign | TK_MinusAssign | TK_LeftShiftArithmeticAssign | TK_RightShiftArithmeticAssign | TK_RightShiftLogicalAssign | TK_BitAndAssign | TK_BitXorAssign | TK_BitOrAssign | TK_PowerAssign | TK_NullishCoalescingAssign => {
+                if min_prec > 4 { return 27; }
+                if !follow_admits(tokens, pos, follow, &FOLLOW_SETS, TK_EOF) { return 23; }
+            },
+            TK_Instanceof => {
+                if min_prec > 14 { return 27; }
+                if !follow_admits(tokens, pos, follow, &FOLLOW_SETS, TK_EOF) { return 13; }
+            },
+            TK_In => {
+                if min_prec > 13 { return 27; }
+                if !follow_admits(tokens, pos, follow, &FOLLOW_SETS, TK_EOF) { return 14; }
+            },
+            TK_As => {
+                if min_prec > 2 { return 27; }
+                if !follow_admits(tokens, pos, follow, &FOLLOW_SETS, TK_EOF) { return 25; }
+            },
+            TK_BackTick => {
+                if min_prec > 3 { return 27; }
+                if !follow_admits(tokens, pos, follow, &FOLLOW_SETS, TK_EOF) { return 24; }
+            },
+            TK_QuestionMark | TK_QuestionMarkDot | TK_Dot | TK_Not | TK_MoreThan => {},
+            _ => { return 27; },
+        };
+    }
+    return atn_lr_loop_decision(&ATN_SIM, atn, 237, tokens, pos, TK_EOF, min_prec);
 }
 
