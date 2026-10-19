@@ -863,21 +863,16 @@ impl FunctionTranslator<'_, '_> {
 
             "i32_as_char" => Some(self.translate_operand(args[0].expr)),
 
+            "ambient_stdout_available" | "ambient_stderr_available" => Some(WirInstr::I32Const(
+                i32::from(self.ambient_write_via_stream(builtin_name).is_some()),
+            )),
+
             "call_indirect_stdout_write_via_stream" | "call_indirect_stderr_write_via_stream" => {
                 // The ambient panic / assert-diagnostic path never forces its
-                // own import. DCE registers `Std{out,err}::write_via_stream` in
-                // `func_map` exactly when the world provides the sink (or a real
-                // `eprintln` / `println` already uses it); a miss lowers to
-                // `unreachable`, keeping a purely-computational component free of
-                // `wasi:cli/stderr`.
-                let is_stderr = builtin_name.contains("stderr");
-                let wasi_func_name = if is_stderr {
-                    "wasi:cli/Stderr::write_via_stream"
-                } else {
-                    "wasi:cli/Stdout::write_via_stream"
-                };
-                let key = MangledName::wasi_import(wasi_func_name);
-                match self.ctx.func_map.get(&key).cloned() {
+                // own import. A miss lowers to `unreachable`, keeping a
+                // purely-computational component free of `wasi:cli/stderr`;
+                // `log_std{out,err}` asks `ambient_std{out,err}_available` first.
+                match self.ambient_write_via_stream(builtin_name) {
                     Some(func_id) => {
                         let call_args: Vec<WirInstr> = args
                             .iter()
@@ -894,6 +889,19 @@ impl FunctionTranslator<'_, '_> {
 
             _ => None,
         }
+    }
+
+    /// The `Std{out,err}::write_via_stream` import an ambient builtin of that
+    /// stream reaches. DCE registers it in `func_map` exactly when the world
+    /// provides the sink, or a real `println` / `eprintln` already uses it.
+    fn ambient_write_via_stream(&self, builtin_name: &str) -> Option<WirFuncId> {
+        let wasi_func_name = if builtin_name.contains("stderr") {
+            "wasi:cli/Stderr::write_via_stream"
+        } else {
+            "wasi:cli/Stdout::write_via_stream"
+        };
+        let key = MangledName::wasi_import(wasi_func_name);
+        self.ctx.func_map.get(&key).cloned()
     }
 
     /// `array_release` nulls a reference element's slots. A reference-free

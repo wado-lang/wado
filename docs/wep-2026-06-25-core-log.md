@@ -211,9 +211,8 @@ promise that. The call stays reachable, the import lands, and at `-O0` nothing
 folds it away.
 
 The import is what makes this worth a type parameter, because an import decides
-instantiation. `core:kiln/generator` links only `core:kiln/kiln-host`, so a
-generator reaching a stamped sink fails to instantiate rather than logging
-without a clock.
+instantiation. `core:kiln/generator` links no clock, so a generator reaching a
+stamped sink fails to instantiate rather than logging without a clock.
 
 ### Runtime filter directives
 
