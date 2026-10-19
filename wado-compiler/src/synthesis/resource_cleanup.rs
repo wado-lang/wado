@@ -1006,6 +1006,7 @@ fn drop_value(scrutinee: TirExpr, type_id: TypeId, cx: &mut Cx) -> Vec<TirStmt> 
                 TypeTable::UNIT,
             ))]
         }
+        Layout::End if is_future_writable(type_id, cx) => vec![unwritten_future_trap(type_id, cx)],
         Layout::End => vec![expr_stmt(end_drop_call(
             scrutinee,
             type_id,
@@ -1023,6 +1024,35 @@ fn drop_value(scrutinee: TirExpr, type_id: TypeId, cx: &mut Cx) -> Vec<TirStmt> 
         Layout::Holder { parts, .. } => drop_parts(scrutinee, type_id, parts, cx),
         Layout::Opaque => Vec::new(),
     }
+}
+
+fn is_future_writable(type_id: TypeId, cx: &Cx) -> bool {
+    let tt = cx.resources.tt.borrow();
+    tt.is_compiler_item_type(tt.representation_head(type_id), CompilerItem::FutureWritable)
+}
+
+/// A `FutureWritable` reaching a drop was never written, since its write
+/// consumes it. The Component Model traps on that drop, and nothing a drop
+/// could write stands in for the value the reader waits for, so the trap names
+/// the end (WEP: Affine Types).
+fn unwritten_future_trap(type_id: TypeId, cx: &Cx) -> TirStmt {
+    let type_name = cx.resources.tt.borrow().type_name(type_id);
+    expr_stmt(panic_with(
+        format!("`{type_name}` dropped before its write: its reader would wait forever"),
+        cx,
+    ))
+}
+
+/// A `panic(message)` call.
+fn panic_with(message: String, cx: &Cx) -> TirExpr {
+    let span = synth_span();
+    let string_ty = {
+        let tt = cx.resources.tt.borrow();
+        let def = tt.require_compiler_item_def(CompilerItem::String);
+        tt.find_struct_type(StructDef::Decl(def))
+            .expect("`String` is in the type table")
+    };
+    common::panic_call(common::string_lit(message, string_ty, span), span)
 }
 
 /// Drop each part of `scrutinee`, a holder of type `type_id`, and not the
@@ -2303,26 +2333,17 @@ fn elab_store(expr: &mut TirExpr, cx: &mut Cx) {
 /// it already is, `place`: the move into `stored` nulled the only place that
 /// owned it, and a reference owns nothing (WEP: Affine Types).
 fn refuse_self_store(place: TirExpr, stored: TirExpr, cx: &Cx) -> TirStmt {
-    let span = synth_span();
-    let (string_ty, type_name) = {
-        let tt = cx.resources.tt.borrow();
-        let def = tt.require_compiler_item_def(CompilerItem::String);
-        let string_ty = tt
-            .find_struct_type(StructDef::Decl(def))
-            .expect("`String` is in the type table");
-        (string_ty, tt.type_name(stored.type_id))
-    };
-    let message = common::string_lit(
+    let type_name = cx.resources.tt.borrow().type_name(stored.type_id);
+    let trap = panic_with(
         format!(
             "a store through a reference moves `{type_name}` into the object it was moved out \
              of, which nothing would own"
         ),
-        string_ty,
-        span,
+        cx,
     );
     if_stmt(
         builtin_call("ref_eq", vec![place, stored], TypeTable::BOOL),
-        TirBlock::new(vec![expr_stmt(common::panic_call(message, span))], span),
+        TirBlock::new(vec![expr_stmt(trap)], synth_span()),
         None,
     )
 }

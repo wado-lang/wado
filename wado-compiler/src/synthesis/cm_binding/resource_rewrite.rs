@@ -1026,15 +1026,24 @@ fn synthesize_future_read_func(
 ) -> TirFunction {
     let cm_interface_registry = ctx.cm_interface_registry;
     let type_table = ctx.type_table;
-    let (func_name, read_name, cm_package, payload_ast, size, align) = {
+    let (func_name, read_name, drop_name, cm_package, payload_ast, size, align) = {
         let tt = type_table.borrow();
         let func_name = future_read_func_name(&tt, payload_type_id);
         let payload = classify_future_payload(&tt, payload_type_id);
         let read_name = CanonicalIntrinsic::FutureRead(payload.clone());
+        let drop_name = CanonicalIntrinsic::FutureDropReadable(payload.clone());
         let cm_package = future_payload_package(&payload);
         let payload_ast = payload_ast_type(payload_type_id, &tt, cm_interface_registry);
         let (size, align) = cm_layout_i32(&payload_ast, cm_interface_registry);
-        (func_name, read_name, cm_package, payload_ast, size, align)
+        (
+            func_name,
+            read_name,
+            drop_name,
+            cm_package,
+            payload_ast,
+            size,
+            align,
+        )
     };
 
     let mut next_local: u32 = 0;
@@ -1153,6 +1162,13 @@ fn synthesize_future_read_func(
         &mut next_local,
         &mut locals,
     ));
+
+    // The read consumes the end (WEP: Affine Types); it is done, so it drops.
+    stmts.push(expr_stmt(cm_canonical_call(
+        drop_name,
+        vec![local_ref(handle_idx, "handle", TypeTable::I32)],
+        TypeTable::UNIT,
+    )));
 
     stmts.push(return_stmt(Some(local_ref(
         result_idx,

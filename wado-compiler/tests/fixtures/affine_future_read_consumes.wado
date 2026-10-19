@@ -1,0 +1,13 @@
+// A future's readable end is read once, so the read consumes it, and a second
+// read is a use after move (WEP: Affine Types).
+
+export fn run() {
+    let [rx, tx] = Future::<i32>::new();
+    tx.write(1);
+    let first = rx.read();
+    let second = rx.read();
+    assert first == second;
+}
+
+__DATA__
+{"compile_error": ":8:18: analysis error: affine value `rx` used after it was moved (moved at 7:17)"}
