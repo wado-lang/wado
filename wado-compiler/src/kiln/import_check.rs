@@ -99,6 +99,7 @@ fn provided_wasi_packages(world: &WorldInfo) -> Vec<&str> {
         .filter(|fq| fq.starts_with(WASI_SCHEME))
         .map(fq_name_package)
         .collect();
+    packages.sort_unstable();
     packages.dedup();
     packages
 }

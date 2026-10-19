@@ -371,8 +371,9 @@ fn generator_importing_wasi_clocks_is_rejected() {
 }
 
 /// A generator reaching a `core:*` module that itself imports WASI must not
-/// pick up that import: the Kiln linker offers only `core:kiln/kiln-host`, so a
-/// `wasi:*` interface carrying a function fails instantiation.
+/// pick up that import: the Kiln linker offers only `core:kiln/kiln-host` and
+/// `wasi:random`, so any other `wasi:*` interface carrying a function fails
+/// instantiation.
 ///
 /// `core:log` is no `wasi:` import at the source level, so the `use`-site check
 /// cannot see this and the guarantee is asserted on the emitted component.
@@ -408,6 +409,16 @@ fn wasi_imports_at(source: &str, what: &str, opt_level: OptLevel) -> Vec<(String
     entries
 }
 
+/// The function-bearing interfaces among `imports`, which the linker has to
+/// provide. A type-only import asks it for nothing.
+fn function_bearing(imports: &[(String, ImportKind)]) -> Vec<&str> {
+    imports
+        .iter()
+        .filter(|(_, kind)| *kind != ImportKind::SharedTypes)
+        .map(|(fq, _)| fq.as_str())
+        .collect()
+}
+
 #[test]
 fn generator_using_core_log_adds_no_wasi_import() {
     let baseline = wasi_imports_of(NOOP_GENERATOR, "noop generator");
@@ -419,15 +430,12 @@ fn generator_using_core_log_adds_no_wasi_import() {
     // What `core:log` adds is `wasi:cli/types`, an instance exporting only an
     // `error-code` enum. A type-only import needs nothing from the linker,
     // which is why a generator carrying it still instantiates; anything
-    // function-bearing would not.
+    // function-bearing outside the generator world would not.
     let with_log = wasi_imports_of(CORE_LOG_GENERATOR, "core:log generator");
-    let provided: Vec<&(String, ImportKind)> = with_log
-        .iter()
-        .filter(|(_, kind)| *kind != ImportKind::SharedTypes)
-        .collect();
+    let provided = function_bearing(&with_log);
     assert!(
         provided.is_empty(),
-        "core:log added {provided:?}, a WASI import the Kiln linker never provides"
+        "core:log added {provided:?}, a WASI import the generator world lacks"
     );
     assert!(
         !with_log.is_empty(),
@@ -460,15 +468,6 @@ fn generator_installing_a_stamped_sink_is_rejected() {
     );
 }
 
-/// The function-bearing `wasi:` interfaces among [`wasi_imports_of`].
-fn provided_wasi_imports_of(source: &str, what: &str) -> Vec<String> {
-    wasi_imports_of(source, what)
-        .into_iter()
-        .filter(|(_, kind)| *kind != ImportKind::SharedTypes)
-        .map(|(fq, _)| fq)
-        .collect()
-}
-
 /// `HashMap::new()` reads `DEFAULT_HASH_SEED`, whose `#[benign]` initializer
 /// asks the host: `#[benign]` waives the effect, not the world import, and the
 /// generator world imports `wasi:random`.
@@ -485,9 +484,10 @@ export fn generate(req: Request) -> Result<Response, Error> {
 
 #[test]
 fn generator_hashing_under_the_default_seed_imports_insecure_seed() {
+    let imports = wasi_imports_of(DEFAULT_SEED_MAP_GENERATOR, "default-seed generator");
     assert_eq!(
-        provided_wasi_imports_of(DEFAULT_SEED_MAP_GENERATOR, "default-seed generator"),
-        ["wasi:random/insecure-seed@0.3.0"],
+        function_bearing(&imports),
+        ["wasi:random/insecure-seed@0.3.0"]
     );
 }
 
@@ -504,10 +504,8 @@ export fn generate(req: Request) -> Result<Response, Error> with Random {
 
 #[test]
 fn generator_may_import_wasi_random() {
-    assert_eq!(
-        provided_wasi_imports_of(RANDOM_GENERATOR, "wasi:random generator"),
-        ["wasi:random/random@0.3.0"],
-    );
+    let imports = wasi_imports_of(RANDOM_GENERATOR, "wasi:random generator");
+    assert_eq!(function_bearing(&imports), ["wasi:random/random@0.3.0"]);
 }
 
 /// A map under a fixed seed leaves `DEFAULT_HASH_SEED` unread, so its
@@ -528,10 +526,7 @@ export fn generate(req: Request) -> Result<Response, Error> {
 fn generator_hashing_under_a_fixed_seed_adds_no_wasi_import() {
     for opt_level in [OptLevel::O0, OptLevel::O2] {
         let imports = wasi_imports_at(FIXED_SEED_MAP_GENERATOR, "fixed-seed generator", opt_level);
-        let provided: Vec<&(String, ImportKind)> = imports
-            .iter()
-            .filter(|(_, kind)| *kind != ImportKind::SharedTypes)
-            .collect();
+        let provided = function_bearing(&imports);
         assert!(
             provided.is_empty(),
             "a fixed-seed map imported {provided:?} at {opt_level:?}"
