@@ -917,15 +917,28 @@ impl FunctionTranslator<'_, '_> {
                 span,
             ));
         }
-        // `&*r` of an affine variant is `r`: the box `r` names is the place,
-        // so a fresh one would detach it.
-        if let TirExprKind::Unary {
-            op: TirUnaryOp::Deref,
-            expr: reference,
-        } = &inner.kind
-            && self.base.type_table.borrow().boxes_element(inner.type_id)
-        {
-            return Some(self.convert_expr(reference));
+        // A slot holding an affine variant holds it in a box, which is the
+        // place: a fresh box would detach it. `&*r` is `r`, and `&s.f` the box
+        // the field holds.
+        if self.base.type_table.borrow().boxes_slot(inner.type_id) {
+            match &inner.kind {
+                TirExprKind::Unary {
+                    op: TirUnaryOp::Deref,
+                    expr: reference,
+                } => return Some(self.convert_expr(reference)),
+                TirExprKind::FieldAccess { .. } => {
+                    let field = self.convert_operand(inner);
+                    return Some(self.alloc_expr(
+                        ExprKind::Unary {
+                            op: nir::NirUnaryOp::Ref,
+                            expr: field,
+                        },
+                        self.base.box_plan.box_struct_types[&inner.type_id],
+                        span,
+                    ));
+                }
+                _ => {}
+            }
         }
         // `&primitive_expr` → fresh `Box<T> { value: expr }`.
         let inner_nir = self.convert_operand(inner);

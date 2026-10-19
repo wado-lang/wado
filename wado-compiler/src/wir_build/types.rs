@@ -288,6 +288,7 @@ fn register_struct(
         }
     }
 
+    let is_box = is_box_instance(tir_struct, type_table);
     let fields: Vec<WirField> = tir_struct
         .fields
         .iter()
@@ -297,7 +298,11 @@ fn register_struct(
             if matches!(ty, WirType::Unit) {
                 return None;
             }
-            let ty = ctx.slot_type(type_table, f.type_id, ty);
+            let ty = if is_box {
+                ctx.unboxed_slot_type(type_table, f.type_id, ty)
+            } else {
+                ctx.slot_type(type_table, f.type_id, ty)
+            };
             Some(WirField {
                 name: f.name.clone(),
                 ty,
@@ -381,7 +386,8 @@ fn register_variant(
             let payload = if type_table.get(case.payload) == &ResolvedType::Unit {
                 Vec::new()
             } else {
-                vec![ctx.type_id_to_wir_type_pending(type_table, case.payload)]
+                let ty = ctx.type_id_to_wir_type_pending(type_table, case.payload);
+                vec![ctx.boxed_slot_type(type_table, case.payload, ty)]
             };
             (case.name.clone(), payload)
         })
@@ -487,12 +493,11 @@ fn register_raw_array_type(
     }
 
     let fq = mangle_builtin_array_type(&elem_name);
-    let elem_wir_type = match type_table.element_box(element_type_id) {
-        Some(wrapper) => ctx
-            .type_id_to_wir_type_pending(type_table, wrapper)
-            .as_nullable(),
-        None => ctx.type_id_to_wir_type_pending(type_table, element_type_id),
-    };
+    let elem_wir_type = ctx.boxed_slot_type(
+        type_table,
+        element_type_id,
+        ctx.type_id_to_wir_type_pending(type_table, element_type_id),
+    );
 
     let type_id = ctx.register_type(
         fq.clone(),
@@ -930,7 +935,11 @@ fn register_mono_variants(ctx: &mut WirContext<'_>) {
                     .map(|(name, payload)| {
                         let wir_payload = match type_table.get(payload) {
                             ResolvedType::Unit => Vec::new(),
-                            _ => vec![ctx.try_type_id_to_wir_type(type_table, payload)?],
+                            _ => {
+                                let held = type_table.slot_box(payload).unwrap_or(payload);
+                                let ty = ctx.try_type_id_to_wir_type(type_table, held)?;
+                                vec![ctx.boxed_slot_type(type_table, payload, ty)]
+                            }
                         };
                         Some((name, wir_payload))
                     })
@@ -1367,7 +1376,11 @@ fn fixup_abstract_struct_fields(ctx: &mut WirContext<'_>) {
                         let field_type_id = tir_field.type_id;
                         let wir_type = ctx.type_id_to_wir_type_pending(type_table, field_type_id);
                         if !is_abstract_ref(&wir_type) {
-                            resolved = Some(ctx.slot_type(type_table, field_type_id, wir_type));
+                            resolved = Some(if is_box_instance(tir_struct, type_table) {
+                                ctx.unboxed_slot_type(type_table, field_type_id, wir_type)
+                            } else {
+                                ctx.slot_type(type_table, field_type_id, wir_type)
+                            });
                             break;
                         }
                     }

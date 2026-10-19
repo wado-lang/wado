@@ -1,0 +1,31 @@
+// `&mut` of a tuple element holding an affine variant is the element itself
+// (WEP: Affine Types), so taking through it empties the element, and its
+// resource drops once.
+
+use { println, log_stdout, Stdout } from "core:cli";
+
+affine struct Tok {
+    n: i32,
+}
+
+impl Drop for Tok {
+    fn drop(self) {
+        log_stdout(`drop ${self.n}`);
+    }
+}
+
+fn clear(slot: &mut Option<Tok>) {
+    slot.take();
+}
+
+export fn run() with Stdout {
+    let mut pair: [Option<Tok>, Option<Tok>] = [Option::Some(Tok { n: 1 }), Option::Some(Tok { n: 2 })];
+    clear(&mut pair.0);
+    println("cleared");
+    let [_, second] = pair;
+    println(`took ${second.unwrap().n}`);
+    println("end");
+}
+
+__DATA__
+{"stdout": "drop 1\ncleared\ntook 2\ndrop 2\nend\n"}

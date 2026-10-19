@@ -1164,7 +1164,7 @@ impl FunctionTranslator<'_, '_> {
                             type_id: case_type_id.clone(),
                             field_name: payload_field_name,
                             expr: Box::new(cast_source(self)),
-                            result_ty: payload_result_ty,
+                            result_ty: payload_result_ty.clone(),
                         };
                         if let PatKind::Binding { local_index, .. } = &arena.pats[*binding].kind {
                             let payload_field_wir =
@@ -1191,10 +1191,12 @@ impl FunctionTranslator<'_, '_> {
                             let payload_wir =
                                 self.ctx.type_id_to_wir_type(self.type_table, payload_tid);
                             let temp_name = self.fresh_local("$variant_payload");
+                            let payload =
+                                self.read_slot(payload_get, &payload_result_ty, payload_tid);
                             instrs.extend(declare_and_set_local(
                                 temp_name.clone(),
                                 payload_wir,
-                                payload_get,
+                                payload,
                             ));
                             self.emit_pattern_bindings(*binding, &temp_name, payload_tid, instrs);
                         }
@@ -1259,10 +1261,11 @@ impl FunctionTranslator<'_, '_> {
                             let temp_name = self.fresh_local("$tuple_elem");
                             let elem_wir_type =
                                 self.ctx.type_id_to_wir_type(self.type_table, elem_type);
+                            let element = self.read_slot(field_get, &field_result_ty, elem_type);
                             instrs.extend(declare_and_set_local(
                                 temp_name.clone(),
                                 elem_wir_type,
-                                field_get,
+                                element,
                             ));
                             self.emit_pattern_bindings(*sub_pattern, &temp_name, elem_type, instrs);
                         }
@@ -1300,10 +1303,12 @@ impl FunctionTranslator<'_, '_> {
                                 self.resolve_struct_field_type(scrut_type, &field.field_name);
                             let field_wir_type =
                                 self.ctx.type_id_to_wir_type(self.type_table, field_type);
+                            let field_value =
+                                self.read_slot(field_get, &field_result_ty, field_type);
                             instrs.extend(declare_and_set_local(
                                 temp_name.clone(),
                                 field_wir_type,
-                                field_get,
+                                field_value,
                             ));
                             self.emit_pattern_bindings(
                                 field.pattern,
@@ -1354,17 +1359,22 @@ impl FunctionTranslator<'_, '_> {
     /// narrow with `RefAsNonNull` when the local is non-nullable and the source
     /// is not, and skip a unit binding, which has no Wasm local.
     fn emit_pattern_binding_set(
-        &self,
+        &mut self,
         local_index: u32,
         source_wir: &WirType,
         source: WirInstr,
         instrs: &mut Vec<WirInstr>,
     ) {
         // The local's own type: boxing may have promoted it past the pattern's.
-        let binding_wir = &self.ctx.type_id_to_wir_type(
-            self.type_table,
-            self.tir_func.locals[local_index as usize].type_id,
-        );
+        let binding_type = self.tir_func.locals[local_index as usize].type_id;
+        let binding_wir = &self.ctx.type_id_to_wir_type(self.type_table, binding_type);
+        // A slot holding its value in a box binds the value by value, and the
+        // box itself by reference.
+        if let Some(slot_box) = self.held_box(source_wir, binding_type) {
+            let value = self.unbox_slot(source, slot_box);
+            let value_wir = binding_wir.clone();
+            return self.emit_pattern_binding_set(local_index, &value_wir, value, instrs);
+        }
         let needs_boxing = ref_binding_needs_boxing(binding_wir, source_wir);
         let value = if needs_boxing {
             let WirType::Ref {
@@ -1457,7 +1467,9 @@ impl FunctionTranslator<'_, '_> {
 
         let mut fields = vec![WirInstr::I32Const(case_index as i32)];
         if let Some(payload_expr) = payload {
-            fields.push(self.translate_operand(payload_expr));
+            let payload = self.translate_operand(payload_expr);
+            let slot_ty = self.get_case_payload_wir_type(&struct_type_id, 0);
+            fields.push(self.into_slot(payload, &slot_ty, self.operand_type_id(payload_expr)));
         }
         self.struct_new(struct_type_id, fields)
     }
@@ -1488,6 +1500,7 @@ impl FunctionTranslator<'_, '_> {
         &mut self,
         inner: Operand,
         case_index: u32,
+        payload_type: TypeId,
     ) -> WirInstr {
         let val = self.translate_operand(inner);
         let inner_ty = self.operand_type_id(inner);
@@ -1517,6 +1530,9 @@ impl FunctionTranslator<'_, '_> {
             expr: Box::new(cast),
             result_ty: payload_result_ty.clone(),
         };
+        if self.held_box(&payload_result_ty, payload_type).is_some() {
+            return self.read_slot(get, &payload_result_ty, payload_type);
+        }
         // The variant case's `payload_0` field is declared nullable for the
         // `Option<&T>` = `&T | null` boxing optimisation, but every `Some(_)`
         // construction site wraps its value with `RefAsNonNull`, so the

@@ -10,7 +10,7 @@ use std::array;
 use crate::module_source::ModuleSource;
 use crate::name::MangledName;
 use crate::tir::{TypeId, TypeTable};
-use crate::wir::{WirInstr, WirType, WirTypeId};
+use crate::wir::{WirInstr, WirType, WirTypeDef, WirTypeId};
 
 use super::context::WirContext;
 use super::primitive_ops::FloatWidth;
@@ -665,7 +665,7 @@ impl FunctionTranslator<'_, '_> {
                     index: Box::new(idx),
                 };
                 Some(match self.element_box(array_type_id) {
-                    Some(element_box) => self.unbox_element(get, element_box),
+                    Some(element_box) => self.unbox_slot(get, element_box),
                     None => get,
                 })
             }
@@ -923,28 +923,25 @@ impl FunctionTranslator<'_, '_> {
     }
 
     /// The `Box<T>` each element of an `Array<T>` or `List<T>` of
-    /// `sequence_type_id` is held in, where `TypeTable::element_box` names one.
+    /// `sequence_type_id` is held in, where `TypeTable::slot_box` names one.
     pub(super) fn element_box(&self, sequence_type_id: TypeId) -> Option<WirTypeId> {
         let sequence = self.type_table.peel_refs(sequence_type_id);
         let element = match self.type_table.get(sequence) {
             ResolvedType::BuiltinArray(element) => *element,
             _ => self.type_table.list_element(sequence)?,
         };
-        let wrapper = self.type_table.element_box(element)?;
-        Some(self.ref_type_id(wrapper))
+        self.ctx.slot_box(self.type_table, element)
     }
 
-    /// The value the element box `boxed` holds, or null for a slot a move
+    /// The value the slot box `boxed` holds, or null for a slot a move
     /// emptied.
-    pub(super) fn unbox_element(&mut self, boxed: WirInstr, element_box: WirTypeId) -> WirInstr {
+    pub(super) fn unbox_slot(&mut self, boxed: WirInstr, slot_box: WirTypeId) -> WirInstr {
         let box_ty = WirType::Ref {
-            type_id: element_box.clone(),
+            type_id: slot_box.clone(),
             nullable: true,
         };
-        let value_ty = self
-            .struct_field_wir_type(&element_box, "value")
-            .as_nullable();
-        let name = self.fresh_local("$element_box");
+        let value_ty = self.struct_field_wir_type(&slot_box, "value").as_nullable();
+        let name = self.fresh_local("$slot_box");
         let read = local_get(&name, &box_ty);
         let [declare, set] = declare_and_set_local(name, box_ty, boxed);
         WirInstr::Seq(vec![
@@ -955,7 +952,7 @@ impl FunctionTranslator<'_, '_> {
                 result: Some(value_ty.clone()),
                 then_body: vec![value_ty.default_value()],
                 else_body: Some(vec![WirInstr::StructGet {
-                    type_id: element_box,
+                    type_id: slot_box,
                     field_name: "value".to_string(),
                     expr: Box::new(read),
                     result_ty: value_ty,
@@ -964,13 +961,72 @@ impl FunctionTranslator<'_, '_> {
         ])
     }
 
-    /// `array_set` of a boxed element writes into the slot's box, so a
-    /// reference to the element sees the new value; a slot a move emptied gets
-    /// a new box.
+    /// The box a slot of WIR type `slot_ty` holds a `type_id` in. The slot's
+    /// own type decides, not `type_id` alone: a box's `value` holds the value
+    /// itself.
+    pub(super) fn held_box(&self, slot_ty: &WirType, type_id: TypeId) -> Option<WirTypeId> {
+        let slot_box = self.ctx.slot_box(self.type_table, type_id)?;
+        matches!(slot_ty, WirType::Ref { type_id, .. } if *type_id == slot_box).then_some(slot_box)
+    }
+
+    /// The value a read of a slot of WIR type `slot_ty` and type `type_id`
+    /// yields from `held`: unboxed where the slot holds it in a box.
+    pub(super) fn read_slot(&mut self, held: WirInstr, slot_ty: &WirType, type_id: TypeId) -> WirInstr {
+        match self.held_box(slot_ty, type_id) {
+            Some(slot_box) => self.unbox_slot(held, slot_box),
+            None => held,
+        }
+    }
+
+    /// `operands`, already translated, spilled to locals in order, as reads of
+    /// them.
+    fn spill_instrs<const N: usize>(
+        &mut self,
+        operands: [(WirInstr, WirType); N],
+        seq: &mut Vec<WirInstr>,
+    ) -> [WirInstr; N] {
+        operands.map(|(operand, ty)| {
+            let name = self.fresh_local("$slot_store");
+            let read = local_get(&name, &ty);
+            seq.extend(declare_and_set_local(name, ty, operand));
+            read
+        })
+    }
+
+    /// Store `value` into the slot box `current` reads: into the box, so a
+    /// reference to the slot sees it, or, for a slot a move emptied, as a new
+    /// box, which `install` puts in the slot.
+    fn store_into_slot_box(
+        &mut self,
+        current: WirInstr,
+        value: WirInstr,
+        slot_box: WirTypeId,
+        install: impl FnOnce(WirInstr) -> WirInstr,
+        seq: &mut Vec<WirInstr>,
+    ) {
+        let box_ty = WirType::Ref {
+            type_id: slot_box.clone(),
+            nullable: true,
+        };
+        let [held] = self.spill_instrs([(current, box_ty)], seq);
+        seq.push(WirInstr::If {
+            condition: Box::new(WirInstr::RefIsNull(Box::new(held.clone()))),
+            result: None,
+            then_body: vec![install(self.struct_new(slot_box.clone(), vec![value.clone()]))],
+            else_body: Some(vec![WirInstr::StructSet {
+                type_id: slot_box,
+                field_name: "value".to_string(),
+                expr: Box::new(held),
+                value: Box::new(value),
+            }]),
+        });
+    }
+
+    /// `array_set` of a boxed element writes into the element's box.
     pub(super) fn store_boxed_element(
         &mut self,
         type_id: WirTypeId,
-        operands: [WirInstr; 3],
+        [array, index, value]: [WirInstr; 3],
         element_box: WirTypeId,
     ) -> WirInstr {
         // Nullable: a parameter's reference is, and `array.get` traps on null.
@@ -980,46 +1036,90 @@ impl FunctionTranslator<'_, '_> {
         };
         let value_ty = self.struct_field_wir_type(&element_box, "value");
         let mut seq = Vec::new();
-        let mut reads = Vec::with_capacity(operands.len());
-        for (operand, ty) in operands.into_iter().zip([array_ty, WirType::I32, value_ty]) {
-            let name = self.fresh_local("$element_store");
-            reads.push(local_get(&name, &ty));
-            seq.extend(declare_and_set_local(name, ty, operand));
-        }
-        let [arr, idx, value]: [WirInstr; 3] = reads.try_into().unwrap();
-        let box_ty = WirType::Ref {
-            type_id: element_box.clone(),
+        let [arr, idx, value] = self.spill_instrs(
+            [(array, array_ty), (index, WirType::I32), (value, value_ty)],
+            &mut seq,
+        );
+        let current = WirInstr::ArrayGet {
+            type_id: type_id.clone(),
+            array: Box::new(arr.clone()),
+            index: Box::new(idx.clone()),
+            result_ty: self.array_element_wir_type(&type_id),
+        };
+        let install = |boxed| WirInstr::ArraySet {
+            type_id,
+            array: Box::new(arr),
+            index: Box::new(idx),
+            value: Box::new(boxed),
+        };
+        self.store_into_slot_box(current, value, element_box, install, &mut seq);
+        WirInstr::Seq(seq)
+    }
+
+    /// A store into a boxed field writes into the field's box.
+    pub(super) fn store_boxed_field(
+        &mut self,
+        type_id: WirTypeId,
+        field_name: &str,
+        [receiver, value]: [WirInstr; 2],
+        field_box: WirTypeId,
+    ) -> WirInstr {
+        let receiver_ty = WirType::Ref {
+            type_id: type_id.clone(),
             nullable: true,
         };
-        let slot = self.fresh_local("$element_box");
-        let read = local_get(&slot, &box_ty);
-        seq.extend(declare_and_set_local(
-            slot,
-            box_ty,
-            WirInstr::ArrayGet {
-                type_id: type_id.clone(),
-                array: Box::new(arr.clone()),
-                index: Box::new(idx.clone()),
-                result_ty: self.array_element_wir_type(&type_id),
-            },
-        ));
-        seq.push(WirInstr::If {
-            condition: Box::new(WirInstr::RefIsNull(Box::new(read.clone()))),
-            result: None,
-            then_body: vec![WirInstr::ArraySet {
-                type_id,
-                array: Box::new(arr),
-                index: Box::new(idx),
-                value: Box::new(self.struct_new(element_box.clone(), vec![value.clone()])),
-            }],
-            else_body: Some(vec![WirInstr::StructSet {
-                type_id: element_box,
-                field_name: "value".to_string(),
-                expr: Box::new(read),
-                value: Box::new(value),
-            }]),
-        });
+        let value_ty = self.struct_field_wir_type(&field_box, "value");
+        let mut seq = Vec::new();
+        let [receiver, value] =
+            self.spill_instrs([(receiver, receiver_ty), (value, value_ty)], &mut seq);
+        let current = WirInstr::StructGet {
+            type_id: type_id.clone(),
+            field_name: field_name.to_string(),
+            expr: Box::new(receiver.clone()),
+            result_ty: self.struct_field_wir_type(&type_id, field_name),
+        };
+        let install = |boxed| WirInstr::StructSet {
+            type_id,
+            field_name: field_name.to_string(),
+            expr: Box::new(receiver),
+            value: Box::new(boxed),
+        };
+        self.store_into_slot_box(current, value, field_box, install, &mut seq);
         WirInstr::Seq(seq)
+    }
+
+    /// `fields`, the values [`Self::translate_args_erasing_unit`] left of
+    /// `operands`, each as its field of the struct `struct_id` holds it.
+    pub(super) fn into_slots(
+        &self,
+        fields: Vec<WirInstr>,
+        operands: &[Operand],
+        struct_id: &WirTypeId,
+    ) -> Vec<WirInstr> {
+        let kept: Vec<TypeId> = operands
+            .iter()
+            .map(|&op| self.operand_type_id(op))
+            .filter(|&ty| !self.is_stackless_type(ty) || self.type_table.is_never(ty))
+            .collect();
+        assert_eq!(kept.len(), fields.len());
+        let WirTypeDef::Struct(st) = &self.ctx.types[struct_id.index() as usize] else {
+            unreachable!("a struct literal builds a struct");
+        };
+        fields
+            .into_iter()
+            .zip(kept)
+            .zip(&st.fields)
+            .map(|((field, ty), slot)| self.into_slot(field, &slot.ty, ty))
+            .collect()
+    }
+
+    /// `value`, of type `type_id`, as a slot of WIR type `slot_ty` holds it:
+    /// in a new box where it holds one.
+    pub(super) fn into_slot(&self, value: WirInstr, slot_ty: &WirType, type_id: TypeId) -> WirInstr {
+        match self.held_box(slot_ty, type_id) {
+            Some(slot_box) => self.struct_new(slot_box, vec![value]),
+            None => value,
+        }
     }
 
     /// `array_release` nulls a reference element's slots. A reference-free

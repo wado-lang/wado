@@ -932,7 +932,7 @@ impl FunctionTranslator<'_, '_> {
         };
 
         if let Some(element_box) = self.element_box(array_type_id) {
-            return self.unbox_element(get_instr, element_box);
+            return self.unbox_slot(get_instr, element_box);
         }
         // For reference element types, convert nullable to non-null
         if is_ref {

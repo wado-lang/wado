@@ -1,0 +1,32 @@
+// A `&mut` binding to a payload holding an affine variant reaches the payload
+// itself (WEP: Affine Types), so taking from it empties the payload, and the
+// payload's resource drops once.
+
+use { println, log_stdout, Stdout } from "core:cli";
+
+affine struct Tok {
+    n: i32,
+}
+
+impl Drop for Tok {
+    fn drop(self) {
+        log_stdout(`drop ${self.n}`);
+    }
+}
+
+affine variant Outer {
+    Has(Option<Tok>),
+    Empty,
+}
+
+export fn run() with Stdout {
+    let mut o = Outer::Has(Option::Some(Tok { n: 1 }));
+    if let Has(inner) = &mut o {
+        let t = inner.take();
+        println(`took ${t.unwrap().n}`);
+    }
+    println("end");
+}
+
+__DATA__
+{"stdout": "took 1\ndrop 1\nend\n"}

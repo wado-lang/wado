@@ -1586,6 +1586,7 @@ impl FunctionTranslator<'_, '_> {
         };
         let value_block = self.prelude_block_holds(tuple_type_id, false);
         let (prelude, raw_fields) = self.translate_args_erasing_unit(elements, value_block);
+        let raw_fields = self.into_slots(raw_fields, elements, &type_id);
         let fields = self.cast_nonnull_fields(&type_id, raw_fields);
         (type_id, prelude, fields)
     }
@@ -1608,15 +1609,25 @@ impl FunctionTranslator<'_, '_> {
             self.type_table.get(array_type_id),
             ResolvedType::BuiltinArray(_)
         );
-        let element_box = self.element_box(array_type_id);
+        let raw_array_type_id = if is_raw_array {
+            type_id.clone()
+        } else {
+            // The `repr` field is a non-nullable ref to the raw `Array<T>`.
+            let WirType::Ref {
+                type_id: raw_array_type_id,
+                ..
+            } = self.struct_field_wir_type(&type_id, SeqField::Backing.field_name())
+            else {
+                panic!("[WIR] ArrayLiteral: List<T> struct {type_id:?} has no `repr` array field");
+            };
+            raw_array_type_id
+        };
+        let slot_ty = self.array_element_wir_type(&raw_array_type_id);
         let element_instrs: Vec<WirInstr> = elements
             .iter()
             .map(|e| {
                 let element = self.translate_operand(*e);
-                match &element_box {
-                    Some(element_box) => self.struct_new(element_box.clone(), vec![element]),
-                    None => element,
-                }
+                self.into_slot(element, &slot_ty, self.operand_type_id(*e))
             })
             .collect();
         if is_raw_array {
@@ -1625,14 +1636,6 @@ impl FunctionTranslator<'_, '_> {
                 elements: element_instrs,
             };
         }
-        // The `repr` field is a non-nullable ref to the raw `Array<T>`.
-        let WirType::Ref {
-            type_id: raw_array_type_id,
-            ..
-        } = self.struct_field_wir_type(&type_id, SeqField::Backing.field_name())
-        else {
-            panic!("[WIR] ArrayLiteral: List<T> struct {type_id:?} has no `repr` array field");
-        };
         let used = i32::try_from(element_instrs.len())
             .unwrap_or_else(|_| panic!("[WIR] array literal has more than i32::MAX elements"));
         self.struct_new(
@@ -1645,6 +1648,74 @@ impl FunctionTranslator<'_, '_> {
                 WirInstr::I32Const(used),
             ],
         )
+    }
+
+    /// What the field `field_access` reads holds, before [`Self::read_slot`],
+    /// and the field's WIR type: a boxed field's box.
+    fn translate_field_held(&mut self, field_access: ExprId) -> (WirInstr, WirType) {
+        let arena = self.body;
+        let expr = &arena.exprs[field_access];
+        let ExprKind::FieldAccess {
+            expr: receiver,
+            field_name,
+            ..
+        } = &expr.kind
+        else {
+            unreachable!("`translate_field_held` takes a field access");
+        };
+        // When the receiver is a TIR local that was bound from a
+        // multi-value-return Call, read the corresponding split
+        // local directly. The aggregate was never materialised
+        // as a struct ref — a `StructGet` here would read an
+        // uninitialised slot.
+        let receiver = *receiver;
+        if let Some(re) = receiver.as_expr()
+            && let ExprKind::Local {
+                index: tir_local, ..
+            } = &arena.exprs[re].kind
+            && let Some(splits) = self.multi_value_split_locals.get(tir_local)
+            && let Some((name, ty)) = splits.get(field_name)
+        {
+            return (local_get(name, ty), ty.clone());
+        }
+        // A stackless field leaves nothing on the stack, so the
+        // declaration side dropped it: emit only the receiver for its
+        // side effects. `&()` is as empty as `()` here.
+        if self.is_stackless_type(expr.type_id) {
+            let recv = self.translate_operand(receiver);
+            return (
+                WirInstr::Seq(vec![WirInstr::Drop(Box::new(recv))]),
+                WirType::Unit,
+            );
+        }
+        let recv = self.translate_operand(receiver);
+        let wir_type = self
+            .ctx
+            .type_id_to_wir_type(self.type_table, self.operand_type_id(receiver));
+        let WirType::Ref { type_id, .. } = wir_type else {
+            panic!(
+                "[WIR] FieldAccess receiver expected Ref WirType, got {wir_type:?} (field={field_name}, type_id={:?})",
+                self.operand_type_id(receiver)
+            );
+        };
+        let result_ty = self.struct_field_wir_type(&type_id, field_name);
+        let held = WirInstr::StructGet {
+            type_id,
+            field_name: field_name.clone(),
+            expr: Box::new(recv),
+            result_ty: result_ty.clone(),
+        };
+        (held, result_ty)
+    }
+
+    /// The field access a reference `inner` takes, where the field holds its
+    /// value in a box: the box is the place the reference names.
+    fn boxed_field_referent(&self, inner: Operand) -> Option<ExprId> {
+        let field_access = inner.as_expr()?;
+        let expr = &self.body.exprs[field_access];
+        (matches!(expr.kind, ExprKind::FieldAccess { .. })
+            && self.type_table.slot_box(expr.type_id).is_some())
+        .then_some(field_access)
     }
 
     /// Build a `StructSet` instruction, wrapping the value with `RefAsNonNull`
@@ -2750,19 +2821,18 @@ impl FunctionTranslator<'_, '_> {
                     && let Some(splits) = self.multi_value_split_locals.get(&idx)
                     && let Some((name, ty)) = splits.get(&field_name)
                 {
-                    return WirInstr::LocalGet {
-                        name: name.clone(),
-                        result_ty: ty.clone(),
-                    };
+                    let (held, ty) = (local_get(name, ty), ty.clone());
+                    return self.read_slot(held, &ty, type_id);
                 }
                 let recv = self.extract_value(receiver);
                 let result_ty = self.struct_field_wir_type(&struct_tid, &field_name);
-                WirInstr::StructGet {
+                let held = WirInstr::StructGet {
                     type_id: struct_tid,
                     field_name,
                     expr: Box::new(recv),
-                    result_ty,
-                }
+                    result_ty: result_ty.clone(),
+                };
+                self.read_slot(held, &result_ty, type_id)
             }
             other => panic!("extract_value: non-constant kind not promotable yet: {other:?}"),
         }
@@ -2829,7 +2899,10 @@ impl FunctionTranslator<'_, '_> {
             }
 
             ExprKind::Unary { op, expr: inner } => match op {
-                NirUnaryOp::Ref | NirUnaryOp::MutRef => self.translate_operand(*inner),
+                NirUnaryOp::Ref | NirUnaryOp::MutRef => match self.boxed_field_referent(*inner) {
+                    Some(field_access) => self.translate_field_held(field_access).0,
+                    None => self.translate_operand(*inner),
+                },
                 NirUnaryOp::Deref => self.translate_operand(*inner),
                 _ => {
                     let inner = *inner;
@@ -2898,57 +2971,14 @@ impl FunctionTranslator<'_, '_> {
                 let value_block = self.prelude_block_holds(expr.type_id, false);
                 let (prelude, field_instrs) =
                     self.translate_args_erasing_unit(&values, value_block);
+                let field_instrs = self.into_slots(field_instrs, &values, &type_id);
                 let new = self.struct_new(type_id, field_instrs);
                 self.wrap_call_with_prelude(prelude, new, expr.type_id, false)
             }
 
-            ExprKind::FieldAccess {
-                expr: receiver,
-                field_name,
-                ..
-            } => {
-                // When the receiver is a TIR local that was bound from a
-                // multi-value-return Call, read the corresponding split
-                // local directly. The aggregate was never materialised
-                // as a struct ref — a `StructGet` here would read an
-                // uninitialised slot.
-                let receiver = *receiver;
-                if let Some(re) = receiver.as_expr()
-                    && let ExprKind::Local {
-                        index: tir_local, ..
-                    } = &arena.exprs[re].kind
-                    && let Some(splits) = self.multi_value_split_locals.get(tir_local)
-                    && let Some((name, ty)) = splits.get(field_name)
-                {
-                    return WirInstr::LocalGet {
-                        name: name.clone(),
-                        result_ty: ty.clone(),
-                    };
-                }
-                // A stackless field leaves nothing on the stack, so the
-                // declaration side dropped it: emit only the receiver for its
-                // side effects. `&()` is as empty as `()` here.
-                if self.is_stackless_type(expr.type_id) {
-                    let recv = self.translate_operand(receiver);
-                    return WirInstr::Seq(vec![WirInstr::Drop(Box::new(recv))]);
-                }
-                let recv = self.translate_operand(receiver);
-                let wir_type = self
-                    .ctx
-                    .type_id_to_wir_type(self.type_table, self.operand_type_id(receiver));
-                let WirType::Ref { type_id, .. } = wir_type else {
-                    panic!(
-                        "[WIR] FieldAccess receiver expected Ref WirType, got {wir_type:?} (field={field_name}, type_id={:?})",
-                        self.operand_type_id(receiver)
-                    );
-                };
-                let result_ty = self.struct_field_wir_type(&type_id, field_name);
-                WirInstr::StructGet {
-                    type_id,
-                    field_name: field_name.clone(),
-                    expr: Box::new(recv),
-                    result_ty,
-                }
+            ExprKind::FieldAccess { .. } => {
+                let (held, slot_ty) = self.translate_field_held(expr_id);
+                self.read_slot(held, &slot_ty, expr.type_id)
             }
 
             ExprKind::Assign { target, value } => {
@@ -3003,7 +3033,14 @@ impl FunctionTranslator<'_, '_> {
                                 self.operand_type_id(receiver)
                             );
                         };
-                        self.struct_set(type_id, field_name.clone(), recv, val)
+                        let target_type = arena.exprs[target].type_id;
+                        let slot_ty = self.struct_field_wir_type(&type_id, field_name);
+                        match self.held_box(&slot_ty, target_type) {
+                            Some(field_box) => {
+                                self.store_boxed_field(type_id, field_name, [recv, val], field_box)
+                            }
+                            None => self.struct_set(type_id, field_name.clone(), recv, val),
+                        }
                     }
                     ExprKind::Index {
                         expr: array_expr,
@@ -3137,7 +3174,7 @@ impl FunctionTranslator<'_, '_> {
                 if self.is_stackless_type(*payload_type) {
                     WirInstr::Nop
                 } else {
-                    self.translate_variant_payload(*inner, *case_index)
+                    self.translate_variant_payload(*inner, *case_index, *payload_type)
                 }
             }
             ExprKind::VariantConstruct {

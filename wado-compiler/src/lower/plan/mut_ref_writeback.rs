@@ -266,17 +266,18 @@ impl WriteBack<'_> {
     }
 
     /// Whether a `&mut` to `place` is a detached box — of the replace types
-    /// only a `variant` gets here, generic or not. An array element boxed by
-    /// [`TypeTable::boxes_element`] is its own box, which `*r` reaches.
+    /// only a `variant` gets here, generic or not. A field or an element boxed
+    /// by [`TypeTable::boxes_slot`] is its own box, which `*r` reaches.
     fn detaches(&self, place: &TirExpr) -> bool {
         self.type_table.is_variant_value(place.type_id)
             && !(matches!(
                 place.kind,
-                TirExprKind::Unary {
-                    op: TirUnaryOp::Deref,
-                    ..
-                }
-            ) && self.type_table.boxes_element(place.type_id))
+                TirExprKind::FieldAccess { .. }
+                    | TirExprKind::Unary {
+                        op: TirUnaryOp::Deref,
+                        ..
+                    }
+            ) && self.type_table.boxes_slot(place.type_id))
     }
 
     /// Whether `arg` *takes* a detached reference, by any route. Forwarding one it

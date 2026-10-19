@@ -771,12 +771,43 @@ impl<'a> WirContext<'a> {
     }
 
     /// `ty`, the WIR type of a field, element or payload of type `type_id`, as
-    /// that slot holds it: non-nullable, but for an affine value.
+    /// that slot holds it: non-nullable, but for an affine value, and in its
+    /// box where [`TypeTable::slot_box`] names one.
     pub fn slot_type(&self, type_table: &TypeTable, type_id: TypeId, ty: WirType) -> WirType {
+        if type_table.slot_box(type_id).is_some() {
+            self.boxed_slot_type(type_table, type_id, ty)
+        } else {
+            self.unboxed_slot_type(type_table, type_id, ty)
+        }
+    }
+
+    /// [`Self::slot_type`] for the slot a box holds its value in.
+    pub fn unboxed_slot_type(&self, type_table: &TypeTable, type_id: TypeId, ty: WirType) -> WirType {
         if self.is_affine(type_table, type_id) {
             ty.as_nullable()
         } else {
             ty.as_nonnull()
+        }
+    }
+
+    /// `ty`, the WIR type of a slot of type `type_id`, as its box where
+    /// [`TypeTable::slot_box`] names one.
+    pub fn boxed_slot_type(&self, type_table: &TypeTable, type_id: TypeId, ty: WirType) -> WirType {
+        match type_table.slot_box(type_id) {
+            Some(wrapper) => self
+                .type_id_to_wir_type_pending(type_table, wrapper)
+                .as_nullable(),
+            None => ty,
+        }
+    }
+
+    /// The box a slot holds a `type_id` in, where [`TypeTable::slot_box`]
+    /// names one.
+    pub fn slot_box(&self, type_table: &TypeTable, type_id: TypeId) -> Option<WirTypeId> {
+        let wrapper = type_table.slot_box(type_id)?;
+        match self.type_id_to_wir_type(type_table, wrapper) {
+            WirType::Ref { type_id, .. } => Some(type_id),
+            other => unreachable!("a slot box is a struct, not {other:?}"),
         }
     }
 

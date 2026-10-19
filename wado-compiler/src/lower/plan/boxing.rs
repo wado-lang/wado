@@ -286,20 +286,17 @@ impl TypeBuilder {
     /// predicate `TypeTable::is_boxed_reference_target` states.
     fn create_needed_box_types(&mut self, type_table: &mut TypeTable) {
         let mut needs_box_base: IndexSet<TypeId> = IndexSet::default();
-        let mut boxed_elements: Vec<TypeId> = Vec::new();
+        let mut boxed_slots: Vec<TypeId> = Vec::new();
 
         for type_id in type_table.iter_type_ids().collect::<Vec<_>>() {
-            match type_table.get(type_id).clone() {
-                ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => {
-                    if type_table.is_boxed_reference_target(inner) {
-                        needs_box_base.insert(inner);
-                    }
-                }
-                ResolvedType::BuiltinArray(element) if type_table.boxes_element(element) => {
-                    needs_box_base.insert(element);
-                    boxed_elements.push(element);
-                }
-                _ => {}
+            if type_table.boxes_slot(type_id) {
+                needs_box_base.insert(type_id);
+                boxed_slots.push(type_id);
+            }
+            if let ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) = *type_table.get(type_id)
+                && type_table.is_boxed_reference_target(inner)
+            {
+                needs_box_base.insert(inner);
             }
         }
 
@@ -312,8 +309,8 @@ impl TypeBuilder {
             let box_type = self.get_or_create_box_type(key, type_table);
             self.box_struct_types.insert(base_type_id, box_type);
         }
-        for element in boxed_elements {
-            type_table.register_element_box(element, self.box_struct_types[&element]);
+        for ty in boxed_slots {
+            type_table.register_slot_box(ty, self.box_struct_types[&ty]);
         }
     }
 
