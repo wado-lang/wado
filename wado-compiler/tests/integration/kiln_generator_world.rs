@@ -427,19 +427,12 @@ fn generator_using_core_log_adds_no_wasi_import() {
         "a generator that only answers `generate` needs no WASI at all, got {baseline:?}"
     );
 
-    // What `core:log` adds is `wasi:cli/types`, an instance exporting only an
-    // `error-code` enum. A type-only import needs nothing from the linker,
-    // which is why a generator carrying it still instantiates; anything
-    // function-bearing outside the generator world would not.
+    // With no stderr to write, `log_stderr` returns before opening a stream, so
+    // even the `wasi:cli/types` error-code its write future carries folds away.
     let with_log = wasi_imports_of(CORE_LOG_GENERATOR, "core:log generator");
-    let provided = function_bearing(&with_log);
     assert!(
-        provided.is_empty(),
-        "core:log added {provided:?}, a WASI import the generator world lacks"
-    );
-    assert!(
-        !with_log.is_empty(),
-        "core:log imports no WASI interface at all, so this test guards nothing"
+        with_log.is_empty(),
+        "core:log added {with_log:?}, a WASI import the generator world lacks"
     );
 }
 

@@ -66,7 +66,7 @@ pub fn check_cm_imports<H: CompilerHost>(
     let mut count = 0;
     for entry in import_plan {
         // A shared-types instance bears no function, so it asks the linker for
-        // nothing: every generator already instantiates with `wasi:cli/types`.
+        // nothing: a generator carrying `wasi:cli/types` still instantiates.
         if !entry.fq.starts_with(WASI_SCHEME)
             || matches!(entry.kind, ImportKind::SharedTypes)
             || world.imports_cm_interface(&entry.fq)
