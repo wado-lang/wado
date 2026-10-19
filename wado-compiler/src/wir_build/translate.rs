@@ -1708,14 +1708,17 @@ impl FunctionTranslator<'_, '_> {
         (held, result_ty)
     }
 
-    /// The field access a reference `inner` takes, where the field holds its
-    /// value in a box: the box is the place the reference names.
-    fn boxed_field_referent(&self, inner: Operand) -> Option<ExprId> {
-        let field_access = inner.as_expr()?;
-        let expr = &self.body.exprs[field_access];
-        (matches!(expr.kind, ExprKind::FieldAccess { .. })
-            && self.type_table.slot_box(expr.type_id).is_some())
-        .then_some(field_access)
+    /// The name of the field at NIR index `field_index` of the struct
+    /// `struct_tid`. The index counts NIR fields, which a Wasm struct leaving
+    /// out `()` ones no longer matches one to one.
+    pub(super) fn nir_field_name(&self, struct_tid: &WirTypeId, field_index: u32) -> String {
+        match self.ctx.nir_field_names.get(&struct_tid.index()) {
+            Some(names) => names[field_index as usize].clone(),
+            None => match self.ctx.types.get(struct_tid.index() as usize) {
+                Some(WirTypeDef::Struct(st)) => st.fields[field_index as usize].name.clone(),
+                _ => panic!("[WIR] field {field_index} read from a type that is not a struct"),
+            },
+        }
     }
 
     /// Build a `StructSet` instruction, wrapping the value with `RefAsNonNull`
@@ -2801,17 +2804,7 @@ impl FunctionTranslator<'_, '_> {
                 else {
                     panic!("extract_value FieldAccess: receiver not a Ref: {wir_type:?}");
                 };
-                // The index counts NIR fields, which a Wasm struct leaving out
-                // `()` ones no longer matches one to one.
-                let field_name = match self.ctx.nir_field_names.get(&struct_tid.index()) {
-                    Some(names) => names[field_index as usize].clone(),
-                    None => match self.ctx.types.get(struct_tid.index() as usize) {
-                        Some(WirTypeDef::Struct(st)) => {
-                            st.fields[field_index as usize].name.clone()
-                        }
-                        _ => panic!("extract_value FieldAccess: receiver type is not a struct"),
-                    },
-                };
+                let field_name = self.nir_field_name(&struct_tid, field_index);
                 // Multi-value-return split: if the receiver is a local that was
                 // split into per-field scalars (the aggregate was never
                 // materialised), read the split local directly — a `StructGet`
@@ -2899,10 +2892,7 @@ impl FunctionTranslator<'_, '_> {
             }
 
             ExprKind::Unary { op, expr: inner } => match op {
-                NirUnaryOp::Ref | NirUnaryOp::MutRef => match self.boxed_field_referent(*inner) {
-                    Some(field_access) => self.translate_field_held(field_access).0,
-                    None => self.translate_operand(*inner),
-                },
+                NirUnaryOp::Ref | NirUnaryOp::MutRef => self.translate_operand(*inner),
                 NirUnaryOp::Deref => self.translate_operand(*inner),
                 _ => {
                     let inner = *inner;

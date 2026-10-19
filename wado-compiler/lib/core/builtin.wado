@@ -181,6 +181,14 @@ pub fn array_get_ref<affine T>(arr: &Array<T>, idx: i32) -> &T;
 #[side_effect(trap, outside = [arr], at = [idx], unset = arr)]
 pub fn array_get_ref_mut<affine T: RefMut>(arr: &mut Array<T>, idx: i32) -> &mut T;
 
+/// Returns the box the field at `field` of `holder` holds an affine variant in,
+/// which is the field's place (WEP: Affine Types). `field` is a constant. Lowering
+/// emits the call for `&mut holder.f`, since a `&` there is no reference to the
+/// value the field reads as.
+#[storage(part_of_args)]
+#[side_effect(none)]
+pub fn field_slot<affine S, affine T>(holder: &mut S, field: i32) -> &mut T;
+
 /// Sets an element in a Array<T> at the given index.
 #[storage(stores_args)]
 #[side_effect(trap, outside = [arr], at = [idx])]

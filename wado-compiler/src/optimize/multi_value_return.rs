@@ -264,6 +264,11 @@ fn candidate_info(
 }
 
 pub(super) fn is_eligible_field_type(type_id: TypeId, type_table: &TypeTable) -> bool {
+    // A slot box is the field's place, so the aggregate's fields would have
+    // to travel as their boxes: a reference into one follows the field.
+    if type_table.boxes_slot(type_id) {
+        return false;
+    }
     match type_table.get(type_id) {
         ResolvedType::Primitive(_)
         | ResolvedType::Struct { .. }

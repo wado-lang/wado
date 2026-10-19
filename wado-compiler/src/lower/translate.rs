@@ -926,16 +926,43 @@ impl FunctionTranslator<'_, '_> {
                     op: TirUnaryOp::Deref,
                     expr: reference,
                 } => return Some(self.convert_expr(reference)),
-                TirExprKind::FieldAccess { .. } => {
-                    let field = self.convert_operand(inner);
-                    return Some(self.alloc_expr(
-                        ExprKind::Unary {
-                            op: nir::NirUnaryOp::Ref,
-                            expr: field,
+                // A builtin rather than `Unary::Ref`, which the optimizer reads
+                // as the referent itself.
+                TirExprKind::FieldAccess {
+                    expr: receiver,
+                    field_index,
+                    ..
+                } => {
+                    let is_reference = matches!(
+                        self.base.type_table.borrow().get(receiver.type_id),
+                        ResolvedType::Ref(_) | ResolvedType::MutRef(_)
+                    );
+                    let holder = if is_reference {
+                        (**receiver).clone()
+                    } else {
+                        let holder_type =
+                            self.base.type_table.borrow_mut().make_mut_ref(receiver.type_id);
+                        TirExpr::new(
+                            TirExprKind::Unary {
+                                op: TirUnaryOp::MutRef,
+                                expr: receiver.clone(),
+                            },
+                            holder_type,
+                            span,
+                        )
+                    };
+                    let field = TirExpr::new(
+                        TirExprKind::IntLiteral {
+                            value: u64::from(*field_index),
+                            repr: field_index.to_string(),
                         },
-                        self.base.box_plan.box_struct_types[&inner.type_id],
+                        TypeTable::I32,
                         span,
-                    ));
+                    );
+                    let slot_box = self.base.box_plan.box_struct_types[&inner.type_id];
+                    return Some(
+                        self.convert_expr(&builtin_call("field_slot", vec![holder, field], slot_box)),
+                    );
                 }
                 _ => {}
             }

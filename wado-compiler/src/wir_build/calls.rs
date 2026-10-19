@@ -669,6 +669,21 @@ impl FunctionTranslator<'_, '_> {
                     None => get,
                 })
             }
+            "field_slot" => {
+                let holder = self.translate_operand(args[0].expr);
+                let type_id = self.ref_type_id(self.operand_type_id(args[0].expr));
+                let field_index = self
+                    .body
+                    .operand_const_int(args[1].expr)
+                    .expect("`field_slot` takes a constant field index");
+                let field_name = self.nir_field_name(&type_id, field_index as u32);
+                Some(WirInstr::StructGet {
+                    result_ty: self.struct_field_wir_type(&type_id, &field_name),
+                    type_id,
+                    field_name,
+                    expr: Box::new(holder),
+                })
+            }
             "array_get_ref" | "array_get_ref_mut" => {
                 let arr = self.translate_operand(args[0].expr);
                 let idx = self.translate_operand(args[1].expr);
