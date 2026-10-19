@@ -7,8 +7,8 @@ use std::fmt::Write;
 use crate::ast::Visibility;
 use crate::ast::{
     Block, EffectHandlerBinding, Expr, ExprStmt, GenericType, IdentExpr, Item, LetStmt, Module,
-    NamedType, Param, Pattern, SelfKind, Stmt, StrLit, StructLiteralExpr, StructLiteralField,
-    Type, UnaryExpr, UnaryOp, UseDecl, UseItem, WithHandlerExpr,
+    NamedType, Param, Pattern, SelfKind, Stmt, StrLit, StructLiteralExpr, StructLiteralField, Type,
+    UnaryExpr, UnaryOp, UseDecl, UseItem, WithHandlerExpr,
 };
 use crate::compiler_host::{Code, CompilerHost, Diagnostic, DiagnosticSpan, Severity};
 use crate::component_model::{CmInterfaceRegistry, SourceInterfaceBatch};
@@ -44,12 +44,13 @@ pub fn check_loaded<H: CompilerHost>(
         .get(KILN_GENERATOR_WORLD)
         .expect("the stdlib declares the generator world");
     let provided = provided_wasi_interfaces(world);
-    let provided_text = provided
-        .iter()
-        .fold(String::new(), |mut out, ((namespace, package), name)| {
-            let _ = write!(out, "`{name}` from `{namespace}:{package}`, ");
-            out
-        });
+    let provided_text =
+        provided
+            .iter()
+            .fold(String::new(), |mut out, ((namespace, package), name)| {
+                let _ = write!(out, "`{name}` from `{namespace}:{package}`, ");
+                out
+            });
 
     let mut count = 0;
     for (source, module) in modules {

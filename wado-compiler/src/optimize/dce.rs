@@ -2460,11 +2460,18 @@ pub(super) fn drop_self_feeding_globals(project: &mut NirPackage, summaries: &Fn
         .map(|g| global_key(&g.module_source, &g.name))
         .filter(|key| !candidates.contains(key))
         .collect();
-    for (i, func_rc) in project.functions.iter().enumerate() {
-        let mut func = func_rc.borrow_mut();
-        let Some(body) = func.body.as_mut() else {
-            continue;
-        };
+    let touched: IndexSet<usize> = carriers
+        .keys()
+        .copied()
+        .chain(
+            candidates
+                .iter()
+                .flat_map(|key| writers[key].iter().copied()),
+        )
+        .collect();
+    for i in touched {
+        let mut func = project.functions[i].borrow_mut();
+        let body = func.body.as_mut().expect("a reader or writer has a body");
         let calls = summaries.of_body(i);
         if let Some(carried) = carriers.get(&i) {
             for block in reachable_block_ids(body) {

@@ -30,7 +30,7 @@ use crate::nir::{
 use crate::nir_arena::{Body, ExprKind, NodeRef};
 use crate::tir::{BuiltinDeclaration, BuiltinDeclarations, TypeId, TypeTable};
 use crate::wir_build::component_plan::ComponentPlan;
-use crate::world_registry::{self, GENERATOR_HOST_INTERFACE, WorldInfo, WorldRegistry};
+use crate::world_registry::{self, WorldInfo, WorldRegistry};
 
 // The optimizer visits functions on several threads, each holding its own
 // function mutably and reading the rest (WEP: Parallel Optimizer).
@@ -804,9 +804,7 @@ impl NirPackage {
 
     /// The target world, when it is a kiln generator world.
     pub fn generator_world(&self) -> Option<&WorldInfo> {
-        self.world_registry
-            .get(&self.target_world)
-            .filter(|w| w.imports_interface(GENERATOR_HOST_INTERFACE))
+        self.world_registry.generator_world(&self.target_world)
     }
 
     /// Look up a variant by `(module_source, name)`.

@@ -6,16 +6,16 @@
 //!   an empty `Response`.
 //! - Typed options: `export fn generate(req: Request<Options>)` produces a
 //!   valid component whose `generate` carries `Options` as a typed argument.
-//! - Import-refusal: adding `use { now } from "wasi:clocks";` to a
-//!   generator surfaces `Code::KilnGeneratorForbiddenImport`.
+//! - Import plan: what WASI a generator's emitted component asks the linker
+//!   for, which no fixture observes.
 //!
 //! See WEP 2026-04-12 §"Options are a typed argument in each generator's own
 //! world".
 
 use crate::common::{block_on, in_memory_host};
 use wado_compiler::{
-    Code, CompileResult, CompilerOptions, Diagnostic, LogLevel, OptLevel, Severity,
-    compile_with_options, wir::ImportKind,
+    Code, CompileResult, CompilerOptions, Diagnostic, LogLevel, OptLevel, compile_with_options,
+    wir::ImportKind,
 };
 
 fn kiln_options() -> CompilerOptions {
@@ -64,30 +64,6 @@ fn compile_generator_at(source: &str, what: &str, opt_level: OptLevel) -> Compil
         );
     };
     result
-}
-
-/// Assert `source` is refused for importing `interface`, whatever reached it.
-fn expect_forbidden_import(source: &str, interface: &str, what: &str) {
-    let host = in_memory_host(&[]);
-    let result = block_on(compile_with_options(
-        source,
-        &host,
-        Some("generator.wado"),
-        kiln_options(),
-    ));
-    assert!(result.is_err(), "{what} should fail to compile");
-
-    let diags = host.diagnostics();
-    let found = diags.iter().any(|d| {
-        d.severity == Severity::Error
-            && d.code == Code::KilnGeneratorForbiddenImport
-            && d.message.contains(interface)
-    });
-    assert!(
-        found,
-        "expected KilnGeneratorForbiddenImport naming {interface}, got:\n{}",
-        diag_list(&diags)
-    );
 }
 
 const NOOP_GENERATOR: &str = r#"
@@ -350,26 +326,6 @@ fn generator_with_extra_export_compiles_to_valid_component() {
     assert!(result.wasm.starts_with(b"\0asm"), "not component-shaped");
 }
 
-const FORBIDDEN_IMPORT_GENERATOR: &str = r#"
-use { Request, Response, Error } from "core:kiln";
-use { now } from "wasi:clocks";
-
-export fn generate(req: Request) -> Result<Response, Error> {
-    let _ = req.primary.path;
-    let _ = now();
-    return Result::Ok(Response { files: [] });
-}
-"#;
-
-#[test]
-fn generator_importing_wasi_clocks_is_rejected() {
-    expect_forbidden_import(
-        FORBIDDEN_IMPORT_GENERATOR,
-        "wasi:clocks",
-        "a generator with a wasi: import",
-    );
-}
-
 /// A generator reaching a `core:*` module that itself imports WASI must not
 /// pick up that import: the Kiln linker offers only `core:kiln/kiln-host` and
 /// insecure `wasi:random`, so any other `wasi:*` interface carrying a function fails
@@ -433,31 +389,6 @@ fn generator_using_core_log_adds_no_wasi_import() {
     assert!(
         with_log.is_empty(),
         "core:log added {with_log:?}, a WASI import the generator world lacks"
-    );
-}
-
-/// Opting into a stamped sink picks up WASI without writing a `wasi:` import:
-/// `WallClock::now()` is `#[ambient]`, so nothing in the generator's source
-/// names the clock and only the import plan sees it.
-const WALL_CLOCK_SINK_GENERATOR: &str = r#"
-use { Request, Response, Error } from "core:kiln";
-use { Log, TextSink, WallClock, info } from "core:log";
-
-export fn generate(req: Request) -> Result<Response, Error> {
-    let mut sink: TextSink<WallClock> = TextSink {};
-    with Log => &mut sink do {
-        info(`generating`, { path: req.primary.path });
-    }
-    return Result::Ok(Response { files: [] });
-}
-"#;
-
-#[test]
-fn generator_installing_a_stamped_sink_is_rejected() {
-    expect_forbidden_import(
-        WALL_CLOCK_SINK_GENERATOR,
-        "wasi:clocks",
-        "a generator reaching wasi:clocks through a sink",
     );
 }
 

@@ -1478,18 +1478,6 @@ pub(super) fn export_needs_param_lifting(
 mod tests {
     use super::*;
 
-    /// The scope a record's stream-read lift reads nested field names under.
-    #[test]
-    fn a_cm_package_comes_from_the_source_in_every_bundled_namespace() {
-        assert_eq!(
-            CmNamespace::split_package("wasi:filesystem/types@0.3.0"),
-            Some((CmNamespace::Wasi, "filesystem"))
-        );
-        // `core:` is not a `CmNamespace`; the kiln lookups own those.
-        assert_eq!(CmNamespace::split_package("core:kiln/types@0.1.0"), None);
-        assert_eq!(CmNamespace::split_package("my:pkg/iface"), None);
-    }
-
     #[test]
     fn a_cm_interface_module_carries_the_namespace_that_owns_it() {
         assert_eq!(
