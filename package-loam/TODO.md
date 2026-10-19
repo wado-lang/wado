@@ -78,9 +78,10 @@ leaves this file, and `design.md` states what it built.
    answer given 0.8 is right about 80% of the time. A temperature keeps each
    question's ranking, so a model's bias toward a label, such as `A`, stays as
    it was. The caller passes the temperatures, and a tool in `tools/` fits them
-   from questions with known answers. Finished when `design.md` records the
-   expected calibration error before and after on questions held out of the
-   fit, and names the data set and its license.
+   from questions with known answers. Finished when `design.md` records, on
+   questions held out of the fit, the expected calibration error before and
+   after, and for each label how often it is the answer given and how often it
+   is the right one. It names the data set and its license.
 10. [ ] A model larger than the guest's heap splits. `onnx_split` writes the
     checkpoint a tensor at a time rather than holding the model. Finished when
     Gemma 4 E2B's export splits and `loam dump` reports its decoder and its
