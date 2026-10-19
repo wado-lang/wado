@@ -1141,6 +1141,9 @@ pub struct TypeTable {
     ///
     /// A sparse [`TypeMap`] keyed by the wrapper `TypeId`.
     box_payload_types: TypeMap<TypeId>,
+    /// The `Box<T>` an `Array<T>` holds each element in, for the elements
+    /// [`Self::boxes_element`] names, keyed by the element.
+    element_boxes: IndexMap<TypeKey, TypeId>,
     /// Index from (struct name, module source) to `TypeId` for O(1) lookup.
     /// Populated incrementally when Struct types are interned.
     struct_name_index: IndexMap<(String, ModuleSource), TypeId>,
@@ -1327,6 +1330,7 @@ impl TypeTable {
             projection_bounds_cache: IndexMap::default(),
             redirects: TypeMap::default(),
             box_payload_types: TypeMap::default(),
+            element_boxes: IndexMap::default(),
             struct_name_index: IndexMap::default(),
             decl_name_index: IndexMap::default(),
             type_by_symbol: IndexMap::default(),
@@ -2661,6 +2665,9 @@ impl TypeTable {
             if let Some(&payload) = self.box_payload_types.get(id) {
                 components.push(payload);
             }
+            if let Some(&wrapper) = self.element_boxes.get(&TypeKey(id)) {
+                components.push(wrapper);
+            }
             if let Some(ty) = self.types.get(id) {
                 match ty {
                     ResolvedType::Struct {
@@ -2753,6 +2760,9 @@ impl TypeTable {
             .retain(|id, &target| effective_keep.contains(&id) && effective_keep.contains(&target));
         self.box_payload_types.retain(|id, &payload| {
             effective_keep.contains(&id) && effective_keep.contains(&payload)
+        });
+        self.element_boxes.retain(|element, wrapper| {
+            effective_keep.contains(&element.0) && effective_keep.contains(wrapper)
         });
         // Retain symbol indices to surviving TypeIds only.
         self.symbol_by_type
@@ -3871,6 +3881,37 @@ impl TypeTable {
     /// `None` if the given `TypeId` is not a registered wrapper.
     pub fn box_payload_of(&self, wrapper: TypeId) -> Option<TypeId> {
         self.box_payload_types.get(wrapper).copied()
+    }
+
+    /// Whether an `Array<T>` holds each `ty` element in a `Box<T>`: an affine
+    /// variant. A variant value is immutable, so only a box makes its element
+    /// a place that `&mut xs[i]` writes (WEP: Affine Types).
+    pub fn boxes_element(&self, ty: TypeId) -> bool {
+        self.is_variant_value(ty) && self.holds_affine_resource(ty)
+    }
+
+    /// Whether a value of `ty` is a variant's, generic or not, through any
+    /// newtype.
+    pub fn is_variant_value(&self, ty: TypeId) -> bool {
+        match self.get(self.representation_head(ty)) {
+            ResolvedType::Variant { .. } => true,
+            ResolvedType::GenericInstance { def, .. } => {
+                self.variant_template_cases(*def).is_some()
+            }
+            _ => false,
+        }
+    }
+
+    /// Record the `Box<T>` an `Array<T>` holds each `element` in.
+    pub fn register_element_box(&mut self, element: TypeId, wrapper: TypeId) {
+        let key = self.type_key(element);
+        self.element_boxes.insert(key, wrapper);
+    }
+
+    /// The `Box<T>` an `Array<T>` holds each `element` in, where
+    /// [`Self::boxes_element`] says it does.
+    pub fn element_box(&self, element: TypeId) -> Option<TypeId> {
+        self.element_boxes.get(&self.type_key(element)).copied()
     }
 
     /// Whether `type_id` may name storage rather than hold a value: a `&T` /

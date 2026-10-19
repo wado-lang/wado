@@ -656,12 +656,17 @@ impl FunctionTranslator<'_, '_> {
             "array_get_value" => {
                 let arr = self.translate_operand(args[0].expr);
                 let idx = self.translate_operand(args[1].expr);
-                let type_id = self.ref_type_id(self.operand_type_id(args[0].expr));
-                Some(WirInstr::ArrayGet {
+                let array_type_id = self.operand_type_id(args[0].expr);
+                let type_id = self.ref_type_id(array_type_id);
+                let get = WirInstr::ArrayGet {
                     result_ty: self.array_element_wir_type(&type_id),
                     type_id,
                     array: Box::new(arr),
                     index: Box::new(idx),
+                };
+                Some(match self.element_box(array_type_id) {
+                    Some(element_box) => self.unbox_element(get, element_box),
+                    None => get,
                 })
             }
             "array_get_ref" | "array_get_ref_mut" => {
@@ -687,11 +692,16 @@ impl FunctionTranslator<'_, '_> {
                 }
             }
             "array_set" => {
+                let array_type_id = self.operand_type_id(args[0].expr);
+                let type_id = self.ref_type_id(array_type_id);
                 let arr = self.translate_operand(args[0].expr);
                 let idx = self.translate_operand(args[1].expr);
                 let val = self.translate_operand(args[2].expr);
+                if let Some(element_box) = self.element_box(array_type_id) {
+                    return Some(self.store_boxed_element(type_id, [arr, idx, val], element_box));
+                }
                 Some(WirInstr::ArraySet {
-                    type_id: self.ref_type_id(self.operand_type_id(args[0].expr)),
+                    type_id,
                     array: Box::new(arr),
                     index: Box::new(idx),
                     value: Box::new(val),
@@ -910,6 +920,106 @@ impl FunctionTranslator<'_, '_> {
 
             _ => None,
         }
+    }
+
+    /// The `Box<T>` each element of an `Array<T>` or `List<T>` of
+    /// `sequence_type_id` is held in, where `TypeTable::element_box` names one.
+    pub(super) fn element_box(&self, sequence_type_id: TypeId) -> Option<WirTypeId> {
+        let sequence = self.type_table.peel_refs(sequence_type_id);
+        let element = match self.type_table.get(sequence) {
+            ResolvedType::BuiltinArray(element) => *element,
+            _ => self.type_table.list_element(sequence)?,
+        };
+        let wrapper = self.type_table.element_box(element)?;
+        Some(self.ref_type_id(wrapper))
+    }
+
+    /// The value the element box `boxed` holds, or null for a slot a move
+    /// emptied.
+    pub(super) fn unbox_element(&mut self, boxed: WirInstr, element_box: WirTypeId) -> WirInstr {
+        let box_ty = WirType::Ref {
+            type_id: element_box.clone(),
+            nullable: true,
+        };
+        let value_ty = self
+            .struct_field_wir_type(&element_box, "value")
+            .as_nullable();
+        let name = self.fresh_local("$element_box");
+        let read = local_get(&name, &box_ty);
+        let [declare, set] = declare_and_set_local(name, box_ty, boxed);
+        WirInstr::Seq(vec![
+            declare,
+            set,
+            WirInstr::If {
+                condition: Box::new(WirInstr::RefIsNull(Box::new(read.clone()))),
+                result: Some(value_ty.clone()),
+                then_body: vec![value_ty.default_value()],
+                else_body: Some(vec![WirInstr::StructGet {
+                    type_id: element_box,
+                    field_name: "value".to_string(),
+                    expr: Box::new(read),
+                    result_ty: value_ty,
+                }]),
+            },
+        ])
+    }
+
+    /// `array_set` of a boxed element writes into the slot's box, so a
+    /// reference to the element sees the new value; a slot a move emptied gets
+    /// a new box.
+    pub(super) fn store_boxed_element(
+        &mut self,
+        type_id: WirTypeId,
+        operands: [WirInstr; 3],
+        element_box: WirTypeId,
+    ) -> WirInstr {
+        // Nullable: a parameter's reference is, and `array.get` traps on null.
+        let array_ty = WirType::Ref {
+            type_id: type_id.clone(),
+            nullable: true,
+        };
+        let value_ty = self.struct_field_wir_type(&element_box, "value");
+        let mut seq = Vec::new();
+        let mut reads = Vec::with_capacity(operands.len());
+        for (operand, ty) in operands.into_iter().zip([array_ty, WirType::I32, value_ty]) {
+            let name = self.fresh_local("$element_store");
+            reads.push(local_get(&name, &ty));
+            seq.extend(declare_and_set_local(name, ty, operand));
+        }
+        let [arr, idx, value]: [WirInstr; 3] = reads.try_into().unwrap();
+        let box_ty = WirType::Ref {
+            type_id: element_box.clone(),
+            nullable: true,
+        };
+        let slot = self.fresh_local("$element_box");
+        let read = local_get(&slot, &box_ty);
+        seq.extend(declare_and_set_local(
+            slot,
+            box_ty,
+            WirInstr::ArrayGet {
+                type_id: type_id.clone(),
+                array: Box::new(arr.clone()),
+                index: Box::new(idx.clone()),
+                result_ty: self.array_element_wir_type(&type_id),
+            },
+        ));
+        seq.push(WirInstr::If {
+            condition: Box::new(WirInstr::RefIsNull(Box::new(read.clone()))),
+            result: None,
+            then_body: vec![WirInstr::ArraySet {
+                type_id,
+                array: Box::new(arr),
+                index: Box::new(idx),
+                value: Box::new(self.struct_new(element_box.clone(), vec![value.clone()])),
+            }],
+            else_body: Some(vec![WirInstr::StructSet {
+                type_id: element_box,
+                field_name: "value".to_string(),
+                expr: Box::new(read),
+                value: Box::new(value),
+            }]),
+        });
+        WirInstr::Seq(seq)
     }
 
     /// `array_release` nulls a reference element's slots. A reference-free

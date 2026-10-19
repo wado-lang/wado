@@ -917,6 +917,16 @@ impl FunctionTranslator<'_, '_> {
                 span,
             ));
         }
+        // `&*r` of an affine variant is `r`: the box `r` names is the place,
+        // so a fresh one would detach it.
+        if let TirExprKind::Unary {
+            op: TirUnaryOp::Deref,
+            expr: reference,
+        } = &inner.kind
+            && self.base.type_table.borrow().boxes_element(inner.type_id)
+        {
+            return Some(self.convert_expr(reference));
+        }
         // `&primitive_expr` → fresh `Box<T> { value: expr }`.
         let inner_nir = self.convert_operand(inner);
         Some(self.wrap_in_box(

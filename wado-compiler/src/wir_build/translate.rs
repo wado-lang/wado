@@ -1608,9 +1608,16 @@ impl FunctionTranslator<'_, '_> {
             self.type_table.get(array_type_id),
             ResolvedType::BuiltinArray(_)
         );
+        let element_box = self.element_box(array_type_id);
         let element_instrs: Vec<WirInstr> = elements
             .iter()
-            .map(|e| self.translate_operand(*e))
+            .map(|e| {
+                let element = self.translate_operand(*e);
+                match &element_box {
+                    Some(element_box) => self.struct_new(element_box.clone(), vec![element]),
+                    None => element,
+                }
+            })
             .collect();
         if is_raw_array {
             return WirInstr::ArrayNewFixed {

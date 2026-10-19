@@ -487,7 +487,12 @@ fn register_raw_array_type(
     }
 
     let fq = mangle_builtin_array_type(&elem_name);
-    let elem_wir_type = ctx.type_id_to_wir_type_pending(type_table, element_type_id);
+    let elem_wir_type = match type_table.element_box(element_type_id) {
+        Some(wrapper) => ctx
+            .type_id_to_wir_type_pending(type_table, wrapper)
+            .as_nullable(),
+        None => ctx.type_id_to_wir_type_pending(type_table, element_type_id),
+    };
 
     let type_id = ctx.register_type(
         fq.clone(),

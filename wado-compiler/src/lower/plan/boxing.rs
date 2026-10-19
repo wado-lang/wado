@@ -286,6 +286,7 @@ impl TypeBuilder {
     /// predicate `TypeTable::is_boxed_reference_target` states.
     fn create_needed_box_types(&mut self, type_table: &mut TypeTable) {
         let mut needs_box_base: IndexSet<TypeId> = IndexSet::default();
+        let mut boxed_elements: Vec<TypeId> = Vec::new();
 
         for type_id in type_table.iter_type_ids().collect::<Vec<_>>() {
             match type_table.get(type_id).clone() {
@@ -293,6 +294,10 @@ impl TypeBuilder {
                     if type_table.is_boxed_reference_target(inner) {
                         needs_box_base.insert(inner);
                     }
+                }
+                ResolvedType::BuiltinArray(element) if type_table.boxes_element(element) => {
+                    needs_box_base.insert(element);
+                    boxed_elements.push(element);
                 }
                 _ => {}
             }
@@ -306,6 +311,9 @@ impl TypeBuilder {
             let key = self.box_key(base_type_id, type_table);
             let box_type = self.get_or_create_box_type(key, type_table);
             self.box_struct_types.insert(base_type_id, box_type);
+        }
+        for element in boxed_elements {
+            type_table.register_element_box(element, self.box_struct_types[&element]);
         }
     }
 

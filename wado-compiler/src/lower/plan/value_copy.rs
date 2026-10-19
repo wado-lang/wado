@@ -178,6 +178,8 @@ pub fn plan(
     confined_params: confine::ConfinedParams,
     ref_receiver_methods: FuncKeySet,
 ) -> ValueCopyPlan {
+    // Again: closure lifting has added its environment structs since `plan`
+    // registered the rest.
     register_type_templates(flat);
     let seed = analyze::collect_seed_types(flat);
     let helpers = synthesize::synthesize_helpers(flat, seed);
@@ -281,7 +283,7 @@ pub fn plan(
 /// Publish every variant declaration's case templates, and every struct's
 /// field types, to the type table, so [`needs_value_copy`] can classify
 /// variants and WIR can tell an affine type from a `&TypeTable`.
-fn register_type_templates(flat: &FlatPackage) {
+pub(super) fn register_type_templates(flat: &FlatPackage) {
     let mut type_table = flat.type_table.borrow_mut();
     for variant in &flat.variants {
         let cases: Vec<(String, u32, TypeId)> = variant

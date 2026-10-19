@@ -1,0 +1,27 @@
+// A temporary in a template string's hole drops when the statement holding
+// the template ends, as one anywhere else does (WEP: Affine Types), not before
+// the statement uses the string.
+
+use { println, log_stdout, Stdout } from "core:cli";
+
+affine struct Tok {
+    n: i32,
+}
+
+impl Drop for Tok {
+    fn drop(self) {
+        log_stdout(`drop ${self.n}`);
+    }
+}
+
+fn make(n: i32) -> Tok {
+    return Tok { n };
+}
+
+export fn run() with Stdout {
+    println(`made ${make(1).n} and ${make(2).n}`);
+    println("end");
+}
+
+__DATA__
+{"stdout": "made 1 and 2\ndrop 2\ndrop 1\nend\n"}
