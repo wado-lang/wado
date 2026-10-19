@@ -2831,6 +2831,52 @@ mod tests {
         );
     }
 
+    /// `let x: i32;` lowers to a unit placeholder, which a read of `x` before
+    /// its first assignment must leave unit-typed: the declaration's lowering
+    /// reads the placeholder's type to tell that it stores nothing.
+    #[test]
+    fn a_read_before_the_first_assignment_leaves_the_placeholder_unit() {
+        let span = Span::new(0, 0, 0, 0);
+        let mut body = Body::empty();
+        *body.locals = vec![NirLocal {
+            name: "x".to_string(),
+            type_id: TypeTable::I32,
+            is_mut: true,
+        }];
+        let placeholder = body.values.alloc_unshared(ValueKind::Unit, TypeTable::UNIT);
+        let declare = body.stmts.push(StmtNode {
+            kind: StmtKind::Let {
+                name: "x".to_string(),
+                local_index: 0,
+                is_mut: true,
+                type_id: TypeTable::I32,
+                value: Operand::Value(placeholder),
+                skip_value_copy: false,
+            },
+            span,
+        });
+        let read = body.exprs.push(ExprNode {
+            kind: ExprKind::Local {
+                index: 0,
+                name: "x".to_string(),
+            },
+            type_id: TypeTable::I32,
+            span,
+        });
+        let read = body.stmts.push(StmtNode {
+            kind: StmtKind::Expr(Operand::Expr(read)),
+            span,
+        });
+        body.push_root(BlockNode {
+            stmts: vec![declare, read],
+            span,
+        });
+
+        let facts = TestFacts::default();
+        build(&mut body, &[], &AliasSets::default(), facts.facts(), None);
+        assert_eq!(body.values.type_of(placeholder), Some(TypeTable::UNIT));
+    }
+
     #[test]
     fn cse_independent_of_mut_escaped_iteration_order() {
         use IndexSet;
