@@ -149,7 +149,7 @@ impl<T> List<T> {
             return null;
         }
         self.used -= 1;
-        return Option::Some(self.repr[self.used]);
+        return Option::Some(builtin::array_take(&mut self.repr, self.used));
     }
 
     /// Copy the live `0..<len()` elements into a fresh fixed `Array<T>` of exactly
@@ -180,7 +180,7 @@ impl<T> List<T> {
     pub fn remove(&mut self, index: i32) -> T
         contract 0 <= index < self.len()
     {
-        let value = self.repr[index];
+        let value = builtin::array_take(&mut self.repr, index);
         // Shift elements left
         builtin::array_move(&mut self.repr, index, &self.repr, index + 1, self.used - 1 - index);
         self.used -= 1;
@@ -192,8 +192,8 @@ impl<T> List<T> {
     pub fn swap(&mut self, a: i32, b: i32)
         contract 0 <= a < self.len() && 0 <= b < self.len()
     {
-        let tmp = self.repr[a];
-        self.repr[a] = self.repr[b];
+        let tmp = builtin::array_take(&mut self.repr, a);
+        self.repr[a] = builtin::array_take(&mut self.repr, b);
         self.repr[b] = tmp;
     }
 

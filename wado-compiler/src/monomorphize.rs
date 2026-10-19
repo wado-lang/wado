@@ -21,6 +21,8 @@ use crate::flat_package::FlatPackage;
 use crate::hashmap::IndexMap;
 use crate::module_source::ModuleSource;
 use crate::name::{FreeFunctionName, LocalMethodName};
+use crate::synthesis::resource_cleanup;
+use crate::synthesis::resource_cleanup::CalleeFacts;
 use crate::tir::{
     AnonStructId, MonomorphInfo, ResolvedType, StructDef, TemplateId, TirFunction, TirModule,
     TirStruct, TypeId, TypeTable,
@@ -97,6 +99,8 @@ pub fn monomorphize(flat: &mut FlatPackage) -> Monomorphization {
         generic_structs: generic_structs_in(&flat.structs).collect(),
         monomorphizer: Monomorphizer::new(flat.trait_env.clone()),
         scanned_functions: 0,
+        callees: resource_cleanup::instance_callee_facts(flat),
+        elaborated_functions: 0,
     };
     session.run(flat);
     session
@@ -128,6 +132,11 @@ pub struct Monomorphization {
     /// instance keyed by the receiver alone, whose body keeps the method's own
     /// type parameters.
     scanned_functions: usize,
+    /// What the templates' signatures reveal about ownership, for elaborating
+    /// the drops of their instances.
+    callees: CalleeFacts,
+    /// How many leading `flat.functions` have had their drops elaborated.
+    elaborated_functions: usize,
 }
 
 impl Monomorphization {
@@ -152,6 +161,14 @@ impl Monomorphization {
         );
         self.scanned_functions = temp_module.functions.len();
         write_back(flat, temp_module);
+        // A generic body's drops are elaborated once its types are known
+        // (WEP: Affine Types).
+        resource_cleanup::elaborate_instance_drops(
+            flat,
+            self.elaborated_functions,
+            &self.callees,
+        );
+        self.elaborated_functions = flat.functions.len();
     }
 }
 

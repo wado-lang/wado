@@ -863,6 +863,19 @@ impl FunctionTranslator<'_, '_> {
                 let resource = self.translate_operand(args[0].expr);
                 Some(self.handle_of(resource))
             }
+            "swap_handles" => {
+                let box_ty = self.wir_type(self.operand_type_id(args[0].expr));
+                let (mut seq, [a, b]) = self.spill_operands(args, [box_ty.clone(), box_ty]);
+                let held = self.fresh_local("$held");
+                seq.extend(declare_and_set_local(
+                    held.clone(),
+                    WirType::I32,
+                    self.handle_of(a.clone()),
+                ));
+                seq.push(self.set_handle(a, self.handle_of(b.clone())));
+                seq.push(self.set_handle(b, local_get(&held, &WirType::I32)));
+                Some(WirInstr::Seq(seq))
+            }
             "zero_handle" => {
                 let resource = self.translate_operand(args[0].expr);
                 Some(self.zero_handle(resource))

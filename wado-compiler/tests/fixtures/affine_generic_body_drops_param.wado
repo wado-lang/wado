@@ -1,0 +1,11 @@
+// A generic body drops the `T` it owns, the way the type monomorphization
+// settles drops (WEP: Affine Types).
+fn keep<affine T>(value: T) {
+}
+
+test {
+    let [rx, tx] = Stream::<u8>::new();
+    keep(rx);
+    assert tx.write([1]).result == CopyResult::Dropped;
+    keep(1);
+}

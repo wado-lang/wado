@@ -1706,11 +1706,16 @@ impl FunctionTranslator<'_, '_> {
     /// Write 0 into the box `resource`, which the Component Model never issues
     /// as a handle: index 0 of a handle table is reserved.
     pub(super) fn zero_handle(&self, resource: WirInstr) -> WirInstr {
+        self.set_handle(resource, WirInstr::I32Const(0))
+    }
+
+    /// Write `handle` into the box `resource`.
+    pub(super) fn set_handle(&self, resource: WirInstr, handle: WirInstr) -> WirInstr {
         WirInstr::StructSet {
             type_id: self.ctx.handle_box().clone(),
             field_name: "value".to_string(),
             expr: Box::new(resource),
-            value: Box::new(WirInstr::I32Const(0)),
+            value: Box::new(handle),
         }
     }
 

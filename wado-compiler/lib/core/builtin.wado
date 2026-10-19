@@ -153,6 +153,13 @@ pub fn array_new_data<T>(bytes: ByteList) -> Array<T>;
 #[side_effect(trap, outside = [arr], at = [idx], unset = arr)]
 pub fn array_get_value<T>(arr: &Array<T>, idx: i32) -> T;
 
+/// Moves the element at `idx` out of `arr`: an affine one leaves its slot
+/// empty, a copyable one stays (WEP: Affine Types). Resource drop synthesis
+/// expands the call.
+#[storage(part_of_args)]
+#[side_effect(trap, outside = [arr], at = [idx], unset = arr)]
+pub fn array_take<T>(arr: &mut Array<T>, idx: i32) -> T;
+
 /// Returns a reference to the element at `idx`. A `Ref` element is aliased in
 /// place; a scalar yields a read-only boxed snapshot (the `&T` read model), so
 /// this is sound to read for every `T` — hence no `Ref` bound.
@@ -469,6 +476,19 @@ pub fn is_moved<T>(value: T) -> bool;
 #[storage(none)]
 #[side_effect(none)]
 pub fn drop<affine T>(value: T);
+
+/// Store `value` where `r` points and return what was there, the one way
+/// `core` moves a value out through a reference (WEP: Affine Types). Resource
+/// drop synthesis expands the call, and the move check trusts it.
+#[storage(part_of_args)]
+#[side_effect(none)]
+pub fn replace<affine T>(r: &mut T, value: T) -> T;
+
+/// Exchange the handles the boxes `a` and `b` hold: `replace` on a resource,
+/// whose box keeps its identity (WEP: Affine Types).
+#[storage(none)]
+#[side_effect(opaque)]
+internal fn swap_handles<R>(a: &R, b: &R);
 
 /// Marks the enclosing code path as cold (rarely executed). `cold_path()` is a
 /// statement placed inside a branch body, so it works anywhere — an `if` /

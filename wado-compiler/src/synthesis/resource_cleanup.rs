@@ -17,7 +17,8 @@ use crate::component_model::CmInterfaceRegistry;
 use crate::defs::DefId;
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::module_source::ModuleSource;
-use crate::name::{drop_glue_name, minted_name};
+use crate::flat_package::FlatPackage;
+use crate::name::{DROP_GLUE_PREFIX, checked_name, drop_glue_name, minted_name};
 use crate::package::Package;
 use crate::resource_holding::{Held, HeldTypes, holds_resource};
 use crate::synthesis::SynthesisError;
@@ -97,6 +98,9 @@ struct Cx<'a> {
     /// The module of the function being elaborated.
     module: ModuleSource,
     refused: &'a mut Vec<SynthesisError>,
+    /// Whether a copy out of a shared reference is refused: an instance's
+    /// copies are the instantiation rule's.
+    refuses_copies: bool,
 }
 
 /// The drop glue functions called so far, by name, each with the type it
@@ -104,6 +108,8 @@ struct Cx<'a> {
 struct DropGlue {
     entry: ModuleSource,
     called: IndexMap<String, TypeId>,
+    /// The glue that exists already, from elaborating before monomorphization.
+    prebuilt: IndexSet<String>,
 }
 
 impl Cx<'_> {
@@ -138,6 +144,9 @@ impl Cx<'_> {
     /// Refuse a call at `span` that copies a `type_id` holding a resource out
     /// of a shared reference: the copy would be a second owner of its handle.
     fn refuse_copy(&mut self, type_id: TypeId, span: Span) {
+        if !self.refuses_copies {
+            return;
+        }
         let type_name = self.resources.tt.borrow().type_name(type_id);
         self.refused.push(SynthesisError {
             code: Code::TypeMismatch,
@@ -185,6 +194,7 @@ enum Layout<'a> {
         decl: Option<DefId>,
         slots: TypeId,
         elem: TypeId,
+        fields: Vec<(u32, String, TypeId)>,
     },
     /// An aggregate, instantiating `decl` with `args` where it has a
     /// declaration.
@@ -295,7 +305,15 @@ impl<'a> Resources<'a> {
             StructDef::Decl(decl) => Some(decl),
             StructDef::Anon(_) => None,
         };
-        let parts = if let Some(fields) = self.struct_fields.get(&(def, Vec::new())) {
+        // Monomorphization registers each instance's fields under its arguments.
+        let parts = if let Some(fields) = self.struct_fields.get(&(def, args.clone())) {
+            Parts::Fields(
+                fields
+                    .iter()
+                    .map(|field| (field.index, field.name.clone(), field.type_id))
+                    .collect(),
+            )
+        } else if let Some(fields) = self.struct_fields.get(&(def, Vec::new())) {
             Parts::Fields(
                 fields
                     .iter()
@@ -321,13 +339,14 @@ impl<'a> Resources<'a> {
             return Layout::Opaque;
         };
         if tt.is_compiler_item_type(base, CompilerItem::List) {
-            let Parts::Fields(fields) = &parts else {
+            let Parts::Fields(fields) = parts else {
                 unreachable!("`List` is a struct");
             };
             return Layout::List {
                 decl,
                 slots: fields[SeqField::Backing.index() as usize].2,
                 elem: args[0],
+                fields,
             };
         }
         Layout::Holder { decl, args, parts }
@@ -427,7 +446,7 @@ impl TirRefVisitor for PatternBindings<'_> {
 /// What a call reveals about ownership, by callee. Each set holds
 /// [`callee_key`]s, which a generic function shares with its instantiations.
 #[derive(Default)]
-struct CalleeFacts {
+pub struct CalleeFacts {
     /// Functions that copy their result out of a shared reference: it names a
     /// type parameter some `&` parameter stores and no `&mut` one does, as
     /// `List::index_value` does. The referenced storage keeps what was copied,
@@ -490,13 +509,15 @@ impl HeldTypes for Stores<'_> {
     fn held(&self, type_id: TypeId) -> Held {
         let resolved = self.resources.tt.borrow().get(type_id).clone();
         match resolved {
-            ResolvedType::TypeParam { index, .. } | ResolvedType::TypePack { index, .. } => {
-                if self.params.contains(&index) {
-                    Held::Resource
-                } else {
-                    Held::Nothing
-                }
+            // Another parameter is a type whose layout nothing knows yet, so it
+            // may store the result: a reflected field getter reads one out of
+            // a `&S`.
+            ResolvedType::TypeParam { .. } | ResolvedType::TypePack { .. }
+                if !self.params.is_empty() =>
+            {
+                Held::Resource
             }
+            ResolvedType::TypeParam { .. } | ResolvedType::TypePack { .. } => Held::Nothing,
             ResolvedType::Ref(inner)
             | ResolvedType::MutRef(inner)
             | ResolvedType::BuiltinArray(inner) => Held::Members {
@@ -556,10 +577,16 @@ pub fn elaborate_resource_drops(project: &mut Package) -> Vec<SynthesisError> {
     let mut glue = DropGlue {
         entry: project.entry_module_source.clone(),
         called: IndexMap::default(),
+        prebuilt: IndexSet::default(),
     };
     let mut refused = Vec::new();
+    // A generic body is elaborated once per instance, where its types are
+    // known: see `elaborate_instance_drops`.
     for module in project.tir_modules.values() {
         for func_rc in &module.functions {
+            if func_rc.borrow().is_template() {
+                continue;
+            }
             elaborate_function(
                 &mut func_rc.borrow_mut(),
                 resources,
@@ -569,23 +596,7 @@ pub fn elaborate_resource_drops(project: &mut Package) -> Vec<SynthesisError> {
             );
         }
     }
-    // A glue body can call glue of its own, so the list grows while it is
-    // built.
-    let mut glue_functions = Vec::new();
-    while let Some((name, type_id)) = glue
-        .called
-        .get_index(glue_functions.len())
-        .map(|(name, type_id)| (name.clone(), *type_id))
-    {
-        glue_functions.push(build_drop_glue(
-            name,
-            type_id,
-            resources,
-            &callees,
-            &mut glue,
-            &mut refused,
-        ));
-    }
+    let glue_functions = build_called_glue(resources, &callees, &mut glue, &mut refused);
     let entry = project
         .tir_modules
         .get_mut(&project.entry_module_source)
@@ -594,6 +605,92 @@ pub fn elaborate_resource_drops(project: &mut Package) -> Vec<SynthesisError> {
         entry.functions.push(Rc::new(RefCell::new(function)));
     }
     refused
+}
+
+/// What every callee in `flat` reveals about ownership, read before
+/// monomorphization replaces the generic signatures it is read from.
+pub fn instance_callee_facts(flat: &FlatPackage) -> CalleeFacts {
+    let struct_fields = tir::struct_fields(&flat.structs);
+    let answers = RefCell::default();
+    let resources = Resources {
+        tt: &flat.type_table,
+        reg: &flat.cm_interface_registry,
+        struct_fields: &struct_fields,
+        answers: &answers,
+    };
+    let mut callees = CalleeFacts::default();
+    for func_rc in &flat.functions {
+        callees.record(&func_rc.borrow(), resources);
+    }
+    callees
+}
+
+/// Elaborate the drops of every instance among `flat.functions` from `first`
+/// on, a generic body whose types are now known (WEP: Affine Types). A copy a
+/// generic body makes is the instantiation rule's to refuse, so none is
+/// refused here.
+pub fn elaborate_instance_drops(flat: &mut FlatPackage, first: usize, callees: &CalleeFacts) {
+    let struct_fields = tir::struct_fields(&flat.structs);
+    let answers = RefCell::default();
+    let resources = Resources {
+        tt: &flat.type_table,
+        reg: &flat.cm_interface_registry,
+        struct_fields: &struct_fields,
+        answers: &answers,
+    };
+    let mut glue = DropGlue {
+        entry: flat.entry_module_source.clone(),
+        called: IndexMap::default(),
+        prebuilt: flat
+            .functions
+            .iter()
+            .map(|func| func.borrow().name.clone())
+            .filter(|name| name.starts_with(DROP_GLUE_PREFIX))
+            .collect(),
+    };
+    let mut refused = Vec::new();
+    for func_rc in &flat.functions[first..] {
+        if func_rc.borrow().monomorph_info.is_none() {
+            continue;
+        }
+        elaborate_function(
+            &mut func_rc.borrow_mut(),
+            resources,
+            callees,
+            &mut glue,
+            &mut refused,
+        );
+    }
+    let glue_functions = build_called_glue(resources, callees, &mut glue, &mut refused);
+    assert!(refused.is_empty(), "an instance refuses no copy");
+    flat.functions
+        .extend(glue_functions.into_iter().map(|f| Rc::new(RefCell::new(f))));
+}
+
+/// Build the glue called so far and not built already. A glue body can call
+/// glue of its own, so the list grows while it is built.
+fn build_called_glue(
+    resources: Resources,
+    callees: &CalleeFacts,
+    glue: &mut DropGlue,
+    refused: &mut Vec<SynthesisError>,
+) -> Vec<TirFunction> {
+    let mut glue_functions = Vec::new();
+    let mut next = 0;
+    while let Some((name, type_id)) = glue
+        .called
+        .get_index(next)
+        .map(|(name, type_id)| (name.clone(), *type_id))
+    {
+        next += 1;
+        if glue.prebuilt.contains(&name) {
+            continue;
+        }
+        glue_functions.push(build_drop_glue(
+            name, type_id, resources, callees, glue, refused,
+        ));
+    }
+    glue_functions
 }
 
 /// The function that drops a value of `type_id`, a holder that holds itself:
@@ -629,6 +726,7 @@ fn build_drop_glue(
         glue,
         module: entry.clone(),
         refused,
+        refuses_copies: true,
     };
     let value = local_ref(0, "value", type_id);
     let stmts = match cx.resources.layout(type_id) {
@@ -654,12 +752,16 @@ fn elaborate_function(
     glue: &mut DropGlue,
     refused: &mut Vec<SynthesisError>,
 ) {
+    if forwards_to_twin(func) {
+        return;
+    }
     let TirFunction {
         body: Some(body),
         params,
         locals,
         local_count,
         module_source,
+        monomorph_info,
         ..
     } = func
     else {
@@ -695,8 +797,24 @@ fn elaborate_function(
         glue,
         module: module_source.clone(),
         refused,
+        refuses_copies: monomorph_info.is_none(),
     };
     elab_scope(body, owned, TemporaryScope::Statement, &mut cx);
+}
+
+/// Whether `func` is its `contract` clauses and a call handing every parameter
+/// to its `unchecked` twin, which owns them. Lowering copies that shape to each
+/// caller.
+fn forwards_to_twin(func: &TirFunction) -> bool {
+    let Some(TirStmt {
+        kind: TirStmtKind::Expr(call) | TirStmtKind::Return { value: Some(call) },
+        ..
+    }) = func.body.as_ref().and_then(|body| body.stmts.last())
+    else {
+        return false;
+    };
+    matches!(&call.kind, TirExprKind::Call { func: callee, .. }
+        if callee.name != func.name && checked_name(&callee.name) == func.name)
 }
 
 /// Cheap pre-check: does the body produce or bind any resource-carrying
@@ -721,7 +839,11 @@ impl TirRefVisitor for ResourceProbe<'_> {
         if self.found {
             return;
         }
-        if self.resources.carried_by(expr.type_id) {
+        let moves = matches!(&expr.kind, TirExprKind::Call { func, args, .. }
+            if func.intrinsic().is_some_and(|name| {
+                MovingBuiltin::named(name, args.first().map(|arg| &arg.expr), self.resources).is_some()
+            }));
+        if moves || self.resources.carried_by(expr.type_id) {
             self.found = true;
             return;
         }
@@ -873,9 +995,8 @@ fn empty_place(place: TirExpr) -> TirStmt {
     expr_stmt(assign(place, null))
 }
 
-/// The loop that drops each slot of the list `list` below its length, where a
-/// move has not emptied it. A slot at or past the length holds nothing, or an
-/// element `pop` moved out, which its taker owns.
+/// Drop each slot of the list `list` below its length, where a move has not
+/// emptied it. A slot at or past the length holds nothing.
 fn drop_list_slots(list: TirExpr, slots_ty: TypeId, elem: TypeId, cx: &mut Cx) -> Vec<TirStmt> {
     let span = synth_span();
     let field = |seq: SeqField, type_id| {
@@ -888,24 +1009,43 @@ fn drop_list_slots(list: TirExpr, slots_ty: TypeId, elem: TypeId, cx: &mut Cx) -
         )
     };
     let (slots, slots_name) = cx.alloc_local(slots_ty, "slots");
-    let (len, len_name) = cx.alloc_local(TypeTable::I32, "len");
+    let slots_ref_ty = cx.resources.tt.borrow_mut().make_ref(slots_ty);
+    let array = common::ref_expr(local_ref(slots, &slots_name, slots_ty), slots_ref_ty, span);
+    let mut stmts = vec![let_stmt(
+        &slots_name,
+        slots,
+        slots_ty,
+        field(SeqField::Backing, slots_ty),
+    )];
+    stmts.extend(drop_slots(
+        &array,
+        common::i32_const(0),
+        field(SeqField::Len, TypeTable::I32),
+        elem,
+        cx,
+    ));
+    stmts
+}
+
+/// The loop that drops each slot of `array` from `start` up to `end`, where a
+/// move has not emptied it.
+fn drop_slots(
+    array: &TirExpr,
+    start: TirExpr,
+    end: TirExpr,
+    elem: TypeId,
+    cx: &mut Cx,
+) -> Vec<TirStmt> {
+    let span = synth_span();
+    let (end_local, end_name) = cx.alloc_local(TypeTable::I32, "end");
     let (index, index_name) = cx.alloc_local(TypeTable::I32, "index");
     cx.locals.last_mut().expect("allocated above").is_mut = true;
     let (slot, slot_name) = cx.alloc_local(elem, "slot");
     let index_ref = || local_ref(index, &index_name, TypeTable::I32);
-    let slots_ref_ty = cx.resources.tt.borrow_mut().make_ref(slots_ty);
-    let read = builtin_call(
-        "array_get_value",
-        vec![
-            common::ref_expr(local_ref(slots, &slots_name, slots_ty), slots_ref_ty, span),
-            index_ref(),
-        ],
-        elem,
-    );
     let in_range = binary(
         TirBinaryOp::Lt,
         index_ref(),
-        local_ref(len, &len_name, TypeTable::I32),
+        local_ref(end_local, &end_name, TypeTable::I32),
         TypeTable::BOOL,
     );
     let mut body = vec![
@@ -914,7 +1054,7 @@ fn drop_list_slots(list: TirExpr, slots_ty: TypeId, elem: TypeId, cx: &mut Cx) -
             TirBlock::new(vec![common::break_stmt()], span),
             None,
         ),
-        let_stmt(&slot_name, slot, elem, read),
+        let_stmt(&slot_name, slot, elem, read_slot(array, index_ref(), elem)),
     ];
     body.extend(drop_if_held(local_ref(slot, &slot_name, elem), elem, cx));
     body.push(expr_stmt(assign(
@@ -927,19 +1067,8 @@ fn drop_list_slots(list: TirExpr, slots_ty: TypeId, elem: TypeId, cx: &mut Cx) -
         ),
     )));
     vec![
-        let_stmt(
-            &slots_name,
-            slots,
-            slots_ty,
-            field(SeqField::Backing, slots_ty),
-        ),
-        let_stmt(
-            &len_name,
-            len,
-            TypeTable::I32,
-            field(SeqField::Len, TypeTable::I32),
-        ),
-        common::let_mut_stmt(&index_name, index, TypeTable::I32, common::i32_const(0)),
+        let_stmt(&end_name, end_local, TypeTable::I32, end),
+        common::let_mut_stmt(&index_name, index, TypeTable::I32, start),
         common::loop_stmt(TirBlock::new(body, span)),
     ]
 }
@@ -1372,6 +1501,7 @@ fn elab_expr(expr: &mut TirExpr, consuming: bool, cx: &mut Cx) {
     let span = expr.span;
     let mut dropped = None;
     let mut stores = false;
+    let mut moving = None;
     match &mut expr.kind {
         TirExprKind::Local { .. } => {
             if consuming && cx.carries_resource(type_id) {
@@ -1444,6 +1574,9 @@ fn elab_expr(expr: &mut TirExpr, consuming: bool, cx: &mut Cx) {
             for arg in rest {
                 elab_expr(&mut arg.expr, true, cx);
             }
+            moving = func
+                .intrinsic()
+                .and_then(|name| MovingBuiltin::named(name, args.first().map(|arg| &arg.expr), cx.resources));
             if func.is_builtin_named("drop") {
                 let (_, [arg]) = args.split_mut() else {
                     unreachable!("`builtin::drop` takes one value");
@@ -1577,6 +1710,256 @@ fn elab_expr(expr: &mut TirExpr, consuming: bool, cx: &mut Cx) {
     if stores {
         elab_store(expr, cx);
     }
+    if let Some(builtin) = moving {
+        elab_moving_builtin(expr, builtin, cx);
+    }
+}
+
+/// A storage builtin that moves an affine element, the places `core` is
+/// trusted rather than checked (WEP: Affine Types).
+#[derive(Clone, Copy)]
+enum MovingBuiltin {
+    /// `replace(r, v)`: store `v` where `r` points and return what was there.
+    /// It has no lowering of its own, so it expands for every type.
+    Replace,
+    /// `array_take`: reads a slot, and empties it where the element is affine.
+    /// Like `replace`, it expands for every type.
+    Take { elem: TypeId, affine: bool },
+    /// `array_set`: drops what the slot held.
+    Set(TypeId),
+    /// `array_move`: empties the source slots the destination does not cover.
+    Move,
+    /// `array_release`: drops what the slots held.
+    Release(TypeId),
+}
+
+impl MovingBuiltin {
+    /// The moving builtin `name` names, given its first argument `first`; an
+    /// array builtin over an element that is not affine moves nothing.
+    fn named(name: &str, first: Option<&TirExpr>, resources: Resources) -> Option<MovingBuiltin> {
+        if name == "replace" {
+            return Some(MovingBuiltin::Replace);
+        }
+        let build: fn(TypeId) -> MovingBuiltin = match name {
+            "array_take" => |elem| MovingBuiltin::Take {
+                elem,
+                affine: false,
+            },
+            "array_set" => MovingBuiltin::Set,
+            "array_move" => |_| MovingBuiltin::Move,
+            "array_release" => MovingBuiltin::Release,
+            _ => return None,
+        };
+        let array = first.expect("an array builtin takes its array first");
+        let elem = {
+            let tt = resources.tt.borrow();
+            match tt.get(tt.peel_refs(array.type_id)) {
+                ResolvedType::BuiltinArray(elem) => *elem,
+                other => unreachable!("an array builtin takes an array, not {other:?}"),
+            }
+        };
+        let affine = resources.carried_by(elem);
+        match build(elem) {
+            MovingBuiltin::Take { elem, .. } => Some(MovingBuiltin::Take { elem, affine }),
+            moving => affine.then_some(moving),
+        }
+    }
+}
+
+/// Expand the call `expr` of `builtin`, its arguments elaborated already.
+fn elab_moving_builtin(expr: &mut TirExpr, builtin: MovingBuiltin, cx: &mut Cx) {
+    let span = expr.span;
+    let type_id = expr.type_id;
+    let TirExprKind::Call { func, args, .. } = &mut expr.kind else {
+        unreachable!("a builtin is called");
+    };
+    let name = func.intrinsic().expect("a builtin").to_string();
+    let mut stmts = Vec::new();
+    let args: Vec<TirExpr> = std::mem::take(args)
+        .into_vec()
+        .into_iter()
+        .map(|arg| {
+            let ty = arg.expr.type_id;
+            let (local, local_name) = cx.alloc_local(ty, "arg");
+            stmts.push(let_stmt(&local_name, local, ty, arg.expr));
+            local_ref(local, &local_name, ty)
+        })
+        .collect();
+    let raw = |args: &[TirExpr]| builtin_call(&name, args.to_vec(), type_id);
+    let tail = match builtin {
+        MovingBuiltin::Replace => Some(replace_through(&args[0], &args[1], &mut stmts, cx)),
+        MovingBuiltin::Take { elem, affine } => {
+            let read = read_slot(&args[0], args[1].clone(), elem);
+            if affine {
+                let (local, local_name) = cx.alloc_local(elem, "taken");
+                stmts.push(let_stmt(&local_name, local, elem, read));
+                stmts.push(release_slots(&args[0], args[1].clone(), common::i32_const(1)));
+                Some(local_ref(local, &local_name, elem))
+            } else {
+                Some(read)
+            }
+        }
+        MovingBuiltin::Set(elem) => {
+            let (local, local_name) = cx.alloc_local(elem, "held");
+            stmts.push(let_stmt(
+                &local_name,
+                local,
+                elem,
+                read_slot(&args[0], args[1].clone(), elem),
+            ));
+            stmts.extend(drop_if_held(local_ref(local, &local_name, elem), elem, cx));
+            stmts.push(expr_stmt(raw(&args)));
+            None
+        }
+        MovingBuiltin::Move => {
+            stmts.push(expr_stmt(raw(&args)));
+            stmts.extend(vacate_moved(&args));
+            None
+        }
+        MovingBuiltin::Release(elem) => {
+            let end = binary(
+                TirBinaryOp::Add,
+                args[1].clone(),
+                args[2].clone(),
+                TypeTable::I32,
+            );
+            stmts.extend(drop_slots(&args[0], args[1].clone(), end, elem, cx));
+            stmts.push(expr_stmt(raw(&args)));
+            None
+        }
+    };
+    stmts.extend(tail.map(expr_stmt));
+    *expr = TirExpr::new(
+        TirExprKind::Block(TirBlock::new(stmts, span)),
+        type_id,
+        span,
+    );
+}
+
+/// `array_get_value(array, index)`: the slot's value, which stays in it.
+fn read_slot(array: &TirExpr, index: TirExpr, elem: TypeId) -> TirExpr {
+    builtin_call("array_get_value", vec![array.clone(), index], elem)
+}
+
+/// `array_release(array, offset, len)`: the slots emptied, what they held
+/// owned elsewhere.
+fn release_slots(array: &TirExpr, offset: TirExpr, len: TirExpr) -> TirStmt {
+    expr_stmt(builtin_call(
+        "array_release",
+        vec![array.clone(), offset, len],
+        TypeTable::UNIT,
+    ))
+}
+
+/// Empty the source slots of `array_move(dst, dst_offset, src, src_offset,
+/// len)` that the destination range does not cover, reading the two as one
+/// array: what they held moved. Where they are two arrays, the source is one
+/// a grow discards, whose slots nothing drops.
+fn vacate_moved(args: &[TirExpr]) -> Vec<TirStmt> {
+    let [_, dst_offset, src, src_offset, len] = args else {
+        unreachable!("`array_move` takes five arguments");
+    };
+    let int = |op, left: &TirExpr, right: &TirExpr| {
+        binary(op, left.clone(), right.clone(), TypeTable::I32)
+    };
+    let min = |a: TirExpr, b: TirExpr| {
+        let less = binary(TirBinaryOp::Lt, a.clone(), b.clone(), TypeTable::BOOL);
+        builtin_call("select", vec![less, a, b], TypeTable::I32)
+    };
+    let max = |a: TirExpr, b: TirExpr| {
+        let less = binary(TirBinaryOp::Lt, a.clone(), b.clone(), TypeTable::BOOL);
+        builtin_call("select", vec![less, b, a], TypeTable::I32)
+    };
+    let span = synth_span();
+    // Moving right leaves `src_offset..min(dst_offset, src_end)`; moving left
+    // leaves `max(dst_end, src_offset)..src_end`.
+    let src_end = int(TirBinaryOp::Add, src_offset, len);
+    let right = release_slots(
+        src,
+        src_offset.clone(),
+        min(int(TirBinaryOp::Sub, dst_offset, src_offset), len.clone()),
+    );
+    let left_start = max(int(TirBinaryOp::Add, dst_offset, len), src_offset.clone());
+    let left = release_slots(
+        src,
+        left_start.clone(),
+        binary(TirBinaryOp::Sub, src_end, left_start, TypeTable::I32),
+    );
+    let moves_right = binary(
+        TirBinaryOp::Gt,
+        dst_offset.clone(),
+        src_offset.clone(),
+        TypeTable::BOOL,
+    );
+    let moves_left = binary(
+        TirBinaryOp::Lt,
+        dst_offset.clone(),
+        src_offset.clone(),
+        TypeTable::BOOL,
+    );
+    vec![if_stmt(
+        moves_right,
+        TirBlock::new(vec![right], span),
+        Some(TirBlock::new(
+            vec![if_stmt(moves_left, TirBlock::new(vec![left], span), None)],
+            span,
+        )),
+    )]
+}
+
+/// `replace(reference, value)` on the locals holding its arguments: what
+/// `reference` points to is returned, and `value` takes its place. An object
+/// keeps its identity, so references to it see the new content: the two
+/// exchange what they hold, and `value`'s object, holding the old content, is
+/// returned. Anything else is read out and the place repointed.
+fn replace_through(
+    reference: &TirExpr,
+    value: &TirExpr,
+    stmts: &mut Vec<TirStmt>,
+    cx: &mut Cx,
+) -> TirExpr {
+    let type_id = value.type_id;
+    let span = synth_span();
+    let place = common::deref_expr(reference.clone(), type_id, span);
+    let layout = if cx.carries_resource(type_id) {
+        cx.resources.layout(type_id)
+    } else {
+        Layout::Opaque
+    };
+    match layout {
+        Layout::Resource(..) | Layout::End => {
+            stmts.push(expr_stmt(builtin_call(
+                "swap_handles",
+                vec![place, value.clone()],
+                TypeTable::UNIT,
+            )));
+        }
+        Layout::List { fields, .. }
+        | Layout::Holder {
+            parts: Parts::Fields(fields),
+            ..
+        } => {
+            for (index, name, field_ty) in fields {
+                let project = |of: &TirExpr| {
+                    common::field_access(of.clone(), index, name.clone(), field_ty, span)
+                };
+                let (local, local_name) = cx.alloc_local(field_ty, "exchanged");
+                stmts.push(let_stmt(&local_name, local, field_ty, project(&place)));
+                stmts.push(expr_stmt(assign(project(&place), project(value))));
+                stmts.push(expr_stmt(assign(
+                    project(value),
+                    local_ref(local, &local_name, field_ty),
+                )));
+            }
+        }
+        Layout::Holder { .. } | Layout::Opaque => {
+            let (local, name) = cx.alloc_local(type_id, "replaced");
+            stmts.push(let_stmt(&name, local, type_id, place.clone()));
+            stmts.push(expr_stmt(assign(place, value.clone())));
+            return local_ref(local, &name, type_id);
+        }
+    }
+    value.clone()
 }
 
 /// Elaborate a closure body as the function it is. It reads captured values
@@ -1619,6 +2002,7 @@ fn elab_closure(
         glue: cx.glue,
         module: cx.module.clone(),
         refused: cx.refused,
+        refuses_copies: cx.refuses_copies,
     };
     let mut block = into_block(body);
     elab_scope(&mut block, owned, TemporaryScope::Statement, &mut inner);

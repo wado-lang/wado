@@ -169,6 +169,18 @@ impl<T, E> Result<T, E> {
     pub fn unwrap_or_else(&self);
 }
 
+impl<affine T> Option<T> {
+    /// Takes the value out, leaving None in its place.
+    pub fn take(&mut self) -> Option<T> {
+        return builtin::replace(self, null);
+    }
+
+    /// Puts `value` in, returning what was there.
+    pub fn replace(&mut self, value: T) -> Option<T> {
+        return builtin::replace(self, Option::Some(value));
+    }
+}
+
 impl<T> Default for Option<T> {
     pub fn default() -> Option<T> {
         return null;
