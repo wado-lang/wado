@@ -91,8 +91,8 @@ test "read_text reports where the text stops being UTF-8" {
             [0x61, 0xc3],
         ],
     };
-    let stream = scripted_stream();
+    let truncated = scripted_stream();
     with &mut input do {
-        assert read_text(stream) == Result::Err(Utf8Error::incomplete(1));
+        assert read_text(truncated) == Result::Err(Utf8Error::incomplete(1));
     };
 }
