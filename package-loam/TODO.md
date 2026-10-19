@@ -42,16 +42,16 @@ leaves this file, and `design.md` states what it built.
    tolerance of onnxruntime's at those ids.
 6. [ ] Decisions. A decision asks a model one question about a state and
    reads the probability of each answer from one pass, rather than generating
-   text. A question is a choice among options, given at run time. Each option
-   is labelled with a letter, so a choice holds at most 26. A label's id is the
-   token the letter adds when it follows the prompt, so the caller's chat turns
-   decide whether that is `A` or ` A`. A letter that adds more than one token,
-   or changes the prompt's own tokens, stops the call. The answer is the
-   softmax of the logits at the labels. A yes-or-no question is a choice of
-   two. A score is a choice among the points of a scale, and its answer also
-   gives their expected value. Loam's decision module takes any model that
-   gives narrowed logits, and that model's tokenizer. The caller spells the
-   model's chat turns. Finished when the Gemma 3 example answers a set of
+   text. Loam's decision module takes any model that gives narrowed logits,
+   and that model's tokenizer. The caller spells the model's chat turns. A
+   question is a choice among options, given at run time. A yes-or-no question
+   is a choice of two. A score is a choice among the points of a scale, and its
+   answer also gives their expected value. Each option is labelled with a
+   letter, so a choice holds at most 26. A label's id is the token the letter
+   adds when it follows the prompt, so the chat turns decide whether that is
+   `A` or ` A`. A letter that adds more than one token, or changes the
+   prompt's own tokens, stops the call. The answer is the softmax of the
+   logits at the labels. Finished when the Gemma 3 example answers a set of
    questions with probabilities within the tolerance of those onnxruntime's
    logits give.
 7. [ ] A state read by many questions. The state's tokens run once. Each
@@ -67,8 +67,8 @@ leaves this file, and `design.md` states what it built.
    token. Every row reads the state's cache, which keeps its batch of one
    rather than being copied for each row. The graph gives the past and the new
    tokens one batch axis, and `forward` checks that the inputs agree on it
-   (see Axis Identity Is a Type, Extents Are Values), so a past of one batch
-   under n rows departs from that check. Finished when `design.md` records the
+   (see Axis Identity Is a Type, Extents Are Values), so a past of batch one
+   beside n rows departs from that check. Finished when `design.md` records the
    time n questions take as rows of one pass as a ratio to the time they take
    one after another, for several n and questions of different lengths, and
    each probability lies within the tolerance of the one its question gets
