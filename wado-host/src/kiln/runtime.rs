@@ -73,7 +73,7 @@ impl WasiRandomView for KilnHostState {
 
 /// `wasi:random/insecure` and `insecure-seed` for one instance, answering the
 /// same on every run so that a generator stays a function of its invocation.
-/// The seeds are arbitrary; only their being fixed matters. ChaCha12 is named
+/// The seeds are arbitrary; only their being fixed matters. `ChaCha12` is named
 /// rather than `StdRng`, whose output rand does not promise to keep across
 /// versions.
 fn fixed_seed_random() -> WasiCtx {
