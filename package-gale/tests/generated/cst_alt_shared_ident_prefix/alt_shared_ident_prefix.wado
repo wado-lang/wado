@@ -2998,7 +2998,7 @@ fn scan_pattern(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, follow: i
                                 sg_9: {
                                     pos += 1;
                                     atn.stack.push(117);
-                                    pos = scan_pattern(tokens, pos, atn, follow_then_opening(FOLLOW_MASK_1, 16, follow));
+                                    pos = scan_pattern(tokens, pos, atn, follow_or(FOLLOW_MASK_1, 16, follow_then(FOLLOW_MASK_4, 8, follow)));
                                     atn.stack.pop();
                                     if pos < 0 { break sg_9; }
                                     break sg_9_done;
@@ -3086,7 +3086,7 @@ fn _parse_match_expr__inner(p: &mut Parser, follow: i64 = 0) -> () {
                 sg_0: {
                     pos += 1;
                     p.atn.stack.push(41);
-                    pos = scan_arm(tokens, pos, &mut p.atn, follow_then_opening(FOLLOW_MASK_1, 16, follow));
+                    pos = scan_arm(tokens, pos, &mut p.atn, 0);
                     p.atn.stack.pop();
                     if pos < 0 { break sg_0; }
                     break sg_0_done;
@@ -3117,7 +3117,7 @@ fn _parse_match_expr__inner(p: &mut Parser, follow: i64 = 0) -> () {
                         if pos >= tokens.len() || tokens[pos] != TK_LIT_COMMA { break sg_1; }
                         pos += 1;
                         p.atn.stack.push(41);
-                        pos = scan_arm(tokens, pos, &mut p.atn, follow_then_opening(FOLLOW_MASK_1, 16, follow));
+                        pos = scan_arm(tokens, pos, &mut p.atn, 0);
                         p.atn.stack.pop();
                         if pos < 0 { break sg_1; }
                         break sg_1_done;
@@ -3131,7 +3131,7 @@ fn _parse_match_expr__inner(p: &mut Parser, follow: i64 = 0) -> () {
             p.expect(TK_LIT_COMMA, &SYNC_4, false);
             p.site = 2;
             p.atn_ret_pending = 41;
-            _parse_arm(p, follow_then_opening(FOLLOW_MASK_1, 16, follow));
+            _parse_arm(p, 0);
             if !kind_set_has(&SYNC_3, p.kinds[p.pos]) { builtin::cold_path(); p.sync_back(&SYNC_3, &EXPECTED_3); }
         }
         if !kind_set_has(&SYNC_3, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_3, &EXPECTED_3); }
@@ -3222,7 +3222,7 @@ fn _parse_pattern__inner_alt_2(p: &mut Parser, follow: i64 = 0) -> () {
                     sg_2: {
                         pos += 1;
                         p.atn.stack.push(95);
-                        pos = scan_pattern(tokens, pos, &mut p.atn, follow_then_opening(FOLLOW_MASK_1, 16, follow));
+                        pos = scan_pattern(tokens, pos, &mut p.atn, follow_or(FOLLOW_MASK_1, 16, follow_then(FOLLOW_MASK_4, 8, follow)));
                         p.atn.stack.pop();
                         if pos < 0 { break sg_2; }
                         break sg_2_done;
@@ -3243,7 +3243,7 @@ fn _parse_pattern__inner_alt_2(p: &mut Parser, follow: i64 = 0) -> () {
                 p.take();
                 p.site = 6;
                 p.atn_ret_pending = 95;
-                _parse_pattern(p, follow_then_opening(FOLLOW_MASK_1, 16, follow));
+                _parse_pattern(p, follow_or(FOLLOW_MASK_1, 16, follow_then(FOLLOW_MASK_4, 8, follow)));
                 if !kind_set_has(&SYNC_7, p.kinds[p.pos]) { builtin::cold_path(); p.sync_back(&SYNC_7, &EXPECTED_7); }
             }
         }
@@ -3275,7 +3275,7 @@ fn scan_pattern__alt_2(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, fo
                                     sg_5: {
                                         pos += 1;
                                         atn.stack.push(95);
-                                        pos = scan_pattern(tokens, pos, atn, follow_then_opening(FOLLOW_MASK_1, 16, follow));
+                                        pos = scan_pattern(tokens, pos, atn, follow_or(FOLLOW_MASK_1, 16, follow_then(FOLLOW_MASK_4, 8, follow)));
                                         atn.stack.pop();
                                         if pos < 0 { break sg_5; }
                                         break sg_5_done;
@@ -3337,7 +3337,7 @@ fn _parse_pattern__inner(p: &mut Parser, follow: i64 = 0) -> () {
                     sg_6: {
                         pos += 1;
                         p.atn.stack.push(117);
-                        pos = scan_pattern(tokens, pos, &mut p.atn, follow_then_opening(FOLLOW_MASK_1, 16, follow));
+                        pos = scan_pattern(tokens, pos, &mut p.atn, follow_or(FOLLOW_MASK_1, 16, follow_then(FOLLOW_MASK_4, 8, follow)));
                         p.atn.stack.pop();
                         if pos < 0 { break sg_6; }
                         break sg_6_done;
@@ -3358,7 +3358,7 @@ fn _parse_pattern__inner(p: &mut Parser, follow: i64 = 0) -> () {
                 p.take();
                 p.site = 8;
                 p.atn_ret_pending = 117;
-                _parse_pattern(p, follow_then_opening(FOLLOW_MASK_1, 16, follow));
+                _parse_pattern(p, follow_or(FOLLOW_MASK_1, 16, follow_then(FOLLOW_MASK_4, 8, follow)));
                 if !kind_set_has(&SYNC_7, p.kinds[p.pos]) { builtin::cold_path(); p.sync_back(&SYNC_7, &EXPECTED_7); }
             }
         }

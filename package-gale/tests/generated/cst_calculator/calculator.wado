@@ -2131,7 +2131,7 @@ fn _parse_func___inner(p: &mut Parser, follow: i64 = 0) -> () {
     while !p.recovering && p.peek_kind() == TK_COMMA {
         p.take();
         p.site = 19;
-        _parse_expression(p, follow_then_opening(FOLLOW_MASK_8, 16, follow));
+        _parse_expression(p, follow_or(FOLLOW_MASK_8, 16, follow_then(FOLLOW_MASK_6, 8, follow)));
         if !kind_set_has(&SYNC_3, p.kinds[p.pos]) { builtin::cold_path(); p.sync_back(&SYNC_3, &EXPECTED_3); }
     }
     p.expect(TK_RPAREN, &EMPTY_SYNC, true);

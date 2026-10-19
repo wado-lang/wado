@@ -1671,7 +1671,7 @@ fn scan_item(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
                             sg_3_done: {
                                 sg_3: {
                                     pos += 1;
-                                    pos = scan_item(tokens, pos, follow_then_opening(FOLLOW_MASK_1, 16, follow));
+                                    pos = scan_item(tokens, pos, follow_or(FOLLOW_MASK_1, 16, follow_then(FOLLOW_MASK_2, 8, follow)));
                                     if pos < 0 { break sg_3; }
                                     break sg_3_done;
                                 }
@@ -1717,7 +1717,7 @@ fn scan_targs(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
         sg_1_done: {
             sg_1: {
                 pos += 1;
-                pos = scan_item(tokens, pos, follow_then_opening(FOLLOW_MASK_1, 16, follow));
+                pos = scan_item(tokens, pos, follow_or(FOLLOW_MASK_1, 16, follow_then(FOLLOW_MASK_3, 8, follow)));
                 if pos < 0 { break sg_1; }
                 break sg_1_done;
             }
@@ -1789,7 +1789,7 @@ fn _parse_item__inner(p: &mut Parser, follow: i64 = 0) -> () {
                 sg_0_done: {
                     sg_0: {
                         pos += 1;
-                        pos = scan_item(tokens, pos, follow_then_opening(FOLLOW_MASK_1, 16, follow));
+                        pos = scan_item(tokens, pos, follow_or(FOLLOW_MASK_1, 16, follow_then(FOLLOW_MASK_2, 8, follow)));
                         if pos < 0 { break sg_0; }
                         break sg_0_done;
                     }
@@ -1807,7 +1807,7 @@ fn _parse_item__inner(p: &mut Parser, follow: i64 = 0) -> () {
             while !p.recovering && p.peek_kind() == TK_LIT_COMMA {
                 p.take();
                 p.site = 4;
-                _parse_item(p, follow_then_opening(FOLLOW_MASK_1, 16, follow));
+                _parse_item(p, follow_or(FOLLOW_MASK_1, 16, follow_then(FOLLOW_MASK_2, 8, follow)));
                 if !kind_set_has(&SYNC_2, p.kinds[p.pos]) { builtin::cold_path(); p.sync_back(&SYNC_2, &EXPECTED_2); }
             }
         }
@@ -1860,7 +1860,7 @@ fn _parse_targs__inner(p: &mut Parser, follow: i64 = 0) -> () {
     while !p.recovering && p.peek_kind() == TK_LIT_COMMA {
         p.take();
         p.site = 7;
-        _parse_item(p, follow_then_opening(FOLLOW_MASK_1, 16, follow));
+        _parse_item(p, follow_or(FOLLOW_MASK_1, 16, follow_then(FOLLOW_MASK_3, 8, follow)));
         if !kind_set_has(&SYNC_3, p.kinds[p.pos]) { builtin::cold_path(); p.sync_back(&SYNC_3, &EXPECTED_3); }
     }
     p.expect(TK_LIT_GT, &EMPTY_SYNC, true);
