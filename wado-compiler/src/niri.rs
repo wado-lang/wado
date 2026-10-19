@@ -97,6 +97,10 @@ pub enum CtfeBuiltin {
     Ieee754Comparison(NirBinaryOp),
     /// `heap_base`, carrying the address it is for this package.
     HeapBase(i32),
+    /// `ambient_std{out,err}_available` in a world providing that sink, where
+    /// it holds. Elsewhere it waits for WIR build, which alone knows whether a
+    /// `println` or `eprintln` imported the stream.
+    AmbientSinkProvided,
 }
 
 impl CtfeBuiltin {
@@ -116,7 +120,8 @@ impl CtfeBuiltin {
             | Self::I32AsChar
             | Self::FloatIsNan
             | Self::Ieee754Comparison(_)
-            | Self::HeapBase(_) => false,
+            | Self::HeapBase(_)
+            | Self::AmbientSinkProvided => false,
         }
     }
 }
@@ -299,6 +304,12 @@ pub(crate) fn build_ctfe_builtin_map(project: &NirPackage) -> CtfeBuiltinMap {
             Some("i32_as_char") => CtfeBuiltin::I32AsChar,
             Some("f32_is_nan" | "f64_is_nan") => CtfeBuiltin::FloatIsNan,
             Some("heap_base") => CtfeBuiltin::HeapBase(project.heap_base()),
+            Some("ambient_stdout_available") if project.provides_ambient_stdio_sink("Stdout") => {
+                CtfeBuiltin::AmbientSinkProvided
+            }
+            Some("ambient_stderr_available") if project.provides_ambient_stdio_sink("Stderr") => {
+                CtfeBuiltin::AmbientSinkProvided
+            }
             Some("f32_ieee754_eq" | "f64_ieee754_eq") => {
                 CtfeBuiltin::Ieee754Comparison(NirBinaryOp::Eq)
             }
