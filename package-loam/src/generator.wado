@@ -80,7 +80,7 @@ fn generate_graph(
         let reason = `loam: ${req.inputs.len()} inputs, and a checkpoint is one file`;
         return refused(req, KilnError::InvalidSchema(reason));
     }
-    if let Some(input) = req.inputs.into_iter().find(|input| !input.type matches { Some("safetensors") }) {
+    if let Some(input) = req.inputs.iter_ref().find(|input| !input.type matches { Some("safetensors") }) {
         let reason = `loam: '${input.path}' is given ${given(&input.type)}; a checkpoint is \`type: "safetensors"\``;
         return refused(req, KilnError::Unsupported(reason));
     }
