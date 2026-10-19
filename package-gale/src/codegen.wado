@@ -555,10 +555,12 @@ fn gen_atn_decide_fns(w: &mut CodeWriter, ctx: &EmitContext, atn: &Atn, used: &H
     let mut verified = used.contains(ATN_VERIFIED);
     for let d of 0..<atn.decision_state.len() {
         if used.contains(sll_decide_fn_name(d)) {
-            verified = gen_sll_decide_fn(w, d, &explorer.explore(d), &ctx.analysis, ctx.settings.atn.verifies()) || verified;
+            verified = gen_sll_decide_fn(w, d, &explorer.explore(d), &ctx.analysis, ctx.settings.atn.verifies())
+                || verified;
         }
     }
-    let lr_decisions: List<i32> = (0..<atn.decision_state.len()).filter(|d| used.contains(lr_decide_fn_name(d))).collect();
+    let lr_decisions: List<i32> = (0..<atn.decision_state.len()).filter(|d| used.contains(lr_decide_fn_name(d))).collect(
+    );
     if !lr_decisions.is_empty() {
         let sim = lr_sim(atn);
         for let d of lr_decisions {

@@ -57,7 +57,11 @@ internal fn lr_table(sim: &AtnSim, decision: i32, kinds: i32, eof: i32) -> LrTab
             if let Some(i) = enters.iter_ref().position(|e: &LrEnter| e.alt == alt) {
                 enters[i].tokens.push(t);
             } else {
-                enters.push(LrEnter { alt, prec: sim.tr_prec[s + alt], tokens: [t] });
+                enters.push(LrEnter {
+                    alt,
+                    prec: sim.tr_prec[s + alt],
+                    tokens: [t],
+                });
             }
         }
     }

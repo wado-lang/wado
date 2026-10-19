@@ -164,7 +164,7 @@ impl SllExplorer {
     {
         let c = place_of(place, 0);
         let reads_step = self.stack_bottom[c.stack] == SLL_NO_CALLER;
-        return place * 8 + if reads_step { step + 1 } else { 0 } as i64;
+        return place * 8 + (if reads_step { step + 1 } else { 0 }) as i64;
     }
 
     fn consumes(&self, state: i32) -> bool {
@@ -360,7 +360,10 @@ impl SllExplorer {
     pub fn explore(&mut self, decision: i32) -> SllDfa {
         self.budget = SLL_DECISION_BUDGET;
         let Some(start) = self.start_closure(self.atn.decision_state[decision]) else {
-            return SllDfa { nodes: [SllNode::Ask], kinds: self.atn.num_tokens };
+            return SllDfa {
+                nodes: [SllNode::Ask],
+                kinds: self.atn.num_tokens,
+            };
         };
         let mut nodes: List<SllNode> = [SllNode::Ask];
         let mut configs: List<List<SllConfig>> = [start];
@@ -427,7 +430,10 @@ fn add_edge(edges: &mut List<SllEdge>, token: i32, to: i32) {
             return;
         }
     }
-    edges.push(SllEdge { tokens: [token], to });
+    edges.push(SllEdge {
+        tokens: [token],
+        to,
+    });
 }
 
 /// The DFA with every node that can only ask turned into `Ask`, the edges to
@@ -447,8 +453,12 @@ fn prune_asking(nodes: List<SllNode>) -> List<SllNode> {
             if let Branch(edges) = &out[n] {
                 let mut kept: List<SllEdge> = [];
                 for let e of edges {
-                    let to = if let Alt(a) = &out[e.to] { node_of_alt[*a] } else { e.to };
-                    if !(out[to] matches { Ask }) {
+                    let to = if let Alt(a) = &out[e.to] {
+                        node_of_alt[*a];
+                    } else {
+                        e.to;
+                    };
+                    if !out[to] matches { Ask } {
                         for let t of &e.tokens {
                             add_edge(&mut kept, *t, to);
                         }
@@ -513,7 +523,13 @@ pub fn atn_verified_call<S: AsStrSlice, S1: AsStrSlice, S2: AsStrSlice, S3: AsSt
 
 /// Emit `sll_decide_fn_name(decision)`. Returns whether it reaches
 /// `ATN_VERIFIED`, which `verify` routes each of its answers through.
-pub fn gen_sll_decide_fn(w: &mut CodeWriter, decision: i32, dfa: &SllDfa, analysis: &GrammarAnalysis, verify: bool) -> bool {
+pub fn gen_sll_decide_fn(
+    w: &mut CodeWriter,
+    decision: i32,
+    dfa: &SllDfa,
+    analysis: &GrammarAnalysis,
+    verify: bool,
+) -> bool {
     let mut f = FnSpec::new(sll_decide_fn_name(decision));
     f.add_param("atn", "&mut AtnPredictor");
     f.add_param("tokens", "&Array<i32>");
@@ -533,10 +549,16 @@ pub fn gen_sll_decide_fn(w: &mut CodeWriter, decision: i32, dfa: &SllDfa, analys
 /// as in a scan of an alternative that is about to fail, the decision is moot
 /// and nothing is checked.
 pub fn gen_atn_verified_fn(w: &mut CodeWriter) {
-    w.begin(`fn ${ATN_VERIFIED}(decision: i32, atn: &mut AtnPredictor, tokens: &Array<i32>, pos: i32, min_prec: i32, alt: i32) -> i32`);
-    w.line("let [simulated, viable] = atn_predict_walk(&mut ATN_DFA, &ATN_SIM, decision, &atn.stack, 0, tokens, pos, TK_EOF, min_prec, &ATN_NO_FALSE_PREDS);");
+    w.begin(
+        `fn ${ATN_VERIFIED}(decision: i32, atn: &mut AtnPredictor, tokens: &Array<i32>, pos: i32, min_prec: i32, alt: i32) -> i32`,
+    );
+    w.line(
+        "let [simulated, viable] = atn_predict_walk(&mut ATN_DFA, &ATN_SIM, decision, &atn.stack, 0, tokens, pos, TK_EOF, min_prec, &ATN_NO_FALSE_PREDS);",
+    );
     w.begin("if viable && simulated != alt");
-    w.line("panic(`atn verify: decision ${decision} at token ${pos}: the parser picks ${alt}, the simulator ${simulated}`);");
+    w.line(
+        "panic(`atn verify: decision ${decision} at token ${pos}: the parser picks ${alt}, the simulator ${simulated}`);",
+    );
     w.end();
     w.line("return alt;");
     w.end();
@@ -555,7 +577,14 @@ fn asking_tokens(edges: &List<SllEdge>, kinds: i32) -> List<i32> {
 }
 
 /// `answer` renders what a decided alternative is returned as.
-fn gen_sll_node(w: &mut CodeWriter, dfa: &SllDfa, node: i32, depth: i32, analysis: &GrammarAnalysis, answer: &fn(i32) -> String) {
+fn gen_sll_node(
+    w: &mut CodeWriter,
+    dfa: &SllDfa,
+    node: i32,
+    depth: i32,
+    analysis: &GrammarAnalysis,
+    answer: &fn(i32) -> String,
+) {
     match &dfa.nodes[node] {
         Alt(a) => w.line(`return ${answer(*a)};`),
         Ask => {
