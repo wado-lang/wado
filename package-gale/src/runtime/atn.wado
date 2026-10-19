@@ -175,6 +175,12 @@ internal fn atn_decode(bytes: &ByteList) -> AtnSim {
     };
 }
 
+internal fn atn_tr_consumes(kind: i32) -> bool {
+    return kind == ATN_TR_ATOM || kind == ATN_TR_SET || kind == ATN_TR_NOT_ATOM || kind == ATN_TR_WILDCARD;
+}
+
 internal fn atn_set_contains(sim: &AtnSim, set: i32, t: i32) -> bool {
-    return t >= 0 && t < sim.set_words * 64 && (sim.set_bits[set * sim.set_words + t / 64] & (1 as i64 << (t % 64) as i64)) != 0;
+    return t >= 0
+        && t < sim.set_words * 64
+        && sim.set_bits[set * sim.set_words + t / 64] & 1 as i64 << (t % 64) as i64 != 0;
 }

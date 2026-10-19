@@ -1359,8 +1359,14 @@ internal fn atn_decode(bytes: &ByteList) -> AtnSim {
     };
 }
 
+internal fn atn_tr_consumes(kind: i32) -> bool {
+    return kind == ATN_TR_ATOM || kind == ATN_TR_SET || kind == ATN_TR_NOT_ATOM || kind == ATN_TR_WILDCARD;
+}
+
 internal fn atn_set_contains(sim: &AtnSim, set: i32, t: i32) -> bool {
-    return t >= 0 && t < sim.set_words * 64 && (sim.set_bits[set * sim.set_words + t / 64] & (1 as i64 << (t % 64) as i64)) != 0;
+    return t >= 0
+        && t < sim.set_words * 64
+        && sim.set_bits[set * sim.set_words + t / 64] & 1 as i64 << (t % 64) as i64 != 0;
 }
 
 global ATN_ACCEPT_EOF: i32 = -2;
@@ -1882,8 +1888,7 @@ fn atn_state_consumes(sim: &AtnSim, state: i32) -> bool {
     if cnt == 0 {
         return false;
     }
-    let k = sim.tr_kind[sim.state_tr_start[state]];
-    return k == ATN_TR_ATOM || k == ATN_TR_SET || k == ATN_TR_NOT_ATOM || k == ATN_TR_WILDCARD;
+    return atn_tr_consumes(sim.tr_kind[sim.state_tr_start[state]]);
 }
 
 struct CfgSet {

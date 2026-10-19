@@ -23,6 +23,7 @@ use {
     ATN_TR_RULE,
     ATN_TR_PRECEDENCE,
     ATN_TR_SET,
+    atn_tr_consumes,
 } from "./runtime/atn.wado";
 use { HashMap, HashSet } from "core:collections";
 use { GALE_SEED } from "./hash_seed.wado";
@@ -173,8 +174,7 @@ impl SllExplorer {
         if ts.is_empty() {
             return false;
         }
-        let k = ts[0].kind;
-        return k == ATN_TR_ATOM || k == ATN_TR_SET || k == ATN_TR_NOT_ATOM || k == ATN_TR_WILDCARD;
+        return atn_tr_consumes(ts[0].kind);
     }
 
     /// Push what `c` reaches without consuming, at token step `step`. Returns

@@ -1211,8 +1211,14 @@ internal fn atn_decode(bytes: &ByteList) -> AtnSim {
     };
 }
 
+internal fn atn_tr_consumes(kind: i32) -> bool {
+    return kind == ATN_TR_ATOM || kind == ATN_TR_SET || kind == ATN_TR_NOT_ATOM || kind == ATN_TR_WILDCARD;
+}
+
 internal fn atn_set_contains(sim: &AtnSim, set: i32, t: i32) -> bool {
-    return t >= 0 && t < sim.set_words * 64 && (sim.set_bits[set * sim.set_words + t / 64] & (1 as i64 << (t % 64) as i64)) != 0;
+    return t >= 0
+        && t < sim.set_words * 64
+        && sim.set_bits[set * sim.set_words + t / 64] & 1 as i64 << (t % 64) as i64 != 0;
 }
 
 global LATN_SEED: HashSeed = HashSeed::fixed(0xA4093822299F31D0, 0x082EFA98EC4E6C89);
@@ -1324,8 +1330,7 @@ fn latn_closure(
     let ts = sim.state_tr_start[state];
     let tc = sim.state_tr_count[state];
     if tc > 0 {
-        let k0 = sim.tr_kind[ts];
-        if k0 == ATN_TR_ATOM || k0 == ATN_TR_NOT_ATOM || k0 == ATN_TR_WILDCARD {
+        if atn_tr_consumes(sim.tr_kind[ts]) {
             out.push(LThread { state, stack, accept: false });
             return;
         }

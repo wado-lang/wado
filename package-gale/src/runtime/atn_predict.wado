@@ -11,6 +11,7 @@ use {
     ATN_TR_PRECEDENCE,
     ATN_TR_SET,
     atn_set_contains,
+    atn_tr_consumes,
 } from "./atn.wado";
 
 global ATN_ACCEPT_EOF: i32 = -2;
@@ -532,8 +533,7 @@ fn atn_state_consumes(sim: &AtnSim, state: i32) -> bool {
     if cnt == 0 {
         return false;
     }
-    let k = sim.tr_kind[sim.state_tr_start[state]];
-    return k == ATN_TR_ATOM || k == ATN_TR_SET || k == ATN_TR_NOT_ATOM || k == ATN_TR_WILDCARD;
+    return atn_tr_consumes(sim.tr_kind[sim.state_tr_start[state]]);
 }
 
 struct CfgSet {
