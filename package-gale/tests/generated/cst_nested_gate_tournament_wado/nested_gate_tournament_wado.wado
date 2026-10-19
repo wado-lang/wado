@@ -3679,14 +3679,13 @@ fn _parse_stmts__inner_alt_0(p: &mut Parser, follow: i64 = 0) -> () {
                 if _kind_set_1(p.peek_kind()) {
                     let _rec_pos = p.pos;
                     let _rec_cp = p.b.checkpoint();
-                    let _rec_sav = p.recovering;
-                    let _rec_spec = p.speculating;
+                    let _rec_outer = p.speculating;
                     p.speculating = true;
                     p.site = 2;
                     p.atn_ret_pending = 29;
                     _parse_stmt(p);
-                    p.speculating = _rec_spec;
-                    p.recovering = _rec_sav;
+                    p.speculating = _rec_outer;
+                    p.recovering = false;
                     p.pos = _rec_pos;
                     p.b.truncate(_rec_cp);
                 }

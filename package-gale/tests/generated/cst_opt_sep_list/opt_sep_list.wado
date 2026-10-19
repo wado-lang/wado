@@ -1684,9 +1684,9 @@ fn _parse_list__inner(p: &mut Parser, follow: i64 = 0) -> () {
             if p.recovering { break; }
             if follow_yields(&p.kinds, p.pos, follow, &FOLLOW_SETS, TK_EOF) { break; }
             if p.peek_kind() != TK_LIT_COMMA { break; }
+            let sp_pending = p.pending;
             let sp_pos = p.pos;
             let sp_cp = p.b.checkpoint();
-            let sp_pending = p.pending;
             let sp_outer = p.speculating;
             p.speculating = true;
             p.expect(TK_LIT_COMMA, &SYNC_0, false);
@@ -1803,9 +1803,9 @@ fn _parse_braced__inner(p: &mut Parser, follow: i64 = 0) -> () {
         loop {
             if p.recovering { break; }
             if p.peek_kind() != TK_LIT_COMMA { break; }
+            let sp_pending = p.pending;
             let sp_pos = p.pos;
             let sp_cp = p.b.checkpoint();
-            let sp_pending = p.pending;
             let sp_outer = p.speculating;
             p.speculating = true;
             p.expect(TK_LIT_COMMA, &SYNC_0, false);

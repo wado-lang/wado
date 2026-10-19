@@ -2745,9 +2745,9 @@ fn _parse_html_document__inner(p: &mut Parser, follow: i64 = 0) -> () {
         if p.recovering { break; }
         if follow_yields(&p.kinds, p.pos, follow, &FOLLOW_SETS, TK_EOF) { break; }
         if !_kind_set_0(p.peek_kind()) { break; }
+        let sp_pending = p.pending;
         let sp_pos = p.pos;
         let sp_cp = p.b.checkpoint();
-        let sp_pending = p.pending;
         let sp_outer = p.speculating;
         p.speculating = true;
         p.site = 0;
@@ -2808,23 +2808,23 @@ fn _parse_html_document__inner(p: &mut Parser, follow: i64 = 0) -> () {
         if p.recovering { break; }
         if follow_yields(&p.kinds, p.pos, follow, &FOLLOW_SETS, TK_EOF) { break; }
         if !_kind_set_0(p.peek_kind()) { break; }
-        let sp_pos_2 = p.pos;
-        let sp_cp_2 = p.b.checkpoint();
         let sp_pending_2 = p.pending;
-        let sp_outer_2 = p.speculating;
+        let sp_2_pos = p.pos;
+        let sp_2_cp = p.b.checkpoint();
+        let sp_2_outer = p.speculating;
         p.speculating = true;
         p.site = 1;
         _parse_scriptlet_or_sea_ws(p);
-        p.speculating = sp_outer_2;
-        if p.recovering || p.pos <= sp_pos_2 {
+        p.speculating = sp_2_outer;
+        if p.recovering || p.pos <= sp_2_pos {
             p.recovering = false;
-            p.pos = sp_pos_2;
-            p.b.truncate(sp_cp_2);
+            p.pos = sp_2_pos;
+            p.b.truncate(sp_2_cp);
             if !_kind_set_0(p.peek_kind()) { p.pending = sp_pending_2; }
             break;
         }
         let sp_end_2 = p.pos;
-        p.pos = sp_pos_2;
+        p.pos = sp_2_pos;
         if sp_end_2 >= 0 {
             let decline_kind_2 = if sp_end_2 < p.kinds.len() { p.kinds[sp_end_2] } else { TK_EOF };
             if !(_kind_set_4(decline_kind_2) || follow == 0 && decline_kind_2 == TK_EOF) {
@@ -2850,7 +2850,7 @@ fn _parse_html_document__inner(p: &mut Parser, follow: i64 = 0) -> () {
                     let probe_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
                     if probe_kind == TK_EOF && follow_admits(tokens, pos, follow, &FOLLOW_SETS, TK_EOF) { decline_dead_2 = true; }
                 }
-                if decline_dead_2 { p.b.truncate(sp_cp_2); p.pending = sp_pending_2; break; }
+                if decline_dead_2 { p.b.truncate(sp_2_cp); p.pending = sp_pending_2; break; }
             }
         }
         p.pos = sp_end_2;
@@ -2862,23 +2862,23 @@ fn _parse_html_document__inner(p: &mut Parser, follow: i64 = 0) -> () {
         if p.recovering { break; }
         if follow_yields(&p.kinds, p.pos, follow, &FOLLOW_SETS, TK_EOF) { break; }
         if !_kind_set_0(p.peek_kind()) { break; }
-        let sp_pos_3 = p.pos;
-        let sp_cp_3 = p.b.checkpoint();
         let sp_pending_3 = p.pending;
-        let sp_outer_3 = p.speculating;
+        let sp_3_pos = p.pos;
+        let sp_3_cp = p.b.checkpoint();
+        let sp_3_outer = p.speculating;
         p.speculating = true;
         p.site = 2;
         _parse_scriptlet_or_sea_ws(p);
-        p.speculating = sp_outer_3;
-        if p.recovering || p.pos <= sp_pos_3 {
+        p.speculating = sp_3_outer;
+        if p.recovering || p.pos <= sp_3_pos {
             p.recovering = false;
-            p.pos = sp_pos_3;
-            p.b.truncate(sp_cp_3);
+            p.pos = sp_3_pos;
+            p.b.truncate(sp_3_cp);
             if !_kind_set_0(p.peek_kind()) { p.pending = sp_pending_3; }
             break;
         }
         let sp_end_3 = p.pos;
-        p.pos = sp_pos_3;
+        p.pos = sp_3_pos;
         if sp_end_3 >= 0 {
             let decline_kind_3 = if sp_end_3 < p.kinds.len() { p.kinds[sp_end_3] } else { TK_EOF };
             if !(_kind_set_5(decline_kind_3) || follow == 0 && decline_kind_3 == TK_EOF) {
@@ -2895,7 +2895,7 @@ fn _parse_html_document__inner(p: &mut Parser, follow: i64 = 0) -> () {
                     let probe_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
                     if probe_kind == TK_EOF && follow_admits(tokens, pos, follow, &FOLLOW_SETS, TK_EOF) { decline_dead_3 = true; }
                 }
-                if decline_dead_3 { p.b.truncate(sp_cp_3); p.pending = sp_pending_3; break; }
+                if decline_dead_3 { p.b.truncate(sp_3_cp); p.pending = sp_pending_3; break; }
             }
         }
         p.pos = sp_end_3;
@@ -2958,9 +2958,9 @@ fn _parse_html_elements__inner(p: &mut Parser, follow: i64 = 0) -> () {
         if p.recovering { break; }
         if follow_yields(&p.kinds, p.pos, follow, &FOLLOW_SETS, TK_EOF) { break; }
         if !_kind_set_6(p.peek_kind()) { break; }
+        let sp_pending = p.pending;
         let sp_pos = p.pos;
         let sp_cp = p.b.checkpoint();
-        let sp_pending = p.pending;
         let sp_outer = p.speculating;
         p.speculating = true;
         p.site = 6;
@@ -3102,9 +3102,9 @@ fn _parse_html_content__inner(p: &mut Parser, follow: i64 = 0) -> () {
         if p.recovering { break; }
         if follow_yields(&p.kinds, p.pos, follow, &FOLLOW_SETS, TK_EOF) { break; }
         if !_kind_set_14(p.peek_kind()) { break; }
+        let sp_pending = p.pending;
         let sp_pos = p.pos;
         let sp_cp = p.b.checkpoint();
-        let sp_pending = p.pending;
         let sp_outer = p.speculating;
         p.speculating = true;
         if !kind_set_has(&SYNC_8, p.kinds[p.pos]) { builtin::cold_path(); p.sync_alts(&SYNC_8, &EXPECTED_8); }

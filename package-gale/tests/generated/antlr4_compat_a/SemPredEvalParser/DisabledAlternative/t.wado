@@ -2809,14 +2809,13 @@ fn _parse_cpp_compilation_unit__inner(p: &mut Parser) -> () {
                 if p.peek_kind() == TK_ANY_CHAR {
                     let _rec_pos = p.pos;
                     let _rec_cp = p.b.checkpoint();
-                    let _rec_sav = p.recovering;
-                    let _rec_spec = p.speculating;
+                    let _rec_outer = p.speculating;
                     p.speculating = true;
                     p.site = 0;
                     p.atn_ret_pending = 9;
                     _parse_content(p);
-                    p.speculating = _rec_spec;
-                    p.recovering = _rec_sav;
+                    p.speculating = _rec_outer;
+                    p.recovering = false;
                     p.pos = _rec_pos;
                     p.b.truncate(_rec_cp);
                 }

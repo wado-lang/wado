@@ -16391,14 +16391,13 @@ fn _parse_statement_list__inner(p: &mut Parser, follow: i64 = 0) -> () with Type
                 if _kind_set_47(p.peek_kind()) {
                     let _rec_pos = p.pos;
                     let _rec_cp = p.b.checkpoint();
-                    let _rec_sav = p.recovering;
-                    let _rec_spec = p.speculating;
+                    let _rec_outer = p.speculating;
                     p.speculating = true;
                     p.site = 169;
                     p.atn_ret_pending = 1209;
                     _parse_statement(p, 0);
-                    p.speculating = _rec_spec;
-                    p.recovering = _rec_sav;
+                    p.speculating = _rec_outer;
+                    p.recovering = false;
                     p.pos = _rec_pos;
                     p.b.truncate(_rec_cp);
                 }

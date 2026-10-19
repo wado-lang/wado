@@ -12110,9 +12110,9 @@ fn _parse_sql_stmt_list__inner(p: &mut Parser, follow: i64 = 0) -> () {
         if p.recovering { break; }
         if follow_yields(&p.kinds, p.pos, follow, &FOLLOW_SETS, TK_EOF) { break; }
         if p.peek_kind() != TK_SCOL { break; }
+        let sp_pending = p.pending;
         let sp_pos = p.pos;
         let sp_cp = p.b.checkpoint();
-        let sp_pending = p.pending;
         let sp_outer = p.speculating;
         p.speculating = true;
         if !kind_set_has(&SYNC_2, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_2, &EXPECTED_2); }
@@ -12157,22 +12157,22 @@ fn _parse_sql_stmt_list__inner(p: &mut Parser, follow: i64 = 0) -> () {
         if p.recovering { break; }
         if follow_yields(&p.kinds, p.pos, follow, &FOLLOW_SETS, TK_EOF) { break; }
         if p.peek_kind() != TK_SCOL { break; }
-        let sp_pos_2 = p.pos;
-        let sp_cp_2 = p.b.checkpoint();
         let sp_pending_2 = p.pending;
-        let sp_outer_2 = p.speculating;
+        let sp_2_pos = p.pos;
+        let sp_2_cp = p.b.checkpoint();
+        let sp_2_outer = p.speculating;
         p.speculating = true;
         p.expect(TK_SCOL, &SYNC_2, true);
-        p.speculating = sp_outer_2;
-        if p.recovering || p.pos <= sp_pos_2 {
+        p.speculating = sp_2_outer;
+        if p.recovering || p.pos <= sp_2_pos {
             p.recovering = false;
-            p.pos = sp_pos_2;
-            p.b.truncate(sp_cp_2);
+            p.pos = sp_2_pos;
+            p.b.truncate(sp_2_cp);
             p.pending = sp_pending_2;
             break;
         }
         let sp_end_2 = p.pos;
-        p.pos = sp_pos_2;
+        p.pos = sp_2_pos;
         if sp_end_2 >= 0 {
             let decline_kind_2 = if sp_end_2 < p.kinds.len() { p.kinds[sp_end_2] } else { TK_EOF };
             if !(_kind_set_2(decline_kind_2) || follow == 0 && decline_kind_2 == TK_EOF && !(sp_end_2 == p.pos + 1 && _kind_set_3(p.kinds[p.pos]) || sp_end_2 == p.pos + 2 && _kind_set_4(p.kinds[p.pos]) && _kind_set_5(p.kinds[p.pos + 1]) || sp_end_2 == p.pos + 3 && _kind_set_6(p.kinds[p.pos]) && _kind_set_7(p.kinds[p.pos + 1]) && _kind_set_5(p.kinds[p.pos + 2]) || sp_end_2 == p.pos + 4 && _kind_set_8(p.kinds[p.pos]) && _kind_set_9(p.kinds[p.pos + 1]) && _kind_set_10(p.kinds[p.pos + 2]) && _kind_set_11(p.kinds[p.pos + 3]))) {
@@ -12183,7 +12183,7 @@ fn _parse_sql_stmt_list__inner(p: &mut Parser, follow: i64 = 0) -> () {
                     let probe_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
                     if _kind_set_2(probe_kind) && follow_exit_viable(tokens, pos, follow, &FOLLOW_SETS, TK_EOF) { decline_dead_2 = true; }
                 }
-                if decline_dead_2 { p.b.truncate(sp_cp_2); p.pending = sp_pending_2; break; }
+                if decline_dead_2 { p.b.truncate(sp_2_cp); p.pending = sp_pending_2; break; }
             }
         }
         p.pos = sp_end_2;
