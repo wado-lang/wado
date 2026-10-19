@@ -2770,24 +2770,24 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String^core:prelude/string
 
 fn "treemap_btree2.wado/treemap_btree2.wado/TreeMap<core:prelude/string.wado/String,i32>::split_child$sroa[self.t]"(self, parent, child_index) {
     let $load_0: ref "core:prelude//List<&mut treemap_btree2.wado/BTreeNode<core:prelude/string.wado/String,i32>>";
-    let $load_4: ref "core:prelude//List<core:prelude/string.wado/String>";
-    let $load_5: ref "core:prelude//List<i32>";
-    let $load_6: ref "core:prelude//List<bool>";
     let full_child: ref "treemap_btree2.wado//BTreeNode<core:prelude/string.wado/String,i32>";
     let new_sibling: ref "treemap_btree2.wado//BTreeNode<core:prelude/string.wado/String,i32>";
     let $v1_13: i32;
-    let elements_77: ref "Array<core:prelude/string.wado/String>";
-    let elements_78: ref Array<i32>;
-    let elements_79: ref Array<bool>;
-    let elements_80: ref "Array<&mut treemap_btree2.wado/BTreeNode<core:prelude/string.wado/String,i32>>";
-    let v_89: ref "core:prelude/string.wado//String";
-    let used_103: i32;
-    let value_131: ref "treemap_btree2.wado//BTreeNode<core:prelude/string.wado/String,i32>";
-    let $licm_keys_201: ref "core:prelude//List<core:prelude/string.wado/String>";
-    let $licm_values_203: ref "core:prelude//List<i32>";
-    let $licm_deleted_205: ref "core:prelude//List<bool>";
-    let $licm_children_210: ref "core:prelude//List<&mut treemap_btree2.wado/BTreeNode<core:prelude/string.wado/String,i32>>";
-    let $av_222: i32;
+    let elements_66: ref "Array<core:prelude/string.wado/String>";
+    let elements_67: ref Array<i32>;
+    let elements_68: ref Array<bool>;
+    let elements_69: ref "Array<&mut treemap_btree2.wado/BTreeNode<core:prelude/string.wado/String,i32>>";
+    let v_74: ref "core:prelude/string.wado//String";
+    let used_88: i32;
+    let value_116: ref "treemap_btree2.wado//BTreeNode<core:prelude/string.wado/String,i32>";
+    let $licm_keys_180: ref "core:prelude//List<core:prelude/string.wado/String>";
+    let $licm_keys_181: ref "core:prelude//List<core:prelude/string.wado/String>";
+    let $licm_values_182: ref "core:prelude//List<i32>";
+    let $licm_values_183: ref "core:prelude//List<i32>";
+    let $licm_deleted_184: ref "core:prelude//List<bool>";
+    let $licm_deleted_185: ref "core:prelude//List<bool>";
+    let $licm_children_190: ref "core:prelude//List<&mut treemap_btree2.wado/BTreeNode<core:prelude/string.wado/String,i32>>";
+    let $av_198: i32;
     $v1_13 = local.tee $load_0(parent.children).used;
     if @unlikely(child_index >=u $v1_13) {
         cold_path;
@@ -2795,77 +2795,65 @@ fn "treemap_btree2.wado/treemap_btree2.wado/TreeMap<core:prelude/string.wado/Str
         unreachable;
     }
     full_child = builtin::array_get_value<ref "treemap_btree2.wado//BTreeNode<core:prelude/string.wado/String,i32>">($load_0.repr, child_index);
-    new_sibling = struct.new "treemap_btree2.wado//BTreeNode<core:prelude/string.wado/String,i32>" { keys: struct.new "core:prelude//List<core:prelude/string.wado/String>" { repr: local.tee elements_77(array.new_fixed<ref "core:prelude/string.wado//String">()), used: 0 }, values: struct.new "core:prelude//List<i32>" { repr: local.tee elements_78(array.new_fixed<i32>()), used: 0 }, deleted: struct.new "core:prelude//List<bool>" { repr: local.tee elements_79(array.new_fixed<bool>()), used: 0 }, children: struct.new "core:prelude//List<&mut treemap_btree2.wado/BTreeNode<core:prelude/string.wado/String,i32>>" { repr: local.tee elements_80(array.new_fixed<ref "treemap_btree2.wado//BTreeNode<core:prelude/string.wado/String,i32>">()), used: 0 }, is_leaf: 1 };
+    new_sibling = struct.new "treemap_btree2.wado//BTreeNode<core:prelude/string.wado/String,i32>" { keys: struct.new "core:prelude//List<core:prelude/string.wado/String>" { repr: local.tee elements_66(array.new_fixed<ref "core:prelude/string.wado//String">()), used: 0 }, values: struct.new "core:prelude//List<i32>" { repr: local.tee elements_67(array.new_fixed<i32>()), used: 0 }, deleted: struct.new "core:prelude//List<bool>" { repr: local.tee elements_68(array.new_fixed<bool>()), used: 0 }, children: struct.new "core:prelude//List<&mut treemap_btree2.wado/BTreeNode<core:prelude/string.wado/String,i32>>" { repr: local.tee elements_69(array.new_fixed<ref "treemap_btree2.wado//BTreeNode<core:prelude/string.wado/String,i32>">()), used: 0 }, is_leaf: 1 };
     if full_child.is_leaf == 0 {
-        elements_77 = array.new_fixed<ref "core:prelude/string.wado//String">();
-        elements_78 = array.new_fixed<i32>();
-        elements_79 = array.new_fixed<bool>();
-        elements_80 = array.new_fixed<ref "treemap_btree2.wado//BTreeNode<core:prelude/string.wado/String,i32>">();
-        local.tee $load_4(new_sibling.keys).repr = elements_77;
-        $load_4.used = 0;
-        local.tee $load_5(new_sibling.values).repr = elements_78;
-        $load_5.used = 0;
-        local.tee $load_6(new_sibling.deleted).repr = elements_79;
-        $load_6.used = 0;
-        local.tee $load_0(new_sibling.children).repr = elements_80;
-        $load_0.used = 0;
-        new_sibling.is_leaf = 0;
+        new_sibling = struct.new "treemap_btree2.wado//BTreeNode<core:prelude/string.wado/String,i32>" { keys: struct.new "core:prelude//List<core:prelude/string.wado/String>" { repr: local.tee elements_66(array.new_fixed<ref "core:prelude/string.wado//String">()), used: 0 }, values: struct.new "core:prelude//List<i32>" { repr: local.tee elements_67(array.new_fixed<i32>()), used: 0 }, deleted: struct.new "core:prelude//List<bool>" { repr: local.tee elements_68(array.new_fixed<bool>()), used: 0 }, children: struct.new "core:prelude//List<&mut treemap_btree2.wado/BTreeNode<core:prelude/string.wado/String,i32>>" { repr: local.tee elements_69(array.new_fixed<ref "treemap_btree2.wado//BTreeNode<core:prelude/string.wado/String,i32>">()), used: 0 }, is_leaf: 0 };
     }
     child_index = local.tee self(self - 1) + 1;
-    $load_4 = full_child.keys;
-    $licm_keys_201 = new_sibling.keys;
-    $load_5 = new_sibling.values;
-    $licm_values_203 = full_child.values;
-    $load_6 = new_sibling.deleted;
-    $licm_deleted_205 = full_child.deleted;
-    elements_77 = $load_4.repr;
-    elements_78 = $licm_values_203.repr;
-    elements_79 = $licm_deleted_205.repr;
+    $licm_keys_180 = full_child.keys;
+    $licm_keys_181 = new_sibling.keys;
+    $licm_values_182 = new_sibling.values;
+    $licm_values_183 = full_child.values;
+    $licm_deleted_184 = new_sibling.deleted;
+    $licm_deleted_185 = full_child.deleted;
+    elements_66 = $licm_keys_180.repr;
+    elements_67 = $licm_values_183.repr;
+    elements_68 = $licm_deleted_185.repr;
     b346: block {
         l347: loop {
-            break_if b346 child_index >= local.tee $v1_13($load_4.used);
+            break_if b346 child_index >= local.tee $v1_13($licm_keys_180.used);
             if @unlikely(0 > child_index) {
                 cold_path;
                 "core:prelude/list.wado/core:prelude/list.wado/List<core:prelude/string.wado/String>^core:prelude/traits.wado/IndexValue<i32>::index_value$contract_report0"(child_index, $v1_13, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("treemap_btree2.wado:212"), used: 23 });
                 unreachable;
             }
-            $av_222 = local.tee v_89(builtin::array_get_value<ref "core:prelude/string.wado//String">(elements_77, child_index)).used;
-            v_89 = struct.new "core:prelude/string.wado//String" { repr: let $array_clone_src_1: ref Array<u8>; $array_clone_src_1 = v_89.repr; let $array_clone_dst_2: ref Array<u8>; builtin::array_copy<u8>(local.tee $array_clone_dst_2(builtin::array_new<u8>($av_222)), 0, $array_clone_src_1, 0, $av_222); $array_clone_dst_2, used: $av_222 };
-            if @unlikely(local.tee $av_222($licm_keys_201.used) >= builtin::array_len($licm_keys_201.repr)) {
+            $av_198 = local.tee v_74(builtin::array_get_value<ref "core:prelude/string.wado//String">(elements_66, child_index)).used;
+            v_74 = struct.new "core:prelude/string.wado//String" { repr: let $array_clone_src_1: ref Array<u8>; $array_clone_src_1 = v_74.repr; let $array_clone_dst_2: ref Array<u8>; builtin::array_copy<u8>(local.tee $array_clone_dst_2(builtin::array_new<u8>($av_198)), 0, $array_clone_src_1, 0, $av_198); $array_clone_dst_2, used: $av_198 };
+            if @unlikely(local.tee $av_198($licm_keys_181.used) >= builtin::array_len($licm_keys_181.repr)) {
                 cold_path;
-                "core:prelude/list.wado/core:prelude/list.wado/List<core:prelude/string.wado/String>::grow"($licm_keys_201);
-                elements_77 = $load_4.repr;
+                "core:prelude/list.wado/core:prelude/list.wado/List<core:prelude/string.wado/String>::grow"($licm_keys_181);
+                elements_66 = $licm_keys_180.repr;
             }
-            builtin::array_set<ref "core:prelude/string.wado//String">($licm_keys_201.repr, $av_222, v_89);
-            $licm_keys_201.used = $av_222 + 1;
-            $av_222 = $licm_values_203.used;
-            if @unlikely(child_index >= $av_222) {
+            builtin::array_set<ref "core:prelude/string.wado//String">($licm_keys_181.repr, $av_198, v_74);
+            $licm_keys_181.used = $av_198 + 1;
+            $av_198 = $licm_values_183.used;
+            if @unlikely(child_index >= $av_198) {
                 cold_path;
-                "core:prelude/list.wado/core:prelude/list.wado/List<i32>^core:prelude/traits.wado/IndexValue<i32>::index_value$contract_report0"(child_index, $av_222, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("treemap_btree2.wado:213"), used: 23 });
+                "core:prelude/list.wado/core:prelude/list.wado/List<i32>^core:prelude/traits.wado/IndexValue<i32>::index_value$contract_report0"(child_index, $av_198, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("treemap_btree2.wado:213"), used: 23 });
                 unreachable;
             }
-            $av_222 = builtin::array_get_value<i32>(elements_78, child_index);
-            if @unlikely(local.tee used_103($load_5.used) >= builtin::array_len($load_5.repr)) {
+            $av_198 = builtin::array_get_value<i32>(elements_67, child_index);
+            if @unlikely(local.tee used_88($licm_values_182.used) >= builtin::array_len($licm_values_182.repr)) {
                 cold_path;
-                "core:prelude/list.wado/core:prelude/list.wado/List<i32>::grow"($load_5);
-                elements_78 = $licm_values_203.repr;
+                "core:prelude/list.wado/core:prelude/list.wado/List<i32>::grow"($licm_values_182);
+                elements_67 = $licm_values_183.repr;
             }
-            builtin::array_set<i32>($load_5.repr, used_103, $av_222);
-            $load_5.used = used_103 + 1;
-            used_103 = $licm_deleted_205.used;
-            if @unlikely(child_index >= used_103) {
+            builtin::array_set<i32>($licm_values_182.repr, used_88, $av_198);
+            $licm_values_182.used = used_88 + 1;
+            used_88 = $licm_deleted_185.used;
+            if @unlikely(child_index >= used_88) {
                 cold_path;
-                "core:prelude/list.wado/core:prelude/list.wado/List<bool>^core:prelude/traits.wado/IndexValue<i32>::index_value$contract_report0"(child_index, used_103, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("treemap_btree2.wado:214"), used: 23 });
+                "core:prelude/list.wado/core:prelude/list.wado/List<bool>^core:prelude/traits.wado/IndexValue<i32>::index_value$contract_report0"(child_index, used_88, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("treemap_btree2.wado:214"), used: 23 });
                 unreachable;
             }
-            used_103 = builtin::array_get_value<bool>(elements_79, child_index);
-            if @unlikely(local.tee $av_222($load_6.used) >= builtin::array_len($load_6.repr)) {
+            used_88 = builtin::array_get_value<bool>(elements_68, child_index);
+            if @unlikely(local.tee $av_198($licm_deleted_184.used) >= builtin::array_len($licm_deleted_184.repr)) {
                 cold_path;
-                "core:prelude/list.wado/core:prelude/list.wado/List<bool>::grow"($load_6);
-                elements_79 = $licm_deleted_205.repr;
+                "core:prelude/list.wado/core:prelude/list.wado/List<bool>::grow"($licm_deleted_184);
+                elements_68 = $licm_deleted_185.repr;
             }
-            builtin::array_set<bool>($load_6.repr, $av_222, used_103);
-            $load_6.used = $av_222 + 1;
+            builtin::array_set<bool>($licm_deleted_184.repr, $av_198, used_88);
+            $licm_deleted_184.used = $av_198 + 1;
             child_index = child_index + 1;
             continue l347;
         };
@@ -2873,8 +2861,8 @@ fn "treemap_btree2.wado/treemap_btree2.wado/TreeMap<core:prelude/string.wado/Str
     if full_child.is_leaf == 0 {
         $v1_13 = self + 1;
         $load_0 = full_child.children;
-        $licm_children_210 = new_sibling.children;
-        elements_80 = $load_0.repr;
+        $licm_children_190 = new_sibling.children;
+        elements_69 = $load_0.repr;
         b355: block {
             l356: loop {
                 break_if b355 $v1_13 >= local.tee child_index($load_0.used);
@@ -2883,55 +2871,55 @@ fn "treemap_btree2.wado/treemap_btree2.wado/TreeMap<core:prelude/string.wado/Str
                     "core:prelude/list.wado/core:prelude/list.wado/List<&mut treemap_btree2.wado/BTreeNode<core:prelude/string.wado/String,i32>>^core:prelude/traits.wado/IndexValue<i32>::index_value$contract_report0"($v1_13, child_index, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("treemap_btree2.wado:219"), used: 23 });
                     unreachable;
                 }
-                value_131 = builtin::array_get_value<ref "treemap_btree2.wado//BTreeNode<core:prelude/string.wado/String,i32>">(elements_80, $v1_13);
-                if @unlikely(local.tee $av_222($licm_children_210.used) >= builtin::array_len($licm_children_210.repr)) {
+                value_116 = builtin::array_get_value<ref "treemap_btree2.wado//BTreeNode<core:prelude/string.wado/String,i32>">(elements_69, $v1_13);
+                if @unlikely(local.tee $av_198($licm_children_190.used) >= builtin::array_len($licm_children_190.repr)) {
                     cold_path;
-                    "core:prelude/list.wado/core:prelude/list.wado/List<&mut treemap_btree2.wado/BTreeNode<core:prelude/string.wado/String,i32>>::grow"($licm_children_210);
-                    elements_80 = $load_0.repr;
+                    "core:prelude/list.wado/core:prelude/list.wado/List<&mut treemap_btree2.wado/BTreeNode<core:prelude/string.wado/String,i32>>::grow"($licm_children_190);
+                    elements_69 = $load_0.repr;
                 }
-                builtin::array_set<ref "treemap_btree2.wado//BTreeNode<core:prelude/string.wado/String,i32>">($licm_children_210.repr, $av_222, value_131);
-                $licm_children_210.used = $av_222 + 1;
+                builtin::array_set<ref "treemap_btree2.wado//BTreeNode<core:prelude/string.wado/String,i32>">($licm_children_190.repr, $av_198, value_116);
+                $licm_children_190.used = $av_198 + 1;
                 $v1_13 = $v1_13 + 1;
                 continue l356;
             };
         };
     }
-    $v1_13 = local.tee $licm_keys_201(full_child.keys).used;
+    $v1_13 = local.tee $licm_keys_181(full_child.keys).used;
     if @unlikely(self >=u $v1_13) {
         cold_path;
         "core:prelude/list.wado/core:prelude/list.wado/List<core:prelude/string.wado/String>^core:prelude/traits.wado/IndexValue<i32>::index_value$contract_report0"(self, $v1_13, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("treemap_btree2.wado:223"), used: 23 });
         unreachable;
     }
-    $array_clone_dst_2 = local.tee v_89(builtin::array_get_value<ref "core:prelude/string.wado//String">($licm_keys_201.repr, self)).repr;
-    builtin::array_copy<u8>(local.tee $array_clone_src_1(builtin::array_new<u8>(local.tee $v1_13(v_89.used))), 0, $array_clone_dst_2, 0, $v1_13);
+    $array_clone_dst_2 = local.tee v_74(builtin::array_get_value<ref "core:prelude/string.wado//String">($licm_keys_181.repr, self)).repr;
+    builtin::array_copy<u8>(local.tee $array_clone_src_1(builtin::array_new<u8>(local.tee $v1_13(v_74.used))), 0, $array_clone_dst_2, 0, $v1_13);
     child_index = builtin::array_get_value<i32>(full_child.values.repr, self);
     self = builtin::array_get_value<bool>(full_child.deleted.repr, self);
-    $licm_keys_201 = parent.keys;
-    v_89 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_copy<u8>(local.tee $array_clone_dst_2(builtin::array_new<u8>($v1_13)), 0, $array_clone_src_1, 0, $v1_13); $array_clone_dst_2, used: $v1_13 };
-    if @unlikely(local.tee $v1_13($licm_keys_201.used) >= builtin::array_len($licm_keys_201.repr)) {
+    $licm_keys_181 = parent.keys;
+    v_74 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_copy<u8>(local.tee $array_clone_dst_2(builtin::array_new<u8>($v1_13)), 0, $array_clone_src_1, 0, $v1_13); $array_clone_dst_2, used: $v1_13 };
+    if @unlikely(local.tee $v1_13($licm_keys_181.used) >= builtin::array_len($licm_keys_181.repr)) {
         cold_path;
-        "core:prelude/list.wado/core:prelude/list.wado/List<core:prelude/string.wado/String>::grow"($licm_keys_201);
+        "core:prelude/list.wado/core:prelude/list.wado/List<core:prelude/string.wado/String>::grow"($licm_keys_181);
     }
-    builtin::array_set<ref "core:prelude/string.wado//String">($licm_keys_201.repr, $v1_13, v_89);
-    $licm_keys_201.used = $v1_13 + 1;
-    if @unlikely(local.tee $v1_13(local.tee $licm_values_203(parent.values).used) >= builtin::array_len($licm_values_203.repr)) {
+    builtin::array_set<ref "core:prelude/string.wado//String">($licm_keys_181.repr, $v1_13, v_74);
+    $licm_keys_181.used = $v1_13 + 1;
+    if @unlikely(local.tee $v1_13(local.tee $licm_values_183(parent.values).used) >= builtin::array_len($licm_values_183.repr)) {
         cold_path;
-        "core:prelude/list.wado/core:prelude/list.wado/List<i32>::grow"($licm_values_203);
+        "core:prelude/list.wado/core:prelude/list.wado/List<i32>::grow"($licm_values_183);
     }
-    builtin::array_set<i32>($licm_values_203.repr, $v1_13, child_index);
-    $licm_values_203.used = $v1_13 + 1;
-    if @unlikely(local.tee $v1_13(local.tee $licm_deleted_205(parent.deleted).used) >= builtin::array_len($licm_deleted_205.repr)) {
+    builtin::array_set<i32>($licm_values_183.repr, $v1_13, child_index);
+    $licm_values_183.used = $v1_13 + 1;
+    if @unlikely(local.tee $v1_13(local.tee $licm_deleted_185(parent.deleted).used) >= builtin::array_len($licm_deleted_185.repr)) {
         cold_path;
-        "core:prelude/list.wado/core:prelude/list.wado/List<bool>::grow"($licm_deleted_205);
+        "core:prelude/list.wado/core:prelude/list.wado/List<bool>::grow"($licm_deleted_185);
     }
-    builtin::array_set<bool>($licm_deleted_205.repr, $v1_13, self);
-    $licm_deleted_205.used = $v1_13 + 1;
-    if @unlikely(local.tee $v1_13(local.tee $licm_children_210(parent.children).used) >= builtin::array_len($licm_children_210.repr)) {
+    builtin::array_set<bool>($licm_deleted_185.repr, $v1_13, self);
+    $licm_deleted_185.used = $v1_13 + 1;
+    if @unlikely(local.tee $v1_13(local.tee $licm_children_190(parent.children).used) >= builtin::array_len($licm_children_190.repr)) {
         cold_path;
-        "core:prelude/list.wado/core:prelude/list.wado/List<&mut treemap_btree2.wado/BTreeNode<core:prelude/string.wado/String,i32>>::grow"($licm_children_210);
+        "core:prelude/list.wado/core:prelude/list.wado/List<&mut treemap_btree2.wado/BTreeNode<core:prelude/string.wado/String,i32>>::grow"($licm_children_190);
     }
-    builtin::array_set<ref "treemap_btree2.wado//BTreeNode<core:prelude/string.wado/String,i32>">($licm_children_210.repr, $v1_13, new_sibling);
-    $licm_children_210.used = $v1_13 + 1;
+    builtin::array_set<ref "treemap_btree2.wado//BTreeNode<core:prelude/string.wado/String,i32>">($licm_children_190.repr, $v1_13, new_sibling);
+    $licm_children_190.used = $v1_13 + 1;
     "treemap_btree2.wado/treemap_btree2.wado/TreeMap<core:prelude/string.wado/String,i32>::sort_node_entries$dae[self]"(parent);
 }
 
