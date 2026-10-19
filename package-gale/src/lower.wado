@@ -2253,6 +2253,7 @@ fn lower_scan_repeat(
         caller_follow_first: *outer_follow,
         gate_caller_follow: effective_gate,
         non_greedy: rep.non_greedy,
+        body_second_position_first: compute_body_second_position_first(&rep.element, ctx),
         body_scannable: ctx.analysis.is_element_scannable(&rep.element, &mut body_visiting),
         atn_decision: rep.atn_decision,
     });
@@ -2274,13 +2275,14 @@ fn rebind_scan_repeat_caller_follow(
     rule_name: &String = &NO_PROBE_RULE,
 ) -> ScanElement {
     if let Repeat(re) = se {
+        let caller_follow_second = compute_caller_follow_second(alt_elements, index + 1, ctx);
         let stamps = lower_repeat_exit_stamps(
             re.non_greedy,
             re.kind,
             &re.inner_admits,
             &caller_follow_first,
-            &scan_repeat_body_second(&alt_elements[index], ctx),
-            &compute_caller_follow_second(alt_elements, index + 1, ctx),
+            &re.body_second_position_first,
+            &caller_follow_second,
             alt_elements,
             index,
             ctx,
@@ -2290,6 +2292,7 @@ fn rebind_scan_repeat_caller_follow(
         return ScanElement::Repeat(ScanRepeatElement {
             ..re,
             caller_follow_first,
+            caller_follow_second,
             continuation_scan: stamps.probe.scan,
             continuation_scannable: stamps.probe.scannable,
             probe_asks_caller: stamps.probe.asks_caller,
@@ -2308,16 +2311,6 @@ fn rebind_scan_repeat_caller_follow(
 /// bodies and continuation walks, where `reaches_rule_tail` is false and
 /// the probe set is never read.
 global NO_PROBE_RULE: String = "";
-
-/// `body_second_position_first` for the Repeat at `elem`, matching what
-/// `lower_repeat_op` stamped on the parse-side op.
-fn scan_repeat_body_second(elem: &Element, ctx: &mut LowerContext) -> List<i32> {
-    return match elem {
-        Repeat(rep) => compute_body_second_position_first(&rep.element, ctx),
-        Label(lab) => scan_repeat_body_second(&lab.element, ctx),
-        TokenRef(_) | Literal(_) | RuleRef(_) | Group(_) | Wildcard(_) | Not(_) => [],
-    };
-}
 
 /// Scan mirror of the elements after `index`, or `null` when any of them is
 /// unscannable. Both probes lower their continuation through here so they

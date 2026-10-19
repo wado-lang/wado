@@ -4600,7 +4600,7 @@ fn scan_arg_action_block(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, 
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos] != TK_BEGIN_ARGUMENT { return -1; }
     pos += 1;
-    while pos < tokens.len() && tokens[pos] == TK_ARGUMENT_CONTENT {
+    while (if pos < tokens.len() { tokens[pos] } else { TK_EOF }) == TK_ARGUMENT_CONTENT {
         pos += 1;
     }
     if pos >= tokens.len() || tokens[pos] != TK_END_ARGUMENT { return -1; }

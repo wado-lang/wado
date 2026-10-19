@@ -1550,6 +1550,26 @@ test "a non-greedy loop's tail call does not read past what follows the loop" {
     assert got == "( a , b x ) x ) x ) => (s (list ( (item a) , (item b x) )) x ) x ))\n( a x , b ) x ) x ) => (s (list ( (item a x) , (item b) )) x ) x ))\n";
 }
 
+global NON_GREEDY_SCAN_G4: String = "
+grammar N;
+p : (lst | '#')* EOF ;
+lst : ';'* st (';'+ st)* ';'* ;
+st : '(' item (',' item)*? (',' tc)* ')' ;
+item : name name? ;
+name : ID | 'pk' ;
+tc : 'pk' '(' ID ')' ;
+ID : [a-z]+ ;
+WS : ' ' -> skip ;
+";
+
+test "a scan leaves a non-greedy loop where the parse does" {
+    // SQLite's `( ',' column_def )*? ( ',' table_constraint )*`: a scan that
+    // takes `pk` as another `item` fails at its `(`, so `lst` declines the
+    // iteration the parse would have taken.
+    let got = parses(NON_GREEDY_SCAN_G4, "p", ["( a ) ; ( b , pk ( c ) ) ;", "( a , pk ( c ) ) ; ( b ) ;"]);
+    assert got == "( a ) ; ( b , pk ( c ) ) ; => (p (lst (st ( (item (name a)) )) ; (st ( (item (name b)) , (tc pk ( c )) )) ;))\n( a , pk ( c ) ) ; ( b ) ; => (p (lst (st ( (item (name a)) , (tc pk ( c )) )) ; (st ( (item (name b)) )) ;))\n";
+}
+
 global LOOP_ENTERS_WHILE_VIABLE_G4: String = "
 grammar T;
 s : 'fn' ty '{' '}' EOF ;

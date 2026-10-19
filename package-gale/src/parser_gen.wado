@@ -2056,9 +2056,22 @@ fn gen_scan_op_repeat<S: AsStrSlice>(
             "tokens",
             "pos",
         );
+    } else if re.non_greedy {
+        non_greedy_static_enters(
+            &loop_admits,
+            &re.body_second_position_first,
+            &re.caller_follow_first,
+            &re.caller_follow_second,
+            `(${kind_at("tokens", "pos")})`,
+            `(${kind_at("tokens", "pos + 1")})`,
+            ctx,
+        );
     } else {
         scan_repeat_guard(&loop_admits, &caller_follow_gate, ctx);
     };
+    if guard == "false" {
+        return;
+    }
     w.begin(`while ${guard}`);
     gen_scan_iteration(w, re, &loop_admits, ctx, true);
     w.end();
@@ -6489,26 +6502,46 @@ fn compute_non_greedy_condition(
             "p.pos",
         );
     }
-    assert !admits_tests_nothing(&rep_op.body_admits), "a body taking every token exits by the simulator, and `check_epsilon_closure` rejects one taking none";
-    let raw_first = &admits_kinds(&rep_op.body_admits);
+    return non_greedy_static_enters(
+        &rep_op.body_admits,
+        &rep_op.body_second_position_first,
+        follow_first,
+        follow_second,
+        &PEEK_KIND,
+        "p.peek_at(1)",
+        ctx,
+    );
+}
 
-    let inner_second_first = &rep_op.body_second_position_first;
-    if non_greedy_static_undecided(raw_first, follow_first, inner_second_first, follow_second) {
+/// Whether a non-greedy loop enters by two tokens, `at0` and `at1`: the body's
+/// first token where the continuation cannot start with it, else the second
+/// token, as for `(',' column_def)*?` before `(',' table_constraint)*`, where
+/// the first is `,` either way. `"false"` where two tokens do not decide. The
+/// parse and the scan both ask here, or the tournament measures an iteration
+/// the parse declines.
+fn non_greedy_static_enters<S: AsStrSlice, S1: AsStrSlice>(
+    body_admits: &Admits,
+    body_second: &List<i32>,
+    follow_first: &List<i32>,
+    follow_second: &List<i32>,
+    at0: S,
+    at1: S1,
+    ctx: &mut EmitContext,
+) -> String {
+    assert !admits_tests_nothing(body_admits), "a body taking every token exits by the simulator, and `check_epsilon_closure` rejects one taking none";
+    let raw_first = &admits_kinds(body_admits);
+    if non_greedy_static_undecided(raw_first, follow_first, body_second, follow_second) {
         return "false";
     }
-
     let continue_first = subtract_sets(raw_first, follow_first);
     if !continue_first.is_empty() {
-        return ctx.first_check_str(&continue_first);
+        return ctx.kind_check_str(&continue_first, at0);
     }
-
-    // First sets completely overlap (e.g. both start with ','), so peek(1)
-    // separates them: for `(',' column_def)*?` before `(',' table_constraint)*`
-    // peek(0) is ',' either way.
-    let second_continue = subtract_sets(inner_second_first, follow_second);
-    let peek0_cond = ctx.first_check_str(raw_first);
-    let peek1_cond = ctx.kind_check_str(&second_continue, "p.peek_at(1)");
-    return `${and_operand(peek0_cond)} && ${and_operand(peek1_cond)}`;
+    let second_continue = subtract_sets(body_second, follow_second);
+    return `${and_operand(ctx.kind_check_str(raw_first, at0))} && ${and_operand(ctx.kind_check_str(
+        &second_continue,
+        at1,
+    ))}`;
 }
 
 /// The scan guard of a repetition's inner element. It requires the scan to
