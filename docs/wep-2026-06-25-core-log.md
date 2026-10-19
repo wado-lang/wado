@@ -210,9 +210,10 @@ Monomorphization drops the instantiation nobody asks for, so a program over
 promise that. The call stays reachable, the import lands, and at `-O0` nothing
 folds it away.
 
-The import is what makes this worth a type parameter, because an import decides
-instantiation. `core:kiln/generator` links no clock, so a generator reaching a
-stamped sink fails to instantiate rather than logging without a clock.
+The import is what makes this worth a type parameter, because a world decides
+which imports a program may have. `core:kiln/generator` imports no clock, so a
+generator reaching a stamped sink is a compile error
+(`KILN_GENERATOR_FORBIDDEN_IMPORT`) rather than logging without a clock.
 
 ### Runtime filter directives
 
