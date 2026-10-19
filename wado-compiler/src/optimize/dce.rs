@@ -1778,6 +1778,10 @@ fn collect_type_dependencies(
     type_table: &TypeTable,
     reachable: &mut IndexSet<TypeId>,
 ) {
+    // A slot of this type holds it in a box, which only WIR names.
+    if let Some(wrapper) = type_table.slot_box(type_id) {
+        collect_type_transitive(wrapper, type_table, reachable);
+    }
     match type_table.get(type_id) {
         ResolvedType::BuiltinArray(inner)
         | ResolvedType::Ref(inner)
