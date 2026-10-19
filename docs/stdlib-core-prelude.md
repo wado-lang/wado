@@ -655,6 +655,16 @@ Types implementing this trait can be used in `for-of` loops directly.
 Creates an iterator from a value.
 Note: Uses &self due to parser limitation (self by value not yet supported in traits).
 
+### `pub affine trait ForOf with _`
+
+What `for let x of e` walks when `e` is a value of a type implementing it:
+the loop passes `e` to `start` and calls the state's
+`next(&mut self) -> Option<Item>` until it answers `None`. The loop owns
+what it walks, so an affine element moves into the binding once. Any other
+iterable is walked through its `IntoIterator`.
+
+#### `fn start(self) -> Self::State`
+
 ### `pub affine trait From<T> with ()`
 
 Infallible conversion trait.
@@ -5649,6 +5659,10 @@ Joins elements into a string with the given separator.
 
 ##### `fn index_value(&self, range: RangeInclusive<i32>) -> Slice<T>`
 
+#### `impl ForOf for List<T>`
+
+##### `fn start(self) -> ListCursor<T>`
+
 #### `impl IntoIterator for List<T>`
 
 ##### `fn into_iter(&self) -> Self::Iter`
@@ -5672,6 +5686,16 @@ Joins elements into a string with the given separator.
 #### `impl Display for List<T>`
 
 ##### `pub fn fmt(&self, f: &mut Formatter)`
+
+### `pub struct ListCursor<affine T>`
+
+The state `for-of` walks a list with: the list and a position. `next` moves
+an affine element out of its slot and copies a copyable one, so the cursor
+never writes a list it shares; dropping it drops the elements not reached.
+
+_Fields are private._
+
+#### `pub fn next(&mut self) -> Option<T>`
 
 ### `pub struct RangeExclusive<T: Ord>`
 
