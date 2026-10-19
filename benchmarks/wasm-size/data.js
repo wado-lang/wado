@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1792416076216,
+  "lastUpdate": 1792446130167,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -68433,6 +68433,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/ca3f6a3ffbc2bb0b5424385c15770cea301fe4c8"
         },
         "date": 1792416075436,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 2955,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 7313,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 19774,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 288295,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "ac1f42a4bd4e30821bcc7d29e707c4f5da7e4489",
+          "message": "Merge pull request #2390 from wado-lang/claude/gallant-maxwell-w4igyp\n\nfeat(kiln): generators hash with HashMap::new() and log to the host",
+          "timestamp": "2026-10-20T06:24:36+09:00",
+          "tree_id": "477a3e0030fc376d00249e3a1a183234b7713019",
+          "url": "https://github.com/wado-lang/wado/commit/ac1f42a4bd4e30821bcc7d29e707c4f5da7e4489"
+        },
+        "date": 1792446129438,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
