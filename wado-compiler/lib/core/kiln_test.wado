@@ -27,7 +27,10 @@ impl KilnHost for RecordingHost {
 }
 
 fn event_at(level: Level, message: String) -> Event {
-    return Event { meta: Metadata { level, target: "gen", file: "gen.wado", line: 1 }, message };
+    return Event {
+        meta: Metadata { level, target: "gen", file: "gen.wado", line: 1 },
+        message,
+    };
 }
 
 // `wado test` builds at `log.level=warn`, so an `info` or `debug` call stops at
@@ -39,7 +42,7 @@ test "KilnLogSink takes info and above" {
         for let level of [Level::Trace, Level::Debug, Level::Info, Level::Warn, Level::Error] as List<Level> {
             taken.push(Log::enabled(level));
         }
-    }
+    };
     assert taken == [false, false, true, true, true];
 }
 
@@ -50,7 +53,7 @@ test "KilnLogSink reports info as info, and a warning or an error as a warning" 
         Log::event(event_at(Level::Info, "generating"));
         warn("careful", { path: "a.schema" });
         error("broken");
-    }
+    };
     assert host.diagnostics.len() == 3;
     assert host.diagnostics[0].level matches { Info };
     assert host.diagnostics[0].message == "gen: generating";
