@@ -2,7 +2,6 @@ use { Span } from "./runtime/lex.wado";
 use { ParseError } from "./g4/parse_error.wado";
 use { escape_ident, to_snake_case, to_lower, to_pascal_case, literal_const_name } from "./ident.wado";
 use { HashMap } from "core:collections";
-use { GALE_SEED } from "./hash_seed.wado";
 use { dedup_append_arr, push_unique } from "./list_util.wado";
 
 /// OptionValue is the typed right-hand side of an ANTLR4 `key = value` option
@@ -298,7 +297,7 @@ pub fn check_references(grammar: &Grammar) -> Result<(), ParseError> {
     // Per-file duplicates are a parse error, so a duplicate here means two
     // merged files define the same rule; downstream name->index maps would
     // silently resolve it to one arbitrary definition.
-    let mut rule_names = HashMap::<String, ()>::with_seed(GALE_SEED);
+    let mut rule_names = HashMap::<String, ()>::new();
     for let pr of &grammar.parser_rules {
         if rule_names.contains_key(pr.name) {
             return Result::Err(
@@ -505,7 +504,7 @@ fn element_holds_epsilon_closure(elem: &Element, ctx: &LeftCornerCtx) -> bool {
 /// Least-fixed-point nullability over the lexer rules, so a closure over an
 /// empty-matching fragment is caught as on the parser side. A cycle is false.
 fn lexer_nullable_table(rules: &List<LexerRule>) -> HashMap<String, bool> {
-    let mut nullable = HashMap::<String, bool>::with_seed(GALE_SEED);
+    let mut nullable = HashMap::<String, bool>::new();
     loop {
         let mut changed = false;
         for let rule of rules {
@@ -589,7 +588,7 @@ struct LeftCornerCtx {
 }
 
 fn build_left_corner_ctx(parser_rules: &List<ParserRule>, scan: bool) -> LeftCornerCtx {
-    let mut index = HashMap::<String, i32>::with_seed(GALE_SEED);
+    let mut index = HashMap::<String, i32>::new();
     for let mut i = 0; i < parser_rules.len(); i += 1 {
         index[parser_rules[i].name] = i;
     }
@@ -1440,7 +1439,7 @@ fn check_all_reached(grammars: &List<Grammar>, master_ids: &List<i32>, order: &L
 /// Each grammar's index by declared name. An import resolves through this, so
 /// building it is where a name two inputs both claim is caught.
 fn index_by_name(grammars: &List<Grammar>) -> Result<HashMap<String, i32>, ParseError> {
-    let mut by_name = HashMap::<String, i32>::with_seed(GALE_SEED);
+    let mut by_name = HashMap::<String, i32>::new();
     for let mut i = 0; i < grammars.len(); i += 1 {
         if !by_name.try_insert(grammars[i].name, i) {
             return Result::Err(

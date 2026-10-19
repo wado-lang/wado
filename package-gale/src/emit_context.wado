@@ -20,7 +20,6 @@ use { PARSER_HANDLE } from "./ident.wado";
 use { push_unique } from "./list_util.wado";
 use { sets_overlap } from "./token_kinds.wado";
 use { HashMap, HashSet } from "core:collections";
-use { GALE_SEED } from "./hash_seed.wado";
 
 /// The parser's ATN predictor (`AtnPredictor`): its field, and the name of the
 /// `&mut` parameter a scan function takes it through.
@@ -67,7 +66,7 @@ pub struct EmitCursor {
     /// references, which it `note`s at its end for `CodeWriter::prune`.
     ref_frames: List<HashSet<String>> = [],
     /// Names referenced outside any function frame.
-    root_refs: HashSet<String> = HashSet::with_seed(GALE_SEED),
+    root_refs: HashSet<String> = HashSet::new(),
     /// Monotonic counter for scan-group label uniqueness (`sg_<n>` etc.), fresh
     /// per generation so labels do not depend on run order.
     scan_group_counter: i32 = 0,
@@ -77,7 +76,7 @@ pub struct EmitCursor {
     scan_queue: List<i32> = [],
     /// The emitted scan function covering one alternative, by
     /// `[rule index, surface alt index]`: one function serves the scan and the parse.
-    alt_scan_fns: HashMap<[i32, i32], String> = HashMap::with_seed(GALE_SEED),
+    alt_scan_fns: HashMap<[i32, i32], String> = HashMap::new(),
     /// `action_id`s codegen has handled (emitted, or already raised a loud
     /// diagnostic for). A post-emit sweep warns for any stamped parser action
     /// left unhandled, so an action on a not-yet-supported code path (nested
@@ -210,7 +209,7 @@ impl EmitCursor {
     /// Open the reference frame of a function about to be emitted: what
     /// `note_ref` records until `end_ref_frame` is that function's.
     pub fn begin_ref_frame(&mut self) {
-        self.ref_frames.push(HashSet::with_seed(GALE_SEED));
+        self.ref_frames.push(HashSet::new());
     }
 
     /// Close the innermost reference frame, handing back what it recorded.
@@ -221,7 +220,7 @@ impl EmitCursor {
     /// What was referenced outside every function frame.
     pub fn take_root_refs(&mut self) -> HashSet<String> {
         let refs = self.root_refs;
-        self.root_refs = HashSet::with_seed(GALE_SEED);
+        self.root_refs = HashSet::new();
         return refs;
     }
 

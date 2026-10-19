@@ -15,7 +15,6 @@ use { ParserRule, Element, peel_labels } from "./ir.wado";
 use { GrammarAnalysis } from "./grammar_analysis.wado";
 use { bits_ids, bits_set, bits_union_into, sets_overlap } from "./token_kinds.wado";
 use { HashMap } from "core:collections";
-use { GALE_SEED } from "./hash_seed.wado";
 
 /// FOLLOW set for a parser rule, in the classical ANTLR4 sense:
 /// the set of token kinds that may legally appear immediately after a
@@ -83,8 +82,8 @@ impl FollowEnv {
     /// the starting point for incremental wiring.
     pub fn empty() -> FollowEnv {
         return FollowEnv {
-            tail_greedy: HashMap::<String, List<i32>>::with_seed(GALE_SEED),
-            rule_follow: HashMap::<String, FollowSet>::with_seed(GALE_SEED),
+            tail_greedy: HashMap::new(),
+            rule_follow: HashMap::new(),
         };
     }
 
@@ -126,10 +125,10 @@ impl RuleFollow {
     /// answers conservatively, and `input_end` has no rule to be asked about.
     pub fn unknown() -> RuleFollow {
         return RuleFollow {
-            kinds: HashMap::with_seed(GALE_SEED),
+            kinds: HashMap::new(),
             exact: false,
             before_eof_token: [],
-            input_end: HashMap::with_seed(GALE_SEED),
+            input_end: HashMap::new(),
         };
     }
 
@@ -187,7 +186,7 @@ pub fn settle_rule_follow(parser_rules: &List<ParserRule>, analysis: &mut Gramma
         return RuleFollow::unknown();
     }
     let fenv = build(parser_rules, analysis, &parser_rules[0].name);
-    let mut kinds = HashMap::<String, List<i32>>::with_seed(GALE_SEED);
+    let mut kinds = HashMap::<String, List<i32>>::new();
     for let rule of parser_rules {
         kinds[rule.name] = fenv.rule_follow(&rule.name).kinds;
     }
@@ -251,7 +250,7 @@ fn element_has_open_first(e: &Element) -> bool {
 /// useful for sub-grammar analysis or tests that exercise propagation
 /// without an EOF anchor.
 pub fn build<S: AsStrSlice>(parser_rules: &List<ParserRule>, analysis: &mut GrammarAnalysis, start_rule: S) -> FollowEnv {
-    let mut tail_greedy = HashMap::<String, List<i32>>::with_seed(GALE_SEED);
+    let mut tail_greedy = HashMap::<String, List<i32>>::new();
     for let rule of parser_rules {
         let mut visiting: List<String> = [];
         let tg = analysis.tail_greedy_first_of_rule(&rule.name, &mut visiting);
@@ -337,7 +336,7 @@ fn compute_rule_follow<S: AsStrSlice>(
         }
     }
 
-    let mut result = HashMap::<String, FollowSet>::with_seed(GALE_SEED);
+    let mut result = HashMap::<String, FollowSet>::new();
     for let mut ri = 0; ri < parser_rules.len(); ri += 1 {
         result[parser_rules[ri].name] = FollowSet { kinds: bits_ids(&env[ri].bits), closed: env[ri].closed };
     }
@@ -497,7 +496,7 @@ pub fn rule_input_end(
             break;
         }
     }
-    let mut result = HashMap::<String, List<List<List<i32>>>>::with_seed(GALE_SEED);
+    let mut result = HashMap::<String, List<List<List<i32>>>>::new();
     for let mut ri = 0; ri < parser_rules.len(); ri += 1 {
         let mut by_len: List<List<List<i32>>> = [];
         for let n of 1..=INPUT_END_MAX_LEN {

@@ -52,10 +52,19 @@ pub fn namespace_member_alias(namespace: &str, member: &str) -> String {
     format!("{namespace}{NAMESPACE_MEMBER_SEP}{member}")
 }
 
+/// Split a `ns$member` alias into its namespace and member. The member is an
+/// identifier, so the last separator splits them, a minted `$ns` included.
+pub fn split_namespace_member(name: &str) -> Option<(&str, &str)> {
+    name.rsplit_once(NAMESPACE_MEMBER_SEP)
+}
+
 /// Read a `ns$member` alias back as the `ns::member` its author wrote, for a
 /// diagnostic. Any other name is already its own spelling.
 pub fn unalias_namespace_member(name: &str) -> String {
-    name.replacen(NAMESPACE_MEMBER_SEP, "::", 1)
+    match split_namespace_member(name) {
+        Some((namespace, member)) => format!("{namespace}::{member}"),
+        None => name.to_string(),
+    }
 }
 
 /// Separator between a local item's declared name and its disambiguating
@@ -746,6 +755,17 @@ pub const MODULES_INIT_FUNCTION: &str = "$initialize_modules";
 /// The global [`MODULES_INIT_FUNCTION`] sets once, so a second entry into the
 /// component re-runs no initializer.
 pub const MODULES_INIT_FLAG: &str = "$modules_initialized";
+
+/// The namespace a Kiln generator's request adapter imports `core:kiln` under,
+/// so what it names cannot meet a name the generator declares or imports.
+pub const KILN_ADAPTER_NAMESPACE: &str = "$kiln";
+
+/// `item` of `core:kiln`, as the request adapter spells it: the alias the
+/// namespace import registers, which a type name resolves by as any name does.
+#[must_use]
+pub fn kiln_adapter_path(item: &str) -> String {
+    namespace_member_alias(KILN_ADAPTER_NAMESPACE, item)
+}
 
 /// Prefix the const-object globalization pass stamps on the globals it hoists
 /// constant aggregates into (`$const_obj_0`, …). It both mints and rescans

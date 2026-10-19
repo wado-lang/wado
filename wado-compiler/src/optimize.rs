@@ -79,9 +79,9 @@ use container_sroa::scalarize_containers;
 use copy_prop::propagate_copies;
 use dae::eliminate_dead_arguments;
 use dce::{
-    Initializers, analyze_dce, filter_bytes_literals, filter_string_literals,
-    remove_unreachable_closure_functors, remove_unreachable_functions, remove_unreachable_globals,
-    remove_unreachable_types, unhoist_unobserved_globals,
+    Initializers, analyze_dce, drop_self_feeding_globals, filter_bytes_literals,
+    filter_string_literals, remove_unreachable_closure_functors, remove_unreachable_functions,
+    remove_unreachable_globals, remove_unreachable_types, unhoist_unobserved_globals,
 };
 use drve::eliminate_dead_return_values;
 use field_scalarize::scalarize_hot_fields;
@@ -415,6 +415,9 @@ fn run_dce(
         if unhoist_unobserved_globals(project, descriptors, &summaries) {
             // A rewritten body only lost work, so its real summary shrank, and
             // the stale table refuses deletions nothing has a reason to refuse.
+            summaries = summarize(project, exec).0;
+        }
+        if drop_self_feeding_globals(project, &summaries) {
             summaries = summarize(project, exec).0;
         }
         let analysis = analyze_dce(project, descriptors, exec);

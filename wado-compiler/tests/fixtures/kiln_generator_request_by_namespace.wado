@@ -1,0 +1,11 @@
+// The request adapter finds `core:kiln`'s `Request` through a namespace import.
+// The primary path is `sub/kiln/value.schema`.
+
+use { total } from "./sub/kiln/value.schema"
+    with {
+        generator: { module: "./sub/kiln/namespaced_request_generator.wado" },
+    };
+
+test {
+    assert total() == 21;
+}

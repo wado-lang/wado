@@ -80,16 +80,6 @@ impl FunctionRef {
         self.module_source.to_path()
     }
 
-    /// Get the fully qualified function name including module path.
-    pub fn full_name(&self) -> String {
-        if let Some(info) = &self.method_info {
-            info.to_mangled_name()
-        } else {
-            let path = self.module_source.to_path();
-            format!("{}/{}", path.join("/"), self.name)
-        }
-    }
-
     pub fn intrinsic(&self) -> Option<&str> {
         DeclarationLookup::from(self).intrinsic()
     }

@@ -6,9 +6,16 @@
 /// each generator synthesizes its own world (see
 /// `wado-compiler::synthesize_lib_world_info`) rather than conforming to one
 /// fixed `generate` signature here. This world exists to carry the shared
-/// `kiln-host` import and to anchor the `core:kiln/generator` identity that
+/// imports and to anchor the `core:kiln/generator` identity that
 /// import-refusal, provider selection, and generator detection key on.
+/// 
+/// Of `wasi:random` it imports the interfaces WASI lets a host answer
+/// deterministically: `insecure-seed`, which `HashMap::new()` reads, and
+/// `insecure`. A generator is a function of its invocation, so it cannot have
+/// `random`, which WASI says a deterministic environment must omit.
 #[cm("core:kiln/generator@0.1.0")]
 pub world Generator {
     import KilnHost;
+    import Insecure;
+    import InsecureSeed;
 }

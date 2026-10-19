@@ -1,0 +1,11 @@
+// A generator may build a map under the default seed, since the Kiln host
+// provides `wasi:random/insecure-seed`. The schema is two bytes.
+
+use { size } from "./sub/kiln/value.schema"
+    with {
+        generator: { module: "./sub/kiln/default_seed_map_generator.wado" },
+    };
+
+test {
+    assert size() == 2;
+}

@@ -12,7 +12,7 @@ use crate::nir_arena::{
     BlockId, BlockNode, Body, ExprId, ExprKind, ExprNode, LocalSet, NodeRef, Operand, PatId,
     PatKind, StmtId, StmtKind, StmtNode,
 };
-use crate::nir_package::NirPackage;
+use crate::nir_package::{AmbientStream, NirPackage};
 use crate::nir_value_graph::{ValueId, ValueKind};
 use crate::parallel::Executor;
 use crate::tir::{ResolvedType, TypeId, TypeTable};
@@ -97,6 +97,9 @@ pub enum CtfeBuiltin {
     Ieee754Comparison(NirBinaryOp),
     /// `heap_base`, carrying the address it is for this package.
     HeapBase(i32),
+    /// `ambient_std{out,err}_available`, carrying what
+    /// [`NirPackage::ambient_stdio`] answers for its stream.
+    AmbientStdio(bool),
 }
 
 impl CtfeBuiltin {
@@ -116,7 +119,8 @@ impl CtfeBuiltin {
             | Self::I32AsChar
             | Self::FloatIsNan
             | Self::Ieee754Comparison(_)
-            | Self::HeapBase(_) => false,
+            | Self::HeapBase(_)
+            | Self::AmbientStdio(_) => false,
         }
     }
 }
@@ -299,6 +303,9 @@ pub(crate) fn build_ctfe_builtin_map(project: &NirPackage) -> CtfeBuiltinMap {
             Some("i32_as_char") => CtfeBuiltin::I32AsChar,
             Some("f32_is_nan" | "f64_is_nan") => CtfeBuiltin::FloatIsNan,
             Some("heap_base") => CtfeBuiltin::HeapBase(project.heap_base()),
+            Some(name) if let Some(stream) = AmbientStream::of_availability_builtin(name) => {
+                CtfeBuiltin::AmbientStdio(project.ambient_stdio().writes(stream))
+            }
             Some("f32_ieee754_eq" | "f64_ieee754_eq") => {
                 CtfeBuiltin::Ieee754Comparison(NirBinaryOp::Eq)
             }

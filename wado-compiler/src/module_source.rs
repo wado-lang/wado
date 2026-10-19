@@ -607,6 +607,16 @@ impl CmNamespace {
         let (prefix, rest) = specifier.split_once(':')?;
         Some((Self::from_prefix(prefix)?, rest))
     }
+
+    /// The namespace and package a CM source names: `"wasi:filesystem/types@0.3.0"`
+    /// → `(Wasi, "filesystem")`. A package is unique only inside its namespace,
+    /// so the two answer together. `None` outside the bundled namespaces.
+    #[must_use]
+    pub fn split_package(source: &str) -> Option<(Self, &str)> {
+        let (namespace, rest) = Self::split_specifier(source)?;
+        let package_end = rest.find(['/', '@']).unwrap_or(rest.len());
+        Some((namespace, &rest[..package_end]))
+    }
 }
 
 impl fmt::Display for CmNamespace {
@@ -1215,6 +1225,17 @@ mod tests {
         assert!(!is_bundled_specifier("./libm.wat"));
         assert!(!is_bundled_specifier("dep:../greet/src/lib.wado"));
         assert!(!is_bundled_specifier("https://example.com/x.wasm"));
+    }
+
+    #[test]
+    fn a_cm_package_comes_from_the_source_in_every_bundled_namespace() {
+        assert_eq!(
+            CmNamespace::split_package("wasi:filesystem/types@0.3.0"),
+            Some((CmNamespace::Wasi, "filesystem"))
+        );
+        // `core:` is not a `CmNamespace`; the kiln lookups own those.
+        assert_eq!(CmNamespace::split_package("core:kiln/types@0.1.0"), None);
+        assert_eq!(CmNamespace::split_package("my:pkg/iface"), None);
     }
 
     #[test]

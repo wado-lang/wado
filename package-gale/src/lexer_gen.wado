@@ -44,7 +44,6 @@ use {
     LEXER_SET_MODE_FIELD,
 } from "./action_translate.wado";
 use { HashMap, HashSet } from "core:collections";
-use { GALE_SEED } from "./hash_seed.wado";
 use icu from "core:icu";
 
 /// A grammar literal rendered the way ANTLR4's vocabulary shows it: the source
@@ -4945,7 +4944,7 @@ pub fn compute_elem_first_chars(
     ci: bool,
     grammar_opts: &List<GrammarOption>,
 ) -> [bool, bool] {
-    let mut seen = HashSet::<i64>::with_seed(GALE_SEED);
+    let mut seen = HashSet::<i64>::new();
     let mut visiting: List<String> = [];
     return elem_first_chars_dedup(body, all_rules, out, &mut seen, ci, grammar_opts, &mut visiting);
 }
@@ -5150,7 +5149,7 @@ struct DispatchGroup {
 /// The arms of the emitted first-char dispatch: a partition of the character
 /// space at every first-set boundary, one arm per distinct call list.
 fn build_dispatch_groups(calls: &List<TryCall>) -> List<DispatchGroup> {
-    let mut cuts = HashSet::<i32>::with_seed(GALE_SEED);
+    let mut cuts = HashSet::<i32>::new();
     for let call of calls {
         if call.is_wildcard {
             continue;
@@ -5170,7 +5169,7 @@ fn build_dispatch_groups(calls: &List<TryCall>) -> List<DispatchGroup> {
     }
 
     let mut groups: List<DispatchGroup> = [];
-    let mut group_by_calls = HashMap::<List<i32>, i32>::with_seed(GALE_SEED);
+    let mut group_by_calls = HashMap::<List<i32>, i32>::new();
     let mut claimed_scalars = 0;
     for let mut i = 0; i + 1 < points.len(); i += 1 {
         let mut spans: List<CharRange> = [];
@@ -5252,7 +5251,7 @@ fn build_mode_try_calls(
             let text: List<char> = lit.text.chars().collect();
             let c = text[0];
             let mut fc: List<[char, char]> = [];
-            let mut fc_seen = HashSet::<i64>::with_seed(GALE_SEED);
+            let mut fc_seen = HashSet::<i64>::new();
             // Parser literals inherit grammar-level caseInsensitive.
             add_folded_range(&mut fc, &mut fc_seen, c, c, grammar_ci);
             let lit_extras = literal_command_extras(
@@ -5381,7 +5380,7 @@ fn gen_second_char_dispatch(
 /// A partition of the second char among `members`, each arm in grammar order.
 /// The `_` arm holds the calls `second_char_admits` places in every arm.
 fn second_char_arms(calls: &List<TryCall>, members: &List<i32>) -> List<DispatchGroup> {
-    let mut cuts = HashSet::<i32>::with_seed(GALE_SEED);
+    let mut cuts = HashSet::<i32>::new();
     for let m of members {
         if let Some(s) = &calls[*m].second_chars && !s.may_end {
             for let r of &s.ranges {
@@ -5393,7 +5392,7 @@ fn second_char_arms(calls: &List<TryCall>, members: &List<i32>) -> List<Dispatch
     let mut points: List<i32> = cuts.into_iter().collect();
     points.sort();
     let mut arms: List<DispatchGroup> = [];
-    let mut arm_by_calls = HashMap::<List<i32>, i32>::with_seed(GALE_SEED);
+    let mut arm_by_calls = HashMap::<List<i32>, i32>::new();
     let mut claimed_scalars = 0;
     for let mut i = 0; i + 1 < points.len(); i += 1 {
         let mut spans: List<CharRange> = [];

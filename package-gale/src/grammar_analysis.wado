@@ -29,7 +29,6 @@ use {
     bits_union_into,
 } from "./token_kinds.wado";
 use { HashMap } from "core:collections";
-use { GALE_SEED } from "./hash_seed.wado";
 
 /// The structural queries over a grammar's parser rules, with their memo
 /// caches and the token-kind table their answers are spelled in.
@@ -90,8 +89,8 @@ fn predicate_fn_owners(parser_rules: &List<ParserRule>) -> HashMap<i32, i32> {
             push_alt_actions(alt, &mut actions);
         }
     }
-    let mut by_text = HashMap::<String, i32>::with_seed(GALE_SEED);
-    let mut owners = HashMap::<i32, i32>::with_seed(GALE_SEED);
+    let mut by_text = HashMap::<String, i32>::new();
+    let mut owners = HashMap::<i32, i32>::new();
     for let a of &actions {
         if a.kind matches { Predicate } {
             let id = a.source.action_id;
@@ -111,8 +110,8 @@ impl GrammarAnalysis {
         token_kinds: TokenKinds = TokenKinds::empty(),
         vocab_names: List<String> = [],
     ) -> GrammarAnalysis {
-        let mut rule_index = HashMap::<String, i32>::with_seed(GALE_SEED);
-        let mut snake_index = HashMap::<String, i32>::with_seed(GALE_SEED);
+        let mut rule_index = HashMap::<String, i32>::new();
+        let mut snake_index = HashMap::<String, i32>::new();
         for let mut i = 0; i < parser_rules.len(); i += 1 {
             rule_index[parser_rules[i].name] = i;
             snake_index[parser_rules[i].snake_name] = i;
@@ -138,9 +137,9 @@ impl GrammarAnalysis {
             scannable_cache: none_cache(rule_count),
             open_end_cache: none_cache(rule_count),
             tail_greedy_cache: none_cache(rule_count),
-            first2_cache: HashMap::with_seed(GALE_SEED),
+            first2_cache: HashMap::new(),
             single_alt_owner: build_single_alt_owner_map(parser_rules),
-            one_token_rules: HashMap::with_seed(GALE_SEED),
+            one_token_rules: HashMap::new(),
             predicate_fn_owners: predicate_fn_owners(parser_rules),
         };
         for let rule of parser_rules {
@@ -1590,7 +1589,7 @@ impl GrammarAnalysis {
 /// Build a map from single-alt group type name to the first rule that contains it.
 /// This ensures parser gen uses the same type names as the type gen for shared groups.
 fn build_single_alt_owner_map(parser_rules: &List<ParserRule>) -> HashMap<String, String> {
-    let mut map = HashMap::<String, String>::with_seed(GALE_SEED);
+    let mut map = HashMap::<String, String>::new();
     for let rule of parser_rules {
         for let alt of &rule.alternatives {
             scan_elements_for_single_alt_groups(&alt.elements, &rule.name, &mut map);

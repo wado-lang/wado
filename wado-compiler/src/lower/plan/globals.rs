@@ -11,7 +11,7 @@ use crate::flat_package::FlatPackage;
 use crate::logger::{Bail, ErrorSink};
 use crate::module_source::ModuleSource;
 use crate::name::{
-    MODULE_INIT_FUNCTION, MODULES_INIT_FLAG, MODULES_INIT_FUNCTION, global_init_target,
+    FunctionId, MODULE_INIT_FUNCTION, MODULES_INIT_FLAG, MODULES_INIT_FUNCTION, global_init_target,
 };
 use crate::synthesis::common::builtin_call;
 use crate::tir::{
@@ -162,13 +162,10 @@ fn set_global(module_source: ModuleSource, name: String, value: TirExpr, span: S
 }
 
 /// The globals a function body reads or writes, and what it calls, in one walk.
-///
-/// Callees are keyed by [`FunctionRef::full_name`], the same key
-/// [`global_refs_by_function`] maps.
 #[derive(Default)]
 struct BodyRefs {
     globals: IndexSet<GlobalKey>,
-    callees: IndexSet<String>,
+    callees: IndexSet<FunctionId>,
 }
 
 impl TirRefVisitor for BodyRefs {
@@ -188,7 +185,7 @@ impl TirRefVisitor for BodyRefs {
                 self.globals.insert((module_source.clone(), name.clone()));
             }
             TirExprKind::Call { func, .. } => {
-                self.callees.insert(func.full_name());
+                self.callees.insert(func.function_id());
             }
             // A function named as a value reaches a call this walk cannot see —
             // `apply(reader)` calls `reader` through a parameter, and a closure
@@ -199,26 +196,12 @@ impl TirRefVisitor for BodyRefs {
                 name,
                 ..
             } => {
-                self.callees.insert(function_key(module_source, name));
+                self.callees.insert(FunctionId::free(module_source, name));
             }
             _ => {}
         }
         self.walk_expr(expr);
     }
-}
-
-/// The key [`global_refs_by_function`] maps a function under: the same string
-/// [`FunctionRef::full_name`] produces for a free function, so a call and a
-/// bare mention of the same function land on one entry.
-fn function_key(module_source: &ModuleSource, name: &str) -> String {
-    FunctionRef {
-        module_source: module_source.clone(),
-        name: name.to_string(),
-        template: None,
-        monomorph_info: None,
-        method_info: None,
-    }
-    .full_name()
 }
 
 /// Every global each function reads or writes, closed over the call graph.
@@ -230,9 +213,9 @@ fn function_key(module_source: &ModuleSource, name: &str) -> String {
 /// each member's own references and terminates.
 fn global_refs_by_function(
     functions: &[Rc<RefCell<TirFunction>>],
-) -> IndexMap<String, IndexSet<GlobalKey>> {
-    let mut refs: IndexMap<String, IndexSet<GlobalKey>> = IndexMap::default();
-    let mut callees: IndexMap<String, IndexSet<String>> = IndexMap::default();
+) -> IndexMap<FunctionId, IndexSet<GlobalKey>> {
+    let mut refs: IndexMap<FunctionId, IndexSet<GlobalKey>> = IndexMap::default();
+    let mut callees: IndexMap<FunctionId, IndexSet<FunctionId>> = IndexMap::default();
     for func_rc in functions {
         let func = func_rc.borrow();
         let Some(body) = func.body.as_ref() else {
@@ -240,13 +223,13 @@ fn global_refs_by_function(
         };
         let mut scan = BodyRefs::default();
         scan.visit_block(body);
-        let key = FunctionRef::from_resolved(&func, func.module_source.clone()).full_name();
+        let key = FunctionId::free(&func.module_source, &func.name);
         refs.entry(key.clone()).or_default().extend(scan.globals);
         callees.entry(key).or_default().extend(scan.callees);
     }
 
     loop {
-        let mut grown: Vec<(String, IndexSet<GlobalKey>)> = Vec::new();
+        let mut grown: Vec<(FunctionId, IndexSet<GlobalKey>)> = Vec::new();
         for (name, called) in &callees {
             let known = &refs[name];
             let fresh: IndexSet<GlobalKey> = called
@@ -278,7 +261,7 @@ fn global_refs_by_function(
 /// error even where no execution would close it.
 fn init_dependencies(
     inits: &[LazyInit],
-    refs_by_function: &IndexMap<String, IndexSet<GlobalKey>>,
+    refs_by_function: &IndexMap<FunctionId, IndexSet<GlobalKey>>,
 ) -> Vec<IndexSet<usize>> {
     let key_to_idx: IndexMap<GlobalKey, usize> = inits
         .iter()
