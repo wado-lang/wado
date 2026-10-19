@@ -1497,6 +1497,21 @@ test "a loop ending its rule declines an iteration its caller's token would stra
     assert got == "{ case a: x; default: y; } => (s { (cs (c case a : (sl (st (e x) ;)))) default : (st (e y) ;) })\n{ case a: default; } => (s { (cs (c case a : (sl (st (e default) ;)))) })\n{ case a: x default: y } => (s { (cs (c case a : (sl (st (e x))))) default : (st (e y)) })\n{ case a: default } => (s { (cs (c case a : (sl (st (e default))))) })\n";
 }
 
+global LOOP_BODY_TAIL_G4: String = "
+grammar T;
+top : s EOF ;
+s : 'a' (',' x)* 'k' ;
+x : 'b' 'k'? ;
+WS : ' ' -> skip ;
+";
+
+test "a call ending a loop body hears what follows the loop, not its rule's end" {
+    // SQLite's `result_column ( ',' result_column )* ( K_FROM … )?`: the body's
+    // last call continues into another iteration or into the rest of the rule.
+    let got = parses(LOOP_BODY_TAIL_G4, "top", ["a , b k", "a , b , b k", "a , b k k"]);
+    assert got == "a , b k => (top (s a , (x b) k))\na , b , b k => (top (s a , (x b) , (x b) k))\na , b k k => (top (s a , (x b k) k))\n";
+}
+
 global TAIL_TOKEN_OPTIONAL_G4: String = "
 grammar T;
 m : base name ';' ;
