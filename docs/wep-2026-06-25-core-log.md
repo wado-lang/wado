@@ -274,6 +274,12 @@ discarding it when the test passes, which is exactly the attribution a
 `CaptureSink`-under-test default was reaching for. `CaptureSink` stays what it
 should be — the sink a test installs to assert on events.
 
+A Kiln generator is the one entry point that gets a shim. It imports no stderr,
+so the default sink drops every event, and the compiler installs `KilnLogSink`
+around `generate`'s body to send them to the host as diagnostics
+([WEP: Kiln](./wep-2026-04-12-kiln.md#the-generator-contract)). The sink lives in
+`core:kiln`, so the policy stays in the library; the compiler only names it.
+
 `Info` rather than `Warn` for the default threshold: a program nobody configured
 should say what it is doing, not everything it is thinking, and a `debug`/`info`
 added while debugging that prints nothing is the papercut the default exists to

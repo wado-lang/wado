@@ -2,10 +2,13 @@
 //! must import no WASI interface the world does not, the sandbox guarantee
 //! (WEP 2026-04-12) resting on the generator being deterministic.
 //! `run_generator`'s runtime link refuses any other `wasi:*` CM import as depth.
+use std::fmt::Write;
+
 use crate::ast::Visibility;
 use crate::ast::{
-    AstId, Expr, GenericType, IdentExpr, Item, LetStmt, Module, NamedType, Param, Pattern,
-    SelfKind, Stmt, StrLit, StructLiteralExpr, StructLiteralField, Type, UseDecl, UseItem,
+    AstId, Block, EffectHandlerBinding, Expr, ExprStmt, GenericType, IdentExpr, Item, LetStmt,
+    Module, NamedType, Param, Pattern, SelfKind, Stmt, StrLit, StructLiteralExpr,
+    StructLiteralField, Type, UnaryExpr, UnaryOp, UseDecl, UseItem, WithHandlerExpr,
 };
 use crate::compiler_host::{Code, CompilerHost, Diagnostic, DiagnosticSpan, Severity};
 use crate::component_model::{CmInterfaceRegistry, SourceInterfaceBatch};
@@ -109,6 +112,8 @@ fn provided_wasi_interfaces(world: &WorldInfo) -> Vec<(&str, &str)> {
 /// `options`, and the body opens with `let req = Request { primary, … };`,
 /// which same-scope shadowing keeps looking like the author's `req`. A
 /// `NoOptions` generator omits `options`, an empty record having no CM form.
+/// The author's body then runs under `core:kiln`'s `KilnLogSink`, since a
+/// generator has no stderr for `core:log`'s default sink.
 pub fn inject_kiln_request_adapter(
     target_world: Option<&str>,
     entry_module: &ModuleSource,
@@ -226,17 +231,7 @@ pub fn inject_kiln_request_adapter(
             name: "options".to_string(),
             name_id: module.alloc_ast_id(),
             name_span: span,
-            value: Expr::StructLiteral(Box::new(StructLiteralExpr {
-                id: module.alloc_ast_id(),
-                name: Some("NoOptions".to_string()),
-                name_id: Some(module.alloc_ast_id()),
-                name_span: Some(span),
-                type_args: Vec::new(),
-                fields: Vec::new(),
-                spreads: Vec::new(),
-                has_trailing_comma: false,
-                span,
-            })),
+            value: empty_struct_literal(module, "NoOptions", span),
             is_shorthand: false,
             span,
         }
@@ -268,9 +263,35 @@ pub fn inject_kiln_request_adapter(
         span,
     });
 
-    // The author imported `Request`; the synthesis also needs `InputFile`
-    // (and `NoOptions` for a no-options generator).
-    let mut needed: Vec<&str> = vec!["InputFile"];
+    // `with &mut KilnLogSink {} do { <the author's body> }`, the body moved in
+    // below once the function is borrowed.
+    let sink = Expr::Unary(Box::new(UnaryExpr {
+        id: module.alloc_ast_id(),
+        op: UnaryOp::MutRef,
+        expr: empty_struct_literal(module, "KilnLogSink", span),
+        span,
+    }));
+    let mut with_sink = WithHandlerExpr {
+        id: module.alloc_ast_id(),
+        handlers: vec![EffectHandlerBinding {
+            id: module.alloc_ast_id(),
+            effect: None,
+            handler: sink,
+            span,
+        }],
+        body: Block {
+            id: module.alloc_ast_id(),
+            stmts: Vec::new(),
+            span,
+        },
+        do_span: span,
+        span,
+    };
+    let with_stmt_id = module.alloc_ast_id();
+
+    // The author imported `Request`; the synthesis also needs `InputFile`,
+    // `KilnLogSink`, and `NoOptions` for a no-options generator.
+    let mut needed: Vec<&str> = vec!["InputFile", "KilnLogSink"];
     if !has_options {
         needed.push("NoOptions");
     }
@@ -283,9 +304,33 @@ pub fn inject_kiln_request_adapter(
         }
         func.params = params;
         if let Some(body) = func.body.as_mut() {
-            body.stmts.insert(0, let_stmt);
+            with_sink.body.stmts = std::mem::take(&mut body.stmts);
+            with_sink.body.span = body.span;
+            body.stmts = vec![
+                let_stmt,
+                Stmt::Expr(ExprStmt {
+                    id: with_stmt_id,
+                    expr: Expr::WithHandler(Box::new(with_sink)),
+                    span,
+                }),
+            ];
         }
     }
+}
+
+/// `name {}`, for a struct with no fields.
+fn empty_struct_literal(module: &mut Module, name: &str, span: Span) -> Expr {
+    Expr::StructLiteral(Box::new(StructLiteralExpr {
+        id: module.alloc_ast_id(),
+        name: Some(name.to_string()),
+        name_id: Some(module.alloc_ast_id()),
+        name_span: Some(span),
+        type_args: Vec::new(),
+        fields: Vec::new(),
+        spreads: Vec::new(),
+        has_trailing_comma: false,
+        span,
+    }))
 }
 
 /// The options binding implied by a `generate` first-parameter type.
@@ -406,8 +451,10 @@ fn check_module<H: CompilerHost>(
     };
     let provided = provided_wasi
         .iter()
-        .map(|(package, name)| format!("`{name}` from `{WASI_SCHEME}{package}`, "))
-        .collect::<String>();
+        .fold(String::new(), |mut out, (package, name)| {
+            let _ = write!(out, "`{name}` from `{WASI_SCHEME}{package}`, ");
+            out
+        });
     let filename = this.to_string();
     let mut count = 0;
     for item in &module.items {

@@ -12,6 +12,7 @@
 
 use { Deserialize } from "core:serde";
 use { Error as CoreError } from "core:prelude/traits.wado";
+use { Log, Event, Level, write_fields_text } from "core:log";
 
 pub use { KilnHost, Diagnostic, DiagnosticLevel, SourceSpan } from "core:kiln/kiln_host.wado";
 
@@ -31,6 +32,45 @@ impl Display for Error {
 }
 
 impl CoreError for Error {
+}
+
+/// The `core:log` handler a generator runs under. A generator has no stderr
+/// for the default sink to write to, so the compiler installs this one around
+/// `generate`'s body. An event at `Info` or above becomes a diagnostic, and
+/// `Debug` and `Trace` are dropped.
+pub struct KilnLogSink {
+}
+
+impl Log for KilnLogSink {
+    fn enabled(&self, level: Level) -> bool {
+        resume diagnostic_level(level) matches { Some(_) };
+    }
+
+    fn event(&mut self, event: Event) {
+        if let Some(level) = diagnostic_level(event.meta.level) {
+            let mut message = `${event.meta.target}: ${event.message}`;
+            write_fields_text(&event.fields, &mut message);
+            report(Diagnostic { level, span: null, message });
+        }
+        resume ();
+    }
+}
+
+/// An error event warns rather than errs: a generator fails the build by
+/// returning an `Error`, and a log line only reports.
+fn diagnostic_level(level: Level) -> Option<DiagnosticLevel> {
+    return match level {
+        Level::Error | Warn => Option::Some(DiagnosticLevel::Warning),
+        Info => Option::Some(DiagnosticLevel::Info),
+        Debug | Trace => null,
+    };
+}
+
+/// Ambient, as the default sink's stderr write is, so installing the sink
+/// demands nothing of `generate`.
+#[ambient]
+fn report(diagnostic: Diagnostic) {
+    KilnHost::emit_diagnostic(diagnostic);
 }
 
 /// How many bytes each `read` asks for while draining an input. Large enough

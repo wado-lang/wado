@@ -621,6 +621,20 @@ KilnHost::emit_diagnostic(KilnDiagnostic {
 });
 ```
 
+A `core:log` event becomes a diagnostic too. The compiler installs
+`KilnLogSink` around `generate`'s body, which maps each event it reaches by its
+level:
+
+| Event level      | Diagnostic level |
+| ---------------- | ---------------- |
+| `Error`, `Warn`  | `warning`        |
+| `Info`           | `info`           |
+| `Debug`, `Trace` | none: dropped    |
+
+The message is the event's target and message, then its fields as `key=value`.
+An `Error` event does not fail the build. A generator fails only by returning an
+`Error`.
+
 ### The Probe
 
 A generator may export `probe` beside `generate`. It reports how many leading
