@@ -135,7 +135,7 @@ impl<affine T> Places<T> {
             self.held.push(Option::Some(value));
             return self.held.len() - 1;
         };
-        self.replace(at, Option::Some(value));
+        self.held[at] = Option::Some(value);
         return at;
     }
 
@@ -155,16 +155,8 @@ impl<affine T> Places<T> {
 
     /// Drops the value at `at`.
     fn remove(&mut self, at: i32) {
-        self.replace(at, null);
+        self.held[at] = null;
         self.vacant.push(at);
-    }
-
-    fn replace(&mut self, at: i32, value: Option<T>) {
-        // A store into an element drops nothing it replaces (a known gap of
-        // WEP: Resource Ownership), so the old value is popped, which does.
-        self.held.push(value);
-        self.held.swap(at, self.held.len() - 1);
-        self.held.pop();
     }
 }
 
