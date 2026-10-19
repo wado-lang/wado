@@ -851,11 +851,7 @@ fn drop_projected(
 }
 
 /// The resource-carrying fields of `scrutinee`, each projected.
-fn affine_fields(
-    scrutinee: &TirExpr,
-    fields: &[(u32, String, TypeId)],
-    cx: &Cx,
-) -> Vec<TirExpr> {
+fn affine_fields(scrutinee: &TirExpr, fields: &[(u32, String, TypeId)], cx: &Cx) -> Vec<TirExpr> {
     fields
         .iter()
         .filter(|(_, _, field_ty)| cx.carries_resource(*field_ty))
@@ -906,7 +902,7 @@ fn drop_list_slots(list: TirExpr, slots_ty: TypeId, elem: TypeId, cx: &mut Cx) -
         ],
         elem,
     );
-    let past_end = binary(
+    let in_range = binary(
         TirBinaryOp::Lt,
         index_ref(),
         local_ref(len, &len_name, TypeTable::I32),
@@ -914,7 +910,7 @@ fn drop_list_slots(list: TirExpr, slots_ty: TypeId, elem: TypeId, cx: &mut Cx) -
     );
     let mut body = vec![
         if_stmt(
-            not_expr(past_end, span),
+            not_expr(in_range, span),
             TirBlock::new(vec![common::break_stmt()], span),
             None,
         ),
@@ -931,8 +927,18 @@ fn drop_list_slots(list: TirExpr, slots_ty: TypeId, elem: TypeId, cx: &mut Cx) -
         ),
     )));
     vec![
-        let_stmt(&slots_name, slots, slots_ty, field(SeqField::Backing, slots_ty)),
-        let_stmt(&len_name, len, TypeTable::I32, field(SeqField::Len, TypeTable::I32)),
+        let_stmt(
+            &slots_name,
+            slots,
+            slots_ty,
+            field(SeqField::Backing, slots_ty),
+        ),
+        let_stmt(
+            &len_name,
+            len,
+            TypeTable::I32,
+            field(SeqField::Len, TypeTable::I32),
+        ),
         common::let_mut_stmt(&index_name, index, TypeTable::I32, common::i32_const(0)),
         common::loop_stmt(TirBlock::new(body, span)),
     ]

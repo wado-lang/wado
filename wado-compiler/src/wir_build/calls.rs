@@ -836,8 +836,7 @@ impl FunctionTranslator<'_, '_> {
                 })
             }
 
-            // A reference to a resource is its handle, not a GC reference
-            // (divergence D6 in the reference-representation WEP).
+            // A reference lowered to the scalar it reads compares by value.
             "ref_eq" => Some(
                 match self
                     .ctx
