@@ -831,6 +831,13 @@ test "for-of moves affine elements out and drops the ones a break skips" {
     }
     assert seen == 3;
     assert LIST_TEST_DROPS == 3;
+
+    let more: List<ListTestToken> = [ListTestToken { id: 4 }, ListTestToken { id: 5 }];
+    for let t of more {
+        seen += t.id;
+    }
+    assert seen == 12;
+    assert LIST_TEST_DROPS == 5;
 }
 
 fn first_through_as_slice<S: AsSlice<Elem = i32>>(s: &S) -> i32 {
