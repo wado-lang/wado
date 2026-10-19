@@ -1327,6 +1327,51 @@ test {
 }
 ```
 
+### Drop
+
+An affine value that has not moved is dropped exactly once, at the first of
+these:
+
+- Its scope ends. The locals of a scope drop in reverse declaration order, on
+  every path out of it.
+- It is a temporary, or a value its statement discards (`make();`,
+  `let _ = make();`), and its statement ends.
+- An assignment replaces it: `x = value` drops what `x` held, and a store
+  into a field or an element drops what the slot held.
+- What holds it drops: a container drops each value it still holds, a struct
+  its fields in declaration order.
+
+A move suppresses the drop, since the moved-from place no longer holds the
+value.
+
+What a drop does is the type's `Drop`, a prelude trait:
+
+```text
+pub affine trait Drop with () {
+    fn drop(self);
+}
+```
+
+- A type with an impl runs its `drop`. The body may move fields out of `self`,
+  and the fields left at its end are dropped one by one. `self` is not dropped
+  again as a whole.
+- A type without an impl drops its fields one by one, in declaration order.
+- A resource's `fn drop(self)` is its `Drop` impl, which ends the handle in the
+  host.
+- Only an affine type implements `Drop`, since a copyable type would run it for
+  every copy. A type that implements it may not be partially moved, nor be the
+  [`..base`](./spec-literals.md#base-spread) of a struct literal.
+- `builtin::drop(value)` drops any value where it is called. `x.drop()` calls
+  the type's impl, and a generic body drops an `affine T` the way `T` drops.
+
+A drop's effects are benign: a function declares no effect for a drop it
+performs, written or implicit. A `drop` that performs an effect other than its
+own resource's names it with [`#[benign(E)]`](./spec-attributes.md#benigne-).
+
+What a use of a value after its move or its drop does, reached through a
+reference, is [unspecified](./spec-overview.md#behavior-classes): it may trap,
+or read what the value held before.
+
 Rationale: [WEP: Affine Types](./wep-2026-10-17-affine-types.md).
 
 ## Generic Type Inference

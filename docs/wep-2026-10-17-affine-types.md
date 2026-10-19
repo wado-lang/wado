@@ -271,10 +271,12 @@ move check skips every module the user did not write.
 
 ### An affine value is an object, and a place is a nullable reference to it
 
-At run time an affine value is a mutable GC object. A struct is its object, as
-today. A resource is a box holding its handle. A variant or a tuple that is
-affine is wrapped in a box. A place that holds an affine value, whether a
-local, a field or an element, is a nullable reference to the object.
+At run time an affine value is a mutable GC object. A struct or a tuple is its
+object, as a struct is today. A resource is a box holding its handle. A variant
+is immutable, so a field, a tuple element, a payload or an element holding an
+affine variant holds it in a box, which is the slot's object. A place that holds
+an affine value, whether a local, a field or an element, is a nullable reference
+to the object.
 
 Five operations act on places and objects:
 
@@ -327,9 +329,9 @@ What follows for references:
 - A `borrow` an export receives arrives in a box that synthesis zeroes when
   the export returns. A reference that escaped the export reaches a zeroed
   box.
-- `&mut` of an affine variant field or element is the variant's box, a real
-  place. `opt.take()` on `h.slot` or on `list[i]` writes into it. For a
-  copyable variant the rule of
+- `&mut` of a field, a tuple element, a payload or an element holding an affine
+  variant is the slot's box, a real place. `opt.take()` on `h.slot` or on
+  `list[i]` writes into it. For a copyable variant the rule of
   [Mutable References to Fields and Elements](./spec-memory.md#mutable-references-to-fields-and-elements)
   is unchanged.
 - An affine value is `Ref` and `RefMut` in every instantiation where it is
@@ -771,12 +773,12 @@ declares the destructor's effects is withdrawn: a drop's effects are benign.
   Fixtures: a resource bound in a closure body, one under `make().a`, one in a
   `Node<T>` and an unmoved `Stream` are dropped; `*r = value` through `&mut R`;
   `x = value` seen through a reference taken before it.
-- [ ] `builtin::replace`, `Option::take` and `Option::replace`, the storage
+- [x] `builtin::replace`, `Option::take` and `Option::replace`, the storage
   builtins moving for an affine element, the methods of `List` that read no
   element by value moved into `impl<affine T> List<T>` with `is_empty` and
-  `iter_ref` beside them, and `&mut` of an affine variant element and field as
-  a place, the variant wrapped in a box. `opt.take()` on
-  `list[i]` is the fixture.
+  `iter_ref` beside them, and `&mut` of a slot holding an affine variant as a
+  place, the slot holding it in a box. Fixtures: `opt.take()` on `list[i]`,
+  on a field, on a payload bound by `&mut` and on a tuple element.
 - [x] `Drop`: a resource's `fn drop(self)` as its impl, a user impl on an
   affine type and an error naming the impl on any other, the fields left at the end of `drop` dropped one by one, a
   drop's effects benign, no partial move or `..base` over a type that
@@ -803,19 +805,19 @@ declares the destructor's effects is withdrawn: a drop's effects are benign.
 - [x] `FutureWrite<T>` and `StreamWrite<T>`: a write returns what it did not
   deliver, in every case the result reports, and the stdlib's write loops
   (`write_all`) read `rest` rather than `count`.
-- [ ] Instantiation rule: an affine argument for an unmarked parameter is a
+- [x] Instantiation rule: an affine argument for an unmarked parameter is a
   type error naming the parameter. It names every generic the corpus
   instantiates with an affine argument, and each is marked or rewritten.
-- [ ] Withdraw the receiver-kind rule and the TIR copy check from #2364. The
+- [x] Withdraw the receiver-kind rule and the TIR copy check from #2364. The
   `resource_copy_out_of_reference_error` fixture stays, its expectations
   rewritten to the rules that now catch each case: `list[0]` on a
   `List<Fields>` is a copy through a reference under the body rule, a generic
   `&self` getter instantiated with `Fields` is an affine argument for an
   unmarked parameter, and `list.last()` is not found, since `Sequence`, which
   declares it, is implemented for a copyable element only.
-- [ ] `assert` records the values it prints by reference, and prints a moved
+- [x] `assert` records the values it prints by reference, and prints a moved
   one as moved.
-- [ ] Spec: rewrite [Resource Ownership](./spec-components.md#resource-ownership),
+- [x] Spec: rewrite [Resource Ownership](./spec-components.md#resource-ownership),
   the resource paragraph, Reference Identity and the `&mut`-to-a-field rule
   of [Memory Model](./spec-memory.md), the drop of a resource in
   [Resources as Effects](./spec-effects.md#resources-as-effects),

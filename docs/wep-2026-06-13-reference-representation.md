@@ -298,13 +298,10 @@ types are concrete enough to see a `variant` behind a type parameter:
   `name ∉ variant_names`. This overloading is fragile and a latent bug source;
   a distinct representation for variant-case discriminants should be
   considered (possibly as separate work).
-- [ ] D6 — `resource`. A resource handle is replace-on-assign but is not in the box
-  predicate, so `&mut resource` has no stable cell. Decide and document: either
-  box resource handles like other replace types, or explicitly reject `&mut`
-  of a resource. (`&mut resource` is currently unverified / effectively
-  unsupported.) A `&resource` is the handle itself, so `ref_eq` on two
-  compares handles: exact for an affine resource, whose handle only one
-  place holds, and true for two copies of an unrestricted one.
+- [x] D6 — `resource`. Settled by
+  [WEP: Affine Types](./wep-2026-10-17-affine-types.md#an-affine-value-is-an-object-and-a-place-is-a-nullable-reference-to-it):
+  an affine resource is boxed, and the box is its object, so `&mut resource`
+  is a reference to the box and `ref_eq` compares boxes.
 - [x] D7 — whole-value `*ref = v` write-back for `List<T>` and tuples. An in-place
   `&mut T` makes `*r = v` a field-wise write-back onto the shared handle,
   lowered by `try_expand_deref_aggregate_assign`. That expansion only

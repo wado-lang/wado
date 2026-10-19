@@ -187,7 +187,7 @@ test {
 ```
 
 An `AsyncCall<T>` is affine: `wait` and `cancel` take it by value, and
-assigning one moves it ([Affine Types](./wep-2026-10-17-affine-types.md)). A
+assigning one moves it ([Affine Types](./spec-types.md#affine-types)). A
 call that drops unawaited is cancelled, and its result buffer freed.
 
 <!-- {"fixture":"async_call_moves.wado"} -->
@@ -292,6 +292,17 @@ other end reads, and a `read` blocks until the other end writes, so the two ends
 must be driven by different tasks. A component cannot start a task of its own,
 so one end goes to another task: an async import's subtask, or the caller of an
 `export async fn`. A task that drives both ends blocks forever.
+
+A future's ends are each used once, so both consume their end:
+`Future::read(self)` and `FutureWritable::write(self, value)`. A second read or
+write is a use after move. A `FutureWritable` dropped before its write traps
+with a message naming it, since the reader would otherwise wait forever.
+
+A write hands back what it did not deliver: the part of the value a reader
+dropped before taking, or the suffix of a stream write the reader did not
+take. `FutureWritable::write` returns a `FutureWrite<T> { rest: Option<T>,
+result }`, and `StreamWritable::write` a `StreamWrite<T> { rest: List<T>,
+result }`. A caller that ignores the result drops the rest.
 
 ## Linking and Resources
 
@@ -437,9 +448,9 @@ test {
 
 #### Drop
 
-An owned resource that has not moved is dropped when its scope ends, on every path out of it. A move suppresses that drop, so each handle is dropped exactly once. An imported resource drops through the Component Model's `resource.drop`. A value holding resources drops each of them, a struct's fields in declaration order. A resource value discarded as a statement (`Fields::new();`, `let _ = ...`) is dropped there.
+An owned resource drops as any affine value does (see [Drop](./spec-types.md#drop)), so each handle is dropped exactly once. An imported resource drops through the Component Model's `resource.drop`. A resource's `fn drop(self)` is its `Drop` impl: it consumes its receiver, so a use after it is a use after move.
 
-A resource's `fn drop(self)` consumes its receiver, so the scope does not drop it again, and a use after it is a use after move.
+Lowering a resource to the host as an `own`, as an argument, a result or what a stream or future write carries, moves it: the host owns the handle from then on.
 
 A trap does not unwind, so it runs no drops.
 

@@ -309,6 +309,15 @@ before the first iteration. Each iteration then calls `next()` on the result,
 binds the element to `item` and runs the body. The loop ends when `next()`
 returns `None`.
 
+An [affine](./spec-types.md#affine-types) operand whose type implements the
+prelude trait `ForOf` is walked through it instead. The loop passes the operand
+by value to `ForOf::start` once, then calls `next()` on the state it returns.
+So the loop owns what it walks: the operand moves into the loop, each element
+moves into the binding, and leaving the loop early drops the elements it did not
+reach. `List<T>` implements `ForOf` for an affine `T`. `for let x of &xs` and
+`for let x of &mut xs` walk an affine list by reference and leave it with its
+owner.
+
 The binding is a copy of each element
 ([Value Semantics](./spec-memory.md#value-semantics)), so changing it does not
 change the collection. `for let x of &xs` and `for let x of &mut xs` bind

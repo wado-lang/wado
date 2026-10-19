@@ -314,6 +314,12 @@ fn bad() {
 }
 ```
 
+A resource's drop is an operation of its effect too, but a benign one: a
+function declares no effect for a drop it performs. Every drop of the resource
+reaches an installed handler, a written `x.drop()` and an implicit one alike
+([Drop](./spec-types.md#drop)), so a test double that counts drops sees both. A
+double that leaves its other operations to `..trap` answers `drop` itself.
+
 ### Implied Resources
 
 A held effect also holds every resource its operations mention in a parameter or return type. The rule applies again to each resource reached, so the grant is transitive:
