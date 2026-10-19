@@ -7,7 +7,7 @@ struct core:prelude//$Resource {  // TypeId(0)
 }
 
 struct cm_record_with_own_field_param.wado//Slot {  // TypeId(1)
-    mut device: ref "core:prelude//$Resource",
+    mut device: ref null "core:prelude//$Resource",
     mut index: u32,
 }
 
@@ -17,9 +17,9 @@ type "functype//wasi/wasi:demo/Gfx::get_device" = fn() -> i32;  // TypeId(3)
 
 type "functype//wasi/wasi:demo/Gfx::pick" = fn(i32, i32) -> i32;  // TypeId(4)
 
-type "functype//cm_record_with_own_field_param.wado/$cm_binding__Gfx_pick" = fn(ref "cm_record_with_own_field_param.wado//Slot") -> u32;  // TypeId(5)
+type "functype//cm_record_with_own_field_param.wado/$cm_binding__Gfx_pick" = fn(ref null "cm_record_with_own_field_param.wado//Slot") -> u32;  // TypeId(5)
 
-type "functype//cm_record_with_own_field_param.wado/$cm_binding__Gfx_get_device" = fn() -> ref "core:prelude//$Resource";  // TypeId(6)
+type "functype//cm_record_with_own_field_param.wado/$cm_binding__Gfx_get_device" = fn() -> ref null "core:prelude//$Resource";  // TypeId(6)
 
 type "functype//cm_record_with_own_field_param.wado/$cm_export__run" = fn();  // TypeId(7)
 
@@ -40,7 +40,7 @@ fn "cm_record_with_own_field_param.wado/$cm_binding__Gfx_get_device"() with Gfx 
 }
 
 fn "cm_record_with_own_field_param.wado/$cm_export__run"() {
-    drop("cm_record_with_own_field_param.wado/$cm_binding__Gfx_pick"(struct.new "cm_record_with_own_field_param.wado//Slot" { device: ref.as_non_null("cm_record_with_own_field_param.wado/$cm_binding__Gfx_get_device"()), index: 3 }));
+    drop("cm_record_with_own_field_param.wado/$cm_binding__Gfx_pick"(struct.new "cm_record_with_own_field_param.wado//Slot" { device: "cm_record_with_own_field_param.wado/$cm_binding__Gfx_get_device"(), index: 3 }));
     "wasi/task-return"(0);
 }
 

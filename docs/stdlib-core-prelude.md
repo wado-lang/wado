@@ -1160,8 +1160,8 @@ Provides operations that apply to the currently executing async task.
 Acknowledge cancellation of the current task.
 
 Call this in response to a cancellation signal (the CM's
-`TASK_CANCELLED` event). Signals to the CM
-runtime that the task accepts being cancelled and will clean up.
+`TASK_CANCELLED` event). Signals to the CM runtime that the task
+accepts being cancelled and will clean up.
 
 ## Types
 

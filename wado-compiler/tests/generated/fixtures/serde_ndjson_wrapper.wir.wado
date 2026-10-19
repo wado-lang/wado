@@ -46,37 +46,41 @@ type "functype//wasi/waitable-set-wait" = fn(i32, i32) -> i32;  // TypeId(13)
 
 type "functype//wasi/wasi:cli/Stdout::write_via_stream" = fn(i32) -> i32;  // TypeId(14)
 
-type "functype//serde_ndjson_wrapper.wado/$cm_binding__Stdout_write_via_stream" = fn(ref "core:prelude//$Resource") -> ref "core:prelude//$Resource";  // TypeId(15)
+type "functype//serde_ndjson_wrapper.wado/$cm_binding__Stdout_write_via_stream" = fn(ref null "core:prelude//$Resource") -> ref null "core:prelude//$Resource";  // TypeId(15)
 
 type "functype//serde_ndjson_wrapper.wado/$cm_export__run" = fn();  // TypeId(16)
 
-type "functype//core:json/write_json_bool" = fn(ref "core:prelude/string.wado//String", bool) -> ref null "core:serde//SerializeError";  // TypeId(17)
+type "functype//serde_ndjson_wrapper.wado/serde_ndjson_wrapper.wado/ndjson<serde_ndjson_wrapper.wado/Message>$sroa[value.ok]" = fn(bool) -> ref "core:prelude/string.wado//String";  // TypeId(17)
 
-type "functype//core:rt/write_string_to_stream$dae[add_newline]" = fn(ref "core:prelude//$Resource", ref Array<u8>, i32);  // TypeId(18)
+type "functype//core:cli/println" = fn(ref Array<u8>, i32);  // TypeId(18)
 
-type "functype//core:rt/cm_stream_write_raw_all_u8" = fn(i32, ref Array<u8>, i32, i32) -> "core:prelude/types.wado//enum:CopyResult";  // TypeId(19)
+type "functype//core:json/write_json_bool" = fn(ref "core:prelude/string.wado//String", bool) -> ref null "core:serde//SerializeError";  // TypeId(19)
 
-type "functype//core:json/core/json/to_string<serde_ndjson_wrapper.wado/Message>$sroa[value.ok,return]$spec0$dae[value]" = fn(ref "core:prelude/types.wado//Option<char>") -> [i32, ref null "core:prelude/string.wado//String", ref null "core:serde//SerializeError"];  // TypeId(20)
+type "functype//core:rt/write_string_to_stream$dae[add_newline]" = fn(ref null "core:prelude//$Resource", ref Array<u8>, i32);  // TypeId(20)
 
-type "functype//core:json/core/json/write_plain_key<&core:prelude/string.wado/String>$spec0" = fn(ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String", i32);  // TypeId(21)
+type "functype//core:rt/cm_stream_write_raw_all_u8" = fn(i32, ref Array<u8>, i32, i32) -> "core:prelude/types.wado//enum:CopyResult";  // TypeId(21)
 
-type "functype//core:prelude/string.wado/core:prelude/string.wado/String::realloc_to" = fn(ref "core:prelude/string.wado//String", i32);  // TypeId(22)
+type "functype//core:json/core/json/to_string<serde_ndjson_wrapper.wado/Message>$sroa[value.ok,return]" = fn(bool, ref "core:prelude/types.wado//Option<char>") -> [i32, ref null "core:prelude/string.wado//String", ref null "core:serde//SerializeError"];  // TypeId(22)
 
-type "functype//core:prelude/string.wado/core:prelude/string.wado/String::grow" = fn(ref "core:prelude/string.wado//String", i32);  // TypeId(23)
+type "functype//core:json/core/json/write_plain_key<&core:prelude/string.wado/String>$spec0" = fn(ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String", i32);  // TypeId(23)
 
-type "functype//core:prelude/string.wado/core:prelude/string.wado/String::push" = fn(ref "core:prelude/string.wado//String", char);  // TypeId(24)
+type "functype//core:prelude/string.wado/core:prelude/string.wado/String::realloc_to" = fn(ref "core:prelude/string.wado//String", i32);  // TypeId(24)
 
-type "functype//core:prelude/string.wado/core:prelude/string.wado/String^core:prelude/traits.wado/Add::add" = fn(ref Array<u8>, i32, ref Array<u8>, i32) -> ref "core:prelude/string.wado//String";  // TypeId(25)
+type "functype//core:prelude/string.wado/core:prelude/string.wado/String::grow" = fn(ref "core:prelude/string.wado//String", i32);  // TypeId(25)
 
-type "functype//core:serde/serde_ndjson_wrapper.wado/Message^core:serde/Serialize::serialize<core:json/JsonSerializer>$sroa[self.ok,s.buf]" = fn(bool, ref "core:prelude/string.wado//String") -> ref null "core:serde//SerializeError";  // TypeId(26)
+type "functype//core:prelude/string.wado/core:prelude/string.wado/String::push" = fn(ref "core:prelude/string.wado//String", char);  // TypeId(26)
 
-type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(27)
+type "functype//core:serde/serde_ndjson_wrapper.wado/Message^core:serde/Serialize::serialize<core:json/JsonSerializer>$sroa[self.ok,s.buf]" = fn(bool, ref "core:prelude/string.wado//String") -> ref null "core:serde//SerializeError";  // TypeId(27)
 
-type "functype//wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code" = fn(i32);  // TypeId(28)
+type "functype//wasi/task-return" = fn(i32);  // TypeId(28)
 
-type "functype//wasi/task-return" = fn(i32);  // TypeId(29)
+type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(29)
 
 type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(30)
+
+type "functype//wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code" = fn(i32);  // TypeId(31)
+
+type "functype//wasi/stream-drop-readable" = fn(i32);  // TypeId(32)
 
 import fn mem/realloc from "mem/realloc";
 import fn wasi/stream-write from "wasi/stream-write";
@@ -86,51 +90,90 @@ import fn wasi/waitable-set-new from "wasi/waitable-set-new";
 import fn wasi/waitable-set-wait from "wasi/waitable-set-wait";
 import fn wasi/wasi:cli/Stdout::write_via_stream from "wasi/wasi:cli/Stdout::write_via_stream";
 import memory (1) from "mem/memory";
-import fn wasi/stream-new from "wasi/stream-new";
-import fn wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code from "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code";
 import fn wasi/task-return from "wasi/task-return";
+import fn wasi/stream-new from "wasi/stream-new";
 import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
+import fn wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code from "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code";
+import fn wasi/stream-drop-readable from "wasi/stream-drop-readable";
 
 global global:core:json::$const_obj_0: ref Array<u8> = array.new_fixed<u8>(102, 97, 108, 115, 101);
 global global:core:json::$const_obj_1: ref Array<u8> = array.new_fixed<u8>(116, 114, 117, 101);
-global global:core:serde::$const_obj_39: ref Array<u8> = array.new_fixed<u8>(125);
-global global:core:serde::$const_obj_40: ref "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(111, 107), used: 2 };
-global global:core:serde::$const_obj_41: ref Array<u8> = array.new_fixed<u8>(123);
-global global:core:json::$const_obj_42: ref Array<u8> = array.new_fixed<u8>(34, 58);
-global global:core:json::$const_obj_44: ref Array<u8> = array.new_fixed<u8>(44, 34);
+global global:serde_ndjson_wrapper.wado::$const_obj_22: ref Array<u8> = array.new_fixed<u8>(10);
+global global:core:serde::$const_obj_38: ref Array<u8> = array.new_fixed<u8>(125);
+global global:core:serde::$const_obj_39: ref "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(111, 107), used: 2 };
+global global:core:serde::$const_obj_40: ref Array<u8> = array.new_fixed<u8>(123);
+global global:core:json::$const_obj_41: ref Array<u8> = array.new_fixed<u8>(34, 58);
+global global:core:json::$const_obj_43: ref Array<u8> = array.new_fixed<u8>(44, 34);
 global global:core:builtin::$unit_case$core:prelude/types.wado//Option<char>$0: ref "core:prelude/types.wado//Option<char>" = struct.new "core:prelude/types.wado//Option<char>" { 0 };
 
 fn "serde_ndjson_wrapper.wado/$cm_binding__Stdout_write_via_stream"(data) with Stdout {
-    return struct.new "core:prelude//$Resource" { value: "wasi/wasi:cli/Stdout::write_via_stream"(data.value) };
+    return let $cm_handle_2: i32, $cm_handle_2 = data.value, data.value = 0, struct.new "core:prelude//$Resource" { value: "wasi/wasi:cli/Stdout::write_via_stream"($cm_handle_2) };
 }
 
 fn "serde_ndjson_wrapper.wado/$cm_export__run"() {
-    let $cm_pair_4: i64;
-    let $sroa_$pattern_temp_0_0_14: ref "core:prelude//$Resource";
-    let $sroa_$pattern_temp_0_1_15: ref "core:prelude//$Resource";
-    let s: ref "core:prelude/string.wado//String";
-    s = struct.new "core:prelude/string.wado//String" { repr: $mv_field_2 = local.tee s(block -> ref "core:prelude/string.wado//String" {
-        let $mv$$vr_2$0: i32;
-        let $mv$$vr_2$1: ref null "core:prelude/string.wado//String";
-        let $mv$$vr_2$2: ref null "core:serde//SerializeError";
-        multivalue_bind [$mv$$vr_2$0, $mv$$vr_2$1, $mv$$vr_2$2] = "core:json/core/json/to_string<serde_ndjson_wrapper.wado/Message>$sroa[value.ok,return]$spec0$dae[value]"(global:core:builtin::$unit_case$core:prelude/types.wado//Option<char>$0);
-        s = (if $mv$$vr_2$0 == 0 -> ref "core:prelude/string.wado//String" {
-            local.tee s(ref.as_non_null($mv$$vr_2$1));
-        } else if @likely($mv$$vr_2$0 == 1) -> ref "core:prelude/string.wado//String" {
-            struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(110, 117, 108, 108), used: 4 };
-        } else {
-            unreachable;
-        });
-        let $mv_field_2: ref Array<u8>;
-        $mv_field_2 = array.new_fixed<u8>(10);
-        "core:prelude/string.wado/core:prelude/string.wado/String^core:prelude/traits.wado/Add::add"(s.repr, s.used, $mv_field_2, 1);
-    }).repr; $mv$$vr_2$0 = s.used; let $array_clone_dst_5: ref Array<u8>; builtin::array_copy<u8>(local.tee $array_clone_dst_5(builtin::array_new<u8>($mv$$vr_2$0)), 0, $mv_field_2, 0, $mv$$vr_2$0); $array_clone_dst_5, used: $mv$$vr_2$0 };
-    $sroa_$pattern_temp_0_0_14 = struct.new "core:prelude//$Resource" { value: builtin::i32_wrap_i64(local.tee $cm_pair_4("wasi/stream-new"())) };
-    $sroa_$pattern_temp_0_1_15 = struct.new "core:prelude//$Resource" { value: builtin::i32_wrap_i64($cm_pair_4 >> 32_i64) };
-    $sroa_$pattern_temp_0_0_14 = "serde_ndjson_wrapper.wado/$cm_binding__Stdout_write_via_stream"($sroa_$pattern_temp_0_0_14);
-    "core:rt/write_string_to_stream$dae[add_newline]"($sroa_$pattern_temp_0_1_15, s.repr, s.used);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"($sroa_$pattern_temp_0_0_14.value);
+    let $load_1: i32;
+    let body: ref "core:prelude/string.wado//String";
+    body = "serde_ndjson_wrapper.wado/serde_ndjson_wrapper.wado/ndjson<serde_ndjson_wrapper.wado/Message>$sroa[value.ok]"(1);
+    let $array_clone_src_1: ref Array<u8>;
+    $array_clone_src_1 = body.repr;
+    $load_1 = body.used;
+    let $array_clone_dst_2: ref Array<u8>;
+    builtin::array_copy<u8>(local.tee $array_clone_dst_2(builtin::array_new<u8>($load_1)), 0, $array_clone_src_1, 0, $load_1);
+    "core:cli/println"($array_clone_dst_2, $load_1);
     "wasi/task-return"(0);
+}
+
+fn "serde_ndjson_wrapper.wado/serde_ndjson_wrapper.wado/ndjson<serde_ndjson_wrapper.wado/Message>$sroa[value.ok]"(value) {
+    let result: ref "core:prelude/string.wado//String";
+    let s: ref "core:prelude/string.wado//String";
+    let start_23: i32;
+    return let $mv$$vr_2$1: ref null "core:prelude/string.wado//String"; let $mv$$vr_2$2: ref null "core:serde//SerializeError"; multivalue_bind [value, $mv$$vr_2$1, $mv$$vr_2$2] = "core:json/core/json/to_string<serde_ndjson_wrapper.wado/Message>$sroa[value.ok,return]"(value, global:core:builtin::$unit_case$core:prelude/types.wado//Option<char>$0), result = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(local.tee value(local.tee s((if value == 0 -> ref "core:prelude/string.wado//String" {
+        local.tee s(ref.as_non_null($mv$$vr_2$1));
+    } else if @likely(value == 1) -> ref "core:prelude/string.wado//String" {
+        struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(110, 117, 108, 108), used: 4 };
+    } else {
+        unreachable;
+    })).used) + 1), used: 0 }, $inline_core_prelude_string_wado_String__internal_push_string_8: block {
+        break_if $inline_core_prelude_string_wado_String__internal_push_string_8 value == 0;
+        if @unlikely(value > builtin::array_len(result.repr)) {
+            cold_path;
+            "core:prelude/string.wado/core:prelude/string.wado/String::grow"(result, value);
+        }
+        start_23 = result.used;
+        result.used = value;
+        builtin::array_copy<u8>(result.repr, start_23, s.repr, 0, value);
+    }, if @unlikely(local.tee value(result.used + 1) > builtin::array_len(result.repr)) {
+        cold_path;
+        "core:prelude/string.wado/core:prelude/string.wado/String::grow"(result, value);
+    }, start_23 = result.used, result.used = value, builtin::array_copy<u8>(result.repr, start_23, global:serde_ndjson_wrapper.wado::$const_obj_22, 0, 1), result;
+}
+
+fn "core:cli/println"($mv$message$repr, $mv$message$used) with Stdout {
+    let $moved_4: ref null "core:prelude//$Resource";
+    let $moved_5: ref null "core:prelude//$Resource";
+    let $cm_pair_7: i64;
+    let $moved_3: ref null "core:prelude//$Resource";
+    let $sroa_$pattern_temp_0_0_13: ref null "core:prelude//$Resource";
+    let $sroa_$pattern_temp_0_1_14: ref null "core:prelude//$Resource";
+    $sroa_$pattern_temp_0_0_13 = struct.new "core:prelude//$Resource" { value: builtin::i32_wrap_i64(local.tee $cm_pair_7("wasi/stream-new"())) };
+    $sroa_$pattern_temp_0_1_14 = struct.new "core:prelude//$Resource" { value: builtin::i32_wrap_i64($cm_pair_7 >> 32_i64) };
+    $moved_4 = "serde_ndjson_wrapper.wado/$cm_binding__Stdout_write_via_stream"($moved_4 = $sroa_$pattern_temp_0_0_13; $sroa_$pattern_temp_0_0_13 = ref.null none; $moved_4);
+    $moved_5 = $sroa_$pattern_temp_0_1_14;
+    $sroa_$pattern_temp_0_1_14 = ref.null none;
+    "core:rt/write_string_to_stream$dae[add_newline]"($moved_3 = $moved_5; $moved_5 = ref.null none; $moved_3, $mv$message$repr, $mv$message$used);
+    if ref.is_null($moved_5) == 0 {
+        "wasi/stream-drop-writable"($moved_5.value);
+    }
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"($moved_5 = $moved_4; $moved_4 = ref.null none; $moved_5.value);
+    if ref.is_null($moved_4) == 0 {
+        "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"($moved_4.value);
+    }
+    if ref.is_null($sroa_$pattern_temp_0_1_14) == 0 {
+        "wasi/stream-drop-writable"($sroa_$pattern_temp_0_1_14.value);
+    }
+    if ref.is_null($sroa_$pattern_temp_0_0_13) == 0 {
+        "wasi/stream-drop-readable"($sroa_$pattern_temp_0_0_13.value);
+    }
 }
 
 fn "core:json/write_json_bool"(buf, v) {
@@ -157,6 +200,7 @@ fn "core:json/write_json_bool"(buf, v) {
 
 fn "core:rt/write_string_to_stream$dae[add_newline]"(tx, $mv$message$repr, $mv$message$used) {
     let new_repr: ref Array<u8>;
+    let $moved_5: ref null "core:prelude//$Resource";
     builtin::array_copy<u8>(local.tee new_repr(builtin::array_new<u8>($mv$message$used + 1)), 0, $mv$message$repr, 0, $mv$message$used);
     builtin::array_set_u8(new_repr, $mv$message$used, 10);
     drop(block -> "core:prelude/types.wado//enum:CopyResult" {
@@ -165,7 +209,10 @@ fn "core:rt/write_string_to_stream$dae[add_newline]"(tx, $mv$message$repr, $mv$m
         $mv$message$used = $mv$message$used + 1;
         "core:rt/cm_stream_write_raw_all_u8"($arg_spill_1, new_repr, 0, $mv$message$used);
     });
-    "wasi/stream-drop-writable"(tx.value);
+    "wasi/stream-drop-writable"($moved_5 = tx; tx = ref.null none; $moved_5.value);
+    if ref.is_null(tx) == 0 {
+        "wasi/stream-drop-writable"(tx.value);
+    }
 }
 
 fn "core:rt/cm_stream_write_raw_all_u8"(handle, $mv$data$repr, $mv$data$start, $mv$data$end) {
@@ -178,17 +225,17 @@ fn "core:rt/cm_stream_write_raw_all_u8"(handle, $mv$data$repr, $mv$data$start, $
     if local.tee $mv$data$end($mv$data$end - $mv$data$start) == 0 {
         return 0;
     }
-    ptr_13 = builtin::i32_wrap_i64(ptr_13 = "mem/realloc"(0, 0, 1, $mv$data$end); i = 0; b8: block {
-        l9: loop {
-            break_if b8 i >= $mv$data$end;
+    ptr_13 = builtin::i32_wrap_i64(ptr_13 = "mem/realloc"(0, 0, 1, $mv$data$end); i = 0; b14: block {
+        l15: loop {
+            break_if b14 i >= $mv$data$end;
             builtin::store_u8(ptr_13 + i, builtin::array_get_value_u8($mv$data$repr, $mv$data$start + i));
             i = i + 1;
-            continue l9;
+            continue l15;
         };
     }; builtin::i64_extend_i32_u(ptr_13) | (builtin::i64_extend_i32_s($mv$data$end) << 32_i64));
     i = 0;
     block {
-        l11: loop {
+        l17: loop {
             ptr_15 = ptr_13 + i;
             count_16 = $mv$data$end - i;
             if local.tee count_16("wasi/stream-write"(handle, ptr_15, select i32(count_16 < 268435455, count_16, 268435455))) == -1 {
@@ -218,29 +265,28 @@ fn "core:rt/cm_stream_write_raw_all_u8"(handle, $mv$data$repr, $mv$data$start, $
                 drop("mem/realloc"(ptr_13, $mv$data$end, 1, 0));
                 return count_16;
             }
-            continue l11;
+            continue l17;
         };
     };
 }
 
-fn "core:json/core/json/to_string<serde_ndjson_wrapper.wado/Message>$sroa[value.ok,return]$spec0$dae[value]"(trailing_char) {
+fn "core:json/core/json/to_string<serde_ndjson_wrapper.wado/Message>$sroa[value.ok,return]"(value, trailing_char) {
     let buf: ref "core:prelude/string.wado//String";
     let $qm_e: ref "core:serde//SerializeError";
-    let c: char;
     let $match_7: ref null "core:serde//SerializeError";
     buf = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(128), used: 0 };
-    if @likely(ref.is_null(local.tee $match_7("core:serde/serde_ndjson_wrapper.wado/Message^core:serde/Serialize::serialize<core:json/JsonSerializer>$sroa[self.ok,s.buf]"(1, buf)))) {
+    if @likely(ref.is_null(local.tee $match_7("core:serde/serde_ndjson_wrapper.wado/Message^core:serde/Serialize::serialize<core:json/JsonSerializer>$sroa[self.ok,s.buf]"(value, buf)))) {
     } else {
         $qm_e = ref.as_non_null($match_7);
         cold_path;
         return 1, ref.null none, $qm_e;
     }
     if ref.test "core:prelude/types.wado//Option<char>::Some"(trailing_char) {
-        c = ref.cast "core:prelude/types.wado//Option<char>::Some"(trailing_char).payload_0;
-        "core:prelude/string.wado/core:prelude/string.wado/String::push"(buf, c);
+        value = ref.cast "core:prelude/types.wado//Option<char>::Some"(trailing_char).payload_0;
+        "core:prelude/string.wado/core:prelude/string.wado/String::push"(buf, value);
     } else {
     }
-    return 0, struct.new "core:prelude/string.wado//String" { repr: let $array_clone_src_1: ref Array<u8>; $array_clone_src_1 = buf.repr; c = buf.used; let $array_clone_dst_2: ref Array<u8>; builtin::array_copy<u8>(local.tee $array_clone_dst_2(builtin::array_new<u8>(c)), 0, $array_clone_src_1, 0, c); $array_clone_dst_2, used: c }, ref.null none;
+    return 0, struct.new "core:prelude/string.wado//String" { repr: let $array_clone_src_1: ref Array<u8>; $array_clone_src_1 = buf.repr; value = buf.used; let $array_clone_dst_2: ref Array<u8>; builtin::array_copy<u8>(local.tee $array_clone_dst_2(builtin::array_new<u8>(value)), 0, $array_clone_src_1, 0, value); $array_clone_dst_2, used: value }, ref.null none;
 }
 
 fn "core:json/core/json/write_plain_key<&core:prelude/string.wado/String>$spec0"(buf, name, count) {
@@ -253,7 +299,7 @@ fn "core:json/core/json/write_plain_key<&core:prelude/string.wado/String>$spec0"
         }
         start_18 = buf.used;
         buf.used = count;
-        builtin::array_copy<u8>(local.tee $load_3(buf.repr), start_18, global:core:json::$const_obj_44, 0, 2);
+        builtin::array_copy<u8>(local.tee $load_3(buf.repr), start_18, global:core:json::$const_obj_43, 0, 2);
         if @unlikely(local.tee start_18(buf.used + 4) > builtin::array_len($load_3)) {
             cold_path;
             "core:prelude/string.wado/core:prelude/string.wado/String::grow"(buf, start_18);
@@ -262,7 +308,7 @@ fn "core:json/core/json/write_plain_key<&core:prelude/string.wado/String>$spec0"
         buf.used = start_18;
         builtin::array_copy<u8>(local.tee $load_3(buf.repr), count, name.repr, 0, 2);
         count = count + 2;
-        builtin::array_copy<u8>($load_3, count, global:core:json::$const_obj_42, 0, 2);
+        builtin::array_copy<u8>($load_3, count, global:core:json::$const_obj_41, 0, 2);
         return;
     }
     if @unlikely(local.tee count(buf.used + 1) > builtin::array_len(buf.repr)) {
@@ -280,7 +326,7 @@ fn "core:json/core/json/write_plain_key<&core:prelude/string.wado/String>$spec0"
     buf.used = start_18;
     builtin::array_copy<u8>(local.tee $load_3(buf.repr), count, name.repr, 0, 2);
     count = count + 2;
-    builtin::array_copy<u8>($load_3, count, global:core:json::$const_obj_42, 0, 2);
+    builtin::array_copy<u8>($load_3, count, global:core:json::$const_obj_41, 0, 2);
 }
 
 fn "core:prelude/string.wado/core:prelude/string.wado/String::realloc_to"(self, new_capacity) {
@@ -343,33 +389,6 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::push"(self, c) {
     };
 }
 
-fn "core:prelude/string.wado/core:prelude/string.wado/String^core:prelude/traits.wado/Add::add"($mv$self$repr, $mv$self$used, $mv$other$repr, $mv$other$used) {
-    let result: ref "core:prelude/string.wado//String";
-    let start_19: i32;
-    result = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>($mv$self$used + $mv$other$used), used: 0 };
-    $inline_core_prelude_string_wado_String__internal_push_string_6: block {
-        break_if $inline_core_prelude_string_wado_String__internal_push_string_6 $mv$self$used == 0;
-        if @unlikely($mv$self$used > builtin::array_len(result.repr)) {
-            cold_path;
-            "core:prelude/string.wado/core:prelude/string.wado/String::grow"(result, $mv$self$used);
-        }
-        start_19 = result.used;
-        result.used = $mv$self$used;
-        builtin::array_copy<u8>(result.repr, start_19, $mv$self$repr, 0, $mv$self$used);
-    };
-    $inline_core_prelude_string_wado_String__internal_push_string_12: block {
-        break_if $inline_core_prelude_string_wado_String__internal_push_string_12 $mv$other$used == 0;
-        if @unlikely(local.tee $mv$self$used(result.used + $mv$other$used) > builtin::array_len(result.repr)) {
-            cold_path;
-            "core:prelude/string.wado/core:prelude/string.wado/String::grow"(result, $mv$self$used);
-        }
-        start_19 = result.used;
-        result.used = $mv$self$used;
-        builtin::array_copy<u8>(result.repr, start_19, $mv$other$repr, 0, $mv$other$used);
-    };
-    return result;
-}
-
 fn "core:serde/serde_ndjson_wrapper.wado/Message^core:serde/Serialize::serialize<core:json/JsonSerializer>$sroa[self.ok,s.buf]"(self, s) {
     let $qm_e_10: ref "core:serde//SerializeError";
     let new_used_28: i32;
@@ -381,8 +400,8 @@ fn "core:serde/serde_ndjson_wrapper.wado/Message^core:serde/Serialize::serialize
     }
     start_29 = s.used;
     s.used = new_used_28;
-    builtin::array_copy<u8>(s.repr, start_29, global:core:serde::$const_obj_41, 0, 1);
-    "core:json/core/json/write_plain_key<&core:prelude/string.wado/String>$spec0"(s, global:core:serde::$const_obj_40, 0);
+    builtin::array_copy<u8>(s.repr, start_29, global:core:serde::$const_obj_40, 0, 1);
+    "core:json/core/json/write_plain_key<&core:prelude/string.wado/String>$spec0"(s, global:core:serde::$const_obj_39, 0);
     if @likely(ref.is_null(local.tee r("core:json/write_json_bool"(s, self)))) {
     } else {
         $qm_e_10 = ref.as_non_null(r);
@@ -395,7 +414,7 @@ fn "core:serde/serde_ndjson_wrapper.wado/Message^core:serde/Serialize::serialize
     }
     start_29 = s.used;
     s.used = self;
-    builtin::array_copy<u8>(s.repr, start_29, global:core:serde::$const_obj_39, 0, 1);
+    builtin::array_copy<u8>(s.repr, start_29, global:core:serde::$const_obj_38, 0, 1);
     return ref.null none;
 }
 

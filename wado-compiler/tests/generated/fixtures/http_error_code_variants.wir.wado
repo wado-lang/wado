@@ -189,7 +189,7 @@ type "functype//mem/realloc" = fn(i32, i32, i32, i32) -> i32;  // TypeId(30)
 
 type "functype//http_error_code_variants.wado/$cm_export__handle" = fn(i32);  // TypeId(31)
 
-type "functype//http_error_code_variants.wado/$cm_task_entry__handle" = fn(ref "core:prelude//$Resource");  // TypeId(32)
+type "functype//http_error_code_variants.wado/$cm_task_entry__handle" = fn(ref null "core:prelude//$Resource");  // TypeId(32)
 
 type "functype//wasi/task-return:handle" = fn(i32, i32, i32, i64, i32, i32, i32, i32);  // TypeId(33)
 
@@ -618,7 +618,11 @@ fn "http_error_code_variants.wado/$cm_task_entry__handle"(request) {
         }
     } else {
     }
-    "wasi/resource-drop:wasi/http/types.wado#request"(request.value);
+    if ref.is_null(request) == 0 {
+        $tv_4 = request.value;
+        request.value = 0;
+        "wasi/resource-drop:wasi/http/types.wado#request"($tv_4);
+    }
 }
 
 export fn "http_error_code_variants.wado/$cm_export__handle" as "handle"

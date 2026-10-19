@@ -7,18 +7,18 @@ struct core:prelude//$Resource {  // TypeId(0)
 }
 
 struct tuple//[cm_tuple_and_result_of_own_param.wado/Device, u32] {  // TypeId(1)
-    mut 0: ref "core:prelude//$Resource",
+    mut 0: ref null "core:prelude//$Resource",
     mut 1: u32,
 }
 
 variant core:prelude/types.wado//Result<cm_tuple_and_result_of_own_param.wado/Device,u32> {  // TypeId(2)
-    Ok(ref "core:prelude//$Resource"),
+    Ok(ref null "core:prelude//$Resource"),
     Err(u32),
 }
 
 struct core:prelude/types.wado//Result<cm_tuple_and_result_of_own_param.wado/Device,u32>::Ok {  // TypeId(3)
     discriminant: i32,
-    payload_0: ref "core:prelude//$Resource",
+    payload_0: ref null "core:prelude//$Resource",
 }
 
 struct core:prelude/types.wado//Result<cm_tuple_and_result_of_own_param.wado/Device,u32>::Err {  // TypeId(4)
@@ -34,11 +34,11 @@ type "functype//wasi/wasi:demo/Gfx::label" = fn(i32, i32);  // TypeId(7)
 
 type "functype//wasi/wasi:demo/Gfx::settle" = fn(i32, i32);  // TypeId(8)
 
-type "functype//cm_tuple_and_result_of_own_param.wado/$cm_binding__Gfx_label" = fn(ref "tuple//[cm_tuple_and_result_of_own_param.wado/Device, u32]");  // TypeId(9)
+type "functype//cm_tuple_and_result_of_own_param.wado/$cm_binding__Gfx_label" = fn(ref null "tuple//[cm_tuple_and_result_of_own_param.wado/Device, u32]");  // TypeId(9)
 
-type "functype//cm_tuple_and_result_of_own_param.wado/$cm_binding__Gfx_get_device" = fn() -> ref "core:prelude//$Resource";  // TypeId(10)
+type "functype//cm_tuple_and_result_of_own_param.wado/$cm_binding__Gfx_get_device" = fn() -> ref null "core:prelude//$Resource";  // TypeId(10)
 
-type "functype//cm_tuple_and_result_of_own_param.wado/$cm_binding__Gfx_settle" = fn(ref "core:prelude/types.wado//Result<cm_tuple_and_result_of_own_param.wado/Device,u32>");  // TypeId(11)
+type "functype//cm_tuple_and_result_of_own_param.wado/$cm_binding__Gfx_settle" = fn(ref null "core:prelude/types.wado//Result<cm_tuple_and_result_of_own_param.wado/Device,u32>");  // TypeId(11)
 
 type "functype//cm_tuple_and_result_of_own_param.wado/$cm_export__run" = fn();  // TypeId(12)
 
@@ -73,8 +73,8 @@ fn "cm_tuple_and_result_of_own_param.wado/$cm_binding__Gfx_settle"(outcome) with
 }
 
 fn "cm_tuple_and_result_of_own_param.wado/$cm_export__run"() {
-    "cm_tuple_and_result_of_own_param.wado/$cm_binding__Gfx_label"(struct.new "tuple//[cm_tuple_and_result_of_own_param.wado/Device, u32]" { 0: ref.as_non_null("cm_tuple_and_result_of_own_param.wado/$cm_binding__Gfx_get_device"()), 1: 7 });
-    "cm_tuple_and_result_of_own_param.wado/$cm_binding__Gfx_settle"(struct.new "core:prelude/types.wado//Result<cm_tuple_and_result_of_own_param.wado/Device,u32>::Ok" { discriminant: 0, payload_0: ref.as_non_null("cm_tuple_and_result_of_own_param.wado/$cm_binding__Gfx_get_device"()) });
+    "cm_tuple_and_result_of_own_param.wado/$cm_binding__Gfx_label"(struct.new "tuple//[cm_tuple_and_result_of_own_param.wado/Device, u32]" { 0: "cm_tuple_and_result_of_own_param.wado/$cm_binding__Gfx_get_device"(), 1: 7 });
+    "cm_tuple_and_result_of_own_param.wado/$cm_binding__Gfx_settle"(struct.new "core:prelude/types.wado//Result<cm_tuple_and_result_of_own_param.wado/Device,u32>::Ok" { discriminant: 0, payload_0: "cm_tuple_and_result_of_own_param.wado/$cm_binding__Gfx_get_device"() });
     "cm_tuple_and_result_of_own_param.wado/$cm_binding__Gfx_settle"(struct.new "core:prelude/types.wado//Result<cm_tuple_and_result_of_own_param.wado/Device,u32>::Err" { discriminant: 1, payload_0: 1 });
     "wasi/task-return"(0);
 }

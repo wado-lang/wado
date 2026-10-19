@@ -6,17 +6,21 @@ struct core:prelude//$Resource {  // TypeId(0)
     mut value: i32,
 }
 
-type "functype//mem/realloc" = fn(i32, i32, i32, i32) -> i32;  // TypeId(1)
+struct affine_impl_of_affine_trait.wado//Holder {  // TypeId(1)
+    mut f: ref null "core:prelude//$Resource",
+}
 
-type "functype//wasi/wasi:http/Fields::new" = fn() -> i32;  // TypeId(2)
+type "functype//mem/realloc" = fn(i32, i32, i32, i32) -> i32;  // TypeId(2)
 
-type "functype//affine_impl_of_affine_trait.wado/$cm_binding__Fields_new" = fn() -> ref "core:prelude//$Resource";  // TypeId(3)
+type "functype//wasi/wasi:http/Fields::new" = fn() -> i32;  // TypeId(3)
 
-type "functype//affine_impl_of_affine_trait.wado/$cm_export__$test_0" = fn();  // TypeId(4)
+type "functype//affine_impl_of_affine_trait.wado/$cm_binding__Fields_new" = fn() -> ref null "core:prelude//$Resource";  // TypeId(4)
 
-type "functype//wasi/resource-drop:wasi/http/types.wado#fields" = fn(i32);  // TypeId(5)
+type "functype//affine_impl_of_affine_trait.wado/$cm_export__$test_0" = fn();  // TypeId(5)
 
-type "functype//wasi/task-return" = fn(i32);  // TypeId(6)
+type "functype//wasi/resource-drop:wasi/http/types.wado#fields" = fn(i32);  // TypeId(6)
+
+type "functype//wasi/task-return" = fn(i32);  // TypeId(7)
 
 import fn mem/realloc from "mem/realloc";
 import fn wasi/wasi:http/Fields::new from "wasi/wasi:http/Fields::new";
@@ -29,7 +33,17 @@ fn "affine_impl_of_affine_trait.wado/$cm_binding__Fields_new"() with Fields {
 }
 
 fn "affine_impl_of_affine_trait.wado/$cm_export__$test_0"() {
-    "wasi/resource-drop:wasi/http/types.wado#fields"("affine_impl_of_affine_trait.wado/$cm_binding__Fields_new"().value);
+    let $load_0: ref null "core:prelude//$Resource";
+    let h: ref null "affine_impl_of_affine_trait.wado//Holder";
+    if ref.is_null(local.tee h(struct.new "affine_impl_of_affine_trait.wado//Holder" { f: "affine_impl_of_affine_trait.wado/$cm_binding__Fields_new"() })) == 0 {
+        if ref.is_null(local.tee $load_0(h.f)) == 0 {
+            let $cm_handle_2: i32;
+            $cm_handle_2 = $load_0.value;
+            $load_0.value = 0;
+            "wasi/resource-drop:wasi/http/types.wado#fields"($cm_handle_2);
+        }
+        h.f = ref.null none;
+    }
     "wasi/task-return"(0);
 }
 

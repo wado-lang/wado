@@ -12,13 +12,13 @@ struct tuple//[&cm_tuple_and_result_of_borrow_param.wado/Item, u32] {  // TypeId
 }
 
 variant core:prelude/types.wado//Result<&cm_tuple_and_result_of_borrow_param.wado/Item,u32> {  // TypeId(2)
-    Ok(ref "core:prelude//$Resource"),
+    Ok(ref null "core:prelude//$Resource"),
     Err(u32),
 }
 
 struct core:prelude/types.wado//Result<&cm_tuple_and_result_of_borrow_param.wado/Item,u32>::Ok {  // TypeId(3)
     discriminant: i32,
-    payload_0: ref "core:prelude//$Resource",
+    payload_0: ref null "core:prelude//$Resource",
 }
 
 struct core:prelude/types.wado//Result<&cm_tuple_and_result_of_borrow_param.wado/Item,u32>::Err {  // TypeId(4)
@@ -34,17 +34,19 @@ type "functype//wasi/wasi:demo/Api::label" = fn(i32, i32);  // TypeId(7)
 
 type "functype//wasi/wasi:demo/Api::settle" = fn(i32, i32);  // TypeId(8)
 
-type "functype//cm_tuple_and_result_of_borrow_param.wado/$cm_binding__Api_get_item" = fn() -> ref "core:prelude//$Resource";  // TypeId(9)
+type "functype//cm_tuple_and_result_of_borrow_param.wado/run" = fn();  // TypeId(9)
 
-type "functype//cm_tuple_and_result_of_borrow_param.wado/$cm_binding__Api_label" = fn(ref "tuple//[&cm_tuple_and_result_of_borrow_param.wado/Item, u32]");  // TypeId(10)
+type "functype//cm_tuple_and_result_of_borrow_param.wado/$cm_binding__Api_get_item" = fn() -> ref null "core:prelude//$Resource";  // TypeId(10)
 
-type "functype//cm_tuple_and_result_of_borrow_param.wado/$cm_binding__Api_settle" = fn(ref "core:prelude/types.wado//Result<&cm_tuple_and_result_of_borrow_param.wado/Item,u32>");  // TypeId(11)
+type "functype//cm_tuple_and_result_of_borrow_param.wado/$cm_binding__Api_label" = fn(ref "tuple//[&cm_tuple_and_result_of_borrow_param.wado/Item, u32]");  // TypeId(11)
 
-type "functype//cm_tuple_and_result_of_borrow_param.wado/$cm_export__run" = fn();  // TypeId(12)
+type "functype//cm_tuple_and_result_of_borrow_param.wado/$cm_binding__Api_settle" = fn(ref "core:prelude/types.wado//Result<&cm_tuple_and_result_of_borrow_param.wado/Item,u32>");  // TypeId(12)
 
-type "functype//wasi/resource-drop:cm_tuple_and_result_of_borrow_param.wado#item" = fn(i32);  // TypeId(13)
+type "functype//cm_tuple_and_result_of_borrow_param.wado/$cm_export__run" = fn();  // TypeId(13)
 
-type "functype//wasi/task-return" = fn(i32);  // TypeId(14)
+type "functype//wasi/resource-drop:cm_tuple_and_result_of_borrow_param.wado#item" = fn(i32);  // TypeId(14)
+
+type "functype//wasi/task-return" = fn(i32);  // TypeId(15)
 
 import fn mem/realloc from "mem/realloc";
 import fn wasi/wasi:demo/Api::get_item from "wasi/wasi:demo/Api::get_item";
@@ -53,6 +55,21 @@ import fn wasi/wasi:demo/Api::settle from "wasi/wasi:demo/Api::settle";
 import memory (1) from "mem/memory";
 import fn wasi/resource-drop:cm_tuple_and_result_of_borrow_param.wado#item from "wasi/resource-drop:cm_tuple_and_result_of_borrow_param.wado#item";
 import fn wasi/task-return from "wasi/task-return";
+
+global global:cm_tuple_and_result_of_borrow_param.wado::$const_obj_0: ref "core:prelude/types.wado//Result<&cm_tuple_and_result_of_borrow_param.wado/Item,u32>" = struct.new "core:prelude/types.wado//Result<&cm_tuple_and_result_of_borrow_param.wado/Item,u32>::Err" { discriminant: 1, payload_0: 1 };
+
+fn "cm_tuple_and_result_of_borrow_param.wado/run"() with Api, Item {
+    let a: ref null "core:prelude//$Resource";
+    "cm_tuple_and_result_of_borrow_param.wado/$cm_binding__Api_label"(struct.new "tuple//[&cm_tuple_and_result_of_borrow_param.wado/Item, u32]" { 0: ref.as_non_null(local.tee a("cm_tuple_and_result_of_borrow_param.wado/$cm_binding__Api_get_item"())), 1: 7 });
+    "cm_tuple_and_result_of_borrow_param.wado/$cm_binding__Api_settle"(struct.new "core:prelude/types.wado//Result<&cm_tuple_and_result_of_borrow_param.wado/Item,u32>::Ok" { discriminant: 0, payload_0: a });
+    "cm_tuple_and_result_of_borrow_param.wado/$cm_binding__Api_settle"(global:cm_tuple_and_result_of_borrow_param.wado::$const_obj_0);
+    if ref.is_null(a) == 0 {
+        let $cm_handle_2: i32;
+        $cm_handle_2 = a.value;
+        a.value = 0;
+        "wasi/resource-drop:cm_tuple_and_result_of_borrow_param.wado#item"($cm_handle_2);
+    }
+}
 
 fn "cm_tuple_and_result_of_borrow_param.wado/$cm_binding__Api_get_item"() with Api {
     return struct.new "core:prelude//$Resource" { value: "wasi/wasi:demo/Api::get_item"() };
@@ -76,11 +93,7 @@ fn "cm_tuple_and_result_of_borrow_param.wado/$cm_binding__Api_settle"(outcome) w
 }
 
 fn "cm_tuple_and_result_of_borrow_param.wado/$cm_export__run"() {
-    let a: ref "core:prelude//$Resource";
-    "cm_tuple_and_result_of_borrow_param.wado/$cm_binding__Api_label"(struct.new "tuple//[&cm_tuple_and_result_of_borrow_param.wado/Item, u32]" { 0: local.tee a("cm_tuple_and_result_of_borrow_param.wado/$cm_binding__Api_get_item"()), 1: 7 });
-    "cm_tuple_and_result_of_borrow_param.wado/$cm_binding__Api_settle"(struct.new "core:prelude/types.wado//Result<&cm_tuple_and_result_of_borrow_param.wado/Item,u32>::Ok" { discriminant: 0, payload_0: a });
-    "cm_tuple_and_result_of_borrow_param.wado/$cm_binding__Api_settle"(struct.new "core:prelude/types.wado//Result<&cm_tuple_and_result_of_borrow_param.wado/Item,u32>::Err" { discriminant: 1, payload_0: 1 });
-    "wasi/resource-drop:cm_tuple_and_result_of_borrow_param.wado#item"(a.value);
+    "cm_tuple_and_result_of_borrow_param.wado/run"();
     "wasi/task-return"(0);
 }
 

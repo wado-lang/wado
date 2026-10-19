@@ -6,24 +6,117 @@ struct core:prelude//$Resource {  // TypeId(0)
     mut value: i32,
 }
 
-type "functype//mem/realloc" = fn(i32, i32, i32, i32) -> i32;  // TypeId(1)
+array Array<wasi:http/types.wado/Fields> (mut ref null "core:prelude//$Resource");  // TypeId(1)
 
-type "functype//spec_components_extract_through_mut.wado/$cm_export__$test_0" = fn();  // TypeId(2)
+variant core:prelude/types.wado//Option<wasi:http/types.wado/Fields> {  // TypeId(2)
+    None,
+    Some(ref null "core:prelude//$Resource"),
+}
 
-type "functype//wasi/resource-drop:wasi/http/types.wado#fields" = fn(i32);  // TypeId(3)
+struct core:prelude/types.wado//Option<wasi:http/types.wado/Fields>::Some {  // TypeId(3)
+    discriminant: i32,
+    payload_0: ref null "core:prelude//$Resource",
+}
 
-type "functype//wasi/task-return" = fn(i32);  // TypeId(4)
+struct core:prelude//List<wasi:http/types.wado/Fields> {  // TypeId(4)
+    mut repr: ref "Array<wasi:http/types.wado/Fields>",
+    mut used: i32,
+}
+
+type "functype//mem/realloc" = fn(i32, i32, i32, i32) -> i32;  // TypeId(5)
+
+type "functype//wasi/stream-write" = fn(i32, i32, i32) -> i32;  // TypeId(6)
+
+type "functype//wasi/waitable-join" = fn(i32, i32);  // TypeId(7)
+
+type "functype//wasi/waitable-set-drop" = fn(i32);  // TypeId(8)
+
+type "functype//wasi/waitable-set-new" = fn() -> i32;  // TypeId(9)
+
+type "functype//wasi/waitable-set-wait" = fn(i32, i32) -> i32;  // TypeId(10)
+
+type "functype//wasi/wasi:cli/Stderr::write_via_stream" = fn(i32) -> i32;  // TypeId(11)
+
+type "functype//spec_components_extract_through_mut.wado/$test_0" = fn();  // TypeId(12)
+
+type "functype//spec_components_extract_through_mut.wado/$drop$core:prelude/list.wado/List<wasi:http/types.wado/Fields>" = fn(ref null "core:prelude//List<wasi:http/types.wado/Fields>");  // TypeId(13)
+
+type "functype//spec_components_extract_through_mut.wado/$cm_export__$test_0" = fn();  // TypeId(14)
+
+type "functype//wasi/resource-drop:wasi/http/types.wado#fields" = fn(i32);  // TypeId(15)
+
+type "functype//wasi/task-return" = fn(i32);  // TypeId(16)
+
+type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(17)
+
+type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(18)
+
+type "functype//wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code" = fn(i32);  // TypeId(19)
+
+type "functype//wasi/stream-drop-readable" = fn(i32);  // TypeId(20)
 
 import fn mem/realloc from "mem/realloc";
+import fn wasi/stream-write from "wasi/stream-write";
+import fn wasi/waitable-join from "wasi/waitable-join";
+import fn wasi/waitable-set-drop from "wasi/waitable-set-drop";
+import fn wasi/waitable-set-new from "wasi/waitable-set-new";
+import fn wasi/waitable-set-wait from "wasi/waitable-set-wait";
+import fn wasi/wasi:cli/Stderr::write_via_stream from "wasi/wasi:cli/Stderr::write_via_stream";
 import memory (1) from "mem/memory";
 import fn wasi/resource-drop:wasi/http/types.wado#fields from "wasi/resource-drop:wasi/http/types.wado#fields";
 import fn wasi/task-return from "wasi/task-return";
+import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
+import fn wasi/stream-new from "wasi/stream-new";
+import fn wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code from "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code";
+import fn wasi/stream-drop-readable from "wasi/stream-drop-readable";
+
+global global:core:builtin::$unit_case$core:prelude/types.wado//Option<wasi:http/types.wado/Fields>$0: ref "core:prelude/types.wado//Option<wasi:http/types.wado/Fields>" = struct.new "core:prelude/types.wado//Option<wasi:http/types.wado/Fields>" { 0 };
+
+fn "spec_components_extract_through_mut.wado/$test_0"() {
+    let list_0: ref null "core:prelude//List<wasi:http/types.wado/Fields>";
+    let $discarded_4: ref null "core:prelude/types.wado//Option<wasi:http/types.wado/Fields>";
+    let $drop_v_5: ref null "core:prelude//$Resource";
+    list_0 = struct.new "core:prelude//List<wasi:http/types.wado/Fields>" { repr: array.new_fixed<ref null "core:prelude//$Resource">(), used: 0 };
+    if local.tee $discarded_4(global:core:builtin::$unit_case$core:prelude/types.wado//Option<wasi:http/types.wado/Fields>$0).discriminant == 0 {
+    } else {
+        $drop_v_5 = ref.cast "core:prelude/types.wado//Option<wasi:http/types.wado/Fields>::Some"($discarded_4).payload_0;
+        let $cm_handle_2: i32;
+        $cm_handle_2 = $drop_v_5.value;
+        $drop_v_5.value = 0;
+        "wasi/resource-drop:wasi/http/types.wado#fields"($cm_handle_2);
+    }
+    block {
+    };
+    if ref.is_null(list_0) == 0 {
+        "spec_components_extract_through_mut.wado/$drop$core:prelude/list.wado/List<wasi:http/types.wado/Fields>"(list_0);
+    }
+}
+
+fn "spec_components_extract_through_mut.wado/$drop$core:prelude/list.wado/List<wasi:http/types.wado/Fields>"(value) {
+    let $slots_1: ref null "Array<wasi:http/types.wado/Fields>";
+    let $end_2: i32;
+    let $index_3: i32;
+    let $slot_4: ref null "core:prelude//$Resource";
+    $slots_1 = value.repr;
+    $end_2 = value.used;
+    $index_3 = 0;
+    b3: block {
+        l4: loop {
+            break_if b3 $index_3 >= $end_2;
+            if ref.is_null(local.tee $slot_4(builtin::array_get_value<ref null "core:prelude//$Resource">($slots_1, $index_3))) == 0 {
+                let $cm_handle_2: i32;
+                $cm_handle_2 = $slot_4.value;
+                $slot_4.value = 0;
+                "wasi/resource-drop:wasi/http/types.wado#fields"($cm_handle_2);
+            }
+            $index_3 = $index_3 + 1;
+            continue l4;
+        };
+    };
+}
 
 fn "spec_components_extract_through_mut.wado/$cm_export__$test_0"() {
-    if ref.is_null(ref.null none) {
-    } else {
-        "wasi/resource-drop:wasi/http/types.wado#fields"(ref.null none.value);
-    }
+    "spec_components_extract_through_mut.wado/$test_0"();
     "wasi/task-return"(0);
 }
 

@@ -7,7 +7,7 @@ struct core:prelude//$Resource {  // TypeId(0)
 }
 
 struct cm_resource_only_in_record_param.wado//Slot {  // TypeId(1)
-    mut device: ref "core:prelude//$Resource",
+    mut device: ref null "core:prelude//$Resource",
 }
 
 type "functype//mem/realloc" = fn(i32, i32, i32, i32) -> i32;  // TypeId(2)
@@ -16,9 +16,9 @@ type "functype//wasi/wasi:demo/Gfx::fill" = fn(i32) -> i32;  // TypeId(3)
 
 type "functype//wasi/wasi:demo/Maker::get_device" = fn() -> i32;  // TypeId(4)
 
-type "functype//cm_resource_only_in_record_param.wado/$cm_binding__Gfx_fill" = fn(ref "cm_resource_only_in_record_param.wado//Slot") -> u32;  // TypeId(5)
+type "functype//cm_resource_only_in_record_param.wado/$cm_binding__Gfx_fill" = fn(ref null "cm_resource_only_in_record_param.wado//Slot") -> u32;  // TypeId(5)
 
-type "functype//cm_resource_only_in_record_param.wado/$cm_binding__Maker_get_device" = fn() -> ref "core:prelude//$Resource";  // TypeId(6)
+type "functype//cm_resource_only_in_record_param.wado/$cm_binding__Maker_get_device" = fn() -> ref null "core:prelude//$Resource";  // TypeId(6)
 
 type "functype//cm_resource_only_in_record_param.wado/$cm_export__run" = fn();  // TypeId(7)
 
@@ -39,7 +39,7 @@ fn "cm_resource_only_in_record_param.wado/$cm_binding__Maker_get_device"() with 
 }
 
 fn "cm_resource_only_in_record_param.wado/$cm_export__run"() {
-    drop("cm_resource_only_in_record_param.wado/$cm_binding__Gfx_fill"(struct.new "cm_resource_only_in_record_param.wado//Slot" { device: ref.as_non_null("cm_resource_only_in_record_param.wado/$cm_binding__Maker_get_device"()) }));
+    drop("cm_resource_only_in_record_param.wado/$cm_binding__Gfx_fill"(struct.new "cm_resource_only_in_record_param.wado//Slot" { device: "cm_resource_only_in_record_param.wado/$cm_binding__Maker_get_device"() }));
     "wasi/task-return"(0);
 }
 

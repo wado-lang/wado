@@ -38,35 +38,41 @@ struct core:prelude/format.wado//Formatter {  // TypeId(7)
 
 struct resource_move_in_while_let.wado//Holder {  // TypeId(8)
     mut id: i32,
-    mut c: ref "core:prelude//$Resource",
+    mut c: ref null "core:prelude//$Resource",
 }
 
-array Array<resource_move_in_while_let.wado/Holder> (mut ref "resource_move_in_while_let.wado//Holder");  // TypeId(9)
+array Array<resource_move_in_while_let.wado/Holder> (mut ref null "resource_move_in_while_let.wado//Holder");  // TypeId(9)
 
-struct core:prelude//List<resource_move_in_while_let.wado/Holder> {  // TypeId(10)
+variant core:prelude/types.wado//Option<resource_move_in_while_let.wado/Holder> {  // TypeId(10)
+    None,
+    Some(ref null "resource_move_in_while_let.wado//Holder"),
+}
+
+struct core:prelude/types.wado//Option<resource_move_in_while_let.wado/Holder>::Some {  // TypeId(11)
+    discriminant: i32,
+    payload_0: ref null "resource_move_in_while_let.wado//Holder",
+}
+
+struct core:prelude//List<resource_move_in_while_let.wado/Holder> {  // TypeId(12)
     mut repr: ref "Array<resource_move_in_while_let.wado/Holder>",
     mut used: i32,
 }
 
-type "functype//mem/realloc" = fn(i32, i32, i32, i32) -> i32;  // TypeId(11)
+type "functype//mem/realloc" = fn(i32, i32, i32, i32) -> i32;  // TypeId(13)
 
-type "functype//wasi/stream-write" = fn(i32, i32, i32) -> i32;  // TypeId(12)
+type "functype//wasi/stream-write" = fn(i32, i32, i32) -> i32;  // TypeId(14)
 
-type "functype//wasi/waitable-join" = fn(i32, i32);  // TypeId(13)
+type "functype//wasi/waitable-join" = fn(i32, i32);  // TypeId(15)
 
-type "functype//wasi/waitable-set-drop" = fn(i32);  // TypeId(14)
+type "functype//wasi/waitable-set-drop" = fn(i32);  // TypeId(16)
 
-type "functype//wasi/waitable-set-new" = fn() -> i32;  // TypeId(15)
+type "functype//wasi/waitable-set-new" = fn() -> i32;  // TypeId(17)
 
-type "functype//wasi/waitable-set-wait" = fn(i32, i32) -> i32;  // TypeId(16)
+type "functype//wasi/waitable-set-wait" = fn(i32, i32) -> i32;  // TypeId(18)
 
-type "functype//wasi/wasi:cli/Stderr::write_via_stream" = fn(i32) -> i32;  // TypeId(17)
+type "functype//wasi/wasi:cli/Stderr::write_via_stream" = fn(i32) -> i32;  // TypeId(19)
 
-type "functype//resource_move_in_while_let.wado/sift$dae[keep]" = fn(ref "core:prelude//List<resource_move_in_while_let.wado/Holder>") -> ref "core:prelude//List<resource_move_in_while_let.wado/Holder>";  // TypeId(18)
-
-type "functype//resource_move_in_while_let.wado/sift_if_let$dae[keep]" = fn(ref "core:prelude//List<resource_move_in_while_let.wado/Holder>") -> ref "core:prelude//List<resource_move_in_while_let.wado/Holder>";  // TypeId(19)
-
-type "functype//resource_move_in_while_let.wado/sift_match$dae[keep]" = fn(ref "core:prelude//List<resource_move_in_while_let.wado/Holder>") -> ref "core:prelude//List<resource_move_in_while_let.wado/Holder>";  // TypeId(20)
+type "functype//resource_move_in_while_let.wado/sift_if_let$dae[keep]" = fn(ref null "core:prelude//List<resource_move_in_while_let.wado/Holder>") -> ref null "core:prelude//List<resource_move_in_while_let.wado/Holder>";  // TypeId(20)
 
 type "functype//resource_move_in_while_let.wado/$test_0_a_binding_moved_in_a_loop_body_is_a_fresh_one_each_iteration" = fn();  // TypeId(21)
 
@@ -86,7 +92,7 @@ type "functype//core:prelude/types.wado/write_copy_is_final" = fn(i32, "core:pre
 
 type "functype//core:rt/gc_array_to_memory" = fn(ref Array<u8>, i32, i32, i32);  // TypeId(29)
 
-type "functype//core:rt/write_string_to_stream$dae[add_newline]" = fn(ref "core:prelude//$Resource", ref Array<u8>, i32);  // TypeId(30)
+type "functype//core:rt/write_string_to_stream$dae[add_newline]" = fn(ref null "core:prelude//$Resource", ref Array<u8>, i32);  // TypeId(30)
 
 type "functype//core:rt/log_stderr" = fn(ref Array<u8>, i32);  // TypeId(31)
 
@@ -116,7 +122,7 @@ type "functype//core:prelude/string.wado/core:prelude/string.wado/String::push" 
 
 type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>" = fn(ref "core:prelude/format.wado//Formatter", bool, ref Array<u8>, i32, i32) -> i32;  // TypeId(44)
 
-type "functype//core:prelude/list.wado/core:prelude/list.wado/List<resource_move_in_while_let.wado/Holder>::grow" = fn(ref "core:prelude//List<resource_move_in_while_let.wado/Holder>");  // TypeId(45)
+type "functype//core:prelude/list.wado/core:prelude/list.wado/List<resource_move_in_while_let.wado/Holder>::grow" = fn(ref null "core:prelude//List<resource_move_in_while_let.wado/Holder>");  // TypeId(45)
 
 type "functype//core:prelude/primitive.wado/i32::fmt_decimal$sroa[self.value]" = fn(i32, ref "core:prelude/format.wado//Formatter");  // TypeId(46)
 
@@ -136,6 +142,8 @@ type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(53)
 
 type "functype//wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code" = fn(i32);  // TypeId(54)
 
+type "functype//wasi/stream-drop-readable" = fn(i32);  // TypeId(55)
+
 import fn mem/realloc from "mem/realloc";
 import fn wasi/stream-write from "wasi/stream-write";
 import fn wasi/waitable-join from "wasi/waitable-join";
@@ -148,145 +156,127 @@ import fn wasi/task-return from "wasi/task-return";
 import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 import fn wasi/stream-new from "wasi/stream-new";
 import fn wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code from "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code";
+import fn wasi/stream-drop-readable from "wasi/stream-drop-readable";
 
-fn "resource_move_in_while_let.wado/sift$dae[keep]"(from) {
-    let $load_1: i32;
-    let kept: ref "core:prelude//List<resource_move_in_while_let.wado/Holder>";
-    let h: ref "resource_move_in_while_let.wado//Holder";
-    let elements: ref "Array<resource_move_in_while_let.wado/Holder>";
-    let value_9: ref "resource_move_in_while_let.wado//Holder";
+global global:core:builtin::$unit_case$core:prelude/types.wado//Option<resource_move_in_while_let.wado/Holder>$0: ref "core:prelude/types.wado//Option<resource_move_in_while_let.wado/Holder>" = struct.new "core:prelude/types.wado//Option<resource_move_in_while_let.wado/Holder>" { 0 };
+
+fn "resource_move_in_while_let.wado/sift_if_let$dae[keep]"(from) {
+    let $load_2: i32;
+    let kept: ref null "core:prelude//List<resource_move_in_while_let.wado/Holder>";
+    let h: ref null "resource_move_in_while_let.wado//Holder";
+    let elements: ref null "Array<resource_move_in_while_let.wado/Holder>";
     let used: i32;
-    let $av_17: i32;
-    kept = struct.new "core:prelude//List<resource_move_in_while_let.wado/Holder>" { repr: local.tee elements(array.new_fixed<ref "resource_move_in_while_let.wado//Holder">()), used: 0 };
+    let $sroa_v_end_22: i32;
+    let current: i32;
+    let $sroa_$iter_0_start_32: i32;
+    kept = struct.new "core:prelude//List<resource_move_in_while_let.wado/Holder>" { repr: ref.as_non_null(local.tee elements(array.new_fixed<ref null "resource_move_in_while_let.wado//Holder">())), used: 0 };
+    $sroa_v_end_22 = from.used;
+    $sroa_$iter_0_start_32 = 0;
     elements = from.repr;
     b0: block {
         l1: loop {
-            break_if b0 local.tee $load_1(from.used) == 0;
-            from.used = $load_1 - 1;
-            if local.tee $av_17(local.tee h(builtin::array_get_value<ref "resource_move_in_while_let.wado//Holder">(elements, from.used)).id) == 1 {
-                value_9 = struct.new "resource_move_in_while_let.wado//Holder" { id: $av_17, c: h.c };
-                if @unlikely(local.tee used(kept.used) >= builtin::array_len(kept.repr)) {
-                    cold_path;
-                    "core:prelude/list.wado/core:prelude/list.wado/List<resource_move_in_while_let.wado/Holder>::grow"(kept);
-                    elements = from.repr;
+            break_if b0 $inline_core_prelude_range_wado_RangeExclusive_i32__core_prelude_traits_wado_Iterator__next_sroa_return__0__$inline_i32_core_prelude_traits_wado_Ord__cmp_sroa_self_value_other_value__0: block -> "core:prelude/traits.wado//enum:Ordering" {
+                if $sroa_$iter_0_start_32 < $sroa_v_end_22 {
+                    break $inline_core_prelude_range_wado_RangeExclusive_i32__core_prelude_traits_wado_Iterator__next_sroa_return__0__$inline_i32_core_prelude_traits_wado_Ord__cmp_sroa_self_value_other_value__0: 0;
                 }
-                builtin::array_set<ref "resource_move_in_while_let.wado//Holder">(kept.repr, used, value_9);
-                kept.used = used + 1;
-            }
+                if $sroa_$iter_0_start_32 > $sroa_v_end_22 {
+                    break $inline_core_prelude_range_wado_RangeExclusive_i32__core_prelude_traits_wado_Iterator__next_sroa_return__0__$inline_i32_core_prelude_traits_wado_Ord__cmp_sroa_self_value_other_value__0: 2;
+                }
+                break $inline_core_prelude_range_wado_RangeExclusive_i32__core_prelude_traits_wado_Iterator__next_sroa_return__0__$inline_i32_core_prelude_traits_wado_Ord__cmp_sroa_self_value_other_value__0: 1;
+            } != 0;
+            current = $sroa_$iter_0_start_32;
+            $inline_core_prelude_range_wado_RangeExclusive_i32__core_prelude_traits_wado_Iterator__next_sroa_return__0__$fused_$inline_i32_core_prelude_range_wado_Step__next_step_sroa_self_value_return__1: block {
+                if current == 2147483647 {
+                    $sroa_$iter_0_start_32 = $sroa_v_end_22;
+                    break $inline_core_prelude_range_wado_RangeExclusive_i32__core_prelude_traits_wado_Iterator__next_sroa_return__0__$fused_$inline_i32_core_prelude_range_wado_Step__next_step_sroa_self_value_return__1;
+                }
+                $sroa_$iter_0_start_32 = current + 1;
+                break $inline_core_prelude_range_wado_RangeExclusive_i32__core_prelude_traits_wado_Iterator__next_sroa_return__0__$fused_$inline_i32_core_prelude_range_wado_Step__next_step_sroa_self_value_return__1;
+            };
+            $fused_$inline_core_prelude_list_wado_List_resource_move_in_while_let_wado_Holder___pop_4: block {
+                break_if $fused_$inline_core_prelude_list_wado_List_resource_move_in_while_let_wado_Holder___pop_4 local.tee $load_2(from.used) == 0;
+                from.used = $load_2 - 1;
+                if local.tee h(builtin::array_get_value<ref null "resource_move_in_while_let.wado//Holder">(elements, from.used)).id == 1 {
+                    if @unlikely(local.tee used(kept.used) >= builtin::array_len(kept.repr)) {
+                        cold_path;
+                        "core:prelude/list.wado/core:prelude/list.wado/List<resource_move_in_while_let.wado/Holder>::grow"(kept);
+                        elements = from.repr;
+                    }
+                    builtin::array_set<ref null "resource_move_in_while_let.wado//Holder">(kept.repr, used, h);
+                    kept.used = used + 1;
+                }
+                break $fused_$inline_core_prelude_list_wado_List_resource_move_in_while_let_wado_Holder___pop_4;
+            };
             continue l1;
         };
     };
     return kept;
 }
 
-fn "resource_move_in_while_let.wado/sift_if_let$dae[keep]"(from) {
-    let $load_2: i32;
-    let kept: ref "core:prelude//List<resource_move_in_while_let.wado/Holder>";
-    let h: ref "resource_move_in_while_let.wado//Holder";
-    let elements: ref "Array<resource_move_in_while_let.wado/Holder>";
-    let value_14: ref "resource_move_in_while_let.wado//Holder";
-    let used: i32;
-    let $sroa_v_end_23: i32;
-    let current: i32;
-    let $sroa_$iter_0_start_33: i32;
-    let $av_34: i32;
-    kept = struct.new "core:prelude//List<resource_move_in_while_let.wado/Holder>" { repr: local.tee elements(array.new_fixed<ref "resource_move_in_while_let.wado//Holder">()), used: 0 };
-    $sroa_v_end_23 = from.used;
-    $sroa_$iter_0_start_33 = 0;
-    elements = from.repr;
-    b4: block {
-        l5: loop {
-            break_if b4 $inline_core_prelude_range_wado_RangeExclusive_i32__core_prelude_traits_wado_Iterator__next_sroa_return__0__$inline_i32_core_prelude_traits_wado_Ord__cmp_sroa_self_value_other_value__0: block -> "core:prelude/traits.wado//enum:Ordering" {
-                if $sroa_$iter_0_start_33 < $sroa_v_end_23 {
-                    break $inline_core_prelude_range_wado_RangeExclusive_i32__core_prelude_traits_wado_Iterator__next_sroa_return__0__$inline_i32_core_prelude_traits_wado_Ord__cmp_sroa_self_value_other_value__0: 0;
-                }
-                if $sroa_$iter_0_start_33 > $sroa_v_end_23 {
-                    break $inline_core_prelude_range_wado_RangeExclusive_i32__core_prelude_traits_wado_Iterator__next_sroa_return__0__$inline_i32_core_prelude_traits_wado_Ord__cmp_sroa_self_value_other_value__0: 2;
-                }
-                break $inline_core_prelude_range_wado_RangeExclusive_i32__core_prelude_traits_wado_Iterator__next_sroa_return__0__$inline_i32_core_prelude_traits_wado_Ord__cmp_sroa_self_value_other_value__0: 1;
-            } != 0;
-            current = $sroa_$iter_0_start_33;
-            $inline_core_prelude_range_wado_RangeExclusive_i32__core_prelude_traits_wado_Iterator__next_sroa_return__0__$fused_$inline_i32_core_prelude_range_wado_Step__next_step_sroa_self_value_return__1: block {
-                if current == 2147483647 {
-                    $sroa_$iter_0_start_33 = $sroa_v_end_23;
-                    break $inline_core_prelude_range_wado_RangeExclusive_i32__core_prelude_traits_wado_Iterator__next_sroa_return__0__$fused_$inline_i32_core_prelude_range_wado_Step__next_step_sroa_self_value_return__1;
-                }
-                $sroa_$iter_0_start_33 = current + 1;
-                break $inline_core_prelude_range_wado_RangeExclusive_i32__core_prelude_traits_wado_Iterator__next_sroa_return__0__$fused_$inline_i32_core_prelude_range_wado_Step__next_step_sroa_self_value_return__1;
-            };
-            $fused_$inline_core_prelude_list_wado_List_resource_move_in_while_let_wado_Holder___pop_4: block {
-                break_if $fused_$inline_core_prelude_list_wado_List_resource_move_in_while_let_wado_Holder___pop_4 local.tee $load_2(from.used) == 0;
-                from.used = $load_2 - 1;
-                if local.tee $av_34(local.tee h(builtin::array_get_value<ref "resource_move_in_while_let.wado//Holder">(elements, from.used)).id) == 1 {
-                    value_14 = struct.new "resource_move_in_while_let.wado//Holder" { id: $av_34, c: h.c };
-                    if @unlikely(local.tee used(kept.used) >= builtin::array_len(kept.repr)) {
-                        cold_path;
-                        "core:prelude/list.wado/core:prelude/list.wado/List<resource_move_in_while_let.wado/Holder>::grow"(kept);
-                        elements = from.repr;
-                    }
-                    builtin::array_set<ref "resource_move_in_while_let.wado//Holder">(kept.repr, used, value_14);
-                    kept.used = used + 1;
-                }
-                break $fused_$inline_core_prelude_list_wado_List_resource_move_in_while_let_wado_Holder___pop_4;
-            };
-            continue l5;
-        };
-    };
-    return kept;
-}
-
-fn "resource_move_in_while_let.wado/sift_match$dae[keep]"(from) {
-    let $load_1: i32;
-    let $load_3: i32;
-    let kept: ref "core:prelude//List<resource_move_in_while_let.wado/Holder>";
-    let h: ref "resource_move_in_while_let.wado//Holder";
-    let $match_4: ref null "resource_move_in_while_let.wado//Holder";
-    let elements: ref "Array<resource_move_in_while_let.wado/Holder>";
-    let value_9: ref "resource_move_in_while_let.wado//Holder";
-    let used: i32;
-    kept = struct.new "core:prelude//List<resource_move_in_while_let.wado/Holder>" { repr: local.tee elements(array.new_fixed<ref "resource_move_in_while_let.wado//Holder">()), used: 0 };
-    elements = from.repr;
-    b11: block {
-        l12: loop {
-            if ref.is_null(local.tee $match_4($inline_core_prelude_list_wado_List_resource_move_in_while_let_wado_Holder___pop_1: block -> ref null "resource_move_in_while_let.wado//Holder" {
-                if local.tee $load_1(from.used) == 0 {
-                    break $inline_core_prelude_list_wado_List_resource_move_in_while_let_wado_Holder___pop_1: ref.null none;
-                }
-                from.used = $load_1 - 1;
-                break $inline_core_prelude_list_wado_List_resource_move_in_while_let_wado_Holder___pop_1: builtin::array_get_value<ref "resource_move_in_while_let.wado//Holder">(elements, from.used);
-            })) == 0 {
-                if local.tee $load_3(local.tee h(ref.as_non_null($match_4)).id) == 1 {
-                    value_9 = struct.new "resource_move_in_while_let.wado//Holder" { id: $load_3, c: h.c };
-                    if @unlikely(local.tee used(kept.used) >= builtin::array_len(kept.repr)) {
-                        cold_path;
-                        "core:prelude/list.wado/core:prelude/list.wado/List<resource_move_in_while_let.wado/Holder>::grow"(kept);
-                        elements = from.repr;
-                    }
-                    builtin::array_set<ref "resource_move_in_while_let.wado//Holder">(kept.repr, used, value_9);
-                    kept.used = used + 1;
-                }
-            } else {
-                break b11;
-            }
-            continue l12;
-        };
-    };
-    return kept;
-}
-
 fn "resource_move_in_while_let.wado/$test_0_a_binding_moved_in_a_loop_body_is_a_fresh_one_each_iteration"() {
-    let none: ref "core:prelude//List<resource_move_in_while_let.wado/Holder>";
-    if @unlikely(("resource_move_in_while_let.wado/sift$dae[keep]"(local.tee none(struct.new "core:prelude//List<resource_move_in_while_let.wado/Holder>" { repr: array.new_fixed<ref "resource_move_in_while_let.wado//Holder">(), used: 0 })).used == 0) == 0) {
+    let $load_1: i32;
+    let none: ref null "core:prelude//List<resource_move_in_while_let.wado/Holder>";
+    let elements_10: ref null "Array<resource_move_in_while_let.wado/Holder>";
+    let kept_14: ref null "core:prelude//List<resource_move_in_while_let.wado/Holder>";
+    let h_15: ref null "resource_move_in_while_let.wado//Holder";
+    let $local_4_23: ref null "core:prelude/types.wado//Option<resource_move_in_while_let.wado/Holder>";
+    let used_30: i32;
+    none = struct.new "core:prelude//List<resource_move_in_while_let.wado/Holder>" { repr: ref.as_non_null(local.tee elements_10(array.new_fixed<ref null "resource_move_in_while_let.wado//Holder">())), used: 0 };
+    kept_14 = struct.new "core:prelude//List<resource_move_in_while_let.wado/Holder>" { repr: ref.as_non_null(local.tee elements_10(array.new_fixed<ref null "resource_move_in_while_let.wado//Holder">())), used: 0 };
+    elements_10 = none.repr;
+    b7: block {
+        l8: loop {
+            break_if b7 local.tee $load_1(none.used) == 0;
+            none.used = $load_1 - 1;
+            if local.tee h_15(builtin::array_get_value<ref null "resource_move_in_while_let.wado//Holder">(elements_10, none.used)).id == 1 {
+                if @unlikely(local.tee used_30(kept_14.used) >= builtin::array_len(kept_14.repr)) {
+                    cold_path;
+                    "core:prelude/list.wado/core:prelude/list.wado/List<resource_move_in_while_let.wado/Holder>::grow"(kept_14);
+                    elements_10 = none.repr;
+                }
+                builtin::array_set<ref null "resource_move_in_while_let.wado//Holder">(kept_14.repr, used_30, h_15);
+                kept_14.used = used_30 + 1;
+            }
+            continue l8;
+        };
+    };
+    if @unlikely(local.tee used_30(kept_14.used == 0) == 0) {
         cold_path;
         "resource_move_in_while_let.wado/$test_0_a_binding_moved_in_a_loop_body_is_a_fresh_one_each_iteration$cold2"();
         unreachable;
     }
-    if @unlikely(("resource_move_in_while_let.wado/sift_if_let$dae[keep]"(none).used == 0) == 0) {
+    if @unlikely((local.tee kept_14("resource_move_in_while_let.wado/sift_if_let$dae[keep]"(none)).used == 0) == 0) {
         cold_path;
         "resource_move_in_while_let.wado/$test_0_a_binding_moved_in_a_loop_body_is_a_fresh_one_each_iteration$cold1"();
         unreachable;
     }
-    if @unlikely((local.tee none("resource_move_in_while_let.wado/sift_match$dae[keep]"(none)).used == 0) == 0) {
+    kept_14 = struct.new "core:prelude//List<resource_move_in_while_let.wado/Holder>" { repr: ref.as_non_null(local.tee elements_10(array.new_fixed<ref null "resource_move_in_while_let.wado//Holder">())), used: 0 };
+    elements_10 = none.repr;
+    b13: block {
+        l14: loop {
+            if ref.test "core:prelude/types.wado//Option<resource_move_in_while_let.wado/Holder>::Some"(local.tee $local_4_23($inline_core_prelude_list_wado_List_resource_move_in_while_let_wado_Holder___pop_4: block -> ref null "core:prelude/types.wado//Option<resource_move_in_while_let.wado/Holder>" {
+                if local.tee used_30(none.used) == 0 {
+                    break $inline_core_prelude_list_wado_List_resource_move_in_while_let_wado_Holder___pop_4: global:core:builtin::$unit_case$core:prelude/types.wado//Option<resource_move_in_while_let.wado/Holder>$0;
+                }
+                none.used = used_30 - 1;
+                break $inline_core_prelude_list_wado_List_resource_move_in_while_let_wado_Holder___pop_4: struct.new "core:prelude/types.wado//Option<resource_move_in_while_let.wado/Holder>::Some" { discriminant: 1, payload_0: builtin::array_get_value<ref null "resource_move_in_while_let.wado//Holder">(elements_10, none.used) };
+            })) {
+                if local.tee h_15(ref.cast "core:prelude/types.wado//Option<resource_move_in_while_let.wado/Holder>::Some"($local_4_23).payload_0).id == 1 {
+                    if @unlikely(local.tee $load_1(kept_14.used) >= builtin::array_len(kept_14.repr)) {
+                        cold_path;
+                        "core:prelude/list.wado/core:prelude/list.wado/List<resource_move_in_while_let.wado/Holder>::grow"(kept_14);
+                        elements_10 = none.repr;
+                    }
+                    builtin::array_set<ref null "resource_move_in_while_let.wado//Holder">(kept_14.repr, $load_1, h_15);
+                    kept_14.used = $load_1 + 1;
+                }
+            } else {
+                break b13;
+            }
+            continue l14;
+        };
+    };
+    if @unlikely(local.tee used_30(kept_14.used == 0) == 0) {
         cold_path;
         "resource_move_in_while_let.wado/$test_0_a_binding_moved_in_a_loop_body_is_a_fresh_one_each_iteration$cold0"();
         unreachable;
@@ -502,6 +492,7 @@ fn "core:rt/gc_array_to_memory"(arr, src_start, ptr, len) {
 
 fn "core:rt/write_string_to_stream$dae[add_newline]"(tx, $mv$message$repr, $mv$message$used) {
     let new_repr: ref Array<u8>;
+    let $moved_5: ref null "core:prelude//$Resource";
     builtin::array_copy<u8>(local.tee new_repr(builtin::array_new<u8>($mv$message$used + 1)), 0, $mv$message$repr, 0, $mv$message$used);
     builtin::array_set_u8(new_repr, $mv$message$used, 10);
     drop(block -> "core:prelude/types.wado//enum:CopyResult" {
@@ -510,18 +501,32 @@ fn "core:rt/write_string_to_stream$dae[add_newline]"(tx, $mv$message$repr, $mv$m
         $mv$message$used = $mv$message$used + 1;
         "core:rt/cm_stream_write_raw_all_u8"($arg_spill_1, new_repr, 0, $mv$message$used);
     });
-    "wasi/stream-drop-writable"(tx.value);
+    "wasi/stream-drop-writable"($moved_5 = tx; tx = ref.null none; $moved_5.value);
+    if ref.is_null(tx) == 0 {
+        "wasi/stream-drop-writable"(tx.value);
+    }
 }
 
 fn "core:rt/log_stderr"($mv$message$repr, $mv$message$used) {
-    let $cm_pair_4: i64;
-    let $sroa_$pattern_temp_0_0_6: i32;
-    let $sroa_$pattern_temp_0_1_7: ref "core:prelude//$Resource";
-    $sroa_$pattern_temp_0_0_6 = builtin::i32_wrap_i64(local.tee $cm_pair_4("wasi/stream-new"()));
-    $sroa_$pattern_temp_0_1_7 = struct.new "core:prelude//$Resource" { value: builtin::i32_wrap_i64($cm_pair_4 >> 32_i64) };
-    $sroa_$pattern_temp_0_0_6 = "wasi/wasi:cli/Stderr::write_via_stream"($sroa_$pattern_temp_0_0_6);
-    "core:rt/write_string_to_stream$dae[add_newline]"($sroa_$pattern_temp_0_1_7, $mv$message$repr, $mv$message$used);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"($sroa_$pattern_temp_0_0_6);
+    let $moved_4: ref null "core:prelude//$Resource";
+    let $moved_5: ref null "core:prelude//$Resource";
+    let $cm_pair_7: i64;
+    let $sroa_$pattern_temp_0_0_9: ref null "core:prelude//$Resource";
+    let $sroa_$pattern_temp_0_1_10: ref null "core:prelude//$Resource";
+    $sroa_$pattern_temp_0_0_9 = struct.new "core:prelude//$Resource" { value: builtin::i32_wrap_i64(local.tee $cm_pair_7("wasi/stream-new"())) };
+    $sroa_$pattern_temp_0_1_10 = struct.new "core:prelude//$Resource" { value: builtin::i32_wrap_i64($cm_pair_7 >> 32_i64) };
+    $moved_4 = struct.new "core:prelude//$Resource" { value: "wasi/wasi:cli/Stderr::write_via_stream"($moved_4 = $sroa_$pattern_temp_0_0_9; $sroa_$pattern_temp_0_0_9 = ref.null none; $moved_4.value) };
+    "core:rt/write_string_to_stream$dae[add_newline]"($moved_5 = $sroa_$pattern_temp_0_1_10; $sroa_$pattern_temp_0_1_10 = ref.null none; $moved_5, $mv$message$repr, $mv$message$used);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"($moved_5 = $moved_4; $moved_4 = ref.null none; $moved_5.value);
+    if ref.is_null($moved_4) == 0 {
+        "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"($moved_4.value);
+    }
+    if ref.is_null($sroa_$pattern_temp_0_1_10) == 0 {
+        "wasi/stream-drop-writable"($sroa_$pattern_temp_0_1_10.value);
+    }
+    if ref.is_null($sroa_$pattern_temp_0_0_9) == 0 {
+        "wasi/stream-drop-readable"($sroa_$pattern_temp_0_0_9.value);
+    }
 }
 
 fn "core:rt/panic"($mv$message$repr, $mv$message$used) {
@@ -579,14 +584,14 @@ fn "core:rt/cm_stream_write_raw_all_u8"(handle, $mv$data$repr, $mv$data$start, $
     $mv$data$start = builtin::i32_wrap_i64("core:rt/cm_lower_list_u8"($mv$data$repr, $mv$data$start, $mv$data$end));
     taken = 0;
     block {
-        l50: loop {
+        l54: loop {
             written = "core:rt/cm_stream_write_once"(handle, $mv$data$start + taken, $mv$data$end - taken);
             taken = taken + local.tee $load_0(written.count);
             if select i32("core:prelude/types.wado/write_copy_is_final"($load_0, written.result), 1, taken >= $mv$data$end) {
                 drop("mem/realloc"($mv$data$start, $mv$data$end, 1, 0));
                 return written.result;
             }
-            continue l50;
+            continue l54;
         };
     };
 }
@@ -835,9 +840,9 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_wri
         self_21 = self.buf;
         new_used_26 = 0;
         $load_2 = self_21.used;
-        b80: block {
-            l81: loop {
-                break_if b80 new_used_26 >= sign_len;
+        b84: block {
+            l85: loop {
+                break_if b84 new_used_26 >= sign_len;
                 if @unlikely(local.tee start_27($load_2 + 1) > builtin::array_len(self_21.repr)) {
                     cold_path;
                     "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self_21, start_27);
@@ -855,7 +860,7 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_wri
                 builtin::array_set_u8(self_21.repr, start_450, 48);
                 new_used_26 = new_used_26 + 1;
                 self_21.used = $load_2;
-                continue l81;
+                continue l85;
             };
         };
         if @unlikely(local.tee new_used_26(local.tee self_21(self.buf).used + digit_count) > builtin::array_len(self_21.repr)) {
@@ -920,12 +925,12 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_wri
         self_21 = self.buf;
         $load_0 = self.fill;
         new_used_26 = 0;
-        b95: block {
-            l96: loop {
-                break_if b95 new_used_26 >= sign_len;
+        b99: block {
+            l100: loop {
+                break_if b99 new_used_26 >= sign_len;
                 "core:prelude/string.wado/core:prelude/string.wado/String::push"(self_21, $load_0);
                 new_used_26 = new_used_26 + 1;
-                continue l96;
+                continue l100;
             };
         };
         return start_450;
@@ -935,12 +940,12 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_wri
         self_21 = self.buf;
         new_used_26 = self.fill;
         $load_0 = 0;
-        b98: block {
-            l99: loop {
-                break_if b98 $load_0 >= $load_2;
+        b102: block {
+            l103: loop {
+                break_if b102 $load_0 >= $load_2;
                 "core:prelude/string.wado/core:prelude/string.wado/String::push"(self_21, new_used_26);
                 $load_0 = $load_0 + 1;
-                continue l99;
+                continue l103;
             };
         };
         if is_negative {
@@ -996,12 +1001,12 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_wri
         self_21 = self.buf;
         $load_2 = self.fill;
         $load_0 = 0;
-        b109: block {
-            l110: loop {
-                break_if b109 $load_0 >= start_450;
+        b113: block {
+            l114: loop {
+                break_if b113 $load_0 >= start_450;
                 "core:prelude/string.wado/core:prelude/string.wado/String::push"(self_21, $load_2);
                 $load_0 = $load_0 + 1;
-                continue l110;
+                continue l114;
             };
         };
         return new_used_26;
@@ -1009,12 +1014,12 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_wri
         self_21 = self.buf;
         new_used_26 = self.fill;
         start_450 = 0;
-        b111: block {
-            l112: loop {
-                break_if b111 start_450 >= sign_len;
+        b115: block {
+            l116: loop {
+                break_if b115 start_450 >= sign_len;
                 "core:prelude/string.wado/core:prelude/string.wado/String::push"(self_21, new_used_26);
                 start_450 = start_450 + 1;
-                continue l112;
+                continue l116;
             };
         };
         if is_negative {
@@ -1073,10 +1078,10 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_wri
 
 fn "core:prelude/list.wado/core:prelude/list.wado/List<resource_move_in_while_let.wado/Holder>::grow"(self) {
     let $load_0: ref "Array<resource_move_in_while_let.wado/Holder>";
-    let new_repr: ref "Array<resource_move_in_while_let.wado/Holder>";
+    let new_repr: ref null "Array<resource_move_in_while_let.wado/Holder>";
     let a: i32;
-    builtin::array_copy<ref "resource_move_in_while_let.wado//Holder">(local.tee new_repr(builtin::array_new<ref "resource_move_in_while_let.wado//Holder">(select i32(a > 4, local.tee a(builtin::array_len(local.tee $load_0(self.repr)) * 2), 4))), 0, $load_0, 0, self.used);
-    self.repr = new_repr;
+    builtin::array_copy<ref null "resource_move_in_while_let.wado//Holder">(local.tee new_repr(builtin::array_new<ref null "resource_move_in_while_let.wado//Holder">(select i32(a > 4, local.tee a(builtin::array_len(local.tee $load_0(self.repr)) * 2), 4))), 0, $load_0, 0, self.used);
+    self.repr = ref.as_non_null(new_repr);
 }
 
 fn "core:prelude/primitive.wado/i32::fmt_decimal$sroa[self.value]"(self, f) {

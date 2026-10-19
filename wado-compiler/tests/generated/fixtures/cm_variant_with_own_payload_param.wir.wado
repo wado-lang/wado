@@ -6,19 +6,29 @@ struct core:prelude//$Resource {  // TypeId(0)
     mut value: i32,
 }
 
-type "functype//mem/realloc" = fn(i32, i32, i32, i32) -> i32;  // TypeId(1)
+variant cm_variant_with_own_payload_param.wado//Target {  // TypeId(1)
+    Dev(ref null "core:prelude//$Resource"),
+    Nothing,
+}
 
-type "functype//wasi/wasi:demo/Gfx::get_device" = fn() -> i32;  // TypeId(2)
+struct cm_variant_with_own_payload_param.wado//Target::Dev {  // TypeId(2)
+    discriminant: i32,
+    payload_0: ref null "core:prelude//$Resource",
+}
 
-type "functype//wasi/wasi:demo/Gfx::pick" = fn(i32, i32) -> i32;  // TypeId(3)
+type "functype//mem/realloc" = fn(i32, i32, i32, i32) -> i32;  // TypeId(3)
 
-type "functype//cm_variant_with_own_payload_param.wado/$cm_binding__Gfx_pick" = fn(ref null "core:prelude//$Resource") -> u32;  // TypeId(4)
+type "functype//wasi/wasi:demo/Gfx::get_device" = fn() -> i32;  // TypeId(4)
 
-type "functype//cm_variant_with_own_payload_param.wado/$cm_binding__Gfx_get_device" = fn() -> ref "core:prelude//$Resource";  // TypeId(5)
+type "functype//wasi/wasi:demo/Gfx::pick" = fn(i32, i32) -> i32;  // TypeId(5)
 
-type "functype//cm_variant_with_own_payload_param.wado/$cm_export__run" = fn();  // TypeId(6)
+type "functype//cm_variant_with_own_payload_param.wado/$cm_binding__Gfx_pick" = fn(ref null "cm_variant_with_own_payload_param.wado//Target") -> u32;  // TypeId(6)
 
-type "functype//wasi/task-return" = fn(i32);  // TypeId(7)
+type "functype//cm_variant_with_own_payload_param.wado/$cm_binding__Gfx_get_device" = fn() -> ref null "core:prelude//$Resource";  // TypeId(7)
+
+type "functype//cm_variant_with_own_payload_param.wado/$cm_export__run" = fn();  // TypeId(8)
+
+type "functype//wasi/task-return" = fn(i32);  // TypeId(9)
 
 import fn mem/realloc from "mem/realloc";
 import fn wasi/wasi:demo/Gfx::get_device from "wasi/wasi:demo/Gfx::get_device";
@@ -26,14 +36,16 @@ import fn wasi/wasi:demo/Gfx::pick from "wasi/wasi:demo/Gfx::pick";
 import memory (1) from "mem/memory";
 import fn wasi/task-return from "wasi/task-return";
 
+global global:core:builtin::$unit_case$cm_variant_with_own_payload_param.wado//Target$1: ref "cm_variant_with_own_payload_param.wado//Target" = struct.new "cm_variant_with_own_payload_param.wado//Target" { 1 };
+
 fn "cm_variant_with_own_payload_param.wado/$cm_binding__Gfx_pick"(target) with Gfx {
     let $target_p0: i32;
     $target_p0 = 0;
-    if ref.is_null(target) == 0 {
-        $target_p0 = target.value;
+    if ref.test "cm_variant_with_own_payload_param.wado//Target::Dev"(target) {
+        $target_p0 = ref.cast "cm_variant_with_own_payload_param.wado//Target::Dev"(target).payload_0.value;
     } else {
     }
-    return "wasi/wasi:demo/Gfx::pick"(ref.is_null(target), $target_p0);
+    return "wasi/wasi:demo/Gfx::pick"(target.discriminant, $target_p0);
 }
 
 fn "cm_variant_with_own_payload_param.wado/$cm_binding__Gfx_get_device"() with Gfx {
@@ -41,8 +53,8 @@ fn "cm_variant_with_own_payload_param.wado/$cm_binding__Gfx_get_device"() with G
 }
 
 fn "cm_variant_with_own_payload_param.wado/$cm_export__run"() {
-    drop("cm_variant_with_own_payload_param.wado/$cm_binding__Gfx_pick"(ref.as_non_null("cm_variant_with_own_payload_param.wado/$cm_binding__Gfx_get_device"())));
-    drop("cm_variant_with_own_payload_param.wado/$cm_binding__Gfx_pick"(ref.null none));
+    drop("cm_variant_with_own_payload_param.wado/$cm_binding__Gfx_pick"(struct.new "cm_variant_with_own_payload_param.wado//Target::Dev" { discriminant: 0, payload_0: "cm_variant_with_own_payload_param.wado/$cm_binding__Gfx_get_device"() }));
+    drop("cm_variant_with_own_payload_param.wado/$cm_binding__Gfx_pick"(global:core:builtin::$unit_case$cm_variant_with_own_payload_param.wado//Target$1));
     "wasi/task-return"(0);
 }
 
