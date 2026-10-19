@@ -158,18 +158,19 @@ pub fn check_resource_moves_semantic(sem: &Semantics) -> Vec<ResourceMoveError> 
 
 /// The `Drop` trait and the declarations of the types implementing it.
 struct Drops {
-    trait_id: AstId,
+    /// `None` in `Semantics::empty`, which the language service checks after
+    /// a failed load: it declares nothing, so nothing implements `Drop`.
+    trait_id: Option<AstId>,
     implementors: IndexSet<AstId>,
 }
 
 impl Drops {
     fn of(sem: &Semantics) -> Drops {
-        let trait_def = sem
-            .types
-            .compiler_item_def(CompilerItem::Drop)
-            .expect("the prelude declares `Drop`");
         let mut drops = Drops {
-            trait_id: sem.types.defs().ast_id(trait_def),
+            trait_id: sem
+                .types
+                .compiler_item_def(CompilerItem::Drop)
+                .map(|def| sem.types.defs().ast_id(def)),
             implementors: IndexSet::default(),
         };
         drops.implementors = sem
@@ -187,7 +188,8 @@ impl Drops {
     }
 
     fn implemented_by(&self, b: &ImplBlock, sem: &Semantics) -> bool {
-        sem.implemented(b).map(Item::id) == Some(self.trait_id)
+        self.trait_id
+            .is_some_and(|id| sem.implemented(b).map(Item::id) == Some(id))
     }
 }
 
@@ -320,7 +322,7 @@ impl Checker<'_> {
         };
         let mut type_name = String::new();
         unparse_type_into(&b.ty, &mut type_name);
-        if t.id == self.drops.trait_id {
+        if Some(t.id) == self.drops.trait_id {
             if !self.impl_self_is_affine(b, scope) {
                 self.push(MoveError::DropOnCopyable { type_name }, trait_type.span());
             }
