@@ -1059,7 +1059,10 @@ fn call_drop_impl(scrutinee: TirExpr, drop_impl: &FunctionRef) -> TirStmt {
 
 fn is_future_writable(type_id: TypeId, cx: &Cx) -> bool {
     let tt = cx.resources.tt.borrow();
-    tt.is_compiler_item_type(tt.representation_head(type_id), CompilerItem::FutureWritable)
+    tt.is_compiler_item_type(
+        tt.representation_head(type_id),
+        CompilerItem::FutureWritable,
+    )
 }
 
 /// A `FutureWritable` reaching a drop was never written, since its write

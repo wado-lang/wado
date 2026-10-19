@@ -428,7 +428,9 @@ pub affine trait Drop with () {
 - A drop at scope exit, at a store, or of a discarded value is the same call as
   a written `x.drop()`. A resource's drop is an operation of the resource's
   effect, so either one reaches an installed handler, and a test double that
-  counts drops sees both.
+  counts drops sees both. A double ending in `..trap` therefore answers `drop`
+  itself, taking the handle by value and handing it to the host's drop, since
+  `..trap` traps on every operation it leaves out.
 - A drop's effects are benign: no function declares an effect for a drop it
   performs. A generic body drops a `T` wherever it discards one (`unwrap_or`
   discards its fallback), and a declared effect would reach a function that
@@ -775,7 +777,7 @@ declares the destructor's effects is withdrawn: a drop's effects are benign.
   `iter_ref` beside them, and `&mut` of an affine variant element and field as
   a place, the variant wrapped in a box. `opt.take()` on
   `list[i]` is the fixture.
-- [ ] `Drop`: a resource's `fn drop(self)` as its impl, a user impl on an
+- [x] `Drop`: a resource's `fn drop(self)` as its impl, a user impl on an
   affine type and an error naming the impl on any other, the fields left at the end of `drop` dropped one by one, a
   drop's effects benign, no partial move or `..base` over a type that
   implements it, a generic `T` dropped the way its type drops,

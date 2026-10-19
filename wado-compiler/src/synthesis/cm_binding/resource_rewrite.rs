@@ -1876,7 +1876,11 @@ impl CmMethodRewriter<'_> {
             .expect("a drop takes its resource")
             .expr;
         *expr = cm_canonical_call(
-            CanonicalIntrinsic::ResourceDrop(resource_decl(receiver.type_id, self.tt, self.cm_interface_registry)),
+            CanonicalIntrinsic::ResourceDrop(resource_decl(
+                receiver.type_id,
+                self.tt,
+                self.cm_interface_registry,
+            )),
             vec![receiver],
             TypeTable::UNIT,
         );
@@ -1996,7 +2000,11 @@ fn resource_decl(
 /// `resource.drop()` on a resource of type `resource_type`: the call a user
 /// writes, which the dispatch rewrite routes to an installed handler and this
 /// pass binds otherwise. A scope-exit drop is one (WEP: Affine Types).
-pub(crate) fn resource_drop_call(resource: TirExpr, resource_type: TypeId, tt: &TypeTable) -> TirExpr {
+pub(crate) fn resource_drop_call(
+    resource: TirExpr,
+    resource_type: TypeId,
+    tt: &TypeTable,
+) -> TirExpr {
     let head = tt.representation_head(resource_type);
     let def = tt.nominal_def(head).expect("a resource is declared");
     let mut info = LocalMethodName::new(tt.fq_base_type_name(head), None, "drop".to_string());
