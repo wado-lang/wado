@@ -4,8 +4,7 @@ This file holds the design of what was built after
 [WEP: Loam](../docs/wep-2026-09-20-loam.md) was completed. The design before
 that is in three documents:
 
-- [WEP: Loam](../docs/wep-2026-09-20-loam.md), the design Loam was built to up
-  to the WEP's completion.
+- [WEP: Loam](../docs/wep-2026-09-20-loam.md), the design up to its completion.
 - [Loam on WebGPU](./webgpu.md), the design of its WebGPU backend.
 - [Loam Tokenizer](./tokenizer.md), the design of its tokenizer.
 

@@ -92,11 +92,11 @@ leaves this file, and `design.md` states what it built.
     each `QMoE` input the operator's definition indexes by expert, so no model
     is named. The device holds as many experts as a budget the caller sets. The
     rest stay in the checkpoint until a token routes to one, and the guest's
-    heap only passes an expert through. An expert is held as the item that
-    keeps a table where it is stored holds a row, with the device as the place
-    it is held. An expert the device does not hold is loaded, never computed by
-    the guest: a guest runs on one thread, since shared-everything threads is at
-    phase 1, and `core:simd` loads no vector from a `List`. Where the budget
+    heap only passes an expert through. A table that stays where it is stored,
+    above, serves its rows the same way. An expert the device does not hold is
+    loaded, never computed by the guest. A guest runs on one thread, since
+    shared-everything threads is at phase 1, and `core:simd` loads no vector
+    from a `List`. Where the budget
     holds fewer than all the experts, the host reads back which experts a layer
     routes to before it runs them. So the host waits once a layer, which The
     MVP Is Tier 1 Only says a `QMoE` spares it. Finished when
