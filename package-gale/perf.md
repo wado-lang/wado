@@ -174,6 +174,16 @@ the cache, because the arena and its maps grow for the whole parse instead of
 starting empty per prediction. That also times out its benchmark's
 `input parses` test.
 
+The first parse's closures were mostly ε-walks through blocks of one-token
+alternatives. SQLite's `keyword` has 136, and `any_name` reaches it from `expr`,
+so every closure entering an expression kept one configuration per keyword. A
+block whose alternatives are distinct bare terminals is now one `Set`
+transition, as in ANTLR4, and a sequence is entered at its first element rather
+than through an ε state of its own. SQLite's first parse expands 5.5 times fewer
+configurations and runs 4 times faster. Computing the LR continuation tables
+only for the states the simulator reads them at (a call's return state, a
+precedence edge's target) cut module init by a further factor of 5.
+
 Revealing the caller stack in growing windows (0, 1, 2, 4… innermost frames,
 every caller assumed below them) settled 96% of Rust's predictions without the
 whole stack. It doubled the first parse and gained nothing after it: a window

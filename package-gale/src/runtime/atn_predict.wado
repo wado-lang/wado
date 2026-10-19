@@ -9,6 +9,8 @@ use {
     ATN_TR_WILDCARD,
     ATN_TR_RULE,
     ATN_TR_PRECEDENCE,
+    ATN_TR_SET,
+    atn_set_contains,
 } from "./atn.wado";
 
 global ATN_ACCEPT_EOF: i32 = -2;
@@ -531,7 +533,7 @@ fn atn_state_consumes(sim: &AtnSim, state: i32) -> bool {
         return false;
     }
     let k = sim.tr_kind[sim.state_tr_start[state]];
-    return k == ATN_TR_ATOM || k == ATN_TR_NOT_ATOM || k == ATN_TR_WILDCARD;
+    return k == ATN_TR_ATOM || k == ATN_TR_SET || k == ATN_TR_NOT_ATOM || k == ATN_TR_WILDCARD;
 }
 
 struct CfgSet {
@@ -787,6 +789,8 @@ fn atn_move(sim: &AtnSim, configs: &List<AtnConfig>, token: i32, eof: i32) -> Li
             let label = sim.tr_label[start + j];
             let matched = if k == ATN_TR_ATOM {
                 label == token;
+            } else if k == ATN_TR_SET {
+                atn_set_contains(sim, label, token);
             } else if k == ATN_TR_WILDCARD {
                 token != eof;
             } else if k == ATN_TR_NOT_ATOM {

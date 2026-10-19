@@ -22,6 +22,7 @@ use {
     ATN_TR_WILDCARD,
     ATN_TR_RULE,
     ATN_TR_PRECEDENCE,
+    ATN_TR_SET,
 } from "./runtime/atn.wado";
 use { HashMap, HashSet } from "core:collections";
 use { GALE_SEED } from "./hash_seed.wado";
@@ -173,7 +174,7 @@ impl SllExplorer {
             return false;
         }
         let k = ts[0].kind;
-        return k == ATN_TR_ATOM || k == ATN_TR_NOT_ATOM || k == ATN_TR_WILDCARD;
+        return k == ATN_TR_ATOM || k == ATN_TR_SET || k == ATN_TR_NOT_ATOM || k == ATN_TR_WILDCARD;
     }
 
     /// Push what `c` reaches without consuming, at token step `step`. Returns
@@ -309,10 +310,10 @@ impl SllExplorer {
             for let t of &self.atn.states[c.state].transitions {
                 let next = SllConfig { state: t.target, alt: c.alt, pr: c.pr, stack: c.stack };
                 if t.kind == ATN_TR_ATOM {
-                    if t.label != self.eof {
-                        let mut list = by_token.get(t.label).unwrap_or([]);
-                        list.push(next);
-                        by_token[t.label] = list;
+                    add_move(&mut by_token, t.label, next, self.eof);
+                } else if t.kind == ATN_TR_SET {
+                    for let k of &self.atn.sets[t.label] {
+                        add_move(&mut by_token, *k, next, self.eof);
                     }
                 } else if t.kind == ATN_TR_WILDCARD {
                     any.push([next, -1]);
@@ -421,6 +422,15 @@ fn rule_follows(atn: &Atn) -> List<List<i32>> {
         }
     }
     return follows;
+}
+
+fn add_move(by_token: &mut HashMap<i32, List<SllConfig>>, token: i32, next: SllConfig, eof: i32) {
+    if token == eof {
+        return;
+    }
+    let mut list = by_token.get(token).unwrap_or([]);
+    list.push(next);
+    by_token[token] = list;
 }
 
 fn add_edge(edges: &mut List<SllEdge>, token: i32, to: i32) {

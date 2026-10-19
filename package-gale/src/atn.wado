@@ -42,6 +42,7 @@ use {
     ATN_TR_WILDCARD,
     ATN_TR_RULE,
     ATN_TR_PRECEDENCE,
+    ATN_TR_SET,
 } from "./runtime/atn.wado";
 use { HashMap } from "core:collections";
 use { GALE_SEED } from "./hash_seed.wado";
@@ -56,6 +57,7 @@ use { GALE_SEED } from "./hash_seed.wado";
 //  - Epsilon: all -1.
 //  - Atom: `label` = token kind.
 //  - NotAtom: `label` = the single excluded token kind.
+//  - Set: `label` = index into `Atn.sets`, the token kinds it matches.
 //  - Wildcard: all -1 (matches any one token).
 //  - RuleRef: `label` = invoked rule index, `follow` = return state id,
 //    `prec` = precedence baked for an LR self-ref (0 otherwise).
@@ -97,6 +99,8 @@ pub struct Atn {
     /// Compile-time `atn_leaf_site -> the state after the terminal matches`,
     /// `-1` for an id no segment took. Not serialized.
     pub leaf_site_states: List<i32> = [],
+    /// The token kinds of each `Set` transition, indexed by its `label`.
+    pub sets: List<List<i32>> = [],
 }
 
 /// The loop-entry (`STAR_LOOP_ENTRY`) decision number for parser rule
@@ -175,6 +179,7 @@ struct AtnBuilder {
     call_site_returns: List<i32>,
     decision_sites: List<i32>,
     leaf_site_states: List<i32> = [],
+    sets: List<List<i32>> = [],
 }
 
 impl AtnBuilder {
@@ -286,6 +291,7 @@ pub fn build_atn_with(grammar: &Grammar, lowered: &LoweredGrammar, num_tokens: i
         call_site_returns: b.call_site_returns,
         decision_sites: b.decision_sites,
         leaf_site_states: b.leaf_site_states,
+        sets: b.sets,
     };
 }
 
@@ -414,6 +420,18 @@ fn build_alternation(
     if alts.len() > 1 {
         b.mark_decision_for_site(start, site);
     }
+    if operand_precs.is_empty() && let Some(kinds) = distinct_terminals(alts) {
+        let from = b.new_state(ATN_BASIC, rule);
+        let to = b.new_state(ATN_BASIC, rule);
+        b.add_trans(from, AtnTransition { kind: ATN_TR_SET, target: to, label: b.sets.len() });
+        b.sets.push(kinds);
+        for let alt of alts {
+            b.record_leaf_site(terminal_leaf_site(&alt.elements[0]), to);
+        }
+        b.add_eps(start, from);
+        b.add_eps(to, end);
+        return [start, end];
+    }
     for let mut i = 0; i < alts.len(); i += 1 {
         let operand_prec = if operand_precs.is_empty() { 0 } else { operand_precs[i] };
         let seg = build_sequence(b, &alts[i].elements, rule, rule_index, operand_prec);
@@ -425,6 +443,42 @@ fn build_alternation(
         b.add_eps(start, end);
     }
     return [start, end];
+}
+
+/// The token kinds of `alts` when each alternative is one bare terminal, each
+/// of its own kind, with no action or predicate. Such a block is built as one
+/// `Set` transition: a keyword-like rule otherwise fans every closure entering
+/// it out into one configuration per alternative. The block keeps its decision
+/// number but offers one edge, which static prediction never sends to the
+/// simulator, since the alternatives are LL(1).
+fn distinct_terminals(alts: &List<Alternative>) -> Option<List<i32>> {
+    if alts.len() < 2 {
+        return null;
+    }
+    let mut kinds: List<i32> = [];
+    for let alt of alts {
+        if alt.elements.len() != 1 || !alt.actions.is_empty() {
+            return null;
+        }
+        let kind = match alt.elements[0] {
+            TokenRef(t) => t.kind_id,
+            Literal(l) => l.kind_id,
+            _ => -1,
+        };
+        if kind < 0 || kinds.contains(&kind) {
+            return null;
+        }
+        kinds.push(kind);
+    }
+    return Option::Some(kinds);
+}
+
+fn terminal_leaf_site(elem: &Element) -> i32 {
+    return match *elem {
+        TokenRef(t) => t.atn_leaf_site,
+        Literal(l) => l.atn_leaf_site,
+        _ => unreachable(),
+    };
 }
 
 /// The state ahead of `entry` an alternative is entered at: one epsilon edge
@@ -452,8 +506,12 @@ fn build_sequence(
     rule_index: &HashMap<String, i32>,
     operand_prec: i32 = 0,
 ) -> [i32, i32] {
-    let entry = b.new_state(ATN_BASIC, rule);
-    let mut cursor = entry;
+    if elements.is_empty() {
+        let entry = b.new_state(ATN_BASIC, rule);
+        return [entry, entry];
+    }
+    let mut entry = -1;
+    let mut cursor = -1;
     for let mut i = 0; i < elements.len(); i += 1 {
         let elem = &elements[i];
         let seg = if operand_prec > 0 && i == elements.len() - 1 {
@@ -461,7 +519,11 @@ fn build_sequence(
         } else {
             build_element(b, elem, rule, rule_index);
         };
-        b.add_eps(cursor, seg.0);
+        if i == 0 {
+            entry = seg.0;
+        } else {
+            b.add_eps(cursor, seg.0);
+        }
         cursor = seg.1;
     }
     return [entry, cursor];
@@ -669,6 +731,7 @@ fn push_u24_biased(bytes: &mut ByteList, v: i32)
 /// tr_label[ntrans_total]: u24 (+1 bias),
 /// tr_follow[ntrans_total]: u24 (+1 bias),
 /// tr_prec[ntrans_total]: u16,
+/// nsets: u16, then per set: count: u16, kinds[count]: u16,
 /// ```
 ///
 /// `ntrans_total` is not stored: it's the sum of `state_tr_count`, which
@@ -709,7 +772,7 @@ pub fn atn_blob_bytes(atn: &Atn) -> ByteList {
     }
 
     let total = 6 + nrules * 2 + ndec * 2 + state_kind.len() + state_tr_count.len() + tr_kind.len() + tr_target.len() + tr_label.len(
-    ) + tr_follow.len() + tr_prec.len();
+    ) + tr_follow.len() + tr_prec.len() + 2 + atn.sets.iter_ref().fold(0, |n, set| n + 2 + set.len() * 2);
     let mut bytes: ByteList = ByteList::with_capacity(total);
     push_u16(&mut bytes, nrules);
     push_u16(&mut bytes, ndec);
@@ -727,6 +790,13 @@ pub fn atn_blob_bytes(atn: &Atn) -> ByteList {
     bytes.extend_from_slice(tr_label.as_slice());
     bytes.extend_from_slice(tr_follow.as_slice());
     bytes.extend_from_slice(tr_prec.as_slice());
+    push_u16(&mut bytes, atn.sets.len());
+    for let set of &atn.sets {
+        push_u16(&mut bytes, set.len());
+        for let k of set {
+            push_u16(&mut bytes, *k);
+        }
+    }
     return bytes;
 }
 
@@ -771,6 +841,9 @@ fn trans_kind_name(kind: i32) -> String {
     if kind == ATN_TR_NOT_ATOM {
         return "notatom";
     }
+    if kind == ATN_TR_SET {
+        return "set";
+    }
     if kind == ATN_TR_WILDCARD {
         return "wild";
     }
@@ -800,6 +873,8 @@ pub fn dump_atn(atn: &Atn, grammar: &Grammar) -> String {
             let mut detail = String::from("");
             if t.kind == ATN_TR_ATOM || t.kind == ATN_TR_NOT_ATOM {
                 detail = ` tk=${t.label}`;
+            } else if t.kind == ATN_TR_SET {
+                detail = ` tks=${atn.sets[t.label]:?}`;
             } else if t.kind == ATN_TR_RULE {
                 detail = ` rule=${t.label} follow=s${t.follow} prec=${t.prec}`;
             } else if t.kind == ATN_TR_PRECEDENCE {

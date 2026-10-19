@@ -9,6 +9,7 @@ use {
     ATN_TR_WILDCARD,
     ATN_TR_RULE,
     ATN_TR_PRECEDENCE,
+    ATN_TR_SET,
 } from "./atn.wado";
 use { AtnPredictor, atn_invocation_prec, atn_predict_once } from "./atn_predict.wado";
 
@@ -25,7 +26,7 @@ internal fn atn_with_lr_tables(sim: AtnSim) -> AtnSim {
         out.rule_first_open.push(false);
     }
     if out.tr_kind.contains(&ATN_TR_PRECEDENCE) {
-        let mut kinds = 0;
+        let mut kinds = out.set_words * 64;
         for let mut j = 0; j < out.tr_kind.len(); j += 1 {
             if out.tr_kind[j] == ATN_TR_ATOM || out.tr_kind[j] == ATN_TR_NOT_ATOM {
                 kinds = i32::max(kinds, out.tr_label[j] + 1);
@@ -120,15 +121,24 @@ fn atn_lr_entry_reached(sim: &AtnSim, from: i32) -> i32 {
 fn atn_compute_state_cont(sim: &mut AtnSim, walk: &mut AtnContWalk) {
     let nstates = sim.state_kind.len();
     let mut entered_from = List::<i32>::filled(nstates, -1);
+    let mut read = List::filled(nstates, false);
     for let mut st = 0; st < nstates; st += 1 {
         let s = sim.state_tr_start[st];
         for let mut j = s; j < s + sim.state_tr_count[st]; j += 1 {
             if sim.tr_kind[j] == ATN_TR_PRECEDENCE {
                 entered_from[sim.tr_target[j]] = st;
+                read[sim.tr_target[j]] = true;
+            } else if sim.tr_kind[j] == ATN_TR_RULE {
+                read[sim.tr_follow[j]] = true;
             }
         }
     }
     for let mut st = 0; st < nstates; st += 1 {
+        if !read[st] {
+            sim.state_cont_nullable.push(false);
+            atn_push_cont_admits(sim, &[], &[], false);
+            continue;
+        }
         walk.begin();
         let nullable = atn_cont_nullable(sim, st, walk);
         walk.begin();
@@ -224,6 +234,10 @@ fn atn_cont_first(sim: &AtnSim, state: i32, walk: &mut AtnContWalk) -> bool {
         let k = sim.tr_kind[s + j];
         if k == ATN_TR_ATOM {
             walk.add_first(sim.tr_label[s + j]);
+        } else if k == ATN_TR_SET {
+            for let t of &sim.set_members[sim.tr_label[s + j]] {
+                walk.add_first(*t);
+            }
         } else if k == ATN_TR_WILDCARD {
             open = true;
         } else if k == ATN_TR_NOT_ATOM {
