@@ -418,15 +418,13 @@ internal global CM_EVENT_SUBTASK: i32 = 1;
 /// Settling is a comparison against this, not an equality with `RETURNED`.
 internal global CM_SUBTASK_STARTED: u32 = 1;
 
-/// True once the subtask `ready` holds has resolved, which is what makes
-/// `subtask.drop` legal — the CM traps a drop of one still in flight.
+/// Whether an event of `code` with `payload` says a subtask resolved, which is
+/// what makes `subtask.drop` legal — the CM traps a drop of one still in flight.
 ///
 /// `waitable-set.wait` is lowered with `cancellable = 0`, so `TASK_CANCELLED`
 /// cannot arrive; settling on it would drop a subtask still in flight.
-internal fn cm_subtask_settled(ready: &Ready<Subtask>) -> bool
-    contract ready.code == CM_EVENT_SUBTASK
-{
-    return ready.payload > CM_SUBTASK_STARTED;
+internal fn cm_subtask_settled(code: i32, payload: u32) -> bool {
+    return code == CM_EVENT_SUBTASK && payload > CM_SUBTASK_STARTED;
 }
 
 /// A subtask whose resolution a set delivered, by its handle, with the state it
@@ -580,7 +578,7 @@ impl<affine W: Waitable> WaitableSet<W> {
 
     fn take_reported(&mut self, event: WaitEvent) -> Ready<W> {
         builtin::waitable_join(event.handle, 0);
-        if event.code == CM_EVENT_SUBTASK && event.payload > CM_SUBTASK_STARTED {
+        if cm_subtask_settled(event.code, event.payload) {
             DELIVERED.push(Resolution { handle: event.handle, state: event.payload });
         }
         let mut at = 0;
@@ -696,7 +694,7 @@ impl<affine T> AsyncCall<T> {
             set.join(subtask);
             loop {
                 let ready = set.wait();
-                if cm_subtask_settled(&ready) {
+                if cm_subtask_settled(ready.code, ready.payload) {
                     drop_resolved(ready.member);
                     break;
                 }

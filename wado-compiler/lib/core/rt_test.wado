@@ -2,7 +2,7 @@
 
 use { i64_add128_soft, i64_sub128_soft, i64_mul_wide_u_soft, i64_mul_wide_s_soft, log_stdout } from "core:rt";
 use { MonotonicClock } from "wasi:clocks";
-use { CM_EVENT_SUBTASK, CM_SUBTASK_STARTED } from "core:prelude/types.wado";
+use { cm_subtask_settled } from "core:prelude/types.wado";
 
 #[expect_trap]
 test "a read with negative room is a defect" {
@@ -82,7 +82,7 @@ fn delivered_call() -> AsyncCall<()> with MonotonicClock {
     set.join(MonotonicClock::wait_for(1_000_000));
     loop {
         let ready = set.wait();
-        if ready.payload > CM_SUBTASK_STARTED {
+        if cm_subtask_settled(ready.code, ready.payload) {
             return ready.member;
         }
         set.join(ready.member);
@@ -95,7 +95,7 @@ test "a call a set delivered ends by a wait, a drop, or another set" {
     let mut again = WaitableSet::<AsyncCall<()>>::new();
     again.join(delivered_call());
     let ready = again.wait();
-    assert ready.code == CM_EVENT_SUBTASK && ready.payload > CM_SUBTASK_STARTED;
+    assert cm_subtask_settled(ready.code, ready.payload);
     ready.member.wait();
 }
 
