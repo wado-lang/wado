@@ -187,7 +187,8 @@ use {
     kind_bitset_words,
 } from "./kind_set_gen.wado";
 use { group_alt_classes, non_greedy_static_undecided } from "./lower.wado";
-use { ATN_VERIFIED_LR, sll_decide_fn_name } from "./atn_sll.wado";
+use { ATN_VERIFIED, atn_verified_call, sll_decide_fn_name } from "./atn_sll.wado";
+use { lr_decide_fn_name } from "./atn_lr_table.wado";
 
 /// Append the defaulted runtime FOLLOW-continuation argument to a
 /// parse/scan/LR function signature, BEFORE any `min_prec` so a
@@ -7265,17 +7266,19 @@ fn gen_atn_body_pick<S: AsStrSlice, S1: AsStrSlice>(
     w.line(`let _atn_alt = ${atn_predict_call(dec, tokens, pos, ctx, "_atn_false")};`);
 }
 
-/// The LR loop's pick at decision `decision`, over `tokens` at `pos`. Under
-/// `atn: "verify"` it goes through `ATN_VERIFIED_LR`, which checks the loop's
-/// shortcut against the simulator.
+/// The LR loop's pick at decision `decision`, over `tokens` at `pos`, through
+/// its table (`atn_lr_table.wado`), handed the caller's FOLLOW where the rule
+/// reads it. Under `atn: "verify"` the pick is checked against the simulator.
 fn lr_decision_call<S: AsStrSlice, S1: AsStrSlice>(ctx: &mut EmitContext, decision: i32, tokens: S, pos: S1) -> String {
-    let callee = if ctx.settings.atn.verifies() {
-        ctx.cursor.note_ref(&ATN_VERIFIED_LR);
-        ATN_VERIFIED_LR;
-    } else {
-        "atn_lr_loop_decision";
-    };
-    return `${callee}(&ATN_SIM, ${ctx.atn_arg()}, ${decision}, ${tokens}, ${pos}, TK_EOF, min_prec)`;
+    let decide = lr_decide_fn_name(decision);
+    ctx.cursor.note_ref(&decide);
+    let follow = if ctx.current_rule_reads_follow() { `, ${FOLLOW_PARAM}` } else { "" };
+    let call = `${decide}(${ctx.atn_arg()}, ${tokens}, ${pos}, min_prec${follow})`;
+    if !ctx.settings.atn.verifies() {
+        return call;
+    }
+    ctx.cursor.note_ref(&ATN_VERIFIED);
+    return atn_verified_call(decision, ctx.atn_arg(), tokens, pos, call);
 }
 
 /// The simulator's pick at decision `atn_dec`, over `tokens` at `pos`, with the
