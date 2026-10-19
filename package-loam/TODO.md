@@ -29,11 +29,11 @@ leaves this file, and `design.md` states what it built.
 4. [ ] The decoder's cache as one value. See A Decoder's Cache Is One Value.
    Finished when the GPT-2 and Gemma 3 examples pass a `Cache` and no line of
    theirs names a layer.
-5. [ ] Narrowed outputs. A use site can name an output to be read at the last
-   position only, and optionally at only the token ids that each call gives.
-   The generated module then computes only that part, as `outputs` already
-   cuts the graph to what it reads (see The Graph Is ONNX). The slice to the
-   last position moves above every node that works on each position alone.
+5. [ ] Narrowed outputs. A use site can say that an output is read only at the
+   last position, or there only at the token ids each call gives. The
+   generated module then computes only that part, as `outputs` already cuts
+   the graph to what it reads (see The Graph Is ONNX). The slice to the last
+   position moves above every node that works on each position alone.
    The ids select rows of the head's weight before its product. So the head's
    cost grows with the number of ids, not with the vocabulary, and no pass
    holds a logit for every position and token. Finished when the Gemma 3
@@ -47,9 +47,9 @@ leaves this file, and `design.md` states what it built.
    The answer is the softmax of the logits at the labels. A yes-or-no question
    is a choice of two. A score is a choice among the points of a scale, and
    its answer also gives their expected value. Loam's decision module takes any
-   model that reads narrowed logits, with its tokenizer, and the caller spells
-   the model's chat turns. Finished when the Gemma 3 example answers a set of
-   questions with the probabilities onnxruntime's logits give.
+   model that reads narrowed logits, and that model's tokenizer. The caller
+   spells the model's chat turns. Finished when the Gemma 3 example answers a
+   set of questions with the probabilities onnxruntime's logits give.
 7. [ ] A state read by many questions. The state's tokens run once. Each
    question runs only its own tokens, against the state's cache, and leaves
    that cache as it was. Finished when `design.md` records the time a question
@@ -62,8 +62,8 @@ leaves this file, and `design.md` states what it built.
    n questions take as rows of one pass as a ratio to the time they take one
    after another, for several n, and each probability equals the one its
    question gets alone.
-9. [ ] Calibrated decisions. A temperature divides the logits before the
-   softmax, one for each kind of question and number of options, so that an
+9. [ ] Calibrated decisions. Each kind of question, at each number of options,
+   has a temperature that divides the logits before the softmax, so that an
    answer given 0.8 is right about 80% of the time. The caller passes the
    temperatures, and a tool in `tools/` fits them from questions with known
    answers. Finished when `design.md` records the expected calibration error
