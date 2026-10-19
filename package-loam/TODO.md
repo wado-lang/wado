@@ -248,23 +248,6 @@ what `conformance/` runs against is `pytorch-operator/` and
 `pytorch-converted/`: whole small graphs with their inputs and outputs beside
 them.
 
-Two suites take their expectations from onnxruntime instead.
-`conformance/operators_test.wado` covers every operator Loam lowers, over
-static shapes, with the attributes and edge values where a reading can go
-wrong. `semantics_test.wado` covers shape arithmetic over a symbolic length, at
-two lengths. A script beside each, `operators.mjs` or `semantics.mjs`, writes
-one small model per case and what onnxruntime computes from it. The test builds
-each model as the generator would and runs the result under `core:eval`, so a
-refused build, a trap and a wrong answer each show as a difference from
-onnxruntime. A case Loam does not match yet is a `#[TODO]` test, so the run
-lists where the two part.
-
-Those models are copied into `tests/onnx/` rather than read out of
-`vendor/onnx`. A submodule is absent wherever it is not initialized, and a file
-an import names has to be there for the module to compile, so reading one turns
-a test into a build failure. The copies keep the upstream layout, and the
-directory's `README.md` carries the provenance.
-
 ### WebGPU
 
 The WebGPU backend runs the convolutions and `max_pool` on the CPU, each
