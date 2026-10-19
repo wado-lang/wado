@@ -293,15 +293,6 @@ impl<T> Iterator for SliceValueIter<T> {
     }
 }
 
-impl<T> IntoIterator for SliceValueIter<T> {
-    type Item = T;
-    type Iter = SliceValueIter<T>;
-
-    fn into_iter(&self) -> SliceValueIter<T> {
-        return *self;
-    }
-}
-
 impl<T> SliceValueIter<T> {
     /// One bulk copy of the remaining range, not an element-at-a-time loop.
     pub fn collect(&mut self) -> List<T> {
@@ -401,15 +392,6 @@ impl<T> Iterator for SliceWindows<T> {
     }
 }
 
-impl<T> IntoIterator for SliceWindows<T> {
-    type Item = Slice<T>;
-    type Iter = SliceWindows<T>;
-
-    fn into_iter(&self) -> SliceWindows<T> {
-        return *self;
-    }
-}
-
 /// Each item is a `Slice<T>` viewing the backing array, not a copy of it.
 pub struct SliceChunks<T> {
     repr: &Array<T>,
@@ -433,15 +415,6 @@ impl<T> Iterator for SliceChunks<T> {
         };
         self.index = stop;
         return Option::Some(slice);
-    }
-}
-
-impl<T> IntoIterator for SliceChunks<T> {
-    type Item = Slice<T>;
-    type Iter = SliceChunks<T>;
-
-    fn into_iter(&self) -> SliceChunks<T> {
-        return *self;
     }
 }
 

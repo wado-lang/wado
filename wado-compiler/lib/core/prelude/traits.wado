@@ -1357,15 +1357,6 @@ impl<affine I: Iterator, U, effect E, F: fn mut(I::Item) -> U with E> Iterator f
     }
 }
 
-impl<I: Iterator, U, effect E, F: fn mut(I::Item) -> U with E> IntoIterator for IterMap<I, F> {
-    type Item = U;
-    type Iter = IterMap<I, F>;
-
-    fn into_iter(&self) -> IterMap<I, F> {
-        return *self;
-    }
-}
-
 /// Generic filter iterator adapter that wraps any Iterator. Its type carries
 /// the predicate's, so advancing it performs what the predicate does.
 pub struct IterFilter<affine I: Iterator, F> {
@@ -1389,15 +1380,6 @@ impl<affine I: Iterator, effect E, F: fn mut(I::Item) -> bool with E> Iterator f
     }
 }
 
-impl<I: Iterator, effect E, F: fn mut(I::Item) -> bool with E> IntoIterator for IterFilter<I, F> {
-    type Item = I::Item;
-    type Iter = IterFilter<I, F>;
-
-    fn into_iter(&self) -> IterFilter<I, F> {
-        return *self;
-    }
-}
-
 /// Generic enumerate iterator adapter that yields (index, element) pairs.
 pub struct IterEnumerate<affine I: Iterator> {
     pub inner: I,
@@ -1414,15 +1396,6 @@ impl<affine I: Iterator> Iterator for IterEnumerate<I> {
             return Option::Some([idx, item]);
         }
         return null;
-    }
-}
-
-impl<I: Iterator> IntoIterator for IterEnumerate<I> {
-    type Item = [i32, I::Item];
-    type Iter = IterEnumerate<I>;
-
-    fn into_iter(&self) -> IterEnumerate<I> {
-        return *self;
     }
 }
 
@@ -1448,15 +1421,6 @@ impl<affine I: Iterator> Iterator for IterTake<I> {
     }
 }
 
-impl<I: Iterator> IntoIterator for IterTake<I> {
-    type Item = I::Item;
-    type Iter = IterTake<I>;
-
-    fn into_iter(&self) -> IterTake<I> {
-        return *self;
-    }
-}
-
 /// Generic skip iterator adapter that skips elements from any Iterator.
 pub struct IterSkip<affine I: Iterator> {
     pub inner: I,
@@ -1478,15 +1442,6 @@ impl<affine I: Iterator> Iterator for IterSkip<I> {
     }
 }
 
-impl<I: Iterator> IntoIterator for IterSkip<I> {
-    type Item = I::Item;
-    type Iter = IterSkip<I>;
-
-    fn into_iter(&self) -> IterSkip<I> {
-        return *self;
-    }
-}
-
 /// Generic step iterator adapter that yields every `gap + 1`-th element of any Iterator.
 pub struct IterStepBy<affine I: Iterator> {
     pub inner: I,
@@ -1503,15 +1458,6 @@ impl<affine I: Iterator> Iterator for IterStepBy<I> {
         }
         self.started = true;
         return self.inner.next();
-    }
-}
-
-impl<I: Iterator> IntoIterator for IterStepBy<I> {
-    type Item = I::Item;
-    type Iter = IterStepBy<I>;
-
-    fn into_iter(&self) -> IterStepBy<I> {
-        return *self;
     }
 }
 
@@ -1536,15 +1482,6 @@ impl<affine I: Iterator, affine J: Iterator<Item = I::Item>> Iterator for IterCh
     }
 }
 
-impl<I: Iterator, J: Iterator<Item = I::Item>> IntoIterator for IterChain<I, J> {
-    type Item = I::Item;
-    type Iter = IterChain<I, J>;
-
-    fn into_iter(&self) -> IterChain<I, J> {
-        return *self;
-    }
-}
-
 /// Generic zip iterator adapter that pairs elements from two iterators.
 pub struct IterZip<affine I: Iterator, affine J: Iterator> {
     pub first: I,
@@ -1564,15 +1501,6 @@ impl<affine I: Iterator, affine J: Iterator> Iterator for IterZip<I, J> {
     }
 }
 
-impl<I: Iterator, J: Iterator> IntoIterator for IterZip<I, J> {
-    type Item = [I::Item, J::Item];
-    type Iter = IterZip<I, J>;
-
-    fn into_iter(&self) -> IterZip<I, J> {
-        return *self;
-    }
-}
-
 /// Conversion into an Iterator.
 /// Types implementing this trait can be used in `for-of` loops directly.
 #[compiler_item("into_iterator")]
@@ -1581,7 +1509,6 @@ pub affine trait IntoIterator with _ {
     type Iter: Iterator<Item = Self::Item>;
 
     /// Creates an iterator from a value.
-    /// Note: Uses &self due to parser limitation (self by value not yet supported in traits).
     fn into_iter(&self) -> Self::Iter;
 }
 

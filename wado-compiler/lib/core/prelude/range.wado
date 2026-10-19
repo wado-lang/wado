@@ -156,24 +156,6 @@ impl<T: Step + Ord> Iterator for RangeInclusive<T> {
     }
 }
 
-impl<T: Step + Ord> IntoIterator for RangeExclusive<T> {
-    type Item = T;
-    type Iter = RangeExclusive<T>;
-
-    fn into_iter(&self) -> RangeExclusive<T> {
-        return *self;
-    }
-}
-
-impl<T: Step + Ord> IntoIterator for RangeInclusive<T> {
-    type Item = T;
-    type Iter = RangeInclusive<T>;
-
-    fn into_iter(&self) -> RangeInclusive<T> {
-        return *self;
-    }
-}
-
 impl<T: Ord> RangeExclusive<T> {
     /// Returns true if the value is within [start, end).
     pub fn contains(&self, value: &T) -> bool {
