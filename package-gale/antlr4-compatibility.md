@@ -552,12 +552,15 @@ in CI as `#[TODO]`. The generated parser is shared with Stage A
 
 ## Prediction & codegen design
 
-Gale generates recursive-descent parsers with no backtracking on the accept
-path — parser or lexer. Alternatives are disambiguated by static k-token
-lookahead; a decision static prediction cannot resolve routes to the runtime
-ATN simulator (next section), never a try-fail-retry loop. Only the repeat-exit
-probe rewinds, and it decides nothing — it re-parses a failed element to
-record where the error is.
+Gale generates recursive-descent parsers that decide by prediction rather than
+by trying an alternative and retrying another. Alternatives are disambiguated by
+static k-token lookahead, and a decision static prediction cannot resolve routes
+to the runtime ATN simulator (next section). The reason is speed: settling a
+decision by trial usually costs more than predicting it. A backtrack that
+replaces more expensive work, such as a scan ahead followed by a second parse,
+is allowed when a benchmark shows it is faster. The repeat-exit probe also
+rewinds, but it decides nothing: it re-parses a failed element to record where
+the error is.
 
 ### Multi-alt dispatch — prediction, then a longest-match tournament
 
@@ -577,8 +580,8 @@ when alts share a prefix and tie on static length (`'mut'? IDENT` vs
 `path '(' … ')'` on `N(n)`). An `EOF` the alt matches counts toward its length
 only where the grammar writes no `EOF` after the rule. In a start rule `s : u | t ; t : A EOF ;`, `t` matches what `u` cannot and wins. Under `prog : stmt* EOF`, a `stmt` ending in `EOF` ties with one ending just before it, and the
 first wins. An alt whose suffix is unscannable at a
-tournament site is a codegen-time panic; the fix is to file an issue, never
-to add backtracking.
+tournament site is a codegen-time panic; the fix is to file an issue, not to
+settle the decision by trial.
 
 Emit reaches that tournament by two routes. The SLL prediction tree may
 give up (`Ambiguous`), or it may resolve the decision into a token cascade
