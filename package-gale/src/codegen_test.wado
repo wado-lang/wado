@@ -1182,7 +1182,7 @@ ifStmt : 'if' 'y' statement ('else' statement)?? ;
     let body = extract_fn_body(&output, "fn _parse_if_stmt__inner(");
     // The `??` enter/skip decision is the ATN simulator's, stamped at compile time,
     // so the shape stays one `if` whose condition is the simulator call.
-    assert body.contains("if atn_predict_once(&ATN_SIM,");
+    assert body.contains("if atn_decide_");
     assert body.contains(") == 1");
     assert !body.contains("atn_ng_optional_enter(");
     assert !body.contains("if p.peek_kind() == TK_LIT_else");
@@ -1273,7 +1273,7 @@ test "non-greedy ?? inside a left-recursive rule threads min_prec" {
     // The atom fn carries `min_prec`, and the `??` enter check forwards it
     // to the simulator (stamped decision number, `== 1` for ENTER).
     assert output.contains("fn _parse_e__inner_atom(p: &mut Parser, min_prec: i32");
-    assert output.contains(", &mut p.atn, &p.kinds, p.pos, TK_EOF, min_prec) == 1");
+    assert output.contains("(&mut p.atn, &p.kinds, p.pos, min_prec) == 1");
     assert output.contains("atn_predict_once(&ATN_SIM,");
 }
 

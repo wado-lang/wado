@@ -32,9 +32,12 @@ use { GrammarAnalysis } from "./grammar_analysis.wado";
 global SLL_MAX_DEPTH: i32 = 4;
 /// How many states one decision's DFA may hold before the rest asks.
 global SLL_MAX_STATES: i32 = 256;
-/// A closure that visits more configurations than this is left to the
-/// simulator rather than explored.
-global SLL_CLOSURE_GUARD: i32 = 100000;
+/// How many configurations one decision's exploration may expand before the
+/// rest of it is left to the simulator. It bounds generation time.
+global SLL_DECISION_BUDGET: i32 = 2000000;
+/// How many places the shared closure memo may hold before it is dropped. It
+/// bounds generation memory.
+global SLL_MEMO_CAP: i32 = 2000000;
 
 /// Past the outermost rule, where only end of input follows.
 global SLL_END: i32 = -2;
@@ -113,8 +116,12 @@ pub struct SllExplorer {
     stack_bottom: List<i32>,
     stack_index: HashMap<i64, i32>,
     /// By `closure_key`, the consuming places a place reaches without
-    /// consuming, or `null` past `SLL_CLOSURE_GUARD`.
-    closures: HashMap<i64, Option<List<i64>>>,
+    /// consuming.
+    closures: HashMap<i64, List<i64>>,
+    /// The places `closures` holds.
+    memo_size: i32,
+    /// What the current decision may still expand.
+    budget: i32,
 }
 
 impl SllExplorer {
@@ -130,6 +137,8 @@ impl SllExplorer {
             stack_bottom: bottoms,
             stack_index: HashMap::with_seed(GALE_SEED),
             closures: HashMap::with_seed(GALE_SEED),
+            memo_size: 0,
+            budget: 0,
         };
     }
 
@@ -201,38 +210,46 @@ impl SllExplorer {
         return false;
     }
 
+    /// Spend one expansion of the current decision's budget. Returns whether
+    /// there was one to spend.
+    fn spend(&mut self) -> bool {
+        self.budget -= 1;
+        return self.budget >= 0;
+    }
+
     /// The consuming places `place` reaches at token step `step`, memoized;
-    /// `null` past the guard.
+    /// `null` once the budget runs out.
     fn place_closure(&mut self, place: i64, step: i32) -> Option<List<i64>> {
         let memo = self.closure_key(place, step);
         if let Some(known) = self.closures.get(memo) {
-            return known;
+            return Option::Some(known);
         }
         let mut seen = HashSet::<i64>::with_seed(GALE_SEED);
         let mut work: List<SllConfig> = [place_of(place, 0)];
         let mut kept: List<i64> = [];
-        let mut result: Option<List<i64>> = null;
-        guarded: {
-            while let Some(c) = work.pop() {
-                let key = place_key(c.state, c.pr, c.stack);
-                if !seen.insert(key) {
-                    continue;
-                }
-                if seen.len() > SLL_CLOSURE_GUARD {
-                    break guarded;
-                }
-                if self.expand(&c, step, &mut work) {
-                    kept.push(key);
-                }
+        while let Some(c) = work.pop() {
+            let key = place_key(c.state, c.pr, c.stack);
+            if !seen.insert(key) {
+                continue;
             }
-            result = Option::Some(kept);
+            if !self.spend() {
+                return null;
+            }
+            if self.expand(&c, step, &mut work) {
+                kept.push(key);
+            }
         }
-        self.closures[memo] = result;
-        return result;
+        if self.memo_size + kept.len() > SLL_MEMO_CAP {
+            self.closures = HashMap::with_seed(GALE_SEED);
+            self.memo_size = 0;
+        }
+        self.memo_size += kept.len();
+        self.closures[memo] = kept;
+        return Option::Some(kept);
     }
 
-    /// The closure of `seeds` at token step `step`, sorted, or `null` past the
-    /// guard.
+    /// The closure of `seeds` at token step `step`, sorted, or `null` once the
+    /// budget runs out.
     fn closure(&mut self, seeds: &List<SllConfig>, step: i32) -> Option<List<SllConfig>> {
         let mut seen = HashSet::<i64>::with_seed(GALE_SEED);
         let mut keys: List<i64> = [];
@@ -267,7 +284,7 @@ impl SllExplorer {
             if c.state == dstate && ts[c.alt].kind == ATN_TR_PRECEDENCE || !seen.insert(config_key(&c)) {
                 continue;
             }
-            if seen.len() > SLL_CLOSURE_GUARD {
+            if !self.spend() {
                 return null;
             }
             if self.expand(&c, 0, &mut work) {
@@ -340,6 +357,7 @@ impl SllExplorer {
 
     /// The DFA of decision `decision`.
     pub fn explore(&mut self, decision: i32) -> SllDfa {
+        self.budget = SLL_DECISION_BUDGET;
         let Some(start) = self.start_closure(self.atn.decision_state[decision]) else {
             return SllDfa { nodes: [SllNode::Ask] };
         };
