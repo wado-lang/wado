@@ -68,12 +68,11 @@ leaves this file, and `design.md` states what it built.
    rather than being copied for each row. The graph gives the past and the new
    tokens one batch axis, and `forward` checks that the inputs agree on it
    (see Axis Identity Is a Type, Extents Are Values). This item changes that
-   check to admit a past of batch one beside n rows, which every row's
-   attention reads. Finished when `design.md` records the
-   time n questions take as rows of one pass as a ratio to the time they take
-   one after another, for several n and questions of different lengths, and
-   each probability lies within the tolerance of the one its question gets
-   alone.
+   check to admit a past of batch one beside n rows. Finished when `design.md`
+   records the time n questions take as rows of one pass as a ratio to the
+   time they take one after another, for several n and questions of different
+   lengths, and each probability lies within the tolerance of the one its
+   question gets alone.
 9. [ ] Calibrated decisions. Each kind of question, at each number of options,
    has a temperature that divides the logits before the softmax, so that an
    answer given 0.8 is right about 80% of the time. A temperature keeps each
