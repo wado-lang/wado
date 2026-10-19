@@ -5982,54 +5982,37 @@ fn begin_plus_flag(w: &mut CodeWriter, name_counts: &mut List<[String, i32]>) ->
     return plus_flag;
 }
 
-/// When a scan-gated repetition over a single RuleRef exits because the scan
-/// failed, the next token may still legitimately start the inner rule but be
-/// malformed deeper in. Returns the call expression (`_parse_R(p)` /
-/// `_parse_R(p, mp)`) used to re-parse it for a precise error, or `null` when
-/// the repeated element is not a single RuleRef (no standalone parse fn).
-fn rep_recovery_expr(rep_op: &RepeatOp, ctx: &mut EmitContext) -> Option<String> {
-    if let LeafRuleCall = rep_op.body_shape {
-        if let RuleCall(r) = &rep_op.body {
-            return Option::Some(`_parse_${r.target_snake}(${parse_call_args(r, ctx).join(", ")})`);
-        }
-    }
-    return null;
+/// The repeat-exit probe of a scan-guarded loop over a single RuleRef, as
+/// `[call, gate]`, or `null` for any other body (no standalone parse fn).
+///
+/// When the scan fails, the next token may still start the inner rule and be
+/// malformed deeper in, so the probe re-parses `call` for a precise error where
+/// `gate` holds. The gate is the FIRST set the walk enumerated, even where the
+/// body admits more: gating on any lookahead can record a spurious deeper error
+/// that hijacks the reported position.
+fn rep_probe(rep_op: &RepeatOp, ctx: &mut EmitContext) -> Option<[String, String]> {
+    let RuleCall(r) = &rep_op.body else {
+        return null;
+    };
+    let loop_first = &admits_enumerated(&rep_op.body_admits);
+    assert !loop_first.is_empty(), "a scan-guarded loop's body is scannable, and a scannable rule call starts somewhere";
+    return Option::Some([
+        `_parse_${r.target_snake}(${parse_call_args(r, ctx).join(", ")})`,
+        ctx.first_check_str(loop_first),
+    ]);
 }
 
 /// Emit the `if ${scan_pos} < 0 { break; }` loop-exit, augmented on the error
-/// path with a diagnostic-only re-parse of a RuleRef inner.
+/// path with the repeat-exit probe.
 fn gen_rep_break_with_recovery<S: AsStrSlice>(w: &mut CodeWriter, scan_pos: S, rep_op: &RepeatOp, ctx: &mut EmitContext) {
-    let recovery = rep_recovery_expr(rep_op, ctx);
-    if let Some(call) = recovery {
-        // The probe wants a set to point at, and takes the one the first-set
-        // walk enumerated even where the body admits more than it: gating a
-        // speculative re-parse on "any lookahead" is what the branch below
-        // refuses to do.
-        let loop_first = &admits_enumerated(&rep_op.body_admits);
-        if loop_first.is_empty() {
-            // No FIRST tokens to gate the speculative re-parse on, and no
-            // reading of that emptiness makes one: gating on nothing fires the
-            // recovery on any lookahead and can record a spurious deeper error
-            // that hijacks the reported position, and gating on `false` never
-            // probes at all. Fall back to the plain break. (Not reachable
-            // today: recovery is only emitted for a `body_scannable`
-            // `LeafRuleCall`, and a scannable RuleRef has a non-empty FIRST —
-            // this guards the invariant.)
-            w.line(`if ${scan_pos} < 0 { break; }`);
-            return;
-        }
+    if let Some([call, gate]) = rep_probe(rep_op, ctx) {
         w.begin(`if ${scan_pos} < 0`);
-        // Gate on the body's FIRST set, so the probe has something to report.
-        w.begin(`if ${ctx.first_check_str(loop_first)}`);
+        w.begin(`if ${gate}`);
         // Backtracking, and the exception the standing rule names: it decides
         // nothing, and only `pending` survives. That message is what points
         // the diagnostic at the offending token rather than the start of input
         // (`driver_cst_error_recovery_test`).
-        w.line("let _rec_pos = p.pos;");
-        w.line("let _rec_cp = p.b.checkpoint();");
-        w.line("let _rec_sav = p.recovering;");
-        w.line("let _rec_spec = p.speculating;");
-        w.line("p.speculating = true;");
+        let mark = Speculation::begin(w, "_rec");
         // Stamp the call's exact ATN return state, just as a normal parse call
         // does, so a context-sensitive callee (`??` / ATN-class LR) sees the
         // right caller frame.
@@ -6037,10 +6020,8 @@ fn gen_rep_break_with_recovery<S: AsStrSlice>(w: &mut CodeWriter, scan_pos: S, r
             gen_call_site_stamps(w, ctx, r.atn_call_site);
         }
         w.line(`${call};`);
-        w.line("p.speculating = _rec_spec;");
-        w.line("p.recovering = _rec_sav;");
-        w.line("p.pos = _rec_pos;");
-        w.line("p.b.truncate(_rec_cp);");
+        mark.end(w);
+        mark.rewind(w);
         w.end();
         w.line("break;");
         w.end();
@@ -6131,24 +6112,15 @@ fn gen_rep_speculative_iteration(
     if guard != "true" {
         w.line(`if ${negate_cond(&guard)} { break; }`);
     }
-    let start = dedup_name("sp_pos", nc);
-    let cp = dedup_name("sp_cp", nc);
     let pending = dedup_name("sp_pending", nc);
-    let outer = dedup_name("sp_outer", nc);
-    w.line(`let ${start} = p.pos;`);
-    w.line(`let ${cp} = p.b.checkpoint();`);
     w.line(`let ${pending} = p.pending;`);
-    w.line(`let ${outer} = p.speculating;`);
-    w.line("p.speculating = true;");
+    let mark = Speculation::begin(w, dedup_name("sp", nc));
     gen_repeat_iteration(w, body, rep_op, inner, ctx, GroupEntry::Looped(String::new()));
-    w.line(`p.speculating = ${outer};`);
-    w.begin(`if p.recovering || p.pos <= ${start}`);
-    w.line("p.recovering = false;");
-    w.line(`p.pos = ${start};`);
-    w.line(`p.b.truncate(${cp});`);
-    let probe_set = admits_enumerated(&rep_op.body_admits);
-    if rep_recovery_expr(rep_op, ctx) matches { Some(_) } && !probe_set.is_empty() {
-        w.line(`if ${negate_cond(ctx.first_check_str(&probe_set))} { p.pending = ${pending}; }`);
+    mark.end(w);
+    w.begin(`if p.recovering || p.pos <= ${mark.pos}`);
+    mark.rewind(w);
+    if let Some([_, gate]) = rep_probe(rep_op, ctx) {
+        w.line(`if ${negate_cond(&gate)} { p.pending = ${pending}; }`);
     } else {
         w.line(`p.pending = ${pending};`);
     }
@@ -6159,7 +6131,7 @@ fn gen_rep_speculative_iteration(
     }
     let end = dedup_name("sp_end", nc);
     w.line(`let ${end} = p.pos;`);
-    w.line(`p.pos = ${start};`);
+    w.line(`p.pos = ${mark.pos};`);
     gen_iteration_duties(
         w,
         &rep_op.duties,
@@ -6169,9 +6141,40 @@ fn gen_rep_speculative_iteration(
         /*reserve_in_guard=*/ true,
         ctx,
         nc,
-        `p.b.truncate(${cp}); p.pending = ${pending}; break;`,
+        `p.b.truncate(${mark.cp}); p.pending = ${pending}; break;`,
     );
     w.line(`p.pos = ${end};`);
+}
+
+/// A parse under `speculating`, as the locals that put the parser back.
+///
+/// Both speculating sites run inside a loop that breaks while `p.recovering`,
+/// so what a rewind restores `recovering` to is `false`.
+struct Speculation {
+    pos: String,
+    cp: String,
+    outer: String,
+}
+
+impl Speculation {
+    fn begin<S: AsStrSlice>(w: &mut CodeWriter, prefix: S) -> Speculation {
+        let mark = Speculation { pos: `${prefix}_pos`, cp: `${prefix}_cp`, outer: `${prefix}_outer` };
+        w.line(`let ${mark.pos} = p.pos;`);
+        w.line(`let ${mark.cp} = p.b.checkpoint();`);
+        w.line(`let ${mark.outer} = p.speculating;`);
+        w.line("p.speculating = true;");
+        return mark;
+    }
+
+    fn end(&self, w: &mut CodeWriter) {
+        w.line(`p.speculating = ${self.outer};`);
+    }
+
+    fn rewind(&self, w: &mut CodeWriter) {
+        w.line("p.recovering = false;");
+        w.line(`p.pos = ${self.pos};`);
+        w.line(`p.b.truncate(${self.cp});`);
+    }
 }
 
 /// A decline is stamped only where the walk reaches the rule's tail

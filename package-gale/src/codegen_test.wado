@@ -1587,9 +1587,9 @@ test "a loop that parses its iteration speculatively rewinds the one that fails"
 }
 
 test "a loop speculates only where the parse runs no action" {
-    assert gen_source(SPECULATIVE_LOOP_G4).contains("p.speculating = true;");
+    assert gen_source(SPECULATIVE_LOOP_G4).contains("let sp_pending");
     let with_predicate = SPECULATIVE_LOOP_G4.replace("st : ID (", "st : {true}? ID (");
-    assert !gen_source(&with_predicate).contains("p.speculating = true;"), "`speculating` skips a predicate";
+    assert !gen_source(&with_predicate).contains("let sp_pending"), "`speculating` skips a predicate";
 }
 
 global LOOP_ENTERS_WHILE_VIABLE_G4: String = "

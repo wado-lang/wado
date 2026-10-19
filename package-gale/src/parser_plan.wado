@@ -138,8 +138,7 @@ pub fn plan_parser(
         rule_reaches_simulator: close_over_callers(&analysis.scannable_callees(), marks.rule_asks_simulator),
         scan_memo: rescanned.contains(&true) || any_lr,
         rescanned,
-        speculates: !settings.emit_actions
-            || !grammar.parser_rules.iter_ref().any(|r| !rule_action_bodies(r).is_empty()),
+        speculates: !settings.emit_actions || grammar.parser_rules.iter_ref().all(|r| rule_action_bodies(r).is_empty()),
         lr_loop_entry_decisions: lr_decs,
         atn_rule_body_decisions: body_decs,
         atn_call_site_returns: if needs_atn { atn.call_site_returns } else { [] },
