@@ -29,46 +29,58 @@ leaves this file, and `design.md` states what it built.
 4. [ ] The decoder's cache as one value. See A Decoder's Cache Is One Value.
    Finished when the GPT-2 and Gemma 3 examples pass a `Cache` and no line of
    theirs names a layer.
-5. [ ] Narrowed outputs. A use site can say that an output is read only at the
-   last position, or there only at the token ids each call gives. The
-   generated module then computes only that part, as `outputs` already cuts
-   the graph to what it reads (see The Graph Is ONNX). The slice to the last
-   position moves above every node that works on each position alone.
-   The ids select rows of the head's weight before its product. So the head's
-   cost grows with the number of ids, not with the vocabulary, and no pass
-   holds a logit for every position and token. Finished when the Gemma 3
-   example ranks the next token from the last position alone, and reads the
-   last position's logits at given ids as onnxruntime computes them at those
-   ids.
+5. [ ] Narrowed outputs. A use site can name an output that each call reads at
+   one position per row, and optionally only at some token ids. The call gives
+   the positions and the ids. The generated module then computes only those
+   values, as `outputs` already cuts the graph to what it reads (see The Graph
+   Is ONNX). Picking each row's position moves above every node that works on
+   each position alone. The ids pick entries along the head weight's
+   vocabulary axis before its product. So the head's cost grows with the
+   number of ids, not with the vocabulary, and no pass holds a logit for every
+   position and token. Finished when the Gemma 3 example ranks the next token
+   from the last position alone, and its logits at given ids lie within the
+   tolerance of onnxruntime's at those ids.
 6. [ ] Decisions. A decision asks a model one question about a state and
    reads the probability of each answer from one pass, rather than generating
    text. A question is a choice among options, given at run time. Each option
-   is labelled with a letter that is one token, so a choice holds at most 26.
-   The answer is the softmax of the logits at the labels. A yes-or-no question
-   is a choice of two. A score is a choice among the points of a scale, and
-   its answer also gives their expected value. Loam's decision module takes any
-   model that reads narrowed logits, and that model's tokenizer. The caller
-   spells the model's chat turns. Finished when the Gemma 3 example answers a
-   set of questions with the probabilities onnxruntime's logits give.
+   is labelled with a letter, so a choice holds at most 26. A label's id is the
+   token the letter adds when it follows the prompt, so the caller's chat turns
+   decide whether that is `A` or ` A`. A letter that adds more than one token,
+   or changes the prompt's own tokens, stops the call. The answer is the
+   softmax of the logits at the labels. A yes-or-no question is a choice of
+   two. A score is a choice among the points of a scale, and its answer also
+   gives their expected value. Loam's decision module takes any model that
+   gives narrowed logits, and that model's tokenizer. The caller spells the
+   model's chat turns. Finished when the Gemma 3 example answers a set of
+   questions with probabilities within the tolerance of those onnxruntime's
+   logits give.
 7. [ ] A state read by many questions. The state's tokens run once. Each
    question runs only its own tokens, against the state's cache, and leaves
-   that cache as it was. Finished when `design.md` records the time a question
-   takes against a state of 1,000 tokens as a ratio to the time with the state
-   run each time, beside the commands that measured both, and the
-   probabilities are unchanged.
+   that cache as it was. Finished when `design.md` records the time several
+   questions take against one state of 1,000 tokens as a ratio to the time
+   with the state run for each, beside the commands that measured both, and
+   each probability lies within the tolerance of the one it gets with the
+   state run for it.
 8. [ ] Questions in one pass. The questions on one state run as the rows of
-   one pass. Every row reads the state's single cache, so the device reads
-   each weight once for all of them. Finished when `design.md` records the time
-   n questions take as rows of one pass as a ratio to the time they take one
-   after another, for several n, and each probability equals the one its
-   question gets alone.
+   one pass, so the device reads each weight once for all of them. A shorter
+   question is padded at its end, and its answer is read at its own last
+   token. Every row reads the state's cache, which keeps its batch of one
+   rather than being copied for each row. The graph gives the past and the new
+   tokens one batch axis, and `forward` checks that the inputs agree on it
+   (see Axis Identity Is a Type, Extents Are Values), so a past of one batch
+   under n rows departs from that check. Finished when `design.md` records the
+   time n questions take as rows of one pass as a ratio to the time they take
+   one after another, for several n and questions of different lengths, and
+   each probability lies within the tolerance of the one its question gets
+   alone.
 9. [ ] Calibrated decisions. Each kind of question, at each number of options,
    has a temperature that divides the logits before the softmax, so that an
-   answer given 0.8 is right about 80% of the time. The caller passes the
-   temperatures, and a tool in `tools/` fits them from questions with known
-   answers. Finished when `design.md` records the expected calibration error
-   before and after on questions held out of the fit, and names the data set
-   and its license.
+   answer given 0.8 is right about 80% of the time. A temperature keeps each
+   question's ranking, so a model's bias toward a label, such as `A`, stays as
+   it was. The caller passes the temperatures, and a tool in `tools/` fits them
+   from questions with known answers. Finished when `design.md` records the
+   expected calibration error before and after on questions held out of the
+   fit, and names the data set and its license.
 10. [ ] A model larger than the guest's heap splits. `onnx_split` writes the
     checkpoint a tensor at a time rather than holding the model. Finished when
     Gemma 4 E2B's export splits and `loam dump` reports its decoder and its
