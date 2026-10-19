@@ -579,10 +579,9 @@ pub fn elaborate_resource_drops(project: &mut Package) -> Vec<SynthesisError> {
         .flat_map(|module| tir::struct_fields(&module.structs))
         .collect();
     let drop_impls = drop_impls(
-        project
-            .tir_modules
-            .values()
-            .flat_map(|module| &module.functions),
+        project.tir_modules.iter().flat_map(|(source, module)| {
+            module.functions.iter().map(|func| (source.clone(), func))
+        }),
         &type_table.borrow(),
     );
     let answers = RefCell::default();
@@ -649,7 +648,12 @@ pub fn instance_callee_facts(flat: &FlatPackage) -> CalleeFacts {
 /// Run `f` with the [`Resources`] of `flat`.
 fn with_flat_resources<R>(flat: &FlatPackage, f: impl FnOnce(Resources) -> R) -> R {
     let struct_fields = tir::struct_fields(&flat.structs);
-    let drop_impls = drop_impls(&flat.functions, &flat.type_table.borrow());
+    let drop_impls = drop_impls(
+        flat.functions
+            .iter()
+            .map(|func| (func.borrow().module_source.clone(), func)),
+        &flat.type_table.borrow(),
+    );
     let answers = RefCell::default();
     f(Resources {
         tt: &flat.type_table,
@@ -850,20 +854,18 @@ fn elaborate_function(
 /// Each type's `Drop::drop`, by the type's declaration.
 type DropImpls = IndexMap<DefId, FunctionRef>;
 
-/// The `Drop::drop` impls among `functions`.
+/// The `Drop::drop` impls among `functions`, each with the module defining it:
+/// before link a function's own `module_source` is not set.
 fn drop_impls<'f>(
-    functions: impl IntoIterator<Item = &'f Rc<RefCell<TirFunction>>>,
+    functions: impl IntoIterator<Item = (ModuleSource, &'f Rc<RefCell<TirFunction>>)>,
     tt: &TypeTable,
 ) -> DropImpls {
     functions
         .into_iter()
-        .filter_map(|func_rc| {
+        .filter_map(|(module, func_rc)| {
             let func = func_rc.borrow();
             let implementor = drop_impl_of(&func, tt)?;
-            Some((
-                implementor,
-                FunctionRef::from_resolved(&func, func.module_source.clone()),
-            ))
+            Some((implementor, FunctionRef::from_resolved(&func, module)))
         })
         .collect()
 }

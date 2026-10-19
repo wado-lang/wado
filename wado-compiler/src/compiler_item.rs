@@ -1513,6 +1513,8 @@ impl CompilerItem {
                 // mints. The sealed `Reflect*` faces need no entry: that pass
                 // writes them at TIR level, where no AST block exists.
                 | Self::Member
+                // Called by every drop `synthesis::resource_cleanup` writes.
+                | Self::Drop
         )
     }
 

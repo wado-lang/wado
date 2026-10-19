@@ -555,6 +555,11 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             for item in &module.items {
                 match item {
                     Item::Struct(struct_decl) => {
+                        if struct_decl.is_affine {
+                            type_table
+                                .borrow_mut()
+                                .mark_affine_decl(resolutions.defs().def_at(struct_decl.id));
+                        }
                         // Unresolved until the second sub-pass; the name is what is needed now.
                         data.struct_fields.insert(
                             resolutions.defs().def_at(struct_decl.id),
@@ -577,6 +582,11 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                         );
                     }
                     Item::Variant(variant_decl) => {
+                        if variant_decl.is_affine {
+                            type_table
+                                .borrow_mut()
+                                .mark_affine_decl(resolutions.defs().def_at(variant_decl.id));
+                        }
                         // Insert with empty cases first - will be populated in second sub-pass
                         data.variant_cases.insert(
                             resolutions.defs().def_at(variant_decl.id),

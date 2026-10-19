@@ -163,7 +163,7 @@ impl TypeSystem {
     /// type is affine in every instantiation: one a type parameter reaches
     /// holds nothing here.
     pub(crate) fn first_affine_member(&self, type_id: TypeId) -> Option<usize> {
-        let Held::Members { members, .. } = self.held(type_id) else {
+        let Held::Members { members, .. } = self.members_held(type_id) else {
             return None;
         };
         members
@@ -861,7 +861,25 @@ impl HeldTypes for TypeSystem {
         self.type_table.borrow().type_key(type_id)
     }
 
+    /// A type declared `affine` is move-only whatever its members hold, as a
+    /// type implementing `Drop` is.
     fn held(&self, type_id: TypeId) -> Held {
+        let declared_affine = {
+            let table = self.type_table.borrow();
+            table
+                .nominal_def(table.representation_head(type_id))
+                .is_some_and(|def| table.is_affine_decl(def))
+        };
+        if declared_affine {
+            return Held::Resource;
+        }
+        self.members_held(type_id)
+    }
+}
+
+impl TypeSystem {
+    /// What `type_id` holds one level down, read from its members alone.
+    fn members_held(&self, type_id: TypeId) -> Held {
         let (base, resolved) = {
             let table = self.type_table.borrow();
             let base = table.representation_head(type_id);

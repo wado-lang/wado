@@ -80,6 +80,15 @@ pub affine trait Default with () {
     fn default() -> Self;
 }
 
+/// What a drop of an affine value runs: at scope exit, at a store over it, for
+/// a value nothing keeps, and by name. A type without an impl drops its fields
+/// one by one. What `drop` leaves in `self` drops field by field after it, and
+/// only an affine type implements it.
+#[compiler_item("drop")]
+pub affine trait Drop with () {
+    fn drop(self);
+}
+
 /// A type's identity: the root every reflected kind sits under. Sealed and
 /// compiler-synthesized like the kinds. See WEP 2026-06-13.
 #[compiler_item("reflect")]

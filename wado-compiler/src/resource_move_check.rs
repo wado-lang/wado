@@ -112,7 +112,9 @@ impl From<ResourceMoveError> for Diagnostic {
             ),
             MoveError::DropOnCopyable { type_name } => (
                 Code::AffineDeclaration,
-                format!("`{type_name}` is copyable, so it cannot implement `Drop`: every copy would run it"),
+                format!(
+                    "`{type_name}` is copyable, so it cannot implement `Drop`: every copy would run it"
+                ),
             ),
             MoveError::DropPartialMove { type_name } => (
                 Code::TypeMismatch,
@@ -533,7 +535,7 @@ impl MoveWalker<'_, '_> {
     fn refuse_move_out_of_drop(&mut self, mut expr: &Expr) {
         while let Expr::FieldAccess(fa) = expr {
             let holder = &fa.expr;
-            let own_self = self.drop_body && matches!(&**holder, Expr::Ident(id) if id.name == "self");
+            let own_self = self.drop_body && matches!(holder, Expr::Ident(id) if id.name == "self");
             if !own_self && self.implements_drop(holder) {
                 let type_name = self.type_name_of(holder);
                 self.report(MoveError::DropPartialMove { type_name }, expr.span());
@@ -724,6 +726,7 @@ impl MoveWalker<'_, '_> {
         let mut inner = MoveWalker {
             checker: &mut *self.checker,
             affine_params: self.affine_params.clone(),
+            drop_body: self.drop_body,
             moved: self.moved.clone(),
             guard_bindings: self.guard_bindings.clone(),
             closure_locals: Some(locals),

@@ -1200,6 +1200,8 @@ pub struct TypeTable {
     /// Resources declared `#[cm(..., linearity = "unrestricted")]`, with the
     /// classes their handles carry where they declare them.
     unrestricted_resources: IndexMap<DefId, Option<HandleClasses>>,
+    /// Structs and variants declared `affine`.
+    affine_decls: IndexSet<DefId>,
     /// `resource Child extends Parent`, child → parent.
     resource_parents: IndexMap<DefId, DefId>,
     /// Every declaration in the program, for rendering a nominal type's head.
@@ -1340,6 +1342,7 @@ impl TypeTable {
             decl_index: IndexMap::default(),
             cm_decl_index: IndexMap::default(),
             unrestricted_resources: IndexMap::default(),
+            affine_decls: IndexSet::default(),
             resource_parents: IndexMap::default(),
             defs: std::sync::Arc::default(),
         };
@@ -1604,6 +1607,17 @@ impl TypeTable {
     #[must_use]
     pub fn is_unrestricted_resource(&self, def: DefId) -> bool {
         self.unrestricted_resources.contains_key(&def)
+    }
+
+    pub fn mark_affine_decl(&mut self, def: DefId) {
+        self.affine_decls.insert(def);
+    }
+
+    /// Whether `def` is a struct or variant declared `affine`: move-only in
+    /// every instantiation, whatever its fields hold.
+    #[must_use]
+    pub fn is_affine_decl(&self, def: DefId) -> bool {
+        self.affine_decls.contains(&def)
     }
 
     /// The classes an unrestricted resource's handles carry, where it declares them.
@@ -3516,6 +3530,9 @@ impl TypeTable {
                 .into_iter()
                 .any(|member| self.holds_affine_in(member, params, open));
         };
+        if self.is_affine_decl(def) {
+            return true;
+        }
         let inner: Vec<bool> = args
             .iter()
             .map(|&arg| self.holds_affine_in(arg, params, open))
