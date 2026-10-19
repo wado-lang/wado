@@ -429,6 +429,42 @@ internal fn cm_subtask_settled(ready: &Ready<Subtask>) -> bool
     return ready.payload > CM_SUBTASK_STARTED;
 }
 
+/// A subtask whose resolution a set delivered, by its handle, with the state it
+/// resolved in.
+struct Resolution {
+    handle: i32,
+    state: u32,
+}
+
+/// The resolutions sets delivered for subtasks not yet dropped. The Component
+/// Model delivers one once, so the call holding the subtask learns of it here:
+/// waiting on it again would block for good, and cancelling it traps. A
+/// subtask's drop removes its entry, before the host reuses the handle.
+global mut DELIVERED: List<Resolution> = [];
+
+/// Where `DELIVERED` holds `handle`'s resolution.
+fn delivered_at(handle: i32) -> Option<i32> {
+    for let mut at = 0; at < DELIVERED.len(); at += 1 {
+        if DELIVERED[at].handle == handle {
+            return Option::Some(at);
+        }
+    }
+    return null;
+}
+
+/// The state `handle`'s subtask resolved in, where a set delivered it.
+fn delivered_state(handle: i32) -> Option<u32> {
+    return delivered_at(handle).map(|at: i32| DELIVERED[at].state);
+}
+
+/// Drops `subtask`, resolved, and forgets its delivered resolution.
+fn drop_resolved(subtask: Subtask) {
+    if let Some(at) = delivered_at(builtin::resource_handle(&subtask)) {
+        let _ = DELIVERED.remove(at);
+    }
+    subtask.drop();
+}
+
 /// The upper 28 bits of a packed CM word: a copy's count, or a subtask's
 /// handle. The word is unsigned, so bit 31 is part of the value.
 internal fn cm_packed_upper(packed: i32) -> i32 {
@@ -486,7 +522,7 @@ impl<affine W: Waitable> WaitableSet<W> {
 
     /// Moves `member` into the set. A member joins one set at a time.
     pub fn join(&mut self, member: W) {
-        if let Some(id) = member.waitable_id() {
+        if let Some(id) = member.waitable_id() && delivered_state(id.handle) matches { None } {
             builtin::waitable_join(id.handle, builtin::resource_handle(&self.raw));
         }
         self.members.push(member);
@@ -525,33 +561,36 @@ impl<affine W: Waitable> WaitableSet<W> {
         return self.members.is_empty();
     }
 
+    /// The first member the host has no event left to report for: one it does
+    /// not know, ready with code 0, or a subtask whose resolution a set already
+    /// delivered, reported again.
     fn take_ready_without_host(&mut self) -> Option<Ready<W>> {
-        let Some(at) = self.position(null) else {
-            return null;
-        };
-        return Option::Some(Ready { member: self.members.remove(at), code: 0, payload: 0 });
-    }
-
-    fn take_reported(&mut self, event: WaitEvent) -> Ready<W> {
-        let Some(at) = self.position(Option::Some(event.handle)) else {
-            unreachable();
-        };
-        builtin::waitable_join(event.handle, 0);
-        return Ready { member: self.members.remove(at), code: event.code, payload: event.payload };
-    }
-
-    /// Where the member the host knows by `handle` sits, or the first one it
-    /// does not know where `handle` is None.
-    fn position(&self, handle: Option<i32>) -> Option<i32> {
         let mut at = 0;
         for let member of self.members.iter_ref() {
-            let id = member.waitable_id().map(|id: ResourceId| id.handle);
-            if id == handle {
-                return Option::Some(at);
+            let Some(id) = member.waitable_id() else {
+                return Option::Some(Ready { member: self.members.remove(at), code: 0, payload: 0 });
+            };
+            if let Some(state) = delivered_state(id.handle) {
+                return Option::Some(Ready { member: self.members.remove(at), code: CM_EVENT_SUBTASK, payload: state });
             }
             at += 1;
         }
         return null;
+    }
+
+    fn take_reported(&mut self, event: WaitEvent) -> Ready<W> {
+        builtin::waitable_join(event.handle, 0);
+        if event.code == CM_EVENT_SUBTASK && event.payload > CM_SUBTASK_STARTED {
+            DELIVERED.push(Resolution { handle: event.handle, state: event.payload });
+        }
+        let mut at = 0;
+        for let member of self.members.iter_ref() {
+            if member.waitable_id().map(|id: ResourceId| id.handle) == Option::Some(event.handle) {
+                return Ready { member: self.members.remove(at), code: event.code, payload: event.payload };
+            }
+            at += 1;
+        }
+        unreachable();
     }
 }
 
@@ -658,7 +697,7 @@ impl<affine T> AsyncCall<T> {
             loop {
                 let ready = set.wait();
                 if cm_subtask_settled(&ready) {
-                    ready.member.drop();
+                    drop_resolved(ready.member);
                     break;
                 }
                 set.join(ready.member);
@@ -685,11 +724,17 @@ impl<affine T> Drop for AsyncCall<T> {
     fn drop(self) {
         let mut returned = true;
         if let Some(subtask) = self.subtask {
-            // `subtask.cancel` traps on a waitable still in a set. Joining set 0
-            // leaves whatever set it is in.
-            builtin::waitable_join(builtin::resource_handle(&subtask), 0);
-            returned = subtask.cancel() == CM_SUBTASK_RETURNED;
-            subtask.drop();
+            let handle = builtin::resource_handle(&subtask);
+            let state = if let Some(state) = delivered_state(handle) {
+                state;
+            } else {
+                // `subtask.cancel` traps on a waitable still in a set. Joining
+                // set 0 leaves whatever set it is in.
+                builtin::waitable_join(handle, 0);
+                subtask.cancel();
+            };
+            returned = state == CM_SUBTASK_RETURNED;
+            drop_resolved(subtask);
         }
         if returned && let Some(buffer) = self.buffer {
             let _ = (self.lift)(buffer.ptr);

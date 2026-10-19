@@ -623,8 +623,9 @@ What changes shape:
   today, and cancels it, since a `Subtask` traps on `drop` until it resolves;
   then it lifts and drops a result the callee returned, which owns handles
   only a lift reaches, and frees the buffer. A call a set already reported
-  cannot be ended, today or after this WEP, and its drop traps: that is
-  [a gap of the `AsyncCall` WEP](./wep-2026-04-22-subtask-generic.md#known-gaps).
+  skips the cancel, which would trap: the set recorded the resolution it
+  delivered
+  ([WEP: Generic `AsyncCall<T>`](./wep-2026-04-22-subtask-generic.md#decision)).
 - `ResourceId`, with `ResourceId::of<R: AffineResource>(&r)`. `AffineResource`
   is a sealed marker the compiler states for every affine resource, so the
   bound is what makes anything else a type error. It names the resource
@@ -806,7 +807,8 @@ declares the destructor's effects is withdrawn: a drop's effects are benign.
 - [x] `WaitableSet<W>` owns its members: `Waitable`, `join`, `wait` and `poll`
   returning `Ready<W>`, and its `Drop` dropping the members first.
   `Waitable = i32`, `WaitEvent.handle` and the `join` methods go. Fixtures: a
-  set waiting on two calls through a variant, and a set dropped with members.
+  set waiting on two calls through a variant, a set dropped with members, and
+  a call a set delivered, then waited, cancelled, dropped and joined again.
 - [x] `FutureWrite<T>` and `StreamWrite<T>`: a write returns what it did not
   deliver, in every case the result reports, and the stdlib's write loops
   (`write_all`) read `rest` rather than `count`.

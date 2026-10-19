@@ -129,6 +129,16 @@ monomorphized per `T`:
 3. Lift `T` from outptr using the per-import lift function.
 4. `realloc(outptr, size, align, 0)` to free.
 
+The Component Model delivers a subtask's resolution once, through the first
+`waitable-set.wait` that reports it. A call a user's set handed back after
+that would wait for an event that never comes, and `subtask.cancel` traps on
+it. So a set records each resolution it delivers by the subtask's handle, and
+the record goes when the subtask drops, before the host reuses the handle. A
+call reads it: `wait` skips the wait, a drop skips the cancel, and a set the
+call joins again reports it without the host. The record is keyed by handle
+rather than kept in the `AsyncCall`, so it holds whatever a user's `Waitable`
+wraps the call in.
+
 ### `wado-from-idl` automation
 
 WIT `async func foo(...) -> T` ⇒ Wado `async fn foo(...) -> AsyncCall<T>`.
@@ -207,14 +217,6 @@ trailers_tx.write(Result::Ok(null));
   live in one component: one end goes to an import's subtask or to the caller.
 - No structured concurrency over several calls (`join`, `race`). A caller
   combines them by hand with `WaitableSet::wait`.
-- A call that was joined to a set and reported there cannot be ended. The
-  Component Model delivers a subtask's resolution once, through the first
-  `waitable-set.wait` that reports it. After that, `wait` on the call waits for
-  an event that never comes, and `cancel` traps, since `subtask.cancel` traps
-  once the resolution was delivered. Nothing in `AsyncCall` records the
-  delivery. Once
-  [WEP: Affine Types](./wep-2026-10-17-affine-types.md#standard-library) gives
-  `AsyncCall` a `Drop` that cancels, dropping such a call traps too.
 - TLS trust store configuration for outgoing HTTPS requests from `wado run`.
   wasmtime-wasi-http 43.0.1's `WasiHttpHooks::send_request` signature uses
   `pub(crate)` types (`HttpResult`, `HttpError`, `body::UnsyncBoxBody`), so

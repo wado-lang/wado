@@ -251,6 +251,11 @@ export fn run() with (Stdout, MonotonicClock) {
 }
 ```
 
+The host reports a call's resolution once, but a call a set handed back
+after its resolution still ends as any call does. `wait` returns its result,
+`cancel` and a drop end it, and a set it joins again reports it at once with
+the same event.
+
 #### Handling an Async Operation
 
 A [handler](./spec-effects.md#handlers) method for an async operation is a

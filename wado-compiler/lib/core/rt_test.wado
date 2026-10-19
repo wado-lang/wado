@@ -1,6 +1,8 @@
 //! Tests for `core:rt`.
 
 use { i64_add128_soft, i64_sub128_soft, i64_mul_wide_u_soft, i64_mul_wide_s_soft, log_stdout } from "core:rt";
+use { MonotonicClock } from "wasi:clocks";
+use { CM_EVENT_SUBTASK, CM_SUBTASK_STARTED } from "core:prelude/types.wado";
 
 #[expect_trap]
 test "a read with negative room is a defect" {
@@ -71,6 +73,30 @@ test "a set drops the future reader it holds" {
     assert readers.poll() matches { None };
     builtin::drop(readers);
     assert tx.write(1).result == CopyResult::Dropped;
+}
+
+/// A call the host resolves after it starts, handed back by the set that
+/// delivered its resolution.
+fn delivered_call() -> AsyncCall<()> with MonotonicClock {
+    let mut set = WaitableSet::<AsyncCall<()>>::new();
+    set.join(MonotonicClock::wait_for(1_000_000));
+    loop {
+        let ready = set.wait();
+        if ready.payload > CM_SUBTASK_STARTED {
+            return ready.member;
+        }
+        set.join(ready.member);
+    }
+}
+
+test "a call a set delivered ends by a wait, a drop, or another set" {
+    delivered_call().wait();
+    builtin::drop(delivered_call());
+    let mut again = WaitableSet::<AsyncCall<()>>::new();
+    again.join(delivered_call());
+    let ready = again.wait();
+    assert ready.code == CM_EVENT_SUBTASK && ready.payload > CM_SUBTASK_STARTED;
+    ready.member.wait();
 }
 
 test "log_stdout writes without an effect" {
