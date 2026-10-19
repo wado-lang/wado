@@ -12,6 +12,9 @@ use {
 } from "./atn.wado";
 use { AtnPredictor, atn_invocation_prec, atn_predict_once } from "./atn_predict.wado";
 
+global ATN_CONT_ANY: i32 = -1;
+global ATN_CONT_NONE: i32 = -2;
+
 internal fn atn_with_lr_tables(sim: AtnSim) -> AtnSim {
     let mut out = sim;
     let nrules = out.rule_start.len();
@@ -73,6 +76,14 @@ fn atn_compute_state_cont(sim: &mut AtnSim) {
             }
         }
     }
+    let mut kinds = 0;
+    for let mut j = 0; j < sim.tr_kind.len(); j += 1 {
+        if sim.tr_kind[j] == ATN_TR_ATOM || sim.tr_kind[j] == ATN_TR_NOT_ATOM {
+            kinds = i32::max(kinds, sim.tr_label[j] + 1);
+        }
+    }
+    sim.cont_kinds = kinds;
+    sim.cont_words = (kinds + 63) / 64;
     for let mut st = 0; st < nstates; st += 1 {
         let mut v1: List<i32> = [];
         let nullable = atn_cont_nullable(sim, st, &mut v1);
@@ -81,18 +92,26 @@ fn atn_compute_state_cont(sim: &mut AtnSim) {
         let mut fneg: List<i32> = [];
         let open = atn_cont_first(sim, st, &mut v2, &mut f, &mut fneg);
         sim.state_cont_nullable.push(nullable);
-        sim.state_cont_first_start.push(sim.cont_first_label.len());
-        sim.state_cont_first_count.push(f.len());
-        for let t of &f {
-            sim.cont_first_label.push(*t);
-        }
-        sim.state_cont_neg_start.push(sim.cont_neg_label.len());
-        sim.state_cont_neg_count.push(fneg.len());
-        for let x of &fneg {
-            sim.cont_neg_label.push(*x);
-        }
-        sim.state_cont_first_open.push(open);
+        atn_push_cont_admits(sim, &f, &fneg, open);
     }
+}
+
+fn atn_push_cont_admits(sim: &mut AtnSim, first: &List<i32>, neg: &List<i32>, open: bool) {
+    let row = sim.state_cont_first.len();
+    for let mut w = 0; w < sim.cont_words; w += 1 {
+        sim.state_cont_first.push(0);
+    }
+    for let t of first {
+        sim.state_cont_first[row + *t / 64] |= 1 as i64 << (*t % 64) as i64;
+    }
+    let any_but = if open || neg.iter_ref().any(|x| *x != neg[0]) {
+        ATN_CONT_ANY;
+    } else if neg.is_empty() {
+        ATN_CONT_NONE;
+    } else {
+        neg[0];
+    };
+    sim.state_cont_any_but.push(any_but);
 }
 
 fn atn_compute_first_nullable(sim: &mut AtnSim) {
@@ -208,26 +227,11 @@ fn atn_cont_first(sim: &AtnSim, state: i32, visited: &mut List<i32>, out: &mut L
 }
 
 fn atn_state_cont_admits(sim: &AtnSim, state: i32, t: i32, eof: i32) -> bool {
-    if sim.state_cont_first_open[state] && t != eof {
+    let any_but = sim.state_cont_any_but[state];
+    if t != eof && (any_but == ATN_CONT_ANY || any_but >= 0 && t != any_but) {
         return true;
     }
-    let fs = sim.state_cont_first_start[state];
-    let fc = sim.state_cont_first_count[state];
-    for let mut j = 0; j < fc; j += 1 {
-        if sim.cont_first_label[fs + j] == t {
-            return true;
-        }
-    }
-    if t != eof {
-        let ns = sim.state_cont_neg_start[state];
-        let nc = sim.state_cont_neg_count[state];
-        for let mut j = 0; j < nc; j += 1 {
-            if sim.cont_neg_label[ns + j] != t {
-                return true;
-            }
-        }
-    }
-    return false;
+    return t < sim.cont_kinds && sim.state_cont_first[state * sim.cont_words + t / 64] >> (t % 64) as i64 & 1 != 0;
 }
 
 internal fn atn_lr_loop_decision(

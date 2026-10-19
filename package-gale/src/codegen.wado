@@ -66,7 +66,8 @@ use { CodeWriter } from "lib:wadopoet";
 use { lower } from "./lower.wado";
 use { build_atn_with, atn_blob_bytes, Atn, empty_atn } from "./atn.wado";
 use { build_latn, grammar_needs_latn, LatnResult } from "./latn.wado";
-use { HashMap } from "core:collections";
+use { HashMap, HashSet } from "core:collections";
+use { SllExplorer, gen_sll_decide_fn, sll_decide_fn_name } from "./atn_sll.wado";
 use { GALE_SEED } from "./hash_seed.wado";
 use { Diagnostic, DiagnosticKind, DiagnosticOwner, DiagnosticSite, Diagnostics, LoweredGrammar } from "./gir.wado";
 
@@ -340,6 +341,7 @@ pub fn generate(grammar: &mut Grammar, options: &GenerateOptions) -> GeneratedOu
     }
     if ctx.plan.needs_atn {
         gen_atn_data_global(&mut w, &atn, ctx.plan.needs_lr_atn);
+        gen_sll_decide_fns(&mut w, &ctx, &atn, &used);
     }
     // Serialized lexer ATN blob, decoded once into `LATN_SIM`, for the
     // runtime lexer simulator (`latn_match`).
@@ -546,6 +548,16 @@ fn warn_atn_class_lexer_predicates(grammar: &Grammar, atn_class_rules: &List<Str
 
 /// Emit the decoded `ATN_SIM` global: the serialized whole-grammar ATN the
 /// inlined runtime decodes once, at construction, into the module-level sim.
+/// Emit the decision functions the kept code calls, in decision order.
+fn gen_sll_decide_fns(w: &mut CodeWriter, ctx: &EmitContext, atn: &Atn, used: &HashSet<String>) {
+    let mut explorer = SllExplorer::new(atn, ctx.analysis.eof_kind_id());
+    for let d of 0..<atn.decision_state.len() {
+        if used.contains(sll_decide_fn_name(d)) {
+            gen_sll_decide_fn(w, d, &explorer.explore(d), &ctx.analysis);
+        }
+    }
+}
+
 fn gen_atn_data_global(w: &mut CodeWriter, atn: &Atn, lr_tables: bool) {
     emit_atn_blob_global(w, atn, "ATN_SIM", lr_tables);
     w.blank();

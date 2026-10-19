@@ -187,6 +187,7 @@ use {
     kind_bitset_words,
 } from "./kind_set_gen.wado";
 use { group_alt_classes, non_greedy_static_undecided } from "./lower.wado";
+use { sll_decide_fn_name } from "./atn_sll.wado";
 
 /// Append the defaulted runtime FOLLOW-continuation argument to a
 /// parse/scan/LR function signature, BEFORE any `min_prec` so a
@@ -4787,7 +4788,7 @@ fn optional_asks_simulator(non_greedy: bool, atn_decides: bool, gate_caller_foll
 /// many one rule holds. `build_repeat` orders a greedy repeat's edges
 /// `[enter=0, exit=1]` and a non-greedy one's `[exit=0, enter=1]`.
 fn atn_enters_cond<S: AsStrSlice, S1: AsStrSlice>(
-    ctx: &EmitContext,
+    ctx: &mut EmitContext,
     site: i32,
     non_greedy: bool,
     tokens: S,
@@ -7255,7 +7256,7 @@ fn gen_atn_body_pick<S: AsStrSlice, S1: AsStrSlice>(
     gates: &List<[i32, String]>,
     tokens: S,
     pos: S1,
-    ctx: &EmitContext,
+    ctx: &mut EmitContext,
 ) {
     if gates.is_empty() {
         w.line(`let _atn_alt = ${atn_predict_call(dec, tokens, pos, ctx)};`);
@@ -7270,19 +7271,22 @@ fn gen_atn_body_pick<S: AsStrSlice, S1: AsStrSlice>(
 
 /// The simulator's pick at decision `atn_dec`, over `tokens` at `pos`, with the
 /// edges of the predicates the list `false_preds` names closed. Only a verdict
-/// no predicate decided is kept for the parse.
+/// no predicate decided is kept for the parse. Without predicates the pick goes
+/// through the decision's lookahead DFA first (`atn_sll.wado`).
 fn atn_predict_call<S: AsStrSlice, S1: AsStrSlice>(
     atn_dec: i32,
     tokens: S,
     pos: S1,
-    ctx: &EmitContext,
+    ctx: &mut EmitContext,
     false_preds: String = "",
 ) -> String
     contract ctx.current_rule_asks_simulator(), "a scan call pushes a return state only toward a rule marked as asking the simulator"
 {
     let prec = atn_prec_arg(ctx);
     if false_preds.is_empty() {
-        return `atn_predict_once(&ATN_SIM, ${atn_dec}, ${ctx.atn_arg()}, ${tokens}, ${pos}, TK_EOF, ${prec})`;
+        let decide = sll_decide_fn_name(atn_dec);
+        ctx.cursor.note_ref(&decide);
+        return `${decide}(${ctx.atn_arg()}, ${tokens}, ${pos}, ${prec})`;
     }
     return `${ctx.atn_path()}.predict(&ATN_SIM, ${atn_dec}, ${tokens}, ${pos}, TK_EOF, ${prec}, &${false_preds})`;
 }
