@@ -179,9 +179,9 @@ fn "value_copy_demote_element_mut.wado/run"() with Stdout {
     let $load_1: i32;
     let words: ref "core:prelude//List<core:prelude/string.wado/String>";
     let v: ref "core:prelude/string.wado//String";
-    let new_used_19: i32;
-    let start_20: i32;
-    let other_31: ref "core:prelude/string.wado//String";
+    let new_used_20: i32;
+    let start_21: i32;
+    let other_32: ref "core:prelude/string.wado//String";
     v = "value_copy_demote_element_mut.wado/shout_first"(local.tee words(black_box(struct.new "core:prelude//List<core:prelude/string.wado/String>" { repr: array.new_fixed<ref "core:prelude/string.wado//String">(struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(104, 105), used: 2 }, struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(121, 111), used: 2 }), used: 2 })));
     let $array_clone_src_1: ref Array<u8>;
     $array_clone_src_1 = v.repr;
@@ -189,14 +189,14 @@ fn "value_copy_demote_element_mut.wado/run"() with Stdout {
     let $array_clone_dst_2: ref Array<u8>;
     builtin::array_copy<u8>(local.tee $array_clone_dst_2(builtin::array_new<u8>($load_1)), 0, $array_clone_src_1, 0, $load_1);
     v = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(33), used: 0 };
-    if @unlikely(local.tee new_used_19(1 + $load_1) > 33) {
+    if @unlikely(local.tee new_used_20(1 + $load_1) > 33) {
         cold_path;
-        "core:prelude/string.wado/core:prelude/string.wado/String::grow"(v, new_used_19);
+        "core:prelude/string.wado/core:prelude/string.wado/String::grow"(v, new_used_20);
     }
-    start_20 = v.used;
-    v.used = new_used_19;
-    builtin::array_copy<u8>(local.tee $array_clone_src_1(v.repr), start_20, $array_clone_dst_2, 0, $load_1);
-    $load_1 = start_20 + $load_1;
+    start_21 = v.used;
+    v.used = new_used_20;
+    builtin::array_copy<u8>(local.tee $array_clone_src_1(v.repr), start_21, $array_clone_dst_2, 0, $load_1);
+    $load_1 = start_21 + $load_1;
     builtin::array_copy<u8>($array_clone_src_1, $load_1, global:value_copy_demote_element_mut.wado::$const_obj_3, 0, 1);
     $load_1 = words.used;
     if @unlikely(0 >= $load_1) {
@@ -204,16 +204,16 @@ fn "value_copy_demote_element_mut.wado/run"() with Stdout {
         "value_copy_demote_element_mut.wado/run$cold0$dae[$contract_arg_0]"($load_1);
         unreachable;
     }
-    other_31 = builtin::array_get_value<ref "core:prelude/string.wado//String">(words.repr, 0);
+    other_32 = builtin::array_get_value<ref "core:prelude/string.wado//String">(words.repr, 0);
     $inline_core_prelude_string_wado_String__internal_push_string_13: block {
-        break_if $inline_core_prelude_string_wado_String__internal_push_string_13 local.tee $load_1(other_31.used) == 0;
-        if @unlikely(local.tee start_20(v.used + $load_1) > builtin::array_len($array_clone_src_1)) {
+        break_if $inline_core_prelude_string_wado_String__internal_push_string_13 local.tee $load_1(other_32.used) == 0;
+        if @unlikely(local.tee start_21(v.used + $load_1) > builtin::array_len($array_clone_src_1)) {
             cold_path;
-            "core:prelude/string.wado/core:prelude/string.wado/String::grow"(v, start_20);
+            "core:prelude/string.wado/core:prelude/string.wado/String::grow"(v, start_21);
         }
-        new_used_19 = v.used;
-        v.used = start_20;
-        builtin::array_copy<u8>(v.repr, new_used_19, other_31.repr, 0, $load_1);
+        new_used_20 = v.used;
+        v.used = start_21;
+        builtin::array_copy<u8>(v.repr, new_used_20, other_32.repr, 0, $load_1);
     };
     "core:cli/println"(v.repr, v.used);
 }

@@ -138,22 +138,25 @@ global global:core:prelude/format.wado::$const_obj_25: ref Array<u8> = array.new
 
 fn "trait_derived_method_call.wado/$test_0_a_derived_body_answers_a_method_call_on_a_struct"() {
     let $local_8: ref "core:prelude/string.wado//String";
-    let a: ref Array<u8>;
-    let b: ref Array<u8>;
     let i: i32;
     let offset_28: i32;
     let f_44: ref "core:prelude/format.wado//Formatter";
-    let $sroa_ser_out_113: ref "core:prelude/string.wado//String";
-    $sroa_ser_out_113 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 };
-    $sroa_ser_out_113 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Point"), used: 5 };
+    let $sroa_ser_out_59: ref "core:prelude/string.wado//String";
+    let $sroa_v_repr_119: ref Array<u8>;
+    $sroa_ser_out_59 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 };
+    $sroa_v_repr_119 = array.new_data<u8>("Point");
+    let $array_clone_dst_2: ref Array<u8>;
+    builtin::array_copy<u8>(local.tee $array_clone_dst_2(builtin::array_new<u8>(5)), 0, $sroa_v_repr_119, 0, 5);
+    $sroa_ser_out_59.repr = $array_clone_dst_2;
+    $sroa_ser_out_59.used = 5;
     if @unlikely(local.tee i($inline_core_prelude_array_wado_seq_eq_u8__1: block -> bool {
-        a = $sroa_ser_out_113.repr;
-        b = global:trait_derived_method_call.wado::$const_obj_13;
+        $array_clone_dst_2 = $sroa_ser_out_59.repr;
+        $sroa_v_repr_119 = global:trait_derived_method_call.wado::$const_obj_13;
         i = 0;
         b1: block {
             l2: loop {
                 break_if b1 i >= 5;
-                if builtin::array_get_value<u8>(a, i) != builtin::array_get_value<u8>(b, i) {
+                if builtin::array_get_value<u8>($array_clone_dst_2, i) != builtin::array_get_value<u8>($sroa_v_repr_119, i) {
                     break $inline_core_prelude_array_wado_seq_eq_u8__1: 0;
                 }
                 i = i + 1;
@@ -164,34 +167,34 @@ fn "trait_derived_method_call.wado/$test_0_a_derived_body_answers_a_method_call_
     }) == 0) {
         cold_path;
         i = "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"(local.tee $local_8(struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(130), used: 0 }), 111);
-        b = $local_8.repr;
-        a = array.new_data<u8>("Assertion failed in ");
-        builtin::array_copy<u8>(b, i, a, 0, 20);
+        $array_clone_dst_2 = $local_8.repr;
+        $sroa_v_repr_119 = array.new_data<u8>("Assertion failed in ");
+        builtin::array_copy<u8>($array_clone_dst_2, i, $sroa_v_repr_119, 0, 20);
         offset_28 = i + 20;
-        a = array.new_data<u8>("$test_0_a_derived_body_answers_a_method_call_on_a_struct");
-        builtin::array_copy<u8>(b, offset_28, a, 0, 56);
+        $sroa_v_repr_119 = array.new_data<u8>("$test_0_a_derived_body_answers_a_method_call_on_a_struct");
+        builtin::array_copy<u8>($array_clone_dst_2, offset_28, $sroa_v_repr_119, 0, 56);
         offset_28 = i + 76;
-        a = array.new_fixed<u8>(32, 97, 116, 32);
-        builtin::array_copy<u8>(b, offset_28, a, 0, 4);
+        $sroa_v_repr_119 = array.new_fixed<u8>(32, 97, 116, 32);
+        builtin::array_copy<u8>($array_clone_dst_2, offset_28, $sroa_v_repr_119, 0, 4);
         offset_28 = i + 80;
-        a = array.new_data<u8>("trait_derived_method_call.wado");
-        builtin::array_copy<u8>(b, offset_28, a, 0, 30);
+        $sroa_v_repr_119 = array.new_data<u8>("trait_derived_method_call.wado");
+        builtin::array_copy<u8>($array_clone_dst_2, offset_28, $sroa_v_repr_119, 0, 30);
         i = i + 110;
-        a = array.new_fixed<u8>(58);
-        builtin::array_copy<u8>(b, i, a, 0, 1);
+        $sroa_v_repr_119 = array.new_fixed<u8>(58);
+        builtin::array_copy<u8>($array_clone_dst_2, i, $sroa_v_repr_119, 0, 1);
         f_44 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::new"($local_8);
         "core:prelude/primitive.wado/i32::fmt_decimal$sroa[self.value]"(145, f_44);
         i = "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"($local_8, 40);
-        a = $local_8.repr;
-        b = array.new_data<u8>("
+        $sroa_v_repr_119 = $local_8.repr;
+        $array_clone_dst_2 = array.new_data<u8>("
 condition: ser.out == \"Point\"
 ");
-        builtin::array_copy<u8>(a, i, b, 0, 31);
+        builtin::array_copy<u8>($sroa_v_repr_119, i, $array_clone_dst_2, 0, 31);
         i = i + 31;
-        b = array.new_data<u8>("ser.out: ");
-        builtin::array_copy<u8>(a, i, b, 0, 9);
-        "core:prelude/format.wado/core/prelude/format.wado/inspect_text<core:prelude/string.wado/String>"("core:prelude/format.wado/core:prelude/format.wado/Formatter::new"($local_8), $sroa_ser_out_113.repr, 5);
-        "core:prelude/string.wado/core:prelude/string.wado/String^core:prelude/string.wado/AsStrSlice::internal_append_to$spec0"(local.tee $sroa_ser_out_113(struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 }), $local_8);
+        $array_clone_dst_2 = array.new_data<u8>("ser.out: ");
+        builtin::array_copy<u8>($sroa_v_repr_119, i, $array_clone_dst_2, 0, 9);
+        "core:prelude/format.wado/core/prelude/format.wado/inspect_text<core:prelude/string.wado/String>"("core:prelude/format.wado/core:prelude/format.wado/Formatter::new"($local_8), $sroa_ser_out_59.repr, $sroa_ser_out_59.used);
+        "core:prelude/string.wado/core:prelude/string.wado/String^core:prelude/string.wado/AsStrSlice::internal_append_to$spec0"(local.tee $sroa_ser_out_59(struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 }), $local_8);
         "core:rt/panic"($local_8.repr, $local_8.used);
         unreachable;
     }
@@ -199,22 +202,25 @@ condition: ser.out == \"Point\"
 
 fn "trait_derived_method_call.wado/$test_1_a_marker_s_body_answers_a_method_call"() {
     let $local_8: ref "core:prelude/string.wado//String";
-    let a: ref Array<u8>;
-    let b: ref Array<u8>;
     let i: i32;
     let offset_28: i32;
     let f_44: ref "core:prelude/format.wado//Formatter";
-    let $sroa_ser_out_113: ref "core:prelude/string.wado//String";
-    $sroa_ser_out_113 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 };
-    $sroa_ser_out_113 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Marked"), used: 6 };
+    let $sroa_ser_out_59: ref "core:prelude/string.wado//String";
+    let $sroa_v_repr_119: ref Array<u8>;
+    $sroa_ser_out_59 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 };
+    $sroa_v_repr_119 = array.new_data<u8>("Marked");
+    let $array_clone_dst_2: ref Array<u8>;
+    builtin::array_copy<u8>(local.tee $array_clone_dst_2(builtin::array_new<u8>(6)), 0, $sroa_v_repr_119, 0, 6);
+    $sroa_ser_out_59.repr = $array_clone_dst_2;
+    $sroa_ser_out_59.used = 6;
     if @unlikely(local.tee i($inline_core_prelude_array_wado_seq_eq_u8__1: block -> bool {
-        a = $sroa_ser_out_113.repr;
-        b = global:trait_derived_method_call.wado::$const_obj_14;
+        $array_clone_dst_2 = $sroa_ser_out_59.repr;
+        $sroa_v_repr_119 = global:trait_derived_method_call.wado::$const_obj_14;
         i = 0;
         b5: block {
             l6: loop {
                 break_if b5 i >= 6;
-                if builtin::array_get_value<u8>(a, i) != builtin::array_get_value<u8>(b, i) {
+                if builtin::array_get_value<u8>($array_clone_dst_2, i) != builtin::array_get_value<u8>($sroa_v_repr_119, i) {
                     break $inline_core_prelude_array_wado_seq_eq_u8__1: 0;
                 }
                 i = i + 1;
@@ -225,34 +231,34 @@ fn "trait_derived_method_call.wado/$test_1_a_marker_s_body_answers_a_method_call
     }) == 0) {
         cold_path;
         i = "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"(local.tee $local_8(struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(131), used: 0 }), 100);
-        b = $local_8.repr;
-        a = array.new_data<u8>("Assertion failed in ");
-        builtin::array_copy<u8>(b, i, a, 0, 20);
+        $array_clone_dst_2 = $local_8.repr;
+        $sroa_v_repr_119 = array.new_data<u8>("Assertion failed in ");
+        builtin::array_copy<u8>($array_clone_dst_2, i, $sroa_v_repr_119, 0, 20);
         offset_28 = i + 20;
-        a = array.new_data<u8>("$test_1_a_marker_s_body_answers_a_method_call");
-        builtin::array_copy<u8>(b, offset_28, a, 0, 45);
+        $sroa_v_repr_119 = array.new_data<u8>("$test_1_a_marker_s_body_answers_a_method_call");
+        builtin::array_copy<u8>($array_clone_dst_2, offset_28, $sroa_v_repr_119, 0, 45);
         offset_28 = i + 65;
-        a = array.new_fixed<u8>(32, 97, 116, 32);
-        builtin::array_copy<u8>(b, offset_28, a, 0, 4);
+        $sroa_v_repr_119 = array.new_fixed<u8>(32, 97, 116, 32);
+        builtin::array_copy<u8>($array_clone_dst_2, offset_28, $sroa_v_repr_119, 0, 4);
         offset_28 = i + 69;
-        a = array.new_data<u8>("trait_derived_method_call.wado");
-        builtin::array_copy<u8>(b, offset_28, a, 0, 30);
+        $sroa_v_repr_119 = array.new_data<u8>("trait_derived_method_call.wado");
+        builtin::array_copy<u8>($array_clone_dst_2, offset_28, $sroa_v_repr_119, 0, 30);
         i = i + 99;
-        a = array.new_fixed<u8>(58);
-        builtin::array_copy<u8>(b, i, a, 0, 1);
+        $sroa_v_repr_119 = array.new_fixed<u8>(58);
+        builtin::array_copy<u8>($array_clone_dst_2, i, $sroa_v_repr_119, 0, 1);
         f_44 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::new"($local_8);
         "core:prelude/primitive.wado/i32::fmt_decimal$sroa[self.value]"(153, f_44);
         i = "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"($local_8, 41);
-        a = $local_8.repr;
-        b = array.new_data<u8>("
+        $sroa_v_repr_119 = $local_8.repr;
+        $array_clone_dst_2 = array.new_data<u8>("
 condition: ser.out == \"Marked\"
 ");
-        builtin::array_copy<u8>(a, i, b, 0, 32);
+        builtin::array_copy<u8>($sroa_v_repr_119, i, $array_clone_dst_2, 0, 32);
         i = i + 32;
-        b = array.new_data<u8>("ser.out: ");
-        builtin::array_copy<u8>(a, i, b, 0, 9);
-        "core:prelude/format.wado/core/prelude/format.wado/inspect_text<core:prelude/string.wado/String>"("core:prelude/format.wado/core:prelude/format.wado/Formatter::new"($local_8), $sroa_ser_out_113.repr, 6);
-        "core:prelude/string.wado/core:prelude/string.wado/String^core:prelude/string.wado/AsStrSlice::internal_append_to$spec0"(local.tee $sroa_ser_out_113(struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 }), $local_8);
+        $array_clone_dst_2 = array.new_data<u8>("ser.out: ");
+        builtin::array_copy<u8>($sroa_v_repr_119, i, $array_clone_dst_2, 0, 9);
+        "core:prelude/format.wado/core/prelude/format.wado/inspect_text<core:prelude/string.wado/String>"("core:prelude/format.wado/core:prelude/format.wado/Formatter::new"($local_8), $sroa_ser_out_59.repr, $sroa_ser_out_59.used);
+        "core:prelude/string.wado/core:prelude/string.wado/String^core:prelude/string.wado/AsStrSlice::internal_append_to$spec0"(local.tee $sroa_ser_out_59(struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 }), $local_8);
         "core:rt/panic"($local_8.repr, $local_8.used);
         unreachable;
     }
@@ -260,22 +266,24 @@ condition: ser.out == \"Marked\"
 
 fn "trait_derived_method_call.wado/$test_2_a_primitive_s_impl_answers_a_method_call"() {
     let $local_8: ref "core:prelude/string.wado//String";
-    let a: ref Array<u8>;
     let b: ref Array<u8>;
     let i: i32;
-    let offset_34: i32;
-    let f_50: ref "core:prelude/format.wado//Formatter";
-    let $sroa_ser_out_93: ref "core:prelude/string.wado//String";
-    $sroa_ser_out_93 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 };
-    $sroa_ser_out_93 = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(55), used: 1 };
+    let offset_36: i32;
+    let f_52: ref "core:prelude/format.wado//Formatter";
+    let $sroa_ser_out_67: ref "core:prelude/string.wado//String";
+    let $sroa_$deref_val_5_repr_105: ref Array<u8>;
+    $sroa_ser_out_67 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 };
+    $sroa_$deref_val_5_repr_105 = array.new_fixed<u8>(55);
+    $sroa_ser_out_67.repr = $sroa_$deref_val_5_repr_105;
+    $sroa_ser_out_67.used = 1;
     if @unlikely(local.tee i($inline_core_prelude_array_wado_seq_eq_u8__3: block -> bool {
-        a = $sroa_ser_out_93.repr;
+        $sroa_$deref_val_5_repr_105 = $sroa_ser_out_67.repr;
         b = global:trait_derived_method_call.wado::$const_obj_15;
         i = 0;
         b9: block {
             l10: loop {
                 break_if b9 i >= 1;
-                if builtin::array_get_value<u8>(a, i) != builtin::array_get_value<u8>(b, i) {
+                if builtin::array_get_value<u8>($sroa_$deref_val_5_repr_105, i) != builtin::array_get_value<u8>(b, i) {
                     break $inline_core_prelude_array_wado_seq_eq_u8__3: 0;
                 }
                 i = i + 1;
@@ -287,33 +295,33 @@ fn "trait_derived_method_call.wado/$test_2_a_primitive_s_impl_answers_a_method_c
         cold_path;
         i = "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"(local.tee $local_8(struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(126), used: 0 }), 103);
         b = $local_8.repr;
-        a = array.new_data<u8>("Assertion failed in ");
-        builtin::array_copy<u8>(b, i, a, 0, 20);
-        offset_34 = i + 20;
-        a = array.new_data<u8>("$test_2_a_primitive_s_impl_answers_a_method_call");
-        builtin::array_copy<u8>(b, offset_34, a, 0, 48);
-        offset_34 = i + 68;
-        a = array.new_fixed<u8>(32, 97, 116, 32);
-        builtin::array_copy<u8>(b, offset_34, a, 0, 4);
-        offset_34 = i + 72;
-        a = array.new_data<u8>("trait_derived_method_call.wado");
-        builtin::array_copy<u8>(b, offset_34, a, 0, 30);
+        $sroa_$deref_val_5_repr_105 = array.new_data<u8>("Assertion failed in ");
+        builtin::array_copy<u8>(b, i, $sroa_$deref_val_5_repr_105, 0, 20);
+        offset_36 = i + 20;
+        $sroa_$deref_val_5_repr_105 = array.new_data<u8>("$test_2_a_primitive_s_impl_answers_a_method_call");
+        builtin::array_copy<u8>(b, offset_36, $sroa_$deref_val_5_repr_105, 0, 48);
+        offset_36 = i + 68;
+        $sroa_$deref_val_5_repr_105 = array.new_fixed<u8>(32, 97, 116, 32);
+        builtin::array_copy<u8>(b, offset_36, $sroa_$deref_val_5_repr_105, 0, 4);
+        offset_36 = i + 72;
+        $sroa_$deref_val_5_repr_105 = array.new_data<u8>("trait_derived_method_call.wado");
+        builtin::array_copy<u8>(b, offset_36, $sroa_$deref_val_5_repr_105, 0, 30);
         i = i + 102;
-        a = array.new_fixed<u8>(58);
-        builtin::array_copy<u8>(b, i, a, 0, 1);
-        f_50 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::new"($local_8);
-        "core:prelude/primitive.wado/i32::fmt_decimal$sroa[self.value]"(161, f_50);
+        $sroa_$deref_val_5_repr_105 = array.new_fixed<u8>(58);
+        builtin::array_copy<u8>(b, i, $sroa_$deref_val_5_repr_105, 0, 1);
+        f_52 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::new"($local_8);
+        "core:prelude/primitive.wado/i32::fmt_decimal$sroa[self.value]"(161, f_52);
         i = "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"($local_8, 36);
-        a = $local_8.repr;
+        $sroa_$deref_val_5_repr_105 = $local_8.repr;
         b = array.new_data<u8>("
 condition: ser.out == \"7\"
 ");
-        builtin::array_copy<u8>(a, i, b, 0, 27);
+        builtin::array_copy<u8>($sroa_$deref_val_5_repr_105, i, b, 0, 27);
         i = i + 27;
         b = array.new_data<u8>("ser.out: ");
-        builtin::array_copy<u8>(a, i, b, 0, 9);
-        "core:prelude/format.wado/core/prelude/format.wado/inspect_text<core:prelude/string.wado/String>"("core:prelude/format.wado/core:prelude/format.wado/Formatter::new"($local_8), $sroa_ser_out_93.repr, 1);
-        "core:prelude/string.wado/core:prelude/string.wado/String^core:prelude/string.wado/AsStrSlice::internal_append_to$spec0"(local.tee $sroa_ser_out_93(struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 }), $local_8);
+        builtin::array_copy<u8>($sroa_$deref_val_5_repr_105, i, b, 0, 9);
+        "core:prelude/format.wado/core/prelude/format.wado/inspect_text<core:prelude/string.wado/String>"("core:prelude/format.wado/core:prelude/format.wado/Formatter::new"($local_8), $sroa_ser_out_67.repr, $sroa_ser_out_67.used);
+        "core:prelude/string.wado/core:prelude/string.wado/String^core:prelude/string.wado/AsStrSlice::internal_append_to$spec0"(local.tee $sroa_ser_out_67(struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 }), $local_8);
         "core:rt/panic"($local_8.repr, $local_8.used);
         unreachable;
     }
@@ -321,22 +329,25 @@ condition: ser.out == \"7\"
 
 fn "trait_derived_method_call.wado/$test_3_a_derived_body_answers_through_a_bounded_parameter"() {
     let $local_8: ref "core:prelude/string.wado//String";
-    let a: ref Array<u8>;
-    let b: ref Array<u8>;
     let i: i32;
     let offset_30: i32;
     let f_46: ref "core:prelude/format.wado//Formatter";
-    let $sroa_ser_out_137: ref "core:prelude/string.wado//String";
-    $sroa_ser_out_137 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 };
-    $sroa_ser_out_137 = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(80, 97, 105, 114), used: 4 };
+    let $sroa_ser_out_61: ref "core:prelude/string.wado//String";
+    let $sroa_v_repr_143: ref Array<u8>;
+    $sroa_ser_out_61 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 };
+    $sroa_v_repr_143 = array.new_fixed<u8>(80, 97, 105, 114);
+    let $array_clone_dst_2: ref Array<u8>;
+    builtin::array_copy<u8>(local.tee $array_clone_dst_2(builtin::array_new<u8>(4)), 0, $sroa_v_repr_143, 0, 4);
+    $sroa_ser_out_61.repr = $array_clone_dst_2;
+    $sroa_ser_out_61.used = 4;
     if @unlikely(local.tee i($inline_core_prelude_array_wado_seq_eq_u8__2: block -> bool {
-        a = $sroa_ser_out_137.repr;
-        b = global:trait_derived_method_call.wado::$const_obj_16;
+        $array_clone_dst_2 = $sroa_ser_out_61.repr;
+        $sroa_v_repr_143 = global:trait_derived_method_call.wado::$const_obj_16;
         i = 0;
         b13: block {
             l14: loop {
                 break_if b13 i >= 4;
-                if builtin::array_get_value<u8>(a, i) != builtin::array_get_value<u8>(b, i) {
+                if builtin::array_get_value<u8>($array_clone_dst_2, i) != builtin::array_get_value<u8>($sroa_v_repr_143, i) {
                     break $inline_core_prelude_array_wado_seq_eq_u8__2: 0;
                 }
                 i = i + 1;
@@ -347,34 +358,34 @@ fn "trait_derived_method_call.wado/$test_3_a_derived_body_answers_through_a_boun
     }) == 0) {
         cold_path;
         i = "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"(local.tee $local_8(struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(129), used: 0 }), 113);
-        b = $local_8.repr;
-        a = array.new_data<u8>("Assertion failed in ");
-        builtin::array_copy<u8>(b, i, a, 0, 20);
+        $array_clone_dst_2 = $local_8.repr;
+        $sroa_v_repr_143 = array.new_data<u8>("Assertion failed in ");
+        builtin::array_copy<u8>($array_clone_dst_2, i, $sroa_v_repr_143, 0, 20);
         offset_30 = i + 20;
-        a = array.new_data<u8>("$test_3_a_derived_body_answers_through_a_bounded_parameter");
-        builtin::array_copy<u8>(b, offset_30, a, 0, 58);
+        $sroa_v_repr_143 = array.new_data<u8>("$test_3_a_derived_body_answers_through_a_bounded_parameter");
+        builtin::array_copy<u8>($array_clone_dst_2, offset_30, $sroa_v_repr_143, 0, 58);
         offset_30 = i + 78;
-        a = array.new_fixed<u8>(32, 97, 116, 32);
-        builtin::array_copy<u8>(b, offset_30, a, 0, 4);
+        $sroa_v_repr_143 = array.new_fixed<u8>(32, 97, 116, 32);
+        builtin::array_copy<u8>($array_clone_dst_2, offset_30, $sroa_v_repr_143, 0, 4);
         offset_30 = i + 82;
-        a = array.new_data<u8>("trait_derived_method_call.wado");
-        builtin::array_copy<u8>(b, offset_30, a, 0, 30);
+        $sroa_v_repr_143 = array.new_data<u8>("trait_derived_method_call.wado");
+        builtin::array_copy<u8>($array_clone_dst_2, offset_30, $sroa_v_repr_143, 0, 30);
         i = i + 112;
-        a = array.new_fixed<u8>(58);
-        builtin::array_copy<u8>(b, i, a, 0, 1);
+        $sroa_v_repr_143 = array.new_fixed<u8>(58);
+        builtin::array_copy<u8>($array_clone_dst_2, i, $sroa_v_repr_143, 0, 1);
         f_46 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::new"($local_8);
         "core:prelude/primitive.wado/i32::fmt_decimal$sroa[self.value]"(169, f_46);
         i = "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"($local_8, 39);
-        a = $local_8.repr;
-        b = array.new_data<u8>("
+        $sroa_v_repr_143 = $local_8.repr;
+        $array_clone_dst_2 = array.new_data<u8>("
 condition: ser.out == \"Pair\"
 ");
-        builtin::array_copy<u8>(a, i, b, 0, 30);
+        builtin::array_copy<u8>($sroa_v_repr_143, i, $array_clone_dst_2, 0, 30);
         i = i + 30;
-        b = array.new_data<u8>("ser.out: ");
-        builtin::array_copy<u8>(a, i, b, 0, 9);
-        "core:prelude/format.wado/core/prelude/format.wado/inspect_text<core:prelude/string.wado/String>"("core:prelude/format.wado/core:prelude/format.wado/Formatter::new"($local_8), $sroa_ser_out_137.repr, 4);
-        "core:prelude/string.wado/core:prelude/string.wado/String^core:prelude/string.wado/AsStrSlice::internal_append_to$spec0"(local.tee $sroa_ser_out_137(struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 }), $local_8);
+        $array_clone_dst_2 = array.new_data<u8>("ser.out: ");
+        builtin::array_copy<u8>($sroa_v_repr_143, i, $array_clone_dst_2, 0, 9);
+        "core:prelude/format.wado/core/prelude/format.wado/inspect_text<core:prelude/string.wado/String>"("core:prelude/format.wado/core:prelude/format.wado/Formatter::new"($local_8), $sroa_ser_out_61.repr, $sroa_ser_out_61.used);
+        "core:prelude/string.wado/core:prelude/string.wado/String^core:prelude/string.wado/AsStrSlice::internal_append_to$spec0"(local.tee $sroa_ser_out_61(struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 }), $local_8);
         "core:rt/panic"($local_8.repr, $local_8.used);
         unreachable;
     }

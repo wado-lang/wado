@@ -173,11 +173,7 @@ impl Monomorphization {
         write_back(flat, temp_module);
         // A generic body's drops are elaborated once its types are known
         // (WEP: Affine Types).
-        resource_cleanup::elaborate_instance_drops(
-            flat,
-            self.elaborated_functions,
-            &self.generics,
-        );
+        resource_cleanup::elaborate_instance_drops(flat, self.elaborated_functions, &self.generics);
         self.elaborated_functions = flat.functions.len();
     }
 }

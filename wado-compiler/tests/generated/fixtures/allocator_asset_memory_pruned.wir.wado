@@ -153,23 +153,23 @@ global global:core:prelude/primitive.wado::$const_obj_45: ref "core:prelude/stri
 fn "allocator_asset_memory_pruned.wado/run"() with Stdout {
     let $load_2: ref Array<u8>;
     let $local_1: ref "core:prelude/string.wado//String";
-    let new_used_29: i32;
-    let start_30: i32;
+    let new_used_30: i32;
+    let start_31: i32;
     $local_1 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(33), used: 0 };
-    if @unlikely(local.tee new_used_29(0 + 4) > builtin::array_len($local_1.repr)) {
+    if @unlikely(local.tee new_used_30(0 + 4) > builtin::array_len($local_1.repr)) {
         cold_path;
-        "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_1, new_used_29);
+        "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_1, new_used_30);
     }
-    start_30 = $local_1.used;
-    $local_1.used = new_used_29;
-    builtin::array_copy<u8>(local.tee $load_2($local_1.repr), start_30, global:allocator_asset_memory_pruned.wado::$const_obj_1, 0, 4);
-    if @unlikely(local.tee start_30($local_1.used + 1) > builtin::array_len($load_2)) {
+    start_31 = $local_1.used;
+    $local_1.used = new_used_30;
+    builtin::array_copy<u8>(local.tee $load_2($local_1.repr), start_31, global:allocator_asset_memory_pruned.wado::$const_obj_1, 0, 4);
+    if @unlikely(local.tee start_31($local_1.used + 1) > builtin::array_len($load_2)) {
         cold_path;
-        "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_1, start_30);
+        "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_1, start_31);
     }
-    new_used_29 = $local_1.used;
-    $local_1.used = start_30;
-    builtin::array_copy<u8>($local_1.repr, new_used_29, global:allocator_asset_memory_pruned.wado::$const_obj_0, 0, 1);
+    new_used_30 = $local_1.used;
+    $local_1.used = start_31;
+    builtin::array_copy<u8>($local_1.repr, new_used_30, global:allocator_asset_memory_pruned.wado::$const_obj_0, 0, 1);
     "core:prelude/primitive.wado/f64::fmt_into$sroa[self.value]$spec0$sroa[f.buf]"(black_box(1.5), $local_1);
     "core:cli/println"($local_1.repr, $local_1.used);
 }

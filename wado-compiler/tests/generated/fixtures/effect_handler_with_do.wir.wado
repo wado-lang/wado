@@ -4,30 +4,38 @@
 
 enum core:prelude/types.wado//enum:CopyResult { Completed = 0, Dropped = 1, Cancelled = 2 };  // TypeId(0)
 
-struct core:prelude//$Resource {  // TypeId(1)
+struct core:prelude/types.wado//Box<core:prelude/types.wado/Option<core:prelude/types.wado/Subtask>> {  // TypeId(1)
+    mut value: ref null "core:prelude/types.wado//Option<core:prelude/types.wado/Subtask>",
+}
+
+struct core:prelude/types.wado//Box<core:prelude/types.wado/Option<core:prelude/types.wado/ResultBuffer>> {  // TypeId(2)
+    mut value: ref null "core:prelude/types.wado//Option<core:prelude/types.wado/ResultBuffer>",
+}
+
+struct core:prelude//$Resource {  // TypeId(3)
     mut value: i32,
 }
 
-struct core:prelude/types.wado//ResultBuffer {  // TypeId(2)
+struct core:prelude/types.wado//ResultBuffer {  // TypeId(4)
     mut ptr: i32,
     mut size: i32,
     mut align: i32,
 }
 
-array Array<u8> (mut u8);  // TypeId(3)
+array Array<u8> (mut u8);  // TypeId(5)
 
-struct core:prelude/string.wado//String {  // TypeId(4)
+struct core:prelude/string.wado//String {  // TypeId(6)
     mut repr: ref Array<u8>,
     mut used: i32,
 }
 
-struct effect_handler_with_do.wado//$Closure_3 {  // TypeId(5)}
+struct effect_handler_with_do.wado//$Closure_3 {  // TypeId(7)}
 
-struct effect_handler_with_do.wado//$Closure_2 {  // TypeId(6)}
+struct effect_handler_with_do.wado//$Closure_2 {  // TypeId(8)}
 
-struct effect_handler_with_do.wado//$Closure_1 {  // TypeId(7)}
+struct effect_handler_with_do.wado//$Closure_1 {  // TypeId(9)}
 
-struct effect_handler_with_do.wado//$Dispatch_wasi:clocks/monotonic_clock.wado/MonotonicClock {  // TypeId(8)
+struct effect_handler_with_do.wado//$Dispatch_wasi:clocks/monotonic_clock.wado/MonotonicClock {  // TypeId(10)
     mut outer: ref null "effect_handler_with_do.wado//$Dispatch_wasi:clocks/monotonic_clock.wado/MonotonicClock",
     mut op_now: ref struct,
     mut op_get_resolution: ref struct,
@@ -35,109 +43,109 @@ struct effect_handler_with_do.wado//$Dispatch_wasi:clocks/monotonic_clock.wado/M
     mut op_wait_for: ref struct,
 }
 
-struct effect_handler_with_do.wado//FixedClock {  // TypeId(9)
+struct effect_handler_with_do.wado//FixedClock {  // TypeId(11)
     mut mark: u64,
 }
 
-struct effect_handler_with_do.wado//$Closure_0 {  // TypeId(10)
+struct effect_handler_with_do.wado//$Closure_0 {  // TypeId(12)
     mut $capture_0: ref "effect_handler_with_do.wado//FixedClock",
 }
 
-struct core:prelude/types.wado//AsyncCall<()> {  // TypeId(11)
-    mut subtask: ref null "core:prelude/types.wado//Option<core:prelude/types.wado/Subtask>",
-    mut buffer: ref null "core:prelude/types.wado//Option<core:prelude/types.wado/ResultBuffer>",
+struct core:prelude/types.wado//AsyncCall<()> {  // TypeId(13)
+    mut subtask: ref null "core:prelude/types.wado//Box<core:prelude/types.wado/Option<core:prelude/types.wado/Subtask>>",
+    mut buffer: ref null "core:prelude/types.wado//Box<core:prelude/types.wado/Option<core:prelude/types.wado/ResultBuffer>>",
     mut lift: ref struct,
 }
 
-variant core:prelude/types.wado//Option<core:prelude/types.wado/Subtask> {  // TypeId(12)
+variant core:prelude/types.wado//Option<core:prelude/types.wado/Subtask> {  // TypeId(14)
     None,
     Some(ref null "core:prelude//$Resource"),
 }
 
-struct core:prelude/types.wado//Option<core:prelude/types.wado/Subtask>::Some {  // TypeId(13)
+struct core:prelude/types.wado//Option<core:prelude/types.wado/Subtask>::Some {  // TypeId(15)
     discriminant: i32,
     payload_0: ref null "core:prelude//$Resource",
 }
 
-variant core:prelude/types.wado//Option<core:prelude/types.wado/ResultBuffer> {  // TypeId(14)
+variant core:prelude/types.wado//Option<core:prelude/types.wado/ResultBuffer> {  // TypeId(16)
     None,
     Some(ref null "core:prelude/types.wado//ResultBuffer"),
 }
 
-struct core:prelude/types.wado//Option<core:prelude/types.wado/ResultBuffer>::Some {  // TypeId(15)
+struct core:prelude/types.wado//Option<core:prelude/types.wado/ResultBuffer>::Some {  // TypeId(17)
     discriminant: i32,
     payload_0: ref null "core:prelude/types.wado//ResultBuffer",
 }
 
-type "functype/$canonical_closure_fn_0" = fn(ref null struct) -> u64;  // TypeId(16)
+type "functype/$canonical_closure_fn_0" = fn(ref null struct) -> u64;  // TypeId(18)
 
-struct canonical//CanonicalClosure_0 {  // TypeId(17)
+struct canonical//CanonicalClosure_0 {  // TypeId(19)
     env: ref null struct,
     func: ref "functype/$canonical_closure_fn_0",
 }
 
-type "functype/$canonical_closure_fn_1" = fn(ref null struct, u64) -> ref null "core:prelude/types.wado//AsyncCall<()>";  // TypeId(18)
+type "functype/$canonical_closure_fn_1" = fn(ref null struct, u64) -> ref null "core:prelude/types.wado//AsyncCall<()>";  // TypeId(20)
 
-struct canonical//CanonicalClosure_1 {  // TypeId(19)
+struct canonical//CanonicalClosure_1 {  // TypeId(21)
     env: ref null struct,
     func: ref "functype/$canonical_closure_fn_1",
 }
 
-type "functype//mem/realloc" = fn(i32, i32, i32, i32) -> i32;  // TypeId(20)
+type "functype//mem/realloc" = fn(i32, i32, i32, i32) -> i32;  // TypeId(22)
 
-type "functype//wasi/stream-write" = fn(i32, i32, i32) -> i32;  // TypeId(21)
+type "functype//wasi/stream-write" = fn(i32, i32, i32) -> i32;  // TypeId(23)
 
-type "functype//wasi/waitable-join" = fn(i32, i32);  // TypeId(22)
+type "functype//wasi/waitable-join" = fn(i32, i32);  // TypeId(24)
 
-type "functype//wasi/waitable-set-drop" = fn(i32);  // TypeId(23)
+type "functype//wasi/waitable-set-drop" = fn(i32);  // TypeId(25)
 
-type "functype//wasi/waitable-set-new" = fn() -> i32;  // TypeId(24)
+type "functype//wasi/waitable-set-new" = fn() -> i32;  // TypeId(26)
 
-type "functype//wasi/waitable-set-wait" = fn(i32, i32) -> i32;  // TypeId(25)
+type "functype//wasi/waitable-set-wait" = fn(i32, i32) -> i32;  // TypeId(27)
 
-type "functype//wasi/wasi:cli/Stdout::write_via_stream" = fn(i32) -> i32;  // TypeId(26)
+type "functype//wasi/wasi:cli/Stdout::write_via_stream" = fn(i32) -> i32;  // TypeId(28)
 
-type "functype//wasi/wasi:clocks/MonotonicClock::now" = fn() -> i64;  // TypeId(27)
+type "functype//wasi/wasi:clocks/MonotonicClock::now" = fn() -> i64;  // TypeId(29)
 
-type "functype//effect_handler_with_do.wado/run" = fn();  // TypeId(28)
+type "functype//effect_handler_with_do.wado/run" = fn();  // TypeId(30)
 
-type "functype//effect_handler_with_do.wado/$cm_binding__Stdout_write_via_stream" = fn(ref null "core:prelude//$Resource") -> ref null "core:prelude//$Resource";  // TypeId(29)
+type "functype//effect_handler_with_do.wado/$cm_binding__Stdout_write_via_stream" = fn(ref null "core:prelude//$Resource") -> ref null "core:prelude//$Resource";  // TypeId(31)
 
-type "functype//effect_handler_with_do.wado/$cm_binding__MonotonicClock_now" = fn() -> u64;  // TypeId(30)
+type "functype//effect_handler_with_do.wado/$cm_binding__MonotonicClock_now" = fn() -> u64;  // TypeId(32)
 
-type "functype//effect_handler_with_do.wado/$cm_export__run" = fn();  // TypeId(31)
+type "functype//effect_handler_with_do.wado/$cm_export__run" = fn();  // TypeId(33)
 
-type "functype//core:cli/println" = fn(ref Array<u8>, i32);  // TypeId(32)
+type "functype//core:cli/println" = fn(ref Array<u8>, i32);  // TypeId(34)
 
-type "functype//core:prelude/primitive.wado/write_decimal_digits" = fn(ref Array<u8>, i32, u64, i32);  // TypeId(33)
+type "functype//core:prelude/primitive.wado/write_decimal_digits" = fn(ref Array<u8>, i32, u64, i32);  // TypeId(35)
 
-type "functype//core:prelude/primitive.wado/count_digits_u64" = fn(u64) -> i32;  // TypeId(34)
+type "functype//core:prelude/primitive.wado/count_digits_u64" = fn(u64) -> i32;  // TypeId(36)
 
-type "functype//core:rt/write_string_to_stream$dae[add_newline]" = fn(ref null "core:prelude//$Resource", ref Array<u8>, i32);  // TypeId(35)
+type "functype//core:rt/write_string_to_stream$dae[add_newline]" = fn(ref null "core:prelude//$Resource", ref Array<u8>, i32);  // TypeId(37)
 
-type "functype//core:rt/cm_stream_write_raw_all_u8" = fn(i32, ref Array<u8>, i32, i32) -> "core:prelude/types.wado//enum:CopyResult";  // TypeId(36)
+type "functype//core:rt/cm_stream_write_raw_all_u8" = fn(i32, ref Array<u8>, i32, i32) -> "core:prelude/types.wado//enum:CopyResult";  // TypeId(38)
 
-type "functype//core:prelude/string.wado/core:prelude/string.wado/String::realloc_to" = fn(ref "core:prelude/string.wado//String", i32);  // TypeId(37)
+type "functype//core:prelude/string.wado/core:prelude/string.wado/String::realloc_to" = fn(ref "core:prelude/string.wado//String", i32);  // TypeId(39)
 
-type "functype//core:prelude/string.wado/core:prelude/string.wado/String::grow" = fn(ref "core:prelude/string.wado//String", i32);  // TypeId(38)
+type "functype//core:prelude/string.wado/core:prelude/string.wado/String::grow" = fn(ref "core:prelude/string.wado//String", i32);  // TypeId(40)
 
-type "functype//effect_handler_with_do.wado/effect_handler_with_do.wado/$Closure_0::$call" = fn(ref "effect_handler_with_do.wado//$Closure_0") -> u64;  // TypeId(39)
+type "functype//effect_handler_with_do.wado/effect_handler_with_do.wado/$Closure_0::$call" = fn(ref "effect_handler_with_do.wado//$Closure_0") -> u64;  // TypeId(41)
 
-type "functype//effect_handler_with_do.wado/effect_handler_with_do.wado/$Closure_1::$call$dae[self]" = fn() -> u64;  // TypeId(40)
+type "functype//effect_handler_with_do.wado/effect_handler_with_do.wado/$Closure_1::$call$dae[self]" = fn() -> u64;  // TypeId(42)
 
-type "functype//effect_handler_with_do.wado/effect_handler_with_do.wado/$Closure_2::$call$dae[self,when]" = fn() -> ref null "core:prelude/types.wado//AsyncCall<()>";  // TypeId(41)
+type "functype//effect_handler_with_do.wado/effect_handler_with_do.wado/$Closure_2::$call$dae[self,when]" = fn() -> ref null "core:prelude/types.wado//AsyncCall<()>";  // TypeId(43)
 
-type "functype//effect_handler_with_do.wado/effect_handler_with_do.wado/$Closure_3::$call$dae[self,how_long]" = fn() -> ref null "core:prelude/types.wado//AsyncCall<()>";  // TypeId(42)
+type "functype//effect_handler_with_do.wado/effect_handler_with_do.wado/$Closure_3::$call$dae[self,how_long]" = fn() -> ref null "core:prelude/types.wado//AsyncCall<()>";  // TypeId(44)
 
-type "functype//wasi/task-return" = fn(i32);  // TypeId(43)
+type "functype//wasi/task-return" = fn(i32);  // TypeId(45)
 
-type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(44)
+type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(46)
 
-type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(45)
+type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(47)
 
-type "functype//wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code" = fn(i32);  // TypeId(46)
+type "functype//wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code" = fn(i32);  // TypeId(48)
 
-type "functype//wasi/stream-drop-readable" = fn(i32);  // TypeId(47)
+type "functype//wasi/stream-drop-readable" = fn(i32);  // TypeId(49)
 
 import fn mem/realloc from "mem/realloc";
 import fn wasi/stream-write from "wasi/stream-write";

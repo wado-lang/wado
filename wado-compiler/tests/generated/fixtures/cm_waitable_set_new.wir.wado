@@ -88,20 +88,20 @@ fn "cm_waitable_set_new.wado/run"() with Stdout {
     let set: ref null "core:prelude/types.wado//WaitableSet<core:prelude/types.wado/Subtask>";
     let $local_1: ref "core:prelude/string.wado//String";
     let elements: ref null "Array<core:prelude/types.wado/Subtask>";
-    let new_used_15: i32;
-    let start_16: i32;
+    let new_used_16: i32;
+    let start_17: i32;
     let text: ref "core:prelude/string.wado//String";
     let $discarded_1: ref null "core:prelude//List<core:prelude/types.wado/Subtask>";
-    let start_56: i32;
+    let start_57: i32;
     set = struct.new "core:prelude/types.wado//WaitableSet<core:prelude/types.wado/Subtask>" { raw: struct.new "core:prelude//$Resource" { value: "wasi/waitable-set-new"() }, members: struct.new "core:prelude//List<core:prelude/types.wado/Subtask>" { repr: ref.as_non_null(local.tee elements(array.new_fixed<ref null "core:prelude//$Resource">())), used: 0 } };
     $local_1 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(23), used: 0 };
-    if @unlikely(local.tee new_used_15(0 + 7) > builtin::array_len($local_1.repr)) {
+    if @unlikely(local.tee new_used_16(0 + 7) > builtin::array_len($local_1.repr)) {
         cold_path;
-        "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_1, new_used_15);
+        "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_1, new_used_16);
     }
-    start_16 = $local_1.used;
-    $local_1.used = new_used_15;
-    builtin::array_copy<u8>(local.tee $load_2($local_1.repr), start_16, global:cm_waitable_set_new.wado::$const_obj_0, 0, 7);
+    start_17 = $local_1.used;
+    $local_1.used = new_used_16;
+    builtin::array_copy<u8>(local.tee $load_2($local_1.repr), start_17, global:cm_waitable_set_new.wado::$const_obj_0, 0, 7);
     text = (if set.members.used == 0 -> ref "core:prelude/string.wado//String" {
         struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(116, 114, 117, 101), used: 4 };
     } else {
@@ -109,27 +109,27 @@ fn "cm_waitable_set_new.wado/run"() with Stdout {
     });
     $inline_core_prelude_format_wado_Formatter__pad_core_prelude_string_wado_String__spec0_sroa_self_buf__0: block {
         $inline_core_prelude_format_wado_Formatter__pad_core_prelude_string_wado_String__spec0_sroa_self_buf__0__$inline_core_prelude_string_wado_String__internal_push_string_2: block {
-            break_if $inline_core_prelude_format_wado_Formatter__pad_core_prelude_string_wado_String__spec0_sroa_self_buf__0__$inline_core_prelude_string_wado_String__internal_push_string_2 local.tee start_16(text.used) == 0;
-            if @unlikely(local.tee new_used_15($local_1.used + start_16) > builtin::array_len($load_2)) {
+            break_if $inline_core_prelude_format_wado_Formatter__pad_core_prelude_string_wado_String__spec0_sroa_self_buf__0__$inline_core_prelude_string_wado_String__internal_push_string_2 local.tee start_17(text.used) == 0;
+            if @unlikely(local.tee new_used_16($local_1.used + start_17) > builtin::array_len($load_2)) {
                 cold_path;
-                "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_1, new_used_15);
+                "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_1, new_used_16);
             }
-            start_56 = $local_1.used;
-            $local_1.used = new_used_15;
-            builtin::array_copy<u8>($local_1.repr, start_56, text.repr, 0, start_16);
+            start_57 = $local_1.used;
+            $local_1.used = new_used_16;
+            builtin::array_copy<u8>($local_1.repr, start_57, text.repr, 0, start_17);
         };
         break $inline_core_prelude_format_wado_Formatter__pad_core_prelude_string_wado_String__spec0_sroa_self_buf__0;
     };
     "core:cli/println"($local_1.repr, $local_1.used);
     if ref.is_null(set) == 0 {
         elements = local.tee $discarded_1(set.members).repr;
-        start_16 = $discarded_1.used;
-        start_56 = 0;
+        start_17 = $discarded_1.used;
+        start_57 = 0;
         b4: block {
             l5: loop {
-                break_if b4 start_56 >= start_16;
-                drop(builtin::array_get_value<ref null "core:prelude//$Resource">(elements, start_56));
-                start_56 = start_56 + 1;
+                break_if b4 start_57 >= start_17;
+                drop(builtin::array_get_value<ref null "core:prelude//$Resource">(elements, start_57));
+                start_57 = start_57 + 1;
                 continue l5;
             };
         };

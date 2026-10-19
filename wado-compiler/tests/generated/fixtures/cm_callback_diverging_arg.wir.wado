@@ -672,7 +672,9 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::push"(self, c) {
 }
 
 fn "core:prelude/list.wado/core:prelude/list.wado/List<fn()->()>^core:prelude/traits.wado/From<Array<T>>::from"(elements) {
-    return struct.new "core:prelude//List<fn()->()>" { repr: elements, used: builtin::array_len(elements) };
+    let used: i32;
+    used = builtin::array_len(elements);
+    return struct.new "core:prelude//List<fn()->()>" { repr: elements, used: used };
 }
 
 fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>"(self, is_negative, $mv$alt_prefix$repr, $mv$alt_prefix$used, digit_count) {

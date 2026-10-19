@@ -147,30 +147,30 @@ fn "array_bounds_elim_floor_guard_wir.wado/sum_back"(xs, from) {
 
 fn "array_bounds_elim_floor_guard_wir.wado/run"() with Stdout {
     let $local_1: ref "core:prelude/string.wado//String";
-    let self_6: i32;
-    let is_negative_12: bool;
+    let self_7: i32;
+    let is_negative_13: bool;
     let x: i64;
-    let start_54: i32;
+    let start_55: i32;
     $local_1 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
-    is_negative_12 = local.tee self_6("array_bounds_elim_floor_guard_wir.wado/sum_back"(global:array_bounds_elim_floor_guard_wir.wado::$const_obj_0, black_box(2))) < 0;
-    self_6 = "core:prelude/primitive.wado/count_digits_u64"(local.tee x(x = builtin::i64_extend_i32_s(self_6); select i64(x < 0_i64, 0_i64 - x, x)));
-    if is_negative_12 {
-        if @unlikely(local.tee is_negative_12(0 + 1) > builtin::array_len($local_1.repr)) {
+    is_negative_13 = local.tee self_7("array_bounds_elim_floor_guard_wir.wado/sum_back"(global:array_bounds_elim_floor_guard_wir.wado::$const_obj_0, black_box(2))) < 0;
+    self_7 = "core:prelude/primitive.wado/count_digits_u64"(local.tee x(x = builtin::i64_extend_i32_s(self_7); select i64(x < 0_i64, 0_i64 - x, x)));
+    if is_negative_13 {
+        if @unlikely(local.tee is_negative_13(0 + 1) > builtin::array_len($local_1.repr)) {
             cold_path;
-            "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_1, is_negative_12);
+            "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_1, is_negative_13);
         }
-        start_54 = $local_1.used;
-        $local_1.used = is_negative_12;
-        builtin::array_set_u8($local_1.repr, start_54, 45);
+        start_55 = $local_1.used;
+        $local_1.used = is_negative_13;
+        builtin::array_set_u8($local_1.repr, start_55, 45);
     } else {
     }
-    if @unlikely(local.tee start_54($local_1.used + self_6) > builtin::array_len($local_1.repr)) {
+    if @unlikely(local.tee start_55($local_1.used + self_7) > builtin::array_len($local_1.repr)) {
         cold_path;
-        "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_1, start_54);
+        "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_1, start_55);
     }
-    is_negative_12 = $local_1.used;
-    $local_1.used = start_54;
-    "core:prelude/primitive.wado/write_decimal_digits"($local_1.repr, is_negative_12, x, self_6);
+    is_negative_13 = $local_1.used;
+    $local_1.used = start_55;
+    "core:prelude/primitive.wado/write_decimal_digits"($local_1.repr, is_negative_13, x, self_7);
     "core:cli/println"($local_1.repr, $local_1.used);
 }
 

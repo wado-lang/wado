@@ -298,9 +298,9 @@ type "functype//core:prelude/primitive.wado/i32::clamp$contract_report0" = fn(i3
 
 type "functype//core:json/json_ws_end$cold0" = fn(i32);  // TypeId(76)
 
-type "functype//core:prelude/traits.wado/core/prelude/traits.wado/write_struct_head<core:serde/SerializeError>$sroa[f.buf]" = fn(ref "core:prelude/string.wado//String");  // TypeId(77)
+type "functype//core:prelude/traits.wado/core/prelude/traits.wado/inspect_variant_payload<i32>$sroa[payload.value]" = fn(i32, ref "core:prelude/format.wado//Formatter");  // TypeId(77)
 
-type "functype//core:prelude/traits.wado/core/prelude/traits.wado/inspect_variant_payload<i32>$sroa[payload.value]" = fn(i32, ref "core:prelude/format.wado//Formatter");  // TypeId(78)
+type "functype//core:prelude/traits.wado/core/prelude/traits.wado/write_struct_head<core:serde/SerializeError>$sroa[f.buf]" = fn(ref "core:prelude/string.wado//String");  // TypeId(78)
 
 type "functype//core:prelude/traits.wado/core/prelude/traits.wado/write_struct_head<core:serde/DeserializeError>$sroa[f.buf]" = fn(ref "core:prelude/string.wado//String");  // TypeId(79)
 
@@ -390,17 +390,17 @@ type "functype//core:prelude/traits.wado/core:serde/SerializeError^core:prelude/
 
 type "functype//core:json/core:json/JsonDeserializer^core:serde/Deserializer::begin_variant<&core:prelude/string.wado/String>$sroa[return]$dae[type_name,num_cases]" = fn(ref "core:json//JsonDeserializer") -> [i32, ref null "core:json//JsonVariantAccess", ref null "core:serde//DeserializeError"];  // TypeId(122)
 
-type "functype//core:prelude/traits.wado/core:serde/SerializeErrorKind^core:prelude/traits.wado/Inspect::inspect$sroa[self.value,f.buf]" = fn("core:serde//enum:SerializeErrorKind", ref "core:prelude/string.wado//String");  // TypeId(123)
+type "functype//core:prelude/primitive.wado/char::is_hexdigit$sroa[self.value]" = fn(char) -> bool;  // TypeId(123)
 
-type "functype//core:prelude/primitive.wado/char::is_hexdigit$sroa[self.value]" = fn(char) -> bool;  // TypeId(124)
+type "functype//core:prelude/primitive.wado/char::hex_digit_value$unchecked$sroa[self.value]" = fn(char) -> i32;  // TypeId(124)
 
-type "functype//core:prelude/primitive.wado/char::hex_digit_value$unchecked$sroa[self.value]" = fn(char) -> i32;  // TypeId(125)
+type "functype//core:prelude/primitive.wado/i32::fmt_into$sroa[self.value]" = fn(i32, ref "core:prelude/format.wado//Formatter");  // TypeId(125)
 
-type "functype//core:prelude/primitive.wado/i32::fmt_into$sroa[self.value]" = fn(i32, ref "core:prelude/format.wado//Formatter");  // TypeId(126)
+type "functype//core:prelude/primitive.wado/i64::fmt_decimal$sroa[self.value]" = fn(i64, ref "core:prelude/format.wado//Formatter");  // TypeId(126)
 
-type "functype//core:prelude/primitive.wado/i64::fmt_decimal$sroa[self.value]" = fn(i64, ref "core:prelude/format.wado//Formatter");  // TypeId(127)
+type "functype//core:prelude/primitive.wado/char^core:prelude/traits.wado/Display::fmt$sroa[self.value]" = fn(char, ref "core:prelude/format.wado//Formatter");  // TypeId(127)
 
-type "functype//core:prelude/primitive.wado/char^core:prelude/traits.wado/Display::fmt$sroa[self.value]" = fn(char, ref "core:prelude/format.wado//Formatter");  // TypeId(128)
+type "functype//core:prelude/traits.wado/core:serde/SerializeErrorKind^core:prelude/traits.wado/Inspect::inspect$sroa[self.value,f.buf]" = fn("core:serde//enum:SerializeErrorKind", ref "core:prelude/string.wado//String");  // TypeId(128)
 
 type "functype//core:prelude/traits.wado/serde_variant_no_unit_case.wado/NoUnit^core:prelude/traits.wado/Inspect::inspect$sroa[self.value]" = fn(ref "serde_variant_no_unit_case.wado//NoUnit", ref "core:prelude/format.wado//Formatter");  // TypeId(129)
 
@@ -459,7 +459,7 @@ global global:core:prelude/traits.wado::$const_obj_33: ref Array<u8> = array.new
 global global:core:prelude/traits.wado::$const_obj_34: ref Array<u8> = array.new_fixed<u8>(40);
 global global:core:prelude/traits.wado::$const_obj_36: ref Array<u8> = array.new_fixed<u8>(32, 32);
 global global:core:prelude/traits.wado::$const_obj_37: ref Array<u8> = array.new_fixed<u8>(44);
-global global:core:prelude/traits.wado::$const_obj_96: ref "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 };
+global global:core:prelude/traits.wado::$const_obj_93: ref "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 };
 global global:core:serde::$const_obj_118: ref Array<u8> = array.new_fixed<u8>(125);
 global global:core:serde::$const_obj_119: ref Array<u8> = array.new_fixed<u8>(58);
 global global:core:serde::$const_obj_120: ref Array<u8> = array.new_fixed<u8>(123);
@@ -2018,13 +2018,6 @@ fn "core:json/json_ws_end$cold0"(b) {
     unreachable;
 }
 
-fn "core:prelude/traits.wado/core/prelude/traits.wado/write_struct_head<core:serde/SerializeError>$sroa[f.buf]"(f) {
-    let name: ref "core:prelude/string.wado//String";
-    name = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("SerializeError"), used: 14 };
-    "core:prelude/string.wado/core:prelude/string.wado/String::push_str<&core:prelude/string.wado/String>"(f, name);
-    "core:prelude/string.wado/core:prelude/string.wado/String^core:prelude/string.wado/AsStrSlice::internal_append_to$spec2"(local.tee name(struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(32), used: 1 }), f);
-}
-
 fn "core:prelude/traits.wado/core/prelude/traits.wado/inspect_variant_payload<i32>$sroa[payload.value]"(payload, f) {
     let self_4: ref "core:prelude/string.wado//String";
     let new_used_16: i32;
@@ -2068,7 +2061,7 @@ fn "core:prelude/traits.wado/core/prelude/traits.wado/inspect_variant_payload<i3
         start_17 = payload < 0;
         new_used_16 = "core:prelude/primitive.wado/count_digits_u64"(local.tee x_49(x_49 = builtin::i64_extend_i32_s(payload); select i64(x_49 < 0_i64, 0_i64 - x_49, x_49)));
         start_17 = block -> i32 {
-            self_4 = global:core:prelude/traits.wado::$const_obj_96;
+            self_4 = global:core:prelude/traits.wado::$const_obj_93;
             "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>"(f, start_17, self_4.repr, self_4.used, new_used_16);
         };
         "core:prelude/primitive.wado/write_decimal_digits"(local.tee self_4(f.buf).repr, start_17, x_49, new_used_16);
@@ -2123,7 +2116,7 @@ fn "core:prelude/traits.wado/core/prelude/traits.wado/inspect_variant_payload<i3
     start_17 = payload < 0;
     payload = "core:prelude/primitive.wado/count_digits_u64"(local.tee x_49(x_49 = builtin::i64_extend_i32_s(payload); select i64(x_49 < 0_i64, 0_i64 - x_49, x_49)));
     start_17 = block -> i32 {
-        self_4 = global:core:prelude/traits.wado::$const_obj_96;
+        self_4 = global:core:prelude/traits.wado::$const_obj_93;
         "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>"(f, start_17, self_4.repr, self_4.used, payload);
     };
     "core:prelude/primitive.wado/write_decimal_digits"(local.tee self_4(f.buf).repr, start_17, x_49, payload);
@@ -2134,6 +2127,13 @@ fn "core:prelude/traits.wado/core/prelude/traits.wado/inspect_variant_payload<i3
     start_17 = self_4.used;
     self_4.used = payload;
     builtin::array_copy<u8>(self_4.repr, start_17, global:core:prelude/traits.wado::$const_obj_33, 0, 1);
+}
+
+fn "core:prelude/traits.wado/core/prelude/traits.wado/write_struct_head<core:serde/SerializeError>$sroa[f.buf]"(f) {
+    let name: ref "core:prelude/string.wado//String";
+    name = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("SerializeError"), used: 14 };
+    "core:prelude/string.wado/core:prelude/string.wado/String::push_str<&core:prelude/string.wado/String>"(f, name);
+    "core:prelude/string.wado/core:prelude/string.wado/String^core:prelude/string.wado/AsStrSlice::internal_append_to$spec2"(local.tee name(struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(32), used: 1 }), f);
 }
 
 fn "core:prelude/traits.wado/core/prelude/traits.wado/write_struct_head<core:serde/DeserializeError>$sroa[f.buf]"(f) {
@@ -3912,27 +3912,6 @@ fn "core:json/core:json/JsonDeserializer^core:serde/Deserializer::begin_variant<
     }
 }
 
-fn "core:prelude/traits.wado/core:serde/SerializeErrorKind^core:prelude/traits.wado/Inspect::inspect$sroa[self.value,f.buf]"(self, f) {
-    let s_9: ref "core:prelude/string.wado//String";
-    let $mv$$tuple_0$0: ref "core:prelude/traits.wado//EnumCase<core:serde/SerializeErrorKind>";
-    let $mv$$tuple_0$1: ref "core:prelude/traits.wado//EnumCase<core:serde/SerializeErrorKind>";
-    multivalue_bind [$mv$$tuple_0$0, $mv$$tuple_0$1] = "core:serde/core:serde/SerializeErrorKind^core:prelude/traits.wado/ReflectEnum::members"();
-    if self == 0 {
-        s_9 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("SerializeErrorKind"), used: 18 };
-        "core:prelude/string.wado/core:prelude/string.wado/String::push_str<&core:prelude/string.wado/String>"(f, s_9);
-        "core:prelude/string.wado/core:prelude/string.wado/String^core:prelude/string.wado/AsStrSlice::internal_append_to$spec3"(local.tee s_9(struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(58, 58), used: 2 }), f);
-        s_9 = $mv$$tuple_0$0.case_name;
-        "core:prelude/string.wado/core:prelude/string.wado/String::push_str<&core:prelude/string.wado/String>"(f, s_9);
-    }
-    if self == 1 {
-        s_9 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("SerializeErrorKind"), used: 18 };
-        "core:prelude/string.wado/core:prelude/string.wado/String::push_str<&core:prelude/string.wado/String>"(f, s_9);
-        "core:prelude/string.wado/core:prelude/string.wado/String^core:prelude/string.wado/AsStrSlice::internal_append_to$spec3"(local.tee s_9(struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(58, 58), used: 2 }), f);
-        s_9 = $mv$$tuple_0$1.case_name;
-        "core:prelude/string.wado/core:prelude/string.wado/String::push_str<&core:prelude/string.wado/String>"(f, s_9);
-    }
-}
-
 fn "core:prelude/primitive.wado/char::is_hexdigit$sroa[self.value]"(self) {
     return (if (if (self - 48) <u 10 -> i32 {
         1;
@@ -3993,6 +3972,27 @@ fn "core:prelude/primitive.wado/char^core:prelude/traits.wado/Display::fmt$sroa[
     } else {
         "core:prelude/string.wado/core:prelude/string.wado/String::push"(local.tee self_3(struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(4), used: 0 }), self);
         "core:prelude/format.wado/core:prelude/format.wado/Formatter::pad<core:prelude/string.wado/String>"(f, self_3.repr, self_3.used);
+    }
+}
+
+fn "core:prelude/traits.wado/core:serde/SerializeErrorKind^core:prelude/traits.wado/Inspect::inspect$sroa[self.value,f.buf]"(self, f) {
+    let s_9: ref "core:prelude/string.wado//String";
+    let $mv$$tuple_0$0: ref "core:prelude/traits.wado//EnumCase<core:serde/SerializeErrorKind>";
+    let $mv$$tuple_0$1: ref "core:prelude/traits.wado//EnumCase<core:serde/SerializeErrorKind>";
+    multivalue_bind [$mv$$tuple_0$0, $mv$$tuple_0$1] = "core:serde/core:serde/SerializeErrorKind^core:prelude/traits.wado/ReflectEnum::members"();
+    if self == 0 {
+        s_9 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("SerializeErrorKind"), used: 18 };
+        "core:prelude/string.wado/core:prelude/string.wado/String::push_str<&core:prelude/string.wado/String>"(f, s_9);
+        "core:prelude/string.wado/core:prelude/string.wado/String^core:prelude/string.wado/AsStrSlice::internal_append_to$spec3"(local.tee s_9(struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(58, 58), used: 2 }), f);
+        s_9 = $mv$$tuple_0$0.case_name;
+        "core:prelude/string.wado/core:prelude/string.wado/String::push_str<&core:prelude/string.wado/String>"(f, s_9);
+    }
+    if self == 1 {
+        s_9 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("SerializeErrorKind"), used: 18 };
+        "core:prelude/string.wado/core:prelude/string.wado/String::push_str<&core:prelude/string.wado/String>"(f, s_9);
+        "core:prelude/string.wado/core:prelude/string.wado/String^core:prelude/string.wado/AsStrSlice::internal_append_to$spec3"(local.tee s_9(struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(58, 58), used: 2 }), f);
+        s_9 = $mv$$tuple_0$1.case_name;
+        "core:prelude/string.wado/core:prelude/string.wado/String::push_str<&core:prelude/string.wado/String>"(f, s_9);
     }
 }
 

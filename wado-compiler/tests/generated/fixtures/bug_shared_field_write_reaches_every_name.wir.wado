@@ -169,8 +169,9 @@ import fn wasi/stream-drop-readable from "wasi/stream-drop-readable";
 
 fn "bug_shared_field_write_reaches_every_name.wado/fresh"() {
     let elements_0: ref Array<i32>;
-    let elements_2: ref "Array<core:prelude/list.wado/List<i32>>";
-    return struct.new "bug_shared_field_write_reaches_every_name.wado//Holder" { inner: struct.new "bug_shared_field_write_reaches_every_name.wado//Inner" { x: struct.new "core:prelude//List<i32>" { repr: local.tee elements_0(array.new_fixed<i32>(1, 2, black_box(3))), used: builtin::array_len(elements_0) } }, rows: struct.new "core:prelude//List<core:prelude/list.wado/List<i32>>" { repr: local.tee elements_2(array.new_fixed<ref "core:prelude//List<i32>">(struct.new "core:prelude//List<i32>" { repr: local.tee elements_0(array.new_fixed<i32>(1, 2, black_box(3))), used: builtin::array_len(elements_0) })), used: builtin::array_len(elements_2) }, items: struct.new "core:prelude//List<i32>" { repr: local.tee elements_0(array.new_fixed<i32>()), used: 0 } };
+    let used_1: i32;
+    let elements_4: ref "Array<core:prelude/list.wado/List<i32>>";
+    return struct.new "bug_shared_field_write_reaches_every_name.wado//Holder" { inner: struct.new "bug_shared_field_write_reaches_every_name.wado//Inner" { x: used_1 = builtin::array_len(local.tee elements_0(array.new_fixed<i32>(1, 2, black_box(3)))); struct.new "core:prelude//List<i32>" { repr: elements_0, used: used_1 } }, rows: used_1 = builtin::array_len(local.tee elements_4(array.new_fixed<ref "core:prelude//List<i32>">(used_1 = builtin::array_len(local.tee elements_0(array.new_fixed<i32>(1, 2, black_box(3)))); struct.new "core:prelude//List<i32>" { repr: elements_0, used: used_1 }))); struct.new "core:prelude//List<core:prelude/list.wado/List<i32>>" { repr: elements_4, used: used_1 }, items: struct.new "core:prelude//List<i32>" { repr: local.tee elements_0(array.new_fixed<i32>()), used: 0 } };
 }
 
 fn "bug_shared_field_write_reaches_every_name.wado/$cm_export__$test_0_a_write_through_a_referenced_field_reaches_it"() {
@@ -692,7 +693,13 @@ condition: 0 <= index < self.len()
 }
 
 fn "bug_shared_field_write_reaches_every_name.wado/bug_shared_field_write_reaches_every_name.wado/Holder::via_pattern"(self) {
-    self.inner.x = struct.new "core:prelude//List<i32>" { repr: array.new_fixed<i32>(9, 9), used: 2 };
+    let $load_1: ref "core:prelude//List<i32>";
+    let d: ref "bug_shared_field_write_reaches_every_name.wado//Inner";
+    let elements: ref Array<i32>;
+    d = self.inner;
+    elements = array.new_fixed<i32>(9, 9);
+    local.tee $load_1(d.x).repr = elements;
+    $load_1.used = 2;
 }
 
 fn "bug_shared_field_write_reaches_every_name.wado/bug_shared_field_write_reaches_every_name.wado/Holder::pattern_read"(self) {
@@ -1150,7 +1157,11 @@ fn "core:prelude/list.wado/core:prelude/list.wado/List<i32>::grow"(self) {
 }
 
 fn "bug_shared_field_write_reaches_every_name.wado/bug_shared_field_write_reaches_every_name.wado/Holder::via_ref$sroa[&mut(self.inner)]"(self) {
-    self.x = struct.new "core:prelude//List<i32>" { repr: array.new_fixed<i32>(9, 9), used: 2 };
+    let $load_0: ref "core:prelude//List<i32>";
+    let elements: ref Array<i32>;
+    elements = array.new_fixed<i32>(9, 9);
+    local.tee $load_0(self.x).repr = elements;
+    $load_0.used = 2;
 }
 
 fn "bug_shared_field_write_reaches_every_name.wado/bug_shared_field_write_reaches_every_name.wado/Holder::ref_read$sroa[&mut(self.inner)]"(self) {

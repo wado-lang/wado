@@ -189,32 +189,34 @@ fn "bug_multi_value_return_block_result.wado/run"() with Stdout {
     let b: ref "core:prelude//List<i32>";
     let $local_2: ref "core:prelude/string.wado//String";
     let elements_4: ref Array<i32>;
-    let self_8: i32;
-    let is_negative_14: bool;
+    let used_5: i32;
+    let is_negative_16: bool;
     let x: i64;
-    let start_56: i32;
-    a = struct.new "core:prelude//List<i32>" { repr: local.tee elements_4(array.new_fixed<i32>(black_box(10), 20)), used: builtin::array_len(elements_4) };
-    b = struct.new "core:prelude//List<i32>" { repr: local.tee elements_4(array.new_fixed<i32>(black_box(30), 40)), used: builtin::array_len(elements_4) };
+    let start_58: i32;
+    used_5 = builtin::array_len(local.tee elements_4(array.new_fixed<i32>(black_box(10), 20)));
+    a = struct.new "core:prelude//List<i32>" { repr: elements_4, used: used_5 };
+    used_5 = builtin::array_len(local.tee elements_4(array.new_fixed<i32>(black_box(30), 40)));
+    b = struct.new "core:prelude//List<i32>" { repr: elements_4, used: used_5 };
     $local_2 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
-    is_negative_14 = local.tee self_8("bug_multi_value_return_block_result.wado/sum"(a, b)) < 0;
-    self_8 = "core:prelude/primitive.wado/count_digits_u64"(local.tee x(x = builtin::i64_extend_i32_s(self_8); select i64(x < 0_i64, 0_i64 - x, x)));
-    if is_negative_14 {
-        if @unlikely(local.tee is_negative_14(0 + 1) > builtin::array_len($local_2.repr)) {
+    is_negative_16 = local.tee used_5("bug_multi_value_return_block_result.wado/sum"(a, b)) < 0;
+    used_5 = "core:prelude/primitive.wado/count_digits_u64"(local.tee x(x = builtin::i64_extend_i32_s(used_5); select i64(x < 0_i64, 0_i64 - x, x)));
+    if is_negative_16 {
+        if @unlikely(local.tee is_negative_16(0 + 1) > builtin::array_len($local_2.repr)) {
             cold_path;
-            "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_2, is_negative_14);
+            "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_2, is_negative_16);
         }
-        start_56 = $local_2.used;
-        $local_2.used = is_negative_14;
-        builtin::array_set_u8($local_2.repr, start_56, 45);
+        start_58 = $local_2.used;
+        $local_2.used = is_negative_16;
+        builtin::array_set_u8($local_2.repr, start_58, 45);
     } else {
     }
-    if @unlikely(local.tee start_56($local_2.used + self_8) > builtin::array_len($local_2.repr)) {
+    if @unlikely(local.tee start_58($local_2.used + used_5) > builtin::array_len($local_2.repr)) {
         cold_path;
-        "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_2, start_56);
+        "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_2, start_58);
     }
-    is_negative_14 = $local_2.used;
-    $local_2.used = start_56;
-    "core:prelude/primitive.wado/write_decimal_digits"($local_2.repr, is_negative_14, x, self_8);
+    is_negative_16 = $local_2.used;
+    $local_2.used = start_58;
+    "core:prelude/primitive.wado/write_decimal_digits"($local_2.repr, is_negative_16, x, used_5);
     "core:cli/println"($local_2.repr, $local_2.used);
 }
 

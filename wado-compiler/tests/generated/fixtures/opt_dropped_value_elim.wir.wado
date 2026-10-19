@@ -87,20 +87,20 @@ import fn wasi/stream-drop-readable from "wasi/stream-drop-readable";
 fn "opt_dropped_value_elim.wado/drain"(n) {
     let xs: ref "core:prelude//List<i32>";
     let i: i32;
-    let value_5: i32;
-    let used: i32;
+    let value_6: i32;
+    let used_7: i32;
     xs = struct.new "core:prelude//List<i32>" { repr: array.new_fixed<i32>(), used: 0 };
     i = 0;
     b0: block {
         l1: loop {
             break_if b0 i >= n;
-            value_5 = i;
-            if @unlikely(local.tee used(xs.used) >= builtin::array_len(xs.repr)) {
+            value_6 = i;
+            if @unlikely(local.tee used_7(xs.used) >= builtin::array_len(xs.repr)) {
                 cold_path;
                 "core:prelude/list.wado/core:prelude/list.wado/List<i32>::grow"(xs);
             }
-            builtin::array_set<i32>(xs.repr, used, value_5);
-            xs.used = used + 1;
+            builtin::array_set<i32>(xs.repr, used_7, value_6);
+            xs.used = used_7 + 1;
             i = i + 1;
             continue l1;
         };

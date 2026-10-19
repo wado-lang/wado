@@ -3334,7 +3334,8 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 ),
                 (None, None) => continue,
             };
-            let (local_ref, inspect_spec) = self.assert_slot_rendering(local_ref, string_type, span);
+            let (local_ref, inspect_spec) =
+                self.assert_slot_rendering(local_ref, string_type, span);
             match slot.seen_local_index {
                 Some(seen_index) => {
                     let render_index = render_local_of[&slot_idx];

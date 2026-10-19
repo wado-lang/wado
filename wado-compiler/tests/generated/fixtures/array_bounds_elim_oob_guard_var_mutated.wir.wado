@@ -119,9 +119,9 @@ fn "array_bounds_elim_oob_guard_var_mutated.wado/run"() with Stdout {
     let sum: i32;
     let $local_3: ref "core:prelude/string.wado//String";
     let x: i64;
-    let $sroa_arr_repr_34: ref Array<i32>;
-    let start_72: i32;
-    $sroa_arr_repr_34 = global:array_bounds_elim_oob_guard_var_mutated.wado::$const_obj_0;
+    let $sroa_arr_repr_35: ref Array<i32>;
+    let start_73: i32;
+    $sroa_arr_repr_35 = global:array_bounds_elim_oob_guard_var_mutated.wado::$const_obj_0;
     i_1 = 0;
     sum = 0;
     b0: block {
@@ -132,7 +132,7 @@ fn "array_bounds_elim_oob_guard_var_mutated.wado/run"() with Stdout {
                 cold_path;
                 "array_bounds_elim_oob_guard_var_mutated.wado/run$cold0$dae[$v1]"(i_1);
                 unreachable;
-            }; builtin::array_get_value<i32>($sroa_arr_repr_34, i_1);
+            }; builtin::array_get_value<i32>($sroa_arr_repr_35, i_1);
             continue l1;
         };
     };
@@ -144,17 +144,17 @@ fn "array_bounds_elim_oob_guard_var_mutated.wado/run"() with Stdout {
             cold_path;
             "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_3, i_1);
         }
-        start_72 = $local_3.used;
+        start_73 = $local_3.used;
         $local_3.used = i_1;
-        builtin::array_set_u8($local_3.repr, start_72, 45);
+        builtin::array_set_u8($local_3.repr, start_73, 45);
     } else {
     }
-    if @unlikely(local.tee start_72($local_3.used + sum) > builtin::array_len($local_3.repr)) {
+    if @unlikely(local.tee start_73($local_3.used + sum) > builtin::array_len($local_3.repr)) {
         cold_path;
-        "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_3, start_72);
+        "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_3, start_73);
     }
     i_1 = $local_3.used;
-    $local_3.used = start_72;
+    $local_3.used = start_73;
     "core:prelude/primitive.wado/write_decimal_digits"($local_3.repr, i_1, x, sum);
     "core:cli/println"($local_3.repr, $local_3.used);
 }

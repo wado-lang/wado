@@ -300,9 +300,7 @@ with a message naming it, since the reader would otherwise wait forever.
 
 A write hands back what it did not deliver: the part of the value a reader
 dropped before taking, or the suffix of a stream write the reader did not
-take. `FutureWritable::write` returns a `FutureWrite<T> { rest: Option<T>,
-result }`, and `StreamWritable::write` a `StreamWrite<T> { rest: List<T>,
-result }`. A caller that ignores the result drops the rest.
+take. `FutureWritable::write` returns a `FutureWrite<T> { rest: Option<T>, result }`, and `StreamWritable::write` a `StreamWrite<T> { rest: List<T>, result }`. A caller that ignores the result drops the rest.
 
 ## Linking and Resources
 

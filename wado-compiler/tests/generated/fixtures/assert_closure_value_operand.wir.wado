@@ -35,19 +35,19 @@ struct core:prelude/format.wado//Formatter {  // TypeId(6)
 
 struct assert_closure_value_operand.wado//$Closure_0 {  // TypeId(7)}
 
-type "functype/$canonical_closure_fn_0" = fn(ref null struct, i32) -> bool;  // TypeId(8)
+type "functype/$canonical_callback_fn" = fn(ref null struct, ref null struct);  // TypeId(8)
 
-type "functype/$canonical_callback_fn" = fn(ref null struct, ref null struct);  // TypeId(9)
-
-struct canonical//CanonicalInspectableBase {  // TypeId(10)
+struct canonical//CanonicalInspectableBase {  // TypeId(9)
     env: ref null struct,
     inspect: ref "functype/$canonical_callback_fn",
 }
 
-struct canonical//CanonicalClosure_0 {  // TypeId(11)
+type "functype/$canonical_closure_fn_1" = fn(ref null struct, i32) -> bool;  // TypeId(10)
+
+struct canonical//CanonicalClosure_1 {  // TypeId(11)
     env: ref null struct,
     inspect: ref "functype/$canonical_callback_fn",
-    func: ref "functype/$canonical_closure_fn_0",
+    func: ref "functype/$canonical_closure_fn_1",
 }
 
 type "functype//mem/realloc" = fn(i32, i32, i32, i32) -> i32;  // TypeId(12)
@@ -141,10 +141,10 @@ global global:assert_closure_value_operand.wado::$const_obj_4: ref Array<u8> = a
 
 fn "assert_closure_value_operand.wado/$cm_export__run"() {
     let pred: ref struct;
-    pred = struct.new "canonical//CanonicalClosure_0" { env: struct.new "assert_closure_value_operand.wado//$Closure_0" {  }, inspect: ref.func "closure/assert_closure_value_operand.wado/$closure_inspect_wrapper_0", func: ref.func "closure/assert_closure_value_operand.wado/$closure_wrapper_0" };
+    pred = struct.new "canonical//CanonicalClosure_1" { env: struct.new "assert_closure_value_operand.wado//$Closure_0" {  }, inspect: ref.func "closure/assert_closure_value_operand.wado/$closure_inspect_wrapper_0", func: ref.func "closure/assert_closure_value_operand.wado/$closure_wrapper_0" };
     if @unlikely(block -> bool {
-        let $indirect_call_1: ref "canonical//CanonicalClosure_0";
-        call_ref "functype/$canonical_closure_fn_0"($indirect_call_1.func, local.tee $indirect_call_1(ref.cast "canonical//CanonicalClosure_0"(pred)).env, 2);
+        let $indirect_call_1: ref "canonical//CanonicalClosure_1";
+        call_ref "functype/$canonical_closure_fn_1"($indirect_call_1.func, local.tee $indirect_call_1(ref.cast "canonical//CanonicalClosure_1"(pred)).env, 2);
     } == 0) {
         cold_path;
         "assert_closure_value_operand.wado/run$cold0"(pred);

@@ -74,36 +74,36 @@ import fn wasi/stream-drop-readable from "wasi/stream-drop-readable";
 global global:closure_iterator_effectful.wado::$const_obj_0: ref Array<i32> = array.new_fixed<i32>(1, 2, 3);
 
 fn "closure_iterator_effectful.wado/run"() with Stdout {
-    let item_8: i32;
+    let item_9: i32;
     let $local_2: ref "core:prelude/string.wado//String";
-    let is_negative_21: bool;
+    let is_negative_22: bool;
     let abs_val: u64;
-    let digit_count_23: i32;
-    let x_25: i64;
+    let digit_count_24: i32;
+    let x_26: i64;
     let arr: ref Array<u8>;
     let pos: i32;
     let t: u64;
     let q: u64;
     let pair: i32;
     let tens: i32;
-    let $sroa_self_repr_50: ref Array<i32>;
-    let $sroa_self_index_54: i32;
-    let new_used_91: i32;
-    let start_92: i32;
-    let new_used_146: i32;
-    let start_147: i32;
-    $sroa_self_repr_50 = global:closure_iterator_effectful.wado::$const_obj_0;
-    $sroa_self_index_54 = 0;
+    let $sroa_self_repr_51: ref Array<i32>;
+    let $sroa_self_index_55: i32;
+    let new_used_92: i32;
+    let start_93: i32;
+    let new_used_147: i32;
+    let start_148: i32;
+    $sroa_self_repr_51 = global:closure_iterator_effectful.wado::$const_obj_0;
+    $sroa_self_index_55 = 0;
     b0: block {
         l1: loop {
-            break_if b0 $sroa_self_index_54 >= 3;
-            item_8 = builtin::array_get_value<i32>($sroa_self_repr_50, $sroa_self_index_54);
-            $sroa_self_index_54 = $sroa_self_index_54 + 1;
+            break_if b0 $sroa_self_index_55 >= 3;
+            item_9 = builtin::array_get_value<i32>($sroa_self_repr_51, $sroa_self_index_55);
+            $sroa_self_index_55 = $sroa_self_index_55 + 1;
             $local_2 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
-            is_negative_21 = item_8 < 0;
-            x_25 = builtin::i64_extend_i32_s(item_8);
-            abs_val = select i64(x_25 < 0_i64, 0_i64 - x_25, x_25);
-            digit_count_23 = $inline_count_digits_u64_12: block -> i32 {
+            is_negative_22 = item_9 < 0;
+            x_26 = builtin::i64_extend_i32_s(item_9);
+            abs_val = select i64(x_26 < 0_i64, 0_i64 - x_26, x_26);
+            digit_count_24 = $inline_count_digits_u64_12: block -> i32 {
                 if abs_val <u 100000_i64 {
                     if abs_val <u 100_i64 {
                         if abs_val <u 10_i64 {
@@ -163,28 +163,28 @@ fn "closure_iterator_effectful.wado/run"() with Stdout {
                 }
                 break $inline_count_digits_u64_12: 20;
             };
-            if is_negative_21 {
-                if @unlikely(local.tee new_used_91(0 + 1) > builtin::array_len($local_2.repr)) {
+            if is_negative_22 {
+                if @unlikely(local.tee new_used_92(0 + 1) > builtin::array_len($local_2.repr)) {
                     cold_path;
-                    "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_2, new_used_91);
+                    "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_2, new_used_92);
                 }
-                start_92 = $local_2.used;
-                $local_2.used = new_used_91;
-                builtin::array_set_u8($local_2.repr, start_92, 45);
+                start_93 = $local_2.used;
+                $local_2.used = new_used_92;
+                builtin::array_set_u8($local_2.repr, start_93, 45);
             } else {
             }
-            if @unlikely(local.tee new_used_146($local_2.used + digit_count_23) > builtin::array_len($local_2.repr)) {
+            if @unlikely(local.tee new_used_147($local_2.used + digit_count_24) > builtin::array_len($local_2.repr)) {
                 cold_path;
-                "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_2, new_used_146);
+                "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_2, new_used_147);
             }
-            start_147 = $local_2.used;
-            $local_2.used = new_used_146;
+            start_148 = $local_2.used;
+            $local_2.used = new_used_147;
             arr = $local_2.repr;
-            pos = start_147 + digit_count_23;
+            pos = start_148 + digit_count_24;
             t = abs_val;
             b24: block {
                 l25: loop {
-                    break_if b24 (pos - start_147) < 2;
+                    break_if b24 (pos - start_148) < 2;
                     q = t /u 100_i64;
                     tens = local.tee pair(builtin::i32_wrap_i64(t - (q * 100_i64))) / 10;
                     builtin::array_set_u8(arr, pos - 1, ((48 + pair) - (tens * 10)) & 255);
@@ -194,8 +194,8 @@ fn "closure_iterator_effectful.wado/run"() with Stdout {
                     continue l25;
                 };
             };
-            if pos > start_147 {
-                builtin::array_set_u8(arr, start_147, (48 + builtin::i32_wrap_i64(t %u 10_i64)) & 255);
+            if pos > start_148 {
+                builtin::array_set_u8(arr, start_148, (48 + builtin::i32_wrap_i64(t %u 10_i64)) & 255);
             }
             "core:cli/println"($local_2.repr, $local_2.used);
             continue l1;

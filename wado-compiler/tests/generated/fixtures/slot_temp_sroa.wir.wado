@@ -180,13 +180,14 @@ fn "slot_temp_sroa.wado/outer$sroa[return]"(m, k) {
 
 fn "slot_temp_sroa.wado/run"() with Stdout {
     let m: ref "core:prelude//List<i32>";
-    let total: i32;
     let j: i32;
     let e: ref "core:prelude/string.wado//String";
     let elements: ref Array<i32>;
+    let used: i32;
     let x: i64;
-    m = struct.new "core:prelude//List<i32>" { repr: local.tee elements(array.new_fixed<i32>(black_box(10), 20, 30)), used: builtin::array_len(elements) };
-    total = 0;
+    used = builtin::array_len(local.tee elements(array.new_fixed<i32>(black_box(10), 20, 30)));
+    m = struct.new "core:prelude//List<i32>" { repr: elements, used: used };
+    used = 0;
     j = 0;
     b7: block {
         l8: loop {
@@ -196,7 +197,7 @@ fn "slot_temp_sroa.wado/run"() with Stdout {
             let $mv$$match_7$2: ref null "core:prelude/string.wado//String";
             multivalue_bind [$mv$$match_7$0, $mv$$match_7$1, $mv$$match_7$2] = "slot_temp_sroa.wado/outer$sroa[return]"(m, 10 * (j + 1));
             if $mv$$match_7$0 == 0 {
-                total = total + $mv$$match_7$1;
+                used = used + $mv$$match_7$1;
             } else {
             }
             j = j + 1;
@@ -206,12 +207,12 @@ fn "slot_temp_sroa.wado/run"() with Stdout {
     multivalue_bind [$mv$$match_7$1, $mv$$match_7$0, $mv$$match_7$2] = "slot_temp_sroa.wado/outer$sroa[return]$spec0$dae[k]"(m);
     if $mv$$match_7$1 == 1 {
         e = ref.as_non_null($mv$$match_7$2);
-        total = total + e.used;
+        used = used + e.used;
     } else {
     }
     e = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
-    $mv$$match_7$1 = total < 0;
-    total = "core:prelude/primitive.wado/count_digits_u64"(local.tee x(x = builtin::i64_extend_i32_s(total); select i64(x < 0_i64, 0_i64 - x, x)));
+    $mv$$match_7$1 = used < 0;
+    used = "core:prelude/primitive.wado/count_digits_u64"(local.tee x(x = builtin::i64_extend_i32_s(used); select i64(x < 0_i64, 0_i64 - x, x)));
     if $mv$$match_7$1 {
         if @unlikely(local.tee $mv$$match_7$1(0 + 1) > builtin::array_len(e.repr)) {
             cold_path;
@@ -222,13 +223,13 @@ fn "slot_temp_sroa.wado/run"() with Stdout {
         builtin::array_set_u8(e.repr, $mv$$match_7$0, 45);
     } else {
     }
-    if @unlikely(local.tee $mv$$match_7$0(e.used + total) > builtin::array_len(e.repr)) {
+    if @unlikely(local.tee $mv$$match_7$0(e.used + used) > builtin::array_len(e.repr)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"(e, $mv$$match_7$0);
     }
     $mv$$match_7$1 = e.used;
     e.used = $mv$$match_7$0;
-    "core:prelude/primitive.wado/write_decimal_digits"(e.repr, $mv$$match_7$1, x, total);
+    "core:prelude/primitive.wado/write_decimal_digits"(e.repr, $mv$$match_7$1, x, used);
     "core:cli/println"(e.repr, e.used);
 }
 

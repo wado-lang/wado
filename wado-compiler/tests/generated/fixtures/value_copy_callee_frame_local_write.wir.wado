@@ -342,27 +342,27 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self, min_ca
 
 fn "value_copy_callee_frame_local_write.wado/value_copy_callee_frame_local_write.wado/P::take_digits"(self) {
     let out: ref "core:prelude//List<i64>";
-    let value_4: i64;
-    let used: i32;
-    let $licm_repr_10: ref Array<u8>;
-    let $hfs_pos_11: i32;
+    let value_5: i64;
+    let used_6: i32;
+    let $licm_repr_11: ref Array<u8>;
+    let $hfs_pos_12: i32;
     out = struct.new "core:prelude//List<i64>" { repr: array.new_fixed<i64>(), used: 0 };
-    $licm_repr_10 = self.repr;
-    $hfs_pos_11 = self.pos;
+    $licm_repr_11 = self.repr;
+    $hfs_pos_12 = self.pos;
     b41: block {
         l42: loop {
-            if $hfs_pos_11 >= 4 {
-                self.pos = $hfs_pos_11;
+            if $hfs_pos_12 >= 4 {
+                self.pos = $hfs_pos_12;
                 break b41;
             }
-            value_4 = builtin::i64_extend_i32_u(builtin::array_get_value_u8($licm_repr_10, $hfs_pos_11));
-            if @unlikely(local.tee used(out.used) >= builtin::array_len(out.repr)) {
+            value_5 = builtin::i64_extend_i32_u(builtin::array_get_value_u8($licm_repr_11, $hfs_pos_12));
+            if @unlikely(local.tee used_6(out.used) >= builtin::array_len(out.repr)) {
                 cold_path;
                 "core:prelude/list.wado/core:prelude/list.wado/List<i64>::grow"(out);
             }
-            builtin::array_set<i64>(out.repr, used, value_4);
-            out.used = used + 1;
-            $hfs_pos_11 = $hfs_pos_11 + 1;
+            builtin::array_set<i64>(out.repr, used_6, value_5);
+            out.used = used_6 + 1;
+            $hfs_pos_12 = $hfs_pos_12 + 1;
             continue l42;
         };
     };

@@ -109,7 +109,7 @@ global global:value_copy_indirect_call_result.wado::$const_obj_3: ref Array<u8> 
 
 fn "value_copy_indirect_call_result.wado/make"(n) {
     let elements: ref Array<u8>;
-    return 200, struct.new "core:prelude//List<u8>" { repr: local.tee elements(array.new_fixed<u8>(n & 255, 2, 3)), used: builtin::array_len(elements) };
+    return 200, n = builtin::array_len(local.tee elements(array.new_fixed<u8>(n & 255, 2, 3))); struct.new "core:prelude//List<u8>" { repr: elements, used: n };
 }
 
 fn "value_copy_indirect_call_result.wado/sink"(v) {

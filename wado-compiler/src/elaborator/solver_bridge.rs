@@ -1267,8 +1267,8 @@ impl SolverBridge {
             let (Some(trait_), SolverType::Decl(head, _)) = (def.trait_, &def.target) else {
                 continue;
             };
-            if let Some(&source) =
-                kind_of(lowering.decl_key(*head)).and_then(|kind| lowering.derivation_source.get(&(trait_, kind)))
+            if let Some(&source) = kind_of(lowering.decl_key(*head))
+                .and_then(|kind| lowering.derivation_source.get(&(trait_, kind)))
             {
                 lowering.impl_defs.insert(id, source);
             }
@@ -1400,9 +1400,9 @@ impl SolverBridge {
             CompilerItem::RefMut,
             CompilerItem::Copyable,
         ]
-            .into_iter()
-            .filter_map(|item| tysys.compiler_trait_def(item))
-            .collect();
+        .into_iter()
+        .filter_map(|item| tysys.compiler_trait_def(item))
+        .collect();
         // A default naming another parameter is opaque to the solver.
         let closed = Written {
             resolutions: &tysys.resolutions,

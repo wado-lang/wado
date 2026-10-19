@@ -1277,7 +1277,10 @@ pub(super) fn generate_field_bridge_helpers(
         })
         .collect();
     [
-        (field_get_helper_name as fn(&str, &str) -> String, Read::Value),
+        (
+            field_get_helper_name as fn(&str, &str) -> String,
+            Read::Value,
+        ),
         (field_ref_helper_name, Read::Ref),
     ]
     .into_iter()

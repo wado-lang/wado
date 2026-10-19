@@ -176,98 +176,98 @@ import fn wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code 
 import fn wasi/stream-drop-readable from "wasi/stream-drop-readable";
 
 fn "iterator_filter_o3_regression.wado/run"() {
-    let self_45: ref "core:prelude/traits.wado//IterFilter<core:prelude/slice.wado/SliceValueIter<i32>,fn mut(i32)->bool>";
-    let self_47: ref "core:prelude/slice.wado//SliceValueIter<i32>";
-    let pred_48: ref "iterator_filter_o3_regression.wado//$Closure_0";
-    let result_50: ref "core:prelude//List<i32>";
-    let self_68: ref "core:prelude/traits.wado//IterFilter<core:prelude/traits.wado/IterFilter<core:prelude/slice.wado/SliceValueIter<i32>,fn mut(i32)->bool>,fn mut(i32)->bool>";
-    let pred_71: ref "iterator_filter_o3_regression.wado//$Closure_1";
-    let pred_73: ref "iterator_filter_o3_regression.wado//$Closure_2";
-    let elements_94: ref Array<i32>;
-    let used_97: i32;
-    let $sroa_arr_repr_118: ref Array<i32>;
-    self_47 = struct.new "core:prelude/slice.wado//SliceValueIter<i32>" { repr: local.tee $sroa_arr_repr_118(array.new_fixed<i32>(1, 2, 3, 4, 5)), index: 0, end: 5 };
-    pred_48 = struct.new "iterator_filter_o3_regression.wado//$Closure_0" {  };
-    self_45 = struct.new "core:prelude/traits.wado//IterFilter<core:prelude/slice.wado/SliceValueIter<i32>,fn mut(i32)->bool>" { inner: self_47, pred: struct.new "canonical//CanonicalClosure_0" { env: pred_48, func: ref.func "closure/iterator_filter_o3_regression.wado/$closure_wrapper_0" } };
-    result_50 = struct.new "core:prelude//List<i32>" { repr: local.tee elements_94(array.new_fixed<i32>()), used: 0 };
+    let self_46: ref "core:prelude/traits.wado//IterFilter<core:prelude/slice.wado/SliceValueIter<i32>,fn mut(i32)->bool>";
+    let self_48: ref "core:prelude/slice.wado//SliceValueIter<i32>";
+    let pred_49: ref "iterator_filter_o3_regression.wado//$Closure_0";
+    let result_51: ref "core:prelude//List<i32>";
+    let self_69: ref "core:prelude/traits.wado//IterFilter<core:prelude/traits.wado/IterFilter<core:prelude/slice.wado/SliceValueIter<i32>,fn mut(i32)->bool>,fn mut(i32)->bool>";
+    let pred_72: ref "iterator_filter_o3_regression.wado//$Closure_1";
+    let pred_74: ref "iterator_filter_o3_regression.wado//$Closure_2";
+    let elements_95: ref Array<i32>;
+    let used_99: i32;
+    let $sroa_arr_repr_121: ref Array<i32>;
+    self_48 = struct.new "core:prelude/slice.wado//SliceValueIter<i32>" { repr: local.tee $sroa_arr_repr_121(array.new_fixed<i32>(1, 2, 3, 4, 5)), index: 0, end: 5 };
+    pred_49 = struct.new "iterator_filter_o3_regression.wado//$Closure_0" {  };
+    self_46 = struct.new "core:prelude/traits.wado//IterFilter<core:prelude/slice.wado/SliceValueIter<i32>,fn mut(i32)->bool>" { inner: self_48, pred: struct.new "canonical//CanonicalClosure_0" { env: pred_49, func: ref.func "closure/iterator_filter_o3_regression.wado/$closure_wrapper_0" } };
+    result_51 = struct.new "core:prelude//List<i32>" { repr: local.tee elements_95(array.new_fixed<i32>()), used: 0 };
     b0: block {
         l1: loop {
-            let $mv$$local_3_52$0: i32;
-            let $mv$$local_3_52$1: i32;
-            multivalue_bind [$mv$$local_3_52$0, $mv$$local_3_52$1] = "core:prelude/traits.wado/core:prelude/traits.wado/IterFilter<core:prelude/slice.wado/SliceValueIter<i32>,fn mut(i32)->bool>^core:prelude/traits.wado/Iterator::next$sroa[return]"(self_45);
-            if $mv$$local_3_52$0 == 1 {
-                if @unlikely(local.tee used_97(result_50.used) >= builtin::array_len(result_50.repr)) {
+            let $mv$$local_3_53$0: i32;
+            let $mv$$local_3_53$1: i32;
+            multivalue_bind [$mv$$local_3_53$0, $mv$$local_3_53$1] = "core:prelude/traits.wado/core:prelude/traits.wado/IterFilter<core:prelude/slice.wado/SliceValueIter<i32>,fn mut(i32)->bool>^core:prelude/traits.wado/Iterator::next$sroa[return]"(self_46);
+            if $mv$$local_3_53$0 == 1 {
+                if @unlikely(local.tee used_99(result_51.used) >= builtin::array_len(result_51.repr)) {
                     cold_path;
-                    "core:prelude/list.wado/core:prelude/list.wado/List<i32>::grow"(result_50);
+                    "core:prelude/list.wado/core:prelude/list.wado/List<i32>::grow"(result_51);
                 }
-                builtin::array_set<i32>(result_50.repr, used_97, $mv$$local_3_52$1);
-                result_50.used = used_97 + 1;
+                builtin::array_set<i32>(result_51.repr, used_99, $mv$$local_3_53$1);
+                result_51.used = used_99 + 1;
             } else {
                 break b0;
             }
             continue l1;
         };
     };
-    if @unlikely(local.tee used_97(result_50.used) != 2) {
+    if @unlikely(local.tee used_99(result_51.used) != 2) {
         cold_path;
-        "iterator_filter_o3_regression.wado/run$cold7"(used_97);
+        "iterator_filter_o3_regression.wado/run$cold7"(used_99);
         unreachable;
     }
-    if @unlikely(0 >= used_97) {
+    if @unlikely(0 >= used_99) {
         cold_path;
-        "iterator_filter_o3_regression.wado/run$cold6$dae[$contract_arg_0]"(used_97);
+        "iterator_filter_o3_regression.wado/run$cold6$dae[$contract_arg_0]"(used_99);
         unreachable;
     }
-    if @unlikely(local.tee $mv$$local_3_52$1(builtin::array_get_value<i32>(local.tee elements_94(result_50.repr), 0)) != 2) {
+    if @unlikely(local.tee $mv$$local_3_53$1(builtin::array_get_value<i32>(local.tee elements_95(result_51.repr), 0)) != 2) {
         cold_path;
-        "iterator_filter_o3_regression.wado/run$cold5"($mv$$local_3_52$1);
+        "iterator_filter_o3_regression.wado/run$cold5"($mv$$local_3_53$1);
         unreachable;
     }
-    if @unlikely(1 >= used_97) {
+    if @unlikely(1 >= used_99) {
         cold_path;
-        "iterator_filter_o3_regression.wado/run$cold4$dae[$contract_arg_1]"(used_97);
+        "iterator_filter_o3_regression.wado/run$cold4$dae[$contract_arg_1]"(used_99);
         unreachable;
     }
-    if @unlikely(local.tee used_97(builtin::array_get_value<i32>(elements_94, 1)) != 4) {
+    if @unlikely(local.tee used_99(builtin::array_get_value<i32>(elements_95, 1)) != 4) {
         cold_path;
-        "iterator_filter_o3_regression.wado/run$cold3"(used_97);
+        "iterator_filter_o3_regression.wado/run$cold3"(used_99);
         unreachable;
     }
-    self_47 = struct.new "core:prelude/slice.wado//SliceValueIter<i32>" { repr: $sroa_arr_repr_118, index: 0, end: 5 };
-    pred_71 = struct.new "iterator_filter_o3_regression.wado//$Closure_1" {  };
-    self_45 = struct.new "core:prelude/traits.wado//IterFilter<core:prelude/slice.wado/SliceValueIter<i32>,fn mut(i32)->bool>" { inner: self_47, pred: struct.new "canonical//CanonicalClosure_0" { env: pred_71, func: ref.func "closure/iterator_filter_o3_regression.wado/$closure_wrapper_1" } };
-    pred_73 = struct.new "iterator_filter_o3_regression.wado//$Closure_2" {  };
-    self_68 = struct.new "core:prelude/traits.wado//IterFilter<core:prelude/traits.wado/IterFilter<core:prelude/slice.wado/SliceValueIter<i32>,fn mut(i32)->bool>,fn mut(i32)->bool>" { inner: self_45, pred: struct.new "canonical//CanonicalClosure_0" { env: pred_73, func: ref.func "closure/iterator_filter_o3_regression.wado/$closure_wrapper_2" } };
-    result_50 = struct.new "core:prelude//List<i32>" { repr: local.tee $sroa_arr_repr_118(array.new_fixed<i32>()), used: 0 };
+    self_48 = struct.new "core:prelude/slice.wado//SliceValueIter<i32>" { repr: $sroa_arr_repr_121, index: 0, end: 5 };
+    pred_72 = struct.new "iterator_filter_o3_regression.wado//$Closure_1" {  };
+    self_46 = struct.new "core:prelude/traits.wado//IterFilter<core:prelude/slice.wado/SliceValueIter<i32>,fn mut(i32)->bool>" { inner: self_48, pred: struct.new "canonical//CanonicalClosure_0" { env: pred_72, func: ref.func "closure/iterator_filter_o3_regression.wado/$closure_wrapper_1" } };
+    pred_74 = struct.new "iterator_filter_o3_regression.wado//$Closure_2" {  };
+    self_69 = struct.new "core:prelude/traits.wado//IterFilter<core:prelude/traits.wado/IterFilter<core:prelude/slice.wado/SliceValueIter<i32>,fn mut(i32)->bool>,fn mut(i32)->bool>" { inner: self_46, pred: struct.new "canonical//CanonicalClosure_0" { env: pred_74, func: ref.func "closure/iterator_filter_o3_regression.wado/$closure_wrapper_2" } };
+    result_51 = struct.new "core:prelude//List<i32>" { repr: local.tee $sroa_arr_repr_121(array.new_fixed<i32>()), used: 0 };
     b9: block {
         l10: loop {
-            multivalue_bind [used_97, $mv$$local_3_52$1] = "core:prelude/traits.wado/core:prelude/traits.wado/IterFilter<core:prelude/traits.wado/IterFilter<core:prelude/slice.wado/SliceValueIter<i32>,fn mut(i32)->bool>,fn mut(i32)->bool>^core:prelude/traits.wado/Iterator::next$sroa[return]"(self_68);
-            if used_97 == 1 {
-                if @unlikely(local.tee $mv$$local_3_52$0(result_50.used) >= builtin::array_len(result_50.repr)) {
+            multivalue_bind [used_99, $mv$$local_3_53$1] = "core:prelude/traits.wado/core:prelude/traits.wado/IterFilter<core:prelude/traits.wado/IterFilter<core:prelude/slice.wado/SliceValueIter<i32>,fn mut(i32)->bool>,fn mut(i32)->bool>^core:prelude/traits.wado/Iterator::next$sroa[return]"(self_69);
+            if used_99 == 1 {
+                if @unlikely(local.tee $mv$$local_3_53$0(result_51.used) >= builtin::array_len(result_51.repr)) {
                     cold_path;
-                    "core:prelude/list.wado/core:prelude/list.wado/List<i32>::grow"(result_50);
+                    "core:prelude/list.wado/core:prelude/list.wado/List<i32>::grow"(result_51);
                 }
-                builtin::array_set<i32>(result_50.repr, $mv$$local_3_52$0, $mv$$local_3_52$1);
-                result_50.used = $mv$$local_3_52$0 + 1;
+                builtin::array_set<i32>(result_51.repr, $mv$$local_3_53$0, $mv$$local_3_53$1);
+                result_51.used = $mv$$local_3_53$0 + 1;
             } else {
                 break b9;
             }
             continue l10;
         };
     };
-    if @unlikely(local.tee used_97(result_50.used) != 1) {
+    if @unlikely(local.tee used_99(result_51.used) != 1) {
         cold_path;
-        "iterator_filter_o3_regression.wado/run$cold2"(used_97);
+        "iterator_filter_o3_regression.wado/run$cold2"(used_99);
         unreachable;
     }
-    if @unlikely(0 >= used_97) {
+    if @unlikely(0 >= used_99) {
         cold_path;
-        "iterator_filter_o3_regression.wado/run$cold1$dae[$contract_arg_2]"(used_97);
+        "iterator_filter_o3_regression.wado/run$cold1$dae[$contract_arg_2]"(used_99);
         unreachable;
     }
-    if @unlikely(local.tee used_97(builtin::array_get_value<i32>(result_50.repr, 0)) != 4) {
+    if @unlikely(local.tee used_99(builtin::array_get_value<i32>(result_51.repr, 0)) != 4) {
         cold_path;
-        "iterator_filter_o3_regression.wado/run$cold0"(used_97);
+        "iterator_filter_o3_regression.wado/run$cold0"(used_99);
         unreachable;
     }
 }

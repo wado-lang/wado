@@ -206,26 +206,26 @@ global global:core:prelude/list.wado::$const_obj_42: ref Array<u8> = array.new_f
 global global:core:prelude/list.wado::$const_obj_43: ref Array<u8> = array.new_fixed<u8>(67, 111, 110, 116, 114, 97, 99, 116, 32, 111, 102, 32);
 
 fn "compound_assign_side_effects.wado/$test_0_arr_bump_______1_evaluates_the_subscript_once"() {
-    let value_36: i32;
-    let $sroa_arr_repr_67: ref Array<i32>;
+    let value_37: i32;
+    let $sroa_arr_repr_68: ref Array<i32>;
     global:compound_assign_side_effects.wado::CALL_COUNT = 0;
-    $sroa_arr_repr_67 = array.new_fixed<i32>(10, 20, 30);
+    $sroa_arr_repr_68 = array.new_fixed<i32>(10, 20, 30);
     global:compound_assign_side_effects.wado::CALL_COUNT = global:compound_assign_side_effects.wado::CALL_COUNT + 1;
-    value_36 = builtin::array_get_value<i32>($sroa_arr_repr_67, 0) + 1;
-    builtin::array_set<i32>($sroa_arr_repr_67, 0, value_36);
-    if @unlikely(local.tee value_36(global:compound_assign_side_effects.wado::CALL_COUNT == 1) == 0) {
+    value_37 = builtin::array_get_value<i32>($sroa_arr_repr_68, 0) + 1;
+    builtin::array_set<i32>($sroa_arr_repr_68, 0, value_37);
+    if @unlikely(local.tee value_37(global:compound_assign_side_effects.wado::CALL_COUNT == 1) == 0) {
         cold_path;
         "compound_assign_side_effects.wado/$test_0_arr_bump_______1_evaluates_the_subscript_once$cold4"();
         unreachable;
     }
-    if @unlikely(local.tee value_36(builtin::array_get_value<i32>($sroa_arr_repr_67, 0)) != 11) {
+    if @unlikely(local.tee value_37(builtin::array_get_value<i32>($sroa_arr_repr_68, 0)) != 11) {
         cold_path;
-        "compound_assign_side_effects.wado/$test_0_arr_bump_______1_evaluates_the_subscript_once$cold2"(value_36);
+        "compound_assign_side_effects.wado/$test_0_arr_bump_______1_evaluates_the_subscript_once$cold2"(value_37);
         unreachable;
     }
-    if @unlikely(local.tee value_36(builtin::array_get_value<i32>($sroa_arr_repr_67, 1)) != 20) {
+    if @unlikely(local.tee value_37(builtin::array_get_value<i32>($sroa_arr_repr_68, 1)) != 20) {
         cold_path;
-        "compound_assign_side_effects.wado/$test_0_arr_bump_______1_evaluates_the_subscript_once$cold0"(value_36);
+        "compound_assign_side_effects.wado/$test_0_arr_bump_______1_evaluates_the_subscript_once$cold0"(value_37);
         unreachable;
     }
 }
@@ -233,62 +233,62 @@ fn "compound_assign_side_effects.wado/$test_0_arr_bump_______1_evaluates_the_sub
 fn "compound_assign_side_effects.wado/$test_3_nested_matrix_bump____j_____1_evaluates_the_row_index_once_and_writes_back"() {
     let $v1_33: i32;
     let elements_82: ref "Array<core:prelude/list.wado/List<i32>>";
-    let self_85: ref "core:prelude//List<i32>";
-    let $v1_90: i32;
-    let self_115: ref "core:prelude//List<i32>";
+    let self_88: ref "core:prelude//List<i32>";
+    let $v1_93: i32;
+    let self_118: ref "core:prelude//List<i32>";
     global:compound_assign_side_effects.wado::CALL_COUNT = 0;
     elements_82 = array.new_fixed<ref "core:prelude//List<i32>">(struct.new "core:prelude//List<i32>" { repr: array.new_fixed<i32>(1, 2), used: 2 }, struct.new "core:prelude//List<i32>" { repr: array.new_fixed<i32>(3, 4), used: 2 });
     global:compound_assign_side_effects.wado::CALL_COUNT = global:compound_assign_side_effects.wado::CALL_COUNT + 1;
-    self_85 = builtin::array_get_value<ref "core:prelude//List<i32>">(elements_82, 0);
-    $v1_33 = self_115 = builtin::array_get_value<ref "core:prelude//List<i32>">(elements_82, 0); $v1_33 = builtin::array_get_value<ref "core:prelude//List<i32>">(elements_82, 0).used; if @unlikely(1 >= $v1_33) {
+    self_88 = builtin::array_get_value<ref "core:prelude//List<i32>">(elements_82, 0);
+    $v1_33 = self_118 = builtin::array_get_value<ref "core:prelude//List<i32>">(elements_82, 0); $v1_33 = builtin::array_get_value<ref "core:prelude//List<i32>">(elements_82, 0).used; if @unlikely(1 >= $v1_33) {
         cold_path;
         "compound_assign_side_effects.wado/$test_3_nested_matrix_bump____j_____1_evaluates_the_row_index_once_and_writes_back$cold10$dae[$contract_arg_1]"($v1_33);
         unreachable;
-    }; builtin::array_get_value<i32>(self_115.repr, 1) + 10;
-    $v1_90 = self_85.used;
-    if @unlikely(1 >= $v1_90) {
+    }; builtin::array_get_value<i32>(self_118.repr, 1) + 10;
+    $v1_93 = self_88.used;
+    if @unlikely(1 >= $v1_93) {
         cold_path;
-        "core:prelude/list.wado/core:prelude/list.wado/List<i32>^core:prelude/traits.wado/IndexAssign<i32>::index_assign$cold0$dae[self,index,value]"($v1_90);
+        "core:prelude/list.wado/core:prelude/list.wado/List<i32>^core:prelude/traits.wado/IndexAssign<i32>::index_assign$cold0$dae[self,index,value]"($v1_93);
         unreachable;
     }
-    builtin::array_set<i32>(self_85.repr, 1, $v1_33);
+    builtin::array_set<i32>(self_88.repr, 1, $v1_33);
     if @unlikely(local.tee $v1_33(global:compound_assign_side_effects.wado::CALL_COUNT == 1) == 0) {
         cold_path;
         "compound_assign_side_effects.wado/$test_3_nested_matrix_bump____j_____1_evaluates_the_row_index_once_and_writes_back$cold9"();
         unreachable;
     }
-    self_85 = builtin::array_get_value<ref "core:prelude//List<i32>">(elements_82, 0);
-    $v1_33 = local.tee self_115(builtin::array_get_value<ref "core:prelude//List<i32>">(elements_82, 0)).used;
+    self_88 = builtin::array_get_value<ref "core:prelude//List<i32>">(elements_82, 0);
+    $v1_33 = local.tee self_118(builtin::array_get_value<ref "core:prelude//List<i32>">(elements_82, 0)).used;
     if @unlikely(1 >= $v1_33) {
         cold_path;
         "compound_assign_side_effects.wado/$test_3_nested_matrix_bump____j_____1_evaluates_the_row_index_once_and_writes_back$cold7$dae[$contract_arg_4]"($v1_33);
         unreachable;
     }
-    if @unlikely(local.tee $v1_33(builtin::array_get_value<i32>(self_85.repr, 1)) != 12) {
+    if @unlikely(local.tee $v1_33(builtin::array_get_value<i32>(self_88.repr, 1)) != 12) {
         cold_path;
         "compound_assign_side_effects.wado/$test_3_nested_matrix_bump____j_____1_evaluates_the_row_index_once_and_writes_back$cold6"($v1_33);
         unreachable;
     }
-    self_85 = builtin::array_get_value<ref "core:prelude//List<i32>">(elements_82, 0);
-    $v1_33 = local.tee self_115(builtin::array_get_value<ref "core:prelude//List<i32>">(elements_82, 0)).used;
+    self_88 = builtin::array_get_value<ref "core:prelude//List<i32>">(elements_82, 0);
+    $v1_33 = local.tee self_118(builtin::array_get_value<ref "core:prelude//List<i32>">(elements_82, 0)).used;
     if @unlikely(0 >= $v1_33) {
         cold_path;
         "compound_assign_side_effects.wado/$test_3_nested_matrix_bump____j_____1_evaluates_the_row_index_once_and_writes_back$cold4$dae[$contract_arg_7]"($v1_33);
         unreachable;
     }
-    if @unlikely(local.tee $v1_33(builtin::array_get_value<i32>(self_85.repr, 0)) != 1) {
+    if @unlikely(local.tee $v1_33(builtin::array_get_value<i32>(self_88.repr, 0)) != 1) {
         cold_path;
         "compound_assign_side_effects.wado/$test_3_nested_matrix_bump____j_____1_evaluates_the_row_index_once_and_writes_back$cold3"($v1_33);
         unreachable;
     }
-    self_85 = builtin::array_get_value<ref "core:prelude//List<i32>">(elements_82, 1);
-    $v1_33 = local.tee self_115(builtin::array_get_value<ref "core:prelude//List<i32>">(elements_82, 1)).used;
+    self_88 = builtin::array_get_value<ref "core:prelude//List<i32>">(elements_82, 1);
+    $v1_33 = local.tee self_118(builtin::array_get_value<ref "core:prelude//List<i32>">(elements_82, 1)).used;
     if @unlikely(0 >= $v1_33) {
         cold_path;
         "compound_assign_side_effects.wado/$test_3_nested_matrix_bump____j_____1_evaluates_the_row_index_once_and_writes_back$cold1$dae[$contract_arg_10]"($v1_33);
         unreachable;
     }
-    if @unlikely(local.tee $v1_33(builtin::array_get_value<i32>(self_85.repr, 0)) != 3) {
+    if @unlikely(local.tee $v1_33(builtin::array_get_value<i32>(self_88.repr, 0)) != 3) {
         cold_path;
         "compound_assign_side_effects.wado/$test_3_nested_matrix_bump____j_____1_evaluates_the_row_index_once_and_writes_back$cold0"($v1_33);
         unreachable;
@@ -320,44 +320,44 @@ fn "compound_assign_side_effects.wado/$test_4_nested_arr_bump____field____1_eval
 }
 
 fn "compound_assign_side_effects.wado/$test_5_side_effecting_custom_index_as_subscript_is_evaluated_once"() {
-    let value_53: i32;
-    let $sroa_a_repr_85: ref Array<i32>;
+    let value_55: i32;
+    let $sroa_a_repr_87: ref Array<i32>;
     global:compound_assign_side_effects.wado::IDX_CALLS = 0;
-    $sroa_a_repr_85 = array.new_fixed<i32>(0, 0, 0);
+    $sroa_a_repr_87 = array.new_fixed<i32>(0, 0, 0);
     global:compound_assign_side_effects.wado::IDX_CALLS = global:compound_assign_side_effects.wado::IDX_CALLS + 1;
-    value_53 = builtin::array_get_value<i32>($sroa_a_repr_85, 1) + 5;
-    builtin::array_set<i32>($sroa_a_repr_85, 1, value_53);
-    if @unlikely(local.tee value_53(global:compound_assign_side_effects.wado::IDX_CALLS == 1) == 0) {
+    value_55 = builtin::array_get_value<i32>($sroa_a_repr_87, 1) + 5;
+    builtin::array_set<i32>($sroa_a_repr_87, 1, value_55);
+    if @unlikely(local.tee value_55(global:compound_assign_side_effects.wado::IDX_CALLS == 1) == 0) {
         cold_path;
         "compound_assign_side_effects.wado/$test_5_side_effecting_custom_index_as_subscript_is_evaluated_once$cold4"();
         unreachable;
     }
-    if @unlikely(local.tee value_53(builtin::array_get_value<i32>($sroa_a_repr_85, 1)) != 5) {
+    if @unlikely(local.tee value_55(builtin::array_get_value<i32>($sroa_a_repr_87, 1)) != 5) {
         cold_path;
-        "compound_assign_side_effects.wado/$test_5_side_effecting_custom_index_as_subscript_is_evaluated_once$cold2"(value_53);
+        "compound_assign_side_effects.wado/$test_5_side_effecting_custom_index_as_subscript_is_evaluated_once$cold2"(value_55);
         unreachable;
     }
-    if @unlikely((local.tee value_53(builtin::array_get_value<i32>($sroa_a_repr_85, 0)) == 0) == 0) {
+    if @unlikely((local.tee value_55(builtin::array_get_value<i32>($sroa_a_repr_87, 0)) == 0) == 0) {
         cold_path;
-        "compound_assign_side_effects.wado/$test_5_side_effecting_custom_index_as_subscript_is_evaluated_once$cold0"(value_53);
+        "compound_assign_side_effects.wado/$test_5_side_effecting_custom_index_as_subscript_is_evaluated_once$cold0"(value_55);
         unreachable;
     }
 }
 
 fn "compound_assign_side_effects.wado/$test_6_closure_after_an_impure_compound_assign_captures_the_right_local"() {
-    let value_31: i32;
-    let $sroa_arr_repr_56: ref Array<i32>;
+    let value_32: i32;
+    let $sroa_arr_repr_57: ref Array<i32>;
     global:compound_assign_side_effects.wado::CALL_COUNT = 0;
-    $sroa_arr_repr_56 = array.new_fixed<i32>(10, 20, 30);
+    $sroa_arr_repr_57 = array.new_fixed<i32>(10, 20, 30);
     global:compound_assign_side_effects.wado::CALL_COUNT = global:compound_assign_side_effects.wado::CALL_COUNT + 1;
-    value_31 = builtin::array_get_value<i32>($sroa_arr_repr_56, 0) + 1;
-    builtin::array_set<i32>($sroa_arr_repr_56, 0, value_31);
-    if @unlikely(local.tee value_31(builtin::array_get_value<i32>($sroa_arr_repr_56, 0)) != 11) {
+    value_32 = builtin::array_get_value<i32>($sroa_arr_repr_57, 0) + 1;
+    builtin::array_set<i32>($sroa_arr_repr_57, 0, value_32);
+    if @unlikely(local.tee value_32(builtin::array_get_value<i32>($sroa_arr_repr_57, 0)) != 11) {
         cold_path;
-        "compound_assign_side_effects.wado/$test_6_closure_after_an_impure_compound_assign_captures_the_right_local$cold1"(value_31);
+        "compound_assign_side_effects.wado/$test_6_closure_after_an_impure_compound_assign_captures_the_right_local$cold1"(value_32);
         unreachable;
     }
-    if @unlikely(local.tee value_31(global:compound_assign_side_effects.wado::CALL_COUNT == 1) == 0) {
+    if @unlikely(local.tee value_32(global:compound_assign_side_effects.wado::CALL_COUNT == 1) == 0) {
         cold_path;
         "compound_assign_side_effects.wado/$test_6_closure_after_an_impure_compound_assign_captures_the_right_local$cold0"();
         unreachable;
@@ -365,19 +365,19 @@ fn "compound_assign_side_effects.wado/$test_6_closure_after_an_impure_compound_a
 }
 
 fn "compound_assign_side_effects.wado/$test_7_match_subscript_with_inner_locals_keeps_frame_parity_for_a_later_closure"() {
-    let value_34: i32;
-    let $sroa_arr_repr_59: ref Array<i32>;
+    let value_35: i32;
+    let $sroa_arr_repr_60: ref Array<i32>;
     global:compound_assign_side_effects.wado::CALL_COUNT = 0;
-    $sroa_arr_repr_59 = array.new_fixed<i32>(10, 20, 30);
+    $sroa_arr_repr_60 = array.new_fixed<i32>(10, 20, 30);
     global:compound_assign_side_effects.wado::CALL_COUNT = global:compound_assign_side_effects.wado::CALL_COUNT + 1;
-    value_34 = builtin::array_get_value<i32>($sroa_arr_repr_59, 0) + 1;
-    builtin::array_set<i32>($sroa_arr_repr_59, 0, value_34);
-    if @unlikely(local.tee value_34(builtin::array_get_value<i32>($sroa_arr_repr_59, 0)) != 11) {
+    value_35 = builtin::array_get_value<i32>($sroa_arr_repr_60, 0) + 1;
+    builtin::array_set<i32>($sroa_arr_repr_60, 0, value_35);
+    if @unlikely(local.tee value_35(builtin::array_get_value<i32>($sroa_arr_repr_60, 0)) != 11) {
         cold_path;
-        "compound_assign_side_effects.wado/$test_7_match_subscript_with_inner_locals_keeps_frame_parity_for_a_later_closure$cold1"(value_34);
+        "compound_assign_side_effects.wado/$test_7_match_subscript_with_inner_locals_keeps_frame_parity_for_a_later_closure$cold1"(value_35);
         unreachable;
     }
-    if @unlikely(local.tee value_34(global:compound_assign_side_effects.wado::CALL_COUNT == 1) == 0) {
+    if @unlikely(local.tee value_35(global:compound_assign_side_effects.wado::CALL_COUNT == 1) == 0) {
         cold_path;
         "compound_assign_side_effects.wado/$test_7_match_subscript_with_inner_locals_keeps_frame_parity_for_a_later_closure$cold0"();
         unreachable;

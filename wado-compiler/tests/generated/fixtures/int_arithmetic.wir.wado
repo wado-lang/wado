@@ -289,77 +289,77 @@ fn "int_arithmetic.wado/$test_29_u64_narrows_in_a_digit_loop"() {
     let digits: ref "core:prelude//List<i32>";
     let v: u64;
     let elements: ref Array<i32>;
-    let value_63: i32;
-    let used: i32;
+    let value_64: i32;
+    let used_65: i32;
     digits = struct.new "core:prelude//List<i32>" { repr: local.tee elements(array.new_fixed<i32>()), used: 0 };
     v = 12345_i64;
     b0: block {
         l1: loop {
             break_if b0 v <=u 0_i64;
-            value_63 = builtin::i32_wrap_i64(v %u 10_i64);
-            if @unlikely(local.tee used(digits.used) >= builtin::array_len(digits.repr)) {
+            value_64 = builtin::i32_wrap_i64(v %u 10_i64);
+            if @unlikely(local.tee used_65(digits.used) >= builtin::array_len(digits.repr)) {
                 cold_path;
                 "core:prelude/list.wado/core:prelude/list.wado/List<i32>::grow"(digits);
             }
-            builtin::array_set<i32>(digits.repr, used, value_63);
-            digits.used = used + 1;
+            builtin::array_set<i32>(digits.repr, used_65, value_64);
+            digits.used = used_65 + 1;
             v = v /u 10_i64;
             continue l1;
         };
     };
-    if @unlikely(local.tee used(digits.used) != 5) {
+    if @unlikely(local.tee used_65(digits.used) != 5) {
         cold_path;
-        "int_arithmetic.wado/$test_29_u64_narrows_in_a_digit_loop$cold10"(used);
+        "int_arithmetic.wado/$test_29_u64_narrows_in_a_digit_loop$cold10"(used_65);
         unreachable;
     }
-    if @unlikely(0 >= used) {
+    if @unlikely(0 >= used_65) {
         cold_path;
-        "int_arithmetic.wado/$test_29_u64_narrows_in_a_digit_loop$cold9$dae[$contract_arg_0]"(used);
+        "int_arithmetic.wado/$test_29_u64_narrows_in_a_digit_loop$cold9$dae[$contract_arg_0]"(used_65);
         unreachable;
     }
-    if @unlikely(local.tee value_63(builtin::array_get_value<i32>(local.tee elements(digits.repr), 0)) != 5) {
+    if @unlikely(local.tee value_64(builtin::array_get_value<i32>(local.tee elements(digits.repr), 0)) != 5) {
         cold_path;
-        "int_arithmetic.wado/$test_29_u64_narrows_in_a_digit_loop$cold8"(value_63);
+        "int_arithmetic.wado/$test_29_u64_narrows_in_a_digit_loop$cold8"(value_64);
         unreachable;
     }
-    if @unlikely(1 >= used) {
+    if @unlikely(1 >= used_65) {
         cold_path;
-        "int_arithmetic.wado/$test_29_u64_narrows_in_a_digit_loop$cold7$dae[$contract_arg_1]"(used);
+        "int_arithmetic.wado/$test_29_u64_narrows_in_a_digit_loop$cold7$dae[$contract_arg_1]"(used_65);
         unreachable;
     }
-    if @unlikely(local.tee value_63(builtin::array_get_value<i32>(elements, 1)) != 4) {
+    if @unlikely(local.tee value_64(builtin::array_get_value<i32>(elements, 1)) != 4) {
         cold_path;
-        "int_arithmetic.wado/$test_29_u64_narrows_in_a_digit_loop$cold6"(value_63);
+        "int_arithmetic.wado/$test_29_u64_narrows_in_a_digit_loop$cold6"(value_64);
         unreachable;
     }
-    if @unlikely(2 >= used) {
+    if @unlikely(2 >= used_65) {
         cold_path;
-        "int_arithmetic.wado/$test_29_u64_narrows_in_a_digit_loop$cold5$dae[$contract_arg_2]"(used);
+        "int_arithmetic.wado/$test_29_u64_narrows_in_a_digit_loop$cold5$dae[$contract_arg_2]"(used_65);
         unreachable;
     }
-    if @unlikely(local.tee value_63(builtin::array_get_value<i32>(elements, 2)) != 3) {
+    if @unlikely(local.tee value_64(builtin::array_get_value<i32>(elements, 2)) != 3) {
         cold_path;
-        "int_arithmetic.wado/$test_29_u64_narrows_in_a_digit_loop$cold4"(value_63);
+        "int_arithmetic.wado/$test_29_u64_narrows_in_a_digit_loop$cold4"(value_64);
         unreachable;
     }
-    if @unlikely(3 >= used) {
+    if @unlikely(3 >= used_65) {
         cold_path;
-        "int_arithmetic.wado/$test_29_u64_narrows_in_a_digit_loop$cold3$dae[$contract_arg_3]"(used);
+        "int_arithmetic.wado/$test_29_u64_narrows_in_a_digit_loop$cold3$dae[$contract_arg_3]"(used_65);
         unreachable;
     }
-    if @unlikely(local.tee value_63(builtin::array_get_value<i32>(elements, 3)) != 2) {
+    if @unlikely(local.tee value_64(builtin::array_get_value<i32>(elements, 3)) != 2) {
         cold_path;
-        "int_arithmetic.wado/$test_29_u64_narrows_in_a_digit_loop$cold2"(value_63);
+        "int_arithmetic.wado/$test_29_u64_narrows_in_a_digit_loop$cold2"(value_64);
         unreachable;
     }
-    if @unlikely(4 >= used) {
+    if @unlikely(4 >= used_65) {
         cold_path;
-        "int_arithmetic.wado/$test_29_u64_narrows_in_a_digit_loop$cold1$dae[$contract_arg_4]"(used);
+        "int_arithmetic.wado/$test_29_u64_narrows_in_a_digit_loop$cold1$dae[$contract_arg_4]"(used_65);
         unreachable;
     }
-    if @unlikely(local.tee used(builtin::array_get_value<i32>(elements, 4)) != 1) {
+    if @unlikely(local.tee used_65(builtin::array_get_value<i32>(elements, 4)) != 1) {
         cold_path;
-        "int_arithmetic.wado/$test_29_u64_narrows_in_a_digit_loop$cold0"(used);
+        "int_arithmetic.wado/$test_29_u64_narrows_in_a_digit_loop$cold0"(used_65);
         unreachable;
     }
 }

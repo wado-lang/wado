@@ -174,11 +174,11 @@ fn "mut_ref_write_back_held_reference.wado/replace_through_the_second_of_a_pair$
 
 fn "mut_ref_write_back_held_reference.wado/replace_through_a_list"(p) {
     let elements: ref "Array<core:prelude/types.wado/Box<mut_ref_write_back_held_reference.wado/Payload>>";
-    let $sroa_held_used_18: i32;
-    $sroa_held_used_18 = builtin::array_len(local.tee elements(array.new_fixed<ref "core:prelude/types.wado//Box<mut_ref_write_back_held_reference.wado/Payload>">(p)));
-    if @unlikely(0 >= $sroa_held_used_18) {
+    let used: i32;
+    used = builtin::array_len(local.tee elements(array.new_fixed<ref "core:prelude/types.wado//Box<mut_ref_write_back_held_reference.wado/Payload>">(p)));
+    if @unlikely(0 >= used) {
         cold_path;
-        "mut_ref_write_back_held_reference.wado/replace_through_a_list$cold0$dae[p,$contract_arg_0]"($sroa_held_used_18);
+        "mut_ref_write_back_held_reference.wado/replace_through_a_list$cold0$dae[p,$contract_arg_0]"(used);
         unreachable;
     }; builtin::array_get_value<ref "core:prelude/types.wado//Box<mut_ref_write_back_held_reference.wado/Payload>">(elements, 0).value = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("listed"), used: 6 };
 }

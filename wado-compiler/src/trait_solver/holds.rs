@@ -375,9 +375,10 @@ impl Query<'_> {
             // The marker owes no body, so its answer's requests are dropped.
             if param.copyable
                 && let Some(copyable) = program.copyable
-                && !elements
-                    .iter()
-                    .all(|element| self.holds(&peel_newtypes(program, element), copyable, &[]).is_some())
+                && !elements.iter().all(|element| {
+                    self.holds(&peel_newtypes(program, element), copyable, &[])
+                        .is_some()
+                })
             {
                 return None;
             }

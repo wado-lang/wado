@@ -138,20 +138,20 @@ fn "array_bounds_elim_oob_loop_dynamic.wado/run"() {
     let arr: ref "core:prelude//List<i32>";
     let i: i32;
     let elements: ref Array<i32>;
-    let value_44: i32;
-    let used: i32;
+    let value_45: i32;
+    let used_46: i32;
     arr = struct.new "core:prelude//List<i32>" { repr: local.tee elements(array.new_fixed<i32>()), used: 0 };
     i = 0;
     b0: block {
         l1: loop {
             break_if b0 i >= 3;
-            value_44 = i * 10;
-            if @unlikely(local.tee used(arr.used) >= builtin::array_len(arr.repr)) {
+            value_45 = i * 10;
+            if @unlikely(local.tee used_46(arr.used) >= builtin::array_len(arr.repr)) {
                 cold_path;
                 "core:prelude/list.wado/core:prelude/list.wado/List<i32>::grow"(arr);
             }
-            builtin::array_set<i32>(arr.repr, used, value_44);
-            arr.used = used + 1;
+            builtin::array_set<i32>(arr.repr, used_46, value_45);
+            arr.used = used_46 + 1;
             i = i + 1;
             continue l1;
         };
@@ -162,9 +162,9 @@ fn "array_bounds_elim_oob_loop_dynamic.wado/run"() {
         "array_bounds_elim_oob_loop_dynamic.wado/run$cold6$dae[$contract_arg_0]"(i);
         unreachable;
     }
-    if @unlikely((local.tee used(builtin::array_get_value<i32>(local.tee elements(arr.repr), 0)) == 0) == 0) {
+    if @unlikely((local.tee used_46(builtin::array_get_value<i32>(local.tee elements(arr.repr), 0)) == 0) == 0) {
         cold_path;
-        "array_bounds_elim_oob_loop_dynamic.wado/run$cold5"(used);
+        "array_bounds_elim_oob_loop_dynamic.wado/run$cold5"(used_46);
         unreachable;
     }
     if @unlikely(1 >= i) {
@@ -172,9 +172,9 @@ fn "array_bounds_elim_oob_loop_dynamic.wado/run"() {
         "array_bounds_elim_oob_loop_dynamic.wado/run$cold4$dae[$contract_arg_1]"(i);
         unreachable;
     }
-    if @unlikely(local.tee used(builtin::array_get_value<i32>(elements, 1)) != 10) {
+    if @unlikely(local.tee used_46(builtin::array_get_value<i32>(elements, 1)) != 10) {
         cold_path;
-        "array_bounds_elim_oob_loop_dynamic.wado/run$cold3"(used);
+        "array_bounds_elim_oob_loop_dynamic.wado/run$cold3"(used_46);
         unreachable;
     }
     if @unlikely(2 >= i) {
@@ -182,9 +182,9 @@ fn "array_bounds_elim_oob_loop_dynamic.wado/run"() {
         "array_bounds_elim_oob_loop_dynamic.wado/run$cold2$dae[$contract_arg_2]"(i);
         unreachable;
     }
-    if @unlikely(local.tee used(builtin::array_get_value<i32>(elements, 2)) != 20) {
+    if @unlikely(local.tee used_46(builtin::array_get_value<i32>(elements, 2)) != 20) {
         cold_path;
-        "array_bounds_elim_oob_loop_dynamic.wado/run$cold1"(used);
+        "array_bounds_elim_oob_loop_dynamic.wado/run$cold1"(used_46);
         unreachable;
     }
     if @unlikely(3 >= i) {

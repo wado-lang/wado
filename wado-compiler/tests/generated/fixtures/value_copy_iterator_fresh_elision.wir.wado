@@ -92,53 +92,53 @@ fn "value_copy_iterator_fresh_elision.wado/run"() with Stdout {
     let $match_6: ref null "value_copy_iterator_fresh_elision.wado//Point";
     let item: ref "value_copy_iterator_fresh_elision.wado//Point";
     let v: ref "value_copy_iterator_fresh_elision.wado//Point";
-    let is_negative_23: bool;
-    let abs_val_24: u64;
-    let digit_count_25: i32;
-    let offset_26: i32;
-    let x_27: i64;
+    let is_negative_24: bool;
+    let abs_val_25: u64;
+    let digit_count_26: i32;
+    let offset_27: i32;
+    let x_28: i64;
     let new_used: i32;
-    let start_40: i32;
-    let is_negative_49: bool;
-    let abs_val_50: u64;
-    let digit_count_51: i32;
-    let offset_52: i32;
-    let x_53: i64;
-    let $sroa_points_repr_55: ref "Array<value_copy_iterator_fresh_elision.wado/Point>";
-    let $sroa_$iter_0_index_60: i32;
-    let $sroa_$f_buf_72: ref "core:prelude/string.wado//String";
-    $sroa_points_repr_55 = global:value_copy_iterator_fresh_elision.wado::$const_obj_4;
-    $sroa_$iter_0_index_60 = 0;
+    let start_41: i32;
+    let is_negative_50: bool;
+    let abs_val_51: u64;
+    let digit_count_52: i32;
+    let offset_53: i32;
+    let x_54: i64;
+    let $sroa_points_repr_56: ref "Array<value_copy_iterator_fresh_elision.wado/Point>";
+    let $sroa_$iter_0_index_61: i32;
+    let $sroa_$f_buf_73: ref "core:prelude/string.wado//String";
+    $sroa_points_repr_56 = global:value_copy_iterator_fresh_elision.wado::$const_obj_4;
+    $sroa_$iter_0_index_61 = 0;
     b0: block {
         l1: loop {
             if ref.is_null(local.tee $match_6($inline_core_prelude_slice_wado_SliceValueIter_value_copy_iterator_fresh_elision_wado_Point__core_prelude_traits_wado_Iterator__next_4: block -> ref null "value_copy_iterator_fresh_elision.wado//Point" {
-                if $sroa_$iter_0_index_60 >= 2 {
+                if $sroa_$iter_0_index_61 >= 2 {
                     break $inline_core_prelude_slice_wado_SliceValueIter_value_copy_iterator_fresh_elision_wado_Point__core_prelude_traits_wado_Iterator__next_4: ref.null none;
                 }
-                item = struct.new "value_copy_iterator_fresh_elision.wado//Point" { x: local.tee v(builtin::array_get_value<ref "value_copy_iterator_fresh_elision.wado//Point">($sroa_points_repr_55, $sroa_$iter_0_index_60)).x, y: v.y };
-                $sroa_$iter_0_index_60 = $sroa_$iter_0_index_60 + 1;
+                item = struct.new "value_copy_iterator_fresh_elision.wado//Point" { x: local.tee v(builtin::array_get_value<ref "value_copy_iterator_fresh_elision.wado//Point">($sroa_points_repr_56, $sroa_$iter_0_index_61)).x, y: v.y };
+                $sroa_$iter_0_index_61 = $sroa_$iter_0_index_61 + 1;
                 break $inline_core_prelude_slice_wado_SliceValueIter_value_copy_iterator_fresh_elision_wado_Point__core_prelude_traits_wado_Iterator__next_4: item;
             })) == 0 {
                 let $variant_payload_1: ref "value_copy_iterator_fresh_elision.wado//Point";
                 x_2 = local.tee $variant_payload_1(ref.as_non_null($match_6)).x;
                 y = $variant_payload_1.y;
-                $sroa_$f_buf_72 = local.tee $local_4(struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(33), used: 0 });
-                is_negative_23 = x_2 < 0;
-                digit_count_25 = "core:prelude/primitive.wado/count_digits_u64"(local.tee abs_val_24(x_27 = builtin::i64_extend_i32_s(x_2); select i64(x_27 < 0_i64, 0_i64 - x_27, x_27)));
-                offset_26 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$sroa[self.buf]$dae[alt_prefix]"($sroa_$f_buf_72, is_negative_23, digit_count_25);
-                "core:prelude/primitive.wado/write_decimal_digits"($sroa_$f_buf_72.repr, offset_26, abs_val_24, digit_count_25);
+                $sroa_$f_buf_73 = local.tee $local_4(struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(33), used: 0 });
+                is_negative_24 = x_2 < 0;
+                digit_count_26 = "core:prelude/primitive.wado/count_digits_u64"(local.tee abs_val_25(x_28 = builtin::i64_extend_i32_s(x_2); select i64(x_28 < 0_i64, 0_i64 - x_28, x_28)));
+                offset_27 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$sroa[self.buf]$dae[alt_prefix]"($sroa_$f_buf_73, is_negative_24, digit_count_26);
+                "core:prelude/primitive.wado/write_decimal_digits"($sroa_$f_buf_73.repr, offset_27, abs_val_25, digit_count_26);
                 if @unlikely(local.tee new_used($local_4.used + 1) > builtin::array_len($local_4.repr)) {
                     cold_path;
                     "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_4, new_used);
                 }
-                start_40 = $local_4.used;
+                start_41 = $local_4.used;
                 $local_4.used = new_used;
-                builtin::array_copy<u8>($local_4.repr, start_40, global:value_copy_iterator_fresh_elision.wado::$const_obj_3, 0, 1);
-                $sroa_$f_buf_72 = $local_4;
-                is_negative_49 = y < 0;
-                digit_count_51 = "core:prelude/primitive.wado/count_digits_u64"(local.tee abs_val_50(x_53 = builtin::i64_extend_i32_s(y); select i64(x_53 < 0_i64, 0_i64 - x_53, x_53)));
-                offset_52 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$sroa[self.buf]$dae[alt_prefix]"($sroa_$f_buf_72, is_negative_49, digit_count_51);
-                "core:prelude/primitive.wado/write_decimal_digits"($sroa_$f_buf_72.repr, offset_52, abs_val_50, digit_count_51);
+                builtin::array_copy<u8>($local_4.repr, start_41, global:value_copy_iterator_fresh_elision.wado::$const_obj_3, 0, 1);
+                $sroa_$f_buf_73 = $local_4;
+                is_negative_50 = y < 0;
+                digit_count_52 = "core:prelude/primitive.wado/count_digits_u64"(local.tee abs_val_51(x_54 = builtin::i64_extend_i32_s(y); select i64(x_54 < 0_i64, 0_i64 - x_54, x_54)));
+                offset_53 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$sroa[self.buf]$dae[alt_prefix]"($sroa_$f_buf_73, is_negative_50, digit_count_52);
+                "core:prelude/primitive.wado/write_decimal_digits"($sroa_$f_buf_73.repr, offset_53, abs_val_51, digit_count_52);
                 "core:cli/println"($local_4.repr, $local_4.used);
             } else {
                 break b0;

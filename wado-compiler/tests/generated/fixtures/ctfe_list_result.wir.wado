@@ -117,9 +117,9 @@ global global:ctfe_list_result.wado::$const_obj_4: ref Array<i32> = array.new_fi
 fn "ctfe_list_result.wado/run"() with Stdout {
     let i_1: i32;
     let $local_2: ref "core:prelude/string.wado//String";
-    let is_negative_35: bool;
+    let is_negative_36: bool;
     let x: i64;
-    let start_79: i32;
+    let start_80: i32;
     i_1 = black_box(2);
     $local_2 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
     if @unlikely(((0 <= i_1) & (i_1 < 5)) == 0) {
@@ -127,25 +127,25 @@ fn "ctfe_list_result.wado/run"() with Stdout {
         "ctfe_list_result.wado/run$cold0$dae[$v1]"(i_1);
         unreachable;
     }
-    is_negative_35 = local.tee i_1(builtin::array_get_value<i32>(global:ctfe_list_result.wado::$const_obj_4, i_1)) < 0;
+    is_negative_36 = local.tee i_1(builtin::array_get_value<i32>(global:ctfe_list_result.wado::$const_obj_4, i_1)) < 0;
     i_1 = "core:prelude/primitive.wado/count_digits_u64"(local.tee x(x = builtin::i64_extend_i32_s(i_1); select i64(x < 0_i64, 0_i64 - x, x)));
-    if is_negative_35 {
-        if @unlikely(local.tee is_negative_35(0 + 1) > builtin::array_len($local_2.repr)) {
+    if is_negative_36 {
+        if @unlikely(local.tee is_negative_36(0 + 1) > builtin::array_len($local_2.repr)) {
             cold_path;
-            "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_2, is_negative_35);
+            "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_2, is_negative_36);
         }
-        start_79 = $local_2.used;
-        $local_2.used = is_negative_35;
-        builtin::array_set_u8($local_2.repr, start_79, 45);
+        start_80 = $local_2.used;
+        $local_2.used = is_negative_36;
+        builtin::array_set_u8($local_2.repr, start_80, 45);
     } else {
     }
-    if @unlikely(local.tee start_79($local_2.used + i_1) > builtin::array_len($local_2.repr)) {
+    if @unlikely(local.tee start_80($local_2.used + i_1) > builtin::array_len($local_2.repr)) {
         cold_path;
-        "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_2, start_79);
+        "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_2, start_80);
     }
-    is_negative_35 = $local_2.used;
-    $local_2.used = start_79;
-    "core:prelude/primitive.wado/write_decimal_digits"($local_2.repr, is_negative_35, x, i_1);
+    is_negative_36 = $local_2.used;
+    $local_2.used = start_80;
+    "core:prelude/primitive.wado/write_decimal_digits"($local_2.repr, is_negative_36, x, i_1);
     "core:cli/println"($local_2.repr, $local_2.used);
 }
 

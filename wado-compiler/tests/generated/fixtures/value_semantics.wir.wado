@@ -81,24 +81,24 @@ global global:value_semantics.wado::$const_obj_4: ref Array<u8> = array.new_fixe
 
 fn "value_semantics.wado/value_semantics_array"() with Stdout {
     let $local_4: ref "core:prelude/string.wado//String";
-    let new_used_79: i32;
-    let start_80: i32;
-    let x_100: i64;
-    let $sroa_b_repr_102: ref Array<i32>;
-    builtin::array_set<i32>(local.tee $sroa_b_repr_102(array.new_fixed<i32>(1, 2, 3)), 0, 99);
+    let new_used_80: i32;
+    let start_81: i32;
+    let x_101: i64;
+    let $sroa_b_repr_103: ref Array<i32>;
+    builtin::array_set<i32>(local.tee $sroa_b_repr_103(array.new_fixed<i32>(1, 2, 3)), 0, 99);
     "core:cli/println"(array.new_data<u8>("a[0]=1"), 6);
     $local_4 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(21), used: 0 };
-    if @unlikely(local.tee new_used_79(0 + 5) > builtin::array_len($local_4.repr)) {
+    if @unlikely(local.tee new_used_80(0 + 5) > builtin::array_len($local_4.repr)) {
         cold_path;
-        "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_4, new_used_79);
+        "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_4, new_used_80);
     }
-    start_80 = $local_4.used;
-    $local_4.used = new_used_79;
-    builtin::array_copy<u8>($local_4.repr, start_80, global:value_semantics.wado::$const_obj_4, 0, 5);
-    new_used_79 = local.tee start_80(builtin::array_get_value<i32>($sroa_b_repr_102, 0)) < 0;
-    start_80 = "core:prelude/primitive.wado/count_digits_u64"(local.tee x_100(x_100 = builtin::i64_extend_i32_s(start_80); select i64(x_100 < 0_i64, 0_i64 - x_100, x_100)));
-    new_used_79 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$sroa[self.buf]$dae[alt_prefix]"($local_4, new_used_79, start_80);
-    "core:prelude/primitive.wado/write_decimal_digits"($local_4.repr, new_used_79, x_100, start_80);
+    start_81 = $local_4.used;
+    $local_4.used = new_used_80;
+    builtin::array_copy<u8>($local_4.repr, start_81, global:value_semantics.wado::$const_obj_4, 0, 5);
+    new_used_80 = local.tee start_81(builtin::array_get_value<i32>($sroa_b_repr_103, 0)) < 0;
+    start_81 = "core:prelude/primitive.wado/count_digits_u64"(local.tee x_101(x_101 = builtin::i64_extend_i32_s(start_81); select i64(x_101 < 0_i64, 0_i64 - x_101, x_101)));
+    new_used_80 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$sroa[self.buf]$dae[alt_prefix]"($local_4, new_used_80, start_81);
+    "core:prelude/primitive.wado/write_decimal_digits"($local_4.repr, new_used_80, x_101, start_81);
     "core:cli/println"($local_4.repr, $local_4.used);
 }
 

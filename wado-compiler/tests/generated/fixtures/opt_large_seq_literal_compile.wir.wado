@@ -972,7 +972,9 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_wri
 }
 
 fn "core:prelude/list.wado/core:prelude/list.wado/List<i32>^core:prelude/traits.wado/From<Array<T>>::from"(elements) {
-    return struct.new "core:prelude//List<i32>" { repr: elements, used: builtin::array_len(elements) };
+    let used: i32;
+    used = builtin::array_len(elements);
+    return struct.new "core:prelude//List<i32>" { repr: elements, used: used };
 }
 
 fn "core:prelude/primitive.wado/i32::fmt_decimal$sroa[self.value]"(self, f) {

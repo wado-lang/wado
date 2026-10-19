@@ -168,17 +168,17 @@ type "functype//core:json/core:json/JsonSerializer^core:serde/Serializer::serial
 
 type "functype//core:prelude/primitive.wado/i32::fmt_into$sroa[self.value]" = fn(i32, ref "core:prelude/format.wado//Formatter");  // TypeId(57)
 
-type "functype//core:prelude/traits.wado/core:serde/SerializeErrorKind^core:prelude/traits.wado/Inspect::inspect$sroa[self.value,f.buf]" = fn("core:serde//enum:SerializeErrorKind", ref "core:prelude/string.wado//String");  // TypeId(58)
+type "functype//core:prelude/primitive.wado/u32::fmt_decimal$sroa[self.value]" = fn(u32, ref "core:prelude/format.wado//Formatter");  // TypeId(58)
 
-type "functype//core:prelude/primitive.wado/u32::fmt_decimal$sroa[self.value]" = fn(u32, ref "core:prelude/format.wado//Formatter");  // TypeId(59)
+type "functype//core:prelude/traits.wado/core:serde/SerializeErrorKind^core:prelude/traits.wado/Inspect::inspect$sroa[self.value,f.buf]" = fn("core:serde//enum:SerializeErrorKind", ref "core:prelude/string.wado//String");  // TypeId(59)
 
 type "functype//core:prelude/string.wado/core:prelude/string.wado/String^core:prelude/string.wado/AsStrSlice::internal_append_to$spec1" = fn(ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String");  // TypeId(60)
 
 type "functype//core:prelude/string.wado/core:prelude/string.wado/String^core:prelude/string.wado/AsStrSlice::internal_append_to$spec2" = fn(ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String");  // TypeId(61)
 
-type "functype//core:serde/[[i32,bool]]^core:serde/Serialize::serialize<core:json/JsonSerializer>$sroa[s.buf]" = fn(ref "tuple//[[i32,bool]]", ref "core:prelude/string.wado//String") -> ref null "core:serde//SerializeError";  // TypeId(62)
+type "functype//core:serde/[i32,bool]^core:serde/Serialize::serialize<core:json/JsonSerializer>$sroa[s.buf]" = fn(i32, bool, ref "core:prelude/string.wado//String") -> ref null "core:serde//SerializeError";  // TypeId(62)
 
-type "functype//core:serde/[i32,bool]^core:serde/Serialize::serialize<core:json/JsonSerializer>$sroa[s.buf]" = fn(i32, bool, ref "core:prelude/string.wado//String") -> ref null "core:serde//SerializeError";  // TypeId(63)
+type "functype//core:serde/[[i32,bool]]^core:serde/Serialize::serialize<core:json/JsonSerializer>$sroa[s.buf]" = fn(ref "tuple//[[i32,bool]]", ref "core:prelude/string.wado//String") -> ref null "core:serde//SerializeError";  // TypeId(63)
 
 type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$sroa[self.buf]$dae[alt_prefix]" = fn(ref "core:prelude/string.wado//String", bool, i32) -> i32;  // TypeId(64)
 
@@ -210,11 +210,11 @@ import fn wasi/stream-drop-readable from "wasi/stream-drop-readable";
 
 global global:core:prelude/format.wado::$const_obj_24: ref Array<u8> = array.new_fixed<u8>(46, 46, 46);
 global global:core:prelude/format.wado::$const_obj_25: ref Array<u8> = array.new_fixed<u8>(92, 117, 123);
-global global:core:json::$const_obj_77: ref Array<u8> = array.new_fixed<u8>(102, 97, 108, 115, 101);
-global global:core:json::$const_obj_78: ref Array<u8> = array.new_fixed<u8>(116, 114, 117, 101);
-global global:core:serde::$const_obj_104: ref Array<u8> = array.new_fixed<u8>(93);
-global global:core:serde::$const_obj_105: ref Array<u8> = array.new_fixed<u8>(91);
-global global:core:serde::$const_obj_107: ref Array<u8> = array.new_fixed<u8>(44);
+global global:core:json::$const_obj_76: ref Array<u8> = array.new_fixed<u8>(102, 97, 108, 115, 101);
+global global:core:json::$const_obj_77: ref Array<u8> = array.new_fixed<u8>(116, 114, 117, 101);
+global global:core:serde::$const_obj_89: ref Array<u8> = array.new_fixed<u8>(93);
+global global:core:serde::$const_obj_90: ref Array<u8> = array.new_fixed<u8>(44);
+global global:core:serde::$const_obj_91: ref Array<u8> = array.new_fixed<u8>(91);
 global global:core:builtin::$unit_case$core:prelude/types.wado//Option<char>$0: ref "core:prelude/types.wado//Option<char>" = struct.new "core:prelude/types.wado//Option<char>" { 0 };
 
 fn "variadic_pack_arg_arity_one.wado/$cm_export__$test_0_a_spreading_target_takes_a_one_element_tuple_whole"() {
@@ -1664,7 +1664,7 @@ fn "core:json/core:json/JsonSerializer^core:serde/Serializer::serialize_bool$sro
         }
         start_15 = self.used;
         self.used = v;
-        builtin::array_copy<u8>(self.repr, start_15, global:core:json::$const_obj_78, 0, 4);
+        builtin::array_copy<u8>(self.repr, start_15, global:core:json::$const_obj_77, 0, 4);
     } else {
         if @unlikely(local.tee start_15(self.used + 5) > builtin::array_len(self.repr)) {
             cold_path;
@@ -1672,7 +1672,7 @@ fn "core:json/core:json/JsonSerializer^core:serde/Serializer::serialize_bool$sro
         }
         v = self.used;
         self.used = start_15;
-        builtin::array_copy<u8>(self.repr, v, global:core:json::$const_obj_77, 0, 5);
+        builtin::array_copy<u8>(self.repr, v, global:core:json::$const_obj_76, 0, 5);
     }
     return ref.null none;
 }
@@ -1688,6 +1688,18 @@ fn "core:prelude/primitive.wado/i32::fmt_into$sroa[self.value]"(self, f) {
         "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>"(f, is_negative, $mv_field_3, 0, self);
     };
     "core:prelude/primitive.wado/write_decimal_digits"(f.buf.repr, is_negative, x, self);
+}
+
+fn "core:prelude/primitive.wado/u32::fmt_decimal$sroa[self.value]"(self, f) {
+    let value: u64;
+    let offset: i32;
+    self = "core:prelude/primitive.wado/count_digits_u64"(local.tee value(builtin::i64_extend_i32_u(self)));
+    offset = block -> i32 {
+        let $mv_field_3: ref Array<u8>;
+        $mv_field_3 = builtin::array_new<u8>(0);
+        "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>"(f, 0, $mv_field_3, 0, self);
+    };
+    "core:prelude/primitive.wado/write_decimal_digits"(f.buf.repr, offset, value, self);
 }
 
 fn "core:prelude/traits.wado/core:serde/SerializeErrorKind^core:prelude/traits.wado/Inspect::inspect$sroa[self.value,f.buf]"(self, f) {
@@ -1709,18 +1721,6 @@ fn "core:prelude/traits.wado/core:serde/SerializeErrorKind^core:prelude/traits.w
         s_9 = $mv$$tuple_0$1.case_name;
         "core:prelude/string.wado/core:prelude/string.wado/String::push_str<&core:prelude/string.wado/String>"(f, s_9);
     }
-}
-
-fn "core:prelude/primitive.wado/u32::fmt_decimal$sroa[self.value]"(self, f) {
-    let value: u64;
-    let offset: i32;
-    self = "core:prelude/primitive.wado/count_digits_u64"(local.tee value(builtin::i64_extend_i32_u(self)));
-    offset = block -> i32 {
-        let $mv_field_3: ref Array<u8>;
-        $mv_field_3 = builtin::array_new<u8>(0);
-        "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>"(f, 0, $mv_field_3, 0, self);
-    };
-    "core:prelude/primitive.wado/write_decimal_digits"(f.buf.repr, offset, value, self);
 }
 
 fn "core:prelude/string.wado/core:prelude/string.wado/String^core:prelude/string.wado/AsStrSlice::internal_append_to$spec1"(self, out) {
@@ -1747,35 +1747,6 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String^core:prelude/string
     builtin::array_copy<u8>(out.repr, start_9, self.repr, 0, 1);
 }
 
-fn "core:serde/[[i32,bool]]^core:serde/Serialize::serialize<core:json/JsonSerializer>$sroa[s.buf]"(self, s) {
-    let $qm_e_7: ref "core:serde//SerializeError";
-    let v_9: ref "tuple//[i32, bool]";
-    let new_used_24: i32;
-    let start_25: i32;
-    let r: ref null "core:serde//SerializeError";
-    if @unlikely(local.tee new_used_24(s.used + 1) > builtin::array_len(s.repr)) {
-        cold_path;
-        "core:prelude/string.wado/core:prelude/string.wado/String::grow"(s, new_used_24);
-    }
-    start_25 = s.used;
-    s.used = new_used_24;
-    builtin::array_copy<u8>(s.repr, start_25, global:core:serde::$const_obj_105, 0, 1);
-    if @likely(ref.is_null(local.tee r("core:serde/[i32,bool]^core:serde/Serialize::serialize<core:json/JsonSerializer>$sroa[s.buf]"(local.tee v_9(self.0).0, v_9.1, s)))) {
-    } else {
-        $qm_e_7 = ref.as_non_null(r);
-        cold_path;
-        return $qm_e_7;
-    }
-    if @unlikely(local.tee start_25(s.used + 1) > builtin::array_len(s.repr)) {
-        cold_path;
-        "core:prelude/string.wado/core:prelude/string.wado/String::grow"(s, start_25);
-    }
-    new_used_24 = s.used;
-    s.used = start_25;
-    builtin::array_copy<u8>(s.repr, new_used_24, global:core:serde::$const_obj_104, 0, 1);
-    return ref.null none;
-}
-
 fn "core:serde/[i32,bool]^core:serde/Serialize::serialize<core:json/JsonSerializer>$sroa[s.buf]"($mv$self$0, $mv$self$1, s) {
     let $local_12: ref "core:serde//SerializeError";
     let new_used_28: i32;
@@ -1788,7 +1759,7 @@ fn "core:serde/[i32,bool]^core:serde/Serialize::serialize<core:json/JsonSerializ
     }
     start_29 = s.used;
     s.used = new_used_28;
-    builtin::array_copy<u8>(s.repr, start_29, global:core:serde::$const_obj_105, 0, 1);
+    builtin::array_copy<u8>(s.repr, start_29, global:core:serde::$const_obj_91, 0, 1);
     start_29 = $mv$self$0 < 0;
     $mv$self$0 = "core:prelude/primitive.wado/count_digits_u64"(local.tee x(x = builtin::i64_extend_i32_s($mv$self$0); select i64(x < 0_i64, 0_i64 - x, x)));
     start_29 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$sroa[self.buf]$dae[alt_prefix]"(s, start_29, $mv$self$0);
@@ -1799,7 +1770,7 @@ fn "core:serde/[i32,bool]^core:serde/Serialize::serialize<core:json/JsonSerializ
     }
     start_29 = s.used;
     s.used = $mv$self$0;
-    builtin::array_copy<u8>(s.repr, start_29, global:core:serde::$const_obj_107, 0, 1);
+    builtin::array_copy<u8>(s.repr, start_29, global:core:serde::$const_obj_90, 0, 1);
     if @likely(ref.is_null(local.tee r_54("core:json/core:json/JsonSerializer^core:serde/Serializer::serialize_bool$sroa[self.buf]"(s, $mv$self$1)))) {
     } else {
         $local_12 = ref.as_non_null(r_54);
@@ -1812,7 +1783,36 @@ fn "core:serde/[i32,bool]^core:serde/Serialize::serialize<core:json/JsonSerializ
     }
     start_29 = s.used;
     s.used = $mv$self$1;
-    builtin::array_copy<u8>(s.repr, start_29, global:core:serde::$const_obj_104, 0, 1);
+    builtin::array_copy<u8>(s.repr, start_29, global:core:serde::$const_obj_89, 0, 1);
+    return ref.null none;
+}
+
+fn "core:serde/[[i32,bool]]^core:serde/Serialize::serialize<core:json/JsonSerializer>$sroa[s.buf]"(self, s) {
+    let $qm_e_7: ref "core:serde//SerializeError";
+    let v_9: ref "tuple//[i32, bool]";
+    let new_used_24: i32;
+    let start_25: i32;
+    let r: ref null "core:serde//SerializeError";
+    if @unlikely(local.tee new_used_24(s.used + 1) > builtin::array_len(s.repr)) {
+        cold_path;
+        "core:prelude/string.wado/core:prelude/string.wado/String::grow"(s, new_used_24);
+    }
+    start_25 = s.used;
+    s.used = new_used_24;
+    builtin::array_copy<u8>(s.repr, start_25, global:core:serde::$const_obj_91, 0, 1);
+    if @likely(ref.is_null(local.tee r("core:serde/[i32,bool]^core:serde/Serialize::serialize<core:json/JsonSerializer>$sroa[s.buf]"(local.tee v_9(self.0).0, v_9.1, s)))) {
+    } else {
+        $qm_e_7 = ref.as_non_null(r);
+        cold_path;
+        return $qm_e_7;
+    }
+    if @unlikely(local.tee start_25(s.used + 1) > builtin::array_len(s.repr)) {
+        cold_path;
+        "core:prelude/string.wado/core:prelude/string.wado/String::grow"(s, start_25);
+    }
+    new_used_24 = s.used;
+    s.used = start_25;
+    builtin::array_copy<u8>(s.repr, new_used_24, global:core:serde::$const_obj_89, 0, 1);
     return ref.null none;
 }
 

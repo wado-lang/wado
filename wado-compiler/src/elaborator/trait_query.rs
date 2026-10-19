@@ -2374,11 +2374,9 @@ impl TypeSystem {
                 let ast::Type::TypePackSpread(name, _) = elem else {
                     return true;
                 };
-                bounds_map.get(name.as_str()).is_none_or(|param| {
-                    type_args
-                        .iter()
-                        .all(|&type_arg| holds(param, type_arg))
-                })
+                bounds_map
+                    .get(name.as_str())
+                    .is_none_or(|param| type_args.iter().all(|&type_arg| holds(param, type_arg)))
             });
         }
         true

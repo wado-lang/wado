@@ -158,45 +158,45 @@ global global:core:builtin::$unit_case$core:prelude/types.wado//Option<i32>$0: r
 
 fn "ice_array_iter_into_iterator.wado/run"() with Stdout {
     let s: ref "core:prelude/string.wado//String";
-    let bytes_4: ref "core:prelude//List<u8>";
+    let bytes_5: ref "core:prelude//List<u8>";
     let prefix: i32;
-    let $sroa_slot_24: i32;
-    let $sroa_slot_25: ref null "core:prelude/string.wado//String";
-    let end_34: i32;
+    let $sroa_slot_25: i32;
+    let $sroa_slot_26: ref null "core:prelude/string.wado//String";
+    let end_35: i32;
     let out: ref Array<u8>;
-    let $sroa_arr_repr_41: ref Array<u8>;
-    $sroa_arr_repr_41 = array.new_data<u8>("Hello");
-    $sroa_slot_24 = 0;
-    $sroa_slot_25 = ref.null none;
+    let $sroa_arr_repr_42: ref Array<u8>;
+    $sroa_arr_repr_42 = array.new_data<u8>("Hello");
+    $sroa_slot_25 = 0;
+    $sroa_slot_26 = ref.null none;
     $inline_core_prelude_string_wado_String__try_from_utf8_core_prelude_bytes_wado_ByteList__sroa_return__2: block {
-        end_34 = local.tee bytes_4("core:prelude/list.wado/core:prelude/list.wado/List<u8>^core:prelude/traits.wado/FromIterator::from_iter<core:prelude/slice.wado/SliceValueIter<u8>>"(struct.new "core:prelude/slice.wado//SliceValueIter<u8>" { repr: $sroa_arr_repr_41, index: 0, end: 5 })).used;
-        $sroa_arr_repr_41 = bytes_4.repr;
+        end_35 = local.tee bytes_5("core:prelude/list.wado/core:prelude/list.wado/List<u8>^core:prelude/traits.wado/FromIterator::from_iter<core:prelude/slice.wado/SliceValueIter<u8>>"(struct.new "core:prelude/slice.wado//SliceValueIter<u8>" { repr: $sroa_arr_repr_42, index: 0, end: 5 })).used;
+        $sroa_arr_repr_42 = bytes_5.repr;
         if @unlikely(local.tee prefix(block -> i32 {
-            "core:prelude/string.wado/core:prelude/string.wado/String::utf8_valid_prefix"($sroa_arr_repr_41, 0, end_34);
-        }) != end_34) {
+            "core:prelude/string.wado/core:prelude/string.wado/String::utf8_valid_prefix"($sroa_arr_repr_42, 0, end_35);
+        }) != end_35) {
             cold_path;
-            $sroa_slot_24 = 1;
-            $sroa_slot_25 = ref.null none;
+            $sroa_slot_25 = 1;
+            $sroa_slot_26 = ref.null none;
             drop(block -> ref "core:prelude/string.wado//Utf8Error" {
-                if @unlikely(prefix == end_34) {
+                if @unlikely(prefix == end_35) {
                     cold_path;
-                    "core:prelude/string.wado/core:prelude/string.wado/String::try_from_utf8<core:prelude/bytes.wado/ByteList>$cold0$dae[bytes]"(prefix, end_34);
+                    "core:prelude/string.wado/core:prelude/string.wado/String::try_from_utf8<core:prelude/bytes.wado/ByteList>$cold0$dae[bytes]"(prefix, end_35);
                     unreachable;
                 }
                 let $mv_error_len_9: ref "core:prelude/types.wado//Option<i32>";
-                multivalue_bind [prefix, $mv_error_len_9] = "core:prelude/string.wado/core:prelude/string.wado/String::utf8_error_at$unchecked"($sroa_arr_repr_41, 0, prefix);
+                multivalue_bind [prefix, $mv_error_len_9] = "core:prelude/string.wado/core:prelude/string.wado/String::utf8_error_at$unchecked"($sroa_arr_repr_42, 0, prefix);
                 struct.new "core:prelude/string.wado//Utf8Error" { valid_up_to: prefix, error_len: $mv_error_len_9 };
             });
             break $inline_core_prelude_string_wado_String__try_from_utf8_core_prelude_bytes_wado_ByteList__sroa_return__2;
         }
-        $sroa_slot_24 = 0;
-        $sroa_slot_25 = struct.new "core:prelude/string.wado//String" { repr: out = builtin::array_new<u8>(select i32(end_34 > 0, end_34, 0)); if end_34 > 0 {
-            builtin::array_copy<u8>(out, 0, $sroa_arr_repr_41, 0, end_34);
-        }; out, used: end_34 };
+        $sroa_slot_25 = 0;
+        $sroa_slot_26 = struct.new "core:prelude/string.wado//String" { repr: out = builtin::array_new<u8>(select i32(end_35 > 0, end_35, 0)); if end_35 > 0 {
+            builtin::array_copy<u8>(out, 0, $sroa_arr_repr_42, 0, end_35);
+        }; out, used: end_35 };
         break $inline_core_prelude_string_wado_String__try_from_utf8_core_prelude_bytes_wado_ByteList__sroa_return__2;
     };
-    if $sroa_slot_24 == 0 {
-        "core:cli/println"(local.tee s(ref.as_non_null($sroa_slot_25)).repr, s.used);
+    if $sroa_slot_25 == 0 {
+        "core:cli/println"(local.tee s(ref.as_non_null($sroa_slot_26)).repr, s.used);
     } else {
     }
 }
@@ -1080,28 +1080,28 @@ fn "core:prelude/slice.wado/core:prelude/slice.wado/Slice<u8>^core:prelude/trait
 fn "core:prelude/list.wado/core:prelude/list.wado/List<u8>^core:prelude/traits.wado/FromIterator::from_iter<core:prelude/slice.wado/SliceValueIter<u8>>"(iter) {
     let result: ref "core:prelude//List<u8>";
     let elements: ref Array<u8>;
-    let item_6: u8;
-    let used: i32;
-    let $licm_end_15: i32;
-    let $hfs_index_17: i32;
+    let item_7: u8;
+    let used_10: i32;
+    let $licm_end_16: i32;
+    let $hfs_index_18: i32;
     result = struct.new "core:prelude//List<u8>" { repr: local.tee elements(array.new_fixed<u8>()), used: 0 };
-    $licm_end_15 = iter.end;
+    $licm_end_16 = iter.end;
     elements = iter.repr;
-    $hfs_index_17 = iter.index;
+    $hfs_index_18 = iter.index;
     b157: block {
         l158: loop {
-            if $hfs_index_17 >= $licm_end_15 {
-                iter.index = $hfs_index_17;
+            if $hfs_index_18 >= $licm_end_16 {
+                iter.index = $hfs_index_18;
                 break b157;
             }
-            item_6 = builtin::array_get_value<u8>(elements, $hfs_index_17);
-            $hfs_index_17 = $hfs_index_17 + 1;
-            if @unlikely(local.tee used(result.used) >= builtin::array_len(result.repr)) {
+            item_7 = builtin::array_get_value<u8>(elements, $hfs_index_18);
+            $hfs_index_18 = $hfs_index_18 + 1;
+            if @unlikely(local.tee used_10(result.used) >= builtin::array_len(result.repr)) {
                 cold_path;
                 "core:prelude/list.wado/core:prelude/list.wado/List<u8>::grow"(result);
             }
-            builtin::array_set_u8(result.repr, used, item_6);
-            result.used = used + 1;
+            builtin::array_set_u8(result.repr, used_10, item_7);
+            result.used = used_10 + 1;
             continue l158;
         };
     };

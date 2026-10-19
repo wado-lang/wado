@@ -70,14 +70,14 @@ import fn wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code 
 import fn wasi/stream-drop-readable from "wasi/stream-drop-readable";
 
 fn "mut_ref_literal_coercion.wado/run"() with Stdout {
-    let xs_72: ref "core:prelude//List<i32>";
-    xs_72 = struct.new "core:prelude//List<i32>" { repr: array.new_fixed<i32>(1, 2, 3), used: 3 };
-    if @unlikely(3 >= builtin::array_len(xs_72.repr)) {
+    let xs_74: ref "core:prelude//List<i32>";
+    xs_74 = struct.new "core:prelude//List<i32>" { repr: array.new_fixed<i32>(1, 2, 3), used: 3 };
+    if @unlikely(3 >= builtin::array_len(xs_74.repr)) {
         cold_path;
-        "core:prelude/list.wado/core:prelude/list.wado/List<i32>::grow"(xs_72);
+        "core:prelude/list.wado/core:prelude/list.wado/List<i32>::grow"(xs_74);
     }
-    builtin::array_set<i32>(xs_72.repr, 3, 4);
-    xs_72.used = 4;
+    builtin::array_set<i32>(xs_74.repr, 3, 4);
+    xs_74.used = 4;
     "core:cli/println"(array.new_data<u8>("mut ref literal coercion: ok"), 28);
 }
 

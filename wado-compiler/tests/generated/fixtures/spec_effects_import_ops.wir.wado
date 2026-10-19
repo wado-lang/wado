@@ -2108,27 +2108,27 @@ fn "core:prelude/list.wado/core:prelude/list.wado/List<u8>^core:prelude/traits.w
     let result: ref "core:prelude//List<u8>";
     let elements: ref Array<u8>;
     let byte: u8;
-    let used: i32;
-    let $licm_used_17: i32;
-    let $hfs_index_19: i32;
+    let used_12: i32;
+    let $licm_used_18: i32;
+    let $hfs_index_20: i32;
     result = struct.new "core:prelude//List<u8>" { repr: local.tee elements(array.new_fixed<u8>()), used: 0 };
-    $licm_used_17 = iter.used;
+    $licm_used_18 = iter.used;
     elements = iter.repr;
-    $hfs_index_19 = iter.index;
+    $hfs_index_20 = iter.index;
     b243: block {
         l244: loop {
-            if $hfs_index_19 >= $licm_used_17 {
-                iter.index = $hfs_index_19;
+            if $hfs_index_20 >= $licm_used_18 {
+                iter.index = $hfs_index_20;
                 break b243;
             }
-            byte = builtin::array_get_value<u8>(elements, $hfs_index_19);
-            $hfs_index_19 = $hfs_index_19 + 1;
-            if @unlikely(local.tee used(result.used) >= builtin::array_len(result.repr)) {
+            byte = builtin::array_get_value<u8>(elements, $hfs_index_20);
+            $hfs_index_20 = $hfs_index_20 + 1;
+            if @unlikely(local.tee used_12(result.used) >= builtin::array_len(result.repr)) {
                 cold_path;
                 "core:prelude/list.wado/core:prelude/list.wado/List<u8>::grow"(result);
             }
-            builtin::array_set_u8(result.repr, used, byte);
-            result.used = used + 1;
+            builtin::array_set_u8(result.repr, used_12, byte);
+            result.used = used_12 + 1;
             continue l244;
         };
     };

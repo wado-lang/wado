@@ -121,26 +121,26 @@ fn "const_object_globalization_large_ref_array.wado/run"() with Stdout {
     let i_0: i32;
     let $local_2: ref "core:prelude/string.wado//String";
     let $contract_arg_0: i32;
-    let is_negative_20: bool;
+    let is_negative_21: bool;
     let abs_val: u64;
-    let digit_count_22: i32;
+    let digit_count_23: i32;
     let x: i64;
     let pos: i32;
     let t: u64;
     let q: u64;
     let pair: i32;
     let tens: i32;
-    let new_used_46: i32;
-    let start_47: i32;
-    let other_50: ref "core:prelude/string.wado//String";
-    let n_62: i32;
-    let new_used_66: i32;
-    let start_67: i32;
-    let $sroa_table_repr_69: ref "Array<core:prelude/string.wado/String>";
-    let new_used_108: i32;
-    let start_109: i32;
-    let new_used_163: i32;
-    let start_164: i32;
+    let new_used_47: i32;
+    let start_48: i32;
+    let other_51: ref "core:prelude/string.wado//String";
+    let n_63: i32;
+    let new_used_67: i32;
+    let start_68: i32;
+    let $sroa_table_repr_70: ref "Array<core:prelude/string.wado/String>";
+    let new_used_109: i32;
+    let start_110: i32;
+    let new_used_164: i32;
+    let start_165: i32;
     i_0 = 0;
     b0: block {
         l1: loop {
@@ -409,12 +409,12 @@ fn "const_object_globalization_large_ref_array.wado/run"() with Stdout {
                 builtin::array_set<ref "core:prelude/string.wado//String">($wir_arr_init_1, 259, struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(120), used: 1 });
                 global:const_object_globalization_large_ref_array.wado::$const_obj_1 = ref.as_non_null($wir_arr_init_1);
             }
-            $sroa_table_repr_69 = global:const_object_globalization_large_ref_array.wado::$const_obj_1;
+            $sroa_table_repr_70 = global:const_object_globalization_large_ref_array.wado::$const_obj_1;
             $local_2 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(33), used: 0 };
-            is_negative_20 = i_0 < 0;
+            is_negative_21 = i_0 < 0;
             x = builtin::i64_extend_i32_s(i_0);
             abs_val = select i64(x < 0_i64, 0_i64 - x, x);
-            digit_count_22 = $inline_count_digits_u64_8: block -> i32 {
+            digit_count_23 = $inline_count_digits_u64_8: block -> i32 {
                 if abs_val <u 100000_i64 {
                     if abs_val <u 100_i64 {
                         if abs_val <u 10_i64 {
@@ -474,28 +474,28 @@ fn "const_object_globalization_large_ref_array.wado/run"() with Stdout {
                 }
                 break $inline_count_digits_u64_8: 20;
             };
-            if is_negative_20 {
-                if @unlikely(local.tee new_used_108(0 + 1) > builtin::array_len($local_2.repr)) {
+            if is_negative_21 {
+                if @unlikely(local.tee new_used_109(0 + 1) > builtin::array_len($local_2.repr)) {
                     cold_path;
-                    "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_2, new_used_108);
+                    "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_2, new_used_109);
                 }
-                start_109 = $local_2.used;
-                $local_2.used = new_used_108;
-                builtin::array_set_u8($local_2.repr, start_109, 45);
+                start_110 = $local_2.used;
+                $local_2.used = new_used_109;
+                builtin::array_set_u8($local_2.repr, start_110, 45);
             } else {
             }
-            if @unlikely(local.tee new_used_163($local_2.used + digit_count_22) > builtin::array_len($local_2.repr)) {
+            if @unlikely(local.tee new_used_164($local_2.used + digit_count_23) > builtin::array_len($local_2.repr)) {
                 cold_path;
-                "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_2, new_used_163);
+                "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_2, new_used_164);
             }
-            start_164 = $local_2.used;
-            $local_2.used = new_used_163;
+            start_165 = $local_2.used;
+            $local_2.used = new_used_164;
             $load_6 = $local_2.repr;
-            pos = start_164 + digit_count_22;
+            pos = start_165 + digit_count_23;
             t = abs_val;
             b25: block {
                 l26: loop {
-                    break_if b25 (pos - start_164) < 2;
+                    break_if b25 (pos - start_165) < 2;
                     q = t /u 100_i64;
                     tens = local.tee pair(builtin::i32_wrap_i64(t - (q * 100_i64))) / 10;
                     builtin::array_set_u8($load_6, pos - 1, ((48 + pair) - (tens * 10)) & 255);
@@ -505,32 +505,32 @@ fn "const_object_globalization_large_ref_array.wado/run"() with Stdout {
                     continue l26;
                 };
             };
-            if pos > start_164 {
-                builtin::array_set_u8($load_6, start_164, (48 + builtin::i32_wrap_i64(t %u 10_i64)) & 255);
+            if pos > start_165 {
+                builtin::array_set_u8($load_6, start_165, (48 + builtin::i32_wrap_i64(t %u 10_i64)) & 255);
             }
-            if @unlikely(local.tee new_used_46($local_2.used + 1) > builtin::array_len($load_6)) {
+            if @unlikely(local.tee new_used_47($local_2.used + 1) > builtin::array_len($load_6)) {
                 cold_path;
-                "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_2, new_used_46);
+                "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_2, new_used_47);
             }
-            start_47 = $local_2.used;
-            $local_2.used = new_used_46;
-            builtin::array_copy<u8>(local.tee $load_9($local_2.repr), start_47, global:const_object_globalization_large_ref_array.wado::$const_obj_0, 0, 1);
+            start_48 = $local_2.used;
+            $local_2.used = new_used_47;
+            builtin::array_copy<u8>(local.tee $load_9($local_2.repr), start_48, global:const_object_globalization_large_ref_array.wado::$const_obj_0, 0, 1);
             $contract_arg_0 = black_box(3);
             if @unlikely(((0 <= $contract_arg_0) & ($contract_arg_0 < 260)) == 0) {
                 cold_path;
                 "const_object_globalization_large_ref_array.wado/run$cold0$dae[$v1]"($contract_arg_0);
                 unreachable;
             }
-            other_50 = builtin::array_get_value<ref "core:prelude/string.wado//String">($sroa_table_repr_69, $contract_arg_0);
+            other_51 = builtin::array_get_value<ref "core:prelude/string.wado//String">($sroa_table_repr_70, $contract_arg_0);
             $inline_core_prelude_string_wado_String__internal_push_string_20: block {
-                break_if $inline_core_prelude_string_wado_String__internal_push_string_20 local.tee n_62(other_50.used) == 0;
-                if @unlikely(local.tee new_used_66($local_2.used + n_62) > builtin::array_len($load_9)) {
+                break_if $inline_core_prelude_string_wado_String__internal_push_string_20 local.tee n_63(other_51.used) == 0;
+                if @unlikely(local.tee new_used_67($local_2.used + n_63) > builtin::array_len($load_9)) {
                     cold_path;
-                    "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_2, new_used_66);
+                    "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_2, new_used_67);
                 }
-                start_67 = $local_2.used;
-                $local_2.used = new_used_66;
-                builtin::array_copy<u8>($local_2.repr, start_67, other_50.repr, 0, n_62);
+                start_68 = $local_2.used;
+                $local_2.used = new_used_67;
+                builtin::array_copy<u8>($local_2.repr, start_68, other_51.repr, 0, n_63);
             };
             "core:cli/println"($local_2.repr, $local_2.used);
             i_0 = i_0 + 1;

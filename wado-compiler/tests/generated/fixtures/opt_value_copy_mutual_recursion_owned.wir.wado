@@ -173,47 +173,48 @@ fn "opt_value_copy_mutual_recursion_owned.wado/lower_y"(d) {
     if (d % 2) == 0 {
         return "opt_value_copy_mutual_recursion_owned.wado/lower_x"(d - 1);
     }
-    kids = struct.new "core:prelude//List<opt_value_copy_mutual_recursion_owned.wado/Node>" { repr: local.tee elements(array.new_fixed<ref "opt_value_copy_mutual_recursion_owned.wado//Node">("opt_value_copy_mutual_recursion_owned.wado/lower_x"(d - 1))), used: builtin::array_len(elements) };
+    d = builtin::array_len(local.tee elements(array.new_fixed<ref "opt_value_copy_mutual_recursion_owned.wado//Node">("opt_value_copy_mutual_recursion_owned.wado/lower_x"(d - 1))));
+    kids = struct.new "core:prelude//List<opt_value_copy_mutual_recursion_owned.wado/Node>" { repr: elements, used: d };
     return struct.new "opt_value_copy_mutual_recursion_owned.wado//Node::N" { discriminant: 1, payload_0: kids };
 }
 
 fn "opt_value_copy_mutual_recursion_owned.wado/run"() with Stdout {
     let out_0: ref "core:prelude//List<opt_value_copy_mutual_recursion_owned.wado/Node>";
     let $local_1: ref "core:prelude/string.wado//String";
-    let value_12: ref "opt_value_copy_mutual_recursion_owned.wado//Node";
-    let self_20: i32;
-    let is_negative_27: bool;
-    let x_31: i64;
-    let $sroa_$f_buf_76: ref "core:prelude/string.wado//String";
+    let value_13: ref "opt_value_copy_mutual_recursion_owned.wado//Node";
+    let self_21: i32;
+    let is_negative_28: bool;
+    let x_32: i64;
+    let $sroa_$f_buf_77: ref "core:prelude/string.wado//String";
     out_0 = struct.new "core:prelude//List<opt_value_copy_mutual_recursion_owned.wado/Node>" { repr: array.new_fixed<ref "opt_value_copy_mutual_recursion_owned.wado//Node">(), used: 0 };
-    value_12 = "opt_value_copy_mutual_recursion_owned.wado/lower_x"(4);
+    value_13 = "opt_value_copy_mutual_recursion_owned.wado/lower_x"(4);
     if @unlikely(0 >= builtin::array_len(out_0.repr)) {
         cold_path;
         "core:prelude/list.wado/core:prelude/list.wado/List<opt_value_copy_mutual_recursion_owned.wado/Node>::grow"(out_0);
     }
-    builtin::array_set<ref "opt_value_copy_mutual_recursion_owned.wado//Node">(out_0.repr, 0, value_12);
+    builtin::array_set<ref "opt_value_copy_mutual_recursion_owned.wado//Node">(out_0.repr, 0, value_13);
     out_0.used = 0 + 1;
-    $sroa_$f_buf_76 = local.tee $local_1(struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(33), used: 0 });
-    is_negative_27 = local.tee self_20(out_0.used) < 0;
-    self_20 = "core:prelude/primitive.wado/count_digits_u64"(local.tee x_31(x_31 = builtin::i64_extend_i32_s(self_20); select i64(x_31 < 0_i64, 0_i64 - x_31, x_31)));
-    is_negative_27 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$sroa[self.buf]$dae[alt_prefix]"($sroa_$f_buf_76, is_negative_27, self_20);
-    "core:prelude/primitive.wado/write_decimal_digits"($sroa_$f_buf_76.repr, is_negative_27, x_31, self_20);
-    if @unlikely(local.tee self_20($local_1.used + 1) > builtin::array_len($local_1.repr)) {
+    $sroa_$f_buf_77 = local.tee $local_1(struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(33), used: 0 });
+    is_negative_28 = local.tee self_21(out_0.used) < 0;
+    self_21 = "core:prelude/primitive.wado/count_digits_u64"(local.tee x_32(x_32 = builtin::i64_extend_i32_s(self_21); select i64(x_32 < 0_i64, 0_i64 - x_32, x_32)));
+    is_negative_28 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$sroa[self.buf]$dae[alt_prefix]"($sroa_$f_buf_77, is_negative_28, self_21);
+    "core:prelude/primitive.wado/write_decimal_digits"($sroa_$f_buf_77.repr, is_negative_28, x_32, self_21);
+    if @unlikely(local.tee self_21($local_1.used + 1) > builtin::array_len($local_1.repr)) {
         cold_path;
-        "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_1, self_20);
+        "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_1, self_21);
     }
-    is_negative_27 = $local_1.used;
-    $local_1.used = self_20;
-    builtin::array_copy<u8>($local_1.repr, is_negative_27, global:opt_value_copy_mutual_recursion_owned.wado::$const_obj_5, 0, 1);
-    $sroa_$f_buf_76 = $local_1;
-    self_20 = local.tee is_negative_27("opt_value_copy_mutual_recursion_owned.wado/depth$sroa[n.value]"(is_negative_27 = out_0.used; if @unlikely(0 >= is_negative_27) {
+    is_negative_28 = $local_1.used;
+    $local_1.used = self_21;
+    builtin::array_copy<u8>($local_1.repr, is_negative_28, global:opt_value_copy_mutual_recursion_owned.wado::$const_obj_5, 0, 1);
+    $sroa_$f_buf_77 = $local_1;
+    self_21 = local.tee is_negative_28("opt_value_copy_mutual_recursion_owned.wado/depth$sroa[n.value]"(is_negative_28 = out_0.used; if @unlikely(0 >= is_negative_28) {
         cold_path;
-        "opt_value_copy_mutual_recursion_owned.wado/run$cold0$dae[$contract_arg_0]"(is_negative_27);
+        "opt_value_copy_mutual_recursion_owned.wado/run$cold0$dae[$contract_arg_0]"(is_negative_28);
         unreachable;
     }; struct.new "core:prelude/types.wado//Box<opt_value_copy_mutual_recursion_owned.wado/Node>" { value: builtin::array_get_value<ref "opt_value_copy_mutual_recursion_owned.wado//Node">(out_0.repr, 0) }.value)) < 0;
-    is_negative_27 = "core:prelude/primitive.wado/count_digits_u64"(local.tee x_31(x_31 = builtin::i64_extend_i32_s(is_negative_27); select i64(x_31 < 0_i64, 0_i64 - x_31, x_31)));
-    self_20 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$sroa[self.buf]$dae[alt_prefix]"($sroa_$f_buf_76, self_20, is_negative_27);
-    "core:prelude/primitive.wado/write_decimal_digits"($sroa_$f_buf_76.repr, self_20, x_31, is_negative_27);
+    is_negative_28 = "core:prelude/primitive.wado/count_digits_u64"(local.tee x_32(x_32 = builtin::i64_extend_i32_s(is_negative_28); select i64(x_32 < 0_i64, 0_i64 - x_32, x_32)));
+    self_21 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$sroa[self.buf]$dae[alt_prefix]"($sroa_$f_buf_77, self_21, is_negative_28);
+    "core:prelude/primitive.wado/write_decimal_digits"($sroa_$f_buf_77.repr, self_21, x_32, is_negative_28);
     "core:cli/println"($local_1.repr, $local_1.used);
 }
 

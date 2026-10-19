@@ -118,37 +118,37 @@ fn "array_bounds_elim_oob_bound_shrunk.wado/run"() with Stdout {
     let $local_3: ref "core:prelude/string.wado//String";
     let elements: ref Array<i32>;
     let x: i64;
-    let $sroa_arr_used_44: i32;
+    let $sroa_arr_used_45: i32;
     elements = array.new_fixed<i32>(10, 20, 30);
-    $sroa_arr_used_44 = 3;
+    $sroa_arr_used_45 = 3;
     i_1 = 0;
     sum = 0;
     b0: block {
         l1: loop {
-            break_if b0 i_1 >= $sroa_arr_used_44;
+            break_if b0 i_1 >= $sroa_arr_used_45;
             if i_1 == 0 {
                 $inline_core_prelude_list_wado_List_i32___pop_3: block {
-                    break_if $inline_core_prelude_list_wado_List_i32___pop_3 $sroa_arr_used_44 == 0;
-                    $sroa_arr_used_44 = $sroa_arr_used_44 - 1;
-                    drop(builtin::array_get_value<i32>(elements, $sroa_arr_used_44));
+                    break_if $inline_core_prelude_list_wado_List_i32___pop_3 $sroa_arr_used_45 == 0;
+                    $sroa_arr_used_45 = $sroa_arr_used_45 - 1;
+                    drop(builtin::array_get_value<i32>(elements, $sroa_arr_used_45));
                     break $inline_core_prelude_list_wado_List_i32___pop_3;
                 };
                 $inline_core_prelude_list_wado_List_i32___pop_4: block {
-                    break_if $inline_core_prelude_list_wado_List_i32___pop_4 $sroa_arr_used_44 == 0;
-                    $sroa_arr_used_44 = $sroa_arr_used_44 - 1;
-                    drop(builtin::array_get_value<i32>(elements, $sroa_arr_used_44));
+                    break_if $inline_core_prelude_list_wado_List_i32___pop_4 $sroa_arr_used_45 == 0;
+                    $sroa_arr_used_45 = $sroa_arr_used_45 - 1;
+                    drop(builtin::array_get_value<i32>(elements, $sroa_arr_used_45));
                     break $inline_core_prelude_list_wado_List_i32___pop_4;
                 };
                 $inline_core_prelude_list_wado_List_i32___pop_5: block {
-                    break_if $inline_core_prelude_list_wado_List_i32___pop_5 $sroa_arr_used_44 == 0;
-                    $sroa_arr_used_44 = $sroa_arr_used_44 - 1;
-                    drop(builtin::array_get_value<i32>(elements, $sroa_arr_used_44));
+                    break_if $inline_core_prelude_list_wado_List_i32___pop_5 $sroa_arr_used_45 == 0;
+                    $sroa_arr_used_45 = $sroa_arr_used_45 - 1;
+                    drop(builtin::array_get_value<i32>(elements, $sroa_arr_used_45));
                     break $inline_core_prelude_list_wado_List_i32___pop_5;
                 };
             }
-            sum = sum + if @unlikely(((0 <= i_1) & (i_1 < $sroa_arr_used_44)) == 0) {
+            sum = sum + if @unlikely(((0 <= i_1) & (i_1 < $sroa_arr_used_45)) == 0) {
                 cold_path;
-                "array_bounds_elim_oob_bound_shrunk.wado/run$cold0"(i_1, $sroa_arr_used_44);
+                "array_bounds_elim_oob_bound_shrunk.wado/run$cold0"(i_1, $sroa_arr_used_45);
                 unreachable;
             }; builtin::array_get_value<i32>(elements, i_1);
             i_1 = i_1 + 1;
@@ -163,17 +163,17 @@ fn "array_bounds_elim_oob_bound_shrunk.wado/run"() with Stdout {
             cold_path;
             "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_3, i_1);
         }
-        $sroa_arr_used_44 = $local_3.used;
+        $sroa_arr_used_45 = $local_3.used;
         $local_3.used = i_1;
-        builtin::array_set_u8($local_3.repr, $sroa_arr_used_44, 45);
+        builtin::array_set_u8($local_3.repr, $sroa_arr_used_45, 45);
     } else {
     }
-    if @unlikely(local.tee $sroa_arr_used_44($local_3.used + sum) > builtin::array_len($local_3.repr)) {
+    if @unlikely(local.tee $sroa_arr_used_45($local_3.used + sum) > builtin::array_len($local_3.repr)) {
         cold_path;
-        "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_3, $sroa_arr_used_44);
+        "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_3, $sroa_arr_used_45);
     }
     i_1 = $local_3.used;
-    $local_3.used = $sroa_arr_used_44;
+    $local_3.used = $sroa_arr_used_45;
     "core:prelude/primitive.wado/write_decimal_digits"($local_3.repr, i_1, x, sum);
     "core:cli/println"($local_3.repr, $local_3.used);
 }

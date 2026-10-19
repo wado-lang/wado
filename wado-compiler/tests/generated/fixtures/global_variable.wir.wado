@@ -641,57 +641,57 @@ condition: `${PI_APPROX}` == \"3.1415929203539825\"
 
 fn "global_variable.wado/$test_6_globals_of_heap_types"() {
     let $v0_0: i32;
-    let self_42: ref "core:prelude//List<i32>";
-    let self_58: ref "core:prelude/string.wado//String";
-    let a_60: ref Array<u8>;
-    let b_63: ref Array<u8>;
-    let i_67: i32;
+    let self_43: ref "core:prelude//List<i32>";
+    let self_59: ref "core:prelude/string.wado//String";
+    let a_61: ref Array<u8>;
+    let b_64: ref Array<u8>;
+    let i_68: i32;
     global:global_variable.wado::ITEMS = struct.new "core:prelude//List<i32>" { repr: array.new_fixed<i32>(1, 2, 3), used: 3 };
-    if @unlikely(local.tee $v0_0(local.tee self_42(global:global_variable.wado::ITEMS).used) != 3) {
+    if @unlikely(local.tee $v0_0(local.tee self_43(global:global_variable.wado::ITEMS).used) != 3) {
         cold_path;
         "global_variable.wado/$test_6_globals_of_heap_types$cold9"($v0_0);
         unreachable;
     }
-    self_42 = global:global_variable.wado::ITEMS;
+    self_43 = global:global_variable.wado::ITEMS;
     $v0_0 = global:global_variable.wado::ITEMS.used;
     if @unlikely(0 >= $v0_0) {
         cold_path;
         "global_variable.wado/$test_6_globals_of_heap_types$cold8$dae[$contract_arg_0]"($v0_0);
         unreachable;
     }
-    if @unlikely(local.tee $v0_0(builtin::array_get_value<i32>(self_42.repr, 0)) != 1) {
+    if @unlikely(local.tee $v0_0(builtin::array_get_value<i32>(self_43.repr, 0)) != 1) {
         cold_path;
         "global_variable.wado/$test_6_globals_of_heap_types$cold7"($v0_0);
         unreachable;
     }
-    if @unlikely(local.tee $v0_0(local.tee self_42(global:global_variable.wado::ITEMS).used) >= builtin::array_len(self_42.repr)) {
+    if @unlikely(local.tee $v0_0(local.tee self_43(global:global_variable.wado::ITEMS).used) >= builtin::array_len(self_43.repr)) {
         cold_path;
-        "core:prelude/list.wado/core:prelude/list.wado/List<i32>::grow"(self_42);
+        "core:prelude/list.wado/core:prelude/list.wado/List<i32>::grow"(self_43);
     }
-    builtin::array_set<i32>(self_42.repr, $v0_0, 4);
-    self_42.used = $v0_0 + 1;
-    if @unlikely(local.tee $v0_0(local.tee self_42(global:global_variable.wado::ITEMS).used) != 4) {
+    builtin::array_set<i32>(self_43.repr, $v0_0, 4);
+    self_43.used = $v0_0 + 1;
+    if @unlikely(local.tee $v0_0(local.tee self_43(global:global_variable.wado::ITEMS).used) != 4) {
         cold_path;
         "global_variable.wado/$test_6_globals_of_heap_types$cold6"($v0_0);
         unreachable;
     }
     global:global_variable.wado::MESSAGE = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Hello, World!"), used: 13 };
-    self_58 = global:global_variable.wado::MESSAGE;
-    if @unlikely(local.tee i_67($inline_core_prelude_array_wado_seq_eq_u8__9: block -> bool {
-        a_60 = self_58.repr;
-        $v0_0 = self_58.used;
-        b_63 = global:global_variable.wado::$const_obj_34;
+    self_59 = global:global_variable.wado::MESSAGE;
+    if @unlikely(local.tee i_68($inline_core_prelude_array_wado_seq_eq_u8__9: block -> bool {
+        a_61 = self_59.repr;
+        $v0_0 = self_59.used;
+        b_64 = global:global_variable.wado::$const_obj_34;
         if $v0_0 != 13 {
             break $inline_core_prelude_array_wado_seq_eq_u8__9: 0;
         }
-        i_67 = 0;
+        i_68 = 0;
         b17: block {
             l18: loop {
-                break_if b17 i_67 >= $v0_0;
-                if builtin::array_get_value<u8>(a_60, i_67) != builtin::array_get_value<u8>(b_63, i_67) {
+                break_if b17 i_68 >= $v0_0;
+                if builtin::array_get_value<u8>(a_61, i_68) != builtin::array_get_value<u8>(b_64, i_68) {
                     break $inline_core_prelude_array_wado_seq_eq_u8__9: 0;
                 }
-                i_67 = i_67 + 1;
+                i_68 = i_68 + 1;
                 continue l18;
             };
         };
@@ -702,19 +702,19 @@ fn "global_variable.wado/$test_6_globals_of_heap_types"() {
         unreachable;
     }
     global:global_variable.wado::MESSAGE = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Updated!"), used: 8 };
-    self_58 = global:global_variable.wado::MESSAGE;
-    if @unlikely(local.tee i_67($inline_core_prelude_array_wado_seq_eq_u8__11: block -> bool {
-        b_63 = self_58.repr;
-        i_67 = self_58.used;
-        a_60 = global:global_variable.wado::$const_obj_33;
-        if i_67 != 8 {
+    self_59 = global:global_variable.wado::MESSAGE;
+    if @unlikely(local.tee i_68($inline_core_prelude_array_wado_seq_eq_u8__11: block -> bool {
+        b_64 = self_59.repr;
+        i_68 = self_59.used;
+        a_61 = global:global_variable.wado::$const_obj_33;
+        if i_68 != 8 {
             break $inline_core_prelude_array_wado_seq_eq_u8__11: 0;
         }
         $v0_0 = 0;
         b22: block {
             l23: loop {
-                break_if b22 $v0_0 >= i_67;
-                if builtin::array_get_value<u8>(b_63, $v0_0) != builtin::array_get_value<u8>(a_60, $v0_0) {
+                break_if b22 $v0_0 >= i_68;
+                if builtin::array_get_value<u8>(b_64, $v0_0) != builtin::array_get_value<u8>(a_61, $v0_0) {
                     break $inline_core_prelude_array_wado_seq_eq_u8__11: 0;
                 }
                 $v0_0 = $v0_0 + 1;
@@ -728,25 +728,25 @@ fn "global_variable.wado/$test_6_globals_of_heap_types"() {
         unreachable;
     }
     global:global_variable.wado::ORIGIN = struct.new "global_variable.wado//GPoint" { x: 0, y: 0 };
-    if @unlikely((local.tee i_67(global:global_variable.wado::ORIGIN.x) == 0) == 0) {
+    if @unlikely((local.tee i_68(global:global_variable.wado::ORIGIN.x) == 0) == 0) {
         cold_path;
-        "global_variable.wado/$test_6_globals_of_heap_types$cold3"(i_67);
+        "global_variable.wado/$test_6_globals_of_heap_types$cold3"(i_68);
         unreachable;
     }
-    if @unlikely((local.tee i_67(global:global_variable.wado::ORIGIN.y) == 0) == 0) {
+    if @unlikely((local.tee i_68(global:global_variable.wado::ORIGIN.y) == 0) == 0) {
         cold_path;
-        "global_variable.wado/$test_6_globals_of_heap_types$cold2"(i_67);
+        "global_variable.wado/$test_6_globals_of_heap_types$cold2"(i_68);
         unreachable;
     }
     global:global_variable.wado::ORIGIN = struct.new "global_variable.wado//GPoint" { x: 10, y: 20 };
-    if @unlikely(local.tee i_67(global:global_variable.wado::ORIGIN.x) != 10) {
+    if @unlikely(local.tee i_68(global:global_variable.wado::ORIGIN.x) != 10) {
         cold_path;
-        "global_variable.wado/$test_6_globals_of_heap_types$cold1"(i_67);
+        "global_variable.wado/$test_6_globals_of_heap_types$cold1"(i_68);
         unreachable;
     }
-    if @unlikely(local.tee i_67(global:global_variable.wado::ORIGIN.y) != 20) {
+    if @unlikely(local.tee i_68(global:global_variable.wado::ORIGIN.y) != 20) {
         cold_path;
-        "global_variable.wado/$test_6_globals_of_heap_types$cold0"(i_67);
+        "global_variable.wado/$test_6_globals_of_heap_types$cold0"(i_68);
         unreachable;
     }
 }
@@ -3703,7 +3703,7 @@ fn "core:prelude/traits.wado/core/prelude/traits.wado/inspect_struct_alternate<g
     let start_27: i32;
     let new_used_78: i32;
     let start_79: i32;
-    let x_128: i64;
+    let x_126: i64;
     if @unlikely(local.tee new_used_26(local.tee f_9(f.buf).used + 6) > builtin::array_len(f_9.repr)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"(f_9, new_used_26);
@@ -3772,12 +3772,12 @@ fn "core:prelude/traits.wado/core/prelude/traits.wado/inspect_struct_alternate<g
     f_9.used = new_used_26;
     builtin::array_copy<u8>(f_9.repr, start_27, global:core:prelude/traits.wado::$const_obj_126, 0, 2);
     start_27 = $mv$v$x < 0;
-    $mv$v$x = "core:prelude/primitive.wado/count_digits_u64"(local.tee x_128(x_128 = builtin::i64_extend_i32_s($mv$v$x); select i64(x_128 < 0_i64, 0_i64 - x_128, x_128)));
+    $mv$v$x = "core:prelude/primitive.wado/count_digits_u64"(local.tee x_126(x_126 = builtin::i64_extend_i32_s($mv$v$x); select i64(x_126 < 0_i64, 0_i64 - x_126, x_126)));
     start_27 = block -> i32 {
         f_9 = global:core:prelude/traits.wado::$const_obj_125;
         "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>"(f, start_27, f_9.repr, f_9.used, $mv$v$x);
     };
-    "core:prelude/primitive.wado/write_decimal_digits"(local.tee f_9(f.buf).repr, start_27, x_128, $mv$v$x);
+    "core:prelude/primitive.wado/write_decimal_digits"(local.tee f_9(f.buf).repr, start_27, x_126, $mv$v$x);
     if @unlikely(local.tee $mv$v$x(local.tee f_9(f.buf).used + 1) > builtin::array_len(f_9.repr)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"(f_9, $mv$v$x);
@@ -3831,12 +3831,12 @@ fn "core:prelude/traits.wado/core/prelude/traits.wado/inspect_struct_alternate<g
     f_9.used = $mv$v$x;
     builtin::array_copy<u8>(f_9.repr, start_27, global:core:prelude/traits.wado::$const_obj_126, 0, 2);
     start_27 = $mv$v$y < 0;
-    $mv$v$y = "core:prelude/primitive.wado/count_digits_u64"(local.tee x_128(x_128 = builtin::i64_extend_i32_s($mv$v$y); select i64(x_128 < 0_i64, 0_i64 - x_128, x_128)));
+    $mv$v$y = "core:prelude/primitive.wado/count_digits_u64"(local.tee x_126(x_126 = builtin::i64_extend_i32_s($mv$v$y); select i64(x_126 < 0_i64, 0_i64 - x_126, x_126)));
     start_27 = block -> i32 {
         f_9 = global:core:prelude/traits.wado::$const_obj_125;
         "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>"(f, start_27, f_9.repr, f_9.used, $mv$v$y);
     };
-    "core:prelude/primitive.wado/write_decimal_digits"(local.tee f_9(f.buf).repr, start_27, x_128, $mv$v$y);
+    "core:prelude/primitive.wado/write_decimal_digits"(local.tee f_9(f.buf).repr, start_27, x_126, $mv$v$y);
     if @unlikely(local.tee $mv$v$y(local.tee f_9(f.buf).used + 1) > builtin::array_len(f_9.repr)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"(f_9, $mv$v$y);
@@ -5647,7 +5647,7 @@ fn "core:prelude/traits.wado/global_variable.wado/GPoint^core:prelude/traits.wad
     let f_8: ref "core:prelude/string.wado//String";
     let new_used_25: i32;
     let start_26: i32;
-    let x_121: i64;
+    let x_119: i64;
     if f.alternate {
         "core:prelude/traits.wado/core/prelude/traits.wado/inspect_struct_alternate<global_variable.wado/GPoint,[i32,i32]>"($mv$self$x, $mv$self$y, f);
         return;
@@ -5688,12 +5688,12 @@ fn "core:prelude/traits.wado/global_variable.wado/GPoint^core:prelude/traits.wad
     f_8.used = new_used_25;
     builtin::array_copy<u8>(f_8.repr, start_26, global:core:prelude/traits.wado::$const_obj_126, 0, 2);
     start_26 = $mv$self$x < 0;
-    $mv$self$x = "core:prelude/primitive.wado/count_digits_u64"(local.tee x_121(x_121 = builtin::i64_extend_i32_s($mv$self$x); select i64(x_121 < 0_i64, 0_i64 - x_121, x_121)));
+    $mv$self$x = "core:prelude/primitive.wado/count_digits_u64"(local.tee x_119(x_119 = builtin::i64_extend_i32_s($mv$self$x); select i64(x_119 < 0_i64, 0_i64 - x_119, x_119)));
     start_26 = block -> i32 {
         f_8 = global:core:prelude/traits.wado::$const_obj_125;
         "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>"(f, start_26, f_8.repr, f_8.used, $mv$self$x);
     };
-    "core:prelude/primitive.wado/write_decimal_digits"(local.tee f_8(f.buf).repr, start_26, x_121, $mv$self$x);
+    "core:prelude/primitive.wado/write_decimal_digits"(local.tee f_8(f.buf).repr, start_26, x_119, $mv$self$x);
     if @unlikely(local.tee $mv$self$x(local.tee f_8(f.buf).used + 2) > builtin::array_len(f_8.repr)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"(f_8, $mv$self$x);
@@ -5716,12 +5716,12 @@ fn "core:prelude/traits.wado/global_variable.wado/GPoint^core:prelude/traits.wad
     f_8.used = $mv$self$x;
     builtin::array_copy<u8>(f_8.repr, start_26, global:core:prelude/traits.wado::$const_obj_126, 0, 2);
     start_26 = $mv$self$y < 0;
-    $mv$self$y = "core:prelude/primitive.wado/count_digits_u64"(local.tee x_121(x_121 = builtin::i64_extend_i32_s($mv$self$y); select i64(x_121 < 0_i64, 0_i64 - x_121, x_121)));
+    $mv$self$y = "core:prelude/primitive.wado/count_digits_u64"(local.tee x_119(x_119 = builtin::i64_extend_i32_s($mv$self$y); select i64(x_119 < 0_i64, 0_i64 - x_119, x_119)));
     start_26 = block -> i32 {
         f_8 = global:core:prelude/traits.wado::$const_obj_125;
         "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>"(f, start_26, f_8.repr, f_8.used, $mv$self$y);
     };
-    "core:prelude/primitive.wado/write_decimal_digits"(local.tee f_8(f.buf).repr, start_26, x_121, $mv$self$y);
+    "core:prelude/primitive.wado/write_decimal_digits"(local.tee f_8(f.buf).repr, start_26, x_119, $mv$self$y);
     if @unlikely(local.tee $mv$self$y(local.tee f_8(f.buf).used + 2) > builtin::array_len(f_8.repr)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"(f_8, $mv$self$y);

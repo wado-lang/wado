@@ -200,26 +200,26 @@ fn "spec_memory_ref_identity.wado/$test_0_references_compare_values__and_ref_eq_
     let xs: ref "core:prelude//List<i32>";
     let $local_8_8: ref "core:prelude/string.wado//String";
     let $local_9: ref "core:prelude/format.wado//Formatter";
-    let other_43: ref "core:prelude//List<i32>";
-    let offset_52: i32;
-    let f_68: ref "core:prelude/format.wado//Formatter";
-    let $sroa_s_repr_161: ref Array<u8>;
+    let other_45: ref "core:prelude//List<i32>";
+    let offset_54: i32;
+    let f_70: ref "core:prelude/format.wado//Formatter";
+    let $sroa_s_repr_163: ref Array<u8>;
     let i: i32;
-    let $licm_repr_202: ref Array<i32>;
-    let $licm_repr_203: ref Array<i32>;
+    let $licm_repr_204: ref Array<i32>;
+    let $licm_repr_205: ref Array<i32>;
     xs = struct.new "core:prelude//List<i32>" { repr: array.new_fixed<i32>(1, 2, 3), used: 3 };
-    other_43 = global:spec_memory_ref_identity.wado::$const_obj_4;
+    other_45 = global:spec_memory_ref_identity.wado::$const_obj_4;
     if @unlikely(local.tee i($inline_core_prelude_array_wado_seq_eq_i32__0: block -> bool {
-        if 3 != other_43.used {
+        if 3 != other_45.used {
             break $inline_core_prelude_array_wado_seq_eq_i32__0: 0;
         }
         i = 0;
-        $licm_repr_202 = xs.repr;
-        $licm_repr_203 = other_43.repr;
+        $licm_repr_204 = xs.repr;
+        $licm_repr_205 = other_45.repr;
         b2: block {
             l3: loop {
                 break_if b2 i >= 3;
-                if builtin::array_get_value<i32>($licm_repr_202, i) != builtin::array_get_value<i32>($licm_repr_203, i) {
+                if builtin::array_get_value<i32>($licm_repr_204, i) != builtin::array_get_value<i32>($licm_repr_205, i) {
                     break $inline_core_prelude_array_wado_seq_eq_i32__0: 0;
                 }
                 i = i + 1;
@@ -231,40 +231,40 @@ fn "spec_memory_ref_identity.wado/$test_0_references_compare_values__and_ref_eq_
         cold_path;
         i = "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"(local.tee $local_8_8(struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(138), used: 0 }), 115);
         $load_3 = $local_8_8.repr;
-        $sroa_s_repr_161 = array.new_data<u8>("Assertion failed in ");
-        builtin::array_copy<u8>($load_3, i, $sroa_s_repr_161, 0, 20);
-        offset_52 = i + 20;
-        $sroa_s_repr_161 = array.new_data<u8>("$test_0_references_compare_values__and_ref_eq_compares_places");
-        builtin::array_copy<u8>($load_3, offset_52, $sroa_s_repr_161, 0, 61);
-        offset_52 = i + 81;
-        $sroa_s_repr_161 = array.new_fixed<u8>(32, 97, 116, 32);
-        builtin::array_copy<u8>($load_3, offset_52, $sroa_s_repr_161, 0, 4);
-        offset_52 = i + 85;
-        $sroa_s_repr_161 = array.new_data<u8>("spec_memory_ref_identity.wado");
-        builtin::array_copy<u8>($load_3, offset_52, $sroa_s_repr_161, 0, 29);
+        $sroa_s_repr_163 = array.new_data<u8>("Assertion failed in ");
+        builtin::array_copy<u8>($load_3, i, $sroa_s_repr_163, 0, 20);
+        offset_54 = i + 20;
+        $sroa_s_repr_163 = array.new_data<u8>("$test_0_references_compare_values__and_ref_eq_compares_places");
+        builtin::array_copy<u8>($load_3, offset_54, $sroa_s_repr_163, 0, 61);
+        offset_54 = i + 81;
+        $sroa_s_repr_163 = array.new_fixed<u8>(32, 97, 116, 32);
+        builtin::array_copy<u8>($load_3, offset_54, $sroa_s_repr_163, 0, 4);
+        offset_54 = i + 85;
+        $sroa_s_repr_163 = array.new_data<u8>("spec_memory_ref_identity.wado");
+        builtin::array_copy<u8>($load_3, offset_54, $sroa_s_repr_163, 0, 29);
         i = i + 114;
-        $sroa_s_repr_161 = array.new_fixed<u8>(58);
-        builtin::array_copy<u8>($load_3, i, $sroa_s_repr_161, 0, 1);
-        f_68 = local.tee $local_9("core:prelude/format.wado/core:prelude/format.wado/Formatter::new"($local_8_8));
-        "core:prelude/primitive.wado/i32::fmt_decimal$sroa[self.value]"(8, f_68);
+        $sroa_s_repr_163 = array.new_fixed<u8>(58);
+        builtin::array_copy<u8>($load_3, i, $sroa_s_repr_163, 0, 1);
+        f_70 = local.tee $local_9("core:prelude/format.wado/core:prelude/format.wado/Formatter::new"($local_8_8));
+        "core:prelude/primitive.wado/i32::fmt_decimal$sroa[self.value]"(8, f_70);
         i = "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"($local_8_8, 27);
-        $sroa_s_repr_161 = $local_8_8.repr;
+        $sroa_s_repr_163 = $local_8_8.repr;
         $load_3 = array.new_data<u8>("
 condition: &xs == &ys
 ");
-        builtin::array_copy<u8>($sroa_s_repr_161, i, $load_3, 0, 23);
+        builtin::array_copy<u8>($sroa_s_repr_163, i, $load_3, 0, 23);
         i = i + 23;
         $load_3 = array.new_fixed<u8>(120, 115, 58, 32);
-        builtin::array_copy<u8>($sroa_s_repr_161, i, $load_3, 0, 4);
+        builtin::array_copy<u8>($sroa_s_repr_163, i, $load_3, 0, 4);
         $local_9 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::new"($local_8_8);
         "core:prelude/list.wado/core:prelude/list.wado/List<i32>^core:prelude/traits.wado/Inspect::inspect"(xs, $local_9);
         i = "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"($local_8_8, 5);
         $load_3 = $local_8_8.repr;
-        $sroa_s_repr_161 = array.new_fixed<u8>(10);
-        builtin::array_copy<u8>($load_3, i, $sroa_s_repr_161, 0, 1);
+        $sroa_s_repr_163 = array.new_fixed<u8>(10);
+        builtin::array_copy<u8>($load_3, i, $sroa_s_repr_163, 0, 1);
         i = i + 1;
-        $sroa_s_repr_161 = array.new_fixed<u8>(121, 115, 58, 32);
-        builtin::array_copy<u8>($load_3, i, $sroa_s_repr_161, 0, 4);
+        $sroa_s_repr_163 = array.new_fixed<u8>(121, 115, 58, 32);
+        builtin::array_copy<u8>($load_3, i, $sroa_s_repr_163, 0, 4);
         $local_9 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::new"($local_8_8);
         "core:prelude/list.wado/core:prelude/list.wado/List<i32>^core:prelude/traits.wado/Inspect::inspect"(global:spec_memory_ref_identity.wado::$const_obj_4, $local_9);
         "core:prelude/string.wado/core:prelude/string.wado/String^core:prelude/string.wado/AsStrSlice::internal_append_to$spec1"(struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 }, $local_8_8);
@@ -274,32 +274,32 @@ condition: &xs == &ys
     if @unlikely(local.tee i(ref.eq(xs, xs)) == 0) {
         cold_path;
         i = "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"(local.tee $local_8_8(struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(123), used: 0 }), 115);
-        $sroa_s_repr_161 = $local_8_8.repr;
+        $sroa_s_repr_163 = $local_8_8.repr;
         $load_3 = array.new_data<u8>("Assertion failed in ");
-        builtin::array_copy<u8>($sroa_s_repr_161, i, $load_3, 0, 20);
-        offset_52 = i + 20;
+        builtin::array_copy<u8>($sroa_s_repr_163, i, $load_3, 0, 20);
+        offset_54 = i + 20;
         $load_3 = array.new_data<u8>("$test_0_references_compare_values__and_ref_eq_compares_places");
-        builtin::array_copy<u8>($sroa_s_repr_161, offset_52, $load_3, 0, 61);
-        offset_52 = i + 81;
+        builtin::array_copy<u8>($sroa_s_repr_163, offset_54, $load_3, 0, 61);
+        offset_54 = i + 81;
         $load_3 = array.new_fixed<u8>(32, 97, 116, 32);
-        builtin::array_copy<u8>($sroa_s_repr_161, offset_52, $load_3, 0, 4);
-        offset_52 = i + 85;
+        builtin::array_copy<u8>($sroa_s_repr_163, offset_54, $load_3, 0, 4);
+        offset_54 = i + 85;
         $load_3 = array.new_data<u8>("spec_memory_ref_identity.wado");
-        builtin::array_copy<u8>($sroa_s_repr_161, offset_52, $load_3, 0, 29);
+        builtin::array_copy<u8>($sroa_s_repr_163, offset_54, $load_3, 0, 29);
         i = i + 114;
         $load_3 = array.new_fixed<u8>(58);
-        builtin::array_copy<u8>($sroa_s_repr_161, i, $load_3, 0, 1);
-        f_68 = local.tee $local_9("core:prelude/format.wado/core:prelude/format.wado/Formatter::new"($local_8_8));
-        "core:prelude/primitive.wado/i32::fmt_decimal$sroa[self.value]"(9, f_68);
+        builtin::array_copy<u8>($sroa_s_repr_163, i, $load_3, 0, 1);
+        f_70 = local.tee $local_9("core:prelude/format.wado/core:prelude/format.wado/Formatter::new"($local_8_8));
+        "core:prelude/primitive.wado/i32::fmt_decimal$sroa[self.value]"(9, f_70);
         i = "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"($local_8_8, 33);
         $load_3 = $local_8_8.repr;
-        $sroa_s_repr_161 = array.new_data<u8>("
+        $sroa_s_repr_163 = array.new_data<u8>("
 condition: ref_eq(&xs, &xs)
 ");
-        builtin::array_copy<u8>($load_3, i, $sroa_s_repr_161, 0, 29);
+        builtin::array_copy<u8>($load_3, i, $sroa_s_repr_163, 0, 29);
         i = i + 29;
-        $sroa_s_repr_161 = array.new_fixed<u8>(120, 115, 58, 32);
-        builtin::array_copy<u8>($load_3, i, $sroa_s_repr_161, 0, 4);
+        $sroa_s_repr_163 = array.new_fixed<u8>(120, 115, 58, 32);
+        builtin::array_copy<u8>($load_3, i, $sroa_s_repr_163, 0, 4);
         $local_9 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::new"($local_8_8);
         "core:prelude/list.wado/core:prelude/list.wado/List<i32>^core:prelude/traits.wado/Inspect::inspect"(xs, $local_9);
         "core:prelude/string.wado/core:prelude/string.wado/String^core:prelude/string.wado/AsStrSlice::internal_append_to$spec1"(struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 }, $local_8_8);
@@ -312,16 +312,16 @@ condition: ref_eq(&xs, &xs)
         "spec_memory_ref_identity.wado/$test_0_references_compare_values__and_ref_eq_compares_places$cold3$dae[$contract_arg_0]"(i);
         unreachable;
     }
-    offset_52 = builtin::array_get_value<i32>(local.tee $licm_repr_203(xs.repr), 0);
+    offset_54 = builtin::array_get_value<i32>(local.tee $licm_repr_205(xs.repr), 0);
     if @unlikely(0 >= i) {
         cold_path;
         "core:prelude/list.wado/core:prelude/list.wado/List<i32>^core:prelude/traits.wado/IndexAssign<i32>::index_assign$cold0$dae[self,index,value]"(i);
         unreachable;
     }
-    builtin::array_set<i32>($licm_repr_203, 0, 9);
-    if @unlikely(offset_52 != 1) {
+    builtin::array_set<i32>($licm_repr_205, 0, 9);
+    if @unlikely(offset_54 != 1) {
         cold_path;
-        "spec_memory_ref_identity.wado/$test_0_references_compare_values__and_ref_eq_compares_places$cold2"(struct.new "core:prelude/types.wado//Box<i32>" { value: offset_52 }, offset_52);
+        "spec_memory_ref_identity.wado/$test_0_references_compare_values__and_ref_eq_compares_places$cold2"(struct.new "core:prelude/types.wado//Box<i32>" { value: offset_54 }, offset_54);
         unreachable;
     }
     if @unlikely(0 >= i) {
@@ -329,13 +329,13 @@ condition: ref_eq(&xs, &xs)
         "spec_memory_ref_identity.wado/$test_0_references_compare_values__and_ref_eq_compares_places$cold1$dae[$contract_arg_1]"(i);
         unreachable;
     }
-    drop(builtin::array_get_value<i32>($licm_repr_203, 0));
+    drop(builtin::array_get_value<i32>($licm_repr_205, 0));
     if @unlikely(0 >= i) {
         cold_path;
         "spec_memory_ref_identity.wado/$test_0_references_compare_values__and_ref_eq_compares_places$cold0$dae[$contract_arg_2]"(i);
         unreachable;
     }
-    drop(builtin::array_get_value<i32>($licm_repr_203, 0));
+    drop(builtin::array_get_value<i32>($licm_repr_205, 0));
 }
 
 fn "spec_memory_ref_identity.wado/$cm_export__$test_0_references_compare_values__and_ref_eq_compares_places"() {
@@ -686,7 +686,7 @@ fn "core:prelude/array.wado/core/prelude/array.wado/write_seq_inspect<i32>$dae[s
     let i: i32;
     let self_7: ref "core:prelude/string.wado//String";
     let other_12: ref "core:prelude/string.wado//String";
-    let $licm_arith_31: bool;
+    let $licm_arith_29: bool;
     if f.alternate {
         "core:prelude/array.wado/core/prelude/array.wado/write_seq_inspect_alt<i32>$dae[start,marker]"(repr, end, f, limit);
         return;
@@ -695,11 +695,11 @@ fn "core:prelude/array.wado/core/prelude/array.wado/write_seq_inspect<i32>$dae[s
     shown = 0;
     truncated = 0;
     i = 0;
-    $licm_arith_31 = limit >= 0;
+    $licm_arith_29 = limit >= 0;
     b49: block {
         l50: loop {
             break_if b49 i >= end;
-            if select i32($licm_arith_31, shown >= limit, 0) {
+            if select i32($licm_arith_29, shown >= limit, 0) {
                 truncated = 1;
                 break b49;
             }
@@ -707,7 +707,7 @@ fn "core:prelude/array.wado/core/prelude/array.wado/write_seq_inspect<i32>$dae[s
                 self_7 = f.buf;
                 "core:prelude/string.wado/core:prelude/string.wado/String^core:prelude/string.wado/AsStrSlice::internal_append_to$spec0"(local.tee other_12(struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(44, 32), used: 2 }), self_7);
             }
-            "core:prelude/primitive.wado/i32::fmt_decimal$sroa[self.value]"(builtin::array_get_value<i32>(repr, i), f);
+            "core:prelude/primitive.wado/i32::fmt_decimal$sroa[self.value]"(struct.new "core:prelude/types.wado//Box<i32>" { value: builtin::array_get_value<i32>(repr, i) }.value, f);
             shown = shown + 1;
             i = i + 1;
             continue l50;
@@ -730,7 +730,7 @@ fn "core:prelude/array.wado/core/prelude/array.wado/write_seq_inspect_alt<i32>$d
     let truncated: bool;
     let i: i32;
     let self_7: ref "core:prelude/string.wado//String";
-    let $licm_arith_25: bool;
+    let $licm_arith_23: bool;
     if 0 >= end {
         self_7 = f.buf;
         "core:prelude/string.wado/core:prelude/string.wado/String^core:prelude/string.wado/AsStrSlice::internal_append_to$spec0"(struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(91, 93), used: 2 }, self_7);
@@ -740,16 +740,16 @@ fn "core:prelude/array.wado/core/prelude/array.wado/write_seq_inspect_alt<i32>$d
     shown = 0;
     truncated = 0;
     i = 0;
-    $licm_arith_25 = limit >= 0;
+    $licm_arith_23 = limit >= 0;
     b56: block {
         l57: loop {
             break_if b56 i >= end;
-            if select i32($licm_arith_25, shown >= limit, 0) {
+            if select i32($licm_arith_23, shown >= limit, 0) {
                 truncated = 1;
                 break b56;
             }
             "core:prelude/format.wado/core:prelude/format.wado/Formatter::write_newline_indent"(f);
-            "core:prelude/primitive.wado/i32::fmt_decimal$sroa[self.value]"(builtin::array_get_value<i32>(repr, i), f);
+            "core:prelude/primitive.wado/i32::fmt_decimal$sroa[self.value]"(struct.new "core:prelude/types.wado//Box<i32>" { value: builtin::array_get_value<i32>(repr, i) }.value, f);
             "core:prelude/string.wado/core:prelude/string.wado/String::push_ascii_byte"(local.tee self_7(f.buf), 44);
             shown = shown + 1;
             i = i + 1;

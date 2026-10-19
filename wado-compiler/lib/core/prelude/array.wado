@@ -39,7 +39,8 @@ use { Formatter } from "core:prelude/format.wado";
 pub type Array<T>;
 
 /// An array copies where its element does.
-impl<T> Copyable for Array<T> {}
+impl<T> Copyable for Array<T> {
+}
 
 impl<affine T> Array<T> {
     /// Creates a new array of `len` elements, each initialised to the
@@ -280,7 +281,14 @@ internal fn write_seq_inspect<affine T: Inspect>(
 /// The alternate (`#`) rendering [`write_seq_inspect`] hands off to: one
 /// element per indented line, `marker` appending a `...` line for the dropped
 /// ones.
-fn write_seq_inspect_alt<affine T: Inspect>(repr: &Array<T>, start: i32, end: i32, f: &mut Formatter, marker: bool, limit: i32) {
+fn write_seq_inspect_alt<affine T: Inspect>(
+    repr: &Array<T>,
+    start: i32,
+    end: i32,
+    f: &mut Formatter,
+    marker: bool,
+    limit: i32,
+) {
     if start >= end {
         f.write_str("[]");
         return;

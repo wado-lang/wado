@@ -115,30 +115,30 @@ fn "opt_value_copy_move_after_ref_match.wado/build$dae[n]"() {
     let tagged: i32;
     let i_2: i32;
     let rep: ref "opt_value_copy_move_after_ref_match.wado//Rep";
-    let used: i32;
-    let $sroa_op_value_17: ref "opt_value_copy_move_after_ref_match.wado//Op";
+    let used_11: i32;
+    let $sroa_op_value_18: ref "opt_value_copy_move_after_ref_match.wado//Op";
     ops = struct.new "core:prelude//List<opt_value_copy_move_after_ref_match.wado/Op>" { repr: array.new_fixed<ref "opt_value_copy_move_after_ref_match.wado//Op">(), used: 0 };
     tagged = 0;
     i_2 = 0;
     b0: block {
         l1: loop {
             break_if b0 i_2 >= 4;
-            if ref.test "opt_value_copy_move_after_ref_match.wado//Op::Repeat"(local.tee $sroa_op_value_17($inline_make_1: block -> ref "opt_value_copy_move_after_ref_match.wado//Op" {
+            if ref.test "opt_value_copy_move_after_ref_match.wado//Op::Repeat"(local.tee $sroa_op_value_18($inline_make_1: block -> ref "opt_value_copy_move_after_ref_match.wado//Op" {
                 if (i_2 % 2) == 0 {
                     break $inline_make_1: struct.new "opt_value_copy_move_after_ref_match.wado//Op::Repeat" { discriminant: 1, payload_0: struct.new "opt_value_copy_move_after_ref_match.wado//Rep" { tags: struct.new "core:prelude//List<core:prelude/string.wado/String>" { repr: array.new_fixed<ref "core:prelude/string.wado//String">(struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(97), used: 1 }, struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(98), used: 1 }), used: 2 } } };
                 }
                 break $inline_make_1: struct.new "opt_value_copy_move_after_ref_match.wado//Op::Plain" { discriminant: 0, payload_0: i_2 };
             })) {
-                rep = ref.cast "opt_value_copy_move_after_ref_match.wado//Op::Repeat"($sroa_op_value_17).payload_0;
+                rep = ref.cast "opt_value_copy_move_after_ref_match.wado//Op::Repeat"($sroa_op_value_18).payload_0;
                 tagged = tagged + rep.tags.used;
             } else {
             }
-            if @unlikely(local.tee used(ops.used) >= builtin::array_len(ops.repr)) {
+            if @unlikely(local.tee used_11(ops.used) >= builtin::array_len(ops.repr)) {
                 cold_path;
                 "core:prelude/list.wado/core:prelude/list.wado/List<opt_value_copy_move_after_ref_match.wado/Op>::grow"(ops);
             }
-            builtin::array_set<ref "opt_value_copy_move_after_ref_match.wado//Op">(ops.repr, used, $sroa_op_value_17);
-            ops.used = used + 1;
+            builtin::array_set<ref "opt_value_copy_move_after_ref_match.wado//Op">(ops.repr, used_11, $sroa_op_value_18);
+            ops.used = used_11 + 1;
             i_2 = i_2 + 1;
             continue l1;
         };

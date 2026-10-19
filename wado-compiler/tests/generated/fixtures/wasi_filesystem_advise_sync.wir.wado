@@ -146,20 +146,20 @@ array Array<[wasi:filesystem/types.wado/Descriptor,core:prelude/string.wado/Stri
 array Array<core:prelude/types.wado/Subtask> (mut ref null "core:prelude//$Resource");  // TypeId(25)
 
 struct core:prelude/types.wado//AsyncCall<core:prelude/types.wado/Result<wasi:filesystem/types.wado/Descriptor,wasi:filesystem/types.wado/ErrorCode>> {  // TypeId(26)
-    mut subtask: ref null "core:prelude/types.wado//Option<core:prelude/types.wado/Subtask>",
-    mut buffer: ref null "core:prelude/types.wado//Option<core:prelude/types.wado/ResultBuffer>",
+    mut subtask: ref null "core:prelude/types.wado//Box<core:prelude/types.wado/Option<core:prelude/types.wado/Subtask>>",
+    mut buffer: ref null "core:prelude/types.wado//Box<core:prelude/types.wado/Option<core:prelude/types.wado/ResultBuffer>>",
     mut lift: ref struct,
 }
 
 struct core:prelude/types.wado//AsyncCall<core:prelude/types.wado/Result<wasi:filesystem/types.wado/DescriptorStat,wasi:filesystem/types.wado/ErrorCode>> {  // TypeId(27)
-    mut subtask: ref null "core:prelude/types.wado//Option<core:prelude/types.wado/Subtask>",
-    mut buffer: ref null "core:prelude/types.wado//Option<core:prelude/types.wado/ResultBuffer>",
+    mut subtask: ref null "core:prelude/types.wado//Box<core:prelude/types.wado/Option<core:prelude/types.wado/Subtask>>",
+    mut buffer: ref null "core:prelude/types.wado//Box<core:prelude/types.wado/Option<core:prelude/types.wado/ResultBuffer>>",
     mut lift: ref struct,
 }
 
 struct core:prelude/types.wado//AsyncCall<core:prelude/types.wado/Result<(),wasi:filesystem/types.wado/ErrorCode>> {  // TypeId(28)
-    mut subtask: ref null "core:prelude/types.wado//Option<core:prelude/types.wado/Subtask>",
-    mut buffer: ref null "core:prelude/types.wado//Option<core:prelude/types.wado/ResultBuffer>",
+    mut subtask: ref null "core:prelude/types.wado//Box<core:prelude/types.wado/Option<core:prelude/types.wado/Subtask>>",
+    mut buffer: ref null "core:prelude/types.wado//Box<core:prelude/types.wado/Option<core:prelude/types.wado/ResultBuffer>>",
     mut lift: ref struct,
 }
 
@@ -605,13 +605,13 @@ fn "wasi_filesystem_advise_sync.wado/run"() with Stdout, Stderr, Preopens {
     let $vc_payload_0: ref "wasi:filesystem/types.wado//DescriptorStat";
     let $vc_payload_1_40: ref "wasi:filesystem/types.wado//ErrorCode";
     let v_42: ref null "wasi:filesystem/types.wado//ErrorCode";
-    let $sroa_$pattern_temp_0_0_55: ref null "core:prelude//$Resource";
-    let $sroa_$pattern_temp_0_1_56: ref null "core:prelude//$Resource";
-    let v_57: ref "wasi:filesystem/types.wado//DescriptorType";
+    let $sroa_$pattern_temp_0_0_56: ref null "core:prelude//$Resource";
+    let $sroa_$pattern_temp_0_1_57: ref null "core:prelude//$Resource";
+    let v_58: ref "wasi:filesystem/types.wado//DescriptorType";
     let $vc_payload_7: ref null "core:prelude/string.wado//String";
-    let $vc_payload_1_60: ref "core:prelude/string.wado//String";
-    let v_61: ref null "wasi:clocks/system_clock.wado//Instant";
-    let $vc_payload_1_62: ref "wasi:clocks/system_clock.wado//Instant";
+    let $vc_payload_1_61: ref "core:prelude/string.wado//String";
+    let v_62: ref null "wasi:clocks/system_clock.wado//Instant";
+    let $vc_payload_1_63: ref "wasi:clocks/system_clock.wado//Instant";
     if local.tee $load_0(local.tee dirs("wasi_filesystem_advise_sync.wado/$cm_binding__Preopens_get_directories"()).used) == 0 {
         let $mv_field_1: ref Array<u8>;
         "core:cli/eprintln"(local.tee $mv_field_1(array.new_data<u8>("no preopened directories available")), 34);
@@ -620,6 +620,7 @@ fn "wasi_filesystem_advise_sync.wado/run"() with Stdout, Stderr, Preopens {
         }
         return;
     }
+    $temp_18 = ref.null none;
     $moved_19 = local.tee $temp_18("core:prelude/list.wado/core:prelude/list.wado/List<[wasi:filesystem/types.wado/Descriptor,core:prelude/string.wado/String]>::remove$unchecked"(dirs, if @unlikely(0 >= $load_0) {
         cold_path;
         "wasi_filesystem_advise_sync.wado/run$cold0$dae[$contract_arg_0]"($load_0);
@@ -641,39 +642,39 @@ fn "wasi_filesystem_advise_sync.wado/run"() with Stdout, Stderr, Preopens {
         read_result = ref.null none;
         file_size = (if ref.test "core:prelude/types.wado//Result<wasi:filesystem/types.wado/DescriptorStat,wasi:filesystem/types.wado/ErrorCode>::Ok"(local.tee v_38((if ref.test "core:prelude/types.wado//Result<wasi:filesystem/types.wado/DescriptorStat,wasi:filesystem/types.wado/ErrorCode>::Ok"(local.tee v_38("core:prelude/types.wado/core:prelude/types.wado/AsyncCall<core:prelude/types.wado/Result<wasi:filesystem/types.wado/DescriptorStat,wasi:filesystem/types.wado/ErrorCode>>::wait"("wasi_filesystem_advise_sync.wado/$cm_binding__Descriptor_stat"($load_2)))) -> ref "core:prelude/types.wado//Result<wasi:filesystem/types.wado/DescriptorStat,wasi:filesystem/types.wado/ErrorCode>" {
             $vc_payload_0 = ref.cast "core:prelude/types.wado//Result<wasi:filesystem/types.wado/DescriptorStat,wasi:filesystem/types.wado/ErrorCode>::Ok"(v_38).payload_0;
-            struct.new "core:prelude/types.wado//Result<wasi:filesystem/types.wado/DescriptorStat,wasi:filesystem/types.wado/ErrorCode>::Ok" { discriminant: 0, payload_0: struct.new "wasi:filesystem/types.wado//DescriptorStat" { type: (if local.tee $load_0(local.tee v_57($vc_payload_0.type).discriminant) == 0 -> ref "wasi:filesystem/types.wado//DescriptorType" {
-                v_57;
+            struct.new "core:prelude/types.wado//Result<wasi:filesystem/types.wado/DescriptorStat,wasi:filesystem/types.wado/ErrorCode>::Ok" { discriminant: 0, payload_0: struct.new "wasi:filesystem/types.wado//DescriptorStat" { type: (if local.tee $load_0(local.tee v_58($vc_payload_0.type).discriminant) == 0 -> ref "wasi:filesystem/types.wado//DescriptorType" {
+                v_58;
             } else if $load_0 == 1 -> ref "wasi:filesystem/types.wado//DescriptorType" {
-                v_57;
+                v_58;
             } else if $load_0 == 2 -> ref "wasi:filesystem/types.wado//DescriptorType" {
-                v_57;
+                v_58;
             } else if $load_0 == 3 -> ref "wasi:filesystem/types.wado//DescriptorType" {
-                v_57;
+                v_58;
             } else if $load_0 == 4 -> ref "wasi:filesystem/types.wado//DescriptorType" {
-                v_57;
+                v_58;
             } else if $load_0 == 5 -> ref "wasi:filesystem/types.wado//DescriptorType" {
-                v_57;
+                v_58;
             } else if $load_0 == 6 -> ref "wasi:filesystem/types.wado//DescriptorType" {
-                v_57;
+                v_58;
             } else {
-                $vc_payload_7 = ref.cast "wasi:filesystem/types.wado//DescriptorType::Other"(v_57).payload_0;
+                $vc_payload_7 = ref.cast "wasi:filesystem/types.wado//DescriptorType::Other"(v_58).payload_0;
                 struct.new "wasi:filesystem/types.wado//DescriptorType::Other" { discriminant: 7, payload_0: (if ref.is_null($vc_payload_7) -> ref null "core:prelude/string.wado//String" {
                     $vc_payload_7;
                 } else {
-                    struct.new "core:prelude/string.wado//String" { repr: $mv_field_1 = local.tee $vc_payload_1_60(ref.as_non_null($vc_payload_7)).repr; $load_0 = $vc_payload_1_60.used; let $array_clone_dst_8: ref Array<u8>; builtin::array_copy<u8>(local.tee $array_clone_dst_8(builtin::array_new<u8>($load_0)), 0, $mv_field_1, 0, $load_0); $array_clone_dst_8, used: $load_0 };
+                    struct.new "core:prelude/string.wado//String" { repr: $mv_field_1 = local.tee $vc_payload_1_61(ref.as_non_null($vc_payload_7)).repr; $load_0 = $vc_payload_1_61.used; let $array_clone_dst_8: ref Array<u8>; builtin::array_copy<u8>(local.tee $array_clone_dst_8(builtin::array_new<u8>($load_0)), 0, $mv_field_1, 0, $load_0); $array_clone_dst_8, used: $load_0 };
                 }) };
-            }), link_count: $vc_payload_0.link_count, size: $vc_payload_0.size, data_access_timestamp: (if ref.is_null(local.tee v_61($vc_payload_0.data_access_timestamp)) -> ref null "wasi:clocks/system_clock.wado//Instant" {
-                v_61;
+            }), link_count: $vc_payload_0.link_count, size: $vc_payload_0.size, data_access_timestamp: (if ref.is_null(local.tee v_62($vc_payload_0.data_access_timestamp)) -> ref null "wasi:clocks/system_clock.wado//Instant" {
+                v_62;
             } else {
-                struct.new "wasi:clocks/system_clock.wado//Instant" { seconds: local.tee $vc_payload_1_62(ref.as_non_null(v_61)).seconds, nanoseconds: $vc_payload_1_62.nanoseconds };
-            }), data_modification_timestamp: (if ref.is_null(local.tee v_61($vc_payload_0.data_modification_timestamp)) -> ref null "wasi:clocks/system_clock.wado//Instant" {
-                v_61;
+                struct.new "wasi:clocks/system_clock.wado//Instant" { seconds: local.tee $vc_payload_1_63(ref.as_non_null(v_62)).seconds, nanoseconds: $vc_payload_1_63.nanoseconds };
+            }), data_modification_timestamp: (if ref.is_null(local.tee v_62($vc_payload_0.data_modification_timestamp)) -> ref null "wasi:clocks/system_clock.wado//Instant" {
+                v_62;
             } else {
-                struct.new "wasi:clocks/system_clock.wado//Instant" { seconds: local.tee $vc_payload_1_62(ref.as_non_null(v_61)).seconds, nanoseconds: $vc_payload_1_62.nanoseconds };
-            }), status_change_timestamp: (if ref.is_null(local.tee v_61($vc_payload_0.status_change_timestamp)) -> ref null "wasi:clocks/system_clock.wado//Instant" {
-                v_61;
+                struct.new "wasi:clocks/system_clock.wado//Instant" { seconds: local.tee $vc_payload_1_63(ref.as_non_null(v_62)).seconds, nanoseconds: $vc_payload_1_63.nanoseconds };
+            }), status_change_timestamp: (if ref.is_null(local.tee v_62($vc_payload_0.status_change_timestamp)) -> ref null "wasi:clocks/system_clock.wado//Instant" {
+                v_62;
             } else {
-                struct.new "wasi:clocks/system_clock.wado//Instant" { seconds: local.tee $vc_payload_1_62(ref.as_non_null(v_61)).seconds, nanoseconds: $vc_payload_1_62.nanoseconds };
+                struct.new "wasi:clocks/system_clock.wado//Instant" { seconds: local.tee $vc_payload_1_63(ref.as_non_null(v_62)).seconds, nanoseconds: $vc_payload_1_63.nanoseconds };
             }) } };
         } else {
             $vc_payload_1_40 = ref.cast "core:prelude/types.wado//Result<wasi:filesystem/types.wado/DescriptorStat,wasi:filesystem/types.wado/ErrorCode>::Err"(v_38).payload_0;
@@ -723,11 +724,11 @@ fn "wasi_filesystem_advise_sync.wado/run"() with Stdout, Stderr, Preopens {
     if ref.test "core:prelude/types.wado//Result<wasi:filesystem/types.wado/Descriptor,wasi:filesystem/types.wado/ErrorCode>::Ok"(local.tee $match_scrut_14($match_scrut_0)) {
         $load_2 = ref.cast "core:prelude/types.wado//Result<wasi:filesystem/types.wado/Descriptor,wasi:filesystem/types.wado/ErrorCode>::Ok"($match_scrut_14).payload_0;
         $match_scrut_0 = ref.null none;
-        $sroa_$pattern_temp_0_0_55 = struct.new "core:prelude//$Resource" { value: builtin::i32_wrap_i64(local.tee file_size("wasi/stream-new"())) };
-        $sroa_$pattern_temp_0_1_56 = struct.new "core:prelude//$Resource" { value: builtin::i32_wrap_i64(file_size >> 32_i64) };
-        $moved_20 = "wasi_filesystem_advise_sync.wado/$cm_binding__Descriptor_write_via_stream"($load_2, $moved_20 = $sroa_$pattern_temp_0_0_55; $sroa_$pattern_temp_0_0_55 = ref.null none; $moved_20, 0_i64);
-        drop("core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u8>::write_all"($sroa_$pattern_temp_0_1_56, struct.new "core:prelude//List<u8>" { repr: array.new_fixed<u8>(116, 101, 115, 116), used: 4 }));
-        "wasi/stream-drop-writable"($moved_21 = $sroa_$pattern_temp_0_1_56; $sroa_$pattern_temp_0_1_56 = ref.null none; $moved_21.value);
+        $sroa_$pattern_temp_0_0_56 = struct.new "core:prelude//$Resource" { value: builtin::i32_wrap_i64(local.tee file_size("wasi/stream-new"())) };
+        $sroa_$pattern_temp_0_1_57 = struct.new "core:prelude//$Resource" { value: builtin::i32_wrap_i64(file_size >> 32_i64) };
+        $moved_20 = "wasi_filesystem_advise_sync.wado/$cm_binding__Descriptor_write_via_stream"($load_2, $moved_20 = $sroa_$pattern_temp_0_0_56; $sroa_$pattern_temp_0_0_56 = ref.null none; $moved_20, 0_i64);
+        drop("core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u8>::write_all"($sroa_$pattern_temp_0_1_57, struct.new "core:prelude//List<u8>" { repr: array.new_fixed<u8>(116, 101, 115, 116), used: 4 }));
+        "wasi/stream-drop-writable"($moved_21 = $sroa_$pattern_temp_0_1_57; $sroa_$pattern_temp_0_1_57 = ref.null none; $moved_21.value);
         "wasi/future-drop-readable:transmission-wasi/filesystem/types.wado#error-code"($moved_21 = $moved_20; $moved_20 = ref.null none; $moved_21.value);
         if ref.is_null(local.tee v_42((if ref.is_null(local.tee v_42("core:prelude/types.wado/core:prelude/types.wado/AsyncCall<core:prelude/types.wado/Result<(),wasi:filesystem/types.wado/ErrorCode>>::wait"("wasi_filesystem_advise_sync.wado/$cm_binding__Descriptor_sync_data"($load_2)))) -> ref null "wasi:filesystem/types.wado//ErrorCode" {
             v_42;
@@ -755,11 +756,11 @@ fn "wasi_filesystem_advise_sync.wado/run"() with Stdout, Stderr, Preopens {
         if ref.is_null($moved_20) == 0 {
             "wasi/future-drop-readable:transmission-wasi/filesystem/types.wado#error-code"($moved_20.value);
         }
-        if ref.is_null($sroa_$pattern_temp_0_1_56) == 0 {
-            "wasi/stream-drop-writable"($sroa_$pattern_temp_0_1_56.value);
+        if ref.is_null($sroa_$pattern_temp_0_1_57) == 0 {
+            "wasi/stream-drop-writable"($sroa_$pattern_temp_0_1_57.value);
         }
-        if ref.is_null($sroa_$pattern_temp_0_0_55) == 0 {
-            "wasi/stream-drop-readable"($sroa_$pattern_temp_0_0_55.value);
+        if ref.is_null($sroa_$pattern_temp_0_0_56) == 0 {
+            "wasi/stream-drop-readable"($sroa_$pattern_temp_0_0_56.value);
         }
         if ref.is_null($load_2) == 0 {
             $load_0 = $load_2.value;
@@ -889,7 +890,7 @@ fn "wasi_filesystem_advise_sync.wado/$cm_binding__Descriptor_stat"(self) with De
     if $subtask_handle != 0 {
         $subtask = struct.new "core:prelude/types.wado//Option<core:prelude/types.wado/Subtask>::Some" { discriminant: 1, payload_0: struct.new "core:prelude//$Resource" { value: $subtask_handle } };
     }
-    return struct.new "core:prelude/types.wado//AsyncCall<core:prelude/types.wado/Result<wasi:filesystem/types.wado/DescriptorStat,wasi:filesystem/types.wado/ErrorCode>>" { subtask: $subtask, buffer: struct.new "core:prelude/types.wado//Option<core:prelude/types.wado/ResultBuffer>::Some" { discriminant: 1, payload_0: struct.new "core:prelude/types.wado//ResultBuffer" { ptr: $async_outptr, size: 112, align: 8 } }, lift: struct.new "canonical//CanonicalClosure_1" { env: struct.new "wasi_filesystem_advise_sync.wado//$Closure_1" {  }, func: ref.func "closure/wasi_filesystem_advise_sync.wado/$closure_wrapper_1" } };
+    return struct.new "core:prelude/types.wado//AsyncCall<core:prelude/types.wado/Result<wasi:filesystem/types.wado/DescriptorStat,wasi:filesystem/types.wado/ErrorCode>>" { subtask: struct.new "core:prelude/types.wado//Box<core:prelude/types.wado/Option<core:prelude/types.wado/Subtask>>" { value: $subtask }, buffer: struct.new "core:prelude/types.wado//Box<core:prelude/types.wado/Option<core:prelude/types.wado/ResultBuffer>>" { value: struct.new "core:prelude/types.wado//Option<core:prelude/types.wado/ResultBuffer>::Some" { discriminant: 1, payload_0: struct.new "core:prelude/types.wado//ResultBuffer" { ptr: $async_outptr, size: 112, align: 8 } } }, lift: struct.new "canonical//CanonicalClosure_1" { env: struct.new "wasi_filesystem_advise_sync.wado//$Closure_1" {  }, func: ref.func "closure/wasi_filesystem_advise_sync.wado/$closure_wrapper_1" } };
 }
 
 fn "wasi_filesystem_advise_sync.wado/$cm_binding__Descriptor_write_via_stream"(self, data, offset) with Descriptor {
@@ -906,7 +907,7 @@ fn "wasi_filesystem_advise_sync.wado/$cm_binding__Descriptor_sync_data"(self) wi
     if $subtask_handle != 0 {
         $subtask = struct.new "core:prelude/types.wado//Option<core:prelude/types.wado/Subtask>::Some" { discriminant: 1, payload_0: struct.new "core:prelude//$Resource" { value: $subtask_handle } };
     }
-    return struct.new "core:prelude/types.wado//AsyncCall<core:prelude/types.wado/Result<(),wasi:filesystem/types.wado/ErrorCode>>" { subtask: $subtask, buffer: struct.new "core:prelude/types.wado//Option<core:prelude/types.wado/ResultBuffer>::Some" { discriminant: 1, payload_0: struct.new "core:prelude/types.wado//ResultBuffer" { ptr: $async_outptr, size: 20, align: 4 } }, lift: struct.new "canonical//CanonicalClosure_2" { env: struct.new "wasi_filesystem_advise_sync.wado//$Closure_3" {  }, func: ref.func "closure/wasi_filesystem_advise_sync.wado/$closure_wrapper_3" } };
+    return struct.new "core:prelude/types.wado//AsyncCall<core:prelude/types.wado/Result<(),wasi:filesystem/types.wado/ErrorCode>>" { subtask: struct.new "core:prelude/types.wado//Box<core:prelude/types.wado/Option<core:prelude/types.wado/Subtask>>" { value: $subtask }, buffer: struct.new "core:prelude/types.wado//Box<core:prelude/types.wado/Option<core:prelude/types.wado/ResultBuffer>>" { value: struct.new "core:prelude/types.wado//Option<core:prelude/types.wado/ResultBuffer>::Some" { discriminant: 1, payload_0: struct.new "core:prelude/types.wado//ResultBuffer" { ptr: $async_outptr, size: 20, align: 4 } } }, lift: struct.new "canonical//CanonicalClosure_2" { env: struct.new "wasi_filesystem_advise_sync.wado//$Closure_3" {  }, func: ref.func "closure/wasi_filesystem_advise_sync.wado/$closure_wrapper_3" } };
 }
 
 fn "wasi_filesystem_advise_sync.wado/$cm_binding__Descriptor_sync"(self) with Descriptor {
@@ -919,7 +920,7 @@ fn "wasi_filesystem_advise_sync.wado/$cm_binding__Descriptor_sync"(self) with De
     if $subtask_handle != 0 {
         $subtask = struct.new "core:prelude/types.wado//Option<core:prelude/types.wado/Subtask>::Some" { discriminant: 1, payload_0: struct.new "core:prelude//$Resource" { value: $subtask_handle } };
     }
-    return struct.new "core:prelude/types.wado//AsyncCall<core:prelude/types.wado/Result<(),wasi:filesystem/types.wado/ErrorCode>>" { subtask: $subtask, buffer: struct.new "core:prelude/types.wado//Option<core:prelude/types.wado/ResultBuffer>::Some" { discriminant: 1, payload_0: struct.new "core:prelude/types.wado//ResultBuffer" { ptr: $async_outptr, size: 20, align: 4 } }, lift: struct.new "canonical//CanonicalClosure_2" { env: struct.new "wasi_filesystem_advise_sync.wado//$Closure_4" {  }, func: ref.func "closure/wasi_filesystem_advise_sync.wado/$closure_wrapper_4" } };
+    return struct.new "core:prelude/types.wado//AsyncCall<core:prelude/types.wado/Result<(),wasi:filesystem/types.wado/ErrorCode>>" { subtask: struct.new "core:prelude/types.wado//Box<core:prelude/types.wado/Option<core:prelude/types.wado/Subtask>>" { value: $subtask }, buffer: struct.new "core:prelude/types.wado//Box<core:prelude/types.wado/Option<core:prelude/types.wado/ResultBuffer>>" { value: struct.new "core:prelude/types.wado//Option<core:prelude/types.wado/ResultBuffer>::Some" { discriminant: 1, payload_0: struct.new "core:prelude/types.wado//ResultBuffer" { ptr: $async_outptr, size: 20, align: 4 } } }, lift: struct.new "canonical//CanonicalClosure_2" { env: struct.new "wasi_filesystem_advise_sync.wado//$Closure_4" {  }, func: ref.func "closure/wasi_filesystem_advise_sync.wado/$closure_wrapper_4" } };
 }
 
 fn "wasi_filesystem_advise_sync.wado/$cm_binding__Descriptor_unlink_file_at"(self, path) with Descriptor {
@@ -948,7 +949,7 @@ fn "wasi_filesystem_advise_sync.wado/$cm_binding__Descriptor_unlink_file_at"(sel
     if ptr_10 != 0 {
         $subtask = struct.new "core:prelude/types.wado//Option<core:prelude/types.wado/Subtask>::Some" { discriminant: 1, payload_0: struct.new "core:prelude//$Resource" { value: ptr_10 } };
     }
-    return struct.new "core:prelude/types.wado//AsyncCall<core:prelude/types.wado/Result<(),wasi:filesystem/types.wado/ErrorCode>>" { subtask: $subtask, buffer: struct.new "core:prelude/types.wado//Option<core:prelude/types.wado/ResultBuffer>::Some" { discriminant: 1, payload_0: struct.new "core:prelude/types.wado//ResultBuffer" { ptr: self_11, size: 20, align: 4 } }, lift: struct.new "canonical//CanonicalClosure_2" { env: struct.new "wasi_filesystem_advise_sync.wado//$Closure_5" {  }, func: ref.func "closure/wasi_filesystem_advise_sync.wado/$closure_wrapper_5" } };
+    return struct.new "core:prelude/types.wado//AsyncCall<core:prelude/types.wado/Result<(),wasi:filesystem/types.wado/ErrorCode>>" { subtask: struct.new "core:prelude/types.wado//Box<core:prelude/types.wado/Option<core:prelude/types.wado/Subtask>>" { value: $subtask }, buffer: struct.new "core:prelude/types.wado//Box<core:prelude/types.wado/Option<core:prelude/types.wado/ResultBuffer>>" { value: struct.new "core:prelude/types.wado//Option<core:prelude/types.wado/ResultBuffer>::Some" { discriminant: 1, payload_0: struct.new "core:prelude/types.wado//ResultBuffer" { ptr: self_11, size: 20, align: 4 } } }, lift: struct.new "canonical//CanonicalClosure_2" { env: struct.new "wasi_filesystem_advise_sync.wado//$Closure_5" {  }, func: ref.func "closure/wasi_filesystem_advise_sync.wado/$closure_wrapper_5" } };
 }
 
 fn "wasi_filesystem_advise_sync.wado/$cm_lift__Descriptor_open_at"($outptr) {
@@ -1788,7 +1789,7 @@ fn "wasi_filesystem_advise_sync.wado/$cm_binding__Descriptor_open_at$spec0"(self
     if open_flags != 0 {
         $subtask = struct.new "core:prelude/types.wado//Option<core:prelude/types.wado/Subtask>::Some" { discriminant: 1, payload_0: struct.new "core:prelude//$Resource" { value: open_flags } };
     }
-    return struct.new "core:prelude/types.wado//AsyncCall<core:prelude/types.wado/Result<wasi:filesystem/types.wado/Descriptor,wasi:filesystem/types.wado/ErrorCode>>" { subtask: $subtask, buffer: struct.new "core:prelude/types.wado//Option<core:prelude/types.wado/ResultBuffer>::Some" { discriminant: 1, payload_0: struct.new "core:prelude/types.wado//ResultBuffer" { ptr: flags, size: 20, align: 4 } }, lift: struct.new "canonical//CanonicalClosure_0" { env: struct.new "wasi_filesystem_advise_sync.wado//$Closure_0" {  }, func: ref.func "closure/wasi_filesystem_advise_sync.wado/$closure_wrapper_0" } };
+    return struct.new "core:prelude/types.wado//AsyncCall<core:prelude/types.wado/Result<wasi:filesystem/types.wado/Descriptor,wasi:filesystem/types.wado/ErrorCode>>" { subtask: struct.new "core:prelude/types.wado//Box<core:prelude/types.wado/Option<core:prelude/types.wado/Subtask>>" { value: $subtask }, buffer: struct.new "core:prelude/types.wado//Box<core:prelude/types.wado/Option<core:prelude/types.wado/ResultBuffer>>" { value: struct.new "core:prelude/types.wado//Option<core:prelude/types.wado/ResultBuffer>::Some" { discriminant: 1, payload_0: struct.new "core:prelude/types.wado//ResultBuffer" { ptr: flags, size: 20, align: 4 } } }, lift: struct.new "canonical//CanonicalClosure_0" { env: struct.new "wasi_filesystem_advise_sync.wado//$Closure_0" {  }, func: ref.func "closure/wasi_filesystem_advise_sync.wado/$closure_wrapper_0" } };
 }
 
 fn "wasi_filesystem_advise_sync.wado/$cm_binding__Descriptor_advise$spec0"(self, offset, length, advice) with Descriptor {
@@ -1800,7 +1801,7 @@ fn "wasi_filesystem_advise_sync.wado/$cm_binding__Descriptor_advise$spec0"(self,
     if $subtask_handle != 0 {
         $subtask = struct.new "core:prelude/types.wado//Option<core:prelude/types.wado/Subtask>::Some" { discriminant: 1, payload_0: struct.new "core:prelude//$Resource" { value: $subtask_handle } };
     }
-    return struct.new "core:prelude/types.wado//AsyncCall<core:prelude/types.wado/Result<(),wasi:filesystem/types.wado/ErrorCode>>" { subtask: $subtask, buffer: struct.new "core:prelude/types.wado//Option<core:prelude/types.wado/ResultBuffer>::Some" { discriminant: 1, payload_0: struct.new "core:prelude/types.wado//ResultBuffer" { ptr: advice, size: 20, align: 4 } }, lift: struct.new "canonical//CanonicalClosure_2" { env: struct.new "wasi_filesystem_advise_sync.wado//$Closure_2" {  }, func: ref.func "closure/wasi_filesystem_advise_sync.wado/$closure_wrapper_2" } };
+    return struct.new "core:prelude/types.wado//AsyncCall<core:prelude/types.wado/Result<(),wasi:filesystem/types.wado/ErrorCode>>" { subtask: struct.new "core:prelude/types.wado//Box<core:prelude/types.wado/Option<core:prelude/types.wado/Subtask>>" { value: $subtask }, buffer: struct.new "core:prelude/types.wado//Box<core:prelude/types.wado/Option<core:prelude/types.wado/ResultBuffer>>" { value: struct.new "core:prelude/types.wado//Option<core:prelude/types.wado/ResultBuffer>::Some" { discriminant: 1, payload_0: struct.new "core:prelude/types.wado//ResultBuffer" { ptr: advice, size: 20, align: 4 } } }, lift: struct.new "canonical//CanonicalClosure_2" { env: struct.new "wasi_filesystem_advise_sync.wado//$Closure_2" {  }, func: ref.func "closure/wasi_filesystem_advise_sync.wado/$closure_wrapper_2" } };
 }
 
 fn "wasi_filesystem_advise_sync.wado/$cm_binding__Descriptor_advise$spec1"(self, offset, length, advice) with Descriptor {
@@ -1812,7 +1813,7 @@ fn "wasi_filesystem_advise_sync.wado/$cm_binding__Descriptor_advise$spec1"(self,
     if $subtask_handle != 0 {
         $subtask = struct.new "core:prelude/types.wado//Option<core:prelude/types.wado/Subtask>::Some" { discriminant: 1, payload_0: struct.new "core:prelude//$Resource" { value: $subtask_handle } };
     }
-    return struct.new "core:prelude/types.wado//AsyncCall<core:prelude/types.wado/Result<(),wasi:filesystem/types.wado/ErrorCode>>" { subtask: $subtask, buffer: struct.new "core:prelude/types.wado//Option<core:prelude/types.wado/ResultBuffer>::Some" { discriminant: 1, payload_0: struct.new "core:prelude/types.wado//ResultBuffer" { ptr: advice, size: 20, align: 4 } }, lift: struct.new "canonical//CanonicalClosure_2" { env: struct.new "wasi_filesystem_advise_sync.wado//$Closure_2" {  }, func: ref.func "closure/wasi_filesystem_advise_sync.wado/$closure_wrapper_2" } };
+    return struct.new "core:prelude/types.wado//AsyncCall<core:prelude/types.wado/Result<(),wasi:filesystem/types.wado/ErrorCode>>" { subtask: struct.new "core:prelude/types.wado//Box<core:prelude/types.wado/Option<core:prelude/types.wado/Subtask>>" { value: $subtask }, buffer: struct.new "core:prelude/types.wado//Box<core:prelude/types.wado/Option<core:prelude/types.wado/ResultBuffer>>" { value: struct.new "core:prelude/types.wado//Option<core:prelude/types.wado/ResultBuffer>::Some" { discriminant: 1, payload_0: struct.new "core:prelude/types.wado//ResultBuffer" { ptr: advice, size: 20, align: 4 } } }, lift: struct.new "canonical//CanonicalClosure_2" { env: struct.new "wasi_filesystem_advise_sync.wado//$Closure_2" {  }, func: ref.func "closure/wasi_filesystem_advise_sync.wado/$closure_wrapper_2" } };
 }
 
 fn "wasi_filesystem_advise_sync.wado/$cm_binding__Descriptor_advise$spec2"(self, offset, length, advice) with Descriptor {
@@ -1824,7 +1825,7 @@ fn "wasi_filesystem_advise_sync.wado/$cm_binding__Descriptor_advise$spec2"(self,
     if $subtask_handle != 0 {
         $subtask = struct.new "core:prelude/types.wado//Option<core:prelude/types.wado/Subtask>::Some" { discriminant: 1, payload_0: struct.new "core:prelude//$Resource" { value: $subtask_handle } };
     }
-    return struct.new "core:prelude/types.wado//AsyncCall<core:prelude/types.wado/Result<(),wasi:filesystem/types.wado/ErrorCode>>" { subtask: $subtask, buffer: struct.new "core:prelude/types.wado//Option<core:prelude/types.wado/ResultBuffer>::Some" { discriminant: 1, payload_0: struct.new "core:prelude/types.wado//ResultBuffer" { ptr: advice, size: 20, align: 4 } }, lift: struct.new "canonical//CanonicalClosure_2" { env: struct.new "wasi_filesystem_advise_sync.wado//$Closure_2" {  }, func: ref.func "closure/wasi_filesystem_advise_sync.wado/$closure_wrapper_2" } };
+    return struct.new "core:prelude/types.wado//AsyncCall<core:prelude/types.wado/Result<(),wasi:filesystem/types.wado/ErrorCode>>" { subtask: struct.new "core:prelude/types.wado//Box<core:prelude/types.wado/Option<core:prelude/types.wado/Subtask>>" { value: $subtask }, buffer: struct.new "core:prelude/types.wado//Box<core:prelude/types.wado/Option<core:prelude/types.wado/ResultBuffer>>" { value: struct.new "core:prelude/types.wado//Option<core:prelude/types.wado/ResultBuffer>::Some" { discriminant: 1, payload_0: struct.new "core:prelude/types.wado//ResultBuffer" { ptr: advice, size: 20, align: 4 } } }, lift: struct.new "canonical//CanonicalClosure_2" { env: struct.new "wasi_filesystem_advise_sync.wado//$Closure_2" {  }, func: ref.func "closure/wasi_filesystem_advise_sync.wado/$closure_wrapper_2" } };
 }
 
 fn "wasi_filesystem_advise_sync.wado/$cm_binding__Descriptor_open_at$spec1"(self, path_flags, path, open_flags, flags) with Descriptor {
@@ -1857,7 +1858,7 @@ fn "wasi_filesystem_advise_sync.wado/$cm_binding__Descriptor_open_at$spec1"(self
     if open_flags != 0 {
         $subtask = struct.new "core:prelude/types.wado//Option<core:prelude/types.wado/Subtask>::Some" { discriminant: 1, payload_0: struct.new "core:prelude//$Resource" { value: open_flags } };
     }
-    return struct.new "core:prelude/types.wado//AsyncCall<core:prelude/types.wado/Result<wasi:filesystem/types.wado/Descriptor,wasi:filesystem/types.wado/ErrorCode>>" { subtask: $subtask, buffer: struct.new "core:prelude/types.wado//Option<core:prelude/types.wado/ResultBuffer>::Some" { discriminant: 1, payload_0: struct.new "core:prelude/types.wado//ResultBuffer" { ptr: flags, size: 20, align: 4 } }, lift: struct.new "canonical//CanonicalClosure_0" { env: struct.new "wasi_filesystem_advise_sync.wado//$Closure_0" {  }, func: ref.func "closure/wasi_filesystem_advise_sync.wado/$closure_wrapper_0" } };
+    return struct.new "core:prelude/types.wado//AsyncCall<core:prelude/types.wado/Result<wasi:filesystem/types.wado/Descriptor,wasi:filesystem/types.wado/ErrorCode>>" { subtask: struct.new "core:prelude/types.wado//Box<core:prelude/types.wado/Option<core:prelude/types.wado/Subtask>>" { value: $subtask }, buffer: struct.new "core:prelude/types.wado//Box<core:prelude/types.wado/Option<core:prelude/types.wado/ResultBuffer>>" { value: struct.new "core:prelude/types.wado//Option<core:prelude/types.wado/ResultBuffer>::Some" { discriminant: 1, payload_0: struct.new "core:prelude/types.wado//ResultBuffer" { ptr: flags, size: 20, align: 4 } } }, lift: struct.new "canonical//CanonicalClosure_0" { env: struct.new "wasi_filesystem_advise_sync.wado//$Closure_0" {  }, func: ref.func "closure/wasi_filesystem_advise_sync.wado/$closure_wrapper_0" } };
 }
 
 fn "core:cli/println"($mv$message$repr, $mv$message$used) with Stdout {
@@ -2380,21 +2381,21 @@ condition: 0 <= index < self.len()
 
 fn "core:prelude/types.wado/core:prelude/types.wado/AsyncCall<core:prelude/types.wado/Result<(),wasi:filesystem/types.wado/ErrorCode>>::wait$cold0$dae[self]"($v0) with Subtask {
     let $mv_field_2: ref Array<u8>;
-    $mv_field_2 = array.new_data<u8>("core:prelude/types.wado:672");
+    $mv_field_2 = array.new_data<u8>("core:prelude/types.wado:670");
     "core:prelude/types.wado/cm_subtask_settled$contract_report0"($v0, $mv_field_2, 27);
     unreachable;
 }
 
 fn "core:prelude/types.wado/core:prelude/types.wado/AsyncCall<core:prelude/types.wado/Result<wasi:filesystem/types.wado/DescriptorStat,wasi:filesystem/types.wado/ErrorCode>>::wait$cold0$dae[self]"($v0) with Subtask {
     let $mv_field_2: ref Array<u8>;
-    $mv_field_2 = array.new_data<u8>("core:prelude/types.wado:672");
+    $mv_field_2 = array.new_data<u8>("core:prelude/types.wado:670");
     "core:prelude/types.wado/cm_subtask_settled$contract_report0"($v0, $mv_field_2, 27);
     unreachable;
 }
 
 fn "core:prelude/types.wado/core:prelude/types.wado/AsyncCall<core:prelude/types.wado/Result<wasi:filesystem/types.wado/Descriptor,wasi:filesystem/types.wado/ErrorCode>>::wait$cold0$dae[self]"($v0) with Subtask {
     let $mv_field_2: ref Array<u8>;
-    $mv_field_2 = array.new_data<u8>("core:prelude/types.wado:672");
+    $mv_field_2 = array.new_data<u8>("core:prelude/types.wado:670");
     "core:prelude/types.wado/cm_subtask_settled$contract_report0"($v0, $mv_field_2, 27);
     unreachable;
 }
@@ -2424,7 +2425,7 @@ fn "core:prelude/types.wado/core:prelude/types.wado/WaitableSet<core:prelude/typ
     $sroa_s_repr_56 = array.new_fixed<u8>(58);
     builtin::array_copy<u8>($load_0, $fuse_at_9, $sroa_s_repr_56, 0, 1);
     f_32 = local.tee $local_6("core:prelude/format.wado/core:prelude/format.wado/Formatter::new"($local_5));
-    "core:prelude/primitive.wado/i32::fmt_decimal$sroa[self.value]"(511, f_32);
+    "core:prelude/primitive.wado/i32::fmt_decimal$sroa[self.value]"(509, f_32);
     $fuse_at_9 = "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"($local_5, 87);
     $sroa_s_repr_56 = $local_5.repr;
     $load_0 = array.new_fixed<u8>(58, 32);
@@ -2449,7 +2450,7 @@ condition: !self.members.is_empty()
 
 fn "core:prelude/types.wado/core:prelude/types.wado/WaitableSet<core:prelude/types.wado/Subtask>::take_ready_without_host$cold0$dae[self]"(at, $v1) {
     let $mv_field_3: ref Array<u8>;
-    $mv_field_3 = array.new_data<u8>("core:prelude/types.wado:544");
+    $mv_field_3 = array.new_data<u8>("core:prelude/types.wado:542");
     "core:prelude/list.wado/core:prelude/list.wado/List<core:prelude/types.wado/Subtask>::remove$contract_report0"(at, $v1, $mv_field_3, 27);
     unreachable;
 }
@@ -2550,84 +2551,78 @@ fn "core:prelude/list.wado/core:prelude/list.wado/List<[wasi:filesystem/types.wa
 }
 
 fn "core:prelude/types.wado/core:prelude/types.wado/AsyncCall<core:prelude/types.wado/Result<(),wasi:filesystem/types.wado/ErrorCode>>::wait"(self) with Subtask {
-    let $load_1: ref null "core:prelude/types.wado//Option<core:prelude/types.wado/Subtask>";
-    let $load_2: ref null "core:prelude/types.wado//Option<core:prelude/types.wado/Subtask>";
-    let $load_28: ref null "core:prelude/types.wado//Option<core:prelude/types.wado/ResultBuffer>";
-    let $load_29: ref null "core:prelude/types.wado//Option<core:prelude/types.wado/ResultBuffer>";
     let subtask: ref null "core:prelude//$Resource";
     let set: ref null "core:prelude/types.wado//WaitableSet<core:prelude/types.wado/Subtask>";
     let ready_4: ref null "core:prelude/types.wado//Ready<core:prelude/types.wado/Subtask>";
     let buffer: ref null "core:prelude/types.wado//ResultBuffer";
     let $moved_6: ref null "core:prelude/types.wado//AsyncCall<core:prelude/types.wado/Result<(),wasi:filesystem/types.wado/ErrorCode>>";
+    let $temp_7: ref null "core:prelude/types.wado//Option<core:prelude/types.wado/ResultBuffer>";
     let $block_v_8: ref null "wasi:filesystem/types.wado//ErrorCode";
-    let $write_back_16: ref null "core:prelude/types.wado//Box<core:prelude/types.wado/Option<core:prelude/types.wado/Subtask>>";
-    let $local_20: ref null "core:prelude/types.wado//Box<core:prelude/types.wado/Option<core:prelude/types.wado/ResultBuffer>>";
+    let self_17: ref null "core:prelude/types.wado//Box<core:prelude/types.wado/Option<core:prelude/types.wado/Subtask>>";
+    let $replaced_3_20: ref null "core:prelude/types.wado//Option<core:prelude/types.wado/Subtask>";
     let elements: ref null "Array<core:prelude/types.wado/Subtask>";
-    let self_36: ref null "core:prelude//List<core:prelude/types.wado/Subtask>";
-    let used_38: i32;
+    let self_29: ref null "core:prelude//List<core:prelude/types.wado/Subtask>";
+    let used_31: i32;
     let $index_3: i32;
+    let self_60: ref null "core:prelude/types.wado//Box<core:prelude/types.wado/Option<core:prelude/types.wado/ResultBuffer>>";
+    let $replaced_3_63: ref null "core:prelude/types.wado//Option<core:prelude/types.wado/ResultBuffer>";
     $moved_6 = self;
     self = ref.null none;
-    $load_1 = local.tee $write_back_16(struct.new "core:prelude/types.wado//Box<core:prelude/types.wado/Option<core:prelude/types.wado/Subtask>>" { value: $moved_6.subtask }).value;
-    $write_back_16.value = global:core:builtin::$unit_case$core:prelude/types.wado//Option<core:prelude/types.wado/Subtask>$0;
-    if ref.eq(local.tee $load_2($write_back_16.value), $load_1) == 0 {
-        $moved_6.subtask = $load_2;
-    }
-    if ref.test "core:prelude/types.wado//Option<core:prelude/types.wado/Subtask>::Some"($load_1) {
-        subtask = ref.cast "core:prelude/types.wado//Option<core:prelude/types.wado/Subtask>::Some"($load_1).payload_0;
+    $replaced_3_20 = local.tee self_17($moved_6.subtask).value;
+    self_17.value = global:core:builtin::$unit_case$core:prelude/types.wado//Option<core:prelude/types.wado/Subtask>$0;
+    if ref.test "core:prelude/types.wado//Option<core:prelude/types.wado/Subtask>::Some"($replaced_3_20) {
+        subtask = ref.cast "core:prelude/types.wado//Option<core:prelude/types.wado/Subtask>::Some"($replaced_3_20).payload_0;
         set = struct.new "core:prelude/types.wado//WaitableSet<core:prelude/types.wado/Subtask>" { raw: struct.new "core:prelude//$Resource" { value: "wasi/waitable-set-new"() }, members: struct.new "core:prelude//List<core:prelude/types.wado/Subtask>" { repr: ref.as_non_null(local.tee elements(array.new_fixed<ref null "core:prelude//$Resource">())), used: 0 } };
         "wasi/waitable-join"(subtask.value, set.raw.value);
-        if @unlikely(local.tee used_38(local.tee self_36(set.members).used) >= builtin::array_len(self_36.repr)) {
+        if @unlikely(local.tee used_31(local.tee self_29(set.members).used) >= builtin::array_len(self_29.repr)) {
             cold_path;
-            "core:prelude/list.wado/core:prelude/list.wado/List<core:prelude/types.wado/Subtask>::grow"(self_36);
+            "core:prelude/list.wado/core:prelude/list.wado/List<core:prelude/types.wado/Subtask>::grow"(self_29);
         }
-        builtin::array_set<ref null "core:prelude//$Resource">(self_36.repr, used_38, subtask);
-        self_36.used = used_38 + 1;
-        b428: block {
-            l429: loop {
-                if @unlikely(local.tee used_38(local.tee ready_4("core:prelude/types.wado/core:prelude/types.wado/WaitableSet<core:prelude/types.wado/Subtask>::wait"(set)).code) != 1) {
+        builtin::array_set<ref null "core:prelude//$Resource">(self_29.repr, used_31, subtask);
+        self_29.used = used_31 + 1;
+        b427: block {
+            l428: loop {
+                if @unlikely(local.tee used_31(local.tee ready_4("core:prelude/types.wado/core:prelude/types.wado/WaitableSet<core:prelude/types.wado/Subtask>::wait"(set)).code) != 1) {
                     cold_path;
-                    "core:prelude/types.wado/core:prelude/types.wado/AsyncCall<core:prelude/types.wado/Result<(),wasi:filesystem/types.wado/ErrorCode>>::wait$cold0$dae[self]"(used_38);
+                    "core:prelude/types.wado/core:prelude/types.wado/AsyncCall<core:prelude/types.wado/Result<(),wasi:filesystem/types.wado/ErrorCode>>::wait$cold0$dae[self]"(used_31);
                     unreachable;
                 }
                 if ready_4.payload >u 1 {
                     "wasi/subtask-drop"(ready_4.member.value);
-                    break b428;
+                    break b427;
                 }
                 "wasi/waitable-join"(local.tee subtask(ready_4.member).value, set.raw.value);
-                if @unlikely(local.tee used_38(local.tee self_36(set.members).used) >= builtin::array_len(self_36.repr)) {
+                if @unlikely(local.tee used_31(local.tee self_29(set.members).used) >= builtin::array_len(self_29.repr)) {
                     cold_path;
-                    "core:prelude/list.wado/core:prelude/list.wado/List<core:prelude/types.wado/Subtask>::grow"(self_36);
+                    "core:prelude/list.wado/core:prelude/list.wado/List<core:prelude/types.wado/Subtask>::grow"(self_29);
                 }
-                builtin::array_set<ref null "core:prelude//$Resource">(self_36.repr, used_38, subtask);
-                self_36.used = used_38 + 1;
-                continue l429;
+                builtin::array_set<ref null "core:prelude//$Resource">(self_29.repr, used_31, subtask);
+                self_29.used = used_31 + 1;
+                continue l428;
             };
         };
         if ref.is_null(set) == 0 {
-            elements = local.tee self_36(set.members).repr;
-            used_38 = self_36.used;
+            elements = local.tee self_29(set.members).repr;
+            used_31 = self_29.used;
             $index_3 = 0;
-            b434: block {
-                l435: loop {
-                    break_if b434 $index_3 >= used_38;
+            b433: block {
+                l434: loop {
+                    break_if b433 $index_3 >= used_31;
                     drop(builtin::array_get_value<ref null "core:prelude//$Resource">(elements, $index_3));
                     $index_3 = $index_3 + 1;
-                    continue l435;
+                    continue l434;
                 };
             };
             "wasi/waitable-set-drop"(set.raw.value);
         }
     } else {
     }
-    $load_28 = local.tee $local_20(struct.new "core:prelude/types.wado//Box<core:prelude/types.wado/Option<core:prelude/types.wado/ResultBuffer>>" { value: $moved_6.buffer }).value;
-    $local_20.value = global:core:builtin::$unit_case$core:prelude/types.wado//Option<core:prelude/types.wado/ResultBuffer>$0;
-    if ref.eq(local.tee $load_29($local_20.value), $load_28) == 0 {
-        $moved_6.buffer = $load_29;
-    }
-    $block_v_8 = (if ref.test "core:prelude/types.wado//Option<core:prelude/types.wado/ResultBuffer>::Some"(local.tee $load_29($load_28)) -> ref null "wasi:filesystem/types.wado//ErrorCode" {
-        buffer = ref.cast "core:prelude/types.wado//Option<core:prelude/types.wado/ResultBuffer>::Some"($load_29).payload_0;
-        $load_28 = global:core:builtin::$unit_case$core:prelude/types.wado//Option<core:prelude/types.wado/ResultBuffer>$0;
+    $temp_7 = global:core:builtin::$unit_case$core:prelude/types.wado//Option<core:prelude/types.wado/ResultBuffer>$0;
+    $replaced_3_63 = local.tee self_60($moved_6.buffer).value;
+    self_60.value = global:core:builtin::$unit_case$core:prelude/types.wado//Option<core:prelude/types.wado/ResultBuffer>$0;
+    $block_v_8 = (if ref.test "core:prelude/types.wado//Option<core:prelude/types.wado/ResultBuffer>::Some"(local.tee $replaced_3_63(local.tee $temp_7($replaced_3_63))) -> ref null "wasi:filesystem/types.wado//ErrorCode" {
+        buffer = ref.cast "core:prelude/types.wado//Option<core:prelude/types.wado/ResultBuffer>::Some"($replaced_3_63).payload_0;
+        $temp_7 = global:core:builtin::$unit_case$core:prelude/types.wado//Option<core:prelude/types.wado/ResultBuffer>$0;
         $block_v_8 = block -> ref null "wasi:filesystem/types.wado//ErrorCode" {
             let $indirect_call_2: ref "canonical//CanonicalClosure_2";
             call_ref "functype/$canonical_closure_fn_2"($indirect_call_2.func, local.tee $indirect_call_2(ref.cast "canonical//CanonicalClosure_2"($moved_6.lift)).env, buffer.ptr);
@@ -2641,10 +2636,10 @@ fn "core:prelude/types.wado/core:prelude/types.wado/AsyncCall<core:prelude/types
             call_ref "functype/$canonical_closure_fn_2"($indirect_call_2.func, local.tee $indirect_call_2(ref.cast "canonical//CanonicalClosure_2"($moved_6.lift)).env, 0);
         };
     });
-    if ref.is_null($load_28) == 0 {
-        if $load_28.discriminant == 0 {
+    if ref.is_null($temp_7) == 0 {
+        if $temp_7.discriminant == 0 {
         } else {
-            drop("mem/realloc"(local.tee buffer(ref.cast "core:prelude/types.wado//Option<core:prelude/types.wado/ResultBuffer>::Some"($load_28).payload_0).ptr, buffer.size, buffer.align, 0));
+            drop("mem/realloc"(local.tee buffer(ref.cast "core:prelude/types.wado//Option<core:prelude/types.wado/ResultBuffer>::Some"($temp_7).payload_0).ptr, buffer.size, buffer.align, 0));
         }
     }
     if ref.is_null($moved_6) == 0 {
@@ -2657,84 +2652,78 @@ fn "core:prelude/types.wado/core:prelude/types.wado/AsyncCall<core:prelude/types
 }
 
 fn "core:prelude/types.wado/core:prelude/types.wado/AsyncCall<core:prelude/types.wado/Result<wasi:filesystem/types.wado/DescriptorStat,wasi:filesystem/types.wado/ErrorCode>>::wait"(self) with Subtask {
-    let $load_1: ref null "core:prelude/types.wado//Option<core:prelude/types.wado/Subtask>";
-    let $load_2: ref null "core:prelude/types.wado//Option<core:prelude/types.wado/Subtask>";
-    let $load_28: ref null "core:prelude/types.wado//Option<core:prelude/types.wado/ResultBuffer>";
-    let $load_29: ref null "core:prelude/types.wado//Option<core:prelude/types.wado/ResultBuffer>";
     let subtask: ref null "core:prelude//$Resource";
     let set: ref null "core:prelude/types.wado//WaitableSet<core:prelude/types.wado/Subtask>";
     let ready_4: ref null "core:prelude/types.wado//Ready<core:prelude/types.wado/Subtask>";
     let buffer: ref null "core:prelude/types.wado//ResultBuffer";
     let $moved_6: ref null "core:prelude/types.wado//AsyncCall<core:prelude/types.wado/Result<wasi:filesystem/types.wado/DescriptorStat,wasi:filesystem/types.wado/ErrorCode>>";
+    let $temp_7: ref null "core:prelude/types.wado//Option<core:prelude/types.wado/ResultBuffer>";
     let $block_v_8: ref "core:prelude/types.wado//Result<wasi:filesystem/types.wado/DescriptorStat,wasi:filesystem/types.wado/ErrorCode>";
-    let $write_back_16: ref null "core:prelude/types.wado//Box<core:prelude/types.wado/Option<core:prelude/types.wado/Subtask>>";
-    let $local_20: ref null "core:prelude/types.wado//Box<core:prelude/types.wado/Option<core:prelude/types.wado/ResultBuffer>>";
+    let self_17: ref null "core:prelude/types.wado//Box<core:prelude/types.wado/Option<core:prelude/types.wado/Subtask>>";
+    let $replaced_3_20: ref null "core:prelude/types.wado//Option<core:prelude/types.wado/Subtask>";
     let elements: ref null "Array<core:prelude/types.wado/Subtask>";
-    let self_36: ref null "core:prelude//List<core:prelude/types.wado/Subtask>";
-    let used_38: i32;
+    let self_29: ref null "core:prelude//List<core:prelude/types.wado/Subtask>";
+    let used_31: i32;
     let $index_3: i32;
+    let self_60: ref null "core:prelude/types.wado//Box<core:prelude/types.wado/Option<core:prelude/types.wado/ResultBuffer>>";
+    let $replaced_3_63: ref null "core:prelude/types.wado//Option<core:prelude/types.wado/ResultBuffer>";
     $moved_6 = self;
     self = ref.null none;
-    $load_1 = local.tee $write_back_16(struct.new "core:prelude/types.wado//Box<core:prelude/types.wado/Option<core:prelude/types.wado/Subtask>>" { value: $moved_6.subtask }).value;
-    $write_back_16.value = global:core:builtin::$unit_case$core:prelude/types.wado//Option<core:prelude/types.wado/Subtask>$0;
-    if ref.eq(local.tee $load_2($write_back_16.value), $load_1) == 0 {
-        $moved_6.subtask = $load_2;
-    }
-    if ref.test "core:prelude/types.wado//Option<core:prelude/types.wado/Subtask>::Some"($load_1) {
-        subtask = ref.cast "core:prelude/types.wado//Option<core:prelude/types.wado/Subtask>::Some"($load_1).payload_0;
+    $replaced_3_20 = local.tee self_17($moved_6.subtask).value;
+    self_17.value = global:core:builtin::$unit_case$core:prelude/types.wado//Option<core:prelude/types.wado/Subtask>$0;
+    if ref.test "core:prelude/types.wado//Option<core:prelude/types.wado/Subtask>::Some"($replaced_3_20) {
+        subtask = ref.cast "core:prelude/types.wado//Option<core:prelude/types.wado/Subtask>::Some"($replaced_3_20).payload_0;
         set = struct.new "core:prelude/types.wado//WaitableSet<core:prelude/types.wado/Subtask>" { raw: struct.new "core:prelude//$Resource" { value: "wasi/waitable-set-new"() }, members: struct.new "core:prelude//List<core:prelude/types.wado/Subtask>" { repr: ref.as_non_null(local.tee elements(array.new_fixed<ref null "core:prelude//$Resource">())), used: 0 } };
         "wasi/waitable-join"(subtask.value, set.raw.value);
-        if @unlikely(local.tee used_38(local.tee self_36(set.members).used) >= builtin::array_len(self_36.repr)) {
+        if @unlikely(local.tee used_31(local.tee self_29(set.members).used) >= builtin::array_len(self_29.repr)) {
             cold_path;
-            "core:prelude/list.wado/core:prelude/list.wado/List<core:prelude/types.wado/Subtask>::grow"(self_36);
+            "core:prelude/list.wado/core:prelude/list.wado/List<core:prelude/types.wado/Subtask>::grow"(self_29);
         }
-        builtin::array_set<ref null "core:prelude//$Resource">(self_36.repr, used_38, subtask);
-        self_36.used = used_38 + 1;
-        b448: block {
-            l449: loop {
-                if @unlikely(local.tee used_38(local.tee ready_4("core:prelude/types.wado/core:prelude/types.wado/WaitableSet<core:prelude/types.wado/Subtask>::wait"(set)).code) != 1) {
+        builtin::array_set<ref null "core:prelude//$Resource">(self_29.repr, used_31, subtask);
+        self_29.used = used_31 + 1;
+        b445: block {
+            l446: loop {
+                if @unlikely(local.tee used_31(local.tee ready_4("core:prelude/types.wado/core:prelude/types.wado/WaitableSet<core:prelude/types.wado/Subtask>::wait"(set)).code) != 1) {
                     cold_path;
-                    "core:prelude/types.wado/core:prelude/types.wado/AsyncCall<core:prelude/types.wado/Result<wasi:filesystem/types.wado/DescriptorStat,wasi:filesystem/types.wado/ErrorCode>>::wait$cold0$dae[self]"(used_38);
+                    "core:prelude/types.wado/core:prelude/types.wado/AsyncCall<core:prelude/types.wado/Result<wasi:filesystem/types.wado/DescriptorStat,wasi:filesystem/types.wado/ErrorCode>>::wait$cold0$dae[self]"(used_31);
                     unreachable;
                 }
                 if ready_4.payload >u 1 {
                     "wasi/subtask-drop"(ready_4.member.value);
-                    break b448;
+                    break b445;
                 }
                 "wasi/waitable-join"(local.tee subtask(ready_4.member).value, set.raw.value);
-                if @unlikely(local.tee used_38(local.tee self_36(set.members).used) >= builtin::array_len(self_36.repr)) {
+                if @unlikely(local.tee used_31(local.tee self_29(set.members).used) >= builtin::array_len(self_29.repr)) {
                     cold_path;
-                    "core:prelude/list.wado/core:prelude/list.wado/List<core:prelude/types.wado/Subtask>::grow"(self_36);
+                    "core:prelude/list.wado/core:prelude/list.wado/List<core:prelude/types.wado/Subtask>::grow"(self_29);
                 }
-                builtin::array_set<ref null "core:prelude//$Resource">(self_36.repr, used_38, subtask);
-                self_36.used = used_38 + 1;
-                continue l449;
+                builtin::array_set<ref null "core:prelude//$Resource">(self_29.repr, used_31, subtask);
+                self_29.used = used_31 + 1;
+                continue l446;
             };
         };
         if ref.is_null(set) == 0 {
-            elements = local.tee self_36(set.members).repr;
-            used_38 = self_36.used;
+            elements = local.tee self_29(set.members).repr;
+            used_31 = self_29.used;
             $index_3 = 0;
-            b454: block {
-                l455: loop {
-                    break_if b454 $index_3 >= used_38;
+            b451: block {
+                l452: loop {
+                    break_if b451 $index_3 >= used_31;
                     drop(builtin::array_get_value<ref null "core:prelude//$Resource">(elements, $index_3));
                     $index_3 = $index_3 + 1;
-                    continue l455;
+                    continue l452;
                 };
             };
             "wasi/waitable-set-drop"(set.raw.value);
         }
     } else {
     }
-    $load_28 = local.tee $local_20(struct.new "core:prelude/types.wado//Box<core:prelude/types.wado/Option<core:prelude/types.wado/ResultBuffer>>" { value: $moved_6.buffer }).value;
-    $local_20.value = global:core:builtin::$unit_case$core:prelude/types.wado//Option<core:prelude/types.wado/ResultBuffer>$0;
-    if ref.eq(local.tee $load_29($local_20.value), $load_28) == 0 {
-        $moved_6.buffer = $load_29;
-    }
-    $block_v_8 = (if ref.test "core:prelude/types.wado//Option<core:prelude/types.wado/ResultBuffer>::Some"(local.tee $load_29($load_28)) -> ref "core:prelude/types.wado//Result<wasi:filesystem/types.wado/DescriptorStat,wasi:filesystem/types.wado/ErrorCode>" {
-        buffer = ref.cast "core:prelude/types.wado//Option<core:prelude/types.wado/ResultBuffer>::Some"($load_29).payload_0;
-        $load_28 = global:core:builtin::$unit_case$core:prelude/types.wado//Option<core:prelude/types.wado/ResultBuffer>$0;
+    $temp_7 = global:core:builtin::$unit_case$core:prelude/types.wado//Option<core:prelude/types.wado/ResultBuffer>$0;
+    $replaced_3_63 = local.tee self_60($moved_6.buffer).value;
+    self_60.value = global:core:builtin::$unit_case$core:prelude/types.wado//Option<core:prelude/types.wado/ResultBuffer>$0;
+    $block_v_8 = (if ref.test "core:prelude/types.wado//Option<core:prelude/types.wado/ResultBuffer>::Some"(local.tee $replaced_3_63(local.tee $temp_7($replaced_3_63))) -> ref "core:prelude/types.wado//Result<wasi:filesystem/types.wado/DescriptorStat,wasi:filesystem/types.wado/ErrorCode>" {
+        buffer = ref.cast "core:prelude/types.wado//Option<core:prelude/types.wado/ResultBuffer>::Some"($replaced_3_63).payload_0;
+        $temp_7 = global:core:builtin::$unit_case$core:prelude/types.wado//Option<core:prelude/types.wado/ResultBuffer>$0;
         $block_v_8 = block -> ref "core:prelude/types.wado//Result<wasi:filesystem/types.wado/DescriptorStat,wasi:filesystem/types.wado/ErrorCode>" {
             let $indirect_call_2: ref "canonical//CanonicalClosure_1";
             call_ref "functype/$canonical_closure_fn_1"($indirect_call_2.func, local.tee $indirect_call_2(ref.cast "canonical//CanonicalClosure_1"($moved_6.lift)).env, buffer.ptr);
@@ -2748,10 +2737,10 @@ fn "core:prelude/types.wado/core:prelude/types.wado/AsyncCall<core:prelude/types
             call_ref "functype/$canonical_closure_fn_1"($indirect_call_2.func, local.tee $indirect_call_2(ref.cast "canonical//CanonicalClosure_1"($moved_6.lift)).env, 0);
         };
     });
-    if ref.is_null($load_28) == 0 {
-        if $load_28.discriminant == 0 {
+    if ref.is_null($temp_7) == 0 {
+        if $temp_7.discriminant == 0 {
         } else {
-            drop("mem/realloc"(local.tee buffer(ref.cast "core:prelude/types.wado//Option<core:prelude/types.wado/ResultBuffer>::Some"($load_28).payload_0).ptr, buffer.size, buffer.align, 0));
+            drop("mem/realloc"(local.tee buffer(ref.cast "core:prelude/types.wado//Option<core:prelude/types.wado/ResultBuffer>::Some"($temp_7).payload_0).ptr, buffer.size, buffer.align, 0));
         }
     }
     if ref.is_null($moved_6) == 0 {
@@ -2764,84 +2753,78 @@ fn "core:prelude/types.wado/core:prelude/types.wado/AsyncCall<core:prelude/types
 }
 
 fn "core:prelude/types.wado/core:prelude/types.wado/AsyncCall<core:prelude/types.wado/Result<wasi:filesystem/types.wado/Descriptor,wasi:filesystem/types.wado/ErrorCode>>::wait"(self) with Subtask {
-    let $load_1: ref null "core:prelude/types.wado//Option<core:prelude/types.wado/Subtask>";
-    let $load_2: ref null "core:prelude/types.wado//Option<core:prelude/types.wado/Subtask>";
-    let $load_28: ref null "core:prelude/types.wado//Option<core:prelude/types.wado/ResultBuffer>";
-    let $load_29: ref null "core:prelude/types.wado//Option<core:prelude/types.wado/ResultBuffer>";
     let subtask: ref null "core:prelude//$Resource";
     let set: ref null "core:prelude/types.wado//WaitableSet<core:prelude/types.wado/Subtask>";
     let ready_4: ref null "core:prelude/types.wado//Ready<core:prelude/types.wado/Subtask>";
     let buffer: ref null "core:prelude/types.wado//ResultBuffer";
     let $moved_6: ref null "core:prelude/types.wado//AsyncCall<core:prelude/types.wado/Result<wasi:filesystem/types.wado/Descriptor,wasi:filesystem/types.wado/ErrorCode>>";
+    let $temp_7: ref null "core:prelude/types.wado//Option<core:prelude/types.wado/ResultBuffer>";
     let $block_v_8: ref null "core:prelude/types.wado//Result<wasi:filesystem/types.wado/Descriptor,wasi:filesystem/types.wado/ErrorCode>";
-    let $write_back_16: ref null "core:prelude/types.wado//Box<core:prelude/types.wado/Option<core:prelude/types.wado/Subtask>>";
-    let $local_20: ref null "core:prelude/types.wado//Box<core:prelude/types.wado/Option<core:prelude/types.wado/ResultBuffer>>";
+    let self_17: ref null "core:prelude/types.wado//Box<core:prelude/types.wado/Option<core:prelude/types.wado/Subtask>>";
+    let $replaced_3_20: ref null "core:prelude/types.wado//Option<core:prelude/types.wado/Subtask>";
     let elements: ref null "Array<core:prelude/types.wado/Subtask>";
-    let self_36: ref null "core:prelude//List<core:prelude/types.wado/Subtask>";
-    let used_38: i32;
+    let self_29: ref null "core:prelude//List<core:prelude/types.wado/Subtask>";
+    let used_31: i32;
     let $index_3: i32;
+    let self_60: ref null "core:prelude/types.wado//Box<core:prelude/types.wado/Option<core:prelude/types.wado/ResultBuffer>>";
+    let $replaced_3_63: ref null "core:prelude/types.wado//Option<core:prelude/types.wado/ResultBuffer>";
     $moved_6 = self;
     self = ref.null none;
-    $load_1 = local.tee $write_back_16(struct.new "core:prelude/types.wado//Box<core:prelude/types.wado/Option<core:prelude/types.wado/Subtask>>" { value: $moved_6.subtask }).value;
-    $write_back_16.value = global:core:builtin::$unit_case$core:prelude/types.wado//Option<core:prelude/types.wado/Subtask>$0;
-    if ref.eq(local.tee $load_2($write_back_16.value), $load_1) == 0 {
-        $moved_6.subtask = $load_2;
-    }
-    if ref.test "core:prelude/types.wado//Option<core:prelude/types.wado/Subtask>::Some"($load_1) {
-        subtask = ref.cast "core:prelude/types.wado//Option<core:prelude/types.wado/Subtask>::Some"($load_1).payload_0;
+    $replaced_3_20 = local.tee self_17($moved_6.subtask).value;
+    self_17.value = global:core:builtin::$unit_case$core:prelude/types.wado//Option<core:prelude/types.wado/Subtask>$0;
+    if ref.test "core:prelude/types.wado//Option<core:prelude/types.wado/Subtask>::Some"($replaced_3_20) {
+        subtask = ref.cast "core:prelude/types.wado//Option<core:prelude/types.wado/Subtask>::Some"($replaced_3_20).payload_0;
         set = struct.new "core:prelude/types.wado//WaitableSet<core:prelude/types.wado/Subtask>" { raw: struct.new "core:prelude//$Resource" { value: "wasi/waitable-set-new"() }, members: struct.new "core:prelude//List<core:prelude/types.wado/Subtask>" { repr: ref.as_non_null(local.tee elements(array.new_fixed<ref null "core:prelude//$Resource">())), used: 0 } };
         "wasi/waitable-join"(subtask.value, set.raw.value);
-        if @unlikely(local.tee used_38(local.tee self_36(set.members).used) >= builtin::array_len(self_36.repr)) {
+        if @unlikely(local.tee used_31(local.tee self_29(set.members).used) >= builtin::array_len(self_29.repr)) {
             cold_path;
-            "core:prelude/list.wado/core:prelude/list.wado/List<core:prelude/types.wado/Subtask>::grow"(self_36);
+            "core:prelude/list.wado/core:prelude/list.wado/List<core:prelude/types.wado/Subtask>::grow"(self_29);
         }
-        builtin::array_set<ref null "core:prelude//$Resource">(self_36.repr, used_38, subtask);
-        self_36.used = used_38 + 1;
-        b468: block {
-            l469: loop {
-                if @unlikely(local.tee used_38(local.tee ready_4("core:prelude/types.wado/core:prelude/types.wado/WaitableSet<core:prelude/types.wado/Subtask>::wait"(set)).code) != 1) {
+        builtin::array_set<ref null "core:prelude//$Resource">(self_29.repr, used_31, subtask);
+        self_29.used = used_31 + 1;
+        b463: block {
+            l464: loop {
+                if @unlikely(local.tee used_31(local.tee ready_4("core:prelude/types.wado/core:prelude/types.wado/WaitableSet<core:prelude/types.wado/Subtask>::wait"(set)).code) != 1) {
                     cold_path;
-                    "core:prelude/types.wado/core:prelude/types.wado/AsyncCall<core:prelude/types.wado/Result<wasi:filesystem/types.wado/Descriptor,wasi:filesystem/types.wado/ErrorCode>>::wait$cold0$dae[self]"(used_38);
+                    "core:prelude/types.wado/core:prelude/types.wado/AsyncCall<core:prelude/types.wado/Result<wasi:filesystem/types.wado/Descriptor,wasi:filesystem/types.wado/ErrorCode>>::wait$cold0$dae[self]"(used_31);
                     unreachable;
                 }
                 if ready_4.payload >u 1 {
                     "wasi/subtask-drop"(ready_4.member.value);
-                    break b468;
+                    break b463;
                 }
                 "wasi/waitable-join"(local.tee subtask(ready_4.member).value, set.raw.value);
-                if @unlikely(local.tee used_38(local.tee self_36(set.members).used) >= builtin::array_len(self_36.repr)) {
+                if @unlikely(local.tee used_31(local.tee self_29(set.members).used) >= builtin::array_len(self_29.repr)) {
                     cold_path;
-                    "core:prelude/list.wado/core:prelude/list.wado/List<core:prelude/types.wado/Subtask>::grow"(self_36);
+                    "core:prelude/list.wado/core:prelude/list.wado/List<core:prelude/types.wado/Subtask>::grow"(self_29);
                 }
-                builtin::array_set<ref null "core:prelude//$Resource">(self_36.repr, used_38, subtask);
-                self_36.used = used_38 + 1;
-                continue l469;
+                builtin::array_set<ref null "core:prelude//$Resource">(self_29.repr, used_31, subtask);
+                self_29.used = used_31 + 1;
+                continue l464;
             };
         };
         if ref.is_null(set) == 0 {
-            elements = local.tee self_36(set.members).repr;
-            used_38 = self_36.used;
+            elements = local.tee self_29(set.members).repr;
+            used_31 = self_29.used;
             $index_3 = 0;
-            b474: block {
-                l475: loop {
-                    break_if b474 $index_3 >= used_38;
+            b469: block {
+                l470: loop {
+                    break_if b469 $index_3 >= used_31;
                     drop(builtin::array_get_value<ref null "core:prelude//$Resource">(elements, $index_3));
                     $index_3 = $index_3 + 1;
-                    continue l475;
+                    continue l470;
                 };
             };
             "wasi/waitable-set-drop"(set.raw.value);
         }
     } else {
     }
-    $load_28 = local.tee $local_20(struct.new "core:prelude/types.wado//Box<core:prelude/types.wado/Option<core:prelude/types.wado/ResultBuffer>>" { value: $moved_6.buffer }).value;
-    $local_20.value = global:core:builtin::$unit_case$core:prelude/types.wado//Option<core:prelude/types.wado/ResultBuffer>$0;
-    if ref.eq(local.tee $load_29($local_20.value), $load_28) == 0 {
-        $moved_6.buffer = $load_29;
-    }
-    $block_v_8 = (if ref.test "core:prelude/types.wado//Option<core:prelude/types.wado/ResultBuffer>::Some"(local.tee $load_29($load_28)) -> ref null "core:prelude/types.wado//Result<wasi:filesystem/types.wado/Descriptor,wasi:filesystem/types.wado/ErrorCode>" {
-        buffer = ref.cast "core:prelude/types.wado//Option<core:prelude/types.wado/ResultBuffer>::Some"($load_29).payload_0;
-        $load_28 = global:core:builtin::$unit_case$core:prelude/types.wado//Option<core:prelude/types.wado/ResultBuffer>$0;
+    $temp_7 = global:core:builtin::$unit_case$core:prelude/types.wado//Option<core:prelude/types.wado/ResultBuffer>$0;
+    $replaced_3_63 = local.tee self_60($moved_6.buffer).value;
+    self_60.value = global:core:builtin::$unit_case$core:prelude/types.wado//Option<core:prelude/types.wado/ResultBuffer>$0;
+    $block_v_8 = (if ref.test "core:prelude/types.wado//Option<core:prelude/types.wado/ResultBuffer>::Some"(local.tee $replaced_3_63(local.tee $temp_7($replaced_3_63))) -> ref null "core:prelude/types.wado//Result<wasi:filesystem/types.wado/Descriptor,wasi:filesystem/types.wado/ErrorCode>" {
+        buffer = ref.cast "core:prelude/types.wado//Option<core:prelude/types.wado/ResultBuffer>::Some"($replaced_3_63).payload_0;
+        $temp_7 = global:core:builtin::$unit_case$core:prelude/types.wado//Option<core:prelude/types.wado/ResultBuffer>$0;
         $block_v_8 = block -> ref null "core:prelude/types.wado//Result<wasi:filesystem/types.wado/Descriptor,wasi:filesystem/types.wado/ErrorCode>" {
             let $indirect_call_2: ref "canonical//CanonicalClosure_0";
             call_ref "functype/$canonical_closure_fn_0"($indirect_call_2.func, local.tee $indirect_call_2(ref.cast "canonical//CanonicalClosure_0"($moved_6.lift)).env, buffer.ptr);
@@ -2855,10 +2838,10 @@ fn "core:prelude/types.wado/core:prelude/types.wado/AsyncCall<core:prelude/types
             call_ref "functype/$canonical_closure_fn_0"($indirect_call_2.func, local.tee $indirect_call_2(ref.cast "canonical//CanonicalClosure_0"($moved_6.lift)).env, 0);
         };
     });
-    if ref.is_null($load_28) == 0 {
-        if $load_28.discriminant == 0 {
+    if ref.is_null($temp_7) == 0 {
+        if $temp_7.discriminant == 0 {
         } else {
-            drop("mem/realloc"(local.tee buffer(ref.cast "core:prelude/types.wado//Option<core:prelude/types.wado/ResultBuffer>::Some"($load_28).payload_0).ptr, buffer.size, buffer.align, 0));
+            drop("mem/realloc"(local.tee buffer(ref.cast "core:prelude/types.wado//Option<core:prelude/types.wado/ResultBuffer>::Some"($temp_7).payload_0).ptr, buffer.size, buffer.align, 0));
         }
     }
     if ref.is_null($moved_6) == 0 {
@@ -2894,8 +2877,8 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::pad<core:prelud
     }
     start_20 = 0;
     new_used_19 = 0;
-    b487: block {
-        l488: loop {
+    b481: block {
+        l482: loop {
             $sroa_slot_187 = 0;
             $inline_core_prelude_string_wado_StrCharIter_core_prelude_traits_wado_Iterator__next_sroa_return__9: block {
                 if start_20 >= $mv$content$used {
@@ -2933,9 +2916,9 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::pad<core:prelud
             if local.tee $match_scrut_0($sroa_slot_187) == 1 {
                 new_used_19 = new_used_19 + 1;
             } else {
-                break b487;
+                break b481;
             }
-            continue l488;
+            continue l482;
         };
     };
     if new_used_19 >= $load_0 {
@@ -2976,9 +2959,9 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::pad<core:prelud
         };
         self_9 = self.buf;
         $match_scrut_0 = 0;
-        b500: block {
-            l501: loop {
-                break_if b500 $match_scrut_0 >= new_used_19;
+        b494: block {
+            l495: loop {
+                break_if b494 $match_scrut_0 >= new_used_19;
                 if @unlikely(local.tee b0(self_9.used + 1) > builtin::array_len(self_9.repr)) {
                     cold_path;
                     "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self_9, b0);
@@ -2987,7 +2970,7 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::pad<core:prelud
                 self_9.used = b0;
                 builtin::array_set_u8(self_9.repr, $sroa_slot_236, 48);
                 $match_scrut_0 = $match_scrut_0 + 1;
-                continue l501;
+                continue l495;
             };
         };
         self_9 = self.buf;
@@ -3018,12 +3001,12 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::pad<core:prelud
         self_9 = self.buf;
         b0 = self.fill;
         $load_0 = 0;
-        b506: block {
-            l507: loop {
-                break_if b506 $load_0 >= new_used_19;
+        b500: block {
+            l501: loop {
+                break_if b500 $load_0 >= new_used_19;
                 "core:prelude/string.wado/core:prelude/string.wado/String::push"(self_9, b0);
                 $load_0 = $load_0 + 1;
-                continue l507;
+                continue l501;
             };
         };
     } else if $match_scrut_0 == 1 {
@@ -3032,12 +3015,12 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::pad<core:prelud
         self_9 = self.buf;
         $load_0 = self.fill;
         $sroa_slot_236 = 0;
-        b509: block {
-            l510: loop {
-                break_if b509 $sroa_slot_236 >= $match_scrut_0;
+        b503: block {
+            l504: loop {
+                break_if b503 $sroa_slot_236 >= $match_scrut_0;
                 "core:prelude/string.wado/core:prelude/string.wado/String::push"(self_9, $load_0);
                 $sroa_slot_236 = $sroa_slot_236 + 1;
-                continue l510;
+                continue l504;
             };
         };
         self_9 = self.buf;
@@ -3054,24 +3037,24 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::pad<core:prelud
         self_9 = self.buf;
         $sroa_slot_236 = self.fill;
         $match_scrut_0 = 0;
-        b512: block {
-            l513: loop {
-                break_if b512 $match_scrut_0 >= b0;
+        b506: block {
+            l507: loop {
+                break_if b506 $match_scrut_0 >= b0;
                 "core:prelude/string.wado/core:prelude/string.wado/String::push"(self_9, $sroa_slot_236);
                 $match_scrut_0 = $match_scrut_0 + 1;
-                continue l513;
+                continue l507;
             };
         };
     } else {
         self_9 = self.buf;
         $match_scrut_0 = self.fill;
         b0 = 0;
-        b514: block {
-            l515: loop {
-                break_if b514 b0 >= new_used_19;
+        b508: block {
+            l509: loop {
+                break_if b508 b0 >= new_used_19;
                 "core:prelude/string.wado/core:prelude/string.wado/String::push"(self_9, $match_scrut_0);
                 b0 = b0 + 1;
-                continue l515;
+                continue l509;
             };
         };
         self_9 = self.buf;
@@ -3173,9 +3156,9 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_wri
         }
         self_21 = self.buf;
         new_used_26 = 0;
-        b532: block {
-            l533: loop {
-                break_if b532 new_used_26 >= sign_len;
+        b526: block {
+            l527: loop {
+                break_if b526 new_used_26 >= sign_len;
                 if @unlikely(local.tee $load_2(self_21.used + 1) > builtin::array_len(self_21.repr)) {
                     cold_path;
                     "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self_21, $load_2);
@@ -3184,7 +3167,7 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_wri
                 self_21.used = $load_2;
                 builtin::array_set_u8(self_21.repr, start_27, 48);
                 new_used_26 = new_used_26 + 1;
-                continue l533;
+                continue l527;
             };
         };
         if @unlikely(local.tee new_used_26(local.tee self_21(self.buf).used + digit_count) > builtin::array_len(self_21.repr)) {
@@ -3235,12 +3218,12 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_wri
         self_21 = self.buf;
         $load_0 = self.fill;
         new_used_26 = 0;
-        b544: block {
-            l545: loop {
-                break_if b544 new_used_26 >= sign_len;
+        b538: block {
+            l539: loop {
+                break_if b538 new_used_26 >= sign_len;
                 "core:prelude/string.wado/core:prelude/string.wado/String::push"(self_21, $load_0);
                 new_used_26 = new_used_26 + 1;
-                continue l545;
+                continue l539;
             };
         };
         return $load_2;
@@ -3250,12 +3233,12 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_wri
         self_21 = self.buf;
         new_used_26 = self.fill;
         $load_0 = 0;
-        b547: block {
-            l548: loop {
-                break_if b547 $load_0 >= start_27;
+        b541: block {
+            l542: loop {
+                break_if b541 $load_0 >= start_27;
                 "core:prelude/string.wado/core:prelude/string.wado/String::push"(self_21, new_used_26);
                 $load_0 = $load_0 + 1;
-                continue l548;
+                continue l542;
             };
         };
         if is_negative {
@@ -3297,12 +3280,12 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_wri
         self_21 = self.buf;
         new_used_26 = self.fill;
         $load_0 = 0;
-        b556: block {
-            l557: loop {
-                break_if b556 $load_0 >= $load_2;
+        b550: block {
+            l551: loop {
+                break_if b550 $load_0 >= $load_2;
                 "core:prelude/string.wado/core:prelude/string.wado/String::push"(self_21, new_used_26);
                 $load_0 = $load_0 + 1;
-                continue l557;
+                continue l551;
             };
         };
         return start_27;
@@ -3310,12 +3293,12 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_wri
         self_21 = self.buf;
         start_27 = self.fill;
         new_used_26 = 0;
-        b558: block {
-            l559: loop {
-                break_if b558 new_used_26 >= sign_len;
+        b552: block {
+            l553: loop {
+                break_if b552 new_used_26 >= sign_len;
                 "core:prelude/string.wado/core:prelude/string.wado/String::push"(self_21, start_27);
                 new_used_26 = new_used_26 + 1;
-                continue l559;
+                continue l553;
             };
         };
         if is_negative {
@@ -3382,7 +3365,7 @@ fn "core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u8>::write_al
     offset = 0;
     $licm_arith_34 = self.value;
     block {
-        l569: loop {
+        l563: loop {
             end_3 = (if offset == 0 -> i32 {
                 data.used;
             } else {
@@ -3422,7 +3405,7 @@ fn "core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u8>::write_al
             }) {
                 return $load_8;
             }
-            continue l569;
+            continue l563;
         };
     };
 }
@@ -3437,9 +3420,9 @@ fn "core:prelude/list.wado/core:prelude/list.wado/List<u8>::split_off$unchecked"
     tail = struct.new "core:prelude//List<u8>" { repr: builtin::array_new<u8>(local.tee n(self.used - at)), used: 0 };
     $sroa_$iter_1_start_35 = 0;
     $licm_repr_25 = self.repr;
-    b577: block {
-        l578: loop {
-            break_if b577 $inline_core_prelude_range_wado_RangeExclusive_i32__core_prelude_traits_wado_Iterator__next_sroa_return__0__$inline_i32_core_prelude_traits_wado_Ord__cmp_sroa_self_value_other_value__0: block -> "core:prelude/traits.wado//enum:Ordering" {
+    b571: block {
+        l572: loop {
+            break_if b571 $inline_core_prelude_range_wado_RangeExclusive_i32__core_prelude_traits_wado_Iterator__next_sroa_return__0__$inline_i32_core_prelude_traits_wado_Ord__cmp_sroa_self_value_other_value__0: block -> "core:prelude/traits.wado//enum:Ordering" {
                 if $sroa_$iter_1_start_35 < n {
                     break $inline_core_prelude_range_wado_RangeExclusive_i32__core_prelude_traits_wado_Iterator__next_sroa_return__0__$inline_i32_core_prelude_traits_wado_Ord__cmp_sroa_self_value_other_value__0: 0;
                 }
@@ -3464,7 +3447,7 @@ fn "core:prelude/list.wado/core:prelude/list.wado/List<u8>::split_off$unchecked"
             }
             builtin::array_set_u8(tail.repr, used, current);
             tail.used = used + 1;
-            continue l578;
+            continue l572;
         };
     };
     self.used = at;
@@ -3492,9 +3475,9 @@ fn "core:prelude/list.wado/core:prelude/list.wado/List<[wasi:filesystem/types.wa
     self.used = $load_1 - 1;
     $arg_13 = local.tee $load_1(self.used) + 1;
     $arg_14 = $load_1;
-    b585: block {
-        l586: loop {
-            break_if b585 $arg_14 >= $arg_13;
+    b579: block {
+        l580: loop {
+            break_if b579 $arg_14 >= $arg_13;
             if ref.is_null(local.tee $slot_20(builtin::array_get_value<ref null "tuple//[wasi:filesystem/types.wado/Descriptor, core:prelude/string.wado/String]">($load_0, $arg_14))) == 0 {
                 if ref.is_null(local.tee $load_3($slot_20.0)) == 0 {
                     index = $load_3.value;
@@ -3504,7 +3487,7 @@ fn "core:prelude/list.wado/core:prelude/list.wado/List<[wasi:filesystem/types.wa
                 $slot_20.0 = ref.null none;
             }
             $arg_14 = $arg_14 + 1;
-            continue l586;
+            continue l580;
         };
     };
     builtin::array_set<ref null "tuple//[wasi:filesystem/types.wado/Descriptor, core:prelude/string.wado/String]">($load_0, $load_1, ref.null none);
@@ -3564,7 +3547,7 @@ fn "core:prelude/types.wado/core:prelude/types.wado/WaitableSet<core:prelude/typ
             break $inline_core_prelude_types_wado_WaitableSet_core_prelude_types_wado_Subtask___take_reported_4: struct.new "core:prelude/types.wado//Ready<core:prelude/types.wado/Subtask>" { member: "core:prelude/list.wado/core:prelude/list.wado/List<core:prelude/types.wado/Subtask>::remove$unchecked"(local.tee $load_2(self.members), evt_handle = $load_2.used; if @unlikely(((0 <= $mv$$local_10$1) & ($mv$$local_10$1 < evt_handle)) == 0) {
                 cold_path;
                 let $mv_field_3: ref Array<u8>;
-                $mv_field_3 = array.new_data<u8>("core:prelude/types.wado:552");
+                $mv_field_3 = array.new_data<u8>("core:prelude/types.wado:550");
                 "core:prelude/list.wado/core:prelude/list.wado/List<core:prelude/types.wado/Subtask>::remove$contract_report0"($mv$$local_10$1, evt_handle, $mv_field_3, 27);
                 unreachable;
             }; $mv$$local_10$1), code: $mv$$local_9$1, payload: payload };
@@ -3629,8 +3612,8 @@ fn "core:prelude/types.wado/core:prelude/types.wado/WaitableSet<core:prelude/typ
     let $mv_end_3: i32;
     multivalue_bind [$mv_repr_1, $mv_index_2, $mv_end_3] = "core:prelude/list.wado/core:prelude/list.wado/List<core:prelude/types.wado/Subtask>::iter_ref"(self.members);
     self_7 = struct.new "core:prelude/slice.wado//SliceRefIter<core:prelude/types.wado/Subtask>" { repr: ref.as_non_null($mv_repr_1), index: $mv_index_2, end: $mv_end_3 };
-    b601: block {
-        l602: loop {
+    b595: block {
+        l596: loop {
             if ref.test "core:prelude/types.wado//Option<&core:prelude/types.wado/Subtask>::Some"(local.tee $match_6("core:prelude/slice.wado/core:prelude/slice.wado/SliceRefIter<core:prelude/types.wado/Subtask>^core:prelude/traits.wado/Iterator::next"(self_7))) {
                 multivalue_bind [$mv_end_3, $mv_index_2] = "wasi_filesystem_advise_sync.wado/core:prelude/types.wado/Option<core:prelude/types.wado/ResourceId>::map<i32>$$Closure_6$sroa[return]$dae[f]"(struct.new "core:prelude/types.wado//ResourceId" { handle: ref.cast "core:prelude/types.wado//Option<&core:prelude/types.wado/Subtask>::Some"($match_6).payload_0.value });
                 if "core:prelude/types.wado/core:prelude/types.wado/Option<i32>^core:prelude/traits.wado/Eq::eq$sroa[self.value,other.value]"((if $mv_end_3 == 0 -> ref "core:prelude/types.wado//Option<i32>" {
@@ -3642,9 +3625,9 @@ fn "core:prelude/types.wado/core:prelude/types.wado/WaitableSet<core:prelude/typ
                 }
                 at = at + 1;
             } else {
-                break b601;
+                break b595;
             }
-            continue l602;
+            continue l596;
         };
     };
     return 0, 0;
@@ -3685,12 +3668,18 @@ fn "core:prelude/list.wado/core:prelude/list.wado/List<core:prelude/types.wado/S
 }
 
 fn "core:prelude/types.wado/core:prelude/types.wado/AsyncCall<core:prelude/types.wado/Result<wasi:filesystem/types.wado/Descriptor,wasi:filesystem/types.wado/ErrorCode>>^core:prelude/traits.wado/Drop::drop"(self) {
+    let $load_5: ref null "core:prelude/types.wado//Box<core:prelude/types.wado/Option<core:prelude/types.wado/ResultBuffer>>";
     let returned: bool;
     let subtask: ref null "core:prelude//$Resource";
     let buffer: ref null "core:prelude/types.wado//ResultBuffer";
     returned = 1;
     let $match_scrut_0: ref null "core:prelude/types.wado//Option<core:prelude/types.wado/Subtask>";
-    if ref.test "core:prelude/types.wado//Option<core:prelude/types.wado/Subtask>::Some"(local.tee $match_scrut_0(self.subtask)) {
+    let $slot_box_1: ref null "core:prelude/types.wado//Box<core:prelude/types.wado/Option<core:prelude/types.wado/Subtask>>";
+    if ref.test "core:prelude/types.wado//Option<core:prelude/types.wado/Subtask>::Some"(local.tee $match_scrut_0((if ref.is_null(local.tee $slot_box_1(self.subtask)) -> ref null "core:prelude/types.wado//Option<core:prelude/types.wado/Subtask>" {
+        ref.null none;
+    } else {
+        $slot_box_1.value;
+    }))) {
         "wasi/waitable-join"(local.tee subtask(ref.cast "core:prelude/types.wado//Option<core:prelude/types.wado/Subtask>::Some"($match_scrut_0).payload_0).value, 0);
         returned = "wasi/subtask-cancel"(subtask.value) == 2;
         "wasi/subtask-drop"(subtask.value);
@@ -3698,12 +3687,21 @@ fn "core:prelude/types.wado/core:prelude/types.wado/AsyncCall<core:prelude/types
     }
     if returned {
         let $match_scrut_1: ref null "core:prelude/types.wado//Option<core:prelude/types.wado/ResultBuffer>";
-        if ref.test "core:prelude/types.wado//Option<core:prelude/types.wado/ResultBuffer>::Some"(local.tee $match_scrut_1(self.buffer)) {
+        if ref.test "core:prelude/types.wado//Option<core:prelude/types.wado/ResultBuffer>::Some"(local.tee $match_scrut_1((if ref.is_null(local.tee $load_5(self.buffer)) -> ref null "core:prelude/types.wado//Option<core:prelude/types.wado/ResultBuffer>" {
+            ref.null none;
+        } else {
+            $load_5.value;
+        }))) {
             buffer = ref.cast "core:prelude/types.wado//Option<core:prelude/types.wado/ResultBuffer>::Some"($match_scrut_1).payload_0;
-            self.buffer = global:core:builtin::$unit_case$core:prelude/types.wado//Option<core:prelude/types.wado/ResultBuffer>$0;
+            $match_scrut_1 = global:core:builtin::$unit_case$core:prelude/types.wado//Option<core:prelude/types.wado/ResultBuffer>$0;
+            if ref.is_null($load_5) {
+                self.buffer = struct.new "core:prelude/types.wado//Box<core:prelude/types.wado/Option<core:prelude/types.wado/ResultBuffer>>" { value: $match_scrut_1 };
+            } else {
+                $load_5.value = $match_scrut_1;
+            }
             drop(block -> ref null "core:prelude/types.wado//Result<wasi:filesystem/types.wado/Descriptor,wasi:filesystem/types.wado/ErrorCode>" {
-                let $indirect_call_1: ref "canonical//CanonicalClosure_0";
-                call_ref "functype/$canonical_closure_fn_0"($indirect_call_1.func, local.tee $indirect_call_1(ref.cast "canonical//CanonicalClosure_0"(self.lift)).env, buffer.ptr);
+                let $indirect_call_6: ref "canonical//CanonicalClosure_0";
+                call_ref "functype/$canonical_closure_fn_0"($indirect_call_6.func, local.tee $indirect_call_6(ref.cast "canonical//CanonicalClosure_0"(self.lift)).env, buffer.ptr);
             });
             if ref.is_null(buffer) == 0 {
                 drop("mem/realloc"(buffer.ptr, buffer.size, buffer.align, 0));
@@ -3712,23 +3710,42 @@ fn "core:prelude/types.wado/core:prelude/types.wado/AsyncCall<core:prelude/types
         }
     }
     if ref.is_null(self) == 0 {
-        if ref.is_null(local.tee $match_scrut_1(self.buffer)) == 0 {
-            if $match_scrut_1.discriminant == 0 {
+        if ref.is_null((if ref.is_null(local.tee $load_5(self.buffer)) -> ref null "core:prelude/types.wado//Option<core:prelude/types.wado/ResultBuffer>" {
+            ref.null none;
+        } else {
+            $load_5.value;
+        })) == 0 {
+            if local.tee $match_scrut_1((if ref.is_null($load_5) -> ref null "core:prelude/types.wado//Option<core:prelude/types.wado/ResultBuffer>" {
+                ref.null none;
+            } else {
+                $load_5.value;
+            })).discriminant == 0 {
             } else {
                 drop("mem/realloc"(local.tee buffer(ref.cast "core:prelude/types.wado//Option<core:prelude/types.wado/ResultBuffer>::Some"($match_scrut_1).payload_0).ptr, buffer.size, buffer.align, 0));
             }
         }
-        self.buffer = global:core:builtin::$unit_case$core:prelude/types.wado//Option<core:prelude/types.wado/ResultBuffer>$0;
+        $match_scrut_1 = global:core:builtin::$unit_case$core:prelude/types.wado//Option<core:prelude/types.wado/ResultBuffer>$0;
+        if ref.is_null(local.tee $load_5(self.buffer)) {
+            self.buffer = struct.new "core:prelude/types.wado//Box<core:prelude/types.wado/Option<core:prelude/types.wado/ResultBuffer>>" { value: $match_scrut_1 };
+        } else {
+            $load_5.value = $match_scrut_1;
+        }
     }
 }
 
 fn "core:prelude/types.wado/core:prelude/types.wado/AsyncCall<core:prelude/types.wado/Result<wasi:filesystem/types.wado/DescriptorStat,wasi:filesystem/types.wado/ErrorCode>>^core:prelude/traits.wado/Drop::drop"(self) {
+    let $load_5: ref null "core:prelude/types.wado//Box<core:prelude/types.wado/Option<core:prelude/types.wado/ResultBuffer>>";
     let returned: bool;
     let subtask: ref null "core:prelude//$Resource";
     let buffer: ref null "core:prelude/types.wado//ResultBuffer";
     returned = 1;
     let $match_scrut_0: ref null "core:prelude/types.wado//Option<core:prelude/types.wado/Subtask>";
-    if ref.test "core:prelude/types.wado//Option<core:prelude/types.wado/Subtask>::Some"(local.tee $match_scrut_0(self.subtask)) {
+    let $slot_box_1: ref null "core:prelude/types.wado//Box<core:prelude/types.wado/Option<core:prelude/types.wado/Subtask>>";
+    if ref.test "core:prelude/types.wado//Option<core:prelude/types.wado/Subtask>::Some"(local.tee $match_scrut_0((if ref.is_null(local.tee $slot_box_1(self.subtask)) -> ref null "core:prelude/types.wado//Option<core:prelude/types.wado/Subtask>" {
+        ref.null none;
+    } else {
+        $slot_box_1.value;
+    }))) {
         "wasi/waitable-join"(local.tee subtask(ref.cast "core:prelude/types.wado//Option<core:prelude/types.wado/Subtask>::Some"($match_scrut_0).payload_0).value, 0);
         returned = "wasi/subtask-cancel"(subtask.value) == 2;
         "wasi/subtask-drop"(subtask.value);
@@ -3736,12 +3753,21 @@ fn "core:prelude/types.wado/core:prelude/types.wado/AsyncCall<core:prelude/types
     }
     if returned {
         let $match_scrut_1: ref null "core:prelude/types.wado//Option<core:prelude/types.wado/ResultBuffer>";
-        if ref.test "core:prelude/types.wado//Option<core:prelude/types.wado/ResultBuffer>::Some"(local.tee $match_scrut_1(self.buffer)) {
+        if ref.test "core:prelude/types.wado//Option<core:prelude/types.wado/ResultBuffer>::Some"(local.tee $match_scrut_1((if ref.is_null(local.tee $load_5(self.buffer)) -> ref null "core:prelude/types.wado//Option<core:prelude/types.wado/ResultBuffer>" {
+            ref.null none;
+        } else {
+            $load_5.value;
+        }))) {
             buffer = ref.cast "core:prelude/types.wado//Option<core:prelude/types.wado/ResultBuffer>::Some"($match_scrut_1).payload_0;
-            self.buffer = global:core:builtin::$unit_case$core:prelude/types.wado//Option<core:prelude/types.wado/ResultBuffer>$0;
+            $match_scrut_1 = global:core:builtin::$unit_case$core:prelude/types.wado//Option<core:prelude/types.wado/ResultBuffer>$0;
+            if ref.is_null($load_5) {
+                self.buffer = struct.new "core:prelude/types.wado//Box<core:prelude/types.wado/Option<core:prelude/types.wado/ResultBuffer>>" { value: $match_scrut_1 };
+            } else {
+                $load_5.value = $match_scrut_1;
+            }
             drop(block -> ref "core:prelude/types.wado//Result<wasi:filesystem/types.wado/DescriptorStat,wasi:filesystem/types.wado/ErrorCode>" {
-                let $indirect_call_1: ref "canonical//CanonicalClosure_1";
-                call_ref "functype/$canonical_closure_fn_1"($indirect_call_1.func, local.tee $indirect_call_1(ref.cast "canonical//CanonicalClosure_1"(self.lift)).env, buffer.ptr);
+                let $indirect_call_6: ref "canonical//CanonicalClosure_1";
+                call_ref "functype/$canonical_closure_fn_1"($indirect_call_6.func, local.tee $indirect_call_6(ref.cast "canonical//CanonicalClosure_1"(self.lift)).env, buffer.ptr);
             });
             if ref.is_null(buffer) == 0 {
                 drop("mem/realloc"(buffer.ptr, buffer.size, buffer.align, 0));
@@ -3750,23 +3776,42 @@ fn "core:prelude/types.wado/core:prelude/types.wado/AsyncCall<core:prelude/types
         }
     }
     if ref.is_null(self) == 0 {
-        if ref.is_null(local.tee $match_scrut_1(self.buffer)) == 0 {
-            if $match_scrut_1.discriminant == 0 {
+        if ref.is_null((if ref.is_null(local.tee $load_5(self.buffer)) -> ref null "core:prelude/types.wado//Option<core:prelude/types.wado/ResultBuffer>" {
+            ref.null none;
+        } else {
+            $load_5.value;
+        })) == 0 {
+            if local.tee $match_scrut_1((if ref.is_null($load_5) -> ref null "core:prelude/types.wado//Option<core:prelude/types.wado/ResultBuffer>" {
+                ref.null none;
+            } else {
+                $load_5.value;
+            })).discriminant == 0 {
             } else {
                 drop("mem/realloc"(local.tee buffer(ref.cast "core:prelude/types.wado//Option<core:prelude/types.wado/ResultBuffer>::Some"($match_scrut_1).payload_0).ptr, buffer.size, buffer.align, 0));
             }
         }
-        self.buffer = global:core:builtin::$unit_case$core:prelude/types.wado//Option<core:prelude/types.wado/ResultBuffer>$0;
+        $match_scrut_1 = global:core:builtin::$unit_case$core:prelude/types.wado//Option<core:prelude/types.wado/ResultBuffer>$0;
+        if ref.is_null(local.tee $load_5(self.buffer)) {
+            self.buffer = struct.new "core:prelude/types.wado//Box<core:prelude/types.wado/Option<core:prelude/types.wado/ResultBuffer>>" { value: $match_scrut_1 };
+        } else {
+            $load_5.value = $match_scrut_1;
+        }
     }
 }
 
 fn "core:prelude/types.wado/core:prelude/types.wado/AsyncCall<core:prelude/types.wado/Result<(),wasi:filesystem/types.wado/ErrorCode>>^core:prelude/traits.wado/Drop::drop"(self) {
+    let $load_5: ref null "core:prelude/types.wado//Box<core:prelude/types.wado/Option<core:prelude/types.wado/ResultBuffer>>";
     let returned: bool;
     let subtask: ref null "core:prelude//$Resource";
     let buffer: ref null "core:prelude/types.wado//ResultBuffer";
     returned = 1;
     let $match_scrut_0: ref null "core:prelude/types.wado//Option<core:prelude/types.wado/Subtask>";
-    if ref.test "core:prelude/types.wado//Option<core:prelude/types.wado/Subtask>::Some"(local.tee $match_scrut_0(self.subtask)) {
+    let $slot_box_1: ref null "core:prelude/types.wado//Box<core:prelude/types.wado/Option<core:prelude/types.wado/Subtask>>";
+    if ref.test "core:prelude/types.wado//Option<core:prelude/types.wado/Subtask>::Some"(local.tee $match_scrut_0((if ref.is_null(local.tee $slot_box_1(self.subtask)) -> ref null "core:prelude/types.wado//Option<core:prelude/types.wado/Subtask>" {
+        ref.null none;
+    } else {
+        $slot_box_1.value;
+    }))) {
         "wasi/waitable-join"(local.tee subtask(ref.cast "core:prelude/types.wado//Option<core:prelude/types.wado/Subtask>::Some"($match_scrut_0).payload_0).value, 0);
         returned = "wasi/subtask-cancel"(subtask.value) == 2;
         "wasi/subtask-drop"(subtask.value);
@@ -3774,12 +3819,21 @@ fn "core:prelude/types.wado/core:prelude/types.wado/AsyncCall<core:prelude/types
     }
     if returned {
         let $match_scrut_1: ref null "core:prelude/types.wado//Option<core:prelude/types.wado/ResultBuffer>";
-        if ref.test "core:prelude/types.wado//Option<core:prelude/types.wado/ResultBuffer>::Some"(local.tee $match_scrut_1(self.buffer)) {
+        if ref.test "core:prelude/types.wado//Option<core:prelude/types.wado/ResultBuffer>::Some"(local.tee $match_scrut_1((if ref.is_null(local.tee $load_5(self.buffer)) -> ref null "core:prelude/types.wado//Option<core:prelude/types.wado/ResultBuffer>" {
+            ref.null none;
+        } else {
+            $load_5.value;
+        }))) {
             buffer = ref.cast "core:prelude/types.wado//Option<core:prelude/types.wado/ResultBuffer>::Some"($match_scrut_1).payload_0;
-            self.buffer = global:core:builtin::$unit_case$core:prelude/types.wado//Option<core:prelude/types.wado/ResultBuffer>$0;
+            $match_scrut_1 = global:core:builtin::$unit_case$core:prelude/types.wado//Option<core:prelude/types.wado/ResultBuffer>$0;
+            if ref.is_null($load_5) {
+                self.buffer = struct.new "core:prelude/types.wado//Box<core:prelude/types.wado/Option<core:prelude/types.wado/ResultBuffer>>" { value: $match_scrut_1 };
+            } else {
+                $load_5.value = $match_scrut_1;
+            }
             drop(block -> ref null "wasi:filesystem/types.wado//ErrorCode" {
-                let $indirect_call_1: ref "canonical//CanonicalClosure_2";
-                call_ref "functype/$canonical_closure_fn_2"($indirect_call_1.func, local.tee $indirect_call_1(ref.cast "canonical//CanonicalClosure_2"(self.lift)).env, buffer.ptr);
+                let $indirect_call_6: ref "canonical//CanonicalClosure_2";
+                call_ref "functype/$canonical_closure_fn_2"($indirect_call_6.func, local.tee $indirect_call_6(ref.cast "canonical//CanonicalClosure_2"(self.lift)).env, buffer.ptr);
             });
             if ref.is_null(buffer) == 0 {
                 drop("mem/realloc"(buffer.ptr, buffer.size, buffer.align, 0));
@@ -3788,13 +3842,26 @@ fn "core:prelude/types.wado/core:prelude/types.wado/AsyncCall<core:prelude/types
         }
     }
     if ref.is_null(self) == 0 {
-        if ref.is_null(local.tee $match_scrut_1(self.buffer)) == 0 {
-            if $match_scrut_1.discriminant == 0 {
+        if ref.is_null((if ref.is_null(local.tee $load_5(self.buffer)) -> ref null "core:prelude/types.wado//Option<core:prelude/types.wado/ResultBuffer>" {
+            ref.null none;
+        } else {
+            $load_5.value;
+        })) == 0 {
+            if local.tee $match_scrut_1((if ref.is_null($load_5) -> ref null "core:prelude/types.wado//Option<core:prelude/types.wado/ResultBuffer>" {
+                ref.null none;
+            } else {
+                $load_5.value;
+            })).discriminant == 0 {
             } else {
                 drop("mem/realloc"(local.tee buffer(ref.cast "core:prelude/types.wado//Option<core:prelude/types.wado/ResultBuffer>::Some"($match_scrut_1).payload_0).ptr, buffer.size, buffer.align, 0));
             }
         }
-        self.buffer = global:core:builtin::$unit_case$core:prelude/types.wado//Option<core:prelude/types.wado/ResultBuffer>$0;
+        $match_scrut_1 = global:core:builtin::$unit_case$core:prelude/types.wado//Option<core:prelude/types.wado/ResultBuffer>$0;
+        if ref.is_null(local.tee $load_5(self.buffer)) {
+            self.buffer = struct.new "core:prelude/types.wado//Box<core:prelude/types.wado/Option<core:prelude/types.wado/ResultBuffer>>" { value: $match_scrut_1 };
+        } else {
+            $load_5.value = $match_scrut_1;
+        }
     }
 }
 

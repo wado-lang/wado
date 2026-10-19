@@ -151,10 +151,10 @@ fn "bug_mut_ref_after_continue.wado/run"() with Stdout {
     let $load_0: i32;
     let $load_1: i32;
     let pos_1: ref "core:prelude/types.wado//Box<i32>";
-    let val_41: i32;
-    let $licm_repr_71: ref Array<i32>;
+    let val_42: i32;
+    let $licm_repr_72: ref Array<i32>;
     pos_1 = struct.new "core:prelude/types.wado//Box<i32>" { value: 0 };
-    $licm_repr_71 = global:bug_mut_ref_after_continue.wado::$const_obj_0;
+    $licm_repr_72 = global:bug_mut_ref_after_continue.wado::$const_obj_0;
     b0: block {
         l1: loop {
             break_if b0 local.tee $load_0(pos_1.value) >= 5;
@@ -162,7 +162,7 @@ fn "bug_mut_ref_after_continue.wado/run"() with Stdout {
                 cold_path;
                 "bug_mut_ref_after_continue.wado/run$cold4$dae[$v1]"(pos_1);
                 unreachable;
-            }; builtin::array_get_value<i32>($licm_repr_71, $load_0) < 20 {
+            }; builtin::array_get_value<i32>($licm_repr_72, $load_0) < 20 {
                 pos_1.value = $load_0 + 1;
                 continue l1;
             }
@@ -171,11 +171,11 @@ fn "bug_mut_ref_after_continue.wado/run"() with Stdout {
                 "bug_mut_ref_after_continue.wado/advance$cold0$sroa[pos.value]$dae[items]"($load_0, 5);
                 unreachable;
             }
-            val_41 = builtin::array_get_value<i32>($licm_repr_71, $load_0);
+            val_42 = builtin::array_get_value<i32>($licm_repr_72, $load_0);
             pos_1.value = $load_0 + 1;
-            if @unlikely(val_41 != 20) {
+            if @unlikely(val_42 != 20) {
                 cold_path;
-                "bug_mut_ref_after_continue.wado/run$cold3"(val_41);
+                "bug_mut_ref_after_continue.wado/run$cold3"(val_42);
                 unreachable;
             }
             if @unlikely(local.tee $load_1(pos_1.value) != 2) {
@@ -188,11 +188,11 @@ fn "bug_mut_ref_after_continue.wado/run"() with Stdout {
                 "bug_mut_ref_after_continue.wado/advance$cold0$sroa[pos.value]$dae[items]"($load_1, 5);
                 unreachable;
             }
-            val_41 = builtin::array_get_value<i32>($licm_repr_71, $load_1);
+            val_42 = builtin::array_get_value<i32>($licm_repr_72, $load_1);
             pos_1.value = $load_1 + 1;
-            if @unlikely(val_41 != 30) {
+            if @unlikely(val_42 != 30) {
                 cold_path;
-                "bug_mut_ref_after_continue.wado/run$cold1"(val_41);
+                "bug_mut_ref_after_continue.wado/run$cold1"(val_42);
                 unreachable;
             }
             if @unlikely(pos_1.value != 3) {

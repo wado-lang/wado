@@ -130,19 +130,19 @@ fn "opt_clone_forward_mutated.wado/run"() with Stdout {
     let $load_0: ref Array<i32>;
     let $v0_5: i32;
     let $local_23: ref "core:prelude/string.wado//String";
-    let start_105: i32;
-    let x_119: i64;
-    let $sroa_b_data_121: ref "core:prelude//List<i32>";
-    let $sroa_$f_buf_134: ref "core:prelude/string.wado//String";
-    $load_0 = local.tee $sroa_b_data_121(struct.new "core:prelude//List<i32>" { repr: array.new_fixed<i32>(1, 2, 3), used: 3 }).repr;
+    let start_106: i32;
+    let x_120: i64;
+    let $sroa_b_data_122: ref "core:prelude//List<i32>";
+    let $sroa_$f_buf_135: ref "core:prelude/string.wado//String";
+    $load_0 = local.tee $sroa_b_data_122(struct.new "core:prelude//List<i32>" { repr: array.new_fixed<i32>(1, 2, 3), used: 3 }).repr;
     let $array_clone_dst_2: ref Array<i32>;
     builtin::array_copy<i32>(local.tee $array_clone_dst_2(builtin::array_new<i32>(3)), 0, $load_0, 0, 3);
     if @unlikely(3 >= builtin::array_len($load_0)) {
         cold_path;
-        "core:prelude/list.wado/core:prelude/list.wado/List<i32>::grow"($sroa_b_data_121);
+        "core:prelude/list.wado/core:prelude/list.wado/List<i32>::grow"($sroa_b_data_122);
     }
-    builtin::array_set<i32>(local.tee $load_0($sroa_b_data_121.repr), 3, 99);
-    $sroa_b_data_121.used = 4;
+    builtin::array_set<i32>(local.tee $load_0($sroa_b_data_122.repr), 3, 99);
+    $sroa_b_data_122.used = 4;
     if @unlikely(local.tee $v0_5(builtin::array_get_value<i32>($array_clone_dst_2, 0)) != 1) {
         cold_path;
         "opt_clone_forward_mutated.wado/run$cold5"($v0_5);
@@ -158,20 +158,20 @@ fn "opt_clone_forward_mutated.wado/run"() with Stdout {
         "opt_clone_forward_mutated.wado/run$cold0"($v0_5);
         unreachable;
     }
-    $v0_5 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$sroa[self.buf]$dae[alt_prefix]"(local.tee $sroa_$f_buf_134(local.tee $local_23(struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(33), used: 0 })), 0, 1);
-    "core:prelude/primitive.wado/write_decimal_digits"($sroa_$f_buf_134.repr, $v0_5, 3_i64, 1);
+    $v0_5 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$sroa[self.buf]$dae[alt_prefix]"(local.tee $sroa_$f_buf_135(local.tee $local_23(struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(33), used: 0 })), 0, 1);
+    "core:prelude/primitive.wado/write_decimal_digits"($sroa_$f_buf_135.repr, $v0_5, 3_i64, 1);
     if @unlikely(local.tee $v0_5($local_23.used + 1) > builtin::array_len($local_23.repr)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_23, $v0_5);
     }
-    start_105 = $local_23.used;
+    start_106 = $local_23.used;
     $local_23.used = $v0_5;
-    builtin::array_copy<u8>($local_23.repr, start_105, global:opt_clone_forward_mutated.wado::$const_obj_4, 0, 1);
-    $sroa_$f_buf_134 = $local_23;
-    $v0_5 = local.tee start_105($sroa_b_data_121.used) < 0;
-    start_105 = "core:prelude/primitive.wado/count_digits_u64"(local.tee x_119(x_119 = builtin::i64_extend_i32_s(start_105); select i64(x_119 < 0_i64, 0_i64 - x_119, x_119)));
-    $v0_5 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$sroa[self.buf]$dae[alt_prefix]"($sroa_$f_buf_134, $v0_5, start_105);
-    "core:prelude/primitive.wado/write_decimal_digits"($sroa_$f_buf_134.repr, $v0_5, x_119, start_105);
+    builtin::array_copy<u8>($local_23.repr, start_106, global:opt_clone_forward_mutated.wado::$const_obj_4, 0, 1);
+    $sroa_$f_buf_135 = $local_23;
+    $v0_5 = local.tee start_106($sroa_b_data_122.used) < 0;
+    start_106 = "core:prelude/primitive.wado/count_digits_u64"(local.tee x_120(x_120 = builtin::i64_extend_i32_s(start_106); select i64(x_120 < 0_i64, 0_i64 - x_120, x_120)));
+    $v0_5 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$sroa[self.buf]$dae[alt_prefix]"($sroa_$f_buf_135, $v0_5, start_106);
+    "core:prelude/primitive.wado/write_decimal_digits"($sroa_$f_buf_135.repr, $v0_5, x_120, start_106);
     "core:cli/println"($local_23.repr, $local_23.used);
 }
 

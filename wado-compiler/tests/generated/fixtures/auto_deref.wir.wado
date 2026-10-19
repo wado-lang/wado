@@ -120,19 +120,19 @@ global global:auto_deref.wado::$const_obj_1: ref Array<i32> = array.new_fixed<i3
 fn "auto_deref.wado/auto_deref_for_of"() with Stdout {
     let sum: i32;
     let ref_val: i32;
-    let $sroa_slot_34: i32;
+    let $sroa_slot_35: i32;
     let b0: u32;
-    let $sroa_$iter_0_repr_63: ref Array<i32>;
-    let $sroa_$iter_0_index_64: i32;
-    let $sroa_$iter_2_repr_68: ref Array<u8>;
+    let $sroa_$iter_0_repr_64: ref Array<i32>;
+    let $sroa_$iter_0_index_65: i32;
+    let $sroa_$iter_2_repr_69: ref Array<u8>;
     sum = 0;
-    $sroa_$iter_0_repr_63 = global:auto_deref.wado::$const_obj_1;
-    $sroa_$iter_0_index_64 = 0;
+    $sroa_$iter_0_repr_64 = global:auto_deref.wado::$const_obj_1;
+    $sroa_$iter_0_index_65 = 0;
     b0: block {
         l1: loop {
-            break_if b0 $sroa_$iter_0_index_64 >= 3;
-            ref_val = builtin::array_get_value<i32>($sroa_$iter_0_repr_63, $sroa_$iter_0_index_64);
-            $sroa_$iter_0_index_64 = $sroa_$iter_0_index_64 + 1;
+            break_if b0 $sroa_$iter_0_index_65 >= 3;
+            ref_val = builtin::array_get_value<i32>($sroa_$iter_0_repr_64, $sroa_$iter_0_index_65);
+            $sroa_$iter_0_index_65 = $sroa_$iter_0_index_65 + 1;
             sum = sum + ref_val;
             continue l1;
         };
@@ -143,44 +143,44 @@ fn "auto_deref.wado/auto_deref_for_of"() with Stdout {
         unreachable;
     }
     sum = 0;
-    $sroa_$iter_2_repr_68 = global:auto_deref.wado::$const_obj_0;
-    $sroa_$iter_0_index_64 = 0;
+    $sroa_$iter_2_repr_69 = global:auto_deref.wado::$const_obj_0;
+    $sroa_$iter_0_index_65 = 0;
     b3: block {
         l4: loop {
-            $sroa_slot_34 = 0;
+            $sroa_slot_35 = 0;
             $inline_core_prelude_string_wado_StrCharIter_core_prelude_traits_wado_Iterator__next_sroa_return__6: block {
-                if $sroa_$iter_0_index_64 >= 3 {
-                    $sroa_slot_34 = 0;
+                if $sroa_$iter_0_index_65 >= 3 {
+                    $sroa_slot_35 = 0;
                     break $inline_core_prelude_string_wado_StrCharIter_core_prelude_traits_wado_Iterator__next_sroa_return__6;
                 }
                 ref_val = 0;
                 $inline_decode_char_at_0: block {
-                    if local.tee b0(builtin::array_get_value<u8>($sroa_$iter_2_repr_68, $sroa_$iter_0_index_64)) <u 128 {
+                    if local.tee b0(builtin::array_get_value<u8>($sroa_$iter_2_repr_69, $sroa_$iter_0_index_65)) <u 128 {
                         ref_val = 1;
                         break $inline_decode_char_at_0;
                     }
                     if b0 <u 224 {
-                        drop(builtin::array_get_value<u8>($sroa_$iter_2_repr_68, $sroa_$iter_0_index_64 + 1));
+                        drop(builtin::array_get_value<u8>($sroa_$iter_2_repr_69, $sroa_$iter_0_index_65 + 1));
                         ref_val = 2;
                         break $inline_decode_char_at_0;
                     }
                     if b0 <u 240 {
-                        drop(builtin::array_get_value<u8>($sroa_$iter_2_repr_68, $sroa_$iter_0_index_64 + 1));
-                        drop(builtin::array_get_value<u8>($sroa_$iter_2_repr_68, $sroa_$iter_0_index_64 + 2));
+                        drop(builtin::array_get_value<u8>($sroa_$iter_2_repr_69, $sroa_$iter_0_index_65 + 1));
+                        drop(builtin::array_get_value<u8>($sroa_$iter_2_repr_69, $sroa_$iter_0_index_65 + 2));
                         ref_val = 3;
                         break $inline_decode_char_at_0;
                     }
-                    drop(builtin::array_get_value<u8>($sroa_$iter_2_repr_68, $sroa_$iter_0_index_64 + 1));
-                    drop(builtin::array_get_value<u8>($sroa_$iter_2_repr_68, $sroa_$iter_0_index_64 + 2));
-                    drop(builtin::array_get_value<u8>($sroa_$iter_2_repr_68, $sroa_$iter_0_index_64 + 3));
+                    drop(builtin::array_get_value<u8>($sroa_$iter_2_repr_69, $sroa_$iter_0_index_65 + 1));
+                    drop(builtin::array_get_value<u8>($sroa_$iter_2_repr_69, $sroa_$iter_0_index_65 + 2));
+                    drop(builtin::array_get_value<u8>($sroa_$iter_2_repr_69, $sroa_$iter_0_index_65 + 3));
                     ref_val = 4;
                     break $inline_decode_char_at_0;
                 };
-                $sroa_$iter_0_index_64 = $sroa_$iter_0_index_64 + ref_val;
-                $sroa_slot_34 = 1;
+                $sroa_$iter_0_index_65 = $sroa_$iter_0_index_65 + ref_val;
+                $sroa_slot_35 = 1;
                 break $inline_core_prelude_string_wado_StrCharIter_core_prelude_traits_wado_Iterator__next_sroa_return__6;
             };
-            if $sroa_slot_34 == 1 {
+            if $sroa_slot_35 == 1 {
                 sum = sum + 1;
             } else {
                 break b3;
@@ -193,7 +193,7 @@ fn "auto_deref.wado/auto_deref_for_of"() with Stdout {
         "auto_deref.wado/auto_deref_for_of$cold0"(sum);
         unreachable;
     }
-    "core:cli/println"(local.tee $sroa_$iter_2_repr_68(array.new_fixed<u8>(111, 107)), 2);
+    "core:cli/println"(local.tee $sroa_$iter_2_repr_69(array.new_fixed<u8>(111, 107)), 2);
 }
 
 fn "auto_deref.wado/$cm_binding__Stdout_write_via_stream"(data) with Stdout {

@@ -105,11 +105,11 @@ type "functype//core:prelude/traits.wado/core/prelude/traits.wado/inspect_struct
 
 type "functype//core:prelude/string.wado/core:prelude/string.wado/String::set_byte_at$contract_report0" = fn(i32, i32, ref Array<u8>, i32);  // TypeId(32)
 
-type "functype//core:prelude/types.wado/$case_extract$core:prelude/types.wado/Result<i32,concrete_impl_two_param_struct_static.wado/Pair<i64,i32>>$concrete_impl_two_param_struct_static.wado/Pair<i64,i32>$sroa[v.value]" = fn(ref "core:prelude/types.wado//Result<i32,concrete_impl_two_param_struct_static.wado/Pair<i64,i32>>", i32) -> ref "concrete_impl_two_param_struct_static.wado//Pair<i64,i32>";  // TypeId(33)
+type "functype//core:prelude/traits.wado/core/prelude/traits.wado/inspect_variant_payload<i32>$sroa[payload.value]" = fn(i32, ref "core:prelude/format.wado//Formatter");  // TypeId(33)
 
-type "functype//core:prelude/types.wado/$case_extract$core:prelude/types.wado/Result<i32,concrete_impl_two_param_struct_static.wado/Pair<i64,i32>>$i32$sroa[v.value]" = fn(ref "core:prelude/types.wado//Result<i32,concrete_impl_two_param_struct_static.wado/Pair<i64,i32>>", i32) -> i32;  // TypeId(34)
+type "functype//core:prelude/types.wado/$case_extract$core:prelude/types.wado/Result<i32,concrete_impl_two_param_struct_static.wado/Pair<i64,i32>>$concrete_impl_two_param_struct_static.wado/Pair<i64,i32>$sroa[v.value]" = fn(ref "core:prelude/types.wado//Result<i32,concrete_impl_two_param_struct_static.wado/Pair<i64,i32>>", i32) -> ref "concrete_impl_two_param_struct_static.wado//Pair<i64,i32>";  // TypeId(34)
 
-type "functype//core:prelude/traits.wado/core/prelude/traits.wado/inspect_variant_payload<i32>$sroa[payload.value]" = fn(i32, ref "core:prelude/format.wado//Formatter");  // TypeId(35)
+type "functype//core:prelude/types.wado/$case_extract$core:prelude/types.wado/Result<i32,concrete_impl_two_param_struct_static.wado/Pair<i64,i32>>$i32$sroa[v.value]" = fn(ref "core:prelude/types.wado//Result<i32,concrete_impl_two_param_struct_static.wado/Pair<i64,i32>>", i32) -> i32;  // TypeId(35)
 
 type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::new" = fn(ref "core:prelude/string.wado//String") -> ref "core:prelude/format.wado//Formatter";  // TypeId(36)
 
@@ -129,9 +129,9 @@ type "functype//core:prelude/types.wado/core:prelude/types.wado/Result<i32,concr
 
 type "functype//core:prelude/traits.wado/concrete_impl_two_param_struct_static.wado/Pair<i64,i32>^core:prelude/traits.wado/Inspect::inspect" = fn(i64, i32, ref "core:prelude/format.wado//Formatter");  // TypeId(44)
 
-type "functype//core:prelude/primitive.wado/i32::fmt_decimal$sroa[self.value]" = fn(i32, ref "core:prelude/format.wado//Formatter");  // TypeId(45)
+type "functype//core:prelude/traits.wado/core:prelude/types.wado/Result<i32,concrete_impl_two_param_struct_static.wado/Pair<i64,i32>>^core:prelude/traits.wado/Inspect::inspect$sroa[self.value]" = fn(ref "core:prelude/types.wado//Result<i32,concrete_impl_two_param_struct_static.wado/Pair<i64,i32>>", ref "core:prelude/format.wado//Formatter");  // TypeId(45)
 
-type "functype//core:prelude/traits.wado/core:prelude/types.wado/Result<i32,concrete_impl_two_param_struct_static.wado/Pair<i64,i32>>^core:prelude/traits.wado/Inspect::inspect$sroa[self.value]" = fn(ref "core:prelude/types.wado//Result<i32,concrete_impl_two_param_struct_static.wado/Pair<i64,i32>>", ref "core:prelude/format.wado//Formatter");  // TypeId(46)
+type "functype//core:prelude/primitive.wado/i32::fmt_decimal$sroa[self.value]" = fn(i32, ref "core:prelude/format.wado//Formatter");  // TypeId(46)
 
 type "functype//core:prelude/string.wado/core:prelude/string.wado/String^core:prelude/string.wado/AsStrSlice::internal_append_to$spec0" = fn(ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String");  // TypeId(47)
 
@@ -786,28 +786,6 @@ condition: 0 <= index < self.len()
     unreachable;
 }
 
-fn "core:prelude/types.wado/$case_extract$core:prelude/types.wado/Result<i32,concrete_impl_two_param_struct_static.wado/Pair<i64,i32>>$concrete_impl_two_param_struct_static.wado/Pair<i64,i32>$sroa[v.value]"(v, index) {
-    if @unlikely(v.discriminant != index) {
-        unreachable;
-    }
-    return (if @likely(index == 1) -> ref "concrete_impl_two_param_struct_static.wado//Pair<i64,i32>" {
-        ref.cast "core:prelude/types.wado//Result<i32,concrete_impl_two_param_struct_static.wado/Pair<i64,i32>>::Err"(v).payload_0;
-    } else {
-        unreachable;
-    });
-}
-
-fn "core:prelude/types.wado/$case_extract$core:prelude/types.wado/Result<i32,concrete_impl_two_param_struct_static.wado/Pair<i64,i32>>$i32$sroa[v.value]"(v, index) {
-    if @unlikely(v.discriminant != index) {
-        unreachable;
-    }
-    return (if @likely(index == 0) -> i32 {
-        ref.cast "core:prelude/types.wado//Result<i32,concrete_impl_two_param_struct_static.wado/Pair<i64,i32>>::Ok"(v).payload_0;
-    } else {
-        unreachable;
-    });
-}
-
 fn "core:prelude/traits.wado/core/prelude/traits.wado/inspect_variant_payload<i32>$sroa[payload.value]"(payload, f) {
     let self_4: ref "core:prelude/string.wado//String";
     let new_used_16: i32;
@@ -842,9 +820,9 @@ fn "core:prelude/traits.wado/core/prelude/traits.wado/inspect_variant_payload<i3
         new_used_16 = 0;
         start_17 = f.indent;
         self_4 = f.buf;
-        b89: block {
-            l90: loop {
-                break_if b89 new_used_16 >= start_17;
+        b85: block {
+            l86: loop {
+                break_if b85 new_used_16 >= start_17;
                 if @unlikely(local.tee new_used_36(self_4.used + 2) > builtin::array_len(self_4.repr)) {
                     cold_path;
                     "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self_4, new_used_36);
@@ -853,7 +831,7 @@ fn "core:prelude/traits.wado/core/prelude/traits.wado/inspect_variant_payload<i3
                 self_4.used = new_used_36;
                 builtin::array_copy<u8>(self_4.repr, start_37, global:core:prelude/traits.wado::$const_obj_19, 0, 2);
                 new_used_16 = new_used_16 + 1;
-                continue l90;
+                continue l86;
             };
         };
         start_17 = payload < 0;
@@ -888,9 +866,9 @@ fn "core:prelude/traits.wado/core/prelude/traits.wado/inspect_variant_payload<i3
         new_used_16 = 0;
         start_17 = f.indent;
         self_4 = f.buf;
-        b96: block {
-            l97: loop {
-                break_if b96 new_used_16 >= start_17;
+        b92: block {
+            l93: loop {
+                break_if b92 new_used_16 >= start_17;
                 if @unlikely(local.tee start_37(self_4.used + 2) > builtin::array_len(self_4.repr)) {
                     cold_path;
                     "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self_4, start_37);
@@ -899,7 +877,7 @@ fn "core:prelude/traits.wado/core/prelude/traits.wado/inspect_variant_payload<i3
                 self_4.used = start_37;
                 builtin::array_copy<u8>(self_4.repr, new_used_36, global:core:prelude/traits.wado::$const_obj_19, 0, 2);
                 new_used_16 = new_used_16 + 1;
-                continue l97;
+                continue l93;
             };
         };
         if @unlikely(local.tee start_17(local.tee self_4(f.buf).used + 1) > builtin::array_len(self_4.repr)) {
@@ -932,6 +910,28 @@ fn "core:prelude/traits.wado/core/prelude/traits.wado/inspect_variant_payload<i3
     start_17 = self_4.used;
     self_4.used = payload;
     builtin::array_copy<u8>(self_4.repr, start_17, global:core:prelude/traits.wado::$const_obj_16, 0, 1);
+}
+
+fn "core:prelude/types.wado/$case_extract$core:prelude/types.wado/Result<i32,concrete_impl_two_param_struct_static.wado/Pair<i64,i32>>$concrete_impl_two_param_struct_static.wado/Pair<i64,i32>$sroa[v.value]"(v, index) {
+    if @unlikely(v.discriminant != index) {
+        unreachable;
+    }
+    return (if @likely(index == 1) -> ref "concrete_impl_two_param_struct_static.wado//Pair<i64,i32>" {
+        ref.cast "core:prelude/types.wado//Result<i32,concrete_impl_two_param_struct_static.wado/Pair<i64,i32>>::Err"(v).payload_0;
+    } else {
+        unreachable;
+    });
+}
+
+fn "core:prelude/types.wado/$case_extract$core:prelude/types.wado/Result<i32,concrete_impl_two_param_struct_static.wado/Pair<i64,i32>>$i32$sroa[v.value]"(v, index) {
+    if @unlikely(v.discriminant != index) {
+        unreachable;
+    }
+    return (if @likely(index == 0) -> i32 {
+        ref.cast "core:prelude/types.wado//Result<i32,concrete_impl_two_param_struct_static.wado/Pair<i64,i32>>::Ok"(v).payload_0;
+    } else {
+        unreachable;
+    });
 }
 
 fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::new"(buf) {
@@ -1476,19 +1476,6 @@ fn "core:prelude/traits.wado/concrete_impl_two_param_struct_static.wado/Pair<i64
     builtin::array_copy<u8>(f_8.repr, start_26, global:core:prelude/traits.wado::$const_obj_32, 0, 2);
 }
 
-fn "core:prelude/primitive.wado/i32::fmt_decimal$sroa[self.value]"(self, f) {
-    let is_negative: bool;
-    let x: i64;
-    is_negative = self < 0;
-    self = "core:prelude/primitive.wado/count_digits_u64"(local.tee x(x = builtin::i64_extend_i32_s(self); select i64(x < 0_i64, 0_i64 - x, x)));
-    is_negative = block -> i32 {
-        let $mv_field_3: ref Array<u8>;
-        $mv_field_3 = builtin::array_new<u8>(0);
-        "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>"(f, is_negative, $mv_field_3, 0, self);
-    };
-    "core:prelude/primitive.wado/write_decimal_digits"(f.buf.repr, is_negative, x, self);
-}
-
 fn "core:prelude/traits.wado/core:prelude/types.wado/Result<i32,concrete_impl_two_param_struct_static.wado/Pair<i64,i32>>^core:prelude/traits.wado/Inspect::inspect$sroa[self.value]"(self, f) {
     let s_9: ref "core:prelude/string.wado//String";
     let $mv$$tuple_0$0: ref "core:prelude/traits.wado//VariantCase<core:prelude/types.wado/Result<i32,concrete_impl_two_param_struct_static.wado/Pair<i64,i32>>,i32>";
@@ -1513,6 +1500,19 @@ fn "core:prelude/traits.wado/core:prelude/types.wado/Result<i32,concrete_impl_tw
         let $mv_arg_1: ref "concrete_impl_two_param_struct_static.wado//Pair<i64,i32>";
         "core:prelude/traits.wado/core/prelude/traits.wado/inspect_variant_payload<concrete_impl_two_param_struct_static.wado/Pair<i64,i32>>"(local.tee $mv_arg_1("core:prelude/types.wado/$case_extract$core:prelude/types.wado/Result<i32,concrete_impl_two_param_struct_static.wado/Pair<i64,i32>>$concrete_impl_two_param_struct_static.wado/Pair<i64,i32>$sroa[v.value]"(self, 1)).a, $mv_arg_1.b, f);
     }
+}
+
+fn "core:prelude/primitive.wado/i32::fmt_decimal$sroa[self.value]"(self, f) {
+    let is_negative: bool;
+    let x: i64;
+    is_negative = self < 0;
+    self = "core:prelude/primitive.wado/count_digits_u64"(local.tee x(x = builtin::i64_extend_i32_s(self); select i64(x < 0_i64, 0_i64 - x, x)));
+    is_negative = block -> i32 {
+        let $mv_field_3: ref Array<u8>;
+        $mv_field_3 = builtin::array_new<u8>(0);
+        "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>"(f, is_negative, $mv_field_3, 0, self);
+    };
+    "core:prelude/primitive.wado/write_decimal_digits"(f.buf.repr, is_negative, x, self);
 }
 
 fn "core:prelude/string.wado/core:prelude/string.wado/String^core:prelude/string.wado/AsStrSlice::internal_append_to$spec0"(self, out) {

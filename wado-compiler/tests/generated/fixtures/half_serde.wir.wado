@@ -626,17 +626,17 @@ type "functype//core:cbor/core:cbor/CborSerializer^core:serde/Serializer::serial
 
 type "functype//core:cbor/core:cbor/CborDeserializer::unexpected_break$sroa[self.pos]" = fn(i32) -> ["core:serde//enum:DeserializeErrorKind", ref "core:prelude/string.wado//String", i64];  // TypeId(219)
 
-type "functype//core:prelude/traits.wado/core:serde/DeserializeErrorKind^core:prelude/traits.wado/Inspect::inspect$sroa[self.value,f.buf]" = fn("core:serde//enum:DeserializeErrorKind", ref "core:prelude/string.wado//String");  // TypeId(220)
+type "functype//core:json/core:json/JsonDeserializer::key_quote_error$sroa[self.pos]" = fn(i32, i32) -> ref "core:serde//DeserializeError";  // TypeId(220)
 
-type "functype//core:json/core:json/JsonDeserializer::key_quote_error$sroa[self.pos]" = fn(i32, i32) -> ref "core:serde//DeserializeError";  // TypeId(221)
+type "functype//core:json/core:json/JsonDeserializer::entry_separator_error$sroa[self.pos]" = fn(i32, i32) -> ref "core:serde//DeserializeError";  // TypeId(221)
 
-type "functype//core:json/core:json/JsonDeserializer::entry_separator_error$sroa[self.pos]" = fn(i32, i32) -> ref "core:serde//DeserializeError";  // TypeId(222)
+type "functype//core:prelude/traits.wado/core:serde/SerializeErrorKind^core:prelude/traits.wado/Inspect::inspect$sroa[self.value,f.buf]" = fn("core:serde//enum:SerializeErrorKind", ref "core:prelude/string.wado//String");  // TypeId(222)
 
 type "functype//core:prelude/primitive.wado/i32::fmt_decimal$sroa[self.value]" = fn(i32, ref "core:prelude/format.wado//Formatter");  // TypeId(223)
 
 type "functype//core:prelude/primitive.wado/i64::fmt_decimal$sroa[self.value]" = fn(i64, ref "core:prelude/format.wado//Formatter");  // TypeId(224)
 
-type "functype//core:prelude/traits.wado/core:serde/SerializeErrorKind^core:prelude/traits.wado/Inspect::inspect$sroa[self.value,f.buf]" = fn("core:serde//enum:SerializeErrorKind", ref "core:prelude/string.wado//String");  // TypeId(225)
+type "functype//core:prelude/traits.wado/core:serde/DeserializeErrorKind^core:prelude/traits.wado/Inspect::inspect$sroa[self.value,f.buf]" = fn("core:serde//enum:DeserializeErrorKind", ref "core:prelude/string.wado//String");  // TypeId(225)
 
 type "functype//core:prelude/primitive.wado/u64::fmt_decimal$sroa[self.value]" = fn(u64, ref "core:prelude/format.wado//Formatter");  // TypeId(226)
 
@@ -672,13 +672,13 @@ type "functype//core:prelude/primitive.wado/u64::fmt_base$sroa[self.value]$spec0
 
 type "functype//core:serde/half_serde.wado/Weights^core:serde/Serialize::serialize<core:json/JsonSerializer>$sroa[s.buf]" = fn(u16, u16, ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String") -> ref null "core:serde//SerializeError";  // TypeId(242)
 
-type "functype//core:serde/half_serde.wado/Weights^core:serde/Serialize::serialize<core:cbor/CborSerializer>$sroa[s.buf]" = fn(u16, u16, ref "core:prelude/string.wado//String", ref "core:prelude//List<u8>") -> ref null "core:serde//SerializeError";  // TypeId(243)
+type "functype//core:json/core:json/JsonDeserializer::scan_string_run$sroa[self.input]" = fn(ref "core:prelude/slice.wado//Slice<u8>", i32) -> [i32, i32, bool];  // TypeId(243)
 
-type "functype//core:json/core:json/JsonDeserializer::scan_string_run$sroa[self.input]" = fn(ref "core:prelude/slice.wado//Slice<u8>", i32) -> [i32, i32, bool];  // TypeId(244)
+type "functype//core:json/core:json/JsonDeserializer::append_scanned_run$sroa[self.input]" = fn(ref Array<u8>, i32, i32, ref "core:prelude/string.wado//String", i32, i32, bool) -> ref null "core:serde//DeserializeError";  // TypeId(244)
 
-type "functype//core:json/core:json/JsonDeserializer::append_scanned_run$sroa[self.input]" = fn(ref Array<u8>, i32, i32, ref "core:prelude/string.wado//String", i32, i32, bool) -> ref null "core:serde//DeserializeError";  // TypeId(245)
+type "functype//core:json/core:json/JsonDeserializer::take_scanned_run$sroa[self.input,return]" = fn(ref Array<u8>, i32, i32, i32, i32, bool) -> [i32, ref null "core:prelude/string.wado//String", ref null "core:serde//DeserializeError"];  // TypeId(245)
 
-type "functype//core:json/core:json/JsonDeserializer::take_scanned_run$sroa[self.input,return]" = fn(ref Array<u8>, i32, i32, i32, i32, bool) -> [i32, ref null "core:prelude/string.wado//String", ref null "core:serde//DeserializeError"];  // TypeId(246)
+type "functype//core:serde/half_serde.wado/Weights^core:serde/Serialize::serialize<core:cbor/CborSerializer>$sroa[s.buf]" = fn(u16, u16, ref "core:prelude/string.wado//String", ref "core:prelude//List<u8>") -> ref null "core:serde//SerializeError";  // TypeId(246)
 
 type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::pad<core:prelude/string.wado/String>$spec0" = fn(ref "core:prelude/format.wado//Formatter", ref Array<u8>, i32);  // TypeId(247)
 
@@ -1811,9 +1811,9 @@ fn "core:prelude/fpfmt.wado/compare_to_midpoint"($mv$digits$repr, $mv$digits$sta
     let midpoint: ref "core:prelude//List<u32>";
     let elements_21: ref Array<u32>;
     let carry: u64;
-    let k_43: i32;
+    let k_45: i32;
     let v: u64;
-    let value_72: u32;
+    let value_74: u32;
     decimal = struct.new "core:prelude//List<u32>" { repr: local.tee elements_21(array.new_fixed<u32>()), used: 0 };
     kept = 0;
     sticky = 0;
@@ -1829,26 +1829,26 @@ fn "core:prelude/fpfmt.wado/compare_to_midpoint"($mv$digits$repr, $mv$digits$sta
                     sticky = select i32(sticky, 1, digit != 0);
                 } else if (kept > 0) | (digit != 0) {
                     carry = builtin::i64_extend_i32_u(digit);
-                    k_43 = 0;
+                    k_45 = 0;
                     $load_0 = decimal.used;
                     elements_21 = decimal.repr;
                     b121: block {
                         l122: loop {
-                            break_if b121 k_43 >= $load_0;
-                            v = (builtin::i64_extend_i32_u(builtin::array_get_value<u32>(elements_21, k_43)) * 10_i64) + carry;
-                            builtin::array_set<u32>(elements_21, k_43, builtin::i32_wrap_i64(v));
+                            break_if b121 k_45 >= $load_0;
+                            v = (builtin::i64_extend_i32_u(builtin::array_get_value<u32>(elements_21, k_45)) * 10_i64) + carry;
+                            builtin::array_set<u32>(elements_21, k_45, builtin::i32_wrap_i64(v));
                             carry = v >>u 32_i64;
-                            k_43 = k_43 + 1;
+                            k_45 = k_45 + 1;
                             continue l122;
                         };
                     };
                     if carry != 0_i64 {
-                        value_72 = builtin::i32_wrap_i64(carry);
+                        value_74 = builtin::i32_wrap_i64(carry);
                         if @unlikely($load_0 >= builtin::array_len(elements_21)) {
                             cold_path;
                             "core:prelude/list.wado/core:prelude/list.wado/List<u32>::grow"(decimal);
                         }
-                        builtin::array_set<u32>(decimal.repr, $load_0, value_72);
+                        builtin::array_set<u32>(decimal.repr, $load_0, value_74);
                         decimal.used = $load_0 + 1;
                     }
                     kept = kept + 1;
@@ -1864,7 +1864,8 @@ fn "core:prelude/fpfmt.wado/compare_to_midpoint"($mv$digits$repr, $mv$digits$sta
     p = builtin::i32_wrap_i64(below >>u builtin::i64_extend_i32_s($mv$format$precision - 1));
     v = select u64(p == 0, v, v | (1_i64 << builtin::i64_extend_i32_s($mv$format$precision - 1)));
     p = select i32(p == 0, 0 - $mv$format$exponent_bits, (p - $mv$format$exponent_bits) - 1);
-    midpoint = struct.new "core:prelude//List<u32>" { repr: local.tee elements_21(array.new_fixed<u32>(builtin::i32_wrap_i64(local.tee v((2_i64 * v) + 1_i64)), builtin::i32_wrap_i64(v >>u 32_i64))), used: builtin::array_len(elements_21) };
+    $mv$format$exponent_bits = builtin::array_len(local.tee elements_21(array.new_fixed<u32>(builtin::i32_wrap_i64(local.tee v((2_i64 * v) + 1_i64)), builtin::i32_wrap_i64(v >>u 32_i64))));
+    midpoint = struct.new "core:prelude//List<u32>" { repr: elements_21, used: $mv$format$exponent_bits };
     $mv$format$exponent_bits = 0;
     p = p - 1;
     if kept >= 0 {
@@ -7684,6 +7685,71 @@ fn "core:cbor/core:cbor/CborDeserializer::unexpected_break$sroa[self.pos]"(self)
     return 6, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("unexpected break"), used: 16 }, builtin::i64_extend_i32_s(self - 1);
 }
 
+fn "core:json/core:json/JsonDeserializer::key_quote_error$sroa[self.pos]"(self, b) {
+    if b < 0 {
+        return "core:serde/core:serde/DeserializeError::eof"(builtin::i64_extend_i32_s(self));
+    }
+    return struct.new "core:serde//DeserializeError" { kind: 0, message: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("expected string key"), used: 19 }, offset: builtin::i64_extend_i32_s(self) };
+}
+
+fn "core:json/core:json/JsonDeserializer::entry_separator_error$sroa[self.pos]"(self, close) {
+    let $local_2: ref "core:prelude/string.wado//String";
+    let $local_3: ref "core:prelude/format.wado//Formatter";
+    $local_2 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(34), used: 0 };
+    "core:prelude/string.wado/core:prelude/string.wado/String^core:prelude/string.wado/AsStrSlice::internal_append_to$spec4"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("expected ',' or '"), used: 17 }, $local_2);
+    $local_3 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::new"($local_2);
+    "core:prelude/primitive.wado/char^core:prelude/traits.wado/Display::fmt$sroa[self.value]"(close & 255, $local_3);
+    "core:prelude/string.wado/core:prelude/string.wado/String^core:prelude/string.wado/AsStrSlice::internal_append_to$spec1"(struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(39), used: 1 }, $local_2);
+    return struct.new "core:serde//DeserializeError" { kind: 6, message: $local_2, offset: builtin::i64_extend_i32_s(self) };
+}
+
+fn "core:prelude/traits.wado/core:serde/SerializeErrorKind^core:prelude/traits.wado/Inspect::inspect$sroa[self.value,f.buf]"(self, f) {
+    let s_9: ref "core:prelude/string.wado//String";
+    let $mv$$tuple_0$0: ref "core:prelude/traits.wado//EnumCase<core:serde/SerializeErrorKind>";
+    let $mv$$tuple_0$1: ref "core:prelude/traits.wado//EnumCase<core:serde/SerializeErrorKind>";
+    multivalue_bind [$mv$$tuple_0$0, $mv$$tuple_0$1] = "core:serde/core:serde/SerializeErrorKind^core:prelude/traits.wado/ReflectEnum::members"();
+    if self == 0 {
+        s_9 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("SerializeErrorKind"), used: 18 };
+        "core:prelude/string.wado/core:prelude/string.wado/String::push_str<&core:prelude/string.wado/String>"(f, s_9);
+        "core:prelude/string.wado/core:prelude/string.wado/String^core:prelude/string.wado/AsStrSlice::internal_append_to$spec2"(local.tee s_9(struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(58, 58), used: 2 }), f);
+        s_9 = $mv$$tuple_0$0.case_name;
+        "core:prelude/string.wado/core:prelude/string.wado/String::push_str<&core:prelude/string.wado/String>"(f, s_9);
+    }
+    if self == 1 {
+        s_9 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("SerializeErrorKind"), used: 18 };
+        "core:prelude/string.wado/core:prelude/string.wado/String::push_str<&core:prelude/string.wado/String>"(f, s_9);
+        "core:prelude/string.wado/core:prelude/string.wado/String^core:prelude/string.wado/AsStrSlice::internal_append_to$spec2"(local.tee s_9(struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(58, 58), used: 2 }), f);
+        s_9 = $mv$$tuple_0$1.case_name;
+        "core:prelude/string.wado/core:prelude/string.wado/String::push_str<&core:prelude/string.wado/String>"(f, s_9);
+    }
+}
+
+fn "core:prelude/primitive.wado/i32::fmt_decimal$sroa[self.value]"(self, f) {
+    let is_negative: bool;
+    let x: i64;
+    is_negative = self < 0;
+    self = "core:prelude/primitive.wado/count_digits_u64"(local.tee x(x = builtin::i64_extend_i32_s(self); select i64(x < 0_i64, 0_i64 - x, x)));
+    is_negative = block -> i32 {
+        let $mv_field_3: ref Array<u8>;
+        $mv_field_3 = builtin::array_new<u8>(0);
+        "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>"(f, is_negative, $mv_field_3, 0, self);
+    };
+    "core:prelude/primitive.wado/write_decimal_digits"(f.buf.repr, is_negative, x, self);
+}
+
+fn "core:prelude/primitive.wado/i64::fmt_decimal$sroa[self.value]"(self, f) {
+    let is_negative: bool;
+    let digit_count: i32;
+    is_negative = self < 0_i64;
+    digit_count = "core:prelude/primitive.wado/count_digits_u64"(local.tee self(select i64(self < 0_i64, 0_i64 - self, self)));
+    is_negative = block -> i32 {
+        let $mv_field_3: ref Array<u8>;
+        $mv_field_3 = builtin::array_new<u8>(0);
+        "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>"(f, is_negative, $mv_field_3, 0, digit_count);
+    };
+    "core:prelude/primitive.wado/write_decimal_digits"(f.buf.repr, is_negative, self, digit_count);
+}
+
 fn "core:prelude/traits.wado/core:serde/DeserializeErrorKind^core:prelude/traits.wado/Inspect::inspect$sroa[self.value,f.buf]"(self, f) {
     let $tuple_0: ref "tuple//[core:prelude/traits.wado/EnumCase<core:serde/DeserializeErrorKind>, core:prelude/traits.wado/EnumCase<core:serde/DeserializeErrorKind>, core:prelude/traits.wado/EnumCase<core:serde/DeserializeErrorKind>, core:prelude/traits.wado/EnumCase<core:serde/DeserializeErrorKind>, core:prelude/traits.wado/EnumCase<core:serde/DeserializeErrorKind>, core:prelude/traits.wado/EnumCase<core:serde/DeserializeErrorKind>, core:prelude/traits.wado/EnumCase<core:serde/DeserializeErrorKind>, core:prelude/traits.wado/EnumCase<core:serde/DeserializeErrorKind>, core:prelude/traits.wado/EnumCase<core:serde/DeserializeErrorKind>, core:prelude/traits.wado/EnumCase<core:serde/DeserializeErrorKind>, core:prelude/traits.wado/EnumCase<core:serde/DeserializeErrorKind>]";
     let case_4: ref "core:prelude/traits.wado//EnumCase<core:serde/DeserializeErrorKind>";
@@ -7775,71 +7841,6 @@ fn "core:prelude/traits.wado/core:serde/DeserializeErrorKind^core:prelude/traits
         "core:prelude/string.wado/core:prelude/string.wado/String^core:prelude/string.wado/AsStrSlice::internal_append_to$spec2"(local.tee s_18(struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(58, 58), used: 2 }), f);
         s_18 = case_4.case_name;
         "core:prelude/string.wado/core:prelude/string.wado/String::push_str<&core:prelude/string.wado/String>"(f, s_18);
-    }
-}
-
-fn "core:json/core:json/JsonDeserializer::key_quote_error$sroa[self.pos]"(self, b) {
-    if b < 0 {
-        return "core:serde/core:serde/DeserializeError::eof"(builtin::i64_extend_i32_s(self));
-    }
-    return struct.new "core:serde//DeserializeError" { kind: 0, message: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("expected string key"), used: 19 }, offset: builtin::i64_extend_i32_s(self) };
-}
-
-fn "core:json/core:json/JsonDeserializer::entry_separator_error$sroa[self.pos]"(self, close) {
-    let $local_2: ref "core:prelude/string.wado//String";
-    let $local_3: ref "core:prelude/format.wado//Formatter";
-    $local_2 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(34), used: 0 };
-    "core:prelude/string.wado/core:prelude/string.wado/String^core:prelude/string.wado/AsStrSlice::internal_append_to$spec4"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("expected ',' or '"), used: 17 }, $local_2);
-    $local_3 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::new"($local_2);
-    "core:prelude/primitive.wado/char^core:prelude/traits.wado/Display::fmt$sroa[self.value]"(close & 255, $local_3);
-    "core:prelude/string.wado/core:prelude/string.wado/String^core:prelude/string.wado/AsStrSlice::internal_append_to$spec1"(struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(39), used: 1 }, $local_2);
-    return struct.new "core:serde//DeserializeError" { kind: 6, message: $local_2, offset: builtin::i64_extend_i32_s(self) };
-}
-
-fn "core:prelude/primitive.wado/i32::fmt_decimal$sroa[self.value]"(self, f) {
-    let is_negative: bool;
-    let x: i64;
-    is_negative = self < 0;
-    self = "core:prelude/primitive.wado/count_digits_u64"(local.tee x(x = builtin::i64_extend_i32_s(self); select i64(x < 0_i64, 0_i64 - x, x)));
-    is_negative = block -> i32 {
-        let $mv_field_3: ref Array<u8>;
-        $mv_field_3 = builtin::array_new<u8>(0);
-        "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>"(f, is_negative, $mv_field_3, 0, self);
-    };
-    "core:prelude/primitive.wado/write_decimal_digits"(f.buf.repr, is_negative, x, self);
-}
-
-fn "core:prelude/primitive.wado/i64::fmt_decimal$sroa[self.value]"(self, f) {
-    let is_negative: bool;
-    let digit_count: i32;
-    is_negative = self < 0_i64;
-    digit_count = "core:prelude/primitive.wado/count_digits_u64"(local.tee self(select i64(self < 0_i64, 0_i64 - self, self)));
-    is_negative = block -> i32 {
-        let $mv_field_3: ref Array<u8>;
-        $mv_field_3 = builtin::array_new<u8>(0);
-        "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>"(f, is_negative, $mv_field_3, 0, digit_count);
-    };
-    "core:prelude/primitive.wado/write_decimal_digits"(f.buf.repr, is_negative, self, digit_count);
-}
-
-fn "core:prelude/traits.wado/core:serde/SerializeErrorKind^core:prelude/traits.wado/Inspect::inspect$sroa[self.value,f.buf]"(self, f) {
-    let s_9: ref "core:prelude/string.wado//String";
-    let $mv$$tuple_0$0: ref "core:prelude/traits.wado//EnumCase<core:serde/SerializeErrorKind>";
-    let $mv$$tuple_0$1: ref "core:prelude/traits.wado//EnumCase<core:serde/SerializeErrorKind>";
-    multivalue_bind [$mv$$tuple_0$0, $mv$$tuple_0$1] = "core:serde/core:serde/SerializeErrorKind^core:prelude/traits.wado/ReflectEnum::members"();
-    if self == 0 {
-        s_9 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("SerializeErrorKind"), used: 18 };
-        "core:prelude/string.wado/core:prelude/string.wado/String::push_str<&core:prelude/string.wado/String>"(f, s_9);
-        "core:prelude/string.wado/core:prelude/string.wado/String^core:prelude/string.wado/AsStrSlice::internal_append_to$spec2"(local.tee s_9(struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(58, 58), used: 2 }), f);
-        s_9 = $mv$$tuple_0$0.case_name;
-        "core:prelude/string.wado/core:prelude/string.wado/String::push_str<&core:prelude/string.wado/String>"(f, s_9);
-    }
-    if self == 1 {
-        s_9 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("SerializeErrorKind"), used: 18 };
-        "core:prelude/string.wado/core:prelude/string.wado/String::push_str<&core:prelude/string.wado/String>"(f, s_9);
-        "core:prelude/string.wado/core:prelude/string.wado/String^core:prelude/string.wado/AsStrSlice::internal_append_to$spec2"(local.tee s_9(struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(58, 58), used: 2 }), f);
-        s_9 = $mv$$tuple_0$1.case_name;
-        "core:prelude/string.wado/core:prelude/string.wado/String::push_str<&core:prelude/string.wado/String>"(f, s_9);
     }
 }
 
@@ -8207,40 +8208,6 @@ fn "core:serde/half_serde.wado/Weights^core:serde/Serialize::serialize<core:json
     return ref.null none;
 }
 
-fn "core:serde/half_serde.wado/Weights^core:serde/Serialize::serialize<core:cbor/CborSerializer>$sroa[s.buf]"($mv$self$scale, $mv$self$bias, $mv$self$name, s) {
-    let $qm_e_10: ref "core:serde//SerializeError";
-    let $match_21: ref null "core:serde//SerializeError";
-    let repr_137: ref Array<u8>;
-    "core:cbor/write_head"(s, 5, 3_i64);
-    "core:cbor/write_head"(s, 3, 5_i64);
-    let $mv_arg_2: ref "core:prelude/slice.wado//Slice<u8>";
-    $mv_arg_2 = global:core:serde::$const_obj_144;
-    "core:prelude/list.wado/core:prelude/list.wado/List<u8>::extend_from_slice"(s, $mv_arg_2.repr, $mv_arg_2.start, $mv_arg_2.end);
-    if @likely(ref.is_null(local.tee $match_21("core:cbor/core:cbor/CborSerializer^core:serde/Serializer::serialize_f32$sroa[self.buf]"(s, "core:prelude/half.wado/f32^core:prelude/traits.wado/From<f16>::from"($mv$self$scale))))) {
-    } else {
-        $qm_e_10 = ref.as_non_null($match_21);
-        cold_path;
-        return $qm_e_10;
-    }
-    "core:cbor/write_head"(s, 3, 4_i64);
-    $mv_arg_2 = global:core:serde::$const_obj_143;
-    "core:prelude/list.wado/core:prelude/list.wado/List<u8>::extend_from_slice"(s, $mv_arg_2.repr, $mv_arg_2.start, $mv_arg_2.end);
-    if @likely(ref.is_null(local.tee $match_21("core:cbor/core:cbor/CborSerializer^core:serde/Serializer::serialize_f32$sroa[self.buf]"(s, builtin::f32_reinterpret_i32($mv$self$bias << 16))))) {
-    } else {
-        $qm_e_10 = ref.as_non_null($match_21);
-        cold_path;
-        return $qm_e_10;
-    }
-    "core:cbor/write_head"(s, 3, 4_i64);
-    $mv_arg_2 = global:core:serde::$const_obj_142;
-    "core:prelude/list.wado/core:prelude/list.wado/List<u8>::extend_from_slice"(s, $mv_arg_2.repr, $mv_arg_2.start, $mv_arg_2.end);
-    "core:cbor/write_head"(s, 3, builtin::i64_extend_i32_s($mv$self$name.used));
-    repr_137 = $mv$self$name.repr;
-    $mv$self$bias = $mv$self$name.used;
-    "core:prelude/list.wado/core:prelude/list.wado/List<u8>::extend_from_slice"(s, repr_137, 0, $mv$self$bias);
-    return ref.null none;
-}
-
 fn "core:json/core:json/JsonDeserializer::scan_string_run$sroa[self.input]"(self, from) {
     let $load_1: i32;
     let len: i32;
@@ -8252,29 +8219,29 @@ fn "core:json/core:json/JsonDeserializer::scan_string_run$sroa[self.input]"(self
     valid = 1;
     stop = -1;
     $licm_repr_16 = self.repr;
-    b1017: block {
-        l1018: loop {
-            break_if b1017 from >= len;
+    b1015: block {
+        l1016: loop {
+            break_if b1015 from >= len;
             if (local.tee b(builtin::array_get_value<u8>($licm_repr_16, $load_1 + from)) - 32) <u 96 {
                 if (b == 34) | (b == 92) {
                     stop = b;
-                    break b1017;
+                    break b1015;
                 }
                 from = from + 1;
-                continue l1018;
+                continue l1016;
             }
             if b < 32 {
                 stop = b;
-                break b1017;
+                break b1015;
             }
             if @unlikely(local.tee b("core:prelude/string.wado/core:prelude/string.wado/String::utf8_sequence_len"(self.repr, self.start, from, len)) <= 0) {
                 cold_path;
                 valid = 0;
                 from = from + 1;
-                continue l1018;
+                continue l1016;
             }
             from = from + b;
-            continue l1018;
+            continue l1016;
         };
     };
     return from, stop, valid;
@@ -8337,6 +8304,40 @@ fn "core:json/core:json/JsonDeserializer::take_scanned_run$sroa[self.input,retur
         break $thread_$inline_core_json_JsonDeserializer__append_scanned_run_1;
     };
     return 0, s_4, ref.null none;
+}
+
+fn "core:serde/half_serde.wado/Weights^core:serde/Serialize::serialize<core:cbor/CborSerializer>$sroa[s.buf]"($mv$self$scale, $mv$self$bias, $mv$self$name, s) {
+    let $qm_e_10: ref "core:serde//SerializeError";
+    let $match_21: ref null "core:serde//SerializeError";
+    let repr_137: ref Array<u8>;
+    "core:cbor/write_head"(s, 5, 3_i64);
+    "core:cbor/write_head"(s, 3, 5_i64);
+    let $mv_arg_2: ref "core:prelude/slice.wado//Slice<u8>";
+    $mv_arg_2 = global:core:serde::$const_obj_144;
+    "core:prelude/list.wado/core:prelude/list.wado/List<u8>::extend_from_slice"(s, $mv_arg_2.repr, $mv_arg_2.start, $mv_arg_2.end);
+    if @likely(ref.is_null(local.tee $match_21("core:cbor/core:cbor/CborSerializer^core:serde/Serializer::serialize_f32$sroa[self.buf]"(s, "core:prelude/half.wado/f32^core:prelude/traits.wado/From<f16>::from"($mv$self$scale))))) {
+    } else {
+        $qm_e_10 = ref.as_non_null($match_21);
+        cold_path;
+        return $qm_e_10;
+    }
+    "core:cbor/write_head"(s, 3, 4_i64);
+    $mv_arg_2 = global:core:serde::$const_obj_143;
+    "core:prelude/list.wado/core:prelude/list.wado/List<u8>::extend_from_slice"(s, $mv_arg_2.repr, $mv_arg_2.start, $mv_arg_2.end);
+    if @likely(ref.is_null(local.tee $match_21("core:cbor/core:cbor/CborSerializer^core:serde/Serializer::serialize_f32$sroa[self.buf]"(s, builtin::f32_reinterpret_i32($mv$self$bias << 16))))) {
+    } else {
+        $qm_e_10 = ref.as_non_null($match_21);
+        cold_path;
+        return $qm_e_10;
+    }
+    "core:cbor/write_head"(s, 3, 4_i64);
+    $mv_arg_2 = global:core:serde::$const_obj_142;
+    "core:prelude/list.wado/core:prelude/list.wado/List<u8>::extend_from_slice"(s, $mv_arg_2.repr, $mv_arg_2.start, $mv_arg_2.end);
+    "core:cbor/write_head"(s, 3, builtin::i64_extend_i32_s($mv$self$name.used));
+    repr_137 = $mv$self$name.repr;
+    $mv$self$bias = $mv$self$name.used;
+    "core:prelude/list.wado/core:prelude/list.wado/List<u8>::extend_from_slice"(s, repr_137, 0, $mv$self$bias);
+    return ref.null none;
 }
 
 fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::pad<core:prelude/string.wado/String>$spec0"(self, $mv$content$repr, $mv$content$used) {

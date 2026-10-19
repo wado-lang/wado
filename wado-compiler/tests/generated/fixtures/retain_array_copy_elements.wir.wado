@@ -137,9 +137,9 @@ fn "retain_array_copy_elements.wado/run"() {
     let direct: ref "Array<retain_array_copy_elements.wado/Slot>";
     let grown: ref "core:prelude//List<retain_array_copy_elements.wado/Slot>";
     let staged: ref "Array<retain_array_copy_elements.wado/Slot>";
-    let value_22: ref "retain_array_copy_elements.wado//Slot";
-    let used: i32;
-    let $sroa_$iter_1_index_38: i32;
+    let value_23: ref "retain_array_copy_elements.wado//Slot";
+    let used_24: i32;
+    let $sroa_$iter_1_index_39: i32;
     x = struct.new "retain_array_copy_elements.wado//Data" { v: black_box(7) };
     direct = builtin::array_new<ref "retain_array_copy_elements.wado//Slot">(1);
     builtin::array_set<ref "retain_array_copy_elements.wado//Slot">(local.tee staged(builtin::array_new<ref "retain_array_copy_elements.wado//Slot">(1)), 0, struct.new "retain_array_copy_elements.wado//Slot" { d: x });
@@ -170,26 +170,26 @@ fn "retain_array_copy_elements.wado/run"() {
     b3: block {
         l4: loop {
             break_if b3 $array_clone_i_6 >= 5;
-            value_22 = struct.new "retain_array_copy_elements.wado//Slot" { d: x };
-            if @unlikely(local.tee used(grown.used) >= builtin::array_len(grown.repr)) {
+            value_23 = struct.new "retain_array_copy_elements.wado//Slot" { d: x };
+            if @unlikely(local.tee used_24(grown.used) >= builtin::array_len(grown.repr)) {
                 cold_path;
                 "core:prelude/list.wado/core:prelude/list.wado/List<retain_array_copy_elements.wado/Slot>::grow"(grown);
             }
-            builtin::array_set<ref "retain_array_copy_elements.wado//Slot">(grown.repr, used, value_22);
-            grown.used = used + 1;
+            builtin::array_set<ref "retain_array_copy_elements.wado//Slot">(grown.repr, used_24, value_23);
+            grown.used = used_24 + 1;
             $array_clone_i_6 = $array_clone_i_6 + 1;
             continue l4;
         };
     };
     $array_clone_i_6 = 0;
-    used = grown.used;
+    used_24 = grown.used;
     direct = grown.repr;
-    $sroa_$iter_1_index_38 = 0;
+    $sroa_$iter_1_index_39 = 0;
     b6: block {
         l7: loop {
-            break_if b6 $sroa_$iter_1_index_38 >= used;
-            x = local.tee value_22(builtin::array_get_value<ref "retain_array_copy_elements.wado//Slot">(direct, $sroa_$iter_1_index_38)).d;
-            $sroa_$iter_1_index_38 = $sroa_$iter_1_index_38 + 1;
+            break_if b6 $sroa_$iter_1_index_39 >= used_24;
+            x = local.tee value_23(builtin::array_get_value<ref "retain_array_copy_elements.wado//Slot">(direct, $sroa_$iter_1_index_39)).d;
+            $sroa_$iter_1_index_39 = $sroa_$iter_1_index_39 + 1;
             $array_clone_i_6 = $array_clone_i_6 + x.v;
             continue l7;
         };

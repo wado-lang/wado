@@ -90,41 +90,41 @@ fn "for_of_shares_list_read_after.wado/run"() with Stdout {
     let $local_4: ref "core:prelude/string.wado//String";
     let end: i32;
     let item: i32;
-    let x_26: i64;
-    let $sroa_$iter_0_repr_58: ref Array<i32>;
-    let $sroa_$iter_0_index_59: i32;
-    let $sroa_$f_buf_71: ref "core:prelude/string.wado//String";
+    let x_27: i64;
+    let $sroa_$iter_0_repr_59: ref Array<i32>;
+    let $sroa_$iter_0_index_60: i32;
+    let $sroa_$f_buf_72: ref "core:prelude/string.wado//String";
     xs = black_box(struct.new "core:prelude//List<i32>" { repr: array.new_fixed<i32>(1, 2, 3), used: 3 });
     sum = 0;
     end = xs.used;
-    $sroa_$iter_0_repr_58 = xs.repr;
-    $sroa_$iter_0_index_59 = 0;
+    $sroa_$iter_0_repr_59 = xs.repr;
+    $sroa_$iter_0_index_60 = 0;
     b0: block {
         l1: loop {
-            break_if b0 $sroa_$iter_0_index_59 >= end;
-            item = builtin::array_get_value<i32>($sroa_$iter_0_repr_58, $sroa_$iter_0_index_59);
-            $sroa_$iter_0_index_59 = $sroa_$iter_0_index_59 + 1;
+            break_if b0 $sroa_$iter_0_index_60 >= end;
+            item = builtin::array_get_value<i32>($sroa_$iter_0_repr_59, $sroa_$iter_0_index_60);
+            $sroa_$iter_0_index_60 = $sroa_$iter_0_index_60 + 1;
             sum = sum + item;
             continue l1;
         };
     };
-    $sroa_$f_buf_71 = local.tee $local_4(struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(33), used: 0 });
-    $sroa_$iter_0_index_59 = sum < 0;
-    sum = "core:prelude/primitive.wado/count_digits_u64"(local.tee x_26(x_26 = builtin::i64_extend_i32_s(sum); select i64(x_26 < 0_i64, 0_i64 - x_26, x_26)));
-    $sroa_$iter_0_index_59 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$sroa[self.buf]$dae[alt_prefix]"($sroa_$f_buf_71, $sroa_$iter_0_index_59, sum);
-    "core:prelude/primitive.wado/write_decimal_digits"($sroa_$f_buf_71.repr, $sroa_$iter_0_index_59, x_26, sum);
+    $sroa_$f_buf_72 = local.tee $local_4(struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(33), used: 0 });
+    $sroa_$iter_0_index_60 = sum < 0;
+    sum = "core:prelude/primitive.wado/count_digits_u64"(local.tee x_27(x_27 = builtin::i64_extend_i32_s(sum); select i64(x_27 < 0_i64, 0_i64 - x_27, x_27)));
+    $sroa_$iter_0_index_60 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$sroa[self.buf]$dae[alt_prefix]"($sroa_$f_buf_72, $sroa_$iter_0_index_60, sum);
+    "core:prelude/primitive.wado/write_decimal_digits"($sroa_$f_buf_72.repr, $sroa_$iter_0_index_60, x_27, sum);
     if @unlikely(local.tee sum($local_4.used + 1) > builtin::array_len($local_4.repr)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_4, sum);
     }
-    $sroa_$iter_0_index_59 = $local_4.used;
+    $sroa_$iter_0_index_60 = $local_4.used;
     $local_4.used = sum;
-    builtin::array_copy<u8>($local_4.repr, $sroa_$iter_0_index_59, global:for_of_shares_list_read_after.wado::$const_obj_3, 0, 1);
-    $sroa_$f_buf_71 = $local_4;
-    sum = local.tee $sroa_$iter_0_index_59(xs.used) < 0;
-    $sroa_$iter_0_index_59 = "core:prelude/primitive.wado/count_digits_u64"(local.tee x_26(x_26 = builtin::i64_extend_i32_s($sroa_$iter_0_index_59); select i64(x_26 < 0_i64, 0_i64 - x_26, x_26)));
-    sum = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$sroa[self.buf]$dae[alt_prefix]"($sroa_$f_buf_71, sum, $sroa_$iter_0_index_59);
-    "core:prelude/primitive.wado/write_decimal_digits"($sroa_$f_buf_71.repr, sum, x_26, $sroa_$iter_0_index_59);
+    builtin::array_copy<u8>($local_4.repr, $sroa_$iter_0_index_60, global:for_of_shares_list_read_after.wado::$const_obj_3, 0, 1);
+    $sroa_$f_buf_72 = $local_4;
+    sum = local.tee $sroa_$iter_0_index_60(xs.used) < 0;
+    $sroa_$iter_0_index_60 = "core:prelude/primitive.wado/count_digits_u64"(local.tee x_27(x_27 = builtin::i64_extend_i32_s($sroa_$iter_0_index_60); select i64(x_27 < 0_i64, 0_i64 - x_27, x_27)));
+    sum = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$sroa[self.buf]$dae[alt_prefix]"($sroa_$f_buf_72, sum, $sroa_$iter_0_index_60);
+    "core:prelude/primitive.wado/write_decimal_digits"($sroa_$f_buf_72.repr, sum, x_27, $sroa_$iter_0_index_60);
     "core:cli/println"($local_4.repr, $local_4.used);
 }
 

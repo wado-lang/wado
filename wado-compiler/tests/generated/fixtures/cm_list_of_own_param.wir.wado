@@ -109,7 +109,9 @@ fn "cm_list_of_own_param.wado/$cm_binding__Gfx_get_device"() with Gfx {
 
 fn "cm_list_of_own_param.wado/$cm_export__run"() {
     let elements: ref null "Array<cm_list_of_own_param.wado/Device>";
-    drop("cm_list_of_own_param.wado/$cm_binding__Gfx_pick"(struct.new "core:prelude//List<cm_list_of_own_param.wado/Device>" { repr: ref.as_non_null(local.tee elements(array.new_fixed<ref null "core:prelude//$Resource">("cm_list_of_own_param.wado/$cm_binding__Gfx_get_device"(), "cm_list_of_own_param.wado/$cm_binding__Gfx_get_device"()))), used: builtin::array_len(elements) }));
+    let used: i32;
+    used = builtin::array_len(local.tee elements(array.new_fixed<ref null "core:prelude//$Resource">("cm_list_of_own_param.wado/$cm_binding__Gfx_get_device"(), "cm_list_of_own_param.wado/$cm_binding__Gfx_get_device"())));
+    drop("cm_list_of_own_param.wado/$cm_binding__Gfx_pick"(struct.new "core:prelude//List<cm_list_of_own_param.wado/Device>" { repr: ref.as_non_null(elements), used: used }));
     "wasi/task-return"(0);
 }
 

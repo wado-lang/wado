@@ -105,51 +105,51 @@ fn "opt_value_copy_unwrap_passes_through.wado/run"() with Stdout {
     let $load_5: ref Array<u8>;
     let $local_2: ref "core:prelude/string.wado//String";
     let elements: ref "Array<core:prelude/string.wado/String>";
-    let self_14: i32;
-    let self_19: ref "core:prelude//List<core:prelude/string.wado/String>";
+    let used: i32;
+    let self_20: ref "core:prelude//List<core:prelude/string.wado/String>";
     let is_negative: bool;
     let x: i64;
-    let other_44: ref "core:prelude/string.wado//String";
-    let start_73: i32;
-    let $sroa_o_value_86: ref null "opt_value_copy_unwrap_passes_through.wado//Shape";
-    $sroa_o_value_86 = struct.new "opt_value_copy_unwrap_passes_through.wado//Shape" { axes: struct.new "core:prelude//List<core:prelude/string.wado/String>" { repr: local.tee elements(array.new_fixed<ref "core:prelude/string.wado//String">(black_box(struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(97), used: 1 }), struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(98), used: 1 })), used: builtin::array_len(elements) } };
+    let other_45: ref "core:prelude/string.wado//String";
+    let start_74: i32;
+    let $sroa_o_value_87: ref null "opt_value_copy_unwrap_passes_through.wado//Shape";
+    $sroa_o_value_87 = struct.new "opt_value_copy_unwrap_passes_through.wado//Shape" { axes: used = builtin::array_len(local.tee elements(array.new_fixed<ref "core:prelude/string.wado//String">(black_box(struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(97), used: 1 }), struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(98), used: 1 }))); struct.new "core:prelude//List<core:prelude/string.wado/String>" { repr: elements, used: used } };
     $local_2 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(33), used: 0 };
-    is_negative = local.tee self_14(local.tee self_19($sroa_o_value_86.axes).used) < 0;
-    self_14 = "core:prelude/primitive.wado/count_digits_u64"(local.tee x(x = builtin::i64_extend_i32_s(self_14); select i64(x < 0_i64, 0_i64 - x, x)));
-    is_negative = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$sroa[self.buf]$dae[alt_prefix]"($local_2, is_negative, self_14);
-    "core:prelude/primitive.wado/write_decimal_digits"($local_2.repr, is_negative, x, self_14);
-    if @unlikely(local.tee self_14($local_2.used + 1) > builtin::array_len($local_2.repr)) {
+    is_negative = local.tee used(local.tee self_20($sroa_o_value_87.axes).used) < 0;
+    used = "core:prelude/primitive.wado/count_digits_u64"(local.tee x(x = builtin::i64_extend_i32_s(used); select i64(x < 0_i64, 0_i64 - x, x)));
+    is_negative = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$sroa[self.buf]$dae[alt_prefix]"($local_2, is_negative, used);
+    "core:prelude/primitive.wado/write_decimal_digits"($local_2.repr, is_negative, x, used);
+    if @unlikely(local.tee used($local_2.used + 1) > builtin::array_len($local_2.repr)) {
         cold_path;
-        "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_2, self_14);
+        "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_2, used);
     }
     is_negative = $local_2.used;
-    $local_2.used = self_14;
+    $local_2.used = used;
     builtin::array_copy<u8>(local.tee $load_5($local_2.repr), is_negative, global:opt_value_copy_unwrap_passes_through.wado::$const_obj_4, 0, 1);
-    is_negative = local.tee self_19($sroa_o_value_86.axes).used;
+    is_negative = local.tee self_20($sroa_o_value_87.axes).used;
     if @unlikely(0 >= is_negative) {
         cold_path;
         "opt_value_copy_unwrap_passes_through.wado/first$cold0$dae[o,$contract_arg_1]"(is_negative);
         unreachable;
     }
-    other_44 = builtin::array_get_value<ref "core:prelude/string.wado//String">(self_19.repr, 0);
+    other_45 = builtin::array_get_value<ref "core:prelude/string.wado//String">(self_20.repr, 0);
     $inline_core_prelude_string_wado_String__internal_push_string_23: block {
-        break_if $inline_core_prelude_string_wado_String__internal_push_string_23 local.tee is_negative(other_44.used) == 0;
-        if @unlikely(local.tee self_14($local_2.used + is_negative) > builtin::array_len($load_5)) {
+        break_if $inline_core_prelude_string_wado_String__internal_push_string_23 local.tee is_negative(other_45.used) == 0;
+        if @unlikely(local.tee used($local_2.used + is_negative) > builtin::array_len($load_5)) {
             cold_path;
-            "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_2, self_14);
+            "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_2, used);
         }
-        start_73 = $local_2.used;
-        $local_2.used = self_14;
-        builtin::array_copy<u8>($local_2.repr, start_73, other_44.repr, 0, is_negative);
+        start_74 = $local_2.used;
+        $local_2.used = used;
+        builtin::array_copy<u8>($local_2.repr, start_74, other_45.repr, 0, is_negative);
     };
     "core:cli/println"($local_2.repr, $local_2.used);
-    is_negative = local.tee self_19($sroa_o_value_86.axes).used;
+    is_negative = local.tee self_20($sroa_o_value_87.axes).used;
     if @unlikely(1 >= is_negative) {
         cold_path;
         "opt_value_copy_unwrap_passes_through.wado/run$cold0$dae[$contract_arg_0]"(is_negative);
         unreachable;
     }
-    "core:cli/println"(local.tee $local_2(builtin::array_get_value<ref "core:prelude/string.wado//String">(self_19.repr, 1)).repr, $local_2.used);
+    "core:cli/println"(local.tee $local_2(builtin::array_get_value<ref "core:prelude/string.wado//String">(self_20.repr, 1)).repr, $local_2.used);
 }
 
 fn "opt_value_copy_unwrap_passes_through.wado/$cm_binding__Stdout_write_via_stream"(data) with Stdout {

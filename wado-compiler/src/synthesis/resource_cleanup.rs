@@ -2062,7 +2062,13 @@ fn elab_closure(
     };
     let yields = yields(body.type_id);
     let mut block = into_block(body);
-    elab_scope(&mut block, owned, TemporaryScope::Statement, yields, &mut inner);
+    elab_scope(
+        &mut block,
+        owned,
+        TemporaryScope::Statement,
+        yields,
+        &mut inner,
+    );
     body.kind = TirExprKind::Block(block);
 }
 
@@ -2376,7 +2382,13 @@ fn elab_match(scrutinee: &mut TirExpr, arms: &mut [TirMatchArm], cx: &mut Cx) {
         cx.scopes.pop();
         let mut block = into_block(&mut arm.body);
         let yields = yields(arm.body.type_id);
-        elab_scope(&mut block, arm_bindings, TemporaryScope::Statement, yields, cx);
+        elab_scope(
+            &mut block,
+            arm_bindings,
+            TemporaryScope::Statement,
+            yields,
+            cx,
+        );
         // Inserted once the body is elaborated: emptying the scrutinee is a
         // move, not a store that drops what it replaces.
         if let Some(place) = emptied {

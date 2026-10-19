@@ -71,19 +71,19 @@ struct core:prelude/traits.wado//VariantCase<core:prelude/types.wado/Option<fn(c
     mut is_unit: bool,
 }
 
-type "functype/$canonical_closure_fn_0" = fn(ref null struct, char) -> bool;  // TypeId(17)
+type "functype/$canonical_callback_fn" = fn(ref null struct, ref null struct);  // TypeId(17)
 
-type "functype/$canonical_callback_fn" = fn(ref null struct, ref null struct);  // TypeId(18)
-
-struct canonical//CanonicalInspectableBase {  // TypeId(19)
+struct canonical//CanonicalInspectableBase {  // TypeId(18)
     env: ref null struct,
     inspect: ref "functype/$canonical_callback_fn",
 }
 
-struct canonical//CanonicalClosure_0 {  // TypeId(20)
+type "functype/$canonical_closure_fn_1" = fn(ref null struct, char) -> bool;  // TypeId(19)
+
+struct canonical//CanonicalClosure_1 {  // TypeId(20)
     env: ref null struct,
     inspect: ref "functype/$canonical_callback_fn",
-    func: ref "functype/$canonical_closure_fn_0",
+    func: ref "functype/$canonical_closure_fn_1",
 }
 
 type "functype//mem/realloc" = fn(i32, i32, i32, i32) -> i32;  // TypeId(21)
@@ -271,19 +271,19 @@ global global:bug_option_of_fn_type_argument.wado::$const_obj_38: ref Array<u8> 
 
 fn "bug_option_of_fn_type_argument.wado/$test_3_list_of_option_of_a_fn_type"() {
     let elements: ref "Array<core:prelude/types.wado/Option<fn(char)->bool>>";
-    let self_29: ref null struct;
-    let $sroa_fs_used_39: i32;
-    $sroa_fs_used_39 = builtin::array_len(local.tee elements(array.new_fixed<ref null struct>(struct.new "canonical//CanonicalClosure_0" { env: struct.new "bug_option_of_fn_type_argument.wado//$Closure_4" {  }, inspect: ref.func "closure/bug_option_of_fn_type_argument.wado/$closure_inspect_wrapper_4", func: ref.func "closure/bug_option_of_fn_type_argument.wado/$closure_wrapper_4" }, ref.null none)));
+    let used: i32;
+    let self_30: ref null struct;
+    used = builtin::array_len(local.tee elements(array.new_fixed<ref null struct>(struct.new "canonical//CanonicalClosure_1" { env: struct.new "bug_option_of_fn_type_argument.wado//$Closure_4" {  }, inspect: ref.func "closure/bug_option_of_fn_type_argument.wado/$closure_inspect_wrapper_4", func: ref.func "closure/bug_option_of_fn_type_argument.wado/$closure_wrapper_4" }, ref.null none)));
     if @unlikely(block -> bool {
-        let $indirect_call_3: ref "canonical//CanonicalClosure_0";
-        call_ref "functype/$canonical_closure_fn_0"($indirect_call_3.func, local.tee $indirect_call_3(ref.cast "canonical//CanonicalClosure_0"($inline_core_prelude_types_wado_Option_fn_char___bool___unwrap_3: block -> ref struct {
-            if @unlikely(0 >= $sroa_fs_used_39) {
+        let $indirect_call_3: ref "canonical//CanonicalClosure_1";
+        call_ref "functype/$canonical_closure_fn_1"($indirect_call_3.func, local.tee $indirect_call_3(ref.cast "canonical//CanonicalClosure_1"($inline_core_prelude_types_wado_Option_fn_char___bool___unwrap_3: block -> ref struct {
+            if @unlikely(0 >= used) {
                 cold_path;
-                "bug_option_of_fn_type_argument.wado/$test_3_list_of_option_of_a_fn_type$cold3$dae[$contract_arg_0]"($sroa_fs_used_39);
+                "bug_option_of_fn_type_argument.wado/$test_3_list_of_option_of_a_fn_type$cold3$dae[$contract_arg_0]"(used);
                 unreachable;
             }
-            if @likely(ref.is_null(local.tee self_29(builtin::array_get_value<ref null struct>(elements, 0))) == 0) {
-                break $inline_core_prelude_types_wado_Option_fn_char___bool___unwrap_3: ref.as_non_null(self_29);
+            if @likely(ref.is_null(local.tee self_30(builtin::array_get_value<ref null struct>(elements, 0))) == 0) {
+                break $inline_core_prelude_types_wado_Option_fn_char___bool___unwrap_3: ref.as_non_null(self_30);
             } else {
             }
             cold_path;
@@ -295,12 +295,12 @@ fn "bug_option_of_fn_type_argument.wado/$test_3_list_of_option_of_a_fn_type"() {
         "bug_option_of_fn_type_argument.wado/$test_3_list_of_option_of_a_fn_type$cold2"();
         unreachable;
     }
-    if @unlikely(1 >= $sroa_fs_used_39) {
+    if @unlikely(1 >= used) {
         cold_path;
-        "bug_option_of_fn_type_argument.wado/$test_3_list_of_option_of_a_fn_type$cold1$dae[$contract_arg_1]"($sroa_fs_used_39);
+        "bug_option_of_fn_type_argument.wado/$test_3_list_of_option_of_a_fn_type$cold1$dae[$contract_arg_1]"(used);
         unreachable;
     }
-    if @unlikely(local.tee $sroa_fs_used_39(ref.is_null(local.tee self_29(builtin::array_get_value<ref null struct>(elements, 1)))) == 0) {
+    if @unlikely(local.tee used(ref.is_null(local.tee self_30(builtin::array_get_value<ref null struct>(elements, 1)))) == 0) {
         cold_path;
         "bug_option_of_fn_type_argument.wado/$test_3_list_of_option_of_a_fn_type$cold0"();
         unreachable;
@@ -319,16 +319,16 @@ fn "bug_option_of_fn_type_argument.wado/$cm_export__$test_0_option_of_a_fn_type"
     let $local_20: ref "core:prelude/format.wado//Formatter";
     let $deref_val: ref "core:prelude/format.wado//Formatter";
     let $sroa_s_repr_61: ref Array<u8>;
-    f_0 = struct.new "canonical//CanonicalClosure_0" { env: struct.new "bug_option_of_fn_type_argument.wado//$Closure_0" {  }, inspect: ref.func "closure/bug_option_of_fn_type_argument.wado/$closure_inspect_wrapper_0", func: ref.func "closure/bug_option_of_fn_type_argument.wado/$closure_wrapper_0" };
+    f_0 = struct.new "canonical//CanonicalClosure_1" { env: struct.new "bug_option_of_fn_type_argument.wado//$Closure_0" {  }, inspect: ref.func "closure/bug_option_of_fn_type_argument.wado/$closure_inspect_wrapper_0", func: ref.func "closure/bug_option_of_fn_type_argument.wado/$closure_wrapper_0" };
     $v0 = block -> bool {
-        let $indirect_call_1: ref "canonical//CanonicalClosure_0";
-        call_ref "functype/$canonical_closure_fn_0"($indirect_call_1.func, local.tee $indirect_call_1(ref.cast "canonical//CanonicalClosure_0"(f_0)).env, 98);
+        let $indirect_call_1: ref "canonical//CanonicalClosure_1";
+        call_ref "functype/$canonical_closure_fn_1"($indirect_call_1.func, local.tee $indirect_call_1(ref.cast "canonical//CanonicalClosure_1"(f_0)).env, 98);
     };
     $v1_seen = 0;
     $v2_seen = 0;
     if @unlikely((if $v0 -> i32 {
         $v2 = $v1 = block -> bool {
-            call_ref "functype/$canonical_closure_fn_0"($indirect_call_1.func, local.tee $indirect_call_1(ref.cast "canonical//CanonicalClosure_0"(f_0)).env, 97);
+            call_ref "functype/$canonical_closure_fn_1"($indirect_call_1.func, local.tee $indirect_call_1(ref.cast "canonical//CanonicalClosure_1"(f_0)).env, 97);
         }; $v1_seen = 1; $v1 == 0;
         $v2_seen = 1;
         $v2;
@@ -388,10 +388,10 @@ condition: none matches { None }
 
 fn "bug_option_of_fn_type_argument.wado/$cm_export__$test_1_result_of_a_fn_type"() {
     let g: ref struct;
-    g = struct.new "canonical//CanonicalClosure_0" { env: struct.new "bug_option_of_fn_type_argument.wado//$Closure_1" {  }, inspect: ref.func "closure/bug_option_of_fn_type_argument.wado/$closure_inspect_wrapper_1", func: ref.func "closure/bug_option_of_fn_type_argument.wado/$closure_wrapper_1" };
+    g = struct.new "canonical//CanonicalClosure_1" { env: struct.new "bug_option_of_fn_type_argument.wado//$Closure_1" {  }, inspect: ref.func "closure/bug_option_of_fn_type_argument.wado/$closure_inspect_wrapper_1", func: ref.func "closure/bug_option_of_fn_type_argument.wado/$closure_wrapper_1" };
     if @unlikely(block -> bool {
-        let $indirect_call_1: ref "canonical//CanonicalClosure_0";
-        call_ref "functype/$canonical_closure_fn_0"($indirect_call_1.func, local.tee $indirect_call_1(ref.cast "canonical//CanonicalClosure_0"(g)).env, 98);
+        let $indirect_call_1: ref "canonical//CanonicalClosure_1";
+        call_ref "functype/$canonical_closure_fn_1"($indirect_call_1.func, local.tee $indirect_call_1(ref.cast "canonical//CanonicalClosure_1"(g)).env, 98);
     } == 0) {
         cold_path;
         "bug_option_of_fn_type_argument.wado/$test_1_result_of_a_fn_type$cold0"();
@@ -403,16 +403,16 @@ fn "bug_option_of_fn_type_argument.wado/$cm_export__$test_1_result_of_a_fn_type"
 fn "bug_option_of_fn_type_argument.wado/$cm_export__$test_2_user_generics_over_a_fn_type"() {
     let g: ref struct;
     if @unlikely(block -> bool {
-        let $indirect_call_1: ref "canonical//CanonicalClosure_0";
-        call_ref "functype/$canonical_closure_fn_0"($indirect_call_1.func, local.tee $indirect_call_1(struct.new "canonical//CanonicalClosure_0" { env: struct.new "bug_option_of_fn_type_argument.wado//$Closure_2" {  }, inspect: ref.func "closure/bug_option_of_fn_type_argument.wado/$closure_inspect_wrapper_2", func: ref.func "closure/bug_option_of_fn_type_argument.wado/$closure_wrapper_2" }).env, 120);
+        let $indirect_call_1: ref "canonical//CanonicalClosure_1";
+        call_ref "functype/$canonical_closure_fn_1"($indirect_call_1.func, local.tee $indirect_call_1(struct.new "canonical//CanonicalClosure_1" { env: struct.new "bug_option_of_fn_type_argument.wado//$Closure_2" {  }, inspect: ref.func "closure/bug_option_of_fn_type_argument.wado/$closure_inspect_wrapper_2", func: ref.func "closure/bug_option_of_fn_type_argument.wado/$closure_wrapper_2" }).env, 120);
     } == 0) {
         cold_path;
         "bug_option_of_fn_type_argument.wado/$test_2_user_generics_over_a_fn_type$cold1"();
         unreachable;
     }
-    g = struct.new "canonical//CanonicalClosure_0" { env: struct.new "bug_option_of_fn_type_argument.wado//$Closure_3" {  }, inspect: ref.func "closure/bug_option_of_fn_type_argument.wado/$closure_inspect_wrapper_3", func: ref.func "closure/bug_option_of_fn_type_argument.wado/$closure_wrapper_3" };
+    g = struct.new "canonical//CanonicalClosure_1" { env: struct.new "bug_option_of_fn_type_argument.wado//$Closure_3" {  }, inspect: ref.func "closure/bug_option_of_fn_type_argument.wado/$closure_inspect_wrapper_3", func: ref.func "closure/bug_option_of_fn_type_argument.wado/$closure_wrapper_3" };
     if @unlikely(block -> bool {
-        call_ref "functype/$canonical_closure_fn_0"($indirect_call_1.func, local.tee $indirect_call_1(ref.cast "canonical//CanonicalClosure_0"(g)).env, 98);
+        call_ref "functype/$canonical_closure_fn_1"($indirect_call_1.func, local.tee $indirect_call_1(ref.cast "canonical//CanonicalClosure_1"(g)).env, 98);
     } == 0) {
         cold_path;
         "bug_option_of_fn_type_argument.wado/$test_2_user_generics_over_a_fn_type$cold0"();

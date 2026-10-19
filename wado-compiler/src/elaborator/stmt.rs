@@ -2599,17 +2599,17 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             let walkable = [CompilerItem::IntoIterator, CompilerItem::ForOf];
             let implements_into_iter = walkable.into_iter().any(|item| {
                 self.tysys.compiler_trait(item).is_some_and(|trait_| {
-                self.tysys.type_implements_trait(
-                    &self.annotate_ctx,
-                    &self.type_lookup(),
-                    iterable_type_id,
-                    &trait_,
-                ) || self.tysys.type_implements_trait(
-                    &self.annotate_ctx,
-                    &self.type_lookup(),
-                    inner_type_id,
-                    &trait_,
-                )
+                    self.tysys.type_implements_trait(
+                        &self.annotate_ctx,
+                        &self.type_lookup(),
+                        iterable_type_id,
+                        &trait_,
+                    ) || self.tysys.type_implements_trait(
+                        &self.annotate_ctx,
+                        &self.type_lookup(),
+                        inner_type_id,
+                        &trait_,
+                    )
                 })
             }) || matches!(
                 self.tysys.type_table.borrow().get(iterable_type_id),
@@ -2855,18 +2855,16 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let walks_value = self.tysys.is_affine(
             into_iter_receiver_type,
             &self.annotate_ctx.trait_ctx.affine_params(),
-        )
-            && self
-                .tysys
-                .compiler_trait(CompilerItem::ForOf)
-                .is_some_and(|trait_| {
-                    self.tysys.type_implements_trait(
-                        &self.annotate_ctx,
-                        &self.type_lookup(),
-                        into_iter_receiver_type,
-                        &trait_,
-                    )
-                });
+        ) && self.tysys.compiler_trait(CompilerItem::ForOf).is_some_and(
+            |trait_| {
+                self.tysys.type_implements_trait(
+                    &self.annotate_ctx,
+                    &self.type_lookup(),
+                    into_iter_receiver_type,
+                    &trait_,
+                )
+            },
+        );
         let (start_name, start_trait) = if walks_value {
             (
                 "start",

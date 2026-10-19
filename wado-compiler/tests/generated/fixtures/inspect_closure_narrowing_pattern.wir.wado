@@ -45,35 +45,35 @@ struct inspect_closure_narrowing_pattern.wado//$Closure_1 {  // TypeId(9)}
 
 struct inspect_closure_narrowing_pattern.wado//$Closure_0 {  // TypeId(10)}
 
-type "functype/$canonical_closure_fn_0" = fn(ref null struct, f64) -> bool;  // TypeId(11)
+type "functype/$canonical_callback_fn" = fn(ref null struct, ref null struct);  // TypeId(11)
 
-type "functype/$canonical_callback_fn" = fn(ref null struct, ref null struct);  // TypeId(12)
-
-struct canonical//CanonicalInspectableBase {  // TypeId(13)
+struct canonical//CanonicalInspectableBase {  // TypeId(12)
     env: ref null struct,
     inspect: ref "functype/$canonical_callback_fn",
 }
 
-struct canonical//CanonicalClosure_0 {  // TypeId(14)
-    env: ref null struct,
-    inspect: ref "functype/$canonical_callback_fn",
-    func: ref "functype/$canonical_closure_fn_0",
-}
+type "functype/$canonical_closure_fn_1" = fn(ref null struct, f64) -> bool;  // TypeId(13)
 
-type "functype/$canonical_closure_fn_1" = fn(ref null struct, i32) -> bool;  // TypeId(15)
-
-struct canonical//CanonicalClosure_1 {  // TypeId(16)
+struct canonical//CanonicalClosure_1 {  // TypeId(14)
     env: ref null struct,
     inspect: ref "functype/$canonical_callback_fn",
     func: ref "functype/$canonical_closure_fn_1",
 }
 
-type "functype/$canonical_closure_fn_2" = fn(ref null struct, ref "core:prelude/string.wado//String") -> bool;  // TypeId(17)
+type "functype/$canonical_closure_fn_2" = fn(ref null struct, i32) -> bool;  // TypeId(15)
 
-struct canonical//CanonicalClosure_2 {  // TypeId(18)
+struct canonical//CanonicalClosure_2 {  // TypeId(16)
     env: ref null struct,
     inspect: ref "functype/$canonical_callback_fn",
     func: ref "functype/$canonical_closure_fn_2",
+}
+
+type "functype/$canonical_closure_fn_3" = fn(ref null struct, ref "core:prelude/string.wado//String") -> bool;  // TypeId(17)
+
+struct canonical//CanonicalClosure_3 {  // TypeId(18)
+    env: ref null struct,
+    inspect: ref "functype/$canonical_callback_fn",
+    func: ref "functype/$canonical_closure_fn_3",
 }
 
 type "functype//mem/realloc" = fn(i32, i32, i32, i32) -> i32;  // TypeId(19)
@@ -210,7 +210,7 @@ fn "inspect_closure_narrowing_pattern.wado/$test_0_a_narrowing_pattern_shows_as_
     let a_end_44: i32;
     let b_45: ref Array<u8>;
     let i_49: i32;
-    $v0_0 = struct.new "canonical//CanonicalClosure_0" { env: struct.new "inspect_closure_narrowing_pattern.wado//$Closure_0" {  }, inspect: ref.func "closure/inspect_closure_narrowing_pattern.wado/$closure_inspect_wrapper_0", func: ref.func "closure/inspect_closure_narrowing_pattern.wado/$closure_wrapper_0" };
+    $v0_0 = struct.new "canonical//CanonicalClosure_1" { env: struct.new "inspect_closure_narrowing_pattern.wado//$Closure_0" {  }, inspect: ref.func "closure/inspect_closure_narrowing_pattern.wado/$closure_inspect_wrapper_0", func: ref.func "closure/inspect_closure_narrowing_pattern.wado/$closure_wrapper_0" };
     $local_1_37 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
     $local_2_38 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 1, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: $local_1_37 };
     "inspect_closure_narrowing_pattern.wado/fn(f64)->bool^core:prelude/traits.wado/Inspect::inspect"(struct.new "core:prelude/types.wado//Box<fn(f64)->bool>" { value: $v0_0 }, $local_2_38);
@@ -295,7 +295,7 @@ condition: fmt_float(|x| x matches { 0.0..<1.5 }) == \"|x: f64| match x {\\n    
         "core:rt/panic"($local_9.repr, $local_9.used);
         unreachable;
     }
-    $v0_0 = struct.new "canonical//CanonicalClosure_1" { env: struct.new "inspect_closure_narrowing_pattern.wado//$Closure_1" {  }, inspect: ref.func "closure/inspect_closure_narrowing_pattern.wado/$closure_inspect_wrapper_1", func: ref.func "closure/inspect_closure_narrowing_pattern.wado/$closure_wrapper_1" };
+    $v0_0 = struct.new "canonical//CanonicalClosure_2" { env: struct.new "inspect_closure_narrowing_pattern.wado//$Closure_1" {  }, inspect: ref.func "closure/inspect_closure_narrowing_pattern.wado/$closure_inspect_wrapper_1", func: ref.func "closure/inspect_closure_narrowing_pattern.wado/$closure_wrapper_1" };
     $local_9 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
     $local_2_38 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 1, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: $local_9 };
     "inspect_closure_narrowing_pattern.wado/fn(i32)->bool^core:prelude/traits.wado/Inspect::inspect"(struct.new "core:prelude/types.wado//Box<fn(f64)->bool>" { value: $v0_0 }, $local_2_38);
@@ -380,7 +380,7 @@ condition: fmt_int(|n| n matches { LOW..=5 }) == \"|n: i32| match n {\\n    LOW.
         "core:rt/panic"($local_1_37.repr, $local_1_37.used);
         unreachable;
     }
-    $v0_0 = struct.new "canonical//CanonicalClosure_2" { env: struct.new "inspect_closure_narrowing_pattern.wado//$Closure_2" {  }, inspect: ref.func "closure/inspect_closure_narrowing_pattern.wado/$closure_inspect_wrapper_2", func: ref.func "closure/inspect_closure_narrowing_pattern.wado/$closure_wrapper_2" };
+    $v0_0 = struct.new "canonical//CanonicalClosure_3" { env: struct.new "inspect_closure_narrowing_pattern.wado//$Closure_2" {  }, inspect: ref.func "closure/inspect_closure_narrowing_pattern.wado/$closure_inspect_wrapper_2", func: ref.func "closure/inspect_closure_narrowing_pattern.wado/$closure_wrapper_2" };
     $local_1_37 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
     $local_2_38 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 1, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: $local_1_37 };
     "inspect_closure_narrowing_pattern.wado/fn(core:prelude/string.wado/String)->bool^core:prelude/traits.wado/Inspect::inspect"(struct.new "core:prelude/types.wado//Box<fn(f64)->bool>" { value: $v0_0 }, $local_2_38);

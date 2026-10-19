@@ -157,8 +157,11 @@ fn "spec_components_consume_holder.wado/$test_0"() {
     let $load_1: ref null "core:prelude//$Resource";
     let holder: ref null "spec_components_consume_holder.wado//Holder";
     let $moved_4: ref null "spec_components_consume_holder.wado//Holder";
+    let $temp_5: ref null "core:prelude//$Resource";
     let $moved_1: ref null "core:prelude//$Resource";
-    $moved_4 = local.tee holder(struct.new "spec_components_consume_holder.wado//Holder" { f: "spec_components_consume_holder.wado/$cm_binding__Fields_new"() });
+    holder = struct.new "spec_components_consume_holder.wado//Holder" { f: "spec_components_consume_holder.wado/$cm_binding__Fields_new"() };
+    $temp_5 = ref.null none;
+    $moved_4 = holder;
     holder = ref.null none;
     $moved_1 = $moved_4.f;
     $moved_4.f = ref.null none;
@@ -171,11 +174,11 @@ fn "spec_components_consume_holder.wado/$test_0"() {
         }
         $moved_4.f = ref.null none;
     }
-    $cm_handle_2 = "spec_components_consume_holder.wado/$cm_binding__Fields_copy_all"($moved_1).used == 0;
-    if ref.is_null($moved_1) == 0 {
+    $cm_handle_2 = "spec_components_consume_holder.wado/$cm_binding__Fields_copy_all"(local.tee $temp_5($moved_1)).used == 0;
+    if ref.is_null($temp_5) == 0 {
         let $cm_handle_4: i32;
-        $cm_handle_4 = $moved_1.value;
-        $moved_1.value = 0;
+        $cm_handle_4 = $temp_5.value;
+        $temp_5.value = 0;
         "wasi/resource-drop:wasi/http/types.wado#fields"($cm_handle_4);
     }
     if @unlikely($cm_handle_2 == 0) {
@@ -184,9 +187,9 @@ fn "spec_components_consume_holder.wado/$test_0"() {
         unreachable;
     }
     if ref.is_null(holder) == 0 {
-        if ref.is_null(local.tee $moved_1(holder.f)) == 0 {
-            $cm_handle_2 = $moved_1.value;
-            $moved_1.value = 0;
+        if ref.is_null(local.tee $temp_5(holder.f)) == 0 {
+            $cm_handle_2 = $temp_5.value;
+            $temp_5.value = 0;
             "wasi/resource-drop:wasi/http/types.wado#fields"($cm_handle_2);
         }
         holder.f = ref.null none;

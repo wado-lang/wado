@@ -147,7 +147,7 @@ global global:value_copy_elide_multi_assign_site.wado::$const_obj_6: ref "core:p
 
 fn "value_copy_elide_multi_assign_site.wado/make"(n) {
     let elements: ref Array<i32>;
-    return struct.new "core:prelude/types.wado//Result<core:prelude/list.wado/List<i32>,i32>::Ok" { discriminant: 0, payload_0: struct.new "core:prelude//List<i32>" { repr: local.tee elements(array.new_fixed<i32>(n, n + 1)), used: builtin::array_len(elements) } };
+    return struct.new "core:prelude/types.wado//Result<core:prelude/list.wado/List<i32>,i32>::Ok" { discriminant: 0, payload_0: n = builtin::array_len(local.tee elements(array.new_fixed<i32>(n, n + 1))); struct.new "core:prelude//List<i32>" { repr: elements, used: n } };
 }
 
 fn "value_copy_elide_multi_assign_site.wado/run"() with Stdout {

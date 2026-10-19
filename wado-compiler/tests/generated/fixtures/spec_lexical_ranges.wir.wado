@@ -624,57 +624,57 @@ condition: !a.contains(&10) && b.contains(&10) && c.contains(&'q') && d.contains
 fn "spec_lexical_ranges.wado/$test_2_iteration"() {
     let seen: ref "core:prelude//List<i32>";
     let elements_22: ref Array<i32>;
-    let used_27: i32;
-    let self_52: ref "core:prelude/traits.wado//IterStepBy<core:prelude/range.wado/RangeExclusive<i32>>";
-    let $local_3_58: ref "tuple//[i32, i32]";
-    let $licm_repr_76: ref Array<i32>;
-    let current_79: i32;
-    let $sroa_$iter_0_start_104: i32;
+    let used_28: i32;
+    let self_54: ref "core:prelude/traits.wado//IterStepBy<core:prelude/range.wado/RangeExclusive<i32>>";
+    let $local_3_60: ref "tuple//[i32, i32]";
+    let $licm_repr_79: ref Array<i32>;
+    let current_82: i32;
+    let $sroa_$iter_0_start_108: i32;
     seen = struct.new "core:prelude//List<i32>" { repr: local.tee elements_22(array.new_fixed<i32>()), used: 0 };
-    $sroa_$iter_0_start_104 = 0;
+    $sroa_$iter_0_start_108 = 0;
     b30: block {
         l31: loop {
             break_if b30 $inline_core_prelude_range_wado_RangeExclusive_i32__core_prelude_traits_wado_Iterator__next_sroa_return__0__$inline_i32_core_prelude_traits_wado_Ord__cmp_sroa_self_value_other_value__0: block -> "core:prelude/traits.wado//enum:Ordering" {
-                if $sroa_$iter_0_start_104 < 3 {
+                if $sroa_$iter_0_start_108 < 3 {
                     break $inline_core_prelude_range_wado_RangeExclusive_i32__core_prelude_traits_wado_Iterator__next_sroa_return__0__$inline_i32_core_prelude_traits_wado_Ord__cmp_sroa_self_value_other_value__0: 0;
                 }
-                if $sroa_$iter_0_start_104 > 3 {
+                if $sroa_$iter_0_start_108 > 3 {
                     break $inline_core_prelude_range_wado_RangeExclusive_i32__core_prelude_traits_wado_Iterator__next_sroa_return__0__$inline_i32_core_prelude_traits_wado_Ord__cmp_sroa_self_value_other_value__0: 2;
                 }
                 break $inline_core_prelude_range_wado_RangeExclusive_i32__core_prelude_traits_wado_Iterator__next_sroa_return__0__$inline_i32_core_prelude_traits_wado_Ord__cmp_sroa_self_value_other_value__0: 1;
             } != 0;
-            current_79 = $sroa_$iter_0_start_104;
+            current_82 = $sroa_$iter_0_start_108;
             $inline_core_prelude_range_wado_RangeExclusive_i32__core_prelude_traits_wado_Iterator__next_sroa_return__0__$fused_$inline_i32_core_prelude_range_wado_Step__next_step_sroa_self_value_return__1: block {
-                if current_79 == 2147483647 {
-                    $sroa_$iter_0_start_104 = 3;
+                if current_82 == 2147483647 {
+                    $sroa_$iter_0_start_108 = 3;
                     break $inline_core_prelude_range_wado_RangeExclusive_i32__core_prelude_traits_wado_Iterator__next_sroa_return__0__$fused_$inline_i32_core_prelude_range_wado_Step__next_step_sroa_self_value_return__1;
                 }
-                $sroa_$iter_0_start_104 = current_79 + 1;
+                $sroa_$iter_0_start_108 = current_82 + 1;
                 break $inline_core_prelude_range_wado_RangeExclusive_i32__core_prelude_traits_wado_Iterator__next_sroa_return__0__$fused_$inline_i32_core_prelude_range_wado_Step__next_step_sroa_self_value_return__1;
             };
-            if @unlikely(local.tee used_27(seen.used) >= builtin::array_len(seen.repr)) {
+            if @unlikely(local.tee used_28(seen.used) >= builtin::array_len(seen.repr)) {
                 cold_path;
                 "core:prelude/list.wado/core:prelude/list.wado/List<i32>::grow"(seen);
             }
-            builtin::array_set<i32>(seen.repr, used_27, current_79);
-            seen.used = used_27 + 1;
+            builtin::array_set<i32>(seen.repr, used_28, current_82);
+            seen.used = used_28 + 1;
             continue l31;
         };
     };
     elements_22 = global:spec_lexical_ranges.wado::$const_obj_25;
-    if @unlikely(local.tee used_27($inline_core_prelude_array_wado_seq_eq_i32__8: block -> bool {
-        if local.tee $sroa_$iter_0_start_104(seen.used) != 3 {
+    if @unlikely(local.tee used_28($inline_core_prelude_array_wado_seq_eq_i32__8: block -> bool {
+        if local.tee $sroa_$iter_0_start_108(seen.used) != 3 {
             break $inline_core_prelude_array_wado_seq_eq_i32__8: 0;
         }
-        used_27 = 0;
-        $licm_repr_76 = seen.repr;
+        used_28 = 0;
+        $licm_repr_79 = seen.repr;
         b38: block {
             l39: loop {
-                break_if b38 used_27 >= $sroa_$iter_0_start_104;
-                if builtin::array_get_value<i32>($licm_repr_76, used_27) != builtin::array_get_value<i32>(elements_22, used_27) {
+                break_if b38 used_28 >= $sroa_$iter_0_start_108;
+                if builtin::array_get_value<i32>($licm_repr_79, used_28) != builtin::array_get_value<i32>(elements_22, used_28) {
                     break $inline_core_prelude_array_wado_seq_eq_i32__8: 0;
                 }
-                used_27 = used_27 + 1;
+                used_28 = used_28 + 1;
                 continue l39;
             };
         };
@@ -684,38 +684,38 @@ fn "spec_lexical_ranges.wado/$test_2_iteration"() {
         "spec_lexical_ranges.wado/$test_2_iteration$cold3"(seen);
         unreachable;
     }
-    self_52 = struct.new "core:prelude/traits.wado//IterStepBy<core:prelude/range.wado/RangeExclusive<i32>>" { inner: struct.new "core:prelude/range.wado//RangeExclusive<i32>" { start: 0, end: 10 }, gap: 2, started: 0 };
-    seen = struct.new "core:prelude//List<i32>" { repr: local.tee $licm_repr_76(array.new_fixed<i32>()), used: 0 };
+    self_54 = struct.new "core:prelude/traits.wado//IterStepBy<core:prelude/range.wado/RangeExclusive<i32>>" { inner: struct.new "core:prelude/range.wado//RangeExclusive<i32>" { start: 0, end: 10 }, gap: 2, started: 0 };
+    seen = struct.new "core:prelude//List<i32>" { repr: local.tee $licm_repr_79(array.new_fixed<i32>()), used: 0 };
     b41: block {
         l42: loop {
-            if local.tee used_27(local.tee $local_3_58("core:prelude/traits.wado/core:prelude/traits.wado/IterStepBy<core:prelude/range.wado/RangeExclusive<i32>>^core:prelude/traits.wado/Iterator::next$sroa[return]"(self_52)).0) == 1 {
-                $sroa_$iter_0_start_104 = $local_3_58.1;
-                if @unlikely(local.tee current_79(seen.used) >= builtin::array_len(seen.repr)) {
+            if local.tee used_28(local.tee $local_3_60("core:prelude/traits.wado/core:prelude/traits.wado/IterStepBy<core:prelude/range.wado/RangeExclusive<i32>>^core:prelude/traits.wado/Iterator::next$sroa[return]"(self_54)).0) == 1 {
+                $sroa_$iter_0_start_108 = $local_3_60.1;
+                if @unlikely(local.tee current_82(seen.used) >= builtin::array_len(seen.repr)) {
                     cold_path;
                     "core:prelude/list.wado/core:prelude/list.wado/List<i32>::grow"(seen);
                 }
-                builtin::array_set<i32>(seen.repr, current_79, $sroa_$iter_0_start_104);
-                seen.used = current_79 + 1;
+                builtin::array_set<i32>(seen.repr, current_82, $sroa_$iter_0_start_108);
+                seen.used = current_82 + 1;
             } else {
                 break b41;
             }
             continue l42;
         };
     };
-    $licm_repr_76 = global:spec_lexical_ranges.wado::$const_obj_24;
-    if @unlikely(local.tee used_27($inline_core_prelude_array_wado_seq_eq_i32__16: block -> bool {
-        if local.tee used_27(seen.used) != 4 {
+    $licm_repr_79 = global:spec_lexical_ranges.wado::$const_obj_24;
+    if @unlikely(local.tee used_28($inline_core_prelude_array_wado_seq_eq_i32__16: block -> bool {
+        if local.tee used_28(seen.used) != 4 {
             break $inline_core_prelude_array_wado_seq_eq_i32__16: 0;
         }
-        current_79 = 0;
+        current_82 = 0;
         elements_22 = seen.repr;
         b47: block {
             l48: loop {
-                break_if b47 current_79 >= used_27;
-                if builtin::array_get_value<i32>(elements_22, current_79) != builtin::array_get_value<i32>($licm_repr_76, current_79) {
+                break_if b47 current_82 >= used_28;
+                if builtin::array_get_value<i32>(elements_22, current_82) != builtin::array_get_value<i32>($licm_repr_79, current_82) {
                     break $inline_core_prelude_array_wado_seq_eq_i32__16: 0;
                 }
-                current_79 = current_79 + 1;
+                current_82 = current_82 + 1;
                 continue l48;
             };
         };
@@ -1922,7 +1922,7 @@ fn "core:prelude/array.wado/core/prelude/array.wado/write_seq_inspect<i32>$dae[s
     let i: i32;
     let self_7: ref "core:prelude/string.wado//String";
     let other_12: ref "core:prelude/string.wado//String";
-    let $licm_arith_31: bool;
+    let $licm_arith_29: bool;
     if f.alternate {
         "core:prelude/array.wado/core/prelude/array.wado/write_seq_inspect_alt<i32>$dae[start,marker]"(repr, end, f, limit);
         return;
@@ -1931,11 +1931,11 @@ fn "core:prelude/array.wado/core/prelude/array.wado/write_seq_inspect<i32>$dae[s
     shown = 0;
     truncated = 0;
     i = 0;
-    $licm_arith_31 = limit >= 0;
+    $licm_arith_29 = limit >= 0;
     b209: block {
         l210: loop {
             break_if b209 i >= end;
-            if select i32($licm_arith_31, shown >= limit, 0) {
+            if select i32($licm_arith_29, shown >= limit, 0) {
                 truncated = 1;
                 break b209;
             }
@@ -1943,7 +1943,7 @@ fn "core:prelude/array.wado/core/prelude/array.wado/write_seq_inspect<i32>$dae[s
                 self_7 = f.buf;
                 "core:prelude/string.wado/core:prelude/string.wado/String^core:prelude/string.wado/AsStrSlice::internal_append_to$spec0"(local.tee other_12(struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(44, 32), used: 2 }), self_7);
             }
-            "core:prelude/primitive.wado/i32::fmt_decimal$sroa[self.value]"(builtin::array_get_value<i32>(repr, i), f);
+            "core:prelude/primitive.wado/i32::fmt_decimal$sroa[self.value]"(struct.new "core:prelude/types.wado//Box<i32>" { value: builtin::array_get_value<i32>(repr, i) }.value, f);
             shown = shown + 1;
             i = i + 1;
             continue l210;
@@ -1966,7 +1966,7 @@ fn "core:prelude/array.wado/core/prelude/array.wado/write_seq_inspect_alt<i32>$d
     let truncated: bool;
     let i: i32;
     let self_7: ref "core:prelude/string.wado//String";
-    let $licm_arith_25: bool;
+    let $licm_arith_23: bool;
     if 0 >= end {
         self_7 = f.buf;
         "core:prelude/string.wado/core:prelude/string.wado/String^core:prelude/string.wado/AsStrSlice::internal_append_to$spec0"(struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(91, 93), used: 2 }, self_7);
@@ -1976,16 +1976,16 @@ fn "core:prelude/array.wado/core/prelude/array.wado/write_seq_inspect_alt<i32>$d
     shown = 0;
     truncated = 0;
     i = 0;
-    $licm_arith_25 = limit >= 0;
+    $licm_arith_23 = limit >= 0;
     b216: block {
         l217: loop {
             break_if b216 i >= end;
-            if select i32($licm_arith_25, shown >= limit, 0) {
+            if select i32($licm_arith_23, shown >= limit, 0) {
                 truncated = 1;
                 break b216;
             }
             "core:prelude/format.wado/core:prelude/format.wado/Formatter::write_newline_indent"(f);
-            "core:prelude/primitive.wado/i32::fmt_decimal$sroa[self.value]"(builtin::array_get_value<i32>(repr, i), f);
+            "core:prelude/primitive.wado/i32::fmt_decimal$sroa[self.value]"(struct.new "core:prelude/types.wado//Box<i32>" { value: builtin::array_get_value<i32>(repr, i) }.value, f);
             "core:prelude/string.wado/core:prelude/string.wado/String::push_ascii_byte"(local.tee self_7(f.buf), 44);
             shown = shown + 1;
             i = i + 1;

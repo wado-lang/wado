@@ -394,7 +394,9 @@ fn "opt_value_copy_demote_shared_elements.wado/escape"(y) {
 
 fn "opt_value_copy_demote_shared_elements.wado/fresh"() {
     let elements: ref "Array<opt_value_copy_demote_shared_elements.wado/S>";
-    return struct.new "core:prelude//List<opt_value_copy_demote_shared_elements.wado/S>" { repr: local.tee elements(array.new_fixed<ref "opt_value_copy_demote_shared_elements.wado//S">(struct.new "opt_value_copy_demote_shared_elements.wado//S" { v: black_box(1) }, struct.new "opt_value_copy_demote_shared_elements.wado//S" { v: 2 })), used: builtin::array_len(elements) };
+    let used: i32;
+    used = builtin::array_len(local.tee elements(array.new_fixed<ref "opt_value_copy_demote_shared_elements.wado//S">(struct.new "opt_value_copy_demote_shared_elements.wado//S" { v: black_box(1) }, struct.new "opt_value_copy_demote_shared_elements.wado//S" { v: 2 })));
+    return struct.new "core:prelude//List<opt_value_copy_demote_shared_elements.wado/S>" { repr: elements, used: used };
 }
 
 fn "opt_value_copy_demote_shared_elements.wado/run"() with Stdout {
@@ -996,7 +998,9 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::push"(self, c) {
 }
 
 fn "core:prelude/list.wado/core:prelude/list.wado/List<opt_value_copy_demote_shared_elements.wado/S>^core:prelude/traits.wado/From<Array<T>>::from"(elements) {
-    return struct.new "core:prelude//List<opt_value_copy_demote_shared_elements.wado/S>" { repr: elements, used: builtin::array_len(elements) };
+    let used: i32;
+    used = builtin::array_len(elements);
+    return struct.new "core:prelude//List<opt_value_copy_demote_shared_elements.wado/S>" { repr: elements, used: used };
 }
 
 fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>"(self, is_negative, $mv$alt_prefix$repr, $mv$alt_prefix$used, digit_count) {

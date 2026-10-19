@@ -377,32 +377,32 @@ fn "sroa_split_loop_rebound_local.wado/sroa_split_loop_rebound_local.wado/statem
     let $iter_0: ref "core:prelude/string.wado//StrSplitIter";
     let part_3: ref "core:prelude/string.wado//String";
     let $match_5: ref null "core:prelude/string.wado//String";
-    let self_12: ref "core:prelude/string.wado//StrSlice";
-    let value_15: ref "core:prelude/string.wado//String";
-    let used: i32;
+    let self_13: ref "core:prelude/string.wado//StrSlice";
+    let value_16: ref "core:prelude/string.wado//String";
+    let used_17: i32;
     let len: i32;
-    let part_22: ref Array<u8>;
-    let $sroa_sep_repr_48: ref Array<u8>;
+    let part_23: ref Array<u8>;
+    let $sroa_sep_repr_49: ref Array<u8>;
     out = struct.new "core:prelude//List<core:prelude/string.wado/String>" { repr: array.new_fixed<ref "core:prelude/string.wado//String">(), used: 0 };
-    $sroa_sep_repr_48 = array.new_fixed<u8>(59);
-    $iter_0 = struct.new "core:prelude/string.wado//StrSplitIter" { repr: $mv$text$repr, used: $mv$text$used, pos: 0, sep_repr: $sroa_sep_repr_48, sep_at: 0, sep_len: 1, finished: 0 };
+    $sroa_sep_repr_49 = array.new_fixed<u8>(59);
+    $iter_0 = struct.new "core:prelude/string.wado//StrSplitIter" { repr: $mv$text$repr, used: $mv$text$used, pos: 0, sep_repr: $sroa_sep_repr_49, sep_at: 0, sep_len: 1, finished: 0 };
     b19: block {
         l20: loop {
             if ref.is_null(local.tee $match_5("core:prelude/string.wado/core:prelude/string.wado/StrSplitIter^core:prelude/traits.wado/Iterator::next$spec0"($iter_0))) == 0 {
-                self_12 = struct.new "core:prelude/string.wado//StrSlice" { repr: local.tee $sroa_sep_repr_48(local.tee part_3(ref.as_non_null($match_5)).repr), start: 0, end: part_3.used };
+                self_13 = struct.new "core:prelude/string.wado//StrSlice" { repr: local.tee $sroa_sep_repr_49(local.tee part_3(ref.as_non_null($match_5)).repr), start: 0, end: part_3.used };
                 let $mv$stmt$repr: ref Array<u8>;
                 let $mv$stmt$start: i32;
                 let $mv$stmt$end: i32;
-                multivalue_bind [$mv$stmt$repr, $mv$stmt$start, $mv$stmt$end] = (let $mv_end_3: i32; multivalue_bind [$mv$text$repr, $mv$text$used, $mv_end_3] = "core:prelude/string.wado/core:prelude/string.wado/StrSlice::trim_start"(self_12.repr, 0, self_12.end); "core:prelude/string.wado/core:prelude/string.wado/StrSlice::trim_end"($mv$text$repr, $mv$text$used, $mv_end_3));
+                multivalue_bind [$mv$stmt$repr, $mv$stmt$start, $mv$stmt$end] = (let $mv_end_3: i32; multivalue_bind [$mv$text$repr, $mv$text$used, $mv_end_3] = "core:prelude/string.wado/core:prelude/string.wado/StrSlice::trim_start"(self_13.repr, 0, self_13.end); "core:prelude/string.wado/core:prelude/string.wado/StrSlice::trim_end"($mv$text$repr, $mv$text$used, $mv_end_3));
                 if $mv$stmt$end != $mv$stmt$start {
-                    builtin::array_copy<u8>(local.tee part_22(builtin::array_new<u8>(local.tee len($mv$stmt$end - $mv$stmt$start))), 0, $mv$stmt$repr, $mv$stmt$start, len);
-                    value_15 = struct.new "core:prelude/string.wado//String" { repr: part_22, used: len };
-                    if @unlikely(local.tee used(out.used) >= builtin::array_len(out.repr)) {
+                    builtin::array_copy<u8>(local.tee part_23(builtin::array_new<u8>(local.tee len($mv$stmt$end - $mv$stmt$start))), 0, $mv$stmt$repr, $mv$stmt$start, len);
+                    value_16 = struct.new "core:prelude/string.wado//String" { repr: part_23, used: len };
+                    if @unlikely(local.tee used_17(out.used) >= builtin::array_len(out.repr)) {
                         cold_path;
                         "core:prelude/list.wado/core:prelude/list.wado/List<core:prelude/string.wado/String>::grow"(out);
                     }
-                    builtin::array_set<ref "core:prelude/string.wado//String">(out.repr, used, value_15);
-                    out.used = used + 1;
+                    builtin::array_set<ref "core:prelude/string.wado//String">(out.repr, used_17, value_16);
+                    out.used = used_17 + 1;
                 }
             } else {
                 break b19;

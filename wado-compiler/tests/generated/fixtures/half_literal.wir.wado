@@ -133,9 +133,9 @@ import fn wasi/stream-drop-readable from "wasi/stream-drop-readable";
 
 fn "half_literal.wado/run"() {
     let elements: ref Array<bf16>;
-    let self_122: u16;
+    let used: i32;
+    let self_123: u16;
     let v: f32;
-    let $sroa_list_used_166: i32;
     block {
     };
     block {
@@ -158,66 +158,66 @@ fn "half_literal.wado/run"() {
     };
     block {
     };
-    $sroa_list_used_166 = builtin::array_len(local.tee elements(array.new_fixed<u16>(16128, 49056, 16457)));
-    if @unlikely(0 >= $sroa_list_used_166) {
+    used = builtin::array_len(local.tee elements(array.new_fixed<u16>(16128, 49056, 16457)));
+    if @unlikely(0 >= used) {
         cold_path;
-        "half_literal.wado/run$cold9$dae[$contract_arg_0]"($sroa_list_used_166);
+        "half_literal.wado/run$cold9$dae[$contract_arg_0]"(used);
         unreachable;
     }
-    if @unlikely(local.tee self_122(builtin::array_get_value<u16>(elements, 0)) != 16128) {
+    if @unlikely(local.tee self_123(builtin::array_get_value<u16>(elements, 0)) != 16128) {
         cold_path;
-        "half_literal.wado/run$cold8"(self_122);
+        "half_literal.wado/run$cold8"(self_123);
         unreachable;
     }
-    if @unlikely(1 >= $sroa_list_used_166) {
+    if @unlikely(1 >= used) {
         cold_path;
-        "half_literal.wado/run$cold7$dae[$contract_arg_1]"($sroa_list_used_166);
+        "half_literal.wado/run$cold7$dae[$contract_arg_1]"(used);
         unreachable;
     }
-    if @unlikely(local.tee self_122(builtin::array_get_value<u16>(elements, 1)) != 49056) {
+    if @unlikely(local.tee self_123(builtin::array_get_value<u16>(elements, 1)) != 49056) {
         cold_path;
-        "half_literal.wado/run$cold6"(self_122);
+        "half_literal.wado/run$cold6"(self_123);
         unreachable;
     }
-    if @unlikely(2 >= $sroa_list_used_166) {
+    if @unlikely(2 >= used) {
         cold_path;
-        "half_literal.wado/run$cold5$dae[$contract_arg_2]"($sroa_list_used_166);
+        "half_literal.wado/run$cold5$dae[$contract_arg_2]"(used);
         unreachable;
     }
-    if @unlikely(local.tee $sroa_list_used_166(builtin::array_get_value<u16>(elements, 2)) != 16457) {
+    if @unlikely(local.tee used(builtin::array_get_value<u16>(elements, 2)) != 16457) {
         cold_path;
-        "half_literal.wado/run$cold4"($sroa_list_used_166);
+        "half_literal.wado/run$cold4"(used);
         unreachable;
     }
     block {
     };
     block {
     };
-    $sroa_list_used_166 = "core:prelude/half.wado/f16::from_f32"(black_box(0.33325195_f32));
-    if @unlikely(13653 != $sroa_list_used_166) {
+    used = "core:prelude/half.wado/f16::from_f32"(black_box(0.33325195_f32));
+    if @unlikely(13653 != used) {
         cold_path;
-        "half_literal.wado/run$cold1"(13653, $sroa_list_used_166);
+        "half_literal.wado/run$cold1"(13653, used);
         unreachable;
     }
-    self_122 = $inline_bf16__from_f32_29: block -> u16 {
-        $sroa_list_used_166 = builtin::i32_reinterpret_f32(local.tee v(black_box(1.0039063_f32)));
+    self_123 = $inline_bf16__from_f32_29: block -> u16 {
+        used = builtin::i32_reinterpret_f32(local.tee v(black_box(1.0039063_f32)));
         if v != v {
-            break $inline_bf16__from_f32_29: ((($sroa_list_used_166 >>u 16) & 65535) | 64) & 65535;
+            break $inline_bf16__from_f32_29: (((used >>u 16) & 65535) | 64) & 65535;
         }
-        self_122 = ($sroa_list_used_166 >>u 16) & 65535;
-        break $inline_bf16__from_f32_29: local.tee self_122($inline_round_to_even_33: block -> u16 {
-            if local.tee $sroa_list_used_166($sroa_list_used_166 & 65535) >u 32768 {
-                break $inline_round_to_even_33: (self_122 + 1) & 65535;
+        self_123 = (used >>u 16) & 65535;
+        break $inline_bf16__from_f32_29: local.tee self_123($inline_round_to_even_33: block -> u16 {
+            if local.tee used(used & 65535) >u 32768 {
+                break $inline_round_to_even_33: (self_123 + 1) & 65535;
             }
-            if ($sroa_list_used_166 == 32768) & ((self_122 & 1) == 1) {
-                break $inline_round_to_even_33: (self_122 + 1) & 65535;
+            if (used == 32768) & ((self_123 & 1) == 1) {
+                break $inline_round_to_even_33: (self_123 + 1) & 65535;
             }
-            break $inline_round_to_even_33: self_122;
+            break $inline_round_to_even_33: self_123;
         });
     };
-    if @unlikely(16256 != self_122) {
+    if @unlikely(16256 != self_123) {
         cold_path;
-        "half_literal.wado/run$cold0"(16256, self_122);
+        "half_literal.wado/run$cold0"(16256, self_123);
         unreachable;
     }
 }

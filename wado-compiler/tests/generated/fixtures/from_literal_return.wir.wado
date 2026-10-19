@@ -240,30 +240,30 @@ fn "from_literal_return.wado/run"() with Stdout {
     let result: ref "core:prelude//List<core:prelude/string.wado/String>";
     let item: ref "core:prelude/string.wado//String";
     let $local_3: ref null "core:prelude/string.wado//String";
-    let value_18: ref "core:prelude/string.wado//String";
-    let used: i32;
+    let value_19: ref "core:prelude/string.wado//String";
+    let used_20: i32;
     self_6 = struct.new "core:collections/entries.wado//MapKeysValueIter<core:prelude/string.wado/String,i32>" { log: "from_literal_return.wado/make_map"().log, index: 0 };
     result = struct.new "core:prelude//List<core:prelude/string.wado/String>" { repr: array.new_fixed<ref "core:prelude/string.wado//String">(), used: 0 };
     b6: block {
         l7: loop {
             if ref.is_null(local.tee $local_3("core:collections/entries.wado/core:collections/entries.wado/MapKeysValueIter<core:prelude/string.wado/String,i32>^core:prelude/traits.wado/Iterator::next"(self_6))) == 0 {
                 item = ref.as_non_null($local_3);
-                value_18 = struct.new "core:prelude/string.wado//String" { repr: let $array_clone_src_1: ref Array<u8>; $array_clone_src_1 = item.repr; $load_2 = item.used; let $array_clone_dst_2: ref Array<u8>; builtin::array_copy<u8>(local.tee $array_clone_dst_2(builtin::array_new<u8>($load_2)), 0, $array_clone_src_1, 0, $load_2); $array_clone_dst_2, used: $load_2 };
-                if @unlikely(local.tee used(result.used) >= builtin::array_len(result.repr)) {
+                value_19 = struct.new "core:prelude/string.wado//String" { repr: let $array_clone_src_1: ref Array<u8>; $array_clone_src_1 = item.repr; $load_2 = item.used; let $array_clone_dst_2: ref Array<u8>; builtin::array_copy<u8>(local.tee $array_clone_dst_2(builtin::array_new<u8>($load_2)), 0, $array_clone_src_1, 0, $load_2); $array_clone_dst_2, used: $load_2 };
+                if @unlikely(local.tee used_20(result.used) >= builtin::array_len(result.repr)) {
                     cold_path;
                     "core:prelude/list.wado/core:prelude/list.wado/List<core:prelude/string.wado/String>::grow"(result);
                 }
-                builtin::array_set<ref "core:prelude/string.wado//String">(result.repr, used, value_18);
-                result.used = used + 1;
+                builtin::array_set<ref "core:prelude/string.wado//String">(result.repr, used_20, value_19);
+                result.used = used_20 + 1;
             } else {
                 break b6;
             }
             continue l7;
         };
     };
-    if @unlikely(local.tee used(result.used) != 2) {
+    if @unlikely(local.tee used_20(result.used) != 2) {
         cold_path;
-        "from_literal_return.wado/run$cold0"(used);
+        "from_literal_return.wado/run$cold0"(used_20);
         unreachable;
     }
     "core:cli/println"(local.tee $array_clone_dst_2(array.new_fixed<u8>(111, 107)), 2);

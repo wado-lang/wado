@@ -35,19 +35,19 @@ struct core:prelude/format.wado//Formatter {  // TypeId(6)
 
 struct default_type_param_after_inferred_cross_module.wado//$Closure_1 {  // TypeId(7)}
 
-type "functype/$canonical_closure_fn_0" = fn(ref null struct, i32) -> bool;  // TypeId(8)
+type "functype/$canonical_callback_fn" = fn(ref null struct, ref null struct);  // TypeId(8)
 
-type "functype/$canonical_callback_fn" = fn(ref null struct, ref null struct);  // TypeId(9)
-
-struct canonical//CanonicalInspectableBase {  // TypeId(10)
+struct canonical//CanonicalInspectableBase {  // TypeId(9)
     env: ref null struct,
     inspect: ref "functype/$canonical_callback_fn",
 }
 
-struct canonical//CanonicalClosure_0 {  // TypeId(11)
+type "functype/$canonical_closure_fn_1" = fn(ref null struct, i32) -> bool;  // TypeId(10)
+
+struct canonical//CanonicalClosure_1 {  // TypeId(11)
     env: ref null struct,
     inspect: ref "functype/$canonical_callback_fn",
-    func: ref "functype/$canonical_closure_fn_0",
+    func: ref "functype/$canonical_closure_fn_1",
 }
 
 type "functype//mem/realloc" = fn(i32, i32, i32, i32) -> i32;  // TypeId(12)
@@ -138,10 +138,10 @@ fn "default_type_param_after_inferred_cross_module.wado/$cm_export__$test_0"() {
     let $deref_val: ref "core:prelude/format.wado//Formatter";
     let offset_19: i32;
     let $sroa_s_repr_48: ref Array<u8>;
-    $v0 = struct.new "canonical//CanonicalClosure_0" { env: struct.new "default_type_param_after_inferred_cross_module.wado//$Closure_1" {  }, inspect: ref.func "closure/default_type_param_after_inferred_cross_module.wado/$closure_inspect_wrapper_0", func: ref.func "closure/default_type_param_after_inferred_cross_module.wado/$closure_wrapper_0" };
+    $v0 = struct.new "canonical//CanonicalClosure_1" { env: struct.new "default_type_param_after_inferred_cross_module.wado//$Closure_1" {  }, inspect: ref.func "closure/default_type_param_after_inferred_cross_module.wado/$closure_inspect_wrapper_0", func: ref.func "closure/default_type_param_after_inferred_cross_module.wado/$closure_wrapper_0" };
     if @unlikely(local.tee $cond_2(block -> bool {
-        let $indirect_call_1: ref "canonical//CanonicalClosure_0";
-        call_ref "functype/$canonical_closure_fn_0"($indirect_call_1.func, local.tee $indirect_call_1(ref.cast "canonical//CanonicalClosure_0"($v0)).env, 1);
+        let $indirect_call_1: ref "canonical//CanonicalClosure_1";
+        call_ref "functype/$canonical_closure_fn_1"($indirect_call_1.func, local.tee $indirect_call_1(ref.cast "canonical//CanonicalClosure_1"($v0)).env, 1);
     }) == 0) {
         cold_path;
         $cond_2 = "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"(local.tee $local_5(struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(133), used: 0 }), 83);

@@ -119,35 +119,35 @@ import fn wasi/stream-drop-readable from "wasi/stream-drop-readable";
 fn "list_literal_no_push.wado/run"() with Stdout {
     let $local_2: ref "core:prelude/string.wado//String";
     let elements: ref "Array<list_literal_no_push.wado/Widget>";
-    let is_negative_27: bool;
+    let used: i32;
+    let is_negative_28: bool;
     let x: i64;
-    let $sroa_widgets_used_34: i32;
-    let start_71: i32;
-    $sroa_widgets_used_34 = builtin::array_len(local.tee elements(array.new_fixed<ref "list_literal_no_push.wado//Widget">(struct.new "list_literal_no_push.wado//Widget" { id: black_box(7) })));
+    let start_72: i32;
+    used = builtin::array_len(local.tee elements(array.new_fixed<ref "list_literal_no_push.wado//Widget">(struct.new "list_literal_no_push.wado//Widget" { id: black_box(7) })));
     $local_2 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
-    is_negative_27 = local.tee $sroa_widgets_used_34(if @unlikely(0 >= $sroa_widgets_used_34) {
+    is_negative_28 = local.tee used(if @unlikely(0 >= used) {
         cold_path;
-        "list_literal_no_push.wado/run$cold0$dae[$contract_arg_0]"($sroa_widgets_used_34);
+        "list_literal_no_push.wado/run$cold0$dae[$contract_arg_0]"(used);
         unreachable;
     }; builtin::array_get_value<ref "list_literal_no_push.wado//Widget">(elements, 0).id) < 0;
-    $sroa_widgets_used_34 = "core:prelude/primitive.wado/count_digits_u64"(local.tee x(x = builtin::i64_extend_i32_s($sroa_widgets_used_34); select i64(x < 0_i64, 0_i64 - x, x)));
-    if is_negative_27 {
-        if @unlikely(local.tee is_negative_27(0 + 1) > builtin::array_len($local_2.repr)) {
+    used = "core:prelude/primitive.wado/count_digits_u64"(local.tee x(x = builtin::i64_extend_i32_s(used); select i64(x < 0_i64, 0_i64 - x, x)));
+    if is_negative_28 {
+        if @unlikely(local.tee is_negative_28(0 + 1) > builtin::array_len($local_2.repr)) {
             cold_path;
-            "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_2, is_negative_27);
+            "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_2, is_negative_28);
         }
-        start_71 = $local_2.used;
-        $local_2.used = is_negative_27;
-        builtin::array_set_u8($local_2.repr, start_71, 45);
+        start_72 = $local_2.used;
+        $local_2.used = is_negative_28;
+        builtin::array_set_u8($local_2.repr, start_72, 45);
     } else {
     }
-    if @unlikely(local.tee start_71($local_2.used + $sroa_widgets_used_34) > builtin::array_len($local_2.repr)) {
+    if @unlikely(local.tee start_72($local_2.used + used) > builtin::array_len($local_2.repr)) {
         cold_path;
-        "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_2, start_71);
+        "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_2, start_72);
     }
-    is_negative_27 = $local_2.used;
-    $local_2.used = start_71;
-    "core:prelude/primitive.wado/write_decimal_digits"($local_2.repr, is_negative_27, x, $sroa_widgets_used_34);
+    is_negative_28 = $local_2.used;
+    $local_2.used = start_72;
+    "core:prelude/primitive.wado/write_decimal_digits"($local_2.repr, is_negative_28, x, used);
     "core:cli/println"($local_2.repr, $local_2.used);
 }
 

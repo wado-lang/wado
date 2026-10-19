@@ -206,11 +206,11 @@ fn "closure_capture_observes_later_write.wado/run"() {
     let l: ref "core:prelude//List<i32>";
     let o: ref "core:prelude/types.wado//Box<core:prelude/types.wado/Option<i32>>";
     let firsts: ref "core:prelude//List<fn()->i32>";
-    let value_119: ref "closure_capture_observes_later_write.wado//$Closure_13";
-    let $functor_141: ref "closure_capture_observes_later_write.wado//$Closure_1";
-    get_n = struct.new "canonical//CanonicalClosure_0" { env: local.tee $functor_141(struct.new "closure_capture_observes_later_write.wado//$Closure_1" { $capture_0: local.tee n(struct.new "core:prelude/types.wado//Box<i32>" { value: 1 }) }), inspect: ref.func "closure/closure_capture_observes_later_write.wado/$closure_inspect_wrapper_0", func: ref.func "closure/closure_capture_observes_later_write.wado/$closure_wrapper_0" };
+    let value_121: ref "closure_capture_observes_later_write.wado//$Closure_13";
+    let $functor_143: ref "closure_capture_observes_later_write.wado//$Closure_1";
+    get_n = struct.new "canonical//CanonicalClosure_0" { env: local.tee $functor_143(struct.new "closure_capture_observes_later_write.wado//$Closure_1" { $capture_0: local.tee n(struct.new "core:prelude/types.wado//Box<i32>" { value: 1 }) }), inspect: ref.func "closure/closure_capture_observes_later_write.wado/$closure_inspect_wrapper_0", func: ref.func "closure/closure_capture_observes_later_write.wado/$closure_wrapper_0" };
     n.value = 2;
-    if @unlikely(local.tee $v1_6($functor_141.$capture_0.value * 2) != 4) {
+    if @unlikely(local.tee $v1_6($functor_143.$capture_0.value * 2) != 4) {
         cold_path;
         "closure_capture_observes_later_write.wado/run$cold13"(get_n, $v1_6);
         unreachable;
@@ -256,12 +256,12 @@ fn "closure_capture_observes_later_write.wado/run"() {
     b7: block {
         l8: loop {
             break_if b7 $v1_6 >= 2;
-            value_119 = struct.new "closure_capture_observes_later_write.wado//$Closure_13" { $capture_0: $v1_6 };
+            value_121 = struct.new "closure_capture_observes_later_write.wado//$Closure_13" { $capture_0: $v1_6 };
             if @unlikely(local.tee $load_6(firsts.used) >= builtin::array_len(firsts.repr)) {
                 cold_path;
                 "core:prelude/list.wado/core:prelude/list.wado/List<fn()->i32>::grow"(firsts);
             }
-            get_n = struct.new "canonical//CanonicalClosure_0" { env: value_119, inspect: ref.func "closure/closure_capture_observes_later_write.wado/$closure_inspect_wrapper_1", func: ref.func "closure/closure_capture_observes_later_write.wado/$closure_wrapper_1" };
+            get_n = struct.new "canonical//CanonicalClosure_0" { env: value_121, inspect: ref.func "closure/closure_capture_observes_later_write.wado/$closure_inspect_wrapper_1", func: ref.func "closure/closure_capture_observes_later_write.wado/$closure_wrapper_1" };
             builtin::array_set<ref struct>(firsts.repr, $load_6, get_n);
             firsts.used = $load_6 + 1;
             $v1_6 = $v1_6 + 1;

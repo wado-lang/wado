@@ -73,19 +73,19 @@ struct core:prelude/types.wado//Option<i32>::Some {  // TypeId(14)
     payload_0: i32,
 }
 
-type "functype/$canonical_closure_fn_0" = fn(ref null struct, i32) -> bool;  // TypeId(15)
+type "functype/$canonical_callback_fn" = fn(ref null struct, ref null struct);  // TypeId(15)
 
-type "functype/$canonical_callback_fn" = fn(ref null struct, ref null struct);  // TypeId(16)
-
-struct canonical//CanonicalInspectableBase {  // TypeId(17)
+struct canonical//CanonicalInspectableBase {  // TypeId(16)
     env: ref null struct,
     inspect: ref "functype/$canonical_callback_fn",
 }
 
-struct canonical//CanonicalClosure_0 {  // TypeId(18)
+type "functype/$canonical_closure_fn_1" = fn(ref null struct, i32) -> bool;  // TypeId(17)
+
+struct canonical//CanonicalClosure_1 {  // TypeId(18)
     env: ref null struct,
     inspect: ref "functype/$canonical_callback_fn",
-    func: ref "functype/$canonical_closure_fn_0",
+    func: ref "functype/$canonical_closure_fn_1",
 }
 
 type "functype//mem/realloc" = fn(i32, i32, i32, i32) -> i32;  // TypeId(19)
@@ -228,27 +228,27 @@ fn "spec_traits_sequence_decls.wado/$test_0"() {
     let $local_23: ref "core:prelude/string.wado//String";
     let $local_25: ref "core:prelude/string.wado//String";
     let $local_27: ref "core:prelude/string.wado//String";
-    let $eq_other_Some_3_64: i32;
-    let f_93: ref "core:prelude/format.wado//Formatter";
-    let $sroa_s_repr_184: ref Array<u8>;
+    let $eq_other_Some_3_65: i32;
+    let f_94: ref "core:prelude/format.wado//Formatter";
+    let $sroa_s_repr_185: ref Array<u8>;
     let i: i32;
-    let $sroa_$licm_items_22_repr_362: ref Array<i32>;
+    let $sroa_$licm_items_22_repr_363: ref Array<i32>;
     $v1_2 = struct.new "core:prelude/types.wado//Option<i32>::Some" { discriminant: 1, payload_0: 2 };
     $v3_seen = 0;
     $v4_seen = 0;
     $v5_seen = 0;
-    if @unlikely(local.tee $eq_other_Some_3_64($inline_core_prelude_types_wado_Option_i32__core_prelude_traits_wado_Eq__eq_5: block -> bool {
+    if @unlikely(local.tee $eq_other_Some_3_65($inline_core_prelude_types_wado_Option_i32__core_prelude_traits_wado_Eq__eq_5: block -> bool {
         $v4 = $inline_spec_traits_sequence_decls_wado_Digits_spec_traits_sequence_decls_wado_Sequence__position_0: block -> ref "core:prelude/types.wado//Option<i32>" {
-            $v3 = struct.new "canonical//CanonicalClosure_0" { env: struct.new "spec_traits_sequence_decls.wado//$Closure_0" {  }, inspect: ref.func "closure/spec_traits_sequence_decls.wado/$closure_inspect_wrapper_0", func: ref.func "closure/spec_traits_sequence_decls.wado/$closure_wrapper_0" };
+            $v3 = struct.new "canonical//CanonicalClosure_1" { env: struct.new "spec_traits_sequence_decls.wado//$Closure_0" {  }, inspect: ref.func "closure/spec_traits_sequence_decls.wado/$closure_inspect_wrapper_0", func: ref.func "closure/spec_traits_sequence_decls.wado/$closure_wrapper_0" };
             $v3_seen = 1;
             i = 0;
-            $sroa_$licm_items_22_repr_362 = array.new_fixed<i32>(0, 1, 2);
+            $sroa_$licm_items_22_repr_363 = array.new_fixed<i32>(0, 1, 2);
             b1: block {
                 l2: loop {
                     break_if b1 i >= 3;
                     if block -> bool {
-                        let $indirect_call_1: ref "canonical//CanonicalClosure_0";
-                        call_ref "functype/$canonical_closure_fn_0"($indirect_call_1.func, local.tee $indirect_call_1(ref.cast "canonical//CanonicalClosure_0"($v3)).env, builtin::array_get_value<i32>($sroa_$licm_items_22_repr_362, i));
+                        let $indirect_call_1: ref "canonical//CanonicalClosure_1";
+                        call_ref "functype/$canonical_closure_fn_1"($indirect_call_1.func, local.tee $indirect_call_1(ref.cast "canonical//CanonicalClosure_1"($v3)).env, builtin::array_get_value<i32>($sroa_$licm_items_22_repr_363, i));
                     } {
                         break $inline_spec_traits_sequence_decls_wado_Digits_spec_traits_sequence_decls_wado_Sequence__position_0: struct.new "core:prelude/types.wado//Option<i32>::Some" { discriminant: 1, payload_0: i };
                     }
@@ -268,8 +268,8 @@ fn "spec_traits_sequence_decls.wado/$test_0"() {
         } else {
             i = ref.cast "core:prelude/types.wado//Option<i32>::Some"($v4).payload_0;
             if ref.test "core:prelude/types.wado//Option<i32>::Some"($v5) {
-                $eq_other_Some_3_64 = ref.cast "core:prelude/types.wado//Option<i32>::Some"($v5).payload_0;
-                break $inline_core_prelude_types_wado_Option_i32__core_prelude_traits_wado_Eq__eq_5: i == $eq_other_Some_3_64;
+                $eq_other_Some_3_65 = ref.cast "core:prelude/types.wado//Option<i32>::Some"($v5).payload_0;
+                break $inline_core_prelude_types_wado_Option_i32__core_prelude_traits_wado_Eq__eq_5: i == $eq_other_Some_3_65;
             } else {
                 break $inline_core_prelude_types_wado_Option_i32__core_prelude_traits_wado_Eq__eq_5: 0;
             }
@@ -299,94 +299,94 @@ fn "spec_traits_sequence_decls.wado/$test_0"() {
             struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("<not evaluated>"), used: 15 };
         });
         $local_20 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::new"(local.tee $local_25(struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 }));
-        "core:prelude/primitive.wado/bool::fmt_into$sroa[self.value]"($eq_other_Some_3_64, $local_20);
-        $eq_other_Some_3_64 = "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"(local.tee $local_27(struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(429), used: 0 }), 63);
+        "core:prelude/primitive.wado/bool::fmt_into$sroa[self.value]"($eq_other_Some_3_65, $local_20);
+        $eq_other_Some_3_65 = "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"(local.tee $local_27(struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(429), used: 0 }), 63);
         $load_3 = $local_27.repr;
-        $sroa_s_repr_184 = array.new_data<u8>("Assertion failed in ");
-        builtin::array_copy<u8>($load_3, $eq_other_Some_3_64, $sroa_s_repr_184, 0, 20);
-        $v5_seen = $eq_other_Some_3_64 + 20;
-        $sroa_s_repr_184 = array.new_data<u8>("$test_0");
-        builtin::array_copy<u8>($load_3, $v5_seen, $sroa_s_repr_184, 0, 7);
-        $v5_seen = $eq_other_Some_3_64 + 27;
-        $sroa_s_repr_184 = array.new_fixed<u8>(32, 97, 116, 32);
-        builtin::array_copy<u8>($load_3, $v5_seen, $sroa_s_repr_184, 0, 4);
-        $v5_seen = $eq_other_Some_3_64 + 31;
-        $sroa_s_repr_184 = array.new_data<u8>("spec_traits_sequence_decls.wado");
-        builtin::array_copy<u8>($load_3, $v5_seen, $sroa_s_repr_184, 0, 31);
-        $eq_other_Some_3_64 = $eq_other_Some_3_64 + 62;
-        $sroa_s_repr_184 = array.new_fixed<u8>(58);
-        builtin::array_copy<u8>($load_3, $eq_other_Some_3_64, $sroa_s_repr_184, 0, 1);
-        f_93 = local.tee $local_20("core:prelude/format.wado/core:prelude/format.wado/Formatter::new"($local_27));
-        "core:prelude/primitive.wado/i32::fmt_decimal$sroa[self.value]"(51, f_93);
-        $eq_other_Some_3_64 = "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"($local_27, 95);
-        $sroa_s_repr_184 = $local_27.repr;
+        $sroa_s_repr_185 = array.new_data<u8>("Assertion failed in ");
+        builtin::array_copy<u8>($load_3, $eq_other_Some_3_65, $sroa_s_repr_185, 0, 20);
+        $v5_seen = $eq_other_Some_3_65 + 20;
+        $sroa_s_repr_185 = array.new_data<u8>("$test_0");
+        builtin::array_copy<u8>($load_3, $v5_seen, $sroa_s_repr_185, 0, 7);
+        $v5_seen = $eq_other_Some_3_65 + 27;
+        $sroa_s_repr_185 = array.new_fixed<u8>(32, 97, 116, 32);
+        builtin::array_copy<u8>($load_3, $v5_seen, $sroa_s_repr_185, 0, 4);
+        $v5_seen = $eq_other_Some_3_65 + 31;
+        $sroa_s_repr_185 = array.new_data<u8>("spec_traits_sequence_decls.wado");
+        builtin::array_copy<u8>($load_3, $v5_seen, $sroa_s_repr_185, 0, 31);
+        $eq_other_Some_3_65 = $eq_other_Some_3_65 + 62;
+        $sroa_s_repr_185 = array.new_fixed<u8>(58);
+        builtin::array_copy<u8>($load_3, $eq_other_Some_3_65, $sroa_s_repr_185, 0, 1);
+        f_94 = local.tee $local_20("core:prelude/format.wado/core:prelude/format.wado/Formatter::new"($local_27));
+        "core:prelude/primitive.wado/i32::fmt_decimal$sroa[self.value]"(51, f_94);
+        $eq_other_Some_3_65 = "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"($local_27, 95);
+        $sroa_s_repr_185 = $local_27.repr;
         $load_3 = array.new_data<u8>("
 condition: d.last() == Option::Some(2) && d.position(|x| x == 1) == Option::Some(1)
 ");
-        builtin::array_copy<u8>($sroa_s_repr_184, $eq_other_Some_3_64, $load_3, 0, 85);
-        $eq_other_Some_3_64 = $eq_other_Some_3_64 + 85;
+        builtin::array_copy<u8>($sroa_s_repr_185, $eq_other_Some_3_65, $load_3, 0, 85);
+        $eq_other_Some_3_65 = $eq_other_Some_3_65 + 85;
         $load_3 = array.new_data<u8>("d.last(): ");
-        builtin::array_copy<u8>($sroa_s_repr_184, $eq_other_Some_3_64, $load_3, 0, 10);
+        builtin::array_copy<u8>($sroa_s_repr_185, $eq_other_Some_3_65, $load_3, 0, 10);
         $local_20 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::new"($local_27);
         "core:prelude/traits.wado/core:prelude/types.wado/Option<i32>^core:prelude/traits.wado/Inspect::inspect$sroa[self.value]"(struct.new "core:prelude/types.wado//Option<i32>::Some" { discriminant: 1, payload_0: 2 }, $local_20);
-        $eq_other_Some_3_64 = "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"($local_27, 18);
+        $eq_other_Some_3_65 = "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"($local_27, 18);
         $load_3 = $local_27.repr;
-        $sroa_s_repr_184 = array.new_fixed<u8>(10);
-        builtin::array_copy<u8>($load_3, $eq_other_Some_3_64, $sroa_s_repr_184, 0, 1);
-        $eq_other_Some_3_64 = $eq_other_Some_3_64 + 1;
-        $sroa_s_repr_184 = array.new_data<u8>("Option::Some(2): ");
-        builtin::array_copy<u8>($load_3, $eq_other_Some_3_64, $sroa_s_repr_184, 0, 17);
+        $sroa_s_repr_185 = array.new_fixed<u8>(10);
+        builtin::array_copy<u8>($load_3, $eq_other_Some_3_65, $sroa_s_repr_185, 0, 1);
+        $eq_other_Some_3_65 = $eq_other_Some_3_65 + 1;
+        $sroa_s_repr_185 = array.new_data<u8>("Option::Some(2): ");
+        builtin::array_copy<u8>($load_3, $eq_other_Some_3_65, $sroa_s_repr_185, 0, 17);
         $local_20 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::new"($local_27);
         "core:prelude/traits.wado/core:prelude/types.wado/Option<i32>^core:prelude/traits.wado/Inspect::inspect$sroa[self.value]"($v1_2, $local_20);
-        $eq_other_Some_3_64 = "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"($local_27, 30);
-        $sroa_s_repr_184 = $local_27.repr;
+        $eq_other_Some_3_65 = "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"($local_27, 30);
+        $sroa_s_repr_185 = $local_27.repr;
         $load_3 = array.new_fixed<u8>(10);
-        builtin::array_copy<u8>($sroa_s_repr_184, $eq_other_Some_3_64, $load_3, 0, 1);
-        $eq_other_Some_3_64 = $eq_other_Some_3_64 + 1;
+        builtin::array_copy<u8>($sroa_s_repr_185, $eq_other_Some_3_65, $load_3, 0, 1);
+        $eq_other_Some_3_65 = $eq_other_Some_3_65 + 1;
         $load_3 = array.new_data<u8>("d.last() == Option::Some(2): ");
-        builtin::array_copy<u8>($sroa_s_repr_184, $eq_other_Some_3_64, $load_3, 0, 29);
+        builtin::array_copy<u8>($sroa_s_repr_185, $eq_other_Some_3_65, $load_3, 0, 29);
         $local_20 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::new"($local_27);
         "core:prelude/primitive.wado/bool::fmt_into$sroa[self.value]"(1, $local_20);
-        $eq_other_Some_3_64 = "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"($local_27, 13);
+        $eq_other_Some_3_65 = "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"($local_27, 13);
         $load_3 = $local_27.repr;
-        $sroa_s_repr_184 = array.new_fixed<u8>(10);
-        builtin::array_copy<u8>($load_3, $eq_other_Some_3_64, $sroa_s_repr_184, 0, 1);
-        $eq_other_Some_3_64 = $eq_other_Some_3_64 + 1;
-        $sroa_s_repr_184 = array.new_data<u8>("|x| x == 1: ");
-        builtin::array_copy<u8>($load_3, $eq_other_Some_3_64, $sroa_s_repr_184, 0, 12);
-        $eq_other_Some_3_64 = $local_19.used;
-        $v5_seen = "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"($local_27, 25 + $eq_other_Some_3_64);
-        builtin::array_copy<u8>(local.tee $sroa_s_repr_184($local_27.repr), $v5_seen, $local_19.repr, 0, $eq_other_Some_3_64);
-        $v4_seen = $v5_seen + $eq_other_Some_3_64;
+        $sroa_s_repr_185 = array.new_fixed<u8>(10);
+        builtin::array_copy<u8>($load_3, $eq_other_Some_3_65, $sroa_s_repr_185, 0, 1);
+        $eq_other_Some_3_65 = $eq_other_Some_3_65 + 1;
+        $sroa_s_repr_185 = array.new_data<u8>("|x| x == 1: ");
+        builtin::array_copy<u8>($load_3, $eq_other_Some_3_65, $sroa_s_repr_185, 0, 12);
+        $eq_other_Some_3_65 = $local_19.used;
+        $v5_seen = "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"($local_27, 25 + $eq_other_Some_3_65);
+        builtin::array_copy<u8>(local.tee $sroa_s_repr_185($local_27.repr), $v5_seen, $local_19.repr, 0, $eq_other_Some_3_65);
+        $v4_seen = $v5_seen + $eq_other_Some_3_65;
         $load_3 = array.new_fixed<u8>(10);
-        builtin::array_copy<u8>($sroa_s_repr_184, $v4_seen, $load_3, 0, 1);
-        $eq_other_Some_3_64 = $v5_seen + (1 + $eq_other_Some_3_64);
+        builtin::array_copy<u8>($sroa_s_repr_185, $v4_seen, $load_3, 0, 1);
+        $eq_other_Some_3_65 = $v5_seen + (1 + $eq_other_Some_3_65);
         $load_3 = array.new_data<u8>("d.position(|x| x == 1): ");
-        builtin::array_copy<u8>($sroa_s_repr_184, $eq_other_Some_3_64, $load_3, 0, 24);
-        $eq_other_Some_3_64 = $local_21.used;
-        $v5_seen = "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"($local_27, 18 + $eq_other_Some_3_64);
-        builtin::array_copy<u8>(local.tee $load_3($local_27.repr), $v5_seen, $local_21.repr, 0, $eq_other_Some_3_64);
-        $v4_seen = $v5_seen + $eq_other_Some_3_64;
-        $sroa_s_repr_184 = array.new_fixed<u8>(10);
-        builtin::array_copy<u8>($load_3, $v4_seen, $sroa_s_repr_184, 0, 1);
-        $eq_other_Some_3_64 = $v5_seen + (1 + $eq_other_Some_3_64);
-        $sroa_s_repr_184 = array.new_data<u8>("Option::Some(1): ");
-        builtin::array_copy<u8>($load_3, $eq_other_Some_3_64, $sroa_s_repr_184, 0, 17);
-        $eq_other_Some_3_64 = $local_23.used;
-        $v5_seen = "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"($local_27, 44 + $eq_other_Some_3_64);
-        builtin::array_copy<u8>(local.tee $sroa_s_repr_184($local_27.repr), $v5_seen, $local_23.repr, 0, $eq_other_Some_3_64);
-        $v4_seen = $v5_seen + $eq_other_Some_3_64;
+        builtin::array_copy<u8>($sroa_s_repr_185, $eq_other_Some_3_65, $load_3, 0, 24);
+        $eq_other_Some_3_65 = $local_21.used;
+        $v5_seen = "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"($local_27, 18 + $eq_other_Some_3_65);
+        builtin::array_copy<u8>(local.tee $load_3($local_27.repr), $v5_seen, $local_21.repr, 0, $eq_other_Some_3_65);
+        $v4_seen = $v5_seen + $eq_other_Some_3_65;
+        $sroa_s_repr_185 = array.new_fixed<u8>(10);
+        builtin::array_copy<u8>($load_3, $v4_seen, $sroa_s_repr_185, 0, 1);
+        $eq_other_Some_3_65 = $v5_seen + (1 + $eq_other_Some_3_65);
+        $sroa_s_repr_185 = array.new_data<u8>("Option::Some(1): ");
+        builtin::array_copy<u8>($load_3, $eq_other_Some_3_65, $sroa_s_repr_185, 0, 17);
+        $eq_other_Some_3_65 = $local_23.used;
+        $v5_seen = "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"($local_27, 44 + $eq_other_Some_3_65);
+        builtin::array_copy<u8>(local.tee $sroa_s_repr_185($local_27.repr), $v5_seen, $local_23.repr, 0, $eq_other_Some_3_65);
+        $v4_seen = $v5_seen + $eq_other_Some_3_65;
         $load_3 = array.new_fixed<u8>(10);
-        builtin::array_copy<u8>($sroa_s_repr_184, $v4_seen, $load_3, 0, 1);
-        $eq_other_Some_3_64 = $v5_seen + (1 + $eq_other_Some_3_64);
+        builtin::array_copy<u8>($sroa_s_repr_185, $v4_seen, $load_3, 0, 1);
+        $eq_other_Some_3_65 = $v5_seen + (1 + $eq_other_Some_3_65);
         $load_3 = array.new_data<u8>("d.position(|x| x == 1) == Option::Some(1): ");
-        builtin::array_copy<u8>($sroa_s_repr_184, $eq_other_Some_3_64, $load_3, 0, 43);
-        $eq_other_Some_3_64 = $local_25.used;
-        $v5_seen = "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"($local_27, 1 + $eq_other_Some_3_64);
-        builtin::array_copy<u8>(local.tee $load_3($local_27.repr), $v5_seen, $local_25.repr, 0, $eq_other_Some_3_64);
-        $eq_other_Some_3_64 = $v5_seen + $eq_other_Some_3_64;
-        $sroa_s_repr_184 = array.new_fixed<u8>(10);
-        builtin::array_copy<u8>($load_3, $eq_other_Some_3_64, $sroa_s_repr_184, 0, 1);
+        builtin::array_copy<u8>($sroa_s_repr_185, $eq_other_Some_3_65, $load_3, 0, 43);
+        $eq_other_Some_3_65 = $local_25.used;
+        $v5_seen = "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"($local_27, 1 + $eq_other_Some_3_65);
+        builtin::array_copy<u8>(local.tee $load_3($local_27.repr), $v5_seen, $local_25.repr, 0, $eq_other_Some_3_65);
+        $eq_other_Some_3_65 = $v5_seen + $eq_other_Some_3_65;
+        $sroa_s_repr_185 = array.new_fixed<u8>(10);
+        builtin::array_copy<u8>($load_3, $eq_other_Some_3_65, $sroa_s_repr_185, 0, 1);
         "core:rt/panic"($local_27.repr, $local_27.used);
         unreachable;
     }

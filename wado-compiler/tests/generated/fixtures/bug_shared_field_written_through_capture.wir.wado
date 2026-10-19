@@ -125,11 +125,12 @@ import fn wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code 
 import fn wasi/stream-drop-readable from "wasi/stream-drop-readable";
 
 fn "bug_shared_field_written_through_capture.wado/$cm_export__$test_0_a_write_through_a_closure_capture_reaches_the_field"() {
-    let $v0: i32;
     let elements: ref Array<i32>;
-    if @unlikely(local.tee $v0("bug_shared_field_written_through_capture.wado/bug_shared_field_written_through_capture.wado/Holder::read_it$sroa[&mut(self.items)]"(struct.new "core:prelude//List<i32>" { repr: local.tee elements(array.new_fixed<i32>(1, 2, black_box(3))), used: builtin::array_len(elements) })) != 3) {
+    let used: i32;
+    used = builtin::array_len(local.tee elements(array.new_fixed<i32>(1, 2, black_box(3))));
+    if @unlikely(local.tee used("bug_shared_field_written_through_capture.wado/bug_shared_field_written_through_capture.wado/Holder::read_it$sroa[&mut(self.items)]"(struct.new "core:prelude//List<i32>" { repr: elements, used: used })) != 3) {
         cold_path;
-        "bug_shared_field_written_through_capture.wado/$test_0_a_write_through_a_closure_capture_reaches_the_field$cold0"($v0);
+        "bug_shared_field_written_through_capture.wado/$test_0_a_write_through_a_closure_capture_reaches_the_field$cold0"(used);
         unreachable;
     }
     "wasi/task-return"(0);

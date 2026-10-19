@@ -117,45 +117,45 @@ fn "dead_result_keeps_callee_heap_writes.wado/run"() with Stdout {
     let l: ref "core:prelude//List<i32>";
     let a: ref Array<i32>;
     let $local_6: ref "core:prelude/string.wado//String";
-    let self_18: i32;
-    let is_negative_24: bool;
-    let x_28: i64;
-    let $sroa_$f_buf_95: ref "core:prelude/string.wado//String";
+    let self_19: i32;
+    let is_negative_25: bool;
+    let x_29: i64;
+    let $sroa_$f_buf_96: ref "core:prelude/string.wado//String";
     "dead_result_keeps_callee_heap_writes.wado/bump$dae[return]"(local.tee c(struct.new "dead_result_keeps_callee_heap_writes.wado//Cell" { v: 0 }));
     "dead_result_keeps_callee_heap_writes.wado/shorten$dae[return]"(local.tee l(struct.new "core:prelude//List<i32>" { repr: array.new_fixed<i32>(1, 2, 3), used: 3 }));
     "dead_result_keeps_callee_heap_writes.wado/poke$dae[return]"(local.tee a(builtin::array_new<i32>(1)));
     if 0 < l.used {
         l.used = 0;
     }
-    $sroa_$f_buf_95 = local.tee $local_6(struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(50), used: 0 });
-    is_negative_24 = local.tee self_18(c.v) < 0;
-    self_18 = "core:prelude/primitive.wado/count_digits_u64"(local.tee x_28(x_28 = builtin::i64_extend_i32_s(self_18); select i64(x_28 < 0_i64, 0_i64 - x_28, x_28)));
-    is_negative_24 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$sroa[self.buf]$dae[alt_prefix]"($sroa_$f_buf_95, is_negative_24, self_18);
-    "core:prelude/primitive.wado/write_decimal_digits"($sroa_$f_buf_95.repr, is_negative_24, x_28, self_18);
-    if @unlikely(local.tee self_18($local_6.used + 1) > builtin::array_len($local_6.repr)) {
+    $sroa_$f_buf_96 = local.tee $local_6(struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(50), used: 0 });
+    is_negative_25 = local.tee self_19(c.v) < 0;
+    self_19 = "core:prelude/primitive.wado/count_digits_u64"(local.tee x_29(x_29 = builtin::i64_extend_i32_s(self_19); select i64(x_29 < 0_i64, 0_i64 - x_29, x_29)));
+    is_negative_25 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$sroa[self.buf]$dae[alt_prefix]"($sroa_$f_buf_96, is_negative_25, self_19);
+    "core:prelude/primitive.wado/write_decimal_digits"($sroa_$f_buf_96.repr, is_negative_25, x_29, self_19);
+    if @unlikely(local.tee self_19($local_6.used + 1) > builtin::array_len($local_6.repr)) {
         cold_path;
-        "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_6, self_18);
+        "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_6, self_19);
     }
-    is_negative_24 = $local_6.used;
-    $local_6.used = self_18;
-    builtin::array_copy<u8>($local_6.repr, is_negative_24, global:dead_result_keeps_callee_heap_writes.wado::$const_obj_4, 0, 1);
-    $sroa_$f_buf_95 = $local_6;
-    self_18 = local.tee is_negative_24(l.used) < 0;
-    is_negative_24 = "core:prelude/primitive.wado/count_digits_u64"(local.tee x_28(x_28 = builtin::i64_extend_i32_s(is_negative_24); select i64(x_28 < 0_i64, 0_i64 - x_28, x_28)));
-    self_18 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$sroa[self.buf]$dae[alt_prefix]"($sroa_$f_buf_95, self_18, is_negative_24);
-    "core:prelude/primitive.wado/write_decimal_digits"($sroa_$f_buf_95.repr, self_18, x_28, is_negative_24);
-    if @unlikely(local.tee is_negative_24($local_6.used + 1) > builtin::array_len($local_6.repr)) {
+    is_negative_25 = $local_6.used;
+    $local_6.used = self_19;
+    builtin::array_copy<u8>($local_6.repr, is_negative_25, global:dead_result_keeps_callee_heap_writes.wado::$const_obj_4, 0, 1);
+    $sroa_$f_buf_96 = $local_6;
+    self_19 = local.tee is_negative_25(l.used) < 0;
+    is_negative_25 = "core:prelude/primitive.wado/count_digits_u64"(local.tee x_29(x_29 = builtin::i64_extend_i32_s(is_negative_25); select i64(x_29 < 0_i64, 0_i64 - x_29, x_29)));
+    self_19 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$sroa[self.buf]$dae[alt_prefix]"($sroa_$f_buf_96, self_19, is_negative_25);
+    "core:prelude/primitive.wado/write_decimal_digits"($sroa_$f_buf_96.repr, self_19, x_29, is_negative_25);
+    if @unlikely(local.tee is_negative_25($local_6.used + 1) > builtin::array_len($local_6.repr)) {
         cold_path;
-        "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_6, is_negative_24);
+        "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_6, is_negative_25);
     }
-    self_18 = $local_6.used;
-    $local_6.used = is_negative_24;
-    builtin::array_copy<u8>($local_6.repr, self_18, global:dead_result_keeps_callee_heap_writes.wado::$const_obj_4, 0, 1);
-    $sroa_$f_buf_95 = $local_6;
-    is_negative_24 = local.tee self_18(builtin::array_get_value<i32>(a, 0)) < 0;
-    self_18 = "core:prelude/primitive.wado/count_digits_u64"(local.tee x_28(x_28 = builtin::i64_extend_i32_s(self_18); select i64(x_28 < 0_i64, 0_i64 - x_28, x_28)));
-    is_negative_24 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$sroa[self.buf]$dae[alt_prefix]"($sroa_$f_buf_95, is_negative_24, self_18);
-    "core:prelude/primitive.wado/write_decimal_digits"($sroa_$f_buf_95.repr, is_negative_24, x_28, self_18);
+    self_19 = $local_6.used;
+    $local_6.used = is_negative_25;
+    builtin::array_copy<u8>($local_6.repr, self_19, global:dead_result_keeps_callee_heap_writes.wado::$const_obj_4, 0, 1);
+    $sroa_$f_buf_96 = $local_6;
+    is_negative_25 = local.tee self_19(builtin::array_get_value<i32>(a, 0)) < 0;
+    self_19 = "core:prelude/primitive.wado/count_digits_u64"(local.tee x_29(x_29 = builtin::i64_extend_i32_s(self_19); select i64(x_29 < 0_i64, 0_i64 - x_29, x_29)));
+    is_negative_25 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$sroa[self.buf]$dae[alt_prefix]"($sroa_$f_buf_96, is_negative_25, self_19);
+    "core:prelude/primitive.wado/write_decimal_digits"($sroa_$f_buf_96.repr, is_negative_25, x_29, self_19);
     "core:cli/println"($local_6.repr, $local_6.used);
 }
 

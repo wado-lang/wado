@@ -782,7 +782,12 @@ impl<'a> WirContext<'a> {
     }
 
     /// [`Self::slot_type`] for the slot a box holds its value in.
-    pub fn unboxed_slot_type(&self, type_table: &TypeTable, type_id: TypeId, ty: WirType) -> WirType {
+    pub fn unboxed_slot_type(
+        &self,
+        type_table: &TypeTable,
+        type_id: TypeId,
+        ty: WirType,
+    ) -> WirType {
         if self.is_affine(type_table, type_id) {
             ty.as_nullable()
         } else {

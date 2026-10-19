@@ -986,7 +986,12 @@ impl FunctionTranslator<'_, '_> {
 
     /// The value a read of a slot of WIR type `slot_ty` and type `type_id`
     /// yields from `held`: unboxed where the slot holds it in a box.
-    pub(super) fn read_slot(&mut self, held: WirInstr, slot_ty: &WirType, type_id: TypeId) -> WirInstr {
+    pub(super) fn read_slot(
+        &mut self,
+        held: WirInstr,
+        slot_ty: &WirType,
+        type_id: TypeId,
+    ) -> WirInstr {
         match self.held_box(slot_ty, type_id) {
             Some(slot_box) => self.unbox_slot(held, slot_box),
             None => held,
@@ -1027,7 +1032,9 @@ impl FunctionTranslator<'_, '_> {
         seq.push(WirInstr::If {
             condition: Box::new(WirInstr::RefIsNull(Box::new(held.clone()))),
             result: None,
-            then_body: vec![install(self.struct_new(slot_box.clone(), vec![value.clone()]))],
+            then_body: vec![install(
+                self.struct_new(slot_box.clone(), vec![value.clone()]),
+            )],
             else_body: Some(vec![WirInstr::StructSet {
                 type_id: slot_box,
                 field_name: "value".to_string(),
@@ -1130,7 +1137,12 @@ impl FunctionTranslator<'_, '_> {
 
     /// `value`, of type `type_id`, as a slot of WIR type `slot_ty` holds it:
     /// in a new box where it holds one.
-    pub(super) fn into_slot(&self, value: WirInstr, slot_ty: &WirType, type_id: TypeId) -> WirInstr {
+    pub(super) fn into_slot(
+        &self,
+        value: WirInstr,
+        slot_ty: &WirType,
+        type_id: TypeId,
+    ) -> WirInstr {
         match self.held_box(slot_ty, type_id) {
             Some(slot_box) => self.struct_new(slot_box, vec![value]),
             None => value,

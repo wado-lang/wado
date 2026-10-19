@@ -49,19 +49,19 @@ struct generic_fn_ref_with_fn_bound_param.wado//$Closure_3 {  // TypeId(9)}
 
 struct generic_fn_ref_with_fn_bound_param.wado//$Closure_1 {  // TypeId(10)}
 
-type "functype/$canonical_closure_fn_0" = fn(ref null struct, i32) -> bool;  // TypeId(11)
+type "functype/$canonical_callback_fn" = fn(ref null struct, ref null struct);  // TypeId(11)
 
-type "functype/$canonical_callback_fn" = fn(ref null struct, ref null struct);  // TypeId(12)
-
-struct canonical//CanonicalInspectableBase {  // TypeId(13)
+struct canonical//CanonicalInspectableBase {  // TypeId(12)
     env: ref null struct,
     inspect: ref "functype/$canonical_callback_fn",
 }
 
-struct canonical//CanonicalClosure_0 {  // TypeId(14)
+type "functype/$canonical_closure_fn_1" = fn(ref null struct, i32) -> bool;  // TypeId(13)
+
+struct canonical//CanonicalClosure_1 {  // TypeId(14)
     env: ref null struct,
     inspect: ref "functype/$canonical_callback_fn",
-    func: ref "functype/$canonical_closure_fn_0",
+    func: ref "functype/$canonical_closure_fn_1",
 }
 
 type "functype//mem/realloc" = fn(i32, i32, i32, i32) -> i32;  // TypeId(15)
@@ -194,10 +194,10 @@ fn "generic_fn_ref_with_fn_bound_param.wado/$cm_export__$test_0"() {
     let offset_33: i32;
     let offset_73: i32;
     let $sroa_s_repr_114: ref Array<u8>;
-    $v0_1 = struct.new "canonical//CanonicalClosure_0" { env: struct.new "generic_fn_ref_with_fn_bound_param.wado//$Closure_1" {  }, inspect: ref.func "closure/generic_fn_ref_with_fn_bound_param.wado/$closure_inspect_wrapper_0", func: ref.func "closure/generic_fn_ref_with_fn_bound_param.wado/$closure_wrapper_0" };
+    $v0_1 = struct.new "canonical//CanonicalClosure_1" { env: struct.new "generic_fn_ref_with_fn_bound_param.wado//$Closure_1" {  }, inspect: ref.func "closure/generic_fn_ref_with_fn_bound_param.wado/$closure_inspect_wrapper_0", func: ref.func "closure/generic_fn_ref_with_fn_bound_param.wado/$closure_wrapper_0" };
     if @unlikely(local.tee $cond_2(block -> bool {
-        let $indirect_call_1: ref "canonical//CanonicalClosure_0";
-        call_ref "functype/$canonical_closure_fn_0"($indirect_call_1.func, local.tee $indirect_call_1(ref.cast "canonical//CanonicalClosure_0"($v0_1)).env, 1);
+        let $indirect_call_1: ref "canonical//CanonicalClosure_1";
+        call_ref "functype/$canonical_closure_fn_1"($indirect_call_1.func, local.tee $indirect_call_1(ref.cast "canonical//CanonicalClosure_1"($v0_1)).env, 1);
     }) == 0) {
         cold_path;
         $cond_2 = "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"(local.tee $local_7(struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(134), used: 0 }), 71);
@@ -242,9 +242,9 @@ condition: here(\"a\", |n| n > 0)
         "core:rt/panic"($local_7.repr, $local_7.used);
         unreachable;
     }
-    $v0_1 = struct.new "canonical//CanonicalClosure_0" { env: struct.new "generic_fn_ref_with_fn_bound_param.wado//$Closure_3" {  }, inspect: ref.func "closure/generic_fn_ref_with_fn_bound_param.wado/$closure_inspect_wrapper_1", func: ref.func "closure/generic_fn_ref_with_fn_bound_param.wado/$closure_wrapper_1" };
+    $v0_1 = struct.new "canonical//CanonicalClosure_1" { env: struct.new "generic_fn_ref_with_fn_bound_param.wado//$Closure_3" {  }, inspect: ref.func "closure/generic_fn_ref_with_fn_bound_param.wado/$closure_inspect_wrapper_1", func: ref.func "closure/generic_fn_ref_with_fn_bound_param.wado/$closure_wrapper_1" };
     if @unlikely((local.tee $cond_2(block -> bool {
-        call_ref "functype/$canonical_closure_fn_0"($indirect_call_1.func, local.tee $indirect_call_1(ref.cast "canonical//CanonicalClosure_0"($v0_1)).env, 1);
+        call_ref "functype/$canonical_closure_fn_1"($indirect_call_1.func, local.tee $indirect_call_1(ref.cast "canonical//CanonicalClosure_1"($v0_1)).env, 1);
     }) == 0) == 0) {
         cold_path;
         offset_33 = "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"(local.tee $local_7(struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(176), used: 0 }), 71);

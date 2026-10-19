@@ -580,7 +580,9 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self, min_ca
 }
 
 fn "core:prelude/list.wado/core:prelude/list.wado/List<core:prelude/string.wado/String>^core:prelude/traits.wado/From<Array<T>>::from"(elements) {
-    return struct.new "core:prelude//List<core:prelude/string.wado/String>" { repr: elements, used: builtin::array_len(elements) };
+    let used: i32;
+    used = builtin::array_len(elements);
+    return struct.new "core:prelude//List<core:prelude/string.wado/String>" { repr: elements, used: used };
 }
 
 fn "core:prelude/list.wado/core:prelude/list.wado/List<core:prelude/string.wado/String>::grow"(self) {

@@ -151,11 +151,11 @@ type "functype//core:prelude/string.wado/core:prelude/string.wado/String::push_s
 
 type "functype//core:prelude/format.wado/&reflect_newtype_inherits_kind.wado/C^core:prelude/traits.wado/Inspect::inspect$sroa[f.buf]" = fn(ref "core:prelude/types.wado//Box<reflect_newtype_inherits_kind.wado/Color>", ref "core:prelude/string.wado//String");  // TypeId(63)
 
-type "functype//core:prelude/traits.wado/reflect_newtype_inherits_kind.wado/C^core:prelude/traits.wado/Inspect::inspect$sroa[self.value,f.buf]" = fn("reflect_newtype_inherits_kind.wado//enum:Color", ref "core:prelude/string.wado//String");  // TypeId(64)
+type "functype//core:prelude/primitive.wado/i32::fmt_decimal$sroa[self.value]" = fn(i32, ref "core:prelude/format.wado//Formatter");  // TypeId(64)
 
-type "functype//core:prelude/primitive.wado/i32::fmt_decimal$sroa[self.value]" = fn(i32, ref "core:prelude/format.wado//Formatter");  // TypeId(65)
+type "functype//core:prelude/primitive.wado/u32::fmt_decimal$sroa[self.value]" = fn(u32, ref "core:prelude/format.wado//Formatter");  // TypeId(65)
 
-type "functype//core:prelude/primitive.wado/u32::fmt_decimal$sroa[self.value]" = fn(u32, ref "core:prelude/format.wado//Formatter");  // TypeId(66)
+type "functype//core:prelude/traits.wado/reflect_newtype_inherits_kind.wado/C^core:prelude/traits.wado/Inspect::inspect$sroa[self.value,f.buf]" = fn("reflect_newtype_inherits_kind.wado//enum:Color", ref "core:prelude/string.wado//String");  // TypeId(66)
 
 type "functype//core:prelude/traits.wado/reflect_newtype_inherits_kind.wado/Color^core:prelude/traits.wado/Inspect::inspect$sroa[self.value,f.buf]" = fn("reflect_newtype_inherits_kind.wado//enum:Color", ref "core:prelude/string.wado//String");  // TypeId(67)
 
@@ -2119,28 +2119,6 @@ fn "core:prelude/format.wado/&reflect_newtype_inherits_kind.wado/C^core:prelude/
     "core:prelude/traits.wado/reflect_newtype_inherits_kind.wado/C^core:prelude/traits.wado/Inspect::inspect$sroa[self.value,f.buf]"(self.value, f);
 }
 
-fn "core:prelude/traits.wado/reflect_newtype_inherits_kind.wado/C^core:prelude/traits.wado/Inspect::inspect$sroa[self.value,f.buf]"(self, f) {
-    let $load_3: ref Array<u8>;
-    let start_16: i32;
-    let $sroa_other_repr_35: ref Array<u8>;
-    "core:prelude/traits.wado/reflect_newtype_inherits_kind.wado/Color^core:prelude/traits.wado/Inspect::inspect$sroa[self.value,f.buf]"(self, f);
-    $sroa_other_repr_35 = array.new_fixed<u8>(32, 97, 115, 32);
-    if @unlikely(local.tee self(f.used + 4) > builtin::array_len(f.repr)) {
-        cold_path;
-        "core:prelude/string.wado/core:prelude/string.wado/String::grow"(f, self);
-    }
-    start_16 = f.used;
-    f.used = self;
-    builtin::array_copy<u8>(local.tee $load_3(f.repr), start_16, $sroa_other_repr_35, 0, 4);
-    if @unlikely(local.tee start_16(f.used + 1) > builtin::array_len($load_3)) {
-        cold_path;
-        "core:prelude/string.wado/core:prelude/string.wado/String::grow"(f, start_16);
-    }
-    self = f.used;
-    f.used = start_16;
-    builtin::array_copy<u8>(f.repr, self, array.new_fixed<u8>(67), 0, 1);
-}
-
 fn "core:prelude/primitive.wado/i32::fmt_decimal$sroa[self.value]"(self, f) {
     let is_negative: bool;
     let x: i64;
@@ -2164,6 +2142,28 @@ fn "core:prelude/primitive.wado/u32::fmt_decimal$sroa[self.value]"(self, f) {
         "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>"(f, 0, $mv_field_3, 0, self);
     };
     "core:prelude/primitive.wado/write_decimal_digits"(f.buf.repr, offset, value, self);
+}
+
+fn "core:prelude/traits.wado/reflect_newtype_inherits_kind.wado/C^core:prelude/traits.wado/Inspect::inspect$sroa[self.value,f.buf]"(self, f) {
+    let $load_3: ref Array<u8>;
+    let start_16: i32;
+    let $sroa_other_repr_35: ref Array<u8>;
+    "core:prelude/traits.wado/reflect_newtype_inherits_kind.wado/Color^core:prelude/traits.wado/Inspect::inspect$sroa[self.value,f.buf]"(self, f);
+    $sroa_other_repr_35 = array.new_fixed<u8>(32, 97, 115, 32);
+    if @unlikely(local.tee self(f.used + 4) > builtin::array_len(f.repr)) {
+        cold_path;
+        "core:prelude/string.wado/core:prelude/string.wado/String::grow"(f, self);
+    }
+    start_16 = f.used;
+    f.used = self;
+    builtin::array_copy<u8>(local.tee $load_3(f.repr), start_16, $sroa_other_repr_35, 0, 4);
+    if @unlikely(local.tee start_16(f.used + 1) > builtin::array_len($load_3)) {
+        cold_path;
+        "core:prelude/string.wado/core:prelude/string.wado/String::grow"(f, start_16);
+    }
+    self = f.used;
+    f.used = start_16;
+    builtin::array_copy<u8>(f.repr, self, array.new_fixed<u8>(67), 0, 1);
 }
 
 fn "core:prelude/traits.wado/reflect_newtype_inherits_kind.wado/Color^core:prelude/traits.wado/Inspect::inspect$sroa[self.value,f.buf]"(self, f) {

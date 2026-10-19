@@ -190,29 +190,30 @@ fn "test_world_variant_generic.wado/$cm_export__$test_0_to_tree_with_variant_wal
     let $local_4: ref "core:prelude/string.wado//String";
     let tok: ref "./sub/test_world_variant_generic_helper.wado//TokenData";
     let children: ref "core:prelude//List<./sub/test_world_variant_generic_helper.wado/CstChild>";
-    let elements_13: ref "Array<./sub/test_world_variant_generic_helper.wado/CstChild>";
+    let elements_14: ref "Array<./sub/test_world_variant_generic_helper.wado/CstChild>";
+    let used_15: i32;
     let a: ref Array<u8>;
-    let a_end: i32;
     let b: ref Array<u8>;
     let i: i32;
-    let f_46: ref "core:prelude/format.wado//Formatter";
-    let offset_57: i32;
+    let f_48: ref "core:prelude/format.wado//Formatter";
+    let offset_59: i32;
     tok = struct.new "./sub/test_world_variant_generic_helper.wado//TokenData" { kind: 1, text: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(120), used: 1 }, leading: struct.new "core:prelude//List<./sub/test_world_variant_generic_helper.wado/TokenData>" { repr: array.new_fixed<ref "./sub/test_world_variant_generic_helper.wado//TokenData">(), used: 0 } };
-    children = struct.new "core:prelude//List<./sub/test_world_variant_generic_helper.wado/CstChild>" { repr: local.tee elements_13(array.new_fixed<ref "./sub/test_world_variant_generic_helper.wado//CstChild">(struct.new "./sub/test_world_variant_generic_helper.wado//CstChild::TokenChild" { discriminant: 0, payload_0: tok })), used: builtin::array_len(elements_13) };
+    used_15 = builtin::array_len(local.tee elements_14(array.new_fixed<ref "./sub/test_world_variant_generic_helper.wado//CstChild">(struct.new "./sub/test_world_variant_generic_helper.wado//CstChild::TokenChild" { discriminant: 0, payload_0: tok })));
+    children = struct.new "core:prelude//List<./sub/test_world_variant_generic_helper.wado/CstChild>" { repr: elements_14, used: used_15 };
     node = struct.new "./sub/test_world_variant_generic_helper.wado//NodeData" { name: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(114, 111, 111, 116), used: 4 }, children: children };
     let $mv$result$name: ref "core:prelude/string.wado//String";
     multivalue_bind [$mv$result$name, children] = "./sub/test_world_variant_generic_helper.wado/to_tree"(node);
     if @unlikely(local.tee i($inline_core_prelude_array_wado_seq_eq_u8__7: block -> bool {
         a = $mv$result$name.repr;
-        a_end = $mv$result$name.used;
+        used_15 = $mv$result$name.used;
         b = array.new_data<u8>("counted:2");
-        if a_end != 9 {
+        if used_15 != 9 {
             break $inline_core_prelude_array_wado_seq_eq_u8__7: 0;
         }
         i = 0;
         b2: block {
             l3: loop {
-                break_if b2 i >= a_end;
+                break_if b2 i >= used_15;
                 if builtin::array_get_value<u8>(a, i) != builtin::array_get_value<u8>(b, i) {
                     break $inline_core_prelude_array_wado_seq_eq_u8__7: 0;
                 }
@@ -227,30 +228,30 @@ fn "test_world_variant_generic.wado/$cm_export__$test_0_to_tree_with_variant_wal
         b = $local_4.repr;
         a = array.new_data<u8>("Assertion failed in ");
         builtin::array_copy<u8>(b, i, a, 0, 20);
-        a_end = i + 20;
+        used_15 = i + 20;
         a = array.new_data<u8>("$test_0_to_tree_with_variant_walk");
-        builtin::array_copy<u8>(b, a_end, a, 0, 33);
-        a_end = i + 53;
+        builtin::array_copy<u8>(b, used_15, a, 0, 33);
+        used_15 = i + 53;
         a = array.new_fixed<u8>(32, 97, 116, 32);
-        builtin::array_copy<u8>(b, a_end, a, 0, 4);
-        a_end = i + 57;
+        builtin::array_copy<u8>(b, used_15, a, 0, 4);
+        used_15 = i + 57;
         a = array.new_data<u8>("test_world_variant_generic.wado");
-        builtin::array_copy<u8>(b, a_end, a, 0, 31);
+        builtin::array_copy<u8>(b, used_15, a, 0, 31);
         i = i + 88;
         a = array.new_fixed<u8>(58);
         builtin::array_copy<u8>(b, i, a, 0, 1);
-        f_46 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::new"($local_4);
-        "core:prelude/primitive.wado/i32::fmt_decimal$sroa[self.value]"(6, f_46);
+        f_48 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::new"($local_4);
+        "core:prelude/primitive.wado/i32::fmt_decimal$sroa[self.value]"(6, f_48);
         "core:prelude/string.wado/core:prelude/string.wado/String^core:prelude/string.wado/AsStrSlice::internal_append_to"(struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(58, 32), used: 2 }, $local_4);
         i = $mv$result$name.used;
-        a_end = "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"($local_4, 52 + i);
-        builtin::array_copy<u8>(local.tee a($local_4.repr), a_end, $mv$result$name.repr, 0, i);
-        offset_57 = a_end + i;
+        used_15 = "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"($local_4, 52 + i);
+        builtin::array_copy<u8>(local.tee a($local_4.repr), used_15, $mv$result$name.repr, 0, i);
+        offset_59 = used_15 + i;
         b = array.new_data<u8>("
 condition: result.name == \"counted:2\"
 ");
-        builtin::array_copy<u8>(a, offset_57, b, 0, 39);
-        i = a_end + (39 + i);
+        builtin::array_copy<u8>(a, offset_59, b, 0, 39);
+        i = used_15 + (39 + i);
         b = array.new_data<u8>("result.name: ");
         builtin::array_copy<u8>(a, i, b, 0, 13);
         "core:prelude/format.wado/core/prelude/format.wado/inspect_text<core:prelude/string.wado/String>"("core:prelude/format.wado/core:prelude/format.wado/Formatter::new"($local_4), $mv$result$name.repr, $mv$result$name.used);

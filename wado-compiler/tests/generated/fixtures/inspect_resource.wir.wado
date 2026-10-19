@@ -237,6 +237,7 @@ fn "inspect_resource.wado/$test_1_resource_flows_through_result__unwrap_err_insp
     let self_27: ref null "core:prelude//$Resource";
     let new_used_41: i32;
     let start_42: i32;
+    let self_68: ref null "core:prelude//$Resource";
     let b: ref Array<u8>;
     let f_136: ref "core:prelude/format.wado//Formatter";
     let $sroa_$pattern_temp_0_0_161: ref null "core:prelude//$Resource";
@@ -279,8 +280,9 @@ fn "inspect_resource.wado/$test_1_resource_flows_through_result__unwrap_err_insp
         unreachable;
     }
     r = struct.new "core:prelude/types.wado//Result<i32,core:prelude/types.wado/StreamWritable<u8>>::Err" { discriminant: 1, payload_0: self_27 = $sroa_$pattern_temp_0_1_162; $sroa_$pattern_temp_0_1_162 = ref.null none; self_27 };
+    self_27 = ref.null none;
     $mv_arg_4 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
-    self_27 = "core:prelude/types.wado/core:prelude/types.wado/Result<i32,core:prelude/types.wado/StreamWritable<u8>>::unwrap_err"($moved_16 = r; r = ref.null none; $moved_16);
+    self_68 = local.tee self_27("core:prelude/types.wado/core:prelude/types.wado/Result<i32,core:prelude/types.wado/StreamWritable<u8>>::unwrap_err"($moved_16 = r; r = ref.null none; $moved_16));
     if @unlikely(local.tee new_used_41(0 + 21) > builtin::array_len($mv_arg_4.repr)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"($mv_arg_4, new_used_41);
@@ -288,7 +290,7 @@ fn "inspect_resource.wado/$test_1_resource_flows_through_result__unwrap_err_insp
     start_304 = $mv_arg_4.used;
     $mv_arg_4.used = new_used_41;
     builtin::array_copy<u8>(local.tee $load_2($mv_arg_4.repr), start_304, global:inspect_resource.wado::$const_obj_14, 0, 21);
-    $cm_pair_20 = builtin::i64_extend_i32_u(self_27.value);
+    $cm_pair_20 = builtin::i64_extend_i32_u(self_68.value);
     new_used_41 = $inline_count_digits_u64_base_28: block -> i32 {
         if $cm_pair_20 == 0_i64 {
             break $inline_count_digits_u64_base_28: 1;

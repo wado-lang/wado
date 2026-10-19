@@ -147,7 +147,11 @@ pub fn pair_comparisons(program: &mut Program, eq: TraitDeclId, ord: TraitDeclId
 /// The bound each parameter of the derived impl carries: `trait_` where a
 /// member mentions it, none otherwise. A reference copies whatever it points
 /// to, so for `Copyable` a mention behind one does not count.
-fn derived_bounds(trait_: TraitDeclId, decl: &Declaration, copyable: bool) -> Vec<Vec<TraitDeclId>> {
+fn derived_bounds(
+    trait_: TraitDeclId,
+    decl: &Declaration,
+    copyable: bool,
+) -> Vec<Vec<TraitDeclId>> {
     (0..decl.params)
         .map(|index| {
             let mentioned = decl.members.iter().any(|m| {
