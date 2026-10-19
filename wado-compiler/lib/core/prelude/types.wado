@@ -213,10 +213,11 @@ pub resource Future<T> {
     #[cm("future-new")]
     fn new() -> [Future<T>, FutureWritable<T>];
 
-    /// Read the value from the future.
-    /// Returns Some(value) when fulfilled, None if the writer dropped without writing.
+    /// Read the value from the future: Some(value) when fulfilled, None if the
+    /// writer dropped without writing. A readable end is read once, so the read
+    /// consumes it.
     #[cm("future-read")]
-    fn read(&self) -> Option<T>;
+    fn read(self) -> Option<T>;
 
     /// Cancel an in-progress read. Blocks until cancellation completes.
     /// Traps if this end is still joined to a `WaitableSet` — leave the set

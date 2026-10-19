@@ -42,7 +42,7 @@ export fn run() with Stdout {
     with &mut c do {
         let [rx, tx] = Future::<i32>::new();
         tx.write(7);
-        assert rx.read() matches { Some(7) };
+        let _unread = rx;
     }
     println(`drops=${c.drops}`);
 }

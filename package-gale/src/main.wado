@@ -156,7 +156,6 @@ fn write_output<S: AsStrSlice, S1: AsStrSlice>(path: S, source: S1) -> Result<()
     if let Some(Err(_)) = sub.read() {
         return Result::Err(`gale: ${path}: write failed`);
     }
-    sub.drop();
     return Result::Ok(());
 }
 
@@ -310,7 +309,6 @@ fn read_all(file: &Descriptor) -> Result<ByteList, ErrorCode> {
     let result = read_stream.read_to_end_bytes();
     read_stream.drop();
     let read_result = done.read();
-    done.drop();
     if let Some(Err(e)) = read_result {
         return Result::Err(e);
     }

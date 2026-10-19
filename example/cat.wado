@@ -70,9 +70,7 @@ fn cat_file(dir: &Descriptor, path: String) -> Result<(), String> with Stdout {
 fn copy_to_stdout<E>(data: Stream<u8>, read_done: Future<Result<(), E>>) -> Result<(), String> with Stdout {
     let copied = Stdout::write_via_stream(data);
     let written = copied.read();
-    copied.drop();
     let read = read_done.read();
-    read_done.drop();
     if let Some(Err(e)) = read {
         return Result::Err(`read failed: ${e:?}`);
     }

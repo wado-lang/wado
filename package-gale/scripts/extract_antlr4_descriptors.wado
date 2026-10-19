@@ -448,7 +448,6 @@ fn read_file_to_string<S: AsStrSlice>(dir: &Descriptor, path: S) -> Result<Strin
     // Consume the completion future so a mid-stream error is distinguished
     // from clean EOF instead of committing a silently truncated grammar.
     let read_result = done.read();
-    done.drop();
     if let Some(Err(e)) = read_result {
         return Result::Err(e);
     }
@@ -478,7 +477,6 @@ fn write_file_string<S: AsStrSlice, S1: AsStrSlice>(dir: &Descriptor, path: S, c
     // Await the completion future so a failed or partial write is reported
     // instead of returning Ok(()).
     let write_result = sub.read();
-    sub.drop();
     if let Some(Err(e)) = write_result {
         return Result::Err(e);
     }

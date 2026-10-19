@@ -5,7 +5,7 @@
 // single shared `stored` slot; the bundled `with &mut f do` form
 // installs both handlers at once for the duration of the `do` block.
 // Inside the block, `Future::<i32>::new()` / `tx.write(value)` /
-// `rx.read()` / `rx.drop()` all dispatch through the
+// `rx.read()` all dispatch through the
 // per-monomorphisation `$effect_dispatch__<module>/Future<i32>__*` /
 // `$effect_dispatch__<module>/FutureWritable<i32>__*` wrappers into
 // `MockFuture`'s methods rather than the CM canonical
@@ -64,7 +64,6 @@ export fn run() with Stdout {
         tx.write(42);
         let value = rx.read();
         assert value matches { Some(42) };
-        rx.drop();
     }
     assert f.write_count == 1;
     assert f.read_count == 1;
