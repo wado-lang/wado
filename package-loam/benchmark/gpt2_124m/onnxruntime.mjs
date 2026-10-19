@@ -9,9 +9,9 @@
 import { readFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 
-const model = new URL('../../package-loam/example/gpt2-124m/', import.meta.url);
+const model = new URL('../../example/gpt2-124m/', import.meta.url);
 // The onnxruntime-node that Loam's oracles pin.
-const ort = createRequire(new URL('../../package-loam/package.json', import.meta.url))('onnxruntime-node');
+const ort = createRequire(new URL('../../package.json', import.meta.url))('onnxruntime-node');
 
 const PROMPT = 'Hello, my name is';
 const STEPS = 8;
