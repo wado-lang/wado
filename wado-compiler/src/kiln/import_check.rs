@@ -1,24 +1,27 @@
 //! Kiln generator import-refusal check: under `core:kiln/generator` the package
-//! must import no WASI interface, the sandbox guarantee (WEP 2026-04-12) resting
-//! on the generator being deterministic. `run_generator`'s runtime link refuses
-//! any `wasi:*` CM import as depth.
+//! must import no WASI interface the world does not, the sandbox guarantee
+//! (WEP 2026-04-12) resting on the generator being deterministic.
+//! `run_generator`'s runtime link refuses any other `wasi:*` CM import as depth.
 use crate::ast::Visibility;
 use crate::ast::{
     AstId, Expr, GenericType, IdentExpr, Item, LetStmt, Module, NamedType, Param, Pattern,
     SelfKind, Stmt, StrLit, StructLiteralExpr, StructLiteralField, Type, UseDecl, UseItem,
 };
 use crate::compiler_host::{Code, CompilerHost, Diagnostic, DiagnosticSpan, Severity};
-use crate::component_model::SourceInterfaceBatch;
+use crate::component_model::{CmInterfaceRegistry, SourceInterfaceBatch};
 use crate::hashmap::IndexMap;
 use crate::logger::Logger;
 use crate::module_source::ModuleSource;
 use crate::token::Span;
 use crate::wir::{ImportEntry, ImportKind};
+use crate::world_registry::{WorldInfo, fq_name_package};
 
 pub const KILN_GENERATOR_WORLD: &str = "core:kiln/generator";
 
 /// The shared CM interface FQ that carries `InputFile` / `Response` / `Error`.
 pub const KILN_TYPES_INTERFACE: &str = "core:kiln/types@0.1.0";
+
+const WASI_SCHEME: &str = "wasi:";
 
 /// Reject the WASI interfaces the author's own `use` names, blaming that span.
 /// Returns the count of rejected sites; zero means the generator passed.
@@ -31,34 +34,43 @@ pub fn check_loaded<H: CompilerHost>(
     if target_world != Some(KILN_GENERATOR_WORLD) {
         return 0;
     }
+    let (_, worlds) = CmInterfaceRegistry::build_from_stdlib();
+    let world = worlds
+        .get(KILN_GENERATOR_WORLD)
+        .expect("the stdlib declares the generator world");
+    let provided = provided_wasi_packages(world);
 
     let mut count = 0;
     for (source, module) in modules {
         if !should_check(source) {
             continue;
         }
-        count += check_module(module, entry_module, source, logger);
+        count += check_module(module, &provided, entry_module, source, logger);
     }
     count
 }
 
-/// Reject the WASI interfaces the planned imports ask the Kiln linker for,
-/// which is where a `core:*` module reaching WASI on the generator's behalf
-/// first shows. Returns the count; zero means the generator links.
+/// Reject the WASI interfaces the planned imports ask the Kiln linker for that
+/// the generator world does not import, which is where a `core:*` module
+/// reaching WASI on the generator's behalf first shows. Returns the count; zero
+/// means the generator links.
 pub fn check_cm_imports<H: CompilerHost>(
-    is_generator_world: bool,
+    generator_world: Option<&WorldInfo>,
     import_plan: &[ImportEntry],
     logger: &Logger<'_, H>,
 ) -> usize {
-    if !is_generator_world {
+    let Some(world) = generator_world else {
         return 0;
-    }
+    };
 
     let mut count = 0;
     for entry in import_plan {
         // A shared-types instance bears no function, so it asks the linker for
         // nothing: every generator already instantiates with `wasi:cli/types`.
-        if !entry.fq.starts_with("wasi:") || matches!(entry.kind, ImportKind::SharedTypes) {
+        if !entry.fq.starts_with(WASI_SCHEME)
+            || matches!(entry.kind, ImportKind::SharedTypes)
+            || world.imports_cm_interface(&entry.fq)
+        {
             continue;
         }
         let _ = logger.error(Diagnostic {
@@ -66,9 +78,8 @@ pub fn check_cm_imports<H: CompilerHost>(
             code: Code::KilnGeneratorForbiddenImport,
             message: format!(
                 "kiln generator imports `{fq}`, which no `use` in it names — a `core:*` module \
-                 reaches WASI on its behalf. The generator linker offers only \
-                 `core:kiln/kiln-host`, so this component cannot instantiate. \
-                 See WEP 2026-04-12 §\"Design principles\".",
+                 reaches WASI on its behalf. The generator world does not import it, so this \
+                 component cannot instantiate. See WEP 2026-04-12 §\"Design principles\".",
                 fq = entry.fq,
             ),
             span: None,
@@ -76,6 +87,20 @@ pub fn check_cm_imports<H: CompilerHost>(
         count += 1;
     }
     count
+}
+
+/// The WASI packages `world` imports an interface of, by name:
+/// `wasi:random/insecure-seed@0.3.0` gives `random`.
+fn provided_wasi_packages(world: &WorldInfo) -> Vec<&str> {
+    let mut packages: Vec<&str> = world
+        .imports
+        .iter()
+        .filter_map(|import| import.cm_interface_fq.as_deref())
+        .filter(|fq| fq.starts_with(WASI_SCHEME))
+        .map(fq_name_package)
+        .collect();
+    packages.dedup();
+    packages
 }
 
 /// Rewrite a kiln generator's `fn generate(req: Request<T>)` into the
@@ -368,6 +393,7 @@ fn should_check(source: &ModuleSource) -> bool {
 
 fn check_module<H: CompilerHost>(
     module: &Module,
+    provided_wasi: &[&str],
     entry_module: &ModuleSource,
     this: &ModuleSource,
     logger: &Logger<'_, H>,
@@ -375,17 +401,21 @@ fn check_module<H: CompilerHost>(
     let mut count = 0;
     for item in &module.items {
         if let Item::Use(decl) = item
-            && let Some(reason) = forbid_reason(&decl.source)
+            && let Some(reason) = forbid_reason(&decl.source, provided_wasi)
         {
             let which = if this == entry_module {
                 "entry module".to_string()
             } else {
                 format!("module `{this}`")
             };
+            let provided = provided_wasi
+                .iter()
+                .map(|package| format!("`{WASI_SCHEME}{package}`, "))
+                .collect::<String>();
             let message = format!(
                 "kiln generator `{which}` imports `{src}`: {reason}. \
                  Generators must be deterministic and can only import \
-                 `core:*` modules and project-relative paths. \
+                 `core:*` modules, {provided}and project-relative paths. \
                  See WEP 2026-04-12 §\"Design principles\".",
                 src = decl.source,
             );
@@ -406,10 +436,13 @@ fn check_module<H: CompilerHost>(
 }
 
 /// Return `Some(reason)` when `source` is not permitted inside a Kiln
-/// generator package.
-fn forbid_reason(source: &str) -> Option<&'static str> {
-    if source.starts_with("wasi:") {
-        return Some("WASI interfaces break determinism");
+/// generator package, whose world imports the WASI packages `provided_wasi`.
+fn forbid_reason(source: &str, provided_wasi: &[&str]) -> Option<&'static str> {
+    if let Some(path) = source.strip_prefix(WASI_SCHEME) {
+        let package = path.split_once('/').map_or(path, |(package, _)| package);
+        if !provided_wasi.contains(&package) {
+            return Some("the generator world does not import it, and WASI breaks determinism");
+        }
     }
     // Any explicit scheme other than `core:` or a project-relative path.
     // Bare URLs (`http://…`, `https://…`) are rejected on the same grounds.
@@ -423,22 +456,27 @@ fn forbid_reason(source: &str) -> Option<&'static str> {
 mod tests {
     use super::*;
 
+    const PROVIDED: &[&str] = &["random"];
+
     #[test]
-    fn forbid_reason_flags_wasi_and_http() {
-        assert!(forbid_reason("wasi:clocks").is_some());
-        assert!(forbid_reason("wasi:cli/stdout").is_some());
-        assert!(forbid_reason("https://example.com/foo.wado").is_some());
-        assert!(forbid_reason("http://example.com/foo.wado").is_some());
+    fn forbid_reason_flags_unprovided_wasi_and_http() {
+        assert!(forbid_reason("wasi:clocks", PROVIDED).is_some());
+        assert!(forbid_reason("wasi:cli/stdout", PROVIDED).is_some());
+        assert!(forbid_reason("wasi:randomness", PROVIDED).is_some());
+        assert!(forbid_reason("https://example.com/foo.wado", PROVIDED).is_some());
+        assert!(forbid_reason("http://example.com/foo.wado", PROVIDED).is_some());
     }
 
     #[test]
-    fn forbid_reason_allows_core_and_relative() {
-        assert!(forbid_reason("core:kiln").is_none());
-        assert!(forbid_reason("core:kiln/kiln_host.wado").is_none());
-        assert!(forbid_reason("core:prelude").is_none());
-        assert!(forbid_reason("core:json").is_none());
-        assert!(forbid_reason("core:cbor").is_none());
-        assert!(forbid_reason("./options.wado").is_none());
-        assert!(forbid_reason("../shared.wado").is_none());
+    fn forbid_reason_allows_core_provided_wasi_and_relative() {
+        assert!(forbid_reason("core:kiln", PROVIDED).is_none());
+        assert!(forbid_reason("core:kiln/kiln_host.wado", PROVIDED).is_none());
+        assert!(forbid_reason("core:prelude", PROVIDED).is_none());
+        assert!(forbid_reason("core:json", PROVIDED).is_none());
+        assert!(forbid_reason("core:cbor", PROVIDED).is_none());
+        assert!(forbid_reason("wasi:random", PROVIDED).is_none());
+        assert!(forbid_reason("wasi:random/insecure_seed.wado", PROVIDED).is_none());
+        assert!(forbid_reason("./options.wado", PROVIDED).is_none());
+        assert!(forbid_reason("../shared.wado", PROVIDED).is_none());
     }
 }

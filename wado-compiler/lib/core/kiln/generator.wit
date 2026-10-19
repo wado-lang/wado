@@ -2,7 +2,7 @@ package core:kiln@0.1.0;
 
 /// Host interface exposed to Kiln generators. Deliberately narrow: a
 /// generator reports diagnostics and nothing else. Its inputs arrive by
-/// value, so it needs no filesystem, no clocks, no random, no network.
+/// value, so it needs no filesystem, no clocks, no network.
 /// See WEP 2026-04-12 (Kiln) §"The generator contract".
 interface kiln-host {
     /// Report a diagnostic that will be surfaced as a normal compile
@@ -69,8 +69,12 @@ interface types {
 /// each generator synthesizes its own world (see
 /// `wado-compiler::synthesize_lib_world_info`) rather than conforming to one
 /// fixed `generate` signature here. This world exists to carry the shared
-/// `kiln-host` import and to anchor the `core:kiln/generator` identity that
+/// imports and to anchor the `core:kiln/generator` identity that
 /// import-refusal, provider selection, and generator detection key on.
+///
+/// `wasi:random` is served from a fixed seed, so a generator stays a function
+/// of its invocation while `HashMap::new()` still reaches its default seed.
 world generator {
     import kiln-host;
+    include wasi:random/imports@0.3.0;
 }

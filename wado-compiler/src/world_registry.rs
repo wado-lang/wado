@@ -192,6 +192,14 @@ impl WorldInfo {
             .iter()
             .any(|i| i.interface_name == interface_name)
     }
+
+    /// True when this world imports the interface whose CM FQ is `fq`
+    /// (`wasi:random/random@0.3.0`).
+    pub fn imports_cm_interface(&self, fq: &str) -> bool {
+        self.imports
+            .iter()
+            .any(|i| i.cm_interface_fq.as_deref() == Some(fq))
+    }
 }
 
 /// Extract the package segment of a CM-style fully-qualified name

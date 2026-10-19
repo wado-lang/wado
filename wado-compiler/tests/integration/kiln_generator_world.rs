@@ -460,8 +460,18 @@ fn generator_installing_a_stamped_sink_is_rejected() {
     );
 }
 
+/// The function-bearing `wasi:` interfaces among [`wasi_imports_of`].
+fn provided_wasi_imports_of(source: &str, what: &str) -> Vec<String> {
+    wasi_imports_of(source, what)
+        .into_iter()
+        .filter(|(_, kind)| *kind != ImportKind::SharedTypes)
+        .map(|(fq, _)| fq)
+        .collect()
+}
+
 /// `HashMap::new()` reads `DEFAULT_HASH_SEED`, whose `#[benign]` initializer
-/// asks the host: `#[benign]` waives the effect, not the world import.
+/// asks the host: `#[benign]` waives the effect, not the world import, and the
+/// generator world imports `wasi:random`.
 const DEFAULT_SEED_MAP_GENERATOR: &str = r#"
 use { Request, Response, Error } from "core:kiln";
 use { HashMap } from "core:collections";
@@ -474,11 +484,29 @@ export fn generate(req: Request) -> Result<Response, Error> {
 "#;
 
 #[test]
-fn generator_hashing_under_the_default_seed_is_rejected() {
-    expect_forbidden_import(
-        DEFAULT_SEED_MAP_GENERATOR,
-        "wasi:random",
-        "a generator reaching DEFAULT_HASH_SEED",
+fn generator_hashing_under_the_default_seed_imports_insecure_seed() {
+    assert_eq!(
+        provided_wasi_imports_of(DEFAULT_SEED_MAP_GENERATOR, "default-seed generator"),
+        ["wasi:random/insecure-seed@0.3.0"],
+    );
+}
+
+const RANDOM_GENERATOR: &str = r#"
+use { Request, Response, Error } from "core:kiln";
+use { Random } from "wasi:random";
+
+export fn generate(req: Request) -> Result<Response, Error> with Random {
+    let _ = Random::get_random_u64();
+    let _ = req.primary.path;
+    return Result::Ok(Response { files: [] });
+}
+"#;
+
+#[test]
+fn generator_may_import_wasi_random() {
+    assert_eq!(
+        provided_wasi_imports_of(RANDOM_GENERATOR, "wasi:random generator"),
+        ["wasi:random/random@0.3.0"],
     );
 }
 
