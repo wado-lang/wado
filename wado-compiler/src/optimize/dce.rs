@@ -30,10 +30,10 @@ use crate::nir_arena::{
     StmtNode,
 };
 use crate::nir_package::{AmbientStdio, NirPackage};
-use crate::nir_value_graph::ValueKind;
+use crate::nir_value_graph::{ValueId, ValueKind};
 use crate::nir_visitor::{NirRefVisitor, reachable_exprs};
 use crate::optimize::arena_query::{
-    expr_node_may_trap, operand_values_may_trap, promoted_local_reads,
+    expr_node_may_trap, operand_values_may_trap, promoted_local_reads, reachable_nodes,
 };
 use crate::tir::{ResolvedType, StructDef, TypeId, TypeTable, projection_arguments};
 use crate::{hashmap, nir};
@@ -446,20 +446,19 @@ fn resolve_imports(
         })
     };
 
-    let ambient = match project.ambient_stdio {
-        Some(decided) => decided,
-        None => {
-            let writes = |interface: &str| {
-                project.provides_ambient_stdio_sink(interface)
-                    || used_wasi_functions.contains(&operation_key(interface, "write_via_stream"))
-            };
-            let decided = AmbientStdio {
-                stdout: writes("Stdout"),
-                stderr: writes("Stderr"),
-            };
-            project.ambient_stdio = Some(decided);
-            decided
-        }
+    let ambient = if let Some(decided) = project.ambient_stdio {
+        decided
+    } else {
+        let writes = |interface: &str| {
+            project.provides_ambient_stdio_sink(interface)
+                || used_wasi_functions.contains(&operation_key(interface, "write_via_stream"))
+        };
+        let decided = AmbientStdio {
+            stdout: writes("Stdout"),
+            stderr: writes("Stderr"),
+        };
+        project.ambient_stdio = Some(decided);
+        decided
     };
     for (interface, intrinsic) in [
         ("Stdout", "call_indirect_stdout"),
@@ -2365,6 +2364,255 @@ fn drop_unobserved_stmts(
         }
     }
     body.blocks[block].stmts = kept;
+}
+
+fn global_key(module_source: &ModuleSource, name: &str) -> (String, String) {
+    (module_source.to_path().join("::"), name.to_string())
+}
+
+/// Drop a global that only feeds itself. Installing a handler saves the
+/// effect's dispatch global, links the saved value into the record it installs
+/// over it, and restores it, so where no operation is performed every read of
+/// the global flows back into a store to it. Those reads go with the stores
+/// they feed and the `let`s carrying them in between, and the analysis that
+/// follows drops the global, the record and the handler's methods.
+///
+/// Answers whether any body changed, as [`unhoist_unobserved_globals`] does.
+pub(super) fn drop_self_feeding_globals(project: &mut NirPackage, summaries: &FnSummaries) -> bool {
+    let mut readers: IndexMap<(String, String), IndexSet<usize>> = IndexMap::default();
+    let mut writers: IndexMap<(String, String), IndexSet<usize>> = IndexMap::default();
+    for (i, func) in project.functions.iter().enumerate() {
+        let func = func.borrow();
+        let Some(body) = func.body.as_ref() else {
+            continue;
+        };
+        for node in reachable_nodes(body) {
+            let NodeRef::Expr(e) = node else {
+                continue;
+            };
+            match &body.exprs[e].kind {
+                ExprKind::GlobalVarGet {
+                    module_source,
+                    name,
+                } => {
+                    readers
+                        .entry(global_key(module_source, name))
+                        .or_default()
+                        .insert(i);
+                }
+                ExprKind::GlobalVarSet {
+                    module_source,
+                    name,
+                    ..
+                } => {
+                    writers
+                        .entry(global_key(module_source, name))
+                        .or_default()
+                        .insert(i);
+                }
+                _ => {}
+            }
+        }
+    }
+    let mut candidates: IndexSet<(String, String)> = readers
+        .iter()
+        .filter(|(key, read_in)| writers.get(*key).is_some_and(|w| read_in.is_subset(w)))
+        .map(|(key, _)| key.clone())
+        .collect();
+    if candidates.is_empty() {
+        return false;
+    }
+    let scope: IndexSet<usize> = candidates
+        .iter()
+        .flat_map(|key| readers[key].iter().copied())
+        .collect();
+
+    let type_table = project.type_table.clone();
+    let types = type_table.borrow();
+    let mut carriers: IndexMap<usize, IndexSet<u32>> = scope
+        .iter()
+        .map(|&i| {
+            let func = project.functions[i].borrow();
+            let body = func.body.as_ref().expect("a reader has a body");
+            (i, deletable_bindings(body, &types, summaries.of_body(i)))
+        })
+        .collect();
+    // Dropping a global drops the stores to it, which shrinks the regions the
+    // remaining candidates and carriers were checked against, so both shrink
+    // together until neither does.
+    loop {
+        let mut observed: IndexSet<(String, String)> = IndexSet::default();
+        for (&i, carried) in &mut carriers {
+            let func = project.functions[i].borrow();
+            let body = func.body.as_ref().expect("a reader has a body");
+            let calls = summaries.of_body(i);
+            loop {
+                let regions = feeding_regions(body, &candidates, carried, &types, calls);
+                let outside = mentions_outside(body, &regions);
+                let before = carried.len();
+                carried.retain(|local| !outside.locals.contains(local));
+                if carried.len() == before {
+                    observed.extend(outside.reads.intersection(&candidates).cloned());
+                    break;
+                }
+            }
+        }
+        if observed.is_empty() {
+            break;
+        }
+        candidates.retain(|key| !observed.contains(key));
+        if candidates.is_empty() {
+            return false;
+        }
+    }
+
+    let kept: IndexSet<(String, String)> = project
+        .globals
+        .iter()
+        .map(|g| global_key(&g.module_source, &g.name))
+        .filter(|key| !candidates.contains(key))
+        .collect();
+    for (i, func_rc) in project.functions.iter().enumerate() {
+        let mut func = func_rc.borrow_mut();
+        let Some(body) = func.body.as_mut() else {
+            continue;
+        };
+        let calls = summaries.of_body(i);
+        if let Some(carried) = carriers.get(&i) {
+            for block in reachable_block_ids(body) {
+                let stmts = std::mem::take(&mut body.blocks[block].stmts);
+                body.blocks[block].stmts = stmts
+                    .into_iter()
+                    .filter(|&s| {
+                        !matches!(body.stmts[s].kind,
+                        StmtKind::Let { local_index, .. } if carried.contains(&local_index))
+                    })
+                    .collect();
+            }
+        }
+        let root = body.root();
+        remove_dead_global_sets(body, NodeRef::Block(root), &kept, &types, calls);
+        debug_assert!(
+            !reads_any_global(body, &candidates),
+            "[NIR] drop_self_feeding_globals: a read outlived the stores it fed"
+        );
+    }
+    true
+}
+
+/// The locals every reachable `let` of which binds a value the pass may delete.
+fn deletable_bindings(body: &Body, types: &TypeTable, calls: CallFacts) -> IndexSet<u32> {
+    let mut deletable: IndexSet<u32> = IndexSet::default();
+    let mut kept: IndexSet<u32> = IndexSet::default();
+    for s in reachable_stmt_ids(body) {
+        if let StmtKind::Let {
+            local_index, value, ..
+        } = body.stmts[s].kind
+        {
+            if deletable_value(body, value, types, calls) {
+                deletable.insert(local_index);
+            } else {
+                kept.insert(local_index);
+            }
+        }
+    }
+    deletable.difference(&kept).copied().collect()
+}
+
+/// The subtrees the pass would delete: each store to a candidate whose value
+/// may go with it, and each `let` of a carrier.
+fn feeding_regions(
+    body: &Body,
+    candidates: &IndexSet<(String, String)>,
+    carried: &IndexSet<u32>,
+    types: &TypeTable,
+    calls: CallFacts,
+) -> IndexSet<NodeRef> {
+    let mut regions: IndexSet<NodeRef> = IndexSet::default();
+    for s in reachable_stmt_ids(body) {
+        if let StmtKind::Let { local_index, .. } = body.stmts[s].kind
+            && carried.contains(&local_index)
+        {
+            regions.insert(NodeRef::Stmt(s));
+        }
+    }
+    for e in reachable_exprs(body) {
+        if let ExprKind::GlobalVarSet {
+            module_source,
+            name,
+            value,
+        } = &body.exprs[e].kind
+            && candidates.contains(&global_key(module_source, name))
+            && deletable_value(body, *value, types, calls)
+        {
+            regions.insert(NodeRef::Expr(e));
+        }
+    }
+    regions
+}
+
+/// The locals and globals a body mentions outside `regions`, skeleton and value
+/// pool alike.
+#[derive(Default)]
+struct Mentions {
+    locals: IndexSet<u32>,
+    reads: IndexSet<(String, String)>,
+    seen_locals: IndexSet<ValueId>,
+    seen_sources: IndexSet<ValueId>,
+}
+
+fn mentions_outside(body: &Body, regions: &IndexSet<NodeRef>) -> Mentions {
+    struct Outside<'a> {
+        regions: &'a IndexSet<NodeRef>,
+        mentions: Mentions,
+    }
+    impl NirRefVisitor for Outside<'_> {
+        fn visit_node(&mut self, body: &Body, node: NodeRef) {
+            if self.regions.contains(&node) {
+                return;
+            }
+            let Mentions {
+                locals,
+                reads,
+                seen_locals,
+                seen_sources,
+            } = &mut self.mentions;
+            if let NodeRef::Expr(e) = node {
+                match &body.exprs[e].kind {
+                    ExprKind::Local { index, .. } => {
+                        locals.insert(*index);
+                    }
+                    ExprKind::GlobalVarGet {
+                        module_source,
+                        name,
+                    } => {
+                        reads.insert(global_key(module_source, name));
+                    }
+                    _ => {}
+                }
+            }
+            let mut sources: Vec<ExprId> = Vec::new();
+            body.for_each_operand(node, |op| {
+                if let Some(v) = op.as_value() {
+                    body.values.for_each_opaque_local(v, seen_locals, |idx, _| {
+                        locals.insert(idx);
+                    });
+                    body.values
+                        .for_each_opaque_expr(v, seen_sources, |e| sources.push(e));
+                }
+            });
+            for e in sources {
+                self.visit_node(body, NodeRef::Expr(e));
+            }
+            self.walk_node(body, node);
+        }
+    }
+    let mut outside = Outside {
+        regions,
+        mentions: Mentions::default(),
+    };
+    outside.visit_node(body, NodeRef::Block(body.root()));
+    outside.mentions
 }
 
 /// Union every `(module_key, global_name)` pair read by some reachable
