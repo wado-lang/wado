@@ -17,8 +17,6 @@
 use std::sync::{Arc, Mutex};
 
 use anyhow::Result;
-use rand::SeedableRng;
-use rand::rngs::ChaCha12Rng;
 use wasmtime::component::types::{ComponentItem, Type};
 use wasmtime::component::{Component, Func, HasSelf, Instance, Linker, StreamReader, Val};
 use wasmtime::{Engine, Store};
@@ -35,6 +33,7 @@ use wado_compiler::{
 };
 
 use crate::engine::fuel_engine;
+use crate::random::fixed_insecure_random;
 use crate::sync::lock;
 
 wasmtime::component::bindgen!({
@@ -69,18 +68,6 @@ impl WasiRandomView for KilnHostState {
     fn random(&mut self) -> &mut WasiRandomCtx {
         self.wasi.random()
     }
-}
-
-/// `wasi:random/insecure` and `insecure-seed` for one instance, answering the
-/// same on every run so that a generator stays a function of its invocation.
-/// The seeds are arbitrary; only their being fixed matters. `ChaCha12` is named
-/// rather than `StdRng`, whose output rand does not promise to keep across
-/// versions.
-fn fixed_seed_random() -> WasiCtx {
-    WasiCtx::builder()
-        .insecure_random(ChaCha12Rng::from_seed([1; 32]))
-        .insecure_random_seed(2)
-        .build()
 }
 
 impl kiln_host::Host for KilnHostState {
@@ -168,7 +155,7 @@ async fn instantiate(
         engine,
         KilnHostState {
             diagnostics,
-            wasi: fixed_seed_random(),
+            wasi: fixed_insecure_random(&mut WasiCtx::builder()).build(),
         },
     );
     let fuel = if policy.fuel == 0 {

@@ -48,6 +48,17 @@ export fn run() with Environment { let _ = args(); }`);
     assert name.starts_with("wasi:cli/environment@");
 }
 
+test "a map under the default seed runs" {
+    let out = eval(`use { println, Stdout } from "core:cli";
+use { HashMap } from "core:collections";
+export fn run() with Stdout {
+    let mut m = HashMap::<String, i32>::new();
+    m["a"] = 1;
+    if m["a"] == 1 { println("found"); }
+}`).unwrap();
+    assert out.stdout == "found\n";
+}
+
 test "fuel bounds the run" {
     let out = eval(`export fn run() { let mut i = 0; loop { i += 1; } }`, 10_000).unwrap();
     assert out.status matches { OutOfFuel };

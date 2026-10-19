@@ -1,5 +1,5 @@
 //! The `wado test` host for `core:eval`: compile a source string as a command,
-//! run it with nothing but stdout, stderr and exit, and cache the outcome.
+//! run it against [`LINKED_INTERFACES`] alone, and cache the outcome.
 //!
 //! See WEP 2026-09-26 (Eval).
 
@@ -16,6 +16,8 @@ use wasmtime_wasi::cli::{WasiCli, WasiCliView};
 use wasmtime_wasi::p2::pipe::MemoryOutputPipe;
 use wasmtime_wasi::p3::bindings::Command;
 use wasmtime_wasi::p3::bindings::cli::{exit, stderr, stdout};
+use wasmtime_wasi::p3::bindings::random::insecure_seed;
+use wasmtime_wasi::random::{WasiRandom, WasiRandomView};
 use wasmtime_wasi::{I32Exit, WasiCtx, WasiCtxView, WasiView};
 
 use wado_compiler::hashmap::IndexMap;
@@ -35,6 +37,7 @@ use crate::manifest::resolution_inputs;
 use crate::runtime::CAPTURED_STDIO_CAPACITY;
 use wado_host::atomic_write::write_atomic;
 use wado_host::engine::{DEFAULT_GC_HEAP_INITIAL_SIZE, fuel_engine};
+use wado_host::random::fixed_insecure_random;
 use wado_host::sync::lock;
 
 wasmtime::component::bindgen!({
@@ -73,6 +76,7 @@ const LINKED_INTERFACES: &[&str] = &[
     "wasi:cli/stdout@0.3.0",
     "wasi:cli/stderr@0.3.0",
     "wasi:cli/exit@0.3.0",
+    "wasi:random/insecure-seed@0.3.0",
 ];
 
 /// The `core:eval` host for one `wado test` run, shared by every test in it.
@@ -607,6 +611,7 @@ fn program_linker(engine: &Engine) -> wasmtime::Result<Linker<Program>> {
     stdout::add_to_linker::<_, WasiCli>(&mut linker, Program::cli)?;
     stderr::add_to_linker::<_, WasiCli>(&mut linker, Program::cli)?;
     exit::add_to_linker::<_, WasiCli>(&mut linker, Program::cli)?;
+    insecure_seed::add_to_linker::<_, WasiRandom>(&mut linker, Program::random)?;
     Ok(linker)
 }
 
@@ -624,6 +629,7 @@ async fn run(engine: &Engine, linker: &Linker<Program>, wasm: &[u8], fuel: u64) 
     let stdout = MemoryOutputPipe::new(CAPTURED_STDIO_CAPACITY);
     let stderr = MemoryOutputPipe::new(CAPTURED_STDIO_CAPACITY);
     let mut builder = WasiCtx::builder();
+    fixed_insecure_random(&mut builder);
     builder.stdout(stdout.clone());
     builder.stderr(stderr.clone());
     let mut store = Store::new(
