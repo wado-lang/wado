@@ -44,10 +44,19 @@ pub fn derive(program: &mut Program, trait_: TraitDeclId, declarations: &[Declar
             params: bounds.iter().cloned().map(ParamDef::bounded).collect(),
             origin: ImplOrigin::Derived,
         });
+        // A member's impl may ask its parameter be copyable, which the
+        // derivation leaves to the instance: an argument the declaration
+        // marks `affine` is checked where it is given.
         let env = Env {
             param_bounds: bounds
                 .iter()
-                .map(|b| b.iter().copied().map(ParamBound::bare).collect())
+                .map(|b| {
+                    b.iter()
+                        .copied()
+                        .chain(program.copyable)
+                        .map(ParamBound::bare)
+                        .collect()
+                })
                 .collect(),
         };
         standing.push((decl, id, env));

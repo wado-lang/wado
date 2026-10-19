@@ -585,7 +585,7 @@ impl<T> IntoIterator for List<T> {
     }
 }
 
-impl<T> IntoIterator for &List<T> {
+impl<affine T> IntoIterator for &List<T> {
     type Item = &T;
     type Iter = SliceRefIter<T>;
 
@@ -663,13 +663,13 @@ impl<affine T> Default for List<T> {
     }
 }
 
-impl<T: Inspect> Inspect for List<T> {
+impl<affine T: Inspect> Inspect for List<T> {
     pub fn inspect(&self, f: &mut Formatter) {
         write_seq_inspect(&self.repr, 0, self.used, f, true, f.resolved_seq_limit());
     }
 }
 
-impl<T: Inspect> Display for List<T> {
+impl<affine T: Inspect> Display for List<T> {
     pub fn fmt(&self, f: &mut Formatter) {
         // Display never applies the default cap; raw precision caps only if >= 0.
         write_seq_inspect(&self.repr, 0, self.used, f, false, f.precision);

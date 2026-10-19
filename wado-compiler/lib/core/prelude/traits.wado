@@ -46,7 +46,7 @@ impl<T: Eq> Eq for &mut T {
 
 /// Whether `a` and `b` point to one place, not merely to equal values. `==`
 /// on references compares the values.
-pub fn ref_eq<T>(a: &T, b: &T) -> bool {
+pub fn ref_eq<affine T>(a: &T, b: &T) -> bool {
     return builtin::ref_eq(a, b);
 }
 
@@ -504,6 +504,11 @@ impl<affine T, affine F> StructField<T, F> {
     pub fn is_secret(&self) -> bool {
         return self.is_secret;
     }
+
+    /// This field in `v`, by reference.
+    pub fn get_ref(&self, v: &T) -> &F {
+        return builtin::struct_field_ref(v, self.index);
+    }
 }
 
 impl<affine T, F> StructField<T, F> {
@@ -874,7 +879,7 @@ pub affine trait Inspect with () {
 /// elided and reported with a trailing `, ..`.
 /// The alternate (`#`) rendering the struct `Inspect` hands off to:
 /// `Name {\n  field: value,\n}`, one field per indented line.
-fn inspect_struct_alternate<affine S: ReflectStruct<FieldTypes = [..F]>, ..F: Inspect>(v: &S, f: &mut Formatter) {
+fn inspect_struct_alternate<affine S: ReflectStruct<FieldTypes = [..F]>, affine ..F: Inspect>(v: &S, f: &mut Formatter) {
     let mut wrote_field = false;
     let mut has_secret = false;
     for let field of ReflectStruct::<S>::members() {
@@ -889,7 +894,7 @@ fn inspect_struct_alternate<affine S: ReflectStruct<FieldTypes = [..F]>, ..F: In
             f.write_newline_indent();
             f.write_str(&field.name());
             f.write_str(": ");
-            field.get(v).inspect(f);
+            field.get_ref(v).inspect(f);
             f.write_str(",");
         }
     }
@@ -919,7 +924,7 @@ fn write_struct_head<affine S: Reflect>(f: &mut Formatter) {
     }
 }
 
-impl<affine S: ReflectStruct<FieldTypes = [..F]>, ..F: Inspect> Inspect for S {
+impl<affine S: ReflectStruct<FieldTypes = [..F]>, affine ..F: Inspect> Inspect for S {
     fn inspect(&self, f: &mut Formatter) {
         if f.alternate {
             inspect_struct_alternate(self, f);
@@ -940,7 +945,7 @@ impl<affine S: ReflectStruct<FieldTypes = [..F]>, ..F: Inspect> Inspect for S {
                 }
                 f.write_str(&field.name());
                 f.write_str(": ");
-                field.get(self).inspect(f);
+                field.get_ref(self).inspect(f);
             }
         }
         if wrote_field {

@@ -128,7 +128,7 @@ impl<T> IntoIterator for Array<T> {
     }
 }
 
-impl<T> IntoIterator for &Array<T> {
+impl<affine T> IntoIterator for &Array<T> {
     type Item = &T;
     type Iter = SliceRefIter<T>;
 
@@ -241,7 +241,7 @@ impl<T: Ord> Ord for Array<T> {
 // sequences (`Array<T>` itself; `List<T>` over its used prefix). `limit` is the
 // resolved element cap (negative = none); `marker` appends `, ...` when
 // elements are dropped.
-internal fn write_seq_inspect<T: Inspect>(
+internal fn write_seq_inspect<affine T: Inspect>(
     repr: &Array<T>,
     start: i32,
     end: i32,
@@ -264,7 +264,7 @@ internal fn write_seq_inspect<T: Inspect>(
         if shown > 0 {
             f.write_str(", ");
         }
-        repr[i].inspect(f);
+        builtin::array_get_ref(repr, i).inspect(f);
         shown += 1;
     }
     if marker && truncated {
@@ -280,7 +280,7 @@ internal fn write_seq_inspect<T: Inspect>(
 /// The alternate (`#`) rendering [`write_seq_inspect`] hands off to: one
 /// element per indented line, `marker` appending a `...` line for the dropped
 /// ones.
-fn write_seq_inspect_alt<T: Inspect>(repr: &Array<T>, start: i32, end: i32, f: &mut Formatter, marker: bool, limit: i32) {
+fn write_seq_inspect_alt<affine T: Inspect>(repr: &Array<T>, start: i32, end: i32, f: &mut Formatter, marker: bool, limit: i32) {
     if start >= end {
         f.write_str("[]");
         return;
@@ -294,7 +294,7 @@ fn write_seq_inspect_alt<T: Inspect>(repr: &Array<T>, start: i32, end: i32, f: &
             break;
         }
         f.write_newline_indent();
-        repr[i].inspect(f);
+        builtin::array_get_ref(repr, i).inspect(f);
         f.write_char(',');
         shown += 1;
     }
@@ -305,13 +305,13 @@ fn write_seq_inspect_alt<T: Inspect>(repr: &Array<T>, start: i32, end: i32, f: &
     f.close_brace("]");
 }
 
-impl<T: Inspect> Inspect for Array<T> {
+impl<affine T: Inspect> Inspect for Array<T> {
     pub fn inspect(&self, f: &mut Formatter) {
         write_seq_inspect(self, 0, builtin::array_len(self), f, true, f.resolved_seq_limit());
     }
 }
 
-impl<T: Inspect> Display for Array<T> {
+impl<affine T: Inspect> Display for Array<T> {
     pub fn fmt(&self, f: &mut Formatter) {
         // Display never applies the default cap; raw precision caps only if >= 0.
         write_seq_inspect(self, 0, builtin::array_len(self), f, false, f.precision);

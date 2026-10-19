@@ -34,7 +34,7 @@ use crate::defs::DefId;
 use crate::escape::unescape_template_segment;
 use crate::name::{
     FqTraitName, case_construct_helper_name, case_extract_helper_name, eq_payload_local,
-    field_get_helper_name, hole_get_helper_name,
+    field_get_helper_name, field_ref_helper_name, hole_get_helper_name,
 };
 use crate::synthesis::common;
 use crate::synthesis::common::{
@@ -1254,11 +1254,12 @@ fn generate_wire_name_policy_fn(
     )
 }
 
-/// Synthesize the `$field_get$S$F` helpers for every distinct field type of a
-/// struct. `StructField::<S, F>::get`'s body carries a `builtin::struct_field_get`
-/// marker; lowering rewrites each monomorphized marker to its helper
-/// (WEP 2026-06-13 §2). Extract-only and guard-free — every struct field is
-/// always present.
+/// Synthesize the `$field_get$S$F` and `$field_ref$S$F` helpers for every
+/// distinct field type of a struct. `StructField::<S, F>::get`'s body carries a
+/// `builtin::struct_field_get` marker, and `get_ref`'s a
+/// `builtin::struct_field_ref`; lowering rewrites each monomorphized marker to
+/// its helper (WEP 2026-06-13 §2). Extract-only and guard-free — every struct
+/// field is always present.
 pub(super) fn generate_field_bridge_helpers(
     type_table: &RefCell<TypeTable>,
     fields: &[FieldInfo],
@@ -1275,14 +1276,29 @@ pub(super) fn generate_field_bridge_helpers(
             value_type: *field_type,
         })
         .collect();
-    generate_read_bridge_helpers(
-        type_table,
-        &members,
-        field_get_helper_name,
-        struct_type,
-        ref_struct_type,
-        span,
-    )
+    [
+        (field_get_helper_name as fn(&str, &str) -> String, Read::Value),
+        (field_ref_helper_name, Read::Ref),
+    ]
+    .into_iter()
+    .flat_map(|helper| {
+        generate_read_bridge_helpers(
+            type_table,
+            &members,
+            helper,
+            struct_type,
+            ref_struct_type,
+            span,
+        )
+    })
+    .collect()
+}
+
+/// What a read bridge answers: the member's value, or a reference to it.
+#[derive(Clone, Copy)]
+pub(super) enum Read {
+    Value,
+    Ref,
 }
 
 /// One member a read bridge dispatches on: the field it reads, and the type
@@ -1306,7 +1322,7 @@ pub(super) struct ReadBridgeMember {
 pub(super) fn generate_read_bridge_helpers(
     type_table: &RefCell<TypeTable>,
     members: &[ReadBridgeMember],
-    helper_name: fn(&str, &str) -> String,
+    (helper_name, read): (fn(&str, &str) -> String, Read),
     struct_type: TypeId,
     ref_struct_type: TypeId,
     span: Span,
@@ -1325,9 +1341,11 @@ pub(super) fn generate_read_bridge_helpers(
         .iter()
         .map(|(mangled_value, group)| {
             generate_read_helper(
+                type_table,
                 helper_name(&mangled_struct, mangled_value),
                 ref_struct_type,
                 group,
+                read,
                 span,
             )
         })
@@ -1335,16 +1353,22 @@ pub(super) fn generate_read_bridge_helpers(
 }
 
 /// `return match index { index => v.<name>, … _ => unreachable() };` over the
-/// members of one value type.
+/// members of one value type, each read taken by reference where `read` says.
 fn generate_read_helper(
+    type_table: &RefCell<TypeTable>,
     helper_name: String,
     ref_struct_type: TypeId,
     members: &[&ReadBridgeMember],
+    read: Read,
     span: Span,
 ) -> TirFunction {
     // The group erases to one type, so any member names the answer. Holding
     // that value by handle is per member: a newtype does, its base does not.
-    let answer_type = members[0].value_type;
+    let value_type = members[0].value_type;
+    let answer_type = match read {
+        Read::Value => value_type,
+        Read::Ref => type_table.borrow_mut().make_ref(value_type),
+    };
     let cases: Vec<(String, u32)> = members.iter().map(|m| (m.name.clone(), m.index)).collect();
     let dispatch = case_index_dispatch(
         local_expr(1, "index", TypeTable::I32, span),
@@ -1363,10 +1387,14 @@ fn generate_read_helper(
                 member.field_type,
                 span,
             );
-            if member.field_type == member.value_type {
+            let value = if member.field_type == member.value_type {
                 access
             } else {
                 deref_expr(access, member.value_type, span)
+            };
+            match read {
+                Read::Value => value,
+                Read::Ref => ref_expr(value, answer_type, span),
             }
         },
         answer_type,
@@ -1611,7 +1639,7 @@ fn generate_template_reflect_impls(
         functions.extend(generate_read_bridge_helpers(
             &module.type_table,
             &hole_members,
-            hole_get_helper_name,
+            (hole_get_helper_name, Read::Value),
             struct_type,
             ref_struct_type,
             span,

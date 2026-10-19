@@ -2594,8 +2594,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             {
                 inner_type_id = t;
             }
-            let into_iterator = self.tysys.compiler_trait(CompilerItem::IntoIterator);
-            let implements_into_iter = into_iterator.is_some_and(|trait_| {
+            // An affine operand walks `ForOf`, which `IntoIterator`'s
+            // unmarked impls do not reach (WEP: Affine Types).
+            let walkable = [CompilerItem::IntoIterator, CompilerItem::ForOf];
+            let implements_into_iter = walkable.into_iter().any(|item| {
+                self.tysys.compiler_trait(item).is_some_and(|trait_| {
                 self.tysys.type_implements_trait(
                     &self.annotate_ctx,
                     &self.type_lookup(),
@@ -2607,6 +2610,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     inner_type_id,
                     &trait_,
                 )
+                })
             }) || matches!(
                 self.tysys.type_table.borrow().get(iterable_type_id),
                 ResolvedType::Unknown | ResolvedType::TypeParam { .. }

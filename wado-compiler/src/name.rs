@@ -335,6 +335,12 @@ pub fn field_get_helper_name(mangled_struct: &str, mangled_field: &str) -> Strin
     format!("$field_get${mangled_struct}${mangled_field}")
 }
 
+/// [`field_get_helper_name`]'s twin answering a reference to the field, which
+/// lowering rewrites `builtin::struct_field_ref::<S, F>` calls to.
+pub fn field_ref_helper_name(mangled_struct: &str, mangled_field: &str) -> String {
+    format!("$field_ref${mangled_struct}${mangled_field}")
+}
+
 /// Name of the synthesized hole-read helper for a template shape and one of
 /// its hole types, both by structural mangle. Lowering rewrites
 /// `builtin::hole_get::<T, V>` calls to it (WEP 2026-01-10).
