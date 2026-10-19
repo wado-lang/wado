@@ -1140,7 +1140,6 @@ fn future_identity_source(ty: &str, name: &str) -> String {
     format!(
         "export async fn {name}(v: Future<{ty}>) -> Future<{ty}> {{\n\
          \x20   let value = v.read();\n\
-         \x20   v.drop();\n\
          \x20   let [rx, tx] = Future::<{ty}>::new();\n\
          \x20   task return rx;\n\
          \x20   if let Some(x) = value {{\n\
@@ -1252,7 +1251,6 @@ export struct Point {
 }
 export async fn id_future_point(v: Future<Point>) -> Future<Point> {
     let value = v.read();
-    v.drop();
     let [rx, tx] = Future::<Point>::new();
     task return rx;
     if let Some(x) = value {
@@ -1440,7 +1438,6 @@ export flags Perms {
 }
 export async fn id_future_color(v: Future<Color>) -> Future<Color> {
     let value = v.read();
-    v.drop();
     let [rx, tx] = Future::<Color>::new();
     task return rx;
     if let Some(x) = value {
@@ -1449,7 +1446,6 @@ export async fn id_future_color(v: Future<Color>) -> Future<Color> {
 }
 export async fn id_future_shape(v: Future<Shape>) -> Future<Shape> {
     let value = v.read();
-    v.drop();
     let [rx, tx] = Future::<Shape>::new();
     task return rx;
     if let Some(x) = value {
@@ -1458,7 +1454,6 @@ export async fn id_future_shape(v: Future<Shape>) -> Future<Shape> {
 }
 export async fn id_future_perms(v: Future<Perms>) -> Future<Perms> {
     let value = v.read();
-    v.drop();
     let [rx, tx] = Future::<Perms>::new();
     task return rx;
     if let Some(x) = value {
@@ -1809,7 +1804,7 @@ fn cm_lib_accepts_newtype_future_payloads() {
         let source = format!(
             "export type Meters = f64;\n\
              export async fn id(v: Future<{ty}>) -> Future<{ty}> {{\n    \
-             let value = v.read();\n    v.drop();\n    \
+             let value = v.read();\n    \
              let [rx, tx] = Future::<{ty}>::new();\n    \
              task return rx;\n    \
              if let Some(x) = value {{\n        tx.write(x);\n    }}\n}}\n"
@@ -1825,7 +1820,7 @@ fn cm_lib_builds_a_type_whose_cm_name_collides_with_wasi() {
     try_compile_lib(
         "export enum ErrorCode {\n    Io,\n    Timeout,\n}\n\
          export async fn id(v: Future<ErrorCode>) -> Future<ErrorCode> {\n    \
-         let value = v.read();\n    v.drop();\n    \
+         let value = v.read();\n    \
          let [rx, tx] = Future::<ErrorCode>::new();\n    \
          task return rx;\n    \
          if let Some(x) = value {\n        tx.write(x);\n    }\n}\n",

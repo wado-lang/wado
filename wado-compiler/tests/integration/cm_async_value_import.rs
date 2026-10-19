@@ -155,7 +155,6 @@ fn future_round_trips_through_an_imported_world_function() {
         r#"
 export fn triple_future(v: Future<u32>) -> Future<u32> {
     let value = v.read();
-    v.drop();
     let [rx, tx] = Future::<u32>::new();
     if let Some(x) = value {
         tx.write(x * 3);
@@ -172,7 +171,6 @@ export fn run() with Stdout {
     tx.write(7);
     let out = triple_future(rx);
     let got = out.read();
-    out.drop();
     println(`${got:?}`);
 }
 "#,
