@@ -90,9 +90,8 @@ pub struct ParserPlan {
 /// work at every level; `rule_rescans` names the other way a scan doubles. A
 /// scan decides nothing and reads only its arguments, so its answer can be kept
 /// for the parse. A prediction reads the caller stack too, which no key here
-/// holds: the walk hides it, and an answer that needed it is not kept. A
-/// left-recursion loop the simulator decides reads the callers outside that, so
-/// it leaves no memo.
+/// holds: the walk hides it, and an answer that needed it is not kept. The
+/// left-recursion loop's caller check reports the callers it reads the same way.
 pub fn plan_parser(
     grammar: &Grammar,
     lowered: &LoweredGrammar,
@@ -133,7 +132,7 @@ pub fn plan_parser(
         needs_lr_atn: marks.needs_lr_atn,
         rule_asks_simulator: marks.rule_asks_simulator,
         rule_reaches_simulator: close_over_callers(&analysis.scannable_callees(), marks.rule_asks_simulator),
-        scan_memo: !marks.needs_lr_atn && (rescanned.contains(&true) || any_lr),
+        scan_memo: rescanned.contains(&true) || any_lr,
         rescanned,
         lr_loop_entry_decisions: lr_decs,
         atn_rule_body_decisions: body_decs,

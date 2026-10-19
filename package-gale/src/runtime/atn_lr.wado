@@ -264,7 +264,7 @@ internal fn atn_lr_loop_decision(
     if enter < 0 {
         return exit_alt;
     }
-    if !contested && !atn_caller_contests(sim, &atn.stack, dstate, t, eof, min_prec) {
+    if !contested && !atn_caller_contests(sim, atn, dstate, t, eof, min_prec) {
         return enter;
     }
     return atn_lr_predict(sim, atn, decision, tokens, pos, t, eof, min_prec);
@@ -281,7 +281,7 @@ internal fn atn_lr_enter_or_ask(
     min_prec: i32,
 ) -> i32 {
     let t = if pos < tokens.len() { tokens[pos] } else { eof };
-    if !atn_caller_contests(sim, &atn.stack, sim.decision_state[decision], t, eof, min_prec) {
+    if !atn_caller_contests(sim, atn, sim.decision_state[decision], t, eof, min_prec) {
         return enter;
     }
     return atn_lr_predict(sim, atn, decision, tokens, pos, t, eof, min_prec);
@@ -318,10 +318,12 @@ fn atn_record_callers_exit(
     let mut mp = min_prec;
     for let mut k = atn.stack.len() - 1; k >= 1; k -= 1 {
         let ret = atn.stack[k];
+        atn.read_down_to(k);
         if ret < 0 || sim.state_collapse_to[ret] != dstate {
             return;
         }
         let caller_mp = atn_invocation_prec(sim, &atn.stack, k - 1);
+        atn.read_down_to(k - 1);
         if atn_caller_alone_enters(sim, dstate, t, eof, caller_mp, mp) {
             return;
         }
@@ -343,29 +345,42 @@ fn atn_caller_alone_enters(sim: &AtnSim, dstate: i32, t: i32, eof: i32, caller_m
     return false;
 }
 
-fn atn_caller_contests(sim: &AtnSim, rule_stack: &List<i32>, dstate: i32, t: i32, eof: i32, min_prec: i32) -> bool {
+fn atn_caller_contests(sim: &AtnSim, atn: &mut AtnPredictor, dstate: i32, t: i32, eof: i32, min_prec: i32) -> bool {
+    let [contests, lowest_read] = atn_callers_contest(sim, &atn.stack, dstate, t, eof, min_prec);
+    atn.read_down_to(lowest_read);
+    return contests;
+}
+
+fn atn_callers_contest(
+    sim: &AtnSim,
+    rule_stack: &List<i32>,
+    dstate: i32,
+    t: i32,
+    eof: i32,
+    min_prec: i32,
+) -> [bool, i32] {
     let mut mp = min_prec;
     let mut same_loop = true;
     let mut i = rule_stack.len() - 1;
     while i >= 0 {
         let ret = rule_stack[i];
         if ret < 0 {
-            return i == 0 && t == eof;
+            return [i == 0 && t == eof, i];
         }
         same_loop = same_loop && i >= 1 && sim.state_collapse_to[ret] == dstate;
         if same_loop {
             let caller_mp = atn_invocation_prec(sim, rule_stack, i - 1);
             if atn_caller_alone_enters(sim, dstate, t, eof, caller_mp, mp) {
-                return true;
+                return [true, i - 1];
             }
             mp = caller_mp;
         } else if atn_state_cont_admits(sim, ret, t, eof) {
-            return true;
+            return [true, i];
         }
         if !sim.state_cont_nullable[ret] {
-            return false;
+            return [false, i];
         }
         i -= 1;
     }
-    return false;
+    return [false, 0];
 }
