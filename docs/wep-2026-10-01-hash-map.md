@@ -233,7 +233,10 @@ an all-zero seed.
 - [x] Gale uses `HashMap` and `HashSet`. Done when `GaleMap` and `GaleSet` are
   deleted and the generator still compiles.
 - [x] Gale and Wadopoet build their maps with `new()`. Done when their fixed
-  seeds are deleted and their generators still compile.
+  seeds are deleted and their generators still compile. Gale's
+  `src/runtime/latn.wado` keeps `LATN_SEED`: it is inlined into every
+  generated parser, and `new()` there would make each parser import
+  `wasi:random/insecure-seed`.
 
 ## Known gaps
 

@@ -1,8 +1,10 @@
 #![allow(dead_code)]
 
-use { HashMap, HashSet } from "core:collections";
+use { HashMap, HashSet, HashSeed } from "core:collections";
 use { AtnSim, ATN_RULE_STOP, ATN_TR_ATOM, ATN_TR_NOT_ATOM, ATN_TR_WILDCARD, ATN_TR_RULE } from "./atn.wado";
 use { char_at } from "./lex.wado";
+
+global LATN_SEED: HashSeed = HashSeed::fixed(0xA4093822299F31D0, 0x082EFA98EC4E6C89);
 
 struct LThread {
     state: i32,
@@ -47,7 +49,7 @@ global mut LATN_VISITED: LatnVisited = LatnVisited {
     step: 0,
     step_of: [],
     stack_of: [],
-    more: HashSet::new(),
+    more: HashSet::with_seed(LATN_SEED),
 };
 
 impl LatnVisited {
@@ -136,7 +138,7 @@ fn latn_closure(
 
 internal fn latn_match(sim: &AtnSim, start_rule: i32, src: &StrSlice, start: i32, longest: bool) -> i32 {
     let mut best = -1;
-    let mut stacks = LatnStacks { parent: [], ret: [], ids: HashMap::new() };
+    let mut stacks = LatnStacks { parent: [], ret: [], ids: HashMap::with_seed(LATN_SEED) };
     let mut open: List<i32> = [];
     let visited = &mut LATN_VISITED;
     visited.cover(sim.state_kind.len());
