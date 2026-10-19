@@ -1,7 +1,7 @@
 # Loam Benchmarks
 
 Loam's backends against onnxruntime, in the format of
-[`benchmark/`](../benchmark/README.md): each arm prints a throughput line, so
+[`benchmark/`](../../benchmark/README.md): each arm prints a throughput line, so
 `benchmark/pick.ts` and `benchmark/ab.ts` read the logs.
 
 ## Setup
@@ -16,7 +16,7 @@ mise run loam-oracle-deps
 ## Tasks
 
 ```sh
-cd package-loam-benchmark
+cd package-loam/benchmark
 mise run gpt2-124m   # GPT-2 (124M) greedy generation
 mise run all
 ```

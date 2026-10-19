@@ -58,3 +58,9 @@ lists where the two part.
 the graph transformers that changed it, where each node runs, the optimized
 graph with its inferred shapes, and one profiled run. It is the reference a
 Loam fusion decision is measured against, as `loam dump` reports one.
+
+## Benchmarks
+
+[`benchmark/`](./benchmark/README.md) times Loam's backends against
+onnxruntime, in the format of the repository's `benchmark/`. Its README says
+how to fetch the models and run it.
