@@ -36,8 +36,7 @@ impl CoreError for Error {
 
 /// The `core:log` handler a generator runs under. A generator has no stderr
 /// for the default sink to write to, so the compiler installs this one around
-/// `generate`'s body. An event at `Info` or above becomes a diagnostic, and
-/// `Debug` and `Trace` are dropped.
+/// `generate`'s body.
 pub struct KilnLogSink {
 }
 
@@ -57,7 +56,8 @@ impl Log for KilnLogSink {
 }
 
 /// An error event warns rather than errs: a generator fails the build by
-/// returning an `Error`, and a log line only reports.
+/// returning an `Error`, and a log line only reports. `Debug` and `Trace` reach
+/// no diagnostic.
 fn diagnostic_level(level: Level) -> Option<DiagnosticLevel> {
     return match level {
         Level::Error | Warn => Option::Some(DiagnosticLevel::Warning),

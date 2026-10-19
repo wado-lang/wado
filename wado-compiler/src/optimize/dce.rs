@@ -1368,7 +1368,7 @@ impl DceWalker<'_> {
                     } => {
                         self.analysis
                             .used_globals
-                            .insert((module_source.to_path().join("::"), name.clone()));
+                            .insert(global_key(module_source, name));
                     }
                     ExprKind::Cast { target_type, .. } => self.add_type(*target_type),
                     ExprKind::StructLiteral { struct_type, .. } => self.add_type(*struct_type),
@@ -1639,11 +1639,10 @@ fn populate_type_reachability(
         // each surviving `global.initializer` here is a constant
         // expression — DceWalker on it only walks the literal tree.
         for global in &project.globals {
-            let global_key = (
-                global.module_source.to_path().join("::"),
-                global.name.clone(),
-            );
-            if !analysis.globals.contains(&global_key) {
+            if !analysis
+                .globals
+                .contains(&global_key(&global.module_source, &global.name))
+            {
                 continue;
             }
             collect_type_transitive(global.ty, &type_table, &mut analysis.types);
@@ -1941,8 +1940,7 @@ fn global_reads_in(body: &Body, expr: ExprId) -> Vec<(ExprId, (String, String))>
                     name,
                 } = &body.exprs[e].kind
             {
-                self.0
-                    .push((e, (module_source.to_path().join("::"), name.clone())));
+                self.0.push((e, global_key(module_source, name)));
             }
             self.walk_node(body, node);
         }
@@ -2057,11 +2055,7 @@ fn lazy_guard_global(
     if !deletable_value(body, *value, types, calls) {
         return None;
     }
-    Some((
-        read,
-        (module_source.to_path().join("::"), name.clone()),
-        *value,
-    ))
+    Some((read, global_key(module_source, name), *value))
 }
 
 struct GlobalGuards<'a> {
@@ -2204,11 +2198,7 @@ impl GlobalGuards<'_> {
         }) {
             return None;
         }
-        Some((
-            read,
-            (module_source.to_path().join("::"), name.clone()),
-            *value,
-        ))
+        Some((read, global_key(module_source, name), *value))
     }
 }
 
@@ -2275,7 +2265,7 @@ pub(super) fn unhoist_unobserved_globals(
             } = &body.exprs[e].kind
                 && !unobserving.contains(&e)
             {
-                observed.insert((module_source.to_path().join("::"), name.clone()));
+                observed.insert(global_key(module_source, name));
             }
         }
     }
@@ -2311,7 +2301,7 @@ fn reads_any_global(body: &Body, globals: &IndexSet<(String, String)>) -> bool {
             ExprKind::GlobalVarGet {
                 module_source,
                 name,
-            } => globals.contains(&(module_source.to_path().join("::"), name.clone())),
+            } => globals.contains(&global_key(module_source, name)),
             _ => false,
         })
 }
@@ -2366,6 +2356,7 @@ fn drop_unobserved_stmts(
     body.blocks[block].stmts = kept;
 }
 
+/// How DCE names a global: its module path and its name.
 fn global_key(module_source: &ModuleSource, name: &str) -> (String, String) {
     (module_source.to_path().join("::"), name.to_string())
 }
@@ -2557,26 +2548,26 @@ fn feeding_regions(
 struct Mentions {
     locals: IndexSet<u32>,
     reads: IndexSet<(String, String)>,
-    seen_locals: IndexSet<ValueId>,
-    seen_sources: IndexSet<ValueId>,
 }
 
 fn mentions_outside(body: &Body, regions: &IndexSet<NodeRef>) -> Mentions {
     struct Outside<'a> {
         regions: &'a IndexSet<NodeRef>,
         mentions: Mentions,
+        seen_locals: IndexSet<ValueId>,
+        seen_sources: IndexSet<ValueId>,
     }
     impl NirRefVisitor for Outside<'_> {
         fn visit_node(&mut self, body: &Body, node: NodeRef) {
             if self.regions.contains(&node) {
                 return;
             }
-            let Mentions {
-                locals,
-                reads,
+            let Self {
+                mentions: Mentions { locals, reads },
                 seen_locals,
                 seen_sources,
-            } = &mut self.mentions;
+                ..
+            } = self;
             if let NodeRef::Expr(e) = node {
                 match &body.exprs[e].kind {
                     ExprKind::Local { index, .. } => {
@@ -2610,6 +2601,8 @@ fn mentions_outside(body: &Body, regions: &IndexSet<NodeRef>) -> Mentions {
     let mut outside = Outside {
         regions,
         mentions: Mentions::default(),
+        seen_locals: IndexSet::default(),
+        seen_sources: IndexSet::default(),
     };
     outside.visit_node(body, NodeRef::Block(body.root()));
     outside.mentions
@@ -2653,10 +2646,9 @@ pub(super) fn remove_unreachable_globals(
     summaries: &FnSummaries,
     initializers: Initializers,
 ) {
-    project.globals.retain(|global| {
-        let global_module_key = global.module_source.to_path().join("::");
-        used_globals.contains(&(global_module_key, global.name.clone()))
-    });
+    project
+        .globals
+        .retain(|global| used_globals.contains(&global_key(&global.module_source, &global.name)));
 
     let type_table = project.type_table.borrow();
     for (i, func_rc) in project.functions.iter().enumerate() {
@@ -2773,8 +2765,7 @@ fn dead_store_value(body: &Body, e: ExprId, used: &IndexSet<(String, String)>) -
     else {
         return None;
     };
-    let key = (module_source.to_path().join("::"), name.clone());
-    (!used.contains(&key)).then_some(*value)
+    (!used.contains(&global_key(module_source, name))).then_some(*value)
 }
 
 /// The part of a dead store's value that must still run: all of it, unless it

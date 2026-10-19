@@ -42,13 +42,26 @@ pub fn check_loaded<H: CompilerHost>(
         .get(KILN_GENERATOR_WORLD)
         .expect("the stdlib declares the generator world");
     let provided = provided_wasi_interfaces(world);
+    let provided_text = provided
+        .iter()
+        .fold(String::new(), |mut out, (package, name)| {
+            let _ = write!(out, "`{name}` from `{WASI_SCHEME}{package}`, ");
+            out
+        });
 
     let mut count = 0;
     for (source, module) in modules {
         if !should_check(source) {
             continue;
         }
-        count += check_module(module, &provided, entry_module, source, logger);
+        count += check_module(
+            module,
+            &provided,
+            &provided_text,
+            entry_module,
+            source,
+            logger,
+        );
     }
     count
 }
@@ -440,6 +453,7 @@ fn should_check(source: &ModuleSource) -> bool {
 fn check_module<H: CompilerHost>(
     module: &Module,
     provided_wasi: &[(&str, &str)],
+    provided_text: &str,
     entry_module: &ModuleSource,
     this: &ModuleSource,
     logger: &Logger<'_, H>,
@@ -449,12 +463,6 @@ fn check_module<H: CompilerHost>(
     } else {
         format!("module `{this}`")
     };
-    let provided = provided_wasi
-        .iter()
-        .fold(String::new(), |mut out, (package, name)| {
-            let _ = write!(out, "`{name}` from `{WASI_SCHEME}{package}`, ");
-            out
-        });
     let filename = this.to_string();
     let mut count = 0;
     for item in &module.items {
@@ -465,7 +473,7 @@ fn check_module<H: CompilerHost>(
             let message = format!(
                 "kiln generator `{which}` imports `{src}`: {reason}. \
                  Generators must be deterministic and can only import \
-                 `core:*` modules, {provided}and project-relative paths. \
+                 `core:*` modules, {provided_text}and project-relative paths. \
                  See WEP 2026-04-12 §\"Design principles\".",
                 src = decl.source,
             );

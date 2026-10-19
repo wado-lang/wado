@@ -621,9 +621,8 @@ KilnHost::emit_diagnostic(KilnDiagnostic {
 });
 ```
 
-A `core:log` event becomes a diagnostic too. The compiler installs
-`KilnLogSink` around `generate`'s body, which maps each event it reaches by its
-level:
+A `core:log` event becomes a diagnostic too. The compiler runs `generate`'s body
+under `KilnLogSink`, which maps each event by its level:
 
 | Event level      | Diagnostic level |
 | ---------------- | ---------------- |

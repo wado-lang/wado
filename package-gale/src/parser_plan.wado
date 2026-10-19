@@ -146,11 +146,7 @@ pub fn plan_parser(
         // Every grammar reads its recovery sets off the ATN; only the
         // simulator's grammars also embed it.
         recovery: recovery_sets(atn, analysis.eof_kind_id()),
-        rule_captures: if settings.emit_actions {
-            rule_captures_of(grammar, lowered);
-        } else {
-            HashMap::new();
-        },
+        rule_captures: if settings.emit_actions { rule_captures_of(grammar, lowered) } else { HashMap::new() },
         binding_reads,
     };
 }
