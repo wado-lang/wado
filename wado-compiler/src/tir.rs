@@ -23,7 +23,8 @@ use crate::compiler_item::CompilerItems;
 use crate::defs::{DefId, DefKind, DefTable};
 use crate::module_source::{CmNamespace, ModuleSource};
 use crate::name::{
-    DeclaredHead, FqTraitName, FqTypeName, INTERNAL_PREFIX, LocalMethodName, NEVER_TYPE_NAME,
+    DeclaredHead, FqTraitName, FqTypeName, FunctionId, INTERNAL_PREFIX, LocalMethodName,
+    NEVER_TYPE_NAME,
     Receiver, RefKind, TEMPLATE_SHAPE_PREFIX, TypeHead, TypeNameInfo, UNIT_TYPE_NAME, checked_name,
     format_type_name, mangle_builtin_array_type, mangle_generic_name, mangle_local_item_name,
     mangle_tuple_type, unchecked_twin_name,
@@ -6962,14 +6963,12 @@ impl FunctionRef {
         self.module_source.to_path()
     }
 
-    /// Get the fully qualified function name including module path.
-    pub fn full_name(&self) -> String {
-        if let Some(info) = &self.method_info {
-            info.to_mangled_name()
-        } else {
-            let path = self.module_source.to_path();
-            format!("{}/{}", path.join("/"), self.name)
-        }
+    /// The function this reference denotes, keyed as NIR's
+    /// `FunctionRef::function_id` keys it. Not by `method_info`: monomorphization
+    /// points a call at an instance by its `name` alone, so the template's
+    /// `method_info` stays on the call.
+    pub fn function_id(&self) -> FunctionId {
+        FunctionId::free(&self.module_source, &self.name)
     }
 
     pub fn intrinsic(&self) -> Option<&str> {

@@ -529,11 +529,11 @@ impl HeldTypes for Stores<'_> {
 
 /// The key [`CalleeFacts`] files a callee under: a method's
 /// [`base_dispatch_key`](crate::name::LocalMethodName::base_dispatch_key), or
-/// a free function's full name.
+/// a free function's identity.
 fn callee_key(func: &FunctionRef) -> String {
     match &func.method_info {
         Some(info) => info.base_dispatch_key(),
-        None => func.full_name(),
+        None => func.function_id().to_string(),
     }
 }
 
