@@ -33,6 +33,10 @@ impl TcpSocket for MinimalTcp {            // a mock: anything unexpected traps
     fn create(&self, family: IpAddressFamily) -> Result<TcpSocket, ErrorCode> {
         resume Result::Ok(mock_socket())
     }
+    fn drop(&self, this: TcpSocket) {      // a drop is an operation too
+        this.drop();
+        resume ()
+    }
     ..trap
 }
 

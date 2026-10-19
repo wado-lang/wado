@@ -657,7 +657,7 @@ A handler answers an effect's operations in place of the host or the operation's
 
 `impl E for T` makes values of `T` handlers for `E`, where `E` is an effect interface or a resource. A plain trait is neither, even one spelled like an effect, and implementing it grants nothing.
 
-A handler method implements one operation. It takes the operation's parameters and return type, after a receiver the operation does not have: `&self` or `&mut self` to reach the handler's state, or none when the method needs no state. A resource's instance method receives the handle as an explicit parameter after that receiver.
+A handler method implements one operation. It takes the operation's parameters and return type, after a receiver the operation does not have: `&self` or `&mut self` to reach the handler's state, or none when the method needs no state. A resource's instance method receives the handle as an explicit parameter after that receiver. A resource's `drop` is one of its operations, so a handler answers each drop, the one scope exit writes included, and the method takes the handle by value.
 
 <!-- {"fixture":"spec_effects_handler_impl.wado"} -->
 
@@ -687,6 +687,10 @@ impl Fields for CountingFields {
     fn has(&mut self, this: &Fields, name: FieldName) -> bool {   // answers `f.has(name)`
         self.calls += 1;
         resume this.has(name)
+    }
+    fn drop(&mut self, this: Fields) {                            // answers `f.drop()`, and scope exit
+        this.drop();
+        resume ()
     }
     ..trap
 }
@@ -905,6 +909,10 @@ impl Log for Filter {                      // a layer: decorate one operation
 impl TcpSocket for MinimalTcp {            // a mock: anything unexpected traps
     fn create(&self, family: IpAddressFamily) -> Result<TcpSocket, ErrorCode> {
         resume Result::Ok(mock_socket())
+    }
+    fn drop(&self, this: TcpSocket) {      // a drop is an operation too
+        this.drop();
+        resume ()
     }
     ..trap
 }

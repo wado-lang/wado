@@ -335,6 +335,9 @@ pub resource Fields {
     #[cm("wasi:http/types@0.3.0#[method]fields.clone")]
     #[cm_params("self")]
     fn clone(&self) -> Fields;
+    /// Drop the resource. Scope exit drops one that nothing moved.
+    #[cm("resource-drop")]
+    fn drop(self);
 }
 
 /// Represents an HTTP Request.
@@ -449,6 +452,9 @@ pub resource Request {
         this: Request,
         res: Future<Result<(), ErrorCode>>,
     ) -> [Stream<u8>, Future<Result<Option<Trailers>, ErrorCode>>];
+    /// Drop the resource. Scope exit drops one that nothing moved.
+    #[cm("resource-drop")]
+    fn drop(self);
 }
 
 /// Parameters for making an HTTP Request. Each of these parameters is
@@ -498,6 +504,9 @@ pub resource RequestOptions {
     #[cm("wasi:http/types@0.3.0#[method]request-options.clone")]
     #[cm_params("self")]
     fn clone(&self) -> RequestOptions;
+    /// Drop the resource. Scope exit drops one that nothing moved.
+    #[cm("resource-drop")]
+    fn drop(self);
 }
 
 /// Represents an HTTP Response.
@@ -557,4 +566,7 @@ pub resource Response {
         this: Response,
         res: Future<Result<(), ErrorCode>>,
     ) -> [Stream<u8>, Future<Result<Option<Trailers>, ErrorCode>>];
+    /// Drop the resource. Scope exit drops one that nothing moved.
+    #[cm("resource-drop")]
+    fn drop(self);
 }

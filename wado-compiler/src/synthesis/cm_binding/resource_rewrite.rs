@@ -1791,6 +1791,10 @@ impl TirMutVisitor for CmMethodRewriter<'_> {
             self.rewrite_cm_new(expr, cm_name == "future-new");
             return;
         }
+        if cm_name == RESOURCE_DROP {
+            self.rewrite_resource_drop(expr);
+            return;
+        }
         if cm_name == "future-write"
             && let Some(payload_type_id) = future_write_payload(self.tt, expr)
         {
@@ -1859,6 +1863,25 @@ impl TirMutVisitor for CmMethodRewriter<'_> {
 }
 
 impl CmMethodRewriter<'_> {
+    /// `r.drop()` on a resource: the canonical `resource.drop` of its
+    /// declaration, handed the box itself, which the drop zeroes.
+    fn rewrite_resource_drop(&self, expr: &mut TirExpr) {
+        let TirExprKind::Call { args, .. } = &mut expr.kind else {
+            unreachable!("a `cm_name` is read off a call");
+        };
+        let receiver = std::mem::take(args)
+            .into_vec()
+            .into_iter()
+            .next()
+            .expect("a drop takes its resource")
+            .expr;
+        *expr = cm_canonical_call(
+            CanonicalIntrinsic::ResourceDrop(resource_decl(receiver.type_id, self.tt, self.cm_interface_registry)),
+            vec![receiver],
+            TypeTable::UNIT,
+        );
+    }
+
     /// Rewrite a CM call — `recv.method(args)` or `Type::method(args)` — to a
     /// builtin/internal call, casting each handle it passes to the scalar the
     /// canonical import takes.
@@ -1949,6 +1972,47 @@ impl CmMethodRewriter<'_> {
         ];
         *expr = TirExpr::new(TirExprKind::Block(block(stmts)), pair_type, synth_span());
     }
+}
+
+/// The `cm_name` of a resource's drop operation, which wado-from-idl declares
+/// on every affine resource.
+pub(crate) const RESOURCE_DROP: &str = "resource-drop";
+
+/// The Component Model declaration of the resource `resource_type`.
+fn resource_decl(
+    resource_type: TypeId,
+    tt: &TypeTable,
+    cm_interface_registry: &CmInterfaceRegistry,
+) -> CmDecl {
+    let def = tt
+        .nominal_def(tt.representation_head(resource_type))
+        .expect("a resource is declared");
+    let cm = cm_interface_registry
+        .get_resource_cm_name_by_module(&tt.def_module(def).to_string(), tt.def_name(def))
+        .expect("a dropped resource has a Component Model name");
+    CmDecl::new(tt.defs(), def, cm)
+}
+
+/// `resource.drop()` on a resource of type `resource_type`: the call a user
+/// writes, which the dispatch rewrite routes to an installed handler and this
+/// pass binds otherwise. A scope-exit drop is one (WEP: Affine Types).
+pub(crate) fn resource_drop_call(resource: TirExpr, resource_type: TypeId, tt: &TypeTable) -> TirExpr {
+    let head = tt.representation_head(resource_type);
+    let def = tt.nominal_def(head).expect("a resource is declared");
+    let mut info = LocalMethodName::new(tt.fq_base_type_name(head), None, "drop".to_string());
+    info.cm_name = Some(RESOURCE_DROP.to_string());
+    let func = FunctionRef {
+        module_source: tt.def_module(def).clone(),
+        name: info.to_mangled_name(),
+        template: None,
+        monomorph_info: None,
+        method_info: Some(info),
+    };
+    TirExpr::new(
+        TirExprKind::method_call(Box::new(resource), func, vec![], vec![]),
+        TypeTable::UNIT,
+        synth_span(),
+    )
 }
 
 /// `end.drop()` on a stream or future end of type `end_type`: the call a user

@@ -215,7 +215,10 @@ impl WadoCodeGenerator {
             .map(|parent| format!(" extends {parent}"))
             .unwrap_or_default();
 
-        if resource.methods.is_empty() {
+        // An affine resource drops through its own operation, so a handler
+        // installed for it sees each drop (WEP: Affine Types).
+        let drops = !resource.unrestricted;
+        if resource.methods.is_empty() && !drops {
             self.writeln(&format!("pub resource {}{extends};", resource.name));
         } else {
             self.writeln(&format!("pub resource {}{extends} {{", resource.name));
@@ -223,6 +226,11 @@ impl WadoCodeGenerator {
 
             for method in &resource.methods {
                 self.write_function(method);
+            }
+            if drops {
+                self.writeln("/// Drop the resource. Scope exit drops one that nothing moved.");
+                self.writeln("#[cm(\"resource-drop\")]");
+                self.writeln("fn drop(self);");
             }
 
             self.indent -= 1;

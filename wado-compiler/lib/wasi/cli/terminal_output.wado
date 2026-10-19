@@ -3,4 +3,8 @@
 
 /// The output side of a terminal.
 #[cm("wasi:cli/terminal-output@0.3.0#terminal-output")]
-pub resource TerminalOutput;
+pub resource TerminalOutput {
+    /// Drop the resource. Scope exit drops one that nothing moved.
+    #[cm("resource-drop")]
+    fn drop(self);
+}

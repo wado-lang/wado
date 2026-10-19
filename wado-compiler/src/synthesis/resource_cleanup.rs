@@ -10,7 +10,6 @@
 use std::cell::RefCell;
 use std::rc::Rc;
 
-use crate::canonical::{CanonicalIntrinsic, CmDecl};
 use crate::compiler_host::Code;
 use crate::compiler_item::{CompilerItem, SeqField};
 use crate::component_model::CmInterfaceRegistry;
@@ -22,11 +21,10 @@ use crate::name::{DROP_GLUE_PREFIX, Receiver, checked_name, drop_glue_name, mint
 use crate::package::Package;
 use crate::resource_holding::{Held, HeldTypes, holds_resource};
 use crate::synthesis::SynthesisError;
-use crate::synthesis::cm_binding::end_drop_call;
+use crate::synthesis::cm_binding::{end_drop_call, resource_drop_call};
 use crate::synthesis::common;
 use crate::synthesis::common::{
-    assign, binary, builtin_call, cm_canonical_call, expr_stmt, if_stmt, let_stmt, local_ref,
-    not_expr, synth_span,
+    assign, binary, builtin_call, expr_stmt, if_stmt, let_stmt, local_ref, not_expr, synth_span,
 };
 use crate::tir;
 use crate::tir::{
@@ -187,8 +185,8 @@ impl Cx<'_> {
 
 /// What a type holds that this pass drops, one level down.
 enum Layout<'a> {
-    /// A resource, released by `resource.drop` under this CM name.
-    Resource(DefId, &'a str),
+    /// A resource with a Component Model name, released by its `drop`.
+    Resource,
     /// A stream or future end, released by its own canonical drop.
     End,
     /// A `List` of `elem`, whose backing array of type `slots` its drop glue
@@ -271,12 +269,14 @@ impl<'a> Resources<'a> {
             if tt.is_unrestricted_resource(def) {
                 return Layout::Opaque;
             }
-            return match self
+            let named = self
                 .reg
                 .get_resource_cm_name_by_module(&tt.def_module(def).to_string(), tt.def_name(def))
-            {
-                Some(cm) => Layout::Resource(def, cm),
-                None => Layout::Opaque,
+                .is_some();
+            return if named {
+                Layout::Resource
+            } else {
+                Layout::Opaque
             };
         }
         if let ResolvedType::GenericResource { .. } = resolved {
@@ -369,7 +369,7 @@ impl<'a> Resources<'a> {
     /// into: a resource's box or a struct.
     fn is_object(&self, type_id: TypeId) -> bool {
         match self.layout(type_id) {
-            Layout::Resource(..) | Layout::End | Layout::List { .. } => true,
+            Layout::Resource | Layout::End | Layout::List { .. } => true,
             Layout::Holder {
                 parts: Parts::Fields(_),
                 ..
@@ -400,7 +400,7 @@ impl HeldTypes for Resources<'_> {
 
     fn held(&self, type_id: TypeId) -> Held {
         match self.layout(type_id) {
-            Layout::Resource(..)
+            Layout::Resource
             | Layout::End
             | Layout::Holder {
                 drop_impl: Some(_), ..
@@ -635,8 +635,8 @@ pub fn elaborate_resource_drops(project: &mut Package) -> Vec<SynthesisError> {
 
 /// What every callee in `flat` reveals about ownership, read before
 /// monomorphization replaces the generic signatures it is read from.
-pub fn instance_callee_facts(flat: &FlatPackage) -> CalleeFacts {
-    with_flat_resources(flat, |resources| {
+pub fn instance_callee_facts(flat: &FlatPackage, drop_impls: &DropImpls) -> CalleeFacts {
+    with_flat_resources(flat, drop_impls, |resources| {
         let mut callees = CalleeFacts::default();
         for func_rc in &flat.functions {
             callees.record(&func_rc.borrow(), resources);
@@ -645,21 +645,30 @@ pub fn instance_callee_facts(flat: &FlatPackage) -> CalleeFacts {
     })
 }
 
-/// Run `f` with the [`Resources`] of `flat`.
-fn with_flat_resources<R>(flat: &FlatPackage, f: impl FnOnce(Resources) -> R) -> R {
-    let struct_fields = tir::struct_fields(&flat.structs);
-    let drop_impls = drop_impls(
+/// The `Drop::drop` impls of `flat`, read before monomorphization takes the
+/// generic ones out of its functions.
+pub fn instance_drop_impls(flat: &FlatPackage) -> DropImpls {
+    drop_impls(
         flat.functions
             .iter()
             .map(|func| (func.borrow().module_source.clone(), func)),
         &flat.type_table.borrow(),
-    );
+    )
+}
+
+/// Run `f` with the [`Resources`] of `flat`.
+fn with_flat_resources<R>(
+    flat: &FlatPackage,
+    drop_impls: &DropImpls,
+    f: impl FnOnce(Resources) -> R,
+) -> R {
+    let struct_fields = tir::struct_fields(&flat.structs);
     let answers = RefCell::default();
     f(Resources {
         tt: &flat.type_table,
         reg: &flat.cm_interface_registry,
         struct_fields: &struct_fields,
-        drop_impls: &drop_impls,
+        drop_impls,
         answers: &answers,
     })
 }
@@ -668,8 +677,13 @@ fn with_flat_resources<R>(flat: &FlatPackage, f: impl FnOnce(Resources) -> R) ->
 /// on, a generic body whose types are now known (WEP: Affine Types). A copy a
 /// generic body makes is the instantiation rule's to refuse, so none is
 /// refused here.
-pub fn elaborate_instance_drops(flat: &mut FlatPackage, first: usize, callees: &CalleeFacts) {
-    let glue_functions = with_flat_resources(flat, |resources| {
+pub fn elaborate_instance_drops(
+    flat: &mut FlatPackage,
+    first: usize,
+    callees: &CalleeFacts,
+    drop_impls: &DropImpls,
+) {
+    let glue_functions = with_flat_resources(flat, drop_impls, |resources| {
         elaborate_instances(flat, first, resources, callees)
     });
     flat.functions
@@ -777,6 +791,10 @@ fn build_drop_glue(
     let value = local_ref(0, "value", type_id);
     let stmts = match cx.resources.layout(type_id) {
         Layout::List { slots, elem, .. } => drop_list_slots(value, slots, elem, &mut cx),
+        Layout::Holder {
+            drop_impl: Some(drop_impl),
+            ..
+        } => vec![call_drop_impl(value, drop_impl)],
         _ => drop_value(value, type_id, &mut cx),
     };
     let mut function = common::make_synthetic_free_function(
@@ -852,10 +870,11 @@ fn elaborate_function(
 }
 
 /// Each type's `Drop::drop`, by the type's declaration.
-type DropImpls = IndexMap<DefId, FunctionRef>;
+pub type DropImpls = IndexMap<DefId, FunctionRef>;
 
 /// The `Drop::drop` impls among `functions`, each with the module defining it:
-/// before link a function's own `module_source` is not set.
+/// before link a function's own `module_source` is not set. An instance is
+/// left out, so a generic impl is named by its template.
 fn drop_impls<'f>(
     functions: impl IntoIterator<Item = (ModuleSource, &'f Rc<RefCell<TirFunction>>)>,
     tt: &TypeTable,
@@ -864,6 +883,9 @@ fn drop_impls<'f>(
         .into_iter()
         .filter_map(|(module, func_rc)| {
             let func = func_rc.borrow();
+            if func.monomorph_info.is_some() {
+                return None;
+            }
             let implementor = drop_impl_of(&func, tt)?;
             Some((implementor, FunctionRef::from_resolved(&func, module)))
         })
@@ -998,14 +1020,11 @@ fn drop_discarded(value: TirExpr, cx: &mut Cx) -> Vec<TirStmt> {
 /// emptied is skipped.
 fn drop_value(scrutinee: TirExpr, type_id: TypeId, cx: &mut Cx) -> Vec<TirStmt> {
     match cx.resources.layout(type_id) {
-        Layout::Resource(def, cm) => {
-            let decl = CmDecl::new(cx.resources.tt.borrow().defs(), def, cm);
-            vec![expr_stmt(cm_canonical_call(
-                CanonicalIntrinsic::ResourceDrop(decl),
-                vec![scrutinee],
-                TypeTable::UNIT,
-            ))]
-        }
+        Layout::Resource => vec![expr_stmt(resource_drop_call(
+            scrutinee,
+            type_id,
+            &cx.resources.tt.borrow(),
+        ))],
         Layout::End if is_future_writable(type_id, cx) => vec![unwritten_future_trap(type_id, cx)],
         Layout::End => vec![expr_stmt(end_drop_call(
             scrutinee,
@@ -1013,17 +1032,29 @@ fn drop_value(scrutinee: TirExpr, type_id: TypeId, cx: &mut Cx) -> Vec<TirStmt> 
             &cx.resources.tt.borrow(),
         ))],
         Layout::List { .. } => drop_through_glue(scrutinee, type_id, cx),
+        // A generic impl's instance is monomorphization's to make. It scans
+        // the glue this pass adds, but not an instance body this pass
+        // elaborates, which it has already scanned.
+        Layout::Holder {
+            drop_impl: Some(_),
+            args,
+            ..
+        } if !args.is_empty() => drop_through_glue(scrutinee, type_id, cx),
         Layout::Holder {
             drop_impl: Some(drop_impl),
             ..
-        } => vec![expr_stmt(TirExpr::new(
-            TirExprKind::method_call(Box::new(scrutinee), drop_impl.clone(), vec![], vec![]),
-            TypeTable::UNIT,
-            synth_span(),
-        ))],
+        } => vec![call_drop_impl(scrutinee, drop_impl)],
         Layout::Holder { parts, .. } => drop_parts(scrutinee, type_id, parts, cx),
         Layout::Opaque => Vec::new(),
     }
+}
+
+fn call_drop_impl(scrutinee: TirExpr, drop_impl: &FunctionRef) -> TirStmt {
+    expr_stmt(TirExpr::new(
+        TirExprKind::method_call(Box::new(scrutinee), drop_impl.clone(), vec![], vec![]),
+        TypeTable::UNIT,
+        synth_span(),
+    ))
 }
 
 fn is_future_writable(type_id: TypeId, cx: &Cx) -> bool {
@@ -2061,7 +2092,7 @@ fn replace_through(
         Layout::Opaque
     };
     match layout {
-        Layout::Resource(..) | Layout::End => {
+        Layout::Resource | Layout::End => {
             stmts.push(expr_stmt(builtin_call(
                 "swap_handles",
                 vec![place, value.clone()],
@@ -2352,7 +2383,7 @@ fn refuse_self_store(place: TirExpr, stored: TirExpr, cx: &Cx) -> TirStmt {
 /// becomes 0 and a struct's affine fields null.
 fn zero_object(value: TirExpr, cx: &Cx) -> Vec<TirStmt> {
     match cx.resources.layout(value.type_id) {
-        Layout::Resource(..) | Layout::End => vec![expr_stmt(builtin_call(
+        Layout::Resource | Layout::End => vec![expr_stmt(builtin_call(
             "zero_handle",
             vec![value],
             TypeTable::UNIT,

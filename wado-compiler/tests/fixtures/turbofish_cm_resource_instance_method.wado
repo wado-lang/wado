@@ -10,8 +10,8 @@ export async fn handle(request: Request) -> Result<Response, ErrorCode> {
     future_tx.write(42);
 
     // Qualified with the receiver as the first argument, where `read` declares
-    // `&self`. The static `new` above shares this path and keeps its binding.
-    let result = Future::<i32>::read(&future_rx);
+    // `self`. The static `new` above shares this path and keeps its binding.
+    let result = Future::<i32>::read(future_rx);
     assert result == Option::Some(42);
 
     let [trailers_future, trailers_tx] = Future::<Result<Option<Trailers>, ErrorCode>>::new();

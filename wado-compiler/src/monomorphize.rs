@@ -22,7 +22,7 @@ use crate::hashmap::IndexMap;
 use crate::module_source::ModuleSource;
 use crate::name::{FreeFunctionName, LocalMethodName};
 use crate::synthesis::resource_cleanup;
-use crate::synthesis::resource_cleanup::CalleeFacts;
+use crate::synthesis::resource_cleanup::{CalleeFacts, DropImpls};
 use crate::tir::{
     AnonStructId, MonomorphInfo, ResolvedType, StructDef, TemplateId, TirFunction, TirModule,
     TirStruct, TypeId, TypeTable,
@@ -94,12 +94,14 @@ pub fn monomorphize(flat: &mut FlatPackage) -> Monomorphization {
             generic_functions.insert(func_rc);
         }
     }
+    let drop_impls = resource_cleanup::instance_drop_impls(flat);
     let mut session = Monomorphization {
         generic_functions,
         generic_structs: generic_structs_in(&flat.structs).collect(),
         monomorphizer: Monomorphizer::new(flat.trait_env.clone()),
         scanned_functions: 0,
-        callees: resource_cleanup::instance_callee_facts(flat),
+        callees: resource_cleanup::instance_callee_facts(flat, &drop_impls),
+        drop_impls,
         elaborated_functions: 0,
     };
     session.run(flat);
@@ -135,6 +137,8 @@ pub struct Monomorphization {
     /// What the templates' signatures reveal about ownership, for elaborating
     /// the drops of their instances.
     callees: CalleeFacts,
+    /// Each type's `Drop::drop`, a generic one by its template.
+    drop_impls: DropImpls,
     /// How many leading `flat.functions` have had their drops elaborated.
     elaborated_functions: usize,
 }
@@ -145,7 +149,18 @@ impl Monomorphization {
         self.run(flat);
     }
 
+    /// Instantiate, then elaborate the new instances' drops, until the drop
+    /// glue that elaborating adds calls no template left to instantiate.
     fn run(&mut self, flat: &mut FlatPackage) {
+        loop {
+            self.instantiate(flat);
+            if flat.functions.len() == self.scanned_functions {
+                break;
+            }
+        }
+    }
+
+    fn instantiate(&mut self, flat: &mut FlatPackage) {
         let mut temp_module = TirModule::new(flat.entry_module_source.clone());
         temp_module.type_table = flat.type_table.clone();
         temp_module.functions = std::mem::take(&mut flat.functions);
@@ -163,7 +178,12 @@ impl Monomorphization {
         write_back(flat, temp_module);
         // A generic body's drops are elaborated once its types are known
         // (WEP: Affine Types).
-        resource_cleanup::elaborate_instance_drops(flat, self.elaborated_functions, &self.callees);
+        resource_cleanup::elaborate_instance_drops(
+            flat,
+            self.elaborated_functions,
+            &self.callees,
+            &self.drop_impls,
+        );
         self.elaborated_functions = flat.functions.len();
     }
 }

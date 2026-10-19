@@ -641,4 +641,7 @@ pub resource Descriptor {
         path_flags: PathFlags,
         path: String,
     ) -> AsyncCall<Result<MetadataHashValue, ErrorCode>>;
+    /// Drop the resource. Scope exit drops one that nothing moved.
+    #[cm("resource-drop")]
+    fn drop(self);
 }
