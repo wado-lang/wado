@@ -2013,7 +2013,18 @@ fn atn_predict_above(
     min_prec: i32,
     false_preds: &List<i32>,
 ) -> i32 {
-    let [alt, _] = atn_predict_walk(dfa, sim, decision, rule_stack, floor, tokens, start_pos, eof, min_prec, false_preds);
+    let [alt, _] = atn_predict_walk(
+        dfa,
+        sim,
+        decision,
+        rule_stack,
+        floor,
+        tokens,
+        start_pos,
+        eof,
+        min_prec,
+        false_preds,
+    );
     return alt;
 }
 
@@ -2921,49 +2932,40 @@ global ATN_SIM: AtnSim = atn_decode(&b"\x02\x00\x03\x00\x27\x00\x00\x00\x02\x00\
 fn atn_decide_0(atn: &mut AtnPredictor, tokens: &Array<i32>, pos: i32, min_prec: i32) -> i32 {
     if pos < tokens.len() {
         match tokens[pos] {
-            TK_ID | TK_INT | TK_OP | TK_SEMI | TK_WS | TK_ERROR | TK_LIT_static | TK_LIT_final | TK_LIT_int => {
-                return 1;
-            },
             TK_LIT_public => {
                 if pos + 1 < tokens.len() {
                     match tokens[pos + 1] {
-                        TK_ID | TK_INT | TK_OP | TK_SEMI | TK_WS | TK_ERROR | TK_LIT_final | TK_LIT_int => {
-                            return 1;
-                        },
-                        TK_LIT_public => {
-                            return 1;
-                        },
                         TK_LIT_static => {
                             if pos + 2 < tokens.len() {
                                 match tokens[pos + 2] {
-                                    TK_ID | TK_INT | TK_OP | TK_SEMI | TK_WS | TK_ERROR | TK_LIT_static | TK_LIT_int => {
-                                        return 1;
-                                    },
-                                    TK_LIT_public => {
-                                        return 1;
-                                    },
                                     TK_LIT_final => {
                                         if pos + 3 < tokens.len() {
                                             match tokens[pos + 3] {
-                                                TK_ID | TK_INT | TK_OP | TK_SEMI | TK_WS | TK_ERROR | TK_LIT_static | TK_LIT_final => {
+                                                TK_EOF | TK_LIT_int => {},
+                                                _ => {
                                                     return 1;
                                                 },
-                                                TK_LIT_public => {
-                                                    return 1;
-                                                },
-                                                _ => {},
                                             };
                                         }
                                     },
-                                    _ => {},
+                                    TK_EOF => {},
+                                    _ => {
+                                        return 1;
+                                    },
                                 };
                             }
                         },
-                        _ => {},
+                        TK_EOF => {},
+                        _ => {
+                            return 1;
+                        },
                     };
                 }
             },
-            _ => {},
+            TK_EOF => {},
+            _ => {
+                return 1;
+            },
         };
     }
     return atn_predict_once(&ATN_SIM, 0, atn, tokens, pos, TK_EOF, min_prec);
@@ -2972,49 +2974,40 @@ fn atn_decide_0(atn: &mut AtnPredictor, tokens: &Array<i32>, pos: i32, min_prec:
 fn atn_decide_1(atn: &mut AtnPredictor, tokens: &Array<i32>, pos: i32, min_prec: i32) -> i32 {
     if pos < tokens.len() {
         match tokens[pos] {
-            TK_ID | TK_INT | TK_OP | TK_SEMI | TK_WS | TK_ERROR | TK_LIT_static | TK_LIT_final | TK_LIT_int => {
-                return 1;
-            },
             TK_LIT_public => {
                 if pos + 1 < tokens.len() {
                     match tokens[pos + 1] {
-                        TK_ID | TK_INT | TK_OP | TK_SEMI | TK_WS | TK_ERROR | TK_LIT_final | TK_LIT_int => {
-                            return 1;
-                        },
-                        TK_LIT_public => {
-                            return 1;
-                        },
                         TK_LIT_static => {
                             if pos + 2 < tokens.len() {
                                 match tokens[pos + 2] {
-                                    TK_ID | TK_INT | TK_OP | TK_SEMI | TK_WS | TK_ERROR | TK_LIT_static | TK_LIT_int => {
-                                        return 1;
-                                    },
-                                    TK_LIT_public => {
-                                        return 1;
-                                    },
                                     TK_LIT_final => {
                                         if pos + 3 < tokens.len() {
                                             match tokens[pos + 3] {
-                                                TK_ID | TK_INT | TK_OP | TK_SEMI | TK_WS | TK_ERROR | TK_LIT_static | TK_LIT_final => {
+                                                TK_EOF | TK_LIT_int => {},
+                                                _ => {
                                                     return 1;
                                                 },
-                                                TK_LIT_public => {
-                                                    return 1;
-                                                },
-                                                _ => {},
                                             };
                                         }
                                     },
-                                    _ => {},
+                                    TK_EOF => {},
+                                    _ => {
+                                        return 1;
+                                    },
                                 };
                             }
                         },
-                        _ => {},
+                        TK_EOF => {},
+                        _ => {
+                            return 1;
+                        },
                     };
                 }
             },
-            _ => {},
+            TK_EOF => {},
+            _ => {
+                return 1;
+            },
         };
     }
     return atn_predict_once(&ATN_SIM, 1, atn, tokens, pos, TK_EOF, min_prec);

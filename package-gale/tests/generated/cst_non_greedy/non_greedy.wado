@@ -2013,7 +2013,18 @@ fn atn_predict_above(
     min_prec: i32,
     false_preds: &List<i32>,
 ) -> i32 {
-    let [alt, _] = atn_predict_walk(dfa, sim, decision, rule_stack, floor, tokens, start_pos, eof, min_prec, false_preds);
+    let [alt, _] = atn_predict_walk(
+        dfa,
+        sim,
+        decision,
+        rule_stack,
+        floor,
+        tokens,
+        start_pos,
+        eof,
+        min_prec,
+        false_preds,
+    );
     return alt;
 }
 
@@ -2868,23 +2879,20 @@ global ATN_SIM: AtnSim = atn_decode(&b"\x02\x00\x04\x00\x23\x00\x00\x00\x02\x00\
 fn atn_decide_2(atn: &mut AtnPredictor, tokens: &Array<i32>, pos: i32, min_prec: i32) -> i32 {
     if pos < tokens.len() {
         match tokens[pos] {
-            TK_INT | TK_NAME | TK_WS | TK_ERROR | TK_LIT_LPAREN | TK_LIT_LBRACKET | TK_LIT_RBRACKET => {
-                return 1;
-            },
             TK_LIT_RPAREN => {
                 if pos + 1 < tokens.len() {
                     match tokens[pos + 1] {
-                        TK_INT | TK_NAME | TK_WS | TK_ERROR | TK_LIT_RBRACKET => {
+                        TK_EOF | TK_LIT_LPAREN | TK_LIT_LBRACKET => {},
+                        _ => {
                             return 1;
                         },
-                        TK_LIT_RPAREN => {
-                            return 1;
-                        },
-                        _ => {},
                     };
                 }
             },
-            _ => {},
+            TK_EOF => {},
+            _ => {
+                return 1;
+            },
         };
     }
     return atn_predict_once(&ATN_SIM, 2, atn, tokens, pos, TK_EOF, min_prec);
@@ -2893,23 +2901,20 @@ fn atn_decide_2(atn: &mut AtnPredictor, tokens: &Array<i32>, pos: i32, min_prec:
 fn atn_decide_3(atn: &mut AtnPredictor, tokens: &Array<i32>, pos: i32, min_prec: i32) -> i32 {
     if pos < tokens.len() {
         match tokens[pos] {
-            TK_INT | TK_NAME | TK_WS | TK_ERROR | TK_LIT_LPAREN | TK_LIT_RPAREN | TK_LIT_LBRACKET => {
-                return 1;
-            },
             TK_LIT_RBRACKET => {
                 if pos + 1 < tokens.len() {
                     match tokens[pos + 1] {
-                        TK_INT | TK_NAME | TK_WS | TK_ERROR | TK_LIT_RPAREN => {
+                        TK_EOF | TK_LIT_LPAREN | TK_LIT_LBRACKET => {},
+                        _ => {
                             return 1;
                         },
-                        TK_LIT_RBRACKET => {
-                            return 1;
-                        },
-                        _ => {},
                     };
                 }
             },
-            _ => {},
+            TK_EOF => {},
+            _ => {
+                return 1;
+            },
         };
     }
     return atn_predict_once(&ATN_SIM, 3, atn, tokens, pos, TK_EOF, min_prec);

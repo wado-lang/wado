@@ -2159,7 +2159,18 @@ fn atn_predict_above(
     min_prec: i32,
     false_preds: &List<i32>,
 ) -> i32 {
-    let [alt, _] = atn_predict_walk(dfa, sim, decision, rule_stack, floor, tokens, start_pos, eof, min_prec, false_preds);
+    let [alt, _] = atn_predict_walk(
+        dfa,
+        sim,
+        decision,
+        rule_stack,
+        floor,
+        tokens,
+        start_pos,
+        eof,
+        min_prec,
+        false_preds,
+    );
     return alt;
 }
 
@@ -3740,17 +3751,11 @@ fn atn_decide_1(atn: &mut AtnPredictor, tokens: &Array<i32>, pos: i32, min_prec:
             TK_LIT_case => {
                 if pos + 1 < tokens.len() {
                     match tokens[pos + 1] {
-                        TK_ID => {
+                        TK_ID | TK_LIT_case => {
                             return 0;
                         },
-                        TK_LIT_RPAREN => {
+                        TK_LIT_RPAREN | TK_LIT_PLUS => {
                             return 1;
-                        },
-                        TK_LIT_PLUS => {
-                            return 1;
-                        },
-                        TK_LIT_case => {
-                            return 0;
                         },
                         TK_LIT_when => {
                             if pos + 2 < tokens.len() {
@@ -3761,10 +3766,7 @@ fn atn_decide_1(atn: &mut AtnPredictor, tokens: &Array<i32>, pos: i32, min_prec:
                                     TK_LIT_when => {
                                         if pos + 3 < tokens.len() {
                                             match tokens[pos + 3] {
-                                                TK_ID | TK_LIT_when | TK_LIT_end => {
-                                                    return 0;
-                                                },
-                                                TK_LIT_case => {
+                                                TK_ID | TK_LIT_when | TK_LIT_end | TK_LIT_case => {
                                                     return 0;
                                                 },
                                                 _ => {},
@@ -3778,26 +3780,20 @@ fn atn_decide_1(atn: &mut AtnPredictor, tokens: &Array<i32>, pos: i32, min_prec:
                         TK_LIT_then => {
                             if pos + 2 < tokens.len() {
                                 match tokens[pos + 2] {
-                                    TK_ID | TK_LIT_then | TK_LIT_end => {
+                                    TK_ID | TK_LIT_then | TK_LIT_end | TK_LIT_case => {
                                         return 1;
                                     },
                                     TK_LIT_PLUS => {
                                         return 0;
                                     },
-                                    TK_LIT_case => {
-                                        return 1;
-                                    },
                                     TK_LIT_when => {
                                         if pos + 3 < tokens.len() {
                                             match tokens[pos + 3] {
-                                                TK_ID | TK_LIT_then => {
+                                                TK_ID | TK_LIT_then | TK_LIT_case => {
                                                     return 0;
                                                 },
                                                 TK_LIT_PLUS => {
                                                     return 1;
-                                                },
-                                                TK_LIT_case => {
-                                                    return 0;
                                                 },
                                                 _ => {},
                                             };
@@ -3810,13 +3806,7 @@ fn atn_decide_1(atn: &mut AtnPredictor, tokens: &Array<i32>, pos: i32, min_prec:
                         TK_LIT_end => {
                             if pos + 2 < tokens.len() {
                                 match tokens[pos + 2] {
-                                    TK_LIT_RPAREN => {
-                                        return 1;
-                                    },
-                                    TK_LIT_then => {
-                                        return 1;
-                                    },
-                                    TK_LIT_end => {
+                                    TK_LIT_RPAREN | TK_LIT_then | TK_LIT_end => {
                                         return 1;
                                     },
                                     _ => {},

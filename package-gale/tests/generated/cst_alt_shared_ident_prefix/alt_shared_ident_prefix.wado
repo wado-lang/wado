@@ -2159,7 +2159,18 @@ fn atn_predict_above(
     min_prec: i32,
     false_preds: &List<i32>,
 ) -> i32 {
-    let [alt, _] = atn_predict_walk(dfa, sim, decision, rule_stack, floor, tokens, start_pos, eof, min_prec, false_preds);
+    let [alt, _] = atn_predict_walk(
+        dfa,
+        sim,
+        decision,
+        rule_stack,
+        floor,
+        tokens,
+        start_pos,
+        eof,
+        min_prec,
+        false_preds,
+    );
     return alt;
 }
 
@@ -3506,19 +3517,10 @@ fn atn_decide_3(atn: &mut AtnPredictor, tokens: &Array<i32>, pos: i32, min_prec:
             TK_IDENT => {
                 if pos + 1 < tokens.len() {
                     match tokens[pos + 1] {
-                        TK_LIT_COMMA => {
+                        TK_LIT_COMMA | TK_LIT_EQGT | TK_LIT_RPAREN => {
                             return 1;
                         },
-                        TK_LIT_EQGT => {
-                            return 1;
-                        },
-                        TK_LIT_LPAREN => {
-                            return 2;
-                        },
-                        TK_LIT_RPAREN => {
-                            return 1;
-                        },
-                        TK_LIT_COLONCOLON => {
+                        TK_LIT_LPAREN | TK_LIT_COLONCOLON => {
                             return 2;
                         },
                         _ => {},
@@ -3543,17 +3545,11 @@ fn atn_decide_3(atn: &mut AtnPredictor, tokens: &Array<i32>, pos: i32, min_prec:
 fn atn_decide_5(atn: &mut AtnPredictor, tokens: &Array<i32>, pos: i32, min_prec: i32) -> i32 {
     if pos < tokens.len() {
         match tokens[pos] {
-            TK_LIT_COMMA => {
-                return 1;
-            },
-            TK_LIT_EQGT => {
+            TK_LIT_COMMA | TK_LIT_EQGT | TK_LIT_RPAREN => {
                 return 1;
             },
             TK_LIT_LPAREN => {
                 return 0;
-            },
-            TK_LIT_RPAREN => {
-                return 1;
             },
             _ => {},
         };

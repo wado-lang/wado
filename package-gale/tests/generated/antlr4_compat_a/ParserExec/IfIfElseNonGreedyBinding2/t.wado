@@ -2159,7 +2159,18 @@ fn atn_predict_above(
     min_prec: i32,
     false_preds: &List<i32>,
 ) -> i32 {
-    let [alt, _] = atn_predict_walk(dfa, sim, decision, rule_stack, floor, tokens, start_pos, eof, min_prec, false_preds);
+    let [alt, _] = atn_predict_walk(
+        dfa,
+        sim,
+        decision,
+        rule_stack,
+        floor,
+        tokens,
+        start_pos,
+        eof,
+        min_prec,
+        false_preds,
+    );
     return alt;
 }
 
@@ -3116,10 +3127,7 @@ global ATN_SIM: AtnSim = atn_decode(&b"\x03\x00\x03\x00\x27\x00\x00\x00\x02\x00\
 fn atn_decide_2(atn: &mut AtnPredictor, tokens: &Array<i32>, pos: i32, min_prec: i32) -> i32 {
     if pos < tokens.len() {
         match tokens[pos] {
-            TK_LIT_x => {
-                return 0;
-            },
-            TK_LIT_if => {
+            TK_LIT_x | TK_LIT_if => {
                 return 0;
             },
             _ => {},

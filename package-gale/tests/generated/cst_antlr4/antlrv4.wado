@@ -2213,7 +2213,18 @@ fn atn_predict_above(
     min_prec: i32,
     false_preds: &List<i32>,
 ) -> i32 {
-    let [alt, _] = atn_predict_walk(dfa, sim, decision, rule_stack, floor, tokens, start_pos, eof, min_prec, false_preds);
+    let [alt, _] = atn_predict_walk(
+        dfa,
+        sim,
+        decision,
+        rule_stack,
+        floor,
+        tokens,
+        start_pos,
+        eof,
+        min_prec,
+        false_preds,
+    );
     return alt;
 }
 
@@ -9023,7 +9034,7 @@ global ATN_SIM: AtnSim = atn_decode(&b"\x43\x00\x58\x00\x35\x04\x00\x00\x02\x00\
 fn atn_decide_52(atn: &mut AtnPredictor, tokens: &Array<i32>, pos: i32, min_prec: i32) -> i32 {
     if pos < tokens.len() {
         match tokens[pos] {
-            TK_STRING_LITERAL => {
+            TK_STRING_LITERAL | TK_DOT | TK_NOT => {
                 return 1;
             },
             TK_ACTION => {
@@ -9032,65 +9043,14 @@ fn atn_decide_52(atn: &mut AtnPredictor, tokens: &Array<i32>, pos: i32, min_prec
             TK_LPAREN => {
                 return 2;
             },
-            TK_DOT => {
-                return 1;
-            },
-            TK_NOT => {
-                return 1;
-            },
             TK_RULE_REF => {
                 if pos + 1 < tokens.len() {
                     match tokens[pos + 1] {
-                        TK_STRING_LITERAL => {
-                            return 1;
-                        },
-                        TK_BEGIN_ARGUMENT => {
-                            return 1;
-                        },
-                        TK_ACTION => {
-                            return 1;
-                        },
-                        TK_SEMI => {
-                            return 1;
-                        },
-                        TK_LPAREN => {
-                            return 1;
-                        },
-                        TK_RPAREN => {
-                            return 1;
-                        },
-                        TK_LT => {
+                        TK_STRING_LITERAL | TK_BEGIN_ARGUMENT | TK_ACTION | TK_SEMI | TK_LPAREN | TK_RPAREN | TK_LT | TK_QUESTION | TK_STAR | TK_PLUS | TK_OR | TK_DOT | TK_POUND | TK_NOT | TK_RULE_REF | TK_TOKEN_REF => {
                             return 1;
                         },
                         TK_ASSIGN | TK_PLUS_ASSIGN => {
                             return 0;
-                        },
-                        TK_QUESTION => {
-                            return 1;
-                        },
-                        TK_STAR => {
-                            return 1;
-                        },
-                        TK_PLUS => {
-                            return 1;
-                        },
-                        TK_OR => {
-                            return 1;
-                        },
-                        TK_DOT => {
-                            return 1;
-                        },
-                        TK_POUND => {
-                            return 1;
-                        },
-                        TK_NOT => {
-                            return 1;
-                        },
-                        TK_RULE_REF => {
-                            return 1;
-                        },
-                        TK_TOKEN_REF => {
-                            return 1;
                         },
                         _ => {},
                     };
@@ -9099,53 +9059,11 @@ fn atn_decide_52(atn: &mut AtnPredictor, tokens: &Array<i32>, pos: i32, min_prec
             TK_TOKEN_REF => {
                 if pos + 1 < tokens.len() {
                     match tokens[pos + 1] {
-                        TK_STRING_LITERAL => {
-                            return 1;
-                        },
-                        TK_ACTION => {
-                            return 1;
-                        },
-                        TK_SEMI => {
-                            return 1;
-                        },
-                        TK_LPAREN => {
-                            return 1;
-                        },
-                        TK_RPAREN => {
-                            return 1;
-                        },
-                        TK_LT => {
+                        TK_STRING_LITERAL | TK_ACTION | TK_SEMI | TK_LPAREN | TK_RPAREN | TK_LT | TK_QUESTION | TK_STAR | TK_PLUS | TK_OR | TK_DOT | TK_POUND | TK_NOT | TK_RULE_REF | TK_TOKEN_REF => {
                             return 1;
                         },
                         TK_ASSIGN | TK_PLUS_ASSIGN => {
                             return 0;
-                        },
-                        TK_QUESTION => {
-                            return 1;
-                        },
-                        TK_STAR => {
-                            return 1;
-                        },
-                        TK_PLUS => {
-                            return 1;
-                        },
-                        TK_OR => {
-                            return 1;
-                        },
-                        TK_DOT => {
-                            return 1;
-                        },
-                        TK_POUND => {
-                            return 1;
-                        },
-                        TK_NOT => {
-                            return 1;
-                        },
-                        TK_RULE_REF => {
-                            return 1;
-                        },
-                        TK_TOKEN_REF => {
-                            return 1;
                         },
                         _ => {},
                     };
@@ -9160,47 +9078,11 @@ fn atn_decide_52(atn: &mut AtnPredictor, tokens: &Array<i32>, pos: i32, min_prec
 fn atn_decide_53(atn: &mut AtnPredictor, tokens: &Array<i32>, pos: i32, min_prec: i32) -> i32 {
     if pos < tokens.len() {
         match tokens[pos] {
-            TK_STRING_LITERAL => {
+            TK_STRING_LITERAL | TK_ACTION | TK_SEMI | TK_LPAREN | TK_RPAREN | TK_OR | TK_DOT | TK_POUND | TK_NOT | TK_RULE_REF | TK_TOKEN_REF => {
                 return 1;
             },
-            TK_ACTION => {
-                return 1;
-            },
-            TK_SEMI => {
-                return 1;
-            },
-            TK_LPAREN => {
-                return 1;
-            },
-            TK_RPAREN => {
-                return 1;
-            },
-            TK_QUESTION => {
+            TK_QUESTION | TK_STAR | TK_PLUS => {
                 return 0;
-            },
-            TK_STAR => {
-                return 0;
-            },
-            TK_PLUS => {
-                return 0;
-            },
-            TK_OR => {
-                return 1;
-            },
-            TK_DOT => {
-                return 1;
-            },
-            TK_POUND => {
-                return 1;
-            },
-            TK_NOT => {
-                return 1;
-            },
-            TK_RULE_REF => {
-                return 1;
-            },
-            TK_TOKEN_REF => {
-                return 1;
             },
             _ => {},
         };
@@ -9211,47 +9093,11 @@ fn atn_decide_53(atn: &mut AtnPredictor, tokens: &Array<i32>, pos: i32, min_prec
 fn atn_decide_54(atn: &mut AtnPredictor, tokens: &Array<i32>, pos: i32, min_prec: i32) -> i32 {
     if pos < tokens.len() {
         match tokens[pos] {
-            TK_STRING_LITERAL => {
+            TK_STRING_LITERAL | TK_ACTION | TK_SEMI | TK_LPAREN | TK_RPAREN | TK_OR | TK_DOT | TK_POUND | TK_NOT | TK_RULE_REF | TK_TOKEN_REF => {
                 return 1;
             },
-            TK_ACTION => {
-                return 1;
-            },
-            TK_SEMI => {
-                return 1;
-            },
-            TK_LPAREN => {
-                return 1;
-            },
-            TK_RPAREN => {
-                return 1;
-            },
-            TK_QUESTION => {
+            TK_QUESTION | TK_STAR | TK_PLUS => {
                 return 0;
-            },
-            TK_STAR => {
-                return 0;
-            },
-            TK_PLUS => {
-                return 0;
-            },
-            TK_OR => {
-                return 1;
-            },
-            TK_DOT => {
-                return 1;
-            },
-            TK_POUND => {
-                return 1;
-            },
-            TK_NOT => {
-                return 1;
-            },
-            TK_RULE_REF => {
-                return 1;
-            },
-            TK_TOKEN_REF => {
-                return 1;
             },
             _ => {},
         };
@@ -9262,44 +9108,11 @@ fn atn_decide_54(atn: &mut AtnPredictor, tokens: &Array<i32>, pos: i32, min_prec
 fn atn_decide_55(atn: &mut AtnPredictor, tokens: &Array<i32>, pos: i32, min_prec: i32) -> i32 {
     if pos < tokens.len() {
         match tokens[pos] {
-            TK_STRING_LITERAL => {
-                return 1;
-            },
-            TK_ACTION => {
-                return 1;
-            },
-            TK_SEMI => {
-                return 1;
-            },
-            TK_LPAREN => {
-                return 1;
-            },
-            TK_RPAREN => {
-                return 1;
-            },
-            TK_LT => {
+            TK_STRING_LITERAL | TK_ACTION | TK_SEMI | TK_LPAREN | TK_RPAREN | TK_LT | TK_OR | TK_DOT | TK_POUND | TK_NOT | TK_RULE_REF | TK_TOKEN_REF => {
                 return 1;
             },
             TK_QUESTION => {
                 return 0;
-            },
-            TK_OR => {
-                return 1;
-            },
-            TK_DOT => {
-                return 1;
-            },
-            TK_POUND => {
-                return 1;
-            },
-            TK_NOT => {
-                return 1;
-            },
-            TK_RULE_REF => {
-                return 1;
-            },
-            TK_TOKEN_REF => {
-                return 1;
             },
             _ => {},
         };
@@ -9310,41 +9123,11 @@ fn atn_decide_55(atn: &mut AtnPredictor, tokens: &Array<i32>, pos: i32, min_prec
 fn atn_decide_56(atn: &mut AtnPredictor, tokens: &Array<i32>, pos: i32, min_prec: i32) -> i32 {
     if pos < tokens.len() {
         match tokens[pos] {
-            TK_STRING_LITERAL => {
-                return 1;
-            },
-            TK_ACTION => {
-                return 1;
-            },
-            TK_SEMI => {
-                return 1;
-            },
-            TK_LPAREN => {
-                return 1;
-            },
-            TK_RPAREN => {
+            TK_STRING_LITERAL | TK_ACTION | TK_SEMI | TK_LPAREN | TK_RPAREN | TK_OR | TK_DOT | TK_POUND | TK_NOT | TK_RULE_REF | TK_TOKEN_REF => {
                 return 1;
             },
             TK_LT => {
                 return 0;
-            },
-            TK_OR => {
-                return 1;
-            },
-            TK_DOT => {
-                return 1;
-            },
-            TK_POUND => {
-                return 1;
-            },
-            TK_NOT => {
-                return 1;
-            },
-            TK_RULE_REF => {
-                return 1;
-            },
-            TK_TOKEN_REF => {
-                return 1;
             },
             _ => {},
         };
@@ -9358,30 +9141,21 @@ fn atn_decide_58(atn: &mut AtnPredictor, tokens: &Array<i32>, pos: i32, min_prec
             TK_RULE_REF | TK_TOKEN_REF => {
                 if pos + 1 < tokens.len() {
                     match tokens[pos + 1] {
-                        TK_COMMA => {
-                            return 0;
-                        },
-                        TK_GT => {
+                        TK_COMMA | TK_GT | TK_DOT => {
                             return 0;
                         },
                         TK_ASSIGN => {
                             if pos + 2 < tokens.len() {
                                 match tokens[pos + 2] {
-                                    TK_INT | TK_STRING_LITERAL => {
+                                    TK_INT | TK_STRING_LITERAL | TK_RULE_REF | TK_TOKEN_REF => {
                                         return 0;
                                     },
                                     TK_ACTION => {
                                         return 1;
                                     },
-                                    TK_RULE_REF | TK_TOKEN_REF => {
-                                        return 0;
-                                    },
                                     _ => {},
                                 };
                             }
-                        },
-                        TK_DOT => {
-                            return 0;
                         },
                         _ => {},
                     };
@@ -9399,59 +9173,11 @@ fn atn_decide_72(atn: &mut AtnPredictor, tokens: &Array<i32>, pos: i32, min_prec
             TK_STRING_LITERAL => {
                 if pos + 1 < tokens.len() {
                     match tokens[pos + 1] {
-                        TK_STRING_LITERAL => {
-                            return 1;
-                        },
-                        TK_ACTION => {
-                            return 1;
-                        },
-                        TK_SEMI => {
-                            return 1;
-                        },
-                        TK_LPAREN => {
-                            return 1;
-                        },
-                        TK_RPAREN => {
-                            return 1;
-                        },
-                        TK_RARROW => {
-                            return 1;
-                        },
-                        TK_LT => {
-                            return 1;
-                        },
-                        TK_QUESTION => {
-                            return 1;
-                        },
-                        TK_STAR => {
-                            return 1;
-                        },
-                        TK_PLUS => {
-                            return 1;
-                        },
-                        TK_OR => {
+                        TK_STRING_LITERAL | TK_ACTION | TK_SEMI | TK_LPAREN | TK_RPAREN | TK_RARROW | TK_LT | TK_QUESTION | TK_STAR | TK_PLUS | TK_OR | TK_DOT | TK_POUND | TK_NOT | TK_LEXER_CHAR_SET | TK_RULE_REF | TK_TOKEN_REF => {
                             return 1;
                         },
                         TK_RANGE => {
                             return 2;
-                        },
-                        TK_DOT => {
-                            return 1;
-                        },
-                        TK_POUND => {
-                            return 1;
-                        },
-                        TK_NOT => {
-                            return 1;
-                        },
-                        TK_LEXER_CHAR_SET => {
-                            return 1;
-                        },
-                        TK_RULE_REF => {
-                            return 1;
-                        },
-                        TK_TOKEN_REF => {
-                            return 1;
                         },
                         _ => {},
                     };
@@ -9472,56 +9198,11 @@ fn atn_decide_72(atn: &mut AtnPredictor, tokens: &Array<i32>, pos: i32, min_prec
 fn atn_decide_73(atn: &mut AtnPredictor, tokens: &Array<i32>, pos: i32, min_prec: i32) -> i32 {
     if pos < tokens.len() {
         match tokens[pos] {
-            TK_STRING_LITERAL => {
-                return 1;
-            },
-            TK_ACTION => {
-                return 1;
-            },
-            TK_SEMI => {
-                return 1;
-            },
-            TK_LPAREN => {
-                return 1;
-            },
-            TK_RPAREN => {
-                return 1;
-            },
-            TK_RARROW => {
+            TK_STRING_LITERAL | TK_ACTION | TK_SEMI | TK_LPAREN | TK_RPAREN | TK_RARROW | TK_QUESTION | TK_STAR | TK_PLUS | TK_OR | TK_DOT | TK_POUND | TK_NOT | TK_LEXER_CHAR_SET | TK_RULE_REF | TK_TOKEN_REF => {
                 return 1;
             },
             TK_LT => {
                 return 0;
-            },
-            TK_QUESTION => {
-                return 1;
-            },
-            TK_STAR => {
-                return 1;
-            },
-            TK_PLUS => {
-                return 1;
-            },
-            TK_OR => {
-                return 1;
-            },
-            TK_DOT => {
-                return 1;
-            },
-            TK_POUND => {
-                return 1;
-            },
-            TK_NOT => {
-                return 1;
-            },
-            TK_LEXER_CHAR_SET => {
-                return 1;
-            },
-            TK_RULE_REF => {
-                return 1;
-            },
-            TK_TOKEN_REF => {
-                return 1;
             },
             _ => {},
         };
@@ -9532,56 +9213,11 @@ fn atn_decide_73(atn: &mut AtnPredictor, tokens: &Array<i32>, pos: i32, min_prec
 fn atn_decide_74(atn: &mut AtnPredictor, tokens: &Array<i32>, pos: i32, min_prec: i32) -> i32 {
     if pos < tokens.len() {
         match tokens[pos] {
-            TK_STRING_LITERAL => {
-                return 1;
-            },
-            TK_ACTION => {
-                return 1;
-            },
-            TK_SEMI => {
-                return 1;
-            },
-            TK_LPAREN => {
-                return 1;
-            },
-            TK_RPAREN => {
-                return 1;
-            },
-            TK_RARROW => {
+            TK_STRING_LITERAL | TK_ACTION | TK_SEMI | TK_LPAREN | TK_RPAREN | TK_RARROW | TK_QUESTION | TK_STAR | TK_PLUS | TK_OR | TK_DOT | TK_POUND | TK_NOT | TK_LEXER_CHAR_SET | TK_RULE_REF | TK_TOKEN_REF => {
                 return 1;
             },
             TK_LT => {
                 return 0;
-            },
-            TK_QUESTION => {
-                return 1;
-            },
-            TK_STAR => {
-                return 1;
-            },
-            TK_PLUS => {
-                return 1;
-            },
-            TK_OR => {
-                return 1;
-            },
-            TK_DOT => {
-                return 1;
-            },
-            TK_POUND => {
-                return 1;
-            },
-            TK_NOT => {
-                return 1;
-            },
-            TK_LEXER_CHAR_SET => {
-                return 1;
-            },
-            TK_RULE_REF => {
-                return 1;
-            },
-            TK_TOKEN_REF => {
-                return 1;
             },
             _ => {},
         };
@@ -9595,17 +9231,11 @@ fn atn_decide_84(atn: &mut AtnPredictor, tokens: &Array<i32>, pos: i32, min_prec
             TK_RULE_REF | TK_TOKEN_REF => {
                 if pos + 1 < tokens.len() {
                     match tokens[pos + 1] {
-                        TK_COMMA => {
-                            return 0;
-                        },
-                        TK_GT => {
+                        TK_COMMA | TK_GT | TK_DOT => {
                             return 0;
                         },
                         TK_ASSIGN => {
                             return 1;
-                        },
-                        TK_DOT => {
-                            return 0;
                         },
                         _ => {},
                     };

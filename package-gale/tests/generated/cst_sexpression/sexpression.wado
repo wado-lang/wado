@@ -2013,7 +2013,18 @@ fn atn_predict_above(
     min_prec: i32,
     false_preds: &List<i32>,
 ) -> i32 {
-    let [alt, _] = atn_predict_walk(dfa, sim, decision, rule_stack, floor, tokens, start_pos, eof, min_prec, false_preds);
+    let [alt, _] = atn_predict_walk(
+        dfa,
+        sim,
+        decision,
+        rule_stack,
+        floor,
+        tokens,
+        start_pos,
+        eof,
+        min_prec,
+        false_preds,
+    );
     return alt;
 }
 
@@ -3018,48 +3029,16 @@ fn atn_decide_1(atn: &mut AtnPredictor, tokens: &Array<i32>, pos: i32, min_prec:
             TK_LPAREN => {
                 if pos + 1 < tokens.len() {
                     match tokens[pos + 1] {
-                        TK_STRING | TK_NUMBER | TK_SYMBOL | TK_DOT => {
-                            if pos + 2 < tokens.len() {
-                                match tokens[pos + 2] {
-                                    TK_STRING | TK_NUMBER | TK_SYMBOL => {
-                                        return 1;
-                                    },
-                                    TK_LPAREN => {
-                                        return 1;
-                                    },
-                                    TK_RPAREN => {
-                                        return 1;
-                                    },
-                                    TK_DOT => {
-                                        if pos + 3 < tokens.len() {
-                                            match tokens[pos + 3] {
-                                                TK_RPAREN => {
-                                                    return 1;
-                                                },
-                                                _ => {},
-                                            };
-                                        }
-                                    },
-                                    _ => {},
-                                };
-                            }
-                        },
                         TK_LPAREN => {
                             if pos + 2 < tokens.len() {
                                 match tokens[pos + 2] {
                                     TK_RPAREN => {
                                         if pos + 3 < tokens.len() {
                                             match tokens[pos + 3] {
-                                                TK_STRING | TK_NUMBER | TK_SYMBOL => {
+                                                TK_WHITESPACE | TK_DOT | TK_EOF | TK_ERROR => {},
+                                                _ => {
                                                     return 1;
                                                 },
-                                                TK_LPAREN => {
-                                                    return 1;
-                                                },
-                                                TK_RPAREN => {
-                                                    return 1;
-                                                },
-                                                _ => {},
                                             };
                                         }
                                     },
@@ -3070,7 +3049,27 @@ fn atn_decide_1(atn: &mut AtnPredictor, tokens: &Array<i32>, pos: i32, min_prec:
                         TK_RPAREN => {
                             return 1;
                         },
-                        _ => {},
+                        TK_WHITESPACE | TK_EOF | TK_ERROR => {},
+                        _ => {
+                            if pos + 2 < tokens.len() {
+                                match tokens[pos + 2] {
+                                    TK_DOT => {
+                                        if pos + 3 < tokens.len() {
+                                            match tokens[pos + 3] {
+                                                TK_RPAREN => {
+                                                    return 1;
+                                                },
+                                                _ => {},
+                                            };
+                                        }
+                                    },
+                                    TK_WHITESPACE | TK_EOF | TK_ERROR => {},
+                                    _ => {
+                                        return 1;
+                                    },
+                                };
+                            }
+                        },
                     };
                 }
             },

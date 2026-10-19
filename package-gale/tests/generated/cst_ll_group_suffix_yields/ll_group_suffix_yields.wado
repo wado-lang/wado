@@ -2159,7 +2159,18 @@ fn atn_predict_above(
     min_prec: i32,
     false_preds: &List<i32>,
 ) -> i32 {
-    let [alt, _] = atn_predict_walk(dfa, sim, decision, rule_stack, floor, tokens, start_pos, eof, min_prec, false_preds);
+    let [alt, _] = atn_predict_walk(
+        dfa,
+        sim,
+        decision,
+        rule_stack,
+        floor,
+        tokens,
+        start_pos,
+        eof,
+        min_prec,
+        false_preds,
+    );
     return alt;
 }
 
@@ -3089,10 +3100,7 @@ fn atn_decide_0(atn: &mut AtnPredictor, tokens: &Array<i32>, pos: i32, min_prec:
                         TK_SEP => {
                             if pos + 2 < tokens.len() {
                                 match tokens[pos + 2] {
-                                    TK_STAR => {
-                                        return 0;
-                                    },
-                                    TK_LBRACE => {
+                                    TK_STAR | TK_LBRACE => {
                                         return 0;
                                     },
                                     _ => {},
