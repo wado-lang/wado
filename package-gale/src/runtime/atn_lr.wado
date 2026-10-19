@@ -267,7 +267,7 @@ internal fn atn_lr_loop_decision(
     if !contested && !atn_caller_contests(sim, &atn.stack, dstate, t, eof, min_prec) {
         return enter;
     }
-    return atn_lr_predict(sim, atn, decision, tokens, pos, eof, min_prec);
+    return atn_lr_predict(sim, atn, decision, tokens, pos, t, eof, min_prec);
 }
 
 internal fn atn_lr_enter_or_ask(
@@ -284,7 +284,7 @@ internal fn atn_lr_enter_or_ask(
     if !atn_caller_contests(sim, &atn.stack, sim.decision_state[decision], t, eof, min_prec) {
         return enter;
     }
-    return atn_lr_predict(sim, atn, decision, tokens, pos, eof, min_prec);
+    return atn_lr_predict(sim, atn, decision, tokens, pos, t, eof, min_prec);
 }
 
 fn atn_lr_predict(
@@ -293,12 +293,12 @@ fn atn_lr_predict(
     decision: i32,
     tokens: &Array<i32>,
     pos: i32,
+    t: i32,
     eof: i32,
     min_prec: i32,
 ) -> i32 {
     let alt = atn_predict_once(sim, decision, atn, tokens, pos, eof, min_prec);
     if alt == sim.state_tr_count[sim.decision_state[decision]] - 1 {
-        let t = if pos < tokens.len() { tokens[pos] } else { eof };
         atn_record_callers_exit(sim, atn, decision, pos, min_prec, t, eof);
     }
     return alt;

@@ -5885,7 +5885,9 @@ fn follow_arg_expr(ctx: &mut EmitContext, arg: &FollowArg) -> String {
                 _ => follow_alternative(loop_ref, positions, follow_arg_expr(ctx, &le.exit)),
             }
         },
-        OpenLoop(le) => follow_opened(&follow_arg_expr(ctx, &le.exit), &follow_open_set_expr(ctx, Option::Some(le.loop_mask))),
+        OpenLoop(le) => follow_opened(&follow_arg_expr(ctx, &le.exit), &follow_open_set_expr(ctx, Option::Some(
+            le.loop_mask,
+        ))),
     };
 }
 

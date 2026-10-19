@@ -347,19 +347,17 @@ fn greedy_optional_inner_follow(ctx: &mut LowerContext, rep: &RepeatElement, fol
 
 /// What a call ending one iteration of greedy loop `rep` continues into:
 /// another iteration, or `exit`, what follows the loop; unknown where `exit`
-/// is. `null` where the loop has no iteration prefix to gate on.
+/// is. `null` where the loop offers no next iteration to read.
 fn loop_tail_follow(ctx: &mut LowerContext, rep: &RepeatElement, exit: FollowArg) -> Option<FollowArg> {
-    if let Some(loop_mask) = loop_iteration_mask(ctx, rep) {
-        if exit matches { NoFollow } {
-            return Option::Some(exit);
-        }
-        return Option::Some(FollowArg::AltMask(CallerLoop { loop_mask, exit }));
-    }
-    if !loops_over_alternatives(rep) {
+    let iteration = loop_iteration_mask(ctx, rep);
+    if iteration matches { None } && !loops_over_alternatives(rep) {
         return null;
     }
     if exit matches { NoFollow } {
         return Option::Some(exit);
+    }
+    if let Some(loop_mask) = iteration {
+        return Option::Some(FollowArg::AltMask(CallerLoop { loop_mask, exit }));
     }
     let mut visiting: List<String> = [];
     let first = ctx.analysis.first_of_element(&rep.element, &mut visiting);
@@ -371,7 +369,9 @@ fn loop_tail_follow(ctx: &mut LowerContext, rep: &RepeatElement, exit: FollowArg
 
 /// A greedy `*` / `+` over a group of several alternatives.
 fn loops_over_alternatives(rep: &RepeatElement) -> bool {
-    return !rep.non_greedy && !rep.kind matches { Optional } && rep.element matches { Group(g) && g.alternatives.len() > 1 };
+    return !rep.non_greedy
+        && !rep.kind matches { Optional }
+        && rep.element matches { Group(g) && g.alternatives.len() > 1 };
 }
 
 /// The suffix twin of `greedy_optional_inner_follow`: what continues past a
@@ -401,10 +401,10 @@ fn retarget_loop_tail_follow(op: Op, tail: &FollowArg) -> Op {
         },
         Group(g) => {
             let mut group = g;
-            for let mut a = 0; a < group.alts.len(); a += 1 {
-                let last = group.alts[a].ops.len() - 1;
-                if last >= 0 {
-                    group.alts[a].ops[last] = retarget_loop_tail_follow(group.alts[a].ops[last], tail);
+            for let alt of &mut group.alts {
+                if !alt.ops.is_empty() {
+                    let last = alt.ops.len() - 1;
+                    alt.ops[last] = retarget_loop_tail_follow(alt.ops[last], tail);
                 }
             }
             Op::Group(group);
@@ -434,10 +434,10 @@ fn retarget_scan_loop_tail_follow(element: ScanElement, tail: &FollowArg) -> Sca
         },
         Group(g) => {
             let mut group = g;
-            for let mut a = 0; a < group.alts.len(); a += 1 {
-                let last = group.alts[a].elements.len() - 1;
-                if last >= 0 {
-                    group.alts[a].elements[last] = retarget_scan_loop_tail_follow(group.alts[a].elements[last], tail);
+            for let alt of &mut group.alts {
+                if !alt.elements.is_empty() {
+                    let last = alt.elements.len() - 1;
+                    alt.elements[last] = retarget_scan_loop_tail_follow(alt.elements[last], tail);
                 }
             }
             ScanElement::Group(group);
