@@ -1,9 +1,10 @@
 //! Native wasmtime runtime for Kiln generators.
 //!
 //! Instantiates a compiled generator component, linking `emit-diagnostic` and
-//! `wasi:random`, the latter from a fixed seed. Everything else — clocks,
-//! filesystem, http — is unlinked; a generator that imports any of those fails
-//! at link time, which is the determinism guarantee.
+//! `wasi:random`'s `insecure` and `insecure-seed`, both from a fixed seed.
+//! Everything else — `random`, clocks, filesystem, http — is unlinked; a
+//! generator that imports any of those fails at link time, which is the
+//! determinism guarantee.
 //!
 //! Revision 3: each generator has its own synthesized world (the `options` shape is
 //! per-generator), so `generate` is invoked dynamically as typed `Val`s rather
@@ -22,7 +23,8 @@ use wasmtime::component::types::{ComponentItem, Type};
 use wasmtime::component::{Component, Func, HasSelf, Instance, Linker, StreamReader, Val};
 use wasmtime::{Engine, Store};
 use wasmtime_wasi::WasiCtx;
-use wasmtime_wasi::random::{WasiRandomCtx, WasiRandomView};
+use wasmtime_wasi::p3::bindings::random::{insecure, insecure_seed};
+use wasmtime_wasi::random::{WasiRandom, WasiRandomCtx, WasiRandomView};
 
 use wado_compiler::kiln::{CanonicalOptions, CanonicalValue};
 use wado_compiler::name::to_cm_name;
@@ -59,7 +61,7 @@ pub struct KilnRunPolicy {
 
 struct KilnHostState {
     diagnostics: Arc<Mutex<Vec<GeneratorDiagnostic>>>,
-    /// Holds only the random context; nothing else of WASI is linked.
+    /// Holds only the insecure random context; nothing else of WASI is linked.
     wasi: WasiCtx,
 }
 
@@ -69,15 +71,15 @@ impl WasiRandomView for KilnHostState {
     }
 }
 
-/// `wasi:random` for one instance, drawing the same values on every run so
-/// that a generator stays a function of its invocation. The seeds are
-/// arbitrary; only their being fixed matters. ChaCha12 is named rather than
-/// `StdRng`, whose output rand does not promise to keep across versions.
+/// `wasi:random/insecure` and `insecure-seed` for one instance, answering the
+/// same on every run so that a generator stays a function of its invocation.
+/// The seeds are arbitrary; only their being fixed matters. ChaCha12 is named
+/// rather than `StdRng`, whose output rand does not promise to keep across
+/// versions.
 fn fixed_seed_random() -> WasiCtx {
     WasiCtx::builder()
-        .secure_random(ChaCha12Rng::from_seed([1; 32]))
-        .insecure_random(ChaCha12Rng::from_seed([2; 32]))
-        .insecure_random_seed(3)
+        .insecure_random(ChaCha12Rng::from_seed([1; 32]))
+        .insecure_random_seed(2)
         .build()
 }
 
@@ -145,9 +147,9 @@ fn exports(component: &Component, engine: &Engine, export: &str) -> bool {
 
 /// A fresh store and instance for one generator call. The kiln determinism
 /// guarantee (WEP 2026-04-12 §"Design principles" #1) is what keeps the linker
-/// to `core:kiln/kiln-host` and a fixed-seed `wasi:random`: the compiler elides
-/// the panic-path stderr at codegen time, so the component imports no other
-/// WASI to begin with.
+/// to `core:kiln/kiln-host` and a fixed-seed insecure `wasi:random`: the
+/// compiler elides the panic-path stderr at codegen time, so the component
+/// imports no other WASI to begin with.
 async fn instantiate(
     engine: &Engine,
     component: &Component,
@@ -156,7 +158,10 @@ async fn instantiate(
 ) -> Result<(Store<KilnHostState>, Instance), GeneratorRunnerError> {
     let mut linker: Linker<KilnHostState> = Linker::new(engine);
     kiln_host::add_to_linker::<_, HasSelf<_>>(&mut linker, |s| s)
-        .and_then(|()| wasmtime_wasi::p3::random::add_to_linker(&mut linker))
+        .and_then(|()| insecure::add_to_linker::<_, WasiRandom>(&mut linker, KilnHostState::random))
+        .and_then(|()| {
+            insecure_seed::add_to_linker::<_, WasiRandom>(&mut linker, KilnHostState::random)
+        })
         .map_err(|e| GeneratorRunnerError::Host(format!("linker setup: {e:#}")))?;
 
     let mut store = Store::new(
@@ -932,8 +937,9 @@ export fn generate(req: Request<Options>) -> Result<Response, Error> {
         );
     }
 
-    /// A generator draws from every `wasi:random` interface, the seed through
-    /// `HashMap::new()`, and writes the same output on every run.
+    /// A generator draws from both `wasi:random` interfaces its world imports,
+    /// the seed through `HashMap::new()` too, and writes the same output on
+    /// every run.
     #[test]
     fn wasi_random_draws_repeat_across_runs() {
         use wado_compiler::{CompilerOptions, LogLevel, compile_with_options};
@@ -941,16 +947,16 @@ export fn generate(req: Request<Options>) -> Result<Response, Error> {
         const SRC: &str = r#"
 use { Request, Response, Error, OutputFile } from "core:kiln";
 use { HashMap } from "core:collections";
-use { Insecure, Random } from "wasi:random";
+use { Insecure, InsecureSeed } from "wasi:random";
 
-export fn generate(req: Request) -> Result<Response, Error> with (Insecure, Random) {
+export fn generate(req: Request) -> Result<Response, Error> with (Insecure, InsecureSeed) {
     let mut draws = HashMap::<String, u64>::new();
-    draws["random"] = Random::get_random_u64();
     draws["insecure"] = Insecure::get_insecure_random_u64();
+    draws["seed"] = InsecureSeed::get_insecure_seed().0;
     return Result::Ok(Response {
         files: [OutputFile {
             path: "out.wado",
-            content: `${draws["random"]} ${draws["insecure"]}`,
+            content: `${draws["insecure"]} ${draws["seed"]}`,
             is_entry: true,
         }],
     });

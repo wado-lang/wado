@@ -118,9 +118,9 @@ and `HashSet` and the newtypes are deleted. `wado-lang:gale` re-exports both,
 so the deletion breaks a package that names them.
 
 Code that runs as a Kiln generator reaches `DEFAULT_HASH_SEED` as any other
-code does. The generator world imports `wasi:random`, which the Kiln host serves
-from a fixed seed ([The Sandbox](./spec-kiln.md#the-sandbox)), so the seed is
-the same on every run and the generator stays deterministic.
+code does. The generator world imports `wasi:random/insecure-seed`, whose value
+may be fixed ([The Sandbox](./spec-kiln.md#the-sandbox)), and the Kiln host
+answers it from a fixed seed, so the generator stays deterministic.
 
 This reverses an earlier decision. The Kiln host first provided no
 `insecure-seed`, on the grounds that a fixed seed in the generator gained as

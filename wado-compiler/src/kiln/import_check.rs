@@ -38,7 +38,7 @@ pub fn check_loaded<H: CompilerHost>(
     let world = worlds
         .get(KILN_GENERATOR_WORLD)
         .expect("the stdlib declares the generator world");
-    let provided = provided_wasi_packages(world);
+    let provided = provided_wasi_interfaces(world);
 
     let mut count = 0;
     for (source, module) in modules {
@@ -77,9 +77,9 @@ pub fn check_cm_imports<H: CompilerHost>(
             severity: Severity::Error,
             code: Code::KilnGeneratorForbiddenImport,
             message: format!(
-                "kiln generator imports `{fq}`, which no `use` in it names — a `core:*` module \
-                 reaches WASI on its behalf. The generator world does not import it, so this \
-                 component cannot instantiate. See WEP 2026-04-12 §\"Design principles\".",
+                "kiln generator imports `{fq}`, which the generator world does not, so this \
+                 component cannot instantiate. A namespace `use` reaches it, or a `core:*` \
+                 module does on the generator's behalf. See WEP 2026-04-12 §\"Design principles\".",
                 fq = entry.fq,
             ),
             span: None,
@@ -89,19 +89,19 @@ pub fn check_cm_imports<H: CompilerHost>(
     count
 }
 
-/// The WASI packages `world` imports an interface of, by name:
-/// `wasi:random/insecure-seed@0.3.0` gives `random`.
-fn provided_wasi_packages(world: &WorldInfo) -> Vec<&str> {
-    let mut packages: Vec<&str> = world
+/// The WASI interfaces `world` imports, each as its package and the name a
+/// `use` spells: `wasi:random/insecure-seed@0.3.0` gives
+/// `("random", "InsecureSeed")`.
+fn provided_wasi_interfaces(world: &WorldInfo) -> Vec<(&str, &str)> {
+    world
         .imports
         .iter()
-        .filter_map(|import| import.cm_interface_fq.as_deref())
-        .filter(|fq| fq.starts_with(WASI_SCHEME))
-        .map(fq_name_package)
-        .collect();
-    packages.sort_unstable();
-    packages.dedup();
-    packages
+        .filter_map(|import| {
+            let fq = import.cm_interface_fq.as_deref()?;
+            fq.starts_with(WASI_SCHEME)
+                .then(|| (fq_name_package(fq), import.interface_name.as_str()))
+        })
+        .collect()
 }
 
 /// Rewrite a kiln generator's `fn generate(req: Request<T>)` into the
@@ -394,25 +394,27 @@ fn should_check(source: &ModuleSource) -> bool {
 
 fn check_module<H: CompilerHost>(
     module: &Module,
-    provided_wasi: &[&str],
+    provided_wasi: &[(&str, &str)],
     entry_module: &ModuleSource,
     this: &ModuleSource,
     logger: &Logger<'_, H>,
 ) -> usize {
+    let which = if this == entry_module {
+        "entry module".to_string()
+    } else {
+        format!("module `{this}`")
+    };
+    let provided = provided_wasi
+        .iter()
+        .map(|(package, name)| format!("`{name}` from `{WASI_SCHEME}{package}`, "))
+        .collect::<String>();
+    let filename = this.to_string();
     let mut count = 0;
     for item in &module.items {
-        if let Item::Use(decl) = item
-            && let Some(reason) = forbid_reason(&decl.source, provided_wasi)
-        {
-            let which = if this == entry_module {
-                "entry module".to_string()
-            } else {
-                format!("module `{this}`")
-            };
-            let provided = provided_wasi
-                .iter()
-                .map(|package| format!("`{WASI_SCHEME}{package}`, "))
-                .collect::<String>();
+        let Item::Use(decl) = item else {
+            continue;
+        };
+        for (span, reason) in forbidden_sites(decl, provided_wasi) {
             let message = format!(
                 "kiln generator `{which}` imports `{src}`: {reason}. \
                  Generators must be deterministic and can only import \
@@ -420,15 +422,11 @@ fn check_module<H: CompilerHost>(
                  See WEP 2026-04-12 §\"Design principles\".",
                 src = decl.source,
             );
-            let filename = this.to_string();
             let _ = logger.error(Diagnostic {
                 severity: Severity::Error,
                 code: Code::KilnGeneratorForbiddenImport,
                 message,
-                span: Some(DiagnosticSpan::from_span(
-                    &decl.source_span,
-                    Some(&filename),
-                )),
+                span: Some(DiagnosticSpan::from_span(span, Some(&filename))),
             });
             count += 1;
         }
@@ -436,14 +434,52 @@ fn check_module<H: CompilerHost>(
     count
 }
 
+/// The sites of `decl` a generator whose world imports `provided_wasi` may not
+/// import, each with the reason: the source itself, or an interface it names
+/// from a WASI package the world imports only part of. A namespace `use` names
+/// none, and the import-plan check answers for what it reaches.
+fn forbidden_sites<'a>(
+    decl: &'a UseDecl,
+    provided_wasi: &[(&str, &str)],
+) -> Vec<(&'a Span, String)> {
+    if let Some(reason) = forbid_reason(&decl.source, provided_wasi) {
+        return vec![(&decl.source_span, reason.to_string())];
+    }
+    let Some(package) = wasi_package(&decl.source) else {
+        return Vec::new();
+    };
+    decl.items
+        .iter()
+        .filter_map(|item| match item {
+            UseItem::Simple {
+                name, name_span, ..
+            }
+            | UseItem::InterfaceFunctions {
+                interface_name: name,
+                name_span,
+                ..
+            } => Some((name, name_span)),
+            UseItem::Wildcard | UseItem::Namespace { .. } => None,
+        })
+        .filter(|(name, _)| !provided_wasi.contains(&(package, name.as_str())))
+        .map(|(name, span)| {
+            (
+                span,
+                format!("the generator world does not import `{name}`"),
+            )
+        })
+        .collect()
+}
+
 /// Return `Some(reason)` when `source` is not permitted inside a Kiln
-/// generator package, whose world imports the WASI packages `provided_wasi`.
-fn forbid_reason(source: &str, provided_wasi: &[&str]) -> Option<&'static str> {
-    if let Some(path) = source.strip_prefix(WASI_SCHEME) {
-        let package = path.split_once('/').map_or(path, |(package, _)| package);
-        if !provided_wasi.contains(&package) {
-            return Some("the generator world does not import it, and WASI breaks determinism");
-        }
+/// generator package, whose world imports the WASI interfaces `provided_wasi`.
+fn forbid_reason(source: &str, provided_wasi: &[(&str, &str)]) -> Option<&'static str> {
+    if let Some(package) = wasi_package(source)
+        && !provided_wasi
+            .iter()
+            .any(|(provided, _)| *provided == package)
+    {
+        return Some("the generator world imports none of its interfaces");
     }
     // Any explicit scheme other than `core:` or a project-relative path.
     // Bare URLs (`http://…`, `https://…`) are rejected on the same grounds.
@@ -453,11 +489,18 @@ fn forbid_reason(source: &str, provided_wasi: &[&str]) -> Option<&'static str> {
     None
 }
 
+/// The package a `wasi:` source names: `random` for `wasi:random` and for
+/// `wasi:random/insecure_seed.wado`.
+fn wasi_package(source: &str) -> Option<&str> {
+    let path = source.strip_prefix(WASI_SCHEME)?;
+    Some(path.split_once('/').map_or(path, |(package, _)| package))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
 
-    const PROVIDED: &[&str] = &["random"];
+    const PROVIDED: &[(&str, &str)] = &[("random", "Insecure"), ("random", "InsecureSeed")];
 
     #[test]
     fn forbid_reason_flags_unprovided_wasi_and_http() {

@@ -372,7 +372,7 @@ fn generator_importing_wasi_clocks_is_rejected() {
 
 /// A generator reaching a `core:*` module that itself imports WASI must not
 /// pick up that import: the Kiln linker offers only `core:kiln/kiln-host` and
-/// `wasi:random`, so any other `wasi:*` interface carrying a function fails
+/// insecure `wasi:random`, so any other `wasi:*` interface carrying a function fails
 /// instantiation.
 ///
 /// `core:log` is no `wasi:` import at the source level, so the `use`-site check
@@ -463,7 +463,7 @@ fn generator_installing_a_stamped_sink_is_rejected() {
 
 /// `HashMap::new()` reads `DEFAULT_HASH_SEED`, whose `#[benign]` initializer
 /// asks the host: `#[benign]` waives the effect, not the world import, and the
-/// generator world imports `wasi:random`.
+/// generator world imports `wasi:random/insecure-seed`.
 const DEFAULT_SEED_MAP_GENERATOR: &str = r#"
 use { Request, Response, Error } from "core:kiln";
 use { HashMap } from "core:collections";
@@ -495,10 +495,15 @@ export fn generate(req: Request) -> Result<Response, Error> with Random {
 }
 "#;
 
+/// WASI has a deterministic host omit `random`, so the generator world imports
+/// only part of `wasi:random`, and the `use` naming the rest is blamed.
 #[test]
-fn generator_may_import_wasi_random() {
-    let imports = wasi_imports_of(RANDOM_GENERATOR, "wasi:random generator");
-    assert_eq!(function_bearing(&imports), ["wasi:random/random@0.3.0"]);
+fn generator_importing_wasi_random_random_is_rejected() {
+    expect_forbidden_import(
+        RANDOM_GENERATOR,
+        "does not import `Random`",
+        "a generator naming wasi:random/random",
+    );
 }
 
 /// A map under a fixed seed leaves `DEFAULT_HASH_SEED` unread, so its

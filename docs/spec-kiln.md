@@ -303,8 +303,8 @@ beside it, and a consuming build uses that output without running the generator
 ### The Generator World
 
 A generator targets the `core:kiln/generator` world. It imports `KilnHost` and
-the three `wasi:random` interfaces, and nothing else
-([The Sandbox](#the-sandbox)):
+two of the `wasi:random` interfaces, `Insecure` and `InsecureSeed`, and nothing
+else ([The Sandbox](#the-sandbox)):
 
 <!-- {"source": "wado-compiler/lib/core/kiln/worlds.wado"} -->
 
@@ -312,7 +312,6 @@ the three `wasi:random` interfaces, and nothing else
 #[cm("core:kiln/generator@0.1.0")]
 pub world Generator {
     import KilnHost;
-    import Random;
     import Insecure;
     import InsecureSeed;
 }
@@ -662,13 +661,16 @@ export fn probe(path: String, content: Stream<u8>) -> Result<u64, Error> {
 ## The Sandbox
 
 A generator runs in a deterministic sandbox. It has no clocks, network,
-environment, or filesystem, and its randomness is the same on every run. It is a
-function of what the invocation hands it: the input files, the name it was
-invoked under, and the options.
+environment, filesystem, or secure randomness. It is a function of what the
+invocation hands it: the input files, the name it was invoked under, and the
+options.
 
-- The host provides `KilnHost` and `wasi:random`, and nothing else.
-- `wasi:random` draws from a fixed seed. Every run of a generator draws the same
-  values, `wasi:random/random` included, so nothing a generator draws is secret.
+- The host provides `KilnHost`, `wasi:random/insecure`, and
+  `wasi:random/insecure-seed`, and nothing else.
+- Both random interfaces behave as `wasi:random/insecure-seed` specifies: what
+  they return may be fixed.
+- `wasi:random/random` is not provided, because WASI requires a deterministic
+  environment to omit it.
 - A map under the default seed works as in any other program: `HashMap::new()`,
   a map literal, `Default`, and `Deserialize`.
 - A generator opens no file. Each input arrives as a stream, and the host

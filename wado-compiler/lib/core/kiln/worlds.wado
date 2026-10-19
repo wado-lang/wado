@@ -9,12 +9,13 @@
 /// imports and to anchor the `core:kiln/generator` identity that
 /// import-refusal, provider selection, and generator detection key on.
 /// 
-/// `wasi:random` is served from a fixed seed, so a generator stays a function
-/// of its invocation while `HashMap::new()` still reaches its default seed.
+/// Of `wasi:random` it imports the interfaces WASI lets a host answer
+/// deterministically: `insecure-seed`, which `HashMap::new()` reads, and
+/// `insecure`. A generator is a function of its invocation, so it cannot have
+/// `random`, which WASI says a deterministic environment must omit.
 #[cm("core:kiln/generator@0.1.0")]
 pub world Generator {
     import KilnHost;
-    import Random;
     import Insecure;
     import InsecureSeed;
 }
