@@ -64,6 +64,15 @@ test "a set holds stream ends the host has no event for" {
     assert writers.len() == 1;
 }
 
+test "a set drops the future reader it holds" {
+    let [rx, tx] = Future::<u8>::new();
+    let mut readers = WaitableSet::<Future<u8>>::new();
+    readers.join(rx);
+    assert readers.poll() matches { None };
+    builtin::drop(readers);
+    assert tx.write(1).result == CopyResult::Dropped;
+}
+
 test "log_stdout writes without an effect" {
     log_stdout("");
 }
