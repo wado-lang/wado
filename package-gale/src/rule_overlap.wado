@@ -101,11 +101,11 @@ fn admit_rule_follow_into_nullable(classes: &mut List<AltClass>, first_sets: &mu
 
 /// Whether the simulator decides `a` rather than the longest-match tournament.
 /// The tournament reads the longest scan, and ANTLR4 the lowest alternative
-/// the rest of the input still admits, so under `Auto` only an at-end conflict
-/// no caller can continue on is left to the tournament.
+/// the rest of the input still admits, so under `Auto` (and `Verify`) only an
+/// at-end conflict no caller can continue on is left to the tournament.
 pub fn ambiguity_routes<S: AsStrSlice>(a: &AmbiguousNode, rule_name: S, follow: &RuleFollow, mode: AtnMode) -> bool {
     return match mode {
-        Auto => match a.reason {
+        Auto | Verify => match a.reason {
             AtEndConflict => follow.at_end_conflict_routes(rule_name, &a.branch_tokens),
             _ => true,
         },

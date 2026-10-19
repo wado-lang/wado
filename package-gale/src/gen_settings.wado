@@ -27,9 +27,20 @@ pub enum AtnMode {
     /// Every ambiguity goes to the tournament, and a grammar with a decision
     /// only the simulator can make is refused.
     Never,
+    /// What `Auto` routes to the simulator, but where the parser settles one of
+    /// those decisions without it, it asks the simulator as well and panics
+    /// when the two disagree.
+    Verify,
 }
 
 impl Deserialize for AtnMode;
+
+impl AtnMode {
+    /// Whether a decision settled without the simulator is checked against it.
+    pub fn verifies(&self) -> bool {
+        return *self matches { Verify };
+    }
+}
 
 /// The settings of one generation. `codegen::install_action_context` builds
 /// them; nothing changes them afterwards.

@@ -187,7 +187,7 @@ use {
     kind_bitset_words,
 } from "./kind_set_gen.wado";
 use { group_alt_classes, non_greedy_static_undecided } from "./lower.wado";
-use { sll_decide_fn_name } from "./atn_sll.wado";
+use { ATN_VERIFIED_LR, sll_decide_fn_name } from "./atn_sll.wado";
 
 /// Append the defaulted runtime FOLLOW-continuation argument to a
 /// parse/scan/LR function signature, BEFORE any `min_prec` so a
@@ -953,9 +953,7 @@ fn gen_lr_suffix_dispatch_atn<S: AsStrSlice>(
 ) {
     let valid = &lr_dispatch.valid_lr_alts;
     w.begin("loop");
-    w.line(
-        `let _atn_alt = atn_lr_loop_decision(&ATN_SIM, ${ctx.atn_arg()}, ${decision}, tokens, pos, TK_EOF, min_prec);`,
-    );
+    w.line(`let _atn_alt = ${lr_decision_call(ctx, decision, "tokens", "pos")};`);
     for let mut i = 0; i < valid.len(); i += 1 {
         let lr = &lr_alts[valid[i]];
         let suffix_call = `${fn_name}_lr_${lr.alt_index}(tokens, pos${scan_trailing_args(ctx)})`;
@@ -4006,9 +4004,7 @@ fn gen_lr_fn_atn<S: AsStrSlice>(
     let mut nc: List<[String, i32]> = [];
     w.begin("loop");
     w.line("if p.recovering { break; }");
-    w.line(
-        `let _atn_alt = atn_lr_loop_decision(&ATN_SIM, ${ctx.atn_arg()}, ${decision}, &p.kinds, p.pos, TK_EOF, min_prec);`,
-    );
+    w.line(`let _atn_alt = ${lr_decision_call(ctx, decision, "&p.kinds", "p.pos")};`);
     w.line("let _lr_pos0 = p.pos;");
     for let mut i = 0; i < valid.len(); i += 1 {
         let lr = &lr_alts[valid[i]];
@@ -7267,6 +7263,19 @@ fn gen_atn_body_pick<S: AsStrSlice, S1: AsStrSlice>(
         w.line(`if ${negate_cond(&g.1)} { _atn_false.push(${g.0}); }`);
     }
     w.line(`let _atn_alt = ${atn_predict_call(dec, tokens, pos, ctx, "_atn_false")};`);
+}
+
+/// The LR loop's pick at decision `decision`, over `tokens` at `pos`. Under
+/// `atn: "verify"` it goes through `ATN_VERIFIED_LR`, which checks the loop's
+/// shortcut against the simulator.
+fn lr_decision_call<S: AsStrSlice, S1: AsStrSlice>(ctx: &mut EmitContext, decision: i32, tokens: S, pos: S1) -> String {
+    let callee = if ctx.settings.atn.verifies() {
+        ctx.cursor.note_ref(&ATN_VERIFIED_LR);
+        ATN_VERIFIED_LR;
+    } else {
+        "atn_lr_loop_decision";
+    };
+    return `${callee}(&ATN_SIM, ${ctx.atn_arg()}, ${decision}, ${tokens}, ${pos}, TK_EOF, min_prec)`;
 }
 
 /// The simulator's pick at decision `atn_dec`, over `tokens` at `pos`, with the

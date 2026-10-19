@@ -67,7 +67,7 @@ use { lower } from "./lower.wado";
 use { build_atn_with, atn_blob_bytes, Atn, empty_atn } from "./atn.wado";
 use { build_latn, grammar_needs_latn, LatnResult } from "./latn.wado";
 use { HashMap, HashSet } from "core:collections";
-use { SllExplorer, gen_sll_decide_fn, sll_decide_fn_name } from "./atn_sll.wado";
+use { ATN_VERIFIED_LR, SllExplorer, gen_atn_verify_fns, gen_sll_decide_fn, sll_decide_fn_name } from "./atn_sll.wado";
 use { GALE_SEED } from "./hash_seed.wado";
 use { Diagnostic, DiagnosticKind, DiagnosticOwner, DiagnosticSite, Diagnostics, LoweredGrammar } from "./gir.wado";
 
@@ -546,18 +546,22 @@ fn warn_atn_class_lexer_predicates(grammar: &Grammar, atn_class_rules: &List<Str
     }
 }
 
-/// Emit the decoded `ATN_SIM` global: the serialized whole-grammar ATN the
-/// inlined runtime decodes once, at construction, into the module-level sim.
-/// Emit the decision functions the kept code calls, in decision order.
+/// Emit the decision functions the kept code calls, in decision order, and the
+/// checks `atn: "verify"` routes them through.
 fn gen_sll_decide_fns(w: &mut CodeWriter, ctx: &EmitContext, atn: &Atn, used: &HashSet<String>) {
+    let verify = ctx.settings.atn.verifies();
     let mut explorer = SllExplorer::new(atn, ctx.analysis.eof_kind_id());
+    let mut dfa_verified = false;
     for let d of 0..<atn.decision_state.len() {
         if used.contains(sll_decide_fn_name(d)) {
-            gen_sll_decide_fn(w, d, &explorer.explore(d), &ctx.analysis);
+            dfa_verified = gen_sll_decide_fn(w, d, &explorer.explore(d), &ctx.analysis, verify) || dfa_verified;
         }
     }
+    gen_atn_verify_fns(w, dfa_verified, used.contains(ATN_VERIFIED_LR));
 }
 
+/// Emit the decoded `ATN_SIM` global: the serialized whole-grammar ATN the
+/// inlined runtime decodes once, at construction, into the module-level sim.
 fn gen_atn_data_global(w: &mut CodeWriter, atn: &Atn, lr_tables: bool) {
     emit_atn_blob_global(w, atn, "ATN_SIM", lr_tables);
     w.blank();

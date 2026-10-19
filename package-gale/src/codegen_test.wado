@@ -763,6 +763,31 @@ test "atn always lets the simulator decide a group" {
     assert always == "a b => (s (a a) b)\na b b => (s (a a) b b)\n";
 }
 
+// The atom choice reads past `any`'s nesting, so the simulator owns it, and the
+// LR loop decides through the simulator's runtime.
+global VERIFIED_LR_G4: String = "grammar L;
+s : K_SEL e (K_ORD ID)? EOF ;
+e : e '||' e | e '=' e | n | f '(' ')' | '(' e ')' | INT ;
+n : any ;
+f : any ;
+any : ID | '(' any ')' ;
+K_SEL : 'sel' ;
+K_ORD : 'ord' ;
+ID : [a-z]+ ;
+INT : [0-9]+ ;
+WS : ' ' -> skip ;
+";
+
+test "atn verify checks the shortcuts against the simulator and parses as auto does" {
+    let verify = GenerateOptions { atn: AtnMode::Verify };
+    let source = gen_with(VERIFIED_LR_G4, &verify).source;
+    assert source.contains("atn_verified(");
+    assert source.contains("atn_lr_loop_decision_verified(");
+    assert !gen_source(VERIFIED_LR_G4).contains("atn_verify(");
+    let inputs: List<String> = ["sel a = 1 ord b", "sel (a) = f() ord b", "sel ((a)) || 1 = (b)"];
+    assert parses(VERIFIED_LR_G4, "s", inputs, &verify) == parses(VERIFIED_LR_G4, "s", inputs);
+}
+
 // Each repeat's body can start what follows it, so its first token does not say
 // whether it enters. The trees are the jar's.
 global CONTESTED_REPEATS_G4: String = "grammar R;

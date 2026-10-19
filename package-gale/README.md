@@ -256,6 +256,12 @@ build a different one.
 | `"auto"` (default) | simulator          | tournament or a continuation scan      | simulator                              |
 | `"always"`         | simulator          | simulator                              | simulator                              |
 | `"never"`          | tournament         | tournament or a continuation scan      | refused: no parser is built            |
+| `"verify"`         | as `"auto"`        | as `"auto"`                            | as `"auto"`                            |
+
+`"verify"` builds the parser `"auto"` builds, except that a decision the
+parser settles without the simulator, though `"auto"` routes it there, is asked
+of the simulator as well. The parser panics where the two answers differ. It is
+for testing a faster path against the simulator over real inputs, not for use.
 
 Under `"auto"`, an ambiguity at a rule's end that no caller continues on also
 stays with the tournament, and a `?` at a rule's end goes to the simulator when
@@ -401,7 +407,7 @@ wado run package-gale gen --output Grammar_parser.wado Grammar.g4
 # Options:
 #   --output <f>       write the generated parser to <f> instead of stdout
 #   --trace            emit a parser that logs its recursive descent
-#   --atn <mode>       auto (default), always or never (see "Choosing the simulator")
+#   --atn <mode>       auto (default), always, never or verify (see "Choosing the simulator")
 #   --log-level <lvl>  gale's own threshold: trace, debug, info, warn (default),
 #                      or error. Advisory grammar diagnostics sit at info.
 wado run package-gale gen --trace Grammar.g4
