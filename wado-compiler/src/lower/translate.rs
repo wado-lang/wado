@@ -207,6 +207,7 @@ pub fn translate(flat: FlatPackage, plan: LowerPlan) -> NirPackage {
         cm_interface_registry,
         world_registry,
         used_wasi_functions,
+        ambient_stdio: None,
         strip_names,
         coverage_section,
         codegen_flags,

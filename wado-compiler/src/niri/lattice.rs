@@ -614,7 +614,7 @@ impl Interpreter<'_> {
                 value: u64::from(address.cast_unsigned()),
                 prim: PrimitiveType::I32,
             }),
-            CtfeBuiltin::AmbientSinkProvided => Lattice::Const(Value::Bool(true)),
+            &CtfeBuiltin::AmbientStdio(writes) => Lattice::Const(Value::Bool(writes)),
             CtfeBuiltin::ArraySet
             | CtfeBuiltin::ArrayCopy
             | CtfeBuiltin::ArrayRelease

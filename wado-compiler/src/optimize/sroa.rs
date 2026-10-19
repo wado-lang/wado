@@ -668,7 +668,7 @@ fn array_read_of_candidate(
         | CtfeBuiltin::FloatIsNan
         | CtfeBuiltin::Ieee754Comparison(_)
         | CtfeBuiltin::HeapBase(_)
-        | CtfeBuiltin::AmbientSinkProvided => None,
+        | CtfeBuiltin::AmbientStdio(_) => None,
     }
 }
 

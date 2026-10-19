@@ -39,6 +39,26 @@ const _: () = {
     shared_across_threads::<TypeTable>();
 };
 
+/// The stdio streams the ambient `log_std{out,err}` path writes: those the
+/// world provides, and in a sink-less world those the program imports anyway.
+/// Decided once, so the fold of `ambient_std{out,err}_available` and the import
+/// keep agreeing whatever optimization removes afterwards.
+#[derive(Debug, Clone, Copy)]
+pub struct AmbientStdio {
+    pub stdout: bool,
+    pub stderr: bool,
+}
+
+impl AmbientStdio {
+    pub fn writes(self, interface_name: &str) -> bool {
+        match interface_name {
+            "Stdout" => self.stdout,
+            "Stderr" => self.stderr,
+            _ => unreachable!("an ambient stream is `Stdout` or `Stderr`"),
+        }
+    }
+}
+
 /// A linked Wado package ready for WIR building and code generation.
 ///
 /// Produced by [`crate::link::link`] from a [`crate::package::Package`].
@@ -118,6 +138,8 @@ pub struct NirPackage {
 
     /// Set of used WASI functions (e.g., "`Stdout::write_via_stream`")
     pub used_wasi_functions: IndexSet<String>,
+    /// Set by the first DCE; read it through [`Self::ambient_stdio`].
+    pub ambient_stdio: Option<AmbientStdio>,
     /// When true, strip debug name sections for smaller binary size (-Os)
     pub strip_names: bool,
     /// The `org.wado-lang.coverage` section payload, under `wado test --coverage`.
@@ -678,6 +700,11 @@ impl NirPackage {
     /// interface so a world importing only one is not mis-gated by the other.
     pub fn provides_ambient_stdio_sink(&self, interface_name: &str) -> bool {
         self.is_test_world() || self.world_imports_interface(interface_name)
+    }
+
+    pub fn ambient_stdio(&self) -> AmbientStdio {
+        self.ambient_stdio
+            .expect("the first DCE decides the ambient streams")
     }
 
     /// Build the lookup of synthesized value-copy helpers, keyed by

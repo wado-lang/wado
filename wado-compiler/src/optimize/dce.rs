@@ -29,7 +29,7 @@ use crate::nir_arena::{
     BlockId, BlockNode, Body, ExprId, ExprKind, NodeRef, Operand, PatKind, StmtId, StmtKind,
     StmtNode,
 };
-use crate::nir_package::NirPackage;
+use crate::nir_package::{AmbientStdio, NirPackage};
 use crate::nir_value_graph::ValueKind;
 use crate::nir_visitor::{NirRefVisitor, reachable_exprs};
 use crate::optimize::arena_query::{
@@ -446,13 +446,26 @@ fn resolve_imports(
         })
     };
 
-    // A sink-less world (`--lib`, kiln) leaves the ambient builtin unimported,
-    // and `calls.rs` lowers it to `unreachable` off the `func_map` this fills.
+    let ambient = match project.ambient_stdio {
+        Some(decided) => decided,
+        None => {
+            let writes = |interface: &str| {
+                project.provides_ambient_stdio_sink(interface)
+                    || used_wasi_functions.contains(&operation_key(interface, "write_via_stream"))
+            };
+            let decided = AmbientStdio {
+                stdout: writes("Stdout"),
+                stderr: writes("Stderr"),
+            };
+            project.ambient_stdio = Some(decided);
+            decided
+        }
+    };
     for (interface, intrinsic) in [
         ("Stdout", "call_indirect_stdout"),
         ("Stderr", "call_indirect_stderr"),
     ] {
-        if project.provides_ambient_stdio_sink(interface) && reaches_intrinsic(intrinsic) {
+        if ambient.writes(interface) && reaches_intrinsic(intrinsic) {
             used_wasi_functions.insert(operation_key(interface, "write_via_stream"));
         }
     }

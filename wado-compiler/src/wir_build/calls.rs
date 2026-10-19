@@ -40,6 +40,16 @@ fn operand_lane_const(body: &Body, op: Operand) -> u8 {
     lane as u8
 }
 
+/// The stdio interface an ambient builtin (`ambient_stderr_available`,
+/// `call_indirect_stderr_write_via_stream`, …) names.
+fn ambient_stream(builtin_name: &str) -> &'static str {
+    if builtin_name.contains("stderr") {
+        "Stderr"
+    } else {
+        "Stdout"
+    }
+}
+
 /// Mechanical builtin shapes — each evaluates its operand expressions
 /// left-to-right (operand order matters: `translate_operand` can register
 /// locals and literals) and wraps them in the given `WirInstr` variant.
@@ -863,45 +873,36 @@ impl FunctionTranslator<'_, '_> {
 
             "i32_as_char" => Some(self.translate_operand(args[0].expr)),
 
-            "ambient_stdout_available" | "ambient_stderr_available" => Some(WirInstr::I32Const(
-                i32::from(self.ambient_write_via_stream(builtin_name).is_some()),
-            )),
+            "ambient_stdout_available" | "ambient_stderr_available" => {
+                let writes = self.ctx.package.ambient_stdio().writes(ambient_stream(builtin_name));
+                Some(WirInstr::I32Const(i32::from(writes)))
+            }
 
             "call_indirect_stdout_write_via_stream" | "call_indirect_stderr_write_via_stream" => {
-                // The ambient panic / assert-diagnostic path never forces its
-                // own import. A miss lowers to `unreachable`, keeping a
-                // purely-computational component free of `wasi:cli/stderr`;
-                // `log_std{out,err}` asks `ambient_std{out,err}_available` first.
-                match self.ambient_write_via_stream(builtin_name) {
-                    Some(func_id) => {
-                        let call_args: Vec<WirInstr> = args
-                            .iter()
-                            .map(|a| self.translate_operand(a.expr))
-                            .collect();
-                        Some(WirInstr::Call {
-                            func_id,
-                            args: call_args,
-                        })
-                    }
-                    None => Some(WirInstr::Unreachable),
+                // `log_std{out,err}` calls this only past
+                // `ambient_std{out,err}_available`, so a stream the component
+                // does not write is left unimported: a purely-computational
+                // component stays free of `wasi:cli/stderr`.
+                let stream = ambient_stream(builtin_name);
+                if !self.ctx.package.ambient_stdio().writes(stream) {
+                    return Some(WirInstr::Unreachable);
                 }
+                let key = MangledName::wasi_import(&format!("wasi:cli/{stream}::write_via_stream"));
+                let func_id = self.ctx.func_map.get(&key).cloned().expect(
+                    "DCE imports the stream an ambient builtin writes once it is reachable",
+                );
+                let call_args: Vec<WirInstr> = args
+                    .iter()
+                    .map(|a| self.translate_operand(a.expr))
+                    .collect();
+                Some(WirInstr::Call {
+                    func_id,
+                    args: call_args,
+                })
             }
 
             _ => None,
         }
-    }
-
-    /// The `Std{out,err}::write_via_stream` import an ambient builtin of that
-    /// stream reaches. DCE registers it in `func_map` exactly when the world
-    /// provides the sink, or a real `println` / `eprintln` already uses it.
-    fn ambient_write_via_stream(&self, builtin_name: &str) -> Option<WirFuncId> {
-        let wasi_func_name = if builtin_name.contains("stderr") {
-            "wasi:cli/Stderr::write_via_stream"
-        } else {
-            "wasi:cli/Stdout::write_via_stream"
-        };
-        let key = MangledName::wasi_import(wasi_func_name);
-        self.ctx.func_map.get(&key).cloned()
     }
 
     /// `array_release` nulls a reference element's slots. A reference-free
