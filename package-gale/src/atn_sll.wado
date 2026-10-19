@@ -537,12 +537,61 @@ pub fn gen_sll_decide_fn(
     f.add_param("min_prec", "i32");
     f.set_return_type("i32");
     f.emit_begin(w);
-    let answer = |a: i32| if verify { atn_verified_call(decision, "atn", "tokens", "pos", `${a}`) } else { `${a}` };
-    gen_sll_node(w, dfa, 0, 0, analysis, &answer);
+    let shape = SllShape::of(dfa, decision);
+    let answer = |a: String| if verify { atn_verified_call(decision, "atn", "tokens", "pos", a) } else { a };
+    gen_sll_node(w, dfa, &shape, 0, analysis, &answer);
     w.line(`return atn_predict_once(&ATN_SIM, ${decision}, atn, tokens, pos, TK_EOF, min_prec);`);
     w.end();
     w.blank();
+    for let n of 1..<dfa.nodes.len() {
+        if shape.shared[n] {
+            w.begin(`fn ${shape.helper_name(n)}(tokens: &Array<i32>, pos: i32) -> i32`);
+            gen_sll_branch(w, dfa, &shape, n, analysis, &|a: String| a);
+            w.line("return -1;");
+            w.end();
+            w.blank();
+        }
+    }
     return verify && dfa.nodes.iter_ref().any(|n| n matches { Alt(_) });
+}
+
+/// Where each node of a DFA is read. The DFA is a DAG, so a branch more than
+/// one edge reaches is emitted once, as a function returning the alternative
+/// it decides or -1 where it asks.
+struct SllShape {
+    decision: i32,
+    /// How many tokens past `pos` a branch reads; each path to it has as many.
+    depth: List<i32>,
+    shared: List<bool>,
+}
+
+impl SllShape {
+    fn of(dfa: &SllDfa, decision: i32) -> SllShape {
+        let mut depth = List::<i32>::filled(dfa.nodes.len(), -1);
+        let mut into = List::<i32>::filled(dfa.nodes.len(), 0);
+        depth[0] = 0;
+        let mut queue: List<i32> = [0];
+        for let mut i = 0; i < queue.len(); i += 1 {
+            let n = queue[i];
+            if let Branch(edges) = &dfa.nodes[n] {
+                for let e of edges {
+                    into[e.to] += 1;
+                    if depth[e.to] < 0 {
+                        depth[e.to] = depth[n] + 1;
+                        queue.push(e.to);
+                    }
+                    assert !dfa.nodes[e.to] matches { Branch(_) } || depth[e.to] == depth[n] + 1, "every path to a branch reads as many tokens";
+                }
+            }
+        }
+        let shared: List<bool> = (0..<dfa.nodes.len()).map(|n| into[n] > 1 && dfa.nodes[n] matches { Branch(_) }).collect(
+        );
+        return SllShape { decision, depth, shared };
+    }
+
+    fn helper_name(&self, node: i32) -> String {
+        return `${sll_decide_fn_name(self.decision)}_${node}`;
+    }
 }
 
 /// Emit `ATN_VERIFIED`. Where no alternative survives under the parse's stack,
@@ -576,47 +625,68 @@ fn asking_tokens(edges: &List<SllEdge>, kinds: i32) -> List<i32> {
     return (0..<kinds).filter(|k| !named[k]).collect();
 }
 
-/// `answer` renders what a decided alternative is returned as.
+/// `answer` renders what a decided alternative, an expression, is returned as.
 fn gen_sll_node(
     w: &mut CodeWriter,
     dfa: &SllDfa,
+    shape: &SllShape,
     node: i32,
-    depth: i32,
     analysis: &GrammarAnalysis,
-    answer: &fn(i32) -> String,
+    answer: &fn(String) -> String,
 ) {
     match &dfa.nodes[node] {
-        Alt(a) => w.line(`return ${answer(*a)};`),
+        Alt(a) => w.line(`return ${answer(`${*a}`)};`),
         Ask => {
         },
-        Branch(edges) => {
-            let at = if depth == 0 { "pos" } else { `pos + ${depth}` };
-            w.begin(`if ${at} < tokens.len()`);
-            w.begin(`match tokens[${at}]`);
-            // The widest edge takes `_` where the tokens that ask are fewer to
-            // name: a DFA over an expression reads a keyword set at many nodes.
-            let asking = asking_tokens(edges, dfa.kinds);
-            let widest = (0..<edges.len()).max_by_key(|i| edges[i].tokens.len()).unwrap();
-            let fallback = if edges[widest].tokens.len() > asking.len() { widest } else { -1 };
-            for let mut i = 0; i < edges.len(); i += 1 {
-                if i != fallback {
-                    w.begin(`${analysis.token_names_of(&edges[i].tokens).join(" | ")} =>`);
-                    gen_sll_node(w, dfa, edges[i].to, depth + 1, analysis, answer);
-                    w.end_with(",");
-                }
-            }
-            if fallback < 0 {
-                w.line("_ => {},");
+        Branch(_) => {
+            if shape.shared[node] {
+                w.line(`let alt = ${shape.helper_name(node)}(tokens, pos);`);
+                w.line(`if alt >= 0 { return ${answer("alt")}; }`);
             } else {
-                if !asking.is_empty() {
-                    w.line(`${analysis.token_names_of(&asking).join(" | ")} => {},`);
-                }
-                w.begin("_ =>");
-                gen_sll_node(w, dfa, edges[fallback].to, depth + 1, analysis, answer);
-                w.end_with(",");
+                gen_sll_branch(w, dfa, shape, node, analysis, answer);
             }
-            w.end_with(";");
-            w.end();
         },
     }
+}
+
+/// The match branch `node` reads its token in.
+fn gen_sll_branch(
+    w: &mut CodeWriter,
+    dfa: &SllDfa,
+    shape: &SllShape,
+    node: i32,
+    analysis: &GrammarAnalysis,
+    answer: &fn(String) -> String,
+) {
+    let Branch(edges) = &dfa.nodes[node] else {
+        unreachable();
+    };
+    let depth = shape.depth[node];
+    let at = if depth == 0 { "pos" } else { `pos + ${depth}` };
+    w.begin(`if ${at} < tokens.len()`);
+    w.begin(`match tokens[${at}]`);
+    // The widest edge takes `_` where the tokens that ask are fewer to name: a
+    // DFA over an expression reads a keyword set at many nodes.
+    let asking = asking_tokens(edges, dfa.kinds);
+    let widest = (0..<edges.len()).max_by_key(|i| edges[i].tokens.len()).unwrap();
+    let fallback = if edges[widest].tokens.len() > asking.len() { widest } else { -1 };
+    for let mut i = 0; i < edges.len(); i += 1 {
+        if i != fallback {
+            w.begin(`${analysis.token_names_of(&edges[i].tokens).join(" | ")} =>`);
+            gen_sll_node(w, dfa, shape, edges[i].to, analysis, answer);
+            w.end_with(",");
+        }
+    }
+    if fallback < 0 {
+        w.line("_ => {},");
+    } else {
+        if !asking.is_empty() {
+            w.line(`${analysis.token_names_of(&asking).join(" | ")} => {},`);
+        }
+        w.begin("_ =>");
+        gen_sll_node(w, dfa, shape, edges[fallback].to, analysis, answer);
+        w.end_with(",");
+    }
+    w.end_with(";");
+    w.end();
 }
