@@ -963,7 +963,12 @@ impl FunctionTranslator<'_, '_> {
                         TypeTable::I32,
                         span,
                     );
-                    let slot_box = self.base.box_plan.box_struct_types[&inner.type_id];
+                    let slot_box = self
+                        .base
+                        .type_table
+                        .borrow()
+                        .slot_box(inner.type_id)
+                        .expect("the boxing plan registers a box for every slot that boxes");
                     return Some(self.convert_expr(&builtin_call(
                         "field_slot",
                         vec![holder, field],

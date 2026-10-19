@@ -944,13 +944,12 @@ fn register_mono_variants(ctx: &mut WirContext<'_>) {
                 let cases: Option<Vec<(String, Vec<WirType>)>> = cases
                     .into_iter()
                     .map(|(name, payload)| {
-                        let wir_payload = match type_table.get(payload) {
-                            ResolvedType::Unit => Vec::new(),
-                            _ => {
-                                let held = type_table.slot_box(payload).unwrap_or(payload);
-                                let ty = ctx.try_type_id_to_wir_type(type_table, held)?;
-                                vec![ctx.boxed_slot_type(type_table, payload, ty)]
-                            }
+                        let wir_payload = if matches!(type_table.get(payload), ResolvedType::Unit) {
+                            Vec::new()
+                        } else {
+                            let held = type_table.slot_box(payload).unwrap_or(payload);
+                            let ty = ctx.try_type_id_to_wir_type(type_table, held)?;
+                            vec![ctx.boxed_slot_type(type_table, payload, ty)]
                         };
                         Some((name, wir_payload))
                     })

@@ -314,7 +314,8 @@ prelude trait `ForOf` is walked through it instead. The loop passes the operand
 by value to `ForOf::start` once, then calls `next()` on the state it returns.
 So the loop owns what it walks: the operand moves into the loop, each element
 moves into the binding, and leaving the loop early drops the elements it did not
-reach. `List<T>` implements `ForOf` for an affine `T`. `for let x of &xs` and
+reach. `List<T>` and `Array<T>` implement `ForOf` for an affine `T`, and so
+does every affine `Iterator`, which is its own state. `for let x of &xs` and
 `for let x of &mut xs` walk an affine list by reference and leave it with its
 owner.
 

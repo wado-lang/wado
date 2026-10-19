@@ -430,7 +430,7 @@ impl MoveWalker<'_, '_> {
             })
     }
 
-    fn place_path<'e>(expr: &'e Expr) -> Option<PlacePath<'e>> {
+    fn place_path(expr: &Expr) -> Option<PlacePath<'_>> {
         match expr {
             Expr::Ident(root) => Some(PlacePath {
                 root,
@@ -971,13 +971,19 @@ impl MoveWalker<'_, '_> {
         }
     }
 
-    /// A condition on the path where a `let` failed: it consumed nothing.
+    /// A condition on the path where it failed. A `let` that failed consumed
+    /// nothing, but one with an element after it may have matched before that
+    /// element failed, and then its scrutinee is in a binding.
     fn visit_condition_reading(&mut self, condition: &Condition) {
         match condition {
             Condition::Expr(e) => self.visit_expr(e),
             Condition::LetChain { elements, .. } => {
-                for element in elements {
-                    self.visit_expr(element.expr());
+                let last = elements.len() - 1;
+                for (i, element) in elements.iter().enumerate() {
+                    match element {
+                        ConditionElement::Let { expr, .. } if i < last => self.visit_value(expr),
+                        _ => self.visit_expr(element.expr()),
+                    }
                 }
             }
         }

@@ -1112,7 +1112,7 @@ impl FunctionTranslator<'_, '_> {
 
     /// `fields`, the values [`Self::translate_args_erasing_unit`] left of
     /// `operands`, each as its field of the struct `struct_id` holds it.
-    pub(super) fn into_slots(
+    pub(super) fn as_slots(
         &self,
         fields: Vec<WirInstr>,
         operands: &[Operand],
@@ -1131,18 +1131,13 @@ impl FunctionTranslator<'_, '_> {
             .into_iter()
             .zip(kept)
             .zip(&st.fields)
-            .map(|((field, ty), slot)| self.into_slot(field, &slot.ty, ty))
+            .map(|((field, ty), slot)| self.as_slot(field, &slot.ty, ty))
             .collect()
     }
 
     /// `value`, of type `type_id`, as a slot of WIR type `slot_ty` holds it:
     /// in a new box where it holds one.
-    pub(super) fn into_slot(
-        &self,
-        value: WirInstr,
-        slot_ty: &WirType,
-        type_id: TypeId,
-    ) -> WirInstr {
+    pub(super) fn as_slot(&self, value: WirInstr, slot_ty: &WirType, type_id: TypeId) -> WirInstr {
         match self.held_box(slot_ty, type_id) {
             Some(slot_box) => self.struct_new(slot_box, vec![value]),
             None => value,

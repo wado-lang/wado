@@ -529,8 +529,10 @@ moves the element at the position out through `array_take` and advances. The
 cursor's drop drops the list, and the list drops the slots that are not null.
 
 `next` is the state's own method rather than a member of the trait, so that
-`ListCursor<T>` need not implement the unmarked `Iterator` with an affine
-`Item`. No blanket impl over `IntoIterator` exists. It would only forward to
+`ListCursor<T>` need not implement `Iterator`, whose `Item` is copyable, with
+an affine `Item`. `Array<T>` walks through a `ListCursor<T>` as well, and an
+affine iterator through `impl<affine I: Iterator> ForOf for I`, as its own
+state. No blanket impl over `IntoIterator` exists. It would only forward to
 `into_iter`, and resolving through it leaves the item type of a generic
 iterator as an unnormalized projection.
 
@@ -547,20 +549,22 @@ compile time, one body per element. The operand still passes by value, so over
 a tuple holding an affine value the loop consumes the tuple and moves each
 element into the binding once.
 
-`Iterator` and `IntoIterator` stay unmarked. Their adapters take `&self` and
-copy it, and `find`, `filter`, `min_by_key` and `max_by_key` hand an element to
-a closure by value and then keep it. Marking the traits would make every one of
+`Iterator` and `IntoIterator` are affine traits, so an affine type may
+implement them. An adapter (`map`, `filter`, `zip` and the rest) takes `self`
+and moves it into the adapter, whose parameter is `affine I`. Their `Item`
+stays unmarked: `find`, `filter`, `min_by_key` and `max_by_key` hand an element
+to a closure by value and then keep it. Marking `Item` would make every one of
 those an error, and the fix, a predicate over `&Item`, rewrites the closures
 passed to them and turns `iter_ref()` chains into `&&T`. Swift's `Sequence`
 does not accept a noncopyable element either.
 
 An affine element is walked one of two ways:
 
-| Written                             | Element  | API               | Why                                                                                                                         |
-| ----------------------------------- | -------- | ----------------- | --------------------------------------------------------------------------------------------------------------------------- |
-| `for x of list`                     | `T`      | `for-of`          | The loop consumes the list.                                                                                                 |
-| `for x of &list`, `list.iter_ref()` | `&T`     | all of `Iterator` | A reference iterator holds only references, so it is copyable whatever its element, and implements the unmarked `Iterator`. |
-| `for x of &mut list`                | `&mut T` | all of `Iterator` | The same, for a body that changes an element in place, such as `x.take()` on an `Option` element.                           |
+| Written                             | Element  | API               | Why                                                                                               |
+| ----------------------------------- | -------- | ----------------- | ------------------------------------------------------------------------------------------------- |
+| `for x of list`                     | `T`      | `for-of`          | The loop consumes the list.                                                                       |
+| `for x of &list`, `list.iter_ref()` | `&T`     | all of `Iterator` | A reference iterator's `Item` is a reference, which is copyable whatever its element.             |
+| `for x of &mut list`                | `&mut T` | all of `Iterator` | The same, for a body that changes an element in place, such as `x.take()` on an `Option` element. |
 
 The second row is where `find` and `filter` reach an affine element: the
 iterator's `Item` is `&T` already, so a predicate takes it by value with one
@@ -583,7 +587,7 @@ instantiates with an affine argument, and each is marked or rewritten.
 
 What the rules leave unmarked, and why:
 
-- `Iterator` and `IntoIterator`, above.
+- The `Item` of `Iterator` and `IntoIterator`, above.
 - `Sequence`, `AsSlice` and `IndexValue`: `at`, `get`, `first`, `last` and
   `index_value` hand an element out by value. `is_empty` and `iter_ref`, which
   `Sequence` and `AsSlice` provide as defaults today, become inherent methods
@@ -790,11 +794,12 @@ declares the destructor's effects is withdrawn: a drop's effects are benign.
 - [x] `Future::read(self)` and `FutureWritable::write(self, value)`. A fixture
   pins a second read as a use after move.
 - [x] `ForOf`: `for-of` passes an affine operand by value to `ForOf::start`,
-  with `List`'s impl over `ListCursor<T>`, and walks any other through
-  `IntoIterator`. The move check consumes the operand and refuses `*r`.
-  Fixtures pin a list consumed with an early `break`, the use after the move,
-  `*r`, and a copyable list read after the loop with no `$value_copy$` in the
-  output.
+  with `List`'s and `Array`'s impls over `ListCursor<T>` and an affine
+  iterator as its own state, and walks any other through `IntoIterator`. The
+  move check consumes the operand and refuses `*r`. Fixtures pin a list
+  consumed with an early `break`, an affine iterator through adapters, the use
+  after the move, `*r`, and a copyable list read after the loop with no
+  `$value_copy$` in the output.
 - [x] `AsyncCall` holds an `Option<Subtask>` and an `Option<ResultBuffer>`,
   with `wait(self)`, `cancel(self)` and its `Drop`. The fixture drops a call
   nobody awaited.

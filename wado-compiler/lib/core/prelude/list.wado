@@ -137,9 +137,6 @@ impl<affine T> List<T> {
     }
 
     /// Removes and returns the last element, or null when empty.
-    // Keeps its slot: binding the element to release the slot after costs a
-    // deep copy of it, since a returned `let` reads as owned rather than as a
-    // projection of `self`.
     pub fn pop(&mut self) -> Option<T> {
         if self.used == 0 {
             return null;
@@ -244,12 +241,11 @@ impl<affine T> List<T> {
         contract 0 <= at <= self.len()
     {
         let n = self.used - at;
-        let mut tail = List::<T>::with_capacity(n);
-        for let i of 0..<n {
-            tail.push(builtin::array_take(&mut self.repr, at + i));
-        }
+        let mut repr: Array<T> = builtin::array_new(n);
+        builtin::array_move(&mut repr, 0, &self.repr, at, n);
+        builtin::array_release(&mut self.repr, at, n);
         self.used = at;
-        return tail;
+        return List { repr, used: n };
     }
 
     /// The elements, each by reference.
@@ -573,6 +569,19 @@ impl<affine T> ForOf for List<T> {
 
     fn start(self) -> ListCursor<T> {
         return ListCursor { list: self, at: 0 };
+    }
+}
+
+impl<affine T> ForOf for Array<T> {
+    type Item = T;
+    type State = ListCursor<T>;
+
+    fn start(self) -> ListCursor<T> {
+        let used = builtin::array_len(&self);
+        return ListCursor {
+            list: List { repr: self, used },
+            at: 0,
+        };
     }
 }
 

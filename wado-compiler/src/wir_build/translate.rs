@@ -1586,7 +1586,7 @@ impl FunctionTranslator<'_, '_> {
         };
         let value_block = self.prelude_block_holds(tuple_type_id, false);
         let (prelude, raw_fields) = self.translate_args_erasing_unit(elements, value_block);
-        let raw_fields = self.into_slots(raw_fields, elements, &type_id);
+        let raw_fields = self.as_slots(raw_fields, elements, &type_id);
         let fields = self.cast_nonnull_fields(&type_id, raw_fields);
         (type_id, prelude, fields)
     }
@@ -1627,7 +1627,7 @@ impl FunctionTranslator<'_, '_> {
             .iter()
             .map(|e| {
                 let element = self.translate_operand(*e);
-                self.into_slot(element, &slot_ty, self.operand_type_id(*e))
+                self.as_slot(element, &slot_ty, self.operand_type_id(*e))
             })
             .collect();
         if is_raw_array {
@@ -2961,7 +2961,7 @@ impl FunctionTranslator<'_, '_> {
                 let value_block = self.prelude_block_holds(expr.type_id, false);
                 let (prelude, field_instrs) =
                     self.translate_args_erasing_unit(&values, value_block);
-                let field_instrs = self.into_slots(field_instrs, &values, &type_id);
+                let field_instrs = self.as_slots(field_instrs, &values, &type_id);
                 let new = self.struct_new(type_id, field_instrs);
                 self.wrap_call_with_prelude(prelude, new, expr.type_id, false)
             }

@@ -141,6 +141,11 @@ pub fn contract_holder_name(method: &str) -> String {
 
 const CONTRACT_HOLDER_PREFIX: &str = "$contract$";
 
+/// Whether `function_name` names a trait's `contract` clause holder.
+pub fn is_contract_holder(function_name: &str) -> bool {
+    function_name.contains(CONTRACT_HOLDER_PREFIX)
+}
+
 /// The function a failed `contract` clause names, from the name of the one
 /// reifying it: the method a clause holder holds the clauses of.
 pub fn contract_owner_name(function_name: &str) -> String {

@@ -1247,12 +1247,12 @@ pub affine trait Iterator with _ {
     }
 
     /// Returns an adapter that yields all elements of `self`, then all elements of `other`.
-    fn chain<J: Iterator<Item = Self::Item>>(self, other: J) -> IterChain<Self, J> with () {
+    fn chain<affine J: Iterator<Item = Self::Item>>(self, other: J) -> IterChain<Self, J> with () {
         return IterChain { first: self, second: other, first_done: false };
     }
 
     /// Returns an adapter that yields `[a, b]` pairs, stopping when either iterator is exhausted.
-    fn zip<J: Iterator>(self, other: J) -> IterZip<Self, J> with () {
+    fn zip<affine J: Iterator>(self, other: J) -> IterZip<Self, J> with () {
         return IterZip { first: self, second: other };
     }
 
@@ -1341,12 +1341,12 @@ pub affine trait Iterator with _ {
 
 /// Generic map iterator adapter that wraps any Iterator. Its type carries the
 /// function's, so advancing it performs what the function does.
-pub struct IterMap<I: Iterator, F> {
+pub struct IterMap<affine I: Iterator, F> {
     pub inner: I,
     pub f: F,
 }
 
-impl<I: Iterator, U, effect E, F: fn mut(I::Item) -> U with E> Iterator for IterMap<I, F> {
+impl<affine I: Iterator, U, effect E, F: fn mut(I::Item) -> U with E> Iterator for IterMap<I, F> {
     type Item = U;
 
     fn next(&mut self) -> Option<Self::Item> with E {
@@ -1368,12 +1368,12 @@ impl<I: Iterator, U, effect E, F: fn mut(I::Item) -> U with E> IntoIterator for 
 
 /// Generic filter iterator adapter that wraps any Iterator. Its type carries
 /// the predicate's, so advancing it performs what the predicate does.
-pub struct IterFilter<I: Iterator, F> {
+pub struct IterFilter<affine I: Iterator, F> {
     pub inner: I,
     pub pred: F,
 }
 
-impl<I: Iterator, effect E, F: fn mut(I::Item) -> bool with E> Iterator for IterFilter<I, F> {
+impl<affine I: Iterator, effect E, F: fn mut(I::Item) -> bool with E> Iterator for IterFilter<I, F> {
     type Item = I::Item;
 
     fn next(&mut self) -> Option<Self::Item> with E {
@@ -1399,12 +1399,12 @@ impl<I: Iterator, effect E, F: fn mut(I::Item) -> bool with E> IntoIterator for 
 }
 
 /// Generic enumerate iterator adapter that yields (index, element) pairs.
-pub struct IterEnumerate<I: Iterator> {
+pub struct IterEnumerate<affine I: Iterator> {
     pub inner: I,
     pub count: i32,
 }
 
-impl<I: Iterator> Iterator for IterEnumerate<I> {
+impl<affine I: Iterator> Iterator for IterEnumerate<I> {
     type Item = [i32, I::Item];
 
     fn next(&mut self) -> Option<Self::Item> with _ {
@@ -1427,12 +1427,12 @@ impl<I: Iterator> IntoIterator for IterEnumerate<I> {
 }
 
 /// Generic take iterator adapter that limits elements from any Iterator.
-pub struct IterTake<I: Iterator> {
+pub struct IterTake<affine I: Iterator> {
     pub inner: I,
     pub remaining: i32,
 }
 
-impl<I: Iterator> Iterator for IterTake<I> {
+impl<affine I: Iterator> Iterator for IterTake<I> {
     type Item = I::Item;
 
     fn next(&mut self) -> Option<Self::Item> with _ {
@@ -1458,12 +1458,12 @@ impl<I: Iterator> IntoIterator for IterTake<I> {
 }
 
 /// Generic skip iterator adapter that skips elements from any Iterator.
-pub struct IterSkip<I: Iterator> {
+pub struct IterSkip<affine I: Iterator> {
     pub inner: I,
     pub remaining: i32,
 }
 
-impl<I: Iterator> Iterator for IterSkip<I> {
+impl<affine I: Iterator> Iterator for IterSkip<I> {
     type Item = I::Item;
 
     fn next(&mut self) -> Option<Self::Item> with _ {
@@ -1488,13 +1488,13 @@ impl<I: Iterator> IntoIterator for IterSkip<I> {
 }
 
 /// Generic step iterator adapter that yields every `gap + 1`-th element of any Iterator.
-pub struct IterStepBy<I: Iterator> {
+pub struct IterStepBy<affine I: Iterator> {
     pub inner: I,
     pub gap: i32,
     pub started: bool,
 }
 
-impl<I: Iterator> Iterator for IterStepBy<I> {
+impl<affine I: Iterator> Iterator for IterStepBy<I> {
     type Item = I::Item;
 
     fn next(&mut self) -> Option<Self::Item> with _ {
@@ -1516,13 +1516,13 @@ impl<I: Iterator> IntoIterator for IterStepBy<I> {
 }
 
 /// Generic chain iterator adapter that chains two iterators of the same item type.
-pub struct IterChain<I: Iterator, J: Iterator> {
+pub struct IterChain<affine I: Iterator, affine J: Iterator> {
     pub first: I,
     pub second: J,
     pub first_done: bool,
 }
 
-impl<I: Iterator, J: Iterator<Item = I::Item>> Iterator for IterChain<I, J> {
+impl<affine I: Iterator, affine J: Iterator<Item = I::Item>> Iterator for IterChain<I, J> {
     type Item = I::Item;
 
     fn next(&mut self) -> Option<Self::Item> with _ {
@@ -1546,12 +1546,12 @@ impl<I: Iterator, J: Iterator<Item = I::Item>> IntoIterator for IterChain<I, J> 
 }
 
 /// Generic zip iterator adapter that pairs elements from two iterators.
-pub struct IterZip<I: Iterator, J: Iterator> {
+pub struct IterZip<affine I: Iterator, affine J: Iterator> {
     pub first: I,
     pub second: J,
 }
 
-impl<I: Iterator, J: Iterator> Iterator for IterZip<I, J> {
+impl<affine I: Iterator, affine J: Iterator> Iterator for IterZip<I, J> {
     type Item = [I::Item, J::Item];
 
     fn next(&mut self) -> Option<Self::Item> with _ {
@@ -1607,6 +1607,15 @@ pub affine trait ForOf with _ {
     affine type State;
 
     fn start(self) -> Self::State;
+}
+
+impl<affine I: Iterator> ForOf for I {
+    type Item = I::Item;
+    type State = I;
+
+    fn start(self) -> I {
+        return self;
+    }
 }
 
 /// Infallible conversion trait.

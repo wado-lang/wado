@@ -335,7 +335,7 @@ impl Stream<u8> {
     }
 }
 
-/// Elements per copy in the read/write loops the stdlib runs. A copy blocks
+/// Elements per copy in the read loop the stdlib runs. A copy blocks
 /// until the peer moves, so this bounds the buffer, not the throughput.
 internal global STREAM_CHUNK_ELEMENTS: i32 = 4096;
 
@@ -378,25 +378,15 @@ impl<T> StreamWritable<T> {
         if data.is_empty() {
             return CopyResult::Completed;
         }
-        let mut offset = 0;
+        let mut pending = data;
         loop {
-            // The first copy offers the whole buffer, so a reader that takes
-            // it all costs no slice.
-            let end = if offset == 0 {
-                data.len();
-            } else {
-                offset + i32::min(STREAM_CHUNK_ELEMENTS, data.len() - offset);
-            };
-            let written = if offset == 0 {
-                self.write(data);
-            } else {
-                self.write(data.as_slice().slice(offset, end).to_list());
-            };
-            let delivered = end - offset - written.rest.len();
-            offset += delivered;
-            if write_copy_is_final(written.result, delivered) || offset >= data.len() {
+            let offered = pending.len();
+            let written = self.write(pending);
+            let delivered = offered - written.rest.len();
+            if write_copy_is_final(written.result, delivered) || written.rest.is_empty() {
                 return written.result;
             }
+            pending = written.rest;
         }
     }
 }

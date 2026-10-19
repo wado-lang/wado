@@ -1460,10 +1460,10 @@ impl FunctionTranslator<'_, '_> {
     ) -> WirInstr {
         let (variant_key, case) = self.variant_case(variant_type, case_index, case_name);
         let carries_payload = !case.payload.is_empty();
-        let struct_type_id = if !carries_payload {
-            self.ref_type_id(result_type)
-        } else {
+        let struct_type_id = if carries_payload {
             self.variant_case_type_id(&variant_key, case_name)
+        } else {
+            self.ref_type_id(result_type)
         };
 
         let mut fields = vec![WirInstr::I32Const(case_index as i32)];
@@ -1471,7 +1471,7 @@ impl FunctionTranslator<'_, '_> {
             let payload = self.translate_operand(payload_expr);
             fields.push(if carries_payload {
                 let slot_ty = self.get_case_payload_wir_type(&struct_type_id, 0);
-                self.into_slot(payload, &slot_ty, self.operand_type_id(payload_expr))
+                self.as_slot(payload, &slot_ty, self.operand_type_id(payload_expr))
             } else {
                 payload
             });

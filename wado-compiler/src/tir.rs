@@ -1181,7 +1181,7 @@ pub struct TypeTable {
     /// Struct field types by declaration and instance arguments, a template's
     /// (no arguments) in its own terms: what [`Self::holds_affine_resource`]
     /// reads.
-    struct_field_index: IndexMap<(DefId, Vec<TypeId>), Vec<TypeId>>,
+    struct_field_index: IndexMap<(DefId, Vec<TypeKey>), Vec<TypeId>>,
     /// Every struct shape the compiler minted, by [`AnonStructId`].
     anon_structs: Vec<AnonEntry>,
     /// Dedup for the above: the same shape in the same module is one id.
@@ -3469,7 +3469,8 @@ impl TypeTable {
     /// Register the field types of a struct declaration instantiated with
     /// `args` (none for the template) for [`Self::holds_affine_resource`].
     pub fn register_struct_fields(&mut self, def: DefId, args: Vec<TypeId>, fields: Vec<TypeId>) {
-        self.struct_field_index.insert((def, args), fields);
+        let key = (def, self.type_keys(&args));
+        self.struct_field_index.insert(key, fields);
     }
 
     /// Whether a value of `ty` is, or holds at any depth, an affine resource:
@@ -3522,11 +3523,14 @@ impl TypeTable {
                 type_args,
             }
             | ResolvedType::GenericInstance { def, type_args } => {
+                if self.is_affine_decl(*def) {
+                    return true;
+                }
                 if self.is_tuple_def(*def) {
                     (None, &[], type_args.clone())
                 } else if let Some(fields) = self
                     .struct_field_index
-                    .get(&(*def, type_args.clone()))
+                    .get(&(*def, self.type_keys(type_args)))
                     .or_else(|| self.struct_field_index.get(&(*def, Vec::new())))
                 {
                     // An instance's own fields are concrete, so the arguments

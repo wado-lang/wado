@@ -17,7 +17,8 @@ use crate::flat_package::FlatPackage;
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::module_source::ModuleSource;
 use crate::name::{
-    DROP_GLUE_PREFIX, Receiver, checked_name, drop_glue_name, is_template_block, minted_name,
+    DROP_GLUE_PREFIX, Receiver, checked_name, drop_glue_name, is_contract_holder,
+    is_template_block, minted_name,
 };
 use crate::package::Package;
 use crate::resource_holding::{Held, HeldTypes, holds_resource};
@@ -680,7 +681,7 @@ fn build_drop_glue(
 
 /// Elaborate resource drops for a single function body.
 fn elaborate_function(func: &mut TirFunction, resources: Resources, glue: &mut DropGlue) {
-    if forwards_to_twin(func) {
+    if copied_to_callers(func) {
         return;
     }
     let implements_drop = drop_impl_of(func, &resources.tt.borrow()).is_some();
@@ -768,10 +769,13 @@ fn drop_impl_of(func: &TirFunction, tt: &TypeTable) -> Option<DefId> {
     implementor.head().def()
 }
 
-/// Whether `func` is its `contract` clauses and a call handing every parameter
-/// to its `unchecked` twin, which owns them. Lowering copies that shape to each
-/// caller.
-fn forwards_to_twin(func: &TirFunction) -> bool {
+/// Whether lowering copies `func` to each caller, so it owns no parameter: a
+/// trait's clause holder, clauses alone, or a function's `contract` clauses and
+/// a call handing every parameter to its `unchecked` twin, which owns them.
+fn copied_to_callers(func: &TirFunction) -> bool {
+    if is_contract_holder(&func.name) {
+        return true;
+    }
     let Some(TirStmt {
         kind: TirStmtKind::Expr(call) | TirStmtKind::Return { value: Some(call) },
         ..
