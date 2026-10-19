@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1792360283637,
+  "lastUpdate": 1792393855199,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -68345,6 +68345,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/274383f7e4df1f4b7c2733379cfa2ad29f368f27"
         },
         "date": 1792360282736,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 2955,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 7313,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 19774,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 288295,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "450aacdec315f725ae4d43d892ab710743c9307f",
+          "message": "Merge pull request #2387 from wado-lang/claude/serene-cannon-2ihaug\n\nfix: a deferred local whose reference a call may keep compiles to valid Wasm",
+          "timestamp": "2026-10-19T15:52:24+09:00",
+          "tree_id": "2e245e38383fba7c68e1ac620ddb17a4ac5b27ea",
+          "url": "https://github.com/wado-lang/wado/commit/450aacdec315f725ae4d43d892ab710743c9307f"
+        },
+        "date": 1792393854536,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
