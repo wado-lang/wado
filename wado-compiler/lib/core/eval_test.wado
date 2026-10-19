@@ -48,17 +48,21 @@ export fn run() with Environment { let _ = args(); }`);
     assert name.starts_with("wasi:cli/environment@");
 }
 
-test "insecure randomness is linked, a map's default seed included" {
-    let out = eval(`use { println, Stdout } from "core:cli";
+test "insecure randomness answers the same on every run, a map's default seed included" {
+    let program = `use { println, Stdout } from "core:cli";
 use { HashMap } from "core:collections";
-use { Insecure } from "wasi:random";
-export fn run() with (Stdout, Insecure) {
+use { Insecure, InsecureSeed } from "wasi:random";
+export fn run() with (Stdout, Insecure, InsecureSeed) {
+    let [lo, hi] = InsecureSeed::get_insecure_seed();
     let mut m = HashMap::<String, u64>::new();
     m["draw"] = Insecure::get_insecure_random_u64();
-    println(\`\${m["draw"]}\`);
-}`).unwrap();
-    assert out.status matches { Exited(0) };
-    assert !out.stdout.is_empty();
+    println(\`\${lo} \${hi} \${m["draw"]}\`);
+}`;
+    let first = eval(program).unwrap();
+    // A different source keeps the second run out of the outcome cache.
+    let second = eval(`// again\n${program}`).unwrap();
+    assert first.status matches { Exited(0) };
+    assert first.stdout == second.stdout;
 }
 
 test "fuel bounds the run" {
