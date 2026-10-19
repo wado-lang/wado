@@ -1,0 +1,15 @@
+// `*r = value` drops what the object `r` names held, then moves the value's
+// content into it (WEP: Affine Types).
+fn replace(r: &mut Stream<u8>, value: Stream<u8>) {
+    *r = value;
+}
+
+test {
+    let [rx, tx] = Stream::<u8>::new();
+    let [rx2, tx2] = Stream::<u8>::new();
+    let mut held = rx;
+    replace(&mut held, rx2);
+    assert tx.write([1]).result == CopyResult::Dropped;
+    held.drop();
+    assert tx2.write([1]).result == CopyResult::Dropped;
+}

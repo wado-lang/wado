@@ -42,6 +42,13 @@ pub(super) fn ref_binding_needs_boxing(binding_wir: &WirType, source_wir: &WirTy
     }
 }
 
+pub(super) fn local_get(name: &str, ty: &WirType) -> WirInstr {
+    WirInstr::LocalGet {
+        name: name.to_string(),
+        result_ty: ty.clone(),
+    }
+}
+
 pub(super) fn declare_and_set_local(name: String, ty: WirType, value: WirInstr) -> [WirInstr; 2] {
     [
         WirInstr::DeclareLocal {
@@ -1689,6 +1696,24 @@ impl FunctionTranslator<'_, '_> {
         self.struct_new(self.ctx.handle_box().clone(), vec![handle])
     }
 
+    /// Whether `op` hands its resource over as an `own`: the box itself, not a
+    /// reference to it, which lowers as a `borrow`.
+    fn is_owned_handle_box(&self, op: Operand) -> bool {
+        let type_id = self.operand_type_id(op);
+        self.is_handle_box(type_id) && !self.type_table.is_reference_shaped(type_id)
+    }
+
+    /// Write 0 into the box `resource`, which the Component Model never issues
+    /// as a handle: index 0 of a handle table is reserved.
+    pub(super) fn zero_handle(&self, resource: WirInstr) -> WirInstr {
+        WirInstr::StructSet {
+            type_id: self.ctx.handle_box().clone(),
+            field_name: "value".to_string(),
+            expr: Box::new(resource),
+            value: Box::new(WirInstr::I32Const(0)),
+        }
+    }
+
     /// Translate `*r = v` for an in-place aggregate referent by copying `v` into
     /// the shared handle field by field, through two temps so each side is
     /// evaluated once. Only the expression-position shape (`let u = (*r = v);`)
@@ -3119,15 +3144,41 @@ impl FunctionTranslator<'_, '_> {
 
             ExprKind::CmRawCall { target, args, .. } => {
                 // The core function takes and returns a resource as its handle.
+                // One it takes as an `own` leaves its box zeroed, since the host
+                // owns the handle from then on (WEP: Affine Types). The operands
+                // are then evaluated in order before the call, so zeroing one
+                // box precedes no operand written after it.
+                let owns = args.iter().any(|a| self.is_owned_handle_box(*a));
+                let mut before = Vec::new();
                 let translated_args: Vec<WirInstr> = args
                     .iter()
                     .map(|a| {
                         let arg = self.translate_operand(*a);
-                        if self.is_handle_box(self.operand_type_id(*a)) {
-                            self.handle_of(arg)
-                        } else {
-                            arg
+                        let type_id = self.operand_type_id(*a);
+                        if !owns {
+                            return if self.is_handle_box(type_id) {
+                                self.handle_of(arg)
+                            } else {
+                                arg
+                            };
                         }
+                        let ty = self.wir_type(type_id);
+                        let name = self.fresh_local("$cm_arg");
+                        before.extend(declare_and_set_local(name.clone(), ty.clone(), arg));
+                        let read = local_get(&name, &ty);
+                        if !self.is_handle_box(type_id) {
+                            return read;
+                        }
+                        let handle = self.fresh_local("$cm_handle");
+                        before.extend(declare_and_set_local(
+                            handle.clone(),
+                            WirType::I32,
+                            self.handle_of(read.clone()),
+                        ));
+                        if self.is_owned_handle_box(*a) {
+                            before.push(self.zero_handle(read));
+                        }
+                        local_get(&handle, &WirType::I32)
                     })
                     .collect();
                 let returns_handle = self.is_handle_box(expr.type_id);
@@ -3175,12 +3226,18 @@ impl FunctionTranslator<'_, '_> {
                     func_id,
                     args: translated_args,
                 };
-                if discards_result {
+                let call = if discards_result {
                     WirInstr::Drop(Box::new(call))
                 } else if returns_handle {
                     self.handle_box_of(call)
                 } else {
                     call
+                };
+                if before.is_empty() {
+                    call
+                } else {
+                    before.push(call);
+                    WirInstr::Seq(before)
                 }
             }
 

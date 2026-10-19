@@ -624,10 +624,8 @@ impl<'a> Analyzer<'a> {
         self.record_write(place, lands, false, live);
     }
 
-    /// Note `assign`, writing `target`, for `in_place_assigns` when the place
-    /// holds an in-place type; its writes are those recorded since `start`. A
-    /// move emptying an affine place stores `null`, which repoints: the object
-    /// it held is the destination's now (WEP: Affine Types).
+    /// Note `assign`, writing `target`, for `in_place_assigns` where
+    /// [`can_write_in_place`]; its writes are those recorded since `start`.
     fn note_assign_site(
         &mut self,
         assign: &TirExpr,
@@ -635,12 +633,7 @@ impl<'a> Analyzer<'a> {
         start: usize,
         live: &IndexSet<u32>,
     ) {
-        let TirExprKind::Assign { value, .. } = &assign.kind else {
-            unreachable!("an assign site is an `Assign`");
-        };
-        if !matches!(value.kind, TirExprKind::Null)
-            && self.type_table.is_in_place_aggregate(target.type_id)
-        {
+        if can_write_in_place(assign, self.type_table) {
             self.note_site(assign.span, target, false, start, live);
         }
     }
@@ -918,6 +911,19 @@ fn collect_local_roots(expr: &TirExpr, out: &mut IndexSet<u32>) {
     W(out).visit_expr(expr);
 }
 
+/// Whether `assign` stores a value of an in-place type, so that it writes in
+/// place where a reference holds its storage. A move emptying an affine place
+/// stores `null`, which repoints: the object it held is the destination's now
+/// (WEP: Affine Types). The sites are keyed by span, which synthesized
+/// assignments share, so lowering asks this again of each one it expands.
+#[must_use]
+pub fn can_write_in_place(assign: &TirExpr, type_table: &tir::TypeTable) -> bool {
+    let TirExprKind::Assign { target, value } = &assign.kind else {
+        unreachable!("an assign site is an `Assign`");
+    };
+    !matches!(value.kind, TirExprKind::Null) && type_table.is_in_place_aggregate(target.type_id)
+}
+
 /// The assignments that write in place in a body the ownership walk does not
 /// read, answered without liveness: every one but to a place rooted at a local
 /// of this frame that nothing references or captures, and to that a field some
@@ -985,7 +991,7 @@ pub fn unanalyzed_in_place_assigns(
                     }
                 }
                 TirExprKind::Assign { target, .. }
-                    if self.type_table.is_in_place_aggregate(target.type_id)
+                    if can_write_in_place(expr, self.type_table)
                         && self.writes_in_place(target, self.owning_field(target)) =>
                 {
                     self.out.insert(expr.span);

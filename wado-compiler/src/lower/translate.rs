@@ -1056,7 +1056,12 @@ impl FunctionTranslator<'_, '_> {
                 }
                 (**ref_expr).clone()
             }
-            _ if self.in_place_assigns.contains(&expr.span) => {
+            _ if self.in_place_assigns.contains(&expr.span)
+                && value_copy::last_use::can_write_in_place(
+                    expr,
+                    &self.base.type_table.borrow(),
+                ) =>
+            {
                 // A handle of a reference type, so every later pass reads the
                 // writes below as going through it.
                 let ref_type = self

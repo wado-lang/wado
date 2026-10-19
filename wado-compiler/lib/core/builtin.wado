@@ -709,6 +709,12 @@ pub fn task_cancel();
 #[side_effect(read)]
 pub fn resource_handle<R>(r: &R) -> i32;
 
+/// Write 0, which the Component Model never issues, into the box `r`: what an
+/// object holds once its content moved into another (WEP: Affine Types).
+#[storage(none)]
+#[side_effect(opaque)]
+internal fn zero_handle<R>(r: &R);
+
 /// Calls stdout's write_via_stream indirectly (ambient, no effect required).
 /// Internal only: used by core:rt for ambient logging (panic, assert).
 /// Public API should use Stdout::write_via_stream() through the effect system.

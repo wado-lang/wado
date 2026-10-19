@@ -22,14 +22,7 @@ use crate::nir::FuncId;
 use crate::nir_arena::{ArenaCallArg, Body, ExprKind, Operand};
 use crate::tir::ResolvedType;
 use crate::wir::WirFuncId;
-use crate::wir_build::translate::ref_binding_needs_boxing;
-
-fn local_get(name: &str, ty: &WirType) -> WirInstr {
-    WirInstr::LocalGet {
-        name: name.to_string(),
-        result_ty: ty.clone(),
-    }
-}
+use crate::wir_build::translate::{local_get, ref_binding_needs_boxing};
 
 /// The compile-time constant of a SIMD lane operand, promoted into the
 /// function's value pool. The elaborator has already rejected anything else.
@@ -870,6 +863,10 @@ impl FunctionTranslator<'_, '_> {
                 );
                 let resource = self.translate_operand(args[0].expr);
                 Some(self.handle_of(resource))
+            }
+            "zero_handle" => {
+                let resource = self.translate_operand(args[0].expr);
+                Some(self.zero_handle(resource))
             }
 
             "call_indirect_stdout_write_via_stream" | "call_indirect_stderr_write_via_stream" => {

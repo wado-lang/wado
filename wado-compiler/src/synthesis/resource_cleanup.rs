@@ -12,6 +12,7 @@ use std::rc::Rc;
 
 use crate::canonical::{CanonicalIntrinsic, CmDecl};
 use crate::compiler_host::Code;
+use crate::compiler_item::{CompilerItem, SeqField};
 use crate::component_model::CmInterfaceRegistry;
 use crate::defs::DefId;
 use crate::hashmap::{IndexMap, IndexSet};
@@ -23,8 +24,8 @@ use crate::synthesis::SynthesisError;
 use crate::synthesis::cm_binding::end_drop_call;
 use crate::synthesis::common;
 use crate::synthesis::common::{
-    assign, builtin_call, cm_canonical_call, expr_stmt, if_stmt, let_stmt, local_ref, not_expr,
-    synth_span,
+    assign, binary, builtin_call, cm_canonical_call, expr_stmt, if_stmt, let_stmt, local_ref,
+    not_expr, synth_span,
 };
 use crate::tir;
 use crate::tir::{
@@ -178,6 +179,13 @@ enum Layout<'a> {
     Resource(DefId, &'a str),
     /// A stream or future end, released by its own canonical drop.
     End,
+    /// A `List` of `elem`, whose backing array of type `slots` its drop glue
+    /// walks.
+    List {
+        decl: Option<DefId>,
+        slots: TypeId,
+        elem: TypeId,
+    },
     /// An aggregate, instantiating `decl` with `args` where it has a
     /// declaration.
     Holder {
@@ -312,7 +320,33 @@ impl<'a> Resources<'a> {
         } else {
             return Layout::Opaque;
         };
+        if tt.is_compiler_item_type(base, CompilerItem::List) {
+            let Parts::Fields(fields) = &parts else {
+                unreachable!("`List` is a struct");
+            };
+            return Layout::List {
+                decl,
+                slots: fields[SeqField::Backing.index() as usize].2,
+                elem: args[0],
+            };
+        }
         Layout::Holder { decl, args, parts }
+    }
+
+    /// Whether a place holding a `type_id` holds an object that a store writes
+    /// into: a resource's box or a struct.
+    fn is_object(&self, type_id: TypeId) -> bool {
+        match self.layout(type_id) {
+            Layout::Resource(..) | Layout::End | Layout::List { .. } => true,
+            Layout::Holder {
+                parts: Parts::Fields(_),
+                ..
+            } => {
+                let tt = self.tt.borrow();
+                tt.as_tuple(tt.representation_head(type_id)).is_none()
+            }
+            Layout::Holder { .. } | Layout::Opaque => false,
+        }
     }
 
     /// The resource-carrying values `pattern` binds (e.g. `response` in
@@ -335,6 +369,11 @@ impl HeldTypes for Resources<'_> {
     fn held(&self, type_id: TypeId) -> Held {
         match self.layout(type_id) {
             Layout::Resource(..) | Layout::End => Held::Resource,
+            Layout::List { decl, elem, .. } => Held::Members {
+                decl,
+                args: vec![elem],
+                members: vec![elem],
+            },
             Layout::Holder { decl, args, parts } => Held::Members {
                 decl,
                 args,
@@ -591,7 +630,11 @@ fn build_drop_glue(
         module: entry.clone(),
         refused,
     };
-    let stmts = drop_value(local_ref(0, "value", type_id), type_id, &mut cx);
+    let value = local_ref(0, "value", type_id);
+    let stmts = match cx.resources.layout(type_id) {
+        Layout::List { slots, elem, .. } => drop_list_slots(value, slots, elem, &mut cx),
+        _ => drop_value(value, type_id, &mut cx),
+    };
     let mut function = common::make_synthetic_free_function(
         name,
         params,
@@ -751,6 +794,7 @@ fn drop_value(scrutinee: TirExpr, type_id: TypeId, cx: &mut Cx) -> Vec<TirStmt> 
             type_id,
             &cx.resources.tt.borrow(),
         ))],
+        Layout::List { .. } => drop_through_glue(scrutinee, type_id, cx),
         Layout::Holder { parts, .. } => {
             let key = cx.resources.tt.borrow().type_key(type_id);
             if cx.expanding.contains(&key) {
@@ -790,28 +834,108 @@ fn drop_through_glue(scrutinee: TirExpr, type_id: TypeId, cx: &mut Cx) -> Vec<Ti
 
 /// Drop each resource-carrying field / tuple element of `scrutinee` in
 /// declaration order, projecting it with a `FieldAccess`, where a move has not
-/// emptied it. `scrutinee` is a place expression (a local reference), so
-/// cloning it per field is cheap.
+/// emptied it, and leave it null. `scrutinee` is a place expression (a local
+/// reference), so cloning it per field is cheap.
 fn drop_projected(
     scrutinee: TirExpr,
     fields: &[(u32, String, TypeId)],
     cx: &mut Cx,
 ) -> Vec<TirStmt> {
     let mut stmts = Vec::new();
-    for (index, name, field_ty) in fields {
-        if !cx.carries_resource(*field_ty) {
-            continue;
-        }
-        let field = common::field_access(
-            scrutinee.clone(),
-            *index,
-            name.clone(),
-            *field_ty,
-            synth_span(),
-        );
-        stmts.extend(drop_if_held(field, *field_ty, cx));
+    for field in affine_fields(&scrutinee, fields, cx) {
+        let field_ty = field.type_id;
+        stmts.extend(drop_if_held(field.clone(), field_ty, cx));
+        stmts.push(empty_place(field));
     }
     stmts
+}
+
+/// The resource-carrying fields of `scrutinee`, each projected.
+fn affine_fields(
+    scrutinee: &TirExpr,
+    fields: &[(u32, String, TypeId)],
+    cx: &Cx,
+) -> Vec<TirExpr> {
+    fields
+        .iter()
+        .filter(|(_, _, field_ty)| cx.carries_resource(*field_ty))
+        .map(|(index, name, field_ty)| {
+            common::field_access(
+                scrutinee.clone(),
+                *index,
+                name.clone(),
+                *field_ty,
+                synth_span(),
+            )
+        })
+        .collect()
+}
+
+/// `place = null`: what a move leaves in the place it moved out of.
+fn empty_place(place: TirExpr) -> TirStmt {
+    let null = TirExpr::new(TirExprKind::Null, place.type_id, synth_span());
+    expr_stmt(assign(place, null))
+}
+
+/// The loop that drops each slot of the list `list` below its length, where a
+/// move has not emptied it. A slot at or past the length holds nothing, or an
+/// element `pop` moved out, which its taker owns.
+fn drop_list_slots(list: TirExpr, slots_ty: TypeId, elem: TypeId, cx: &mut Cx) -> Vec<TirStmt> {
+    let span = synth_span();
+    let field = |seq: SeqField, type_id| {
+        common::field_access(
+            list.clone(),
+            seq.index(),
+            seq.field_name().to_string(),
+            type_id,
+            span,
+        )
+    };
+    let (slots, slots_name) = cx.alloc_local(slots_ty, "slots");
+    let (len, len_name) = cx.alloc_local(TypeTable::I32, "len");
+    let (index, index_name) = cx.alloc_local(TypeTable::I32, "index");
+    cx.locals.last_mut().expect("allocated above").is_mut = true;
+    let (slot, slot_name) = cx.alloc_local(elem, "slot");
+    let index_ref = || local_ref(index, &index_name, TypeTable::I32);
+    let slots_ref_ty = cx.resources.tt.borrow_mut().make_ref(slots_ty);
+    let read = builtin_call(
+        "array_get_value",
+        vec![
+            common::ref_expr(local_ref(slots, &slots_name, slots_ty), slots_ref_ty, span),
+            index_ref(),
+        ],
+        elem,
+    );
+    let past_end = binary(
+        TirBinaryOp::Lt,
+        index_ref(),
+        local_ref(len, &len_name, TypeTable::I32),
+        TypeTable::BOOL,
+    );
+    let mut body = vec![
+        if_stmt(
+            not_expr(past_end, span),
+            TirBlock::new(vec![common::break_stmt()], span),
+            None,
+        ),
+        let_stmt(&slot_name, slot, elem, read),
+    ];
+    body.extend(drop_if_held(local_ref(slot, &slot_name, elem), elem, cx));
+    body.push(expr_stmt(assign(
+        index_ref(),
+        binary(
+            TirBinaryOp::Add,
+            index_ref(),
+            common::i32_const(1),
+            TypeTable::I32,
+        ),
+    )));
+    vec![
+        let_stmt(&slots_name, slots, slots_ty, field(SeqField::Backing, slots_ty)),
+        let_stmt(&len_name, len, TypeTable::I32, field(SeqField::Len, TypeTable::I32)),
+        common::let_mut_stmt(&index_name, index, TypeTable::I32, common::i32_const(0)),
+        common::loop_stmt(TirBlock::new(body, span)),
+    ]
 }
 
 /// Drop a variant structurally via a synthesized `match`, an arm per case.
@@ -1241,6 +1365,7 @@ fn elab_expr(expr: &mut TirExpr, consuming: bool, cx: &mut Cx) {
     let type_id = expr.type_id;
     let span = expr.span;
     let mut dropped = None;
+    let mut stores = false;
     match &mut expr.kind {
         TirExprKind::Local { .. } => {
             if consuming && cx.carries_resource(type_id) {
@@ -1345,7 +1470,7 @@ fn elab_expr(expr: &mut TirExpr, consuming: bool, cx: &mut Cx) {
         TirExprKind::Assign { target, value } => {
             elab_expr(target, false, cx);
             elab_expr(value, true, cx);
-            elab_store(target, value, cx);
+            stores = cx.carries_resource(target.type_id);
         }
         // An element read leaves its container whole; a copy out of one is
         // the refused call's to report.
@@ -1443,6 +1568,9 @@ fn elab_expr(expr: &mut TirExpr, consuming: bool, cx: &mut Cx) {
             span,
         );
     }
+    if stores {
+        elab_store(expr, cx);
+    }
 }
 
 /// Elaborate a closure body as the function it is. It reads captured values
@@ -1512,11 +1640,10 @@ fn take_place(expr: &mut TirExpr, cx: &mut Cx) {
 fn empty_after(expr: &mut TirExpr, place: TirExpr, cx: &mut Cx) {
     let type_id = expr.type_id;
     let (local, name) = cx.alloc_local(type_id, "moved");
-    let null = TirExpr::new(TirExprKind::Null, place.type_id, synth_span());
     wrap_in_block(expr, |value| {
         vec![
             let_stmt(&name, local, type_id, value),
-            expr_stmt(assign(place, null)),
+            empty_place(place),
             expr_stmt(local_ref(local, &name, type_id)),
         ]
     });
@@ -1601,24 +1728,128 @@ fn spill_as_local(expr: &TirExpr, cx: &mut Cx) -> (u32, String) {
     (local, name)
 }
 
-/// What a store into `target` replaces drops once the stored `value` is
-/// computed, since computing it may read what it replaces.
-fn elab_store(target: &TirExpr, value: &mut TirExpr, cx: &mut Cx) {
-    if !cx.carries_resource(target.type_id) || !is_place(target, cx) {
-        return;
-    }
-    let replaced = drop_if_held(target.clone(), target.type_id, cx);
-    if replaced.is_empty() {
-        return;
-    }
-    let type_id = value.type_id;
+/// Elaborate the store `expr` of an affine value. What the place held drops
+/// once the stored value is computed, since computing it may read it. A place
+/// holding an object takes the stored value's content, so every reference to
+/// the place sees it, and the stored value's own object is zeroed. A null
+/// place, one a move emptied, takes the stored reference.
+fn elab_store(expr: &mut TirExpr, cx: &mut Cx) {
+    let span = expr.span;
+    let TirExprKind::Assign { target, value } = &mut expr.kind else {
+        unreachable!("`elab_store` takes an assignment");
+    };
+    let type_id = target.type_id;
+    let through = match &target.kind {
+        TirExprKind::Unary {
+            op: TirUnaryOp::Deref,
+            expr: reference,
+        } => Some((**reference).clone()),
+        _ if is_place(target, cx) => None,
+        _ => return,
+    };
+    let target = (**target).clone();
+    let unit = TirExpr::new(TirExprKind::Unit, TypeTable::UNIT, span);
+    let value = std::mem::replace(&mut **value, unit);
     let (local, name) = cx.alloc_local(type_id, "stored");
-    wrap_in_block(value, |computed| {
-        let mut stmts = vec![let_stmt(&name, local, type_id, computed)];
-        stmts.extend(replaced);
-        stmts.push(expr_stmt(local_ref(local, &name, type_id)));
-        stmts
-    });
+    let stored = local_ref(local, &name, type_id);
+    let mut stmts = vec![let_stmt(&name, local, type_id, value)];
+    let is_object = cx.resources.is_object(type_id);
+    match through {
+        Some(reference) => {
+            // Read the reference once: dropping a struct reads it per field.
+            let reference = if matches!(reference.kind, TirExprKind::Local { .. }) {
+                reference
+            } else {
+                let ref_ty = reference.type_id;
+                let (local, name) = cx.alloc_local(ref_ty, "store_ref");
+                stmts.push(let_stmt(&name, local, ref_ty, reference));
+                local_ref(local, &name, ref_ty)
+            };
+            let place = common::deref_expr(reference, type_id, span);
+            if is_object {
+                stmts.push(refuse_self_store(place.clone(), stored.clone(), cx));
+            }
+            stmts.extend(drop_if_held(place.clone(), type_id, cx));
+            stmts.push(expr_stmt(assign(place, stored.clone())));
+            if is_object {
+                stmts.extend(zero_object(stored, cx));
+            }
+        }
+        None if is_object => {
+            let mut write = drop_value(target.clone(), type_id, cx);
+            let ref_ty = cx.resources.tt.borrow_mut().make_mut_ref(type_id);
+            let into = common::deref_expr(
+                common::mut_ref_expr(target.clone(), ref_ty, span),
+                type_id,
+                span,
+            );
+            write.push(expr_stmt(assign(into, stored.clone())));
+            write.extend(zero_object(stored.clone(), cx));
+            let moved = builtin_call("is_moved", vec![target.clone()], TypeTable::BOOL);
+            stmts.push(if_stmt(
+                moved,
+                TirBlock::new(vec![expr_stmt(assign(target, stored))], span),
+                Some(TirBlock::new(write, span)),
+            ));
+        }
+        None => {
+            stmts.extend(drop_if_held(target.clone(), type_id, cx));
+            stmts.push(expr_stmt(assign(target, stored)));
+        }
+    }
+    *expr = TirExpr::new(
+        TirExprKind::Block(TirBlock::new(stmts, span)),
+        TypeTable::UNIT,
+        span,
+    );
+}
+
+/// Trap where a store through a reference would move `stored` into the object
+/// it already is, `place`: the move into `stored` nulled the only place that
+/// owned it, and a reference owns nothing (WEP: Affine Types).
+fn refuse_self_store(place: TirExpr, stored: TirExpr, cx: &Cx) -> TirStmt {
+    let span = synth_span();
+    let (string_ty, type_name) = {
+        let tt = cx.resources.tt.borrow();
+        let def = tt.require_compiler_item_def(CompilerItem::String);
+        let string_ty = tt
+            .find_struct_type(StructDef::Decl(def))
+            .expect("`String` is in the type table");
+        (string_ty, tt.type_name(stored.type_id))
+    };
+    let message = common::string_lit(
+        format!(
+            "a store through a reference moves `{type_name}` into the object it was moved out \
+             of, which nothing would own"
+        ),
+        string_ty,
+        span,
+    );
+    if_stmt(
+        builtin_call("ref_eq", vec![place, stored], TypeTable::BOOL),
+        TirBlock::new(vec![expr_stmt(common::panic_call(message, span))], span),
+        None,
+    )
+}
+
+/// Zero `value`'s object, whose content moved into another: a box's handle
+/// becomes 0 and a struct's affine fields null.
+fn zero_object(value: TirExpr, cx: &Cx) -> Vec<TirStmt> {
+    match cx.resources.layout(value.type_id) {
+        Layout::Resource(..) | Layout::End => vec![expr_stmt(builtin_call(
+            "zero_handle",
+            vec![value],
+            TypeTable::UNIT,
+        ))],
+        Layout::Holder {
+            parts: Parts::Fields(fields),
+            ..
+        } => affine_fields(&value, &fields, cx)
+            .into_iter()
+            .map(empty_place)
+            .collect(),
+        Layout::List { .. } | Layout::Holder { .. } | Layout::Opaque => Vec::new(),
+    }
 }
 
 /// Elaborate `expr` as a scope of its own: whatever it declares (its

@@ -1,0 +1,12 @@
+// An assignment to a place holding an object writes into it, so a reference
+// taken before it sees the new value (WEP: Affine Types).
+test {
+    let [rx, tx] = Stream::<u8>::new();
+    let [rx2, tx2] = Stream::<u8>::new();
+    let id2 = ResourceId::of(&rx2);
+    let mut x = rx;
+    let r = &x;
+    x = rx2;
+    assert tx.write([1]).result == CopyResult::Dropped;
+    assert ResourceId::of(r) == id2;
+}
