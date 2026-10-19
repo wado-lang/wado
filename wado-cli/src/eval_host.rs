@@ -761,3 +761,33 @@ pub fn add_to_linker<T: Send + 'static>(
 ) -> wasmtime::Result<()> {
     eval_host::add_to_linker::<T, HasSelf<EvalSession>>(linker, session)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::{Outcome, current_thread_runtime, program_linker, run};
+    use wado_host::engine::fuel_engine;
+    use wasm_encoder::{
+        Component, ComponentImportSection, ComponentTypeRef, ComponentTypeSection, InstanceType,
+    };
+    use wasmtime::OptLevel;
+
+    /// A component whose one import is an empty instance named `interface`.
+    fn importing(interface: &str) -> Vec<u8> {
+        let mut types = ComponentTypeSection::new();
+        types.instance(&InstanceType::new());
+        let mut imports = ComponentImportSection::new();
+        imports.import(interface, ComponentTypeRef::Instance(0));
+        let mut component = Component::new();
+        component.section(&types).section(&imports);
+        component.finish()
+    }
+
+    #[test]
+    fn an_import_the_host_does_not_link_is_unavailable() {
+        let engine = fuel_engine(OptLevel::None).expect("building the eval engine");
+        let linker = program_linker(&engine).expect("linking the eval host");
+        let wasm = importing("acme:absent/iface");
+        let outcome = current_thread_runtime().block_on(run(&engine, &linker, &wasm, 1));
+        assert!(matches!(outcome, Outcome::Unavailable(name) if name == "acme:absent/iface"));
+    }
+}
