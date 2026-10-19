@@ -1,0 +1,11 @@
+// The request adapter finds `core:kiln`'s `Request` under whatever name the
+// generator imports it, and leaves a `Request` of the generator's own alone.
+
+use { total } from "./sub/kiln/value.schema"
+    with {
+        generator: { module: "./sub/kiln/aliased_request_generator.wado" },
+    };
+
+test {
+    assert total() == 7;
+}

@@ -20,8 +20,6 @@ use crate::token::Span;
 use crate::wir::{ImportEntry, ImportKind};
 use crate::world_registry::WorldInfo;
 
-pub const KILN_GENERATOR_WORLD: &str = "core:kiln/generator";
-
 /// The shared CM interface FQ that carries `InputFile` / `Response` / `Error`.
 pub const KILN_TYPES_INTERFACE: &str = "core:kiln/types@0.1.0";
 
@@ -36,13 +34,10 @@ pub fn check_loaded<H: CompilerHost>(
     modules: &IndexMap<ModuleSource, Module>,
     logger: &Logger<'_, H>,
 ) -> usize {
-    if target_world != Some(KILN_GENERATOR_WORLD) {
-        return 0;
-    }
     let (_, worlds) = CmInterfaceRegistry::build_from_stdlib();
-    let world = worlds
-        .get(KILN_GENERATOR_WORLD)
-        .expect("the stdlib declares the generator world");
+    let Some(world) = target_world.and_then(|world| worlds.generator_world(world)) else {
+        return 0;
+    };
     let provided = provided_wasi_interfaces(world);
     let provided_text =
         provided
@@ -136,7 +131,8 @@ pub fn inject_kiln_request_adapter(
     modules: &mut IndexMap<ModuleSource, Module>,
     source_interfaces: &mut SourceInterfaceBatch,
 ) {
-    if target_world != Some(KILN_GENERATOR_WORLD) {
+    let (_, worlds) = CmInterfaceRegistry::build_from_stdlib();
+    if !target_world.is_some_and(|world| worlds.is_generator_world(world)) {
         return;
     }
 
@@ -150,6 +146,7 @@ pub fn inject_kiln_request_adapter(
     // extract the `Request<T>` inner type (or `NoOptions` for the bare
     // `Request` form). Iterates by index so the mutation pass can bypass
     // Rust's borrow checker when it needs to call `module.alloc_ast_id()`.
+    let request_names = KilnRequestNames::of(module);
     let mut target: Option<(usize, String, Span, Type, RequestOptions)> = None;
     for (idx, item) in module.items.iter().enumerate() {
         let Item::Function(func) = item else { continue };
@@ -159,7 +156,7 @@ pub fn inject_kiln_request_adapter(
         let Some(first) = func.params.first() else {
             continue;
         };
-        let Some(request_options) = request_options_type(&first.ty) else {
+        let Some(request_options) = request_names.options_of(&first.ty) else {
             continue;
         };
         target = Some((
@@ -374,16 +371,56 @@ enum RequestOptions {
     Default,
 }
 
-/// Classify a `generate` first-parameter type for the adapter rewrite.
-/// Returns `None` for anything that is not a `Request<T>` or a bare `Request`,
-/// which the pass leaves untouched.
-fn request_options_type(ty: &Type) -> Option<RequestOptions> {
-    match ty {
-        Type::Generic(g) if g.name == "Request" && g.args.len() == 1 => {
-            Some(RequestOptions::Explicit(g.args[0].clone()))
+/// How a module spells `core:kiln`'s `Request`: the names its `use`s of it
+/// bind, and the namespaces it imports `core:kiln` under. Loading precedes
+/// resolution, so the imports are what tell `core:kiln`'s apart from a
+/// `Request` of the generator's own.
+#[derive(Default)]
+struct KilnRequestNames<'a> {
+    bound: Vec<&'a str>,
+    namespaces: Vec<&'a str>,
+}
+
+impl<'a> KilnRequestNames<'a> {
+    fn of(module: &'a Module) -> Self {
+        let mut names = Self::default();
+        for item in &module.items {
+            let Item::Use(decl) = item else { continue };
+            if decl.source != "core:kiln" {
+                continue;
+            }
+            for use_item in &decl.items {
+                match use_item {
+                    UseItem::Simple { name, alias, .. } if name == "Request" => {
+                        names.bound.push(alias.as_deref().unwrap_or(name));
+                    }
+                    UseItem::Namespace { name, .. } => names.namespaces.push(name),
+                    _ => {}
+                }
+            }
         }
-        Type::Named(n) if n.name == "Request" => Some(RequestOptions::Default),
-        _ => None,
+        names
+    }
+
+    /// Classify a `generate` first-parameter type for the adapter rewrite.
+    /// `None` for anything but `core:kiln`'s `Request<T>` or bare `Request`,
+    /// which the pass leaves untouched.
+    fn options_of(&self, ty: &Type) -> Option<RequestOptions> {
+        let args = match ty {
+            Type::Named(n) if self.bound.contains(&n.name.as_str()) => &[][..],
+            Type::Generic(g) if self.bound.contains(&g.name.as_str()) => &g.args[..],
+            Type::NamespacedGeneric(g)
+                if g.name == "Request" && self.namespaces.contains(&g.namespace.as_str()) =>
+            {
+                &g.args[..]
+            }
+            _ => return None,
+        };
+        match args {
+            [] => Some(RequestOptions::Default),
+            [options] => Some(RequestOptions::Explicit(options.clone())),
+            _ => None,
+        }
     }
 }
 
