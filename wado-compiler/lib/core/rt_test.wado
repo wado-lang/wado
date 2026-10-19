@@ -31,6 +31,39 @@ test "an empty waitable set has nothing to poll" {
     assert ws.poll() matches { None };
 }
 
+/// A member the host does not know, so it is ready the moment it joins.
+struct Settled {
+    n: i32,
+}
+
+impl Waitable for Settled {
+    fn waitable_id(&self) -> Option<ResourceId> {
+        return null;
+    }
+}
+
+test "a member ready without the host comes back in join order" {
+    let mut ws = WaitableSet::<Settled>::new();
+    assert ws.is_empty();
+    ws.join(Settled { n: 1 });
+    ws.join(Settled { n: 2 });
+    assert ws.len() == 2;
+    let first = ws.poll().unwrap();
+    assert first.member.n == 1 && first.code == 0;
+    assert ws.wait().member.n == 2;
+    assert ws.is_empty();
+}
+
+test "a set holds stream ends the host has no event for" {
+    let [rx, tx] = Stream::<u8>::new();
+    let mut readers = WaitableSet::<Stream<u8>>::new();
+    readers.join(rx);
+    let mut writers = WaitableSet::<StreamWritable<u8>>::new();
+    writers.join(tx);
+    assert readers.poll() matches { None };
+    assert writers.len() == 1;
+}
+
 test "log_stdout writes without an effect" {
     log_stdout("");
 }
