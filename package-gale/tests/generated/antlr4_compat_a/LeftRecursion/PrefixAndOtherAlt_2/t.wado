@@ -1011,13 +1011,10 @@ internal struct AtnSim {
     internal rule_first_neg: List<List<i32>> = [],
     internal rule_first_open: List<bool> = [],
     internal state_cont_nullable: List<bool> = [],
-    internal state_cont_first_start: List<i32> = [],
-    internal state_cont_first_count: List<i32> = [],
-    internal state_cont_neg_start: List<i32> = [],
-    internal state_cont_neg_count: List<i32> = [],
-    internal cont_first_label: List<i32> = [],
-    internal cont_neg_label: List<i32> = [],
-    internal state_cont_first_open: List<bool> = [],
+    internal cont_kinds: i32 = 0,
+    internal cont_words: i32 = 0,
+    internal state_cont_first: List<i64> = [],
+    internal state_cont_any_but: List<i32> = [],
     internal state_collapse_to: List<i32> = [],
     internal state_collapse_target: List<bool> = [],
     internal state_call_prec: List<i32>,
@@ -2165,6 +2162,9 @@ impl AtnDfa {
     }
 }
 
+global ATN_CONT_ANY: i32 = -1;
+global ATN_CONT_NONE: i32 = -2;
+
 internal fn atn_with_lr_tables(sim: AtnSim) -> AtnSim {
     let mut out = sim;
     let nrules = out.rule_start.len();
@@ -2226,6 +2226,14 @@ fn atn_compute_state_cont(sim: &mut AtnSim) {
             }
         }
     }
+    let mut kinds = 0;
+    for let mut j = 0; j < sim.tr_kind.len(); j += 1 {
+        if sim.tr_kind[j] == ATN_TR_ATOM || sim.tr_kind[j] == ATN_TR_NOT_ATOM {
+            kinds = i32::max(kinds, sim.tr_label[j] + 1);
+        }
+    }
+    sim.cont_kinds = kinds;
+    sim.cont_words = (kinds + 63) / 64;
     for let mut st = 0; st < nstates; st += 1 {
         let mut v1: List<i32> = [];
         let nullable = atn_cont_nullable(sim, st, &mut v1);
@@ -2234,18 +2242,26 @@ fn atn_compute_state_cont(sim: &mut AtnSim) {
         let mut fneg: List<i32> = [];
         let open = atn_cont_first(sim, st, &mut v2, &mut f, &mut fneg);
         sim.state_cont_nullable.push(nullable);
-        sim.state_cont_first_start.push(sim.cont_first_label.len());
-        sim.state_cont_first_count.push(f.len());
-        for let t of &f {
-            sim.cont_first_label.push(*t);
-        }
-        sim.state_cont_neg_start.push(sim.cont_neg_label.len());
-        sim.state_cont_neg_count.push(fneg.len());
-        for let x of &fneg {
-            sim.cont_neg_label.push(*x);
-        }
-        sim.state_cont_first_open.push(open);
+        atn_push_cont_admits(sim, &f, &fneg, open);
     }
+}
+
+fn atn_push_cont_admits(sim: &mut AtnSim, first: &List<i32>, neg: &List<i32>, open: bool) {
+    let row = sim.state_cont_first.len();
+    for let mut w = 0; w < sim.cont_words; w += 1 {
+        sim.state_cont_first.push(0);
+    }
+    for let t of first {
+        sim.state_cont_first[row + *t / 64] |= 1 as i64 << (*t % 64) as i64;
+    }
+    let any_but = if open || neg.iter_ref().any(|x| *x != neg[0]) {
+        ATN_CONT_ANY;
+    } else if neg.is_empty() {
+        ATN_CONT_NONE;
+    } else {
+        neg[0];
+    };
+    sim.state_cont_any_but.push(any_but);
 }
 
 fn atn_compute_first_nullable(sim: &mut AtnSim) {
@@ -2361,26 +2377,11 @@ fn atn_cont_first(sim: &AtnSim, state: i32, visited: &mut List<i32>, out: &mut L
 }
 
 fn atn_state_cont_admits(sim: &AtnSim, state: i32, t: i32, eof: i32) -> bool {
-    if sim.state_cont_first_open[state] && t != eof {
+    let any_but = sim.state_cont_any_but[state];
+    if t != eof && (any_but == ATN_CONT_ANY || any_but >= 0 && t != any_but) {
         return true;
     }
-    let fs = sim.state_cont_first_start[state];
-    let fc = sim.state_cont_first_count[state];
-    for let mut j = 0; j < fc; j += 1 {
-        if sim.cont_first_label[fs + j] == t {
-            return true;
-        }
-    }
-    if t != eof {
-        let ns = sim.state_cont_neg_start[state];
-        let nc = sim.state_cont_neg_count[state];
-        for let mut j = 0; j < nc; j += 1 {
-            if sim.cont_neg_label[ns + j] != t {
-                return true;
-            }
-        }
-    }
-    return false;
+    return t < sim.cont_kinds && sim.state_cont_first[state * sim.cont_words + t / 64] >> (t % 64) as i64 & 1 != 0;
 }
 
 internal fn atn_lr_loop_decision(
@@ -3070,7 +3071,7 @@ fn scan_expr_atom(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, min_pre
     let kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
     if _kind_set_1(kind) {
         if kind == TK_LIT_MINUS {
-            let _atn_alt = atn_predict_once(&ATN_SIM, 0, atn, tokens, pos, TK_EOF, min_prec);
+            let _atn_alt = atn_decide_0(atn, tokens, pos, min_prec);
             if _atn_alt == 0 {
                 return scan_expr__alt_0(tokens, start, atn, min_prec);
             }
@@ -3176,7 +3177,7 @@ fn _parse_expr__inner_atom(p: &mut Parser, min_prec: i32 = 0) -> () {
     let kind = p.peek_kind();
     if _kind_set_1(kind) {
         if kind == TK_LIT_MINUS {
-            let _atn_alt = atn_predict_once(&ATN_SIM, 0, &mut p.atn, &p.kinds, p.pos, TK_EOF, min_prec);
+            let _atn_alt = atn_decide_0(&mut p.atn, &p.kinds, p.pos, min_prec);
             if _atn_alt == 0 {
                 p.site = 1;
                 p.atn_ret_pending = 19;
@@ -3372,4 +3373,35 @@ global SYNC_2: List<i32> = [48];
 global EXPECTED_2: List<i32> = [TK_LIT_MINUS, TK_LIT_PLUS];
 
 global ATN_SIM: AtnSim = atn_with_lr_tables(atn_decode(&b"\x04\x00\x04\x00\x32\x00\x00\x00\x02\x00\x04\x00\x06\x00\x0f\x00\x19\x00\x24\x00\x2a\x00\x02\x03\x02\x03\x02\x03\x02\x03\x04\x05\x01\x01\x01\x01\x01\x04\x05\x01\x01\x01\x01\x01\x01\x01\x01\x06\x09\x07\x01\x01\x01\x01\x01\x04\x05\x01\x04\x05\x01\x01\x01\x01\x04\x05\x01\x01\x01\x01\x01\x01\x01\x00\x00\x00\x01\x00\x00\x00\x01\x00\x00\x00\x01\x00\x00\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x02\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x02\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x02\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x02\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x00\x00\x00\x00\x00\x00\x00\x04\x00\x01\x00\x00\x00\x00\x00\x04\x00\x00\x04\x00\x04\x00\x05\x00\x00\x00\x00\x04\x00\x04\x00\x00\x00\x00\x00\x00\x00\x01\x00\x01\x00\x00\x00\x00\x00\x01\x00\x00\x01\x00\x09\x00\x10\x00\x22\x00\x2b\x00\x0b\x00\x02\x00\x0c\x00\x03\x00\x0e\x00\x0f\x00\x0a\x00\x12\x00\x15\x00\x1a\x00\x13\x00\x05\x00\x11\x00\x16\x00\x07\x00\x18\x00\x03\x00\x11\x00\x1d\x00\x1b\x00\x04\x00\x1a\x00\x1e\x00\x07\x00\x20\x00\x03\x00\x1c\x00\x24\x00\x06\x00\x25\x00\x27\x00\x26\x00\x29\x00\x28\x00\x26\x00\x2a\x00\x23\x00\x2d\x00\x30\x00\x08\x00\x2e\x00\x2f\x00\x2c\x00\x31\x00\x32\x00\x2c\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x02\x00\x00\x00\x00\x00\x03\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x03\x00\x00\x00\x00\x00\x00\x00\x00\x04\x00\x00\x00\x00\x00\x02\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x04\x00\x00\x00\x00\x00\x02\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x05\x00\x00\x00\x00\x00\x01\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x06\x00\x00\x00\x00\x00\x00\x00\x00\x05\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x0d\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x14\x00\x00\x00\x00\x00\x00\x00\x00\x17\x00\x00\x00\x00\x00\x19\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x1f\x00\x00\x00\x00\x00\x21\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x02\x00\x00\x00\x01\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x02\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00"));
+
+fn atn_decide_0(atn: &mut AtnPredictor, tokens: &Array<i32>, pos: i32, min_prec: i32) -> i32 {
+    if pos < tokens.len() {
+        match tokens[pos] {
+            TK_Integer => {
+                return 0;
+            },
+            TK_LIT_MINUS => {
+                if pos + 1 < tokens.len() {
+                    match tokens[pos + 1] {
+                        TK_Integer => {
+                            return 0;
+                        },
+                        TK_LIT_MINUS => {
+                            return 1;
+                        },
+                        TK_LIT_PLUS => {
+                            return 1;
+                        },
+                        _ => {},
+                    };
+                }
+            },
+            TK_LIT_PLUS => {
+                return 1;
+            },
+            _ => {},
+        };
+    }
+    return atn_predict_once(&ATN_SIM, 0, atn, tokens, pos, TK_EOF, min_prec);
+}
 

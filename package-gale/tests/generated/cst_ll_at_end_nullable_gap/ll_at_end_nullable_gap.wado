@@ -1157,13 +1157,10 @@ internal struct AtnSim {
     internal rule_first_neg: List<List<i32>> = [],
     internal rule_first_open: List<bool> = [],
     internal state_cont_nullable: List<bool> = [],
-    internal state_cont_first_start: List<i32> = [],
-    internal state_cont_first_count: List<i32> = [],
-    internal state_cont_neg_start: List<i32> = [],
-    internal state_cont_neg_count: List<i32> = [],
-    internal cont_first_label: List<i32> = [],
-    internal cont_neg_label: List<i32> = [],
-    internal state_cont_first_open: List<bool> = [],
+    internal cont_kinds: i32 = 0,
+    internal cont_words: i32 = 0,
+    internal state_cont_first: List<i64> = [],
+    internal state_cont_any_but: List<i32> = [],
     internal state_collapse_to: List<i32> = [],
     internal state_collapse_target: List<bool> = [],
     internal state_call_prec: List<i32>,
@@ -2839,7 +2836,7 @@ fn _parse_x__inner(p: &mut Parser) -> () {
     if !kind_set_has(&SYNC_2, p.kinds[p.pos]) { builtin::cold_path(); p.sync_alts(&SYNC_2, &EXPECTED_2); }
     let kind = p.peek_kind();
     if kind == TK_LIT_a {
-        let _atn_alt = atn_predict_once(&ATN_SIM, 0, &mut p.atn, &p.kinds, p.pos, TK_EOF, 0);
+        let _atn_alt = atn_decide_0(&mut p.atn, &p.kinds, p.pos, 0);
         if _atn_alt == 1 {
             return _parse_x__inner_alt_1(p);
         }
@@ -2956,4 +2953,43 @@ global FOLLOW_SETS: List<List<i32>> = [[8]];
 global FOLLOW_MASK_0: i64 = 1;
 
 global ATN_SIM: AtnSim = atn_decode(&b"\x03\x00\x02\x00\x24\x00\x00\x00\x02\x00\x04\x00\x0f\x00\x20\x00\x02\x03\x02\x03\x02\x03\x04\x05\x01\x01\x01\x01\x01\x01\x01\x04\x05\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x04\x05\x01\x04\x05\x01\x01\x01\x00\x00\x00\x01\x00\x00\x00\x01\x00\x00\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x02\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x02\x00\x01\x00\x01\x00\x01\x00\x00\x00\x00\x00\x00\x00\x04\x00\x04\x00\x01\x00\x00\x00\x00\x00\x01\x00\x01\x00\x00\x01\x00\x01\x00\x01\x00\x00\x00\x00\x00\x00\x00\x01\x00\x07\x00\x10\x00\x1e\x00\x09\x00\x02\x00\x0a\x00\x03\x00\x0c\x00\x05\x00\x0e\x00\x0f\x00\x08\x00\x12\x00\x17\x00\x04\x00\x13\x00\x14\x00\x15\x00\x16\x00\x11\x00\x18\x00\x19\x00\x1a\x00\x1b\x00\x1c\x00\x1d\x00\x11\x00\x20\x00\x06\x00\x21\x00\x23\x00\x22\x00\x1f\x00\x24\x00\x22\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x02\x00\x00\x00\x00\x00\x03\x00\x00\x00\x00\x00\x04\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x05\x00\x00\x00\x00\x00\x06\x00\x00\x00\x00\x00\x00\x00\x00\x05\x00\x00\x00\x00\x00\x06\x00\x00\x00\x00\x00\x04\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x07\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x0b\x00\x00\x00\x00\x00\x0d\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00");
+
+fn atn_decide_0(atn: &mut AtnPredictor, tokens: &Array<i32>, pos: i32, min_prec: i32) -> i32 {
+    if pos < tokens.len() {
+        match tokens[pos] {
+            TK_LIT_a => {
+                if pos + 1 < tokens.len() {
+                    match tokens[pos + 1] {
+                        TK_LIT_b => {
+                            if pos + 2 < tokens.len() {
+                                match tokens[pos + 2] {
+                                    TK_LIT_c => {
+                                        if pos + 3 < tokens.len() {
+                                            match tokens[pos + 3] {
+                                                TK_LIT_c => {
+                                                    return 1;
+                                                },
+                                                TK_LIT_w => {
+                                                    return 1;
+                                                },
+                                                _ => {},
+                                            };
+                                        }
+                                    },
+                                    TK_LIT_w => {
+                                        return 0;
+                                    },
+                                    _ => {},
+                                };
+                            }
+                        },
+                        _ => {},
+                    };
+                }
+            },
+            _ => {},
+        };
+    }
+    return atn_predict_once(&ATN_SIM, 0, atn, tokens, pos, TK_EOF, min_prec);
+}
 
