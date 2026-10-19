@@ -1128,6 +1128,62 @@ internal fn follow_yields(tokens: &Array<i32>, pos: i32, cont: i64, sets: &List<
     }
     return alive && constrained;
 }
+internal struct ScanMemo<G> {
+    heads: Array<i32>,
+    entries: List<ScanMemoEntry<G>>,
+}
+
+struct ScanMemoEntry<G> {
+    next: i32,
+    rule: i32,
+    min_prec: i32,
+    follow: i64,
+    cont: i64,
+    gate_in: G,
+    end: i32,
+    gate_out: G,
+}
+
+impl<G: Eq> ScanMemo<G> {
+    internal fn new(positions: i32) -> ScanMemo<G> {
+        return ScanMemo { heads: Array::<i32>::filled(positions + 1, -1), entries: [] };
+    }
+
+    internal fn find(&self, rule: i32, pos: i32, min_prec: i32, follow: i64, cont: i64, gate: &G) -> i32 {
+        let mut at = self.heads[pos];
+        while at >= 0 {
+            let e = &self.entries[at];
+            if e.rule == rule && e.min_prec == min_prec && e.follow == follow && e.cont == cont && e.gate_in == *gate {
+                return at;
+            }
+            at = e.next;
+        }
+        return -1;
+    }
+
+    internal fn end_of(&self, entry: i32) -> i32 {
+        return self.entries[entry].end;
+    }
+
+    internal fn gate_of(&self, entry: i32) -> G {
+        return self.entries[entry].gate_out;
+    }
+
+    internal fn put(
+        &mut self,
+        rule: i32,
+        pos: i32,
+        min_prec: i32,
+        follow: i64,
+        cont: i64,
+        gate_in: G,
+        end: i32,
+        gate_out: G,
+    ) {
+        self.entries.push(ScanMemoEntry { next: self.heads[pos], rule, min_prec, follow, cont, gate_in, end, gate_out });
+        self.heads[pos] = self.entries.len() - 1;
+    }
+}
 internal global ATN_BASIC: i32 = 1;
 internal global ATN_RULE_START: i32 = 2;
 internal global ATN_RULE_STOP: i32 = 3;
@@ -1356,7 +1412,7 @@ impl AtnPredictor {
         return alt;
     }
 
-    fn read_down_to(&mut self, depth: i32) {
+    internal fn read_down_to(&mut self, depth: i32) {
         self.reach = i32::min(self.reach, depth);
     }
 
@@ -1596,7 +1652,6 @@ impl CtxArena {
         if rstk.is_empty() {
             return CTX_UNKNOWN;
         }
-        assert floor == 0 || sim.state_collapse_to.is_empty(), "a collapse into a caller loop reads the callers a floor hides";
         let mut ctx = if floor > 0 { self.push(CTX_HIDDEN_RETURN, 0, CTX_EMPTY) } else { CTX_EMPTY };
         for let mut k = floor; k < rstk.len(); k += 1 {
             if rstk[k] >= 0 {
@@ -1937,7 +1992,7 @@ fn atn_expand(
         rset.add(arena, cur.state, cur.alt, cur.pr, cur.pctx);
         return;
     }
-    let pctx = atn_collapse_into_caller_loop(sim, arena, cur, work);
+    let pctx = atn_collapse_into_caller_loop(sim, arena, cur, work, &mut scratch.hidden_alts);
     if pctx < 0 {
         return;
     }
@@ -1968,7 +2023,13 @@ fn atn_expand(
     }
 }
 
-fn atn_collapse_into_caller_loop(sim: &AtnSim, arena: &mut CtxArena, cur: &AtnConfig, work: &mut List<AtnConfig>) -> i32 {
+fn atn_collapse_into_caller_loop(
+    sim: &AtnSim,
+    arena: &mut CtxArena,
+    cur: &AtnConfig,
+    work: &mut List<AtnConfig>,
+    hidden_alts: &mut List<i32>,
+) -> i32 {
     if sim.state_collapse_to.is_empty() || !sim.state_collapse_target[cur.state] {
         return cur.pctx;
     }
@@ -1976,10 +2037,10 @@ fn atn_collapse_into_caller_loop(sim: &AtnSim, arena: &mut CtxArena, cur: &AtnCo
     let n = arena.node_len[cur.pctx];
     let mut collapses = false;
     for let mut e = s; e < s + n; e += 1 {
-        if atn_edge_collapses(sim, arena, e, cur) {
-            collapses = true;
-            break;
+        if arena.ret[e] == CTX_HIDDEN_RETURN && !hidden_alts.contains(&cur.alt) {
+            hidden_alts.push(cur.alt);
         }
+        collapses = collapses || atn_edge_collapses(sim, arena, e, cur);
     }
     if !collapses {
         return cur.pctx;
@@ -2352,11 +2413,66 @@ internal fn atn_with_lr_tables(sim: AtnSim) -> AtnSim {
         out.rule_first_open.push(false);
     }
     if out.tr_kind.contains(&ATN_TR_PRECEDENCE) {
-        atn_compute_first_nullable(&mut out);
-        atn_compute_state_cont(&mut out);
+        let mut kinds = 0;
+        for let mut j = 0; j < out.tr_kind.len(); j += 1 {
+            if out.tr_kind[j] == ATN_TR_ATOM || out.tr_kind[j] == ATN_TR_NOT_ATOM {
+                kinds = i32::max(kinds, out.tr_label[j] + 1);
+            }
+        }
+        out.cont_kinds = kinds;
+        out.cont_words = (kinds + 63) / 64;
+        let mut walk = AtnContWalk {
+            seen: List::filled(out.state_kind.len(), 0),
+            stamp: 0,
+            has: List::filled(kinds, false),
+            first: [],
+            neg: [],
+        };
+        atn_compute_first_nullable(&mut out, &mut walk);
+        atn_compute_state_cont(&mut out, &mut walk);
         atn_compute_collapse(&mut out);
     }
     return out;
+}
+
+struct AtnContWalk {
+    seen: List<i32>,
+    stamp: i32,
+    has: List<bool>,
+    first: List<i32>,
+    neg: List<i32>,
+}
+
+impl AtnContWalk {
+    fn begin(&mut self) {
+        self.stamp += 1;
+        for let t of &self.first {
+            self.has[*t] = false;
+        }
+        self.first.clear();
+        self.neg.clear();
+    }
+
+    fn enters(&mut self, state: i32) -> bool {
+        if self.seen[state] == self.stamp {
+            return false;
+        }
+        self.seen[state] = self.stamp;
+        return true;
+    }
+
+    fn add_first(&mut self, t: i32) {
+        if !self.has[t] {
+            self.has[t] = true;
+            self.first.push(t);
+        }
+    }
+
+    fn add_neg(&mut self, t: i32) {
+        if !self.neg.contains(&t) {
+            self.neg.push(t);
+        }
+    }
 }
 
 fn atn_compute_collapse(sim: &mut AtnSim) {
@@ -2389,12 +2505,9 @@ fn atn_lr_entry_reached(sim: &AtnSim, from: i32) -> i32 {
     return -1;
 }
 
-fn atn_compute_state_cont(sim: &mut AtnSim) {
+fn atn_compute_state_cont(sim: &mut AtnSim, walk: &mut AtnContWalk) {
     let nstates = sim.state_kind.len();
-    let mut entered_from: List<i32> = [];
-    for let mut st = 0; st < nstates; st += 1 {
-        entered_from.push(-1);
-    }
+    let mut entered_from = List::<i32>::filled(nstates, -1);
     for let mut st = 0; st < nstates; st += 1 {
         let s = sim.state_tr_start[st];
         for let mut j = s; j < s + sim.state_tr_count[st]; j += 1 {
@@ -2403,23 +2516,16 @@ fn atn_compute_state_cont(sim: &mut AtnSim) {
             }
         }
     }
-    let mut kinds = 0;
-    for let mut j = 0; j < sim.tr_kind.len(); j += 1 {
-        if sim.tr_kind[j] == ATN_TR_ATOM || sim.tr_kind[j] == ATN_TR_NOT_ATOM {
-            kinds = i32::max(kinds, sim.tr_label[j] + 1);
-        }
-    }
-    sim.cont_kinds = kinds;
-    sim.cont_words = (kinds + 63) / 64;
     for let mut st = 0; st < nstates; st += 1 {
-        let mut v1: List<i32> = [];
-        let nullable = atn_cont_nullable(sim, st, &mut v1);
-        let mut v2: List<i32> = if entered_from[st] >= 0 { [entered_from[st]] } else { [] };
-        let mut f: List<i32> = [];
-        let mut fneg: List<i32> = [];
-        let open = atn_cont_first(sim, st, &mut v2, &mut f, &mut fneg);
+        walk.begin();
+        let nullable = atn_cont_nullable(sim, st, walk);
+        walk.begin();
+        if entered_from[st] >= 0 {
+            let _ = walk.enters(entered_from[st]);
+        }
+        let open = atn_cont_first(sim, st, walk);
         sim.state_cont_nullable.push(nullable);
-        atn_push_cont_admits(sim, &f, &fneg, open);
+        atn_push_cont_admits(sim, &walk.first, &walk.neg, open);
     }
 }
 
@@ -2441,45 +2547,36 @@ fn atn_push_cont_admits(sim: &mut AtnSim, first: &List<i32>, neg: &List<i32>, op
     sim.state_cont_any_but.push(any_but);
 }
 
-fn atn_compute_first_nullable(sim: &mut AtnSim) {
+fn atn_compute_first_nullable(sim: &mut AtnSim, walk: &mut AtnContWalk) {
     let nrules = sim.rule_start.len();
     let mut changed = true;
     while changed {
         changed = false;
         for let mut r = 0; r < nrules; r += 1 {
-            let mut v1: List<i32> = [];
-            if atn_cont_nullable(sim, sim.rule_start[r], &mut v1) && !sim.rule_nullable[r] {
+            walk.begin();
+            if atn_cont_nullable(sim, sim.rule_start[r], walk) && !sim.rule_nullable[r] {
                 sim.rule_nullable[r] = true;
                 changed = true;
             }
-            let mut v2: List<i32> = [];
-            let mut f: List<i32> = [];
-            let mut fneg: List<i32> = [];
-            if atn_cont_first(sim, sim.rule_start[r], &mut v2, &mut f, &mut fneg) && !sim.rule_first_open[r] {
+            walk.begin();
+            if atn_cont_first(sim, sim.rule_start[r], walk) && !sim.rule_first_open[r] {
                 sim.rule_first_open[r] = true;
                 changed = true;
             }
-            for let t of &f {
-                if !sim.rule_first[r].contains(t) {
-                    sim.rule_first[r].push(*t);
-                    changed = true;
-                }
-            }
-            for let x of &fneg {
-                if !sim.rule_first_neg[r].contains(x) {
-                    sim.rule_first_neg[r].push(*x);
-                    changed = true;
-                }
+            assert walk.first.len() >= sim.rule_first[r].len() && walk.neg.len() >= sim.rule_first_neg[r].len(), "a rule's first set only grows as its callees' do";
+            if walk.first.len() > sim.rule_first[r].len() || walk.neg.len() > sim.rule_first_neg[r].len() {
+                sim.rule_first[r] = walk.first;
+                sim.rule_first_neg[r] = walk.neg;
+                changed = true;
             }
         }
     }
 }
 
-fn atn_cont_nullable(sim: &AtnSim, state: i32, visited: &mut List<i32>) -> bool {
-    if visited.contains(&state) {
+fn atn_cont_nullable(sim: &AtnSim, state: i32, walk: &mut AtnContWalk) -> bool {
+    if !walk.enters(state) {
         return false;
     }
-    visited.push(state);
     if sim.state_kind[state] == ATN_RULE_STOP {
         return true;
     }
@@ -2488,12 +2585,12 @@ fn atn_cont_nullable(sim: &AtnSim, state: i32, visited: &mut List<i32>) -> bool 
     for let mut j = 0; j < c; j += 1 {
         let k = sim.tr_kind[s + j];
         if k == ATN_TR_EPSILON || k == ATN_TR_PRECEDENCE {
-            if atn_cont_nullable(sim, sim.tr_target[s + j], visited) {
+            if atn_cont_nullable(sim, sim.tr_target[s + j], walk) {
                 return true;
             }
         } else if k == ATN_TR_RULE {
             let callee = sim.tr_label[s + j];
-            if callee >= 0 && sim.rule_nullable[callee] && atn_cont_nullable(sim, sim.tr_follow[s + j], visited) {
+            if callee >= 0 && sim.rule_nullable[callee] && atn_cont_nullable(sim, sim.tr_follow[s + j], walk) {
                 return true;
             }
         }
@@ -2501,11 +2598,10 @@ fn atn_cont_nullable(sim: &AtnSim, state: i32, visited: &mut List<i32>) -> bool 
     return false;
 }
 
-fn atn_cont_first(sim: &AtnSim, state: i32, visited: &mut List<i32>, out: &mut List<i32>, neg: &mut List<i32>) -> bool {
-    if visited.contains(&state) {
+fn atn_cont_first(sim: &AtnSim, state: i32, walk: &mut AtnContWalk) -> bool {
+    if !walk.enters(state) {
         return false;
     }
-    visited.push(state);
     if sim.state_kind[state] == ATN_RULE_STOP {
         return false;
     }
@@ -2515,36 +2611,28 @@ fn atn_cont_first(sim: &AtnSim, state: i32, visited: &mut List<i32>, out: &mut L
     for let mut j = 0; j < c; j += 1 {
         let k = sim.tr_kind[s + j];
         if k == ATN_TR_ATOM {
-            if !out.contains(&sim.tr_label[s + j]) {
-                out.push(sim.tr_label[s + j]);
-            }
+            walk.add_first(sim.tr_label[s + j]);
         } else if k == ATN_TR_WILDCARD {
             open = true;
         } else if k == ATN_TR_NOT_ATOM {
-            if !neg.contains(&sim.tr_label[s + j]) {
-                neg.push(sim.tr_label[s + j]);
-            }
+            walk.add_neg(sim.tr_label[s + j]);
         } else if k == ATN_TR_EPSILON || k == ATN_TR_PRECEDENCE {
-            if atn_cont_first(sim, sim.tr_target[s + j], visited, out, neg) {
+            if atn_cont_first(sim, sim.tr_target[s + j], walk) {
                 open = true;
             }
         } else if k == ATN_TR_RULE {
             let callee = sim.tr_label[s + j];
             if callee >= 0 {
                 for let t of &sim.rule_first[callee] {
-                    if !out.contains(t) {
-                        out.push(*t);
-                    }
+                    walk.add_first(*t);
                 }
                 for let x of &sim.rule_first_neg[callee] {
-                    if !neg.contains(x) {
-                        neg.push(*x);
-                    }
+                    walk.add_neg(*x);
                 }
                 if sim.rule_first_open[callee] {
                     open = true;
                 }
-                if sim.rule_nullable[callee] && atn_cont_first(sim, sim.tr_follow[s + j], visited, out, neg) {
+                if sim.rule_nullable[callee] && atn_cont_first(sim, sim.tr_follow[s + j], walk) {
                     open = true;
                 }
             }
@@ -2591,7 +2679,7 @@ internal fn atn_lr_loop_decision(
     if enter < 0 {
         return exit_alt;
     }
-    if !contested && !atn_caller_contests(sim, &atn.stack, dstate, t, eof, min_prec) {
+    if !contested && !atn_caller_contests(sim, atn, dstate, t, eof, min_prec) {
         return enter;
     }
     return atn_lr_predict(sim, atn, decision, tokens, pos, t, eof, min_prec);
@@ -2608,7 +2696,7 @@ internal fn atn_lr_enter_or_ask(
     min_prec: i32,
 ) -> i32 {
     let t = if pos < tokens.len() { tokens[pos] } else { eof };
-    if !atn_caller_contests(sim, &atn.stack, sim.decision_state[decision], t, eof, min_prec) {
+    if !atn_caller_contests(sim, atn, sim.decision_state[decision], t, eof, min_prec) {
         return enter;
     }
     return atn_lr_predict(sim, atn, decision, tokens, pos, t, eof, min_prec);
@@ -2645,10 +2733,12 @@ fn atn_record_callers_exit(
     let mut mp = min_prec;
     for let mut k = atn.stack.len() - 1; k >= 1; k -= 1 {
         let ret = atn.stack[k];
+        atn.read_down_to(k);
         if ret < 0 || sim.state_collapse_to[ret] != dstate {
             return;
         }
         let caller_mp = atn_invocation_prec(sim, &atn.stack, k - 1);
+        atn.read_down_to(k - 1);
         if atn_caller_alone_enters(sim, dstate, t, eof, caller_mp, mp) {
             return;
         }
@@ -2670,31 +2760,44 @@ fn atn_caller_alone_enters(sim: &AtnSim, dstate: i32, t: i32, eof: i32, caller_m
     return false;
 }
 
-fn atn_caller_contests(sim: &AtnSim, rule_stack: &List<i32>, dstate: i32, t: i32, eof: i32, min_prec: i32) -> bool {
+fn atn_caller_contests(sim: &AtnSim, atn: &mut AtnPredictor, dstate: i32, t: i32, eof: i32, min_prec: i32) -> bool {
+    let [contests, lowest_read] = atn_callers_contest(sim, &atn.stack, dstate, t, eof, min_prec);
+    atn.read_down_to(lowest_read);
+    return contests;
+}
+
+fn atn_callers_contest(
+    sim: &AtnSim,
+    rule_stack: &List<i32>,
+    dstate: i32,
+    t: i32,
+    eof: i32,
+    min_prec: i32,
+) -> [bool, i32] {
     let mut mp = min_prec;
     let mut same_loop = true;
     let mut i = rule_stack.len() - 1;
     while i >= 0 {
         let ret = rule_stack[i];
         if ret < 0 {
-            return i == 0 && t == eof;
+            return [i == 0 && t == eof, i];
         }
         same_loop = same_loop && i >= 1 && sim.state_collapse_to[ret] == dstate;
         if same_loop {
             let caller_mp = atn_invocation_prec(sim, rule_stack, i - 1);
             if atn_caller_alone_enters(sim, dstate, t, eof, caller_mp, mp) {
-                return true;
+                return [true, i - 1];
             }
             mp = caller_mp;
         } else if atn_state_cont_admits(sim, ret, t, eof) {
-            return true;
+            return [true, i];
         }
         if !sim.state_cont_nullable[ret] {
-            return false;
+            return [false, i];
         }
         i -= 1;
     }
-    return false;
+    return [false, 0];
 }
 pub global TK_IF: i32 = 0;
 pub global TK_EQ: i32 = 1;
@@ -2914,6 +3017,7 @@ struct Parser {
     line_starts: List<i32>,
     no_brace: i32 = 0,
     scan_gate: ScanGate = ScanGate {},
+    memo: ScanMemo<ScanGate>,
 }
 
 fn kind_names(kinds: &List<i32>) -> List<String> {
@@ -2927,7 +3031,7 @@ fn kind_names(kinds: &List<i32>) -> List<String> {
 impl Parser {
     fn new(tokens: TokenStream) -> Parser {
         let kinds = tokens.kinds.to_array();
-        return Parser { tokens, kinds, pos: 0, pending: null, recovering: false, speculating: false, max_errors: i32::MAX, site: -1, sites: [], failed_expected: [], recovery_pos: -1, recovered_failures: [], atn: AtnPredictor::new(), atn_ret_pending: -1, b: TreeBuilder::with_capacity(tokens.len() * 4), diagnostics: [], line_starts: line_starts(&tokens.src) };
+        return Parser { tokens, kinds, pos: 0, pending: null, recovering: false, speculating: false, max_errors: i32::MAX, site: -1, sites: [], failed_expected: [], recovery_pos: -1, recovered_failures: [], atn: AtnPredictor::new(), atn_ret_pending: -1, b: TreeBuilder::with_capacity(tokens.len() * 4), diagnostics: [], line_starts: line_starts(&tokens.src), memo: ScanMemo::new(kinds.len()) };
     }
 
     fn emit(&mut self, s: String) {
@@ -3329,10 +3433,10 @@ impl Parser {
     }
 }
 
-fn scan_stmt(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, atn: &mut AtnPredictor) -> i32 {
+fn scan_stmt(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, atn: &mut AtnPredictor, memo: &mut ScanMemo<ScanGate>) -> i32 {
     let mut pos = pos;
     atn.stack.push(46);
-    pos = scan_expr(tokens, pos, gate, atn, 0);
+    pos = scan_expr(tokens, pos, gate, atn, memo, 0);
     atn.stack.pop();
     if pos < 0 { return -1; }
     if pos >= tokens.len() || tokens[pos] != TK_SEMI { return -1; }
@@ -3340,7 +3444,7 @@ fn scan_stmt(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, atn: &mut AtnPr
     return pos;
 }
 
-fn scan_blk(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, atn: &mut AtnPredictor) -> i32 {
+fn scan_blk(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, atn: &mut AtnPredictor, memo: &mut ScanMemo<ScanGate>) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos] != TK_LB { return -1; }
     pos += 1;
@@ -3351,7 +3455,7 @@ fn scan_blk(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, atn: &mut AtnPre
     return pos;
 }
 
-fn scan_expr_atom(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, atn: &mut AtnPredictor, min_prec: i32) -> i32 {
+fn scan_expr_atom(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, atn: &mut AtnPredictor, memo: &mut ScanMemo<ScanGate>, min_prec: i32) -> i32 {
     let start = pos;
     let start_gate = *gate;
     let mut pos = pos;
@@ -3361,11 +3465,11 @@ fn scan_expr_atom(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, atn: &mut 
         try_1: {
             gate.no_brace = 1;
             atn.stack.push(64);
-            pos = scan_expr(tokens, pos, gate, atn, 0);
+            pos = scan_expr(tokens, pos, gate, atn, memo, 0);
             atn.stack.pop();
             if pos < 0 { break try_1; }
             gate.no_brace = 0;
-            pos = scan_blk(tokens, pos, gate, atn);
+            pos = scan_blk(tokens, pos, gate, atn, memo);
             if pos < 0 { break try_1; }
             return pos;
         }
@@ -3379,31 +3483,44 @@ fn scan_expr_atom(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, atn: &mut 
             return -1;
         }
         if _atn_alt == 1 {
-            return scan_expr__alt_2(tokens, start, gate, atn, min_prec);
+            return scan_expr__alt_2(tokens, start, gate, atn, memo, min_prec);
         }
-        return scan_expr__alt_3(tokens, start, gate, atn, min_prec);
+        return scan_expr__alt_3(tokens, start, gate, atn, memo, min_prec);
     }
     return -1;
 }
 
-fn scan_expr_lr_0(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, atn: &mut AtnPredictor, min_prec: i32) -> i32 {
+fn scan_expr_lr_0(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, atn: &mut AtnPredictor, memo: &mut ScanMemo<ScanGate>, min_prec: i32) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos] != TK_EQ { return -1; }
     pos += 1;
     atn.stack.push(87);
-    pos = scan_expr(tokens, pos, gate, atn, 2);
+    pos = scan_expr(tokens, pos, gate, atn, memo, 2);
     atn.stack.pop();
     if pos < 0 { return -1; }
     return pos;
 }
 
-fn scan_expr(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, atn: &mut AtnPredictor, min_prec: i32 = 0) -> i32 {
-    let mut pos = scan_expr_atom(tokens, pos, gate, atn, min_prec);
+fn scan_expr(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, atn: &mut AtnPredictor, memo: &mut ScanMemo<ScanGate>, min_prec: i32 = 0) -> i32 {
+    let memo_at = memo.find(5, pos, min_prec, 0, 0, &*gate);
+    if memo_at >= 0 {
+        *gate = memo.gate_of(memo_at);
+        return memo.end_of(memo_at);
+    }
+    let memo_gate = *gate;
+    let memo_callers = atn.hide_callers();
+    let memo_end = scan_expr__walk(tokens, pos, gate, atn, memo, min_prec);
+    if !atn.reveal_callers(memo_callers) { memo.put(5, pos, min_prec, 0, 0, memo_gate, memo_end, *gate); }
+    return memo_end;
+}
+
+fn scan_expr__walk(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, atn: &mut AtnPredictor, memo: &mut ScanMemo<ScanGate>, min_prec: i32 = 0) -> i32 {
+    let mut pos = scan_expr_atom(tokens, pos, gate, atn, memo, min_prec);
     if pos < 0 { return -1; }
     loop {
         let _atn_alt = atn_lr_decide_4(atn, tokens, pos, min_prec);
         if _atn_alt == 0 {
-            pos = scan_expr_lr_0(tokens, pos, gate, atn, min_prec);
+            pos = scan_expr_lr_0(tokens, pos, gate, atn, memo, min_prec);
             if pos < 0 { return -1; }
         } else {
             break;
@@ -3472,7 +3589,7 @@ fn _parse_stmts__inner_alt_0(p: &mut Parser, follow: i64 = 0) -> () {
                 let tokens = &p.kinds;
                 let mut pos: i32 = p.pos;
                 p.atn.stack.push(32);
-                pos = scan_stmt(tokens, pos, &mut p.scan_gate, &mut p.atn);
+                pos = scan_stmt(tokens, pos, &mut p.scan_gate, &mut p.atn, &mut p.memo);
                 p.atn.stack.pop();
                 if pos < 0 { break rep_scan; }
                 if pos <= p.pos { break rep_scan; }
@@ -3490,7 +3607,7 @@ fn _parse_stmts__inner_alt_0(p: &mut Parser, follow: i64 = 0) -> () {
                             let sp = pos;
                             let sp_gate = p.scan_gate;
                             p.atn.stack.push(38);
-                            pos = scan_expr(tokens, pos, &mut p.scan_gate, &mut p.atn, 0);
+                            pos = scan_expr(tokens, pos, &mut p.scan_gate, &mut p.atn, &mut p.memo, 0);
                             p.atn.stack.pop();
                             if pos < 0 {
                                 pos = sp;
@@ -3628,7 +3745,7 @@ fn _parse_expr__inner_alt_2(p: &mut Parser, min_prec: i32) -> () {
     return;
 }
 
-fn scan_expr__alt_2(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, atn: &mut AtnPredictor, min_prec: i32) -> i32 {
+fn scan_expr__alt_2(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, atn: &mut AtnPredictor, memo: &mut ScanMemo<ScanGate>, min_prec: i32) -> i32 {
     let mut pos = pos;
     if gate.no_brace != 0 { return -1; }
     if pos >= tokens.len() || tokens[pos] != TK_ID { return -1; }
@@ -3647,7 +3764,7 @@ fn _parse_expr__inner_alt_3(p: &mut Parser, min_prec: i32) -> () {
     return;
 }
 
-fn scan_expr__alt_3(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, atn: &mut AtnPredictor, min_prec: i32) -> i32 {
+fn scan_expr__alt_3(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, atn: &mut AtnPredictor, memo: &mut ScanMemo<ScanGate>, min_prec: i32) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos] != TK_ID { return -1; }
     pos += 1;

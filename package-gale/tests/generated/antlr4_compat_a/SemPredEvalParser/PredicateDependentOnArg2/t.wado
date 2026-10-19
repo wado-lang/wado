@@ -1209,7 +1209,7 @@ impl AtnPredictor {
         return alt;
     }
 
-    fn read_down_to(&mut self, depth: i32) {
+    internal fn read_down_to(&mut self, depth: i32) {
         self.reach = i32::min(self.reach, depth);
     }
 
@@ -1449,7 +1449,6 @@ impl CtxArena {
         if rstk.is_empty() {
             return CTX_UNKNOWN;
         }
-        assert floor == 0 || sim.state_collapse_to.is_empty(), "a collapse into a caller loop reads the callers a floor hides";
         let mut ctx = if floor > 0 { self.push(CTX_HIDDEN_RETURN, 0, CTX_EMPTY) } else { CTX_EMPTY };
         for let mut k = floor; k < rstk.len(); k += 1 {
             if rstk[k] >= 0 {
@@ -1790,7 +1789,7 @@ fn atn_expand(
         rset.add(arena, cur.state, cur.alt, cur.pr, cur.pctx);
         return;
     }
-    let pctx = atn_collapse_into_caller_loop(sim, arena, cur, work);
+    let pctx = atn_collapse_into_caller_loop(sim, arena, cur, work, &mut scratch.hidden_alts);
     if pctx < 0 {
         return;
     }
@@ -1821,7 +1820,13 @@ fn atn_expand(
     }
 }
 
-fn atn_collapse_into_caller_loop(sim: &AtnSim, arena: &mut CtxArena, cur: &AtnConfig, work: &mut List<AtnConfig>) -> i32 {
+fn atn_collapse_into_caller_loop(
+    sim: &AtnSim,
+    arena: &mut CtxArena,
+    cur: &AtnConfig,
+    work: &mut List<AtnConfig>,
+    hidden_alts: &mut List<i32>,
+) -> i32 {
     if sim.state_collapse_to.is_empty() || !sim.state_collapse_target[cur.state] {
         return cur.pctx;
     }
@@ -1829,10 +1834,10 @@ fn atn_collapse_into_caller_loop(sim: &AtnSim, arena: &mut CtxArena, cur: &AtnCo
     let n = arena.node_len[cur.pctx];
     let mut collapses = false;
     for let mut e = s; e < s + n; e += 1 {
-        if atn_edge_collapses(sim, arena, e, cur) {
-            collapses = true;
-            break;
+        if arena.ret[e] == CTX_HIDDEN_RETURN && !hidden_alts.contains(&cur.alt) {
+            hidden_alts.push(cur.alt);
         }
+        collapses = collapses || atn_edge_collapses(sim, arena, e, cur);
     }
     if !collapses {
         return cur.pctx;
