@@ -377,7 +377,7 @@ impl Query<'_> {
                 && let Some(copyable) = program.copyable
                 && !elements
                     .iter()
-                    .all(|element| self.holds(element, copyable, &[]).is_some())
+                    .all(|element| self.holds(&peel_newtypes(program, element), copyable, &[]).is_some())
             {
                 return None;
             }
@@ -649,6 +649,19 @@ pub(super) fn newtype_base(program: &Program, ty: &SolverType) -> Option<SolverT
         base.map_params(&|i| args.get(i as usize).cloned())
             .unwrap_or_else(|| panic!("{base:?} mentions a parameter {ty:?} has no argument for")),
     )
+}
+
+/// `ty` with every newtype level peeled. A newtype copies where its base does,
+/// and the subject a newtype's base is asked under ranks impls, which a kind
+/// does not. A newtype cycle is reported where it is declared.
+fn peel_newtypes(program: &Program, ty: &SolverType) -> SolverType {
+    let mut seen = vec![ty.clone()];
+    while let Some(base) = newtype_base(program, seen.last().expect("seeded"))
+        && !seen.contains(&base)
+    {
+        seen.push(base);
+    }
+    seen.pop().expect("seeded")
 }
 
 /// Whether the impl answers a bound writing `args`: at every parameter each

@@ -1600,6 +1600,17 @@ impl SolverBridge {
     ) {
         let handles_from = declarations.len();
         declarations.extend(handles);
+        // First: the other derivations ask it of their members' instances.
+        if let Some(copyable) = program.copyable {
+            let unrestricted: Vec<Declaration> = declarations
+                .iter()
+                .filter(|decl| {
+                    !matches!(lowering.decl_key(decl.id), DeclKey::Def(def) if table.is_affine_decl(*def))
+                })
+                .cloned()
+                .collect();
+            derive(program, copyable, &unrestricted);
+        }
         let traits: Vec<(CompilerItem, TraitDeclId)> = Self::DERIVED
             .into_iter()
             .filter_map(|item| Some((item, Self::derived_trait(tysys, lowering, item)?)))
@@ -1613,15 +1624,6 @@ impl SolverBridge {
                 other => unreachable!("{other:?} is not derived"),
             };
             derive(program, trait_, eligible);
-        }
-        if let Some(copyable) = program.copyable {
-            let unrestricted: Vec<Declaration> = declarations
-                .into_iter()
-                .filter(|decl| {
-                    !matches!(lowering.decl_key(decl.id), DeclKey::Def(def) if table.is_affine_decl(*def))
-                })
-                .collect();
-            derive(program, copyable, &unrestricted);
         }
     }
 
