@@ -15,11 +15,10 @@ use crate::tir::{
 };
 
 use crate::synthesis::common::{
-    affine_handle, alloc_local, assign, binary, block, bool_lit, break_stmt, builtin_call,
-    case_chain, cast, cm_raw_call, expr_stmt, generic_method_call, handle_from_f64, handle_to_f64,
-    i32_const, if_stmt, internal_call, is_affine_resource, let_mut_stmt, let_stmt, local_ref,
-    loop_stmt, mut_ref_expr, option_none, option_some, return_stmt, split_packed_ptr_len,
-    synth_span,
+    affine_handle, alloc_local, assign, binary, block, break_stmt, builtin_call, case_chain, cast,
+    cm_raw_call, expr_stmt, generic_method_call, handle_from_f64, handle_to_f64, i32_const,
+    if_stmt, internal_call, is_affine_resource, let_mut_stmt, let_stmt, local_ref, loop_stmt,
+    option_none, option_some, return_stmt, split_packed_ptr_len, synth_span,
 };
 
 use super::lift::{lift_variant_from_disc, materialize_if_needed, synthesize_lift};
@@ -283,60 +282,60 @@ fn lift_subtask(
     result()
 }
 
+/// The `Option<ResultBuffer>` an `AsyncCall` holds: the `size` bytes at
+/// `ptr`, or None for a call that returns nothing.
+fn result_buffer(type_table: &RefCell<TypeTable>, ptr: TirExpr, size: u32, align: u32) -> TirExpr {
+    let mut tt = type_table.borrow_mut();
+    let buffer_type = tt.make_result_buffer();
+    let option_type = tt.make_option(buffer_type);
+    if size == 0 {
+        return option_none(option_type, tt.compiler_items());
+    }
+    let buffer = struct_literal(
+        buffer_type,
+        "ResultBuffer",
+        vec![
+            ("ptr", ptr),
+            ("size", i32_const(size as i32)),
+            ("align", i32_const(align as i32)),
+        ],
+    );
+    option_some(buffer, option_type, tt.compiler_items())
+}
+
 /// Build the `AsyncCall<T>` struct literal returned by async import paths.
 /// Field order and indices mirror the stdlib `AsyncCall` declaration.
 fn make_async_call_literal(
-    type_table: &RefCell<TypeTable>,
-    subtask_type: TypeId,
+    async_call_type: TypeId,
     subtask: TirExpr,
-    outptr: TirExpr,
-    size: TirExpr,
-    align: TirExpr,
+    buffer: TirExpr,
     lift: TirExpr,
 ) -> TirExpr {
-    let not_ended = mut_ref_expr(
-        bool_lit(false, synth_span()),
-        type_table.borrow_mut().make_mut_ref(TypeTable::BOOL),
-        synth_span(),
-    );
+    struct_literal(
+        async_call_type,
+        "AsyncCall",
+        vec![("subtask", subtask), ("buffer", buffer), ("lift", lift)],
+    )
+}
+
+/// A literal of the synthesized struct `name`, its fields in declaration order.
+fn struct_literal(struct_type: TypeId, name: &str, fields: Vec<(&str, TirExpr)>) -> TirExpr {
+    let fields = fields
+        .into_iter()
+        .enumerate()
+        .map(|(index, (name, value))| TirStructField {
+            name: name.to_string(),
+            value,
+            field_index: index as u32,
+        })
+        .collect();
     TirExpr::new(
         TirExprKind::StructLiteral {
-            struct_type: subtask_type,
-            struct_name: "AsyncCall".to_string(),
-            fields: vec![
-                TirStructField {
-                    name: "__cm_subtask".to_string(),
-                    value: subtask,
-                    field_index: 0,
-                },
-                TirStructField {
-                    name: "__cm_outptr".to_string(),
-                    value: outptr,
-                    field_index: 1,
-                },
-                TirStructField {
-                    name: "__cm_size".to_string(),
-                    value: size,
-                    field_index: 2,
-                },
-                TirStructField {
-                    name: "__cm_align".to_string(),
-                    value: align,
-                    field_index: 3,
-                },
-                TirStructField {
-                    name: "__cm_lift".to_string(),
-                    value: lift,
-                    field_index: 4,
-                },
-                TirStructField {
-                    name: "__cm_ended".to_string(),
-                    value: not_ended,
-                    field_index: 5,
-                },
-            ],
+            struct_type,
+            struct_name: name.to_string(),
+            fields,
         },
-        subtask_type,
+        struct_type,
         synth_span(),
     )
 }
@@ -416,15 +415,8 @@ fn synthesize_async_wrap_function(
         let option_type = optional_subtask_type(ctx.type_table);
         option_none(option_type, ctx.type_table.borrow().compiler_items())
     };
-    let completed = make_async_call_literal(
-        ctx.type_table,
-        subtask_type,
-        no_subtask,
-        outptr_expr,
-        i32_const(outptr_size as i32),
-        i32_const(outptr_align as i32),
-        lift_fn_ref,
-    );
+    let buffer = result_buffer(ctx.type_table, outptr_expr, outptr_size, outptr_align);
+    let completed = make_async_call_literal(subtask_type, no_subtask, buffer, lift_fn_ref);
     body_stmts.push(return_stmt(Some(completed)));
 
     make_binding_function(
@@ -1267,7 +1259,7 @@ impl<'a> AdapterBuilder<'a> {
     /// Async result strategy. The WASI P3 lowered function returns a packed
     /// `(subtask_handle << 4) | status`, its result reaching the outptr buffer
     /// only at `Status::Returned`. The adapter neither waits nor lifts: it
-    /// packages `(packed_handle, outptr, size, align, __cm_lift_fn)` into an
+    /// packages the subtask, the result buffer and the lift function into an
     /// `AsyncCall<T>`, leaving `wait()` to do both.
     fn emit_async_result(
         &mut self,
@@ -1283,15 +1275,14 @@ impl<'a> AdapterBuilder<'a> {
             raw_call,
         ));
 
-        let (outptr_expr, size_expr, align_expr) = match async_outptr {
-            Some(outptr) => (
+        let buffer = match async_outptr {
+            Some(outptr) => result_buffer(
+                self.lower_ctx.type_table,
                 local_ref(outptr.local, "$async_outptr", TypeTable::I32),
-                i32_const(outptr.size as i32),
-                i32_const(outptr.align as i32),
+                outptr.size,
+                outptr.align,
             ),
-            // Void async import: no outptr. Carry zeroes so the struct
-            // layout is uniform; `AsyncCall<()>::wait` is a no-op.
-            None => (i32_const(0), i32_const(0), i32_const(0)),
+            None => result_buffer(self.lower_ctx.type_table, i32_const(0), 0, 0),
         };
 
         // The type argument T for AsyncCall<T> is the CM-level result type
@@ -1342,15 +1333,8 @@ impl<'a> AdapterBuilder<'a> {
             &mut self.locals,
             &mut self.body_stmts,
         );
-        let subtask_struct = make_async_call_literal(
-            self.lower_ctx.type_table,
-            subtask_type,
-            subtask,
-            outptr_expr,
-            size_expr,
-            align_expr,
-            lift_fn_ref.clone(),
-        );
+        let subtask_struct =
+            make_async_call_literal(subtask_type, subtask, buffer, lift_fn_ref.clone());
         self.body_stmts.push(return_stmt(Some(subtask_struct)));
         self.auxiliary.push(lift_fn);
 

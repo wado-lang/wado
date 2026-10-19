@@ -157,8 +157,8 @@ call and returns an `AsyncCall<T>` at once. The caller decides when to wait:
 
 - `.wait()` blocks until the call returns, then yields its `T`.
 - `.cancel()` abandons the call.
-- `.join(&set)` adds the call to a `WaitableSet`, so one wait covers several
-  calls and streams.
+- `set.join(call)` moves the call into a `WaitableSet`, so one wait covers
+  several calls and streams.
 
 A function or closure that starts an async call also holds the effects these
 methods declare, so it may later wait on that call without declaring them. A
@@ -186,12 +186,9 @@ test {
 }
 ```
 
-An `AsyncCall<T>` is used once: `wait` or `cancel` ends the call, and a later
-`wait`, `cancel` or `join` on it traps. A call owns its `Subtask`, so
-assigning one moves it ([Affine Types](./wep-2026-10-17-affine-types.md)).
-`join` only registers the call with the set, so the caller still owes the
-`wait` or `cancel` that ends it. A call never waited on nor cancelled leaks its
-subtask handle and result buffer.
+An `AsyncCall<T>` is affine: `wait` and `cancel` take it by value, and
+assigning one moves it ([Affine Types](./wep-2026-10-17-affine-types.md)). A
+call that drops unawaited is cancelled, and its result buffer freed.
 
 <!-- {"fixture":"async_call_moves.wado"} -->
 
@@ -201,6 +198,51 @@ with Fetch => &Canned {} do {
     let moved = call;
     assert call.wait() == 4;   // error: `call` moved to `moved`
     println(`${moved.wait()}`);
+}
+```
+
+#### Waiting on Several
+
+A `WaitableSet<W>` owns what it waits on. `join` moves a member in, and
+`wait` blocks until one has an event, then moves that member back out in a
+`Ready<W>` beside the event's `code` and `payload`. `poll` asks without
+blocking. A set that drops drops its remaining members first. A member is any
+affine type implementing `Waitable`, so a set waiting on calls of two result
+types takes a variant over them:
+
+<!-- {"fixture":"waitable_set_variant_members.wado"} -->
+
+```wado
+affine variant Timer {
+    Short(AsyncCall<()>),
+    Long(AsyncCall<()>),
+}
+
+impl Waitable for Timer {
+    fn waitable_id(&self) -> Option<ResourceId> {
+        return match self {
+            Short(call) => call.waitable_id(),
+            Long(call) => call.waitable_id(),
+        };
+    }
+}
+
+fn first_ready() -> String with MonotonicClock {
+    let mut set = WaitableSet::<Timer>::new();
+    set.join(Timer::Long(MonotonicClock::wait_for(60_000_000_000)));
+    set.join(Timer::Short(MonotonicClock::wait_for(0)));
+    let ready = set.wait();
+    let name = match ready.member {
+        Short(call) => {
+            call.wait();
+            "short"
+        },
+        Long(call) => {
+            call.wait();
+            "long"
+        },
+    };
+    return `${name} first, ${set.len()} left`;
 }
 ```
 

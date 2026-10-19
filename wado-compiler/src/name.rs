@@ -23,9 +23,6 @@ use std::hash::Hash;
 /// label, global, or synthesized struct or function. A Wado identifier holds no
 /// dollar sign, so a minted name collides with nothing an author wrote and no
 /// source can `break` to a synthesized label.
-///
-/// The `AsyncCall::__cm_*` fields are the exception: the standard library
-/// declares them in Wado source, which cannot spell the prefix.
 pub const INTERNAL_PREFIX: &str = "$";
 
 /// Canonical method name of the synthesised `$call` impl on every

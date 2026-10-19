@@ -180,6 +180,8 @@ pub enum CompilerItem {
     Slice,
     /// `AsyncCall<T>` — the subtask handle a `task`-returning call yields.
     AsyncCall,
+    /// `ResultBuffer` — the linear memory an `AsyncCall` lifts its result from.
+    ResultBuffer,
 
     // ── Resources ─────────────────────────────────────────────────────
     /// `Future<T>` — the CM future handle a `future` type lowers to.
@@ -773,6 +775,7 @@ impl CompilerItem {
         Self::ReflectTemplateHole,
         Self::Slice,
         Self::AsyncCall,
+        Self::ResultBuffer,
         Self::Future,
         Self::FutureWritable,
         Self::Subtask,
@@ -1019,6 +1022,7 @@ impl CompilerItem {
             Self::ReflectTemplateHole => "template_hole",
             Self::Slice => "slice",
             Self::AsyncCall => "async_call",
+            Self::ResultBuffer => "result_buffer",
             Self::Future => "future",
             Self::FutureWritable => "future_writable",
             Self::Subtask => "subtask",
@@ -1320,6 +1324,7 @@ impl CompilerItem {
             | Self::ReflectTemplateHole
             | Self::Slice
             | Self::AsyncCall
+            | Self::ResultBuffer
             | Self::Future
             | Self::FutureWritable
             | Self::Subtask
@@ -1577,7 +1582,8 @@ impl CompilerItem {
             | Self::ReflectFlagsBit
             | Self::ReflectTemplateHole
             | Self::Slice
-            | Self::AsyncCall => CompilerItemKind::Struct,
+            | Self::AsyncCall
+            | Self::ResultBuffer => CompilerItemKind::Struct,
             Self::Future
             | Self::FutureWritable
             | Self::Stream

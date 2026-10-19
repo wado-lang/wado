@@ -22,7 +22,7 @@ use crate::hashmap::IndexMap;
 use crate::module_source::ModuleSource;
 use crate::name::{FreeFunctionName, LocalMethodName};
 use crate::synthesis::resource_cleanup;
-use crate::synthesis::resource_cleanup::{CalleeFacts, DropImpls};
+use crate::synthesis::resource_cleanup::{CalleeFacts, Generics};
 use crate::tir::{
     AnonStructId, MonomorphInfo, ResolvedType, StructDef, TemplateId, TirFunction, TirModule,
     TirStruct, TypeId, TypeTable,
@@ -94,14 +94,14 @@ pub fn monomorphize(flat: &mut FlatPackage) -> Monomorphization {
             generic_functions.insert(func_rc);
         }
     }
-    let drop_impls = resource_cleanup::instance_drop_impls(flat);
+    let generics = Generics::of(flat);
     let mut session = Monomorphization {
         generic_functions,
         generic_structs: generic_structs_in(&flat.structs).collect(),
         monomorphizer: Monomorphizer::new(flat.trait_env.clone()),
         scanned_functions: 0,
-        callees: resource_cleanup::instance_callee_facts(flat, &drop_impls),
-        drop_impls,
+        callees: resource_cleanup::instance_callee_facts(flat, &generics),
+        generics,
         elaborated_functions: 0,
     };
     session.run(flat);
@@ -137,8 +137,8 @@ pub struct Monomorphization {
     /// What the templates' signatures reveal about ownership, for elaborating
     /// the drops of their instances.
     callees: CalleeFacts,
-    /// Each type's `Drop::drop`, a generic one by its template.
-    drop_impls: DropImpls,
+    /// What elaborating the instances' drops reads of the templates.
+    generics: Generics,
     /// How many leading `flat.functions` have had their drops elaborated.
     elaborated_functions: usize,
 }
@@ -182,7 +182,7 @@ impl Monomorphization {
             flat,
             self.elaborated_functions,
             &self.callees,
-            &self.drop_impls,
+            &self.generics,
         );
         self.elaborated_functions = flat.functions.len();
     }

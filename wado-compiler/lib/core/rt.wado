@@ -25,7 +25,6 @@ use {
     StreamWrite,
     StreamWritable,
     WaitEvent,
-    Waitable,
     cm_packed_upper,
     write_copy_is_final,
 } from "core:prelude/types.wado";
@@ -443,7 +442,7 @@ internal fn cm_waitable_set_wait(ws: i32) -> WaitEvent {
     let evt_handle = builtin::i32_load(out_ptr);
     let payload = builtin::i32_load(out_ptr + 4);
     let freed = builtin::realloc(out_ptr, 8, 4, 0);
-    return WaitEvent { code, handle: evt_handle as Waitable, payload: payload as u32 };
+    return WaitEvent { code, handle: evt_handle, payload: payload as u32 };
 }
 
 #[compiler_item("cm_waitable_join")]
@@ -463,7 +462,7 @@ internal fn cm_waitable_set_poll(ws: i32) -> Option<WaitEvent> {
     let evt_handle = builtin::i32_load(out_ptr);
     let payload = builtin::i32_load(out_ptr + 4);
     let freed = builtin::realloc(out_ptr, 8, 4, 0);
-    return Option::Some(WaitEvent { code, handle: evt_handle as Waitable, payload: payload as u32 });
+    return Option::Some(WaitEvent { code, handle: evt_handle, payload: payload as u32 });
 }
 
 // `as` with a half on either side. No instruction converts a half, so a half

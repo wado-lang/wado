@@ -1,0 +1,63 @@
+// A `Drop` body that drops a field by name drops what the field holds, in a
+// generic impl as in a concrete one (WEP: Affine Types).
+
+use { println, Stdout } from "core:cli";
+
+struct Counter {
+    drops: i32,
+}
+
+impl Stream<u8> for Counter {
+    fn drop(&mut self, this: &Stream<u8>) {
+        let _ = this;
+        self.drops += 1;
+        resume ()
+    }
+    ..trap
+}
+
+affine struct Bag<affine T> {
+    items: List<T>,
+}
+
+impl<affine T> Drop for Bag<T> {
+    fn drop(self) {
+        builtin::drop(self.items);
+    }
+}
+
+affine struct Box1 {
+    items: List<Stream<u8>>,
+}
+
+impl Drop for Box1 {
+    fn drop(self) {
+        builtin::drop(self.items);
+    }
+}
+
+fn stream() -> Stream<u8> {
+    let [rx, tx] = Stream::<u8>::new();
+    tx.drop();
+    return rx;
+}
+
+export fn run() with Stdout {
+    let mut c = Counter { drops: 0 };
+    let a = stream();
+    let b = stream();
+    let x = stream();
+    with &mut c do {
+        let mut items: List<Stream<u8>> = [];
+        items.push(a);
+        items.push(b);
+        let _bag = Bag { items };
+        let mut more: List<Stream<u8>> = [];
+        more.push(x);
+        let _box = Box1 { items: more };
+    }
+    println(`drops=${c.drops}`);
+}
+
+__DATA__
+{"stdout": "drops=3\n"}

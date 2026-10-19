@@ -1,0 +1,46 @@
+// A WaitableSet waits on calls of two kinds through a variant member, hands
+// back the one that is ready, and cancels the one still pending when it drops
+// (WEP: Affine Types).
+
+use { println, Stdout } from "core:cli";
+use { MonotonicClock } from "wasi:clocks";
+
+affine variant Timer {
+    Short(AsyncCall<()>),
+    Long(AsyncCall<()>),
+}
+
+impl Waitable for Timer {
+    fn waitable_id(&self) -> Option<ResourceId> {
+        return match self {
+            Short(call) => call.waitable_id(),
+            Long(call) => call.waitable_id(),
+        };
+    }
+}
+
+fn first_ready() -> String with MonotonicClock {
+    let mut set = WaitableSet::<Timer>::new();
+    set.join(Timer::Long(MonotonicClock::wait_for(60_000_000_000)));
+    set.join(Timer::Short(MonotonicClock::wait_for(0)));
+    let ready = set.wait();
+    let name = match ready.member {
+        Short(call) => {
+            call.wait();
+            "short"
+        },
+        Long(call) => {
+            call.wait();
+            "long"
+        },
+    };
+    return `${name} first, ${set.len()} left`;
+}
+
+export fn run() with (Stdout, MonotonicClock) {
+    println(first_ready());
+    println("set dropped");
+}
+
+__DATA__
+{"stdout": "short first, 1 left\nset dropped\n"}

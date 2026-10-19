@@ -442,15 +442,10 @@ fn build_doc_struct(
     trivia: &TriviaMap,
     include_private: bool,
 ) -> DocStruct {
-    // `__`-prefixed fields are an internal-naming convention (CM ABI
-    // plumbing on `AsyncCall<T>`, etc.). Treat them like private fields
-    // for documentation: hide the field row but still flag the struct
-    // as having hidden state via `has_private_fields` so the rendered
-    // signature gets a `..` placeholder. With `include_private`, nothing is
-    // hidden.
-    let is_hidden = |f: &StructField| {
-        !include_private && (!f.visibility.is_public() || f.name.starts_with("__"))
-    };
+    // A hidden field still flags the struct as having hidden state via
+    // `has_private_fields`, so the rendered signature gets a `..`
+    // placeholder. With `include_private`, nothing is hidden.
+    let is_hidden = |f: &StructField| !include_private && !f.visibility.is_public();
     let has_private_fields = s.fields.iter().any(is_hidden);
 
     let fields: Vec<DocField> = s

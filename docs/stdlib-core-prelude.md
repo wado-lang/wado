@@ -109,6 +109,15 @@ Types implementing this trait can produce a sensible "zero" or "empty" value.
 
 Returns the default value for this type.
 
+### `pub affine trait Drop with ()`
+
+What a drop of an affine value runs: at scope exit, at a store over it, for
+a value nothing keeps, and by name. A type without an impl drops its fields
+one by one. What `drop` leaves in `self` drops field by field after it, and
+only an affine type implements it.
+
+#### `fn drop(self)`
+
 ### `pub trait Reflect with ()`
 
 A type's identity: the root every reflected kind sits under. Sealed and
@@ -739,6 +748,16 @@ that `Formatter` depends on — mirroring `impl Display for String` above.
 
 #### `fn push_display<T: Display>(&mut self, value: &T)`
 
+### `pub affine trait Waitable with ()`
+
+What a `WaitableSet` waits on: a value the host reports events for by its
+handle.
+
+#### `fn waitable_id(&self) -> Option<ResourceId>`
+
+The handle the host reports this value by, or None where it is ready
+without the host.
+
 ### `pub trait Sequence with ()`
 
 Read-only random-access sequence: `Array<T>`, `List<T>`, and `Slice<T>`.
@@ -958,20 +977,19 @@ The readable end is passed to consumers; the writable end fulfills the future.
 
 Create a new future pair: [Future<T>, FutureWritable<T>].
 
-#### `fn read(&self) -> Option<T>`
+#### `fn read(self) -> Option<T>`
 
 `#[cm("future-read")]`
 
-Read the value from the future.
-Returns Some(value) when fulfilled, None if the writer dropped without writing.
+Read the value from the future: Some(value) when fulfilled, None if the
+writer dropped without writing. A readable end is read once, so the read
+consumes it.
 
 #### `fn cancel_read(&self)`
 
 `#[cm("future-cancel-read")]`
 
 Cancel an in-progress read. Blocks until cancellation completes.
-Traps if this end is still joined to a `WaitableSet` — leave the set
-first.
 
 #### `fn drop(self)`
 
@@ -996,8 +1014,6 @@ write consumes it.
 `#[cm("future-cancel-write")]`
 
 Cancel an in-progress write. Blocks until cancellation completes.
-Traps if this end is still joined to a `WaitableSet` — leave the set
-first.
 
 #### `fn drop(self)`
 
@@ -1029,8 +1045,6 @@ traps, so a loop breaks on the result, never on an empty chunk.
 `#[cm("stream-cancel-read")]`
 
 Cancel an in-progress read. Blocks until cancellation completes.
-Traps if this end is still joined to a `WaitableSet` — leave the set
-first.
 
 #### `fn drop(self)`
 
@@ -1081,8 +1095,6 @@ Any element type but a byte is a compile error.
 `#[cm("stream-cancel-write")]`
 
 Cancel an in-progress write. Blocks until cancellation completes.
-Traps if this end is still joined to a `WaitableSet` — leave the set
-first.
 
 #### `fn drop(self)`
 
@@ -1095,75 +1107,23 @@ Drop the writable end, signaling end-of-stream.
 Write every element, or stop early when the readable end drops.
 Returns the result of the copy that ended the loop.
 
-### `pub resource WaitableSet`
-
-A set of waitable handles used for async task coordination.
-
-Lifecycle: create with `new()`, join waitables into the set, wait/poll for
-events, then drop. A WaitableSet can only be dropped when it has no joined
-children — `Subtask::drop()` automatically removes the subtask from its
-joined set (via the CM spec's `Waitable.join(None)` semantics), so always
-drop subtasks before dropping the set.
-
-#### `fn new() -> WaitableSet`
-
-`#[cm("waitable-set-new")]`
-
-Create a new waitable set.
-
-#### `fn wait(&self) -> WaitEvent`
-
-`#[cm("waitable-set-wait")]`
-
-Block until an event occurs. Returns the event details.
-
-#### `fn poll(&self) -> Option<WaitEvent>`
-
-`#[cm("waitable-set-poll")]`
-
-Non-blocking poll. Returns Some(event) if ready, None otherwise.
-
-#### `fn drop(self)`
-
-`#[cm("waitable-set-drop")]`
-
-Drop the waitable set. Traps if waitables are still joined to this set.
-
 ### `pub resource Subtask`
 
-A raw CM subtask handle. Prefer `AsyncCall<T>` (see below), which pairs the
-handle with its result buffer.
-
-`Subtask` extends `Waitable` in the CM spec. When dropped, it
-automatically removes itself from any joined `WaitableSet` (the CM
-runtime calls `Waitable.join(None)` internally), so `WaitableSet::drop`
-can succeed.
-
-Correct lifecycle:
-subtask.join(&ws);
-ws.wait();
-subtask.drop(); // removes from ws
-ws.drop(); // safe — no children
+A raw CM subtask handle. `AsyncCall<T>` holds one, with its result buffer.
+Dropping a subtask leaves the set it is joined to.
 
 #### `fn drop(self)`
 
 `#[cm("subtask-drop")]`
 
-Drop a completed subtask. Automatically unjoins from its WaitableSet.
-Traps if the subtask has not yet resolved.
+Drop a completed subtask. Traps if the subtask has not yet resolved.
 
-#### `fn cancel(&self)`
+#### `fn cancel(&self) -> u32`
 
 `#[cm("subtask-cancel")]`
 
-Cancel this in-progress subtask. Blocks until cancellation completes.
-
-#### `fn join(&self, set: &WaitableSet) -> Waitable`
-
-`#[cm("waitable-join")]`
-
-Join this subtask to a waitable set for monitoring.
-Returns a Waitable token identifying this subtask in wait results.
+Cancel this in-progress subtask, blocking until it resolves, and return
+the state it resolved in.
 
 ### `pub resource ErrorContext`
 
@@ -1199,20 +1159,11 @@ Provides operations that apply to the currently executing async task.
 
 Acknowledge cancellation of the current task.
 
-Call this in response to a cancellation signal (e.g. after receiving
-`WaitEvent { code: 6 }` from `WaitableSet::wait`). Signals to the CM
+Call this in response to a cancellation signal (the CM's
+`TASK_CANCELLED` event). Signals to the CM
 runtime that the task accepts being cancelled and will clean up.
 
 ## Types
-
-### `pub type Waitable = i32`
-
-Opaque token identifying a waitable handle within a WaitableSet.
-Obtained from `Subtask::join`. Compared by handle identity (`==`).
-
-A newtype over the raw `i32` handle: copyable, with `Eq` inherited from
-`i32`. It is an identity token with no lifecycle of its own — the joined
-`Subtask` / `AsyncCall` owns the actual handle lifecycle.
 
 ### `pub type ByteArray = Array<u8>`
 
@@ -4463,34 +4414,79 @@ may take a prefix, so `count` can be short of what was offered.
 
 #### `result: CopyResult`
 
-### `pub struct WaitEvent`
+### `pub affine struct WaitableSet<affine W: Waitable>`
 
-Event returned by `WaitableSet::wait` or `WaitableSet::poll`.
+A set of values the host reports events for, owning each while it waits.
+A wait moves the member that is ready back out, so one that may report
+again, such as a stream, is joined again. Dropping the set drops the
+members it still holds.
+
+A set has one member type. A loop waiting on several kinds declares a
+variant of its own and implements `Waitable` on it, case by case.
+
+_Fields are private._
+
+#### `pub fn new() -> WaitableSet<W>`
+
+`#[benign(RawWaitableSet)]`
+
+#### `pub fn join(&mut self, member: W)`
+
+Moves `member` into the set. A member joins one set at a time.
+
+#### `pub fn wait(&mut self) -> Ready<W>`
+
+`#[benign(RawWaitableSet)]`
+
+Blocks until a member has an event, and moves it out. A member ready
+without the host comes first. Traps on an empty set.
+
+#### `pub fn poll(&mut self) -> Option<Ready<W>>`
+
+`#[benign(RawWaitableSet)]`
+
+The member that has an event, moved out, or None where none has one
+yet.
+
+#### `pub fn len(&self) -> i32`
+
+#### `pub fn is_empty(&self) -> bool`
+
+#### `impl Drop for WaitableSet<W>`
+
+##### `fn drop(self)`
+
+`#[benign(RawWaitableSet)]`
+
+Drops the members first, each leaving the host's set as it drops: the
+host traps on dropping a set that still has one.
+
+### `pub struct Ready<affine W>`
+
+A member of a `WaitableSet` that has an event, moved out of the set with
+the event's code and payload. A member ready without the host has code 0.
+
+#### `member: W`
 
 #### `code: i32`
 
-CM event code:
-1 = subtask, 2 = stream-read, 3 = stream-write, 4 = future-read, 5 = future-write, 6 = cancelled
-
-#### `handle: Waitable`
-
-Which waitable handle triggered the event.
+The Component Model's event code: 1 a subtask, 2 a stream read, 3 a
+stream write, 4 a future read, 5 a future write.
 
 #### `payload: u32`
 
-Event-specific data (e.g. count|status for streams).
+The event's payload: a subtask's state, or a copy's count and status.
 
-### `pub affine struct AsyncCall<T>`
+### `pub affine struct AsyncCall<affine T>`
 
 A handle to an in-flight CM async import call, parameterised by the
 result type `T`. Returned by the synthesised adapter for a WIT
 `async func` import.
 
-`AsyncCall<T>` pairs the raw CM subtask handle with the linear-memory
-buffer into which the host writes the async result. `wait` blocks until
-the call returns and takes the lifted result; `cancel` aborts the
-in-flight call. Either one ends the call; a call that neither ends leaks
-its handle and buffer.
+`AsyncCall<T>` holds the CM subtask with the linear-memory buffer into
+which the host writes the async result. `wait` blocks until the call
+returns and takes the lifted result; `cancel` aborts the in-flight call.
+Either one consumes the call, and dropping a call cancels it.
 
 The subtask begins running the moment the adapter returns, so writes to
 stream parameters (e.g. a request body) made after the adapter call and
@@ -4507,26 +4503,32 @@ body_tx.drop();
 let resp = task.wait();             // block for response
 ```
 
+The synthesized adapter builds one with a literal, which reaches the
+private fields, so user code can neither peek nor forge one.
+
 _Fields are private._
 
-#### `pub fn wait(self) -> T with (Subtask, WaitableSet)`
+#### `pub fn wait(self) -> T with Subtask`
 
 Wait for the subtask to complete and return the lifted result.
-Drops the CM subtask handle and frees the result buffer before
-returning.
 
 #### `pub fn cancel(self) with Subtask`
 
-Cancel the in-flight subtask and free the result buffer. Any
-partially-written result is discarded.
+Cancel the in-flight subtask. A result it returned before the cancel
+is lifted and dropped, since it may own handles.
 
-#### `pub fn join(&self, set: &WaitableSet) -> Waitable with Subtask`
+#### `impl Drop for AsyncCall<T>`
 
-Join this subtask to a waitable set for manual polling (use when
-the caller wants to wait on multiple subtasks and/or streams
-simultaneously). Returns a `Waitable` token identifying this
-subtask in wait events. The caller remains responsible for eventual
-`wait`/`cancel` on this `AsyncCall<T>`.
+##### `fn drop(self)`
+
+`#[benign(Subtask)]`
+
+Cancels a call nobody waited on, and drops a result the callee
+returned, which owns handles only a lift reaches.
+
+#### `impl Waitable for AsyncCall<T>`
+
+##### `fn waitable_id(&self) -> Option<ResourceId>`
 
 ### `pub struct ParseIntError`
 
@@ -5434,10 +5436,6 @@ _Fields are private._
 
 #### `pub fn grow(&mut self)`
 
-#### `pub fn filled(n: i32, element: T) -> List<T>`
-
-A list of `n` copies of `element`.
-
 #### `pub fn from_tuple<..Elems>(elements: [..Elems]) -> List<T>`
 
 `#[compiler_item("list_from_tuple")]`
@@ -5470,14 +5468,6 @@ Wasm array bounds check still guards the store, so an under-reserved call
 traps rather than corrupting memory.
 
 #### `pub fn pop(&mut self) -> Option<T>`
-
-#### `pub fn to_array(&self) -> Array<T>`
-
-Copy the live `0..<len()` elements into a fresh fixed `Array<T>` of exactly
-`len()`. Hand a finished, no-longer-growing buffer to code that only
-indexes it: `Array`'s `[]` is bounds-checked by Wasm (traps on OOB)
-without `List[]`'s power-assert diagnostic, so index-heavy readers (e.g. a
-generated parser over a fixed token stream) avoid that per-access cost.
 
 #### `pub fn insert(&mut self, index: i32, value: T)`
 
@@ -5518,6 +5508,28 @@ Reserves capacity for at least `additional` more elements.
 
 Shrinks the capacity to match the current length.
 
+#### `pub fn reverse(&mut self)`
+
+Reverses the elements in place.
+
+#### `pub fn is_empty(&self) -> bool`
+
+#### `pub fn iter_ref(&self) -> SliceRefIter<T>`
+
+The elements, each by reference.
+
+#### `pub fn filled(n: i32, element: T) -> List<T>`
+
+A list of `n` copies of `element`.
+
+#### `pub fn to_array(&self) -> Array<T>`
+
+Copy the live `0..<len()` elements into a fresh fixed `Array<T>` of exactly
+`len()`. Hand a finished, no-longer-growing buffer to code that only
+indexes it: `Array`'s `[]` is bounds-checked by Wasm (traps on OOB)
+without `List[]`'s power-assert diagnostic, so index-heavy readers (e.g. a
+generated parser over a fixed token stream) avoid that per-access cost.
+
 #### `pub fn extend(&mut self, other: &List<T>)`
 
 Extends this list with elements from another list.
@@ -5529,10 +5541,6 @@ Extends this list with the elements of a slice in a single bulk copy
 different backing array than this list. Taken by value because a slice is
 a cheap view (a backing reference plus two offsets), which also lets a
 newtype view (e.g. `ByteSlice`) coerce to `Slice<T>` at the call.
-
-#### `pub fn reverse(&mut self)`
-
-Reverses the elements in place.
 
 #### `pub fn repeat(&self, n: i32) -> List<T>`
 

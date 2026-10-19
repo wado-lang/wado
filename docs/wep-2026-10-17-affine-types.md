@@ -678,6 +678,11 @@ joined again. A set has one member type. A loop that waits on several kinds
 declares a variant of its own and implements `Waitable` on it, case by case. The
 resource behind the set becomes internal to `core`.
 
+Since that resource is internal, no caller can install a handler for it, and a
+caller asked for it as an effect could only pass it on. The set's methods
+therefore declare its operations `#[benign(RawWaitableSet)]`, the way a drop's
+effects are benign, and `AsyncCall::wait` performs only `Subtask`.
+
 ### Web handles
 
 A `linearity = "unrestricted"` handle is outside this discipline, as it is
@@ -792,10 +797,10 @@ declares the destructor's effects is withdrawn: a drop's effects are benign.
   A fixture pins that elision shares a list the loop's body does not write: no
   `$value_copy$` in the output. The fixtures that relied on a body's write
   being seen by the loop are rewritten.
-- [ ] `AsyncCall` holds an `Option<Subtask>` and an `Option<ResultBuffer>`,
+- [x] `AsyncCall` holds an `Option<Subtask>` and an `Option<ResultBuffer>`,
   with `wait(self)`, `cancel(self)` and its `Drop`. The fixture drops a call
   nobody awaited.
-- [ ] `WaitableSet<W>` owns its members: `Waitable`, `join`, `wait` and `poll`
+- [x] `WaitableSet<W>` owns its members: `Waitable`, `join`, `wait` and `poll`
   returning `Ready<W>`, and its `Drop` dropping the members first.
   `Waitable = i32`, `WaitEvent.handle` and the `join` methods go. Fixtures: a
   set waiting on two calls through a variant, and a set dropped with members.

@@ -157,9 +157,21 @@ allowing further interaction with it.
 
 The input side of a terminal.
 
+##### `fn drop(self)`
+
+`#[cm("resource-drop")]`
+
+Drop the resource. Scope exit drops one that nothing moved.
+
 #### `pub resource TerminalOutput`
 
 The output side of a terminal.
+
+##### `fn drop(self)`
+
+`#[cm("resource-drop")]`
+
+Drop the resource. Scope exit drops one that nothing moved.
 
 ### Enums
 
@@ -511,6 +523,12 @@ Return a hash of the metadata associated with a filesystem object referred
 to by a directory descriptor and a relative path.
 
 This performs the same hash computation as `metadata-hash`.
+
+##### `fn drop(self)`
+
+`#[cm("resource-drop")]`
+
+Drop the resource. Scope exit drops one that nothing moved.
 
 ### Types
 
@@ -1098,6 +1116,12 @@ Make a deep copy of the Fields. Equivalent in behavior to calling the
 `fields` constructor on the return value of `copy-all`. The resulting
 `fields` is mutable.
 
+##### `fn drop(self)`
+
+`#[cm("resource-drop")]`
+
+Drop the resource. Scope exit drops one that nothing moved.
+
 #### `pub resource Request`
 
 Represents an HTTP Request.
@@ -1227,6 +1251,12 @@ communicate an error in handling of the request.
 Note that function will move the `request`, but references to headers or
 request options acquired from it previously will remain valid.
 
+##### `fn drop(self)`
+
+`#[cm("resource-drop")]`
+
+Drop the resource. Scope exit drops one that nothing moved.
+
 #### `pub resource RequestOptions`
 
 Parameters for making an HTTP Request. Each of these parameters is
@@ -1292,6 +1322,12 @@ supported or that this handle is immutable.
 Make a deep copy of the `request-options`.
 The resulting `request-options` is mutable.
 
+##### `fn drop(self)`
+
+`#[cm("resource-drop")]`
+
+Drop the resource. Scope exit drops one that nothing moved.
+
 #### `pub resource Response`
 
 Represents an HTTP Response.
@@ -1352,6 +1388,12 @@ communicate an error in handling of the response.
 
 Note that function will move the `response`, but references to headers
 acquired from it previously will remain valid.
+
+##### `fn drop(self)`
+
+`#[cm("resource-drop")]`
+
+Drop the resource. Scope exit drops one that nothing moved.
 
 ### Types
 
@@ -2381,6 +2423,12 @@ Equivalent to the SO_RCVBUF and SO_SNDBUF socket options.
 
 `#[cm("wasi:sockets/types@0.3.0#[method]tcp-socket.set-send-buffer-size")]` `#[cm_params("self", "value")]`
 
+##### `fn drop(self)`
+
+`#[cm("resource-drop")]`
+
+Drop the resource. Scope exit drops one that nothing moved.
+
 #### `pub resource UdpSocket`
 
 A UDP socket handle.
@@ -2678,6 +2726,12 @@ Equivalent to the SO_RCVBUF and SO_SNDBUF socket options.
 
 `#[cm("wasi:sockets/types@0.3.0#[method]udp-socket.set-send-buffer-size")]` `#[cm_params("self", "value")]`
 
+##### `fn drop(self)`
+
+`#[cm("resource-drop")]`
+
+Drop the resource. Scope exit drops one that nothing moved.
+
 ### Types
 
 #### `pub type Ipv4Address = [u8, u8, u8, u8]`
@@ -2895,6 +2949,12 @@ Similar to `AF_INET6` in POSIX.
 
 `#[cm("wasi:tls/types@0.3.0-draft#[method]error.to-debug-string")]` `#[cm_params("self")]`
 
+##### `fn drop(self)`
+
+`#[cm("resource-drop")]`
+
+Drop the resource. Scope exit drops one that nothing moved.
+
 #### `pub resource Connector`
 
 ##### `fn new() -> Connector`
@@ -2924,3 +2984,9 @@ and returns a decrypted application data stream.
 
 Perform the handshake.
 The `send` & `receive` streams must be set up before calling this method.
+
+##### `fn drop(self)`
+
+`#[cm("resource-drop")]`
+
+Drop the resource. Scope exit drops one that nothing moved.

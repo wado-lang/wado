@@ -10,7 +10,7 @@ global mut PENDING: Option<AsyncCall<i32>> = null;
 
 fn finish() -> i32 {
     let _start = || { let _ = Fetch::get("/b"); };
-    if let Some(call) = PENDING {
+    if let Some(call) = PENDING.take() {
         return call.wait();
     }
     return 0;
@@ -23,6 +23,6 @@ export fn run() with Fetch {
 
 __DATA__
 {
-    "compile_error": ":14:16: analysis error: missing resource 'Subtask' required by 'wait'; 14:16: missing resource 'WaitableSet' required by 'wait'",
+    "compile_error": ":14:16: analysis error: missing resource 'Subtask' required by 'wait'",
     "compile_error_codes": ["MISSING_EFFECT"]
 }

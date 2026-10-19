@@ -633,10 +633,40 @@ pub fn elaborate_resource_drops(project: &mut Package) -> Vec<SynthesisError> {
     refused
 }
 
+/// What monomorphization takes out of a [`FlatPackage`] that elaborating its
+/// instances still reads.
+pub struct Generics {
+    /// Each type's `Drop::drop`, a generic one by its template.
+    drop_impls: DropImpls,
+    /// The fields of each generic struct. A `List` instance is never made a
+    /// struct of its own, so its fields are read from here.
+    struct_fields: StructFields,
+}
+
+impl Generics {
+    /// The generics of `flat`, read before monomorphization takes them out.
+    pub fn of(flat: &FlatPackage) -> Self {
+        Self {
+            drop_impls: drop_impls(
+                flat.functions
+                    .iter()
+                    .map(|func| (func.borrow().module_source.clone(), func)),
+                &flat.type_table.borrow(),
+            ),
+            struct_fields: flat
+                .structs
+                .iter()
+                .filter(|s| !s.type_params.is_empty())
+                .map(|s| ((s.def, Vec::new()), s.fields.clone()))
+                .collect(),
+        }
+    }
+}
+
 /// What every callee in `flat` reveals about ownership, read before
 /// monomorphization replaces the generic signatures it is read from.
-pub fn instance_callee_facts(flat: &FlatPackage, drop_impls: &DropImpls) -> CalleeFacts {
-    with_flat_resources(flat, drop_impls, |resources| {
+pub fn instance_callee_facts(flat: &FlatPackage, generics: &Generics) -> CalleeFacts {
+    with_flat_resources(flat, generics, |resources| {
         let mut callees = CalleeFacts::default();
         for func_rc in &flat.functions {
             callees.record(&func_rc.borrow(), resources);
@@ -645,30 +675,20 @@ pub fn instance_callee_facts(flat: &FlatPackage, drop_impls: &DropImpls) -> Call
     })
 }
 
-/// The `Drop::drop` impls of `flat`, read before monomorphization takes the
-/// generic ones out of its functions.
-pub fn instance_drop_impls(flat: &FlatPackage) -> DropImpls {
-    drop_impls(
-        flat.functions
-            .iter()
-            .map(|func| (func.borrow().module_source.clone(), func)),
-        &flat.type_table.borrow(),
-    )
-}
-
 /// Run `f` with the [`Resources`] of `flat`.
 fn with_flat_resources<R>(
     flat: &FlatPackage,
-    drop_impls: &DropImpls,
+    generics: &Generics,
     f: impl FnOnce(Resources) -> R,
 ) -> R {
-    let struct_fields = tir::struct_fields(&flat.structs);
+    let mut struct_fields = generics.struct_fields.clone();
+    struct_fields.extend(tir::struct_fields(&flat.structs));
     let answers = RefCell::default();
     f(Resources {
         tt: &flat.type_table,
         reg: &flat.cm_interface_registry,
         struct_fields: &struct_fields,
-        drop_impls,
+        drop_impls: &generics.drop_impls,
         answers: &answers,
     })
 }
@@ -681,9 +701,9 @@ pub fn elaborate_instance_drops(
     flat: &mut FlatPackage,
     first: usize,
     callees: &CalleeFacts,
-    drop_impls: &DropImpls,
+    generics: &Generics,
 ) {
-    let glue_functions = with_flat_resources(flat, drop_impls, |resources| {
+    let glue_functions = with_flat_resources(flat, generics, |resources| {
         elaborate_instances(flat, first, resources, callees)
     });
     flat.functions
@@ -870,7 +890,7 @@ fn elaborate_function(
 }
 
 /// Each type's `Drop::drop`, by the type's declaration.
-pub type DropImpls = IndexMap<DefId, FunctionRef>;
+type DropImpls = IndexMap<DefId, FunctionRef>;
 
 /// The `Drop::drop` impls among `functions`, each with the module defining it:
 /// before link a function's own `module_source` is not set. An instance is

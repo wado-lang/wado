@@ -3838,8 +3838,7 @@ pub fn unparse_struct_signature(s: &StructDecl, public_only: bool) -> String {
         &mut out,
     );
     out.push_str(" { ");
-    let hidden =
-        |f: &StructField| public_only && (!f.visibility.is_public() || f.name.starts_with("__"));
+    let hidden = |f: &StructField| public_only && !f.visibility.is_public();
     let has_hidden = s.fields.iter().any(hidden);
     let mut first = true;
     for field in s.fields.iter().filter(|f| !hidden(f)) {

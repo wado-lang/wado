@@ -3134,6 +3134,11 @@ impl TypeTable {
         self.make_generic_instance(def, vec![inner])
     }
 
+    pub fn make_result_buffer(&mut self) -> TypeId {
+        let def = self.require_compiler_item_def(CompilerItem::ResultBuffer);
+        self.make_struct(StructDef::Decl(def))
+    }
+
     /// If `type_id` is a `AsyncCall<T>` `GenericInstance`, return `T`.
     pub fn as_async_call(&self, type_id: TypeId) -> Option<TypeId> {
         self.single_arg_of(type_id, CompilerItem::AsyncCall)

@@ -52,7 +52,9 @@ pub struct List<T> {
     used: i32,
 }
 
-impl<T> List<T> {
+// What reads no element by value, so an affine element reaches it too
+// (WEP: Affine Types).
+impl<affine T> List<T> {
     #[compiler_item("list_with_capacity")]
     pub fn with_capacity(capacity: i32) -> List<T> {
         return List { repr: builtin::array_new(capacity), used: 0 };
@@ -75,13 +77,6 @@ impl<T> List<T> {
         let mut new_repr: Array<T> = builtin::array_new(new_capacity);
         builtin::array_move(&mut new_repr, 0, &self.repr, 0, self.used);
         self.repr = new_repr;
-    }
-
-    /// A list of `n` copies of `element`.
-    pub fn filled(n: i32, element: T) -> List<T> {
-        let mut repr: Array<T> = builtin::array_new(n);
-        builtin::array_fill(&mut repr, 0, element, n);
-        return List { repr, used: n };
     }
 
     /// Collect a homogeneous tuple `[T, T, ...]` into a `List<T>`.
@@ -150,15 +145,6 @@ impl<T> List<T> {
         }
         self.used -= 1;
         return Option::Some(builtin::array_take(&mut self.repr, self.used));
-    }
-
-    /// Copy the live `0..<len()` elements into a fresh fixed `Array<T>` of exactly
-    /// `len()`. Hand a finished, no-longer-growing buffer to code that only
-    /// indexes it: `Array`'s `[]` is bounds-checked by Wasm (traps on OOB)
-    /// without `List[]`'s power-assert diagnostic, so index-heavy readers (e.g. a
-    /// generated parser over a fixed token stream) avoid that per-access cost.
-    pub fn to_array(&self) -> Array<T> {
-        return builtin::array_clone_prefix(&self.repr, self.used);
     }
 
     /// Inserts an element at the given index, shifting all elements after it to the right.
@@ -234,6 +220,47 @@ impl<T> List<T> {
         }
     }
 
+    /// Reverses the elements in place.
+    pub fn reverse(&mut self) {
+        let mut lo = 0;
+        let mut hi = self.used - 1;
+        while lo < hi {
+            let tmp = builtin::array_take(&mut self.repr, lo);
+            self.repr[lo] = builtin::array_take(&mut self.repr, hi);
+            self.repr[hi] = tmp;
+            lo += 1;
+            hi -= 1;
+        }
+    }
+
+    pub fn is_empty(&self) -> bool {
+        return self.used == 0;
+    }
+
+    /// The elements, each by reference.
+    pub fn iter_ref(&self) -> SliceRefIter<T> {
+        return SliceRefIter::internal_new(&self.repr, 0, self.used);
+    }
+}
+
+// What copies an element, so a copyable one only.
+impl<T> List<T> {
+    /// A list of `n` copies of `element`.
+    pub fn filled(n: i32, element: T) -> List<T> {
+        let mut repr: Array<T> = builtin::array_new(n);
+        builtin::array_fill(&mut repr, 0, element, n);
+        return List { repr, used: n };
+    }
+
+    /// Copy the live `0..<len()` elements into a fresh fixed `Array<T>` of exactly
+    /// `len()`. Hand a finished, no-longer-growing buffer to code that only
+    /// indexes it: `Array`'s `[]` is bounds-checked by Wasm (traps on OOB)
+    /// without `List[]`'s power-assert diagnostic, so index-heavy readers (e.g. a
+    /// generated parser over a fixed token stream) avoid that per-access cost.
+    pub fn to_array(&self) -> Array<T> {
+        return builtin::array_clone_prefix(&self.repr, self.used);
+    }
+
     /// Extends this list with elements from another list.
     pub fn extend(&mut self, other: &List<T>) {
         let other_len = other.used;
@@ -272,19 +299,6 @@ impl<T> List<T> {
             other_len,
         );
         self.used = new_used;
-    }
-
-    /// Reverses the elements in place.
-    pub fn reverse(&mut self) {
-        let mut lo = 0;
-        let mut hi = self.used - 1;
-        while lo < hi {
-            let tmp = self.repr[lo];
-            self.repr[lo] = self.repr[hi];
-            self.repr[hi] = tmp;
-            lo += 1;
-            hi -= 1;
-        }
     }
 
     /// Returns a new list containing this list's elements repeated `n` times.
