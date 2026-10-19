@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1792393855199,
+  "lastUpdate": 1792416076216,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -68389,6 +68389,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/450aacdec315f725ae4d43d892ab710743c9307f"
         },
         "date": 1792393854536,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 2955,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 7313,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 19774,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 288295,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "ca3f6a3ffbc2bb0b5424385c15770cea301fe4c8",
+          "message": "Merge pull request #2388 from wado-lang/ccr-a6d482bb-lmuzjc\n\ndocs(loam): a model-agnostic design that reaches Gemma 4, Qwen 3.5 and gpt-oss",
+          "timestamp": "2026-10-19T22:01:27+09:00",
+          "tree_id": "213fd7cec5c9c2c367231e31b5be4995f004dd97",
+          "url": "https://github.com/wado-lang/wado/commit/ca3f6a3ffbc2bb0b5424385c15770cea301fe4c8"
+        },
+        "date": 1792416075436,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
