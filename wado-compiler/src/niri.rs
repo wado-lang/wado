@@ -12,7 +12,7 @@ use crate::nir_arena::{
     BlockId, BlockNode, Body, ExprId, ExprKind, ExprNode, LocalSet, NodeRef, Operand, PatId,
     PatKind, StmtId, StmtKind, StmtNode,
 };
-use crate::nir_package::NirPackage;
+use crate::nir_package::{AmbientStream, NirPackage};
 use crate::nir_value_graph::{ValueId, ValueKind};
 use crate::parallel::Executor;
 use crate::tir::{ResolvedType, TypeId, TypeTable};
@@ -303,11 +303,8 @@ pub(crate) fn build_ctfe_builtin_map(project: &NirPackage) -> CtfeBuiltinMap {
             Some("i32_as_char") => CtfeBuiltin::I32AsChar,
             Some("f32_is_nan" | "f64_is_nan") => CtfeBuiltin::FloatIsNan,
             Some("heap_base") => CtfeBuiltin::HeapBase(project.heap_base()),
-            Some("ambient_stdout_available") => {
-                CtfeBuiltin::AmbientStdio(project.ambient_stdio().stdout)
-            }
-            Some("ambient_stderr_available") => {
-                CtfeBuiltin::AmbientStdio(project.ambient_stdio().stderr)
+            Some(name) if let Some(stream) = AmbientStream::of_availability_builtin(name) => {
+                CtfeBuiltin::AmbientStdio(project.ambient_stdio().writes(stream))
             }
             Some("f32_ieee754_eq" | "f64_ieee754_eq") => {
                 CtfeBuiltin::Ieee754Comparison(NirBinaryOp::Eq)

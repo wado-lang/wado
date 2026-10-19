@@ -607,6 +607,16 @@ impl CmNamespace {
         let (prefix, rest) = specifier.split_once(':')?;
         Some((Self::from_prefix(prefix)?, rest))
     }
+
+    /// The namespace and package a CM source names: `"wasi:filesystem/types@0.3.0"`
+    /// → `(Wasi, "filesystem")`. A package is unique only inside its namespace,
+    /// so the two answer together. `None` outside the bundled namespaces.
+    #[must_use]
+    pub fn split_package(source: &str) -> Option<(Self, &str)> {
+        let (namespace, rest) = Self::split_specifier(source)?;
+        let without_version = rest.split('@').next().unwrap_or(rest);
+        Some((namespace, without_version.split('/').next()?))
+    }
 }
 
 impl fmt::Display for CmNamespace {

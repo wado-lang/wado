@@ -29,7 +29,7 @@ use crate::nir_arena::{
     BlockId, BlockNode, Body, ExprId, ExprKind, NodeRef, Operand, PatKind, StmtId, StmtKind,
     StmtNode,
 };
-use crate::nir_package::{AmbientStdio, NirPackage};
+use crate::nir_package::{AmbientStdio, AmbientStream, NirPackage};
 use crate::nir_value_graph::{ValueId, ValueKind};
 use crate::nir_visitor::{NirRefVisitor, reachable_exprs};
 use crate::optimize::arena_query::{
@@ -439,33 +439,30 @@ fn resolve_imports(
         }
     }
 
-    let reaches_intrinsic = |prefix: &str| {
+    let reaches_intrinsic = |name: &str| {
         reachable.iter().any(|func_id| {
             matches!(func_id, FunctionId::Free(f)
-                if f.module_source.is_core_builtin() && f.name.starts_with(prefix))
+                if f.module_source.is_core_builtin() && f.name == name)
         })
     };
 
     let ambient = if let Some(decided) = project.ambient_stdio {
         decided
     } else {
-        let writes = |interface: &str| {
-            project.provides_ambient_stdio_sink(interface)
-                || used_wasi_functions.contains(&operation_key(interface, "write_via_stream"))
+        let writes = |stream: AmbientStream| {
+            project.provides_ambient_stdio_sink(stream)
+                || used_wasi_functions.contains(stream.write_operation().as_decl_str())
         };
         let decided = AmbientStdio {
-            stdout: writes("Stdout"),
-            stderr: writes("Stderr"),
+            stdout: writes(AmbientStream::Stdout),
+            stderr: writes(AmbientStream::Stderr),
         };
         project.ambient_stdio = Some(decided);
         decided
     };
-    for (interface, intrinsic) in [
-        ("Stdout", "call_indirect_stdout"),
-        ("Stderr", "call_indirect_stderr"),
-    ] {
-        if ambient.writes(interface) && reaches_intrinsic(intrinsic) {
-            used_wasi_functions.insert(operation_key(interface, "write_via_stream"));
+    for stream in AmbientStream::ALL {
+        if ambient.writes(stream) && reaches_intrinsic(stream.write_builtin()) {
+            used_wasi_functions.insert(stream.write_operation().into_string());
         }
     }
 
@@ -2425,7 +2422,7 @@ pub(super) fn drop_self_feeding_globals(project: &mut NirPackage, summaries: &Fn
         .map(|&i| {
             let func = project.functions[i].borrow();
             let body = func.body.as_ref().expect("a reader has a body");
-            (i, deletable_bindings(body, &types, summaries.of_body(i)))
+            (i, carriers(body, &candidates, &types, summaries.of_body(i)))
         })
         .collect();
     // Dropping a global drops the stores to it, which shrinks the regions the
@@ -2439,7 +2436,7 @@ pub(super) fn drop_self_feeding_globals(project: &mut NirPackage, summaries: &Fn
             let calls = summaries.of_body(i);
             loop {
                 let regions = feeding_regions(body, &candidates, carried, &types, calls);
-                let outside = mentions_outside(body, &regions);
+                let outside = mentions_outside(body, NodeRef::Block(body.root()), &regions);
                 let before = carried.len();
                 carried.retain(|local| !outside.locals.contains(local));
                 if carried.len() == before {
@@ -2491,9 +2488,18 @@ pub(super) fn drop_self_feeding_globals(project: &mut NirPackage, summaries: &Fn
     true
 }
 
-/// The locals every reachable `let` of which binds a value the pass may delete.
-fn deletable_bindings(body: &Body, types: &TypeTable, calls: CallFacts) -> IndexSet<u32> {
-    let mut deletable: IndexSet<u32> = IndexSet::default();
+/// The locals every reachable `let` of which binds a value the pass may delete
+/// and reads a candidate, directly or through another such local. A `let`
+/// reading none carries no candidate into a store, and seeding one would cost
+/// the fixed point a walk of the body per link of its chain.
+fn carriers(
+    body: &Body,
+    candidates: &IndexSet<(String, String)>,
+    types: &TypeTable,
+    calls: CallFacts,
+) -> IndexSet<u32> {
+    let no_regions = IndexSet::default();
+    let mut deletable: IndexMap<u32, Mentions> = IndexMap::default();
     let mut kept: IndexSet<u32> = IndexSet::default();
     for s in reachable_stmt_ids(body) {
         if let StmtKind::Let {
@@ -2501,13 +2507,28 @@ fn deletable_bindings(body: &Body, types: &TypeTable, calls: CallFacts) -> Index
         } = body.stmts[s].kind
         {
             if deletable_value(body, value, types, calls) {
-                deletable.insert(local_index);
+                let found = mentions_outside(body, NodeRef::Stmt(s), &no_regions);
+                let mentions = deletable.entry(local_index).or_default();
+                mentions.locals.extend(found.locals);
+                mentions.reads.extend(found.reads);
             } else {
                 kept.insert(local_index);
             }
         }
     }
-    deletable.difference(&kept).copied().collect()
+    deletable.retain(|local, _| !kept.contains(local));
+    let mut carried: IndexSet<u32> = IndexSet::default();
+    loop {
+        let before = carried.len();
+        for (local, mentions) in &deletable {
+            if !mentions.reads.is_disjoint(candidates) || !mentions.locals.is_disjoint(&carried) {
+                carried.insert(*local);
+            }
+        }
+        if carried.len() == before {
+            return carried;
+        }
+    }
 }
 
 /// The subtrees the pass would delete: each store to a candidate whose value
@@ -2542,15 +2563,15 @@ fn feeding_regions(
     regions
 }
 
-/// The locals and globals a body mentions outside `regions`, skeleton and value
-/// pool alike.
+/// The locals and globals `root`'s subtree mentions outside `regions`, skeleton
+/// and value pool alike.
 #[derive(Default)]
 struct Mentions {
     locals: IndexSet<u32>,
     reads: IndexSet<(String, String)>,
 }
 
-fn mentions_outside(body: &Body, regions: &IndexSet<NodeRef>) -> Mentions {
+fn mentions_outside(body: &Body, root: NodeRef, regions: &IndexSet<NodeRef>) -> Mentions {
     struct Outside<'a> {
         regions: &'a IndexSet<NodeRef>,
         mentions: Mentions,
@@ -2604,7 +2625,7 @@ fn mentions_outside(body: &Body, regions: &IndexSet<NodeRef>) -> Mentions {
         seen_locals: IndexSet::default(),
         seen_sources: IndexSet::default(),
     };
-    outside.visit_node(body, NodeRef::Block(body.root()));
+    outside.visit_node(body, root);
     outside.mentions
 }
 

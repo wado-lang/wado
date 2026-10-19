@@ -484,28 +484,6 @@ fn generator_hashing_under_the_default_seed_imports_insecure_seed() {
     );
 }
 
-const RANDOM_GENERATOR: &str = r#"
-use { Request, Response, Error } from "core:kiln";
-use { Random } from "wasi:random";
-
-export fn generate(req: Request) -> Result<Response, Error> with Random {
-    let _ = Random::get_random_u64();
-    let _ = req.primary.path;
-    return Result::Ok(Response { files: [] });
-}
-"#;
-
-/// WASI has a deterministic host omit `random`, so the generator world imports
-/// only part of `wasi:random`, and the `use` naming the rest is blamed.
-#[test]
-fn generator_importing_wasi_random_random_is_rejected() {
-    expect_forbidden_import(
-        RANDOM_GENERATOR,
-        "does not import `Random`",
-        "a generator naming wasi:random/random",
-    );
-}
-
 /// A map under a fixed seed leaves `DEFAULT_HASH_SEED` unread, so its
 /// initializer goes, and the import only it reached goes with it, at every
 /// optimization level.

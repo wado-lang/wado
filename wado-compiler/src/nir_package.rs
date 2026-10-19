@@ -20,7 +20,8 @@ use crate::loader::{DEFAULT_PAGE_SIZE_LOG2, WasmAsset};
 use crate::lower::plan::value_copy::ValueCopyHelpers;
 use crate::module_source::ModuleSource;
 use crate::name::{
-    FunctionId, LocalMethodName, NarrowedParam, param_label, reshaped_name, retired_name,
+    DeclName, DeclPath, FunctionId, LocalMethodName, NarrowedParam, param_label, reshaped_name,
+    retired_name,
 };
 use crate::nir::{
     ClosureFunctor, FuncCell, FuncId, FuncRef, FunctionRef, NirEnum, NirFlags, NirFunction,
@@ -39,6 +40,58 @@ const _: () = {
     shared_across_threads::<TypeTable>();
 };
 
+/// A stdio stream the ambient `log_std{out,err}` path may write.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum AmbientStream {
+    Stdout,
+    Stderr,
+}
+
+impl AmbientStream {
+    pub const ALL: [Self; 2] = [Self::Stdout, Self::Stderr];
+
+    /// The `wasi:cli` interface the stream is.
+    pub fn interface_name(self) -> &'static str {
+        match self {
+            Self::Stdout => "Stdout",
+            Self::Stderr => "Stderr",
+        }
+    }
+
+    /// The operation that writes the stream: `Stdout::write_via_stream`.
+    pub fn write_operation(self) -> DeclPath {
+        DeclPath::method_of(&DeclName::new(self.interface_name()), "write_via_stream")
+    }
+
+    /// `core:builtin`'s `ambient_std{out,err}_available`.
+    pub fn availability_builtin(self) -> &'static str {
+        match self {
+            Self::Stdout => "ambient_stdout_available",
+            Self::Stderr => "ambient_stderr_available",
+        }
+    }
+
+    /// `core:builtin`'s `call_indirect_std{out,err}_write_via_stream`.
+    pub fn write_builtin(self) -> &'static str {
+        match self {
+            Self::Stdout => "call_indirect_stdout_write_via_stream",
+            Self::Stderr => "call_indirect_stderr_write_via_stream",
+        }
+    }
+
+    pub fn of_availability_builtin(name: &str) -> Option<Self> {
+        Self::ALL
+            .into_iter()
+            .find(|stream| stream.availability_builtin() == name)
+    }
+
+    pub fn of_write_builtin(name: &str) -> Option<Self> {
+        Self::ALL
+            .into_iter()
+            .find(|stream| stream.write_builtin() == name)
+    }
+}
+
 /// The stdio streams the ambient `log_std{out,err}` path writes: those the
 /// world provides, and in a sink-less world those the program imports anyway.
 /// Decided once, so the fold of `ambient_std{out,err}_available` and the import
@@ -50,11 +103,10 @@ pub struct AmbientStdio {
 }
 
 impl AmbientStdio {
-    pub fn writes(self, interface_name: &str) -> bool {
-        match interface_name {
-            "Stdout" => self.stdout,
-            "Stderr" => self.stderr,
-            _ => unreachable!("an ambient stream is `Stdout` or `Stderr`"),
+    pub fn writes(self, stream: AmbientStream) -> bool {
+        match stream {
+            AmbientStream::Stdout => self.stdout,
+            AmbientStream::Stderr => self.stderr,
         }
     }
 }
@@ -692,15 +744,14 @@ impl NirPackage {
         self.target_world == world_registry::TEST_WORLD
     }
 
-    /// Whether the target world provides an ambient sink for the given stdio
-    /// interface (`Stdout` / `Stderr`) used by the `log_*` (panic /
-    /// assert-diagnostic) path. True for the test world and any world importing
-    /// the interface; false for `--lib` and kiln, where the ambient path writes
-    /// only a stream the program imports anyway ([`AmbientStdio`]). Each stream
-    /// is gated on its own interface so a world importing only one is not
-    /// mis-gated by the other.
-    pub fn provides_ambient_stdio_sink(&self, interface_name: &str) -> bool {
-        self.is_test_world() || self.world_imports_interface(interface_name)
+    /// Whether the target world provides an ambient sink for `stream`, which
+    /// the `log_*` (panic / assert-diagnostic) path writes. True for the test
+    /// world and any world importing the stream's interface; false for `--lib`
+    /// and kiln, where the ambient path writes only a stream the program
+    /// imports anyway ([`AmbientStdio`]). Each stream is gated on its own
+    /// interface so a world importing only one is not mis-gated by the other.
+    pub fn provides_ambient_stdio_sink(&self, stream: AmbientStream) -> bool {
+        self.is_test_world() || self.world_imports_interface(stream.interface_name())
     }
 
     pub fn ambient_stdio(&self) -> AmbientStdio {
