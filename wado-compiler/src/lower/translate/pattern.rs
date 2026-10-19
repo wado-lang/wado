@@ -6,7 +6,6 @@ use crate::lower::plan::value_copy::funcset::FuncKeySet;
 use crate::lower::plan::value_copy::place;
 use crate::module_source::ModuleSource;
 use crate::name::{FqTraitName, FqTypeName, LocalMethodName, minted_name};
-use crate::primitive::PrimitiveType;
 use crate::synthesis::common::bool_lit;
 use crate::tir::{
     CallArg, FunctionRef, LetStorage, ResolvedType, StructDef, StructFields, TirBinaryOp, TirBlock,
@@ -896,35 +895,48 @@ impl<'a> PatternLowerer<'a> {
             | TirPattern::Variant { .. } => {
                 // A compound whose parts may be refutable at any depth
                 // (`Branch([Leaf(a), Leaf(b)])`, `Some(Some(1))`) is tested whole.
-                let temp_index = self.alloc_local(elem_type);
-                let temp_name = format!("$compound_{temp_index}");
-                let temp_expr = TirExpr::new(
-                    TirExprKind::Local {
-                        index: temp_index,
-                        name: temp_name.clone(),
-                    },
-                    elem_type,
-                    span,
-                );
-                let original = std::mem::replace(sub, TirPattern::Wildcard);
-                let true_literal = bool_lit(true, span);
-                let check = self.build_pattern_check(
-                    &original,
-                    temp_expr,
-                    elem_type,
-                    span,
-                    type_table,
-                    true_literal,
-                );
+                let check = self.test_whole(sub, elem_type, span, type_table);
                 conditions.push(check);
-                *sub = TirPattern::Binding {
-                    name: temp_name,
-                    local_index: temp_index,
-                    type_id: elem_type,
-                };
             }
             _ => {}
         }
+    }
+
+    /// Replace `pattern` with a binding of the value it reads, and return the
+    /// test that the bound value matches it, setting any inner bindings.
+    fn test_whole(
+        &mut self,
+        pattern: &mut TirPattern,
+        type_id: TypeId,
+        span: Span,
+        type_table: &TypeTable,
+    ) -> TirExpr {
+        let temp_index = self.alloc_local(type_id);
+        let temp_name = format!("$tested_{temp_index}");
+        let temp_expr = TirExpr::new(
+            TirExprKind::Local {
+                index: temp_index,
+                name: temp_name.clone(),
+            },
+            type_id,
+            span,
+        );
+        let original = std::mem::replace(
+            pattern,
+            TirPattern::Binding {
+                name: temp_name,
+                local_index: temp_index,
+                type_id,
+            },
+        );
+        self.build_pattern_check(
+            &original,
+            temp_expr,
+            type_id,
+            span,
+            type_table,
+            bool_lit(true, span),
+        )
     }
 
     /// Build a boolean `TirExpr` that checks whether `value` matches `pattern`.
@@ -2107,15 +2119,7 @@ impl<'a> PatternLowerer<'a> {
                 *scrutinee.as_mut() = peeled;
                 let scrutinee_type_id = scrutinee.type_id;
 
-                let unsigned = matches!(
-                    type_table.get(scrutinee_type_id),
-                    ResolvedType::Primitive(
-                        PrimitiveType::U8
-                            | PrimitiveType::U16
-                            | PrimitiveType::U32
-                            | PrimitiveType::U64
-                    )
-                );
+                let unsigned = type_table.is_unsigned_int(scrutinee_type_id);
                 for arm in arms.iter_mut() {
                     self.fold_const_int_globals(&mut arm.pattern, unsigned);
                 }
@@ -2126,55 +2130,32 @@ impl<'a> PatternLowerer<'a> {
                 // multiplies through nested matches.
                 let mut expanded_arms = Vec::new();
                 for mut arm in arms.drain(..) {
-                    let pattern = std::mem::replace(&mut arm.pattern, TirPattern::Wildcard);
-                    match pattern {
-                        TirPattern::Or(alternatives)
-                            if alternatives.iter().all(is_plain_value_pattern) =>
-                        {
-                            arm.pattern = TirPattern::Or(alternatives);
-                            expanded_arms.push(arm);
-                        }
-                        TirPattern::Or(alternatives) if alternatives.iter().all(binds_nothing) => {
-                            let span = arm.span;
-                            let temp_index = self.alloc_local(scrutinee_type_id);
-                            let temp_name = format!("$or_{temp_index}");
-                            let temp_expr = TirExpr::new(
-                                TirExprKind::Local {
-                                    index: temp_index,
-                                    name: temp_name.clone(),
-                                },
-                                scrutinee_type_id,
-                                span,
-                            );
-                            let check = self.build_pattern_check(
-                                &TirPattern::Or(alternatives),
-                                temp_expr,
-                                scrutinee_type_id,
-                                span,
-                                type_table,
-                                bool_lit(true, span),
-                            );
-                            arm.pattern = TirPattern::Binding {
-                                name: temp_name,
-                                local_index: temp_index,
-                                type_id: scrutinee_type_id,
-                            };
-                            guard_arm(&mut arm, check);
-                            expanded_arms.push(arm);
-                        }
-                        TirPattern::Or(alternatives) => {
-                            for alt in alternatives {
-                                expanded_arms.push(TirMatchArm {
-                                    pattern: alt,
-                                    guard: arm.guard.clone(),
-                                    body: arm.body.clone(),
-                                    span: arm.span,
-                                });
-                            }
-                        }
-                        pattern => {
-                            arm.pattern = pattern;
-                            expanded_arms.push(arm);
+                    let TirPattern::Or(alternatives) = &arm.pattern else {
+                        expanded_arms.push(arm);
+                        continue;
+                    };
+                    if alternatives.iter().all(is_plain_value_pattern) {
+                        expanded_arms.push(arm);
+                    } else if alternatives.iter().all(binds_nothing) {
+                        let check = self.test_whole(
+                            &mut arm.pattern,
+                            scrutinee_type_id,
+                            arm.span,
+                            type_table,
+                        );
+                        guard_arm(&mut arm, check);
+                        expanded_arms.push(arm);
+                    } else {
+                        let TirPattern::Or(alternatives) = arm.pattern else {
+                            unreachable!()
+                        };
+                        for alt in alternatives {
+                            expanded_arms.push(TirMatchArm {
+                                pattern: alt,
+                                guard: arm.guard.clone(),
+                                body: arm.body.clone(),
+                                span: arm.span,
+                            });
                         }
                     }
                 }
