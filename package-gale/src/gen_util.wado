@@ -107,12 +107,13 @@ pub fn follow_forward_args() -> String {
 /// `positions` the prefix already constrains. `opens` marks that start as a
 /// fresh reading rather than more of the same one.
 ///
-/// The forwarded half is masked down to its positions first. A reading it opens
-/// begins where the alternation was written, and `prefix` moves that point
-/// without moving the mark, so the gate would revive the reading `prefix`
-/// positions early — `{ x, y }` inside `[ … ]` handing its own comma to the
-/// list, whose next iteration also starts with one. Only the reading this
-/// composition opens is at a position the gate can still place.
+/// Behind `prefix`, the forwarded half is masked down to its positions first. A
+/// reading it opens begins where the alternation was written, and `prefix`
+/// moves that point without moving the mark, so the gate would revive the
+/// reading `prefix` positions early — `{ x, y }` inside `[ … ]` handing its own
+/// comma to the list, whose next iteration also starts with one. Opened, the
+/// forwarded half starts at the gate, so its own readings do too and keep their
+/// marks: masked, `f (',' f)* ')'` would lose its `)` behind `f`'s `('::' g)*`.
 ///
 /// An empty continuation is an unknown one. Behind `prefix` it only stops
 /// constraining, but as an alternative to it, it is a reading the slots cannot

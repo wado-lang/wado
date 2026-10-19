@@ -741,7 +741,7 @@ pub struct LiteralOp {
 
 /// How a `RuleCall` supplies the runtime FOLLOW continuation to the
 /// callee, replacing the per-(rule, mask) `__follow_<id>` variant
-/// selection. Exactly one of four forms:
+/// selection. The main forms:
 ///
 /// - `NoFollow` — non-repair call: emit passes nothing, the callee's
 ///   defaulted `&EMPTY_FOLLOW` disables its tail-greedy gate.
@@ -783,6 +783,10 @@ pub variant FollowArg {
     /// holding both in sequence asserts the loop's first token at a depth the
     /// other reading does not have it.
     AltMask(CallerLoop),
+    /// `AltMask` for a loop whose body has several alternatives: no single
+    /// prefix reads the next iteration, so it is an open reading that starts
+    /// with `loop_mask`'s one position, the body's first kinds.
+    OpenLoop(CallerLoop),
 }
 
 /// The two readings of a caller loop's continuation.
