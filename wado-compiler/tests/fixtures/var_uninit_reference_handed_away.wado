@@ -1,11 +1,11 @@
-// A local declared without a value, a reference to which a call may keep,
-// takes each assignment in place behind a flag that says whether it holds
-// storage yet. The in-place branch of the first assignment reads the local
-// before anything is written to it, and never runs.
+// A local declared without a value, a reference to which a call may keep.
+// An assignment a reference may precede writes in place, behind a flag that
+// says whether the local holds storage yet. The first assignment, which no
+// reference precedes, stores: nothing reads the local before Wasm sees it set,
+// so it stays non-nullable.
 //
-// The value graph used to take the unit placeholder of `let x: P;` for the
-// local's value. That read then stamped `P` on the placeholder, and the
-// declaration lowered to a `local.set` of nothing: invalid Wasm.
+// A reference a loop takes precedes every assignment in the loop, since the
+// next turn brings it first, but not one before the loop.
 struct P {
     a: i32,
     b: i32,
@@ -48,9 +48,22 @@ fn first_assigned_in_an_arm(n: i32) -> i32 {
     return r.sum();
 }
 
+fn referenced_by_a_loop_after(n: i32) -> i32 {
+    let mut x: P;
+    let mut r = &P { a: 0, b: 0 };
+    x = P { a: 1, b: 1 };
+    while r.a < 1 {
+        r = &x;
+        builtin::black_box(r);
+    }
+    x = P { a: 5, b: n };
+    return r.a + r.b;
+}
+
 test "the reference reads the reassigned value" {
     assert read_after(5) == 10;
     assert first_assigned_in_an_arm(5) == 10;
+    assert referenced_by_a_loop_after(5) == 10;
 }
 
 test "no read follows the reassignment" {

@@ -150,7 +150,7 @@ pub fn analyze_ownership(
         &paths,
         &reference_copies,
         &plan.observed_fields,
-        &ReferencePoints::of(body, &IndexSet::default(), plan),
+        &ReferencePoints::of(body, plan),
     );
 
     let fresh = a.owned_locals(func, oracle, type_table);
@@ -924,15 +924,20 @@ fn collect_local_roots(expr: &TirExpr, out: &mut IndexSet<u32>) {
 /// the receiver of a `&self` / `&mut self` method, or by a closure's capture.
 /// What a repeated body references counts from where it starts, since the next
 /// turn brings it before every site the body runs.
+#[derive(Default)]
 struct ReferencePoints {
     first: IndexMap<u32, usize>,
     sites: IndexMap<Span, usize>,
 }
 
 impl ReferencePoints {
-    /// Walk `body`, with `held` referenced before it starts.
-    fn of(body: &TirBlock, held: &IndexSet<u32>, plan: &ValueCopyPlan) -> Self {
-        let mut walk = ReferenceWalk::new(held, plan);
+    fn of(body: &TirBlock, plan: &ValueCopyPlan) -> Self {
+        let mut walk = ReferenceWalk {
+            plan,
+            position: 0,
+            repeated_from: None,
+            points: ReferencePoints::default(),
+        };
         walk.visit_block(body);
         walk.points
     }
@@ -948,44 +953,39 @@ impl ReferencePoints {
     }
 }
 
+/// Each statement and expression takes the next position as the walk enters it.
 struct ReferenceWalk<'a> {
     plan: &'a ValueCopyPlan,
     position: usize,
+    /// Where the outermost body around the walk that runs again starts.
+    repeated_from: Option<usize>,
     points: ReferencePoints,
 }
 
-impl<'a> ReferenceWalk<'a> {
-    fn new(held: &IndexSet<u32>, plan: &'a ValueCopyPlan) -> Self {
-        Self {
-            plan,
-            position: 0,
-            points: ReferencePoints {
-                first: held.iter().map(|local| (*local, 0)).collect(),
-                sites: IndexMap::default(),
-            },
-        }
-    }
-
+impl ReferenceWalk<'_> {
     fn reference(&mut self, local: u32) {
-        self.points.first.entry(local).or_insert(self.position);
+        // Positions only grow, and a repeated body starts before every position
+        // in it, so the first reference the walk meets is the earliest.
+        let at = self.repeated_from.unwrap_or(self.position);
+        self.points.first.entry(local).or_insert(at);
     }
 
-    /// Reference from here every local a body that runs again references.
-    fn reference_repeated(&mut self, visit: impl FnOnce(&mut ReferenceWalk<'a>)) {
-        let mut repeated = ReferenceWalk::new(&IndexSet::default(), self.plan);
-        visit(&mut repeated);
-        for local in repeated.points.first.into_keys() {
-            self.reference(local);
-        }
+    fn walk_repeated(&mut self, walk: impl FnOnce(&mut Self)) {
+        let outer = self.repeated_from;
+        self.repeated_from = outer.or(Some(self.position));
+        walk(self);
+        self.repeated_from = outer;
     }
 }
 
 impl TirRefVisitor for ReferenceWalk<'_> {
     fn visit_stmt(&mut self, stmt: &TirStmt) {
-        if let TirStmtKind::Loop { body } | TirStmtKind::VariadicForOf { body, .. } = &stmt.kind {
-            self.reference_repeated(|walk| walk.visit_block(body));
+        self.position += 1;
+        if let TirStmtKind::Loop { .. } | TirStmtKind::VariadicForOf { .. } = &stmt.kind {
+            self.walk_repeated(|walk| walk.walk_stmt(stmt));
+        } else {
+            self.walk_stmt(stmt);
         }
-        self.walk_stmt(stmt);
     }
 
     fn visit_expr(&mut self, expr: &TirExpr) {
@@ -1023,7 +1023,8 @@ impl TirRefVisitor for ReferenceWalk<'_> {
             }
             TirExprKind::VariadicTupleComprehension { .. }
             | TirExprKind::TypePackExpansion { .. } => {
-                self.reference_repeated(|walk| walk.walk_expr(expr));
+                self.walk_repeated(|walk| walk.walk_expr(expr));
+                return;
             }
             _ => {}
         }
@@ -1036,9 +1037,10 @@ impl TirRefVisitor for ReferenceWalk<'_> {
                 .contains(&func.module_source, &func.name),
             _ => false,
         };
+        // A span several sites share answers for the latest of them, which every
+        // reference before the others also precedes.
         if is_site {
-            let at = self.points.sites.entry(expr.span).or_insert(self.position);
-            *at = (*at).max(self.position);
+            self.points.sites.insert(expr.span, self.position);
         }
     }
 }
@@ -1135,7 +1137,7 @@ pub fn unanalyzed_in_place_assigns(
         type_table,
         observed: &plan.observed_fields,
         list_element_assigns: &plan.list_element_assigns,
-        references: ReferencePoints::of(body, &func.address_taken_locals, plan),
+        references: ReferencePoints::of(body, plan),
         out: IndexSet::default(),
     };
     scan.visit_block(body);
