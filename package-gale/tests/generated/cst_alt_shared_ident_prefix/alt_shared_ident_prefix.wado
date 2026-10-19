@@ -3033,29 +3033,29 @@ fn scan_pattern(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, follow: i
         try_3: {
             if pos < tokens.len() && _kind_set_0(tokens[pos]) {
                 let sp = pos;
-                sg_8_done: {
-                    sg_8: {
+                sg_7_done: {
+                    sg_7: {
                         atn.stack.push(95);
                         pos = scan_pattern(tokens, pos, atn, follow_or(FOLLOW_MASK_1, 16, follow_then(FOLLOW_MASK_4, 8, follow)));
                         atn.stack.pop();
-                        if pos < 0 { break sg_8; }
+                        if pos < 0 { break sg_7; }
                         while pos < tokens.len() && tokens[pos] == TK_LIT_COMMA {
                             let sp = pos;
-                            sg_9_done: {
-                                sg_9: {
+                            sg_8_done: {
+                                sg_8: {
                                     pos += 1;
                                     atn.stack.push(103);
                                     pos = scan_pattern(tokens, pos, atn, follow_or(FOLLOW_MASK_1, 16, follow_then(FOLLOW_MASK_4, 8, follow)));
                                     atn.stack.pop();
-                                    if pos < 0 { break sg_9; }
-                                    break sg_9_done;
+                                    if pos < 0 { break sg_8; }
+                                    break sg_8_done;
                                 }
                                 pos = -1;
                             }
                             if pos < 0 { pos = sp; break; }
                             if pos == sp { break; }
                         }
-                        break sg_8_done;
+                        break sg_7_done;
                     }
                     pos = -1;
                 }
@@ -3076,12 +3076,12 @@ fn scan_path(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, follow: i64 
     pos += 1;
     while pos < tokens.len() && tokens[pos] == TK_LIT_COLONCOLON && !follow_yields(tokens, pos, follow, &FOLLOW_SETS, TK_EOF) {
         let sp = pos;
-        sg_7_done: {
-            sg_7: {
+        sg_6_done: {
+            sg_6: {
                 pos += 1;
-                if pos >= tokens.len() || tokens[pos] != TK_IDENT { break sg_7; }
+                if pos >= tokens.len() || tokens[pos] != TK_IDENT { break sg_6; }
                 pos += 1;
-                break sg_7_done;
+                break sg_6_done;
             }
             pos = -1;
         }
@@ -3155,30 +3155,24 @@ fn _parse_match_expr__inner(p: &mut Parser, follow: i64 = 0) -> () {
         if !kind_set_has(&SYNC_3, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_3, &EXPECTED_3); }
         loop {
             if p.recovering { break; }
-            let mut rep_scan_pos: i32 = -1;
-            rep_scan: {
-                let tokens = &p.kinds;
-                let mut pos: i32 = p.pos;
-                sg_1_done: {
-                    sg_1: {
-                        if pos >= tokens.len() || tokens[pos] != TK_LIT_COMMA { break sg_1; }
-                        pos += 1;
-                        p.atn.stack.push(37);
-                        pos = scan_arm(tokens, pos, &mut p.atn, 0);
-                        p.atn.stack.pop();
-                        if pos < 0 { break sg_1; }
-                        break sg_1_done;
-                    }
-                    break rep_scan;
-                }
-                if pos <= p.pos { break rep_scan; }
-                rep_scan_pos = pos;
-            }
-            if rep_scan_pos < 0 { break; }
+            if p.peek_kind() != TK_LIT_COMMA { break; }
+            let sp_pos = p.pos;
+            let sp_cp = p.b.checkpoint();
+            let sp_pending = p.pending;
+            let sp_outer = p.speculating;
+            p.speculating = true;
             p.expect(TK_LIT_COMMA, &SYNC_4, false);
             p.site = 2;
             p.atn_ret_pending = 37;
             _parse_arm(p, 0);
+            p.speculating = sp_outer;
+            if p.recovering || p.pos <= sp_pos {
+                p.recovering = false;
+                p.pos = sp_pos;
+                p.b.truncate(sp_cp);
+                p.pending = sp_pending;
+                break;
+            }
             if !kind_set_has(&SYNC_3, p.kinds[p.pos]) { builtin::cold_path(); p.sync_back(&SYNC_3, &EXPECTED_3); }
         }
         if !kind_set_has(&SYNC_3, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_3, &EXPECTED_3); }
@@ -3265,14 +3259,14 @@ fn _parse_pattern__inner_alt_2(p: &mut Parser, follow: i64 = 0) -> () {
             if pos < 0 { break opt_scan; }
             while pos < tokens.len() && tokens[pos] == TK_LIT_COMMA {
                 let sp = pos;
-                sg_2_done: {
-                    sg_2: {
+                sg_1_done: {
+                    sg_1: {
                         pos += 1;
                         p.atn.stack.push(84);
                         pos = scan_pattern(tokens, pos, &mut p.atn, follow_or(FOLLOW_MASK_1, 16, follow_then(FOLLOW_MASK_4, 8, follow)));
                         p.atn.stack.pop();
-                        if pos < 0 { break sg_2; }
-                        break sg_2_done;
+                        if pos < 0 { break sg_1; }
+                        break sg_1_done;
                     }
                     pos = -1;
                 }
@@ -3305,42 +3299,42 @@ fn scan_pattern__alt_2(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, fo
     if pos < 0 { return -1; }
     if atn_decide_5(atn, tokens, pos, 0) == 0 {
         let sp = pos;
-        sg_3_done: {
-            sg_3: {
+        sg_2_done: {
+            sg_2: {
                 pos += 1;
                 if pos < tokens.len() && _kind_set_0(tokens[pos]) {
                     let sp = pos;
-                    sg_4_done: {
-                        sg_4: {
+                    sg_3_done: {
+                        sg_3: {
                             atn.stack.push(76);
                             pos = scan_pattern(tokens, pos, atn, follow_or(FOLLOW_MASK_1, 16, follow_then(FOLLOW_MASK_4, 8, follow)));
                             atn.stack.pop();
-                            if pos < 0 { break sg_4; }
+                            if pos < 0 { break sg_3; }
                             while pos < tokens.len() && tokens[pos] == TK_LIT_COMMA {
                                 let sp = pos;
-                                sg_5_done: {
-                                    sg_5: {
+                                sg_4_done: {
+                                    sg_4: {
                                         pos += 1;
                                         atn.stack.push(84);
                                         pos = scan_pattern(tokens, pos, atn, follow_or(FOLLOW_MASK_1, 16, follow_then(FOLLOW_MASK_4, 8, follow)));
                                         atn.stack.pop();
-                                        if pos < 0 { break sg_5; }
-                                        break sg_5_done;
+                                        if pos < 0 { break sg_4; }
+                                        break sg_4_done;
                                     }
                                     pos = -1;
                                 }
                                 if pos < 0 { pos = sp; break; }
                                 if pos == sp { break; }
                             }
-                            break sg_4_done;
+                            break sg_3_done;
                         }
                         pos = -1;
                     }
                     if pos < 0 { pos = sp; }
                 }
-                if pos >= tokens.len() || tokens[pos] != TK_LIT_RPAREN { break sg_3; }
+                if pos >= tokens.len() || tokens[pos] != TK_LIT_RPAREN { break sg_2; }
                 pos += 1;
-                break sg_3_done;
+                break sg_2_done;
             }
             pos = -1;
         }
@@ -3380,14 +3374,14 @@ fn _parse_pattern__inner(p: &mut Parser, follow: i64 = 0) -> () {
             if pos < 0 { break opt_scan; }
             while pos < tokens.len() && tokens[pos] == TK_LIT_COMMA {
                 let sp = pos;
-                sg_6_done: {
-                    sg_6: {
+                sg_5_done: {
+                    sg_5: {
                         pos += 1;
                         p.atn.stack.push(103);
                         pos = scan_pattern(tokens, pos, &mut p.atn, follow_or(FOLLOW_MASK_1, 16, follow_then(FOLLOW_MASK_4, 8, follow)));
                         p.atn.stack.pop();
-                        if pos < 0 { break sg_6; }
-                        break sg_6_done;
+                        if pos < 0 { break sg_5; }
+                        break sg_5_done;
                     }
                     pos = -1;
                 }

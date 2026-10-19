@@ -1695,26 +1695,27 @@ fn _parse_name__inner(p: &mut Parser, follow: i64 = 0) -> () {
     loop {
         if p.recovering { break; }
         if follow_yields(&p.kinds, p.pos, follow, &FOLLOW_SETS, TK_EOF) { break; }
-        let mut rep_scan_pos: i32 = -1;
-        rep_scan: {
-            let tokens = &p.kinds;
-            let mut pos: i32 = p.pos;
-            sg_0_done: {
-                sg_0: {
-                    if pos >= tokens.len() || tokens[pos] != TK_OR { break sg_0; }
-                    pos += 1;
-                    if pos >= tokens.len() || tokens[pos] != TK_ID { break sg_0; }
-                    pos += 1;
-                    break sg_0_done;
-                }
-                break rep_scan;
-            }
-            if pos <= p.pos { break rep_scan; }
-            rep_scan_pos = pos;
+        if p.peek_kind() != TK_OR { break; }
+        let sp_pos = p.pos;
+        let sp_cp = p.b.checkpoint();
+        let sp_pending = p.pending;
+        let sp_outer = p.speculating;
+        p.speculating = true;
+        p.expect(TK_OR, &SYNC_1, false);
+        p.expect(TK_ID, &SYNC_2, true);
+        p.speculating = sp_outer;
+        if p.recovering || p.pos <= sp_pos {
+            p.recovering = false;
+            p.pos = sp_pos;
+            p.b.truncate(sp_cp);
+            p.pending = sp_pending;
+            break;
         }
-        if rep_scan_pos >= 0 {
-            let decline_kind = if rep_scan_pos < p.kinds.len() { p.kinds[rep_scan_pos] } else { TK_EOF };
-            if !(_kind_set_0(decline_kind) || follow == 0 && decline_kind == TK_EOF && !(rep_scan_pos == p.pos + 2 && p.kinds[p.pos] == TK_OR && p.kinds[p.pos + 1] == TK_ID || rep_scan_pos == p.pos + 4 && p.kinds[p.pos] == TK_COMMA && p.kinds[p.pos + 1] == TK_ID && p.kinds[p.pos + 2] == TK_OR && p.kinds[p.pos + 3] == TK_ID)) {
+        let sp_end = p.pos;
+        p.pos = sp_pos;
+        if sp_end >= 0 {
+            let decline_kind = if sp_end < p.kinds.len() { p.kinds[sp_end] } else { TK_EOF };
+            if !(_kind_set_0(decline_kind) || follow == 0 && decline_kind == TK_EOF && !(sp_end == p.pos + 2 && p.kinds[p.pos] == TK_OR && p.kinds[p.pos + 1] == TK_ID || sp_end == p.pos + 4 && p.kinds[p.pos] == TK_COMMA && p.kinds[p.pos + 1] == TK_ID && p.kinds[p.pos + 2] == TK_OR && p.kinds[p.pos + 3] == TK_ID)) {
                 let mut decline_dead: bool = false;
                 decline_scan: {
                     let tokens = &p.kinds;
@@ -1722,12 +1723,10 @@ fn _parse_name__inner(p: &mut Parser, follow: i64 = 0) -> () {
                     let probe_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
                     if _kind_set_0(probe_kind) && follow_exit_viable(tokens, pos, follow, &FOLLOW_SETS, TK_EOF) { decline_dead = true; }
                 }
-                if decline_dead { break; }
+                if decline_dead { p.b.truncate(sp_cp); p.pending = sp_pending; break; }
             }
         }
-        if rep_scan_pos < 0 { break; }
-        p.expect(TK_OR, &SYNC_1, false);
-        p.expect(TK_ID, &SYNC_2, true);
+        p.pos = sp_end;
     }
     return;
 }

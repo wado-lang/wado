@@ -5950,8 +5950,12 @@ fn gen_op_repeat_star_plus_greedy(
         let plus_flag = if is_plus { begin_plus_flag(w, name_counts) } else { String::new() };
         w.begin("loop");
         w.line("if p.recovering { break; }");
-        let decided = gen_rep_iteration_entry(w, rep_op, inner, ctx, name_counts, &plus_flag);
-        gen_repeat_iteration(w, &body, rep_op, inner, ctx, decided_entry(&decided, &plus_flag), decided);
+        if repeat_speculates(rep_op, inner, is_plus, ctx) {
+            gen_rep_speculative_iteration(w, &body, rep_op, inner, ctx, name_counts);
+        } else {
+            let decided = gen_rep_iteration_entry(w, rep_op, inner, ctx, name_counts, &plus_flag);
+            gen_repeat_iteration(w, &body, rep_op, inner, ctx, decided_entry(&decided, &plus_flag), decided);
+        }
     } else if is_plus && body matches { Storable(_) } {
         let plus_flag = begin_plus_flag(w, name_counts);
         w.begin(`while !p.recovering && (${plus_flag} || ${body_guard_cond(rep_op, ctx)})`);
@@ -6094,6 +6098,82 @@ fn gen_rep_iteration_entry<S: AsStrSlice>(
     return null;
 }
 
+/// Whether a scan-guarded loop parses each iteration under `speculating` and
+/// rewinds the one that fails, instead of scanning it and parsing it again: the
+/// backtrack the standing rule allows for speed. A `+`'s first iteration is the
+/// parse's to report, a reserve walks on from the guard's own scan, and a body
+/// the tournament decides has no one parse to try.
+fn repeat_speculates(rep_op: &RepeatOp, inner: &Element, is_plus: bool, ctx: &EmitContext) -> bool {
+    if !ctx.plan.speculates || is_plus || !rep_op.duties.reserve_scan.is_empty() {
+        return false;
+    }
+    if let Group(g_op) = &rep_op.body {
+        return !(group_dispatches(g_op) && peel_scalar_label(inner) matches { Group(_) });
+    }
+    return true;
+}
+
+/// One iteration of a `repeat_speculates` loop. It ends where the scan guard
+/// would have, so the decline asks the same question of the same end.
+///
+/// A rewound iteration leaves `pending` as the guard would have: its own
+/// failure only where the repeat-exit probe re-parses the same call.
+fn gen_rep_speculative_iteration(
+    w: &mut CodeWriter,
+    body: &RepeatBody,
+    rep_op: &RepeatOp,
+    inner: &Element,
+    ctx: &mut EmitContext,
+    nc: &mut List<[String, i32]>,
+) {
+    gen_caller_follow_gate(w, rep_op);
+    let guard = body_guard_cond(rep_op, ctx);
+    if guard != "true" {
+        w.line(`if ${negate_cond(&guard)} { break; }`);
+    }
+    let start = dedup_name("sp_pos", nc);
+    let cp = dedup_name("sp_cp", nc);
+    let pending = dedup_name("sp_pending", nc);
+    let outer = dedup_name("sp_outer", nc);
+    w.line(`let ${start} = p.pos;`);
+    w.line(`let ${cp} = p.b.checkpoint();`);
+    w.line(`let ${pending} = p.pending;`);
+    w.line(`let ${outer} = p.speculating;`);
+    w.line("p.speculating = true;");
+    gen_repeat_iteration(w, body, rep_op, inner, ctx, GroupEntry::Looped(String::new()));
+    w.line(`p.speculating = ${outer};`);
+    w.begin(`if p.recovering || p.pos <= ${start}`);
+    w.line("p.recovering = false;");
+    w.line(`p.pos = ${start};`);
+    w.line(`p.b.truncate(${cp});`);
+    let probe_set = admits_enumerated(&rep_op.body_admits);
+    if rep_recovery_expr(rep_op, ctx) matches { Some(_) } && !probe_set.is_empty() {
+        w.line(`if ${negate_cond(ctx.first_check_str(&probe_set))} { p.pending = ${pending}; }`);
+    } else {
+        w.line(`p.pending = ${pending};`);
+    }
+    w.line("break;");
+    w.end();
+    if rep_op.duties.is_empty() {
+        return;
+    }
+    let end = dedup_name("sp_end", nc);
+    w.line(`let ${end} = p.pos;`);
+    w.line(`p.pos = ${start};`);
+    gen_iteration_duties(
+        w,
+        &rep_op.duties,
+        &admits_kinds(&rep_op.body_admits),
+        &end,
+        &Refusable::Always,
+        /*reserve_in_guard=*/ true,
+        ctx,
+        nc,
+        `p.b.truncate(${cp}); p.pending = ${pending}; break;`,
+    );
+    w.line(`p.pos = ${end};`);
+}
+
 /// A decline is stamped only where the walk reaches the rule's tail
 /// (`lower_decline_scan`), so its verdict always asks the caller.
 global DECLINE_ASKS_CALLER: bool = true;
@@ -6111,13 +6191,14 @@ global DECLINE_ASKS_CALLER: bool = true;
 /// threaded mask. The mask is inert wherever no caller supplied one, so asking
 /// it would call the end of the input a dead end and decline the last iteration
 /// of every top-level list.
-fn gen_rep_decline_stranded<S: AsStrSlice>(
+fn gen_rep_decline_stranded<S: AsStrSlice, S1: AsStrSlice>(
     w: &mut CodeWriter,
     duties: &IterationDuties,
     body_admits: &List<i32>,
     scan_pos: S,
     ctx: &mut EmitContext,
     nc: &mut List<[String, i32]>,
+    refuse: S1,
 ) {
     if !duties.decline_stranded {
         return;
@@ -6147,7 +6228,7 @@ fn gen_rep_decline_stranded<S: AsStrSlice>(
         &duties.decline_viable,
         duties.decline_scan.is_empty(),
     );
-    w.line(`if ${dead_end} { break; }`);
+    w.line(`if ${dead_end} { ${refuse} }`);
     w.end();
     w.end();
 }
@@ -6178,7 +6259,7 @@ variant Refusable {
 /// reserve into the guard's own scan. That is not a placement detail: failing
 /// there fails the guard, which is what lets the repeat-exit probe report where
 /// a starved iteration stopped.
-fn gen_iteration_duties<S: AsStrSlice>(
+fn gen_iteration_duties<S: AsStrSlice, S1: AsStrSlice = String>(
     w: &mut CodeWriter,
     duties: &IterationDuties,
     body_admits: &List<i32>,
@@ -6187,6 +6268,7 @@ fn gen_iteration_duties<S: AsStrSlice>(
     reserve_in_guard: bool,
     ctx: &mut EmitContext,
     nc: &mut List<[String, i32]>,
+    refuse: S1 = PLAIN_BREAK,
 ) {
     if duties.is_empty() {
         return;
@@ -6201,9 +6283,9 @@ fn gen_iteration_duties<S: AsStrSlice>(
     } else {
         false;
     };
-    gen_rep_decline_stranded(w, duties, body_admits, at, ctx, nc);
+    gen_rep_decline_stranded(w, duties, body_admits, at, ctx, nc, &refuse);
     if !reserve_in_guard {
-        gen_rep_reserve_at(w, duties, body_admits, at, ctx, nc);
+        gen_rep_reserve_at(w, duties, body_admits, at, ctx, nc, &refuse);
     }
     if exempt_first {
         w.end();
@@ -6211,13 +6293,14 @@ fn gen_iteration_duties<S: AsStrSlice>(
 }
 
 /// The reserve, checked from a position the entry has already committed to.
-fn gen_rep_reserve_at<S: AsStrSlice>(
+fn gen_rep_reserve_at<S: AsStrSlice, S1: AsStrSlice>(
     w: &mut CodeWriter,
     duties: &IterationDuties,
     body_admits: &List<i32>,
     at: S,
     ctx: &mut EmitContext,
     nc: &mut List<[String, i32]>,
+    refuse: S1,
 ) {
     if duties.reserve_scan.is_empty() {
         return;
@@ -6245,7 +6328,7 @@ fn gen_rep_reserve_at<S: AsStrSlice>(
     }
     w.line(`${ok} = true;`);
     w.end();
-    w.line(`if !${ok} { break; }`);
+    w.line(`if !${ok} { ${refuse} }`);
     w.end();
     w.end();
 }
@@ -6843,14 +6926,17 @@ fn group_decision(
 /// The decision of a group that decides between alternatives, or `null` for
 /// one that does not: a lone alternative, or a token-only group.
 fn group_alt_decision(g_op: &GroupOp, g_elem: &GroupElement, ctx: &mut EmitContext) -> Option<GroupDecision> {
-    let dispatches = match &g_op.shape {
-        SimpleCst(_) | General(_) => g_op.alts.len() > 1,
-        TokenOnly(_) | SingleAlt(_) | Transparent => false,
-    };
-    if !dispatches {
+    if !group_dispatches(g_op) {
         return null;
     }
     return Option::Some(group_decision(&g_elem.alternatives, &g_op.empty_alt_admits, ctx));
+}
+
+fn group_dispatches(g_op: &GroupOp) -> bool {
+    return match &g_op.shape {
+        SimpleCst(_) | General(_) => g_op.alts.len() > 1,
+        TokenOnly(_) | SingleAlt(_) | Transparent => false,
+    };
 }
 
 /// `group_alt_decision` for the op-only walker, off the dispatch lower baked

@@ -1570,6 +1570,28 @@ test "a scan leaves a non-greedy loop where the parse does" {
     assert got == "( a ) ; ( b , pk ( c ) ) ; => (p (lst (st ( (item (name a)) )) ; (st ( (item (name b)) , (tc pk ( c )) )) ;))\n( a , pk ( c ) ) ; ( b ) ; => (p (lst (st ( (item (name a)) , (tc pk ( c )) )) ; (st ( (item (name b)) )) ;))\n";
 }
 
+// SQLite's `sql_stmt_list`: an iteration's `;`s are also the list's tail.
+global SPECULATIVE_LOOP_G4: String = "
+grammar S;
+p : (lst | '#')* EOF ;
+lst : ';'* st (';'+ st)* ';'* ;
+st : ID ('.' ID)* | ID '(' ID ')' ;
+ID : [a-z]+ ;
+WS : ' ' -> skip ;
+";
+
+test "a loop that parses its iteration speculatively rewinds the one that fails" {
+    // The second input's iteration takes `; ;` before `#` fails it.
+    let got = parses(SPECULATIVE_LOOP_G4, "p", ["a ; b ( c ) ;", "a . b ; ; # c ;"]);
+    assert got == "a ; b ( c ) ; => (p (lst (st a) ; (st b ( c )) ;))\na . b ; ; # c ; => (p (lst (st a . b) ; ;) # (lst (st c) ;))\n";
+}
+
+test "a loop speculates only where the parse runs no action" {
+    assert gen_source(SPECULATIVE_LOOP_G4).contains("p.speculating = true;");
+    let with_predicate = SPECULATIVE_LOOP_G4.replace("st : ID (", "st : {true}? ID (");
+    assert !gen_source(&with_predicate).contains("p.speculating = true;"), "`speculating` skips a predicate";
+}
+
 global LOOP_ENTERS_WHILE_VIABLE_G4: String = "
 grammar T;
 s : 'fn' ty '{' '}' EOF ;

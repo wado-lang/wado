@@ -2974,92 +2974,6 @@ impl Parser {
     }
 }
 
-fn scan_order_by(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, follow: i64 = 0) -> i32 {
-    let start = pos;
-    let mut pos = pos;
-    let kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
-    if _kind_set_1(kind) {
-        let _atn_alt = atn_decide_0(atn, tokens, pos, 0);
-        if _atn_alt == 0 {
-            return scan_order_by_clause(tokens, start, atn, follow);
-        }
-        return scan_order_by__alt_1(tokens, start, atn, follow);
-    }
-    return -1;
-}
-
-fn scan_order_by_clause(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, follow: i64 = 0) -> i32 {
-    let mut pos = pos;
-    pos = scan_path(tokens, pos, atn, follow_then(FOLLOW_MASK_2, 8, follow));
-    if pos < 0 { return -1; }
-    if pos >= tokens.len() || tokens[pos] != TK_DIRECTION { return -1; }
-    pos += 1;
-    return pos;
-}
-
-fn scan_path(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, follow: i64 = 0) -> i32 {
-    let mut pos = pos;
-    pos = scan_expr(tokens, pos, atn, follow);
-    if pos < 0 { return -1; }
-    return pos;
-}
-
-fn scan_expr(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, follow: i64 = 0) -> i32 {
-    let mut pos = pos;
-    pos = scan_atom(tokens, pos, atn, follow_then_opening(FOLLOW_MASK_3, 16, follow));
-    if pos < 0 { return -1; }
-    while pos < tokens.len() && _kind_set_2(tokens[pos]) && !follow_yields(tokens, pos, follow, &FOLLOW_SETS, TK_EOF) {
-        let sp = pos;
-        sg_3_done: {
-            sg_3: {
-                pos += 1;
-                pos = scan_atom(tokens, pos, atn, follow_then_opening(FOLLOW_MASK_3, 16, follow));
-                if pos < 0 { break sg_3; }
-                break sg_3_done;
-            }
-            pos = -1;
-        }
-        if pos < 0 { pos = sp; break; }
-        if pos == sp { break; }
-    }
-    return pos;
-}
-
-fn scan_atom(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, follow: i64 = 0) -> i32 {
-    let start = pos;
-    let mut pos = pos;
-    let kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
-    if kind == TK_KEY {
-        pos = start + 1;
-        while pos < tokens.len() && tokens[pos] == TK_LIT_DOT && !follow_yields(tokens, pos, follow, &FOLLOW_SETS, TK_EOF) {
-            let sp = pos;
-            sg_4_done: {
-                sg_4: {
-                    pos += 1;
-                    if pos >= tokens.len() || tokens[pos] != TK_KEY { break sg_4; }
-                    pos += 1;
-                    break sg_4_done;
-                }
-                pos = -1;
-            }
-            if pos < 0 { pos = sp; break; }
-            if pos == sp { break; }
-        }
-        return pos;
-    } else if kind == TK_LPAREN {
-        pos = start + 1;
-        try_1: {
-            pos = scan_expr(tokens, pos, atn, follow_then(FOLLOW_MASK_5, 8, follow));
-            if pos < 0 { break try_1; }
-            if pos >= tokens.len() || tokens[pos] != TK_RPAREN { break try_1; }
-            pos += 1;
-            return pos;
-        }
-        return -1;
-    }
-    return -1;
-}
-
 fn _parse_s__inner(p: &mut Parser, follow: i64 = 0) -> () {
     p.site = 0;
     p.atn_ret_pending = 15;
@@ -3090,28 +3004,29 @@ fn _parse_order_by__inner_alt_1(p: &mut Parser, follow: i64 = 0) -> () {
     loop {
         if p.recovering { break; }
         if follow_yields(&p.kinds, p.pos, follow, &FOLLOW_SETS, TK_EOF) { break; }
-        let mut rep_scan_pos: i32 = -1;
-        rep_scan: {
-            let tokens = &p.kinds;
-            let mut pos: i32 = p.pos;
-            sg_0_done: {
-                sg_0: {
-                    if pos >= tokens.len() || tokens[pos] != TK_LIT_COMMA { break sg_0; }
-                    pos += 1;
-                    p.atn.stack.push(31);
-                    pos = scan_order_by(tokens, pos, &mut p.atn, follow_then_opening(FOLLOW_MASK_1, 16, follow));
-                    p.atn.stack.pop();
-                    if pos < 0 { break sg_0; }
-                    break sg_0_done;
-                }
-                break rep_scan;
-            }
-            if pos <= p.pos { break rep_scan; }
-            rep_scan_pos = pos;
+        if p.peek_kind() != TK_LIT_COMMA { break; }
+        let sp_pos = p.pos;
+        let sp_cp = p.b.checkpoint();
+        let sp_pending = p.pending;
+        let sp_outer = p.speculating;
+        p.speculating = true;
+        p.expect(TK_LIT_COMMA, &SYNC_0, false);
+        p.site = 3;
+        p.atn_ret_pending = 31;
+        _parse_order_by(p, follow_then_opening(FOLLOW_MASK_1, 16, follow));
+        p.speculating = sp_outer;
+        if p.recovering || p.pos <= sp_pos {
+            p.recovering = false;
+            p.pos = sp_pos;
+            p.b.truncate(sp_cp);
+            p.pending = sp_pending;
+            break;
         }
-        if rep_scan_pos >= 0 {
-            let decline_kind = if rep_scan_pos < p.kinds.len() { p.kinds[rep_scan_pos] } else { TK_EOF };
-            if !(_kind_set_0(decline_kind) || follow == 0 && decline_kind == TK_EOF && !(rep_scan_pos == p.pos + 3 && p.kinds[p.pos] == TK_LIT_COMMA && p.kinds[p.pos + 1] == TK_KEY && p.kinds[p.pos + 2] == TK_DIRECTION)) {
+        let sp_end = p.pos;
+        p.pos = sp_pos;
+        if sp_end >= 0 {
+            let decline_kind = if sp_end < p.kinds.len() { p.kinds[sp_end] } else { TK_EOF };
+            if !(_kind_set_0(decline_kind) || follow == 0 && decline_kind == TK_EOF && !(sp_end == p.pos + 3 && p.kinds[p.pos] == TK_LIT_COMMA && p.kinds[p.pos + 1] == TK_KEY && p.kinds[p.pos + 2] == TK_DIRECTION)) {
                 let mut decline_dead: bool = false;
                 decline_scan: {
                     let tokens = &p.kinds;
@@ -3119,51 +3034,12 @@ fn _parse_order_by__inner_alt_1(p: &mut Parser, follow: i64 = 0) -> () {
                     let probe_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
                     if _kind_set_0(probe_kind) && follow_exit_viable(tokens, pos, follow, &FOLLOW_SETS, TK_EOF) { decline_dead = true; }
                 }
-                if decline_dead { break; }
+                if decline_dead { p.b.truncate(sp_cp); p.pending = sp_pending; break; }
             }
         }
-        if rep_scan_pos < 0 { break; }
-        p.expect(TK_LIT_COMMA, &SYNC_0, false);
-        p.site = 3;
-        p.atn_ret_pending = 31;
-        _parse_order_by(p, follow_then_opening(FOLLOW_MASK_1, 16, follow));
+        p.pos = sp_end;
     }
     return;
-}
-
-fn scan_order_by__alt_1(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, follow: i64 = 0) -> i32 {
-    let mut pos = pos;
-    pos = scan_order_by_clause(tokens, pos, atn, follow_then_opening(FOLLOW_MASK_1, 16, follow));
-    if pos < 0 { return -1; }
-    while pos < tokens.len() && tokens[pos] == TK_LIT_COMMA && !follow_yields(tokens, pos, follow, &FOLLOW_SETS, TK_EOF) {
-        let sp = pos;
-        sg_1_done: {
-            sg_1: {
-                pos += 1;
-                atn.stack.push(31);
-                pos = scan_order_by(tokens, pos, atn, follow_then_opening(FOLLOW_MASK_1, 16, follow));
-                atn.stack.pop();
-                if pos < 0 { break sg_1; }
-                break sg_1_done;
-            }
-            pos = -1;
-        }
-        if pos < 0 { pos = sp; break; }
-        if pos == sp { break; }
-        let dk_2 = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
-        if !(_kind_set_0(dk_2) || follow == 0 && dk_2 == TK_EOF && !(pos == sp + 3 && tokens[sp] == TK_LIT_COMMA && tokens[sp + 1] == TK_KEY && tokens[sp + 2] == TK_DIRECTION)) {
-            let dc_2 = pos;
-            let mut dc_2_exit = false;
-            pos = sp;
-            dcl_2: {
-                let probe_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
-                if _kind_set_0(probe_kind) && follow_exit_viable(tokens, pos, follow, &FOLLOW_SETS, TK_EOF) { dc_2_exit = true; }
-            }
-            if dc_2_exit { pos = sp; break; }
-            pos = dc_2;
-        }
-    }
-    return pos;
 }
 
 fn _parse_order_by__inner(p: &mut Parser, follow: i64 = 0) -> () {

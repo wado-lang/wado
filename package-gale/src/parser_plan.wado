@@ -63,6 +63,10 @@ pub struct ParserPlan {
     pub scan_memo: bool = false,
     /// The rule's scan is memoized (`GrammarAnalysis::rule_rescans`).
     rescanned: List<bool> = [],
+    /// The parse runs no action or predicate, which `speculating` skips, so a
+    /// speculative parse is the parse: a loop can parse an iteration and rewind
+    /// it instead of scanning it first.
+    pub speculates: bool = false,
     /// The ATN decision of each rule's LR loop entry, -1 for a rule with none.
     lr_loop_entry_decisions: List<i32> = [],
     /// The ATN decision of each rule's top-level alternation, which a routed
@@ -134,6 +138,8 @@ pub fn plan_parser(
         rule_reaches_simulator: close_over_callers(&analysis.scannable_callees(), marks.rule_asks_simulator),
         scan_memo: rescanned.contains(&true) || any_lr,
         rescanned,
+        speculates: !settings.emit_actions
+            || !grammar.parser_rules.iter_ref().any(|r| !rule_action_bodies(r).is_empty()),
         lr_loop_entry_decisions: lr_decs,
         atn_rule_body_decisions: body_decs,
         atn_call_site_returns: if needs_atn { atn.call_site_returns } else { [] },

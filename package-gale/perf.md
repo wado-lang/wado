@@ -238,6 +238,26 @@ The per-parse cost did not show on SQLite, which went from 8.10 to 8.72 MB/s
 on `package-gale/benchmark/sqlite`. TypeScript went from 1.15 to 3.31 MB/s, and
 Rust from 0.68 to 3.17 MB/s.
 
+### A loop parses its iteration rather than scanning it first (landed, 2026-10)
+
+A scan-guarded loop used to scan each iteration to decide whether to take it,
+then parse the same tokens again. SQLite's `sql_stmt_list` scans every
+statement after the first this way. The loop now parses the iteration under
+`speculating`, and rewinds the position, the tree and `pending` when it fails
+or declines (`gen_rep_speculative_iteration`). `speculating` skips actions and
+predicates, so only a grammar that runs neither speculates
+(`ParserPlan::speculates`). The other exclusions are in `repeat_speculates`.
+
+`-O3`, one parse of each benchmark input, same window (`Benchmark` over the
+parser generated before and after):
+
+| grammar |   before |    after |
+| ------- | -------: | -------: |
+| SQLite  | 0.934 ms | 0.784 ms |
+| css3    | 1.875 ms | 1.784 ms |
+
+Rust and TypeScript run predicates, so their parsers do not change.
+
 ### Standing rules (measured)
 
 The four rules these benchmarks established — live set over allocation count,

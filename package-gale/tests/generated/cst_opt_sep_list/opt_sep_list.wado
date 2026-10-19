@@ -1683,27 +1683,23 @@ fn _parse_list__inner(p: &mut Parser, follow: i64 = 0) -> () {
         loop {
             if p.recovering { break; }
             if follow_yields(&p.kinds, p.pos, follow, &FOLLOW_SETS, TK_EOF) { break; }
-            let mut rep_scan_pos: i32 = -1;
-            rep_scan: {
-                let tokens = &p.kinds;
-                let mut pos: i32 = p.pos;
-                sg_1_done: {
-                    sg_1: {
-                        if pos >= tokens.len() || tokens[pos] != TK_LIT_COMMA { break sg_1; }
-                        pos += 1;
-                        if pos >= tokens.len() || tokens[pos] != TK_IDENT { break sg_1; }
-                        pos += 1;
-                        break sg_1_done;
-                    }
-                    break rep_scan;
-                }
-                if pos <= p.pos { break rep_scan; }
-                rep_scan_pos = pos;
-            }
-            if rep_scan_pos < 0 { break; }
+            if p.peek_kind() != TK_LIT_COMMA { break; }
+            let sp_pos = p.pos;
+            let sp_cp = p.b.checkpoint();
+            let sp_pending = p.pending;
+            let sp_outer = p.speculating;
+            p.speculating = true;
             p.expect(TK_LIT_COMMA, &SYNC_0, false);
             p.site = 2;
             _parse_arm(p);
+            p.speculating = sp_outer;
+            if p.recovering || p.pos <= sp_pos {
+                p.recovering = false;
+                p.pos = sp_pos;
+                p.b.truncate(sp_cp);
+                p.pending = sp_pending;
+                break;
+            }
         }
         if p.peek_kind() == TK_LIT_COMMA && (!follow_yields(&p.kinds, p.pos, follow, &FOLLOW_SETS, TK_EOF) || follow_resumes(&p.kinds, p.pos + 1, follow, &FOLLOW_SETS, TK_EOF)) {
             p.take();
@@ -1783,12 +1779,12 @@ fn _parse_braced__inner(p: &mut Parser, follow: i64 = 0) -> () {
         pos += 1;
         while pos < tokens.len() && tokens[pos] == TK_LIT_COMMA {
             let sp = pos;
-            sg_2_done: {
-                sg_2: {
+            sg_1_done: {
+                sg_1: {
                     pos += 1;
-                    if pos >= tokens.len() || tokens[pos] != TK_IDENT { break sg_2; }
+                    if pos >= tokens.len() || tokens[pos] != TK_IDENT { break sg_1; }
                     pos += 1;
-                    break sg_2_done;
+                    break sg_1_done;
                 }
                 pos = -1;
             }
@@ -1806,27 +1802,23 @@ fn _parse_braced__inner(p: &mut Parser, follow: i64 = 0) -> () {
         if !kind_set_has(&SYNC_3, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_3, &EXPECTED_3); }
         loop {
             if p.recovering { break; }
-            let mut rep_scan_pos: i32 = -1;
-            rep_scan: {
-                let tokens = &p.kinds;
-                let mut pos: i32 = p.pos;
-                sg_3_done: {
-                    sg_3: {
-                        if pos >= tokens.len() || tokens[pos] != TK_LIT_COMMA { break sg_3; }
-                        pos += 1;
-                        if pos >= tokens.len() || tokens[pos] != TK_IDENT { break sg_3; }
-                        pos += 1;
-                        break sg_3_done;
-                    }
-                    break rep_scan;
-                }
-                if pos <= p.pos { break rep_scan; }
-                rep_scan_pos = pos;
-            }
-            if rep_scan_pos < 0 { break; }
+            if p.peek_kind() != TK_LIT_COMMA { break; }
+            let sp_pos = p.pos;
+            let sp_cp = p.b.checkpoint();
+            let sp_pending = p.pending;
+            let sp_outer = p.speculating;
+            p.speculating = true;
             p.expect(TK_LIT_COMMA, &SYNC_0, false);
             p.site = 7;
             _parse_arm(p);
+            p.speculating = sp_outer;
+            if p.recovering || p.pos <= sp_pos {
+                p.recovering = false;
+                p.pos = sp_pos;
+                p.b.truncate(sp_cp);
+                p.pending = sp_pending;
+                break;
+            }
             if !kind_set_has(&SYNC_3, p.kinds[p.pos]) { builtin::cold_path(); p.sync_back(&SYNC_3, &EXPECTED_3); }
         }
         if !kind_set_has(&SYNC_3, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_3, &EXPECTED_3); }

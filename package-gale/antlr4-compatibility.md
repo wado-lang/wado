@@ -558,7 +558,11 @@ static k-token lookahead, and a decision static prediction cannot resolve routes
 to the runtime ATN simulator (next section). The reason is speed: settling a
 decision by trial usually costs more than predicting it. A backtrack that
 replaces more expensive work, such as a scan ahead followed by a second parse,
-is allowed when a benchmark shows it is faster. The repeat-exit probe also
+is allowed when a benchmark shows it is faster. A scan-guarded loop is one: it
+parses the iteration under `speculating` and rewinds it if it fails
+(`gen_rep_speculative_iteration`). That parse decides as the scan did only
+because the scan makes the parse's choice (next section), and only in a parser
+that runs no action or predicate, since `speculating` skips both. The repeat-exit probe also
 rewinds, but it decides nothing: it re-parses a failed element to record where
 the error is.
 
