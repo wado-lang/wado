@@ -565,7 +565,7 @@ that no function type carries it.
 ```wado
 #[storage(part_of_args)]
 #[side_effect(trap, outside = [arr], at = [idx], unset = arr)]
-pub fn array_get_ref<T>(arr: &Array<T>, idx: i32) -> &T;
+pub fn array_get_ref<affine T>(arr: &Array<T>, idx: i32) -> &T;
 ```
 
 <!-- {"source":"wado-compiler/lib/core/builtin.wado"} -->
@@ -694,7 +694,7 @@ traps.
 ```wado
 #[storage(fresh, len = len)]
 #[side_effect(trap, negative = len)]
-pub fn array_new<T>(len: i32) -> Array<T>;
+pub fn array_new<affine T>(len: i32) -> Array<T>;
 ```
 
 `outside` and `at` are arrays of the same length, and the i-th entries pair up.
