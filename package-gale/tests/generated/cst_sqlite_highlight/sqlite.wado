@@ -5625,7 +5625,7 @@ fn scan_compound_select_stmt(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredict
                 pos = gp_498;
             }
             atn.stack.push(409);
-            pos = scan_select_core(tokens, pos, atn, memo, follow);
+            pos = scan_select_core(tokens, pos, atn, memo, 0);
             atn.stack.pop();
             if pos < 0 { break sg_497; }
             break sg_497_done;
@@ -5652,7 +5652,7 @@ fn scan_compound_select_stmt(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredict
                     pos = gp_500;
                 }
                 atn.stack.push(409);
-                pos = scan_select_core(tokens, pos, atn, memo, follow);
+                pos = scan_select_core(tokens, pos, atn, memo, 0);
                 atn.stack.pop();
                 if pos < 0 { break sg_499; }
                 break sg_499_done;
@@ -6044,7 +6044,7 @@ fn scan_create_table_stmt(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor,
                                                 sg_379: {
                                                     pos += 1;
                                                     atn.stack.push(551);
-                                                    pos = scan_column_def(tokens, pos, atn, memo, follow);
+                                                    pos = scan_column_def(tokens, pos, atn, memo, 0);
                                                     atn.stack.pop();
                                                     if pos < 0 { break sg_379; }
                                                     break sg_379_done;
@@ -6122,7 +6122,7 @@ fn scan_create_table_stmt(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor,
                                     sg_383: {
                                         pos += 1;
                                         atn.stack.push(551);
-                                        pos = scan_column_def(tokens, pos, atn, memo, follow);
+                                        pos = scan_column_def(tokens, pos, atn, memo, 0);
                                         atn.stack.pop();
                                         if pos < 0 { break sg_383; }
                                         break sg_383_done;
@@ -6219,7 +6219,7 @@ fn scan_create_table_stmt(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor,
                                     sg_388: {
                                         pos += 1;
                                         atn.stack.push(551);
-                                        pos = scan_column_def(tokens, pos, atn, memo, follow);
+                                        pos = scan_column_def(tokens, pos, atn, memo, 0);
                                         atn.stack.pop();
                                         if pos < 0 { break sg_388; }
                                         break sg_388_done;
@@ -6298,7 +6298,7 @@ fn scan_create_table_stmt(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor,
                         sg_392: {
                             pos += 1;
                             atn.stack.push(551);
-                            pos = scan_column_def(tokens, pos, atn, memo, follow);
+                            pos = scan_column_def(tokens, pos, atn, memo, 0);
                             atn.stack.pop();
                             if pos < 0 { break sg_392; }
                             break sg_392_done;
@@ -9404,7 +9404,7 @@ fn scan_factored_select_stmt(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredict
                 pos = scan_compound_operator(tokens, pos, atn, memo);
                 if pos < 0 { break sg_485; }
                 atn.stack.push(980);
-                pos = scan_select_core(tokens, pos, atn, memo, follow);
+                pos = scan_select_core(tokens, pos, atn, memo, 0);
                 atn.stack.pop();
                 if pos < 0 { break sg_485; }
                 break sg_485_done;
@@ -10228,7 +10228,7 @@ fn scan_select_stmt(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, memo:
                 pos = scan_compound_operator(tokens, pos, atn, memo);
                 if pos < 0 { break sg_426; }
                 atn.stack.push(1293);
-                pos = scan_select_or_values(tokens, pos, atn, memo, follow);
+                pos = scan_select_or_values(tokens, pos, atn, memo, 0);
                 atn.stack.pop();
                 if pos < 0 { break sg_426; }
                 break sg_426_done;
@@ -12597,7 +12597,7 @@ fn scan_join_clause(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, memo:
                 atn.stack.pop();
                 if pos < 0 { break sg_260; }
                 atn.stack.push(2440);
-                pos = scan_join_constraint(tokens, pos, atn, memo, follow);
+                pos = scan_join_constraint(tokens, pos, atn, memo, 0);
                 atn.stack.pop();
                 if pos < 0 { break sg_260; }
                 break sg_260_done;
@@ -14267,7 +14267,7 @@ fn _parse_compound_select_stmt__inner(p: &mut Parser, follow: i64 = 0) -> () {
         }
         p.site = 48;
         p.atn_ret_pending = 409;
-        _parse_select_core(p, follow);
+        _parse_select_core(p, 0);
     }
     if p.peek_kind() == TK_K_ORDER && p.peek_at(1) == TK_K_BY && _kind_set_19(p.peek_at(2)) && !follow_yields(&p.kinds, p.pos, follow, &FOLLOW_SETS, TK_EOF) {
         p.take();
@@ -14637,7 +14637,7 @@ fn _parse_create_table_stmt__inner(p: &mut Parser, follow: i64 = 0) -> () {
                                             sg_15: {
                                                 pos += 1;
                                                 p.atn.stack.push(551);
-                                                pos = scan_column_def(tokens, pos, &mut p.atn, &mut p.memo, follow);
+                                                pos = scan_column_def(tokens, pos, &mut p.atn, &mut p.memo, 0);
                                                 p.atn.stack.pop();
                                                 if pos < 0 { break sg_15; }
                                                 break sg_15_done;
@@ -14715,7 +14715,7 @@ fn _parse_create_table_stmt__inner(p: &mut Parser, follow: i64 = 0) -> () {
                                 sg_19: {
                                     pos += 1;
                                     p.atn.stack.push(551);
-                                    pos = scan_column_def(tokens, pos, &mut p.atn, &mut p.memo, follow);
+                                    pos = scan_column_def(tokens, pos, &mut p.atn, &mut p.memo, 0);
                                     p.atn.stack.pop();
                                     if pos < 0 { break sg_19; }
                                     break sg_19_done;
@@ -14813,7 +14813,7 @@ fn _parse_create_table_stmt__inner(p: &mut Parser, follow: i64 = 0) -> () {
                                 sg_24: {
                                     pos += 1;
                                     p.atn.stack.push(551);
-                                    pos = scan_column_def(tokens, pos, &mut p.atn, &mut p.memo, follow);
+                                    pos = scan_column_def(tokens, pos, &mut p.atn, &mut p.memo, 0);
                                     p.atn.stack.pop();
                                     if pos < 0 { break sg_24; }
                                     break sg_24_done;
@@ -14893,7 +14893,7 @@ fn _parse_create_table_stmt__inner(p: &mut Parser, follow: i64 = 0) -> () {
             p.expect(TK_COMMA, &SYNC_7, false);
             p.site = 62;
             p.atn_ret_pending = 551;
-            _parse_column_def(p, follow);
+            _parse_column_def(p, 0);
         }
         if !kind_set_has(&SYNC_19, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_19, &EXPECTED_19); }
         while !p.recovering && p.peek_kind() == TK_COMMA {
@@ -18012,7 +18012,7 @@ fn _parse_factored_select_stmt__inner(p: &mut Parser, follow: i64 = 0) -> () {
         _parse_compound_operator(p);
         p.site = 106;
         p.atn_ret_pending = 980;
-        _parse_select_core(p, follow);
+        _parse_select_core(p, 0);
     }
     if p.peek_kind() == TK_K_ORDER && p.peek_at(1) == TK_K_BY && _kind_set_19(p.peek_at(2)) && !follow_yields(&p.kinds, p.pos, follow, &FOLLOW_SETS, TK_EOF) {
         p.take();
@@ -19091,7 +19091,7 @@ fn _parse_select_stmt__inner(p: &mut Parser, follow: i64 = 0) -> () {
         _parse_compound_operator(p);
         p.site = 142;
         p.atn_ret_pending = 1293;
-        _parse_select_or_values(p, follow);
+        _parse_select_or_values(p, 0);
     }
     if p.peek_kind() == TK_K_ORDER && p.peek_at(1) == TK_K_BY && _kind_set_19(p.peek_at(2)) && !follow_yields(&p.kinds, p.pos, follow, &FOLLOW_SETS, TK_EOF) {
         p.take();
@@ -23311,7 +23311,7 @@ fn _parse_join_clause__inner(p: &mut Parser, follow: i64 = 0) -> () {
         _parse_table_or_subquery(p, follow_open_with(follow, follow_open_set(FOLLOW_MASK_66)));
         p.site = 294;
         p.atn_ret_pending = 2440;
-        _parse_join_constraint(p, follow);
+        _parse_join_constraint(p, 0);
     }
     return;
 }

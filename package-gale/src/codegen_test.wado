@@ -1533,6 +1533,23 @@ test "a loop's skippable iteration keeps every reading of what follows the loop"
     assert got == "( e < h , h > ) => (s ( (fs (f (g e (a < h , h >)))) ))\n( e < h , h > , u ) => (s ( (fs (f (g e (a < h , h >))) , (f (g u))) ))\n( e < h , h , > ) => (s ( (fs (f (g e (a < h , h , >)))) ))\n( e :: d < h > , ) => (s ( (fs (f (g e) :: (g d (a < h >))) ,) ))\n";
 }
 
+global NON_GREEDY_TAIL_G4: String = "
+grammar T;
+s : list 'x' ')' 'x' ')' EOF ;
+list : '(' item (',' item)*? ')' ;
+item : ID 'x'? ;
+ID : [a-z]+ ;
+WS : ' ' -> skip ;
+";
+
+test "a non-greedy loop's tail call does not read past what follows the loop" {
+    // SQLite's `'(' column_def (',' column_def)*? … ')'`: the `)` stands
+    // between the last `item` and what follows `list`, which here matches
+    // `x )` as deep as the gate reads.
+    let got = parses(NON_GREEDY_TAIL_G4, "s", ["( a , b x ) x ) x )", "( a x , b ) x ) x )"]);
+    assert got == "( a , b x ) x ) x ) => (s (list ( (item a) , (item b x) )) x ) x ))\n( a x , b ) x ) x ) => (s (list ( (item a x) , (item b) )) x ) x ))\n";
+}
+
 global LOOP_ENTERS_WHILE_VIABLE_G4: String = "
 grammar T;
 s : 'fn' ty '{' '}' EOF ;

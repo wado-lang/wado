@@ -12132,7 +12132,7 @@ fn scan_match_arms(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, atn: &mut
                 if pos >= tokens.len() || tokens[pos] != TK_FATARROW { break sg_132; }
                 pos += 1;
                 atn.stack.push(2592);
-                pos = scan_match_arm_expression(tokens, pos, gate, atn, memo, follow);
+                pos = scan_match_arm_expression(tokens, pos, gate, atn, memo, 0);
                 atn.stack.pop();
                 if pos < 0 { break sg_132; }
                 break sg_132_done;
@@ -24433,7 +24433,7 @@ fn _parse_match_arms__inner(p: &mut Parser, follow: i64 = 0) -> () with RustPars
                     if pos >= tokens.len() || tokens[pos] != TK_FATARROW { break sg_46; }
                     pos += 1;
                     p.atn.stack.push(2592);
-                    pos = scan_match_arm_expression(tokens, pos, &mut p.scan_gate, &mut p.atn, &mut p.memo, follow);
+                    pos = scan_match_arm_expression(tokens, pos, &mut p.scan_gate, &mut p.atn, &mut p.memo, 0);
                     p.atn.stack.pop();
                     if pos < 0 { break sg_46; }
                     break sg_46_done;
@@ -24475,7 +24475,7 @@ fn _parse_match_arms__inner(p: &mut Parser, follow: i64 = 0) -> () with RustPars
         p.expect(TK_FATARROW, &SYNC_60, false);
         p.site = 402;
         p.atn_ret_pending = 2592;
-        _parse_match_arm_expression(p, follow);
+        _parse_match_arm_expression(p, 0);
         if !kind_set_has(&SYNC_122, p.kinds[p.pos]) { builtin::cold_path(); p.sync_back(&SYNC_122, &EXPECTED_122); }
     }
     p.site = 403;

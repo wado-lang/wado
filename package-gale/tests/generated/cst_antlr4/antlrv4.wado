@@ -4799,7 +4799,7 @@ fn scan_rule_alt_list(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, fol
             sg_14: {
                 pos += 1;
                 atn.stack.push(483);
-                pos = scan_labeled_alt(tokens, pos, atn, follow);
+                pos = scan_labeled_alt(tokens, pos, atn, 0);
                 atn.stack.pop();
                 if pos < 0 { break sg_14; }
                 break sg_14_done;
@@ -4878,7 +4878,7 @@ fn scan_lexer_alt_list(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, fo
             sg_13: {
                 pos += 1;
                 atn.stack.push(530);
-                pos = scan_lexer_alt(tokens, pos, atn, follow);
+                pos = scan_lexer_alt(tokens, pos, atn, 0);
                 atn.stack.pop();
                 if pos < 0 { break sg_13; }
                 break sg_13_done;
@@ -5106,7 +5106,7 @@ fn scan_alt_list(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, follow: 
             sg_10: {
                 pos += 1;
                 atn.stack.push(626);
-                pos = scan_alternative(tokens, pos, atn, follow);
+                pos = scan_alternative(tokens, pos, atn, 0);
                 atn.stack.pop();
                 if pos < 0 { break sg_10; }
                 break sg_10_done;
@@ -6837,7 +6837,7 @@ fn _parse_rule_alt_list__inner(p: &mut Parser, follow: i64 = 0) -> () {
         p.take();
         p.site = 59;
         p.atn_ret_pending = 483;
-        _parse_labeled_alt(p, follow);
+        _parse_labeled_alt(p, 0);
     }
     return;
 }
@@ -6946,7 +6946,7 @@ fn _parse_lexer_alt_list__inner(p: &mut Parser, follow: i64 = 0) -> () {
         p.take();
         p.site = 66;
         p.atn_ret_pending = 530;
-        _parse_lexer_alt(p, follow);
+        _parse_lexer_alt(p, 0);
     }
     return;
 }
@@ -7380,7 +7380,7 @@ fn _parse_alt_list__inner(p: &mut Parser, follow: i64 = 0) -> () {
         p.take();
         p.site = 84;
         p.atn_ret_pending = 626;
-        _parse_alternative(p, follow);
+        _parse_alternative(p, 0);
     }
     return;
 }

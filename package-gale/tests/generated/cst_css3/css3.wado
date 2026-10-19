@@ -18782,7 +18782,7 @@ fn scan_expression(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, follow
         sg_61: {
             if pos >= tokens.len() || !_kind_set_25(tokens[pos]) { break sg_61; }
             pos += 1;
-            pos = scan_ws(tokens, pos, atn, follow);
+            pos = scan_ws(tokens, pos, atn, 0);
             if pos < 0 { break sg_61; }
             break sg_61_done;
         }
@@ -18793,7 +18793,7 @@ fn scan_expression(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, follow
         sg_62_done: {
             sg_62: {
                 pos += 1;
-                pos = scan_ws(tokens, pos, atn, follow);
+                pos = scan_ws(tokens, pos, atn, 0);
                 if pos < 0 { break sg_62; }
                 break sg_62_done;
             }
@@ -18987,7 +18987,7 @@ fn scan_declaration_list(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, 
         sg_51_done: {
             sg_51: {
                 pos += 1;
-                pos = scan_ws(tokens, pos, atn, follow);
+                pos = scan_ws(tokens, pos, atn, 0);
                 if pos < 0 { break sg_51; }
                 break sg_51_done;
             }
@@ -19155,7 +19155,7 @@ fn scan_expr(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, follow: i64 
                     pos = scan_operator_(tokens, pos, atn, FOLLOW_MASK_16);
                     if pos < 0 { pos = sp; }
                 }
-                pos = scan_term(tokens, pos, atn, follow);
+                pos = scan_term(tokens, pos, atn, 0);
                 if pos < 0 { break sg_46; }
                 break sg_46_done;
             }
@@ -20076,7 +20076,7 @@ fn scan_supports_conjunction(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredict
             pos = scan_ws(tokens, pos, atn, FOLLOW_MASK_41);
             if pos < 0 { break sg_27; }
             atn.stack.push(1280);
-            pos = scan_supports_condition_in_parens(tokens, pos, atn, follow);
+            pos = scan_supports_condition_in_parens(tokens, pos, atn, 0);
             atn.stack.pop();
             if pos < 0 { break sg_27; }
             break sg_27_done;
@@ -20102,7 +20102,7 @@ fn scan_supports_conjunction(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredict
                 pos = scan_ws(tokens, pos, atn, FOLLOW_MASK_41);
                 if pos < 0 { break sg_28; }
                 atn.stack.push(1280);
-                pos = scan_supports_condition_in_parens(tokens, pos, atn, follow);
+                pos = scan_supports_condition_in_parens(tokens, pos, atn, 0);
                 atn.stack.pop();
                 if pos < 0 { break sg_28; }
                 break sg_28_done;
@@ -20150,7 +20150,7 @@ fn scan_supports_disjunction(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredict
             pos = scan_ws(tokens, pos, atn, FOLLOW_MASK_41);
             if pos < 0 { break sg_24; }
             atn.stack.push(1304);
-            pos = scan_supports_condition_in_parens(tokens, pos, atn, follow);
+            pos = scan_supports_condition_in_parens(tokens, pos, atn, 0);
             atn.stack.pop();
             if pos < 0 { break sg_24; }
             break sg_24_done;
@@ -20176,7 +20176,7 @@ fn scan_supports_disjunction(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredict
                 pos = scan_ws(tokens, pos, atn, FOLLOW_MASK_41);
                 if pos < 0 { break sg_25; }
                 atn.stack.push(1304);
-                pos = scan_supports_condition_in_parens(tokens, pos, atn, follow);
+                pos = scan_supports_condition_in_parens(tokens, pos, atn, 0);
                 atn.stack.pop();
                 if pos < 0 { break sg_25; }
                 break sg_25_done;
@@ -20671,7 +20671,7 @@ fn scan_font_family_name_list(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredic
                 pos += 1;
                 pos = scan_ws(tokens, pos, atn, FOLLOW_MASK_27);
                 if pos < 0 { break sg_34; }
-                pos = scan_font_family_name(tokens, pos, atn, follow);
+                pos = scan_font_family_name(tokens, pos, atn, 0);
                 if pos < 0 { break sg_34; }
                 break sg_34_done;
             }
@@ -20798,7 +20798,7 @@ fn scan_feature_value_definition(tokens: &Array<i32>, pos: i32, atn: &mut AtnPre
             sg_32: {
                 pos = scan_ws(tokens, pos, atn, FOLLOW_MASK_49);
                 if pos < 0 { break sg_32; }
-                pos = scan_number(tokens, pos, atn, follow);
+                pos = scan_number(tokens, pos, atn, 0);
                 if pos < 0 { break sg_32; }
                 break sg_32_done;
             }
@@ -22308,7 +22308,7 @@ fn _parse_expression__inner(p: &mut Parser, follow: i64 = 0) -> () {
         }
         p.site = 111;
         p.atn_ret_pending = 704;
-        _parse_ws(p, follow);
+        _parse_ws(p, 0);
     }
     return;
 }
@@ -22718,7 +22718,7 @@ fn _parse_declaration_list__inner(p: &mut Parser, follow: i64 = 0) -> () {
         p.take();
         p.site = 137;
         p.atn_ret_pending = 811;
-        _parse_ws(p, follow);
+        _parse_ws(p, 0);
         if !kind_set_has(&SYNC_49, p.kinds[p.pos]) { builtin::cold_path(); p.sync_back(&SYNC_49, &EXPECTED_49); }
     }
     p.site = 138;
@@ -23054,7 +23054,7 @@ fn _parse_expr__inner(p: &mut Parser, follow: i64 = 0) -> () {
                         pos = scan_operator_(tokens, pos, &mut p.atn, FOLLOW_MASK_16);
                         if pos < 0 { pos = sp; }
                     }
-                    pos = scan_term(tokens, pos, &mut p.atn, follow);
+                    pos = scan_term(tokens, pos, &mut p.atn, 0);
                     if pos < 0 { break sg_15; }
                     break sg_15_done;
                 }
@@ -23085,7 +23085,7 @@ fn _parse_expr__inner(p: &mut Parser, follow: i64 = 0) -> () {
         }
         p.site = 155;
         p.atn_ret_pending = 885;
-        _parse_term(p, follow);
+        _parse_term(p, 0);
     }
     return;
 }
@@ -24584,7 +24584,7 @@ fn _parse_supports_conjunction__inner(p: &mut Parser, follow: i64 = 0) -> () {
                         pos = scan_ws(tokens, pos, &mut p.atn, FOLLOW_MASK_41);
                         if pos < 0 { break sg_16; }
                         p.atn.stack.push(1280);
-                        pos = scan_supports_condition_in_parens(tokens, pos, &mut p.atn, follow);
+                        pos = scan_supports_condition_in_parens(tokens, pos, &mut p.atn, 0);
                         p.atn.stack.pop();
                         if pos < 0 { break sg_16; }
                         break sg_16_done;
@@ -24627,7 +24627,7 @@ fn _parse_supports_conjunction__inner(p: &mut Parser, follow: i64 = 0) -> () {
         _parse_ws(p, FOLLOW_MASK_41);
         p.site = 263;
         p.atn_ret_pending = 1280;
-        _parse_supports_condition_in_parens(p, follow);
+        _parse_supports_condition_in_parens(p, 0);
     }
     return;
 }
@@ -24678,7 +24678,7 @@ fn _parse_supports_disjunction__inner(p: &mut Parser, follow: i64 = 0) -> () {
                         pos = scan_ws(tokens, pos, &mut p.atn, FOLLOW_MASK_41);
                         if pos < 0 { break sg_17; }
                         p.atn.stack.push(1304);
-                        pos = scan_supports_condition_in_parens(tokens, pos, &mut p.atn, follow);
+                        pos = scan_supports_condition_in_parens(tokens, pos, &mut p.atn, 0);
                         p.atn.stack.pop();
                         if pos < 0 { break sg_17; }
                         break sg_17_done;
@@ -24721,7 +24721,7 @@ fn _parse_supports_disjunction__inner(p: &mut Parser, follow: i64 = 0) -> () {
         _parse_ws(p, FOLLOW_MASK_41);
         p.site = 269;
         p.atn_ret_pending = 1304;
-        _parse_supports_condition_in_parens(p, follow);
+        _parse_supports_condition_in_parens(p, 0);
     }
     return;
 }
@@ -25562,7 +25562,7 @@ fn _parse_font_family_name_list__inner(p: &mut Parser, follow: i64 = 0) -> () {
                     pos += 1;
                     pos = scan_ws(tokens, pos, &mut p.atn, FOLLOW_MASK_27);
                     if pos < 0 { break sg_18; }
-                    pos = scan_font_family_name(tokens, pos, &mut p.atn, follow);
+                    pos = scan_font_family_name(tokens, pos, &mut p.atn, 0);
                     if pos < 0 { break sg_18; }
                     break sg_18_done;
                 }
@@ -25594,7 +25594,7 @@ fn _parse_font_family_name_list__inner(p: &mut Parser, follow: i64 = 0) -> () {
         _parse_ws(p, FOLLOW_MASK_27);
         p.site = 349;
         p.atn_ret_pending = 1645;
-        _parse_font_family_name(p, follow);
+        _parse_font_family_name(p, 0);
     }
     return;
 }
@@ -25786,7 +25786,7 @@ fn _parse_feature_value_definition__inner(p: &mut Parser, follow: i64 = 0) -> ()
                 sg_20: {
                     pos = scan_ws(tokens, pos, &mut p.atn, FOLLOW_MASK_49);
                     if pos < 0 { break sg_20; }
-                    pos = scan_number(tokens, pos, &mut p.atn, follow);
+                    pos = scan_number(tokens, pos, &mut p.atn, 0);
                     if pos < 0 { break sg_20; }
                     break sg_20_done;
                 }
@@ -25814,7 +25814,7 @@ fn _parse_feature_value_definition__inner(p: &mut Parser, follow: i64 = 0) -> ()
         _parse_ws(p, FOLLOW_MASK_49);
         p.site = 366;
         p.atn_ret_pending = 1718;
-        _parse_number(p, follow);
+        _parse_number(p, 0);
     }
     return;
 }
