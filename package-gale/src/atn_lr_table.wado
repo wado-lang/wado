@@ -95,6 +95,8 @@ pub fn gen_lr_decide_fn(w: &mut CodeWriter, decision: i32, table: &LrTable, anal
         if follow {
             w.line(`if !follow_admits(tokens, pos, follow, &FOLLOW_SETS, TK_EOF) { return ${e.alt}; }`);
         }
+        // Only `e.alt` takes the token, so only a caller can contest it.
+        w.line(`return atn_lr_enter_or_ask(&ATN_SIM, atn, ${decision}, ${e.alt}, tokens, pos, TK_EOF, min_prec);`);
         w.end_with(",");
     }
     if !table.contested.is_empty() {
