@@ -26,11 +26,7 @@ use crate::ast::{AstId, GenericParam};
 use crate::defs::DefId;
 use crate::elaborator::sig;
 use crate::elaborator::solver_bridge::SolverBridge;
-use crate::name::{
-    FqTypeName, NEVER_TYPE_NAME, RefKind, UNIT_TYPE_NAME, display_assoc_type_projection,
-    display_generic_name, display_tuple_type, mangle_builtin_array_type, ref_type_name,
-    type_pack_name,
-};
+use crate::name::FqTypeName;
 use crate::resolve::Resolutions;
 
 /// Pipeline-wide type knowledge — the type arena, the cross-module decl
@@ -591,79 +587,9 @@ impl TypeSystem {
         bound_param_name(self.type_table.borrow().get(type_id)).cloned()
     }
 
-    /// Render a type as a user-facing Wado type string (used in diagnostics
-    /// and synthesized names). Recurses through references, generic args,
-    /// tuples, and function types.
+    /// [`TypeTable::type_name`], the one diagnostic spelling of a type.
     pub(crate) fn type_id_to_string(&self, type_id: TypeId) -> String {
-        let resolved = self.type_table.borrow().get(type_id).clone();
-        match resolved {
-            ResolvedType::Primitive(prim) => format!("{prim:?}").to_lowercase(),
-            ResolvedType::Struct { def, .. } => self.type_table.borrow().struct_head_decl_name(def),
-            ResolvedType::GenericInstance { def, type_args } => {
-                let name = self.type_table.borrow().def_name(def).to_string();
-                let args: Vec<String> = type_args
-                    .iter()
-                    .map(|&t| self.type_id_to_string(t))
-                    .collect();
-                if self.type_table.borrow().is_tuple_def(def) {
-                    display_tuple_type(&args)
-                } else {
-                    display_generic_name(&name, &args)
-                }
-            }
-            ResolvedType::BuiltinArray(elem) => {
-                mangle_builtin_array_type(&self.type_id_to_string(elem))
-            }
-            ResolvedType::Ref(inner) => {
-                ref_type_name(RefKind::Shared, &self.type_id_to_string(inner))
-            }
-            ResolvedType::MutRef(inner) => {
-                ref_type_name(RefKind::Mut, &self.type_id_to_string(inner))
-            }
-            ResolvedType::Function {
-                params,
-                return_type,
-                ..
-            } => {
-                let param_strs: Vec<String> =
-                    params.iter().map(|&t| self.type_id_to_string(t)).collect();
-                let ret_str = self.type_id_to_string(return_type);
-                format!("fn({}) -> {}", param_strs.join(", "), ret_str)
-            }
-            ResolvedType::TypeParam { name, .. } | ResolvedType::AssocParam { name, .. } => name,
-            ResolvedType::InferVar(var) => var.to_string(),
-            ResolvedType::Enum { def }
-            | ResolvedType::Resource { def }
-            | ResolvedType::Variant { def }
-            | ResolvedType::Newtype { def, .. }
-            | ResolvedType::Flags { def } => self.type_table.borrow().def_name(def).to_string(),
-            ResolvedType::GenericResource { def, type_args } => {
-                let args: Vec<String> = type_args
-                    .iter()
-                    .map(|&t| self.type_id_to_string(t))
-                    .collect();
-                display_generic_name(self.type_table.borrow().def_name(def), &args)
-            }
-            ResolvedType::TypePack { name, .. } => type_pack_name(&name),
-            ResolvedType::AssocTypeProjection {
-                param_id,
-                assoc_name,
-                args,
-                ..
-            } => {
-                let args: Vec<String> = args.iter().map(|&t| self.type_id_to_string(t)).collect();
-                display_assoc_type_projection(
-                    &self.type_id_to_string(param_id),
-                    &assoc_name,
-                    &args,
-                    None,
-                )
-            }
-            ResolvedType::Unit => UNIT_TYPE_NAME.to_string(),
-            ResolvedType::Never => NEVER_TYPE_NAME.to_string(),
-            ResolvedType::Unknown => "<unknown>".to_string(),
-            ResolvedType::Error => "<error>".to_string(),
-        }
+        self.type_table.borrow().type_name(type_id)
     }
 
     /// Whether `==` / `!=` compares these operands as unrestricted resource

@@ -5164,8 +5164,8 @@ impl TypeTable {
             ResolvedType::Primitive(p) => p.as_str().to_string(),
             ResolvedType::Unit => UNIT_TYPE_NAME.to_string(),
             ResolvedType::Never => NEVER_TYPE_NAME.to_string(),
-            ResolvedType::Unknown => "unknown".to_string(),
-            ResolvedType::Error => "error".to_string(),
+            ResolvedType::Unknown => "<unknown>".to_string(),
+            ResolvedType::Error => "<error>".to_string(),
             ResolvedType::BuiltinArray(elem) => mangle_builtin_array_type(&type_name(*elem)),
             ResolvedType::Struct {
                 def: StructDef::Anon(id),
@@ -5179,15 +5179,8 @@ impl TypeTable {
                     (true, Some(decl)) => self.head_name(decl, true),
                     _ => self.struct_head_decl_name(*def),
                 };
-                if type_args.is_empty() {
-                    head
-                } else {
-                    let args: Vec<String> = type_args
-                        .iter()
-                        .map(|&a| self.mangle_type_arg_rowless(a))
-                        .collect();
-                    mangle_generic_name(&head, &args)
-                }
+                let args: Vec<String> = type_args.iter().map(|t| type_name(*t)).collect();
+                display_generic_name(&head, &args)
             }
             ResolvedType::Enum { def } | ResolvedType::Resource { def } => {
                 self.head_name(*def, qualified)

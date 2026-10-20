@@ -27,12 +27,12 @@ use crate::elaborator::orchestration::first_infer_span;
 use crate::elaborator::reify::reserve_float_pattern_locals;
 use crate::elaborator::sem::types::{BodyFacts, DesugarKind, ForOfIteratorInfo};
 use crate::elaborator::synth::ArgClass;
+use crate::elaborator::trait_env::written_type_source;
 use crate::elaborator::trait_query::assoc_const_owner;
 use crate::elaborator::types::{GenericNewtypeInfo, ImplMemberKind, ParamSlot, StructFieldInfo};
 use crate::name::{
-    RefKind, constant_pattern_local_name, display_generic_name, display_tuple_type, for_body_label,
-    mangle_local_item_name, minted_name, namespace_member_alias, range_local_name, ref_type_name,
-    type_pack_name,
+    constant_pattern_local_name, for_body_label, mangle_local_item_name, minted_name,
+    namespace_member_alias, range_local_name,
 };
 use crate::primitive::PrimitiveType;
 use crate::resolve::Resolutions;
@@ -1130,7 +1130,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let Some(qualifier) = qualifier else {
             return case_name.to_string();
         };
-        format!("{}::{case_name}", format_pattern_qualifier_type(qualifier))
+        format!("{}::{case_name}", written_type_source(qualifier))
     }
 
     /// `type_id` wrapped in the scrutinee's reference kind — the one place that
@@ -3229,32 +3229,6 @@ impl TypeSystem {
             return true;
         };
         head.decl() == Some(written)
-    }
-}
-
-fn format_pattern_qualifier_type(ty: &Type) -> String {
-    let list = |args: &[Type]| {
-        args.iter()
-            .map(format_pattern_qualifier_type)
-            .collect::<Vec<_>>()
-    };
-    match ty {
-        Type::Named(t) => t.name.clone(),
-        Type::Generic(t) => display_generic_name(&t.name, &list(&t.args)),
-        Type::NamespacedGeneric(t) => {
-            display_generic_name(&format!("{}::{}", t.namespace, t.name), &list(&t.args))
-        }
-        Type::Function(_) => "fn".to_string(),
-        Type::Tuple(types) => display_tuple_type(&list(types)),
-        Type::Reference(inner) => {
-            ref_type_name(RefKind::Shared, &format_pattern_qualifier_type(inner))
-        }
-        Type::MutReference(inner) => {
-            ref_type_name(RefKind::Mut, &format_pattern_qualifier_type(inner))
-        }
-        Type::TypePackSpread(name, _) => type_pack_name(name),
-        Type::Infer(_) => "_".to_string(),
-        Type::Error(_) => "<error>".to_string(),
     }
 }
 
