@@ -239,21 +239,18 @@ impl TypeSystem {
                     | ResolvedType::AssocTypeProjection { .. }
             )
         };
-        let pointee = self.newtype_erased(pointee);
-        if open(&self.type_table.borrow().get(pointee)) {
+        let head_key = |ty: TypeId| {
+            let tt = self.type_table.borrow();
+            tt.type_key(tt.representation_head(ty))
+        };
+        let pointee = self.type_table.borrow().representation_head(pointee);
+        if open(self.type_table.borrow().get(pointee)) {
             return true;
         }
-        let target = self.type_table.borrow().type_key(pointee);
+        let target = head_key(pointee);
         self.reaches(place, &|ty, resolved| {
-            open(resolved) || self.type_table.borrow().type_key(self.newtype_erased(ty)) == target
+            open(resolved) || head_key(ty) == target
         })
-    }
-
-    fn newtype_erased(&self, mut type_id: TypeId) -> TypeId {
-        while let ResolvedType::Newtype { base_type, .. } = self.type_table.borrow().get(type_id) {
-            type_id = *base_type;
-        }
-        type_id
     }
 
     /// A declaration's fields name its own parameters, which its arguments
