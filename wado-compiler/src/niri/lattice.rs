@@ -615,6 +615,13 @@ impl Interpreter<'_> {
                 prim: PrimitiveType::I32,
             }),
             &CtfeBuiltin::AmbientStdio(writes) => Lattice::Const(Value::Bool(writes)),
+            CtfeBuiltin::IsMoved => match args {
+                [place] => match self.operand_lattice_folded(body, place.expr) {
+                    Lattice::Const(Value::Null) => Lattice::Const(Value::Bool(true)),
+                    _ => Lattice::Unevaluated,
+                },
+                _ => Lattice::Unevaluated,
+            },
             CtfeBuiltin::ArraySet
             | CtfeBuiltin::ArrayCopy
             | CtfeBuiltin::ArrayRelease
