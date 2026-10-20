@@ -117,6 +117,29 @@ test "predict resolves a two-token shared-prefix decision" {
     assert adaptive_predict(&sim, d, &to_kinds(&brack), 0, eof) == 1, "ID '[' ']' should pick alt 1";
 }
 
+global K2_BRACE_G4: String = "
+grammar T;
+a : ID '(' ')' | ID '{' '}' ;
+ID : 'a'..'z'+ ;
+WS : ' ' -> skip ;
+";
+
+// The program-wide DFA caches one ATN's predictions, so a second ATN, even one
+// of the same size, must not read them.
+#[expect_trap]
+test "the shared DFA refuses a second ATN of the same size" {
+    let first = build_atn(&parse(K2_G4).unwrap());
+    let second = build_atn(&parse(K2_BRACE_G4).unwrap());
+    assert first.states.len() == second.states.len();
+    let kinds = to_kinds(&[
+        mk(0),
+        mk(4),
+        mk(5),
+    ]);
+    atn_predict_once(&decode(&first), rule_block_decision(&first, 0), &mut AtnPredictor::new(), &kinds, 0, 2);
+    atn_predict_once(&decode(&second), rule_block_decision(&second, 0), &mut AtnPredictor::new(), &kinds, 0, 2);
+}
+
 // ANTLR4 finds the viable alternatives first and only then drops the ones a
 // false predicate gates (`doc/predicates.md`), so disabling the only viable alt
 // leaves none rather than handing the decision to one the input cannot take.

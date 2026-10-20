@@ -39,7 +39,7 @@ use crate::optimize::heap_effect::{Effect, HeapEffects, HeapEffectsCache, LazyHe
 /// type arriving under another id is still a hit, each with the local the write
 /// goes through where its receiver is one.
 #[derive(Default)]
-struct FieldWrites(IndexSet<(TypeKey, u32, Option<u32>)>);
+struct FieldWrites(IndexMap<(TypeKey, u32), IndexSet<Option<u32>>>);
 
 impl FieldWrites {
     fn insert(
@@ -50,7 +50,9 @@ impl FieldWrites {
         type_table: &TypeTable,
     ) {
         self.0
-            .insert((type_table.type_key(pointee), field_idx, receiver));
+            .entry((type_table.type_key(pointee), field_idx))
+            .or_default()
+            .insert(receiver);
     }
 
     /// Whether a write may reach `root`'s object: one through no local, or
@@ -62,10 +64,13 @@ impl FieldWrites {
         type_table: &TypeTable,
         shares: impl Fn(u32) -> bool,
     ) -> bool {
-        let key = type_table.type_key(pointee);
         self.0
-            .iter()
-            .any(|&(k, f, receiver)| k == key && f == field_idx && receiver.is_none_or(&shares))
+            .get(&(type_table.type_key(pointee), field_idx))
+            .is_some_and(|receivers| {
+                receivers
+                    .iter()
+                    .any(|receiver| receiver.is_none_or(&shares))
+            })
     }
 }
 

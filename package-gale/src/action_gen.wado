@@ -651,8 +651,8 @@ pub fn ambiguous_group_predicate_gated(amb_alts: &List<i32>, alts: &List<Alterna
 /// Walks the whole tree, not just its root, to stay symmetric with emit (which
 /// gates a node nested under a `Dispatch` too). A node is gated when it either
 /// dispatches by the grammar-order predicate chain (interchangeable), or routes
-/// through the runtime ATN — where a false gate drops its alts from the viable
-/// set the simulator finds (`disabled_alts`) instead.
+/// through the runtime ATN — where the simulator closes the edges of the false
+/// predicates it is handed (`false_preds`) instead.
 fn collect_gated_ambiguous_alts(
     node: &PredictionNode,
     alts: &List<Alternative>,
@@ -681,7 +681,7 @@ fn collect_gated_ambiguous_alts(
 }
 
 /// Whether an `Ambiguous` node routes through the runtime ATN *and* carries a
-/// gateable predicate — so its gate alts feed the simulator's `disabled_alts`
+/// gateable predicate — so its predicates feed the simulator's `false_preds`
 /// rather than an inline dispatch chain.
 fn ambiguous_group_atn_predicate_gated(
     a: &AmbiguousNode,

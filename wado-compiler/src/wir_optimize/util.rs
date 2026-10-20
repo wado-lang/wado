@@ -204,7 +204,7 @@ impl Footprint {
 /// one reload. That measured slower, so `CalleeWrites` is not consulted inside
 /// one (`.claude/skills/wado-performance/trade-offs.md`).
 pub(super) fn is_cold_arm(arm: &[WirInstr]) -> bool {
-    arm.iter().any(|instr| matches!(instr, WirInstr::ColdPath))
+    WirInstr::marks_cold_path(arm)
 }
 
 /// The struct fields each defined function may write, its callees' writes
@@ -232,31 +232,26 @@ impl CalleeWrites {
             fields.push(own);
             callees.push(calls);
         }
-        let mut changed = true;
-        while changed {
-            changed = false;
-            for f in 0..fields.len() {
-                for &c in &callees[f] {
-                    let Some(own) = &fields[f] else {
-                        break;
-                    };
-                    if c == f {
-                        continue;
-                    }
-                    let Some(written) = &fields[c] else {
-                        fields[f] = None;
-                        changed = true;
-                        break;
-                    };
-                    let missing: Vec<String> = written
-                        .iter()
-                        .filter(|name| !own.contains(*name))
-                        .cloned()
-                        .collect();
-                    if !missing.is_empty() {
-                        fields[f].as_mut().expect("bound above").extend(missing);
-                        changed = true;
-                    }
+        let mut callers: Vec<Vec<usize>> = vec![Vec::new(); fields.len()];
+        for (f, calls) in callees.iter_mut().enumerate() {
+            calls.sort_unstable();
+            calls.dedup();
+            calls.retain(|&c| c != f);
+            for &c in calls.iter() {
+                callers[c].push(f);
+            }
+        }
+        let mut pending: Vec<usize> = (0..fields.len()).collect();
+        let mut queued = vec![true; fields.len()];
+        while let Some(f) = pending.pop() {
+            queued[f] = false;
+            if !absorb_callee_writes(&mut fields, f, &callees[f]) {
+                continue;
+            }
+            for &caller in &callers[f] {
+                if !queued[caller] {
+                    queued[caller] = true;
+                    pending.push(caller);
                 }
             }
         }
@@ -271,6 +266,35 @@ impl CalleeWrites {
         let position = index.checked_sub(self.defined_func_base)? as usize;
         self.fields.get(position)?.as_ref()
     }
+}
+
+/// Extend what `f` writes by what each of `calls` writes, and say whether that
+/// changed it.
+fn absorb_callee_writes(
+    fields: &mut [Option<IndexSet<String>>],
+    f: usize,
+    calls: &[usize],
+) -> bool {
+    let mut changed = false;
+    for &c in calls {
+        let Some(own) = &fields[f] else {
+            return changed;
+        };
+        let Some(written) = &fields[c] else {
+            fields[f] = None;
+            return true;
+        };
+        let missing: Vec<String> = written
+            .iter()
+            .filter(|name| !own.contains(*name))
+            .cloned()
+            .collect();
+        if !missing.is_empty() {
+            fields[f].as_mut().expect("bound above").extend(missing);
+            changed = true;
+        }
+    }
+    changed
 }
 
 fn direct_writes(

@@ -141,6 +141,26 @@ test "a block of distinct terminals matches them by one set transition" {
     assert_sim_matches_atn(&atn_decode(&atn_blob_bytes(&atn)), &atn);
 }
 
+fn alternatives_g4(count: i32) -> String {
+    let mut g4 = "grammar T;\na : ID ID";
+    for let _ of 1..<count {
+        g4.push_str(" | ID ID");
+    }
+    g4.push_str(" ;\nID : [a-z]+ ;\n");
+    return g4;
+}
+
+test "a decision holds up to one alternative fewer than the failed-alternative offset" {
+    build_atn(&parse(alternatives_g4(1023)).unwrap());
+}
+
+// The simulator marks an alternative a predicate failed by offsetting it, so a
+// decision that wide would read its higher alternatives as failed ones.
+#[expect_trap]
+test "a decision as wide as the failed-alternative offset is refused" {
+    build_atn(&parse(alternatives_g4(1024)).unwrap());
+}
+
 test "ATN has one start/stop per parser rule" {
     let g = parse(NON_GREEDY_G4).unwrap();
     let atn = build_atn(&g);

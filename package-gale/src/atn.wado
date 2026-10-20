@@ -44,6 +44,7 @@ use {
     ATN_TR_PRECEDENCE,
     ATN_TR_SET,
 } from "./runtime/atn.wado";
+use { ATN_FAILED_ALT } from "./runtime/atn_predict.wado";
 use { HashMap } from "core:collections";
 
 // ATN state kinds and transition kinds are the wire-format protocol shared
@@ -53,7 +54,7 @@ use { HashMap } from "core:collections";
 // not on the kind); the kind tells the closure how to traverse (`RuleStop`
 // pops a return frame, loop-back states re-enter the decision, etc.).
 // Transition `label`/`follow`/`prec` carry kind-specific data:
-//  - Epsilon: all -1.
+//  - Epsilon: `label` = the action id of the predicate guarding it, else -1.
 //  - Atom: `label` = token kind.
 //  - NotAtom: `label` = the single excluded token kind.
 //  - Set: `label` = index into `Atn.sets`, the token kinds it matches.
@@ -279,6 +280,10 @@ pub fn build_atn_with(grammar: &Grammar, lowered: &LoweredGrammar, num_tokens: i
         };
         b.add_eps(b.rule_start[r], body.0);
         b.add_eps(body.1, b.rule_stop[r]);
+    }
+    for let d of &b.decision_state {
+        assert b.states[*d].transitions.len() < ATN_FAILED_ALT,
+            "a decision must leave the simulator room to mark an alternative failed";
     }
 
     return Atn {

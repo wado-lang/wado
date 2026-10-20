@@ -292,7 +292,10 @@ impl SllExplorer {
     /// The start state's closure. An alternative that comes back to the
     /// decision state through a precedence edge has consumed nothing, so it is
     /// dropped there, as in the runtime's `atn_closure`; that depends on the
-    /// alternative, so no place memo serves it.
+    /// alternative, so no place memo serves it. Every configuration starts at
+    /// precedence 0, whatever `min_prec` the call asks at: an edge a higher one
+    /// closes reopens in an outer frame of the rule, the outermost of which
+    /// runs at 0, so the alternative the DFA keeps survives at every `min_prec`.
     fn start_closure(&mut self, dstate: i32) -> Option<List<SllConfig>> {
         let mut work: List<SllConfig> = [];
         let ts = &self.atn.states[dstate].transitions;
