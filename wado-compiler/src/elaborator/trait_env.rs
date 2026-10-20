@@ -2898,24 +2898,16 @@ pub(super) fn header_as_written(header: &ImplHeader) -> String {
 ///
 /// Renders the AST, so nothing reads it back into a declaration.
 pub(super) fn written_type_source(ty: &ast::Type) -> String {
-    let list = |args: &[ast::Type]| {
-        args.iter()
-            .map(written_type_source)
-            .collect::<Vec<_>>()
-            .join(", ")
-    };
+    let list = |args: &[ast::Type]| args.iter().map(written_type_source).collect::<Vec<_>>();
     match ty {
         ast::Type::Named(named) => named.name.clone(),
-        ast::Type::Generic(g) => format!("{}<{}>", g.name, list(&g.args)),
+        ast::Type::Generic(g) => name::display_generic_name(&g.name, &list(&g.args)),
         ast::Type::NamespacedGeneric(ns) => {
-            format!("{}::{}<{}>", ns.namespace, ns.name, list(&ns.args))
+            name::display_generic_name(&format!("{}::{}", ns.namespace, ns.name), &list(&ns.args))
         }
         ast::Type::Function(ft) => name::display_fn_type(
             ft.is_mut,
-            &ft.params
-                .iter()
-                .map(written_type_source)
-                .collect::<Vec<_>>(),
+            &list(&ft.params),
             &written_type_source(&ft.return_type),
             matches!(ft.return_type, ast::Type::Function(_)),
             &ft.effects
@@ -2923,10 +2915,14 @@ pub(super) fn written_type_source(ty: &ast::Type) -> String {
                 .map(|e| e.name.clone())
                 .collect::<Vec<_>>(),
         ),
-        ast::Type::Tuple(elems) => format!("[{}]", list(elems)),
-        ast::Type::Reference(inner) => format!("&{}", written_type_source(inner)),
-        ast::Type::MutReference(inner) => format!("&mut {}", written_type_source(inner)),
-        ast::Type::TypePackSpread(name, _) => format!("..{name}"),
+        ast::Type::Tuple(elems) => name::display_tuple_type(&list(elems)),
+        ast::Type::Reference(inner) => {
+            name::ref_type_name(name::RefKind::Shared, &written_type_source(inner))
+        }
+        ast::Type::MutReference(inner) => {
+            name::ref_type_name(name::RefKind::Mut, &written_type_source(inner))
+        }
+        ast::Type::TypePackSpread(pack, _) => name::type_pack_name(pack),
         ast::Type::Infer(_) => "_".to_string(),
         ast::Type::Error(_) => "<error>".to_string(),
     }

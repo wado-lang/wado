@@ -28,7 +28,7 @@ use crate::cm_abi::{
 use crate::defs::{DefId, DefTable};
 use crate::lexer::lex;
 use crate::module_source::{CmNamespace, ModuleSource};
-use crate::name::{DeclName, DeclPath, UNIT_TYPE_NAME, to_cm_name};
+use crate::name::{DeclName, DeclPath, RefKind, UNIT_TYPE_NAME, ref_type_name, to_cm_name};
 use crate::parser::Parser;
 use crate::primitive::PrimitiveType;
 use crate::resolve::Resolutions;
@@ -1999,8 +1999,8 @@ impl CmInterfaceRegistry {
                 Some(source) => format!("{source}#{}", n.name),
                 None => n.name.clone(),
             },
-            Type::Reference(inner) => format!("&{}", self.type_key(inner)),
-            Type::MutReference(inner) => format!("&mut {}", self.type_key(inner)),
+            Type::Reference(inner) => ref_type_name(RefKind::Shared, &self.type_key(inner)),
+            Type::MutReference(inner) => ref_type_name(RefKind::Mut, &self.type_key(inner)),
             Type::Generic(g) => format!("{}:{}", g.name, keys(&g.args)),
             Type::NamespacedGeneric(g) => {
                 format!("{}::{}:{}", g.namespace, g.name, keys(&g.args))

@@ -16,9 +16,9 @@ use crate::module_source::{CmNamespace, ModuleSource};
 use crate::name;
 use crate::name::{
     FqTraitName, FqTypeName, INTERNAL_PREFIX, NEVER_TYPE_NAME, Receiver, RefKind,
-    TEMPLATE_SHAPE_PREFIX, TypeHead, TypeNameInfo, UNIT_TYPE_NAME, display_assoc_type_projection,
-    display_generic_name, display_tuple_type, format_type_name, mangle_assoc_type_projection,
-    mangle_builtin_array_type, mangle_declared_type, mangle_generic_name, mangle_local_item_name,
+    TEMPLATE_SHAPE_PREFIX, TypeHead, TypeNameInfo, UNIT_TYPE_NAME, assoc_type_projection_name,
+    display_assoc_type_projection, display_generic_name, display_tuple_type, format_type_name,
+    mangle_builtin_array_type, mangle_declared, mangle_generic_name, mangle_local_item_name,
     mangle_tuple_type, ref_type_name, type_pack_name,
 };
 use crate::primitive::PrimitiveType;
@@ -5286,7 +5286,7 @@ impl TypeTable {
                     mangle_tuple_type(&args)
                 } else {
                     let unqualified = mangle_generic_name(&self.decl_render_name(*def), &args);
-                    mangle_declared_type(module_source, &unqualified)
+                    mangle_declared(module_source, &unqualified)
                 }
             }
             ResolvedType::BuiltinArray(elem) => {
@@ -5405,7 +5405,7 @@ impl TypeTable {
                     return mangle_tuple_type(&args);
                 }
                 let unqualified = mangle_generic_name(&self.decl_render_name(*def), &args);
-                mangle_declared_type(self.def_module(*def), &unqualified)
+                mangle_declared(self.def_module(*def), &unqualified)
             }
             ResolvedType::Ref(inner) => {
                 ref_type_name(RefKind::Shared, &self.mangle_type_arg_erased(*inner))
@@ -5740,7 +5740,7 @@ impl TypeTable {
             // well.
             // The identity every mangled name embeds, so the rendered
             // spelling: each instantiation is its own type.
-            ResolvedType::Struct { def, type_args } => TypeNameInfo::Named(mangle_declared_type(
+            ResolvedType::Struct { def, type_args } => TypeNameInfo::Named(mangle_declared(
                 self.struct_head_module(*def),
                 &self.struct_rendered_name(*def, type_args),
             )),
@@ -5748,10 +5748,9 @@ impl TypeTable {
             | ResolvedType::Resource { def }
             | ResolvedType::Variant { def }
             | ResolvedType::Newtype { def, .. }
-            | ResolvedType::Flags { def } => TypeNameInfo::Named(mangle_declared_type(
-                self.def_module(*def),
-                self.def_name(*def),
-            )),
+            | ResolvedType::Flags { def } => {
+                TypeNameInfo::Named(mangle_declared(self.def_module(*def), self.def_name(*def)))
+            }
             // A type parameter is a template's own binder, not a declaration.
             ResolvedType::TypeParam { name, .. } => TypeNameInfo::Named(name.clone()),
             ResolvedType::AssocParam { .. } => {
@@ -5770,7 +5769,7 @@ impl TypeTable {
                     return TypeNameInfo::Tuple(args);
                 }
                 TypeNameInfo::Generic {
-                    name: mangle_declared_type(self.def_module(*def), &self.decl_render_name(*def)),
+                    name: mangle_declared(self.def_module(*def), &self.decl_render_name(*def)),
                     args,
                 }
             }
@@ -5803,7 +5802,7 @@ impl TypeTable {
                 ..
             } => {
                 let base =
-                    mangle_assoc_type_projection(&self.mangle_type_name(*param_id), assoc_name);
+                    assoc_type_projection_name(&self.mangle_type_name(*param_id), assoc_name);
                 if args.is_empty() {
                     TypeNameInfo::Named(base)
                 } else {

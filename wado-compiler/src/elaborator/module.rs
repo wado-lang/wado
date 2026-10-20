@@ -15,7 +15,10 @@ use crate::elaborator::item::{
     register_enum_compiler_items, register_function_compiler_item, register_method_compiler_item,
     register_trait_compiler_item, register_variant_compiler_items,
 };
-use crate::name::{FqTypeName, MethodName, RefKind, TUPLE_TYPE_NAME, UNIT_TYPE_NAME};
+use crate::name::{
+    FqTypeName, MethodName, RefKind, TUPLE_TYPE_NAME, UNIT_TYPE_NAME, display_generic_name,
+    ref_type_name,
+};
 
 impl<H: CompilerHost> Elaborator<'_, H> {
     pub(super) fn collect_types(&mut self, module: &Module) {
@@ -333,16 +336,20 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     .iter()
                     .map(|a| self.get_type_name_full(a))
                     .collect();
-                format!("{}<{}>", generic.name, args.join(", "))
+                display_generic_name(&generic.name, &args)
             }
             // What the programmer wrote: this renders for diagnostics, where
             // `get_type_name`'s `ns$Name` registry key is not a spelling.
             Type::NamespacedGeneric(g) => {
                 let args: Vec<String> = g.args.iter().map(|a| self.get_type_name_full(a)).collect();
-                format!("{}::{}<{}>", g.namespace, g.name, args.join(", "))
+                display_generic_name(&format!("{}::{}", g.namespace, g.name), &args)
             }
-            Type::Reference(inner) => format!("&{}", self.get_type_name_full(inner)),
-            Type::MutReference(inner) => format!("&mut {}", self.get_type_name_full(inner)),
+            Type::Reference(inner) => {
+                ref_type_name(RefKind::Shared, &self.get_type_name_full(inner))
+            }
+            Type::MutReference(inner) => {
+                ref_type_name(RefKind::Mut, &self.get_type_name_full(inner))
+            }
             _ => self.get_type_name(ty),
         }
     }

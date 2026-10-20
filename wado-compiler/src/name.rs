@@ -2394,14 +2394,15 @@ pub fn mangle_builtin_array_type(elem_type: &str) -> String {
     format!("Array<{elem_type}>")
 }
 
-/// A declared type's mangled name, qualified by the module declaring it:
+/// A declaration's mangled name, qualified by the module declaring it:
 /// `{module}/{name}`.
-pub fn mangle_declared_type(module: impl fmt::Display, name: &str) -> String {
+pub fn mangle_declared(module: impl fmt::Display, name: &str) -> String {
     format!("{module}/{name}")
 }
 
-/// An associated-type projection's mangled head: `{base}::{assoc}`.
-pub fn mangle_assoc_type_projection(base: &str, assoc: &str) -> String {
+/// An associated-type projection's head, `T::Item`: one spelling for a
+/// mangled name and a diagnostic alike.
+pub fn assoc_type_projection_name(base: &str, assoc: &str) -> String {
     format!("{base}::{assoc}")
 }
 
@@ -2453,7 +2454,7 @@ pub fn display_assoc_type_projection(
             let at = display_type_args(trait_args);
             format!("<{base} as {owner}{at}>::{assoc}{args}")
         }
-        None => format!("{base}::{assoc}{args}"),
+        None => format!("{}{args}", assoc_type_projection_name(base, assoc)),
     }
 }
 
@@ -3644,9 +3645,9 @@ impl FqTypeName {
         }
         match &self.head {
             TypeHead::Declared(head) => {
-                out.push_str(&mangle_declared_type(head.module(), head.rendered()));
+                out.push_str(&mangle_declared(head.module(), head.rendered()));
             }
-            TypeHead::Shape { module, name } => out.push_str(&mangle_declared_type(module, name)),
+            TypeHead::Shape { module, name } => out.push_str(&mangle_declared(module, name)),
             // A bucket keys an index and heads no function name; spelled apart
             // from a shape's so the two cannot be read as one.
             TypeHead::ParamBucket { module, name } => {
@@ -3785,7 +3786,7 @@ impl FqTypeName {
         }
         let args: Vec<String> = self.args.iter().map(FqTypeName::to_display).collect();
         if let TypeHead::Tuple = self.head {
-            out.push_str(&format!("[{}]", args.join(", ")));
+            out.push_str(&display_tuple_type(&args));
             return out;
         }
         if let Some(spelled) = self.fn_spelling(
@@ -3797,7 +3798,10 @@ impl FqTypeName {
             return out;
         }
         if let TypeHead::Projection(head) = &self.head {
-            out.push_str(&format!("{}::{}", head.base.to_display(), head.assoc));
+            out.push_str(&assoc_type_projection_name(
+                &head.base.to_display(),
+                &head.assoc,
+            ));
         } else {
             out.push_str(self.head.name());
         }
@@ -4131,7 +4135,7 @@ impl FqTraitName {
     #[must_use]
     pub fn to_mangled(&self) -> String {
         let head = match &self.head {
-            TraitHead::Declared(head) => format!("{}/{}", head.module(), head.rendered()),
+            TraitHead::Declared(head) => mangle_declared(head.module(), head.rendered()),
             TraitHead::Binder(name) => name.clone(),
         };
         let args: Vec<String> = self.args.iter().map(FqTypeName::to_mangled).collect();

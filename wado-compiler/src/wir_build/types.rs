@@ -7,7 +7,7 @@
 
 use crate::compiler_item::SeqField;
 use crate::module_source::ModuleSource;
-use crate::name::{FqTypeName, StructName};
+use crate::name::{FqTypeName, StructName, display_tuple_type};
 use crate::nir::{NirStruct, NirVariantDecl};
 use crate::tir::{ResolvedType, TypeId, TypeTable};
 use crate::wir::{
@@ -650,7 +650,7 @@ fn register_tuple_types(ctx: &mut WirContext<'_>) {
                     .iter()
                     .map(|&e| type_table.mangle_type_arg_rowless_resolving_newtypes(e))
                     .collect();
-                let tuple_display = format!("[{}]", elem_names.join(", "));
+                let tuple_display = display_tuple_type(&elem_names);
                 let fq = wir_tuple_type_key(&tuple_display);
 
                 let fields: Vec<WirField> = elements

@@ -30,8 +30,9 @@ use crate::elaborator::synth::ArgClass;
 use crate::elaborator::trait_query::assoc_const_owner;
 use crate::elaborator::types::{GenericNewtypeInfo, ImplMemberKind, ParamSlot, StructFieldInfo};
 use crate::name::{
-    constant_pattern_local_name, for_body_label, mangle_local_item_name, minted_name,
-    namespace_member_alias, range_local_name,
+    RefKind, constant_pattern_local_name, display_generic_name, display_tuple_type, for_body_label,
+    mangle_local_item_name, minted_name, namespace_member_alias, range_local_name, ref_type_name,
+    type_pack_name,
 };
 use crate::primitive::PrimitiveType;
 use crate::resolve::Resolutions;
@@ -3232,42 +3233,26 @@ impl TypeSystem {
 }
 
 fn format_pattern_qualifier_type(ty: &Type) -> String {
+    let list = |args: &[Type]| {
+        args.iter()
+            .map(format_pattern_qualifier_type)
+            .collect::<Vec<_>>()
+    };
     match ty {
         Type::Named(t) => t.name.clone(),
-        Type::Generic(t) => {
-            let args = t
-                .args
-                .iter()
-                .map(format_pattern_qualifier_type)
-                .collect::<Vec<_>>()
-                .join(", ");
-            format!("{}<{args}>", t.name)
-        }
+        Type::Generic(t) => display_generic_name(&t.name, &list(&t.args)),
         Type::NamespacedGeneric(t) => {
-            if t.args.is_empty() {
-                format!("{}::{}", t.namespace, t.name)
-            } else {
-                let args = t
-                    .args
-                    .iter()
-                    .map(format_pattern_qualifier_type)
-                    .collect::<Vec<_>>()
-                    .join(", ");
-                format!("{}::{}<{args}>", t.namespace, t.name)
-            }
+            display_generic_name(&format!("{}::{}", t.namespace, t.name), &list(&t.args))
         }
         Type::Function(_) => "fn".to_string(),
-        Type::Tuple(types) => {
-            let elems = types
-                .iter()
-                .map(format_pattern_qualifier_type)
-                .collect::<Vec<_>>()
-                .join(", ");
-            format!("[{elems}]")
+        Type::Tuple(types) => display_tuple_type(&list(types)),
+        Type::Reference(inner) => {
+            ref_type_name(RefKind::Shared, &format_pattern_qualifier_type(inner))
         }
-        Type::Reference(inner) => format!("&{}", format_pattern_qualifier_type(inner)),
-        Type::MutReference(inner) => format!("&mut {}", format_pattern_qualifier_type(inner)),
-        Type::TypePackSpread(name, _) => format!("..{name}"),
+        Type::MutReference(inner) => {
+            ref_type_name(RefKind::Mut, &format_pattern_qualifier_type(inner))
+        }
+        Type::TypePackSpread(name, _) => type_pack_name(name),
         Type::Infer(_) => "_".to_string(),
         Type::Error(_) => "<error>".to_string(),
     }
