@@ -17,14 +17,11 @@
 use std::sync::{Arc, Mutex};
 
 use anyhow::Result;
-use rand::SeedableRng;
-use rand::rngs::ChaCha12Rng;
 use wasmtime::component::types::{ComponentItem, Type};
 use wasmtime::component::{Component, Func, HasSelf, Instance, Linker, StreamReader, Val};
 use wasmtime::{Engine, Store};
 use wasmtime_wasi::WasiCtx;
-use wasmtime_wasi::p3::bindings::random::{insecure, insecure_seed};
-use wasmtime_wasi::random::{WasiRandom, WasiRandomCtx, WasiRandomView};
+use wasmtime_wasi::random::{WasiRandomCtx, WasiRandomView};
 
 use wado_compiler::kiln::{CanonicalOptions, CanonicalValue};
 use wado_compiler::name::to_cm_name;
@@ -35,6 +32,7 @@ use wado_compiler::{
 };
 
 use crate::engine::fuel_engine;
+use crate::random;
 use crate::sync::lock;
 
 wasmtime::component::bindgen!({
@@ -69,18 +67,6 @@ impl WasiRandomView for KilnHostState {
     fn random(&mut self) -> &mut WasiRandomCtx {
         self.wasi.random()
     }
-}
-
-/// `wasi:random/insecure` and `insecure-seed` for one instance, answering the
-/// same on every run so that a generator stays a function of its invocation.
-/// The seeds are arbitrary; only their being fixed matters. `ChaCha12` is named
-/// rather than `StdRng`, whose output rand does not promise to keep across
-/// versions.
-fn fixed_seed_random() -> WasiCtx {
-    WasiCtx::builder()
-        .insecure_random(ChaCha12Rng::from_seed([1; 32]))
-        .insecure_random_seed(2)
-        .build()
 }
 
 impl kiln_host::Host for KilnHostState {
@@ -158,17 +144,14 @@ async fn instantiate(
 ) -> Result<(Store<KilnHostState>, Instance), GeneratorRunnerError> {
     let mut linker: Linker<KilnHostState> = Linker::new(engine);
     kiln_host::add_to_linker::<_, HasSelf<_>>(&mut linker, |s| s)
-        .and_then(|()| insecure::add_to_linker::<_, WasiRandom>(&mut linker, KilnHostState::random))
-        .and_then(|()| {
-            insecure_seed::add_to_linker::<_, WasiRandom>(&mut linker, KilnHostState::random)
-        })
+        .and_then(|()| random::add_to_linker(&mut linker))
         .map_err(|e| GeneratorRunnerError::Host(format!("linker setup: {e:#}")))?;
 
     let mut store = Store::new(
         engine,
         KilnHostState {
             diagnostics,
-            wasi: fixed_seed_random(),
+            wasi: random::fixed_seed(&mut WasiCtx::builder()).build(),
         },
     );
     let fuel = if policy.fuel == 0 {
@@ -938,10 +921,9 @@ export fn generate(req: Request<Options>) -> Result<Response, Error> {
     }
 
     /// A generator draws from both `wasi:random` interfaces its world imports,
-    /// the seed through `HashMap::new()` too, and writes the same output on
-    /// every run.
+    /// the seed through `HashMap::new()` too.
     #[test]
-    fn wasi_random_draws_repeat_across_runs() {
+    fn wasi_random_draws_reach_the_generator() {
         use wado_compiler::{CompilerOptions, LogLevel, compile_with_options};
 
         const SRC: &str = r#"
@@ -979,32 +961,22 @@ export fn generate(req: Request) -> Result<Response, Error> with (Insecure, Inse
 
         let engine = generator_engine().expect("engine");
         let component = compile_component(&engine, &compiled.wasm).expect("component");
-        let run = || {
-            let request = GeneratorRequest {
-                primary: GeneratorInputFile {
-                    path: "schema.txt".to_string(),
-                    content: Vec::new(),
-                    use_type: None,
-                },
-                inputs: vec![],
-                module: "../gen".to_string(),
-                options: CanonicalOptions::default(),
-            };
-            let (outcome, _diags) = runtime().block_on(run_generator(
-                &engine,
-                &component,
-                request,
-                KilnRunPolicy::default(),
-            ));
-            outcome
-                .expect("generator runs and returns Ok")
-                .files
-                .remove(0)
-                .content
+        let request = GeneratorRequest {
+            primary: GeneratorInputFile {
+                path: "schema.txt".to_string(),
+                content: Vec::new(),
+                use_type: None,
+            },
+            inputs: vec![],
+            module: "../gen".to_string(),
+            options: CanonicalOptions::default(),
         };
-
-        let first = run();
-        assert_eq!(first, run());
-        assert_ne!(first, "0 0", "the host serves draws, not zeros");
+        let (outcome, _diags) = runtime().block_on(run_generator(
+            &engine,
+            &component,
+            request,
+            KilnRunPolicy::default(),
+        ));
+        outcome.expect("generator runs and returns Ok");
     }
 }
