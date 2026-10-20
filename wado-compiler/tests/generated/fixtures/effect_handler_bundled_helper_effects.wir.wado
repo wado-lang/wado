@@ -132,7 +132,8 @@ fn "effect_handler_bundled_helper_effects.wado/run"() with Stdout {
             global:effect_handler_bundled_helper_effects.wado::$effect_effect_handler_bundled_helper_effects.wado/A = $local_0_10;
             break $inline__effect_dispatch__effect_handler_bundled_helper_effects_wado_A__a_2: $local_2_12;
         } else {
-            "core:rt/panic"(array.new_data<u8>("no handler installed for `A::a`"), 31);
+            let $mv_field_1: ref Array<u8>;
+            "core:rt/panic"(local.tee $mv_field_1(array.new_data<u8>("no handler installed for `A::a`")), 31);
             unreachable;
         }
         unreachable;
@@ -145,7 +146,7 @@ fn "effect_handler_bundled_helper_effects.wado/run"() with Stdout {
             global:effect_handler_bundled_helper_effects.wado::$effect_effect_handler_bundled_helper_effects.wado/B = $local_0_13;
             break $inline__effect_dispatch__effect_handler_bundled_helper_effects_wado_B__b_3: $local_2_12;
         } else {
-            "core:rt/panic"(array.new_data<u8>("no handler installed for `B::b`"), 31);
+            "core:rt/panic"(local.tee $mv_field_1(array.new_data<u8>("no handler installed for `B::b`")), 31);
             unreachable;
         }
         unreachable;
@@ -159,24 +160,22 @@ fn "effect_handler_bundled_helper_effects.wado/run"() with Stdout {
     }
     start_33 = $local_2_2.used;
     $local_2_2.used = new_used_32;
-    builtin::array_copy<u8>($local_2_2.repr, start_33, global:effect_handler_bundled_helper_effects.wado::$const_obj_3, 0, 6);
+    builtin::array_copy<u8>(local.tee $mv_field_1($local_2_2.repr), start_33, global:effect_handler_bundled_helper_effects.wado::$const_obj_3, 0, 6);
     start_33 = $local_2_12 < 0;
     $local_2_12 = "core:prelude/primitive.wado/count_digits_u64"(local.tee x(x = builtin::i64_extend_i32_s($local_2_12); select i64(x < 0_i64, 0_i64 - x, x)));
     if start_33 {
-        if @unlikely(local.tee start_33($local_2_2.used + 1) > builtin::array_len($local_2_2.repr)) {
+        if @unlikely(local.tee new_used_32(local.tee start_33($local_2_2.used) + 1) > builtin::array_len($mv_field_1)) {
             cold_path;
-            "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_2_2, start_33);
+            "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_2_2, new_used_32);
         }
-        new_used_32 = $local_2_2.used;
-        $local_2_2.used = start_33;
-        builtin::array_set_u8($local_2_2.repr, new_used_32, 45);
+        $local_2_2.used = new_used_32;
+        builtin::array_set_u8($local_2_2.repr, start_33, 45);
     } else {
     }
-    if @unlikely(local.tee new_used_32($local_2_2.used + $local_2_12) > builtin::array_len($local_2_2.repr)) {
+    if @unlikely(local.tee new_used_32(local.tee start_33($local_2_2.used) + $local_2_12) > builtin::array_len($local_2_2.repr)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_2_2, new_used_32);
     }
-    start_33 = $local_2_2.used;
     $local_2_2.used = new_used_32;
     "core:prelude/primitive.wado/write_decimal_digits"($local_2_2.repr, start_33, x, $local_2_12);
     $local_2_12 = builtin::i32_wrap_i64(local.tee x("wasi/stream-new"()));

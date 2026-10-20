@@ -83,6 +83,7 @@ global global:async_export_result_reaches_the_caller.wado::$const_obj_0: ref Arr
 global global:async_export_result_reaches_the_caller.wado::$const_obj_1: ref Array<u8> = array.new_fixed<u8>(103, 111, 116, 32);
 
 fn "async_export_result_reaches_the_caller.wado/run"() with Stdout {
+    let $load_2: ref Array<u8>;
     let v: i32;
     let $local_2_2: ref "core:prelude/string.wado//String";
     let $local_4_4: ref "core:prelude/string.wado//String";
@@ -108,24 +109,22 @@ fn "async_export_result_reaches_the_caller.wado/run"() with Stdout {
         }
         start_22 = $local_2_2.used;
         $local_2_2.used = new_used_21;
-        builtin::array_copy<u8>($local_2_2.repr, start_22, global:async_export_result_reaches_the_caller.wado::$const_obj_1, 0, 4);
+        builtin::array_copy<u8>(local.tee $load_2($local_2_2.repr), start_22, global:async_export_result_reaches_the_caller.wado::$const_obj_1, 0, 4);
         start_22 = v < 0;
         v = "core:prelude/primitive.wado/count_digits_u64"(local.tee x(x = builtin::i64_extend_i32_s(v); select i64(x < 0_i64, 0_i64 - x, x)));
         if start_22 {
-            if @unlikely(local.tee start_22($local_2_2.used + 1) > builtin::array_len($local_2_2.repr)) {
+            if @unlikely(local.tee new_used_21(local.tee start_22($local_2_2.used) + 1) > builtin::array_len($load_2)) {
                 cold_path;
-                "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_2_2, start_22);
+                "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_2_2, new_used_21);
             }
-            new_used_21 = $local_2_2.used;
-            $local_2_2.used = start_22;
-            builtin::array_set_u8($local_2_2.repr, new_used_21, 45);
+            $local_2_2.used = new_used_21;
+            builtin::array_set_u8($local_2_2.repr, start_22, 45);
         } else {
         }
-        if @unlikely(local.tee new_used_21($local_2_2.used + v) > builtin::array_len($local_2_2.repr)) {
+        if @unlikely(local.tee new_used_21(local.tee start_22($local_2_2.used) + v) > builtin::array_len($local_2_2.repr)) {
             cold_path;
             "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_2_2, new_used_21);
         }
-        start_22 = $local_2_2.used;
         $local_2_2.used = new_used_21;
         "core:prelude/primitive.wado/write_decimal_digits"($local_2_2.repr, start_22, x, v);
         v = builtin::i32_wrap_i64(local.tee x("wasi/stream-new"()));

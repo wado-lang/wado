@@ -78,18 +78,16 @@ fn "bug_seq_materialize_wrong_container.wado/run"() with Stdout {
     start_153 = $sroa_$f_buf_68.used;
     $sroa_$f_buf_68.used = new_used_152;
     "core:prelude/primitive.wado/write_decimal_digits"($sroa_$f_buf_68.repr, start_153, 5_i64, 1);
-    if @unlikely(local.tee start_153($local_1.used + 1) > builtin::array_len($local_1.repr)) {
+    if @unlikely(local.tee new_used_152(local.tee start_153($local_1.used) + 1) > builtin::array_len($local_1.repr)) {
         cold_path;
-        "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_1, start_153);
+        "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_1, new_used_152);
     }
-    new_used_152 = $local_1.used;
-    $local_1.used = start_153;
-    builtin::array_copy<u8>($local_1.repr, new_used_152, global:bug_seq_materialize_wrong_container.wado::$const_obj_0, 0, 1);
-    if @unlikely(local.tee new_used_152(local.tee $sroa_$f_buf_68($local_1).used + 1) > builtin::array_len($sroa_$f_buf_68.repr)) {
+    $local_1.used = new_used_152;
+    builtin::array_copy<u8>($local_1.repr, start_153, global:bug_seq_materialize_wrong_container.wado::$const_obj_0, 0, 1);
+    if @unlikely(local.tee new_used_152(local.tee start_153(local.tee $sroa_$f_buf_68($local_1).used) + 1) > builtin::array_len($sroa_$f_buf_68.repr)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"($sroa_$f_buf_68, new_used_152);
     }
-    start_153 = $sroa_$f_buf_68.used;
     $sroa_$f_buf_68.used = new_used_152;
     "core:prelude/primitive.wado/write_decimal_digits"($sroa_$f_buf_68.repr, start_153, 2_i64, 1);
     start_153 = builtin::i32_wrap_i64(local.tee packed("wasi/stream-new"()));

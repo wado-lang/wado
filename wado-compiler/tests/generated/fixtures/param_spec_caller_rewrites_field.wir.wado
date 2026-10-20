@@ -110,13 +110,12 @@ fn "param_spec_caller_rewrites_field.wado/emit"($mv$opt$mode, $mv$opt$repeat, ou
             continue l1;
         };
     };
-    if @unlikely(local.tee start_51(out.used + 1) > builtin::array_len(out.repr)) {
+    if @unlikely(local.tee new_used_50(local.tee start_51(out.used) + 1) > builtin::array_len(out.repr)) {
         cold_path;
-        "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out, start_51);
+        "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out, new_used_50);
     }
-    new_used_50 = out.used;
-    out.used = start_51;
-    builtin::array_set_u8(out.repr, new_used_50, 47);
+    out.used = new_used_50;
+    builtin::array_set_u8(out.repr, start_51, 47);
 }
 
 fn "param_spec_caller_rewrites_field.wado/$cm_binding__Stdout_write_via_stream"(data) with Stdout {

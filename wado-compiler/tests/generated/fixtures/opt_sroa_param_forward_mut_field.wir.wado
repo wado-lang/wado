@@ -78,18 +78,16 @@ fn "opt_sroa_param_forward_mut_field.wado/run"() with Stdout {
     start_167 = $sroa_$f_buf_82.used;
     $sroa_$f_buf_82.used = new_used_166;
     "core:prelude/primitive.wado/write_decimal_digits"($sroa_$f_buf_82.repr, start_167, 45_i64, 2);
-    if @unlikely(local.tee start_167($local_1.used + 1) > builtin::array_len($local_1.repr)) {
+    if @unlikely(local.tee new_used_166(local.tee start_167($local_1.used) + 1) > builtin::array_len($local_1.repr)) {
         cold_path;
-        "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_1, start_167);
+        "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_1, new_used_166);
     }
-    new_used_166 = $local_1.used;
-    $local_1.used = start_167;
-    builtin::array_copy<u8>($local_1.repr, new_used_166, global:opt_sroa_param_forward_mut_field.wado::$const_obj_5, 0, 1);
-    if @unlikely(local.tee new_used_166(local.tee $sroa_$f_buf_82($local_1).used + 1) > builtin::array_len($sroa_$f_buf_82.repr)) {
+    $local_1.used = new_used_166;
+    builtin::array_copy<u8>($local_1.repr, start_167, global:opt_sroa_param_forward_mut_field.wado::$const_obj_5, 0, 1);
+    if @unlikely(local.tee new_used_166(local.tee start_167(local.tee $sroa_$f_buf_82($local_1).used) + 1) > builtin::array_len($sroa_$f_buf_82.repr)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"($sroa_$f_buf_82, new_used_166);
     }
-    start_167 = $sroa_$f_buf_82.used;
     $sroa_$f_buf_82.used = new_used_166;
     "core:prelude/primitive.wado/write_decimal_digits"($sroa_$f_buf_82.repr, start_167, 1_i64, 1);
     start_167 = builtin::i32_wrap_i64(local.tee packed("wasi/stream-new"()));

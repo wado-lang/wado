@@ -151,17 +151,16 @@ fn "effect_with_clause_renamed_import.wado/run"() with Stdout {
         builtin::array_set_u8($local_1_1.repr, start_75, 45);
     } else {
     }
-    if @unlikely(local.tee start_75($local_1_1.used + self_13) > builtin::array_len($local_1_1.repr)) {
+    if @unlikely(local.tee is_negative_24(local.tee start_75($local_1_1.used) + self_13) > builtin::array_len($local_1_1.repr)) {
         cold_path;
-        "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_1_1, start_75);
+        "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_1_1, is_negative_24);
     }
-    is_negative_24 = $local_1_1.used;
-    $local_1_1.used = start_75;
-    "core:prelude/primitive.wado/write_decimal_digits"($local_1_1.repr, is_negative_24, x, self_13);
+    $local_1_1.used = is_negative_24;
+    "core:prelude/primitive.wado/write_decimal_digits"($local_1_1.repr, start_75, x, self_13);
     self_13 = builtin::i32_wrap_i64(local.tee x("wasi/stream-new"()));
-    is_negative_24 = builtin::i32_wrap_i64(x >> 32_i64);
+    start_75 = builtin::i32_wrap_i64(x >> 32_i64);
     self_13 = "effect_with_clause_renamed_import.wado/$cm_binding__Stdout_write_via_stream"(self_13);
-    "core:rt/write_string_to_stream$dae[add_newline]"(is_negative_24, $local_1_1.repr, $local_1_1.used);
+    "core:rt/write_string_to_stream$dae[add_newline]"(start_75, $local_1_1.repr, $local_1_1.used);
     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(self_13);
     global:effect_with_clause_renamed_import.wado::$effect_wasi:random/random.wado/Random = $save_wasi:random/random.wado/Random;
 }

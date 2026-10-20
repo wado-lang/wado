@@ -201,22 +201,21 @@ fn "effect_handler_bundled.wado/run"() with Stdout {
     $local_2_21 = "core:prelude/primitive.wado/count_digits_u64"(local.tee x_56(x_56 = builtin::i64_extend_i32_s($local_2_21); select i64(x_56 < 0_i64, 0_i64 - x_56, x_56)));
     $load_5 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$sroa[self.buf]$dae[alt_prefix]"($sroa_$f_buf_150, $load_5, $local_2_21);
     "core:prelude/primitive.wado/write_decimal_digits"($sroa_$f_buf_150.repr, $load_5, x_56, $local_2_21);
-    if @unlikely(local.tee $local_2_21($local_2_18.used + 5) > builtin::array_len($local_2_18.repr)) {
+    if @unlikely(local.tee $load_5(local.tee $local_2_21($local_2_18.used) + 5) > builtin::array_len($local_2_18.repr)) {
         cold_path;
-        "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_2_18, $local_2_21);
+        "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_2_18, $load_5);
     }
-    $load_5 = $local_2_18.used;
-    $local_2_18.used = $local_2_21;
-    builtin::array_copy<u8>($local_2_18.repr, $load_5, global:effect_handler_bundled.wado::$const_obj_5, 0, 5);
+    $local_2_18.used = $load_5;
+    builtin::array_copy<u8>($local_2_18.repr, $local_2_21, global:effect_handler_bundled.wado::$const_obj_5, 0, 5);
     $sroa_$f_buf_150 = $local_2_18;
-    $load_5 = $local_2_24 < 0;
+    $local_2_21 = $local_2_24 < 0;
     $local_2_24 = "core:prelude/primitive.wado/count_digits_u64"(local.tee x_56(x_56 = builtin::i64_extend_i32_s($local_2_24); select i64(x_56 < 0_i64, 0_i64 - x_56, x_56)));
-    $load_5 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$sroa[self.buf]$dae[alt_prefix]"($sroa_$f_buf_150, $load_5, $local_2_24);
-    "core:prelude/primitive.wado/write_decimal_digits"($sroa_$f_buf_150.repr, $load_5, x_56, $local_2_24);
+    $local_2_21 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$sroa[self.buf]$dae[alt_prefix]"($sroa_$f_buf_150, $local_2_21, $local_2_24);
+    "core:prelude/primitive.wado/write_decimal_digits"($sroa_$f_buf_150.repr, $local_2_21, x_56, $local_2_24);
     $local_2_24 = builtin::i32_wrap_i64(local.tee x_56("wasi/stream-new"()));
-    $load_5 = builtin::i32_wrap_i64(x_56 >> 32_i64);
+    $local_2_21 = builtin::i32_wrap_i64(x_56 >> 32_i64);
     $local_2_24 = "effect_handler_bundled.wado/$cm_binding__Stdout_write_via_stream"($local_2_24);
-    "core:rt/write_string_to_stream$dae[add_newline]"($load_5, $local_2_18.repr, $local_2_18.used);
+    "core:rt/write_string_to_stream$dae[add_newline]"($local_2_21, $local_2_18.repr, $local_2_18.used);
     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"($local_2_24);
     global:effect_handler_bundled.wado::$effect_effect_handler_bundled.wado/Counter = $save_effect_handler_bundled.wado/Counter;
     global:effect_handler_bundled.wado::$effect_effect_handler_bundled.wado/Greeting = $save_effect_handler_bundled.wado/Greeting;
@@ -225,18 +224,18 @@ fn "effect_handler_bundled.wado/run"() with Stdout {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_2_18, $local_2_24);
     }
-    $load_5 = $local_2_18.used;
+    $local_2_21 = $local_2_18.used;
     $local_2_18.used = $local_2_24;
-    builtin::array_copy<u8>($local_2_18.repr, $load_5, global:effect_handler_bundled.wado::$const_obj_4, 0, 12);
-    $local_2_24 = local.tee $load_5(h.count) < 0;
-    $load_5 = "core:prelude/primitive.wado/count_digits_u64"(local.tee x_56(x_56 = builtin::i64_extend_i32_s($load_5); select i64(x_56 < 0_i64, 0_i64 - x_56, x_56)));
-    $local_2_24 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$sroa[self.buf]$dae[alt_prefix]"($local_2_18, $local_2_24, $load_5);
-    "core:prelude/primitive.wado/write_decimal_digits"($local_2_18.repr, $local_2_24, x_56, $load_5);
-    $load_5 = builtin::i32_wrap_i64(local.tee x_56("wasi/stream-new"()));
+    builtin::array_copy<u8>($local_2_18.repr, $local_2_21, global:effect_handler_bundled.wado::$const_obj_4, 0, 12);
+    $local_2_24 = local.tee $local_2_21(h.count) < 0;
+    $local_2_21 = "core:prelude/primitive.wado/count_digits_u64"(local.tee x_56(x_56 = builtin::i64_extend_i32_s($local_2_21); select i64(x_56 < 0_i64, 0_i64 - x_56, x_56)));
+    $local_2_24 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$sroa[self.buf]$dae[alt_prefix]"($local_2_18, $local_2_24, $local_2_21);
+    "core:prelude/primitive.wado/write_decimal_digits"($local_2_18.repr, $local_2_24, x_56, $local_2_21);
+    $local_2_21 = builtin::i32_wrap_i64(local.tee x_56("wasi/stream-new"()));
     $local_2_24 = builtin::i32_wrap_i64(x_56 >> 32_i64);
-    $load_5 = "effect_handler_bundled.wado/$cm_binding__Stdout_write_via_stream"($load_5);
+    $local_2_21 = "effect_handler_bundled.wado/$cm_binding__Stdout_write_via_stream"($local_2_21);
     "core:rt/write_string_to_stream$dae[add_newline]"($local_2_24, $local_2_18.repr, $local_2_18.used);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"($load_5);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"($local_2_21);
 }
 
 fn "effect_handler_bundled.wado/$cm_binding__Stdout_write_via_stream"(data) with Stdout {
@@ -452,24 +451,22 @@ fn "effect_handler_bundled.wado/effect_handler_bundled.wado/$Closure_1::$call"(s
 }
 
 fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$sroa[self.buf]$dae[alt_prefix]"(self, is_negative, digit_count) {
-    let start_26: i32;
+    let new_used_25: i32;
     if is_negative {
-        if @unlikely(local.tee is_negative(self.used + 1) > builtin::array_len(self.repr)) {
+        if @unlikely(local.tee new_used_25(local.tee is_negative(self.used) + 1) > builtin::array_len(self.repr)) {
             cold_path;
-            "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self, is_negative);
+            "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self, new_used_25);
         }
-        start_26 = self.used;
-        self.used = is_negative;
-        builtin::array_set_u8(self.repr, start_26, 45);
+        self.used = new_used_25;
+        builtin::array_set_u8(self.repr, is_negative, 45);
     } else {
     }
-    if @unlikely(local.tee digit_count(self.used + digit_count) > builtin::array_len(self.repr)) {
+    if @unlikely(local.tee digit_count(local.tee is_negative(self.used) + digit_count) > builtin::array_len(self.repr)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self, digit_count);
     }
-    start_26 = self.used;
     self.used = digit_count;
-    return start_26;
+    return is_negative;
 }
 
 fn "closure/effect_handler_bundled.wado/$closure_wrapper_0"($env) {

@@ -234,13 +234,12 @@ fn "serde_serialize_trait.wado/serde_serialize_trait.wado/TextSerializer^serde_s
     builtin::array_copy<u8>($load_3, self_21, global:serde_serialize_trait.wado::$const_obj_10, 0, 1);
     $inline_core_prelude_string_wado_String__internal_push_string_14: block {
         break_if $inline_core_prelude_string_wado_String__internal_push_string_14 local.tee self_21($local_2.used) == 0;
-        if @unlikely(local.tee start_25(self.used + self_21) > builtin::array_len(self.repr)) {
+        if @unlikely(local.tee new_used_24(local.tee start_25(self.used) + self_21) > builtin::array_len(self.repr)) {
             cold_path;
-            "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self, start_25);
+            "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self, new_used_24);
         }
-        new_used_24 = self.used;
-        self.used = start_25;
-        builtin::array_copy<u8>(self.repr, new_used_24, $local_2.repr, 0, self_21);
+        self.used = new_used_24;
+        builtin::array_copy<u8>(self.repr, start_25, $local_2.repr, 0, self_21);
     };
     return ref.null none;
 }

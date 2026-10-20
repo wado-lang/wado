@@ -67,9 +67,9 @@ global global:niri_match_enum_discriminator.wado::$const_obj_4: ref Array<u8> = 
 global global:niri_match_enum_discriminator.wado::$const_obj_5: ref "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(116, 114, 117, 101), used: 4 };
 
 fn "niri_match_enum_discriminator.wado/run"() with Stdout {
+    let $load_2: i32;
     let $local_16: ref "core:prelude/string.wado//String";
     let new_used_40: i32;
-    let start_41: i32;
     let packed: i64;
     let $sroa_$f_buf_110: ref "core:prelude/string.wado//String";
     $sroa_$f_buf_110 = local.tee $local_16(struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(67), used: 0 });
@@ -78,41 +78,38 @@ fn "niri_match_enum_discriminator.wado/run"() with Stdout {
     let $mv_arg_2: ref "core:prelude/string.wado//String";
     $mv_arg_2 = global:niri_match_enum_discriminator.wado::$const_obj_5;
     "core:prelude/format.wado/core:prelude/format.wado/Formatter::pad<core:prelude/string.wado/String>$spec0$sroa[self.buf]"($arg_spill_1, $mv_arg_2.repr, $mv_arg_2.used);
-    if @unlikely(local.tee new_used_40($local_16.used + 1) > builtin::array_len($local_16.repr)) {
+    if @unlikely(local.tee new_used_40(local.tee $load_2($local_16.used) + 1) > builtin::array_len($local_16.repr)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_16, new_used_40);
     }
-    start_41 = $local_16.used;
     $local_16.used = new_used_40;
-    builtin::array_copy<u8>($local_16.repr, start_41, global:niri_match_enum_discriminator.wado::$const_obj_4, 0, 1);
+    builtin::array_copy<u8>($local_16.repr, $load_2, global:niri_match_enum_discriminator.wado::$const_obj_4, 0, 1);
     $mv_arg_2 = local.tee $sroa_$f_buf_110($local_16);
     $arg_spill_1 = global:niri_match_enum_discriminator.wado::$const_obj_3;
     "core:prelude/format.wado/core:prelude/format.wado/Formatter::pad<core:prelude/string.wado/String>$spec0$sroa[self.buf]"($mv_arg_2, $arg_spill_1.repr, $arg_spill_1.used);
-    if @unlikely(local.tee start_41($local_16.used + 1) > builtin::array_len($local_16.repr)) {
-        cold_path;
-        "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_16, start_41);
-    }
-    new_used_40 = $local_16.used;
-    $local_16.used = start_41;
-    builtin::array_copy<u8>($local_16.repr, new_used_40, global:niri_match_enum_discriminator.wado::$const_obj_4, 0, 1);
-    $arg_spill_1 = local.tee $sroa_$f_buf_110($local_16);
-    $mv_arg_2 = global:niri_match_enum_discriminator.wado::$const_obj_5;
-    "core:prelude/format.wado/core:prelude/format.wado/Formatter::pad<core:prelude/string.wado/String>$spec0$sroa[self.buf]"($arg_spill_1, $mv_arg_2.repr, $mv_arg_2.used);
-    if @unlikely(local.tee new_used_40($local_16.used + 1) > builtin::array_len($local_16.repr)) {
+    if @unlikely(local.tee new_used_40(local.tee $load_2($local_16.used) + 1) > builtin::array_len($local_16.repr)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_16, new_used_40);
     }
-    start_41 = $local_16.used;
     $local_16.used = new_used_40;
-    builtin::array_copy<u8>($local_16.repr, start_41, global:niri_match_enum_discriminator.wado::$const_obj_4, 0, 1);
+    builtin::array_copy<u8>($local_16.repr, $load_2, global:niri_match_enum_discriminator.wado::$const_obj_4, 0, 1);
+    $arg_spill_1 = local.tee $sroa_$f_buf_110($local_16);
+    $mv_arg_2 = global:niri_match_enum_discriminator.wado::$const_obj_5;
+    "core:prelude/format.wado/core:prelude/format.wado/Formatter::pad<core:prelude/string.wado/String>$spec0$sroa[self.buf]"($arg_spill_1, $mv_arg_2.repr, $mv_arg_2.used);
+    if @unlikely(local.tee new_used_40(local.tee $load_2($local_16.used) + 1) > builtin::array_len($local_16.repr)) {
+        cold_path;
+        "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_16, new_used_40);
+    }
+    $local_16.used = new_used_40;
+    builtin::array_copy<u8>($local_16.repr, $load_2, global:niri_match_enum_discriminator.wado::$const_obj_4, 0, 1);
     $sroa_$f_buf_110 = $local_16;
     $mv_arg_2 = global:niri_match_enum_discriminator.wado::$const_obj_3;
     "core:prelude/format.wado/core:prelude/format.wado/Formatter::pad<core:prelude/string.wado/String>$spec0$sroa[self.buf]"($sroa_$f_buf_110, $mv_arg_2.repr, $mv_arg_2.used);
-    start_41 = builtin::i32_wrap_i64(local.tee packed("wasi/stream-new"()));
+    $load_2 = builtin::i32_wrap_i64(local.tee packed("wasi/stream-new"()));
     new_used_40 = builtin::i32_wrap_i64(packed >> 32_i64);
-    start_41 = "niri_match_enum_discriminator.wado/$cm_binding__Stdout_write_via_stream"(start_41);
+    $load_2 = "niri_match_enum_discriminator.wado/$cm_binding__Stdout_write_via_stream"($load_2);
     "core:rt/write_string_to_stream$dae[add_newline]"(new_used_40, $local_16.repr, $local_16.used);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(start_41);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"($load_2);
 }
 
 fn "niri_match_enum_discriminator.wado/$cm_binding__Stdout_write_via_stream"(data) with Stdout {
@@ -206,17 +203,16 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self, min_ca
 }
 
 fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::pad<core:prelude/string.wado/String>$spec0$sroa[self.buf]"(self, $mv$content$repr, $mv$content$used) {
+    let $load_0: i32;
     let new_used_19: i32;
-    let start_20: i32;
     $inline_core_prelude_string_wado_String__internal_push_string_2: block {
         break_if $inline_core_prelude_string_wado_String__internal_push_string_2 $mv$content$used == 0;
-        if @unlikely(local.tee new_used_19(self.used + $mv$content$used) > builtin::array_len(self.repr)) {
+        if @unlikely(local.tee new_used_19(local.tee $load_0(self.used) + $mv$content$used) > builtin::array_len(self.repr)) {
             cold_path;
             "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self, new_used_19);
         }
-        start_20 = self.used;
         self.used = new_used_19;
-        builtin::array_copy<u8>(self.repr, start_20, $mv$content$repr, 0, $mv$content$used);
+        builtin::array_copy<u8>(self.repr, $load_0, $mv$content$repr, 0, $mv$content$used);
     };
     return;
 }

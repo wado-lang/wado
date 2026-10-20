@@ -135,17 +135,16 @@ fn "cm_unprovided_import_record_type_runs.wado/run"() with Stdout {
         builtin::array_set_u8($local_1_1.repr, start_74, 45);
     } else {
     }
-    if @unlikely(local.tee start_74($local_1_1.used + $local_3) > builtin::array_len($local_1_1.repr)) {
+    if @unlikely(local.tee is_negative_23(local.tee start_74($local_1_1.used) + $local_3) > builtin::array_len($local_1_1.repr)) {
         cold_path;
-        "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_1_1, start_74);
+        "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_1_1, is_negative_23);
     }
-    is_negative_23 = $local_1_1.used;
-    $local_1_1.used = start_74;
-    "core:prelude/primitive.wado/write_decimal_digits"($local_1_1.repr, is_negative_23, x, $local_3);
+    $local_1_1.used = is_negative_23;
+    "core:prelude/primitive.wado/write_decimal_digits"($local_1_1.repr, start_74, x, $local_3);
     $local_3 = builtin::i32_wrap_i64(local.tee x("wasi/stream-new"()));
-    is_negative_23 = builtin::i32_wrap_i64(x >> 32_i64);
+    start_74 = builtin::i32_wrap_i64(x >> 32_i64);
     $local_3 = "cm_unprovided_import_record_type_runs.wado/$cm_binding__Stdout_write_via_stream"($local_3);
-    "core:rt/write_string_to_stream$dae[add_newline]"(is_negative_23, $local_1_1.repr, $local_1_1.used);
+    "core:rt/write_string_to_stream$dae[add_newline]"(start_74, $local_1_1.repr, $local_1_1.used);
     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"($local_3);
     global:cm_unprovided_import_record_type_runs.wado::$effect_cm_unprovided_import_record_type_runs.wado/Dom = $save_cm_unprovided_import_record_type_runs.wado/Dom;
 }

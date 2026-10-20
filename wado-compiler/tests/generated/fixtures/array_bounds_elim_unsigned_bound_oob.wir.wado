@@ -113,17 +113,16 @@ fn "array_bounds_elim_unsigned_bound_oob.wado/run"() with Stdout {
         builtin::array_set_u8($local_0.repr, start_69, 45);
     } else {
     }
-    if @unlikely(local.tee start_69($local_0.used + n_13) > builtin::array_len($local_0.repr)) {
+    if @unlikely(local.tee is_negative_18(local.tee start_69($local_0.used) + n_13) > builtin::array_len($local_0.repr)) {
         cold_path;
-        "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_0, start_69);
+        "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_0, is_negative_18);
     }
-    is_negative_18 = $local_0.used;
-    $local_0.used = start_69;
-    "core:prelude/primitive.wado/write_decimal_digits"($local_0.repr, is_negative_18, x_12, n_13);
+    $local_0.used = is_negative_18;
+    "core:prelude/primitive.wado/write_decimal_digits"($local_0.repr, start_69, x_12, n_13);
     n_13 = builtin::i32_wrap_i64(local.tee x_12("wasi/stream-new"()));
-    is_negative_18 = builtin::i32_wrap_i64(x_12 >> 32_i64);
+    start_69 = builtin::i32_wrap_i64(x_12 >> 32_i64);
     n_13 = "array_bounds_elim_unsigned_bound_oob.wado/$cm_binding__Stdout_write_via_stream"(n_13);
-    "core:rt/write_string_to_stream$dae[add_newline]"(is_negative_18, $local_0.repr, $local_0.used);
+    "core:rt/write_string_to_stream$dae[add_newline]"(start_69, $local_0.repr, $local_0.used);
     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(n_13);
 }
 

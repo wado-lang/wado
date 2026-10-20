@@ -69,33 +69,31 @@ global global:store_to_load_forwarding.wado::$const_obj_4: ref Array<u8> = array
 fn "store_to_load_forwarding.wado/run"() with Stdout {
     let $local_27: ref "core:prelude/string.wado//String";
     let offset_45: i32;
-    let start_59: i32;
+    let new_used_58: i32;
     let packed: i64;
     let $sroa_$f_buf_127: ref "core:prelude/string.wado//String";
     offset_45 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$sroa[self.buf]$dae[alt_prefix]"(local.tee $sroa_$f_buf_127(local.tee $local_27(struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(52), used: 0 })), 0, 2);
     "core:prelude/primitive.wado/write_decimal_digits"($sroa_$f_buf_127.repr, offset_45, 10_i64, 2);
-    if @unlikely(local.tee offset_45($local_27.used + 2) > builtin::array_len($local_27.repr)) {
+    if @unlikely(local.tee new_used_58(local.tee offset_45($local_27.used) + 2) > builtin::array_len($local_27.repr)) {
         cold_path;
-        "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_27, offset_45);
+        "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_27, new_used_58);
     }
-    start_59 = $local_27.used;
-    $local_27.used = offset_45;
-    builtin::array_copy<u8>($local_27.repr, start_59, global:store_to_load_forwarding.wado::$const_obj_4, 0, 2);
-    start_59 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$sroa[self.buf]$dae[alt_prefix]"(local.tee $sroa_$f_buf_127($local_27), 0, 2);
-    "core:prelude/primitive.wado/write_decimal_digits"($sroa_$f_buf_127.repr, start_59, 42_i64, 2);
-    if @unlikely(local.tee start_59($local_27.used + 2) > builtin::array_len($local_27.repr)) {
+    $local_27.used = new_used_58;
+    builtin::array_copy<u8>($local_27.repr, offset_45, global:store_to_load_forwarding.wado::$const_obj_4, 0, 2);
+    offset_45 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$sroa[self.buf]$dae[alt_prefix]"(local.tee $sroa_$f_buf_127($local_27), 0, 2);
+    "core:prelude/primitive.wado/write_decimal_digits"($sroa_$f_buf_127.repr, offset_45, 42_i64, 2);
+    if @unlikely(local.tee new_used_58(local.tee offset_45($local_27.used) + 2) > builtin::array_len($local_27.repr)) {
         cold_path;
-        "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_27, start_59);
+        "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_27, new_used_58);
     }
-    offset_45 = $local_27.used;
-    $local_27.used = start_59;
+    $local_27.used = new_used_58;
     builtin::array_copy<u8>($local_27.repr, offset_45, global:store_to_load_forwarding.wado::$const_obj_4, 0, 2);
     offset_45 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$sroa[self.buf]$dae[alt_prefix]"(local.tee $sroa_$f_buf_127($local_27), 0, 3);
     "core:prelude/primitive.wado/write_decimal_digits"($sroa_$f_buf_127.repr, offset_45, 100_i64, 3);
     offset_45 = builtin::i32_wrap_i64(local.tee packed("wasi/stream-new"()));
-    start_59 = builtin::i32_wrap_i64(packed >> 32_i64);
+    new_used_58 = builtin::i32_wrap_i64(packed >> 32_i64);
     offset_45 = "store_to_load_forwarding.wado/$cm_binding__Stdout_write_via_stream"(offset_45);
-    "core:rt/write_string_to_stream$dae[add_newline]"(start_59, $local_27.repr, $local_27.used);
+    "core:rt/write_string_to_stream$dae[add_newline]"(new_used_58, $local_27.repr, $local_27.used);
     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(offset_45);
 }
 
@@ -212,24 +210,22 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self, min_ca
 }
 
 fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$sroa[self.buf]$dae[alt_prefix]"(self, is_negative, digit_count) {
-    let start_26: i32;
+    let new_used_25: i32;
     if is_negative {
-        if @unlikely(local.tee is_negative(self.used + 1) > builtin::array_len(self.repr)) {
+        if @unlikely(local.tee new_used_25(local.tee is_negative(self.used) + 1) > builtin::array_len(self.repr)) {
             cold_path;
-            "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self, is_negative);
+            "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self, new_used_25);
         }
-        start_26 = self.used;
-        self.used = is_negative;
-        builtin::array_set_u8(self.repr, start_26, 45);
+        self.used = new_used_25;
+        builtin::array_set_u8(self.repr, is_negative, 45);
     } else {
     }
-    if @unlikely(local.tee digit_count(self.used + digit_count) > builtin::array_len(self.repr)) {
+    if @unlikely(local.tee digit_count(local.tee is_negative(self.used) + digit_count) > builtin::array_len(self.repr)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self, digit_count);
     }
-    start_26 = self.used;
     self.used = digit_count;
-    return start_26;
+    return is_negative;
 }
 
 export fn "store_to_load_forwarding.wado/$cm_export__run" as "run"

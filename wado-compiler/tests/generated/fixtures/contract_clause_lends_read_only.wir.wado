@@ -215,24 +215,22 @@ fn "contract_clause_lends_read_only.wado/run"() with Stdout {
     self_27 = "core:prelude/primitive.wado/count_digits_u64"(local.tee x_49(x_49 = builtin::i64_extend_i32_s(self_27); select i64(x_49 < 0_i64, 0_i64 - x_49, x_49)));
     is_negative_45 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$sroa[self.buf]$dae[alt_prefix]"($sroa_$f_buf_133, is_negative_45, self_27);
     "core:prelude/primitive.wado/write_decimal_digits"($sroa_$f_buf_133.repr, is_negative_45, x_49, self_27);
-    if @unlikely(local.tee self_27($local_2.used + 1) > builtin::array_len($local_2.repr)) {
-        cold_path;
-        "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_2, self_27);
-    }
-    is_negative_45 = $local_2.used;
-    $local_2.used = self_27;
-    builtin::array_copy<u8>($local_2.repr, is_negative_45, global:contract_clause_lends_read_only.wado::$const_obj_1, 0, 1);
-    $sroa_$f_buf_133 = $local_2;
-    c_0.n = c_0.n + 1;
-    self_27 = local.tee is_negative_45(c_0.n) < 0;
-    is_negative_45 = "core:prelude/primitive.wado/count_digits_u64"(local.tee x_49(x_49 = builtin::i64_extend_i32_s(is_negative_45); select i64(x_49 < 0_i64, 0_i64 - x_49, x_49)));
-    self_27 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$sroa[self.buf]$dae[alt_prefix]"($sroa_$f_buf_133, self_27, is_negative_45);
-    "core:prelude/primitive.wado/write_decimal_digits"($sroa_$f_buf_133.repr, self_27, x_49, is_negative_45);
-    if @unlikely(local.tee is_negative_45($local_2.used + 1) > builtin::array_len($local_2.repr)) {
+    if @unlikely(local.tee is_negative_45(local.tee self_27($local_2.used) + 1) > builtin::array_len($local_2.repr)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_2, is_negative_45);
     }
-    self_27 = $local_2.used;
+    $local_2.used = is_negative_45;
+    builtin::array_copy<u8>($local_2.repr, self_27, global:contract_clause_lends_read_only.wado::$const_obj_1, 0, 1);
+    $sroa_$f_buf_133 = $local_2;
+    c_0.n = c_0.n + 1;
+    is_negative_45 = local.tee self_27(c_0.n) < 0;
+    self_27 = "core:prelude/primitive.wado/count_digits_u64"(local.tee x_49(x_49 = builtin::i64_extend_i32_s(self_27); select i64(x_49 < 0_i64, 0_i64 - x_49, x_49)));
+    is_negative_45 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$sroa[self.buf]$dae[alt_prefix]"($sroa_$f_buf_133, is_negative_45, self_27);
+    "core:prelude/primitive.wado/write_decimal_digits"($sroa_$f_buf_133.repr, is_negative_45, x_49, self_27);
+    if @unlikely(local.tee is_negative_45(local.tee self_27($local_2.used) + 1) > builtin::array_len($local_2.repr)) {
+        cold_path;
+        "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_2, is_negative_45);
+    }
     $local_2.used = is_negative_45;
     builtin::array_copy<u8>($local_2.repr, self_27, global:contract_clause_lends_read_only.wado::$const_obj_1, 0, 1);
     $sroa_$f_buf_133 = $local_2;
@@ -444,29 +442,27 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self, min_ca
 }
 
 fn "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"(self, n) {
-    let start: i32;
-    if @unlikely(local.tee n(self.used + n) > builtin::array_len(self.repr)) {
+    let $load_0: i32;
+    if @unlikely(local.tee n(local.tee $load_0(self.used) + n) > builtin::array_len(self.repr)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self, n);
     }
-    start = self.used;
     self.used = n;
-    return start;
+    return $load_0;
 }
 
 fn "core:prelude/string.wado/core:prelude/string.wado/String^core:prelude/string.wado/AsStrSlice::internal_append_to"(self, out) {
+    let $load_1: i32;
     let n_4: i32;
     let new_used: i32;
-    let start_9: i32;
     $inline_core_prelude_string_wado_String__internal_push_string_0: block {
         break_if $inline_core_prelude_string_wado_String__internal_push_string_0 local.tee n_4(self.used) == 0;
-        if @unlikely(local.tee new_used(out.used + n_4) > builtin::array_len(out.repr)) {
+        if @unlikely(local.tee new_used(local.tee $load_1(out.used) + n_4) > builtin::array_len(out.repr)) {
             cold_path;
             "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out, new_used);
         }
-        start_9 = out.used;
         out.used = new_used;
-        builtin::array_copy<u8>(out.repr, start_9, self.repr, 0, n_4);
+        builtin::array_copy<u8>(out.repr, $load_1, self.repr, 0, n_4);
     };
 }
 
@@ -480,47 +476,43 @@ fn "contract_clause_lends_read_only.wado/contract_clause_lends_read_only.wado/$C
 }
 
 fn "contract_clause_lends_read_only.wado/contract_clause_lends_read_only.wado/$Closure_0^core:prelude/traits.wado/Inspect::inspect$dae[self]"(f) {
+    let $load_2: i32;
     let self_1: ref "core:prelude/string.wado//String";
     let new_used_13: i32;
-    let start_14: i32;
     if f.alternate {
-        if @unlikely(local.tee new_used_13(local.tee self_1(f.buf).used + 16) > builtin::array_len(self_1.repr)) {
+        if @unlikely(local.tee new_used_13(local.tee $load_2(local.tee self_1(f.buf).used) + 16) > builtin::array_len(self_1.repr)) {
             cold_path;
             "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self_1, new_used_13);
         }
-        start_14 = self_1.used;
         self_1.used = new_used_13;
-        builtin::array_copy<u8>(self_1.repr, start_14, global:contract_clause_lends_read_only.wado::$const_obj_43, 0, 16);
+        builtin::array_copy<u8>(self_1.repr, $load_2, global:contract_clause_lends_read_only.wado::$const_obj_43, 0, 16);
     } else {
-        if @unlikely(local.tee start_14(local.tee self_1(f.buf).used + 13) > builtin::array_len(self_1.repr)) {
+        if @unlikely(local.tee new_used_13(local.tee $load_2(local.tee self_1(f.buf).used) + 13) > builtin::array_len(self_1.repr)) {
             cold_path;
-            "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self_1, start_14);
+            "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self_1, new_used_13);
         }
-        new_used_13 = self_1.used;
-        self_1.used = start_14;
-        builtin::array_copy<u8>(self_1.repr, new_used_13, global:contract_clause_lends_read_only.wado::$const_obj_42, 0, 13);
+        self_1.used = new_used_13;
+        builtin::array_copy<u8>(self_1.repr, $load_2, global:contract_clause_lends_read_only.wado::$const_obj_42, 0, 13);
     }
 }
 
 fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$sroa[self.buf]$dae[alt_prefix]"(self, is_negative, digit_count) {
-    let start_26: i32;
+    let new_used_25: i32;
     if is_negative {
-        if @unlikely(local.tee is_negative(self.used + 1) > builtin::array_len(self.repr)) {
+        if @unlikely(local.tee new_used_25(local.tee is_negative(self.used) + 1) > builtin::array_len(self.repr)) {
             cold_path;
-            "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self, is_negative);
+            "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self, new_used_25);
         }
-        start_26 = self.used;
-        self.used = is_negative;
-        builtin::array_set_u8(self.repr, start_26, 45);
+        self.used = new_used_25;
+        builtin::array_set_u8(self.repr, is_negative, 45);
     } else {
     }
-    if @unlikely(local.tee digit_count(self.used + digit_count) > builtin::array_len(self.repr)) {
+    if @unlikely(local.tee digit_count(local.tee is_negative(self.used) + digit_count) > builtin::array_len(self.repr)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self, digit_count);
     }
-    start_26 = self.used;
     self.used = digit_count;
-    return start_26;
+    return is_negative;
 }
 
 fn "closure/contract_clause_lends_read_only.wado/$closure_wrapper_0"($env, $p0) {

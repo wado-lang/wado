@@ -255,17 +255,16 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self, min_ca
 }
 
 fn "core:prelude/string.wado/core:prelude/string.wado/String::push_str<core:prelude/string.wado/String>"(self, $mv$other$repr, $mv$other$used) {
+    let $load_0: i32;
     let new_used: i32;
-    let start_11: i32;
     $inline_core_prelude_string_wado_String__internal_push_string_1: block {
         break_if $inline_core_prelude_string_wado_String__internal_push_string_1 $mv$other$used == 0;
-        if @unlikely(local.tee new_used(self.used + $mv$other$used) > builtin::array_len(self.repr)) {
+        if @unlikely(local.tee new_used(local.tee $load_0(self.used) + $mv$other$used) > builtin::array_len(self.repr)) {
             cold_path;
             "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self, new_used);
         }
-        start_11 = self.used;
         self.used = new_used;
-        builtin::array_copy<u8>(self.repr, start_11, $mv$other$repr, 0, $mv$other$used);
+        builtin::array_copy<u8>(self.repr, $load_0, $mv$other$repr, 0, $mv$other$used);
     };
 }
 

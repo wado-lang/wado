@@ -221,6 +221,8 @@ global global:treemap_btree.wado::$const_obj_19: ref "core:prelude/string.wado//
 
 fn "treemap_btree.wado/run"() with Stdout {
     let $load_82: i32;
+    let $load_87: i32;
+    let $load_89: i32;
     let map: ref "treemap_btree.wado//TreeMap<core:prelude/string.wado/String,i32>";
     let $match_32: ref "tuple//[i32, i32]";
     let packed_48: i64;
@@ -233,13 +235,12 @@ fn "treemap_btree.wado/run"() with Stdout {
     let v_306: ref "tuple//[core:prelude/string.wado/String, i32]";
     let v_307: ref "core:prelude/string.wado//String";
     let new_used_318: i32;
-    let start_319: i32;
     let x_340: i64;
     let pair_349: i32;
     let tens_350: i32;
     let packed_352: i64;
     let $sroa_item_1_605: i32;
-    let start_731: i32;
+    let new_used_730: i32;
     "treemap_btree.wado/treemap_btree.wado/TreeMap<core:prelude/string.wado/String,i32>::insert"(local.tee map(struct.new "treemap_btree.wado//TreeMap<core:prelude/string.wado/String,i32>" { root: ref.null none, t: 3, size: 0, deleted_count: 0 }), struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("apple"), used: 5 }, 1);
     "treemap_btree.wado/treemap_btree.wado/TreeMap<core:prelude/string.wado/String,i32>::insert"(map, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("banana"), used: 6 }, 2);
     "treemap_btree.wado/treemap_btree.wado/TreeMap<core:prelude/string.wado/String,i32>::insert"(map, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("cherry"), used: 6 }, 3);
@@ -444,14 +445,13 @@ fn "treemap_btree.wado/run"() with Stdout {
             rx_49 = rx_49 + 1;
             builtin::array_copy<u8>(local.tee $array_clone_src_17(builtin::array_new<u8>($load_82)), 0, $array_clone_dst_18, 0, $load_82);
             $mv_arg_2.used = 0;
-            if @unlikely(local.tee new_used_318($mv_arg_2.used + (3 + $load_82)) > builtin::array_len($mv_arg_2.repr)) {
+            if @unlikely(local.tee new_used_318(local.tee start_115($mv_arg_2.used) + (3 + $load_82)) > builtin::array_len($mv_arg_2.repr)) {
                 cold_path;
                 "core:prelude/string.wado/core:prelude/string.wado/String::grow"($mv_arg_2, new_used_318);
             }
-            start_319 = $mv_arg_2.used;
             $mv_arg_2.used = new_used_318;
-            builtin::array_copy<u8>(local.tee $array_clone_dst_18($mv_arg_2.repr), start_319, $array_clone_src_17, 0, $load_82);
-            $load_82 = start_319 + $load_82;
+            builtin::array_copy<u8>(local.tee $array_clone_dst_18($mv_arg_2.repr), start_115, $array_clone_src_17, 0, $load_82);
+            $load_82 = start_115 + $load_82;
             builtin::array_copy<u8>($array_clone_dst_18, $load_82, global:treemap_btree.wado::$const_obj_4, 0, 3);
             $load_82 = $sroa_item_1_605 < 0;
             x_340 = builtin::i64_extend_i32_s($sroa_item_1_605);
@@ -517,26 +517,24 @@ fn "treemap_btree.wado/run"() with Stdout {
                 break $inline_count_digits_u64_123: 20;
             };
             if $load_82 {
-                if @unlikely(local.tee start_115($mv_arg_2.used + 1) > builtin::array_len($array_clone_dst_18)) {
+                if @unlikely(local.tee new_used_730(local.tee $load_87($mv_arg_2.used) + 1) > builtin::array_len($array_clone_dst_18)) {
                     cold_path;
-                    "core:prelude/string.wado/core:prelude/string.wado/String::grow"($mv_arg_2, start_115);
+                    "core:prelude/string.wado/core:prelude/string.wado/String::grow"($mv_arg_2, new_used_730);
                 }
-                start_731 = $mv_arg_2.used;
-                $mv_arg_2.used = start_115;
-                builtin::array_set_u8($mv_arg_2.repr, start_731, 45);
+                $mv_arg_2.used = new_used_730;
+                builtin::array_set_u8($mv_arg_2.repr, $load_87, 45);
             } else {
             }
-            if @unlikely(local.tee $load_82($mv_arg_2.used + $sroa_item_1_605) > builtin::array_len($mv_arg_2.repr)) {
+            if @unlikely(local.tee $load_82(local.tee $load_89($mv_arg_2.used) + $sroa_item_1_605) > builtin::array_len($mv_arg_2.repr)) {
                 cold_path;
                 "core:prelude/string.wado/core:prelude/string.wado/String::grow"($mv_arg_2, $load_82);
             }
-            start_319 = $mv_arg_2.used;
             $mv_arg_2.used = $load_82;
             $array_clone_dst_18 = $mv_arg_2.repr;
-            $sroa_item_1_605 = start_319 + $sroa_item_1_605;
+            $sroa_item_1_605 = $load_89 + $sroa_item_1_605;
             b40: block {
                 l41: loop {
-                    break_if b40 ($sroa_item_1_605 - start_319) < 2;
+                    break_if b40 ($sroa_item_1_605 - $load_89) < 2;
                     packed_48 = x_340 /u 100_i64;
                     tens_350 = local.tee pair_349(builtin::i32_wrap_i64(x_340 - (packed_48 * 100_i64))) / 10;
                     builtin::array_set_u8($array_clone_dst_18, $sroa_item_1_605 - 1, ((48 + pair_349) - (tens_350 * 10)) & 255);
@@ -546,14 +544,14 @@ fn "treemap_btree.wado/run"() with Stdout {
                     continue l41;
                 };
             };
-            if $sroa_item_1_605 > start_319 {
-                builtin::array_set_u8($array_clone_dst_18, start_319, (48 + builtin::i32_wrap_i64(x_340 %u 10_i64)) & 255);
+            if $sroa_item_1_605 > $load_89 {
+                builtin::array_set_u8($array_clone_dst_18, $load_89, (48 + builtin::i32_wrap_i64(x_340 %u 10_i64)) & 255);
             }
-            start_319 = builtin::i32_wrap_i64(local.tee packed_352("wasi/stream-new"()));
-            $sroa_item_1_605 = builtin::i32_wrap_i64(packed_352 >> 32_i64);
-            start_319 = "treemap_btree.wado/$cm_binding__Stdout_write_via_stream"(start_319);
-            "core:rt/write_string_to_stream$spec0$dae[add_newline]"($sroa_item_1_605, $mv_arg_2.repr, $mv_arg_2.used);
-            "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(start_319);
+            $sroa_item_1_605 = builtin::i32_wrap_i64(local.tee packed_352("wasi/stream-new"()));
+            $load_82 = builtin::i32_wrap_i64(packed_352 >> 32_i64);
+            $sroa_item_1_605 = "treemap_btree.wado/$cm_binding__Stdout_write_via_stream"($sroa_item_1_605);
+            "core:rt/write_string_to_stream$spec0$dae[add_newline]"($load_82, $mv_arg_2.repr, $mv_arg_2.used);
+            "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"($sroa_item_1_605);
             continue l16;
         };
     };
@@ -634,24 +632,23 @@ fn "treemap_btree.wado/run"() with Stdout {
         l50: loop {
             break_if b49 pair_349 >= tens_350;
             $array_clone_dst_18 = local.tee v_307(local.tee v_306(builtin::array_get_value<ref "tuple//[core:prelude/string.wado/String, i32]">(elements_299, pair_349)).0).repr;
-            builtin::array_copy<u8>(local.tee $array_clone_src_17(builtin::array_new<u8>(local.tee start_319(v_307.used))), 0, $array_clone_dst_18, 0, start_319);
-            $sroa_item_1_605 = v_306.1;
+            builtin::array_copy<u8>(local.tee $array_clone_src_17(builtin::array_new<u8>(local.tee $sroa_item_1_605(v_307.used))), 0, $array_clone_dst_18, 0, $sroa_item_1_605);
+            $load_82 = v_306.1;
             pair_349 = pair_349 + 1;
-            builtin::array_copy<u8>(local.tee $array_clone_dst_18(builtin::array_new<u8>(start_319)), 0, $array_clone_src_17, 0, start_319);
+            builtin::array_copy<u8>(local.tee $array_clone_dst_18(builtin::array_new<u8>($sroa_item_1_605)), 0, $array_clone_src_17, 0, $sroa_item_1_605);
             $mv_arg_2.used = 0;
-            if @unlikely(local.tee $load_82($mv_arg_2.used + (3 + start_319)) > builtin::array_len($mv_arg_2.repr)) {
+            if @unlikely(local.tee new_used_318(local.tee $load_89($mv_arg_2.used) + (3 + $sroa_item_1_605)) > builtin::array_len($mv_arg_2.repr)) {
                 cold_path;
-                "core:prelude/string.wado/core:prelude/string.wado/String::grow"($mv_arg_2, $load_82);
+                "core:prelude/string.wado/core:prelude/string.wado/String::grow"($mv_arg_2, new_used_318);
             }
-            new_used_318 = $mv_arg_2.used;
-            $mv_arg_2.used = $load_82;
-            builtin::array_copy<u8>(local.tee $array_clone_src_17($mv_arg_2.repr), new_used_318, $array_clone_dst_18, 0, start_319);
-            start_319 = new_used_318 + start_319;
-            builtin::array_copy<u8>($array_clone_src_17, start_319, global:treemap_btree.wado::$const_obj_4, 0, 3);
-            start_319 = $sroa_item_1_605 < 0;
-            x_340 = builtin::i64_extend_i32_s($sroa_item_1_605);
+            $mv_arg_2.used = new_used_318;
+            builtin::array_copy<u8>(local.tee $array_clone_src_17($mv_arg_2.repr), $load_89, $array_clone_dst_18, 0, $sroa_item_1_605);
+            $sroa_item_1_605 = $load_89 + $sroa_item_1_605;
+            builtin::array_copy<u8>($array_clone_src_17, $sroa_item_1_605, global:treemap_btree.wado::$const_obj_4, 0, 3);
+            $sroa_item_1_605 = $load_82 < 0;
+            x_340 = builtin::i64_extend_i32_s($load_82);
             x_340 = select i64(x_340 < 0_i64, 0_i64 - x_340, x_340);
-            $sroa_item_1_605 = $inline_count_digits_u64_196: block -> i32 {
+            $load_82 = $inline_count_digits_u64_196: block -> i32 {
                 if x_340 <u 100000_i64 {
                     if x_340 <u 100_i64 {
                         if x_340 <u 10_i64 {
@@ -711,44 +708,42 @@ fn "treemap_btree.wado/run"() with Stdout {
                 }
                 break $inline_count_digits_u64_196: 20;
             };
-            if start_319 {
-                if @unlikely(local.tee start_731($mv_arg_2.used + 1) > builtin::array_len($array_clone_src_17)) {
+            if $sroa_item_1_605 {
+                if @unlikely(local.tee $load_87(local.tee new_used_730($mv_arg_2.used) + 1) > builtin::array_len($array_clone_src_17)) {
                     cold_path;
-                    "core:prelude/string.wado/core:prelude/string.wado/String::grow"($mv_arg_2, start_731);
+                    "core:prelude/string.wado/core:prelude/string.wado/String::grow"($mv_arg_2, $load_87);
                 }
-                start_115 = $mv_arg_2.used;
-                $mv_arg_2.used = start_731;
-                builtin::array_set_u8($mv_arg_2.repr, start_115, 45);
+                $mv_arg_2.used = $load_87;
+                builtin::array_set_u8($mv_arg_2.repr, new_used_730, 45);
             } else {
             }
-            if @unlikely(local.tee start_319($mv_arg_2.used + $sroa_item_1_605) > builtin::array_len($mv_arg_2.repr)) {
+            if @unlikely(local.tee $sroa_item_1_605(local.tee start_115($mv_arg_2.used) + $load_82) > builtin::array_len($mv_arg_2.repr)) {
                 cold_path;
-                "core:prelude/string.wado/core:prelude/string.wado/String::grow"($mv_arg_2, start_319);
+                "core:prelude/string.wado/core:prelude/string.wado/String::grow"($mv_arg_2, $sroa_item_1_605);
             }
-            new_used_318 = $mv_arg_2.used;
-            $mv_arg_2.used = start_319;
+            $mv_arg_2.used = $sroa_item_1_605;
             $array_clone_src_17 = $mv_arg_2.repr;
-            $sroa_item_1_605 = new_used_318 + $sroa_item_1_605;
+            $load_82 = start_115 + $load_82;
             b74: block {
                 l75: loop {
-                    break_if b74 ($sroa_item_1_605 - new_used_318) < 2;
+                    break_if b74 ($load_82 - start_115) < 2;
                     packed_352 = x_340 /u 100_i64;
                     rx_49 = local.tee tx_50(builtin::i32_wrap_i64(x_340 - (packed_352 * 100_i64))) / 10;
-                    builtin::array_set_u8($array_clone_src_17, $sroa_item_1_605 - 1, ((48 + tx_50) - (rx_49 * 10)) & 255);
-                    builtin::array_set_u8($array_clone_src_17, $sroa_item_1_605 - 2, (48 + rx_49) & 255);
-                    $sroa_item_1_605 = $sroa_item_1_605 - 2;
+                    builtin::array_set_u8($array_clone_src_17, $load_82 - 1, ((48 + tx_50) - (rx_49 * 10)) & 255);
+                    builtin::array_set_u8($array_clone_src_17, $load_82 - 2, (48 + rx_49) & 255);
+                    $load_82 = $load_82 - 2;
                     x_340 = packed_352;
                     continue l75;
                 };
             };
-            if $sroa_item_1_605 > new_used_318 {
-                builtin::array_set_u8($array_clone_src_17, new_used_318, (48 + builtin::i32_wrap_i64(x_340 %u 10_i64)) & 255);
+            if $load_82 > start_115 {
+                builtin::array_set_u8($array_clone_src_17, start_115, (48 + builtin::i32_wrap_i64(x_340 %u 10_i64)) & 255);
             }
-            new_used_318 = builtin::i32_wrap_i64(local.tee packed_48("wasi/stream-new"()));
+            $load_82 = builtin::i32_wrap_i64(local.tee packed_48("wasi/stream-new"()));
             $sroa_item_1_605 = builtin::i32_wrap_i64(packed_48 >> 32_i64);
-            new_used_318 = "treemap_btree.wado/$cm_binding__Stdout_write_via_stream"(new_used_318);
+            $load_82 = "treemap_btree.wado/$cm_binding__Stdout_write_via_stream"($load_82);
             "core:rt/write_string_to_stream$spec0$dae[add_newline]"($sroa_item_1_605, $mv_arg_2.repr, $mv_arg_2.used);
-            "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(new_used_318);
+            "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"($load_82);
             continue l50;
         };
     };
@@ -1243,37 +1238,35 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self, min_ca
 }
 
 fn "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"(self, n) {
-    let start: i32;
-    if @unlikely(local.tee n(self.used + n) > builtin::array_len(self.repr)) {
+    let $load_0: i32;
+    if @unlikely(local.tee n(local.tee $load_0(self.used) + n) > builtin::array_len(self.repr)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self, n);
     }
-    start = self.used;
     self.used = n;
-    return start;
+    return $load_0;
 }
 
 fn "core:prelude/string.wado/core:prelude/string.wado/String::push"(self, c) {
+    let $load_0: i32;
     let byte: u8;
     let new_used: i32;
-    let start_9: i32;
     let repr: ref Array<u8>;
     if c <u 128 {
         byte = c & 255;
-        if @unlikely(local.tee new_used(self.used + 1) > builtin::array_len(self.repr)) {
+        if @unlikely(local.tee new_used(local.tee $load_0(self.used) + 1) > builtin::array_len(self.repr)) {
             cold_path;
             "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self, new_used);
         }
-        start_9 = self.used;
         self.used = new_used;
-        builtin::array_set_u8(self.repr, start_9, byte);
+        builtin::array_set_u8(self.repr, $load_0, byte);
         return;
     }
     if @unlikely((local.tee byte(self.used) + 4) > builtin::array_len(self.repr)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self, byte + 4);
     }
-    self.used = local.tee byte(self.used) + $inline_encode_char_0: block -> i32 {
+    self.used = byte + $inline_encode_char_0: block -> i32 {
         repr = self.repr;
         if c <u 128 {
             builtin::array_set_u8(repr, byte, c & 255);
@@ -1354,268 +1347,243 @@ fn "treemap_btree.wado/treemap_btree.wado/TreeMap<core:prelude/string.wado/Strin
 fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>"(self, is_negative, $mv$alt_prefix$repr, $mv$alt_prefix$used, digit_count) {
     let $load_0: bool;
     let $load_2: i32;
+    let $load_4: i32;
     let sign_len: i32;
     let prefix_len: i32;
     let self_21: ref "core:prelude/string.wado//String";
     let new_used_26: i32;
-    let start_27: i32;
+    let i_221: i32;
     $load_0 = self.sign_plus;
     sign_len = select i32(select i32(is_negative, 1, $load_0), 1, 0);
     prefix_len = select i32(self.alternate, $mv$alt_prefix$used, 0);
     sign_len = (sign_len + prefix_len) + digit_count;
     if (local.tee $load_2(self.width) <= 0) | (sign_len >= $load_2) {
         if is_negative {
-            if @unlikely(local.tee new_used_26(local.tee self_21(self.buf).used + 1) > builtin::array_len(self_21.repr)) {
+            if @unlikely(local.tee new_used_26(local.tee $load_4(local.tee self_21(self.buf).used) + 1) > builtin::array_len(self_21.repr)) {
                 cold_path;
                 "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self_21, new_used_26);
             }
-            start_27 = self_21.used;
             self_21.used = new_used_26;
-            builtin::array_set_u8(self_21.repr, start_27, 45);
+            builtin::array_set_u8(self_21.repr, $load_4, 45);
         } else if $load_0 {
-            if @unlikely(local.tee start_27(local.tee self_21(self.buf).used + 1) > builtin::array_len(self_21.repr)) {
+            if @unlikely(local.tee new_used_26(local.tee $load_4(local.tee self_21(self.buf).used) + 1) > builtin::array_len(self_21.repr)) {
                 cold_path;
-                "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self_21, start_27);
+                "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self_21, new_used_26);
             }
-            new_used_26 = self_21.used;
-            self_21.used = start_27;
-            builtin::array_set_u8(self_21.repr, new_used_26, 43);
+            self_21.used = new_used_26;
+            builtin::array_set_u8(self_21.repr, $load_4, 43);
         }
         if prefix_len > 0 {
             self_21 = self.buf;
             $inline_core_prelude_string_wado_String__internal_push_view_19: block {
                 break_if $inline_core_prelude_string_wado_String__internal_push_view_19 $mv$alt_prefix$used == 0;
-                if @unlikely(local.tee new_used_26(self_21.used + $mv$alt_prefix$used) > builtin::array_len(self_21.repr)) {
+                if @unlikely(local.tee new_used_26(local.tee $load_4(self_21.used) + $mv$alt_prefix$used) > builtin::array_len(self_21.repr)) {
                     cold_path;
                     "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self_21, new_used_26);
                 }
-                start_27 = self_21.used;
                 self_21.used = new_used_26;
-                builtin::array_copy<u8>(self_21.repr, start_27, $mv$alt_prefix$repr, 0, $mv$alt_prefix$used);
+                builtin::array_copy<u8>(self_21.repr, $load_4, $mv$alt_prefix$repr, 0, $mv$alt_prefix$used);
             };
         }
-        if @unlikely(local.tee start_27(local.tee self_21(self.buf).used + digit_count) > builtin::array_len(self_21.repr)) {
+        if @unlikely(local.tee new_used_26(local.tee $load_4(local.tee self_21(self.buf).used) + digit_count) > builtin::array_len(self_21.repr)) {
             cold_path;
-            "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self_21, start_27);
+            "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self_21, new_used_26);
         }
-        new_used_26 = self_21.used;
-        self_21.used = start_27;
-        return new_used_26;
+        self_21.used = new_used_26;
+        return $load_4;
     }
     sign_len = $load_2 - sign_len;
     if self.zero_pad {
         if is_negative {
-            if @unlikely(local.tee $load_2(local.tee self_21(self.buf).used + 1) > builtin::array_len(self_21.repr)) {
+            if @unlikely(local.tee $load_4(local.tee $load_2(local.tee self_21(self.buf).used) + 1) > builtin::array_len(self_21.repr)) {
                 cold_path;
-                "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self_21, $load_2);
+                "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self_21, $load_4);
             }
-            new_used_26 = self_21.used;
-            self_21.used = $load_2;
-            builtin::array_set_u8(self_21.repr, new_used_26, 45);
+            self_21.used = $load_4;
+            builtin::array_set_u8(self_21.repr, $load_2, 45);
         } else if $load_0 {
-            if @unlikely(local.tee new_used_26(local.tee self_21(self.buf).used + 1) > builtin::array_len(self_21.repr)) {
+            if @unlikely(local.tee $load_4(local.tee $load_2(local.tee self_21(self.buf).used) + 1) > builtin::array_len(self_21.repr)) {
                 cold_path;
-                "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self_21, new_used_26);
+                "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self_21, $load_4);
             }
-            $load_2 = self_21.used;
-            self_21.used = new_used_26;
+            self_21.used = $load_4;
             builtin::array_set_u8(self_21.repr, $load_2, 43);
         }
         if prefix_len > 0 {
             self_21 = self.buf;
             $inline_core_prelude_string_wado_String__internal_push_view_41: block {
                 break_if $inline_core_prelude_string_wado_String__internal_push_view_41 $mv$alt_prefix$used == 0;
-                if @unlikely(local.tee $load_2(self_21.used + $mv$alt_prefix$used) > builtin::array_len(self_21.repr)) {
+                if @unlikely(local.tee $load_4(local.tee $load_2(self_21.used) + $mv$alt_prefix$used) > builtin::array_len(self_21.repr)) {
                     cold_path;
-                    "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self_21, $load_2);
+                    "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self_21, $load_4);
                 }
-                new_used_26 = self_21.used;
-                self_21.used = $load_2;
-                builtin::array_copy<u8>(self_21.repr, new_used_26, $mv$alt_prefix$repr, 0, $mv$alt_prefix$used);
+                self_21.used = $load_4;
+                builtin::array_copy<u8>(self_21.repr, $load_2, $mv$alt_prefix$repr, 0, $mv$alt_prefix$used);
             };
         }
         self_21 = self.buf;
-        new_used_26 = 0;
+        $load_2 = 0;
         b150: block {
             l151: loop {
-                break_if b150 new_used_26 >= sign_len;
-                if @unlikely(local.tee $load_2(self_21.used + 1) > builtin::array_len(self_21.repr)) {
+                break_if b150 $load_2 >= sign_len;
+                if @unlikely(local.tee new_used_26(local.tee $load_4(self_21.used) + 1) > builtin::array_len(self_21.repr)) {
                     cold_path;
-                    "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self_21, $load_2);
+                    "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self_21, new_used_26);
                 }
-                start_27 = self_21.used;
-                self_21.used = $load_2;
-                builtin::array_set_u8(self_21.repr, start_27, 48);
-                new_used_26 = new_used_26 + 1;
+                self_21.used = new_used_26;
+                builtin::array_set_u8(self_21.repr, $load_4, 48);
+                $load_2 = $load_2 + 1;
                 continue l151;
             };
         };
-        if @unlikely(local.tee new_used_26(local.tee self_21(self.buf).used + digit_count) > builtin::array_len(self_21.repr)) {
+        if @unlikely(local.tee $load_2(local.tee $load_4(self_21.used) + digit_count) > builtin::array_len(self_21.repr)) {
             cold_path;
-            "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self_21, new_used_26);
+            "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self_21, $load_2);
         }
-        start_27 = self_21.used;
-        self_21.used = new_used_26;
-        return start_27;
+        self_21.used = $load_2;
+        return $load_4;
     }
-    if local.tee start_27(self.align) == 0 {
+    if local.tee $load_4(self.align) == 0 {
         if is_negative {
-            if @unlikely(local.tee new_used_26(local.tee self_21(self.buf).used + 1) > builtin::array_len(self_21.repr)) {
+            if @unlikely(local.tee new_used_26(local.tee $load_2(local.tee self_21(self.buf).used) + 1) > builtin::array_len(self_21.repr)) {
                 cold_path;
                 "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self_21, new_used_26);
             }
-            $load_2 = self_21.used;
             self_21.used = new_used_26;
             builtin::array_set_u8(self_21.repr, $load_2, 45);
         } else if $load_0 {
-            if @unlikely(local.tee $load_0(local.tee self_21(self.buf).used + 1) > builtin::array_len(self_21.repr)) {
+            if @unlikely(local.tee new_used_26(local.tee $load_2(local.tee self_21(self.buf).used) + 1) > builtin::array_len(self_21.repr)) {
                 cold_path;
-                "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self_21, $load_0);
+                "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self_21, new_used_26);
             }
-            $load_2 = self_21.used;
-            self_21.used = $load_0;
+            self_21.used = new_used_26;
             builtin::array_set_u8(self_21.repr, $load_2, 43);
         }
         if prefix_len > 0 {
             self_21 = self.buf;
             $inline_core_prelude_string_wado_String__internal_push_view_64: block {
                 break_if $inline_core_prelude_string_wado_String__internal_push_view_64 $mv$alt_prefix$used == 0;
-                if @unlikely(local.tee $load_2(self_21.used + $mv$alt_prefix$used) > builtin::array_len(self_21.repr)) {
+                if @unlikely(local.tee new_used_26(local.tee $load_2(self_21.used) + $mv$alt_prefix$used) > builtin::array_len(self_21.repr)) {
                     cold_path;
-                    "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self_21, $load_2);
+                    "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self_21, new_used_26);
                 }
-                $load_0 = self_21.used;
-                self_21.used = $load_2;
-                builtin::array_copy<u8>(self_21.repr, $load_0, $mv$alt_prefix$repr, 0, $mv$alt_prefix$used);
+                self_21.used = new_used_26;
+                builtin::array_copy<u8>(self_21.repr, $load_2, $mv$alt_prefix$repr, 0, $mv$alt_prefix$used);
             };
         }
-        if @unlikely(local.tee $load_0(local.tee self_21(self.buf).used + digit_count) > builtin::array_len(self_21.repr)) {
+        if @unlikely(local.tee new_used_26(local.tee $load_2(local.tee self_21(self.buf).used) + digit_count) > builtin::array_len(self_21.repr)) {
             cold_path;
-            "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self_21, $load_0);
+            "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self_21, new_used_26);
         }
-        $load_2 = self_21.used;
-        self_21.used = $load_0;
-        self_21 = self.buf;
-        $load_0 = self.fill;
-        new_used_26 = 0;
+        self_21.used = new_used_26;
+        new_used_26 = self.fill;
+        i_221 = 0;
         b162: block {
             l163: loop {
-                break_if b162 new_used_26 >= sign_len;
-                "core:prelude/string.wado/core:prelude/string.wado/String::push"(self_21, $load_0);
-                new_used_26 = new_used_26 + 1;
+                break_if b162 i_221 >= sign_len;
+                "core:prelude/string.wado/core:prelude/string.wado/String::push"(self_21, new_used_26);
+                i_221 = i_221 + 1;
                 continue l163;
             };
         };
         return $load_2;
-    } else if start_27 == 1 {
-        start_27 = sign_len / 2;
-        $load_2 = sign_len - start_27;
+    } else if $load_4 == 1 {
+        $load_4 = sign_len / 2;
+        $load_2 = sign_len - $load_4;
         self_21 = self.buf;
-        new_used_26 = self.fill;
-        $load_0 = 0;
+        i_221 = self.fill;
+        new_used_26 = 0;
         b165: block {
             l166: loop {
-                break_if b165 $load_0 >= start_27;
-                "core:prelude/string.wado/core:prelude/string.wado/String::push"(self_21, new_used_26);
-                $load_0 = $load_0 + 1;
+                break_if b165 new_used_26 >= $load_4;
+                "core:prelude/string.wado/core:prelude/string.wado/String::push"(self_21, i_221);
+                new_used_26 = new_used_26 + 1;
                 continue l166;
             };
         };
         if is_negative {
-            if @unlikely(local.tee start_27(local.tee self_21(self.buf).used + 1) > builtin::array_len(self_21.repr)) {
+            if @unlikely(local.tee $load_4(local.tee new_used_26(self_21.used) + 1) > builtin::array_len(self_21.repr)) {
                 cold_path;
-                "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self_21, start_27);
+                "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self_21, $load_4);
             }
-            new_used_26 = self_21.used;
-            self_21.used = start_27;
+            self_21.used = $load_4;
             builtin::array_set_u8(self_21.repr, new_used_26, 45);
-        } else if self.sign_plus {
-            if @unlikely(local.tee new_used_26(local.tee self_21(self.buf).used + 1) > builtin::array_len(self_21.repr)) {
+        } else if $load_0 {
+            if @unlikely(local.tee $load_4(local.tee new_used_26(self_21.used) + 1) > builtin::array_len(self_21.repr)) {
                 cold_path;
-                "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self_21, new_used_26);
+                "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self_21, $load_4);
             }
-            start_27 = self_21.used;
-            self_21.used = new_used_26;
-            builtin::array_set_u8(self_21.repr, start_27, 43);
+            self_21.used = $load_4;
+            builtin::array_set_u8(self_21.repr, new_used_26, 43);
         }
         if prefix_len > 0 {
-            self_21 = self.buf;
             $inline_core_prelude_string_wado_String__internal_push_view_88: block {
                 break_if $inline_core_prelude_string_wado_String__internal_push_view_88 $mv$alt_prefix$used == 0;
-                if @unlikely(local.tee start_27(self_21.used + $mv$alt_prefix$used) > builtin::array_len(self_21.repr)) {
+                if @unlikely(local.tee $load_4(local.tee new_used_26(self_21.used) + $mv$alt_prefix$used) > builtin::array_len(self_21.repr)) {
                     cold_path;
-                    "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self_21, start_27);
+                    "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self_21, $load_4);
                 }
-                new_used_26 = self_21.used;
-                self_21.used = start_27;
+                self_21.used = $load_4;
                 builtin::array_copy<u8>(self_21.repr, new_used_26, $mv$alt_prefix$repr, 0, $mv$alt_prefix$used);
             };
         }
-        if @unlikely(local.tee new_used_26(local.tee self_21(self.buf).used + digit_count) > builtin::array_len(self_21.repr)) {
+        if @unlikely(local.tee $load_4(local.tee new_used_26(self_21.used) + digit_count) > builtin::array_len(self_21.repr)) {
             cold_path;
-            "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self_21, new_used_26);
+            "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self_21, $load_4);
         }
-        start_27 = self_21.used;
-        self_21.used = new_used_26;
-        self_21 = self.buf;
-        new_used_26 = self.fill;
-        $load_0 = 0;
+        self_21.used = $load_4;
+        $load_4 = 0;
         b174: block {
             l175: loop {
-                break_if b174 $load_0 >= $load_2;
-                "core:prelude/string.wado/core:prelude/string.wado/String::push"(self_21, new_used_26);
-                $load_0 = $load_0 + 1;
+                break_if b174 $load_4 >= $load_2;
+                "core:prelude/string.wado/core:prelude/string.wado/String::push"(self_21, i_221);
+                $load_4 = $load_4 + 1;
                 continue l175;
             };
         };
-        return start_27;
+        return new_used_26;
     } else {
         self_21 = self.buf;
-        start_27 = self.fill;
-        new_used_26 = 0;
+        new_used_26 = self.fill;
+        i_221 = 0;
         b176: block {
             l177: loop {
-                break_if b176 new_used_26 >= sign_len;
-                "core:prelude/string.wado/core:prelude/string.wado/String::push"(self_21, start_27);
-                new_used_26 = new_used_26 + 1;
+                break_if b176 i_221 >= sign_len;
+                "core:prelude/string.wado/core:prelude/string.wado/String::push"(self_21, new_used_26);
+                i_221 = i_221 + 1;
                 continue l177;
             };
         };
         if is_negative {
-            if @unlikely(local.tee is_negative(local.tee self_21(self.buf).used + 1) > builtin::array_len(self_21.repr)) {
+            if @unlikely(local.tee i_221(local.tee is_negative(self_21.used) + 1) > builtin::array_len(self_21.repr)) {
+                cold_path;
+                "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self_21, i_221);
+            }
+            self_21.used = i_221;
+            builtin::array_set_u8(self_21.repr, is_negative, 45);
+        } else if $load_0 {
+            if @unlikely(local.tee is_negative(local.tee $load_0(self_21.used) + 1) > builtin::array_len(self_21.repr)) {
                 cold_path;
                 "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self_21, is_negative);
             }
-            start_27 = self_21.used;
             self_21.used = is_negative;
-            builtin::array_set_u8(self_21.repr, start_27, 45);
-        } else if self.sign_plus {
-            if @unlikely(local.tee start_27(local.tee self_21(self.buf).used + 1) > builtin::array_len(self_21.repr)) {
-                cold_path;
-                "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self_21, start_27);
-            }
-            is_negative = self_21.used;
-            self_21.used = start_27;
-            builtin::array_set_u8(self_21.repr, is_negative, 43);
+            builtin::array_set_u8(self_21.repr, $load_0, 43);
         }
         if prefix_len > 0 {
-            self_21 = self.buf;
             $inline_core_prelude_string_wado_String__internal_push_view_112: block {
                 break_if $inline_core_prelude_string_wado_String__internal_push_view_112 $mv$alt_prefix$used == 0;
-                if @unlikely(local.tee prefix_len(self_21.used + $mv$alt_prefix$used) > builtin::array_len(self_21.repr)) {
+                if @unlikely(local.tee $load_0(local.tee prefix_len(self_21.used) + $mv$alt_prefix$used) > builtin::array_len(self_21.repr)) {
                     cold_path;
-                    "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self_21, prefix_len);
+                    "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self_21, $load_0);
                 }
-                is_negative = self_21.used;
-                self_21.used = prefix_len;
-                builtin::array_copy<u8>(self_21.repr, is_negative, $mv$alt_prefix$repr, 0, $mv$alt_prefix$used);
+                self_21.used = $load_0;
+                builtin::array_copy<u8>(self_21.repr, prefix_len, $mv$alt_prefix$repr, 0, $mv$alt_prefix$used);
             };
         }
-        if @unlikely(local.tee digit_count(local.tee self_21(self.buf).used + digit_count) > builtin::array_len(self_21.repr)) {
+        if @unlikely(local.tee digit_count(local.tee $mv$alt_prefix$used(self_21.used) + digit_count) > builtin::array_len(self_21.repr)) {
             cold_path;
             "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self_21, digit_count);
         }
-        $mv$alt_prefix$used = self_21.used;
         self_21.used = digit_count;
         return $mv$alt_prefix$used;
     }
@@ -2631,15 +2599,14 @@ fn "core:prelude/primitive.wado/i32::fmt_decimal$sroa[self.value]"(self, f) {
 }
 
 fn "core:prelude/string.wado/core:prelude/string.wado/String^core:prelude/string.wado/AsStrSlice::internal_append_to$spec0"(self, out) {
+    let $load_0: i32;
     let new_used: i32;
-    let start_9: i32;
-    if @unlikely(local.tee new_used(out.used + 1) > builtin::array_len(out.repr)) {
+    if @unlikely(local.tee new_used(local.tee $load_0(out.used) + 1) > builtin::array_len(out.repr)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out, new_used);
     }
-    start_9 = out.used;
     out.used = new_used;
-    builtin::array_copy<u8>(out.repr, start_9, self.repr, 0, 1);
+    builtin::array_copy<u8>(out.repr, $load_0, self.repr, 0, 1);
 }
 
 fn "treemap_btree.wado/treemap_btree.wado/TreeMap<core:prelude/string.wado/String,i32>::split_child$sroa[self.t]"(self, parent, child_index) {
@@ -2826,24 +2793,22 @@ fn "treemap_btree.wado/treemap_btree.wado/TreeMap<core:prelude/string.wado/Strin
 }
 
 fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$sroa[self.buf]$dae[alt_prefix]"(self, is_negative, digit_count) {
-    let start_26: i32;
+    let new_used_25: i32;
     if is_negative {
-        if @unlikely(local.tee is_negative(self.used + 1) > builtin::array_len(self.repr)) {
+        if @unlikely(local.tee new_used_25(local.tee is_negative(self.used) + 1) > builtin::array_len(self.repr)) {
             cold_path;
-            "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self, is_negative);
+            "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self, new_used_25);
         }
-        start_26 = self.used;
-        self.used = is_negative;
-        builtin::array_set_u8(self.repr, start_26, 45);
+        self.used = new_used_25;
+        builtin::array_set_u8(self.repr, is_negative, 45);
     } else {
     }
-    if @unlikely(local.tee digit_count(self.used + digit_count) > builtin::array_len(self.repr)) {
+    if @unlikely(local.tee digit_count(local.tee is_negative(self.used) + digit_count) > builtin::array_len(self.repr)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self, digit_count);
     }
-    start_26 = self.used;
     self.used = digit_count;
-    return start_26;
+    return is_negative;
 }
 
 export fn "treemap_btree.wado/$cm_export__run" as "run"

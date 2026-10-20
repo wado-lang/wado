@@ -113,17 +113,16 @@ fn "hfs_match_nested_in_block.wado/run"() with Stdout {
         builtin::array_set_u8($local_3.repr, i_1, 45);
     } else {
     }
-    if @unlikely(local.tee i_1($local_3.used + $match_scrut_0) > builtin::array_len($local_3.repr)) {
+    if @unlikely(local.tee $hfs_v_431(local.tee i_1($local_3.used) + $match_scrut_0) > builtin::array_len($local_3.repr)) {
         cold_path;
-        "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_3, i_1);
+        "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_3, $hfs_v_431);
     }
-    $hfs_v_431 = $local_3.used;
-    $local_3.used = i_1;
-    "core:prelude/primitive.wado/write_decimal_digits"($local_3.repr, $hfs_v_431, x, $match_scrut_0);
+    $local_3.used = $hfs_v_431;
+    "core:prelude/primitive.wado/write_decimal_digits"($local_3.repr, i_1, x, $match_scrut_0);
     $match_scrut_0 = builtin::i32_wrap_i64(local.tee x("wasi/stream-new"()));
-    $hfs_v_431 = builtin::i32_wrap_i64(x >> 32_i64);
+    i_1 = builtin::i32_wrap_i64(x >> 32_i64);
     $match_scrut_0 = "hfs_match_nested_in_block.wado/$cm_binding__Stdout_write_via_stream"($match_scrut_0);
-    "core:rt/write_string_to_stream$dae[add_newline]"($hfs_v_431, $local_3.repr, $local_3.used);
+    "core:rt/write_string_to_stream$dae[add_newline]"(i_1, $local_3.repr, $local_3.used);
     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"($match_scrut_0);
 }
 

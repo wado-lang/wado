@@ -1,0 +1,40 @@
+// A call forgets only the fields its callee may write. The cold call grows the
+// `List`s, which writes their `repr` alone, so `b.tag` and its `used` are read
+// once and reused after it.
+
+struct Rows {
+    tag: List<i32>,
+    id: List<i32>,
+}
+
+impl Rows {
+    fn push_row(&mut self, t: i32, i: i32) {
+        if self.tag.len() >= self.tag.capacity() {
+            builtin::cold_path();
+            self.tag.reserve(1);
+            self.id.reserve(1);
+        }
+        unchecked self.tag.push_within_capacity(t);
+        unchecked self.id.push_within_capacity(i);
+    }
+}
+
+fn fill(n: i32) -> Rows {
+    let mut b = Rows { tag: [], id: [] };
+    for let i of 0..<n {
+        b.push_row(i, i * 2);
+    }
+    return b;
+}
+
+export fn run() {
+    let b = fill(builtin::black_box(10));
+    assert b.tag.len() == 10 && b.id[9] == 18;
+}
+
+__DATA__
+{
+    "stdout": "",
+    "wir_scope": "fill",
+    "wir_not_expect:O2": ["(b.tag).used;"]
+}

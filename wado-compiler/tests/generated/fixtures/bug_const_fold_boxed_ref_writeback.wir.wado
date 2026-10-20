@@ -105,23 +105,22 @@ fn "bug_const_fold_boxed_ref_writeback.wado/run"() with Stdout {
         builtin::array_set_u8($local_0.repr, start_140, 45);
     } else {
     }
-    if @unlikely(local.tee start_140($local_0.used + rx_22) > builtin::array_len($local_0.repr)) {
+    if @unlikely(local.tee tx_23(local.tee start_140($local_0.used) + rx_22) > builtin::array_len($local_0.repr)) {
         cold_path;
-        "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_0, start_140);
+        "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_0, tx_23);
     }
-    tx_23 = $local_0.used;
-    $local_0.used = start_140;
-    "core:prelude/primitive.wado/write_decimal_digits"($local_0.repr, tx_23, packed_21, rx_22);
+    $local_0.used = tx_23;
+    "core:prelude/primitive.wado/write_decimal_digits"($local_0.repr, start_140, packed_21, rx_22);
     rx_22 = builtin::i32_wrap_i64(local.tee packed_21("wasi/stream-new"()));
-    tx_23 = builtin::i32_wrap_i64(packed_21 >> 32_i64);
+    start_140 = builtin::i32_wrap_i64(packed_21 >> 32_i64);
     rx_22 = "bug_const_fold_boxed_ref_writeback.wado/$cm_binding__Stdout_write_via_stream"(rx_22);
-    "core:rt/write_string_to_stream$dae[add_newline]"(tx_23, $local_0.repr, $local_0.used);
+    "core:rt/write_string_to_stream$dae[add_newline]"(start_140, $local_0.repr, $local_0.used);
     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(rx_22);
     rx_22 = builtin::i32_wrap_i64(local.tee packed_21("wasi/stream-new"()));
-    tx_23 = builtin::i32_wrap_i64(packed_21 >> 32_i64);
+    start_140 = builtin::i32_wrap_i64(packed_21 >> 32_i64);
     rx_22 = "bug_const_fold_boxed_ref_writeback.wado/$cm_binding__Stdout_write_via_stream"(rx_22);
     $local_0 = global:bug_const_fold_boxed_ref_writeback.wado::$const_obj_1;
-    "core:rt/write_string_to_stream$dae[add_newline]"(tx_23, $local_0.repr, $local_0.used);
+    "core:rt/write_string_to_stream$dae[add_newline]"(start_140, $local_0.repr, $local_0.used);
     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(rx_22);
 }
 

@@ -146,17 +146,16 @@ fn "hfs_letdestructure_loop_local.wado/run"() with Stdout {
         builtin::array_set_u8($local_5.repr, n_4, 45);
     } else {
     }
-    if @unlikely(local.tee n_4($local_5.used + total) > builtin::array_len($local_5.repr)) {
+    if @unlikely(local.tee $load_9(local.tee n_4($local_5.used) + total) > builtin::array_len($local_5.repr)) {
         cold_path;
-        "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_5, n_4);
+        "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_5, $load_9);
     }
-    $load_9 = $local_5.used;
-    $local_5.used = n_4;
-    "core:prelude/primitive.wado/write_decimal_digits"($local_5.repr, $load_9, x, total);
+    $local_5.used = $load_9;
+    "core:prelude/primitive.wado/write_decimal_digits"($local_5.repr, n_4, x, total);
     total = builtin::i32_wrap_i64(local.tee x("wasi/stream-new"()));
-    $load_9 = builtin::i32_wrap_i64(x >> 32_i64);
+    n_4 = builtin::i32_wrap_i64(x >> 32_i64);
     total = "hfs_letdestructure_loop_local.wado/$cm_binding__Stdout_write_via_stream"(total);
-    "core:rt/write_string_to_stream$dae[add_newline]"($load_9, $local_5.repr, $local_5.used);
+    "core:rt/write_string_to_stream$dae[add_newline]"(n_4, $local_5.repr, $local_5.used);
     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(total);
 }
 

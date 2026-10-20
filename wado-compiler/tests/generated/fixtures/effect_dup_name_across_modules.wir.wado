@@ -135,20 +135,19 @@ fn "effect_dup_name_across_modules.wado/run"() with Stdout {
     self_17 = "core:prelude/primitive.wado/count_digits_u64"(local.tee x_28(x_28 = builtin::i64_extend_i32_s(self_17); select i64(x_28 < 0_i64, 0_i64 - x_28, x_28)));
     is_negative_24 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$sroa[self.buf]$dae[alt_prefix]"($sroa_$f_buf_75, is_negative_24, self_17);
     "core:prelude/primitive.wado/write_decimal_digits"($sroa_$f_buf_75.repr, is_negative_24, x_28, self_17);
-    if @unlikely(local.tee self_17(message_7.used + 1) > builtin::array_len(message_7.repr)) {
+    if @unlikely(local.tee is_negative_24(local.tee self_17(message_7.used) + 1) > builtin::array_len(message_7.repr)) {
         cold_path;
-        "core:prelude/string.wado/core:prelude/string.wado/String::grow"(message_7, self_17);
+        "core:prelude/string.wado/core:prelude/string.wado/String::grow"(message_7, is_negative_24);
     }
-    is_negative_24 = message_7.used;
-    message_7.used = self_17;
-    builtin::array_copy<u8>(message_7.repr, is_negative_24, global:effect_dup_name_across_modules.wado::$const_obj_3, 0, 1);
-    is_negative_24 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$sroa[self.buf]$dae[alt_prefix]"(local.tee $sroa_$f_buf_75(message_7), 0, 1);
-    "core:prelude/primitive.wado/write_decimal_digits"($sroa_$f_buf_75.repr, is_negative_24, 7_i64, 1);
-    is_negative_24 = builtin::i32_wrap_i64(local.tee x_28("wasi/stream-new"()));
-    self_17 = builtin::i32_wrap_i64(x_28 >> 32_i64);
-    is_negative_24 = "effect_dup_name_across_modules.wado/$cm_binding__Stdout_write_via_stream"(is_negative_24);
-    "core:rt/write_string_to_stream$dae[add_newline]"(self_17, message_7.repr, message_7.used);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(is_negative_24);
+    message_7.used = is_negative_24;
+    builtin::array_copy<u8>(message_7.repr, self_17, global:effect_dup_name_across_modules.wado::$const_obj_3, 0, 1);
+    self_17 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$sroa[self.buf]$dae[alt_prefix]"(local.tee $sroa_$f_buf_75(message_7), 0, 1);
+    "core:prelude/primitive.wado/write_decimal_digits"($sroa_$f_buf_75.repr, self_17, 7_i64, 1);
+    self_17 = builtin::i32_wrap_i64(local.tee x_28("wasi/stream-new"()));
+    is_negative_24 = builtin::i32_wrap_i64(x_28 >> 32_i64);
+    self_17 = "effect_dup_name_across_modules.wado/$cm_binding__Stdout_write_via_stream"(self_17);
+    "core:rt/write_string_to_stream$dae[add_newline]"(is_negative_24, message_7.repr, message_7.used);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(self_17);
 }
 
 fn "effect_dup_name_across_modules.wado/$cm_binding__Stdout_write_via_stream"(data) with Stdout {
@@ -357,24 +356,22 @@ fn "effect_dup_name_across_modules.wado/effect_dup_name_across_modules.wado/$Clo
 }
 
 fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$sroa[self.buf]$dae[alt_prefix]"(self, is_negative, digit_count) {
-    let start_26: i32;
+    let new_used_25: i32;
     if is_negative {
-        if @unlikely(local.tee is_negative(self.used + 1) > builtin::array_len(self.repr)) {
+        if @unlikely(local.tee new_used_25(local.tee is_negative(self.used) + 1) > builtin::array_len(self.repr)) {
             cold_path;
-            "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self, is_negative);
+            "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self, new_used_25);
         }
-        start_26 = self.used;
-        self.used = is_negative;
-        builtin::array_set_u8(self.repr, start_26, 45);
+        self.used = new_used_25;
+        builtin::array_set_u8(self.repr, is_negative, 45);
     } else {
     }
-    if @unlikely(local.tee digit_count(self.used + digit_count) > builtin::array_len(self.repr)) {
+    if @unlikely(local.tee digit_count(local.tee is_negative(self.used) + digit_count) > builtin::array_len(self.repr)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self, digit_count);
     }
-    start_26 = self.used;
     self.used = digit_count;
-    return start_26;
+    return is_negative;
 }
 
 fn "closure/effect_dup_name_across_modules.wado/$closure_wrapper_0"($env, $p0) {

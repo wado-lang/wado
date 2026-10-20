@@ -126,17 +126,16 @@ fn "opt_inline_cycle_bridge.wado/run"() with Stdout {
         builtin::array_set_u8($local_3_3.repr, $sroa_v_end_37, 45);
     } else {
     }
-    if @unlikely(local.tee $sroa_v_end_37($local_3_3.used + total) > builtin::array_len($local_3_3.repr)) {
+    if @unlikely(local.tee $sroa_$iter_0_start_49(local.tee $sroa_v_end_37($local_3_3.used) + total) > builtin::array_len($local_3_3.repr)) {
         cold_path;
-        "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_3_3, $sroa_v_end_37);
+        "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_3_3, $sroa_$iter_0_start_49);
     }
-    $sroa_$iter_0_start_49 = $local_3_3.used;
-    $local_3_3.used = $sroa_v_end_37;
-    "core:prelude/primitive.wado/write_decimal_digits"($local_3_3.repr, $sroa_$iter_0_start_49, x_27, total);
+    $local_3_3.used = $sroa_$iter_0_start_49;
+    "core:prelude/primitive.wado/write_decimal_digits"($local_3_3.repr, $sroa_v_end_37, x_27, total);
     total = builtin::i32_wrap_i64(local.tee x_27("wasi/stream-new"()));
-    $sroa_$iter_0_start_49 = builtin::i32_wrap_i64(x_27 >> 32_i64);
+    $sroa_v_end_37 = builtin::i32_wrap_i64(x_27 >> 32_i64);
     total = "opt_inline_cycle_bridge.wado/$cm_binding__Stdout_write_via_stream"(total);
-    "core:rt/write_string_to_stream$dae[add_newline]"($sroa_$iter_0_start_49, $local_3_3.repr, $local_3_3.used);
+    "core:rt/write_string_to_stream$dae[add_newline]"($sroa_v_end_37, $local_3_3.repr, $local_3_3.used);
     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(total);
 }
 

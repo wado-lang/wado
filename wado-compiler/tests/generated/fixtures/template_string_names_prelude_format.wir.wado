@@ -67,6 +67,7 @@ import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 global global:template_string_names_prelude_format.wado::$const_obj_3: ref Array<u8> = array.new_fixed<u8>(110, 61);
 
 fn "template_string_names_prelude_format.wado/run"() with Stdout {
+    let $load_2: ref Array<u8>;
     let n_0: i32;
     let $local_1: ref "core:prelude/string.wado//String";
     let new_used_19: i32;
@@ -80,24 +81,22 @@ fn "template_string_names_prelude_format.wado/run"() with Stdout {
     }
     start_20 = $local_1.used;
     $local_1.used = new_used_19;
-    builtin::array_copy<u8>($local_1.repr, start_20, global:template_string_names_prelude_format.wado::$const_obj_3, 0, 2);
+    builtin::array_copy<u8>(local.tee $load_2($local_1.repr), start_20, global:template_string_names_prelude_format.wado::$const_obj_3, 0, 2);
     start_20 = local.tee n_0(n_0 * 2) < 0;
     n_0 = "core:prelude/primitive.wado/count_digits_u64"(local.tee x_34(x_34 = builtin::i64_extend_i32_s(n_0); select i64(x_34 < 0_i64, 0_i64 - x_34, x_34)));
     if start_20 {
-        if @unlikely(local.tee start_20($local_1.used + 1) > builtin::array_len($local_1.repr)) {
+        if @unlikely(local.tee new_used_19(local.tee start_20($local_1.used) + 1) > builtin::array_len($load_2)) {
             cold_path;
-            "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_1, start_20);
+            "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_1, new_used_19);
         }
-        new_used_19 = $local_1.used;
-        $local_1.used = start_20;
-        builtin::array_set_u8($local_1.repr, new_used_19, 45);
+        $local_1.used = new_used_19;
+        builtin::array_set_u8($local_1.repr, start_20, 45);
     } else {
     }
-    if @unlikely(local.tee new_used_19($local_1.used + n_0) > builtin::array_len($local_1.repr)) {
+    if @unlikely(local.tee new_used_19(local.tee start_20($local_1.used) + n_0) > builtin::array_len($local_1.repr)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_1, new_used_19);
     }
-    start_20 = $local_1.used;
     $local_1.used = new_used_19;
     "core:prelude/primitive.wado/write_decimal_digits"($local_1.repr, start_20, x_34, n_0);
     n_0 = builtin::i32_wrap_i64(local.tee x_34("wasi/stream-new"()));

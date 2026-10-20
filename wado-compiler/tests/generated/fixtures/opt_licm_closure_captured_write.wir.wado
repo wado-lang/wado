@@ -102,17 +102,16 @@ fn "opt_licm_closure_captured_write.wado/run"() with Stdout {
         builtin::array_set_u8($local_5.repr, i_4, 45);
     } else {
     }
-    if @unlikely(local.tee i_4($local_5.used + sum) > builtin::array_len($local_5.repr)) {
+    if @unlikely(local.tee $licm_value_35(local.tee i_4($local_5.used) + sum) > builtin::array_len($local_5.repr)) {
         cold_path;
-        "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_5, i_4);
+        "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_5, $licm_value_35);
     }
-    $licm_value_35 = $local_5.used;
-    $local_5.used = i_4;
-    "core:prelude/primitive.wado/write_decimal_digits"($local_5.repr, $licm_value_35, x, sum);
+    $local_5.used = $licm_value_35;
+    "core:prelude/primitive.wado/write_decimal_digits"($local_5.repr, i_4, x, sum);
     sum = builtin::i32_wrap_i64(local.tee x("wasi/stream-new"()));
-    $licm_value_35 = builtin::i32_wrap_i64(x >> 32_i64);
+    i_4 = builtin::i32_wrap_i64(x >> 32_i64);
     sum = "opt_licm_closure_captured_write.wado/$cm_binding__Stdout_write_via_stream"(sum);
-    "core:rt/write_string_to_stream$dae[add_newline]"($licm_value_35, $local_5.repr, $local_5.used);
+    "core:rt/write_string_to_stream$dae[add_newline]"(i_4, $local_5.repr, $local_5.used);
     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(sum);
 }
 

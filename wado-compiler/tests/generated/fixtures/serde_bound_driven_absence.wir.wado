@@ -184,43 +184,39 @@ fn "core:json/core/json/to_string<serde_bound_driven_absence.wado/UsedForSeriali
 }
 
 fn "core:json/core/json/write_plain_key<&core:prelude/string.wado/String>$spec0"(buf, name, count) {
-    let $load_3: ref Array<u8>;
-    let start_18: i32;
+    let $load_2: ref Array<u8>;
+    let new_used_17: i32;
     if count > 0 {
-        if @unlikely(local.tee count(buf.used + 2) > builtin::array_len(buf.repr)) {
+        if @unlikely(local.tee new_used_17(local.tee count(buf.used) + 2) > builtin::array_len(buf.repr)) {
             cold_path;
-            "core:prelude/string.wado/core:prelude/string.wado/String::grow"(buf, count);
+            "core:prelude/string.wado/core:prelude/string.wado/String::grow"(buf, new_used_17);
         }
-        start_18 = buf.used;
-        buf.used = count;
-        builtin::array_copy<u8>(local.tee $load_3(buf.repr), start_18, global:core:json::$const_obj_24, 0, 2);
-        if @unlikely(local.tee start_18(buf.used + 3) > builtin::array_len($load_3)) {
+        buf.used = new_used_17;
+        builtin::array_copy<u8>(local.tee $load_2(buf.repr), count, global:core:json::$const_obj_24, 0, 2);
+        if @unlikely(local.tee new_used_17(local.tee count(buf.used) + 3) > builtin::array_len($load_2)) {
             cold_path;
-            "core:prelude/string.wado/core:prelude/string.wado/String::grow"(buf, start_18);
+            "core:prelude/string.wado/core:prelude/string.wado/String::grow"(buf, new_used_17);
         }
-        count = buf.used;
-        buf.used = start_18;
-        builtin::array_copy<u8>(local.tee $load_3(buf.repr), count, name.repr, 0, 1);
+        buf.used = new_used_17;
+        builtin::array_copy<u8>(local.tee $load_2(buf.repr), count, name.repr, 0, 1);
         count = count + 1;
-        builtin::array_copy<u8>($load_3, count, global:core:json::$const_obj_22, 0, 2);
+        builtin::array_copy<u8>($load_2, count, global:core:json::$const_obj_22, 0, 2);
         return;
     }
-    if @unlikely(local.tee count(buf.used + 1) > builtin::array_len(buf.repr)) {
+    if @unlikely(local.tee new_used_17(local.tee count(buf.used) + 1) > builtin::array_len(buf.repr)) {
         cold_path;
-        "core:prelude/string.wado/core:prelude/string.wado/String::grow"(buf, count);
+        "core:prelude/string.wado/core:prelude/string.wado/String::grow"(buf, new_used_17);
     }
-    start_18 = buf.used;
-    buf.used = count;
-    builtin::array_set_u8(local.tee $load_3(buf.repr), start_18, 34);
-    if @unlikely(local.tee start_18(buf.used + 3) > builtin::array_len($load_3)) {
+    buf.used = new_used_17;
+    builtin::array_set_u8(local.tee $load_2(buf.repr), count, 34);
+    if @unlikely(local.tee new_used_17(local.tee count(buf.used) + 3) > builtin::array_len($load_2)) {
         cold_path;
-        "core:prelude/string.wado/core:prelude/string.wado/String::grow"(buf, start_18);
+        "core:prelude/string.wado/core:prelude/string.wado/String::grow"(buf, new_used_17);
     }
-    count = buf.used;
-    buf.used = start_18;
-    builtin::array_copy<u8>(local.tee $load_3(buf.repr), count, name.repr, 0, 1);
+    buf.used = new_used_17;
+    builtin::array_copy<u8>(local.tee $load_2(buf.repr), count, name.repr, 0, 1);
     count = count + 1;
-    builtin::array_copy<u8>($load_3, count, global:core:json::$const_obj_22, 0, 2);
+    builtin::array_copy<u8>($load_2, count, global:core:json::$const_obj_22, 0, 2);
 }
 
 fn "core:prelude/string.wado/core:prelude/string.wado/String::realloc_to"(self, new_capacity) {
@@ -239,26 +235,25 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self, min_ca
 }
 
 fn "core:prelude/string.wado/core:prelude/string.wado/String::push"(self, c) {
+    let $load_0: i32;
     let byte: u8;
     let new_used: i32;
-    let start_9: i32;
     let repr: ref Array<u8>;
     if c <u 128 {
         byte = c & 255;
-        if @unlikely(local.tee new_used(self.used + 1) > builtin::array_len(self.repr)) {
+        if @unlikely(local.tee new_used(local.tee $load_0(self.used) + 1) > builtin::array_len(self.repr)) {
             cold_path;
             "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self, new_used);
         }
-        start_9 = self.used;
         self.used = new_used;
-        builtin::array_set_u8(self.repr, start_9, byte);
+        builtin::array_set_u8(self.repr, $load_0, byte);
         return;
     }
     if @unlikely((local.tee byte(self.used) + 4) > builtin::array_len(self.repr)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self, byte + 4);
     }
-    self.used = local.tee byte(self.used) + $inline_encode_char_0: block -> i32 {
+    self.used = byte + $inline_encode_char_0: block -> i32 {
         repr = self.repr;
         if c <u 128 {
             builtin::array_set_u8(repr, byte, c & 255);
@@ -284,50 +279,47 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::push"(self, c) {
 }
 
 fn "core:serde/serde_bound_driven_absence.wado/UsedForSerialize^core:serde/Serialize::serialize<core:json/JsonSerializer>$sroa[self.x,s.buf]"(self, s) {
+    let $load_0: i32;
+    let $load_3: ref Array<u8>;
     let new_used_28: i32;
-    let start_29: i32;
     let x: i64;
-    if @unlikely(local.tee new_used_28(s.used + 1) > builtin::array_len(s.repr)) {
+    if @unlikely(local.tee new_used_28(local.tee $load_0(s.used) + 1) > builtin::array_len(s.repr)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"(s, new_used_28);
     }
-    start_29 = s.used;
     s.used = new_used_28;
-    builtin::array_copy<u8>(s.repr, start_29, global:core:serde::$const_obj_21, 0, 1);
+    builtin::array_copy<u8>(s.repr, $load_0, global:core:serde::$const_obj_21, 0, 1);
     "core:json/core/json/write_plain_key<&core:prelude/string.wado/String>$spec0"(s, global:core:serde::$const_obj_20, 0);
-    start_29 = self < 0;
+    $load_0 = self < 0;
     self = "core:prelude/primitive.wado/count_digits_u64"(local.tee x(x = builtin::i64_extend_i32_s(self); select i64(x < 0_i64, 0_i64 - x, x)));
-    start_29 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec1$sroa[self.buf]$dae[alt_prefix]"(s, start_29, self);
-    "core:prelude/primitive.wado/write_decimal_digits"(s.repr, start_29, x, self);
-    if @unlikely(local.tee self(s.used + 1) > builtin::array_len(s.repr)) {
+    $load_0 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec1$sroa[self.buf]$dae[alt_prefix]"(s, $load_0, self);
+    "core:prelude/primitive.wado/write_decimal_digits"(local.tee $load_3(s.repr), $load_0, x, self);
+    if @unlikely(local.tee $load_0(local.tee self(s.used) + 1) > builtin::array_len($load_3)) {
         cold_path;
-        "core:prelude/string.wado/core:prelude/string.wado/String::grow"(s, self);
+        "core:prelude/string.wado/core:prelude/string.wado/String::grow"(s, $load_0);
     }
-    start_29 = s.used;
-    s.used = self;
-    builtin::array_copy<u8>(s.repr, start_29, global:core:serde::$const_obj_19, 0, 1);
+    s.used = $load_0;
+    builtin::array_copy<u8>(s.repr, self, global:core:serde::$const_obj_19, 0, 1);
     return ref.null none;
 }
 
 fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec1$sroa[self.buf]$dae[alt_prefix]"(self, is_negative, digit_count) {
-    let start_26: i32;
+    let new_used_25: i32;
     if is_negative {
-        if @unlikely(local.tee is_negative(self.used + 1) > builtin::array_len(self.repr)) {
+        if @unlikely(local.tee new_used_25(local.tee is_negative(self.used) + 1) > builtin::array_len(self.repr)) {
             cold_path;
-            "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self, is_negative);
+            "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self, new_used_25);
         }
-        start_26 = self.used;
-        self.used = is_negative;
-        builtin::array_set_u8(self.repr, start_26, 45);
+        self.used = new_used_25;
+        builtin::array_set_u8(self.repr, is_negative, 45);
     } else {
     }
-    if @unlikely(local.tee digit_count(self.used + digit_count) > builtin::array_len(self.repr)) {
+    if @unlikely(local.tee digit_count(local.tee is_negative(self.used) + digit_count) > builtin::array_len(self.repr)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self, digit_count);
     }
-    start_26 = self.used;
     self.used = digit_count;
-    return start_26;
+    return is_negative;
 }
 
 export fn "serde_bound_driven_absence.wado/$cm_export__run" as "run"

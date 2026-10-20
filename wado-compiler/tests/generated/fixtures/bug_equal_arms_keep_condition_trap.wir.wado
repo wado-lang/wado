@@ -85,17 +85,16 @@ fn "bug_equal_arms_keep_condition_trap.wado/run"() with Stdout {
         builtin::array_set_u8($local_2.repr, start_68, 45);
     } else {
     }
-    if @unlikely(local.tee start_68($local_2.used + z) > builtin::array_len($local_2.repr)) {
+    if @unlikely(local.tee is_negative_17(local.tee start_68($local_2.used) + z) > builtin::array_len($local_2.repr)) {
         cold_path;
-        "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_2, start_68);
+        "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_2, is_negative_17);
     }
-    is_negative_17 = $local_2.used;
-    $local_2.used = start_68;
-    "core:prelude/primitive.wado/write_decimal_digits"($local_2.repr, is_negative_17, x, z);
+    $local_2.used = is_negative_17;
+    "core:prelude/primitive.wado/write_decimal_digits"($local_2.repr, start_68, x, z);
     z = builtin::i32_wrap_i64(local.tee x("wasi/stream-new"()));
-    is_negative_17 = builtin::i32_wrap_i64(x >> 32_i64);
+    start_68 = builtin::i32_wrap_i64(x >> 32_i64);
     z = "bug_equal_arms_keep_condition_trap.wado/$cm_binding__Stdout_write_via_stream"(z);
-    "core:rt/write_string_to_stream$dae[add_newline]"(is_negative_17, $local_2.repr, $local_2.used);
+    "core:rt/write_string_to_stream$dae[add_newline]"(start_68, $local_2.repr, $local_2.used);
     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(z);
 }
 

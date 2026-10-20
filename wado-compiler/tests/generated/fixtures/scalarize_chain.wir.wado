@@ -78,18 +78,16 @@ fn "scalarize_chain.wado/run"() with Stdout {
     start_164 = $sroa_$f_buf_79.used;
     $sroa_$f_buf_79.used = new_used_163;
     "core:prelude/primitive.wado/write_decimal_digits"($sroa_$f_buf_79.repr, start_164, 22_i64, 2);
-    if @unlikely(local.tee start_164($local_1.used + 2) > builtin::array_len($local_1.repr)) {
+    if @unlikely(local.tee new_used_163(local.tee start_164($local_1.used) + 2) > builtin::array_len($local_1.repr)) {
         cold_path;
-        "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_1, start_164);
+        "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_1, new_used_163);
     }
-    new_used_163 = $local_1.used;
-    $local_1.used = start_164;
-    builtin::array_copy<u8>($local_1.repr, new_used_163, global:scalarize_chain.wado::$const_obj_3, 0, 2);
-    if @unlikely(local.tee new_used_163(local.tee $sroa_$f_buf_79($local_1).used + 2) > builtin::array_len($sroa_$f_buf_79.repr)) {
+    $local_1.used = new_used_163;
+    builtin::array_copy<u8>($local_1.repr, start_164, global:scalarize_chain.wado::$const_obj_3, 0, 2);
+    if @unlikely(local.tee new_used_163(local.tee start_164(local.tee $sroa_$f_buf_79($local_1).used) + 2) > builtin::array_len($sroa_$f_buf_79.repr)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"($sroa_$f_buf_79, new_used_163);
     }
-    start_164 = $sroa_$f_buf_79.used;
     $sroa_$f_buf_79.used = new_used_163;
     "core:prelude/primitive.wado/write_decimal_digits"($sroa_$f_buf_79.repr, start_164, 66_i64, 2);
     start_164 = builtin::i32_wrap_i64(local.tee packed("wasi/stream-new"()));

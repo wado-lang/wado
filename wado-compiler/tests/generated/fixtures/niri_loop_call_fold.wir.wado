@@ -90,27 +90,25 @@ fn "niri_loop_call_fold.wado/run"() with Stdout {
     let c: i32;
     let $local_3: ref "core:prelude/string.wado//String";
     let offset_21: i32;
-    let start_35: i32;
+    let new_used_34: i32;
     let x_74: i64;
     let $sroa_$f_buf_97: ref "core:prelude/string.wado//String";
     c = "niri_loop_call_fold.wado/runaway"(black_box(50000));
     offset_21 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$sroa[self.buf]$dae[alt_prefix]"(local.tee $sroa_$f_buf_97(local.tee $local_3(struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(50), used: 0 })), 0, 2);
     "core:prelude/primitive.wado/write_decimal_digits"($sroa_$f_buf_97.repr, offset_21, 55_i64, 2);
-    if @unlikely(local.tee offset_21($local_3.used + 1) > builtin::array_len($local_3.repr)) {
+    if @unlikely(local.tee new_used_34(local.tee offset_21($local_3.used) + 1) > builtin::array_len($local_3.repr)) {
         cold_path;
-        "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_3, offset_21);
+        "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_3, new_used_34);
     }
-    start_35 = $local_3.used;
-    $local_3.used = offset_21;
-    builtin::array_copy<u8>($local_3.repr, start_35, global:niri_loop_call_fold.wado::$const_obj_3, 0, 1);
-    start_35 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$sroa[self.buf]$dae[alt_prefix]"(local.tee $sroa_$f_buf_97($local_3), 0, 2);
-    "core:prelude/primitive.wado/write_decimal_digits"($sroa_$f_buf_97.repr, start_35, 21_i64, 2);
-    if @unlikely(local.tee start_35($local_3.used + 1) > builtin::array_len($local_3.repr)) {
+    $local_3.used = new_used_34;
+    builtin::array_copy<u8>($local_3.repr, offset_21, global:niri_loop_call_fold.wado::$const_obj_3, 0, 1);
+    offset_21 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$sroa[self.buf]$dae[alt_prefix]"(local.tee $sroa_$f_buf_97($local_3), 0, 2);
+    "core:prelude/primitive.wado/write_decimal_digits"($sroa_$f_buf_97.repr, offset_21, 21_i64, 2);
+    if @unlikely(local.tee new_used_34(local.tee offset_21($local_3.used) + 1) > builtin::array_len($local_3.repr)) {
         cold_path;
-        "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_3, start_35);
+        "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_3, new_used_34);
     }
-    offset_21 = $local_3.used;
-    $local_3.used = start_35;
+    $local_3.used = new_used_34;
     builtin::array_copy<u8>($local_3.repr, offset_21, global:niri_loop_call_fold.wado::$const_obj_3, 0, 1);
     $sroa_$f_buf_97 = $local_3;
     offset_21 = c < 0;
@@ -298,24 +296,22 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self, min_ca
 }
 
 fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$sroa[self.buf]$dae[alt_prefix]"(self, is_negative, digit_count) {
-    let start_26: i32;
+    let new_used_25: i32;
     if is_negative {
-        if @unlikely(local.tee is_negative(self.used + 1) > builtin::array_len(self.repr)) {
+        if @unlikely(local.tee new_used_25(local.tee is_negative(self.used) + 1) > builtin::array_len(self.repr)) {
             cold_path;
-            "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self, is_negative);
+            "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self, new_used_25);
         }
-        start_26 = self.used;
-        self.used = is_negative;
-        builtin::array_set_u8(self.repr, start_26, 45);
+        self.used = new_used_25;
+        builtin::array_set_u8(self.repr, is_negative, 45);
     } else {
     }
-    if @unlikely(local.tee digit_count(self.used + digit_count) > builtin::array_len(self.repr)) {
+    if @unlikely(local.tee digit_count(local.tee is_negative(self.used) + digit_count) > builtin::array_len(self.repr)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self, digit_count);
     }
-    start_26 = self.used;
     self.used = digit_count;
-    return start_26;
+    return is_negative;
 }
 
 export fn "niri_loop_call_fold.wado/$cm_export__run" as "run"

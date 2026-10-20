@@ -566,7 +566,7 @@ fn "effect_interface_default_body.wado/effect_interface_default_body.wado/$Closu
     let $local_2: ref "core:prelude/string.wado//String";
     let self_5: ref "core:prelude//List<core:prelude/string.wado/String>";
     let start_21: i32;
-    let start_47: i32;
+    let new_used_46: i32;
     self_2 = self.$capture_0.tag;
     self_5 = global:effect_interface_default_body.wado::LINES;
     $local_2 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(33), used: 0 };
@@ -585,29 +585,27 @@ fn "effect_interface_default_body.wado/effect_interface_default_body.wado/$Closu
         $local_2.used = $load_3;
         builtin::array_copy<u8>($local_2.repr, start_21, $array_clone_dst_2, 0, $load_3);
     };
-    if @unlikely(local.tee $load_3($local_2.used + 1) > builtin::array_len($local_2.repr)) {
+    if @unlikely(local.tee start_21(local.tee $load_3($local_2.used) + 1) > builtin::array_len($local_2.repr)) {
         cold_path;
-        "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_2, $load_3);
+        "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_2, start_21);
     }
-    start_21 = $local_2.used;
-    $local_2.used = $load_3;
-    builtin::array_copy<u8>(local.tee $array_clone_dst_2($local_2.repr), start_21, global:effect_interface_default_body.wado::$const_obj_7, 0, 1);
+    $local_2.used = start_21;
+    builtin::array_copy<u8>(local.tee $array_clone_dst_2($local_2.repr), $load_3, global:effect_interface_default_body.wado::$const_obj_7, 0, 1);
     $inline_core_prelude_string_wado_String__internal_push_string_16: block {
-        break_if $inline_core_prelude_string_wado_String__internal_push_string_16 local.tee start_21(message.used) == 0;
-        if @unlikely(local.tee $load_3($local_2.used + start_21) > builtin::array_len($array_clone_dst_2)) {
+        break_if $inline_core_prelude_string_wado_String__internal_push_string_16 local.tee $load_3(message.used) == 0;
+        if @unlikely(local.tee new_used_46(local.tee start_21($local_2.used) + $load_3) > builtin::array_len($array_clone_dst_2)) {
             cold_path;
-            "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_2, $load_3);
+            "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_2, new_used_46);
         }
-        start_47 = $local_2.used;
-        $local_2.used = $load_3;
-        builtin::array_copy<u8>($local_2.repr, start_47, message.repr, 0, start_21);
+        $local_2.used = new_used_46;
+        builtin::array_copy<u8>($local_2.repr, start_21, message.repr, 0, $load_3);
     };
-    if @unlikely(local.tee start_21(self_5.used) >= builtin::array_len(self_5.repr)) {
+    if @unlikely(local.tee $load_3(self_5.used) >= builtin::array_len(self_5.repr)) {
         cold_path;
         "core:prelude/list.wado/core:prelude/list.wado/List<core:prelude/string.wado/String>::grow"(self_5);
     }
-    builtin::array_set<ref "core:prelude/string.wado//String">(self_5.repr, start_21, $local_2);
-    self_5.used = start_21 + 1;
+    builtin::array_set<ref "core:prelude/string.wado//String">(self_5.repr, $load_3, $local_2);
+    self_5.used = $load_3 + 1;
 }
 
 fn "effect_interface_default_body.wado/effect_interface_default_body.wado/$Closure_2::$call$dae[self]"(level) {

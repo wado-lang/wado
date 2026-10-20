@@ -78,7 +78,7 @@ global global:opt_value_copy_move_field_out.wado::$const_obj_4: ref Array<u8> = 
 fn "opt_value_copy_move_field_out.wado/run"() with Stdout {
     let $local_1: ref "core:prelude/string.wado//String";
     let offset_35: i32;
-    let start_49: i32;
+    let new_used_48: i32;
     let packed: i64;
     let $sroa_o_x_105: ref "core:prelude//List<i32>";
     let $sroa_$f_buf_123: ref "core:prelude/string.wado//String";
@@ -91,28 +91,26 @@ fn "opt_value_copy_move_field_out.wado/run"() with Stdout {
     $sroa_o_x_105.used = 5;
     offset_35 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$sroa[self.buf]$dae[alt_prefix]"(local.tee $sroa_$f_buf_123(local.tee $local_1(struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(50), used: 0 })), 0, 1);
     "core:prelude/primitive.wado/write_decimal_digits"($sroa_$f_buf_123.repr, offset_35, 5_i64, 1);
-    if @unlikely(local.tee offset_35($local_1.used + 1) > builtin::array_len($local_1.repr)) {
+    if @unlikely(local.tee new_used_48(local.tee offset_35($local_1.used) + 1) > builtin::array_len($local_1.repr)) {
         cold_path;
-        "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_1, offset_35);
+        "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_1, new_used_48);
     }
-    start_49 = $local_1.used;
-    $local_1.used = offset_35;
-    builtin::array_copy<u8>($local_1.repr, start_49, global:opt_value_copy_move_field_out.wado::$const_obj_4, 0, 1);
-    start_49 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$sroa[self.buf]$dae[alt_prefix]"(local.tee $sroa_$f_buf_123($local_1), 0, 1);
-    "core:prelude/primitive.wado/write_decimal_digits"($sroa_$f_buf_123.repr, start_49, 4_i64, 1);
-    if @unlikely(local.tee start_49($local_1.used + 1) > builtin::array_len($local_1.repr)) {
+    $local_1.used = new_used_48;
+    builtin::array_copy<u8>($local_1.repr, offset_35, global:opt_value_copy_move_field_out.wado::$const_obj_4, 0, 1);
+    offset_35 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$sroa[self.buf]$dae[alt_prefix]"(local.tee $sroa_$f_buf_123($local_1), 0, 1);
+    "core:prelude/primitive.wado/write_decimal_digits"($sroa_$f_buf_123.repr, offset_35, 4_i64, 1);
+    if @unlikely(local.tee new_used_48(local.tee offset_35($local_1.used) + 1) > builtin::array_len($local_1.repr)) {
         cold_path;
-        "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_1, start_49);
+        "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_1, new_used_48);
     }
-    offset_35 = $local_1.used;
-    $local_1.used = start_49;
+    $local_1.used = new_used_48;
     builtin::array_copy<u8>($local_1.repr, offset_35, global:opt_value_copy_move_field_out.wado::$const_obj_4, 0, 1);
     offset_35 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$sroa[self.buf]$dae[alt_prefix]"(local.tee $sroa_$f_buf_123($local_1), 0, 1);
     "core:prelude/primitive.wado/write_decimal_digits"($sroa_$f_buf_123.repr, offset_35, 6_i64, 1);
     offset_35 = builtin::i32_wrap_i64(local.tee packed("wasi/stream-new"()));
-    start_49 = builtin::i32_wrap_i64(packed >> 32_i64);
+    new_used_48 = builtin::i32_wrap_i64(packed >> 32_i64);
     offset_35 = "opt_value_copy_move_field_out.wado/$cm_binding__Stdout_write_via_stream"(offset_35);
-    "core:rt/write_string_to_stream$dae[add_newline]"(start_49, $local_1.repr, $local_1.used);
+    "core:rt/write_string_to_stream$dae[add_newline]"(new_used_48, $local_1.repr, $local_1.used);
     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(offset_35);
 }
 
@@ -237,24 +235,22 @@ fn "core:prelude/list.wado/core:prelude/list.wado/List<i32>::grow"(self) {
 }
 
 fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$sroa[self.buf]$dae[alt_prefix]"(self, is_negative, digit_count) {
-    let start_26: i32;
+    let new_used_25: i32;
     if is_negative {
-        if @unlikely(local.tee is_negative(self.used + 1) > builtin::array_len(self.repr)) {
+        if @unlikely(local.tee new_used_25(local.tee is_negative(self.used) + 1) > builtin::array_len(self.repr)) {
             cold_path;
-            "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self, is_negative);
+            "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self, new_used_25);
         }
-        start_26 = self.used;
-        self.used = is_negative;
-        builtin::array_set_u8(self.repr, start_26, 45);
+        self.used = new_used_25;
+        builtin::array_set_u8(self.repr, is_negative, 45);
     } else {
     }
-    if @unlikely(local.tee digit_count(self.used + digit_count) > builtin::array_len(self.repr)) {
+    if @unlikely(local.tee digit_count(local.tee is_negative(self.used) + digit_count) > builtin::array_len(self.repr)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self, digit_count);
     }
-    start_26 = self.used;
     self.used = digit_count;
-    return start_26;
+    return is_negative;
 }
 
 export fn "opt_value_copy_move_field_out.wado/$cm_export__run" as "run"

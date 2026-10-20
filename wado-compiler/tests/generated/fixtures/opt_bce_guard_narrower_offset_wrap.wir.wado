@@ -89,12 +89,13 @@ fn "opt_bce_guard_narrower_offset_wrap.wado/g"(arr, i) with Stdout {
     let x: i64;
     if @unlikely((i + 1) >= local.tee $load_0(arr.used)) {
         cold_path;
-        "core:rt/panic"(array.new_data<u8>("offset guard"), 12);
+        let $mv_field_1: ref Array<u8>;
+        "core:rt/panic"(local.tee $mv_field_1(array.new_data<u8>("offset guard")), 12);
         unreachable;
     }
     if @unlikely(i >= $load_0) {
         cold_path;
-        "core:rt/panic"(array.new_data<u8>("plain guard"), 11);
+        "core:rt/panic"(local.tee $mv_field_1(array.new_data<u8>("plain guard")), 11);
         unreachable;
     }
     $local_2 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(19), used: 0 };
@@ -104,24 +105,22 @@ fn "opt_bce_guard_narrower_offset_wrap.wado/g"(arr, i) with Stdout {
     }
     start_23 = $local_2.used;
     $local_2.used = $load_0;
-    builtin::array_copy<u8>($local_2.repr, start_23, global:opt_bce_guard_narrower_offset_wrap.wado::$const_obj_3, 0, 3);
+    builtin::array_copy<u8>(local.tee $mv_field_1($local_2.repr), start_23, global:opt_bce_guard_narrower_offset_wrap.wado::$const_obj_3, 0, 3);
     start_23 = i < 0;
     i = "core:prelude/primitive.wado/count_digits_u64"(local.tee x(x = builtin::i64_extend_i32_s(i); select i64(x < 0_i64, 0_i64 - x, x)));
     if start_23 {
-        if @unlikely(local.tee start_23($local_2.used + 1) > builtin::array_len($local_2.repr)) {
+        if @unlikely(local.tee $load_0(local.tee start_23($local_2.used) + 1) > builtin::array_len($mv_field_1)) {
             cold_path;
-            "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_2, start_23);
+            "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_2, $load_0);
         }
-        $load_0 = $local_2.used;
-        $local_2.used = start_23;
-        builtin::array_set_u8($local_2.repr, $load_0, 45);
+        $local_2.used = $load_0;
+        builtin::array_set_u8($local_2.repr, start_23, 45);
     } else {
     }
-    if @unlikely(local.tee $load_0($local_2.used + i) > builtin::array_len($local_2.repr)) {
+    if @unlikely(local.tee $load_0(local.tee start_23($local_2.used) + i) > builtin::array_len($local_2.repr)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_2, $load_0);
     }
-    start_23 = $local_2.used;
     $local_2.used = $load_0;
     "core:prelude/primitive.wado/write_decimal_digits"($local_2.repr, start_23, x, i);
     i = builtin::i32_wrap_i64(local.tee x("wasi/stream-new"()));

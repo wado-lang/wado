@@ -69,7 +69,7 @@ global global:method_receiver_no_value_copy.wado::$const_obj_6: ref Array<u8> = 
 global global:method_receiver_no_value_copy.wado::$const_obj_7: ref Array<u8> = array.new_fixed<u8>(97);
 
 fn "method_receiver_no_value_copy.wado/run"() with Stdout {
-    let $load_21: ref Array<u8>;
+    let $load_17: ref Array<u8>;
     let $local_2: ref "core:prelude/string.wado//String";
     let new_used_21: i32;
     let start_22: i32;
@@ -83,32 +83,28 @@ fn "method_receiver_no_value_copy.wado/run"() with Stdout {
     start_22 = $local_2.used;
     $local_2.used = new_used_21;
     builtin::array_copy<u8>($local_2.repr, start_22, global:method_receiver_no_value_copy.wado::$const_obj_7, 0, 1);
-    if @unlikely(local.tee start_22(local.tee $sroa_$f_buf_127($local_2).used + 1) > builtin::array_len($sroa_$f_buf_127.repr)) {
+    if @unlikely(local.tee new_used_21(local.tee start_22(local.tee $sroa_$f_buf_127($local_2).used) + 1) > builtin::array_len($sroa_$f_buf_127.repr)) {
         cold_path;
-        "core:prelude/string.wado/core:prelude/string.wado/String::grow"($sroa_$f_buf_127, start_22);
+        "core:prelude/string.wado/core:prelude/string.wado/String::grow"($sroa_$f_buf_127, new_used_21);
     }
-    new_used_21 = $sroa_$f_buf_127.used;
-    $sroa_$f_buf_127.used = start_22;
-    "core:prelude/primitive.wado/write_decimal_digits"($sroa_$f_buf_127.repr, new_used_21, 3_i64, 1);
-    if @unlikely(local.tee new_used_21($local_2.used + 1) > builtin::array_len($local_2.repr)) {
+    $sroa_$f_buf_127.used = new_used_21;
+    "core:prelude/primitive.wado/write_decimal_digits"($sroa_$f_buf_127.repr, start_22, 3_i64, 1);
+    if @unlikely(local.tee new_used_21(local.tee start_22($local_2.used) + 1) > builtin::array_len($local_2.repr)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_2, new_used_21);
     }
-    start_22 = $local_2.used;
     $local_2.used = new_used_21;
     builtin::array_copy<u8>($local_2.repr, start_22, global:method_receiver_no_value_copy.wado::$const_obj_6, 0, 1);
-    if @unlikely(local.tee start_22(local.tee $sroa_$f_buf_127($local_2).used + 1) > builtin::array_len($sroa_$f_buf_127.repr)) {
+    if @unlikely(local.tee new_used_21(local.tee start_22(local.tee $sroa_$f_buf_127($local_2).used) + 1) > builtin::array_len($sroa_$f_buf_127.repr)) {
         cold_path;
-        "core:prelude/string.wado/core:prelude/string.wado/String::grow"($sroa_$f_buf_127, start_22);
+        "core:prelude/string.wado/core:prelude/string.wado/String::grow"($sroa_$f_buf_127, new_used_21);
     }
-    new_used_21 = $sroa_$f_buf_127.used;
-    $sroa_$f_buf_127.used = start_22;
-    "core:prelude/primitive.wado/write_decimal_digits"($sroa_$f_buf_127.repr, new_used_21, 3_i64, 1);
-    if @unlikely(local.tee new_used_21($local_2.used + 1) > builtin::array_len($local_2.repr)) {
+    $sroa_$f_buf_127.used = new_used_21;
+    "core:prelude/primitive.wado/write_decimal_digits"($sroa_$f_buf_127.repr, start_22, 3_i64, 1);
+    if @unlikely(local.tee new_used_21(local.tee start_22($local_2.used) + 1) > builtin::array_len($local_2.repr)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_2, new_used_21);
     }
-    start_22 = $local_2.used;
     $local_2.used = new_used_21;
     builtin::array_copy<u8>($local_2.repr, start_22, global:method_receiver_no_value_copy.wado::$const_obj_5, 0, 1);
     start_22 = builtin::i32_wrap_i64(local.tee packed_76("wasi/stream-new"()));
@@ -117,8 +113,8 @@ fn "method_receiver_no_value_copy.wado/run"() with Stdout {
     "core:rt/write_string_to_stream$dae[add_newline]"(new_used_21, $local_2.repr, $local_2.used);
     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(start_22);
     local.tee $local_2(struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(8), used: 0 }).used = 6;
-    builtin::array_copy<u8>(local.tee $load_21($local_2.repr), 0, global:method_receiver_no_value_copy.wado::$const_obj_4, 0, 3);
-    builtin::array_copy<u8>($load_21, 0 + 3, global:method_receiver_no_value_copy.wado::$const_obj_3, 0, 3);
+    builtin::array_copy<u8>(local.tee $load_17($local_2.repr), 0, global:method_receiver_no_value_copy.wado::$const_obj_4, 0, 3);
+    builtin::array_copy<u8>($load_17, 0 + 3, global:method_receiver_no_value_copy.wado::$const_obj_3, 0, 3);
     start_22 = builtin::i32_wrap_i64(local.tee packed_76("wasi/stream-new"()));
     new_used_21 = builtin::i32_wrap_i64(packed_76 >> 32_i64);
     start_22 = "method_receiver_no_value_copy.wado/$cm_binding__Stdout_write_via_stream"(start_22);

@@ -87,13 +87,14 @@ import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 global global:wir_optimize_vcopy_return_struct.wado::$const_obj_4: ref Array<u8> = array.new_fixed<u8>(32);
 
 fn "wir_optimize_vcopy_return_struct.wado/run"() with Stdout {
-    let $load_6: ref Array<u8>;
+    let $load_0: ref "wir_optimize_vcopy_return_struct.wado//Inner";
+    let $load_5: ref Array<u8>;
     let o: ref "wir_optimize_vcopy_return_struct.wado//Outer";
     let $local_4_4: ref "core:prelude/string.wado//String";
     let is_negative_21: bool;
     let x_25: i64;
     let self_26: ref "core:prelude/string.wado//String";
-    let start_44: i32;
+    let new_used_43: i32;
     let $sroa_$f_buf_102: ref "core:prelude/string.wado//String";
     let $mv$r$0: i32;
     let $mv$r$1: ref null "wir_optimize_vcopy_return_struct.wado//Outer";
@@ -102,49 +103,45 @@ fn "wir_optimize_vcopy_return_struct.wado/run"() with Stdout {
     if $mv$r$0 == 0 {
         o = ref.as_non_null($mv$r$1);
         $sroa_$f_buf_102 = local.tee $local_4_4(struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(50), used: 0 });
-        is_negative_21 = local.tee $mv$r$0(o.inner.value) < 0;
+        is_negative_21 = local.tee $mv$r$0(local.tee $load_0(o.inner).value) < 0;
         $mv$r$0 = "core:prelude/primitive.wado/count_digits_u64"(local.tee x_25(x_25 = builtin::i64_extend_i32_s($mv$r$0); select i64(x_25 < 0_i64, 0_i64 - x_25, x_25)));
         is_negative_21 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$sroa[self.buf]$dae[alt_prefix]"($sroa_$f_buf_102, is_negative_21, $mv$r$0);
         "core:prelude/primitive.wado/write_decimal_digits"(local.tee self_26($sroa_$f_buf_102).repr, is_negative_21, x_25, $mv$r$0);
-        if @unlikely(local.tee $mv$r$0($local_4_4.used + 1) > builtin::array_len($local_4_4.repr)) {
+        if @unlikely(local.tee is_negative_21(local.tee $mv$r$0($local_4_4.used) + 1) > builtin::array_len($local_4_4.repr)) {
             cold_path;
-            "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_4_4, $mv$r$0);
+            "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_4_4, is_negative_21);
         }
-        is_negative_21 = $local_4_4.used;
-        $local_4_4.used = $mv$r$0;
-        builtin::array_copy<u8>(local.tee $load_6($local_4_4.repr), is_negative_21, global:wir_optimize_vcopy_return_struct.wado::$const_obj_4, 0, 1);
-        is_negative_21 = o.inner.name.used;
-        if @unlikely(local.tee $mv$r$0($local_4_4.used + (1 + is_negative_21)) > builtin::array_len($load_6)) {
+        $local_4_4.used = is_negative_21;
+        builtin::array_copy<u8>(local.tee $load_5($local_4_4.repr), $mv$r$0, global:wir_optimize_vcopy_return_struct.wado::$const_obj_4, 0, 1);
+        $mv$r$0 = local.tee self_26($load_0.name).used;
+        if @unlikely(local.tee new_used_43(local.tee is_negative_21($local_4_4.used) + (1 + $mv$r$0)) > builtin::array_len($load_5)) {
             cold_path;
-            "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_4_4, $mv$r$0);
+            "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_4_4, new_used_43);
         }
-        start_44 = $local_4_4.used;
-        $local_4_4.used = $mv$r$0;
-        $load_6 = $local_4_4.repr;
-        self_26 = o.inner.name;
-        builtin::array_copy<u8>($load_6, start_44, self_26.repr, 0, is_negative_21);
-        is_negative_21 = start_44 + is_negative_21;
-        builtin::array_copy<u8>($load_6, is_negative_21, global:wir_optimize_vcopy_return_struct.wado::$const_obj_4, 0, 1);
+        $local_4_4.used = new_used_43;
+        builtin::array_copy<u8>(local.tee $load_5($local_4_4.repr), is_negative_21, self_26.repr, 0, $mv$r$0);
+        $mv$r$0 = is_negative_21 + $mv$r$0;
+        builtin::array_copy<u8>($load_5, $mv$r$0, global:wir_optimize_vcopy_return_struct.wado::$const_obj_4, 0, 1);
         $sroa_$f_buf_102 = $local_4_4;
-        start_44 = local.tee is_negative_21(o.tag) < 0;
-        is_negative_21 = "core:prelude/primitive.wado/count_digits_u64"(local.tee x_25(x_25 = builtin::i64_extend_i32_s(is_negative_21); select i64(x_25 < 0_i64, 0_i64 - x_25, x_25)));
-        start_44 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$sroa[self.buf]$dae[alt_prefix]"($sroa_$f_buf_102, start_44, is_negative_21);
-        "core:prelude/primitive.wado/write_decimal_digits"($sroa_$f_buf_102.repr, start_44, x_25, is_negative_21);
-        is_negative_21 = builtin::i32_wrap_i64(local.tee x_25("wasi/stream-new"()));
-        start_44 = builtin::i32_wrap_i64(x_25 >> 32_i64);
-        is_negative_21 = "wir_optimize_vcopy_return_struct.wado/$cm_binding__Stdout_write_via_stream"(is_negative_21);
-        "core:rt/write_string_to_stream$dae[add_newline]"(start_44, $local_4_4.repr, $local_4_4.used);
-        "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(is_negative_21);
+        is_negative_21 = local.tee $mv$r$0(o.tag) < 0;
+        $mv$r$0 = "core:prelude/primitive.wado/count_digits_u64"(local.tee x_25(x_25 = builtin::i64_extend_i32_s($mv$r$0); select i64(x_25 < 0_i64, 0_i64 - x_25, x_25)));
+        is_negative_21 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$sroa[self.buf]$dae[alt_prefix]"($sroa_$f_buf_102, is_negative_21, $mv$r$0);
+        "core:prelude/primitive.wado/write_decimal_digits"($sroa_$f_buf_102.repr, is_negative_21, x_25, $mv$r$0);
+        $mv$r$0 = builtin::i32_wrap_i64(local.tee x_25("wasi/stream-new"()));
+        is_negative_21 = builtin::i32_wrap_i64(x_25 >> 32_i64);
+        $mv$r$0 = "wir_optimize_vcopy_return_struct.wado/$cm_binding__Stdout_write_via_stream"($mv$r$0);
+        "core:rt/write_string_to_stream$dae[add_newline]"(is_negative_21, $local_4_4.repr, $local_4_4.used);
+        "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"($mv$r$0);
     } else {
     }
-    multivalue_bind [is_negative_21, $mv$r$1, $mv$r$2] = "wir_optimize_vcopy_return_struct.wado/make_outer$sroa[return]$spec1$dae[v]"();
-    if is_negative_21 == 1 {
+    multivalue_bind [$mv$r$0, $mv$r$1, $mv$r$2] = "wir_optimize_vcopy_return_struct.wado/make_outer$sroa[return]$spec1$dae[v]"();
+    if $mv$r$0 == 1 {
         $local_4_4 = ref.as_non_null($mv$r$2);
-        is_negative_21 = builtin::i32_wrap_i64(local.tee x_25("wasi/stream-new"()));
-        start_44 = builtin::i32_wrap_i64(x_25 >> 32_i64);
-        is_negative_21 = "wir_optimize_vcopy_return_struct.wado/$cm_binding__Stdout_write_via_stream"(is_negative_21);
-        "core:rt/write_string_to_stream$dae[add_newline]"(start_44, $local_4_4.repr, $local_4_4.used);
-        "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(is_negative_21);
+        $mv$r$0 = builtin::i32_wrap_i64(local.tee x_25("wasi/stream-new"()));
+        is_negative_21 = builtin::i32_wrap_i64(x_25 >> 32_i64);
+        $mv$r$0 = "wir_optimize_vcopy_return_struct.wado/$cm_binding__Stdout_write_via_stream"($mv$r$0);
+        "core:rt/write_string_to_stream$dae[add_newline]"(is_negative_21, $local_4_4.repr, $local_4_4.used);
+        "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"($mv$r$0);
     } else {
     }
 }
@@ -353,24 +350,22 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self, min_ca
 }
 
 fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$sroa[self.buf]$dae[alt_prefix]"(self, is_negative, digit_count) {
-    let start_26: i32;
+    let new_used_25: i32;
     if is_negative {
-        if @unlikely(local.tee is_negative(self.used + 1) > builtin::array_len(self.repr)) {
+        if @unlikely(local.tee new_used_25(local.tee is_negative(self.used) + 1) > builtin::array_len(self.repr)) {
             cold_path;
-            "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self, is_negative);
+            "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self, new_used_25);
         }
-        start_26 = self.used;
-        self.used = is_negative;
-        builtin::array_set_u8(self.repr, start_26, 45);
+        self.used = new_used_25;
+        builtin::array_set_u8(self.repr, is_negative, 45);
     } else {
     }
-    if @unlikely(local.tee digit_count(self.used + digit_count) > builtin::array_len(self.repr)) {
+    if @unlikely(local.tee digit_count(local.tee is_negative(self.used) + digit_count) > builtin::array_len(self.repr)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self, digit_count);
     }
-    start_26 = self.used;
     self.used = digit_count;
-    return start_26;
+    return is_negative;
 }
 
 export fn "wir_optimize_vcopy_return_struct.wado/$cm_export__run" as "run"

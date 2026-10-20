@@ -53,7 +53,8 @@ fn collect_ref_funcs_instr(instr: &WirInstr, pinned: &mut IndexSet<u32>) {
 }
 
 /// The state a subtree reads or writes: locals and struct fields by name,
-/// the rest of the heap as one region, and a call as any of it.
+/// the rest of the heap as one region, and a call as any of it unless
+/// `CalleeWrites` knows its callee.
 #[derive(Default)]
 pub(super) struct Footprint {
     locals: IndexSet<String>,
@@ -72,21 +73,25 @@ impl Footprint {
     }
 
     pub(super) fn writes(instr: &WirInstr) -> Self {
-        Self::writes_all(std::slice::from_ref(instr))
+        let mut footprint = Self::default();
+        footprint.add_writes(instr, None);
+        footprint
     }
 
-    pub(super) fn writes_all(body: &[WirInstr]) -> Self {
+    /// What `body` writes, with a direct call to a function `callees` knows
+    /// writing only the fields it names.
+    pub(super) fn writes_all(body: &[WirInstr], callees: &CalleeWrites) -> Self {
         let mut footprint = Self::default();
         for instr in body {
-            footprint.add_writes(instr);
+            footprint.add_writes(instr, Some(callees));
         }
         footprint
     }
 
     /// What `instr` itself writes, its operands left out.
-    pub(super) fn writes_of_node(instr: &WirInstr) -> Self {
+    pub(super) fn writes_of_node(instr: &WirInstr, callees: &CalleeWrites) -> Self {
         let mut footprint = Self::default();
-        footprint.add_node_writes(instr);
+        footprint.add_node_writes(instr, Some(callees));
         footprint
     }
 
@@ -141,13 +146,20 @@ impl Footprint {
         instr.for_each_child(&mut |child| self.add_reads(child));
     }
 
-    fn add_writes(&mut self, instr: &WirInstr) {
-        self.add_node_writes(instr);
-        instr.for_each_child(&mut |child| self.add_writes(child));
+    fn add_writes(&mut self, instr: &WirInstr, callees: Option<&CalleeWrites>) {
+        self.add_node_writes(instr, callees);
+        instr.for_each_child(&mut |child| self.add_writes(child, callees));
     }
 
-    fn add_node_writes(&mut self, instr: &WirInstr) {
+    fn add_node_writes(&mut self, instr: &WirInstr, callees: Option<&CalleeWrites>) {
         self.locals.extend(instr.local_writes().map(str::to_string));
+        if let WirInstr::Call { func_id, .. } = instr
+            && let Some(fields) = callees.and_then(|c| c.of(func_id.index()))
+        {
+            self.fields.extend(fields.iter().cloned());
+            self.heap = true;
+            return;
+        }
         match instr {
             WirInstr::StructSet { field_name, .. } => {
                 self.fields.insert(field_name.clone());
@@ -170,6 +182,86 @@ impl Footprint {
             _ => {}
         }
     }
+}
+
+/// The struct fields each defined function may write, its callees' writes
+/// included. A function reaching an import or an indirect call has none: what
+/// it writes is unknown.
+pub(super) struct CalleeWrites {
+    defined_func_base: u32,
+    fields: Vec<Option<IndexSet<String>>>,
+}
+
+impl CalleeWrites {
+    pub(super) fn of_module(module: &WirPackage) -> Self {
+        let mut fields: Vec<Option<IndexSet<String>>> = Vec::with_capacity(module.functions.len());
+        let mut callees: Vec<Vec<usize>> = Vec::with_capacity(module.functions.len());
+        for func in &module.functions {
+            let mut own = Some(IndexSet::default());
+            let mut calls = Vec::new();
+            if let Some(body) = &func.body {
+                for instr in body {
+                    direct_writes(module, instr, &mut own, &mut calls);
+                }
+            } else {
+                own = None;
+            }
+            fields.push(own);
+            callees.push(calls);
+        }
+        let mut changed = true;
+        while changed {
+            changed = false;
+            for f in 0..fields.len() {
+                for &c in &callees[f] {
+                    if c == f || fields[f].is_none() {
+                        continue;
+                    }
+                    let Some(written) = fields[c].clone() else {
+                        fields[f] = None;
+                        changed = true;
+                        continue;
+                    };
+                    let own = fields[f].as_mut().expect("checked above");
+                    let before = own.len();
+                    own.extend(written);
+                    changed |= own.len() != before;
+                }
+            }
+        }
+        Self {
+            defined_func_base: module.defined_func_base,
+            fields,
+        }
+    }
+
+    /// The fields the function `index` names may write, or `None` if unknown.
+    fn of(&self, index: u32) -> Option<&IndexSet<String>> {
+        let position = index.checked_sub(self.defined_func_base)? as usize;
+        self.fields.get(position)?.as_ref()
+    }
+}
+
+fn direct_writes(
+    module: &WirPackage,
+    instr: &WirInstr,
+    own: &mut Option<IndexSet<String>>,
+    calls: &mut Vec<usize>,
+) {
+    match instr {
+        WirInstr::StructSet { field_name, .. } => {
+            if let Some(own) = own {
+                own.insert(field_name.clone());
+            }
+        }
+        WirInstr::Call { func_id, .. } => match module.defined_func_position(func_id.index()) {
+            Some(position) => calls.push(position),
+            None => *own = None,
+        },
+        WirInstr::CallIndirect { .. } | WirInstr::CallRef { .. } => *own = None,
+        _ => {}
+    }
+    instr.for_each_child(&mut |child| direct_writes(module, child, own, calls));
 }
 
 /// True if no node in `instr`'s sub-tree is observable. Pure loads

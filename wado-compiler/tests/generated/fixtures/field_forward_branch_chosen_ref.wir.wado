@@ -140,23 +140,22 @@ fn "field_forward_branch_chosen_ref.wado/via_if"() with Stdout {
     start_22 = "core:prelude/primitive.wado/count_digits_u64"(local.tee x_35(x_35 = builtin::i64_extend_i32_s(start_22); select i64(x_35 < 0_i64, 0_i64 - x_35, x_35)));
     new_used_21 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$sroa[self.buf]$dae[alt_prefix]"($sroa_$f_buf_84, new_used_21, start_22);
     "core:prelude/primitive.wado/write_decimal_digits"($sroa_$f_buf_84.repr, new_used_21, x_35, start_22);
-    if @unlikely(local.tee start_22($local_3.used + 7) > builtin::array_len($local_3.repr)) {
+    if @unlikely(local.tee new_used_21(local.tee start_22($local_3.used) + 7) > builtin::array_len($local_3.repr)) {
         cold_path;
-        "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_3, start_22);
+        "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_3, new_used_21);
     }
-    new_used_21 = $local_3.used;
-    $local_3.used = start_22;
-    builtin::array_copy<u8>($local_3.repr, new_used_21, global:field_forward_branch_chosen_ref.wado::$const_obj_3, 0, 7);
+    $local_3.used = new_used_21;
+    builtin::array_copy<u8>($local_3.repr, start_22, global:field_forward_branch_chosen_ref.wado::$const_obj_3, 0, 7);
     $sroa_$f_buf_84 = $local_3;
-    start_22 = local.tee new_used_21(p.f) < 0;
-    new_used_21 = "core:prelude/primitive.wado/count_digits_u64"(local.tee x_35(x_35 = builtin::i64_extend_i32_s(new_used_21); select i64(x_35 < 0_i64, 0_i64 - x_35, x_35)));
-    start_22 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$sroa[self.buf]$dae[alt_prefix]"($sroa_$f_buf_84, start_22, new_used_21);
-    "core:prelude/primitive.wado/write_decimal_digits"($sroa_$f_buf_84.repr, start_22, x_35, new_used_21);
-    new_used_21 = builtin::i32_wrap_i64(local.tee x_35("wasi/stream-new"()));
-    start_22 = builtin::i32_wrap_i64(x_35 >> 32_i64);
-    new_used_21 = "field_forward_branch_chosen_ref.wado/$cm_binding__Stdout_write_via_stream"(new_used_21);
-    "core:rt/write_string_to_stream$dae[add_newline]"(start_22, $local_3.repr, $local_3.used);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(new_used_21);
+    new_used_21 = local.tee start_22(p.f) < 0;
+    start_22 = "core:prelude/primitive.wado/count_digits_u64"(local.tee x_35(x_35 = builtin::i64_extend_i32_s(start_22); select i64(x_35 < 0_i64, 0_i64 - x_35, x_35)));
+    new_used_21 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$sroa[self.buf]$dae[alt_prefix]"($sroa_$f_buf_84, new_used_21, start_22);
+    "core:prelude/primitive.wado/write_decimal_digits"($sroa_$f_buf_84.repr, new_used_21, x_35, start_22);
+    start_22 = builtin::i32_wrap_i64(local.tee x_35("wasi/stream-new"()));
+    new_used_21 = builtin::i32_wrap_i64(x_35 >> 32_i64);
+    start_22 = "field_forward_branch_chosen_ref.wado/$cm_binding__Stdout_write_via_stream"(start_22);
+    "core:rt/write_string_to_stream$dae[add_newline]"(new_used_21, $local_3.repr, $local_3.used);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(start_22);
 }
 
 fn "field_forward_branch_chosen_ref.wado/via_match"() with Stdout {
@@ -191,23 +190,21 @@ fn "field_forward_branch_chosen_ref.wado/via_match"() with Stdout {
     start_23 = "core:prelude/primitive.wado/count_digits_u64"(local.tee x_36(x_36 = builtin::i64_extend_i32_s(start_23); select i64(x_36 < 0_i64, 0_i64 - x_36, x_36)));
     $match_scrut_0 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$sroa[self.buf]$dae[alt_prefix]"($sroa_$f_buf_113, $match_scrut_0, start_23);
     "core:prelude/primitive.wado/write_decimal_digits"($sroa_$f_buf_113.repr, $match_scrut_0, x_36, start_23);
-    if @unlikely(local.tee start_23($local_4_4.used + 7) > builtin::array_len($local_4_4.repr)) {
-        cold_path;
-        "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_4_4, start_23);
-    }
-    $match_scrut_0 = $local_4_4.used;
-    $local_4_4.used = start_23;
-    builtin::array_copy<u8>($local_4_4.repr, $match_scrut_0, global:field_forward_branch_chosen_ref.wado::$const_obj_3, 0, 7);
-    $sroa_$f_buf_113 = $local_4_4;
-    start_23 = local.tee $match_scrut_0(p.f) < 0;
-    $match_scrut_0 = "core:prelude/primitive.wado/count_digits_u64"(local.tee x_36(x_36 = builtin::i64_extend_i32_s($match_scrut_0); select i64(x_36 < 0_i64, 0_i64 - x_36, x_36)));
-    start_23 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$sroa[self.buf]$dae[alt_prefix]"($sroa_$f_buf_113, start_23, $match_scrut_0);
-    "core:prelude/primitive.wado/write_decimal_digits"($sroa_$f_buf_113.repr, start_23, x_36, $match_scrut_0);
-    if @unlikely(local.tee $match_scrut_0($local_4_4.used + 7) > builtin::array_len($local_4_4.repr)) {
+    if @unlikely(local.tee $match_scrut_0(local.tee start_23($local_4_4.used) + 7) > builtin::array_len($local_4_4.repr)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_4_4, $match_scrut_0);
     }
-    start_23 = $local_4_4.used;
+    $local_4_4.used = $match_scrut_0;
+    builtin::array_copy<u8>($local_4_4.repr, start_23, global:field_forward_branch_chosen_ref.wado::$const_obj_3, 0, 7);
+    $sroa_$f_buf_113 = $local_4_4;
+    $match_scrut_0 = local.tee start_23(p.f) < 0;
+    start_23 = "core:prelude/primitive.wado/count_digits_u64"(local.tee x_36(x_36 = builtin::i64_extend_i32_s(start_23); select i64(x_36 < 0_i64, 0_i64 - x_36, x_36)));
+    $match_scrut_0 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$sroa[self.buf]$dae[alt_prefix]"($sroa_$f_buf_113, $match_scrut_0, start_23);
+    "core:prelude/primitive.wado/write_decimal_digits"($sroa_$f_buf_113.repr, $match_scrut_0, x_36, start_23);
+    if @unlikely(local.tee $match_scrut_0(local.tee start_23($local_4_4.used) + 7) > builtin::array_len($local_4_4.repr)) {
+        cold_path;
+        "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_4_4, $match_scrut_0);
+    }
     $local_4_4.used = $match_scrut_0;
     builtin::array_copy<u8>($local_4_4.repr, start_23, global:field_forward_branch_chosen_ref.wado::$const_obj_5, 0, 7);
     $sroa_$f_buf_113 = $local_4_4;
@@ -251,23 +248,22 @@ fn "field_forward_branch_chosen_ref.wado/via_labeled_block"() with Stdout {
     start_22 = "core:prelude/primitive.wado/count_digits_u64"(local.tee x_35(x_35 = builtin::i64_extend_i32_s(start_22); select i64(x_35 < 0_i64, 0_i64 - x_35, x_35)));
     new_used_21 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$sroa[self.buf]$dae[alt_prefix]"($sroa_$f_buf_84, new_used_21, start_22);
     "core:prelude/primitive.wado/write_decimal_digits"($sroa_$f_buf_84.repr, new_used_21, x_35, start_22);
-    if @unlikely(local.tee start_22($local_3.used + 7) > builtin::array_len($local_3.repr)) {
+    if @unlikely(local.tee new_used_21(local.tee start_22($local_3.used) + 7) > builtin::array_len($local_3.repr)) {
         cold_path;
-        "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_3, start_22);
+        "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_3, new_used_21);
     }
-    new_used_21 = $local_3.used;
-    $local_3.used = start_22;
-    builtin::array_copy<u8>($local_3.repr, new_used_21, global:field_forward_branch_chosen_ref.wado::$const_obj_3, 0, 7);
+    $local_3.used = new_used_21;
+    builtin::array_copy<u8>($local_3.repr, start_22, global:field_forward_branch_chosen_ref.wado::$const_obj_3, 0, 7);
     $sroa_$f_buf_84 = $local_3;
-    start_22 = local.tee new_used_21(p.f) < 0;
-    new_used_21 = "core:prelude/primitive.wado/count_digits_u64"(local.tee x_35(x_35 = builtin::i64_extend_i32_s(new_used_21); select i64(x_35 < 0_i64, 0_i64 - x_35, x_35)));
-    start_22 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$sroa[self.buf]$dae[alt_prefix]"($sroa_$f_buf_84, start_22, new_used_21);
-    "core:prelude/primitive.wado/write_decimal_digits"($sroa_$f_buf_84.repr, start_22, x_35, new_used_21);
-    new_used_21 = builtin::i32_wrap_i64(local.tee x_35("wasi/stream-new"()));
-    start_22 = builtin::i32_wrap_i64(x_35 >> 32_i64);
-    new_used_21 = "field_forward_branch_chosen_ref.wado/$cm_binding__Stdout_write_via_stream"(new_used_21);
-    "core:rt/write_string_to_stream$dae[add_newline]"(start_22, $local_3.repr, $local_3.used);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(new_used_21);
+    new_used_21 = local.tee start_22(p.f) < 0;
+    start_22 = "core:prelude/primitive.wado/count_digits_u64"(local.tee x_35(x_35 = builtin::i64_extend_i32_s(start_22); select i64(x_35 < 0_i64, 0_i64 - x_35, x_35)));
+    new_used_21 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$sroa[self.buf]$dae[alt_prefix]"($sroa_$f_buf_84, new_used_21, start_22);
+    "core:prelude/primitive.wado/write_decimal_digits"($sroa_$f_buf_84.repr, new_used_21, x_35, start_22);
+    start_22 = builtin::i32_wrap_i64(local.tee x_35("wasi/stream-new"()));
+    new_used_21 = builtin::i32_wrap_i64(x_35 >> 32_i64);
+    start_22 = "field_forward_branch_chosen_ref.wado/$cm_binding__Stdout_write_via_stream"(start_22);
+    "core:rt/write_string_to_stream$dae[add_newline]"(new_used_21, $local_3.repr, $local_3.used);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(start_22);
 }
 
 fn "field_forward_branch_chosen_ref.wado/via_labeled_block_tail"() with Stdout {
@@ -299,23 +295,22 @@ fn "field_forward_branch_chosen_ref.wado/via_labeled_block_tail"() with Stdout {
     start_22 = "core:prelude/primitive.wado/count_digits_u64"(local.tee x_35(x_35 = builtin::i64_extend_i32_s(start_22); select i64(x_35 < 0_i64, 0_i64 - x_35, x_35)));
     new_used_21 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$sroa[self.buf]$dae[alt_prefix]"($sroa_$f_buf_84, new_used_21, start_22);
     "core:prelude/primitive.wado/write_decimal_digits"($sroa_$f_buf_84.repr, new_used_21, x_35, start_22);
-    if @unlikely(local.tee start_22($local_3.used + 7) > builtin::array_len($local_3.repr)) {
+    if @unlikely(local.tee new_used_21(local.tee start_22($local_3.used) + 7) > builtin::array_len($local_3.repr)) {
         cold_path;
-        "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_3, start_22);
+        "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_3, new_used_21);
     }
-    new_used_21 = $local_3.used;
-    $local_3.used = start_22;
-    builtin::array_copy<u8>($local_3.repr, new_used_21, global:field_forward_branch_chosen_ref.wado::$const_obj_3, 0, 7);
+    $local_3.used = new_used_21;
+    builtin::array_copy<u8>($local_3.repr, start_22, global:field_forward_branch_chosen_ref.wado::$const_obj_3, 0, 7);
     $sroa_$f_buf_84 = $local_3;
-    start_22 = local.tee new_used_21(p.f) < 0;
-    new_used_21 = "core:prelude/primitive.wado/count_digits_u64"(local.tee x_35(x_35 = builtin::i64_extend_i32_s(new_used_21); select i64(x_35 < 0_i64, 0_i64 - x_35, x_35)));
-    start_22 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$sroa[self.buf]$dae[alt_prefix]"($sroa_$f_buf_84, start_22, new_used_21);
-    "core:prelude/primitive.wado/write_decimal_digits"($sroa_$f_buf_84.repr, start_22, x_35, new_used_21);
-    new_used_21 = builtin::i32_wrap_i64(local.tee x_35("wasi/stream-new"()));
-    start_22 = builtin::i32_wrap_i64(x_35 >> 32_i64);
-    new_used_21 = "field_forward_branch_chosen_ref.wado/$cm_binding__Stdout_write_via_stream"(new_used_21);
-    "core:rt/write_string_to_stream$dae[add_newline]"(start_22, $local_3.repr, $local_3.used);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(new_used_21);
+    new_used_21 = local.tee start_22(p.f) < 0;
+    start_22 = "core:prelude/primitive.wado/count_digits_u64"(local.tee x_35(x_35 = builtin::i64_extend_i32_s(start_22); select i64(x_35 < 0_i64, 0_i64 - x_35, x_35)));
+    new_used_21 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$sroa[self.buf]$dae[alt_prefix]"($sroa_$f_buf_84, new_used_21, start_22);
+    "core:prelude/primitive.wado/write_decimal_digits"($sroa_$f_buf_84.repr, new_used_21, x_35, start_22);
+    start_22 = builtin::i32_wrap_i64(local.tee x_35("wasi/stream-new"()));
+    new_used_21 = builtin::i32_wrap_i64(x_35 >> 32_i64);
+    start_22 = "field_forward_branch_chosen_ref.wado/$cm_binding__Stdout_write_via_stream"(start_22);
+    "core:rt/write_string_to_stream$dae[add_newline]"(new_used_21, $local_3.repr, $local_3.used);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(start_22);
 }
 
 fn "field_forward_branch_chosen_ref.wado/via_select"() with Stdout {
@@ -342,23 +337,22 @@ fn "field_forward_branch_chosen_ref.wado/via_select"() with Stdout {
     start_22 = "core:prelude/primitive.wado/count_digits_u64"(local.tee x_35(x_35 = builtin::i64_extend_i32_s(start_22); select i64(x_35 < 0_i64, 0_i64 - x_35, x_35)));
     new_used_21 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$sroa[self.buf]$dae[alt_prefix]"($sroa_$f_buf_84, new_used_21, start_22);
     "core:prelude/primitive.wado/write_decimal_digits"($sroa_$f_buf_84.repr, new_used_21, x_35, start_22);
-    if @unlikely(local.tee start_22($local_3.used + 7) > builtin::array_len($local_3.repr)) {
+    if @unlikely(local.tee new_used_21(local.tee start_22($local_3.used) + 7) > builtin::array_len($local_3.repr)) {
         cold_path;
-        "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_3, start_22);
+        "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_3, new_used_21);
     }
-    new_used_21 = $local_3.used;
-    $local_3.used = start_22;
-    builtin::array_copy<u8>($local_3.repr, new_used_21, global:field_forward_branch_chosen_ref.wado::$const_obj_3, 0, 7);
+    $local_3.used = new_used_21;
+    builtin::array_copy<u8>($local_3.repr, start_22, global:field_forward_branch_chosen_ref.wado::$const_obj_3, 0, 7);
     $sroa_$f_buf_84 = $local_3;
-    start_22 = local.tee new_used_21(p.f) < 0;
-    new_used_21 = "core:prelude/primitive.wado/count_digits_u64"(local.tee x_35(x_35 = builtin::i64_extend_i32_s(new_used_21); select i64(x_35 < 0_i64, 0_i64 - x_35, x_35)));
-    start_22 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$sroa[self.buf]$dae[alt_prefix]"($sroa_$f_buf_84, start_22, new_used_21);
-    "core:prelude/primitive.wado/write_decimal_digits"($sroa_$f_buf_84.repr, start_22, x_35, new_used_21);
-    new_used_21 = builtin::i32_wrap_i64(local.tee x_35("wasi/stream-new"()));
-    start_22 = builtin::i32_wrap_i64(x_35 >> 32_i64);
-    new_used_21 = "field_forward_branch_chosen_ref.wado/$cm_binding__Stdout_write_via_stream"(new_used_21);
-    "core:rt/write_string_to_stream$dae[add_newline]"(start_22, $local_3.repr, $local_3.used);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(new_used_21);
+    new_used_21 = local.tee start_22(p.f) < 0;
+    start_22 = "core:prelude/primitive.wado/count_digits_u64"(local.tee x_35(x_35 = builtin::i64_extend_i32_s(start_22); select i64(x_35 < 0_i64, 0_i64 - x_35, x_35)));
+    new_used_21 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$sroa[self.buf]$dae[alt_prefix]"($sroa_$f_buf_84, new_used_21, start_22);
+    "core:prelude/primitive.wado/write_decimal_digits"($sroa_$f_buf_84.repr, new_used_21, x_35, start_22);
+    start_22 = builtin::i32_wrap_i64(local.tee x_35("wasi/stream-new"()));
+    new_used_21 = builtin::i32_wrap_i64(x_35 >> 32_i64);
+    start_22 = "field_forward_branch_chosen_ref.wado/$cm_binding__Stdout_write_via_stream"(start_22);
+    "core:rt/write_string_to_stream$dae[add_newline]"(new_used_21, $local_3.repr, $local_3.used);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(start_22);
 }
 
 fn "field_forward_branch_chosen_ref.wado/via_black_box"() with Stdout {
@@ -411,23 +405,22 @@ fn "field_forward_branch_chosen_ref.wado/via_call"() with Stdout {
     start_22 = "core:prelude/primitive.wado/count_digits_u64"(local.tee x_35(x_35 = builtin::i64_extend_i32_s(start_22); select i64(x_35 < 0_i64, 0_i64 - x_35, x_35)));
     new_used_21 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$sroa[self.buf]$dae[alt_prefix]"($sroa_$f_buf_84, new_used_21, start_22);
     "core:prelude/primitive.wado/write_decimal_digits"($sroa_$f_buf_84.repr, new_used_21, x_35, start_22);
-    if @unlikely(local.tee start_22($local_3.used + 7) > builtin::array_len($local_3.repr)) {
+    if @unlikely(local.tee new_used_21(local.tee start_22($local_3.used) + 7) > builtin::array_len($local_3.repr)) {
         cold_path;
-        "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_3, start_22);
+        "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_3, new_used_21);
     }
-    new_used_21 = $local_3.used;
-    $local_3.used = start_22;
-    builtin::array_copy<u8>($local_3.repr, new_used_21, global:field_forward_branch_chosen_ref.wado::$const_obj_3, 0, 7);
+    $local_3.used = new_used_21;
+    builtin::array_copy<u8>($local_3.repr, start_22, global:field_forward_branch_chosen_ref.wado::$const_obj_3, 0, 7);
     $sroa_$f_buf_84 = $local_3;
-    start_22 = local.tee new_used_21(p.f) < 0;
-    new_used_21 = "core:prelude/primitive.wado/count_digits_u64"(local.tee x_35(x_35 = builtin::i64_extend_i32_s(new_used_21); select i64(x_35 < 0_i64, 0_i64 - x_35, x_35)));
-    start_22 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$sroa[self.buf]$dae[alt_prefix]"($sroa_$f_buf_84, start_22, new_used_21);
-    "core:prelude/primitive.wado/write_decimal_digits"($sroa_$f_buf_84.repr, start_22, x_35, new_used_21);
-    new_used_21 = builtin::i32_wrap_i64(local.tee x_35("wasi/stream-new"()));
-    start_22 = builtin::i32_wrap_i64(x_35 >> 32_i64);
-    new_used_21 = "field_forward_branch_chosen_ref.wado/$cm_binding__Stdout_write_via_stream"(new_used_21);
-    "core:rt/write_string_to_stream$dae[add_newline]"(start_22, $local_3.repr, $local_3.used);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(new_used_21);
+    new_used_21 = local.tee start_22(p.f) < 0;
+    start_22 = "core:prelude/primitive.wado/count_digits_u64"(local.tee x_35(x_35 = builtin::i64_extend_i32_s(start_22); select i64(x_35 < 0_i64, 0_i64 - x_35, x_35)));
+    new_used_21 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$sroa[self.buf]$dae[alt_prefix]"($sroa_$f_buf_84, new_used_21, start_22);
+    "core:prelude/primitive.wado/write_decimal_digits"($sroa_$f_buf_84.repr, new_used_21, x_35, start_22);
+    start_22 = builtin::i32_wrap_i64(local.tee x_35("wasi/stream-new"()));
+    new_used_21 = builtin::i32_wrap_i64(x_35 >> 32_i64);
+    start_22 = "field_forward_branch_chosen_ref.wado/$cm_binding__Stdout_write_via_stream"(start_22);
+    "core:rt/write_string_to_stream$dae[add_newline]"(new_used_21, $local_3.repr, $local_3.used);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(start_22);
 }
 
 fn "field_forward_branch_chosen_ref.wado/via_holder"() with Stdout {
@@ -458,23 +451,22 @@ fn "field_forward_branch_chosen_ref.wado/via_holder"() with Stdout {
     start_22 = "core:prelude/primitive.wado/count_digits_u64"(local.tee x_35(x_35 = builtin::i64_extend_i32_s(start_22); select i64(x_35 < 0_i64, 0_i64 - x_35, x_35)));
     new_used_21 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$sroa[self.buf]$dae[alt_prefix]"($sroa_$f_buf_84, new_used_21, start_22);
     "core:prelude/primitive.wado/write_decimal_digits"($sroa_$f_buf_84.repr, new_used_21, x_35, start_22);
-    if @unlikely(local.tee start_22($local_3.used + 7) > builtin::array_len($local_3.repr)) {
+    if @unlikely(local.tee new_used_21(local.tee start_22($local_3.used) + 7) > builtin::array_len($local_3.repr)) {
         cold_path;
-        "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_3, start_22);
+        "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_3, new_used_21);
     }
-    new_used_21 = $local_3.used;
-    $local_3.used = start_22;
-    builtin::array_copy<u8>($local_3.repr, new_used_21, global:field_forward_branch_chosen_ref.wado::$const_obj_3, 0, 7);
+    $local_3.used = new_used_21;
+    builtin::array_copy<u8>($local_3.repr, start_22, global:field_forward_branch_chosen_ref.wado::$const_obj_3, 0, 7);
     $sroa_$f_buf_84 = $local_3;
-    start_22 = local.tee new_used_21(p.f) < 0;
-    new_used_21 = "core:prelude/primitive.wado/count_digits_u64"(local.tee x_35(x_35 = builtin::i64_extend_i32_s(new_used_21); select i64(x_35 < 0_i64, 0_i64 - x_35, x_35)));
-    start_22 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$sroa[self.buf]$dae[alt_prefix]"($sroa_$f_buf_84, start_22, new_used_21);
-    "core:prelude/primitive.wado/write_decimal_digits"($sroa_$f_buf_84.repr, start_22, x_35, new_used_21);
-    new_used_21 = builtin::i32_wrap_i64(local.tee x_35("wasi/stream-new"()));
-    start_22 = builtin::i32_wrap_i64(x_35 >> 32_i64);
-    new_used_21 = "field_forward_branch_chosen_ref.wado/$cm_binding__Stdout_write_via_stream"(new_used_21);
-    "core:rt/write_string_to_stream$dae[add_newline]"(start_22, $local_3.repr, $local_3.used);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(new_used_21);
+    new_used_21 = local.tee start_22(p.f) < 0;
+    start_22 = "core:prelude/primitive.wado/count_digits_u64"(local.tee x_35(x_35 = builtin::i64_extend_i32_s(start_22); select i64(x_35 < 0_i64, 0_i64 - x_35, x_35)));
+    new_used_21 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$sroa[self.buf]$dae[alt_prefix]"($sroa_$f_buf_84, new_used_21, start_22);
+    "core:prelude/primitive.wado/write_decimal_digits"($sroa_$f_buf_84.repr, new_used_21, x_35, start_22);
+    start_22 = builtin::i32_wrap_i64(local.tee x_35("wasi/stream-new"()));
+    new_used_21 = builtin::i32_wrap_i64(x_35 >> 32_i64);
+    start_22 = "field_forward_branch_chosen_ref.wado/$cm_binding__Stdout_write_via_stream"(start_22);
+    "core:rt/write_string_to_stream$dae[add_newline]"(new_used_21, $local_3.repr, $local_3.used);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(start_22);
 }
 
 fn "field_forward_branch_chosen_ref.wado/via_closure"() with Stdout {
@@ -505,23 +497,22 @@ fn "field_forward_branch_chosen_ref.wado/via_closure"() with Stdout {
     start_24 = "core:prelude/primitive.wado/count_digits_u64"(local.tee x_37(x_37 = builtin::i64_extend_i32_s(start_24); select i64(x_37 < 0_i64, 0_i64 - x_37, x_37)));
     new_used_23 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$sroa[self.buf]$dae[alt_prefix]"($sroa_$f_buf_86, new_used_23, start_24);
     "core:prelude/primitive.wado/write_decimal_digits"($sroa_$f_buf_86.repr, new_used_23, x_37, start_24);
-    if @unlikely(local.tee start_24($local_4_4.used + 7) > builtin::array_len($local_4_4.repr)) {
+    if @unlikely(local.tee new_used_23(local.tee start_24($local_4_4.used) + 7) > builtin::array_len($local_4_4.repr)) {
         cold_path;
-        "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_4_4, start_24);
+        "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_4_4, new_used_23);
     }
-    new_used_23 = $local_4_4.used;
-    $local_4_4.used = start_24;
-    builtin::array_copy<u8>($local_4_4.repr, new_used_23, global:field_forward_branch_chosen_ref.wado::$const_obj_3, 0, 7);
+    $local_4_4.used = new_used_23;
+    builtin::array_copy<u8>($local_4_4.repr, start_24, global:field_forward_branch_chosen_ref.wado::$const_obj_3, 0, 7);
     $sroa_$f_buf_86 = $local_4_4;
-    start_24 = local.tee new_used_23(p.f) < 0;
-    new_used_23 = "core:prelude/primitive.wado/count_digits_u64"(local.tee x_37(x_37 = builtin::i64_extend_i32_s(new_used_23); select i64(x_37 < 0_i64, 0_i64 - x_37, x_37)));
-    start_24 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$sroa[self.buf]$dae[alt_prefix]"($sroa_$f_buf_86, start_24, new_used_23);
-    "core:prelude/primitive.wado/write_decimal_digits"($sroa_$f_buf_86.repr, start_24, x_37, new_used_23);
-    new_used_23 = builtin::i32_wrap_i64(local.tee x_37("wasi/stream-new"()));
-    start_24 = builtin::i32_wrap_i64(x_37 >> 32_i64);
-    new_used_23 = "field_forward_branch_chosen_ref.wado/$cm_binding__Stdout_write_via_stream"(new_used_23);
-    "core:rt/write_string_to_stream$dae[add_newline]"(start_24, $local_4_4.repr, $local_4_4.used);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(new_used_23);
+    new_used_23 = local.tee start_24(p.f) < 0;
+    start_24 = "core:prelude/primitive.wado/count_digits_u64"(local.tee x_37(x_37 = builtin::i64_extend_i32_s(start_24); select i64(x_37 < 0_i64, 0_i64 - x_37, x_37)));
+    new_used_23 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$sroa[self.buf]$dae[alt_prefix]"($sroa_$f_buf_86, new_used_23, start_24);
+    "core:prelude/primitive.wado/write_decimal_digits"($sroa_$f_buf_86.repr, new_used_23, x_37, start_24);
+    start_24 = builtin::i32_wrap_i64(local.tee x_37("wasi/stream-new"()));
+    new_used_23 = builtin::i32_wrap_i64(x_37 >> 32_i64);
+    start_24 = "field_forward_branch_chosen_ref.wado/$cm_binding__Stdout_write_via_stream"(start_24);
+    "core:rt/write_string_to_stream$dae[add_newline]"(new_used_23, $local_4_4.repr, $local_4_4.used);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(start_24);
 }
 
 fn "field_forward_branch_chosen_ref.wado/via_nested_if"() with Stdout {
@@ -558,23 +549,21 @@ fn "field_forward_branch_chosen_ref.wado/via_nested_if"() with Stdout {
     start_23 = "core:prelude/primitive.wado/count_digits_u64"(local.tee x_36(x_36 = builtin::i64_extend_i32_s(start_23); select i64(x_36 < 0_i64, 0_i64 - x_36, x_36)));
     new_used_22 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$sroa[self.buf]$dae[alt_prefix]"($sroa_$f_buf_113, new_used_22, start_23);
     "core:prelude/primitive.wado/write_decimal_digits"($sroa_$f_buf_113.repr, new_used_22, x_36, start_23);
-    if @unlikely(local.tee start_23($local_4_4.used + 7) > builtin::array_len($local_4_4.repr)) {
-        cold_path;
-        "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_4_4, start_23);
-    }
-    new_used_22 = $local_4_4.used;
-    $local_4_4.used = start_23;
-    builtin::array_copy<u8>($local_4_4.repr, new_used_22, global:field_forward_branch_chosen_ref.wado::$const_obj_3, 0, 7);
-    $sroa_$f_buf_113 = $local_4_4;
-    start_23 = local.tee new_used_22(p.f) < 0;
-    new_used_22 = "core:prelude/primitive.wado/count_digits_u64"(local.tee x_36(x_36 = builtin::i64_extend_i32_s(new_used_22); select i64(x_36 < 0_i64, 0_i64 - x_36, x_36)));
-    start_23 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$sroa[self.buf]$dae[alt_prefix]"($sroa_$f_buf_113, start_23, new_used_22);
-    "core:prelude/primitive.wado/write_decimal_digits"($sroa_$f_buf_113.repr, start_23, x_36, new_used_22);
-    if @unlikely(local.tee new_used_22($local_4_4.used + 7) > builtin::array_len($local_4_4.repr)) {
+    if @unlikely(local.tee new_used_22(local.tee start_23($local_4_4.used) + 7) > builtin::array_len($local_4_4.repr)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_4_4, new_used_22);
     }
-    start_23 = $local_4_4.used;
+    $local_4_4.used = new_used_22;
+    builtin::array_copy<u8>($local_4_4.repr, start_23, global:field_forward_branch_chosen_ref.wado::$const_obj_3, 0, 7);
+    $sroa_$f_buf_113 = $local_4_4;
+    new_used_22 = local.tee start_23(p.f) < 0;
+    start_23 = "core:prelude/primitive.wado/count_digits_u64"(local.tee x_36(x_36 = builtin::i64_extend_i32_s(start_23); select i64(x_36 < 0_i64, 0_i64 - x_36, x_36)));
+    new_used_22 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$sroa[self.buf]$dae[alt_prefix]"($sroa_$f_buf_113, new_used_22, start_23);
+    "core:prelude/primitive.wado/write_decimal_digits"($sroa_$f_buf_113.repr, new_used_22, x_36, start_23);
+    if @unlikely(local.tee new_used_22(local.tee start_23($local_4_4.used) + 7) > builtin::array_len($local_4_4.repr)) {
+        cold_path;
+        "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_4_4, new_used_22);
+    }
     $local_4_4.used = new_used_22;
     builtin::array_copy<u8>($local_4_4.repr, start_23, global:field_forward_branch_chosen_ref.wado::$const_obj_5, 0, 7);
     $sroa_$f_buf_113 = $local_4_4;
@@ -776,24 +765,22 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self, min_ca
 }
 
 fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$sroa[self.buf]$dae[alt_prefix]"(self, is_negative, digit_count) {
-    let start_26: i32;
+    let new_used_25: i32;
     if is_negative {
-        if @unlikely(local.tee is_negative(self.used + 1) > builtin::array_len(self.repr)) {
+        if @unlikely(local.tee new_used_25(local.tee is_negative(self.used) + 1) > builtin::array_len(self.repr)) {
             cold_path;
-            "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self, is_negative);
+            "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self, new_used_25);
         }
-        start_26 = self.used;
-        self.used = is_negative;
-        builtin::array_set_u8(self.repr, start_26, 45);
+        self.used = new_used_25;
+        builtin::array_set_u8(self.repr, is_negative, 45);
     } else {
     }
-    if @unlikely(local.tee digit_count(self.used + digit_count) > builtin::array_len(self.repr)) {
+    if @unlikely(local.tee digit_count(local.tee is_negative(self.used) + digit_count) > builtin::array_len(self.repr)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self, digit_count);
     }
-    start_26 = self.used;
     self.used = digit_count;
-    return start_26;
+    return is_negative;
 }
 
 export fn "field_forward_branch_chosen_ref.wado/$cm_export__run" as "run"

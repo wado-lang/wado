@@ -5,7 +5,7 @@
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::wir::{WirInstr, WirPackage, WirType, WirTypeId};
 
-use super::util::Footprint;
+use super::util::{CalleeWrites, Footprint};
 
 /// A field chain read off a local: `root.f0.f1…`, outermost field last.
 #[derive(Clone, PartialEq, Eq, Hash)]
@@ -57,13 +57,14 @@ struct Temp {
     used: bool,
 }
 
-struct Reuser {
+struct Reuser<'c> {
+    callees: &'c CalleeWrites,
     avail: Avail,
     temps: Vec<Temp>,
     taken: IndexSet<String>,
 }
 
-impl Reuser {
+impl Reuser<'_> {
     fn visit_body(&mut self, body: &mut [WirInstr]) {
         for instr in body {
             self.visit(instr);
@@ -91,10 +92,10 @@ impl Reuser {
                 let before = self.avail.clone();
                 self.visit_body(body);
                 self.avail = before;
-                forget_written(&mut self.avail, &Footprint::writes_all(body));
+                forget_written(&mut self.avail, &Footprint::writes_all(body, self.callees));
             }
             WirInstr::Loop { body, .. } => {
-                forget_written(&mut self.avail, &Footprint::writes_all(body));
+                forget_written(&mut self.avail, &Footprint::writes_all(body, self.callees));
                 let entry = self.avail.clone();
                 self.visit_body(body);
                 self.avail = entry;
@@ -122,7 +123,10 @@ impl Reuser {
             }
             _ => {
                 instr.for_each_boxed_child_mut(&mut |child| self.visit(child));
-                forget_written(&mut self.avail, &Footprint::writes_of_node(instr));
+                forget_written(
+                    &mut self.avail,
+                    &Footprint::writes_of_node(instr, self.callees),
+                );
             }
         }
     }
@@ -179,12 +183,14 @@ fn unwrap_unused(instr: &mut WirInstr, unused: &IndexSet<String>) {
 }
 
 pub(super) fn reuse_struct_loads(module: &mut WirPackage) {
+    let callees = CalleeWrites::of_module(module);
     for func in &mut module.functions {
         let locals = func.declared_locals();
         let Some(body) = &mut func.body else {
             continue;
         };
         let mut reuser = Reuser {
+            callees: &callees,
             avail: Avail::default(),
             temps: Vec::new(),
             taken: locals

@@ -87,23 +87,22 @@ fn "value_copy_callee_writes_handle_field.wado/run"() with Stdout {
     digit_count_25 = "core:prelude/primitive.wado/count_digits_u64"(local.tee before(select i64(before < 0_i64, 0_i64 - before, before)));
     $array_clone_len_3 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$sroa[self.buf]$dae[alt_prefix]"($sroa_$f_buf_77, $array_clone_len_3, digit_count_25);
     "core:prelude/primitive.wado/write_decimal_digits"($sroa_$f_buf_77.repr, $array_clone_len_3, before, digit_count_25);
-    if @unlikely(local.tee digit_count_25($local_3.used + 1) > builtin::array_len($local_3.repr)) {
+    if @unlikely(local.tee $array_clone_len_3(local.tee digit_count_25($local_3.used) + 1) > builtin::array_len($local_3.repr)) {
         cold_path;
-        "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_3, digit_count_25);
+        "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_3, $array_clone_len_3);
     }
-    $array_clone_len_3 = $local_3.used;
-    $local_3.used = digit_count_25;
-    builtin::array_copy<u8>($local_3.repr, $array_clone_len_3, global:value_copy_callee_writes_handle_field.wado::$const_obj_3, 0, 1);
+    $local_3.used = $array_clone_len_3;
+    builtin::array_copy<u8>($local_3.repr, digit_count_25, global:value_copy_callee_writes_handle_field.wado::$const_obj_3, 0, 1);
     $sroa_$f_buf_77 = $local_3;
-    $array_clone_len_3 = local.tee before(builtin::i64_extend_i32_u(builtin::array_get_value_u8(bytes, 0))) < 0_i64;
-    digit_count_25 = "core:prelude/primitive.wado/count_digits_u64"(local.tee before(select i64(before < 0_i64, 0_i64 - before, before)));
-    $array_clone_len_3 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$sroa[self.buf]$dae[alt_prefix]"($sroa_$f_buf_77, $array_clone_len_3, digit_count_25);
-    "core:prelude/primitive.wado/write_decimal_digits"($sroa_$f_buf_77.repr, $array_clone_len_3, before, digit_count_25);
-    digit_count_25 = builtin::i32_wrap_i64(local.tee before("wasi/stream-new"()));
-    $array_clone_len_3 = builtin::i32_wrap_i64(before >> 32_i64);
-    digit_count_25 = "value_copy_callee_writes_handle_field.wado/$cm_binding__Stdout_write_via_stream"(digit_count_25);
-    "core:rt/write_string_to_stream$dae[add_newline]"($array_clone_len_3, $local_3.repr, $local_3.used);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(digit_count_25);
+    digit_count_25 = local.tee before(builtin::i64_extend_i32_u(builtin::array_get_value_u8(bytes, 0))) < 0_i64;
+    $array_clone_len_3 = "core:prelude/primitive.wado/count_digits_u64"(local.tee before(select i64(before < 0_i64, 0_i64 - before, before)));
+    digit_count_25 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$sroa[self.buf]$dae[alt_prefix]"($sroa_$f_buf_77, digit_count_25, $array_clone_len_3);
+    "core:prelude/primitive.wado/write_decimal_digits"($sroa_$f_buf_77.repr, digit_count_25, before, $array_clone_len_3);
+    $array_clone_len_3 = builtin::i32_wrap_i64(local.tee before("wasi/stream-new"()));
+    digit_count_25 = builtin::i32_wrap_i64(before >> 32_i64);
+    $array_clone_len_3 = "value_copy_callee_writes_handle_field.wado/$cm_binding__Stdout_write_via_stream"($array_clone_len_3);
+    "core:rt/write_string_to_stream$dae[add_newline]"(digit_count_25, $local_3.repr, $local_3.used);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"($array_clone_len_3);
 }
 
 fn "value_copy_callee_writes_handle_field.wado/$cm_binding__Stdout_write_via_stream"(data) with Stdout {
@@ -280,24 +279,22 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self, min_ca
 }
 
 fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$sroa[self.buf]$dae[alt_prefix]"(self, is_negative, digit_count) {
-    let start_26: i32;
+    let new_used_25: i32;
     if is_negative {
-        if @unlikely(local.tee is_negative(self.used + 1) > builtin::array_len(self.repr)) {
+        if @unlikely(local.tee new_used_25(local.tee is_negative(self.used) + 1) > builtin::array_len(self.repr)) {
             cold_path;
-            "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self, is_negative);
+            "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self, new_used_25);
         }
-        start_26 = self.used;
-        self.used = is_negative;
-        builtin::array_set_u8(self.repr, start_26, 45);
+        self.used = new_used_25;
+        builtin::array_set_u8(self.repr, is_negative, 45);
     } else {
     }
-    if @unlikely(local.tee digit_count(self.used + digit_count) > builtin::array_len(self.repr)) {
+    if @unlikely(local.tee digit_count(local.tee is_negative(self.used) + digit_count) > builtin::array_len(self.repr)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self, digit_count);
     }
-    start_26 = self.used;
     self.used = digit_count;
-    return start_26;
+    return is_negative;
 }
 
 export fn "value_copy_callee_writes_handle_field.wado/$cm_export__run" as "run"
