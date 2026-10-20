@@ -25,7 +25,7 @@ use {
     ATN_TR_SET,
     atn_tr_consumes,
 } from "./runtime/atn.wado";
-use { HashMap, HashSet } from "core:collections";
+use { HashMap } from "core:collections";
 use { CodeWriter, FnSpec } from "lib:wadopoet";
 use { GrammarAnalysis } from "./grammar_analysis.wado";
 
@@ -35,7 +35,7 @@ global SLL_MAX_DEPTH: i32 = 4;
 global SLL_MAX_STATES: i32 = 1024;
 /// How many configurations one decision's exploration may expand before the
 /// rest of it is left to the simulator. It bounds generation time.
-global SLL_DECISION_BUDGET: i32 = 2000000;
+global SLL_DECISION_BUDGET: i32 = 800000;
 /// How many places the shared closure memo may hold before it is dropped. It
 /// bounds generation memory.
 global SLL_MEMO_CAP: i32 = 2000000;
@@ -44,12 +44,18 @@ global SLL_MEMO_CAP: i32 = 2000000;
 global SLL_END: i32 = -2;
 /// The decision rule's own frame, whose end continues at the global FOLLOW.
 global SLL_NO_CALLER: i32 = 0;
-/// The stack ids below this are bottom frames: `SLL_NO_CALLER`, then one per
-/// token step a configuration may leave the decision rule at. Left at step
-/// `j`, it continues at the global FOLLOW in frame `1 + j`. Every alternative
-/// that ends the rule at step `j` reaches the same configurations from there,
-/// and so does the parse's stack, so a frame names how a configuration got
-/// there as well as where it is.
+/// How many bottom frames there are: `SLL_NO_CALLER`, then one per token step
+/// a configuration may leave the decision rule at. Left at step `j`, it
+/// continues at the global FOLLOW in frame `1 + j`. Every alternative that
+/// ends the rule at step `j` reaches the same configurations from there, and
+/// so does the parse's stack, so a frame names how a configuration got there
+/// as well as where it is.
+///
+/// A stack id is `chain * SLL_BOTTOMS + bottom`, where the chain holds the
+/// frames pushed above the bottom one and chain 0 none. Nothing moves a
+/// configuration off a bottom frame other than `SLL_NO_CALLER`, so the
+/// closure of a place on frame `1 + j` is that of the same place on frame 1,
+/// shifted.
 global SLL_BOTTOMS: i32 = SLL_MAX_DEPTH + 2;
 
 /// How many stacks `config_key` can tell apart: it packs a stack id above 40
@@ -110,18 +116,148 @@ fn place_of(key: i64, alt: i32) -> SllConfig {
     return SllConfig { state, alt, pr: (rest % PR_BITS) as i32, stack: (rest / PR_BITS) as i32 };
 }
 
+/// How far `place`'s bottom frame sits above frame 1, in place keys, where it
+/// is an escape frame; 0 on `SLL_NO_CALLER`.
+fn frame_shift(place: i64) -> i64 {
+    let bottom = place_of(place, 0).stack % SLL_BOTTOMS;
+    if bottom == SLL_NO_CALLER {
+        return 0;
+    }
+    return (bottom - 1) as i64 * PR_BITS * STATE_BITS;
+}
+
+fn config_of(key: i64) -> SllConfig {
+    return place_of(key / ALT_BITS, (key % ALT_BITS) as i32);
+}
+
+/// A set of keys that empties in constant time, so one serves every closure:
+/// a slot is in the set only while it carries the current stamp. A fresh
+/// `HashSet` per closure cost a fifth of the explorer's time.
+struct KeySet {
+    keys: List<i64>,
+    stamps: List<i32>,
+    stamp: i32,
+    count: i32,
+    bits: i32,
+}
+
+impl KeySet {
+    fn new() -> KeySet {
+        return KeySet::with_bits(10);
+    }
+
+    fn with_bits(bits: i32) -> KeySet {
+        return KeySet {
+            keys: List::filled(1 << bits, 0),
+            stamps: List::filled(1 << bits, 0),
+            stamp: 1,
+            count: 0,
+            bits,
+        };
+    }
+
+    fn clear(&mut self) {
+        self.stamp += 1;
+        self.count = 0;
+    }
+
+    /// Whether `key` was absent; it is present afterwards.
+    fn insert(&mut self, key: i64) -> bool {
+        if (self.count + 1) * 2 > self.keys.len() {
+            self.grow();
+        }
+        let mask = self.keys.len() - 1;
+        let mut at = (key as u64 * 0x9E3779B97F4A7C15 >> (64 - self.bits) as u64) as i32;
+        while self.stamps[at] == self.stamp {
+            if self.keys[at] == key {
+                return false;
+            }
+            at = at + 1 & mask;
+        }
+        self.keys[at] = key;
+        self.stamps[at] = self.stamp;
+        self.count += 1;
+        return true;
+    }
+
+    fn grow(&mut self) {
+        let mut wider = KeySet::with_bits(self.bits + 1);
+        for let i of 0..<self.keys.len() {
+            if self.stamps[i] == self.stamp {
+                wider.insert(self.keys[i]);
+            }
+        }
+        *self = wider;
+    }
+}
+
+/// `keys` sorted, each once, where each run of it from one of `runs` to the
+/// next is sorted already.
+fn merge_runs(keys: List<i64>, runs: List<i32>) -> List<i64> {
+    let mut cur = keys;
+    let mut bounds = runs;
+    bounds.push(cur.len());
+    while bounds.len() > 2 {
+        let mut next = List::<i64>::with_capacity(cur.len());
+        let mut merged: List<i32> = [];
+        for let mut r = 0; r + 1 < bounds.len(); r += 2 {
+            merged.push(next.len());
+            let mid = bounds[r + 1];
+            let end = if r + 2 < bounds.len() { bounds[r + 2] } else { mid };
+            let mut i = bounds[r];
+            let mut j = mid;
+            while i < mid && j < end {
+                if cur[j] < cur[i] {
+                    next.push(cur[j]);
+                    j += 1;
+                } else {
+                    next.push(cur[i]);
+                    i += 1;
+                }
+            }
+            for let k of i..<mid {
+                next.push(cur[k]);
+            }
+            for let k of j..<end {
+                next.push(cur[k]);
+            }
+        }
+        merged.push(next.len());
+        cur = next;
+        bounds = merged;
+    }
+    let mut kept = 0;
+    for let mut i = 0; i < cur.len(); i += 1 {
+        if kept == 0 || cur[i] != cur[kept - 1] {
+            cur[kept] = cur[i];
+            kept += 1;
+        }
+    }
+    cur.truncate(kept);
+    return cur;
+}
+
 /// Explores the DFAs of one ATN's decisions, sharing the closures they reach.
 pub struct SllExplorer {
     atn: Atn,
     eof: i32,
     /// Per rule, the states a call to it returns to.
     follows: List<List<i32>>,
-    stack_ret: List<i32>,
-    stack_rpr: List<i32>,
-    stack_parent: List<i32>,
-    /// The stack's bottom frame.
-    stack_bottom: List<i32>,
-    stack_index: HashMap<i64, i32>,
+    /// Per state, whether it consumes next, its rule where it is a rule's
+    /// stop state (-1 otherwise), and where its transitions start in the
+    /// `tr_*` columns, which hold every state's transitions in order.
+    consuming: List<bool>,
+    stop_rule: List<i32>,
+    tr_start: List<i32>,
+    tr_kind: List<i32>,
+    tr_target: List<i32>,
+    tr_follow: List<i32>,
+    tr_prec: List<i32>,
+    /// Per chain, its top frame and the chain below it.
+    chain_ret: List<i32>,
+    chain_rpr: List<i32>,
+    chain_parent: List<i32>,
+    chain_index: HashMap<i64, i32>,
     /// By `closure_key`, the consuming places a place reaches without
     /// consuming.
     closures: HashMap<i64, List<i64>>,
@@ -129,103 +265,130 @@ pub struct SllExplorer {
     memo_size: i32,
     /// What the current decision may still expand.
     budget: i32,
+    /// The configurations the closure in progress has reached.
+    seen: KeySet,
 }
 
 impl SllExplorer {
     pub fn new(atn: &Atn, eof: i32) -> SllExplorer {
-        let bottoms: List<i32> = (0..<SLL_BOTTOMS).collect();
+        let mut consuming: List<bool> = [];
+        let mut stop_rule: List<i32> = [];
+        let mut tr_start: List<i32> = [];
+        let mut tr_kind: List<i32> = [];
+        let mut tr_target: List<i32> = [];
+        let mut tr_follow: List<i32> = [];
+        let mut tr_prec: List<i32> = [];
+        for let st of &atn.states {
+            consuming.push(!st.transitions.is_empty() && atn_tr_consumes(st.transitions[0].kind));
+            stop_rule.push(if st.kind == ATN_RULE_STOP { st.rule } else { -1 });
+            tr_start.push(tr_kind.len());
+            for let t of &st.transitions {
+                tr_kind.push(t.kind);
+                tr_target.push(t.target);
+                tr_follow.push(t.follow);
+                tr_prec.push(t.prec);
+            }
+        }
+        tr_start.push(tr_kind.len());
         return SllExplorer {
             atn: *atn,
             eof,
             follows: rule_follows(atn),
-            stack_ret: List::filled(SLL_BOTTOMS, -1),
-            stack_rpr: List::filled(SLL_BOTTOMS, 0),
-            stack_parent: List::filled(SLL_BOTTOMS, -1),
-            stack_bottom: bottoms,
-            stack_index: HashMap::new(),
+            consuming,
+            stop_rule,
+            tr_start,
+            tr_kind,
+            tr_target,
+            tr_follow,
+            tr_prec,
+            chain_ret: [-1],
+            chain_rpr: [0],
+            chain_parent: [-1],
+            chain_index: HashMap::new(),
             closures: HashMap::new(),
             memo_size: 0,
             budget: 0,
+            seen: KeySet::new(),
         };
     }
 
-    /// Drop every stack above the bottom frames, and the closures naming them.
-    /// A decision pushes at most one stack per expansion its budget allows, so
-    /// a table dropped past half of `SLL_MAX_STACKS` between decisions never
-    /// outgrows it.
+    /// Whether the chains the next decision may push could outgrow
+    /// `SLL_MAX_STACKS`: it pushes at most one per expansion its budget allows.
+    fn stacks_full(&self) -> bool {
+        let chains = SLL_MAX_STACKS / SLL_BOTTOMS as i64;
+        assert chains > SLL_DECISION_BUDGET as i64;
+        return (self.chain_ret.len() + SLL_DECISION_BUDGET) as i64 > chains;
+    }
+
+    /// Drop every chain, and the closures naming them.
     fn drop_stacks(&mut self) {
-        assert (SLL_DECISION_BUDGET as i64) < SLL_MAX_STACKS / 2;
-        self.stack_ret.truncate(SLL_BOTTOMS);
-        self.stack_rpr.truncate(SLL_BOTTOMS);
-        self.stack_parent.truncate(SLL_BOTTOMS);
-        self.stack_bottom.truncate(SLL_BOTTOMS);
-        self.stack_index = HashMap::new();
+        self.chain_ret.truncate(1);
+        self.chain_rpr.truncate(1);
+        self.chain_parent.truncate(1);
+        self.chain_index = HashMap::new();
         self.closures = HashMap::new();
         self.memo_size = 0;
     }
 
     fn push_stack(&mut self, ret: i32, rpr: i32, parent: i32) -> i32 {
-        let key = place_key(ret, rpr, parent);
-        if let Some(id) = self.stack_index.get(key) {
-            return id;
-        }
-        let id = self.stack_ret.len();
-        self.stack_ret.push(ret);
-        self.stack_rpr.push(rpr);
-        self.stack_parent.push(parent);
-        self.stack_bottom.push(self.stack_bottom[parent]);
-        self.stack_index[key] = id;
-        return id;
+        let below = parent / SLL_BOTTOMS;
+        let key = place_key(ret, rpr, below);
+        let chain = if let Some(id) = self.chain_index.get(key) {
+            id;
+        } else {
+            let id = self.chain_ret.len();
+            self.chain_ret.push(ret);
+            self.chain_rpr.push(rpr);
+            self.chain_parent.push(below);
+            self.chain_index[key] = id;
+            id;
+        };
+        return chain * SLL_BOTTOMS + parent % SLL_BOTTOMS;
     }
 
     /// The memo key of `place`'s closure at token step `step`. Only a place in
-    /// the decision rule's frame can leave it, so only its closure reads `step`.
-    fn closure_key(&self, place: i64, step: i32) -> i64
+    /// the decision rule's frame can leave it, so only its closure reads
+    /// `step`; any other is keyed as its place on frame 1.
+    fn closure_key(place: i64, step: i32) -> i64
         contract SLL_BOTTOMS < 8
     {
-        let c = place_of(place, 0);
-        let reads_step = self.stack_bottom[c.stack] == SLL_NO_CALLER;
-        return place * 8 + (if reads_step { step + 1 } else { 0 }) as i64;
-    }
-
-    fn consumes(&self, state: i32) -> bool {
-        let ts = &self.atn.states[state].transitions;
-        if ts.is_empty() {
-            return false;
+        if place_of(place, 0).stack % SLL_BOTTOMS == SLL_NO_CALLER {
+            return place * 8 + (step + 1) as i64;
         }
-        return atn_tr_consumes(ts[0].kind);
+        return (place - frame_shift(place)) * 8;
     }
 
-    /// Push what `c` reaches without consuming, at token step `step`. Returns
-    /// whether `c` is kept instead: it consumes next, or input ends.
-    fn expand(&mut self, c: &SllConfig, step: i32, work: &mut List<SllConfig>) -> bool {
-        if c.state == SLL_END || self.consumes(c.state) {
+    /// Push the configurations the one `key` names reaches without consuming,
+    /// at token step `step`. Returns whether it is kept instead: it consumes
+    /// next, or input ends.
+    fn expand(&mut self, key: i64, step: i32, work: &mut List<i64>) -> bool {
+        let c = config_of(key);
+        if c.state == SLL_END || self.consuming[c.state] {
             return true;
         }
-        let st = &self.atn.states[c.state];
-        if st.kind == ATN_RULE_STOP {
+        let alt = c.alt as i64;
+        let rule = self.stop_rule[c.state];
+        if rule >= 0 {
             if c.stack < SLL_BOTTOMS {
                 let escaped = if c.stack == SLL_NO_CALLER { 1 + step } else { c.stack };
-                for let f of &self.follows[st.rule] {
-                    work.push(SllConfig { state: *f, alt: c.alt, pr: 0, stack: escaped });
+                for let f of &self.follows[rule] {
+                    work.push(place_key(*f, 0, escaped) * ALT_BITS + alt);
                 }
-                work.push(SllConfig { state: SLL_END, alt: c.alt, pr: 0, stack: escaped });
+                work.push(place_key(SLL_END, 0, escaped) * ALT_BITS + alt);
             } else {
-                work.push(SllConfig {
-                    state: self.stack_ret[c.stack],
-                    alt: c.alt,
-                    pr: self.stack_rpr[c.stack],
-                    stack: self.stack_parent[c.stack],
-                });
+                let chain = c.stack / SLL_BOTTOMS;
+                let below = self.chain_parent[chain] * SLL_BOTTOMS + c.stack % SLL_BOTTOMS;
+                work.push(place_key(self.chain_ret[chain], self.chain_rpr[chain], below) * ALT_BITS + alt);
             }
             return false;
         }
-        for let t of &st.transitions {
-            if t.kind == ATN_TR_EPSILON || t.kind == ATN_TR_PRECEDENCE && t.prec >= c.pr {
-                work.push(SllConfig { state: t.target, alt: c.alt, pr: c.pr, stack: c.stack });
-            } else if t.kind == ATN_TR_RULE && t.target >= 0 {
-                let stack = self.push_stack(t.follow, c.pr, c.stack);
-                work.push(SllConfig { state: t.target, alt: c.alt, pr: t.prec, stack });
+        for let j of self.tr_start[c.state]..<self.tr_start[c.state + 1] {
+            let kind = self.tr_kind[j];
+            if kind == ATN_TR_EPSILON || kind == ATN_TR_PRECEDENCE && self.tr_prec[j] >= c.pr {
+                work.push(place_key(self.tr_target[j], c.pr, c.stack) * ALT_BITS + alt);
+            } else if kind == ATN_TR_RULE && self.tr_target[j] >= 0 {
+                let stack = self.push_stack(self.tr_follow[j], c.pr, c.stack);
+                work.push(place_key(self.tr_target[j], self.tr_prec[j], stack) * ALT_BITS + alt);
             }
         }
         return false;
@@ -238,55 +401,91 @@ impl SllExplorer {
         return self.budget >= 0;
     }
 
-    /// The consuming places `place` reaches at token step `step`, memoized;
-    /// `null` once the budget runs out.
-    fn place_closure(&mut self, place: i64, step: i32) -> Option<List<i64>> {
-        let memo = self.closure_key(place, step);
-        if let Some(known) = self.closures.get(memo) {
-            return Option::Some(known);
+    /// The `closures` key holding the consuming places `place` reaches at token
+    /// step `step`, short of its `frame_shift`, computed once; `null` once the
+    /// budget runs out.
+    fn place_closure(&mut self, place: i64, step: i32) -> Option<i64> {
+        let memo = SllExplorer::closure_key(place, step);
+        if self.closures.contains_key(memo) {
+            return Option::Some(memo);
         }
-        let mut seen = HashSet::<i64>::new();
-        let mut work: List<SllConfig> = [place_of(place, 0)];
-        let mut kept: List<i64> = [];
-        while let Some(c) = work.pop() {
-            let key = place_key(c.state, c.pr, c.stack);
-            if !seen.insert(key) {
-                continue;
-            }
-            if !self.spend() {
-                return null;
-            }
-            if self.expand(&c, step, &mut work) {
-                kept.push(key);
-            }
-        }
+        let Some(mut kept) = self.walk(place, step, false) else {
+            return null;
+        };
+        kept.sort();
         if self.memo_size + kept.len() > SLL_MEMO_CAP {
             self.closures = HashMap::new();
             self.memo_size = 0;
         }
         self.memo_size += kept.len();
         self.closures[memo] = kept;
-        return Option::Some(kept);
+        return Option::Some(memo);
     }
 
-    /// The closure of `seeds` at token step `step`, sorted, or `null` once the
-    /// budget runs out.
-    fn closure(&mut self, seeds: &List<SllConfig>, step: i32) -> Option<List<SllConfig>> {
-        let mut seen = HashSet::<i64>::new();
+    /// The closure of the configurations `seeds` keys at token step `step`, as
+    /// sorted keys, or `null` once the budget runs out.
+    fn closure(&mut self, seeds: &List<i64>, step: i32) -> Option<List<i64>> {
         let mut keys: List<i64> = [];
+        let mut runs: List<i32> = [];
         for let s of seeds {
-            let Some(reached) = self.place_closure(place_key(s.state, s.pr, s.stack), step) else {
+            let place = *s / ALT_BITS;
+            let Some(memo) = self.place_closure(place, step) else {
                 return null;
             };
-            for let p of &reached {
-                let k = *p * ALT_BITS + s.alt as i64;
-                if seen.insert(k) {
-                    keys.push(k);
+            runs.push(keys.len());
+            let shift = frame_shift(place);
+            let alt = *s % ALT_BITS;
+            for let p of &self.closures[memo] {
+                keys.push((*p + shift) * ALT_BITS + alt);
+            }
+        }
+        return Option::Some(merge_runs(keys, runs));
+    }
+
+    /// Whether the closure of `seeds` at token step `step` holds anything. It
+    /// stops at the first configuration it keeps, so it costs far less than
+    /// the closure; `false` once the budget runs out.
+    fn reaches_any(&mut self, seeds: &List<i64>, step: i32) -> bool {
+        for let s of seeds {
+            let place = *s / ALT_BITS;
+            let memo = SllExplorer::closure_key(place, step);
+            let reached = if self.closures.contains_key(memo) {
+                self.closures[memo].len();
+            } else {
+                let Some(kept) = self.walk(place, step, true) else {
+                    return false;
+                };
+                kept.len();
+            };
+            if reached > 0 {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /// The consuming places `place` reaches at token step `step`, short of its
+    /// `frame_shift`, in no order, or only the first one with `first_only`;
+    /// `null` once the budget runs out.
+    fn walk(&mut self, place: i64, step: i32, first_only: bool) -> Option<List<i64>> {
+        self.seen.clear();
+        let mut work: List<i64> = [(place - frame_shift(place)) * ALT_BITS];
+        let mut kept: List<i64> = [];
+        while let Some(key) = work.pop() {
+            if !self.seen.insert(key) {
+                continue;
+            }
+            if !self.spend() {
+                return null;
+            }
+            if self.expand(key, step, &mut work) {
+                kept.push(key / ALT_BITS);
+                if first_only {
+                    break;
                 }
             }
         }
-        keys.sort();
-        return Option::Some(keys.iter_ref().map(|k| place_of(*k / ALT_BITS, (*k % ALT_BITS) as i32)).collect());
+        return Option::Some(kept);
     }
 
     /// The start state's closure. An alternative that comes back to the
@@ -296,46 +495,49 @@ impl SllExplorer {
     /// precedence 0, whatever `min_prec` the call asks at: an edge a higher one
     /// closes reopens in an outer frame of the rule, the outermost of which
     /// runs at 0, so the alternative the DFA keeps survives at every `min_prec`.
-    fn start_closure(&mut self, dstate: i32) -> Option<List<SllConfig>> {
-        let mut work: List<SllConfig> = [];
+    fn start_closure(&mut self, dstate: i32) -> Option<List<i64>> {
+        let mut work: List<i64> = [];
         let ts = &self.atn.states[dstate].transitions;
         for let mut j = 0; j < ts.len(); j += 1 {
-            work.push(SllConfig { state: ts[j].target, alt: j, pr: 0, stack: SLL_NO_CALLER });
+            work.push(config_key(&SllConfig { state: ts[j].target, alt: j, pr: 0, stack: SLL_NO_CALLER }));
         }
-        let mut seen = HashSet::<i64>::new();
-        let mut kept: List<SllConfig> = [];
-        while let Some(c) = work.pop() {
-            if c.state == dstate && ts[c.alt].kind == ATN_TR_PRECEDENCE || !seen.insert(config_key(&c)) {
+        self.seen.clear();
+        let mut kept: List<i64> = [];
+        while let Some(key) = work.pop() {
+            let c = config_of(key);
+            if c.state == dstate && ts[c.alt].kind == ATN_TR_PRECEDENCE || !self.seen.insert(key) {
                 continue;
             }
             if !self.spend() {
                 return null;
             }
-            if self.expand(&c, 0, &mut work) {
-                kept.push(c);
+            if self.expand(key, 0, &mut work) {
+                kept.push(key);
             }
         }
-        kept.sort_by(|a, b| config_key(a).cmp(&config_key(b)));
+        kept.sort();
         return Option::Some(kept);
     }
 
     /// For each token some configuration takes, the configurations it moves
     /// to, by token ascending. End of input is left out: the simulator decides
     /// there.
-    fn moves(&self, configs: &List<SllConfig>) -> List<[i32, List<SllConfig>]> {
-        let mut by_token = HashMap::<i32, List<SllConfig>>::new();
-        let mut any: List<[SllConfig, i32]> = [];
-        for let c of configs {
+    fn moves(&self, configs: &List<i64>) -> List<[i32, List<i64>]> {
+        let mut slot_of = List::<i32>::filled(self.atn.num_tokens, -1);
+        let mut by_slot: List<List<i64>> = [];
+        let mut any: List<[i64, i32]> = [];
+        for let key of configs {
+            let c = config_of(*key);
             if c.state == SLL_END {
                 continue;
             }
             for let t of &self.atn.states[c.state].transitions {
-                let next = SllConfig { state: t.target, alt: c.alt, pr: c.pr, stack: c.stack };
+                let next = place_key(t.target, c.pr, c.stack) * ALT_BITS + c.alt as i64;
                 if t.kind == ATN_TR_ATOM {
-                    add_move(&mut by_token, t.label, next, self.eof);
+                    self.add_move(&mut slot_of, &mut by_slot, t.label, next);
                 } else if t.kind == ATN_TR_SET {
                     for let k of &self.atn.sets[t.label] {
-                        add_move(&mut by_token, *k, next, self.eof);
+                        self.add_move(&mut slot_of, &mut by_slot, *k, next);
                     }
                 } else if t.kind == ATN_TR_WILDCARD {
                     any.push([next, -1]);
@@ -344,15 +546,12 @@ impl SllExplorer {
                 }
             }
         }
-        let mut tokens: List<i32> = if any.is_empty() {
-            by_token.keys().map(|k| *k).collect();
-        } else {
-            (0..<self.atn.num_tokens).filter(|k| k != self.eof).collect();
-        };
-        tokens.sort();
-        let mut out: List<[i32, List<SllConfig>]> = [];
-        for let token of tokens {
-            let mut moved = by_token.get(token).unwrap_or([]);
+        let mut out: List<[i32, List<i64>]> = [];
+        for let token of 0..<self.atn.num_tokens {
+            if token == self.eof || slot_of[token] < 0 && any.is_empty() {
+                continue;
+            }
+            let mut moved: List<i64> = if slot_of[token] < 0 { [] } else { by_slot[slot_of[token]] };
             for let a of &any {
                 if a.1 != token {
                     moved.push(a.0);
@@ -365,23 +564,66 @@ impl SllExplorer {
         return out;
     }
 
+    fn add_move(&self, slot_of: &mut List<i32>, by_slot: &mut List<List<i64>>, token: i32, next: i64) {
+        if token == self.eof {
+            return;
+        }
+        if slot_of[token] < 0 {
+            slot_of[token] = by_slot.len();
+            by_slot.push([]);
+        }
+        by_slot[slot_of[token]].push(next);
+    }
+
     /// Whether alternative `lowest` stands wherever another one does. Two
     /// configurations at one place got there alike (`SLL_BOTTOMS`) and read
     /// the same tokens on, under any stack, so no lookahead tells them apart
-    /// and the simulator settles on the lowest, as here.
-    fn lowest_alt_covers_rest(configs: &List<SllConfig>, lowest: i32) -> bool {
-        let mut places = HashSet::<i64>::new();
-        for let c of configs {
-            if c.alt == lowest {
-                places.insert(place_key(c.state, c.pr, c.stack));
+    /// and the simulator settles on the lowest, as here. `configs` is sorted,
+    /// so the configurations at one place sit together.
+    fn lowest_alt_covers_rest(configs: &List<i64>, lowest: i32) -> bool {
+        let mut i = 0;
+        while i < configs.len() {
+            let place = configs[i] / ALT_BITS;
+            let mut has_lowest = false;
+            let mut has_other = false;
+            while i < configs.len() && configs[i] / ALT_BITS == place {
+                if (configs[i] % ALT_BITS) as i32 == lowest {
+                    has_lowest = true;
+                } else {
+                    has_other = true;
+                }
+                i += 1;
+            }
+            if has_other && !has_lowest {
+                return false;
             }
         }
-        return configs.iter_ref().all(|c| c.alt == lowest || places.contains(place_key(c.state, c.pr, c.stack)));
+        return true;
+    }
+
+    /// The alternative `configs` leave alone, if they leave one.
+    fn settled(configs: &List<i64>) -> Option<i32> {
+        if configs.is_empty() {
+            return null;
+        }
+        let mut lowest = configs[0] % ALT_BITS;
+        let mut alone = true;
+        for let key of configs {
+            let alt = *key % ALT_BITS;
+            if alt != lowest {
+                alone = false;
+                lowest = i64::min(lowest, alt);
+            }
+        }
+        if !alone && !SllExplorer::lowest_alt_covers_rest(configs, lowest as i32) {
+            return null;
+        }
+        return Option::Some(lowest as i32);
     }
 
     /// The DFA of decision `decision`.
     pub fn explore(&mut self, decision: i32) -> SllDfa {
-        if self.stack_ret.len() as i64 > SLL_MAX_STACKS / 2 {
+        if self.stacks_full() {
             self.drop_stacks();
         }
         self.budget = SLL_DECISION_BUDGET;
@@ -392,39 +634,71 @@ impl SllExplorer {
             };
         };
         let mut nodes: List<SllNode> = [SllNode::Ask];
-        let mut configs: List<List<SllConfig>> = [start];
+        let mut configs: List<List<i64>> = [start];
         let mut depth: List<i32> = [0];
-        let mut by_key = HashMap::<String, i32>::new();
-        by_key[node_key(0, &configs[0])] = 0;
+        // A node that leaves alternatives open is its configurations at a
+        // depth, so the DFA has no cycle and the emitted matches nest at most
+        // `SLL_MAX_DEPTH` deep. One that settles is its alternative.
+        let mut node_at: List<HashMap<List<i64>, i32>> = [];
+        for let _ of 0..=SLL_MAX_DEPTH {
+            node_at.push(HashMap::new());
+        }
+        node_at[0][configs[0]] = 0;
+        let mut alt_node = HashMap::<i32, i32>::new();
         for let mut n = 0; n < configs.len(); n += 1 {
-            let alts = unique_alts(&configs[n]);
-            if alts.is_empty() {
-                continue;
-            }
-            if alts.len() == 1 || SllExplorer::lowest_alt_covers_rest(&configs[n], alts[0]) {
-                nodes[n] = SllNode::Alt(alts[0]);
+            if let Some(alt) = SllExplorer::settled(&configs[n]) {
+                nodes[n] = SllNode::Alt(alt);
                 continue;
             }
             if depth[n] >= SLL_MAX_DEPTH {
                 continue;
             }
+            let d = depth[n] + 1;
             let mut edges: List<SllEdge> = [];
+            let mut closure_of = HashMap::<List<i64>, Option<List<i64>>>::new();
             for let [token, moved] of self.moves(&configs[n]) {
-                let Some(next) = self.closure(&moved, depth[n] + 1) else {
-                    continue;
-                };
-                let key = node_key(depth[n] + 1, &next);
-                let to = if let Some(known) = by_key.get_str(&key) {
-                    known;
-                } else if configs.len() < SLL_MAX_STATES {
-                    let id = configs.len();
-                    configs.push(next);
-                    depth.push(depth[n] + 1);
-                    nodes.push(SllNode::Ask);
-                    by_key[key] = id;
-                    id;
+                // A closure is the union of its seeds' places' closures, each
+                // carrying its seed's alternative, so it settles where its
+                // seeds do, unless no seed's place reaches anything. Short of
+                // distinct places closing over one place, it settles nothing
+                // else, and a node at the last depth that does not settle
+                // asks.
+                let to = if let Some(alt) = SllExplorer::settled(&moved) {
+                    if !self.reaches_any(&moved, d) {
+                        continue;
+                    }
+                    if let Some(known) = alt_node.get(alt) {
+                        known;
+                    } else {
+                        let Some(id) = new_node(&mut configs, &mut depth, &mut nodes, moved, d) else {
+                            continue;
+                        };
+                        alt_node[alt] = id;
+                        id;
+                    }
                 } else {
-                    continue;
+                    if d == SLL_MAX_DEPTH {
+                        continue;
+                    }
+                    let reached = if let Some(known) = closure_of.get(moved) {
+                        known;
+                    } else {
+                        let computed = self.closure(&moved, d);
+                        closure_of[moved] = computed;
+                        computed;
+                    };
+                    let Some(next) = reached else {
+                        continue;
+                    };
+                    if let Some(known) = node_at[d].get(next) {
+                        known;
+                    } else {
+                        let Some(id) = new_node(&mut configs, &mut depth, &mut nodes, next, d) else {
+                            continue;
+                        };
+                        node_at[d][next] = id;
+                        id;
+                    }
                 };
                 add_edge(&mut edges, token, to);
             }
@@ -432,6 +706,24 @@ impl SllExplorer {
         }
         return SllDfa { nodes: prune_asking(nodes), kinds: self.atn.num_tokens };
     }
+}
+
+/// A new node holding `held` at depth `d`, unless the DFA holds
+/// `SLL_MAX_STATES` already.
+fn new_node(
+    configs: &mut List<List<i64>>,
+    depth: &mut List<i32>,
+    nodes: &mut List<SllNode>,
+    held: List<i64>,
+    d: i32,
+) -> Option<i32> {
+    if configs.len() >= SLL_MAX_STATES {
+        return null;
+    }
+    configs.push(held);
+    depth.push(d);
+    nodes.push(SllNode::Ask);
+    return Option::Some(configs.len() - 1);
 }
 
 fn rule_follows(atn: &Atn) -> List<List<i32>> {
@@ -447,15 +739,6 @@ fn rule_follows(atn: &Atn) -> List<List<i32>> {
         }
     }
     return follows;
-}
-
-fn add_move(by_token: &mut HashMap<i32, List<SllConfig>>, token: i32, next: SllConfig, eof: i32) {
-    if token == eof {
-        return;
-    }
-    let mut list = by_token.get(token).unwrap_or([]);
-    list.push(next);
-    by_token[token] = list;
 }
 
 fn add_edge(edges: &mut List<SllEdge>, token: i32, to: i32) {
@@ -512,27 +795,6 @@ fn prune_asking(nodes: List<SllNode>) -> List<SllNode> {
     return out;
 }
 
-fn unique_alts(configs: &List<SllConfig>) -> List<i32> {
-    let mut alts: List<i32> = [];
-    for let c of configs {
-        if !alts.contains(&c.alt) {
-            alts.push(c.alt);
-        }
-    }
-    alts.sort();
-    return alts;
-}
-
-/// A node is its configurations at a depth, so the DFA has no cycle and the
-/// emitted matches nest at most `SLL_MAX_DEPTH` deep.
-fn node_key(depth: i32, configs: &List<SllConfig>) -> String {
-    let mut key = String::with_capacity(configs.len() * 12 + 4);
-    key.push_str(&`${depth}|`);
-    for let c of configs {
-        key.push_str(&`${config_key(c)};`);
-    }
-    return key;
-}
 
 /// The function a parser predicts `decision` through: it matches the DFA's
 /// tokens, and asks the simulator where the DFA leaves the decision open.

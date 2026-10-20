@@ -627,6 +627,50 @@ ranking can flip with the heap size, so a single size does not decide a change
 here. The reason, and two levers judged on one size only, are in
 [`dead-ends.md`](../.claude/skills/wado-performance/dead-ends.md).
 
+#### The lookahead DFA explorer (2026-10, landed)
+
+`SllExplorer` (`atn_sll.wado`) builds each ATN decision's lookahead DFA at
+generation time. It made `benchmark/gale_gen` about 160 times as slow, nearly
+all of it in `gen_atn_decide_fns`. Five changes brought it back:
+
+- Configurations are `i64` keys, and the ATN's transitions are flat columns.
+  The output is byte-identical.
+- The closure walk reuses one stamped open-addressing set instead of a fresh
+  `HashSet` per closure.
+- A stack id is `chain * SLL_BOTTOMS + bottom`, so a place on escape frame
+  `1 + j` shares the memoized closure of the same place on frame 1.
+- A moved set that already settles on one alternative becomes an `Alt` node.
+  `reaches_any` checks only that some configuration survives, stopping at the
+  first one, so no closure is computed.
+- At `SLL_MAX_DEPTH`, a moved set that does not settle asks without a closure.
+  Pruning would drop that edge anyway.
+
+The last two save expansions, so a smaller `SLL_DECISION_BUDGET` explores as
+much as the old one did. The budget is chosen by the TypeScript parse's
+simulator misses, the `atn_predict_once` calls its verdict cache cannot
+answer. Fuel is not a good guide here, because a miss costs mostly GC. The
+150k arm ran 1.3% more fuel than the old parser and took 10.5% longer.
+
+| `SLL_DECISION_BUDGET`  | misses per parse | Rust gen (dev host) |
+| ---------------------- | ---------------: | ------------------: |
+| 2M, before the changes |             1135 |              13.8 s |
+| 600k                   |             1174 |              1.39 s |
+| 800k                   |             1125 |              1.53 s |
+| 1M                     |             1137 |              1.57 s |
+
+At 800k the four parse benchmarks match the old parser in an alternating A/B.
+The budget must stay below `SLL_MAX_STACKS / SLL_BOTTOMS` chains, which
+`stacks_full` asserts.
+
+These did not pay, measured on the same harness:
+
+- A closure relative to its stack, rooted per use: 6.9–7.1 s against 5.1 s. The
+  kept places mostly sit on distinct relative stacks, so rooting cost more than
+  sharing saved.
+- The stamped set in place of `push_stack`'s `HashMap`: 4.31 s against 4.06 s.
+- Grouping a closure's seeds by place, so that one merge run covers every
+  alternative, and sorting each moved set first: both slower.
+
 Open levers on `benchmark/gale_gen`:
 
 - [ ] **Kind sets and FOLLOW masks still arrive as names.** `kind_check_str`
