@@ -304,16 +304,14 @@ fn "affine_drop_impl_drops_field_by_name.wado/run"() with Stdout {
         rx_99.value = 0;
     }
     items.used = used_19 + 1;
-    if ref.is_null(local.tee _box(struct.new "affine_drop_impl_drops_field_by_name.wado//Box1" { items: items = self_22; self_22 = ref.null none; items })) == 0 {
-        items = _box.items;
-        _box.items = ref.null none;
-        "affine_drop_impl_drops_field_by_name.wado/$drop$core:prelude/list.wado/List<core:prelude/types.wado/Stream<u8>>"(items);
-        if ref.is_null(_box) == 0 {
-            if ref.is_null(local.tee items(_box.items)) == 0 {
-                "affine_drop_impl_drops_field_by_name.wado/$drop$core:prelude/list.wado/List<core:prelude/types.wado/Stream<u8>>"(items);
-            }
-            _box.items = ref.null none;
+    items = local.tee _box(struct.new "affine_drop_impl_drops_field_by_name.wado//Box1" { items: items = self_22; self_22 = ref.null none; items }).items;
+    _box.items = ref.null none;
+    "affine_drop_impl_drops_field_by_name.wado/$drop$core:prelude/list.wado/List<core:prelude/types.wado/Stream<u8>>"(items);
+    if ref.is_null(_box) == 0 {
+        if ref.is_null(local.tee items(_box.items)) == 0 {
+            "affine_drop_impl_drops_field_by_name.wado/$drop$core:prelude/list.wado/List<core:prelude/types.wado/Stream<u8>>"(items);
         }
+        _box.items = ref.null none;
     }
     if ref.is_null(_bag) == 0 {
         items = _bag.items;
@@ -404,14 +402,14 @@ fn "affine_drop_impl_drops_field_by_name.wado/$drop$core:prelude/list.wado/List<
     $slots_1 = value.repr;
     $end_2 = value.used;
     $index_3 = 0;
-    b26: block {
-        l27: loop {
-            break_if b26 $index_3 >= $end_2;
+    b25: block {
+        l26: loop {
+            break_if b25 $index_3 >= $end_2;
             if ref.is_null(local.tee $slot_4(builtin::array_get_value<ref null "core:prelude//$Resource">($slots_1, $index_3))) == 0 {
                 "affine_drop_impl_drops_field_by_name.wado/$effect_dispatch__core:prelude/types.wado/Stream<u8>__drop"($slot_4);
             }
             $index_3 = $index_3 + 1;
-            continue l27;
+            continue l26;
         };
     };
 }
@@ -430,16 +428,16 @@ fn "core:prelude/primitive.wado/write_decimal_digits"(arr, offset, val, digit_co
     let pair: i32;
     let tens: i32;
     digit_count = offset + digit_count;
-    b29: block {
-        l30: loop {
-            break_if b29 (digit_count - offset) < 2;
+    b28: block {
+        l29: loop {
+            break_if b28 (digit_count - offset) < 2;
             q = val /u 100_i64;
             tens = local.tee pair(builtin::i32_wrap_i64(val - (q * 100_i64))) / 10;
             builtin::array_set_u8(arr, digit_count - 1, ((48 + pair) - (tens * 10)) & 255);
             builtin::array_set_u8(arr, digit_count - 2, (48 + tens) & 255);
             digit_count = digit_count - 2;
             val = q;
-            continue l30;
+            continue l29;
         };
     };
     if digit_count > offset {
@@ -540,17 +538,17 @@ fn "core:rt/cm_stream_write_raw_all_u8"(handle, $mv$data$repr, $mv$data$start, $
     if local.tee $mv$data$end($mv$data$end - $mv$data$start) == 0 {
         return 0;
     }
-    ptr_15 = builtin::i32_wrap_i64(ptr_15 = "mem/realloc"(0, 0, 1, $mv$data$end); i = 0; b53: block {
-        l54: loop {
-            break_if b53 i >= $mv$data$end;
+    ptr_15 = builtin::i32_wrap_i64(ptr_15 = "mem/realloc"(0, 0, 1, $mv$data$end); i = 0; b52: block {
+        l53: loop {
+            break_if b52 i >= $mv$data$end;
             builtin::store_u8(ptr_15 + i, builtin::array_get_value_u8($mv$data$repr, $mv$data$start + i));
             i = i + 1;
-            continue l54;
+            continue l53;
         };
     }; builtin::i64_extend_i32_u(ptr_15) | (builtin::i64_extend_i32_s($mv$data$end) << 32_i64));
     i = 0;
     block {
-        l56: loop {
+        l55: loop {
             delivered_6 = local.tee written($inline_cm_stream_write_once_4: block -> i32 {
                 $mv$data$start = ptr_15 + i;
                 count_18 = $mv$data$end - i;
@@ -581,7 +579,7 @@ fn "core:rt/cm_stream_write_raw_all_u8"(handle, $mv$data$repr, $mv$data$start, $
                 drop("mem/realloc"(ptr_15, $mv$data$end, 1, 0));
                 return $match_scrut_0;
             }
-            continue l56;
+            continue l55;
         };
     };
 }
