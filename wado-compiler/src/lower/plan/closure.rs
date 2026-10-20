@@ -207,7 +207,7 @@ fn build_functor_suffix(functor_types: &[(u32, TypeId)], type_table: &TypeTable)
     functor_types
         .iter()
         .fold(String::new(), |mut acc, (_, tid)| {
-            let _ = write!(acc, "${}", type_table.type_name(*tid));
+            let _ = write!(acc, "${}", type_table.struct_type_rendered_name(*tid));
             acc
         })
 }

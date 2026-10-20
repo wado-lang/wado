@@ -772,7 +772,10 @@ fn sub_generic_instantiation(
         && let ResolvedType::GenericInstance { def, type_args } = tt.get(gi.instance_type).clone()
         && let base = tt.def_name(def).to_string()
     {
-        let arg_names: Vec<String> = type_args.iter().map(|&t| tt.type_name(t)).collect();
+        let arg_names: Vec<String> = type_args
+            .iter()
+            .map(|&t| tt.mangle_type_arg_for_generic(t))
+            .collect();
         *name = mangle_generic_name(&base, &arg_names);
     }
 }

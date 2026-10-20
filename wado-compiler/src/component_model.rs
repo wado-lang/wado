@@ -67,7 +67,7 @@ pub fn classify_future_payload(type_table: &TypeTable, type_arg: TypeId) -> CmFu
     try_classify_future_payload(type_table, type_arg).unwrap_or_else(|| {
         panic!(
             "`Future<{}>` has no Component Model payload type",
-            type_table.base_type_name(type_arg)
+            type_table.type_name(type_arg)
         )
     })
 }
@@ -244,7 +244,7 @@ pub fn classify_stream_payload(type_table: &TypeTable, element: TypeId) -> CmStr
         None => panic!(
             "`Stream<{}>` has no Component Model element type: a guest-created \
              stream of a WASI-owned type is not supported yet",
-            type_table.base_type_name(element)
+            type_table.type_name(element)
         ),
     }
 }

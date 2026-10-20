@@ -19,7 +19,7 @@ use crate::defs::{DefId, DefKind};
 use crate::elaborator::trait_env::{
     ViaClause, non_default_arg_count, written_arg_nodes, written_type_arg,
 };
-use crate::name::{FqTypeName, namespace_member_alias};
+use crate::name::{FqTypeName, namespace_member_alias, type_pack_name};
 use crate::symbol::SymbolKind;
 use crate::tir::TraitRef;
 use crate::trait_solver::args_per_param;
@@ -122,7 +122,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         .make_type_pack(name.clone(), index)
                 } else {
                     let _ = self.emit(TypeError::UnknownType {
-                        name: format!("..{name}"),
+                        name: type_pack_name(name),
                         span: *span,
                     });
                     TypeTable::ERROR

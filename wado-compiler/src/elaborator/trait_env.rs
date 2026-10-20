@@ -1313,7 +1313,7 @@ impl TraitEnv {
             .any(|trait_| {
                 trait_.def == Some(from_trait)
                     && trait_.arg_ids.first().is_some_and(|array| {
-                        matches!(array.head(), name::TypeHead::Builtin(head) if head == TypeTable::ARRAY_TYPE_NAME)
+                        matches!(array.head(), name::TypeHead::Builtin(head) if head == name::ARRAY_TYPE_NAME)
                             && array.args().first().is_some_and(|element| {
                                 matches!(element.head(), name::TypeHead::Tuple)
                                     && element.args().len() == 2

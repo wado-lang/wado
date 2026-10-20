@@ -2317,7 +2317,7 @@ impl TypeSystem {
             ResolvedType::Primitive(prim) => Some(prim.as_str().to_string()),
             ResolvedType::Unit => Some(name::UNIT_TYPE_NAME.to_string()),
             ResolvedType::Never => Some(name::NEVER_TYPE_NAME.to_string()),
-            ResolvedType::BuiltinArray(_) => Some(TypeTable::ARRAY_TYPE_NAME.to_string()),
+            ResolvedType::BuiltinArray(_) => Some(name::ARRAY_TYPE_NAME.to_string()),
             _ => None,
         }
     }

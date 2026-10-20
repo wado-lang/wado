@@ -14,7 +14,7 @@ use crate::component_model::wado_primitive_name_to_cm;
 use crate::hashmap::IndexSet;
 use crate::logger::Logger;
 use crate::module_source::ModuleSource;
-use crate::name::{FqTypeName, MethodName, global_name};
+use crate::name::{FqTypeName, MethodName, display_generic_name, global_name};
 use crate::tir::{
     AssocTypeSig, TirEffectOp, TirParam, TraitFrame, TraitRef, TypeId, method_param_offset,
 };
@@ -830,8 +830,8 @@ impl<H: CompilerHost> TypeParamScope<'_, '_, H> {
                 "a newtype converts to and from each type down its chain"
             };
             let header = format!(
-                "From<{}> for {}",
-                tt.type_name(source),
+                "{} for {}",
+                display_generic_name("From", &[tt.type_name(source)]),
                 tt.type_name(target)
             );
             (provided, header)

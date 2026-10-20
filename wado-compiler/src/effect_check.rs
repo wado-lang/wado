@@ -15,11 +15,10 @@ use crate::module_source::ModuleSource;
 use crate::name::{DeclaredHead, FqTraitName, FqTypeName, TypeHead};
 use crate::resolve::{Resolution, Resolutions};
 use crate::tir::{
-    EffectRef, EffectRows, FunctionRef, ResolvedType, RowFlow, TemplateId, TypeId, TypeSet,
-    solve_row,
+    EffectRef, EffectRows, FunctionRef, ResolvedType, RowFlow, TemplateId, TypeId, solve_row,
 };
 use crate::token::Span;
-use crate::type_table::TypeTable;
+use crate::type_table::{TypeSet, TypeTable};
 
 use crate::ast::{
     self, AstId, AstVisitor, Attribute, Block, CmImport, EffectHandlerBinding, Expr, Function,

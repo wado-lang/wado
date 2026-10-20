@@ -5,7 +5,10 @@ use crate::ast::{self, AstId};
 use crate::compiler_host::CompilerHost;
 use crate::defs::DefId;
 use crate::module_source::ModuleSource;
-use crate::name::{FqTypeName, LocalMethodName, MethodName, Receiver, RefKind, UNIT_TYPE_NAME};
+use crate::name::{
+    ARRAY_TYPE_NAME, FqTypeName, LocalMethodName, MethodName, Receiver, RefKind, UNIT_TYPE_NAME,
+    display_generic_name,
+};
 use crate::primitive::PrimitiveType;
 use crate::tir::{
     FunctionRef, MonomorphInfo, ResolvedType, SubstitutionContext, TemplateId, TupleSlot, TypeId,
@@ -445,10 +448,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 .expect("a nominal type names a declaration"),
             // Raw GC array `Array<T>`: inherent methods live in
             // `impl Array<T>` (core:prelude/array.wado), keyed by "Array".
-            ResolvedType::BuiltinArray(_) => (
-                TypeTable::ARRAY_TYPE_NAME.to_string(),
-                ModuleSource::array(),
-            ),
+            ResolvedType::BuiltinArray(_) => (ARRAY_TYPE_NAME.to_string(), ModuleSource::array()),
             _ => (
                 self.tysys
                     .type_table
@@ -1603,7 +1603,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 let required = RequiredTrait {
                     decl: self.tysys.resolutions.get(head.site),
                     args: Some(trait_args),
-                    display: format!("{declared_head}<{}>", args_spelled.join(", ")),
+                    display: display_generic_name(&declared_head, &args_spelled),
                 };
                 let method_type_args: Vec<TypeId> =
                     self.resolve_turbofish_args(&static_call.type_args);
@@ -2198,9 +2198,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             ResolvedType::BuiltinArray(elem) => {
                 let arg = self.tysys.type_table.borrow().fq_type_name(elem);
                 (
-                    TypeTable::ARRAY_TYPE_NAME.to_string(),
+                    ARRAY_TYPE_NAME.to_string(),
                     ModuleSource::array(),
-                    FqTypeName::builtin(TypeTable::ARRAY_TYPE_NAME).with_args(vec![arg]),
+                    FqTypeName::builtin(ARRAY_TYPE_NAME).with_args(vec![arg]),
                     vec![elem],
                 )
             }
@@ -3652,9 +3652,9 @@ impl TypeSystem {
             // looked up on its base, and `flags`' on `u32`.
             let head = table.representation_head(target_type_id);
             match table.get(head) {
-                ResolvedType::BuiltinArray(_) => Some(ImplTargetKey::Builtin(
-                    TypeTable::ARRAY_TYPE_NAME.to_string(),
-                )),
+                ResolvedType::BuiltinArray(_) => {
+                    Some(ImplTargetKey::Builtin(ARRAY_TYPE_NAME.to_string()))
+                }
                 ResolvedType::Unit => Some(ImplTargetKey::Builtin(UNIT_TYPE_NAME.to_string())),
                 _ => table
                     .nominal_def(head)

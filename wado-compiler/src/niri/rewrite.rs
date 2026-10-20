@@ -517,7 +517,7 @@ impl Interpreter<'_> {
             sink.alloc_expr(
                 ExprKind::StructLiteral {
                     struct_type: type_id,
-                    struct_name: self.type_table.type_name(type_id),
+                    struct_name: self.type_table.struct_type_rendered_name(type_id),
                     fields: fields
                         .into_iter()
                         .enumerate()

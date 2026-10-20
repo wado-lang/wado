@@ -13,7 +13,9 @@ use crate::compiler_host::CompilerHost;
 use crate::compiler_item::CompilerItem;
 use crate::defs::DefId;
 use crate::module_source::ModuleSource;
-use crate::name::{LocalMethodName, MethodName, TUPLE_TYPE_NAME};
+use crate::name::{
+    ARRAY_TYPE_NAME, LocalMethodName, MethodName, TUPLE_TYPE_NAME, display_generic_name,
+};
 use crate::tir::{
     FunctionRef, ProjectionAnswer, ResolvedType, SlotProjections, SubstitutionContext, TemplateId,
     TypeId, positional_substitution,
@@ -538,10 +540,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             // (`Add<Feet>`), so render the head with the right-hand type: a
             // defaulted `Rhs = Self` impl then reads like a written one.
             .map(|info| match info.rhs_type {
-                Some(t) => format!(
-                    "{}<{}>",
+                Some(t) => display_generic_name(
                     info.trait_name.base_name(),
-                    tt.type_name(tt.peel_refs(t))
+                    &[tt.type_name(tt.peel_refs(t))],
                 ),
                 None => info.trait_name.base_name().to_string(),
             })
@@ -809,12 +810,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             // Raw GC array `Array<T>` — methods live in `impl Array<T>`
             // (core:prelude/array.wado), keyed by the base name "Array".
             // `None` module triggers "search all loaded modules".
-            ResolvedType::BuiltinArray(elem) => (
-                TypeTable::ARRAY_TYPE_NAME.to_string(),
-                None,
-                Some(vec![*elem]),
-                None,
-            ),
+            ResolvedType::BuiltinArray(elem) => {
+                (ARRAY_TYPE_NAME.to_string(), None, Some(vec![*elem]), None)
+            }
             // Unit type () - search for impl blocks in loaded modules
             ResolvedType::Unit => (UNIT_TYPE_NAME.to_string(), None, None, None),
             // An enum or a non-generic variant: the declaration is the whole

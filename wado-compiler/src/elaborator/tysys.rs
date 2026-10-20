@@ -27,7 +27,7 @@ use crate::ast::{AstId, GenericParam};
 use crate::defs::DefId;
 use crate::elaborator::sig;
 use crate::elaborator::solver_bridge::SolverBridge;
-use crate::name::FqTypeName;
+use crate::name::{ARRAY_TYPE_NAME, FqTypeName};
 use crate::resolve::Resolutions;
 
 /// Pipeline-wide type knowledge — the type arena, the cross-module decl
@@ -348,7 +348,7 @@ impl TypeSystem {
                 .map(|(n, _)| n),
             // `Array<T>` is declared definitionless, so it has no nominal head
             // to read; its declaration names it `Array` and carries its impls.
-            ResolvedType::BuiltinArray(_) => Some(TypeTable::ARRAY_TYPE_NAME.to_string()),
+            ResolvedType::BuiltinArray(_) => Some(ARRAY_TYPE_NAME.to_string()),
             _ => None,
         }
     }
@@ -474,7 +474,7 @@ impl TypeSystem {
             let is_builtin_array = matches!(tt.get(base_id), ResolvedType::BuiltinArray(_));
             drop(tt);
             if is_builtin_array {
-                return (TypeTable::ARRAY_TYPE_NAME.to_string(), base_id);
+                return (ARRAY_TYPE_NAME.to_string(), base_id);
             }
             if let Some(base_name) = self.struct_name_for_type(base_id) {
                 return (base_name, base_id);
@@ -500,7 +500,7 @@ impl TypeSystem {
                 // The raw GC array's base method-owner name is "Array"
                 // (its type args are carried separately), not the full
                 // `type_name` spelling `Array<T>`.
-                ResolvedType::BuiltinArray(_) => return TypeTable::ARRAY_TYPE_NAME.to_string(),
+                ResolvedType::BuiltinArray(_) => return ARRAY_TYPE_NAME.to_string(),
                 _ => return self.type_table.borrow().type_name(current),
             }
         }

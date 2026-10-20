@@ -2391,8 +2391,13 @@ pub fn mangle_option_type(inner_type: &str) -> String {
 /// Examples:
 /// - `mangle_builtin_array_type("i32")` → `"Array<i32>"`
 pub fn mangle_builtin_array_type(elem_type: &str) -> String {
-    format!("Array<{elem_type}>")
+    format!("{ARRAY_TYPE_NAME}<{elem_type}>")
 }
+
+/// The head name of the raw GC array (`ResolvedType::BuiltinArray`): both the
+/// `Array<T>` the resolver recognises and the method-owner base name
+/// (`impl Array<T>` in `core:prelude/array.wado`) the dispatch arms report.
+pub const ARRAY_TYPE_NAME: &str = "Array";
 
 /// A declaration's mangled name, qualified by the module declaring it:
 /// `{module}/{name}`.
@@ -2434,28 +2439,33 @@ pub fn display_generic_name(head: &str, args: &[String]) -> String {
     format!("{head}{}", display_type_args(args))
 }
 
+/// The raw GC array type as a diagnostic writes it: `Array<T>`.
+pub fn display_builtin_array_type(elem_type: String) -> String {
+    display_generic_name(ARRAY_TYPE_NAME, &[elem_type])
+}
+
 /// A tuple type as a diagnostic writes it: `[A, B]`.
 pub fn display_tuple_type(elems: &[String]) -> String {
     format!("[{}]", elems.join(", "))
 }
 
 /// An associated-type projection as a diagnostic writes it: `T::Item<A>`, or
-/// `<T as Trait<B>>::Item<A>` given its owning trait and that trait's
-/// arguments.
+/// `<T as Trait<B>>::Item<A>` given its owning trait as written.
 pub fn display_assoc_type_projection(
     base: &str,
     assoc: &str,
     args: &[String],
-    owner: Option<(&str, &[String])>,
+    owner: Option<&str>,
 ) -> String {
-    let args = display_type_args(args);
-    match owner {
-        Some((owner, trait_args)) => {
-            let at = display_type_args(trait_args);
-            format!("<{base} as {owner}{at}>::{assoc}{args}")
-        }
-        None => format!("{}{args}", assoc_type_projection_name(base, assoc)),
-    }
+    let base = match owner {
+        Some(owner) => format!("<{base} as {owner}>"),
+        None => base.to_string(),
+    };
+    format!(
+        "{}{}",
+        assoc_type_projection_name(&base, assoc),
+        display_type_args(args)
+    )
 }
 
 /// Key of a declared type in the WIR type table.
@@ -2502,10 +2512,10 @@ pub fn wir_func_type_key(func_key: &str) -> String {
 /// Key of an anonymous tuple struct in the WIR type table.
 ///
 /// Examples:
-/// - `wir_tuple_type_key("[i32, i32]")` → `"tuple//[i32, i32]"`
+/// - `wir_tuple_type_key(&["i32", "i32"])` → `"tuple//[i32, i32]"`
 #[must_use]
-pub fn wir_tuple_type_key(display: &str) -> String {
-    format!("tuple//{display}")
+pub fn wir_tuple_type_key(elems: &[String]) -> String {
+    format!("tuple//[{}]", elems.join(", "))
 }
 
 /// Build a local method name from struct name and method name.
@@ -3138,7 +3148,7 @@ pub fn is_builtin_shape_name(name: &str) -> bool {
         || PrimitiveType::is_primitive_name(head)
         || matches!(
             head,
-            UNIT_TYPE_NAME | NEVER_TYPE_NAME | "Array" | TUPLE_TYPE_NAME | "Fn"
+            UNIT_TYPE_NAME | NEVER_TYPE_NAME | ARRAY_TYPE_NAME | TUPLE_TYPE_NAME | "Fn"
         )
 }
 

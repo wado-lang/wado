@@ -1985,7 +1985,7 @@ fn stream_element_decl(tt: &TypeTable, elem: TypeId, cm_name: &str) -> CmDecl {
         .unwrap_or_else(|| {
             panic!(
                 "`stream<{}>` element names no declaration",
-                tt.base_type_name(elem)
+                tt.type_name(elem)
             )
         });
     CmDecl::new(tt.defs(), def, cm_name)

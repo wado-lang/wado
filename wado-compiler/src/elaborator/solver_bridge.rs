@@ -6,7 +6,9 @@ use crate::compiler_item::CompilerItem;
 use crate::defs::{DefId, DefKind, DefTable};
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::module_source::ModuleSource;
-use crate::name::{FqTraitName, FqTypeName, NEVER_TYPE_NAME, RefKind, TypeHead, UNIT_TYPE_NAME};
+use crate::name::{
+    ARRAY_TYPE_NAME, FqTraitName, FqTypeName, NEVER_TYPE_NAME, RefKind, TypeHead, UNIT_TYPE_NAME,
+};
 use crate::primitive::PrimitiveType;
 use crate::tir::{EffectRef, ResolvedType, TypeId};
 use crate::trait_solver::{
@@ -267,7 +269,7 @@ impl Lowering {
         }
         // `type_id` spells a resolved type under these heads whether or not a
         // written type names one.
-        for name in [TypeTable::ARRAY_TYPE_NAME, UNIT_TYPE_NAME, NEVER_TYPE_NAME]
+        for name in [ARRAY_TYPE_NAME, UNIT_TYPE_NAME, NEVER_TYPE_NAME]
             .into_iter()
             .chain(PrimitiveType::all_primitive_names())
         {
@@ -656,7 +658,7 @@ impl Lowering {
         match table.get(id) {
             ResolvedType::Primitive(p) => decl(DeclKey::Builtin(p.as_str().to_string()), vec![]),
             ResolvedType::BuiltinArray(elem) => decl(
-                DeclKey::Builtin(TypeTable::ARRAY_TYPE_NAME.to_string()),
+                DeclKey::Builtin(ARRAY_TYPE_NAME.to_string()),
                 vec![self.type_id(table, *elem, param)?],
             ),
             // `()` is the unit declaration, not the empty tuple
@@ -947,8 +949,7 @@ fn representative(
             if let Some(id) = TypeTable::primitive_by_name(name) {
                 return Some(table.get(id).clone());
             }
-            (name == TypeTable::ARRAY_TYPE_NAME)
-                .then_some(ResolvedType::BuiltinArray(TypeTable::UNIT))
+            (name == ARRAY_TYPE_NAME).then_some(ResolvedType::BuiltinArray(TypeTable::UNIT))
         }
         DeclKey::FnShape { is_mut } => Some(ResolvedType::Function {
             is_mut: *is_mut,
