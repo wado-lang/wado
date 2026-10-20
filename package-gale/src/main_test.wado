@@ -17,6 +17,7 @@ use { Environment, Exit } from "core:cli";
 use { Log } from "core:log";
 use { Preopens, Descriptor, PathFlags, OpenFlags, DescriptorFlags } from "wasi:filesystem";
 use fs from "core:fs";
+use { TreeMap } from "core:collections";
 use { Request, Response, Error as KilnError, InputFile, KilnHost, Diagnostic as KilnDiagnostic } from "core:kiln";
 
 global EXPR: String = "grammar Expr;
@@ -92,7 +93,7 @@ fn put(dir: &String, name: String, text: String) with Preopens {
 }
 
 /// What one `gale` run returned, printed and logged.
-struct Run {
+affine struct Run {
     result: Result<(), String>,
     console: Console,
 }
@@ -119,6 +120,7 @@ fn gale_with(grants: List<String>, argv: List<String>) -> Run with (Preopens, En
     let result = with &mut console, Environment => &line, Preopens => &dirs do {
         gale();
     };
+    console.end_writes();
     return Run { result, console };
 }
 
@@ -127,16 +129,26 @@ fn gale_in<S: AsStrSlice>(dir: S, argv: List<String>) -> Run with (Preopens, Env
     return gale_with([dir.to_string()], argv);
 }
 
-/// Serves each input file's content from its stream handle, an index into
-/// `contents`.
+/// Serves each input file's content from its stream, by the stream's identity.
 struct Inputs {
-    contents: List<ByteList>,
+    contents: TreeMap<ResourceId, ByteList> = TreeMap::<ResourceId, ByteList>::new(),
+}
+
+impl Inputs {
+    /// A stream serving `content`, made before the handler is installed, since
+    /// it traps on `new`.
+    fn serve(&mut self, content: ByteList) -> Stream<u8> {
+        let [rx, tx] = Stream::<u8>::new();
+        tx.drop();
+        self.contents[ResourceId::of(&rx)] = content;
+        return rx;
+    }
 }
 
 impl Stream<u8> for Inputs {
     fn read(&mut self, this: &Stream<u8>, max: i32) -> StreamChunk<u8> {
         let _ = max;
-        resume StreamChunk { items: self.contents[*this as i32] as List<u8>, result: CopyResult::Dropped };
+        resume StreamChunk { items: self.contents[ResourceId::of(this)] as List<u8>, result: CopyResult::Dropped };
     }
 
     fn drop(&mut self, this: &Stream<u8>) {
@@ -191,16 +203,13 @@ fn kiln(
     options: Options,
     primary_type: Option<String> = null,
 ) -> KilnRun {
-    let mut inputs = Inputs {
-        contents: [primary.1],
-    };
+    let mut inputs = Inputs {};
     let mut files: List<InputFile> = [];
     for let [path, content, type_] of supplementary {
-        files.push(InputFile { path, content: inputs.contents.len() as Stream<u8>, type: type_ });
-        inputs.contents.push(content);
+        files.push(InputFile { path, content: inputs.serve(content), type: type_ });
     }
     let request = Request {
-        primary: InputFile { path: primary.0, content: 0 as Stream<u8>, type: primary_type },
+        primary: InputFile { path: primary.0, content: inputs.serve(primary.1), type: primary_type },
         inputs: files,
         module: "lib:gale",
         options,
@@ -308,6 +317,7 @@ test "run prints what a successful command prints, and does not exit" {
     with &mut console, Environment => &line, Preopens => &dirs, Exit => &NoExit {} do {
         run();
     };
+    console.end_writes();
     assert console.stdout().contains("rule 0 'expr'");
     assert console.stderr() == "";
 }

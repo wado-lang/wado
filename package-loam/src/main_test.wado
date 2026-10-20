@@ -60,16 +60,15 @@ fn checkpoint(shape: List<i64>) -> ByteList {
     ]);
 }
 
-/// Serves each input file's content from its stream handle, an index into
-/// `contents`.
+/// Serves the one input file's content from any stream read.
 struct Inputs {
-    contents: List<ByteList>,
+    content: ByteList,
 }
 
 impl Stream<u8> for Inputs {
     fn read(&mut self, this: &Stream<u8>, max: i32) -> StreamChunk<u8> {
-        let _ = max;
-        resume StreamChunk { items: self.contents[*this as i32] as List<u8>, result: CopyResult::Dropped };
+        let _ = [this, max];
+        resume StreamChunk { items: self.content as List<u8>, result: CopyResult::Dropped };
     }
 
     fn drop(&mut self, this: &Stream<u8>) {
@@ -92,13 +91,14 @@ impl KilnHost for Host {
 
 /// The entry module the Kiln generator builds from `primary`, `[path, content,
 /// type]`, under `options`.
-fn kiln(primary: [String, ByteList, String], options: Options) -> String {
+fn kiln(primary: [String, ByteList, String], options: Options) -> String with (Stream, StreamWritable) {
     let [path, content, type] = primary;
-    let mut inputs = Inputs {
-        contents: [content],
-    };
+    let mut inputs = Inputs { content };
+    // Made before `Inputs` is installed, since it traps on `new`.
+    let [stream, writer] = Stream::<u8>::new();
+    writer.drop();
     let request = Request {
-        primary: InputFile { path, content: 0 as Stream<u8>, type: Option::Some(type) },
+        primary: InputFile { path, content: stream, type: Option::Some(type) },
         inputs: [],
         module: "lib:loam",
         options,

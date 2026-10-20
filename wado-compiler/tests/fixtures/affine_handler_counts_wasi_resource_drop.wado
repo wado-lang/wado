@@ -1,0 +1,39 @@
+// A WASI resource drops through its own `fn drop(self)`, so a handler counting
+// its drops sees the one scope exit writes as it sees an explicit one
+// (WEP: Affine Types).
+
+use { println, Stdout } from "core:cli";
+use { Fields } from "wasi:http";
+
+struct CountingFields {
+    drops: i32,
+}
+
+impl Fields for CountingFields {
+    fn new(&mut self) -> Fields {
+        resume Fields::new()
+    }
+    fn drop(&mut self, this: Fields) {
+        self.drops += 1;
+        this.drop();                    // the host's drop, as self-delegation is
+        resume ()
+    }
+    ..trap
+}
+
+export fn run() with (Stdout, Fields) {
+    let mut counter = CountingFields { drops: 0 };
+    with Fields => &mut counter do {
+        let explicit = Fields::new();
+        explicit.drop();
+        let _scoped = Fields::new();
+    }
+    println(`drops=${counter.drops}`);
+
+    let real = Fields::new();
+    real.drop();
+    println("unhandled drop ok");
+}
+
+__DATA__
+{"stdout": "drops=2\nunhandled drop ok\n"}

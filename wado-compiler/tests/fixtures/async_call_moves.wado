@@ -1,0 +1,28 @@
+// An `AsyncCall` owns its `Subtask`, so assigning it moves it: the call has one
+// owner, and using the source after the move is a compile error.
+
+use { println, Stdout } from "core:cli";
+
+export fn run() with Stdout {
+    with Fetch => &Canned {} do {
+        let call = Fetch::get("/abc");
+        let moved = call;
+        assert call.wait() == 4;   // error: `call` moved to `moved`
+        println(`${moved.wait()}`);
+    }
+}
+
+#[cm("example:demo/fetch")]
+interface Fetch {
+    #[cm("example:demo/fetch#get")]
+    async fn get(url: String) -> AsyncCall<i32>;
+}
+
+struct Canned {}
+
+impl Fetch for Canned {
+    fn get(&self, url: String) -> i32 { resume url.len(); }
+}
+
+__DATA__
+{"compile_error": ":10:16: analysis error: affine value `call` used after it was moved (moved at 9:21)"}

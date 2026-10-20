@@ -377,10 +377,15 @@ fn function_bearing(imports: &[(String, ImportKind)]) -> Vec<&str> {
 
 #[test]
 fn generator_using_core_log_adds_no_wasi_import() {
+    // A panic drops the future stderr hands back, whose payload names the cli
+    // `error-code`, so even this generator carries `wasi:cli/types`, and
+    // nothing more.
     let baseline = wasi_imports_of(NOOP_GENERATOR, "noop generator");
     assert!(
-        baseline.is_empty(),
-        "a generator that only answers `generate` needs no WASI at all, got {baseline:?}"
+        baseline
+            .iter()
+            .all(|(_, kind)| *kind == ImportKind::SharedTypes),
+        "a generator that only answers `generate` needs no WASI the linker provides, got {baseline:?}"
     );
 
     // With no stderr to write, `log_stderr` returns before opening a stream, so

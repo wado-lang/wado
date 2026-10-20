@@ -4,13 +4,13 @@
 
 use { Request, Response, ErrorCode, Fields, Headers, Trailers } from "wasi:http";
 
-variant Held {
+affine variant Held {
     One(Fields),
     Pair([Fields, i32]),
     Empty,
 }
 
-variant Boxed<T> {
+variant Boxed<affine T> {
     Full(T),
     Hollow,
 }

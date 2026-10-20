@@ -1202,6 +1202,231 @@ variant Nested<T> {
 }
 ```
 
+## Affine Types
+
+An affine type is move-only: a value of it is used at most once. An affine
+resource is one, and so is every type that holds one at any depth.
+
+A named `struct` or `variant` that holds an affine value in a field or a case
+is declared `affine`. One that holds none may not be. Either mismatch is an
+error naming the declaration (`AFFINE_DECLARATION`). A field typed by a type
+parameter holds nothing for this rule, since the parameter is copyable unless
+an instantiation says otherwise. A tuple, an anonymous struct and a newtype have
+no declaration to mark, so each is affine when something it holds is.
+
+<!-- {"fixture":"affine_declarations.wado"} -->
+
+```wado
+affine struct Holder {
+    c: Counter,
+    n: i32,
+}
+
+affine variant Slot {
+    Empty,
+    Held(Holder),
+}
+
+affine struct Bag {
+    items: List<Counter>,
+}
+
+type Wrapped = Holder;
+
+test {
+    let slot: Slot = Empty;
+    assert slot matches { Empty };
+    let bag = Bag { items: [] };
+    assert bag.items.is_empty();
+}
+```
+
+A type parameter written `affine T` admits an affine type argument, and its
+body is checked with `T` affine: a value of `T` moves at most once. An
+associated type written `affine type Item;` is affine the same way.
+
+<!-- {"fixture":"affine_param_moves_once.wado"} -->
+
+```wado
+fn wrap<affine T>(x: T) -> Option<T> {
+    return Option::Some(x);
+}
+
+test {
+    let f = wrap(Fields::new()).unwrap();
+    assert f.copy_all().is_empty();
+}
+```
+
+A type parameter without the mark may be copied in its body. An affine
+argument for one is an error at the instantiation naming the parameter
+(`AFFINE_ARGUMENT`), whether the parameter is a function's or a type
+declaration's.
+
+<!-- {"fixture":"affine_argument_for_unmarked_param.wado"} -->
+
+```wado
+fn dup<T>(x: T) -> [T, T] {
+    return [x, x];
+}
+
+export fn run() {
+    let pair = dup(Fields { n: 1 });
+}
+```
+
+An `impl` whose type parameter is unmarked does not apply to an affine
+argument, so its methods are not found on that instance. `List<affine T>`
+moves its elements in `push`, `pop` and `remove`, and copies them in `first`,
+`last` and the rest of `Sequence`, which a list of affine elements lacks.
+
+<!-- {"fixture":"affine_argument_misses_unmarked_impl.wado"} -->
+
+```wado
+struct Cell<affine T> {
+    value: T,
+}
+
+impl<T> Cell<T> {
+    fn twice(&self) -> [T, T] {
+        return [self.value, self.value];
+    }
+}
+
+export fn run() {
+    let cell = Cell { value: Fields { n: 1 } };
+    let pair = cell.twice();
+}
+```
+
+An affine type implements only an `affine trait`, whose default bodies are
+checked with `Self` affine. A trait without the mark may copy `Self` in a
+default body, so implementing it for an affine type is an error at the impl
+(`AFFINE_DECLARATION`).
+
+<!-- {"fixture":"affine_impl_of_affine_trait.wado"} -->
+
+```wado
+affine trait Named {
+    fn name(&self) -> String;
+
+    fn shout(&self) -> String {
+        return `${self.name()}!`;
+    }
+}
+
+impl Named for Holder {
+    fn name(&self) -> String {
+        return "holder";
+    }
+}
+
+test {
+    let h = Holder { f: Fields::new() };
+    assert h.shout() == "holder!";
+}
+```
+
+### Drop
+
+An affine value that has not moved is dropped exactly once, at the first of
+these:
+
+- Its scope ends. The locals of a scope drop in reverse declaration order, on
+  every path out of it.
+- It is a temporary, or a value its statement discards (`make();`,
+  `let _ = make();`), and its statement ends.
+- An assignment replaces it: `x = value` drops what `x` held, and a store
+  into a field or an element drops what the slot held.
+- What holds it drops: a container drops each value it still holds, a struct
+  its fields in declaration order.
+
+A move suppresses the drop, since the moved-from place no longer holds the
+value.
+
+What a drop does is the type's `Drop`, a prelude trait:
+
+```text
+pub affine trait Drop with () {
+    fn drop(self);
+}
+```
+
+- A type with an impl runs its `drop`. The body may move fields out of `self`,
+  and the fields left at its end are dropped one by one. `self` is not dropped
+  again as a whole.
+- A type without an impl drops its fields one by one, in declaration order.
+- A resource's `fn drop(self)` is its `Drop` impl, which ends the handle in the
+  host.
+- Only an affine type implements `Drop`, since a copyable type would run it for
+  every copy. A type that implements it may not be partially moved, nor be the
+  [`..base`](./spec-literals.md#base-spread) of a struct literal.
+- `builtin::drop(value)` drops any value where it is called. `x.drop()` calls
+  the type's impl, and a generic body drops an `affine T` the way `T` drops.
+
+A drop's effects are benign: a function declares no effect for a drop it
+performs, written or implicit. A `drop` that performs an effect other than its
+own resource's names it with [`#[benign(E)]`](./spec-attributes.md#benigne-).
+
+### References into Affine Values
+
+A value refers into a local when it is a reference to the local or to a place
+inside it, a closure capturing it, or a value built from one whose type may hold
+a reference: a struct or tuple holding one, or what a call returns when it was
+handed one. A call may store what any of its operands refers into through each
+`&mut` it takes.
+
+A borrow `&x` or `&mut x` handed to a parameter declared `&P` or `&mut P` stays
+out of the result where the declared return type holds no reference that could
+point into a `P`: none to `P` itself, to a type a `P` holds, or to a type
+parameter. It is likewise never stored through another parameter declared
+`&mut Q` where `Q` holds no such reference. Such a result, or such a `Q`, still
+carries what `x` refers into. A parameter declared a type parameter, or a callee
+that is a closure or a `fn` value, hands the borrow on.
+
+<!-- {"fixture":"affine_reference_call_result_unrelated.wado"} -->
+
+```wado
+test {
+    let mut t = Tok { id: 1 };
+    let n = Name { text: "a" };
+    let id = read(&mut t);
+    let v = view(&t, &n);
+    let w = t.label(&n);
+    let x = Tok::label(&t, &n);
+    let moved = t;
+    assert id == 1;
+    assert v.name.text == "a";
+    assert w.name.text == "a";
+    assert x.name.text == "a";
+    assert moved.id == 1;
+}
+```
+
+A value referring into an affine local is read only while the local holds what
+it read. The compiler refuses (`TYPE_MISMATCH`):
+
+- a read of it after the local moved, or after the local's scope ended;
+- a read of it after a `&mut` use of the local other than through it, such as a
+  method taking `&mut self`, which may have moved out a part of the local;
+- a `return` of it from the body declaring the local;
+- a `&mut` parameter, or a closure's capture, left holding it when the body
+  ends;
+- a store of it into a global.
+
+<!-- {"fixture":"affine_reference_used_after_move.wado"} -->
+
+```wado
+test {
+    let t = Tok { id: 7 };
+    let r = &t;
+    builtin::drop(t);
+    assert r.id == 7;
+}
+```
+
+Rationale: [WEP: Affine Types](./wep-2026-10-17-affine-types.md).
+
 ## Generic Type Inference
 
 Wado infers type arguments for struct literals, variant constructors, and generic function and method calls. It uses two complementary mechanisms.

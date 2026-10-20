@@ -152,7 +152,8 @@ impl WadoCodeGenerator {
         if let Some(ref attr) = s.cm_attr {
             self.writeln(&format!("#[cm(\"{attr}\")]"));
         }
-        self.writeln(&format!("pub struct {} {{", s.name));
+        let affine = if s.is_affine { "affine " } else { "" };
+        self.writeln(&format!("pub {affine}struct {} {{", s.name));
         self.indent += 1;
 
         for field in &s.fields {
@@ -174,7 +175,8 @@ impl WadoCodeGenerator {
         if let Some(ref attr) = v.cm_attr {
             self.writeln(&format!("#[cm(\"{attr}\")]"));
         }
-        self.writeln(&format!("pub variant {} {{", v.name));
+        let affine = if v.is_affine { "affine " } else { "" };
+        self.writeln(&format!("pub {affine}variant {} {{", v.name));
         self.indent += 1;
 
         for case in &v.cases {
@@ -213,7 +215,10 @@ impl WadoCodeGenerator {
             .map(|parent| format!(" extends {parent}"))
             .unwrap_or_default();
 
-        if resource.methods.is_empty() {
+        // An affine resource drops through its own operation, so a handler
+        // installed for it sees each drop (WEP: Affine Types).
+        let drops = !resource.unrestricted;
+        if resource.methods.is_empty() && !drops {
             self.writeln(&format!("pub resource {}{extends};", resource.name));
         } else {
             self.writeln(&format!("pub resource {}{extends} {{", resource.name));
@@ -221,6 +226,11 @@ impl WadoCodeGenerator {
 
             for method in &resource.methods {
                 self.write_function(method);
+            }
+            if drops {
+                self.writeln("/// Drop the resource. Scope exit drops one that nothing moved.");
+                self.writeln("#[cm(\"resource-drop\")]");
+                self.writeln("fn drop(self);");
             }
 
             self.indent -= 1;

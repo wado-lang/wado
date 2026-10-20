@@ -1,0 +1,32 @@
+// A path that moves a value and binds it afresh before `continue` leaves it
+// whole for the next iteration, and a `break` after a move leaves the loop
+// with it moved but unread.
+affine struct Tok {
+    id: i32,
+}
+
+impl Drop for Tok {
+    fn drop(self) {
+    }
+}
+
+fn eat(t: Tok) -> i32 {
+    return t.id;
+}
+
+test {
+    let mut t = Tok { id: 1 };
+    let mut sum = 0;
+    for let i of 0..<3 {
+        if i == 0 {
+            sum += eat(t);
+            t = Tok { id: 2 };
+            continue;
+        }
+        if i == 2 {
+            sum += eat(t);
+            break;
+        }
+    }
+    assert sum == 3;
+}

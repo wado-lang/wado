@@ -87,6 +87,14 @@ impl Stream<u8> for ScriptedInput {
     ..trap
 }
 
+/// A real handle for the scripted reads to answer, made outside the
+/// handler's `with`, which traps on `new`.
+fn scripted_stream() -> Stream<u8> {
+    let [rx, tx] = Stream::<u8>::new();
+    tx.drop();
+    return rx;
+}
+
 test "read_all drains every chunk and drops the stream" {
     let mut input = ScriptedInput {
         chunks: [
@@ -95,8 +103,9 @@ test "read_all drains every chunk and drops the stream" {
             [3],
         ],
     };
+    let stream = scripted_stream();
     with &mut input do {
-        assert read_all(0 as Stream<u8>) == [1, 2, 3] as ByteList;
+        assert read_all(stream) == [1, 2, 3] as ByteList;
     };
     assert input.dropped;
 }
@@ -109,8 +118,9 @@ test "read_text decodes a character split across chunks" {
             [0xa9, 0x62],
         ],
     };
+    let stream = scripted_stream();
     with &mut input do {
-        assert read_text(0 as Stream<u8>) == Result::Ok("a\u{e9}b");
+        assert read_text(stream) == Result::Ok("a\u{e9}b");
     };
     assert input.dropped;
 }
@@ -122,15 +132,17 @@ test "read_text reports where the text stops being UTF-8" {
             [0x63, 0xff],
         ],
     };
+    let stream = scripted_stream();
     with &mut input do {
-        assert read_text(0 as Stream<u8>) == Result::Err(Utf8Error::invalid(3, 1));
+        assert read_text(stream) == Result::Err(Utf8Error::invalid(3, 1));
     };
     input = ScriptedInput {
         chunks: [
             [0x61, 0xc3],
         ],
     };
+    let truncated = scripted_stream();
     with &mut input do {
-        assert read_text(0 as Stream<u8>) == Result::Err(Utf8Error::incomplete(1));
+        assert read_text(truncated) == Result::Err(Utf8Error::incomplete(1));
     };
 }

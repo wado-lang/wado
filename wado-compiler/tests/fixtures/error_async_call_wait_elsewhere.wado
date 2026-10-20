@@ -1,20 +1,27 @@
-// Only the function that starts an async call may wait on it undeclared.
+// A function that neither starts a call nor is handed one through its
+// signature declares what waiting on it performs.
 #[cm("example:demo/fetch")]
 interface Fetch {
     #[cm("example:demo/fetch#get")]
     async fn get(url: String) -> AsyncCall<i32>;
 }
 
-fn finish(call: AsyncCall<i32>) -> i32 {
-    return call.wait();
+global mut PENDING: Option<AsyncCall<i32>> = null;
+
+fn finish() -> i32 {
+    if let Some(call) = PENDING.take() {
+        return call.wait();
+    }
+    return 0;
 }
 
 export fn run() with Fetch {
-    let _ = finish(Fetch::get("/a"));
+    PENDING = Option::Some(Fetch::get("/a"));
+    let _ = finish();
 }
 
 __DATA__
 {
-    "compile_error": ":9:12: analysis error: missing resource 'Subtask' required by 'wait'; 9:12: missing resource 'WaitableSet' required by 'wait'",
+    "compile_error": ":13:16: analysis error: missing resource 'Subtask' required by 'wait'",
     "compile_error_codes": ["MISSING_EFFECT"]
 }

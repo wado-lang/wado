@@ -2596,19 +2596,23 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             {
                 inner_type_id = t;
             }
-            let into_iterator = self.tysys.compiler_trait(CompilerItem::IntoIterator);
-            let implements_into_iter = into_iterator.is_some_and(|trait_| {
-                self.tysys.type_implements_trait(
-                    &self.annotate_ctx,
-                    &self.type_lookup(),
-                    iterable_type_id,
-                    &trait_,
-                ) || self.tysys.type_implements_trait(
-                    &self.annotate_ctx,
-                    &self.type_lookup(),
-                    inner_type_id,
-                    &trait_,
-                )
+            // An affine operand walks `ForOf`, which `IntoIterator`'s
+            // unmarked impls do not reach (WEP: Affine Types).
+            let walkable = [CompilerItem::IntoIterator, CompilerItem::ForOf];
+            let implements_into_iter = walkable.into_iter().any(|item| {
+                self.tysys.compiler_trait(item).is_some_and(|trait_| {
+                    self.tysys.type_implements_trait(
+                        &self.annotate_ctx,
+                        &self.type_lookup(),
+                        iterable_type_id,
+                        &trait_,
+                    ) || self.tysys.type_implements_trait(
+                        &self.annotate_ctx,
+                        &self.type_lookup(),
+                        inner_type_id,
+                        &trait_,
+                    )
+                })
             }) || matches!(
                 self.tysys.type_table.borrow().get(iterable_type_id),
                 ResolvedType::Unknown | ResolvedType::TypeParam { .. }
@@ -2846,7 +2850,33 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let iter_var = format!("$iter_{unique_id}");
         let label = format!("$for_of_{unique_id}");
 
-        // `<receiver>.into_iter()` — the synthetic call passes
+        // An affine value moves into the loop through `ForOf::start`, so the
+        // loop owns what it walks. A copyable one walks its `IntoIterator`,
+        // whose iterator shares the operand's storage where a moved one would
+        // cost a copy of a list read after the loop (WEP: Affine Types).
+        let walks_value = self.tysys.is_affine(
+            into_iter_receiver_type,
+            &self.annotate_ctx.trait_ctx.affine_params(),
+        ) && self.tysys.compiler_trait(CompilerItem::ForOf).is_some_and(
+            |trait_| {
+                self.tysys.type_implements_trait(
+                    &self.annotate_ctx,
+                    &self.type_lookup(),
+                    into_iter_receiver_type,
+                    &trait_,
+                )
+            },
+        );
+        let (start_name, start_trait) = if walks_value {
+            (
+                "start",
+                self.tysys.required_compiler_trait(CompilerItem::ForOf),
+            )
+        } else {
+            ("into_iter", None)
+        };
+
+        // `<receiver>.start()` / `.into_iter()` — the synthetic call passes
         // `call_id == None` so `record_method_dispatch` skips it; the
         // outcome's `dispatch` carries the `(self_kind, is_ref_impl,
         // FunctionRef)` reify needs to reproduce the same call shape
@@ -2855,7 +2885,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             MethodCallInput {
                 receiver: into_iter_receiver_type,
                 receiver_ast: None,
-                method_name: "into_iter",
+                method_name: start_name,
                 method_id: None,
                 call_id: None,
                 defaults_site: None,
@@ -2863,7 +2893,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 args: &[],
                 expected_type: None,
                 span,
-                required_trait: None,
+                required_trait: start_trait,
             },
             ctx,
         );
@@ -2871,19 +2901,22 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let iter_type = into_iter_outcome.type_id;
 
         // Iterator-trait conformance check, mirroring the pre-refactor
-        // surface error.
+        // surface error. A `ForOf` state answers `next` without being one.
         let iterator = self.tysys.compiler_trait(CompilerItem::Iterator);
-        if !iterator.is_some_and(|trait_| {
-            self.tysys.type_implements_trait(
-                &self.annotate_ctx,
-                &self.type_lookup(),
-                iter_type,
-                &trait_,
+        if !walks_value
+            && !iterator.is_some_and(|trait_| {
+                self.tysys.type_implements_trait(
+                    &self.annotate_ctx,
+                    &self.type_lookup(),
+                    iter_type,
+                    &trait_,
+                )
+            })
+            && !matches!(
+                self.tysys.type_table.borrow().get(iter_type),
+                ResolvedType::Unknown | ResolvedType::Error | ResolvedType::TypeParam { .. }
             )
-        }) && !matches!(
-            self.tysys.type_table.borrow().get(iter_type),
-            ResolvedType::Unknown | ResolvedType::Error | ResolvedType::TypeParam { .. }
-        ) {
+        {
             let type_name = self.tysys.type_table.borrow().type_name(iter_type);
             let _ = self.emit(TypeError::MissingTraitImpl {
                 type_name,

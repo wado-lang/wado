@@ -14,7 +14,7 @@ use crate::nir::{FuncId, FuncRef};
 use crate::nir_package::NirPackage;
 use crate::primitive::PrimitiveType;
 use crate::tir::{ResolvedType, TypeId};
-use crate::type_table::TypeTable;
+use crate::type_table::{TypeKey, TypeTable};
 use crate::wir::{
     CmImportViolation, TraitBoundViolation, WasmModuleFunc, WasmModuleInfo, WirAbstractHeapType,
     WirComponent, WirData, WirExport, WirField, WirFuncId, WirFuncType, WirFunction, WirGlobal,
@@ -99,6 +99,12 @@ pub struct WirContext<'a> {
     pub type_map: IndexMap<String, WirTypeId>,
     /// Map from `StructName` to `WirTypeId` (for struct lookup by qualified name).
     pub struct_type_map: IndexMap<StructName, WirTypeId>,
+    /// `$Resource`, the object an affine resource is: its handle, mutable in
+    /// place, so a reference to the resource sees a store through another
+    /// (WEP: Affine Types). Set while types register, before any is looked up.
+    pub handle_box: Option<WirTypeId>,
+    /// What [`TypeTable::holds_affine_resource`] has answered, by type.
+    affine: RefCell<IndexMap<TypeKey, bool>>,
     /// Map from element `TypeId` to `WirTypeId` for raw GC array types.
     pub array_type_map: IndexMap<TypeId, WirTypeId>,
     /// Map from element type name to `WirTypeId` (dedup for arrays).
@@ -333,6 +339,8 @@ impl<'a> WirContext<'a> {
             types: Vec::new(),
             type_map: IndexMap::default(),
             struct_type_map: IndexMap::default(),
+            handle_box: None,
+            affine: RefCell::default(),
             array_type_map: IndexMap::default(),
             array_type_by_name: IndexMap::default(),
             tuple_type_map: IndexMap::default(),
@@ -676,6 +684,12 @@ impl<'a> WirContext<'a> {
         WirType::non_null_ref(type_id.clone())
     }
 
+    pub fn handle_box(&self) -> &WirTypeId {
+        self.handle_box
+            .as_ref()
+            .expect("`$Resource` registers before any type is looked up")
+    }
+
     /// Find a registered tuple whose elements have the same WIR types as
     /// `elements`, ignoring `TypeId` identity. CM binding synthesis interns its
     /// own `TypeId`s for element types that already have a registered tuple.
@@ -745,7 +759,78 @@ impl<'a> WirContext<'a> {
         self.lookup_wir_type(type_table, type_id).ok()
     }
 
+    /// Whether a place holding a `type_id` is nullable: it holds an affine
+    /// value, which a move empties (WEP: Affine Types).
+    pub fn is_affine(&self, type_table: &TypeTable, type_id: TypeId) -> bool {
+        let key = type_table.type_key(type_id);
+        if let Some(&affine) = self.affine.borrow().get(&key) {
+            return affine;
+        }
+        let affine = type_table.holds_affine_resource(type_id);
+        self.affine.borrow_mut().insert(key, affine);
+        affine
+    }
+
+    /// `ty`, the WIR type of a field, element or payload of type `type_id`, as
+    /// that slot holds it: non-nullable, but for an affine value, and in its
+    /// box where [`TypeTable::slot_box`] names one.
+    pub fn slot_type(&self, type_table: &TypeTable, type_id: TypeId, ty: WirType) -> WirType {
+        if type_table.slot_box(type_id).is_some() {
+            self.boxed_slot_type(type_table, type_id, ty)
+        } else {
+            self.unboxed_slot_type(type_table, type_id, ty)
+        }
+    }
+
+    /// [`Self::slot_type`] for the slot a box holds its value in.
+    pub fn unboxed_slot_type(
+        &self,
+        type_table: &TypeTable,
+        type_id: TypeId,
+        ty: WirType,
+    ) -> WirType {
+        if self.is_affine(type_table, type_id) {
+            ty.as_nullable()
+        } else {
+            ty.as_nonnull()
+        }
+    }
+
+    /// `ty`, the WIR type of a slot of type `type_id`, as its box where
+    /// [`TypeTable::slot_box`] names one.
+    pub fn boxed_slot_type(&self, type_table: &TypeTable, type_id: TypeId, ty: WirType) -> WirType {
+        match type_table.slot_box(type_id) {
+            Some(wrapper) => self
+                .type_id_to_wir_type_pending(type_table, wrapper)
+                .as_nullable(),
+            None => ty,
+        }
+    }
+
+    /// The box a slot holds a `type_id` in, where [`TypeTable::slot_box`]
+    /// names one.
+    pub fn slot_box(&self, type_table: &TypeTable, type_id: TypeId) -> Option<WirTypeId> {
+        let wrapper = type_table.slot_box(type_id)?;
+        match self.type_id_to_wir_type(type_table, wrapper) {
+            WirType::Ref { type_id, .. } => Some(type_id),
+            other => unreachable!("a slot box is a struct, not {other:?}"),
+        }
+    }
+
     fn lookup_wir_type(
+        &self,
+        type_table: &TypeTable,
+        type_id: TypeId,
+    ) -> Result<WirType, UnregisteredType> {
+        let wir = self.lookup_wir_shape(type_table, type_id)?;
+        Ok(if self.is_affine(type_table, type_id) {
+            wir.as_nullable()
+        } else {
+            wir
+        })
+    }
+
+    fn lookup_wir_shape(
         &self,
         type_table: &TypeTable,
         type_id: TypeId,
@@ -904,10 +989,11 @@ impl<'a> WirContext<'a> {
                 self.lookup_wir_type(type_table, *base_type)?
             }
             ResolvedType::Resource { .. } | ResolvedType::GenericResource { .. } => {
-                let scalar = type_table
-                    .handle_scalar(type_id)
-                    .expect("a resource is a handle");
-                self.lookup_wir_type(type_table, scalar)?
+                if type_table.is_unrestricted_handle(type_id) {
+                    self.lookup_wir_type(type_table, TypeTable::U64)?
+                } else {
+                    Self::ref_to(self.handle_box())
+                }
             }
             // Flags are bitmasks stored as i32
             ResolvedType::Flags { .. } => WirType::I32,

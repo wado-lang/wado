@@ -9,7 +9,7 @@ use std::sync::Arc;
 
 use crate::analyze::Analyzer;
 use crate::ast::{
-    AstId, AstIdSpace, AstVisitor, IdCollector, ImplBlock, Item, Module, SelfKind, Visibility,
+    AstId, AstIdSpace, AstVisitor, Expr, IdCollector, ImplBlock, Item, Module, SelfKind, Visibility,
 };
 use crate::ast_index::{AstIndex, FunctionLocation};
 use crate::compiler_host::{Code, CompilerHost, LogLevel};
@@ -22,18 +22,18 @@ use crate::elaborator::liveness::{Liveness, LivenessScope};
 use crate::elaborator::orchestration::{AnnotateState, rt_unreachable_calls};
 use crate::elaborator::sem::types::{CoercionKind, DesugarKind, MethodDispatch};
 use crate::elaborator::sem::{Fact, FactKind, ModuleSemantics};
-use crate::from_marker::write_out_from_markers;
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::kiln::InvocationIndex;
 use crate::kiln::import_check::inject_kiln_request_adapter;
 use crate::logger::Logger;
+use crate::marker::write_out_markers;
 use crate::module_source::{ModuleSource, ModuleSourceInterner};
 use crate::name::resolve_import_with_entry;
 use crate::resolve::Resolutions;
 use crate::stdlib_snapshot::{get_or_init_snapshot, reparsed_snapshot_module};
 use crate::symbol::{Symbol, SymbolTable};
 use crate::symbol_notation::SymbolNotation;
-use crate::tir::{EffectRows, ResolvedType, TirModule, TypeId};
+use crate::tir::{EffectRows, ResolvedType, TemplateId, TirModule, TypeId};
 use crate::token::Span;
 use crate::type_table::TypeTable;
 use crate::unparse::unparse_contract_clause_renamed;
@@ -134,6 +134,42 @@ pub enum SymbolResolveError {
     ModuleNotLoaded,
     /// The module is loaded but defines no matching symbol or member.
     SymbolNotFound,
+}
+
+/// Where an operand of a call stands among its callee's parameters.
+#[derive(Clone, Copy)]
+pub(crate) enum Operand {
+    Receiver,
+    Arg(usize),
+}
+
+impl Operand {
+    /// The operand where a static call spells the receiver as its first
+    /// argument (`Type::method(recv, ..)`).
+    fn with_receiver_in_args(self) -> Operand {
+        match self {
+            Operand::Arg(0) => Operand::Receiver,
+            Operand::Arg(i) => Operand::Arg(i - 1),
+            Operand::Receiver => unreachable!("such a call spells no receiver"),
+        }
+    }
+}
+
+/// Where a call may put what it was handed: its result, or what a `&mut`
+/// operand points to.
+#[derive(Clone, Copy)]
+pub(crate) enum Destination {
+    Result,
+    Through(Operand),
+}
+
+impl Destination {
+    fn with_receiver_in_args(self) -> Destination {
+        match self {
+            Destination::Result => Destination::Result,
+            Destination::Through(to) => Destination::Through(to.with_receiver_in_args()),
+        }
+    }
 }
 
 impl Semantics {
@@ -580,14 +616,25 @@ impl Semantics {
         ))
     }
 
-    /// Whether `type_id` is, or holds at any depth, an affine resource, which
-    /// makes a binding of it move-only.
-    pub(crate) fn carries_resource(&self, type_id: TypeId) -> bool {
+    /// Whether a value of `type_id` is move-only in a body whose `affine` type
+    /// parameters are `affine_params`.
+    pub(crate) fn is_affine(&self, type_id: TypeId, affine_params: &[String]) -> bool {
         self.state
             .as_ref()
-            .expect("the resource move check runs on annotated semantics")
+            .expect("the move check runs on annotated semantics")
             .tysys
-            .carries_resource(type_id)
+            .is_affine(type_id, affine_params)
+    }
+
+    /// The index of the first field or case of the struct or variant declared
+    /// at `decl` that holds an affine value in every instantiation.
+    pub(crate) fn first_affine_member(&self, decl: AstId) -> Option<usize> {
+        let type_id = self.types.type_of_symbol(&decl)?;
+        self.state
+            .as_ref()
+            .expect("the affine declaration check runs on annotated semantics")
+            .tysys
+            .first_affine_member(type_id)
     }
 
     /// Whether a value of `type_id` reaches a `&mut` a call handed it may write
@@ -596,6 +643,70 @@ impl Semantics {
         self.state
             .as_ref()
             .is_none_or(|state| state.tysys.reaches_mut_ref(type_id))
+    }
+
+    /// Whether a value of `type_id` may hold a reference.
+    pub(crate) fn may_hold_reference(&self, type_id: TypeId) -> bool {
+        self.state
+            .as_ref()
+            .expect("the move check runs on annotated semantics")
+            .tysys
+            .may_hold_reference(type_id)
+    }
+
+    /// Whether a borrow written at `operand` of `call` may reach `destination`,
+    /// in any of its recorded dispatches. A callee with no declaration, a
+    /// closure or a fn value, may.
+    pub(crate) fn borrow_reaches(
+        &self,
+        call: &Expr,
+        operand: Operand,
+        destination: Destination,
+    ) -> bool {
+        let tysys = &self
+            .state
+            .as_ref()
+            .expect("the move check runs on annotated semantics")
+            .tysys;
+        // `Type::method(..)` and a free function both record a static dispatch;
+        // a call of a closure or a fn value records none.
+        let callees: Vec<(Option<DefId>, bool)> = match call {
+            Expr::MethodCall(mc) => self
+                .method_dispatches_at(mc.id)
+                .map(|dispatch| (dispatch.method_def, false))
+                .collect(),
+            Expr::StaticMethodCall(_) | Expr::Call(_) => self
+                .facts_at(ModuleSemantics::STATIC_METHOD_DISPATCH, call.id())
+                .map(|dispatch| {
+                    let declared = dispatch
+                        .function_ref
+                        .template
+                        .as_ref()
+                        .and_then(TemplateId::def);
+                    (dispatch.method_def.or(declared), dispatch.self_in_args)
+                })
+                .collect(),
+            _ => unreachable!("only a call has operands"),
+        };
+        callees.is_empty()
+            || callees.into_iter().any(|(callee, receiver_in_args)| {
+                let (operand, destination) = if receiver_in_args {
+                    (
+                        operand.with_receiver_in_args(),
+                        destination.with_receiver_in_args(),
+                    )
+                } else {
+                    (operand, destination)
+                };
+                callee.is_none_or(|def| tysys.borrow_reaches(def, operand, destination))
+            })
+    }
+
+    /// Whether the method call at `id` takes its receiver as `&mut self`, in
+    /// any of its recorded dispatches.
+    pub(crate) fn method_call_takes_mut_receiver(&self, id: AstId) -> bool {
+        self.method_dispatches_at(id)
+            .any(|dispatch| dispatch.self_kind == SelfKind::MutRef)
     }
 
     /// Whether the method call at `id` takes its receiver `self` by value,
@@ -791,10 +902,14 @@ impl Semantics {
     /// inherent block.
     #[must_use]
     pub fn implemented(&self, b: &ImplBlock) -> Option<&Item> {
+        self.declaration_of(b.trait_type.as_ref()?)
+    }
+
+    /// The item declaring the head of `ty`: `Option` for `Option<T>`.
+    #[must_use]
+    pub fn declaration_of(&self, ty: &ast::Type) -> Option<&Item> {
         let resolutions = self.resolutions()?;
-        let id = resolutions
-            .defs()
-            .ast_id(resolutions.head_decl(b.trait_type.as_ref()?)?);
+        let id = resolutions.defs().ast_id(resolutions.head_decl(ty)?);
         let module = self.modules.get(self.module_of_id(id)?)?;
         module.items.iter().find(|item| item.id() == id)
     }
@@ -1351,7 +1466,7 @@ pub(crate) fn semantics_with_logger<H: CompilerHost>(
         (analyzer.into_symbols(), ok)
     };
     if analyze_ok {
-        write_out_from_markers(&mut load_result.modules, &symbols);
+        write_out_markers(&mut load_result.modules, &symbols);
     }
 
     // Set up once the AST is final, and before anything can bail, so cursor

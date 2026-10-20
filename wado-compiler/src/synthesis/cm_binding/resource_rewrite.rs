@@ -15,21 +15,23 @@ use crate::hashmap::{IndexMap, IndexSet};
 use crate::module_source::{CmNamespace, ModuleSource, ModuleSourceInterner};
 use crate::name::{
     LocalMethodName, cm_future_read_func_name, cm_future_write_func_name, cm_stream_read_func_name,
-    cm_stream_read_value_func_name, cm_stream_write_func_name, to_cm_name,
+    cm_stream_read_value_func_name, cm_stream_write_func_name, minted_name, to_cm_name,
 };
 use crate::package::Package;
 use crate::tir::{
-    CallArg, FunctionKind, FunctionRef, InlineHint, MonomorphInfo, ResolvedType, TirBinaryOp,
-    TirBlock, TirExpr, TirExprKind, TirFunction, TirLocal, TirParam, TirStmt, TirStmtKind, TypeId,
+    CallArg, FrameLocals, FunctionKind, FunctionRef, InlineHint, MonomorphInfo, ResolvedType,
+    TirBinaryOp, TirBlock, TirExpr, TirExprKind, TirFunction, TirLocal, TirParam, TirStmt,
+    TirStmtKind, TypeId,
 };
 use crate::tir_visitor::{TirMutVisitor, TirRefVisitor};
 use crate::type_table::TypeTable;
 
 use crate::canonical::{CanonicalIntrinsic, CmDecl, CmFuturePayload, CmStreamPayload};
 use crate::synthesis::common::{
-    alloc_named_local, assign, binary, break_stmt, builtin_call, cast, cm_canonical_call,
-    entry_call, expr_stmt, i32_const, if_stmt, internal_call, let_mut_stmt, let_stmt, local_ref,
-    loop_stmt, option_none, option_some, return_stmt, synth_span,
+    alloc_named_local, assign, binary, block, break_stmt, builtin_call, cast, cm_canonical_call,
+    entry_call, expr_stmt, generic_method_call, handle_scalar, i32_const, i64_const, if_stmt,
+    internal_call, let_mut_stmt, let_stmt, local_ref, loop_stmt, option_none, option_some,
+    return_stmt, struct_literal, synth_span,
 };
 
 use super::synthesize_lift;
@@ -46,13 +48,14 @@ use crate::synthesis::cm_binding::lower::{
     buffer_bytes, synthesize_lower_list_to_buffer, synthesize_lower_wasi_type_to_memory,
 };
 use crate::synthesis::cm_binding::{PayloadsValidated, future_stream_payload_site};
-use crate::tir::TirStructField;
 use crate::{ast, tir};
 
 /// CM async built-ins (`stream-read`, `stream-write`, `future-read`, …)
 /// pack their result as `(count << 4) | status`, with `-1` meaning BLOCKED.
 const CM_PACKED_STATUS_MASK: i32 = 0xF;
 const CM_BLOCKED: i32 = -1;
+/// The `CopyResult` status of a copy whose reader or writer dropped first.
+const CM_DROPPED: i32 = 1;
 
 /// `cm_packed_count(result)`: the element count of a packed CM async result.
 fn packed_count(result: TirExpr) -> TirExpr {
@@ -86,8 +89,22 @@ fn copy_result_of(packed: TirExpr, type_table: &RefCell<TypeTable>) -> TirExpr {
     )
 }
 
-/// `StreamChunk { items, result }` / `StreamWrite { count, result }` — what a
-/// copy moved, paired with how it ended. Field order follows the declaration.
+/// `cm_future_write_result(packed)`: how a future write ended, a BLOCKED one
+/// pending.
+fn future_write_result_of(packed: TirExpr, type_table: &RefCell<TypeTable>) -> TirExpr {
+    let result = type_table
+        .borrow_mut()
+        .make_compiler_enum(CompilerItem::FutureWriteResult);
+    internal_call(
+        CompilerItem::CmFutureWriteResult.attr_name(),
+        vec![packed],
+        result,
+    )
+}
+
+/// `StreamChunk { items, result }` / `StreamWrite { rest, result }` — what a
+/// copy moved or left, paired with how it ended. Field order follows the
+/// declaration.
 fn copy_report_literal(
     type_id: TypeId,
     item: CompilerItem,
@@ -97,25 +114,10 @@ fn copy_report_literal(
     type_table: &RefCell<TypeTable>,
 ) -> TirExpr {
     let struct_name = type_table.borrow().compiler_struct_name(item).to_string();
-    TirExpr::new(
-        TirExprKind::StructLiteral {
-            struct_type: type_id,
-            struct_name,
-            fields: vec![
-                TirStructField {
-                    name: moved_field.to_string(),
-                    value: moved,
-                    field_index: 0,
-                },
-                TirStructField {
-                    name: "result".to_string(),
-                    value: result,
-                    field_index: 1,
-                },
-            ],
-        },
+    struct_literal(
         type_id,
-        synth_span(),
+        struct_name,
+        [(moved_field, moved), ("result", result)],
     )
 }
 
@@ -137,15 +139,15 @@ fn stream_chunk_literal(
 
 fn stream_write_literal(
     write_type_id: TypeId,
-    count: TirExpr,
+    rest: TirExpr,
     result: TirExpr,
     type_table: &RefCell<TypeTable>,
 ) -> TirExpr {
     copy_report_literal(
         write_type_id,
         CompilerItem::StreamWrite,
-        "count",
-        count,
+        "rest",
+        rest,
         result,
         type_table,
     )
@@ -591,7 +593,7 @@ fn synthesize_stream_write_func(elem_type_id: TypeId, ctx: &SynthCtx) -> TirFunc
         &mut locals,
         Some("data".to_string()),
         list_type_id,
-        false,
+        true,
     );
 
     // Lower the list into a CM element buffer: (ptr, element count).
@@ -610,8 +612,8 @@ fn synthesize_stream_write_func(elem_type_id: TypeId, ctx: &SynthCtx) -> TirFunc
     );
     stmts.extend(lower_stmts);
 
-    // One copy. A reader may take only a prefix, which the returned count
-    // reports; `StreamWritable::write_all` is the loop that finishes a buffer.
+    // One copy. A reader may take only a prefix, and the rest is returned;
+    // `StreamWritable::write_all` is the loop that finishes a buffer.
     let result_idx = alloc_named_local(
         &mut next_local,
         &mut locals,
@@ -666,12 +668,29 @@ fn synthesize_stream_write_func(elem_type_id: TypeId, ctx: &SynthCtx) -> TirFunc
         ),
     ));
 
-    let write_type_id = type_table
-        .borrow_mut()
-        .make_compiler_struct(CompilerItem::StreamWrite);
+    // The delivered prefix now belongs to the reader, so `data` keeps it and
+    // is never dropped: a binding is synthesized after drops are elaborated.
+    let (write_type_id, list_head, split_off) = {
+        let mut tt = type_table.borrow_mut();
+        let write_type_id = tt.make_stream_write(elem_type_id);
+        let list_head = tt.compiler_struct_fq_name(CompilerItem::List);
+        let split_off = tt
+            .compiler_items()
+            .require_template(CompilerItem::ListSplitOff);
+        (write_type_id, list_head, split_off)
+    };
+    let rest = generic_method_call(
+        local_ref(data_idx, "data", list_type_id),
+        &list_head,
+        "split_off",
+        ModuleSource::list(),
+        split_off,
+        vec![packed_count(result_ref())],
+        list_type_id,
+    );
     stmts.push(return_stmt(Some(stream_write_literal(
         write_type_id,
-        packed_count(result_ref()),
+        rest,
         copy_result_of(result_ref(), type_table),
         type_table,
     ))));
@@ -701,7 +720,7 @@ fn synthesize_stream_write_func(elem_type_id: TypeId, ctx: &SynthCtx) -> TirFunc
                 name: "data".to_string(),
                 local_index: data_idx,
                 type_id: list_type_id,
-                is_mut: false,
+                is_mut: true,
                 is_mut_ref: false,
                 span: synth_span(),
             },
@@ -787,21 +806,20 @@ fn free_cm_buffer(
 fn synthesize_future_write_func(payload_type_id: TypeId, ctx: &SynthCtx) -> TirFunction {
     let cm_interface_registry = ctx.cm_interface_registry;
     let type_table = ctx.type_table;
-    let (func_name, write_name, cm_package, payload_ast, size, align, awaits_reader) = {
+    let (func_name, write_name, drop_name, cm_package, payload_ast, size, align, awaits_reader) = {
         let tt = type_table.borrow();
         let func_name = future_write_func_name(&tt, payload_type_id);
         let payload = classify_future_payload(&tt, payload_type_id);
         let write_name = CanonicalIntrinsic::FutureWrite(payload.clone());
+        let drop_name = CanonicalIntrinsic::FutureDropWritable(payload.clone());
         let cm_package = future_payload_package(&payload);
         let payload_ast = payload_ast_type(payload_type_id, &tt, cm_interface_registry);
         let (size, align) = cm_layout_i32(&payload_ast, cm_interface_registry);
-        let awaits_reader = matches!(
-            payload,
-            CmFuturePayload::Trailers | CmFuturePayload::Transmission(_)
-        );
+        let awaits_reader = payload.write_awaits_reader();
         (
             func_name,
             write_name,
+            drop_name,
             cm_package,
             payload_ast,
             size,
@@ -875,14 +893,10 @@ fn synthesize_future_write_func(payload_type_id: TypeId, ctx: &SynthCtx) -> TirF
         &mut locals,
         Some("$written".to_string()),
         TypeTable::I32,
-        awaits_reader,
+        true,
     );
-    let write_binding = if awaits_reader {
-        let_mut_stmt
-    } else {
-        let_stmt
-    };
-    stmts.push(write_binding(
+    let written = || local_ref(written_idx, "$written", TypeTable::I32);
+    stmts.push(let_mut_stmt(
         "$written",
         written_idx,
         TypeTable::I32,
@@ -896,6 +910,12 @@ fn synthesize_future_write_func(payload_type_id: TypeId, ctx: &SynthCtx) -> TirF
         ),
     ));
 
+    // The write consumes the end (WEP: Affine Types).
+    let drop_end = expr_stmt(cm_canonical_call(
+        drop_name,
+        vec![local_ref(handle_idx, "handle", TypeTable::I32)],
+        TypeTable::UNIT,
+    ));
     if awaits_reader {
         stmts.push(await_if_blocked(written_idx, "$written", handle_idx));
         stmts.push(free_cm_buffer(
@@ -905,7 +925,71 @@ fn synthesize_future_write_func(payload_type_id: TypeId, ctx: &SynthCtx) -> TirF
             &mut next_local,
             &mut locals,
         ));
+        stmts.push(drop_end);
+    } else {
+        // An end whose copy is pending cannot be dropped, and waiting for the
+        // reader would deadlock one in this instance, so the end is left to the
+        // host, which delivers the value from the buffer and reports the write
+        // `Pending` (WEP: Affine Types, known gaps). A write that finished
+        // frees the buffer.
+        let free = free_cm_buffer(ptr_idx, size, align, &mut next_local, &mut locals);
+        stmts.push(if_stmt(
+            is_blocked(written()),
+            block(vec![]),
+            Some(block(vec![free, drop_end])),
+        ));
     }
+
+    // The value is the reader's unless the reader dropped first. A binding is
+    // synthesized after drops are elaborated, so a delivered `value` is never
+    // dropped here.
+    let (write_type_id, option_type_id) = {
+        let mut tt = type_table.borrow_mut();
+        (
+            tt.make_future_write(payload_type_id),
+            tt.make_option(payload_type_id),
+        )
+    };
+    let rest_idx = alloc_named_local(
+        &mut next_local,
+        &mut locals,
+        Some("$rest".to_string()),
+        option_type_id,
+        true,
+    );
+    let rest = || local_ref(rest_idx, "$rest", option_type_id);
+    let (none, some) = {
+        let tt = type_table.borrow();
+        let value = local_ref(value_idx, "value", payload_type_id);
+        (
+            option_none(option_type_id, tt.compiler_items()),
+            option_some(value, option_type_id, tt.compiler_items()),
+        )
+    };
+    stmts.push(let_mut_stmt("$rest", rest_idx, option_type_id, none));
+    stmts.push(if_stmt(
+        binary(
+            TirBinaryOp::Eq,
+            binary(
+                TirBinaryOp::BitAnd,
+                written(),
+                i32_const(CM_PACKED_STATUS_MASK),
+                TypeTable::I32,
+            ),
+            i32_const(CM_DROPPED),
+            TypeTable::BOOL,
+        ),
+        block(vec![expr_stmt(assign(rest(), some))]),
+        None,
+    ));
+    stmts.push(return_stmt(Some(copy_report_literal(
+        write_type_id,
+        CompilerItem::FutureWrite,
+        "rest",
+        rest(),
+        future_write_result_of(written(), type_table),
+        type_table,
+    ))));
 
     TirFunction {
         module_source: ModuleSource::default(),
@@ -937,7 +1021,7 @@ fn synthesize_future_write_func(payload_type_id: TypeId, ctx: &SynthCtx) -> TirF
                 span: synth_span(),
             },
         ],
-        return_type: TypeTable::UNIT,
+        return_type: write_type_id,
         task_return_type: None,
         effects: vec![],
         immediates: vec![],
@@ -1001,15 +1085,24 @@ fn synthesize_future_read_func(
 ) -> TirFunction {
     let cm_interface_registry = ctx.cm_interface_registry;
     let type_table = ctx.type_table;
-    let (func_name, read_name, cm_package, payload_ast, size, align) = {
+    let (func_name, read_name, drop_name, cm_package, payload_ast, size, align) = {
         let tt = type_table.borrow();
         let func_name = future_read_func_name(&tt, payload_type_id);
         let payload = classify_future_payload(&tt, payload_type_id);
         let read_name = CanonicalIntrinsic::FutureRead(payload.clone());
+        let drop_name = CanonicalIntrinsic::FutureDropReadable(payload.clone());
         let cm_package = future_payload_package(&payload);
         let payload_ast = payload_ast_type(payload_type_id, &tt, cm_interface_registry);
         let (size, align) = cm_layout_i32(&payload_ast, cm_interface_registry);
-        (func_name, read_name, cm_package, payload_ast, size, align)
+        (
+            func_name,
+            read_name,
+            drop_name,
+            cm_package,
+            payload_ast,
+            size,
+            align,
+        )
     };
 
     let mut next_local: u32 = 0;
@@ -1128,6 +1221,13 @@ fn synthesize_future_read_func(
         &mut next_local,
         &mut locals,
     ));
+
+    // The read consumes the end (WEP: Affine Types); it is done, so it drops.
+    stmts.push(expr_stmt(cm_canonical_call(
+        drop_name,
+        vec![local_ref(handle_idx, "handle", TypeTable::I32)],
+        TypeTable::UNIT,
+    )));
 
     stmts.push(return_stmt(Some(local_ref(
         result_idx,
@@ -1640,8 +1740,6 @@ fn internal_cm_binding(cm_name: &str) -> Option<CompilerItem> {
         "error-context-debug-message" => CompilerItem::CmErrorContextDebugMessage,
         "waitable-set-wait" => CompilerItem::CmWaitableSetWait,
         "waitable-set-poll" => CompilerItem::CmWaitableSetPoll,
-        // Void canonical; the binding returns the handle as a `Waitable`.
-        "waitable-join" => CompilerItem::CmWaitableJoin,
         _ => return None,
     })
 }
@@ -1654,13 +1752,9 @@ fn cm_binding_function(cm_name: &str) -> Option<BindingTarget> {
         return Some(BindingTarget::Internal(binding));
     }
     let intrinsic = CanonicalIntrinsic::from_import_name(cm_name)?;
-    // A constructor hands back both ends packed in an i64, so the canonical
-    // alone is not the binding: `rewrite_cm_new` splits the pair.
-    let is_pair = matches!(
-        intrinsic,
-        CanonicalIntrinsic::StreamNew(_) | CanonicalIntrinsic::FutureNew(_)
-    );
-    (!is_pair).then_some(BindingTarget::Canonical(intrinsic))
+    // A constructor's call carries the payload its name needs, so
+    // `rewrite_cm_new` binds it.
+    (!intrinsic.creates_pair()).then_some(BindingTarget::Canonical(intrinsic))
 }
 
 /// Rewrite all #[cm("...")] resource method calls in the project.
@@ -1668,29 +1762,20 @@ fn rewrite_cm_resource_methods(sites: &BindingSites<'_>) {
     let type_table = sites.type_table.borrow();
     for func_rc in &sites.functions {
         let mut func = func_rc.borrow_mut();
+        let func = &mut *func;
         if let Some(body) = &mut func.body {
-            rewrite_cm_methods_in_block(
-                body,
-                &type_table,
-                &sites.entry_module_source,
-                sites.cm_interface_registry,
-            );
+            CmMethodRewriter {
+                tt: &type_table,
+                entry_source: &sites.entry_module_source,
+                cm_interface_registry: sites.cm_interface_registry,
+                frame: FrameLocals::Function {
+                    locals: &mut func.locals,
+                    local_count: &mut func.local_count,
+                },
+            }
+            .visit_block(body);
         }
     }
-}
-
-fn rewrite_cm_methods_in_block(
-    block: &mut TirBlock,
-    tt: &TypeTable,
-    entry_source: &ModuleSource,
-    cm_interface_registry: &CmInterfaceRegistry,
-) {
-    CmMethodRewriter {
-        tt,
-        entry_source,
-        cm_interface_registry,
-    }
-    .visit_block(block);
 }
 
 /// Rewrites `#[cm("...")]` resource method calls into the appropriate
@@ -1701,6 +1786,8 @@ struct CmMethodRewriter<'a> {
     tt: &'a TypeTable,
     entry_source: &'a ModuleSource,
     cm_interface_registry: &'a CmInterfaceRegistry,
+    /// The enclosing frame's locals, which a constructor's split grows.
+    frame: FrameLocals<'a>,
 }
 
 impl TirMutVisitor for CmMethodRewriter<'_> {
@@ -1720,6 +1807,25 @@ impl TirMutVisitor for CmMethodRewriter<'_> {
     }
 
     fn visit_expr(&mut self, expr: &mut TirExpr) {
+        if let TirExprKind::Closure {
+            params,
+            body,
+            body_locals,
+            ..
+        } = &mut expr.kind
+        {
+            CmMethodRewriter {
+                tt: self.tt,
+                entry_source: self.entry_source,
+                cm_interface_registry: self.cm_interface_registry,
+                frame: FrameLocals::Closure {
+                    params: params.as_slice(),
+                    body_locals,
+                },
+            }
+            .visit_expr(body);
+            return;
+        }
         // Recurse first so nested CM calls are rewritten before this node.
         self.walk_expr(expr);
 
@@ -1738,11 +1844,12 @@ impl TirMutVisitor for CmMethodRewriter<'_> {
             return;
         }
 
-        // future-new / stream-new: emit the payload-parameterized canonical as a
-        // `CmRawCall` (returns the packed i64) and pass it to the `core:rt` pair
-        // splitter, which casts the two halves to the readable/writable handles.
         if matches!(cm_name.as_str(), "future-new" | "stream-new") {
-            rewrite_cm_new(expr, self.tt, cm_name == "future-new");
+            self.rewrite_cm_new(expr, cm_name == "future-new");
+            return;
+        }
+        if cm_name == RESOURCE_DROP {
+            self.rewrite_resource_drop(expr);
             return;
         }
         if cm_name == "future-write"
@@ -1813,35 +1920,57 @@ impl TirMutVisitor for CmMethodRewriter<'_> {
 }
 
 impl CmMethodRewriter<'_> {
+    /// `r.drop()` on a resource: the canonical `resource.drop` of its
+    /// declaration, handed the box itself, which the drop zeroes.
+    fn rewrite_resource_drop(&self, expr: &mut TirExpr) {
+        let TirExprKind::Call { args, .. } = &mut expr.kind else {
+            unreachable!("a `cm_name` is read off a call");
+        };
+        let receiver = std::mem::take(args)
+            .into_vec()
+            .into_iter()
+            .next()
+            .expect("a drop takes its resource")
+            .expr;
+        *expr = cm_canonical_call(
+            CanonicalIntrinsic::ResourceDrop(resource_decl(
+                receiver.type_id,
+                self.tt,
+                self.cm_interface_registry,
+            )),
+            vec![receiver],
+            TypeTable::UNIT,
+        );
+    }
+
     /// Rewrite a CM call — `recv.method(args)` or `Type::method(args)` — to a
-    /// builtin/internal call, casting the handle it operates on to the scalar the
+    /// builtin/internal call, casting each handle it passes to the scalar the
     /// canonical import takes.
     fn rewrite_call(&self, expr: &mut TirExpr, target: BindingTarget) {
         let TirExprKind::Call { args, .. } = &mut expr.kind else {
             return;
         };
-        let mut taken_args: Vec<TirExpr> = std::mem::take(args)
+        let taken_args: Vec<TirExpr> = std::mem::take(args)
             .into_vec()
             .into_iter()
-            .map(|a| a.expr)
+            .map(|a| match handle_scalar(self.tt, a.expr.type_id) {
+                Some(scalar) => cast(a.expr, scalar),
+                None => a.expr,
+            })
             .collect();
-        if let Some(handle) = taken_args.first_mut()
-            && let Some(scalar) = handle_scalar(self.tt, handle.type_id)
-        {
-            let taken = std::mem::replace(
-                handle,
-                TirExpr::new(TirExprKind::Unit, TypeTable::UNIT, synth_span()),
-            );
-            *handle = cast(taken, scalar);
-        }
 
         *expr = match target {
             BindingTarget::Canonical(intrinsic) => {
                 cm_canonical_call(intrinsic, taken_args, expr.type_id)
             }
-            BindingTarget::Internal(item) => {
-                internal_call(item.attr_name(), taken_args, expr.type_id)
-            }
+            // A `core:rt` binding returns a resource as its bare handle.
+            BindingTarget::Internal(item) => match handle_scalar(self.tt, expr.type_id) {
+                Some(scalar) => cast(
+                    internal_call(item.attr_name(), taken_args, scalar),
+                    expr.type_id,
+                ),
+                None => internal_call(item.attr_name(), taken_args, expr.type_id),
+            },
             BindingTarget::Entry(name) => {
                 entry_call(&name, taken_args, expr.type_id, self.entry_source.clone())
             }
@@ -1849,65 +1978,149 @@ impl CmMethodRewriter<'_> {
     }
 }
 
-/// The scalar a resource handle is, where `type_id` is one. `args[0]` is one
-/// exactly where the member declares a receiver: a constructor's first argument
-/// is a value (`ErrorContext::new(message)`), which casting would corrupt.
-fn handle_scalar(tt: &TypeTable, type_id: TypeId) -> Option<TypeId> {
-    tt.handle_scalar(peel_newtypes(tt, tt.peel_refs(type_id)))
+impl CmMethodRewriter<'_> {
+    /// Rewrite a `Future::<T>::new()` / `Stream::<T>::new()` static call into
+    /// the canonical that creates the pair, parameterized by the call's
+    /// payload. The canonical returns both ends packed in an `i64`
+    /// (`readable | writable << 32`), and each half is lifted to its end:
+    /// `{ let packed = new(); [packed as i32 as R, (packed >> 32) as i32 as W] }`.
+    fn rewrite_cm_new(&mut self, expr: &mut TirExpr, is_future: bool) {
+        let TirExprKind::Call { func, .. } = &expr.kind else {
+            return;
+        };
+        let Some(payload_tid) = func
+            .monomorph_info
+            .as_ref()
+            .and_then(|m| m.impl_type_args.first().copied())
+        else {
+            return;
+        };
+        let canonical = if is_future {
+            CanonicalIntrinsic::FutureNew(classify_future_payload(self.tt, payload_tid))
+        } else {
+            CanonicalIntrinsic::StreamNew(classify_stream_payload(self.tt, payload_tid))
+        };
+        let pair_type = expr.type_id;
+        let Some(&[readable, writable]) = self.tt.as_tuple(pair_type).as_deref() else {
+            unreachable!("a stream or future constructor returns its two ends");
+        };
+        let name = minted_name("cm_pair", self.frame.next_index());
+        let packed = self.frame.alloc(name.clone(), TypeTable::I64);
+        let half = |shift: i64, end: TypeId| {
+            let packed = local_ref(packed, &name, TypeTable::I64);
+            let bits = if shift == 0 {
+                packed
+            } else {
+                binary(TirBinaryOp::Shr, packed, i64_const(shift), TypeTable::I64)
+            };
+            cast(cast(bits, TypeTable::I32), end)
+        };
+        let ends = TirExpr::new(
+            TirExprKind::TupleLiteral {
+                elements: vec![half(0, readable), half(32, writable)],
+            },
+            pair_type,
+            synth_span(),
+        );
+        let stmts = vec![
+            let_stmt(
+                &name,
+                packed,
+                TypeTable::I64,
+                cm_canonical_call(canonical, vec![], TypeTable::I64),
+            ),
+            expr_stmt(ends),
+        ];
+        *expr = TirExpr::new(TirExprKind::Block(block(stmts)), pair_type, synth_span());
+    }
 }
 
-/// Rewrite a `Future::<T>::new()` / `Stream::<T>::new()` static call into
-/// `rt::cm_{future,stream}_pair::<T>(<canonical-new CmRawCall>)`. The canonical
-/// name is parameterized by the payload (computed here from the call's concrete
-/// type arg); the i64 handle split lives in `core:rt`.
-fn rewrite_cm_new(expr: &mut TirExpr, tt: &TypeTable, is_future: bool) {
-    let TirExprKind::Call { func, .. } = &expr.kind else {
-        return;
+/// The `cm_name` of a resource's drop operation, which wado-from-idl declares
+/// on every affine resource.
+pub(crate) const RESOURCE_DROP: &str = "resource-drop";
+
+/// The Component Model declaration of the resource `resource_type`.
+fn resource_decl(
+    resource_type: TypeId,
+    tt: &TypeTable,
+    cm_interface_registry: &CmInterfaceRegistry,
+) -> CmDecl {
+    let def = tt
+        .nominal_def(tt.representation_head(resource_type))
+        .expect("a resource is declared");
+    let cm = cm_interface_registry
+        .get_resource_cm_name_by_module(&tt.def_module(def).to_string(), tt.def_name(def))
+        .expect("a dropped resource has a Component Model name");
+    CmDecl::new(tt.defs(), def, cm)
+}
+
+/// `resource.drop()` on a resource of type `resource_type`: the call a user
+/// writes, which the dispatch rewrite routes to an installed handler and this
+/// pass binds otherwise. A scope-exit drop is one (WEP: Affine Types).
+pub(crate) fn resource_drop_call(
+    resource: TirExpr,
+    resource_type: TypeId,
+    tt: &TypeTable,
+) -> TirExpr {
+    let head = tt.representation_head(resource_type);
+    let def = tt.nominal_def(head).expect("a resource is declared");
+    let mut info = LocalMethodName::new(tt.fq_base_type_name(head), None, "drop".to_string());
+    info.cm_name = Some(RESOURCE_DROP.to_string());
+    let func = FunctionRef {
+        module_source: tt.def_module(def).clone(),
+        name: info.to_mangled_name(),
+        template: None,
+        monomorph_info: None,
+        method_info: Some(info),
     };
-    let Some(payload_tid) = func
-        .monomorph_info
-        .as_ref()
-        .and_then(|m| m.impl_type_args.first().copied())
-    else {
-        return;
-    };
-    let (canonical, item) = if is_future {
-        let payload = classify_future_payload(tt, payload_tid);
-        (
-            CanonicalIntrinsic::FutureNew(payload),
-            CompilerItem::CmFuturePair,
-        )
-    } else {
-        let payload = classify_stream_payload(tt, payload_tid);
-        (
-            CanonicalIntrinsic::StreamNew(payload),
-            CompilerItem::CmStreamPair,
-        )
-    };
-    let helper = item.attr_name();
-    let template = tt.compiler_items().require_template(item);
-    let result_type = expr.type_id;
-    let packed = cm_canonical_call(canonical, vec![], TypeTable::I64);
-    *expr = TirExpr::new(
-        TirExprKind::Call {
-            func: Box::new(FunctionRef {
-                module_source: ModuleSource::rt(),
-                name: helper.to_string(),
-                template: Some(template),
-                monomorph_info: Some(MonomorphInfo {
-                    generic_name: helper.to_string(),
-                    impl_type_args: vec![payload_tid],
-                    method_type_args: vec![],
-                    is_blanket: false,
-                }),
-                method_info: None,
-            }),
-            type_args: vec![payload_tid],
-            args: CallArgs::free(vec![CallArg::new(packed, false)]),
-        },
-        result_type,
+    TirExpr::new(
+        TirExprKind::method_call(Box::new(resource), func, vec![], vec![]),
+        TypeTable::UNIT,
         synth_span(),
-    );
+    )
+}
+
+/// `end.drop()` on a stream or future end of type `end_type`: the call a user
+/// writes, which this pass binds once the end's payload is known. A scope-exit
+/// drop is one (WEP: Affine Types).
+pub(crate) fn end_drop_call(end: TirExpr, end_type: TypeId, tt: &TypeTable) -> TirExpr {
+    let head = peel_newtypes(tt, end_type);
+    let is = |item| tt.is_compiler_item_type(head, item);
+    let cm_name = if is(CompilerItem::Stream) {
+        "stream-drop-readable"
+    } else if is(CompilerItem::StreamWritable) {
+        "stream-drop-writable"
+    } else if is(CompilerItem::Future) {
+        "future-drop-readable"
+    } else {
+        assert!(
+            is(CompilerItem::FutureWritable),
+            "a generic resource is a stream or future end"
+        );
+        "future-drop-writable"
+    };
+    let def = tt.nominal_def(head).expect("an end is a declared resource");
+    let type_args: Vec<_> = tt
+        .generic_type_args(head)
+        .expect("an end names its payload")
+        .iter()
+        .map(|arg| tt.fq_type_name(*arg))
+        .collect();
+    let mut info = LocalMethodName::new(tt.fq_base_type_name(head), None, "drop".to_string())
+        .with_struct_type_args(&type_args);
+    info.cm_name = Some(cm_name.to_string());
+    let func = FunctionRef {
+        module_source: tt.def_module(def).clone(),
+        name: info.to_mangled_name(),
+        template: None,
+        monomorph_info: None,
+        method_info: Some(info),
+    };
+    TirExpr::new(
+        TirExprKind::method_call(Box::new(end), func, vec![], vec![]),
+        TypeTable::UNIT,
+        synth_span(),
+    )
 }
 
 /// Drop and cancel are the canonical import itself, so the parameterized name
@@ -2049,7 +2262,6 @@ mod cm_binding_tests {
         ("waitable-set-wait", Some("internal cm_waitable_set_wait")),
         ("waitable-set-poll", Some("internal cm_waitable_set_poll")),
         ("waitable-set-drop", Some("canonical waitable-set-drop")),
-        ("waitable-join", Some("internal cm_waitable_join")),
         ("subtask-drop", Some("canonical subtask-drop")),
         ("subtask-cancel", Some("canonical subtask-cancel")),
         ("error-context-new", Some("internal cm_error_context_new")),

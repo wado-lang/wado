@@ -1,0 +1,14 @@
+// An `affine trait`'s default bodies are checked with `Self` affine, so one that
+// copies `Self` out of `&self` is rejected at the trait.
+
+affine trait Twice {
+    fn twice(&self) -> [Self, Self] {
+        return [*self, *self];
+    }
+}
+
+export fn run() {
+}
+
+__DATA__
+{"compile_error": ":6:17: analysis error: cannot move affine type `Self` out of a reference; 6:24: cannot move affine type `Self` out of a reference"}

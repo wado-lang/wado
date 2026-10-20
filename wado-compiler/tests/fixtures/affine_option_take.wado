@@ -1,0 +1,40 @@
+// `take` and `replace` move a value out through a reference, leaving the place
+// holding what replaced it (WEP: Affine Types).
+test "take empties the place" {
+    let [rx, tx] = Stream::<u8>::new();
+    let mut slot: Option<Stream<u8>> = Some(rx);
+    let taken = slot.take();
+    assert slot matches { None };
+    builtin::drop(taken);
+    assert tx.write([1]).result == CopyResult::Dropped;
+}
+
+test "replace returns what was there" {
+    let [rx, tx] = Stream::<u8>::new();
+    let [rx2, tx2] = Stream::<u8>::new();
+    let mut slot: Option<Stream<u8>> = Some(rx);
+    let old = slot.replace(rx2);
+    builtin::drop(old);
+    assert tx.write([1]).result == CopyResult::Dropped;
+    builtin::drop(slot);
+    assert tx2.write([1]).result == CopyResult::Dropped;
+}
+
+affine struct Holder {
+    slot: Option<Stream<u8>>,
+}
+
+test "take from a field" {
+    let [rx, tx] = Stream::<u8>::new();
+    let mut holder = Holder { slot: Some(rx) };
+    let taken = holder.slot.take();
+    builtin::drop(taken);
+    assert tx.write([1]).result == CopyResult::Dropped;
+    assert holder.slot matches { None };
+}
+
+test "copyable values replace as well" {
+    let mut n = 1;
+    assert builtin::replace(&mut n, 2) == 1;
+    assert n == 2;
+}

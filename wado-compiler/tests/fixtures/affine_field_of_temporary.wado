@@ -1,0 +1,25 @@
+// A field of a value no binding holds moves out of that temporary, which owns
+// it; one read through a dereference is copied out of a reference.
+use { Fields } from "wasi:http";
+
+affine struct Holder {
+    f: Fields,
+}
+
+fn make() -> Holder {
+    return Holder { f: Fields::new() };
+}
+
+fn owned() -> Fields {
+    return make().f;
+}
+
+fn borrowed(h: &Holder) -> Fields {
+    return (*h).f;
+}
+
+export fn run() {
+}
+
+__DATA__
+{"compile_error": ":18:12: analysis error: cannot move affine type `Fields` out of a reference"}

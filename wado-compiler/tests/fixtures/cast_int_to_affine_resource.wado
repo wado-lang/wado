@@ -1,0 +1,10 @@
+// `as` converts no integer to an affine resource: each cast of one integer
+// minted another owner of its handle.
+use { Fields } from "wasi:http";
+
+test {
+    let fields = 0 as Fields;
+}
+
+__DATA__
+{"compile_error": "cannot cast 'i32' to 'Fields': an affine resource converts to no other type; `ResourceId::of(&r)` reads its identity"}

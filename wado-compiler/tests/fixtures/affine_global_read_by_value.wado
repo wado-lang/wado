@@ -1,0 +1,15 @@
+// A global holding an affine value is never read by value: no check follows a
+// global across functions, so a read would copy it.
+use { Fields } from "wasi:http";
+
+global mut SLOT: Option<Fields> = null;
+
+fn eat(f: Option<Fields>) {
+}
+
+export fn run() {
+    eat(SLOT);
+}
+
+__DATA__
+{"compile_error": ":11:9: analysis error: cannot read global `SLOT` by value: it holds an affine value"}

@@ -96,7 +96,7 @@ pub struct PlacedRead<Axes> {
 
 /// A buffer the backend owns. A struct, so a list hands one out by reference,
 /// which it cannot do for a resource held bare.
-struct Slot {
+affine struct Slot {
     buffer: GpuBuffer,
     words: i32,
     /// Unique among the buffers the backend has made, so a cached bind group
@@ -119,12 +119,12 @@ struct Spare {
 
 /// Values at places that stay theirs while they live, so a place can name
 /// one, and a place a dropped value left is the next one's.
-struct Places<T> {
+struct Places<affine T> {
     held: List<Option<T>>,
     vacant: List<i32>,
 }
 
-impl<T> Places<T> {
+impl<affine T> Places<T> {
     fn new() -> Places<T> {
         return Places { held: [], vacant: [] };
     }
@@ -135,7 +135,7 @@ impl<T> Places<T> {
             self.held.push(Option::Some(value));
             return self.held.len() - 1;
         };
-        self.replace(at, Option::Some(value));
+        self.held[at] = Option::Some(value);
         return at;
     }
 
@@ -155,22 +155,14 @@ impl<T> Places<T> {
 
     /// Drops the value at `at`.
     fn remove(&mut self, at: i32) {
-        self.replace(at, null);
+        self.held[at] = null;
         self.vacant.push(at);
-    }
-
-    fn replace(&mut self, at: i32, value: Option<T>) {
-        // A store into an element drops nothing it replaces (a known gap of
-        // WEP: Resource Ownership), so the old value is popped, which does.
-        self.held.push(value);
-        self.held.swap(at, self.held.len() - 1);
-        self.held.pop();
     }
 }
 
 /// A bind group a dispatch made, which a later dispatch binding the same
 /// spans to the same shader reuses.
-struct CachedGroup {
+affine struct CachedGroup {
     group: GpuBindGroup,
     key: List<i32>,
     /// The last pass a dispatch bound it in.
@@ -178,7 +170,7 @@ struct CachedGroup {
 }
 
 /// A compiled shader, held as `Slot` holds a buffer.
-struct Pipeline {
+affine struct Pipeline {
     compiled: GpuComputePipeline,
     layout: GpuBindGroupLayout,
 }
@@ -186,7 +178,7 @@ struct Pipeline {
 /// The encoder recording a pass's commands until they are submitted, and the
 /// one compute pass every dispatch goes into. A compute pass makes each
 /// dispatch see what the ones before it wrote.
-struct Recording {
+affine struct Recording {
     encoder: GpuCommandEncoder,
     pass: GpuComputePassEncoder,
 }
@@ -201,7 +193,7 @@ struct Parameters {
 }
 
 /// The kernels on a WebGPU device, and on the CPU where no shader is written.
-pub struct WebGpuBackend {
+pub affine struct WebGpuBackend {
     device: GpuDevice,
     queue: GpuQueue,
     pipelines: List<Pipeline>,

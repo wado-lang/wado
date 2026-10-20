@@ -1127,9 +1127,9 @@ fn test_library_export_reaching_a_resource_is_refused() {
     let dir = tempfile::tempdir().unwrap();
     let cases = [
         "export fn take(d: Descriptor) -> i32 { return 1; }",
-        "export struct Holder { pub d: Descriptor }\n\
+        "export affine struct Holder { pub d: Descriptor }\n\
          export fn take(h: Holder) -> i32 { return 1; }",
-        "export variant Payload { Open(Descriptor), Closed }\n\
+        "export affine variant Payload { Open(Descriptor), Closed }\n\
          export fn take(p: Payload) -> i32 { return 1; }",
         "export type Handle = Descriptor;\n\
          export fn take(h: Handle) -> i32 { return 1; }",
@@ -1158,7 +1158,7 @@ fn test_library_export_reaching_a_resource_through_an_alias_is_refused() {
     std::fs::write(
         dir.path().join("other.wado"),
         "use { Descriptor } from \"wasi:filesystem\";\n\
-         export struct Holder { pub d: Descriptor }\n",
+         export affine struct Holder { pub d: Descriptor }\n",
     )
     .unwrap();
     let src = dir.path().join("lib.wado");

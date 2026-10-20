@@ -2,7 +2,7 @@
 // Tests that Future::<T>::new() can create a future handle pair.
 //
 // This test exercises:
-// - Future::<T>::new() - create a future pair [Future<T>, i32]
+// - Future::<T>::new() - create a future pair [Future<T>, FutureWritable<T>]
 //   where the first element is the readable handle (rx)
 //   and the second element is the writable handle (tx)
 
@@ -10,11 +10,12 @@ use { Request, Response, ErrorCode, Fields, Headers, Trailers } from "wasi:http"
 
 export async fn handle(request: Request) -> Result<Response, ErrorCode> {
     // Create a trailers future pair
-    let [future_rx, _future_tx] = Future::<Result<Option<Trailers>, ErrorCode>>::new();
+    let [future_rx, future_tx] = Future::<Result<Option<Trailers>, ErrorCode>>::new();
 
-    // Verify we got valid handles (non-negative i32 values)
-    // The rx and tx handles are opaque i32 values managed by the runtime
-    // We can't inspect them directly, but creating them should not trap
+    // A writable end dropped unwritten traps, and a write waits for its reader,
+    // so the reader goes first and the write then finds it dropped.
+    future_rx.drop();
+    future_tx.write(Result::<Option<Trailers>, ErrorCode>::Ok(null));
 
     // Return 200 OK
     let [trailers_future, trailers_tx] = Future::<Result<Option<Trailers>, ErrorCode>>::new();
@@ -28,5 +29,5 @@ __DATA__
 {
     "wasi:http/service": {"status": 200},
     "wir_not_expect:O2": ["drop(struct.new \"tuple"],
-    "wir_expect:O2": ["drop(\"wasi/future-new\"())"]
+    "wir_expect:O2": ["builtin::i32_wrap_i64(local.tee $cm_pair_"]
 }

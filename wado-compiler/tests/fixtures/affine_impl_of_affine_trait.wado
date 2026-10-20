@@ -1,0 +1,26 @@
+// An affine type implements an `affine trait`, whose bodies hold `Self` to
+// moves.
+use { Fields } from "wasi:http";
+
+affine struct Holder {
+    f: Fields,
+}
+
+affine trait Named {
+    fn name(&self) -> String;
+
+    fn shout(&self) -> String {
+        return `${self.name()}!`;
+    }
+}
+
+impl Named for Holder {
+    fn name(&self) -> String {
+        return "holder";
+    }
+}
+
+test {
+    let h = Holder { f: Fields::new() };
+    assert h.shout() == "holder!";
+}

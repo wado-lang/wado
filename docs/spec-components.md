@@ -157,13 +157,15 @@ call and returns an `AsyncCall<T>` at once. The caller decides when to wait:
 
 - `.wait()` blocks until the call returns, then yields its `T`.
 - `.cancel()` abandons the call.
-- `.join(&set)` adds the call to a `WaitableSet`, so one wait covers several
-  calls and streams.
+- `set.join(call)` moves the call into a `WaitableSet`, so one wait covers
+  several calls and streams.
 
 A function or closure that starts an async call also holds the effects these
 methods declare, so it may later wait on that call without declaring them. A
 closure is a body of its own: a call it starts grants nothing to the function
-around it.
+around it. A call owns its `Subtask`, so a function handed one through its
+signature holds them too
+([Resources as Effects](./spec-effects.md#resources-as-effects)).
 
 <!-- {"fixture":"spec_components_async_import.wado"} -->
 
@@ -178,28 +180,82 @@ fn fetch(req: Request) -> Result<Response, ErrorCode> with Client {
 
 test {
     let mut mock = MockClient {};
-    let response = with Client => &mut mock do { fetch(new_request()) };
-    assert response matches { Ok(_) };
+    let fetched = with Client => &mut mock do { fetch(mock.new_request()) matches { Ok(_) } };
+    assert fetched;
+    mock.end_writes();
 }
 ```
 
-An `AsyncCall<T>` is used once: `wait` or `cancel` ends the call, and a later
-`wait`, `cancel` or `join` on it traps. A copy names the same call, so it ends
-with the original. `join` only registers the call with the set, so the caller
-still owes the `wait` or `cancel` that ends it. A call never waited on nor
-cancelled leaks its subtask handle and result buffer.
+An `AsyncCall<T>` is affine: `wait` and `cancel` take it by value, and
+assigning one moves it ([Affine Types](./spec-types.md#affine-types)). A
+call that drops unawaited is cancelled, and its result buffer freed.
 
-<!-- {"fixture":"async_call_copy_shares_end.wado"} -->
+<!-- {"fixture":"async_call_moves.wado"} -->
 
 ```wado
 with Fetch => &Canned {} do {
     let call = Fetch::get("/abc");
-    let copy = call;
-    assert call.wait() == 4;
-    println("waited");
-    copy.cancel();             // traps: the call ended at `wait`
+    let moved = call;
+    assert call.wait() == 4;   // error: `call` moved to `moved`
+    println(`${moved.wait()}`);
 }
 ```
+
+#### Waiting on Several
+
+A `WaitableSet<W>` owns what it waits on. `join` moves a member in, and
+`wait` blocks until one has an event, then moves that member back out in a
+`Ready<W>` beside the event. `poll` asks without blocking. The event is a
+`ReadyEvent`: `Call` with the `CallState` a call moved to, or `Unreported` for a
+member with no handle for the host to report. A set that drops drops its
+remaining members first.
+
+A member is any type implementing `Waitable`. The trait is sealed: the standard
+library implements it on the calls, since a hand-written `waitable_id` could
+name a handle its value does not own. A stream or future end is no member: each
+copy on one waits inside the binding, so the host never has an event left to
+report for it. A set waiting on two kinds takes a variant over them, which
+derives the trait with the marker `impl Waitable for V;`. Each case holds one member, or none for one that is
+ready without the host:
+
+<!-- {"fixture":"waitable_set_variant_members.wado"} -->
+
+```wado
+affine variant Timer {
+    Short(AsyncCall<()>),
+    Long(AsyncCall<()>),
+}
+
+impl Waitable for Timer;
+
+fn first_ready() -> String with MonotonicClock {
+    let mut set = WaitableSet::<Timer>::new();
+    set.join(Timer::Long(MonotonicClock::wait_for(60_000_000_000)));
+    set.join(Timer::Short(MonotonicClock::wait_for(0)));
+    let ready = set.wait();
+    let name = match ready.member {
+        Short(call) => {
+            call.wait();
+            "short"
+        },
+        Long(call) => {
+            call.wait();
+            "long"
+        },
+    };
+    return `${name} first, ${set.len()} left`;
+}
+
+export fn run() with (Stdout, MonotonicClock) {
+    assert first_ready() == "short first, 1 left";
+    println("set dropped");
+}
+```
+
+The host reports a call's resolution once, but a call a set handed back
+after its resolution still ends as any call does. `wait` returns its result,
+`cancel` and a drop end it, and a set it joins again reports it at once with
+the same event.
 
 #### Handling an Async Operation
 
@@ -213,16 +269,17 @@ returns the value at once.
 ```wado
 impl Client for MockClient {
     fn send(&mut self, request: Request) -> Result<Response, ErrorCode> {
-        resume Result::<Response, ErrorCode>::Ok(canned_response());
+        resume Result::<Response, ErrorCode>::Ok(self.canned_response());
     }
 }
 
 test {
     let mut mock = MockClient {};
     with Client => &mut mock do {
-        let call = Client::send(new_request());
+        let call = Client::send(mock.new_request());
         assert call.wait() matches { Ok(_) };   // completed already
     };
+    mock.end_writes();
 }
 ```
 
@@ -241,6 +298,19 @@ other end reads, and a `read` blocks until the other end writes, so the two ends
 must be driven by different tasks. A component cannot start a task of its own,
 so one end goes to another task: an async import's subtask, or the caller of an
 `export async fn`. A task that drives both ends blocks forever.
+
+A future's ends are each used once, so both consume their end:
+`Future::read(self)` and `FutureWritable::write(self, value)`. A second read or
+write is a use after move. A `FutureWritable` dropped before its write traps
+with a message naming it, since the reader would otherwise wait forever.
+
+A write hands back what it did not deliver: the part of the value a reader
+dropped before taking, or the suffix of a stream write the reader did not
+take. `FutureWritable::write` returns a `FutureWrite<T> { rest: Option<T>, result }`, and `StreamWritable::write` a `StreamWrite<T> { rest: List<T>, result }`. A caller that ignores the result drops the rest.
+
+A future write's `result` is a `FutureWriteResult`. It is `Pending` where the
+write returned before its reader read: the host then holds the value and hands
+it to the reader, so nothing comes back in `rest`.
 
 ## Linking and Resources
 
@@ -306,29 +376,37 @@ fn eat(c: Counter) { }
 
 fn misuse(c: Counter, d: Counter) {
     eat(c);          // moves `c`
-    c.bump();        // ERROR: resource `c` used after it was moved
+    c.bump();        // ERROR: affine value `c` used after it was moved
     d.consume();     // a by-value `self` moves `d` too
 }
 ```
 
 The check follows control flow. A move on one branch of an `if` or `match` counts after the branches meet, unless that branch diverges. A move inside a loop body is a use after move on the next iteration. A new `let` of the name, or an assignment to it, makes it usable again.
 
-A value that holds an affine resource, directly or through a field, element or payload, is move-only in the same way. It moves as a whole: a resource is not moved out of it on its own, so a consuming method (below) is how one is taken out.
+A value that holds an affine resource, directly or through a field, element or payload, is move-only in the same way. The check tracks each place, a binding or a field path under it: moving `h.f` out of an owned `h` leaves its other fields usable, and a later use of `h` or `h.f` is a use after move.
+
+Three positions never move an affine value:
+
+- A closure body sees its captures by reference.
+- A `match` guard sees the arm's bindings by reference.
+- A global is never read by value, since no check follows it across functions.
+
+A `match` or `if let` consumes its scrutinee when an arm is entered. A refutable pattern that fails consumes nothing, so the `else` of an `if let` or a `let ... else` may still use it.
 
 A method consumes a resource through a bare `self` receiver, and takes a reference to it through `&self` or `&mut self` (see [Method Receiver: `self` by Value](./spec-memory.md#method-receiver-self-by-value)). `Option` and `Result` take `self` by value in `unwrap`, `expect`, `unwrap_or`, `unwrap_err` and `expect_err`, so extracting a resource consumes the container and leaves the resource with one owner.
 
 #### No Move Out of a Reference
 
-Returning a resource reached through a `&` or `&mut` parameter, `&self` included, is a compile error. A reference leaves its referent with its owner, so the returned resource would have a second owner. The rule covers a field read, a dereference, a `match` binding over the referenced value, and a `let` bound from any of these. A resource the function produces itself may be returned.
+Reading an affine value by value through a `&` or `&mut`, `&self` included, is a compile error. A reference leaves its referent with its owner, so the value read would have a second owner. The rule covers a field read through a reference and a dereference, wherever the value goes: returned, passed, bound or stored. Reading it where it stands (`self.f.has(name)`) takes no ownership and is allowed.
 
 <!-- {"fixture":"spec_components_move_out_of_reference.wado"} -->
 
 ```wado
-struct Holder { f: Fields }
+affine struct Holder { f: Fields }
 
 impl Holder {
     fn peek(&self) -> Fields {
-        return self.f;       // ERROR: cannot move resource `Fields` out of a reference
+        return self.f;       // ERROR: cannot move affine type `Fields` out of a reference
     }
 }
 ```
@@ -348,19 +426,19 @@ test {
 }
 ```
 
-#### Generic Calls Through a Reference
+#### Elements
 
-A generic function's signature says whether its result is copied or taken out. When the result names a type parameter that a `&` parameter stores (in a field, an element, a payload or behind a reference) and no `&mut` parameter does, the call copies it out of the referenced storage, which keeps it: `list[i]`, `List::last`, and a `fn first(&self) -> T` of one's own. Where the result holds a resource, taking it (binding, passing or returning it) is a compile error. Reading it where it stands (`list[0].has(name)`) leaves no second owner and is allowed.
+An element of a list or an array is read through the reference indexing takes, so reading it by value (`list[i]`, `list[i].f`) is a move out of a reference too. Reading it where it stands (`list[0].has(name)`) is allowed.
 
 <!-- {"fixture":"spec_components_copy_out_of_reference.wado"} -->
 
 ```wado
 fn first(list: List<Fields>) -> Fields {
-    return list[0];      // ERROR: cannot copy resource `Fields` out of a reference
+    return list[0];      // ERROR: cannot move affine type `Fields` out of a reference
 }
 ```
 
-When a `&mut` parameter stores it, the call takes the result out, as `List::pop` and `List::remove` do. The caller owns it, so a result nothing binds is dropped.
+A generic reaches a resource only through a parameter declared `affine` (see [Affine Types](./spec-types.md#affine-types)), so a call's result is never a copy of one. `List::pop` and `List::remove` take the element out. The caller owns it, so a result nothing binds is dropped.
 
 <!-- {"fixture":"spec_components_extract_through_mut.wado"} -->
 
@@ -378,9 +456,9 @@ test {
 
 #### Drop
 
-An owned resource that has not moved is dropped when its scope ends, on every path out of it. A move suppresses that drop, so each handle is dropped exactly once. An imported resource drops through the Component Model's `resource.drop`. A value holding resources drops each of them, a struct's fields in declaration order. A resource value discarded as a statement (`Fields::new();`, `let _ = ...`) is dropped there.
+An owned resource drops as any affine value does (see [Drop](./spec-types.md#drop)), so each handle is dropped exactly once. An imported resource drops through the Component Model's `resource.drop`. A resource's `fn drop(self)` is its `Drop` impl: it consumes its receiver, so a use after it is a use after move.
 
-A resource's `fn drop(self)` consumes its receiver, so the scope does not drop it again, and a use after it is a use after move.
+Lowering a resource to the host as an `own`, as an argument, a result or what a stream or future write carries, moves it: the host owns the handle from then on.
 
 A trap does not unwind, so it runs no drops.
 

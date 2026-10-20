@@ -317,7 +317,7 @@ impl Holder {
 
 export fn run() {}
 "#,
-            "cannot move resource `Fields` out of a reference",
+            "cannot move affine type `Fields` out of a reference",
         ),
     ];
     futures::executor::block_on(async {

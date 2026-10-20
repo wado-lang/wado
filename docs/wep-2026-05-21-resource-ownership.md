@@ -18,6 +18,12 @@ The `move` and `unique` keywords once reserved for this work are unnecessary:
 the analysis needs move-only semantics, not new syntax
 ([No `move` or `unique` keyword](#no-move-or-unique-keyword)).
 
+[WEP: Affine Types](./wep-2026-10-17-affine-types.md#what-this-replaces)
+replaces part of this one. A call through a reference no longer copies or
+extracts, since the signature states it. Cleanup synthesis retires for the
+scope-exit drop of what is not null. Most of the resource gaps below close.
+The move check and value-copy elision stand.
+
 ### CM handle types
 
 | Handle      | Meaning                                                                        |

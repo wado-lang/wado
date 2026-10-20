@@ -1,0 +1,14 @@
+// `cancel` consumes an `AsyncCall` as `wait` does, so a `join` after it is a
+// use after move.
+
+use { MonotonicClock } from "wasi:clocks";
+
+export fn run() with MonotonicClock {
+    let call = MonotonicClock::wait_for(1_000_000_000);
+    call.cancel();
+    let mut set = WaitableSet::<AsyncCall<()>>::new();
+    set.join(call);
+}
+
+__DATA__
+{"compile_error": ":10:14: analysis error: affine value `call` used after it was moved (moved at 8:5)"}

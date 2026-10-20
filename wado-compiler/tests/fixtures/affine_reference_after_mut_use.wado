@@ -1,0 +1,21 @@
+// A `&mut` use of an affine local, other than through the reference, may move
+// out what the reference reads: `pop` takes the element `first` names.
+affine struct Tok {
+    id: i32,
+}
+
+impl Drop for Tok {
+    fn drop(self) {
+    }
+}
+
+test {
+    let mut toks: List<Tok> = [];
+    toks.push(Tok { id: 1 });
+    let first = &toks[0];
+    let popped = toks.pop();
+    assert first.id == 1;
+}
+
+__DATA__
+{"compile_error": ":17:12: analysis error: `first` refers into `toks`, which a `&mut` use at 16:18 may have moved out of"}

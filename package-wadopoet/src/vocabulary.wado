@@ -27,7 +27,7 @@ pub fn is_keyword<S: AsStrSlice>(name: S) -> bool {
             _ => false,
         },
         6 => match name {
-            "assert" | "effect" | "export" | "global" | "import" | "resume" | "return" | "struct" => true,
+            "affine" | "assert" | "effect" | "export" | "global" | "import" | "resume" | "return" | "struct" => true,
             _ => false,
         },
         7 => match name {
@@ -64,11 +64,11 @@ fn is_prelude_name<S: AsStrSlice>(name: S) -> bool {
             _ => false,
         },
         4 => match name {
-            "From" | "Hash" | "Left" | "Less" | "List" | "None" | "Some" | "Step" | "bf16" | "bool" | "char" | "i128" | "u128" | "v128" => true,
+            "Call" | "Drop" | "From" | "Hash" | "Left" | "Less" | "List" | "None" | "Some" | "Step" | "bf16" | "bool" | "char" | "i128" | "u128" | "v128" => true,
             _ => false,
         },
         5 => match name {
-            "Array" | "BitOr" | "Camel" | "Empty" | "Equal" | "Error" | "Kebab" | "Octal" | "Right" | "Slice" | "Snake" | "panic" => true,
+            "Array" | "BitOr" | "Camel" | "Empty" | "Equal" | "Error" | "ForOf" | "Kebab" | "Octal" | "Ready" | "Right" | "Slice" | "Snake" | "panic" => true,
             _ => false,
         },
         6 => match name {
@@ -76,23 +76,23 @@ fn is_prelude_name<S: AsStrSlice>(name: S) -> bool {
             _ => false,
         },
         7 => match name {
-            "AsSlice" | "Default" | "Display" | "Dropped" | "FromStr" | "Greater" | "Inspect" | "Invalid" | "IterMap" | "IterZip" | "Product" | "Reflect" | "Subtask" | "TryFrom" => true,
+            "AsSlice" | "Default" | "Display" | "Dropped" | "FromStr" | "Greater" | "Inspect" | "Invalid" | "IterMap" | "IterZip" | "Pending" | "Product" | "Reflect" | "Started" | "Subtask" | "TryFrom" => true,
             _ => false,
         },
         8 => match name {
-            "ByteList" | "EnumCase" | "Extremum" | "FlagsBit" | "Identity" | "IndexRef" | "IterSkip" | "IterTake" | "Iterator" | "LowerExp" | "LowerHex" | "Ordering" | "Sequence" | "StrSlice" | "UpperExp" | "UpperHex" | "Waitable" => true,
+            "ByteList" | "EnumCase" | "Extremum" | "FlagsBit" | "Identity" | "IndexRef" | "IterSkip" | "IterTake" | "Iterator" | "LowerExp" | "LowerHex" | "Ordering" | "Returned" | "Sequence" | "Starting" | "StrSlice" | "UpperExp" | "UpperHex" | "Waitable" => true,
             _ => false,
         },
         9 => match name {
-            "Alignment" | "AsyncCall" | "ByteArray" | "ByteSlice" | "Cancelled" | "CaseStyle" | "Completed" | "Formatter" | "IterChain" | "Utf8Error" | "WaitEvent" => true,
+            "Alignment" | "AsyncCall" | "ByteArray" | "ByteSlice" | "CallState" | "Cancelled" | "CaseStyle" | "Completed" | "Formatter" | "IterChain" | "Utf8Error" => true,
             _ => false,
         },
         10 => match name {
-            "AsStrSlice" | "CopyResult" | "IndexValue" | "IterFilter" | "IterStepBy" => true,
+            "AsStrSlice" | "CopyResult" | "IndexValue" | "IterFilter" | "IterStepBy" | "ListCursor" | "ReadyEvent" | "ResourceId" | "Unreported" => true,
             _ => false,
         },
         11 => match name {
-            "AsByteSlice" | "FromLeBytes" | "IndexAssign" | "IndexRefMut" | "NegOverflow" | "PosOverflow" | "PushDisplay" | "ReflectEnum" | "SliceChunks" | "StrCharIter" | "StreamChunk" | "StreamWrite" | "StructField" | "VariantCase" | "WaitableSet" | "unreachable" => true,
+            "AsByteSlice" | "FromLeBytes" | "FutureWrite" | "IndexAssign" | "IndexRefMut" | "NegOverflow" | "PosOverflow" | "PushDisplay" | "ReflectEnum" | "SliceChunks" | "StrCharIter" | "StreamChunk" | "StreamWrite" | "StructField" | "VariantCase" | "WaitableSet" | "unreachable" => true,
             _ => false,
         },
         12 => match name {
@@ -104,7 +104,7 @@ fn is_prelude_name<S: AsStrSlice>(name: S) -> bool {
             _ => false,
         },
         14 => match name {
-            "FloatErrorKind" | "FutureWritable" | "LenientFromStr" | "ParseBoolError" | "ParseCharError" | "RangeExclusive" | "RangeInclusive" | "ReflectNewtype" | "ReflectVariant" | "ScreamingKebab" | "ScreamingSnake" | "SliceValueIter" | "StreamWritable" => true,
+            "AffineResource" | "FloatErrorKind" | "FutureWritable" | "LenientFromStr" | "ParseBoolError" | "ParseCharError" | "RangeExclusive" | "RangeInclusive" | "ReflectNewtype" | "ReflectVariant" | "ScreamingKebab" | "ScreamingSnake" | "SliceValueIter" | "StreamWritable" => true,
             _ => false,
         },
         15 => match name {
@@ -116,7 +116,7 @@ fn is_prelude_name<S: AsStrSlice>(name: S) -> bool {
             _ => false,
         },
         17 => match name {
-            "LenientParseError" => true,
+            "FutureWriteResult" | "LenientParseError" => true,
             _ => false,
         },
         18 => match name {
@@ -124,7 +124,11 @@ fn is_prelude_name<S: AsStrSlice>(name: S) -> bool {
             _ => false,
         },
         22 => match name {
-            "StrSplitWhitespaceIter" => true,
+            "CancelledBeforeStarted" | "StrSplitWhitespaceIter" => true,
+            _ => false,
+        },
+        23 => match name {
+            "CancelledBeforeReturned" => true,
             _ => false,
         },
         _ => false,

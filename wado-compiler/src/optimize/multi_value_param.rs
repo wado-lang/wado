@@ -320,6 +320,8 @@ struct ReadWalk<'s, 'b, 'a> {
     reads: Reads<'a>,
     whole_reads: Vec<ExprId>,
     field_subjects: IndexMap<ExprId, &'a str>,
+    /// The places assignments write.
+    written: IndexSet<ExprId>,
     /// The call arguments that hand the local on whole.
     forwarded: IndexSet<ExprId>,
     values_seen: IndexSet<ValueId>,
@@ -334,6 +336,7 @@ impl<'s, 'b, 'a> ReadWalk<'s, 'b, 'a> {
             reads: Reads::default(),
             whole_reads: Vec::new(),
             field_subjects: IndexMap::default(),
+            written: IndexSet::default(),
             forwarded: IndexSet::default(),
             values_seen: IndexSet::default(),
             sources_seen: IndexSet::default(),
@@ -405,6 +408,12 @@ impl<'s, 'b, 'a> ReadWalk<'s, 'b, 'a> {
         // in its subtree, which this walk reaches on its own.
         match &self.scope.body.exprs[e].kind {
             ExprKind::Local { index, .. } if *index == self.scope.local => self.whole_reads.push(e),
+            // A field written writes the caller's aggregate, which a split
+            // local cannot reach, so the local under it counts as read whole.
+            ExprKind::Assign { target, .. } => {
+                self.written.insert(*target);
+            }
+            ExprKind::FieldAccess { .. } if self.written.contains(&e) => {}
             ExprKind::FieldAccess {
                 expr: inner,
                 field_name,

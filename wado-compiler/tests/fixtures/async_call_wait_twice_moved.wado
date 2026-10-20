@@ -1,0 +1,13 @@
+// `wait` consumes an `AsyncCall`, so a second one is a use after move rather
+// than a lift from a buffer already freed.
+
+use { MonotonicClock } from "wasi:clocks";
+
+export fn run() with MonotonicClock {
+    let call = MonotonicClock::wait_for(0);
+    call.wait();
+    call.wait();
+}
+
+__DATA__
+{"compile_error": ":9:5: analysis error: affine value `call` used after it was moved (moved at 8:5)"}

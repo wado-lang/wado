@@ -36,7 +36,7 @@ pub fn derive(program: &mut Program, trait_: TraitDeclId, declarations: &[Declar
         if has_impl.contains(&decl.id) {
             continue;
         }
-        let bounds = derived_bounds(trait_, decl);
+        let bounds = derived_bounds(trait_, decl, program.copyable == Some(trait_));
         let id = program.push_impl(ImplDef {
             trait_: Some(trait_),
             trait_args: Vec::new(),
@@ -44,10 +44,19 @@ pub fn derive(program: &mut Program, trait_: TraitDeclId, declarations: &[Declar
             params: bounds.iter().cloned().map(ParamDef::bounded).collect(),
             origin: ImplOrigin::Derived,
         });
+        // A member's impl may ask its parameter be copyable, which the
+        // derivation leaves to the instance: an argument the declaration
+        // marks `affine` is checked where it is given.
         let env = Env {
             param_bounds: bounds
                 .iter()
-                .map(|b| b.iter().copied().map(ParamBound::bare).collect())
+                .map(|b| {
+                    b.iter()
+                        .copied()
+                        .chain(program.copyable)
+                        .map(ParamBound::bare)
+                        .collect()
+                })
                 .collect(),
         };
         standing.push((decl, id, env));
@@ -136,11 +145,22 @@ pub fn pair_comparisons(program: &mut Program, eq: TraitDeclId, ord: TraitDeclId
 }
 
 /// The bound each parameter of the derived impl carries: `trait_` where a
-/// member mentions it, none otherwise.
-fn derived_bounds(trait_: TraitDeclId, decl: &Declaration) -> Vec<Vec<TraitDeclId>> {
+/// member mentions it, none otherwise. A reference copies whatever it points
+/// to, so for `Copyable` a mention behind one does not count.
+fn derived_bounds(
+    trait_: TraitDeclId,
+    decl: &Declaration,
+    copyable: bool,
+) -> Vec<Vec<TraitDeclId>> {
     (0..decl.params)
         .map(|index| {
-            let mentioned = decl.members.iter().any(|m| m.mentions_param(index));
+            let mentioned = decl.members.iter().any(|m| {
+                if copyable {
+                    m.owns_param(index)
+                } else {
+                    m.mentions_param(index)
+                }
+            });
             if mentioned { vec![trait_] } else { Vec::new() }
         })
         .collect()

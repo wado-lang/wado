@@ -1,0 +1,20 @@
+// A reference into an affine local is read through after the local moved:
+// what it reads went with the move.
+affine struct Tok {
+    id: i32,
+}
+
+impl Drop for Tok {
+    fn drop(self) {
+    }
+}
+
+test {
+    let t = Tok { id: 7 };
+    let r = &t;
+    builtin::drop(t);
+    assert r.id == 7;
+}
+
+__DATA__
+{"compile_error": ":16:12: analysis error: `r` refers into `t`, which moved at 15:19"}

@@ -1,32 +1,12 @@
-// WaitableSet::poll E2E test
-// Tests that WaitableSet::poll() returns None when no events are ready.
+// Polling a WaitableSet with no members finds no event.
 
-use { Request, Response, ErrorCode, Fields, Headers, Trailers } from "wasi:http";
+use { println, Stdout } from "core:cli";
 
-export async fn handle(request: Request) -> Result<Response, ErrorCode> with WaitableSet {
-    // Create a waitable set and poll it (should get None since nothing is joined)
-    let ws = WaitableSet::new();
-    let event = ws.poll();
-
-    // Poll should return None since there are no waitables
-    if let Some(_) = event {
-        // Unexpected — should not happen. `ws` is dropped once after the `if`.
-        let [trailers_future, trailers_tx] = Future::<Result<Option<Trailers>, ErrorCode>>::new();
-        let headers = Headers::new();
-        let [response, _tx_future] = Response::new(headers, null, trailers_future);
-        task return Result::<Response, ErrorCode>::Ok(response);
-        trailers_tx.write(Result::<Option<Trailers>, ErrorCode>::Ok(null));
-    }
-
-    ws.drop();
-
-    // Return 200 OK
-    let [trailers_future, trailers_tx] = Future::<Result<Option<Trailers>, ErrorCode>>::new();
-    let headers = Headers::new();
-    let [response, _tx_future] = Response::new(headers, null, trailers_future);
-    task return Result::<Response, ErrorCode>::Ok(response);
-    trailers_tx.write(Result::<Option<Trailers>, ErrorCode>::Ok(null));
+export fn run() with Stdout {
+    let mut set = WaitableSet::<Subtask>::new();
+    let ready = set.poll();
+    println(`ready: ${ready matches { Some(_) }}`);
 }
 
 __DATA__
-{"wasi:http/service": {"status": 200}}
+{"stdout": "ready: false\n"}

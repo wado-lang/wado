@@ -126,7 +126,7 @@ use gemma from "./gemma3.onnxtext"
 global LAYERS: i32 = 18;
 
 /// Gemma 3 with its weights loaded where `Bk` runs the kernels.
-pub struct Model<Bk: Backend> {
+pub struct Model<affine Bk: Backend> {
     backend: Bk,
     weights: gemma::Prepared<Bk>,
     /// The ids the caches hold the keys and values of.
@@ -136,7 +136,7 @@ pub struct Model<Bk: Backend> {
     caches: List<Bk::Tensor<f32, [gemma::Batch, gemma::KvHead, gemma::Past, gemma::Dim]>>,
 }
 
-impl<Bk: Backend> Model<Bk> {
+impl<affine Bk: Backend> Model<Bk> {
     /// Loads the weights onto `backend` from a safetensors checkpoint laid out
     /// as `gemma3-header.safetensors` says.
     pub fn load(backend: Bk, checkpoint: &ByteList) -> Result<Model<Bk>, LoadError> with _ {

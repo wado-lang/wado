@@ -1,0 +1,21 @@
+// `ResourceId::of(&r)` is a live resource's identity: equal for one resource,
+// distinct for two, and a copyable key.
+use { TreeMap } from "core:collections";
+use { Fields } from "wasi:http";
+
+test {
+    let a = Fields::new();
+    let b = Fields::new();
+    assert ResourceId::of(&a) == ResourceId::of(&a);
+    assert ResourceId::of(&a) != ResourceId::of(&b);
+
+    let mut names = TreeMap::<ResourceId, String>::new();
+    names[ResourceId::of(&a)] = "a";
+    names[ResourceId::of(&b)] = "b";
+    assert names[ResourceId::of(&b)] == "b";
+
+    let [rx, tx] = Stream::<u8>::new();
+    assert ResourceId::of(&rx) != ResourceId::of(&tx);
+    rx.drop();
+    tx.drop();
+}

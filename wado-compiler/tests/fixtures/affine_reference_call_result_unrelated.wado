@@ -1,0 +1,48 @@
+// A call's result keeps a borrow passed to it only where its declared return
+// type spells a reference that could point into the borrowed type. `View`
+// holds a `&Name`, which no `Tok` contains, so moving `t` leaves `v` intact.
+affine struct Tok {
+    id: i32,
+}
+
+impl Drop for Tok {
+    fn drop(self) {
+    }
+}
+
+struct Name {
+    text: String,
+}
+
+struct View {
+    name: &Name,
+}
+
+impl Tok {
+    fn label(&self, name: &Name) -> View {
+        return View { name };
+    }
+}
+
+fn read(t: &mut Tok) -> i32 {
+    return t.id;
+}
+
+fn view(t: &Tok, name: &Name) -> View {
+    return View { name };
+}
+
+test {
+    let mut t = Tok { id: 1 };
+    let n = Name { text: "a" };
+    let id = read(&mut t);
+    let v = view(&t, &n);
+    let w = t.label(&n);
+    let x = Tok::label(&t, &n);
+    let moved = t;
+    assert id == 1;
+    assert v.name.text == "a";
+    assert w.name.text == "a";
+    assert x.name.text == "a";
+    assert moved.id == 1;
+}

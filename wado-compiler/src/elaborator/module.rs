@@ -260,7 +260,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         );
                         scope.bind_param(
                             &param.name,
-                            BinderInScope::declared(idx, type_id, param.id),
+                            BinderInScope::declared(idx, type_id, param),
                             ScopedBound::pin_declared(param, self_binding),
                         );
                         method_type_param_names.push(param.name.clone());

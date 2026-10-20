@@ -302,6 +302,8 @@ pub(super) struct ImplHeader {
     /// `impl Trait for Type;` — a body-less derivation request rather than a
     /// real impl (WEP 2026-06-25 trait derivation).
     pub(super) is_synthesize_request: bool,
+    /// A marker the compiler wrote out, which a sealed trait admits.
+    pub(super) written_out: bool,
     /// Where the block is written, for diagnostics raised against it.
     pub(super) span: Span,
 }
@@ -1102,6 +1104,7 @@ impl TraitEnv {
                         methods: method_headers(defs, &impl_block.methods),
                         associated_types: impl_block.associated_types.clone(),
                         is_synthesize_request: impl_block.is_synthesize_request,
+                        written_out: impl_block.written_out,
                         span: impl_block.span,
                     },
                 );

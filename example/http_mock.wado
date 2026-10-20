@@ -9,7 +9,8 @@
 //!
 //! Mocked responses carry data in the status code and headers only: a body
 //! stream needs a concurrent reader (the host), which a same-task mock
-//! cannot provide.
+//! cannot provide. For the same reason a test ends each trailers future itself,
+//! once nothing reads the message it belongs to.
 //!
 //! Run the tests with `wado test example/http_mock.wado`, or serve for real
 //! with `wado serve example/http_mock.wado`.
@@ -17,9 +18,15 @@
 use { Request, Response, ErrorCode, Headers, FieldName, FieldValue, Trailers, StatusCode } from "wasi:http";
 use { Client } from "wasi:http";
 
+// Ends a message's trailers. An end dropped unwritten traps, and a write waits
+// for its reader, so it is written once the message is done.
+fn end_trailers(end: FutureWritable<Result<Option<Trailers>, ErrorCode>>) {
+    end.write(Result::<Option<Trailers>, ErrorCode>::Ok(null));
+}
+
 // A tiny gateway: `/status` reports the upstream health-check status in an
 // `x-upstream-status` response header, mapping upstream failures to 502.
-fn gateway(req: Request) -> Response with Client {
+fn gateway(req: Request) -> [Response, FutureWritable<Result<Option<Trailers>, ErrorCode>>] with Client {
     let path = match req.get_path_with_query() {
         Some(p) => p,
         None => "/",
@@ -28,12 +35,14 @@ fn gateway(req: Request) -> Response with Client {
         return respond(404, []);
     }
 
-    let [trailers_rx, _trailers_tx] = Future::<Result<Option<Trailers>, ErrorCode>>::new();
+    let [trailers_rx, trailers_tx] = Future::<Result<Option<Trailers>, ErrorCode>>::new();
     let [out_req, _req_future] = Request::new(Headers::new(), null, trailers_rx, null);
     out_req.set_authority(Option::<String>::Some("upstream.internal"));
     out_req.set_path_with_query(Option::<String>::Some("/health"));
 
-    return match Client::send(out_req).wait() {
+    let sent = Client::send(out_req).wait();
+    end_trailers(trailers_tx);
+    return match sent {
         Ok(upstream) => {
             let status = upstream.get_status_code() as i32;
             respond(200, [
@@ -44,27 +53,43 @@ fn gateway(req: Request) -> Response with Client {
     };
 }
 
-fn respond(status: StatusCode, headers: List<[String, String]>) -> Response {
+fn respond(
+    status: StatusCode,
+    headers: List<[String, String]>,
+) -> [Response, FutureWritable<Result<Option<Trailers>, ErrorCode>>] {
     let fields = Headers::new();
     for let [name, value] of headers {
         let _ = fields.append(name as FieldName, value.bytes().collect() as FieldValue);
     }
-    let [trailers_rx, _trailers_tx] = Future::<Result<Option<Trailers>, ErrorCode>>::new();
+    let [trailers_rx, trailers_tx] = Future::<Result<Option<Trailers>, ErrorCode>>::new();
     let [resp, _tx_future] = Response::new(fields, null, trailers_rx);
     let _ = resp.set_status_code(status);
-    return resp;
+    return [resp, trailers_tx];
 }
 
+// A Wado call runs the handler to its end, where it writes the trailers nothing
+// reads yet, so the tests call `gateway` rather than this.
 export async fn handle(request: Request) -> Result<Response, ErrorCode> with Client {
-    let response = gateway(request);
+    let [response, trailers] = gateway(request);
     task return Result::<Response, ErrorCode>::Ok(response);
+    end_trailers(trailers);
 }
 
 // Send-side mock: records every outgoing request path and replays a canned
-// status. Installed with `with Client => &mut mock do { ... }`.
-struct MockUpstream {
+// status. Installed with `with Client => &mut mock do { ... }`. It keeps the
+// trailers end of each response it makes, for `end_writes`.
+affine struct MockUpstream {
     hits: List<String> = [],
     status: StatusCode = 200,
+    ends: List<FutureWritable<Result<Option<Trailers>, ErrorCode>>> = [],
+}
+
+impl MockUpstream {
+    fn end_writes(&mut self) {
+        while let Some(end) = self.ends.pop() {
+            end_trailers(end);
+        }
+    }
 }
 
 impl Client for MockUpstream {
@@ -74,7 +99,9 @@ impl Client for MockUpstream {
             None => "",
         };
         self.hits.push(path);
-        resume Result::<Response, ErrorCode>::Ok(respond(self.status, []));
+        let [resp, end] = respond(self.status, []);
+        self.ends.push(end);
+        resume Result::<Response, ErrorCode>::Ok(resp);
     }
 }
 
@@ -91,11 +118,22 @@ impl Client for DeadUpstream {
 
 // Serve-side mock: a real `Request` resource, constructed instead of
 // received from the network.
-fn get(path: String) -> Request {
-    let [trailers_rx, _trailers_tx] = Future::<Result<Option<Trailers>, ErrorCode>>::new();
+fn get(path: String) -> [Request, FutureWritable<Result<Option<Trailers>, ErrorCode>>] {
+    let [trailers_rx, trailers_tx] = Future::<Result<Option<Trailers>, ErrorCode>>::new();
     let [req, _req_future] = Request::new(Headers::new(), null, trailers_rx, null);
     req.set_path_with_query(Option::<String>::Some(path));
-    return req;
+    return [req, trailers_tx];
+}
+
+// Drops a response the gateway answered, then ends what nothing reads any more.
+fn finish(
+    answer: [Response, FutureWritable<Result<Option<Trailers>, ErrorCode>>],
+    request_end: FutureWritable<Result<Option<Trailers>, ErrorCode>>,
+) {
+    let [response, response_end] = answer;
+    builtin::drop(response);
+    end_trailers(response_end);
+    end_trailers(request_end);
 }
 
 fn header_text(resp: &Response, name: String) -> String {
@@ -106,56 +144,48 @@ fn header_text(resp: &Response, name: String) -> String {
 
 test "/status pings the upstream and reports its status" {
     let mut upstream = MockUpstream { status: 204 };
-    let resp = with Client => &mut upstream do {
-        gateway(get("/status"));
+    let [req, req_end] = get("/status");
+    let answer = with Client => &mut upstream do {
+        gateway(req);
     };
-    assert resp.get_status_code() == 200;
-    assert header_text(&resp, "x-upstream-status") == "204";
+    assert answer.0.get_status_code() == 200;
+    assert header_text(&answer.0, "x-upstream-status") == "204";
     let hits: List<String> = ["/health"];
     assert upstream.hits == hits;
-}
-
-test "the exported handle routes through to the upstream" {
-    let mut upstream = MockUpstream { status: 204 };
-    let delivered = with Client => &mut upstream do {
-        handle(get("/status"));
-    };
-    let hits: List<String> = ["/health"];
-    assert upstream.hits == hits;
-    match delivered {
-        Result::Ok(resp) => {
-            assert resp.get_status_code() == 200;
-            assert header_text(&resp, "x-upstream-status") == "204";
-        },
-        Result::Err(_) => {
-            assert false;
-        },
-    }
+    finish(answer, req_end);
+    upstream.end_writes();
 }
 
 test "unknown path is 404 and never touches the upstream" {
     let mut upstream = MockUpstream {};
-    let resp = with Client => &mut upstream do {
-        gateway(get("/nope"));
+    let [req, req_end] = get("/nope");
+    let answer = with Client => &mut upstream do {
+        gateway(req);
     };
-    assert resp.get_status_code() == 404;
+    assert answer.0.get_status_code() == 404;
     assert upstream.hits.is_empty();
+    finish(answer, req_end);
 }
 
 test "upstream connection failure maps to 502" {
     let dead = DeadUpstream {};
-    let resp = with Client => &dead do {
-        gateway(get("/status"));
+    let [req, req_end] = get("/status");
+    let answer = with Client => &dead do {
+        gateway(req);
     };
-    assert resp.get_status_code() == 502;
+    assert answer.0.get_status_code() == 502;
+    finish(answer, req_end);
 }
 
 test "each request hits the upstream once" {
     let mut upstream = MockUpstream {};
     with Client => &mut upstream do {
-        gateway(get("/status"));
-        gateway(get("/status"));
+        for let _ of 0..<2 {
+            let [req, req_end] = get("/status");
+            finish(gateway(req), req_end);
+        }
     };
     let hits: List<String> = ["/health", "/health"];
     assert upstream.hits == hits;
+    upstream.end_writes();
 }

@@ -7,10 +7,11 @@ export async fn handle(request: Request) -> Result<Response, ErrorCode> {
     let path = request.get_path_with_query().unwrap_or("/");
     let tags = request.get_headers().get("x-tag" as FieldName);
 
-    let [done, _done_tx] = Future::<Result<(), ErrorCode>>::new();
+    let [done, done_tx] = Future::<Result<(), ErrorCode>>::new();
     let [request_body, _request_trailers] = Request::consume_body(request, done);
     let text = String::from_utf8_lossy(request_body.read_to_end_bytes());
     request_body.drop();
+    done_tx.write(Result::<(), ErrorCode>::Ok(()));
 
     let headers = Headers::new();
     assert headers.append("x-tag-echo" as FieldName, tags[0] as FieldValue) matches { Ok(_) };

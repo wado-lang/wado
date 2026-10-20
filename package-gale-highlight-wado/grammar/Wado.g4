@@ -161,7 +161,7 @@ withItem
     ;
 
 structDecl
-    : 'struct' typeName genericParams? '{' fieldList? '}'
+    : 'affine'? 'struct' typeName genericParams? '{' fieldList? '}'
     ;
 
 fieldList
@@ -197,7 +197,7 @@ flagsCase
     ;
 
 variantDecl
-    : 'variant' typeName genericParams? '{' variantCaseList? '}'
+    : 'affine'? 'variant' typeName genericParams? '{' variantCaseList? '}'
     ;
 
 variantCaseList
@@ -209,7 +209,7 @@ variantCase
     ;
 
 traitDecl
-    : 'trait' typeName genericParams? (':' traitBounds)? withClause? '{' traitMember* '}'
+    : 'affine'? 'trait' typeName genericParams? (':' traitBounds)? withClause? '{' traitMember* '}'
     ;
 
 interfaceDecl
@@ -238,7 +238,7 @@ traitMember
     ;
 
 traitMemberBody
-    : 'type' name genericParams? (':' traitBounds)? ';'
+    : 'affine'? 'type' name genericParams? (':' traitBounds)? ';'
     | functionDecl
     ;
 
@@ -269,7 +269,7 @@ genericParams
     ;
 
 genericParam
-    : '..'? 'effect'? name (':' traitBounds)? ('=' typeRef)?
+    : 'affine'? '..'? 'effect'? name (':' traitBounds)? ('=' typeRef)?
     ;
 
 traitBounds
@@ -334,7 +334,7 @@ memberName
     | 'import' | 'export' | 'assert' | 'global' | 'const' | 'matches'
     | 'true' | 'false' | 'null' | 'trap' | 'forward' | 'Self'
     | 'test' | 'do' | 'task' | 'extends' | 'internal' | 'resume' | 'self'
-    | 'contract' | 'unchecked'
+    | 'contract' | 'unchecked' | 'affine'
     ;
 
 block

@@ -6,7 +6,11 @@
 // which is expanded at monomorphization time.
 
 use { Formatter } from "core:prelude/format.wado";
-use { Ordering, Hash, Hasher } from "core:prelude/traits.wado";
+use { Ordering, Hash, Hasher, Copyable } from "core:prelude/traits.wado";
+
+/// A tuple copies where each of its elements does.
+impl<..T> Copyable for [..T] {
+}
 
 /// The alternate (`#`) rendering the tuple `Inspect` hands off to: one element
 /// per indented line.

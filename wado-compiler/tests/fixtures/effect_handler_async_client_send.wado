@@ -6,18 +6,29 @@
 use { Request, Response, ErrorCode, Fields, Headers, Trailers, StatusCode } from "wasi:http";
 use { Client } from "wasi:http/client.wado";
 
-struct MockClient {
+// A handler runs only until its `resume`, and nothing reads the mocked
+// response's trailers, so a write inside it would block forever (P3 futures
+// rendezvous). The mock keeps each writable end, and the caller ends it once the
+// response is dropped, since an end dropped unwritten traps.
+affine struct MockClient {
     calls: i32,
+    ends: List<FutureWritable<Result<Option<Trailers>, ErrorCode>>> = [],
 }
 
-// Nobody transmits the mocked response or reads the mocked request, so their
-// trailer futures never gain a reader — writing them would block forever
-// (P3 futures rendezvous). The writable ends are simply left unwritten.
+impl MockClient {
+    fn end_writes(&mut self) {
+        while let Some(end) = self.ends.pop() {
+            end.write(Result::<Option<Trailers>, ErrorCode>::Ok(null));
+        }
+    }
+}
+
 impl Client for MockClient {
     fn send(&mut self, request: Request) -> Result<Response, ErrorCode> {
         self.calls += 1;
         assert request.get_path_with_query() matches { Some("/upstream") };
-        let [trailers_future, _trailers_tx] = Future::<Result<Option<Trailers>, ErrorCode>>::new();
+        let [trailers_future, trailers_tx] = Future::<Result<Option<Trailers>, ErrorCode>>::new();
+        self.ends.push(trailers_tx);
         let [resp, _tx_future] = Response::new(Headers::new(), null, trailers_future);
         let _ = resp.set_status_code(201 as StatusCode);
         resume Result::<Response, ErrorCode>::Ok(resp);
@@ -26,14 +37,20 @@ impl Client for MockClient {
 
 fn fetch_upstream() -> Response with Client {
     let headers = Headers::new();
-    let [trailers_future, _trailers_tx] = Future::<Result<Option<Trailers>, ErrorCode>>::new();
+    let [trailers_future, trailers_tx] = Future::<Result<Option<Trailers>, ErrorCode>>::new();
     let [req, _req_future] = Request::new(headers, null, trailers_future, null);
     req.set_path_with_query(Option::<String>::Some("/upstream"));
     let result = Client::send(req).wait();
+    trailers_tx.write(Result::<Option<Trailers>, ErrorCode>::Ok(null));
     return match result {
         Ok(r) => r,
         Err(_) => panic("mocked send returned Err"),
     };
+}
+
+// Takes the response, so it is dropped before the mock ends its trailers.
+fn status_of(response: Response) -> i32 {
+    return response.get_status_code() as i32;
 }
 
 export async fn handle(request: Request) -> Result<Response, ErrorCode> {
@@ -42,7 +59,8 @@ export async fn handle(request: Request) -> Result<Response, ErrorCode> {
         fetch_upstream();
     };
     assert mock.calls == 1;
-    let status = upstream.get_status_code() as i32;
+    let status = status_of(upstream);
+    mock.end_writes();
 
     let [trailers_future, trailers_tx] = Future::<Result<Option<Trailers>, ErrorCode>>::new();
     let [body_rx, body_tx] = Stream::<u8>::new();

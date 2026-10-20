@@ -266,17 +266,19 @@ impl WriteBack<'_> {
         changed
     }
 
-    /// Whether a `&mut` to a place of this type is a detached box — of the
-    /// replace types only a `variant` gets here, generic or not.
-    fn detaches(&self, place_type: TypeId) -> bool {
-        let peeled = self.type_table.representation_head(place_type);
-        match self.type_table.get(peeled) {
-            ResolvedType::Variant { .. } => true,
-            ResolvedType::GenericInstance { def, .. } => {
-                self.type_table.variant_template_cases(*def).is_some()
-            }
-            _ => false,
-        }
+    /// Whether a `&mut` to `place` is a detached box — of the replace types
+    /// only a `variant` gets here, generic or not. A field or an element boxed
+    /// by [`TypeTable::boxes_slot`] is its own box, which `*r` reaches.
+    fn detaches(&self, place: &TirExpr) -> bool {
+        self.type_table.is_variant_value(place.type_id)
+            && !(matches!(
+                place.kind,
+                TirExprKind::FieldAccess { .. }
+                    | TirExprKind::Unary {
+                        op: TirUnaryOp::Deref,
+                        ..
+                    }
+            ) && self.type_table.boxes_slot(place.type_id))
     }
 
     /// Whether `arg` *takes* a detached reference, by any route. Forwarding one it
@@ -311,7 +313,7 @@ impl WriteBack<'_> {
                     ..
                 }
         );
-        (detached && self.detaches(place.type_id)).then_some(place.as_ref())
+        (detached && self.detaches(place)).then_some(place.as_ref())
     }
 
     /// The subset [`Self::wrap`] can also store back to: a place whose

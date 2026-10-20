@@ -16,6 +16,7 @@ use {
     IndexValue,
     IndexAssign,
     IntoIterator,
+    ForOf,
     FromIterator,
     From,
     Display,
@@ -47,12 +48,14 @@ use { AsByteSlice, FromLeBytes } from "core:prelude/bytes.wado";
 /// not read those slots: what it reads is unspecified, some value of `T` or a
 /// trap.
 #[compiler_item("list")]
-pub struct List<T> {
+pub struct List<affine T> {
     repr: Array<T>,
     used: i32,
 }
 
-impl<T> List<T> {
+// What reads no element by value, so an affine element reaches it too
+// (WEP: Affine Types).
+impl<affine T> List<T> {
     #[compiler_item("list_with_capacity")]
     pub fn with_capacity(capacity: i32) -> List<T> {
         return List { repr: builtin::array_new(capacity), used: 0 };
@@ -75,13 +78,6 @@ impl<T> List<T> {
         let mut new_repr: Array<T> = builtin::array_new(new_capacity);
         builtin::array_move(&mut new_repr, 0, &self.repr, 0, self.used);
         self.repr = new_repr;
-    }
-
-    /// A list of `n` copies of `element`.
-    pub fn filled(n: i32, element: T) -> List<T> {
-        let mut repr: Array<T> = builtin::array_new(n);
-        builtin::array_fill(&mut repr, 0, element, n);
-        return List { repr, used: n };
     }
 
     /// Collect a homogeneous tuple `[T, T, ...]` into a `List<T>`.
@@ -141,24 +137,12 @@ impl<T> List<T> {
     }
 
     /// Removes and returns the last element, or null when empty.
-    // Keeps its slot: binding the element to release the slot after costs a
-    // deep copy of it, since a returned `let` reads as owned rather than as a
-    // projection of `self`.
     pub fn pop(&mut self) -> Option<T> {
         if self.used == 0 {
             return null;
         }
         self.used -= 1;
-        return Option::Some(self.repr[self.used]);
-    }
-
-    /// Copy the live `0..<len()` elements into a fresh fixed `Array<T>` of exactly
-    /// `len()`. Hand a finished, no-longer-growing buffer to code that only
-    /// indexes it: `Array`'s `[]` is bounds-checked by Wasm (traps on OOB)
-    /// without `List[]`'s power-assert diagnostic, so index-heavy readers (e.g. a
-    /// generated parser over a fixed token stream) avoid that per-access cost.
-    pub fn to_array(&self) -> Array<T> {
-        return builtin::array_clone_prefix(&self.repr, self.used);
+        return Option::Some(builtin::array_take(&mut self.repr, self.used));
     }
 
     /// Inserts an element at the given index, shifting all elements after it to the right.
@@ -180,7 +164,7 @@ impl<T> List<T> {
     pub fn remove(&mut self, index: i32) -> T
         contract 0 <= index < self.len()
     {
-        let value = self.repr[index];
+        let value = builtin::array_take(&mut self.repr, index);
         // Shift elements left
         builtin::array_move(&mut self.repr, index, &self.repr, index + 1, self.used - 1 - index);
         self.used -= 1;
@@ -192,8 +176,8 @@ impl<T> List<T> {
     pub fn swap(&mut self, a: i32, b: i32)
         contract 0 <= a < self.len() && 0 <= b < self.len()
     {
-        let tmp = self.repr[a];
-        self.repr[a] = self.repr[b];
+        let tmp = builtin::array_take(&mut self.repr, a);
+        self.repr[a] = builtin::array_take(&mut self.repr, b);
         self.repr[b] = tmp;
     }
 
@@ -234,6 +218,60 @@ impl<T> List<T> {
         }
     }
 
+    /// Reverses the elements in place.
+    pub fn reverse(&mut self) {
+        let mut lo = 0;
+        let mut hi = self.used - 1;
+        while lo < hi {
+            let tmp = builtin::array_take(&mut self.repr, lo);
+            self.repr[lo] = builtin::array_take(&mut self.repr, hi);
+            self.repr[hi] = tmp;
+            lo += 1;
+            hi -= 1;
+        }
+    }
+
+    pub fn is_empty(&self) -> bool {
+        return self.used == 0;
+    }
+
+    /// Moves the elements from `at` on into a new list, keeping the first `at`.
+    #[compiler_item("list_split_off")]
+    internal fn split_off(&mut self, at: i32) -> List<T>
+        contract 0 <= at <= self.len()
+    {
+        let n = self.used - at;
+        let mut repr: Array<T> = builtin::array_new(n);
+        builtin::array_move(&mut repr, 0, &self.repr, at, n);
+        builtin::array_release(&mut self.repr, at, n);
+        self.used = at;
+        return List { repr, used: n };
+    }
+
+    /// The elements, each by reference.
+    pub fn iter_ref(&self) -> SliceRefIter<T> {
+        return SliceRefIter::internal_new(&self.repr, 0, self.used);
+    }
+}
+
+// What copies an element, so a copyable one only.
+impl<T> List<T> {
+    /// A list of `n` copies of `element`.
+    pub fn filled(n: i32, element: T) -> List<T> {
+        let mut repr: Array<T> = builtin::array_new(n);
+        builtin::array_fill(&mut repr, 0, element, n);
+        return List { repr, used: n };
+    }
+
+    /// Copy the live `0..<len()` elements into a fresh fixed `Array<T>` of exactly
+    /// `len()`. Hand a finished, no-longer-growing buffer to code that only
+    /// indexes it: `Array`'s `[]` is bounds-checked by Wasm (traps on OOB)
+    /// without `List[]`'s power-assert diagnostic, so index-heavy readers (e.g. a
+    /// generated parser over a fixed token stream) avoid that per-access cost.
+    pub fn to_array(&self) -> Array<T> {
+        return builtin::array_clone_prefix(&self.repr, self.used);
+    }
+
     /// Extends this list with elements from another list.
     pub fn extend(&mut self, other: &List<T>) {
         let other_len = other.used;
@@ -272,19 +310,6 @@ impl<T> List<T> {
             other_len,
         );
         self.used = new_used;
-    }
-
-    /// Reverses the elements in place.
-    pub fn reverse(&mut self) {
-        let mut lo = 0;
-        let mut hi = self.used - 1;
-        while lo < hi {
-            let tmp = self.repr[lo];
-            self.repr[lo] = self.repr[hi];
-            self.repr[hi] = tmp;
-            lo += 1;
-            hi -= 1;
-        }
     }
 
     /// Returns a new list containing this list's elements repeated `n` times.
@@ -357,7 +382,7 @@ impl<T> IndexValue<i32> for List<T> {
     }
 }
 
-impl<T> IndexAssign<i32> for List<T> {
+impl<affine T> IndexAssign<i32> for List<T> {
     type Output = T;
 
     #[compiler_item("list_index_assign")]
@@ -367,7 +392,7 @@ impl<T> IndexAssign<i32> for List<T> {
     }
 }
 
-impl<T: Ref> IndexRef<i32> for List<T> {
+impl<affine T: Ref> IndexRef<i32> for List<T> {
     type Output = T;
 
     fn index_ref(&self, index: i32) -> &T
@@ -377,7 +402,7 @@ impl<T: Ref> IndexRef<i32> for List<T> {
     }
 }
 
-impl<T: RefMut> IndexRefMut<i32> for List<T> {
+impl<affine T: RefMut> IndexRefMut<i32> for List<T> {
     type Output = T;
 
     fn index_ref_mut(&mut self, index: i32) -> &mut T
@@ -519,6 +544,47 @@ impl<T> IndexValue<RangeInclusive<i32>> for List<T> {
     }
 }
 
+/// The state `for-of` walks a list with: the list and a position. `next` moves
+/// an affine element out of its slot and copies a copyable one, so the cursor
+/// never writes a list it shares; dropping it drops the elements not reached.
+pub struct ListCursor<affine T> {
+    list: List<T>,
+    at: i32,
+}
+
+impl<affine T> ListCursor<T> {
+    pub fn next(&mut self) -> Option<T> {
+        if self.at >= self.list.used {
+            return null;
+        }
+        let item = builtin::array_take(&mut self.list.repr, self.at);
+        self.at += 1;
+        return Option::Some(item);
+    }
+}
+
+impl<affine T> ForOf for List<T> {
+    type Item = T;
+    type State = ListCursor<T>;
+
+    fn start(self) -> ListCursor<T> {
+        return ListCursor { list: self, at: 0 };
+    }
+}
+
+impl<affine T> ForOf for Array<T> {
+    type Item = T;
+    type State = ListCursor<T>;
+
+    fn start(self) -> ListCursor<T> {
+        let used = builtin::array_len(&self);
+        return ListCursor {
+            list: List { repr: self, used },
+            at: 0,
+        };
+    }
+}
+
 impl<T> IntoIterator for List<T> {
     type Item = T;
     type Iter = SliceValueIter<T>;
@@ -528,7 +594,7 @@ impl<T> IntoIterator for List<T> {
     }
 }
 
-impl<T> IntoIterator for &List<T> {
+impl<affine T> IntoIterator for &List<T> {
     type Item = &T;
     type Iter = SliceRefIter<T>;
 
@@ -593,25 +659,26 @@ impl<T> FromIterator for List<T> {
 
 // `[e0, e1, …]` as a `List<T>`: the literal is the backing array already, so
 // the list is its spine over it (WEP 2026-08-24).
-impl<T> From<Array<T>> for List<T> {
+impl<affine T> From<Array<T>> for List<T> {
     fn from(elements: Array<T>) -> List<T> {
-        return List { repr: elements, used: builtin::array_len(&elements) };
+        let used = builtin::array_len(&elements);
+        return List { repr: elements, used };
     }
 }
 
-impl<T> Default for List<T> {
+impl<affine T> Default for List<T> {
     pub fn default() -> List<T> {
         return [] as List<T>;
     }
 }
 
-impl<T: Inspect> Inspect for List<T> {
+impl<affine T: Inspect> Inspect for List<T> {
     pub fn inspect(&self, f: &mut Formatter) {
         write_seq_inspect(&self.repr, 0, self.used, f, true, f.resolved_seq_limit());
     }
 }
 
-impl<T: Inspect> Display for List<T> {
+impl<affine T: Inspect> Display for List<T> {
     pub fn fmt(&self, f: &mut Formatter) {
         // Display never applies the default cap; raw precision caps only if >= 0.
         write_seq_inspect(&self.repr, 0, self.used, f, false, f.precision);

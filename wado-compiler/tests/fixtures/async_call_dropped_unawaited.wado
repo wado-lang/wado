@@ -1,0 +1,20 @@
+// A call nobody awaits is cancelled when it drops, so the program does not
+// wait for it (WEP: Affine Types).
+
+use { println, Stdout } from "core:cli";
+use { MonotonicClock } from "wasi:clocks";
+
+fn start() with MonotonicClock {
+    let _held = MonotonicClock::wait_for(60_000_000_000);
+}
+
+export fn run() with (Stdout, MonotonicClock) {
+    let _ = MonotonicClock::wait_for(60_000_000_000);
+    let call = MonotonicClock::wait_for(60_000_000_000);
+    call.cancel();
+    start();
+    println("done");
+}
+
+__DATA__
+{"stdout": "done\n"}

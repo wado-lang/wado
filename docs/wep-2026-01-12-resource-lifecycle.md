@@ -106,6 +106,12 @@ This aligns perfectly with Wado's needs.
 > The compositional-cleanup, execution-guarantee, and effect-propagation
 > rules are unchanged; only the spelling above is corrected.
 
+> Amendment (WEP 2026-10-17): [WEP: Affine Types](./wep-2026-10-17-affine-types.md#drop)
+> answers the open question of a user-defined drop for a type that is not a
+> resource: an affine type implements `Drop`. It withdraws the rule that a
+> function owning a resource declares the destructor's effects: a drop's
+> effects are benign. A free `builtin::drop(value)` exists beside `r.drop()`.
+
 ### 1. `resource` Types Are Implicitly `unique`
 
 Component Model `resource` types automatically have move-only semantics:

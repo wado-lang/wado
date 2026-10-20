@@ -1,0 +1,28 @@
+// A `break` carries what its path moved to the end of the loop.
+affine struct Tok {
+    id: i32,
+}
+
+impl Drop for Tok {
+    fn drop(self) {
+    }
+}
+
+fn eat(t: Tok) -> i32 {
+    return t.id;
+}
+
+test {
+    let t = Tok { id: 1 };
+    let c = builtin::black_box(true);
+    loop {
+        if c {
+            eat(t);
+            break;
+        }
+    }
+    eat(t);
+}
+
+__DATA__
+{"compile_error": ":24:9: analysis error: affine value `t` used after it was moved (moved at 20:17)"}

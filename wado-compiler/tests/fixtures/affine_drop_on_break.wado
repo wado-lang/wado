@@ -1,0 +1,12 @@
+// `break` drops what each scope it leaves holds (WEP: Affine Types).
+test {
+    let [rx, tx] = Stream::<u8>::new();
+    let mut slot: Option<Stream<u8>> = Some(rx);
+    loop {
+        let Some(held) = slot else { break; };
+        slot = null;
+        if true { break; }
+        held.drop();
+    }
+    assert tx.write([1]).result == CopyResult::Dropped;
+}

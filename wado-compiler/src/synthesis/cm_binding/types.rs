@@ -1441,16 +1441,14 @@ pub(super) fn type_id_to_ast_type(
 
 /// Whether a parameter needs CM flat-ABI lifting at the export boundary — that
 /// is, whether its flat representation is anything but a single-slot passthrough
-/// of the same Wasm value type. Handle-shaped types (resource, enum, flags) and
-/// every primitive but `bool` travel as one scalar at both layers and need none;
-/// `bool`, `Unit`, and everything else must be reconstructed Wado-side.
+/// of the same Wasm value type. Enum, flags and every primitive but `bool` travel
+/// as one scalar at both layers and need none; a resource (a boxed `i32` or an
+/// `f64`-carried handle), `bool`, `Unit`, and everything else must be
+/// reconstructed Wado-side.
 pub(super) fn param_needs_lifting(type_id: TypeId, tt: &TypeTable) -> bool {
     match tt.get(type_id) {
         ResolvedType::Primitive(prim) => matches!(prim, PrimitiveType::Bool),
         ResolvedType::Unit => true,
-        ResolvedType::Resource { .. } | ResolvedType::GenericResource { .. } => {
-            tt.is_unrestricted_handle(type_id)
-        }
         // One-scalar handle-shaped types flow through.
         ResolvedType::Enum { .. } | ResolvedType::Flags { .. } => false,
         // `ResolvedType::Newtype` unwraps at the CM boundary, so recurse on

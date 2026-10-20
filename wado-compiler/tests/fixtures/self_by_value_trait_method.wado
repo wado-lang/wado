@@ -1,0 +1,23 @@
+// A trait's method declares its receiver against `Self`, a type parameter, so
+// a value type implements a by-value `self` method as the trait declares it.
+trait Finish {
+    fn finish(self) -> i32;
+}
+
+struct Counter {
+    n: i32,
+}
+
+impl Finish for Counter {
+    fn finish(self) -> i32 {
+        return self.n;
+    }
+}
+
+test {
+    let c = Counter { n: 3 };
+    assert c.finish() == 3;
+    let xs: List<i32> = [1, 2, 3];
+    let mut it = xs.into_iter().map(|x| x * 2);
+    assert it.collect() == [2, 4, 6] as List<i32>;
+}

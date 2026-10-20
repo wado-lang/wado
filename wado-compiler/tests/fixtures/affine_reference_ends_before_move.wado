@@ -1,0 +1,42 @@
+// A reference into an affine local, or a closure capturing one, may be read
+// up to the move: only a read after it is refused.
+use { println, log_stdout, Stdout } from "core:cli";
+
+affine struct Tok {
+    id: i32,
+}
+
+impl Drop for Tok {
+    fn drop(self) {
+        log_stdout(`drop ${self.id}`);
+    }
+}
+
+fn first(toks: &List<Tok>) -> &Tok {
+    return &toks[0];
+}
+
+export fn run() with Stdout {
+    let t = Tok { id: 1 };
+    let r = &t;
+    let read = || t.id;
+    println(`${r.id} ${read()}`);
+    builtin::drop(t);
+
+    let mut toks: List<Tok> = [];
+    toks.push(Tok { id: 2 });
+    toks.push(Tok { id: 3 });
+    for let tok of &toks {
+        println(`${tok.id}`);
+    }
+    println(`${first(&toks).id}`);
+    let mut cur = &toks[0];
+    for let i of 0..<toks.len() {
+        cur = &toks[i];
+    }
+    println(`${cur.id}`);
+    builtin::drop(toks);
+}
+
+__DATA__
+{"stdout": "1 1\ndrop 1\n2\n3\n2\n3\ndrop 2\ndrop 3\n"}

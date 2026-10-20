@@ -32,7 +32,8 @@ use crate::lower::wide_int_literal::literal_from_repr;
 use crate::lower::{bare_asserts, wide_arith, wide_int_literal};
 use crate::name::{
     FunctionId, case_construct_helper_name, case_extract_helper_name, closure_capture_field,
-    field_get_helper_name, hole_fmt_helper_name, hole_get_helper_name, variant_tag_helper_name,
+    field_get_helper_name, field_ref_helper_name, hole_fmt_helper_name, hole_get_helper_name,
+    variant_tag_helper_name,
 };
 use crate::nir::{
     FuncCell, FuncId, FuncRef, NirEnum, NirEnumCase, NirField, NirFlags, NirFlagsMember,
@@ -919,6 +920,66 @@ impl FunctionTranslator<'_, '_> {
                 span,
             ));
         }
+        // A slot holding an affine variant holds it in a box, which is the
+        // place: a fresh box would detach it. `&*r` is `r`, and `&s.f` the box
+        // the field holds.
+        if self.base.type_table.borrow().boxes_slot(inner.type_id) {
+            match &inner.kind {
+                TirExprKind::Unary {
+                    op: TirUnaryOp::Deref,
+                    expr: reference,
+                } => return Some(self.convert_expr(reference)),
+                // A builtin rather than `Unary::Ref`, which the optimizer reads
+                // as the referent itself.
+                TirExprKind::FieldAccess {
+                    expr: receiver,
+                    field_index,
+                    ..
+                } => {
+                    let is_reference = matches!(
+                        self.base.type_table.borrow().get(receiver.type_id),
+                        ResolvedType::Ref(_) | ResolvedType::MutRef(_)
+                    );
+                    let holder = if is_reference {
+                        (**receiver).clone()
+                    } else {
+                        let holder_type = self
+                            .base
+                            .type_table
+                            .borrow_mut()
+                            .make_mut_ref(receiver.type_id);
+                        TirExpr::new(
+                            TirExprKind::Unary {
+                                op: TirUnaryOp::MutRef,
+                                expr: receiver.clone(),
+                            },
+                            holder_type,
+                            span,
+                        )
+                    };
+                    let field = TirExpr::new(
+                        TirExprKind::IntLiteral {
+                            value: u64::from(*field_index),
+                            repr: field_index.to_string(),
+                        },
+                        TypeTable::I32,
+                        span,
+                    );
+                    let slot_box = self
+                        .base
+                        .type_table
+                        .borrow()
+                        .slot_box(inner.type_id)
+                        .expect("the boxing plan registers a box for every slot that boxes");
+                    return Some(self.convert_expr(&builtin_call(
+                        "field_slot",
+                        vec![holder, field],
+                        slot_box,
+                    )));
+                }
+                _ => {}
+            }
+        }
         // `&primitive_expr` → fresh `Box<T> { value: expr }`.
         let inner_nir = self.convert_operand(inner);
         Some(self.wrap_in_box(
@@ -1058,7 +1119,12 @@ impl FunctionTranslator<'_, '_> {
                 }
                 (**ref_expr).clone()
             }
-            _ if self.in_place_assigns.contains(&expr.span) => {
+            _ if self.in_place_assigns.contains(&expr.span)
+                && value_copy::last_use::can_write_in_place(
+                    expr,
+                    &self.base.type_table.borrow(),
+                ) =>
+            {
                 // A handle of a reference type, so every later pass reads the
                 // writes below as going through it.
                 let ref_type = self
@@ -1140,6 +1206,11 @@ impl FunctionTranslator<'_, '_> {
             .borrow()
             .as_list(list.type_id)
             .expect("`index_assign` is a `List` method");
+        // An affine element is an object, which resource drop synthesis has
+        // written the call to drop and fill (WEP: Affine Types).
+        if self.base.type_table.borrow().holds_affine_resource(element) {
+            return None;
+        }
         let span = call.span;
 
         let list_idx = self.alloc_local(list.type_id, "$list".to_string());
@@ -2478,16 +2549,24 @@ impl FunctionTranslator<'_, '_> {
             return Some(self.bridge_call(variant_ty, helper_name, args, "variant_tag"));
         }
 
-        if func.is_builtin_named("struct_field_get") {
-            let ta = Self::marker_type_args::<2>(type_args, mi, "struct_field_get");
-            let name = {
-                let tt = self.base.type_table.borrow();
-                field_get_helper_name(
-                    &tt.mangle_type_arg_unboxed(ta[0]),
-                    &tt.mangle_type_arg_unboxed(ta[1]),
-                )
-            };
-            return Some(self.bridge_call(ta[0], name, args, "struct_field_get"));
+        for (builtin, helper_name) in [
+            (
+                "struct_field_get",
+                field_get_helper_name as fn(&str, &str) -> String,
+            ),
+            ("struct_field_ref", field_ref_helper_name),
+        ] {
+            if func.is_builtin_named(builtin) {
+                let ta = Self::marker_type_args::<2>(type_args, mi, builtin);
+                let name = {
+                    let tt = self.base.type_table.borrow();
+                    helper_name(
+                        &tt.mangle_type_arg_unboxed(ta[0]),
+                        &tt.mangle_type_arg_unboxed(ta[1]),
+                    )
+                };
+                return Some(self.bridge_call(ta[0], name, args, builtin));
+            }
         }
 
         // `hole_get<T, V>` names the shape and the hole type; `hole_fmt<T>`

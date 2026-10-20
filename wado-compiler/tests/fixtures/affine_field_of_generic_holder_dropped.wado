@@ -1,0 +1,11 @@
+// A generic holder's field drops by its instance's type (WEP: Affine Types).
+struct Node<affine T> { value: T, tag: i32 }
+
+test {
+    let [rx, tx] = Stream::<u8>::new();
+    scope: {
+        let node = Node { value: rx, tag: 1 };
+        assert node.tag == 1;
+    }
+    assert tx.write([1]).result == CopyResult::Dropped;
+}

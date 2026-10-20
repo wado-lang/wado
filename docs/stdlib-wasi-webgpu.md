@@ -30,6 +30,12 @@
 
 `#[cm("wasi:webgpu/webgpu@0.3.0-rc.2#[method]gpu.wgsl-language-features")]` `#[cm_params("self")]`
 
+##### `fn drop(self)`
+
+`#[cm("resource-drop")]`
+
+Drop the resource. Scope exit drops one that nothing moved.
+
 #### `pub resource GpuAdapter`
 
 ##### `fn features(&self) -> GpuSupportedFeatures`
@@ -47,6 +53,12 @@
 ##### `async fn request_device(&self, descriptor: Option<GpuDeviceDescriptor>) -> AsyncCall<Result<GpuDevice, RequestDeviceError>>`
 
 `#[cm("wasi:webgpu/webgpu@0.3.0-rc.2#[method]gpu-adapter.request-device")]` `#[cm_params("self", "descriptor")]`
+
+##### `fn drop(self)`
+
+`#[cm("resource-drop")]`
+
+Drop the resource. Scope exit drops one that nothing moved.
 
 #### `pub resource GpuAdapterInfo`
 
@@ -78,6 +90,12 @@
 
 `#[cm("wasi:webgpu/webgpu@0.3.0-rc.2#[method]gpu-adapter-info.is-fallback-adapter")]` `#[cm_params("self")]`
 
+##### `fn drop(self)`
+
+`#[cm("resource-drop")]`
+
+Drop the resource. Scope exit drops one that nothing moved.
+
 #### `pub resource GpuBindGroup`
 
 ##### `fn label(&self) -> String`
@@ -88,6 +106,12 @@
 
 `#[cm("wasi:webgpu/webgpu@0.3.0-rc.2#[method]gpu-bind-group.set-label")]` `#[cm_params("self", "label")]`
 
+##### `fn drop(self)`
+
+`#[cm("resource-drop")]`
+
+Drop the resource. Scope exit drops one that nothing moved.
+
 #### `pub resource GpuBindGroupLayout`
 
 ##### `fn label(&self) -> String`
@@ -97,6 +121,12 @@
 ##### `fn set_label(&self, label: String)`
 
 `#[cm("wasi:webgpu/webgpu@0.3.0-rc.2#[method]gpu-bind-group-layout.set-label")]` `#[cm_params("self", "label")]`
+
+##### `fn drop(self)`
+
+`#[cm("resource-drop")]`
+
+Drop the resource. Scope exit drops one that nothing moved.
 
 #### `pub resource GpuBuffer`
 
@@ -140,6 +170,12 @@
 
 `#[cm("wasi:webgpu/webgpu@0.3.0-rc.2#[method]gpu-buffer.get-mapped-range-set-with-copy")]` `#[cm_params("self", "data", "offset", "size")]`
 
+##### `fn drop(self)`
+
+`#[cm("resource-drop")]`
+
+Drop the resource. Scope exit drops one that nothing moved.
+
 #### `pub resource GpuCanvasContext`
 
 ##### `fn configure(&self, configuration: GpuCanvasConfiguration)`
@@ -158,6 +194,12 @@
 
 `#[cm("wasi:webgpu/webgpu@0.3.0-rc.2#[method]gpu-canvas-context.get-current-texture")]` `#[cm_params("self")]`
 
+##### `fn drop(self)`
+
+`#[cm("resource-drop")]`
+
+Drop the resource. Scope exit drops one that nothing moved.
+
 #### `pub resource GpuCommandBuffer`
 
 ##### `fn label(&self) -> String`
@@ -167,6 +209,12 @@
 ##### `fn set_label(&self, label: String)`
 
 `#[cm("wasi:webgpu/webgpu@0.3.0-rc.2#[method]gpu-command-buffer.set-label")]` `#[cm_params("self", "label")]`
+
+##### `fn drop(self)`
+
+`#[cm("resource-drop")]`
+
+Drop the resource. Scope exit drops one that nothing moved.
 
 #### `pub resource GpuCommandEncoder`
 
@@ -226,11 +274,23 @@
 
 `#[cm("wasi:webgpu/webgpu@0.3.0-rc.2#[method]gpu-command-encoder.insert-debug-marker")]` `#[cm_params("self", "marker-label")]`
 
+##### `fn drop(self)`
+
+`#[cm("resource-drop")]`
+
+Drop the resource. Scope exit drops one that nothing moved.
+
 #### `pub resource GpuCompilationInfo`
 
 ##### `fn messages(&self) -> List<GpuCompilationMessage>`
 
 `#[cm("wasi:webgpu/webgpu@0.3.0-rc.2#[method]gpu-compilation-info.messages")]` `#[cm_params("self")]`
+
+##### `fn drop(self)`
+
+`#[cm("resource-drop")]`
+
+Drop the resource. Scope exit drops one that nothing moved.
 
 #### `pub resource GpuCompilationMessage`
 
@@ -257,6 +317,12 @@
 ##### `fn length(&self) -> u64`
 
 `#[cm("wasi:webgpu/webgpu@0.3.0-rc.2#[method]gpu-compilation-message.length")]` `#[cm_params("self")]`
+
+##### `fn drop(self)`
+
+`#[cm("resource-drop")]`
+
+Drop the resource. Scope exit drops one that nothing moved.
 
 #### `pub resource GpuComputePassEncoder`
 
@@ -304,6 +370,12 @@
 
 `#[cm("wasi:webgpu/webgpu@0.3.0-rc.2#[method]gpu-compute-pass-encoder.set-immediates")]` `#[cm_params("self", "range-offset", "data", "data-offset", "data-size")]`
 
+##### `fn drop(self)`
+
+`#[cm("resource-drop")]`
+
+Drop the resource. Scope exit drops one that nothing moved.
+
 #### `pub resource GpuComputePipeline`
 
 ##### `fn label(&self) -> String`
@@ -317,6 +389,12 @@
 ##### `fn get_bind_group_layout(&self, index: u32) -> GpuBindGroupLayout`
 
 `#[cm("wasi:webgpu/webgpu@0.3.0-rc.2#[method]gpu-compute-pipeline.get-bind-group-layout")]` `#[cm_params("self", "index")]`
+
+##### `fn drop(self)`
+
+`#[cm("resource-drop")]`
+
+Drop the resource. Scope exit drops one that nothing moved.
 
 #### `pub resource GpuDevice`
 
@@ -420,6 +498,12 @@
 
 `#[cm("wasi:webgpu/webgpu@0.3.0-rc.2#[method]gpu-device.on-uncaptured-error")]` `#[cm_params("self")]`
 
+##### `fn drop(self)`
+
+`#[cm("resource-drop")]`
+
+Drop the resource. Scope exit drops one that nothing moved.
+
 #### `pub resource GpuDeviceLostInfo`
 
 ##### `fn reason(&self) -> GpuDeviceLostReason`
@@ -429,6 +513,12 @@
 ##### `fn message(&self) -> String`
 
 `#[cm("wasi:webgpu/webgpu@0.3.0-rc.2#[method]gpu-device-lost-info.message")]` `#[cm_params("self")]`
+
+##### `fn drop(self)`
+
+`#[cm("resource-drop")]`
+
+Drop the resource. Scope exit drops one that nothing moved.
 
 #### `pub resource GpuError`
 
@@ -440,6 +530,12 @@
 
 `#[cm("wasi:webgpu/webgpu@0.3.0-rc.2#[method]gpu-error.kind")]` `#[cm_params("self")]`
 
+##### `fn drop(self)`
+
+`#[cm("resource-drop")]`
+
+Drop the resource. Scope exit drops one that nothing moved.
+
 #### `pub resource GpuPipelineLayout`
 
 ##### `fn label(&self) -> String`
@@ -449,6 +545,12 @@
 ##### `fn set_label(&self, label: String)`
 
 `#[cm("wasi:webgpu/webgpu@0.3.0-rc.2#[method]gpu-pipeline-layout.set-label")]` `#[cm_params("self", "label")]`
+
+##### `fn drop(self)`
+
+`#[cm("resource-drop")]`
+
+Drop the resource. Scope exit drops one that nothing moved.
 
 #### `pub resource GpuQuerySet`
 
@@ -471,6 +573,12 @@
 ##### `fn set_label(&self, label: String)`
 
 `#[cm("wasi:webgpu/webgpu@0.3.0-rc.2#[method]gpu-query-set.set-label")]` `#[cm_params("self", "label")]`
+
+##### `fn drop(self)`
+
+`#[cm("resource-drop")]`
+
+Drop the resource. Scope exit drops one that nothing moved.
 
 #### `pub resource GpuQueue`
 
@@ -498,6 +606,12 @@
 
 `#[cm("wasi:webgpu/webgpu@0.3.0-rc.2#[method]gpu-queue.set-label")]` `#[cm_params("self", "label")]`
 
+##### `fn drop(self)`
+
+`#[cm("resource-drop")]`
+
+Drop the resource. Scope exit drops one that nothing moved.
+
 #### `pub resource GpuRenderBundle`
 
 ##### `fn label(&self) -> String`
@@ -507,6 +621,12 @@
 ##### `fn set_label(&self, label: String)`
 
 `#[cm("wasi:webgpu/webgpu@0.3.0-rc.2#[method]gpu-render-bundle.set-label")]` `#[cm_params("self", "label")]`
+
+##### `fn drop(self)`
+
+`#[cm("resource-drop")]`
+
+Drop the resource. Scope exit drops one that nothing moved.
 
 #### `pub resource GpuRenderBundleEncoder`
 
@@ -569,6 +689,12 @@
 ##### `fn draw_indexed_indirect(&self, indirect_buffer: &GpuBuffer, indirect_offset: GpuSize64)`
 
 `#[cm("wasi:webgpu/webgpu@0.3.0-rc.2#[method]gpu-render-bundle-encoder.draw-indexed-indirect")]` `#[cm_params("self", "indirect-buffer", "indirect-offset")]`
+
+##### `fn drop(self)`
+
+`#[cm("resource-drop")]`
+
+Drop the resource. Scope exit drops one that nothing moved.
 
 #### `pub resource GpuRenderPassEncoder`
 
@@ -660,6 +786,12 @@
 
 `#[cm("wasi:webgpu/webgpu@0.3.0-rc.2#[method]gpu-render-pass-encoder.draw-indexed-indirect")]` `#[cm_params("self", "indirect-buffer", "indirect-offset")]`
 
+##### `fn drop(self)`
+
+`#[cm("resource-drop")]`
+
+Drop the resource. Scope exit drops one that nothing moved.
+
 #### `pub resource GpuRenderPipeline`
 
 ##### `fn label(&self) -> String`
@@ -674,6 +806,12 @@
 
 `#[cm("wasi:webgpu/webgpu@0.3.0-rc.2#[method]gpu-render-pipeline.get-bind-group-layout")]` `#[cm_params("self", "index")]`
 
+##### `fn drop(self)`
+
+`#[cm("resource-drop")]`
+
+Drop the resource. Scope exit drops one that nothing moved.
+
 #### `pub resource GpuSampler`
 
 ##### `fn label(&self) -> String`
@@ -683,6 +821,12 @@
 ##### `fn set_label(&self, label: String)`
 
 `#[cm("wasi:webgpu/webgpu@0.3.0-rc.2#[method]gpu-sampler.set-label")]` `#[cm_params("self", "label")]`
+
+##### `fn drop(self)`
+
+`#[cm("resource-drop")]`
+
+Drop the resource. Scope exit drops one that nothing moved.
 
 #### `pub resource GpuShaderModule`
 
@@ -698,11 +842,23 @@
 
 `#[cm("wasi:webgpu/webgpu@0.3.0-rc.2#[method]gpu-shader-module.set-label")]` `#[cm_params("self", "label")]`
 
+##### `fn drop(self)`
+
+`#[cm("resource-drop")]`
+
+Drop the resource. Scope exit drops one that nothing moved.
+
 #### `pub resource GpuSupportedFeatures`
 
 ##### `fn has(&self, value: String) -> bool`
 
 `#[cm("wasi:webgpu/webgpu@0.3.0-rc.2#[method]gpu-supported-features.has")]` `#[cm_params("self", "value")]`
+
+##### `fn drop(self)`
+
+`#[cm("resource-drop")]`
+
+Drop the resource. Scope exit drops one that nothing moved.
 
 #### `pub resource GpuSupportedLimits`
 
@@ -850,6 +1006,12 @@
 
 `#[cm("wasi:webgpu/webgpu@0.3.0-rc.2#[method]gpu-supported-limits.max-compute-workgroups-per-dimension")]` `#[cm_params("self")]`
 
+##### `fn drop(self)`
+
+`#[cm("resource-drop")]`
+
+Drop the resource. Scope exit drops one that nothing moved.
+
 #### `pub resource GpuTexture`
 
 ##### `fn create_view(&self, descriptor: Option<GpuTextureViewDescriptor>) -> GpuTextureView`
@@ -904,6 +1066,12 @@
 
 `#[cm("wasi:webgpu/webgpu@0.3.0-rc.2#[method]gpu-texture.set-label")]` `#[cm_params("self", "label")]`
 
+##### `fn drop(self)`
+
+`#[cm("resource-drop")]`
+
+Drop the resource. Scope exit drops one that nothing moved.
+
 #### `pub resource GpuTextureView`
 
 ##### `fn label(&self) -> String`
@@ -914,11 +1082,23 @@
 
 `#[cm("wasi:webgpu/webgpu@0.3.0-rc.2#[method]gpu-texture-view.set-label")]` `#[cm_params("self", "label")]`
 
+##### `fn drop(self)`
+
+`#[cm("resource-drop")]`
+
+Drop the resource. Scope exit drops one that nothing moved.
+
 #### `pub resource GpuUncapturedErrorEvent`
 
 ##### `fn error(&self) -> GpuError`
 
 `#[cm("wasi:webgpu/webgpu@0.3.0-rc.2#[method]gpu-uncaptured-error-event.error")]` `#[cm_params("self")]`
+
+##### `fn drop(self)`
+
+`#[cm("resource-drop")]`
+
+Drop the resource. Scope exit drops one that nothing moved.
 
 #### `pub resource RecordGpuPipelineConstantValue`
 
@@ -954,6 +1134,12 @@
 
 `#[cm("wasi:webgpu/webgpu@0.3.0-rc.2#[method]record-gpu-pipeline-constant-value.entries")]` `#[cm_params("self")]`
 
+##### `fn drop(self)`
+
+`#[cm("resource-drop")]`
+
+Drop the resource. Scope exit drops one that nothing moved.
+
 #### `pub resource RecordOptionGpuSize64`
 
 ##### `fn new() -> RecordOptionGpuSize64`
@@ -988,11 +1174,23 @@
 
 `#[cm("wasi:webgpu/webgpu@0.3.0-rc.2#[method]record-option-gpu-size64.entries")]` `#[cm_params("self")]`
 
+##### `fn drop(self)`
+
+`#[cm("resource-drop")]`
+
+Drop the resource. Scope exit drops one that nothing moved.
+
 #### `pub resource WgslLanguageFeatures`
 
 ##### `fn has(&self, value: String) -> bool`
 
 `#[cm("wasi:webgpu/webgpu@0.3.0-rc.2#[method]wgsl-language-features.has")]` `#[cm_params("self", "value")]`
+
+##### `fn drop(self)`
+
+`#[cm("resource-drop")]`
+
+Drop the resource. Scope exit drops one that nothing moved.
 
 ### Types
 
@@ -1504,7 +1702,7 @@
 
 ##### `alpha_mode: Option<GpuCanvasAlphaMode>`
 
-#### `pub struct GpuCanvasConfigurationOwned`
+#### `pub affine struct GpuCanvasConfigurationOwned`
 
 ##### `device: GpuDevice`
 
@@ -1520,7 +1718,7 @@
 
 ##### `alpha_mode: Option<GpuCanvasAlphaMode>`
 
-#### `pub struct GpuFragmentState`
+#### `pub affine struct GpuFragmentState`
 
 ##### `targets: List<Option<GpuColorTargetState>>`
 
@@ -1530,7 +1728,7 @@
 
 ##### `constants: Option<RecordGpuPipelineConstantValue>`
 
-#### `pub struct GpuProgrammableStage`
+#### `pub affine struct GpuProgrammableStage`
 
 ##### `module: &GpuShaderModule`
 
@@ -1538,7 +1736,7 @@
 
 ##### `constants: Option<RecordGpuPipelineConstantValue>`
 
-#### `pub struct GpuComputePipelineDescriptor`
+#### `pub affine struct GpuComputePipelineDescriptor`
 
 ##### `compute: GpuProgrammableStage`
 
@@ -1546,7 +1744,7 @@
 
 ##### `label: Option<String>`
 
-#### `pub struct GpuVertexState`
+#### `pub affine struct GpuVertexState`
 
 ##### `buffers: Option<List<Option<GpuVertexBufferLayout>>>`
 
@@ -1556,7 +1754,7 @@
 
 ##### `constants: Option<RecordGpuPipelineConstantValue>`
 
-#### `pub struct GpuRenderPipelineDescriptor`
+#### `pub affine struct GpuRenderPipelineDescriptor`
 
 ##### `vertex: GpuVertexState`
 
@@ -1572,7 +1770,7 @@
 
 ##### `label: Option<String>`
 
-#### `pub struct GpuDeviceDescriptor`
+#### `pub affine struct GpuDeviceDescriptor`
 
 ##### `required_features: Option<List<GpuFeatureName>>`
 

@@ -11,6 +11,7 @@ mod import_adapter;
 mod lift;
 mod lower;
 mod resource_rewrite;
+pub(crate) use resource_rewrite::{end_drop_call, resource_drop_call};
 mod task_return;
 mod type_fixup;
 pub(crate) mod types;

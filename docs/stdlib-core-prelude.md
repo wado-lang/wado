@@ -25,7 +25,7 @@ assert decoded matches { Ok(s) && s == "Wado" };
 
 ## Functions
 
-### `pub fn ref_eq<T>(a: &T, b: &T) -> bool`
+### `pub fn ref_eq<affine T>(a: &T, b: &T) -> bool`
 
 Whether `a` and `b` point to one place, not merely to equal values. `==`
 on references compares the values.
@@ -64,7 +64,7 @@ caller can lead the run here, check the contract with `panic` or `assert`.
 
 ## Traits
 
-### `pub trait Eq<Rhs = Self> with ()`
+### `pub affine trait Eq<Rhs = Self> with ()`
 
 Trait for equality comparisons.
 Types implementing this trait can be compared with `==` and `!=` operators.
@@ -73,7 +73,7 @@ Types implementing this trait can be compared with `==` and `!=` operators.
 
 Returns true if self equals other.
 
-### `pub trait Ord: Eq with ()`
+### `pub affine trait Ord: Eq with ()`
 
 A total order over the type: what `<`, `sort`, `TreeMap` and a `T: Ord`
 bound read. A float's puts every NaN last, as one value, and `-0.0` equal to
@@ -94,13 +94,13 @@ its seed; an impl only says which words and bytes make up the value.
 
 Takes the length too, so consecutive byte runs never run together.
 
-### `pub trait Hash: Eq with ()`
+### `pub affine trait Hash: Eq with ()`
 
 A value a hash table can key on. Values that are `==` feed a hasher alike.
 
 #### `fn hash<H: Hasher>(&self, h: &mut H)`
 
-### `pub trait Default with ()`
+### `pub affine trait Default with ()`
 
 Trait for providing a default value for a type.
 Types implementing this trait can produce a sensible "zero" or "empty" value.
@@ -108,6 +108,15 @@ Types implementing this trait can produce a sensible "zero" or "empty" value.
 #### `fn default() -> Self`
 
 Returns the default value for this type.
+
+### `pub affine trait Drop with ()`
+
+What a drop of an affine value runs: at scope exit, at a store over it, for
+a value nothing keeps, and by name. A type without an impl drops its fields
+one by one. What `drop` leaves in `self` drops field by field after it, and
+only an affine type implements it.
+
+#### `fn drop(self)`
 
 ### `pub trait Reflect with ()`
 
@@ -163,7 +172,7 @@ Empty slots but `index`, which holds that field's declared default
 All slots empty. Starting here is what makes a filled slot mean "the
 wire wrote this", so a repeat is visible without a second record.
 
-### `pub trait Member with ()`
+### `pub affine trait Member with ()`
 
 The attr-reading face of a reflected member. Sealed and
 compiler-synthesized; user impls are rejected. See WEP 2026-06-13.
@@ -301,7 +310,12 @@ ones (`variant`, `fn`). A `&mut` to one of these writes through to the stored
 value. Sealed and compiler-synthesized; user impls are rejected.
 See WEP 2026-01-20.
 
-### `pub trait IndexRef<IndexType> with ()`
+### `pub trait AffineResource with ()`
+
+Marker every affine resource holds, and nothing else. Sealed and
+compiler-stated; user impls are rejected. See WEP: Affine Types.
+
+### `pub affine trait IndexRef<IndexType> with ()`
 
 Immutable reference indexing: `&container[i]` reads through this.
 `Output: Ref` — only a reference element can be handed out by reference; a
@@ -311,7 +325,7 @@ value element is read through `IndexValue`.
 
 Returns a reference to the element at the given index.
 
-### `pub trait IndexRefMut<IndexType> with ()`
+### `pub affine trait IndexRefMut<IndexType> with ()`
 
 Mutable reference indexing: `container[i].mutating_method()`.
 `Output: RefMut` — the element must be mutated in place, so a replace-on-assign
@@ -321,7 +335,7 @@ element (`variant`, `fn`) cannot be handed out mutably by reference.
 
 Returns a mutable reference to the element at the given index.
 
-### `pub trait IndexAssign<IndexType> with ()`
+### `pub affine trait IndexAssign<IndexType> with ()`
 
 Value-assignment indexing: `container[i] = value`.
 Separate from `IndexRefMut`: a scalar element has no addressable cell, so
@@ -443,7 +457,7 @@ Trait for the `>>` operator (right shift).
 
 Returns self shifted right by rhs bits.
 
-### `pub trait Display with ()`
+### `pub affine trait Display with ()`
 
 Trait for user-facing display formatting.
 Types implementing this trait can be formatted with `${x}` in template strings.
@@ -453,12 +467,12 @@ All format traits write to a `Formatter` that wraps `&mut String`.
 
 Formats the value and writes to the given formatter.
 
-### `pub trait Error: Display with ()`
+### `pub affine trait Error: Display with ()`
 
 What every standard library error type is: a failure carrying a reason a
 person can read. It adds nothing to `Display`, so a bound on it says only that.
 
-### `pub trait Inspect with ()`
+### `pub affine trait Inspect with ()`
 
 Trait for debug/inspect formatting.
 Types implementing this trait can be formatted with `${x:?}` in template strings.
@@ -527,7 +541,7 @@ Used with the `${x:E}` format specifier.
 
 Formats the value in uppercase exponential notation and writes to the given formatter.
 
-### `pub trait Iterator with _`
+### `pub affine trait Iterator with _`
 
 The core iterator trait for sequences of values.
 Types implementing this trait can be iterated over using `for-of` loops.
@@ -541,7 +555,7 @@ Returns None when iteration is complete.
 
 #### `fn count(&mut self) -> i32`
 
-#### `fn map<U, effect E, F: fn mut(Self::Item) -> U with E>(&self, f: F) -> IterMap<Self, F> with ()`
+#### `fn map<U, effect E, F: fn mut(Self::Item) -> U with E>(self, f: F) -> IterMap<Self, F> with ()`
 
 #### `fn fold<Acc>(&mut self, init: Acc, mut f: fn mut(Acc, Self::Item) -> Acc with _) -> Acc with _`
 
@@ -579,31 +593,31 @@ Advances the entire iterator and returns the last element, or None if empty.
 Reduces elements to a single value without an initial accumulator.
 Returns None if the iterator is empty.
 
-#### `fn filter<effect E, F: fn mut(Self::Item) -> bool with E>(&self, pred: F) -> IterFilter<Self, F> with ()`
+#### `fn filter<effect E, F: fn mut(Self::Item) -> bool with E>(self, pred: F) -> IterFilter<Self, F> with ()`
 
 Returns an adapter that skips elements for which `pred` returns false.
 
-#### `fn enumerate(&self) -> IterEnumerate<Self> with ()`
+#### `fn enumerate(self) -> IterEnumerate<Self> with ()`
 
 Returns an adapter that yields `[i, element]` tuples, where `i` starts at 0.
 
-#### `fn take(&self, n: i32) -> IterTake<Self> with ()`
+#### `fn take(self, n: i32) -> IterTake<Self> with ()`
 
 Returns an adapter that stops after yielding at most `n` elements.
 
-#### `fn skip(&self, n: i32) -> IterSkip<Self> with ()`
+#### `fn skip(self, n: i32) -> IterSkip<Self> with ()`
 
 Returns an adapter that discards the first `n` elements before yielding the rest.
 
-#### `fn step_by(&self, step: i32) -> IterStepBy<Self> with ()`
+#### `fn step_by(self, step: i32) -> IterStepBy<Self> with ()`
 
 - `contract step > 0`
 
 Returns an adapter that yields the first element, then every `step`-th after it.
 
-#### `fn chain<J: Iterator<Item = Self::Item>>(&self, other: J) -> IterChain<Self, J> with ()`
+#### `fn chain<affine J: Iterator<Item = Self::Item>>(self, other: J) -> IterChain<Self, J> with ()`
 
-#### `fn zip<J: Iterator>(&self, other: J) -> IterZip<Self, J> with ()`
+#### `fn zip<affine J: Iterator>(self, other: J) -> IterZip<Self, J> with ()`
 
 Returns an adapter that yields `[a, b]` pairs, stopping when either iterator is exhausted.
 
@@ -631,7 +645,7 @@ The remaining element with the smallest `key`, the first on ties.
 
 The remaining element with the largest `key`, the last on ties.
 
-### `pub trait IntoIterator with _`
+### `pub affine trait IntoIterator with _`
 
 Conversion into an Iterator.
 Types implementing this trait can be used in `for-of` loops directly.
@@ -639,9 +653,18 @@ Types implementing this trait can be used in `for-of` loops directly.
 #### `fn into_iter(&self) -> Self::Iter`
 
 Creates an iterator from a value.
-Note: Uses &self due to parser limitation (self by value not yet supported in traits).
 
-### `pub trait From<T> with ()`
+### `pub affine trait ForOf with _`
+
+What `for let x of e` walks when `e` is a value of a type implementing it:
+the loop passes `e` to `start` and calls the state's
+`next(&mut self) -> Option<Item>` until it answers `None`. The loop owns
+what it walks, so an affine element moves into the binding once. Any other
+iterable is walked through its `IntoIterator`.
+
+#### `fn start(self) -> Self::State`
+
+### `pub affine trait From<T> with ()`
 
 Infallible conversion trait.
 Implement this to define how to convert from type `T` into `Self`.
@@ -653,7 +676,7 @@ The compiler provides a reflexive blanket impl `From<T> for T` for all types.
 
 Converts a value of type `T` into `Self`.
 
-### `pub trait TryFrom<T> with ()`
+### `pub affine trait TryFrom<T> with ()`
 
 Fallible conversion trait. `Err: Error`, so a caller reaching the failure
 through the bound can always report its reason.
@@ -733,6 +756,20 @@ foreign type) and placed here, not in string.wado, so `String` stays a leaf
 that `Formatter` depends on — mirroring `impl Display for String` above.
 
 #### `fn push_display<T: Display>(&mut self, value: &T)`
+
+### `pub affine trait Waitable with ()`
+
+What a `WaitableSet` waits on: a value the host reports events for by its
+handle. It is sealed, so a set joins only what it can account for: the
+standard library implements it on the calls, and a variant whose cases each
+hold one derives it with `impl Waitable for V;`. A stream or future end is
+none: each copy on one waits inside the binding, so the host never has an
+event left to report for it.
+
+#### `fn waitable_id(&self) -> Option<ResourceId>`
+
+The handle the host reports this value by, or None where it is ready
+without the host.
 
 ### `pub trait Sequence with ()`
 
@@ -953,20 +990,19 @@ The readable end is passed to consumers; the writable end fulfills the future.
 
 Create a new future pair: [Future<T>, FutureWritable<T>].
 
-#### `fn read(&self) -> Option<T>`
+#### `fn read(self) -> Option<T>`
 
 `#[cm("future-read")]`
 
-Read the value from the future.
-Returns Some(value) when fulfilled, None if the writer dropped without writing.
+Read the value from the future: Some(value) when fulfilled, None if the
+writer dropped without writing. A readable end is read once, so the read
+consumes it.
 
 #### `fn cancel_read(&self)`
 
 `#[cm("future-cancel-read")]`
 
 Cancel an in-progress read. Blocks until cancellation completes.
-Traps if this end is still joined to a `WaitableSet` — leave the set
-first.
 
 #### `fn drop(self)`
 
@@ -979,19 +1015,19 @@ Drop the readable end of the future.
 Writable end of an async value (WASI Component Model future).
 Opaque i32 handle managed by the runtime.
 
-#### `fn write(&self, value: T)`
+#### `fn write(self, value: T) -> FutureWrite<T>`
 
 `#[cm("future-write")]`
 
-Fulfill the future with a value.
+Fulfill the future with a value. A writable end is written once, so the
+write consumes it. A reader that dropped first leaves the value in
+`rest`.
 
 #### `fn cancel_write(&self)`
 
 `#[cm("future-cancel-write")]`
 
 Cancel an in-progress write. Blocks until cancellation completes.
-Traps if this end is still joined to a `WaitableSet` — leave the set
-first.
 
 #### `fn drop(self)`
 
@@ -1023,8 +1059,6 @@ traps, so a loop breaks on the result, never on an empty chunk.
 `#[cm("stream-cancel-read")]`
 
 Cancel an in-progress read. Blocks until cancellation completes.
-Traps if this end is still joined to a `WaitableSet` — leave the set
-first.
 
 #### `fn drop(self)`
 
@@ -1052,13 +1086,13 @@ doubling past half the address space is what a large file cannot afford.
 
 Writable end of an async sequence (WASI Component Model stream).
 
-#### `fn write(&self, data: List<T>) -> StreamWrite`
+#### `fn write(&self, data: List<T>) -> StreamWrite<T>`
 
 `#[cm("stream-write")]`
 
 One Component Model copy of `data`, blocking until the reader takes at
-least one element or drops. The reader may take a prefix, so the count
-can be short of `data.len()`. Writing to an end whose result was
+least one element or drops. The reader may take a prefix, and what it
+left comes back as `rest`. Writing to an end whose result was
 `Dropped` traps, and an empty `data` is the CM's readiness signal, which
 blocks until a reader rendezvouses rather than writing nothing.
 `write_all` is the loop that finishes the buffer.
@@ -1075,8 +1109,6 @@ Any element type but a byte is a compile error.
 `#[cm("stream-cancel-write")]`
 
 Cancel an in-progress write. Blocks until cancellation completes.
-Traps if this end is still joined to a `WaitableSet` — leave the set
-first.
 
 #### `fn drop(self)`
 
@@ -1089,76 +1121,23 @@ Drop the writable end, signaling end-of-stream.
 Write every element, or stop early when the readable end drops.
 Returns the result of the copy that ended the loop.
 
-### `pub resource WaitableSet`
-
-A set of waitable handles used for async task coordination.
-
-Lifecycle: create with `new()`, join waitables into the set, wait/poll for
-events, then drop. A WaitableSet can only be dropped when it has no joined
-children — `Subtask::drop()` automatically removes the subtask from its
-joined set (via the CM spec's `Waitable.join(None)` semantics), so always
-drop subtasks before dropping the set.
-
-#### `fn new() -> WaitableSet`
-
-`#[cm("waitable-set-new")]`
-
-Create a new waitable set.
-
-#### `fn wait(&self) -> WaitEvent`
-
-`#[cm("waitable-set-wait")]`
-
-Block until an event occurs. Returns the event details.
-
-#### `fn poll(&self) -> Option<WaitEvent>`
-
-`#[cm("waitable-set-poll")]`
-
-Non-blocking poll. Returns Some(event) if ready, None otherwise.
-
-#### `fn drop(self)`
-
-`#[cm("waitable-set-drop")]`
-
-Drop the waitable set. Traps if waitables are still joined to this set.
-
 ### `pub resource Subtask`
 
-A raw CM subtask handle. Prefer `AsyncCall<T>` (see below), which pairs the
-handle with its result buffer.
-
-`Subtask` extends `Waitable` in the CM spec. When dropped, it
-automatically removes itself from any joined `WaitableSet` (the CM
-runtime calls `Waitable.join(None)` internally), so `WaitableSet::drop`
-can succeed.
-
-Correct lifecycle:
-let subtask = handle as Subtask;
-subtask.join(&ws);
-ws.wait();
-subtask.drop(); // removes from ws
-ws.drop(); // safe — no children
+A raw CM subtask handle. `AsyncCall<T>` holds one, with its result buffer.
+Dropping a subtask leaves the set it is joined to.
 
 #### `fn drop(self)`
 
 `#[cm("subtask-drop")]`
 
-Drop a completed subtask. Automatically unjoins from its WaitableSet.
-Traps if the subtask has not yet resolved.
+Drop a completed subtask. Traps if the subtask has not yet resolved.
 
-#### `fn cancel(&self)`
+#### `fn cancel(&self) -> u32`
 
 `#[cm("subtask-cancel")]`
 
-Cancel this in-progress subtask. Blocks until cancellation completes.
-
-#### `fn join(&self, set: &WaitableSet) -> Waitable`
-
-`#[cm("waitable-join")]`
-
-Join this subtask to a waitable set for monitoring.
-Returns a Waitable token identifying this subtask in wait results.
+Cancel this in-progress subtask, blocking until it resolves, and return
+the state it resolved in.
 
 ### `pub resource ErrorContext`
 
@@ -1183,15 +1162,6 @@ Get the debug message from this error context.
 Drop the error context.
 
 ## Types
-
-### `pub type Waitable = i32`
-
-Opaque token identifying a waitable handle within a WaitableSet.
-Obtained from `Subtask::join`. Compared by handle identity (`==`).
-
-A newtype over the raw `i32` handle: copyable, with `Eq` inherited from
-`i32`. It is an identity token with no lifecycle of its own — the joined
-`Subtask` / `AsyncCall` owns the actual handle lifecycle.
 
 ### `pub type ByteArray = Array<u8>`
 
@@ -3401,7 +3371,7 @@ Encodes this character as UTF-8, returning the bytes.
 
 ## Structs
 
-### `pub struct VariantCase<T, P>`
+### `pub struct VariantCase<affine T, affine P>`
 
 A case handle minted by `ReflectVariant::members()`: the payload type `P`
 is static, the case index is a value. `extract` / `construct` bridge a
@@ -3422,10 +3392,6 @@ Whether the case carries no payload.
 
 Whether `v`'s live case is this case.
 
-#### `pub fn extract(&self, v: &T) -> P`
-
-The payload of this case in `v`. Traps unless `holds(v)`.
-
 #### `pub fn construct(&self, payload: P) -> T`
 
 Builds this case around `payload`.
@@ -3433,6 +3399,10 @@ Builds this case around `payload`.
 #### `pub fn make(&self) -> T`
 
 Builds this case with no payload. Traps unless `is_unit()`.
+
+#### `pub fn extract(&self, v: &T) -> P`
+
+The payload of this case in `v`. Traps unless `holds(v)`.
 
 #### `impl Member for VariantCase<T, P>`
 
@@ -3544,7 +3514,7 @@ Renders the value through the trait method the specifier's type
 selects (`Display::fmt` when it names none), on a `Formatter` carrying
 the specifier's settings over `f`'s buffer.
 
-### `pub struct StructField<T, F>`
+### `pub struct StructField<affine T, affine F>`
 
 A field handle minted by `ReflectStruct::members()`: the field type `F` is
 static, and `get` reads the field's value out of a struct. See WEP 2026-06-13.
@@ -3563,6 +3533,10 @@ Whether the field declares a default value.
 
 Whether the field is marked `#[secret]`.
 
+#### `pub fn get_ref(&self, v: &T) -> &F`
+
+This field in `v`, by reference.
+
 #### `pub fn get(&self, v: &T) -> F`
 
 The value of this field in `v`.
@@ -3577,7 +3551,7 @@ The value of this field in `v`.
 
 ##### `fn inspect(&self, f: &mut Formatter)`
 
-### `pub struct IterMap<I: Iterator, F>`
+### `pub struct IterMap<affine I: Iterator, F>`
 
 Generic map iterator adapter that wraps any Iterator. Its type carries the
 function's, so advancing it performs what the function does.
@@ -3594,7 +3568,7 @@ function's, so advancing it performs what the function does.
 
 ##### `fn into_iter(&self) -> IterMap<I, F>`
 
-### `pub struct IterFilter<I: Iterator, F>`
+### `pub struct IterFilter<affine I: Iterator, F>`
 
 Generic filter iterator adapter that wraps any Iterator. Its type carries
 the predicate's, so advancing it performs what the predicate does.
@@ -3611,7 +3585,7 @@ the predicate's, so advancing it performs what the predicate does.
 
 ##### `fn into_iter(&self) -> IterFilter<I, F>`
 
-### `pub struct IterEnumerate<I: Iterator>`
+### `pub struct IterEnumerate<affine I: Iterator>`
 
 Generic enumerate iterator adapter that yields (index, element) pairs.
 
@@ -3623,11 +3597,7 @@ Generic enumerate iterator adapter that yields (index, element) pairs.
 
 ##### `fn next(&mut self) -> Option<Self::Item> with _`
 
-#### `impl IntoIterator for IterEnumerate<I>`
-
-##### `fn into_iter(&self) -> IterEnumerate<I>`
-
-### `pub struct IterTake<I: Iterator>`
+### `pub struct IterTake<affine I: Iterator>`
 
 Generic take iterator adapter that limits elements from any Iterator.
 
@@ -3639,11 +3609,7 @@ Generic take iterator adapter that limits elements from any Iterator.
 
 ##### `fn next(&mut self) -> Option<Self::Item> with _`
 
-#### `impl IntoIterator for IterTake<I>`
-
-##### `fn into_iter(&self) -> IterTake<I>`
-
-### `pub struct IterSkip<I: Iterator>`
+### `pub struct IterSkip<affine I: Iterator>`
 
 Generic skip iterator adapter that skips elements from any Iterator.
 
@@ -3655,11 +3621,7 @@ Generic skip iterator adapter that skips elements from any Iterator.
 
 ##### `fn next(&mut self) -> Option<Self::Item> with _`
 
-#### `impl IntoIterator for IterSkip<I>`
-
-##### `fn into_iter(&self) -> IterSkip<I>`
-
-### `pub struct IterStepBy<I: Iterator>`
+### `pub struct IterStepBy<affine I: Iterator>`
 
 Generic step iterator adapter that yields every `gap + 1`-th element of any Iterator.
 
@@ -3673,11 +3635,7 @@ Generic step iterator adapter that yields every `gap + 1`-th element of any Iter
 
 ##### `fn next(&mut self) -> Option<Self::Item> with _`
 
-#### `impl IntoIterator for IterStepBy<I>`
-
-##### `fn into_iter(&self) -> IterStepBy<I>`
-
-### `pub struct IterChain<I: Iterator, J: Iterator>`
+### `pub struct IterChain<affine I: Iterator, affine J: Iterator>`
 
 Generic chain iterator adapter that chains two iterators of the same item type.
 
@@ -3691,11 +3649,7 @@ Generic chain iterator adapter that chains two iterators of the same item type.
 
 ##### `fn next(&mut self) -> Option<Self::Item> with _`
 
-#### `impl IntoIterator for IterChain<I, J>`
-
-##### `fn into_iter(&self) -> IterChain<I, J>`
-
-### `pub struct IterZip<I: Iterator, J: Iterator>`
+### `pub struct IterZip<affine I: Iterator, affine J: Iterator>`
 
 Generic zip iterator adapter that pairs elements from two iterators.
 
@@ -3706,10 +3660,6 @@ Generic zip iterator adapter that pairs elements from two iterators.
 #### `impl Iterator for IterZip<I, J>`
 
 ##### `fn next(&mut self) -> Option<Self::Item> with _`
-
-#### `impl IntoIterator for IterZip<I, J>`
-
-##### `fn into_iter(&self) -> IterZip<I, J>`
 
 ### `pub struct ConvertError`
 
@@ -4411,6 +4361,19 @@ Not through `div_rem`: `MIN % -1` is 0, though `MIN / -1` overflows.
 
 ##### `fn next_step(&self) -> Option<i128>`
 
+### `pub struct ResourceId`
+
+The identity of a live affine resource, which owns nothing. A dropped
+resource's identity may come back for a later one, since the host reuses a
+freed handle index. Nothing converts it back into a resource.
+
+_Fields are private._
+
+#### `pub fn of<affine R: AffineResource>(r: &R) -> ResourceId`
+
+The identity of `r`. A static function rather than a method, so it
+takes no name from any resource.
+
 ### `pub struct StreamChunk<T>`
 
 What one `Stream::read` copied, and how that copy ended. A copy carries
@@ -4420,43 +4383,90 @@ elements and the peer's drop together, so `result` is what says more follows.
 
 #### `result: CopyResult`
 
-### `pub struct StreamWrite`
+### `pub struct StreamWrite<affine T>`
 
-What one `StreamWritable::write` copied, and how that copy ended. A reader
-may take a prefix, so `count` can be short of what was offered.
+What one `StreamWritable::write` did not deliver, and how its copy ended.
+A reader may take a prefix, and the elements it left come back in `rest`.
 
-#### `count: i32`
+#### `rest: List<T>`
 
 #### `result: CopyResult`
 
-### `pub struct WaitEvent`
+### `pub struct FutureWrite<affine T>`
 
-Event returned by `WaitableSet::wait` or `WaitableSet::poll`.
+What `FutureWritable::write` did not deliver, and how its copy ended: the
+value comes back in `rest` where the reader dropped first.
 
-#### `code: i32`
+#### `rest: Option<T>`
 
-CM event code:
-1 = subtask, 2 = stream-read, 3 = stream-write, 4 = future-read, 5 = future-write, 6 = cancelled
+#### `result: FutureWriteResult`
 
-#### `handle: Waitable`
+### `pub affine struct WaitableSet<affine W: Waitable>`
 
-Which waitable handle triggered the event.
+A set of values the host reports events for, owning each while it waits.
+A wait moves the member that is ready back out. Dropping the set drops the
+members it still holds.
 
-#### `payload: u32`
+A set has one member type. A loop waiting on several kinds declares a
+variant of its own and derives `Waitable` on it with `impl Waitable for V;`.
 
-Event-specific data (e.g. count|status for streams).
+_Fields are private._
 
-### `pub struct AsyncCall<T>`
+#### `pub fn new() -> WaitableSet<W>`
+
+`#[benign(RawWaitableSet)]`
+
+#### `pub fn join(&mut self, member: W)`
+
+Moves `member` into the set. A member joins one set at a time, so
+whether the host has an event left for it is settled here.
+
+#### `pub fn wait(&mut self) -> Ready<W>`
+
+`#[benign(RawWaitableSet)]`
+
+Blocks until a member has an event, and moves it out. A member ready
+without the host comes first. Traps on an empty set.
+
+#### `pub fn poll(&mut self) -> Option<Ready<W>>`
+
+`#[benign(RawWaitableSet)]`
+
+The member that has an event, moved out, or None where none has one
+yet.
+
+#### `pub fn len(&self) -> i32`
+
+#### `pub fn is_empty(&self) -> bool`
+
+#### `impl Drop for WaitableSet<W>`
+
+##### `fn drop(self)`
+
+`#[benign(RawWaitableSet)]`
+
+Drops the members first, each leaving the host's set as it drops: the
+host traps on dropping a set that still has one.
+
+### `pub struct Ready<affine W>`
+
+A member of a `WaitableSet` that has an event, moved out of the set with
+the event.
+
+#### `member: W`
+
+#### `event: ReadyEvent`
+
+### `pub affine struct AsyncCall<affine T>`
 
 A handle to an in-flight CM async import call, parameterised by the
 result type `T`. Returned by the synthesised adapter for a WIT
 `async func` import.
 
-`AsyncCall<T>` pairs the raw CM subtask handle with the linear-memory
-buffer into which the host writes the async result. `wait` blocks until
-the call returns and takes the lifted result; `cancel` aborts the
-in-flight call. Either one ends the call, for every copy of the value; a
-call that neither ends leaks its handle and buffer.
+`AsyncCall<T>` holds the CM subtask with the linear-memory buffer into
+which the host writes the async result. `wait` blocks until the call
+returns and takes the lifted result; `cancel` aborts the in-flight call.
+Either one consumes the call, and dropping a call cancels it.
 
 The subtask begins running the moment the adapter returns, so writes to
 stream parameters (e.g. a request body) made after the adapter call and
@@ -4473,27 +4483,32 @@ body_tx.drop();
 let resp = task.wait();             // block for response
 ```
 
+The synthesized adapter builds one with a literal, which reaches the
+private fields, so user code can neither peek nor forge one.
+
 _Fields are private._
 
-#### `pub fn wait(&self) -> T with (Subtask, WaitableSet)`
+#### `pub fn wait(self) -> T with Subtask`
 
 Wait for the subtask to complete and return the lifted result.
-Drops the CM subtask handle and frees the result buffer before
-returning, which ends the call: any later `wait`, `cancel` or `join`
-on it, or on a copy of it, traps.
 
-#### `pub fn cancel(&self) with Subtask`
+#### `pub fn cancel(self) with Subtask`
 
-Cancel the in-flight subtask and free the result buffer. Any
-partially-written result is discarded. It ends the call as `wait` does.
+Cancel the in-flight subtask. A result it returned before the cancel
+is lifted and dropped, since it may own handles.
 
-#### `pub fn join(&self, set: &WaitableSet) -> Waitable with Subtask`
+#### `impl Drop for AsyncCall<T>`
 
-Join this subtask to a waitable set for manual polling (use when
-the caller wants to wait on multiple subtasks and/or streams
-simultaneously). Returns a `Waitable` token identifying this
-subtask in wait events. The caller remains responsible for eventual
-`wait`/`cancel` on this `AsyncCall<T>`.
+##### `fn drop(self)`
+
+`#[benign(Subtask)]`
+
+Cancels a call nobody waited on, and drops a result the callee
+returned, which owns handles only a lift reaches.
+
+#### `impl Waitable for AsyncCall<T>`
+
+##### `fn waitable_id(&self) -> Option<ResourceId>`
 
 ### `pub struct ParseIntError`
 
@@ -4659,11 +4674,7 @@ One bulk copy of the remaining range, not an element-at-a-time loop.
 
 ##### `fn next(&mut self) -> Option<Self::Item>`
 
-#### `impl IntoIterator for SliceValueIter<T>`
-
-##### `fn into_iter(&self) -> SliceValueIter<T>`
-
-### `pub struct SliceRefIter<T>`
+### `pub struct SliceRefIter<affine T>`
 
 A by-reference forward iterator over a backing `Array<T>` range. Each `&T`
 points to a fresh copy of the element — Wasm GC has no interior references —
@@ -4698,10 +4709,6 @@ _Fields are private._
 
 ##### `fn next(&mut self) -> Option<Self::Item>`
 
-#### `impl IntoIterator for SliceWindows<T>`
-
-##### `fn into_iter(&self) -> SliceWindows<T>`
-
 ### `pub struct SliceChunks<T>`
 
 Each item is a `Slice<T>` viewing the backing array, not a copy of it.
@@ -4711,10 +4718,6 @@ _Fields are private._
 #### `impl Iterator for SliceChunks<T>`
 
 ##### `fn next(&mut self) -> Option<Self::Item>`
-
-#### `impl IntoIterator for SliceChunks<T>`
-
-##### `fn into_iter(&self) -> SliceChunks<T>`
 
 ### `pub struct Utf8Error`
 
@@ -5383,7 +5386,7 @@ If `count` is negative, replaces all occurrences.
 
 ##### `pub fn eq(&self, other: &String) -> bool`
 
-### `pub struct List<T>`
+### `pub struct List<affine T>`
 
 A growable sequence.
 
@@ -5400,10 +5403,6 @@ _Fields are private._
 `#[compiler_item("list_with_capacity")]`
 
 #### `pub fn grow(&mut self)`
-
-#### `pub fn filled(n: i32, element: T) -> List<T>`
-
-A list of `n` copies of `element`.
 
 #### `pub fn from_tuple<..Elems>(elements: [..Elems]) -> List<T>`
 
@@ -5438,13 +5437,7 @@ traps rather than corrupting memory.
 
 #### `pub fn pop(&mut self) -> Option<T>`
 
-#### `pub fn to_array(&self) -> Array<T>`
-
-Copy the live `0..<len()` elements into a fresh fixed `Array<T>` of exactly
-`len()`. Hand a finished, no-longer-growing buffer to code that only
-indexes it: `Array`'s `[]` is bounds-checked by Wasm (traps on OOB)
-without `List[]`'s power-assert diagnostic, so index-heavy readers (e.g. a
-generated parser over a fixed token stream) avoid that per-access cost.
+Removes and returns the last element, or null when empty.
 
 #### `pub fn insert(&mut self, index: i32, value: T)`
 
@@ -5485,6 +5478,28 @@ Reserves capacity for at least `additional` more elements.
 
 Shrinks the capacity to match the current length.
 
+#### `pub fn reverse(&mut self)`
+
+Reverses the elements in place.
+
+#### `pub fn is_empty(&self) -> bool`
+
+#### `pub fn iter_ref(&self) -> SliceRefIter<T>`
+
+The elements, each by reference.
+
+#### `pub fn filled(n: i32, element: T) -> List<T>`
+
+A list of `n` copies of `element`.
+
+#### `pub fn to_array(&self) -> Array<T>`
+
+Copy the live `0..<len()` elements into a fresh fixed `Array<T>` of exactly
+`len()`. Hand a finished, no-longer-growing buffer to code that only
+indexes it: `Array`'s `[]` is bounds-checked by Wasm (traps on OOB)
+without `List[]`'s power-assert diagnostic, so index-heavy readers (e.g. a
+generated parser over a fixed token stream) avoid that per-access cost.
+
 #### `pub fn extend(&mut self, other: &List<T>)`
 
 Extends this list with elements from another list.
@@ -5496,10 +5511,6 @@ Extends this list with the elements of a slice in a single bulk copy
 different backing array than this list. Taken by value because a slice is
 a cheap view (a backing reference plus two offsets), which also lets a
 newtype view (e.g. `ByteSlice`) coerce to `Slice<T>` at the call.
-
-#### `pub fn reverse(&mut self)`
-
-Reverses the elements in place.
 
 #### `pub fn repeat(&self, n: i32) -> List<T>`
 
@@ -5598,6 +5609,10 @@ Joins elements into a string with the given separator.
 
 ##### `fn index_value(&self, range: RangeInclusive<i32>) -> Slice<T>`
 
+#### `impl ForOf for List<T>`
+
+##### `fn start(self) -> ListCursor<T>`
+
 #### `impl IntoIterator for List<T>`
 
 ##### `fn into_iter(&self) -> Self::Iter`
@@ -5622,6 +5637,16 @@ Joins elements into a string with the given separator.
 
 ##### `pub fn fmt(&self, f: &mut Formatter)`
 
+### `pub struct ListCursor<affine T>`
+
+The state `for-of` walks a list with: the list and a position. `next` moves
+an affine element out of its slot and copies a copyable one, so the cursor
+never writes a list it shares; dropping it drops the elements not reached.
+
+_Fields are private._
+
+#### `pub fn next(&mut self) -> Option<T>`
+
 ### `pub struct RangeExclusive<T: Ord>`
 
 Half-open range [start, end).
@@ -5642,10 +5667,6 @@ Returns true if the range contains no elements.
 #### `impl Iterator for RangeExclusive<T>`
 
 ##### `fn next(&mut self) -> Option<T>`
-
-#### `impl IntoIterator for RangeExclusive<T>`
-
-##### `fn into_iter(&self) -> RangeExclusive<T>`
 
 #### `impl Eq for RangeExclusive<T>`
 
@@ -5676,10 +5697,6 @@ Returns true if the range contains no elements.
 
 ##### `fn next(&mut self) -> Option<T>`
 
-#### `impl IntoIterator for RangeInclusive<T>`
-
-##### `fn into_iter(&self) -> RangeInclusive<T>`
-
 #### `impl Eq for RangeInclusive<T>`
 
 ##### `fn eq(&self, other: &Self) -> bool`
@@ -5706,6 +5723,17 @@ Result type - either Ok(T) or Err(E)
 #### `Ok(T)`
 
 #### `Err(E)`
+
+### `pub variant ReadyEvent`
+
+What the host reported for a `WaitableSet` member.
+
+#### `Unreported`
+
+The member has no handle for the host to report, so it is ready
+without one.
+
+#### `Call(CallState)`
 
 ## Enums
 
@@ -5776,6 +5804,37 @@ The peer end is gone; no further copy is possible on this end.
 #### `Cancelled`
 
 A cancel finished and returned the buffer; the end stays usable.
+
+### `pub enum FutureWriteResult`
+
+How a `FutureWritable::write` ended.
+
+#### `Completed`
+
+The reader took the value.
+
+#### `Dropped`
+
+The reader dropped first, and the value came back.
+
+#### `Pending`
+
+The reader has not read yet. The host holds the value and hands it to
+the reader, so it is no longer the writer's.
+
+### `pub enum CallState`
+
+The state an async call moved to (`CanonicalABI.md`, `Subtask.State`).
+
+#### `Starting`
+
+#### `Started`
+
+#### `Returned`
+
+#### `CancelledBeforeStarted`
+
+#### `CancelledBeforeReturned`
 
 ### `pub enum IntErrorKind`
 

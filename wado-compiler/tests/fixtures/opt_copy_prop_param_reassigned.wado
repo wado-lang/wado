@@ -1,0 +1,13 @@
+// A copy of a parameter the body later assigns does not read the parameter
+// after that assignment: `tx.drop()` moves `tx` out, emptying it, and the WIR
+// copy propagation used to read the emptied `tx` in place of the moved value.
+#[inline(never)]
+fn finish(tx: StreamWritable<u8>) {
+    tx.drop();
+}
+
+test {
+    let [rx, tx] = Stream::<u8>::new();
+    finish(tx);
+    assert rx.read(1).result == CopyResult::Dropped;
+}

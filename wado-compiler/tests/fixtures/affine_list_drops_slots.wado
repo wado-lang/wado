@@ -1,0 +1,17 @@
+// A list drops each element it still holds where its scope ends, and not one
+// `pop` moved out (WEP: Affine Types).
+test {
+    let [rx, tx] = Stream::<u8>::new();
+    let [rx2, tx2] = Stream::<u8>::new();
+    let mut kept: Option<Stream<u8>> = null;
+    scope: {
+        let mut ends: List<Stream<u8>> = [];
+        ends.push(rx);
+        ends.push(rx2);
+        kept = ends.pop();
+    }
+    assert tx.write([1]).result == CopyResult::Dropped;
+    let Some(end) = kept else { unreachable(); };
+    end.drop();
+    assert tx2.write([1]).result == CopyResult::Dropped;
+}

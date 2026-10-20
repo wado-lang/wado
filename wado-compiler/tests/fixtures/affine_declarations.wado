@@ -1,0 +1,29 @@
+// A declaration holding an affine value says so with `affine`; a tuple, an
+// anonymous struct and a newtype have no declaration to mark and infer it.
+
+pub resource Counter {
+    fn bump(&self);
+}
+
+affine struct Holder {
+    c: Counter,
+    n: i32,
+}
+
+affine variant Slot {
+    Empty,
+    Held(Holder),
+}
+
+affine struct Bag {
+    items: List<Counter>,
+}
+
+type Wrapped = Holder;
+
+test {
+    let slot: Slot = Empty;
+    assert slot matches { Empty };
+    let bag = Bag { items: [] };
+    assert bag.items.is_empty();
+}

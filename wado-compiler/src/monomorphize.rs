@@ -21,6 +21,8 @@ use crate::flat_package::FlatPackage;
 use crate::hashmap::IndexMap;
 use crate::module_source::ModuleSource;
 use crate::name::{FreeFunctionName, LocalMethodName};
+use crate::synthesis::resource_cleanup;
+use crate::synthesis::resource_cleanup::Generics;
 use crate::tir::{
     MonomorphInfo, ResolvedType, StructDef, TemplateId, TirFunction, TirModule, TirStruct, TypeId,
 };
@@ -97,6 +99,8 @@ pub fn monomorphize(flat: &mut FlatPackage) -> Monomorphization {
         generic_structs: generic_structs_in(&flat.structs).collect(),
         monomorphizer: Monomorphizer::new(flat.trait_env.clone()),
         scanned_functions: 0,
+        generics: Generics::of(flat),
+        elaborated_functions: 0,
     };
     session.run(flat);
     session
@@ -128,6 +132,10 @@ pub struct Monomorphization {
     /// instance keyed by the receiver alone, whose body keeps the method's own
     /// type parameters.
     scanned_functions: usize,
+    /// What elaborating the instances' drops reads of the templates.
+    generics: Generics,
+    /// How many leading `flat.functions` have had their drops elaborated.
+    elaborated_functions: usize,
 }
 
 impl Monomorphization {
@@ -136,7 +144,18 @@ impl Monomorphization {
         self.run(flat);
     }
 
+    /// Instantiate, then elaborate the new instances' drops, until the drop
+    /// glue that elaborating adds calls no template left to instantiate.
     fn run(&mut self, flat: &mut FlatPackage) {
+        loop {
+            self.instantiate(flat);
+            if flat.functions.len() == self.scanned_functions {
+                break;
+            }
+        }
+    }
+
+    fn instantiate(&mut self, flat: &mut FlatPackage) {
         let mut temp_module = TirModule::new(flat.entry_module_source.clone());
         temp_module.type_table = flat.type_table.clone();
         temp_module.functions = std::mem::take(&mut flat.functions);
@@ -152,6 +171,10 @@ impl Monomorphization {
         );
         self.scanned_functions = temp_module.functions.len();
         write_back(flat, temp_module);
+        // A generic body's drops are elaborated once its types are known
+        // (WEP: Affine Types).
+        resource_cleanup::elaborate_instance_drops(flat, self.elaborated_functions, &self.generics);
+        self.elaborated_functions = flat.functions.len();
     }
 }
 

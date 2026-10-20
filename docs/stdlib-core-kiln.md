@@ -74,7 +74,7 @@ default type argument of `Request`, so a generator with no `Options`
 struct writes `fn generate(req: Request)` and never mentions options.
 Its CBOR wire form is the empty map, which decodes back into `NoOptions`.
 
-### `pub struct Request<T = NoOptions>`
+### `pub affine struct Request<T = NoOptions>`
 
 The typed request a Kiln generator receives. Generator authors write
 `export fn generate(req: Request<Options>) -> Result<Response, Error>`
@@ -123,7 +123,7 @@ by consulting `CompilerHost`.
 
 #### `message: String`
 
-### `pub struct InputFile`
+### `pub affine struct InputFile`
 
 One schema file the compiler opened for the generator. The set of
 files is fixed by the invocation declaration; the content arrives as

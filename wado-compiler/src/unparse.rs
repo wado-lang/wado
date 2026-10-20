@@ -1067,6 +1067,7 @@ impl<'a> Unparser<'a> {
         self.output
             .push_str(type_decl_keyword(s.visibility, s.is_export));
 
+        self.emit_kw_if(s.is_affine, "affine ");
         self.output.push_str("struct ");
         self.output.push_str(&s.name);
         self.unparse_generic_params(&s.type_params);
@@ -1115,6 +1116,7 @@ impl<'a> Unparser<'a> {
         }
         self.delimited("<", ">", written_params(params), |s, param| {
             s.emit_inline_attrs(&param.attrs);
+            s.emit_kw_if(param.is_affine, "affine ");
             s.emit_kw_if(param.is_effect, "effect ");
             s.emit_kw_if(param.is_pack, "..");
             s.output.push_str(&param.name);
@@ -1157,6 +1159,7 @@ impl<'a> Unparser<'a> {
         self.output
             .push_str(type_decl_keyword(v.visibility, v.is_export));
 
+        self.emit_kw_if(v.is_affine, "affine ");
         self.output.push_str("variant ");
         self.output.push_str(&v.name);
         self.unparse_generic_params(&v.type_params);
@@ -1303,6 +1306,7 @@ impl<'a> Unparser<'a> {
         self.emit_outer_attrs(t.id, &t.attrs);
         self.emit_visibility(t.visibility);
 
+        self.emit_kw_if(t.is_affine, "affine ");
         self.output.push_str("trait ");
         self.output.push_str(&t.name);
         self.unparse_generic_params(&t.type_params);
@@ -1334,6 +1338,7 @@ impl<'a> Unparser<'a> {
         let (id, span, attrs) = (member.id(), member.span(), member.attrs());
         match member {
             Member::Declared(assoc) => self.emit_member(id, span, attrs, |this| {
+                this.emit_kw_if(assoc.is_affine, "affine ");
                 this.output.push_str("type ");
                 this.output.push_str(&assoc.name);
                 this.unparse_generic_params(&assoc.type_params);
@@ -3758,7 +3763,11 @@ pub fn unparse_variant_header(v: &VariantDecl) -> String {
     let mut out = String::new();
     emit_decl_header(
         type_decl_keyword(v.visibility, v.is_export),
-        "variant ",
+        if v.is_affine {
+            "affine variant "
+        } else {
+            "variant "
+        },
         &v.name,
         &v.type_params,
         &mut out,
@@ -3782,7 +3791,11 @@ pub fn unparse_trait_header(t: &TraitDecl) -> String {
     let mut out = String::new();
     emit_decl_header(
         t.visibility.keyword(),
-        "trait ",
+        if t.is_affine {
+            "affine trait "
+        } else {
+            "trait "
+        },
         &t.name,
         &t.type_params,
         &mut out,
@@ -3815,14 +3828,17 @@ pub fn unparse_struct_signature(s: &StructDecl, public_only: bool) -> String {
     let mut out = String::new();
     emit_decl_header(
         type_decl_keyword(s.visibility, s.is_export),
-        "struct ",
+        if s.is_affine {
+            "affine struct "
+        } else {
+            "struct "
+        },
         &s.name,
         &s.type_params,
         &mut out,
     );
     out.push_str(" { ");
-    let hidden =
-        |f: &StructField| public_only && (!f.visibility.is_public() || f.name.starts_with("__"));
+    let hidden = |f: &StructField| public_only && !f.visibility.is_public();
     let has_hidden = s.fields.iter().any(hidden);
     let mut first = true;
     for field in s.fields.iter().filter(|f| !hidden(f)) {
@@ -4008,6 +4024,7 @@ pub fn unparse_generic_params_into(params: &[GenericParam], output: &mut String)
         return;
     }
     delimited_into("<", ">", written_params(params), output, |param, o| {
+        emit_kw_if_into(param.is_affine, "affine ", o);
         emit_kw_if_into(param.is_effect, "effect ", o);
         emit_kw_if_into(param.is_pack, "..", o);
         o.push_str(&param.name);

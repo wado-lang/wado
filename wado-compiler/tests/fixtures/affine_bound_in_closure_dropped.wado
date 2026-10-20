@@ -1,0 +1,10 @@
+// A closure body is a function of its own: an end it binds drops where the
+// body's scope ends (WEP: Affine Types).
+test {
+    let [rx, tx] = Stream::<u8>::new();
+    let take = |end: Stream<u8>| {
+        let held = end;
+    };
+    take(rx);
+    assert tx.write([1]).result == CopyResult::Dropped;
+}

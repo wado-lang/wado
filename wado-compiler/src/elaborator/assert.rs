@@ -172,6 +172,9 @@ pub(super) fn render_local_name(cap_name: &str) -> String {
 /// The text a conditional slot renders when the run never reached it.
 pub(super) const NOT_EVALUATED: &str = "<not evaluated>";
 
+/// The text a slot renders when a move in the condition emptied its place.
+pub(super) const MOVED: &str = "<moved>";
+
 /// Render every recorded capture plan, for `wado dump --assert-plan`.
 pub(crate) fn render_plans(sem: &ModuleSemantics) -> String {
     let mut out = String::new();

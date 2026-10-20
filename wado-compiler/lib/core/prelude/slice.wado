@@ -293,15 +293,6 @@ impl<T> Iterator for SliceValueIter<T> {
     }
 }
 
-impl<T> IntoIterator for SliceValueIter<T> {
-    type Item = T;
-    type Iter = SliceValueIter<T>;
-
-    fn into_iter(&self) -> SliceValueIter<T> {
-        return *self;
-    }
-}
-
 impl<T> SliceValueIter<T> {
     /// One bulk copy of the remaining range, not an element-at-a-time loop.
     pub fn collect(&mut self) -> List<T> {
@@ -318,17 +309,19 @@ impl<T> SliceValueIter<T> {
 /// A by-reference forward iterator over a backing `Array<T>` range. Each `&T`
 /// points to a fresh copy of the element — Wasm GC has no interior references —
 /// so it reads but never writes the backing array. Backs `for x of &list`.
-pub struct SliceRefIter<T> {
+pub struct SliceRefIter<affine T> {
     repr: &Array<T>,
     index: i32,
     end: i32,
 }
 
-impl<T> SliceRefIter<T> {
+impl<affine T> SliceRefIter<T> {
     internal fn internal_new(repr: &Array<T>, index: i32, end: i32) -> SliceRefIter<T> {
         return SliceRefIter { repr, index, end };
     }
+}
 
+impl<T> SliceRefIter<T> {
     /// The same remaining range yielded by value. Named for the axis rather
     /// than Rust's `copied()`: every element read in Wado is a copy already.
     pub fn iter_value(&self) -> SliceValueIter<T> {
@@ -336,7 +329,7 @@ impl<T> SliceRefIter<T> {
     }
 }
 
-impl<T> Iterator for SliceRefIter<T> {
+impl<affine T> Iterator for SliceRefIter<T> {
     type Item = &T;
 
     fn next(&mut self) -> Option<Self::Item> {
@@ -399,15 +392,6 @@ impl<T> Iterator for SliceWindows<T> {
     }
 }
 
-impl<T> IntoIterator for SliceWindows<T> {
-    type Item = Slice<T>;
-    type Iter = SliceWindows<T>;
-
-    fn into_iter(&self) -> SliceWindows<T> {
-        return *self;
-    }
-}
-
 /// Each item is a `Slice<T>` viewing the backing array, not a copy of it.
 pub struct SliceChunks<T> {
     repr: &Array<T>,
@@ -431,15 +415,6 @@ impl<T> Iterator for SliceChunks<T> {
         };
         self.index = stop;
         return Option::Some(slice);
-    }
-}
-
-impl<T> IntoIterator for SliceChunks<T> {
-    type Item = Slice<T>;
-    type Iter = SliceChunks<T>;
-
-    fn into_iter(&self) -> SliceChunks<T> {
-        return *self;
     }
 }
 

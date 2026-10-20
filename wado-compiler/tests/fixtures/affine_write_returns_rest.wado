@@ -1,0 +1,25 @@
+// A write hands back what its reader did not take (WEP: Affine Types).
+
+use { println, Stdout } from "core:cli";
+
+export fn run() with Stdout {
+    let [rx, tx] = Future::<String>::new();
+    rx.drop();
+    let written = tx.write("kept");
+    println(`${written.result:?} ${written.rest:?}`);
+
+    let [srx, stx] = Stream::<i32>::new();
+    srx.drop();
+    let sent = stx.write([1, 2, 3]);
+    println(`${sent.result:?} ${sent.rest:?}`);
+    stx.drop();
+
+    let [brx, btx] = Stream::<u8>::new();
+    brx.drop();
+    let bytes = btx.write([7, 8]);
+    println(`${bytes.result:?} ${bytes.rest:?}`);
+    btx.drop();
+}
+
+__DATA__
+{"stdout": "FutureWriteResult::Dropped Option::Some(\"kept\")\nCopyResult::Dropped [1, 2, 3]\nCopyResult::Dropped [7, 8]\n"}

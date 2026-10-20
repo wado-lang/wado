@@ -630,8 +630,8 @@ impl<'a> Analyzer<'a> {
         self.record_write(place, lands, false, live);
     }
 
-    /// Note `assign`, writing `target`, for `in_place_assigns` when the place
-    /// holds an in-place type; its writes are those recorded since `start`.
+    /// Note `assign`, writing `target`, for `in_place_assigns` where
+    /// [`can_write_in_place`]; its writes are those recorded since `start`.
     fn note_assign_site(
         &mut self,
         assign: &TirExpr,
@@ -639,7 +639,7 @@ impl<'a> Analyzer<'a> {
         start: usize,
         live: &IndexSet<u32>,
     ) {
-        if self.type_table.is_in_place_aggregate(target.type_id) {
+        if can_write_in_place(assign, self.type_table) {
             self.note_site(assign.span, target, false, start, live);
         }
     }
@@ -917,6 +917,26 @@ fn collect_local_roots(expr: &TirExpr, out: &mut IndexSet<u32>) {
     W(out).visit_expr(expr);
 }
 
+/// Whether `assign` stores a value of an in-place type, so that it writes in
+/// place where a reference holds its storage. A move emptying an affine place
+/// stores `null`, which repoints: the object it held is the destination's now.
+/// An affine struct or list is an object, whose stores resource drop synthesis
+/// has already written into it where its place was not null, so one left is
+/// to a null place, and repoints too (WEP: Affine Types). The sites are keyed
+/// by span, which synthesized assignments share, so lowering asks this again
+/// of each one it expands.
+#[must_use]
+pub fn can_write_in_place(assign: &TirExpr, type_table: &TypeTable) -> bool {
+    let TirExprKind::Assign { target, value } = &assign.kind else {
+        unreachable!("an assign site is an `Assign`");
+    };
+    let ty = target.type_id;
+    let affine_object = type_table.holds_affine_resource(ty) && type_table.as_tuple(ty).is_none();
+    !matches!(value.kind, TirExprKind::Null)
+        && !affine_object
+        && type_table.is_in_place_aggregate(ty)
+}
+
 /// Where a forward walk over a body first takes a reference to each local, and
 /// where each assignment site runs. An assignment to a local no reference can
 /// precede writes storage nothing else reaches, so it repoints.
@@ -1120,7 +1140,7 @@ pub fn unanalyzed_in_place_assigns(
                     }
                 }
                 TirExprKind::Assign { target, .. }
-                    if self.type_table.is_in_place_aggregate(target.type_id)
+                    if can_write_in_place(expr, self.type_table)
                         && self.writes_in_place(target, self.owning_field(target), expr.span) =>
                 {
                     self.out.insert(expr.span);

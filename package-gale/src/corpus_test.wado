@@ -20,6 +20,7 @@ fn collect(argv: List<String>, flags: List<String>) -> [List<String>, Console] w
     let paths = with &mut console do {
         collect_paths(&argv, ".rs", flags);
     };
+    console.end_writes();
     return [paths, console];
 }
 
@@ -69,6 +70,7 @@ fn ratchet_run(baseline: &String, counts: HashMap<String, i32>, update: bool) ->
     let status = with &mut console do {
         ratchet(*baseline, &counts, update, NOUN, REMEDY);
     };
+    console.end_writes();
     return [status, console];
 }
 

@@ -1,0 +1,31 @@
+// An `impl` whose type parameter is not declared `affine` does not apply to an
+// affine argument, so its methods are not found (WEP: Affine Types).
+
+affine struct Fields {
+    n: i32,
+}
+
+impl Drop for Fields {
+    fn drop(self) {}
+}
+
+struct Cell<affine T> {
+    value: T,
+}
+
+impl<T> Cell<T> {
+    fn twice(&self) -> [T, T] {
+        return [self.value, self.value];
+    }
+}
+
+export fn run() {
+    let cell = Cell { value: Fields { n: 1 } };
+    let pair = cell.twice();
+}
+
+__DATA__
+{
+    "compile_error": ":24:16: analysis error: no method 'twice' found on type 'Cell<Fields>'",
+    "compile_error_codes": ["METHOD_NOT_FOUND"]
+}

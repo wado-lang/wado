@@ -82,7 +82,7 @@ Each chapter builds on the ones before it.
 1. [Lexical Structure](./spec-lexical.md): whitespace, comments, identifiers and keywords.
 2. [Literals](./spec-literals.md): numbers, strings, templates, tuples, lists and compile-time literals.
 3. [Statements and Expressions](./spec-expressions.md): statements, variables, globals, operators and ranges.
-4. [Types](./spec-types.md): primitives, strings, tuples, lists, newtypes, structs, enums and variants.
+4. [Types](./spec-types.md): primitives, strings, tuples, lists, newtypes, structs, affine types, enums and variants.
 5. [Patterns](./spec-patterns.md): taking a value apart in `match`, `let` and `for`.
 6. [Control Flow](./spec-control-flow.md): branches, loops, labeled blocks and error handling.
 7. [Assertions](./spec-assertions.md): the `assert` statement and its failure message.

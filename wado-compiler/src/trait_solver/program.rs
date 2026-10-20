@@ -105,6 +105,17 @@ impl SolverType {
         self.mentions(&|p| matches!(p, Self::Param(i) | Self::Pack(i) if *i == index))
     }
 
+    /// Whether `self` mentions the parameter or pack at `index` other than
+    /// behind a reference.
+    #[must_use]
+    pub fn owns_param(&self, index: u32) -> bool {
+        match self {
+            Self::Ref { .. } => false,
+            Self::Decl(_, inner) | Self::Tuple(inner) => inner.iter().any(|t| t.owns_param(index)),
+            other => other.mentions_param(index),
+        }
+    }
+
     /// `self` with each parameter and pack replaced by `arg` at its position;
     /// `None` where `arg` has none for one.
     #[must_use]
@@ -172,6 +183,10 @@ impl ParamBound {
 pub struct ParamDef {
     pub bounds: Vec<ParamBound>,
     pub pins: Vec<Pin>,
+    /// Admits only a [`Program::copyable`] argument: the parameter is not
+    /// declared `affine`. A kind, not a bound, so it ranks no impl above
+    /// another.
+    pub copyable: bool,
 }
 
 impl ParamDef {
@@ -179,7 +194,7 @@ impl ParamDef {
     pub fn bounded(bounds: Vec<TraitDeclId>) -> Self {
         Self {
             bounds: bounds.into_iter().map(ParamBound::bare).collect(),
-            pins: Vec::new(),
+            ..Self::default()
         }
     }
 }
@@ -436,6 +451,9 @@ pub struct Program {
     /// `From<Meters> for i64` would make every newtype of `i64` convert from
     /// `Meters`.
     pub not_inherited: IndexSet<ImplId>,
+    /// The marker a type holds when no value of it is affine, which a
+    /// [`ParamDef::copyable`] parameter asks of its argument.
+    pub copyable: Option<TraitDeclId>,
 }
 
 /// The ids whose target could match `ty`, in the order they were added: what

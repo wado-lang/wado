@@ -209,6 +209,18 @@ impl BuiltinRegistry {
                     .borrow_mut()
                     .intern(ResolvedType::BuiltinArray(element_type))
             }
+            Type::Generic(g) if matches!(g.name.as_str(), "Stream" | "Future") => {
+                let [payload] = g.args.as_slice() else {
+                    panic!("core:builtin writes `{}` without one type argument", g.name);
+                };
+                let payload = Self::resolve_type(payload, type_params, type_table);
+                let mut type_table = type_table.borrow_mut();
+                if g.name == "Stream" {
+                    type_table.make_stream(payload)
+                } else {
+                    type_table.make_future(payload)
+                }
+            }
             Type::Tuple(elements) => {
                 let element_types: Vec<TypeId> = elements
                     .iter()

@@ -623,6 +623,7 @@ impl Parser {
                 | T::Global
                 | T::Pub
                 | T::Export
+                | T::Affine
         )
     }
 
@@ -639,7 +640,7 @@ impl Parser {
     /// question answers the same way past a run of attributes.
     fn local_item_starts_at(&self, at: usize) -> bool {
         match self.peek_nth(at).kind {
-            T::Struct | T::Enum | T::Variant | T::Impl | T::Trait => true,
+            T::Struct | T::Enum | T::Variant | T::Impl | T::Trait | T::Affine => true,
             T::Flags | T::Type => matches!(self.peek_nth(at + 1).kind, TokenKind::Ident(_)),
             _ => false,
         }
@@ -1386,6 +1387,20 @@ impl Parser {
             false
         };
 
+        let is_affine = self.check(&TokenKind::Affine);
+        if is_affine {
+            let span = self.advance().span;
+            if !matches!(
+                self.peek_kind(),
+                TokenKind::Struct | TokenKind::Variant | TokenKind::Trait
+            ) {
+                return Err(ParseError {
+                    message: "`affine` declares a `struct`, a `variant` or a `trait`".to_string(),
+                    span,
+                });
+            }
+        }
+
         if !self.check(&TokenKind::Resource) {
             reject_resource_linearity(&attrs)?;
         }
@@ -1424,20 +1439,22 @@ impl Parser {
                 .parse_interface_decl(visibility, attrs)
                 .map(Item::Interface),
             TokenKind::Struct => self
-                .parse_struct_decl(visibility, has_export, attrs)
+                .parse_struct_decl(visibility, has_export, is_affine, attrs)
                 .map(Item::Struct),
             TokenKind::Enum => self
                 .parse_enum_decl(visibility, has_export, attrs)
                 .map(Item::Enum),
             TokenKind::Variant => self
-                .parse_variant_decl(visibility, has_export, attrs)
+                .parse_variant_decl(visibility, has_export, is_affine, attrs)
                 .map(Item::Variant),
             TokenKind::Flags => self
                 .parse_flags_decl(visibility, has_export, attrs)
                 .map(Item::Flags),
             TokenKind::Type => self.parse_type_decl(visibility, has_export, attrs),
             TokenKind::Impl => self.parse_impl_block(attrs).map(Item::Impl),
-            TokenKind::Trait => self.parse_trait_decl(visibility, attrs).map(Item::Trait),
+            TokenKind::Trait => self
+                .parse_trait_decl(visibility, is_affine, attrs)
+                .map(Item::Trait),
             TokenKind::Resource => self
                 .parse_resource_decl(visibility, attrs)
                 .map(Item::Resource),
@@ -5774,6 +5791,11 @@ impl Parser {
             let attrs = self.parse_attributes()?;
             let start_span = self.peek().span;
 
+            let is_affine = self.check(&TokenKind::Affine);
+            if is_affine {
+                self.advance();
+            }
+
             // Parse effect parameter: `effect E`
             let is_effect = if self.check(&TokenKind::Effect) {
                 self.advance();
@@ -5781,6 +5803,13 @@ impl Parser {
             } else {
                 false
             };
+
+            if is_affine && is_effect {
+                return Err(self.error_at_span(
+                    start_span,
+                    "`affine` admits an affine type argument, so it marks no effect parameter",
+                ));
+            }
 
             // Parse type pack parameter: `..T`
             let is_pack = if self.check_dot_dot_or_ellipsis() {
@@ -5832,6 +5861,7 @@ impl Parser {
                 name,
                 name_span,
                 is_effect,
+                is_affine,
                 is_pack,
                 bounds,
                 default,
@@ -5966,6 +5996,7 @@ impl Parser {
         &mut self,
         visibility: Visibility,
         is_export: bool,
+        is_affine: bool,
         attrs: Vec<Attribute>,
     ) -> ParseResult<StructDecl> {
         let id = self.alloc_ast_id();
@@ -5988,6 +6019,7 @@ impl Parser {
             name_span,
             visibility,
             is_export,
+            is_affine,
             type_params,
             fields,
             attrs,
@@ -6170,6 +6202,7 @@ impl Parser {
         &mut self,
         visibility: Visibility,
         is_export: bool,
+        is_affine: bool,
         attrs: Vec<Attribute>,
     ) -> ParseResult<VariantDecl> {
         let id = self.alloc_ast_id();
@@ -6199,6 +6232,7 @@ impl Parser {
             name_span,
             visibility,
             is_export,
+            is_affine,
             type_params,
             cases,
             attrs,
@@ -6365,6 +6399,7 @@ impl Parser {
                 constants: Vec::new(),
                 methods: Vec::new(),
                 is_synthesize_request: true,
+                written_out: false,
                 rest: None,
                 span: start_span.merge(&end_span),
             });
@@ -6495,6 +6530,7 @@ impl Parser {
             constants,
             methods,
             is_synthesize_request: false,
+            written_out: false,
             rest,
             span: start_span.merge(&end_span),
         })
@@ -6546,6 +6582,7 @@ impl Parser {
                         name: param_name.clone(),
                         name_span: param_name_span,
                         is_effect: false,
+                        is_affine: false,
                         is_pack: false,
                         bounds,
                         default: None,
@@ -6583,6 +6620,7 @@ impl Parser {
     fn parse_trait_decl(
         &mut self,
         visibility: Visibility,
+        is_affine: bool,
         attrs: Vec<Attribute>,
     ) -> ParseResult<TraitDecl> {
         let id = self.alloc_ast_id();
@@ -6620,10 +6658,21 @@ impl Parser {
         while !self.check(&TokenKind::RBrace) && !self.is_at_end() {
             let attrs = self.parse_attributes()?;
 
-            // Check if this is an associated type declaration: `type Name;` or `type Name: Bound1 + Bound2;`
-            if self.check(&TokenKind::Type) {
+            // An associated type declaration: `type Name;`, `affine type Name;`
+            // or `type Name: Bound1 + Bound2;`
+            let assoc_is_affine = self.check(&TokenKind::Affine);
+            if assoc_is_affine && !matches!(self.peek_nth(1).kind, TokenKind::Type) {
+                return Err(self.error_at_span(
+                    self.peek().span,
+                    "`affine` in a trait marks an associated type: `affine type Name;`",
+                ));
+            }
+            if self.check(&TokenKind::Type) || assoc_is_affine {
                 let type_span = self.peek().span;
                 let assoc_id = self.alloc_ast_id();
+                if assoc_is_affine {
+                    self.advance();
+                }
                 self.advance();
                 let assoc_name = self.consume_ident()?;
                 let type_params = self.parse_generic_params()?;
@@ -6637,6 +6686,7 @@ impl Parser {
                 associated_types.push(AssociatedTypeDecl {
                     id: assoc_id,
                     name: assoc_name,
+                    is_affine: assoc_is_affine,
                     type_params,
                     bounds,
                     span: type_span.merge(&end),
@@ -6685,6 +6735,7 @@ impl Parser {
             name,
             name_span,
             visibility,
+            is_affine,
             head,
             type_params,
             supertraits,
@@ -6746,6 +6797,7 @@ impl Parser {
             name: EFFECT_HOLE.to_string(),
             name_span: span,
             is_effect: true,
+            is_affine: false,
             is_pack: false,
             bounds: Vec::new(),
             default: None,

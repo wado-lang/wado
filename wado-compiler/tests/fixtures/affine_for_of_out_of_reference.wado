@@ -1,0 +1,28 @@
+// `for-of` takes its operand by value, so walking `*r` over an affine list
+// would move the list out of a reference; `for let t of r` walks it by
+// reference instead (WEP: Affine Types).
+
+affine struct Token {
+    id: i32,
+}
+
+impl Drop for Token {
+    fn drop(self) {}
+}
+
+fn walk(r: &List<Token>) -> i32 {
+    let mut sum = 0;
+    for let t of *r {
+        sum += t.id;
+        builtin::drop(t);
+    }
+    return sum;
+}
+
+export fn run() {
+    let tokens: List<Token> = [Token { id: 1 }];
+    let _ = walk(&tokens);
+}
+
+__DATA__
+{"compile_error": ":15:18: analysis error: cannot move affine type `List<Token>` out of a reference"}

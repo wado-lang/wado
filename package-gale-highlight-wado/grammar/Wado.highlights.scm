@@ -174,6 +174,7 @@
 
 ; Keywords (inline literals)
 "Self" @keyword
+"affine" @keyword
 "as" @keyword
 "assert" @keyword
 "async" @keyword

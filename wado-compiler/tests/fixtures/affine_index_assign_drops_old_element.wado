@@ -1,0 +1,23 @@
+// Assigning to a list element that holds an affine value drops the old value
+// there, before the statement completes (WEP: Affine Types).
+
+use { println, log_stdout, Stdout } from "core:cli";
+
+affine struct Tok {
+    n: i32,
+}
+
+impl Drop for Tok {
+    fn drop(self) {
+        log_stdout(`drop ${self.n}`);
+    }
+}
+
+export fn run() with Stdout {
+    let mut list: List<Tok> = [Tok { n: 1 }, Tok { n: 2 }];
+    list[1] = Tok { n: 3 };
+    println("end");
+}
+
+__DATA__
+{"stdout": "drop 2\nend\ndrop 1\ndrop 3\n"}
