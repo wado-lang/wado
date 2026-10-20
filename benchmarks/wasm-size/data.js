@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1792446130167,
+  "lastUpdate": 1792455503975,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -68477,6 +68477,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/ac1f42a4bd4e30821bcc7d29e707c4f5da7e4489"
         },
         "date": 1792446129438,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 2955,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 7313,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 19774,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 288295,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "484c6bdf0225677787baba04caf7c4610b0eaaad",
+          "message": "Merge pull request #2393 from wado-lang/ccr-a6d482bb-lmuzjc\n\nrefactor(loam): keep Loam's benchmarks in package-loam/benchmark",
+          "timestamp": "2026-10-20T08:59:08+09:00",
+          "tree_id": "2dbcefa99edca2af92aed2c3f740d482e672d183",
+          "url": "https://github.com/wado-lang/wado/commit/484c6bdf0225677787baba04caf7c4610b0eaaad"
+        },
+        "date": 1792455503407,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
