@@ -512,48 +512,48 @@ fn "parser_synth_id_collision_test.wado/unescape_st_text"($mv$s$repr, $mv$s$used
 }
 
 fn "parser_synth_id_collision_test.wado/section_header_of"(line) {
+    let $load_0: i32;
     let last_idx: i32;
     let repr_78: ref Array<u8>;
     let b_85: u8;
     let part: ref Array<u8>;
-    let $av_118: i32;
-    if local.tee $av_118(line.used) <= 2 {
+    if local.tee $load_0(line.used) <= 2 {
         return ref.null none;
     }
     if block -> bool {
         repr_78 = line.repr;
         let $mv_arg_4: ref "core:prelude/string.wado//String";
         $mv_arg_4 = global:parser_synth_id_collision_test.wado::$const_obj_20;
-        "core:prelude/string.wado/core:prelude/string.wado/StrSlice::starts_with<core:prelude/string.wado/String>"(repr_78, 0, $av_118, $mv_arg_4.repr, $mv_arg_4.used);
+        "core:prelude/string.wado/core:prelude/string.wado/StrSlice::starts_with<core:prelude/string.wado/String>"(repr_78, 0, $load_0, $mv_arg_4.repr, $mv_arg_4.used);
     } == 0 {
         return ref.null none;
     }
-    last_idx = local.tee $av_118(line.used) - 1;
+    last_idx = $load_0 - 1;
     if builtin::array_get_value<u8>(local.tee repr_78(line.repr), last_idx) != 93 {
         return ref.null none;
     }
-    if @unlikely(((1 <= last_idx) & (last_idx <= $av_118)) == 0) {
+    if @unlikely(((1 <= last_idx) & (last_idx <= $load_0)) == 0) {
         cold_path;
-        "parser_synth_id_collision_test.wado/section_header_of$cold1$dae[line,$contract_arg_0]"(last_idx, $av_118);
+        "parser_synth_id_collision_test.wado/section_header_of$cold1$dae[line,$contract_arg_0]"(last_idx, $load_0);
         unreachable;
     }
-    if @unlikely(local.tee $av_118((if local.tee b_85($inline_boundary_at_7: block -> bool {
-        if 1 == $av_118 {
+    if @unlikely(local.tee $load_0((if local.tee b_85($inline_boundary_at_7: block -> bool {
+        if 1 == $load_0 {
             break $inline_boundary_at_7: 1;
         }
-        if 1 > $av_118 {
+        if 1 > $load_0 {
             break $inline_boundary_at_7: 0;
         }
         break $inline_boundary_at_7: (local.tee b_85(builtin::array_get_value<u8>(repr_78, 1)) & 192) != 128;
     }) -> i32 {
         $inline_boundary_at_4: block -> bool {
-            if (last_idx == 0) | (last_idx == $av_118) {
+            if (last_idx == 0) | (last_idx == $load_0) {
                 break $inline_boundary_at_4: 1;
             }
-            if $av_118 <u last_idx {
+            if $load_0 <u last_idx {
                 break $inline_boundary_at_4: 0;
             }
-            break $inline_boundary_at_4: (local.tee $av_118(builtin::array_get_value<u8>(repr_78, last_idx)) & 192) != 128;
+            break $inline_boundary_at_4: (local.tee $load_0(builtin::array_get_value<u8>(repr_78, last_idx)) & 192) != 128;
         };
     } else {
         0;

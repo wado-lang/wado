@@ -26,7 +26,6 @@ use {
     atn_tr_consumes,
 } from "./runtime/atn.wado";
 use { HashMap, HashSet } from "core:collections";
-use { GALE_SEED } from "./hash_seed.wado";
 use { CodeWriter, FnSpec } from "lib:wadopoet";
 use { GrammarAnalysis } from "./grammar_analysis.wado";
 
@@ -143,8 +142,8 @@ impl SllExplorer {
             stack_rpr: List::filled(SLL_BOTTOMS, 0),
             stack_parent: List::filled(SLL_BOTTOMS, -1),
             stack_bottom: bottoms,
-            stack_index: HashMap::with_seed(GALE_SEED),
-            closures: HashMap::with_seed(GALE_SEED),
+            stack_index: HashMap::new(),
+            closures: HashMap::new(),
             memo_size: 0,
             budget: 0,
         };
@@ -160,8 +159,8 @@ impl SllExplorer {
         self.stack_rpr.truncate(SLL_BOTTOMS);
         self.stack_parent.truncate(SLL_BOTTOMS);
         self.stack_bottom.truncate(SLL_BOTTOMS);
-        self.stack_index = HashMap::with_seed(GALE_SEED);
-        self.closures = HashMap::with_seed(GALE_SEED);
+        self.stack_index = HashMap::new();
+        self.closures = HashMap::new();
         self.memo_size = 0;
     }
 
@@ -246,7 +245,7 @@ impl SllExplorer {
         if let Some(known) = self.closures.get(memo) {
             return Option::Some(known);
         }
-        let mut seen = HashSet::<i64>::with_seed(GALE_SEED);
+        let mut seen = HashSet::<i64>::new();
         let mut work: List<SllConfig> = [place_of(place, 0)];
         let mut kept: List<i64> = [];
         while let Some(c) = work.pop() {
@@ -262,7 +261,7 @@ impl SllExplorer {
             }
         }
         if self.memo_size + kept.len() > SLL_MEMO_CAP {
-            self.closures = HashMap::with_seed(GALE_SEED);
+            self.closures = HashMap::new();
             self.memo_size = 0;
         }
         self.memo_size += kept.len();
@@ -273,7 +272,7 @@ impl SllExplorer {
     /// The closure of `seeds` at token step `step`, sorted, or `null` once the
     /// budget runs out.
     fn closure(&mut self, seeds: &List<SllConfig>, step: i32) -> Option<List<SllConfig>> {
-        let mut seen = HashSet::<i64>::with_seed(GALE_SEED);
+        let mut seen = HashSet::<i64>::new();
         let mut keys: List<i64> = [];
         for let s of seeds {
             let Some(reached) = self.place_closure(place_key(s.state, s.pr, s.stack), step) else {
@@ -300,7 +299,7 @@ impl SllExplorer {
         for let mut j = 0; j < ts.len(); j += 1 {
             work.push(SllConfig { state: ts[j].target, alt: j, pr: 0, stack: SLL_NO_CALLER });
         }
-        let mut seen = HashSet::<i64>::with_seed(GALE_SEED);
+        let mut seen = HashSet::<i64>::new();
         let mut kept: List<SllConfig> = [];
         while let Some(c) = work.pop() {
             if c.state == dstate && ts[c.alt].kind == ATN_TR_PRECEDENCE || !seen.insert(config_key(&c)) {
@@ -321,7 +320,7 @@ impl SllExplorer {
     /// to, by token ascending. End of input is left out: the simulator decides
     /// there.
     fn moves(&self, configs: &List<SllConfig>) -> List<[i32, List<SllConfig>]> {
-        let mut by_token = HashMap::<i32, List<SllConfig>>::with_seed(GALE_SEED);
+        let mut by_token = HashMap::<i32, List<SllConfig>>::new();
         let mut any: List<[SllConfig, i32]> = [];
         for let c of configs {
             if c.state == SLL_END {
@@ -368,7 +367,7 @@ impl SllExplorer {
     /// the same tokens on, under any stack, so no lookahead tells them apart
     /// and the simulator settles on the lowest, as here.
     fn lowest_alt_covers_rest(configs: &List<SllConfig>, lowest: i32) -> bool {
-        let mut places = HashSet::<i64>::with_seed(GALE_SEED);
+        let mut places = HashSet::<i64>::new();
         for let c of configs {
             if c.alt == lowest {
                 places.insert(place_key(c.state, c.pr, c.stack));
@@ -392,7 +391,7 @@ impl SllExplorer {
         let mut nodes: List<SllNode> = [SllNode::Ask];
         let mut configs: List<List<SllConfig>> = [start];
         let mut depth: List<i32> = [0];
-        let mut by_key = HashMap::<String, i32>::with_seed(GALE_SEED);
+        let mut by_key = HashMap::<String, i32>::new();
         by_key[node_key(0, &configs[0])] = 0;
         for let mut n = 0; n < configs.len(); n += 1 {
             let alts = unique_alts(&configs[n]);
@@ -473,7 +472,7 @@ fn add_edge(edges: &mut List<SllEdge>, token: i32, to: i32) {
 /// one dropped, and the edges to one alternative merged into one edge.
 fn prune_asking(nodes: List<SllNode>) -> List<SllNode> {
     let mut out = nodes;
-    let mut node_of_alt = HashMap::<i32, i32>::with_seed(GALE_SEED);
+    let mut node_of_alt = HashMap::<i32, i32>::new();
     for let mut n = 0; n < out.len(); n += 1 {
         if let Alt(a) = &out[n] && !node_of_alt.contains_key(*a) {
             node_of_alt[*a] = n;

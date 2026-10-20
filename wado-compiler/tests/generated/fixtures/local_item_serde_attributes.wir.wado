@@ -2332,34 +2332,16 @@ condition: char::is_scalar_value(value)
     $sroa_s_repr_67 = array.new_data<u8>("value: ");
     builtin::array_copy<u8>($load_2, start_11, $sroa_s_repr_67, 0, 7);
     value = "core:prelude/primitive.wado/count_digits_u64"(local.tee value_50(builtin::i64_extend_i32_u(value)));
-<<<<<<< HEAD
-    $mv$$site$used = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$sroa[self.buf]$dae[alt_prefix]"($local_2, 0, value);
-    "core:prelude/primitive.wado/write_decimal_digits"(local.tee $mv$$site$repr($local_2.repr), $mv$$site$used, value_50, value);
-    $load_2 = array.new_fixed<u8>(10);
-    if @unlikely(local.tee value($local_2.used + 1) > builtin::array_len($mv$$site$repr)) {
-||||||| 63de94d26e7
-    $mv$$site$used = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$sroa[self.buf]$dae[alt_prefix]"($local_2, 0, value);
-    "core:prelude/primitive.wado/write_decimal_digits"($local_2.repr, $mv$$site$used, value_50, value);
-    $mv$$site$repr = array.new_fixed<u8>(10);
-    if @unlikely(local.tee value($local_2.used + 1) > builtin::array_len($local_2.repr)) {
-=======
     start_11 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$sroa[self.buf]$dae[alt_prefix]"($local_2, 0, value);
-    "core:prelude/primitive.wado/write_decimal_digits"($local_2.repr, start_11, value_50, value);
-    $sroa_s_repr_67 = array.new_fixed<u8>(10);
-    if @unlikely(local.tee value($local_2.used + 1) > builtin::array_len($local_2.repr)) {
->>>>>>> origin/main
+    "core:prelude/primitive.wado/write_decimal_digits"(local.tee $sroa_s_repr_67($local_2.repr), start_11, value_50, value);
+    $load_2 = array.new_fixed<u8>(10);
+    if @unlikely(local.tee value($local_2.used + 1) > builtin::array_len($sroa_s_repr_67)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_2, value);
     }
     start_11 = $local_2.used;
     $local_2.used = value;
-<<<<<<< HEAD
-    builtin::array_copy<u8>($local_2.repr, $mv$$site$used, $load_2, 0, 1);
-||||||| 63de94d26e7
-    builtin::array_copy<u8>($local_2.repr, $mv$$site$used, $mv$$site$repr, 0, 1);
-=======
-    builtin::array_copy<u8>($local_2.repr, start_11, $sroa_s_repr_67, 0, 1);
->>>>>>> origin/main
+    builtin::array_copy<u8>($local_2.repr, start_11, $load_2, 0, 1);
     "core:rt/panic"($local_2.repr, $local_2.used);
     unreachable;
 }
@@ -3612,16 +3594,7 @@ fn "core:args/core:args/ArgvDeserializer::pull_option_value$sroa[return]"(self) 
         }; self_23 };
         return 1, ref.null none, struct.new "core:serde//DeserializeError" { kind: 8, message: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("unexpected end of input"), used: 23 }, offset: -1_i64 };
     }
-<<<<<<< HEAD
-    if @unlikely(((0 <= $load_0) & ($load_0 < $load_2)) == 0) {
-||||||| 63de94d26e7
-    $load_0 = local.tee $load_1(self.tokens).used;
-    start_50 = self.pos;
-    if @unlikely(((0 <= start_50) & (start_50 < $load_0)) == 0) {
-=======
-    $load_0 = local.tee $load_1(self.tokens).used;
-    if @unlikely(local.tee start_50(self.pos) >=u $load_0) {
->>>>>>> origin/main
+    if @unlikely($load_0 >=u $load_2) {
         cold_path;
         "core:args/core:args/ArgvDeserializer::pull_option_value$cold0$sroa[self.pos]"($load_0, $load_2);
         unreachable;
@@ -4909,16 +4882,8 @@ fn "core:args/core:args/ArgvDeserializer::split_long$unchecked<&core:prelude/str
         }; $load_0); struct.new "core:prelude/string.wado//String" { repr: part, used: $load_0 };
     } else {
     }
-<<<<<<< HEAD
-    $load_0 = local.tee $mv_arg_70((if $contract_arg_0_89 = struct.new "core:prelude/string.wado//StrSlice" { repr: local.tee $mv_field_4(tok.repr), start: 0, end: local.tee $load_0(tok.used) }; multivalue_bind [b_306, b_289] = ($mv_arg_34 = global:core:args::$const_obj_29; "core:prelude/string.wado/core:prelude/string.wado/StrSlice::find<core:prelude/string.wado/String>$sroa[return]"($contract_arg_0_89.repr, 0, $contract_arg_0_89.end, $mv_arg_34.repr, $mv_arg_34.used)); b_306 == 1 -> ref "core:prelude/string.wado//String" {
-        $contract_arg_0_89 = struct.new "core:prelude/string.wado//StrSlice" { repr: $mv_field_4, start: 0, end: $load_0 };
-||||||| 63de94d26e7
-    $load_0 = local.tee $mv_arg_70((if $contract_arg_0_89 = struct.new "core:prelude/string.wado//StrSlice" { repr: local.tee $mv_field_4(tok.repr), start: 0, end: tok.used }; multivalue_bind [$load_0, b_306] = ($mv_arg_34 = global:core:args::$const_obj_29; "core:prelude/string.wado/core:prelude/string.wado/StrSlice::find<core:prelude/string.wado/String>$sroa[return]"($contract_arg_0_89.repr, 0, $contract_arg_0_89.end, $mv_arg_34.repr, $mv_arg_34.used)); $load_0 == 1 -> ref "core:prelude/string.wado//String" {
-        $contract_arg_0_89 = struct.new "core:prelude/string.wado//StrSlice" { repr: local.tee $mv_field_4(tok.repr), start: 0, end: tok.used };
-=======
-    $load_0 = local.tee $mv_arg_16((if $contract_arg_0_89 = struct.new "core:prelude/string.wado//StrSlice" { repr: local.tee part(tok.repr), start: 0, end: tok.used }; multivalue_bind [$load_0, b_306] = ($mv_arg_7 = global:core:args::$const_obj_29; "core:prelude/string.wado/core:prelude/string.wado/StrSlice::find<core:prelude/string.wado/String>$sroa[return]"($contract_arg_0_89.repr, 0, $contract_arg_0_89.end, $mv_arg_7.repr, $mv_arg_7.used)); $load_0 == 1 -> ref "core:prelude/string.wado//String" {
-        $contract_arg_0_89 = struct.new "core:prelude/string.wado//StrSlice" { repr: local.tee part(tok.repr), start: 0, end: tok.used };
->>>>>>> origin/main
+    $load_0 = local.tee $mv_arg_16((if $contract_arg_0_89 = struct.new "core:prelude/string.wado//StrSlice" { repr: local.tee part(tok.repr), start: 0, end: local.tee $load_0(tok.used) }; multivalue_bind [b_306, b_289] = ($mv_arg_7 = global:core:args::$const_obj_29; "core:prelude/string.wado/core:prelude/string.wado/StrSlice::find<core:prelude/string.wado/String>$sroa[return]"($contract_arg_0_89.repr, 0, $contract_arg_0_89.end, $mv_arg_7.repr, $mv_arg_7.used)); b_306 == 1 -> ref "core:prelude/string.wado//String" {
+        $contract_arg_0_89 = struct.new "core:prelude/string.wado//StrSlice" { repr: part, start: 0, end: $load_0 };
         block -> ref "core:prelude/string.wado//String" {
             $mv_arg_7 = global:core:args::$const_obj_29;
             let $mv_arg_16: ref "core:prelude/string.wado//String";
@@ -5694,21 +5659,11 @@ fn "core:prelude/string.wado/core:prelude/string.wado/StrSlice::replacen<core:pr
     let new_used_126: i32;
     let start_127: i32;
     let $licm_arith_178: i32;
-<<<<<<< HEAD
-    let $licm_arith_206: i32;
     let $sroa_other_start_208: i32;
     let $licm_arith_213: bool;
-    len_5 = $mv$self$end - $mv$self$start;
-||||||| 63de94d26e7
-    let $licm_arith_205: i32;
-    let $sroa_other_start_207: i32;
-    len_5 = $mv$self$end - $mv$self$start;
-=======
-    let $sroa_other_start_207: i32;
     $load_0 = self.end;
     $load_1 = self.start;
     len_5 = $load_0 - $load_1;
->>>>>>> origin/main
     if $mv$from$used == 0 {
         repr_63 = self.repr;
         builtin::array_copy<u8>(local.tee part(builtin::array_new<u8>(local.tee len_65($load_0 - $load_1))), 0, repr_63, $load_1, len_65);
@@ -5718,27 +5673,13 @@ fn "core:prelude/string.wado/core:prelude/string.wado/StrSlice::replacen<core:pr
     len_65 = 0;
     pos_8 = 0;
     limit = len_5 - $mv$from$used;
-<<<<<<< HEAD
-    $licm_arith_178 = $mv$self$end - $mv$self$start;
-    $licm_arith_206 = $mv$self$end - $mv$self$start;
-    $licm_arith_213 = $mv$to$used == 0;
-    b618: block {
-        l619: loop {
-            break_if b618 pos_8 > limit;
-||||||| 63de94d26e7
-    $licm_arith_178 = $mv$self$end - $mv$self$start;
-    $licm_arith_205 = $mv$self$end - $mv$self$start;
-    b618: block {
-        l619: loop {
-            break_if b618 pos_8 > limit;
-=======
     part = self.repr;
     $licm_arith_178 = $load_0 - $load_1;
     $load_0 = $load_0 - $load_1;
+    $licm_arith_213 = $mv$to$used == 0;
     b616: block {
         l617: loop {
             break_if b616 pos_8 > limit;
->>>>>>> origin/main
             if $inline_bytes_match_at_8: block -> bool {
                 pos_69 = $load_1 + pos_8;
                 j = 0;
@@ -5770,22 +5711,10 @@ fn "core:prelude/string.wado/core:prelude/string.wado/StrSlice::replacen<core:pr
                     break $inline_boundary_at_14: (builtin::array_get_value<u8>(part, $load_1 + $contract_arg_0) & 192) != 128;
                 }) -> i32 {
                     $inline_boundary_at_5: block -> bool {
-<<<<<<< HEAD
-                        if (pos_8 == 0) | (pos_8 == $licm_arith_206) {
-||||||| 63de94d26e7
-                        if (pos_8 == 0) | (pos_8 == $licm_arith_205) {
-=======
                         if (pos_8 == 0) | (pos_8 == $load_0) {
->>>>>>> origin/main
                             break $inline_boundary_at_5: 1;
                         }
-<<<<<<< HEAD
-                        if (pos_8 < 0) | (pos_8 > $licm_arith_206) {
-||||||| 63de94d26e7
-                        if (pos_8 < 0) | (pos_8 > $licm_arith_205) {
-=======
                         if (pos_8 < 0) | (pos_8 > $load_0) {
->>>>>>> origin/main
                             break $inline_boundary_at_5: 0;
                         }
                         break $inline_boundary_at_5: (builtin::array_get_value<u8>(part, $load_1 + pos_8) & 192) != 128;
@@ -5797,34 +5726,16 @@ fn "core:prelude/string.wado/core:prelude/string.wado/StrSlice::replacen<core:pr
                     "core:prelude/string.wado/core:prelude/string.wado/StrSlice::slice$contract_report1"($v1_17, self, pos_8, $contract_arg_0, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("core:prelude/string.wado:1702"), used: 29 });
                     unreachable;
                 }
-<<<<<<< HEAD
-                $sroa_other_start_208 = $mv$self$start + $contract_arg_0;
-||||||| 63de94d26e7
-                $sroa_other_start_207 = $mv$self$start + $contract_arg_0;
-=======
-                $sroa_other_start_207 = $load_1 + $contract_arg_0;
->>>>>>> origin/main
+                $sroa_other_start_208 = $load_1 + $contract_arg_0;
                 $inline_core_prelude_string_wado_String__internal_push_view_18: block {
-<<<<<<< HEAD
-                    break_if $inline_core_prelude_string_wado_String__internal_push_view_18 local.tee n_108(($mv$self$start + pos_8) - $sroa_other_start_208) == 0;
-||||||| 63de94d26e7
-                    break_if $inline_core_prelude_string_wado_String__internal_push_view_18 local.tee n_108(($mv$self$start + pos_8) - $sroa_other_start_207) == 0;
-=======
-                    break_if $inline_core_prelude_string_wado_String__internal_push_view_18 local.tee n_108(($load_1 + pos_8) - $sroa_other_start_207) == 0;
->>>>>>> origin/main
+                    break_if $inline_core_prelude_string_wado_String__internal_push_view_18 local.tee n_108(($load_1 + pos_8) - $sroa_other_start_208) == 0;
                     if @unlikely(local.tee new_used_113(result.used + n_108) > builtin::array_len(result.repr)) {
                         cold_path;
                         "core:prelude/string.wado/core:prelude/string.wado/String::grow"(result, new_used_113);
                     }
                     start_114 = result.used;
                     result.used = new_used_113;
-<<<<<<< HEAD
-                    builtin::array_copy<u8>(result.repr, start_114, $mv$self$repr, $sroa_other_start_208, n_108);
-||||||| 63de94d26e7
-                    builtin::array_copy<u8>(result.repr, start_114, $mv$self$repr, $sroa_other_start_207, n_108);
-=======
-                    builtin::array_copy<u8>(result.repr, start_114, part, $sroa_other_start_207, n_108);
->>>>>>> origin/main
+                    builtin::array_copy<u8>(result.repr, start_114, part, $sroa_other_start_208, n_108);
                 };
                 $inline_core_prelude_string_wado_String__internal_push_string_24: block {
                     break_if $inline_core_prelude_string_wado_String__internal_push_string_24 $licm_arith_213;

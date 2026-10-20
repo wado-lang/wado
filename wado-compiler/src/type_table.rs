@@ -4915,6 +4915,25 @@ impl TypeTable {
         }
     }
 
+    /// Whether `id`, unfolded into a tree, nests more than `max_depth` types on
+    /// one path or holds more than `max_size` in all. A shared constituent
+    /// counts once per use, as naming the type spells it, and the walk stops
+    /// at the first type past either bound.
+    pub fn outgrows(&self, id: TypeId, max_depth: usize, max_size: usize) -> bool {
+        let mut size_room = max_size;
+        self.outgrows_from(id, max_depth, &mut size_room)
+    }
+
+    fn outgrows_from(&self, id: TypeId, depth_room: usize, size_room: &mut usize) -> bool {
+        if depth_room == 0 || *size_room == 0 {
+            return true;
+        }
+        *size_room -= 1;
+        self.any_constituent(id, &mut |t| {
+            self.outgrows_from(t, depth_room - 1, size_room)
+        })
+    }
+
     /// Whether `f` holds of any type `id` is built over, through the
     /// constructors a use site substitutes into (`Self::subst_rec`).
     fn any_constituent(&self, id: TypeId, f: &mut dyn FnMut(TypeId) -> bool) -> bool {

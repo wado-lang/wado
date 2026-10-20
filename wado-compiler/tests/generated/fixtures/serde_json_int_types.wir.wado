@@ -1334,6 +1334,7 @@ condition: v2 == 18446744073709551615 as u64
 }
 
 fn "core:json/write_json_i64"(buf, v) {
+    let $load_6: ref Array<u8>;
     let is_negative_16: bool;
     let abs_val_17: u64;
     let digit_count_18: i32;
@@ -1360,8 +1361,8 @@ fn "core:json/write_json_i64"(buf, v) {
     is_negative_16 = v < 0_i64;
     digit_count_18 = "core:prelude/primitive.wado/count_digits_u64"(local.tee v(select i64(v < 0_i64, 0_i64 - v, v)));
     is_negative_16 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$sroa[self.buf]$dae[alt_prefix]"(buf, is_negative_16, digit_count_18);
-    "core:prelude/primitive.wado/write_decimal_digits"(local.tee $mv_field_3(buf.repr), is_negative_16, v, digit_count_18);
-    if @unlikely(local.tee digit_count_18(buf.used + 1) > builtin::array_len($mv_field_3)) {
+    "core:prelude/primitive.wado/write_decimal_digits"(local.tee $load_6(buf.repr), is_negative_16, v, digit_count_18);
+    if @unlikely(local.tee digit_count_18(buf.used + 1) > builtin::array_len($load_6)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"(buf, digit_count_18);
     }
@@ -1378,6 +1379,7 @@ fn "core:json/write_json_i64"(buf, v) {
 }
 
 fn "core:json/write_json_u64"(buf, v) {
+    let $load_6: ref Array<u8>;
     let digit_count_13: i32;
     let offset_14: i32;
     if v <=u 9007199254740991_i64 {
@@ -1401,8 +1403,8 @@ fn "core:json/write_json_u64"(buf, v) {
     builtin::array_set_u8(buf.repr, offset_14, 34);
     offset_14 = "core:prelude/primitive.wado/count_digits_u64"(v);
     digit_count_13 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$sroa[self.buf]$dae[alt_prefix]"(buf, 0, offset_14);
-    "core:prelude/primitive.wado/write_decimal_digits"(local.tee $mv_field_3(buf.repr), digit_count_13, v, offset_14);
-    if @unlikely(local.tee offset_14(buf.used + 1) > builtin::array_len($mv_field_3)) {
+    "core:prelude/primitive.wado/write_decimal_digits"(local.tee $load_6(buf.repr), digit_count_13, v, offset_14);
+    if @unlikely(local.tee offset_14(buf.used + 1) > builtin::array_len($load_6)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"(buf, offset_14);
     }
@@ -1603,6 +1605,7 @@ fn "core:prelude/intparse.wado/parse_u64_digits$unchecked$sroa[return]$dae[radix
 
 fn "core:prelude/intparse.wado/split_sign$sroa[return]"(s) {
     let $load_1: i32;
+    let $load_3: ref Array<u8>;
     let len: i32;
     let is_negative: bool;
     let $v1_8: i32;
@@ -1633,16 +1636,16 @@ fn "core:prelude/intparse.wado/split_sign$sroa[return]"(s) {
             "core:prelude/intparse.wado/split_sign$cold1$dae[s]"(len, $v1_8, $load_1);
             unreachable;
         }
-        if @unlikely(local.tee $av_37((if local.tee $load_1("core:prelude/string.wado/core:prelude/string.wado/StrSlice::is_char_boundary"(s.repr, s.start, s.end, $v1_8)) -> i32 {
-            "core:prelude/string.wado/core:prelude/string.wado/StrSlice::is_char_boundary"(s.repr, s.start, s.end, len);
+        if @unlikely(local.tee $av_37((if local.tee is_negative("core:prelude/string.wado/core:prelude/string.wado/StrSlice::is_char_boundary"(local.tee $load_3(s.repr), local.tee $load_1(s.start), local.tee $av_37(s.end), $v1_8)) -> i32 {
+            "core:prelude/string.wado/core:prelude/string.wado/StrSlice::is_char_boundary"($load_3, $load_1, $av_37, len);
         } else {
             0;
         })) == 0) {
             cold_path;
-            "core:prelude/intparse.wado/split_sign$cold0"(s, len, $v1_8, $load_1);
+            "core:prelude/intparse.wado/split_sign$cold0"(s, len, $v1_8, is_negative);
             unreachable;
         }
-        "core:prelude/string.wado/core:prelude/string.wado/StrSlice::slice$unchecked"(s.repr, s.start, $v1_8, len);
+        "core:prelude/string.wado/core:prelude/string.wado/StrSlice::slice$unchecked"($load_3, $load_1, $v1_8, len);
     } }, 0;
 }
 
