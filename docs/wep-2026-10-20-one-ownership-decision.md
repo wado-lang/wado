@@ -34,9 +34,9 @@ two passes disagree on in the other direction, where the check sees a move and
 the drop pass does not take, would drop the value twice instead.
 
 `method_call_consumes_receiver` already shows the shape a fix takes. The body
-walk records the dispatch of each method call, and both the check and reify
-read whether it takes `self` by value. Nothing else about ownership is
-recorded once.
+walk records the dispatch of each method call, and the move check reads from it
+whether the call takes `self` by value. Nothing else about ownership is
+recorded, and reify does not read even that.
 
 ## Decision
 
@@ -100,8 +100,6 @@ already refused every program that would copy an affine value.
 - [ ] `MoveWalker` reads `Semantics::operand_mode` and loses `visit_value`.
 - [ ] `TirExprKind::Move`, emitted by reify and by `move_of`. Drop elaboration
   loses `consuming` and gains the assertion.
-- [ ] Value-copy planning (`lower/plan/value_copy`) reads `Move` where it now
-  infers that a read is the last one, if a measurement shows it gains from it.
 
 ## Known gaps
 
