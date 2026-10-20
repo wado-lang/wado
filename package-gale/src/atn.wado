@@ -282,8 +282,7 @@ pub fn build_atn_with(grammar: &Grammar, lowered: &LoweredGrammar, num_tokens: i
         b.add_eps(body.1, b.rule_stop[r]);
     }
     for let d of &b.decision_state {
-        assert b.states[*d].transitions.len() < ATN_FAILED_ALT,
-            "a decision must leave the simulator room to mark an alternative failed";
+        assert b.states[*d].transitions.len() < ATN_FAILED_ALT, "a decision must leave the simulator room to mark an alternative failed";
     }
 
     return Atn {

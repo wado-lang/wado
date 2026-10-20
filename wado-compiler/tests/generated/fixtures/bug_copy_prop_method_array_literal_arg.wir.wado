@@ -230,9 +230,11 @@ fn "bug_copy_prop_method_array_literal_arg.wado/run"() {
         cold_path;
         $local_8 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(38), used: 0 };
         "core:prelude/string.wado/core:prelude/string.wado/String^core:prelude/string.wado/AsStrSlice::internal_append_to"(local.tee other_27(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("expected Ok, got Err("), used: 21 }), $local_8);
-        $mv$$vr_4$0 = local.tee other_27($qm_e.msg).used;
+        $mv$$vr_4$0 = $qm_e.msg.used;
         $fuse_at_16 = "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"($local_8, 1 + $mv$$vr_4$0);
-        builtin::array_copy<u8>(local.tee $load_2($local_8.repr), $fuse_at_16, other_27.repr, 0, $mv$$vr_4$0);
+        $load_2 = $local_8.repr;
+        other_27 = $qm_e.msg;
+        builtin::array_copy<u8>($load_2, $fuse_at_16, other_27.repr, 0, $mv$$vr_4$0);
         $mv$$vr_4$0 = $fuse_at_16 + $mv$$vr_4$0;
         $sroa_s_repr_91 = array.new_fixed<u8>(41);
         builtin::array_copy<u8>($load_2, $mv$$vr_4$0, $sroa_s_repr_91, 0, 1);

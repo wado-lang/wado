@@ -1054,7 +1054,10 @@ internal global ATN_TR_RULE: i32 = 4;
 internal global ATN_TR_PRECEDENCE: i32 = 5;
 internal global ATN_TR_SET: i32 = 6;
 
+global mut ATN_SIMS_DECODED: i32 = 0;
+
 internal struct AtnSim {
+    internal serial: i32,
     internal state_kind: List<i32>,
     internal state_tr_start: List<i32>,
     internal state_tr_count: List<i32>,
@@ -1193,7 +1196,9 @@ internal fn atn_decode(bytes: &ByteList) -> AtnSim {
         }
     }
 
+    ATN_SIMS_DECODED += 1;
     return AtnSim {
+        serial: ATN_SIMS_DECODED,
         state_kind,
         state_tr_start,
         state_tr_count,

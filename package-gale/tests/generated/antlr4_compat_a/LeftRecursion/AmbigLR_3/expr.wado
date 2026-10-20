@@ -1052,7 +1052,10 @@ internal global ATN_TR_RULE: i32 = 4;
 internal global ATN_TR_PRECEDENCE: i32 = 5;
 internal global ATN_TR_SET: i32 = 6;
 
+global mut ATN_SIMS_DECODED: i32 = 0;
+
 internal struct AtnSim {
+    internal serial: i32,
     internal state_kind: List<i32>,
     internal state_tr_start: List<i32>,
     internal state_tr_count: List<i32>,
@@ -1191,7 +1194,9 @@ internal fn atn_decode(bytes: &ByteList) -> AtnSim {
         }
     }
 
+    ATN_SIMS_DECODED += 1;
     return AtnSim {
+        serial: ATN_SIMS_DECODED,
         state_kind,
         state_tr_start,
         state_tr_count,
@@ -1239,7 +1244,7 @@ global CTX_EMPTY: i32 = 0;
 global CTX_UNKNOWN: i32 = 1;
 
 global ATN_READS_HIDDEN: i32 = -6;
-global ATN_FAILED_ALT: i32 = 1024;
+internal global ATN_FAILED_ALT: i32 = 1024;
 
 global ATN_DFA_UNDECIDED: i32 = -7;
 global ATN_DFA_DEAD: i32 = -8;
@@ -2182,7 +2187,7 @@ struct AtnDfa {
     state_first: List<i32>,
     seeds: AtnKeyLists,
     edges: AtnKeyMap,
-    sim_states: i32,
+    sim_serial: i32,
 }
 
 impl AtnDfa {
@@ -2195,18 +2200,18 @@ impl AtnDfa {
             state_first: [],
             seeds: AtnKeyLists::new(),
             edges: AtnKeyMap::new(),
-            sim_states: -1,
+            sim_serial: 0,
         };
     }
 
     fn make_room(&mut self, sim: &AtnSim) {
-        if self.sim_states < 0 {
-            self.sim_states = sim.state_kind.len();
+        if self.sim_serial == 0 {
+            self.sim_serial = sim.serial;
         }
-        assert self.sim_states == sim.state_kind.len(), "a DFA caches the predictions of one ATN";
+        assert self.sim_serial == sim.serial, "a DFA caches the predictions of one ATN";
         if self.arena.closure_cut_short || self.arena.node_count() >= ATN_DFA_NODE_CAP {
             *self = AtnDfa::new();
-            self.sim_states = sim.state_kind.len();
+            self.sim_serial = sim.serial;
         }
     }
 

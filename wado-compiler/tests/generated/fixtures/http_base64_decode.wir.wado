@@ -554,10 +554,10 @@ condition: result matches { Some(bytes) && bytes.len() == 3 }
     $local_13 = (if @unlikely(ref.is_null(local.tee result("core:base64/decode_impl$dae[canonical]"(global:http_base64_decode.wado::$const_obj_10 = struct.new "core:prelude/slice.wado//Slice<u8>" { repr: global:http_base64_decode.wado::$const_obj_11 = array.new_fixed<u8>(89, 87, 74, 106); global:http_base64_decode.wado::$const_obj_11, start: 0, end: 4 }; global:http_base64_decode.wado::$const_obj_10, global:core:base64::DECODE_TABLE))) == 0) -> ref "core:prelude/string.wado//String" {
         bytes_2 = ref.as_non_null(result);
         $inline_core_prelude_string_wado_String__from_utf8_lossy_core_prelude_bytes_wado_ByteList__18: block -> ref "core:prelude/string.wado//String" {
-            if @likely("core:prelude/string.wado/core:prelude/string.wado/String::utf8_valid_prefix"(local.tee $load_1(local.tee slice(struct.new "core:prelude/slice.wado//Slice<u8>" { repr: bytes_2.repr, start: 0, end: bytes_2.used }).repr), 0, local.tee rx_233(slice.end)) == rx_233) {
-                break $inline_core_prelude_string_wado_String__from_utf8_lossy_core_prelude_bytes_wado_ByteList__18: struct.new "core:prelude/string.wado//String" { repr: $sroa_s_repr_245 = builtin::array_new<u8>(select i32(rx_233 > 0, rx_233, 0)); if rx_233 > 0 {
-                    builtin::array_copy<u8>($sroa_s_repr_245, 0, $load_1, 0, rx_233);
-                }; $sroa_s_repr_245, used: rx_233 };
+            if @likely("core:prelude/string.wado/core:prelude/string.wado/String::utf8_valid_prefix"(local.tee slice(struct.new "core:prelude/slice.wado//Slice<u8>" { repr: bytes_2.repr, start: 0, end: bytes_2.used }).repr, 0, slice.end) == local.tee rx_233(slice.end)) {
+                break $inline_core_prelude_string_wado_String__from_utf8_lossy_core_prelude_bytes_wado_ByteList__18: struct.new "core:prelude/string.wado//String" { repr: $load_1 = builtin::array_new<u8>(select i32(rx_233 > 0, rx_233, 0)); if rx_233 > 0 {
+                    builtin::array_copy<u8>($load_1, 0, slice.repr, 0, rx_233);
+                }; $load_1, used: rx_233 };
             }
             cold_path;
             $local_13 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(rx_233), used: 0 };
