@@ -14,7 +14,8 @@ use crate::ast;
 use crate::compiler_host::CompilerHost;
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::module_source::ModuleSource;
-use crate::tir::{TraitRef, TypeId, TypeKey};
+use crate::tir::{TraitRef, TypeId};
+use crate::type_table::TypeKey;
 
 use super::coercion::PendingLiterals;
 use super::sem::decls::PendingBounds;

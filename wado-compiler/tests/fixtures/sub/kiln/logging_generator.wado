@@ -1,0 +1,18 @@
+// A Kiln generator that logs through `core:log` at several levels.
+
+use { Request, Response, OutputFile, Error } from "core:kiln";
+use { debug, info, warn, error } from "core:log";
+
+export fn generate(req: Request) -> Result<Response, Error> {
+    debug("noisy");
+    info("generating");
+    warn("careful", { path: req.primary.path });
+    error("broken");
+    return Result::Ok(Response {
+        files: [OutputFile {
+            path: "out.wado",
+            content: "pub fn logged() -> bool { return true; }",
+            is_entry: true,
+        }],
+    });
+}

@@ -94,8 +94,7 @@ or not anything reads the global. Under the old rule `DEFAULT_HASH_SEED` would
 ask the host for a seed, and keep the `insecure-seed` import, in every program
 that imports `core:collections`, `TreeMap` users included. Under the new one, a
 program that reaches none of its readers imports nothing for it, at every
-optimization level. A Kiln generator depends on that, since it may import no
-`wasi:*` interface even at `-O0`.
+optimization level.
 
 ### `#[benign]` on functions stays
 
@@ -118,15 +117,17 @@ newtypes gave Gale a seedless `new()`, and `Default`, `Serialize` and
 and `HashSet` and the newtypes are deleted. `wado-lang:gale` re-exports both,
 so the deletion breaks a package that names them.
 
-Code that runs as a Kiln generator builds every map with
-`with_seed(HashSeed::fixed(…))`. A generator may import no `wasi:*` interface
-([The Sandbox](./spec-kiln.md#the-sandbox)), so one that reaches
-`DEFAULT_HASH_SEED` through `new()`, a literal, `Default` or `Deserialize` is a
-compile error (`KILN_GENERATOR_FORBIDDEN_IMPORT`). A struct the generator builds that
-holds a map takes a hand-written constructor in place of a derived `Default`.
-The Kiln host stays as it is: a
-constant `insecure-seed` would widen what it provides, for no gain over a fixed
-seed in the generator.
+Code that runs as a Kiln generator reaches `DEFAULT_HASH_SEED` as any other
+code does. The generator world imports `wasi:random/insecure-seed`, whose value
+may be fixed ([The Sandbox](./spec-kiln.md#the-sandbox)), and the Kiln host
+answers it from a fixed seed, so the generator stays deterministic.
+
+This reverses an earlier decision. The Kiln host first provided no
+`insecure-seed`, on the grounds that a fixed seed in the generator gained as
+much. It did not: a generator reaching `new()`, a literal, `Default` or
+`Deserialize` failed to compile, so code shared with ordinary programs needed a
+`with_seed` at each map, and a struct holding a map needed a hand-written
+constructor in place of a derived `Default`.
 
 ### Iteration keeps insertion order
 
@@ -229,9 +230,13 @@ an all-zero seed.
   order, and the output holds no seed.
 - [x] Map and list literals coerce to `HashMap<String, V>` and `HashSet<T>`.
   Done when a literal and a spread keep source order, last write wins.
-- [x] Gale uses `HashMap` and `HashSet`, under a fixed seed wherever the
-  generator reaches. Done when `GaleMap` and `GaleSet` are deleted and the
-  generator still compiles.
+- [x] Gale uses `HashMap` and `HashSet`. Done when `GaleMap` and `GaleSet` are
+  deleted and the generator still compiles.
+- [x] Gale and Wadopoet build their maps with `new()`. Done when their fixed
+  seeds are deleted and their generators still compile. Gale's
+  `src/runtime/latn.wado` keeps `LATN_SEED`: it is inlined into every
+  generated parser, and `new()` there would make each parser import
+  `wasi:random/insecure-seed`.
 
 ## Known gaps
 

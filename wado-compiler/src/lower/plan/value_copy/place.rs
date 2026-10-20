@@ -12,9 +12,10 @@ use crate::lower::plan::value_copy::callgraph;
 use crate::name::LocalMethodName;
 use crate::tir::{
     BuiltinDeclarations, CallArg, FunctionRef, ResolvedType, TirExpr, TirExprKind, TirFunction,
-    TirParam, TirPattern, TirStmt, TirStmtKind, TirUnaryOp, TypeId, TypeTable,
+    TirParam, TirPattern, TirStmt, TirStmtKind, TirUnaryOp, TypeId,
 };
 use crate::tir_visitor::TirRefVisitor;
+use crate::type_table::TypeTable;
 
 /// One step of a projection.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]

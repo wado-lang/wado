@@ -6,8 +6,9 @@
 
 use crate::compiler_host::CompilerHost;
 use crate::hashmap::IndexMap;
-use crate::tir::{ResolvedType, SubstitutionContext, TypeId, TypeTable};
+use crate::tir::{ResolvedType, SubstitutionContext, TypeId};
 use crate::token::Span;
+use crate::type_table::TypeTable;
 
 use super::Elaborator;
 use super::coercion::ExpectedReturn;

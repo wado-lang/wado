@@ -1,0 +1,18 @@
+// A Kiln generator importing `Request` under another name, beside a `Request`
+// of its own.
+
+use { Request as KilnRequest, Response, OutputFile, Error } from "core:kiln";
+
+struct Request { size: i32 }
+
+export fn generate(req: KilnRequest) -> Result<Response, Error> {
+    let own = Request { size: 7 };
+    let _ = req.primary.path;
+    return Result::Ok(Response {
+        files: [OutputFile {
+            path: "out.wado",
+            content: `pub fn total() -> i32 { return ${own.size}; }`,
+            is_entry: true,
+        }],
+    });
+}

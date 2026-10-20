@@ -13,8 +13,9 @@ use crate::nir_arena::{
 };
 use crate::nir_engine::{Engine, Rule};
 use crate::nir_value_graph::ValueKind;
-use crate::tir::{ResolvedType, TypeTable};
+use crate::tir::ResolvedType;
 use crate::token::Span;
+use crate::type_table::TypeTable;
 
 pub(super) struct IfChainToMatchRule<'t> {
     type_table: &'t TypeTable,

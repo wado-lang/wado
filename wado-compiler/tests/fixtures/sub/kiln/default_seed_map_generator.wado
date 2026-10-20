@@ -1,0 +1,18 @@
+// A Kiln generator that builds its maps under the default seed: `new()` and a
+// literal both read `DEFAULT_HASH_SEED`, which asks `wasi:random`.
+
+use { Request, Response, OutputFile, Error, read_all } from "core:kiln";
+use { HashMap } from "core:collections";
+
+export fn generate(req: Request) -> Result<Response, Error> {
+    let mut sizes = HashMap::<String, i32>::new();
+    sizes[req.primary.path] = read_all(req.primary.content).len();
+    let named = { size: sizes[req.primary.path] } as HashMap<String, i32>;
+    return Result::Ok(Response {
+        files: [OutputFile {
+            path: "out.wado",
+            content: `pub fn size() -> i32 { return ${named["size"]}; }`,
+            is_entry: true,
+        }],
+    });
+}

@@ -1,0 +1,15 @@
+// An associated constant is inlined where it is read, so a `return` would leave the reader.
+struct Limits {}
+
+impl Limits {
+    const MAX: i32 = pick: { if builtin::black_box(true) { return 7; } 1 };
+}
+
+export fn run() {
+    let _ = Limits::MAX;
+}
+
+__DATA__
+{
+  "compile_error": ":5:60: parse error: `return` cannot leave an associated constant: it runs apart from the code around it"
+}

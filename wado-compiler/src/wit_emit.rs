@@ -28,8 +28,8 @@ use crate::primitive::PrimitiveType;
 use crate::semantics::Semantics;
 use crate::tir::{
     ResolvedType, TirEnum, TirFlags, TirModule, TirNewtype, TirStruct, TirVariantDecl, TypeId,
-    TypeTable,
 };
+use crate::type_table::TypeTable;
 use crate::unparse::unparse_type_into;
 use crate::world_registry::{
     CALLBACK_INTERFACE, CallbackExport, ExportMappings, WorldRegistry, WorldSurface,

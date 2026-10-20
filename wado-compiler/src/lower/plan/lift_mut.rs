@@ -8,10 +8,11 @@ use crate::flat_package::FlatPackage;
 use crate::name::minted_name;
 use crate::tir::{
     LetStorage, TirBlock, TirExpr, TirExprKind, TirLocal, TirMatchArm, TirPattern, TirStmt,
-    TirStmtKind, TirStructPatternField, TypeId, TypeTable,
+    TirStmtKind, TirStructPatternField, TypeId,
 };
 use crate::tir_visitor::{TirOptVisitor, opt_walk_expr, opt_walk_stmt, remap_local_reads};
 use crate::token::Span;
+use crate::type_table::TypeTable;
 
 /// Idempotent: a second walk finds no `mut` bindings to lift.
 pub fn lift_mut_match_bindings(project: &mut FlatPackage) {

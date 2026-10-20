@@ -5,8 +5,9 @@ use std::sync::Arc;
 use crate::ast::{AstId, Type};
 use crate::compiler_host::CompilerHost;
 use crate::hashmap::IndexMap;
-use crate::tir::{ProjectionAnswer, ResolvedType, SlotProjections, TypeId, TypeTable};
+use crate::tir::{ProjectionAnswer, ResolvedType, SlotProjections, TypeId};
 use crate::token::Span;
+use crate::type_table::TypeTable;
 
 use super::Elaborator;
 use super::scope::{BinderInScope, FamilySite, ScopedBound};
@@ -18,7 +19,7 @@ use crate::defs::{DefId, DefKind};
 use crate::elaborator::trait_env::{
     ViaClause, non_default_arg_count, written_arg_nodes, written_type_arg,
 };
-use crate::name::{FqTypeName, namespace_member_alias};
+use crate::name::{FqTypeName, namespace_member_alias, namespaced_name, type_pack_name};
 use crate::symbol::SymbolKind;
 use crate::tir::TraitRef;
 use crate::trait_solver::args_per_param;
@@ -121,7 +122,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         .make_type_pack(name.clone(), index)
                 } else {
                     let _ = self.emit(TypeError::UnknownType {
-                        name: format!("..{name}"),
+                        name: type_pack_name(name),
                         span: *span,
                     });
                     TypeTable::ERROR
@@ -356,7 +357,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .unwrap_or_default();
         if params.len() != namespaced.args.len() {
             let _ = self.emit(TypeError::TypeArgumentCount {
-                name: format!("{}::{}", namespaced.namespace, namespaced.name),
+                name: namespaced_name(&namespaced.namespace, &namespaced.name),
                 expected: params.len(),
                 found: namespaced.args.len(),
                 span: namespaced.span,

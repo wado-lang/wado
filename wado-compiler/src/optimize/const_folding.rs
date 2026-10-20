@@ -32,8 +32,9 @@ use crate::optimize::alias::alias_classes;
 use crate::optimize::arena_query::projected_const_field;
 use crate::parallel::Executor;
 use crate::primitive::PrimitiveType;
-use crate::tir::{ResolvedType, TypeId, TypeTable};
+use crate::tir::{ResolvedType, TypeId};
 use crate::token::Span;
+use crate::type_table::TypeTable;
 
 /// The whole-program maps [`fold_constants`] feeds its interpreter. Membership
 /// is read out of bodies — `is_ctfe_runnable` decides the [`CalleeMap`], and

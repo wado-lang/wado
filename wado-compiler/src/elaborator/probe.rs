@@ -7,8 +7,9 @@ use crate::compiler_host::CompilerHost;
 use crate::compiler_item::CompilerItem;
 use crate::coverage::ProbeSite;
 use crate::hashmap::IndexSet;
-use crate::tir::{TirBlock, TirExpr, TirExprKind, TirStmt, TirStmtKind, TypeTable};
+use crate::tir::{TirBlock, TirExpr, TirExprKind, TirStmt, TirStmtKind};
 use crate::token::Span;
+use crate::type_table::TypeTable;
 
 use super::reify::{Reify, rt_call};
 

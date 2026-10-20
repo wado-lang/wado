@@ -3,7 +3,8 @@
 
 use crate::ast;
 use crate::compiler_host::CompilerHost;
-use crate::tir::{TemplateHole, TemplateShape, TypeId, TypeTable};
+use crate::tir::{TemplateHole, TemplateShape, TypeId};
+use crate::type_table::TypeTable;
 use crate::unparse::unparse_expr_source;
 
 use super::Elaborator;

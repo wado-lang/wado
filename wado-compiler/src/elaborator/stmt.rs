@@ -7,9 +7,10 @@ use crate::ast::{
 };
 use crate::compiler_host::CompilerHost;
 use crate::elaborator::sig::AssocConstSig;
-use crate::tir::{InstancePattern, ResolvedType, TirPattern, TypeId, TypeTable};
+use crate::tir::{InstancePattern, ResolvedType, TirPattern, TypeId};
 use crate::tir_visitor::remap_local_reads;
 use crate::token::Span;
+use crate::type_table::TypeTable;
 use crate::unparse::unparse_instance_pattern;
 
 use super::method_call::MethodCallInput;
@@ -27,6 +28,7 @@ use crate::elaborator::orchestration::first_infer_span;
 use crate::elaborator::reify::reserve_float_pattern_locals;
 use crate::elaborator::sem::types::{BodyFacts, DesugarKind, ForOfIteratorInfo};
 use crate::elaborator::synth::ArgClass;
+use crate::elaborator::trait_env::written_type_source;
 use crate::elaborator::trait_query::assoc_const_owner;
 use crate::elaborator::types::{GenericNewtypeInfo, ImplMemberKind, ParamSlot, StructFieldInfo};
 use crate::name::{
@@ -1129,7 +1131,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let Some(qualifier) = qualifier else {
             return case_name.to_string();
         };
-        format!("{}::{case_name}", format_pattern_qualifier_type(qualifier))
+        format!("{}::{case_name}", written_type_source(qualifier))
     }
 
     /// `type_id` wrapped in the scrutinee's reference kind — the one place that
@@ -1239,7 +1241,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// The written qualifier and the scrutinee's rendering can be the same
     /// text — two declarations of one name is precisely what this mismatch
     /// reports — so each takes its module then, in the same notation and under
-    /// the same rule as [`crate::tir::TypeTable::type_names_for_mismatch`].
+    /// the same rule as [`TypeTable::type_names_for_mismatch`].
     fn pattern_mismatch_names(
         &self,
         site: Option<AstId>,
@@ -3261,48 +3263,6 @@ impl TypeSystem {
             return true;
         };
         head.decl() == Some(written)
-    }
-}
-
-fn format_pattern_qualifier_type(ty: &Type) -> String {
-    match ty {
-        Type::Named(t) => t.name.clone(),
-        Type::Generic(t) => {
-            let args = t
-                .args
-                .iter()
-                .map(format_pattern_qualifier_type)
-                .collect::<Vec<_>>()
-                .join(", ");
-            format!("{}<{args}>", t.name)
-        }
-        Type::NamespacedGeneric(t) => {
-            if t.args.is_empty() {
-                format!("{}::{}", t.namespace, t.name)
-            } else {
-                let args = t
-                    .args
-                    .iter()
-                    .map(format_pattern_qualifier_type)
-                    .collect::<Vec<_>>()
-                    .join(", ");
-                format!("{}::{}<{args}>", t.namespace, t.name)
-            }
-        }
-        Type::Function(_) => "fn".to_string(),
-        Type::Tuple(types) => {
-            let elems = types
-                .iter()
-                .map(format_pattern_qualifier_type)
-                .collect::<Vec<_>>()
-                .join(", ");
-            format!("[{elems}]")
-        }
-        Type::Reference(inner) => format!("&{}", format_pattern_qualifier_type(inner)),
-        Type::MutReference(inner) => format!("&mut {}", format_pattern_qualifier_type(inner)),
-        Type::TypePackSpread(name, _) => format!("..{name}"),
-        Type::Infer(_) => "_".to_string(),
-        Type::Error(_) => "<error>".to_string(),
     }
 }
 

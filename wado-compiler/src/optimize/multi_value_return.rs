@@ -7,7 +7,8 @@ use crate::nir_arena::{BlockId, Body, ExprId, ExprKind, NodeRef, Operand, StmtId
 use crate::nir_package::NirPackage;
 use crate::optimize::arena_query::every_return;
 use crate::optimize::sroa_variant_return::settled_locals;
-use crate::tir::{ResolvedType, TypeId, TypeTable};
+use crate::tir::{ResolvedType, TypeId};
+use crate::type_table::TypeTable;
 
 /// Widest result vector the ABI is applied to. Matches
 /// `wir_optimize::sroa_variant_return::layout::MAX_PER_CASE_RESULT_FIELDS`, so

@@ -955,7 +955,7 @@ impl Log for Filter {
 /// Append ` key=value` for each field of an object, matching `TextSink`'s line
 /// format. A non-object payload (a bare scalar, `Null`) contributes nothing:
 /// it has no key to write it under.
-fn write_fields_text(fields: &Value, out: &mut String) {
+internal fn write_fields_text(fields: &Value, out: &mut String) {
     if let Object(map) = fields {
         for let [key, value] of map.entries() {
             out.push_str(` ${key}=`);

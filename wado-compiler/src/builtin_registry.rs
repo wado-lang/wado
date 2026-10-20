@@ -11,9 +11,11 @@ use crate::ast::{Attribute, CmBoundary, Function, Item, Module, Type};
 use crate::compiler_item::CompilerItem;
 use crate::lexer::lex;
 use crate::module_source::ModuleSource;
+use crate::name::ARRAY_TYPE_NAME;
 use crate::parser::Parser;
 use crate::stdlib;
-use crate::tir::{ResolvedType, TypeId, TypeTable};
+use crate::tir::{ResolvedType, TypeId};
+use crate::type_table::TypeTable;
 
 /// Information about a builtin function
 #[derive(Debug, Clone)]
@@ -198,7 +200,7 @@ impl BuiltinRegistry {
             }
             // `Array<T>` is the user-facing spelling of the raw GC array
             // builtin; the builtin module's own signatures use it.
-            Type::Generic(g) if g.name == TypeTable::ARRAY_TYPE_NAME => {
+            Type::Generic(g) if g.name == ARRAY_TYPE_NAME => {
                 let [element] = g.args.as_slice() else {
                     panic!("core:builtin writes `Array` without one type argument");
                 };

@@ -41,7 +41,7 @@ path, which names no package.
 
 Host interface exposed to Kiln generators. Deliberately narrow: a
 generator reports diagnostics and nothing else. Its inputs arrive by
-value, so it needs no filesystem, no clocks, no random, no network.
+value, so it needs no filesystem, no clocks, no network.
 See WEP 2026-04-12 (Kiln) §"The generator contract".
 
 #### `fn emit_diagnostic(diagnostic: Diagnostic)`
@@ -54,6 +54,18 @@ printed even if the generator eventually returns a successful
 response.
 
 ## Structs
+
+### `pub struct KilnLogSink`
+
+The `core:log` handler a generator runs under. A generator has no stderr
+for the default sink to write to, so the compiler installs this one around
+`generate`'s body.
+
+#### `impl Log for KilnLogSink`
+
+##### `fn enabled(&self, level: Level) -> bool`
+
+##### `fn event(&mut self, event: Event)`
 
 ### `pub struct NoOptions`
 

@@ -20,12 +20,13 @@ use crate::name::FunctionId;
 use crate::synthesis::effect_dispatch::ResourceWrapperIndex;
 use crate::tir::{
     BuiltinDeclarations, TirEnum, TirFlags, TirFunction, TirGlobal, TirStruct, TirTest,
-    TirVariantDecl, TypeTable,
+    TirVariantDecl,
 };
 use crate::tir_visitor::TirMutVisitor;
 use crate::token::Span;
+use crate::type_table::TypeTable;
 use crate::wir_build::component_plan::ComponentPlan;
-use crate::world_registry::{self, GENERATOR_HOST_INTERFACE, WorldRegistry};
+use crate::world_registry::{self, WorldRegistry};
 
 /// A linked Wado package ready for WIR building and code generation.
 ///
@@ -126,23 +127,6 @@ impl FlatPackage {
     /// Check if the project targets the synthetic test world.
     pub fn is_test_world(&self) -> bool {
         self.target_world == world_registry::TEST_WORLD
-    }
-
-    /// Whether the active world declares an `import {interface_name} { … }`
-    /// block. Drives the world-shape decisions in codegen, lowering and DCE that
-    /// once matched on `target_world` strings, so a new generator-shaped world
-    /// needs no new branches. `false` for the synthetic test world and any
-    /// unknown one, neither having a registry entry.
-    pub fn world_imports_interface(&self, interface_name: &str) -> bool {
-        self.world_registry
-            .get(&self.target_world)
-            .is_some_and(|w| w.imports_interface(interface_name))
-    }
-
-    /// Whether the target world is a kiln generator world (imports
-    /// [`crate::world_registry::GENERATOR_HOST_INTERFACE`]).
-    pub fn is_generator_world(&self) -> bool {
-        self.world_imports_interface(GENERATOR_HOST_INTERFACE)
     }
 
     /// Walk every function body with `visitor`, which may rewrite it in place.

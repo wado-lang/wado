@@ -7,8 +7,9 @@ use crate::compiler_host::CompilerHost;
 use crate::defs::DefId;
 use crate::hashmap::IndexSet;
 use crate::name::FqTraitName;
-use crate::tir::{ResolvedType, TypeId, TypeTable};
+use crate::tir::{ResolvedType, TypeId};
 use crate::token::Span;
+use crate::type_table::TypeTable;
 
 use super::Elaborator;
 use super::callee::StaticMethodRef;

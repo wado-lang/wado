@@ -1,0 +1,18 @@
+// A generator has no stderr, so its `core:log` events reach the host as
+// diagnostics instead: `Warn` and `Error` as warnings, `Debug` not at all.
+
+use { logged } from "./sub/kiln/value.schema"
+    with {
+        generator: { module: "./sub/kiln/logging_generator.wado" },
+    };
+
+test {
+    assert logged();
+}
+
+__DATA__
+{
+    "test": {},
+    "warnings_contains": ["generate: careful path=sub/kiln/value.schema", "generate: broken"],
+    "warnings_not_contains": ["generate: noisy"]
+}

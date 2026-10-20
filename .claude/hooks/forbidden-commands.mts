@@ -18,6 +18,13 @@ const FORBIDDEN = [
       "nohup, setsid and disown are forbidden (AGENTS.md > Tooling): a detached job notifies" +
       " nobody when it exits. Run a long job through the harness's background mechanism.",
   },
+  {
+    pattern: /^pgrep$/,
+    reason:
+      "pgrep is forbidden: `-f` matches itself, since the shell running" +
+      " it carries the pattern in its own command line, so a wait on it never ends. Wait for" +
+      " the harness's background notification instead.",
+  },
 ];
 
 /** Why the command is denied, or null when it runs nothing forbidden. */

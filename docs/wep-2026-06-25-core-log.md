@@ -210,10 +210,10 @@ Monomorphization drops the instantiation nobody asks for, so a program over
 promise that. The call stays reachable, the import lands, and at `-O0` nothing
 folds it away.
 
-The import is what makes this worth a type parameter, because an import decides
-instantiation. `core:kiln/generator` links only `core:kiln/kiln-host`, so a
-generator reaching a stamped sink fails to instantiate rather than logging
-without a clock.
+The import is what makes this worth a type parameter, because a world decides
+which imports a program may have. `core:kiln/generator` imports no clock, so a
+generator reaching a stamped sink is a compile error
+(`KILN_GENERATOR_FORBIDDEN_IMPORT`) rather than logging without a clock.
 
 ### Runtime filter directives
 
@@ -274,6 +274,12 @@ keep the policy in `core:log`. The test world needs no special case either:
 discarding it when the test passes, which is exactly the attribution a
 `CaptureSink`-under-test default was reaching for. `CaptureSink` stays what it
 should be — the sink a test installs to assert on events.
+
+A Kiln generator is the one entry point that gets a shim. It imports no stderr,
+so the default sink drops every event, and the compiler installs `KilnLogSink`
+around `generate`'s body to send them to the host as diagnostics
+([WEP: Kiln](./wep-2026-04-12-kiln.md#the-generator-contract)). The sink lives in
+`core:kiln`, so the policy stays in the library; the compiler only names it.
 
 `Info` rather than `Warn` for the default threshold: a program nobody configured
 should say what it is doing, not everything it is thinking, and a `debug`/`info`

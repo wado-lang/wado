@@ -77,7 +77,13 @@ type "functype//core:rt/panic" = fn(ref Array<u8>, i32);  // TypeId(25)
 
 type "functype//core:rt/unreachable" = fn();  // TypeId(26)
 
+<<<<<<< HEAD
 type "functype//core:rt/cm_stream_write_raw_all_u8" = fn(i32, ref Array<u8>, i32, i32) -> "core:prelude/types.wado//enum:CopyResult";  // TypeId(27)
+||||||| 63de94d26
+type "functype//core:prelude/int128.wado/core:prelude/int128.wado/u128::div_rem_wide$contract_report0" = fn(u64, u64, ref Array<u8>, i32);  // TypeId(26)
+=======
+type "functype//core:prelude/int128.wado/core:prelude/int128.wado/u128::div_rem_wide$contract_report0" = fn(u64, u64, ref "core:prelude/string.wado//String");  // TypeId(26)
+>>>>>>> origin/main
 
 type "functype//core:prelude/int128.wado/core:prelude/int128.wado/u128::div_rem_wide$contract_report0" = fn(u64, u64, ref Array<u8>, i32);  // TypeId(28)
 
@@ -409,14 +415,28 @@ fn "core:rt/cm_stream_write_raw_all_u8"(handle, $mv$data$repr, $mv$data$start, $
     };
 }
 
+<<<<<<< HEAD
 fn "core:prelude/int128.wado/core:prelude/int128.wado/u128::div_rem_wide$contract_report0"(hi, d, $mv$$site$repr, $mv$$site$used) {
+||||||| 63de94d26
+fn "core:rt/core/rt/cm_stream_pair<u8>"(packed) {
+    return builtin::i32_wrap_i64(packed), builtin::i32_wrap_i64(packed >> 32_i64);
+}
+
+fn "core:prelude/int128.wado/core:prelude/int128.wado/u128::div_rem_wide$contract_report0"(hi, d, $mv$$site$repr, $mv$$site$used) {
+=======
+fn "core:rt/core/rt/cm_stream_pair<u8>"(packed) {
+    return builtin::i32_wrap_i64(packed), builtin::i32_wrap_i64(packed >> 32_i64);
+}
+
+fn "core:prelude/int128.wado/core:prelude/int128.wado/u128::div_rem_wide$contract_report0"(hi, d, $site) {
+>>>>>>> origin/main
     let $load_0: ref Array<u8>;
     let $local_17: ref "core:prelude/string.wado//String";
     let $local_18: ref "core:prelude/format.wado//Formatter";
     let $fuse_at_5: i32;
     let offset_15: i32;
+    let offset_28: i32;
     let f_44: ref "core:prelude/format.wado//Formatter";
-    let other: ref "core:prelude/string.wado//String";
     let $sroa_s_repr_63: ref Array<u8>;
     $fuse_at_5 = "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"(local.tee $local_17(struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(133), used: 0 }), 41);
     $load_0 = $local_17.repr;
@@ -428,35 +448,36 @@ fn "core:prelude/int128.wado/core:prelude/int128.wado/u128::div_rem_wide$contrac
     $fuse_at_5 = $fuse_at_5 + 30;
     $sroa_s_repr_63 = array.new_data<u8>(" failed at ");
     builtin::array_copy<u8>($load_0, $fuse_at_5, $sroa_s_repr_63, 0, 11);
-    $fuse_at_5 = "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"($local_17, 57 + $mv$$site$used);
-    builtin::array_copy<u8>(local.tee $sroa_s_repr_63($local_17.repr), $fuse_at_5, $mv$$site$repr, 0, $mv$$site$used);
-    offset_15 = $fuse_at_5 + $mv$$site$used;
-    $mv$$site$repr = array.new_fixed<u8>(58, 32);
-    builtin::array_copy<u8>($sroa_s_repr_63, offset_15, $mv$$site$repr, 0, 2);
-    offset_15 = $fuse_at_5 + (2 + $mv$$site$used);
-    $mv$$site$repr = array.new_data<u8>("the quotient must fit in 64 bits");
-    builtin::array_copy<u8>($sroa_s_repr_63, offset_15, $mv$$site$repr, 0, 32);
-    offset_15 = $fuse_at_5 + (34 + $mv$$site$used);
-    $mv$$site$repr = array.new_data<u8>("
+    $fuse_at_5 = $site.used;
+    offset_15 = "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"($local_17, 57 + $fuse_at_5);
+    builtin::array_copy<u8>(local.tee $sroa_s_repr_63($local_17.repr), offset_15, $site.repr, 0, $fuse_at_5);
+    offset_28 = offset_15 + $fuse_at_5;
+    $load_0 = array.new_fixed<u8>(58, 32);
+    builtin::array_copy<u8>($sroa_s_repr_63, offset_28, $load_0, 0, 2);
+    offset_28 = offset_15 + (2 + $fuse_at_5);
+    $load_0 = array.new_data<u8>("the quotient must fit in 64 bits");
+    builtin::array_copy<u8>($sroa_s_repr_63, offset_28, $load_0, 0, 32);
+    offset_28 = offset_15 + (34 + $fuse_at_5);
+    $load_0 = array.new_data<u8>("
 condition: hi < d
 ");
-    builtin::array_copy<u8>($sroa_s_repr_63, offset_15, $mv$$site$repr, 0, 19);
-    $mv$$site$used = $fuse_at_5 + (53 + $mv$$site$used);
-    $mv$$site$repr = array.new_fixed<u8>(104, 105, 58, 32);
-    builtin::array_copy<u8>($sroa_s_repr_63, $mv$$site$used, $mv$$site$repr, 0, 4);
+    builtin::array_copy<u8>($sroa_s_repr_63, offset_28, $load_0, 0, 19);
+    $fuse_at_5 = offset_15 + (53 + $fuse_at_5);
+    $load_0 = array.new_fixed<u8>(104, 105, 58, 32);
+    builtin::array_copy<u8>($sroa_s_repr_63, $fuse_at_5, $load_0, 0, 4);
     f_44 = local.tee $local_18("core:prelude/format.wado/core:prelude/format.wado/Formatter::new"($local_17));
     "core:prelude/primitive.wado/u64::fmt_decimal$sroa[self.value]"(hi, f_44);
-    $mv$$site$used = "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"($local_17, 4);
-    $mv$$site$repr = $local_17.repr;
+    $fuse_at_5 = "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"($local_17, 4);
+    $load_0 = $local_17.repr;
     $sroa_s_repr_63 = array.new_fixed<u8>(10);
-    builtin::array_copy<u8>($mv$$site$repr, $mv$$site$used, $sroa_s_repr_63, 0, 1);
-    $mv$$site$used = $mv$$site$used + 1;
+    builtin::array_copy<u8>($load_0, $fuse_at_5, $sroa_s_repr_63, 0, 1);
+    $fuse_at_5 = $fuse_at_5 + 1;
     $sroa_s_repr_63 = array.new_fixed<u8>(100, 58, 32);
-    builtin::array_copy<u8>($mv$$site$repr, $mv$$site$used, $sroa_s_repr_63, 0, 3);
+    builtin::array_copy<u8>($load_0, $fuse_at_5, $sroa_s_repr_63, 0, 3);
     $local_18 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::new"($local_17);
     "core:prelude/primitive.wado/u64::fmt_decimal$sroa[self.value]"(d, $local_18);
-    other = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 };
-    "core:prelude/string.wado/core:prelude/string.wado/String::internal_push_string$spec0"($local_17, other);
+    $site = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 };
+    "core:prelude/string.wado/core:prelude/string.wado/String::internal_push_string$spec0"($local_17, $site);
     "core:rt/panic"($local_17.repr, $local_17.used);
     unreachable;
 }
@@ -627,8 +648,7 @@ fn "core:prelude/int128.wado/core:prelude/int128.wado/u128::div_rem"(self, divis
     $load_1 = divisor.high;
     if @unlikely(($load_0 == 0_i64) & ($load_1 == 0_i64)) {
         cold_path;
-        let $mv_field_1: ref Array<u8>;
-        "core:rt/panic"(local.tee $mv_field_1(array.new_data<u8>("u128 division by zero")), 21);
+        "core:rt/panic"(array.new_data<u8>("u128 division by zero"), 21);
         unreachable;
     }
     if $load_1 == 0_i64 {
@@ -639,8 +659,7 @@ fn "core:prelude/int128.wado/core:prelude/int128.wado/u128::div_rem"(self, divis
         } else {
             multivalue_bind [$contract_arg_0, $av_86] = "core:prelude/int128.wado/core:prelude/int128.wado/u128::div_rem_wide$unchecked"(local.tee $contract_arg_0($av_85 %u $load_0), $av_86, if @unlikely($contract_arg_0 >=u $load_0) {
                 cold_path;
-                $mv_field_1 = array.new_data<u8>("core:prelude/int128.wado:353");
-                "core:prelude/int128.wado/core:prelude/int128.wado/u128::div_rem_wide$contract_report0"($contract_arg_0, $load_0, $mv_field_1, 28);
+                "core:prelude/int128.wado/core:prelude/int128.wado/u128::div_rem_wide$contract_report0"($contract_arg_0, $load_0, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("core:prelude/int128.wado:353"), used: 28 });
                 unreachable;
             }; $load_0);
             return $av_85 = $av_85 /u $load_0; struct.new "core:prelude/int128.wado//u128" { low: $contract_arg_0, high: $av_85 }, struct.new "core:prelude/int128.wado//u128" { low: $av_86, high: 0_i64 };
@@ -669,11 +688,9 @@ fn "core:prelude/int128.wado/core:prelude/int128.wado/u128::div_rem"(self, divis
         }
         $av_85 = local.tee $load_0(self.high) >>u 1_i64;
         $load_0 = (self.low >>u 1_i64) | ($load_0 << 63_i64);
-        multivalue_bind [$load_1, $load_0] = "core:prelude/int128.wado/core:prelude/int128.wado/u128::div_rem_wide$unchecked"($av_85, $load_0, if @unlikely($av_85 >=u $load_1) {
+        multivalue_bind [$load_1, $av_85] = "core:prelude/int128.wado/core:prelude/int128.wado/u128::div_rem_wide$unchecked"($av_85, $load_0, if @unlikely($av_85 >=u $load_1) {
             cold_path;
-            $load_0 = $load_1;
-            $mv_field_1 = array.new_data<u8>("core:prelude/int128.wado:374");
-            "core:prelude/int128.wado/core:prelude/int128.wado/u128::div_rem_wide$contract_report0"($av_85, $load_0, $mv_field_1, 28);
+            "core:prelude/int128.wado/core:prelude/int128.wado/u128::div_rem_wide$contract_report0"($av_85, $load_1, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("core:prelude/int128.wado:374"), used: 28 });
             unreachable;
         }; $load_1);
         if @unlikely(local.tee $av_86($load_1 >>u (63_i64 - $av_86)) == 0_i64) {
@@ -681,28 +698,28 @@ fn "core:prelude/int128.wado/core:prelude/int128.wado/u128::div_rem"(self, divis
             "core:prelude/int128.wado/core:prelude/int128.wado/u128::div_rem$cold0$dae[self,divisor]"($av_86);
             unreachable;
         }
-        multivalue_bind [$load_0, $av_85] = i64.mul_wide_u(local.tee $av_86($av_86 - 1_i64), local.tee $load_1(divisor.low));
-        $contract_arg_0 = ($av_85 + ($av_86 * local.tee $av_85(divisor.high))) + (0_i64 * $load_1);
-        multivalue_bind [$contract_arg_0, $load_0] = i64.sub128(self.low, self.high, $load_0, $contract_arg_0);
-        self = struct.new "core:prelude/int128.wado//u128" { low: $contract_arg_0, high: $load_0 };
+        multivalue_bind [$av_85, $load_0] = i64.mul_wide_u(local.tee $av_86($av_86 - 1_i64), local.tee $load_1(divisor.low));
+        $contract_arg_0 = ($load_0 + ($av_86 * local.tee $load_0(divisor.high))) + (0_i64 * $load_1);
+        multivalue_bind [$contract_arg_0, $av_85] = i64.sub128(self.low, self.high, $av_85, $contract_arg_0);
+        self = struct.new "core:prelude/int128.wado//u128" { low: $contract_arg_0, high: $av_85 };
         if $inline_core_prelude_int128_wado_u128_core_prelude_traits_wado_Ord__cmp_10: block -> "core:prelude/traits.wado//enum:Ordering" {
-            if local.tee $load_0(self.high) <u $av_85 {
+            if local.tee $av_85(self.high) <u $load_0 {
                 break $inline_core_prelude_int128_wado_u128_core_prelude_traits_wado_Ord__cmp_10: 0;
             }
-            if $load_0 >u $av_85 {
+            if $av_85 >u $load_0 {
                 break $inline_core_prelude_int128_wado_u128_core_prelude_traits_wado_Ord__cmp_10: 2;
             }
-            if local.tee $load_0(self.low) <u $load_1 {
+            if local.tee $av_85(self.low) <u $load_1 {
                 break $inline_core_prelude_int128_wado_u128_core_prelude_traits_wado_Ord__cmp_10: 0;
             }
-            if $load_0 >u $load_1 {
+            if $av_85 >u $load_1 {
                 break $inline_core_prelude_int128_wado_u128_core_prelude_traits_wado_Ord__cmp_10: 2;
             }
             break $inline_core_prelude_int128_wado_u128_core_prelude_traits_wado_Ord__cmp_10: 1;
         } != 0 {
             $av_86 = $av_86 + 1_i64;
-            multivalue_bind [$av_85, $load_1] = i64.sub128(self.low, self.high, $load_1, $av_85);
-            self = struct.new "core:prelude/int128.wado//u128" { low: $av_85, high: $load_1 };
+            multivalue_bind [$load_0, $load_1] = i64.sub128(self.low, self.high, $load_1, $load_0);
+            self = struct.new "core:prelude/int128.wado//u128" { low: $load_0, high: $load_1 };
         }
         return struct.new "core:prelude/int128.wado//u128" { low: $av_86, high: 0_i64 }, self;
     }

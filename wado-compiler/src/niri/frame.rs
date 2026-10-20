@@ -11,7 +11,7 @@ use crate::nir_arena::{
     BlockId, Body, ExprId, ExprKind, ExprNode, NodeRef, Operand, StmtId, StmtKind, StmtNode,
 };
 use crate::nir_visitor::NirRefVisitor;
-use crate::tir::TypeTable;
+use crate::type_table::TypeTable;
 
 use super::callee::{CallSite, CalleeKey};
 use super::place::{
@@ -589,7 +589,8 @@ impl Interpreter<'_> {
             | CtfeBuiltin::I32AsChar
             | CtfeBuiltin::FloatIsNan
             | CtfeBuiltin::Ieee754Comparison(_)
-            | CtfeBuiltin::HeapBase(_) => None,
+            | CtfeBuiltin::HeapBase(_)
+            | CtfeBuiltin::AmbientStdio(_) => None,
         }
     }
 

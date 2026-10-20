@@ -8,7 +8,6 @@ use { SuperOp } from "./superclass.wado";
 use { MemberNames } from "./java2wado/jmembers.wado";
 use { gate_body_of } from "./scan_gate.wado";
 use { HashMap } from "core:collections";
-use { GALE_SEED } from "./hash_seed.wado";
 
 /// The settings of one generation. `codegen::install_action_context` builds
 /// them; nothing changes them afterwards.
@@ -42,7 +41,7 @@ pub struct GenSettings {
     /// differently in the grammar and identically after translation, so this is
     /// the one form the gate analysis reads. Reading the grammar text instead
     /// meant predicting what the translator would name the member.
-    pub gate_bodies: HashMap<i32, String> = HashMap::<i32, String>::with_seed(GALE_SEED),
+    pub gate_bodies: HashMap<i32, String> = HashMap::new(),
     /// The lexer's `superClass` base effect-interface name, or `""` when none.
     /// See `action.md`, "SuperClass — an effect interface".
     pub superclass_name: String = "",

@@ -16,9 +16,10 @@ use crate::name::{
 };
 use crate::tir::{
     EffectRef, FunctionRef, InstancePattern, REFLECT_NEWTYPE_BASE, ResolvedType,
-    SubstitutionContext, TirLiteralPattern, TirStruct, TypeId, TypeKey, TypeTable,
+    SubstitutionContext, TirLiteralPattern, TirStruct, TypeId,
 };
 use crate::token::Span;
+use crate::type_table::{TypeKey, TypeTable};
 
 use super::Elaborator;
 use super::call::{CaseSite, DefaultTypeBinding, DefaultWalk, WalkedDefault, slot_type_bindings};
@@ -53,7 +54,8 @@ use crate::escape::{self, unescape_byte, unescape_char};
 use crate::hashmap;
 use crate::lexer::defaults_to_float;
 use crate::primitive::PrimitiveType;
-use crate::tir::{AnonStructId, StructDef};
+use crate::tir::StructDef;
+use crate::type_table::AnonStructId;
 use std::cell::OnceCell;
 use std::cmp::Ordering;
 use std::rc::Rc;
@@ -4347,10 +4349,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     None => TypeTable::UNKNOWN,
                 }
             };
-            // Build mangled name with type arguments
             let arg_names: Vec<String> = type_args
                 .iter()
-                .map(|&t| self.tysys.type_table.borrow().type_name(t))
+                .map(|&t| {
+                    self.tysys
+                        .type_table
+                        .borrow()
+                        .mangle_type_arg_for_generic(t)
+                })
                 .collect();
             let mangled_name = mangle_generic_name(&struct_name, &arg_names);
             // WEP 2026-05-26: record the inferred
@@ -5788,8 +5794,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // The monomorphizer keys instantiation lookup on this form
         // (`RangeExclusive<i32>`), so there is one spelling of it: the body
         // walk mangles it here and records it, and reify reads it back instead
-        // of running its own `type_name(t)` + `mangle_generic_name`.
-        let arg_names = vec![self.tysys.type_table.borrow().type_name(element_type)];
+        // of running its own `mangle_generic_name`.
+        let arg_names = vec![
+            self.tysys
+                .type_table
+                .borrow()
+                .mangle_type_arg_for_generic(element_type),
+        ];
         let mangled_name = mangle_generic_name(&struct_name, &arg_names);
         self.record_generic_instantiation_with_mangle(
             range.id,

@@ -1,9 +1,10 @@
 //! Native wasmtime runtime for Kiln generators.
 //!
-//! Instantiates a compiled generator component, linking only the single
-//! host import (`emit-diagnostic`). Everything else — WASI, clocks,
-//! random, http — is unlinked; a generator that imports any of those fails at
-//! link time, which is the determinism guarantee.
+//! Instantiates a compiled generator component, linking `emit-diagnostic` and
+//! `wasi:random`'s `insecure` and `insecure-seed`, both from a fixed seed.
+//! Everything else — `random`, clocks, filesystem, http — is unlinked; a
+//! generator that imports any of those fails at link time, which is the
+//! determinism guarantee.
 //!
 //! Revision 3: each generator has its own synthesized world (the `options` shape is
 //! per-generator), so `generate` is invoked dynamically as typed `Val`s rather
@@ -19,6 +20,8 @@ use anyhow::Result;
 use wasmtime::component::types::{ComponentItem, Type};
 use wasmtime::component::{Component, Func, HasSelf, Instance, Linker, StreamReader, Val};
 use wasmtime::{Engine, Store};
+use wasmtime_wasi::WasiCtx;
+use wasmtime_wasi::random::{WasiRandomCtx, WasiRandomView};
 
 use wado_compiler::kiln::{CanonicalOptions, CanonicalValue};
 use wado_compiler::name::to_cm_name;
@@ -29,13 +32,15 @@ use wado_compiler::{
 };
 
 use crate::engine::fuel_engine;
+use crate::random;
 use crate::sync::lock;
 
 wasmtime::component::bindgen!({
-    path: "../wado-compiler/lib/core/kiln/generator.wit",
+    path: "../wado-compiler/lib/core/kiln",
     world: "generator",
     imports: { default: async },
     exports: { default: async },
+    with: { "wasi:random": wasmtime_wasi::p3::bindings::random },
 });
 
 use self::core::kiln::kiln_host;
@@ -54,6 +59,14 @@ pub struct KilnRunPolicy {
 
 struct KilnHostState {
     diagnostics: Arc<Mutex<Vec<GeneratorDiagnostic>>>,
+    /// Holds only the insecure random context; nothing else of WASI is linked.
+    wasi: WasiCtx,
+}
+
+impl WasiRandomView for KilnHostState {
+    fn random(&mut self) -> &mut WasiRandomCtx {
+        self.wasi.random()
+    }
 }
 
 impl kiln_host::Host for KilnHostState {
@@ -120,8 +133,9 @@ fn exports(component: &Component, engine: &Engine, export: &str) -> bool {
 
 /// A fresh store and instance for one generator call. The kiln determinism
 /// guarantee (WEP 2026-04-12 §"Design principles" #1) is what keeps the linker
-/// to `core:kiln/kiln-host` alone: the compiler elides the panic-path stderr at
-/// codegen time, so the component never imports WASI to begin with.
+/// to `core:kiln/kiln-host` and a fixed-seed insecure `wasi:random`: the
+/// compiler elides the panic-path stderr at codegen time, so the component
+/// imports no other WASI to begin with.
 async fn instantiate(
     engine: &Engine,
     component: &Component,
@@ -130,9 +144,16 @@ async fn instantiate(
 ) -> Result<(Store<KilnHostState>, Instance), GeneratorRunnerError> {
     let mut linker: Linker<KilnHostState> = Linker::new(engine);
     kiln_host::add_to_linker::<_, HasSelf<_>>(&mut linker, |s| s)
+        .and_then(|()| random::add_to_linker(&mut linker))
         .map_err(|e| GeneratorRunnerError::Host(format!("linker setup: {e:#}")))?;
 
-    let mut store = Store::new(engine, KilnHostState { diagnostics });
+    let mut store = Store::new(
+        engine,
+        KilnHostState {
+            diagnostics,
+            wasi: random::fixed_seed(&mut WasiCtx::builder()).build(),
+        },
+    );
     let fuel = if policy.fuel == 0 {
         u64::MAX
     } else {
@@ -897,5 +918,65 @@ export fn generate(req: Request<Options>) -> Result<Response, Error> {
             response.files[0].path, "ok.wado",
             "all three option values (snake_case i32, f32, multi-word enum case) must decode"
         );
+    }
+
+    /// A generator draws from both `wasi:random` interfaces its world imports,
+    /// the seed through `HashMap::new()` too.
+    #[test]
+    fn wasi_random_draws_reach_the_generator() {
+        use wado_compiler::{CompilerOptions, LogLevel, compile_with_options};
+
+        const SRC: &str = r#"
+use { Request, Response, Error, OutputFile } from "core:kiln";
+use { HashMap } from "core:collections";
+use { Insecure, InsecureSeed } from "wasi:random";
+
+export fn generate(req: Request) -> Result<Response, Error> with (Insecure, InsecureSeed) {
+    let mut draws = HashMap::<String, u64>::new();
+    draws["insecure"] = Insecure::get_insecure_random_u64();
+    draws["seed"] = InsecureSeed::get_insecure_seed().0;
+    return Result::Ok(Response {
+        files: [OutputFile {
+            path: "out.wado",
+            content: `${draws["insecure"]} ${draws["seed"]}`,
+            is_entry: true,
+        }],
+    });
+}
+"#;
+
+        let options = CompilerOptions {
+            log_level: Some(LogLevel::Warn),
+            target_world: Some("core:kiln/generator".to_string()),
+            ..CompilerOptions::default()
+        };
+        let compiled = runtime()
+            .block_on(compile_with_options(
+                SRC,
+                &NoopHost::new(),
+                Some("generator.wado"),
+                options,
+            ))
+            .expect("generator compiles to a component");
+
+        let engine = generator_engine().expect("engine");
+        let component = compile_component(&engine, &compiled.wasm).expect("component");
+        let request = GeneratorRequest {
+            primary: GeneratorInputFile {
+                path: "schema.txt".to_string(),
+                content: Vec::new(),
+                use_type: None,
+            },
+            inputs: vec![],
+            module: "../gen".to_string(),
+            options: CanonicalOptions::default(),
+        };
+        let (outcome, _diags) = runtime().block_on(run_generator(
+            &engine,
+            &component,
+            request,
+            KilnRunPolicy::default(),
+        ));
+        outcome.expect("generator runs and returns Ok");
     }
 }

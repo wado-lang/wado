@@ -1,0 +1,19 @@
+// `?` in a clause would leave the caller, as a `return` would.
+fn parse(n: i32) -> Result<i32, String> {
+    return Ok(n);
+}
+
+fn f(n: i32) -> Result<i32, String>
+    contract parse(n)? >= 0
+{
+    return Ok(n);
+}
+
+export fn run() {
+    let _ = f(1);
+}
+
+__DATA__
+{
+  "compile_error": ":7:14: parse error: `?` cannot leave a contract clause: it runs apart from the code around it"
+}

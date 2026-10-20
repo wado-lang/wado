@@ -20,10 +20,11 @@ use crate::tir::{
     CallArg, FunctionKind, FunctionRef, InlineHint, LetStorage, ResolvedType, StructDef,
     TemplateShape, TirBinaryOp, TirBlock, TirExpr, TirExprKind, TirFunction, TirLiteralPattern,
     TirLocal, TirMatchArm, TirModule, TirParam, TirPattern, TirStmt, TirStmtKind, TirStructField,
-    TirTypeParam, TraitRef, TypeId, TypeTable,
+    TirTypeParam, TraitRef, TypeId,
 };
 use crate::tir_visitor::TirMutVisitor;
 use crate::token::Span;
+use crate::type_table::TypeTable;
 
 use super::common::{
     FormatterWriteStr, deref_expr, make_synthetic_free_function, make_synthetic_method,

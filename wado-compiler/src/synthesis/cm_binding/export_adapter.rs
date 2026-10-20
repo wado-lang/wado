@@ -19,8 +19,15 @@ use crate::primitive::PrimitiveType;
 use crate::tir::{
     CallArg, FunctionRef, ResolvedType, TirBinaryOp, TirBlock, TirExpr, TirExprKind, TirFunction,
     TirLocal, TirMatchArm, TirModule, TirParam, TirPattern, TirStmt, TirStmtKind, TirStruct,
+<<<<<<< HEAD
     TirVariantCase, TirVariantDecl, TypeId, TypeTable,
+||||||| 63de94d26
+    TirStructField, TirVariantCase, TirVariantDecl, TypeId, TypeTable,
+=======
+    TirStructField, TirVariantCase, TirVariantDecl, TypeId,
+>>>>>>> origin/main
 };
+use crate::type_table::TypeTable;
 
 use crate::synthesis::common::{
     alloc_local, assign, binary, block, break_stmt, builtin_call, case_chain, cast,

@@ -533,6 +533,27 @@ let found = scan: {
 assert found == 8;
 ```
 
+## Jumps Stay Inside a Detached Expression
+
+Some expressions run apart from the code written around them: a default value
+of a parameter or a field runs at each use, a global initializer runs before
+the first read, an associated constant's value runs where it is read, and a
+[contract clause](./spec-assertions.md#contract-checks)
+runs at each call. A jump in one of them must land inside it. `return`,
+`resume`, `task return` and `?` are compile errors there, and so is a `break`
+or `continue` that no loop or labeled block inside the expression binds.
+Otherwise the jump would leave whatever surrounds the use: the caller, a loop
+around the call, or no function at all. A closure written in such an expression
+is a function of its own, so its `return` is allowed.
+
+<!-- {"fixture":"error_default_value_continues.wado"} -->
+
+```wado
+fn f(x: i32 = pick: { if builtin::black_box(true) { continue; } 1 }) -> i32 {
+    return x;
+}
+```
+
 ## Match Expression
 
 A `match` tests its scrutinee against each arm's pattern in order and runs the

@@ -22,7 +22,8 @@ use crate::loader::ModuleLoader;
 use crate::logger::Logger;
 use crate::module_source::ModuleSource;
 use crate::semantics::{Semantics, semantics_with_logger};
-use crate::tir::{TirFunction, TirModule, TypeTable};
+use crate::tir::{TirFunction, TirModule};
+use crate::type_table::TypeTable;
 
 thread_local! {
     static SNAPSHOT: OnceCell<Rc<Semantics>> = const { OnceCell::new() };

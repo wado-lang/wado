@@ -6,6 +6,7 @@ pub mod atomic_write;
 pub mod engine;
 pub mod fixture;
 pub mod kiln;
+pub mod random;
 pub mod stub_host;
 pub mod sync;
 pub mod timezone;

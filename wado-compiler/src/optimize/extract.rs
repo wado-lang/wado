@@ -35,8 +35,9 @@ use crate::optimize::heap_effect::HeapEffectsCache;
 use crate::parallel::Executor;
 use crate::primitive::PrimitiveType;
 use crate::tir;
-use crate::tir::{ResolvedType, TypeTable};
+use crate::tir::ResolvedType;
 use crate::token::Span;
+use crate::type_table::TypeTable;
 
 /// Rewrite a pure expression whose `ValueGraph` representative is a literal into
 /// that literal. Idempotent: an expression already holding the target literal
@@ -909,8 +910,8 @@ mod tests {
     use crate::nir_arena::{BlockId, BlockNode, Body, ExprNode, StmtId, StmtKind, StmtNode};
     use crate::nir_engine::{EngineBuffers, Rule};
     use crate::tir;
-    use crate::tir::TypeTable;
     use crate::token::Span;
+    use crate::type_table::TypeTable;
     use std::assert_matches;
 
     fn e(body: &mut Body, kind: ExprKind) -> ExprId {

@@ -12,9 +12,10 @@ use crate::name::mangle_generic_name;
 use crate::tir::{
     LetStorage, MonomorphInfo, ResolvedType, StructDef, TirBlock, TirExpr, TirExprKind, TirField,
     TirFunction, TirLocal, TirPattern, TirStmt, TirStmtKind, TirStruct, TirStructField,
-    TirTemplatePart, TypeId, TypeTable,
+    TirTemplatePart, TypeId,
 };
 use crate::token::Span;
+use crate::type_table::TypeTable;
 
 /// Type-level boxing facts produced by [`prepare_types`].
 pub struct BoxPlan {

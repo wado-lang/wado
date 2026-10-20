@@ -120,8 +120,7 @@ fn "list_index_assign_negative_oob.wado/run"() with Stdout {
     let x: i64;
     let start_84: i32;
     repr_12 = builtin::array_new<i32>(4);
-    index_14 = black_box(-1);
-    if @unlikely(((0 <= index_14) & (index_14 < 4)) == 0) {
+    if @unlikely(local.tee index_14(black_box(-1)) >=u 4) {
         cold_path;
         "core:prelude/list.wado/core:prelude/list.wado/List<i32>^core:prelude/traits.wado/IndexAssign<i32>::index_assign$cold0$dae[self,value,$v1]"(index_14);
         unreachable;

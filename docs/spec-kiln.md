@@ -302,8 +302,9 @@ beside it, and a consuming build uses that output without running the generator
 
 ### The Generator World
 
-A generator targets the `core:kiln/generator` world. It imports one interface,
-`KilnHost`, and nothing else:
+A generator targets the `core:kiln/generator` world. It imports `KilnHost` and
+two of the `wasi:random` interfaces, `Insecure` and `InsecureSeed`, and nothing
+else ([The Sandbox](#the-sandbox)):
 
 <!-- {"source": "wado-compiler/lib/core/kiln/worlds.wado"} -->
 
@@ -311,6 +312,8 @@ A generator targets the `core:kiln/generator` world. It imports one interface,
 #[cm("core:kiln/generator@0.1.0")]
 pub world Generator {
     import KilnHost;
+    import Insecure;
+    import InsecureSeed;
 }
 ```
 
@@ -616,6 +619,19 @@ KilnHost::emit_diagnostic(KilnDiagnostic {
 });
 ```
 
+A `core:log` event becomes a diagnostic too. The compiler runs `generate`'s body
+under `KilnLogSink`, which maps each event by its level:
+
+| Event level      | Diagnostic level |
+| ---------------- | ---------------- |
+| `Error`, `Warn`  | `warning`        |
+| `Info`           | `info`           |
+| `Debug`, `Trace` | none: dropped    |
+
+The message is the event's target and message, then its fields as `key=value`.
+An `Error` event does not fail the build. A generator fails only by returning an
+`Error`.
+
 ### The Probe
 
 A generator may export `probe` beside `generate`. It reports how many leading
@@ -655,16 +671,25 @@ export fn probe(path: String, content: Stream<u8>) -> Result<u64, Error> {
 
 ## The Sandbox
 
-A generator runs in a deterministic sandbox. It has no clocks, randomness,
-network, environment, or filesystem. It is a function of what the invocation
-hands it: the input files, the name it was invoked under, and the options.
+A generator runs in a deterministic sandbox. It has no clocks, network,
+environment, filesystem, or secure randomness. It is a function of what the
+invocation hands it: the input files, the name it was invoked under, and the
+options.
 
-- The host provides `KilnHost` and nothing else.
+- The host provides `KilnHost`, `wasi:random/insecure`, and
+  `wasi:random/insecure-seed`, and nothing else.
+- Both random interfaces behave as `wasi:random/insecure-seed` specifies: what
+  they return may be fixed.
+- `wasi:random/random` is not provided, because WASI requires a deterministic
+  environment to omit it.
+- A map under the default seed works as in any other program: `HashMap::new()`,
+  a map literal, `Default`, and `Deserialize`.
 - A generator opens no file. Each input arrives as a stream, and the host
   decides what is on it.
 - A generator writes no file. Every output is returned in the response.
-- A generator that imports a `wasi:*` interface, directly or through a
-  `core:*` module, is a compile error (`KILN_GENERATOR_FORBIDDEN_IMPORT`).
+- A generator that imports a `wasi:*` interface its world does not import,
+  directly or through a `core:*` module, is a compile error
+  (`KILN_GENERATOR_FORBIDDEN_IMPORT`).
 
 ### Running Again
 

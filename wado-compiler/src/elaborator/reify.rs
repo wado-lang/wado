@@ -33,8 +33,9 @@ use crate::tir::{
     self as tir, CallArg, GlobalInit, InstancePattern, LetStorage, LocalFrame, ResolvedType,
     TirBinaryOp, TirBlock, TirEnum, TirEnumCase, TirExpr, TirExprKind, TirFlags, TirFlagsMember,
     TirFunction, TirGlobal, TirModule, TirNewtype, TirPattern, TirStmt, TirStmtKind, TirStruct,
-    TirTest, TirUnaryOp, TirVariantDecl, TypeId, TypeTable, assign_stmt, transpose_tuple_expr,
+    TirTest, TirUnaryOp, TirVariantDecl, TypeId, assign_stmt, transpose_tuple_expr,
 };
+use crate::type_table::TypeTable;
 
 use super::coercion::{
     NumericLiteralKind, classify_numeric_literal, is_literal_arithmetic,

@@ -12,18 +12,28 @@ use crate::call_args::CallArgs;
 use crate::compiler_item::CompilerItem;
 use crate::component_model::{CmInterfaceRegistry, CmTypeKind};
 use crate::hashmap::{IndexMap, IndexSet};
-use crate::module_source::{ModuleSource, ModuleSourceInterner};
+use crate::module_source::{CmNamespace, ModuleSource, ModuleSourceInterner};
 use crate::name::{
     LocalMethodName, cm_future_read_func_name, cm_future_write_func_name, cm_stream_read_func_name,
     cm_stream_read_value_func_name, cm_stream_write_func_name, minted_name, to_cm_name,
 };
 use crate::package::Package;
 use crate::tir::{
+<<<<<<< HEAD
     CallArg, FrameLocals, FunctionKind, FunctionRef, InlineHint, MonomorphInfo, ResolvedType,
     TirBinaryOp, TirBlock, TirExpr, TirExprKind, TirFunction, TirLocal, TirParam, TirStmt,
     TirStmtKind, TypeId, TypeTable,
+||||||| 63de94d26
+    CallArg, FunctionKind, FunctionRef, InlineHint, MonomorphInfo, ResolvedType, TirBinaryOp,
+    TirBlock, TirExpr, TirExprKind, TirFunction, TirLocal, TirParam, TirStmt, TirStmtKind, TypeId,
+    TypeTable,
+=======
+    CallArg, FunctionKind, FunctionRef, InlineHint, MonomorphInfo, ResolvedType, TirBinaryOp,
+    TirBlock, TirExpr, TirExprKind, TirFunction, TirLocal, TirParam, TirStmt, TirStmtKind, TypeId,
+>>>>>>> origin/main
 };
 use crate::tir_visitor::{TirMutVisitor, TirRefVisitor};
+use crate::type_table::TypeTable;
 
 use crate::canonical::{CanonicalIntrinsic, CmDecl, CmFuturePayload, CmStreamPayload};
 use crate::synthesis::common::{
@@ -46,7 +56,6 @@ use crate::flat_package::FlatPackage;
 use crate::synthesis::cm_binding::lower::{
     buffer_bytes, synthesize_lower_list_to_buffer, synthesize_lower_wasi_type_to_memory,
 };
-use crate::synthesis::cm_binding::types::cm_package_from_source;
 use crate::synthesis::cm_binding::{PayloadsValidated, future_stream_payload_site};
 use crate::{ast, tir};
 
@@ -343,7 +352,7 @@ fn synthesize_record_stream_read_func(elem_type_id: TypeId, ctx: &SynthCtx) -> T
         name: elem_name.clone(),
         span: synth_span(),
     });
-    let (_, elem_pkg) = cm_package_from_source(&source)
+    let (_, elem_pkg) = CmNamespace::split_package(&source)
         .expect("`find_binding_source` yields only bundled-namespace sources");
     let (elem_size, elem_align) = cm_layout_i32(&ast_type, registry);
     // The same fallback the other builder of this declaration uses: one
@@ -2198,7 +2207,7 @@ fn stream_element_decl(tt: &TypeTable, elem: TypeId, cm_name: &str) -> CmDecl {
         .unwrap_or_else(|| {
             panic!(
                 "`stream<{}>` element names no declaration",
-                tt.base_type_name(elem)
+                tt.type_name(elem)
             )
         });
     CmDecl::new(tt.defs(), def, cm_name)
@@ -2232,8 +2241,7 @@ mod cm_binding_tests {
     /// What each Component Model primitive binds to. The table is the
     /// specification; [`cm_binding_function`] derives it rather than listing it.
     /// `None` is left to a caller above it: the constructors to `rewrite_cm_new`,
-    /// the payload-carrying futures to the parameterized paths, and the task
-    /// and context builtins to WIR translate.
+    /// and the payload-carrying futures to the parameterized paths.
     const EXPECTED: &[(&str, Option<&str>)] = &[
         ("future-new", None),
         ("future-read", None),
@@ -2271,11 +2279,6 @@ mod cm_binding_tests {
             Some("internal cm_error_context_debug_message"),
         ),
         ("error-context-drop", Some("canonical error-context-drop")),
-        ("backpressure-inc", None),
-        ("backpressure-dec", None),
-        ("context-get", None),
-        ("context-set", None),
-        ("task-cancel", None),
     ];
 
     fn binding_of(cm_name: &str) -> Option<String> {

@@ -19,8 +19,9 @@ use crate::elaborator::trait_env::{SynthesisedImpls, TraitEnv};
 use crate::module_source::ModuleSource;
 use crate::package::Package;
 use crate::tir;
-use crate::tir::{ResolvedType, TypeTable};
+use crate::tir::ResolvedType;
 use crate::token::Span;
+use crate::type_table::TypeTable;
 
 /// A synthesis failure, at the declaration it concerns where one is known.
 #[derive(Debug)]

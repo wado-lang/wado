@@ -12,7 +12,8 @@ use crate::nir_arena::{Body, ExprId, ExprKind, NodeRef, Operand};
 use crate::nir_package::NirPackage;
 use crate::nir_value_graph::{OpaqueSource, ValueId, ValueKind};
 use crate::parallel::Executor;
-use crate::tir::{ResolvedType, TypeId, TypeTable};
+use crate::tir::{ResolvedType, TypeId};
+use crate::type_table::TypeTable;
 
 use super::gate::FunctionGate;
 use super::heap_effect::HeapEffectsCache;

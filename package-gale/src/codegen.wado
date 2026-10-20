@@ -67,7 +67,6 @@ use { lower } from "./lower.wado";
 use { build_atn_with, atn_blob_bytes, Atn, empty_atn } from "./atn.wado";
 use { build_latn, grammar_needs_latn, LatnResult } from "./latn.wado";
 use { HashMap } from "core:collections";
-use { GALE_SEED } from "./hash_seed.wado";
 use { Diagnostic, DiagnosticKind, DiagnosticOwner, DiagnosticSite, Diagnostics, LoweredGrammar } from "./gir.wado";
 
 pub struct GenerateOptions {
@@ -289,10 +288,10 @@ pub fn generate(grammar: &mut Grammar, options: &GenerateOptions) -> GeneratedOu
     let needs_latn = grammar_needs_latn(grammar);
     let mut latn = LatnResult {
         atn: empty_atn(),
-        rule_index: HashMap::<String, i32>::with_seed(GALE_SEED),
+        rule_index: HashMap::new(),
         atn_class_rules: [],
     };
-    let mut atn_class_map = HashMap::<String, i32>::with_seed(GALE_SEED);
+    let mut atn_class_map = HashMap::<String, i32>::new();
     if needs_latn {
         latn = build_latn(grammar);
         for let name of &latn.atn_class_rules {

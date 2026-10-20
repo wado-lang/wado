@@ -20,8 +20,9 @@ use crate::nir_arena::{
 };
 use crate::nir_engine::{Engine, Rule};
 use crate::nir_package::NirPackage;
-use crate::tir::{TypeId, TypeTable};
+use crate::tir::TypeId;
 use crate::token::Span;
+use crate::type_table::TypeTable;
 
 use super::arena_query::{is_local, stmt_mentions_local};
 use super::gate::{FunctionGate, GatedPass};

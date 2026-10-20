@@ -1,0 +1,27 @@
+// `xs[0]`, `xs[1]`, `xs[2]` on one straight path: the first check takes the
+// last's index, and the other two need none.
+
+use { println, Stdout } from "core:cli";
+
+#[inline(never)]
+fn sum_asc(xs: &List<i32>) -> i32 {
+    return xs[0] + xs[1] + xs[2];
+}
+
+export fn run() with Stdout {
+    let xs: List<i32> = builtin::black_box([1, 2, 3, 4]);
+    println(`${sum_asc(&xs)}`);
+}
+
+__DATA__
+{
+    "stdout": "6\n",
+    "wir_scope": "sum_asc",
+    "wir_expect:O2": [
+        "if @unlikely(2 >= $load_{n})"
+    ],
+    "wir_not_expect:O2": [
+        "1 >= ",
+        "@unlikely(0 "
+    ]
+}

@@ -15,10 +15,9 @@ use crate::module_source::ModuleSource;
 use crate::primitive::PrimitiveType;
 use crate::semantics::Semantics;
 use crate::symbol::SymbolKind;
-use crate::tir::{
-    FunctionRef, ResolvedType, TirExpr, TirExprKind, TirField, TirModule, TypeId, TypeTable,
-};
+use crate::tir::{FunctionRef, ResolvedType, TirExpr, TirExprKind, TirField, TirModule, TypeId};
 use crate::token::Span;
+use crate::type_table::TypeTable;
 
 /// Structural description of a generator's `export struct Options`.
 #[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize)]

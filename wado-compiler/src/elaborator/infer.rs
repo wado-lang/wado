@@ -7,7 +7,8 @@
 use std::cell::RefCell;
 
 use crate::hashmap::IndexMap;
-use crate::tir::{ResolvedType, TypeId, TypeTable};
+use crate::tir::{ResolvedType, TypeId};
+use crate::type_table::TypeTable;
 
 /// Recursively unify an `expected` type, possibly holding `TypeParam` /
 /// `TypePack` holes, against a concrete `actual`, extending `bindings` with what

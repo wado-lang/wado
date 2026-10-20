@@ -793,6 +793,8 @@ Each unimplemented operation gets a stub funcref in the dispatch record. `..trap
 
 Growth is O(operations), independent of the number of call sites or handler types. Function signatures are unchanged — no hidden parameters.
 
+An effect no reachable code performs costs nothing. Its `with` blocks read the global only to save it, link it into the record, and restore it, so DCE's `drop_self_feeding_globals` deletes those reads and stores. The global, the record and the handler's methods then go with them. The compiler relies on this to install `core:kiln`'s log sink around every Kiln generator.
+
 ### Design Alternatives Considered
 
 - Hidden parameter threading: passes dispatch record as an extra function parameter. Enables static devirtualization at `with` sites, but changes every function signature in the effect chain and increases binary size proportional to call-chain depth times number of effects. Could be added later as an optimization pass on top of the global-based mechanism.

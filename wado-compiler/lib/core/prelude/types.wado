@@ -774,6 +774,7 @@ pub resource ErrorContext {
     #[cm("error-context-drop")]
     fn drop(self);
 }
+<<<<<<< HEAD
 
 /// Backpressure control for the current component instance.
 ///
@@ -820,3 +821,52 @@ pub resource Task {
     #[cm("task-cancel")]
     fn cancel();
 }
+||||||| 63de94d26
+
+/// Backpressure control for the current component instance.
+///
+/// Signals to the host that this component is under load.
+/// Increment to enable backpressure; decrement to release it.
+/// The host will stop dispatching new calls when the counter is non-zero.
+internal resource Backpressure {
+    /// Increment the backpressure counter by 1.
+    /// The host applies backpressure when the counter is non-zero.
+    #[cm("backpressure-inc")]
+    fn inc();
+
+    /// Decrement the backpressure counter by 1.
+    #[cm("backpressure-dec")]
+    fn dec();
+}
+
+/// Task-local context storage for the current async task.
+///
+/// Provides typed slots (u32) for passing context values across component
+/// boundaries without threading them through call arguments.
+/// The slot index must be a compile-time constant.
+internal resource Context {
+    /// Get the value of task-local context slot `slot`.
+    /// `slot` must be a compile-time constant.
+    #[cm("context-get")]
+    fn get(slot: u32) -> u32;
+
+    /// Set the value of task-local context slot `slot` to `value`.
+    /// `slot` must be a compile-time constant.
+    #[cm("context-set")]
+    fn set(slot: u32, value: u32);
+}
+
+/// The current async task handle.
+///
+/// Provides operations that apply to the currently executing async task.
+pub resource Task {
+    /// Acknowledge cancellation of the current task.
+    ///
+    /// Call this in response to a cancellation signal (e.g. after receiving
+    /// `WaitEvent { code: 6 }` from `WaitableSet::wait`). Signals to the CM
+    /// runtime that the task accepts being cancelled and will clean up.
+    #[cm("task-cancel")]
+    fn cancel();
+}
+=======
+>>>>>>> origin/main

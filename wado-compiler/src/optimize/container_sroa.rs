@@ -21,8 +21,9 @@ use crate::nir_arena::{
 use crate::nir_engine::{Engine, Rule};
 use crate::nir_package::NirPackage;
 use crate::parallel::Executor;
-use crate::tir::{ResolvedType, TypeId, TypeKey, TypeTable};
+use crate::tir::{ResolvedType, TypeId};
 use crate::token::Span;
+use crate::type_table::{TypeKey, TypeTable};
 
 use cranelift_entity::EntityRef;
 
@@ -638,7 +639,8 @@ fn is_storage_builtin(builtin: CtfeBuiltin) -> bool {
         CtfeBuiltin::I32AsChar
         | CtfeBuiltin::FloatIsNan
         | CtfeBuiltin::Ieee754Comparison(_)
-        | CtfeBuiltin::HeapBase(_) => false,
+        | CtfeBuiltin::HeapBase(_)
+        | CtfeBuiltin::AmbientStdio(_) => false,
     }
 }
 

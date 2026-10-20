@@ -1,0 +1,31 @@
+// `for let i of 0..<xs.len()` guards each `xs[i]`: the range's `start < end`
+// reaches the loop as a primitive compare, not an `Ordering` an inlined
+// `Ord::cmp` built, so condition implication drops the check.
+
+use { println, Stdout } from "core:cli";
+
+fn sum(xs: &List<i32>) -> i32 {
+    let mut s = 0;
+    for let i of 0..<xs.len() {
+        s += xs[i];
+    }
+    return s;
+}
+
+export fn run() with Stdout {
+    let xs: List<i32> = builtin::black_box([1, 2, 3, 4]);
+    println(`${sum(&xs)}`);
+}
+
+__DATA__
+{
+    "stdout": "10\n",
+    "wir_scope": "/run\"",
+    "wir_expect:O2": [
+        "builtin::array_get_value<i32>("
+    ],
+    "wir_not_expect:O2": [
+        "$cold0",
+        "Ord__cmp"
+    ]
+}

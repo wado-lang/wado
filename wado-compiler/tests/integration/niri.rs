@@ -36,7 +36,8 @@ use wado_compiler::niri::{
 };
 use wado_compiler::primitive::PrimitiveType;
 use wado_compiler::symbol::{StructSymbol, SymbolKind, SymbolTable};
-use wado_compiler::tir::{EffectRef, TypeId, TypeTable};
+use wado_compiler::tir::{EffectRef, TypeId};
+use wado_compiler::type_table::TypeTable;
 
 /// A struct type for a fixture.
 ///

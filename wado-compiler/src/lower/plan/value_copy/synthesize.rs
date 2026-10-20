@@ -13,13 +13,13 @@ use crate::flat_package::FlatPackage;
 use crate::hashmap::IndexSet;
 use crate::module_source::ModuleSource;
 use crate::tir::{
-    CallArg, FunctionKind, FunctionRef, InlineHint, InstanceKey, MonomorphInfo, ResolvedType,
-    StructDef, TirBlock, TirExpr, TirExprKind, TirField, TirFunction, TirLocal, TirMatchArm,
-    TirParam, TirPattern, TirStmt, TirStmtKind, TirStruct, TirStructField, TirUnaryOp, TypeId,
-    TypeTable,
+    CallArg, FunctionKind, FunctionRef, InlineHint, MonomorphInfo, ResolvedType, StructDef,
+    TirBlock, TirExpr, TirExprKind, TirField, TirFunction, TirLocal, TirMatchArm, TirParam,
+    TirPattern, TirStmt, TirStmtKind, TirStruct, TirStructField, TirUnaryOp, TypeId,
 };
 use crate::tir_visitor::TirRefVisitor;
 use crate::token::Span;
+use crate::type_table::{InstanceKey, TypeTable};
 
 use super::{ValueCopyHelpers, needs_value_copy};
 use crate::ast::Visibility;

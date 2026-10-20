@@ -20,9 +20,10 @@ use crate::lower::plan::value_copy::place::ReturnPaths;
 use crate::lower::plan::value_copy::{analyze, hands_out_payload};
 use crate::tir::{
     BuiltinDeclarations, CallArg, FunctionKind, FunctionRef, TirBlock, TirExpr, TirExprKind,
-    TirFunction, TirParam, TirStmt, TirStmtKind, TirUnaryOp, TypeId, TypeTable,
+    TirFunction, TirParam, TirStmt, TirStmtKind, TirUnaryOp, TypeId,
 };
 use crate::tir_visitor::TirRefVisitor;
+use crate::type_table::TypeTable;
 
 /// Oracle the freshness checker consults for a call's return convention.
 pub struct OwnedCalls<'a> {

@@ -1,4 +1,5 @@
-use { Error, package_of, read_all, read_text } from "core:kiln";
+use { Diagnostic, Error, KilnHost, KilnLogSink, package_of, read_all, read_text } from "core:kiln";
+use { Event, Level, Log, Metadata, error, warn } from "core:log";
 
 test "package_of keeps the package and drops a version or a file path" {
     assert package_of(&"lib:grog") == Option::Some("lib:grog");
@@ -11,6 +12,55 @@ test "Error renders its reason" {
     assert `${Error::InvalidSchema("bad token")}` == "invalid schema: bad token";
     assert `${Error::Unsupported("streaming input")}` == "unsupported: streaming input";
     assert `${Error::Other("boom")}` == "boom";
+}
+
+/// A Kiln host that keeps what the generator reports.
+struct RecordingHost {
+    diagnostics: List<Diagnostic> = [],
+}
+
+impl KilnHost for RecordingHost {
+    fn emit_diagnostic(&mut self, diagnostic: Diagnostic) {
+        self.diagnostics.push(diagnostic);
+        resume ();
+    }
+}
+
+fn event_at(level: Level, message: String) -> Event {
+    return Event {
+        meta: Metadata { level, target: "gen", file: "gen.wado", line: 1 },
+        message,
+    };
+}
+
+// `wado test` builds at `log.level=warn`, so an `info` or `debug` call stops at
+// the facade; those levels reach the sink as `Log` operations instead.
+
+test "KilnLogSink takes info and above" {
+    let mut taken: List<bool> = [];
+    with Log => &mut KilnLogSink {} do {
+        for let level of [Level::Trace, Level::Debug, Level::Info, Level::Warn, Level::Error] as List<Level> {
+            taken.push(Log::enabled(level));
+        }
+    };
+    assert taken == [false, false, true, true, true];
+}
+
+test "KilnLogSink reports info as info, and a warning or an error as a warning" {
+    let mut host = RecordingHost {};
+    with KilnHost => &mut host, Log => &mut KilnLogSink {} do {
+        Log::event(event_at(Level::Debug, "noisy"));
+        Log::event(event_at(Level::Info, "generating"));
+        warn("careful", { path: "a.schema" });
+        error("broken");
+    };
+    assert host.diagnostics.len() == 3;
+    assert host.diagnostics[0].level matches { Info };
+    assert host.diagnostics[0].message == "gen: generating";
+    assert host.diagnostics[1].level matches { Warning };
+    assert host.diagnostics[1].message.ends_with(": careful path=a.schema");
+    assert host.diagnostics[2].level matches { Warning };
+    assert host.diagnostics[2].message.ends_with(": broken");
 }
 
 /// An input stream that hands over its chunks one read at a time, the last

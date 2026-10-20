@@ -908,8 +908,11 @@ assert x > 0, "x must be positive";
 ```
 
 A `contract` clause states what a caller owes. An unmarked call checks it in
-every build; a call marked `unchecked` vouches for it, and only a build under
-`-f contract-checks` checks it. See [the spec](./spec-assertions.md#contract-checks).
+every build; a call marked `unchecked` vouches for it, and only a build that
+checks contracts checks it: `wado test`, `-O0` and `-O1` (the default of
+`wado run` and `wado serve`), or `-f contract-checks`. A clause runs at the
+call, so a `return` or `?` inside it is an error. See
+[the spec](./spec-assertions.md#contract-checks).
 
 ```wado
 fn half(n: i32) -> i32
@@ -919,7 +922,7 @@ fn half(n: i32) -> i32
 }
 
 half(4);             // checked, always
-unchecked half(4);   // the caller vouches; checked only under -f contract-checks
+unchecked half(4);   // the caller vouches; checked only where the build checks
 
 trait Pick {
     fn pick(&self, i: i32) -> i32

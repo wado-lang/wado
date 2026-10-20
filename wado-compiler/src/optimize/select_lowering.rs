@@ -10,7 +10,8 @@ use crate::nir_engine::{Engine, EngineBuffers, Rule};
 use crate::nir_package::NirPackage;
 use crate::nir_value_graph::{OpaqueSource, ValueId, ValueKind};
 use crate::optimize::mod_ref::ModRef;
-use crate::tir::{TypeId, TypeTable};
+use crate::tir::TypeId;
+use crate::type_table::TypeTable;
 
 /// Run select lowering on all functions, driven by the rewrite engine.
 pub fn select_lowering(project: &mut NirPackage) -> bool {

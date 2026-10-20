@@ -24,10 +24,10 @@ use crate::name::{FreeFunctionName, LocalMethodName};
 use crate::synthesis::resource_cleanup;
 use crate::synthesis::resource_cleanup::Generics;
 use crate::tir::{
-    AnonStructId, MonomorphInfo, ResolvedType, StructDef, TemplateId, TirFunction, TirModule,
-    TirStruct, TypeId, TypeTable,
+    MonomorphInfo, ResolvedType, StructDef, TemplateId, TirFunction, TirModule, TirStruct, TypeId,
 };
 use crate::tir_visitor::TirRefVisitor;
+use crate::type_table::{AnonStructId, TypeTable};
 
 use state::Monomorphizer;
 

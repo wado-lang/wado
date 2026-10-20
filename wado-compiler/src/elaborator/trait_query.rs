@@ -11,10 +11,11 @@ use crate::compiler_host::CompilerHost;
 use crate::compiler_item::CompilerItem;
 use crate::defs::DefId;
 use crate::module_source::ModuleSource;
-use crate::name::{FqTypeName, Receiver, TypeHead};
+use crate::name::{FqTypeName, Receiver, TypeHead, display_generic_name};
 use crate::primitive::PrimitiveType;
-use crate::tir::{ResolvedType, TypeId, TypeTable};
+use crate::tir::{ResolvedType, TypeId};
 use crate::token::Span;
+use crate::type_table::TypeTable;
 
 use super::callee::CalleeRef;
 use super::method_lookup::ImplParamSlots;
@@ -3562,11 +3563,8 @@ fn trait_named_by_position(
 /// The bound as the source writes it, so a failure over an argument names the
 /// argument: `Add<i32>` and not the `Add` the type does implement.
 fn bound_as_written(name: &str, trait_: &FqTraitName) -> String {
-    if trait_.args().is_empty() {
-        return name.to_string();
-    }
     let args: Vec<String> = trait_.args().iter().map(FqTypeName::to_display).collect();
-    format!("{name}<{}>", args.join(", "))
+    display_generic_name(name, &args)
 }
 
 /// Whether the compiler supplies `trait_name`'s operator for the primitive

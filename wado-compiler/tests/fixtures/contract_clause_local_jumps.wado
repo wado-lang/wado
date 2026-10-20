@@ -1,0 +1,35 @@
+// A jump that lands inside the clause stays: a labeled block it leaves, a loop
+// it breaks, and a closure's own `return`.
+fn f(xs: &List<i32>, n: i32) -> i32
+    contract found: {
+        for let x of *xs {
+            if x == n { break found: true; }
+        }
+        false
+    }
+    contract all: {
+        let mut i = 0;
+        loop {
+            if i >= xs.len() { break; }
+            i += 1;
+        }
+        i == xs.len()
+    }
+    contract (|v: i32| { if v < 0 { return false; } return true; })(n)
+{
+    return n;
+}
+
+test "jumps that land inside the clause" {
+    let xs: List<i32> = [1, 2, 3];
+    assert f(&xs, 2) == 2;
+}
+
+#[expect_trap]
+test "a clause still fails" {
+    let xs: List<i32> = [1, 2, 3];
+    let _ = f(&xs, builtin::black_box(5));
+}
+
+__DATA__
+{"test": {}}

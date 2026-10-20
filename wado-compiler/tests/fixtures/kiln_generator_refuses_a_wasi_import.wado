@@ -1,0 +1,14 @@
+// A generator importing a WASI package its world imports none of is refused at
+// the `use`.
+
+use { hello } from "./sub/kiln/value.schema"
+    with {
+        generator: { module: "./sub/kiln/clocks_generator.wado" },
+    };
+
+test {
+    assert hello() == 7;
+}
+
+__DATA__
+{"compile_error": "clocks_generator.wado:4:18: error: kiln generator `entry module` imports `wasi:clocks`: the generator world imports none of its interfaces"}

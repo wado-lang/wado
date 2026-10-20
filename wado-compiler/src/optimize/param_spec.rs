@@ -13,7 +13,8 @@ use crate::nir_engine::{Engine, EngineBuffers};
 use crate::nir_package::NirPackage;
 use crate::nir_value_graph::ValueKind;
 use crate::niri::{Callee, CalleeMap, CtfeBuiltinMap, build_callee_map, build_ctfe_builtin_map};
-use crate::tir::{ResolvedType, TypeId, TypeTable};
+use crate::tir::{ResolvedType, TypeId};
+use crate::type_table::TypeTable;
 
 use super::arena_query::{cold_exprs, cold_path_id};
 use super::body_memo::BodyMemo;

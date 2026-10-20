@@ -22,8 +22,9 @@ use crate::hashmap;
 use crate::module_source::ModuleSource;
 use crate::name::{FqTraitName, FqTypeName, unalias_namespace_member};
 use crate::resolve::{Resolution, Resolutions};
-use crate::tir::{ResolvedType, StructDef, TirLocal, TypeId, TypeTable};
+use crate::tir::{ResolvedType, StructDef, TirLocal, TypeId};
 use crate::token::Span;
+use crate::type_table::TypeTable;
 
 /// Struct field info: module source and field definitions
 #[derive(Clone)]

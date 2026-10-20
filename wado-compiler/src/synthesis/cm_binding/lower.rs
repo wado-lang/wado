@@ -11,8 +11,9 @@ use crate::module_source::ModuleSource;
 use crate::name::LocalMethodName;
 use crate::tir::{
     CallArg, FunctionRef, ResolvedType, TirBinaryOp, TirExpr, TirExprKind, TirLocal, TirMatchArm,
-    TirPattern, TirStmt, TirStmtKind, TypeId, TypeTable,
+    TirPattern, TirStmt, TirStmtKind, TypeId,
 };
+use crate::type_table::TypeTable;
 
 use crate::synthesis::common::{
     affine_handle, alloc_local, assign, binary, block, break_stmt, builtin_call, cast, deref_expr,

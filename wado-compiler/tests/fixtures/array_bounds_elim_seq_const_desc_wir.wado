@@ -1,0 +1,28 @@
+// `xs[3]` passing proves `3 < len`, so the constant indices below it need no
+// check of their own.
+
+use { println, Stdout } from "core:cli";
+
+#[inline(never)]
+fn sum_desc(xs: &List<i32>) -> i32 {
+    return xs[3] + xs[2] + xs[1] + xs[0];
+}
+
+export fn run() with Stdout {
+    let xs: List<i32> = builtin::black_box([1, 2, 3, 4]);
+    println(`${sum_desc(&xs)}`);
+}
+
+__DATA__
+{
+    "stdout": "10\n",
+    "wir_scope": "sum_desc",
+    "wir_expect:O2": [
+        "if @unlikely(3 >= "
+    ],
+    "wir_not_expect:O2": [
+        "2 >= ",
+        "1 >= ",
+        "0 >= "
+    ]
+}

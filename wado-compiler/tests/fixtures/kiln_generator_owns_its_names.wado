@@ -1,0 +1,12 @@
+// A generator may declare `InputFile`, `NoOptions` or `KilnLogSink` itself: the
+// request adapter reaches `core:kiln`'s through a namespace no source can
+// spell, rather than importing the bare names into the generator.
+
+use { total } from "./sub/kiln/value.schema"
+    with {
+        generator: { module: "./sub/kiln/own_names_generator.wado" },
+    };
+
+test {
+    assert total() == 7;
+}

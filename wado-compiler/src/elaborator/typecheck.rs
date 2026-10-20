@@ -6,8 +6,9 @@
 
 use crate::compiler_host::CompilerHost;
 use crate::defs::DefId;
-use crate::tir::{EffectRef, ResolvedType, RowFlow, TupleSlot, TypeId, TypeTable};
+use crate::tir::{EffectRef, ResolvedType, RowFlow, TupleSlot, TypeId};
 use crate::token::Span;
+use crate::type_table::TypeTable;
 
 use super::Elaborator;
 use super::call::ArgSite;

@@ -12,12 +12,13 @@ use wado_host::engine::{DEFAULT_COLLECTOR, DEFAULT_GC_HEAP_INITIAL_SIZE};
 #[derive(Clone, Copy, PartialEq, Eq, Debug, Default)]
 pub enum OptLevel {
     O0,
-    /// All passes except DCE. Iterations: 2, inline threshold: 10.
+    /// All passes on a small budget, and contract checks on. Iterations: 2,
+    /// inline threshold: 4.
     O1,
-    /// Production: all passes, including DCE. Iterations: 10, inline threshold: 10.
+    /// Production: contract checks off. Iterations: 15, inline threshold: 16.
     #[default]
     O2,
-    /// Aggressive. Iterations: 100, inline threshold: 20.
+    /// Aggressive. Iterations: 20, inline threshold: 26.
     O3,
     /// `O2` plus name-section stripping.
     Os,
@@ -54,17 +55,17 @@ impl OptLevel {
 pub fn parse_opt_level_arg(parser: &mut Parser) -> Result<OptLevel, CliExit> {
     let Some(val) = parser.optional_value() else {
         return Err(CliExit::error(
-            "-O requires a level. Use -O0, -O1, -O2, -O3, -Os, or -Og",
+            "-O requires a level. Use -O0, -O1, -O2, -O3, or -Os",
         ));
     };
     match val.to_string_lossy().as_ref() {
-        "0" | "g" => Ok(OptLevel::O0),
+        "0" => Ok(OptLevel::O0),
         "1" => Ok(OptLevel::O1),
         "2" => Ok(OptLevel::O2),
         "3" => Ok(OptLevel::O3),
         "s" => Ok(OptLevel::Os),
         other => Err(CliExit::error(format!(
-            "unknown optimization level '-O{other}'. Use -O0, -O1, -O2, -O3, -Os, or -Og"
+            "unknown optimization level '-O{other}'. Use -O0, -O1, -O2, -O3, or -Os"
         ))),
     }
 }
@@ -96,7 +97,7 @@ impl CompileKnobOpt {
                 long: None,
                 short: Some('O'),
                 value: Some("<n>"),
-                desc: "Optimization level: -O0, -O1, -O2, -O3, -Os",
+                desc: "Optimization level: -O0, -O1, -O2, -O3, -Os\n(default: -O2; -O1 under run and serve)",
             },
             Self::InlineThreshold => OptSpec {
                 long: Some("optimize-inline-threshold"),
@@ -140,7 +141,7 @@ impl CompileKnobOpt {
                 long: None,
                 short: Some('f'),
                 value: Some("<flag>"),
-                desc: "Toggle a codegen feature flag (repeatable; prefix no- to disable):\nbranch-hinting   emit metadata.code.branch_hint entries (default: on)\nbare-asserts     assertion failures trap without a message (default: on at -Os)\nwide-arithmetic  native i64.mul_wide/add128/sub128 (default: on)\ncontract-checks  trap on an _unchecked call outside its contract (default: on in the test world and at -O0)",
+                desc: "Toggle a codegen feature flag (repeatable; prefix no- to disable):\nbranch-hinting   emit metadata.code.branch_hint entries (default: on)\nbare-asserts     assertion failures trap without a message (default: on at -Os)\nwide-arithmetic  native i64.mul_wide/add128/sub128 (default: on)\ncontract-checks  check the contract of a call marked unchecked (default: on in the test world, at -O0 and -O1)",
             },
             Self::NoCache => OptSpec {
                 long: Some("no-cache"),
@@ -226,6 +227,18 @@ impl Default for CompileKnobs {
 }
 
 impl CompileKnobs {
+    /// The knobs of a subcommand that runs what it compiles at once (`run`,
+    /// `serve`). They default to `-O1`: there the compile counts against the
+    /// run, which `-O2` costs more than it saves, and `-O1` keeps the contract
+    /// checks a program being developed wants.
+    #[must_use]
+    pub fn compile_and_run() -> Self {
+        Self {
+            opt_level: OptLevel::O1,
+            ..Self::default()
+        }
+    }
+
     /// The threads the optimizer runs on: `--optimize-threads`, else every
     /// available core. A subcommand compiling several files at once sets its
     /// share before this is read: 1 under `wado test`, the cores divided by the
@@ -487,7 +500,6 @@ mod tests {
             ("-O2", OptLevel::O2),
             ("-O3", OptLevel::O3),
             ("-Os", OptLevel::Os),
-            ("-Og", OptLevel::O0),
         ] {
             assert_eq!(parse_opt_level(&[arg]), Ok(expected), "failed for {arg}");
         }

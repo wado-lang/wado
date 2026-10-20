@@ -11,7 +11,8 @@ use crate::nir::{NirBinaryOp, NirUnaryOp};
 use crate::nir_arena::{Body, Operand};
 use crate::nir_value_graph::value_kind_to_const;
 use crate::primitive::PrimitiveType;
-use crate::tir::{ResolvedType, TypeId, TypeTable};
+use crate::tir::{ResolvedType, TypeId};
+use crate::type_table::TypeTable;
 
 /// A typed compile-time value produced by the interpreter.
 #[derive(Debug, Clone, PartialEq)]

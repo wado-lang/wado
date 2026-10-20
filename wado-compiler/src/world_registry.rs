@@ -25,8 +25,7 @@ pub const TEST_WORLD: &str = "test";
 
 /// The interface whose import marks a world as a kiln generator world.
 /// The one place the name is spelled; generator-world checks go through
-/// [`WorldRegistry::is_generator_world`] (or the package-level
-/// `is_generator_world` helpers), never a scattered string literal.
+/// [`WorldRegistry::generator_world`], never a scattered string literal.
 pub const GENERATOR_HOST_INTERFACE: &str = "KilnHost";
 
 /// The interface every [`CallbackExport`] belongs to.
@@ -191,6 +190,14 @@ impl WorldInfo {
         self.imports
             .iter()
             .any(|i| i.interface_name == interface_name)
+    }
+
+    /// True when this world imports the interface whose CM FQ is `fq`
+    /// (`wasi:random/random@0.3.0`).
+    pub fn imports_cm_interface(&self, fq: &str) -> bool {
+        self.imports
+            .iter()
+            .any(|i| i.cm_interface_fq.as_deref() == Some(fq))
     }
 }
 
@@ -404,20 +411,18 @@ impl WorldRegistry {
         self.worlds.contains_key(fq_name)
     }
 
-    /// Whether `world` is registered and imports `interface_name`. The single
-    /// predicate behind kiln-generator detection (see [`GENERATOR_HOST_INTERFACE`]),
-    /// so the frontend, `cm_binding`, and codegen all agree on what counts as a
-    /// generator world instead of some string-matching `core:kiln/generator`.
-    pub fn world_imports_interface(&self, world: &str, interface_name: &str) -> bool {
+    /// `world`, when it is a kiln generator world. Structural: any world that
+    /// imports [`GENERATOR_HOST_INTERFACE`] qualifies, so a future generator
+    /// world with a different FQ is detected without new branches. The single
+    /// predicate behind kiln-generator detection, so the frontend, `cm_binding`,
+    /// and codegen all agree on what counts as a generator world.
+    pub fn generator_world(&self, world: &str) -> Option<&WorldInfo> {
         self.get(world)
-            .is_some_and(|w| w.imports_interface(interface_name))
+            .filter(|w| w.imports_interface(GENERATOR_HOST_INTERFACE))
     }
 
-    /// Whether `world` is a kiln generator world. Structural: any world that
-    /// imports [`GENERATOR_HOST_INTERFACE`] qualifies, so a future generator
-    /// world with a different FQ is detected without new branches.
     pub fn is_generator_world(&self, world: &str) -> bool {
-        self.world_imports_interface(world, GENERATOR_HOST_INTERFACE)
+        self.generator_world(world).is_some()
     }
 
     /// Get the number of registered worlds

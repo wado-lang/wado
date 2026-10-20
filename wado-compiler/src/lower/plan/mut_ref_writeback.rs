@@ -11,10 +11,11 @@ use crate::hashmap::IndexSet;
 use crate::logger::{Bail, ErrorSink};
 use crate::tir::{
     LetStorage, ResolvedType, TirBinaryOp, TirBlock, TirExpr, TirExprKind, TirLocal, TirStmt,
-    TirStmtKind, TirUnaryOp, TypeId, TypeTable,
+    TirStmtKind, TirUnaryOp, TypeId,
 };
 use crate::tir_visitor::{TirOptVisitor, opt_walk_expr, opt_walk_stmt};
 use crate::token::Span;
+use crate::type_table::TypeTable;
 
 /// Runs before [`super::boxing::prepare_types`], while `&mut T` is still
 /// distinguishable from `&T` and the referent type is readable.

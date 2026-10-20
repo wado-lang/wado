@@ -74,9 +74,10 @@ use crate::name::{self as name, Receiver, RefKind};
 use crate::name::{DeclName, FqTraitName, FqTypeName, global_name, namespace_member_alias};
 use crate::resolve::Resolution;
 use crate::symbol::{Symbol, SymbolKind, SymbolTable, VariableSymbol};
-use crate::tir::{self as tir, TypeId, TypeTable};
+use crate::tir::{self as tir, TypeId};
 use crate::tir::{ResolvedType, StructDef};
 use crate::token::Span;
+use crate::type_table::TypeTable;
 
 /// Build a function-name → item-index map for a module's items. Used
 /// once per loaded module during annotate
@@ -1231,7 +1232,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         target_type_name: &str,
         span: Span,
     ) {
-        if target_type_id == tir::TypeTable::ERROR {
+        if target_type_id == TypeTable::ERROR {
             return;
         }
         if self.tysys.structurally_derivable_for_explicit_request(
@@ -1545,7 +1546,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                 let tt = self.tysys.type_table.borrow();
                 match tt.get(current) {
                     ResolvedType::Newtype { base_type, .. } => *base_type,
-                    ResolvedType::Flags { .. } => tir::TypeTable::U32,
+                    ResolvedType::Flags { .. } => TypeTable::U32,
                     _ => return None,
                 }
             };
@@ -2236,7 +2237,7 @@ impl TypeSystem {
         loop {
             let peeled = match self.type_table.borrow().get(current).clone() {
                 tir::ResolvedType::Newtype { base_type, .. } => base_type,
-                tir::ResolvedType::Flags { .. } => tir::TypeTable::U32,
+                tir::ResolvedType::Flags { .. } => TypeTable::U32,
                 _ => break,
             };
             if peeled == current {
@@ -2316,7 +2317,7 @@ impl TypeSystem {
             ResolvedType::Primitive(prim) => Some(prim.as_str().to_string()),
             ResolvedType::Unit => Some(name::UNIT_TYPE_NAME.to_string()),
             ResolvedType::Never => Some(name::NEVER_TYPE_NAME.to_string()),
-            ResolvedType::BuiltinArray(_) => Some(tir::TypeTable::ARRAY_TYPE_NAME.to_string()),
+            ResolvedType::BuiltinArray(_) => Some(name::ARRAY_TYPE_NAME.to_string()),
             _ => None,
         }
     }

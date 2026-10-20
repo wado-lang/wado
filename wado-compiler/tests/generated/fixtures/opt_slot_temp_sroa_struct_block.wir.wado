@@ -168,7 +168,7 @@ fn "opt_slot_temp_sroa_struct_block.wado/use_literal"(p) {
     $sroa_slot_3 = 0_i64;
     $sroa_slot_4 = 0_i64;
     $inline_pick_literal_0: block {
-        if (p >= 0) & (p < 8) {
+        if p <u 8 {
             $sroa_slot_3 = builtin::i64_extend_i32_s(p);
             $sroa_slot_4 = 7_i64;
             break $inline_pick_literal_0;
@@ -190,7 +190,7 @@ fn "opt_slot_temp_sroa_struct_block.wado/use_call"(p) {
     $sroa_slot_3 = 0_i64;
     $sroa_slot_4 = 0_i64;
     $inline_pick_call_0: block {
-        if (p >= 0) & (p < 8) {
+        if p <u 8 {
             $sroa_slot_3 = builtin::i64_extend_i32_s(p);
             $sroa_slot_4 = 7_i64;
             break $inline_pick_call_0;
@@ -207,7 +207,7 @@ fn "opt_slot_temp_sroa_struct_block.wado/use_call"(p) {
 
 fn "opt_slot_temp_sroa_struct_block.wado/use_half"(p) {
     return $inline_pick_half_0: block -> ref "opt_slot_temp_sroa_struct_block.wado//Half" {
-        if (p >= 0) & (p < 8) {
+        if p <u 8 {
             break $inline_pick_half_0: struct.new "opt_slot_temp_sroa_struct_block.wado//Half" { kept: builtin::i64_extend_i32_s(p), dropped: 7_i64 };
         }
         break $inline_pick_half_0: struct.new "opt_slot_temp_sroa_struct_block.wado//Half" { kept: builtin::i64_extend_i32_s(p) * 3_i64, dropped: 5_i64 };
@@ -231,7 +231,7 @@ fn "opt_slot_temp_sroa_struct_block.wado/use_boxed"(p) {
     let new_used: i32;
     let start: i32;
     v_2 = (if ref.is_null(local.tee $mv_a_1(local.tee x($inline_pick_boxed_0: block -> ref "opt_slot_temp_sroa_struct_block.wado//Boxed" {
-        if (p >= 0) & (p < 8) {
+        if p <u 8 {
             break $inline_pick_boxed_0: struct.new "opt_slot_temp_sroa_struct_block.wado//Boxed" { a: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(102, 97, 115, 116), used: 4 }, b: 7_i64 };
         }
         let $mv_a_1: ref null "core:prelude/string.wado//String";

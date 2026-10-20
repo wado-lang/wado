@@ -25,9 +25,10 @@ use crate::tir::{
     LetStorage, MonomorphInfo, ResolvedType, StructDef, TemplateId, TirBlock, TirCapture,
     TirEffectOp, TirExpr, TirExprKind, TirField, TirFunction, TirGlobal, TirLocal, TirMatchArm,
     TirParam, TirPattern, TirStmt, TirStmtKind, TirStruct, TirStructField, TirTemplatePart, TypeId,
-    TypeKey, TypeTable, positional_substitution,
+    positional_substitution,
 };
 use crate::tir_visitor::TirRefVisitor;
+use crate::type_table::{TypeKey, TypeTable};
 use crate::{Span, hashmap, tir, token};
 
 /// An effect or resource **declaration**. `EffectMeta` carries its *template*

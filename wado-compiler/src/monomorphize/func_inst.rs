@@ -11,12 +11,13 @@ use crate::hashmap::{IndexMap, IndexSet};
 use crate::module_source::ModuleSource;
 use crate::name::{FqTypeName, LocalMethodName, Projected, RefKind, mangle_generic_name};
 use crate::tir::{
-    AnonStructId, CallArg, FunctionKind, FunctionRef, InstantiationKey, LetStorage, MonomorphInfo,
-    ResolvedType, ShapeSubstitution, StructDef, TemplateId, TirBinaryOp, TirBlock, TirExpr,
-    TirExprKind, TirFunction, TirLocal, TirModule, TirParam, TirPattern, TirStmt, TirStmtKind,
-    TirTemplatePart, TirUnaryOp, TypeId, TypeTable, method_param_offset, transpose_tuple_expr,
+    CallArg, FunctionKind, FunctionRef, InstantiationKey, LetStorage, MonomorphInfo, ResolvedType,
+    ShapeSubstitution, StructDef, TemplateId, TirBinaryOp, TirBlock, TirExpr, TirExprKind,
+    TirFunction, TirLocal, TirModule, TirParam, TirPattern, TirStmt, TirStmtKind, TirTemplatePart,
+    TirUnaryOp, TypeId, method_param_offset, transpose_tuple_expr,
 };
 use crate::tir_visitor::{TirMutVisitor, TirRefVisitor};
+use crate::type_table::{AnonStructId, TypeTable};
 
 use super::state::Monomorphizer;
 use super::{Templates, module_source_for_trait_impl};
@@ -935,6 +936,75 @@ impl Monomorphizer {
             && self
                 .newtype_link_with_trait_impl(id, type_table, trait_)
                 .is_none()
+    }
+
+    /// `a.cmp(&b) == Ordering::Less` and its five siblings, on a receiver whose
+    /// `<` is an instruction, as that instruction: `a < b`. A generic `a < b`
+    /// reaches here as this shape, since a `T: Ord` body can only call `cmp`,
+    /// and the call leaves an `Ordering` the optimizer must thread back to a
+    /// `bool` before a guard over it reads as a comparison.
+    fn fold_scalar_ord_cmp(
+        &self,
+        op: TirBinaryOp,
+        left: &TirExpr,
+        right: &TirExpr,
+        type_table: &TypeTable,
+    ) -> Option<TirExprKind> {
+        let (func, args, enum_type, case_index) = match (&left.kind, &right.kind) {
+            (
+                TirExprKind::Call { func, args, .. },
+                TirExprKind::EnumConstruct {
+                    enum_type,
+                    case_index,
+                    ..
+                },
+            )
+            | (
+                TirExprKind::EnumConstruct {
+                    enum_type,
+                    case_index,
+                    ..
+                },
+                TirExprKind::Call { func, args, .. },
+            ) => (func, args, enum_type, case_index),
+            _ => return None,
+        };
+        let ordering = type_table.compiler_item_def(CompilerItem::Ordering)?;
+        if !matches!(type_table.get(*enum_type), ResolvedType::Enum { def } if *def == ordering) {
+            return None;
+        }
+        let info = func.method_info.as_ref()?;
+        let trait_decl = info.trait_name.as_ref().and_then(FqTraitName::canonical)?;
+        let item = type_table
+            .compiler_items()
+            .trait_item_of_decl(type_table.defs().ast_id(trait_decl));
+        if item != Some(CompilerItem::Ord) || info.method_name != "cmp" {
+            return None;
+        }
+        let (Some(receiver), [other]) = args.split() else {
+            return None;
+        };
+        let receiver_type = type_table.peel_refs(receiver.expr.type_id);
+        if !self.operator_lowers_to_scalar(type_table, receiver_type, Some(trait_decl)) {
+            return None;
+        }
+        let items = type_table.compiler_items();
+        let less = items.require_enum_case(CompilerItem::OrderingLess).3;
+        let greater = items.require_enum_case(CompilerItem::OrderingGreater).3;
+        let op = match (op, *case_index) {
+            (TirBinaryOp::Eq, i) if i == less => TirBinaryOp::Lt,
+            (TirBinaryOp::Eq, i) if i == greater => TirBinaryOp::Gt,
+            (TirBinaryOp::Eq, _) => TirBinaryOp::Eq,
+            (TirBinaryOp::NotEq, i) if i == less => TirBinaryOp::GtEq,
+            (TirBinaryOp::NotEq, i) if i == greater => TirBinaryOp::LtEq,
+            (TirBinaryOp::NotEq, _) => TirBinaryOp::NotEq,
+            _ => return None,
+        };
+        Some(TirExprKind::Binary {
+            op,
+            left: Box::new(unref_operand(&receiver.expr, type_table)),
+            right: Box::new(unref_operand(&other.expr, type_table)),
+        })
     }
 
     fn value_blanket_serves(&self, tid: TypeId, trait_: DefId, type_table: &TypeTable) -> bool {
@@ -1895,6 +1965,10 @@ impl Monomorphizer {
                     right,
                     type_table,
                 ) {
+                    expr.kind = new_kind;
+                } else if let Some(new_kind) =
+                    self.fold_scalar_ord_cmp(*op, left, right, type_table)
+                {
                     expr.kind = new_kind;
                 }
             }
