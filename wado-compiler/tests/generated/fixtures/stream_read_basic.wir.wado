@@ -428,17 +428,9 @@ fn "core:rt/cm_stream_read_u8"(handle, max) {
     let result: i32;
     let ws: i32;
     let evt_ptr: i32;
-<<<<<<< HEAD
     let status: i32;
-    if @unlikely((local.tee max(select i32(max < 268435455, max, 268435455)) < 0) | (max > 2147483647)) {
-||||||| 63de94d26
-    let status_17: i32;
-    if @unlikely((local.tee max(select i32(max < 268435455, max, 268435455)) < 0) | (max > 2147483647)) {
-=======
-    let status_17: i32;
     max = select i32(max < 268435455, max, 268435455);
     if @unlikely(2147483647 <u max) {
->>>>>>> origin/main
         cold_path;
         let $mv_field_1: ref Array<u8>;
         "core:rt/panic"(local.tee $mv_field_1(array.new_data<u8>("a buffer's length is negative or past what linear memory can address")), 68);

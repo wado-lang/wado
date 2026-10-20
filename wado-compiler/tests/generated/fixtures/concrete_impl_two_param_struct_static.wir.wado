@@ -101,17 +101,11 @@ type "functype//core:rt/unreachable" = fn();  // TypeId(29)
 
 type "functype//core:rt/cm_stream_write_raw_all_u8" = fn(i32, ref Array<u8>, i32, i32) -> "core:prelude/types.wado//enum:CopyResult";  // TypeId(30)
 
-<<<<<<< HEAD
 type "functype//core:prelude/traits.wado/core/prelude/traits.wado/inspect_variant_payload<concrete_impl_two_param_struct_static.wado/Pair<i64,i32>>" = fn(i64, i32, ref "core:prelude/format.wado//Formatter");  // TypeId(31)
-||||||| 63de94d26
-type "functype//core:prelude/string.wado/core:prelude/string.wado/String::set_byte_at$contract_report0" = fn(i32, i32, ref Array<u8>, i32);  // TypeId(30)
-=======
-type "functype//core:prelude/string.wado/core:prelude/string.wado/String::set_byte_at$contract_report0" = fn(i32, i32, ref "core:prelude/string.wado//String");  // TypeId(30)
->>>>>>> origin/main
 
 type "functype//core:prelude/traits.wado/core/prelude/traits.wado/inspect_struct_alternate<concrete_impl_two_param_struct_static.wado/Pair<i64,i32>,[i64,i32]>" = fn(i64, i32, ref "core:prelude/format.wado//Formatter");  // TypeId(32)
 
-type "functype//core:prelude/string.wado/core:prelude/string.wado/String::set_byte_at$contract_report0" = fn(i32, i32, ref Array<u8>, i32);  // TypeId(33)
+type "functype//core:prelude/string.wado/core:prelude/string.wado/String::set_byte_at$contract_report0" = fn(i32, i32, ref "core:prelude/string.wado//String");  // TypeId(33)
 
 type "functype//core:prelude/traits.wado/core/prelude/traits.wado/inspect_variant_payload<i32>$sroa[payload.value]" = fn(i32, ref "core:prelude/format.wado//Formatter");  // TypeId(34)
 
@@ -137,9 +131,9 @@ type "functype//core:prelude/types.wado/core:prelude/types.wado/Result<i32,concr
 
 type "functype//core:prelude/traits.wado/concrete_impl_two_param_struct_static.wado/Pair<i64,i32>^core:prelude/traits.wado/Inspect::inspect" = fn(i64, i32, ref "core:prelude/format.wado//Formatter");  // TypeId(45)
 
-type "functype//core:prelude/traits.wado/core:prelude/types.wado/Result<i32,concrete_impl_two_param_struct_static.wado/Pair<i64,i32>>^core:prelude/traits.wado/Inspect::inspect$sroa[self.value]" = fn(ref "core:prelude/types.wado//Result<i32,concrete_impl_two_param_struct_static.wado/Pair<i64,i32>>", ref "core:prelude/format.wado//Formatter");  // TypeId(46)
+type "functype//core:prelude/primitive.wado/i32::fmt_decimal$sroa[self.value]" = fn(i32, ref "core:prelude/format.wado//Formatter");  // TypeId(46)
 
-type "functype//core:prelude/primitive.wado/i32::fmt_decimal$sroa[self.value]" = fn(i32, ref "core:prelude/format.wado//Formatter");  // TypeId(47)
+type "functype//core:prelude/traits.wado/core:prelude/types.wado/Result<i32,concrete_impl_two_param_struct_static.wado/Pair<i64,i32>>^core:prelude/traits.wado/Inspect::inspect$sroa[self.value]" = fn(ref "core:prelude/types.wado//Result<i32,concrete_impl_two_param_struct_static.wado/Pair<i64,i32>>", ref "core:prelude/format.wado//Formatter");  // TypeId(47)
 
 type "functype//core:prelude/string.wado/core:prelude/string.wado/String^core:prelude/string.wado/AsStrSlice::internal_append_to$spec0" = fn(ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String");  // TypeId(48)
 
@@ -1467,6 +1461,19 @@ fn "core:prelude/traits.wado/concrete_impl_two_param_struct_static.wado/Pair<i64
     builtin::array_copy<u8>(f_8.repr, start_26, global:core:prelude/traits.wado::$const_obj_32, 0, 2);
 }
 
+fn "core:prelude/primitive.wado/i32::fmt_decimal$sroa[self.value]"(self, f) {
+    let is_negative: bool;
+    let x: i64;
+    is_negative = self < 0;
+    self = "core:prelude/primitive.wado/count_digits_u64"(local.tee x(x = builtin::i64_extend_i32_s(self); select i64(x < 0_i64, 0_i64 - x, x)));
+    is_negative = block -> i32 {
+        let $mv_field_3: ref Array<u8>;
+        $mv_field_3 = builtin::array_new<u8>(0);
+        "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>"(f, is_negative, $mv_field_3, 0, self);
+    };
+    "core:prelude/primitive.wado/write_decimal_digits"(f.buf.repr, is_negative, x, self);
+}
+
 fn "core:prelude/traits.wado/core:prelude/types.wado/Result<i32,concrete_impl_two_param_struct_static.wado/Pair<i64,i32>>^core:prelude/traits.wado/Inspect::inspect$sroa[self.value]"(self, f) {
     let s_9: ref "core:prelude/string.wado//String";
     let $mv$$tuple_0$0: ref "core:prelude/traits.wado//VariantCase<core:prelude/types.wado/Result<i32,concrete_impl_two_param_struct_static.wado/Pair<i64,i32>>,i32>";
@@ -1491,19 +1498,6 @@ fn "core:prelude/traits.wado/core:prelude/types.wado/Result<i32,concrete_impl_tw
         let $mv_arg_1: ref "concrete_impl_two_param_struct_static.wado//Pair<i64,i32>";
         "core:prelude/traits.wado/core/prelude/traits.wado/inspect_variant_payload<concrete_impl_two_param_struct_static.wado/Pair<i64,i32>>"(local.tee $mv_arg_1("core:prelude/types.wado/$case_extract$core:prelude/types.wado/Result<i32,concrete_impl_two_param_struct_static.wado/Pair<i64,i32>>$concrete_impl_two_param_struct_static.wado/Pair<i64,i32>$sroa[v.value]"(self, 1)).a, $mv_arg_1.b, f);
     }
-}
-
-fn "core:prelude/primitive.wado/i32::fmt_decimal$sroa[self.value]"(self, f) {
-    let is_negative: bool;
-    let x: i64;
-    is_negative = self < 0;
-    self = "core:prelude/primitive.wado/count_digits_u64"(local.tee x(x = builtin::i64_extend_i32_s(self); select i64(x < 0_i64, 0_i64 - x, x)));
-    is_negative = block -> i32 {
-        let $mv_field_3: ref Array<u8>;
-        $mv_field_3 = builtin::array_new<u8>(0);
-        "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>"(f, is_negative, $mv_field_3, 0, self);
-    };
-    "core:prelude/primitive.wado/write_decimal_digits"(f.buf.repr, is_negative, x, self);
 }
 
 fn "core:prelude/string.wado/core:prelude/string.wado/String^core:prelude/string.wado/AsStrSlice::internal_append_to$spec0"(self, out) {

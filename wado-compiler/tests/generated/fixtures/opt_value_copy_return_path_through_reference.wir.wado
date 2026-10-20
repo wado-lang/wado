@@ -90,15 +90,9 @@ type "functype//core:rt/cm_stream_write_once" = fn(i32, i32, i32) -> i32;  // Ty
 
 type "functype//core:rt/cm_stream_write_raw_all_u8" = fn(i32, ref Array<u8>, i32, i32) -> "core:prelude/types.wado//enum:CopyResult";  // TypeId(34)
 
-type "functype//core:prelude/string.wado/core:prelude/string.wado/String::set_byte_at$contract_report0" = fn(i32, i32, ref Array<u8>, i32);  // TypeId(35)
+type "functype//core:prelude/string.wado/core:prelude/string.wado/String::set_byte_at$contract_report0" = fn(i32, i32, ref "core:prelude/string.wado//String");  // TypeId(35)
 
-<<<<<<< HEAD
 type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::new" = fn(ref "core:prelude/string.wado//String") -> ref "core:prelude/format.wado//Formatter";  // TypeId(36)
-||||||| 63de94d26
-type "functype//core:prelude/string.wado/core:prelude/string.wado/String::set_byte_at$contract_report0" = fn(i32, i32, ref Array<u8>, i32);  // TypeId(36)
-=======
-type "functype//core:prelude/string.wado/core:prelude/string.wado/String::set_byte_at$contract_report0" = fn(i32, i32, ref "core:prelude/string.wado//String");  // TypeId(36)
->>>>>>> origin/main
 
 type "functype//core:prelude/string.wado/core:prelude/string.wado/String::realloc_to" = fn(ref "core:prelude/string.wado//String", i32);  // TypeId(37)
 
@@ -116,15 +110,9 @@ type "functype//core:prelude/primitive.wado/i32::fmt_decimal$sroa[self.value]" =
 
 type "functype//opt_value_copy_return_path_through_reference.wado/opt_value_copy_return_path_through_reference.wado/Holder::bump_via_call$sroa[&mut(self.rows)]" = fn(ref "core:prelude//List<i32>");  // TypeId(44)
 
-type "functype//opt_value_copy_return_path_through_reference.wado/opt_value_copy_return_path_through_reference.wado/Holder::bump_via_call$sroa[&mut(self.rows)]" = fn(ref "core:prelude//List<i32>");  // TypeId(45)
+type "functype//opt_value_copy_return_path_through_reference.wado/opt_value_copy_return_path_through_reference.wado/Holder::bump_via_local$sroa[&mut(self.rows)]" = fn(ref "core:prelude//List<i32>");  // TypeId(45)
 
-<<<<<<< HEAD
 type "functype//core:prelude/string.wado/core:prelude/string.wado/String::internal_push_string$spec0" = fn(ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String");  // TypeId(46)
-||||||| 63de94d26
-type "functype//opt_value_copy_return_path_through_reference.wado/opt_value_copy_return_path_through_reference.wado/Holder::bump_via_call$sroa[&mut(self.rows)]" = fn(ref "core:prelude//List<i32>");  // TypeId(46)
-=======
-type "functype//opt_value_copy_return_path_through_reference.wado/opt_value_copy_return_path_through_reference.wado/Holder::bump_via_local$sroa[&mut(self.rows)]" = fn(ref "core:prelude//List<i32>");  // TypeId(46)
->>>>>>> origin/main
 
 type "functype//wasi/task-return" = fn(i32);  // TypeId(47)
 
@@ -358,32 +346,6 @@ condition: len_across_local(&mut h) == 3
     unreachable;
 }
 
-<<<<<<< HEAD
-fn "opt_value_copy_return_path_through_reference.wado/len_across_call$sroa[&mut(h.rows)]"(h) {
-    let $load_1: i32;
-    let $array_clone_src_1: ref Array<i32>;
-    $array_clone_src_1 = h.repr;
-    $load_1 = h.used;
-    builtin::array_copy<i32>(builtin::array_new<i32>($load_1), 0, $array_clone_src_1, 0, $load_1);
-    "opt_value_copy_return_path_through_reference.wado/opt_value_copy_return_path_through_reference.wado/Holder::bump_via_call$sroa[&mut(self.rows)]"(h);
-    return $load_1;
-}
-
-||||||| 63de94d26
-fn "opt_value_copy_return_path_through_reference.wado/len_across_call$sroa[&mut(h.rows)]"(h) {
-    let $load_1: i32;
-    let $array_clone_src_1: ref Array<i32>;
-    $array_clone_src_1 = h.repr;
-    $load_1 = h.used;
-    let $array_clone_dst_2: ref Array<i32>;
-    builtin::array_copy<i32>(local.tee $array_clone_dst_2(builtin::array_new<i32>($load_1)), 0, $array_clone_src_1, 0, $load_1);
-    drop($array_clone_dst_2);
-    "opt_value_copy_return_path_through_reference.wado/opt_value_copy_return_path_through_reference.wado/Holder::bump_via_call$sroa[&mut(self.rows)]"(h);
-    return $load_1;
-}
-
-=======
->>>>>>> origin/main
 fn "opt_value_copy_return_path_through_reference.wado/len_across_local$sroa[&mut(h.rows)]"(h) {
     let $load_1: i32;
     let $array_clone_src_1: ref Array<i32>;
@@ -399,9 +361,7 @@ fn "opt_value_copy_return_path_through_reference.wado/len_across_call$sroa[&mut(
     let $array_clone_src_1: ref Array<i32>;
     $array_clone_src_1 = h.repr;
     $load_1 = h.used;
-    let $array_clone_dst_2: ref Array<i32>;
-    builtin::array_copy<i32>(local.tee $array_clone_dst_2(builtin::array_new<i32>($load_1)), 0, $array_clone_src_1, 0, $load_1);
-    drop($array_clone_dst_2);
+    builtin::array_copy<i32>(builtin::array_new<i32>($load_1), 0, $array_clone_src_1, 0, $load_1);
     "opt_value_copy_return_path_through_reference.wado/opt_value_copy_return_path_through_reference.wado/Holder::bump_via_call$sroa[&mut(self.rows)]"(h);
     return $load_1;
 }
@@ -616,21 +576,7 @@ fn "core:rt/cm_stream_write_raw_all_u8"(handle, $mv$data$repr, $mv$data$start, $
     };
 }
 
-<<<<<<< HEAD
-fn "core:prelude/string.wado/core:prelude/string.wado/String::set_byte_at$contract_report0"(index, $v1, $mv$$site$repr, $mv$$site$used) {
-||||||| 63de94d26
-fn "core:rt/core/rt/cm_stream_pair<u8>"(packed) {
-    return builtin::i32_wrap_i64(packed), builtin::i32_wrap_i64(packed >> 32_i64);
-}
-
-fn "core:prelude/string.wado/core:prelude/string.wado/String::set_byte_at$contract_report0"(index, $v1, $mv$$site$repr, $mv$$site$used) {
-=======
-fn "core:rt/core/rt/cm_stream_pair<u8>"(packed) {
-    return builtin::i32_wrap_i64(packed), builtin::i32_wrap_i64(packed >> 32_i64);
-}
-
 fn "core:prelude/string.wado/core:prelude/string.wado/String::set_byte_at$contract_report0"(index, $v1, $site) {
->>>>>>> origin/main
     let $load_0: ref Array<u8>;
     let $local_7: ref "core:prelude/string.wado//String";
     let $local_8: ref "core:prelude/format.wado//Formatter";

@@ -67,15 +67,9 @@ type "functype//core:rt/panic" = fn(ref Array<u8>, i32);  // TypeId(23)
 
 type "functype//core:rt/unreachable" = fn();  // TypeId(24)
 
-<<<<<<< HEAD
 type "functype//core:rt/cm_stream_write_raw_all_u8" = fn(i32, ref Array<u8>, i32, i32) -> "core:prelude/types.wado//enum:CopyResult";  // TypeId(25)
-||||||| 63de94d26
-type "functype//core:prelude/list.wado/core:prelude/list.wado/List<i32>^core:prelude/traits.wado/IndexValue<i32>::index_value$contract_report0$dae[$v1]" = fn(i32, ref Array<u8>, i32);  // TypeId(24)
-=======
-type "functype//core:prelude/list.wado/core:prelude/list.wado/List<i32>^core:prelude/traits.wado/IndexValue<i32>::index_value$contract_report0" = fn(i32, i32, ref "core:prelude/string.wado//String");  // TypeId(24)
->>>>>>> origin/main
 
-type "functype//core:prelude/list.wado/core:prelude/list.wado/List<i32>^core:prelude/traits.wado/IndexValue<i32>::index_value$contract_report0$dae[$v1]" = fn(i32, ref Array<u8>, i32);  // TypeId(26)
+type "functype//core:prelude/list.wado/core:prelude/list.wado/List<i32>^core:prelude/traits.wado/IndexValue<i32>::index_value$contract_report0" = fn(i32, i32, ref "core:prelude/string.wado//String");  // TypeId(26)
 
 type "functype//core:prelude/list.wado/core:prelude/list.wado/List<i32>^core:prelude/traits.wado/IndexAssign<i32>::index_assign$cold0$dae[self,value,$v1]" = fn(i32);  // TypeId(27)
 
@@ -150,15 +144,7 @@ fn "array_bounds_elim_fill_conditional_write.wado/run"() with Stdout {
                 if i_23 == 2 {
                     seen = i_23;
                 }
-<<<<<<< HEAD
-                index_33 = i_23;
-                if @unlikely(((0 <= index_33) & (index_33 < 11)) == 0) {
-||||||| 63de94d26
-                index_47 = i_37;
-                if @unlikely(((0 <= index_47) & (index_47 < 11)) == 0) {
-=======
-                if @unlikely(local.tee index_47(i_37) >=u 11) {
->>>>>>> origin/main
+                if @unlikely(local.tee index_33(i_23) >=u 11) {
                     cold_path;
                     "core:prelude/list.wado/core:prelude/list.wado/List<i32>^core:prelude/traits.wado/IndexAssign<i32>::index_assign$cold0$dae[self,value,$v1]"(index_33);
                     unreachable;
@@ -180,32 +166,10 @@ fn "array_bounds_elim_fill_conditional_write.wado/run"() with Stdout {
     } else {
         b11: block {
             l12: loop {
-<<<<<<< HEAD
                 break_if b11 i_23 > limit;
-                index_33 = index_33 + if @unlikely(((0 <= i_23) & (i_23 < 11)) == 0) {
-||||||| 63de94d26
-                break_if b11 i_37 > limit;
-                index_47 = index_47 + if @unlikely(((0 <= i_37) & (i_37 < 11)) == 0) {
-=======
-                break_if b11 i_37 > limit;
-                index_47 = index_47 + if @unlikely(i_37 >=u 11) {
->>>>>>> origin/main
+                index_33 = index_33 + if @unlikely(i_23 >=u 11) {
                     cold_path;
-<<<<<<< HEAD
-                    let $arg_spill_1: i32;
-                    $arg_spill_1 = i_23;
-                    let $mv_field_2: ref Array<u8>;
-                    $mv_field_2 = array.new_data<u8>("array_bounds_elim_fill_conditional_write.wado:19");
-                    "core:prelude/list.wado/core:prelude/list.wado/List<i32>^core:prelude/traits.wado/IndexValue<i32>::index_value$contract_report0$dae[$v1]"($arg_spill_1, $mv_field_2, 48);
-||||||| 63de94d26
-                    let $arg_spill_1: i32;
-                    $arg_spill_1 = i_37;
-                    let $mv_field_2: ref Array<u8>;
-                    $mv_field_2 = array.new_data<u8>("array_bounds_elim_fill_conditional_write.wado:19");
-                    "core:prelude/list.wado/core:prelude/list.wado/List<i32>^core:prelude/traits.wado/IndexValue<i32>::index_value$contract_report0$dae[$v1]"($arg_spill_1, $mv_field_2, 48);
-=======
-                    "core:prelude/list.wado/core:prelude/list.wado/List<i32>^core:prelude/traits.wado/IndexValue<i32>::index_value$contract_report0"(i_37, 11, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("array_bounds_elim_fill_conditional_write.wado:19"), used: 48 });
->>>>>>> origin/main
+                    "core:prelude/list.wado/core:prelude/list.wado/List<i32>^core:prelude/traits.wado/IndexValue<i32>::index_value$contract_report0"(i_23, 11, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("array_bounds_elim_fill_conditional_write.wado:19"), used: 48 });
                     unreachable;
                 }; builtin::array_get_value<i32>(repr_5, i_23);
                 i_23 = i_23 + 1;
@@ -219,49 +183,19 @@ fn "array_bounds_elim_fill_conditional_write.wado/run"() with Stdout {
             cold_path;
             "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_1, index_33);
         }
-<<<<<<< HEAD
-        $arg_spill_1 = $local_1.used;
+        i_23 = $local_1.used;
         $local_1.used = index_33;
-        builtin::array_set_u8($local_1.repr, $arg_spill_1, 45);
-||||||| 63de94d26
-        $arg_spill_1 = $local_1.used;
-        $local_1.used = index_47;
-        builtin::array_set_u8($local_1.repr, $arg_spill_1, 45);
-=======
-        i_37 = $local_1.used;
-        $local_1.used = index_47;
-        builtin::array_set_u8($local_1.repr, i_37, 45);
->>>>>>> origin/main
+        builtin::array_set_u8($local_1.repr, i_23, 45);
     } else {
     }
-    if @unlikely(local.tee i_37($local_1.used + seen) > builtin::array_len($local_1.repr)) {
+    if @unlikely(local.tee i_23($local_1.used + seen) > builtin::array_len($local_1.repr)) {
         cold_path;
-        "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_1, i_37);
+        "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_1, i_23);
     }
-<<<<<<< HEAD
     index_33 = $local_1.used;
-    $local_1.used = $arg_spill_1;
+    $local_1.used = i_23;
     "core:prelude/primitive.wado/write_decimal_digits"($local_1.repr, index_33, x, seen);
     "core:cli/println"($local_1.repr, $local_1.used);
-||||||| 63de94d26
-    index_47 = $local_1.used;
-    $local_1.used = $arg_spill_1;
-    "core:prelude/primitive.wado/write_decimal_digits"($local_1.repr, index_47, x, seen);
-    seen = builtin::i32_wrap_i64(local.tee x("wasi/stream-new"()));
-    index_47 = builtin::i32_wrap_i64(x >> 32_i64);
-    seen = "array_bounds_elim_fill_conditional_write.wado/$cm_binding__Stdout_write_via_stream"(seen);
-    "core:rt/write_string_to_stream$dae[add_newline]"(index_47, $local_1.repr, $local_1.used);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(seen);
-=======
-    index_47 = $local_1.used;
-    $local_1.used = i_37;
-    "core:prelude/primitive.wado/write_decimal_digits"($local_1.repr, index_47, x, seen);
-    seen = builtin::i32_wrap_i64(local.tee x("wasi/stream-new"()));
-    index_47 = builtin::i32_wrap_i64(x >> 32_i64);
-    seen = "array_bounds_elim_fill_conditional_write.wado/$cm_binding__Stdout_write_via_stream"(seen);
-    "core:rt/write_string_to_stream$dae[add_newline]"(index_47, $local_1.repr, $local_1.used);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(seen);
->>>>>>> origin/main
 }
 
 fn "array_bounds_elim_fill_conditional_write.wado/$cm_binding__Stdout_write_via_stream"(data) with Stdout {
@@ -493,21 +427,7 @@ fn "core:rt/cm_stream_write_raw_all_u8"(handle, $mv$data$repr, $mv$data$start, $
     };
 }
 
-<<<<<<< HEAD
-fn "core:prelude/list.wado/core:prelude/list.wado/List<i32>^core:prelude/traits.wado/IndexValue<i32>::index_value$contract_report0$dae[$v1]"(index, $mv$$site$repr, $mv$$site$used) {
-||||||| 63de94d26
-fn "core:rt/core/rt/cm_stream_pair<u8>"(packed) {
-    return builtin::i32_wrap_i64(packed), builtin::i32_wrap_i64(packed >> 32_i64);
-}
-
-fn "core:prelude/list.wado/core:prelude/list.wado/List<i32>^core:prelude/traits.wado/IndexValue<i32>::index_value$contract_report0$dae[$v1]"(index, $mv$$site$repr, $mv$$site$used) {
-=======
-fn "core:rt/core/rt/cm_stream_pair<u8>"(packed) {
-    return builtin::i32_wrap_i64(packed), builtin::i32_wrap_i64(packed >> 32_i64);
-}
-
 fn "core:prelude/list.wado/core:prelude/list.wado/List<i32>^core:prelude/traits.wado/IndexValue<i32>::index_value$contract_report0"(index, $v1, $site) {
->>>>>>> origin/main
     let $load_0: ref Array<u8>;
     let $local_6: ref "core:prelude/string.wado//String";
     let $local_7: ref "core:prelude/format.wado//Formatter";

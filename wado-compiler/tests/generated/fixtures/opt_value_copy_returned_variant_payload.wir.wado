@@ -156,11 +156,11 @@ type "functype//core:prelude/string.wado/&core:prelude/string.wado/String^core:p
 
 type "functype//core:prelude/list.wado/core:prelude/list.wado/List<i32>^core:prelude/traits.wado/Inspect::inspect" = fn(ref "core:prelude//List<i32>", ref "core:prelude/format.wado//Formatter");  // TypeId(58)
 
-type "functype//opt_value_copy_returned_variant_payload.wado/opt_value_copy_returned_variant_payload.wado/Store::find$sroa[self.name]" = fn(ref "core:prelude/string.wado//String", i32) -> ref null "core:prelude/string.wado//String";  // TypeId(59)
+type "functype//core:prelude/primitive.wado/i32::fmt_decimal$sroa[self.value]" = fn(i32, ref "core:prelude/format.wado//Formatter");  // TypeId(59)
 
-type "functype//core:prelude/primitive.wado/i32::fmt_decimal$sroa[self.value]" = fn(i32, ref "core:prelude/format.wado//Formatter");  // TypeId(60)
+type "functype//core:prelude/primitive.wado/u32::fmt_decimal$sroa[self.value]" = fn(u32, ref "core:prelude/format.wado//Formatter");  // TypeId(60)
 
-type "functype//core:prelude/primitive.wado/u32::fmt_decimal$sroa[self.value]" = fn(u32, ref "core:prelude/format.wado//Formatter");  // TypeId(61)
+type "functype//opt_value_copy_returned_variant_payload.wado/opt_value_copy_returned_variant_payload.wado/Store::find$sroa[self.name]" = fn(ref "core:prelude/string.wado//String", i32) -> ref null "core:prelude/string.wado//String";  // TypeId(61)
 
 type "functype//core:prelude/string.wado/core:prelude/string.wado/String^core:prelude/string.wado/AsStrSlice::internal_append_to$spec0" = fn(ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String");  // TypeId(62)
 
@@ -1623,13 +1623,6 @@ fn "core:prelude/list.wado/core:prelude/list.wado/List<i32>^core:prelude/traits.
     });
 }
 
-fn "opt_value_copy_returned_variant_payload.wado/opt_value_copy_returned_variant_payload.wado/Store::find$sroa[self.name]"(self, want) {
-    if want < 0 {
-        return ref.null none;
-    }
-    return self;
-}
-
 fn "core:prelude/primitive.wado/i32::fmt_decimal$sroa[self.value]"(self, f) {
     let is_negative: bool;
     let x: i64;
@@ -1653,6 +1646,13 @@ fn "core:prelude/primitive.wado/u32::fmt_decimal$sroa[self.value]"(self, f) {
         "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>"(f, 0, $mv_field_3, 0, self);
     };
     "core:prelude/primitive.wado/write_decimal_digits"(f.buf.repr, offset, value, self);
+}
+
+fn "opt_value_copy_returned_variant_payload.wado/opt_value_copy_returned_variant_payload.wado/Store::find$sroa[self.name]"(self, want) {
+    if want < 0 {
+        return ref.null none;
+    }
+    return self;
 }
 
 fn "core:prelude/string.wado/core:prelude/string.wado/String^core:prelude/string.wado/AsStrSlice::internal_append_to$spec0"(self, out) {
