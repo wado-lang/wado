@@ -11,7 +11,7 @@ use crate::compiler_host::{Code, Diagnostic, DiagnosticSpan, Severity};
 use crate::compiler_item::CompilerItem;
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::module_source::ModuleSource;
-use crate::semantics::Semantics;
+use crate::semantics::{Operand, Semantics};
 use crate::symbol::SymbolKind;
 use crate::tir::{ResolvedType, TypeId};
 use crate::token::Span;
@@ -1295,28 +1295,20 @@ impl MoveWalker<'_, '_> {
             },
             Expr::Call(call) => {
                 owners = self.owners_of(&call.callee);
-                for arg in &call.args {
-                    merge_owners(&mut owners, self.owners_of(arg));
-                }
+                merge_owners(&mut owners, self.args_owners(expr, &call.args));
             }
             Expr::MethodCall(mc) => {
                 owners = if self.sem().method_call_consumes_receiver(mc.id) {
                     self.owners_of(&mc.receiver)
-                } else if self.sem().method_call_may_borrow_receiver(mc.id) {
+                } else if self.sem().borrow_reaches_result(expr, Operand::Receiver) {
                     let writes = self.sem().method_call_takes_mut_receiver(mc.id);
                     self.reference_owners(&mc.receiver, writes)
                 } else {
                     self.contents_owners(&mc.receiver)
                 };
-                for arg in &mc.args {
-                    merge_owners(&mut owners, self.owners_of(arg));
-                }
+                merge_owners(&mut owners, self.args_owners(expr, &mc.args));
             }
-            Expr::StaticMethodCall(smc) => {
-                for arg in &smc.args {
-                    merge_owners(&mut owners, self.owners_of(arg));
-                }
-            }
+            Expr::StaticMethodCall(smc) => owners = self.args_owners(expr, &smc.args),
             Expr::Cast(c) => owners = self.owners_of(&c.expr),
             Expr::TryOp(t) => owners = self.owners_of(&t.expr),
             Expr::Spread(inner, _) => owners = self.owners_of(inner),
@@ -1365,6 +1357,26 @@ impl MoveWalker<'_, '_> {
             | Expr::ComparisonChain(_)
             | Expr::Literal(_)
             | Expr::Error(_) => {}
+        }
+        owners
+    }
+
+    /// What the arguments of `call` hand its result. A borrow written as an
+    /// argument counts only where the callee may hand it back; what the
+    /// borrowed place holds counts either way.
+    fn args_owners(&self, call: &Expr, args: &[Expr]) -> Owners {
+        let mut owners = Owners::default();
+        for (i, arg) in args.iter().enumerate() {
+            let held = match arg {
+                Expr::Unary(u)
+                    if matches!(u.op, ast::UnaryOp::Ref | ast::UnaryOp::MutRef)
+                        && !self.sem().borrow_reaches_result(call, Operand::Arg(i)) =>
+                {
+                    self.contents_owners(&u.expr)
+                }
+                _ => self.owners_of(arg),
+            };
+            merge_owners(&mut owners, held);
         }
         owners
     }

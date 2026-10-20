@@ -1,0 +1,24 @@
+// A borrow passed where the declared return type may refer back into it stays
+// live in the result: `id` may hand back `&t.id`.
+affine struct Tok {
+    id: i32,
+}
+
+impl Drop for Tok {
+    fn drop(self) {
+    }
+}
+
+fn id(t: &Tok) -> &i32 {
+    return &t.id;
+}
+
+test {
+    let t = Tok { id: 1 };
+    let r = id(&t);
+    let moved = t;
+    assert *r == 1;
+}
+
+__DATA__
+{"compile_error": ":20:13: analysis error: `r` refers into `t`, which moved at 19:17"}

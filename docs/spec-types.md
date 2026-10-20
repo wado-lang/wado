@@ -1376,6 +1376,32 @@ a reference: a struct or tuple holding one, or what a call returns when it was
 handed one. A call may store what any of its operands refers into through each
 `&mut` it takes.
 
+A borrow `&x` or `&mut x` handed to a parameter declared `&P` or `&mut P` stays
+out of the result where the declared return type holds no reference that could
+point into a `P`: none to `P` itself, to a type a `P` holds, or to a type
+parameter. Such a result still carries what `x` refers into. A parameter
+declared a type parameter, or a callee that is a closure or a `fn` value, hands
+the borrow on.
+
+<!-- {"fixture":"affine_reference_call_result_unrelated.wado"} -->
+
+```wado
+test {
+    let mut t = Tok { id: 1 };
+    let n = Name { text: "a" };
+    let id = read(&mut t);
+    let v = view(&t, &n);
+    let w = t.label(&n);
+    let x = Tok::label(&t, &n);
+    let moved = t;
+    assert id == 1;
+    assert v.name.text == "a";
+    assert w.name.text == "a";
+    assert x.name.text == "a";
+    assert moved.id == 1;
+}
+```
+
 A value referring into an affine local is read only while the local holds what
 it read. The compiler refuses (`TYPE_MISMATCH`):
 

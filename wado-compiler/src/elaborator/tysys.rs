@@ -28,6 +28,7 @@ use crate::elaborator::sig;
 use crate::elaborator::solver_bridge::SolverBridge;
 use crate::name::{FqTypeName, NEVER_TYPE_NAME, UNIT_TYPE_NAME};
 use crate::resolve::Resolutions;
+use crate::semantics::Operand;
 
 /// Pipeline-wide type knowledge — the type arena, the cross-module decl
 /// indices, the registries, and the read-only caches built once at
@@ -190,32 +191,87 @@ impl TypeSystem {
     /// any depth, a function's captures, or a type parameter, which a caller
     /// may bind to one.
     pub(crate) fn may_hold_reference(&self, type_id: TypeId) -> bool {
-        self.may_hold_reference_from(type_id, true, &mut IndexSet::default())
+        self.may_hold_reference_from(type_id, true, None, &mut IndexSet::default())
     }
 
-    /// Whether `method` may hand back a reference its arguments did not bring:
-    /// one its declared return type spells, not one a type parameter binds.
-    pub(crate) fn may_return_new_reference(&self, method: DefId) -> bool {
-        self.signatures.method_sig(method).is_none_or(|sig| {
-            sig.decl.return_type.is_some_and(|ret| {
-                self.may_hold_reference_from(ret, false, &mut IndexSet::default())
-            })
+    /// Whether a borrow passed at `operand` of a call of `callee` may reach the
+    /// result. It may not where the parameter is declared a reference and the
+    /// declared return type spells no reference that could point into the
+    /// borrowed type: a body generic over the rest has no way to make such a
+    /// reference of its own, so its result holds only what the borrowed place
+    /// already held. A parameter declared a type parameter takes the borrow as
+    /// its argument, which the result may return.
+    pub(crate) fn borrow_reaches_result(&self, callee: DefId, operand: Operand) -> bool {
+        let (decl, first_value) = match self.signatures.method_sig(callee) {
+            Some(sig) => (&sig.decl, sig.first_value_param()),
+            None => match self.signatures.function_sig(callee) {
+                Some(sig) => (&sig.decl, 0),
+                None => return true,
+            },
+        };
+        let at = match operand {
+            Operand::Receiver => 0,
+            Operand::Arg(i) => first_value + i,
+        };
+        let Some(&param) = decl.param_types.get(at) else {
+            return true;
+        };
+        let (ResolvedType::Ref(borrowed) | ResolvedType::MutRef(borrowed)) =
+            self.type_table.borrow().get(param).clone()
+        else {
+            return true;
+        };
+        decl.return_type.is_some_and(|ret| {
+            self.may_hold_reference_from(ret, false, Some(borrowed), &mut IndexSet::default())
         })
     }
 
+    /// Whether a reference to `pointee` may point into a value of `place`: at
+    /// it or at what it holds at any depth, through a newtype either way. A
+    /// type parameter on either side may be bound to anything.
+    fn may_point_into(&self, pointee: TypeId, place: TypeId) -> bool {
+        let open = |resolved: &ResolvedType| {
+            matches!(
+                resolved,
+                ResolvedType::TypeParam { .. }
+                    | ResolvedType::AssocParam { .. }
+                    | ResolvedType::TypePack { .. }
+                    | ResolvedType::AssocTypeProjection { .. }
+            )
+        };
+        let pointee = self.newtype_erased(pointee);
+        if open(&self.type_table.borrow().get(pointee)) {
+            return true;
+        }
+        let target = self.type_table.borrow().type_key(pointee);
+        self.reaches(place, &|ty, resolved| {
+            open(resolved) || self.type_table.borrow().type_key(self.newtype_erased(ty)) == target
+        })
+    }
+
+    fn newtype_erased(&self, mut type_id: TypeId) -> TypeId {
+        while let ResolvedType::Newtype { base_type, .. } = self.type_table.borrow().get(type_id) {
+            type_id = *base_type;
+        }
+        type_id
+    }
+
     /// A declaration's fields name its own parameters, which its arguments
-    /// answer for, so `params` is false below a field.
+    /// answer for, so `params` is false below a field. With `into`, only a
+    /// reference that may point into that type counts.
     fn may_hold_reference_from(
         &self,
         type_id: TypeId,
         params: bool,
+        into: Option<TypeId>,
         walked: &mut IndexSet<(TypeKey, bool)>,
     ) -> bool {
         let resolved = self.type_table.borrow().get(type_id).clone();
         let (args, members) = match resolved {
-            ResolvedType::Ref(_) | ResolvedType::MutRef(_) | ResolvedType::Function { .. } => {
-                return true;
+            ResolvedType::Ref(pointee) | ResolvedType::MutRef(pointee) => {
+                return into.is_none_or(|place| self.may_point_into(pointee, place));
             }
+            ResolvedType::Function { .. } => return true,
             ResolvedType::TypeParam { .. }
             | ResolvedType::AssocParam { .. }
             | ResolvedType::TypePack { .. }
@@ -247,10 +303,10 @@ impl TypeSystem {
             return false;
         }
         args.into_iter()
-            .any(|arg| self.may_hold_reference_from(arg, params, walked))
+            .any(|arg| self.may_hold_reference_from(arg, params, into, walked))
             || members
                 .into_iter()
-                .any(|member| self.may_hold_reference_from(member, false, walked))
+                .any(|member| self.may_hold_reference_from(member, false, into, walked))
     }
 
     /// Whether a value of `type_id` is or holds a float, in a field, element or
