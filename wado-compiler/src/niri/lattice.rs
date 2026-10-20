@@ -617,7 +617,9 @@ impl Interpreter<'_> {
             &CtfeBuiltin::AmbientStdio(writes) => Lattice::Const(Value::Bool(writes)),
             CtfeBuiltin::IsMoved => match args {
                 [place] => match self.operand_lattice_folded(body, place.expr) {
-                    Lattice::Const(Value::Null) => Lattice::Const(Value::Bool(true)),
+                    Lattice::Const(value) => {
+                        Lattice::Const(Value::Bool(matches!(value, Value::Null)))
+                    }
                     _ => Lattice::Unevaluated,
                 },
                 _ => unreachable!("`is_moved` takes one place"),

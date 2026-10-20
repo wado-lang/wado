@@ -13,13 +13,12 @@
 //! reaching the slot the host reuses. No such reference reaches a class that
 //! keeps no box, so the store of 0 becomes one into the place it names.
 
+use crate::hashmap::IndexMap;
 use crate::module_source::ModuleSource;
 use crate::name::{RESOURCE_OBJECT_STRUCT, wir_type_key};
 use crate::wir::{WirFuncId, WirFuncType, WirInstr, WirPackage, WirType, WirTypeDef, WirTypeId};
 
-use indexmap::IndexMap;
-
-use super::util::collect_pinned_func_ids;
+use super::util::{branches_at_or_beyond, collect_pinned_func_ids};
 
 /// What the expression under analysis hands its value to.
 #[derive(Clone, Copy)]
@@ -47,7 +46,7 @@ pub(super) fn unbox_handles(module: &mut WirPackage) {
         escapes: vec![false; places.count],
         func: 0,
     };
-    for id in places.pinned.iter().copied() {
+    for id in places.pinned(module) {
         scan.escapes[id] = true;
     }
     for (func, function) in module.functions.iter().enumerate() {
@@ -88,46 +87,39 @@ fn handle_box_type(module: &WirPackage) -> Option<u32> {
 }
 
 /// Every place of `$Resource` type, numbered: each function's locals and
-/// parameters by name, and its result. `pinned` holds the parameters and
-/// results of the functions a caller outside this package's direct calls
-/// reaches.
+/// parameters by name, and its result.
 struct Places {
     handle_box: u32,
     count: usize,
     locals: Vec<IndexMap<String, usize>>,
     results: Vec<Option<usize>>,
-    pinned: Vec<usize>,
 }
 
 impl Places {
     fn collect(module: &WirPackage, handle_box: u32) -> Self {
-        let pinned_funcs = collect_pinned_func_ids(module);
         let is_box = |ty: &WirType| matches!(ty, WirType::Ref { type_id, .. } if type_id.index() == handle_box);
         let mut places = Self {
             handle_box,
             count: 0,
             locals: Vec::with_capacity(module.functions.len()),
             results: Vec::with_capacity(module.functions.len()),
-            pinned: Vec::new(),
         };
-        for (func, function) in module.functions.iter().enumerate() {
+        for function in &module.functions {
             let ft = module.types[function.type_id.index() as usize].expect_func();
-            let is_pinned =
-                function.body.is_none() || pinned_funcs.contains(&module.defined_func_index(func));
             let mut locals = IndexMap::default();
             for (name, ty) in function.param_names.iter().zip(&ft.params) {
                 if is_box(ty) {
-                    let id = places.mint(is_pinned);
+                    let id = places.mint();
                     locals.insert(name.clone(), id);
                 }
             }
             let result = match ft.results.as_slice() {
-                [result] if is_box(result) => Some(places.mint(is_pinned)),
+                [result] if is_box(result) => Some(places.mint()),
                 _ => None,
             };
             for (name, ty) in function.declared_locals().iter() {
                 if is_box(ty) {
-                    let id = places.mint(false);
+                    let id = places.mint();
                     assert!(
                         locals.insert(name.to_string(), id).is_none(),
                         "a function names each local once"
@@ -140,13 +132,30 @@ impl Places {
         places
     }
 
-    fn mint(&mut self, pinned: bool) -> usize {
+    fn mint(&mut self) -> usize {
         let id = self.count;
         self.count += 1;
-        if pinned {
-            self.pinned.push(id);
-        }
         id
+    }
+
+    /// The parameters and results of the functions a caller outside this
+    /// package's direct calls reaches.
+    fn pinned(&self, module: &WirPackage) -> Vec<usize> {
+        let pinned_funcs = collect_pinned_func_ids(module);
+        let mut pinned = Vec::new();
+        for (func, function) in module.functions.iter().enumerate() {
+            if function.body.is_some() && !pinned_funcs.contains(&module.defined_func_index(func)) {
+                continue;
+            }
+            pinned.extend(
+                function
+                    .param_names
+                    .iter()
+                    .filter_map(|name| self.local(func, name)),
+            );
+            pinned.extend(self.result(func));
+        }
+        pinned
     }
 
     fn is_box(&self, type_id: &WirTypeId) -> bool {
@@ -290,11 +299,16 @@ impl Scan<'_> {
                 result: Some(_),
                 then_body,
                 else_body: Some(else_body),
-            } if matches!(sink, Sink::Flow(_)) => {
+            } if matches!(sink, Sink::Flow(_)) && !exits(then_body) && !exits(else_body) => {
                 self.consume(condition, Sink::Escape);
                 self.consume_tail(then_body, sink);
                 self.consume_tail(else_body, sink);
             }
+            WirInstr::Block {
+                result: Some(_),
+                body,
+                ..
+            } if matches!(sink, Sink::Flow(_)) && !exits(body) => self.consume_tail(body, sink),
             WirInstr::Select {
                 condition,
                 if_true,
@@ -351,6 +365,12 @@ impl Scan<'_> {
             })
             .collect()
     }
+}
+
+/// Whether a branch leaves `body`, a labeled body, carrying a value its tail
+/// does not.
+fn exits(body: &[WirInstr]) -> bool {
+    body.iter().any(|instr| branches_at_or_beyond(instr, 0))
 }
 
 /// Give each function whose parameter or result is unboxed a signature taking
@@ -491,6 +511,10 @@ impl Rewrite<'_> {
                 *result = Some(WirType::I32);
                 self.lower_tail(then_body);
                 self.lower_tail(else_body);
+            }
+            WirInstr::Block { result, body, .. } => {
+                *result = Some(WirType::I32);
+                self.lower_tail(body);
             }
             WirInstr::Select {
                 condition,

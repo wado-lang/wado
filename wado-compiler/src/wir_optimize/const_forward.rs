@@ -6,6 +6,8 @@
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::wir::{WirInstr, WirPackage, WirTypeDef, WirTypeId};
 
+use super::util::branches_at_or_beyond;
+
 pub(super) fn forward_struct_field_constants(module: &mut WirPackage) {
     let types = &module.types;
     for func_idx in 0..module.functions.len() {
@@ -522,54 +524,6 @@ fn forward_fields_in_body(body: &mut [WirInstr], known: &mut FieldKnowledge<'_>)
 /// resume after the block, so they cannot carry stale facts there.
 fn may_exit_enclosing_block(instr: &WirInstr) -> bool {
     branches_at_or_beyond(instr, 0)
-}
-
-fn branches_at_or_beyond(instr: &WirInstr, label_depth: u32) -> bool {
-    match instr {
-        WirInstr::Br { depth } => *depth >= label_depth,
-        WirInstr::BrIf { depth, condition } => {
-            *depth >= label_depth || branches_at_or_beyond(condition, label_depth)
-        }
-        WirInstr::BrTable {
-            index,
-            targets,
-            default,
-        } => {
-            targets
-                .iter()
-                .chain(std::iter::once(default))
-                .any(|d| *d >= label_depth)
-                || branches_at_or_beyond(index, label_depth)
-        }
-        WirInstr::Block { body, .. } | WirInstr::Loop { body, .. } => body
-            .iter()
-            .any(|child| branches_at_or_beyond(child, label_depth + 1)),
-        WirInstr::If {
-            condition,
-            then_body,
-            else_body,
-            ..
-        } => {
-            branches_at_or_beyond(condition, label_depth)
-                || then_body
-                    .iter()
-                    .any(|child| branches_at_or_beyond(child, label_depth + 1))
-                || else_body
-                    .iter()
-                    .flatten()
-                    .any(|child| branches_at_or_beyond(child, label_depth + 1))
-        }
-        WirInstr::Seq(body) => body
-            .iter()
-            .any(|child| branches_at_or_beyond(child, label_depth)),
-        _ => {
-            let mut found = false;
-            instr.for_each_child(&mut |child| {
-                found = found || branches_at_or_beyond(child, label_depth);
-            });
-            found
-        }
-    }
 }
 
 /// The locals whose own object `instr` puts in a container: a struct field, an

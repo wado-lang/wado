@@ -368,6 +368,56 @@ pub(super) fn for_each_null_trapping_operand(
     });
 }
 
+/// Whether `instr` branches to the label `label_depth` levels out or to any
+/// label beyond it.
+pub(super) fn branches_at_or_beyond(instr: &WirInstr, label_depth: u32) -> bool {
+    match instr {
+        WirInstr::Br { depth } => *depth >= label_depth,
+        WirInstr::BrIf { depth, condition } => {
+            *depth >= label_depth || branches_at_or_beyond(condition, label_depth)
+        }
+        WirInstr::BrTable {
+            index,
+            targets,
+            default,
+        } => {
+            targets
+                .iter()
+                .chain(std::iter::once(default))
+                .any(|d| *d >= label_depth)
+                || branches_at_or_beyond(index, label_depth)
+        }
+        WirInstr::Block { body, .. } | WirInstr::Loop { body, .. } => body
+            .iter()
+            .any(|child| branches_at_or_beyond(child, label_depth + 1)),
+        WirInstr::If {
+            condition,
+            then_body,
+            else_body,
+            ..
+        } => {
+            branches_at_or_beyond(condition, label_depth)
+                || then_body
+                    .iter()
+                    .any(|child| branches_at_or_beyond(child, label_depth + 1))
+                || else_body
+                    .iter()
+                    .flatten()
+                    .any(|child| branches_at_or_beyond(child, label_depth + 1))
+        }
+        WirInstr::Seq(body) => body
+            .iter()
+            .any(|child| branches_at_or_beyond(child, label_depth)),
+        _ => {
+            let mut found = false;
+            instr.for_each_child(&mut |child| {
+                found = found || branches_at_or_beyond(child, label_depth);
+            });
+            found
+        }
+    }
+}
+
 /// Index of the first non-`Nop` statement at or after `from`.
 pub(super) fn next_non_nop(stmts: &[WirInstr], from: usize) -> Option<usize> {
     (from..stmts.len()).find(|&k| !matches!(stmts[k], WirInstr::Nop))
