@@ -3805,11 +3805,7 @@ impl FqTypeName {
         } else {
             out.push_str(self.head.name());
         }
-        if !args.is_empty() {
-            out.push('<');
-            out.push_str(&args.join(", "));
-            out.push('>');
-        }
+        out.push_str(&display_type_args(&args));
         out
     }
 
