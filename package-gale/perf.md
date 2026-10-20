@@ -631,7 +631,7 @@ here. The reason, and two levers judged on one size only, are in
 
 `SllExplorer` (`atn_sll.wado`) builds each ATN decision's lookahead DFA at
 generation time. It made `benchmark/gale_gen` about 160 times as slow, nearly
-all of it in `gen_atn_decide_fns`. Five changes brought it back:
+all of it in `gen_atn_decide_fns`. Six changes brought it back:
 
 - Configurations are `i64` keys, and the ATN's transitions are flat columns.
   The output is byte-identical.
@@ -644,21 +644,28 @@ all of it in `gen_atn_decide_fns`. Five changes brought it back:
   first one, so no closure is computed.
 - At `SLL_MAX_DEPTH`, a moved set that does not settle asks without a closure.
   Pruning would drop that edge anyway.
+- A node's closure is computed when the node is branched, not when an edge
+  first reaches it (`DfaBuild`). The closure decides the node's identity, so a
+  node whose closure another node at its depth holds becomes an alias of it.
+  When closures were computed on creation, 93% of the depth-3 nodes ended up
+  asking: the budget ran out before breadth-first order branched them, so
+  nearly all the budget bought nodes that were never used.
 
-The last two save expansions, so a smaller `SLL_DECISION_BUDGET` explores as
-much as the old one did. The budget is chosen by the TypeScript parse's
-simulator misses, the `atn_predict_once` calls its verdict cache cannot
-answer. Fuel is not a good guide here, because a miss costs mostly GC. The
-150k arm ran 1.3% more fuel than the old parser and took 10.5% longer.
+The last three save expansions, so a smaller `SLL_DECISION_BUDGET` explores
+as much as the old one did. The budget is chosen by the parses' simulator
+misses, the `atn_predict_once` calls the verdict cache cannot answer. Fuel is
+not a good guide here, because a miss costs mostly GC. A 150k arm ran 1.3%
+more fuel than the old parser and took 10.5% longer.
 
-| `SLL_DECISION_BUDGET`  | misses per parse | Rust gen (dev host) |
-| ---------------------- | ---------------: | ------------------: |
-| 2M, before the changes |             1135 |              13.8 s |
-| 600k                   |             1174 |              1.39 s |
-| 800k                   |             1125 |              1.53 s |
-| 1M                     |             1137 |              1.57 s |
+| `SLL_DECISION_BUDGET`        | TypeScript misses | Rust misses | Rust gen (dev host) |
+| ---------------------------- | ----------------: | ----------: | ------------------: |
+| 2M, before the changes       |              1135 |         319 |              13.8 s |
+| 800k, closures on creation   |              1125 |         316 |              1.53 s |
+| 120k, closures when branched |              1273 |         321 |              0.31 s |
+| 200k, closures when branched |              1101 |         316 |              0.43 s |
+| 300k, closures when branched |              1098 |         316 |              0.57 s |
 
-At 800k the four parse benchmarks match the old parser in an alternating A/B.
+At 200k the four parse benchmarks match the old parser in an alternating A/B.
 The budget must stay below `SLL_MAX_STACKS / SLL_BOTTOMS` chains, which
 `stacks_full` asserts.
 
@@ -670,6 +677,12 @@ These did not pay, measured on the same harness:
 - The stamped set in place of `push_stack`'s `HashMap`: 4.31 s against 4.06 s.
 - Grouping a closure's seeds by place, so that one merge run covers every
   alternative, and sorting each moved set first: both slower.
+- A node keyed by its moved set rather than its closure: the TypeScript DFAs
+  doubled, and misses rose to 1331. Distinct moved sets close over one set
+  often enough that merging them matters, hence the aliases.
+- A stack-free test of whether a depth-3 node can settle at all: it ruled out
+  3 of 40,712 nodes. The nodes were dead because the budget never reached
+  them, not because they could not settle.
 
 Open levers on `benchmark/gale_gen`:
 

@@ -35,7 +35,7 @@ global SLL_MAX_DEPTH: i32 = 4;
 global SLL_MAX_STATES: i32 = 1024;
 /// How many configurations one decision's exploration may expand before the
 /// rest of it is left to the simulator. It bounds generation time.
-global SLL_DECISION_BUDGET: i32 = 800000;
+global SLL_DECISION_BUDGET: i32 = 200000;
 /// How many places the shared closure memo may hold before it is dropped. It
 /// bounds generation memory.
 global SLL_MEMO_CAP: i32 = 2000000;
@@ -641,97 +641,153 @@ impl SllExplorer {
                 kinds: self.atn.num_tokens,
             };
         };
-        let mut nodes: List<SllNode> = [SllNode::Ask];
-        let mut configs: List<List<i64>> = [start];
-        let mut depth: List<i32> = [0];
-        // A node that leaves alternatives open is its configurations at a
-        // depth, so the DFA has no cycle and the emitted matches nest at most
-        // `SLL_MAX_DEPTH` deep. One that settles is its alternative.
-        let mut node_at: List<HashMap<List<i64>, i32>> = [];
-        for let _ of 0..=SLL_MAX_DEPTH {
-            node_at.push(HashMap::new());
+        let mut b = DfaBuild::new(start);
+        for let mut n = 0; n < b.configs.len(); n += 1 {
+            self.branch(&mut b, n);
         }
-        node_at[0][configs[0]] = 0;
-        let mut alt_node = HashMap::<i32, i32>::new();
-        for let mut n = 0; n < configs.len(); n += 1 {
-            if let Some(alt) = SllExplorer::settled(&configs[n]) {
-                nodes[n] = SllNode::Alt(alt);
-                continue;
+        return SllDfa { nodes: prune_asking(b.resolved_nodes()), kinds: self.atn.num_tokens };
+    }
+
+    /// Settle node `n`, or give it the edges the tokens after it take.
+    fn branch(&mut self, b: &mut DfaBuild, n: i32) {
+        if !b.closed[n] {
+            let d = b.depth[n];
+            let Some(closure) = self.closure(&b.configs[n], d) else {
+                return;
+            };
+            if let Some(known) = b.node_at[d].get(closure) {
+                b.alias[n] = known;
+                return;
             }
-            if depth[n] >= SLL_MAX_DEPTH {
-                continue;
-            }
-            let d = depth[n] + 1;
-            let mut edges: List<SllEdge> = [];
-            let mut closure_of = HashMap::<List<i64>, Option<List<i64>>>::new();
-            for let [token, moved] of self.moves(&configs[n]) {
-                // A closure is the union of its seeds' places' closures, each
-                // carrying its seed's alternative, so it settles where its
-                // seeds do, unless no seed's place reaches anything. Short of
-                // distinct places closing over one place, it settles nothing
-                // else, and a node at the last depth that does not settle
-                // asks.
-                let to = if let Some(alt) = SllExplorer::settled(&moved) {
-                    if !self.reaches_any(&moved, d) {
-                        continue;
-                    }
-                    if let Some(known) = alt_node.get(alt) {
-                        known;
-                    } else {
-                        let Some(id) = new_node(&mut configs, &mut depth, &mut nodes, moved, d) else {
-                            continue;
-                        };
-                        alt_node[alt] = id;
-                        id;
-                    }
+            b.node_at[d][closure] = n;
+            b.configs[n] = closure;
+            b.closed[n] = true;
+        }
+        if let Some(alt) = SllExplorer::settled(&b.configs[n]) {
+            b.nodes[n] = SllNode::Alt(alt);
+            return;
+        }
+        if b.depth[n] >= SLL_MAX_DEPTH {
+            return;
+        }
+        let d = b.depth[n] + 1;
+        let mut edges: List<SllEdge> = [];
+        for let [token, moved] of self.moves(&b.configs[n]) {
+            // A closure is the union of its seeds' places' closures, each
+            // carrying its seed's alternative, so it settles where its seeds
+            // do, unless no seed's place reaches anything. Short of distinct
+            // places closing over one place, it settles nothing else, and a
+            // node at the last depth that does not settle asks.
+            let to = if let Some(alt) = SllExplorer::settled(&moved) {
+                if !self.reaches_any(&moved, d) {
+                    continue;
+                }
+                if let Some(known) = b.alt_node.get(alt) {
+                    known;
                 } else {
-                    if d == SLL_MAX_DEPTH {
-                        continue;
-                    }
-                    let reached = if let Some(known) = closure_of.get(moved) {
-                        known;
-                    } else {
-                        let computed = self.closure(&moved, d);
-                        closure_of[moved] = computed;
-                        computed;
-                    };
-                    let Some(next) = reached else {
+                    let Some(id) = b.add_node(moved, d, true) else {
                         continue;
                     };
-                    if let Some(known) = node_at[d].get(next) {
-                        known;
-                    } else {
-                        let Some(id) = new_node(&mut configs, &mut depth, &mut nodes, next, d) else {
-                            continue;
-                        };
-                        node_at[d][next] = id;
-                        id;
-                    }
-                };
-                add_edge(&mut edges, token, to);
-            }
-            nodes[n] = SllNode::Branch(edges);
+                    b.alt_node[alt] = id;
+                    id;
+                }
+            } else {
+                if d == SLL_MAX_DEPTH {
+                    continue;
+                }
+                if let Some(known) = b.moved_at[d].get(moved) {
+                    known;
+                } else {
+                    let Some(id) = b.add_node(moved, d, false) else {
+                        continue;
+                    };
+                    b.moved_at[d][moved] = id;
+                    id;
+                }
+            };
+            add_edge(&mut edges, token, to);
         }
-        return SllDfa { nodes: prune_asking(nodes), kinds: self.atn.num_tokens };
+        b.nodes[n] = SllNode::Branch(edges);
     }
 }
 
-/// A new node holding `held` at depth `d`, unless the DFA holds
-/// `SLL_MAX_STATES` already.
-fn new_node(
-    configs: &mut List<List<i64>>,
-    depth: &mut List<i32>,
-    nodes: &mut List<SllNode>,
-    held: List<i64>,
-    d: i32,
-) -> Option<i32> {
-    if configs.len() >= SLL_MAX_STATES {
-        return null;
+/// A decision's DFA while it is explored. A node that leaves alternatives
+/// open is its configurations at a depth, so the DFA has no cycle and the
+/// emitted matches nest at most `SLL_MAX_DEPTH` deep. One that settles is its
+/// alternative.
+///
+/// A node holds the configurations it moved to until it is branched, and only
+/// then their closure, so a node the budget never reaches costs none of it. A
+/// node whose closure another node at its depth holds already is an alias of
+/// that node. A node settled by the configurations it moved to needs no
+/// closure, so it starts `closed`.
+struct DfaBuild {
+    nodes: List<SllNode>,
+    configs: List<List<i64>>,
+    depth: List<i32>,
+    closed: List<bool>,
+    alias: List<i32>,
+    /// By depth, the node each closure or moved set is.
+    node_at: List<HashMap<List<i64>, i32>>,
+    moved_at: List<HashMap<List<i64>, i32>>,
+    alt_node: HashMap<i32, i32>,
+}
+
+impl DfaBuild {
+    fn new(start: List<i64>) -> DfaBuild {
+        let mut node_at: List<HashMap<List<i64>, i32>> = [];
+        let mut moved_at: List<HashMap<List<i64>, i32>> = [];
+        for let _ of 0..=SLL_MAX_DEPTH {
+            node_at.push(HashMap::new());
+            moved_at.push(HashMap::new());
+        }
+        node_at[0][start] = 0;
+        return DfaBuild {
+            nodes: [SllNode::Ask],
+            configs: [start],
+            depth: [0],
+            closed: [true],
+            alias: [-1],
+            node_at,
+            moved_at,
+            alt_node: HashMap::new(),
+        };
     }
-    configs.push(held);
-    depth.push(d);
-    nodes.push(SllNode::Ask);
-    return Option::Some(configs.len() - 1);
+
+    /// A new node holding `held` at depth `d`, closed or not, unless the DFA
+    /// holds `SLL_MAX_STATES` already.
+    fn add_node(&mut self, held: List<i64>, d: i32, closed: bool) -> Option<i32> {
+        if self.configs.len() >= SLL_MAX_STATES {
+            return null;
+        }
+        self.configs.push(held);
+        self.depth.push(d);
+        self.closed.push(closed);
+        self.alias.push(-1);
+        self.nodes.push(SllNode::Ask);
+        return Option::Some(self.configs.len() - 1);
+    }
+
+    /// The nodes, every edge to an alias led to the node it stands for.
+    fn resolved_nodes(&self) -> List<SllNode> {
+        let mut out = self.nodes;
+        for let mut n = 0; n < out.len(); n += 1 {
+            if let Branch(edges) = &out[n] {
+                let mut led: List<SllEdge> = [];
+                for let e of edges {
+                    let to = if self.alias[e.to] >= 0 { self.alias[e.to] } else { e.to };
+                    for let t of &e.tokens {
+                        add_edge(&mut led, *t, to);
+                    }
+                }
+                for let e of &mut led {
+                    e.tokens.sort();
+                }
+                out[n] = SllNode::Branch(led);
+            }
+        }
+        return out;
+    }
 }
 
 fn rule_follows(atn: &Atn) -> List<List<i32>> {
