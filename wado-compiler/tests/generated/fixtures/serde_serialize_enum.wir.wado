@@ -39,29 +39,25 @@ type "functype//serde_serialize_enum.wado/$cm_binding__Stdout_write_via_stream" 
 
 type "functype//serde_serialize_enum.wado/$cm_export__run" = fn();  // TypeId(14)
 
-type "functype//core:cli/println" = fn(ref Array<u8>, i32);  // TypeId(15)
+type "functype//core:rt/write_string_to_stream$dae[add_newline]" = fn(ref null "core:prelude//$Resource", ref Array<u8>, i32);  // TypeId(15)
 
-type "functype//core:rt/write_string_to_stream$dae[add_newline]" = fn(ref null "core:prelude//$Resource", ref Array<u8>, i32);  // TypeId(16)
+type "functype//core:rt/unreachable" = fn();  // TypeId(16)
 
-type "functype//core:rt/unreachable" = fn();  // TypeId(17)
+type "functype//core:rt/cm_stream_write_raw_all_u8" = fn(i32, ref Array<u8>, i32, i32) -> "core:prelude/types.wado//enum:CopyResult";  // TypeId(17)
 
-type "functype//core:rt/cm_stream_write_raw_all_u8" = fn(i32, ref Array<u8>, i32, i32) -> "core:prelude/types.wado//enum:CopyResult";  // TypeId(18)
+type "functype//core:prelude/string.wado/core:prelude/string.wado/String::realloc_to" = fn(ref "core:prelude/string.wado//String", i32);  // TypeId(18)
 
-type "functype//core:prelude/string.wado/core:prelude/string.wado/String::realloc_to" = fn(ref "core:prelude/string.wado//String", i32);  // TypeId(19)
+type "functype//core:prelude/string.wado/core:prelude/string.wado/String::grow" = fn(ref "core:prelude/string.wado//String", i32);  // TypeId(19)
 
-type "functype//core:prelude/string.wado/core:prelude/string.wado/String::grow" = fn(ref "core:prelude/string.wado//String", i32);  // TypeId(20)
+type "functype//serde_serialize_enum.wado/serde_serialize_enum.wado/JsonSerializer^serde_serialize_enum.wado/Serializer::serialize_unit_variant$sroa[&mut(self.buf)]$dae[type_name,disc]" = fn(ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String") -> ref null "serde_serialize_enum.wado//SerializeError";  // TypeId(20)
 
-type "functype//serde_serialize_enum.wado/serde_serialize_enum.wado/JsonSerializer^serde_serialize_enum.wado/Serializer::serialize_unit_variant$sroa[&mut(self.buf)]$dae[type_name,disc]" = fn(ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String") -> ref null "serde_serialize_enum.wado//SerializeError";  // TypeId(21)
+type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(21)
 
-type "functype//wasi/task-return" = fn(i32);  // TypeId(22)
+type "functype//wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code" = fn(i32);  // TypeId(22)
 
-type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(23)
+type "functype//wasi/task-return" = fn(i32);  // TypeId(23)
 
 type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(24)
-
-type "functype//wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code" = fn(i32);  // TypeId(25)
-
-type "functype//wasi/stream-drop-readable" = fn(i32);  // TypeId(26)
 
 import fn mem/realloc from "mem/realloc";
 import fn wasi/stream-write from "wasi/stream-write";
@@ -71,22 +67,39 @@ import fn wasi/waitable-set-new from "wasi/waitable-set-new";
 import fn wasi/waitable-set-wait from "wasi/waitable-set-wait";
 import fn wasi/wasi:cli/Stdout::write_via_stream from "wasi/wasi:cli/Stdout::write_via_stream";
 import memory (1) from "mem/memory";
-import fn wasi/task-return from "wasi/task-return";
 import fn wasi/stream-new from "wasi/stream-new";
-import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 import fn wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code from "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code";
-import fn wasi/stream-drop-readable from "wasi/stream-drop-readable";
+import fn wasi/task-return from "wasi/task-return";
+import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 
 global global:serde_serialize_enum.wado::$const_obj_2: ref "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(66, 108, 117, 101), used: 4 };
 global global:serde_serialize_enum.wado::$const_obj_3: ref "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(82, 101, 100), used: 3 };
 global global:serde_serialize_enum.wado::$const_obj_10: ref Array<u8> = array.new_fixed<u8>(34);
 
 fn "serde_serialize_enum.wado/run"() with Stdout {
+    let s_4: ref "core:prelude/string.wado//String";
     let $sroa_ser_buf_7: ref "core:prelude/string.wado//String";
-    drop("serde_serialize_enum.wado/serde_serialize_enum.wado/JsonSerializer^serde_serialize_enum.wado/Serializer::serialize_unit_variant$sroa[&mut(self.buf)]$dae[type_name,disc]"(local.tee $sroa_ser_buf_7(struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 }), global:serde_serialize_enum.wado::$const_obj_3));
-    "core:cli/println"($sroa_ser_buf_7.repr, $sroa_ser_buf_7.used);
-    drop("serde_serialize_enum.wado/serde_serialize_enum.wado/JsonSerializer^serde_serialize_enum.wado/Serializer::serialize_unit_variant$sroa[&mut(self.buf)]$dae[type_name,disc]"(local.tee $sroa_ser_buf_7(struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 }), global:serde_serialize_enum.wado::$const_obj_2));
-    "core:cli/println"($sroa_ser_buf_7.repr, $sroa_ser_buf_7.used);
+    let $moved_4_12: ref null "core:prelude//$Resource";
+    let $cm_pair_7_15: i64;
+    let $sroa_$pattern_temp_0_0_13_21: ref null "core:prelude//$Resource";
+    let $sroa_$pattern_temp_0_1_14_22: ref null "core:prelude//$Resource";
+    drop("serde_serialize_enum.wado/serde_serialize_enum.wado/JsonSerializer^serde_serialize_enum.wado/Serializer::serialize_unit_variant$sroa[&mut(self.buf)]$dae[type_name,disc]"(local.tee s_4(local.tee $sroa_ser_buf_7(struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 })), global:serde_serialize_enum.wado::$const_obj_3));
+    s_4 = $sroa_ser_buf_7;
+    $sroa_$pattern_temp_0_0_13_21 = struct.new "core:prelude//$Resource" { value: builtin::i32_wrap_i64(local.tee $cm_pair_7_15("wasi/stream-new"())) };
+    $sroa_$pattern_temp_0_1_14_22 = struct.new "core:prelude//$Resource" { value: builtin::i32_wrap_i64($cm_pair_7_15 >> 32_i64) };
+    $moved_4_12 = "serde_serialize_enum.wado/$cm_binding__Stdout_write_via_stream"($moved_4_12 = $sroa_$pattern_temp_0_0_13_21; $sroa_$pattern_temp_0_0_13_21 = ref.null none; $moved_4_12);
+    $sroa_$pattern_temp_0_0_13_21 = $sroa_$pattern_temp_0_1_14_22;
+    $sroa_$pattern_temp_0_1_14_22 = ref.null none;
+    "core:rt/write_string_to_stream$dae[add_newline]"($sroa_$pattern_temp_0_1_14_22 = $sroa_$pattern_temp_0_0_13_21; $sroa_$pattern_temp_0_0_13_21 = ref.null none; $sroa_$pattern_temp_0_1_14_22, s_4.repr, s_4.used);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"($sroa_$pattern_temp_0_1_14_22 = $moved_4_12; $moved_4_12 = ref.null none; $sroa_$pattern_temp_0_1_14_22.value);
+    drop("serde_serialize_enum.wado/serde_serialize_enum.wado/JsonSerializer^serde_serialize_enum.wado/Serializer::serialize_unit_variant$sroa[&mut(self.buf)]$dae[type_name,disc]"(local.tee s_4(local.tee $sroa_ser_buf_7(struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 })), global:serde_serialize_enum.wado::$const_obj_2));
+    $sroa_$pattern_temp_0_1_14_22 = struct.new "core:prelude//$Resource" { value: builtin::i32_wrap_i64(local.tee $cm_pair_7_15("wasi/stream-new"())) };
+    $moved_4_12 = struct.new "core:prelude//$Resource" { value: builtin::i32_wrap_i64($cm_pair_7_15 >> 32_i64) };
+    $sroa_$pattern_temp_0_0_13_21 = "serde_serialize_enum.wado/$cm_binding__Stdout_write_via_stream"($sroa_$pattern_temp_0_0_13_21 = $sroa_$pattern_temp_0_1_14_22; $sroa_$pattern_temp_0_1_14_22 = ref.null none; $sroa_$pattern_temp_0_0_13_21);
+    $sroa_$pattern_temp_0_1_14_22 = $moved_4_12;
+    $moved_4_12 = ref.null none;
+    "core:rt/write_string_to_stream$dae[add_newline]"($moved_4_12 = $sroa_$pattern_temp_0_1_14_22; $sroa_$pattern_temp_0_1_14_22 = ref.null none; $moved_4_12, $sroa_ser_buf_7.repr, $sroa_ser_buf_7.used);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"($moved_4_12 = $sroa_$pattern_temp_0_0_13_21; $sroa_$pattern_temp_0_0_13_21 = ref.null none; $moved_4_12.value);
 }
 
 fn "serde_serialize_enum.wado/$cm_binding__Stdout_write_via_stream"(data) with Stdout {
@@ -96,34 +109,6 @@ fn "serde_serialize_enum.wado/$cm_binding__Stdout_write_via_stream"(data) with S
 fn "serde_serialize_enum.wado/$cm_export__run"() {
     "serde_serialize_enum.wado/run"();
     "wasi/task-return"(0);
-}
-
-fn "core:cli/println"($mv$message$repr, $mv$message$used) with Stdout {
-    let $moved_4: ref null "core:prelude//$Resource";
-    let $moved_5: ref null "core:prelude//$Resource";
-    let $cm_pair_7: i64;
-    let $moved_3: ref null "core:prelude//$Resource";
-    let $sroa_$pattern_temp_0_0_13: ref null "core:prelude//$Resource";
-    let $sroa_$pattern_temp_0_1_14: ref null "core:prelude//$Resource";
-    $sroa_$pattern_temp_0_0_13 = struct.new "core:prelude//$Resource" { value: builtin::i32_wrap_i64(local.tee $cm_pair_7("wasi/stream-new"())) };
-    $sroa_$pattern_temp_0_1_14 = struct.new "core:prelude//$Resource" { value: builtin::i32_wrap_i64($cm_pair_7 >> 32_i64) };
-    $moved_4 = "serde_serialize_enum.wado/$cm_binding__Stdout_write_via_stream"($moved_4 = $sroa_$pattern_temp_0_0_13; $sroa_$pattern_temp_0_0_13 = ref.null none; $moved_4);
-    $moved_5 = $sroa_$pattern_temp_0_1_14;
-    $sroa_$pattern_temp_0_1_14 = ref.null none;
-    "core:rt/write_string_to_stream$dae[add_newline]"($moved_3 = $moved_5; $moved_5 = ref.null none; $moved_3, $mv$message$repr, $mv$message$used);
-    if ref.is_null($moved_5) == 0 {
-        "wasi/stream-drop-writable"($moved_5.value);
-    }
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"($moved_5 = $moved_4; $moved_4 = ref.null none; $moved_5.value);
-    if ref.is_null($moved_4) == 0 {
-        "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"($moved_4.value);
-    }
-    if ref.is_null($sroa_$pattern_temp_0_1_14) == 0 {
-        "wasi/stream-drop-writable"($sroa_$pattern_temp_0_1_14.value);
-    }
-    if ref.is_null($sroa_$pattern_temp_0_0_13) == 0 {
-        "wasi/stream-drop-readable"($sroa_$pattern_temp_0_0_13.value);
-    }
 }
 
 fn "core:rt/write_string_to_stream$dae[add_newline]"(tx, $mv$message$repr, $mv$message$used) {
@@ -138,9 +123,6 @@ fn "core:rt/write_string_to_stream$dae[add_newline]"(tx, $mv$message$repr, $mv$m
         "core:rt/cm_stream_write_raw_all_u8"($arg_spill_1, new_repr, 0, $mv$message$used);
     });
     "wasi/stream-drop-writable"($moved_5 = tx; tx = ref.null none; $moved_5.value);
-    if ref.is_null(tx) == 0 {
-        "wasi/stream-drop-writable"(tx.value);
-    }
 }
 
 fn "core:rt/unreachable"() {
@@ -161,17 +143,17 @@ fn "core:rt/cm_stream_write_raw_all_u8"(handle, $mv$data$repr, $mv$data$start, $
     if local.tee $mv$data$end($mv$data$end - $mv$data$start) == 0 {
         return 0;
     }
-    ptr_15 = builtin::i32_wrap_i64(ptr_15 = "mem/realloc"(0, 0, 1, $mv$data$end); i = 0; b7: block {
-        l8: loop {
-            break_if b7 i >= $mv$data$end;
+    ptr_15 = builtin::i32_wrap_i64(ptr_15 = "mem/realloc"(0, 0, 1, $mv$data$end); i = 0; b2: block {
+        l3: loop {
+            break_if b2 i >= $mv$data$end;
             builtin::store_u8(ptr_15 + i, builtin::array_get_value_u8($mv$data$repr, $mv$data$start + i));
             i = i + 1;
-            continue l8;
+            continue l3;
         };
     }; builtin::i64_extend_i32_u(ptr_15) | (builtin::i64_extend_i32_s($mv$data$end) << 32_i64));
     i = 0;
     block {
-        l10: loop {
+        l5: loop {
             delivered_6 = local.tee written($inline_cm_stream_write_once_4: block -> i32 {
                 $mv$data$start = ptr_15 + i;
                 count_18 = $mv$data$end - i;
@@ -202,7 +184,7 @@ fn "core:rt/cm_stream_write_raw_all_u8"(handle, $mv$data$repr, $mv$data$start, $
                 drop("mem/realloc"(ptr_15, $mv$data$end, 1, 0));
                 return $match_scrut_0;
             }
-            continue l10;
+            continue l5;
         };
     };
 }

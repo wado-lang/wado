@@ -20,16 +20,13 @@ type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(6)
 
 type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(7)
 
-type "functype//wasi/stream-drop-readable" = fn(i32);  // TypeId(8)
-
-type "functype//wasi/task-return" = fn(i32);  // TypeId(9)
+type "functype//wasi/task-return" = fn(i32);  // TypeId(8)
 
 import fn mem/realloc from "mem/realloc";
 import fn wasi/wasi:demo/Sink::send from "wasi/wasi:demo/Sink::send";
 import memory (1) from "mem/memory";
 import fn wasi/stream-new from "wasi/stream-new";
 import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
-import fn wasi/stream-drop-readable from "wasi/stream-drop-readable";
 import fn wasi/task-return from "wasi/task-return";
 
 fn "cm_import_user_stream_with_wide_params.wado/run"() with Sink {
@@ -42,9 +39,6 @@ fn "cm_import_user_stream_with_wide_params.wado/run"() with Sink {
     "cm_import_user_stream_with_wide_params.wado/$cm_binding__Sink_send"($moved_2 = $sroa_$pattern_temp_0_0_5; $sroa_$pattern_temp_0_0_5 = ref.null none; $moved_2, 4294967298_i64, 2.5);
     if ref.is_null($sroa_$pattern_temp_0_1_6) == 0 {
         "wasi/stream-drop-writable"($sroa_$pattern_temp_0_1_6.value);
-    }
-    if ref.is_null($sroa_$pattern_temp_0_0_5) == 0 {
-        "wasi/stream-drop-readable"($sroa_$pattern_temp_0_0_5.value);
     }
 }
 
