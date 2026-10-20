@@ -133,7 +133,8 @@ pub(super) struct Monomorphizer {
     /// nested unroll competes for the same slots. Cleared per instantiation.
     pub unrolled_local_claims: RefCell<IndexSet<u32>>,
     /// The first template asked for at type arguments nested past
-    /// [`MAX_INSTANCE_TYPE_DEPTH`], which is left uninstantiated.
+    /// [`MAX_INSTANCE_TYPE_DEPTH`] or grown past [`MAX_INSTANCE_TYPE_SIZE`],
+    /// which is left uninstantiated.
     pub expanding: Option<ExpandingTemplate>,
 }
 
@@ -142,6 +143,12 @@ pub(super) struct Monomorphizer {
 /// `walk<S>`) asks for one level more at every instance, and no program
 /// written to terminate nests this deep.
 pub(super) const MAX_INSTANCE_TYPE_DEPTH: usize = 64;
+/// How many types an instance's type argument may hold, a shared one once per
+/// use. A template calling itself at a type holding its own parameter twice
+/// (`walk([s, s])`) doubles it at every instance, and its name with it, so the
+/// depth bound alone is reached only after the names outgrow memory. The
+/// largest a benchmark asks for holds 127.
+pub(super) const MAX_INSTANCE_TYPE_SIZE: usize = 4096;
 
 /// A template whose instances never end, as the diagnostic names it.
 pub(super) struct ExpandingTemplate {
@@ -320,7 +327,7 @@ impl Monomorphizer {
         key.impl_type_args
             .iter()
             .chain(&key.method_type_args)
-            .any(|&arg| type_table.nesting_depth(arg) > MAX_INSTANCE_TYPE_DEPTH)
+            .any(|&arg| type_table.outgrows(arg, MAX_INSTANCE_TYPE_DEPTH, MAX_INSTANCE_TYPE_SIZE))
     }
 
     /// Index every queued instance under its canonical key as well, so a site
