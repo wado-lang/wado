@@ -615,9 +615,9 @@ Returns an adapter that discards the first `n` elements before yielding the rest
 
 Returns an adapter that yields the first element, then every `step`-th after it.
 
-#### `fn chain<J: Iterator<Item = Self::Item>>(self, other: J) -> IterChain<Self, J> with ()`
+#### `fn chain<affine J: Iterator<Item = Self::Item>>(self, other: J) -> IterChain<Self, J> with ()`
 
-#### `fn zip<J: Iterator>(self, other: J) -> IterZip<Self, J> with ()`
+#### `fn zip<affine J: Iterator>(self, other: J) -> IterZip<Self, J> with ()`
 
 Returns an adapter that yields `[a, b]` pairs, stopping when either iterator is exhausted.
 
@@ -653,7 +653,6 @@ Types implementing this trait can be used in `for-of` loops directly.
 #### `fn into_iter(&self) -> Self::Iter`
 
 Creates an iterator from a value.
-Note: Uses &self due to parser limitation (self by value not yet supported in traits).
 
 ### `pub affine trait ForOf with _`
 
@@ -761,7 +760,9 @@ that `Formatter` depends on — mirroring `impl Display for String` above.
 ### `pub affine trait Waitable with ()`
 
 What a `WaitableSet` waits on: a value the host reports events for by its
-handle.
+handle. It is sealed, so a set joins only what it can account for: the
+standard library implements it, and a variant whose cases each hold one
+derives it with `impl Waitable for V;`.
 
 #### `fn waitable_id(&self) -> Option<ResourceId>`
 
@@ -3564,7 +3565,7 @@ The value of this field in `v`.
 
 ##### `fn inspect(&self, f: &mut Formatter)`
 
-### `pub struct IterMap<I: Iterator, F>`
+### `pub struct IterMap<affine I: Iterator, F>`
 
 Generic map iterator adapter that wraps any Iterator. Its type carries the
 function's, so advancing it performs what the function does.
@@ -3581,7 +3582,7 @@ function's, so advancing it performs what the function does.
 
 ##### `fn into_iter(&self) -> IterMap<I, F>`
 
-### `pub struct IterFilter<I: Iterator, F>`
+### `pub struct IterFilter<affine I: Iterator, F>`
 
 Generic filter iterator adapter that wraps any Iterator. Its type carries
 the predicate's, so advancing it performs what the predicate does.
@@ -3598,7 +3599,7 @@ the predicate's, so advancing it performs what the predicate does.
 
 ##### `fn into_iter(&self) -> IterFilter<I, F>`
 
-### `pub struct IterEnumerate<I: Iterator>`
+### `pub struct IterEnumerate<affine I: Iterator>`
 
 Generic enumerate iterator adapter that yields (index, element) pairs.
 
@@ -3610,11 +3611,7 @@ Generic enumerate iterator adapter that yields (index, element) pairs.
 
 ##### `fn next(&mut self) -> Option<Self::Item> with _`
 
-#### `impl IntoIterator for IterEnumerate<I>`
-
-##### `fn into_iter(&self) -> IterEnumerate<I>`
-
-### `pub struct IterTake<I: Iterator>`
+### `pub struct IterTake<affine I: Iterator>`
 
 Generic take iterator adapter that limits elements from any Iterator.
 
@@ -3626,11 +3623,7 @@ Generic take iterator adapter that limits elements from any Iterator.
 
 ##### `fn next(&mut self) -> Option<Self::Item> with _`
 
-#### `impl IntoIterator for IterTake<I>`
-
-##### `fn into_iter(&self) -> IterTake<I>`
-
-### `pub struct IterSkip<I: Iterator>`
+### `pub struct IterSkip<affine I: Iterator>`
 
 Generic skip iterator adapter that skips elements from any Iterator.
 
@@ -3642,11 +3635,7 @@ Generic skip iterator adapter that skips elements from any Iterator.
 
 ##### `fn next(&mut self) -> Option<Self::Item> with _`
 
-#### `impl IntoIterator for IterSkip<I>`
-
-##### `fn into_iter(&self) -> IterSkip<I>`
-
-### `pub struct IterStepBy<I: Iterator>`
+### `pub struct IterStepBy<affine I: Iterator>`
 
 Generic step iterator adapter that yields every `gap + 1`-th element of any Iterator.
 
@@ -3660,11 +3649,7 @@ Generic step iterator adapter that yields every `gap + 1`-th element of any Iter
 
 ##### `fn next(&mut self) -> Option<Self::Item> with _`
 
-#### `impl IntoIterator for IterStepBy<I>`
-
-##### `fn into_iter(&self) -> IterStepBy<I>`
-
-### `pub struct IterChain<I: Iterator, J: Iterator>`
+### `pub struct IterChain<affine I: Iterator, affine J: Iterator>`
 
 Generic chain iterator adapter that chains two iterators of the same item type.
 
@@ -3678,11 +3663,7 @@ Generic chain iterator adapter that chains two iterators of the same item type.
 
 ##### `fn next(&mut self) -> Option<Self::Item> with _`
 
-#### `impl IntoIterator for IterChain<I, J>`
-
-##### `fn into_iter(&self) -> IterChain<I, J>`
-
-### `pub struct IterZip<I: Iterator, J: Iterator>`
+### `pub struct IterZip<affine I: Iterator, affine J: Iterator>`
 
 Generic zip iterator adapter that pairs elements from two iterators.
 
@@ -3693,10 +3674,6 @@ Generic zip iterator adapter that pairs elements from two iterators.
 #### `impl Iterator for IterZip<I, J>`
 
 ##### `fn next(&mut self) -> Option<Self::Item> with _`
-
-#### `impl IntoIterator for IterZip<I, J>`
-
-##### `fn into_iter(&self) -> IterZip<I, J>`
 
 ### `pub struct ConvertError`
 
@@ -4436,7 +4413,7 @@ value comes back in `rest` where the reader dropped first.
 
 #### `rest: Option<T>`
 
-#### `result: CopyResult`
+#### `result: FutureWriteResult`
 
 ### `pub affine struct WaitableSet<affine W: Waitable>`
 
@@ -4446,7 +4423,7 @@ again, such as a stream, is joined again. Dropping the set drops the
 members it still holds.
 
 A set has one member type. A loop waiting on several kinds declares a
-variant of its own and implements `Waitable` on it, case by case.
+variant of its own and derives `Waitable` on it with `impl Waitable for V;`.
 
 _Fields are private._
 
@@ -4456,7 +4433,8 @@ _Fields are private._
 
 #### `pub fn join(&mut self, member: W)`
 
-Moves `member` into the set. A member joins one set at a time.
+Moves `member` into the set. A member joins one set at a time, so
+whether the host has an event left for it is settled here.
 
 #### `pub fn wait(&mut self) -> Ready<W>`
 
@@ -4488,18 +4466,11 @@ host traps on dropping a set that still has one.
 ### `pub struct Ready<affine W>`
 
 A member of a `WaitableSet` that has an event, moved out of the set with
-the event's code and payload. A member ready without the host has code 0.
+the event.
 
 #### `member: W`
 
-#### `code: i32`
-
-The Component Model's event code: 1 a subtask, 2 a stream read, 3 a
-stream write, 4 a future read, 5 a future write.
-
-#### `payload: u32`
-
-The event's payload: a subtask's state, or a copy's count and status.
+#### `event: ReadyEvent`
 
 ### `pub affine struct AsyncCall<affine T>`
 
@@ -4718,10 +4689,6 @@ One bulk copy of the remaining range, not an element-at-a-time loop.
 
 ##### `fn next(&mut self) -> Option<Self::Item>`
 
-#### `impl IntoIterator for SliceValueIter<T>`
-
-##### `fn into_iter(&self) -> SliceValueIter<T>`
-
 ### `pub struct SliceRefIter<affine T>`
 
 A by-reference forward iterator over a backing `Array<T>` range. Each `&T`
@@ -4757,10 +4724,6 @@ _Fields are private._
 
 ##### `fn next(&mut self) -> Option<Self::Item>`
 
-#### `impl IntoIterator for SliceWindows<T>`
-
-##### `fn into_iter(&self) -> SliceWindows<T>`
-
 ### `pub struct SliceChunks<T>`
 
 Each item is a `Slice<T>` viewing the backing array, not a copy of it.
@@ -4770,10 +4733,6 @@ _Fields are private._
 #### `impl Iterator for SliceChunks<T>`
 
 ##### `fn next(&mut self) -> Option<Self::Item>`
-
-#### `impl IntoIterator for SliceChunks<T>`
-
-##### `fn into_iter(&self) -> SliceChunks<T>`
 
 ### `pub struct Utf8Error`
 
@@ -5493,6 +5452,8 @@ traps rather than corrupting memory.
 
 #### `pub fn pop(&mut self) -> Option<T>`
 
+Removes and returns the last element, or null when empty.
+
 #### `pub fn insert(&mut self, index: i32, value: T)`
 
 - `contract 0 <= index <= self.len()`
@@ -5722,10 +5683,6 @@ Returns true if the range contains no elements.
 
 ##### `fn next(&mut self) -> Option<T>`
 
-#### `impl IntoIterator for RangeExclusive<T>`
-
-##### `fn into_iter(&self) -> RangeExclusive<T>`
-
 #### `impl Eq for RangeExclusive<T>`
 
 ##### `fn eq(&self, other: &Self) -> bool`
@@ -5755,10 +5712,6 @@ Returns true if the range contains no elements.
 
 ##### `fn next(&mut self) -> Option<T>`
 
-#### `impl IntoIterator for RangeInclusive<T>`
-
-##### `fn into_iter(&self) -> RangeInclusive<T>`
-
 #### `impl Eq for RangeInclusive<T>`
 
 ##### `fn eq(&self, other: &Self) -> bool`
@@ -5785,6 +5738,19 @@ Result type - either Ok(T) or Err(E)
 #### `Ok(T)`
 
 #### `Err(E)`
+
+### `pub variant ReadyEvent`
+
+What the host reported for a `WaitableSet` member. Only a call reports: a
+copy on a stream or future end waits inside the binding, so none of them
+is a member.
+
+#### `Unreported`
+
+The member has no handle for the host to report, so it is ready
+without one.
+
+#### `Call(CallState)`
 
 ## Enums
 
@@ -5855,6 +5821,37 @@ The peer end is gone; no further copy is possible on this end.
 #### `Cancelled`
 
 A cancel finished and returned the buffer; the end stays usable.
+
+### `pub enum FutureWriteResult`
+
+How a `FutureWritable::write` ended.
+
+#### `Completed`
+
+The reader took the value.
+
+#### `Dropped`
+
+The reader dropped first, and the value came back.
+
+#### `Pending`
+
+The reader has not read yet. The host holds the value and hands it to
+the reader, so it is no longer the writer's.
+
+### `pub enum CallState`
+
+The state an async call moved to (`CanonicalABI.md`, `Subtask.State`).
+
+#### `Starting`
+
+#### `Started`
+
+#### `Returned`
+
+#### `CancelledBeforeStarted`
+
+#### `CancelledBeforeReturned`
 
 ### `pub enum IntErrorKind`
 

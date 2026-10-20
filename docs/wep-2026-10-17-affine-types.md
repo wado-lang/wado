@@ -692,10 +692,6 @@ pub struct Ready<affine W> { pub member: W, pub event: ReadyEvent }
 pub variant ReadyEvent {
     Unreported,                  // no handle for the host to report
     Call(CallState),
-    StreamRead(StreamCopy),      // StreamCopy { count, result: CopyResult }
-    StreamWritten(StreamCopy),
-    FutureRead(CopyResult),
-    FutureWritten(CopyResult),
 }
 ```
 
@@ -703,11 +699,15 @@ pub variant ReadyEvent {
 moves it out, and returns it with the event, decoded into a `ReadyEvent`
 variant. A raw code and payload would leave every caller to decode the
 Component Model's numbering, and a caller that read a stream's count as a
-call's state would drop a call still in flight. `Subtask`,
-`Stream`, `StreamWritable`, `Future`, `FutureWritable` and `AsyncCall`
+call's state would drop a call still in flight. `Subtask` and `AsyncCall`
 implement `Waitable`. An `AsyncCall` that completed synchronously has no
 subtask, so its `waitable_id` is `None`, and `wait` hands it back first without
 asking the host.
+
+A stream or future end does not implement it. Each copy on one waits inside the
+binding (`cm_await_blocked`), so no copy is ever left pending for the host to
+report, and a set of ends would wait forever. Nor does `ReadyEvent` carry a copy
+event, since no member can produce one.
 
 The host reports an event by handle index only, so something in the guest has
 to map the index back to the value. The set is that table, and the ownership
@@ -721,8 +721,7 @@ follows the Component Model's own rules:
 
 `Waitable = i32`, `WaitEvent.handle`, `Subtask::join` and `AsyncCall::join` go.
 An event loop no longer compares an integer with the resource it meant. A
-member returns moved out, so one that may report again, such as a stream, is
-joined again. A set has one member type. A loop that waits on several kinds
+member returns moved out. A set has one member type. A loop that waits on several kinds
 declares a variant of its own and derives `Waitable` on it. The resource behind
 the set becomes internal to `core`.
 

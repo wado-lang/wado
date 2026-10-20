@@ -1,0 +1,14 @@
+// A stream end is not `Waitable`: each copy on it waits inside the binding, so
+// no event is ever left for a set to report, and a set of them would wait
+// forever.
+pub fn watch(set: &mut WaitableSet<Stream<u8>>, stream: Stream<u8>) {
+    set.join(stream);
+}
+
+export fn run() {
+}
+
+__DATA__
+{
+    "compile_error_codes": ["TRAIT_BOUND_NOT_SATISFIED"]
+}

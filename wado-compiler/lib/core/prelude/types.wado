@@ -443,22 +443,14 @@ internal fn call_state(raw: u32) -> CallState {
     };
 }
 
-/// What one copy on a stream end moved, and how it ended.
-pub struct StreamCopy {
-    pub count: i32,
-    pub result: CopyResult,
-}
-
-/// What the host reported for a `WaitableSet` member.
+/// What the host reported for a `WaitableSet` member. Only a call reports: a
+/// copy on a stream or future end waits inside the binding, so none of them
+/// is a member.
 pub variant ReadyEvent {
     /// The member has no handle for the host to report, so it is ready
     /// without one.
     Unreported,
     Call(CallState),
-    StreamRead(StreamCopy),
-    StreamWritten(StreamCopy),
-    FutureRead(CopyResult),
-    FutureWritten(CopyResult),
 }
 
 /// An event the host reports for a waitable handle.
@@ -649,30 +641,6 @@ pub resource Subtask {
 }
 
 impl Waitable for Subtask {
-    fn waitable_id(&self) -> Option<ResourceId> {
-        return Option::Some(ResourceId::of(self));
-    }
-}
-
-impl<T> Waitable for Stream<T> {
-    fn waitable_id(&self) -> Option<ResourceId> {
-        return Option::Some(ResourceId::of(self));
-    }
-}
-
-impl<T> Waitable for StreamWritable<T> {
-    fn waitable_id(&self) -> Option<ResourceId> {
-        return Option::Some(ResourceId::of(self));
-    }
-}
-
-impl<T> Waitable for Future<T> {
-    fn waitable_id(&self) -> Option<ResourceId> {
-        return Option::Some(ResourceId::of(self));
-    }
-}
-
-impl<T> Waitable for FutureWritable<T> {
     fn waitable_id(&self) -> Option<ResourceId> {
         return Option::Some(ResourceId::of(self));
     }

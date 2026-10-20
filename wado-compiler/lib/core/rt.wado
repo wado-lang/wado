@@ -23,7 +23,6 @@ use {
     FutureWriteResult,
     Stream,
     StreamChunk,
-    StreamCopy,
     StreamWrite,
     StreamWritable,
     ReadyEvent,
@@ -476,25 +475,15 @@ internal fn cm_waitable_set_poll(ws: i32) -> Option<WaitEvent> {
 /// The event of `code` whose handle and payload the host wrote at `out_ptr`,
 /// which this frees.
 ///
-/// `waitable-set.wait` is lowered with `cancellable = 0`, so `TASK_CANCELLED`
-/// (code 6) cannot arrive.
+/// Only a subtask joins a set, so only `SUBTASK` (code 1) arrives:
+/// `waitable-set.wait` is lowered with `cancellable = 0`, which rules out
+/// `TASK_CANCELLED` too.
 fn cm_wait_event(code: i32, out_ptr: i32) -> WaitEvent {
+    assert code == 1, "only a subtask joins a set";
     let handle = builtin::i32_load(out_ptr);
     let payload = builtin::i32_load(out_ptr + 4);
     let freed = builtin::realloc(out_ptr, 8, 4, 0);
-    let copy = StreamCopy {
-        count: cm_packed_count(payload),
-        result: cm_copy_result(payload),
-    };
-    let event = match code {
-        1 => ReadyEvent::Call(call_state(payload as u32)),
-        2 => ReadyEvent::StreamRead(copy),
-        3 => ReadyEvent::StreamWritten(copy),
-        4 => ReadyEvent::FutureRead(copy.result),
-        5 => ReadyEvent::FutureWritten(copy.result),
-        _ => unreachable(),
-    };
-    return WaitEvent { handle, event };
+    return WaitEvent { handle, event: ReadyEvent::Call(call_state(payload as u32)) };
 }
 
 // `as` with a half on either side. No instruction converts a half, so a half

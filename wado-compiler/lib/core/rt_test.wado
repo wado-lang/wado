@@ -60,25 +60,6 @@ test "a member ready without the host comes back in join order" {
     assert ws.is_empty();
 }
 
-test "a set holds stream ends the host has no event for" {
-    let [rx, tx] = Stream::<u8>::new();
-    let mut readers = WaitableSet::<Stream<u8>>::new();
-    readers.join(rx);
-    let mut writers = WaitableSet::<StreamWritable<u8>>::new();
-    writers.join(tx);
-    assert readers.poll() matches { None };
-    assert writers.len() == 1;
-}
-
-test "a set drops the future reader it holds" {
-    let [rx, tx] = Future::<u8>::new();
-    let mut readers = WaitableSet::<Future<u8>>::new();
-    readers.join(rx);
-    assert readers.poll() matches { None };
-    builtin::drop(readers);
-    assert tx.write(1).result == FutureWriteResult::Dropped;
-}
-
 /// A call the host resolves after it starts, handed back by the set that
 /// delivered its resolution.
 fn delivered_call() -> AsyncCall<()> with MonotonicClock {
