@@ -162,6 +162,15 @@ pub(crate) enum Destination {
     Through(Operand),
 }
 
+impl Destination {
+    fn with_receiver_in_args(self) -> Destination {
+        match self {
+            Destination::Result => Destination::Result,
+            Destination::Through(to) => Destination::Through(to.with_receiver_in_args()),
+        }
+    }
+}
+
 impl Semantics {
     /// Point every effect variable at the row the effect check solved it to,
     /// in the snapshot and in the table the TIR reads alike.
@@ -681,13 +690,10 @@ impl Semantics {
         callees.is_empty()
             || callees.into_iter().any(|(callee, receiver_in_args)| {
                 let (operand, destination) = if receiver_in_args {
-                    let destination = match destination {
-                        Destination::Result => Destination::Result,
-                        Destination::Through(to) => {
-                            Destination::Through(to.with_receiver_in_args())
-                        }
-                    };
-                    (operand.with_receiver_in_args(), destination)
+                    (
+                        operand.with_receiver_in_args(),
+                        destination.with_receiver_in_args(),
+                    )
                 } else {
                     (operand, destination)
                 };
