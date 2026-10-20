@@ -4171,8 +4171,9 @@ fn "core:prelude/string.wado/core:prelude/string.wado/StrSlice::replacen<core:pr
     let new_used_126: i32;
     let start_127: i32;
     let $licm_arith_178: i32;
-    let $licm_arith_205: i32;
-    let $sroa_other_start_207: i32;
+    let $licm_arith_206: i32;
+    let $sroa_other_start_208: i32;
+    let $licm_arith_213: bool;
     len_5 = $mv$self$end - $mv$self$start;
     if $mv$from$used == 0 {
         builtin::array_copy<u8>(local.tee part(builtin::array_new<u8>(local.tee len_65($mv$self$end - $mv$self$start))), 0, $mv$self$repr, $mv$self$start, len_65);
@@ -4183,7 +4184,8 @@ fn "core:prelude/string.wado/core:prelude/string.wado/StrSlice::replacen<core:pr
     pos_8 = 0;
     limit = len_5 - $mv$from$used;
     $licm_arith_178 = $mv$self$end - $mv$self$start;
-    $licm_arith_205 = $mv$self$end - $mv$self$start;
+    $licm_arith_206 = $mv$self$end - $mv$self$start;
+    $licm_arith_213 = $mv$to$used == 0;
     b386: block {
         l387: loop {
             break_if b386 pos_8 > limit;
@@ -4221,10 +4223,10 @@ fn "core:prelude/string.wado/core:prelude/string.wado/StrSlice::replacen<core:pr
                     break $inline_boundary_at_14: (builtin::array_get_value<u8>($mv$self$repr, $mv$self$start + $contract_arg_0) & 192) != 128;
                 }) -> i32 {
                     $inline_boundary_at_5: block -> bool {
-                        if (pos_8 == 0) | (pos_8 == $licm_arith_205) {
+                        if (pos_8 == 0) | (pos_8 == $licm_arith_206) {
                             break $inline_boundary_at_5: 1;
                         }
-                        if (pos_8 < 0) | (pos_8 > $licm_arith_205) {
+                        if (pos_8 < 0) | (pos_8 > $licm_arith_206) {
                             break $inline_boundary_at_5: 0;
                         }
                         break $inline_boundary_at_5: (builtin::array_get_value<u8>($mv$self$repr, $mv$self$start + pos_8) & 192) != 128;
@@ -4240,19 +4242,19 @@ fn "core:prelude/string.wado/core:prelude/string.wado/StrSlice::replacen<core:pr
                     "core:prelude/string.wado/core:prelude/string.wado/StrSlice::slice$contract_report1"($v1_17, $mv$self$repr, $mv$self$start, $mv$self$end, $arg_spill_7, $contract_arg_0, $mv_field_9, 29);
                     unreachable;
                 }
-                $sroa_other_start_207 = $mv$self$start + $contract_arg_0;
+                $sroa_other_start_208 = $mv$self$start + $contract_arg_0;
                 $inline_core_prelude_string_wado_String__internal_push_view_18: block {
-                    break_if $inline_core_prelude_string_wado_String__internal_push_view_18 local.tee n_108(($mv$self$start + pos_8) - $sroa_other_start_207) == 0;
+                    break_if $inline_core_prelude_string_wado_String__internal_push_view_18 local.tee n_108(($mv$self$start + pos_8) - $sroa_other_start_208) == 0;
                     if @unlikely(local.tee new_used_113(result.used + n_108) > builtin::array_len(result.repr)) {
                         cold_path;
                         "core:prelude/string.wado/core:prelude/string.wado/String::grow"(result, new_used_113);
                     }
                     start_114 = result.used;
                     result.used = new_used_113;
-                    builtin::array_copy<u8>(result.repr, start_114, $mv$self$repr, $sroa_other_start_207, n_108);
+                    builtin::array_copy<u8>(result.repr, start_114, $mv$self$repr, $sroa_other_start_208, n_108);
                 };
                 $inline_core_prelude_string_wado_String__internal_push_string_24: block {
-                    break_if $inline_core_prelude_string_wado_String__internal_push_string_24 $mv$to$used == 0;
+                    break_if $inline_core_prelude_string_wado_String__internal_push_string_24 $licm_arith_213;
                     if @unlikely(local.tee new_used_126(result.used + $mv$to$used) > builtin::array_len(result.repr)) {
                         cold_path;
                         "core:prelude/string.wado/core:prelude/string.wado/String::grow"(result, new_used_126);

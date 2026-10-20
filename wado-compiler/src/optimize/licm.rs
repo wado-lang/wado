@@ -32,18 +32,37 @@ use crate::optimize::arena_query::storage_root;
 use crate::optimize::condition_implication::{eliminate_at_root, resolve_panic_ids};
 use crate::optimize::heap_effect::{Effect, HeapEffects, HeapEffectsCache, LazyHeapFrame};
 
-/// Pointee types with a field, keyed by [`TypeTable::type_key`] so the same
-/// type arriving under another id is still a hit.
+/// Field writes by pointee type, keyed by [`TypeTable::type_key`] so the same
+/// type arriving under another id is still a hit, each with the local the write
+/// goes through where its receiver is one.
 #[derive(Default)]
-struct PointeeFieldSet(IndexSet<(TypeKey, u32)>);
+struct FieldWrites(IndexSet<(TypeKey, u32, Option<u32>)>);
 
-impl PointeeFieldSet {
-    fn insert(&mut self, pointee: TypeId, field_idx: u32, type_table: &TypeTable) {
-        self.0.insert((type_table.type_key(pointee), field_idx));
+impl FieldWrites {
+    fn insert(
+        &mut self,
+        pointee: TypeId,
+        field_idx: u32,
+        receiver: Option<u32>,
+        type_table: &TypeTable,
+    ) {
+        self.0
+            .insert((type_table.type_key(pointee), field_idx, receiver));
     }
 
-    fn contains(&self, pointee: TypeId, field_idx: u32, type_table: &TypeTable) -> bool {
-        self.0.contains(&(type_table.type_key(pointee), field_idx))
+    /// Whether a write may reach `root`'s object: one through no local, or
+    /// through a local whose objects `shares` does not rule apart from it.
+    fn reach(
+        &self,
+        pointee: TypeId,
+        field_idx: u32,
+        type_table: &TypeTable,
+        shares: impl Fn(u32) -> bool,
+    ) -> bool {
+        let key = type_table.type_key(pointee);
+        self.0
+            .iter()
+            .any(|&(k, f, receiver)| k == key && f == field_idx && receiver.is_none_or(&shares))
     }
 }
 
@@ -71,11 +90,11 @@ struct ModifiedVars {
     fields: IndexSet<(u32, u32)>,
     /// GC alias pairs: if `(a, b)` is present, `a` and `b` may point to the same object.
     aliases: Vec<(u32, u32)>,
-    /// `(pointee_type, field_index)` for every field written in the loop. Wado
-    /// references alias, so a write through one `&T` is seen through any other;
-    /// the `(local, field)` tracking above misses writes via a different alias.
+    /// Every field written in the loop, by pointee type. Wado references alias,
+    /// so a write through one `&T` is seen through any other; the
+    /// `(local, field)` tracking above misses writes via a different alias.
     /// Used by `is_field_aliasing_written`.
-    written_field_types: PointeeFieldSet,
+    field_writes: FieldWrites,
     /// Every direct and indirect call in the loop.
     call_sites: Vec<ExprId>,
 }
@@ -93,19 +112,25 @@ impl ModifiedVars {
         self.fields.insert((local_idx, field_idx));
     }
 
-    fn insert_written_field_type(
-        &mut self,
-        pointee: TypeId,
+    /// Whether a field write in the loop may reach `root.field_idx`. A write
+    /// through a local whose objects the body's [`HeapFrame`] keeps apart from
+    /// `root`'s cannot: `stack.used = …` on a list the body built leaves a
+    /// parameter's `used` alone.
+    ///
+    /// [`HeapFrame`]: crate::optimize::heap_effect::HeapFrame
+    fn field_written(
+        &self,
+        ctx: &LicmCtx,
+        body: &Body,
+        root: u32,
+        root_type: TypeId,
         field_idx: u32,
-        type_table: &TypeTable,
-    ) {
-        self.written_field_types
-            .insert(pointee, field_idx, type_table);
-    }
-
-    fn written_field(&self, pointee: TypeId, field_idx: u32, type_table: &TypeTable) -> bool {
-        self.written_field_types
-            .contains(pointee, field_idx, type_table)
+    ) -> bool {
+        let pointee = ctx.type_table.peel_refs(root_type);
+        self.field_writes
+            .reach(pointee, field_idx, ctx.type_table, |receiver| {
+                ctx.heap.get(body).locals_may_share(receiver, root)
+            })
     }
 
     /// True when hoisting `root.field_idx` is unsound: another handle on the
@@ -118,8 +143,7 @@ impl ModifiedVars {
         root_type: TypeId,
         field_idx: u32,
     ) -> bool {
-        let pointee = ctx.type_table.peel_refs(root_type);
-        self.written_field(pointee, field_idx, ctx.type_table)
+        self.field_written(ctx, body, root, root_type, field_idx)
             || self.call_writes_object(ctx, body, root, root_type)
     }
 
@@ -690,8 +714,7 @@ fn hoist_reloadable_field_loads(
     // object, and that the loop still reads other than through a reload.
     candidates.retain(|c| {
         let root_ty = candidate_root_ty(engine, c.local_index, c.type_id);
-        let pointee = ctx.type_table.peel_refs(root_ty);
-        if modified_vars.written_field(pointee, c.field_index, ctx.type_table)
+        if modified_vars.field_written(ctx, engine.body, c.local_index, root_ty, c.field_index)
             || !modified_vars.call_writes_object(ctx, engine.body, c.local_index, root_ty)
         {
             return false;
@@ -1297,8 +1320,8 @@ fn is_pure_field_chain(body: &Body, e: ExprId) -> bool {
     }
 }
 
-/// Record a field-access write into `written_field_types`, keyed by the pointee
-/// type of the assigned object.
+/// Record a field-access write into `field_writes`, keyed by the pointee type
+/// of the assigned object and the local it goes through.
 fn record_written_field_type(
     body: &Body,
     target: ExprId,
@@ -1314,7 +1337,13 @@ fn record_written_field_type(
         && let Some(inner_e) = inner.as_expr()
     {
         let pointee = type_table.peel_refs(body.exprs[inner_e].type_id);
-        modified.insert_written_field_type(pointee, *field_index, type_table);
+        let receiver = match &body.exprs[inner_e].kind {
+            ExprKind::Local { index, .. } => Some(*index),
+            _ => None,
+        };
+        modified
+            .field_writes
+            .insert(pointee, *field_index, receiver, type_table);
     }
 }
 

@@ -326,12 +326,14 @@ fn "wasi_filesystem_read_transform_stream.wado/to_upper"(data) {
     let value_20: u8;
     let used_21: i32;
     let used_28: i32;
+    let $licm_used_33: i32;
     result = struct.new "core:prelude//List<u8>" { repr: local.tee elements(array.new_fixed<u8>()), used: 0 };
     i = 0;
+    $licm_used_33 = data.used;
     elements = data.repr;
     b0: block {
         l1: loop {
-            break_if b0 i >= data.used;
+            break_if b0 i >= $licm_used_33;
             if (local.tee b(builtin::array_get_value<u8>(elements, i)) >=u 97) & (b <=u 122) {
                 value_20 = (b - 32) & 255;
                 if @unlikely(local.tee used_21(result.used) >= builtin::array_len(result.repr)) {
