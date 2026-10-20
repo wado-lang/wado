@@ -5,8 +5,9 @@ use std::sync::Arc;
 use crate::ast::{AstId, Type};
 use crate::compiler_host::CompilerHost;
 use crate::hashmap::IndexMap;
-use crate::tir::{ProjectionAnswer, ResolvedType, SlotProjections, TypeId, TypeTable};
+use crate::tir::{ProjectionAnswer, ResolvedType, SlotProjections, TypeId};
 use crate::token::Span;
+use crate::type_table::TypeTable;
 
 use super::Elaborator;
 use super::scope::{BinderInScope, FamilySite, ScopedBound};

@@ -15,10 +15,11 @@ use crate::defs::DefId;
 use crate::module_source::ModuleSource;
 use crate::name::{LocalMethodName, MethodName, TUPLE_TYPE_NAME};
 use crate::tir::{
-    FunctionRef, ProjectionAnswer, ResolvedType, SlotProjections, SubstitutionContext,
-    TargetBinding, TemplateId, TypeId, TypeTable, positional_substitution,
+    FunctionRef, ProjectionAnswer, ResolvedType, SlotProjections, SubstitutionContext, TemplateId,
+    TypeId, positional_substitution,
 };
 use crate::token::Span;
+use crate::type_table::{TargetBinding, TypeTable};
 
 use super::Elaborator;
 use super::call::{

@@ -12,7 +12,8 @@ use crate::nir::{FuncId, NirBinaryOp, NirUnaryOp};
 use crate::nir_arena::{
     ArmData, BlockId, Body, ExprId, ExprKind, NodeRef, Operand, PatId, PatKind, StmtId, StmtKind,
 };
-use crate::tir::{ObjectTypes, TypeKey, TypeTable};
+use crate::tir::ObjectTypes;
+use crate::type_table::{TypeKey, TypeTable};
 
 use super::{HeapVersion, OpaqueSource, ValueId, ValueKind, ValuePool};
 use crate::nir_value_graph::value_kind_to_const;

@@ -35,7 +35,8 @@ use crate::nir_visitor::{NirRefVisitor, reachable_exprs};
 use crate::optimize::arena_query::{
     expr_node_may_trap, operand_values_may_trap, promoted_local_reads, reachable_nodes,
 };
-use crate::tir::{ResolvedType, StructDef, TypeId, TypeTable, projection_arguments};
+use crate::tir::{ResolvedType, StructDef, TypeId, projection_arguments};
+use crate::type_table::TypeTable;
 use crate::{hashmap, nir};
 
 /// Call graph: function ID -> set of called function IDs

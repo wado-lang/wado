@@ -6,8 +6,9 @@
 
 use crate::compiler_host::CompilerHost;
 use crate::hashmap::{IndexMap, IndexSet};
-use crate::tir::{InferVarId, ResolvedType, TypeId, TypeTable};
+use crate::tir::{InferVarId, ResolvedType, TypeId};
 use crate::token::Span;
+use crate::type_table::TypeTable;
 
 use super::Elaborator;
 use super::infer::unify;

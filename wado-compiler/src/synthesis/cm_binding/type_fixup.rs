@@ -12,9 +12,10 @@ use crate::module_source::ModuleSource;
 use crate::name::{DeclName, DeclPath};
 use crate::tir::{
     CallArg, FunctionRef, ResolvedType, TirBlock, TirExpr, TirExprKind, TirFunction, TirLocal,
-    TirStmt, TirStmtKind, TypeId, TypeTable,
+    TirStmt, TirStmtKind, TypeId,
 };
 use crate::tir_visitor::{TirMutVisitor, TirRefVisitor};
+use crate::type_table::TypeTable;
 
 use crate::synthesis::common::{cast, internal_call, option_none, synth_span};
 

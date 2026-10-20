@@ -18,8 +18,9 @@ use crate::loader::resolve_use_decl_source;
 use crate::module_source::{ModuleSource, ModuleSourceInterner, PackageId};
 use crate::name;
 use crate::resolve::{Resolution, Resolutions, head_site};
-use crate::tir::{TemplateId, TypeId, TypeTable};
+use crate::tir::{TemplateId, TypeId};
 use crate::token::Span;
+use crate::type_table::TypeTable;
 use crate::unparse::{unparse_generic_params_into, unparse_type_into};
 
 /// Namespace-import alias (`use ns from "…"`) → the namespace's module.
@@ -210,7 +211,7 @@ impl ImplTargetKey {
 /// The spelling a declaration renders to in a mangled head: its declared name,
 /// with a function-local declaration's disambiguator applied.
 ///
-/// [`crate::tir::TypeTable::decl_render_name`] one layer down, for the callers
+/// [`TypeTable::decl_render_name`] one layer down, for the callers
 /// that hold a [`crate::defs::DefTable`] and no type table.
 pub(crate) fn render_decl_name(defs: &DefTable, def: DefId) -> String {
     if defs.is_function_local(def) {

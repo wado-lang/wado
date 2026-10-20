@@ -27,11 +27,11 @@ use crate::lower::plan::value_copy::analyze;
 use crate::tir::{
     BuiltinDeclaration, BuiltinDeclarations, DeclarationTable, FunctionRef, ResolvedType,
     RetainInto, RetainSpec, ReturnConvention, TirBlock, TirExpr, TirExprKind, TirFunction,
-    TirPattern, TirStmt, TirStmtKind, TirStruct, TirUnaryOp, TypeId, TypeTable,
-    capture_source_locals,
+    TirPattern, TirStmt, TirStmtKind, TirStruct, TirUnaryOp, TypeId, capture_source_locals,
 };
 use crate::tir_visitor::TirRefVisitor;
 use crate::token::Span;
+use crate::type_table::TypeTable;
 use std::cell::RefCell;
 
 /// The destination of a position the callee hands back with its result. The

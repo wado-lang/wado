@@ -20,10 +20,11 @@ use crate::name::FunctionId;
 use crate::synthesis::effect_dispatch::ResourceWrapperIndex;
 use crate::tir::{
     BuiltinDeclarations, TirEnum, TirFlags, TirFunction, TirGlobal, TirStruct, TirTest,
-    TirVariantDecl, TypeTable,
+    TirVariantDecl,
 };
 use crate::tir_visitor::TirMutVisitor;
 use crate::token::Span;
+use crate::type_table::TypeTable;
 use crate::wir_build::component_plan::ComponentPlan;
 use crate::world_registry::{self, WorldRegistry};
 

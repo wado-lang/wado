@@ -7,8 +7,6 @@ use std::cell::RefCell;
 use std::rc::Rc;
 use std::sync::Arc;
 
-use rustc_hash::FxBuildHasher;
-
 use crate::builtin_facts::{BuiltinFacts, ParamShape, ReturnShape, SideEffect, Storage, TrapCheck};
 use crate::call_args::CallArgs;
 use crate::canonical::CmCallTarget;
@@ -16,18 +14,15 @@ use crate::compiler_item::CompilerItem;
 use crate::format_spec::TemplateFormatSpec;
 use crate::hashmap::{IndexMap, IndexSet};
 
-use crate::ast::{AstId, NamePolicy, RangeKind, RestClause, Visibility};
+use crate::ast::{NamePolicy, RangeKind, RestClause, Visibility};
 use crate::defs::{DefId, DefTable};
 use crate::hashmap;
-use crate::module_source::{CmNamespace, ModuleSource};
+use crate::module_source::ModuleSource;
 use crate::name::{DeclaredHead, FunctionId, LocalMethodName, checked_name, unchecked_twin_name};
 use crate::primitive::PrimitiveType;
 use crate::symbol_notation::render;
 use crate::token::Span;
-
-mod type_table;
-
-pub use type_table::{ImplProjection, TargetBinding, TypeTable};
+use crate::type_table::{AnonStructId, TypeKey, TypeTable};
 
 /// `ReflectNewtype`'s only associated type (`type Base`): what the newtype
 /// wraps. Sealed and compiler-defined, so its spelling is fixed rather than
@@ -321,24 +316,6 @@ impl std::fmt::Display for TypeId {
     }
 }
 
-/// What a [`TypeId`] resolves to, as a value to compare or key a map by.
-/// An id addresses a slot; this answers identity.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub struct TypeKey(TypeId);
-
-/// An arbitrary but fixed order, for a key that has to sort.
-impl Ord for TypeKey {
-    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
-        self.0.0.cmp(&other.0.0)
-    }
-}
-
-impl PartialOrd for TypeKey {
-    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
-        Some(self.cmp(other))
-    }
-}
-
 /// A set of heap object types, keyed by [`TypeTable::heap_object_key`]; `any`
 /// stands for every type.
 #[derive(Clone, Default, PartialEq, Eq, Debug)]
@@ -454,20 +431,6 @@ impl std::fmt::Display for InferVarId {
     }
 }
 
-/// An anonymous struct's shape, interned by its field list.
-///
-/// Minted only by [`TypeTable::intern_anon_struct`]. Two literals of the same
-/// shape reach one of these, which is why the shape is the identity and no
-/// declaration is involved.
-#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub struct AnonStructId(u32);
-
-impl std::fmt::Debug for AnonStructId {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "Anon({})", self.0)
-    }
-}
-
 /// A struct shape the compiler minted rather than source declared.
 ///
 /// A struct literal is identified by its fields, because two literals of the
@@ -500,33 +463,12 @@ pub struct TemplateShape {
     pub holes: Vec<TemplateHole>,
 }
 
-/// How many characters of a template's text its type name shows.
-const TEMPLATE_NAME_MAX_CHARS: usize = 50;
-
 impl TemplateShape {
     /// The struct field holding hole `k`.
     #[must_use]
     pub fn field_name(k: usize) -> String {
         format!("h{k}")
     }
-}
-
-/// An interned shape with the mangle it was minted under. The mangle renders
-/// the shape's field types, and erasure later redirects a newtype among them
-/// to its base: rendering again would spell a different name from the one the
-/// `TirStruct` was registered under, so the name is fixed at interning.
-#[derive(Debug, Clone)]
-struct AnonEntry {
-    module: ModuleSource,
-    shape: AnonShape,
-    mangle: String,
-    /// Whether the shape mentions a type parameter, which its types fix.
-    open: bool,
-    /// Whether a literal wrote the shape, so elaboration emitted its struct.
-    written: bool,
-    /// The substitutions that make this shape, one per written origin: a
-    /// concrete shape is where any number of open ones, and a literal, meet.
-    substitutions: Vec<ShapeSubstitution>,
 }
 
 /// A written shape a substituted one is made from, and the substitution that
@@ -730,76 +672,6 @@ pub enum ResolvedType {
     Error,
 }
 
-/// A dense map from [`TypeId`] to `V`, backed by a `Vec` indexed by `TypeId.0`.
-/// `TypeId`s are dense and sequential, so every access is a hash-free array
-/// index — [`TypeTable::get`] is the compiler's hottest accessor. The newtype
-/// keeps the lone `TypeId`→`usize` conversion in one place. Erased entries are
-/// `None`: [`TypeMap::retain`] punches holes rather than renumbering.
-#[derive(Debug, Clone)]
-pub(crate) struct TypeMap<V> {
-    slots: Vec<Option<V>>,
-}
-
-impl<V> Default for TypeMap<V> {
-    fn default() -> Self {
-        Self { slots: Vec::new() }
-    }
-}
-
-impl<V> TypeMap<V> {
-    /// The `TypeId` the next [`Self::push`] will occupy.
-    pub(crate) fn next_id(&self) -> TypeId {
-        TypeId(self.slots.len() as u32)
-    }
-
-    /// Live value at `id`, or `None` if absent, erased, or out of range.
-    pub(crate) fn get(&self, id: TypeId) -> Option<&V> {
-        self.slots.get(id.0 as usize).and_then(Option::as_ref)
-    }
-
-    /// Append a value at the next dense `TypeId` (== [`Self::next_id`]).
-    pub(crate) fn push(&mut self, value: V) {
-        self.slots.push(Some(value));
-    }
-
-    /// Set `id`'s value, growing the backing storage with empty slots as
-    /// needed. Used for sparse maps such as erasure redirects.
-    pub(crate) fn set_growing(&mut self, id: TypeId, value: V) {
-        let idx = id.0 as usize;
-        if idx >= self.slots.len() {
-            self.slots.resize_with(idx + 1, || None);
-        }
-        self.slots[idx] = Some(value);
-    }
-
-    /// Drop every live slot for which `keep(id, &value)` returns false.
-    pub(crate) fn retain(&mut self, mut keep: impl FnMut(TypeId, &V) -> bool) {
-        for (i, slot) in self.slots.iter_mut().enumerate() {
-            if let Some(value) = slot
-                && !keep(TypeId(i as u32), value)
-            {
-                *slot = None;
-            }
-        }
-    }
-
-    /// Iterate live `(TypeId, &value)` pairs, skipping erased holes.
-    pub(crate) fn iter(&self) -> impl Iterator<Item = (TypeId, &V)> {
-        self.slots
-            .iter()
-            .enumerate()
-            .filter_map(|(i, slot)| slot.as_ref().map(|v| (TypeId(i as u32), v)))
-    }
-
-    /// Iterate the `TypeId`s of every live slot.
-    pub(crate) fn ids(&self) -> impl Iterator<Item = TypeId> + '_ {
-        self.slots
-            .iter()
-            .enumerate()
-            .filter_map(|(i, slot)| slot.as_ref().map(|_| TypeId(i as u32)))
-    }
-}
-
 /// A dense set of [`TypeId`], backed by a bitset — the set-shaped companion to
 /// [`TypeMap`]. One bit per type, so a transient "visited" set over the type
 /// graph costs a small `Vec<u64>` instead of a hash set that reallocates as it
@@ -885,173 +757,6 @@ pub struct AssocTypeSig {
     pub bounds: Vec<TraitRef>,
 }
 
-/// [`AssocTypeKey`] for a generic impl, whose target is a declaration rather
-/// than an instantiated type.
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
-struct GenericAssocTypeKey {
-    target_decl: AstId,
-    trait_decl: DefId,
-    assoc_name: String,
-}
-
-/// What an associated type belongs to. The trait's arguments are not part of
-/// it: a bound writes none, so every lookup names them all and
-/// [`AssocAnswers`] picks between them.
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
-struct AssocTypeKey {
-    receiver: InstanceKey,
-    trait_decl: DefId,
-    assoc_name: String,
-}
-
-/// A type keyed by its declaration and arguments: one key whether read as the
-/// instance or as the monomorphized struct, which [`TypeKey`] keeps apart.
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub enum InstanceKey {
-    Nominal(DefId, Vec<InstanceKey>),
-    Ref(Box<InstanceKey>),
-    MutRef(Box<InstanceKey>),
-    /// The interned slot of the unerased type: a newtype keeps its own impls.
-    Other(TypeId),
-}
-
-/// The answers registered under one key, by the arguments the impl wrote
-/// beyond the declared defaults: `impl Add for Cm` and `impl Add<Inch> for Cm`
-/// both give `Output`.
-#[derive(Debug, Clone, Default)]
-struct AssocAnswers(Vec<AssocAnswer>);
-
-/// The associated types one receiver answers, from
-/// [`TypeTable::assoc_types_of`].
-#[derive(Debug, Clone)]
-pub struct ReceiverAssocTypes(Vec<(AssocTypeKey, AssocAnswers)>);
-
-/// One impl's answer: the trait arguments its header writes, which a bare
-/// bound tells apart by their absence, and those with the trait's defaults
-/// filled, which a projection reached at full arguments compares. A generic
-/// impl's answer is written over the parameters of `impl_def`, whose target
-/// binds them at an instance; one with no impl block, a synthesized impl's, is
-/// written over the declaration's own parameters.
-#[derive(Debug, Clone, Default)]
-struct AssocAnswer {
-    written: Vec<TypeId>,
-    filled: Option<Vec<TypeId>>,
-    answer: TypeId,
-    impl_def: Option<DefId>,
-}
-
-impl AssocAnswers {
-    fn insert(
-        &mut self,
-        written: Vec<TypeId>,
-        filled: Option<Vec<TypeId>>,
-        answer: TypeId,
-        impl_def: Option<DefId>,
-    ) {
-        let entry = AssocAnswer {
-            written,
-            filled,
-            answer,
-            impl_def,
-        };
-        match self.0.iter_mut().find(|slot| slot.written == entry.written) {
-            Some(slot) => *slot = entry,
-            None => self.0.push(entry),
-        }
-    }
-
-    /// The one answer a bound names: the bare instantiation where one is
-    /// registered, else whatever the arguments-writing impls agree on. A bound
-    /// writes no arguments, so it cannot pick between impls that disagree.
-    fn bare(&self) -> Option<TypeId> {
-        one_assoc_answer(self.tagged())
-    }
-
-    /// The entry [`Self::bare`] answers from, whose impl frame its answer is
-    /// written in: a bare one where one is registered.
-    fn bare_entry(&self) -> Option<&AssocAnswer> {
-        let answer = self.bare()?;
-        let any_bare = self.0.iter().any(|entry| entry.written.is_empty());
-        self.0
-            .iter()
-            .find(|entry| (entry.written.is_empty() || !any_bare) && entry.answer == answer)
-    }
-
-    /// The answer of the impl reached at `trait_args`, where they are known
-    /// and an impl's, defaults filled, are exactly them; else [`Self::bare`].
-    fn at(&self, table: &TypeTable, trait_args: Option<&[TypeId]>) -> Option<TypeId> {
-        trait_args
-            .and_then(|wanted| {
-                self.0
-                    .iter()
-                    .find(|entry| {
-                        entry
-                            .filled
-                            .as_deref()
-                            .is_some_and(|filled| table.same_types(filled, wanted))
-                    })
-                    .map(|entry| entry.answer)
-            })
-            .or_else(|| self.bare())
-    }
-
-    /// Each answer paired with whether a bare bound names it, for a caller
-    /// weighing answers from several traits at once.
-    fn tagged(&self) -> impl Iterator<Item = (bool, TypeId)> + Clone {
-        self.0
-            .iter()
-            .map(|entry| (entry.written.is_empty(), entry.answer))
-    }
-
-    /// Every type the answers hold: the answers and the arguments filing them.
-    fn types(&self) -> impl Iterator<Item = TypeId> + '_ {
-        self.0.iter().flat_map(|entry| {
-            entry
-                .written
-                .iter()
-                .chain(entry.filled.iter().flatten())
-                .copied()
-                .chain([entry.answer])
-        })
-    }
-}
-
-/// The Component Model coordinate `module` is addressed by, or `None` where it
-/// declares nothing at that boundary. A `core:` module carries no namespace.
-fn cm_module_key(
-    name: &str,
-    module: &ModuleSource,
-) -> Option<(String, Option<CmNamespace>, String)> {
-    match module {
-        ModuleSource::Binding {
-            namespace,
-            interface,
-        } => Some((
-            name.to_string(),
-            Some(*namespace),
-            interface.as_str().to_string(),
-        )),
-        ModuleSource::Core { name: cm_name } => {
-            Some((name.to_string(), None, cm_name.as_str().to_string()))
-        }
-        _ => None,
-    }
-}
-
-/// The one answer among `candidates`, preferring those a bare bound names when
-/// any is registered: a bound writes no trait arguments, so an impl that does
-/// is consulted only when nothing else answers. `None` when they disagree.
-fn one_assoc_answer<T: Copy + PartialEq>(
-    candidates: impl Iterator<Item = (bool, T)> + Clone,
-) -> Option<T> {
-    let bare = candidates.clone().any(|(bare, _)| bare);
-    let mut answers = candidates
-        .filter(|(is_bare, _)| *is_bare || !bare)
-        .map(|(_, answer)| answer);
-    let first = answers.next()?;
-    answers.all(|answer| answer == first).then_some(first)
-}
-
 /// Every argument a projection names apart from its base: the associated
 /// type's own and its trait's. A walk reading one reads both.
 pub fn projection_arguments<'a>(
@@ -1059,13 +764,6 @@ pub fn projection_arguments<'a>(
     trait_args: &'a Option<Vec<TypeId>>,
 ) -> impl Iterator<Item = TypeId> + 'a {
     args.iter().chain(trait_args.iter().flatten()).copied()
-}
-
-/// Whether a slot search descends into a projection's base or stops there.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum Through {
-    Projection,
-    ProjectionStops,
 }
 
 /// The prelude struct a `kind` range literal builds.
@@ -2265,11 +1963,6 @@ impl ProjectionAnswer {
     }
 }
 
-static NO_PARAMS: IndexMap<u32, TypeId> = IndexMap::with_hasher(FxBuildHasher);
-static NO_VARS: IndexMap<InferVarId, TypeId> = IndexMap::with_hasher(FxBuildHasher);
-static NO_PROJECTIONS: SlotProjections = IndexMap::with_hasher(FxBuildHasher);
-static NO_ROWS: EffectRows = IndexMap::with_hasher(FxBuildHasher);
-
 /// Effect parameters and variables, by name, and the row each stands for.
 pub type EffectRows = IndexMap<String, Vec<EffectRef>>;
 
@@ -2282,95 +1975,6 @@ pub struct RowFlow {
     pub span: Span,
     /// The source path of the module the move is written in.
     pub module: String,
-}
-
-/// Where a type's spelling writes its function types' rows. A function value
-/// is one whatever its row, so an instance whose arguments differ only in
-/// rows is one instance and answers one name; a function type standing alone
-/// keeps its row, which selects an impl written for it.
-#[derive(Clone, Copy, PartialEq, Eq)]
-enum RowSpelling {
-    /// Outside type arguments only: the name an instance answers to.
-    OutsideArgs,
-    /// Nowhere: inside a type argument.
-    Nowhere,
-    /// Everywhere: the rows themselves, for the effect check to read.
-    Everywhere,
-}
-
-/// Whether two function types' rows can be one: equal, or one still open. An
-/// effect parameter stands for whatever row meets it, and a variable for the
-/// row the effect check solves it to.
-fn rows_agree(a: &[EffectRef], b: &[EffectRef]) -> bool {
-    let open = |row: &[EffectRef]| row.iter().any(|e| e.is_param() || e.is_var());
-    a == b || open(a) || open(b)
-}
-
-/// What one substitution replaces, leaf by leaf: a declaration's slots, solved
-/// inference variables, a generic associated type's own parameters, the
-/// projections a use site answers, and the effect parameters and variables in
-/// a function type's row.
-#[derive(Clone, Copy)]
-struct Leaves<'s> {
-    params: &'s IndexMap<u32, TypeId>,
-    vars: &'s IndexMap<InferVarId, TypeId>,
-    family: Option<FamilyAt<'s>>,
-    projections: &'s SlotProjections,
-    rows: &'s EffectRows,
-    /// Whether every row is emptied, not just the names `rows` holds.
-    erase_rows: bool,
-}
-
-/// One generic associated type's parameters, and the arguments a projection
-/// gives them.
-#[derive(Clone, Copy)]
-struct FamilyAt<'s> {
-    owning_trait: DefId,
-    assoc_name: &'s str,
-    args: &'s [TypeId],
-}
-
-impl Leaves<'static> {
-    const NONE: Self = Self {
-        params: &NO_PARAMS,
-        vars: &NO_VARS,
-        family: None,
-        projections: &NO_PROJECTIONS,
-        rows: &NO_ROWS,
-        erase_rows: false,
-    };
-}
-
-impl Leaves<'_> {
-    fn is_empty(&self) -> bool {
-        self.params.is_empty()
-            && self.vars.is_empty()
-            && self.family.is_none_or(|at| at.args.is_empty())
-            && self.projections.is_empty()
-            && self.rows.is_empty()
-            && !self.erase_rows
-    }
-
-    /// `effects` with each parameter or variable this substitution names
-    /// replaced by its row, each effect once.
-    fn row(&self, effects: &[EffectRef]) -> Vec<EffectRef> {
-        if self.erase_rows {
-            return Vec::new();
-        }
-        let mut out: Vec<EffectRef> = Vec::new();
-        for effect in effects {
-            let replaced = match effect {
-                EffectRef::Param { name } | EffectRef::Var { name, .. } => self.rows.get(name),
-                EffectRef::Concrete(_) | EffectRef::Undeclared { .. } => None,
-            };
-            for e in replaced.map_or(std::slice::from_ref(effect), Vec::as_slice) {
-                if !out.contains(e) {
-                    out.push(e.clone());
-                }
-            }
-        }
-        out
-    }
 }
 
 /// `effects` with each variable `rows` solves replaced by its solution, and each

@@ -4117,9 +4117,9 @@ use crate::name::LocalMethodName;
 use crate::tir::{
     FloatBound, InstancePattern, PatternLiteral, RangeBound, TirBinaryOp, TirBlock, TirEnum,
     TirExpr, TirExprKind, TirFlags, TirFunction, TirGlobal, TirLiteralPattern, TirLocal, TirModule,
-    TirParam, TirPattern, TirStmt, TirStmtKind, TirStruct, TirUnaryOp, TypeId, TypeTable,
-    receiver_value,
+    TirParam, TirPattern, TirStmt, TirStmtKind, TirStruct, TirUnaryOp, TypeId, receiver_value,
 };
+use crate::type_table::TypeTable;
 
 /// Unparses TIR back to pseudo-Wado source code.
 /// The output shows the code after monomorphization and lowering.

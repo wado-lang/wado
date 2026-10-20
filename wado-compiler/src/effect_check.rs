@@ -16,9 +16,10 @@ use crate::name::{DeclaredHead, FqTraitName, FqTypeName, TypeHead};
 use crate::resolve::{Resolution, Resolutions};
 use crate::tir::{
     EffectRef, EffectRows, FunctionRef, ResolvedType, RowFlow, TemplateId, TypeId, TypeSet,
-    TypeTable, solve_row,
+    solve_row,
 };
 use crate::token::Span;
+use crate::type_table::TypeTable;
 
 use crate::ast::{
     self, AstId, AstVisitor, Attribute, Block, CmImport, EffectHandlerBinding, Expr, Function,

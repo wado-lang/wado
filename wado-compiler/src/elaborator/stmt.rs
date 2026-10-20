@@ -7,9 +7,10 @@ use crate::ast::{
 };
 use crate::compiler_host::CompilerHost;
 use crate::elaborator::sig::AssocConstSig;
-use crate::tir::{InstancePattern, ResolvedType, TirPattern, TypeId, TypeTable};
+use crate::tir::{InstancePattern, ResolvedType, TirPattern, TypeId};
 use crate::tir_visitor::remap_local_reads;
 use crate::token::Span;
+use crate::type_table::TypeTable;
 use crate::unparse::unparse_instance_pattern;
 
 use super::method_call::MethodCallInput;
@@ -1240,7 +1241,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// The written qualifier and the scrutinee's rendering can be the same
     /// text — two declarations of one name is precisely what this mismatch
     /// reports — so each takes its module then, in the same notation and under
-    /// the same rule as [`crate::tir::TypeTable::type_names_for_mismatch`].
+    /// the same rule as [`TypeTable::type_names_for_mismatch`].
     fn pattern_mismatch_names(
         &self,
         site: Option<AstId>,

@@ -11,12 +11,13 @@ use crate::hashmap::{IndexMap, IndexSet};
 use crate::module_source::ModuleSource;
 use crate::name::{FqTypeName, LocalMethodName, Projected, RefKind, mangle_generic_name};
 use crate::tir::{
-    AnonStructId, CallArg, FunctionKind, FunctionRef, InstantiationKey, LetStorage, MonomorphInfo,
-    ResolvedType, ShapeSubstitution, StructDef, TemplateId, TirBinaryOp, TirBlock, TirExpr,
-    TirExprKind, TirFunction, TirLocal, TirModule, TirParam, TirPattern, TirStmt, TirStmtKind,
-    TirTemplatePart, TirUnaryOp, TypeId, TypeTable, method_param_offset, transpose_tuple_expr,
+    CallArg, FunctionKind, FunctionRef, InstantiationKey, LetStorage, MonomorphInfo, ResolvedType,
+    ShapeSubstitution, StructDef, TemplateId, TirBinaryOp, TirBlock, TirExpr, TirExprKind,
+    TirFunction, TirLocal, TirModule, TirParam, TirPattern, TirStmt, TirStmtKind, TirTemplatePart,
+    TirUnaryOp, TypeId, method_param_offset, transpose_tuple_expr,
 };
 use crate::tir_visitor::{TirMutVisitor, TirRefVisitor};
+use crate::type_table::{AnonStructId, TypeTable};
 
 use super::state::Monomorphizer;
 use super::{Templates, module_source_for_trait_impl};

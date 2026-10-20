@@ -16,9 +16,10 @@ use crate::name::{
 };
 use crate::tir::{
     EffectRef, FunctionRef, InstancePattern, REFLECT_NEWTYPE_BASE, ResolvedType,
-    SubstitutionContext, TirLiteralPattern, TirStruct, TypeId, TypeKey, TypeTable,
+    SubstitutionContext, TirLiteralPattern, TirStruct, TypeId,
 };
 use crate::token::Span;
+use crate::type_table::{TypeKey, TypeTable};
 
 use super::Elaborator;
 use super::call::{CaseSite, DefaultTypeBinding, DefaultWalk, WalkedDefault, slot_type_bindings};
@@ -53,7 +54,8 @@ use crate::escape::{self, unescape_byte, unescape_char};
 use crate::hashmap;
 use crate::lexer::defaults_to_float;
 use crate::primitive::PrimitiveType;
-use crate::tir::{AnonStructId, StructDef};
+use crate::tir::StructDef;
+use crate::type_table::AnonStructId;
 use std::cell::OnceCell;
 use std::cmp::Ordering;
 use std::rc::Rc;

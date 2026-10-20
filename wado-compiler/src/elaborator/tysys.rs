@@ -16,7 +16,8 @@ use crate::hashmap::{IndexMap, IndexSet};
 use crate::module_source::ModuleSource;
 use crate::resource_holding::{Held, HeldTypes, holds_resource};
 use crate::synthesis::template::{eq_from_written_cmp, written_impl_reaches};
-use crate::tir::{ResolvedType, StructDef, TypeId, TypeKey, TypeTable, range_item};
+use crate::tir::{ResolvedType, StructDef, TypeId, range_item};
+use crate::type_table::{TypeKey, TypeTable};
 
 use super::sem::decls::ModuleDecls;
 use super::trait_env::{NamespaceImports, TraitEnv};

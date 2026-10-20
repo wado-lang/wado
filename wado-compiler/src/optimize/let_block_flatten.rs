@@ -197,8 +197,8 @@ mod tests {
     use crate::hashmap::IndexSet;
     use crate::nir::{FuncId, NirLocal};
     use crate::nir_arena::{BlockNode, ExprNode, Operand, StmtNode};
-    use crate::tir::TypeTable;
     use crate::token::Span;
+    use crate::type_table::TypeTable;
 
     fn sp() -> Span {
         Span::new(0, 0, 0, 0)

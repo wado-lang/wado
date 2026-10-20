@@ -8,7 +8,8 @@ use crate::compiler_host::CompilerHost;
 use crate::hashmap::IndexMap;
 use crate::module_source::ModuleSource;
 use crate::name::{FqTypeName, LocalMethodName, MethodName, RefKind, unalias_namespace_member};
-use crate::tir::{FunctionRef, InferVarId, MonomorphInfo, ResolvedType, TypeId, TypeTable};
+use crate::tir::{FunctionRef, InferVarId, MonomorphInfo, ResolvedType, TypeId};
+use crate::type_table::TypeTable;
 
 use super::Elaborator;
 use super::callee::{CalleeRef, StaticMethodRef};

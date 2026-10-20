@@ -9,7 +9,8 @@ use crate::compiler_item::SeqField;
 use crate::module_source::ModuleSource;
 use crate::name::{FqTypeName, StructName, display_tuple_type};
 use crate::nir::{NirStruct, NirVariantDecl};
-use crate::tir::{ResolvedType, TypeId, TypeTable};
+use crate::tir::{ResolvedType, TypeId};
+use crate::type_table::TypeTable;
 use crate::wir::{
     WirArrayType, WirEnumCase, WirEnumType, WirField, WirGenericOrigin, WirMeta, WirName,
     WirStructType, WirType, WirTypeDef, WirVariantCase, WirVariantRepr, WirVariantType,

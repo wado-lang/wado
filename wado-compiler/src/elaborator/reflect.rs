@@ -6,7 +6,8 @@ use crate::compiler_host::CompilerHost;
 use crate::compiler_item::CompilerItem;
 use crate::defs::DefId;
 use crate::name::{FqTypeName, LocalMethodName};
-use crate::tir::{FunctionRef, ResolvedType, TypeId, TypeTable};
+use crate::tir::{FunctionRef, ResolvedType, TypeId};
+use crate::type_table::TypeTable;
 
 use super::Elaborator;
 use super::trait_query::OnBoundTrait;

@@ -13,7 +13,8 @@ use crate::lexer::lex;
 use crate::module_source::ModuleSource;
 use crate::parser::Parser;
 use crate::stdlib;
-use crate::tir::{ResolvedType, TypeId, TypeTable};
+use crate::tir::{ResolvedType, TypeId};
+use crate::type_table::TypeTable;
 
 /// Information about a builtin function
 #[derive(Debug, Clone)]

@@ -3,7 +3,7 @@
 use crate::ast::{Item, Module, Type};
 use crate::compiler_host::CompilerHost;
 use crate::module_source::ModuleSource;
-use crate::tir::TypeTable;
+use crate::type_table::TypeTable;
 
 use super::Elaborator;
 use super::scope::{BinderInScope, ScopedBound};

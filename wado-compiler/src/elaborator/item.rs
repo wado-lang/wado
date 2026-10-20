@@ -16,10 +16,10 @@ use crate::logger::Logger;
 use crate::module_source::ModuleSource;
 use crate::name::{FqTypeName, MethodName, global_name};
 use crate::tir::{
-    AssocTypeSig, ImplProjection, TirEffectOp, TirParam, TraitFrame, TraitRef, TypeId, TypeTable,
-    method_param_offset,
+    AssocTypeSig, TirEffectOp, TirParam, TraitFrame, TraitRef, TypeId, method_param_offset,
 };
 use crate::token::Span;
+use crate::type_table::{ImplProjection, TypeTable};
 
 use super::infer_hole::InferHoleTable;
 use super::scope::{BinderInScope, Scope, ScopedBound, TraitContext, TypeParamScope, param_decl};

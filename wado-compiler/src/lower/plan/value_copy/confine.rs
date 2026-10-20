@@ -23,10 +23,10 @@ use crate::flat_package::FlatPackage;
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::tir::{
     BuiltinDeclarations, FunctionKind, FunctionRef, ResolvedType, TirBlock, TirExpr, TirExprKind,
-    TirFunction, TirParam, TirPattern, TirStmt, TirStmtKind, TypeId, TypeTable,
-    capture_source_locals,
+    TirFunction, TirParam, TirPattern, TirStmt, TirStmtKind, TypeId, capture_source_locals,
 };
 use crate::tir_visitor::TirRefVisitor;
+use crate::type_table::TypeTable;
 
 /// Per-parameter confinement bits. A missing entry answers "not confined".
 pub struct ConfinedParams {

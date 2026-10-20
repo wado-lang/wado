@@ -25,7 +25,8 @@ use crate::optimize::arena_query::{
 };
 use crate::optimize::gate::{FunctionGate, GatedPass};
 use crate::optimize::value_copy::mutation::{MutationOracle, Witness, expr_witnesses};
-use crate::tir::{BuiltinDeclaration, TypeId, TypeTable};
+use crate::tir::{BuiltinDeclaration, TypeId};
+use crate::type_table::TypeTable;
 use crate::{hashmap, nir_arena};
 
 /// Run condition implication at the body root on an existing engine session.

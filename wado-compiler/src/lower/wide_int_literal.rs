@@ -17,9 +17,9 @@ use crate::name::LocalMethodName;
 use crate::synthesis::common::not_expr;
 use crate::tir::{
     CallArg, FunctionRef, ResolvedType, TirBinaryOp, TirExpr, TirExprKind, TirUnaryOp, TypeId,
-    TypeTable,
 };
 use crate::token::Span;
+use crate::type_table::TypeTable;
 
 /// The wide-int method `method` as a callee, named by the registry so that no
 /// producer spells it.

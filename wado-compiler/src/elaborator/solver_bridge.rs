@@ -8,13 +8,14 @@ use crate::hashmap::{IndexMap, IndexSet};
 use crate::module_source::ModuleSource;
 use crate::name::{FqTraitName, FqTypeName, NEVER_TYPE_NAME, RefKind, TypeHead, UNIT_TYPE_NAME};
 use crate::primitive::PrimitiveType;
-use crate::tir::{AnonStructId, EffectRef, ResolvedType, TypeId, TypeTable};
+use crate::tir::{EffectRef, ResolvedType, TypeId};
 use crate::trait_solver::{
     ArgDefault, AssocId, Candidate, Declaration, Env, Fact, ImplDef, ImplId, ImplOrigin, MethodId,
     ModuleId, ModuleScope, ParamBound, ParamDef, Pin, Program, RefRule, Selection, SolverType,
     TraitDeclId, TypeDeclId, TypeDef, applies, bound_candidates, candidates, comparison_row,
     derive, holds_with_args, mark_duplicates, owed, pair_comparisons, rank,
 };
+use crate::type_table::{AnonStructId, TypeTable};
 
 use super::trait_env::{
     BlanketReceiver, ImplHeader, ImplTargetKey, TraitDeclHeader, TraitEnv, written_arg_nodes,

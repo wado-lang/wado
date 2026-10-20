@@ -4,7 +4,8 @@
 //! here decides the rest, so the phases cannot disagree on an aggregate.
 
 use crate::defs::DefId;
-use crate::tir::{TypeId, TypeKey};
+use crate::tir::TypeId;
+use crate::type_table::TypeKey;
 
 /// What a type holds, one level down.
 pub(crate) enum Held {

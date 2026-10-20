@@ -18,7 +18,8 @@ use crate::nir_arena::{
 };
 use crate::nir_package::NirPackage;
 use crate::parallel::Executor;
-use crate::tir::{ArrayElementAccess, ResolvedType, TypeId, TypeTable};
+use crate::tir::{ArrayElementAccess, ResolvedType, TypeId};
+use crate::type_table::TypeTable;
 
 use super::arena_query::{
     bare_promoted_local, bare_promoted_reads, buried_promoted_reads, cold_functions_of,

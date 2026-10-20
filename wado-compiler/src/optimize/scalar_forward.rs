@@ -10,7 +10,8 @@ use crate::nir::FuncParts;
 use crate::nir_arena::{BlockId, Body, ExprId, ExprKind, NodeRef, StmtId, StmtKind};
 use crate::nir_engine::{Engine, Rule};
 use crate::nir_package::NirPackage;
-use crate::tir::{TypeId, TypeTable};
+use crate::tir::TypeId;
+use crate::type_table::TypeTable;
 
 use super::arena_query::{is_addressed, is_pure_expr};
 use super::gate::{FunctionGate, GatedPass};

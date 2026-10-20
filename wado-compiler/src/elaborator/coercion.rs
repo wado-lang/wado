@@ -23,8 +23,9 @@ use crate::hashmap::{IndexMap, IndexSet};
 use crate::lexer::{defaults_to_float, has_decimal_point};
 use crate::module_source::ModuleSource;
 use crate::name::FqTraitName;
-use crate::tir::{InferVarId, ResolvedType, TypeId, TypeTable};
+use crate::tir::{InferVarId, ResolvedType, TypeId};
 use crate::token::Span;
+use crate::type_table::TypeTable;
 
 /// Whether `expr` is a literal — the only position implicit conversion reaches
 /// (WEP 2026-08-24). A template string, a variable, and a call are not.

@@ -14,7 +14,8 @@ use crate::nir_arena::{
 use crate::nir_value_graph::{Side, ValueKind, neutral_int};
 use crate::nir_visitor::NirRefVisitor;
 use crate::primitive::PrimitiveType;
-use crate::tir::{ResolvedType, TypeId, TypeTable};
+use crate::tir::{ResolvedType, TypeId};
+use crate::type_table::TypeTable;
 
 use super::lattice::is_provably_exhaustive;
 use super::pattern::PatternMatch;

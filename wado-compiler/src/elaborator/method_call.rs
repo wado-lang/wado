@@ -9,9 +9,9 @@ use crate::name::{FqTypeName, LocalMethodName, MethodName, Receiver, RefKind, UN
 use crate::primitive::PrimitiveType;
 use crate::tir::{
     FunctionRef, MonomorphInfo, ResolvedType, SubstitutionContext, TemplateId, TupleSlot, TypeId,
-    TypeTable,
 };
 use crate::token::Span;
+use crate::type_table::TypeTable;
 
 use super::call::{
     ArgSite, CaseSite, SigChoice, bind_nearer, merge_turbofish_type_args, turbofish_leaves_slot,

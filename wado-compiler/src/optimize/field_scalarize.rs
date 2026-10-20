@@ -24,8 +24,9 @@ use crate::optimize::alias::bound_value;
 use crate::optimize::arena_query::is_local;
 use crate::optimize::gate::FunctionGate;
 use crate::optimize::heap_effect::{Effect, HeapEffects, HeapEffectsCache, HeapFrame};
-use crate::tir::{ResolvedType, TypeId, TypeTable};
+use crate::tir::{ResolvedType, TypeId};
 use crate::token::Span;
+use crate::type_table::TypeTable;
 
 const MIN_ACCESS_COUNT: usize = 4;
 

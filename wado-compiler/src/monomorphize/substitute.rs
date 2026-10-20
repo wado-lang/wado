@@ -8,9 +8,10 @@ use crate::defs::DefId;
 use crate::hashmap::IndexMap;
 use crate::tir::{
     InstantiationKey, ResolvedType, TirExpr, TirExprKind, TirFunction, TirModule, TirPattern,
-    TirStmt, TirStmtKind, TirStruct, TypeId, TypeTable,
+    TirStmt, TirStmtKind, TirStruct, TypeId,
 };
 use crate::tir_visitor::TirMutVisitor;
+use crate::type_table::TypeTable;
 
 use super::state::Monomorphizer;
 

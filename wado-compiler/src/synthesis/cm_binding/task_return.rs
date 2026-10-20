@@ -23,11 +23,12 @@ use crate::module_source::{ModuleSource, ModuleSourceInterner};
 use crate::package::Package;
 use crate::tir::{
     ResolvedType, TirBlock, TirExpr, TirExprKind, TirFunction, TirLocal, TirMatchArm, TirModule,
-    TirPattern, TirStmt, TirStmtKind, TypeId, TypeTable,
+    TirPattern, TirStmt, TirStmtKind, TypeId,
 };
 use crate::tir_visitor::{
     TirOptVisitor, TirRefVisitor, opt_walk_block, opt_walk_expr, opt_walk_stmt,
 };
+use crate::type_table::TypeTable;
 
 use crate::synthesis::common::{
     alloc_local, assign, bool_lit, cast, cm_canonical_call, expr_stmt, i32_const, if_stmt,

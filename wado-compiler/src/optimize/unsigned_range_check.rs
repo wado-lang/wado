@@ -12,7 +12,8 @@ use crate::nir_arena::{ExprId, ExprKind, Operand};
 use crate::nir_engine::{Engine, EngineBuffers, Rule};
 use crate::nir_package::NirPackage;
 use crate::primitive::PrimitiveType;
-use crate::tir::{TypeId, TypeTable};
+use crate::tir::TypeId;
+use crate::type_table::TypeTable;
 
 use super::arena_query::{binary_parts, is_pure_nontrapping_operand_typed};
 use super::condition_implication::{

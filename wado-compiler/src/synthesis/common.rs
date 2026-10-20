@@ -17,10 +17,11 @@ use crate::tir;
 use crate::tir::{
     CallArg, FunctionKind, FunctionRef, InlineHint, LetStorage, MonomorphInfo, TemplateId,
     TirBinaryOp, TirBlock, TirExpr, TirExprKind, TirFunction, TirLocal, TirParam, TirPattern,
-    TirStmt, TirStmtKind, TirUnaryOp, TypeId, TypeTable,
+    TirStmt, TirStmtKind, TirUnaryOp, TypeId,
 };
 use crate::tir_visitor::{TirMutVisitor, TirRefVisitor};
 use crate::token::Span;
+use crate::type_table::TypeTable;
 
 /// Synthetic span used for all generated code.
 ///

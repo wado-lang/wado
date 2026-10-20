@@ -17,9 +17,10 @@ use crate::lower::wide_int_literal::create_literal;
 use crate::module_source::ModuleSource;
 use crate::name::global_init_target;
 use crate::tir::{
-    GlobalInit, LocalFrame, TirExpr, TirExprKind, TirFunction, TypeId, TypeTable, initializer_body,
+    GlobalInit, LocalFrame, TirExpr, TirExprKind, TirFunction, TypeId, initializer_body,
 };
 use crate::token::Span;
+use crate::type_table::TypeTable;
 
 /// Severity for one class of param-resolution diagnostic, set per `wado`
 /// invocation (`--param-unknown` / `--param-invalid` / `--param-missing`).

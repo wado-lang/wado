@@ -6,7 +6,8 @@ use crate::ast::{AttrArg, Attribute};
 use crate::attribute::{SIDE_EFFECT, STORAGE};
 use crate::hashmap::IndexSet;
 use crate::lower::plan::value_copy::place::{is_reference, may_carry_storage};
-use crate::tir::{ResolvedType, TypeId, TypeTable};
+use crate::tir::{ResolvedType, TypeId};
+use crate::type_table::TypeTable;
 
 /// `#[storage(...)]`: what a call's result shares with its arguments, and what
 /// the call keeps of them.

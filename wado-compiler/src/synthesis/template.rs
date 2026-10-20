@@ -39,10 +39,11 @@ use crate::synthesis::traits::case_index_dispatch;
 use crate::tir::{
     CallArg, FunctionRef, LetStorage, MonomorphInfo, ResolvedType, StructDef, TemplateId,
     TemplateShape, TirBlock, TirExpr, TirExprKind, TirFunction, TirLocal, TirModule, TirParam,
-    TirStmt, TirStmtKind, TirStructField, TirTemplatePart, TypeId, TypeTable,
+    TirStmt, TirStmtKind, TirStructField, TirTemplatePart, TypeId,
 };
 use crate::tir_visitor::{TirOptVisitor, opt_walk_expr};
 use crate::token::Span;
+use crate::type_table::TypeTable;
 use crate::{format_spec, tir};
 
 /// Every `core:prelude/format` symbol this synthesiser needs, resolved once

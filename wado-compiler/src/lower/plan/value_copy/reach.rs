@@ -10,8 +10,9 @@
 
 use crate::flat_package::FlatPackage;
 use crate::hashmap::{IndexMap, IndexSet};
-use crate::tir::{ResolvedType, StructFields, TirExpr, TirExprKind, TypeId, TypeKey, TypeTable};
+use crate::tir::{ResolvedType, StructFields, TirExpr, TirExprKind, TypeId};
 use crate::tir_visitor::TirRefVisitor;
+use crate::type_table::{TypeKey, TypeTable};
 
 /// A `fn` type's parameter and return types. A `fn` value passes where a
 /// `fn mut`, or one with other effects, is expected, so only the shape says

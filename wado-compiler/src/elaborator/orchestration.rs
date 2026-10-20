@@ -25,7 +25,8 @@ use crate::coverage::{CoverageMap, CoverageScope};
 use crate::logger::{Bail, Logger, ModuleDiag};
 use crate::module_source::{ModuleSource, ModuleSourceInterner};
 use crate::symbol::SymbolTable;
-use crate::tir::{ResolvedType, TirModule, TypeId, TypeTable, positional_substitution};
+use crate::tir::{ResolvedType, TirModule, TypeId, positional_substitution};
+use crate::type_table::TypeTable;
 use crate::world_registry::WorldRegistry;
 
 use super::method_lookup::ImplParamSlots;

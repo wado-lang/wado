@@ -7,8 +7,9 @@ use crate::elaborator::synth::ArgSource;
 use crate::hashmap::IndexMap;
 use crate::name::{FqTypeName, LocalMethodName, MethodName, Receiver, RefKind};
 use crate::primitive::PrimitiveType;
-use crate::tir::{FunctionRef, MonomorphInfo, ResolvedType, TemplateId, TypeId, TypeTable};
+use crate::tir::{FunctionRef, MonomorphInfo, ResolvedType, TemplateId, TypeId};
 use crate::token::Span;
+use crate::type_table::TypeTable;
 use crate::unparse::binary_op_str;
 
 use super::Elaborator;

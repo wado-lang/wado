@@ -16,7 +16,7 @@ use super::place::{
     lvalue_root_local, peel_wrappers, place_of, referenced_place_operand, write_root_local,
 };
 use crate::nir_visitor::reachable_exprs;
-use crate::tir::TypeTable;
+use crate::type_table::TypeTable;
 
 use super::{CalleeMap, CtfeBuiltinMap, ProgramFacts};
 use crate::compiler_trace;

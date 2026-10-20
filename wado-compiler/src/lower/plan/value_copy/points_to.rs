@@ -39,9 +39,10 @@ use crate::module_source::ModuleSource;
 use crate::tir::{
     BuiltinDeclaration, BuiltinDeclarations, CaptureSource, ClosureFunctor, FunctionKind,
     ResolvedType, RetainInto, ReturnConvention, StructFields, TirBlock, TirExpr, TirExprKind,
-    TirPattern, TirStmt, TirStmtKind, TirUnaryOp, TypeId, TypeKey, TypeTable,
+    TirPattern, TirStmt, TirStmtKind, TirUnaryOp, TypeId,
 };
 use crate::token::Span;
+use crate::type_table::{TypeKey, TypeTable};
 
 /// A frame: a function, or a global's initializer, whose locals have locations
 /// of their own.

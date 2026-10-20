@@ -34,8 +34,9 @@ use crate::primitive::PrimitiveType;
 use crate::resolve::Resolutions;
 use crate::stdlib;
 use crate::synthesis::cm_binding::types::cm_interface_module;
-use crate::tir::{ResolvedType, TypeId, TypeTable};
+use crate::tir::{ResolvedType, TypeId};
 use crate::token::Span;
+use crate::type_table::TypeTable;
 use crate::unparse::unparse_type_into;
 use crate::world_registry::{InterfaceExportLookup, InterfaceExportMethod, WorldRegistry};
 

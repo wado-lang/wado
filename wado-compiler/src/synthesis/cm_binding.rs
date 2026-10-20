@@ -38,10 +38,10 @@ use crate::package::{Package, test_selected};
 use crate::synthesis::SynthesisError;
 use crate::tir::{
     EffectRef, ResolvedType, TirExpr, TirExprKind, TirFunction, TirModule, TirParam, TypeId,
-    TypeTable,
 };
 use crate::tir_visitor::TirRefVisitor;
 use crate::token::Span;
+use crate::type_table::TypeTable;
 use crate::unparse::unparse_type_into;
 use crate::world_registry::{TEST_WORLD, WorldExportInfo, WorldInfo, fq_name_package};
 
@@ -116,8 +116,9 @@ mod payload_validation {
     use crate::hashmap::IndexSet;
     use crate::module_source::ModuleSource;
     use crate::package::Package;
-    use crate::tir::{TirFunction, TypeTable};
+    use crate::tir::TirFunction;
     use crate::tir_visitor::TirRefVisitor;
+    use crate::type_table::TypeTable;
 
     use super::{FunctionKey, NamedPayloadFinder};
     use crate::synthesis::cm_binding::{

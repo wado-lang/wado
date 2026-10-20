@@ -15,7 +15,8 @@ use super::super::types::{DataDecls, StructFieldInfo};
 use crate::defs::DefId;
 use crate::elaborator::sig;
 use crate::elaborator::sig::{AssocConstSig, ImplSig, TraitSig};
-use crate::tir::{AnonStructId, EffectRef, TirEffectOp, TirStruct};
+use crate::tir::{EffectRef, TirEffectOp, TirStruct};
+use crate::type_table::AnonStructId;
 
 /// A function's canonical signature, resolved once by its module's decl
 /// pass in the declaring perspective, with the function's own type params

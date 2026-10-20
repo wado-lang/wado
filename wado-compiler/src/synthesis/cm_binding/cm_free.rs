@@ -9,7 +9,8 @@ use crate::cm_abi;
 use crate::component_model::{
     CmInterfaceRegistry, EMPTY_TUPLE_AT_BOUNDARY, cm_layout_with_registry,
 };
-use crate::tir::{TirBinaryOp, TirExpr, TirLocal, TirStmt, TypeTable};
+use crate::tir::{TirBinaryOp, TirExpr, TirLocal, TirStmt};
+use crate::type_table::TypeTable;
 
 use crate::synthesis::common::{
     alloc_local, assign, binary, block, break_stmt, builtin_call, expr_stmt, i32_const, if_stmt,

@@ -15,7 +15,8 @@ use crate::nir_arena::{
 };
 use crate::nir_package::NirPackage;
 use crate::nir_value_graph::{OpaqueSource, ValueId, ValueKind};
-use crate::tir::{EffectRef, ResolvedType, TypeTable};
+use crate::tir::{EffectRef, ResolvedType};
+use crate::type_table::TypeTable;
 use crate::unparse::unparse_with_row_into;
 use crate::{nir, tir};
 

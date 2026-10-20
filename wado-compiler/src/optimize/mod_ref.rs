@@ -21,7 +21,8 @@ use crate::optimize::body_memo::BodyMemo;
 use crate::optimize::bounds::{self, Proofs};
 use crate::optimize::inline::recursive_scc_members;
 use crate::parallel::Executor;
-use crate::tir::{BuiltinDeclaration, BuiltinDeclarations, TypeTable};
+use crate::tir::{BuiltinDeclaration, BuiltinDeclarations};
+use crate::type_table::TypeTable;
 
 /// Read / write flags for a single state channel (e.g., GC heap or
 /// linear memory).

@@ -19,10 +19,11 @@ use crate::tir::{
     CallArg, CaptureSource, ClosureFunctor, FunctionKind, FunctionRef, InlineHint, ResolvedType,
     StructDef, TirBlock, TirCapture, TirExpr, TirExprKind, TirField, TirFunction, TirLocal,
     TirParam, TirPattern, TirStmt, TirStmtKind, TirStruct, TirStructField, TirUnaryOp, TypeId,
-    TypeTable, capture_at, capture_source_locals,
+    capture_at, capture_source_locals,
 };
 use crate::tir_visitor::{TirMutVisitor, TirRefVisitor, shift_locals};
 use crate::token::Span;
+use crate::type_table::TypeTable;
 use crate::unparse::unparse_tir_closure_source;
 use crate::{hashmap, tir};
 

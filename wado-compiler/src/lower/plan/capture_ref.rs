@@ -7,10 +7,11 @@ use crate::lower::plan::value_copy::place::place_root;
 use crate::name::{capture_ref_name, is_for_body_label};
 use crate::tir::{
     CaptureSource, LetStorage, TirBlock, TirExpr, TirExprKind, TirLocal, TirPattern, TirStmt,
-    TirStmtKind, TirUnaryOp, TypeId, TypeTable,
+    TirStmtKind, TirUnaryOp, TypeId,
 };
 use crate::tir_visitor::{TirMutVisitor, TirRefVisitor};
 use crate::token::Span;
+use crate::type_table::TypeTable;
 
 pub fn capture_observed_by_ref(flat: &mut FlatPackage) {
     let type_table = flat.type_table.clone();

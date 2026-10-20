@@ -2328,7 +2328,7 @@ impl CompilerItems {
 
     /// The node that declares `item`'s type, whatever kind of declaration it
     /// is. This is how a consumer holding only the item reaches an identity —
-    /// [`crate::tir::TypeTable::compiler_item_def`] resolves it — so no stdlib
+    /// [`crate::type_table::TypeTable::compiler_item_def`] resolves it — so no stdlib
     /// type has to be reached for by spelling its name.
     pub fn decl(&self, item: CompilerItem) -> Option<AstId> {
         self.get(item)?.decl()

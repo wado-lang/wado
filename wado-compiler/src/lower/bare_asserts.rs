@@ -8,8 +8,9 @@ use crate::compiler_item::CompilerItem;
 use crate::flat_package::FlatPackage;
 use crate::module_source::ModuleSource;
 use crate::synthesis::common::builtin_call;
-use crate::tir::{FunctionRef, TirBlock, TirExpr, TirExprKind, TirStmt, TirStmtKind, TypeTable};
+use crate::tir::{FunctionRef, TirBlock, TirExpr, TirExprKind, TirStmt, TirStmtKind};
 use crate::tir_visitor::TirMutVisitor;
+use crate::type_table::TypeTable;
 
 /// The real trap-with-message routine `assert_failed` wraps, in its module.
 const PANIC: &str = "panic";

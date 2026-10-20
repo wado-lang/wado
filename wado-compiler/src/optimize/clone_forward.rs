@@ -11,7 +11,7 @@ use crate::nir_arena::{ArenaCallArg, BlockId, Body, ExprId, ExprKind, NodeRef, S
 use crate::nir_engine::{Engine, EngineBuffers, Rule};
 use crate::nir_package::NirPackage;
 use crate::optimize::dce::{DescriptorCache, callee_descriptor};
-use crate::tir::TypeTable;
+use crate::type_table::TypeTable;
 
 /// Whether the call's stamped `func_id` is a full-length array clone
 /// (`array_clone` / its shallow spine twin). The *binding* matcher

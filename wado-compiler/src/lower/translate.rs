@@ -53,10 +53,11 @@ use crate::tir::{
     TirExpr, TirExprKind, TirField, TirFlags, TirFlagsMember, TirFunction, TirGlobal,
     TirLiteralPattern, TirLocal, TirMatchArm, TirParam, TirPattern, TirStmt, TirStmtKind,
     TirStruct, TirStructField, TirStructPatternField, TirTest, TirTypeParam, TirUnaryOp,
-    TirVariantCase, TirVariantDecl, TypeTable, receiver_value, struct_fields,
+    TirVariantCase, TirVariantDecl, receiver_value, struct_fields,
 };
 use crate::tir_visitor::TirRefVisitor;
 use crate::token::Span;
+use crate::type_table::TypeTable;
 use crate::{nir, tir};
 
 /// Translate a [`FlatPackage`] (TIR-shaped) into a [`NirPackage`] (NIR-shaped).

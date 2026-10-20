@@ -29,7 +29,8 @@ use crate::nir_arena::{
 };
 use crate::nir_package::NirPackage;
 use crate::nir_value_graph::ValueId;
-use crate::tir::{ResolvedType, TypeId, TypeTable};
+use crate::tir::{ResolvedType, TypeId};
+use crate::type_table::TypeTable;
 
 use super::arena_query::{cold_path_id, is_cold_marker};
 use super::dce::DescriptorCache;

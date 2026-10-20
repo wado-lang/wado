@@ -2,9 +2,10 @@
 
 use crate::tir::{
     FunctionRef, InstantiationKey, MonomorphInfo, ResolvedType, TirBlock, TirExpr, TirExprKind,
-    TirLocal, TirModule, TirStmt, TirStmtKind, TypeTable,
+    TirLocal, TirModule, TirStmt, TirStmtKind,
 };
 use crate::tir_visitor::{TirMutVisitor, TirRefVisitor};
+use crate::type_table::TypeTable;
 
 use super::state::Monomorphizer;
 

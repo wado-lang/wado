@@ -7,7 +7,8 @@ use crate::ast::{Expr, GenericParam};
 use crate::defs::{DefId, DefTable};
 use crate::hashmap::IndexMap;
 use crate::module_source::ModuleSource;
-use crate::tir::{EffectRows, TemplateId, TypeId, TypeTable, positional_substitution};
+use crate::tir::{EffectRows, TemplateId, TypeId, positional_substitution};
+use crate::type_table::TypeTable;
 
 use super::sem::decls::FunctionSig;
 use crate::ast;

@@ -5,8 +5,9 @@ use crate::elaborator::trait_env::{BlanketImpl, BlanketParamSource, BlanketRecei
 use crate::hashmap::IndexMap;
 use crate::tir::{
     CallArg, FunctionRef, InstantiationKey, MonomorphInfo, ResolvedType, TemplateId, TirExpr,
-    TirExprKind, TirFunction, TypeId, TypeTable,
+    TirExprKind, TirFunction, TypeId,
 };
+use crate::type_table::TypeTable;
 
 use crate::synthesis::template::blanket_impl_args;
 

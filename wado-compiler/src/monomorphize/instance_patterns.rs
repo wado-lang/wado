@@ -9,8 +9,9 @@ use crate::elaborator::types::TypeError;
 use crate::flat_package::FlatPackage;
 use crate::logger::{Bail, Logger};
 use crate::synthesis::common::alloc_named_local;
-use crate::tir::{TirLocal, TirPattern, TypeTable};
+use crate::tir::{TirLocal, TirPattern};
 use crate::tir_visitor::TirMutVisitor;
+use crate::type_table::TypeTable;
 
 /// Lower every per-instance pattern, reporting each that names no value of
 /// its instance.
