@@ -1379,9 +1379,10 @@ handed one. A call may store what any of its operands refers into through each
 A borrow `&x` or `&mut x` handed to a parameter declared `&P` or `&mut P` stays
 out of the result where the declared return type holds no reference that could
 point into a `P`: none to `P` itself, to a type a `P` holds, or to a type
-parameter. Such a result still carries what `x` refers into. A parameter
-declared a type parameter, or a callee that is a closure or a `fn` value, hands
-the borrow on.
+parameter. It is likewise never stored through another parameter declared
+`&mut Q` where `Q` holds no such reference. Such a result, or such a `Q`, still
+carries what `x` refers into. A parameter declared a type parameter, or a callee
+that is a closure or a `fn` value, hands the borrow on.
 
 <!-- {"fixture":"affine_reference_call_result_unrelated.wado"} -->
 

@@ -281,7 +281,9 @@ held. This is how `set.wait()` hands back a member that outlives the set, and
 how `router.match_request(&request)` leaves `request` free to move.
 
 A call may store any operand through each `&mut` it takes, so what that `&mut`
-reaches carries them all. The check refuses a read after the
+reaches carries them all. The same declared-type test exempts a borrow from a
+`&mut Q` parameter whose `Q` holds no reference that could point into it, which
+is how `array_move(&mut dst, &src, …)` leaves `src` free to move. The check refuses a read after the
 local moved or its scope ended, a `return` of such a value, a `&mut` parameter
 or a capture left holding one at the end of the body, and a store into a global.
 
@@ -291,7 +293,8 @@ read, as Rust's exclusive borrow does. A use through the reference itself does
 not.
 
 This refuses programs a lifetime system would accept: a call handed `&t` and
-`&mut v` is taken to store `&t` into `v`, whether it does or not. Refusing more
+`&mut v`, where `v`'s type could hold a reference into `t`'s, is taken to store
+`&t` into `v`, whether it does or not. Refusing more
 was preferred to behaviour left unspecified at run time.
 
 The check runs on the `Semantics` layer, so it has spans and reaches the
@@ -441,8 +444,8 @@ pub affine trait Drop with () {
 ```
 
 - A type without an impl drops its fields one by one, in declaration order,
-  as today. A `List<affine T>` drops its elements, which a `List` holding a
-  resource does not do today.
+  as today. A `List<affine T>` and an `Array<affine T>` drop their elements,
+  which a `List` holding a resource does not do today.
 - `builtin::drop<affine T>(value: T)` drops any value where it is called. It
   takes `value` and ends, so the scope-exit drop of the parameter does the
   work. `x.drop()` names a type's `Drop` impl, so a type without one, and an
