@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1792493255557,
+  "lastUpdate": 1792511248281,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -68629,6 +68629,50 @@ window.BENCHMARK_DATA = {
           {
             "name": "sqlite_highlight",
             "value": 288295,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "a2a560cdf672858ea6ea5073cfccf8ccd7fe19f8",
+          "message": "Merge pull request #2395 from wado-lang/ccr-af62058d-luc7sx\n\nfeat(affine)!: every Component Model handle has exactly one owner, checked at compile time",
+          "timestamp": "2026-10-21T00:31:26+09:00",
+          "tree_id": "379bae22dbc9f809414a6780769ae9b82b0ed672",
+          "url": "https://github.com/wado-lang/wado/commit/a2a560cdf672858ea6ea5073cfccf8ccd7fe19f8"
+        },
+        "date": 1792511247594,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 3237,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 7575,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 19866,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 288768,
             "unit": "bytes"
           }
         ]
