@@ -130,7 +130,8 @@ point of the same package, such as a command line, can read the same struct.
 is published like any type an export reaches
 ([Published Types](./spec-components.md#published-types)): it is declared
 `export`, and so is every type its fields name. Every field is `pub`, since a
-WIT record shows them all. Gale declares two:
+WIT record shows them all. Gale declares three, one of them an `enum` it
+re-exports with `export use`:
 
 <!-- {"source": "package-gale/src/generator.wado"} -->
 
@@ -144,6 +145,10 @@ export struct Options {
     /// e.g. `["statement"]`. Empty is byte-identical. See "Parsing a fragment"
     /// in the README.
     pub fragment_entries: List<String>,
+    /// Which decisions the parser asks the runtime ATN simulator: `"auto"` (the
+    /// default), `"always"` or `"never"`. See "Choosing the simulator" in the
+    /// README.
+    pub atn: AtnMode = AtnMode::Auto,
 }
 ```
 
@@ -590,18 +595,19 @@ record source-span {
   carried, and a byte range in it.
 - Every diagnostic is reported, whether the run then succeeds or fails.
 
-Gale relays the diagnostics of its own analysis:
+Gale relays the diagnostics of its own analysis, and collects its errors to
+fail the run with:
 
 <!-- {"source": "package-gale/src/generator.wado"} -->
 
 ```wado
 for let d of &generated.diagnostics {
     if let Some(level) = diagnostic_level(&d.kind) {
-        KilnHost::emit_diagnostic(KilnDiagnostic {
-            level: kiln_level(level),
-            span: null,
-            message: `gale: ${d.owner.label()}: ${d.message}`,
-        });
+        let message = `gale: ${d.owner.label()}: ${d.message}`;
+        if level matches { Error } {
+            refusals.push(message);
+        }
+        KilnHost::emit_diagnostic(KilnDiagnostic { level: kiln_level(level), span: null, message });
     }
 }
 ```
