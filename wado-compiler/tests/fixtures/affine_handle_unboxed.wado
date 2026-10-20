@@ -1,0 +1,16 @@
+// A resource no reference reaches is kept as its bare handle, not in the
+// `$Resource` box a place otherwise holds (WEP: Affine Types). `println` makes a
+// stream, hands its writable end to the host and moves the readable end along,
+// so neither end needs its box.
+
+use { println, Stdout } from "core:cli";
+
+export fn run() with Stdout {
+    println("hi");
+}
+
+__DATA__
+{
+    "stdout": "hi\n",
+    "wir_not_expect:O2": ["struct.new \"core:prelude//$Resource\""]
+}

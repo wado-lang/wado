@@ -207,7 +207,9 @@ settles the locals (step 11).
 4. Array rewrites: constant arrays to data segments, large literals split, and
    the zero fill of a fresh array removed.
 5. Peephole: repeated field loads reused, instruction selection (`select`,
-   rotates), and variant result slots flattened.
+   rotates), and variant result slots flattened. Then a resource whose
+   `$Resource` box no reference reaches is kept as its bare handle, across the
+   locals, parameters and results it moves through.
 6. Write-only local elimination.
 7. Global cleanup (constant initializers, duplicate globals, dead data), then
    `br_if` selection, the calls to a function left empty and the once-flags

@@ -24,6 +24,7 @@ mod prune_dead_data;
 mod reuse_loads;
 mod share_unit_cases;
 mod sroa_variant_return;
+mod unbox_handle;
 mod util;
 
 use crate::codegen_flags::CodegenFlags;
@@ -53,6 +54,7 @@ use peephole::run_peephole;
 use prune_dead_data::prune_dead_data;
 use share_unit_cases::share_unit_cases;
 use sroa_variant_return::flatten_variant_slots;
+use unbox_handle::unbox_handles;
 
 /// What a pass run's passes are called: `wir/<pass>` for the main package,
 /// `wir/<module>:<pass>` for a `#![wasm_module]` package's.
@@ -230,6 +232,10 @@ fn optimize_scoped(
     // nested-in-nested slots peel one level per round.
     wir_pass(scope, "flatten_variant_slots", module, profiler, |m| {
         flatten_variant_slots(m);
+    });
+    // After copy propagation, which leaves the moves between places it joins.
+    wir_pass(scope, "unbox_handles", module, profiler, |m| {
+        unbox_handles(m);
     });
     profiler.span_end(&scope.name("phase5_peephole"));
 
