@@ -861,6 +861,14 @@ test "for-of moves affine elements out of an array" {
     assert LIST_TEST_DROPS == before + 2;
 }
 
+test "split_off moves the tail out and keeps the head" {
+    let mut xs: List<i32> = [1, 2, 3, 4];
+    let tail = xs.split_off(1);
+    assert xs == [1];
+    assert tail == [2, 3, 4];
+    assert xs.split_off(1).is_empty();
+}
+
 fn first_through_as_slice<S: AsSlice<Elem = i32>>(s: &S) -> i32 {
     return *s.iter_ref().next().unwrap();
 }
