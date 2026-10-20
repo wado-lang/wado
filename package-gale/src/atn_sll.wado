@@ -116,10 +116,14 @@ fn place_of(key: i64, alt: i32) -> SllConfig {
     return SllConfig { state, alt, pr: (rest % PR_BITS) as i32, stack: (rest / PR_BITS) as i32 };
 }
 
+fn bottom_of(place: i64) -> i32 {
+    return place_of(place, 0).stack % SLL_BOTTOMS;
+}
+
 /// How far `place`'s bottom frame sits above frame 1, in place keys, where it
 /// is an escape frame; 0 on `SLL_NO_CALLER`.
 fn frame_shift(place: i64) -> i64 {
-    let bottom = place_of(place, 0).stack % SLL_BOTTOMS;
+    let bottom = bottom_of(place);
     if bottom == SLL_NO_CALLER {
         return 0;
     }
@@ -157,6 +161,10 @@ impl KeySet {
     }
 
     fn clear(&mut self) {
+        if self.stamp == i32::MAX {
+            *self = KeySet::with_bits(self.bits);
+            return;
+        }
         self.stamp += 1;
         self.count = 0;
     }
@@ -352,7 +360,7 @@ impl SllExplorer {
     fn closure_key(place: i64, step: i32) -> i64
         contract SLL_BOTTOMS < 8
     {
-        if place_of(place, 0).stack % SLL_BOTTOMS == SLL_NO_CALLER {
+        if bottom_of(place) == SLL_NO_CALLER {
             return place * 8 + (step + 1) as i64;
         }
         return (place - frame_shift(place)) * 8;
