@@ -1320,9 +1320,7 @@ fn is_pure_field_chain(body: &Body, e: ExprId) -> bool {
     }
 }
 
-/// Record a field-access write into `field_writes`, keyed by the pointee type
-/// of the assigned object and the local it goes through.
-fn record_written_field_type(
+fn record_field_write(
     body: &Body,
     target: ExprId,
     modified: &mut ModifiedVars,
@@ -1366,7 +1364,7 @@ fn mark_assignment_target_as_modified(
         } => {
             let inner = *inner;
             let field_index = *field_index;
-            record_written_field_type(body, e, modified, type_table);
+            record_field_write(body, e, modified, type_table);
             if let Some(inner_e) = inner.as_expr()
                 && let ExprKind::Local { index, .. } = &body.exprs[inner_e].kind
             {
