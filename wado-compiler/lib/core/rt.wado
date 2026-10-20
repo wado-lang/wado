@@ -307,17 +307,15 @@ internal fn cm_await_blocked(handle: i32) -> i32 {
 }
 
 /// The `CopyResult` a packed CM copy reports (`CanonicalABI.md`): the low
-/// nibble of `(count << 4) | status`.
+/// nibble of `(count << 4) | status`. Cancellation is unreachable: no binding
+/// cancels a copy.
 #[compiler_item("cm_copy_result")]
 internal fn cm_copy_result(packed: i32) -> CopyResult {
-    let status = packed & 0xf;
-    if status == 0 {
-        return CopyResult::Completed;
-    }
-    if status == 1 {
-        return CopyResult::Dropped;
-    }
-    return CopyResult::Cancelled;
+    return match packed & 0xf {
+        0 => CopyResult::Completed,
+        1 => CopyResult::Dropped,
+        _ => unreachable(),
+    };
 }
 
 /// How a future write whose packed result is `packed` ended, a BLOCKED one
