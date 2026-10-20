@@ -196,13 +196,11 @@ impl TypeSystem {
     /// Whether `method` may hand back a reference its arguments did not bring:
     /// one its declared return type spells, not one a type parameter binds.
     pub(crate) fn may_return_new_reference(&self, method: DefId) -> bool {
-        self.signatures
-            .method_sig(method)
-            .is_none_or(|sig| {
-                sig.decl.return_type.is_some_and(|ret| {
-                    self.may_hold_reference_from(ret, false, &mut IndexSet::default())
-                })
+        self.signatures.method_sig(method).is_none_or(|sig| {
+            sig.decl.return_type.is_some_and(|ret| {
+                self.may_hold_reference_from(ret, false, &mut IndexSet::default())
             })
+        })
     }
 
     /// A declaration's fields name its own parameters, which its arguments
@@ -240,9 +238,10 @@ impl TypeSystem {
                 members.extend(self.case_payload_types(type_id).unwrap_or_default());
                 (type_args, members)
             }
-            ResolvedType::Variant { .. } => {
-                (Vec::new(), self.case_payload_types(type_id).unwrap_or_default())
-            }
+            ResolvedType::Variant { .. } => (
+                Vec::new(),
+                self.case_payload_types(type_id).unwrap_or_default(),
+            ),
         };
         if !walked.insert((self.type_table.borrow().type_key(type_id), params)) {
             return false;

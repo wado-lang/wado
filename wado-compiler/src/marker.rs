@@ -30,8 +30,8 @@
 //! resolved with the rest of the module.
 
 use crate::ast::{
-    AstId, Block, CallExpr, EffectsSource, Expr, Function, GenericType, IdentExpr, ImplBlock,
-    Item, Literal, LiteralExpr, MatchArm, MatchExpr, MethodCallExpr, Module, NamedType, Param,
+    AstId, Block, CallExpr, EffectsSource, Expr, Function, GenericType, IdentExpr, ImplBlock, Item,
+    Literal, LiteralExpr, MatchArm, MatchExpr, MethodCallExpr, Module, NamedType, Param,
     PathSegment, Pattern, ReturnKeyword, ReturnStmt, SelfKind, Stmt, Type, Visibility,
 };
 use crate::compiler_item::{CompilerItem, parse_compiler_item_attrs};
@@ -57,7 +57,10 @@ enum Derived {
 
 /// Write out every marker whose trait is the compiler's `From` or `Waitable`,
 /// however the module spells it.
-pub(crate) fn write_out_markers(modules: &mut IndexMap<ModuleSource, Module>, symbols: &SymbolTable) {
+pub(crate) fn write_out_markers(
+    modules: &mut IndexMap<ModuleSource, Module>,
+    symbols: &SymbolTable,
+) {
     for (source, at, derived) in derived_markers(modules, symbols) {
         let module = modules.get_mut(&source).expect("collected from `modules`");
         let Item::Impl(block) = &module.items[at] else {
@@ -134,7 +137,10 @@ fn trait_decl(modules: &IndexMap<ModuleSource, Module>, item: CompilerItem) -> O
 
 /// Each case of the variant declared at `decl`, and whether it carries a
 /// payload; `None` where `decl` declares no variant.
-fn variant_cases(modules: &IndexMap<ModuleSource, Module>, decl: AstId) -> Option<Vec<(String, bool)>> {
+fn variant_cases(
+    modules: &IndexMap<ModuleSource, Module>,
+    decl: AstId,
+) -> Option<Vec<(String, bool)>> {
     modules
         .values()
         .flat_map(|m| &m.items)
@@ -218,7 +224,10 @@ fn method(
 fn from_method(module: &mut Module, source: &Type, span: Span) -> Function {
     let mut fresh = || module.alloc_ast_id();
     let param_type = source.refreshed(&mut fresh);
-    let turbofish = vec![named_type(fresh(), "Self", span), source.refreshed(&mut fresh)];
+    let turbofish = vec![
+        named_type(fresh(), "Self", span),
+        source.refreshed(&mut fresh),
+    ];
     let return_type = named_type(fresh(), "Self", span);
     let callee = Expr::Ident(IdentExpr {
         id: fresh(),
@@ -334,5 +343,12 @@ fn waitable_method(module: &mut Module, cases: &[(String, bool)], span: Span) ->
         args: vec![named_type(fresh(), "ResourceId", span)],
         span,
     });
-    method(module, "waitable_id", vec![self_param], return_type, value, span)
+    method(
+        module,
+        "waitable_id",
+        vec![self_param],
+        return_type,
+        value,
+        span,
+    )
 }

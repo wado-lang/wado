@@ -483,7 +483,10 @@ fn cm_wait_event(code: i32, out_ptr: i32) -> WaitEvent {
     let handle = builtin::i32_load(out_ptr);
     let payload = builtin::i32_load(out_ptr + 4);
     let freed = builtin::realloc(out_ptr, 8, 4, 0);
-    let copy = StreamCopy { count: cm_packed_count(payload), result: cm_copy_result(payload) };
+    let copy = StreamCopy {
+        count: cm_packed_count(payload),
+        result: cm_copy_result(payload),
+    };
     let event = match code {
         1 => ReadyEvent::Call(call_state(payload as u32)),
         2 => ReadyEvent::StreamRead(copy),

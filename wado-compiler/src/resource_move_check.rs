@@ -164,7 +164,9 @@ impl From<ResourceMoveError> for Diagnostic {
             ),
             MoveError::ReturnsLocalReference { owner } => (
                 Code::TypeMismatch,
-                format!("cannot return a reference into `{owner}`, which drops as the body returns"),
+                format!(
+                    "cannot return a reference into `{owner}`, which drops as the body returns"
+                ),
             ),
             MoveError::ReferenceEscapes { holder, owner } => (
                 Code::TypeMismatch,
@@ -515,6 +517,12 @@ struct PlacePath<'e> {
     fields: Vec<&'e str>,
 }
 
+impl PlacePath<'_> {
+    fn owned_fields(&self) -> Vec<String> {
+        self.fields.iter().map(|f| (*f).to_string()).collect()
+    }
+}
+
 struct MoveWalker<'a, 'c> {
     checker: &'c mut Checker<'a>,
     affine_params: Vec<String>,
@@ -725,9 +733,7 @@ impl MoveWalker<'_, '_> {
         let since = self.disturbances.get(&owner.def)?.get(owner.disturbed..)?;
         since
             .iter()
-            .find(|d| {
-                d.via != holder && paths_overlap(&d.path, &path)
-            })
+            .find(|d| d.via != holder && paths_overlap(&d.path, &path))
             .map(|d| Gone::Disturbed(d.span))
     }
 
@@ -745,7 +751,7 @@ impl MoveWalker<'_, '_> {
             return;
         };
         let path: Vec<String> = Self::place_path(expr)
-            .map(|place| place.fields.iter().map(|f| (*f).to_string()).collect())
+            .map(|place| place.owned_fields())
             .unwrap_or_default();
         let mut places = vec![(via, path)];
         if let Some(owners) = self.flow.holders.get(&via) {
@@ -791,10 +797,7 @@ impl MoveWalker<'_, '_> {
             return;
         };
         let name = place.root.name.clone();
-        if matches!(
-            self.sem().symbol_at(def).map(|s| &s.kind),
-            Some(SymbolKind::Global(_))
-        ) {
+        if self.global_name(def).is_some() {
             self.report(MoveError::GlobalByValue { name }, place.root.span);
             return;
         }
@@ -820,8 +823,9 @@ impl MoveWalker<'_, '_> {
             return;
         }
         self.refuse_move_out_of_drop(expr);
-        let path = place.fields.iter().map(|f| (*f).to_string()).collect();
-        self.flow.moved.insert((def, path), place.root.span);
+        self.flow
+            .moved
+            .insert((def, place.owned_fields()), place.root.span);
     }
 
     fn type_name_of(&self, expr: &Expr) -> String {
@@ -1063,7 +1067,12 @@ impl MoveWalker<'_, '_> {
             inner.refuse_returned(&closure.body);
         }
         let mut outside = outside_params;
-        outside.extend(inner.captures.iter().map(|(def, name)| (*def, name.clone())));
+        outside.extend(
+            inner
+                .captures
+                .iter()
+                .map(|(def, name)| (*def, name.clone())),
+        );
         inner.refuse_escapes(&outside);
 
         let MoveWalker {
@@ -1119,7 +1128,7 @@ impl MoveWalker<'_, '_> {
         match &a.target {
             Expr::Ident(ident) => {
                 if let Some(def) = self.note_capture(ident) {
-                    self.rebind(def, &ident.name, owners);
+                    self.rebind(def, owners);
                 }
             }
             target => {
@@ -1135,8 +1144,8 @@ impl MoveWalker<'_, '_> {
     }
 
     /// A whole binding takes a new value, referring into `owners` alone.
-    fn rebind(&mut self, def: AstId, name: &str, owners: Owners) {
-        if self.refuse_global_store(def, name, &owners) {
+    fn rebind(&mut self, def: AstId, owners: Owners) {
+        if self.refuse_global_store(def, &owners) {
             return;
         }
         if owners.is_empty() {
@@ -1148,12 +1157,7 @@ impl MoveWalker<'_, '_> {
 
     /// The binding `def` may now refer into `owners` too, other than itself.
     fn store(&mut self, def: AstId, owners: &Owners) {
-        let name = self
-            .sem()
-            .symbol_at(def)
-            .map(|s| s.name.clone())
-            .unwrap_or_default();
-        if owners.is_empty() || self.refuse_global_store(def, &name, owners) {
+        if owners.is_empty() || self.refuse_global_store(def, owners) {
             return;
         }
         let into = self.flow.holders.entry(def).or_default();
@@ -1166,24 +1170,29 @@ impl MoveWalker<'_, '_> {
 
     /// Refuse a store of a reference into an affine local in a global, which
     /// outlives every local. True where `def` is a global.
-    fn refuse_global_store(&mut self, def: AstId, name: &str, owners: &Owners) -> bool {
-        if !matches!(
-            self.sem().symbol_at(def).map(|s| &s.kind),
-            Some(SymbolKind::Global(_))
-        ) {
+    fn refuse_global_store(&mut self, def: AstId, owners: &Owners) -> bool {
+        let Some(global) = self.global_name(def) else {
             return false;
-        }
+        };
         if let Some(site) = owners.values().find(|site| site.affine) {
             let span = site.span;
             self.report(
                 MoveError::GlobalHoldsReference {
-                    global: name.to_string(),
+                    global,
                     owner: site.name.clone(),
                 },
                 span,
             );
         }
         true
+    }
+
+    /// The name of `def`, where it is a global.
+    fn global_name(&self, def: AstId) -> Option<String> {
+        self.sem()
+            .symbol_at(def)
+            .filter(|s| matches!(s.kind, SymbolKind::Global(_)))
+            .map(|s| s.name.clone())
     }
 
     /// The locals a write through `target` may land in: its root, and what the
@@ -1217,13 +1226,13 @@ impl MoveWalker<'_, '_> {
         let mut owners = Owners::default();
         let mut targets = Vec::new();
         if let Some(mc) = method {
+            let writes = self.sem().method_call_takes_mut_receiver(mc.id);
             if self.sem().method_call_consumes_receiver(mc.id) {
                 merge_owners(&mut owners, self.owners_of(&mc.receiver));
             } else {
-                let writes = self.sem().method_call_takes_mut_receiver(mc.id);
                 merge_owners(&mut owners, self.reference_owners(&mc.receiver, writes));
             }
-            if self.sem().method_call_takes_mut_receiver(mc.id) {
+            if writes {
                 targets.extend(self.write_targets(&mc.receiver));
                 self.disturb(&mc.receiver);
             }
@@ -1236,7 +1245,11 @@ impl MoveWalker<'_, '_> {
             }
         }
         for def in targets {
-            if self.sem().local_type(def).is_none_or(|ty| self.sem().may_hold_reference(ty)) {
+            if self
+                .sem()
+                .local_type(def)
+                .is_none_or(|ty| self.sem().may_hold_reference(ty))
+            {
                 self.store(def, &owners);
             }
         }
@@ -1259,24 +1272,22 @@ impl MoveWalker<'_, '_> {
         }
         let mut owners = Owners::default();
         match expr {
-            Expr::Ident(_) | Expr::FieldAccess(_) | Expr::Index(_) => {
-                match place_root(expr) {
-                    Some(root) => {
-                        if let Some(held) = self
-                            .sem()
-                            .referenced_symbol(root.id)
-                            .and_then(|def| self.flow.holders.get(&def))
-                        {
-                            owners.clone_from(held);
-                        }
+            Expr::Ident(_) | Expr::FieldAccess(_) | Expr::Index(_) => match place_root(expr) {
+                Some(root) => {
+                    if let Some(held) = self
+                        .sem()
+                        .referenced_symbol(root.id)
+                        .and_then(|def| self.flow.holders.get(&def))
+                    {
+                        owners.clone_from(held);
                     }
-                    None => match expr {
-                        Expr::FieldAccess(fa) => owners = self.owners_of(&fa.expr),
-                        Expr::Index(ix) => owners = self.owners_of(&ix.expr),
-                        _ => unreachable!("an identifier is a place root"),
-                    },
                 }
-            }
+                None => match expr {
+                    Expr::FieldAccess(fa) => owners = self.owners_of(&fa.expr),
+                    Expr::Index(ix) => owners = self.owners_of(&ix.expr),
+                    _ => unreachable!("an identifier is a place root"),
+                },
+            },
             Expr::Unary(u) => match u.op {
                 ast::UnaryOp::Ref => owners = self.reference_owners(&u.expr, false),
                 ast::UnaryOp::MutRef => owners = self.reference_owners(&u.expr, true),
@@ -1340,16 +1351,9 @@ impl MoveWalker<'_, '_> {
             Expr::LabeledBlock(lb) => owners = self.labeled_block_owners(&lb.label, &lb.block),
             Expr::WithHandler(w) => owners = self.block_owners(&w.body),
             Expr::If(if_expr) => {
-                owners = self.block_owners(&if_expr.then_block);
-                if let Some(eb) = &if_expr.else_block {
-                    merge_owners(&mut owners, self.block_owners(eb));
-                }
+                owners = self.if_owners(&if_expr.then_block, if_expr.else_block.as_ref());
             }
-            Expr::Match(m) => {
-                for arm in &m.arms {
-                    merge_owners(&mut owners, self.owners_of(&arm.body));
-                }
-            }
+            Expr::Match(m) => owners = self.arms_owners(&m.arms),
             Expr::Closure(c) => {
                 owners = self.closure_owners.get(&c.id).cloned().unwrap_or_default();
             }
@@ -1396,9 +1400,8 @@ impl MoveWalker<'_, '_> {
                 if let Some(writes) = borrow
                     && self.sem().local_type(def).is_some()
                 {
-                    let path = place.fields.iter().map(|f| (*f).to_string()).collect();
                     owners.insert(
-                        self.owner(def, path),
+                        self.owner(def, place.owned_fields()),
                         OwnerSite {
                             name: place.root.name.clone(),
                             span: expr.span(),
@@ -1416,23 +1419,27 @@ impl MoveWalker<'_, '_> {
     fn block_owners(&self, block: &Block) -> Owners {
         match block.stmts.last() {
             Some(Stmt::Expr(e)) => self.owners_of(&e.expr),
-            Some(Stmt::If(s)) => {
-                let mut owners = self.block_owners(&s.then_block);
-                if let Some(eb) = &s.else_block {
-                    merge_owners(&mut owners, self.block_owners(eb));
-                }
-                owners
-            }
-            Some(Stmt::Match(m)) => {
-                let mut owners = Owners::default();
-                for arm in &m.arms {
-                    merge_owners(&mut owners, self.owners_of(&arm.body));
-                }
-                owners
-            }
+            Some(Stmt::If(s)) => self.if_owners(&s.then_block, s.else_block.as_ref()),
+            Some(Stmt::Match(m)) => self.arms_owners(&m.arms),
             Some(Stmt::LabeledBlock(lb)) => self.labeled_block_owners(&lb.label, &lb.block),
             _ => Owners::default(),
         }
+    }
+
+    fn if_owners(&self, then_block: &Block, else_block: Option<&Block>) -> Owners {
+        let mut owners = self.block_owners(then_block);
+        if let Some(eb) = else_block {
+            merge_owners(&mut owners, self.block_owners(eb));
+        }
+        owners
+    }
+
+    fn arms_owners(&self, arms: &[ast::MatchArm]) -> Owners {
+        let mut owners = Owners::default();
+        for arm in arms {
+            merge_owners(&mut owners, self.owners_of(&arm.body));
+        }
+        owners
     }
 
     fn labeled_block_owners(&self, label: &str, block: &Block) -> Owners {
@@ -1441,6 +1448,13 @@ impl MoveWalker<'_, '_> {
             merge_owners(&mut owners, broken.clone());
         }
         owners
+    }
+
+    /// `pattern` binds afresh to what `value` refers into.
+    fn bind_to(&mut self, pattern: &Pattern, value: &Expr) {
+        self.bind_pattern(pattern);
+        let owners = self.owners_of(value);
+        self.hold_bindings(pattern, &owners);
     }
 
     /// Bind each of `pattern`'s bindings that may hold a reference to `owners`.
@@ -1470,17 +1484,20 @@ impl MoveWalker<'_, '_> {
 
     /// Refuse a returned value referring into an affine local of the body.
     fn refuse_returned(&mut self, value: &Expr) {
-        let owners = self.owners_of(value);
-        let local = owners
-            .iter()
-            .find(|(owner, site)| site.affine && self.is_own_local(owner.def));
-        if let Some((_, site)) = local {
-            let kind = MoveError::ReturnsLocalReference {
-                owner: site.name.clone(),
-            };
-            let span = site.span;
-            self.report(kind, span);
+        if let Some(site) = self.affine_own_local(&self.owners_of(value)) {
+            self.report(
+                MoveError::ReturnsLocalReference { owner: site.name },
+                site.span,
+            );
         }
+    }
+
+    /// The site of an affine local of this body among `owners`, if any.
+    fn affine_own_local(&self, owners: &Owners) -> Option<OwnerSite> {
+        owners
+            .iter()
+            .find(|(owner, site)| site.affine && self.is_own_local(owner.def))
+            .map(|(_, site)| site.clone())
     }
 
     /// At the end of the body, refuse each of `outside` that refers into an
@@ -1490,11 +1507,7 @@ impl MoveWalker<'_, '_> {
             let Some(owners) = self.flow.holders.get(holder) else {
                 continue;
             };
-            let local = owners
-                .iter()
-                .find(|(owner, site)| site.affine && self.is_own_local(owner.def))
-                .map(|(_, site)| site.clone());
-            if let Some(site) = local {
+            if let Some(site) = self.affine_own_local(owners) {
                 self.report(
                     MoveError::ReferenceEscapes {
                         holder: holder_name.clone(),
@@ -1543,10 +1556,9 @@ impl MoveWalker<'_, '_> {
                     self.visit_block(eb);
                     self.flow = matched;
                 }
-                self.bind_pattern(&l.pattern);
-                if let Some(value) = &l.value {
-                    let owners = self.owners_of(value);
-                    self.hold_bindings(&l.pattern, &owners);
+                match &l.value {
+                    Some(value) => self.bind_to(&l.pattern, value),
+                    None => self.bind_pattern(&l.pattern),
                 }
                 false
             }
@@ -1749,9 +1761,7 @@ impl MoveWalker<'_, '_> {
                     match element {
                         ConditionElement::Let { pattern, expr, .. } => {
                             self.visit_value(expr);
-                            self.bind_pattern(pattern);
-                            let owners = self.owners_of(expr);
-                            self.hold_bindings(pattern, &owners);
+                            self.bind_to(pattern, expr);
                         }
                         ConditionElement::Expr(e) => self.visit_expr(e),
                     }

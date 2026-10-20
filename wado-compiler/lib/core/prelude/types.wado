@@ -427,7 +427,7 @@ impl CallState {
     /// Whether the call resolved, by returning or by a cancel. Only a resolved
     /// call's subtask may drop: the Component Model traps on one in flight.
     pub fn is_resolved(&self) -> bool {
-        return !(*self matches { Starting | Started });
+        return !*self matches { Starting | Started };
     }
 }
 
@@ -438,7 +438,8 @@ internal fn call_state(raw: u32) -> CallState {
         1 => CallState::Started,
         2 => CallState::Returned,
         3 => CallState::CancelledBeforeStarted,
-        _ => CallState::CancelledBeforeReturned,
+        4 => CallState::CancelledBeforeReturned,
+        _ => unreachable(),
     };
 }
 
@@ -604,7 +605,10 @@ impl<affine W: Waitable> WaitableSet<W> {
                 return Option::Some(Ready { member: self.members.remove(at), event: ReadyEvent::Unreported });
             };
             if let Some(state) = delivered_state(id.handle) {
-                return Option::Some(Ready { member: self.members.remove(at), event: ReadyEvent::Call(state) });
+                return Option::Some(Ready {
+                    member: self.members.remove(at),
+                    event: ReadyEvent::Call(state),
+                });
             }
             at += 1;
         }
