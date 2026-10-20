@@ -214,9 +214,8 @@ A member is any type implementing `Waitable`. The trait is sealed: the standard
 library implements it on the calls, since a hand-written `waitable_id` could
 name a handle its value does not own. A stream or future end is no member: each
 copy on one waits inside the binding, so the host never has an event left to
-report for it. A set waiting on two
-kinds takes a variant over them, which derives the trait with the marker
-`impl Waitable for V;`. Each case holds one member, or none for one that is
+report for it. A set waiting on two kinds takes a variant over them, which
+derives the trait with the marker `impl Waitable for V;`. Each case holds one member, or none for one that is
 ready without the host:
 
 <!-- {"fixture":"waitable_set_variant_members.wado"} -->

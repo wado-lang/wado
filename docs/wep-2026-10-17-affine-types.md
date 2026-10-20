@@ -721,9 +721,9 @@ follows the Component Model's own rules:
 
 `Waitable = i32`, `WaitEvent.handle`, `Subtask::join` and `AsyncCall::join` go.
 An event loop no longer compares an integer with the resource it meant. A
-member returns moved out. A set has one member type. A loop that waits on several kinds
-declares a variant of its own and derives `Waitable` on it. The resource behind
-the set becomes internal to `core`.
+member returns moved out. A set has one member type. A loop that waits on
+several kinds declares a variant of its own and derives `Waitable` on it. The
+resource behind the set becomes internal to `core`.
 
 `Waitable` is sealed. The set trusts `waitable_id`: it joins the handle named
 there, and treats the member as ready without the host where there is none. A

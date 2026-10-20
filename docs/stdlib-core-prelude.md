@@ -761,8 +761,10 @@ that `Formatter` depends on — mirroring `impl Display for String` above.
 
 What a `WaitableSet` waits on: a value the host reports events for by its
 handle. It is sealed, so a set joins only what it can account for: the
-standard library implements it, and a variant whose cases each hold one
-derives it with `impl Waitable for V;`.
+standard library implements it on the calls, and a variant whose cases each
+hold one derives it with `impl Waitable for V;`. A stream or future end is
+none: each copy on one waits inside the binding, so the host never has an
+event left to report for it.
 
 #### `fn waitable_id(&self) -> Option<ResourceId>`
 
@@ -4418,8 +4420,7 @@ value comes back in `rest` where the reader dropped first.
 ### `pub affine struct WaitableSet<affine W: Waitable>`
 
 A set of values the host reports events for, owning each while it waits.
-A wait moves the member that is ready back out, so one that may report
-again, such as a stream, is joined again. Dropping the set drops the
+A wait moves the member that is ready back out. Dropping the set drops the
 members it still holds.
 
 A set has one member type. A loop waiting on several kinds declares a
@@ -5741,9 +5742,7 @@ Result type - either Ok(T) or Err(E)
 
 ### `pub variant ReadyEvent`
 
-What the host reported for a `WaitableSet` member. Only a call reports: a
-copy on a stream or future end waits inside the binding, so none of them
-is a member.
+What the host reported for a `WaitableSet` member.
 
 #### `Unreported`
 
