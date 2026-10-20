@@ -1,0 +1,66 @@
+// An or-pattern whose alternatives bind nothing but are compound (a case
+// with a payload, a tuple, a struct) is tested whole in one guard. The guard
+// must combine with the arm's own, and an arm lowered this way may be the
+// last one the match needs.
+use { println, Stdout } from "core:cli";
+
+variant Shape {
+    Circle(i32),
+    Square(i32),
+    Line([i32, i32]),
+    Point,
+}
+
+struct Size {
+    w: i32,
+    h: i32,
+}
+
+fn shape(s: Shape) -> i32 {
+    return match s {
+        Circle(_) | Square(0) => 1,
+        Square(_) | Line([0, _]) => 2,
+        Line(_) | Point => 3,
+    };
+}
+
+fn pair(p: [i32, i32], limit: i32) -> i32 {
+    return match p {
+        [0, _] | [_, 0] && limit > 0 => 1,
+        [0, _] | [_, 0] => 2,
+        _ => 3,
+    };
+}
+
+fn size(s: Size) -> i32 {
+    return match s {
+        Size { w: 0, .. } | Size { h: 0, .. } => 0,
+        Size { w, h } => w * h,
+    };
+}
+
+fn nested(o: Option<Option<i32>>) -> i32 {
+    return match o {
+        Some(None) | None => 0,
+        Some(Some(7)) | Some(Some(8)) => 1,
+        Some(Some(_)) => 2,
+    };
+}
+
+export fn run() with Stdout {
+    let shapes: List<Shape> = [Circle(5), Square(0), Square(4), Line([0, 9]), Line([1, 9]), Point];
+    for let s of shapes {
+        println(`shape ${shape(builtin::black_box(s))}`);
+    }
+    println(`pair ${pair(builtin::black_box([0, 3]), 1)} ${pair(builtin::black_box([3, 0]), 0)} ${pair(builtin::black_box([3, 3]), 1)}`);
+    println(`size ${size(builtin::black_box(Size { w: 0, h: 4 }))} ${size(builtin::black_box(Size { w: 3, h: 4 }))}`);
+    let opts: List<Option<Option<i32>>> = [null, Some(null), Some(Some(7)), Some(Some(8)), Some(Some(9))];
+    for let o of opts {
+        println(`nested ${nested(builtin::black_box(o))}`);
+    }
+}
+
+__DATA__
+{
+    "stdout": "shape 1\nshape 1\nshape 2\nshape 2\nshape 3\nshape 3\npair 1 2 3\nsize 0 12\nnested 0\nnested 0\nnested 1\nnested 1\nnested 2\n"
+}

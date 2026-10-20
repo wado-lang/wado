@@ -159,7 +159,7 @@ impl Footprint {
         {
             self.add_writes(condition, callees);
             for arm in std::iter::once(then_body).chain(else_body) {
-                self.add_writes_all(arm, callees.filter(|_| !is_cold_arm(arm)));
+                self.add_writes_all(arm, arm_callees(arm, callees));
             }
             return;
         }
@@ -199,12 +199,15 @@ impl Footprint {
     }
 }
 
-/// True if `arm` is marked rarely run. Keeping a load live across a call there
-/// takes a callee-saved register, saved and restored on every entry, to spare
-/// one reload. That measured slower, so `CalleeWrites` is not consulted inside
-/// one (`.claude/skills/wado-performance/trade-offs.md`).
-pub(super) fn is_cold_arm(arm: &[WirInstr]) -> bool {
-    WirInstr::marks_cold_path(arm)
+/// The `CalleeWrites` an arm consults: none in one marked rarely run. Keeping a
+/// load live across a call there takes a callee-saved register, saved and
+/// restored on every entry, to spare one reload. That measured slower
+/// (`.claude/skills/wado-performance/trade-offs.md`).
+pub(super) fn arm_callees<'c>(
+    arm: &[WirInstr],
+    callees: Option<&'c CalleeWrites>,
+) -> Option<&'c CalleeWrites> {
+    callees.filter(|_| !WirInstr::marks_cold_path(arm))
 }
 
 /// The struct fields each defined function may write, its callees' writes

@@ -5,7 +5,7 @@
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::wir::{WirInstr, WirPackage, WirType, WirTypeId};
 
-use super::util::{CalleeWrites, Footprint, is_cold_arm};
+use super::util::{CalleeWrites, Footprint, arm_callees};
 
 /// A field chain read off a local: `root.f0.f1…`, outermost field last.
 #[derive(Clone, PartialEq, Eq, Hash)]
@@ -58,7 +58,7 @@ struct Temp {
 }
 
 struct Reuser<'c> {
-    /// `None` inside a cold arm (`is_cold_arm`).
+    /// What the arm being visited consults (`arm_callees`).
     callees: Option<&'c CalleeWrites>,
     avail: Avail,
     temps: Vec<Temp>,
@@ -77,9 +77,7 @@ impl Reuser<'_> {
     fn visit_arm(&mut self, arm: &mut [WirInstr], entry: &Avail) -> Option<Avail> {
         self.avail.clone_from(entry);
         let callees = self.callees;
-        if is_cold_arm(arm) {
-            self.callees = None;
-        }
+        self.callees = arm_callees(arm, callees);
         self.visit_body(arm);
         self.callees = callees;
         let falls_through = !arm.last().is_some_and(WirInstr::always_diverges);
