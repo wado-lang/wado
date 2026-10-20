@@ -1,0 +1,22 @@
+// A call taking `&mut` may store into it what any operand refers into, so the
+// list holds a reference into `t` once `t` dropped.
+affine struct Tok {
+    id: i32,
+}
+
+impl Drop for Tok {
+    fn drop(self) {
+    }
+}
+
+test {
+    let mut seen: List<&Tok> = [];
+    blk: {
+        let t = Tok { id: 0 };
+        seen.push(&t);
+    }
+    assert seen[0].id == 0;
+}
+
+__DATA__
+{"compile_error": ":18:12: analysis error: `seen` refers into `t`, which dropped as its scope ended"}

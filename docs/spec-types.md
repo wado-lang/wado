@@ -1368,9 +1368,35 @@ A drop's effects are benign: a function declares no effect for a drop it
 performs, written or implicit. A `drop` that performs an effect other than its
 own resource's names it with [`#[benign(E)]`](./spec-attributes.md#benigne-).
 
-What a use of a value after its move or its drop does, reached through a
-reference, is [unspecified](./spec-overview.md#behavior-classes): it may trap,
-or read what the value held before.
+### References into Affine Values
+
+A value refers into a local when it is a reference to the local or to a place
+inside it, a closure capturing it, or a value built from one whose type may hold
+a reference: a struct or tuple holding one, or what a call returns when it was
+handed one. A call may store what any of its operands refers into through each
+`&mut` it takes.
+
+A value referring into an affine local is read only while the local holds what
+it read. The compiler refuses (`TYPE_MISMATCH`):
+
+- a read of it after the local moved, or after the local's scope ended;
+- a read of it after a `&mut` use of the local other than through it, such as a
+  method taking `&mut self`, which may have moved out a part of the local;
+- a `return` of it from the body declaring the local;
+- a `&mut` parameter, or a closure's capture, left holding it when the body
+  ends;
+- a store of it into a global.
+
+<!-- {"fixture":"affine_reference_used_after_move.wado"} -->
+
+```wado
+test {
+    let t = Tok { id: 7 };
+    let r = &t;
+    builtin::drop(t);
+    assert r.id == 7;
+}
+```
 
 Rationale: [WEP: Affine Types](./wep-2026-10-17-affine-types.md).
 

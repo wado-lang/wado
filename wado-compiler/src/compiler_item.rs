@@ -262,6 +262,9 @@ pub enum CompilerItem {
     /// `AffineResource` — sealed marker every affine resource holds, so
     /// `ResourceId::of` takes one and nothing else.
     AffineResource,
+    /// `Waitable` — what a `WaitableSet` holds, sealed: the standard library
+    /// implements it, and a variant derives it from its cases.
+    Waitable,
     /// `Copyable` — sealed marker of a type no value of which is affine: what
     /// an impl's parameter not declared `affine` admits (WEP: Affine Types).
     Copyable,
@@ -689,6 +692,8 @@ pub enum CompilerItem {
     CmAwaitBlocked,
     /// `core:prelude/types::CopyResult`, how a CM copy ended.
     CopyResult,
+    /// `core:prelude/types::FutureWriteResult`, how a future write ended.
+    FutureWriteResult,
     /// `core:prelude/types::StreamChunk`, what one `Stream::read` copied.
     StreamChunk,
     /// `core:prelude/types::StreamWrite`, what one `StreamWritable::write` did
@@ -698,6 +703,8 @@ pub enum CompilerItem {
     FutureWrite,
     /// `core:rt::cm_copy_result`.
     CmCopyResult,
+    /// `core:rt::cm_future_write_result`.
+    CmFutureWriteResult,
     /// `core:rt::cm_copy_count`.
     CmCopyCount,
     /// `core:rt::cm_buffer_bytes`.
@@ -768,6 +775,7 @@ impl CompilerItem {
         Self::Result,
         Self::Ordering,
         Self::CopyResult,
+        Self::FutureWriteResult,
         Self::StreamChunk,
         Self::StreamWrite,
         Self::FutureWrite,
@@ -801,6 +809,7 @@ impl CompilerItem {
         Self::Ref,
         Self::RefMut,
         Self::AffineResource,
+        Self::Waitable,
         Self::Copyable,
         Self::IndexValue,
         Self::IndexRef,
@@ -970,6 +979,7 @@ impl CompilerItem {
         Self::CmCallback,
         Self::CmAwaitBlocked,
         Self::CmCopyResult,
+        Self::CmFutureWriteResult,
         Self::CmCopyCount,
         Self::CmBufferBytes,
         Self::CmPackedCount,
@@ -1018,6 +1028,7 @@ impl CompilerItem {
             Self::Result => "result",
             Self::Ordering => "ordering",
             Self::CopyResult => "copy_result",
+            Self::FutureWriteResult => "future_write_result",
             Self::StreamChunk => "stream_chunk",
             Self::StreamWrite => "stream_write",
             Self::FutureWrite => "future_write",
@@ -1051,6 +1062,7 @@ impl CompilerItem {
             Self::Ref => "ref",
             Self::RefMut => "ref_mut",
             Self::AffineResource => "affine_resource",
+            Self::Waitable => "waitable",
             Self::Copyable => "copyable",
             Self::IndexValue => "index_value",
             Self::IndexRef => "index_ref",
@@ -1163,6 +1175,7 @@ impl CompilerItem {
             Self::CmCallback => "cm_callback",
             Self::CmAwaitBlocked => "cm_await_blocked",
             Self::CmCopyResult => "cm_copy_result",
+            Self::CmFutureWriteResult => "cm_future_write_result",
             Self::CmCopyCount => "cm_copy_count",
             Self::CmBufferBytes => "cm_buffer_bytes",
             Self::CmPackedCount => "cm_packed_count",
@@ -1274,6 +1287,7 @@ impl CompilerItem {
             | Self::CmCallback
             | Self::CmAwaitBlocked
             | Self::CmCopyResult
+            | Self::CmFutureWriteResult
             | Self::CmCopyCount
             | Self::CmBufferBytes
             | Self::CmPackedCount
@@ -1315,6 +1329,7 @@ impl CompilerItem {
             | Self::Result
             | Self::Ordering
             | Self::CopyResult
+            | Self::FutureWriteResult
             | Self::StreamChunk
             | Self::StreamWrite
             | Self::FutureWrite
@@ -1355,6 +1370,7 @@ impl CompilerItem {
             | Self::Ref
             | Self::RefMut
             | Self::AffineResource
+            | Self::Waitable
             | Self::Copyable
             | Self::IndexValue
             | Self::IndexRef
@@ -1564,6 +1580,7 @@ impl CompilerItem {
             | Self::CmCallback
             | Self::CmAwaitBlocked
             | Self::CmCopyResult
+            | Self::CmFutureWriteResult
             | Self::CmCopyCount
             | Self::CmBufferBytes
             | Self::CmPackedCount
@@ -1608,9 +1625,11 @@ impl CompilerItem {
             | Self::Subtask => CompilerItemKind::Resource,
             Self::ByteList | Self::ByteSlice => CompilerItemKind::Newtype,
             Self::Option | Self::Result => CompilerItemKind::Variant,
-            Self::Ordering | Self::Alignment | Self::CaseStyle | Self::CopyResult => {
-                CompilerItemKind::Enum
-            }
+            Self::Ordering
+            | Self::Alignment
+            | Self::CaseStyle
+            | Self::CopyResult
+            | Self::FutureWriteResult => CompilerItemKind::Enum,
             Self::StreamChunk | Self::StreamWrite | Self::FutureWrite => CompilerItemKind::Struct,
             Self::SerializeError | Self::DeserializeError => CompilerItemKind::Struct,
             Self::SerializeErrorKind | Self::DeserializeErrorKind => CompilerItemKind::Enum,
@@ -1629,6 +1648,7 @@ impl CompilerItem {
             | Self::Ref
             | Self::RefMut
             | Self::AffineResource
+            | Self::Waitable
             | Self::Copyable
             | Self::IndexValue
             | Self::IndexRef

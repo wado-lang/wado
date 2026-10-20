@@ -10555,7 +10555,7 @@ pub struct TirTraitMethod {
 /// The set is closed: the elaborator classifies the requested trait at the
 /// syntax boundary and rejects anything else with a diagnostic, so downstream
 /// synthesis never needs to re-parse a trait-name string. A `From` marker
-/// never reaches here: `from_marker` writes it out as an ordinary impl.
+/// never reaches here: `marker` writes it out as an ordinary impl.
 #[derive(Debug, Clone)]
 pub enum SynthTrait {
     Serialize,

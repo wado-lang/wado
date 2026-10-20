@@ -1,0 +1,20 @@
+// `Waitable` is sealed: a hand-written impl could report a handle the value
+// does not own, so a set would join it and drop it twice. A variant derives one
+// with the marker instead.
+struct Fake {
+    handle: i32,
+}
+
+impl Waitable for Fake {
+    fn waitable_id(&self) -> Option<ResourceId> {
+        return null;
+    }
+}
+
+export fn run() {
+}
+
+__DATA__
+{
+    "compile_error": ":8:1: type error: cannot implement `Waitable`: it is sealed, and a variant whose cases each hold one derives it with `impl Waitable for V;`"
+}

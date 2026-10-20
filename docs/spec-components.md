@@ -205,10 +205,17 @@ with Fetch => &Canned {} do {
 
 A `WaitableSet<W>` owns what it waits on. `join` moves a member in, and
 `wait` blocks until one has an event, then moves that member back out in a
-`Ready<W>` beside the event's `code` and `payload`. `poll` asks without
-blocking. A set that drops drops its remaining members first. A member is any
-affine type implementing `Waitable`, so a set waiting on calls of two result
-types takes a variant over them:
+`Ready<W>` beside the event. `poll` asks without blocking. The event is a
+`ReadyEvent`: `Call` with the `CallState` a call moved to, a copy on a stream or
+future end with how it ended, or `Unreported` for a member with no handle for
+the host to report. A set that drops drops its remaining members first.
+
+A member is any type implementing `Waitable`. The trait is sealed: the standard
+library implements it on the calls, streams and futures, since a hand-written
+`waitable_id` could name a handle its value does not own. A set waiting on two
+kinds takes a variant over them, which derives the trait with the marker
+`impl Waitable for V;`. Each case holds one member, or none for one that is
+ready without the host:
 
 <!-- {"fixture":"waitable_set_variant_members.wado"} -->
 
@@ -218,14 +225,7 @@ affine variant Timer {
     Long(AsyncCall<()>),
 }
 
-impl Waitable for Timer {
-    fn waitable_id(&self) -> Option<ResourceId> {
-        return match self {
-            Short(call) => call.waitable_id(),
-            Long(call) => call.waitable_id(),
-        };
-    }
-}
+impl Waitable for Timer;
 
 fn first_ready() -> String with MonotonicClock {
     let mut set = WaitableSet::<Timer>::new();
@@ -306,6 +306,10 @@ with a message naming it, since the reader would otherwise wait forever.
 A write hands back what it did not deliver: the part of the value a reader
 dropped before taking, or the suffix of a stream write the reader did not
 take. `FutureWritable::write` returns a `FutureWrite<T> { rest: Option<T>, result }`, and `StreamWritable::write` a `StreamWrite<T> { rest: List<T>, result }`. A caller that ignores the result drops the rest.
+
+A future write's `result` is a `FutureWriteResult`. It is `Pending` where the
+write returned before its reader read: the host then holds the value and hands
+it to the reader, so nothing comes back in `rest`.
 
 ## Linking and Resources
 

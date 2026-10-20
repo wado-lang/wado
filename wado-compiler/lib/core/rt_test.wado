@@ -2,7 +2,6 @@
 
 use { i64_add128_soft, i64_sub128_soft, i64_mul_wide_u_soft, i64_mul_wide_s_soft, log_stdout } from "core:rt";
 use { MonotonicClock } from "wasi:clocks";
-use { cm_subtask_settled } from "core:prelude/types.wado";
 
 #[expect_trap]
 test "a read with negative room is a defect" {
@@ -25,7 +24,15 @@ test "a future whose reader is gone hands its value back" {
     rx.drop();
     let written = tx.write(1);
     assert written.rest == Option::Some(1);
-    assert written.result == CopyResult::Dropped;
+    assert written.result == FutureWriteResult::Dropped;
+}
+
+test "a future write the reader has not read yet is pending" {
+    let [rx, tx] = Future::<i32>::new();
+    let written = tx.write(1);
+    assert written.rest matches { None };
+    assert written.result == FutureWriteResult::Pending;
+    assert rx.read() == Option::Some(1);
 }
 
 test "an empty waitable set has nothing to poll" {
@@ -33,26 +40,23 @@ test "an empty waitable set has nothing to poll" {
     assert ws.poll() matches { None };
 }
 
-/// A member the host does not know, so it is ready the moment it joins.
-struct Settled {
-    n: i32,
+/// Members the host does not know, so each is ready the moment it joins.
+variant Settled {
+    First,
+    Second,
 }
 
-impl Waitable for Settled {
-    fn waitable_id(&self) -> Option<ResourceId> {
-        return null;
-    }
-}
+impl Waitable for Settled;
 
 test "a member ready without the host comes back in join order" {
     let mut ws = WaitableSet::<Settled>::new();
     assert ws.is_empty();
-    ws.join(Settled { n: 1 });
-    ws.join(Settled { n: 2 });
+    ws.join(Settled::First);
+    ws.join(Settled::Second);
     assert ws.len() == 2;
     let first = ws.poll().unwrap();
-    assert first.member.n == 1 && first.code == 0;
-    assert ws.wait().member.n == 2;
+    assert first.member matches { First } && first.event matches { Unreported };
+    assert ws.wait().member matches { Second };
     assert ws.is_empty();
 }
 
@@ -72,7 +76,7 @@ test "a set drops the future reader it holds" {
     readers.join(rx);
     assert readers.poll() matches { None };
     builtin::drop(readers);
-    assert tx.write(1).result == CopyResult::Dropped;
+    assert tx.write(1).result == FutureWriteResult::Dropped;
 }
 
 /// A call the host resolves after it starts, handed back by the set that
@@ -81,7 +85,7 @@ fn delivered_call() -> AsyncCall<()> with MonotonicClock {
     let mut set = WaitableSet::<AsyncCall<()>>::new();
     set.join(MonotonicClock::wait_for(1_000_000));
     let ready = set.wait();
-    assert cm_subtask_settled(ready.code, ready.payload);
+    assert ready.event matches { Call(Returned) };
     return ready.member;
 }
 
@@ -94,7 +98,7 @@ test "a call a set delivered ends by a wait, a drop, or another set" {
     let mut again = WaitableSet::<AsyncCall<()>>::new();
     again.join(delivered_call());
     let ready = again.wait();
-    assert cm_subtask_settled(ready.code, ready.payload);
+    assert ready.event matches { Call(Returned) };
     ready.member.wait();
 }
 

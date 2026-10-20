@@ -1132,6 +1132,8 @@ pub enum TypeError {
     /// in user code — the compiler provides its impl for every eligible type.
     SealedTraitImpl {
         trait_name: String,
+        /// Whether a marker `impl Trait for T;` derives it instead.
+        derived_by_marker: bool,
         span: Span,
     },
 
@@ -2514,10 +2516,25 @@ impl TypeError {
                 ),
                 *span,
             ),
-            TypeError::SealedTraitImpl { trait_name, span } => (
+            TypeError::SealedTraitImpl {
+                trait_name,
+                derived_by_marker: false,
+                span,
+            } => (
                 Code::OrphanRule,
                 format!(
                     "cannot implement `{trait_name}`: it is a sealed, compiler-synthesized trait provided automatically for every eligible type"
+                ),
+                *span,
+            ),
+            TypeError::SealedTraitImpl {
+                trait_name,
+                derived_by_marker: true,
+                span,
+            } => (
+                Code::OrphanRule,
+                format!(
+                    "cannot implement `{trait_name}`: it is sealed, and a variant whose cases each hold one derives it with `impl {trait_name} for V;`"
                 ),
                 *span,
             ),

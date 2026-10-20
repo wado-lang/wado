@@ -6374,6 +6374,7 @@ impl Parser {
                 constants: Vec::new(),
                 methods: Vec::new(),
                 is_synthesize_request: true,
+                written_out: false,
                 rest: None,
                 span: start_span.merge(&end_span),
             });
@@ -6503,6 +6504,7 @@ impl Parser {
             constants,
             methods,
             is_synthesize_request: false,
+            written_out: false,
             rest,
             span: start_span.merge(&end_span),
         })

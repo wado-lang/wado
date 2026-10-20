@@ -20,11 +20,15 @@ use {
     CopyResult,
     Future,
     FutureWritable,
+    FutureWriteResult,
     Stream,
     StreamChunk,
+    StreamCopy,
     StreamWrite,
     StreamWritable,
+    ReadyEvent,
     WaitEvent,
+    call_state,
     cm_packed_upper,
     write_copy_is_final,
 } from "core:prelude/types.wado";
@@ -317,6 +321,20 @@ internal fn cm_copy_result(packed: i32) -> CopyResult {
     return CopyResult::Cancelled;
 }
 
+/// How a future write whose packed result is `packed` ended, a BLOCKED one
+/// pending. Cancellation is unreachable: no binding cancels a write.
+#[compiler_item("cm_future_write_result")]
+internal fn cm_future_write_result(packed: i32) -> FutureWriteResult {
+    if packed == -1 {
+        return FutureWriteResult::Pending;
+    }
+    return match cm_copy_result(packed) {
+        Completed => FutureWriteResult::Completed,
+        Dropped => FutureWriteResult::Dropped,
+        Cancelled => unreachable(),
+    };
+}
+
 /// The most elements one Canonical ABI copy moves (`CanonicalABI.md`, `MAX_LENGTH`).
 global CM_COPY_MAX: i32 = (1 << 28) - 1;
 
@@ -438,15 +456,11 @@ internal fn cm_error_context_debug_message(handle: i32) -> String {
 }
 
 /// CM adapter for waitable_set.wait().
-/// Allocates output buffer, calls waitable-set-wait, constructs WaitEvent.
 #[compiler_item("cm_waitable_set_wait")]
 internal fn cm_waitable_set_wait(ws: i32) -> WaitEvent {
     let out_ptr = builtin::realloc(0, 0, 4, 8);
     let code = builtin::waitable_set_wait(ws, out_ptr);
-    let evt_handle = builtin::i32_load(out_ptr);
-    let payload = builtin::i32_load(out_ptr + 4);
-    let freed = builtin::realloc(out_ptr, 8, 4, 0);
-    return WaitEvent { code, handle: evt_handle, payload: payload as u32 };
+    return cm_wait_event(code, out_ptr);
 }
 
 #[compiler_item("cm_waitable_set_poll")]
@@ -457,10 +471,28 @@ internal fn cm_waitable_set_poll(ws: i32) -> Option<WaitEvent> {
         let freed = builtin::realloc(out_ptr, 8, 4, 0);
         return null;
     }
-    let evt_handle = builtin::i32_load(out_ptr);
+    return Option::Some(cm_wait_event(code, out_ptr));
+}
+
+/// The event of `code` whose handle and payload the host wrote at `out_ptr`,
+/// which this frees.
+///
+/// `waitable-set.wait` is lowered with `cancellable = 0`, so `TASK_CANCELLED`
+/// (code 6) cannot arrive.
+fn cm_wait_event(code: i32, out_ptr: i32) -> WaitEvent {
+    let handle = builtin::i32_load(out_ptr);
     let payload = builtin::i32_load(out_ptr + 4);
     let freed = builtin::realloc(out_ptr, 8, 4, 0);
-    return Option::Some(WaitEvent { code, handle: evt_handle, payload: payload as u32 });
+    let copy = StreamCopy { count: cm_packed_count(payload), result: cm_copy_result(payload) };
+    let event = match code {
+        1 => ReadyEvent::Call(call_state(payload as u32)),
+        2 => ReadyEvent::StreamRead(copy),
+        3 => ReadyEvent::StreamWritten(copy),
+        4 => ReadyEvent::FutureRead(copy.result),
+        5 => ReadyEvent::FutureWritten(copy.result),
+        _ => unreachable(),
+    };
+    return WaitEvent { handle, event };
 }
 
 // `as` with a half on either side. No instruction converts a half, so a half

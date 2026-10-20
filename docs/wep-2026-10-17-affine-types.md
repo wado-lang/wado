@@ -264,6 +264,27 @@ replaces the one `base` carried, which is dropped. A type that implements
 `Drop` gives up no field this way, as SE-0429 holds for a type with a `deinit`:
 its `drop` relies on the fields it was built with.
 
+### A reference is read only while its local holds the value
+
+A reference into an affine local, and a closure capturing one, are read only
+while the local holds what they read. The move check follows them within a
+body, with no lifetime in any signature. A reference or a closure carries the
+local it names, a value built from one carries what that one carries, and a
+call's result carries what every operand carries, since no signature says which
+one it returns. A call may store any operand through each `&mut` it takes, so
+what that `&mut` reaches carries them all. The check refuses a read after the
+local moved or its scope ended, a `return` of such a value, a `&mut` parameter
+or a capture left holding one at the end of the body, and a store into a global.
+
+A `&mut` use of the local other than through the reference, such as `pop` or
+`take`, may move a part of it out, so it ends what references taken before it
+read, as Rust's exclusive borrow does. A use through the reference itself does
+not.
+
+This refuses programs a lifetime system would accept: a call handed `&t` and
+`&mut v` is taken to store `&t` into `v`, whether it does or not. Refusing more
+was preferred to behaviour left unspecified at run time.
+
 The check runs on the `Semantics` layer, so it has spans and reaches the
 editor, and it needs no instantiation to run. It runs over the standard library
 too, whose generic bodies this design relies on it to hold to moves; today's
@@ -286,10 +307,11 @@ Five operations act on places and objects:
   object into the object `r` names, after dropping what that object held, and
   zeroes the value's object, as the write-back of `*r = s2` does for a struct
   today. `r` keeps naming the object it did. Where the value's object is the
-  one `r` names (`let r = &mut x; let v = x; *r = v;`), the store traps with a
-  message naming the resource: the move into `v` nulled the only place that
-  owned the object, a reference owns nothing, so no place could own it after
-  the store.
+  one `r` names, the store traps with a message naming the resource: the move
+  out of the place nulled the only place that owned the object, a reference
+  owns nothing, so no place could own it after the store. The static rule
+  refuses `let r = &mut x; let v = x; *r = v;`, so only a reference the check
+  does not follow reaches the trap.
 - An assignment `x = value` to a place that holds an object is `*&mut x = value`, so every reference to the place sees the new value, as
   [WEP: Reference Liveness](./wep-2026-10-13-referenced-places.md) has an
   assignment to a referenced place do for a copyable value. To a null place,
@@ -305,8 +327,8 @@ Five operations act on places and objects:
 What a use of a zeroed object does is unspecified: it may trap, or read what
 the object held before. A field that cannot be null, such as an `i32`, keeps
 its value, and a box holding 0 traps only where the host checks the index. The
-compiler adds no check. A local is never read after its move, which the static
-rule reports.
+compiler adds no check. Neither a local nor a value referring into it is read
+after the local moved or dropped, which the static rule reports.
 
 Scope exit drops every affine local that is not null, in reverse declaration
 order, and a temporary at the end of its statement. A container drops every
@@ -318,14 +340,14 @@ every one of those is a place.
 
 The static rule above and this dynamic one divide the work. Copying is silent,
 so only the static rule can stop it. A use after a move or a drop that the
-static rule does not report, which is one reached through a reference, an
-element or a closure, reaches a zeroed object.
+static rule does not report reaches a zeroed object: one through a reference a
+callee kept where no body follows it.
 
 What follows for references:
 
 - A reference is to the object, as `&s` is to a struct today. It follows the
-  object through a move, and it sees the drop: in
-  `let r = &f; eat(f); r.has()`, `has` reaches the box `eat` zeroed.
+  object through a move, which is why the static rule refuses a read after one:
+  in `let r = &f; eat(f); r.has()`, `has` would reach the box `eat` zeroed.
 - A `borrow` an export receives arrives in a box that synthesis zeroes when
   the export returns. A reference that escaped the export reaches a zeroed
   box.
@@ -487,7 +509,7 @@ nothing, so the write hands it back:
 fn write(self, value: T) -> FutureWrite<T>;        // FutureWritable<affine T>
 fn write(&self, data: List<T>) -> StreamWrite<T>;  // StreamWritable<affine T>
 
-struct FutureWrite<affine T> { rest: Option<T>, result: CopyResult }
+struct FutureWrite<affine T> { rest: Option<T>, result: FutureWriteResult }
 struct StreamWrite<affine T> { rest: List<T>, result: CopyResult }
 ```
 
@@ -640,7 +662,7 @@ A waitable set holds the members joined to it, and a wait hands back the member
 that is ready:
 
 ```wado
-pub affine trait Waitable {
+pub affine trait Waitable {                       // sealed
     fn waitable_id(&self) -> Option<ResourceId>;  // None: ready without the host
 }
 
@@ -653,11 +675,23 @@ impl<affine W: Waitable> WaitableSet<W> {
     pub fn poll(&mut self) -> Option<Ready<W>>;
 }
 
-pub struct Ready<affine W> { pub member: W, pub code: i32, pub payload: u32 }
+pub struct Ready<affine W> { pub member: W, pub event: ReadyEvent }
+
+pub variant ReadyEvent {
+    Unreported,                  // no handle for the host to report
+    Call(CallState),
+    StreamRead(StreamCopy),      // StreamCopy { count, result: CopyResult }
+    StreamWritten(StreamCopy),
+    FutureRead(CopyResult),
+    FutureWritten(CopyResult),
+}
 ```
 
 `join` moves the member into the set. `wait` blocks until a member has an event,
-moves it out, and returns it with the event's code and payload. `Subtask`,
+moves it out, and returns it with the event, decoded into a `ReadyEvent`
+variant. A raw code and payload would leave every caller to decode the
+Component Model's numbering, and a caller that read a stream's count as a
+call's state would drop a call still in flight. `Subtask`,
 `Stream`, `StreamWritable`, `Future`, `FutureWritable` and `AsyncCall`
 implement `Waitable`. An `AsyncCall` that completed synchronously has no
 subtask, so its `waitable_id` is `None`, and `wait` hands it back first without
@@ -677,8 +711,20 @@ follows the Component Model's own rules:
 An event loop no longer compares an integer with the resource it meant. A
 member returns moved out, so one that may report again, such as a stream, is
 joined again. A set has one member type. A loop that waits on several kinds
-declares a variant of its own and implements `Waitable` on it, case by case. The
-resource behind the set becomes internal to `core`.
+declares a variant of its own and derives `Waitable` on it. The resource behind
+the set becomes internal to `core`.
+
+`Waitable` is sealed. The set trusts `waitable_id`: it joins the handle named
+there, and treats the member as ready without the host where there is none. A
+hand-written impl could name a handle another value owns, so that value's
+events would arrive for the wrong member, or one that owns a handle could say
+it has none. The standard library implements the trait on the values that own
+a waitable handle, and nothing else may. A loop's variant derives it with the
+marker `impl Waitable for V;`, which the compiler writes out case by case: a
+case with a payload asks the payload, and one without is ready without the
+host. `Subtask` stays public, since a function waiting on a call it was neither
+handed nor started names it as an effect, but no value of it can be had
+outside `core`.
 
 Since that resource is internal, no caller can install a handler for it, and a
 caller asked for it as an effect could only pass it on. The set's methods
@@ -824,6 +870,16 @@ declares the destructor's effects is withdrawn: a drop's effects are benign.
   declares it, is implemented for a copyable element only.
 - [x] `assert` records the values it prints by reference, and prints a moved
   one as moved.
+- [x] A reference read only while its local holds the value: the move check
+  follows what each value refers into, and refuses a read after a move, a scope
+  end or another `&mut` use, a returned reference into a local, a `&mut`
+  parameter or a capture left holding one, and a store into a global. The
+  `*r = value` fixture whose store trapped is refused at compile time.
+- [x] `Waitable` is sealed, and `impl Waitable for V;` derives it on a variant.
+  Fixtures pin a hand-written impl as an error and a set over derived variants.
+- [x] `Ready<W>` carries a `ReadyEvent` rather than a raw code and payload.
+- [x] A future write reports a `FutureWriteResult`, `Pending` where the reader
+  has not read yet, rather than claiming `Completed`.
 - [x] Spec: rewrite [Resource Ownership](./spec-components.md#resource-ownership),
   the resource paragraph, Reference Identity and the `&mut`-to-a-field rule
   of [Memory Model](./spec-memory.md), the drop of a resource in
@@ -858,18 +914,25 @@ consumes writes the loop.
 ### A closure cannot own an affine value
 
 A closure captures by reference, so it may use an affine value but never owns
-one. A closure that outlives the value's owner reaches a zeroed object on its
-first use after the drop, and what that does is unspecified.
+one, and it is refused where it would outlive the value's owner.
+
+### A callee may keep a reference no body follows
+
+The check follows a reference within the body holding it. A callee handed one
+may store it in a global, or hand a closure to the Component Model, which
+`cm_callback_key` keeps for the life of the instance. Neither is visible at the
+call, so a use after the owner drops reaches a zeroed object, and what that does
+is unspecified.
 
 ### A scalar future write does not wait for its reader
 
 A write blocks until its copy ends only for the HTTP trailers and transmission
 results. Every other `FutureWritable` write returns once the copy starts, since
-a reader in the same instance would deadlock a writer waiting on it. Such a
-write cannot report what the reader did, so one still pending reports
-`Completed` with no `rest`. An end whose copy is still pending
-cannot be dropped, so the write leaves it to the host, and the handle lives
-until the instance ends.
+a reader in the same instance would deadlock a writer waiting on it. One the
+reader has not read yet reports `Pending` with no `rest`: the value is the
+host's to deliver, and nothing says whether the reader takes it or drops first.
+An end whose copy is still pending cannot be dropped, so the write leaves it to
+the host, and the handle lives until the instance ends.
 
 ### A panic drops nothing
 

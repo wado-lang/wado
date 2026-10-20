@@ -10,14 +10,7 @@ affine variant Timer {
     Long(AsyncCall<()>),
 }
 
-impl Waitable for Timer {
-    fn waitable_id(&self) -> Option<ResourceId> {
-        return match self {
-            Short(call) => call.waitable_id(),
-            Long(call) => call.waitable_id(),
-        };
-    }
-}
+impl Waitable for Timer;
 
 fn first_ready() -> String with MonotonicClock {
     let mut set = WaitableSet::<Timer>::new();

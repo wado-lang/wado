@@ -273,12 +273,24 @@ pub struct StreamWrite<affine T> {
     pub result: CopyResult,
 }
 
+/// How a `FutureWritable::write` ended.
+#[compiler_item("future_write_result")]
+pub enum FutureWriteResult {
+    /// The reader took the value.
+    Completed,
+    /// The reader dropped first, and the value came back.
+    Dropped,
+    /// The reader has not read yet. The host holds the value and hands it to
+    /// the reader, so it is no longer the writer's.
+    Pending,
+}
+
 /// What `FutureWritable::write` did not deliver, and how its copy ended: the
 /// value comes back in `rest` where the reader dropped first.
 #[compiler_item("future_write")]
 pub struct FutureWrite<affine T> {
     pub rest: Option<T>,
-    pub result: CopyResult,
+    pub result: FutureWriteResult,
 }
 
 /// Readable end of an async sequence (WASI Component Model stream).
@@ -392,46 +404,73 @@ impl<T> StreamWritable<T> {
 }
 
 /// What a `WaitableSet` waits on: a value the host reports events for by its
-/// handle.
+/// handle. It is sealed, so a set joins only what it can account for: the
+/// standard library implements it, and a variant whose cases each hold one
+/// derives it with `impl Waitable for V;`.
+#[compiler_item("waitable")]
 pub affine trait Waitable with () {
     /// The handle the host reports this value by, or None where it is ready
     /// without the host.
     fn waitable_id(&self) -> Option<ResourceId>;
 }
 
-/// An event the host reports for a waitable handle.
-internal struct WaitEvent {
-    /// CM event code:
-    ///   1 = subtask, 2 = stream-read, 3 = stream-write, 4 = future-read, 5 = future-write, 6 = cancelled
-    internal code: i32,
-    /// The handle the event is for.
-    internal handle: i32,
-    /// Event-specific data (e.g. count|status for streams).
-    internal payload: u32,
+/// The state an async call moved to (`CanonicalABI.md`, `Subtask.State`).
+pub enum CallState {
+    Starting,
+    Started,
+    Returned,
+    CancelledBeforeStarted,
+    CancelledBeforeReturned,
 }
 
-/// `WaitEvent::code` for a subtask transition (CM `EventCode.SUBTASK`).
-internal global CM_EVENT_SUBTASK: i32 = 1;
+impl CallState {
+    /// Whether the call resolved, by returning or by a cancel. Only a resolved
+    /// call's subtask may drop: the Component Model traps on one in flight.
+    pub fn is_resolved(&self) -> bool {
+        return !(*self matches { Starting | Started });
+    }
+}
 
-/// The last in-flight state of the CM subtask state machine: `STARTING`
-/// precedes it, and `RETURNED` and the two `CANCELLED_*` states sit above it.
-/// Settling is a comparison against this, not an equality with `RETURNED`.
-internal global CM_SUBTASK_STARTED: u32 = 1;
+/// The `CallState` the Component Model numbers `raw`.
+internal fn call_state(raw: u32) -> CallState {
+    return match raw {
+        0 => CallState::Starting,
+        1 => CallState::Started,
+        2 => CallState::Returned,
+        3 => CallState::CancelledBeforeStarted,
+        _ => CallState::CancelledBeforeReturned,
+    };
+}
 
-/// Whether an event of `code` with `payload` says a subtask resolved, which is
-/// what makes `subtask.drop` legal — the CM traps a drop of one still in flight.
-///
-/// `waitable-set.wait` is lowered with `cancellable = 0`, so `TASK_CANCELLED`
-/// cannot arrive; settling on it would drop a subtask still in flight.
-internal fn cm_subtask_settled(code: i32, payload: u32) -> bool {
-    return code == CM_EVENT_SUBTASK && payload > CM_SUBTASK_STARTED;
+/// What one copy on a stream end moved, and how it ended.
+pub struct StreamCopy {
+    pub count: i32,
+    pub result: CopyResult,
+}
+
+/// What the host reported for a `WaitableSet` member.
+pub variant ReadyEvent {
+    /// The member has no handle for the host to report, so it is ready
+    /// without one.
+    Unreported,
+    Call(CallState),
+    StreamRead(StreamCopy),
+    StreamWritten(StreamCopy),
+    FutureRead(CopyResult),
+    FutureWritten(CopyResult),
+}
+
+/// An event the host reports for a waitable handle.
+internal struct WaitEvent {
+    internal handle: i32,
+    internal event: ReadyEvent,
 }
 
 /// A subtask whose resolution a set delivered, by its handle, with the state it
 /// resolved in.
 struct Resolution {
     handle: i32,
-    state: u32,
+    state: CallState,
 }
 
 /// The resolutions sets delivered for subtasks not yet dropped. The Component
@@ -451,7 +490,7 @@ fn delivered_at(handle: i32) -> Option<i32> {
 }
 
 /// The state `handle`'s subtask resolved in, where a set delivered it.
-fn delivered_state(handle: i32) -> Option<u32> {
+fn delivered_state(handle: i32) -> Option<CallState> {
     return delivered_at(handle).map(|at: i32| DELIVERED[at].state);
 }
 
@@ -495,21 +534,17 @@ internal resource RawWaitableSet {
 /// members it still holds.
 ///
 /// A set has one member type. A loop waiting on several kinds declares a
-/// variant of its own and implements `Waitable` on it, case by case.
+/// variant of its own and derives `Waitable` on it with `impl Waitable for V;`.
 pub affine struct WaitableSet<affine W: Waitable> {
     raw: RawWaitableSet,
     members: List<W>,
 }
 
 /// A member of a `WaitableSet` that has an event, moved out of the set with
-/// the event's code and payload. A member ready without the host has code 0.
+/// the event.
 pub struct Ready<affine W> {
     pub member: W,
-    /// The Component Model's event code: 1 a subtask, 2 a stream read, 3 a
-    /// stream write, 4 a future read, 5 a future write.
-    pub code: i32,
-    /// The event's payload: a subtask's state, or a copy's count and status.
-    pub payload: u32,
+    pub event: ReadyEvent,
 }
 
 impl<affine W: Waitable> WaitableSet<W> {
@@ -560,31 +595,31 @@ impl<affine W: Waitable> WaitableSet<W> {
     }
 
     /// The first member the host has no event left to report for: one it does
-    /// not know, ready with code 0, or a subtask whose resolution a set already
+    /// not know, `Unreported`, or a subtask whose resolution a set already
     /// delivered, reported again.
     fn take_ready_without_host(&mut self) -> Option<Ready<W>> {
         let mut at = 0;
         for let member of self.members.iter_ref() {
             let Some(id) = member.waitable_id() else {
-                return Option::Some(Ready { member: self.members.remove(at), code: 0, payload: 0 });
+                return Option::Some(Ready { member: self.members.remove(at), event: ReadyEvent::Unreported });
             };
             if let Some(state) = delivered_state(id.handle) {
-                return Option::Some(Ready { member: self.members.remove(at), code: CM_EVENT_SUBTASK, payload: state });
+                return Option::Some(Ready { member: self.members.remove(at), event: ReadyEvent::Call(state) });
             }
             at += 1;
         }
         return null;
     }
 
-    fn take_reported(&mut self, event: WaitEvent) -> Ready<W> {
-        builtin::waitable_join(event.handle, 0);
-        if cm_subtask_settled(event.code, event.payload) {
-            DELIVERED.push(Resolution { handle: event.handle, state: event.payload });
+    fn take_reported(&mut self, reported: WaitEvent) -> Ready<W> {
+        builtin::waitable_join(reported.handle, 0);
+        if let Call(state) = reported.event && state.is_resolved() {
+            DELIVERED.push(Resolution { handle: reported.handle, state });
         }
         let mut at = 0;
         for let member of self.members.iter_ref() {
-            if member.waitable_id().map(|id: ResourceId| id.handle) == Option::Some(event.handle) {
-                return Ready { member: self.members.remove(at), code: event.code, payload: event.payload };
+            if member.waitable_id().map(|id: ResourceId| id.handle) == Option::Some(reported.handle) {
+                return Ready { member: self.members.remove(at), event: reported.event };
             }
             at += 1;
         }
@@ -682,9 +717,6 @@ pub affine struct AsyncCall<affine T> {
     lift: fn(i32) -> T,
 }
 
-/// The `subtask.cancel` state of a subtask that returned before the cancel.
-internal global CM_SUBTASK_RETURNED: u32 = 2;
-
 impl<affine T> AsyncCall<T> {
     /// Wait for the subtask to complete and return the lifted result.
     pub fn wait(self) -> T with Subtask {
@@ -694,7 +726,7 @@ impl<affine T> AsyncCall<T> {
             set.join(subtask);
             loop {
                 let ready = set.wait();
-                if cm_subtask_settled(ready.code, ready.payload) {
+                if ready.event matches { Call(state) && state.is_resolved() } {
                     drop_resolved(ready.member);
                     break;
                 }
@@ -729,9 +761,9 @@ impl<affine T> Drop for AsyncCall<T> {
                 // `subtask.cancel` traps on a waitable still in a set. Joining
                 // set 0 leaves whatever set it is in.
                 builtin::waitable_join(handle, 0);
-                subtask.cancel();
+                call_state(subtask.cancel());
             };
-            returned = state == CM_SUBTASK_RETURNED;
+            returned = state == CallState::Returned;
             drop_resolved(subtask);
         }
         if returned && let Some(buffer) = self.buffer {

@@ -11,7 +11,7 @@ fn delivered() -> AsyncCall<()> with MonotonicClock {
     set.join(MonotonicClock::wait_for(1_000_000));
     loop {
         let ready = set.wait();
-        if ready.payload > 1 {
+        if ready.event matches { Call(state) && state.is_resolved() } {
             return ready.member;
         }
         set.join(ready.member);
@@ -22,13 +22,7 @@ affine variant Timer {
     Only(AsyncCall<()>),
 }
 
-impl Waitable for Timer {
-    fn waitable_id(&self) -> Option<ResourceId> {
-        return match self {
-            Only(call) => call.waitable_id(),
-        };
-    }
-}
+impl Waitable for Timer;
 
 export fn run() with (Stdout, MonotonicClock) {
     delivered().wait();

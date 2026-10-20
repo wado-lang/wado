@@ -10,7 +10,7 @@ Assignment, parameter passing, and return all perform a deep copy of the value. 
 
 The copy stops at a reference. A `&T` or `&mut T`, wherever it appears, is copied as a reference, and the copy aliases the same value. So a `Slice<T>` or a `StrSlice`, which is a struct holding a reference to its backing array, shares its elements with the value it views.
 
-A resource is a handle to something the host owns, not a Wado value, so it is never deep-copied. A value of an [affine type](./spec-types.md#affine-types), an affine resource or anything holding one, is move-only: assignment, parameter passing, and return move it, and the source is unusable afterwards (see [Resource Ownership](./spec-components.md#resource-ownership)). A reference to an affine value names the value itself, not a copy, so it sees every write to it, and it sees a move or a drop of it too.
+A resource is a handle to something the host owns, not a Wado value, so it is never deep-copied. A value of an [affine type](./spec-types.md#affine-types), an affine resource or anything holding one, is move-only: assignment, parameter passing, and return move it, and the source is unusable afterwards (see [Resource Ownership](./spec-components.md#resource-ownership)). A reference to an affine value names the value itself, not a copy, so it sees every write to it. It is read only while the value is in place: a read after a move or a drop of it is a compile error (see [References into Affine Values](./spec-types.md#references-into-affine-values)).
 
 <!-- {"fixture":"spec_memory_copy.wado"} -->
 

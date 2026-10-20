@@ -941,13 +941,14 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             CompilerItem::Ref,
             CompilerItem::RefMut,
             CompilerItem::AffineResource,
+            CompilerItem::Waitable,
         ] {
             let Some(sealed) = type_table.borrow().compiler_items().trait_def(sealed_item) else {
                 continue;
             };
             let sealed_name = resolutions.defs().name(sealed).to_string();
             for header in trait_env.impl_headers.values() {
-                if !is_user_local(&header.module) {
+                if !is_user_local(&header.module) || header.written_out {
                     continue;
                 }
                 if header.trait_def() == Some(sealed) {
@@ -955,6 +956,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                         &header.module,
                         TypeError::SealedTraitImpl {
                             trait_name: sealed_name.clone(),
+                            derived_by_marker: sealed_item == CompilerItem::Waitable,
                             span: header.span,
                         },
                     );

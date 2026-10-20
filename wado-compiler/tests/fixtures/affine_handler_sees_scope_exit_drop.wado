@@ -28,7 +28,7 @@ impl FutureWritable<i32> for Counter {
     fn write(&mut self, this: &FutureWritable<i32>, value: i32) -> FutureWrite<i32> {
         let _ = this;
         self.stored = Option::Some(value);
-        resume FutureWrite { rest: null, result: CopyResult::Completed }
+        resume FutureWrite { rest: null, result: FutureWriteResult::Completed }
     }
     fn drop(&mut self, this: &FutureWritable<i32>) {
         let _ = this;

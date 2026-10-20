@@ -57,6 +57,20 @@ enum MoveError {
     DropPartialMove { type_name: String },
     /// `..base` over a type that implements `Drop`.
     DropSpread { type_name: String },
+    /// A value read after a local it refers into moved, dropped, or went to a
+    /// `&mut` use other than through the value.
+    DanglingReference {
+        holder: String,
+        owner: String,
+        gone: Gone,
+    },
+    /// A body returning a reference into a local of its own.
+    ReturnsLocalReference { owner: String },
+    /// A `&mut` parameter or a capture keeping a reference into a local of the
+    /// body past its end.
+    ReferenceEscapes { holder: String, owner: String },
+    /// A global keeping a reference into a local.
+    GlobalHoldsReference { global: String, owner: String },
 }
 
 impl From<ResourceMoveError> for Diagnostic {
@@ -127,6 +141,40 @@ impl From<ResourceMoveError> for Diagnostic {
                 format!(
                     "`{type_name}` implements `Drop`, so `..base` cannot take fields from it: its `drop` relies on the fields it was built with"
                 ),
+            ),
+            MoveError::DanglingReference {
+                holder,
+                owner,
+                gone,
+            } => (
+                Code::TypeMismatch,
+                match gone {
+                    Gone::Moved(at) => format!(
+                        "`{holder}` refers into `{owner}`, which moved at {}:{}",
+                        at.line, at.column,
+                    ),
+                    Gone::Ended => format!(
+                        "`{holder}` refers into `{owner}`, which dropped as its scope ended"
+                    ),
+                    Gone::Disturbed(at) => format!(
+                        "`{holder}` refers into `{owner}`, which a `&mut` use at {}:{} may have moved out of",
+                        at.line, at.column,
+                    ),
+                },
+            ),
+            MoveError::ReturnsLocalReference { owner } => (
+                Code::TypeMismatch,
+                format!("cannot return a reference into `{owner}`, which drops as the body returns"),
+            ),
+            MoveError::ReferenceEscapes { holder, owner } => (
+                Code::TypeMismatch,
+                format!(
+                    "`{holder}` keeps a reference into `{owner}` past the body, where `{owner}` drops"
+                ),
+            ),
+            MoveError::GlobalHoldsReference { global, owner } => (
+                Code::TypeMismatch,
+                format!("global `{global}` cannot keep a reference into `{owner}`, which drops"),
             ),
         };
         Diagnostic {
@@ -241,7 +289,7 @@ impl Checker<'_> {
                     self.check_function(method, &[], false);
                 }
             }
-            Item::Test(test) => self.check_body(&test.body, Vec::new(), false),
+            Item::Test(test) => self.check_body(&test.body, Vec::new(), false, Vec::new()),
             _ => {}
         }
     }
@@ -252,20 +300,32 @@ impl Checker<'_> {
         };
         let mut scope = outer.to_vec();
         scope.extend(affine_params(&func.type_params));
-        self.check_body(body, scope, drop_body);
+        let outside = func
+            .params
+            .iter()
+            .filter(|p| self.is_mut_ref_local(p.id))
+            .map(|p| (p.id, p.name.clone()))
+            .collect();
+        self.check_body(body, scope, drop_body, outside);
     }
 
-    fn check_body(&mut self, body: &Block, affine_params: Vec<String>, drop_body: bool) {
-        let mut walker = MoveWalker {
-            checker: self,
-            affine_params,
-            drop_body,
-            moved: IndexMap::default(),
-            guard_bindings: IndexSet::default(),
-            closure_locals: None,
-            suppress: 0,
-        };
+    fn is_mut_ref_local(&self, id: AstId) -> bool {
+        self.sem
+            .local_type(id)
+            .is_some_and(|ty| matches!(self.sem.types.get(ty), ResolvedType::MutRef(_)))
+    }
+
+    /// `outside` holds the `&mut` parameters, which outlive the body.
+    fn check_body(
+        &mut self,
+        body: &Block,
+        affine_params: Vec<String>,
+        drop_body: bool,
+        outside: Vec<(AstId, String)>,
+    ) {
+        let mut walker = MoveWalker::new(self, affine_params, drop_body);
         walker.visit_block(body);
+        walker.refuse_escapes(&outside);
     }
 
     /// A named struct or variant is declared `affine` exactly when a field or a
@@ -369,12 +429,85 @@ enum LoopHead<'a> {
     None,
     /// `while` and C-style `for`: a `let` in it binds afresh each time.
     Condition(&'a Condition),
-    /// `for ... of`: the binding takes the next element.
-    Binding(&'a Pattern),
+    /// `for ... of`: the binding takes the next element, which refers into
+    /// what the operand refers into.
+    Binding(&'a Pattern, Owners),
 }
 
 /// Each moved place, a binding and a field path into it, with where it moved.
 type Moves = IndexMap<(AstId, Vec<String>), Span>;
+
+/// Why a local a value refers into no longer holds what the value reads.
+#[derive(Debug, Clone, Copy)]
+enum Gone {
+    Moved(Span),
+    Ended,
+    /// A `&mut` use of the local, not through the value, which may have moved
+    /// a part of it out.
+    Disturbed(Span),
+}
+
+/// A local a reference reaches into: the binding, the field path into it,
+/// which binding of it, since a loop binds its locals afresh each iteration,
+/// and how many `&mut` uses of it came before.
+#[derive(Clone, PartialEq, Eq, Hash)]
+struct Owner {
+    def: AstId,
+    path: Vec<String>,
+    instance: u32,
+    disturbed: usize,
+}
+
+#[derive(Clone)]
+struct OwnerSite {
+    name: String,
+    /// Where the reference was taken.
+    span: Span,
+    /// Only an affine local moves, and only dropping one ends what a reference
+    /// into it reads.
+    affine: bool,
+    /// Whether the value may write through to the local: a `&mut`, or a
+    /// closure making a `&mut` use of its capture.
+    writes: bool,
+}
+
+/// A `&mut` use of a place: `via` is the binding it went through.
+#[derive(Clone)]
+struct Disturbance {
+    via: AstId,
+    path: Vec<String>,
+    span: Span,
+}
+
+/// What a value refers into.
+type Owners = IndexMap<Owner, OwnerSite>;
+
+fn merge_owners(into: &mut Owners, from: Owners) {
+    for (owner, site) in from {
+        into.entry(owner).or_insert(site);
+    }
+}
+
+/// What a body knows at a point of it.
+#[derive(Clone, Default)]
+struct Flow {
+    moved: Moves,
+    /// What each local holding a reference refers into.
+    holders: IndexMap<AstId, Owners>,
+}
+
+impl Flow {
+    /// The state where paths join: a place moved on any of them, and a
+    /// reference held on any of them.
+    fn merge(&mut self, from: Flow) {
+        for (place, span) in from.moved {
+            self.moved.entry(place).or_insert(span);
+        }
+        for (holder, owners) in from.holders {
+            merge_owners(self.holders.entry(holder).or_default(), owners);
+        }
+    }
+}
 
 /// A place a body reads: a binding and the field path into it (`h.f.g`).
 struct PlacePath<'e> {
@@ -387,15 +520,51 @@ struct MoveWalker<'a, 'c> {
     affine_params: Vec<String>,
     /// Whether this is a `Drop::drop` body, which may move fields out of `self`.
     drop_body: bool,
-    /// Each moved place: a binding and the field path moved out of it, empty
-    /// for the binding as a whole.
-    moved: Moves,
+    flow: Flow,
     /// The bindings of the arm whose guard is being walked.
     guard_bindings: IndexSet<AstId>,
     /// Inside a closure body, the bindings it declares itself; every other
     /// local it names is a capture.
     closure_locals: Option<IndexSet<AstId>>,
+    /// Inside a closure body, each local it captures, by name.
+    captures: IndexMap<AstId, String>,
+    /// How many times each binding was bound.
+    instances: IndexMap<AstId, u32>,
+    /// The instance of each local at the end of its scope.
+    ended: IndexMap<AstId, u32>,
+    /// The bindings each open scope declares, innermost last.
+    scopes: Vec<Vec<AstId>>,
+    /// The `&mut` uses of each local, in order.
+    disturbances: IndexMap<AstId, Vec<Disturbance>>,
+    /// Inside a closure body, the captures it makes a `&mut` use of.
+    disturbed_captures: IndexSet<AstId>,
+    /// What each closure the body built refers into.
+    closure_owners: IndexMap<AstId, Owners>,
+    /// What the `break` values of each labeled block refer into.
+    break_owners: IndexMap<String, Owners>,
     suppress: u32,
+}
+
+impl<'a, 'c> MoveWalker<'a, 'c> {
+    fn new(checker: &'c mut Checker<'a>, affine_params: Vec<String>, drop_body: bool) -> Self {
+        MoveWalker {
+            checker,
+            affine_params,
+            drop_body,
+            flow: Flow::default(),
+            guard_bindings: IndexSet::default(),
+            closure_locals: None,
+            captures: IndexMap::default(),
+            instances: IndexMap::default(),
+            ended: IndexMap::default(),
+            scopes: Vec::new(),
+            disturbances: IndexMap::default(),
+            disturbed_captures: IndexSet::default(),
+            closure_owners: IndexMap::default(),
+            break_owners: IndexMap::default(),
+            suppress: 0,
+        }
+    }
 }
 
 impl MoveWalker<'_, '_> {
@@ -422,7 +591,8 @@ impl MoveWalker<'_, '_> {
     /// The moved place overlapping `def.path`, if any: the place itself, one
     /// inside it, or one holding it.
     fn moved_overlap(&self, def: AstId, path: &[&str]) -> Option<Span> {
-        self.moved
+        self.flow
+            .moved
             .iter()
             .find_map(|((moved_def, moved_path), span)| {
                 let overlaps = *moved_def == def && paths_overlap(moved_path, path);
@@ -483,7 +653,7 @@ impl MoveWalker<'_, '_> {
     }
 
     fn read(&mut self, place: &PlacePath<'_>) {
-        let Some(def) = self.sem().referenced_symbol(place.root.id) else {
+        let Some(def) = self.local_use(place.root) else {
             return;
         };
         if let Some(moved_at) = self.moved_overlap(def, &place.fields) {
@@ -497,9 +667,127 @@ impl MoveWalker<'_, '_> {
         }
     }
 
+    /// The binding `ident` reads, once it is noted as a capture where it is one
+    /// and what it holds is checked to be live.
+    fn local_use(&mut self, ident: &IdentExpr) -> Option<AstId> {
+        let def = self.note_capture(ident)?;
+        self.refuse_dangling(def, ident);
+        Some(def)
+    }
+
+    /// The binding `ident` names, noted as a capture where it is one.
+    fn note_capture(&mut self, ident: &IdentExpr) -> Option<AstId> {
+        let def = self.sem().referenced_symbol(ident.id)?;
+        if self.sem().local_type(def).is_some()
+            && let Some(locals) = &self.closure_locals
+            && !locals.contains(&def)
+        {
+            self.captures.insert(def, ident.name.clone());
+        }
+        Some(def)
+    }
+
+    /// Refuse a read of `holder` once a local it refers into moved or dropped.
+    fn refuse_dangling(&mut self, holder: AstId, ident: &IdentExpr) {
+        let Some(owners) = self.flow.holders.get(&holder) else {
+            return;
+        };
+        let gone = owners.iter().find_map(|(owner, site)| {
+            site.affine
+                .then(|| self.owner_gone(holder, owner))
+                .flatten()
+                .map(|gone| (site.name.clone(), gone))
+        });
+        if let Some((owner, gone)) = gone {
+            self.report(
+                MoveError::DanglingReference {
+                    holder: ident.name.clone(),
+                    owner,
+                    gone,
+                },
+                ident.span,
+            );
+        }
+    }
+
+    /// Why `owner` no longer holds what `holder` reads through it, if it does
+    /// not.
+    fn owner_gone(&self, holder: AstId, owner: &Owner) -> Option<Gone> {
+        if self.instance(owner.def) != owner.instance
+            || self.ended.get(&owner.def) == Some(&owner.instance)
+        {
+            return Some(Gone::Ended);
+        }
+        let path: Vec<&str> = owner.path.iter().map(String::as_str).collect();
+        if let Some(moved_at) = self.moved_overlap(owner.def, &path) {
+            return Some(Gone::Moved(moved_at));
+        }
+        let since = self.disturbances.get(&owner.def)?.get(owner.disturbed..)?;
+        since
+            .iter()
+            .find(|d| {
+                d.via != holder && paths_overlap(&d.path, &path)
+            })
+            .map(|d| Gone::Disturbed(d.span))
+    }
+
+    fn disturbed_count(&self, def: AstId) -> usize {
+        self.disturbances.get(&def).map_or(0, Vec::len)
+    }
+
+    /// A `&mut` use of the place `expr` writes through: of the local it is
+    /// rooted in, and of each affine local that local writes through to.
+    fn disturb(&mut self, expr: &Expr) {
+        let Some(root) = write_root(expr) else {
+            return;
+        };
+        let Some(via) = self.sem().referenced_symbol(root.id) else {
+            return;
+        };
+        let path: Vec<String> = Self::place_path(expr)
+            .map(|place| place.fields.iter().map(|f| (*f).to_string()).collect())
+            .unwrap_or_default();
+        let mut places = vec![(via, path)];
+        if let Some(owners) = self.flow.holders.get(&via) {
+            places.extend(
+                owners
+                    .iter()
+                    .filter(|(_, site)| site.writes)
+                    .map(|(owner, _)| (owner.def, owner.path.clone())),
+            );
+        }
+        for (def, path) in places {
+            if !self.is_affine_local(def) {
+                continue;
+            }
+            if !self.is_own_local(def) {
+                self.disturbed_captures.insert(def);
+            }
+            self.disturbances.entry(def).or_default().push(Disturbance {
+                via,
+                path,
+                span: expr.span(),
+            });
+        }
+    }
+
+    fn instance(&self, def: AstId) -> u32 {
+        self.instances.get(&def).copied().unwrap_or(0)
+    }
+
+    /// The place `path` into `def` as it stands now.
+    fn owner(&self, def: AstId, path: Vec<String>) -> Owner {
+        Owner {
+            def,
+            path,
+            instance: self.instance(def),
+            disturbed: self.disturbed_count(def),
+        }
+    }
+
     /// A by-value use of the place `expr` names, whose value is affine.
     fn consume(&mut self, expr: &Expr, place: &PlacePath<'_>) {
-        let Some(def) = self.sem().referenced_symbol(place.root.id) else {
+        let Some(def) = self.local_use(place.root) else {
             return;
         };
         let name = place.root.name.clone();
@@ -533,7 +821,7 @@ impl MoveWalker<'_, '_> {
         }
         self.refuse_move_out_of_drop(expr);
         let path = place.fields.iter().map(|f| (*f).to_string()).collect();
-        self.moved.insert((def, path), place.root.span);
+        self.flow.moved.insert((def, path), place.root.span);
     }
 
     fn type_name_of(&self, expr: &Expr) -> String {
@@ -579,7 +867,7 @@ impl MoveWalker<'_, '_> {
         let Some(def) = self.sem().referenced_symbol(place.root.id) else {
             return;
         };
-        self.moved.retain(|(moved_def, moved_path), _| {
+        self.flow.moved.retain(|(moved_def, moved_path), _| {
             *moved_def != def
                 || moved_path.len() < place.fields.len()
                 || !paths_overlap(moved_path, &place.fields)
@@ -631,6 +919,11 @@ impl MoveWalker<'_, '_> {
                 for arg in &call.args {
                     self.visit_value(arg);
                 }
+                self.store_through_call(None, &call.args);
+                // A closure writes through to what it captures.
+                if matches!(call.callee, Expr::Ident(_)) {
+                    self.disturb(&call.callee);
+                }
             }
             Expr::MethodCall(mc) => {
                 if self.sem().method_call_consumes_receiver(mc.id) {
@@ -641,11 +934,13 @@ impl MoveWalker<'_, '_> {
                 for arg in &mc.args {
                     self.visit_value(arg);
                 }
+                self.store_through_call(Some(mc), &mc.args);
             }
             Expr::StaticMethodCall(smc) => {
                 for arg in &smc.args {
                     self.visit_value(arg);
                 }
+                self.store_through_call(None, &smc.args);
             }
 
             Expr::Unary(u) => self.visit_expr(&u.expr),
@@ -745,39 +1040,498 @@ impl MoveWalker<'_, '_> {
     /// sees what the frame moved before it, and moves only its own locals.
     fn visit_closure(&mut self, closure: &ClosureExpr) {
         let locals: IndexSet<AstId> = closure.params.iter().map(|p| p.id).collect();
-        let mut inner = MoveWalker {
-            checker: &mut *self.checker,
-            affine_params: self.affine_params.clone(),
-            drop_body: self.drop_body,
-            moved: self.moved.clone(),
-            guard_bindings: self.guard_bindings.clone(),
-            closure_locals: Some(locals),
-            suppress: self.suppress,
-        };
+        let outside_params: Vec<(AstId, String)> = closure
+            .params
+            .iter()
+            .filter(|p| self.checker.is_mut_ref_local(p.id))
+            .map(|p| (p.id, p.name.clone()))
+            .collect();
+        let mut inner = MoveWalker::new(
+            &mut *self.checker,
+            self.affine_params.clone(),
+            self.drop_body,
+        );
+        inner.flow = self.flow.clone();
+        inner.guard_bindings = self.guard_bindings.clone();
+        inner.closure_locals = Some(locals);
+        inner.instances = self.instances.clone();
+        inner.ended = self.ended.clone();
+        inner.disturbances = self.disturbances.clone();
+        inner.suppress = self.suppress;
         inner.visit_value(&closure.body);
+        if !matches!(closure.body, Expr::Block(_)) {
+            inner.refuse_returned(&closure.body);
+        }
+        let mut outside = outside_params;
+        outside.extend(inner.captures.iter().map(|(def, name)| (*def, name.clone())));
+        inner.refuse_escapes(&outside);
+
+        let MoveWalker {
+            flow: Flow { mut holders, .. },
+            captures,
+            closure_locals,
+            disturbed_captures,
+            ..
+        } = inner;
+        let locals = closure_locals.expect("a closure body has locals");
+        let mut owners = Owners::default();
+        for (def, name) in captures {
+            // What the body stored in the capture outlives the call.
+            let stored: Owners = holders
+                .shift_remove(&def)
+                .unwrap_or_default()
+                .into_iter()
+                .filter(|(owner, _)| !locals.contains(&owner.def))
+                .collect();
+            if !stored.is_empty() {
+                merge_owners(self.flow.holders.entry(def).or_default(), stored);
+            }
+            if let Some(held) = self.flow.holders.get(&def) {
+                merge_owners(&mut owners, held.clone());
+            }
+            let writes = disturbed_captures.contains(&def);
+            let site = OwnerSite {
+                affine: self.is_affine_local(def),
+                name: name.clone(),
+                span: closure.span,
+                writes,
+            };
+            owners.insert(self.owner(def, Vec::new()), site);
+            if !self.is_own_local(def) {
+                self.captures.insert(def, name);
+                if writes {
+                    self.disturbed_captures.insert(def);
+                }
+            }
+        }
+        self.closure_owners.insert(closure.id, owners);
+    }
+
+    fn is_affine_local(&self, def: AstId) -> bool {
+        self.sem()
+            .local_type(def)
+            .is_some_and(|ty| self.is_affine(ty))
     }
 
     fn visit_assign(&mut self, a: &AssignExpr) {
         self.visit_value(&a.value);
+        let owners = self.owners_of(&a.value);
+        match &a.target {
+            Expr::Ident(ident) => {
+                if let Some(def) = self.note_capture(ident) {
+                    self.rebind(def, &ident.name, owners);
+                }
+            }
+            target => {
+                for def in self.write_targets(target) {
+                    self.store(def, &owners);
+                }
+            }
+        }
         match Self::place_path(&a.target) {
             Some(place) => self.clear_place(&place),
             None => self.visit_expr(&a.target),
         }
     }
 
-    fn visit_block(&mut self, block: &Block) -> bool {
-        for stmt in &block.stmts {
-            if self.visit_stmt(stmt) {
-                return true;
+    /// A whole binding takes a new value, referring into `owners` alone.
+    fn rebind(&mut self, def: AstId, name: &str, owners: Owners) {
+        if self.refuse_global_store(def, name, &owners) {
+            return;
+        }
+        if owners.is_empty() {
+            self.flow.holders.shift_remove(&def);
+        } else {
+            self.flow.holders.insert(def, owners);
+        }
+    }
+
+    /// The binding `def` may now refer into `owners` too, other than itself.
+    fn store(&mut self, def: AstId, owners: &Owners) {
+        let name = self
+            .sem()
+            .symbol_at(def)
+            .map(|s| s.name.clone())
+            .unwrap_or_default();
+        if owners.is_empty() || self.refuse_global_store(def, &name, owners) {
+            return;
+        }
+        let into = self.flow.holders.entry(def).or_default();
+        for (owner, site) in owners {
+            if owner.def != def {
+                into.entry(owner.clone()).or_insert_with(|| site.clone());
             }
         }
-        false
+    }
+
+    /// Refuse a store of a reference into an affine local in a global, which
+    /// outlives every local. True where `def` is a global.
+    fn refuse_global_store(&mut self, def: AstId, name: &str, owners: &Owners) -> bool {
+        if !matches!(
+            self.sem().symbol_at(def).map(|s| &s.kind),
+            Some(SymbolKind::Global(_))
+        ) {
+            return false;
+        }
+        if let Some(site) = owners.values().find(|site| site.affine) {
+            let span = site.span;
+            self.report(
+                MoveError::GlobalHoldsReference {
+                    global: name.to_string(),
+                    owner: site.name.clone(),
+                },
+                span,
+            );
+        }
+        true
+    }
+
+    /// The locals a write through `target` may land in: its root, and what the
+    /// root refers into.
+    fn write_targets(&self, target: &Expr) -> Vec<AstId> {
+        let mut targets = Vec::new();
+        let Some(root) = write_root(target) else {
+            return targets;
+        };
+        let Some(def) = self.sem().referenced_symbol(root.id) else {
+            return targets;
+        };
+        targets.push(def);
+        let mut at = 0;
+        while at < targets.len() {
+            if let Some(owners) = self.flow.holders.get(&targets[at]) {
+                for owner in owners.keys() {
+                    if !targets.contains(&owner.def) {
+                        targets.push(owner.def);
+                    }
+                }
+            }
+            at += 1;
+        }
+        targets
+    }
+
+    /// A call may store what any operand refers into through each `&mut` it
+    /// takes.
+    fn store_through_call(&mut self, method: Option<&ast::MethodCallExpr>, args: &[Expr]) {
+        let mut owners = Owners::default();
+        let mut targets = Vec::new();
+        if let Some(mc) = method {
+            if self.sem().method_call_consumes_receiver(mc.id) {
+                merge_owners(&mut owners, self.owners_of(&mc.receiver));
+            } else {
+                let writes = self.sem().method_call_takes_mut_receiver(mc.id);
+                merge_owners(&mut owners, self.reference_owners(&mc.receiver, writes));
+            }
+            if self.sem().method_call_takes_mut_receiver(mc.id) {
+                targets.extend(self.write_targets(&mc.receiver));
+                self.disturb(&mc.receiver);
+            }
+        }
+        for arg in args {
+            merge_owners(&mut owners, self.owners_of(arg));
+            if self.is_mut_ref(arg) {
+                targets.extend(self.write_targets(arg));
+                self.disturb(arg);
+            }
+        }
+        for def in targets {
+            if self.sem().local_type(def).is_none_or(|ty| self.sem().may_hold_reference(ty)) {
+                self.store(def, &owners);
+            }
+        }
+    }
+
+    fn is_mut_ref(&self, expr: &Expr) -> bool {
+        self.sem()
+            .expression_type(expr.id())
+            .is_some_and(|ty| matches!(self.sem().types.get(ty), ResolvedType::MutRef(_)))
+    }
+
+    /// What the value of `expr` refers into.
+    fn owners_of(&self, expr: &Expr) -> Owners {
+        let may_hold = self
+            .sem()
+            .expression_type(expr.id())
+            .is_some_and(|ty| self.sem().may_hold_reference(ty));
+        if !may_hold {
+            return Owners::default();
+        }
+        let mut owners = Owners::default();
+        match expr {
+            Expr::Ident(_) | Expr::FieldAccess(_) | Expr::Index(_) => {
+                match place_root(expr) {
+                    Some(root) => {
+                        if let Some(held) = self
+                            .sem()
+                            .referenced_symbol(root.id)
+                            .and_then(|def| self.flow.holders.get(&def))
+                        {
+                            owners.clone_from(held);
+                        }
+                    }
+                    None => match expr {
+                        Expr::FieldAccess(fa) => owners = self.owners_of(&fa.expr),
+                        Expr::Index(ix) => owners = self.owners_of(&ix.expr),
+                        _ => unreachable!("an identifier is a place root"),
+                    },
+                }
+            }
+            Expr::Unary(u) => match u.op {
+                ast::UnaryOp::Ref => owners = self.reference_owners(&u.expr, false),
+                ast::UnaryOp::MutRef => owners = self.reference_owners(&u.expr, true),
+                _ => owners = self.owners_of(&u.expr),
+            },
+            Expr::Call(call) => {
+                owners = self.owners_of(&call.callee);
+                for arg in &call.args {
+                    merge_owners(&mut owners, self.owners_of(arg));
+                }
+            }
+            Expr::MethodCall(mc) => {
+                owners = if self.sem().method_call_consumes_receiver(mc.id) {
+                    self.owners_of(&mc.receiver)
+                } else if self.sem().method_call_may_borrow_receiver(mc.id) {
+                    let writes = self.sem().method_call_takes_mut_receiver(mc.id);
+                    self.reference_owners(&mc.receiver, writes)
+                } else {
+                    self.contents_owners(&mc.receiver)
+                };
+                for arg in &mc.args {
+                    merge_owners(&mut owners, self.owners_of(arg));
+                }
+            }
+            Expr::StaticMethodCall(smc) => {
+                for arg in &smc.args {
+                    merge_owners(&mut owners, self.owners_of(arg));
+                }
+            }
+            Expr::Cast(c) => owners = self.owners_of(&c.expr),
+            Expr::TryOp(t) => owners = self.owners_of(&t.expr),
+            Expr::Spread(inner, _) => owners = self.owners_of(inner),
+            Expr::StructLiteral(s) => {
+                for spread in &s.spreads {
+                    merge_owners(&mut owners, self.owners_of(&spread.expr));
+                }
+                for field in &s.fields {
+                    merge_owners(&mut owners, self.owners_of(&field.value));
+                }
+            }
+            Expr::TupleLiteral(t) => {
+                for el in &t.elements {
+                    merge_owners(&mut owners, self.owners_of(el));
+                }
+            }
+            Expr::TupleComprehension(c) => {
+                owners = self.owners_of(&c.iterable);
+                merge_owners(&mut owners, self.owners_of(&c.body));
+            }
+            // A hole is referenced where it stands.
+            Expr::TaggedTemplate(t) => {
+                for hole in t.template.interpolations() {
+                    merge_owners(&mut owners, self.reference_owners(hole, false));
+                }
+            }
+            Expr::Range(r) => {
+                owners = self.owners_of(&r.start);
+                merge_owners(&mut owners, self.owners_of(&r.end));
+            }
+            Expr::Block(block) => owners = self.block_owners(block),
+            Expr::LabeledBlock(lb) => owners = self.labeled_block_owners(&lb.label, &lb.block),
+            Expr::WithHandler(w) => owners = self.block_owners(&w.body),
+            Expr::If(if_expr) => {
+                owners = self.block_owners(&if_expr.then_block);
+                if let Some(eb) = &if_expr.else_block {
+                    merge_owners(&mut owners, self.block_owners(eb));
+                }
+            }
+            Expr::Match(m) => {
+                for arm in &m.arms {
+                    merge_owners(&mut owners, self.owners_of(&arm.body));
+                }
+            }
+            Expr::Closure(c) => {
+                owners = self.closure_owners.get(&c.id).cloned().unwrap_or_default();
+            }
+            Expr::Binary(_)
+            | Expr::Assign(_)
+            | Expr::CompoundAssign(_)
+            | Expr::TemplateString(_)
+            | Expr::Matches(_)
+            | Expr::ComparisonChain(_)
+            | Expr::Literal(_)
+            | Expr::Error(_) => {}
+        }
+        owners
+    }
+
+    /// What a reference to the place or temporary `expr` refers into; `writes`
+    /// for a `&mut`.
+    fn reference_owners(&self, expr: &Expr, writes: bool) -> Owners {
+        self.borrow_owners(expr, Some(writes))
+    }
+
+    /// What the place or temporary `expr` holds references into, leaving out
+    /// the place itself.
+    fn contents_owners(&self, expr: &Expr) -> Owners {
+        self.borrow_owners(expr, None)
+    }
+
+    /// `borrow` carries `writes` where a reference to `expr` itself is taken.
+    fn borrow_owners(&self, expr: &Expr, borrow: Option<bool>) -> Owners {
+        match expr {
+            Expr::Unary(u) if u.op == ast::UnaryOp::Deref => self.owners_of(&u.expr),
+            Expr::Index(ix) => self.borrow_owners(&ix.expr, borrow),
+            Expr::FieldAccess(fa) if Self::place_path(expr).is_none() => {
+                self.borrow_owners(&fa.expr, borrow)
+            }
+            _ => {
+                let Some(place) = Self::place_path(expr) else {
+                    return self.owners_of(expr);
+                };
+                let Some(def) = self.sem().referenced_symbol(place.root.id) else {
+                    return Owners::default();
+                };
+                let mut owners = self.flow.holders.get(&def).cloned().unwrap_or_default();
+                if let Some(writes) = borrow
+                    && self.sem().local_type(def).is_some()
+                {
+                    let path = place.fields.iter().map(|f| (*f).to_string()).collect();
+                    owners.insert(
+                        self.owner(def, path),
+                        OwnerSite {
+                            name: place.root.name.clone(),
+                            span: expr.span(),
+                            affine: self.is_affine_local(def),
+                            writes,
+                        },
+                    );
+                }
+                owners
+            }
+        }
+    }
+
+    /// What the value a block ends with refers into.
+    fn block_owners(&self, block: &Block) -> Owners {
+        match block.stmts.last() {
+            Some(Stmt::Expr(e)) => self.owners_of(&e.expr),
+            Some(Stmt::If(s)) => {
+                let mut owners = self.block_owners(&s.then_block);
+                if let Some(eb) = &s.else_block {
+                    merge_owners(&mut owners, self.block_owners(eb));
+                }
+                owners
+            }
+            Some(Stmt::Match(m)) => {
+                let mut owners = Owners::default();
+                for arm in &m.arms {
+                    merge_owners(&mut owners, self.owners_of(&arm.body));
+                }
+                owners
+            }
+            Some(Stmt::LabeledBlock(lb)) => self.labeled_block_owners(&lb.label, &lb.block),
+            _ => Owners::default(),
+        }
+    }
+
+    fn labeled_block_owners(&self, label: &str, block: &Block) -> Owners {
+        let mut owners = self.block_owners(block);
+        if let Some(broken) = self.break_owners.get(label) {
+            merge_owners(&mut owners, broken.clone());
+        }
+        owners
+    }
+
+    /// Bind each of `pattern`'s bindings that may hold a reference to `owners`.
+    fn hold_bindings(&mut self, pattern: &Pattern, owners: &Owners) {
+        if owners.is_empty() {
+            return;
+        }
+        let mut ids = Vec::new();
+        for_each_pattern_binding(pattern, &mut |id| ids.push(id));
+        for id in ids {
+            if self
+                .sem()
+                .local_type(id)
+                .is_some_and(|ty| self.sem().may_hold_reference(ty))
+            {
+                self.flow.holders.insert(id, owners.clone());
+            }
+        }
+    }
+
+    /// Whether `def` is a binding of this body rather than a capture.
+    fn is_own_local(&self, def: AstId) -> bool {
+        self.closure_locals
+            .as_ref()
+            .is_none_or(|locals| locals.contains(&def))
+    }
+
+    /// Refuse a returned value referring into an affine local of the body.
+    fn refuse_returned(&mut self, value: &Expr) {
+        let owners = self.owners_of(value);
+        let local = owners
+            .iter()
+            .find(|(owner, site)| site.affine && self.is_own_local(owner.def));
+        if let Some((_, site)) = local {
+            let kind = MoveError::ReturnsLocalReference {
+                owner: site.name.clone(),
+            };
+            let span = site.span;
+            self.report(kind, span);
+        }
+    }
+
+    /// At the end of the body, refuse each of `outside` that refers into an
+    /// affine local of it.
+    fn refuse_escapes(&mut self, outside: &[(AstId, String)]) {
+        for (holder, holder_name) in outside {
+            let Some(owners) = self.flow.holders.get(holder) else {
+                continue;
+            };
+            let local = owners
+                .iter()
+                .find(|(owner, site)| site.affine && self.is_own_local(owner.def))
+                .map(|(_, site)| site.clone());
+            if let Some(site) = local {
+                self.report(
+                    MoveError::ReferenceEscapes {
+                        holder: holder_name.clone(),
+                        owner: site.name,
+                    },
+                    site.span,
+                );
+            }
+        }
+    }
+
+    /// Runs `walk` in a scope of its own: the bindings it makes end with it.
+    fn in_scope<R>(&mut self, walk: impl FnOnce(&mut Self) -> R) -> R {
+        self.scopes.push(Vec::new());
+        let result = walk(self);
+        for id in self.scopes.pop().expect("the scope pushed above") {
+            let instance = self.instance(id);
+            self.ended.insert(id, instance);
+        }
+        result
+    }
+
+    fn visit_block(&mut self, block: &Block) -> bool {
+        self.in_scope(|walker| {
+            for stmt in &block.stmts {
+                if walker.visit_stmt(stmt) {
+                    return true;
+                }
+            }
+            false
+        })
     }
 
     fn visit_stmt(&mut self, stmt: &Stmt) -> bool {
         match stmt {
             Stmt::Let(l) => {
-                let before = self.moved.clone();
+                let before = self.flow.clone();
                 if let Some(value) = &l.value {
                     self.visit_value(value);
                 }
@@ -785,11 +1539,15 @@ impl MoveWalker<'_, '_> {
                 // else block diverges, so the continuation keeps the state
                 // the match left.
                 if let Some(eb) = &l.else_block {
-                    let matched = std::mem::replace(&mut self.moved, before);
+                    let matched = std::mem::replace(&mut self.flow, before);
                     self.visit_block(eb);
-                    self.moved = matched;
+                    self.flow = matched;
                 }
                 self.bind_pattern(&l.pattern);
+                if let Some(value) = &l.value {
+                    let owners = self.owners_of(value);
+                    self.hold_bindings(&l.pattern, &owners);
+                }
                 false
             }
             Stmt::Expr(e) => {
@@ -799,6 +1557,7 @@ impl MoveWalker<'_, '_> {
             Stmt::Return(r) => {
                 if let Some(value) = &r.value {
                     self.visit_value(value);
+                    self.refuse_returned(value);
                 }
                 true
             }
@@ -816,26 +1575,33 @@ impl MoveWalker<'_, '_> {
                 false
             }
             Stmt::For(s) => {
-                if let Some(init) = &s.init {
-                    self.visit_stmt(init);
-                }
-                let head = match &s.condition {
-                    Some(cond) => LoopHead::Condition(cond),
-                    None => LoopHead::None,
-                };
-                self.visit_loop(&head, &s.body, s.update.as_ref());
+                self.in_scope(|walker| {
+                    if let Some(init) = &s.init {
+                        walker.visit_stmt(init);
+                    }
+                    let head = match &s.condition {
+                        Some(cond) => LoopHead::Condition(cond),
+                        None => LoopHead::None,
+                    };
+                    walker.visit_loop(&head, &s.body, s.update.as_ref());
+                });
                 false
             }
             // The loop owns what it walks (WEP: Affine Types).
             Stmt::ForOf(s) => {
                 self.visit_value(&s.iterable);
-                self.visit_loop(&LoopHead::Binding(&s.binding), &s.body, None);
+                let owners = self.owners_of(&s.iterable);
+                self.visit_loop(&LoopHead::Binding(&s.binding, owners), &s.body, None);
                 false
             }
             Stmt::Match(m) => self.visit_match(&m.expr, &m.arms),
             Stmt::Break(b) => {
                 if let Some(value) = &b.value {
                     self.visit_value(value);
+                    if let Some(label) = &b.label {
+                        let owners = self.owners_of(value);
+                        merge_owners(self.break_owners.entry(label.clone()).or_default(), owners);
+                    }
                 }
                 true
             }
@@ -859,29 +1625,44 @@ impl MoveWalker<'_, '_> {
     /// A loop as two iterations: the first records what it moves, and the
     /// second reports what reads a value the first moved. Each iteration runs
     /// the head, the body, then `update`, as a C-style `for` does.
+    /// The loop may also run no iteration, so what it leaves joins the state
+    /// it entered with.
     fn visit_loop(&mut self, head: &LoopHead, body: &Block, update: Option<&Expr>) {
+        let entry = self.flow.clone();
         self.suppress += 1;
         self.visit_iteration(head, body, update);
         self.suppress -= 1;
         self.visit_iteration(head, body, update);
+        self.flow.merge(entry);
     }
 
     fn visit_iteration(&mut self, head: &LoopHead, body: &Block, update: Option<&Expr>) {
-        match head {
-            LoopHead::None => {}
-            LoopHead::Condition(condition) => self.visit_condition(condition),
-            LoopHead::Binding(pattern) => self.bind_pattern(pattern),
-        }
-        self.visit_block(body);
-        if let Some(update) = update {
-            self.visit_expr(update);
-        }
+        self.in_scope(|walker| {
+            match head {
+                LoopHead::None => {}
+                LoopHead::Condition(condition) => walker.visit_condition(condition),
+                LoopHead::Binding(pattern, owners) => {
+                    walker.bind_pattern(pattern);
+                    walker.hold_bindings(pattern, owners);
+                }
+            }
+            walker.visit_block(body);
+            if let Some(update) = update {
+                walker.visit_expr(update);
+            }
+        });
     }
 
-    /// The bindings `pattern` makes hold new values, none of them moved.
+    /// The bindings `pattern` makes hold new values, none of them moved, and
+    /// none of them referring into anything yet.
     fn bind_pattern(&mut self, pattern: &Pattern) {
         for_each_pattern_binding(pattern, &mut |id| {
-            self.moved.retain(|(def, _), _| *def != id);
+            self.flow.moved.retain(|(def, _), _| *def != id);
+            self.flow.holders.shift_remove(&id);
+            *self.instances.entry(id).or_default() += 1;
+            if let Some(scope) = self.scopes.last_mut() {
+                scope.push(id);
+            }
             if let Some(locals) = &mut self.closure_locals {
                 locals.insert(id);
             }
@@ -897,47 +1678,53 @@ impl MoveWalker<'_, '_> {
         then_block: &Block,
         else_block: Option<&Block>,
     ) -> bool {
-        let before = self.moved.clone();
+        let before = self.flow.clone();
         self.suppress += 1;
         self.visit_condition_reading(condition);
         self.suppress -= 1;
-        let unmatched = std::mem::replace(&mut self.moved, before);
-        self.visit_condition(condition);
-        let then_div = self.visit_block(then_block);
-        let then_moved = std::mem::replace(&mut self.moved, unmatched);
+        let unmatched = std::mem::replace(&mut self.flow, before);
+        let then_div = self.in_scope(|walker| {
+            walker.visit_condition(condition);
+            walker.visit_block(then_block)
+        });
+        let then_flow = std::mem::replace(&mut self.flow, unmatched);
         let else_div = match else_block {
             Some(eb) => self.visit_block(eb),
             None => false,
         };
         if !then_div {
-            merge_moves(&mut self.moved, then_moved);
+            self.flow.merge(then_flow);
         }
         else_block.is_some() && then_div && else_div
     }
 
     fn visit_match(&mut self, scrutinee: &Expr, arms: &[ast::MatchArm]) -> bool {
         self.visit_value(scrutinee);
-        let base = std::mem::take(&mut self.moved);
+        let owners = self.owners_of(scrutinee);
+        let base = std::mem::take(&mut self.flow);
         let mut merged = base.clone();
         let mut all_diverge = true;
         for arm in arms {
-            self.moved.clone_from(&base);
-            self.bind_pattern(&arm.pattern);
-            if let Some(guard) = &arm.guard {
-                let saved = self.guard_bindings.clone();
-                for_each_pattern_binding(&arm.pattern, &mut |id| {
-                    self.guard_bindings.insert(id);
-                });
-                self.visit_expr(guard);
-                self.guard_bindings = saved;
-            }
-            let diverged = self.visit_expr_diverges(&arm.body);
+            self.flow.clone_from(&base);
+            let diverged = self.in_scope(|walker| {
+                walker.bind_pattern(&arm.pattern);
+                walker.hold_bindings(&arm.pattern, &owners);
+                if let Some(guard) = &arm.guard {
+                    let saved = walker.guard_bindings.clone();
+                    for_each_pattern_binding(&arm.pattern, &mut |id| {
+                        walker.guard_bindings.insert(id);
+                    });
+                    walker.visit_expr(guard);
+                    walker.guard_bindings = saved;
+                }
+                walker.visit_expr_diverges(&arm.body)
+            });
             if !diverged {
                 all_diverge = false;
-                merge_moves(&mut merged, std::mem::take(&mut self.moved));
+                merged.merge(std::mem::take(&mut self.flow));
             }
         }
-        self.moved = merged;
+        self.flow = merged;
         all_diverge
     }
 
@@ -963,6 +1750,8 @@ impl MoveWalker<'_, '_> {
                         ConditionElement::Let { pattern, expr, .. } => {
                             self.visit_value(expr);
                             self.bind_pattern(pattern);
+                            let owners = self.owners_of(expr);
+                            self.hold_bindings(pattern, &owners);
                         }
                         ConditionElement::Expr(e) => self.visit_expr(e),
                     }
@@ -990,10 +1779,28 @@ impl MoveWalker<'_, '_> {
     }
 }
 
-/// Each place moved on a path that reaches the join, keeping the first move.
-fn merge_moves(into: &mut Moves, from: Moves) {
-    for (place, span) in from {
-        into.entry(place).or_insert(span);
+/// The binding a place of `expr` is rooted in, through fields and elements.
+fn place_root(expr: &Expr) -> Option<&IdentExpr> {
+    match expr {
+        Expr::Ident(ident) => Some(ident),
+        Expr::FieldAccess(fa) => place_root(&fa.expr),
+        Expr::Index(ix) => place_root(&ix.expr),
+        _ => None,
+    }
+}
+
+/// The binding a write through `expr` starts from: through fields, elements,
+/// references, and the receivers of calls that may hand back a reference
+/// into them.
+fn write_root(expr: &Expr) -> Option<&IdentExpr> {
+    match expr {
+        Expr::Ident(ident) => Some(ident),
+        Expr::FieldAccess(fa) => write_root(&fa.expr),
+        Expr::Index(ix) => write_root(&ix.expr),
+        Expr::Unary(u) => write_root(&u.expr),
+        Expr::Cast(c) => write_root(&c.expr),
+        Expr::MethodCall(mc) => write_root(&mc.receiver),
+        _ => None,
     }
 }
 

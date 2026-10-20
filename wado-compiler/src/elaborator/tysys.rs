@@ -186,6 +186,74 @@ impl TypeSystem {
         })
     }
 
+    /// Whether a value of `type_id` may hold a reference: one it is or holds at
+    /// any depth, a function's captures, or a type parameter, which a caller
+    /// may bind to one.
+    pub(crate) fn may_hold_reference(&self, type_id: TypeId) -> bool {
+        self.may_hold_reference_from(type_id, true, &mut IndexSet::default())
+    }
+
+    /// Whether `method` may hand back a reference its arguments did not bring:
+    /// one its declared return type spells, not one a type parameter binds.
+    pub(crate) fn may_return_new_reference(&self, method: DefId) -> bool {
+        self.signatures
+            .method_sig(method)
+            .is_none_or(|sig| {
+                sig.decl.return_type.is_some_and(|ret| {
+                    self.may_hold_reference_from(ret, false, &mut IndexSet::default())
+                })
+            })
+    }
+
+    /// A declaration's fields name its own parameters, which its arguments
+    /// answer for, so `params` is false below a field.
+    fn may_hold_reference_from(
+        &self,
+        type_id: TypeId,
+        params: bool,
+        walked: &mut IndexSet<(TypeKey, bool)>,
+    ) -> bool {
+        let resolved = self.type_table.borrow().get(type_id).clone();
+        let (args, members) = match resolved {
+            ResolvedType::Ref(_) | ResolvedType::MutRef(_) | ResolvedType::Function { .. } => {
+                return true;
+            }
+            ResolvedType::TypeParam { .. }
+            | ResolvedType::AssocParam { .. }
+            | ResolvedType::TypePack { .. }
+            | ResolvedType::AssocTypeProjection { .. } => return params,
+            ResolvedType::Primitive(_)
+            | ResolvedType::Unit
+            | ResolvedType::Never
+            | ResolvedType::Enum { .. }
+            | ResolvedType::Flags { .. }
+            | ResolvedType::Resource { .. }
+            | ResolvedType::GenericResource { .. }
+            | ResolvedType::InferVar(_)
+            | ResolvedType::Unknown
+            | ResolvedType::Error => return false,
+            ResolvedType::BuiltinArray(inner) => (vec![inner], Vec::new()),
+            ResolvedType::Newtype { base_type, .. } => (vec![base_type], Vec::new()),
+            ResolvedType::Struct { type_args, .. }
+            | ResolvedType::GenericInstance { type_args, .. } => {
+                let mut members = self.struct_field_type_ids_of(type_id).unwrap_or_default();
+                members.extend(self.case_payload_types(type_id).unwrap_or_default());
+                (type_args, members)
+            }
+            ResolvedType::Variant { .. } => {
+                (Vec::new(), self.case_payload_types(type_id).unwrap_or_default())
+            }
+        };
+        if !walked.insert((self.type_table.borrow().type_key(type_id), params)) {
+            return false;
+        }
+        args.into_iter()
+            .any(|arg| self.may_hold_reference_from(arg, params, walked))
+            || members
+                .into_iter()
+                .any(|member| self.may_hold_reference_from(member, false, walked))
+    }
+
     /// Whether a value of `type_id` is or holds a float, in a field, element or
     /// payload at any depth.
     pub(crate) fn holds_float(&self, type_id: TypeId) -> bool {

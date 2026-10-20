@@ -1,0 +1,22 @@
+// A reference into an affine local cannot leave the body: the local drops as
+// the body returns.
+affine struct Tok {
+    id: i32,
+}
+
+impl Drop for Tok {
+    fn drop(self) {
+    }
+}
+
+fn leak() -> &Tok {
+    let t = Tok { id: 7 };
+    return &t;
+}
+
+test {
+    assert leak().id == 7;
+}
+
+__DATA__
+{"compile_error": ":14:13: analysis error: cannot return a reference into `t`, which drops as the body returns"}

@@ -55,8 +55,7 @@ use crate::{ast, tir};
 /// pack their result as `(count << 4) | status`, with `-1` meaning BLOCKED.
 const CM_PACKED_STATUS_MASK: i32 = 0xF;
 const CM_BLOCKED: i32 = -1;
-/// The `CopyResult` statuses a packed CM copy result carries.
-const CM_COMPLETED: i32 = 0;
+/// The `CopyResult` status of a copy whose reader or writer dropped first.
 const CM_DROPPED: i32 = 1;
 
 /// `cm_packed_count(result)`: the element count of a packed CM async result.
@@ -88,6 +87,19 @@ fn copy_result_of(packed: TirExpr, type_table: &RefCell<TypeTable>) -> TirExpr {
         CompilerItem::CmCopyResult.attr_name(),
         vec![packed],
         copy_result,
+    )
+}
+
+/// `cm_future_write_result(packed)`: how a future write ended, a BLOCKED one
+/// pending.
+fn future_write_result_of(packed: TirExpr, type_table: &RefCell<TypeTable>) -> TirExpr {
+    let result = type_table
+        .borrow_mut()
+        .make_compiler_enum(CompilerItem::FutureWriteResult);
+    internal_call(
+        CompilerItem::CmFutureWriteResult.attr_name(),
+        vec![packed],
+        result,
     )
 }
 
@@ -933,10 +945,11 @@ fn synthesize_future_write_func(payload_type_id: TypeId, ctx: &SynthCtx) -> TirF
     } else {
         // An end whose copy is pending cannot be dropped, and waiting for the
         // reader would deadlock one in this instance, so the end is left to the
-        // host, which delivers the value (WEP: Affine Types, known gaps).
+        // host, which delivers the value and reports the write `Pending`
+        // (WEP: Affine Types, known gaps).
         stmts.push(if_stmt(
             is_blocked(written()),
-            block(vec![expr_stmt(assign(written(), i32_const(CM_COMPLETED)))]),
+            block(vec![]),
             Some(block(vec![drop_end])),
         ));
     }
@@ -988,7 +1001,7 @@ fn synthesize_future_write_func(payload_type_id: TypeId, ctx: &SynthCtx) -> TirF
         CompilerItem::FutureWrite,
         "rest",
         rest(),
-        copy_result_of(written(), type_table),
+        future_write_result_of(written(), type_table),
         type_table,
     ))));
 

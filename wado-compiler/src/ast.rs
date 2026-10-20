@@ -4994,6 +4994,9 @@ pub struct ImplBlock {
     pub methods: Vec<Function>,
     /// `impl Trait for Type;` — synthesis request (compiler generates the body)
     pub is_synthesize_request: bool,
+    /// A marker written out as the impl it stands for, whose methods the
+    /// compiler wrote: a sealed trait admits it.
+    pub written_out: bool,
     /// Rest clause at the end of an effect handler `impl` block, deciding
     /// what an operation absent from `methods` does when dispatched. Only
     /// meaningful for effect handler impls; ignored for ordinary trait impls.

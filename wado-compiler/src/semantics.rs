@@ -22,7 +22,7 @@ use crate::elaborator::liveness::{Liveness, LivenessScope};
 use crate::elaborator::orchestration::{AnnotateState, rt_unreachable_calls};
 use crate::elaborator::sem::types::{CoercionKind, DesugarKind, MethodDispatch};
 use crate::elaborator::sem::{Fact, FactKind, ModuleSemantics};
-use crate::from_marker::write_out_from_markers;
+use crate::marker::write_out_markers;
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::kiln::InvocationIndex;
 use crate::kiln::import_check::inject_kiln_request_adapter;
@@ -606,6 +606,40 @@ impl Semantics {
         self.state
             .as_ref()
             .is_none_or(|state| state.tysys.reaches_mut_ref(type_id))
+    }
+
+    /// Whether a value of `type_id` may hold a reference.
+    pub(crate) fn may_hold_reference(&self, type_id: TypeId) -> bool {
+        self.state
+            .as_ref()
+            .expect("the move check runs on annotated semantics")
+            .tysys
+            .may_hold_reference(type_id)
+    }
+
+    /// Whether the method call at `id` may hand back a reference into its
+    /// receiver, in any of its recorded dispatches: one its declared return
+    /// type spells. A call with no recorded dispatch may.
+    pub(crate) fn method_call_may_borrow_receiver(&self, id: AstId) -> bool {
+        let tysys = &self
+            .state
+            .as_ref()
+            .expect("the move check runs on annotated semantics")
+            .tysys;
+        let mut dispatches = self.method_dispatches_at(id).peekable();
+        dispatches.peek().is_none()
+            || dispatches.any(|dispatch| {
+                dispatch
+                    .method_def
+                    .is_none_or(|def| tysys.may_return_new_reference(def))
+            })
+    }
+
+    /// Whether the method call at `id` takes its receiver as `&mut self`, in
+    /// any of its recorded dispatches.
+    pub(crate) fn method_call_takes_mut_receiver(&self, id: AstId) -> bool {
+        self.method_dispatches_at(id)
+            .any(|dispatch| dispatch.self_kind == SelfKind::MutRef)
     }
 
     /// Whether the method call at `id` takes its receiver `self` by value,
@@ -1365,7 +1399,7 @@ pub(crate) fn semantics_with_logger<H: CompilerHost>(
         (analyzer.into_symbols(), ok)
     };
     if analyze_ok {
-        write_out_from_markers(&mut load_result.modules, &symbols);
+        write_out_markers(&mut load_result.modules, &symbols);
     }
 
     // Set up once the AST is final, and before anything can bail, so cursor
