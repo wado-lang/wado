@@ -24,15 +24,8 @@ use crate::hashmap::{IndexMap, IndexSet};
 use crate::module_source::ModuleSource;
 use crate::tir;
 use crate::tir::{
-<<<<<<< HEAD
     BuiltinDeclarations, ResolvedType, StructDef, TemplateId, TirExpr, TirExprKind, TirFunction,
-    TypeId, TypeTable,
-||||||| 63de94d26
-    BuiltinDeclarations, ResolvedType, TemplateId, TirExpr, TirExprKind, TirFunction, TypeId,
-    TypeTable,
-=======
-    BuiltinDeclarations, ResolvedType, TemplateId, TirExpr, TirExprKind, TirFunction, TypeId,
->>>>>>> origin/main
+    TypeId,
 };
 use crate::type_table::TypeTable;
 use funcset::{FuncKeyMap, FuncKeySet};

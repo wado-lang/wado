@@ -33,13 +33,7 @@ use crate::resolve::Resolutions;
 use crate::stdlib_snapshot::{get_or_init_snapshot, reparsed_snapshot_module};
 use crate::symbol::{Symbol, SymbolTable};
 use crate::symbol_notation::SymbolNotation;
-<<<<<<< HEAD
-use crate::tir::{EffectRows, ResolvedType, TemplateId, TirModule, TypeId, TypeTable};
-||||||| 63de94d26
-use crate::tir::{EffectRows, ResolvedType, TirModule, TypeId, TypeTable};
-=======
-use crate::tir::{EffectRows, ResolvedType, TirModule, TypeId};
->>>>>>> origin/main
+use crate::tir::{EffectRows, ResolvedType, TemplateId, TirModule, TypeId};
 use crate::token::Span;
 use crate::type_table::TypeTable;
 use crate::unparse::unparse_contract_clause_renamed;

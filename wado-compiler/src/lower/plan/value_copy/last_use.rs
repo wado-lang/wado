@@ -917,7 +917,6 @@ fn collect_local_roots(expr: &TirExpr, out: &mut IndexSet<u32>) {
     W(out).visit_expr(expr);
 }
 
-<<<<<<< HEAD
 /// Whether `assign` stores a value of an in-place type, so that it writes in
 /// place where a reference holds its storage. A move emptying an affine place
 /// stores `null`, which repoints: the object it held is the destination's now.
@@ -927,7 +926,7 @@ fn collect_local_roots(expr: &TirExpr, out: &mut IndexSet<u32>) {
 /// by span, which synthesized assignments share, so lowering asks this again
 /// of each one it expands.
 #[must_use]
-pub fn can_write_in_place(assign: &TirExpr, type_table: &tir::TypeTable) -> bool {
+pub fn can_write_in_place(assign: &TirExpr, type_table: &TypeTable) -> bool {
     let TirExprKind::Assign { target, value } = &assign.kind else {
         unreachable!("an assign site is an `Assign`");
     };
@@ -936,8 +935,8 @@ pub fn can_write_in_place(assign: &TirExpr, type_table: &tir::TypeTable) -> bool
     !matches!(value.kind, TirExprKind::Null)
         && !affine_object
         && type_table.is_in_place_aggregate(ty)
-||||||| 63de94d26
-=======
+}
+
 /// Where a forward walk over a body first takes a reference to each local, and
 /// where each assignment site runs. An assignment to a local no reference can
 /// precede writes storage nothing else reaches, so it repoints.
@@ -1065,7 +1064,6 @@ impl TirRefVisitor for ReferenceWalk<'_> {
             self.points.sites.insert(expr.span, self.position);
         }
     }
->>>>>>> origin/main
 }
 
 /// The assignments that write in place in a body the ownership walk does not
@@ -1142,16 +1140,8 @@ pub fn unanalyzed_in_place_assigns(
                     }
                 }
                 TirExprKind::Assign { target, .. }
-<<<<<<< HEAD
                     if can_write_in_place(expr, self.type_table)
-                        && self.writes_in_place(target, self.owning_field(target)) =>
-||||||| 63de94d26
-                    if self.type_table.is_in_place_aggregate(target.type_id)
-                        && self.writes_in_place(target, self.owning_field(target)) =>
-=======
-                    if self.type_table.is_in_place_aggregate(target.type_id)
                         && self.writes_in_place(target, self.owning_field(target), expr.span) =>
->>>>>>> origin/main
                 {
                     self.out.insert(expr.span);
                 }

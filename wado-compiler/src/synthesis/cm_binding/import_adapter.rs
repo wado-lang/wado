@@ -11,13 +11,7 @@ use crate::module_source::{ModuleSource, ModuleSourceInterner};
 use crate::name::{LocalMethodName, cm_binding_func_name, cm_lift_func_name};
 use crate::tir::{
     CallArg, EffectRef, FunctionKind, FunctionRef, InlineHint, TirBinaryOp, TirBlock, TirExpr,
-<<<<<<< HEAD
-    TirExprKind, TirFunction, TirLocal, TirParam, TirStmt, TypeId, TypeTable,
-||||||| 63de94d26
-    TirExprKind, TirFunction, TirLocal, TirParam, TirStmt, TirStructField, TypeId, TypeTable,
-=======
-    TirExprKind, TirFunction, TirLocal, TirParam, TirStmt, TirStructField, TypeId,
->>>>>>> origin/main
+    TirExprKind, TirFunction, TirLocal, TirParam, TirStmt, TypeId,
 };
 use crate::type_table::TypeTable;
 

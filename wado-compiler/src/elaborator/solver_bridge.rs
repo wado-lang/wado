@@ -1094,7 +1094,7 @@ impl SolverBridge {
         for index in 0..self.lowering.decls.len() {
             let head = TypeDeclId(u32::try_from(index).expect("fewer than 2^32 declarations"));
             let copies = match self.lowering.decl_key(head) {
-                DeclKey::Builtin(name) => name != TypeTable::ARRAY_TYPE_NAME,
+                DeclKey::Builtin(name) => name != ARRAY_TYPE_NAME,
                 DeclKey::FnShape { .. } => true,
                 DeclKey::Def(_)
                 | DeclKey::AnonymousStruct

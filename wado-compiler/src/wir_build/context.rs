@@ -13,14 +13,8 @@ use crate::name::{StructName, wir_enum_type_key, wir_type_key};
 use crate::nir::{FuncId, FuncRef};
 use crate::nir_package::NirPackage;
 use crate::primitive::PrimitiveType;
-<<<<<<< HEAD
-use crate::tir::{ResolvedType, TypeId, TypeKey, TypeTable};
-||||||| 63de94d26
-use crate::tir::{ResolvedType, TypeId, TypeTable};
-=======
 use crate::tir::{ResolvedType, TypeId};
-use crate::type_table::TypeTable;
->>>>>>> origin/main
+use crate::type_table::{TypeKey, TypeTable};
 use crate::wir::{
     CmImportViolation, TraitBoundViolation, WasmModuleFunc, WasmModuleInfo, WirAbstractHeapType,
     WirComponent, WirData, WirExport, WirField, WirFuncId, WirFuncType, WirFunction, WirGlobal,

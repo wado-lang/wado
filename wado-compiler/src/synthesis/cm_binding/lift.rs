@@ -11,16 +11,8 @@ use crate::ast::{NamedType, Type};
 use crate::cm_abi;
 use crate::component_model::{CmVariantCase, EMPTY_TUPLE_AT_BOUNDARY};
 use crate::module_source::ModuleSource;
-<<<<<<< HEAD
-use crate::tir::{TirBinaryOp, TirExpr, TirExprKind, TirLocal, TirStmt, TypeId, TypeTable};
-||||||| 63de94d26
-use crate::tir::{
-    TirBinaryOp, TirExpr, TirExprKind, TirLocal, TirStmt, TirStructField, TypeId, TypeTable,
-};
-=======
-use crate::tir::{TirBinaryOp, TirExpr, TirExprKind, TirLocal, TirStmt, TirStructField, TypeId};
+use crate::tir::{TirBinaryOp, TirExpr, TirExprKind, TirLocal, TirStmt, TypeId};
 use crate::type_table::TypeTable;
->>>>>>> origin/main
 
 use crate::synthesis::common::{
     alloc_local, assign, binary, block, break_stmt, builtin_call, case_chain, cast, expr_stmt,

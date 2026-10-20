@@ -19,18 +19,9 @@ use crate::name::{
 };
 use crate::package::Package;
 use crate::tir::{
-<<<<<<< HEAD
     CallArg, FrameLocals, FunctionKind, FunctionRef, InlineHint, MonomorphInfo, ResolvedType,
     TirBinaryOp, TirBlock, TirExpr, TirExprKind, TirFunction, TirLocal, TirParam, TirStmt,
-    TirStmtKind, TypeId, TypeTable,
-||||||| 63de94d26
-    CallArg, FunctionKind, FunctionRef, InlineHint, MonomorphInfo, ResolvedType, TirBinaryOp,
-    TirBlock, TirExpr, TirExprKind, TirFunction, TirLocal, TirParam, TirStmt, TirStmtKind, TypeId,
-    TypeTable,
-=======
-    CallArg, FunctionKind, FunctionRef, InlineHint, MonomorphInfo, ResolvedType, TirBinaryOp,
-    TirBlock, TirExpr, TirExprKind, TirFunction, TirLocal, TirParam, TirStmt, TirStmtKind, TypeId,
->>>>>>> origin/main
+    TirStmtKind, TypeId,
 };
 use crate::tir_visitor::{TirMutVisitor, TirRefVisitor};
 use crate::type_table::TypeTable;

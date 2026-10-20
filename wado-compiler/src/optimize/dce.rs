@@ -440,7 +440,6 @@ fn resolve_imports(
         }
     }
 
-<<<<<<< HEAD
     // Asked of the declaration, so a monomorphized builtin answers by the name
     // it was declared under.
     let reached_intrinsics: Vec<String> = project
@@ -452,24 +451,9 @@ fn resolve_imports(
             FunctionRef::from_resolved(&func, func.module_source.clone())
                 .intrinsic()
                 .map(str::to_string)
-||||||| 63de94d26
-    let reaches_intrinsic = |prefix: &str| {
-        reachable.iter().any(|func_id| {
-            matches!(func_id, FunctionId::Free(f)
-                if f.module_source.is_core_builtin() && f.name.starts_with(prefix))
-=======
-    let reaches_intrinsic = |name: &str| {
-        reachable.iter().any(|func_id| {
-            matches!(func_id, FunctionId::Free(f)
-                if f.module_source.is_core_builtin() && f.name == name)
->>>>>>> origin/main
         })
         .collect();
-    let reaches_intrinsic = |prefix: &str| {
-        reached_intrinsics
-            .iter()
-            .any(|name| name.starts_with(prefix))
-    };
+    let reaches_intrinsic = |name: &str| reached_intrinsics.iter().any(|reached| reached == name);
 
     let ambient = if let Some(decided) = project.ambient_stdio {
         decided

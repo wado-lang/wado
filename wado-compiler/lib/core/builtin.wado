@@ -701,43 +701,6 @@ pub fn error_context_debug_message(handle: i32, outptr: i32);
 #[side_effect(opaque)]
 pub fn error_context_drop(handle: i32);
 
-<<<<<<< HEAD
-// --- Backpressure ---
-
-/// Increment the backpressure counter.
-#[canonical("wasi", "backpressure-inc")]
-#[storage(none)]
-#[side_effect(opaque)]
-pub fn backpressure_inc();
-
-/// Decrement the backpressure counter.
-#[canonical("wasi", "backpressure-dec")]
-#[storage(none)]
-#[side_effect(opaque)]
-pub fn backpressure_dec();
-
-// --- Context ---
-
-/// Get the value of a task-local context slot.
-#[canonical("wasi", "context-get")]
-#[storage(none)]
-#[side_effect(opaque)]
-pub fn context_get(slot: i32) -> i32;
-
-/// Set the value of a task-local context slot.
-#[canonical("wasi", "context-set")]
-#[storage(none)]
-#[side_effect(opaque)]
-pub fn context_set(slot: i32, value: i32);
-
-// --- Task ---
-
-/// Acknowledge cancellation of the current task.
-#[canonical("wasi", "task-cancel")]
-#[storage(none)]
-#[side_effect(opaque)]
-pub fn task_cancel();
-
 /// The handle `r` holds, read without moving it. `ResourceId::of` bounds `R`
 /// to an affine resource.
 #[storage(none)]
@@ -750,45 +713,6 @@ internal fn resource_handle<affine R>(r: &R) -> i32;
 #[side_effect(opaque)]
 internal fn zero_handle<R>(r: &R);
 
-||||||| 63de94d26
-// --- Backpressure ---
-
-/// Increment the backpressure counter.
-#[canonical("wasi", "backpressure-inc")]
-#[storage(none)]
-#[side_effect(opaque)]
-pub fn backpressure_inc();
-
-/// Decrement the backpressure counter.
-#[canonical("wasi", "backpressure-dec")]
-#[storage(none)]
-#[side_effect(opaque)]
-pub fn backpressure_dec();
-
-// --- Context ---
-
-/// Get the value of a task-local context slot.
-#[canonical("wasi", "context-get")]
-#[storage(none)]
-#[side_effect(opaque)]
-pub fn context_get(slot: i32) -> i32;
-
-/// Set the value of a task-local context slot.
-#[canonical("wasi", "context-set")]
-#[storage(none)]
-#[side_effect(opaque)]
-pub fn context_set(slot: i32, value: i32);
-
-// --- Task ---
-
-/// Acknowledge cancellation of the current task.
-#[canonical("wasi", "task-cancel")]
-#[storage(none)]
-#[side_effect(opaque)]
-pub fn task_cancel();
-
-=======
->>>>>>> origin/main
 /// Calls stdout's write_via_stream indirectly (ambient, no effect required).
 /// Internal only: used by core:rt for ambient logging (panic, assert).
 /// Public API should use Stdout::write_via_stream() through the effect system.
@@ -803,12 +727,7 @@ pub fn call_indirect_stdout_write_via_stream<T>(rx: Stream<u8>) -> Future<T>;
 /// It calls the Component Model import, so it may suspend as one does.
 #[storage(none)]
 #[side_effect(opaque, suspend)]
-<<<<<<< HEAD
 pub fn call_indirect_stderr_write_via_stream<T>(rx: Stream<u8>) -> Future<T>;
-||||||| 63de94d26
-pub fn call_indirect_stderr_write_via_stream(rx: i32) -> i32;
-=======
-pub fn call_indirect_stderr_write_via_stream(rx: i32) -> i32;
 
 /// Whether `call_indirect_stdout_write_via_stream` reaches stdout, rather than
 /// trapping in a component that imports no stdout.
@@ -822,7 +741,6 @@ pub fn ambient_stdout_available() -> bool;
 #[side_effect(none)]
 pub fn ambient_stderr_available() -> bool;
 
->>>>>>> origin/main
 /// Absolute value of f32
 /// Maps to Wasm f32.abs instruction
 #[storage(none)]

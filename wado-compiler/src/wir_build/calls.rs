@@ -9,17 +9,9 @@ use std::array;
 
 use crate::module_source::ModuleSource;
 use crate::name::MangledName;
-<<<<<<< HEAD
-use crate::tir::{TypeId, TypeTable};
-use crate::wir::{WirInstr, WirType, WirTypeDef, WirTypeId};
-||||||| 63de94d26
-use crate::tir::{TypeId, TypeTable};
-use crate::wir::{WirInstr, WirType, WirTypeId};
-=======
 use crate::tir::TypeId;
 use crate::type_table::TypeTable;
-use crate::wir::{WirInstr, WirType, WirTypeId};
->>>>>>> origin/main
+use crate::wir::{WirInstr, WirType, WirTypeDef, WirTypeId};
 
 use super::context::WirContext;
 use super::primitive_ops::FloatWidth;
@@ -890,7 +882,6 @@ impl FunctionTranslator<'_, '_> {
 
             "i32_as_char" => Some(self.translate_operand(args[0].expr)),
 
-<<<<<<< HEAD
             "resource_handle" => {
                 assert!(
                     self.is_handle_box(self.operand_type_id(args[0].expr)),
@@ -917,58 +908,6 @@ impl FunctionTranslator<'_, '_> {
                 Some(self.zero_handle(resource))
             }
 
-            "call_indirect_stdout_write_via_stream" | "call_indirect_stderr_write_via_stream" => {
-                // The ambient panic / assert-diagnostic path never forces its
-                // own import. DCE registers `Std{out,err}::write_via_stream` in
-                // `func_map` exactly when the world provides the sink (or a real
-                // `eprintln` / `println` already uses it); a miss lowers to
-                // `unreachable`, keeping a purely-computational component free of
-                // `wasi:cli/stderr`.
-                let is_stderr = builtin_name.contains("stderr");
-                let wasi_func_name = if is_stderr {
-                    "wasi:cli/Stderr::write_via_stream"
-                } else {
-                    "wasi:cli/Stdout::write_via_stream"
-                };
-                let key = MangledName::wasi_import(wasi_func_name);
-                match self.ctx.func_map.get(&key).cloned() {
-                    Some(func_id) => {
-                        let rx = self.translate_operand(args[0].expr);
-                        let call = WirInstr::Call {
-                            func_id,
-                            args: vec![self.handle_of(rx)],
-                        };
-                        Some(self.handle_box_of(call))
-                    }
-                    None => Some(WirInstr::Unreachable),
-||||||| 63de94d26
-            "call_indirect_stdout_write_via_stream" | "call_indirect_stderr_write_via_stream" => {
-                // The ambient panic / assert-diagnostic path never forces its
-                // own import. DCE registers `Std{out,err}::write_via_stream` in
-                // `func_map` exactly when the world provides the sink (or a real
-                // `eprintln` / `println` already uses it); a miss lowers to
-                // `unreachable`, keeping a purely-computational component free of
-                // `wasi:cli/stderr`.
-                let is_stderr = builtin_name.contains("stderr");
-                let wasi_func_name = if is_stderr {
-                    "wasi:cli/Stderr::write_via_stream"
-                } else {
-                    "wasi:cli/Stdout::write_via_stream"
-                };
-                let key = MangledName::wasi_import(wasi_func_name);
-                match self.ctx.func_map.get(&key).cloned() {
-                    Some(func_id) => {
-                        let call_args: Vec<WirInstr> = args
-                            .iter()
-                            .map(|a| self.translate_operand(a.expr))
-                            .collect();
-                        Some(WirInstr::Call {
-                            func_id,
-                            args: call_args,
-                        })
-                    }
-                    None => Some(WirInstr::Unreachable),
-=======
             _ if let Some(stream) = AmbientStream::of_availability_builtin(builtin_name) => {
                 let writes = self.ctx.package.ambient_stdio().writes(stream);
                 Some(WirInstr::I32Const(i32::from(writes)))
@@ -981,7 +920,6 @@ impl FunctionTranslator<'_, '_> {
                 // component stays free of `wasi:cli/stderr`.
                 if !self.ctx.package.ambient_stdio().writes(stream) {
                     return Some(WirInstr::Unreachable);
->>>>>>> origin/main
                 }
                 let write = self
                     .ctx
@@ -993,14 +931,12 @@ impl FunctionTranslator<'_, '_> {
                 let func_id = self.ctx.func_map.get(&key).cloned().expect(
                     "DCE imports the stream an ambient builtin writes once it is reachable",
                 );
-                let call_args: Vec<WirInstr> = args
-                    .iter()
-                    .map(|a| self.translate_operand(a.expr))
-                    .collect();
-                Some(WirInstr::Call {
+                let rx = self.translate_operand(args[0].expr);
+                let call = WirInstr::Call {
                     func_id,
-                    args: call_args,
-                })
+                    args: vec![self.handle_of(rx)],
+                };
+                Some(self.handle_box_of(call))
             }
 
             _ => None,
