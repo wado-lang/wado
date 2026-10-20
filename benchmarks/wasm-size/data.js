@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1792456547548,
+  "lastUpdate": 1792493255557,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -68565,6 +68565,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/7394e0e893604101c732dbbcf86493b4c57f79f1"
         },
         "date": 1792456546720,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 2955,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 7313,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 19774,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 288295,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "dab3348a8d5faa080c771fd3a6ec67df74f94d14",
+          "message": "Merge pull request #2394 from wado-lang/ccr-5cc1b1b4-uizexs\n\nrefactor(compiler): one diagnostic spelling of a type, every name format in name.rs",
+          "timestamp": "2026-10-20T19:27:20+09:00",
+          "tree_id": "49fa5f01d7f5193e20e87b54a6349a8a55f20312",
+          "url": "https://github.com/wado-lang/wado/commit/dab3348a8d5faa080c771fd3a6ec67df74f94d14"
+        },
+        "date": 1792493255147,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
