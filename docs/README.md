@@ -205,6 +205,7 @@
 - [Float Literal Patterns](./wep-2026-10-11-float-literal-patterns.md)
 - [Reference Liveness and Assignment to a Referenced Place](./wep-2026-10-13-referenced-places.md)
 - [Affine Types — Swift's Noncopyable Discipline for Resources](./wep-2026-10-17-affine-types.md)
+- [One Ownership Decision — Where an Operand Moves, Said Once](./wep-2026-10-20-one-ownership-decision.md)
 
 ## Standard Library
 
