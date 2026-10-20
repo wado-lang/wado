@@ -15,7 +15,7 @@
 
 use crate::module_source::ModuleSource;
 use crate::name::{RESOURCE_OBJECT_STRUCT, wir_type_key};
-use crate::wir::{WirFuncType, WirInstr, WirPackage, WirType, WirTypeDef, WirTypeId};
+use crate::wir::{WirFuncId, WirFuncType, WirInstr, WirPackage, WirType, WirTypeDef, WirTypeId};
 
 use indexmap::{IndexMap, IndexSet};
 
@@ -50,7 +50,6 @@ pub(super) fn unbox_handles(module: &mut WirPackage) {
     }
     let mut scan = Scan {
         module,
-        handle_box,
         places: &places,
         parent: (0..places.ids.len()).collect(),
         escapes: vec![false; places.ids.len()],
@@ -74,7 +73,6 @@ pub(super) fn unbox_handles(module: &mut WirPackage) {
     for (func, body) in bodies.iter_mut().enumerate() {
         let mut rewrite = Rewrite {
             module,
-            handle_box,
             places: &places,
             unboxed: &unboxed,
             func,
@@ -90,18 +88,17 @@ pub(super) fn unbox_handles(module: &mut WirPackage) {
 
 fn handle_box_type(module: &WirPackage) -> Option<u32> {
     let fq = wir_type_key(&ModuleSource::prelude(), RESOURCE_OBJECT_STRUCT);
-    module.types.iter().position(|def| {
-        matches!(def, WirTypeDef::Struct(s) if s.name.fq == fq)
-    }).map(|index| u32::try_from(index).expect("type index fits u32"))
-}
-
-fn is_handle_box(ty: &WirType, handle_box: u32) -> bool {
-    matches!(ty, WirType::Ref { type_id, .. } if type_id.index() == handle_box)
+    module
+        .types
+        .iter()
+        .position(|def| matches!(def, WirTypeDef::Struct(s) if s.name.fq == fq))
+        .map(|index| u32::try_from(index).expect("type index fits u32"))
 }
 
 /// Every place of `$Resource` type, numbered, and the ones whose function a
 /// caller outside this package's direct calls reaches.
 struct Places {
+    handle_box: u32,
     ids: IndexMap<Place, usize>,
     pinned: Vec<usize>,
 }
@@ -113,33 +110,41 @@ impl Places {
         let mut pinned = Vec::new();
         for (func, function) in module.functions.iter().enumerate() {
             let ft = module.types[function.type_id.index() as usize].expect_func();
-            let is_pinned = function.body.is_none()
-                || pinned_funcs.contains(&module.defined_func_index(func));
-            let mut add = |place: Place, ids: &mut IndexMap<Place, usize>| {
+            let is_pinned =
+                function.body.is_none() || pinned_funcs.contains(&module.defined_func_index(func));
+            let is_box = |ty: &WirType| matches!(ty, WirType::Ref { type_id, .. } if type_id.index() == handle_box);
+            let mut add = |place: Place, signature: bool| {
                 let id = ids.len();
                 ids.insert(place, id);
-                if is_pinned {
+                if signature && is_pinned {
                     pinned.push(id);
                 }
             };
             for (name, ty) in function.param_names.iter().zip(&ft.params) {
-                if is_handle_box(ty, handle_box) {
-                    add(Place::Local(func, name.clone()), &mut ids);
+                if is_box(ty) {
+                    add(Place::Local(func, name.clone()), true);
                 }
             }
             if let [result] = ft.results.as_slice()
-                && is_handle_box(result, handle_box)
+                && is_box(result)
             {
-                add(Place::Result(func), &mut ids);
+                add(Place::Result(func), true);
             }
             for (name, ty) in function.declared_locals().iter() {
-                if is_handle_box(ty, handle_box) {
-                    let id = ids.len();
-                    ids.insert(Place::Local(func, name.to_string()), id);
+                if is_box(ty) {
+                    add(Place::Local(func, name.to_string()), false);
                 }
             }
         }
-        Self { ids, pinned }
+        Self {
+            handle_box,
+            ids,
+            pinned,
+        }
+    }
+
+    fn is_box(&self, type_id: &WirTypeId) -> bool {
+        type_id.index() == self.handle_box
     }
 
     fn local(&self, func: usize, name: &str) -> Option<usize> {
@@ -150,9 +155,15 @@ impl Places {
         self.ids.get(&Place::Result(func)).copied()
     }
 
-    fn param(&self, module: &WirPackage, callee: usize, index: usize) -> Option<usize> {
-        let name = module.functions[callee].param_names.get(index)?;
-        self.local(callee, name)
+    /// The place a direct call to `func_id` passes its argument `index` into.
+    fn param(&self, module: &WirPackage, func_id: &WirFuncId, index: usize) -> Option<usize> {
+        let callee = module.defined_func_position(func_id.index())?;
+        self.local(callee, module.functions[callee].param_names.get(index)?)
+    }
+
+    /// The place a direct call to `func_id` returns from.
+    fn call_result(&self, module: &WirPackage, func_id: &WirFuncId) -> Option<usize> {
+        self.result(module.defined_func_position(func_id.index())?)
     }
 }
 
@@ -160,7 +171,6 @@ impl Places {
 /// a box escapes from.
 struct Scan<'a> {
     module: &'a WirPackage,
-    handle_box: u32,
     places: &'a Places,
     parent: Vec<usize>,
     escapes: Vec<bool>,
@@ -209,14 +219,6 @@ impl Scan<'_> {
         }
     }
 
-    fn callee(&self, func_id: u32) -> Option<usize> {
-        self.module.defined_func_position(func_id)
-    }
-
-    fn is_box(&self, type_id: &WirTypeId) -> bool {
-        type_id.index() == self.handle_box
-    }
-
     fn consume(&mut self, instr: &WirInstr, sink: Sink) {
         let func = self.func;
         match instr {
@@ -224,18 +226,20 @@ impl Scan<'_> {
                 Some(id) => self.place_to(id, sink),
                 None => self.opaque_to(sink),
             },
-            WirInstr::LocalTee { name, value } => match self.places.local(func, name) {
-                Some(id) => {
+            WirInstr::LocalTee { name, value } => {
+                if let Some(id) = self.places.local(func, name) {
                     self.consume(value, Sink::Flow(id));
                     self.place_to(id, sink);
-                }
-                None => {
+                } else {
                     self.consume(value, Sink::Escape);
                     self.opaque_to(sink);
                 }
-            },
+            }
             WirInstr::LocalSet { name, value } => {
-                let to = self.places.local(func, name).map_or(Sink::Escape, Sink::Flow);
+                let to = self
+                    .places
+                    .local(func, name)
+                    .map_or(Sink::Escape, Sink::Flow);
                 self.consume(value, to);
             }
             WirInstr::MultiValueLocalBind { instr, locals } => {
@@ -246,13 +250,13 @@ impl Scan<'_> {
                     }
                 }
             }
-            WirInstr::StructNew { type_id, fields } if self.is_box(type_id) => {
+            WirInstr::StructNew { type_id, fields } if self.places.is_box(type_id) => {
                 for field in fields {
                     self.consume(field, Sink::Escape);
                 }
             }
             WirInstr::RefNull { .. } => {}
-            WirInstr::StructGet { type_id, expr, .. } if self.is_box(type_id) => {
+            WirInstr::StructGet { type_id, expr, .. } if self.places.is_box(type_id) => {
                 self.consume(expr, Sink::Read);
             }
             WirInstr::StructSet {
@@ -260,10 +264,17 @@ impl Scan<'_> {
                 expr,
                 value,
                 ..
-            } if self.is_box(type_id) => {
+            } if self.places.is_box(type_id) => {
                 let zeroes_place = matches!(**value, WirInstr::I32Const(0))
                     && matches!(**expr, WirInstr::LocalGet { .. });
-                self.consume(expr, if zeroes_place { Sink::Read } else { Sink::Escape });
+                self.consume(
+                    expr,
+                    if zeroes_place {
+                        Sink::Read
+                    } else {
+                        Sink::Escape
+                    },
+                );
                 self.consume(value, Sink::Escape);
             }
             WirInstr::RefIsNull(expr) | WirInstr::Drop(expr) => self.consume(expr, Sink::Read),
@@ -276,12 +287,11 @@ impl Scan<'_> {
                 }
             }
             WirInstr::Call { func_id, args } => {
-                let callee = self.callee(func_id.index());
                 for (index, arg) in args.iter().enumerate() {
-                    let to = callee.and_then(|c| self.places.param(self.module, c, index));
+                    let to = self.places.param(self.module, func_id, index);
                     self.consume(arg, to.map_or(Sink::Escape, Sink::Flow));
                 }
-                match callee.and_then(|c| self.places.result(c)) {
+                match self.places.call_result(self.module, func_id) {
                     Some(id) => self.place_to(id, sink),
                     None => self.opaque_to(sink),
                 }
@@ -316,7 +326,10 @@ fn retype_signatures(module: &mut WirPackage, places: &Places, unboxed: &IndexSe
         let ft = module.types[function.type_id.index() as usize].expect_func();
         let mut params = ft.params.clone();
         for (param, name) in params.iter_mut().zip(&function.param_names) {
-            if places.local(func, name).is_some_and(|id| unboxed.contains(&id)) {
+            if places
+                .local(func, name)
+                .is_some_and(|id| unboxed.contains(&id))
+            {
                 *param = WirType::I32;
             }
         }
@@ -341,7 +354,6 @@ fn retype_signatures(module: &mut WirPackage, places: &Places, unboxed: &IndexSe
 
 struct Rewrite<'a> {
     module: &'a WirPackage,
-    handle_box: u32,
     places: &'a Places,
     unboxed: &'a IndexSet<usize>,
     func: usize,
@@ -349,17 +361,11 @@ struct Rewrite<'a> {
 
 impl Rewrite<'_> {
     fn unboxed_local(&self, name: &str) -> bool {
-        self.places
-            .local(self.func, name)
-            .is_some_and(|id| self.unboxed.contains(&id))
+        self.unboxed_id(self.places.local(self.func, name))
     }
 
     fn unboxed_id(&self, id: Option<usize>) -> bool {
         id.is_some_and(|id| self.unboxed.contains(&id))
-    }
-
-    fn callee(&self, func_id: u32) -> Option<usize> {
-        self.module.defined_func_position(func_id)
     }
 
     /// Whether `instr` yields a handle rather than a box once rewritten.
@@ -369,15 +375,11 @@ impl Rewrite<'_> {
                 self.unboxed_local(name)
             }
             WirInstr::Call { func_id, .. } => {
-                self.unboxed_id(self.callee(func_id.index()).and_then(|c| self.places.result(c)))
+                self.unboxed_id(self.places.call_result(self.module, func_id))
             }
             WirInstr::Seq(items) => items.last().is_some_and(|last| self.yields_handle(last)),
             _ => false,
         }
-    }
-
-    fn is_box(&self, type_id: &WirTypeId) -> bool {
-        type_id.index() == self.handle_box
     }
 
     fn rewrite(&mut self, instr: &mut WirInstr) {
@@ -394,7 +396,7 @@ impl Rewrite<'_> {
                 self.lower(value);
             }
             WirInstr::StructGet { type_id, expr, .. }
-                if self.is_box(type_id) && self.yields_handle(expr) =>
+                if self.places.is_box(type_id) && self.yields_handle(expr) =>
             {
                 self.rewrite(expr);
                 let handle = std::mem::replace(&mut **expr, WirInstr::Nop);
@@ -406,7 +408,7 @@ impl Rewrite<'_> {
                 *instr = WirInstr::I32Eqz(Box::new(handle));
             }
             WirInstr::StructSet { type_id, expr, .. }
-                if self.is_box(type_id) && self.yields_handle(expr) =>
+                if self.places.is_box(type_id) && self.yields_handle(expr) =>
             {
                 let WirInstr::LocalGet { name, .. } = &**expr else {
                     unreachable!("an unboxed class zeroes only a place");
@@ -417,10 +419,8 @@ impl Rewrite<'_> {
                 };
             }
             WirInstr::Call { func_id, args } => {
-                let callee = self.callee(func_id.index());
                 for (index, arg) in args.iter_mut().enumerate() {
-                    let param = callee.and_then(|c| self.places.param(self.module, c, index));
-                    if self.unboxed_id(param) {
+                    if self.unboxed_id(self.places.param(self.module, func_id, index)) {
                         self.lower(arg);
                     } else {
                         self.rewrite(arg);
@@ -440,7 +440,7 @@ impl Rewrite<'_> {
     /// handle it holds.
     fn lower(&mut self, value: &mut WirInstr) {
         match value {
-            WirInstr::StructNew { type_id, fields } if self.is_box(type_id) => {
+            WirInstr::StructNew { type_id, fields } if self.places.is_box(type_id) => {
                 let [handle] = std::mem::take(fields)
                     .try_into()
                     .unwrap_or_else(|_| unreachable!("`$Resource` has one field"));
@@ -449,7 +449,9 @@ impl Rewrite<'_> {
             }
             WirInstr::RefNull { .. } => *value = WirInstr::I32Const(0),
             WirInstr::Seq(items) => {
-                let (last, init) = items.split_last_mut().expect("a value's sequence ends in it");
+                let (last, init) = items
+                    .split_last_mut()
+                    .expect("a value's sequence ends in it");
                 for item in init {
                     self.rewrite(item);
                 }
