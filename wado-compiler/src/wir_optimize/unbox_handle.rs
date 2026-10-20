@@ -17,7 +17,7 @@ use crate::module_source::ModuleSource;
 use crate::name::{RESOURCE_OBJECT_STRUCT, wir_type_key};
 use crate::wir::{WirFuncId, WirFuncType, WirInstr, WirPackage, WirType, WirTypeDef, WirTypeId};
 
-use indexmap::{IndexMap, IndexSet};
+use indexmap::IndexMap;
 
 use super::util::collect_pinned_func_ids;
 
@@ -57,7 +57,7 @@ pub(super) fn unbox_handles(module: &mut WirPackage) {
         }
     }
     let unboxed = scan.unboxed();
-    if unboxed.is_empty() {
+    if !unboxed.contains(&true) {
         return;
     }
     retype_signatures(module, &places, &unboxed);
@@ -102,9 +102,7 @@ struct Places {
 impl Places {
     fn collect(module: &WirPackage, handle_box: u32) -> Self {
         let pinned_funcs = collect_pinned_func_ids(module);
-        let is_box = |ty: &WirType| {
-            matches!(ty, WirType::Ref { type_id, .. } if type_id.index() == handle_box)
-        };
+        let is_box = |ty: &WirType| matches!(ty, WirType::Ref { type_id, .. } if type_id.index() == handle_box);
         let mut places = Self {
             handle_box,
             count: 0,
@@ -336,14 +334,18 @@ impl Scan<'_> {
         for item in init {
             self.consume(item, Sink::Escape);
         }
-        let last_sink = if last.always_diverges() { Sink::Escape } else { sink };
+        let last_sink = if last.always_diverges() {
+            Sink::Escape
+        } else {
+            sink
+        };
         self.consume(last, last_sink);
     }
 
-    /// The places whose class no box escapes from.
-    fn unboxed(&mut self) -> IndexSet<usize> {
+    /// Whether each place's class keeps no box.
+    fn unboxed(&mut self) -> Vec<bool> {
         (0..self.parent.len())
-            .filter(|&id| {
+            .map(|id| {
                 let root = self.find(id);
                 !self.escapes[root]
             })
@@ -353,21 +355,18 @@ impl Scan<'_> {
 
 /// Give each function whose parameter or result is unboxed a signature taking
 /// or returning the handle.
-fn retype_signatures(module: &mut WirPackage, places: &Places, unboxed: &IndexSet<usize>) {
+fn retype_signatures(module: &mut WirPackage, places: &Places, unboxed: &[bool]) {
     for func in 0..module.functions.len() {
         let function = &module.functions[func];
         let ft = module.types[function.type_id.index() as usize].expect_func();
         let mut params = ft.params.clone();
         for (param, name) in params.iter_mut().zip(&function.param_names) {
-            if places
-                .local(func, name)
-                .is_some_and(|id| unboxed.contains(&id))
-            {
+            if places.local(func, name).is_some_and(|id| unboxed[id]) {
                 *param = WirType::I32;
             }
         }
         let mut results = ft.results.clone();
-        if places.result(func).is_some_and(|id| unboxed.contains(&id)) {
+        if places.result(func).is_some_and(|id| unboxed[id]) {
             results = vec![WirType::I32];
         }
         if params == ft.params && results == ft.results {
@@ -388,7 +387,7 @@ fn retype_signatures(module: &mut WirPackage, places: &Places, unboxed: &IndexSe
 struct Rewrite<'a> {
     module: &'a WirPackage,
     places: &'a Places,
-    unboxed: &'a IndexSet<usize>,
+    unboxed: &'a [bool],
     func: usize,
 }
 
@@ -398,7 +397,7 @@ impl Rewrite<'_> {
     }
 
     fn unboxed_id(&self, id: Option<usize>) -> bool {
-        id.is_some_and(|id| self.unboxed.contains(&id))
+        id.is_some_and(|id| self.unboxed[id])
     }
 
     /// Whether `instr` yields a handle rather than a box once rewritten.
