@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1792455503975,
+  "lastUpdate": 1792456547548,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -68521,6 +68521,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/484c6bdf0225677787baba04caf7c4610b0eaaad"
         },
         "date": 1792455503407,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 2955,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 7313,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 19774,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 288295,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "7394e0e893604101c732dbbcf86493b4c57f79f1",
+          "message": "Merge pull request #2392 from wado-lang/claude/gallant-maxwell-w4igyp\n\nfeat(eval): evaluated programs build maps and draw insecure randomness",
+          "timestamp": "2026-10-20T09:08:30+09:00",
+          "tree_id": "a0d37494d2177d4926cd3da0ded42140bd598fa4",
+          "url": "https://github.com/wado-lang/wado/commit/7394e0e893604101c732dbbcf86493b4c57f79f1"
+        },
+        "date": 1792456546720,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
