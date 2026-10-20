@@ -1,0 +1,58 @@
+// A match testing many spans dispatches through `br_table` however sparse its
+// cases are. A parser's token dispatch is this shape: a dozen arms over token
+// ids spread across a wide range, and the common token reaching the last ones.
+
+fn alt(t: i32) -> i32 {
+    match t {
+        2 => {
+            return 1;
+        },
+        7..=9 | 149..=150 | 152 => {
+            return 2;
+        },
+        41 => {
+            return 3;
+        },
+        42 => {
+            return 4;
+        },
+        69 => {
+            return 5;
+        },
+        101 => {
+            return 6;
+        },
+        114 => {
+            return 7;
+        },
+        127 => {
+            return 8;
+        },
+        141 => {
+            return 9;
+        },
+        146 => {
+            return 10;
+        },
+        _ => {},
+    };
+    return 0;
+}
+
+export fn run() {
+    assert alt(builtin::black_box(2)) == 1;
+    assert alt(builtin::black_box(8)) == 2;
+    assert alt(builtin::black_box(152)) == 2;
+    assert alt(builtin::black_box(114)) == 7;
+    assert alt(builtin::black_box(146)) == 10;
+    assert alt(builtin::black_box(3)) == 0;
+    assert alt(builtin::black_box(151)) == 0;
+    assert alt(builtin::black_box(-1)) == 0;
+    assert alt(builtin::black_box(1000)) == 0;
+}
+
+__DATA__
+{
+    "stdout": "",
+    "wir_expect:O2": ["br_table"]
+}
