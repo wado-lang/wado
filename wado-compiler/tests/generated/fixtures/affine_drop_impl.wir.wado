@@ -93,9 +93,8 @@ import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 
 global mut global:affine_drop_impl.wado::DROPS: i32 = 0;
 global mut global:affine_drop_impl.wado::GIVEN: i32 = 0;
-global global:affine_drop_impl.wado::$const_obj_1: ref Array<u8> = array.new_fixed<u8>(32, 103, 105, 118, 101, 110, 61);
-global global:affine_drop_impl.wado::$const_obj_2: ref Array<u8> = array.new_fixed<u8>(58, 32, 100, 114, 111, 112, 115, 61);
-global global:affine_drop_impl.wado::$const_obj_3: ref "affine_drop_impl.wado//Guard" = struct.new "affine_drop_impl.wado//Guard" { id: 1 };
+global global:affine_drop_impl.wado::$const_obj_0: ref Array<u8> = array.new_fixed<u8>(32, 103, 105, 118, 101, 110, 61);
+global global:affine_drop_impl.wado::$const_obj_1: ref Array<u8> = array.new_fixed<u8>(58, 32, 100, 114, 111, 112, 115, 61);
 
 fn "affine_drop_impl.wado/holder"() {
     let $load_0: ref null "affine_drop_impl.wado//Guard";
@@ -126,7 +125,7 @@ fn "affine_drop_impl.wado/report"($mv$what$repr, $mv$what$used) with Stdout {
     $local_1.used = new_used_9;
     builtin::array_copy<u8>(local.tee $load_2($local_1.repr), start_10, $mv$what$repr, 0, $mv$what$used);
     $mv$what$used = start_10 + $mv$what$used;
-    builtin::array_copy<u8>($load_2, $mv$what$used, global:affine_drop_impl.wado::$const_obj_2, 0, 8);
+    builtin::array_copy<u8>($load_2, $mv$what$used, global:affine_drop_impl.wado::$const_obj_1, 0, 8);
     $sroa_$f_buf_86 = $local_1;
     start_10 = local.tee $mv$what$used(global:affine_drop_impl.wado::DROPS) < 0;
     $mv$what$used = "core:prelude/primitive.wado/count_digits_u64"(local.tee x_31(x_31 = builtin::i64_extend_i32_s($mv$what$used); select i64(x_31 < 0_i64, 0_i64 - x_31, x_31)));
@@ -138,7 +137,7 @@ fn "affine_drop_impl.wado/report"($mv$what$repr, $mv$what$used) with Stdout {
     }
     start_10 = $local_1.used;
     $local_1.used = $mv$what$used;
-    builtin::array_copy<u8>($local_1.repr, start_10, global:affine_drop_impl.wado::$const_obj_1, 0, 7);
+    builtin::array_copy<u8>($local_1.repr, start_10, global:affine_drop_impl.wado::$const_obj_0, 0, 7);
     $sroa_$f_buf_86 = $local_1;
     $mv$what$used = local.tee start_10(global:affine_drop_impl.wado::GIVEN) < 0;
     start_10 = "core:prelude/primitive.wado/count_digits_u64"(local.tee x_31(x_31 = builtin::i64_extend_i32_s(start_10); select i64(x_31 < 0_i64, 0_i64 - x_31, x_31)));
@@ -160,9 +159,7 @@ fn "affine_drop_impl.wado/run"() with Stdout {
     let $moved_1_5: ref null "affine_drop_impl.wado//Guard";
     let self_8: i32;
     let self_16: ref null "affine_drop_impl.wado//Keeper";
-    if ref.is_null(global:affine_drop_impl.wado::$const_obj_3) == 0 {
-        global:affine_drop_impl.wado::DROPS = global:affine_drop_impl.wado::DROPS + 1;
-    }
+    global:affine_drop_impl.wado::DROPS = global:affine_drop_impl.wado::DROPS + 1;
     "affine_drop_impl.wado/report"(array.new_data<u8>("scope exit"), 10);
     $moved_1_5 = local.tee g_4(struct.new "affine_drop_impl.wado//Guard" { id: 2 });
     g_4 = ref.null none;
@@ -202,16 +199,16 @@ fn "core:prelude/primitive.wado/write_decimal_digits"(arr, offset, val, digit_co
     let pair: i32;
     let tens: i32;
     digit_count = offset + digit_count;
-    b6: block {
-        l7: loop {
-            break_if b6 (digit_count - offset) < 2;
+    b5: block {
+        l6: loop {
+            break_if b5 (digit_count - offset) < 2;
             q = val /u 100_i64;
             tens = local.tee pair(builtin::i32_wrap_i64(val - (q * 100_i64))) / 10;
             builtin::array_set_u8(arr, digit_count - 1, ((48 + pair) - (tens * 10)) & 255);
             builtin::array_set_u8(arr, digit_count - 2, (48 + tens) & 255);
             digit_count = digit_count - 2;
             val = q;
-            continue l7;
+            continue l6;
         };
     };
     if digit_count > offset {
@@ -311,17 +308,17 @@ fn "core:rt/cm_stream_write_raw_all_u8"(handle, $mv$data$repr, $mv$data$start, $
     if local.tee $mv$data$end($mv$data$end - $mv$data$start) == 0 {
         return 0;
     }
-    ptr_15 = builtin::i32_wrap_i64(ptr_15 = "mem/realloc"(0, 0, 1, $mv$data$end); i = 0; b30: block {
-        l31: loop {
-            break_if b30 i >= $mv$data$end;
+    ptr_15 = builtin::i32_wrap_i64(ptr_15 = "mem/realloc"(0, 0, 1, $mv$data$end); i = 0; b29: block {
+        l30: loop {
+            break_if b29 i >= $mv$data$end;
             builtin::store_u8(ptr_15 + i, builtin::array_get_value_u8($mv$data$repr, $mv$data$start + i));
             i = i + 1;
-            continue l31;
+            continue l30;
         };
     }; builtin::i64_extend_i32_u(ptr_15) | (builtin::i64_extend_i32_s($mv$data$end) << 32_i64));
     i = 0;
     block {
-        l33: loop {
+        l32: loop {
             delivered_6 = local.tee written($inline_cm_stream_write_once_4: block -> i32 {
                 $mv$data$start = ptr_15 + i;
                 count_18 = $mv$data$end - i;
@@ -352,7 +349,7 @@ fn "core:rt/cm_stream_write_raw_all_u8"(handle, $mv$data$repr, $mv$data$start, $
                 drop("mem/realloc"(ptr_15, $mv$data$end, 1, 0));
                 return $match_scrut_0;
             }
-            continue l33;
+            continue l32;
         };
     };
 }
