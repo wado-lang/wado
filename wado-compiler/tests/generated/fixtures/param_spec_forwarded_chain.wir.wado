@@ -91,28 +91,30 @@ fn "param_spec_forwarded_chain.wado/$cm_export__run"() {
 }
 
 fn "param_spec_forwarded_chain.wado/outer$spec0$dae[st]"(out, word) {
-    let $load_0: i32;
     let new_used_7: i32;
-    if @unlikely(local.tee new_used_7(local.tee $load_0(out.used) + 1) > builtin::array_len(out.repr)) {
+    let start_8: i32;
+    if @unlikely(local.tee new_used_7(out.used + 1) > builtin::array_len(out.repr)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out, new_used_7);
     }
+    start_8 = out.used;
     out.used = new_used_7;
-    builtin::array_set_u8(out.repr, $load_0, 91);
+    builtin::array_set_u8(out.repr, start_8, 91);
     "param_spec_forwarded_chain.wado/inner$spec0$dae[st]"(out, word);
-    if @unlikely(local.tee new_used_7(local.tee $load_0(out.used) + 1) > builtin::array_len(out.repr)) {
+    if @unlikely(local.tee start_8(out.used + 1) > builtin::array_len(out.repr)) {
         cold_path;
-        "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out, new_used_7);
+        "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out, start_8);
     }
-    out.used = new_used_7;
-    builtin::array_set_u8(out.repr, $load_0, 93);
+    new_used_7 = out.used;
+    out.used = start_8;
+    builtin::array_set_u8(out.repr, new_used_7, 93);
 }
 
 fn "param_spec_forwarded_chain.wado/inner$spec0$dae[st]"(out, word) {
-    let $load_2: i32;
     let i: i32;
     let b: u8;
     let new_used_42: i32;
+    let start_43: i32;
     let $licm_repr_80: ref Array<u8>;
     i = 0;
     $licm_repr_80 = word.repr;
@@ -120,13 +122,14 @@ fn "param_spec_forwarded_chain.wado/inner$spec0$dae[st]"(out, word) {
         l3: loop {
             break_if b2 i >= word.used;
             b = builtin::array_get_value<u8>($licm_repr_80, i);
-            if @unlikely(local.tee new_used_42(local.tee $load_2(out.used) + 1) > builtin::array_len(out.repr)) {
+            if @unlikely(local.tee new_used_42(out.used + 1) > builtin::array_len(out.repr)) {
                 cold_path;
                 "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out, new_used_42);
                 $licm_repr_80 = word.repr;
             }
+            start_43 = out.used;
             out.used = new_used_42;
-            builtin::array_set_u8(out.repr, $load_2, b);
+            builtin::array_set_u8(out.repr, start_43, b);
             i = i + 1;
             continue l3;
         };

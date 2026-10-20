@@ -157,39 +157,42 @@ fn "contract_clause_order.wado/non_negative_at$contract_report0$dae[$v1]"(i, $mv
     builtin::array_copy<u8>($load_2, new_used_84, global:contract_clause_order.wado::$const_obj_14, 0, 15);
     start_85 = start_85 + 27;
     builtin::array_copy<u8>($load_2, start_85, global:contract_clause_order.wado::$const_obj_13, 0, 11);
-    if @unlikely(local.tee new_used_84(local.tee start_85($local_8.used) + (53 + $mv$$site$used)) > builtin::array_len($load_2)) {
+    if @unlikely(local.tee start_85($local_8.used + (53 + $mv$$site$used)) > builtin::array_len($load_2)) {
         cold_path;
-        "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_8, new_used_84);
+        "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_8, start_85);
     }
-    $local_8.used = new_used_84;
-    builtin::array_copy<u8>(local.tee $load_2($local_8.repr), start_85, $mv$$site$repr, 0, $mv$$site$used);
-    new_used_84 = start_85 + $mv$$site$used;
-    builtin::array_copy<u8>($load_2, new_used_84, global:contract_clause_order.wado::$const_obj_12, 0, 2);
-    new_used_84 = start_85 + (2 + $mv$$site$used);
-    builtin::array_copy<u8>($load_2, new_used_84, global:contract_clause_order.wado::$const_obj_11, 0, 18);
-    new_used_84 = start_85 + (20 + $mv$$site$used);
-    builtin::array_copy<u8>($load_2, new_used_84, global:contract_clause_order.wado::$const_obj_10, 0, 30);
-    $mv$$site$used = start_85 + (50 + $mv$$site$used);
+    new_used_84 = $local_8.used;
+    $local_8.used = start_85;
+    builtin::array_copy<u8>(local.tee $load_2($local_8.repr), new_used_84, $mv$$site$repr, 0, $mv$$site$used);
+    start_85 = new_used_84 + $mv$$site$used;
+    builtin::array_copy<u8>($load_2, start_85, global:contract_clause_order.wado::$const_obj_12, 0, 2);
+    start_85 = new_used_84 + (2 + $mv$$site$used);
+    builtin::array_copy<u8>($load_2, start_85, global:contract_clause_order.wado::$const_obj_11, 0, 18);
+    start_85 = new_used_84 + (20 + $mv$$site$used);
+    builtin::array_copy<u8>($load_2, start_85, global:contract_clause_order.wado::$const_obj_10, 0, 30);
+    $mv$$site$used = new_used_84 + (50 + $mv$$site$used);
     builtin::array_copy<u8>($load_2, $mv$$site$used, global:contract_clause_order.wado::$const_obj_9, 0, 3);
     $sroa_$f_buf_134 = $local_8;
     $mv$$site$used = i < 0;
     i = "core:prelude/primitive.wado/count_digits_u64"(local.tee x_99(x_99 = builtin::i64_extend_i32_s(i); select i64(x_99 < 0_i64, 0_i64 - x_99, x_99)));
     $mv$$site$used = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$sroa[self.buf]$dae[alt_prefix]"($sroa_$f_buf_134, $mv$$site$used, i);
     "core:prelude/primitive.wado/write_decimal_digits"($sroa_$f_buf_134.repr, $mv$$site$used, x_99, i);
-    if @unlikely(local.tee $mv$$site$used(local.tee i($local_8.used) + 11) > builtin::array_len($local_8.repr)) {
+    if @unlikely(local.tee i($local_8.used + 11) > builtin::array_len($local_8.repr)) {
+        cold_path;
+        "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_8, i);
+    }
+    $mv$$site$used = $local_8.used;
+    $local_8.used = i;
+    builtin::array_copy<u8>(local.tee $load_2($local_8.repr), $mv$$site$used, global:contract_clause_order.wado::$const_obj_6, 0, 1);
+    $mv$$site$used = $mv$$site$used + 1;
+    builtin::array_copy<u8>($load_2, $mv$$site$used, global:contract_clause_order.wado::$const_obj_7, 0, 10);
+    $mv$$site$used = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$sroa[self.buf]$dae[alt_prefix]"(local.tee $sroa_$f_buf_134($local_8), 0, 1);
+    "core:prelude/primitive.wado/write_decimal_digits"($sroa_$f_buf_134.repr, $mv$$site$used, 3_i64, 1);
+    if @unlikely(local.tee $mv$$site$used($local_8.used + 1) > builtin::array_len($local_8.repr)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_8, $mv$$site$used);
     }
-    $local_8.used = $mv$$site$used;
-    builtin::array_copy<u8>(local.tee $load_2($local_8.repr), i, global:contract_clause_order.wado::$const_obj_6, 0, 1);
-    i = i + 1;
-    builtin::array_copy<u8>($load_2, i, global:contract_clause_order.wado::$const_obj_7, 0, 10);
-    i = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$sroa[self.buf]$dae[alt_prefix]"(local.tee $sroa_$f_buf_134($local_8), 0, 1);
-    "core:prelude/primitive.wado/write_decimal_digits"($sroa_$f_buf_134.repr, i, 3_i64, 1);
-    if @unlikely(local.tee $mv$$site$used(local.tee i($local_8.used) + 1) > builtin::array_len($local_8.repr)) {
-        cold_path;
-        "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_8, $mv$$site$used);
-    }
+    i = $local_8.used;
     $local_8.used = $mv$$site$used;
     builtin::array_copy<u8>($local_8.repr, i, global:contract_clause_order.wado::$const_obj_6, 0, 1);
     "core:rt/panic"($local_8.repr, $local_8.used);
@@ -215,40 +218,43 @@ fn "contract_clause_order.wado/non_negative_at$contract_report1"($v1, i, $mv$$si
     builtin::array_copy<u8>($load_2, new_used_71, global:contract_clause_order.wado::$const_obj_14, 0, 15);
     start_72 = start_72 + 27;
     builtin::array_copy<u8>($load_2, start_72, global:contract_clause_order.wado::$const_obj_13, 0, 11);
-    if @unlikely(local.tee new_used_71(local.tee start_72($local_10.used) + (26 + $mv$$site$used)) > builtin::array_len($load_2)) {
+    if @unlikely(local.tee start_72($local_10.used + (26 + $mv$$site$used)) > builtin::array_len($load_2)) {
         cold_path;
-        "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_10, new_used_71);
+        "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_10, start_72);
     }
-    $local_10.used = new_used_71;
-    builtin::array_copy<u8>(local.tee $load_2($local_10.repr), start_72, $mv$$site$repr, 0, $mv$$site$used);
-    new_used_71 = start_72 + $mv$$site$used;
-    builtin::array_copy<u8>($load_2, new_used_71, global:contract_clause_order.wado::$const_obj_20, 0, 23);
-    $mv$$site$used = start_72 + (23 + $mv$$site$used);
+    new_used_71 = $local_10.used;
+    $local_10.used = start_72;
+    builtin::array_copy<u8>(local.tee $load_2($local_10.repr), new_used_71, $mv$$site$repr, 0, $mv$$site$used);
+    start_72 = new_used_71 + $mv$$site$used;
+    builtin::array_copy<u8>($load_2, start_72, global:contract_clause_order.wado::$const_obj_20, 0, 23);
+    $mv$$site$used = new_used_71 + (23 + $mv$$site$used);
     builtin::array_copy<u8>($load_2, $mv$$site$used, global:contract_clause_order.wado::$const_obj_9, 0, 3);
     $sroa_$f_buf_121 = $local_10;
     $mv$$site$used = i < 0;
     i = "core:prelude/primitive.wado/count_digits_u64"(local.tee x_86(x_86 = builtin::i64_extend_i32_s(i); select i64(x_86 < 0_i64, 0_i64 - x_86, x_86)));
     $mv$$site$used = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$sroa[self.buf]$dae[alt_prefix]"($sroa_$f_buf_121, $mv$$site$used, i);
     "core:prelude/primitive.wado/write_decimal_digits"($sroa_$f_buf_121.repr, $mv$$site$used, x_86, i);
-    if @unlikely(local.tee $mv$$site$used(local.tee i($local_10.used) + 8) > builtin::array_len($local_10.repr)) {
-        cold_path;
-        "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_10, $mv$$site$used);
-    }
-    $local_10.used = $mv$$site$used;
-    builtin::array_copy<u8>(local.tee $load_2($local_10.repr), i, global:contract_clause_order.wado::$const_obj_6, 0, 1);
-    i = i + 1;
-    builtin::array_copy<u8>($load_2, i, global:contract_clause_order.wado::$const_obj_17, 0, 7);
-    $sroa_$f_buf_121 = $local_10;
-    i = $v1 < 0;
-    $v1 = "core:prelude/primitive.wado/count_digits_u64"(local.tee x_86(x_86 = builtin::i64_extend_i32_s($v1); select i64(x_86 < 0_i64, 0_i64 - x_86, x_86)));
-    i = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$sroa[self.buf]$dae[alt_prefix]"($sroa_$f_buf_121, i, $v1);
-    "core:prelude/primitive.wado/write_decimal_digits"($sroa_$f_buf_121.repr, i, x_86, $v1);
-    if @unlikely(local.tee i(local.tee $v1($local_10.used) + 1) > builtin::array_len($local_10.repr)) {
+    if @unlikely(local.tee i($local_10.used + 8) > builtin::array_len($local_10.repr)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_10, i);
     }
+    $mv$$site$used = $local_10.used;
     $local_10.used = i;
-    builtin::array_copy<u8>($local_10.repr, $v1, global:contract_clause_order.wado::$const_obj_6, 0, 1);
+    builtin::array_copy<u8>(local.tee $load_2($local_10.repr), $mv$$site$used, global:contract_clause_order.wado::$const_obj_6, 0, 1);
+    $mv$$site$used = $mv$$site$used + 1;
+    builtin::array_copy<u8>($load_2, $mv$$site$used, global:contract_clause_order.wado::$const_obj_17, 0, 7);
+    $sroa_$f_buf_121 = $local_10;
+    $mv$$site$used = $v1 < 0;
+    $v1 = "core:prelude/primitive.wado/count_digits_u64"(local.tee x_86(x_86 = builtin::i64_extend_i32_s($v1); select i64(x_86 < 0_i64, 0_i64 - x_86, x_86)));
+    $mv$$site$used = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$sroa[self.buf]$dae[alt_prefix]"($sroa_$f_buf_121, $mv$$site$used, $v1);
+    "core:prelude/primitive.wado/write_decimal_digits"($sroa_$f_buf_121.repr, $mv$$site$used, x_86, $v1);
+    if @unlikely(local.tee $v1($local_10.used + 1) > builtin::array_len($local_10.repr)) {
+        cold_path;
+        "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_10, $v1);
+    }
+    $mv$$site$used = $local_10.used;
+    $local_10.used = $v1;
+    builtin::array_copy<u8>($local_10.repr, $mv$$site$used, global:contract_clause_order.wado::$const_obj_6, 0, 1);
     "core:rt/panic"($local_10.repr, $local_10.used);
     unreachable;
 }
@@ -445,22 +451,24 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self, min_ca
 }
 
 fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$sroa[self.buf]$dae[alt_prefix]"(self, is_negative, digit_count) {
-    let new_used_25: i32;
+    let start_26: i32;
     if is_negative {
-        if @unlikely(local.tee new_used_25(local.tee is_negative(self.used) + 1) > builtin::array_len(self.repr)) {
+        if @unlikely(local.tee is_negative(self.used + 1) > builtin::array_len(self.repr)) {
             cold_path;
-            "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self, new_used_25);
+            "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self, is_negative);
         }
-        self.used = new_used_25;
-        builtin::array_set_u8(self.repr, is_negative, 45);
+        start_26 = self.used;
+        self.used = is_negative;
+        builtin::array_set_u8(self.repr, start_26, 45);
     } else {
     }
-    if @unlikely(local.tee digit_count(local.tee is_negative(self.used) + digit_count) > builtin::array_len(self.repr)) {
+    if @unlikely(local.tee digit_count(self.used + digit_count) > builtin::array_len(self.repr)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self, digit_count);
     }
+    start_26 = self.used;
     self.used = digit_count;
-    return is_negative;
+    return start_26;
 }
 
 export fn "contract_clause_order.wado/$cm_export__run" as "run"

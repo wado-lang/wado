@@ -80,29 +80,31 @@ fn "param_spec_config_struct.wado/$cm_export__run"() {
 }
 
 fn "param_spec_config_struct.wado/render$spec0$dae[cfg]"(out, n) {
-    let $load_0: i32;
     let i: i32;
     let new_used_9: i32;
+    let start_10: i32;
     i = 0;
     b0: block {
         l1: loop {
             break_if b0 i >= n;
-            if @unlikely(local.tee new_used_9(local.tee $load_0(out.used) + 1) > builtin::array_len(out.repr)) {
+            if @unlikely(local.tee new_used_9(out.used + 1) > builtin::array_len(out.repr)) {
                 cold_path;
                 "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out, new_used_9);
             }
+            start_10 = out.used;
             out.used = new_used_9;
-            builtin::array_set_u8(out.repr, $load_0, 120);
+            builtin::array_set_u8(out.repr, start_10, 120);
             i = i + 1;
             continue l1;
         };
     };
-    if @unlikely(local.tee i(local.tee $load_0(out.used) + 1) > builtin::array_len(out.repr)) {
+    if @unlikely(local.tee i(out.used + 1) > builtin::array_len(out.repr)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out, i);
     }
+    n = out.used;
     out.used = i;
-    builtin::array_set_u8(out.repr, $load_0, 124);
+    builtin::array_set_u8(out.repr, n, 124);
 }
 
 fn "core:rt/write_string_to_stream$dae[add_newline]"(tx, $mv$message$repr, $mv$message$used) {

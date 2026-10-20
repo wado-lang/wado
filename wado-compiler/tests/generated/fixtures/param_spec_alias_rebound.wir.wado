@@ -104,21 +104,22 @@ fn "param_spec_alias_rebound.wado/run"() with Stdout {
     self_10 = "core:prelude/primitive.wado/count_digits_u64"(local.tee x_24(x_24 = builtin::i64_extend_i32_s(self_10); select i64(x_24 < 0_i64, 0_i64 - x_24, x_24)));
     is_negative_20 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$sroa[self.buf]$dae[alt_prefix]"($sroa_$f_buf_75, is_negative_20, self_10);
     "core:prelude/primitive.wado/write_decimal_digits"($sroa_$f_buf_75.repr, is_negative_20, x_24, self_10);
-    if @unlikely(local.tee is_negative_20(local.tee self_10($local_1.used) + 1) > builtin::array_len($local_1.repr)) {
+    if @unlikely(local.tee self_10($local_1.used + 1) > builtin::array_len($local_1.repr)) {
         cold_path;
-        "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_1, is_negative_20);
+        "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_1, self_10);
     }
-    $local_1.used = is_negative_20;
-    builtin::array_copy<u8>($local_1.repr, self_10, global:param_spec_alias_rebound.wado::$const_obj_3, 0, 1);
+    is_negative_20 = $local_1.used;
+    $local_1.used = self_10;
+    builtin::array_copy<u8>($local_1.repr, is_negative_20, global:param_spec_alias_rebound.wado::$const_obj_3, 0, 1);
     $sroa_$f_buf_75 = $local_1;
-    self_10 = local.tee n_0(cfg_13 = struct.new "param_spec_alias_rebound.wado//Config" { verbose: 1, level: 3 }; r_15 = struct.new "param_spec_alias_rebound.wado//Config" { verbose: 1, level: 3 }; local.tee other_14(cfg_13).level = 9; local.tee other_14("param_spec_alias_rebound.wado/pick"(r_15)).level = 3; "param_spec_alias_rebound.wado/describe"(1, cfg_13.level, n_0)) < 0;
+    is_negative_20 = local.tee n_0(cfg_13 = struct.new "param_spec_alias_rebound.wado//Config" { verbose: 1, level: 3 }; r_15 = struct.new "param_spec_alias_rebound.wado//Config" { verbose: 1, level: 3 }; local.tee other_14(cfg_13).level = 9; local.tee other_14("param_spec_alias_rebound.wado/pick"(r_15)).level = 3; "param_spec_alias_rebound.wado/describe"(1, cfg_13.level, n_0)) < 0;
     n_0 = "core:prelude/primitive.wado/count_digits_u64"(local.tee x_24(x_24 = builtin::i64_extend_i32_s(n_0); select i64(x_24 < 0_i64, 0_i64 - x_24, x_24)));
-    self_10 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$sroa[self.buf]$dae[alt_prefix]"($sroa_$f_buf_75, self_10, n_0);
-    "core:prelude/primitive.wado/write_decimal_digits"($sroa_$f_buf_75.repr, self_10, x_24, n_0);
+    is_negative_20 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$sroa[self.buf]$dae[alt_prefix]"($sroa_$f_buf_75, is_negative_20, n_0);
+    "core:prelude/primitive.wado/write_decimal_digits"($sroa_$f_buf_75.repr, is_negative_20, x_24, n_0);
     n_0 = builtin::i32_wrap_i64(local.tee x_24("wasi/stream-new"()));
-    self_10 = builtin::i32_wrap_i64(x_24 >> 32_i64);
+    is_negative_20 = builtin::i32_wrap_i64(x_24 >> 32_i64);
     n_0 = "param_spec_alias_rebound.wado/$cm_binding__Stdout_write_via_stream"(n_0);
-    "core:rt/write_string_to_stream$dae[add_newline]"(self_10, $local_1.repr, $local_1.used);
+    "core:rt/write_string_to_stream$dae[add_newline]"(is_negative_20, $local_1.repr, $local_1.used);
     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(n_0);
 }
 
@@ -296,22 +297,24 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self, min_ca
 }
 
 fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$sroa[self.buf]$dae[alt_prefix]"(self, is_negative, digit_count) {
-    let new_used_25: i32;
+    let start_26: i32;
     if is_negative {
-        if @unlikely(local.tee new_used_25(local.tee is_negative(self.used) + 1) > builtin::array_len(self.repr)) {
+        if @unlikely(local.tee is_negative(self.used + 1) > builtin::array_len(self.repr)) {
             cold_path;
-            "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self, new_used_25);
+            "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self, is_negative);
         }
-        self.used = new_used_25;
-        builtin::array_set_u8(self.repr, is_negative, 45);
+        start_26 = self.used;
+        self.used = is_negative;
+        builtin::array_set_u8(self.repr, start_26, 45);
     } else {
     }
-    if @unlikely(local.tee digit_count(local.tee is_negative(self.used) + digit_count) > builtin::array_len(self.repr)) {
+    if @unlikely(local.tee digit_count(self.used + digit_count) > builtin::array_len(self.repr)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self, digit_count);
     }
+    start_26 = self.used;
     self.used = digit_count;
-    return is_negative;
+    return start_26;
 }
 
 export fn "param_spec_alias_rebound.wado/$cm_export__run" as "run"

@@ -73,25 +73,21 @@ impl Footprint {
     }
 
     pub(super) fn writes(instr: &WirInstr) -> Self {
-        let mut footprint = Self::default();
-        footprint.add_writes(instr, None);
-        footprint
+        Self::writes_all(std::slice::from_ref(instr), None)
     }
 
-    /// What `body` writes, with a direct call to a function `callees` knows
-    /// writing only the fields it names.
-    pub(super) fn writes_all(body: &[WirInstr], callees: &CalleeWrites) -> Self {
+    /// What `body` writes, with a direct call off a cold path to a function
+    /// `callees` knows writing only the fields it names.
+    pub(super) fn writes_all(body: &[WirInstr], callees: Option<&CalleeWrites>) -> Self {
         let mut footprint = Self::default();
-        for instr in body {
-            footprint.add_writes(instr, Some(callees));
-        }
+        footprint.add_writes_all(body, callees);
         footprint
     }
 
     /// What `instr` itself writes, its operands left out.
-    pub(super) fn writes_of_node(instr: &WirInstr, callees: &CalleeWrites) -> Self {
+    pub(super) fn writes_of_node(instr: &WirInstr, callees: Option<&CalleeWrites>) -> Self {
         let mut footprint = Self::default();
-        footprint.add_node_writes(instr, Some(callees));
+        footprint.add_node_writes(instr, callees);
         footprint
     }
 
@@ -146,8 +142,27 @@ impl Footprint {
         instr.for_each_child(&mut |child| self.add_reads(child));
     }
 
+    fn add_writes_all(&mut self, body: &[WirInstr], callees: Option<&CalleeWrites>) {
+        for instr in body {
+            self.add_writes(instr, callees);
+        }
+    }
+
     fn add_writes(&mut self, instr: &WirInstr, callees: Option<&CalleeWrites>) {
         self.add_node_writes(instr, callees);
+        if let WirInstr::If {
+            condition,
+            then_body,
+            else_body,
+            ..
+        } = instr
+        {
+            self.add_writes(condition, callees);
+            for arm in std::iter::once(then_body).chain(else_body) {
+                self.add_writes_all(arm, callees.filter(|_| !is_cold_arm(arm)));
+            }
+            return;
+        }
         instr.for_each_child(&mut |child| self.add_writes(child, callees));
     }
 
@@ -182,6 +197,14 @@ impl Footprint {
             _ => {}
         }
     }
+}
+
+/// True if `arm` is marked rarely run. Keeping a load live across a call there
+/// takes a callee-saved register, saved and restored on every entry, to spare
+/// one reload. That measured slower, so `CalleeWrites` is not consulted inside
+/// one (`.claude/skills/wado-performance/trade-offs.md`).
+pub(super) fn is_cold_arm(arm: &[WirInstr]) -> bool {
+    arm.iter().any(|instr| matches!(instr, WirInstr::ColdPath))
 }
 
 /// The struct fields each defined function may write, its callees' writes

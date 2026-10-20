@@ -182,16 +182,17 @@ fn "const_object_globalization_value_arg_call.wado/run"() with Stdout {
         builtin::array_set_u8($mv_arg_3.repr, current, 45);
     } else {
     }
-    if @unlikely(local.tee $sroa_$iter_0_start_46(local.tee current($mv_arg_3.used) + acc) > builtin::array_len($mv_arg_3.repr)) {
+    if @unlikely(local.tee current($mv_arg_3.used + acc) > builtin::array_len($mv_arg_3.repr)) {
         cold_path;
-        "core:prelude/string.wado/core:prelude/string.wado/String::grow"($mv_arg_3, $sroa_$iter_0_start_46);
+        "core:prelude/string.wado/core:prelude/string.wado/String::grow"($mv_arg_3, current);
     }
-    $mv_arg_3.used = $sroa_$iter_0_start_46;
-    "core:prelude/primitive.wado/write_decimal_digits"($mv_arg_3.repr, current, x, acc);
+    $sroa_$iter_0_start_46 = $mv_arg_3.used;
+    $mv_arg_3.used = current;
+    "core:prelude/primitive.wado/write_decimal_digits"($mv_arg_3.repr, $sroa_$iter_0_start_46, x, acc);
     acc = builtin::i32_wrap_i64(local.tee x("wasi/stream-new"()));
-    current = builtin::i32_wrap_i64(x >> 32_i64);
+    $sroa_$iter_0_start_46 = builtin::i32_wrap_i64(x >> 32_i64);
     acc = "const_object_globalization_value_arg_call.wado/$cm_binding__Stdout_write_via_stream"(acc);
-    "core:rt/write_string_to_stream$dae[add_newline]"(current, $mv_arg_3.repr, $mv_arg_3.used);
+    "core:rt/write_string_to_stream$dae[add_newline]"($sroa_$iter_0_start_46, $mv_arg_3.repr, $mv_arg_3.used);
     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(acc);
 }
 

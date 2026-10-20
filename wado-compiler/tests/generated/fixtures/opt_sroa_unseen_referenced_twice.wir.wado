@@ -170,16 +170,17 @@ fn "opt_sroa_unseen_referenced_twice.wado/f"(a, bad) with Stdout {
         builtin::array_set_u8($local_4_4.repr, start_70, 45);
     } else {
     }
-    if @unlikely(local.tee a(local.tee start_70($local_4_4.used) + bad) > builtin::array_len($local_4_4.repr)) {
+    if @unlikely(local.tee start_70($local_4_4.used + bad) > builtin::array_len($local_4_4.repr)) {
         cold_path;
-        "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_4_4, a);
+        "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_4_4, start_70);
     }
-    $local_4_4.used = a;
-    "core:prelude/primitive.wado/write_decimal_digits"($local_4_4.repr, start_70, x, bad);
+    a = $local_4_4.used;
+    $local_4_4.used = start_70;
+    "core:prelude/primitive.wado/write_decimal_digits"($local_4_4.repr, a, x, bad);
     bad = builtin::i32_wrap_i64(local.tee x("wasi/stream-new"()));
-    start_70 = builtin::i32_wrap_i64(x >> 32_i64);
+    a = builtin::i32_wrap_i64(x >> 32_i64);
     bad = "opt_sroa_unseen_referenced_twice.wado/$cm_binding__Stdout_write_via_stream"(bad);
-    "core:rt/write_string_to_stream$spec0$dae[add_newline]"(start_70, $local_4_4.repr, $local_4_4.used);
+    "core:rt/write_string_to_stream$spec0$dae[add_newline]"(a, $local_4_4.repr, $local_4_4.used);
     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(bad);
 }
 

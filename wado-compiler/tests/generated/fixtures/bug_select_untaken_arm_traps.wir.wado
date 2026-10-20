@@ -97,16 +97,17 @@ fn "bug_select_untaken_arm_traps.wado/run"() with Stdout {
         builtin::array_set_u8($mv_arg_2.repr, start_105, 45);
     } else {
     }
-    if @unlikely(local.tee tx_25(local.tee start_105($mv_arg_2.used) + rx_24) > builtin::array_len($mv_arg_2.repr)) {
+    if @unlikely(local.tee start_105($mv_arg_2.used + rx_24) > builtin::array_len($mv_arg_2.repr)) {
         cold_path;
-        "core:prelude/string.wado/core:prelude/string.wado/String::grow"($mv_arg_2, tx_25);
+        "core:prelude/string.wado/core:prelude/string.wado/String::grow"($mv_arg_2, start_105);
     }
-    $mv_arg_2.used = tx_25;
-    "core:prelude/primitive.wado/write_decimal_digits"($mv_arg_2.repr, start_105, packed_23, rx_24);
+    tx_25 = $mv_arg_2.used;
+    $mv_arg_2.used = start_105;
+    "core:prelude/primitive.wado/write_decimal_digits"($mv_arg_2.repr, tx_25, packed_23, rx_24);
     rx_24 = builtin::i32_wrap_i64(local.tee packed_23("wasi/stream-new"()));
-    start_105 = builtin::i32_wrap_i64(packed_23 >> 32_i64);
+    tx_25 = builtin::i32_wrap_i64(packed_23 >> 32_i64);
     rx_24 = "bug_select_untaken_arm_traps.wado/$cm_binding__Stdout_write_via_stream"(rx_24);
-    "core:rt/write_string_to_stream$dae[add_newline]"(start_105, $mv_arg_2.repr, $mv_arg_2.used);
+    "core:rt/write_string_to_stream$dae[add_newline]"(tx_25, $mv_arg_2.repr, $mv_arg_2.used);
     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(rx_24);
 }
 

@@ -74,7 +74,7 @@ global mut global:global_dce.wado::$modules_initialized: bool = 0;
 global global:global_dce.wado::$const_obj_3: ref Array<u8> = array.new_fixed<u8>(44);
 
 fn "global_dce.wado/run"() with Stdout {
-    let $load_5: ref Array<u8>;
+    let $load_6: ref Array<u8>;
     let $local_0: ref "core:prelude/string.wado//String";
     let self_9: i32;
     let is_negative_15: bool;
@@ -100,38 +100,41 @@ fn "global_dce.wado/run"() with Stdout {
         builtin::array_set_u8($local_0.repr, start_97, 45);
     } else {
     }
-    if @unlikely(local.tee is_negative_15(local.tee start_97($local_0.used) + self_9) > builtin::array_len($local_0.repr)) {
-        cold_path;
-        "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_0, is_negative_15);
-    }
-    $local_0.used = is_negative_15;
-    "core:prelude/primitive.wado/write_decimal_digits"(local.tee $load_5($local_0.repr), start_97, x, self_9);
-    if @unlikely(local.tee start_97(local.tee self_9($local_0.used) + 1) > builtin::array_len($load_5)) {
+    if @unlikely(local.tee start_97($local_0.used + self_9) > builtin::array_len($local_0.repr)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_0, start_97);
     }
+    is_negative_15 = $local_0.used;
     $local_0.used = start_97;
-    builtin::array_copy<u8>(local.tee $load_5($local_0.repr), self_9, global:global_dce.wado::$const_obj_3, 0, 1);
+    "core:prelude/primitive.wado/write_decimal_digits"(local.tee $load_6($local_0.repr), is_negative_15, x, self_9);
+    if @unlikely(local.tee self_9($local_0.used + 1) > builtin::array_len($load_6)) {
+        cold_path;
+        "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_0, self_9);
+    }
+    is_negative_15 = $local_0.used;
+    $local_0.used = self_9;
+    builtin::array_copy<u8>(local.tee $load_6($local_0.repr), is_negative_15, global:global_dce.wado::$const_obj_3, 0, 1);
     v = global:global_dce.wado::USED_STRING;
     let $array_clone_src_1: ref Array<u8>;
     $array_clone_src_1 = v.repr;
-    self_9 = v.used;
+    is_negative_15 = v.used;
     let $array_clone_dst_2: ref Array<u8>;
-    builtin::array_copy<u8>(local.tee $array_clone_dst_2(builtin::array_new<u8>(self_9)), 0, $array_clone_src_1, 0, self_9);
+    builtin::array_copy<u8>(local.tee $array_clone_dst_2(builtin::array_new<u8>(is_negative_15)), 0, $array_clone_src_1, 0, is_negative_15);
     $inline_core_prelude_string_wado_String__internal_push_string_17: block {
-        break_if $inline_core_prelude_string_wado_String__internal_push_string_17 self_9 == 0;
-        if @unlikely(local.tee is_negative_15(local.tee start_97($local_0.used) + self_9) > builtin::array_len($load_5)) {
+        break_if $inline_core_prelude_string_wado_String__internal_push_string_17 is_negative_15 == 0;
+        if @unlikely(local.tee self_9($local_0.used + is_negative_15) > builtin::array_len($load_6)) {
             cold_path;
-            "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_0, is_negative_15);
+            "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_0, self_9);
         }
-        $local_0.used = is_negative_15;
-        builtin::array_copy<u8>($local_0.repr, start_97, $array_clone_dst_2, 0, self_9);
+        start_97 = $local_0.used;
+        $local_0.used = self_9;
+        builtin::array_copy<u8>($local_0.repr, start_97, $array_clone_dst_2, 0, is_negative_15);
     };
-    self_9 = builtin::i32_wrap_i64(local.tee x("wasi/stream-new"()));
+    is_negative_15 = builtin::i32_wrap_i64(local.tee x("wasi/stream-new"()));
     start_97 = builtin::i32_wrap_i64(x >> 32_i64);
-    self_9 = "global_dce.wado/$cm_binding__Stdout_write_via_stream"(self_9);
+    is_negative_15 = "global_dce.wado/$cm_binding__Stdout_write_via_stream"(is_negative_15);
     "core:rt/write_string_to_stream$dae[add_newline]"(start_97, $local_0.repr, $local_0.used);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(self_9);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(is_negative_15);
 }
 
 fn "global_dce.wado/$cm_binding__Stdout_write_via_stream"(data) with Stdout {

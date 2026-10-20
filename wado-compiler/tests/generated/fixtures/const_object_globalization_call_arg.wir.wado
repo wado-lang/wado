@@ -125,16 +125,17 @@ fn "const_object_globalization_call_arg.wado/run"() with Stdout {
         builtin::array_set_u8($local_0.repr, start_66, 45);
     } else {
     }
-    if @unlikely(local.tee is_negative_15(local.tee start_66($local_0.used) + $arg_spill_2) > builtin::array_len($local_0.repr)) {
+    if @unlikely(local.tee start_66($local_0.used + $arg_spill_2) > builtin::array_len($local_0.repr)) {
         cold_path;
-        "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_0, is_negative_15);
+        "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_0, start_66);
     }
-    $local_0.used = is_negative_15;
-    "core:prelude/primitive.wado/write_decimal_digits"($local_0.repr, start_66, x, $arg_spill_2);
+    is_negative_15 = $local_0.used;
+    $local_0.used = start_66;
+    "core:prelude/primitive.wado/write_decimal_digits"($local_0.repr, is_negative_15, x, $arg_spill_2);
     $arg_spill_2 = builtin::i32_wrap_i64(local.tee x("wasi/stream-new"()));
-    start_66 = builtin::i32_wrap_i64(x >> 32_i64);
+    is_negative_15 = builtin::i32_wrap_i64(x >> 32_i64);
     $arg_spill_2 = "const_object_globalization_call_arg.wado/$cm_binding__Stdout_write_via_stream"($arg_spill_2);
-    "core:rt/write_string_to_stream$dae[add_newline]"(start_66, $local_0.repr, $local_0.used);
+    "core:rt/write_string_to_stream$dae[add_newline]"(is_negative_15, $local_0.repr, $local_0.used);
     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"($arg_spill_2);
 }
 

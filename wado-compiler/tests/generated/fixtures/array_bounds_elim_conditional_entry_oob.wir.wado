@@ -110,16 +110,17 @@ fn "array_bounds_elim_conditional_entry_oob.wado/run"() with Stdout {
         builtin::array_set_u8($local_1.repr, n_3, 45);
     } else {
     }
-    if @unlikely(local.tee i_36(local.tee n_3($local_1.used) + flag) > builtin::array_len($local_1.repr)) {
+    if @unlikely(local.tee n_3($local_1.used + flag) > builtin::array_len($local_1.repr)) {
         cold_path;
-        "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_1, i_36);
+        "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_1, n_3);
     }
-    $local_1.used = i_36;
-    "core:prelude/primitive.wado/write_decimal_digits"($local_1.repr, n_3, x, flag);
+    i_36 = $local_1.used;
+    $local_1.used = n_3;
+    "core:prelude/primitive.wado/write_decimal_digits"($local_1.repr, i_36, x, flag);
     flag = builtin::i32_wrap_i64(local.tee x("wasi/stream-new"()));
-    n_3 = builtin::i32_wrap_i64(x >> 32_i64);
+    i_36 = builtin::i32_wrap_i64(x >> 32_i64);
     flag = "array_bounds_elim_conditional_entry_oob.wado/$cm_binding__Stdout_write_via_stream"(flag);
-    "core:rt/write_string_to_stream$dae[add_newline]"(n_3, $local_1.repr, $local_1.used);
+    "core:rt/write_string_to_stream$dae[add_newline]"(i_36, $local_1.repr, $local_1.used);
     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(flag);
 }
 

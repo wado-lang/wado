@@ -1,6 +1,7 @@
-// A call forgets only the fields its callee may write. The cold call grows the
-// `List`s, which writes their `repr` alone, so `b.tag` and its `used` are read
-// once and reused after it.
+// A call in a cold arm forgets every field, even one its callee never writes.
+// The cold call here grows the `List`s, writing only their `repr`, yet `b.tag`
+// and its `used` load again after it: keeping them live across the call would
+// cost the hot path a callee-saved register to spare one reload.
 
 struct Rows {
     tag: List<i32>,
@@ -36,5 +37,5 @@ __DATA__
 {
     "stdout": "",
     "wir_scope": "fill",
-    "wir_not_expect:O2": ["(b.tag).used;"]
+    "wir_expect:O2": ["(b.tag).used;"]
 }

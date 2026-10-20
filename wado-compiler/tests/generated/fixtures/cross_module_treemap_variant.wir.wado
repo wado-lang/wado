@@ -325,8 +325,6 @@ fn "./sub/cross_module_treemap_variant_helper.wado/stringify$sroa[v.value]"(v) {
     let $load_3: ref Array<u8>;
     let $load_17: i32;
     let $load_20: i32;
-    let $load_25: i32;
-    let $load_28: i32;
     let s_1: ref "core:prelude/string.wado//String";
     let map: ref "core:collections/treemap.wado//TreeMap<core:prelude/string.wado/String,./sub/cross_module_treemap_variant_helper.wado/Value>";
     let $local_8: ref "core:prelude/string.wado//String";
@@ -348,6 +346,7 @@ fn "./sub/cross_module_treemap_variant_helper.wado/stringify$sroa[v.value]"(v) {
     let other_121: ref "core:prelude/string.wado//String";
     let n_126: i32;
     let new_used_130: i32;
+    let start_131: i32;
     let elements: ref "Array<[core:prelude/string.wado/String,./sub/cross_module_treemap_variant_helper.wado/Value]>";
     return (if ref.test "./sub/cross_module_treemap_variant_helper.wado//Value::Str"(v) -> ref "core:prelude/string.wado//String" {
         s_1 = ref.cast "./sub/cross_module_treemap_variant_helper.wado//Value::Str"(v).payload_0;
@@ -429,23 +428,25 @@ fn "./sub/cross_module_treemap_variant_helper.wado/stringify$sroa[v.value]"(v) {
                 builtin::array_copy<u8>(local.tee $array_clone_src_1(v_87.repr), start_96, $local_8.repr, 0, self_92);
                 self_92 = start_96 + self_92;
                 builtin::array_copy<u8>($array_clone_src_1, self_92, global:./sub/cross_module_treemap_variant_helper.wado::$const_obj_20, 0, 1);
-                if @unlikely(local.tee self_92(local.tee $load_25(v_87.used) + (2 + $load_17)) > builtin::array_len($array_clone_src_1)) {
+                if @unlikely(local.tee self_92(v_87.used + (2 + $load_17)) > builtin::array_len($array_clone_src_1)) {
                     cold_path;
                     "core:prelude/string.wado/core:prelude/string.wado/String::grow"(v_87, self_92);
                 }
+                start_96 = v_87.used;
                 v_87.used = self_92;
-                builtin::array_copy<u8>(local.tee $array_clone_src_1(v_87.repr), $load_25, $array_clone_dst_2, 0, $load_17);
-                $load_17 = $load_25 + $load_17;
+                builtin::array_copy<u8>(local.tee $array_clone_src_1(v_87.repr), start_96, $array_clone_dst_2, 0, $load_17);
+                $load_17 = start_96 + $load_17;
                 builtin::array_copy<u8>($array_clone_src_1, $load_17, global:./sub/cross_module_treemap_variant_helper.wado::$const_obj_19, 0, 2);
                 other_121 = "./sub/cross_module_treemap_variant_helper.wado/stringify$sroa[v.value]"(v);
                 $inline_core_prelude_string_wado_String__internal_push_string_39: block {
                     break_if $inline_core_prelude_string_wado_String__internal_push_string_39 local.tee n_126(other_121.used) == 0;
-                    if @unlikely(local.tee new_used_130(local.tee $load_28(v_87.used) + n_126) > builtin::array_len(v_87.repr)) {
+                    if @unlikely(local.tee new_used_130(v_87.used + n_126) > builtin::array_len(v_87.repr)) {
                         cold_path;
                         "core:prelude/string.wado/core:prelude/string.wado/String::grow"(v_87, new_used_130);
                     }
+                    start_131 = v_87.used;
                     v_87.used = new_used_130;
-                    builtin::array_copy<u8>(v_87.repr, $load_28, other_121.repr, 0, n_126);
+                    builtin::array_copy<u8>(v_87.repr, start_131, other_121.repr, 0, n_126);
                 };
                 $local_8 = v_87;
                 self_43 = self_43 + 1;
@@ -453,16 +454,16 @@ fn "./sub/cross_module_treemap_variant_helper.wado/stringify$sroa[v.value]"(v) {
             };
         };
         $vc_payload_0 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(17), used: 0 };
-        new_used_130 = $local_8.used;
-        if @unlikely(local.tee $load_28(1 + new_used_130) > 17) {
+        start_131 = $local_8.used;
+        if @unlikely(local.tee new_used_130(1 + start_131) > 17) {
             cold_path;
-            "core:prelude/string.wado/core:prelude/string.wado/String::grow"($vc_payload_0, $load_28);
+            "core:prelude/string.wado/core:prelude/string.wado/String::grow"($vc_payload_0, new_used_130);
         }
         n_126 = $vc_payload_0.used;
-        $vc_payload_0.used = $load_28;
-        builtin::array_copy<u8>(local.tee $array_clone_dst_5($vc_payload_0.repr), n_126, $local_8.repr, 0, new_used_130);
-        new_used_130 = n_126 + new_used_130;
-        builtin::array_copy<u8>($array_clone_dst_5, new_used_130, global:./sub/cross_module_treemap_variant_helper.wado::$const_obj_18, 0, 1);
+        $vc_payload_0.used = new_used_130;
+        builtin::array_copy<u8>(local.tee $array_clone_dst_5($vc_payload_0.repr), n_126, $local_8.repr, 0, start_131);
+        start_131 = n_126 + start_131;
+        builtin::array_copy<u8>($array_clone_dst_5, start_131, global:./sub/cross_module_treemap_variant_helper.wado::$const_obj_18, 0, 1);
         $vc_payload_0;
     });
 }

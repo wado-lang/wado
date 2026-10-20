@@ -123,31 +123,34 @@ fn "stream_cm_stdin_read.wado/run"() with Stdout, Stdin {
     start_25 = total < 0;
     total = "core:prelude/primitive.wado/count_digits_u64"(local.tee x(x = builtin::i64_extend_i32_s(total); select i64(x < 0_i64, 0_i64 - x, x)));
     if start_25 {
-        if @unlikely(local.tee stdin_stream(local.tee start_25($local_3.used) + 1) > builtin::array_len($load_4)) {
+        if @unlikely(local.tee start_25($local_3.used + 1) > builtin::array_len($load_4)) {
             cold_path;
-            "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_3, stdin_stream);
+            "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_3, start_25);
         }
-        $local_3.used = stdin_stream;
-        builtin::array_set_u8($local_3.repr, start_25, 45);
+        stdin_stream = $local_3.used;
+        $local_3.used = start_25;
+        builtin::array_set_u8($local_3.repr, stdin_stream, 45);
     } else {
     }
-    if @unlikely(local.tee stdin_stream(local.tee start_25($local_3.used) + total) > builtin::array_len($local_3.repr)) {
+    if @unlikely(local.tee stdin_stream($local_3.used + total) > builtin::array_len($local_3.repr)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_3, stdin_stream);
     }
+    start_25 = $local_3.used;
     $local_3.used = stdin_stream;
     "core:prelude/primitive.wado/write_decimal_digits"(local.tee $load_4($local_3.repr), start_25, x, total);
-    if @unlikely(local.tee start_25(local.tee total($local_3.used) + 6) > builtin::array_len($load_4)) {
+    if @unlikely(local.tee total($local_3.used + 6) > builtin::array_len($load_4)) {
         cold_path;
-        "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_3, start_25);
+        "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_3, total);
     }
-    $local_3.used = start_25;
-    builtin::array_copy<u8>($local_3.repr, total, global:stream_cm_stdin_read.wado::$const_obj_3, 0, 6);
-    total = builtin::i32_wrap_i64(local.tee x("wasi/stream-new"()));
-    start_25 = builtin::i32_wrap_i64(x >> 32_i64);
-    total = "stream_cm_stdin_read.wado/$cm_binding__Stdout_write_via_stream"(total);
-    "core:rt/write_string_to_stream$dae[add_newline]"(start_25, $local_3.repr, $local_3.used);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(total);
+    start_25 = $local_3.used;
+    $local_3.used = total;
+    builtin::array_copy<u8>($local_3.repr, start_25, global:stream_cm_stdin_read.wado::$const_obj_3, 0, 6);
+    start_25 = builtin::i32_wrap_i64(local.tee x("wasi/stream-new"()));
+    total = builtin::i32_wrap_i64(x >> 32_i64);
+    start_25 = "stream_cm_stdin_read.wado/$cm_binding__Stdout_write_via_stream"(start_25);
+    "core:rt/write_string_to_stream$dae[add_newline]"(total, $local_3.repr, $local_3.used);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(start_25);
 }
 
 fn "stream_cm_stdin_read.wado/$cm_binding__Stdout_write_via_stream"(data) with Stdout {
@@ -400,7 +403,6 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self, min_ca
 }
 
 fn "core:prelude/types.wado/core:prelude/types.wado/Stream<u8>::read_to_end_sized$dae[expected]"(self) {
-    let $load_1: i32;
     let all: ref "core:prelude//List<u8>";
     let other_len: i32;
     let new_used: i32;
@@ -412,11 +414,11 @@ fn "core:prelude/types.wado/core:prelude/types.wado/Stream<u8>::read_to_end_size
             multivalue_bind [$mv$chunk$items, $mv$chunk$result] = "core:rt/cm_stream_read_u8"(self, 4096);
             $inline_core_prelude_list_wado_List_u8___extend_1: block {
                 break_if $inline_core_prelude_list_wado_List_u8___extend_1 local.tee other_len($mv$chunk$items.used) == 0;
-                if @unlikely(local.tee new_used(local.tee $load_1(all.used) + other_len) > builtin::array_len(all.repr)) {
+                if @unlikely(local.tee new_used(all.used + other_len) > builtin::array_len(all.repr)) {
                     cold_path;
                     "core:prelude/list.wado/core:prelude/list.wado/List<u8>::grow_to"(all, new_used);
                 }
-                builtin::array_copy<u8>(all.repr, $load_1, $mv$chunk$items.repr, 0, other_len);
+                builtin::array_copy<u8>(all.repr, all.used, $mv$chunk$items.repr, 0, other_len);
                 all.used = new_used;
             };
             if $mv$chunk$result != 0 {

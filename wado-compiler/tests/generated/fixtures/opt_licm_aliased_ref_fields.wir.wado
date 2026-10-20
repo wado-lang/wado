@@ -117,16 +117,17 @@ fn "opt_licm_aliased_ref_fields.wado/run"() with Stdout {
         builtin::array_set_u8($local_3.repr, start_69, 45);
     } else {
     }
-    if @unlikely(local.tee is_negative_18(local.tee start_69($local_3.used) + result) > builtin::array_len($local_3.repr)) {
+    if @unlikely(local.tee start_69($local_3.used + result) > builtin::array_len($local_3.repr)) {
         cold_path;
-        "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_3, is_negative_18);
+        "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_3, start_69);
     }
-    $local_3.used = is_negative_18;
-    "core:prelude/primitive.wado/write_decimal_digits"($local_3.repr, start_69, x, result);
+    is_negative_18 = $local_3.used;
+    $local_3.used = start_69;
+    "core:prelude/primitive.wado/write_decimal_digits"($local_3.repr, is_negative_18, x, result);
     result = builtin::i32_wrap_i64(local.tee x("wasi/stream-new"()));
-    start_69 = builtin::i32_wrap_i64(x >> 32_i64);
+    is_negative_18 = builtin::i32_wrap_i64(x >> 32_i64);
     result = "opt_licm_aliased_ref_fields.wado/$cm_binding__Stdout_write_via_stream"(result);
-    "core:rt/write_string_to_stream$dae[add_newline]"(start_69, $local_3.repr, $local_3.used);
+    "core:rt/write_string_to_stream$dae[add_newline]"(is_negative_18, $local_3.repr, $local_3.used);
     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(result);
 }
 

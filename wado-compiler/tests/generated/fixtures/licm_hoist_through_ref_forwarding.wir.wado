@@ -79,7 +79,7 @@ fn "licm_hoist_through_ref_forwarding.wado/run"() with Stdout {
     let $local_6: ref "core:prelude/string.wado//String";
     let is_negative_21: bool;
     let x_25: i64;
-    let new_used_50: i32;
+    let start_51: i32;
     out_0 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 };
     src = black_box(struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(97, 98, 34, 99), used: 4 });
     at = "licm_hoist_through_ref_forwarding.wado/licm_hoist_through_ref_forwarding.wado/count_quotes<&core:prelude/string.wado/String>"(out_0, src);
@@ -88,37 +88,39 @@ fn "licm_hoist_through_ref_forwarding.wado/run"() with Stdout {
     at = "core:prelude/primitive.wado/count_digits_u64"(local.tee x_25(x_25 = builtin::i64_extend_i32_s(at); select i64(x_25 < 0_i64, 0_i64 - x_25, x_25)));
     is_negative_21 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$sroa[self.buf]$dae[alt_prefix]"(src, is_negative_21, at);
     "core:prelude/primitive.wado/write_decimal_digits"(local.tee $load_0(src.repr), is_negative_21, x_25, at);
-    if @unlikely(local.tee is_negative_21(local.tee at(src.used) + 1) > builtin::array_len($load_0)) {
+    if @unlikely(local.tee at(src.used + 1) > builtin::array_len($load_0)) {
         cold_path;
-        "core:prelude/string.wado/core:prelude/string.wado/String::grow"(src, is_negative_21);
+        "core:prelude/string.wado/core:prelude/string.wado/String::grow"(src, at);
     }
-    src.used = is_negative_21;
-    builtin::array_copy<u8>(local.tee $load_0(src.repr), at, global:licm_hoist_through_ref_forwarding.wado::$const_obj_3, 0, 1);
+    is_negative_21 = src.used;
+    src.used = at;
+    builtin::array_copy<u8>(local.tee $load_0(src.repr), is_negative_21, global:licm_hoist_through_ref_forwarding.wado::$const_obj_3, 0, 1);
     $inline_core_prelude_string_wado_String__internal_push_string_16: block {
-        break_if $inline_core_prelude_string_wado_String__internal_push_string_16 local.tee at(out_0.used) == 0;
-        if @unlikely(local.tee new_used_50(local.tee is_negative_21(src.used) + at) > builtin::array_len($load_0)) {
+        break_if $inline_core_prelude_string_wado_String__internal_push_string_16 local.tee is_negative_21(out_0.used) == 0;
+        if @unlikely(local.tee at(src.used + is_negative_21) > builtin::array_len($load_0)) {
             cold_path;
-            "core:prelude/string.wado/core:prelude/string.wado/String::grow"(src, new_used_50);
+            "core:prelude/string.wado/core:prelude/string.wado/String::grow"(src, at);
         }
-        src.used = new_used_50;
-        builtin::array_copy<u8>(src.repr, is_negative_21, out_0.repr, 0, at);
+        start_51 = src.used;
+        src.used = at;
+        builtin::array_copy<u8>(src.repr, start_51, out_0.repr, 0, is_negative_21);
     };
-    at = builtin::i32_wrap_i64(local.tee x_25("wasi/stream-new"()));
-    is_negative_21 = builtin::i32_wrap_i64(x_25 >> 32_i64);
-    at = "licm_hoist_through_ref_forwarding.wado/$cm_binding__Stdout_write_via_stream"(at);
-    "core:rt/write_string_to_stream$dae[add_newline]"(is_negative_21, src.repr, src.used);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(at);
+    is_negative_21 = builtin::i32_wrap_i64(local.tee x_25("wasi/stream-new"()));
+    start_51 = builtin::i32_wrap_i64(x_25 >> 32_i64);
+    is_negative_21 = "licm_hoist_through_ref_forwarding.wado/$cm_binding__Stdout_write_via_stream"(is_negative_21);
+    "core:rt/write_string_to_stream$dae[add_newline]"(start_51, src.repr, src.used);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(is_negative_21);
     src = black_box(struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(97, 98, 99), used: 3 });
     $local_6 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
-    is_negative_21 = local.tee at("licm_hoist_through_ref_forwarding.wado/licm_hoist_through_ref_forwarding.wado/count_quotes<&core:prelude/string.wado/String>"(out_0, src)) < 0;
-    at = "core:prelude/primitive.wado/count_digits_u64"(local.tee x_25(x_25 = builtin::i64_extend_i32_s(at); select i64(x_25 < 0_i64, 0_i64 - x_25, x_25)));
-    is_negative_21 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$sroa[self.buf]$dae[alt_prefix]"($local_6, is_negative_21, at);
-    "core:prelude/primitive.wado/write_decimal_digits"($local_6.repr, is_negative_21, x_25, at);
-    at = builtin::i32_wrap_i64(local.tee x_25("wasi/stream-new"()));
-    is_negative_21 = builtin::i32_wrap_i64(x_25 >> 32_i64);
-    at = "licm_hoist_through_ref_forwarding.wado/$cm_binding__Stdout_write_via_stream"(at);
-    "core:rt/write_string_to_stream$dae[add_newline]"(is_negative_21, $local_6.repr, $local_6.used);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(at);
+    start_51 = local.tee is_negative_21("licm_hoist_through_ref_forwarding.wado/licm_hoist_through_ref_forwarding.wado/count_quotes<&core:prelude/string.wado/String>"(out_0, src)) < 0;
+    is_negative_21 = "core:prelude/primitive.wado/count_digits_u64"(local.tee x_25(x_25 = builtin::i64_extend_i32_s(is_negative_21); select i64(x_25 < 0_i64, 0_i64 - x_25, x_25)));
+    start_51 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$sroa[self.buf]$dae[alt_prefix]"($local_6, start_51, is_negative_21);
+    "core:prelude/primitive.wado/write_decimal_digits"($local_6.repr, start_51, x_25, is_negative_21);
+    is_negative_21 = builtin::i32_wrap_i64(local.tee x_25("wasi/stream-new"()));
+    start_51 = builtin::i32_wrap_i64(x_25 >> 32_i64);
+    is_negative_21 = "licm_hoist_through_ref_forwarding.wado/$cm_binding__Stdout_write_via_stream"(is_negative_21);
+    "core:rt/write_string_to_stream$dae[add_newline]"(start_51, $local_6.repr, $local_6.used);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(is_negative_21);
 }
 
 fn "licm_hoist_through_ref_forwarding.wado/$cm_binding__Stdout_write_via_stream"(data) with Stdout {
@@ -131,10 +133,10 @@ fn "licm_hoist_through_ref_forwarding.wado/$cm_export__run"() {
 }
 
 fn "licm_hoist_through_ref_forwarding.wado/licm_hoist_through_ref_forwarding.wado/count_quotes<&core:prelude/string.wado/String>"(buf, s) {
-    let $load_2: i32;
     let i: i32;
     let self_5: i32;
     let new_used: i32;
+    let start_21: i32;
     let $licm_repr_35: ref Array<u8>;
     self_5 = s.used;
     i = 0;
@@ -146,13 +148,14 @@ fn "licm_hoist_through_ref_forwarding.wado/licm_hoist_through_ref_forwarding.wad
                 i = i + 1;
                 continue l3;
             }
-            if @unlikely(local.tee new_used(local.tee $load_2(buf.used) + 3) > builtin::array_len(buf.repr)) {
+            if @unlikely(local.tee new_used(buf.used + 3) > builtin::array_len(buf.repr)) {
                 cold_path;
                 "core:prelude/string.wado/core:prelude/string.wado/String::grow"(buf, new_used);
                 $licm_repr_35 = s.repr;
             }
+            start_21 = buf.used;
             buf.used = new_used;
-            builtin::array_copy<u8>(buf.repr, $load_2, global:licm_hoist_through_ref_forwarding.wado::$const_obj_4, 0, 3);
+            builtin::array_copy<u8>(buf.repr, start_21, global:licm_hoist_through_ref_forwarding.wado::$const_obj_4, 0, 3);
             return i;
             continue l3;
         };
@@ -325,22 +328,24 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self, min_ca
 }
 
 fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$sroa[self.buf]$dae[alt_prefix]"(self, is_negative, digit_count) {
-    let new_used_25: i32;
+    let start_26: i32;
     if is_negative {
-        if @unlikely(local.tee new_used_25(local.tee is_negative(self.used) + 1) > builtin::array_len(self.repr)) {
+        if @unlikely(local.tee is_negative(self.used + 1) > builtin::array_len(self.repr)) {
             cold_path;
-            "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self, new_used_25);
+            "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self, is_negative);
         }
-        self.used = new_used_25;
-        builtin::array_set_u8(self.repr, is_negative, 45);
+        start_26 = self.used;
+        self.used = is_negative;
+        builtin::array_set_u8(self.repr, start_26, 45);
     } else {
     }
-    if @unlikely(local.tee digit_count(local.tee is_negative(self.used) + digit_count) > builtin::array_len(self.repr)) {
+    if @unlikely(local.tee digit_count(self.used + digit_count) > builtin::array_len(self.repr)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self, digit_count);
     }
+    start_26 = self.used;
     self.used = digit_count;
-    return is_negative;
+    return start_26;
 }
 
 export fn "licm_hoist_through_ref_forwarding.wado/$cm_export__run" as "run"

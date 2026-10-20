@@ -94,16 +94,17 @@ fn "param_spec_scalar_clone_wir.wado/run"() with Stdout {
         builtin::array_set_u8($mv_arg_2.repr, tx_26, 45);
     } else {
     }
-    if @unlikely(local.tee rx_25(local.tee tx_26($mv_arg_2.used) + n_0) > builtin::array_len($mv_arg_2.repr)) {
+    if @unlikely(local.tee tx_26($mv_arg_2.used + n_0) > builtin::array_len($mv_arg_2.repr)) {
         cold_path;
-        "core:prelude/string.wado/core:prelude/string.wado/String::grow"($mv_arg_2, rx_25);
+        "core:prelude/string.wado/core:prelude/string.wado/String::grow"($mv_arg_2, tx_26);
     }
-    $mv_arg_2.used = rx_25;
-    "core:prelude/primitive.wado/write_decimal_digits"($mv_arg_2.repr, tx_26, packed_24, n_0);
+    rx_25 = $mv_arg_2.used;
+    $mv_arg_2.used = tx_26;
+    "core:prelude/primitive.wado/write_decimal_digits"($mv_arg_2.repr, rx_25, packed_24, n_0);
     n_0 = builtin::i32_wrap_i64(local.tee packed_24("wasi/stream-new"()));
-    tx_26 = builtin::i32_wrap_i64(packed_24 >> 32_i64);
+    rx_25 = builtin::i32_wrap_i64(packed_24 >> 32_i64);
     n_0 = "param_spec_scalar_clone_wir.wado/$cm_binding__Stdout_write_via_stream"(n_0);
-    "core:rt/write_string_to_stream$dae[add_newline]"(tx_26, $mv_arg_2.repr, $mv_arg_2.used);
+    "core:rt/write_string_to_stream$dae[add_newline]"(rx_25, $mv_arg_2.repr, $mv_arg_2.used);
     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(n_0);
 }
 

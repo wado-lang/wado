@@ -101,20 +101,21 @@ fn "niri_referenced_aggregate_result.wado/run"() with Stdout {
     let $mv_arg_6: ref "core:prelude/string.wado//String";
     $mv_arg_6 = global:niri_referenced_aggregate_result.wado::$const_obj_2;
     "core:prelude/format.wado/core:prelude/format.wado/Formatter::pad<core:prelude/string.wado/String>$spec0$sroa[self.buf]"($arg_spill_5, $mv_arg_6.repr, $mv_arg_6.used);
-    if @unlikely(local.tee rx_34(local.tee tx_35($mv_arg_2.used) + 1) > builtin::array_len($mv_arg_2.repr)) {
+    if @unlikely(local.tee tx_35($mv_arg_2.used + 1) > builtin::array_len($mv_arg_2.repr)) {
         cold_path;
-        "core:prelude/string.wado/core:prelude/string.wado/String::grow"($mv_arg_2, rx_34);
+        "core:prelude/string.wado/core:prelude/string.wado/String::grow"($mv_arg_2, tx_35);
     }
-    $mv_arg_2.used = rx_34;
-    builtin::array_copy<u8>($mv_arg_2.repr, tx_35, global:niri_referenced_aggregate_result.wado::$const_obj_1, 0, 1);
+    rx_34 = $mv_arg_2.used;
+    $mv_arg_2.used = tx_35;
+    builtin::array_copy<u8>($mv_arg_2.repr, rx_34, global:niri_referenced_aggregate_result.wado::$const_obj_1, 0, 1);
     $sroa_$f_buf_163 = $mv_arg_2;
     $mv_arg_6 = global:niri_referenced_aggregate_result.wado::$const_obj_0;
     "core:prelude/format.wado/core:prelude/format.wado/Formatter::pad<core:prelude/string.wado/String>$spec0$sroa[self.buf]"($sroa_$f_buf_163, $mv_arg_6.repr, $mv_arg_6.used);
-    tx_35 = builtin::i32_wrap_i64(local.tee packed_33("wasi/stream-new"()));
-    rx_34 = builtin::i32_wrap_i64(packed_33 >> 32_i64);
-    tx_35 = "niri_referenced_aggregate_result.wado/$cm_binding__Stdout_write_via_stream"(tx_35);
-    "core:rt/write_string_to_stream$dae[add_newline]"(rx_34, $mv_arg_2.repr, $mv_arg_2.used);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(tx_35);
+    rx_34 = builtin::i32_wrap_i64(local.tee packed_33("wasi/stream-new"()));
+    tx_35 = builtin::i32_wrap_i64(packed_33 >> 32_i64);
+    rx_34 = "niri_referenced_aggregate_result.wado/$cm_binding__Stdout_write_via_stream"(rx_34);
+    "core:rt/write_string_to_stream$dae[add_newline]"(tx_35, $mv_arg_2.repr, $mv_arg_2.used);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(rx_34);
 }
 
 fn "niri_referenced_aggregate_result.wado/$cm_binding__Stdout_write_via_stream"(data) with Stdout {
@@ -208,16 +209,17 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self, min_ca
 }
 
 fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::pad<core:prelude/string.wado/String>$spec0$sroa[self.buf]"(self, $mv$content$repr, $mv$content$used) {
-    let $load_0: i32;
     let new_used_19: i32;
+    let start_20: i32;
     $inline_core_prelude_string_wado_String__internal_push_string_2: block {
         break_if $inline_core_prelude_string_wado_String__internal_push_string_2 $mv$content$used == 0;
-        if @unlikely(local.tee new_used_19(local.tee $load_0(self.used) + $mv$content$used) > builtin::array_len(self.repr)) {
+        if @unlikely(local.tee new_used_19(self.used + $mv$content$used) > builtin::array_len(self.repr)) {
             cold_path;
             "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self, new_used_19);
         }
+        start_20 = self.used;
         self.used = new_used_19;
-        builtin::array_copy<u8>(self.repr, $load_0, $mv$content$repr, 0, $mv$content$used);
+        builtin::array_copy<u8>(self.repr, start_20, $mv$content$repr, 0, $mv$content$used);
     };
     return;
 }

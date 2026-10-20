@@ -69,14 +69,11 @@ global global:tmpl_hoist_match_arm_loop.wado::$const_obj_3: ref Array<u8> = arra
 global global:tmpl_hoist_match_arm_loop.wado::$const_obj_4: ref Array<u8> = array.new_fixed<u8>(109, 61);
 
 fn "tmpl_hoist_match_arm_loop.wado/run"() with Stdout {
-    let $load_0: i32;
-    let $load_2: ref Array<u8>;
-    let $load_3: i32;
-    let $load_5: i32;
+    let $load_3: ref Array<u8>;
     let mode: i32;
     let total: i32;
     let new_used_19: i32;
-    let digit_count_31: i32;
+    let start_20: i32;
     let x_33: i64;
     let arr: ref Array<u8>;
     let q: u64;
@@ -84,6 +81,8 @@ fn "tmpl_hoist_match_arm_loop.wado/run"() with Stdout {
     let tens: i32;
     let $tmpl_buf_87: ref "core:prelude/string.wado//String";
     let new_used_137: i32;
+    let start_138: i32;
+    let start_193: i32;
     mode = global:tmpl_hoist_match_arm_loop.wado::MODE;
     total = 0;
     if mode == 1 {
@@ -95,16 +94,17 @@ fn "tmpl_hoist_match_arm_loop.wado/run"() with Stdout {
             l3: loop {
                 break_if b2 mode >= 4;
                 $tmpl_buf_87.used = 0;
-                if @unlikely(local.tee new_used_19(local.tee $load_0($tmpl_buf_87.used) + 2) > builtin::array_len($tmpl_buf_87.repr)) {
+                if @unlikely(local.tee new_used_19($tmpl_buf_87.used + 2) > builtin::array_len($tmpl_buf_87.repr)) {
                     cold_path;
                     "core:prelude/string.wado/core:prelude/string.wado/String::grow"($tmpl_buf_87, new_used_19);
                 }
+                start_20 = $tmpl_buf_87.used;
                 $tmpl_buf_87.used = new_used_19;
-                builtin::array_copy<u8>(local.tee $load_2($tmpl_buf_87.repr), $load_0, global:tmpl_hoist_match_arm_loop.wado::$const_obj_4, 0, 2);
-                new_used_19 = mode < 0;
+                builtin::array_copy<u8>(local.tee $load_3($tmpl_buf_87.repr), start_20, global:tmpl_hoist_match_arm_loop.wado::$const_obj_4, 0, 2);
+                start_20 = mode < 0;
                 x_33 = builtin::i64_extend_i32_s(mode);
                 x_33 = select i64(x_33 < 0_i64, 0_i64 - x_33, x_33);
-                digit_count_31 = $inline_count_digits_u64_12: block -> i32 {
+                new_used_19 = $inline_count_digits_u64_12: block -> i32 {
                     if x_33 <u 100000_i64 {
                         if x_33 <u 100_i64 {
                             if x_33 <u 10_i64 {
@@ -164,36 +164,38 @@ fn "tmpl_hoist_match_arm_loop.wado/run"() with Stdout {
                     }
                     break $inline_count_digits_u64_12: 20;
                 };
-                if new_used_19 {
-                    if @unlikely(local.tee new_used_137(local.tee $load_3($tmpl_buf_87.used) + 1) > builtin::array_len($load_2)) {
+                if start_20 {
+                    if @unlikely(local.tee new_used_137($tmpl_buf_87.used + 1) > builtin::array_len($load_3)) {
                         cold_path;
                         "core:prelude/string.wado/core:prelude/string.wado/String::grow"($tmpl_buf_87, new_used_137);
                     }
+                    start_138 = $tmpl_buf_87.used;
                     $tmpl_buf_87.used = new_used_137;
-                    builtin::array_set_u8($tmpl_buf_87.repr, $load_3, 45);
+                    builtin::array_set_u8($tmpl_buf_87.repr, start_138, 45);
                 } else {
                 }
-                if @unlikely(local.tee new_used_19(local.tee $load_5($tmpl_buf_87.used) + digit_count_31) > builtin::array_len($tmpl_buf_87.repr)) {
+                if @unlikely(local.tee start_20($tmpl_buf_87.used + new_used_19) > builtin::array_len($tmpl_buf_87.repr)) {
                     cold_path;
-                    "core:prelude/string.wado/core:prelude/string.wado/String::grow"($tmpl_buf_87, new_used_19);
+                    "core:prelude/string.wado/core:prelude/string.wado/String::grow"($tmpl_buf_87, start_20);
                 }
-                $tmpl_buf_87.used = new_used_19;
+                start_193 = $tmpl_buf_87.used;
+                $tmpl_buf_87.used = start_20;
                 arr = $tmpl_buf_87.repr;
-                digit_count_31 = $load_5 + digit_count_31;
+                new_used_19 = start_193 + new_used_19;
                 b27: block {
                     l28: loop {
-                        break_if b27 (digit_count_31 - $load_5) < 2;
+                        break_if b27 (new_used_19 - start_193) < 2;
                         q = x_33 /u 100_i64;
                         tens = local.tee pair(builtin::i32_wrap_i64(x_33 - (q * 100_i64))) / 10;
-                        builtin::array_set_u8(arr, digit_count_31 - 1, ((48 + pair) - (tens * 10)) & 255);
-                        builtin::array_set_u8(arr, digit_count_31 - 2, (48 + tens) & 255);
-                        digit_count_31 = digit_count_31 - 2;
+                        builtin::array_set_u8(arr, new_used_19 - 1, ((48 + pair) - (tens * 10)) & 255);
+                        builtin::array_set_u8(arr, new_used_19 - 2, (48 + tens) & 255);
+                        new_used_19 = new_used_19 - 2;
                         x_33 = q;
                         continue l28;
                     };
                 };
-                if digit_count_31 > $load_5 {
-                    builtin::array_set_u8(arr, $load_5, (48 + builtin::i32_wrap_i64(x_33 %u 10_i64)) & 255);
+                if new_used_19 > start_193 {
+                    builtin::array_set_u8(arr, start_193, (48 + builtin::i32_wrap_i64(x_33 %u 10_i64)) & 255);
                 }
                 total = total + $tmpl_buf_87.used;
                 mode = mode + 1;
@@ -210,22 +212,24 @@ fn "tmpl_hoist_match_arm_loop.wado/run"() with Stdout {
     }
     pair = $tmpl_buf_87.used;
     $tmpl_buf_87.used = tens;
-    builtin::array_copy<u8>(local.tee $load_2($tmpl_buf_87.repr), pair, global:tmpl_hoist_match_arm_loop.wado::$const_obj_3, 0, 6);
+    builtin::array_copy<u8>(local.tee $load_3($tmpl_buf_87.repr), pair, global:tmpl_hoist_match_arm_loop.wado::$const_obj_3, 0, 6);
     pair = total < 0;
     total = "core:prelude/primitive.wado/count_digits_u64"(local.tee q(q = builtin::i64_extend_i32_s(total); select i64(q < 0_i64, 0_i64 - q, q)));
     if pair {
-        if @unlikely(local.tee tens(local.tee pair($tmpl_buf_87.used) + 1) > builtin::array_len($load_2)) {
+        if @unlikely(local.tee pair($tmpl_buf_87.used + 1) > builtin::array_len($load_3)) {
             cold_path;
-            "core:prelude/string.wado/core:prelude/string.wado/String::grow"($tmpl_buf_87, tens);
+            "core:prelude/string.wado/core:prelude/string.wado/String::grow"($tmpl_buf_87, pair);
         }
-        $tmpl_buf_87.used = tens;
-        builtin::array_set_u8($tmpl_buf_87.repr, pair, 45);
+        tens = $tmpl_buf_87.used;
+        $tmpl_buf_87.used = pair;
+        builtin::array_set_u8($tmpl_buf_87.repr, tens, 45);
     } else {
     }
-    if @unlikely(local.tee tens(local.tee pair($tmpl_buf_87.used) + total) > builtin::array_len($tmpl_buf_87.repr)) {
+    if @unlikely(local.tee tens($tmpl_buf_87.used + total) > builtin::array_len($tmpl_buf_87.repr)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"($tmpl_buf_87, tens);
     }
+    pair = $tmpl_buf_87.used;
     $tmpl_buf_87.used = tens;
     "core:prelude/primitive.wado/write_decimal_digits"($tmpl_buf_87.repr, pair, q, total);
     total = builtin::i32_wrap_i64(local.tee q("wasi/stream-new"()));

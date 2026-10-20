@@ -69,24 +69,25 @@ global global:blanket_impl_builtin_bound.wado::$const_obj_0: ref Array<u8> = arr
 fn "blanket_impl_builtin_bound.wado/run"() with Stdout {
     let $local_12: ref "core:prelude/string.wado//String";
     let offset_30: i32;
-    let new_used: i32;
+    let start_44: i32;
     let packed: i64;
     let $sroa_$f_buf_78: ref "core:prelude/string.wado//String";
     offset_30 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$sroa[self.buf]$dae[alt_prefix]"(local.tee $sroa_$f_buf_78(local.tee $local_12(struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(33), used: 0 })), 0, 2);
     "core:prelude/primitive.wado/write_decimal_digits"($sroa_$f_buf_78.repr, offset_30, 42_i64, 2);
-    if @unlikely(local.tee new_used(local.tee offset_30($local_12.used) + 1) > builtin::array_len($local_12.repr)) {
+    if @unlikely(local.tee offset_30($local_12.used + 1) > builtin::array_len($local_12.repr)) {
         cold_path;
-        "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_12, new_used);
+        "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_12, offset_30);
     }
-    $local_12.used = new_used;
-    builtin::array_copy<u8>($local_12.repr, offset_30, global:blanket_impl_builtin_bound.wado::$const_obj_0, 0, 1);
-    offset_30 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$sroa[self.buf]$dae[alt_prefix]"(local.tee $sroa_$f_buf_78($local_12), 0, 2);
-    "core:prelude/primitive.wado/write_decimal_digits"($sroa_$f_buf_78.repr, offset_30, 49_i64, 2);
-    offset_30 = builtin::i32_wrap_i64(local.tee packed("wasi/stream-new"()));
-    new_used = builtin::i32_wrap_i64(packed >> 32_i64);
-    offset_30 = "blanket_impl_builtin_bound.wado/$cm_binding__Stdout_write_via_stream"(offset_30);
-    "core:rt/write_string_to_stream$dae[add_newline]"(new_used, $local_12.repr, $local_12.used);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(offset_30);
+    start_44 = $local_12.used;
+    $local_12.used = offset_30;
+    builtin::array_copy<u8>($local_12.repr, start_44, global:blanket_impl_builtin_bound.wado::$const_obj_0, 0, 1);
+    start_44 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$sroa[self.buf]$dae[alt_prefix]"(local.tee $sroa_$f_buf_78($local_12), 0, 2);
+    "core:prelude/primitive.wado/write_decimal_digits"($sroa_$f_buf_78.repr, start_44, 49_i64, 2);
+    start_44 = builtin::i32_wrap_i64(local.tee packed("wasi/stream-new"()));
+    offset_30 = builtin::i32_wrap_i64(packed >> 32_i64);
+    start_44 = "blanket_impl_builtin_bound.wado/$cm_binding__Stdout_write_via_stream"(start_44);
+    "core:rt/write_string_to_stream$dae[add_newline]"(offset_30, $local_12.repr, $local_12.used);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(start_44);
 }
 
 fn "blanket_impl_builtin_bound.wado/$cm_binding__Stdout_write_via_stream"(data) with Stdout {
@@ -202,22 +203,24 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self, min_ca
 }
 
 fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$sroa[self.buf]$dae[alt_prefix]"(self, is_negative, digit_count) {
-    let new_used_25: i32;
+    let start_26: i32;
     if is_negative {
-        if @unlikely(local.tee new_used_25(local.tee is_negative(self.used) + 1) > builtin::array_len(self.repr)) {
+        if @unlikely(local.tee is_negative(self.used + 1) > builtin::array_len(self.repr)) {
             cold_path;
-            "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self, new_used_25);
+            "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self, is_negative);
         }
-        self.used = new_used_25;
-        builtin::array_set_u8(self.repr, is_negative, 45);
+        start_26 = self.used;
+        self.used = is_negative;
+        builtin::array_set_u8(self.repr, start_26, 45);
     } else {
     }
-    if @unlikely(local.tee digit_count(local.tee is_negative(self.used) + digit_count) > builtin::array_len(self.repr)) {
+    if @unlikely(local.tee digit_count(self.used + digit_count) > builtin::array_len(self.repr)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self, digit_count);
     }
+    start_26 = self.used;
     self.used = digit_count;
-    return is_negative;
+    return start_26;
 }
 
 export fn "blanket_impl_builtin_bound.wado/$cm_export__run" as "run"

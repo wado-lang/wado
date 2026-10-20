@@ -79,29 +79,32 @@ fn "effect_handler_mut_self_alias.wado/run"() with Stdout {
     start_23 = $local_3.used;
     $local_3.used = new_used_22;
     builtin::array_copy<u8>($local_3.repr, start_23, global:effect_handler_mut_self_alias.wado::$const_obj_4, 0, 2);
-    if @unlikely(local.tee new_used_22(local.tee start_23(local.tee $sroa_$f_buf_86($local_3).used) + 1) > builtin::array_len($sroa_$f_buf_86.repr)) {
+    if @unlikely(local.tee start_23(local.tee $sroa_$f_buf_86($local_3).used + 1) > builtin::array_len($sroa_$f_buf_86.repr)) {
         cold_path;
-        "core:prelude/string.wado/core:prelude/string.wado/String::grow"($sroa_$f_buf_86, new_used_22);
+        "core:prelude/string.wado/core:prelude/string.wado/String::grow"($sroa_$f_buf_86, start_23);
     }
-    $sroa_$f_buf_86.used = new_used_22;
-    "core:prelude/primitive.wado/write_decimal_digits"($sroa_$f_buf_86.repr, start_23, 1_i64, 1);
-    if @unlikely(local.tee new_used_22(local.tee start_23($local_3.used) + 7) > builtin::array_len($local_3.repr)) {
+    new_used_22 = $sroa_$f_buf_86.used;
+    $sroa_$f_buf_86.used = start_23;
+    "core:prelude/primitive.wado/write_decimal_digits"($sroa_$f_buf_86.repr, new_used_22, 1_i64, 1);
+    if @unlikely(local.tee new_used_22($local_3.used + 7) > builtin::array_len($local_3.repr)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_3, new_used_22);
     }
+    start_23 = $local_3.used;
     $local_3.used = new_used_22;
     builtin::array_copy<u8>($local_3.repr, start_23, global:effect_handler_mut_self_alias.wado::$const_obj_3, 0, 7);
-    if @unlikely(local.tee new_used_22(local.tee start_23(local.tee $sroa_$f_buf_86($local_3).used) + 1) > builtin::array_len($sroa_$f_buf_86.repr)) {
+    if @unlikely(local.tee start_23(local.tee $sroa_$f_buf_86($local_3).used + 1) > builtin::array_len($sroa_$f_buf_86.repr)) {
         cold_path;
-        "core:prelude/string.wado/core:prelude/string.wado/String::grow"($sroa_$f_buf_86, new_used_22);
+        "core:prelude/string.wado/core:prelude/string.wado/String::grow"($sroa_$f_buf_86, start_23);
     }
-    $sroa_$f_buf_86.used = new_used_22;
-    "core:prelude/primitive.wado/write_decimal_digits"($sroa_$f_buf_86.repr, start_23, 1_i64, 1);
-    start_23 = builtin::i32_wrap_i64(local.tee packed("wasi/stream-new"()));
-    new_used_22 = builtin::i32_wrap_i64(packed >> 32_i64);
-    start_23 = "effect_handler_mut_self_alias.wado/$cm_binding__Stdout_write_via_stream"(start_23);
-    "core:rt/write_string_to_stream$dae[add_newline]"(new_used_22, $local_3.repr, $local_3.used);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(start_23);
+    new_used_22 = $sroa_$f_buf_86.used;
+    $sroa_$f_buf_86.used = start_23;
+    "core:prelude/primitive.wado/write_decimal_digits"($sroa_$f_buf_86.repr, new_used_22, 1_i64, 1);
+    new_used_22 = builtin::i32_wrap_i64(local.tee packed("wasi/stream-new"()));
+    start_23 = builtin::i32_wrap_i64(packed >> 32_i64);
+    new_used_22 = "effect_handler_mut_self_alias.wado/$cm_binding__Stdout_write_via_stream"(new_used_22);
+    "core:rt/write_string_to_stream$dae[add_newline]"(start_23, $local_3.repr, $local_3.used);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(new_used_22);
 }
 
 fn "effect_handler_mut_self_alias.wado/$cm_binding__Stdout_write_via_stream"(data) with Stdout {

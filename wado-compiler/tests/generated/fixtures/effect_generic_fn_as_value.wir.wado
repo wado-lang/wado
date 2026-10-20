@@ -128,16 +128,17 @@ fn "effect_generic_fn_as_value.wado/run"() with Stdout {
         builtin::array_set_u8($mv_arg_2.repr, start_102, 45);
     } else {
     }
-    if @unlikely(local.tee tx_59(local.tee start_102($mv_arg_2.used) + rx_58) > builtin::array_len($mv_arg_2.repr)) {
+    if @unlikely(local.tee start_102($mv_arg_2.used + rx_58) > builtin::array_len($mv_arg_2.repr)) {
         cold_path;
-        "core:prelude/string.wado/core:prelude/string.wado/String::grow"($mv_arg_2, tx_59);
+        "core:prelude/string.wado/core:prelude/string.wado/String::grow"($mv_arg_2, start_102);
     }
-    $mv_arg_2.used = tx_59;
-    "core:prelude/primitive.wado/write_decimal_digits"($mv_arg_2.repr, start_102, packed_57, rx_58);
+    tx_59 = $mv_arg_2.used;
+    $mv_arg_2.used = start_102;
+    "core:prelude/primitive.wado/write_decimal_digits"($mv_arg_2.repr, tx_59, packed_57, rx_58);
     rx_58 = builtin::i32_wrap_i64(local.tee packed_57("wasi/stream-new"()));
-    start_102 = builtin::i32_wrap_i64(packed_57 >> 32_i64);
+    tx_59 = builtin::i32_wrap_i64(packed_57 >> 32_i64);
     rx_58 = "effect_generic_fn_as_value.wado/$cm_binding__Stdout_write_via_stream"(rx_58);
-    "core:rt/write_string_to_stream$dae[add_newline]"(start_102, $mv_arg_2.repr, $mv_arg_2.used);
+    "core:rt/write_string_to_stream$dae[add_newline]"(tx_59, $mv_arg_2.repr, $mv_arg_2.used);
     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(rx_58);
 }
 

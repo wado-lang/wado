@@ -78,16 +78,18 @@ fn "cast_ref_source_to_struct.wado/run"() with Stdout {
     start_161 = $sroa_$f_buf_76.used;
     $sroa_$f_buf_76.used = new_used_160;
     "core:prelude/primitive.wado/write_decimal_digits"($sroa_$f_buf_76.repr, start_161, 1_i64, 1);
-    if @unlikely(local.tee new_used_160(local.tee start_161($local_5.used) + 1) > builtin::array_len($local_5.repr)) {
+    if @unlikely(local.tee start_161($local_5.used + 1) > builtin::array_len($local_5.repr)) {
         cold_path;
-        "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_5, new_used_160);
+        "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_5, start_161);
     }
-    $local_5.used = new_used_160;
-    builtin::array_copy<u8>($local_5.repr, start_161, global:cast_ref_source_to_struct.wado::$const_obj_0, 0, 1);
-    if @unlikely(local.tee new_used_160(local.tee start_161(local.tee $sroa_$f_buf_76($local_5).used) + 1) > builtin::array_len($sroa_$f_buf_76.repr)) {
+    new_used_160 = $local_5.used;
+    $local_5.used = start_161;
+    builtin::array_copy<u8>($local_5.repr, new_used_160, global:cast_ref_source_to_struct.wado::$const_obj_0, 0, 1);
+    if @unlikely(local.tee new_used_160(local.tee $sroa_$f_buf_76($local_5).used + 1) > builtin::array_len($sroa_$f_buf_76.repr)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"($sroa_$f_buf_76, new_used_160);
     }
+    start_161 = $sroa_$f_buf_76.used;
     $sroa_$f_buf_76.used = new_used_160;
     "core:prelude/primitive.wado/write_decimal_digits"($sroa_$f_buf_76.repr, start_161, 1_i64, 1);
     start_161 = builtin::i32_wrap_i64(local.tee packed("wasi/stream-new"()));

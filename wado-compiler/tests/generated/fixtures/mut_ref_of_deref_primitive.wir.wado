@@ -77,7 +77,7 @@ fn "mut_ref_of_deref_primitive.wado/run"() with Stdout {
     let new_used_22: i32;
     let start_23: i32;
     let x_36: i64;
-    let new_used_84: i32;
+    let start_85: i32;
     local.tee c_0(struct.new "core:prelude/types.wado//Box<i32>" { value: 0 }).value = 1;
     c_0.value = 2;
     $local_2 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(18), used: 0 };
@@ -91,19 +91,21 @@ fn "mut_ref_of_deref_primitive.wado/run"() with Stdout {
     new_used_22 = local.tee start_23(c_0.value) < 0;
     start_23 = "core:prelude/primitive.wado/count_digits_u64"(local.tee x_36(x_36 = builtin::i64_extend_i32_s(start_23); select i64(x_36 < 0_i64, 0_i64 - x_36, x_36)));
     if new_used_22 {
-        if @unlikely(local.tee new_used_84(local.tee new_used_22($local_2.used) + 1) > builtin::array_len($load_2)) {
+        if @unlikely(local.tee new_used_22($local_2.used + 1) > builtin::array_len($load_2)) {
             cold_path;
-            "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_2, new_used_84);
+            "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_2, new_used_22);
         }
-        $local_2.used = new_used_84;
-        builtin::array_set_u8($local_2.repr, new_used_22, 45);
+        start_85 = $local_2.used;
+        $local_2.used = new_used_22;
+        builtin::array_set_u8($local_2.repr, start_85, 45);
     } else {
     }
-    if @unlikely(local.tee new_used_84(local.tee new_used_22($local_2.used) + start_23) > builtin::array_len($local_2.repr)) {
+    if @unlikely(local.tee start_85($local_2.used + start_23) > builtin::array_len($local_2.repr)) {
         cold_path;
-        "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_2, new_used_84);
+        "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_2, start_85);
     }
-    $local_2.used = new_used_84;
+    new_used_22 = $local_2.used;
+    $local_2.used = start_85;
     "core:prelude/primitive.wado/write_decimal_digits"($local_2.repr, new_used_22, x_36, start_23);
     start_23 = builtin::i32_wrap_i64(local.tee x_36("wasi/stream-new"()));
     new_used_22 = builtin::i32_wrap_i64(x_36 >> 32_i64);

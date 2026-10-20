@@ -139,7 +139,7 @@ fn "effect_handler_with_do.wado/run"() with Stdout {
     let $local_2_9: u64;
     let new_used_26: i32;
     let start_27: i32;
-    let new_used_139: i32;
+    let start_140: i32;
     clock = struct.new "effect_handler_with_do.wado//FixedClock" { mark: 12345_i64 };
     global:effect_handler_with_do.wado::$effect_wasi:clocks/monotonic_clock.wado/MonotonicClock = local.tee $d_wasi:clocks/monotonic_clock.wado/MonotonicClock(struct.new "effect_handler_with_do.wado//$Dispatch_wasi:clocks/monotonic_clock.wado/MonotonicClock" { outer: local.tee $save_wasi:clocks/monotonic_clock.wado/MonotonicClock(global:effect_handler_with_do.wado::$effect_wasi:clocks/monotonic_clock.wado/MonotonicClock), op_now: struct.new "canonical//CanonicalClosure_0" { env: struct.new "effect_handler_with_do.wado//$Closure_0" { $capture_0: clock }, func: ref.func "closure/effect_handler_with_do.wado/$closure_wrapper_0" }, op_get_resolution: struct.new "canonical//CanonicalClosure_0" { env: struct.new "effect_handler_with_do.wado//$Closure_1" {  }, func: ref.func "closure/effect_handler_with_do.wado/$closure_wrapper_1" }, op_wait_until: struct.new "canonical//CanonicalClosure_1" { env: struct.new "effect_handler_with_do.wado//$Closure_2" {  }, func: ref.func "closure/effect_handler_with_do.wado/$closure_wrapper_2" }, op_wait_for: struct.new "canonical//CanonicalClosure_1" { env: struct.new "effect_handler_with_do.wado//$Closure_3" {  }, func: ref.func "closure/effect_handler_with_do.wado/$closure_wrapper_3" } });
     $local_2_9 = $inline__effect_dispatch__wasi_clocks_monotonic_clock_wado_MonotonicClock__now_1: block -> u64 {
@@ -165,16 +165,17 @@ fn "effect_handler_with_do.wado/run"() with Stdout {
     $local_2_2.used = new_used_26;
     builtin::array_copy<u8>(local.tee $load_6($local_2_2.repr), start_27, global:effect_handler_with_do.wado::$const_obj_3, 0, 6);
     start_27 = "core:prelude/primitive.wado/count_digits_u64"($local_2_9);
-    if @unlikely(local.tee new_used_139(local.tee new_used_26($local_2_2.used) + start_27) > builtin::array_len($load_6)) {
+    if @unlikely(local.tee new_used_26($local_2_2.used + start_27) > builtin::array_len($load_6)) {
         cold_path;
-        "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_2_2, new_used_139);
+        "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_2_2, new_used_26);
     }
-    $local_2_2.used = new_used_139;
-    "core:prelude/primitive.wado/write_decimal_digits"($local_2_2.repr, new_used_26, $local_2_9, start_27);
+    start_140 = $local_2_2.used;
+    $local_2_2.used = new_used_26;
+    "core:prelude/primitive.wado/write_decimal_digits"($local_2_2.repr, start_140, $local_2_9, start_27);
     start_27 = builtin::i32_wrap_i64(local.tee $local_2_9("wasi/stream-new"()));
-    new_used_26 = builtin::i32_wrap_i64($local_2_9 >> 32_i64);
+    start_140 = builtin::i32_wrap_i64($local_2_9 >> 32_i64);
     start_27 = "effect_handler_with_do.wado/$cm_binding__Stdout_write_via_stream"(start_27);
-    "core:rt/write_string_to_stream$dae[add_newline]"(new_used_26, $local_2_2.repr, $local_2_2.used);
+    "core:rt/write_string_to_stream$dae[add_newline]"(start_140, $local_2_2.repr, $local_2_2.used);
     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(start_27);
     global:effect_handler_with_do.wado::$effect_wasi:clocks/monotonic_clock.wado/MonotonicClock = $save_wasi:clocks/monotonic_clock.wado/MonotonicClock;
 }
