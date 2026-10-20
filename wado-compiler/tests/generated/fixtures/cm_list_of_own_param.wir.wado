@@ -41,23 +41,27 @@ type "functype//cm_list_of_own_param.wado/$cm_binding__Gfx_get_device" = fn() ->
 
 type "functype//cm_list_of_own_param.wado/$cm_export__run" = fn();  // TypeId(16)
 
-type "functype//core:rt/write_string_to_stream$dae[add_newline]" = fn(ref null "core:prelude//$Resource", ref Array<u8>, i32);  // TypeId(17)
+type "functype//cm_list_of_own_param.wado/$drop$Array<cm_list_of_own_param.wado/Device>" = fn(ref null "Array<cm_list_of_own_param.wado/Device>");  // TypeId(17)
 
-type "functype//core:rt/log_stderr" = fn(ref Array<u8>, i32);  // TypeId(18)
+type "functype//core:rt/write_string_to_stream$dae[add_newline]" = fn(ref null "core:prelude//$Resource", ref Array<u8>, i32);  // TypeId(18)
 
-type "functype//core:rt/panic" = fn(ref Array<u8>, i32);  // TypeId(19)
+type "functype//core:rt/log_stderr" = fn(ref Array<u8>, i32);  // TypeId(19)
 
-type "functype//core:rt/cm_stream_write_raw_all_u8" = fn(i32, ref Array<u8>, i32, i32) -> "core:prelude/types.wado//enum:CopyResult";  // TypeId(20)
+type "functype//core:rt/panic" = fn(ref Array<u8>, i32);  // TypeId(20)
 
-type "functype//wasi/task-return" = fn(i32);  // TypeId(21)
+type "functype//core:rt/cm_stream_write_raw_all_u8" = fn(i32, ref Array<u8>, i32, i32) -> "core:prelude/types.wado//enum:CopyResult";  // TypeId(21)
 
-type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(22)
+type "functype//wasi/task-return" = fn(i32);  // TypeId(22)
 
-type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(23)
+type "functype//wasi/resource-drop:cm_list_of_own_param.wado#device" = fn(i32);  // TypeId(23)
 
-type "functype//wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code" = fn(i32);  // TypeId(24)
+type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(24)
 
-type "functype//wasi/stream-drop-readable" = fn(i32);  // TypeId(25)
+type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(25)
+
+type "functype//wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code" = fn(i32);  // TypeId(26)
+
+type "functype//wasi/stream-drop-readable" = fn(i32);  // TypeId(27)
 
 import fn mem/realloc from "mem/realloc";
 import fn wasi/stream-write from "wasi/stream-write";
@@ -70,6 +74,7 @@ import fn wasi/wasi:demo/Gfx::get_device from "wasi/wasi:demo/Gfx::get_device";
 import fn wasi/wasi:demo/Gfx::pick from "wasi/wasi:demo/Gfx::pick";
 import memory (1) from "mem/memory";
 import fn wasi/task-return from "wasi/task-return";
+import fn wasi/resource-drop:cm_list_of_own_param.wado#device from "wasi/resource-drop:cm_list_of_own_param.wado#device";
 import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 import fn wasi/stream-new from "wasi/stream-new";
 import fn wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code from "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code";
@@ -110,9 +115,36 @@ fn "cm_list_of_own_param.wado/$cm_binding__Gfx_get_device"() with Gfx {
 fn "cm_list_of_own_param.wado/$cm_export__run"() {
     let elements: ref null "Array<cm_list_of_own_param.wado/Device>";
     let used: i32;
+    let $moved_2: ref null "Array<cm_list_of_own_param.wado/Device>";
+    let $drop_spill_3: ref null "core:prelude//List<cm_list_of_own_param.wado/Device>";
     used = builtin::array_len(local.tee elements(array.new_fixed<ref null "core:prelude//$Resource">("cm_list_of_own_param.wado/$cm_binding__Gfx_get_device"(), "cm_list_of_own_param.wado/$cm_binding__Gfx_get_device"())));
-    drop("cm_list_of_own_param.wado/$cm_binding__Gfx_pick"(struct.new "core:prelude//List<cm_list_of_own_param.wado/Device>" { repr: ref.as_non_null(elements), used: used }));
+    $drop_spill_3 = struct.new "core:prelude//List<cm_list_of_own_param.wado/Device>" { repr: ref.as_non_null($moved_2 = elements; elements = ref.null none; $moved_2), used: used };
+    if ref.is_null(elements) == 0 {
+        "cm_list_of_own_param.wado/$drop$Array<cm_list_of_own_param.wado/Device>"(elements);
+    }
+    drop("cm_list_of_own_param.wado/$cm_binding__Gfx_pick"($drop_spill_3));
     "wasi/task-return"(0);
+}
+
+fn "cm_list_of_own_param.wado/$drop$Array<cm_list_of_own_param.wado/Device>"(value) {
+    let $end_1: i32;
+    let $index_2: i32;
+    let $slot_3: ref null "core:prelude//$Resource";
+    $end_1 = builtin::array_len(value);
+    $index_2 = 0;
+    b4: block {
+        l5: loop {
+            break_if b4 $index_2 >= $end_1;
+            if ref.is_null(local.tee $slot_3(builtin::array_get_value<ref null "core:prelude//$Resource">(value, $index_2))) == 0 {
+                let $cm_handle_2: i32;
+                $cm_handle_2 = $slot_3.value;
+                $slot_3.value = 0;
+                "wasi/resource-drop:cm_list_of_own_param.wado#device"($cm_handle_2);
+            }
+            $index_2 = $index_2 + 1;
+            continue l5;
+        };
+    };
 }
 
 fn "core:rt/write_string_to_stream$dae[add_newline]"(tx, $mv$message$repr, $mv$message$used) {
@@ -174,17 +206,17 @@ fn "core:rt/cm_stream_write_raw_all_u8"(handle, $mv$data$repr, $mv$data$start, $
     if local.tee $mv$data$end($mv$data$end - $mv$data$start) == 0 {
         return 0;
     }
-    ptr_19 = builtin::i32_wrap_i64(ptr_19 = "mem/realloc"(0, 0, 1, $mv$data$end); i = 0; b9: block {
-        l10: loop {
-            break_if b9 i >= $mv$data$end;
+    ptr_19 = builtin::i32_wrap_i64(ptr_19 = "mem/realloc"(0, 0, 1, $mv$data$end); i = 0; b13: block {
+        l14: loop {
+            break_if b13 i >= $mv$data$end;
             builtin::store_u8(ptr_19 + i, builtin::array_get_value_u8($mv$data$repr, $mv$data$start + i));
             i = i + 1;
-            continue l10;
+            continue l14;
         };
     }; builtin::i64_extend_i32_u(ptr_19) | (builtin::i64_extend_i32_s($mv$data$end) << 32_i64));
     i = 0;
     block {
-        l12: loop {
+        l16: loop {
             delivered_6 = local.tee written($inline_cm_stream_write_once_1: block -> i32 {
                 $mv$data$start = ptr_19 + i;
                 count_24 = $mv$data$end - i;
@@ -216,7 +248,7 @@ fn "core:rt/cm_stream_write_raw_all_u8"(handle, $mv$data$repr, $mv$data$start, $
                 drop("mem/realloc"(ptr_19, $mv$data$end, 1, 0));
                 return result_7;
             }
-            continue l12;
+            continue l16;
         };
     };
 }

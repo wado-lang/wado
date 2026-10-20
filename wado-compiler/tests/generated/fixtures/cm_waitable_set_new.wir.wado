@@ -4,68 +4,124 @@
 
 enum core:prelude/types.wado//enum:CopyResult { Completed = 0, Dropped = 1, Cancelled = 2 };  // TypeId(0)
 
-struct core:prelude//$Resource {  // TypeId(1)
+enum core:prelude/types.wado//enum:CallState { Starting = 0, Started = 1, Returned = 2, CancelledBeforeStarted = 3, CancelledBeforeReturned = 4 };  // TypeId(1)
+
+struct core:prelude//$Resource {  // TypeId(2)
     mut value: i32,
 }
 
-array Array<u8> (mut u8);  // TypeId(2)
+struct core:prelude/types.wado//StreamCopy {  // TypeId(3)
+    mut count: i32,
+    mut result: "core:prelude/types.wado//enum:CopyResult",
+}
 
-struct core:prelude/string.wado//String {  // TypeId(3)
+variant core:prelude/types.wado//ReadyEvent {  // TypeId(4)
+    Unreported,
+    Call("core:prelude/types.wado//enum:CallState"),
+    StreamRead(ref "core:prelude/types.wado//StreamCopy"),
+    StreamWritten(ref "core:prelude/types.wado//StreamCopy"),
+    FutureRead("core:prelude/types.wado//enum:CopyResult"),
+    FutureWritten("core:prelude/types.wado//enum:CopyResult"),
+}
+
+struct core:prelude/types.wado//ReadyEvent::Call {  // TypeId(5)
+    discriminant: i32,
+    payload_0: "core:prelude/types.wado//enum:CallState",
+}
+
+struct core:prelude/types.wado//ReadyEvent::StreamRead {  // TypeId(6)
+    discriminant: i32,
+    payload_0: ref "core:prelude/types.wado//StreamCopy",
+}
+
+struct core:prelude/types.wado//ReadyEvent::StreamWritten {  // TypeId(7)
+    discriminant: i32,
+    payload_0: ref "core:prelude/types.wado//StreamCopy",
+}
+
+struct core:prelude/types.wado//ReadyEvent::FutureRead {  // TypeId(8)
+    discriminant: i32,
+    payload_0: "core:prelude/types.wado//enum:CopyResult",
+}
+
+struct core:prelude/types.wado//ReadyEvent::FutureWritten {  // TypeId(9)
+    discriminant: i32,
+    payload_0: "core:prelude/types.wado//enum:CopyResult",
+}
+
+array Array<u8> (mut u8);  // TypeId(10)
+
+struct core:prelude/string.wado//String {  // TypeId(11)
     mut repr: ref Array<u8>,
     mut used: i32,
 }
 
-array Array<core:prelude/types.wado/Subtask> (mut ref null "core:prelude//$Resource");  // TypeId(4)
+array Array<core:prelude/types.wado/Subtask> (mut ref null "core:prelude//$Resource");  // TypeId(12)
 
-struct core:prelude/types.wado//WaitableSet<core:prelude/types.wado/Subtask> {  // TypeId(5)
-    mut raw: ref null "core:prelude//$Resource",
-    mut members: ref null "core:prelude//List<core:prelude/types.wado/Subtask>",
+array Array<core:prelude/types.wado/Ready<core:prelude/types.wado/Subtask>> (mut ref null "core:prelude/types.wado//Ready<core:prelude/types.wado/Subtask>");  // TypeId(13)
+
+struct core:prelude/types.wado//Ready<core:prelude/types.wado/Subtask> {  // TypeId(14)
+    mut member: ref null "core:prelude//$Resource",
+    mut event: ref "core:prelude/types.wado//ReadyEvent",
 }
 
-struct core:prelude//List<core:prelude/types.wado/Subtask> {  // TypeId(6)
+struct core:prelude/types.wado//WaitableSet<core:prelude/types.wado/Subtask> {  // TypeId(15)
+    mut raw: ref null "core:prelude//$Resource",
+    mut members: ref null "core:prelude//List<core:prelude/types.wado/Subtask>",
+    mut ready: ref null "core:prelude//List<core:prelude/types.wado/Ready<core:prelude/types.wado/Subtask>>",
+}
+
+struct core:prelude//List<core:prelude/types.wado/Subtask> {  // TypeId(16)
     mut repr: ref "Array<core:prelude/types.wado/Subtask>",
     mut used: i32,
 }
 
-type "functype//mem/realloc" = fn(i32, i32, i32, i32) -> i32;  // TypeId(7)
+struct core:prelude//List<core:prelude/types.wado/Ready<core:prelude/types.wado/Subtask>> {  // TypeId(17)
+    mut repr: ref "Array<core:prelude/types.wado/Ready<core:prelude/types.wado/Subtask>>",
+    mut used: i32,
+}
 
-type "functype//wasi/stream-write" = fn(i32, i32, i32) -> i32;  // TypeId(8)
+type "functype//mem/realloc" = fn(i32, i32, i32, i32) -> i32;  // TypeId(18)
 
-type "functype//wasi/waitable-join" = fn(i32, i32);  // TypeId(9)
+type "functype//wasi/stream-write" = fn(i32, i32, i32) -> i32;  // TypeId(19)
 
-type "functype//wasi/waitable-set-drop" = fn(i32);  // TypeId(10)
+type "functype//wasi/waitable-join" = fn(i32, i32);  // TypeId(20)
 
-type "functype//wasi/waitable-set-new" = fn() -> i32;  // TypeId(11)
+type "functype//wasi/waitable-set-drop" = fn(i32);  // TypeId(21)
 
-type "functype//wasi/waitable-set-wait" = fn(i32, i32) -> i32;  // TypeId(12)
+type "functype//wasi/waitable-set-new" = fn() -> i32;  // TypeId(22)
 
-type "functype//wasi/wasi:cli/Stdout::write_via_stream" = fn(i32) -> i32;  // TypeId(13)
+type "functype//wasi/waitable-set-wait" = fn(i32, i32) -> i32;  // TypeId(23)
 
-type "functype//cm_waitable_set_new.wado/run" = fn();  // TypeId(14)
+type "functype//wasi/wasi:cli/Stdout::write_via_stream" = fn(i32) -> i32;  // TypeId(24)
 
-type "functype//cm_waitable_set_new.wado/$cm_binding__Stdout_write_via_stream" = fn(ref null "core:prelude//$Resource") -> ref null "core:prelude//$Resource";  // TypeId(15)
+type "functype//cm_waitable_set_new.wado/run" = fn();  // TypeId(25)
 
-type "functype//cm_waitable_set_new.wado/$cm_export__run" = fn();  // TypeId(16)
+type "functype//cm_waitable_set_new.wado/$cm_binding__Stdout_write_via_stream" = fn(ref null "core:prelude//$Resource") -> ref null "core:prelude//$Resource";  // TypeId(26)
 
-type "functype//core:cli/println" = fn(ref Array<u8>, i32);  // TypeId(17)
+type "functype//cm_waitable_set_new.wado/$cm_export__run" = fn();  // TypeId(27)
 
-type "functype//core:rt/write_string_to_stream$dae[add_newline]" = fn(ref null "core:prelude//$Resource", ref Array<u8>, i32);  // TypeId(18)
+type "functype//core:cli/println" = fn(ref Array<u8>, i32);  // TypeId(28)
 
-type "functype//core:rt/cm_stream_write_raw_all_u8" = fn(i32, ref Array<u8>, i32, i32) -> "core:prelude/types.wado//enum:CopyResult";  // TypeId(19)
+type "functype//core:rt/write_string_to_stream$dae[add_newline]" = fn(ref null "core:prelude//$Resource", ref Array<u8>, i32);  // TypeId(29)
 
-type "functype//core:prelude/string.wado/core:prelude/string.wado/String::realloc_to" = fn(ref "core:prelude/string.wado//String", i32);  // TypeId(20)
+type "functype//core:rt/cm_stream_write_raw_all_u8" = fn(i32, ref Array<u8>, i32, i32) -> "core:prelude/types.wado//enum:CopyResult";  // TypeId(30)
 
-type "functype//core:prelude/string.wado/core:prelude/string.wado/String::grow" = fn(ref "core:prelude/string.wado//String", i32);  // TypeId(21)
+type "functype//core:prelude/string.wado/core:prelude/string.wado/String::realloc_to" = fn(ref "core:prelude/string.wado//String", i32);  // TypeId(31)
 
-type "functype//wasi/task-return" = fn(i32);  // TypeId(22)
+type "functype//core:prelude/string.wado/core:prelude/string.wado/String::grow" = fn(ref "core:prelude/string.wado//String", i32);  // TypeId(32)
 
-type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(23)
+type "functype//core:prelude/types.wado/core:prelude/types.wado/WaitableSet<core:prelude/types.wado/Subtask>^core:prelude/traits.wado/Drop::drop" = fn(ref null "core:prelude//$Resource", ref null "core:prelude//List<core:prelude/types.wado/Subtask>", ref null "core:prelude//List<core:prelude/types.wado/Ready<core:prelude/types.wado/Subtask>>");  // TypeId(33)
 
-type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(24)
+type "functype//wasi/task-return" = fn(i32);  // TypeId(34)
 
-type "functype//wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code" = fn(i32);  // TypeId(25)
+type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(35)
 
-type "functype//wasi/stream-drop-readable" = fn(i32);  // TypeId(26)
+type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(36)
+
+type "functype//wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code" = fn(i32);  // TypeId(37)
+
+type "functype//wasi/stream-drop-readable" = fn(i32);  // TypeId(38)
 
 import fn mem/realloc from "mem/realloc";
 import fn wasi/stream-write from "wasi/stream-write";
@@ -87,53 +143,40 @@ fn "cm_waitable_set_new.wado/run"() with Stdout {
     let $load_2: ref Array<u8>;
     let set: ref null "core:prelude/types.wado//WaitableSet<core:prelude/types.wado/Subtask>";
     let $local_1: ref "core:prelude/string.wado//String";
-    let elements: ref null "Array<core:prelude/types.wado/Subtask>";
-    let new_used_16: i32;
-    let start_17: i32;
+    let new_used_18: i32;
+    let start_19: i32;
     let text: ref "core:prelude/string.wado//String";
-    let $discarded_1: ref null "core:prelude//List<core:prelude/types.wado/Subtask>";
-    let start_57: i32;
-    set = struct.new "core:prelude/types.wado//WaitableSet<core:prelude/types.wado/Subtask>" { raw: struct.new "core:prelude//$Resource" { value: "wasi/waitable-set-new"() }, members: struct.new "core:prelude//List<core:prelude/types.wado/Subtask>" { repr: ref.as_non_null(local.tee elements(array.new_fixed<ref null "core:prelude//$Resource">())), used: 0 } };
+    let start_54: i32;
+    set = struct.new "core:prelude/types.wado//WaitableSet<core:prelude/types.wado/Subtask>" { raw: struct.new "core:prelude//$Resource" { value: "wasi/waitable-set-new"() }, members: struct.new "core:prelude//List<core:prelude/types.wado/Subtask>" { repr: array.new_fixed<ref null "core:prelude//$Resource">(), used: 0 }, ready: struct.new "core:prelude//List<core:prelude/types.wado/Ready<core:prelude/types.wado/Subtask>>" { repr: array.new_fixed<ref null "core:prelude/types.wado//Ready<core:prelude/types.wado/Subtask>">(), used: 0 } };
     $local_1 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(23), used: 0 };
-    if @unlikely(local.tee new_used_16(0 + 7) > builtin::array_len($local_1.repr)) {
+    if @unlikely(local.tee new_used_18(0 + 7) > builtin::array_len($local_1.repr)) {
         cold_path;
-        "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_1, new_used_16);
+        "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_1, new_used_18);
     }
-    start_17 = $local_1.used;
-    $local_1.used = new_used_16;
-    builtin::array_copy<u8>(local.tee $load_2($local_1.repr), start_17, global:cm_waitable_set_new.wado::$const_obj_0, 0, 7);
-    text = (if set.members.used == 0 -> ref "core:prelude/string.wado//String" {
+    start_19 = $local_1.used;
+    $local_1.used = new_used_18;
+    builtin::array_copy<u8>(local.tee $load_2($local_1.repr), start_19, global:cm_waitable_set_new.wado::$const_obj_0, 0, 7);
+    text = (if (set.members.used + set.ready.used) == 0 -> ref "core:prelude/string.wado//String" {
         struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(116, 114, 117, 101), used: 4 };
     } else {
         struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("false"), used: 5 };
     });
     $inline_core_prelude_format_wado_Formatter__pad_core_prelude_string_wado_String__spec0_sroa_self_buf__0: block {
         $inline_core_prelude_format_wado_Formatter__pad_core_prelude_string_wado_String__spec0_sroa_self_buf__0__$inline_core_prelude_string_wado_String__internal_push_string_2: block {
-            break_if $inline_core_prelude_format_wado_Formatter__pad_core_prelude_string_wado_String__spec0_sroa_self_buf__0__$inline_core_prelude_string_wado_String__internal_push_string_2 local.tee start_17(text.used) == 0;
-            if @unlikely(local.tee new_used_16($local_1.used + start_17) > builtin::array_len($load_2)) {
+            break_if $inline_core_prelude_format_wado_Formatter__pad_core_prelude_string_wado_String__spec0_sroa_self_buf__0__$inline_core_prelude_string_wado_String__internal_push_string_2 local.tee start_19(text.used) == 0;
+            if @unlikely(local.tee new_used_18($local_1.used + start_19) > builtin::array_len($load_2)) {
                 cold_path;
-                "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_1, new_used_16);
+                "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_1, new_used_18);
             }
-            start_57 = $local_1.used;
-            $local_1.used = new_used_16;
-            builtin::array_copy<u8>($local_1.repr, start_57, text.repr, 0, start_17);
+            start_54 = $local_1.used;
+            $local_1.used = new_used_18;
+            builtin::array_copy<u8>($local_1.repr, start_54, text.repr, 0, start_19);
         };
         break $inline_core_prelude_format_wado_Formatter__pad_core_prelude_string_wado_String__spec0_sroa_self_buf__0;
     };
     "core:cli/println"($local_1.repr, $local_1.used);
     if ref.is_null(set) == 0 {
-        elements = local.tee $discarded_1(set.members).repr;
-        start_17 = $discarded_1.used;
-        start_57 = 0;
-        b4: block {
-            l5: loop {
-                break_if b4 start_57 >= start_17;
-                drop(builtin::array_get_value<ref null "core:prelude//$Resource">(elements, start_57));
-                start_57 = start_57 + 1;
-                continue l5;
-            };
-        };
-        "wasi/waitable-set-drop"(set.raw.value);
+        "core:prelude/types.wado/core:prelude/types.wado/WaitableSet<core:prelude/types.wado/Subtask>^core:prelude/traits.wado/Drop::drop"(set.raw, set.members, set.ready);
     }
 }
 
@@ -205,17 +248,17 @@ fn "core:rt/cm_stream_write_raw_all_u8"(handle, $mv$data$repr, $mv$data$start, $
     if local.tee $mv$data$end($mv$data$end - $mv$data$start) == 0 {
         return 0;
     }
-    ptr_15 = builtin::i32_wrap_i64(ptr_15 = "mem/realloc"(0, 0, 1, $mv$data$end); i = 0; b13: block {
-        l14: loop {
-            break_if b13 i >= $mv$data$end;
+    ptr_15 = builtin::i32_wrap_i64(ptr_15 = "mem/realloc"(0, 0, 1, $mv$data$end); i = 0; b11: block {
+        l12: loop {
+            break_if b11 i >= $mv$data$end;
             builtin::store_u8(ptr_15 + i, builtin::array_get_value_u8($mv$data$repr, $mv$data$start + i));
             i = i + 1;
-            continue l14;
+            continue l12;
         };
     }; builtin::i64_extend_i32_u(ptr_15) | (builtin::i64_extend_i32_s($mv$data$end) << 32_i64));
     i = 0;
     block {
-        l16: loop {
+        l14: loop {
             delivered_6 = local.tee written($inline_cm_stream_write_once_4: block -> i32 {
                 $mv$data$start = ptr_15 + i;
                 count_18 = $mv$data$end - i;
@@ -247,7 +290,7 @@ fn "core:rt/cm_stream_write_raw_all_u8"(handle, $mv$data$repr, $mv$data$start, $
                 drop("mem/realloc"(ptr_15, $mv$data$end, 1, 0));
                 return result_7;
             }
-            continue l16;
+            continue l14;
         };
     };
 }
@@ -265,6 +308,36 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self, min_ca
         return;
     }
     "core:prelude/string.wado/core:prelude/string.wado/String::realloc_to"(self, select i32(min_capacity > 8, local.tee min_capacity(select i32(capacity > min_capacity, local.tee capacity(capacity * 2), min_capacity)), 8));
+}
+
+fn "core:prelude/types.wado/core:prelude/types.wado/WaitableSet<core:prelude/types.wado/Subtask>^core:prelude/traits.wado/Drop::drop"($mv$self$raw, $mv$self$members, $mv$self$ready) {
+    let $slots_1_4: ref null "Array<core:prelude/types.wado/Subtask>";
+    let $end_2_5: i32;
+    let $index_3_6: i32;
+    let $slots_1_9: ref null "Array<core:prelude/types.wado/Ready<core:prelude/types.wado/Subtask>>";
+    $slots_1_4 = $mv$self$members.repr;
+    $end_2_5 = $mv$self$members.used;
+    $index_3_6 = 0;
+    b20: block {
+        l21: loop {
+            break_if b20 $index_3_6 >= $end_2_5;
+            drop(builtin::array_get_value<ref null "core:prelude//$Resource">($slots_1_4, $index_3_6));
+            $index_3_6 = $index_3_6 + 1;
+            continue l21;
+        };
+    };
+    $slots_1_9 = $mv$self$ready.repr;
+    $index_3_6 = $mv$self$ready.used;
+    $end_2_5 = 0;
+    b22: block {
+        l23: loop {
+            break_if b22 $end_2_5 >= $index_3_6;
+            drop(builtin::array_get_value<ref null "core:prelude/types.wado//Ready<core:prelude/types.wado/Subtask>">($slots_1_9, $end_2_5));
+            $end_2_5 = $end_2_5 + 1;
+            continue l23;
+        };
+    };
+    "wasi/waitable-set-drop"($mv$self$raw.value);
 }
 
 export fn "cm_waitable_set_new.wado/$cm_export__run" as "run"
