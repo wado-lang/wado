@@ -681,27 +681,30 @@ test "router: re-registering a dynamic route" {
     assert r.match_path(Method::Put, &"/s") matches { Some(m) && m.handler == 8 };
 }
 
-// Matches a request for `path`. Its trailers end is written once the request
-// is dropped: an end dropped unwritten traps, and a write waits for its reader.
+// Whether a request for `path` matches as `check` expects. Its trailers end is
+// written once the request is dropped: an end dropped unwritten traps, and a
+// write waits for its reader. The match is checked while the request lives,
+// since it may refer into it.
 fn match_get(
     r: &Router<i32>,
     path: Option<String>,
-) -> Option<&RouteMatch<i32>> with (Fields, Request, Future, FutureWritable) {
+    check: fn(&RouteMatch<i32>) -> bool,
+) -> bool with (Fields, Request, Future, FutureWritable) {
     let [trailers, end] = Future::<Result<Option<Trailers>, ErrorCode>>::new();
     let [req, _] = Request::new(Headers::new(), null, trailers, null);
     req.set_path_with_query(path);
-    let found = r.match_request(&req);
+    let matched = r.match_request(&req) matches { Some(m) && check(m) };
     builtin::drop(req);
     end.write(Result::<Option<Trailers>, ErrorCode>::Ok(null));
-    return found;
+    return matched;
 }
 
 test "router: match a wasi:http request, ignoring its query and fragment" {
     let mut r = Router::<i32>::new();
     r.get("/users/:id", 1);
     r.get("/", 2);
-    assert match_get(&r, Option::Some("/users/7?x=1")) matches { Some(m) && m.params["id"] == "7" };
-    assert match_get(&r, Option::Some("/users/8#top")) matches { Some(m) && m.params["id"] == "8" };
-    assert match_get(&r, Option::Some("/users/9")) matches { Some(m) && m.params["id"] == "9" };
-    assert match_get(&r, null) matches { Some(m) && m.handler == 2 };
+    assert match_get(&r, Option::Some("/users/7?x=1"), |m| m.params["id"] == "7");
+    assert match_get(&r, Option::Some("/users/8#top"), |m| m.params["id"] == "8");
+    assert match_get(&r, Option::Some("/users/9"), |m| m.params["id"] == "9");
+    assert match_get(&r, null, |m| m.handler == 2);
 }

@@ -271,7 +271,10 @@ while the local holds what they read. The move check follows them within a
 body, with no lifetime in any signature. A reference or a closure carries the
 local it names, a value built from one carries what that one carries, and a
 call's result carries what every operand carries, since no signature says which
-one it returns. A call may store any operand through each `&mut` it takes, so
+one it returns. A receiver taken by reference is the exception where the
+method's declared return type spells no reference: such a result can hold only
+what the receiver already held, never a reference into the receiver itself, so
+`set.wait()` hands back a member that outlives the set. A call may store any operand through each `&mut` it takes, so
 what that `&mut` reaches carries them all. The check refuses a read after the
 local moved or its scope ended, a `return` of such a value, a `&mut` parameter
 or a capture left holding one at the end of the body, and a store into a global.
