@@ -18,7 +18,7 @@ use crate::tir;
 use crate::tir::{
     CallArg, FunctionKind, FunctionRef, InlineHint, LetStorage, MonomorphInfo, TemplateId,
     TirBinaryOp, TirBlock, TirExpr, TirExprKind, TirFunction, TirLocal, TirParam, TirPattern,
-    TirStmt, TirStmtKind, TirUnaryOp, TypeId, TypeTable,
+    TirStmt, TirStmtKind, TirStructField, TirUnaryOp, TypeId, TypeTable,
 };
 use crate::tir_visitor::{TirMutVisitor, TirRefVisitor};
 use crate::token::Span;
@@ -374,6 +374,32 @@ fn cm_target_call(target: CmCallTarget, args: Vec<TirExpr>, return_type: TypeId)
     TirExpr::new(
         TirExprKind::CmRawCall { target, args },
         return_type,
+        synth_span(),
+    )
+}
+
+/// A literal of the struct `name`, `fields` given in declaration order.
+pub fn struct_literal<S: Into<String>>(
+    struct_type: TypeId,
+    name: impl Into<String>,
+    fields: impl IntoIterator<Item = (S, TirExpr)>,
+) -> TirExpr {
+    let fields = fields
+        .into_iter()
+        .zip(0..)
+        .map(|((name, value), field_index)| TirStructField {
+            name: name.into(),
+            value,
+            field_index,
+        })
+        .collect();
+    TirExpr::new(
+        TirExprKind::StructLiteral {
+            struct_type,
+            struct_name: name.into(),
+            fields,
+        },
+        struct_type,
         synth_span(),
     )
 }

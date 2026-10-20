@@ -11,14 +11,14 @@ use crate::module_source::{ModuleSource, ModuleSourceInterner};
 use crate::name::{LocalMethodName, cm_binding_func_name, cm_lift_func_name};
 use crate::tir::{
     CallArg, EffectRef, FunctionKind, FunctionRef, InlineHint, TirBinaryOp, TirBlock, TirExpr,
-    TirExprKind, TirFunction, TirLocal, TirParam, TirStmt, TirStructField, TypeId, TypeTable,
+    TirExprKind, TirFunction, TirLocal, TirParam, TirStmt, TypeId, TypeTable,
 };
 
 use crate::synthesis::common::{
     affine_handle, alloc_local, assign, binary, block, break_stmt, builtin_call, case_chain, cast,
     cm_raw_call, expr_stmt, generic_method_call, handle_from_f64, handle_to_f64, i32_const,
     if_stmt, internal_call, is_affine_resource, let_mut_stmt, let_stmt, local_ref, loop_stmt,
-    option_none, option_some, return_stmt, split_packed_ptr_len, synth_span,
+    option_none, option_some, return_stmt, split_packed_ptr_len, struct_literal, synth_span,
 };
 
 use super::lift::{lift_variant_from_disc, materialize_if_needed, synthesize_lift};
@@ -315,28 +315,6 @@ fn make_async_call_literal(
         async_call_type,
         "AsyncCall",
         vec![("subtask", subtask), ("buffer", buffer), ("lift", lift)],
-    )
-}
-
-/// A literal of the synthesized struct `name`, its fields in declaration order.
-fn struct_literal(struct_type: TypeId, name: &str, fields: Vec<(&str, TirExpr)>) -> TirExpr {
-    let fields = fields
-        .into_iter()
-        .enumerate()
-        .map(|(index, (name, value))| TirStructField {
-            name: name.to_string(),
-            value,
-            field_index: index as u32,
-        })
-        .collect();
-    TirExpr::new(
-        TirExprKind::StructLiteral {
-            struct_type,
-            struct_name: name.to_string(),
-            fields,
-        },
-        struct_type,
-        synth_span(),
     )
 }
 

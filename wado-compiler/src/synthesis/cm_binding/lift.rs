@@ -11,14 +11,13 @@ use crate::ast::{NamedType, Type};
 use crate::cm_abi;
 use crate::component_model::{CmVariantCase, EMPTY_TUPLE_AT_BOUNDARY};
 use crate::module_source::ModuleSource;
-use crate::tir::{
-    TirBinaryOp, TirExpr, TirExprKind, TirLocal, TirStmt, TirStructField, TypeId, TypeTable,
-};
+use crate::tir::{TirBinaryOp, TirExpr, TirExprKind, TirLocal, TirStmt, TypeId, TypeTable};
 
 use crate::synthesis::common::{
     alloc_local, assign, binary, block, break_stmt, builtin_call, case_chain, cast, expr_stmt,
     generic_method_call, generic_static_call, handle_from_f64, i32_const, if_stmt, internal_call,
-    let_mut_stmt, let_stmt, local_ref, loop_stmt, option_none, option_some, synth_span,
+    let_mut_stmt, let_stmt, local_ref, loop_stmt, option_none, option_some, struct_literal,
+    synth_span,
 };
 
 use super::types::{
@@ -478,24 +477,10 @@ fn try_lift_wasi_struct(
         let lifted_field =
             synthesize_lift_inner(field_ty, field_addr, next_local, stmts, locals, ctx);
         let lifted_field = materialize_if_needed(lifted_field, next_local, stmts, locals);
-        let field_name = &wado_fields[i];
-        tir_fields.push(TirStructField {
-            name: field_name.clone(),
-            value: lifted_field,
-            field_index: i as u32,
-        });
+        tir_fields.push((wado_fields[i].as_str(), lifted_field));
     }
 
-    // Build the StructLiteral expression
-    let struct_expr = TirExpr::new(
-        TirExprKind::StructLiteral {
-            struct_type: struct_type_id,
-            struct_name: named.name.clone(),
-            fields: tir_fields,
-        },
-        struct_type_id,
-        synth_span(),
-    );
+    let struct_expr = struct_literal(struct_type_id, named.name.as_str(), tir_fields);
 
     // Materialize the struct into a local
     let result_local = alloc_local(next_local, locals, struct_type_id);

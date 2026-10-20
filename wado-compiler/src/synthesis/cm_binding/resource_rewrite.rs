@@ -30,7 +30,7 @@ use crate::synthesis::common::{
     alloc_named_local, assign, binary, block, break_stmt, builtin_call, cast, cm_canonical_call,
     entry_call, expr_stmt, generic_method_call, handle_scalar, i32_const, i64_const, if_stmt,
     internal_call, let_mut_stmt, let_stmt, local_ref, loop_stmt, option_none, option_some,
-    return_stmt, synth_span,
+    return_stmt, struct_literal, synth_span,
 };
 
 use super::synthesize_lift;
@@ -48,7 +48,6 @@ use crate::synthesis::cm_binding::lower::{
 };
 use crate::synthesis::cm_binding::types::cm_package_from_source;
 use crate::synthesis::cm_binding::{PayloadsValidated, future_stream_payload_site};
-use crate::tir::TirStructField;
 use crate::{ast, tir};
 
 /// CM async built-ins (`stream-read`, `stream-write`, `future-read`, …)
@@ -115,25 +114,10 @@ fn copy_report_literal(
     type_table: &RefCell<TypeTable>,
 ) -> TirExpr {
     let struct_name = type_table.borrow().compiler_struct_name(item).to_string();
-    TirExpr::new(
-        TirExprKind::StructLiteral {
-            struct_type: type_id,
-            struct_name,
-            fields: vec![
-                TirStructField {
-                    name: moved_field.to_string(),
-                    value: moved,
-                    field_index: 0,
-                },
-                TirStructField {
-                    name: "result".to_string(),
-                    value: result,
-                    field_index: 1,
-                },
-            ],
-        },
+    struct_literal(
         type_id,
-        synth_span(),
+        struct_name,
+        [(moved_field, moved), ("result", result)],
     )
 }
 

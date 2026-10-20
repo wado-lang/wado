@@ -19,14 +19,14 @@ use crate::primitive::PrimitiveType;
 use crate::tir::{
     CallArg, FunctionRef, ResolvedType, TirBinaryOp, TirBlock, TirExpr, TirExprKind, TirFunction,
     TirLocal, TirMatchArm, TirModule, TirParam, TirPattern, TirStmt, TirStmtKind, TirStruct,
-    TirStructField, TirVariantCase, TirVariantDecl, TypeId, TypeTable,
+    TirVariantCase, TirVariantDecl, TypeId, TypeTable,
 };
 
 use crate::synthesis::common::{
     alloc_local, assign, binary, block, break_stmt, builtin_call, case_chain, cast,
     cm_canonical_call, expr_stmt, generic_method_call, handle_from_f64, handle_to_f64, i32_const,
     if_stmt, internal_call, let_mut_stmt, let_stmt, local_ref, loop_stmt, option_none, option_some,
-    param_local, return_stmt, split_packed_ptr_len, synth_span,
+    param_local, return_stmt, split_packed_ptr_len, struct_literal, synth_span,
 };
 
 use super::cm_free::{
@@ -1215,22 +1215,11 @@ fn lift_struct_from_flat_params(
             tir_modules,
             lift_ctx,
         );
-        fields.push(TirStructField {
-            name: field.name.clone(),
-            value: lifted,
-            field_index: field.index,
-        });
+        assert_eq!(field.index as usize, fields.len());
+        fields.push((field.name.as_str(), lifted));
         offset += consumed;
     }
-    let struct_expr = TirExpr::new(
-        TirExprKind::StructLiteral {
-            struct_type: struct_type_id,
-            struct_name: struct_decl.name.clone(),
-            fields,
-        },
-        struct_type_id,
-        synth_span(),
-    );
+    let struct_expr = struct_literal(struct_type_id, struct_decl.name.as_str(), fields);
     let result_local = alloc_local(next_local, locals, struct_type_id);
     stmts.push(let_stmt(
         "$struct_lift",
