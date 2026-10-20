@@ -562,25 +562,25 @@ impl Interpreter<'_> {
             }
             CtfeBuiltin::ArrayGet => match args {
                 [arr, index] => self.index_lattice(body, arr.expr, index.expr),
-                _ => Lattice::Unevaluated,
+                _ => unreachable!("`array_get_value` takes an array and an index"),
             },
             CtfeBuiltin::ArrayNew => match args {
                 [len] => self.allocation_lattice(body, e, len.expr),
-                _ => Lattice::Unevaluated,
+                _ => unreachable!("`array_new` takes a length"),
             },
             CtfeBuiltin::ArrayClonePrefix => match args {
                 [src, len] => self.clone_prefix_lattice(body, e, src.expr, len.expr),
-                _ => Lattice::Unevaluated,
+                _ => unreachable!("`array_clone_prefix` takes an array and a length"),
             },
             CtfeBuiltin::Select => match args {
                 [condition, if_true, if_false] => {
                     self.select_lattice(body, condition.expr, if_true.expr, if_false.expr)
                 }
-                _ => Lattice::Unevaluated,
+                _ => unreachable!("`select` takes a condition and two values"),
             },
             CtfeBuiltin::I32AsChar => match args {
                 [value] => self.i32_as_char_lattice(body, value.expr),
-                _ => Lattice::Unevaluated,
+                _ => unreachable!("`i32_as_char` takes one value"),
             },
             CtfeBuiltin::FloatIsNan => match args {
                 [value] => match self.operand_lattice_folded(body, value.expr) {
@@ -590,7 +590,7 @@ impl Interpreter<'_> {
                     }
                     _ => Lattice::Unevaluated,
                 },
-                _ => Lattice::Unevaluated,
+                _ => unreachable!("`is_nan` takes one float"),
             },
             &CtfeBuiltin::Ieee754Comparison(op) => match args {
                 [a, b] => match (
@@ -608,7 +608,7 @@ impl Interpreter<'_> {
                     }
                     _ => Lattice::Unevaluated,
                 },
-                _ => Lattice::Unevaluated,
+                _ => unreachable!("an IEEE comparison takes two floats"),
             },
             CtfeBuiltin::HeapBase(address) => Lattice::Const(Value::Int {
                 value: u64::from(address.cast_unsigned()),
@@ -620,7 +620,7 @@ impl Interpreter<'_> {
                     Lattice::Const(Value::Null) => Lattice::Const(Value::Bool(true)),
                     _ => Lattice::Unevaluated,
                 },
-                _ => Lattice::Unevaluated,
+                _ => unreachable!("`is_moved` takes one place"),
             },
             CtfeBuiltin::ArraySet
             | CtfeBuiltin::ArrayCopy

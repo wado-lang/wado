@@ -21,14 +21,6 @@ use indexmap::{IndexMap, IndexSet};
 
 use super::util::collect_pinned_func_ids;
 
-/// A place a resource lives in: a local or parameter of the function at a
-/// position, or that function's result.
-#[derive(Clone, PartialEq, Eq, Hash)]
-enum Place {
-    Local(usize, String),
-    Result(usize),
-}
-
 /// What the expression under analysis hands its value to.
 #[derive(Clone, Copy)]
 enum Sink {
@@ -45,14 +37,14 @@ pub(super) fn unbox_handles(module: &mut WirPackage) {
         return;
     };
     let places = Places::collect(module, handle_box);
-    if places.ids.is_empty() {
+    if places.count == 0 {
         return;
     }
     let mut scan = Scan {
         module,
         places: &places,
-        parent: (0..places.ids.len()).collect(),
-        escapes: vec![false; places.ids.len()],
+        parent: (0..places.count).collect(),
+        escapes: vec![false; places.count],
         func: 0,
     };
     for id in places.pinned.iter().copied() {
@@ -95,52 +87,68 @@ fn handle_box_type(module: &WirPackage) -> Option<u32> {
         .map(|index| u32::try_from(index).expect("type index fits u32"))
 }
 
-/// Every place of `$Resource` type, numbered, and the ones whose function a
-/// caller outside this package's direct calls reaches.
+/// Every place of `$Resource` type, numbered: each function's locals and
+/// parameters by name, and its result. `pinned` holds the parameters and
+/// results of the functions a caller outside this package's direct calls
+/// reaches.
 struct Places {
     handle_box: u32,
-    ids: IndexMap<Place, usize>,
+    count: usize,
+    locals: Vec<IndexMap<String, usize>>,
+    results: Vec<Option<usize>>,
     pinned: Vec<usize>,
 }
 
 impl Places {
     fn collect(module: &WirPackage, handle_box: u32) -> Self {
         let pinned_funcs = collect_pinned_func_ids(module);
-        let mut ids: IndexMap<Place, usize> = IndexMap::default();
-        let mut pinned = Vec::new();
+        let is_box = |ty: &WirType| {
+            matches!(ty, WirType::Ref { type_id, .. } if type_id.index() == handle_box)
+        };
+        let mut places = Self {
+            handle_box,
+            count: 0,
+            locals: Vec::with_capacity(module.functions.len()),
+            results: Vec::with_capacity(module.functions.len()),
+            pinned: Vec::new(),
+        };
         for (func, function) in module.functions.iter().enumerate() {
             let ft = module.types[function.type_id.index() as usize].expect_func();
             let is_pinned =
                 function.body.is_none() || pinned_funcs.contains(&module.defined_func_index(func));
-            let is_box = |ty: &WirType| matches!(ty, WirType::Ref { type_id, .. } if type_id.index() == handle_box);
-            let mut add = |place: Place, signature: bool| {
-                let id = ids.len();
-                ids.insert(place, id);
-                if signature && is_pinned {
-                    pinned.push(id);
-                }
-            };
+            let mut locals = IndexMap::default();
             for (name, ty) in function.param_names.iter().zip(&ft.params) {
                 if is_box(ty) {
-                    add(Place::Local(func, name.clone()), true);
+                    let id = places.mint(is_pinned);
+                    locals.insert(name.clone(), id);
                 }
             }
-            if let [result] = ft.results.as_slice()
-                && is_box(result)
-            {
-                add(Place::Result(func), true);
-            }
+            let result = match ft.results.as_slice() {
+                [result] if is_box(result) => Some(places.mint(is_pinned)),
+                _ => None,
+            };
             for (name, ty) in function.declared_locals().iter() {
                 if is_box(ty) {
-                    add(Place::Local(func, name.to_string()), false);
+                    let id = places.mint(false);
+                    assert!(
+                        locals.insert(name.to_string(), id).is_none(),
+                        "a function names each local once"
+                    );
                 }
             }
+            places.locals.push(locals);
+            places.results.push(result);
         }
-        Self {
-            handle_box,
-            ids,
-            pinned,
+        places
+    }
+
+    fn mint(&mut self, pinned: bool) -> usize {
+        let id = self.count;
+        self.count += 1;
+        if pinned {
+            self.pinned.push(id);
         }
+        id
     }
 
     fn is_box(&self, type_id: &WirTypeId) -> bool {
@@ -148,11 +156,11 @@ impl Places {
     }
 
     fn local(&self, func: usize, name: &str) -> Option<usize> {
-        self.ids.get(&Place::Local(func, name.to_string())).copied()
+        self.locals[func].get(name).copied()
     }
 
     fn result(&self, func: usize) -> Option<usize> {
-        self.ids.get(&Place::Result(func)).copied()
+        self.results[func]
     }
 
     /// The place a direct call to `func_id` passes its argument `index` into.
@@ -278,13 +286,26 @@ impl Scan<'_> {
                 self.consume(value, Sink::Escape);
             }
             WirInstr::RefIsNull(expr) | WirInstr::Drop(expr) => self.consume(expr, Sink::Read),
-            WirInstr::Seq(items) => {
-                if let Some((last, init)) = items.split_last() {
-                    for item in init {
-                        self.consume(item, Sink::Escape);
-                    }
-                    self.consume(last, sink);
-                }
+            WirInstr::Seq(items) => self.consume_tail(items, sink),
+            WirInstr::If {
+                condition,
+                result: Some(_),
+                then_body,
+                else_body: Some(else_body),
+            } if matches!(sink, Sink::Flow(_)) => {
+                self.consume(condition, Sink::Escape);
+                self.consume_tail(then_body, sink);
+                self.consume_tail(else_body, sink);
+            }
+            WirInstr::Select {
+                condition,
+                if_true,
+                if_false,
+                ..
+            } if matches!(sink, Sink::Flow(_)) => {
+                self.consume(if_true, sink);
+                self.consume(if_false, sink);
+                self.consume(condition, Sink::Escape);
             }
             WirInstr::Call { func_id, args } => {
                 for (index, arg) in args.iter().enumerate() {
@@ -305,6 +326,18 @@ impl Scan<'_> {
                 self.opaque_to(sink);
             }
         }
+    }
+
+    /// A body whose last instruction, unless it diverges, is its value.
+    fn consume_tail(&mut self, body: &[WirInstr], sink: Sink) {
+        let Some((last, init)) = body.split_last() else {
+            return;
+        };
+        for item in init {
+            self.consume(item, Sink::Escape);
+        }
+        let last_sink = if last.always_diverges() { Sink::Escape } else { sink };
+        self.consume(last, last_sink);
     }
 
     /// The places whose class no box escapes from.
@@ -448,14 +481,30 @@ impl Rewrite<'_> {
                 self.rewrite(value);
             }
             WirInstr::RefNull { .. } => *value = WirInstr::I32Const(0),
-            WirInstr::Seq(items) => {
-                let (last, init) = items
-                    .split_last_mut()
-                    .expect("a value's sequence ends in it");
-                for item in init {
-                    self.rewrite(item);
+            WirInstr::Seq(items) => self.lower_tail(items),
+            WirInstr::If {
+                condition,
+                result,
+                then_body,
+                else_body: Some(else_body),
+            } => {
+                self.rewrite(condition);
+                *result = Some(WirType::I32);
+                self.lower_tail(then_body);
+                self.lower_tail(else_body);
+            }
+            WirInstr::Select {
+                condition,
+                if_true,
+                if_false,
+                ty,
+            } => {
+                self.lower(if_true);
+                self.lower(if_false);
+                self.rewrite(condition);
+                if ty.is_some() {
+                    *ty = Some(WirType::I32);
                 }
-                self.lower(last);
             }
             _ => {
                 assert!(
@@ -464,6 +513,19 @@ impl Rewrite<'_> {
                 );
                 self.rewrite(value);
             }
+        }
+    }
+
+    /// Lower the value a body ends in, as `Scan::consume_tail` reads it.
+    fn lower_tail(&mut self, body: &mut [WirInstr]) {
+        let (last, init) = body.split_last_mut().expect("a value's body ends in it");
+        for item in init {
+            self.rewrite(item);
+        }
+        if last.always_diverges() {
+            self.rewrite(last);
+        } else {
+            self.lower(last);
         }
     }
 }

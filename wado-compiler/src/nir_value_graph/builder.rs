@@ -876,10 +876,16 @@ impl<'a> Builder<'a> {
     }
 
     /// `is_moved(place)` is `true` where the value reaching `place` is the
-    /// `null` a move wrote into it.
+    /// `null` a move wrote into it, and `false` where it is the object a struct
+    /// literal built.
     fn known_moved(&mut self, place: Operand) -> Option<ValueId> {
         let value = self.walked_value(place)?;
-        matches!(self.pool.kind(value), ValueKind::Null).then(|| self.pool.bool(true))
+        let moved = match self.pool.kind(value) {
+            ValueKind::Null => true,
+            _ if self.owned_pointees.contains(&value) => false,
+            _ => return None,
+        };
+        Some(self.pool.bool(moved))
     }
 
     /// If `recv_expr` is a bare `Local` known to reference a pointee local

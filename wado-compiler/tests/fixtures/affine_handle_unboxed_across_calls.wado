@@ -1,0 +1,30 @@
+// A resource keeps its bare handle across the calls it moves through: a
+// parameter and a result no reference reaches take the handle, not its
+// `$Resource` box, and so does a place a branch chooses the resource for
+// (WEP: Affine Types). Storing one end in a struct makes it escape, so only that
+// end keeps its box.
+
+#[inline(never)]
+fn pick(first: bool, a: StreamWritable<u8>, b: StreamWritable<u8>) -> StreamWritable<u8> {
+    let chosen = if first { a } else { b };
+    return chosen;
+}
+
+affine struct Holder {
+    rx: Stream<u8>,
+}
+
+test {
+    let [rx_a, tx_a] = Stream::<u8>::new();
+    let [rx_b, tx_b] = Stream::<u8>::new();
+    let tx = pick(builtin::black_box(true), tx_a, tx_b);
+    builtin::drop(tx);
+    let held = Holder { rx: rx_a };
+    assert held.rx.read(1).result == CopyResult::Dropped;
+    assert rx_b.read(1).result == CopyResult::Dropped;
+}
+
+__DATA__
+{
+    "wir_expect:O2": ["fn(bool, i32, i32) -> i32", "struct.new \"core:prelude//$Resource\""]
+}
