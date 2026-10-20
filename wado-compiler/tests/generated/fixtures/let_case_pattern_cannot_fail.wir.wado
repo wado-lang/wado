@@ -489,13 +489,12 @@ fn "core:rt/unreachable"() {
 fn "core:rt/cm_stream_write_raw_all_u8"(handle, $mv$data$repr, $mv$data$start, $mv$data$end) {
     let written: i32;
     let delivered_6: i32;
-    let result_7: "core:prelude/types.wado//enum:CopyResult";
     let ptr_19: i32;
     let count_24: i32;
     let result_25: i32;
     let ws: i32;
     let evt_ptr: i32;
-    let status_33: i32;
+    let status: i32;
     let i: i32;
     if local.tee $mv$data$end($mv$data$end - $mv$data$start) == 0 {
         return 0;
@@ -519,28 +518,27 @@ fn "core:rt/cm_stream_write_raw_all_u8"(handle, $mv$data$repr, $mv$data$start, $
                     "wasi/waitable-join"(handle, ws);
                     evt_ptr = "mem/realloc"(0, 0, 4, 8);
                     drop("wasi/waitable-set-wait"(ws, evt_ptr));
-                    status_33 = builtin::load_i32(evt_ptr + 4);
+                    status = builtin::load_i32(evt_ptr + 4);
                     drop("mem/realloc"(evt_ptr, 8, 4, 0));
                     "wasi/waitable-join"(handle, 0);
                     "wasi/waitable-set-drop"(ws);
-                    break $inline_cm_stream_write_once_1: status_33;
+                    break $inline_cm_stream_write_once_1: status;
                 }
                 break $inline_cm_stream_write_once_1: result_25;
             }) >>u 4;
-            result_7 = $inline_cm_copy_result_4: block -> "core:prelude/types.wado//enum:CopyResult" {
-                let $match_scrut_0: i32;
-                if local.tee $match_scrut_0(written & 15) == 0 {
-                    break $inline_cm_copy_result_4: 0;
-                } else if $match_scrut_0 == 1 {
-                    break $inline_cm_copy_result_4: 1;
-                } else {
-                }
-                break $inline_cm_copy_result_4: 2;
-            };
+            let $match_scrut_0: i32;
+            $match_scrut_0 = (if local.tee $match_scrut_0(written & 15) == 0 -> "core:prelude/types.wado//enum:CopyResult" {
+                0;
+            } else if @likely($match_scrut_0 == 1) -> "core:prelude/types.wado//enum:CopyResult" {
+                1;
+            } else {
+                "core:rt/unreachable"();
+                unreachable;
+            });
             i = i + delivered_6;
-            if ((result_7 != 0) | (delivered_6 <= 0)) | (i >= $mv$data$end) {
+            if (($match_scrut_0 != 0) | (delivered_6 <= 0)) | (i >= $mv$data$end) {
                 drop("mem/realloc"(ptr_19, $mv$data$end, 1, 0));
-                return result_7;
+                return $match_scrut_0;
             }
             continue l33;
         };
