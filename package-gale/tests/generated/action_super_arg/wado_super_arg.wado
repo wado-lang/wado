@@ -1449,6 +1449,7 @@ struct CtxArena {
     merge_cache: AtnKeyMap,
     cover_cache: AtnKeyMap,
     node_limit: i32,
+    closure_cut_short: bool,
 }
 
 struct AtnConfig {
@@ -1472,6 +1473,7 @@ impl CtxArena {
             merge_cache: AtnKeyMap::new(),
             cover_cache: AtnKeyMap::new(),
             node_limit: ATN_ARENA_CAP,
+            closure_cut_short: false,
         };
         let empty = arena.push(CTX_BOUNDARY, 0, CTX_EMPTY);
         let unknown = arena.push(CTX_UNKNOWN_RETURN, 0, CTX_EMPTY);
@@ -1852,7 +1854,11 @@ fn atn_expand(
                 work.push(AtnConfig { state: target, alt: cur.alt, pctx, pr: cur.pr });
             }
         } else if k == ATN_TR_RULE {
-            if target < 0 || arena.node_count() >= arena.node_limit {
+            if target < 0 {
+                continue;
+            }
+            if arena.node_count() >= arena.node_limit {
+                arena.closure_cut_short = true;
                 continue;
             }
             let npctx = arena.push(sim.tr_follow[start + j], cur.pr, pctx);
@@ -2146,7 +2152,7 @@ impl AtnDfa {
             self.sim_states = sim.state_kind.len();
         }
         assert self.sim_states == sim.state_kind.len(), "a DFA caches the predictions of one ATN";
-        if self.arena.node_count() >= ATN_DFA_NODE_CAP {
+        if self.arena.closure_cut_short || self.arena.node_count() >= ATN_DFA_NODE_CAP {
             *self = AtnDfa::new();
             self.sim_states = sim.state_kind.len();
         }
