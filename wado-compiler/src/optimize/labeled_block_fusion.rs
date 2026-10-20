@@ -18,8 +18,9 @@ use crate::nir_arena::{
 use crate::nir_engine::{Engine, Rule};
 use crate::nir_value_graph::ValueKind;
 use crate::nir_visitor::NirRefVisitor;
-use crate::tir::{TypeId, TypeTable};
+use crate::tir::TypeId;
 use crate::token::Span;
+use crate::type_table::TypeTable;
 
 use super::arena_query::{
     block_yields_value, has_break_to, is_local, is_local_operand,

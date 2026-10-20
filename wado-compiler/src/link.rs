@@ -12,9 +12,8 @@ use crate::hashmap::IndexMap;
 use crate::hashmap::IndexSet;
 use crate::module_source::ModuleSource;
 use crate::package::Package;
-use crate::tir::{
-    BuiltinDeclaration, BuiltinDeclarations, DeclarationShape, TirFunction, TypeTable,
-};
+use crate::tir::{BuiltinDeclaration, BuiltinDeclarations, DeclarationShape, TirFunction};
+use crate::type_table::TypeTable;
 use crate::wir_build::component_plan;
 use crate::world_registry::TEST_WORLD;
 

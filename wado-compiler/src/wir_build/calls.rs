@@ -9,7 +9,8 @@ use std::array;
 
 use crate::module_source::ModuleSource;
 use crate::name::MangledName;
-use crate::tir::{TypeId, TypeTable};
+use crate::tir::TypeId;
+use crate::type_table::TypeTable;
 use crate::wir::{WirInstr, WirType, WirTypeId};
 
 use super::context::WirContext;

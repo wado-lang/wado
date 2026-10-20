@@ -10,7 +10,8 @@ use crate::synthesis::common::{
     block, cast, expr_stmt, handle_from_f64, internal_call, local_ref, locals_from_params,
     synth_span,
 };
-use crate::tir::{ResolvedType, TirExpr, TirExprKind, TirParam, TypeId, TypeKey, TypeTable};
+use crate::tir::{ResolvedType, TirExpr, TirExprKind, TirParam, TypeId};
+use crate::type_table::{TypeKey, TypeTable};
 use crate::world_registry::CallbackExport;
 
 use super::entry_type_table;

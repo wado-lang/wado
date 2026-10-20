@@ -7,7 +7,8 @@
 
 use crate::ast;
 use crate::compiler_host::CompilerHost;
-use crate::tir::{EffectRef, ResolvedType, TypeId, TypeKey};
+use crate::tir::{EffectRef, ResolvedType, TypeId};
+use crate::type_table::TypeKey;
 
 use super::Elaborator;
 use super::types::{FunctionContext, TypeError};

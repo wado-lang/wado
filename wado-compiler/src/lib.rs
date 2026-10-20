@@ -101,6 +101,7 @@ pub mod tir_visitor;
 pub mod token;
 pub mod trace;
 pub mod trait_solver;
+pub mod type_table;
 pub mod unparse;
 pub mod unresolved_types;
 pub mod unused_import;

@@ -22,7 +22,8 @@ use crate::nir_package::NirPackage;
 use crate::nir_value_graph::{OpaqueSource, ValueId, ValueKind};
 use crate::optimize::mod_ref;
 use crate::optimize::value_copy::mutation::MutationOracle;
-use crate::tir::{ResolvedType, TypeId, TypeTable};
+use crate::tir::{ResolvedType, TypeId};
+use crate::type_table::TypeTable;
 
 /// Every reachable block, each before the blocks nested under it.
 pub(super) fn reachable_blocks(body: &Body) -> Vec<BlockId> {

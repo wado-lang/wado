@@ -14,8 +14,9 @@ use crate::nir_arena::{
 use crate::nir_engine::{Engine, EngineBuffers, Rule};
 use crate::nir_package::NirPackage;
 use crate::primitive::PrimitiveType;
-use crate::tir::{ResolvedType, TypeTable};
+use crate::tir::ResolvedType;
 use crate::token::Span;
+use crate::type_table::TypeTable;
 
 /// Minimum values a `br_table` must cover to be worth it — one range arm can
 /// reach it alone. It replaces a cascade the predictor gets right with a single

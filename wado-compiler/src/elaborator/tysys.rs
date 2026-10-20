@@ -16,7 +16,8 @@ use crate::hashmap::{IndexMap, IndexSet};
 use crate::module_source::ModuleSource;
 use crate::resource_holding::{Held, HeldTypes, holds_resource};
 use crate::synthesis::template::{eq_from_written_cmp, written_impl_reaches};
-use crate::tir::{ResolvedType, StructDef, TypeId, TypeKey, TypeTable, range_item};
+use crate::tir::{ResolvedType, StructDef, TypeId, range_item};
+use crate::type_table::{TypeKey, TypeTable};
 
 use super::sem::decls::ModuleDecls;
 use super::trait_env::{NamespaceImports, TraitEnv};
@@ -26,7 +27,7 @@ use crate::ast::{AstId, GenericParam};
 use crate::defs::DefId;
 use crate::elaborator::sig;
 use crate::elaborator::solver_bridge::SolverBridge;
-use crate::name::{FqTypeName, NEVER_TYPE_NAME, UNIT_TYPE_NAME};
+use crate::name::{ARRAY_TYPE_NAME, FqTypeName};
 use crate::resolve::Resolutions;
 
 /// Pipeline-wide type knowledge — the type arena, the cross-module decl
@@ -347,7 +348,7 @@ impl TypeSystem {
                 .map(|(n, _)| n),
             // `Array<T>` is declared definitionless, so it has no nominal head
             // to read; its declaration names it `Array` and carries its impls.
-            ResolvedType::BuiltinArray(_) => Some(TypeTable::ARRAY_TYPE_NAME.to_string()),
+            ResolvedType::BuiltinArray(_) => Some(ARRAY_TYPE_NAME.to_string()),
             _ => None,
         }
     }
@@ -473,7 +474,7 @@ impl TypeSystem {
             let is_builtin_array = matches!(tt.get(base_id), ResolvedType::BuiltinArray(_));
             drop(tt);
             if is_builtin_array {
-                return (TypeTable::ARRAY_TYPE_NAME.to_string(), base_id);
+                return (ARRAY_TYPE_NAME.to_string(), base_id);
             }
             if let Some(base_name) = self.struct_name_for_type(base_id) {
                 return (base_name, base_id);
@@ -499,7 +500,7 @@ impl TypeSystem {
                 // The raw GC array's base method-owner name is "Array"
                 // (its type args are carried separately), not the full
                 // `type_name` spelling `Array<T>`.
-                ResolvedType::BuiltinArray(_) => return TypeTable::ARRAY_TYPE_NAME.to_string(),
+                ResolvedType::BuiltinArray(_) => return ARRAY_TYPE_NAME.to_string(),
                 _ => return self.type_table.borrow().type_name(current),
             }
         }
@@ -587,83 +588,9 @@ impl TypeSystem {
         bound_param_name(self.type_table.borrow().get(type_id)).cloned()
     }
 
-    /// Render a type as a user-facing Wado type string (used in diagnostics
-    /// and synthesized names). Recurses through references, generic args,
-    /// tuples, and function types.
+    /// [`TypeTable::type_name`], the one diagnostic spelling of a type.
     pub(crate) fn type_id_to_string(&self, type_id: TypeId) -> String {
-        let resolved = self.type_table.borrow().get(type_id).clone();
-        match resolved {
-            ResolvedType::Primitive(prim) => format!("{prim:?}").to_lowercase(),
-            ResolvedType::Struct { def, .. } => self.type_table.borrow().struct_head_decl_name(def),
-            ResolvedType::GenericInstance { def, type_args } => {
-                let name = self.type_table.borrow().def_name(def).to_string();
-                if self.type_table.borrow().is_tuple_def(def) {
-                    let parts: Vec<String> = type_args
-                        .iter()
-                        .map(|&t| self.type_id_to_string(t))
-                        .collect();
-                    format!("[{}]", parts.join(", "))
-                } else if type_args.is_empty() {
-                    name
-                } else {
-                    let args: Vec<String> = type_args
-                        .iter()
-                        .map(|&t| self.type_id_to_string(t))
-                        .collect();
-                    format!("{}<{}>", name, args.join(", "))
-                }
-            }
-            ResolvedType::BuiltinArray(elem) => {
-                format!("Array<{}>", self.type_id_to_string(elem))
-            }
-            ResolvedType::Ref(inner) => format!("&{}", self.type_id_to_string(inner)),
-            ResolvedType::MutRef(inner) => format!("&mut {}", self.type_id_to_string(inner)),
-            ResolvedType::Function {
-                params,
-                return_type,
-                ..
-            } => {
-                let param_strs: Vec<String> =
-                    params.iter().map(|&t| self.type_id_to_string(t)).collect();
-                let ret_str = self.type_id_to_string(return_type);
-                format!("fn({}) -> {}", param_strs.join(", "), ret_str)
-            }
-            ResolvedType::TypeParam { name, .. } | ResolvedType::AssocParam { name, .. } => name,
-            ResolvedType::InferVar(var) => var.to_string(),
-            ResolvedType::Enum { def }
-            | ResolvedType::Resource { def }
-            | ResolvedType::Variant { def }
-            | ResolvedType::Newtype { def, .. }
-            | ResolvedType::Flags { def } => self.type_table.borrow().def_name(def).to_string(),
-            ResolvedType::GenericResource { def, type_args } => {
-                let args: Vec<String> = type_args
-                    .iter()
-                    .map(|&t| self.type_id_to_string(t))
-                    .collect();
-                let name = self.type_table.borrow().def_name(def).to_string();
-                format!("{}<{}>", name, args.join(", "))
-            }
-            ResolvedType::TypePack { name, .. } => format!("..{name}"),
-            ResolvedType::AssocTypeProjection {
-                param_id,
-                assoc_name,
-                args,
-                ..
-            } => {
-                let base = format!("{}::{}", self.type_id_to_string(param_id), assoc_name);
-                if args.is_empty() {
-                    base
-                } else {
-                    let args: Vec<String> =
-                        args.iter().map(|&t| self.type_id_to_string(t)).collect();
-                    format!("{base}<{}>", args.join(", "))
-                }
-            }
-            ResolvedType::Unit => UNIT_TYPE_NAME.to_string(),
-            ResolvedType::Never => NEVER_TYPE_NAME.to_string(),
-            ResolvedType::Unknown => "<unknown>".to_string(),
-            ResolvedType::Error => "<error>".to_string(),
-        }
+        self.type_table.borrow().type_name(type_id)
     }
 
     /// Whether `==` / `!=` compares these operands as unrestricted resource

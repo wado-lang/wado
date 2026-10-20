@@ -15,7 +15,8 @@ use crate::nir::{FuncCell, FuncRef, FunctionKind, FunctionRef, NirParam, NirUnar
 use crate::nir_arena::{Body, ExprId, ExprKind, NodeRef, Operand, StmtId, StmtKind};
 use crate::nir_package::NirPackage;
 use crate::nir_visitor::reachable_exprs;
-use crate::tir::{ResolvedType, TypeId, TypeKey, TypeTable};
+use crate::tir::{ResolvedType, TypeId};
+use crate::type_table::{TypeKey, TypeTable};
 
 use super::arena_query::storage_root;
 use super::arena_query::{expr_mentions_local, is_local, reachable_blocks, strip_refs};

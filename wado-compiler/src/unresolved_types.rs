@@ -7,8 +7,8 @@ use crate::compiler_host::{Code, Diagnostic, DiagnosticSpan, Severity};
 use crate::flat_package::FlatPackage;
 use crate::logger::Logger;
 use crate::module_source::ModuleSource;
-use crate::tir::TypeTable;
 use crate::token::Span;
+use crate::type_table::TypeTable;
 
 /// Report every declared type resolution never answered; the count lets the
 /// caller stop before lowering.

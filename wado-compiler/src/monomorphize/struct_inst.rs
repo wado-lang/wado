@@ -1,9 +1,8 @@
 //! Struct instantiation: creating concrete structs from generic definitions.
 
 use crate::hashmap::IndexMap;
-use crate::tir::{
-    InstantiationKey, MonomorphInfo, ResolvedType, TirField, TirStruct, TypeId, TypeTable,
-};
+use crate::tir::{InstantiationKey, MonomorphInfo, ResolvedType, TirField, TirStruct, TypeId};
+use crate::type_table::TypeTable;
 
 use super::state::Monomorphizer;
 

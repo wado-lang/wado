@@ -4117,9 +4117,9 @@ use crate::name::LocalMethodName;
 use crate::tir::{
     FloatBound, InstancePattern, PatternLiteral, RangeBound, TirBinaryOp, TirBlock, TirEnum,
     TirExpr, TirExprKind, TirFlags, TirFunction, TirGlobal, TirLiteralPattern, TirLocal, TirModule,
-    TirParam, TirPattern, TirStmt, TirStmtKind, TirStruct, TirUnaryOp, TypeId, TypeTable,
-    receiver_value,
+    TirParam, TirPattern, TirStmt, TirStmtKind, TirStruct, TirUnaryOp, TypeId, receiver_value,
 };
+use crate::type_table::TypeTable;
 
 /// Unparses TIR back to pseudo-Wado source code.
 /// The output shows the code after monomorphization and lowering.
@@ -4162,6 +4162,16 @@ impl<'a> TirUnparser<'a> {
     fn source_form(mut self) -> Self {
         self.source_form = true;
         self
+    }
+
+    /// A type as source writes it in source form, and otherwise mangled, as the
+    /// dump's function names and the WIR dump spell it.
+    fn type_spelling(&self, id: TypeId) -> String {
+        if self.source_form {
+            self.type_table.type_name(id)
+        } else {
+            self.type_table.mangle_type_arg_for_generic(id)
+        }
     }
 
     /// Quote an identifier if it contains characters that make it invalid Wado syntax.
@@ -4222,7 +4232,7 @@ impl<'a> TirUnparser<'a> {
             return;
         }
         self.delimited("::<", ">", args, |s, t| {
-            let name = s.type_table.type_name(*t);
+            let name = s.type_spelling(*t);
             s.output.push_str(&name);
         });
     }
@@ -4285,7 +4295,7 @@ impl<'a> TirUnparser<'a> {
         self.emit_kw_if(g.wado_mutable, "mut ");
         self.output.push_str(&g.name);
         self.output.push_str(": ");
-        self.output.push_str(&self.type_table.type_name(g.ty));
+        self.output.push_str(&self.type_spelling(g.ty));
         // A deferred global's slot holds a placeholder, and the declared value
         // is the `$init$` function below. Saying so keeps the placeholder from
         // reading as the value.
@@ -4314,7 +4324,7 @@ impl<'a> TirUnparser<'a> {
                 }
                 if let Some(default_type) = param.default {
                     s.output.push_str(" = ");
-                    let name = s.type_table.type_name(default_type);
+                    let name = s.type_spelling(default_type);
                     s.output.push_str(&name);
                 }
             });
@@ -4326,8 +4336,7 @@ impl<'a> TirUnparser<'a> {
                 this.output.push_str(field.visibility.keyword());
                 this.output.push_str(&field.name);
                 this.output.push_str(": ");
-                this.output
-                    .push_str(&this.type_table.type_name(field.type_id));
+                this.output.push_str(&this.type_spelling(field.type_id));
                 this.output.push_str(",\n");
             }
         });
@@ -4398,7 +4407,7 @@ impl<'a> TirUnparser<'a> {
                 }
                 if let Some(default_type) = param.default {
                     s.output.push_str(" = ");
-                    let name = s.type_table.type_name(default_type);
+                    let name = s.type_spelling(default_type);
                     s.output.push_str(&name);
                 }
             });
@@ -4408,8 +4417,7 @@ impl<'a> TirUnparser<'a> {
 
         if f.return_type != TypeTable::UNIT {
             self.output.push_str(" -> ");
-            self.output
-                .push_str(&self.type_table.type_name(f.return_type));
+            self.output.push_str(&self.type_spelling(f.return_type));
         }
 
         self.unparse_tir_with_clause(&f.effects);
@@ -4430,8 +4438,7 @@ impl<'a> TirUnparser<'a> {
     fn unparse_param(&mut self, param: &TirParam) {
         self.output.push_str(&param.name);
         self.output.push_str(": ");
-        self.output
-            .push_str(&self.type_table.type_name(param.type_id));
+        self.output.push_str(&self.type_spelling(param.type_id));
     }
 
     fn unparse_block(&mut self, block: &TirBlock) {
@@ -4456,7 +4463,7 @@ impl<'a> TirUnparser<'a> {
                 }
                 self.output.push_str(name);
                 self.output.push_str(": ");
-                self.output.push_str(&self.type_table.type_name(*type_id));
+                self.output.push_str(&self.type_spelling(*type_id));
                 self.output.push_str(" = ");
                 self.unparse_expr(value);
                 self.output.push_str(";\n");
@@ -4643,7 +4650,7 @@ impl<'a> TirUnparser<'a> {
             } => {
                 self.output.push_str(name.as_deref().unwrap_or("_"));
                 self.output.push_str(": ");
-                self.output.push_str(&self.type_table.type_name(*type_id));
+                self.output.push_str(&self.type_spelling(*type_id));
                 self.output.push_str(" && ");
                 self.unparse_expr(test);
             }
@@ -4689,7 +4696,7 @@ impl<'a> TirUnparser<'a> {
                 case_name, payload, ..
             } => {
                 // Get the variant type name from the type_id
-                let type_name = self.type_table.type_name(expr.type_id);
+                let type_name = self.type_spelling(expr.type_id);
                 self.output.push_str(&type_name);
                 self.output.push_str("::");
                 self.output.push_str(case_name);
@@ -4701,7 +4708,7 @@ impl<'a> TirUnparser<'a> {
             }
             TirExprKind::EnumConstruct { case_name, .. } => {
                 // Get the enum type name from the type_id
-                let type_name = self.type_table.type_name(expr.type_id);
+                let type_name = self.type_spelling(expr.type_id);
                 self.output.push_str(&type_name);
                 self.output.push_str("::");
                 self.output.push_str(case_name);
@@ -4731,7 +4738,7 @@ impl<'a> TirUnparser<'a> {
                         if i > 0 {
                             self.output.push_str(", ");
                         }
-                        let name = self.type_table.type_name(*ty);
+                        let name = self.type_spelling(*ty);
                         self.output.push_str(&name);
                     }
                     self.output.push('>');
@@ -4795,8 +4802,7 @@ impl<'a> TirUnparser<'a> {
             } => {
                 self.unparse_expr(inner);
                 self.output.push_str(" as ");
-                self.output
-                    .push_str(&self.type_table.type_name(*target_type));
+                self.output.push_str(&self.type_spelling(*target_type));
             }
             TirExprKind::Call {
                 func,
@@ -5054,7 +5060,7 @@ impl<'a> TirUnparser<'a> {
         self.delimited("|", "|", params, |s, (name, type_id)| {
             s.output.push_str(name);
             s.output.push_str(": ");
-            let ty = s.type_table.type_name(*type_id);
+            let ty = s.type_spelling(*type_id);
             s.output.push_str(&ty);
         });
         if !captures.is_empty() {

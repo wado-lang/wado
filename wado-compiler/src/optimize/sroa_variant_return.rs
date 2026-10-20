@@ -13,8 +13,9 @@ use crate::nir_arena::{
 use crate::nir_package::{NirPackage, Reshape, ReturnShape};
 use crate::nir_value_graph::ValueKind;
 use crate::primitive::PrimitiveType;
-use crate::tir::{ResolvedType, TypeId, TypeKey, TypeTable};
+use crate::tir::{ResolvedType, TypeId};
 use crate::token::Span;
+use crate::type_table::{TypeKey, TypeTable};
 
 use cranelift_entity::EntityRef;
 

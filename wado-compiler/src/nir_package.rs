@@ -28,7 +28,8 @@ use crate::nir::{
     NirGlobal, NirImport, NirStruct, NirTest, NirVariantDecl,
 };
 use crate::nir_arena::{Body, ExprKind, NodeRef};
-use crate::tir::{BuiltinDeclaration, BuiltinDeclarations, TypeId, TypeTable};
+use crate::tir::{BuiltinDeclaration, BuiltinDeclarations, TypeId};
+use crate::type_table::TypeTable;
 use crate::wir_build::component_plan::ComponentPlan;
 use crate::world_registry::{self, WorldInfo, WorldRegistry};
 

@@ -668,8 +668,7 @@ impl<'a, H: CompilerHost> Analyzer<'a, H> {
                             cm_import,
                         });
 
-                        // Register as "{Effect}::{method}"
-                        let qualified_name = format!("{}::{}", effect.name, method.name);
+                        let qualified_name = mangle_local_method(&effect.name, &method.name);
                         self.define_unique(
                             module_source,
                             method.id,
@@ -802,8 +801,7 @@ impl<'a, H: CompilerHost> Analyzer<'a, H> {
                             cm_import,
                         });
 
-                        // Register as "{Resource}::{method}"
-                        let qualified_name = format!("{}::{}", resource.name, method.name);
+                        let qualified_name = mangle_local_method(&resource.name, &method.name);
                         self.define_unique(
                             module_source,
                             method.id,

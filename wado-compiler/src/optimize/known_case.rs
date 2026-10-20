@@ -267,8 +267,8 @@ mod tests {
     use crate::nir_arena::{BlockNode, ExprNode, StmtId, StmtNode};
     use crate::nir_engine::EngineBuffers;
     use crate::nir_value_graph::ValueKind;
-    use crate::tir::TypeTable;
     use crate::token::Span;
+    use crate::type_table::TypeTable;
 
     fn expr(body: &mut Body, kind: ExprKind) -> ExprId {
         body.exprs.push(ExprNode {

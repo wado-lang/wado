@@ -13,7 +13,8 @@ use crate::hashmap::{IndexMap, IndexSet};
 use crate::nir::{NirBinaryOp, NirUnaryOp};
 use crate::nir_arena::ExprId;
 use crate::primitive::PrimitiveType;
-use crate::tir::{TypeId, TypeTable};
+use crate::tir::TypeId;
+use crate::type_table::TypeTable;
 
 /// The constant a [`ValueKind`] denotes, as niri's
 /// [`crate::const_eval::Value`] — the one projection between the two, which
@@ -1347,7 +1348,8 @@ impl ValuePool {
 mod tests {
     use super::*;
     use crate::nir::{NirBinaryOp, NirUnaryOp};
-    use crate::tir::{TypeId, TypeTable};
+    use crate::tir::TypeId;
+    use crate::type_table::TypeTable;
 
     // ---- Hash-cons dedup ----
 

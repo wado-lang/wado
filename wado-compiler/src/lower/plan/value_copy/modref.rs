@@ -9,10 +9,9 @@ use crate::flat_package::FlatPackage;
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::lower::plan::value_copy::place::is_reference;
 use crate::module_source::ModuleSource;
-use crate::tir::{
-    BuiltinDeclarations, TirExpr, TirExprKind, TirFunction, TirStmt, TypeId, TypeTable,
-};
+use crate::tir::{BuiltinDeclarations, TirExpr, TirExprKind, TirFunction, TirStmt, TypeId};
 use crate::tir_visitor::TirRefVisitor;
+use crate::type_table::TypeTable;
 
 /// Which of a function's incoming handles a write is reached through: a
 /// formatter's scratch `Array<u8>` and a parser's input are two origins.

@@ -25,10 +25,11 @@ use crate::tir;
 use crate::tir::{
     FunctionRef, ResolvedType, StructDef, StructFields, TirBinaryOp, TirBlock, TirExpr,
     TirExprKind, TirFunction, TirLocal, TirMatchArm, TirParam, TirPattern, TirStmt, TirStmtKind,
-    TirTemplatePart, TirUnaryOp, TypeId, TypeKey, TypeTable,
+    TirTemplatePart, TirUnaryOp, TypeId,
 };
 use crate::tir_visitor::TirRefVisitor;
 use crate::token::Span;
+use crate::type_table::{TypeKey, TypeTable};
 
 /// An owned resource-bearing value currently live in some scope.
 #[derive(Clone)]

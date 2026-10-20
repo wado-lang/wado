@@ -7,7 +7,8 @@
 
 use crate::ast;
 use crate::compiler_host::CompilerHost;
-use crate::tir::{TypeId, TypeTable};
+use crate::tir::TypeId;
+use crate::type_table::TypeTable;
 
 use super::Elaborator;
 use super::types::FunctionContext;

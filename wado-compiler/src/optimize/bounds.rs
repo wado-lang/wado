@@ -14,7 +14,8 @@ use crate::nir_arena::{
 use crate::nir_value_graph::ValueKind;
 use crate::optimize::arena_query::{binary_parts, local_written_by, operand_local, storage_root};
 use crate::primitive::PrimitiveType;
-use crate::tir::{BuiltinDeclaration, ResolvedType, TypeTable};
+use crate::tir::{BuiltinDeclaration, ResolvedType};
+use crate::type_table::TypeTable;
 
 /// The builtin calls in one body whose every trap condition holds, each
 /// with the callee its checks were proven against.

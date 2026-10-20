@@ -517,7 +517,7 @@ async fn run_single(opts: &DumpOptions, input: &str) -> Result<(), CliExit> {
                 let type_table = first_module.type_table.borrow();
                 println!("=== Types ===");
                 for (id, ty) in type_table.all_types() {
-                    let name = type_table.type_name(id);
+                    let name = type_table.mangle_type_arg_for_generic(id);
                     let kind = match ty {
                         wado_compiler::tir::ResolvedType::Primitive(_) => "primitive",
                         wado_compiler::tir::ResolvedType::Unit => "unit",

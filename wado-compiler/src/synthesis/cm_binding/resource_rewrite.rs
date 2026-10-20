@@ -21,9 +21,9 @@ use crate::package::Package;
 use crate::tir::{
     CallArg, FunctionKind, FunctionRef, InlineHint, MonomorphInfo, ResolvedType, TirBinaryOp,
     TirBlock, TirExpr, TirExprKind, TirFunction, TirLocal, TirParam, TirStmt, TirStmtKind, TypeId,
-    TypeTable,
 };
 use crate::tir_visitor::{TirMutVisitor, TirRefVisitor};
+use crate::type_table::TypeTable;
 
 use crate::canonical::{CanonicalIntrinsic, CmDecl, CmFuturePayload, CmStreamPayload};
 use crate::synthesis::common::{
@@ -1985,7 +1985,7 @@ fn stream_element_decl(tt: &TypeTable, elem: TypeId, cm_name: &str) -> CmDecl {
         .unwrap_or_else(|| {
             panic!(
                 "`stream<{}>` element names no declaration",
-                tt.base_type_name(elem)
+                tt.type_name(elem)
             )
         });
     CmDecl::new(tt.defs(), def, cm_name)

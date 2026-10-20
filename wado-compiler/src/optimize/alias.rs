@@ -23,7 +23,8 @@ use crate::nir_package::NirPackage;
 use crate::nir_value_graph::builder::AliasSets;
 use crate::niri::AliasClasses;
 use crate::parallel::{Executor, lock};
-use crate::tir::{ResolvedType, TypeId, TypeKey, TypeTable};
+use crate::tir::{ResolvedType, TypeId};
+use crate::type_table::{TypeKey, TypeTable};
 
 /// Per-function alias annotations, computed once by [`build_alias_info`]:
 /// `aliased` are locals reachable through another handle, `untrackable` those

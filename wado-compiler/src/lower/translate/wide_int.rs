@@ -8,9 +8,10 @@ use std::rc::Rc;
 use crate::lower::wide_int_literal::create_literal;
 use crate::tir::{
     LetStorage, TirBinaryOp, TirBlock, TirExpr, TirExprKind, TirLiteralPattern, TirMatchArm,
-    TirPattern, TirStmt, TirStmtKind, TypeId, TypeTable,
+    TirPattern, TirStmt, TirStmtKind, TypeId,
 };
 use crate::token::Span;
+use crate::type_table::TypeTable;
 
 /// True for a wide-int scrutinee with at least one arm that tests its value. A
 /// `match x { _ => … }` lowers fine as a normal NIR `Match`.

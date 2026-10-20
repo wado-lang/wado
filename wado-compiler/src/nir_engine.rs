@@ -21,8 +21,9 @@ use crate::nir_arena::{
 use crate::nir_value_graph::builder::{AliasSets, CallFacts, build};
 use crate::nir_value_graph::{HeapVersion, OpaqueSource, ValueId, ValueKind, builder};
 use crate::niri::CtfeBuiltinMap;
-use crate::tir::{ObjectTypes, ResolvedType, TypeId, TypeTable};
+use crate::tir::{ObjectTypes, ResolvedType, TypeId};
 use crate::token::Span;
+use crate::type_table::TypeTable;
 
 /// A live-pool representative per field read, plus the versions a placement
 /// needs: a representative's `heap_ver` proves its *uses* see one load, not
@@ -1827,7 +1828,7 @@ mod tests {
     use crate::nir::NirBinaryOp;
     use crate::nir_arena::{BlockNode, ExprNode, StmtNode};
     use crate::primitive::PrimitiveType;
-    use crate::tir::TypeTable;
+    use crate::type_table::TypeTable;
     use Span;
     use std::assert_matches;
 

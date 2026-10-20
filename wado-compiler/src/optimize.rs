@@ -68,9 +68,9 @@ use crate::hashmap::IndexSet;
 #[cfg(debug_assertions)]
 use crate::nir_arena::{ExprKind, NodeRef, PatKind, StmtKind};
 #[cfg(debug_assertions)]
-use crate::tir::TypeTable;
-#[cfg(debug_assertions)]
 use crate::trace::filter;
+#[cfg(debug_assertions)]
+use crate::type_table::TypeTable;
 
 use const_branch_prune::{prune_constant_branches, prune_template_block_wrappers};
 use const_folding::{fold_constants, fold_constants_all};

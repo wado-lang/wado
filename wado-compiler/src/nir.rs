@@ -19,8 +19,9 @@ use crate::name::{
     FunctionId, LocalMethodName, closure_call_method_info, closure_call_name, minted_name,
 };
 use crate::nir_arena::{Body, ExprBody, Tracked};
-use crate::tir::{self, DeclarationLookup, EffectRef, StructDef, TypeId, TypeTable};
+use crate::tir::{self, DeclarationLookup, EffectRef, StructDef, TypeId};
 use crate::token::Span;
+use crate::type_table::TypeTable;
 
 /// Canonical identity of a function entity. Minted in `lower` over the
 /// post-monomorphization function set and intrinsic to the entity — not its

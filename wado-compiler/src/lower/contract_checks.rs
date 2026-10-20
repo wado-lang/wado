@@ -31,9 +31,10 @@ use crate::synthesis::common::builtin_call;
 use crate::tir::{
     CallArg, FunctionKind, FunctionRef, LetStorage, LocalFrame, TemplateId, TirBlock, TirExpr,
     TirExprKind, TirFunction, TirLocal, TirParam, TirPattern, TirStmt, TirStmtKind, TirUnaryOp,
-    TypeId, TypeTable, assign_stmt,
+    TypeId, assign_stmt,
 };
 use crate::tir_visitor::{TirMutVisitor, TirRefVisitor, remap_locals};
+use crate::type_table::TypeTable;
 
 /// Under `-f contract-checks`, point every call `unchecked` marks back at its
 /// checked function, so that it is checked as an unmarked call is. Runs ahead

@@ -18,8 +18,9 @@ use crate::loader::resolve_use_decl_source;
 use crate::module_source::{ModuleSource, ModuleSourceInterner, PackageId};
 use crate::name;
 use crate::resolve::{Resolution, Resolutions, head_site};
-use crate::tir::{TemplateId, TypeId, TypeTable};
+use crate::tir::{TemplateId, TypeId};
 use crate::token::Span;
+use crate::type_table::TypeTable;
 use crate::unparse::{unparse_generic_params_into, unparse_type_into};
 
 /// Namespace-import alias (`use ns from "…"`) → the namespace's module.
@@ -210,7 +211,7 @@ impl ImplTargetKey {
 /// The spelling a declaration renders to in a mangled head: its declared name,
 /// with a function-local declaration's disambiguator applied.
 ///
-/// [`crate::tir::TypeTable::decl_render_name`] one layer down, for the callers
+/// [`TypeTable::decl_render_name`] one layer down, for the callers
 /// that hold a [`crate::defs::DefTable`] and no type table.
 pub(crate) fn render_decl_name(defs: &DefTable, def: DefId) -> String {
     if defs.is_function_local(def) {
@@ -1312,7 +1313,7 @@ impl TraitEnv {
             .any(|trait_| {
                 trait_.def == Some(from_trait)
                     && trait_.arg_ids.first().is_some_and(|array| {
-                        matches!(array.head(), name::TypeHead::Builtin(head) if head == TypeTable::ARRAY_TYPE_NAME)
+                        matches!(array.head(), name::TypeHead::Builtin(head) if head == name::ARRAY_TYPE_NAME)
                             && array.args().first().is_some_and(|element| {
                                 matches!(element.head(), name::TypeHead::Tuple)
                                     && element.args().len() == 2
@@ -2898,24 +2899,17 @@ pub(super) fn header_as_written(header: &ImplHeader) -> String {
 ///
 /// Renders the AST, so nothing reads it back into a declaration.
 pub(super) fn written_type_source(ty: &ast::Type) -> String {
-    let list = |args: &[ast::Type]| {
-        args.iter()
-            .map(written_type_source)
-            .collect::<Vec<_>>()
-            .join(", ")
-    };
+    let list = |args: &[ast::Type]| args.iter().map(written_type_source).collect::<Vec<_>>();
     match ty {
         ast::Type::Named(named) => named.name.clone(),
-        ast::Type::Generic(g) => format!("{}<{}>", g.name, list(&g.args)),
-        ast::Type::NamespacedGeneric(ns) => {
-            format!("{}::{}<{}>", ns.namespace, ns.name, list(&ns.args))
-        }
+        ast::Type::Generic(g) => name::display_generic_name(&g.name, &list(&g.args)),
+        ast::Type::NamespacedGeneric(ns) => name::display_generic_name(
+            &name::namespaced_name(&ns.namespace, &ns.name),
+            &list(&ns.args),
+        ),
         ast::Type::Function(ft) => name::display_fn_type(
             ft.is_mut,
-            &ft.params
-                .iter()
-                .map(written_type_source)
-                .collect::<Vec<_>>(),
+            &list(&ft.params),
             &written_type_source(&ft.return_type),
             matches!(ft.return_type, ast::Type::Function(_)),
             &ft.effects
@@ -2923,10 +2917,14 @@ pub(super) fn written_type_source(ty: &ast::Type) -> String {
                 .map(|e| e.name.clone())
                 .collect::<Vec<_>>(),
         ),
-        ast::Type::Tuple(elems) => format!("[{}]", list(elems)),
-        ast::Type::Reference(inner) => format!("&{}", written_type_source(inner)),
-        ast::Type::MutReference(inner) => format!("&mut {}", written_type_source(inner)),
-        ast::Type::TypePackSpread(name, _) => format!("..{name}"),
+        ast::Type::Tuple(elems) => name::display_tuple_type(&list(elems)),
+        ast::Type::Reference(inner) => {
+            name::ref_type_name(name::RefKind::Shared, &written_type_source(inner))
+        }
+        ast::Type::MutReference(inner) => {
+            name::ref_type_name(name::RefKind::Mut, &written_type_source(inner))
+        }
+        ast::Type::TypePackSpread(pack, _) => name::type_pack_name(pack),
         ast::Type::Infer(_) => "_".to_string(),
         ast::Type::Error(_) => "<error>".to_string(),
     }

@@ -7,8 +7,12 @@ use crate::ast::{self, Expr, Type};
 use crate::compiler_host::CompilerHost;
 use crate::hashmap::IndexMap;
 use crate::module_source::ModuleSource;
-use crate::name::{FqTypeName, LocalMethodName, MethodName, RefKind, unalias_namespace_member};
-use crate::tir::{FunctionRef, InferVarId, MonomorphInfo, ResolvedType, TypeId, TypeTable};
+use crate::name::{
+    FqTypeName, LocalMethodName, MethodName, RefKind, display_generic_name,
+    unalias_namespace_member,
+};
+use crate::tir::{FunctionRef, InferVarId, MonomorphInfo, ResolvedType, TypeId};
+use crate::type_table::TypeTable;
 
 use super::Elaborator;
 use super::callee::{CalleeRef, StaticMethodRef};
@@ -1152,7 +1156,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             }
         };
         let _ = self.emit(TypeError::MarkerWithheld {
-            trait_name: format!("From<{source_name}>"),
+            trait_name: display_generic_name("From", &[source_name]),
             type_name: target_name,
             why,
             span,

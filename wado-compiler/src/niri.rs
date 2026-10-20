@@ -15,8 +15,9 @@ use crate::nir_arena::{
 use crate::nir_package::{AmbientStream, NirPackage};
 use crate::nir_value_graph::{ValueId, ValueKind};
 use crate::parallel::Executor;
-use crate::tir::{ResolvedType, TypeId, TypeTable};
+use crate::tir::{ResolvedType, TypeId};
 use crate::token::Span;
+use crate::type_table::TypeTable;
 use crate::{compiler_trace, nir_arena};
 
 /// Three-state lattice over compile-time evaluation results, ordered
@@ -1069,7 +1070,7 @@ mod tests {
     use crate::module_source::ModuleSource;
     use crate::nir::FunctionRef;
     use crate::nir_arena::Body;
-    use crate::tir::TypeTable;
+    use crate::type_table::TypeTable;
 
     /// A runnable body-less-shaped callee made runnable: a value to return, and
     /// a parameter it keeps.

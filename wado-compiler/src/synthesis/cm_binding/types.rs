@@ -16,8 +16,9 @@ use crate::primitive::PrimitiveType;
 use crate::stdlib::is_wit_core_module;
 use crate::tir::{
     ResolvedType, TemplateId, TirBinaryOp, TirExpr, TirExprKind, TirModule, TirParam, TirStruct,
-    TirVariantDecl, TypeId, TypeTable,
+    TirVariantDecl, TypeId,
 };
+use crate::type_table::TypeTable;
 
 use crate::component_model::map_key_rejection;
 use crate::component_model::{future_payload_rejection, stream_payload_rejection};
@@ -153,7 +154,7 @@ impl LiftContext<'_> {
     }
 
     /// The declaration behind a CM named type — see
-    /// [`crate::tir::TypeTable::cm_decl_in`] for why the WIT boundary resolves
+    /// [`TypeTable::cm_decl_in`] for why the WIT boundary resolves
     /// a name rather than following a reference site.
     pub(super) fn cm_decl(&self, source: &str, name: &str) -> DefId {
         self.cm_decl_at(&self.type_table.borrow(), source, name)

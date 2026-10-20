@@ -24,8 +24,9 @@ use crate::nir::{FuncCell, FunctionRef, NirFunction, NirUnaryOp};
 use crate::nir_arena::{Body, ExprId, ExprKind, ExprNode, NodeRef, Operand};
 use crate::nir_package::{FieldForm, NirPackage, ParamShape, Reshape, SroaParamProjection};
 use crate::parallel::Executor;
-use crate::tir::{ResolvedType, TypeId, TypeTable};
+use crate::tir::{ResolvedType, TypeId};
 use crate::token::Span;
+use crate::type_table::TypeTable;
 
 use cranelift_entity::EntityRef;
 

@@ -13,7 +13,7 @@ use super::types::FunctionContext;
 use crate::compiler_item::CompilerItem;
 use crate::elaborator::sem::ModuleSemantics;
 use crate::elaborator::sem::types::{AssertCaptureInfo, AssertSlot, DesugarKind};
-use crate::tir::TypeTable;
+use crate::type_table::TypeTable;
 
 impl<H: CompilerHost> Elaborator<'_, H> {
     pub(super) fn desugar_assert(&mut self, assert_stmt: &AssertStmt, ctx: &mut FunctionContext) {

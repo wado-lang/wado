@@ -16,10 +16,11 @@ use crate::name::{
 use crate::synthesis::common::builtin_call;
 use crate::tir::{
     FunctionRef, GlobalInit, LocalFrame, TirBlock, TirExpr, TirExprKind, TirFunction, TirGlobal,
-    TirStmt, TirStmtKind, TypeTable, is_constant_initializer,
+    TirStmt, TirStmtKind, is_constant_initializer,
 };
 use crate::tir_visitor::{TirRefVisitor, shift_locals};
 use crate::token::Span;
+use crate::type_table::TypeTable;
 
 /// A global, by the module declaring it and its name: two modules may each
 /// declare one of the same name.

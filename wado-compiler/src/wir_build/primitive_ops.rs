@@ -8,7 +8,8 @@ use crate::compiler_item::SeqField;
 use crate::const_eval::{int_bit_width, prim_of};
 use crate::nir::{NirBinaryOp, NirUnaryOp};
 use crate::primitive::PrimitiveType;
-use crate::tir::{ResolvedType, TypeId, TypeTable};
+use crate::tir::{ResolvedType, TypeId};
+use crate::type_table::TypeTable;
 use crate::wir::{WirInstr, WirType};
 
 use super::translate::FunctionTranslator;

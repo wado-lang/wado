@@ -22,10 +22,10 @@ use crate::hashmap::IndexMap;
 use crate::module_source::ModuleSource;
 use crate::name::{FreeFunctionName, LocalMethodName};
 use crate::tir::{
-    AnonStructId, MonomorphInfo, ResolvedType, StructDef, TemplateId, TirFunction, TirModule,
-    TirStruct, TypeId, TypeTable,
+    MonomorphInfo, ResolvedType, StructDef, TemplateId, TirFunction, TirModule, TirStruct, TypeId,
 };
 use crate::tir_visitor::TirRefVisitor;
+use crate::type_table::{AnonStructId, TypeTable};
 
 use state::Monomorphizer;
 

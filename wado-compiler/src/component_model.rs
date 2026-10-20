@@ -28,14 +28,15 @@ use crate::cm_abi::{
 use crate::defs::{DefId, DefTable};
 use crate::lexer::lex;
 use crate::module_source::{CmNamespace, ModuleSource};
-use crate::name::{DeclName, DeclPath, UNIT_TYPE_NAME, to_cm_name};
+use crate::name::{DeclName, DeclPath, RefKind, UNIT_TYPE_NAME, ref_type_name, to_cm_name};
 use crate::parser::Parser;
 use crate::primitive::PrimitiveType;
 use crate::resolve::Resolutions;
 use crate::stdlib;
 use crate::synthesis::cm_binding::types::cm_interface_module;
-use crate::tir::{ResolvedType, TypeId, TypeTable};
+use crate::tir::{ResolvedType, TypeId};
 use crate::token::Span;
+use crate::type_table::TypeTable;
 use crate::unparse::unparse_type_into;
 use crate::world_registry::{InterfaceExportLookup, InterfaceExportMethod, WorldRegistry};
 
@@ -66,7 +67,7 @@ pub fn classify_future_payload(type_table: &TypeTable, type_arg: TypeId) -> CmFu
     try_classify_future_payload(type_table, type_arg).unwrap_or_else(|| {
         panic!(
             "`Future<{}>` has no Component Model payload type",
-            type_table.base_type_name(type_arg)
+            type_table.type_name(type_arg)
         )
     })
 }
@@ -243,7 +244,7 @@ pub fn classify_stream_payload(type_table: &TypeTable, element: TypeId) -> CmStr
         None => panic!(
             "`Stream<{}>` has no Component Model element type: a guest-created \
              stream of a WASI-owned type is not supported yet",
-            type_table.base_type_name(element)
+            type_table.type_name(element)
         ),
     }
 }
@@ -1999,8 +2000,8 @@ impl CmInterfaceRegistry {
                 Some(source) => format!("{source}#{}", n.name),
                 None => n.name.clone(),
             },
-            Type::Reference(inner) => format!("&{}", self.type_key(inner)),
-            Type::MutReference(inner) => format!("&mut {}", self.type_key(inner)),
+            Type::Reference(inner) => ref_type_name(RefKind::Shared, &self.type_key(inner)),
+            Type::MutReference(inner) => ref_type_name(RefKind::Mut, &self.type_key(inner)),
             Type::Generic(g) => format!("{}:{}", g.name, keys(&g.args)),
             Type::NamespacedGeneric(g) => {
                 format!("{}::{}:{}", g.namespace, g.name, keys(&g.args))

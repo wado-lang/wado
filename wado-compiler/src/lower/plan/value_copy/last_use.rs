@@ -16,10 +16,11 @@ use crate::lower::plan::value_copy::{ValueCopyPlan, analyze, modref, place};
 use crate::tir;
 use crate::tir::{
     FunctionRef, LetStorage, TirBlock, TirExpr, TirExprKind, TirFunction, TirMatchArm, TirPattern,
-    TirStmt, TirStmtKind, TirTemplatePart, TirUnaryOp, TypeId, TypeTable, capture_source_locals,
+    TirStmt, TirStmtKind, TirTemplatePart, TirUnaryOp, TypeId, capture_source_locals,
 };
 use crate::tir_visitor::{TirRefVisitor, for_each_block_result};
 use crate::token::Span;
+use crate::type_table::TypeTable;
 use std::rc::Rc;
 
 /// What a move can retire in one body.

@@ -7,7 +7,7 @@ use crate::nir::{FunctionKind, NirFunction};
 use crate::nir_arena::{BlockId, Body, ExprId, ExprKind, NodeRef, Operand, StmtId, StmtKind};
 use crate::nir_package::{NirPackage, Reshape, ReturnShape};
 use crate::parallel::Executor;
-use crate::tir::TypeTable;
+use crate::type_table::TypeTable;
 
 use cranelift_entity::EntityRef;
 

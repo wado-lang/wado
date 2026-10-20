@@ -30,7 +30,8 @@ use crate::nir_arena::{
 use crate::nir_package::NirPackage;
 use crate::nir_value_graph::{ValueId, ValueKind};
 use crate::primitive::PrimitiveType;
-use crate::tir::{BuiltinDeclaration, ResolvedType, TypeId, TypeTable};
+use crate::tir::{BuiltinDeclaration, ResolvedType, TypeId};
+use crate::type_table::TypeTable;
 
 use cranelift_entity::EntityRef;
 
@@ -3901,7 +3902,8 @@ fn inline_calls_in_expr(
 #[cfg(test)]
 mod cast_cost_tests {
     use super::cast_emits_instruction;
-    use crate::tir::{TypeId, TypeTable};
+    use crate::tir::TypeId;
+    use crate::type_table::TypeTable;
 
     fn emits(from: TypeId, to: TypeId) -> bool {
         cast_emits_instruction(&TypeTable::new(), from, to)
