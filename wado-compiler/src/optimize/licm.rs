@@ -1337,9 +1337,10 @@ fn record_written_field_type(
         && let Some(inner_e) = inner.as_expr()
     {
         let pointee = type_table.peel_refs(body.exprs[inner_e].type_id);
-        let receiver = match &body.exprs[inner_e].kind {
-            ExprKind::Local { index, .. } => Some(*index),
-            _ => None,
+        let receiver = if let ExprKind::Local { index, .. } = &body.exprs[inner_e].kind {
+            Some(*index)
+        } else {
+            None
         };
         modified
             .field_writes

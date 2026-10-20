@@ -237,18 +237,26 @@ impl CalleeWrites {
             changed = false;
             for f in 0..fields.len() {
                 for &c in &callees[f] {
-                    if c == f || fields[f].is_none() {
+                    let Some(own) = &fields[f] else {
+                        break;
+                    };
+                    if c == f {
                         continue;
                     }
-                    let Some(written) = fields[c].clone() else {
+                    let Some(written) = &fields[c] else {
                         fields[f] = None;
                         changed = true;
-                        continue;
+                        break;
                     };
-                    let own = fields[f].as_mut().expect("checked above");
-                    let before = own.len();
-                    own.extend(written);
-                    changed |= own.len() != before;
+                    let missing: Vec<String> = written
+                        .iter()
+                        .filter(|name| !own.contains(*name))
+                        .cloned()
+                        .collect();
+                    if !missing.is_empty() {
+                        fields[f].as_mut().expect("bound above").extend(missing);
+                        changed = true;
+                    }
                 }
             }
         }

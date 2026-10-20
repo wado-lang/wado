@@ -556,7 +556,18 @@ impl<'a> PatternLowerer<'a> {
                     TirLiteralPattern::I128(value)
                 });
             }
-            _ => {}
+            TirPattern::PerInstance { .. } => {
+                unreachable!("instance_patterns lowers every per-instance pattern")
+            }
+            TirPattern::Wildcard
+            | TirPattern::Binding { .. }
+            | TirPattern::Literal(_)
+            | TirPattern::Tuple(..)
+            | TirPattern::Variant { .. }
+            | TirPattern::Enum { .. }
+            | TirPattern::Struct { .. }
+            | TirPattern::Range { .. }
+            | TirPattern::Narrow { .. } => {}
         }
     }
 
