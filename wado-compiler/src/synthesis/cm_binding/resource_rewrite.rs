@@ -945,12 +945,14 @@ fn synthesize_future_write_func(payload_type_id: TypeId, ctx: &SynthCtx) -> TirF
     } else {
         // An end whose copy is pending cannot be dropped, and waiting for the
         // reader would deadlock one in this instance, so the end is left to the
-        // host, which delivers the value and reports the write `Pending`
-        // (WEP: Affine Types, known gaps).
+        // host, which delivers the value from the buffer and reports the write
+        // `Pending` (WEP: Affine Types, known gaps). A write that finished
+        // frees the buffer.
+        let free = free_cm_buffer(ptr_idx, size, align, &mut next_local, &mut locals);
         stmts.push(if_stmt(
             is_blocked(written()),
             block(vec![]),
-            Some(block(vec![drop_end])),
+            Some(block(vec![free, drop_end])),
         ));
     }
 

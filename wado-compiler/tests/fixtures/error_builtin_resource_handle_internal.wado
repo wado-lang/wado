@@ -1,0 +1,10 @@
+// A builtin only the compiler and `core` call stays inside the standard
+// library: its lowering trusts arguments no signature checks.
+test {
+    let x = builtin::resource_handle(&5);
+}
+
+__DATA__
+{
+  "compile_error": ":4:13: analysis error: symbol 'resource_handle' is `internal` to 'core:builtin'"
+}

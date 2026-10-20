@@ -538,7 +538,12 @@ internal resource RawWaitableSet {
 /// variant of its own and derives `Waitable` on it with `impl Waitable for V;`.
 pub affine struct WaitableSet<affine W: Waitable> {
     raw: RawWaitableSet,
+    /// The members joined to `raw`, which the host reports events for.
     members: List<W>,
+    /// The members the host has no event left to report for, in join order:
+    /// one it does not know, `Unreported`, or a subtask whose resolution a set
+    /// already delivered, reported again.
+    ready: List<Ready<W>>,
 }
 
 /// A member of a `WaitableSet` that has an event, moved out of the set with
@@ -551,14 +556,21 @@ pub struct Ready<affine W> {
 impl<affine W: Waitable> WaitableSet<W> {
     #[benign(RawWaitableSet)]
     pub fn new() -> WaitableSet<W> {
-        return WaitableSet { raw: RawWaitableSet::new(), members: [] };
+        return WaitableSet { raw: RawWaitableSet::new(), members: [], ready: [] };
     }
 
-    /// Moves `member` into the set. A member joins one set at a time.
+    /// Moves `member` into the set. A member joins one set at a time, so
+    /// whether the host has an event left for it is settled here.
     pub fn join(&mut self, member: W) {
-        if let Some(id) = member.waitable_id() && delivered_state(id.handle) matches { None } {
-            builtin::waitable_join(id.handle, builtin::resource_handle(&self.raw));
+        let Some(id) = member.waitable_id() else {
+            self.ready.push(Ready { member, event: ReadyEvent::Unreported });
+            return;
+        };
+        if let Some(state) = delivered_state(id.handle) {
+            self.ready.push(Ready { member, event: ReadyEvent::Call(state) });
+            return;
         }
+        builtin::waitable_join(id.handle, builtin::resource_handle(&self.raw));
         self.members.push(member);
     }
 
@@ -566,9 +578,9 @@ impl<affine W: Waitable> WaitableSet<W> {
     /// without the host comes first. Traps on an empty set.
     #[benign(RawWaitableSet)]
     pub fn wait(&mut self) -> Ready<W> {
-        assert !self.members.is_empty(), "a set waits on a member";
-        if let Some(ready) = self.take_ready_without_host() {
-            return ready;
+        assert !self.is_empty(), "a set waits on a member";
+        if !self.ready.is_empty() {
+            return self.ready.remove(0);
         }
         let event = self.raw.wait();
         return self.take_reported(event);
@@ -578,8 +590,8 @@ impl<affine W: Waitable> WaitableSet<W> {
     /// yet.
     #[benign(RawWaitableSet)]
     pub fn poll(&mut self) -> Option<Ready<W>> {
-        if let Some(ready) = self.take_ready_without_host() {
-            return Option::Some(ready);
+        if !self.ready.is_empty() {
+            return Option::Some(self.ready.remove(0));
         }
         let Some(event) = self.raw.poll() else {
             return null;
@@ -588,31 +600,11 @@ impl<affine W: Waitable> WaitableSet<W> {
     }
 
     pub fn len(&self) -> i32 {
-        return self.members.len();
+        return self.members.len() + self.ready.len();
     }
 
     pub fn is_empty(&self) -> bool {
-        return self.members.is_empty();
-    }
-
-    /// The first member the host has no event left to report for: one it does
-    /// not know, `Unreported`, or a subtask whose resolution a set already
-    /// delivered, reported again.
-    fn take_ready_without_host(&mut self) -> Option<Ready<W>> {
-        let mut at = 0;
-        for let member of self.members.iter_ref() {
-            let Some(id) = member.waitable_id() else {
-                return Option::Some(Ready { member: self.members.remove(at), event: ReadyEvent::Unreported });
-            };
-            if let Some(state) = delivered_state(id.handle) {
-                return Option::Some(Ready {
-                    member: self.members.remove(at),
-                    event: ReadyEvent::Call(state),
-                });
-            }
-            at += 1;
-        }
-        return null;
+        return self.len() == 0;
     }
 
     fn take_reported(&mut self, reported: WaitEvent) -> Ready<W> {
@@ -637,6 +629,7 @@ impl<affine W: Waitable> Drop for WaitableSet<W> {
     #[benign(RawWaitableSet)]
     fn drop(self) {
         builtin::drop(self.members);
+        builtin::drop(self.ready);
         self.raw.drop();
     }
 }

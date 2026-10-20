@@ -187,7 +187,7 @@ pub fn array_get_ref_mut<affine T: RefMut>(arr: &mut Array<T>, idx: i32) -> &mut
 /// value the field reads as.
 #[storage(part_of_args)]
 #[side_effect(none)]
-pub fn field_slot<affine S, affine T>(holder: &mut S, field: i32) -> &mut T;
+internal fn field_slot<affine S, affine T>(holder: &mut S, field: i32) -> &mut T;
 
 /// Sets an element in a Array<T> at the given index.
 #[storage(stores_args)]
@@ -484,7 +484,7 @@ pub fn is_uninitialized<affine T>(value: &T) -> bool;
 /// is never null.
 #[storage(none)]
 #[side_effect(none)]
-pub fn is_moved<affine T>(value: T) -> bool;
+internal fn is_moved<affine T>(value: T) -> bool;
 
 /// Drop `value` where it is called (WEP: Affine Types). Resource drop synthesis
 /// replaces the call with the drop of what it takes.
@@ -741,7 +741,7 @@ pub fn task_cancel();
 /// to an affine resource.
 #[storage(none)]
 #[side_effect(read)]
-pub fn resource_handle<affine R>(r: &R) -> i32;
+internal fn resource_handle<affine R>(r: &R) -> i32;
 
 /// Write 0, which the Component Model never issues, into the box `r`: what an
 /// object holds once its content moved into another (WEP: Affine Types).

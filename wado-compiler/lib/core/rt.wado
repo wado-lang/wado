@@ -385,14 +385,13 @@ internal fn cm_stream_read_u8(handle: i32, max: i32) -> StreamChunk<u8> {
 /// the reader took. `StreamWritable::write_all` is the loop over it.
 #[compiler_item("cm_stream_write_u8")]
 internal fn cm_stream_write_u8(handle: i32, data: List<u8>) -> StreamWrite<u8> {
-    let mut data = data;
-    let packed = cm_lower_array_u8(data);
-    let ptr = packed as i32;
-    let len = (packed >> 32) as i32;
+    let bytes = data.internal_raw_data_ref();
+    let len = data.len();
+    let ptr = cm_lower_list_u8(bytes, 0, len) as i32;
     let written = cm_stream_write_once(handle, ptr, len);
     let freed = builtin::realloc(ptr, len, 1, 0);
     return StreamWrite {
-        rest: data.split_off(cm_packed_count(written)),
+        rest: Slice::internal_new(bytes, cm_packed_count(written), len).to_list(),
         result: cm_copy_result(written),
     };
 }
