@@ -13,7 +13,7 @@ use crate::module_source::ModuleSource;
 use crate::name::{
     FqTraitName, FqTypeName, LocalMethodName, MethodName, closure_call_method_info,
     closure_call_name, closure_capture_field, closure_functor_struct_name, discarded_param_name,
-    is_fn_type_name,
+    is_fn_type_name, mangle_local_method,
 };
 use crate::tir::{
     CallArg, CaptureSource, ClosureFunctor, FunctionKind, FunctionRef, InlineHint, ResolvedType,
@@ -882,7 +882,7 @@ impl ClosureLowerer {
                         Box::new(fmt_local.clone()),
                         FunctionRef {
                             module_source: ModuleSource::format(),
-                            name: format!("{}::{}", fmt.fq, fmt.write_literal),
+                            name: mangle_local_method(&fmt.fq.to_string(), &fmt.write_literal),
                             template: None,
                             monomorph_info: None,
                             method_info: Some(LocalMethodName::new(

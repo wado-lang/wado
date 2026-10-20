@@ -62,9 +62,15 @@ pub fn split_namespace_member(name: &str) -> Option<(&str, &str)> {
 /// diagnostic. Any other name is already its own spelling.
 pub fn unalias_namespace_member(name: &str) -> String {
     match split_namespace_member(name) {
-        Some((namespace, member)) => format!("{namespace}::{member}"),
+        Some((namespace, member)) => namespaced_name(namespace, member),
         None => name.to_string(),
     }
+}
+
+/// A member reached through a namespace import, as source writes it:
+/// `ns::member`.
+pub fn namespaced_name(namespace: &str, member: &str) -> String {
+    format!("{namespace}::{member}")
 }
 
 /// Separator between a local item's declared name and its disambiguating
@@ -2437,11 +2443,6 @@ fn display_type_args(args: &[String]) -> String {
 /// A generic type as a diagnostic writes it: `Name<A, B>`.
 pub fn display_generic_name(head: &str, args: &[String]) -> String {
     format!("{head}{}", display_type_args(args))
-}
-
-/// The raw GC array type as a diagnostic writes it: `Array<T>`.
-pub fn display_builtin_array_type(elem_type: String) -> String {
-    display_generic_name(ARRAY_TYPE_NAME, &[elem_type])
 }
 
 /// A tuple type as a diagnostic writes it: `[A, B]`.

@@ -17,7 +17,7 @@ use crate::elaborator::item::{
 };
 use crate::name::{
     FqTypeName, MethodName, RefKind, TUPLE_TYPE_NAME, UNIT_TYPE_NAME, display_generic_name,
-    ref_type_name,
+    namespaced_name, ref_type_name,
 };
 
 impl<H: CompilerHost> Elaborator<'_, H> {
@@ -307,7 +307,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             Type::NamespacedGeneric(g) => self
                 .sem
                 .imports
-                .canonical_ns_ref(&format!("{}::{}", g.namespace, g.name))
+                .canonical_ns_ref(&namespaced_name(&g.namespace, &g.name))
                 .unwrap_or_else(|| g.name.clone()),
             Type::Reference(_) | Type::MutReference(_) => RefKind::from_ast(ty)
                 .expect("ref classify")
@@ -342,7 +342,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             // `get_type_name`'s `ns$Name` registry key is not a spelling.
             Type::NamespacedGeneric(g) => {
                 let args: Vec<String> = g.args.iter().map(|a| self.get_type_name_full(a)).collect();
-                display_generic_name(&format!("{}::{}", g.namespace, g.name), &args)
+                display_generic_name(&namespaced_name(&g.namespace, &g.name), &args)
             }
             Type::Reference(inner) => {
                 ref_type_name(RefKind::Shared, &self.get_type_name_full(inner))

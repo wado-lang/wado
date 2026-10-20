@@ -27,7 +27,7 @@ use crate::comment::{Comment, TriviaMap};
 use crate::compiler_host::{Code, Diagnostic, DiagnosticSpan, Severity};
 use crate::escape::{quoted, unescape_string};
 use crate::lexer::{LexResult, WILDCARD, defaults_to_float, is_decimal_integer, lex_interpolation};
-use crate::name::contract_holder_name;
+use crate::name::{contract_holder_name, namespaced_name};
 use crate::syntax::statement_keyword_name_message;
 use crate::token::{Position, Span, TemplateTokenPart, Token, TokenKind, TokenKind as T};
 use crate::{ast, format_spec, hashmap};
@@ -1221,7 +1221,7 @@ impl Parser {
             let prefix = match &qualifier {
                 Type::Named(t) => t.name.clone(),
                 Type::Generic(g) => g.name.clone(),
-                Type::NamespacedGeneric(n) => format!("{}::{}", n.namespace, n.name),
+                Type::NamespacedGeneric(n) => namespaced_name(&n.namespace, &n.name),
                 _ => unreachable!("qualifier is always a named/generic path"),
             };
             let type_name = format!("{prefix}::{case_name}");

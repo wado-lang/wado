@@ -2903,9 +2903,10 @@ pub(super) fn written_type_source(ty: &ast::Type) -> String {
     match ty {
         ast::Type::Named(named) => named.name.clone(),
         ast::Type::Generic(g) => name::display_generic_name(&g.name, &list(&g.args)),
-        ast::Type::NamespacedGeneric(ns) => {
-            name::display_generic_name(&format!("{}::{}", ns.namespace, ns.name), &list(&ns.args))
-        }
+        ast::Type::NamespacedGeneric(ns) => name::display_generic_name(
+            &name::namespaced_name(&ns.namespace, &ns.name),
+            &list(&ns.args),
+        ),
         ast::Type::Function(ft) => name::display_fn_type(
             ft.is_mut,
             &list(&ft.params),
