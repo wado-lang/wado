@@ -25,8 +25,10 @@ use crate::module_source::{CmNamespace, ModuleSource};
 use crate::name::{
     DeclaredHead, FqTraitName, FqTypeName, FunctionId, INTERNAL_PREFIX, LocalMethodName,
     NEVER_TYPE_NAME, Receiver, RefKind, TEMPLATE_SHAPE_PREFIX, TypeHead, TypeNameInfo,
-    UNIT_TYPE_NAME, checked_name, format_type_name, mangle_builtin_array_type, mangle_generic_name,
-    mangle_local_item_name, mangle_tuple_type, unchecked_twin_name,
+    UNIT_TYPE_NAME, checked_name, display_assoc_type_projection, display_generic_name,
+    display_tuple_type, format_type_name, mangle_assoc_type_projection, mangle_builtin_array_type,
+    mangle_declared_type, mangle_generic_name, mangle_local_item_name, mangle_tuple_type,
+    ref_type_name, type_pack_name, unchecked_twin_name,
 };
 use crate::primitive::PrimitiveType;
 use crate::symbol_notation::render;
@@ -6149,8 +6151,7 @@ impl TypeTable {
     #[must_use]
     pub fn type_name_unboxed(&self, id: TypeId) -> String {
         match self.spelled_ref(id) {
-            Some((payload, RefKind::Shared)) => format!("&{}", self.type_name_unboxed(payload)),
-            Some((payload, RefKind::Mut)) => format!("&mut {}", self.type_name_unboxed(payload)),
+            Some((payload, kind)) => ref_type_name(kind, &self.type_name_unboxed(payload)),
             None => self.type_name(id),
         }
     }
@@ -6204,9 +6205,7 @@ impl TypeTable {
             ResolvedType::Never => NEVER_TYPE_NAME.to_string(),
             ResolvedType::Unknown => "unknown".to_string(),
             ResolvedType::Error => "error".to_string(),
-            ResolvedType::BuiltinArray(elem) => {
-                format!("Array<{}>", type_name(*elem))
-            }
+            ResolvedType::BuiltinArray(elem) => mangle_builtin_array_type(&type_name(*elem)),
             ResolvedType::Struct {
                 def: StructDef::Anon(id),
                 ..
@@ -6254,16 +6253,12 @@ impl TypeTable {
                     &effect_names,
                 )
             }
-            ResolvedType::Ref(inner) => format!("&{}", type_name(*inner)),
-            ResolvedType::MutRef(inner) => format!("&mut {}", type_name(*inner)),
+            ResolvedType::Ref(inner) => ref_type_name(RefKind::Shared, &type_name(*inner)),
+            ResolvedType::MutRef(inner) => ref_type_name(RefKind::Mut, &type_name(*inner)),
             ResolvedType::Variant { def } => self.head_name(*def, qualified),
             ResolvedType::GenericResource { def, type_args } => {
                 let arg_names: Vec<String> = type_args.iter().map(|t| type_name(*t)).collect();
-                format!(
-                    "{}<{}>",
-                    self.head_name(*def, qualified),
-                    arg_names.join(", ")
-                )
+                display_generic_name(&self.head_name(*def, qualified), &arg_names)
             }
             ResolvedType::TypeParam { name, .. } | ResolvedType::AssocParam { name, .. } => {
                 name.clone()
@@ -6277,51 +6272,39 @@ impl TypeTable {
                 trait_args,
                 ..
             } => {
-                let base = type_name(*param_id);
-                let listed = |ids: &[TypeId]| {
-                    if ids.is_empty() {
-                        String::new()
-                    } else {
-                        let names: Vec<String> = ids.iter().map(|a| type_name(*a)).collect();
-                        format!("<{}>", names.join(", "))
-                    }
-                };
-                let args = listed(args);
+                let names =
+                    |ids: &[TypeId]| -> Vec<String> { ids.iter().map(|a| type_name(*a)).collect() };
                 // The owning trait and its arguments are part of a
                 // projection's identity, so two that differ only there render
                 // the same without them.
-                if qualified {
-                    let owner = self.head_name(*owning_trait, true);
-                    let at = trait_args.as_deref().map(listed).unwrap_or_default();
-                    format!("<{base} as {owner}{at}>::{assoc_name}{args}")
-                } else {
-                    format!("{base}::{assoc_name}{args}")
-                }
+                let owner = qualified.then(|| {
+                    (
+                        self.head_name(*owning_trait, true),
+                        trait_args.as_deref().map(names).unwrap_or_default(),
+                    )
+                });
+                display_assoc_type_projection(
+                    &type_name(*param_id),
+                    assoc_name,
+                    &names(args),
+                    owner.as_ref().map(|(o, at)| (o.as_str(), at.as_slice())),
+                )
             }
             ResolvedType::GenericInstance { def, type_args } => {
                 let arg_names: Vec<String> = type_args.iter().map(|t| type_name(*t)).collect();
                 // A tuple is module-independent, so it has nothing to qualify.
                 if self.is_tuple_def(*def) {
-                    format!("[{}]", arg_names.join(", "))
+                    display_tuple_type(&arg_names)
                 } else {
-                    format!(
-                        "{}<{}>",
-                        self.head_name(*def, qualified),
-                        arg_names.join(", ")
-                    )
+                    display_generic_name(&self.head_name(*def, qualified), &arg_names)
                 }
             }
             ResolvedType::Newtype { def, type_args, .. } => {
-                let head = self.head_name(*def, qualified);
-                if type_args.is_empty() {
-                    head
-                } else {
-                    let args: Vec<String> = type_args.iter().map(|t| type_name(*t)).collect();
-                    format!("{head}<{}>", args.join(", "))
-                }
+                let args: Vec<String> = type_args.iter().map(|t| type_name(*t)).collect();
+                display_generic_name(&self.head_name(*def, qualified), &args)
             }
             ResolvedType::Flags { def } => self.head_name(*def, qualified),
-            ResolvedType::TypePack { name, .. } => format!("..{name}"),
+            ResolvedType::TypePack { name, .. } => type_pack_name(name),
         }
     }
 
@@ -6342,7 +6325,7 @@ impl TypeTable {
                     mangle_tuple_type(&args)
                 } else {
                     let unqualified = mangle_generic_name(&self.decl_render_name(*def), &args);
-                    format!("{module_source}/{unqualified}")
+                    mangle_declared_type(module_source, &unqualified)
                 }
             }
             ResolvedType::BuiltinArray(elem) => {
@@ -6461,10 +6444,14 @@ impl TypeTable {
                     return mangle_tuple_type(&args);
                 }
                 let unqualified = mangle_generic_name(&self.decl_render_name(*def), &args);
-                format!("{}/{unqualified}", self.def_module(*def))
+                mangle_declared_type(self.def_module(*def), &unqualified)
             }
-            ResolvedType::Ref(inner) => format!("&{}", self.mangle_type_arg_erased(*inner)),
-            ResolvedType::MutRef(inner) => format!("&mut {}", self.mangle_type_arg_erased(*inner)),
+            ResolvedType::Ref(inner) => {
+                ref_type_name(RefKind::Shared, &self.mangle_type_arg_erased(*inner))
+            }
+            ResolvedType::MutRef(inner) => {
+                ref_type_name(RefKind::Mut, &self.mangle_type_arg_erased(*inner))
+            }
             ResolvedType::BuiltinArray(elem) => {
                 mangle_builtin_array_type(&self.mangle_type_arg_erased(*elem))
             }
@@ -6792,18 +6779,18 @@ impl TypeTable {
             // well.
             // The identity every mangled name embeds, so the rendered
             // spelling: each instantiation is its own type.
-            ResolvedType::Struct { def, type_args } => TypeNameInfo::Named(format!(
-                "{}/{}",
+            ResolvedType::Struct { def, type_args } => TypeNameInfo::Named(mangle_declared_type(
                 self.struct_head_module(*def),
-                self.struct_rendered_name(*def, type_args)
+                &self.struct_rendered_name(*def, type_args),
             )),
             ResolvedType::Enum { def }
             | ResolvedType::Resource { def }
             | ResolvedType::Variant { def }
             | ResolvedType::Newtype { def, .. }
-            | ResolvedType::Flags { def } => {
-                TypeNameInfo::Named(format!("{}/{}", self.def_module(*def), self.def_name(*def)))
-            }
+            | ResolvedType::Flags { def } => TypeNameInfo::Named(mangle_declared_type(
+                self.def_module(*def),
+                self.def_name(*def),
+            )),
             // A type parameter is a template's own binder, not a declaration.
             ResolvedType::TypeParam { name, .. } => TypeNameInfo::Named(name.clone()),
             ResolvedType::AssocParam { .. } => {
@@ -6822,7 +6809,7 @@ impl TypeTable {
                     return TypeNameInfo::Tuple(args);
                 }
                 TypeNameInfo::Generic {
-                    name: format!("{}/{}", self.def_module(*def), self.decl_render_name(*def)),
+                    name: mangle_declared_type(self.def_module(*def), &self.decl_render_name(*def)),
                     args,
                 }
             }
@@ -6854,7 +6841,8 @@ impl TypeTable {
                 args,
                 ..
             } => {
-                let base = format!("{}::{}", self.mangle_type_name(*param_id), assoc_name);
+                let base =
+                    mangle_assoc_type_projection(&self.mangle_type_name(*param_id), assoc_name);
                 if args.is_empty() {
                     TypeNameInfo::Named(base)
                 } else {
@@ -6867,7 +6855,7 @@ impl TypeTable {
                     }
                 }
             }
-            ResolvedType::TypePack { name, .. } => TypeNameInfo::Named(format!("..{name}")),
+            ResolvedType::TypePack { name, .. } => TypeNameInfo::Named(type_pack_name(name)),
             ResolvedType::Never => TypeNameInfo::Named(NEVER_TYPE_NAME.to_string()),
             ResolvedType::Unknown | ResolvedType::Error => TypeNameInfo::Unknown,
         }

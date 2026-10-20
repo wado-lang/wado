@@ -2394,6 +2394,69 @@ pub fn mangle_builtin_array_type(elem_type: &str) -> String {
     format!("Array<{elem_type}>")
 }
 
+/// A declared type's mangled name, qualified by the module declaring it:
+/// `{module}/{name}`.
+pub fn mangle_declared_type(module: impl fmt::Display, name: &str) -> String {
+    format!("{module}/{name}")
+}
+
+/// An associated-type projection's mangled head: `{base}::{assoc}`.
+pub fn mangle_assoc_type_projection(base: &str, assoc: &str) -> String {
+    format!("{base}::{assoc}")
+}
+
+/// A reference type as source writes it, `&T` / `&mut T`: one spelling for a
+/// mangled name and a diagnostic alike.
+pub fn ref_type_name(kind: RefKind, inner: &str) -> String {
+    let mut out = String::new();
+    push_ref_prefix(&mut out, kind);
+    out.push_str(inner);
+    out
+}
+
+/// A type pack as source writes it: `..T`.
+pub fn type_pack_name(name: &str) -> String {
+    format!("..{name}")
+}
+
+/// The `<A, B>` a diagnostic writes after a head; empty for no arguments.
+fn display_type_args(args: &[String]) -> String {
+    if args.is_empty() {
+        String::new()
+    } else {
+        format!("<{}>", args.join(", "))
+    }
+}
+
+/// A generic type as a diagnostic writes it: `Name<A, B>`.
+pub fn display_generic_name(head: &str, args: &[String]) -> String {
+    format!("{head}{}", display_type_args(args))
+}
+
+/// A tuple type as a diagnostic writes it: `[A, B]`.
+pub fn display_tuple_type(elems: &[String]) -> String {
+    format!("[{}]", elems.join(", "))
+}
+
+/// An associated-type projection as a diagnostic writes it: `T::Item<A>`, or
+/// `<T as Trait<B>>::Item<A>` given its owning trait and that trait's
+/// arguments.
+pub fn display_assoc_type_projection(
+    base: &str,
+    assoc: &str,
+    args: &[String],
+    owner: Option<(&str, &[String])>,
+) -> String {
+    let args = display_type_args(args);
+    match owner {
+        Some((owner, trait_args)) => {
+            let at = display_type_args(trait_args);
+            format!("<{base} as {owner}{at}>::{assoc}{args}")
+        }
+        None => format!("{base}::{assoc}{args}"),
+    }
+}
+
 /// Key of a declared type in the WIR type table.
 ///
 /// Registration (`wir_build::types`) and lookup (`wir_build::context`) both
@@ -3292,7 +3355,7 @@ impl FqTypeName {
     /// tuple's elements, none included.
     #[must_use]
     pub fn pack_spread(name: &str) -> Self {
-        Self::binder(&format!("..{name}"))
+        Self::binder(&type_pack_name(name))
     }
 
     /// Whether this is a [`Self::pack_spread`].
@@ -3581,9 +3644,9 @@ impl FqTypeName {
         }
         match &self.head {
             TypeHead::Declared(head) => {
-                out.push_str(&format!("{}/{}", head.module(), head.rendered()));
+                out.push_str(&mangle_declared_type(head.module(), head.rendered()));
             }
-            TypeHead::Shape { module, name } => out.push_str(&format!("{module}/{name}")),
+            TypeHead::Shape { module, name } => out.push_str(&mangle_declared_type(module, name)),
             // A bucket keys an index and heads no function name; spelled apart
             // from a shape's so the two cannot be read as one.
             TypeHead::ParamBucket { module, name } => {
