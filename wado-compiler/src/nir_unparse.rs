@@ -120,7 +120,7 @@ impl<'a> NirUnparser<'a> {
             return;
         }
         self.delimited("::<", ">", args, |s, t| {
-            let name = s.type_table.type_name(*t);
+            let name = s.type_table.mangle_type_arg_for_generic(*t);
             s.output.push_str(&name);
         });
     }
@@ -195,7 +195,8 @@ impl<'a> NirUnparser<'a> {
         self.emit_kw_if(g.wado_mutable, "mut ");
         self.output.push_str(&g.name);
         self.output.push_str(": ");
-        self.output.push_str(&self.type_table.type_name(g.ty));
+        self.output
+            .push_str(&self.type_table.mangle_type_arg_for_generic(g.ty));
         self.output.push_str(if g.init.is_deferred() {
             " = deferred "
         } else {
@@ -222,7 +223,7 @@ impl<'a> NirUnparser<'a> {
                 }
                 if let Some(default_type) = param.default {
                     s.output.push_str(" = ");
-                    let name = s.type_table.type_name(default_type);
+                    let name = s.type_table.mangle_type_arg_for_generic(default_type);
                     s.output.push_str(&name);
                 }
             });
@@ -235,7 +236,7 @@ impl<'a> NirUnparser<'a> {
                 this.output.push_str(&field.name);
                 this.output.push_str(": ");
                 this.output
-                    .push_str(&this.type_table.type_name(field.type_id));
+                    .push_str(&this.type_table.mangle_type_arg_for_generic(field.type_id));
                 this.output.push_str(",\n");
             }
         });
@@ -303,7 +304,7 @@ impl<'a> NirUnparser<'a> {
                 }
                 if let Some(default_type) = param.default {
                     s.output.push_str(" = ");
-                    let name = s.type_table.type_name(default_type);
+                    let name = s.type_table.mangle_type_arg_for_generic(default_type);
                     s.output.push_str(&name);
                 }
             });
@@ -314,7 +315,7 @@ impl<'a> NirUnparser<'a> {
         if f.return_type != TypeTable::UNIT {
             self.output.push_str(" -> ");
             self.output
-                .push_str(&self.type_table.type_name(f.return_type));
+                .push_str(&self.type_table.mangle_type_arg_for_generic(f.return_type));
         }
 
         self.unparse_nir_with_clause(&f.effects);
@@ -337,7 +338,7 @@ impl<'a> NirUnparser<'a> {
         self.output.push_str(&param.name);
         self.output.push_str(": ");
         self.output
-            .push_str(&self.type_table.type_name(param.type_id));
+            .push_str(&self.type_table.mangle_type_arg_for_generic(param.type_id));
     }
 
     fn unparse_block(&mut self, body: &Body, block: BlockId) {
@@ -364,7 +365,8 @@ impl<'a> NirUnparser<'a> {
                 }
                 self.output.push_str(name);
                 self.output.push_str(": ");
-                self.output.push_str(&self.type_table.type_name(*type_id));
+                self.output
+                    .push_str(&self.type_table.mangle_type_arg_for_generic(*type_id));
                 self.output.push_str(" = ");
                 self.unparse_operand(body, value);
                 self.output.push_str(";\n");
@@ -591,7 +593,8 @@ impl<'a> NirUnparser<'a> {
             ValueKind::Cast { operand, target } => {
                 self.unparse_value(body, operand);
                 self.output.push_str(" as ");
-                self.output.push_str(&self.type_table.type_name(target));
+                self.output
+                    .push_str(&self.type_table.mangle_type_arg_for_generic(target));
             }
             _ => {
                 let op = Operand::Value(v);
@@ -625,7 +628,7 @@ impl<'a> NirUnparser<'a> {
             } => {
                 let payload = *payload;
                 // Get the variant type name from the type_id
-                let type_name = self.type_table.type_name(ty);
+                let type_name = self.type_table.mangle_type_arg_for_generic(ty);
                 self.output.push_str(&type_name);
                 self.output.push_str("::");
                 self.output.push_str(case_name);
@@ -637,7 +640,7 @@ impl<'a> NirUnparser<'a> {
             }
             ExprKind::EnumConstruct { case_name, .. } => {
                 // Get the enum type name from the type_id
-                let type_name = self.type_table.type_name(ty);
+                let type_name = self.type_table.mangle_type_arg_for_generic(ty);
                 self.output.push_str(&type_name);
                 self.output.push_str("::");
                 self.output.push_str(case_name);
@@ -697,7 +700,7 @@ impl<'a> NirUnparser<'a> {
                 self.unparse_operand(body, inner);
                 self.output.push_str(" as ");
                 self.output
-                    .push_str(&self.type_table.type_name(target_type));
+                    .push_str(&self.type_table.mangle_type_arg_for_generic(target_type));
             }
             ExprKind::Call {
                 func_id,

@@ -84,7 +84,7 @@ fn tir_resolved_marks_a_deferred_global_rather_than_printing_its_placeholder() {
         .expect("entry module declares GREETING");
 
     assert!(
-        entry.contains("global GREETING: String = deferred "),
+        entry.contains("global GREETING: core:prelude/string.wado/String = deferred "),
         "a deferred global must be marked, got:\n{entry}"
     );
     assert!(
