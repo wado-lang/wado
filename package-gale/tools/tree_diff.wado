@@ -3,7 +3,8 @@
 //! counts one misplaced subtree as many hunks, so this compares the trees as
 //! sets of (rule, first token, end token) spans. A divergence is a run of
 //! overlapping spans one side has and the other lacks, reported once with the
-//! outermost differing rule on each side and the tokens it covers.
+//! outermost differing rule on each side and the tokens it covers. As with
+//! `diff`, it exits 1 where the trees disagree.
 //!
 //! ```sh
 //! wado run package-gale/tools/tree_diff.wado -- jar.tree gale.tree
@@ -253,6 +254,9 @@ export fn run() with (Stdout, Stderr, Environment, Preopens, Exit) {
         println(`[${d.start}] jar:${d.jar_rule.unwrap_or("-")} gale:${d.gale_rule.unwrap_or("-")} | ${shown}`);
     }
     println(`${found.len()} divergence(s)`);
+    if !found.is_empty() {
+        exit(1);
+    }
 }
 
 test "a tree splits into leaves and rule spans" {

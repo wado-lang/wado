@@ -10,6 +10,7 @@ use {
     ATN_TR_RULE,
     ATN_TR_PRECEDENCE,
     ATN_TR_SET,
+    atn_any_takes,
 } from "./atn.wado";
 use { AtnPredictor, atn_invocation_prec, atn_predict_once } from "./atn_predict.wado";
 
@@ -26,13 +27,7 @@ internal fn atn_with_lr_tables(sim: AtnSim) -> AtnSim {
         out.rule_first_open.push(false);
     }
     if out.tr_kind.contains(&ATN_TR_PRECEDENCE) {
-        let mut kinds = out.set_words * 64;
-        for let mut j = 0; j < out.tr_kind.len(); j += 1 {
-            if out.tr_kind[j] == ATN_TR_ATOM || out.tr_kind[j] == ATN_TR_NOT_ATOM {
-                kinds = i32::max(kinds, out.tr_label[j] + 1);
-            }
-        }
-        out.cont_kinds = kinds;
+        let kinds = out.num_tokens;
         out.cont_words = (kinds + 63) / 64;
         let mut walk = AtnContWalk {
             seen: List::filled(out.state_kind.len(), 0),
@@ -269,10 +264,10 @@ fn atn_cont_first(sim: &AtnSim, state: i32, walk: &mut AtnContWalk) -> bool {
 
 internal fn atn_state_cont_admits(sim: &AtnSim, state: i32, t: i32, eof: i32) -> bool {
     let any_but = sim.state_cont_any_but[state];
-    if t != eof && (any_but == ATN_CONT_ANY || any_but >= 0 && t != any_but) {
+    if atn_any_takes(sim, t, eof) && (any_but == ATN_CONT_ANY || any_but >= 0 && t != any_but) {
         return true;
     }
-    return t < sim.cont_kinds && sim.state_cont_first[state * sim.cont_words + t / 64] >> (t % 64) as i64 & 1 != 0;
+    return t < sim.num_tokens && sim.state_cont_first[state * sim.cont_words + t / 64] >> (t % 64) as i64 & 1 != 0;
 }
 
 internal fn atn_lr_loop_decision(

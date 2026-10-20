@@ -724,7 +724,7 @@ fn push_u24_biased(bytes: &mut ByteList, v: i32)
 /// wire order):
 ///
 /// ```text
-/// nrules: u16, ndec: u16, nstates: u16,
+/// nrules: u16, ndec: u16, nstates: u16, num_tokens: u16,
 /// rule_start[nrules]: u16,
 /// decision_state[ndec]: u16,
 /// state_kind[nstates]: u8,
@@ -740,8 +740,8 @@ fn push_u24_biased(bytes: &mut ByteList, v: i32)
 /// `ntrans_total` is not stored: it's the sum of `state_tr_count`, which
 /// precedes the transition columns, so `atn_decode` derives it (and
 /// `state_tr_start`, a running prefix sum) while reading that column.
-/// `num_tokens`, per-state `rule`/`decision`, and `rule_stop` aren't in the
-/// blob at all — see `AtnSim`'s doc comment in `runtime/atn.wado` for why.
+/// Per-state `rule`/`decision` and `rule_stop` aren't in the blob at all: the
+/// simulator reads neither.
 /// One pass over `atn.states` (and each state's `transitions`) fills seven
 /// per-column byte accumulators; a final handful of bulk `extend_from_slice`
 /// calls assembles them into the wire order above, so no field is walked
@@ -774,12 +774,13 @@ pub fn atn_blob_bytes(atn: &Atn) -> ByteList {
         }
     }
 
-    let total = 6 + nrules * 2 + ndec * 2 + state_kind.len() + state_tr_count.len() + tr_kind.len() + tr_target.len() + tr_label.len(
+    let total = 8 + nrules * 2 + ndec * 2 + state_kind.len() + state_tr_count.len() + tr_kind.len() + tr_target.len() + tr_label.len(
     ) + tr_follow.len() + tr_prec.len() + 2 + atn.sets.iter_ref().fold(0, |n, set| n + 2 + set.len() * 2);
     let mut bytes: ByteList = ByteList::with_capacity(total);
     push_u16(&mut bytes, nrules);
     push_u16(&mut bytes, ndec);
     push_u16(&mut bytes, nstates);
+    push_u16(&mut bytes, atn.num_tokens);
     for let s of &atn.rule_start {
         push_u16(&mut bytes, *s);
     }

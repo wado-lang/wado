@@ -486,6 +486,7 @@ reports each divergence once, with the outermost rule each side built there.
 
 `mise run oracle-gale-typescript [file.ts]` runs all three, on the
 benchmark input when no file is named, and installs the Java the jar needs.
+It fails where the trees disagree, so a script can gate on it.
 `scripts/oracle-typescript.sh` holds the commands and keeps both trees under
 `target/oracle-typescript/`.
 
