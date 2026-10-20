@@ -109,41 +109,41 @@ type "functype//wasi/wasi:clocks/MonotonicClock::now" = fn() -> i64;  // TypeId(
 
 type "functype//effect_handler_with_do.wado/run" = fn();  // TypeId(30)
 
-type "functype//effect_handler_with_do.wado/$cm_binding__Stdout_write_via_stream" = fn(ref null "core:prelude//$Resource") -> ref null "core:prelude//$Resource";  // TypeId(31)
+type "functype//effect_handler_with_do.wado/$cm_binding__MonotonicClock_now" = fn() -> u64;  // TypeId(31)
 
-type "functype//effect_handler_with_do.wado/$cm_binding__MonotonicClock_now" = fn() -> u64;  // TypeId(32)
+type "functype//effect_handler_with_do.wado/$cm_export__run" = fn();  // TypeId(32)
 
-type "functype//effect_handler_with_do.wado/$cm_export__run" = fn();  // TypeId(33)
+type "functype//core:prelude/primitive.wado/write_decimal_digits" = fn(ref Array<u8>, i32, u64, i32);  // TypeId(33)
 
-type "functype//core:prelude/primitive.wado/write_decimal_digits" = fn(ref Array<u8>, i32, u64, i32);  // TypeId(34)
+type "functype//core:prelude/primitive.wado/count_digits_u64" = fn(u64) -> i32;  // TypeId(34)
 
-type "functype//core:prelude/primitive.wado/count_digits_u64" = fn(u64) -> i32;  // TypeId(35)
+type "functype//core:rt/unreachable" = fn();  // TypeId(35)
 
-type "functype//core:rt/write_string_to_stream$dae[add_newline]" = fn(ref null "core:prelude//$Resource", ref Array<u8>, i32);  // TypeId(36)
+type "functype//core:rt/cm_stream_write_raw_all_u8" = fn(i32, ref Array<u8>, i32, i32) -> "core:prelude/types.wado//enum:CopyResult";  // TypeId(36)
 
-type "functype//core:rt/unreachable" = fn();  // TypeId(37)
+type "functype//core:prelude/string.wado/core:prelude/string.wado/String::realloc_to" = fn(ref "core:prelude/string.wado//String", i32);  // TypeId(37)
 
-type "functype//core:rt/cm_stream_write_raw_all_u8" = fn(i32, ref Array<u8>, i32, i32) -> "core:prelude/types.wado//enum:CopyResult";  // TypeId(38)
+type "functype//core:prelude/string.wado/core:prelude/string.wado/String::grow" = fn(ref "core:prelude/string.wado//String", i32);  // TypeId(38)
 
-type "functype//core:prelude/string.wado/core:prelude/string.wado/String::realloc_to" = fn(ref "core:prelude/string.wado//String", i32);  // TypeId(39)
+type "functype//effect_handler_with_do.wado/effect_handler_with_do.wado/$Closure_1::$call" = fn(ref "effect_handler_with_do.wado//$Closure_1") -> u64;  // TypeId(39)
 
-type "functype//core:prelude/string.wado/core:prelude/string.wado/String::grow" = fn(ref "core:prelude/string.wado//String", i32);  // TypeId(40)
+type "functype//effect_handler_with_do.wado/effect_handler_with_do.wado/$Closure_2::$call$dae[self]" = fn() -> u64;  // TypeId(40)
 
-type "functype//effect_handler_with_do.wado/effect_handler_with_do.wado/$Closure_1::$call" = fn(ref "effect_handler_with_do.wado//$Closure_1") -> u64;  // TypeId(41)
+type "functype//effect_handler_with_do.wado/effect_handler_with_do.wado/$Closure_3::$call$dae[self,when]" = fn() -> ref null "core:prelude/types.wado//AsyncCall<()>";  // TypeId(41)
 
-type "functype//effect_handler_with_do.wado/effect_handler_with_do.wado/$Closure_2::$call$dae[self]" = fn() -> u64;  // TypeId(42)
+type "functype//effect_handler_with_do.wado/effect_handler_with_do.wado/$Closure_4::$call$dae[self,how_long]" = fn() -> ref null "core:prelude/types.wado//AsyncCall<()>";  // TypeId(42)
 
-type "functype//effect_handler_with_do.wado/effect_handler_with_do.wado/$Closure_3::$call$dae[self,when]" = fn() -> ref null "core:prelude/types.wado//AsyncCall<()>";  // TypeId(43)
+type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(43)
 
-type "functype//effect_handler_with_do.wado/effect_handler_with_do.wado/$Closure_4::$call$dae[self,how_long]" = fn() -> ref null "core:prelude/types.wado//AsyncCall<()>";  // TypeId(44)
+type "functype//wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code" = fn(i32);  // TypeId(44)
 
-type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(45)
+type "functype//wasi/task-return" = fn(i32);  // TypeId(45)
 
-type "functype//wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code" = fn(i32);  // TypeId(46)
+type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(46)
 
-type "functype//wasi/task-return" = fn(i32);  // TypeId(47)
+type "functype//effect_handler_with_do.wado/$cm_binding__Stdout_write_via_stream" = fn(i32) -> i32;  // TypeId(47)
 
-type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(48)
+type "functype//core:rt/write_string_to_stream$dae[add_newline]" = fn(i32, ref Array<u8>, i32);  // TypeId(48)
 
 import fn mem/realloc from "mem/realloc";
 import fn wasi/stream-write from "wasi/stream-write";
@@ -171,9 +171,6 @@ fn "effect_handler_with_do.wado/run"() with Stdout {
     let $local_2_9: u64;
     let new_used_21: i32;
     let start_22: i32;
-    let $moved_4: ref null "core:prelude//$Resource";
-    let $sroa_$pattern_temp_0_0_13: ref null "core:prelude//$Resource";
-    let $sroa_$pattern_temp_0_1_14: ref null "core:prelude//$Resource";
     let start_141: i32;
     clock = struct.new "effect_handler_with_do.wado//FixedClock" { mark: 12345_i64 };
     global:effect_handler_with_do.wado::$effect_wasi:clocks/monotonic_clock.wado/MonotonicClock = local.tee $d_wasi:clocks/monotonic_clock.wado/MonotonicClock(struct.new "effect_handler_with_do.wado//$Dispatch_wasi:clocks/monotonic_clock.wado/MonotonicClock" { outer: local.tee $save_wasi:clocks/monotonic_clock.wado/MonotonicClock(global:effect_handler_with_do.wado::$effect_wasi:clocks/monotonic_clock.wado/MonotonicClock), op_now: struct.new "canonical//CanonicalClosure_0" { env: struct.new "effect_handler_with_do.wado//$Closure_1" { $capture_0: clock }, func: ref.func "closure/effect_handler_with_do.wado/$closure_wrapper_0" }, op_get_resolution: struct.new "canonical//CanonicalClosure_0" { env: struct.new "effect_handler_with_do.wado//$Closure_2" {  }, func: ref.func "closure/effect_handler_with_do.wado/$closure_wrapper_1" }, op_wait_until: struct.new "canonical//CanonicalClosure_1" { env: struct.new "effect_handler_with_do.wado//$Closure_3" {  }, func: ref.func "closure/effect_handler_with_do.wado/$closure_wrapper_2" }, op_wait_for: struct.new "canonical//CanonicalClosure_1" { env: struct.new "effect_handler_with_do.wado//$Closure_4" {  }, func: ref.func "closure/effect_handler_with_do.wado/$closure_wrapper_3" } });
@@ -207,18 +204,18 @@ fn "effect_handler_with_do.wado/run"() with Stdout {
     start_141 = $local_2_2.used;
     $local_2_2.used = new_used_21;
     "core:prelude/primitive.wado/write_decimal_digits"($local_2_2.repr, start_141, $local_2_9, start_22);
-    $sroa_$pattern_temp_0_0_13 = struct.new "core:prelude//$Resource" { value: builtin::i32_wrap_i64(local.tee $local_2_9("wasi/stream-new"())) };
-    $sroa_$pattern_temp_0_1_14 = struct.new "core:prelude//$Resource" { value: builtin::i32_wrap_i64($local_2_9 >> 32_i64) };
-    $moved_4 = "effect_handler_with_do.wado/$cm_binding__Stdout_write_via_stream"($moved_4 = $sroa_$pattern_temp_0_0_13; $sroa_$pattern_temp_0_0_13 = ref.null none; $moved_4);
-    $sroa_$pattern_temp_0_0_13 = $sroa_$pattern_temp_0_1_14;
-    $sroa_$pattern_temp_0_1_14 = ref.null none;
-    "core:rt/write_string_to_stream$dae[add_newline]"($sroa_$pattern_temp_0_1_14 = $sroa_$pattern_temp_0_0_13; $sroa_$pattern_temp_0_0_13 = ref.null none; $sroa_$pattern_temp_0_1_14, $local_2_2.repr, $local_2_2.used);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"($sroa_$pattern_temp_0_1_14 = $moved_4; $moved_4 = ref.null none; $sroa_$pattern_temp_0_1_14.value);
+    start_22 = builtin::i32_wrap_i64(local.tee $local_2_9("wasi/stream-new"()));
+    start_141 = builtin::i32_wrap_i64($local_2_9 >> 32_i64);
+    new_used_21 = "effect_handler_with_do.wado/$cm_binding__Stdout_write_via_stream"(new_used_21 = start_22; start_22 = 0; new_used_21);
+    start_22 = start_141;
+    start_141 = 0;
+    "core:rt/write_string_to_stream$dae[add_newline]"(start_141 = start_22; start_22 = 0; start_141, $local_2_2.repr, $local_2_2.used);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(start_141 = new_used_21; new_used_21 = 0; start_141);
     global:effect_handler_with_do.wado::$effect_wasi:clocks/monotonic_clock.wado/MonotonicClock = $save_wasi:clocks/monotonic_clock.wado/MonotonicClock;
 }
 
 fn "effect_handler_with_do.wado/$cm_binding__Stdout_write_via_stream"(data) with Stdout {
-    return let $cm_handle_2: i32, $cm_handle_2 = data.value, data.value = 0, struct.new "core:prelude//$Resource" { value: "wasi/wasi:cli/Stdout::write_via_stream"($cm_handle_2) };
+    return let $cm_handle_2: i32, $cm_handle_2 = data, data = 0, "wasi/wasi:cli/Stdout::write_via_stream"($cm_handle_2);
 }
 
 fn "effect_handler_with_do.wado/$cm_binding__MonotonicClock_now"() with MonotonicClock {
@@ -315,16 +312,15 @@ fn "core:prelude/primitive.wado/count_digits_u64"(val) {
 
 fn "core:rt/write_string_to_stream$dae[add_newline]"(tx, $mv$message$repr, $mv$message$used) {
     let new_repr: ref Array<u8>;
-    let $moved_5: ref null "core:prelude//$Resource";
     builtin::array_copy<u8>(local.tee new_repr(builtin::array_new<u8>($mv$message$used + 1)), 0, $mv$message$repr, 0, $mv$message$used);
     builtin::array_set_u8(new_repr, $mv$message$used, 10);
     drop(block -> "core:prelude/types.wado//enum:CopyResult" {
         let $arg_spill_1: i32;
-        $arg_spill_1 = tx.value;
+        $arg_spill_1 = tx;
         $mv$message$used = $mv$message$used + 1;
         "core:rt/cm_stream_write_raw_all_u8"($arg_spill_1, new_repr, 0, $mv$message$used);
     });
-    "wasi/stream-drop-writable"($moved_5 = tx; tx = ref.null none; $moved_5.value);
+    "wasi/stream-drop-writable"($mv$message$used = tx; tx = 0; $mv$message$used);
 }
 
 fn "core:rt/unreachable"() {

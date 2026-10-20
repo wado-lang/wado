@@ -71,27 +71,27 @@ type "functype//wasi/wasi:sockets/TcpSocket::create" = fn(i32, i32);  // TypeId(
 
 type "functype//resource_method_instance.wado/run" = fn();  // TypeId(17)
 
-type "functype//resource_method_instance.wado/$cm_binding__Stdout_write_via_stream" = fn(ref null "core:prelude//$Resource") -> ref null "core:prelude//$Resource";  // TypeId(18)
+type "functype//resource_method_instance.wado/$cm_binding__TcpSocket_create" = fn(i32) -> ref null "core:prelude/types.wado//Result<wasi:sockets/types.wado/TcpSocket,wasi:sockets/types.wado/ErrorCode>";  // TypeId(18)
 
-type "functype//resource_method_instance.wado/$cm_binding__TcpSocket_create" = fn(i32) -> ref null "core:prelude/types.wado//Result<wasi:sockets/types.wado/TcpSocket,wasi:sockets/types.wado/ErrorCode>";  // TypeId(19)
+type "functype//resource_method_instance.wado/$cm_export__run" = fn();  // TypeId(19)
 
-type "functype//resource_method_instance.wado/$cm_export__run" = fn();  // TypeId(20)
+type "functype//core:rt/unreachable" = fn();  // TypeId(20)
 
-type "functype//core:rt/write_string_to_stream$dae[add_newline]" = fn(ref null "core:prelude//$Resource", ref Array<u8>, i32);  // TypeId(21)
+type "functype//core:rt/cm_stream_write_raw_all_u8" = fn(i32, ref Array<u8>, i32, i32) -> "core:prelude/types.wado//enum:CopyResult";  // TypeId(21)
 
-type "functype//core:rt/unreachable" = fn();  // TypeId(22)
+type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(22)
 
-type "functype//core:rt/cm_stream_write_raw_all_u8" = fn(i32, ref Array<u8>, i32, i32) -> "core:prelude/types.wado//enum:CopyResult";  // TypeId(23)
+type "functype//wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code" = fn(i32);  // TypeId(23)
 
-type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(24)
+type "functype//wasi/resource-drop:wasi/sockets/types.wado#tcp-socket" = fn(i32);  // TypeId(24)
 
-type "functype//wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code" = fn(i32);  // TypeId(25)
+type "functype//wasi/task-return" = fn(i32);  // TypeId(25)
 
-type "functype//wasi/resource-drop:wasi/sockets/types.wado#tcp-socket" = fn(i32);  // TypeId(26)
+type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(26)
 
-type "functype//wasi/task-return" = fn(i32);  // TypeId(27)
+type "functype//resource_method_instance.wado/$cm_binding__Stdout_write_via_stream" = fn(i32) -> i32;  // TypeId(27)
 
-type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(28)
+type "functype//core:rt/write_string_to_stream$dae[add_newline]" = fn(i32, ref Array<u8>, i32);  // TypeId(28)
 
 import fn mem/realloc from "mem/realloc";
 import fn wasi/stream-write from "wasi/stream-write";
@@ -128,56 +128,55 @@ global global:core:builtin::$unit_case$wasi:sockets/types.wado//ErrorCode$13: re
 fn "resource_method_instance.wado/run"() with Stdout, TcpSocket {
     let result: ref null "core:prelude/types.wado//Result<wasi:sockets/types.wado/TcpSocket,wasi:sockets/types.wado/ErrorCode>";
     let socket: ref null "core:prelude//$Resource";
-    let $moved_4_8: ref null "core:prelude//$Resource";
+    let $moved_4_8: i32;
     let $cm_pair_7_11: i64;
-    let $sroa_$pattern_temp_0_0_13_17: ref null "core:prelude//$Resource";
-    let $sroa_$pattern_temp_0_1_14_18: ref null "core:prelude//$Resource";
+    let $sroa_$pattern_temp_0_0_13_17: i32;
+    let $sroa_$pattern_temp_0_1_14_18: i32;
     result = "resource_method_instance.wado/$cm_binding__TcpSocket_create"(0);
     let $match_scrut_0: ref null "core:prelude/types.wado//Result<wasi:sockets/types.wado/TcpSocket,wasi:sockets/types.wado/ErrorCode>";
     if ref.test "core:prelude/types.wado//Result<wasi:sockets/types.wado/TcpSocket,wasi:sockets/types.wado/ErrorCode>::Ok"(local.tee $match_scrut_0(result)) {
         socket = ref.cast "core:prelude/types.wado//Result<wasi:sockets/types.wado/TcpSocket,wasi:sockets/types.wado/ErrorCode>::Ok"($match_scrut_0).payload_0;
         result = ref.null none;
-        $sroa_$pattern_temp_0_0_13_17 = struct.new "core:prelude//$Resource" { value: builtin::i32_wrap_i64(local.tee $cm_pair_7_11("wasi/stream-new"())) };
-        $sroa_$pattern_temp_0_1_14_18 = struct.new "core:prelude//$Resource" { value: builtin::i32_wrap_i64($cm_pair_7_11 >> 32_i64) };
-        $moved_4_8 = "resource_method_instance.wado/$cm_binding__Stdout_write_via_stream"($moved_4_8 = $sroa_$pattern_temp_0_0_13_17; $sroa_$pattern_temp_0_0_13_17 = ref.null none; $moved_4_8);
+        $sroa_$pattern_temp_0_0_13_17 = builtin::i32_wrap_i64(local.tee $cm_pair_7_11("wasi/stream-new"()));
+        $sroa_$pattern_temp_0_1_14_18 = builtin::i32_wrap_i64($cm_pair_7_11 >> 32_i64);
+        $moved_4_8 = "resource_method_instance.wado/$cm_binding__Stdout_write_via_stream"($moved_4_8 = $sroa_$pattern_temp_0_0_13_17; $sroa_$pattern_temp_0_0_13_17 = 0; $moved_4_8);
         $sroa_$pattern_temp_0_0_13_17 = $sroa_$pattern_temp_0_1_14_18;
-        $sroa_$pattern_temp_0_1_14_18 = ref.null none;
+        $sroa_$pattern_temp_0_1_14_18 = 0;
         $sroa_$pattern_temp_0_1_14_18 = $sroa_$pattern_temp_0_0_13_17;
-        $sroa_$pattern_temp_0_0_13_17 = ref.null none;
+        $sroa_$pattern_temp_0_0_13_17 = 0;
         let $mv_arg_4: ref "core:prelude/string.wado//String";
         $mv_arg_4 = global:resource_method_instance.wado::$const_obj_1;
         "core:rt/write_string_to_stream$dae[add_newline]"($sroa_$pattern_temp_0_1_14_18, $mv_arg_4.repr, $mv_arg_4.used);
-        "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"($sroa_$pattern_temp_0_1_14_18 = $moved_4_8; $moved_4_8 = ref.null none; $sroa_$pattern_temp_0_1_14_18.value);
+        "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"($sroa_$pattern_temp_0_1_14_18 = $moved_4_8; $moved_4_8 = 0; $sroa_$pattern_temp_0_1_14_18);
         if ref.is_null(socket) == 0 {
-            let $cm_handle_6: i32;
-            $cm_handle_6 = socket.value;
+            $sroa_$pattern_temp_0_1_14_18 = socket.value;
             socket.value = 0;
-            "wasi/resource-drop:wasi/sockets/types.wado#tcp-socket"($cm_handle_6);
+            "wasi/resource-drop:wasi/sockets/types.wado#tcp-socket"($sroa_$pattern_temp_0_1_14_18);
         }
     } else {
-        socket = struct.new "core:prelude//$Resource" { value: builtin::i32_wrap_i64(local.tee $cm_pair_7_11("wasi/stream-new"())) };
-        $sroa_$pattern_temp_0_1_14_18 = struct.new "core:prelude//$Resource" { value: builtin::i32_wrap_i64($cm_pair_7_11 >> 32_i64) };
-        $moved_4_8 = "resource_method_instance.wado/$cm_binding__Stdout_write_via_stream"($moved_4_8 = socket; socket = ref.null none; $moved_4_8);
-        socket = $sroa_$pattern_temp_0_1_14_18;
-        $sroa_$pattern_temp_0_1_14_18 = ref.null none;
-        $sroa_$pattern_temp_0_1_14_18 = socket;
-        socket = ref.null none;
+        $sroa_$pattern_temp_0_1_14_18 = builtin::i32_wrap_i64(local.tee $cm_pair_7_11("wasi/stream-new"()));
+        $moved_4_8 = builtin::i32_wrap_i64($cm_pair_7_11 >> 32_i64);
+        $sroa_$pattern_temp_0_0_13_17 = "resource_method_instance.wado/$cm_binding__Stdout_write_via_stream"($sroa_$pattern_temp_0_0_13_17 = $sroa_$pattern_temp_0_1_14_18; $sroa_$pattern_temp_0_1_14_18 = 0; $sroa_$pattern_temp_0_0_13_17);
+        $sroa_$pattern_temp_0_1_14_18 = $moved_4_8;
+        $moved_4_8 = 0;
+        $moved_4_8 = $sroa_$pattern_temp_0_1_14_18;
+        $sroa_$pattern_temp_0_1_14_18 = 0;
         $mv_arg_4 = global:resource_method_instance.wado::$const_obj_0;
-        "core:rt/write_string_to_stream$dae[add_newline]"($sroa_$pattern_temp_0_1_14_18, $mv_arg_4.repr, $mv_arg_4.used);
-        "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"($sroa_$pattern_temp_0_1_14_18 = $moved_4_8; $moved_4_8 = ref.null none; $sroa_$pattern_temp_0_1_14_18.value);
+        "core:rt/write_string_to_stream$dae[add_newline]"($moved_4_8, $mv_arg_4.repr, $mv_arg_4.used);
+        "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"($moved_4_8 = $sroa_$pattern_temp_0_0_13_17; $sroa_$pattern_temp_0_0_13_17 = 0; $moved_4_8);
     }
     if ref.is_null(result) == 0 {
         if ref.test "core:prelude/types.wado//Result<wasi:sockets/types.wado/TcpSocket,wasi:sockets/types.wado/ErrorCode>::Ok"(result) {
-            $cm_handle_6 = local.tee $sroa_$pattern_temp_0_1_14_18(ref.cast "core:prelude/types.wado//Result<wasi:sockets/types.wado/TcpSocket,wasi:sockets/types.wado/ErrorCode>::Ok"(result).payload_0).value;
-            $sroa_$pattern_temp_0_1_14_18.value = 0;
-            "wasi/resource-drop:wasi/sockets/types.wado#tcp-socket"($cm_handle_6);
+            $moved_4_8 = local.tee socket(ref.cast "core:prelude/types.wado//Result<wasi:sockets/types.wado/TcpSocket,wasi:sockets/types.wado/ErrorCode>::Ok"(result).payload_0).value;
+            socket.value = 0;
+            "wasi/resource-drop:wasi/sockets/types.wado#tcp-socket"($moved_4_8);
         } else {
         }
     }
 }
 
 fn "resource_method_instance.wado/$cm_binding__Stdout_write_via_stream"(data) with Stdout {
-    return let $cm_handle_2: i32, $cm_handle_2 = data.value, data.value = 0, struct.new "core:prelude//$Resource" { value: "wasi/wasi:cli/Stdout::write_via_stream"($cm_handle_2) };
+    return let $cm_handle_2: i32, $cm_handle_2 = data, data = 0, "wasi/wasi:cli/Stdout::write_via_stream"($cm_handle_2);
 }
 
 fn "resource_method_instance.wado/$cm_binding__TcpSocket_create"(address_family) with TcpSocket {
@@ -258,16 +257,15 @@ fn "resource_method_instance.wado/$cm_export__run"() {
 
 fn "core:rt/write_string_to_stream$dae[add_newline]"(tx, $mv$message$repr, $mv$message$used) {
     let new_repr: ref Array<u8>;
-    let $moved_5: ref null "core:prelude//$Resource";
     builtin::array_copy<u8>(local.tee new_repr(builtin::array_new<u8>($mv$message$used + 1)), 0, $mv$message$repr, 0, $mv$message$used);
     builtin::array_set_u8(new_repr, $mv$message$used, 10);
     drop(block -> "core:prelude/types.wado//enum:CopyResult" {
         let $arg_spill_1: i32;
-        $arg_spill_1 = tx.value;
+        $arg_spill_1 = tx;
         $mv$message$used = $mv$message$used + 1;
         "core:rt/cm_stream_write_raw_all_u8"($arg_spill_1, new_repr, 0, $mv$message$used);
     });
-    "wasi/stream-drop-writable"($moved_5 = tx; tx = ref.null none; $moved_5.value);
+    "wasi/stream-drop-writable"($mv$message$used = tx; tx = 0; $mv$message$used);
 }
 
 fn "core:rt/unreachable"() {

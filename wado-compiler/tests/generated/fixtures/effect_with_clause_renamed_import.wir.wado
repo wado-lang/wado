@@ -4,103 +4,99 @@
 
 enum core:prelude/types.wado//enum:CopyResult { Completed = 0, Dropped = 1, Cancelled = 2 };  // TypeId(0)
 
-struct core:prelude//$Resource {  // TypeId(1)
-    mut value: i32,
-}
+array Array<u8> (mut u8);  // TypeId(1)
 
-array Array<u8> (mut u8);  // TypeId(2)
-
-struct core:prelude/string.wado//String {  // TypeId(3)
+struct core:prelude/string.wado//String {  // TypeId(2)
     mut repr: ref Array<u8>,
     mut used: i32,
 }
 
-struct effect_with_clause_renamed_import.wado//$Closure_1 {  // TypeId(4)}
+struct effect_with_clause_renamed_import.wado//$Closure_1 {  // TypeId(3)}
 
-struct effect_with_clause_renamed_import.wado//$Dispatch_wasi:random/random.wado/Random {  // TypeId(5)
+struct effect_with_clause_renamed_import.wado//$Dispatch_wasi:random/random.wado/Random {  // TypeId(4)
     mut outer: ref null "effect_with_clause_renamed_import.wado//$Dispatch_wasi:random/random.wado/Random",
     mut op_get_random_bytes: ref struct,
     mut op_get_random_u64: ref struct,
 }
 
-struct effect_with_clause_renamed_import.wado//FixedRandom {  // TypeId(6)
+struct effect_with_clause_renamed_import.wado//FixedRandom {  // TypeId(5)
     mut byte: u8,
 }
 
-struct effect_with_clause_renamed_import.wado//$Closure_0 {  // TypeId(7)
+struct effect_with_clause_renamed_import.wado//$Closure_0 {  // TypeId(6)
     mut $capture_0: ref "effect_with_clause_renamed_import.wado//FixedRandom",
 }
 
-struct core:prelude//List<u8> {  // TypeId(8)
+struct core:prelude//List<u8> {  // TypeId(7)
     mut repr: ref Array<u8>,
     mut used: i32,
 }
 
-type "functype/$canonical_closure_fn_0" = fn(ref null struct, u64) -> ref "core:prelude//List<u8>";  // TypeId(9)
+type "functype/$canonical_closure_fn_0" = fn(ref null struct, u64) -> ref "core:prelude//List<u8>";  // TypeId(8)
 
-struct canonical//CanonicalClosure_0 {  // TypeId(10)
+struct canonical//CanonicalClosure_0 {  // TypeId(9)
     env: ref null struct,
     func: ref "functype/$canonical_closure_fn_0",
 }
 
-type "functype/$canonical_closure_fn_1" = fn(ref null struct) -> u64;  // TypeId(11)
+type "functype/$canonical_closure_fn_1" = fn(ref null struct) -> u64;  // TypeId(10)
 
-struct canonical//CanonicalClosure_1 {  // TypeId(12)
+struct canonical//CanonicalClosure_1 {  // TypeId(11)
     env: ref null struct,
     func: ref "functype/$canonical_closure_fn_1",
 }
 
-type "functype//mem/realloc" = fn(i32, i32, i32, i32) -> i32;  // TypeId(13)
+type "functype//mem/realloc" = fn(i32, i32, i32, i32) -> i32;  // TypeId(12)
 
-type "functype//wasi/stream-write" = fn(i32, i32, i32) -> i32;  // TypeId(14)
+type "functype//wasi/stream-write" = fn(i32, i32, i32) -> i32;  // TypeId(13)
 
-type "functype//wasi/waitable-join" = fn(i32, i32);  // TypeId(15)
+type "functype//wasi/waitable-join" = fn(i32, i32);  // TypeId(14)
 
-type "functype//wasi/waitable-set-drop" = fn(i32);  // TypeId(16)
+type "functype//wasi/waitable-set-drop" = fn(i32);  // TypeId(15)
 
-type "functype//wasi/waitable-set-new" = fn() -> i32;  // TypeId(17)
+type "functype//wasi/waitable-set-new" = fn() -> i32;  // TypeId(16)
 
-type "functype//wasi/waitable-set-wait" = fn(i32, i32) -> i32;  // TypeId(18)
+type "functype//wasi/waitable-set-wait" = fn(i32, i32) -> i32;  // TypeId(17)
 
-type "functype//wasi/wasi:cli/Stdout::write_via_stream" = fn(i32) -> i32;  // TypeId(19)
+type "functype//wasi/wasi:cli/Stdout::write_via_stream" = fn(i32) -> i32;  // TypeId(18)
 
-type "functype//wasi/wasi:random/Random::get_random_bytes" = fn(i64, i32);  // TypeId(20)
+type "functype//wasi/wasi:random/Random::get_random_bytes" = fn(i64, i32);  // TypeId(19)
 
-type "functype//effect_with_clause_renamed_import.wado/run" = fn();  // TypeId(21)
+type "functype//effect_with_clause_renamed_import.wado/run" = fn();  // TypeId(20)
 
-type "functype//effect_with_clause_renamed_import.wado/$cm_binding__Stdout_write_via_stream" = fn(ref null "core:prelude//$Resource") -> ref null "core:prelude//$Resource";  // TypeId(22)
+type "functype//effect_with_clause_renamed_import.wado/$cm_binding__Random_get_random_bytes" = fn(i64) -> ref "core:prelude//List<u8>";  // TypeId(21)
 
-type "functype//effect_with_clause_renamed_import.wado/$cm_binding__Random_get_random_bytes" = fn(i64) -> ref "core:prelude//List<u8>";  // TypeId(23)
+type "functype//effect_with_clause_renamed_import.wado/$cm_export__run" = fn();  // TypeId(22)
 
-type "functype//effect_with_clause_renamed_import.wado/$cm_export__run" = fn();  // TypeId(24)
+type "functype//core:prelude/primitive.wado/write_decimal_digits" = fn(ref Array<u8>, i32, u64, i32);  // TypeId(23)
 
-type "functype//core:prelude/primitive.wado/write_decimal_digits" = fn(ref Array<u8>, i32, u64, i32);  // TypeId(25)
+type "functype//core:prelude/primitive.wado/count_digits_u64" = fn(u64) -> i32;  // TypeId(24)
 
-type "functype//core:prelude/primitive.wado/count_digits_u64" = fn(u64) -> i32;  // TypeId(26)
+type "functype//core:rt/unreachable" = fn();  // TypeId(25)
 
-type "functype//core:rt/write_string_to_stream$dae[add_newline]" = fn(ref null "core:prelude//$Resource", ref Array<u8>, i32);  // TypeId(27)
+type "functype//core:rt/cm_stream_write_raw_all_u8" = fn(i32, ref Array<u8>, i32, i32) -> "core:prelude/types.wado//enum:CopyResult";  // TypeId(26)
 
-type "functype//core:rt/unreachable" = fn();  // TypeId(28)
+type "functype//core:prelude/string.wado/core:prelude/string.wado/String::realloc_to" = fn(ref "core:prelude/string.wado//String", i32);  // TypeId(27)
 
-type "functype//core:rt/cm_stream_write_raw_all_u8" = fn(i32, ref Array<u8>, i32, i32) -> "core:prelude/types.wado//enum:CopyResult";  // TypeId(29)
+type "functype//core:prelude/string.wado/core:prelude/string.wado/String::grow" = fn(ref "core:prelude/string.wado//String", i32);  // TypeId(28)
 
-type "functype//core:prelude/string.wado/core:prelude/string.wado/String::realloc_to" = fn(ref "core:prelude/string.wado//String", i32);  // TypeId(30)
+type "functype//core:prelude/list.wado/core:prelude/list.wado/List<u8>::grow" = fn(ref "core:prelude//List<u8>");  // TypeId(29)
 
-type "functype//core:prelude/string.wado/core:prelude/string.wado/String::grow" = fn(ref "core:prelude/string.wado//String", i32);  // TypeId(31)
+type "functype//effect_with_clause_renamed_import.wado/effect_with_clause_renamed_import.wado/$Closure_0::$call" = fn(ref "effect_with_clause_renamed_import.wado//$Closure_0", u64) -> ref "core:prelude//List<u8>";  // TypeId(30)
 
-type "functype//core:prelude/list.wado/core:prelude/list.wado/List<u8>::grow" = fn(ref "core:prelude//List<u8>");  // TypeId(32)
+type "functype//effect_with_clause_renamed_import.wado/effect_with_clause_renamed_import.wado/$Closure_1::$call$dae[self]" = fn() -> u64;  // TypeId(31)
 
-type "functype//effect_with_clause_renamed_import.wado/effect_with_clause_renamed_import.wado/$Closure_0::$call" = fn(ref "effect_with_clause_renamed_import.wado//$Closure_0", u64) -> ref "core:prelude//List<u8>";  // TypeId(33)
+type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(32)
 
-type "functype//effect_with_clause_renamed_import.wado/effect_with_clause_renamed_import.wado/$Closure_1::$call$dae[self]" = fn() -> u64;  // TypeId(34)
+type "functype//wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code" = fn(i32);  // TypeId(33)
 
-type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(35)
+type "functype//wasi/task-return" = fn(i32);  // TypeId(34)
 
-type "functype//wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code" = fn(i32);  // TypeId(36)
+type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(35)
 
-type "functype//wasi/task-return" = fn(i32);  // TypeId(37)
+type "functype//effect_with_clause_renamed_import.wado/$cm_binding__Stdout_write_via_stream" = fn(i32) -> i32;  // TypeId(36)
 
-type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(38)
+type "functype//core:rt/write_string_to_stream$dae[add_newline]" = fn(i32, ref Array<u8>, i32);  // TypeId(37)
 
 import fn mem/realloc from "mem/realloc";
 import fn wasi/stream-write from "wasi/stream-write";
@@ -128,9 +124,6 @@ fn "effect_with_clause_renamed_import.wado/run"() with Stdout {
     let $local_3: ref "core:prelude//List<u8>";
     let is_negative_19: bool;
     let x: i64;
-    let $moved_4: ref null "core:prelude//$Resource";
-    let $sroa_$pattern_temp_0_0_13: ref null "core:prelude//$Resource";
-    let $sroa_$pattern_temp_0_1_14: ref null "core:prelude//$Resource";
     let start_76: i32;
     fixed = struct.new "effect_with_clause_renamed_import.wado//FixedRandom" { byte: 1 };
     global:effect_with_clause_renamed_import.wado::$effect_wasi:random/random.wado/Random = local.tee $d_wasi:random/random.wado/Random(struct.new "effect_with_clause_renamed_import.wado//$Dispatch_wasi:random/random.wado/Random" { outer: local.tee $save_wasi:random/random.wado/Random(global:effect_with_clause_renamed_import.wado::$effect_wasi:random/random.wado/Random), op_get_random_bytes: struct.new "canonical//CanonicalClosure_0" { env: struct.new "effect_with_clause_renamed_import.wado//$Closure_0" { $capture_0: fixed }, func: ref.func "closure/effect_with_clause_renamed_import.wado/$closure_wrapper_0" }, op_get_random_u64: struct.new "canonical//CanonicalClosure_1" { env: struct.new "effect_with_clause_renamed_import.wado//$Closure_1" {  }, func: ref.func "closure/effect_with_clause_renamed_import.wado/$closure_wrapper_1" } });
@@ -167,18 +160,18 @@ fn "effect_with_clause_renamed_import.wado/run"() with Stdout {
     is_negative_19 = $local_1_1.used;
     $local_1_1.used = start_76;
     "core:prelude/primitive.wado/write_decimal_digits"($local_1_1.repr, is_negative_19, x, self_8);
-    $sroa_$pattern_temp_0_0_13 = struct.new "core:prelude//$Resource" { value: builtin::i32_wrap_i64(local.tee x("wasi/stream-new"())) };
-    $sroa_$pattern_temp_0_1_14 = struct.new "core:prelude//$Resource" { value: builtin::i32_wrap_i64(x >> 32_i64) };
-    $moved_4 = "effect_with_clause_renamed_import.wado/$cm_binding__Stdout_write_via_stream"($moved_4 = $sroa_$pattern_temp_0_0_13; $sroa_$pattern_temp_0_0_13 = ref.null none; $moved_4);
-    $sroa_$pattern_temp_0_0_13 = $sroa_$pattern_temp_0_1_14;
-    $sroa_$pattern_temp_0_1_14 = ref.null none;
-    "core:rt/write_string_to_stream$dae[add_newline]"($sroa_$pattern_temp_0_1_14 = $sroa_$pattern_temp_0_0_13; $sroa_$pattern_temp_0_0_13 = ref.null none; $sroa_$pattern_temp_0_1_14, $local_1_1.repr, $local_1_1.used);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"($sroa_$pattern_temp_0_1_14 = $moved_4; $moved_4 = ref.null none; $sroa_$pattern_temp_0_1_14.value);
+    self_8 = builtin::i32_wrap_i64(local.tee x("wasi/stream-new"()));
+    is_negative_19 = builtin::i32_wrap_i64(x >> 32_i64);
+    start_76 = "effect_with_clause_renamed_import.wado/$cm_binding__Stdout_write_via_stream"(start_76 = self_8; self_8 = 0; start_76);
+    self_8 = is_negative_19;
+    is_negative_19 = 0;
+    "core:rt/write_string_to_stream$dae[add_newline]"(is_negative_19 = self_8; self_8 = 0; is_negative_19, $local_1_1.repr, $local_1_1.used);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(is_negative_19 = start_76; start_76 = 0; is_negative_19);
     global:effect_with_clause_renamed_import.wado::$effect_wasi:random/random.wado/Random = $save_wasi:random/random.wado/Random;
 }
 
 fn "effect_with_clause_renamed_import.wado/$cm_binding__Stdout_write_via_stream"(data) with Stdout {
-    return let $cm_handle_2: i32, $cm_handle_2 = data.value, data.value = 0, struct.new "core:prelude//$Resource" { value: "wasi/wasi:cli/Stdout::write_via_stream"($cm_handle_2) };
+    return let $cm_handle_2: i32, $cm_handle_2 = data, data = 0, "wasi/wasi:cli/Stdout::write_via_stream"($cm_handle_2);
 }
 
 fn "effect_with_clause_renamed_import.wado/$cm_binding__Random_get_random_bytes"(max_len) with Random {
@@ -305,16 +298,15 @@ fn "core:prelude/primitive.wado/count_digits_u64"(val) {
 
 fn "core:rt/write_string_to_stream$dae[add_newline]"(tx, $mv$message$repr, $mv$message$used) {
     let new_repr: ref Array<u8>;
-    let $moved_5: ref null "core:prelude//$Resource";
     builtin::array_copy<u8>(local.tee new_repr(builtin::array_new<u8>($mv$message$used + 1)), 0, $mv$message$repr, 0, $mv$message$used);
     builtin::array_set_u8(new_repr, $mv$message$used, 10);
     drop(block -> "core:prelude/types.wado//enum:CopyResult" {
         let $arg_spill_1: i32;
-        $arg_spill_1 = tx.value;
+        $arg_spill_1 = tx;
         $mv$message$used = $mv$message$used + 1;
         "core:rt/cm_stream_write_raw_all_u8"($arg_spill_1, new_repr, 0, $mv$message$used);
     });
-    "wasi/stream-drop-writable"($moved_5 = tx; tx = ref.null none; $moved_5.value);
+    "wasi/stream-drop-writable"($mv$message$used = tx; tx = 0; $mv$message$used);
 }
 
 fn "core:rt/unreachable"() {
