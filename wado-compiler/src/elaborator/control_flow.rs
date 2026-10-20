@@ -8,8 +8,9 @@ use std::cell::RefCell;
 
 use crate::ast;
 use crate::hashmap::IndexMap;
-use crate::tir::{TypeId, TypeTable};
+use crate::tir::TypeId;
 use crate::token::Span;
+use crate::type_table::TypeTable;
 
 use super::types::LoopJump;
 use crate::ast::AstId;

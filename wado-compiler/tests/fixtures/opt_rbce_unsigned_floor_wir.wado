@@ -1,0 +1,27 @@
+// A passed `6 <= u` floors an unsigned `u` as it does a signed one, so the
+// later `5 <= u && u < n` is dead.
+
+use { println, Stdout } from "core:cli";
+
+#[inline(never)]
+fn twice(u: u32, n: u32) -> u32 {
+    if !(6 <= u && u < n) {
+        unreachable();
+    }
+    if !(5 <= u && u < n) {
+        unreachable();
+    }
+    return u;
+}
+
+export fn run() with Stdout {
+    println(`${twice(builtin::black_box(7), builtin::black_box(9))}`);
+}
+
+__DATA__
+{
+    "stdout": "7\n",
+    "wir_scope": "twice",
+    "wir_expect:O2": ["6 <=u u"],
+    "wir_not_expect:O2": ["5 <=u u"]
+}

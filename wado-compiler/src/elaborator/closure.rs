@@ -7,7 +7,8 @@
 use crate::ast::{self};
 use crate::compiler_host::CompilerHost;
 use crate::name::capture_ref_name;
-use crate::tir::{CaptureSource, EffectRef, ResolvedType, TirCapture, TypeId, TypeTable};
+use crate::tir::{CaptureSource, EffectRef, ResolvedType, TirCapture, TypeId};
+use crate::type_table::TypeTable;
 
 use super::Elaborator;
 use super::types::{FunctionContext, OuterReach, TypeError, VarRef};

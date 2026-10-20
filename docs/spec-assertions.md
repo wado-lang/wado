@@ -143,6 +143,12 @@ message included. The report names the function and the call's position, since
 the call is what broke the contract. A call through a function value reports
 the clause's position instead, as the function cannot know who called it.
 
+A violation may trap sooner than the call that breaks the contract, at an
+earlier call on the same path with nothing observable between the two. The
+report then names that earlier call and its arguments. A contract promises only
+that a violation traps, so `xs[i]; xs[i + 1]; xs[i + 2]` may check
+`i + 2 < xs.len()` at `xs[i]`.
+
 <!-- {"fixture":"contract_call_site.wado", "assert": false} -->
 
 ```wado
@@ -181,13 +187,15 @@ always checked.
 Whether a build checks a marked call is set by `-f contract-checks` and
 `-f no-contract-checks`, and by nothing a program writes. Without either flag,
 the test world checks at every optimization level, and any other world checks
-at `-O0` only:
+at `-O0` and `-O1`. `wado run` and `wado serve` build at `-O1` unless told
+otherwise, so they check by default:
 
 ```sh
 wado test app.wado                              # checks
 wado test -f no-contract-checks app.wado        # does not
-wado run -O0 app.wado                           # checks
-wado run app.wado                               # does not (-O2)
+wado run app.wado                               # checks (-O1)
+wado run -O2 app.wado                           # does not
+wado compile app.wado                           # does not (-O2)
 wado compile -O2 -f contract-checks app.wado    # checks
 ```
 

@@ -14,7 +14,8 @@ use crate::nir_arena::{
 use crate::nir_value_graph::{Side, ValueKind, neutral_int};
 use crate::nir_visitor::NirRefVisitor;
 use crate::primitive::PrimitiveType;
-use crate::tir::{ResolvedType, TypeId, TypeTable};
+use crate::tir::{ResolvedType, TypeId};
+use crate::type_table::TypeTable;
 
 use super::lattice::is_provably_exhaustive;
 use super::pattern::PatternMatch;
@@ -516,7 +517,7 @@ impl Interpreter<'_> {
             sink.alloc_expr(
                 ExprKind::StructLiteral {
                     struct_type: type_id,
-                    struct_name: self.type_table.type_name(type_id),
+                    struct_name: self.type_table.struct_type_rendered_name(type_id),
                     fields: fields
                         .into_iter()
                         .enumerate()

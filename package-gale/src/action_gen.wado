@@ -27,7 +27,6 @@ use {
     scan_gate_condition_for,
 } from "./gate_conditions.wado";
 use { HashMap } from "core:collections";
-use { GALE_SEED } from "./hash_seed.wado";
 use { follow_forward_args, negate_cond, to_snake_case } from "./gen_util.wado";
 use { elements_match } from "./ir_shape.wado";
 use { CallForm, CallStmt, CodeWriter, FnSpec, ImplSpec, ParamSpec } from "lib:wadopoet";
@@ -171,7 +170,7 @@ fn translate_caller_arg<S: AsStrSlice>(expr: S, ctx: &EmitContext) -> Option<Str
 /// A body the translator refuses is simply absent, and the gate analysis refuses
 /// it in turn.
 pub fn translate_gate_bodies(grammar: &Grammar, settings: &GenSettings) -> HashMap<i32, String> {
-    let mut out = HashMap::<i32, String>::with_seed(GALE_SEED);
+    let mut out = HashMap::<i32, String>::new();
     if !settings.emit_actions {
         return out;
     }

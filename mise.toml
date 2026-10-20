@@ -114,8 +114,7 @@ run = """
 set -xe -o pipefail
 mkdir -p package-wadopoet/build
 scripts/dev-bin.sh wado syntax --format json -o package-wadopoet/build/syntax.json
-# `-O1`, for the reason `scripts/check-rust-paths.sh` gives.
-scripts/dev-bin.sh wado run -O1 package-wadopoet/scripts/gen_vocabulary.wado -- package-wadopoet/build/syntax.json > package-wadopoet/src/vocabulary.wado
+scripts/dev-bin.sh wado run package-wadopoet/scripts/gen_vocabulary.wado -- package-wadopoet/build/syntax.json > package-wadopoet/src/vocabulary.wado
 """
 
 [tasks.check-wadopoet-vocabulary]
@@ -638,6 +637,8 @@ cargo run -p wado-from-idl -- \
     --wit-dir vendor/wasi-webgpu/wit \
     --output-dir wado-compiler/lib/wasi
 find wado-compiler/lib/wasi -type f -name '*.wado' -exec scripts/dev-bin.sh wado format -w {} +
+# The Kiln generator world imports two of `wasi:random`'s interfaces.
+cp vendor/wasmtime/crates/wasi/src/p3/wit/deps/random.wit wado-compiler/lib/core/kiln/deps/random.wit
 """
 
 [tasks.webidl-deps]
@@ -666,11 +667,13 @@ run = """
 #!/usr/bin/env bash
 set -xe -o pipefail
 # Submodules only — each facade `lib/core/<package>.wado` is hand-written.
+# `--package` leaves out the `deps/` a world includes, which `wasi:*` covers.
 for package in kiln eval coverage; do
     rm -f "wado-compiler/lib/core/$package/"*.wado
     cargo run -p wado-from-idl -- \
         --wit-dir "wado-compiler/lib/core/$package" \
         --output-dir wado-compiler/lib/core \
+        --package "$package" \
         --skip-flat-reexport
 done
 """

@@ -9,7 +9,8 @@ use crate::nir::{FuncRef, NirFunction, NirUnaryOp};
 use crate::nir_arena::{Body, ExprKind, Operand};
 use crate::nir_value_graph::ValueKind;
 use crate::primitive::PrimitiveType;
-use crate::tir::{ResolvedType, TypeTable};
+use crate::tir::ResolvedType;
+use crate::type_table::TypeTable;
 use crate::wir::{
     WirFunction, WirGlobal, WirImport, WirImportDesc, WirInstr, WirMeta, WirName, WirType,
 };

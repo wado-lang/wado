@@ -75,9 +75,9 @@ type "functype//core:prelude/string.wado/core:prelude/string.wado/String::push" 
 
 type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>" = fn(ref "core:prelude/format.wado//Formatter", bool, ref Array<u8>, i32, i32) -> i32;  // TypeId(29)
 
-type "functype//core:prelude/primitive.wado/i32::fmt_decimal$sroa[self.value]" = fn(i32, ref "core:prelude/format.wado//Formatter");  // TypeId(30)
+type "functype//newtype_chain_dispatch.wado/newtype_chain_dispatch.wado/Point^core:prelude/traits.wado/Display::fmt$sroa[f.buf]" = fn(i32, i32, ref "core:prelude/string.wado//String");  // TypeId(30)
 
-type "functype//newtype_chain_dispatch.wado/newtype_chain_dispatch.wado/Point^core:prelude/traits.wado/Display::fmt$sroa[f.buf]" = fn(i32, i32, ref "core:prelude/string.wado//String");  // TypeId(31)
+type "functype//core:prelude/primitive.wado/i32::fmt_decimal$sroa[self.value]" = fn(i32, ref "core:prelude/format.wado//Formatter");  // TypeId(31)
 
 type "functype//core:prelude/string.wado/core:prelude/string.wado/String^core:prelude/string.wado/AsStrSlice::internal_append_to$spec2" = fn(ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String");  // TypeId(32)
 
@@ -105,9 +105,9 @@ import fn wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code 
 import fn wasi/task-return from "wasi/task-return";
 import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 
-global global:newtype_chain_dispatch.wado::$const_obj_86: ref Array<u8> = array.new_fixed<u8>(41);
-global global:newtype_chain_dispatch.wado::$const_obj_87: ref Array<u8> = array.new_fixed<u8>(44);
-global global:newtype_chain_dispatch.wado::$const_obj_88: ref Array<u8> = array.new_fixed<u8>(40);
+global global:newtype_chain_dispatch.wado::$const_obj_80: ref Array<u8> = array.new_fixed<u8>(41);
+global global:newtype_chain_dispatch.wado::$const_obj_81: ref Array<u8> = array.new_fixed<u8>(44);
+global global:newtype_chain_dispatch.wado::$const_obj_82: ref Array<u8> = array.new_fixed<u8>(40);
 
 fn "newtype_chain_dispatch.wado/run"() with Stdout {
     let $local_22: ref "core:prelude/string.wado//String";
@@ -736,19 +736,6 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_wri
     }
 }
 
-fn "core:prelude/primitive.wado/i32::fmt_decimal$sroa[self.value]"(self, f) {
-    let is_negative: bool;
-    let x: i64;
-    is_negative = self < 0;
-    self = "core:prelude/primitive.wado/count_digits_u64"(local.tee x(x = builtin::i64_extend_i32_s(self); select i64(x < 0_i64, 0_i64 - x, x)));
-    is_negative = block -> i32 {
-        let $mv_field_3: ref Array<u8>;
-        $mv_field_3 = builtin::array_new<u8>(0);
-        "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>"(f, is_negative, $mv_field_3, 0, self);
-    };
-    "core:prelude/primitive.wado/write_decimal_digits"(f.buf.repr, is_negative, x, self);
-}
-
 fn "newtype_chain_dispatch.wado/newtype_chain_dispatch.wado/Point^core:prelude/traits.wado/Display::fmt$sroa[f.buf]"($mv$self$x, $mv$self$y, f) {
     let $local_2: ref "core:prelude/string.wado//String";
     let new_used_17: i32;
@@ -762,7 +749,7 @@ fn "newtype_chain_dispatch.wado/newtype_chain_dispatch.wado/Point^core:prelude/t
     }
     start_18 = $local_2.used;
     $local_2.used = new_used_17;
-    builtin::array_copy<u8>($local_2.repr, start_18, global:newtype_chain_dispatch.wado::$const_obj_88, 0, 1);
+    builtin::array_copy<u8>($local_2.repr, start_18, global:newtype_chain_dispatch.wado::$const_obj_82, 0, 1);
     $sroa_$f_buf_101 = $local_2;
     start_18 = $mv$self$x < 0;
     $mv$self$x = "core:prelude/primitive.wado/count_digits_u64"(local.tee x_31(x_31 = builtin::i64_extend_i32_s($mv$self$x); select i64(x_31 < 0_i64, 0_i64 - x_31, x_31)));
@@ -774,7 +761,7 @@ fn "newtype_chain_dispatch.wado/newtype_chain_dispatch.wado/Point^core:prelude/t
     }
     start_18 = $local_2.used;
     $local_2.used = $mv$self$x;
-    builtin::array_copy<u8>($local_2.repr, start_18, global:newtype_chain_dispatch.wado::$const_obj_87, 0, 1);
+    builtin::array_copy<u8>($local_2.repr, start_18, global:newtype_chain_dispatch.wado::$const_obj_81, 0, 1);
     $sroa_$f_buf_101 = $local_2;
     start_18 = $mv$self$y < 0;
     $mv$self$y = "core:prelude/primitive.wado/count_digits_u64"(local.tee x_31(x_31 = builtin::i64_extend_i32_s($mv$self$y); select i64(x_31 < 0_i64, 0_i64 - x_31, x_31)));
@@ -786,7 +773,7 @@ fn "newtype_chain_dispatch.wado/newtype_chain_dispatch.wado/Point^core:prelude/t
     }
     start_18 = $local_2.used;
     $local_2.used = $mv$self$y;
-    builtin::array_copy<u8>($local_2.repr, start_18, global:newtype_chain_dispatch.wado::$const_obj_86, 0, 1);
+    builtin::array_copy<u8>($local_2.repr, start_18, global:newtype_chain_dispatch.wado::$const_obj_80, 0, 1);
     $inline_core_prelude_string_wado_String__internal_push_string_32: block {
         break_if $inline_core_prelude_string_wado_String__internal_push_string_32 local.tee start_18($local_2.used) == 0;
         if @unlikely(local.tee $mv$self$y(f.used + start_18) > builtin::array_len(f.repr)) {
@@ -797,6 +784,19 @@ fn "newtype_chain_dispatch.wado/newtype_chain_dispatch.wado/Point^core:prelude/t
         f.used = $mv$self$y;
         builtin::array_copy<u8>(f.repr, $mv$self$x, $local_2.repr, 0, start_18);
     };
+}
+
+fn "core:prelude/primitive.wado/i32::fmt_decimal$sroa[self.value]"(self, f) {
+    let is_negative: bool;
+    let x: i64;
+    is_negative = self < 0;
+    self = "core:prelude/primitive.wado/count_digits_u64"(local.tee x(x = builtin::i64_extend_i32_s(self); select i64(x < 0_i64, 0_i64 - x, x)));
+    is_negative = block -> i32 {
+        let $mv_field_3: ref Array<u8>;
+        $mv_field_3 = builtin::array_new<u8>(0);
+        "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>"(f, is_negative, $mv_field_3, 0, self);
+    };
+    "core:prelude/primitive.wado/write_decimal_digits"(f.buf.repr, is_negative, x, self);
 }
 
 fn "core:prelude/string.wado/core:prelude/string.wado/String^core:prelude/string.wado/AsStrSlice::internal_append_to$spec2"(self, out) {

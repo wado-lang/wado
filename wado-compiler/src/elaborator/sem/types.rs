@@ -11,8 +11,9 @@ use crate::hashmap::{IndexMap, IndexSet};
 use crate::module_source::ModuleSource;
 use crate::name::{DeclaredHead, FqTraitName, FqTypeName, LocalMethodName, Receiver};
 use crate::tir;
-use crate::tir::{EffectRef, FunctionRef, TirEffectOp, TirTypeParam, TypeId, TypeTable};
+use crate::tir::{EffectRef, FunctionRef, TirEffectOp, TirTypeParam, TypeId};
 use crate::token::Span;
+use crate::type_table::TypeTable;
 
 /// Method-dispatch decision for a [`crate::ast::MethodCallExpr`]:
 /// `function_ref` is the resolved target, so reify emits the call without

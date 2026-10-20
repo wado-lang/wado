@@ -13,16 +13,17 @@ use crate::module_source::ModuleSource;
 use crate::name::{
     FqTraitName, FqTypeName, LocalMethodName, MethodName, closure_call_method_info,
     closure_call_name, closure_capture_field, closure_functor_struct_name, discarded_param_name,
-    is_fn_type_name,
+    is_fn_type_name, mangle_local_method,
 };
 use crate::tir::{
     CallArg, CaptureSource, ClosureFunctor, FunctionKind, FunctionRef, InlineHint, ResolvedType,
     StructDef, TirBlock, TirCapture, TirExpr, TirExprKind, TirField, TirFunction, TirLocal,
     TirParam, TirPattern, TirStmt, TirStmtKind, TirStruct, TirStructField, TirUnaryOp, TypeId,
-    TypeTable, capture_at, capture_source_locals,
+    capture_at, capture_source_locals,
 };
 use crate::tir_visitor::{TirMutVisitor, TirRefVisitor, shift_locals};
 use crate::token::Span;
+use crate::type_table::TypeTable;
 use crate::unparse::unparse_tir_closure_source;
 use crate::{hashmap, tir};
 
@@ -206,7 +207,7 @@ fn build_functor_suffix(functor_types: &[(u32, TypeId)], type_table: &TypeTable)
     functor_types
         .iter()
         .fold(String::new(), |mut acc, (_, tid)| {
-            let _ = write!(acc, "${}", type_table.type_name(*tid));
+            let _ = write!(acc, "${}", type_table.struct_type_rendered_name(*tid));
             acc
         })
 }
@@ -881,7 +882,7 @@ impl ClosureLowerer {
                         Box::new(fmt_local.clone()),
                         FunctionRef {
                             module_source: ModuleSource::format(),
-                            name: format!("{}::{}", fmt.fq, fmt.write_literal),
+                            name: mangle_local_method(&fmt.fq.to_string(), &fmt.write_literal),
                             template: None,
                             monomorph_info: None,
                             method_info: Some(LocalMethodName::new(

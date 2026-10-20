@@ -18,7 +18,6 @@ use {
     rule_binding_reads,
 } from "./action_translate.wado";
 use { HashMap, HashSet } from "core:collections";
-use { GALE_SEED } from "./hash_seed.wado";
 
 /// The labeled rule calls of one rule whose capture an action reads: `spans`
 /// carry the call's token range (`$x.text`), `nodes` its builder row (`$x.ctx`).
@@ -46,9 +45,9 @@ pub struct ParserPlan {
     pub emit_follow: bool = false,
     /// Rules whose functions carry the FOLLOW slots, by snake name: the same
     /// answer for the declaration and every call site.
-    follow_rule_snakes: HashSet<String> = HashSet::with_seed(GALE_SEED),
+    follow_rule_snakes: HashSet<String> = HashSet::new(),
     /// Only a `LeftRecursive` rule carries a `min_prec` parameter, by snake name.
-    pub lr_rule_snakes: HashSet<String> = HashSet::with_seed(GALE_SEED),
+    pub lr_rule_snakes: HashSet<String> = HashSet::new(),
     /// A decision routes to the runtime ATN simulator: the parser carries its
     /// infrastructure (the `ATN_SIM` blob, `Parser.atn`, rule-entry stack
     /// maintenance), and every scan takes the parser's ATN state by `&mut`.
@@ -81,7 +80,7 @@ pub struct ParserPlan {
     recovery: RecoverySets = empty_recovery_sets(),
     /// By rule name, the labeled rule calls whose capture an action reads.
     /// Their value-struct fields are what `$x.text` / `$x.ctx` resolve to.
-    rule_captures: HashMap<String, RuleCaptures> = HashMap::with_seed(GALE_SEED),
+    rule_captures: HashMap<String, RuleCaptures> = HashMap::new(),
     /// The binding bases each rule's actions read (`rule_binding_reads`).
     binding_reads: List<Option<List<String>>> = [],
 }
@@ -146,11 +145,7 @@ pub fn plan_parser(
         // Every grammar reads its recovery sets off the ATN; only the
         // simulator's grammars also embed it.
         recovery: recovery_sets(atn, analysis.eof_kind_id()),
-        rule_captures: if settings.emit_actions {
-            rule_captures_of(grammar, lowered);
-        } else {
-            HashMap::with_seed(GALE_SEED);
-        },
+        rule_captures: if settings.emit_actions { rule_captures_of(grammar, lowered) } else { HashMap::new() },
         binding_reads,
     };
 }
@@ -292,7 +287,7 @@ fn expect_ids(sets: &List<Option<List<i32>>>, i: i32) -> Option<List<i32>> {
 }
 
 fn name_set(names: &List<String>) -> HashSet<String> {
-    let mut set = HashSet::<String>::with_seed(GALE_SEED);
+    let mut set = HashSet::<String>::new();
     for let name of names {
         set.insert(*name);
     }
@@ -302,7 +297,7 @@ fn name_set(names: &List<String>) -> HashSet<String> {
 /// What every rule's actions read off its labeled rule calls, so the value
 /// struct, the capture emit, and the reference all read one answer.
 fn rule_captures_of(grammar: &Grammar, lowered: &LoweredGrammar) -> HashMap<String, RuleCaptures> {
-    let mut captures: HashMap<String, RuleCaptures> = HashMap::with_seed(GALE_SEED);
+    let mut captures: HashMap<String, RuleCaptures> = HashMap::new();
     for let mut i = 0; i < grammar.parser_rules.len(); i += 1 {
         let rule = &grammar.parser_rules[i];
         let bodies = rule_action_bodies(rule);

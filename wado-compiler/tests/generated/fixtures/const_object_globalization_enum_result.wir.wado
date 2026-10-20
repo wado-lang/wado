@@ -234,7 +234,6 @@ fn "core:prelude/array.wado/core/prelude/array.wado/seq_cmp<u8>$dae[a_start,b_st
     let i: i32;
     let x: u8;
     let y: u8;
-    let $cse_18: bool;
     min_len = select i32(a_end < b_end, a_end, b_end);
     i = 0;
     b10: block {
@@ -242,28 +241,10 @@ fn "core:prelude/array.wado/core/prelude/array.wado/seq_cmp<u8>$dae[a_start,b_st
             break_if b10 i >= min_len;
             x = builtin::array_get_value<u8>(a, i);
             y = builtin::array_get_value<u8>(b, i);
-            $cse_18 = x <u y;
-            y = x >u y;
-            if $inline_u8_core_prelude_traits_wado_Ord__cmp_sroa_self_value_other_value__1: block -> "core:prelude/traits.wado//enum:Ordering" {
-                if $cse_18 {
-                    break $inline_u8_core_prelude_traits_wado_Ord__cmp_sroa_self_value_other_value__1: 0;
-                }
-                if y {
-                    break $inline_u8_core_prelude_traits_wado_Ord__cmp_sroa_self_value_other_value__1: 2;
-                }
-                break $inline_u8_core_prelude_traits_wado_Ord__cmp_sroa_self_value_other_value__1: 1;
-            } == 0 {
+            if x <u y {
                 return 0;
             }
-            if $inline_u8_core_prelude_traits_wado_Ord__cmp_sroa_self_value_other_value__2: block -> "core:prelude/traits.wado//enum:Ordering" {
-                if $cse_18 {
-                    break $inline_u8_core_prelude_traits_wado_Ord__cmp_sroa_self_value_other_value__2: 0;
-                }
-                if y {
-                    break $inline_u8_core_prelude_traits_wado_Ord__cmp_sroa_self_value_other_value__2: 2;
-                }
-                break $inline_u8_core_prelude_traits_wado_Ord__cmp_sroa_self_value_other_value__2: 1;
-            } == 2 {
+            if x >u y {
                 return 2;
             }
             i = i + 1;
@@ -299,12 +280,12 @@ fn "core:prelude/array.wado/core/prelude/array.wado/write_seq_inspect<core:prelu
     i = 0;
     $licm_arith_60 = limit >= 0;
     self_7 = f.buf;
-    b21: block {
-        l22: loop {
-            break_if b21 i >= end;
+    b17: block {
+        l18: loop {
+            break_if b17 i >= end;
             if select i32($licm_arith_60, start_65 >= limit, 0) {
                 new_used_64 = 1;
-                break b21;
+                break b17;
             }
             if start_65 > 0 {
                 if @unlikely(local.tee new_used_21(self_7.used + 2) > builtin::array_len(self_7.repr)) {
@@ -318,7 +299,7 @@ fn "core:prelude/array.wado/core/prelude/array.wado/write_seq_inspect<core:prelu
             "core:prelude/traits.wado/core:prelude/types.wado/Option<core:prelude/string.wado/String>^core:prelude/traits.wado/Inspect::inspect$sroa[self.value]$spec0$sroa[f.buf]"(builtin::array_get_value<ref null "core:prelude/string.wado//String">(repr, i), self_7);
             start_65 = start_65 + 1;
             i = i + 1;
-            continue l22;
+            continue l18;
         };
     };
     if new_used_64 {
@@ -418,9 +399,9 @@ fn "core:prelude/format.wado/core/prelude/format.wado/inspect_text<core:prelude/
     $sroa_$iter_0_byte_index_446 = 0;
     $tmpl_buf_132 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
     $hfs_used_843 = f.used;
-    b32: block {
-        l33: loop {
-            break_if b32 $sroa_$iter_0_byte_index_446 >= $mv$text$used;
+    b28: block {
+        l29: loop {
+            break_if b28 $sroa_$iter_0_byte_index_446 >= $mv$text$used;
             $sroa_slot_435 = 0;
             $sroa_slot_436 = 0;
             $inline_decode_char_at_3: block {
@@ -452,7 +433,7 @@ fn "core:prelude/format.wado/core/prelude/format.wado/inspect_text<core:prelude/
             $sroa_$iter_0_byte_index_446 = $sroa_$iter_0_byte_index_446 + $sroa_slot_436;
             if start_140 >= 256 {
                 new_used_139 = 1;
-                break b32;
+                break b28;
             }
             if $sroa_slot_435 == 34 {
                 if @unlikely(local.tee new_used_188($hfs_used_843 + 1) > builtin::array_len(f.repr)) {
@@ -573,14 +554,14 @@ fn "core:prelude/format.wado/core/prelude/format.wado/inspect_text<core:prelude/
                     builtin::array_set_u8(arr, start_537, 48);
                 } else {
                     temp = val_i64_68;
-                    b58: block {
-                        l59: loop {
-                            break_if b58 temp == 0_i64;
+                    b54: block {
+                        l55: loop {
+                            break_if b54 temp == 0_i64;
                             pos_87 = pos_87 - 1;
                             digit = builtin::i32_wrap_i64(temp & 15_i64);
                             builtin::array_set_u8(arr, pos_87, select i32(digit < 10, 48 + digit, (97 + digit) - 10) & 255);
                             temp = temp >>u 4_i64;
-                            continue l59;
+                            continue l55;
                         };
                     };
                 }
@@ -611,7 +592,7 @@ fn "core:prelude/format.wado/core/prelude/format.wado/inspect_text<core:prelude/
             }
             start_140 = start_140 + 1;
             f.used = $hfs_used_843;
-            continue l33;
+            continue l29;
         };
     };
     if @unlikely(local.tee start_399(f.used + 1) > builtin::array_len(f.repr)) {
@@ -756,19 +737,19 @@ fn "const_object_globalization_enum_result.wado/core:prelude/list.wado/List<core
     buf = builtin::array_new<ref null "core:prelude/string.wado//String">(n);
     width = 1;
     $licm_repr_54 = self.repr;
-    b75: block {
-        l76: loop {
+    b71: block {
+        l72: loop {
             start = 0;
-            b77: block {
-                l78: loop {
-                    break_if b77 width >= (n - start);
+            b73: block {
+                l74: loop {
+                    break_if b73 width >= (n - start);
                     end = local.tee mid(start + width) + b_14 = n - mid; select i32(width < b_14, width, b_14);
                     i = start;
                     j = mid;
                     k = start;
-                    b79: block {
-                        l80: loop {
-                            break_if b79 k >= end;
+                    b75: block {
+                        l76: loop {
+                            break_if b75 k >= end;
                             if i < mid {
                                 if j < end {
                                     $sroa_a_value_57 = (if ref.is_null(local.tee v_17(builtin::array_get_value<ref null "core:prelude/string.wado//String">($licm_repr_54, i))) -> ref null "core:prelude/string.wado//String" {
@@ -823,17 +804,17 @@ fn "const_object_globalization_enum_result.wado/core:prelude/list.wado/List<core
                                 j = j + 1;
                             }
                             k = k + 1;
-                            continue l80;
+                            continue l76;
                         };
                     };
                     builtin::array_copy<ref null "core:prelude/string.wado//String">($licm_repr_54, start, buf, start, end - start);
                     start = end;
-                    continue l78;
+                    continue l74;
                 };
             };
-            break_if b75 width >= (n - width);
+            break_if b71 width >= (n - width);
             width = width * 2;
-            continue l76;
+            continue l72;
         };
     };
 }

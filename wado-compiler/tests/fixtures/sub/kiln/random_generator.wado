@@ -1,0 +1,10 @@
+// A Kiln generator naming `Random`, which a deterministic host omits from
+// `wasi:random`.
+
+use { Request, Response, Error } from "core:kiln";
+use { Random } from "wasi:random";
+
+export fn generate(req: Request) -> Result<Response, Error> with Random {
+    let _ = Random::get_random_u64();
+    return Result::Ok(Response { files: [] });
+}

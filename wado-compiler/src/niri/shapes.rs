@@ -7,7 +7,8 @@
 use crate::hashmap::IndexMap;
 use crate::nir::NirField;
 use crate::nir_package::NirPackage;
-use crate::tir::{TypeId, TypeTable};
+use crate::tir::TypeId;
+use crate::type_table::TypeTable;
 
 /// A struct field as a literal spells it.
 pub struct FieldShape {

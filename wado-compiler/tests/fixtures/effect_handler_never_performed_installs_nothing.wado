@@ -1,0 +1,30 @@
+// A handler for an effect nothing performs leaves no code behind. With no
+// operation reachable, the dispatch global is read only to save it, link it into
+// the record installed over it, and restore it, so the install, the record and
+// the handler's methods all go.
+
+use { println, Stdout } from "core:cli";
+
+interface Counter {
+    fn next() -> i32;
+}
+
+struct Fixed {}
+
+impl Counter for Fixed {
+    fn next(&mut self) -> i32 {
+        resume 7;
+    }
+}
+
+export fn run() with Stdout {
+    with Counter => &mut Fixed {} do {
+        println("ok");
+    }
+}
+
+__DATA__
+{
+    "stdout": "ok\n",
+    "wir_not_expect:O2": ["$effect_", "$Dispatch_", "$Closure_0"]
+}

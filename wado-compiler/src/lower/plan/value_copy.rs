@@ -25,8 +25,8 @@ use crate::module_source::ModuleSource;
 use crate::tir;
 use crate::tir::{
     BuiltinDeclarations, ResolvedType, TemplateId, TirExpr, TirExprKind, TirFunction, TypeId,
-    TypeTable,
 };
+use crate::type_table::TypeTable;
 use funcset::{FuncKeyMap, FuncKeySet};
 
 /// The `T` of a `builtin::copy_value::<T>` callee, which is the helper the fold

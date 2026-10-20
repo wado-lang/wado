@@ -52,10 +52,25 @@ pub fn namespace_member_alias(namespace: &str, member: &str) -> String {
     format!("{namespace}{NAMESPACE_MEMBER_SEP}{member}")
 }
 
+/// Split a `ns$member` alias into its namespace and member. The member is an
+/// identifier, so the last separator splits them, a minted `$ns` included.
+pub fn split_namespace_member(name: &str) -> Option<(&str, &str)> {
+    name.rsplit_once(NAMESPACE_MEMBER_SEP)
+}
+
 /// Read a `ns$member` alias back as the `ns::member` its author wrote, for a
 /// diagnostic. Any other name is already its own spelling.
 pub fn unalias_namespace_member(name: &str) -> String {
-    name.replacen(NAMESPACE_MEMBER_SEP, "::", 1)
+    match split_namespace_member(name) {
+        Some((namespace, member)) => namespaced_name(namespace, member),
+        None => name.to_string(),
+    }
+}
+
+/// A member reached through a namespace import, as source writes it:
+/// `ns::member`.
+pub fn namespaced_name(namespace: &str, member: &str) -> String {
+    format!("{namespace}::{member}")
 }
 
 /// Separator between a local item's declared name and its disambiguating
@@ -746,6 +761,17 @@ pub const MODULES_INIT_FUNCTION: &str = "$initialize_modules";
 /// The global [`MODULES_INIT_FUNCTION`] sets once, so a second entry into the
 /// component re-runs no initializer.
 pub const MODULES_INIT_FLAG: &str = "$modules_initialized";
+
+/// The namespace a Kiln generator's request adapter imports `core:kiln` under,
+/// so what it names cannot meet a name the generator declares or imports.
+pub const KILN_ADAPTER_NAMESPACE: &str = "$kiln";
+
+/// `item` of `core:kiln`, as the request adapter spells it: the alias the
+/// namespace import registers, which a type name resolves by as any name does.
+#[must_use]
+pub fn kiln_adapter_path(item: &str) -> String {
+    namespace_member_alias(KILN_ADAPTER_NAMESPACE, item)
+}
 
 /// Prefix the const-object globalization pass stamps on the globals it hoists
 /// constant aggregates into (`$const_obj_0`, …). It both mints and rescans
@@ -2371,7 +2397,76 @@ pub fn mangle_option_type(inner_type: &str) -> String {
 /// Examples:
 /// - `mangle_builtin_array_type("i32")` → `"Array<i32>"`
 pub fn mangle_builtin_array_type(elem_type: &str) -> String {
-    format!("Array<{elem_type}>")
+    format!("{ARRAY_TYPE_NAME}<{elem_type}>")
+}
+
+/// The head name of the raw GC array (`ResolvedType::BuiltinArray`): both the
+/// `Array<T>` the resolver recognises and the method-owner base name
+/// (`impl Array<T>` in `core:prelude/array.wado`) the dispatch arms report.
+pub const ARRAY_TYPE_NAME: &str = "Array";
+
+/// A declaration's mangled name, qualified by the module declaring it:
+/// `{module}/{name}`.
+pub fn mangle_declared(module: impl fmt::Display, name: &str) -> String {
+    format!("{module}/{name}")
+}
+
+/// An associated-type projection's head, `T::Item`: one spelling for a
+/// mangled name and a diagnostic alike.
+pub fn assoc_type_projection_name(base: &str, assoc: &str) -> String {
+    format!("{base}::{assoc}")
+}
+
+/// A reference type as source writes it, `&T` / `&mut T`: one spelling for a
+/// mangled name and a diagnostic alike.
+pub fn ref_type_name(kind: RefKind, inner: &str) -> String {
+    let mut out = String::new();
+    push_ref_prefix(&mut out, kind);
+    out.push_str(inner);
+    out
+}
+
+/// A type pack as source writes it: `..T`.
+pub fn type_pack_name(name: &str) -> String {
+    format!("..{name}")
+}
+
+/// The `<A, B>` a diagnostic writes after a head; empty for no arguments.
+fn display_type_args(args: &[String]) -> String {
+    if args.is_empty() {
+        String::new()
+    } else {
+        format!("<{}>", args.join(", "))
+    }
+}
+
+/// A generic type as a diagnostic writes it: `Name<A, B>`.
+pub fn display_generic_name(head: &str, args: &[String]) -> String {
+    format!("{head}{}", display_type_args(args))
+}
+
+/// A tuple type as a diagnostic writes it: `[A, B]`.
+pub fn display_tuple_type(elems: &[String]) -> String {
+    format!("[{}]", elems.join(", "))
+}
+
+/// An associated-type projection as a diagnostic writes it: `T::Item<A>`, or
+/// `<T as Trait<B>>::Item<A>` given its owning trait as written.
+pub fn display_assoc_type_projection(
+    base: &str,
+    assoc: &str,
+    args: &[String],
+    owner: Option<&str>,
+) -> String {
+    let base = match owner {
+        Some(owner) => format!("<{base} as {owner}>"),
+        None => base.to_string(),
+    };
+    format!(
+        "{}{}",
+        assoc_type_projection_name(&base, assoc),
+        display_type_args(args)
+    )
 }
 
 /// Key of a declared type in the WIR type table.
@@ -2418,10 +2513,10 @@ pub fn wir_func_type_key(func_key: &str) -> String {
 /// Key of an anonymous tuple struct in the WIR type table.
 ///
 /// Examples:
-/// - `wir_tuple_type_key("[i32, i32]")` → `"tuple//[i32, i32]"`
+/// - `wir_tuple_type_key(&["i32", "i32"])` → `"tuple//[i32, i32]"`
 #[must_use]
-pub fn wir_tuple_type_key(display: &str) -> String {
-    format!("tuple//{display}")
+pub fn wir_tuple_type_key(elems: &[String]) -> String {
+    format!("tuple//[{}]", elems.join(", "))
 }
 
 /// Build a local method name from struct name and method name.
@@ -3054,7 +3149,7 @@ pub fn is_builtin_shape_name(name: &str) -> bool {
         || PrimitiveType::is_primitive_name(head)
         || matches!(
             head,
-            UNIT_TYPE_NAME | NEVER_TYPE_NAME | "Array" | TUPLE_TYPE_NAME | "Fn"
+            UNIT_TYPE_NAME | NEVER_TYPE_NAME | ARRAY_TYPE_NAME | TUPLE_TYPE_NAME | "Fn"
         )
 }
 
@@ -3272,7 +3367,7 @@ impl FqTypeName {
     /// tuple's elements, none included.
     #[must_use]
     pub fn pack_spread(name: &str) -> Self {
-        Self::binder(&format!("..{name}"))
+        Self::binder(&type_pack_name(name))
     }
 
     /// Whether this is a [`Self::pack_spread`].
@@ -3561,9 +3656,9 @@ impl FqTypeName {
         }
         match &self.head {
             TypeHead::Declared(head) => {
-                out.push_str(&format!("{}/{}", head.module(), head.rendered()));
+                out.push_str(&mangle_declared(head.module(), head.rendered()));
             }
-            TypeHead::Shape { module, name } => out.push_str(&format!("{module}/{name}")),
+            TypeHead::Shape { module, name } => out.push_str(&mangle_declared(module, name)),
             // A bucket keys an index and heads no function name; spelled apart
             // from a shape's so the two cannot be read as one.
             TypeHead::ParamBucket { module, name } => {
@@ -3702,7 +3797,7 @@ impl FqTypeName {
         }
         let args: Vec<String> = self.args.iter().map(FqTypeName::to_display).collect();
         if let TypeHead::Tuple = self.head {
-            out.push_str(&format!("[{}]", args.join(", ")));
+            out.push_str(&display_tuple_type(&args));
             return out;
         }
         if let Some(spelled) = self.fn_spelling(
@@ -3714,15 +3809,14 @@ impl FqTypeName {
             return out;
         }
         if let TypeHead::Projection(head) = &self.head {
-            out.push_str(&format!("{}::{}", head.base.to_display(), head.assoc));
+            out.push_str(&assoc_type_projection_name(
+                &head.base.to_display(),
+                &head.assoc,
+            ));
         } else {
             out.push_str(self.head.name());
         }
-        if !args.is_empty() {
-            out.push('<');
-            out.push_str(&args.join(", "));
-            out.push('>');
-        }
+        out.push_str(&display_type_args(&args));
         out
     }
 
@@ -4048,7 +4142,7 @@ impl FqTraitName {
     #[must_use]
     pub fn to_mangled(&self) -> String {
         let head = match &self.head {
-            TraitHead::Declared(head) => format!("{}/{}", head.module(), head.rendered()),
+            TraitHead::Declared(head) => mangle_declared(head.module(), head.rendered()),
             TraitHead::Binder(name) => name.clone(),
         };
         let args: Vec<String> = self.args.iter().map(FqTypeName::to_mangled).collect();

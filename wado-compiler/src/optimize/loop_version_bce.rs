@@ -24,8 +24,9 @@ use crate::nir_engine::{Engine, EngineBuffers, Rule};
 use crate::nir_package::NirPackage;
 use crate::nir_value_graph::ValueKind;
 use crate::parallel::Executor;
-use crate::tir::{TypeId, TypeTable};
+use crate::tir::TypeId;
 use crate::token::Span;
+use crate::type_table::TypeTable;
 
 use super::alias::{CallImmutability, builder_alias_sets, first_param_types};
 use super::arena_query::{block_contains_loop, has_break_to};

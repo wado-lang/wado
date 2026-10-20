@@ -10,8 +10,8 @@ use crate::nir::{FuncParts, NirBinaryOp};
 use crate::nir_arena::{BlockId, Body, ExprId, ExprKind, Operand, StmtKind};
 use crate::nir_engine::{Engine, EngineBuffers, Rule};
 use crate::nir_package::NirPackage;
-use crate::tir::TypeTable;
 use crate::token::Span;
+use crate::type_table::TypeTable;
 
 use super::arena_query::is_pure_nontrapping_operand_typed;
 

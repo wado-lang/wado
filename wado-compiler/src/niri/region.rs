@@ -9,7 +9,8 @@ use crate::nir::NirUnaryOp;
 use crate::nir_arena::{
     BlockId, Body, ExprId, ExprKind, LocalSet, NodeRef, Operand, PatKind, StmtId, StmtKind,
 };
-use crate::tir::{TypeId, TypeTable};
+use crate::tir::TypeId;
+use crate::type_table::TypeTable;
 
 use super::ProgramFacts;
 use super::callee::{CallSite, Callee};

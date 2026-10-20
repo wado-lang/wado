@@ -21,7 +21,7 @@ use crate::optimize::alias::{
 };
 use crate::optimize::extract::{extract_const, is_place_read};
 use crate::optimize::gate::{FunctionGate, GatedPass};
-use crate::tir::TypeTable;
+use crate::type_table::TypeTable;
 
 /// Forwards stores to loads in the functions `gate` still holds. The only pass
 /// after `field_scalarize`, so its shadow inits (`$hfs_x = obj.f`) fold here.

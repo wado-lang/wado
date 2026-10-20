@@ -1,0 +1,27 @@
+// A call that cannot return may still print and exit cleanly, so a later check
+// does not move ahead of it.
+
+use { println, exit, Exit, Stdout } from "core:cli";
+
+#[inline(never)]
+fn die() -> ! with (Stdout, Exit) {
+    println("done");
+    exit(0);
+}
+
+#[inline(never)]
+fn read(xs: &List<i32>, i: i32, stop: bool) -> i32 with (Stdout, Exit) {
+    let a = xs[i];
+    if stop {
+        die();
+    }
+    return a + xs[i + 1];
+}
+
+export fn run() with (Stdout, Exit) {
+    let xs: List<i32> = builtin::black_box([1]);
+    let _ = read(&xs, builtin::black_box(0), builtin::black_box(true));
+}
+
+__DATA__
+{"stdout": "done\n", "exit_code": 0}

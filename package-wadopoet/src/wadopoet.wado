@@ -1,5 +1,5 @@
 use { ReflectTemplate } from "core:prelude";
-use { HashMap, HashSet, HashSeed } from "core:collections";
+use { HashMap, HashSet } from "core:collections";
 
 /// What a call does with the callee's result.
 pub variant CallForm {
@@ -484,7 +484,7 @@ impl CodeWriter {
     pub fn prune(&mut self) {
         self.flush_text();
         let items = self.items();
-        let mut item_of = HashMap::<String, i32>::with_seed(SOURCE_SEED);
+        let mut item_of = HashMap::<String, i32>::new();
         for let mut k = 0; k < items.len(); k += 1 {
             let head = &self.segs[items[k].start];
             item_of[self.slice(head.name_start, head.name_end).to_string()] = k;
@@ -502,7 +502,7 @@ impl CodeWriter {
 
     /// Every name the text `note`s or a call statement calls.
     pub fn references(&self) -> HashSet<String> {
-        let mut found = HashSet::<String>::with_seed(SOURCE_SEED);
+        let mut found = HashSet::<String>::new();
         for let seg of &self.segs {
             if seg.kind matches { Call } {
                 found.insert(self.slice(seg.text_start, seg.text_end).to_string());
@@ -884,10 +884,6 @@ impl CodeWriter {
 /// Forwarding rounds before `prune` stops following chains of forwarders. Each
 /// round resolves one link of every chain, and generated code nests few.
 global MAX_FORWARD_ROUNDS: i32 = 8;
-
-/// Seeds every map over the source being written, which the program writes
-/// itself rather than reads from an attacker.
-global SOURCE_SEED: HashSeed = HashSeed::fixed(0xA4093822299F31D0, 0x082EFA98EC4E6C89);
 
 /// A top-level function: the segments of its head and closing brace.
 struct Item {

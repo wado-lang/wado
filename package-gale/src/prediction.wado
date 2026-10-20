@@ -18,7 +18,6 @@ use { sort_group_by_specificity } from "./alt_grouping.wado";
 use { all_alts_are_single_token } from "./ir_shape.wado";
 use { dedup_append_arr, push_unique } from "./list_util.wado";
 use { HashSet } from "core:collections";
-use { GALE_SEED } from "./hash_seed.wado";
 
 pub variant PredictionNode {
     Leaf(i32),
@@ -853,7 +852,7 @@ fn try_expand_opaque(
         return null;
     }
     // Rule diversity check: only expand when opaque configs reference different rules.
-    let mut rule_refs = HashSet::<String>::with_seed(GALE_SEED);
+    let mut rule_refs = HashSet::<String>::new();
     for let c of original_configs {
         if !opaque_alts.contains(&c.alt_index) {
             continue;

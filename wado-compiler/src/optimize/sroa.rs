@@ -21,8 +21,9 @@ use crate::nir_engine::{Engine, Rule};
 use crate::nir_package::NirPackage;
 use crate::nir_value_graph::ValueKind;
 use crate::niri::{CtfeBuiltin, CtfeBuiltinMap, build_ctfe_builtin_map};
-use crate::tir::{TypeId, TypeTable};
+use crate::tir::TypeId;
 use crate::token::Span;
+use crate::type_table::TypeTable;
 
 /// What an element local is minted under, narrowed by its aggregate's name and
 /// then the element's.
@@ -667,7 +668,8 @@ fn array_read_of_candidate(
         | CtfeBuiltin::I32AsChar
         | CtfeBuiltin::FloatIsNan
         | CtfeBuiltin::Ieee754Comparison(_)
-        | CtfeBuiltin::HeapBase(_) => None,
+        | CtfeBuiltin::HeapBase(_)
+        | CtfeBuiltin::AmbientStdio(_) => None,
     }
 }
 

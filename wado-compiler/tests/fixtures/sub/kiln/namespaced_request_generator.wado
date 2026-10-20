@@ -1,0 +1,14 @@
+// A Kiln generator naming `Request` through a namespace import of `core:kiln`.
+
+use kiln from "core:kiln";
+use { Response, OutputFile, Error } from "core:kiln";
+
+export fn generate(req: kiln::Request) -> Result<Response, Error> {
+    return Result::Ok(Response {
+        files: [OutputFile {
+            path: "out.wado",
+            content: `pub fn total() -> i32 { return ${req.primary.path.len()}; }`,
+            is_entry: true,
+        }],
+    });
+}

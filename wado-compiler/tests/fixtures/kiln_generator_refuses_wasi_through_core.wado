@@ -1,0 +1,14 @@
+// A generator reaching WASI through a `core:*` module names no `wasi:` import,
+// so the planned imports are what refuse it.
+
+use { hello } from "./sub/kiln/value.schema"
+    with {
+        generator: { module: "./sub/kiln/stamped_sink_generator.wado" },
+    };
+
+test {
+    assert hello() == 7;
+}
+
+__DATA__
+{"compile_error": "error: kiln generator imports `wasi:clocks/system-clock@0.3.0`, which the generator world does not"}

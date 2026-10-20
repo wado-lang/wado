@@ -11,11 +11,9 @@ use crate::module_source::ModuleSource;
 use crate::monomorphize::Templates;
 use crate::name::{FqTraitName, FqTypeName, LocalMethodName, MethodName, mangle_generic_name};
 use crate::synthesis::template::{eq_from_written_cmp, written_impl_reaches};
-use crate::tir::{
-    AnonStructId, InstantiationKey, ReceiverAssocTypes, ResolvedType, TemplateId, TirFunction,
-    TirTypeParam, TypeId, TypeTable,
-};
+use crate::tir::{InstantiationKey, ResolvedType, TemplateId, TirFunction, TirTypeParam, TypeId};
 use crate::token::Span;
+use crate::type_table::{AnonStructId, ReceiverAssocTypes, TypeTable};
 
 /// Tracks struct monomorphization state
 pub(super) struct StructInstState {

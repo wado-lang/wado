@@ -82,7 +82,7 @@ fn "cm_list_param_resource_return.wado/$cm_binding__Api_make_layout"(entries) wi
     let $array_clone_dst_2: ref Array<u32>;
     builtin::array_copy<u32>(local.tee $array_clone_dst_2(builtin::array_new<u32>($load_1)), 0, $array_clone_src_1, 0, $load_1);
     drop($array_clone_dst_2);
-    if @unlikely(($load_1 < 0) | ($load_1 > 536870911)) {
+    if @unlikely(536870911 <u $load_1) {
         cold_path;
         "core:rt/panic"(array.new_data<u8>("a buffer's length is negative or past what linear memory can address"), 68);
         unreachable;

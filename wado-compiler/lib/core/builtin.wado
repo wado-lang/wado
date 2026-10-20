@@ -652,42 +652,6 @@ pub fn error_context_debug_message(handle: i32, outptr: i32);
 #[side_effect(opaque)]
 pub fn error_context_drop(handle: i32);
 
-// --- Backpressure ---
-
-/// Increment the backpressure counter.
-#[canonical("wasi", "backpressure-inc")]
-#[storage(none)]
-#[side_effect(opaque)]
-pub fn backpressure_inc();
-
-/// Decrement the backpressure counter.
-#[canonical("wasi", "backpressure-dec")]
-#[storage(none)]
-#[side_effect(opaque)]
-pub fn backpressure_dec();
-
-// --- Context ---
-
-/// Get the value of a task-local context slot.
-#[canonical("wasi", "context-get")]
-#[storage(none)]
-#[side_effect(opaque)]
-pub fn context_get(slot: i32) -> i32;
-
-/// Set the value of a task-local context slot.
-#[canonical("wasi", "context-set")]
-#[storage(none)]
-#[side_effect(opaque)]
-pub fn context_set(slot: i32, value: i32);
-
-// --- Task ---
-
-/// Acknowledge cancellation of the current task.
-#[canonical("wasi", "task-cancel")]
-#[storage(none)]
-#[side_effect(opaque)]
-pub fn task_cancel();
-
 /// Calls stdout's write_via_stream indirectly (ambient, no effect required).
 /// Returns the subtask handle for the async operation.
 /// Internal only: used by core:rt for ambient logging (panic, assert).
@@ -705,6 +669,19 @@ pub fn call_indirect_stdout_write_via_stream(rx: i32) -> i32;
 #[storage(none)]
 #[side_effect(opaque, suspend)]
 pub fn call_indirect_stderr_write_via_stream(rx: i32) -> i32;
+
+/// Whether `call_indirect_stdout_write_via_stream` reaches stdout, rather than
+/// trapping in a component that imports no stdout.
+#[storage(none)]
+#[side_effect(none)]
+pub fn ambient_stdout_available() -> bool;
+
+/// Whether `call_indirect_stderr_write_via_stream` reaches stderr, rather than
+/// trapping in a component that imports no stderr.
+#[storage(none)]
+#[side_effect(none)]
+pub fn ambient_stderr_available() -> bool;
+
 /// Absolute value of f32
 /// Maps to Wasm f32.abs instruction
 #[storage(none)]

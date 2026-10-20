@@ -13,7 +13,8 @@ use crate::hashmap::{IndexMap, IndexSet};
 use crate::nir::{NirBinaryOp, NirUnaryOp};
 use crate::nir_arena::ExprId;
 use crate::primitive::PrimitiveType;
-use crate::tir::{TypeId, TypeTable};
+use crate::tir::TypeId;
+use crate::type_table::TypeTable;
 
 /// The constant a [`ValueKind`] denotes, as niri's
 /// [`crate::const_eval::Value`] — the one projection between the two, which
@@ -624,6 +625,10 @@ impl ValuePool {
     /// promotion). Idempotent; a later call overwrites.
     #[inline]
     pub fn set_type(&mut self, id: ValueId, type_id: TypeId) {
+        assert!(
+            type_id == TypeTable::UNIT || !matches!(self.values[id.0 as usize], ValueKind::Unit),
+            "a unit value is never retyped, here as {type_id:?}"
+        );
         self.types[id.0 as usize] = Some(type_id);
     }
 
@@ -1343,7 +1348,8 @@ impl ValuePool {
 mod tests {
     use super::*;
     use crate::nir::{NirBinaryOp, NirUnaryOp};
-    use crate::tir::{TypeId, TypeTable};
+    use crate::tir::TypeId;
+    use crate::type_table::TypeTable;
 
     // ---- Hash-cons dedup ----
 

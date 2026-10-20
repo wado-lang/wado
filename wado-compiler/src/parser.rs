@@ -3,19 +3,19 @@
 
 use crate::ast::{
     AssertStmt, AssignExpr, AssocTypeBound, AssociatedConst, AssociatedTypeBinding,
-    AssociatedTypeDecl, AstId, AstIdSpace, AttrArg, AttrEntry, AttrItem, AttrObject, AttrValue,
-    Attribute, BinaryExpr, BinaryOp, Block, BreakStmt, BuiltinTypeDecl, CallExpr, CastExpr,
-    ChainedComparison, ClosureExpr, ClosureParam, CmBoundary, CmImport, CmResourceLinearity,
-    ComparisonChainExpr, CompoundAssignExpr, CompoundAssignOp, Condition, ConditionElement,
-    ContinueStmt, EFFECT_HOLE, EffectHandlerBinding, EffectName, EffectsSource, EnumCase, EnumDecl,
-    ErrorExpr, ErrorItem, ErrorStmt, ExportTarget, Expr, ExprStmt, FieldAccessExpr, FlagsDecl,
-    FlagsVariant, ForOfStmt, ForStmt, FormatSpec, Function, FunctionType, GenericParam,
-    GenericType, GlobalDecl, HandleClasses, IdentExpr, IfExpr, IfStmt, ImplBlock, ImportAttributes,
-    IndexExpr, InnerAttribute, InterfaceDecl, Item, LabeledBlockExpr, LabeledBlockStmt, LetStmt,
-    Literal, LiteralExpr, LoopStmt, MatchArm, MatchExpr, MatchesExpr, MethodCallExpr, Module,
-    NamedType, NamespacedGenericType, Newtype, Param, PathSegment, Pattern, RangeExpr, RangeKind,
-    ResourceDecl, RestClause, RestClauseDecl, ReturnKeyword, ReturnStmt, SelfKind,
-    StaticMethodCallExpr, Stmt, StrLit, StructDecl, StructField, StructLiteralExpr,
+    AssociatedTypeDecl, AstId, AstIdSpace, AstVisitor, AttrArg, AttrEntry, AttrItem, AttrObject,
+    AttrValue, Attribute, BinaryExpr, BinaryOp, Block, BreakStmt, BuiltinTypeDecl, CallExpr,
+    CastExpr, ChainedComparison, ClosureExpr, ClosureParam, CmBoundary, CmImport,
+    CmResourceLinearity, ComparisonChainExpr, CompoundAssignExpr, CompoundAssignOp, Condition,
+    ConditionElement, ContinueStmt, EFFECT_HOLE, EffectHandlerBinding, EffectName, EffectsSource,
+    EnumCase, EnumDecl, ErrorExpr, ErrorItem, ErrorStmt, ExportTarget, Expr, ExprStmt,
+    FieldAccessExpr, FlagsDecl, FlagsVariant, ForOfStmt, ForStmt, FormatSpec, Function,
+    FunctionType, GenericParam, GenericType, GlobalDecl, HandleClasses, IdentExpr, IfExpr, IfStmt,
+    ImplBlock, ImportAttributes, IndexExpr, InnerAttribute, InterfaceDecl, Item, LabeledBlockExpr,
+    LabeledBlockStmt, LetStmt, Literal, LiteralExpr, LoopStmt, MatchArm, MatchExpr, MatchesExpr,
+    MethodCallExpr, Module, NamedType, NamespacedGenericType, Newtype, Param, PathSegment, Pattern,
+    RangeExpr, RangeKind, ResourceDecl, RestClause, RestClauseDecl, ReturnKeyword, ReturnStmt,
+    SelfKind, StaticMethodCallExpr, Stmt, StrLit, StructDecl, StructField, StructLiteralExpr,
     StructLiteralField, StructLiteralSpread, StructPatternField, TaggedTemplateExpr,
     TaskReturnStmt, TemplatePart, TemplateStringExpr, TestDecl, TraitBound, TraitDecl, TraitHead,
     TryOpExpr, TupleComprehensionExpr, TupleLiteralExpr, TupleTypeDecl, Type, UnaryExpr, UnaryOp,
@@ -27,7 +27,7 @@ use crate::comment::{Comment, TriviaMap};
 use crate::compiler_host::{Code, Diagnostic, DiagnosticSpan, Severity};
 use crate::escape::{quoted, unescape_string};
 use crate::lexer::{LexResult, WILDCARD, defaults_to_float, is_decimal_integer, lex_interpolation};
-use crate::name::contract_holder_name;
+use crate::name::{contract_holder_name, namespaced_name};
 use crate::syntax::statement_keyword_name_message;
 use crate::token::{Position, Span, TemplateTokenPart, Token, TokenKind, TokenKind as T};
 use crate::{ast, format_spec, hashmap};
@@ -1221,7 +1221,7 @@ impl Parser {
             let prefix = match &qualifier {
                 Type::Named(t) => t.name.clone(),
                 Type::Generic(g) => g.name.clone(),
-                Type::NamespacedGeneric(n) => format!("{}::{}", n.namespace, n.name),
+                Type::NamespacedGeneric(n) => namespaced_name(&n.namespace, &n.name),
                 _ => unreachable!("qualifier is always a named/generic path"),
             };
             let type_name = format!("{prefix}::{case_name}");
@@ -1504,9 +1504,8 @@ impl Parser {
         self.expect(&TokenKind::Colon)?;
         let ty = self.parse_type()?;
 
-        // Initializer (required)
         self.expect(&TokenKind::Eq)?;
-        let initializer = self.parse_expr()?;
+        let initializer = self.parse_detached_expr(DetachedPosition::GlobalInitializer)?;
 
         let end_span = self.peek().span;
         self.expect(&TokenKind::Semicolon)?;
@@ -2356,9 +2355,12 @@ impl Parser {
             let id = self.alloc_ast_id();
             self.advance();
             let condition = self.parse_expr_no_struct_literal()?;
+            self.reject_escaping_jump(&condition, DetachedPosition::Contract);
             let message = if self.check(&TokenKind::Comma) {
                 self.advance();
-                Some(self.parse_expr_no_struct_literal()?)
+                let message = self.parse_expr_no_struct_literal()?;
+                self.reject_escaping_jump(&message, DetachedPosition::Contract);
+                Some(message)
             } else {
                 None
             };
@@ -2374,6 +2376,29 @@ impl Parser {
             }));
         }
         Ok(clauses)
+    }
+
+    /// An expression `position` evaluates apart from the code around it.
+    fn parse_detached_expr(&mut self, position: DetachedPosition) -> ParseResult<Expr> {
+        let expr = self.parse_expr()?;
+        self.reject_escaping_jump(&expr, position);
+        Ok(expr)
+    }
+
+    /// Reports a jump in `expr` that would leave it. The expression is
+    /// evaluated where it is used, so such a jump would leave whatever code
+    /// surrounds that use: the caller, a loop around the call, or no function
+    /// at all.
+    fn reject_escaping_jump(&mut self, expr: &Expr, position: DetachedPosition) {
+        let mut finder = EscapingJump::default();
+        finder.visit_expr(expr);
+        if let Some((jump, span)) = finder.found {
+            let message = format!(
+                "`{jump}` cannot leave {}: it runs apart from the code around it",
+                position.noun()
+            );
+            self.errors.push(self.error_at_span(span, &message));
+        }
     }
 
     /// `(World::name, ns::World::name, …)` after `export`: the world exports
@@ -2539,7 +2564,7 @@ impl Parser {
 
         let default = if self.check(&TokenKind::Eq) {
             self.advance();
-            Some(self.parse_expr()?)
+            Some(self.parse_detached_expr(DetachedPosition::DefaultValue)?)
         } else {
             None
         };
@@ -5995,7 +6020,7 @@ impl Parser {
 
             let default = if self.check(&TokenKind::Eq) {
                 self.advance();
-                Some(self.parse_expr()?)
+                Some(self.parse_detached_expr(DetachedPosition::DefaultValue)?)
             } else {
                 None
             };
@@ -6439,7 +6464,8 @@ impl Parser {
                     self.expect(&TokenKind::Colon)?;
                     let const_ty = self.parse_type()?;
                     self.expect(&TokenKind::Eq)?;
-                    let const_value = self.parse_expr()?;
+                    let const_value =
+                        self.parse_detached_expr(DetachedPosition::AssociatedConst)?;
                     let end = self.expect(&TokenKind::Semicolon)?.span;
                     constants.push(AssociatedConst {
                         id: const_id,
@@ -7361,6 +7387,107 @@ fn serde_attr_advice(args: &[AttrArg]) -> String {
         );
     }
     advice
+}
+
+/// A position whose expression is evaluated apart from the code written
+/// around it. The diagnostic names it.
+#[derive(Debug, Clone, Copy)]
+enum DetachedPosition {
+    DefaultValue,
+    GlobalInitializer,
+    AssociatedConst,
+    Contract,
+}
+
+impl DetachedPosition {
+    fn noun(self) -> &'static str {
+        match self {
+            Self::DefaultValue => "a default value",
+            Self::GlobalInitializer => "a global initializer",
+            Self::AssociatedConst => "an associated constant",
+            Self::Contract => "a contract clause",
+        }
+    }
+}
+
+/// Finds the first jump that lands outside the expression walked. A closure
+/// is a function of its own, so the walk stops at one.
+#[derive(Default)]
+struct EscapingJump {
+    loops: usize,
+    labels: Vec<String>,
+    found: Option<(&'static str, Span)>,
+}
+
+impl EscapingJump {
+    fn in_loop(&mut self, body: &Block) {
+        self.loops += 1;
+        self.visit_block(body);
+        self.loops -= 1;
+    }
+
+    fn in_label(&mut self, label: &str, body: &Block) {
+        self.labels.push(label.to_string());
+        self.visit_block(body);
+        self.labels.pop();
+    }
+}
+
+impl AstVisitor for EscapingJump {
+    fn visit_stmt(&mut self, stmt: &Stmt) {
+        if self.found.is_some() {
+            return;
+        }
+        match stmt {
+            Stmt::Return(ret) => self.found = Some((ret.keyword.as_str(), ret.span)),
+            Stmt::TaskReturn(ret) => self.found = Some(("task return", ret.span)),
+            Stmt::Break(brk) => {
+                let lands_inside = match &brk.label {
+                    Some(label) => self.labels.contains(label),
+                    None => self.loops > 0,
+                };
+                if !lands_inside {
+                    self.found = Some(("break", brk.span));
+                }
+            }
+            Stmt::Continue(cont) if self.loops == 0 => self.found = Some(("continue", cont.span)),
+            Stmt::While(w) => {
+                self.visit_condition(&w.condition);
+                self.in_loop(&w.body);
+            }
+            Stmt::For(f) => {
+                if let Some(init) = &f.init {
+                    self.visit_stmt(init);
+                }
+                if let Some(cond) = &f.condition {
+                    self.visit_condition(cond);
+                }
+                if let Some(update) = &f.update {
+                    self.visit_expr(update);
+                }
+                self.in_loop(&f.body);
+            }
+            Stmt::ForOf(f) => {
+                self.visit_expr(&f.iterable);
+                self.in_loop(&f.body);
+            }
+            Stmt::Loop(l) => self.in_loop(&l.body),
+            Stmt::LabeledBlock(lb) => self.in_label(&lb.label, &lb.block),
+            _ => ast::walk_stmt(self, stmt),
+        }
+    }
+
+    fn visit_expr(&mut self, expr: &Expr) {
+        if self.found.is_some() {
+            return;
+        }
+        match expr {
+            Expr::Closure(_) => {}
+            Expr::TryOp(op) => self.found = Some(("?", op.span)),
+            Expr::LabeledBlock(lb) => self.in_label(&lb.label, &lb.block),
+            _ => ast::walk_expr(self, expr),
+        }
+    }
 }
 
 #[cfg(test)]

@@ -139,8 +139,7 @@ fn "array_bounds_elim_version_shifted_negative.wado/run"() with Stdout {
         b3: block {
             l4: loop {
                 break_if b3 c >= n_6;
-                index_9 = ob + c;
-                if @unlikely(((0 <= index_9) & (index_9 < 8)) == 0) {
+                if @unlikely(local.tee index_9(ob + c) >=u 8) {
                     cold_path;
                     "core:prelude/list.wado/core:prelude/list.wado/List<i32>^core:prelude/traits.wado/IndexAssign<i32>::index_assign$cold0$dae[self,value,$v1]"(index_9);
                     unreachable;

@@ -10,9 +10,10 @@ use crate::lower::plan::value_copy::last_use::RefTargets;
 use crate::lower::plan::value_copy::{copied_element_type_arg, copy_value_type_arg};
 use crate::tir::{
     BuiltinDeclarations, FunctionRef, LetStorage, ResolvedType, TirBlock, TirExpr, TirExprKind,
-    TirMatchArm, TirPattern, TirStmt, TirStmtKind, TirUnaryOp, TypeId, TypeTable,
+    TirMatchArm, TirPattern, TirStmt, TirStmtKind, TirUnaryOp, TypeId,
 };
 use crate::tir_visitor::TirRefVisitor;
+use crate::type_table::TypeTable;
 
 /// Every `TypeId` the fold may wrap in `$value_copy$T(...)`, and the element
 /// types of the element-copying builtin calls codegen routes through it.

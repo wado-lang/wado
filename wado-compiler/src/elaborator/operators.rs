@@ -5,10 +5,11 @@ use crate::compiler_host::CompilerHost;
 use crate::compiler_item::CompilerItem;
 use crate::elaborator::synth::ArgSource;
 use crate::hashmap::IndexMap;
-use crate::name::{FqTypeName, LocalMethodName, MethodName, Receiver, RefKind};
+use crate::name::{ARRAY_TYPE_NAME, FqTypeName, LocalMethodName, MethodName, Receiver, RefKind};
 use crate::primitive::PrimitiveType;
-use crate::tir::{FunctionRef, MonomorphInfo, ResolvedType, TemplateId, TypeId, TypeTable};
+use crate::tir::{FunctionRef, MonomorphInfo, ResolvedType, TemplateId, TypeId};
 use crate::token::Span;
+use crate::type_table::TypeTable;
 use crate::unparse::binary_op_str;
 
 use super::Elaborator;
@@ -1189,7 +1190,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         | ResolvedType::Flags { .. } => tt.base_type_name(base_type_id),
                         // `arr[i] = v` dispatches through `impl IndexAssign for Array<T>`,
                         // keyed by the base name "Array".
-                        ResolvedType::BuiltinArray(_) => TypeTable::ARRAY_TYPE_NAME.to_string(),
+                        ResolvedType::BuiltinArray(_) => ARRAY_TYPE_NAME.to_string(),
                         _ => String::new(),
                     }
                 };

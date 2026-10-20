@@ -5,7 +5,6 @@
 //! produces the same names.
 
 use { HashMap } from "core:collections";
-use { GALE_SEED } from "./hash_seed.wado";
 use { FOLLOW_MAX_DEPTH } from "./runtime/follow.wado";
 
 /// A token-kind set interned during parser codegen. Multi-element
@@ -54,9 +53,9 @@ impl TableRegistry {
     /// No table interned.
     pub fn new() -> TableRegistry {
         return TableRegistry {
-            kind_sets: HashMap::with_seed(GALE_SEED),
-            sync_sets: HashMap::with_seed(GALE_SEED),
-            follow_masks: HashMap::with_seed(GALE_SEED),
+            kind_sets: HashMap::new(),
+            sync_sets: HashMap::new(),
+            follow_masks: HashMap::new(),
             follow_mask_depths: [],
         };
     }

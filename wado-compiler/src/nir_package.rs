@@ -20,16 +20,18 @@ use crate::loader::{DEFAULT_PAGE_SIZE_LOG2, WasmAsset};
 use crate::lower::plan::value_copy::ValueCopyHelpers;
 use crate::module_source::ModuleSource;
 use crate::name::{
-    FunctionId, LocalMethodName, NarrowedParam, param_label, reshaped_name, retired_name,
+    DeclName, DeclPath, FunctionId, LocalMethodName, NarrowedParam, param_label, reshaped_name,
+    retired_name,
 };
 use crate::nir::{
     ClosureFunctor, FuncCell, FuncId, FuncRef, FunctionRef, NirEnum, NirFlags, NirFunction,
     NirGlobal, NirImport, NirStruct, NirTest, NirVariantDecl,
 };
 use crate::nir_arena::{Body, ExprKind, NodeRef};
-use crate::tir::{BuiltinDeclaration, BuiltinDeclarations, TypeId, TypeTable};
+use crate::tir::{BuiltinDeclaration, BuiltinDeclarations, TypeId};
+use crate::type_table::TypeTable;
 use crate::wir_build::component_plan::ComponentPlan;
-use crate::world_registry::{self, GENERATOR_HOST_INTERFACE, WorldRegistry};
+use crate::world_registry::{self, WorldInfo, WorldRegistry};
 
 // The optimizer visits functions on several threads, each holding its own
 // function mutably and reading the rest (WEP: Parallel Optimizer).
@@ -38,6 +40,77 @@ const _: () = {
     shared_across_threads::<NirFunction>();
     shared_across_threads::<TypeTable>();
 };
+
+/// A stdio stream the ambient `log_std{out,err}` path may write.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum AmbientStream {
+    Stdout,
+    Stderr,
+}
+
+impl AmbientStream {
+    pub const ALL: [Self; 2] = [Self::Stdout, Self::Stderr];
+
+    /// The `wasi:cli` interface the stream is.
+    pub fn interface_name(self) -> &'static str {
+        match self {
+            Self::Stdout => "Stdout",
+            Self::Stderr => "Stderr",
+        }
+    }
+
+    /// The operation that writes the stream: `Stdout::write_via_stream`.
+    pub fn write_operation(self) -> DeclPath {
+        DeclPath::method_of(&DeclName::new(self.interface_name()), "write_via_stream")
+    }
+
+    /// `core:builtin`'s `ambient_std{out,err}_available`.
+    pub fn availability_builtin(self) -> &'static str {
+        match self {
+            Self::Stdout => "ambient_stdout_available",
+            Self::Stderr => "ambient_stderr_available",
+        }
+    }
+
+    /// `core:builtin`'s `call_indirect_std{out,err}_write_via_stream`.
+    pub fn write_builtin(self) -> &'static str {
+        match self {
+            Self::Stdout => "call_indirect_stdout_write_via_stream",
+            Self::Stderr => "call_indirect_stderr_write_via_stream",
+        }
+    }
+
+    pub fn of_availability_builtin(name: &str) -> Option<Self> {
+        Self::ALL
+            .into_iter()
+            .find(|stream| stream.availability_builtin() == name)
+    }
+
+    pub fn of_write_builtin(name: &str) -> Option<Self> {
+        Self::ALL
+            .into_iter()
+            .find(|stream| stream.write_builtin() == name)
+    }
+}
+
+/// The stdio streams the ambient `log_std{out,err}` path writes: those the
+/// world provides, and in a sink-less world those the program imports anyway.
+/// Decided once, so the fold of `ambient_std{out,err}_available` and the import
+/// keep agreeing whatever optimization removes afterwards.
+#[derive(Debug, Clone, Copy)]
+pub struct AmbientStdio {
+    pub stdout: bool,
+    pub stderr: bool,
+}
+
+impl AmbientStdio {
+    pub fn writes(self, stream: AmbientStream) -> bool {
+        match stream {
+            AmbientStream::Stdout => self.stdout,
+            AmbientStream::Stderr => self.stderr,
+        }
+    }
+}
 
 /// A linked Wado package ready for WIR building and code generation.
 ///
@@ -118,6 +191,8 @@ pub struct NirPackage {
 
     /// Set of used WASI functions (e.g., "`Stdout::write_via_stream`")
     pub used_wasi_functions: IndexSet<String>,
+    /// Set by the first DCE; read it through [`Self::ambient_stdio`].
+    pub ambient_stdio: Option<AmbientStdio>,
     /// When true, strip debug name sections for smaller binary size (-Os)
     pub strip_names: bool,
     /// The `org.wado-lang.coverage` section payload, under `wado test --coverage`.
@@ -670,14 +745,19 @@ impl NirPackage {
         self.target_world == world_registry::TEST_WORLD
     }
 
-    /// Whether the target world provides an ambient sink for the given stdio
-    /// interface (`Stdout` / `Stderr`) used by the `log_*` (panic /
-    /// assert-diagnostic) path. True for the test world and any world importing
-    /// the interface; false for `--lib` and kiln, where the ambient path traps
-    /// silently instead of forcing the import. Each stream is gated on its own
+    /// Whether the target world provides an ambient sink for `stream`, which
+    /// the `log_*` (panic / assert-diagnostic) path writes. True for the test
+    /// world and any world importing the stream's interface; false for `--lib`
+    /// and kiln, where the ambient path writes only a stream the program
+    /// imports anyway ([`AmbientStdio`]). Each stream is gated on its own
     /// interface so a world importing only one is not mis-gated by the other.
-    pub fn provides_ambient_stdio_sink(&self, interface_name: &str) -> bool {
-        self.is_test_world() || self.world_imports_interface(interface_name)
+    pub fn provides_ambient_stdio_sink(&self, stream: AmbientStream) -> bool {
+        self.is_test_world() || self.world_imports_interface(stream.interface_name())
+    }
+
+    pub fn ambient_stdio(&self) -> AmbientStdio {
+        self.ambient_stdio
+            .expect("the first DCE decides the ambient streams")
     }
 
     /// Build the lookup of synthesized value-copy helpers, keyed by
@@ -720,7 +800,12 @@ impl NirPackage {
     /// Whether the target world is a kiln generator world (imports
     /// [`crate::world_registry::GENERATOR_HOST_INTERFACE`]).
     pub fn is_generator_world(&self) -> bool {
-        self.world_imports_interface(GENERATOR_HOST_INTERFACE)
+        self.generator_world().is_some()
+    }
+
+    /// The target world, when it is a kiln generator world.
+    pub fn generator_world(&self) -> Option<&WorldInfo> {
+        self.world_registry.generator_world(&self.target_world)
     }
 
     /// Look up a variant by `(module_source, name)`.

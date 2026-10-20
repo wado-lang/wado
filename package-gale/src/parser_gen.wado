@@ -53,7 +53,6 @@ use { is_nullable } from "./grammar_analysis.wado";
 use { RuleOverlap } from "./rule_overlap.wado";
 use { CallForm, CallStmt, CodeWriter, FnSpec, ParamSpec, wado } from "lib:wadopoet";
 use { HashMap } from "core:collections";
-use { GALE_SEED } from "./hash_seed.wado";
 use {
     PredictionNode,
     PredictionDispatch,
@@ -315,7 +314,7 @@ pub fn gen_parser(
 /// its caller, `CALL_FOLLOW_SETS` holding each distinct set once.
 /// `CALL_FOLLOW_ENDS[site]` says whether the caller may end there instead.
 fn gen_call_follow_tables(w: &mut CodeWriter, ctx: &EmitContext) {
-    let mut set_ids = HashMap::<String, i32>::with_seed(GALE_SEED);
+    let mut set_ids = HashMap::<String, i32>::new();
     let mut sets: List<String> = [];
     let mut index: List<String> = [];
     for let follow of &ctx.plan.recovery_sets().call_follow {

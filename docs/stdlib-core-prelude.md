@@ -1182,22 +1182,6 @@ Get the debug message from this error context.
 
 Drop the error context.
 
-### `pub resource Task`
-
-The current async task handle.
-
-Provides operations that apply to the currently executing async task.
-
-#### `fn cancel()`
-
-`#[cm("task-cancel")]`
-
-Acknowledge cancellation of the current task.
-
-Call this in response to a cancellation signal (e.g. after receiving
-`WaitEvent { code: 6 }` from `WaitableSet::wait`). Signals to the CM
-runtime that the task accepts being cancelled and will clean up.
-
 ## Types
 
 ### `pub type Waitable = i32`

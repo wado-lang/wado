@@ -21,8 +21,9 @@ use crate::nir_arena::{
 use crate::nir_value_graph::builder::{AliasSets, CallFacts, build};
 use crate::nir_value_graph::{HeapVersion, OpaqueSource, ValueId, ValueKind, builder};
 use crate::niri::CtfeBuiltinMap;
-use crate::tir::{ObjectTypes, ResolvedType, TypeId, TypeTable};
+use crate::tir::{ObjectTypes, ResolvedType, TypeId};
 use crate::token::Span;
+use crate::type_table::TypeTable;
 
 /// A live-pool representative per field read, plus the versions a placement
 /// needs: a representative's `heap_ver` proves its *uses* see one load, not
@@ -353,6 +354,9 @@ pub struct Engine<'a> {
     /// default) means "no callee is a panic". Set via
     /// [`Engine::set_panic_callee_ids`].
     panic_callee_ids: Option<&'a IndexSet<FuncId>>,
+    /// The callees that do nothing a trap would hide, supplied by
+    /// `condition_implication`. Set via [`Engine::set_quiet_callee_ids`].
+    quiet_callee_ids: Option<&'a IndexSet<FuncId>>,
     /// [`FuncId`]s of pure builtin intrinsics (`array_get_value`, `array_len`, …),
     /// supplied by a value-graph pass so the builder knows such a call writes no
     /// heap — the call node no longer carries a `FunctionRef` to classify by.
@@ -391,6 +395,7 @@ impl<'a> Engine<'a> {
             ctfe_builtins: None,
             vg_type_table: None,
             panic_callee_ids: None,
+            quiet_callee_ids: None,
             pure_builtin_callees: None,
             promoted_reads: OnceCell::new(),
         };
@@ -750,6 +755,18 @@ impl<'a> Engine<'a> {
     /// panic-block recognizer. See [`Engine::is_panic_callee`].
     pub fn set_panic_callee_ids(&mut self, ids: &'a IndexSet<FuncId>) {
         self.panic_callee_ids = Some(ids);
+    }
+
+    /// See [`Engine::is_quiet_callee`].
+    pub fn set_quiet_callee_ids(&mut self, ids: &'a IndexSet<FuncId>) {
+        self.quiet_callee_ids = Some(ids);
+    }
+
+    /// Whether a call to `func_id` either returns with nothing outside the
+    /// program observing it, or traps having reported nothing but a failed
+    /// contract. `false` when no set was supplied.
+    pub fn is_quiet_callee(&self, func_id: FuncId) -> bool {
+        self.quiet_callee_ids.is_some_and(|s| s.contains(&func_id))
     }
 
     /// Supply the pure-builtin callee ids so the value-graph build classifies a
@@ -1811,7 +1828,7 @@ mod tests {
     use crate::nir::NirBinaryOp;
     use crate::nir_arena::{BlockNode, ExprNode, StmtNode};
     use crate::primitive::PrimitiveType;
-    use crate::tir::TypeTable;
+    use crate::type_table::TypeTable;
     use Span;
     use std::assert_matches;
 

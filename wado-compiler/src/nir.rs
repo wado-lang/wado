@@ -19,8 +19,9 @@ use crate::name::{
     FunctionId, LocalMethodName, closure_call_method_info, closure_call_name, minted_name,
 };
 use crate::nir_arena::{Body, ExprBody, Tracked};
-use crate::tir::{self, DeclarationLookup, EffectRef, StructDef, TypeId, TypeTable};
+use crate::tir::{self, DeclarationLookup, EffectRef, StructDef, TypeId};
 use crate::token::Span;
+use crate::type_table::TypeTable;
 
 /// Canonical identity of a function entity. Minted in `lower` over the
 /// post-monomorphization function set and intrinsic to the entity — not its
@@ -78,16 +79,6 @@ impl FunctionRef {
     /// Get the module path (for backwards compatibility)
     pub fn module_path(&self) -> Vec<String> {
         self.module_source.to_path()
-    }
-
-    /// Get the fully qualified function name including module path.
-    pub fn full_name(&self) -> String {
-        if let Some(info) = &self.method_info {
-            info.to_mangled_name()
-        } else {
-            let path = self.module_source.to_path();
-            format!("{}/{}", path.join("/"), self.name)
-        }
     }
 
     pub fn intrinsic(&self) -> Option<&str> {
@@ -203,6 +194,19 @@ impl NirBinaryOp {
             Self::LtEq => Self::Gt,
             Self::Gt => Self::LtEq,
             Self::GtEq => Self::Lt,
+            _ => return None,
+        })
+    }
+
+    /// The comparison that answers the same with its operands swapped:
+    /// `a < b` is `b > a`. `None` for an op that is not one of the six.
+    pub fn converse(self) -> Option<Self> {
+        Some(match self {
+            Self::Eq | Self::NotEq => self,
+            Self::Lt => Self::Gt,
+            Self::LtEq => Self::GtEq,
+            Self::Gt => Self::Lt,
+            Self::GtEq => Self::LtEq,
             _ => return None,
         })
     }
@@ -801,6 +805,10 @@ pub enum FunctionKind {
     /// `type_id`. Calls to such functions may be elided when the argument is
     /// provably fresh.
     ValueCopy { type_id: TypeId },
+    /// `F$contract_report{k}`: reports a failed `contract` clause, then traps.
+    /// A contract asks only that a violation trap, so a check calling one may
+    /// move ahead of another (`condition_implication`).
+    ContractReport,
     /// Auto-derived `fn(..)^Inspect::inspect` dispatch stub. Its NIR body is
     /// `unreachable()`, a placeholder making the call resolvable;
     /// WIR build recognises the kind and supplies a `call_ref` through the

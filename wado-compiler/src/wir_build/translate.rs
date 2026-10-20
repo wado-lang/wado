@@ -9,7 +9,8 @@ use crate::module_source::ModuleSource;
 use crate::name::global_name;
 use crate::nir::{FuncId, NirBinaryOp, NirFunction, NirParam, NirUnaryOp};
 use crate::primitive::PrimitiveType;
-use crate::tir::{ResolvedType, TypeId, TypeTable};
+use crate::tir::{ResolvedType, TypeId};
+use crate::type_table::TypeTable;
 use crate::wir::{WirFunction, WirInstr, WirName, WirType, WirTypeDef, WirTypeId};
 
 use super::context::{SplitParam, WirContext};

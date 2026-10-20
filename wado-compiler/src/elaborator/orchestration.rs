@@ -25,7 +25,8 @@ use crate::coverage::{CoverageMap, CoverageScope};
 use crate::logger::{Bail, Logger, ModuleDiag};
 use crate::module_source::{ModuleSource, ModuleSourceInterner};
 use crate::symbol::SymbolTable;
-use crate::tir::{ResolvedType, TirModule, TypeId, TypeTable, positional_substitution};
+use crate::tir::{ResolvedType, TirModule, TypeId, positional_substitution};
+use crate::type_table::TypeTable;
 use crate::world_registry::WorldRegistry;
 
 use super::method_lookup::ImplParamSlots;
@@ -59,7 +60,7 @@ use crate::hashmap;
 use crate::kiln::InvocationIndex;
 use crate::name::{
     NEVER_TYPE_NAME, UNIT_TYPE_NAME, contract_holder_name, namespace_member_alias,
-    resolve_import_with_invocations,
+    resolve_import_with_invocations, split_namespace_member,
 };
 use crate::primitive::PrimitiveType;
 use crate::resolve::{Resolution, Resolutions, head_site};
@@ -2924,7 +2925,10 @@ impl<H: CompilerHost> AstVisitor for TypeNameCheck<'_, '_, '_, H> {
     fn visit_type(&mut self, ty: &Type) {
         match ty {
             Type::Named(named) => {
-                let name = named.name.as_str();
+                // A synthesized `ns$member` names the member, as the `ns::member`
+                // an author writes does.
+                let name = split_namespace_member(&named.name)
+                    .map_or(named.name.as_str(), |(_, member)| member);
                 if !matches!(name, UNIT_TYPE_NAME | NEVER_TYPE_NAME | "Self")
                     && !self.type_params.contains(&name)
                     && !self.known.contains(name)

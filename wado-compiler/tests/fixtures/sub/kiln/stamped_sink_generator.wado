@@ -1,0 +1,13 @@
+// A Kiln generator installing a sink that stamps each event with the wall
+// clock. `WallClock::now()` is `#[ambient]`, so no `use` here names the clock.
+
+use { Request, Response, Error } from "core:kiln";
+use { Log, TextSink, WallClock, info } from "core:log";
+
+export fn generate(req: Request) -> Result<Response, Error> {
+    let mut sink: TextSink<WallClock> = TextSink {};
+    with Log => &mut sink do {
+        info(`generating`, { path: req.primary.path });
+    }
+    return Result::Ok(Response { files: [] });
+}

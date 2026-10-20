@@ -22,9 +22,10 @@ use crate::flat_package::FlatPackage;
 use crate::hashmap::IndexSet;
 use crate::tir::{
     FunctionRef, ResolvedType, StructFields, TirExpr, TirExprKind, TirPattern, TirStmt,
-    TirStmtKind, TirUnaryOp, TypeId, TypeTable, struct_fields,
+    TirStmtKind, TirUnaryOp, TypeId, struct_fields,
 };
 use crate::tir_visitor::TirRefVisitor;
+use crate::type_table::TypeTable;
 
 /// `(owner, field)` pairs some reference may observe from outside the body that
 /// assigns them.

@@ -1,0 +1,10 @@
+// A negative index traps through the one unsigned compare its range check
+// fuses into, as it does through the signed pair.
+
+export fn run() {
+    let arr: List<i32> = [10, 20, 30];
+    let _ = arr[builtin::black_box(-1)];
+}
+
+__DATA__
+{"trapped": true}

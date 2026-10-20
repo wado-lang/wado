@@ -6,7 +6,6 @@
 use fs from "core:fs";
 use { Preopens } from "core:fs";
 use { HashMap } from "core:collections";
-use { GALE_SEED } from "./hash_seed.wado";
 
 
 /// The relative `.wado` paths a module's `use` items name, as written.
@@ -31,7 +30,7 @@ fn imported_paths(source: &String) -> List<String> {
 
 /// Each non-test module under `root` with the modules it imports.
 fn import_graph<S: AsStrSlice>(root: S) -> HashMap<String, List<String>> with Preopens {
-    let mut graph = HashMap::<String, List<String>>::with_seed(GALE_SEED);
+    let mut graph = HashMap::<String, List<String>>::new();
     for let entry of fs::walk_dir(root).unwrap() {
         let path = entry.unwrap().path;
         if !path.ends_with(".wado") || path.ends_with("_test.wado") {

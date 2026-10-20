@@ -22,9 +22,10 @@ use crate::tir;
 use crate::tir::{
     CallArg, FunctionKind, FunctionRef, InlineHint, ResolvedType, SynthTrait, SynthesisRequest,
     TirBinaryOp, TirExpr, TirExprKind, TirField, TirFunction, TirLocal, TirModule, TirParam,
-    TirStmt, TirStruct, TypeId, TypeTable,
+    TirStmt, TirStruct, TypeId,
 };
 use crate::token::Span;
+use crate::type_table::TypeTable;
 
 /// Snapshot of the `core:serde` symbol names this synthesiser needs, resolved
 /// once through the `CompilerItem` registry. Mirrors

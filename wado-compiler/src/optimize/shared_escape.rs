@@ -13,7 +13,8 @@ use crate::nir_arena::{
 };
 use crate::nir_package::NirPackage;
 use crate::parallel::lock;
-use crate::tir::{BuiltinDeclarations, DeclarationLookup, TypeTable};
+use crate::tir::{BuiltinDeclarations, DeclarationLookup};
+use crate::type_table::TypeTable;
 
 use super::arena_query::{bare_promoted_local, collect_pattern_bindings, holds_reference};
 

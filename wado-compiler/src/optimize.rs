@@ -56,6 +56,7 @@ mod store_load_forward;
 mod string_push;
 mod tmpl_hoist;
 mod tuple_projection;
+mod unsigned_range_check;
 mod value_copy;
 mod value_copy_demote;
 
@@ -67,9 +68,9 @@ use crate::hashmap::IndexSet;
 #[cfg(debug_assertions)]
 use crate::nir_arena::{ExprKind, NodeRef, PatKind, StmtKind};
 #[cfg(debug_assertions)]
-use crate::tir::TypeTable;
-#[cfg(debug_assertions)]
 use crate::trace::filter;
+#[cfg(debug_assertions)]
+use crate::type_table::TypeTable;
 
 use const_branch_prune::{prune_constant_branches, prune_template_block_wrappers};
 use const_folding::{fold_constants, fold_constants_all};
@@ -78,9 +79,9 @@ use container_sroa::scalarize_containers;
 use copy_prop::propagate_copies;
 use dae::eliminate_dead_arguments;
 use dce::{
-    Initializers, analyze_dce, filter_bytes_literals, filter_string_literals,
-    remove_unreachable_closure_functors, remove_unreachable_functions, remove_unreachable_globals,
-    remove_unreachable_types, unhoist_unobserved_globals,
+    Initializers, analyze_dce, drop_self_feeding_globals, filter_bytes_literals,
+    filter_string_literals, remove_unreachable_closure_functors, remove_unreachable_functions,
+    remove_unreachable_globals, remove_unreachable_types, unhoist_unobserved_globals,
 };
 use drve::eliminate_dead_return_values;
 use field_scalarize::scalarize_hot_fields;
@@ -345,6 +346,10 @@ pub fn optimize(
         run_pass("nir/loop_version_bce", &mut project, profiler, |p| {
             loop_version_bce::version_loops(p, &mut descriptors, &exec)
         });
+        // After every bounds-check eliminator, which read the signed halves.
+        run_pass("nir/unsigned_range_check", &mut project, profiler, |p| {
+            unsigned_range_check::fuse_unsigned_range_checks(p)
+        });
     }
 
     // Post-optimization rewrites: select lowering for branchless Wasm
@@ -410,6 +415,9 @@ fn run_dce(
         if unhoist_unobserved_globals(project, descriptors, &summaries) {
             // A rewritten body only lost work, so its real summary shrank, and
             // the stale table refuses deletions nothing has a reason to refuse.
+            summaries = summarize(project, exec).0;
+        }
+        if drop_self_feeding_globals(project, &summaries) {
             summaries = summarize(project, exec).0;
         }
         let analysis = analyze_dce(project, descriptors, exec);

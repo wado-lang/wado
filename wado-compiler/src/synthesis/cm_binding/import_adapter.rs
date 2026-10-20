@@ -11,8 +11,9 @@ use crate::module_source::{ModuleSource, ModuleSourceInterner};
 use crate::name::{LocalMethodName, cm_binding_func_name, cm_lift_func_name};
 use crate::tir::{
     CallArg, EffectRef, FunctionKind, FunctionRef, InlineHint, TirBinaryOp, TirBlock, TirExpr,
-    TirExprKind, TirFunction, TirLocal, TirParam, TirStmt, TirStructField, TypeId, TypeTable,
+    TirExprKind, TirFunction, TirLocal, TirParam, TirStmt, TirStructField, TypeId,
 };
+use crate::type_table::TypeTable;
 
 use crate::synthesis::common::{
     alloc_local, assign, binary, block, bool_lit, break_stmt, builtin_call, case_chain,

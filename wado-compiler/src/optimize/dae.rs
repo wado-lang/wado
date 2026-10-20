@@ -17,7 +17,7 @@ use super::arena_query;
 use super::gate::{FunctionGate, GatedPass};
 use crate::nir::FuncId;
 use crate::parallel::Executor;
-use crate::tir::TypeTable;
+use crate::type_table::TypeTable;
 
 /// A function's canonical [`FuncId`]: the candidate/confirmed/pinned sets key on
 /// it, and a call site is matched by the stamped `func_id` on its call node.

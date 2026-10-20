@@ -10,7 +10,8 @@ use crate::compiler_host::CompilerHost;
 use crate::compiler_item::CompilerItem;
 use crate::hashmap::IndexMap;
 use crate::name::FqTypeName;
-use crate::tir::{ResolvedType, TypeId, TypeTable, range_item};
+use crate::tir::{ResolvedType, TypeId, range_item};
+use crate::type_table::TypeTable;
 
 use super::Elaborator;
 use super::callee::CalleeRef;

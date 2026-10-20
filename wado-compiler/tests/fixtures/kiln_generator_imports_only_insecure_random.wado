@@ -1,0 +1,14 @@
+// The generator world imports only part of `wasi:random`, so a generator
+// naming the rest is refused at that name.
+
+use { hello } from "./sub/kiln/value.schema"
+    with {
+        generator: { module: "./sub/kiln/random_generator.wado" },
+    };
+
+test {
+    assert hello() == 7;
+}
+
+__DATA__
+{"compile_error": "random_generator.wado:5:7: error: kiln generator `entry module` imports `wasi:random`: the generator world does not import `Random`"}

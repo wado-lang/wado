@@ -12,13 +12,13 @@ use crate::attribute::{AMBIENT, BENIGN};
 use crate::hashmap::{IndexMap, IndexSet};
 
 use crate::module_source::ModuleSource;
-use crate::name::{DeclaredHead, FqTraitName, FqTypeName, TypeHead};
+use crate::name::{DeclaredHead, FqTraitName, FqTypeName, TypeHead, mangle_local_method};
 use crate::resolve::{Resolution, Resolutions};
 use crate::tir::{
-    EffectRef, EffectRows, FunctionRef, ResolvedType, RowFlow, TemplateId, TypeId, TypeSet,
-    TypeTable, solve_row,
+    EffectRef, EffectRows, FunctionRef, ResolvedType, RowFlow, TemplateId, TypeId, solve_row,
 };
 use crate::token::Span;
+use crate::type_table::{TypeSet, TypeTable};
 
 use crate::ast::{
     self, AstId, AstVisitor, Attribute, Block, CmImport, EffectHandlerBinding, Expr, Function,
@@ -1232,7 +1232,7 @@ fn check_impl_effect_conformance(
                 continue;
             }
             out.push(EffectError {
-                callee: format!("{}::{}", trait_name.base_name(), method.name),
+                callee: mangle_local_method(trait_name.base_name(), &method.name),
                 missing_effect: effect.name().to_string(),
                 fault: EffectFault::UndeclaredByTrait,
                 span: method.span,

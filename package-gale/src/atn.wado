@@ -45,7 +45,6 @@ use {
     ATN_TR_SET,
 } from "./runtime/atn.wado";
 use { HashMap } from "core:collections";
-use { GALE_SEED } from "./hash_seed.wado";
 
 // ATN state kinds and transition kinds are the wire-format protocol shared
 // with the decoder; they live in `runtime/atn.wado` (imported above) so there
@@ -267,7 +266,7 @@ pub fn build_atn_with(grammar: &Grammar, lowered: &LoweredGrammar, num_tokens: i
         b.rule_stop.push(stop);
     }
 
-    let mut rule_index = HashMap::<String, i32>::with_seed(GALE_SEED);
+    let mut rule_index = HashMap::<String, i32>::new();
     for let mut r = 0; r < nrules; r += 1 {
         rule_index[grammar.parser_rules[r].name] = r;
     }

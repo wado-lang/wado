@@ -1,0 +1,22 @@
+// A Kiln generator declaring types under the names `core:kiln` gives the
+// request adapter's own types.
+
+use { Request, Response, OutputFile, Error } from "core:kiln";
+
+struct InputFile { size: i32 }
+
+struct NoOptions { size: i32 }
+
+struct KilnLogSink { size: i32 }
+
+export fn generate(req: Request) -> Result<Response, Error> {
+    let sizes = [InputFile { size: 1 }.size, NoOptions { size: 2 }.size, KilnLogSink { size: 4 }.size];
+    let _ = req.primary.path;
+    return Result::Ok(Response {
+        files: [OutputFile {
+            path: "out.wado",
+            content: `pub fn total() -> i32 { return ${sizes.0 + sizes.1 + sizes.2}; }`,
+            is_entry: true,
+        }],
+    });
+}

@@ -17,8 +17,9 @@ use crate::nir_package::NirPackage;
 use crate::nir_value_graph::{OpaqueSource, ValueId, ValueKind};
 use crate::tir::{
     BuiltinDeclaration, BuiltinDeclarations, ObjectTypes, ResolvedType, RetainInto, RetainSpec,
-    ReturnConvention, TypeId, TypeKey, TypeTable,
+    ReturnConvention, TypeId,
 };
+use crate::type_table::{TypeKey, TypeTable};
 
 use super::arena_query::holds_reference;
 use super::body_memo::BodyMemo;

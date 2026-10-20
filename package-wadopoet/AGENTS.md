@@ -133,9 +133,10 @@ export fn run() with Stdout { println(parse("a b")); }`;
 The source is the whole program, in one module:
 
 - It exports `run()`, as any `wasi:cli/command` does.
-- Its `use` items may name `core:*` only. A relative path does not compile.
-- It gets stdout, stderr and exit, and nothing else: no arguments, stdin,
-  environment, files, clock or randomness.
+- Its `use` items may name the standard library (`core:*` and `wasi:*`) and
+  the calling package's `[dependencies]`. A relative path does not compile.
+- It can use stdout, stderr, exit, and `wasi:random/insecure` and
+  `insecure-seed`. Which other interfaces `eval` links is not decided yet.
 
 `eval` returns `Result<Output, EvalError>`. `Err` means the program never ran:
 

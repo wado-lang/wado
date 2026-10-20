@@ -190,8 +190,8 @@ mod tests {
     use crate::nir_engine::EngineBuffers;
     use crate::optimize::bounds::Proofs;
     use crate::optimize::mod_ref::FnEffect;
-    use crate::tir::TypeTable;
     use crate::token::Span;
+    use crate::type_table::TypeTable;
 
     /// `let x = 1;` at the root, with a promoted `Opaque(Local x)` interned in
     /// the pool. `extra_read` decides whether a statement still carries that

@@ -100,8 +100,12 @@ internal fn drop_cli_write_future(future: Future<Result<(), CliErrorCode>>) {
 /// Logs a message with newline to stdout (ambient, no effect required).
 /// Uses builtin::call_indirect_* to bypass the effect system — this is
 /// intentional for logging/debugging which must work without effects.
+/// A component with no stdout drops the message: logging is best-effort.
 #[ambient]
 pub fn log_stdout(message: String) {
+    if !builtin::ambient_stdout_available() {
+        return;
+    }
     let [rx, tx] = Stream::<u8>::new();
 
     let future_handle = builtin::call_indirect_stdout_write_via_stream(rx as i32);
@@ -112,8 +116,12 @@ pub fn log_stdout(message: String) {
 /// Logs a message with newline to stderr (ambient, no effect required).
 /// Uses builtin::call_indirect_* to bypass the effect system — this is
 /// intentional for logging/debugging which must work without effects.
+/// A component with no stderr drops the message: logging is best-effort.
 #[ambient]
 pub fn log_stderr(message: String) {
+    if !builtin::ambient_stderr_available() {
+        return;
+    }
     let [rx, tx] = Stream::<u8>::new();
 
     let future_handle = builtin::call_indirect_stderr_write_via_stream(rx as i32);

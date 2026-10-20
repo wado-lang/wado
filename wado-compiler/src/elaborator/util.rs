@@ -11,9 +11,10 @@ use crate::primitive::PrimitiveType;
 use crate::resolve::Resolutions;
 use crate::tir::{
     FloatBound, FloatBoundKind, InstancePattern, PatternLiteral, RangeBound, ResolvedType,
-    TirLiteralPattern, TypeId, TypeTable,
+    TirLiteralPattern, TypeId,
 };
 use crate::token::Span;
+use crate::type_table::TypeTable;
 
 /// Why the integer literal `repr` of `magnitude`, negated where `negated`, is no
 /// value of `target_type`. Every base checks the numeric range, annotated or cast.

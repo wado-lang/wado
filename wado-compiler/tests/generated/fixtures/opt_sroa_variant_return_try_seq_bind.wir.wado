@@ -108,13 +108,13 @@ type "functype//core:rt/panic" = fn(ref Array<u8>, i32);  // TypeId(31)
 
 type "functype//core:rt/cm_stream_write_raw_all_u8" = fn(i32, ref Array<u8>, i32, i32) -> "core:prelude/types.wado//enum:CopyResult";  // TypeId(32)
 
-type "functype//core:prelude/list.wado/core:prelude/list.wado/List<core:prelude/string.wado/String>^core:prelude/traits.wado/IndexValue<i32>::index_value$contract_report0" = fn(i32, i32, ref Array<u8>, i32);  // TypeId(33)
+type "functype//core:prelude/list.wado/core:prelude/list.wado/List<core:prelude/string.wado/String>^core:prelude/traits.wado/IndexValue<i32>::index_value$contract_report0" = fn(i32, i32, ref "core:prelude/string.wado//String");  // TypeId(33)
 
-type "functype//core:prelude/traits.wado/core/prelude/traits.wado/inspect_variant_payload<i32>$sroa[payload.value]" = fn(i32, ref "core:prelude/format.wado//Formatter");  // TypeId(34)
+type "functype//core:prelude/types.wado/$case_extract$core:prelude/types.wado/Result<i32,opt_sroa_variant_return_try_seq_bind.wado/StepErr>$opt_sroa_variant_return_try_seq_bind.wado/StepErr$sroa[v.value]" = fn(ref "core:prelude/types.wado//Result<i32,opt_sroa_variant_return_try_seq_bind.wado/StepErr>", i32) -> ref "opt_sroa_variant_return_try_seq_bind.wado//StepErr";  // TypeId(34)
 
-type "functype//core:prelude/types.wado/$case_extract$core:prelude/types.wado/Result<i32,opt_sroa_variant_return_try_seq_bind.wado/StepErr>$opt_sroa_variant_return_try_seq_bind.wado/StepErr$sroa[v.value]" = fn(ref "core:prelude/types.wado//Result<i32,opt_sroa_variant_return_try_seq_bind.wado/StepErr>", i32) -> ref "opt_sroa_variant_return_try_seq_bind.wado//StepErr";  // TypeId(35)
+type "functype//core:prelude/types.wado/$case_extract$core:prelude/types.wado/Result<i32,opt_sroa_variant_return_try_seq_bind.wado/StepErr>$i32$sroa[v.value]" = fn(ref "core:prelude/types.wado//Result<i32,opt_sroa_variant_return_try_seq_bind.wado/StepErr>", i32) -> i32;  // TypeId(35)
 
-type "functype//core:prelude/types.wado/$case_extract$core:prelude/types.wado/Result<i32,opt_sroa_variant_return_try_seq_bind.wado/StepErr>$i32$sroa[v.value]" = fn(ref "core:prelude/types.wado//Result<i32,opt_sroa_variant_return_try_seq_bind.wado/StepErr>", i32) -> i32;  // TypeId(36)
+type "functype//core:prelude/traits.wado/core/prelude/traits.wado/inspect_variant_payload<i32>$sroa[payload.value]" = fn(i32, ref "core:prelude/format.wado//Formatter");  // TypeId(36)
 
 type "functype//core:prelude/traits.wado/core/prelude/traits.wado/inspect_variant_payload<opt_sroa_variant_return_try_seq_bind.wado/StepErr>$sroa[payload.value]" = fn(ref "opt_sroa_variant_return_try_seq_bind.wado//StepErr", ref "core:prelude/format.wado//Formatter");  // TypeId(37)
 
@@ -421,9 +421,7 @@ condition: ok matches { Ok(6) }
 }
 
 fn "opt_sroa_variant_return_try_seq_bind.wado/opt_sroa_variant_return_try_seq_bind.wado/Cursor::step$cold0$sroa[self.pos]"(self, $v1) {
-    let $mv_field_3: ref Array<u8>;
-    $mv_field_3 = array.new_data<u8>("opt_sroa_variant_return_try_seq_bind.wado:43");
-    "core:prelude/list.wado/core:prelude/list.wado/List<core:prelude/string.wado/String>^core:prelude/traits.wado/IndexValue<i32>::index_value$contract_report0"(self, $v1, $mv_field_3, 44);
+    "core:prelude/list.wado/core:prelude/list.wado/List<core:prelude/string.wado/String>^core:prelude/traits.wado/IndexValue<i32>::index_value$contract_report0"(self, $v1, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("opt_sroa_variant_return_try_seq_bind.wado:43"), used: 44 });
     unreachable;
 }
 
@@ -585,13 +583,13 @@ fn "core:rt/cm_stream_write_raw_all_u8"(handle, $mv$data$repr, $mv$data$start, $
     };
 }
 
-fn "core:prelude/list.wado/core:prelude/list.wado/List<core:prelude/string.wado/String>^core:prelude/traits.wado/IndexValue<i32>::index_value$contract_report0"(index, $v1, $mv$$site$repr, $mv$$site$used) {
+fn "core:prelude/list.wado/core:prelude/list.wado/List<core:prelude/string.wado/String>^core:prelude/traits.wado/IndexValue<i32>::index_value$contract_report0"(index, $v1, $site) {
     let $load_2: ref Array<u8>;
     let $local_6: ref "core:prelude/string.wado//String";
     let new_used_14: i32;
     let start_15: i32;
+    let start_33: i32;
     let x_58: i64;
-    let $sroa_$f_buf_123: ref "core:prelude/string.wado//String";
     $local_6 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(144), used: 0 };
     if @unlikely(local.tee new_used_14(0 + 40) > builtin::array_len($local_6.repr)) {
         cold_path;
@@ -604,45 +602,68 @@ fn "core:prelude/list.wado/core:prelude/list.wado/List<core:prelude/string.wado/
     builtin::array_copy<u8>($load_2, new_used_14, global:core:prelude/list.wado::$const_obj_48, 0, 17);
     start_15 = start_15 + 29;
     builtin::array_copy<u8>($load_2, start_15, global:core:prelude/list.wado::$const_obj_47, 0, 11);
-    if @unlikely(local.tee start_15($local_6.used + (43 + $mv$$site$used)) > builtin::array_len($load_2)) {
+    start_15 = $site.used;
+    if @unlikely(local.tee new_used_14($local_6.used + (43 + start_15)) > builtin::array_len($load_2)) {
         cold_path;
-        "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_6, start_15);
+        "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_6, new_used_14);
     }
-    new_used_14 = $local_6.used;
-    $local_6.used = start_15;
-    builtin::array_copy<u8>(local.tee $load_2($local_6.repr), new_used_14, $mv$$site$repr, 0, $mv$$site$used);
-    start_15 = new_used_14 + $mv$$site$used;
-    builtin::array_copy<u8>($load_2, start_15, global:core:prelude/list.wado::$const_obj_46, 0, 36);
-    $mv$$site$used = new_used_14 + (36 + $mv$$site$used);
-    builtin::array_copy<u8>($load_2, $mv$$site$used, global:core:prelude/list.wado::$const_obj_45, 0, 7);
-    $sroa_$f_buf_123 = $local_6;
-    $mv$$site$used = index < 0;
+    start_33 = $local_6.used;
+    $local_6.used = new_used_14;
+    builtin::array_copy<u8>(local.tee $load_2($local_6.repr), start_33, $site.repr, 0, start_15);
+    new_used_14 = start_33 + start_15;
+    builtin::array_copy<u8>($load_2, new_used_14, global:core:prelude/list.wado::$const_obj_46, 0, 36);
+    start_15 = start_33 + (36 + start_15);
+    builtin::array_copy<u8>($load_2, start_15, global:core:prelude/list.wado::$const_obj_45, 0, 7);
+    $site = $local_6;
+    start_15 = index < 0;
     index = "core:prelude/primitive.wado/count_digits_u64"(local.tee x_58(x_58 = builtin::i64_extend_i32_s(index); select i64(x_58 < 0_i64, 0_i64 - x_58, x_58)));
-    $mv$$site$used = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$sroa[self.buf]$dae[alt_prefix]"($sroa_$f_buf_123, $mv$$site$used, index);
-    "core:prelude/primitive.wado/write_decimal_digits"($sroa_$f_buf_123.repr, $mv$$site$used, x_58, index);
+    start_15 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$sroa[self.buf]$dae[alt_prefix]"($site, start_15, index);
+    "core:prelude/primitive.wado/write_decimal_digits"($site.repr, start_15, x_58, index);
     if @unlikely(local.tee index($local_6.used + 13) > builtin::array_len($local_6.repr)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_6, index);
     }
-    $mv$$site$used = $local_6.used;
+    start_15 = $local_6.used;
     $local_6.used = index;
-    builtin::array_copy<u8>(local.tee $load_2($local_6.repr), $mv$$site$used, global:core:prelude/list.wado::$const_obj_42, 0, 1);
-    $mv$$site$used = $mv$$site$used + 1;
-    builtin::array_copy<u8>($load_2, $mv$$site$used, global:core:prelude/list.wado::$const_obj_43, 0, 12);
-    $sroa_$f_buf_123 = $local_6;
-    $mv$$site$used = $v1 < 0;
+    builtin::array_copy<u8>(local.tee $load_2($local_6.repr), start_15, global:core:prelude/list.wado::$const_obj_42, 0, 1);
+    start_15 = start_15 + 1;
+    builtin::array_copy<u8>($load_2, start_15, global:core:prelude/list.wado::$const_obj_43, 0, 12);
+    $site = $local_6;
+    start_15 = $v1 < 0;
     $v1 = "core:prelude/primitive.wado/count_digits_u64"(local.tee x_58(x_58 = builtin::i64_extend_i32_s($v1); select i64(x_58 < 0_i64, 0_i64 - x_58, x_58)));
-    $mv$$site$used = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$sroa[self.buf]$dae[alt_prefix]"($sroa_$f_buf_123, $mv$$site$used, $v1);
-    "core:prelude/primitive.wado/write_decimal_digits"($sroa_$f_buf_123.repr, $mv$$site$used, x_58, $v1);
+    start_15 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$sroa[self.buf]$dae[alt_prefix]"($site, start_15, $v1);
+    "core:prelude/primitive.wado/write_decimal_digits"($site.repr, start_15, x_58, $v1);
     if @unlikely(local.tee $v1($local_6.used + 1) > builtin::array_len($local_6.repr)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_6, $v1);
     }
-    $mv$$site$used = $local_6.used;
+    start_15 = $local_6.used;
     $local_6.used = $v1;
-    builtin::array_copy<u8>($local_6.repr, $mv$$site$used, global:core:prelude/list.wado::$const_obj_42, 0, 1);
+    builtin::array_copy<u8>($local_6.repr, start_15, global:core:prelude/list.wado::$const_obj_42, 0, 1);
     "core:rt/panic"($local_6.repr, $local_6.used);
     unreachable;
+}
+
+fn "core:prelude/types.wado/$case_extract$core:prelude/types.wado/Result<i32,opt_sroa_variant_return_try_seq_bind.wado/StepErr>$opt_sroa_variant_return_try_seq_bind.wado/StepErr$sroa[v.value]"(v, index) {
+    if @unlikely(v.discriminant != index) {
+        unreachable;
+    }
+    return (if @likely(index == 1) -> ref "opt_sroa_variant_return_try_seq_bind.wado//StepErr" {
+        ref.cast "core:prelude/types.wado//Result<i32,opt_sroa_variant_return_try_seq_bind.wado/StepErr>::Err"(v).payload_0;
+    } else {
+        unreachable;
+    });
+}
+
+fn "core:prelude/types.wado/$case_extract$core:prelude/types.wado/Result<i32,opt_sroa_variant_return_try_seq_bind.wado/StepErr>$i32$sroa[v.value]"(v, index) {
+    if @unlikely(v.discriminant != index) {
+        unreachable;
+    }
+    return (if @likely(index == 0) -> i32 {
+        ref.cast "core:prelude/types.wado//Result<i32,opt_sroa_variant_return_try_seq_bind.wado/StepErr>::Ok"(v).payload_0;
+    } else {
+        unreachable;
+    });
 }
 
 fn "core:prelude/traits.wado/core/prelude/traits.wado/inspect_variant_payload<i32>$sroa[payload.value]"(payload, f) {
@@ -671,9 +692,9 @@ fn "core:prelude/traits.wado/core/prelude/traits.wado/inspect_variant_payload<i3
         new_used_16 = 0;
         start_17 = f.indent;
         self_4 = f.buf;
-        b56: block {
-            l57: loop {
-                break_if b56 new_used_16 >= start_17;
+        b60: block {
+            l61: loop {
+                break_if b60 new_used_16 >= start_17;
                 if @unlikely(local.tee new_used_36(self_4.used + 2) > builtin::array_len(self_4.repr)) {
                     cold_path;
                     "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self_4, new_used_36);
@@ -682,7 +703,7 @@ fn "core:prelude/traits.wado/core/prelude/traits.wado/inspect_variant_payload<i3
                 self_4.used = new_used_36;
                 builtin::array_copy<u8>(self_4.repr, start_37, global:core:prelude/traits.wado::$const_obj_59, 0, 2);
                 new_used_16 = new_used_16 + 1;
-                continue l57;
+                continue l61;
             };
         };
         start_17 = payload < 0;
@@ -710,9 +731,9 @@ fn "core:prelude/traits.wado/core/prelude/traits.wado/inspect_variant_payload<i3
         new_used_16 = 0;
         start_17 = f.indent;
         self_4 = f.buf;
-        b62: block {
-            l63: loop {
-                break_if b62 new_used_16 >= start_17;
+        b66: block {
+            l67: loop {
+                break_if b66 new_used_16 >= start_17;
                 if @unlikely(local.tee start_37(self_4.used + 2) > builtin::array_len(self_4.repr)) {
                     cold_path;
                     "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self_4, start_37);
@@ -721,7 +742,7 @@ fn "core:prelude/traits.wado/core/prelude/traits.wado/inspect_variant_payload<i3
                 self_4.used = start_37;
                 builtin::array_copy<u8>(self_4.repr, new_used_36, global:core:prelude/traits.wado::$const_obj_59, 0, 2);
                 new_used_16 = new_used_16 + 1;
-                continue l63;
+                continue l67;
             };
         };
         if @unlikely(local.tee start_17(local.tee self_4(f.buf).used + 1) > builtin::array_len(self_4.repr)) {
@@ -754,28 +775,6 @@ fn "core:prelude/traits.wado/core/prelude/traits.wado/inspect_variant_payload<i3
     start_17 = self_4.used;
     self_4.used = payload;
     builtin::array_copy<u8>(self_4.repr, start_17, global:core:prelude/traits.wado::$const_obj_55, 0, 1);
-}
-
-fn "core:prelude/types.wado/$case_extract$core:prelude/types.wado/Result<i32,opt_sroa_variant_return_try_seq_bind.wado/StepErr>$opt_sroa_variant_return_try_seq_bind.wado/StepErr$sroa[v.value]"(v, index) {
-    if @unlikely(v.discriminant != index) {
-        unreachable;
-    }
-    return (if @likely(index == 1) -> ref "opt_sroa_variant_return_try_seq_bind.wado//StepErr" {
-        ref.cast "core:prelude/types.wado//Result<i32,opt_sroa_variant_return_try_seq_bind.wado/StepErr>::Err"(v).payload_0;
-    } else {
-        unreachable;
-    });
-}
-
-fn "core:prelude/types.wado/$case_extract$core:prelude/types.wado/Result<i32,opt_sroa_variant_return_try_seq_bind.wado/StepErr>$i32$sroa[v.value]"(v, index) {
-    if @unlikely(v.discriminant != index) {
-        unreachable;
-    }
-    return (if @likely(index == 0) -> i32 {
-        ref.cast "core:prelude/types.wado//Result<i32,opt_sroa_variant_return_try_seq_bind.wado/StepErr>::Ok"(v).payload_0;
-    } else {
-        unreachable;
-    });
 }
 
 fn "core:prelude/traits.wado/core/prelude/traits.wado/inspect_variant_payload<opt_sroa_variant_return_try_seq_bind.wado/StepErr>$sroa[payload.value]"(payload, f) {
@@ -959,7 +958,7 @@ fn "opt_sroa_variant_return_try_seq_bind.wado/opt_sroa_variant_return_try_seq_bi
     if local.tee $load_0(self.pos) >= local.tee $load_2(local.tee $load_1(self.data).used) {
         return 0, ref.null none, ref.null none;
     }
-    if @unlikely(((0 <= $load_0) & ($load_0 < $load_2)) == 0) {
+    if @unlikely($load_0 >=u $load_2) {
         cold_path;
         "opt_sroa_variant_return_try_seq_bind.wado/opt_sroa_variant_return_try_seq_bind.wado/Cursor::step$cold0$sroa[self.pos]"($load_0, $load_2);
         unreachable;

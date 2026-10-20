@@ -8,8 +8,9 @@ use crate::nir::{FuncId, NirBinaryOp, NirUnaryOp};
 use crate::nir_arena::{ArmData, Body, ExprId, ExprKind, Operand, StmtId, StmtKind};
 use crate::nir_engine::{Engine, Rule};
 use crate::nir_value_graph::ValueKind;
-use crate::tir::{TypeId, TypeTable};
+use crate::tir::TypeId;
 use crate::token::Span;
+use crate::type_table::TypeTable;
 
 use super::match_to_switch::{ArmSpan, arm_body_block, arm_spans, scrutinee_bits};
 use super::select_lowering::select_call;

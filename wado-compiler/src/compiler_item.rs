@@ -1226,12 +1226,13 @@ impl CompilerItem {
         Self::ALL.iter().copied().find(|i| i.attr_name() == name)
     }
 
-    /// Whether the registry must hold this item for `world` to compile. A
+    /// Whether the registry must hold this item for the target world to
+    /// compile, given whether that world is a Kiln generator world. A
     /// `core::prelude` item always is; one from a world the user did not opt
     /// into is required only once that module is loaded, which keeps the
     /// validator from failing a CLI build that pulls in neither kiln nor serde.
     /// The scan runs after `annotate_modules`, ahead of any synthesis call.
-    pub fn is_required(self, world: &str) -> bool {
+    pub fn is_required(self, generator_world: bool) -> bool {
         match self {
             // Always loaded — `core:prelude` is auto-imported, and `core:rt`
             // carries the CM ABI helpers the binding synthesis calls.
@@ -1423,7 +1424,7 @@ impl CompilerItem {
             | Self::Iterator
             | Self::IntoIterator => true,
             // Kiln generator world only.
-            Self::KilnRequest | Self::KilnNoOptions => world == "core:kiln/generator",
+            Self::KilnRequest | Self::KilnNoOptions => generator_world,
             // Loaded only when the user imports `core:collections`.
             Self::TreeMap
             | Self::MapEntriesIter
@@ -2327,7 +2328,7 @@ impl CompilerItems {
 
     /// The node that declares `item`'s type, whatever kind of declaration it
     /// is. This is how a consumer holding only the item reaches an identity —
-    /// [`crate::tir::TypeTable::compiler_item_def`] resolves it — so no stdlib
+    /// [`crate::type_table::TypeTable::compiler_item_def`] resolves it — so no stdlib
     /// type has to be reached for by spelling its name.
     pub fn decl(&self, item: CompilerItem) -> Option<AstId> {
         self.get(item)?.decl()
@@ -2560,16 +2561,16 @@ impl CompilerItems {
         self.require_enum_case(item).3
     }
 
-    /// List every required-but-missing [`CompilerItem`] for the given
-    /// `world`. The elaborator calls this after `annotate_modules` so an
-    /// unregistered prelude item (or world-specific item for the
-    /// active world) fails the compile with a clear diagnostic
-    /// instead of an ICE deep inside synthesis.
-    pub fn missing_required(&self, world: &str) -> Vec<CompilerItem> {
+    /// List every required-but-missing [`CompilerItem`] for the target world,
+    /// as [`CompilerItem::is_required`] scopes them. The elaborator calls this
+    /// after `annotate_modules` so an unregistered prelude item (or
+    /// world-specific item for the active world) fails the compile with a
+    /// clear diagnostic instead of an ICE deep inside synthesis.
+    pub fn missing_required(&self, generator_world: bool) -> Vec<CompilerItem> {
         CompilerItem::ALL
             .iter()
             .copied()
-            .filter(|item| item.is_required(world) && self.get(*item).is_none())
+            .filter(|item| item.is_required(generator_world) && self.get(*item).is_none())
             .collect()
     }
 }
@@ -2947,8 +2948,8 @@ mod tests {
     #[test]
     fn missing_required_scopes_by_world() {
         let reg = CompilerItems::new();
-        let cli_missing = reg.missing_required("core:cli/command");
-        let kiln_missing = reg.missing_required("core:kiln/generator");
+        let cli_missing = reg.missing_required(false);
+        let kiln_missing = reg.missing_required(true);
         assert!(
             !cli_missing.contains(&CompilerItem::KilnRequest),
             "KilnRequest is kiln-specific and must not be required in CLI builds",

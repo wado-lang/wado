@@ -792,8 +792,8 @@ mod tests {
         registry.extend_source_interfaces(b.source_interfaces.clone());
         assert_eq!(b.interface_fqs, vec![catalog_fq.clone()]);
         // cm-catalog performs no I/O, so the ambient panic path imports nothing
-        // (`log_stderr` rides an existing stderr import or traps — see
-        // `provides_ambient_stdio_sink`). Its one host-leaf import is
+        // (`log_stderr` rides an existing stderr import or drops its message —
+        // see `AmbientStdio`). Its one host-leaf import is
         // `wasi:cli/types`, the shared error-code the future/stream results of
         // its async exports carry — a genuine capability of the async surface,
         // not an ambient effect.

@@ -21,8 +21,9 @@ use crate::niri::{
     materializing_globals, region_queries,
 };
 use crate::parallel::Executor;
-use crate::tir::{TypeId, TypeTable};
+use crate::tir::TypeId;
 use crate::token::Span;
+use crate::type_table::TypeTable;
 
 /// A single optimizer remark: a residual cost with its source span.
 pub struct Remark {

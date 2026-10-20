@@ -1,0 +1,11 @@
+// A global initializer has no function to return from.
+global G: i32 = pick: { if builtin::black_box(true) { return 7; } 1 };
+
+export fn run() {
+    let _ = G;
+}
+
+__DATA__
+{
+  "compile_error": ":2:55: parse error: `return` cannot leave a global initializer: it runs apart from the code around it"
+}

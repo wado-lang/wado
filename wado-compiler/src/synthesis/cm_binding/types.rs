@@ -16,8 +16,9 @@ use crate::primitive::PrimitiveType;
 use crate::stdlib::is_wit_core_module;
 use crate::tir::{
     ResolvedType, TemplateId, TirBinaryOp, TirExpr, TirExprKind, TirModule, TirParam, TirStruct,
-    TirVariantDecl, TypeId, TypeTable,
+    TirVariantDecl, TypeId,
 };
+use crate::type_table::TypeTable;
 
 use crate::component_model::map_key_rejection;
 use crate::component_model::{future_payload_rejection, stream_payload_rejection};
@@ -153,7 +154,7 @@ impl LiftContext<'_> {
     }
 
     /// The declaration behind a CM named type — see
-    /// [`crate::tir::TypeTable::cm_decl_in`] for why the WIT boundary resolves
+    /// [`TypeTable::cm_decl_in`] for why the WIT boundary resolves
     /// a name rather than following a reference site.
     pub(super) fn cm_decl(&self, source: &str, name: &str) -> DefId {
         self.cm_decl_at(&self.type_table.borrow(), source, name)
@@ -464,15 +465,6 @@ fn held_type(
     }
 }
 
-/// The namespace and package a CM source names: `"wasi:filesystem/types@0.3.0"`
-/// → `(Wasi, "filesystem")`. A package is unique only inside its namespace, so
-/// the two answer together. `None` outside the bundled namespaces.
-pub(super) fn cm_package_from_source(source: &str) -> Option<(CmNamespace, &str)> {
-    let (namespace, rest) = CmNamespace::split_specifier(source)?;
-    let without_version = rest.split('@').next().unwrap_or(rest);
-    Some((namespace, without_version.split('/').next()?))
-}
-
 /// Given a bare type name, ask the registry for its canonical owner and return
 /// the namespace and package that own it (e.g. `(Wasi, "filesystem")`). Used to
 /// disambiguate name lookups for types whose canonical owner differs from the
@@ -484,7 +476,7 @@ pub(super) fn canonical_cm_package<'a>(
 ) -> Option<(CmNamespace, &'a str)> {
     for kind in CmTypeKind::ALL {
         if let Some(source) = registry.bare_name_owner(kind, name)
-            && let Some(found) = cm_package_from_source(source)
+            && let Some(found) = CmNamespace::split_package(source)
         {
             return Some(found);
         }
@@ -1486,18 +1478,6 @@ pub(super) fn export_needs_param_lifting(
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    /// The scope a record's stream-read lift reads nested field names under.
-    #[test]
-    fn a_cm_package_comes_from_the_source_in_every_bundled_namespace() {
-        assert_eq!(
-            cm_package_from_source("wasi:filesystem/types@0.3.0"),
-            Some((CmNamespace::Wasi, "filesystem"))
-        );
-        // `core:` is not a `CmNamespace`; the kiln lookups own those.
-        assert_eq!(cm_package_from_source("core:kiln/types@0.1.0"), None);
-        assert_eq!(cm_package_from_source("my:pkg/iface"), None);
-    }
 
     #[test]
     fn a_cm_interface_module_carries_the_namespace_that_owns_it() {

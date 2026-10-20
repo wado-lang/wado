@@ -98,8 +98,10 @@ wado compile -o file.wat file.wado     # generate WAT
 wado compile --wat-to-stdout file.wado # output WAT to stdout
 ```
 
-Optimization levels: `-O0` (none), `-O1` (development), `-O2` (production,
-default), `-O3` (aggressive), `-Os` (`-O2` + strip symbols).
+Optimization levels: `-O0` (none), `-O1` (development; the default of `run`
+and `serve`), `-O2` (production; the default elsewhere), `-O3` (aggressive),
+`-Os` (`-O2` + strip symbols). Below `-O2`, a call marked `unchecked` has its
+contract checked, so pass `-O2` to measure what ships.
 
 To inspect invalid Wasm when debugging codegen bugs, skip validation:
 

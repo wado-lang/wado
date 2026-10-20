@@ -1,0 +1,16 @@
+// `xs[i + 1]` passing with `i = i32::MAX` would be a wrapped `i32::MIN`, which
+// the lower half rejects, so nothing it proves may excuse `xs[i]`'s check.
+// Here `xs[i]` traps at `i = -1` after `xs[i + 1]` passed at `0`.
+
+#[inline(never)]
+fn pair(xs: &List<i32>, i: i32) -> i32 {
+    return xs[i + 1] + xs[i];
+}
+
+export fn run() {
+    let xs: List<i32> = builtin::black_box([1, 2, 3]);
+    let _ = pair(&xs, builtin::black_box(-1));
+}
+
+__DATA__
+{"trapped": true}

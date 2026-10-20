@@ -22,8 +22,9 @@ use crate::nir::{FuncId, NirBinaryOp, NirLiteralPattern, NirLocal, NirUnaryOp};
 use crate::nir_value_graph::builder::ValueGraphBuild;
 use crate::nir_value_graph::{OpaqueSource, ValueId, ValueKind, ValuePool};
 use crate::primitive::PrimitiveType;
-use crate::tir::{TypeId, TypeTable};
+use crate::tir::TypeId;
 use crate::token::Span;
+use crate::type_table::TypeTable;
 
 /// An operand position in the skeleton — an expression's value, after operand
 /// promotion. It is either a pure value living in the

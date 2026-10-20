@@ -101,6 +101,7 @@ pub mod tir_visitor;
 pub mod token;
 pub mod trace;
 pub mod trait_solver;
+pub mod type_table;
 pub mod unparse;
 pub mod unresolved_types;
 pub mod unused_import;
@@ -226,8 +227,8 @@ pub struct CompileResult {
     /// otherwise.
     pub wit_emit_snapshot: Option<wit_emit::WitEmitSnapshot>,
     /// Structural description of the generator's `export struct Options`,
-    /// populated only when `target_world == "core:kiln/generator"` and
-    /// the Options struct extracts cleanly. Consumed by the CLI's kiln
+    /// populated only when the target world is a generator world and the
+    /// Options struct extracts cleanly. Consumed by the CLI's kiln
     /// provider to skip a second compile when the driver asks for the
     /// descriptor.
     pub kiln_options_descriptor: Option<kiln::OptionsDescriptor>,
@@ -1995,7 +1996,7 @@ fn compile_after_load<H: CompilerHost>(
             .type_table
             .borrow()
             .compiler_items()
-            .missing_required(&package.target_world);
+            .missing_required(is_kiln_generator);
         if !missing.is_empty() {
             for item in &missing {
                 report_without_span(
@@ -2210,7 +2211,8 @@ fn compile_after_load<H: CompilerHost>(
     // The Kiln guarantee on the imports actually planned, which is the first
     // point a transitive `core:*` dependency on WASI is visible. Before
     // codegen, so a generator that cannot instantiate never reaches bytes.
-    if kiln::import_check::check_cm_imports(is_kiln_generator, &wir_package.import_plan, logger) > 0
+    if kiln::import_check::check_cm_imports(nir.generator_world(), &wir_package.import_plan, logger)
+        > 0
     {
         return Err(Bail);
     }

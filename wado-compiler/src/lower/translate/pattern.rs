@@ -11,10 +11,11 @@ use crate::tir::{
     CallArg, FunctionRef, LetStorage, ResolvedType, StructDef, StructFields, TirBinaryOp, TirBlock,
     TirExpr, TirExprKind, TirField, TirFunction, TirLiteralPattern, TirLocal, TirMatchArm,
     TirPattern, TirStmt, TirStmtKind, TirStructField, TirStructPatternField, TirUnaryOp, TypeId,
-    TypeTable, struct_fields,
+    struct_fields,
 };
 use crate::tir_visitor::for_each_block_result;
 use crate::token::Span;
+use crate::type_table::TypeTable;
 
 /// Coerce a by-value `value` to a `&T` / `&mut T` pattern binding.
 ///

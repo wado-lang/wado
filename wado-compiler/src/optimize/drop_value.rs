@@ -6,8 +6,8 @@
 
 use crate::nir_arena::{BlockId, BlockRole, ExprKind, NodeRef, Operand, StmtId, StmtKind};
 use crate::nir_engine::{Engine, Rule};
-use crate::tir::TypeTable;
 use crate::token::Span;
+use crate::type_table::TypeTable;
 
 use super::arena_query;
 use crate::compiler_trace;

@@ -12,8 +12,8 @@ use crate::nir_engine::{Engine, Rule};
 use crate::nir_package::NirPackage;
 use crate::nir_value_graph::ValueKind;
 use crate::tir;
-use crate::tir::TypeTable;
 use crate::token::Span;
+use crate::type_table::TypeTable;
 
 /// Resolve the whole-package context for the append rules, or `None` when the
 /// `String::push_str` / `push` markers are absent.
