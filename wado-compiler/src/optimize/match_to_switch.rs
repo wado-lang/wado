@@ -405,7 +405,7 @@ fn build_switch(
 /// Wrap an arm body in a fresh block holding a single `Expr` statement. A
 /// skeleton body is deep-cloned; a promoted constant operand is immutable and
 /// shareable, so it flows straight into the statement slot.
-fn arm_body_block(engine: &mut Engine, body: Operand, arm_span: Span) -> BlockId {
+pub(super) fn arm_body_block(engine: &mut Engine, body: Operand, arm_span: Span) -> BlockId {
     let (op, span) = match body {
         Operand::Expr(e) => (
             Operand::Expr(engine.clone_expr(e)),

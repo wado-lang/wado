@@ -1,7 +1,8 @@
 //! Match → bitset: the set membership test `x matches { A | B | 'x'..='z' }`
 //! becomes `(x - min) as u32 < range & (WORD >> (x - min)) & 1 != 0`, which
-//! branches on nothing. Runs before `match_to_switch`, which takes what is
-//! left.
+//! branches on nothing. A match with one set arm and a wildcard becomes an `if`
+//! on that test, whatever its arms yield. Runs before `match_to_switch`, which
+//! takes what is left.
 
 use crate::nir::{FuncId, NirBinaryOp, NirUnaryOp};
 use crate::nir_arena::{ArmData, Body, ExprId, ExprKind, Operand, StmtId, StmtKind};
@@ -10,7 +11,7 @@ use crate::nir_value_graph::ValueKind;
 use crate::tir::{TypeId, TypeTable};
 use crate::token::Span;
 
-use super::match_to_switch::{arm_spans, scrutinee_bits};
+use super::match_to_switch::{ArmSpan, arm_body_block, arm_spans, scrutinee_bits};
 use super::select_lowering::select_call;
 
 /// Below this many members a compare cascade is as cheap as the mask test.
@@ -53,9 +54,6 @@ impl Rule for MatchToBitsetRule<'_> {
         else {
             return false;
         };
-        if engine.body.exprs[id].type_id != TypeTable::BOOL {
-            return false;
-        }
         let scrutinee = *scrutinee;
         let scrut_type = engine.body.operand_type(scrutinee);
         // The offset is taken in `i32`, so a wider scrutinee would lose values
@@ -63,17 +61,36 @@ impl Rule for MatchToBitsetRule<'_> {
         if scrutinee_bits(self.type_table.get(scrut_type)).is_none_or(|bits| bits > 32) {
             return false;
         }
-        let Some(set) = analyze(arms, engine.body) else {
+        let span = engine.body.exprs[id].span;
+        if engine.body.exprs[id].type_id == TypeTable::BOOL
+            && let Some(set) = analyze_constant_arms(arms, engine.body)
+        {
+            let kind = self.build(engine, scrutinee, scrut_type, &set, span);
+            engine.replace_expr_kind(id, kind);
+            return true;
+        }
+        let Some(set) = analyze_two_way(arms, engine.body) else {
             return false;
         };
-        let span = engine.body.exprs[id].span;
-        let kind = self.build(engine, scrutinee, scrut_type, &set, span);
-        engine.replace_expr_kind(id, kind);
+        let [member, other] = [arms[0].clone(), arms[1].clone()];
+        let test = self.build(engine, scrutinee, scrut_type, &set, span);
+        let condition = Operand::Expr(engine.alloc_expr(test, TypeTable::BOOL, span));
+        let then_branch = arm_body_block(engine, member.body, member.span);
+        let else_branch = arm_body_block(engine, other.body, other.span);
+        engine.replace_expr_kind(
+            id,
+            ExprKind::If {
+                condition,
+                then_branch,
+                else_branch: Some(else_branch),
+            },
+        );
         true
     }
 }
 
-fn analyze(arms: &[ArmData], body: &Body) -> Option<Bitset> {
+/// A set test whose arms each yield a constant `bool`.
+fn analyze_constant_arms(arms: &[ArmData], body: &Body) -> Option<Bitset> {
     let (spans, wildcard) = arm_spans(arms, body)?;
     // A match without a wildcard is exhaustive, so every value has an arm and
     // nothing reads the default.
@@ -81,14 +98,35 @@ fn analyze(arms: &[ArmData], body: &Body) -> Option<Bitset> {
         Some(i) => body.operand_const_bool(arms[i].body)?,
         None => false,
     };
-    let is_member = |arm: usize| Some(body.operand_const_bool(arms[arm].body)? != default);
+    analyze(&spans, default, |arm| {
+        Some(body.operand_const_bool(arms[arm].body)? != default)
+    })
+}
 
+/// One set arm and a wildcard, whatever they yield: the set's members take
+/// the first arm.
+fn analyze_two_way(arms: &[ArmData], body: &Body) -> Option<Bitset> {
+    if arms.len() != 2 {
+        return None;
+    }
+    let (spans, wildcard) = arm_spans(arms, body)?;
+    if wildcard != Some(1) {
+        return None;
+    }
+    analyze(&spans, false, |_| Some(true))
+}
+
+fn analyze(
+    spans: &[ArmSpan],
+    default: bool,
+    is_member: impl Fn(usize) -> Option<bool>,
+) -> Option<Bitset> {
     // The window before a single value is walked: enumerating to find it would
     // do the work of every arm the width goes on to refuse. Only a member
     // widens it — a value outside fails the range compare, which is the answer
     // the default gives anyway.
     let (mut min, mut max) = (i64::MAX, i64::MIN);
-    for &(arm, lo, hi) in &spans {
+    for &(arm, lo, hi) in spans {
         if !is_member(arm)? {
             continue;
         }
@@ -109,7 +147,7 @@ fn analyze(arms: &[ArmData], body: &Body) -> Option<Bitset> {
     let mut seen = vec![0u64; words_len];
     let mut words = vec![0u64; words_len];
     let mut members = 0usize;
-    for &(arm, lo, hi) in &spans {
+    for &(arm, lo, hi) in spans {
         let member = is_member(arm)?;
         for v in lo.max(min)..=hi.min(max) {
             let off = v.abs_diff(min);
