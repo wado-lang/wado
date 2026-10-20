@@ -1116,7 +1116,7 @@ in a rule 6 does not reach (fixture `ll_opt_greedy_ambig.g4`) and a non-greedy `
 narrower body that no lookahead separates (`ll_non_greedy_plus_loop.g4`,
 SQLite's `name+?`). Before the simulator cached its predictions, a prediction
 per occurrence cost a full closure over the grammar, which took SQLite's
-DDL-heavy benchmark corpus from 2.6 ms to 402 ms per parse; neither gating it behind the ambiguous
+DDL-heavy benchmark corpus to 155 times as long per parse; neither gating it behind the ambiguous
 lookahead nor bounding the lookahead recovers that. The two are also coupled —
 entering `type_name?` is only right if `name+?` can then take the second name,
 so landing one alone turns an accepted input into an error. The measurements and

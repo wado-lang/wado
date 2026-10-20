@@ -145,9 +145,8 @@ export struct Options {
     /// e.g. `["statement"]`. Empty is byte-identical. See "Parsing a fragment"
     /// in the README.
     pub fragment_entries: List<String>,
-    /// Which decisions the parser asks the runtime ATN simulator: `"auto"` (the
-    /// default), `"always"` or `"never"`. See "Choosing the simulator" in the
-    /// README.
+    /// Which decisions the parser asks the runtime ATN simulator. "Choosing the
+    /// simulator" in the README lists the modes.
     pub atn: AtnMode = AtnMode::Auto,
 }
 ```

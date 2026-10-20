@@ -53,6 +53,10 @@ global SLL_NO_CALLER: i32 = 0;
 /// there as well as where it is.
 global SLL_BOTTOMS: i32 = SLL_MAX_DEPTH + 2;
 
+/// How many stacks `config_key` can tell apart: it packs a stack id above 40
+/// bits of state, precedence and alternative.
+global SLL_MAX_STACKS: i64 = 8388608;
+
 global STATE_BITS: i64 = 1048576;
 global PR_BITS: i64 = 1024;
 global ALT_BITS: i64 = 1024;
@@ -90,6 +94,7 @@ struct SllConfig {
 fn place_key(state: i32, pr: i32, stack: i32) -> i64
     contract -2 <= state && ((state + 2) as i64) < STATE_BITS
     contract 0 <= pr && (pr as i64) < PR_BITS
+    contract 0 <= stack && (stack as i64) < SLL_MAX_STACKS
 {
     return (stack as i64 * PR_BITS + pr as i64) * STATE_BITS + (state + 2) as i64;
 }
@@ -143,6 +148,21 @@ impl SllExplorer {
             memo_size: 0,
             budget: 0,
         };
+    }
+
+    /// Drop every stack above the bottom frames, and the closures naming them.
+    /// A decision pushes at most one stack per expansion its budget allows, so
+    /// a table dropped past half of `SLL_MAX_STACKS` between decisions never
+    /// outgrows it.
+    fn drop_stacks(&mut self) {
+        assert (SLL_DECISION_BUDGET as i64) < SLL_MAX_STACKS / 2;
+        self.stack_ret.truncate(SLL_BOTTOMS);
+        self.stack_rpr.truncate(SLL_BOTTOMS);
+        self.stack_parent.truncate(SLL_BOTTOMS);
+        self.stack_bottom.truncate(SLL_BOTTOMS);
+        self.stack_index = HashMap::with_seed(GALE_SEED);
+        self.closures = HashMap::with_seed(GALE_SEED);
+        self.memo_size = 0;
     }
 
     fn push_stack(&mut self, ret: i32, rpr: i32, parent: i32) -> i32 {
@@ -359,6 +379,9 @@ impl SllExplorer {
 
     /// The DFA of decision `decision`.
     pub fn explore(&mut self, decision: i32) -> SllDfa {
+        if self.stack_ret.len() as i64 > SLL_MAX_STACKS / 2 {
+            self.drop_stacks();
+        }
         self.budget = SLL_DECISION_BUDGET;
         let Some(start) = self.start_closure(self.atn.decision_state[decision]) else {
             return SllDfa {

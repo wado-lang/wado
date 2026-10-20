@@ -33,17 +33,16 @@ traverse. `benchmark/sqlite_parse` (parse only: build the CST, then
 `result.ok()`) is the build-isolation companion. Both run the same 13366-byte
 SQLite fixture, guest at `-O2`.
 
-Dev-host numbers (`cargo run` `wado`; post-flat-CST, 2026-07). Read the split as
-a ratio, not as absolutes: the same benchmark measured **1.467 ms/iter** on a dev
-host on 2026-09-02, against 1.436–1.479 on a release one. The two hosts sit
-within each other's spread now, because `Cargo.toml` raises `opt-level` on the
-compiler's dependencies and wasmtime is one of them. Re-measure both columns
-before sizing a GC lever off them.
+Dev-host split (`cargo run` `wado`; post-flat-CST, 2026-07), as a multiple of
+`syntax_highlight` under `copying`. On 2026-09-02 the same benchmark measured
+inside a release host's spread on a dev host, because `Cargo.toml` raises
+`opt-level` on the compiler's dependencies and wasmtime is one of them.
+Re-measure both columns before sizing a GC lever off them.
 
-| benchmark                         | `copying` (default) | `null` (no GC) |     GC part |
-| --------------------------------- | ------------------: | -------------: | ----------: |
-| `syntax_highlight` (build + walk) |        ~9.5 ms/iter |   ~5.8 ms/iter | ~4.1 (~42%) |
-| `sqlite_parse` (build only)       |        ~4.4 ms/iter |              — |           — |
+| benchmark                         | `copying` (default) | `null` (no GC) | GC share |
+| --------------------------------- | ------------------: | -------------: | -------: |
+| `syntax_highlight` (build + walk) |                   1 |          ~0.61 |     ~42% |
+| `sqlite_parse` (build only)       |               ~0.46 |              — |        — |
 
 `syntax_highlight` is **no longer GC-bound**: collection was ~42% of wall-clock
 at that snapshot, down from ~73% on the old node tree (see "The CST is a flat
@@ -67,7 +66,7 @@ wado run --collector copying -O2 syntax_highlight/syntax_highlight.wado   # defa
 (`wado` = `cargo run --bin wado --`. Analyze `p.json` with the `wado-performance`
 skill's script — count **leaf** frames for self-time — or upload to
 profiler.firefox.com. `copying − null` is the collection cost; `drc` is
-pathological here (~234 ms/iter) — never use it. `null` leaks, so use a
+pathological here (~25× `copying`) — never use it. `null` leaks, so use a
 fixed-iteration driver, not the auto-tuned harness, which OOMs the heap under
 `null`.)
 
@@ -84,20 +83,20 @@ cycle, which is what made `syntax_highlight` GC-bound. Design in
 
 Result vs the old node tree (dev host, `benchmark-syntax-highlight`):
 
-| collector           | node tree | flat store |         change |
-| ------------------- | --------: | ---------: | -------------: |
-| `copying` (default) |      29.5 |        9.5 | **~3.0× wall** |
-| `null` (no GC)      |       8.0 |        5.8 |          ~1.4× |
-| GC portion          |      21.5 |        4.1 | **~5.2× less** |
+| collector           | node tree / flat store |
+| ------------------- | ---------------------: |
+| `copying` (default) |         **~3.0× wall** |
+| `null` (no GC)      |                  ~1.4× |
+| GC portion          |         **~5.2× less** |
 
-On the **release** host the same change is only **~1.47×** (5.06 → 3.45 ms/iter,
-`benchmark/README.md`) — the dev multiple is GC-inflated (the `wado-performance`
+On the **release** host the same change is only **~1.47×**
+(`benchmark/README.md`) — the dev multiple is GC-inflated (the `wado-performance`
 skill's §1). Still enough to move Gale from 4th to 2nd place, ahead of native
 tree-sitter and Lezer.
 
-The residual ~4.1 ms GC is highlight's own captures/HTML allocation (the profile
+The residual GC is highlight's own captures/HTML allocation (the profile
 below), not the CST — `sqlite_parse` (build-then-discard,
-no highlight) is ~4.4 ms/iter and did not regress. One known transient:
+no highlight) did not regress. One known transient:
 `TreeBuilder::finish` copies the `tag`/`a`/`b`/`alt` columns into the store
 because Wado has no by-value `self` / move (methods are `&self`/`&mut self`);
 each copy is exact-sized (a `List` value copy right-sizes to `used`) and the
@@ -107,8 +106,8 @@ builder's originals die with the parse.
 to `4 × tokens` (measured `rows ≈ 3.44 × tokens`) so they never grow from empty —
 one right-sized `array.new_default` instead of `log2(rows)` doubling reallocs, at
 ~16% over-fill (comparable to `TokenStream`'s `chars/4`). Release `sqlite_parse`
-2.52 → 2.36 ms/iter (~6%, build-heavy), `syntax_highlight` ~2% (build is a smaller
-share); no over-fill regression.
+~6% faster (build-heavy), `syntax_highlight` ~2% (build is a smaller share); no
+over-fill regression.
 
 ### Dispatch reaches every lexer rule (landed, 2026-08)
 
@@ -127,8 +126,7 @@ read case-folded, and a negated set read that way counted as unknown, so the
 `SAFECODEPOINT` arm "might collide" with `ESC`. A leading-chars read now folds
 as the emitter does: a non-recursive fragment in its caller's casing, a rule
 with its own matcher in `Casing::Unknown`, a superset of either. With it,
-`STRING` is a static matcher. Tokenizing `twitter.json` went from 206 KB/s to
-87 MB/s.
+`STRING` is a static matcher. Tokenizing `twitter.json` got 420 times as fast.
 
 Rust's `STRING_LITERAL` and `BYTE_STRING_LITERAL` stayed on the ATN because
 every escape arm starts with `\`. Two arms sharing a first char now collide only
@@ -137,13 +135,13 @@ if they can share the second too (`second_chars_apart`), and none of those can.
 Rust's identifier class spent 66% of tokenizing in a `c matches { … }` over
 `\p{L}`. The compiler tested an or-pattern one range at a time, with no short
 circuit. It now binary-searches a set too sparse for a bitset or a `br_table`.
-With both changes, tokenizing 1.5 MB of Rust went from 1.9 MB/s to 29 MB/s.
+With both changes, tokenizing 1.5 MB of Rust got 15 times as fast.
 
 A rule that does need the ATN (a nested block comment, a raw string) paid
 for a formatted `String` key and a `TreeSet` insert per visited state per
 character, plus a copy of the rule stack per thread. Stacks are now interned
 ids, and the visited set is a stamp per state. An ATN-routed JSON string rule
-went from 402 KB/s to 3.6 MB/s. What is left is the closure walk itself, which a
+got 9 times as fast. What is left is the closure walk itself, which a
 DFA cache would remove (see "What's next").
 
 ### The simulator keeps its predictions for the program's life
@@ -160,12 +158,12 @@ module, so they outlive one parse, and they reset together at
 A parse after the first is almost all cache hits. The first pays every closure,
 and that is the open cost:
 
-| 13 KB input | `main` | first parse, before | first parse | later parses |
-| ----------- | -----: | ------------------: | ----------: | -----------: |
-| CSS         | 1.7 ms |               87 ms |       20 ms |       2.8 ms |
-| SQLite      | 0.7 ms |              940 ms |      340 ms |       6.7 ms |
-| Rust        | 1.9 ms |               2.1 s |      0.77 s |       6.5 ms |
-| TypeScript  | 2.4 ms |               4.9 s |       6.1 s |       9.3 ms |
+| 13 KB input, × `main` | `main` | first parse, before | first parse | later parses |
+| --------------------- | -----: | ------------------: | ----------: | -----------: |
+| CSS                   |      1 |                  51 |          12 |          1.6 |
+| SQLite                |      1 |                1300 |         490 |          9.6 |
+| Rust                  |      1 |                1100 |         410 |          3.4 |
+| TypeScript            |      1 |                2000 |        2500 |          3.9 |
 
 `main` and "before" are the `gale-parse` benchmarks (`benchmark/<grammar>`).
 "Before" is the simulator without the cache. The other two columns time three
@@ -188,8 +186,8 @@ Revealing the caller stack in growing windows (0, 1, 2, 4… innermost frames,
 every caller assumed below them) settled 96% of Rust's predictions without the
 whole stack. It doubled the first parse and gained nothing after it: a window
 with no frames returns into every call site of the rule, so its closures are
-the largest. The 586-file Rust corpus took 6 m 35 s with the windows and
-5 m 22 s without them.
+the largest. The 586-file Rust corpus took 1.23 times as long with the windows
+as without them.
 
 ### Nesting no longer doubles the scan (landed, 2026-09)
 
@@ -214,29 +212,29 @@ What the simulator still costs a grammar that never needs a hidden caller is the
 stack itself: a scan pushes a return state around each call that can reach a
 decision the simulator makes. TypeScript's `exportStatement` is one such
 decision, and a statement reaches it through every function body. The parse
-runs at 2.6 MB/s, against 3.1 MB/s with the pushes removed and 0.7 MB/s with no
-memo.
+runs at 0.84 times the speed it has with the pushes removed, and 3.7 times the
+speed it has with no memo.
 
 A failing optional or loop body repeats a scan too. HTML's `htmlElement` scans
 `(htmlContent '<' '/' TAG_NAME '>')?`, and an unclosed `<br>` scans every
 sibling after it as its content before the close fails. Each of those siblings
 does the same, so without a memo the time doubles with every two `<br>`s, and a
-40 KB page takes 157 s. The memo also keeps the answer of a recursive rule that
+40 KB page takes minutes. The memo also keeps the answer of a recursive rule that
 a repeat body calls with a required element after it (`GrammarAnalysis::rule_rescans`).
 Keeping every recursive rule costs the Rust parse a third of its speed: that
 memoizes 145 rules, and most of them are never scanned twice.
 
 Release host, `-O2`, one parse of Rust nested 14 deep:
 
-| Rust input   |  before |  after |
-| ------------ | ------: | -----: |
-| `f(f(…))`    | 24.6 ms | 0.1 ms |
-| `A { x: … }` | 46.6 ms | 0.1 ms |
-| `((…))`      |  3.7 ms | 0.2 ms |
+| Rust input   | before / after |
+| ------------ | -------------: |
+| `f(f(…))`    |           246× |
+| `A { x: … }` |           466× |
+| `((…))`      |            18× |
 
-The per-parse cost did not show on SQLite, which went from 8.10 to 8.72 MB/s
-on `package-gale/benchmark/sqlite`. TypeScript went from 1.15 to 3.31 MB/s, and
-Rust from 0.68 to 3.17 MB/s.
+The per-parse cost did not show on SQLite, which ran 1.08 times as fast on
+`package-gale/benchmark/sqlite`. TypeScript ran 2.9 times as fast, and Rust 4.7
+times.
 
 ### A loop parses its iteration rather than scanning it first (landed, 2026-10)
 
@@ -251,10 +249,10 @@ predicates, so only a grammar that runs neither speculates
 `-O3`, one parse of each benchmark input, same window (`Benchmark` over the
 parser generated before and after):
 
-| grammar |   before |    after |
-| ------- | -------: | -------: |
-| SQLite  | 0.934 ms | 0.784 ms |
-| css3    | 1.875 ms | 1.784 ms |
+| grammar | change |
+| ------- | -----: |
+| SQLite  | +19.1% |
+| css3    |  +5.1% |
 
 Rust and TypeScript run predicates, so their parsers do not change.
 
@@ -271,10 +269,10 @@ holds.
 
 Measured as the section above measures:
 
-| grammar |   before |    after |
-| ------- | -------: | -------: |
-| SQLite  | 0.790 ms | 0.696 ms |
-| css3    | 1.800 ms | 1.799 ms |
+| grammar | change |
+| ------- | -----: |
+| SQLite  | +13.5% |
+| css3    |   flat |
 
 Rust and TypeScript (their `benchmark/` drivers, one after the other) stay
 within 1%: what they lose is an ATN decision or two between keywords that an
@@ -296,8 +294,8 @@ fast its own code is.
 ### The highlight phase pays only for what a query asks for (landed, 2026-09-02)
 
 Two levers, both in the consumer half of `syntax_highlight`, worth **+8.0%**
-together on a release host (1.551 → 1.436 ms/iter, alternating best of five per
-arm, arms' ranges disjoint):
+together on a release host (alternating best of five per arm, arms' ranges
+disjoint):
 
 - **No rule-context capture, no CST walk (+6.5%).** `highlight_walk` visits
   every CST row — `rows ≈ 3.44 × tokens` — only to maintain the visitor's rule
@@ -306,7 +304,7 @@ arm, arms' ranges disjoint):
   unobservable: `hl_cover_unvisited`'s token sweep reaches the same captures.
   `gen_highlight` emitted the call only when the query resolved an override.
   Skipping the walk **without** also gating `hl_cover_unvisited`'s sort is a
-  _loss_ (1.553–1.615) — the sweep alone is already in start order, and sorting
+  _loss_ (0.1–4% slower than before) — the sweep alone is already in start order, and sorting
   ~2900 captures costs more than the walk did. The gate has since been removed.
   Every query in the tree carries a rule context, so no generated parser took
   the skip, and the second path cost more to reason about than it saved.
@@ -321,7 +319,7 @@ kept the char iterator and measured flat. Batching was never the lever; the
 calls were.
 
 `nir/drop_value` (`docs/optimizer.md`) took another 3.3% on top of the two, so
-the three come to **1.515 → 1.351 ms/iter (+12.1%)** against `origin/main`,
+the three come to **+12.1%** against `origin/main`,
 three alternating pairs with the order swapped and the arms disjoint. That pass
 is Wado-wide rather than Gale's, but this is the benchmark it showed on: the
 parser and `TreeBuilder` discard a `pop()` per closed node, and each was
@@ -450,28 +448,28 @@ Found by reading generated code (2026-09), not yet measured on a benchmark:
 
 Distinct from the _generated parser_: how long `gale gen` takes to emit a large
 grammar. Keyword-heavy grammars (SQLite, TypeScript, Rust) are slow; the Kiln
-build path (copying collector + fuel) makes TypeScript/Rust take on the order of
-an hour. Measured findings, `wado run … gen` (`cargo run` host):
+build path (copying collector + fuel) makes TypeScript/Rust slower still.
+Measured findings, `wado run … gen` (`cargo run` host):
 
 - **The dominant cost was not GC — it was an exponential analysis (2026-07,
-  fixed).** `gale gen` on TypeScript (30 min+) and Rust was ~99% inside
+  fixed).** `gale gen` on TypeScript (over 30 times SQLite's) and Rust was ~99% inside
   `GrammarAnalysis::is_rule_scannable_at`, the recursive scannability check the
   optional-scan-guard lowering runs per optional/repeat element. Profiling the
   exploding run (guest profiler with a `WADO_PROFILE_MAX_SECS` bounded flush —
-  the profile only writes on clean exit, so an unbounded 30-min run is unusable)
+  the profile only writes on clean exit, so an unbounded run is unusable)
   put `is_element/alt/rule_scannable_at` at **98.8% inclusive**; it barely
-  registered on SQLite (57 s). Root cause: the SCC-aware memoization (`80ab9ed7e`)
+  registered on SQLite. Root cause: the SCC-aware memoization (`80ab9ed7e`)
   caches a rule only once its SCC has closed (`local_min >= p`); in a large
   mutual-recursion SCC (TS's expression / type / statement web) nearly every node
   stays provisional and is recomputed on every path → exponential (a synthetic
-  dense-recursion grammar scaled ≈`1.4^R`; R=20 → 5.6 s, R=24 blew past minutes).
+  dense-recursion grammar scaled ≈`1.4^R`).
   Scannability is actually pure reachability — a rule is non-scannable iff it can
   reach an _undefined_-rule reference, the only `false` source in
   `is_element_scannable_at` — so `precompute_scannability` computes it once in
   O(V+E) and seeds `scannable_cache`, making the recursion O(1). **Byte-identical
-  output** (css3 / SQLite / follow_gate md5 unchanged); **TypeScript 30 min+ →
-  ~15 s gen** (63 s wall incl. the ~48 s generator recompile), **Rust similar**;
-  the synthetic repro 5.6 s → 0.10 s. Lesson: profile keyword-heavy grammars
+  output** (css3 / SQLite / follow_gate md5 unchanged); **TypeScript's gen over
+  120× faster** (the generator's own recompile now takes 3 times the gen), **Rust
+  similar**; the synthetic repro 56× faster. Lesson: profile keyword-heavy grammars
   end-to-end — a super-linear analysis hides behind the GC number, and micro-
   grammars miss it (the trigger is deep _mutual recursion_, not size/alt-count).
   The four other SCC-memoized analyses — `first_of_rule_at`, `rule_is_nullable_at`,
@@ -485,10 +483,10 @@ an hour. Measured findings, `wado run … gen` (`cargo run` host):
 - **Two levers only: compute, and GC.** Isolate GC with `--collector null` (no
   GC; leaks, so only for a one-shot gen) vs the default `copying`:
 
-  | grammar | output  | first-sets      | null (compute) | copying | GC       |
-  | ------- | ------- | --------------- | -------------- | ------- | -------- |
-  | css3    | 1.76 MB | small           | 39.1s          | 41.5s   | **2.4s** |
-  | SQLite  | 786 KB  | large (150+ kw) | 38.5s          | 61–65s  | **~24s** |
+  | grammar | output  | first-sets      | copying / null | GC share |
+  | ------- | ------- | --------------- | -------------- | -------- |
+  | css3    | 1.76 MB | small           | 1.06           | **6%**   |
+  | SQLite  | 786 KB  | large (150+ kw) | ~1.6           | **~38%** |
 
 - **GC scales with distinct-token count, not output size.** css3 emits a _bigger_
   file with ~10× _less_ GC — its first-sets are tiny. So the copying collector's
@@ -499,9 +497,9 @@ an hour. Measured findings, `wado run … gen` (`cargo run` host):
   the FIRST-set caches and kind-set registry are the remaining ones.
 
 - **Collector switch is a non-lever.** DRC (cost ∝ garbage) is _worse_ on small
-  grammars — SQLite DRC 118s vs copying 61s — because its per-alloc overhead
-  dwarfs the small live set; it only wins where copying thrashes a huge live set
-  (TypeScript ~7min vs ~1h). A blanket kiln→DRC switch would regress the common
+  grammars — SQLite takes 1.9 times as long under DRC as under copying — because
+  its per-alloc overhead dwarfs the small live set; it only wins where copying
+  thrashes a huge live set (TypeScript ~8× faster). A blanket kiln→DRC switch would regress the common
   case. Reduce allocation instead.
 
 - **The lever (landing): the token's identity _is_ a dense integer, carried on
@@ -512,7 +510,7 @@ an hour. Measured findings, `wado run … gen` (`cargo run` host):
   recovered only at emit (`token_names_of` / `kind_check_str`).
 
   **Do NOT re-cache via a lazy `String→i32` intern in the hot path** — measured a
-  net loss (SQLite copying 61s → 80s, null 38.5s → 48s): the per-call intern is a
+  net loss (SQLite 1.31 times as long under copying, 1.25 under null): the per-call intern is a
   String tree-lookup costing more than the compare it replaced, and it still
   rebuilds `TK_{name}`. The fast path is `elem.kind_id` (resolved once); the only
   fallback intern is for unresolved IR in unit tests.
@@ -522,11 +520,12 @@ an hour. Measured findings, `wado run … gen` (`cargo run` host):
   (sort names, then map to ids) so emit order/dedup are unchanged; emit writes
   the name, not the number. Measure the win as the `copying` − `null` GC delta.
 
-  Progress (SQLite `wado run gen`, `copying` − `null` GC): baseline 24s.
+  Progress (SQLite `wado run gen`, `copying` − `null` GC), as a multiple of the
+  baseline:
   - P0 (table + `kind_id` + resolution pass, inert) — byte-identical.
-  - P1+P2 (FIRST sets + prediction carry ids) — GC 21s, copying 59.3s, compute
-    back to baseline (null 38.1s).
-  - P3 (kind/sync/follow-mask registries store ids) — GC 17.5s, copying 56.5s.
+  - P1+P2 (FIRST sets + prediction carry ids) — GC 0.88, copying 0.97, compute
+    back to baseline.
+  - P3 (kind/sync/follow-mask registries store ids) — GC 0.73, copying 0.93.
     Remaining P4 (the `lower`/`parser_gen` FIRST-set boundary, `rule_follow_kinds`)
     is smaller and coupled on SQLite; the keyword-dense TS/Rust grammars (GC-bound)
     are where the accumulated cut should matter most.
@@ -535,7 +534,7 @@ an hour. Measured findings, `wado run … gen` (`cargo run` host):
   grammar, dev host) profiled four compute hot spots; fixing them (plus the
   review round: in-place FOLLOW propagation instead of per-contribution
   FollowBits copies, and the left-corner reachability walks precomputed in id
-  space) took best-of-three from 728.8 to ~336 ms/iter (~2.2×), generated
+  space) made best-of-three ~2.2× faster, generated
   output byte-identical for the Rust and SQLite grammars:
   - `build_dispatch_groups` + first-char accumulation (~25% self): `add_range`
     and the distinct-range collection deduped by linear scan, each (char, call)
@@ -612,18 +611,18 @@ Release-host profiles of `benchmark/gale_gen` found seven levers:
 - `rule_takes_min_prec_arg` and `rule_reads_follow` scanned a list of names.
 
 Generated Rust, SQLite, css3 and TypeScript parsers are byte-identical. The
-whole set against `origin/main`, ms/iter, by GC heap size:
+whole set against `origin/main`, by GC heap size:
 
-| heap | main   | branch |
-| ---- | ------ | ------ |
-| 256m | 109.05 | 92.42  |
-| 384m | 104.94 | 89.83  |
-| 512m | 104.99 | 92.00  |
-| 640m | 102.62 | 87.22  |
-| 768m | 100.77 | 85.81  |
-| 1g   | 101.49 | 85.06  |
+| heap | change |
+| ---- | -----: |
+| 256m | +18.0% |
+| 384m | +16.8% |
+| 512m | +14.1% |
+| 640m | +17.7% |
+| 768m | +17.4% |
+| 1g   | +19.3% |
 
-The geometric mean goes from 103.94 to 88.68 ms/iter (+17.2%). gale-gen's
+The geometric mean is +17.2%. gale-gen's
 ranking can flip with the heap size, so a single size does not decide a change
 here. The reason, and two levers judged on one size only, are in
 [`dead-ends.md`](../.claude/skills/wado-performance/dead-ends.md).
@@ -646,17 +645,17 @@ Open levers on `benchmark/gale_gen`:
 
 The **first** attempt at a flat CST: a SoA `CstArena` + `Cst` cursor
 (rowan-style), built in one pass over the `BuildEvent` log. In isolation the SoA
-build was ~2× faster, but `sqlite-parse` (build then discard) regressed 4.9 →
-18 ms: a loose `List::with_capacity(n)` zero-fills via `array.new_default`, so
-nine over-sized arrays dominated (131 ms); exact-sizing cut it to 18 ms but no
-further. `syntax-highlight` also lost — 64.7 vs 39.4 ms — because `children()`
+build was ~2× faster, but `sqlite-parse` (build then discard) regressed 3.7×: a
+loose `List::with_capacity(n)` zero-fills via `array.new_default`, so nine
+over-sized arrays dominated (27× before exact-sizing, which cut it to 3.7× but
+no further). `syntax-highlight` also lost — 1.64 times as long — because `children()`
 boxed a `CstChild` + `Cst` per visited node, moving allocation from build-time to
 walk-time instead of removing it. Reverted in `37d6597`.
 
 **Done right (2026-07, now the current state).** The retry lever recorded here —
 scalar child accessors so the walk allocates nothing, and the parser's event
 stream _as_ the store (no second arena, columns grown by `push` not
-`with_capacity`) — is exactly what shipped: `copying` 29.5 → 9.5 ms. The two
+`with_capacity`) — is exactly what shipped: `copying` ~3.0× faster. The two
 losses to avoid, confirmed: **value-cursor re-boxing** (a struct per visited node
 — every Wado struct is a WasmGC object) and **`array.new_default` zero-fill of an
 over-sized arena**.
@@ -672,10 +671,10 @@ tables, to shrink the generated artifact (scan is ~21% of the compiled module /
 faithful flat-`List<i32>` bytecode VM (bounds-checked `SCAN_PROG[ip]` fetches).
 Output was identical, so the timing is valid.
 
-| build (SQLite, 600 iters)   |  per-parse | vs baseline |
-| --------------------------- | ---------: | ----------: |
-| baseline (compiled scan)    |  ~9,275 µs |           — |
-| VM for 3 leaf scanners only | ~11,500 µs |    **+24%** |
+| build (SQLite, 600 iters)   | per-parse, vs baseline |
+| --------------------------- | ---------------------: |
+| baseline (compiled scan)    |                      — |
+| VM for 3 leaf scanners only |               **+24%** |
 
 Converting ~4.9% of self-time cost +24% wall ⇒ implied slowdown **K ≈ 5.9**; a
 full conversion projects **+30–60%** parse time.
@@ -731,7 +730,7 @@ own shapes:
   The same answer came back for `classify_keyword`'s first-char dispatch.
 - **Run-at-a-time HTML escaping** (2026-07). `highlight_html` escapes char by
   char; batching the stretches between escapable bytes into one
-  `push_str_range_unchecked` measured **flat** (median 2.93 vs 2.90 ms/iter). The
+  `push_str_range_unchecked` measured **flat** (medians 1% apart). The
   captures are dense — ~2900 over 13366 chars, so the mean unescaped stretch is
   ~4.6 chars and the per-run bookkeeping costs what the batching saves.
   Input-shape-bound: sparse captures would answer differently. Batching the
@@ -744,7 +743,7 @@ own shapes:
   call's _caller_ is what paid.
 - **The simulator at a hot LR loop entry** (2026-07). Routing SQLite's
   `expr NOT? BETWEEN expr AND expr` mid operand to the simulator took
-  `SELECT … BETWEEN 1 AND 10 AND y = 2` over 40 statements from 41 ms to 2.3 s
+  `SELECT … BETWEEN 1 AND 10 AND y = 2` over 40 statements to 56 times as long
   on the dev profile. That shape is decided on the scan instead (`lr_cont`).
 
 ## Correctness items with a performance flavor
@@ -759,16 +758,15 @@ path. Full context in `TODO.md` ("Soundness and compatibility divergence") and
 for the scan and the runtime FOLLOW gate first. A decision neither settles as
 ANTLR4 does goes to the simulator, whatever it costs, and its cost is then the
 thing to work on. The lookahead DFA ("The simulator keeps its predictions for
-the program's life") is the lever that landed. ANTLR4 with its DFA parses this
-grammar and input at 216.991 ms/iter against Gale's 2.535
-(`benchmark/README.md`), so a cache does not by itself close the gap to the
-scan.
+the program's life") is the lever that landed. ANTLR4 with its DFA takes 86
+times as long as Gale on this grammar and input (`benchmark/README.md`), so a
+cache does not by itself close the gap to the scan.
 
 - **A tournament asks the simulator once per alternative it scans**
   (`DropLoopEntryBranchInLRRule_4`). Each loop-entry prediction there looks
   ahead to EOF, since the ambiguity is real, and `stat`'s tournament scans
-  `expr` once for `';'` and once for `'.'`. At 15 lines that is 92 predictions
-  and 0.11 s at `-O2`, quadratic in the input. Deciding `stat` with the
+  `expr` once for `';'` and once for `'.'`. At 15 lines that is 92 predictions,
+  quadratic in the input. Deciding `stat` with the
   simulator would ask each question once. The tournament's longest match and
   ANTLR4's lowest alternative can disagree, though, so that is a routing
   decision rather than a tuning one.
@@ -779,7 +777,7 @@ scan.
   out of grammars that embed it today. Untried.
 - **Ambiguous greedy `rule?` and non-greedy `*?` / `+?` min-match — closed on
   the scan, not the simulator (2026-07).** The simulator answer was implemented
-  and reverted at release `sqlite_parse` **2.604 → 402.372 ms/iter (155×)**:
+  and reverted at release `sqlite_parse` **155× slower**:
   one prediction was a full closure over the grammar, before the simulator
   cached its predictions, and neither bounding the lookahead nor gating it
   brought that down. What shipped decides the ambiguity
