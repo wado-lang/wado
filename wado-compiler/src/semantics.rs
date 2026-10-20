@@ -33,7 +33,7 @@ use crate::resolve::Resolutions;
 use crate::stdlib_snapshot::{get_or_init_snapshot, reparsed_snapshot_module};
 use crate::symbol::{Symbol, SymbolTable};
 use crate::symbol_notation::SymbolNotation;
-use crate::tir::{EffectRows, ResolvedType, TirModule, TypeId, TypeTable};
+use crate::tir::{EffectRows, ResolvedType, TemplateId, TirModule, TypeId, TypeTable};
 use crate::token::Span;
 use crate::unparse::unparse_contract_clause_renamed;
 use crate::wit_emit::{WitContract, WitEmitInput};
@@ -140,6 +140,26 @@ pub enum SymbolResolveError {
 pub(crate) enum Operand {
     Receiver,
     Arg(usize),
+}
+
+impl Operand {
+    /// The operand where a static call spells the receiver as its first
+    /// argument (`Type::method(recv, ..)`).
+    fn with_receiver_in_args(self) -> Operand {
+        match self {
+            Operand::Arg(0) => Operand::Receiver,
+            Operand::Arg(i) => Operand::Arg(i - 1),
+            Operand::Receiver => unreachable!("such a call spells no receiver"),
+        }
+    }
+}
+
+/// Where a call may put what it was handed: its result, or what a `&mut`
+/// operand points to.
+#[derive(Clone, Copy)]
+pub(crate) enum Destination {
+    Result,
+    Through(Operand),
 }
 
 impl Semantics {
@@ -624,53 +644,54 @@ impl Semantics {
             .may_hold_reference(type_id)
     }
 
-    /// Whether a borrow written at `operand` of `call` may reach the call's
-    /// result, in any of its recorded dispatches. A callee with no declaration,
-    /// a closure or a fn value, may.
-    pub(crate) fn borrow_reaches_result(&self, call: &Expr, operand: Operand) -> bool {
+    /// Whether a borrow written at `operand` of `call` may reach `destination`,
+    /// in any of its recorded dispatches. A callee with no declaration, a
+    /// closure or a fn value, may.
+    pub(crate) fn borrow_reaches(
+        &self,
+        call: &Expr,
+        operand: Operand,
+        destination: Destination,
+    ) -> bool {
         let tysys = &self
             .state
             .as_ref()
             .expect("the move check runs on annotated semantics")
             .tysys;
-        // A static call spelling the receiver as its first argument
-        // (`Type::method(recv, ..)`) shifts the rest by one.
-        let static_dispatches = |id: AstId, named: Option<DefId>| {
-            self.facts_at(ModuleSemantics::STATIC_METHOD_DISPATCH, id)
-                .map(move |dispatch| {
-                    let operand = match operand {
-                        Operand::Arg(0) if dispatch.self_in_args => Operand::Receiver,
-                        Operand::Arg(i) if dispatch.self_in_args => Operand::Arg(i - 1),
-                        _ => operand,
-                    };
-                    (dispatch.method_def.or(named), operand)
-                })
-                .collect::<Vec<_>>()
-        };
-        let callees = match call {
+        // `Type::method(..)` and a free function both record a static dispatch;
+        // a call of a closure or a fn value records none.
+        let callees: Vec<(Option<DefId>, bool)> = match call {
             Expr::MethodCall(mc) => self
                 .method_dispatches_at(mc.id)
-                .map(|dispatch| (dispatch.method_def, operand))
+                .map(|dispatch| (dispatch.method_def, false))
                 .collect(),
-            Expr::StaticMethodCall(smc) => static_dispatches(smc.id, None),
-            // `Type::method(..)` parses as a call and records a static dispatch;
-            // a free function's dispatch names no method, so its path does.
-            Expr::Call(c) => {
-                let named = self
-                    .referenced_symbol(c.callee.id())
-                    .and_then(|id| self.types.defs().of_ast_id(id));
-                let dispatched = static_dispatches(c.id, named);
-                if dispatched.is_empty() {
-                    vec![(named, operand)]
-                } else {
-                    dispatched
-                }
-            }
+            Expr::StaticMethodCall(_) | Expr::Call(_) => self
+                .facts_at(ModuleSemantics::STATIC_METHOD_DISPATCH, call.id())
+                .map(|dispatch| {
+                    let declared = dispatch
+                        .function_ref
+                        .template
+                        .as_ref()
+                        .and_then(TemplateId::def);
+                    (dispatch.method_def.or(declared), dispatch.self_in_args)
+                })
+                .collect(),
             _ => unreachable!("only a call has operands"),
         };
         callees.is_empty()
-            || callees.into_iter().any(|(callee, operand)| {
-                callee.is_none_or(|def| tysys.borrow_reaches_result(def, operand))
+            || callees.into_iter().any(|(callee, receiver_in_args)| {
+                let (operand, destination) = if receiver_in_args {
+                    let destination = match destination {
+                        Destination::Result => Destination::Result,
+                        Destination::Through(to) => {
+                            Destination::Through(to.with_receiver_in_args())
+                        }
+                    };
+                    (operand.with_receiver_in_args(), destination)
+                } else {
+                    (operand, destination)
+                };
+                callee.is_none_or(|def| tysys.borrow_reaches(def, operand, destination))
             })
     }
 

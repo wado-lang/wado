@@ -11,7 +11,7 @@ use crate::compiler_host::{Code, Diagnostic, DiagnosticSpan, Severity};
 use crate::compiler_item::CompilerItem;
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::module_source::ModuleSource;
-use crate::semantics::{Operand, Semantics};
+use crate::semantics::{Destination, Operand, Semantics};
 use crate::symbol::SymbolKind;
 use crate::tir::{ResolvedType, TypeId};
 use crate::token::Span;
@@ -550,7 +550,37 @@ struct MoveWalker<'a, 'c> {
     closure_owners: IndexMap<AstId, Owners>,
     /// What the `break` values of each labeled block refer into.
     break_owners: IndexMap<String, Owners>,
+    /// The state each enclosing loop's `break`s and `continue`s carry to where
+    /// they jump, innermost last.
+    loops: Vec<LoopJumps>,
+    /// The state each enclosing labeled block's `break`s carry to its end,
+    /// innermost last.
+    labels: Vec<(String, Option<Flow>)>,
     suppress: u32,
+}
+
+#[derive(Default)]
+struct LoopJumps {
+    breaks: Option<Flow>,
+    continues: Option<Flow>,
+}
+
+/// The receiver a call spells, if a method call, and its arguments.
+fn call_operands(call: &Expr) -> (Option<&ast::MethodCallExpr>, &[Expr]) {
+    match call {
+        Expr::Call(c) => (None, &c.args),
+        Expr::MethodCall(mc) => (Some(mc), &mc.args),
+        Expr::StaticMethodCall(smc) => (None, &smc.args),
+        _ => unreachable!("only a call has operands"),
+    }
+}
+
+/// `flow` reaching a point other paths may reach too.
+fn reach(point: &mut Option<Flow>, flow: Flow) {
+    match point {
+        Some(joined) => joined.merge(flow),
+        None => *point = Some(flow),
+    }
 }
 
 impl<'a, 'c> MoveWalker<'a, 'c> {
@@ -570,6 +600,8 @@ impl<'a, 'c> MoveWalker<'a, 'c> {
             disturbed_captures: IndexSet::default(),
             closure_owners: IndexMap::default(),
             break_owners: IndexMap::default(),
+            loops: Vec::new(),
+            labels: Vec::new(),
             suppress: 0,
         }
     }
@@ -923,7 +955,7 @@ impl MoveWalker<'_, '_> {
                 for arg in &call.args {
                     self.visit_value(arg);
                 }
-                self.store_through_call(None, &call.args);
+                self.store_through_call(expr);
                 // A closure writes through to what it captures.
                 if matches!(call.callee, Expr::Ident(_)) {
                     self.disturb(&call.callee);
@@ -938,13 +970,13 @@ impl MoveWalker<'_, '_> {
                 for arg in &mc.args {
                     self.visit_value(arg);
                 }
-                self.store_through_call(Some(mc), &mc.args);
+                self.store_through_call(expr);
             }
             Expr::StaticMethodCall(smc) => {
                 for arg in &smc.args {
                     self.visit_value(arg);
                 }
-                self.store_through_call(None, &smc.args);
+                self.store_through_call(expr);
             }
 
             Expr::Unary(u) => self.visit_expr(&u.expr),
@@ -1003,7 +1035,7 @@ impl MoveWalker<'_, '_> {
                 self.visit_block(block);
             }
             Expr::LabeledBlock(lb) => {
-                self.visit_block(&lb.block);
+                self.visit_labeled_block(&lb.label, &lb.block);
             }
             Expr::If(if_expr) => {
                 self.visit_if(
@@ -1220,37 +1252,40 @@ impl MoveWalker<'_, '_> {
         targets
     }
 
-    /// A call may store what any operand refers into through each `&mut` it
+    /// A call may store what its operands hand it through each `&mut` it
     /// takes.
-    fn store_through_call(&mut self, method: Option<&ast::MethodCallExpr>, args: &[Expr]) {
-        let mut owners = Owners::default();
-        let mut targets = Vec::new();
-        if let Some(mc) = method {
-            let writes = self.sem().method_call_takes_mut_receiver(mc.id);
-            if self.sem().method_call_consumes_receiver(mc.id) {
-                merge_owners(&mut owners, self.owners_of(&mc.receiver));
-            } else {
-                merge_owners(&mut owners, self.reference_owners(&mc.receiver, writes));
-            }
-            if writes {
-                targets.extend(self.write_targets(&mc.receiver));
-                self.disturb(&mc.receiver);
-            }
+    fn store_through_call(&mut self, call: &Expr) {
+        let (method, args) = call_operands(call);
+        let mut through: Vec<(Operand, &Expr)> = Vec::new();
+        if let Some(mc) = method
+            && self.sem().method_call_takes_mut_receiver(mc.id)
+        {
+            through.push((Operand::Receiver, &mc.receiver));
         }
-        for arg in args {
-            merge_owners(&mut owners, self.owners_of(arg));
+        for (i, arg) in args.iter().enumerate() {
             if self.is_mut_ref(arg) {
-                targets.extend(self.write_targets(arg));
-                self.disturb(arg);
+                through.push((Operand::Arg(i), arg));
             }
         }
-        for def in targets {
-            if self
-                .sem()
-                .local_type(def)
-                .is_none_or(|ty| self.sem().may_hold_reference(ty))
-            {
-                self.store(def, &owners);
+        let stores: Vec<(Vec<AstId>, Owners)> = through
+            .iter()
+            .map(|(operand, target)| {
+                let owners = self.operands_owners(call, Destination::Through(*operand));
+                (self.write_targets(target), owners)
+            })
+            .collect();
+        for (_, target) in &through {
+            self.disturb(target);
+        }
+        for (targets, owners) in stores {
+            for def in targets {
+                if self
+                    .sem()
+                    .local_type(def)
+                    .is_none_or(|ty| self.sem().may_hold_reference(ty))
+                {
+                    self.store(def, &owners);
+                }
             }
         }
     }
@@ -1295,20 +1330,11 @@ impl MoveWalker<'_, '_> {
             },
             Expr::Call(call) => {
                 owners = self.owners_of(&call.callee);
-                merge_owners(&mut owners, self.args_owners(expr, &call.args));
+                merge_owners(&mut owners, self.operands_owners(expr, Destination::Result));
             }
-            Expr::MethodCall(mc) => {
-                owners = if self.sem().method_call_consumes_receiver(mc.id) {
-                    self.owners_of(&mc.receiver)
-                } else if self.sem().borrow_reaches_result(expr, Operand::Receiver) {
-                    let writes = self.sem().method_call_takes_mut_receiver(mc.id);
-                    self.reference_owners(&mc.receiver, writes)
-                } else {
-                    self.contents_owners(&mc.receiver)
-                };
-                merge_owners(&mut owners, self.args_owners(expr, &mc.args));
+            Expr::MethodCall(_) | Expr::StaticMethodCall(_) => {
+                owners = self.operands_owners(expr, Destination::Result);
             }
-            Expr::StaticMethodCall(smc) => owners = self.args_owners(expr, &smc.args),
             Expr::Cast(c) => owners = self.owners_of(&c.expr),
             Expr::TryOp(t) => owners = self.owners_of(&t.expr),
             Expr::Spread(inner, _) => owners = self.owners_of(inner),
@@ -1361,16 +1387,29 @@ impl MoveWalker<'_, '_> {
         owners
     }
 
-    /// What the arguments of `call` hand its result. A borrow written as an
-    /// argument counts only where the callee may hand it back; what the
+    /// What the operands of `call` hand `destination`. A borrow written as an
+    /// operand counts only where the callee may put it there; what the
     /// borrowed place holds counts either way.
-    fn args_owners(&self, call: &Expr, args: &[Expr]) -> Owners {
+    fn operands_owners(&self, call: &Expr, destination: Destination) -> Owners {
+        let reaches = |operand| self.sem().borrow_reaches(call, operand, destination);
+        let (method, args) = call_operands(call);
         let mut owners = Owners::default();
+        if let Some(mc) = method {
+            let held = if self.sem().method_call_consumes_receiver(mc.id) {
+                self.owners_of(&mc.receiver)
+            } else if reaches(Operand::Receiver) {
+                let writes = self.sem().method_call_takes_mut_receiver(mc.id);
+                self.reference_owners(&mc.receiver, writes)
+            } else {
+                self.contents_owners(&mc.receiver)
+            };
+            merge_owners(&mut owners, held);
+        }
         for (i, arg) in args.iter().enumerate() {
             let held = match arg {
                 Expr::Unary(u)
                     if matches!(u.op, ast::UnaryOp::Ref | ast::UnaryOp::MutRef)
-                        && !self.sem().borrow_reaches_result(call, Operand::Arg(i)) =>
+                        && !reaches(Operand::Arg(i)) =>
                 {
                     self.contents_owners(&u.expr)
                 }
@@ -1627,6 +1666,21 @@ impl MoveWalker<'_, '_> {
                         merge_owners(self.break_owners.entry(label.clone()).or_default(), owners);
                     }
                 }
+                // A jump with no target is a type error the language service
+                // still walks.
+                let flow = self.flow.clone();
+                let target = match &b.label {
+                    Some(label) => self
+                        .labels
+                        .iter_mut()
+                        .rev()
+                        .find(|(name, _)| name == label)
+                        .map(|(_, end)| end),
+                    None => self.loops.last_mut().map(|jumps| &mut jumps.breaks),
+                };
+                if let Some(target) = target {
+                    reach(target, flow);
+                }
                 true
             }
             Stmt::Assert(a) => {
@@ -1636,8 +1690,14 @@ impl MoveWalker<'_, '_> {
                 }
                 false
             }
-            Stmt::LabeledBlock(lb) => self.visit_block(&lb.block),
-            Stmt::Continue(_) => true,
+            Stmt::LabeledBlock(lb) => self.visit_labeled_block(&lb.label, &lb.block),
+            Stmt::Continue(_) => {
+                let flow = self.flow.clone();
+                if let Some(jumps) = self.loops.last_mut() {
+                    reach(&mut jumps.continues, flow);
+                }
+                true
+            }
             Stmt::Item(item) => {
                 self.checker.check_item(item);
                 false
@@ -1650,17 +1710,26 @@ impl MoveWalker<'_, '_> {
     /// second reports what reads a value the first moved. Each iteration runs
     /// the head, the body, then `update`, as a C-style `for` does.
     /// The loop may also run no iteration, so what it leaves joins the state
-    /// it entered with.
+    /// it entered with, and what each `break` carried.
     fn visit_loop(&mut self, head: &LoopHead, body: &Block, update: Option<&Expr>) {
         let entry = self.flow.clone();
+        self.loops.push(LoopJumps::default());
         self.suppress += 1;
         self.visit_iteration(head, body, update);
         self.suppress -= 1;
         self.visit_iteration(head, body, update);
+        let jumps = self.loops.pop().expect("pushed above");
         self.flow.merge(entry);
+        if let Some(broken) = jumps.breaks {
+            self.flow.merge(broken);
+        }
     }
 
+    /// The iteration's end is reached by a body that does not diverge and by
+    /// each `continue`; one reached by neither leaves the next iteration the
+    /// state this one began with.
     fn visit_iteration(&mut self, head: &LoopHead, body: &Block, update: Option<&Expr>) {
+        let start = self.flow.clone();
         self.in_scope(|walker| {
             match head {
                 LoopHead::None => {}
@@ -1670,11 +1739,36 @@ impl MoveWalker<'_, '_> {
                     walker.hold_bindings(pattern, owners);
                 }
             }
-            walker.visit_block(body);
+            let diverged = walker.visit_block(body);
+            let jumps = walker.loops.last_mut().expect("the loop pushed its jumps");
+            let mut end = (!diverged).then(|| walker.flow.clone());
+            if let Some(continued) = jumps.continues.take() {
+                reach(&mut end, continued);
+            }
+            walker.flow = end.unwrap_or(start);
             if let Some(update) = update {
                 walker.visit_expr(update);
             }
         });
+    }
+
+    /// A labeled block ends where its body does and where each `break` naming
+    /// it lands.
+    fn visit_labeled_block(&mut self, label: &str, block: &Block) -> bool {
+        self.labels.push((label.to_string(), None));
+        let diverged = self.visit_block(block);
+        let (_, broken) = self.labels.pop().expect("pushed above");
+        let mut end = (!diverged).then(|| std::mem::take(&mut self.flow));
+        if let Some(broken) = broken {
+            reach(&mut end, broken);
+        }
+        match end {
+            Some(end) => {
+                self.flow = end;
+                false
+            }
+            None => true,
+        }
     }
 
     /// The bindings `pattern` makes hold new values, none of them moved, and
@@ -1755,7 +1849,7 @@ impl MoveWalker<'_, '_> {
     fn visit_expr_diverges(&mut self, expr: &Expr) -> bool {
         match expr {
             Expr::Block(block) => self.visit_block(block),
-            Expr::LabeledBlock(lb) => self.visit_block(&lb.block),
+            Expr::LabeledBlock(lb) => self.visit_labeled_block(&lb.label, &lb.block),
             other => {
                 self.visit_value(other);
                 false

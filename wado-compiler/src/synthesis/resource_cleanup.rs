@@ -25,8 +25,8 @@ use crate::resource_holding::{Held, HeldTypes, holds_resource};
 use crate::synthesis::cm_binding::{end_drop_call, resource_drop_call};
 use crate::synthesis::common;
 use crate::synthesis::common::{
-    assign, binary, builtin_call, expr_stmt, if_stmt, let_mut_stmt, let_stmt, local_ref, not_expr,
-    synth_span,
+    assign, binary, builtin_call, deref_expr, expr_stmt, if_stmt, let_mut_stmt, let_stmt,
+    local_ref, not_expr, synth_span,
 };
 use crate::tir;
 use crate::tir::{
@@ -208,6 +208,8 @@ enum Layout<'a> {
         elem: TypeId,
         fields: Vec<(u32, String, TypeId)>,
     },
+    /// An `Array` of `elem`, whose drop glue walks every slot.
+    Array { elem: TypeId },
     /// An aggregate, instantiating `decl` with `args` where it has a
     /// declaration, and dropped by `drop_impl` where it implements `Drop`.
     Holder {
@@ -292,6 +294,9 @@ impl<'a> Resources<'a> {
         }
         if let ResolvedType::GenericResource { .. } = resolved {
             return Layout::End;
+        }
+        if let ResolvedType::BuiltinArray(elem) = resolved {
+            return Layout::Array { elem };
         }
         let mut tt = self.tt.borrow_mut();
         if let Some(elems) = tt.as_tuple(base) {
@@ -388,7 +393,7 @@ impl<'a> Resources<'a> {
                 let tt = self.tt.borrow();
                 tt.as_tuple(tt.representation_head(type_id)).is_none()
             }
-            Layout::Holder { .. } | Layout::Opaque => false,
+            Layout::Array { .. } | Layout::Holder { .. } | Layout::Opaque => false,
         }
     }
 
@@ -418,6 +423,11 @@ impl HeldTypes for Resources<'_> {
             } => Held::Resource,
             Layout::List { decl, elem, .. } => Held::Members {
                 decl,
+                args: vec![elem],
+                members: vec![elem],
+            },
+            Layout::Array { elem } => Held::Members {
+                decl: None,
                 args: vec![elem],
                 members: vec![elem],
             },
@@ -662,6 +672,7 @@ fn build_drop_glue(
     let value = local_ref(0, "value", type_id);
     let stmts = match cx.resources.layout(type_id) {
         Layout::List { slots, elem, .. } => drop_list_slots(value, slots, elem, &mut cx),
+        Layout::Array { elem } => drop_array_slots(value, elem, &mut cx),
         Layout::Holder {
             drop_impl: Some(drop_impl),
             ..
@@ -898,7 +909,7 @@ fn drop_value(scrutinee: TirExpr, type_id: TypeId, cx: &mut Cx) -> Vec<TirStmt> 
             type_id,
             &cx.resources.tt.borrow(),
         ))],
-        Layout::List { .. } => drop_through_glue(scrutinee, type_id, cx),
+        Layout::List { .. } | Layout::Array { .. } => drop_through_glue(scrutinee, type_id, cx),
         // A generic impl's instance is monomorphization's to make. It scans
         // the glue this pass adds, but not an instance body this pass
         // elaborates, which it has already scanned.
@@ -1063,6 +1074,15 @@ fn drop_list_slots(list: TirExpr, slots_ty: TypeId, elem: TypeId, cx: &mut Cx) -
         cx,
     ));
     stmts
+}
+
+/// Drop each slot of `array`, where a move has not emptied it.
+fn drop_array_slots(array: TirExpr, elem: TypeId, cx: &mut Cx) -> Vec<TirStmt> {
+    let span = synth_span();
+    let array_ref_ty = cx.resources.tt.borrow_mut().make_ref(array.type_id);
+    let array = common::ref_expr(array, array_ref_ty, span);
+    let len = builtin_call("array_len", vec![array.clone()], TypeTable::I32);
+    drop_slots(&array, common::i32_const(0), len, elem, cx)
 }
 
 /// The loop that drops each slot of `array` from `start` up to `end`, where a
@@ -1876,7 +1896,7 @@ fn elab_moving_builtin(expr: &mut TirExpr, builtin: MovingBuiltin, cx: &mut Cx) 
         }
         MovingBuiltin::Move => {
             stmts.push(expr_stmt(raw(&args)));
-            stmts.extend(vacate_moved(&args));
+            stmts.extend(vacate_moved(&args, cx));
             None
         }
         MovingBuiltin::Release(elem) => {
@@ -1915,13 +1935,22 @@ fn release_slots(array: &TirExpr, offset: TirExpr, len: TirExpr) -> TirStmt {
 }
 
 /// Empty the source slots of `array_move(dst, dst_offset, src, src_offset,
-/// len)` that the destination range does not cover, reading the two as one
-/// array: what they held moved. Where they are two arrays, the source is one
-/// a grow discards, whose slots nothing drops.
-fn vacate_moved(args: &[TirExpr]) -> Vec<TirStmt> {
-    let [_, dst_offset, src, src_offset, len] = args else {
+/// len)` that the destination range does not cover: what they held moved, so
+/// a later drop of the source range drops nothing twice. Within one array the
+/// ranges may overlap; across two the whole source range empties.
+fn vacate_moved(args: &[TirExpr], cx: &Cx) -> Vec<TirStmt> {
+    let [dst, dst_offset, src, src_offset, len] = args else {
         unreachable!("`array_move` takes five arguments");
     };
+    let array = |reference: &TirExpr| {
+        let tt = cx.resources.tt.borrow();
+        let (ResolvedType::Ref(array) | ResolvedType::MutRef(array)) = *tt.get(reference.type_id)
+        else {
+            unreachable!("`array_move` takes its arrays by reference");
+        };
+        deref_expr(reference.clone(), array, synth_span())
+    };
+    let same_array = builtin_call("ref_eq", vec![array(dst), array(src)], TypeTable::BOOL);
     let int = |op, left: &TirExpr, right: &TirExpr| {
         binary(op, left.clone(), right.clone(), TypeTable::I32)
     };
@@ -1958,13 +1987,19 @@ fn vacate_moved(args: &[TirExpr]) -> Vec<TirStmt> {
         src_offset.clone(),
         TypeTable::BOOL,
     );
-    vec![if_stmt(
+    let shifted = if_stmt(
         moves_right,
         TirBlock::new(vec![right], span),
         Some(TirBlock::new(
             vec![if_stmt(moves_left, TirBlock::new(vec![left], span), None)],
             span,
         )),
+    );
+    let across = release_slots(src, src_offset.clone(), len.clone());
+    vec![if_stmt(
+        same_array,
+        TirBlock::new(vec![shifted], span),
+        Some(TirBlock::new(vec![across], span)),
     )]
 }
 
@@ -2013,7 +2048,7 @@ fn replace_through(
                 )));
             }
         }
-        Layout::Holder { .. } | Layout::Opaque => {
+        Layout::Array { .. } | Layout::Holder { .. } | Layout::Opaque => {
             let (local, name) = cx.alloc_local(type_id, "replaced");
             stmts.push(let_stmt(&name, local, type_id, place.clone()));
             stmts.push(expr_stmt(assign(place, value.clone())));
@@ -2311,7 +2346,9 @@ fn zero_object(value: TirExpr, cx: &Cx) -> Vec<TirStmt> {
             .into_iter()
             .map(empty_place)
             .collect(),
-        Layout::List { .. } | Layout::Holder { .. } | Layout::Opaque => Vec::new(),
+        Layout::List { .. } | Layout::Array { .. } | Layout::Holder { .. } | Layout::Opaque => {
+            Vec::new()
+        }
     }
 }
 

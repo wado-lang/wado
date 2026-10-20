@@ -28,7 +28,7 @@ use crate::elaborator::sig;
 use crate::elaborator::solver_bridge::SolverBridge;
 use crate::name::{FqTypeName, NEVER_TYPE_NAME, UNIT_TYPE_NAME};
 use crate::resolve::Resolutions;
-use crate::semantics::Operand;
+use crate::semantics::{Destination, Operand};
 
 /// Pipeline-wide type knowledge — the type arena, the cross-module decl
 /// indices, the registries, and the read-only caches built once at
@@ -194,14 +194,19 @@ impl TypeSystem {
         self.may_hold_reference_from(type_id, true, None, &mut IndexSet::default())
     }
 
-    /// Whether a borrow passed at `operand` of a call of `callee` may reach the
-    /// result. It may not where the parameter is declared a reference and the
-    /// declared return type spells no reference that could point into the
-    /// borrowed type: a body generic over the rest has no way to make such a
-    /// reference of its own, so its result holds only what the borrowed place
-    /// already held. A parameter declared a type parameter takes the borrow as
-    /// its argument, which the result may return.
-    pub(crate) fn borrow_reaches_result(&self, callee: DefId, operand: Operand) -> bool {
+    /// Whether a borrow passed at `operand` of a call of `callee` may reach
+    /// `destination`. It may not where the parameter is declared a reference
+    /// and the declared destination type holds no reference that could point
+    /// into the borrowed type: a body generic over the rest has no way to make
+    /// such a reference of its own, so what it puts there holds only what the
+    /// borrowed place already held. A parameter declared a type parameter takes
+    /// the borrow as its argument, which the body may put anywhere.
+    pub(crate) fn borrow_reaches(
+        &self,
+        callee: DefId,
+        operand: Operand,
+        destination: Destination,
+    ) -> bool {
         let (decl, first_value) = match self.signatures.method_sig(callee) {
             Some(sig) => (&sig.decl, sig.first_value_param()),
             None => match self.signatures.function_sig(callee) {
@@ -209,21 +214,33 @@ impl TypeSystem {
                 None => return true,
             },
         };
-        let at = match operand {
-            Operand::Receiver => 0,
-            Operand::Arg(i) => first_value + i,
+        let param = |operand: Operand| {
+            let at = match operand {
+                Operand::Receiver => 0,
+                Operand::Arg(i) => first_value + i,
+            };
+            decl.param_types
+                .get(at)
+                .map(|&param| self.type_table.borrow().get(param).clone())
         };
-        let Some(&param) = decl.param_types.get(at) else {
-            return true;
-        };
-        let (ResolvedType::Ref(borrowed) | ResolvedType::MutRef(borrowed)) =
-            self.type_table.borrow().get(param).clone()
+        let Some(ResolvedType::Ref(borrowed) | ResolvedType::MutRef(borrowed)) = param(operand)
         else {
             return true;
         };
-        decl.return_type.is_some_and(|ret| {
-            self.may_hold_reference_from(ret, false, Some(borrowed), &mut IndexSet::default())
-        })
+        let into = match destination {
+            Destination::Result => match decl.return_type {
+                Some(ret) => ret,
+                None => return false,
+            },
+            // A parameter declared `&` takes no write, whatever the caller
+            // passed it.
+            Destination::Through(target) => match param(target) {
+                Some(ResolvedType::MutRef(target)) => target,
+                Some(ResolvedType::Ref(_)) => return false,
+                _ => return true,
+            },
+        };
+        self.may_hold_reference_from(into, false, Some(borrowed), &mut IndexSet::default())
     }
 
     /// Whether a reference to `pointee` may point into a value of `place`: at

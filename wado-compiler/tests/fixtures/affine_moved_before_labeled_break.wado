@@ -1,0 +1,25 @@
+// A `break LABEL` carries what its path moved to the end of the labeled block.
+affine struct Tok {
+    id: i32,
+}
+
+impl Drop for Tok {
+    fn drop(self) {
+    }
+}
+
+fn eat(t: Tok) -> i32 {
+    return t.id;
+}
+
+test {
+    let t = Tok { id: 1 };
+    blk: {
+        eat(t);
+        break blk;
+    }
+    eat(t);
+}
+
+__DATA__
+{"compile_error": ":21:9: analysis error: affine value `t` used after it was moved (moved at 18:13)"}
