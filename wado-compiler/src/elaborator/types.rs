@@ -4196,6 +4196,26 @@ pub(crate) struct DataDecls {
 }
 
 impl DataDecls {
+    /// Take what `from` declares of the fields, cases and base of each of
+    /// `defs`.
+    pub(crate) fn publish<'d>(
+        &mut self,
+        from: &DataDecls,
+        defs: impl IntoIterator<Item = &'d DefId>,
+    ) {
+        for def in defs {
+            if let Some(info) = from.struct_fields.get(def) {
+                self.struct_fields.insert(*def, info.clone());
+            }
+            if let Some(info) = from.variant_cases.get(def) {
+                self.variant_cases.insert(*def, info.clone());
+            }
+            if let Some(base) = from.newtypes.get(def) {
+                self.newtypes.insert(*def, *base);
+            }
+        }
+    }
+
     /// Declare `decl` as a distinct flags type, which is also a type name.
     pub(super) fn declare_flags(
         &mut self,

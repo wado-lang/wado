@@ -1,0 +1,50 @@
+// A loop a `break` leaves falls through, so what it moved is gone after it:
+// a `break` of the loop itself, and one of a labeled block around it.
+
+affine struct Tok {
+    id: i32,
+}
+
+impl Drop for Tok {
+    fn drop(self) {
+    }
+}
+
+fn eat(t: Tok) -> i32 {
+    return t.id;
+}
+
+fn broken(flag: bool) -> i32 {
+    let t = Tok { id: 1 };
+    loop {
+        if flag {
+            eat(t);
+            break;
+        }
+    }
+    return t.id;
+}
+
+fn labeled(flag: bool) -> i32 {
+    let t = Tok { id: 2 };
+    out: {
+        while true {
+            if flag {
+                eat(t);
+                break out;
+            }
+        }
+    }
+    return t.id;
+}
+
+export fn run() {
+    broken(true);
+    labeled(true);
+}
+
+__DATA__
+{
+    "compile_error": ":25:12: analysis error: affine value `t` used after it was moved (moved at 21:17)",
+    "compile_errors_contains": ["affine value `t` used after it was moved (moved at 33:21)"]
+}

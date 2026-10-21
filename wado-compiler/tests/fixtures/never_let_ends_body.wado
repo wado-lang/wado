@@ -1,0 +1,22 @@
+// A `let` whose value is of type `!` never falls through, so the body needs no
+// `return` after it.
+
+use { println, Stdout } from "core:cli";
+
+fn fail() -> ! {
+    panic("gone");
+}
+
+fn first(flag: bool) -> i32 {
+    if flag {
+        return 1;
+    }
+    let never = fail();
+}
+
+export fn run() with Stdout {
+    println(`${first(true)}`);
+}
+
+__DATA__
+{"stdout": "1\n"}

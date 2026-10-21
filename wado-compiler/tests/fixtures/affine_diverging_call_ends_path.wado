@@ -1,0 +1,107 @@
+// A path that never falls through keeps what it moved to itself, so the value
+// is still in place after it: a call to a `-> !` function, `panic` as a `let`
+// value or a match arm, a `loop`, `while true` or `for ;;` no `break`
+// leaves, and an `else` that returns.
+
+use { println, log_stdout, Stdout } from "core:cli";
+
+affine struct Tok {
+    id: i32,
+}
+
+impl Drop for Tok {
+    fn drop(self) {
+        log_stdout(`drop ${self.id}`);
+    }
+}
+
+fn eat(t: Tok) -> i32 {
+    return t.id;
+}
+
+fn fail(message: String) -> ! {
+    panic(message);
+}
+
+fn call_stmt(flag: bool) -> i32 {
+    let t = Tok { id: 1 };
+    if flag {
+        eat(t);
+        fail("gone");
+    }
+    return t.id;
+}
+
+fn let_value(flag: bool) -> i32 {
+    let t = Tok { id: 2 };
+    if flag {
+        eat(t);
+        let never = panic("gone");
+    }
+    return t.id;
+}
+
+fn match_arm(flag: bool) -> i32 {
+    let t = Tok { id: 3 };
+    let n = match flag {
+        true => {
+            eat(t);
+            panic("gone")
+        },
+        false => 0,
+    };
+    return t.id + n;
+}
+
+fn endless(flag: bool) -> i32 {
+    let t = Tok { id: 4 };
+    if flag {
+        eat(t);
+        loop {
+        }
+    }
+    return t.id;
+}
+
+fn endless_while(flag: bool) -> i32 {
+    let t = Tok { id: 5 };
+    if flag {
+        eat(t);
+        while true {
+        }
+    }
+    return t.id;
+}
+
+fn endless_for(flag: bool) -> i32 {
+    let t = Tok { id: 6 };
+    if flag {
+        eat(t);
+        for ; ; {
+        }
+    }
+    return t.id;
+}
+
+fn else_returns(flag: bool) -> i32 {
+    let t = Tok { id: 7 };
+    if flag {
+    } else {
+        eat(t);
+        return 0;
+    }
+    return t.id;
+}
+
+export fn run() with Stdout {
+    println(`${call_stmt(false)}`);
+    println(`${let_value(false)}`);
+    println(`${match_arm(false)}`);
+    println(`${endless(false)}`);
+    println(`${endless_while(false)}`);
+    println(`${endless_for(false)}`);
+    println(`${else_returns(true)}`);
+}
+
+__DATA__
+{"stdout": "drop 1\n1\ndrop 2\n2\ndrop 3\n3\ndrop 4\n4\ndrop 5\n5\ndrop 6\n6\ndrop 7\n7\n"}

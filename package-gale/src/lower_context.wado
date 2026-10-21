@@ -217,20 +217,29 @@ impl LowerContext {
         return rule_overlap_groups(rule, lowered_rule, &mut self.analysis, &self.follow, has_gate);
     }
 
-    /// Whether the choice among the alternatives `alt_indices` of the rule
-    /// being lowered reaches a decision the simulator makes. `multi_alt` is
-    /// as for `rule_overlap::overlap_groups_of`. Under `atn: "verify"` it never
-    /// does: the tournament makes it, and the simulator checks what `auto`
-    /// would hand it.
-    pub fn choice_routes(&mut self, rule: &ParserRule, alt_indices: List<i32>, multi_alt: bool) -> bool {
+    /// Who makes the choice among the alternatives `alt_indices` of the rule
+    /// being lowered. `multi_alt` is as for `rule_overlap::overlap_groups_of`.
+    /// Under `atn: "verify"` the simulator never does: the tournament makes
+    /// it, and the simulator checks what `auto` would hand it.
+    pub fn choice_route(&mut self, rule: &ParserRule, alt_indices: List<i32>, multi_alt: bool) -> ChoiceRoute {
         let has_gate = |alt: &Alternative| self.alt_has_gate(alt);
         let overlap = overlap_groups_of(rule, alt_indices, multi_alt, &mut self.analysis, &self.follow, has_gate);
+        let mode = if self.settings.atn.verifies() { AtnMode::Auto } else { self.settings.atn };
+        if !overlap_routes(rule, &overlap, &mut self.analysis, &self.follow, mode) {
+            return ChoiceRoute::Static;
+        }
         if !self.settings.atn.verifies() {
-            return overlap_routes(rule, &overlap, &mut self.analysis, &self.follow, self.settings.atn);
+            return ChoiceRoute::Simulator;
         }
-        if overlap_routes(rule, &overlap, &mut self.analysis, &self.follow, AtnMode::Auto) {
-            self.mark_checks_with_simulator();
-        }
-        return false;
+        self.mark_checks_with_simulator();
+        return ChoiceRoute::Checked;
     }
+}
+
+/// Who makes a choice among alternatives.
+pub enum ChoiceRoute {
+    Static,
+    /// The static path, with the simulator checking it.
+    Checked,
+    Simulator,
 }

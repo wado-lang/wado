@@ -1251,9 +1251,10 @@ fn elab_scope(
     let mut out: Vec<TirStmt> = Vec::new();
     let mut flow = Flow::Normal;
     let last = stmts.len().wrapping_sub(1);
-    for (idx, stmt) in stmts.into_iter().enumerate() {
+    for (idx, mut stmt) in stmts.into_iter().enumerate() {
         if flow == Flow::Diverged {
-            // Unreachable after a diverging statement; preserve verbatim.
+            // No path reaches it, so nothing drops there and a move takes nothing.
+            StripMoves.visit_stmt(&mut stmt);
             out.push(stmt);
             continue;
         }

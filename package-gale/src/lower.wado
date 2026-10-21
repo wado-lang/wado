@@ -85,6 +85,7 @@ use {
     alt_is_left_recursive,
     compute_prefix_self_ref_min_prec,
     element_is_self_ref,
+    lr_alt_has_suffix,
     rule_is_left_recursive,
 } from "./lr_util.wado";
 use {
@@ -652,7 +653,7 @@ fn lower_multi_alt_rule(rule: &ParserRule, ctx: &mut LowerContext) -> MultiAltRu
     let dispatch = build_overlap_dispatch(&owner, &rule.alternatives, &all_indices, &classes, ctx);
     // The scan of a rule whose choice the simulator makes consults it as the
     // parse does.
-    if ctx.choice_routes(rule, all_indices, true) {
+    if ctx.choice_route(rule, all_indices, true) matches { Simulator } {
         ctx.mark_asks_simulator("the choice among the alternatives");
     }
     return MultiAltRule {
@@ -714,6 +715,13 @@ fn lower_lr_rule(rule: &ParserRule, ctx: &mut LowerContext) -> LeftRecursiveRule
         lr_alts.push(lower_lr_alt(rule, *lr_idx, own_prec, conflict_min, ctx, &case_names, &alt_gc_starts));
         lr_position += 1;
     }
+    let mut loop_edges = 0;
+    for let a of &mut lr_alts {
+        if lr_alt_has_suffix(&rule.alternatives[a.alt_index]) {
+            a.loop_edge = loop_edges;
+            loop_edges += 1;
+        }
+    }
 
     // ATN-class detection: the static suffix-first dispatch mis-commits when
     // an atom alt recursively references this rule with a trailing literal
@@ -725,7 +733,8 @@ fn lower_lr_rule(rule: &ParserRule, ctx: &mut LowerContext) -> LeftRecursiveRule
     // suffix the full context gives the caller (`new Map<T>()` in a TypeScript
     // initializer: `()` is the `new`'s, not a call suffix).
     let suffix_classes = lr_suffix_classes(rule, &lr_alts, ctx);
-    let atom_routes = ctx.choice_routes(rule, non_lr_indices, false);
+    let atom_route = ctx.choice_route(rule, non_lr_indices, false);
+    let atom_routes = atom_route matches { Simulator };
     let atn_class = atom_routes
         || lr_rule_is_atn_class(rule, &non_lr_indices, &lr_alts, &suffix_classes, &mut ctx.analysis);
     if atn_class {
@@ -754,6 +763,7 @@ fn lower_lr_rule(rule: &ParserRule, ctx: &mut LowerContext) -> LeftRecursiveRule
         lr_alts,
         lr_dispatch,
         atn_class,
+        loop_checked: !atn_class && atom_route matches { Checked },
         mid_operand_gated,
     };
 }
@@ -785,7 +795,7 @@ fn lr_rule_is_atn_class(
     // the open end via `atn_state_cont_admits`.
     for let mut i = 0; i < lr_alts.len(); i += 1 {
         let a = &lr_alts[i];
-        if !a.suffix.ops.is_empty() && (a.suffix_first.is_empty() || alt_class_is_open_ended(&suffix_classes[i])) {
+        if a.loop_edge >= 0 && (a.suffix_first.is_empty() || alt_class_is_open_ended(&suffix_classes[i])) {
             return true;
         }
     }
@@ -1560,7 +1570,7 @@ fn compute_lr_conflict_min_prec(
     let mut lr_pos: i32 = 0;
     for let lr_idx of lr_indices {
         let other = &rule.alternatives[*lr_idx];
-        if other.elements.len() <= 1 {
+        if !lr_alt_has_suffix(other) {
             lr_pos += 1;
             continue;
         }
@@ -1597,7 +1607,7 @@ fn compute_lr_dispatch_data(lr_alts: &List<LrAlt>, suffix_classes: &List<AltClas
         // and their `scan_X_lr_N` helpers. Only the static dispatch reads
         // `groups`: the simulator decides between suffixes admitting one token,
         // as ANTLR4 does.
-        let skip = if atn_class { lr.suffix.ops.is_empty() } else { lr.suffix_first.is_empty() };
+        let skip = if atn_class { lr.loop_edge < 0 } else { lr.suffix_first.is_empty() };
         if skip {
             continue;
         }
@@ -4253,6 +4263,7 @@ fn patch_repeat_op_caller_follow<S: AsStrSlice>(
         probe_contested: stamps.probe_contested,
         static_exit_undecided: stamps.static_exit_undecided,
         atn_decides: stamps.atn_decides,
+        atn_checks: stamps.atn_checks,
         atn_asked_kinds: stamps.atn_asked_kinds,
         probe_viable: stamps.probe.viable,
         duties: stamps.duties,
@@ -4266,6 +4277,7 @@ struct RepeatExitStamps {
     probe_contested: bool,
     static_exit_undecided: bool,
     atn_decides: bool,
+    atn_checks: bool,
     atn_asked_kinds: List<i32>,
     duties: IterationDuties,
 }
@@ -4316,12 +4328,17 @@ fn lower_repeat_exit_stamps<S: AsStrSlice>(
     outer_suffix: &List<Element>,
 ) -> RepeatExitStamps {
     let by_atn = non_greedy_exit_by_atn(non_greedy, kind, body_admits);
-    let contested = ctx.settings.atn matches { Always }
+    let contested_somewhere = ctx.settings.atn matches { Always | Verify }
+        && !by_atn
         && repeat_contested(body_admits, caller_follow_first, alt_elements, index, ctx, reaches_rule_tail);
+    let contested = contested_somewhere && ctx.settings.atn matches { Always };
+    let checked = contested_somewhere && !non_greedy && ctx.settings.atn.verifies();
     if by_atn {
         ctx.mark_asks_simulator("a non-greedy loop's exit");
     } else if contested {
         ctx.mark_asks_simulator("a repeat whose body and continuation can start on one token");
+    } else if checked {
+        ctx.mark_checks_with_simulator();
     }
     return RepeatExitStamps {
         probe: if by_atn || contested {
@@ -4345,6 +4362,7 @@ fn lower_repeat_exit_stamps<S: AsStrSlice>(
             caller_follow_second,
         ),
         atn_decides: by_atn || contested,
+        atn_checks: checked,
         atn_asked_kinds: if by_atn {
             atn_asked_kinds(&alt_elements[index], caller_follow_first, alt_elements, index, ctx);
         } else {

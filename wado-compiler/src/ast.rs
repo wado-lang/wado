@@ -2950,6 +2950,14 @@ pub enum Condition {
     },
 }
 
+impl Condition {
+    /// Whether it is the literal `true`: a loop it heads ends only by a jump.
+    #[must_use]
+    pub fn is_always_true(&self) -> bool {
+        matches!(self, Self::Expr(Expr::Literal(lit)) if matches!(lit.value, Literal::Bool(true)))
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct IfStmt {
     pub id: AstId,

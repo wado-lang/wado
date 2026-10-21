@@ -144,6 +144,10 @@ pub(crate) struct ModuleDecls {
     /// The identities of the local items in scope at the walk's position, by the
     /// name written in source. Their contents come from the maps above.
     pub(crate) fn_local_items: IndexMap<String, DefId>,
+
+    /// Every function-local struct and newtype the walk declared, which the
+    /// program's data tables learn of only once the walk ends.
+    pub(crate) fn_local_defs: Vec<DefId>,
 }
 
 impl ModuleDecls {

@@ -13,7 +13,7 @@ use wasmtime::{
 };
 use wasmtime_wasi::filesystem::WasiFilesystemCtx;
 use wasmtime_wasi::p2::pipe::MemoryOutputPipe;
-use wasmtime_wasi::{FsPerms, WasiCtx, WasiCtxView, WasiView};
+use wasmtime_wasi::{FsPerms, WasiCtx, WasiCtxBuilder, WasiCtxView, WasiView};
 use wasmtime_wasi_http::{WasiHttpCtx, WasiHttpCtxView, WasiHttpView};
 use wasmtime_wasi_tls::{
     Error as WasiTlsError, TlsProvider, TlsStream, TlsTransport, WasiTlsCtx, WasiTlsCtxBuilder,
@@ -29,6 +29,19 @@ use wado_host::engine::default_config;
 use wado_host::sync::lock;
 use wado_host::timezone::add_to_linker;
 use wado_host::tls_trust::{build_root_cert_store, install_default_crypto_provider};
+
+/// Let `wasi:sockets` and `wasi:tls` reach the host network, as a native tool
+/// can: a guest is confined by what its effects reach, and one that names
+/// `TcpSocket` asked for the network. A deployment that must not give it one
+/// confines the host process instead.
+fn grant_host_network(builder: &mut WasiCtxBuilder) {
+    builder.inherit_network();
+    // wasmtime denies creating a socket by default; `inherit_network`
+    // relaxes only the per-address check that comes after it.
+    builder.allow_tcp(true);
+    builder.allow_udp(true);
+    builder.allow_ip_name_lookup(true);
+}
 
 /// Build a [`WasiTlsCtx`] backed by [`WadoTlsProvider`] so the raw
 /// `wasi:tls` connector and [`WadoHttpHooks`] share the same trust store.
@@ -125,7 +138,8 @@ impl WasiState {
     ///
     /// Returns an error if a preopened directory cannot be opened.
     pub fn new(preopened_dirs: &[(String, String)], args: &[String]) -> Result<Self> {
-        Self::build(preopened_dirs, args, true, Stdio::Inherit, None)
+        let preopens = Preopens::open(preopened_dirs)?;
+        Ok(Self::build(&preopens, args, true, Stdio::Inherit, None))
     }
 
     /// Like [`Self::new`], but captures the guest's stdout/stderr into
@@ -153,7 +167,7 @@ impl WasiState {
         let stdout = MemoryOutputPipe::new(CAPTURED_STDIO_CAPACITY);
         let stderr = MemoryOutputPipe::new(CAPTURED_STDIO_CAPACITY);
         let state = Self::build(
-            preopened_dirs,
+            &Preopens::open(preopened_dirs)?,
             args,
             true,
             Stdio::Captured {
@@ -161,54 +175,32 @@ impl WasiState {
                 stderr: stderr.clone(),
             },
             Some(eval),
-        )?;
+        );
         Ok((state, stdout, stderr))
     }
 
     /// Like [`Self::new`], but reuses pre-opened directories from
     /// [`Preopens`] and does NOT inherit the host process's environment.
-    /// Used by `wado serve`, which builds a fresh `WasiState` per request:
-    /// the preopens are opened once at server startup, then attached to
-    /// every per-request state via this constructor — avoiding one `openat`
-    /// syscall per preopen per request.
+    /// Used by `wado serve`, which builds a `WasiState` for each worker
+    /// instance and again whenever it recycles one: the preopens are opened
+    /// once at server startup, then attached to every state via this
+    /// constructor — avoiding one `openat` syscall per preopen per state.
     ///
     /// Skipping `inherit_env` matches the policy expected of long-running
     /// services: an HTTP server's env typically holds secrets (DB
-    /// credentials, API tokens) that must not leak into per-request handler
-    /// components.
+    /// credentials, API tokens) that must not leak into handler components.
     pub fn new_no_inherit_env_with_preopens(preopens: &Preopens, args: &[String]) -> Self {
-        let mut builder = WasiCtx::builder();
-        builder.inherit_stdio();
-        builder.args(args);
-        let mut ctx = builder.build();
-        // Replace the (empty) filesystem ctx with a clone of the cached one.
-        // The clone is cheap: each preopen's underlying `cap_std::fs::Dir`
-        // is held behind an `Arc`, so we share fds rather than re-opening.
-        *ctx.filesystem() = preopens.0.clone();
-
-        let table = ResourceTable::new();
-        let http = WasiHttpCtx::new();
-        let http_hooks = WadoHttpHooks::new();
-        let tls = build_wasi_tls_ctx();
-        Self {
-            ctx,
-            table,
-            http,
-            http_hooks,
-            tls,
-            eval: None,
-            coverage: CoverageHits::default(),
-            fuel_start: None,
-        }
+        Self::build(preopens, args, false, Stdio::Inherit, None)
     }
 
+    /// The one place that decides what a guest reaches.
     fn build(
-        preopened_dirs: &[(String, String)],
+        preopens: &Preopens,
         args: &[String],
         inherit_env: bool,
         stdio: Stdio,
         eval: Option<EvalSession>,
-    ) -> Result<Self> {
+    ) -> Self {
         let mut builder = WasiCtx::builder();
         match stdio {
             Stdio::Inherit => {
@@ -223,37 +215,19 @@ impl WasiState {
             builder.inherit_env();
         }
         builder.args(args);
-        for (host_path, guest_path) in preopened_dirs {
-            builder.preopened_dir(host_path, guest_path, FsPerms::ReadWrite)?;
-        }
-        // `wado run` and `wado test` are invoked directly by the developer,
-        // so mirror native CLI tools by letting `wasi:sockets`/`wasi:tls`
-        // reach the host network. Long-running services go through
-        // [`Self::new_no_inherit_env_with_preopens`], which keeps the
-        // default deny-all stance — operators opt in explicitly there.
-        // Hermetic test harnesses (compiler `tests/common.rs`) build their
-        // own `WasiCtx` and are unaffected.
-        builder.inherit_network();
-        // wasmtime denies creating a socket by default; `inherit_network`
-        // relaxes only the per-address check that comes after it.
-        builder.allow_tcp(true);
-        builder.allow_udp(true);
-        builder.allow_ip_name_lookup(true);
-        let ctx = builder.build();
-        let table = ResourceTable::new();
-        let http = WasiHttpCtx::new();
-        let http_hooks = WadoHttpHooks::new();
-        let tls = build_wasi_tls_ctx();
-        Ok(Self {
+        grant_host_network(&mut builder);
+        let mut ctx = builder.build();
+        *ctx.filesystem() = preopens.0.clone();
+        Self {
             ctx,
-            table,
-            http,
-            http_hooks,
-            tls,
+            table: ResourceTable::new(),
+            http: WasiHttpCtx::new(),
+            http_hooks: WadoHttpHooks::new(),
+            tls: build_wasi_tls_ctx(),
             eval,
             coverage: CoverageHits::default(),
             fuel_start: None,
-        })
+        }
     }
 
     /// The coverage regions this store reported.
@@ -272,11 +246,10 @@ impl WasiState {
 /// Pre-opened directories that can be reused across many `WasiState`s.
 ///
 /// `WasiCtxBuilder::preopened_dir` opens the host path with one `openat`
-/// syscall per call. For one-shot processes (`wado run`, `wado test`) that
-/// is fine, but `wado serve` builds a fresh `WasiState` per request, and
-/// re-opening the same dirs on every request is wasted work. A `Preopens`
-/// is opened once (at server startup) and then attached to per-request
-/// states via [`WasiState::new_no_inherit_env_with_preopens`].
+/// syscall per call. `wado serve` builds a `WasiState` per worker instance and
+/// again on every recycle, so it opens a `Preopens` once at startup and
+/// attaches it to each state via
+/// [`WasiState::new_no_inherit_env_with_preopens`].
 ///
 /// The underlying `cap_std::fs::Dir` handles are reference-counted inside
 /// wasmtime's `Dir` (`Arc<cap_std::fs::Dir>`), so cloning a `Preopens`
@@ -294,11 +267,6 @@ impl Preopens {
         for (host_path, guest_path) in preopened_dirs {
             builder.preopened_dir(host_path, guest_path, FsPerms::ReadWrite)?;
         }
-        // We only need the filesystem half of the WasiCtx; the rest is
-        // rebuilt fresh per request. `WasiFilesystemCtx` is `Clone` (with
-        // the heavy `Dir` handles refcounted internally), so taking it by
-        // clone here pays the open cost once and lets every subsequent
-        // request reuse the open fds.
         let mut ctx = builder.build();
         Ok(Self(ctx.filesystem().clone()))
     }
