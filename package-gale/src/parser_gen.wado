@@ -7984,14 +7984,11 @@ fn emit_atn_check<S: AsStrSlice>(
     ctx: &mut EmitContext,
 ) {
     let prec = atn_prec_arg(ctx);
-    let mut number = pick.to_string();
-    if c.numbers != *candidates {
-        number = String::new();
-        for let mut i = 0; i < candidates.len() - 1; i += 1 {
-            number.push_str(`if ${pick} == ${candidates[i]} { ${c.numbers[i]} } else `);
-        }
-        number.push_str(`{ ${c.numbers[c.numbers.len() - 1]} }`);
-    }
+    let number = if c.numbers == *candidates {
+        pick.to_string();
+    } else {
+        candidate_number(&pick, candidates, &c.numbers);
+    };
     ctx.cursor.note_ref(&ATN_VERIFIED);
     let decide = sll_decide_fn_name(c.decision);
     ctx.cursor.note_ref(&decide);
@@ -8007,6 +8004,17 @@ fn emit_atn_check<S: AsStrSlice>(
     )};`);
     w.line(`let _ = ${decide}(${ctx.atn_arg()}, &p.kinds, p.pos, ${prec});`);
     w.end();
+}
+
+/// The expression mapping `pick`, one of `candidates`, to the number at the
+/// same position in `numbers`.
+fn candidate_number<S: AsStrSlice>(pick: S, candidates: &List<i32>, numbers: &List<i32>) -> String {
+    let mut out = String::new();
+    for let mut i = 0; i < candidates.len() - 1; i += 1 {
+        out.push_str(`if ${pick} == ${candidates[i]} { ${numbers[i]} } else `);
+    }
+    out.push_str(`{ ${numbers[numbers.len() - 1]} }`);
+    return out;
 }
 
 /// True when every alt in `indices` has a scan helper covering its whole body,
