@@ -1,7 +1,7 @@
-// A path that reaches an expression of type `!` never falls through, so what
-// it moved stays in place on every path that does: a call to a `-> !`
-// function, `panic` as a `let` value or a match arm, and a `loop` no `break`
-// leaves.
+// What a path moved stays in place on every path that falls through, where the
+// first never does: a call to a `-> !` function, `panic` as a `let` value or a
+// match arm, a `loop`, `while true` or `for ;;` no `break` leaves, and an
+// `else` that returns.
 
 use { println, log_stdout, Stdout } from "core:cli";
 
@@ -63,12 +63,45 @@ fn endless(flag: bool) -> i32 {
     return t.id;
 }
 
+fn endless_while(flag: bool) -> i32 {
+    let t = Tok { id: 5 };
+    if flag {
+        eat(t);
+        while true {
+        }
+    }
+    return t.id;
+}
+
+fn endless_for(flag: bool) -> i32 {
+    let t = Tok { id: 6 };
+    if flag {
+        eat(t);
+        for ; ; {
+        }
+    }
+    return t.id;
+}
+
+fn else_returns(flag: bool) -> i32 {
+    let t = Tok { id: 7 };
+    if flag {
+    } else {
+        eat(t);
+        return 0;
+    }
+    return t.id;
+}
+
 export fn run() with Stdout {
     println(`${call_stmt(false)}`);
     println(`${let_value(false)}`);
     println(`${match_arm(false)}`);
     println(`${endless(false)}`);
+    println(`${endless_while(false)}`);
+    println(`${endless_for(false)}`);
+    println(`${else_returns(true)}`);
 }
 
 __DATA__
-{"stdout": "drop 1\n1\ndrop 2\n2\ndrop 3\n3\ndrop 4\n4\n"}
+{"stdout": "drop 1\n1\ndrop 2\n2\ndrop 3\n3\ndrop 4\n4\ndrop 5\n5\ndrop 6\n6\ndrop 7\n7\n"}

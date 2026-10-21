@@ -1,0 +1,24 @@
+// A call whose type is a newtype over `!` never returns, as one of type `!`
+// does, so the body needs no `return` after it.
+
+use { println, Stdout } from "core:cli";
+
+type Never = !;
+
+fn fail() -> Never {
+    panic("gone");
+}
+
+fn first(flag: bool) -> i32 {
+    if flag {
+        return 1;
+    }
+    fail();
+}
+
+export fn run() with Stdout {
+    println(`${first(true)}`);
+}
+
+__DATA__
+{"stdout": "1\n"}

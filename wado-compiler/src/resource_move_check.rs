@@ -428,6 +428,17 @@ enum LoopHead<'a> {
     Binding(&'a Pattern, Owners),
 }
 
+impl LoopHead<'_> {
+    /// Whether the head never ends the loop, leaving that to a jump.
+    fn is_endless(&self) -> bool {
+        match self {
+            Self::None => true,
+            Self::Condition(condition) => condition.is_always_true(),
+            Self::Binding(..) => false,
+        }
+    }
+}
+
 /// Each moved place, a binding and a field path into it, with where it moved.
 type Moves = IndexMap<(AstId, Vec<String>), Span>;
 
@@ -1550,13 +1561,30 @@ impl MoveWalker<'_, '_> {
 
     fn visit_block(&mut self, block: &Block) -> bool {
         self.in_scope(|walker| {
-            for stmt in &block.stmts {
-                if walker.visit_stmt(stmt) {
-                    return true;
-                }
+            let mut stmts = block.stmts.iter();
+            let diverged = stmts.by_ref().any(|stmt| walker.visit_stmt(stmt));
+            if diverged {
+                walker.visit_unreachable(stmts);
             }
-            false
+            diverged
         })
+    }
+
+    /// Checks statements no path reaches, from the state where the path left.
+    /// What they do reaches nothing: their jumps land nowhere, and the state
+    /// they leave is the one they found.
+    fn visit_unreachable<'s>(&mut self, stmts: impl Iterator<Item = &'s Stmt>) {
+        let flow = self.flow.clone();
+        let loops = std::mem::take(&mut self.loops);
+        let labels = std::mem::take(&mut self.labels);
+        let break_owners = self.break_owners.clone();
+        for stmt in stmts {
+            self.visit_stmt(stmt);
+        }
+        self.flow = flow;
+        self.loops = loops;
+        self.labels = labels;
+        self.break_owners = break_owners;
     }
 
     fn visit_stmt(&mut self, stmt: &Stmt) -> bool {
@@ -1598,30 +1626,21 @@ impl MoveWalker<'_, '_> {
                 false
             }
             Stmt::If(s) => self.visit_if(&s.condition, &s.then_block, s.else_block.as_ref()),
-            Stmt::While(s) => {
-                self.visit_loop(&LoopHead::Condition(&s.condition), &s.body, None);
-                false
-            }
-            Stmt::Loop(s) => !self.visit_loop(&LoopHead::None, &s.body, None),
-            Stmt::For(s) => {
-                self.in_scope(|walker| {
-                    if let Some(init) = &s.init {
-                        walker.visit_stmt(init);
-                    }
-                    let head = match &s.condition {
-                        Some(cond) => LoopHead::Condition(cond),
-                        None => LoopHead::None,
-                    };
-                    walker.visit_loop(&head, &s.body, s.update.as_ref());
-                });
-                false
-            }
+            Stmt::While(s) => self.visit_loop(&LoopHead::Condition(&s.condition), &s.body, None),
+            Stmt::Loop(s) => self.visit_loop(&LoopHead::None, &s.body, None),
+            Stmt::For(s) => self.in_scope(|walker| {
+                let init_diverged = s.init.as_ref().is_some_and(|init| walker.visit_stmt(init));
+                let head = match &s.condition {
+                    Some(cond) => LoopHead::Condition(cond),
+                    None => LoopHead::None,
+                };
+                walker.visit_loop(&head, &s.body, s.update.as_ref()) || init_diverged
+            }),
             // The loop owns what it walks (WEP: Affine Types).
             Stmt::ForOf(s) => {
                 self.visit_at(&s.iterable);
                 let owners = self.owners_of(&s.iterable);
-                self.visit_loop(&LoopHead::Binding(&s.binding, owners), &s.body, None);
-                false
+                self.visit_loop(&LoopHead::Binding(&s.binding, owners), &s.body, None)
             }
             Stmt::Match(m) => self.visit_match(&m.expr, &m.arms),
             Stmt::Break(b) => {
@@ -1675,9 +1694,9 @@ impl MoveWalker<'_, '_> {
     /// A loop as two iterations: the first records what it moves, and the
     /// second reports what reads a value the first moved. Each iteration runs
     /// the head, the body, then `update`, as a C-style `for` does.
-    /// The loop may also run no iteration, so what it leaves joins the state
-    /// it entered with, and what each `break` carried. Answers whether a
-    /// `break` leaves it.
+    /// A loop whose head can end it may also run no iteration, so it ends
+    /// where its head does, in the state it entered with or any an iteration
+    /// left; every loop ends where each `break` lands.
     fn visit_loop(&mut self, head: &LoopHead, body: &Block, update: Option<&Expr>) -> bool {
         let entry = self.flow.clone();
         self.loops.push(LoopJumps::default());
@@ -1686,12 +1705,21 @@ impl MoveWalker<'_, '_> {
         self.suppress -= 1;
         self.visit_iteration(head, body, update);
         let jumps = self.loops.pop().expect("pushed above");
-        self.flow.merge(entry);
-        let Some(broken) = jumps.breaks else {
-            return false;
-        };
-        self.flow.merge(broken);
-        true
+        let mut end = (!head.is_endless()).then(|| {
+            let mut ended = std::mem::take(&mut self.flow);
+            ended.merge(entry);
+            ended
+        });
+        if let Some(broken) = jumps.breaks {
+            reach(&mut end, broken);
+        }
+        match end {
+            Some(end) => {
+                self.flow = end;
+                false
+            }
+            None => true,
+        }
     }
 
     /// Whether `expr` is of type `!`: evaluating it never falls through.
@@ -1782,14 +1810,13 @@ impl MoveWalker<'_, '_> {
             walker.visit_block(then_block)
         });
         let then_flow = std::mem::replace(&mut self.flow, unmatched);
-        let else_div = match else_block {
-            Some(eb) => self.visit_block(eb),
-            None => false,
-        };
-        if !then_div {
-            self.flow.merge(then_flow);
+        let else_div = else_block.is_some_and(|eb| self.visit_block(eb));
+        match (then_div, else_div) {
+            (false, false) => self.flow.merge(then_flow),
+            (false, true) => self.flow = then_flow,
+            (true, _) => {}
         }
-        else_block.is_some() && then_div && else_div
+        then_div && else_div
     }
 
     fn visit_match(&mut self, scrutinee: &Expr, arms: &[ast::MatchArm]) -> bool {
