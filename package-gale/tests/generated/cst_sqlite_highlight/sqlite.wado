@@ -10429,84 +10429,91 @@ fn scan_expr_atom(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, memo: &
     let kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
     if _kind_set_43(kind) {
         if kind == TK_OPEN_PAR {
-            let _atn_alt = atn_decide_168(atn, tokens, pos, min_prec);
-            if _atn_alt == 7 {
-                return scan_expr__alt_21(tokens, start, atn, memo, min_prec, follow);
-            }
-            if _atn_alt == 5 {
-                return scan_expr__alt_14(tokens, start, atn, memo, min_prec, follow);
-            }
-            if _atn_alt == 4 {
-                return scan_expr__alt_13(tokens, start, atn, memo, min_prec, follow);
-            }
-            return scan_expr__alt_2(tokens, start, atn, memo, min_prec, follow);
+            let mut best: i32 = -1;
+            let try_2_end = scan_expr__alt_2(tokens, start, atn, memo, min_prec, follow);
+            if try_2_end > best { best = try_2_end; }
+            let try_13_end = scan_expr__alt_13(tokens, start, atn, memo, min_prec, follow);
+            if try_13_end > best { best = try_13_end; }
+            let try_14_end = scan_expr__alt_14(tokens, start, atn, memo, min_prec, follow);
+            if try_14_end > best { best = try_14_end; }
+            let try_21_end = scan_expr__alt_21(tokens, start, atn, memo, min_prec, follow);
+            if try_21_end > best { best = try_21_end; }
+            if best >= 0 { pos = best; return pos; }
+            return -1;
         } else if kind == TK_K_CAST {
-            let _atn_alt = atn_decide_168(atn, tokens, pos, min_prec);
-            if _atn_alt == 6 {
-                return scan_expr__alt_15(tokens, start, atn, memo, min_prec, follow);
-            }
-            if _atn_alt == 4 {
-                return scan_expr__alt_13(tokens, start, atn, memo, min_prec, follow);
-            }
-            return scan_expr__alt_2(tokens, start, atn, memo, min_prec, follow);
+            let mut best: i32 = -1;
+            let try_2_end = scan_expr__alt_2(tokens, start, atn, memo, min_prec, follow);
+            if try_2_end > best { best = try_2_end; }
+            let try_13_end = scan_expr__alt_13(tokens, start, atn, memo, min_prec, follow);
+            if try_13_end > best { best = try_13_end; }
+            let try_15_end = scan_expr__alt_15(tokens, start, atn, memo, min_prec, follow);
+            if try_15_end > best { best = try_15_end; }
+            if best >= 0 { pos = best; return pos; }
+            return -1;
         } else if kind == TK_K_CASE {
-            let _atn_alt = atn_decide_168(atn, tokens, pos, min_prec);
-            if _atn_alt == 8 {
-                return scan_expr__alt_22(tokens, start, atn, memo, min_prec, follow);
-            }
-            if _atn_alt == 4 {
-                return scan_expr__alt_13(tokens, start, atn, memo, min_prec, follow);
-            }
-            return scan_expr__alt_2(tokens, start, atn, memo, min_prec, follow);
+            let mut best: i32 = -1;
+            let try_2_end = scan_expr__alt_2(tokens, start, atn, memo, min_prec, follow);
+            if try_2_end > best { best = try_2_end; }
+            let try_13_end = scan_expr__alt_13(tokens, start, atn, memo, min_prec, follow);
+            if try_13_end > best { best = try_13_end; }
+            let try_22_end = scan_expr__alt_22(tokens, start, atn, memo, min_prec, follow);
+            if try_22_end > best { best = try_22_end; }
+            if best >= 0 { pos = best; return pos; }
+            return -1;
         } else if kind == TK_K_RAISE {
-            let _atn_alt = atn_decide_168(atn, tokens, pos, min_prec);
-            if _atn_alt == 9 {
-                return scan_expr__alt_23(tokens, start, atn, memo, min_prec, follow);
-            }
-            if _atn_alt == 4 {
-                return scan_expr__alt_13(tokens, start, atn, memo, min_prec, follow);
-            }
-            return scan_expr__alt_2(tokens, start, atn, memo, min_prec, follow);
+            let mut best: i32 = -1;
+            let try_2_end = scan_expr__alt_2(tokens, start, atn, memo, min_prec, follow);
+            if try_2_end > best { best = try_2_end; }
+            let try_13_end = scan_expr__alt_13(tokens, start, atn, memo, min_prec, follow);
+            if try_13_end > best { best = try_13_end; }
+            let try_23_end = scan_expr__alt_23(tokens, start, atn, memo, min_prec, follow);
+            if try_23_end > best { best = try_23_end; }
+            if best >= 0 { pos = best; return pos; }
+            return -1;
         } else if kind == TK_K_NOT {
-            let _atn_alt = atn_decide_168(atn, tokens, pos, min_prec);
-            if _atn_alt == 7 {
-                return scan_expr__alt_21(tokens, start, atn, memo, min_prec, follow);
-            }
-            if _atn_alt == 4 {
-                return scan_expr__alt_13(tokens, start, atn, memo, min_prec, follow);
-            }
-            if _atn_alt == 2 {
-                return scan_expr__alt_2(tokens, start, atn, memo, min_prec, follow);
-            }
-            return scan_expr__alt_3(tokens, start, atn, memo, min_prec, follow);
+            let mut best: i32 = -1;
+            let try_2_end = scan_expr__alt_2(tokens, start, atn, memo, min_prec, follow);
+            if try_2_end > best { best = try_2_end; }
+            let try_3_end = scan_expr__alt_3(tokens, start, atn, memo, min_prec, follow);
+            if try_3_end > best { best = try_3_end; }
+            let try_13_end = scan_expr__alt_13(tokens, start, atn, memo, min_prec, follow);
+            if try_13_end > best { best = try_13_end; }
+            let try_21_end = scan_expr__alt_21(tokens, start, atn, memo, min_prec, follow);
+            if try_21_end > best { best = try_21_end; }
+            if best >= 0 { pos = best; return pos; }
+            return -1;
         } else if kind == TK_K_EXISTS {
-            let _atn_alt = atn_decide_168(atn, tokens, pos, min_prec);
-            if _atn_alt == 7 {
-                return scan_expr__alt_21(tokens, start, atn, memo, min_prec, follow);
-            }
-            if _atn_alt == 4 {
-                return scan_expr__alt_13(tokens, start, atn, memo, min_prec, follow);
-            }
-            return scan_expr__alt_2(tokens, start, atn, memo, min_prec, follow);
+            let mut best: i32 = -1;
+            let try_2_end = scan_expr__alt_2(tokens, start, atn, memo, min_prec, follow);
+            if try_2_end > best { best = try_2_end; }
+            let try_13_end = scan_expr__alt_13(tokens, start, atn, memo, min_prec, follow);
+            if try_13_end > best { best = try_13_end; }
+            let try_21_end = scan_expr__alt_21(tokens, start, atn, memo, min_prec, follow);
+            if try_21_end > best { best = try_21_end; }
+            if best >= 0 { pos = best; return pos; }
+            return -1;
         } else if _kind_set_44(kind) {
             return scan_expr__alt_3(tokens, start, atn, memo, min_prec, follow);
         } else if _kind_set_45(kind) {
             return scan_expr__alt_0(tokens, start, atn, memo, min_prec, follow);
         } else if _kind_set_46(kind) {
-            let _atn_alt = atn_decide_168(atn, tokens, pos, min_prec);
-            if _atn_alt == 0 {
-                return scan_expr__alt_0(tokens, start, atn, memo, min_prec, follow);
-            }
-            if _atn_alt == 4 {
-                return scan_expr__alt_13(tokens, start, atn, memo, min_prec, follow);
-            }
-            return scan_expr__alt_2(tokens, start, atn, memo, min_prec, follow);
+            let mut best: i32 = -1;
+            let try_0_end = scan_expr__alt_0(tokens, start, atn, memo, min_prec, follow);
+            if try_0_end > best { best = try_0_end; }
+            let try_2_end = scan_expr__alt_2(tokens, start, atn, memo, min_prec, follow);
+            if try_2_end > best { best = try_2_end; }
+            let try_13_end = scan_expr__alt_13(tokens, start, atn, memo, min_prec, follow);
+            if try_13_end > best { best = try_13_end; }
+            if best >= 0 { pos = best; return pos; }
+            return -1;
         } else if _kind_set_47(kind) {
-            let _atn_alt = atn_decide_168(atn, tokens, pos, min_prec);
-            if _atn_alt == 4 {
-                return scan_expr__alt_13(tokens, start, atn, memo, min_prec, follow);
-            }
-            return scan_expr__alt_2(tokens, start, atn, memo, min_prec, follow);
+            let mut best: i32 = -1;
+            let try_2_end = scan_expr__alt_2(tokens, start, atn, memo, min_prec, follow);
+            if try_2_end > best { best = try_2_end; }
+            let try_13_end = scan_expr__alt_13(tokens, start, atn, memo, min_prec, follow);
+            if try_13_end > best { best = try_13_end; }
+            if best >= 0 { pos = best; return pos; }
+            return -1;
         }
     }
     if kind == TK_BIND_PARAMETER {
@@ -11540,11 +11547,13 @@ fn scan_result_column(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, mem
     }
     if _kind_set_19(kind) {
         if _kind_set_15(kind) {
-            let _atn_alt = atn_decide_229(atn, tokens, pos, 0);
-            if _atn_alt == 1 {
-                return scan_result_column__alt_1(tokens, start, atn, memo, follow);
-            }
-            return scan_result_column__alt_2(tokens, start, atn, memo, follow);
+            let mut best: i32 = -1;
+            let try_1_end = scan_result_column__alt_1(tokens, start, atn, memo, follow);
+            if try_1_end > best { best = try_1_end; }
+            let try_2_end = scan_result_column__alt_2(tokens, start, atn, memo, follow);
+            if try_2_end > best { best = try_2_end; }
+            if best >= 0 { pos = best; return pos; }
+            return -1;
         } else if _kind_set_60(kind) {
             return scan_result_column__alt_2(tokens, start, atn, memo, follow);
         }
@@ -11570,23 +11579,25 @@ fn scan_table_or_subquery__walk(tokens: &Array<i32>, pos: i32, atn: &mut AtnPred
     let kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
     if _kind_set_15(kind) {
         if kind == TK_OPEN_PAR {
-            let _atn_alt = atn_decide_232(atn, tokens, pos, 0);
-            if _atn_alt == 3 {
-                return scan_table_or_subquery__alt_3(tokens, start, atn, memo, follow);
-            }
-            if _atn_alt == 2 {
-                return scan_table_or_subquery__alt_2(tokens, start, atn, memo, follow);
-            }
-            if _atn_alt == 1 {
-                return scan_table_or_subquery__alt_1(tokens, start, atn, memo, follow);
-            }
-            return scan_table_or_subquery__alt_0(tokens, start, atn, memo, follow);
+            let mut best: i32 = -1;
+            let try_0_end = scan_table_or_subquery__alt_0(tokens, start, atn, memo, follow);
+            if try_0_end > best { best = try_0_end; }
+            let try_1_end = scan_table_or_subquery__alt_1(tokens, start, atn, memo, follow);
+            if try_1_end > best { best = try_1_end; }
+            let try_2_end = scan_table_or_subquery__alt_2(tokens, start, atn, memo, follow);
+            if try_2_end > best { best = try_2_end; }
+            let try_3_end = scan_table_or_subquery__alt_3(tokens, start, atn, memo, follow);
+            if try_3_end > best { best = try_3_end; }
+            if best >= 0 { pos = best; return pos; }
+            return -1;
         } else if _kind_set_63(kind) {
-            let _atn_alt = atn_decide_232(atn, tokens, pos, 0);
-            if _atn_alt == 1 {
-                return scan_table_or_subquery__alt_1(tokens, start, atn, memo, follow);
-            }
-            return scan_table_or_subquery__alt_0(tokens, start, atn, memo, follow);
+            let mut best: i32 = -1;
+            let try_0_end = scan_table_or_subquery__alt_0(tokens, start, atn, memo, follow);
+            if try_0_end > best { best = try_0_end; }
+            let try_1_end = scan_table_or_subquery__alt_1(tokens, start, atn, memo, follow);
+            if try_1_end > best { best = try_1_end; }
+            if best >= 0 { pos = best; return pos; }
+            return -1;
         }
     }
     return -1;
@@ -12114,11 +12125,13 @@ fn scan_module_argument(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, m
     let kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
     if _kind_set_19(kind) {
         if _kind_set_15(kind) {
-            let _atn_alt = atn_decide_275(atn, tokens, pos, 0);
-            if _atn_alt == 0 {
-                return scan_module_argument__alt_0(tokens, start, atn, memo, follow);
-            }
-            return scan_module_argument__alt_1(tokens, start, atn, memo, follow);
+            let mut best: i32 = -1;
+            let try_0_end = scan_module_argument__alt_0(tokens, start, atn, memo, follow);
+            if try_0_end > best { best = try_0_end; }
+            let try_1_end = scan_module_argument__alt_1(tokens, start, atn, memo, follow);
+            if try_1_end > best { best = try_1_end; }
+            if best >= 0 { pos = best; return pos; }
+            return -1;
         } else if _kind_set_60(kind) {
             return scan_module_argument__alt_0(tokens, start, atn, memo, follow);
         }
@@ -20041,64 +20054,206 @@ fn _parse_expr__inner_atom(p: &mut Parser, follow: i64 = 0, min_prec: i32 = 0) -
     let kind = p.peek_kind();
     if _kind_set_43(kind) {
         if kind == TK_OPEN_PAR {
-            let _atn_alt = atn_decide_168(&mut p.atn, &p.kinds, p.pos, min_prec);
-            if _atn_alt == 7 {
+            let _sd_tokens = &p.kinds;
+            let _sd_pos = p.pos;
+            let _sd_p_21 = scan_expr__alt_21(_sd_tokens, _sd_pos, &mut p.atn, &mut p.memo, min_prec, follow);
+            let _sd_p_14 = scan_expr__alt_14(_sd_tokens, _sd_pos, &mut p.atn, &mut p.memo, min_prec, follow);
+            let _sd_p_13 = scan_expr__alt_13(_sd_tokens, _sd_pos, &mut p.atn, &mut p.memo, min_prec, follow);
+            let _sd_p_2 = scan_expr__alt_2(_sd_tokens, _sd_pos, &mut p.atn, &mut p.memo, min_prec, follow);
+            let mut _sd_best_i: i32 = -1;
+            let mut _sd_best_p: i32 = -1;
+            if _sd_p_2 > _sd_best_p {
+                _sd_best_p = _sd_p_2;
+                _sd_best_i = 2;
+            }
+            if _sd_p_13 > _sd_best_p {
+                _sd_best_p = _sd_p_13;
+                _sd_best_i = 13;
+            }
+            if _sd_p_14 > _sd_best_p {
+                _sd_best_p = _sd_p_14;
+                _sd_best_i = 14;
+            }
+            if _sd_p_21 > _sd_best_p {
+                _sd_best_p = _sd_p_21;
+                _sd_best_i = 21;
+            }
+            if _sd_best_i >= 0 {
+                let _ = atn_verified(168, &mut p.atn, &p.kinds, p.pos, min_prec, if _sd_best_i == 21 { 7 } else if _sd_best_i == 14 { 5 } else if _sd_best_i == 13 { 4 } else { 2 });
+                let _ = atn_decide_168(&mut p.atn, &p.kinds, p.pos, min_prec);
+            }
+            if _sd_best_i == 21 {
                 return _parse_expr__inner_alt_21(p, min_prec, follow);
             }
-            if _atn_alt == 5 {
+            if _sd_best_i == 14 {
                 return _parse_expr__inner_alt_14(p, min_prec, follow);
             }
-            if _atn_alt == 4 {
+            if _sd_best_i == 13 {
                 return _parse_expr__inner_alt_13(p, min_prec, follow);
             }
             return _parse_expr__inner_alt_2(p, min_prec, follow);
         } else if kind == TK_K_CAST {
-            let _atn_alt = atn_decide_168(&mut p.atn, &p.kinds, p.pos, min_prec);
-            if _atn_alt == 6 {
+            let _sd_tokens = &p.kinds;
+            let _sd_pos = p.pos;
+            let _sd_p_15 = scan_expr__alt_15(_sd_tokens, _sd_pos, &mut p.atn, &mut p.memo, min_prec, follow);
+            let _sd_p_13 = scan_expr__alt_13(_sd_tokens, _sd_pos, &mut p.atn, &mut p.memo, min_prec, follow);
+            let _sd_p_2 = scan_expr__alt_2(_sd_tokens, _sd_pos, &mut p.atn, &mut p.memo, min_prec, follow);
+            let mut _sd_best_i: i32 = -1;
+            let mut _sd_best_p: i32 = -1;
+            if _sd_p_2 > _sd_best_p {
+                _sd_best_p = _sd_p_2;
+                _sd_best_i = 2;
+            }
+            if _sd_p_13 > _sd_best_p {
+                _sd_best_p = _sd_p_13;
+                _sd_best_i = 13;
+            }
+            if _sd_p_15 > _sd_best_p {
+                _sd_best_p = _sd_p_15;
+                _sd_best_i = 15;
+            }
+            if _sd_best_i >= 0 {
+                let _ = atn_verified(168, &mut p.atn, &p.kinds, p.pos, min_prec, if _sd_best_i == 15 { 6 } else if _sd_best_i == 13 { 4 } else { 2 });
+                let _ = atn_decide_168(&mut p.atn, &p.kinds, p.pos, min_prec);
+            }
+            if _sd_best_i == 15 {
                 return _parse_expr__inner_alt_15(p, min_prec, follow);
             }
-            if _atn_alt == 4 {
+            if _sd_best_i == 13 {
                 return _parse_expr__inner_alt_13(p, min_prec, follow);
             }
             return _parse_expr__inner_alt_2(p, min_prec, follow);
         } else if kind == TK_K_CASE {
-            let _atn_alt = atn_decide_168(&mut p.atn, &p.kinds, p.pos, min_prec);
-            if _atn_alt == 8 {
+            let _sd_tokens = &p.kinds;
+            let _sd_pos = p.pos;
+            let _sd_p_22 = scan_expr__alt_22(_sd_tokens, _sd_pos, &mut p.atn, &mut p.memo, min_prec, follow);
+            let _sd_p_13 = scan_expr__alt_13(_sd_tokens, _sd_pos, &mut p.atn, &mut p.memo, min_prec, follow);
+            let _sd_p_2 = scan_expr__alt_2(_sd_tokens, _sd_pos, &mut p.atn, &mut p.memo, min_prec, follow);
+            let mut _sd_best_i: i32 = -1;
+            let mut _sd_best_p: i32 = -1;
+            if _sd_p_2 > _sd_best_p {
+                _sd_best_p = _sd_p_2;
+                _sd_best_i = 2;
+            }
+            if _sd_p_13 > _sd_best_p {
+                _sd_best_p = _sd_p_13;
+                _sd_best_i = 13;
+            }
+            if _sd_p_22 > _sd_best_p {
+                _sd_best_p = _sd_p_22;
+                _sd_best_i = 22;
+            }
+            if _sd_best_i >= 0 {
+                let _ = atn_verified(168, &mut p.atn, &p.kinds, p.pos, min_prec, if _sd_best_i == 22 { 8 } else if _sd_best_i == 13 { 4 } else { 2 });
+                let _ = atn_decide_168(&mut p.atn, &p.kinds, p.pos, min_prec);
+            }
+            if _sd_best_i == 22 {
                 return _parse_expr__inner_alt_22(p, min_prec, follow);
             }
-            if _atn_alt == 4 {
+            if _sd_best_i == 13 {
                 return _parse_expr__inner_alt_13(p, min_prec, follow);
             }
             return _parse_expr__inner_alt_2(p, min_prec, follow);
         } else if kind == TK_K_RAISE {
-            let _atn_alt = atn_decide_168(&mut p.atn, &p.kinds, p.pos, min_prec);
-            if _atn_alt == 9 {
+            let _sd_tokens = &p.kinds;
+            let _sd_pos = p.pos;
+            let _sd_p_23 = scan_expr__alt_23(_sd_tokens, _sd_pos, &mut p.atn, &mut p.memo, min_prec, follow);
+            let _sd_p_13 = scan_expr__alt_13(_sd_tokens, _sd_pos, &mut p.atn, &mut p.memo, min_prec, follow);
+            let _sd_p_2 = scan_expr__alt_2(_sd_tokens, _sd_pos, &mut p.atn, &mut p.memo, min_prec, follow);
+            let mut _sd_best_i: i32 = -1;
+            let mut _sd_best_p: i32 = -1;
+            if _sd_p_2 > _sd_best_p {
+                _sd_best_p = _sd_p_2;
+                _sd_best_i = 2;
+            }
+            if _sd_p_13 > _sd_best_p {
+                _sd_best_p = _sd_p_13;
+                _sd_best_i = 13;
+            }
+            if _sd_p_23 > _sd_best_p {
+                _sd_best_p = _sd_p_23;
+                _sd_best_i = 23;
+            }
+            if _sd_best_i >= 0 {
+                let _ = atn_verified(168, &mut p.atn, &p.kinds, p.pos, min_prec, if _sd_best_i == 23 { 9 } else if _sd_best_i == 13 { 4 } else { 2 });
+                let _ = atn_decide_168(&mut p.atn, &p.kinds, p.pos, min_prec);
+            }
+            if _sd_best_i == 23 {
                 p.site = 245;
                 p.atn_ret_pending = 1856;
                 return _parse_raise_function(p);
             }
-            if _atn_alt == 4 {
+            if _sd_best_i == 13 {
                 return _parse_expr__inner_alt_13(p, min_prec, follow);
             }
             return _parse_expr__inner_alt_2(p, min_prec, follow);
         } else if kind == TK_K_NOT {
-            let _atn_alt = atn_decide_168(&mut p.atn, &p.kinds, p.pos, min_prec);
-            if _atn_alt == 7 {
+            let _sd_tokens = &p.kinds;
+            let _sd_pos = p.pos;
+            let _sd_p_21 = scan_expr__alt_21(_sd_tokens, _sd_pos, &mut p.atn, &mut p.memo, min_prec, follow);
+            let _sd_p_13 = scan_expr__alt_13(_sd_tokens, _sd_pos, &mut p.atn, &mut p.memo, min_prec, follow);
+            let _sd_p_2 = scan_expr__alt_2(_sd_tokens, _sd_pos, &mut p.atn, &mut p.memo, min_prec, follow);
+            let _sd_p_3 = scan_expr__alt_3(_sd_tokens, _sd_pos, &mut p.atn, &mut p.memo, min_prec, follow);
+            let mut _sd_best_i: i32 = -1;
+            let mut _sd_best_p: i32 = -1;
+            if _sd_p_2 > _sd_best_p {
+                _sd_best_p = _sd_p_2;
+                _sd_best_i = 2;
+            }
+            if _sd_p_3 > _sd_best_p {
+                _sd_best_p = _sd_p_3;
+                _sd_best_i = 3;
+            }
+            if _sd_p_13 > _sd_best_p {
+                _sd_best_p = _sd_p_13;
+                _sd_best_i = 13;
+            }
+            if _sd_p_21 > _sd_best_p {
+                _sd_best_p = _sd_p_21;
+                _sd_best_i = 21;
+            }
+            if _sd_best_i >= 0 {
+                let _ = atn_verified(168, &mut p.atn, &p.kinds, p.pos, min_prec, if _sd_best_i == 21 { 7 } else if _sd_best_i == 13 { 4 } else if _sd_best_i == 2 { 2 } else { 3 });
+                let _ = atn_decide_168(&mut p.atn, &p.kinds, p.pos, min_prec);
+            }
+            if _sd_best_i == 21 {
                 return _parse_expr__inner_alt_21(p, min_prec, follow);
             }
-            if _atn_alt == 4 {
+            if _sd_best_i == 13 {
                 return _parse_expr__inner_alt_13(p, min_prec, follow);
             }
-            if _atn_alt == 2 {
+            if _sd_best_i == 2 {
                 return _parse_expr__inner_alt_2(p, min_prec, follow);
             }
             return _parse_expr__inner_alt_3(p, min_prec, follow);
         } else if kind == TK_K_EXISTS {
-            let _atn_alt = atn_decide_168(&mut p.atn, &p.kinds, p.pos, min_prec);
-            if _atn_alt == 7 {
+            let _sd_tokens = &p.kinds;
+            let _sd_pos = p.pos;
+            let _sd_p_21 = scan_expr__alt_21(_sd_tokens, _sd_pos, &mut p.atn, &mut p.memo, min_prec, follow);
+            let _sd_p_13 = scan_expr__alt_13(_sd_tokens, _sd_pos, &mut p.atn, &mut p.memo, min_prec, follow);
+            let _sd_p_2 = scan_expr__alt_2(_sd_tokens, _sd_pos, &mut p.atn, &mut p.memo, min_prec, follow);
+            let mut _sd_best_i: i32 = -1;
+            let mut _sd_best_p: i32 = -1;
+            if _sd_p_2 > _sd_best_p {
+                _sd_best_p = _sd_p_2;
+                _sd_best_i = 2;
+            }
+            if _sd_p_13 > _sd_best_p {
+                _sd_best_p = _sd_p_13;
+                _sd_best_i = 13;
+            }
+            if _sd_p_21 > _sd_best_p {
+                _sd_best_p = _sd_p_21;
+                _sd_best_i = 21;
+            }
+            if _sd_best_i >= 0 {
+                let _ = atn_verified(168, &mut p.atn, &p.kinds, p.pos, min_prec, if _sd_best_i == 21 { 7 } else if _sd_best_i == 13 { 4 } else { 2 });
+                let _ = atn_decide_168(&mut p.atn, &p.kinds, p.pos, min_prec);
+            }
+            if _sd_best_i == 21 {
                 return _parse_expr__inner_alt_21(p, min_prec, follow);
             }
-            if _atn_alt == 4 {
+            if _sd_best_i == 13 {
                 return _parse_expr__inner_alt_13(p, min_prec, follow);
             }
             return _parse_expr__inner_alt_2(p, min_prec, follow);
@@ -20109,19 +20264,58 @@ fn _parse_expr__inner_atom(p: &mut Parser, follow: i64 = 0, min_prec: i32 = 0) -
             p.atn_ret_pending = 1739;
             return _parse_literal_value(p);
         } else if _kind_set_46(kind) {
-            let _atn_alt = atn_decide_168(&mut p.atn, &p.kinds, p.pos, min_prec);
-            if _atn_alt == 0 {
+            let _sd_tokens = &p.kinds;
+            let _sd_pos = p.pos;
+            let _sd_p_0 = scan_expr__alt_0(_sd_tokens, _sd_pos, &mut p.atn, &mut p.memo, min_prec, follow);
+            let _sd_p_13 = scan_expr__alt_13(_sd_tokens, _sd_pos, &mut p.atn, &mut p.memo, min_prec, follow);
+            let _sd_p_2 = scan_expr__alt_2(_sd_tokens, _sd_pos, &mut p.atn, &mut p.memo, min_prec, follow);
+            let mut _sd_best_i: i32 = -1;
+            let mut _sd_best_p: i32 = -1;
+            if _sd_p_0 > _sd_best_p {
+                _sd_best_p = _sd_p_0;
+                _sd_best_i = 0;
+            }
+            if _sd_p_2 > _sd_best_p {
+                _sd_best_p = _sd_p_2;
+                _sd_best_i = 2;
+            }
+            if _sd_p_13 > _sd_best_p {
+                _sd_best_p = _sd_p_13;
+                _sd_best_i = 13;
+            }
+            if _sd_best_i >= 0 {
+                let _ = atn_verified(168, &mut p.atn, &p.kinds, p.pos, min_prec, if _sd_best_i == 0 { 0 } else if _sd_best_i == 13 { 4 } else { 2 });
+                let _ = atn_decide_168(&mut p.atn, &p.kinds, p.pos, min_prec);
+            }
+            if _sd_best_i == 0 {
                 p.site = 195;
                 p.atn_ret_pending = 1739;
                 return _parse_literal_value(p);
             }
-            if _atn_alt == 4 {
+            if _sd_best_i == 13 {
                 return _parse_expr__inner_alt_13(p, min_prec, follow);
             }
             return _parse_expr__inner_alt_2(p, min_prec, follow);
         } else if _kind_set_47(kind) {
-            let _atn_alt = atn_decide_168(&mut p.atn, &p.kinds, p.pos, min_prec);
-            if _atn_alt == 4 {
+            let _sd_tokens = &p.kinds;
+            let _sd_pos = p.pos;
+            let _sd_p_13 = scan_expr__alt_13(_sd_tokens, _sd_pos, &mut p.atn, &mut p.memo, min_prec, follow);
+            let _sd_p_2 = scan_expr__alt_2(_sd_tokens, _sd_pos, &mut p.atn, &mut p.memo, min_prec, follow);
+            let mut _sd_best_i: i32 = -1;
+            let mut _sd_best_p: i32 = -1;
+            if _sd_p_2 > _sd_best_p {
+                _sd_best_p = _sd_p_2;
+                _sd_best_i = 2;
+            }
+            if _sd_p_13 > _sd_best_p {
+                _sd_best_p = _sd_p_13;
+                _sd_best_i = 13;
+            }
+            if _sd_best_i >= 0 {
+                let _ = atn_verified(168, &mut p.atn, &p.kinds, p.pos, min_prec, if _sd_best_i == 13 { 4 } else { 2 });
+                let _ = atn_decide_168(&mut p.atn, &p.kinds, p.pos, min_prec);
+            }
+            if _sd_best_i == 13 {
                 return _parse_expr__inner_alt_13(p, min_prec, follow);
             }
             return _parse_expr__inner_alt_2(p, min_prec, follow);
@@ -21344,8 +21538,25 @@ fn _parse_result_column__inner(p: &mut Parser, follow: i64 = 0) -> () {
     }
     if _kind_set_19(kind) {
         if _kind_set_15(kind) {
-            let _atn_alt = atn_decide_229(&mut p.atn, &p.kinds, p.pos, 0);
-            if _atn_alt == 1 {
+            let _sd_tokens = &p.kinds;
+            let _sd_pos = p.pos;
+            let _sd_p_1 = scan_result_column__alt_1(_sd_tokens, _sd_pos, &mut p.atn, &mut p.memo, follow);
+            let _sd_p_2 = scan_result_column__alt_2(_sd_tokens, _sd_pos, &mut p.atn, &mut p.memo, follow);
+            let mut _sd_best_i: i32 = -1;
+            let mut _sd_best_p: i32 = -1;
+            if _sd_p_1 > _sd_best_p {
+                _sd_best_p = _sd_p_1;
+                _sd_best_i = 1;
+            }
+            if _sd_p_2 > _sd_best_p {
+                _sd_best_p = _sd_p_2;
+                _sd_best_i = 2;
+            }
+            if _sd_best_i >= 0 {
+                let _ = atn_verified(229, &mut p.atn, &p.kinds, p.pos, 0, if _sd_best_i == 1 { 1 } else { 2 });
+                let _ = atn_decide_229(&mut p.atn, &p.kinds, p.pos, 0);
+            }
+            if _sd_best_i == 1 {
                 return _parse_result_column__inner_alt_1(p, follow);
             }
             return _parse_result_column__inner_alt_2(p, follow);
@@ -22085,20 +22296,64 @@ fn _parse_table_or_subquery__inner(p: &mut Parser, follow: i64 = 0) -> () {
     let kind = p.peek_kind();
     if _kind_set_15(kind) {
         if kind == TK_OPEN_PAR {
-            let _atn_alt = atn_decide_232(&mut p.atn, &p.kinds, p.pos, 0);
-            if _atn_alt == 3 {
+            let _sd_tokens = &p.kinds;
+            let _sd_pos = p.pos;
+            let _sd_p_3 = scan_table_or_subquery__alt_3(_sd_tokens, _sd_pos, &mut p.atn, &mut p.memo, follow);
+            let _sd_p_2 = scan_table_or_subquery__alt_2(_sd_tokens, _sd_pos, &mut p.atn, &mut p.memo, follow);
+            let _sd_p_1 = scan_table_or_subquery__alt_1(_sd_tokens, _sd_pos, &mut p.atn, &mut p.memo, follow);
+            let _sd_p_0 = scan_table_or_subquery__alt_0(_sd_tokens, _sd_pos, &mut p.atn, &mut p.memo, follow);
+            let mut _sd_best_i: i32 = -1;
+            let mut _sd_best_p: i32 = -1;
+            if _sd_p_0 > _sd_best_p {
+                _sd_best_p = _sd_p_0;
+                _sd_best_i = 0;
+            }
+            if _sd_p_1 > _sd_best_p {
+                _sd_best_p = _sd_p_1;
+                _sd_best_i = 1;
+            }
+            if _sd_p_2 > _sd_best_p {
+                _sd_best_p = _sd_p_2;
+                _sd_best_i = 2;
+            }
+            if _sd_p_3 > _sd_best_p {
+                _sd_best_p = _sd_p_3;
+                _sd_best_i = 3;
+            }
+            if _sd_best_i >= 0 {
+                let _ = atn_verified(232, &mut p.atn, &p.kinds, p.pos, 0, if _sd_best_i == 3 { 3 } else if _sd_best_i == 2 { 2 } else if _sd_best_i == 1 { 1 } else { 0 });
+                let _ = atn_decide_232(&mut p.atn, &p.kinds, p.pos, 0);
+            }
+            if _sd_best_i == 3 {
                 return _parse_table_or_subquery__inner_alt_3(p, follow);
             }
-            if _atn_alt == 2 {
+            if _sd_best_i == 2 {
                 return _parse_table_or_subquery__inner_alt_2(p, follow);
             }
-            if _atn_alt == 1 {
+            if _sd_best_i == 1 {
                 return _parse_table_or_subquery__inner_alt_1(p, follow);
             }
             return _parse_table_or_subquery__inner_alt_0(p, follow);
         } else if _kind_set_63(kind) {
-            let _atn_alt = atn_decide_232(&mut p.atn, &p.kinds, p.pos, 0);
-            if _atn_alt == 1 {
+            let _sd_tokens = &p.kinds;
+            let _sd_pos = p.pos;
+            let _sd_p_1 = scan_table_or_subquery__alt_1(_sd_tokens, _sd_pos, &mut p.atn, &mut p.memo, follow);
+            let _sd_p_0 = scan_table_or_subquery__alt_0(_sd_tokens, _sd_pos, &mut p.atn, &mut p.memo, follow);
+            let mut _sd_best_i: i32 = -1;
+            let mut _sd_best_p: i32 = -1;
+            if _sd_p_0 > _sd_best_p {
+                _sd_best_p = _sd_p_0;
+                _sd_best_i = 0;
+            }
+            if _sd_p_1 > _sd_best_p {
+                _sd_best_p = _sd_p_1;
+                _sd_best_i = 1;
+            }
+            if _sd_best_i >= 0 {
+                let _ = atn_verified(232, &mut p.atn, &p.kinds, p.pos, 0, if _sd_best_i == 1 { 1 } else { 0 });
+                let _ = atn_decide_232(&mut p.atn, &p.kinds, p.pos, 0);
+            }
+            if _sd_best_i == 1 {
                 return _parse_table_or_subquery__inner_alt_1(p, follow);
             }
             return _parse_table_or_subquery__inner_alt_0(p, follow);
@@ -22862,8 +23117,25 @@ fn _parse_module_argument__inner(p: &mut Parser, follow: i64 = 0) -> () {
     let kind = p.peek_kind();
     if _kind_set_19(kind) {
         if _kind_set_15(kind) {
-            let _atn_alt = atn_decide_275(&mut p.atn, &p.kinds, p.pos, 0);
-            if _atn_alt == 0 {
+            let _sd_tokens = &p.kinds;
+            let _sd_pos = p.pos;
+            let _sd_p_0 = scan_module_argument__alt_0(_sd_tokens, _sd_pos, &mut p.atn, &mut p.memo, follow);
+            let _sd_p_1 = scan_module_argument__alt_1(_sd_tokens, _sd_pos, &mut p.atn, &mut p.memo, follow);
+            let mut _sd_best_i: i32 = -1;
+            let mut _sd_best_p: i32 = -1;
+            if _sd_p_0 > _sd_best_p {
+                _sd_best_p = _sd_p_0;
+                _sd_best_i = 0;
+            }
+            if _sd_p_1 > _sd_best_p {
+                _sd_best_p = _sd_p_1;
+                _sd_best_i = 1;
+            }
+            if _sd_best_i >= 0 {
+                let _ = atn_verified(275, &mut p.atn, &p.kinds, p.pos, 0, if _sd_best_i == 0 { 0 } else { 1 });
+                let _ = atn_decide_275(&mut p.atn, &p.kinds, p.pos, 0);
+            }
+            if _sd_best_i == 0 {
                 p.site = 311;
                 p.atn_ret_pending = 2646;
                 return _parse_expr(p, follow);

@@ -18984,11 +18984,13 @@ fn scan_ruleset(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, follow: i
     let kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
     if _kind_set_30(kind) {
         if _kind_set_31(kind) {
-            let _atn_alt = atn_decide_59(atn, tokens, pos, 0);
-            if _atn_alt == 1 {
-                return scan_ruleset__alt_1(tokens, start, atn, follow);
-            }
-            return scan_ruleset__alt_0(tokens, start, atn, follow);
+            let mut best: i32 = -1;
+            let try_0_end = scan_ruleset__alt_0(tokens, start, atn, follow);
+            if try_0_end > best { best = try_0_end; }
+            let try_1_end = scan_ruleset__alt_1(tokens, start, atn, follow);
+            if try_1_end > best { best = try_1_end; }
+            if best >= 0 { pos = best; return pos; }
+            return -1;
         } else if _kind_set_32(kind) {
             return scan_ruleset__alt_0(tokens, start, atn, follow);
         } else if _kind_set_33(kind) {
@@ -19064,11 +19066,13 @@ fn scan_declaration(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, follo
     let mut pos = pos;
     let kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
     if _kind_set_18(kind) {
-        let _atn_alt = atn_decide_66(atn, tokens, pos, 0);
-        if _atn_alt == 0 {
-            return scan_declaration__alt_0(tokens, start, atn, follow);
-        }
-        return scan_declaration__alt_1(tokens, start, atn, follow);
+        let mut best: i32 = -1;
+        let try_0_end = scan_declaration__alt_0(tokens, start, atn, follow);
+        if try_0_end > best { best = try_0_end; }
+        let try_1_end = scan_declaration__alt_1(tokens, start, atn, follow);
+        if try_1_end > best { best = try_1_end; }
+        if best >= 0 { pos = best; return pos; }
+        return -1;
     }
     return -1;
 }
@@ -20021,14 +20025,15 @@ fn scan_supports_condition(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor
         return -1;
     }
     if _kind_set_63(kind) {
-        let _atn_alt = atn_decide_95(atn, tokens, pos, 0);
-        if _atn_alt == 1 {
-            return scan_supports_condition__alt_1(tokens, start, atn, follow);
-        }
-        if _atn_alt == 2 {
-            return scan_supports_condition__alt_2(tokens, start, atn, follow);
-        }
-        return scan_supports_condition__alt_3(tokens, start, atn, follow);
+        let mut best: i32 = -1;
+        let try_1_end = scan_supports_condition__alt_1(tokens, start, atn, follow);
+        if try_1_end > best { best = try_1_end; }
+        let try_2_end = scan_supports_condition__alt_2(tokens, start, atn, follow);
+        if try_2_end > best { best = try_2_end; }
+        let try_3_end = scan_supports_condition__alt_3(tokens, start, atn, follow);
+        if try_3_end > best { best = try_3_end; }
+        if best >= 0 { pos = best; return pos; }
+        return -1;
     }
     return -1;
 }
@@ -20039,14 +20044,15 @@ fn scan_supports_condition_in_parens(tokens: &Array<i32>, pos: i32, atn: &mut At
     let kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
     if _kind_set_63(kind) {
         if kind == TK_OpenParen {
-            let _atn_alt = atn_decide_96(atn, tokens, pos, 0);
-            if _atn_alt == 0 {
-                return scan_supports_condition_in_parens__alt_0(tokens, start, atn, follow);
-            }
-            if _atn_alt == 1 {
-                return scan_supports_condition_in_parens__alt_1(tokens, start, atn, follow);
-            }
-            return scan_supports_condition_in_parens__alt_2(tokens, start, atn, follow);
+            let mut best: i32 = -1;
+            let try_0_end = scan_supports_condition_in_parens__alt_0(tokens, start, atn, follow);
+            if try_0_end > best { best = try_0_end; }
+            let try_1_end = scan_supports_condition_in_parens__alt_1(tokens, start, atn, follow);
+            if try_1_end > best { best = try_1_end; }
+            let try_2_end = scan_supports_condition_in_parens__alt_2(tokens, start, atn, follow);
+            if try_2_end > best { best = try_2_end; }
+            if best >= 0 { pos = best; return pos; }
+            return -1;
         } else if kind == TK_Function_ {
             return scan_supports_condition_in_parens__alt_2(tokens, start, atn, follow);
         }
@@ -20499,11 +20505,13 @@ fn scan_font_face_declaration(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredic
     let mut pos = pos;
     let kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
     if _kind_set_18(kind) {
-        let _atn_alt = atn_decide_111(atn, tokens, pos, 0);
-        if _atn_alt == 0 {
-            return scan_font_face_declaration__alt_0(tokens, start, atn, follow);
-        }
-        return scan_font_face_declaration__alt_1(tokens, start, atn, follow);
+        let mut best: i32 = -1;
+        let try_0_end = scan_font_face_declaration__alt_0(tokens, start, atn, follow);
+        if try_0_end > best { best = try_0_end; }
+        let try_1_end = scan_font_face_declaration__alt_1(tokens, start, atn, follow);
+        if try_1_end > best { best = try_1_end; }
+        if best >= 0 { pos = best; return pos; }
+        return -1;
     }
     return -1;
 }
@@ -20951,6 +20959,21 @@ fn _parse_charset__inner_alt_0(p: &mut Parser, follow: i64 = 0) -> () {
     return;
 }
 
+fn scan_charset__alt_0(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, follow: i64 = 0) -> i32 {
+    let mut pos = pos;
+    if pos >= tokens.len() || tokens[pos] != TK_Charset { return -1; }
+    pos += 1;
+    pos = scan_ws(tokens, pos, atn, FOLLOW_MASK_5);
+    if pos < 0 { return -1; }
+    if pos >= tokens.len() || tokens[pos] != TK_String_ { return -1; }
+    pos += 1;
+    pos = scan_ws(tokens, pos, atn, FOLLOW_MASK_6);
+    if pos < 0 { return -1; }
+    if pos >= tokens.len() || tokens[pos] != TK_SemiColon { return -1; }
+    pos += 1;
+    return scan_ws(tokens, pos, atn, follow);
+}
+
 fn _parse_charset__inner_alt_1(p: &mut Parser, follow: i64 = 0) -> () {
     p.b.set_alt(1);
     p.expect(TK_Charset, &SYNC_8, false);
@@ -20964,12 +20987,40 @@ fn _parse_charset__inner_alt_1(p: &mut Parser, follow: i64 = 0) -> () {
     return;
 }
 
+fn scan_charset__alt_1(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, follow: i64 = 0) -> i32 {
+    let mut pos = pos;
+    if pos >= tokens.len() || tokens[pos] != TK_Charset { return -1; }
+    pos += 1;
+    pos = scan_ws(tokens, pos, atn, FOLLOW_MASK_5);
+    if pos < 0 { return -1; }
+    if pos >= tokens.len() || tokens[pos] != TK_String_ { return -1; }
+    pos += 1;
+    return scan_ws(tokens, pos, atn, follow);
+}
+
 fn _parse_charset__inner(p: &mut Parser, follow: i64 = 0) -> () {
     if !kind_set_has(&SYNC_11, p.kinds[p.pos]) { builtin::cold_path(); p.sync_alts(&SYNC_11, &EXPECTED_11); }
     let kind = p.peek_kind();
     if kind == TK_Charset {
-        let _atn_alt = atn_decide_12(&mut p.atn, &p.kinds, p.pos, 0);
-        if _atn_alt == 0 {
+        let _sd_tokens = &p.kinds;
+        let _sd_pos = p.pos;
+        let _sd_p_0 = scan_charset__alt_0(_sd_tokens, _sd_pos, &mut p.atn, follow);
+        let _sd_p_1 = scan_charset__alt_1(_sd_tokens, _sd_pos, &mut p.atn, follow);
+        let mut _sd_best_i: i32 = -1;
+        let mut _sd_best_p: i32 = -1;
+        if _sd_p_0 > _sd_best_p {
+            _sd_best_p = _sd_p_0;
+            _sd_best_i = 0;
+        }
+        if _sd_p_1 > _sd_best_p {
+            _sd_best_p = _sd_p_1;
+            _sd_best_i = 1;
+        }
+        if _sd_best_i >= 0 {
+            let _ = atn_verified(12, &mut p.atn, &p.kinds, p.pos, 0, if _sd_best_i == 0 { 0 } else { 1 });
+            let _ = atn_decide_12(&mut p.atn, &p.kinds, p.pos, 0);
+        }
+        if _sd_best_i == 0 {
             return _parse_charset__inner_alt_0(p, follow);
         }
         return _parse_charset__inner_alt_1(p, follow);
@@ -21027,6 +21078,35 @@ fn _parse_imports__inner_alt_0(p: &mut Parser, follow: i64 = 0) -> () {
     return;
 }
 
+fn scan_imports__alt_0(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, follow: i64 = 0) -> i32 {
+    let mut pos = pos;
+    if pos >= tokens.len() || tokens[pos] != TK_Import { return -1; }
+    pos += 1;
+    pos = scan_ws(tokens, pos, atn, FOLLOW_MASK_7);
+    if pos < 0 { return -1; }
+    sg_0_done: {
+        let sgk_0 = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
+        if sgk_0 == TK_String_ {
+            pos += 1;
+            break sg_0_done;
+        } else if _kind_set_2(sgk_0) {
+            sg_0_1: {
+                pos = scan_url(tokens, pos, atn, 0);
+                if pos < 0 { break sg_0_1; }
+                break sg_0_done;
+            }
+        }
+        return -1;
+    }
+    pos = scan_ws(tokens, pos, atn, 0);
+    if pos < 0 { return -1; }
+    pos = scan_media_query_list(tokens, pos, atn, FOLLOW_MASK_6);
+    if pos < 0 { return -1; }
+    if pos >= tokens.len() || tokens[pos] != TK_SemiColon { return -1; }
+    pos += 1;
+    return scan_ws(tokens, pos, atn, follow);
+}
+
 fn _parse_imports__inner_alt_1(p: &mut Parser, follow: i64 = 0) -> () {
     p.b.set_alt(1);
     p.expect(TK_Import, &SYNC_12, false);
@@ -21052,6 +21132,33 @@ fn _parse_imports__inner_alt_1(p: &mut Parser, follow: i64 = 0) -> () {
     p.atn_ret_pending = 277;
     _parse_ws(p, follow);
     return;
+}
+
+fn scan_imports__alt_1(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, follow: i64 = 0) -> i32 {
+    let mut pos = pos;
+    if pos >= tokens.len() || tokens[pos] != TK_Import { return -1; }
+    pos += 1;
+    pos = scan_ws(tokens, pos, atn, FOLLOW_MASK_7);
+    if pos < 0 { return -1; }
+    sg_1_done: {
+        let sgk_1 = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
+        if sgk_1 == TK_String_ {
+            pos += 1;
+            break sg_1_done;
+        } else if _kind_set_2(sgk_1) {
+            sg_1_1: {
+                pos = scan_url(tokens, pos, atn, 0);
+                if pos < 0 { break sg_1_1; }
+                break sg_1_done;
+            }
+        }
+        return -1;
+    }
+    pos = scan_ws(tokens, pos, atn, FOLLOW_MASK_6);
+    if pos < 0 { return -1; }
+    if pos >= tokens.len() || tokens[pos] != TK_SemiColon { return -1; }
+    pos += 1;
+    return scan_ws(tokens, pos, atn, follow);
 }
 
 fn _parse_imports__inner_alt_2(p: &mut Parser, follow: i64 = 0) -> () {
@@ -21080,6 +21187,31 @@ fn _parse_imports__inner_alt_2(p: &mut Parser, follow: i64 = 0) -> () {
     return;
 }
 
+fn scan_imports__alt_2(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, follow: i64 = 0) -> i32 {
+    let mut pos = pos;
+    if pos >= tokens.len() || tokens[pos] != TK_Import { return -1; }
+    pos += 1;
+    pos = scan_ws(tokens, pos, atn, FOLLOW_MASK_7);
+    if pos < 0 { return -1; }
+    sg_2_done: {
+        let sgk_2 = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
+        if sgk_2 == TK_String_ {
+            pos += 1;
+            break sg_2_done;
+        } else if _kind_set_2(sgk_2) {
+            sg_2_1: {
+                pos = scan_url(tokens, pos, atn, follow_open_with(follow, follow_open_set(FOLLOW_MASK_8)));
+                if pos < 0 { break sg_2_1; }
+                break sg_2_done;
+            }
+        }
+        return -1;
+    }
+    pos = scan_ws(tokens, pos, atn, follow_open_with(follow, follow_open_set(FOLLOW_MASK_8)));
+    if pos < 0 { return -1; }
+    return scan_media_query_list(tokens, pos, atn, follow);
+}
+
 fn _parse_imports__inner_alt_3(p: &mut Parser, follow: i64 = 0) -> () {
     p.b.set_alt(3);
     p.expect(TK_Import, &SYNC_12, false);
@@ -21103,18 +21235,68 @@ fn _parse_imports__inner_alt_3(p: &mut Parser, follow: i64 = 0) -> () {
     return;
 }
 
+fn scan_imports__alt_3(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, follow: i64 = 0) -> i32 {
+    let mut pos = pos;
+    if pos >= tokens.len() || tokens[pos] != TK_Import { return -1; }
+    pos += 1;
+    pos = scan_ws(tokens, pos, atn, FOLLOW_MASK_7);
+    if pos < 0 { return -1; }
+    sg_3_done: {
+        let sgk_3 = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
+        if sgk_3 == TK_String_ {
+            pos += 1;
+            break sg_3_done;
+        } else if _kind_set_2(sgk_3) {
+            sg_3_1: {
+                pos = scan_url(tokens, pos, atn, follow_open_with(follow, follow_open_set(FOLLOW_MASK_9)));
+                if pos < 0 { break sg_3_1; }
+                break sg_3_done;
+            }
+        }
+        return -1;
+    }
+    return scan_ws(tokens, pos, atn, follow);
+}
+
 fn _parse_imports__inner(p: &mut Parser, follow: i64 = 0) -> () {
     if !kind_set_has(&SYNC_14, p.kinds[p.pos]) { builtin::cold_path(); p.sync_alts(&SYNC_14, &EXPECTED_14); }
     let kind = p.peek_kind();
     if kind == TK_Import {
-        let _atn_alt = atn_decide_13(&mut p.atn, &p.kinds, p.pos, 0);
-        if _atn_alt == 0 {
+        let _sd_tokens = &p.kinds;
+        let _sd_pos = p.pos;
+        let _sd_p_0 = scan_imports__alt_0(_sd_tokens, _sd_pos, &mut p.atn, follow);
+        let _sd_p_1 = scan_imports__alt_1(_sd_tokens, _sd_pos, &mut p.atn, follow);
+        let _sd_p_2 = scan_imports__alt_2(_sd_tokens, _sd_pos, &mut p.atn, follow);
+        let _sd_p_3 = scan_imports__alt_3(_sd_tokens, _sd_pos, &mut p.atn, follow);
+        let mut _sd_best_i: i32 = -1;
+        let mut _sd_best_p: i32 = -1;
+        if _sd_p_0 > _sd_best_p {
+            _sd_best_p = _sd_p_0;
+            _sd_best_i = 0;
+        }
+        if _sd_p_1 > _sd_best_p {
+            _sd_best_p = _sd_p_1;
+            _sd_best_i = 1;
+        }
+        if _sd_p_2 > _sd_best_p {
+            _sd_best_p = _sd_p_2;
+            _sd_best_i = 2;
+        }
+        if _sd_p_3 > _sd_best_p {
+            _sd_best_p = _sd_p_3;
+            _sd_best_i = 3;
+        }
+        if _sd_best_i >= 0 {
+            let _ = atn_verified(13, &mut p.atn, &p.kinds, p.pos, 0, if _sd_best_i == 0 { 0 } else if _sd_best_i == 1 { 1 } else if _sd_best_i == 2 { 2 } else { 3 });
+            let _ = atn_decide_13(&mut p.atn, &p.kinds, p.pos, 0);
+        }
+        if _sd_best_i == 0 {
             return _parse_imports__inner_alt_0(p, follow);
         }
-        if _atn_alt == 1 {
+        if _sd_best_i == 1 {
             return _parse_imports__inner_alt_1(p, follow);
         }
-        if _atn_alt == 2 {
+        if _sd_best_i == 2 {
             return _parse_imports__inner_alt_2(p, follow);
         }
         return _parse_imports__inner_alt_3(p, follow);
@@ -21188,6 +21370,46 @@ fn _parse_namespace___inner_alt_0(p: &mut Parser, follow: i64 = 0) -> () {
     return;
 }
 
+fn scan_namespace___alt_0(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, follow: i64 = 0) -> i32 {
+    let mut pos = pos;
+    if pos >= tokens.len() || tokens[pos] != TK_Namespace { return -1; }
+    pos += 1;
+    pos = scan_ws(tokens, pos, atn, 0);
+    if pos < 0 { return -1; }
+    if pos < tokens.len() && _kind_set_3(tokens[pos]) {
+        let sp = pos;
+        sg_4_done: {
+            sg_4: {
+                pos += 1;
+                pos = scan_ws(tokens, pos, atn, FOLLOW_MASK_7);
+                if pos < 0 { break sg_4; }
+                break sg_4_done;
+            }
+            pos = -1;
+        }
+        if pos < 0 { pos = sp; }
+    }
+    sg_5_done: {
+        let sgk_5 = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
+        if sgk_5 == TK_String_ {
+            pos += 1;
+            break sg_5_done;
+        } else if _kind_set_2(sgk_5) {
+            sg_5_1: {
+                pos = scan_url(tokens, pos, atn, 0);
+                if pos < 0 { break sg_5_1; }
+                break sg_5_done;
+            }
+        }
+        return -1;
+    }
+    pos = scan_ws(tokens, pos, atn, FOLLOW_MASK_6);
+    if pos < 0 { return -1; }
+    if pos >= tokens.len() || tokens[pos] != TK_SemiColon { return -1; }
+    pos += 1;
+    return scan_ws(tokens, pos, atn, follow);
+}
+
 fn _parse_namespace___inner_alt_1(p: &mut Parser, follow: i64 = 0) -> () {
     p.b.set_alt(1);
     p.expect(TK_Namespace, &SYNC_15, false);
@@ -21230,12 +21452,65 @@ fn _parse_namespace___inner_alt_1(p: &mut Parser, follow: i64 = 0) -> () {
     return;
 }
 
+fn scan_namespace___alt_1(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, follow: i64 = 0) -> i32 {
+    let mut pos = pos;
+    if pos >= tokens.len() || tokens[pos] != TK_Namespace { return -1; }
+    pos += 1;
+    pos = scan_ws(tokens, pos, atn, 0);
+    if pos < 0 { return -1; }
+    if pos < tokens.len() && _kind_set_3(tokens[pos]) {
+        let sp = pos;
+        sg_6_done: {
+            sg_6: {
+                pos += 1;
+                pos = scan_ws(tokens, pos, atn, FOLLOW_MASK_7);
+                if pos < 0 { break sg_6; }
+                break sg_6_done;
+            }
+            pos = -1;
+        }
+        if pos < 0 { pos = sp; }
+    }
+    sg_7_done: {
+        let sgk_7 = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
+        if sgk_7 == TK_String_ {
+            pos += 1;
+            break sg_7_done;
+        } else if _kind_set_2(sgk_7) {
+            sg_7_1: {
+                pos = scan_url(tokens, pos, atn, follow_open_with(follow, follow_open_set(FOLLOW_MASK_9)));
+                if pos < 0 { break sg_7_1; }
+                break sg_7_done;
+            }
+        }
+        return -1;
+    }
+    return scan_ws(tokens, pos, atn, follow);
+}
+
 fn _parse_namespace___inner(p: &mut Parser, follow: i64 = 0) -> () {
     if !kind_set_has(&SYNC_17, p.kinds[p.pos]) { builtin::cold_path(); p.sync_alts(&SYNC_17, &EXPECTED_17); }
     let kind = p.peek_kind();
     if kind == TK_Namespace {
-        let _atn_alt = atn_decide_18(&mut p.atn, &p.kinds, p.pos, 0);
-        if _atn_alt == 0 {
+        let _sd_tokens = &p.kinds;
+        let _sd_pos = p.pos;
+        let _sd_p_0 = scan_namespace___alt_0(_sd_tokens, _sd_pos, &mut p.atn, follow);
+        let _sd_p_1 = scan_namespace___alt_1(_sd_tokens, _sd_pos, &mut p.atn, follow);
+        let mut _sd_best_i: i32 = -1;
+        let mut _sd_best_p: i32 = -1;
+        if _sd_p_0 > _sd_best_p {
+            _sd_best_p = _sd_p_0;
+            _sd_best_i = 0;
+        }
+        if _sd_p_1 > _sd_best_p {
+            _sd_best_p = _sd_p_1;
+            _sd_best_i = 1;
+        }
+        if _sd_best_i >= 0 {
+            let _ = atn_verified(18, &mut p.atn, &p.kinds, p.pos, 0, if _sd_best_i == 0 { 0 } else { 1 });
+            let _ = atn_decide_18(&mut p.atn, &p.kinds, p.pos, 0);
+        }
+        if _sd_best_i == 0 {
             return _parse_namespace___inner_alt_0(p, follow);
         }
         return _parse_namespace___inner_alt_1(p, follow);
@@ -22690,8 +22965,25 @@ fn _parse_ruleset__inner(p: &mut Parser, follow: i64 = 0) -> () {
     let kind = p.peek_kind();
     if _kind_set_30(kind) {
         if _kind_set_31(kind) {
-            let _atn_alt = atn_decide_59(&mut p.atn, &p.kinds, p.pos, 0);
-            if _atn_alt == 1 {
+            let _sd_tokens = &p.kinds;
+            let _sd_pos = p.pos;
+            let _sd_p_1 = scan_ruleset__alt_1(_sd_tokens, _sd_pos, &mut p.atn, follow);
+            let _sd_p_0 = scan_ruleset__alt_0(_sd_tokens, _sd_pos, &mut p.atn, follow);
+            let mut _sd_best_i: i32 = -1;
+            let mut _sd_best_p: i32 = -1;
+            if _sd_p_0 > _sd_best_p {
+                _sd_best_p = _sd_p_0;
+                _sd_best_i = 0;
+            }
+            if _sd_p_1 > _sd_best_p {
+                _sd_best_p = _sd_p_1;
+                _sd_best_i = 1;
+            }
+            if _sd_best_i >= 0 {
+                let _ = atn_verified(59, &mut p.atn, &p.kinds, p.pos, 0, if _sd_best_i == 1 { 1 } else { 0 });
+                let _ = atn_decide_59(&mut p.atn, &p.kinds, p.pos, 0);
+            }
+            if _sd_best_i == 1 {
                 return _parse_ruleset__inner_alt_1(p, follow);
             }
             return _parse_ruleset__inner_alt_0(p, follow);
@@ -22886,8 +23178,25 @@ fn _parse_declaration__inner(p: &mut Parser, follow: i64 = 0) -> () {
     if !kind_set_has(&SYNC_46, p.kinds[p.pos]) { builtin::cold_path(); p.sync_alts(&SYNC_46, &EXPECTED_46); }
     let kind = p.peek_kind();
     if _kind_set_18(kind) {
-        let _atn_alt = atn_decide_66(&mut p.atn, &p.kinds, p.pos, 0);
-        if _atn_alt == 0 {
+        let _sd_tokens = &p.kinds;
+        let _sd_pos = p.pos;
+        let _sd_p_0 = scan_declaration__alt_0(_sd_tokens, _sd_pos, &mut p.atn, follow);
+        let _sd_p_1 = scan_declaration__alt_1(_sd_tokens, _sd_pos, &mut p.atn, follow);
+        let mut _sd_best_i: i32 = -1;
+        let mut _sd_best_p: i32 = -1;
+        if _sd_p_0 > _sd_best_p {
+            _sd_best_p = _sd_p_0;
+            _sd_best_i = 0;
+        }
+        if _sd_p_1 > _sd_best_p {
+            _sd_best_p = _sd_p_1;
+            _sd_best_i = 1;
+        }
+        if _sd_best_i >= 0 {
+            let _ = atn_verified(66, &mut p.atn, &p.kinds, p.pos, 0, if _sd_best_i == 0 { 0 } else { 1 });
+            let _ = atn_decide_66(&mut p.atn, &p.kinds, p.pos, 0);
+        }
+        if _sd_best_i == 0 {
             return _parse_declaration__inner_alt_0(p, follow);
         }
         return _parse_declaration__inner_alt_1(p, follow);
@@ -24386,13 +24695,35 @@ fn _parse_supports_condition__inner(p: &mut Parser, follow: i64 = 0) -> () {
         return;
     }
     if _kind_set_63(kind) {
-        let _atn_alt = atn_decide_95(&mut p.atn, &p.kinds, p.pos, 0);
-        if _atn_alt == 1 {
+        let _sd_tokens = &p.kinds;
+        let _sd_pos = p.pos;
+        let _sd_p_1 = scan_supports_condition__alt_1(_sd_tokens, _sd_pos, &mut p.atn, follow);
+        let _sd_p_2 = scan_supports_condition__alt_2(_sd_tokens, _sd_pos, &mut p.atn, follow);
+        let _sd_p_3 = scan_supports_condition__alt_3(_sd_tokens, _sd_pos, &mut p.atn, follow);
+        let mut _sd_best_i: i32 = -1;
+        let mut _sd_best_p: i32 = -1;
+        if _sd_p_1 > _sd_best_p {
+            _sd_best_p = _sd_p_1;
+            _sd_best_i = 1;
+        }
+        if _sd_p_2 > _sd_best_p {
+            _sd_best_p = _sd_p_2;
+            _sd_best_i = 2;
+        }
+        if _sd_p_3 > _sd_best_p {
+            _sd_best_p = _sd_p_3;
+            _sd_best_i = 3;
+        }
+        if _sd_best_i >= 0 {
+            let _ = atn_verified(95, &mut p.atn, &p.kinds, p.pos, 0, if _sd_best_i == 1 { 1 } else if _sd_best_i == 2 { 2 } else { 3 });
+            let _ = atn_decide_95(&mut p.atn, &p.kinds, p.pos, 0);
+        }
+        if _sd_best_i == 1 {
             p.site = 247;
             p.atn_ret_pending = 1226;
             return _parse_supports_conjunction(p, follow);
         }
-        if _atn_alt == 2 {
+        if _sd_best_i == 2 {
             p.site = 248;
             p.atn_ret_pending = 1228;
             return _parse_supports_disjunction(p, follow);
@@ -24479,11 +24810,33 @@ fn _parse_supports_condition_in_parens__inner(p: &mut Parser, follow: i64 = 0) -
     let kind = p.peek_kind();
     if _kind_set_63(kind) {
         if kind == TK_OpenParen {
-            let _atn_alt = atn_decide_96(&mut p.atn, &p.kinds, p.pos, 0);
-            if _atn_alt == 0 {
+            let _sd_tokens = &p.kinds;
+            let _sd_pos = p.pos;
+            let _sd_p_0 = scan_supports_condition_in_parens__alt_0(_sd_tokens, _sd_pos, &mut p.atn, follow);
+            let _sd_p_1 = scan_supports_condition_in_parens__alt_1(_sd_tokens, _sd_pos, &mut p.atn, follow);
+            let _sd_p_2 = scan_supports_condition_in_parens__alt_2(_sd_tokens, _sd_pos, &mut p.atn, follow);
+            let mut _sd_best_i: i32 = -1;
+            let mut _sd_best_p: i32 = -1;
+            if _sd_p_0 > _sd_best_p {
+                _sd_best_p = _sd_p_0;
+                _sd_best_i = 0;
+            }
+            if _sd_p_1 > _sd_best_p {
+                _sd_best_p = _sd_p_1;
+                _sd_best_i = 1;
+            }
+            if _sd_p_2 > _sd_best_p {
+                _sd_best_p = _sd_p_2;
+                _sd_best_i = 2;
+            }
+            if _sd_best_i >= 0 {
+                let _ = atn_verified(96, &mut p.atn, &p.kinds, p.pos, 0, if _sd_best_i == 0 { 0 } else if _sd_best_i == 1 { 1 } else { 2 });
+                let _ = atn_decide_96(&mut p.atn, &p.kinds, p.pos, 0);
+            }
+            if _sd_best_i == 0 {
                 return _parse_supports_condition_in_parens__inner_alt_0(p, follow);
             }
-            if _atn_alt == 1 {
+            if _sd_best_i == 1 {
                 p.site = 253;
                 p.atn_ret_pending = 1244;
                 return _parse_supports_declaration_condition(p, follow);
@@ -25267,8 +25620,25 @@ fn _parse_font_face_declaration__inner(p: &mut Parser, follow: i64 = 0) -> () {
     if !kind_set_has(&SYNC_46, p.kinds[p.pos]) { builtin::cold_path(); p.sync_alts(&SYNC_46, &EXPECTED_46); }
     let kind = p.peek_kind();
     if _kind_set_18(kind) {
-        let _atn_alt = atn_decide_111(&mut p.atn, &p.kinds, p.pos, 0);
-        if _atn_alt == 0 {
+        let _sd_tokens = &p.kinds;
+        let _sd_pos = p.pos;
+        let _sd_p_0 = scan_font_face_declaration__alt_0(_sd_tokens, _sd_pos, &mut p.atn, follow);
+        let _sd_p_1 = scan_font_face_declaration__alt_1(_sd_tokens, _sd_pos, &mut p.atn, follow);
+        let mut _sd_best_i: i32 = -1;
+        let mut _sd_best_p: i32 = -1;
+        if _sd_p_0 > _sd_best_p {
+            _sd_best_p = _sd_p_0;
+            _sd_best_i = 0;
+        }
+        if _sd_p_1 > _sd_best_p {
+            _sd_best_p = _sd_p_1;
+            _sd_best_i = 1;
+        }
+        if _sd_best_i >= 0 {
+            let _ = atn_verified(111, &mut p.atn, &p.kinds, p.pos, 0, if _sd_best_i == 0 { 0 } else { 1 });
+            let _ = atn_decide_111(&mut p.atn, &p.kinds, p.pos, 0);
+        }
+        if _sd_best_i == 0 {
             return _parse_font_face_declaration__inner_alt_0(p, follow);
         }
         return _parse_font_face_declaration__inner_alt_1(p, follow);

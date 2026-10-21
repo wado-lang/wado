@@ -97,15 +97,20 @@ fn traced<S: AsStrSlice>(grammar: S, body: String) -> String {
 
 /// Runs `body` beside the parser `source` and the `items` declared with it.
 fn run_beside(source: String, body: String, items: String = "") -> Output {
+    let out = eval_beside(source, body, items);
+    assert out.status matches { Exited(0) };
+    return out;
+}
+
+/// `run_beside` for a run that may trap.
+fn eval_beside(source: String, body: String, items: String = "") -> Output {
     // The generated source opens with inner attributes, which come first.
-    let out = eval(`${source}
+    return eval(`${source}
 use { println, Stdout } from "core:cli";
 ${items}
 export fn run() with Stdout {
 ${body}}
 `).unwrap();
-    assert out.status matches { Exited(0) };
-    return out;
 }
 
 // `SHOW_FN` and `SHOW_TOKENS_FN` are `"..."` literals, so their holes are the
@@ -744,6 +749,28 @@ test "atn never leaves an ambiguity the simulator decides by default to the tour
     assert !never.source.contains("ATN_SIM");
     assert never.source.contains("let _sd_p_0 = scan_a__alt_0(");
     assert !never.diagnostics.iter_ref().any(|d: &Diagnostic| d.kind matches { SimulatorRequired });
+}
+
+// `Z Z X` reads either way. The simulator takes the lower alternative, `b`, and
+// the tournament the longer, `b X`.
+global OPAQUE_CONTINUED_G4: String = "grammar T;
+r : a X* EOF ;
+a : b | b X ;
+b : Z Z ;
+X : 'X' ;
+Z : 'Z' ;
+WS : ' ' -> skip ;
+";
+
+test "atn verify parses as never does and checks each pick against the simulator" {
+    let verify = GenerateOptions { atn: AtnMode::Verify };
+    let never = GenerateOptions { atn: AtnMode::Never };
+    assert parses(OPAQUE_CONTINUED_G4, "r", ["Z Z"], &verify) == parses(OPAQUE_CONTINUED_G4, "r", ["Z Z"], &never);
+    assert parses(OPAQUE_CONTINUED_G4, "r", ["Z Z X"]) == "Z Z X => (r (a (b Z Z)) X)\n";
+    assert parses(OPAQUE_CONTINUED_G4, "r", ["Z Z X"], &never) == "Z Z X => (r (a (b Z Z) X))\n";
+    let out = eval_beside(gen_with(OPAQUE_CONTINUED_G4, &verify).source, wado`show("Z Z X", parse_r("Z Z X"));\n`, SHOW_FN);
+    assert !out.status matches { Exited(0) };
+    assert out.stderr.contains("atn verify: decision ");
 }
 
 // `(a | a B)` shares `a`, which hides the deciding token. The tournament takes

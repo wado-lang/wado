@@ -6357,11 +6357,19 @@ fn scan_token_tree_token(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, atn
         if _kind_set_10(kind) {
             return scan_token_tree_token__alt_1(tokens, start, gate, atn, memo);
         } else if _kind_set_11(kind) {
-            let _atn_alt = atn_decide_8(atn, tokens, pos, 0);
-            if _atn_alt == 0 {
-                return scan_token_tree_token__alt_0(tokens, start, gate, atn, memo);
+            let mut best: i32 = -1;
+            let mut best_gate = *gate;
+            let try_0_end = scan_token_tree_token__alt_0(tokens, start, gate, atn, memo);
+            if try_0_end > best { best = try_0_end; best_gate = *gate; }
+            *gate = start_gate;
+            let try_1_end = scan_token_tree_token__alt_1(tokens, start, gate, atn, memo);
+            if try_1_end > best { best = try_1_end; best_gate = *gate; }
+            if best >= 0 {
+                pos = best;
+                *gate = best_gate;
+                return pos;
             }
-            return scan_token_tree_token__alt_1(tokens, start, gate, atn, memo);
+            return -1;
         } else if _kind_set_12(kind) {
             return scan_token_tree_token__alt_0(tokens, start, gate, atn, memo);
         }
@@ -6387,14 +6395,22 @@ fn scan_macro_invocation_semi(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate
     let mut pos = pos;
     let kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
     if _kind_set_15(kind) {
-        let _atn_alt = atn_decide_9(atn, tokens, pos, 0);
-        if _atn_alt == 0 {
-            return scan_macro_invocation_semi__alt_0(tokens, start, gate, atn, memo, follow);
+        let mut best: i32 = -1;
+        let mut best_gate = *gate;
+        let try_0_end = scan_macro_invocation_semi__alt_0(tokens, start, gate, atn, memo, follow);
+        if try_0_end > best { best = try_0_end; best_gate = *gate; }
+        *gate = start_gate;
+        let try_1_end = scan_macro_invocation_semi__alt_1(tokens, start, gate, atn, memo, follow);
+        if try_1_end > best { best = try_1_end; best_gate = *gate; }
+        *gate = start_gate;
+        let try_2_end = scan_macro_invocation_semi__alt_2(tokens, start, gate, atn, memo, follow);
+        if try_2_end > best { best = try_2_end; best_gate = *gate; }
+        if best >= 0 {
+            pos = best;
+            *gate = best_gate;
+            return pos;
         }
-        if _atn_alt == 1 {
-            return scan_macro_invocation_semi__alt_1(tokens, start, gate, atn, memo, follow);
-        }
-        return scan_macro_invocation_semi__alt_2(tokens, start, gate, atn, memo, follow);
+        return -1;
     }
     return -1;
 }
@@ -6736,11 +6752,19 @@ fn scan_macro_match_token(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, at
         if _kind_set_10(kind) {
             return scan_macro_match_token__alt_1(tokens, start, gate, atn, memo);
         } else if _kind_set_11(kind) {
-            let _atn_alt = atn_decide_25(atn, tokens, pos, 0);
-            if _atn_alt == 0 {
-                return scan_macro_match_token__alt_0(tokens, start, gate, atn, memo);
+            let mut best: i32 = -1;
+            let mut best_gate = *gate;
+            let try_0_end = scan_macro_match_token__alt_0(tokens, start, gate, atn, memo);
+            if try_0_end > best { best = try_0_end; best_gate = *gate; }
+            *gate = start_gate;
+            let try_1_end = scan_macro_match_token__alt_1(tokens, start, gate, atn, memo);
+            if try_1_end > best { best = try_1_end; best_gate = *gate; }
+            if best >= 0 {
+                pos = best;
+                *gate = best_gate;
+                return pos;
             }
-            return scan_macro_match_token__alt_1(tokens, start, gate, atn, memo);
+            return -1;
         } else if _kind_set_12(kind) {
             return scan_macro_match_token__alt_0(tokens, start, gate, atn, memo);
         }
@@ -6765,11 +6789,19 @@ fn scan_macro_rep_sep(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, atn: &
         if _kind_set_10(kind) {
             return scan_macro_rep_sep__alt_1(tokens, start, gate, atn, memo);
         } else if _kind_set_11(kind) {
-            let _atn_alt = atn_decide_26(atn, tokens, pos, 0);
-            if _atn_alt == 0 {
-                return scan_macro_rep_sep__alt_0(tokens, start, gate, atn, memo);
+            let mut best: i32 = -1;
+            let mut best_gate = *gate;
+            let try_0_end = scan_macro_rep_sep__alt_0(tokens, start, gate, atn, memo);
+            if try_0_end > best { best = try_0_end; best_gate = *gate; }
+            *gate = start_gate;
+            let try_1_end = scan_macro_rep_sep__alt_1(tokens, start, gate, atn, memo);
+            if try_1_end > best { best = try_1_end; best_gate = *gate; }
+            if best >= 0 {
+                pos = best;
+                *gate = best_gate;
+                return pos;
             }
-            return scan_macro_rep_sep__alt_1(tokens, start, gate, atn, memo);
+            return -1;
         } else if _kind_set_12(kind) {
             return scan_macro_rep_sep__alt_0(tokens, start, gate, atn, memo);
         }
@@ -7087,11 +7119,19 @@ fn scan_macro_item(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, atn: &mut
     let kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
     if _kind_set_15(kind) {
         if kind == TK_KW_MACRORULES {
-            let _atn_alt = atn_decide_32(atn, tokens, pos, 0);
-            if _atn_alt == 0 {
-                return scan_macro_item__alt_0(tokens, start, gate, atn, memo, follow);
+            let mut best: i32 = -1;
+            let mut best_gate = *gate;
+            let try_0_end = scan_macro_item__alt_0(tokens, start, gate, atn, memo, follow);
+            if try_0_end > best { best = try_0_end; best_gate = *gate; }
+            *gate = start_gate;
+            let try_1_end = scan_macro_item__alt_1(tokens, start, gate, atn, memo, follow);
+            if try_1_end > best { best = try_1_end; best_gate = *gate; }
+            if best >= 0 {
+                pos = best;
+                *gate = best_gate;
+                return pos;
             }
-            return scan_macro_item__alt_1(tokens, start, gate, atn, memo, follow);
+            return -1;
         } else if _kind_set_29(kind) {
             return scan_macro_item__alt_0(tokens, start, gate, atn, memo, follow);
         }
@@ -7249,11 +7289,19 @@ fn scan_use_tree(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, atn: &mut A
     let kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
     if _kind_set_30(kind) {
         if _kind_set_15(kind) {
-            let _atn_alt = atn_decide_40(atn, tokens, pos, 0);
-            if _atn_alt == 0 {
-                return scan_use_tree__alt_0(tokens, start, gate, atn, memo, follow);
+            let mut best: i32 = -1;
+            let mut best_gate = *gate;
+            let try_0_end = scan_use_tree__alt_0(tokens, start, gate, atn, memo, follow);
+            if try_0_end > best { best = try_0_end; best_gate = *gate; }
+            *gate = start_gate;
+            let try_1_end = scan_use_tree__alt_1(tokens, start, gate, atn, memo, follow);
+            if try_1_end > best { best = try_1_end; best_gate = *gate; }
+            if best >= 0 {
+                pos = best;
+                *gate = best_gate;
+                return pos;
             }
-            return scan_use_tree__alt_1(tokens, start, gate, atn, memo, follow);
+            return -1;
         } else if _kind_set_32(kind) {
             return scan_use_tree__alt_0(tokens, start, gate, atn, memo, follow);
         }
@@ -7367,11 +7415,19 @@ fn scan_function_parameters(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, 
     let kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
     if _kind_set_33(kind) {
         if _kind_set_37(kind) {
-            let _atn_alt = atn_decide_60(atn, tokens, pos, 0);
-            if _atn_alt == 1 {
-                return scan_function_parameters__alt_1(tokens, start, gate, atn, memo, follow);
+            let mut best: i32 = -1;
+            let mut best_gate = *gate;
+            let try_0_end = scan_function_parameters__alt_0(tokens, start, gate, atn, memo, follow);
+            if try_0_end > best { best = try_0_end; best_gate = *gate; }
+            *gate = start_gate;
+            let try_1_end = scan_function_parameters__alt_1(tokens, start, gate, atn, memo, follow);
+            if try_1_end > best { best = try_1_end; best_gate = *gate; }
+            if best >= 0 {
+                pos = best;
+                *gate = best_gate;
+                return pos;
             }
-            return scan_function_parameters__alt_0(tokens, start, gate, atn, memo, follow);
+            return -1;
         } else if _kind_set_42(kind) {
             return scan_function_parameters__alt_1(tokens, start, gate, atn, memo, follow);
         }
@@ -7653,11 +7709,19 @@ fn scan_struct_(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, atn: &mut At
     let mut pos = pos;
     let kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
     if kind == TK_KW_STRUCT {
-        let _atn_alt = atn_decide_77(atn, tokens, pos, 0);
-        if _atn_alt == 0 {
-            return scan_struct___alt_0(tokens, start, gate, atn, memo, follow);
+        let mut best: i32 = -1;
+        let mut best_gate = *gate;
+        let try_0_end = scan_struct___alt_0(tokens, start, gate, atn, memo, follow);
+        if try_0_end > best { best = try_0_end; best_gate = *gate; }
+        *gate = start_gate;
+        let try_1_end = scan_struct___alt_1(tokens, start, gate, atn, memo, follow);
+        if try_1_end > best { best = try_1_end; best_gate = *gate; }
+        if best >= 0 {
+            pos = best;
+            *gate = best_gate;
+            return pos;
         }
-        return scan_struct___alt_1(tokens, start, gate, atn, memo, follow);
+        return -1;
     }
     return -1;
 }
@@ -8400,11 +8464,19 @@ fn scan_implementation(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, atn: 
     let kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
     if _kind_set_58(kind) {
         if kind == TK_KW_IMPL {
-            let _atn_alt = atn_decide_117(atn, tokens, pos, 0);
-            if _atn_alt == 0 {
-                return scan_implementation__alt_0(tokens, start, gate, atn, memo, follow);
+            let mut best: i32 = -1;
+            let mut best_gate = *gate;
+            let try_0_end = scan_implementation__alt_0(tokens, start, gate, atn, memo, follow);
+            if try_0_end > best { best = try_0_end; best_gate = *gate; }
+            *gate = start_gate;
+            let try_1_end = scan_implementation__alt_1(tokens, start, gate, atn, memo, follow);
+            if try_1_end > best { best = try_1_end; best_gate = *gate; }
+            if best >= 0 {
+                pos = best;
+                *gate = best_gate;
+                return pos;
             }
-            return scan_implementation__alt_1(tokens, start, gate, atn, memo, follow);
+            return -1;
         } else if kind == TK_KW_UNSAFE {
             return scan_implementation__alt_1(tokens, start, gate, atn, memo, follow);
         }
@@ -9298,11 +9370,19 @@ fn scan_where_clause_item__walk(tokens: &Array<i32>, pos: i32, gate: &mut ScanGa
     let kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
     if _kind_set_48(kind) {
         if _kind_set_44(kind) {
-            let _atn_alt = atn_decide_149(atn, tokens, pos, 0);
-            if _atn_alt == 0 {
-                return scan_lifetime_where_clause_item(tokens, start, gate, atn, memo, follow);
+            let mut best: i32 = -1;
+            let mut best_gate = *gate;
+            let try_0_end = scan_lifetime_where_clause_item(tokens, start, gate, atn, memo, follow);
+            if try_0_end > best { best = try_0_end; best_gate = *gate; }
+            *gate = start_gate;
+            let try_1_end = scan_where_clause_item__alt_1(tokens, start, gate, atn, memo, follow);
+            if try_1_end > best { best = try_1_end; best_gate = *gate; }
+            if best >= 0 {
+                pos = best;
+                *gate = best_gate;
+                return pos;
             }
-            return scan_where_clause_item__alt_1(tokens, start, gate, atn, memo, follow);
+            return -1;
         } else if _kind_set_70(kind) {
             return scan_where_clause_item__alt_1(tokens, start, gate, atn, memo, follow);
         }
@@ -9615,51 +9695,57 @@ fn scan_statement(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, atn: &mut 
     }
     if _kind_set_75(kind) {
         if kind == TK_POUND {
-            let mut _atn_false: List<i32> = [];
-            if gate.no_struct != 0 { _atn_false.push(2); }
-            if gate.no_struct != 0 { _atn_false.push(3); }
-            let _atn_alt = atn.predict(&ATN_SIM, 159, tokens, pos, TK_EOF, 0, &_atn_false);
-            if _atn_alt < 0 {
-                return -1;
+            let mut best: i32 = -1;
+            let mut best_gate = *gate;
+            let try_1_end = scan_statement__alt_1(tokens, start, gate, atn, memo, follow);
+            if try_1_end > best { best = try_1_end; best_gate = *gate; }
+            *gate = start_gate;
+            let try_2_end = scan_statement__alt_2(tokens, start, gate, atn, memo, follow);
+            if try_2_end > best { best = try_2_end; best_gate = *gate; }
+            *gate = start_gate;
+            let try_3_end = scan_statement__alt_3(tokens, start, gate, atn, memo, follow);
+            if try_3_end > best { best = try_3_end; best_gate = *gate; }
+            if best >= 0 {
+                pos = best;
+                *gate = best_gate;
+                return pos;
             }
-            if _atn_alt == 1 {
-                return scan_statement__alt_1(tokens, start, gate, atn, memo, follow);
-            }
-            if _atn_alt == 2 {
-                return scan_statement__alt_2(tokens, start, gate, atn, memo, follow);
-            }
-            return scan_statement__alt_3(tokens, start, gate, atn, memo, follow);
+            return -1;
         } else if kind == TK_KW_LET {
             return scan_statement__alt_2(tokens, start, gate, atn, memo, follow);
         } else if _kind_set_15(kind) {
-            let mut _atn_false: List<i32> = [];
-            if gate.no_struct != 0 { _atn_false.push(2); }
-            if gate.no_struct != 0 { _atn_false.push(3); }
-            let _atn_alt = atn.predict(&ATN_SIM, 159, tokens, pos, TK_EOF, 0, &_atn_false);
-            if _atn_alt < 0 {
-                return -1;
+            let mut best: i32 = -1;
+            let mut best_gate = *gate;
+            let try_1_end = scan_statement__alt_1(tokens, start, gate, atn, memo, follow);
+            if try_1_end > best { best = try_1_end; best_gate = *gate; }
+            *gate = start_gate;
+            let try_3_end = scan_statement__alt_3(tokens, start, gate, atn, memo, follow);
+            if try_3_end > best { best = try_3_end; best_gate = *gate; }
+            *gate = start_gate;
+            let try_4_end = scan_statement__alt_4(tokens, start, gate, atn, memo, follow);
+            if try_4_end > best { best = try_4_end; best_gate = *gate; }
+            if best >= 0 {
+                pos = best;
+                *gate = best_gate;
+                return pos;
             }
-            if _atn_alt == 1 {
-                return scan_statement__alt_1(tokens, start, gate, atn, memo, follow);
-            }
-            if _atn_alt == 3 {
-                return scan_statement__alt_3(tokens, start, gate, atn, memo, follow);
-            }
-            return scan_statement__alt_4(tokens, start, gate, atn, memo, follow);
+            return -1;
         } else if _kind_set_76(kind) {
             return scan_statement__alt_1(tokens, start, gate, atn, memo, follow);
         } else if _kind_set_77(kind) {
-            let mut _atn_false: List<i32> = [];
-            if gate.no_struct != 0 { _atn_false.push(2); }
-            if gate.no_struct != 0 { _atn_false.push(3); }
-            let _atn_alt = atn.predict(&ATN_SIM, 159, tokens, pos, TK_EOF, 0, &_atn_false);
-            if _atn_alt < 0 {
-                return -1;
+            let mut best: i32 = -1;
+            let mut best_gate = *gate;
+            let try_1_end = scan_statement__alt_1(tokens, start, gate, atn, memo, follow);
+            if try_1_end > best { best = try_1_end; best_gate = *gate; }
+            *gate = start_gate;
+            let try_3_end = scan_statement__alt_3(tokens, start, gate, atn, memo, follow);
+            if try_3_end > best { best = try_3_end; best_gate = *gate; }
+            if best >= 0 {
+                pos = best;
+                *gate = best_gate;
+                return pos;
             }
-            if _atn_alt == 1 {
-                return scan_statement__alt_1(tokens, start, gate, atn, memo, follow);
-            }
-            return scan_statement__alt_3(tokens, start, gate, atn, memo, follow);
+            return -1;
         } else if _kind_set_78(kind) {
             return scan_statement__alt_3(tokens, start, gate, atn, memo, follow);
         }
@@ -9755,17 +9841,19 @@ fn scan_expression_statement(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate,
     let kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
     if _kind_set_55(kind) {
         if _kind_set_79(kind) {
-            let mut _atn_false: List<i32> = [];
-            if gate.no_struct != 0 { _atn_false.push(2); }
-            if gate.no_struct != 0 { _atn_false.push(3); }
-            let _atn_alt = atn.predict(&ATN_SIM, 164, tokens, pos, TK_EOF, 0, &_atn_false);
-            if _atn_alt < 0 {
-                return -1;
+            let mut best: i32 = -1;
+            let mut best_gate = *gate;
+            let try_0_end = scan_expression_statement__alt_0(tokens, start, gate, atn, memo, follow);
+            if try_0_end > best { best = try_0_end; best_gate = *gate; }
+            *gate = start_gate;
+            let try_1_end = scan_expression_statement__alt_1(tokens, start, gate, atn, memo, follow);
+            if try_1_end > best { best = try_1_end; best_gate = *gate; }
+            if best >= 0 {
+                pos = best;
+                *gate = best_gate;
+                return pos;
             }
-            if _atn_alt == 0 {
-                return scan_expression_statement__alt_0(tokens, start, gate, atn, memo, follow);
-            }
-            return scan_expression_statement__alt_1(tokens, start, gate, atn, memo, follow);
+            return -1;
         } else if _kind_set_80(kind) {
             return scan_expression_statement__alt_0(tokens, start, gate, atn, memo, follow);
         }
@@ -9780,17 +9868,33 @@ fn scan_expression_atom(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, atn:
     let kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
     if _kind_set_83(kind) {
         if kind == TK_POUND {
-            let _atn_alt = atn_decide_166(atn, tokens, pos, min_prec);
-            if _atn_alt == 18 {
-                return scan_expression__alt_39(tokens, start, gate, atn, memo, min_prec, follow);
+            let mut best: i32 = -1;
+            let mut best_gate = *gate;
+            let try_0_end = scan_expression__alt_0(tokens, start, gate, atn, memo, min_prec, follow);
+            if try_0_end > best { best = try_0_end; best_gate = *gate; }
+            *gate = start_gate;
+            let try_39_end = scan_expression__alt_39(tokens, start, gate, atn, memo, min_prec, follow);
+            if try_39_end > best { best = try_39_end; best_gate = *gate; }
+            if best >= 0 {
+                pos = best;
+                *gate = best_gate;
+                return pos;
             }
-            return scan_expression__alt_0(tokens, start, gate, atn, memo, min_prec, follow);
+            return -1;
         } else if kind == TK_KW_ASYNC {
-            let _atn_alt = atn_decide_166(atn, tokens, pos, min_prec);
-            if _atn_alt == 17 {
-                return scan_expression__alt_38(tokens, start, gate, atn, memo, min_prec, follow);
+            let mut best: i32 = -1;
+            let mut best_gate = *gate;
+            let try_38_end = scan_expression__alt_38(tokens, start, gate, atn, memo, min_prec, follow);
+            if try_38_end > best { best = try_38_end; best_gate = *gate; }
+            *gate = start_gate;
+            let try_39_end = scan_expression__alt_39(tokens, start, gate, atn, memo, min_prec, follow);
+            if try_39_end > best { best = try_39_end; best_gate = *gate; }
+            if best >= 0 {
+                pos = best;
+                *gate = best_gate;
+                return pos;
             }
-            return scan_expression__alt_39(tokens, start, gate, atn, memo, min_prec, follow);
+            return -1;
         } else if _kind_set_84(kind) {
             return scan_expression__alt_38(tokens, start, gate, atn, memo, min_prec, follow);
         } else if _kind_set_85(kind) {
@@ -9803,38 +9907,42 @@ fn scan_expression_atom(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, atn:
     }
     if _kind_set_86(kind) {
         if _kind_set_15(kind) {
-            let mut _atn_false: List<i32> = [];
-            if gate.no_struct != 0 { _atn_false.push(2); }
-            if gate.no_struct != 0 { _atn_false.push(3); }
-            let _atn_alt = atn.predict(&ATN_SIM, 166, tokens, pos, TK_EOF, min_prec, &_atn_false);
-            if _atn_alt < 0 {
-                return -1;
+            let mut best: i32 = -1;
+            let mut best_gate = *gate;
+            let try_2_end = scan_expression__alt_2(tokens, start, gate, atn, memo, min_prec, follow);
+            if try_2_end > best { best = try_2_end; best_gate = *gate; }
+            *gate = start_gate;
+            let try_36_end = scan_expression__alt_36(tokens, start, gate, atn, memo, min_prec, follow);
+            if try_36_end > best { best = try_36_end; best_gate = *gate; }
+            *gate = start_gate;
+            let try_37_end = scan_expression__alt_37(tokens, start, gate, atn, memo, min_prec, follow);
+            if try_37_end > best { best = try_37_end; best_gate = *gate; }
+            *gate = start_gate;
+            let try_40_end = scan_expression__alt_40(tokens, start, gate, atn, memo, min_prec, follow);
+            if try_40_end > best { best = try_40_end; best_gate = *gate; }
+            if best >= 0 {
+                pos = best;
+                *gate = best_gate;
+                return pos;
             }
-            if _atn_alt == 2 {
-                return scan_expression__alt_2(tokens, start, gate, atn, memo, min_prec, follow);
-            }
-            if _atn_alt == 15 {
-                return scan_expression__alt_36(tokens, start, gate, atn, memo, min_prec, follow);
-            }
-            if _atn_alt == 16 {
-                return scan_expression__alt_37(tokens, start, gate, atn, memo, min_prec, follow);
-            }
-            return scan_expression__alt_40(tokens, start, gate, atn, memo, min_prec, follow);
+            return -1;
         } else if kind == TK_KW_SELFTYPE {
-            let mut _atn_false: List<i32> = [];
-            if gate.no_struct != 0 { _atn_false.push(2); }
-            if gate.no_struct != 0 { _atn_false.push(3); }
-            let _atn_alt = atn.predict(&ATN_SIM, 166, tokens, pos, TK_EOF, min_prec, &_atn_false);
-            if _atn_alt < 0 {
-                return -1;
+            let mut best: i32 = -1;
+            let mut best_gate = *gate;
+            let try_2_end = scan_expression__alt_2(tokens, start, gate, atn, memo, min_prec, follow);
+            if try_2_end > best { best = try_2_end; best_gate = *gate; }
+            *gate = start_gate;
+            let try_36_end = scan_expression__alt_36(tokens, start, gate, atn, memo, min_prec, follow);
+            if try_36_end > best { best = try_36_end; best_gate = *gate; }
+            *gate = start_gate;
+            let try_37_end = scan_expression__alt_37(tokens, start, gate, atn, memo, min_prec, follow);
+            if try_37_end > best { best = try_37_end; best_gate = *gate; }
+            if best >= 0 {
+                pos = best;
+                *gate = best_gate;
+                return pos;
             }
-            if _atn_alt == 2 {
-                return scan_expression__alt_2(tokens, start, gate, atn, memo, min_prec, follow);
-            }
-            if _atn_alt == 15 {
-                return scan_expression__alt_36(tokens, start, gate, atn, memo, min_prec, follow);
-            }
-            return scan_expression__alt_37(tokens, start, gate, atn, memo, min_prec, follow);
+            return -1;
         } else if kind == TK_LT {
             return scan_expression__alt_2(tokens, start, gate, atn, memo, min_prec, follow);
         }
@@ -9842,11 +9950,19 @@ fn scan_expression_atom(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, atn:
     if _kind_set_81(kind) {
         let la_1 = if pos + 1 < tokens.len() { tokens[pos + 1] } else { TK_EOF };
         if la_1 == TK_KW_RAW {
-            let _atn_alt = atn_decide_166(atn, tokens, pos, min_prec);
-            if _atn_alt == 3 {
-                return scan_expression__alt_10(tokens, start, gate, atn, memo, min_prec, follow);
+            let mut best: i32 = -1;
+            let mut best_gate = *gate;
+            let try_10_end = scan_expression__alt_10(tokens, start, gate, atn, memo, min_prec, follow);
+            if try_10_end > best { best = try_10_end; best_gate = *gate; }
+            *gate = start_gate;
+            let try_11_end = scan_expression__alt_11(tokens, start, gate, atn, memo, min_prec, follow);
+            if try_11_end > best { best = try_11_end; best_gate = *gate; }
+            if best >= 0 {
+                pos = best;
+                *gate = best_gate;
+                return pos;
             }
-            return scan_expression__alt_11(tokens, start, gate, atn, memo, min_prec, follow);
+            return -1;
         } else if _kind_set_87(la_1) {
             return scan_expression__alt_11(tokens, start, gate, atn, memo, min_prec, follow);
         } else {
@@ -9965,11 +10081,19 @@ fn scan_expression_atom(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, atn:
         return pos;
     }
     if kind == TK_LPAREN {
-        let _atn_alt = atn_decide_166(atn, tokens, pos, min_prec);
-        if _atn_alt == 12 {
-            return scan_expression__alt_33(tokens, start, gate, atn, memo, min_prec, follow);
+        let mut best: i32 = -1;
+        let mut best_gate = *gate;
+        let try_33_end = scan_expression__alt_33(tokens, start, gate, atn, memo, min_prec, follow);
+        if try_33_end > best { best = try_33_end; best_gate = *gate; }
+        *gate = start_gate;
+        let try_35_end = scan_expression__alt_35(tokens, start, gate, atn, memo, min_prec, follow);
+        if try_35_end > best { best = try_35_end; best_gate = *gate; }
+        if best >= 0 {
+            pos = best;
+            *gate = best_gate;
+            return pos;
         }
-        return scan_expression__alt_35(tokens, start, gate, atn, memo, min_prec, follow);
+        return -1;
     }
     if kind == TK_LSQUAREBRACKET {
         pos = start + 1;
@@ -10618,17 +10742,19 @@ fn scan_statements(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, atn: &mut
     let kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
     if _kind_set_93(kind) {
         if _kind_set_55(kind) {
-            let mut _atn_false: List<i32> = [];
-            if gate.no_struct != 0 { _atn_false.push(2); }
-            if gate.no_struct != 0 { _atn_false.push(3); }
-            let _atn_alt = atn.predict(&ATN_SIM, 199, tokens, pos, TK_EOF, 0, &_atn_false);
-            if _atn_alt < 0 {
-                return -1;
+            let mut best: i32 = -1;
+            let mut best_gate = *gate;
+            let try_0_end = scan_statements__alt_0(tokens, start, gate, atn, memo, follow);
+            if try_0_end > best { best = try_0_end; best_gate = *gate; }
+            *gate = start_gate;
+            let try_1_end = scan_statements__alt_1(tokens, start, gate, atn, memo, follow);
+            if try_1_end > best { best = try_1_end; best_gate = *gate; }
+            if best >= 0 {
+                pos = best;
+                *gate = best_gate;
+                return pos;
             }
-            if _atn_alt == 1 {
-                return scan_statements__alt_1(tokens, start, gate, atn, memo, follow);
-            }
-            return scan_statements__alt_0(tokens, start, gate, atn, memo, follow);
+            return -1;
         } else if _kind_set_98(kind) {
             return scan_statements__alt_0(tokens, start, gate, atn, memo, follow);
         }
@@ -10675,17 +10801,19 @@ fn scan_array_elements__scoped(tokens: &Array<i32>, pos: i32, gate: &mut ScanGat
     let mut pos = pos;
     let kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
     if _kind_set_55(kind) {
-        let mut _atn_false: List<i32> = [];
-        if gate.no_struct != 0 { _atn_false.push(2); }
-        if gate.no_struct != 0 { _atn_false.push(3); }
-        let _atn_alt = atn.predict(&ATN_SIM, 203, tokens, pos, TK_EOF, 0, &_atn_false);
-        if _atn_alt < 0 {
-            return -1;
+        let mut best: i32 = -1;
+        let mut best_gate = *gate;
+        let try_0_end = scan_array_elements__alt_0(tokens, start, gate, atn, memo, follow);
+        if try_0_end > best { best = try_0_end; best_gate = *gate; }
+        *gate = start_gate;
+        let try_1_end = scan_array_elements__alt_1(tokens, start, gate, atn, memo, follow);
+        if try_1_end > best { best = try_1_end; best_gate = *gate; }
+        if best >= 0 {
+            pos = best;
+            *gate = best_gate;
+            return pos;
         }
-        if _atn_alt == 0 {
-            return scan_array_elements__alt_0(tokens, start, gate, atn, memo, follow);
-        }
-        return scan_array_elements__alt_1(tokens, start, gate, atn, memo, follow);
+        return -1;
     }
     return -1;
 }
@@ -10788,14 +10916,22 @@ fn scan_struct_expression(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, at
     let mut pos = pos;
     let kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
     if _kind_set_92(kind) {
-        let _atn_alt = atn_decide_208(atn, tokens, pos, 0);
-        if _atn_alt == 0 {
-            return scan_struct_expression__alt_0(tokens, start, gate, atn, memo, follow);
+        let mut best: i32 = -1;
+        let mut best_gate = *gate;
+        let try_0_end = scan_struct_expression__alt_0(tokens, start, gate, atn, memo, follow);
+        if try_0_end > best { best = try_0_end; best_gate = *gate; }
+        *gate = start_gate;
+        let try_1_end = scan_struct_expression__alt_1(tokens, start, gate, atn, memo, follow);
+        if try_1_end > best { best = try_1_end; best_gate = *gate; }
+        *gate = start_gate;
+        let try_2_end = scan_struct_expression__alt_2(tokens, start, gate, atn, memo, follow);
+        if try_2_end > best { best = try_2_end; best_gate = *gate; }
+        if best >= 0 {
+            pos = best;
+            *gate = best_gate;
+            return pos;
         }
-        if _atn_alt == 1 {
-            return scan_struct_expression__alt_1(tokens, start, gate, atn, memo, follow);
-        }
-        return scan_struct_expression__alt_2(tokens, start, gate, atn, memo, follow);
+        return -1;
     }
     return -1;
 }
@@ -11228,14 +11364,22 @@ fn scan_enumeration_variant_expression(tokens: &Array<i32>, pos: i32, gate: &mut
     let mut pos = pos;
     let kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
     if _kind_set_92(kind) {
-        let _atn_alt = atn_decide_222(atn, tokens, pos, 0);
-        if _atn_alt == 0 {
-            return scan_enumeration_variant_expression__alt_0(tokens, start, gate, atn, memo, follow);
+        let mut best: i32 = -1;
+        let mut best_gate = *gate;
+        let try_0_end = scan_enumeration_variant_expression__alt_0(tokens, start, gate, atn, memo, follow);
+        if try_0_end > best { best = try_0_end; best_gate = *gate; }
+        *gate = start_gate;
+        let try_1_end = scan_enumeration_variant_expression__alt_1(tokens, start, gate, atn, memo, follow);
+        if try_1_end > best { best = try_1_end; best_gate = *gate; }
+        *gate = start_gate;
+        let try_2_end = scan_enumeration_variant_expression__alt_2(tokens, start, gate, atn, memo, follow);
+        if try_2_end > best { best = try_2_end; best_gate = *gate; }
+        if best >= 0 {
+            pos = best;
+            *gate = best_gate;
+            return pos;
         }
-        if _atn_alt == 1 {
-            return scan_enumeration_variant_expression__alt_1(tokens, start, gate, atn, memo, follow);
-        }
-        return scan_enumeration_variant_expression__alt_2(tokens, start, gate, atn, memo, follow);
+        return -1;
     }
     return -1;
 }
@@ -12210,17 +12354,19 @@ fn scan_match_arm_expression(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate,
     let kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
     if _kind_set_55(kind) {
         if _kind_set_79(kind) {
-            let mut _atn_false: List<i32> = [];
-            if gate.no_struct != 0 { _atn_false.push(2); }
-            if gate.no_struct != 0 { _atn_false.push(3); }
-            let _atn_alt = atn.predict(&ATN_SIM, 256, tokens, pos, TK_EOF, 0, &_atn_false);
-            if _atn_alt < 0 {
-                return -1;
+            let mut best: i32 = -1;
+            let mut best_gate = *gate;
+            let try_0_end = scan_match_arm_expression__alt_0(tokens, start, gate, atn, memo, follow);
+            if try_0_end > best { best = try_0_end; best_gate = *gate; }
+            *gate = start_gate;
+            let try_1_end = scan_match_arm_expression__alt_1(tokens, start, gate, atn, memo, follow);
+            if try_1_end > best { best = try_1_end; best_gate = *gate; }
+            if best >= 0 {
+                pos = best;
+                *gate = best_gate;
+                return pos;
             }
-            if _atn_alt == 0 {
-                return scan_match_arm_expression__alt_0(tokens, start, gate, atn, memo, follow);
-            }
-            return scan_match_arm_expression__alt_1(tokens, start, gate, atn, memo, follow);
+            return -1;
         } else if _kind_set_80(kind) {
             return scan_match_arm_expression__alt_0(tokens, start, gate, atn, memo, follow);
         }
@@ -12411,11 +12557,19 @@ fn scan_pattern_no_top_alt(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, a
     let kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
     if _kind_set_118(kind) {
         if _kind_set_119(kind) {
-            let _atn_alt = atn_decide_265(atn, tokens, pos, 0);
-            if _atn_alt == 0 {
-                return scan_pattern_no_top_alt__alt_0(tokens, start, gate, atn, memo, follow);
+            let mut best: i32 = -1;
+            let mut best_gate = *gate;
+            let try_0_end = scan_pattern_no_top_alt__alt_0(tokens, start, gate, atn, memo, follow);
+            if try_0_end > best { best = try_0_end; best_gate = *gate; }
+            *gate = start_gate;
+            let try_1_end = scan_pattern_no_top_alt__alt_1(tokens, start, gate, atn, memo, follow);
+            if try_1_end > best { best = try_1_end; best_gate = *gate; }
+            if best >= 0 {
+                pos = best;
+                *gate = best_gate;
+                return pos;
             }
-            return scan_pattern_no_top_alt__alt_1(tokens, start, gate, atn, memo, follow);
+            return -1;
         } else if _kind_set_120(kind) {
             return scan_pattern_no_top_alt__alt_0(tokens, start, gate, atn, memo, follow);
         }
@@ -12440,41 +12594,65 @@ fn scan_pattern_without_range(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate
         if _kind_set_123(kind) {
             return scan_pattern_without_range__alt_1(tokens, start, gate, atn, memo, follow);
         } else if _kind_set_22(kind) {
-            let _atn_alt = atn_decide_266(atn, tokens, pos, 0);
-            if _atn_alt == 1 {
-                return scan_pattern_without_range__alt_1(tokens, start, gate, atn, memo, follow);
+            let mut best: i32 = -1;
+            let mut best_gate = *gate;
+            let try_1_end = scan_pattern_without_range__alt_1(tokens, start, gate, atn, memo, follow);
+            if try_1_end > best { best = try_1_end; best_gate = *gate; }
+            *gate = start_gate;
+            let try_5_end = scan_pattern_without_range__alt_5(tokens, start, gate, atn, memo, follow);
+            if try_5_end > best { best = try_5_end; best_gate = *gate; }
+            *gate = start_gate;
+            let try_6_end = scan_pattern_without_range__alt_6(tokens, start, gate, atn, memo, follow);
+            if try_6_end > best { best = try_6_end; best_gate = *gate; }
+            *gate = start_gate;
+            let try_10_end = scan_pattern_without_range__alt_10(tokens, start, gate, atn, memo, follow);
+            if try_10_end > best { best = try_10_end; best_gate = *gate; }
+            *gate = start_gate;
+            let try_11_end = scan_pattern_without_range__alt_11(tokens, start, gate, atn, memo, follow);
+            if try_11_end > best { best = try_11_end; best_gate = *gate; }
+            if best >= 0 {
+                pos = best;
+                *gate = best_gate;
+                return pos;
             }
-            if _atn_alt == 5 {
-                return scan_pattern_without_range__alt_5(tokens, start, gate, atn, memo, follow);
-            }
-            if _atn_alt == 6 {
-                return scan_pattern_without_range__alt_6(tokens, start, gate, atn, memo, follow);
-            }
-            if _atn_alt == 10 {
-                return scan_pattern_without_range__alt_10(tokens, start, gate, atn, memo, follow);
-            }
-            return scan_pattern_without_range__alt_11(tokens, start, gate, atn, memo, follow);
+            return -1;
         } else if _kind_set_124(kind) {
-            let _atn_alt = atn_decide_266(atn, tokens, pos, 0);
-            if _atn_alt == 5 {
-                return scan_pattern_without_range__alt_5(tokens, start, gate, atn, memo, follow);
+            let mut best: i32 = -1;
+            let mut best_gate = *gate;
+            let try_5_end = scan_pattern_without_range__alt_5(tokens, start, gate, atn, memo, follow);
+            if try_5_end > best { best = try_5_end; best_gate = *gate; }
+            *gate = start_gate;
+            let try_6_end = scan_pattern_without_range__alt_6(tokens, start, gate, atn, memo, follow);
+            if try_6_end > best { best = try_6_end; best_gate = *gate; }
+            *gate = start_gate;
+            let try_10_end = scan_pattern_without_range__alt_10(tokens, start, gate, atn, memo, follow);
+            if try_10_end > best { best = try_10_end; best_gate = *gate; }
+            *gate = start_gate;
+            let try_11_end = scan_pattern_without_range__alt_11(tokens, start, gate, atn, memo, follow);
+            if try_11_end > best { best = try_11_end; best_gate = *gate; }
+            if best >= 0 {
+                pos = best;
+                *gate = best_gate;
+                return pos;
             }
-            if _atn_alt == 6 {
-                return scan_pattern_without_range__alt_6(tokens, start, gate, atn, memo, follow);
-            }
-            if _atn_alt == 10 {
-                return scan_pattern_without_range__alt_10(tokens, start, gate, atn, memo, follow);
-            }
-            return scan_pattern_without_range__alt_11(tokens, start, gate, atn, memo, follow);
+            return -1;
         } else if kind == TK_KW_SELFTYPE {
-            let _atn_alt = atn_decide_266(atn, tokens, pos, 0);
-            if _atn_alt == 5 {
-                return scan_pattern_without_range__alt_5(tokens, start, gate, atn, memo, follow);
+            let mut best: i32 = -1;
+            let mut best_gate = *gate;
+            let try_5_end = scan_pattern_without_range__alt_5(tokens, start, gate, atn, memo, follow);
+            if try_5_end > best { best = try_5_end; best_gate = *gate; }
+            *gate = start_gate;
+            let try_6_end = scan_pattern_without_range__alt_6(tokens, start, gate, atn, memo, follow);
+            if try_6_end > best { best = try_6_end; best_gate = *gate; }
+            *gate = start_gate;
+            let try_10_end = scan_pattern_without_range__alt_10(tokens, start, gate, atn, memo, follow);
+            if try_10_end > best { best = try_10_end; best_gate = *gate; }
+            if best >= 0 {
+                pos = best;
+                *gate = best_gate;
+                return pos;
             }
-            if _atn_alt == 6 {
-                return scan_pattern_without_range__alt_6(tokens, start, gate, atn, memo, follow);
-            }
-            return scan_pattern_without_range__alt_10(tokens, start, gate, atn, memo, follow);
+            return -1;
         } else if kind == TK_LT {
             return scan_pattern_without_range__alt_10(tokens, start, gate, atn, memo, follow);
         }
@@ -12498,11 +12676,19 @@ fn scan_pattern_without_range(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate
         return -1;
     }
     if kind == TK_LPAREN {
-        let _atn_alt = atn_decide_266(atn, tokens, pos, 0);
-        if _atn_alt == 7 {
-            return scan_pattern_without_range__alt_7(tokens, start, gate, atn, memo, follow);
+        let mut best: i32 = -1;
+        let mut best_gate = *gate;
+        let try_7_end = scan_pattern_without_range__alt_7(tokens, start, gate, atn, memo, follow);
+        if try_7_end > best { best = try_7_end; best_gate = *gate; }
+        *gate = start_gate;
+        let try_8_end = scan_pattern_without_range__alt_8(tokens, start, gate, atn, memo, follow);
+        if try_8_end > best { best = try_8_end; best_gate = *gate; }
+        if best >= 0 {
+            pos = best;
+            *gate = best_gate;
+            return pos;
         }
-        return scan_pattern_without_range__alt_8(tokens, start, gate, atn, memo, follow);
+        return -1;
     }
     if kind == TK_LSQUAREBRACKET {
         try_9: {
@@ -12623,14 +12809,22 @@ fn scan_range_pattern(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, atn: &
     let mut pos = pos;
     let kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
     if _kind_set_119(kind) {
-        let _atn_alt = atn_decide_273(atn, tokens, pos, 0);
-        if _atn_alt == 0 {
-            return scan_range_pattern__alt_0(tokens, start, gate, atn, memo, follow);
+        let mut best: i32 = -1;
+        let mut best_gate = *gate;
+        let try_0_end = scan_range_pattern__alt_0(tokens, start, gate, atn, memo, follow);
+        if try_0_end > best { best = try_0_end; best_gate = *gate; }
+        *gate = start_gate;
+        let try_1_end = scan_range_pattern__alt_1(tokens, start, gate, atn, memo, follow);
+        if try_1_end > best { best = try_1_end; best_gate = *gate; }
+        *gate = start_gate;
+        let try_2_end = scan_range_pattern__alt_2(tokens, start, gate, atn, memo, follow);
+        if try_2_end > best { best = try_2_end; best_gate = *gate; }
+        if best >= 0 {
+            pos = best;
+            *gate = best_gate;
+            return pos;
         }
-        if _atn_alt == 2 {
-            return scan_range_pattern__alt_2(tokens, start, gate, atn, memo, follow);
-        }
-        return scan_range_pattern__alt_1(tokens, start, gate, atn, memo, follow);
+        return -1;
     }
     return -1;
 }
@@ -12759,11 +12953,19 @@ fn scan_struct_pattern_elements(tokens: &Array<i32>, pos: i32, gate: &mut ScanGa
     let kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
     if _kind_set_127(kind) {
         if kind == TK_POUND {
-            let _atn_alt = atn_decide_280(atn, tokens, pos, 0);
-            if _atn_alt == 1 {
-                return scan_struct_pattern_elements__alt_1(tokens, start, gate, atn, memo, follow);
+            let mut best: i32 = -1;
+            let mut best_gate = *gate;
+            let try_0_end = scan_struct_pattern_elements__alt_0(tokens, start, gate, atn, memo, follow);
+            if try_0_end > best { best = try_0_end; best_gate = *gate; }
+            *gate = start_gate;
+            let try_1_end = scan_struct_pattern_elements__alt_1(tokens, start, gate, atn, memo, follow);
+            if try_1_end > best { best = try_1_end; best_gate = *gate; }
+            if best >= 0 {
+                pos = best;
+                *gate = best_gate;
+                return pos;
             }
-            return scan_struct_pattern_elements__alt_0(tokens, start, gate, atn, memo, follow);
+            return -1;
         } else if kind == TK_DOTDOT {
             return scan_struct_pattern_elements__alt_1(tokens, start, gate, atn, memo, follow);
         } else if _kind_set_129(kind) {
@@ -13034,20 +13236,36 @@ fn scan_tuple_pattern_items(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, 
     let kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
     if _kind_set_126(kind) {
         if kind == TK_DOTDOT {
-            let _atn_alt = atn_decide_293(atn, tokens, pos, 0);
-            if _atn_alt == 1 {
-                return scan_tuple_pattern_items__alt_1(tokens, start, gate, atn, memo, follow);
+            let mut best: i32 = -1;
+            let mut best_gate = *gate;
+            let try_0_end = scan_tuple_pattern_items__alt_0(tokens, start, gate, atn, memo, follow);
+            if try_0_end > best { best = try_0_end; best_gate = *gate; }
+            *gate = start_gate;
+            let try_1_end = scan_tuple_pattern_items__alt_1(tokens, start, gate, atn, memo, follow);
+            if try_1_end > best { best = try_1_end; best_gate = *gate; }
+            *gate = start_gate;
+            let try_2_end = scan_tuple_pattern_items__alt_2(tokens, start, gate, atn, memo, follow);
+            if try_2_end > best { best = try_2_end; best_gate = *gate; }
+            if best >= 0 {
+                pos = best;
+                *gate = best_gate;
+                return pos;
             }
-            if _atn_alt == 2 {
-                return scan_tuple_pattern_items__alt_2(tokens, start, gate, atn, memo, follow);
-            }
-            return scan_tuple_pattern_items__alt_0(tokens, start, gate, atn, memo, follow);
+            return -1;
         } else if _kind_set_130(kind) {
-            let _atn_alt = atn_decide_293(atn, tokens, pos, 0);
-            if _atn_alt == 2 {
-                return scan_tuple_pattern_items__alt_2(tokens, start, gate, atn, memo, follow);
+            let mut best: i32 = -1;
+            let mut best_gate = *gate;
+            let try_0_end = scan_tuple_pattern_items__alt_0(tokens, start, gate, atn, memo, follow);
+            if try_0_end > best { best = try_0_end; best_gate = *gate; }
+            *gate = start_gate;
+            let try_2_end = scan_tuple_pattern_items__alt_2(tokens, start, gate, atn, memo, follow);
+            if try_2_end > best { best = try_2_end; best_gate = *gate; }
+            if best >= 0 {
+                pos = best;
+                *gate = best_gate;
+                return pos;
             }
-            return scan_tuple_pattern_items__alt_0(tokens, start, gate, atn, memo, follow);
+            return -1;
         }
     }
     return -1;
@@ -13188,17 +13406,33 @@ fn scan_type___walk(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, atn: &mu
     let kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
     if _kind_set_48(kind) {
         if kind == TK_KW_IMPL {
-            let _atn_alt = atn_decide_300(atn, tokens, pos, 0);
-            if _atn_alt == 0 {
-                return scan_type___alt_0(tokens, start, gate, atn, memo, follow);
+            let mut best: i32 = -1;
+            let mut best_gate = *gate;
+            let try_0_end = scan_type___alt_0(tokens, start, gate, atn, memo, follow);
+            if try_0_end > best { best = try_0_end; best_gate = *gate; }
+            *gate = start_gate;
+            let try_1_end = scan_type___alt_1(tokens, start, gate, atn, memo, follow);
+            if try_1_end > best { best = try_1_end; best_gate = *gate; }
+            if best >= 0 {
+                pos = best;
+                *gate = best_gate;
+                return pos;
             }
-            return scan_type___alt_1(tokens, start, gate, atn, memo, follow);
+            return -1;
         } else if _kind_set_131(kind) {
-            let _atn_alt = atn_decide_300(atn, tokens, pos, 0);
-            if _atn_alt == 0 {
-                return scan_type___alt_0(tokens, start, gate, atn, memo, follow);
+            let mut best: i32 = -1;
+            let mut best_gate = *gate;
+            let try_0_end = scan_type___alt_0(tokens, start, gate, atn, memo, follow);
+            if try_0_end > best { best = try_0_end; best_gate = *gate; }
+            *gate = start_gate;
+            let try_2_end = scan_type___alt_2(tokens, start, gate, atn, memo, follow);
+            if try_2_end > best { best = try_2_end; best_gate = *gate; }
+            if best >= 0 {
+                pos = best;
+                *gate = best_gate;
+                return pos;
             }
-            return scan_type___alt_2(tokens, start, gate, atn, memo, follow);
+            return -1;
         } else if _kind_set_132(kind) {
             return scan_type___alt_2(tokens, start, gate, atn, memo, follow);
         } else if _kind_set_133(kind) {
@@ -13215,37 +13449,69 @@ fn scan_type_no_bounds(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, atn: 
     let kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
     if _kind_set_134(kind) {
         if kind == TK_LPAREN {
-            let _atn_alt = atn_decide_301(atn, tokens, pos, 0);
-            if _atn_alt == 0 {
-                return scan_type_no_bounds__alt_0(tokens, start, gate, atn, memo, follow);
+            let mut best: i32 = -1;
+            let mut best_gate = *gate;
+            let try_0_end = scan_type_no_bounds__alt_0(tokens, start, gate, atn, memo, follow);
+            if try_0_end > best { best = try_0_end; best_gate = *gate; }
+            *gate = start_gate;
+            let try_2_end = scan_type_no_bounds__alt_2(tokens, start, gate, atn, memo, follow);
+            if try_2_end > best { best = try_2_end; best_gate = *gate; }
+            *gate = start_gate;
+            let try_4_end = scan_type_no_bounds__alt_4(tokens, start, gate, atn, memo, follow);
+            if try_4_end > best { best = try_4_end; best_gate = *gate; }
+            if best >= 0 {
+                pos = best;
+                *gate = best_gate;
+                return pos;
             }
-            if _atn_alt == 2 {
-                return scan_type_no_bounds__alt_2(tokens, start, gate, atn, memo, follow);
-            }
-            return scan_type_no_bounds__alt_4(tokens, start, gate, atn, memo, follow);
+            return -1;
         } else if kind == TK_KW_FOR {
-            let _atn_alt = atn_decide_301(atn, tokens, pos, 0);
-            if _atn_alt == 2 {
-                return scan_type_no_bounds__alt_2(tokens, start, gate, atn, memo, follow);
+            let mut best: i32 = -1;
+            let mut best_gate = *gate;
+            let try_2_end = scan_type_no_bounds__alt_2(tokens, start, gate, atn, memo, follow);
+            if try_2_end > best { best = try_2_end; best_gate = *gate; }
+            *gate = start_gate;
+            let try_12_end = scan_type_no_bounds__alt_12(tokens, start, gate, atn, memo, follow);
+            if try_12_end > best { best = try_12_end; best_gate = *gate; }
+            if best >= 0 {
+                pos = best;
+                *gate = best_gate;
+                return pos;
             }
-            return scan_type_no_bounds__alt_12(tokens, start, gate, atn, memo, follow);
+            return -1;
         } else if _kind_set_135(kind) {
             return scan_type_no_bounds__alt_12(tokens, start, gate, atn, memo, follow);
         } else if _kind_set_15(kind) {
-            let _atn_alt = atn_decide_301(atn, tokens, pos, 0);
-            if _atn_alt == 2 {
-                return scan_type_no_bounds__alt_2(tokens, start, gate, atn, memo, follow);
+            let mut best: i32 = -1;
+            let mut best_gate = *gate;
+            let try_2_end = scan_type_no_bounds__alt_2(tokens, start, gate, atn, memo, follow);
+            if try_2_end > best { best = try_2_end; best_gate = *gate; }
+            *gate = start_gate;
+            let try_3_end = scan_type_no_bounds__alt_3(tokens, start, gate, atn, memo, follow);
+            if try_3_end > best { best = try_3_end; best_gate = *gate; }
+            *gate = start_gate;
+            let try_13_end = scan_type_no_bounds__alt_13(tokens, start, gate, atn, memo, follow);
+            if try_13_end > best { best = try_13_end; best_gate = *gate; }
+            if best >= 0 {
+                pos = best;
+                *gate = best_gate;
+                return pos;
             }
-            if _atn_alt == 3 {
-                return scan_type_no_bounds__alt_3(tokens, start, gate, atn, memo, follow);
-            }
-            return scan_type_no_bounds__alt_13(tokens, start, gate, atn, memo, follow);
+            return -1;
         } else if kind == TK_KW_SELFTYPE {
-            let _atn_alt = atn_decide_301(atn, tokens, pos, 0);
-            if _atn_alt == 2 {
-                return scan_type_no_bounds__alt_2(tokens, start, gate, atn, memo, follow);
+            let mut best: i32 = -1;
+            let mut best_gate = *gate;
+            let try_2_end = scan_type_no_bounds__alt_2(tokens, start, gate, atn, memo, follow);
+            if try_2_end > best { best = try_2_end; best_gate = *gate; }
+            *gate = start_gate;
+            let try_3_end = scan_type_no_bounds__alt_3(tokens, start, gate, atn, memo, follow);
+            if try_3_end > best { best = try_3_end; best_gate = *gate; }
+            if best >= 0 {
+                pos = best;
+                *gate = best_gate;
+                return pos;
             }
-            return scan_type_no_bounds__alt_3(tokens, start, gate, atn, memo, follow);
+            return -1;
         } else if _kind_set_136(kind) {
             return scan_type_no_bounds__alt_2(tokens, start, gate, atn, memo, follow);
         }
@@ -13285,11 +13551,19 @@ fn scan_type_no_bounds(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, atn: 
         return -1;
     }
     if kind == TK_LSQUAREBRACKET {
-        let _atn_alt = atn_decide_301(atn, tokens, pos, 0);
-        if _atn_alt == 8 {
-            return scan_type_no_bounds__alt_8(tokens, start, gate, atn, memo, follow);
+        let mut best: i32 = -1;
+        let mut best_gate = *gate;
+        let try_8_end = scan_type_no_bounds__alt_8(tokens, start, gate, atn, memo, follow);
+        if try_8_end > best { best = try_8_end; best_gate = *gate; }
+        *gate = start_gate;
+        let try_9_end = scan_type_no_bounds__alt_9(tokens, start, gate, atn, memo, follow);
+        if try_9_end > best { best = try_9_end; best_gate = *gate; }
+        if best >= 0 {
+            pos = best;
+            *gate = best_gate;
+            return pos;
         }
-        return scan_type_no_bounds__alt_9(tokens, start, gate, atn, memo, follow);
+        return -1;
     }
     if kind == TK_UNDERSCORE {
         pos = start + 1;
@@ -13542,11 +13816,19 @@ fn scan_function_parameters_maybe_named_variadic(tokens: &Array<i32>, pos: i32, 
     let mut pos = pos;
     let kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
     if _kind_set_137(kind) {
-        let _atn_alt = atn_decide_315(atn, tokens, pos, 0);
-        if _atn_alt == 0 {
-            return scan_function_parameters_maybe_named_variadic__alt_0(tokens, start, gate, atn, memo, follow);
+        let mut best: i32 = -1;
+        let mut best_gate = *gate;
+        let try_0_end = scan_function_parameters_maybe_named_variadic__alt_0(tokens, start, gate, atn, memo, follow);
+        if try_0_end > best { best = try_0_end; best_gate = *gate; }
+        *gate = start_gate;
+        let try_1_end = scan_function_parameters_maybe_named_variadic__alt_1(tokens, start, gate, atn, memo, follow);
+        if try_1_end > best { best = try_1_end; best_gate = *gate; }
+        if best >= 0 {
+            pos = best;
+            *gate = best_gate;
+            return pos;
         }
-        return scan_function_parameters_maybe_named_variadic__alt_1(tokens, start, gate, atn, memo, follow);
+        return -1;
     }
     return -1;
 }
@@ -14238,17 +14520,25 @@ fn scan_generic_args(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, atn: &m
     let mut pos = pos;
     let kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
     if kind == TK_LT {
-        let _atn_alt = atn_decide_347(atn, tokens, pos, 0);
-        if _atn_alt == 1 {
-            return scan_generic_args__alt_1(tokens, start, gate, atn, memo, follow);
+        let mut best: i32 = -1;
+        let mut best_gate = *gate;
+        let try_0_end = scan_generic_args__alt_0(tokens, start, gate, atn, memo, follow);
+        if try_0_end > best { best = try_0_end; best_gate = *gate; }
+        *gate = start_gate;
+        let try_1_end = scan_generic_args__alt_1(tokens, start, gate, atn, memo, follow);
+        if try_1_end > best { best = try_1_end; best_gate = *gate; }
+        *gate = start_gate;
+        let try_2_end = scan_generic_args__alt_2(tokens, start, gate, atn, memo, follow);
+        if try_2_end > best { best = try_2_end; best_gate = *gate; }
+        *gate = start_gate;
+        let try_3_end = scan_generic_args__alt_3(tokens, start, gate, atn, memo, follow);
+        if try_3_end > best { best = try_3_end; best_gate = *gate; }
+        if best >= 0 {
+            pos = best;
+            *gate = best_gate;
+            return pos;
         }
-        if _atn_alt == 2 {
-            return scan_generic_args__alt_2(tokens, start, gate, atn, memo, follow);
-        }
-        if _atn_alt == 3 {
-            return scan_generic_args__alt_3(tokens, start, gate, atn, memo, follow);
-        }
-        return scan_generic_args__alt_0(tokens, start, gate, atn, memo, follow);
+        return -1;
     }
     return -1;
 }
@@ -14273,11 +14563,19 @@ fn scan_generic_arg__walk(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, at
     let kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
     if _kind_set_161(kind) {
         if _kind_set_44(kind) {
-            let _atn_alt = atn_decide_355(atn, tokens, pos, 0);
-            if _atn_alt == 0 {
-                return scan_generic_arg__alt_0(tokens, start, gate, atn, memo, follow);
+            let mut best: i32 = -1;
+            let mut best_gate = *gate;
+            let try_0_end = scan_generic_arg__alt_0(tokens, start, gate, atn, memo, follow);
+            if try_0_end > best { best = try_0_end; best_gate = *gate; }
+            *gate = start_gate;
+            let try_1_end = scan_generic_arg__alt_1(tokens, start, gate, atn, memo, follow);
+            if try_1_end > best { best = try_1_end; best_gate = *gate; }
+            if best >= 0 {
+                pos = best;
+                *gate = best_gate;
+                return pos;
             }
-            return scan_generic_arg__alt_1(tokens, start, gate, atn, memo, follow);
+            return -1;
         } else if _kind_set_22(kind) {
             let mut best: i32 = -1;
             let mut best_gate = *gate;
@@ -14298,11 +14596,19 @@ fn scan_generic_arg__walk(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, at
         } else if _kind_set_162(kind) {
             return scan_generic_arg__alt_2(tokens, start, gate, atn, memo, follow);
         } else if _kind_set_158(kind) {
-            let _atn_alt = atn_decide_355(atn, tokens, pos, 0);
-            if _atn_alt == 1 {
-                return scan_generic_arg__alt_1(tokens, start, gate, atn, memo, follow);
+            let mut best: i32 = -1;
+            let mut best_gate = *gate;
+            let try_1_end = scan_generic_arg__alt_1(tokens, start, gate, atn, memo, follow);
+            if try_1_end > best { best = try_1_end; best_gate = *gate; }
+            *gate = start_gate;
+            let try_2_end = scan_generic_arg__alt_2(tokens, start, gate, atn, memo, follow);
+            if try_2_end > best { best = try_2_end; best_gate = *gate; }
+            if best >= 0 {
+                pos = best;
+                *gate = best_gate;
+                return pos;
             }
-            return scan_generic_arg__alt_2(tokens, start, gate, atn, memo, follow);
+            return -1;
         } else if _kind_set_163(kind) {
             return scan_generic_arg__alt_1(tokens, start, gate, atn, memo, follow);
         }
@@ -14869,11 +15175,19 @@ fn scan_macro_identifier_like_token(tokens: &Array<i32>, pos: i32, gate: &mut Sc
         if _kind_set_172(kind) {
             return scan_macro_identifier_like_token__alt_1(tokens, start, gate, atn, memo);
         } else if kind == TK_KW_UNION {
-            let _atn_alt = atn_decide_377(atn, tokens, pos, 0);
-            if _atn_alt == 0 {
-                return scan_macro_identifier_like_token__alt_0(tokens, start, gate, atn, memo);
+            let mut best: i32 = -1;
+            let mut best_gate = *gate;
+            let try_0_end = scan_macro_identifier_like_token__alt_0(tokens, start, gate, atn, memo);
+            if try_0_end > best { best = try_0_end; best_gate = *gate; }
+            *gate = start_gate;
+            let try_1_end = scan_macro_identifier_like_token__alt_1(tokens, start, gate, atn, memo);
+            if try_1_end > best { best = try_1_end; best_gate = *gate; }
+            if best >= 0 {
+                pos = best;
+                *gate = best_gate;
+                return pos;
             }
-            return scan_macro_identifier_like_token__alt_1(tokens, start, gate, atn, memo);
+            return -1;
         } else if _kind_set_173(kind) {
             return scan_macro_identifier_like_token__alt_0(tokens, start, gate, atn, memo);
         }
@@ -15200,8 +15514,27 @@ fn _parse_token_tree_token__inner(p: &mut Parser) -> () with RustParserBase {
             p.atn_ret_pending = 462;
             return _parse_macro_literal_token(p);
         } else if _kind_set_11(kind) {
-            let _atn_alt = atn_decide_8(&mut p.atn, &p.kinds, p.pos, 0);
-            if _atn_alt == 0 {
+            let _sd_tokens = &p.kinds;
+            let _sd_pos = p.pos;
+            p.scan_gate.no_struct = p.no_struct;
+            let _sd_p_0 = scan_token_tree_token__alt_0(_sd_tokens, _sd_pos, &mut p.scan_gate, &mut p.atn, &mut p.memo);
+            p.scan_gate.no_struct = p.no_struct;
+            let _sd_p_1 = scan_token_tree_token__alt_1(_sd_tokens, _sd_pos, &mut p.scan_gate, &mut p.atn, &mut p.memo);
+            let mut _sd_best_i: i32 = -1;
+            let mut _sd_best_p: i32 = -1;
+            if _sd_p_0 > _sd_best_p {
+                _sd_best_p = _sd_p_0;
+                _sd_best_i = 0;
+            }
+            if _sd_p_1 > _sd_best_p {
+                _sd_best_p = _sd_p_1;
+                _sd_best_i = 1;
+            }
+            if _sd_best_i >= 0 {
+                let _ = atn_verified(8, &mut p.atn, &p.kinds, p.pos, 0, if _sd_best_i == 0 { 0 } else { 1 });
+                let _ = atn_decide_8(&mut p.atn, &p.kinds, p.pos, 0);
+            }
+            if _sd_best_i == 0 {
                 p.site = 9;
                 p.atn_ret_pending = 460;
                 return _parse_macro_identifier_like_token(p);
@@ -15393,11 +15726,36 @@ fn _parse_macro_invocation_semi__inner(p: &mut Parser, follow: i64 = 0) -> () wi
     if !kind_set_has(&SYNC_11, p.kinds[p.pos]) { builtin::cold_path(); p.sync_alts(&SYNC_11, &EXPECTED_11); }
     let kind = p.peek_kind();
     if _kind_set_15(kind) {
-        let _atn_alt = atn_decide_9(&mut p.atn, &p.kinds, p.pos, 0);
-        if _atn_alt == 0 {
+        let _sd_tokens = &p.kinds;
+        let _sd_pos = p.pos;
+        p.scan_gate.no_struct = p.no_struct;
+        let _sd_p_0 = scan_macro_invocation_semi__alt_0(_sd_tokens, _sd_pos, &mut p.scan_gate, &mut p.atn, &mut p.memo, follow);
+        p.scan_gate.no_struct = p.no_struct;
+        let _sd_p_1 = scan_macro_invocation_semi__alt_1(_sd_tokens, _sd_pos, &mut p.scan_gate, &mut p.atn, &mut p.memo, follow);
+        p.scan_gate.no_struct = p.no_struct;
+        let _sd_p_2 = scan_macro_invocation_semi__alt_2(_sd_tokens, _sd_pos, &mut p.scan_gate, &mut p.atn, &mut p.memo, follow);
+        let mut _sd_best_i: i32 = -1;
+        let mut _sd_best_p: i32 = -1;
+        if _sd_p_0 > _sd_best_p {
+            _sd_best_p = _sd_p_0;
+            _sd_best_i = 0;
+        }
+        if _sd_p_1 > _sd_best_p {
+            _sd_best_p = _sd_p_1;
+            _sd_best_i = 1;
+        }
+        if _sd_p_2 > _sd_best_p {
+            _sd_best_p = _sd_p_2;
+            _sd_best_i = 2;
+        }
+        if _sd_best_i >= 0 {
+            let _ = atn_verified(9, &mut p.atn, &p.kinds, p.pos, 0, if _sd_best_i == 0 { 0 } else if _sd_best_i == 1 { 1 } else { 2 });
+            let _ = atn_decide_9(&mut p.atn, &p.kinds, p.pos, 0);
+        }
+        if _sd_best_i == 0 {
             return _parse_macro_invocation_semi__inner_alt_0(p, follow);
         }
-        if _atn_alt == 1 {
+        if _sd_best_i == 1 {
             return _parse_macro_invocation_semi__inner_alt_1(p, follow);
         }
         return _parse_macro_invocation_semi__inner_alt_2(p, follow);
@@ -15825,8 +16183,27 @@ fn _parse_macro_match_token__inner(p: &mut Parser) -> () with RustParserBase {
             p.atn_ret_pending = 643;
             return _parse_macro_literal_token(p);
         } else if _kind_set_11(kind) {
-            let _atn_alt = atn_decide_25(&mut p.atn, &p.kinds, p.pos, 0);
-            if _atn_alt == 0 {
+            let _sd_tokens = &p.kinds;
+            let _sd_pos = p.pos;
+            p.scan_gate.no_struct = p.no_struct;
+            let _sd_p_0 = scan_macro_match_token__alt_0(_sd_tokens, _sd_pos, &mut p.scan_gate, &mut p.atn, &mut p.memo);
+            p.scan_gate.no_struct = p.no_struct;
+            let _sd_p_1 = scan_macro_match_token__alt_1(_sd_tokens, _sd_pos, &mut p.scan_gate, &mut p.atn, &mut p.memo);
+            let mut _sd_best_i: i32 = -1;
+            let mut _sd_best_p: i32 = -1;
+            if _sd_p_0 > _sd_best_p {
+                _sd_best_p = _sd_p_0;
+                _sd_best_i = 0;
+            }
+            if _sd_p_1 > _sd_best_p {
+                _sd_best_p = _sd_p_1;
+                _sd_best_i = 1;
+            }
+            if _sd_best_i >= 0 {
+                let _ = atn_verified(25, &mut p.atn, &p.kinds, p.pos, 0, if _sd_best_i == 0 { 0 } else { 1 });
+                let _ = atn_decide_25(&mut p.atn, &p.kinds, p.pos, 0);
+            }
+            if _sd_best_i == 0 {
                 p.site = 38;
                 p.atn_ret_pending = 641;
                 return _parse_macro_identifier_like_token(p);
@@ -15917,8 +16294,27 @@ fn _parse_macro_rep_sep__inner(p: &mut Parser) -> () with RustParserBase {
             p.atn_ret_pending = 657;
             return _parse_macro_literal_token(p);
         } else if _kind_set_11(kind) {
-            let _atn_alt = atn_decide_26(&mut p.atn, &p.kinds, p.pos, 0);
-            if _atn_alt == 0 {
+            let _sd_tokens = &p.kinds;
+            let _sd_pos = p.pos;
+            p.scan_gate.no_struct = p.no_struct;
+            let _sd_p_0 = scan_macro_rep_sep__alt_0(_sd_tokens, _sd_pos, &mut p.scan_gate, &mut p.atn, &mut p.memo);
+            p.scan_gate.no_struct = p.no_struct;
+            let _sd_p_1 = scan_macro_rep_sep__alt_1(_sd_tokens, _sd_pos, &mut p.scan_gate, &mut p.atn, &mut p.memo);
+            let mut _sd_best_i: i32 = -1;
+            let mut _sd_best_p: i32 = -1;
+            if _sd_p_0 > _sd_best_p {
+                _sd_best_p = _sd_p_0;
+                _sd_best_i = 0;
+            }
+            if _sd_p_1 > _sd_best_p {
+                _sd_best_p = _sd_p_1;
+                _sd_best_i = 1;
+            }
+            if _sd_best_i >= 0 {
+                let _ = atn_verified(26, &mut p.atn, &p.kinds, p.pos, 0, if _sd_best_i == 0 { 0 } else { 1 });
+                let _ = atn_decide_26(&mut p.atn, &p.kinds, p.pos, 0);
+            }
+            if _sd_best_i == 0 {
                 p.site = 43;
                 p.atn_ret_pending = 655;
                 return _parse_macro_identifier_like_token(p);
@@ -16438,8 +16834,27 @@ fn _parse_macro_item__inner(p: &mut Parser, follow: i64 = 0) -> () with RustPars
     let kind = p.peek_kind();
     if _kind_set_15(kind) {
         if kind == TK_KW_MACRORULES {
-            let _atn_alt = atn_decide_32(&mut p.atn, &p.kinds, p.pos, 0);
-            if _atn_alt == 0 {
+            let _sd_tokens = &p.kinds;
+            let _sd_pos = p.pos;
+            p.scan_gate.no_struct = p.no_struct;
+            let _sd_p_0 = scan_macro_item__alt_0(_sd_tokens, _sd_pos, &mut p.scan_gate, &mut p.atn, &mut p.memo, follow);
+            p.scan_gate.no_struct = p.no_struct;
+            let _sd_p_1 = scan_macro_item__alt_1(_sd_tokens, _sd_pos, &mut p.scan_gate, &mut p.atn, &mut p.memo, follow);
+            let mut _sd_best_i: i32 = -1;
+            let mut _sd_best_p: i32 = -1;
+            if _sd_p_0 > _sd_best_p {
+                _sd_best_p = _sd_p_0;
+                _sd_best_i = 0;
+            }
+            if _sd_p_1 > _sd_best_p {
+                _sd_best_p = _sd_p_1;
+                _sd_best_i = 1;
+            }
+            if _sd_best_i >= 0 {
+                let _ = atn_verified(32, &mut p.atn, &p.kinds, p.pos, 0, if _sd_best_i == 0 { 0 } else { 1 });
+                let _ = atn_decide_32(&mut p.atn, &p.kinds, p.pos, 0);
+            }
+            if _sd_best_i == 0 {
                 p.site = 64;
                 p.atn_ret_pending = 720;
                 return _parse_macro_invocation_semi(p, follow);
@@ -17010,8 +17425,27 @@ fn _parse_use_tree__inner(p: &mut Parser, follow: i64 = 0) -> () with RustParser
     let kind = p.peek_kind();
     if _kind_set_30(kind) {
         if _kind_set_15(kind) {
-            let _atn_alt = atn_decide_40(&mut p.atn, &p.kinds, p.pos, 0);
-            if _atn_alt == 0 {
+            let _sd_tokens = &p.kinds;
+            let _sd_pos = p.pos;
+            p.scan_gate.no_struct = p.no_struct;
+            let _sd_p_0 = scan_use_tree__alt_0(_sd_tokens, _sd_pos, &mut p.scan_gate, &mut p.atn, &mut p.memo, follow);
+            p.scan_gate.no_struct = p.no_struct;
+            let _sd_p_1 = scan_use_tree__alt_1(_sd_tokens, _sd_pos, &mut p.scan_gate, &mut p.atn, &mut p.memo, follow);
+            let mut _sd_best_i: i32 = -1;
+            let mut _sd_best_p: i32 = -1;
+            if _sd_p_0 > _sd_best_p {
+                _sd_best_p = _sd_p_0;
+                _sd_best_i = 0;
+            }
+            if _sd_p_1 > _sd_best_p {
+                _sd_best_p = _sd_p_1;
+                _sd_best_i = 1;
+            }
+            if _sd_best_i >= 0 {
+                let _ = atn_verified(40, &mut p.atn, &p.kinds, p.pos, 0, if _sd_best_i == 0 { 0 } else { 1 });
+                let _ = atn_decide_40(&mut p.atn, &p.kinds, p.pos, 0);
+            }
+            if _sd_best_i == 0 {
                 return _parse_use_tree__inner_alt_0(p, follow);
             }
             return _parse_use_tree__inner_alt_1(p, follow);
@@ -17442,8 +17876,27 @@ fn _parse_function_parameters__inner(p: &mut Parser, follow: i64 = 0) -> () with
     let kind = p.peek_kind();
     if _kind_set_33(kind) {
         if _kind_set_37(kind) {
-            let _atn_alt = atn_decide_60(&mut p.atn, &p.kinds, p.pos, 0);
-            if _atn_alt == 1 {
+            let _sd_tokens = &p.kinds;
+            let _sd_pos = p.pos;
+            p.scan_gate.no_struct = p.no_struct;
+            let _sd_p_1 = scan_function_parameters__alt_1(_sd_tokens, _sd_pos, &mut p.scan_gate, &mut p.atn, &mut p.memo, follow);
+            p.scan_gate.no_struct = p.no_struct;
+            let _sd_p_0 = scan_function_parameters__alt_0(_sd_tokens, _sd_pos, &mut p.scan_gate, &mut p.atn, &mut p.memo, follow);
+            let mut _sd_best_i: i32 = -1;
+            let mut _sd_best_p: i32 = -1;
+            if _sd_p_0 > _sd_best_p {
+                _sd_best_p = _sd_p_0;
+                _sd_best_i = 0;
+            }
+            if _sd_p_1 > _sd_best_p {
+                _sd_best_p = _sd_p_1;
+                _sd_best_i = 1;
+            }
+            if _sd_best_i >= 0 {
+                let _ = atn_verified(60, &mut p.atn, &p.kinds, p.pos, 0, if _sd_best_i == 1 { 1 } else { 0 });
+                let _ = atn_decide_60(&mut p.atn, &p.kinds, p.pos, 0);
+            }
+            if _sd_best_i == 1 {
                 return _parse_function_parameters__inner_alt_1(p, follow);
             }
             return _parse_function_parameters__inner_alt_0(p, follow);
@@ -17834,8 +18287,27 @@ fn _parse_struct___inner(p: &mut Parser, follow: i64 = 0) -> () with RustParserB
     if !kind_set_has(&SYNC_49, p.kinds[p.pos]) { builtin::cold_path(); p.sync_alts(&SYNC_49, &EXPECTED_49); }
     let kind = p.peek_kind();
     if kind == TK_KW_STRUCT {
-        let _atn_alt = atn_decide_77(&mut p.atn, &p.kinds, p.pos, 0);
-        if _atn_alt == 0 {
+        let _sd_tokens = &p.kinds;
+        let _sd_pos = p.pos;
+        p.scan_gate.no_struct = p.no_struct;
+        let _sd_p_0 = scan_struct___alt_0(_sd_tokens, _sd_pos, &mut p.scan_gate, &mut p.atn, &mut p.memo, follow);
+        p.scan_gate.no_struct = p.no_struct;
+        let _sd_p_1 = scan_struct___alt_1(_sd_tokens, _sd_pos, &mut p.scan_gate, &mut p.atn, &mut p.memo, follow);
+        let mut _sd_best_i: i32 = -1;
+        let mut _sd_best_p: i32 = -1;
+        if _sd_p_0 > _sd_best_p {
+            _sd_best_p = _sd_p_0;
+            _sd_best_i = 0;
+        }
+        if _sd_p_1 > _sd_best_p {
+            _sd_best_p = _sd_p_1;
+            _sd_best_i = 1;
+        }
+        if _sd_best_i >= 0 {
+            let _ = atn_verified(77, &mut p.atn, &p.kinds, p.pos, 0, if _sd_best_i == 0 { 0 } else { 1 });
+            let _ = atn_decide_77(&mut p.atn, &p.kinds, p.pos, 0);
+        }
+        if _sd_best_i == 0 {
             p.site = 106;
             p.atn_ret_pending = 1038;
             return _parse_struct_struct(p, follow);
@@ -18731,8 +19203,27 @@ fn _parse_implementation__inner(p: &mut Parser, follow: i64 = 0) -> () with Rust
     let kind = p.peek_kind();
     if _kind_set_58(kind) {
         if kind == TK_KW_IMPL {
-            let _atn_alt = atn_decide_117(&mut p.atn, &p.kinds, p.pos, 0);
-            if _atn_alt == 0 {
+            let _sd_tokens = &p.kinds;
+            let _sd_pos = p.pos;
+            p.scan_gate.no_struct = p.no_struct;
+            let _sd_p_0 = scan_implementation__alt_0(_sd_tokens, _sd_pos, &mut p.scan_gate, &mut p.atn, &mut p.memo, follow);
+            p.scan_gate.no_struct = p.no_struct;
+            let _sd_p_1 = scan_implementation__alt_1(_sd_tokens, _sd_pos, &mut p.scan_gate, &mut p.atn, &mut p.memo, follow);
+            let mut _sd_best_i: i32 = -1;
+            let mut _sd_best_p: i32 = -1;
+            if _sd_p_0 > _sd_best_p {
+                _sd_best_p = _sd_p_0;
+                _sd_best_i = 0;
+            }
+            if _sd_p_1 > _sd_best_p {
+                _sd_best_p = _sd_p_1;
+                _sd_best_i = 1;
+            }
+            if _sd_best_i >= 0 {
+                let _ = atn_verified(117, &mut p.atn, &p.kinds, p.pos, 0, if _sd_best_i == 0 { 0 } else { 1 });
+                let _ = atn_decide_117(&mut p.atn, &p.kinds, p.pos, 0);
+            }
+            if _sd_best_i == 0 {
                 p.site = 158;
                 p.atn_ret_pending = 1356;
                 return _parse_inherent_impl(p, follow);
@@ -19805,8 +20296,27 @@ fn _parse_where_clause_item__inner(p: &mut Parser, follow: i64 = 0) -> () with R
     let kind = p.peek_kind();
     if _kind_set_48(kind) {
         if _kind_set_44(kind) {
-            let _atn_alt = atn_decide_149(&mut p.atn, &p.kinds, p.pos, 0);
-            if _atn_alt == 0 {
+            let _sd_tokens = &p.kinds;
+            let _sd_pos = p.pos;
+            p.scan_gate.no_struct = p.no_struct;
+            let _sd_p_0 = scan_lifetime_where_clause_item(_sd_tokens, _sd_pos, &mut p.scan_gate, &mut p.atn, &mut p.memo, follow);
+            p.scan_gate.no_struct = p.no_struct;
+            let _sd_p_1 = scan_where_clause_item__alt_1(_sd_tokens, _sd_pos, &mut p.scan_gate, &mut p.atn, &mut p.memo, follow);
+            let mut _sd_best_i: i32 = -1;
+            let mut _sd_best_p: i32 = -1;
+            if _sd_p_0 > _sd_best_p {
+                _sd_best_p = _sd_p_0;
+                _sd_best_i = 0;
+            }
+            if _sd_p_1 > _sd_best_p {
+                _sd_best_p = _sd_p_1;
+                _sd_best_i = 1;
+            }
+            if _sd_best_i >= 0 {
+                let _ = atn_verified(149, &mut p.atn, &p.kinds, p.pos, 0, if _sd_best_i == 0 { 0 } else { 1 });
+                let _ = atn_decide_149(&mut p.atn, &p.kinds, p.pos, 0);
+            }
+            if _sd_best_i == 0 {
                 p.site = 195;
                 p.atn_ret_pending = 1586;
                 return _parse_lifetime_where_clause_item(p, follow);
@@ -20272,20 +20782,34 @@ fn _parse_statement__inner(p: &mut Parser, follow: i64 = 0) -> () with RustParse
     }
     if _kind_set_75(kind) {
         if kind == TK_POUND {
-            let mut _atn_false: List<i32> = [];
-            if p.no_struct != 0 { _atn_false.push(2); }
-            if p.no_struct != 0 { _atn_false.push(3); }
-            let _atn_alt = p.atn.predict(&ATN_SIM, 159, &p.kinds, p.pos, TK_EOF, 0, &_atn_false);
-            if _atn_alt < 0 {
-                p.no_viable("no viable alternative", p.peek_span(), &EMPTY_SYNC);
-                return;
+            let _sd_tokens = &p.kinds;
+            let _sd_pos = p.pos;
+            p.scan_gate.no_struct = p.no_struct;
+            let _sd_p_1 = scan_statement__alt_1(_sd_tokens, _sd_pos, &mut p.scan_gate, &mut p.atn, &mut p.memo, follow);
+            p.scan_gate.no_struct = p.no_struct;
+            let _sd_p_2 = scan_statement__alt_2(_sd_tokens, _sd_pos, &mut p.scan_gate, &mut p.atn, &mut p.memo, follow);
+            p.scan_gate.no_struct = p.no_struct;
+            let _sd_p_3 = scan_statement__alt_3(_sd_tokens, _sd_pos, &mut p.scan_gate, &mut p.atn, &mut p.memo, follow);
+            let mut _sd_best_i: i32 = -1;
+            let mut _sd_best_p: i32 = -1;
+            if _sd_p_1 > _sd_best_p {
+                _sd_best_p = _sd_p_1;
+                _sd_best_i = 1;
             }
-            if _atn_alt == 1 {
+            if _sd_p_2 > _sd_best_p {
+                _sd_best_p = _sd_p_2;
+                _sd_best_i = 2;
+            }
+            if _sd_p_3 > _sd_best_p {
+                _sd_best_p = _sd_p_3;
+                _sd_best_i = 3;
+            }
+            if _sd_best_i == 1 {
                 p.site = 216;
                 p.atn_ret_pending = 1691;
                 return _parse_item(p);
             }
-            if _atn_alt == 2 {
+            if _sd_best_i == 2 {
                 p.site = 217;
                 p.atn_ret_pending = 1693;
                 return _parse_let_statement(p, follow);
@@ -20298,20 +20822,34 @@ fn _parse_statement__inner(p: &mut Parser, follow: i64 = 0) -> () with RustParse
             p.atn_ret_pending = 1693;
             return _parse_let_statement(p, follow);
         } else if _kind_set_15(kind) {
-            let mut _atn_false: List<i32> = [];
-            if p.no_struct != 0 { _atn_false.push(2); }
-            if p.no_struct != 0 { _atn_false.push(3); }
-            let _atn_alt = p.atn.predict(&ATN_SIM, 159, &p.kinds, p.pos, TK_EOF, 0, &_atn_false);
-            if _atn_alt < 0 {
-                p.no_viable("no viable alternative", p.peek_span(), &EMPTY_SYNC);
-                return;
+            let _sd_tokens = &p.kinds;
+            let _sd_pos = p.pos;
+            p.scan_gate.no_struct = p.no_struct;
+            let _sd_p_1 = scan_statement__alt_1(_sd_tokens, _sd_pos, &mut p.scan_gate, &mut p.atn, &mut p.memo, follow);
+            p.scan_gate.no_struct = p.no_struct;
+            let _sd_p_3 = scan_statement__alt_3(_sd_tokens, _sd_pos, &mut p.scan_gate, &mut p.atn, &mut p.memo, follow);
+            p.scan_gate.no_struct = p.no_struct;
+            let _sd_p_4 = scan_statement__alt_4(_sd_tokens, _sd_pos, &mut p.scan_gate, &mut p.atn, &mut p.memo, follow);
+            let mut _sd_best_i: i32 = -1;
+            let mut _sd_best_p: i32 = -1;
+            if _sd_p_1 > _sd_best_p {
+                _sd_best_p = _sd_p_1;
+                _sd_best_i = 1;
             }
-            if _atn_alt == 1 {
+            if _sd_p_3 > _sd_best_p {
+                _sd_best_p = _sd_p_3;
+                _sd_best_i = 3;
+            }
+            if _sd_p_4 > _sd_best_p {
+                _sd_best_p = _sd_p_4;
+                _sd_best_i = 4;
+            }
+            if _sd_best_i == 1 {
                 p.site = 216;
                 p.atn_ret_pending = 1691;
                 return _parse_item(p);
             }
-            if _atn_alt == 3 {
+            if _sd_best_i == 3 {
                 p.site = 218;
                 p.atn_ret_pending = 1695;
                 return _parse_expression_statement(p, follow);
@@ -20324,15 +20862,23 @@ fn _parse_statement__inner(p: &mut Parser, follow: i64 = 0) -> () with RustParse
             p.atn_ret_pending = 1691;
             return _parse_item(p);
         } else if _kind_set_77(kind) {
-            let mut _atn_false: List<i32> = [];
-            if p.no_struct != 0 { _atn_false.push(2); }
-            if p.no_struct != 0 { _atn_false.push(3); }
-            let _atn_alt = p.atn.predict(&ATN_SIM, 159, &p.kinds, p.pos, TK_EOF, 0, &_atn_false);
-            if _atn_alt < 0 {
-                p.no_viable("no viable alternative", p.peek_span(), &EMPTY_SYNC);
-                return;
+            let _sd_tokens = &p.kinds;
+            let _sd_pos = p.pos;
+            p.scan_gate.no_struct = p.no_struct;
+            let _sd_p_1 = scan_statement__alt_1(_sd_tokens, _sd_pos, &mut p.scan_gate, &mut p.atn, &mut p.memo, follow);
+            p.scan_gate.no_struct = p.no_struct;
+            let _sd_p_3 = scan_statement__alt_3(_sd_tokens, _sd_pos, &mut p.scan_gate, &mut p.atn, &mut p.memo, follow);
+            let mut _sd_best_i: i32 = -1;
+            let mut _sd_best_p: i32 = -1;
+            if _sd_p_1 > _sd_best_p {
+                _sd_best_p = _sd_p_1;
+                _sd_best_i = 1;
             }
-            if _atn_alt == 1 {
+            if _sd_p_3 > _sd_best_p {
+                _sd_best_p = _sd_p_3;
+                _sd_best_i = 3;
+            }
+            if _sd_best_i == 1 {
                 p.site = 216;
                 p.atn_ret_pending = 1691;
                 return _parse_item(p);
@@ -20467,15 +21013,23 @@ fn _parse_expression_statement__inner(p: &mut Parser, follow: i64 = 0) -> () wit
     let kind = p.peek_kind();
     if _kind_set_55(kind) {
         if _kind_set_79(kind) {
-            let mut _atn_false: List<i32> = [];
-            if p.no_struct != 0 { _atn_false.push(2); }
-            if p.no_struct != 0 { _atn_false.push(3); }
-            let _atn_alt = p.atn.predict(&ATN_SIM, 164, &p.kinds, p.pos, TK_EOF, 0, &_atn_false);
-            if _atn_alt < 0 {
-                p.no_viable("no viable alternative", p.peek_span(), &EMPTY_SYNC);
-                return;
+            let _sd_tokens = &p.kinds;
+            let _sd_pos = p.pos;
+            p.scan_gate.no_struct = p.no_struct;
+            let _sd_p_0 = scan_expression_statement__alt_0(_sd_tokens, _sd_pos, &mut p.scan_gate, &mut p.atn, &mut p.memo, follow);
+            p.scan_gate.no_struct = p.no_struct;
+            let _sd_p_1 = scan_expression_statement__alt_1(_sd_tokens, _sd_pos, &mut p.scan_gate, &mut p.atn, &mut p.memo, follow);
+            let mut _sd_best_i: i32 = -1;
+            let mut _sd_best_p: i32 = -1;
+            if _sd_p_0 > _sd_best_p {
+                _sd_best_p = _sd_p_0;
+                _sd_best_i = 0;
             }
-            if _atn_alt == 0 {
+            if _sd_p_1 > _sd_best_p {
+                _sd_best_p = _sd_p_1;
+                _sd_best_i = 1;
+            }
+            if _sd_best_i == 0 {
                 return _parse_expression_statement__inner_alt_0(p, follow);
             }
             return _parse_expression_statement__inner_alt_1(p, follow);
@@ -21033,14 +21587,52 @@ fn _parse_expression__inner_atom(p: &mut Parser, follow: i64 = 0, min_prec: i32 
     let kind = p.peek_kind();
     if _kind_set_83(kind) {
         if kind == TK_POUND {
-            let _atn_alt = atn_decide_166(&mut p.atn, &p.kinds, p.pos, min_prec);
-            if _atn_alt == 18 {
+            let _sd_tokens = &p.kinds;
+            let _sd_pos = p.pos;
+            p.scan_gate.no_struct = p.no_struct;
+            let _sd_p_39 = scan_expression__alt_39(_sd_tokens, _sd_pos, &mut p.scan_gate, &mut p.atn, &mut p.memo, min_prec, follow);
+            p.scan_gate.no_struct = p.no_struct;
+            let _sd_p_0 = scan_expression__alt_0(_sd_tokens, _sd_pos, &mut p.scan_gate, &mut p.atn, &mut p.memo, min_prec, follow);
+            let mut _sd_best_i: i32 = -1;
+            let mut _sd_best_p: i32 = -1;
+            if _sd_p_0 > _sd_best_p {
+                _sd_best_p = _sd_p_0;
+                _sd_best_i = 0;
+            }
+            if _sd_p_39 > _sd_best_p {
+                _sd_best_p = _sd_p_39;
+                _sd_best_i = 39;
+            }
+            if _sd_best_i >= 0 {
+                let _ = atn_verified(166, &mut p.atn, &p.kinds, p.pos, min_prec, if _sd_best_i == 39 { 18 } else { 0 });
+                let _ = atn_decide_166(&mut p.atn, &p.kinds, p.pos, min_prec);
+            }
+            if _sd_best_i == 39 {
                 return _parse_expression__inner_alt_39(p, min_prec, follow);
             }
             return _parse_expression__inner_alt_0(p, min_prec, follow);
         } else if kind == TK_KW_ASYNC {
-            let _atn_alt = atn_decide_166(&mut p.atn, &p.kinds, p.pos, min_prec);
-            if _atn_alt == 17 {
+            let _sd_tokens = &p.kinds;
+            let _sd_pos = p.pos;
+            p.scan_gate.no_struct = p.no_struct;
+            let _sd_p_38 = scan_expression__alt_38(_sd_tokens, _sd_pos, &mut p.scan_gate, &mut p.atn, &mut p.memo, min_prec, follow);
+            p.scan_gate.no_struct = p.no_struct;
+            let _sd_p_39 = scan_expression__alt_39(_sd_tokens, _sd_pos, &mut p.scan_gate, &mut p.atn, &mut p.memo, min_prec, follow);
+            let mut _sd_best_i: i32 = -1;
+            let mut _sd_best_p: i32 = -1;
+            if _sd_p_38 > _sd_best_p {
+                _sd_best_p = _sd_p_38;
+                _sd_best_i = 38;
+            }
+            if _sd_p_39 > _sd_best_p {
+                _sd_best_p = _sd_p_39;
+                _sd_best_i = 39;
+            }
+            if _sd_best_i >= 0 {
+                let _ = atn_verified(166, &mut p.atn, &p.kinds, p.pos, min_prec, if _sd_best_i == 38 { 17 } else { 18 });
+                let _ = atn_decide_166(&mut p.atn, &p.kinds, p.pos, min_prec);
+            }
+            if _sd_best_i == 38 {
                 return _parse_expression__inner_alt_38(p, min_prec, follow);
             }
             return _parse_expression__inner_alt_39(p, min_prec, follow);
@@ -21059,48 +21651,105 @@ fn _parse_expression__inner_atom(p: &mut Parser, follow: i64 = 0, min_prec: i32 
     }
     if _kind_set_86(kind) {
         if _kind_set_15(kind) {
-            let mut _atn_false: List<i32> = [];
-            if p.no_struct != 0 { _atn_false.push(2); }
-            if p.no_struct != 0 { _atn_false.push(3); }
-            let _atn_alt = p.atn.predict(&ATN_SIM, 166, &p.kinds, p.pos, TK_EOF, min_prec, &_atn_false);
-            if _atn_alt < 0 {
-                p.no_viable("no viable alternative", p.peek_span(), &EMPTY_SYNC);
-                return;
+            let _sd_tokens = &p.kinds;
+            let _sd_pos = p.pos;
+            p.scan_gate.no_struct = p.no_struct;
+            let _sd_p_2 = scan_expression__alt_2(_sd_tokens, _sd_pos, &mut p.scan_gate, &mut p.atn, &mut p.memo, min_prec, follow);
+            p.scan_gate.no_struct = p.no_struct;
+            let _sd_p_36 = scan_expression__alt_36(_sd_tokens, _sd_pos, &mut p.scan_gate, &mut p.atn, &mut p.memo, min_prec, follow);
+            p.scan_gate.no_struct = p.no_struct;
+            let _sd_p_37 = scan_expression__alt_37(_sd_tokens, _sd_pos, &mut p.scan_gate, &mut p.atn, &mut p.memo, min_prec, follow);
+            p.scan_gate.no_struct = p.no_struct;
+            let _sd_p_40 = scan_expression__alt_40(_sd_tokens, _sd_pos, &mut p.scan_gate, &mut p.atn, &mut p.memo, min_prec, follow);
+            let mut _sd_best_i: i32 = -1;
+            let mut _sd_best_p: i32 = -1;
+            if _sd_p_2 > _sd_best_p {
+                _sd_best_p = _sd_p_2;
+                _sd_best_i = 2;
             }
-            if _atn_alt == 2 {
-                return _parse_expression__inner_alt_2(p, min_prec, follow);
+            if _sd_p_36 > _sd_best_p {
+                _sd_best_p = _sd_p_36;
+                _sd_best_i = 36;
             }
-            if _atn_alt == 15 {
-                return _parse_expression__inner_alt_36(p, min_prec, follow);
+            if _sd_p_37 > _sd_best_p {
+                _sd_best_p = _sd_p_37;
+                _sd_best_i = 37;
             }
-            if _atn_alt == 16 {
+            if _sd_p_40 > _sd_best_p {
+                _sd_best_p = _sd_p_40;
+                _sd_best_i = 40;
+            }
+            if _sd_best_i >= 0 {
+                if _sd_best_i == 2 {
+                    return _parse_expression__inner_alt_2(p, min_prec, follow);
+                }
+                if _sd_best_i == 36 {
+                    return _parse_expression__inner_alt_36(p, min_prec, follow);
+                }
+                if _sd_best_i == 37 {
+                    return _parse_expression__inner_alt_37(p, min_prec, follow);
+                }
+                return _parse_expression__inner_alt_40(p, min_prec, follow);
+            }
+        } else if kind == TK_KW_SELFTYPE {
+            let _sd_tokens = &p.kinds;
+            let _sd_pos = p.pos;
+            p.scan_gate.no_struct = p.no_struct;
+            let _sd_p_2 = scan_expression__alt_2(_sd_tokens, _sd_pos, &mut p.scan_gate, &mut p.atn, &mut p.memo, min_prec, follow);
+            p.scan_gate.no_struct = p.no_struct;
+            let _sd_p_36 = scan_expression__alt_36(_sd_tokens, _sd_pos, &mut p.scan_gate, &mut p.atn, &mut p.memo, min_prec, follow);
+            p.scan_gate.no_struct = p.no_struct;
+            let _sd_p_37 = scan_expression__alt_37(_sd_tokens, _sd_pos, &mut p.scan_gate, &mut p.atn, &mut p.memo, min_prec, follow);
+            let mut _sd_best_i: i32 = -1;
+            let mut _sd_best_p: i32 = -1;
+            if _sd_p_2 > _sd_best_p {
+                _sd_best_p = _sd_p_2;
+                _sd_best_i = 2;
+            }
+            if _sd_p_36 > _sd_best_p {
+                _sd_best_p = _sd_p_36;
+                _sd_best_i = 36;
+            }
+            if _sd_p_37 > _sd_best_p {
+                _sd_best_p = _sd_p_37;
+                _sd_best_i = 37;
+            }
+            if _sd_best_i >= 0 {
+                if _sd_best_i == 2 {
+                    return _parse_expression__inner_alt_2(p, min_prec, follow);
+                }
+                if _sd_best_i == 36 {
+                    return _parse_expression__inner_alt_36(p, min_prec, follow);
+                }
                 return _parse_expression__inner_alt_37(p, min_prec, follow);
             }
-            return _parse_expression__inner_alt_40(p, min_prec, follow);
-        } else if kind == TK_KW_SELFTYPE {
-            let mut _atn_false: List<i32> = [];
-            if p.no_struct != 0 { _atn_false.push(2); }
-            if p.no_struct != 0 { _atn_false.push(3); }
-            let _atn_alt = p.atn.predict(&ATN_SIM, 166, &p.kinds, p.pos, TK_EOF, min_prec, &_atn_false);
-            if _atn_alt < 0 {
-                p.no_viable("no viable alternative", p.peek_span(), &EMPTY_SYNC);
-                return;
-            }
-            if _atn_alt == 2 {
-                return _parse_expression__inner_alt_2(p, min_prec, follow);
-            }
-            if _atn_alt == 15 {
-                return _parse_expression__inner_alt_36(p, min_prec, follow);
-            }
-            return _parse_expression__inner_alt_37(p, min_prec, follow);
         } else if kind == TK_LT {
             return _parse_expression__inner_alt_2(p, min_prec, follow);
         }
     }
     if _kind_set_81(kind) {
         if p.peek_at(1) == TK_KW_RAW {
-            let _atn_alt = atn_decide_166(&mut p.atn, &p.kinds, p.pos, min_prec);
-            if _atn_alt == 3 {
+            let _sd_tokens = &p.kinds;
+            let _sd_pos = p.pos;
+            p.scan_gate.no_struct = p.no_struct;
+            let _sd_p_10 = scan_expression__alt_10(_sd_tokens, _sd_pos, &mut p.scan_gate, &mut p.atn, &mut p.memo, min_prec, follow);
+            p.scan_gate.no_struct = p.no_struct;
+            let _sd_p_11 = scan_expression__alt_11(_sd_tokens, _sd_pos, &mut p.scan_gate, &mut p.atn, &mut p.memo, min_prec, follow);
+            let mut _sd_best_i: i32 = -1;
+            let mut _sd_best_p: i32 = -1;
+            if _sd_p_10 > _sd_best_p {
+                _sd_best_p = _sd_p_10;
+                _sd_best_i = 10;
+            }
+            if _sd_p_11 > _sd_best_p {
+                _sd_best_p = _sd_p_11;
+                _sd_best_i = 11;
+            }
+            if _sd_best_i >= 0 {
+                let _ = atn_verified(166, &mut p.atn, &p.kinds, p.pos, min_prec, if _sd_best_i == 10 { 3 } else { 4 });
+                let _ = atn_decide_166(&mut p.atn, &p.kinds, p.pos, min_prec);
+            }
+            if _sd_best_i == 10 {
                 return _parse_expression__inner_alt_10(p, min_prec, follow);
             }
             return _parse_expression__inner_alt_11(p, min_prec, follow);
@@ -21202,8 +21851,27 @@ fn _parse_expression__inner_atom(p: &mut Parser, follow: i64 = 0, min_prec: i32 
         return;
     }
     if kind == TK_LPAREN {
-        let _atn_alt = atn_decide_166(&mut p.atn, &p.kinds, p.pos, min_prec);
-        if _atn_alt == 12 {
+        let _sd_tokens = &p.kinds;
+        let _sd_pos = p.pos;
+        p.scan_gate.no_struct = p.no_struct;
+        let _sd_p_33 = scan_expression__alt_33(_sd_tokens, _sd_pos, &mut p.scan_gate, &mut p.atn, &mut p.memo, min_prec, follow);
+        p.scan_gate.no_struct = p.no_struct;
+        let _sd_p_35 = scan_expression__alt_35(_sd_tokens, _sd_pos, &mut p.scan_gate, &mut p.atn, &mut p.memo, min_prec, follow);
+        let mut _sd_best_i: i32 = -1;
+        let mut _sd_best_p: i32 = -1;
+        if _sd_p_33 > _sd_best_p {
+            _sd_best_p = _sd_p_33;
+            _sd_best_i = 33;
+        }
+        if _sd_p_35 > _sd_best_p {
+            _sd_best_p = _sd_p_35;
+            _sd_best_i = 35;
+        }
+        if _sd_best_i >= 0 {
+            let _ = atn_verified(166, &mut p.atn, &p.kinds, p.pos, min_prec, if _sd_best_i == 33 { 12 } else { 14 });
+            let _ = atn_decide_166(&mut p.atn, &p.kinds, p.pos, min_prec);
+        }
+        if _sd_best_i == 33 {
             return _parse_expression__inner_alt_33(p, min_prec, follow);
         }
         return _parse_expression__inner_alt_35(p, min_prec, follow);
@@ -22083,15 +22751,23 @@ fn _parse_statements__inner(p: &mut Parser, follow: i64 = 0) -> () with RustPars
     let kind = p.peek_kind();
     if _kind_set_93(kind) {
         if _kind_set_55(kind) {
-            let mut _atn_false: List<i32> = [];
-            if p.no_struct != 0 { _atn_false.push(2); }
-            if p.no_struct != 0 { _atn_false.push(3); }
-            let _atn_alt = p.atn.predict(&ATN_SIM, 199, &p.kinds, p.pos, TK_EOF, 0, &_atn_false);
-            if _atn_alt < 0 {
-                p.no_viable("no viable alternative", p.peek_span(), &EMPTY_SYNC);
-                return;
+            let _sd_tokens = &p.kinds;
+            let _sd_pos = p.pos;
+            p.scan_gate.no_struct = p.no_struct;
+            let _sd_p_1 = scan_statements__alt_1(_sd_tokens, _sd_pos, &mut p.scan_gate, &mut p.atn, &mut p.memo, follow);
+            p.scan_gate.no_struct = p.no_struct;
+            let _sd_p_0 = scan_statements__alt_0(_sd_tokens, _sd_pos, &mut p.scan_gate, &mut p.atn, &mut p.memo, follow);
+            let mut _sd_best_i: i32 = -1;
+            let mut _sd_best_p: i32 = -1;
+            if _sd_p_0 > _sd_best_p {
+                _sd_best_p = _sd_p_0;
+                _sd_best_i = 0;
             }
-            if _atn_alt == 1 {
+            if _sd_p_1 > _sd_best_p {
+                _sd_best_p = _sd_p_1;
+                _sd_best_i = 1;
+            }
+            if _sd_best_i == 1 {
                 p.site = 311;
                 p.atn_ret_pending = 2072;
                 return _parse_expression(p, follow);
@@ -22322,15 +22998,23 @@ fn _parse_array_elements__inner(p: &mut Parser, follow: i64 = 0) -> ArrayElement
     vals = alt_done: {
         let kind = p.peek_kind();
         if _kind_set_55(kind) {
-            let mut _atn_false: List<i32> = [];
-            if p.no_struct != 0 { _atn_false.push(2); }
-            if p.no_struct != 0 { _atn_false.push(3); }
-            let _atn_alt = p.atn.predict(&ATN_SIM, 203, &p.kinds, p.pos, TK_EOF, 0, &_atn_false);
-            if _atn_alt < 0 {
-                p.no_viable("no viable alternative", p.peek_span(), &EMPTY_SYNC);
-                return vals;
+            let _sd_tokens = &p.kinds;
+            let _sd_pos = p.pos;
+            p.scan_gate.no_struct = p.no_struct;
+            let _sd_p_0 = scan_array_elements__alt_0(_sd_tokens, _sd_pos, &mut p.scan_gate, &mut p.atn, &mut p.memo, follow);
+            p.scan_gate.no_struct = p.no_struct;
+            let _sd_p_1 = scan_array_elements__alt_1(_sd_tokens, _sd_pos, &mut p.scan_gate, &mut p.atn, &mut p.memo, follow);
+            let mut _sd_best_i: i32 = -1;
+            let mut _sd_best_p: i32 = -1;
+            if _sd_p_0 > _sd_best_p {
+                _sd_best_p = _sd_p_0;
+                _sd_best_i = 0;
             }
-            if _atn_alt == 0 {
+            if _sd_p_1 > _sd_best_p {
+                _sd_best_p = _sd_p_1;
+                _sd_best_i = 1;
+            }
+            if _sd_best_i == 0 {
                 break alt_done: _parse_array_elements__inner_alt_0(p, follow, vals);
             }
             break alt_done: _parse_array_elements__inner_alt_1(p, follow, vals);
@@ -22516,13 +23200,38 @@ fn _parse_struct_expression__inner(p: &mut Parser, follow: i64 = 0) -> () with R
     if !kind_set_has(&SYNC_112, p.kinds[p.pos]) { builtin::cold_path(); p.sync_alts(&SYNC_112, &EXPECTED_112); }
     let kind = p.peek_kind();
     if _kind_set_92(kind) {
-        let _atn_alt = atn_decide_208(&mut p.atn, &p.kinds, p.pos, 0);
-        if _atn_alt == 0 {
+        let _sd_tokens = &p.kinds;
+        let _sd_pos = p.pos;
+        p.scan_gate.no_struct = p.no_struct;
+        let _sd_p_0 = scan_struct_expression__alt_0(_sd_tokens, _sd_pos, &mut p.scan_gate, &mut p.atn, &mut p.memo, follow);
+        p.scan_gate.no_struct = p.no_struct;
+        let _sd_p_1 = scan_struct_expression__alt_1(_sd_tokens, _sd_pos, &mut p.scan_gate, &mut p.atn, &mut p.memo, follow);
+        p.scan_gate.no_struct = p.no_struct;
+        let _sd_p_2 = scan_struct_expression__alt_2(_sd_tokens, _sd_pos, &mut p.scan_gate, &mut p.atn, &mut p.memo, follow);
+        let mut _sd_best_i: i32 = -1;
+        let mut _sd_best_p: i32 = -1;
+        if _sd_p_0 > _sd_best_p {
+            _sd_best_p = _sd_p_0;
+            _sd_best_i = 0;
+        }
+        if _sd_p_1 > _sd_best_p {
+            _sd_best_p = _sd_p_1;
+            _sd_best_i = 1;
+        }
+        if _sd_p_2 > _sd_best_p {
+            _sd_best_p = _sd_p_2;
+            _sd_best_i = 2;
+        }
+        if _sd_best_i >= 0 {
+            let _ = atn_verified(208, &mut p.atn, &p.kinds, p.pos, 0, if _sd_best_i == 0 { 0 } else if _sd_best_i == 1 { 1 } else { 2 });
+            let _ = atn_decide_208(&mut p.atn, &p.kinds, p.pos, 0);
+        }
+        if _sd_best_i == 0 {
             p.site = 320;
             p.atn_ret_pending = 2133;
             return _parse_struct_expr_struct(p, follow);
         }
-        if _atn_alt == 1 {
+        if _sd_best_i == 1 {
             p.site = 321;
             p.atn_ret_pending = 2135;
             return _parse_struct_expr_tuple(p, follow);
@@ -23269,13 +23978,38 @@ fn _parse_enumeration_variant_expression__inner(p: &mut Parser, follow: i64 = 0)
     if !kind_set_has(&SYNC_112, p.kinds[p.pos]) { builtin::cold_path(); p.sync_alts(&SYNC_112, &EXPECTED_112); }
     let kind = p.peek_kind();
     if _kind_set_92(kind) {
-        let _atn_alt = atn_decide_222(&mut p.atn, &p.kinds, p.pos, 0);
-        if _atn_alt == 0 {
+        let _sd_tokens = &p.kinds;
+        let _sd_pos = p.pos;
+        p.scan_gate.no_struct = p.no_struct;
+        let _sd_p_0 = scan_enumeration_variant_expression__alt_0(_sd_tokens, _sd_pos, &mut p.scan_gate, &mut p.atn, &mut p.memo, follow);
+        p.scan_gate.no_struct = p.no_struct;
+        let _sd_p_1 = scan_enumeration_variant_expression__alt_1(_sd_tokens, _sd_pos, &mut p.scan_gate, &mut p.atn, &mut p.memo, follow);
+        p.scan_gate.no_struct = p.no_struct;
+        let _sd_p_2 = scan_enumeration_variant_expression__alt_2(_sd_tokens, _sd_pos, &mut p.scan_gate, &mut p.atn, &mut p.memo, follow);
+        let mut _sd_best_i: i32 = -1;
+        let mut _sd_best_p: i32 = -1;
+        if _sd_p_0 > _sd_best_p {
+            _sd_best_p = _sd_p_0;
+            _sd_best_i = 0;
+        }
+        if _sd_p_1 > _sd_best_p {
+            _sd_best_p = _sd_p_1;
+            _sd_best_i = 1;
+        }
+        if _sd_p_2 > _sd_best_p {
+            _sd_best_p = _sd_p_2;
+            _sd_best_i = 2;
+        }
+        if _sd_best_i >= 0 {
+            let _ = atn_verified(222, &mut p.atn, &p.kinds, p.pos, 0, if _sd_best_i == 0 { 0 } else if _sd_best_i == 1 { 1 } else { 2 });
+            let _ = atn_decide_222(&mut p.atn, &p.kinds, p.pos, 0);
+        }
+        if _sd_best_i == 0 {
             p.site = 341;
             p.atn_ret_pending = 2248;
             return _parse_enum_expr_struct(p, follow);
         }
-        if _atn_alt == 1 {
+        if _sd_best_i == 1 {
             p.site = 342;
             p.atn_ret_pending = 2250;
             return _parse_enum_expr_tuple(p, follow);
@@ -24657,15 +25391,23 @@ fn _parse_match_arm_expression__inner(p: &mut Parser, follow: i64 = 0) -> () wit
     let kind = p.peek_kind();
     if _kind_set_55(kind) {
         if _kind_set_79(kind) {
-            let mut _atn_false: List<i32> = [];
-            if p.no_struct != 0 { _atn_false.push(2); }
-            if p.no_struct != 0 { _atn_false.push(3); }
-            let _atn_alt = p.atn.predict(&ATN_SIM, 256, &p.kinds, p.pos, TK_EOF, 0, &_atn_false);
-            if _atn_alt < 0 {
-                p.no_viable("no viable alternative", p.peek_span(), &EMPTY_SYNC);
-                return;
+            let _sd_tokens = &p.kinds;
+            let _sd_pos = p.pos;
+            p.scan_gate.no_struct = p.no_struct;
+            let _sd_p_0 = scan_match_arm_expression__alt_0(_sd_tokens, _sd_pos, &mut p.scan_gate, &mut p.atn, &mut p.memo, follow);
+            p.scan_gate.no_struct = p.no_struct;
+            let _sd_p_1 = scan_match_arm_expression__alt_1(_sd_tokens, _sd_pos, &mut p.scan_gate, &mut p.atn, &mut p.memo, follow);
+            let mut _sd_best_i: i32 = -1;
+            let mut _sd_best_p: i32 = -1;
+            if _sd_p_0 > _sd_best_p {
+                _sd_best_p = _sd_p_0;
+                _sd_best_i = 0;
             }
-            if _atn_alt == 0 {
+            if _sd_p_1 > _sd_best_p {
+                _sd_best_p = _sd_p_1;
+                _sd_best_i = 1;
+            }
+            if _sd_best_i == 0 {
                 return _parse_match_arm_expression__inner_alt_0(p, follow);
             }
             return _parse_match_arm_expression__inner_alt_1(p, follow);
@@ -24903,8 +25645,27 @@ fn _parse_pattern_no_top_alt__inner(p: &mut Parser, follow: i64 = 0) -> () with 
     let kind = p.peek_kind();
     if _kind_set_118(kind) {
         if _kind_set_119(kind) {
-            let _atn_alt = atn_decide_265(&mut p.atn, &p.kinds, p.pos, 0);
-            if _atn_alt == 0 {
+            let _sd_tokens = &p.kinds;
+            let _sd_pos = p.pos;
+            p.scan_gate.no_struct = p.no_struct;
+            let _sd_p_0 = scan_pattern_no_top_alt__alt_0(_sd_tokens, _sd_pos, &mut p.scan_gate, &mut p.atn, &mut p.memo, follow);
+            p.scan_gate.no_struct = p.no_struct;
+            let _sd_p_1 = scan_pattern_no_top_alt__alt_1(_sd_tokens, _sd_pos, &mut p.scan_gate, &mut p.atn, &mut p.memo, follow);
+            let mut _sd_best_i: i32 = -1;
+            let mut _sd_best_p: i32 = -1;
+            if _sd_p_0 > _sd_best_p {
+                _sd_best_p = _sd_p_0;
+                _sd_best_i = 0;
+            }
+            if _sd_p_1 > _sd_best_p {
+                _sd_best_p = _sd_p_1;
+                _sd_best_i = 1;
+            }
+            if _sd_best_i >= 0 {
+                let _ = atn_verified(265, &mut p.atn, &p.kinds, p.pos, 0, if _sd_best_i == 0 { 0 } else { 1 });
+                let _ = atn_decide_265(&mut p.atn, &p.kinds, p.pos, 0);
+            }
+            if _sd_best_i == 0 {
                 p.site = 417;
                 p.atn_ret_pending = 2675;
                 return _parse_pattern_without_range(p, follow);
@@ -25019,23 +25780,60 @@ fn _parse_pattern_without_range__inner(p: &mut Parser, follow: i64 = 0) -> () wi
             p.atn_ret_pending = 2683;
             return _parse_identifier_pattern(p, follow);
         } else if _kind_set_22(kind) {
-            let _atn_alt = atn_decide_266(&mut p.atn, &p.kinds, p.pos, 0);
-            if _atn_alt == 1 {
+            let _sd_tokens = &p.kinds;
+            let _sd_pos = p.pos;
+            p.scan_gate.no_struct = p.no_struct;
+            let _sd_p_1 = scan_pattern_without_range__alt_1(_sd_tokens, _sd_pos, &mut p.scan_gate, &mut p.atn, &mut p.memo, follow);
+            p.scan_gate.no_struct = p.no_struct;
+            let _sd_p_5 = scan_pattern_without_range__alt_5(_sd_tokens, _sd_pos, &mut p.scan_gate, &mut p.atn, &mut p.memo, follow);
+            p.scan_gate.no_struct = p.no_struct;
+            let _sd_p_6 = scan_pattern_without_range__alt_6(_sd_tokens, _sd_pos, &mut p.scan_gate, &mut p.atn, &mut p.memo, follow);
+            p.scan_gate.no_struct = p.no_struct;
+            let _sd_p_10 = scan_pattern_without_range__alt_10(_sd_tokens, _sd_pos, &mut p.scan_gate, &mut p.atn, &mut p.memo, follow);
+            p.scan_gate.no_struct = p.no_struct;
+            let _sd_p_11 = scan_pattern_without_range__alt_11(_sd_tokens, _sd_pos, &mut p.scan_gate, &mut p.atn, &mut p.memo, follow);
+            let mut _sd_best_i: i32 = -1;
+            let mut _sd_best_p: i32 = -1;
+            if _sd_p_1 > _sd_best_p {
+                _sd_best_p = _sd_p_1;
+                _sd_best_i = 1;
+            }
+            if _sd_p_5 > _sd_best_p {
+                _sd_best_p = _sd_p_5;
+                _sd_best_i = 5;
+            }
+            if _sd_p_6 > _sd_best_p {
+                _sd_best_p = _sd_p_6;
+                _sd_best_i = 6;
+            }
+            if _sd_p_10 > _sd_best_p {
+                _sd_best_p = _sd_p_10;
+                _sd_best_i = 10;
+            }
+            if _sd_p_11 > _sd_best_p {
+                _sd_best_p = _sd_p_11;
+                _sd_best_i = 11;
+            }
+            if _sd_best_i >= 0 {
+                let _ = atn_verified(266, &mut p.atn, &p.kinds, p.pos, 0, if _sd_best_i == 1 { 1 } else if _sd_best_i == 5 { 5 } else if _sd_best_i == 6 { 6 } else if _sd_best_i == 10 { 10 } else { 11 });
+                let _ = atn_decide_266(&mut p.atn, &p.kinds, p.pos, 0);
+            }
+            if _sd_best_i == 1 {
                 p.site = 420;
                 p.atn_ret_pending = 2683;
                 return _parse_identifier_pattern(p, follow);
             }
-            if _atn_alt == 5 {
+            if _sd_best_i == 5 {
                 p.site = 424;
                 p.atn_ret_pending = 2691;
                 return _parse_struct_pattern(p, follow);
             }
-            if _atn_alt == 6 {
+            if _sd_best_i == 6 {
                 p.site = 425;
                 p.atn_ret_pending = 2693;
                 return _parse_tuple_struct_pattern(p, follow);
             }
-            if _atn_alt == 10 {
+            if _sd_best_i == 10 {
                 p.site = 429;
                 p.atn_ret_pending = 2701;
                 return _parse_path_pattern(p, follow);
@@ -25044,18 +25842,49 @@ fn _parse_pattern_without_range__inner(p: &mut Parser, follow: i64 = 0) -> () wi
             p.atn_ret_pending = 2703;
             return _parse_macro_invocation(p, follow);
         } else if _kind_set_124(kind) {
-            let _atn_alt = atn_decide_266(&mut p.atn, &p.kinds, p.pos, 0);
-            if _atn_alt == 5 {
+            let _sd_tokens = &p.kinds;
+            let _sd_pos = p.pos;
+            p.scan_gate.no_struct = p.no_struct;
+            let _sd_p_5 = scan_pattern_without_range__alt_5(_sd_tokens, _sd_pos, &mut p.scan_gate, &mut p.atn, &mut p.memo, follow);
+            p.scan_gate.no_struct = p.no_struct;
+            let _sd_p_6 = scan_pattern_without_range__alt_6(_sd_tokens, _sd_pos, &mut p.scan_gate, &mut p.atn, &mut p.memo, follow);
+            p.scan_gate.no_struct = p.no_struct;
+            let _sd_p_10 = scan_pattern_without_range__alt_10(_sd_tokens, _sd_pos, &mut p.scan_gate, &mut p.atn, &mut p.memo, follow);
+            p.scan_gate.no_struct = p.no_struct;
+            let _sd_p_11 = scan_pattern_without_range__alt_11(_sd_tokens, _sd_pos, &mut p.scan_gate, &mut p.atn, &mut p.memo, follow);
+            let mut _sd_best_i: i32 = -1;
+            let mut _sd_best_p: i32 = -1;
+            if _sd_p_5 > _sd_best_p {
+                _sd_best_p = _sd_p_5;
+                _sd_best_i = 5;
+            }
+            if _sd_p_6 > _sd_best_p {
+                _sd_best_p = _sd_p_6;
+                _sd_best_i = 6;
+            }
+            if _sd_p_10 > _sd_best_p {
+                _sd_best_p = _sd_p_10;
+                _sd_best_i = 10;
+            }
+            if _sd_p_11 > _sd_best_p {
+                _sd_best_p = _sd_p_11;
+                _sd_best_i = 11;
+            }
+            if _sd_best_i >= 0 {
+                let _ = atn_verified(266, &mut p.atn, &p.kinds, p.pos, 0, if _sd_best_i == 5 { 5 } else if _sd_best_i == 6 { 6 } else if _sd_best_i == 10 { 10 } else { 11 });
+                let _ = atn_decide_266(&mut p.atn, &p.kinds, p.pos, 0);
+            }
+            if _sd_best_i == 5 {
                 p.site = 424;
                 p.atn_ret_pending = 2691;
                 return _parse_struct_pattern(p, follow);
             }
-            if _atn_alt == 6 {
+            if _sd_best_i == 6 {
                 p.site = 425;
                 p.atn_ret_pending = 2693;
                 return _parse_tuple_struct_pattern(p, follow);
             }
-            if _atn_alt == 10 {
+            if _sd_best_i == 10 {
                 p.site = 429;
                 p.atn_ret_pending = 2701;
                 return _parse_path_pattern(p, follow);
@@ -25064,13 +25893,38 @@ fn _parse_pattern_without_range__inner(p: &mut Parser, follow: i64 = 0) -> () wi
             p.atn_ret_pending = 2703;
             return _parse_macro_invocation(p, follow);
         } else if kind == TK_KW_SELFTYPE {
-            let _atn_alt = atn_decide_266(&mut p.atn, &p.kinds, p.pos, 0);
-            if _atn_alt == 5 {
+            let _sd_tokens = &p.kinds;
+            let _sd_pos = p.pos;
+            p.scan_gate.no_struct = p.no_struct;
+            let _sd_p_5 = scan_pattern_without_range__alt_5(_sd_tokens, _sd_pos, &mut p.scan_gate, &mut p.atn, &mut p.memo, follow);
+            p.scan_gate.no_struct = p.no_struct;
+            let _sd_p_6 = scan_pattern_without_range__alt_6(_sd_tokens, _sd_pos, &mut p.scan_gate, &mut p.atn, &mut p.memo, follow);
+            p.scan_gate.no_struct = p.no_struct;
+            let _sd_p_10 = scan_pattern_without_range__alt_10(_sd_tokens, _sd_pos, &mut p.scan_gate, &mut p.atn, &mut p.memo, follow);
+            let mut _sd_best_i: i32 = -1;
+            let mut _sd_best_p: i32 = -1;
+            if _sd_p_5 > _sd_best_p {
+                _sd_best_p = _sd_p_5;
+                _sd_best_i = 5;
+            }
+            if _sd_p_6 > _sd_best_p {
+                _sd_best_p = _sd_p_6;
+                _sd_best_i = 6;
+            }
+            if _sd_p_10 > _sd_best_p {
+                _sd_best_p = _sd_p_10;
+                _sd_best_i = 10;
+            }
+            if _sd_best_i >= 0 {
+                let _ = atn_verified(266, &mut p.atn, &p.kinds, p.pos, 0, if _sd_best_i == 5 { 5 } else if _sd_best_i == 6 { 6 } else { 10 });
+                let _ = atn_decide_266(&mut p.atn, &p.kinds, p.pos, 0);
+            }
+            if _sd_best_i == 5 {
                 p.site = 424;
                 p.atn_ret_pending = 2691;
                 return _parse_struct_pattern(p, follow);
             }
-            if _atn_alt == 6 {
+            if _sd_best_i == 6 {
                 p.site = 425;
                 p.atn_ret_pending = 2693;
                 return _parse_tuple_struct_pattern(p, follow);
@@ -25103,8 +25957,27 @@ fn _parse_pattern_without_range__inner(p: &mut Parser, follow: i64 = 0) -> () wi
         return;
     }
     if kind == TK_LPAREN {
-        let _atn_alt = atn_decide_266(&mut p.atn, &p.kinds, p.pos, 0);
-        if _atn_alt == 7 {
+        let _sd_tokens = &p.kinds;
+        let _sd_pos = p.pos;
+        p.scan_gate.no_struct = p.no_struct;
+        let _sd_p_7 = scan_pattern_without_range__alt_7(_sd_tokens, _sd_pos, &mut p.scan_gate, &mut p.atn, &mut p.memo, follow);
+        p.scan_gate.no_struct = p.no_struct;
+        let _sd_p_8 = scan_pattern_without_range__alt_8(_sd_tokens, _sd_pos, &mut p.scan_gate, &mut p.atn, &mut p.memo, follow);
+        let mut _sd_best_i: i32 = -1;
+        let mut _sd_best_p: i32 = -1;
+        if _sd_p_7 > _sd_best_p {
+            _sd_best_p = _sd_p_7;
+            _sd_best_i = 7;
+        }
+        if _sd_p_8 > _sd_best_p {
+            _sd_best_p = _sd_p_8;
+            _sd_best_i = 8;
+        }
+        if _sd_best_i >= 0 {
+            let _ = atn_verified(266, &mut p.atn, &p.kinds, p.pos, 0, if _sd_best_i == 7 { 7 } else { 8 });
+            let _ = atn_decide_266(&mut p.atn, &p.kinds, p.pos, 0);
+        }
+        if _sd_best_i == 7 {
             p.site = 426;
             p.atn_ret_pending = 2695;
             return _parse_tuple_pattern(p, follow);
@@ -25418,11 +26291,36 @@ fn _parse_range_pattern__inner(p: &mut Parser, follow: i64 = 0) -> () with RustP
     if !kind_set_has(&SYNC_136, p.kinds[p.pos]) { builtin::cold_path(); p.sync_alts(&SYNC_136, &EXPECTED_136); }
     let kind = p.peek_kind();
     if _kind_set_119(kind) {
-        let _atn_alt = atn_decide_273(&mut p.atn, &p.kinds, p.pos, 0);
-        if _atn_alt == 0 {
+        let _sd_tokens = &p.kinds;
+        let _sd_pos = p.pos;
+        p.scan_gate.no_struct = p.no_struct;
+        let _sd_p_0 = scan_range_pattern__alt_0(_sd_tokens, _sd_pos, &mut p.scan_gate, &mut p.atn, &mut p.memo, follow);
+        p.scan_gate.no_struct = p.no_struct;
+        let _sd_p_2 = scan_range_pattern__alt_2(_sd_tokens, _sd_pos, &mut p.scan_gate, &mut p.atn, &mut p.memo, follow);
+        p.scan_gate.no_struct = p.no_struct;
+        let _sd_p_1 = scan_range_pattern__alt_1(_sd_tokens, _sd_pos, &mut p.scan_gate, &mut p.atn, &mut p.memo, follow);
+        let mut _sd_best_i: i32 = -1;
+        let mut _sd_best_p: i32 = -1;
+        if _sd_p_0 > _sd_best_p {
+            _sd_best_p = _sd_p_0;
+            _sd_best_i = 0;
+        }
+        if _sd_p_1 > _sd_best_p {
+            _sd_best_p = _sd_p_1;
+            _sd_best_i = 1;
+        }
+        if _sd_p_2 > _sd_best_p {
+            _sd_best_p = _sd_p_2;
+            _sd_best_i = 2;
+        }
+        if _sd_best_i >= 0 {
+            let _ = atn_verified(273, &mut p.atn, &p.kinds, p.pos, 0, if _sd_best_i == 0 { 0 } else if _sd_best_i == 2 { 2 } else { 1 });
+            let _ = atn_decide_273(&mut p.atn, &p.kinds, p.pos, 0);
+        }
+        if _sd_best_i == 0 {
             return _parse_range_pattern__inner_alt_0(p, follow);
         }
-        if _atn_alt == 2 {
+        if _sd_best_i == 2 {
             return _parse_range_pattern__inner_alt_2(p, follow);
         }
         return _parse_range_pattern__inner_alt_1(p, follow);
@@ -25696,8 +26594,27 @@ fn _parse_struct_pattern_elements__inner(p: &mut Parser, follow: i64 = 0) -> () 
     let kind = p.peek_kind();
     if _kind_set_127(kind) {
         if kind == TK_POUND {
-            let _atn_alt = atn_decide_280(&mut p.atn, &p.kinds, p.pos, 0);
-            if _atn_alt == 1 {
+            let _sd_tokens = &p.kinds;
+            let _sd_pos = p.pos;
+            p.scan_gate.no_struct = p.no_struct;
+            let _sd_p_1 = scan_struct_pattern_elements__alt_1(_sd_tokens, _sd_pos, &mut p.scan_gate, &mut p.atn, &mut p.memo, follow);
+            p.scan_gate.no_struct = p.no_struct;
+            let _sd_p_0 = scan_struct_pattern_elements__alt_0(_sd_tokens, _sd_pos, &mut p.scan_gate, &mut p.atn, &mut p.memo, follow);
+            let mut _sd_best_i: i32 = -1;
+            let mut _sd_best_p: i32 = -1;
+            if _sd_p_0 > _sd_best_p {
+                _sd_best_p = _sd_p_0;
+                _sd_best_i = 0;
+            }
+            if _sd_p_1 > _sd_best_p {
+                _sd_best_p = _sd_p_1;
+                _sd_best_i = 1;
+            }
+            if _sd_best_i >= 0 {
+                let _ = atn_verified(280, &mut p.atn, &p.kinds, p.pos, 0, if _sd_best_i == 1 { 1 } else { 0 });
+                let _ = atn_decide_280(&mut p.atn, &p.kinds, p.pos, 0);
+            }
+            if _sd_best_i == 1 {
                 p.site = 444;
                 p.atn_ret_pending = 2839;
                 return _parse_struct_pattern_et_cetera(p, follow);
@@ -26235,19 +27152,63 @@ fn _parse_tuple_pattern_items__inner(p: &mut Parser, follow: i64 = 0) -> () with
     let kind = p.peek_kind();
     if _kind_set_126(kind) {
         if kind == TK_DOTDOT {
-            let _atn_alt = atn_decide_293(&mut p.atn, &p.kinds, p.pos, 0);
-            if _atn_alt == 1 {
+            let _sd_tokens = &p.kinds;
+            let _sd_pos = p.pos;
+            p.scan_gate.no_struct = p.no_struct;
+            let _sd_p_1 = scan_tuple_pattern_items__alt_1(_sd_tokens, _sd_pos, &mut p.scan_gate, &mut p.atn, &mut p.memo, follow);
+            p.scan_gate.no_struct = p.no_struct;
+            let _sd_p_2 = scan_tuple_pattern_items__alt_2(_sd_tokens, _sd_pos, &mut p.scan_gate, &mut p.atn, &mut p.memo, follow);
+            p.scan_gate.no_struct = p.no_struct;
+            let _sd_p_0 = scan_tuple_pattern_items__alt_0(_sd_tokens, _sd_pos, &mut p.scan_gate, &mut p.atn, &mut p.memo, follow);
+            let mut _sd_best_i: i32 = -1;
+            let mut _sd_best_p: i32 = -1;
+            if _sd_p_0 > _sd_best_p {
+                _sd_best_p = _sd_p_0;
+                _sd_best_i = 0;
+            }
+            if _sd_p_1 > _sd_best_p {
+                _sd_best_p = _sd_p_1;
+                _sd_best_i = 1;
+            }
+            if _sd_p_2 > _sd_best_p {
+                _sd_best_p = _sd_p_2;
+                _sd_best_i = 2;
+            }
+            if _sd_best_i >= 0 {
+                let _ = atn_verified(293, &mut p.atn, &p.kinds, p.pos, 0, if _sd_best_i == 1 { 1 } else if _sd_best_i == 2 { 2 } else { 0 });
+                let _ = atn_decide_293(&mut p.atn, &p.kinds, p.pos, 0);
+            }
+            if _sd_best_i == 1 {
                 p.site = 460;
                 p.atn_ret_pending = 2939;
                 return _parse_rest_pattern(p);
             }
-            if _atn_alt == 2 {
+            if _sd_best_i == 2 {
                 return _parse_tuple_pattern_items__inner_alt_2(p, follow);
             }
             return _parse_tuple_pattern_items__inner_alt_0(p, follow);
         } else if _kind_set_130(kind) {
-            let _atn_alt = atn_decide_293(&mut p.atn, &p.kinds, p.pos, 0);
-            if _atn_alt == 2 {
+            let _sd_tokens = &p.kinds;
+            let _sd_pos = p.pos;
+            p.scan_gate.no_struct = p.no_struct;
+            let _sd_p_2 = scan_tuple_pattern_items__alt_2(_sd_tokens, _sd_pos, &mut p.scan_gate, &mut p.atn, &mut p.memo, follow);
+            p.scan_gate.no_struct = p.no_struct;
+            let _sd_p_0 = scan_tuple_pattern_items__alt_0(_sd_tokens, _sd_pos, &mut p.scan_gate, &mut p.atn, &mut p.memo, follow);
+            let mut _sd_best_i: i32 = -1;
+            let mut _sd_best_p: i32 = -1;
+            if _sd_p_0 > _sd_best_p {
+                _sd_best_p = _sd_p_0;
+                _sd_best_i = 0;
+            }
+            if _sd_p_2 > _sd_best_p {
+                _sd_best_p = _sd_p_2;
+                _sd_best_i = 2;
+            }
+            if _sd_best_i >= 0 {
+                let _ = atn_verified(293, &mut p.atn, &p.kinds, p.pos, 0, if _sd_best_i == 2 { 2 } else { 0 });
+                let _ = atn_decide_293(&mut p.atn, &p.kinds, p.pos, 0);
+            }
+            if _sd_best_i == 2 {
                 return _parse_tuple_pattern_items__inner_alt_2(p, follow);
             }
             return _parse_tuple_pattern_items__inner_alt_0(p, follow);
@@ -26467,8 +27428,27 @@ fn _parse_type___inner(p: &mut Parser, follow: i64 = 0) -> () with RustParserBas
     let kind = p.peek_kind();
     if _kind_set_48(kind) {
         if kind == TK_KW_IMPL {
-            let _atn_alt = atn_decide_300(&mut p.atn, &p.kinds, p.pos, 0);
-            if _atn_alt == 0 {
+            let _sd_tokens = &p.kinds;
+            let _sd_pos = p.pos;
+            p.scan_gate.no_struct = p.no_struct;
+            let _sd_p_0 = scan_type___alt_0(_sd_tokens, _sd_pos, &mut p.scan_gate, &mut p.atn, &mut p.memo, follow);
+            p.scan_gate.no_struct = p.no_struct;
+            let _sd_p_1 = scan_type___alt_1(_sd_tokens, _sd_pos, &mut p.scan_gate, &mut p.atn, &mut p.memo, follow);
+            let mut _sd_best_i: i32 = -1;
+            let mut _sd_best_p: i32 = -1;
+            if _sd_p_0 > _sd_best_p {
+                _sd_best_p = _sd_p_0;
+                _sd_best_i = 0;
+            }
+            if _sd_p_1 > _sd_best_p {
+                _sd_best_p = _sd_p_1;
+                _sd_best_i = 1;
+            }
+            if _sd_best_i >= 0 {
+                let _ = atn_verified(300, &mut p.atn, &p.kinds, p.pos, 0, if _sd_best_i == 0 { 0 } else { 1 });
+                let _ = atn_decide_300(&mut p.atn, &p.kinds, p.pos, 0);
+            }
+            if _sd_best_i == 0 {
                 p.site = 469;
                 p.atn_ret_pending = 2998;
                 return _parse_type_no_bounds(p, follow);
@@ -26477,8 +27457,27 @@ fn _parse_type___inner(p: &mut Parser, follow: i64 = 0) -> () with RustParserBas
             p.atn_ret_pending = 3000;
             return _parse_impl_trait_type(p, follow);
         } else if _kind_set_131(kind) {
-            let _atn_alt = atn_decide_300(&mut p.atn, &p.kinds, p.pos, 0);
-            if _atn_alt == 0 {
+            let _sd_tokens = &p.kinds;
+            let _sd_pos = p.pos;
+            p.scan_gate.no_struct = p.no_struct;
+            let _sd_p_0 = scan_type___alt_0(_sd_tokens, _sd_pos, &mut p.scan_gate, &mut p.atn, &mut p.memo, follow);
+            p.scan_gate.no_struct = p.no_struct;
+            let _sd_p_2 = scan_type___alt_2(_sd_tokens, _sd_pos, &mut p.scan_gate, &mut p.atn, &mut p.memo, follow);
+            let mut _sd_best_i: i32 = -1;
+            let mut _sd_best_p: i32 = -1;
+            if _sd_p_0 > _sd_best_p {
+                _sd_best_p = _sd_p_0;
+                _sd_best_i = 0;
+            }
+            if _sd_p_2 > _sd_best_p {
+                _sd_best_p = _sd_p_2;
+                _sd_best_i = 2;
+            }
+            if _sd_best_i >= 0 {
+                let _ = atn_verified(300, &mut p.atn, &p.kinds, p.pos, 0, if _sd_best_i == 0 { 0 } else { 2 });
+                let _ = atn_decide_300(&mut p.atn, &p.kinds, p.pos, 0);
+            }
+            if _sd_best_i == 0 {
                 p.site = 469;
                 p.atn_ret_pending = 2998;
                 return _parse_type_no_bounds(p, follow);
@@ -26596,13 +27595,38 @@ fn _parse_type_no_bounds__inner(p: &mut Parser, follow: i64 = 0) -> () with Rust
     let kind = p.peek_kind();
     if _kind_set_134(kind) {
         if kind == TK_LPAREN {
-            let _atn_alt = atn_decide_301(&mut p.atn, &p.kinds, p.pos, 0);
-            if _atn_alt == 0 {
+            let _sd_tokens = &p.kinds;
+            let _sd_pos = p.pos;
+            p.scan_gate.no_struct = p.no_struct;
+            let _sd_p_0 = scan_type_no_bounds__alt_0(_sd_tokens, _sd_pos, &mut p.scan_gate, &mut p.atn, &mut p.memo, follow);
+            p.scan_gate.no_struct = p.no_struct;
+            let _sd_p_2 = scan_type_no_bounds__alt_2(_sd_tokens, _sd_pos, &mut p.scan_gate, &mut p.atn, &mut p.memo, follow);
+            p.scan_gate.no_struct = p.no_struct;
+            let _sd_p_4 = scan_type_no_bounds__alt_4(_sd_tokens, _sd_pos, &mut p.scan_gate, &mut p.atn, &mut p.memo, follow);
+            let mut _sd_best_i: i32 = -1;
+            let mut _sd_best_p: i32 = -1;
+            if _sd_p_0 > _sd_best_p {
+                _sd_best_p = _sd_p_0;
+                _sd_best_i = 0;
+            }
+            if _sd_p_2 > _sd_best_p {
+                _sd_best_p = _sd_p_2;
+                _sd_best_i = 2;
+            }
+            if _sd_p_4 > _sd_best_p {
+                _sd_best_p = _sd_p_4;
+                _sd_best_i = 4;
+            }
+            if _sd_best_i >= 0 {
+                let _ = atn_verified(301, &mut p.atn, &p.kinds, p.pos, 0, if _sd_best_i == 0 { 0 } else if _sd_best_i == 2 { 2 } else { 4 });
+                let _ = atn_decide_301(&mut p.atn, &p.kinds, p.pos, 0);
+            }
+            if _sd_best_i == 0 {
                 p.site = 472;
                 p.atn_ret_pending = 3006;
                 return _parse_parenthesized_type(p, follow);
             }
-            if _atn_alt == 2 {
+            if _sd_best_i == 2 {
                 p.site = 474;
                 p.atn_ret_pending = 3010;
                 return _parse_trait_object_type_one_bound(p, follow);
@@ -26611,8 +27635,27 @@ fn _parse_type_no_bounds__inner(p: &mut Parser, follow: i64 = 0) -> () with Rust
             p.atn_ret_pending = 3014;
             return _parse_tuple_type(p, follow);
         } else if kind == TK_KW_FOR {
-            let _atn_alt = atn_decide_301(&mut p.atn, &p.kinds, p.pos, 0);
-            if _atn_alt == 2 {
+            let _sd_tokens = &p.kinds;
+            let _sd_pos = p.pos;
+            p.scan_gate.no_struct = p.no_struct;
+            let _sd_p_2 = scan_type_no_bounds__alt_2(_sd_tokens, _sd_pos, &mut p.scan_gate, &mut p.atn, &mut p.memo, follow);
+            p.scan_gate.no_struct = p.no_struct;
+            let _sd_p_12 = scan_type_no_bounds__alt_12(_sd_tokens, _sd_pos, &mut p.scan_gate, &mut p.atn, &mut p.memo, follow);
+            let mut _sd_best_i: i32 = -1;
+            let mut _sd_best_p: i32 = -1;
+            if _sd_p_2 > _sd_best_p {
+                _sd_best_p = _sd_p_2;
+                _sd_best_i = 2;
+            }
+            if _sd_p_12 > _sd_best_p {
+                _sd_best_p = _sd_p_12;
+                _sd_best_i = 12;
+            }
+            if _sd_best_i >= 0 {
+                let _ = atn_verified(301, &mut p.atn, &p.kinds, p.pos, 0, if _sd_best_i == 2 { 2 } else { 12 });
+                let _ = atn_decide_301(&mut p.atn, &p.kinds, p.pos, 0);
+            }
+            if _sd_best_i == 2 {
                 p.site = 474;
                 p.atn_ret_pending = 3010;
                 return _parse_trait_object_type_one_bound(p, follow);
@@ -26625,13 +27668,38 @@ fn _parse_type_no_bounds__inner(p: &mut Parser, follow: i64 = 0) -> () with Rust
             p.atn_ret_pending = 3030;
             return _parse_bare_function_type(p, follow);
         } else if _kind_set_15(kind) {
-            let _atn_alt = atn_decide_301(&mut p.atn, &p.kinds, p.pos, 0);
-            if _atn_alt == 2 {
+            let _sd_tokens = &p.kinds;
+            let _sd_pos = p.pos;
+            p.scan_gate.no_struct = p.no_struct;
+            let _sd_p_2 = scan_type_no_bounds__alt_2(_sd_tokens, _sd_pos, &mut p.scan_gate, &mut p.atn, &mut p.memo, follow);
+            p.scan_gate.no_struct = p.no_struct;
+            let _sd_p_3 = scan_type_no_bounds__alt_3(_sd_tokens, _sd_pos, &mut p.scan_gate, &mut p.atn, &mut p.memo, follow);
+            p.scan_gate.no_struct = p.no_struct;
+            let _sd_p_13 = scan_type_no_bounds__alt_13(_sd_tokens, _sd_pos, &mut p.scan_gate, &mut p.atn, &mut p.memo, follow);
+            let mut _sd_best_i: i32 = -1;
+            let mut _sd_best_p: i32 = -1;
+            if _sd_p_2 > _sd_best_p {
+                _sd_best_p = _sd_p_2;
+                _sd_best_i = 2;
+            }
+            if _sd_p_3 > _sd_best_p {
+                _sd_best_p = _sd_p_3;
+                _sd_best_i = 3;
+            }
+            if _sd_p_13 > _sd_best_p {
+                _sd_best_p = _sd_p_13;
+                _sd_best_i = 13;
+            }
+            if _sd_best_i >= 0 {
+                let _ = atn_verified(301, &mut p.atn, &p.kinds, p.pos, 0, if _sd_best_i == 2 { 2 } else if _sd_best_i == 3 { 3 } else { 13 });
+                let _ = atn_decide_301(&mut p.atn, &p.kinds, p.pos, 0);
+            }
+            if _sd_best_i == 2 {
                 p.site = 474;
                 p.atn_ret_pending = 3010;
                 return _parse_trait_object_type_one_bound(p, follow);
             }
-            if _atn_alt == 3 {
+            if _sd_best_i == 3 {
                 p.site = 475;
                 p.atn_ret_pending = 3012;
                 return _parse_type_path(p, follow);
@@ -26640,8 +27708,27 @@ fn _parse_type_no_bounds__inner(p: &mut Parser, follow: i64 = 0) -> () with Rust
             p.atn_ret_pending = 3032;
             return _parse_macro_invocation(p, follow);
         } else if kind == TK_KW_SELFTYPE {
-            let _atn_alt = atn_decide_301(&mut p.atn, &p.kinds, p.pos, 0);
-            if _atn_alt == 2 {
+            let _sd_tokens = &p.kinds;
+            let _sd_pos = p.pos;
+            p.scan_gate.no_struct = p.no_struct;
+            let _sd_p_2 = scan_type_no_bounds__alt_2(_sd_tokens, _sd_pos, &mut p.scan_gate, &mut p.atn, &mut p.memo, follow);
+            p.scan_gate.no_struct = p.no_struct;
+            let _sd_p_3 = scan_type_no_bounds__alt_3(_sd_tokens, _sd_pos, &mut p.scan_gate, &mut p.atn, &mut p.memo, follow);
+            let mut _sd_best_i: i32 = -1;
+            let mut _sd_best_p: i32 = -1;
+            if _sd_p_2 > _sd_best_p {
+                _sd_best_p = _sd_p_2;
+                _sd_best_i = 2;
+            }
+            if _sd_p_3 > _sd_best_p {
+                _sd_best_p = _sd_p_3;
+                _sd_best_i = 3;
+            }
+            if _sd_best_i >= 0 {
+                let _ = atn_verified(301, &mut p.atn, &p.kinds, p.pos, 0, if _sd_best_i == 2 { 2 } else { 3 });
+                let _ = atn_decide_301(&mut p.atn, &p.kinds, p.pos, 0);
+            }
+            if _sd_best_i == 2 {
                 p.site = 474;
                 p.atn_ret_pending = 3010;
                 return _parse_trait_object_type_one_bound(p, follow);
@@ -26680,8 +27767,27 @@ fn _parse_type_no_bounds__inner(p: &mut Parser, follow: i64 = 0) -> () with Rust
         return;
     }
     if kind == TK_LSQUAREBRACKET {
-        let _atn_alt = atn_decide_301(&mut p.atn, &p.kinds, p.pos, 0);
-        if _atn_alt == 8 {
+        let _sd_tokens = &p.kinds;
+        let _sd_pos = p.pos;
+        p.scan_gate.no_struct = p.no_struct;
+        let _sd_p_8 = scan_type_no_bounds__alt_8(_sd_tokens, _sd_pos, &mut p.scan_gate, &mut p.atn, &mut p.memo, follow);
+        p.scan_gate.no_struct = p.no_struct;
+        let _sd_p_9 = scan_type_no_bounds__alt_9(_sd_tokens, _sd_pos, &mut p.scan_gate, &mut p.atn, &mut p.memo, follow);
+        let mut _sd_best_i: i32 = -1;
+        let mut _sd_best_p: i32 = -1;
+        if _sd_p_8 > _sd_best_p {
+            _sd_best_p = _sd_p_8;
+            _sd_best_i = 8;
+        }
+        if _sd_p_9 > _sd_best_p {
+            _sd_best_p = _sd_p_9;
+            _sd_best_i = 9;
+        }
+        if _sd_best_i >= 0 {
+            let _ = atn_verified(301, &mut p.atn, &p.kinds, p.pos, 0, if _sd_best_i == 8 { 8 } else { 9 });
+            let _ = atn_decide_301(&mut p.atn, &p.kinds, p.pos, 0);
+        }
+        if _sd_best_i == 8 {
             p.site = 480;
             p.atn_ret_pending = 3022;
             return _parse_array_type(p, follow);
@@ -27190,8 +28296,27 @@ fn _parse_function_parameters_maybe_named_variadic__inner(p: &mut Parser, follow
     if !kind_set_has(&SYNC_152, p.kinds[p.pos]) { builtin::cold_path(); p.sync_alts(&SYNC_152, &EXPECTED_152); }
     let kind = p.peek_kind();
     if _kind_set_137(kind) {
-        let _atn_alt = atn_decide_315(&mut p.atn, &p.kinds, p.pos, 0);
-        if _atn_alt == 0 {
+        let _sd_tokens = &p.kinds;
+        let _sd_pos = p.pos;
+        p.scan_gate.no_struct = p.no_struct;
+        let _sd_p_0 = scan_function_parameters_maybe_named_variadic__alt_0(_sd_tokens, _sd_pos, &mut p.scan_gate, &mut p.atn, &mut p.memo, follow);
+        p.scan_gate.no_struct = p.no_struct;
+        let _sd_p_1 = scan_function_parameters_maybe_named_variadic__alt_1(_sd_tokens, _sd_pos, &mut p.scan_gate, &mut p.atn, &mut p.memo, follow);
+        let mut _sd_best_i: i32 = -1;
+        let mut _sd_best_p: i32 = -1;
+        if _sd_p_0 > _sd_best_p {
+            _sd_best_p = _sd_p_0;
+            _sd_best_i = 0;
+        }
+        if _sd_p_1 > _sd_best_p {
+            _sd_best_p = _sd_p_1;
+            _sd_best_i = 1;
+        }
+        if _sd_best_i >= 0 {
+            let _ = atn_verified(315, &mut p.atn, &p.kinds, p.pos, 0, if _sd_best_i == 0 { 0 } else { 1 });
+            let _ = atn_decide_315(&mut p.atn, &p.kinds, p.pos, 0);
+        }
+        if _sd_best_i == 0 {
             p.site = 501;
             p.atn_ret_pending = 3160;
             return _parse_maybe_named_function_parameters(p, follow);
@@ -28727,14 +29852,45 @@ fn _parse_generic_args__inner(p: &mut Parser, follow: i64 = 0) -> () with RustPa
     if !kind_set_has(&SYNC_84, p.kinds[p.pos]) { builtin::cold_path(); p.sync_alts(&SYNC_84, &EXPECTED_84); }
     let kind = p.peek_kind();
     if kind == TK_LT {
-        let _atn_alt = atn_decide_347(&mut p.atn, &p.kinds, p.pos, 0);
-        if _atn_alt == 1 {
+        let _sd_tokens = &p.kinds;
+        let _sd_pos = p.pos;
+        p.scan_gate.no_struct = p.no_struct;
+        let _sd_p_1 = scan_generic_args__alt_1(_sd_tokens, _sd_pos, &mut p.scan_gate, &mut p.atn, &mut p.memo, follow);
+        p.scan_gate.no_struct = p.no_struct;
+        let _sd_p_2 = scan_generic_args__alt_2(_sd_tokens, _sd_pos, &mut p.scan_gate, &mut p.atn, &mut p.memo, follow);
+        p.scan_gate.no_struct = p.no_struct;
+        let _sd_p_3 = scan_generic_args__alt_3(_sd_tokens, _sd_pos, &mut p.scan_gate, &mut p.atn, &mut p.memo, follow);
+        p.scan_gate.no_struct = p.no_struct;
+        let _sd_p_0 = scan_generic_args__alt_0(_sd_tokens, _sd_pos, &mut p.scan_gate, &mut p.atn, &mut p.memo, follow);
+        let mut _sd_best_i: i32 = -1;
+        let mut _sd_best_p: i32 = -1;
+        if _sd_p_0 > _sd_best_p {
+            _sd_best_p = _sd_p_0;
+            _sd_best_i = 0;
+        }
+        if _sd_p_1 > _sd_best_p {
+            _sd_best_p = _sd_p_1;
+            _sd_best_i = 1;
+        }
+        if _sd_p_2 > _sd_best_p {
+            _sd_best_p = _sd_p_2;
+            _sd_best_i = 2;
+        }
+        if _sd_p_3 > _sd_best_p {
+            _sd_best_p = _sd_p_3;
+            _sd_best_i = 3;
+        }
+        if _sd_best_i >= 0 {
+            let _ = atn_verified(347, &mut p.atn, &p.kinds, p.pos, 0, if _sd_best_i == 1 { 1 } else if _sd_best_i == 2 { 2 } else if _sd_best_i == 3 { 3 } else { 0 });
+            let _ = atn_decide_347(&mut p.atn, &p.kinds, p.pos, 0);
+        }
+        if _sd_best_i == 1 {
             return _parse_generic_args__inner_alt_1(p, follow);
         }
-        if _atn_alt == 2 {
+        if _sd_best_i == 2 {
             return _parse_generic_args__inner_alt_2(p, follow);
         }
-        if _atn_alt == 3 {
+        if _sd_best_i == 3 {
             return _parse_generic_args__inner_alt_3(p, follow);
         }
         return _parse_generic_args__inner_alt_0(p, follow);
@@ -28801,8 +29957,27 @@ fn _parse_generic_arg__inner(p: &mut Parser, follow: i64 = 0) -> () with RustPar
     let kind = p.peek_kind();
     if _kind_set_161(kind) {
         if _kind_set_44(kind) {
-            let _atn_alt = atn_decide_355(&mut p.atn, &p.kinds, p.pos, 0);
-            if _atn_alt == 0 {
+            let _sd_tokens = &p.kinds;
+            let _sd_pos = p.pos;
+            p.scan_gate.no_struct = p.no_struct;
+            let _sd_p_0 = scan_generic_arg__alt_0(_sd_tokens, _sd_pos, &mut p.scan_gate, &mut p.atn, &mut p.memo, follow);
+            p.scan_gate.no_struct = p.no_struct;
+            let _sd_p_1 = scan_generic_arg__alt_1(_sd_tokens, _sd_pos, &mut p.scan_gate, &mut p.atn, &mut p.memo, follow);
+            let mut _sd_best_i: i32 = -1;
+            let mut _sd_best_p: i32 = -1;
+            if _sd_p_0 > _sd_best_p {
+                _sd_best_p = _sd_p_0;
+                _sd_best_i = 0;
+            }
+            if _sd_p_1 > _sd_best_p {
+                _sd_best_p = _sd_p_1;
+                _sd_best_i = 1;
+            }
+            if _sd_best_i >= 0 {
+                let _ = atn_verified(355, &mut p.atn, &p.kinds, p.pos, 0, if _sd_best_i == 0 { 0 } else { 1 });
+                let _ = atn_decide_355(&mut p.atn, &p.kinds, p.pos, 0);
+            }
+            if _sd_best_i == 0 {
                 p.site = 545;
                 p.atn_ret_pending = 3504;
                 return _parse_lifetime(p);
@@ -28851,8 +30026,27 @@ fn _parse_generic_arg__inner(p: &mut Parser, follow: i64 = 0) -> () with RustPar
             p.atn_ret_pending = 3508;
             return _parse_generic_args_const(p, follow);
         } else if _kind_set_158(kind) {
-            let _atn_alt = atn_decide_355(&mut p.atn, &p.kinds, p.pos, 0);
-            if _atn_alt == 1 {
+            let _sd_tokens = &p.kinds;
+            let _sd_pos = p.pos;
+            p.scan_gate.no_struct = p.no_struct;
+            let _sd_p_1 = scan_generic_arg__alt_1(_sd_tokens, _sd_pos, &mut p.scan_gate, &mut p.atn, &mut p.memo, follow);
+            p.scan_gate.no_struct = p.no_struct;
+            let _sd_p_2 = scan_generic_arg__alt_2(_sd_tokens, _sd_pos, &mut p.scan_gate, &mut p.atn, &mut p.memo, follow);
+            let mut _sd_best_i: i32 = -1;
+            let mut _sd_best_p: i32 = -1;
+            if _sd_p_1 > _sd_best_p {
+                _sd_best_p = _sd_p_1;
+                _sd_best_i = 1;
+            }
+            if _sd_p_2 > _sd_best_p {
+                _sd_best_p = _sd_p_2;
+                _sd_best_i = 2;
+            }
+            if _sd_best_i >= 0 {
+                let _ = atn_verified(355, &mut p.atn, &p.kinds, p.pos, 0, if _sd_best_i == 1 { 1 } else { 2 });
+                let _ = atn_decide_355(&mut p.atn, &p.kinds, p.pos, 0);
+            }
+            if _sd_best_i == 1 {
                 p.site = 546;
                 p.atn_ret_pending = 3506;
                 return _parse_type_(p, follow);
@@ -29650,8 +30844,27 @@ fn _parse_macro_identifier_like_token__inner(p: &mut Parser) -> () with RustPars
             p.atn_ret_pending = 3715;
             return _parse_identifier(p);
         } else if kind == TK_KW_UNION {
-            let _atn_alt = atn_decide_377(&mut p.atn, &p.kinds, p.pos, 0);
-            if _atn_alt == 0 {
+            let _sd_tokens = &p.kinds;
+            let _sd_pos = p.pos;
+            p.scan_gate.no_struct = p.no_struct;
+            let _sd_p_0 = scan_macro_identifier_like_token__alt_0(_sd_tokens, _sd_pos, &mut p.scan_gate, &mut p.atn, &mut p.memo);
+            p.scan_gate.no_struct = p.no_struct;
+            let _sd_p_1 = scan_macro_identifier_like_token__alt_1(_sd_tokens, _sd_pos, &mut p.scan_gate, &mut p.atn, &mut p.memo);
+            let mut _sd_best_i: i32 = -1;
+            let mut _sd_best_p: i32 = -1;
+            if _sd_p_0 > _sd_best_p {
+                _sd_best_p = _sd_p_0;
+                _sd_best_i = 0;
+            }
+            if _sd_p_1 > _sd_best_p {
+                _sd_best_p = _sd_p_1;
+                _sd_best_i = 1;
+            }
+            if _sd_best_i >= 0 {
+                let _ = atn_verified(377, &mut p.atn, &p.kinds, p.pos, 0, if _sd_best_i == 0 { 0 } else { 1 });
+                let _ = atn_decide_377(&mut p.atn, &p.kinds, p.pos, 0);
+            }
+            if _sd_best_i == 0 {
                 p.site = 576;
                 p.atn_ret_pending = 3713;
                 return _parse_keyword(p);
