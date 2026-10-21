@@ -3629,6 +3629,19 @@ impl TypeTable {
         }
     }
 
+    /// The entries of `answers` whose impl's target binds at `type_args`:
+    /// `impl<T> Tr for W<List<T>>` answers nothing at `W<i32>`.
+    fn answers_reaching(&self, answers: &AssocAnswers, type_args: &[TypeId]) -> AssocAnswers {
+        AssocAnswers(
+            answers
+                .0
+                .iter()
+                .filter(|entry| self.entry_slots(entry, type_args).is_some())
+                .cloned()
+                .collect(),
+        )
+    }
+
     /// [`Self::entry_slots`] with the slots the impl's bounds project from
     /// those, which interning reaches.
     fn entry_slots_mut(
@@ -3653,21 +3666,21 @@ impl TypeTable {
         base_decl: AstId,
         substitution: &IndexMap<u32, TypeId>,
     ) {
+        let mut type_args: Vec<(u32, TypeId)> =
+            substitution.iter().map(|(&i, &t)| (i, t)).collect();
+        type_args.sort_by_key(|&(index, _)| index);
+        let type_args: Vec<TypeId> = type_args.into_iter().map(|(_, t)| t).collect();
         let defs: Vec<(DefId, String, AssocAnswer)> = self
             .generic_assoc_type_defs
             .iter()
             .filter(|(key, _)| key.target_decl == base_decl)
             .flat_map(|(key, answers)| {
-                answers
+                self.answers_reaching(answers, &type_args)
                     .0
-                    .iter()
-                    .map(move |entry| (key.trait_decl, key.assoc_name.clone(), entry.clone()))
+                    .into_iter()
+                    .map(move |entry| (key.trait_decl, key.assoc_name.clone(), entry))
             })
             .collect();
-        let mut type_args: Vec<(u32, TypeId)> =
-            substitution.iter().map(|(&i, &t)| (i, t)).collect();
-        type_args.sort_by_key(|&(index, _)| index);
-        let type_args: Vec<TypeId> = type_args.into_iter().map(|(_, t)| t).collect();
         for (trait_decl, assoc_name, entry) in defs {
             let slots = self.entry_slots_mut(&entry, &type_args);
             // The header's arguments are written over the impl's parameters too.
@@ -3890,14 +3903,14 @@ impl TypeTable {
         }
         let type_args = self.nominal_type_args(concrete_id)?;
         let decl = self.decl_of_type(concrete_id)?;
-        let answers = self
-            .generic_assoc_type_defs
-            .get(&GenericAssocTypeKey {
+        let answers = self.answers_reaching(
+            self.generic_assoc_type_defs.get(&GenericAssocTypeKey {
                 target_decl: decl,
                 trait_decl: *trait_key,
                 assoc_name: assoc_name.to_string(),
-            })?
-            .clone();
+            })?,
+            &type_args,
+        );
         // A generic impl records the arguments it writes, which may read its
         // own parameters (`impl<T> Mix<T> for G<T>`), so each is compared at
         // the instance's arguments, defaults filled as `wanted`'s are.

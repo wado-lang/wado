@@ -1,0 +1,51 @@
+// A generic impl's associated type answers only an instance its target
+// reaches: `impl<T> Tr for W<List<T>>` says nothing of `W<i32>`, so the
+// projection stays unanswered rather than taking that impl's `i32`.
+struct W<T> {
+    v: T,
+}
+
+trait Tr with () {
+    type A;
+    fn a(&self) -> Self::A;
+}
+
+impl Tr for W<i64> {
+    type A = bool;
+    fn a(&self) -> bool {
+        return true;
+    }
+}
+
+impl<T> Tr for W<List<T>> {
+    type A = i32;
+    fn a(&self) -> i32 {
+        return self.v.len();
+    }
+}
+
+struct Fwd<I> {
+    i: I,
+}
+
+impl<I: Tr> Tr for Fwd<I> {
+    type A = I::A;
+    fn a(&self) -> I::A {
+        return self.i.a();
+    }
+}
+
+fn mk<T>(v: T) -> Fwd<W<T>> {
+    return Fwd { i: W { v } };
+}
+
+export fn run() {
+    let n = mk(5).a();
+    assert n;
+}
+
+__DATA__
+{
+    "compile_error": "type 'W<i32>' does not implement trait 'Tr' required by bound on 'I'",
+    "compile_errors_not_contains": ["found 'i32'"]
+}
