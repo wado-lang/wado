@@ -1,0 +1,49 @@
+// A default is reified at the call, outside the callee's body, and moves what
+// it takes as the body would.
+
+use { println, log_stdout, Stdout } from "core:cli";
+
+affine struct Tok {
+    id: i32,
+}
+
+impl Drop for Tok {
+    fn drop(self) {
+        log_stdout(`drop ${self.id}`);
+    }
+}
+
+fn eat(t: Tok) -> i32 {
+    return t.id;
+}
+
+fn apply(t: Tok, f: fn(Tok) -> i32 = |held| eat(held)) -> i32 {
+    return f(t);
+}
+
+// Silent, since when an initializer runs is unspecified.
+affine struct Quiet {
+    id: i32,
+}
+
+impl Drop for Quiet {
+    fn drop(self) {
+    }
+}
+
+fn eat_quiet(q: Quiet) -> i32 {
+    return q.id;
+}
+
+global HELD: i32 = held: {
+    let q = Quiet { id: 2 };
+    eat_quiet(q)
+};
+
+export fn run() with Stdout {
+    println(`${apply(Tok { id: 1 })}`);
+    println(`${HELD}`);
+}
+
+__DATA__
+{"stdout": "drop 1\n1\n2\n"}

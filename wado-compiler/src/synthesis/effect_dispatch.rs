@@ -20,6 +20,7 @@ use crate::package::Package;
 use crate::synthesis::common::{
     alloc_local, alloc_named_local, option_some, panic_call, ref_expr, synth_span, unreachable_call,
 };
+use crate::synthesis::resource_cleanup;
 use crate::tir::{
     CallArg, CaptureSource, EffectRef, FunctionKind, FunctionRef, GlobalInit, InlineHint,
     LetStorage, MonomorphInfo, ResolvedType, StructDef, TemplateId, TirBlock, TirCapture,
@@ -593,6 +594,7 @@ fn build_dispatch_wrapper_function(
         Some(alloc_local(&mut next_local, &mut locals, return_type))
     };
 
+    // Each branch forwards the parameters once.
     let arg_exprs: Vec<TirExpr> = params
         .iter()
         .map(|p| {
@@ -604,6 +606,7 @@ fn build_dispatch_wrapper_function(
                 p.type_id,
                 span,
             )
+            .moved()
         })
         .collect();
 
@@ -739,7 +742,8 @@ fn build_dispatch_wrapper_function(
             },
             return_type,
             span,
-        );
+        )
+        .moved();
         then_stmts.push(TirStmt::new(
             TirStmtKind::Return {
                 value: Some(result_expr),
@@ -1085,6 +1089,8 @@ struct LowerCtx {
     /// Stack of local-allocation scopes — one entry per active function
     /// or closure body. Top of stack is the innermost scope.
     scopes: Vec<LocalScope>,
+    /// Whether a `WithHandler` was desugared.
+    desugared: bool,
 }
 
 /// One frame on `LowerCtx.scopes`. The outermost is always `Function` and owns
@@ -1159,6 +1165,7 @@ fn lower_with_handler_dispatch_in_func(func: &mut TirFunction, env: &DispatchEnv
                 next_local: func.local_count,
                 locals,
             }],
+            desugared: false,
         };
         lower_dispatch_in_block(body, env, &mut ctx);
         match ctx.scopes.pop().expect("function scope") {
@@ -1169,6 +1176,11 @@ fn lower_with_handler_dispatch_in_func(func: &mut TirFunction, env: &DispatchEnv
             LocalScope::Closure { .. } => {
                 unreachable!("outermost scope must be a function frame")
             }
+        }
+        // The desugaring marks what it moves for the instances of a template,
+        // whose drops are elaborated later; any other body's already are.
+        if ctx.desugared && !func.is_template() {
+            resource_cleanup::strip_moves(func);
         }
     }
 }
@@ -1282,6 +1294,7 @@ fn walk_dispatch_children(expr: &mut TirExpr, env: &DispatchEnv, ctx: &mut Lower
         }
         TirExprKind::Unary { expr, .. }
         | TirExprKind::Cast { expr, .. }
+        | TirExprKind::Move { expr }
         | TirExprKind::FieldAccess { expr, .. }
         | TirExprKind::TupleSpread { expr }
         | TirExprKind::TupleZip { expr }
@@ -1466,6 +1479,7 @@ impl TirRefVisitor for MaxLocalIndex {
 /// order after the body. A binding with no matching plan panics: annotate and
 /// this pass are out of sync.
 fn desugar_with_handler(expr: &mut TirExpr, env: &DispatchEnv, ctx: &mut LowerCtx) {
+    ctx.desugared = true;
     let span = expr.span;
     let result_type = expr.type_id;
 
@@ -1777,11 +1791,14 @@ fn desugar_with_handler(expr: &mut TirExpr, env: &DispatchEnv, ctx: &mut LowerCt
         ));
         stmts.extend(restore_seq);
         stmts.push(TirStmt::new(
-            TirStmtKind::Expr(TirExpr::new(
-                TirExprKind::Local { index: local, name },
-                result_type,
-                body_span,
-            )),
+            TirStmtKind::Expr(
+                TirExpr::new(
+                    TirExprKind::Local { index: local, name },
+                    result_type,
+                    body_span,
+                )
+                .moved(),
+            ),
             body_span,
         ));
     }
@@ -1876,7 +1893,8 @@ impl<'a, 'b> RestoreInjector<'a, 'b> {
                     },
                     value_type,
                     stmt_span,
-                );
+                )
+                .moved();
             }
 
             to_insert.extend(self.restore_seq.iter().cloned());
@@ -1979,6 +1997,7 @@ impl<'a, 'b> RestoreInjector<'a, 'b> {
             }
             TirExprKind::Unary { expr: inner, .. }
             | TirExprKind::Cast { expr: inner, .. }
+            | TirExprKind::Move { expr: inner }
             | TirExprKind::FieldAccess { expr: inner, .. }
             | TirExprKind::TupleSpread { expr: inner }
             | TirExprKind::TupleZip { expr: inner }
@@ -2131,6 +2150,29 @@ fn wrap_async_result(
     )
 }
 
+/// The arguments an operation's closure hands on: each of its parameters,
+/// moved.
+fn forwarded_args(op: &TirEffectOp, span: Span) -> Vec<CallArg> {
+    op.params
+        .iter()
+        .enumerate()
+        .map(|(i, p)| {
+            CallArg::new(
+                TirExpr::new(
+                    TirExprKind::Local {
+                        index: i as u32,
+                        name: p.name.clone(),
+                    },
+                    p.type_id,
+                    span,
+                )
+                .moved(),
+                false,
+            )
+        })
+        .collect()
+}
+
 /// Build the `op_<n>` closure `|<op_params>| $h_<E>.<E>::<op>(<op_params>)` for
 /// one (effect, op, handler-impl) triple. The receiver is a `Capture { index: 0 }`
 /// holding whatever `$h_<E>` holds, which the lower-phase closure pass turns
@@ -2155,24 +2197,7 @@ fn build_handler_op_closure(
         .iter()
         .map(|p| (p.name.clone(), p.type_id))
         .collect();
-    let arg_call_args: Vec<CallArg> = op
-        .params
-        .iter()
-        .enumerate()
-        .map(|(i, p)| {
-            CallArg::new(
-                TirExpr::new(
-                    TirExprKind::Local {
-                        index: i as u32,
-                        name: p.name.clone(),
-                    },
-                    p.type_id,
-                    span,
-                ),
-                false,
-            )
-        })
-        .collect();
+    let arg_call_args = forwarded_args(op, span);
 
     let target = impl_info
         .methods
@@ -2337,24 +2362,7 @@ fn build_default_closure(
         .iter()
         .map(|p| (p.name.clone(), p.type_id))
         .collect();
-    let args: Vec<CallArg> = op
-        .params
-        .iter()
-        .enumerate()
-        .map(|(i, p)| {
-            CallArg::new(
-                TirExpr::new(
-                    TirExprKind::Local {
-                        index: i as u32,
-                        name: p.name.clone(),
-                    },
-                    p.type_id,
-                    span,
-                ),
-                false,
-            )
-        })
-        .collect();
+    let args = forwarded_args(op, span);
     let body = TirExpr::new(
         TirExprKind::Call {
             func: Box::new(FunctionRef {
@@ -2406,24 +2414,7 @@ fn build_forward_closure(
         .iter()
         .map(|p| (p.name.clone(), p.type_id))
         .collect();
-    let args: Vec<CallArg> = op
-        .params
-        .iter()
-        .enumerate()
-        .map(|(i, p)| {
-            CallArg::new(
-                TirExpr::new(
-                    TirExprKind::Local {
-                        index: i as u32,
-                        name: p.name.clone(),
-                    },
-                    p.type_id,
-                    span,
-                ),
-                false,
-            )
-        })
-        .collect();
+    let args = forwarded_args(op, span);
     let closure_ret = op.return_type;
     let wrapper_name = plan
         .wrapper_names
@@ -2839,6 +2830,7 @@ fn rewrite_call_children(expr: &mut TirExpr, ctx: &RewriteCtx<'_>) {
         }
         TirExprKind::Unary { expr, .. }
         | TirExprKind::Cast { expr, .. }
+        | TirExprKind::Move { expr }
         | TirExprKind::FieldAccess { expr, .. }
         | TirExprKind::TupleSpread { expr }
         | TirExprKind::TupleZip { expr }

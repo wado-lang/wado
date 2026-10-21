@@ -2136,7 +2136,7 @@ impl Monomorphizer {
                 *target_type = self.substitute_type(*target_type, substitution, type_table);
                 self.substitute_types_in_expr(inner, substitution, type_table, local_count, locals);
             }
-            TirExprKind::FieldAccess { expr: inner, .. } => {
+            TirExprKind::FieldAccess { expr: inner, .. } | TirExprKind::Move { expr: inner } => {
                 self.substitute_types_in_expr(inner, substitution, type_table, local_count, locals);
             }
             TirExprKind::TupleSpread { expr: inner } => {

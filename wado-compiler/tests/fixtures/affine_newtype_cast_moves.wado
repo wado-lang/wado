@@ -1,0 +1,21 @@
+// A newtype cast converts for free, so it moves its operand as a `let` would:
+// the source is empty after it.
+affine struct Tok {
+    id: i32,
+}
+
+impl Drop for Tok {
+    fn drop(self) {
+    }
+}
+
+type Wrapped = Tok;
+
+test {
+    let t = Tok { id: 1 };
+    let w = t as Wrapped;
+    assert t.id == 1;
+}
+
+__DATA__
+{"compile_error": ":17:12: analysis error: affine value `t` used after it was moved (moved at 16:13)"}

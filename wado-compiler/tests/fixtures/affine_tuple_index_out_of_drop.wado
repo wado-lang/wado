@@ -1,0 +1,27 @@
+// A tuple's `h.pair[0]` is `h.pair.0`, so it moves no field out of a holder
+// that implements `Drop`.
+affine struct Tok {
+    id: i32,
+}
+
+impl Drop for Tok {
+    fn drop(self) {
+    }
+}
+
+affine struct H {
+    pair: [Tok, i32],
+}
+
+impl Drop for H {
+    fn drop(self) {
+    }
+}
+
+test {
+    let h = H { pair: [Tok { id: 1 }, 2] };
+    let a = h.pair[0];
+}
+
+__DATA__
+{"compile_error": ":23:13: analysis error: `H` implements `Drop`, so no field moves out of it: its `drop` relies on the fields it was built with"}

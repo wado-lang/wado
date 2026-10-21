@@ -1,0 +1,27 @@
+// A `matches` guard is evaluated, so a value it passes by value moves there.
+
+use { println, log_stdout, Stdout } from "core:cli";
+
+affine struct Tok {
+    id: i32,
+}
+
+impl Drop for Tok {
+    fn drop(self) {
+        log_stdout(`drop ${self.id}`);
+    }
+}
+
+fn eat(t: Tok) -> i32 {
+    return t.id;
+}
+
+export fn run() with Stdout {
+    let k = Tok { id: 1 };
+    let o: Option<i32> = Some(3);
+    let b = o matches { Some(x) && eat(k) > x };
+    println(`${b}`);
+}
+
+__DATA__
+{"stdout": "drop 1\nfalse\n"}

@@ -54,6 +54,7 @@ pub mod nir_unparse;
 pub mod nir_value_graph;
 pub mod nir_visitor;
 pub mod optimize;
+mod ownership;
 pub mod package;
 pub mod parallel;
 pub mod param_resolution;
