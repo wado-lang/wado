@@ -559,8 +559,10 @@ serial advances on read, so a template nested inside a hole mints its own
   threshold refuses.
 - `lower/translate.rs` folds `builtin::hole_get` / `hole_fmt` calls to the
   bridge names beside its `struct_field_get` arm; `name.rs` owns both names.
-- A template shape is not yet open, so nothing mints bridges after
-  monomorphization. The roadmap's generic template shapes change that.
+- An open template shape gets neither bridge. Each concrete shape only a
+  substitution reaches gets its own: `$hole_fmt` inside the monomorphization
+  fixpoint, `$hole_get` after monomorphization beside `$field_get`. The
+  roadmap's generic template shapes item says why.
 
 ### Fixtures
 
