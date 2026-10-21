@@ -403,42 +403,11 @@ fn "core:rt/cm_stream_write_raw_all_u8"(handle, $mv$data$repr, $mv$data$start, $
     i = 0;
     block {
         l44: loop {
-<<<<<<< HEAD
             ptr_17 = ptr_15 + i;
             count_18 = $mv$data$end - i;
             count_18 = local.tee written($inline_cm_await_blocked_6: block -> i32 {
                 if local.tee $mv$data$start("wasi/stream-write"(handle, ptr_17, select i32(count_18 < 268435455, count_18, 268435455))) != -1 {
                     break $inline_cm_await_blocked_6: $mv$data$start;
-||||||| 5402cf367
-        l49: loop {
-            delivered_6 = local.tee written($inline_cm_stream_write_once_4: block -> i32 {
-                $mv$data$start = ptr_15 + i;
-                count_18 = $mv$data$end - i;
-                if local.tee result_19("wasi/stream-write"(handle, $mv$data$start, select i32(count_18 < 268435455, count_18, 268435455))) == -1 {
-                    ws = "wasi/waitable-set-new"();
-                    "wasi/waitable-join"(handle, ws);
-                    evt_ptr = "mem/realloc"(0, 0, 4, 8);
-                    drop("wasi/waitable-set-wait"(ws, evt_ptr));
-                    status = builtin::load_i32(evt_ptr + 4);
-                    drop("mem/realloc"(evt_ptr, 8, 4, 0));
-                    "wasi/waitable-join"(handle, 0);
-                    "wasi/waitable-set-drop"(ws);
-                    break $inline_cm_stream_write_once_4: status;
-=======
-            delivered_6 = local.tee written($inline_cm_stream_write_once_4: block -> i32 {
-                $mv$data$start = ptr_15 + i;
-                count_18 = $mv$data$end - i;
-                if local.tee result_19("wasi/stream-write"(handle, $mv$data$start, select i32(count_18 < 268435455, count_18, 268435455))) == -1 {
-                    ws = "wasi/waitable-set-new"();
-                    "wasi/waitable-join"(handle, ws);
-                    evt_ptr = "mem/realloc"(0, 0, 4, 8);
-                    drop("wasi/waitable-set-wait"(ws, evt_ptr));
-                    status = builtin::load_i32(evt_ptr + 4);
-                    drop("mem/realloc"(evt_ptr, 8, 4, 0));
-                    "wasi/waitable-join"(handle, 0);
-                    "wasi/waitable-set-drop"(ws);
-                    break $inline_cm_stream_write_once_4: status;
->>>>>>> origin/main
                 }
                 ws = "wasi/waitable-set-new"();
                 "wasi/waitable-join"(handle, ws);
