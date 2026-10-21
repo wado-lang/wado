@@ -1,12 +1,17 @@
 use { Request, Response, ErrorCode, Headers, Trailers } from "wasi:http";
-use { TcpSocket, IpAddressFamily, IpSocketAddress, Ipv4SocketAddress } from "wasi:sockets";
+use { TcpSocket, IpAddressFamily, IpSocketAddress, Ipv4Address, Ipv4SocketAddress } from "wasi:sockets";
 
 fn bind_loopback() -> String with TcpSocket {
     let socket = match TcpSocket::create(IpAddressFamily::Ipv4) {
         Ok(socket) => socket,
-        Err(e) => return `create: ${e:?}`,
+        Err(e) => {
+            return `create: ${e:?}`;
+        },
     };
-    let address = IpSocketAddress::Ipv4(Ipv4SocketAddress { port: 0, address: [127, 0, 0, 1] });
+    let address = IpSocketAddress::Ipv4(Ipv4SocketAddress {
+        port: 0,
+        address: [127 as u8, 0 as u8, 0 as u8, 1 as u8] as Ipv4Address,
+    });
     return match socket.bind(address) {
         Ok(_) => "bound",
         Err(e) => `bind: ${e:?}`,
