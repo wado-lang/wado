@@ -77,6 +77,24 @@ enum SpreadElems {
     Fixed(Vec<TypeId>),
     /// A count unknown before monomorphization (a pack), or never (an error).
     Open(Vec<TypeId>),
+    /// A tuple literal operand of this many elements, not yet resolved.
+    Literal(usize),
+}
+
+/// How many elements a tuple literal has whatever its elements' types, which
+/// holds while every spread inside it spreads another such literal.
+fn literal_tuple_arity(expr: &Expr) -> Option<usize> {
+    let Expr::TupleLiteral(tuple_lit) = expr else {
+        return None;
+    };
+    tuple_lit
+        .elements
+        .iter()
+        .map(|elem| match elem {
+            Expr::Spread(inner, _) => literal_tuple_arity(inner),
+            _ => Some(1),
+        })
+        .sum()
 }
 
 /// Outcome of trying to derive type arguments for a generic function
@@ -5058,11 +5076,16 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     ) -> TypeId {
         // Spreads first: their element counts place every other element, so
         // each takes its own expected type wherever the spreads are concrete.
+        // A literal operand counts its elements without being resolved, and
+        // waits for its own slice of the expected type.
         let spreads: Vec<Option<SpreadElems>> = tuple_lit
             .elements
             .iter()
             .map(|elem| match elem {
-                Expr::Spread(inner, _) => Some(self.resolve_spread_elems(elem, inner, ctx)),
+                Expr::Spread(inner, _) => Some(match literal_tuple_arity(inner) {
+                    Some(arity) => SpreadElems::Literal(arity),
+                    None => self.resolve_spread_elems(elem, inner, ctx, None),
+                }),
                 _ => None,
             })
             .collect();
@@ -5071,6 +5094,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .map(|spread| match spread {
                 None => Some(1),
                 Some(SpreadElems::Fixed(elems)) => Some(elems.len()),
+                Some(SpreadElems::Literal(arity)) => Some(*arity),
                 Some(SpreadElems::Open(_)) => None,
             })
             .sum::<Option<usize>>();
@@ -5094,6 +5118,24 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 Some(SpreadElems::Fixed(elems) | SpreadElems::Open(elems)) => {
                     elem_types.extend(elems);
                 }
+                Some(SpreadElems::Literal(arity)) => {
+                    let Expr::Spread(inner, _) = elem else {
+                        unreachable!("only a spread element records a spread");
+                    };
+                    let start = elem_types.len();
+                    let expected = expected_elem_types.as_ref().map(|expected| {
+                        let slice = expected[start..start + arity].to_vec();
+                        self.tysys.type_table.borrow_mut().make_tuple(slice)
+                    });
+                    match self.resolve_spread_elems(elem, inner, ctx, expected) {
+                        SpreadElems::Fixed(elems) | SpreadElems::Open(elems) => {
+                            elem_types.extend(elems);
+                        }
+                        SpreadElems::Literal(_) => {
+                            unreachable!("a resolved spread has its element types")
+                        }
+                    }
+                }
                 None => {
                     let elem_expected = expected_elem_types
                         .as_ref()
@@ -5115,8 +5157,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         spread: &Expr,
         inner: &Expr,
         ctx: &mut FunctionContext,
+        expected: Option<TypeId>,
     ) -> SpreadElems {
-        let spread_type_id = self.resolve_expr(inner, ctx, None);
+        let spread_type_id = self.resolve_expr(inner, ctx, expected);
         if self
             .tysys
             .type_table
