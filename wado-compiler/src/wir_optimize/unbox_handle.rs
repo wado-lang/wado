@@ -13,12 +13,13 @@
 //! reaching the slot the host reuses. No such reference reaches a class that
 //! keeps no box, so the store of 0 becomes one into the place it names.
 
+use crate::graph::DisjointSets;
 use crate::hashmap::IndexMap;
 use crate::module_source::ModuleSource;
 use crate::name::{RESOURCE_OBJECT_STRUCT, wir_type_key};
 use crate::wir::{WirFuncId, WirFuncType, WirInstr, WirPackage, WirType, WirTypeDef, WirTypeId};
 
-use super::util::{branches_at_or_beyond, collect_pinned_func_ids};
+use super::util::{collect_pinned_func_ids, may_exit_enclosing_block};
 
 /// What the expression under analysis hands its value to.
 #[derive(Clone, Copy)]
@@ -42,7 +43,7 @@ pub(super) fn unbox_handles(module: &mut WirPackage) {
     let mut scan = Scan {
         module,
         places: &places,
-        parent: (0..places.count).collect(),
+        classes: DisjointSets::new(places.count),
         escapes: vec![false; places.count],
         func: 0,
     };
@@ -187,29 +188,19 @@ impl Places {
 struct Scan<'a> {
     module: &'a WirPackage,
     places: &'a Places,
-    parent: Vec<usize>,
+    classes: DisjointSets,
     escapes: Vec<bool>,
     func: usize,
 }
 
 impl Scan<'_> {
     fn find(&mut self, id: usize) -> usize {
-        let mut root = id;
-        while self.parent[root] != root {
-            root = self.parent[root];
-        }
-        let mut at = id;
-        while self.parent[at] != root {
-            at = std::mem::replace(&mut self.parent[at], root);
-        }
-        root
+        self.classes.find(id as u32) as usize
     }
 
     fn join(&mut self, a: usize, b: usize) {
-        let (a, b) = (self.find(a), self.find(b));
-        if a != b {
-            self.parent[a] = b;
-            self.escapes[b] |= self.escapes[a];
+        if let Some((absorbed, kept)) = self.classes.union(a as u32, b as u32) {
+            self.escapes[kept as usize] |= self.escapes[absorbed as usize];
         }
     }
 
@@ -358,7 +349,7 @@ impl Scan<'_> {
 
     /// Whether each place's class keeps no box.
     fn unboxed(&mut self) -> Vec<bool> {
-        (0..self.parent.len())
+        (0..self.escapes.len())
             .map(|id| {
                 let root = self.find(id);
                 !self.escapes[root]
@@ -370,7 +361,7 @@ impl Scan<'_> {
 /// Whether a branch leaves `body`, a labeled body, carrying a value its tail
 /// does not.
 fn exits(body: &[WirInstr]) -> bool {
-    body.iter().any(|instr| branches_at_or_beyond(instr, 0))
+    body.iter().any(may_exit_enclosing_block)
 }
 
 /// Give each function whose parameter or result is unboxed a signature taking

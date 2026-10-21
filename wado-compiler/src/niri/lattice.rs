@@ -548,7 +548,7 @@ impl Interpreter<'_> {
         match builtin {
             CtfeBuiltin::ArrayLen => {
                 let [arr] = args else {
-                    return Lattice::Unevaluated;
+                    unreachable!("`array_len` takes an array");
                 };
                 let Lattice::Const(v) = self.operand_to_lattice(body, arr.expr) else {
                     return Lattice::Unevaluated;

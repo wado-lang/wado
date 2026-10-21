@@ -3,10 +3,11 @@
 //! Per-function pass that propagates known constant field values through `StructGet`,
 //! folds constant comparisons, and eliminates dead branches.
 
+use crate::graph::DisjointSets;
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::wir::{WirInstr, WirPackage, WirTypeDef, WirTypeId};
 
-use super::util::branches_at_or_beyond;
+use super::util::may_exit_enclosing_block;
 
 pub(super) fn forward_struct_field_constants(module: &mut WirPackage) {
     let types = &module.types;
@@ -177,33 +178,24 @@ fn collect_copy_groups(body: &[WirInstr]) -> IndexMap<String, u32> {
     }
 
     let mut index_of: IndexMap<String, u32> = IndexMap::default();
-    let mut parent: Vec<u32> = Vec::new();
-    let mut intern = |name: &str, parent: &mut Vec<u32>| -> u32 {
+    let mut sets = DisjointSets::default();
+    let mut intern = |name: &str, sets: &mut DisjointSets| -> u32 {
         if let Some(i) = index_of.get(name) {
             return *i;
         }
-        let i = u32::try_from(parent.len()).expect("local count fits u32");
+        let i = sets.push();
         index_of.insert(name.to_string(), i);
-        parent.push(i);
         i
     };
-    fn find(parent: &mut [u32], mut i: u32) -> u32 {
-        while parent[i as usize] != i {
-            parent[i as usize] = parent[parent[i as usize] as usize];
-            i = parent[i as usize];
-        }
-        i
-    }
     for (to, from) in &edges {
-        let a = intern(to, &mut parent);
-        let b = intern(from, &mut parent);
-        let (ra, rb) = (find(&mut parent, a), find(&mut parent, b));
-        parent[ra as usize] = rb;
+        let a = intern(to, &mut sets);
+        let b = intern(from, &mut sets);
+        sets.union(a, b);
     }
 
     let mut groups = IndexMap::default();
     for (name, i) in &index_of {
-        groups.insert(name.clone(), find(&mut parent, *i));
+        groups.insert(name.clone(), sets.find(*i));
     }
     groups
 }
@@ -516,14 +508,6 @@ fn forward_fields_in_body(body: &mut [WirInstr], known: &mut FieldKnowledge<'_>)
         update_knowledge_from_instr(&body[i], known);
     }
     changed
-}
-
-/// True if executing `instr` may branch out of the enclosing block: it
-/// contains a `Br`/`BrIf`/`BrTable` whose target is the block's own label or
-/// any label beyond it. `Return`/`Unreachable` do not count — they never
-/// resume after the block, so they cannot carry stale facts there.
-fn may_exit_enclosing_block(instr: &WirInstr) -> bool {
-    branches_at_or_beyond(instr, 0)
 }
 
 /// The locals whose own object `instr` puts in a container: a struct field, an

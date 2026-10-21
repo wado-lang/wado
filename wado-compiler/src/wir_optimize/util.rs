@@ -368,9 +368,17 @@ pub(super) fn for_each_null_trapping_operand(
     });
 }
 
+/// True if executing `instr` may branch out of the enclosing block: it
+/// contains a `Br`/`BrIf`/`BrTable` whose target is the block's own label or
+/// any label beyond it. `Return`/`Unreachable` do not count — they never
+/// resume after the block.
+pub(super) fn may_exit_enclosing_block(instr: &WirInstr) -> bool {
+    branches_at_or_beyond(instr, 0)
+}
+
 /// Whether `instr` branches to the label `label_depth` levels out or to any
 /// label beyond it.
-pub(super) fn branches_at_or_beyond(instr: &WirInstr, label_depth: u32) -> bool {
+fn branches_at_or_beyond(instr: &WirInstr, label_depth: u32) -> bool {
     match instr {
         WirInstr::Br { depth } => *depth >= label_depth,
         WirInstr::BrIf { depth, condition } => {

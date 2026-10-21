@@ -13,6 +13,7 @@ use std::sync::Mutex;
 use cranelift_entity::SecondaryMap;
 
 use crate::compiler_item::CompilerItem;
+use crate::graph::DisjointSets;
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::module_source::ModuleSource;
 use crate::nir::{FuncId, NirLocal, NirUnaryOp};
@@ -1066,40 +1067,21 @@ fn alias_groups_from_edges(edges: Vec<(u32, u32)>) -> AliasGroups {
     if edges.is_empty() {
         return AliasGroups::default();
     }
-    // Union-find via simple parent pointers; locals are sparse u32s.
-    let mut parent: IndexMap<u32, u32> = IndexMap::default();
-    fn find(parent: &mut IndexMap<u32, u32>, x: u32) -> u32 {
-        let mut root = x;
-        while let Some(&p) = parent.get(&root)
-            && p != root
-        {
-            root = p;
-        }
-        let mut cur = x;
-        while let Some(&p) = parent.get(&cur)
-            && p != cur
-        {
-            parent.insert(cur, root);
-            cur = p;
-        }
-        root
-    }
+    // Locals are sparse, so each takes the next node as it is first seen.
+    let mut node_of: IndexMap<u32, u32> = IndexMap::default();
+    let mut sets = DisjointSets::default();
+    let mut node = |local: u32, sets: &mut DisjointSets| *node_of.entry(local).or_insert_with(|| sets.push());
     for (a, b) in edges {
-        parent.entry(a).or_insert(a);
-        parent.entry(b).or_insert(b);
-        let ra = find(&mut parent, a);
-        let rb = find(&mut parent, b);
-        if ra != rb {
-            parent.insert(ra, rb);
-        }
+        let (a, b) = (node(a, &mut sets), node(b, &mut sets));
+        sets.union(a, b);
     }
-    let keys: Vec<u32> = parent.keys().copied().collect();
+    let locals: Vec<u32> = node_of.keys().copied().collect();
     let mut root_of: IndexMap<u32, u32> = IndexMap::default();
     let mut members_of: IndexMap<u32, Vec<u32>> = IndexMap::default();
-    for k in keys {
-        let r = find(&mut parent, k);
-        root_of.insert(k, r);
-        members_of.entry(r).or_default().push(k);
+    for (n, &local) in locals.iter().enumerate() {
+        let root = locals[sets.find(n as u32) as usize];
+        root_of.insert(local, root);
+        members_of.entry(root).or_default().push(local);
     }
     AliasGroups {
         root_of,
