@@ -8,6 +8,13 @@ use crate::ast::{
     Stmt, TraitDecl, UnaryOp,
 };
 use crate::hashmap::IndexMap;
+use crate::symbol::{Symbol, SymbolKind};
+
+/// Whether `symbol` is a variable, a local or a global: what
+/// [`BodyFacts::names_variable`] asks of the symbol an identifier names.
+pub(crate) fn is_variable(symbol: &Symbol) -> bool {
+    matches!(symbol.kind, SymbolKind::Variable(_) | SymbolKind::Global(_))
+}
 
 /// What the modes of a body read from its types.
 pub(crate) trait BodyFacts {
@@ -291,28 +298,53 @@ impl<F: BodyFacts> ModeWalk<'_, F> {
             ),
             Expr::Match(m) => self.match_arms(&m.expr, &m.arms),
             Expr::Closure(closure) => self.expr(&closure.body, OperandMode::Consume),
-            _ => {
-                for (operand, position) in positions(expr) {
-                    let operand_mode = match position {
-                        Position::Is(operand_mode) => operand_mode,
-                        Position::Inherit => mode,
-                        Position::Projection
-                            if mode == OperandMode::Consume && self.facts.is_affine(expr.id()) =>
-                        {
-                            OperandMode::Consume
-                        }
-                        Position::Projection => OperandMode::Borrow,
-                        Position::Receiver if self.facts.consumes_receiver(expr.id()) => {
-                            OperandMode::Consume
-                        }
-                        Position::Receiver => OperandMode::Borrow,
-                    };
-                    self.expr(operand, operand_mode);
-                }
-                if let Expr::WithHandler(w) = expr {
-                    self.block(&w.body);
-                }
+            Expr::WithHandler(w) => {
+                self.operands(expr, mode);
+                self.block(&w.body);
             }
+            Expr::Call(_)
+            | Expr::MethodCall(_)
+            | Expr::StaticMethodCall(_)
+            | Expr::Unary(_)
+            | Expr::Binary(_)
+            | Expr::CompoundAssign(_)
+            | Expr::Assign(_)
+            | Expr::ComparisonChain(_)
+            | Expr::Index(_)
+            | Expr::FieldAccess(_)
+            | Expr::Cast(_)
+            | Expr::Spread(..)
+            | Expr::TryOp(_)
+            | Expr::StructLiteral(_)
+            | Expr::TupleLiteral(_)
+            | Expr::TupleComprehension(_)
+            | Expr::TemplateString(_)
+            | Expr::TaggedTemplate(_)
+            | Expr::Range(_)
+            | Expr::Matches(_)
+            | Expr::Ident(_)
+            | Expr::Literal(_)
+            | Expr::Error(_) => self.operands(expr, mode),
+        }
+    }
+
+    fn operands(&mut self, expr: &Expr, mode: OperandMode) {
+        for (operand, position) in positions(expr) {
+            let operand_mode = match position {
+                Position::Is(operand_mode) => operand_mode,
+                Position::Inherit => mode,
+                Position::Projection
+                    if mode == OperandMode::Consume && self.facts.is_affine(expr.id()) =>
+                {
+                    OperandMode::Consume
+                }
+                Position::Projection => OperandMode::Borrow,
+                Position::Receiver if self.facts.consumes_receiver(expr.id()) => {
+                    OperandMode::Consume
+                }
+                Position::Receiver => OperandMode::Borrow,
+            };
+            self.expr(operand, operand_mode);
         }
     }
 }

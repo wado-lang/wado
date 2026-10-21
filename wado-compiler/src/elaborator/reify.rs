@@ -496,19 +496,21 @@ impl<H: CompilerHost> ownership::BodyFacts for ReifyFacts<'_, '_, H> {
     }
 
     fn names_variable(&self, ident: &ast::IdentExpr) -> bool {
-        // A trait default body's references are its own module's, which reify
-        // stands outside while it replays the body for an impl.
-        let mut walks = std::iter::once(self.reify.sem)
-            .chain(self.reify.all_module_semantics.values().map(|sem| &**sem));
-        walks.any(|sem| {
-            sem.bindings.references.get(&ident.id).is_some_and(|def| {
-                sem.bindings.local_symbols.contains_key(def)
-                    || self
-                        .reify
-                        .symbols
-                        .get(def)
-                        .is_some_and(|s| matches!(s.kind, SymbolKind::Global(_)))
-            })
+        // Read the references of the module `ident` was written in, as
+        // `Elaborator::home_module` does: reify replays a trait default body
+        // outside its own module.
+        let sem = self
+            .reify
+            .tysys
+            .trait_env
+            .module_of_space(ident.id.space())
+            .map_or(self.reify.sem, |module| &self.reify.all_module_semantics[module]);
+        sem.bindings.references.get(&ident.id).is_some_and(|def| {
+            sem.bindings
+                .local_symbols
+                .get(def)
+                .or_else(|| self.reify.symbols.get(def))
+                .is_some_and(ownership::is_variable)
         })
     }
 }

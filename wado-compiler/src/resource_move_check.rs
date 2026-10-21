@@ -418,7 +418,6 @@ impl Checker<'_> {
     }
 }
 
-/// An `affine trait`'s default bodies are checked with `Self` affine.
 /// What a loop evaluates at the start of each iteration.
 enum LoopHead<'a> {
     None,
@@ -534,7 +533,7 @@ impl BodyFacts for SemFacts<'_> {
         self.sem
             .referenced_symbol(ident.id)
             .and_then(|def| self.sem.symbol_at(def))
-            .is_some_and(|s| matches!(s.kind, SymbolKind::Variable(_) | SymbolKind::Global(_)))
+            .is_some_and(ownership::is_variable)
     }
 }
 
@@ -969,7 +968,49 @@ impl MoveWalker<'_, '_> {
             }
             Expr::Closure(closure) => self.visit_closure(closure),
             Expr::Assign(a) => self.visit_assign(a),
-            _ => self.visit_operands(expr),
+            Expr::Call(call) => {
+                self.visit_operands(expr);
+                self.store_through_call(expr);
+                // A closure writes through to what it captures.
+                if matches!(call.callee, Expr::Ident(_)) {
+                    self.disturb(&call.callee);
+                }
+            }
+            Expr::MethodCall(_) | Expr::StaticMethodCall(_) => {
+                self.visit_operands(expr);
+                self.store_through_call(expr);
+            }
+            Expr::WithHandler(w) => {
+                self.visit_operands(expr);
+                self.visit_block(&w.body);
+            }
+            Expr::StructLiteral(s) => {
+                if let Some(spread) = s.spreads.first()
+                    && self.implements_drop(expr)
+                {
+                    let type_name = self.type_name_of(expr);
+                    self.report(MoveError::DropSpread { type_name }, spread.expr.span());
+                }
+                self.visit_operands(expr);
+            }
+            Expr::Unary(_)
+            | Expr::Binary(_)
+            | Expr::CompoundAssign(_)
+            | Expr::ComparisonChain(_)
+            | Expr::Index(_)
+            | Expr::FieldAccess(_)
+            | Expr::Cast(_)
+            | Expr::Spread(..)
+            | Expr::TryOp(_)
+            | Expr::TupleLiteral(_)
+            | Expr::TupleComprehension(_)
+            | Expr::TemplateString(_)
+            | Expr::TaggedTemplate(_)
+            | Expr::Range(_)
+            | Expr::Matches(_)
+            | Expr::Ident(_)
+            | Expr::Literal(_)
+            | Expr::Error(_) => self.visit_operands(expr),
         }
     }
 
@@ -990,32 +1031,10 @@ impl MoveWalker<'_, '_> {
         self.roots_in_element(expr).then_some(expr)
     }
 
-    /// An expression whose children are operands, each visited in the mode of
-    /// its position.
+    /// Visit each operand of `expr` in the mode of its position.
     fn visit_operands(&mut self, expr: &Expr) {
-        if let Expr::StructLiteral(s) = expr
-            && let Some(spread) = s.spreads.first()
-            && self.implements_drop(expr)
-        {
-            let type_name = self.type_name_of(expr);
-            self.report(MoveError::DropSpread { type_name }, spread.expr.span());
-        }
         for operand in ownership::operands(expr) {
             self.visit_at(operand);
-        }
-        match expr {
-            Expr::Call(call) => {
-                self.store_through_call(expr);
-                // A closure writes through to what it captures.
-                if matches!(call.callee, Expr::Ident(_)) {
-                    self.disturb(&call.callee);
-                }
-            }
-            Expr::MethodCall(_) | Expr::StaticMethodCall(_) => self.store_through_call(expr),
-            Expr::WithHandler(w) => {
-                self.visit_block(&w.body);
-            }
-            _ => {}
         }
     }
 
@@ -1837,7 +1856,9 @@ impl MoveWalker<'_, '_> {
                         ConditionElement::Let { expr, .. } if i == last => {
                             self.visit(expr, OperandMode::Borrow);
                         }
-                        _ => self.visit_at(element.expr()),
+                        ConditionElement::Let { .. } | ConditionElement::Expr(_) => {
+                            self.visit_at(element.expr());
+                        }
                     }
                 }
             }
