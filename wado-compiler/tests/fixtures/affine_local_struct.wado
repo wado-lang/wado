@@ -1,0 +1,32 @@
+// A function-local `affine struct` moves and drops as a module-level one does.
+
+use { log_stdout, println, Stdout } from "core:cli";
+
+affine struct Tok {
+    id: i32,
+}
+
+impl Drop for Tok {
+    fn drop(self) {
+        log_stdout(`drop ${self.id}`);
+    }
+}
+
+fn hand_on(flag: bool) -> i32 {
+    affine struct Holder { t: Tok }
+    let h = Holder { t: Tok { id: 1 } };
+    let a = h;
+    if flag {
+        let b = a;
+        return 2;
+    }
+    return 1;
+}
+
+export fn run() with Stdout {
+    println(`${hand_on(false)}`);
+    println(`${hand_on(true)}`);
+}
+
+__DATA__
+{"stdout": "drop 1\n1\ndrop 1\n2\n"}

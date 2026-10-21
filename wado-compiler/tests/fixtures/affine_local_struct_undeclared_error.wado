@@ -1,0 +1,19 @@
+// A function-local struct holding an affine value is declared `affine`, as a
+// module-level one is: the declaration check reads its fields too.
+
+affine struct Tok {
+    id: i32,
+}
+
+impl Drop for Tok {
+    fn drop(self) {
+    }
+}
+
+export fn run() {
+    struct Holder { t: Tok }
+    let h = Holder { t: Tok { id: 1 } };
+}
+
+__DATA__
+{"compile_error": ":14:12: analysis error: `Holder` holds an affine value in `t`, so it must be declared `affine struct`"}
