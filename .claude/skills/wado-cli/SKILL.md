@@ -143,6 +143,11 @@ directory and naming it relative to that.
 wado run --dir /tmp/scratch prog.wado Foo.g4  # Foo.g4 resolves inside /tmp/scratch
 ```
 
+The network is not granted piecemeal. `run`, `test` and `serve` all let a guest
+open TCP and UDP sockets and resolve names, as a native tool can. A guest that
+performs none of `wasi:sockets`' effects imports none of them. To keep a service
+off the network, confine the `wado serve` process itself.
+
 ## Test
 
 `wado test` discovers and runs `test` blocks (compiled against the `test` world,
