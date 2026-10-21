@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1792623222573,
+  "lastUpdate": 1792627057549,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -69181,6 +69181,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/6284387262bcef9f91dd8264947262da03aa5275"
         },
         "date": 1792623222225,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 3053,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 7382,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 19623,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 276881,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "af380e51b5269723b0a75a613975fdb1e7b5c1bc",
+          "message": "Merge pull request #2411 from wado-lang/claude/gracious-faraday-rjp97k\n\nfeat(template): pass a hole of a type parameter to a tag",
+          "timestamp": "2026-10-22T08:38:44+09:00",
+          "tree_id": "7c6d44951a6dc2c71daa1b7adda410cc05c5af1d",
+          "url": "https://github.com/wado-lang/wado/commit/af380e51b5269723b0a75a613975fdb1e7b5c1bc"
+        },
+        "date": 1792627057184,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
