@@ -672,13 +672,16 @@ impl MoveWalker<'_, '_> {
         ownership::place_path(expr, &self.facts())
     }
 
+    fn field_step<'e>(&self, expr: &'e Expr) -> Option<(&'e Expr, &'e str)> {
+        ownership::field_step(expr, &self.facts())
+    }
+
     /// Whether `expr` is a container's element, or a field of one at any
     /// depth.
     fn roots_in_element(&self, expr: &Expr) -> bool {
-        match expr {
-            Expr::Index(ix) => !self.facts().indexes_tuple(&ix.expr),
-            Expr::FieldAccess(fa) => self.roots_in_element(&fa.expr),
-            _ => false,
+        match self.field_step(expr) {
+            Some((base, _)) => self.roots_in_element(base),
+            None => matches!(expr, Expr::Index(_)),
         }
     }
 
@@ -695,14 +698,11 @@ impl MoveWalker<'_, '_> {
 
     /// Whether a field path passes through a reference or a dereference.
     fn path_through_reference(&self, expr: &Expr) -> bool {
-        match expr {
-            Expr::FieldAccess(fa) => {
-                matches!(&fa.expr, Expr::Unary(u) if u.op == ast::UnaryOp::Deref)
-                    || self.is_reference(&fa.expr)
-                    || self.path_through_reference(&fa.expr)
-            }
-            _ => false,
-        }
+        self.field_step(expr).is_some_and(|(base, _)| {
+            matches!(base, Expr::Unary(u) if u.op == ast::UnaryOp::Deref)
+                || self.is_reference(base)
+                || self.path_through_reference(base)
+        })
     }
 
     fn read(&mut self, place: &PlacePath<'_>) {
@@ -887,8 +887,7 @@ impl MoveWalker<'_, '_> {
     /// one holder a field may leave: what `drop` leaves behind drops field by
     /// field.
     fn refuse_move_out_of_drop(&mut self, mut expr: &Expr) {
-        while let Expr::FieldAccess(fa) = expr {
-            let holder = &fa.expr;
+        while let Some((holder, _)) = self.field_step(expr) {
             let own_self = self.drop_body && matches!(holder, Expr::Ident(id) if id.name == "self");
             if !own_self && self.implements_drop(holder) {
                 let type_name = self.type_name_of(holder);
@@ -978,16 +977,17 @@ impl MoveWalker<'_, '_> {
     /// owner in: a reference, or a container whose `&self` hands out an
     /// element.
     fn out_of_reference<'e>(&self, expr: &'e Expr) -> Option<&'e Expr> {
-        match expr {
-            Expr::Unary(u) if u.op == ast::UnaryOp::Deref => Some(&u.expr),
-            Expr::FieldAccess(fa)
-                if self.path_through_reference(expr) || self.roots_in_element(&fa.expr) =>
-            {
-                Some(&fa.expr)
-            }
-            _ if self.roots_in_element(expr) => Some(expr),
-            _ => None,
+        if let Expr::Unary(u) = expr
+            && u.op == ast::UnaryOp::Deref
+        {
+            return Some(&u.expr);
         }
+        if let Some((base, _)) = self.field_step(expr)
+            && (self.path_through_reference(expr) || self.roots_in_element(base))
+        {
+            return Some(base);
+        }
+        self.roots_in_element(expr).then_some(expr)
     }
 
     /// An expression whose children are operands, each visited in the mode of

@@ -1,0 +1,18 @@
+// A tuple's `r[0]` read through a reference is `r.0`, which moves nothing out
+// of what the reference names.
+affine struct Tok {
+    id: i32,
+}
+
+impl Drop for Tok {
+    fn drop(self) {
+    }
+}
+
+fn take(r: &[Tok, i32]) -> Tok {
+    let a = r[0];
+    return a;
+}
+
+__DATA__
+{"compile_error": ":13:13: analysis error: cannot move affine type `Tok` out of a reference"}

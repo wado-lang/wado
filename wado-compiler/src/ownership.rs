@@ -55,16 +55,23 @@ impl PlacePath<'_> {
 
 /// The place `expr` names, if it names one.
 pub(crate) fn place_path<'e>(expr: &'e Expr, facts: &impl BodyFacts) -> Option<PlacePath<'e>> {
-    match expr {
-        Expr::Ident(root) if facts.names_variable(root) => Some(PlacePath {
+    if let Expr::Ident(root) = expr {
+        return facts.names_variable(root).then(|| PlacePath {
             root,
             fields: Vec::new(),
-        }),
-        Expr::FieldAccess(fa) => {
-            let mut path = place_path(&fa.expr, facts)?;
-            path.fields.push(&fa.field);
-            Some(path)
-        }
+        });
+    }
+    let (base, field) = field_step(expr, facts)?;
+    let mut path = place_path(base, facts)?;
+    path.fields.push(field);
+    Some(path)
+}
+
+/// The aggregate `expr` reads a field of, and the field: `h.f`, or a tuple's
+/// `t[0]`, which is its field `t.0`.
+pub(crate) fn field_step<'e>(expr: &'e Expr, facts: &impl BodyFacts) -> Option<(&'e Expr, &'e str)> {
+    match expr {
+        Expr::FieldAccess(fa) => Some((&fa.expr, &fa.field)),
         Expr::Index(ix) if facts.indexes_tuple(&ix.expr) => {
             let Expr::Literal(lit) = &ix.index else {
                 return None;
@@ -75,16 +82,14 @@ pub(crate) fn place_path<'e>(expr: &'e Expr, facts: &impl BodyFacts) -> Option<P
             if !digits.bytes().all(|b| b.is_ascii_digit()) {
                 return None;
             }
-            // The field `t.0` names: `t[00]` is `t.0` too.
+            // `t[00]` is `t.0` too.
             let unpadded = digits.trim_start_matches('0');
             let field = if unpadded.is_empty() {
                 &digits[digits.len() - 1..]
             } else {
                 unpadded
             };
-            let mut path = place_path(&ix.expr, facts)?;
-            path.fields.push(field);
-            Some(path)
+            Some((&ix.expr, field))
         }
         _ => None,
     }
