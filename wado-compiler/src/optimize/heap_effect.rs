@@ -280,8 +280,10 @@ impl HeapEffectsCache {
         );
         self.summaries.resize_with(len, Summary::default);
         self.frames.resize_with(len, OnceLock::new);
-        for (frame, _) in self.frames.iter_mut().zip(&edited).filter(|(_, e)| **e) {
-            *frame = OnceLock::new();
+        for (frame, &edited) in self.frames.iter_mut().zip(&edited) {
+            if edited {
+                *frame = OnceLock::new();
+            }
         }
         if edited.contains(&true) {
             self.solve(
@@ -336,7 +338,10 @@ impl HeapEffectsCache {
                 .flat_map(|&n| &successors[n])
                 .map(|&s| component_of[s])
                 .filter(|&d| d != c)
-                .map(|d| depth[d] + 1)
+                .map(|d| {
+                    assert!(d < c, "a callee's component must precede its caller's");
+                    depth[d] + 1
+                })
                 .max()
                 .unwrap_or(0);
             if by_depth.len() <= depth[c] {
@@ -361,7 +366,9 @@ impl HeapEffectsCache {
                 .collect();
             while !pending.is_empty() {
                 let this = &*self;
-                let fresh = exec.map(&pending, |&n| this.summarize(functions, type_table, n));
+                let fresh = exec.map(&pending, |&n| {
+                    this.summarize(functions, type_table, n, true)
+                });
                 let mut next = Vec::new();
                 for (n, summary) in pending.into_iter().zip(fresh) {
                     if summary == *self.summary_mut(n) {
@@ -420,8 +427,15 @@ impl HeapEffectsCache {
         }
     }
 
-    /// What node `n` gives its callers, read against the summaries as they stand.
-    fn summarize(&self, functions: &[FuncRef], type_table: &TypeTable, n: usize) -> Summary {
+    /// What node `n` gives its callers, read against the summaries as they
+    /// stand, from its cached frame or, where `cached` is false, a fresh one.
+    fn summarize(
+        &self,
+        functions: &[FuncRef],
+        type_table: &TypeTable,
+        n: usize,
+        cached: bool,
+    ) -> Summary {
         let entries = self.functions.facts();
         if n == entries.len() {
             let mut indirect = Summary::default();
@@ -438,28 +452,33 @@ impl HeapEffectsCache {
                 };
                 let f = functions[n].borrow();
                 let body = f.body.as_ref().expect("a `Callee::Body` has a body");
-                let mut frame = self.frames[n]
-                    .get_or_init(|| {
-                        let params: Vec<u32> = f.params.iter().map(|p| p.local_index).collect();
-                        HeapFrame::unlinked(&effects, body, &params)
-                    })
-                    .clone();
-                frame.link(&effects, body);
-                frame.summary(&effects, body)
+                let build = || {
+                    let params: Vec<u32> = f.params.iter().map(|p| p.local_index).collect();
+                    HeapFrame::unlinked(&effects, body, &params)
+                };
+                let fresh;
+                let frame = if cached {
+                    self.frames[n].get_or_init(build)
+                } else {
+                    fresh = build();
+                    &fresh
+                };
+                frame.summary(&frame.linked(&effects, body), &effects, body)
             }
             Callee::Builtin(_) | Callee::Opaque { .. } => Summary::default(),
         }
     }
 
-    /// A summary the solver left behind a moved callee no longer answers for
-    /// its function. One node per refresh, rotating, keeps the check cheap.
+    /// A summary the solver left behind a moved callee, or a cached frame its
+    /// body outgrew, no longer answers for its function. One node per refresh,
+    /// rotating, keeps the check cheap.
     #[cfg(debug_assertions)]
     fn assert_one_settled(&mut self, functions: &[FuncRef], type_table: &TypeTable) {
         let nodes = self.summaries.len() + 1;
         self.cursor %= nodes;
         let n = self.cursor;
         self.cursor += 1;
-        let summary = self.summarize(functions, type_table, n);
+        let summary = self.summarize(functions, type_table, n, false);
         assert!(
             summary == *self.summary_mut(n),
             "the heap-effect summary of node {n} went stale"
@@ -486,11 +505,13 @@ impl HeapEffects<'_> {
     }
 
     /// Whether the retain `r` may carry a reference out of `args`.
-    fn retains_reference(&self, body: &Body, r: &RetainSpec<usize>, args: &[Operand]) -> bool {
-        !r.elements
-            || args
-                .get(r.source)
-                .is_none_or(|&a| self.elements_hold_reference(body.operand_type(a)))
+    fn retains_reference(
+        &self,
+        body: &Body,
+        r: &RetainSpec<usize>,
+        source: Option<Operand>,
+    ) -> bool {
+        !r.elements || source.is_none_or(|a| self.elements_hold_reference(body.operand_type(a)))
     }
 
     /// Each argument of `call`, in the callee's parameter order, with what the
@@ -511,10 +532,9 @@ impl HeapEffects<'_> {
                     },
                     Target::Builtin(declaration) => {
                         let retains = || {
-                            declaration
-                                .retains
-                                .iter()
-                                .filter(|r| r.source == j && self.retains_reference(body, r, &args))
+                            declaration.retains.iter().filter(|r| {
+                                r.source == j && self.retains_reference(body, r, Some(a))
+                            })
                         };
                         Kept {
                             in_result: returns_part_of(declaration, j)
@@ -818,7 +838,6 @@ enum OperandNode {
     Unknown,
 }
 
-#[derive(Clone)]
 enum Keys {
     One(TypeKey),
     Set(Arc<ObjectTypes>),
@@ -868,7 +887,6 @@ pub(super) struct Kept {
 
 /// One read or write of an object: where it happens, through which operand,
 /// and which field, where it names one.
-#[derive(Clone)]
 struct AccessSite {
     effect: Effect,
     node: u32,
@@ -878,12 +896,53 @@ struct AccessSite {
     field: Option<u32>,
 }
 
-/// One body's objects as a union-find over locals and expressions, where a
-/// class holds what flows together and carries the origins reaching it.
+/// A union-find over a frame's nodes, where a class holds what flows together
+/// and its root carries the origins reaching it.
 #[derive(Clone)]
-pub(super) struct HeapFrame {
-    classes: DisjointSets,
+struct Classes {
+    sets: DisjointSets,
     prov: Vec<Prov>,
+}
+
+impl Classes {
+    fn new(len: usize) -> Self {
+        Self {
+            sets: DisjointSets::new(len),
+            prov: vec![Prov::default(); len],
+        }
+    }
+
+    fn push(&mut self) -> u32 {
+        self.prov.push(Prov::default());
+        self.sets.push()
+    }
+
+    fn root(&self, n: u32) -> u32 {
+        self.sets.root(n)
+    }
+
+    /// The origins of `n`'s class.
+    fn prov_of(&self, n: u32) -> Prov {
+        self.prov[self.root(n) as usize]
+    }
+
+    fn unify(&mut self, a: u32, b: u32) {
+        if let Some((absorbed, kept)) = self.sets.union(b, a) {
+            let absorbed_prov = self.prov[absorbed as usize];
+            self.prov[kept as usize].join(absorbed_prov);
+        }
+    }
+
+    fn unify_nodes(&mut self, a: OperandNode, b: OperandNode) {
+        if let (OperandNode::Node(a), OperandNode::Node(b)) = (a, b) {
+            self.unify(a, b);
+        }
+    }
+}
+
+/// One body's objects as [`Classes`] over its locals and expressions.
+pub(super) struct HeapFrame {
+    classes: Classes,
     local_nodes: Vec<u32>,
     /// Locals whose definition the walk reached. A caller may query a body it
     /// is midway through rewriting: LICM reads a hoist's local before linking
@@ -902,7 +961,8 @@ pub(super) struct HeapFrame {
     calls: Vec<ExprId>,
     /// Each call's result node and its span of `call_args`, in `calls` order.
     call_nodes: Vec<(OperandNode, Range<usize>)>,
-    call_args: Vec<OperandNode>,
+    /// Each argument, in the callee's parameter order, with its node.
+    call_args: Vec<(Operand, OperandNode)>,
     /// Assignment targets: written, not read.
     targets: IndexSet<ExprId>,
 }
@@ -939,18 +999,17 @@ impl HeapFrame {
     /// The classes of `body`, whose parameters are the locals `params`.
     pub(super) fn new(effects: &HeapEffects, body: &Body, params: &[u32]) -> Self {
         let mut frame = Self::unlinked(effects, body, params);
-        frame.link(effects, body);
+        frame.classes = frame.linked(effects, body);
         frame
     }
 
-    /// The frame before [`Self::link`]: what the body alone joins, read from
+    /// The frame before [`Self::linked`]: what the body alone joins, read from
     /// nothing in the summaries, so it stands as long as the body does.
     fn unlinked(effects: &HeapEffects, body: &Body, params: &[u32]) -> Self {
         let expr_count = body.exprs.len();
         let expr_base = 2;
         let mut frame = Self {
-            classes: DisjointSets::new(expr_base as usize + expr_count),
-            prov: vec![Prov::default(); expr_base as usize + expr_count],
+            classes: Classes::new(expr_base as usize + expr_count),
             local_nodes: Vec::new(),
             defined: IndexSet::default(),
             partial: false,
@@ -963,10 +1022,10 @@ impl HeapFrame {
             call_args: Vec::new(),
             targets: IndexSet::default(),
         };
-        frame.prov[ELSEWHERE as usize] = Prov::ELSEWHERE;
+        frame.classes.prov[ELSEWHERE as usize] = Prov::ELSEWHERE;
         for (k, &local) in params.iter().enumerate() {
             let n = frame.define_local(local);
-            frame.prov[n as usize].join(Prov::param(k));
+            frame.classes.prov[n as usize].join(Prov::param(k));
             frame.params.push(n);
         }
         let mut nodes = Vec::new();
@@ -1007,19 +1066,32 @@ impl HeapFrame {
         if let Some(tail) = body.block_tail(body.root()) {
             frame.unify_op(effects, body, RET, tail);
         }
+        for i in 0..frame.local_nodes.len() {
+            let n = frame.local_nodes[i];
+            if n != NO_NODE && !frame.defined.contains(&(i as u32)) {
+                frame.unify(n, ELSEWHERE);
+                frame.partial = true;
+            }
+        }
         frame
     }
 
-    /// Join what each call makes share, as its callee answers now, and settle
-    /// the classes.
-    fn link(&mut self, effects: &HeapEffects, body: &Body) {
-        let call_args = std::mem::take(&mut self.call_args);
-        for i in 0..self.calls.len() {
-            let (result, span) = self.call_nodes[i].clone();
-            self.call_flows(effects, body, self.calls[i], result, &call_args[span]);
+    /// The classes once each call joins what it makes share, as its callee
+    /// answers now.
+    fn linked(&self, effects: &HeapEffects, body: &Body) -> Classes {
+        let mut classes = self.classes.clone();
+        for (&e, (result, span)) in self.calls.iter().zip(&self.call_nodes) {
+            Self::call_flows(
+                &mut classes,
+                effects,
+                body,
+                e,
+                *result,
+                &self.call_args[span.clone()],
+            );
         }
-        self.call_args = call_args;
-        self.finish();
+        classes.sets.flatten();
+        classes
     }
 
     fn local_node(&mut self, local: u32) -> u32 {
@@ -1028,9 +1100,7 @@ impl HeapFrame {
             self.local_nodes.resize(i + 1, NO_NODE);
         }
         if self.local_nodes[i] == NO_NODE {
-            let n = self.classes.push();
-            self.prov.push(Prov::default());
-            self.local_nodes[i] = n;
+            self.local_nodes[i] = self.classes.push();
         }
         self.local_nodes[i]
     }
@@ -1045,10 +1115,7 @@ impl HeapFrame {
     }
 
     fn unify(&mut self, a: u32, b: u32) {
-        if let Some((absorbed, kept)) = self.classes.union(b, a) {
-            let absorbed_prov = self.prov[absorbed as usize];
-            self.prov[kept as usize].join(absorbed_prov);
-        }
+        self.classes.unify(a, b);
     }
 
     fn unify_op(&mut self, effects: &HeapEffects, body: &Body, n: u32, op: Operand) {
@@ -1058,9 +1125,7 @@ impl HeapFrame {
     }
 
     fn unify_nodes(&mut self, a: OperandNode, b: OperandNode) {
-        if let (OperandNode::Node(a), OperandNode::Node(b)) = (a, b) {
-            self.unify(a, b);
-        }
+        self.classes.unify_nodes(a, b);
     }
 
     /// The node for an operand while building: a promoted value joins every
@@ -1324,7 +1389,7 @@ impl HeapFrame {
                 let start = self.call_args.len();
                 for a in call_operands(body, e) {
                     let n = self.operand_node(effects, body, a);
-                    self.call_args.push(n);
+                    self.call_args.push((a, n));
                 }
                 self.calls.push(e);
                 self.call_nodes.push((result, start..self.call_args.len()));
@@ -1452,104 +1517,87 @@ impl HeapFrame {
     /// Join what a call makes share: its result with what the callee returns,
     /// and each argument with what the callee stores into it.
     fn call_flows(
-        &mut self,
+        classes: &mut Classes,
         effects: &HeapEffects,
         body: &Body,
         e: ExprId,
         result: OperandNode,
-        nodes: &[OperandNode],
+        args: &[(Operand, OperandNode)],
     ) {
+        let node = |j: usize| args.get(j).map_or(OperandNode::None, |&(_, n)| n);
         match call_target(effects, body, e) {
             Target::Summary(s) => {
-                for (j, &n) in nodes.iter().enumerate() {
+                for (j, &(_, n)) in args.iter().enumerate() {
                     if s.ret.has_param(j) {
-                        self.unify_nodes(result, n);
+                        classes.unify_nodes(result, n);
                     }
                     if s.into_elsewhere.has_param(j) {
-                        self.unify_nodes(n, OperandNode::Node(ELSEWHERE));
+                        classes.unify_nodes(n, OperandNode::Node(ELSEWHERE));
                     }
                 }
                 if s.ret.elsewhere {
-                    self.unify_nodes(result, OperandNode::Node(ELSEWHERE));
+                    classes.unify_nodes(result, OperandNode::Node(ELSEWHERE));
                 }
-                for (k, into) in s.into_params.iter().enumerate() {
-                    let Some(&nk) = nodes.get(k) else { continue };
+                for (k, into) in s.into_params.iter().enumerate().take(args.len()) {
+                    let nk = node(k);
                     if into.elsewhere {
-                        self.unify_nodes(nk, OperandNode::Node(ELSEWHERE));
+                        classes.unify_nodes(nk, OperandNode::Node(ELSEWHERE));
                     }
-                    for (j, &nj) in nodes.iter().enumerate() {
+                    for (j, &(_, nj)) in args.iter().enumerate() {
                         if j != k && into.has_param(j) {
-                            self.unify_nodes(nk, nj);
+                            classes.unify_nodes(nk, nj);
                         }
                     }
                 }
             }
             Target::Builtin(declaration) => {
-                let args = call_operands(body, e);
                 for r in &declaration.retains {
-                    if !effects.retains_reference(body, r, &args) {
+                    let source = args.get(r.source).map(|&(a, _)| a);
+                    if !effects.retains_reference(body, r, source) {
                         continue;
                     }
-                    let source = nodes.get(r.source).copied().unwrap_or(OperandNode::None);
                     match r.into {
-                        RetainInto::Param(q) => self.unify_nodes(
-                            nodes.get(q).copied().unwrap_or(OperandNode::None),
-                            source,
-                        ),
-                        RetainInto::Result => self.unify_nodes(result, source),
+                        RetainInto::Param(q) => classes.unify_nodes(node(q), node(r.source)),
+                        RetainInto::Result => classes.unify_nodes(result, node(r.source)),
                         RetainInto::Anywhere => {
-                            self.unify_nodes(result, source);
-                            self.unify_nodes(OperandNode::Node(ELSEWHERE), source);
+                            classes.unify_nodes(result, node(r.source));
+                            classes.unify_nodes(OperandNode::Node(ELSEWHERE), node(r.source));
                         }
                     }
                 }
-                for (j, &n) in nodes.iter().enumerate() {
+                for (j, &(_, n)) in args.iter().enumerate() {
                     if returns_part_of(declaration, j) {
-                        self.unify_nodes(result, n);
+                        classes.unify_nodes(result, n);
                     }
                 }
             }
             Target::Opaque { .. } => {
-                for &n in nodes {
-                    self.unify_nodes(result, n);
+                for &(_, n) in args {
+                    classes.unify_nodes(result, n);
                 }
                 if let OperandNode::None | OperandNode::Unknown = result {
-                    for pair in nodes.windows(2) {
-                        self.unify_nodes(pair[0], pair[1]);
+                    for pair in args.windows(2) {
+                        classes.unify_nodes(pair[0].1, pair[1].1);
                     }
                 }
             }
         }
     }
 
-    fn finish(&mut self) {
-        for i in 0..self.local_nodes.len() {
-            let n = self.local_nodes[i];
-            if n != NO_NODE && !self.defined.contains(&(i as u32)) {
-                self.unify(n, ELSEWHERE);
-                self.partial = true;
-            }
-        }
-        self.classes.flatten();
-    }
-
-    fn class_prov(&self, n: u32) -> Prov {
-        self.prov[self.classes.root(n) as usize]
-    }
-
-    /// The summary this frame's body gives its callers.
-    fn summary(&self, effects: &HeapEffects, body: &Body) -> Summary {
+    /// The summary this frame's body gives its callers, once its calls join
+    /// `classes`.
+    fn summary(&self, classes: &Classes, effects: &HeapEffects, body: &Body) -> Summary {
         let mut s = Summary {
-            ret: self.class_prov(RET),
-            into_params: self.params.iter().map(|&n| self.class_prov(n)).collect(),
-            into_elsewhere: self.class_prov(ELSEWHERE),
+            ret: classes.prov_of(RET),
+            into_params: self.params.iter().map(|&n| classes.prov_of(n)).collect(),
+            into_elsewhere: classes.prov_of(ELSEWHERE),
             ..Summary::default()
         };
         for AccessSite {
             effect, node, keys, ..
         } in &self.accesses
         {
-            let prov = self.class_prov(*node);
+            let prov = classes.prov_of(*node);
             let access = match effect {
                 Effect::Read => &mut s.reads,
                 Effect::Write => &mut s.writes,
@@ -1559,53 +1607,11 @@ impl HeapFrame {
                 Keys::Set(set) => access.record(prov, set),
             }
         }
-        for &call in &self.calls {
-            self.call_summary(effects, body, call, &mut s);
+        for (&call, (_, span)) in self.calls.iter().zip(&self.call_nodes) {
+            let args = &self.call_args[span.clone()];
+            call_summary(classes, effects, body, call, args, &mut s);
         }
         s
-    }
-
-    /// Add what `call` does to objects the caller did not allocate.
-    fn call_summary(&self, effects: &HeapEffects, body: &Body, call: ExprId, s: &mut Summary) {
-        let (target, args) = call_parts(effects, body, call);
-        let mut unobserved = Access::default();
-        let Summary { reads, writes, .. } = s;
-        let writes = if effects.returns(body, call) {
-            writes
-        } else {
-            &mut unobserved
-        };
-        reads.elsewhere.union(&target.elsewhere(Effect::Read));
-        writes.elsewhere.union(&target.elsewhere(Effect::Write));
-        for (j, &a) in args.iter().enumerate() {
-            let OperandNode::Node(n) = self.lookup(effects, body, a) else {
-                continue;
-            };
-            let prov = self.prov[n as usize];
-            if prov.is_fresh() {
-                continue;
-            }
-            let ty = body.operand_type(a);
-            match target {
-                Target::Summary(t) => {
-                    let reach = effects.reach(ty);
-                    reads.record_meet(prov, &t.reads.through_args, &reach);
-                    writes.record_meet(prov, &t.writes.through_args, &reach);
-                }
-                Target::Builtin(declaration) => {
-                    let touched = builtin_touches(effects, declaration, ty);
-                    reads.record(prov, &touched);
-                    if declaration.mut_params.contains(&j) {
-                        writes.record(prov, &touched);
-                    }
-                }
-                Target::Opaque { .. } => {
-                    let reach = effects.reach(ty);
-                    reads.record(prov, &reach);
-                    writes.record(prov, &reach);
-                }
-            }
-        }
     }
 
     /// The class root an operand's objects belong to, without joining anything.
@@ -1670,7 +1676,8 @@ impl HeapFrame {
             (Some(h), OperandNode::Node(n)) => {
                 let elsewhere = self.classes.root(ELSEWHERE);
                 n == h
-                    || (!self.prov[h as usize].is_fresh() && !self.prov[n as usize].is_fresh())
+                    || (!self.classes.prov[h as usize].is_fresh()
+                        && !self.classes.prov[n as usize].is_fresh())
                     || (self.partial && (h == elsewhere || n == elsewhere))
             }
         }
@@ -1735,7 +1742,7 @@ impl HeapFrame {
             return false;
         }
         let h = self.local_root(local);
-        let h_escapes = h.is_none_or(|r| !self.prov[r as usize].is_fresh());
+        let h_escapes = h.is_none_or(|r| !self.classes.prov[r as usize].is_fresh());
         let (target, args) = call_parts(effects, body, call);
         if h_escapes && keys.meets(&target.elsewhere(effect)) {
             return true;
@@ -1793,7 +1800,7 @@ impl HeapFrame {
         let Some(h) = self.local_root(local) else {
             return true;
         };
-        let prov = self.prov[h as usize];
+        let prov = self.classes.prov[h as usize];
         !prov.is_fresh()
             && (h == self.classes.root(RET)
                 || h == self.classes.root(ELSEWHERE)
@@ -1944,6 +1951,57 @@ impl Target<'_> {
         } else {
             ObjectTypes::default()
         })
+    }
+}
+
+/// Add what `call`, whose arguments are `args`, does to objects the caller did
+/// not allocate.
+fn call_summary(
+    classes: &Classes,
+    effects: &HeapEffects,
+    body: &Body,
+    call: ExprId,
+    args: &[(Operand, OperandNode)],
+    s: &mut Summary,
+) {
+    let target = call_target(effects, body, call);
+    let mut unobserved = Access::default();
+    let Summary { reads, writes, .. } = s;
+    let writes = if effects.returns(body, call) {
+        writes
+    } else {
+        &mut unobserved
+    };
+    reads.elsewhere.union(&target.elsewhere(Effect::Read));
+    writes.elsewhere.union(&target.elsewhere(Effect::Write));
+    for (j, &(a, node)) in args.iter().enumerate() {
+        let OperandNode::Node(n) = node else {
+            continue;
+        };
+        let prov = classes.prov_of(n);
+        if prov.is_fresh() {
+            continue;
+        }
+        let ty = body.operand_type(a);
+        match target {
+            Target::Summary(t) => {
+                let reach = effects.reach(ty);
+                reads.record_meet(prov, &t.reads.through_args, &reach);
+                writes.record_meet(prov, &t.writes.through_args, &reach);
+            }
+            Target::Builtin(declaration) => {
+                let touched = builtin_touches(effects, declaration, ty);
+                reads.record(prov, &touched);
+                if declaration.mut_params.contains(&j) {
+                    writes.record(prov, &touched);
+                }
+            }
+            Target::Opaque { .. } => {
+                let reach = effects.reach(ty);
+                reads.record(prov, &reach);
+                writes.record(prov, &reach);
+            }
+        }
     }
 }
 
