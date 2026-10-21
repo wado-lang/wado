@@ -4439,13 +4439,12 @@ impl TypeTable {
                     return self.instantiate_family(owning_trait, &assoc_name, answer, &new_args);
                 }
                 if let Some(resolved) = self.answer_projection(
-                        substituted_base,
-                        &owning_trait,
-                        new_trait_args.as_deref(),
-                        &assoc_name,
-                        &new_args,
-                    )
-                {
+                    substituted_base,
+                    &owning_trait,
+                    new_trait_args.as_deref(),
+                    &assoc_name,
+                    &new_args,
+                ) {
                     return resolved;
                 }
                 // Bindings are resolved in the same frame as the rest of the

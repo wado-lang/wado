@@ -6,7 +6,6 @@ use std::ops::{Deref, DerefMut};
 
 use crate::hashmap::{IndexMap, IndexSet};
 
-use crate::missing_trait_message;
 use crate::analyze::symbol_not_visible_message;
 use crate::ast::{self, AstId, Expr, Visibility};
 use crate::compiler_host::{Code, Diagnostic, DiagnosticSpan, Severity};
@@ -20,6 +19,7 @@ use crate::elaborator::trait_env::TraitEnv;
 use crate::elaborator::trait_query::BoundUnmet;
 use crate::elaborator::tysys::TypeSystem;
 use crate::hashmap;
+use crate::missing_trait_message;
 use crate::module_source::ModuleSource;
 use crate::name::{FqTraitName, FqTypeName, unalias_namespace_member};
 use crate::resolve::{Resolution, Resolutions};

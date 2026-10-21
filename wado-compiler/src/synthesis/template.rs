@@ -277,14 +277,7 @@ fn build_hole_fmt_helper(
             };
             let dispatch =
                 interpolation_dispatch_type(hole.hole_type, kind, ctx.trait_env, &ctx.tt.borrow());
-            let stmts = trait_fmt_call(
-                dispatch,
-                value,
-                formatter,
-                kind,
-                span,
-                ctx,
-            );
+            let stmts = trait_fmt_call(dispatch, value, formatter, kind, span, ctx);
             TirExpr::new(
                 TirExprKind::Block(TirBlock::new(stmts, span)),
                 TypeTable::UNIT,
@@ -522,8 +515,12 @@ fn build_template_block(
                     mut_ref_formatter,
                     span,
                 );
-                let dispatch =
-                    interpolation_dispatch_type(resolved.type_id, kind, ctx.trait_env, &tt.borrow());
+                let dispatch = interpolation_dispatch_type(
+                    resolved.type_id,
+                    kind,
+                    ctx.trait_env,
+                    &tt.borrow(),
+                );
                 stmts.extend(trait_fmt_call(
                     dispatch,
                     *resolved,
@@ -854,15 +851,16 @@ fn trait_fmt_call(
     span: Span,
     ctx: &TemplateCtx,
 ) -> Vec<TirStmt> {
-    let (trait_name, method_name) = {
+    let (trait_fq, method) = {
         let tt = ctx.tt.borrow();
         let items = tt.compiler_items();
+        let item = kind.trait_item();
         (
-            items.trait_fq(kind.trait_item()),
-            items.trait_method_name(kind.trait_item()).to_string(),
+            items.trait_fq(item),
+            items.trait_method_name(item).to_string(),
         )
     };
-    let (trait_name, method_name) = (&trait_name, method_name.as_str());
+    let (trait_name, method_name) = (&trait_fq, method.as_str());
     let target = peel_transparent_newtype(type_id, kind, trait_name, ctx);
     let (val, type_id) = if target == type_id {
         (val, type_id)
@@ -1200,19 +1198,27 @@ pub(crate) fn written_impl_reaches(
     receiver: TypeId,
     tt: &TypeTable,
 ) -> bool {
-    trait_env
-        .methodful_impls_by_receiver(&tt.impl_receiver_key(receiver), trait_)
-        .any(|block| tt.impl_reaches_instance(block, receiver))
+    written_impl_reaches_where(trait_env, trait_, receiver, tt, |_| true)
 }
 
 /// Whether an impl written for this reference's own referent (`&R`) reaches
 /// `receiver`, which the universal `&T` blanket does not count as.
 fn ref_impl_written(trait_env: &TraitEnv, trait_: DefId, receiver: TypeId, tt: &TypeTable) -> bool {
+    written_impl_reaches_where(trait_env, trait_, receiver, tt, |block| {
+        trait_env.blanket_of_block(block).is_none()
+    })
+}
+
+fn written_impl_reaches_where(
+    trait_env: &TraitEnv,
+    trait_: DefId,
+    receiver: TypeId,
+    tt: &TypeTable,
+    admits: impl Fn(DefId) -> bool,
+) -> bool {
     trait_env
         .methodful_impls_by_receiver(&tt.impl_receiver_key(receiver), trait_)
-        .any(|block| {
-            trait_env.blanket_of_block(block).is_none() && tt.impl_reaches_instance(block, receiver)
-        })
+        .any(|block| admits(block) && tt.impl_reaches_instance(block, receiver))
 }
 
 /// The trait's `eq` emitted into the block of a `cmp` written alone.
