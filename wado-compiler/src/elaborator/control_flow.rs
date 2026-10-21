@@ -79,6 +79,10 @@ fn stmt_always_exits(ctx: CtrlFlowCtx<'_>, stmt: &ast::Stmt, exit_labels: &[&str
     match stmt {
         ast::Stmt::Return(_) | ast::Stmt::Break(_) | ast::Stmt::Continue(_) => true,
         ast::Stmt::Expr(e) => expr_always_exits_past(ctx, &e.expr, exit_labels),
+        ast::Stmt::Let(l) => l
+            .value
+            .as_ref()
+            .is_some_and(|value| expr_always_exits_past(ctx, value, exit_labels)),
         ast::Stmt::If(if_stmt) => {
             if let Some(else_block) = &if_stmt.else_block {
                 block_always_exits_past(ctx, &if_stmt.then_block, exit_labels)
