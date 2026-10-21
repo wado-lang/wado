@@ -1564,27 +1564,38 @@ impl MoveWalker<'_, '_> {
             let mut stmts = block.stmts.iter();
             let diverged = stmts.by_ref().any(|stmt| walker.visit_stmt(stmt));
             if diverged {
-                walker.visit_unreachable(stmts);
+                walker.visit_unreachable(|dead| {
+                    for stmt in stmts {
+                        dead.visit_stmt(stmt);
+                    }
+                });
             }
             diverged
         })
     }
 
-    /// Checks statements no path reaches, from the state where the path left.
-    /// What they do reaches nothing: their jumps land nowhere, and the state
-    /// they leave is the one they found.
-    fn visit_unreachable<'s>(&mut self, stmts: impl Iterator<Item = &'s Stmt>) {
-        let flow = self.flow.clone();
-        let loops = std::mem::take(&mut self.loops);
-        let labels = std::mem::take(&mut self.labels);
-        let break_owners = self.break_owners.clone();
-        for stmt in stmts {
-            self.visit_stmt(stmt);
-        }
-        self.flow = flow;
-        self.loops = loops;
-        self.labels = labels;
-        self.break_owners = break_owners;
+    /// Checks code no path reaches, from the state where the path left. What it
+    /// does reaches nothing: `walk` runs a walker of its own, which reports
+    /// into the checker and is dropped, and its jumps land nowhere.
+    fn visit_unreachable(&mut self, walk: impl FnOnce(&mut MoveWalker<'_, '_>)) {
+        let mut dead = MoveWalker::new(
+            &mut *self.checker,
+            Rc::clone(&self.modes),
+            self.affine_params.clone(),
+            self.drop_body,
+        );
+        dead.flow.clone_from(&self.flow);
+        dead.guard_bindings.clone_from(&self.guard_bindings);
+        dead.closure_locals.clone_from(&self.closure_locals);
+        dead.captures.clone_from(&self.captures);
+        dead.instances.clone_from(&self.instances);
+        dead.ended.clone_from(&self.ended);
+        dead.disturbances.clone_from(&self.disturbances);
+        dead.disturbed_captures.clone_from(&self.disturbed_captures);
+        dead.closure_owners.clone_from(&self.closure_owners);
+        dead.break_owners.clone_from(&self.break_owners);
+        dead.suppress = self.suppress;
+        walk(&mut dead);
     }
 
     fn visit_stmt(&mut self, stmt: &Stmt) -> bool {
@@ -1629,12 +1640,17 @@ impl MoveWalker<'_, '_> {
             Stmt::While(s) => self.visit_loop(&LoopHead::Condition(&s.condition), &s.body, None),
             Stmt::Loop(s) => self.visit_loop(&LoopHead::None, &s.body, None),
             Stmt::For(s) => self.in_scope(|walker| {
-                let init_diverged = s.init.as_ref().is_some_and(|init| walker.visit_stmt(init));
                 let head = match &s.condition {
                     Some(cond) => LoopHead::Condition(cond),
                     None => LoopHead::None,
                 };
-                walker.visit_loop(&head, &s.body, s.update.as_ref()) || init_diverged
+                if s.init.as_ref().is_some_and(|init| walker.visit_stmt(init)) {
+                    walker.visit_unreachable(|dead| {
+                        dead.visit_loop(&head, &s.body, s.update.as_ref());
+                    });
+                    return true;
+                }
+                walker.visit_loop(&head, &s.body, s.update.as_ref())
             }),
             // The loop owns what it walks (WEP: Affine Types).
             Stmt::ForOf(s) => {

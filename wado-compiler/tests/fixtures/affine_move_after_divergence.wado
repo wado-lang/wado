@@ -1,6 +1,7 @@
-// A move in a statement no path reaches takes nothing: the statements after a
-// `return`, a `break` and a `continue`, and after an `if` whose every branch
-// leaves.
+// A statement no path reaches affects no path that runs: its move takes
+// nothing and its `&mut` use disturbs nothing. Such statements follow a
+// `return`, a `break` and a `continue`, an `if` whose every branch leaves,
+// and make up a C-style `for` whose `init` diverges.
 
 use { println, log_stdout, Stdout } from "core:cli";
 
@@ -16,6 +17,18 @@ impl Drop for Tok {
 
 fn eat(t: Tok) -> i32 {
     return t.id;
+}
+
+fn poke(t: &mut Tok) {
+    t.id += 10;
+}
+
+fn look(t: &Tok) -> i32 {
+    return t.id;
+}
+
+fn fail() -> ! {
+    panic("gone");
 }
 
 fn after_return(flag: bool) -> i32 {
@@ -53,11 +66,36 @@ fn after_leaving_if(flag: bool) -> i32 {
     return t.id;
 }
 
+fn after_return_poke(flag: bool) -> i32 {
+    let mut t = Tok { id: 4 };
+    let r = &t;
+    if flag {
+        return 0;
+        poke(&mut t);
+    }
+    return look(r);
+}
+
+fn diverging_init(flag: bool) -> i32 {
+    let t = Tok { id: 5 };
+    out: {
+        if flag {
+            for let x = fail(); ; {
+                eat(t);
+                break out;
+            }
+        }
+    }
+    return t.id;
+}
+
 export fn run() with Stdout {
     println(`${after_return(false)}`);
     println(`${after_jumps(false)}`);
     println(`${after_leaving_if(false)}`);
+    println(`${after_return_poke(false)}`);
+    println(`${diverging_init(false)}`);
 }
 
 __DATA__
-{"stdout": "drop 1\n1\ndrop 2\n2\ndrop 3\n3\n"}
+{"stdout": "drop 1\n1\ndrop 2\n2\ndrop 3\n3\ndrop 4\n4\ndrop 5\n5\n"}
