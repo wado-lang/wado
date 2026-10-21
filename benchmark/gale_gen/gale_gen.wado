@@ -9,6 +9,7 @@ use { MonotonicClock } from "wasi:clocks";
 use { Benchmark } from "core:benchmark";
 use { assemble_grammar } from "../../package-gale/src/g4/parser.wado";
 use { generate, GenerateOptions } from "../../package-gale/src/codegen.wado";
+use { AtnMode } from "../../package-gale/src/gen_settings.wado";
 
 global RUST_LEXER: String = #include_str("../../package-gale/tests/grammars/RustLexer.g4");
 global RUST_PARSER: String = #include_str("../../package-gale/tests/grammars/RustParser.g4");
@@ -22,7 +23,7 @@ fn gen_rust() -> i32 {
         Ok(g) => g,
         Err(_) => panic("gale-gen: assemble_grammar failed on the Rust grammar"),
     };
-    let out = generate(&mut grammar, &GenerateOptions {});
+    let out = generate(&mut grammar, &GenerateOptions { atn: AtnMode::Never });
     return out.source.len();
 }
 
