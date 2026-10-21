@@ -6,6 +6,7 @@ use std::ops::{Deref, DerefMut};
 
 use crate::hashmap::{IndexMap, IndexSet};
 
+use crate::MISSING_DISPLAY_HINT;
 use crate::analyze::symbol_not_visible_message;
 use crate::ast::{self, AstId, Expr, Visibility};
 use crate::compiler_host::{Code, Diagnostic, DiagnosticSpan, Severity};
@@ -2785,7 +2786,7 @@ impl TypeError {
                 span,
             } => {
                 let hint = if *is_display {
-                    "; use `${x:?}` for debug output, or add an `impl Display`"
+                    MISSING_DISPLAY_HINT
                 } else {
                     ""
                 };

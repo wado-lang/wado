@@ -95,10 +95,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .tysys
             .compiler_trait(item)
             .expect("every format kind names a prelude trait");
-        if self
-            .tysys
-            .type_implements_trait(&self.annotate_ctx, &self.type_lookup(), receiver, &trait_)
-        {
+        if self.tysys.type_implements_trait(
+            &self.annotate_ctx,
+            &self.type_lookup(),
+            receiver,
+            &trait_,
+        ) {
             return;
         }
         let (type_name, trait_name) = {
