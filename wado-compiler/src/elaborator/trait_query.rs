@@ -390,7 +390,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// Enforce a trait's associated-type bounds (`type X: Bound`) against an
     /// impl's bindings (`type X = Concrete`), skipping still-parametric
     /// bindings. Only the bound's trait is checked, not its associated-type
-    /// equality constraints (`Iterator<Item = Self::Item>`).
+    /// equality constraints (`Iterator<Item = Self::Item>`). An affine binding
+    /// needs `affine type X`, parametric or not.
     pub(super) fn enforce_impl_assoc_type_bounds(&mut self, impl_block: &ast::ImplBlock) {
         let Some(impl_site) = self.impl_family_site(impl_block) else {
             return;
@@ -428,8 +429,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     span: binding.span,
                 });
             }
-            if sig.bounds.is_empty()
-                || !self.tysys.type_table.borrow().binding_is_concrete(type_id)
+            if sig.bounds.is_empty() || !self.tysys.type_table.borrow().binding_is_concrete(type_id)
             {
                 continue;
             }
