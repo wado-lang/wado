@@ -21,6 +21,7 @@
  * Runs directly on Node.js >= 23.6 (type stripping is on by default):
  *   ./analyze_native_profile.ts PROFILE.json [--top N] [--binary wado]
  *                             [--main-base 0x100000000] [--symbolicator auto|atos|addr2line]
+ *                             [--under REGEX] [--thread REGEX]
  */
 import { spawnSync } from "node:child_process";
 import { readFileSync } from "node:fs";
