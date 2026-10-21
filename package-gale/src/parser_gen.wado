@@ -1153,7 +1153,12 @@ fn scan_lr_site<S: AsStrSlice>(fn_name: S) -> LrOverlapSite {
     };
 }
 
-fn parse_lr_site<S: AsStrSlice, S1: AsStrSlice>(scan_fn: S, rk: S1, labeled: bool, checked_decision: i32) -> LrOverlapSite {
+fn parse_lr_site<S: AsStrSlice, S1: AsStrSlice>(
+    scan_fn: S,
+    rk: S1,
+    labeled: bool,
+    checked_decision: i32,
+) -> LrOverlapSite {
     return LrOverlapSite {
         kind_expr: "_sk",
         second_expr: "p.peek_at(1)",
@@ -4122,7 +4127,15 @@ fn emit_lr_branch<S: AsStrSlice>(
 fn gen_lr_loop_check<S: AsStrSlice>(w: &mut CodeWriter, decision: i32, ctx: &mut EmitContext, at: S, edge: i32) {
     ctx.cursor.note_ref(&ATN_VERIFIED);
     w.begin("if !p.recovering");
-    w.line(`let _ = ${atn_verified_call(decision, AtnPicker::LrLoop, ctx.atn_arg(), "&p.kinds", at, "min_prec", `${edge}`)};`);
+    w.line(`let _ = ${atn_verified_call(
+        decision,
+        AtnPicker::LrLoop,
+        ctx.atn_arg(),
+        "&p.kinds",
+        at,
+        "min_prec",
+        `${edge}`,
+    )};`);
     w.end();
 }
 

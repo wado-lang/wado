@@ -975,7 +975,12 @@ C : 'c' ;
 D : 'd' ;
 WS : ' ' -> skip ;
 ";
-    let got = parses_each(g4, [["s", "a c d"], ["s", "a c d d"], ["s", "a c d c d"], ["s", "a c d c d c d"]]);
+    let got = parses_each(g4, [
+        ["s", "a c d"],
+        ["s", "a c d d"],
+        ["s", "a c d c d"],
+        ["s", "a c d c d c d"],
+    ]);
     assert got == "a c d => (s (e (e a) c d))
 a c d d => (s (e (e a) c d d))
 a c d c d => (s (e (e a) c d c d))
@@ -997,7 +1002,11 @@ D : 'd' ;
 WS : ' ' -> skip ;
 ";
     let verify = GenerateOptions { atn: AtnMode::Verify };
-    let agreed = parses_each(g4, [["s", "a c d"], ["s", "a c d d d"], ["s", "a c d c d"]], &verify);
+    let agreed = parses_each(g4, [
+        ["s", "a c d"],
+        ["s", "a c d d d"],
+        ["s", "a c d c d"],
+    ], &verify);
     assert agreed == "a c d => (s (e (e a) c d))
 a c d d d => (s (e (e a) c d d d))
 a c d c d => (s (e (e (e a) c d) c d))
@@ -1039,7 +1048,11 @@ new a < b => (s (e new (e (e a) < (e b))))
 new a < b > ( ) . c => (s (e (e new (e a) (targs < b >) ( )) . c))
 ";
     let input = "new a < b > . c";
-    let out = eval_beside(gen_with(CONTESTED_NEW_G4, &verify).source, wado`show("${input}", parse_s("${input}"));\n`, SHOW_FN);
+    let out = eval_beside(
+        gen_with(CONTESTED_NEW_G4, &verify).source,
+        wado`show("${input}", parse_s("${input}"));\n`,
+        SHOW_FN,
+    );
     assert !out.status matches { Exited(0) };
     assert out.stderr.contains(": the left-recursion loop picks "), out.stderr;
 }

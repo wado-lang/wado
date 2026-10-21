@@ -259,12 +259,14 @@ build a different one.
 | `"verify"`         | tournament, checked | tournament, checked                    | simulator                              |
 
 `"verify"` builds the tree `"never"` builds. Where `"auto"` would hand a
-rule's ambiguity to the simulator, or `"always"` a group's, the parser asks the
-simulator as well and panics where its answer differs from the tournament's.
-The lookahead DFA `"auto"` reads there is checked the same way. A `?` `*` `+`
-and a left-recursion loop's suffix are not checked yet, and neither is a
-decision a predicate gates. It is for testing the tournament against the
-simulator over real inputs, not for use.
+rule's ambiguity to the simulator, or `"always"` a group's or a `?` `*` `+`'s,
+the parser asks the simulator as well and panics where its answer differs from
+the static pick. So does a left-recursion loop's choice of suffix, in a rule
+whose atom choice `"auto"` routes. The lookahead DFA and LR table `"auto"` reads
+there are checked the same way. A decision a predicate gates is not checked yet,
+and neither is a `?` at a rule's end that `"auto"` hands the simulator. It is
+for testing the static path against the simulator over real inputs, not for
+use.
 
 Under `"auto"`, an ambiguity at a rule's end that no caller continues on also
 stays with the tournament, and a `?` at a rule's end goes to the simulator when

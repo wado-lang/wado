@@ -35,12 +35,11 @@ Entries state the symptom, how to reproduce it, and anything already measured â€
 
 ### Pipeline and tooling correctness
 
-- [ ] **`atn: "verify"` leaves part of `never` unchecked.** It builds `never`'s tree and checks each rule and group tournament against the simulator, which pins `never` against `auto` and `always` there. Three kinds of decision are still unchecked:
-  - A `?` `*` `+`'s enter or exit, which `always` hands the simulator. The static path settles it across a guard and the body's reserve and decline scans, so the check has no one place to sit.
-  - A left-recursion loop's suffix. `auto` reads the LR table where the atom choice routes, and under `verify` neither the table nor the static loop's pick is checked.
+- [ ] **`atn: "verify"` leaves part of `never` unchecked.** It builds `never`'s tree and checks against the simulator each rule and group tournament, each contested `?` `*` `+`, and the left-recursion loop of a rule whose atom choice `auto` routes. Two kinds of decision are still unchecked:
   - A decision a predicate gates, since the simulator is handed no predicate's verdict.
+  - A `?` at a rule's end that the caller's FOLLOW gates, which `auto` hands the simulator in a rule that asks it anyway. On `e : e '.' ID | 'new' e args | 'new' e | e args | ID e? | args ; args : '(' e? ')' ;`, every input where `never`'s tree differs from the jar's (`new a b ( ) ( )`, `a new b c ( )`, `new a ( ) . b`) panicked at the atom's tournament check first.
 
-  The generated SQLite parser is 1.0 MB under `never`, 1.9 MB under `verify`, 1.8 MB under `auto` and 9.5 MB under `always`.
+  The generated SQLite parser is 1.0 MB under `never`, 2.0 MB under `verify`, 1.8 MB under `auto` and 9.5 MB under `always`.
 
 ## Stage C â€” action / predicate execution
 
