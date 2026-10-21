@@ -504,7 +504,9 @@ impl<H: CompilerHost> ownership::BodyFacts for ReifyFacts<'_, '_, H> {
             .tysys
             .trait_env
             .module_of_space(ident.id.space())
-            .map_or(self.reify.sem, |module| &self.reify.all_module_semantics[module]);
+            .map_or(self.reify.sem, |module| {
+                &self.reify.all_module_semantics[module]
+            });
         sem.bindings.references.get(&ident.id).is_some_and(|def| {
             sem.bindings
                 .local_symbols
@@ -587,7 +589,11 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         affine_params: Vec<String>,
         reify: impl FnOnce(&mut Self) -> R,
     ) -> R {
-        self.with_ownership(affine_params, |facts| ownership::body_modes(body, facts), reify)
+        self.with_ownership(
+            affine_params,
+            |facts| ownership::body_modes(body, facts),
+            reify,
+        )
     }
 
     /// [`Self::with_body_ownership`] for an expression reified where no body
@@ -597,7 +603,11 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         expr: &ast::Expr,
         reify: impl FnOnce(&mut Self) -> R,
     ) -> R {
-        self.with_ownership(Vec::new(), |facts| ownership::expr_modes(expr, facts), reify)
+        self.with_ownership(
+            Vec::new(),
+            |facts| ownership::expr_modes(expr, facts),
+            reify,
+        )
     }
 
     fn with_ownership<R>(
@@ -645,13 +655,11 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         self.ask_ownership(|_, facts| facts.is_affine(expr.id()))
     }
 
-    /// `read`, of a local reify bound a value to ahead of where it is used,
-    /// standing in a position that takes the value: what the local owns moves
-    /// on.
+    /// `read` marked moved where its value is affine. `read` reads a local
+    /// reify bound ahead of its use, in a position that takes the value.
     fn handed_on(&self, read: TirExpr) -> TirExpr {
-        let affine = self.ask_ownership(|_, facts| {
-            self.tysys.is_affine(read.type_id, facts.affine_params)
-        });
+        let affine =
+            self.ask_ownership(|_, facts| self.tysys.is_affine(read.type_id, facts.affine_params));
         if affine { read.moved() } else { read }
     }
 
@@ -7281,13 +7289,12 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                                 }
                                 mut_refs.visit_expr(&mut resolved);
                                 if *named {
-                                    resolved =
-                                        this.handed_on(bind_param_to_local(
-                                            ctx,
-                                            name,
-                                            resolved,
-                                            &mut prelude,
-                                        ));
+                                    resolved = this.handed_on(bind_param_to_local(
+                                        ctx,
+                                        name,
+                                        resolved,
+                                        &mut prelude,
+                                    ));
                                 }
                                 // A default is a value synthesized here, with no caller storage
                                 // behind it for the callee to write.

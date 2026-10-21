@@ -76,7 +76,10 @@ pub(crate) fn place_path<'e>(expr: &'e Expr, facts: &impl BodyFacts) -> Option<P
 
 /// The aggregate `expr` reads a field of, and the field: `h.f`, or a tuple's
 /// `t[0]`, which is its field `t.0`.
-pub(crate) fn field_step<'e>(expr: &'e Expr, facts: &impl BodyFacts) -> Option<(&'e Expr, &'e str)> {
+pub(crate) fn field_step<'e>(
+    expr: &'e Expr,
+    facts: &impl BodyFacts,
+) -> Option<(&'e Expr, &'e str)> {
     match expr {
         Expr::FieldAccess(fa) => Some((&fa.expr, &fa.field)),
         Expr::Index(ix) if facts.indexes_tuple(&ix.expr) => {
