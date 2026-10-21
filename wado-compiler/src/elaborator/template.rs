@@ -91,6 +91,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         ) {
             return;
         }
+        // A variable an enclosing call has yet to answer (a closure parameter
+        // typed by the callee's own parameter) has no bounds to read here.
+        let scope_params = self.scope_type_param_ids();
+        if self.is_open_slot(receiver, &scope_params) {
+            return;
+        }
         let trait_ = self
             .tysys
             .compiler_trait(item)
