@@ -295,14 +295,20 @@ internal fn inspect_handle(f: &mut Formatter, name: String, handle: f64, class: 
 // These functions implement the Component Model ABI for resource operations.
 // Synthesis rewrites #[cm("...")] method calls to call these adapters.
 
-/// Await a BLOCKED stream or future copy. Returns the copy result in the same
-/// `(count << 4) | status` packing the canonical returns directly, so callers
-/// read the blocked and non-blocked paths identically.
+/// The packed result of the stream or future copy on `handle` that answered
+/// `packed`, awaiting it first if BLOCKED. Either way it is in the
+/// `(count << 4) | status` packing the canonical returns directly.
+///
+/// Every copy settles here, so one that blocks and one that does not both reach
+/// this function: whether a given copy blocks is the host's scheduling.
 ///
 /// The handle must be unjoined before the set is dropped; a set still holding a
 /// waitable cannot be deleted.
 #[compiler_item("cm_await_blocked")]
-internal fn cm_await_blocked(handle: i32) -> i32 {
+internal fn cm_await_blocked(handle: i32, packed: i32) -> i32 {
+    if packed != -1 {
+        return packed;
+    }
     let ws = builtin::waitable_set_new();
     builtin::waitable_join(handle, ws);
     let evt_ptr = builtin::realloc(0, 0, 4, 8);
@@ -373,10 +379,7 @@ internal fn cm_packed_count(packed: i32) -> i32 {
 internal fn cm_stream_read_u8(handle: i32, max: i32) -> StreamChunk<u8> {
     let room = cm_buffer_bytes(cm_copy_count(max), 1);
     let ptr = builtin::realloc(0, 0, 1, room);
-    let mut result = builtin::stream_read(handle, ptr, room);
-    if result == -1 {
-        result = cm_await_blocked(handle);
-    }
+    let result = cm_await_blocked(handle, builtin::stream_read(handle, ptr, room));
     let count = cm_packed_count(result);
     let arr = memory_to_gc_array(ptr, count);
     let freed = builtin::realloc(ptr, room, 1, 0);
@@ -404,11 +407,7 @@ internal fn cm_stream_write_u8(handle: i32, data: List<u8>) -> StreamWrite<u8> {
 /// One `stream.write` of up to `count` elements from `ptr`, awaiting a BLOCKED
 /// copy. Returns the packed result.
 internal fn cm_stream_write_once(handle: i32, ptr: i32, count: i32) -> i32 {
-    let result = builtin::stream_write(handle, ptr, cm_copy_count(count));
-    if result == -1 {
-        return cm_await_blocked(handle);
-    }
-    return result;
+    return cm_await_blocked(handle, builtin::stream_write(handle, ptr, cm_copy_count(count)));
 }
 
 /// CM adapter for stream.write_raw_all(slice) on Stream<u8>. The slice is

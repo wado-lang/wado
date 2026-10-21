@@ -752,24 +752,18 @@ fn synthesize_stream_write_func(elem_type_id: TypeId, ctx: &SynthCtx) -> TirFunc
     }
 }
 
-/// `if <status> == BLOCKED { <status> = cm_await_blocked(handle) }` — re-reads
-/// the packed result after the host signals readiness.
+/// `<status> = cm_await_blocked(handle, <status>)`: the packed result, awaited
+/// first if the copy answered BLOCKED.
 fn await_if_blocked(status_idx: u32, status_name: &str, handle_idx: u32) -> TirStmt {
-    if_stmt(
-        is_blocked(local_ref(status_idx, status_name, TypeTable::I32)),
-        TirBlock {
-            stmts: vec![expr_stmt(assign(
-                local_ref(status_idx, status_name, TypeTable::I32),
-                internal_call(
-                    CompilerItem::CmAwaitBlocked.attr_name(),
-                    vec![local_ref(handle_idx, "handle", TypeTable::I32)],
-                    TypeTable::I32,
-                ),
-            ))],
-            span: synth_span(),
-        },
-        None,
-    )
+    let status = || local_ref(status_idx, status_name, TypeTable::I32);
+    expr_stmt(assign(
+        status(),
+        internal_call(
+            CompilerItem::CmAwaitBlocked.attr_name(),
+            vec![local_ref(handle_idx, "handle", TypeTable::I32), status()],
+            TypeTable::I32,
+        ),
+    ))
 }
 
 fn free_cm_buffer(
