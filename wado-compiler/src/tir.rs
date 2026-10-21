@@ -773,6 +773,26 @@ impl TirExpr {
             span,
         }
     }
+
+    /// The place `self` moves out of, or `self` where it moves nothing.
+    pub fn unmoved(&self) -> &Self {
+        match &self.kind {
+            TirExprKind::Move { expr } => expr,
+            _ => self,
+        }
+    }
+
+    /// The value of the place `self` names, moved out of it.
+    pub fn moved(self) -> Self {
+        let (type_id, span) = (self.type_id, self.span);
+        Self::new(
+            TirExprKind::Move {
+                expr: Box::new(self),
+            },
+            type_id,
+            span,
+        )
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -987,6 +1007,14 @@ pub enum TirExprKind {
     Cast {
         expr: Box<TirExpr>,
         target_type: TypeId,
+    },
+    /// The affine value of the place `expr` names, moved out of it: the place
+    /// is empty afterwards (WEP: Affine Types). Reify marks the places
+    /// `ownership::Modes::moves` names, and synthesis marks those it moves
+    /// itself. Drop elaboration takes ownership here and nowhere else, then
+    /// removes the node.
+    Move {
+        expr: Box<TirExpr>,
     },
 
     /// Every call: free function (`foo(args)`), static method
@@ -1666,6 +1694,7 @@ pub fn transpose_tuple_expr(receiver: &TirExpr, span: Span, type_table: &mut Typ
         "every cell reads the receiver, so reify binds it before either expansion"
     );
     let tuple = type_table.peel_refs(receiver.type_id);
+    let by_value = tuple == receiver.type_id;
     let transposed = type_table
         .transposed_tuple(tuple)
         .expect("method lookup admits `zip` only over rows that transpose");
@@ -1700,7 +1729,7 @@ pub fn transpose_tuple_expr(receiver: &TirExpr, span: Span, type_table: &mut Typ
                         *row_type,
                         span,
                     );
-                    TirExpr::new(
+                    let cell = TirExpr::new(
                         TirExprKind::FieldAccess {
                             expr: Box::new(row_access),
                             field_index: col as u32,
@@ -1708,7 +1737,9 @@ pub fn transpose_tuple_expr(receiver: &TirExpr, span: Span, type_table: &mut Typ
                         },
                         cells[col],
                         span,
-                    )
+                    );
+                    // A receiver held by value hands each cell on, once.
+                    if by_value { cell.moved() } else { cell }
                 })
                 .collect();
             TirExpr::new(TirExprKind::TupleLiteral { elements }, column_type, span)

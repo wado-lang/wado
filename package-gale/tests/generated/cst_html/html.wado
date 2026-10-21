@@ -1027,7 +1027,7 @@ internal fn follow_then(prefix: i64, prefix_bits: i64, cont: i64) -> i64 {
 }
 
 internal fn follow_then_opening(prefix: i64, prefix_bits: i64, cont: i64) -> i64 {
-    let opened = (cont & FOLLOW_SEQUENCED | FOLLOW_OPENS_BIT) << prefix_bits;
+    let opened = (cont & FOLLOW_CONT_MASK | FOLLOW_OPENS_BIT) << prefix_bits;
     return (prefix | opened) & FOLLOW_CONT_MASK | follow_open_mark(cont);
 }
 
@@ -2535,17 +2535,17 @@ fn scan_html_elements(tokens: &Array<i32>, pos: i32, memo: &mut ScanMemo<()>, fo
         pos = scan_html_misc(tokens, pos, memo);
         if pos < 0 { pos = sp; break; }
         if pos == sp { break; }
-        let dk_8 = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
-        if !(_kind_set_5(dk_8) || follow == 0 && dk_8 == TK_EOF && !(pos == sp + 1 && tokens[sp] == TK_SCRIPTLET || pos == sp + 2 && _kind_set_7(tokens[sp]) && _kind_set_8(tokens[sp + 1]) || pos == sp + 3 && _kind_set_2(tokens[sp]) && _kind_set_9(tokens[sp + 1]) && _kind_set_10(tokens[sp + 2]) || pos == sp + 4 && _kind_set_2(tokens[sp]) && _kind_set_11(tokens[sp + 1]) && _kind_set_12(tokens[sp + 2]) && _kind_set_10(tokens[sp + 3]))) {
-            let dc_8 = pos;
-            let mut dc_8_exit = false;
+        let dk_6 = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
+        if !(_kind_set_5(dk_6) || follow == 0 && dk_6 == TK_EOF && !(pos == sp + 1 && tokens[sp] == TK_SCRIPTLET || pos == sp + 2 && _kind_set_7(tokens[sp]) && _kind_set_8(tokens[sp + 1]) || pos == sp + 3 && _kind_set_2(tokens[sp]) && _kind_set_9(tokens[sp + 1]) && _kind_set_10(tokens[sp + 2]) || pos == sp + 4 && _kind_set_2(tokens[sp]) && _kind_set_11(tokens[sp + 1]) && _kind_set_12(tokens[sp + 2]) && _kind_set_10(tokens[sp + 3]))) {
+            let dc_6 = pos;
+            let mut dc_6_exit = false;
             pos = sp;
-            dcl_8: {
+            dcl_6: {
                 let probe_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
-                if _kind_set_5(probe_kind) && follow_exit_viable(tokens, pos, follow, &FOLLOW_SETS, TK_EOF) { dc_8_exit = true; }
+                if _kind_set_5(probe_kind) && follow_exit_viable(tokens, pos, follow, &FOLLOW_SETS, TK_EOF) { dc_6_exit = true; }
             }
-            if dc_8_exit { pos = sp; break; }
-            pos = dc_8;
+            if dc_6_exit { pos = sp; break; }
+            pos = dc_6;
         }
     }
     return pos;
@@ -2566,37 +2566,37 @@ fn scan_html_element(tokens: &Array<i32>, pos: i32, memo: &mut ScanMemo<()>, fol
                 if pos < 0 { pos = sp; break; }
                 if pos == sp { break; }
             }
-            let gp_2 = pos;
-            sg_2_done: {
-                let sgk_2 = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
-                if sgk_2 == TK_TAG_CLOSE {
+            let gp_3 = pos;
+            sg_3_done: {
+                let sgk_3 = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
+                if sgk_3 == TK_TAG_CLOSE {
                     pos += 1;
                     if pos < tokens.len() && _kind_set_18(tokens[pos]) && !follow_yields(tokens, pos, follow, &FOLLOW_SETS, TK_EOF) {
                         let sp = pos;
-                        sg_3_done: {
-                            sg_3: {
+                        sg_4_done: {
+                            sg_4: {
                                 pos = scan_html_content(tokens, pos, memo, FOLLOW_MASK_6);
-                                if pos < 0 { break sg_3; }
-                                if pos >= tokens.len() || tokens[pos] != TK_TAG_OPEN { break sg_3; }
+                                if pos < 0 { break sg_4; }
+                                if pos >= tokens.len() || tokens[pos] != TK_TAG_OPEN { break sg_4; }
                                 pos += 1;
-                                if pos >= tokens.len() || tokens[pos] != TK_TAG_SLASH { break sg_3; }
+                                if pos >= tokens.len() || tokens[pos] != TK_TAG_SLASH { break sg_4; }
                                 pos += 1;
-                                if pos >= tokens.len() || tokens[pos] != TK_TAG_NAME { break sg_3; }
+                                if pos >= tokens.len() || tokens[pos] != TK_TAG_NAME { break sg_4; }
                                 pos += 1;
-                                if pos >= tokens.len() || tokens[pos] != TK_TAG_CLOSE { break sg_3; }
+                                if pos >= tokens.len() || tokens[pos] != TK_TAG_CLOSE { break sg_4; }
                                 pos += 1;
-                                break sg_3_done;
+                                break sg_4_done;
                             }
                             pos = -1;
                         }
                         if pos < 0 { pos = sp; }
                     }
-                    break sg_2_done;
-                } else if sgk_2 == TK_TAG_SLASH_CLOSE {
+                    break sg_3_done;
+                } else if sgk_3 == TK_TAG_SLASH_CLOSE {
                     pos += 1;
-                    break sg_2_done;
+                    break sg_3_done;
                 }
-                pos = gp_2;
+                pos = gp_3;
             }
             return pos;
         }
@@ -2645,21 +2645,21 @@ fn scan_html_content__walk(tokens: &Array<i32>, pos: i32, memo: &mut ScanMemo<()
     }
     while pos < tokens.len() && _kind_set_14(tokens[pos]) && !follow_yields(tokens, pos, follow, &FOLLOW_SETS, TK_EOF) {
         let sp = pos;
-        sg_5_done: {
-            sg_5: {
-                sg_6_done: {
-                    let sgk_6 = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
-                    if _kind_set_15(sgk_6) {
-                        sg_6_0: {
+        sg_0_done: {
+            sg_0: {
+                sg_1_done: {
+                    let sgk_1 = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
+                    if _kind_set_15(sgk_1) {
+                        sg_1_0: {
                             pos = scan_html_element(tokens, pos, memo, follow_open_with(follow, follow_open_set(FOLLOW_MASK_8)));
-                            if pos < 0 { break sg_6_0; }
-                            break sg_6_done;
+                            if pos < 0 { break sg_1_0; }
+                            break sg_1_done;
                         }
-                    } else if _kind_set_16(sgk_6) {
+                    } else if _kind_set_17(sgk_1) {
                         pos += 1;
-                        break sg_6_done;
+                        break sg_1_done;
                     }
-                    break sg_5;
+                    break sg_0;
                 }
                 if pos < tokens.len() && _kind_set_13(tokens[pos]) {
                     let sp = pos;
@@ -2669,23 +2669,23 @@ fn scan_html_content__walk(tokens: &Array<i32>, pos: i32, memo: &mut ScanMemo<()
                         pos = sp;
                     }
                 }
-                break sg_5_done;
+                break sg_0_done;
             }
             pos = -1;
         }
         if pos < 0 { pos = sp; break; }
         if pos == sp { break; }
-        let dk_7 = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
-        if !(_kind_set_14(dk_7) || follow == 0 && dk_7 == TK_EOF && !(pos == sp + 4 && tokens[sp] == TK_TAG_OPEN && tokens[sp + 1] == TK_TAG_SLASH && tokens[sp + 2] == TK_TAG_NAME && tokens[sp + 3] == TK_TAG_CLOSE)) {
-            let dc_7 = pos;
-            let mut dc_7_exit = false;
+        let dk_2 = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
+        if !(_kind_set_14(dk_2) || follow == 0 && dk_2 == TK_EOF && !(pos == sp + 4 && tokens[sp] == TK_TAG_OPEN && tokens[sp + 1] == TK_TAG_SLASH && tokens[sp + 2] == TK_TAG_NAME && tokens[sp + 3] == TK_TAG_CLOSE)) {
+            let dc_2 = pos;
+            let mut dc_2_exit = false;
             pos = sp;
-            dcl_7: {
+            dcl_2: {
                 let probe_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
-                if probe_kind == TK_TAG_OPEN && follow_exit_viable(tokens, pos, follow, &FOLLOW_SETS, TK_EOF) { dc_7_exit = true; }
+                if probe_kind == TK_TAG_OPEN && follow_exit_viable(tokens, pos, follow, &FOLLOW_SETS, TK_EOF) { dc_2_exit = true; }
             }
-            if dc_7_exit { pos = sp; break; }
-            pos = dc_7;
+            if dc_2_exit { pos = sp; break; }
+            pos = dc_2;
         }
     }
     return pos;
@@ -2697,12 +2697,12 @@ fn scan_html_attribute(tokens: &Array<i32>, pos: i32, memo: &mut ScanMemo<()>, f
     pos += 1;
     if pos < tokens.len() && tokens[pos] == TK_TAG_EQUALS && !follow_yields(tokens, pos, follow, &FOLLOW_SETS, TK_EOF) {
         let sp = pos;
-        sg_4_done: {
-            sg_4: {
+        sg_5_done: {
+            sg_5: {
                 pos += 1;
-                if pos >= tokens.len() || tokens[pos] != TK_ATTVALUE_VALUE { break sg_4; }
+                if pos >= tokens.len() || tokens[pos] != TK_ATTVALUE_VALUE { break sg_5; }
                 pos += 1;
-                break sg_4_done;
+                break sg_5_done;
             }
             pos = -1;
         }
@@ -2744,17 +2744,26 @@ fn _parse_html_document__inner(p: &mut Parser, follow: i64 = 0) -> () {
     loop {
         if p.recovering { break; }
         if follow_yields(&p.kinds, p.pos, follow, &FOLLOW_SETS, TK_EOF) { break; }
-        let mut rep_scan_pos: i32 = -1;
-        rep_scan: {
-            let tokens = &p.kinds;
-            let mut pos: i32 = p.pos;
-            if pos >= tokens.len() || !_kind_set_0(tokens[pos]) { break rep_scan; }
-            pos += 1;
-            if pos <= p.pos { break rep_scan; }
-            rep_scan_pos = pos;
+        if !_kind_set_0(p.peek_kind()) { break; }
+        let sp_pending = p.pending;
+        let sp_pos = p.pos;
+        let sp_cp = p.b.checkpoint();
+        let sp_outer = p.speculating;
+        p.speculating = true;
+        p.site = 0;
+        _parse_scriptlet_or_sea_ws(p);
+        p.speculating = sp_outer;
+        if p.recovering || p.pos <= sp_pos {
+            p.recovering = false;
+            p.pos = sp_pos;
+            p.b.truncate(sp_cp);
+            if !_kind_set_0(p.peek_kind()) { p.pending = sp_pending; }
+            break;
         }
-        if rep_scan_pos >= 0 {
-            let decline_kind = if rep_scan_pos < p.kinds.len() { p.kinds[rep_scan_pos] } else { TK_EOF };
+        let sp_end = p.pos;
+        p.pos = sp_pos;
+        if sp_end >= 0 {
+            let decline_kind = if sp_end < p.kinds.len() { p.kinds[sp_end] } else { TK_EOF };
             if !(_kind_set_1(decline_kind) || follow == 0 && decline_kind == TK_EOF) {
                 let mut decline_dead: bool = false;
                 decline_scan: {
@@ -2787,27 +2796,10 @@ fn _parse_html_document__inner(p: &mut Parser, follow: i64 = 0) -> () {
                     let probe_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
                     if probe_kind == TK_EOF && follow_admits(tokens, pos, follow, &FOLLOW_SETS, TK_EOF) { decline_dead = true; }
                 }
-                if decline_dead { break; }
+                if decline_dead { p.b.truncate(sp_cp); p.pending = sp_pending; break; }
             }
         }
-        if rep_scan_pos < 0 {
-            if _kind_set_0(p.peek_kind()) {
-                let _rec_pos = p.pos;
-                let _rec_cp = p.b.checkpoint();
-                let _rec_sav = p.recovering;
-                let _rec_spec = p.speculating;
-                p.speculating = true;
-                p.site = 0;
-                _parse_scriptlet_or_sea_ws(p);
-                p.speculating = _rec_spec;
-                p.recovering = _rec_sav;
-                p.pos = _rec_pos;
-                p.b.truncate(_rec_cp);
-            }
-            break;
-        }
-        p.site = 0;
-        _parse_scriptlet_or_sea_ws(p);
+        p.pos = sp_end;
     }
     if p.peek_kind() == TK_XML && (!follow_yields(&p.kinds, p.pos, follow, &FOLLOW_SETS, TK_EOF) || (_kind_set_3((if p.pos + 1 < p.kinds.len() { p.kinds[p.pos + 1] } else { TK_EOF })) || follow_resumes(&p.kinds, p.pos + 1, follow, &FOLLOW_SETS, TK_EOF))) {
         p.take();
@@ -2815,17 +2807,26 @@ fn _parse_html_document__inner(p: &mut Parser, follow: i64 = 0) -> () {
     loop {
         if p.recovering { break; }
         if follow_yields(&p.kinds, p.pos, follow, &FOLLOW_SETS, TK_EOF) { break; }
-        let mut rep_scan_pos_2: i32 = -1;
-        rep_scan_2: {
-            let tokens = &p.kinds;
-            let mut pos: i32 = p.pos;
-            if pos >= tokens.len() || !_kind_set_0(tokens[pos]) { break rep_scan_2; }
-            pos += 1;
-            if pos <= p.pos { break rep_scan_2; }
-            rep_scan_pos_2 = pos;
+        if !_kind_set_0(p.peek_kind()) { break; }
+        let sp_pending_2 = p.pending;
+        let sp_2_pos = p.pos;
+        let sp_2_cp = p.b.checkpoint();
+        let sp_2_outer = p.speculating;
+        p.speculating = true;
+        p.site = 1;
+        _parse_scriptlet_or_sea_ws(p);
+        p.speculating = sp_2_outer;
+        if p.recovering || p.pos <= sp_2_pos {
+            p.recovering = false;
+            p.pos = sp_2_pos;
+            p.b.truncate(sp_2_cp);
+            if !_kind_set_0(p.peek_kind()) { p.pending = sp_pending_2; }
+            break;
         }
-        if rep_scan_pos_2 >= 0 {
-            let decline_kind_2 = if rep_scan_pos_2 < p.kinds.len() { p.kinds[rep_scan_pos_2] } else { TK_EOF };
+        let sp_end_2 = p.pos;
+        p.pos = sp_2_pos;
+        if sp_end_2 >= 0 {
+            let decline_kind_2 = if sp_end_2 < p.kinds.len() { p.kinds[sp_end_2] } else { TK_EOF };
             if !(_kind_set_4(decline_kind_2) || follow == 0 && decline_kind_2 == TK_EOF) {
                 let mut decline_dead_2: bool = false;
                 decline_scan_2: {
@@ -2849,27 +2850,10 @@ fn _parse_html_document__inner(p: &mut Parser, follow: i64 = 0) -> () {
                     let probe_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
                     if probe_kind == TK_EOF && follow_admits(tokens, pos, follow, &FOLLOW_SETS, TK_EOF) { decline_dead_2 = true; }
                 }
-                if decline_dead_2 { break; }
+                if decline_dead_2 { p.b.truncate(sp_2_cp); p.pending = sp_pending_2; break; }
             }
         }
-        if rep_scan_pos_2 < 0 {
-            if _kind_set_0(p.peek_kind()) {
-                let _rec_pos = p.pos;
-                let _rec_cp = p.b.checkpoint();
-                let _rec_sav = p.recovering;
-                let _rec_spec = p.speculating;
-                p.speculating = true;
-                p.site = 1;
-                _parse_scriptlet_or_sea_ws(p);
-                p.speculating = _rec_spec;
-                p.recovering = _rec_sav;
-                p.pos = _rec_pos;
-                p.b.truncate(_rec_cp);
-            }
-            break;
-        }
-        p.site = 1;
-        _parse_scriptlet_or_sea_ws(p);
+        p.pos = sp_end_2;
     }
     if p.peek_kind() == TK_DTD && (!follow_yields(&p.kinds, p.pos, follow, &FOLLOW_SETS, TK_EOF) || (_kind_set_2((if p.pos + 1 < p.kinds.len() { p.kinds[p.pos + 1] } else { TK_EOF })) || follow_resumes(&p.kinds, p.pos + 1, follow, &FOLLOW_SETS, TK_EOF))) {
         p.take();
@@ -2877,17 +2861,26 @@ fn _parse_html_document__inner(p: &mut Parser, follow: i64 = 0) -> () {
     loop {
         if p.recovering { break; }
         if follow_yields(&p.kinds, p.pos, follow, &FOLLOW_SETS, TK_EOF) { break; }
-        let mut rep_scan_pos_3: i32 = -1;
-        rep_scan_3: {
-            let tokens = &p.kinds;
-            let mut pos: i32 = p.pos;
-            if pos >= tokens.len() || !_kind_set_0(tokens[pos]) { break rep_scan_3; }
-            pos += 1;
-            if pos <= p.pos { break rep_scan_3; }
-            rep_scan_pos_3 = pos;
+        if !_kind_set_0(p.peek_kind()) { break; }
+        let sp_pending_3 = p.pending;
+        let sp_3_pos = p.pos;
+        let sp_3_cp = p.b.checkpoint();
+        let sp_3_outer = p.speculating;
+        p.speculating = true;
+        p.site = 2;
+        _parse_scriptlet_or_sea_ws(p);
+        p.speculating = sp_3_outer;
+        if p.recovering || p.pos <= sp_3_pos {
+            p.recovering = false;
+            p.pos = sp_3_pos;
+            p.b.truncate(sp_3_cp);
+            if !_kind_set_0(p.peek_kind()) { p.pending = sp_pending_3; }
+            break;
         }
-        if rep_scan_pos_3 >= 0 {
-            let decline_kind_3 = if rep_scan_pos_3 < p.kinds.len() { p.kinds[rep_scan_pos_3] } else { TK_EOF };
+        let sp_end_3 = p.pos;
+        p.pos = sp_3_pos;
+        if sp_end_3 >= 0 {
+            let decline_kind_3 = if sp_end_3 < p.kinds.len() { p.kinds[sp_end_3] } else { TK_EOF };
             if !(_kind_set_5(decline_kind_3) || follow == 0 && decline_kind_3 == TK_EOF) {
                 let mut decline_dead_3: bool = false;
                 decline_scan_3: {
@@ -2902,27 +2895,10 @@ fn _parse_html_document__inner(p: &mut Parser, follow: i64 = 0) -> () {
                     let probe_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
                     if probe_kind == TK_EOF && follow_admits(tokens, pos, follow, &FOLLOW_SETS, TK_EOF) { decline_dead_3 = true; }
                 }
-                if decline_dead_3 { break; }
+                if decline_dead_3 { p.b.truncate(sp_3_cp); p.pending = sp_pending_3; break; }
             }
         }
-        if rep_scan_pos_3 < 0 {
-            if _kind_set_0(p.peek_kind()) {
-                let _rec_pos = p.pos;
-                let _rec_cp = p.b.checkpoint();
-                let _rec_sav = p.recovering;
-                let _rec_spec = p.speculating;
-                p.speculating = true;
-                p.site = 2;
-                _parse_scriptlet_or_sea_ws(p);
-                p.speculating = _rec_spec;
-                p.recovering = _rec_sav;
-                p.pos = _rec_pos;
-                p.b.truncate(_rec_cp);
-            }
-            break;
-        }
-        p.site = 2;
-        _parse_scriptlet_or_sea_ws(p);
+        p.pos = sp_end_3;
     }
     while !p.recovering && _kind_set_2(p.peek_kind()) {
         if follow_yields(&p.kinds, p.pos, follow, &FOLLOW_SETS, TK_EOF) { break; }
@@ -2981,18 +2957,27 @@ fn _parse_html_elements__inner(p: &mut Parser, follow: i64 = 0) -> () {
     loop {
         if p.recovering { break; }
         if follow_yields(&p.kinds, p.pos, follow, &FOLLOW_SETS, TK_EOF) { break; }
-        let mut rep_scan_pos: i32 = -1;
-        rep_scan: {
-            let tokens = &p.kinds;
-            let mut pos: i32 = p.pos;
-            pos = scan_html_misc(tokens, pos, &mut p.memo);
-            if pos < 0 { break rep_scan; }
-            if pos <= p.pos { break rep_scan; }
-            rep_scan_pos = pos;
+        if !_kind_set_6(p.peek_kind()) { break; }
+        let sp_pending = p.pending;
+        let sp_pos = p.pos;
+        let sp_cp = p.b.checkpoint();
+        let sp_outer = p.speculating;
+        p.speculating = true;
+        p.site = 6;
+        _parse_html_misc(p);
+        p.speculating = sp_outer;
+        if p.recovering || p.pos <= sp_pos {
+            p.recovering = false;
+            p.pos = sp_pos;
+            p.b.truncate(sp_cp);
+            if !_kind_set_6(p.peek_kind()) { p.pending = sp_pending; }
+            break;
         }
-        if rep_scan_pos >= 0 {
-            let decline_kind = if rep_scan_pos < p.kinds.len() { p.kinds[rep_scan_pos] } else { TK_EOF };
-            if !(_kind_set_5(decline_kind) || follow == 0 && decline_kind == TK_EOF && !(rep_scan_pos == p.pos + 1 && p.kinds[p.pos] == TK_SCRIPTLET || rep_scan_pos == p.pos + 2 && _kind_set_7(p.kinds[p.pos]) && _kind_set_8(p.kinds[p.pos + 1]) || rep_scan_pos == p.pos + 3 && _kind_set_2(p.kinds[p.pos]) && _kind_set_9(p.kinds[p.pos + 1]) && _kind_set_10(p.kinds[p.pos + 2]) || rep_scan_pos == p.pos + 4 && _kind_set_2(p.kinds[p.pos]) && _kind_set_11(p.kinds[p.pos + 1]) && _kind_set_12(p.kinds[p.pos + 2]) && _kind_set_10(p.kinds[p.pos + 3]))) {
+        let sp_end = p.pos;
+        p.pos = sp_pos;
+        if sp_end >= 0 {
+            let decline_kind = if sp_end < p.kinds.len() { p.kinds[sp_end] } else { TK_EOF };
+            if !(_kind_set_5(decline_kind) || follow == 0 && decline_kind == TK_EOF && !(sp_end == p.pos + 1 && p.kinds[p.pos] == TK_SCRIPTLET || sp_end == p.pos + 2 && _kind_set_7(p.kinds[p.pos]) && _kind_set_8(p.kinds[p.pos + 1]) || sp_end == p.pos + 3 && _kind_set_2(p.kinds[p.pos]) && _kind_set_9(p.kinds[p.pos + 1]) && _kind_set_10(p.kinds[p.pos + 2]) || sp_end == p.pos + 4 && _kind_set_2(p.kinds[p.pos]) && _kind_set_11(p.kinds[p.pos + 1]) && _kind_set_12(p.kinds[p.pos + 2]) && _kind_set_10(p.kinds[p.pos + 3]))) {
                 let mut decline_dead: bool = false;
                 decline_scan: {
                     let tokens = &p.kinds;
@@ -3000,27 +2985,10 @@ fn _parse_html_elements__inner(p: &mut Parser, follow: i64 = 0) -> () {
                     let probe_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
                     if _kind_set_5(probe_kind) && follow_exit_viable(tokens, pos, follow, &FOLLOW_SETS, TK_EOF) { decline_dead = true; }
                 }
-                if decline_dead { break; }
+                if decline_dead { p.b.truncate(sp_cp); p.pending = sp_pending; break; }
             }
         }
-        if rep_scan_pos < 0 {
-            if _kind_set_6(p.peek_kind()) {
-                let _rec_pos = p.pos;
-                let _rec_cp = p.b.checkpoint();
-                let _rec_sav = p.recovering;
-                let _rec_spec = p.speculating;
-                p.speculating = true;
-                p.site = 6;
-                _parse_html_misc(p);
-                p.speculating = _rec_spec;
-                p.recovering = _rec_sav;
-                p.pos = _rec_pos;
-                p.b.truncate(_rec_cp);
-            }
-            break;
-        }
-        p.site = 6;
-        _parse_html_misc(p);
+        p.pos = sp_end;
     }
     return;
 }
@@ -3133,55 +3101,12 @@ fn _parse_html_content__inner(p: &mut Parser, follow: i64 = 0) -> () {
     loop {
         if p.recovering { break; }
         if follow_yields(&p.kinds, p.pos, follow, &FOLLOW_SETS, TK_EOF) { break; }
-        let mut rep_scan_pos: i32 = -1;
-        rep_scan: {
-            let tokens = &p.kinds;
-            let mut pos: i32 = p.pos;
-            sg_0_done: {
-                sg_0: {
-                    sg_1_done: {
-                        let sgk_1 = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
-                        if _kind_set_15(sgk_1) {
-                            sg_1_0: {
-                                pos = scan_html_element(tokens, pos, &mut p.memo, follow_open_with(follow, follow_open_set(FOLLOW_MASK_8)));
-                                if pos < 0 { break sg_1_0; }
-                                break sg_1_done;
-                            }
-                        } else if _kind_set_16(sgk_1) {
-                            pos += 1;
-                            break sg_1_done;
-                        }
-                        break sg_0;
-                    }
-                    if pos < tokens.len() && _kind_set_13(tokens[pos]) {
-                        let sp = pos;
-                        pos += 1;
-                        if pos < 0 { pos = sp; }
-                        if follow_yields(tokens, sp, follow, &FOLLOW_SETS, TK_EOF) && !follow_resumes(tokens, pos, follow, &FOLLOW_SETS, TK_EOF) {
-                            pos = sp;
-                        }
-                    }
-                    break sg_0_done;
-                }
-                break rep_scan;
-            }
-            if pos <= p.pos { break rep_scan; }
-            rep_scan_pos = pos;
-        }
-        if rep_scan_pos >= 0 {
-            let decline_kind = if rep_scan_pos < p.kinds.len() { p.kinds[rep_scan_pos] } else { TK_EOF };
-            if !(_kind_set_14(decline_kind) || follow == 0 && decline_kind == TK_EOF && !(rep_scan_pos == p.pos + 4 && p.kinds[p.pos] == TK_TAG_OPEN && p.kinds[p.pos + 1] == TK_TAG_SLASH && p.kinds[p.pos + 2] == TK_TAG_NAME && p.kinds[p.pos + 3] == TK_TAG_CLOSE)) {
-                let mut decline_dead: bool = false;
-                decline_scan: {
-                    let tokens = &p.kinds;
-                    let mut pos: i32 = p.pos;
-                    let probe_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
-                    if probe_kind == TK_TAG_OPEN && follow_exit_viable(tokens, pos, follow, &FOLLOW_SETS, TK_EOF) { decline_dead = true; }
-                }
-                if decline_dead { break; }
-            }
-        }
-        if rep_scan_pos < 0 { break; }
+        if !_kind_set_14(p.peek_kind()) { break; }
+        let sp_pending = p.pending;
+        let sp_pos = p.pos;
+        let sp_cp = p.b.checkpoint();
+        let sp_outer = p.speculating;
+        p.speculating = true;
         if !kind_set_has(&SYNC_8, p.kinds[p.pos]) { builtin::cold_path(); p.sync_alts(&SYNC_8, &EXPECTED_8); }
         let grp_kind = p.peek_kind();
         if _kind_set_15(grp_kind) {
@@ -3189,7 +3114,7 @@ fn _parse_html_content__inner(p: &mut Parser, follow: i64 = 0) -> () {
             _parse_html_element(p, follow_open_with(follow, follow_open_set(FOLLOW_MASK_8)));
         } else if grp_kind == TK_CDATA {
             p.take();
-        } else if _kind_set_17(grp_kind) {
+        } else if _kind_set_16(grp_kind) {
             p.site = 13;
             _parse_html_comment(p);
         } else {
@@ -3211,6 +3136,30 @@ fn _parse_html_content__inner(p: &mut Parser, follow: i64 = 0) -> () {
             p.site = 14;
             _parse_html_chardata(p);
         }
+        p.speculating = sp_outer;
+        if p.recovering || p.pos <= sp_pos {
+            p.recovering = false;
+            p.pos = sp_pos;
+            p.b.truncate(sp_cp);
+            p.pending = sp_pending;
+            break;
+        }
+        let sp_end = p.pos;
+        p.pos = sp_pos;
+        if sp_end >= 0 {
+            let decline_kind = if sp_end < p.kinds.len() { p.kinds[sp_end] } else { TK_EOF };
+            if !(_kind_set_14(decline_kind) || follow == 0 && decline_kind == TK_EOF && !(sp_end == p.pos + 4 && p.kinds[p.pos] == TK_TAG_OPEN && p.kinds[p.pos + 1] == TK_TAG_SLASH && p.kinds[p.pos + 2] == TK_TAG_NAME && p.kinds[p.pos + 3] == TK_TAG_CLOSE)) {
+                let mut decline_dead: bool = false;
+                decline_scan: {
+                    let tokens = &p.kinds;
+                    let mut pos: i32 = p.pos;
+                    let probe_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
+                    if probe_kind == TK_TAG_OPEN && follow_exit_viable(tokens, pos, follow, &FOLLOW_SETS, TK_EOF) { decline_dead = true; }
+                }
+                if decline_dead { p.b.truncate(sp_cp); p.pending = sp_pending; break; }
+            }
+        }
+        p.pos = sp_end;
     }
     return;
 }
@@ -3275,7 +3224,7 @@ fn _parse_html_chardata(p: &mut Parser) -> () {
 fn _parse_html_misc__inner(p: &mut Parser) -> () {
     if !kind_set_has(&SYNC_11, p.kinds[p.pos]) { builtin::cold_path(); p.sync_alts(&SYNC_11, &EXPECTED_11); }
     let kind = p.peek_kind();
-    if _kind_set_17(kind) {
+    if _kind_set_16(kind) {
         p.site = 15;
         _parse_html_comment(p);
         return;
@@ -3305,7 +3254,7 @@ fn _parse_html_misc(p: &mut Parser) -> () {
 fn _parse_html_comment__inner(p: &mut Parser) -> () {
     if !kind_set_has(&SYNC_12, p.kinds[p.pos]) { builtin::cold_path(); p.sync_alts(&SYNC_12, &EXPECTED_12); }
     let kind = p.peek_kind();
-    if _kind_set_17(kind) {
+    if _kind_set_16(kind) {
         p.take();
         return;
     }
@@ -3517,11 +3466,11 @@ fn _kind_set_15(k: i32) -> bool {
 }
 
 fn _kind_set_16(k: i32) -> bool {
-    return k matches { TK_CDATA | TK_HTML_COMMENT | TK_HTML_CONDITIONAL_COMMENT };
+    return k matches { TK_HTML_COMMENT | TK_HTML_CONDITIONAL_COMMENT };
 }
 
 fn _kind_set_17(k: i32) -> bool {
-    return k matches { TK_HTML_COMMENT | TK_HTML_CONDITIONAL_COMMENT };
+    return k matches { TK_CDATA | TK_HTML_COMMENT | TK_HTML_CONDITIONAL_COMMENT };
 }
 
 fn _kind_set_18(k: i32) -> bool {

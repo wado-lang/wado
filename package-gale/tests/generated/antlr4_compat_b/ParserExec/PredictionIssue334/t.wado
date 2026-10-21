@@ -1024,7 +1024,7 @@ internal fn follow_then(prefix: i64, prefix_bits: i64, cont: i64) -> i64 {
 }
 
 internal fn follow_then_opening(prefix: i64, prefix_bits: i64, cont: i64) -> i64 {
-    let opened = (cont & FOLLOW_SEQUENCED | FOLLOW_OPENS_BIT) << prefix_bits;
+    let opened = (cont & FOLLOW_CONT_MASK | FOLLOW_OPENS_BIT) << prefix_bits;
     return (prefix | opened) & FOLLOW_CONT_MASK | follow_open_mark(cont);
 }
 
@@ -1751,7 +1751,7 @@ fn _parse_file___inner(p: &mut Parser, follow: i64 = 0) -> () {
                 sg_0: {
                     if pos >= tokens.len() || tokens[pos] != TK_SEMICOLON { break sg_0; }
                     pos += 1;
-                    pos = scan_item(tokens, pos, follow_then_opening(FOLLOW_MASK_0, 16, follow));
+                    pos = scan_item(tokens, pos, 0);
                     if pos < 0 { break sg_0; }
                     break sg_0_done;
                 }
@@ -1778,7 +1778,7 @@ fn _parse_file___inner(p: &mut Parser, follow: i64 = 0) -> () {
         if rep_scan_pos < 0 { break; }
         let semicolon = p.expect(TK_SEMICOLON, &SYNC_1, false);
         p.site = 1;
-        let item = _parse_item(p, follow_then_opening(FOLLOW_MASK_0, 16, follow));
+        let item = _parse_item(p, 0);
         if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { builtin::cold_path(); p.sync_back(&SYNC_0, &EXPECTED_0); }
     }
     if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_0, &EXPECTED_0); }
@@ -1880,6 +1880,5 @@ global EXPECTED_0: List<i32> = [TK_EOF, TK_SEMICOLON];
 global SYNC_1: List<i32> = [2];
 global SYNC_2: List<i32> = [4];
 
-global FOLLOW_SETS: List<List<i32>> = [[1], [2]];
-global FOLLOW_MASK_0: i64 = 513;
+global FOLLOW_SETS: List<List<i32>> = [];
 

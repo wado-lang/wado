@@ -772,23 +772,6 @@ fn build_fn_canonical_dispatch_body(
     ])
 }
 
-/// Translate all pending function bodies from TIR to WIR instructions.
-/// True when a branch body contains a `cold_path()` marker. Descends through
-/// transparent grouping (`Block` / `Seq`) but stops at nested control flow
-/// (`If` / `Loop`): a `cold_path()` inside an inner branch belongs to that
-/// branch, not this one.
-fn block_has_cold_path(body: &[WirInstr]) -> bool {
-    body.iter().any(instr_has_cold_path)
-}
-
-fn instr_has_cold_path(i: &WirInstr) -> bool {
-    match i {
-        WirInstr::ColdPath => true,
-        WirInstr::Block { body, .. } | WirInstr::Seq(body) => block_has_cold_path(body),
-        _ => false,
-    }
-}
-
 /// True when an `if` has no meaningful `else` — either no else block, or one
 /// whose only instructions are `nop`s. `if let` / `while let` desugaring lowers
 /// to `if <test> { … } else { nop }`, which is semantically the implicit-else
@@ -828,7 +811,7 @@ fn hint_guard_fall_through(instrs: &mut [WirInstr], mut reaches_cold: bool) -> b
             } = &mut instrs[i]
             && else_is_empty(else_body)
             && then_body.iter().any(WirInstr::always_diverges)
-            && !block_has_cold_path(then_body)
+            && !WirInstr::marks_cold_path(then_body)
         {
             WirInstr::hint_condition(condition, true);
         }
@@ -860,8 +843,10 @@ fn apply_cold_path_hints_instr(instr: &mut WirInstr) {
             if let Some(else_body) = else_body {
                 apply_cold_path_hints(else_body);
             }
-            let then_cold = block_has_cold_path(then_body);
-            let else_cold = else_body.as_ref().is_some_and(|b| block_has_cold_path(b));
+            let then_cold = WirInstr::marks_cold_path(then_body);
+            let else_cold = else_body
+                .as_ref()
+                .is_some_and(|b| WirInstr::marks_cold_path(b));
             // Only a single cold side yields an unambiguous hint.
             let likely = match (then_cold, else_cold) {
                 (true, false) => false,

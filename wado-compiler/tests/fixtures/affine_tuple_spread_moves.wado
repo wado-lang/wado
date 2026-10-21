@@ -1,0 +1,19 @@
+// A tuple spread splices its operand's elements into the new tuple, so it
+// moves the operand: a second spread of it is a use after move.
+affine struct Tok {
+    id: i32,
+}
+
+impl Drop for Tok {
+    fn drop(self) {
+    }
+}
+
+test {
+    let t = [Tok { id: 1 }];
+    let u = [..t, 2];
+    let v = [..t, 3];
+}
+
+__DATA__
+{"compile_error": ":15:16: analysis error: affine value `t` used after it was moved (moved at 14:16)"}

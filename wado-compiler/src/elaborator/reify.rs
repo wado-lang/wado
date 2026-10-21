@@ -28,6 +28,7 @@ use crate::name::{
     CONTRACT_CLAUSE_INTRINSIC, CONTRACT_SITE_INTRINSIC, FqTypeName, Receiver, contract_owner_name,
     global_init_function, global_name, unchecked_twin_name,
 };
+use crate::ownership::{self, BodyFacts as _, Modes};
 use crate::symbol::SymbolTable;
 use crate::tir::{
     self as tir, CallArg, GlobalInit, InstancePattern, LetStorage, LocalFrame, ResolvedType,
@@ -450,6 +451,70 @@ pub(crate) struct Reify<'a, H: CompilerHost> {
     /// The probe ids of code reify emits no instance of: a tuple `for-of` body
     /// over no elements.
     pub(crate) probes_without_instance: IndexSet<u32>,
+    /// The `affine` type parameters of the impl whose methods are reified.
+    pub(crate) impl_affine_params: Vec<String>,
+    /// The ownership of the body being reified, which says what
+    /// [`Self::reify_expr`] marks `Move`. `None` outside a body.
+    pub(crate) body_ownership: Option<Rc<BodyOwnership>>,
+}
+
+/// What decides the places a body moves.
+pub(crate) struct BodyOwnership {
+    modes: Modes,
+    affine_params: Vec<String>,
+}
+
+/// [`ownership::BodyFacts`] as reify reads them, through the active tuple
+/// `for-of` overlays: an element's types decide whether a place in the body
+/// moves.
+struct ReifyFacts<'r, 'a, H: CompilerHost> {
+    reify: &'r Reify<'a, H>,
+    affine_params: &'r [String],
+}
+
+impl<H: CompilerHost> ownership::BodyFacts for ReifyFacts<'_, '_, H> {
+    fn consumes_receiver(&self, call: AstId) -> bool {
+        self.reify
+            .ann_method_dispatch(call)
+            .is_some_and(|dispatch| dispatch.consumes_self)
+    }
+
+    fn indexes_tuple(&self, base: &ast::Expr) -> bool {
+        self.reify
+            .ann_expression_types(base.id())
+            .is_some_and(|ty| {
+                let tt = self.reify.tysys.type_table.borrow();
+                matches!(tt.get(tt.peel_refs(ty)), ResolvedType::GenericInstance { def, .. }
+                if tt.is_tuple_def(*def))
+            })
+    }
+
+    fn is_affine(&self, expr: AstId) -> bool {
+        self.reify
+            .ann_expression_types(expr)
+            .is_some_and(|ty| self.reify.tysys.is_affine(ty, self.affine_params))
+    }
+
+    fn names_variable(&self, ident: &ast::IdentExpr) -> bool {
+        // Read the references of the module `ident` was written in, as
+        // `Elaborator::home_module` does: reify replays a trait default body
+        // outside its own module.
+        let sem = self
+            .reify
+            .tysys
+            .trait_env
+            .module_of_space(ident.id.space())
+            .map_or(self.reify.sem, |module| {
+                &self.reify.all_module_semantics[module]
+            });
+        sem.bindings.references.get(&ident.id).is_some_and(|def| {
+            sem.bindings
+                .local_symbols
+                .get(def)
+                .or_else(|| self.reify.symbols.get(def))
+                .is_some_and(ownership::is_variable)
+        })
+    }
 }
 
 /// Call site captured for location literals in defaults.
@@ -511,7 +576,91 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             coverage: None,
             probes_emitted: IndexSet::default(),
             probes_without_instance: IndexSet::default(),
+            impl_affine_params: Vec::new(),
+            body_ownership: None,
         }
+    }
+
+    /// Run `reify` over `body`, a function's or a test's, with the places it
+    /// moves known. `affine_params` are its `affine` type parameters.
+    fn with_body_ownership<R>(
+        &mut self,
+        body: &ast::Block,
+        affine_params: Vec<String>,
+        reify: impl FnOnce(&mut Self) -> R,
+    ) -> R {
+        self.with_ownership(
+            affine_params,
+            |facts| ownership::body_modes(body, facts),
+            reify,
+        )
+    }
+
+    /// [`Self::with_body_ownership`] for an expression reified where no body
+    /// is: a default, a global's initializer, an associated constant.
+    fn with_expr_ownership<R>(
+        &mut self,
+        expr: &ast::Expr,
+        reify: impl FnOnce(&mut Self) -> R,
+    ) -> R {
+        self.with_ownership(
+            Vec::new(),
+            |facts| ownership::expr_modes(expr, facts),
+            reify,
+        )
+    }
+
+    fn with_ownership<R>(
+        &mut self,
+        affine_params: Vec<String>,
+        walk: impl FnOnce(&ReifyFacts<'_, 'a, H>) -> Modes,
+        reify: impl FnOnce(&mut Self) -> R,
+    ) -> R {
+        let modes = walk(&ReifyFacts {
+            reify: self,
+            affine_params: &affine_params,
+        });
+        let ownership = Some(Rc::new(BodyOwnership {
+            modes,
+            affine_params,
+        }));
+        util::replaced(self, |this| &mut this.body_ownership, ownership, reify).0
+    }
+
+    /// Answer `ask` about the body being reified; outside one, nothing moves.
+    fn ask_ownership(&self, ask: impl FnOnce(&Modes, &ReifyFacts<'_, 'a, H>) -> bool) -> bool {
+        self.body_ownership.as_ref().is_some_and(|body| {
+            ask(
+                &body.modes,
+                &ReifyFacts {
+                    reify: self,
+                    affine_params: &body.affine_params,
+                },
+            )
+        })
+    }
+
+    /// Whether `expr` is a place the body being reified moves.
+    fn moves(&self, expr: &ast::Expr) -> bool {
+        self.ask_ownership(|modes, facts| modes.moves(expr, facts))
+    }
+
+    /// Whether the body being reified takes ownership of the value of `expr`,
+    /// so a local reify binds it to moves where `expr` stood.
+    fn takes(&self, expr: &ast::Expr) -> bool {
+        self.ask_ownership(|modes, facts| modes.takes(expr, facts))
+    }
+
+    fn is_affine(&self, expr: &ast::Expr) -> bool {
+        self.ask_ownership(|_, facts| facts.is_affine(expr.id()))
+    }
+
+    /// `read` marked moved where its value is affine. `read` reads a local
+    /// reify bound ahead of its use, in a position that takes the value.
+    fn handed_on(&self, read: TirExpr) -> TirExpr {
+        let affine =
+            self.ask_ownership(|_, facts| self.tysys.is_affine(read.type_id, facts.affine_params));
+        if affine { read.moved() } else { read }
     }
 
     /// The body fact `map` records for `id` in the walk reify is replaying:
@@ -713,8 +862,20 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                     // trait default-method `TirFunction`s, synthesised here
                     // from the per-impl facts the body walk recorded on
                     // `sem.default_method_facts`.
-                    let mut methods = self.reify_impl(impl_block);
-                    methods.extend(self.reify_impl_default_methods(impl_block));
+                    // A default method's facts are the impl's own walk, which
+                    // states its types in the impl's parameters.
+                    let affine_params = ownership::affine_params(&impl_block.type_params);
+                    let methods = util::replaced(
+                        self,
+                        |this| &mut this.impl_affine_params,
+                        affine_params,
+                        |this| {
+                            let mut methods = this.reify_impl(impl_block);
+                            methods.extend(this.reify_impl_default_methods(impl_block));
+                            methods
+                        },
+                    )
+                    .0;
                     let bound = bind_trait_contracts(
                         methods,
                         &self.contract_bindings(impl_block),
@@ -1199,10 +1360,11 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             });
         }
 
-        let body = func
-            .body
-            .as_ref()
-            .map(|b| self.reify_block(b, &mut ctx, None));
+        let body = func.body.as_ref().map(|b| {
+            let mut affine_params = self.impl_affine_params.clone();
+            affine_params.extend(ownership::affine_params(&func.type_params));
+            self.with_body_ownership(b, affine_params, |this| this.reify_block(b, &mut ctx, None))
+        });
 
         // Projected while the type-param scope was alive, so defaults are
         // resolved; after it is torn down they cannot be.
@@ -1514,7 +1676,9 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
 
         let return_type = TypeTable::UNIT;
         let mut ctx = FunctionContext::new(return_type, function_name.clone());
-        let body = self.reify_block(&test_decl.body, &mut ctx, None);
+        let body = self.with_body_ownership(&test_decl.body, Vec::new(), |this| {
+            this.reify_block(&test_decl.body, &mut ctx, None)
+        });
 
         let tir_func = TirFunction {
             module_source: ModuleSource::default(),
@@ -1591,7 +1755,9 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             ty,
             global_name(&self.current_module_source, &global_decl.name),
         );
-        let initializer = self.reify_expr(&global_decl.initializer, &mut ctx, Some(ty));
+        let initializer = self.with_expr_ownership(&global_decl.initializer, |this| {
+            this.reify_expr(&global_decl.initializer, &mut ctx, Some(ty))
+        });
         let param = self.reify_param_attr(global_decl);
         let span = global_decl.span;
 
@@ -2428,7 +2594,8 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
     /// `sem.types.method_dispatch` for method calls,
     /// `sem.types.desugars` for desugar expansions, and
     /// `sem.types.generic_instantiations` for generic call /
-    /// struct-literal / variant-ctor type args.
+    /// struct-literal / variant-ctor type args. A place the body moves is
+    /// marked `Move`, for drop elaboration to take.
     pub(super) fn reify_expr(
         &mut self,
         expr: &ast::Expr,
@@ -2453,6 +2620,16 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             return tir.clone();
         }
 
+        let tir = self.reify_unmoved(expr, ctx, expected_type);
+        if self.moves(expr) { tir.moved() } else { tir }
+    }
+
+    fn reify_unmoved(
+        &mut self,
+        expr: &ast::Expr,
+        ctx: &mut FunctionContext,
+        expected_type: Option<TypeId>,
+    ) -> TirExpr {
         // The expression's recorded type is the source of truth for
         // `TirExpr::type_id`. Falls back to `expected_type` (or
         // `UNKNOWN` when neither is available) for AST shapes that
@@ -2493,7 +2670,9 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 if let Some(facts) = self.ann_sequence_coercions(tuple_lit.id) {
                     return self.reify_sequence_coercion(tuple_lit, facts, ctx, span);
                 }
-                self.reify_tuple_literal(tuple_lit, ctx, recorded_type, span)
+                self.reify_composite_literal(tuple_lit.id, recorded_type, span, |this, ty| {
+                    this.reify_tuple_literal(tuple_lit, ctx, ty, span)
+                })
             }
             ast::Expr::Cast(cast) => {
                 // The cast expression's type is the resolved target type;
@@ -2887,110 +3066,115 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         };
 
         // Re-read rather than bind: straight-line code makes the read exact,
-        // and a binding would keep an aggregate live across the assert.
-        if is_place && !conditional {
+        // and a binding would keep an aggregate live across the assert. A
+        // binding would also copy an affine place the condition only borrows.
+        let rereads = is_place && (!conditional || (!self.takes(expr) && self.is_affine(expr)));
+        if rereads {
             let cap_ctx = ctx
                 .reify_assert_capture_ctx
                 .as_mut()
                 .expect("reify_assert_capture_ctx survives recursive reify");
-            cap_ctx.slots[slot_idx].emitted = true;
-            cap_ctx.slots[slot_idx].type_id = Some(type_id);
-            cap_ctx.slots[slot_idx].place_expr = Some(resolved.clone());
-            return resolved;
+            // The failure branch reads the place, which the condition may
+            // have moved out of.
+            cap_ctx.slots[slot_idx].place_expr = Some(resolved.unmoved().clone());
+            if !conditional {
+                cap_ctx.slots[slot_idx].emitted = true;
+                cap_ctx.slots[slot_idx].type_id = Some(type_id);
+                return resolved;
+            }
         }
 
         // `defining_ast_id = None` keeps synthetic locals out of
         // `local_symbols` (LSP hover / go-to-def).
-        let local_index = ctx.add_local(cap_name.clone(), type_id, !hoisted, None);
+        let local_index =
+            (!rereads).then(|| ctx.add_local(cap_name.clone(), type_id, !hoisted, None));
+        let local_ref = local_index.map(|index| {
+            TirExpr::new(
+                TirExprKind::Local {
+                    index,
+                    name: cap_name.clone(),
+                },
+                type_id,
+                cap_span,
+            )
+        });
         let seen_local_index = conditional
             .then(|| ctx.add_local(seen_local_name(&cap_name), TypeTable::BOOL, true, None));
 
-        let local_ref = TirExpr::new(
-            TirExprKind::Local {
-                index: local_index,
-                name: cap_name.clone(),
-            },
-            type_id,
-            cap_span,
-        );
-
-        // A hoisted slot binds ahead of the condition, its scope reaching the
-        // failure branch too — sound because all that precedes it is bound too.
-        if hoisted {
+        let mut decls = Vec::new();
+        let spliced = if hoisted {
+            // A hoisted slot binds ahead of the condition, its scope reaching
+            // the failure branch too — sound because all that precedes it is
+            // bound too.
             assert!(
                 seen_local_index.is_none(),
                 "a conditional slot is never hoisted"
             );
-            let binding = TirStmt::new(
+            let local_ref = local_ref.expect("a hoisted slot is never a place");
+            decls.push(TirStmt::new(
                 TirStmtKind::Let {
                     name: cap_name,
-                    local_index,
+                    local_index: local_index.expect("bound with its reference"),
                     is_mut: false,
                     type_id,
                     value: resolved,
                     storage: LetStorage::Planned,
                 },
                 cap_span,
-            );
-            let cap_ctx = ctx
-                .reify_assert_capture_ctx
-                .as_mut()
-                .expect("reify_assert_capture_ctx survives recursive reify");
-            cap_ctx.slots[slot_idx].emitted = true;
-            cap_ctx.slots[slot_idx].local_index = Some(local_index);
-            cap_ctx.slots[slot_idx].type_id = Some(type_id);
-            cap_ctx.emitted_lets.push(binding);
-            return local_ref;
-        }
-
-        // Otherwise the capture sits where the operand does, moving no
-        // evaluation; until it runs, the local holds its Wasm default.
-        let (decls, spliced) = if let Some(seen_index) = seen_local_index {
-            let decls = vec![TirStmt::new(
-                TirStmtKind::Let {
-                    name: seen_local_name(&cap_name),
-                    local_index: seen_index,
-                    is_mut: true,
-                    type_id: TypeTable::BOOL,
-                    value: bool_lit(false, cap_span),
-                    storage: LetStorage::Taken,
-                },
-                cap_span,
-            )];
-            let capture_block = TirBlock::new(
-                vec![
-                    assign_stmt(local_ref.clone(), resolved, cap_span),
-                    assign_stmt(
-                        TirExpr::new(
-                            TirExprKind::Local {
-                                index: seen_index,
-                                name: seen_local_name(&cap_name),
-                            },
-                            TypeTable::BOOL,
-                            cap_span,
-                        ),
-                        bool_lit(true, cap_span),
-                        cap_span,
-                    ),
-                    TirStmt::new(TirStmtKind::Expr(local_ref), cap_span),
-                ],
-                cap_span,
-            );
-            (
-                decls,
-                TirExpr::new(TirExprKind::Block(capture_block), type_id, cap_span),
-            )
+            ));
+            // The capture stands where the operand did: what consumed the
+            // operand moves the local.
+            if self.takes(expr) {
+                local_ref.moved()
+            } else {
+                local_ref
+            }
         } else {
-            let capture_block = TirBlock::new(
-                vec![
-                    assign_stmt(local_ref.clone(), resolved, cap_span),
-                    TirStmt::new(TirStmtKind::Expr(local_ref), cap_span),
-                ],
+            // Otherwise the capture sits where the operand does, moving no
+            // evaluation; until it runs, the local holds its Wasm default.
+            let mut stmts = Vec::new();
+            let tail = match &local_ref {
+                // The block ends in the place itself, so it yields what the
+                // place holds without taking it.
+                None => resolved,
+                // The local hands on what the operand evaluated to, which it
+                // owns if the value is affine.
+                Some(local_ref) => {
+                    stmts.push(assign_stmt(local_ref.clone(), resolved, cap_span));
+                    if self.is_affine(expr) {
+                        local_ref.clone().moved()
+                    } else {
+                        local_ref.clone()
+                    }
+                }
+            };
+            if let Some(seen_index) = seen_local_index {
+                let seen_ref = TirExpr::new(
+                    TirExprKind::Local {
+                        index: seen_index,
+                        name: seen_local_name(&cap_name),
+                    },
+                    TypeTable::BOOL,
+                    cap_span,
+                );
+                decls.push(TirStmt::new(
+                    TirStmtKind::Let {
+                        name: seen_local_name(&cap_name),
+                        local_index: seen_index,
+                        is_mut: true,
+                        type_id: TypeTable::BOOL,
+                        value: bool_lit(false, cap_span),
+                        storage: LetStorage::Taken,
+                    },
+                    cap_span,
+                ));
+                stmts.push(assign_stmt(seen_ref, bool_lit(true, cap_span), cap_span));
+            }
+            stmts.push(TirStmt::new(TirStmtKind::Expr(tail), cap_span));
+            TirExpr::new(
+                TirExprKind::Block(TirBlock::new(stmts, cap_span)),
+                type_id,
                 cap_span,
-            );
-            (
-                Vec::new(),
-                TirExpr::new(TirExprKind::Block(capture_block), type_id, cap_span),
             )
         };
 
@@ -2999,7 +3183,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             .as_mut()
             .expect("reify_assert_capture_ctx survives recursive reify");
         cap_ctx.slots[slot_idx].emitted = true;
-        cap_ctx.slots[slot_idx].local_index = Some(local_index);
+        cap_ctx.slots[slot_idx].local_index = local_index;
         cap_ctx.slots[slot_idx].type_id = Some(type_id);
         cap_ctx.slots[slot_idx].seen_local_index = seen_local_index;
         cap_ctx.emitted_lets.extend(decls);
@@ -3664,6 +3848,11 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                     elem_type,
                     span,
                 );
+                let field_access = if by_ref {
+                    field_access
+                } else {
+                    this.handed_on(field_access)
+                };
 
                 // By reference (`for v of &tuple`), bind `&T_k` to a fresh copy of
                 // the field, matching `for v of &list` refiter semantics.
@@ -4871,16 +5060,30 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         ctx: &mut FunctionContext,
         recorded_type: TypeId,
     ) -> TirExpr {
+        self.reify_composite_literal(struct_lit.id, recorded_type, struct_lit.span, |this, ty| {
+            this.reify_struct_literal_as(struct_lit, ctx, ty)
+        })
+    }
+
+    /// Build a literal as `recorded_type`, or, where annotate coerced it to a
+    /// newtype over a composite, as that newtype's base retagged.
+    fn reify_composite_literal(
+        &mut self,
+        id: AstId,
+        recorded_type: TypeId,
+        span: Span,
+        build: impl FnOnce(&mut Self, TypeId) -> TirExpr,
+    ) -> TirExpr {
         let Some(newtype) = self
-            .ann_coercions(struct_lit.id)
-            .filter(|choice| choice.kind == CoercionKind::StructNewtype)
+            .ann_coercions(id)
+            .filter(|choice| choice.kind == CoercionKind::CompositeNewtype)
             .map(|choice| choice.target_type)
         else {
-            return self.reify_struct_literal_as(struct_lit, ctx, recorded_type);
+            return build(self, recorded_type);
         };
         let base = self.tysys.type_table.borrow().representation_head(newtype);
-        let built = self.reify_struct_literal_as(struct_lit, ctx, base);
-        cast_to_newtype(built, Some(newtype), struct_lit.span)
+        let built = build(self, base);
+        cast_to_newtype(built, Some(newtype), span)
     }
 
     fn reify_struct_literal_as(
@@ -5031,7 +5234,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 }
                 let name = minted_name("field", ctx.fresh_serial());
                 TirStructField {
-                    value: bind_to_local(ctx, name, f.value, &mut base_binding),
+                    value: self.handed_on(bind_to_local(ctx, name, f.value, &mut base_binding)),
                     ..f
                 }
             })
@@ -5044,7 +5247,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 let field_ty = substitute(self, *raw_ty);
                 fields.push(TirStructField {
                     name: name.clone(),
-                    value: TirExpr::new(
+                    value: self.handed_on(TirExpr::new(
                         TirExprKind::FieldAccess {
                             expr: Box::new(base_ref.clone()),
                             field_index: *field_index,
@@ -5052,7 +5255,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                         },
                         field_ty,
                         struct_lit.span,
-                    ),
+                    )),
                     field_index: *field_index,
                 });
             }
@@ -5070,7 +5273,9 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                         // A default's free names resolve in the struct's module.
                         let value = ctx.with_caller_bindings_hidden(|ctx| {
                             this.with_module_perspective(&struct_module, |this| {
-                                this.reify_expr(default_expr, ctx, Some(expected_field_ty))
+                                this.with_expr_ownership(default_expr, |this| {
+                                    this.reify_expr(default_expr, ctx, Some(expected_field_ty))
+                                })
                             })
                         });
                         fields.push(TirStructField {
@@ -5410,7 +5615,8 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 },
                 some_type,
                 span,
-            ),
+            )
+            .moved(),
             span,
         };
 
@@ -5510,7 +5716,8 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 },
                 ok_type,
                 span,
-            ),
+            )
+            .moved(),
             span,
         };
 
@@ -5521,7 +5728,8 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             },
             inner_err_type,
             span,
-        );
+        )
+        .moved();
         // `<OuterErr>::from(e)` where an impl converts, or a bound promises
         // one; otherwise the two convert with no impl, and `e` is cast.
         let converted_err = match self.ann_from_call_facts(qm_id) {
@@ -6119,7 +6327,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                         )
                     };
                     for (i, &et) in inner_elems.iter().enumerate() {
-                        elements.push(TirExpr::new(
+                        elements.push(self.handed_on(TirExpr::new(
                             TirExprKind::FieldAccess {
                                 expr: Box::new(spread_ref.clone()),
                                 field_index: i as u32,
@@ -6127,7 +6335,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                             },
                             et,
                             elem.span(),
-                        ));
+                        )));
                         elem_types.push(et);
                     }
                 } else {
@@ -6634,6 +6842,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                         struct_lit.span,
                     ),
                 };
+                let value = self.handed_on(value);
                 TirStructField {
                     name: uf.name.clone(),
                     value,
@@ -7072,7 +7281,12 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                                         }
                                         mut_ref
                                     } else {
-                                        bind_param_to_local(ctx, name, value, &mut prelude)
+                                        this.handed_on(bind_param_to_local(
+                                            ctx,
+                                            name,
+                                            value,
+                                            &mut prelude,
+                                        ))
                                     };
                                 }
                             }
@@ -7083,14 +7297,20 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                                 // A trait method's default has no body for annotate to walk, so
                                 // without the parameter's type here it reifies untyped.
                                 let expected = param_types.get(i).copied();
-                                let mut resolved = this.reify_expr(default_ast, ctx, expected);
+                                let mut resolved = this.with_expr_ownership(default_ast, |this| {
+                                    this.reify_expr(default_ast, ctx, expected)
+                                });
                                 if let Some(expected) = expected {
                                     this.settle_packs_in_default(&mut resolved, expected);
                                 }
                                 mut_refs.visit_expr(&mut resolved);
                                 if *named {
-                                    resolved =
-                                        bind_param_to_local(ctx, name, resolved, &mut prelude);
+                                    resolved = this.handed_on(bind_param_to_local(
+                                        ctx,
+                                        name,
+                                        resolved,
+                                        &mut prelude,
+                                    ));
                                 }
                                 // A default is a value synthesized here, with no caller storage
                                 // behind it for the callee to write.
@@ -8714,7 +8934,9 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             module, ty, value, ..
         } = assoc;
         let resolved = ctx.with_caller_bindings_hidden(|ctx| {
-            self.with_module_perspective(&module, |this| this.reify_expr(&value, ctx, Some(ty)))
+            self.with_module_perspective(&module, |this| {
+                this.with_expr_ownership(&value, |this| this.reify_expr(&value, ctx, Some(ty)))
+            })
         });
         TirExpr::new(resolved.kind, ty, span)
     }

@@ -21,6 +21,7 @@ use {
     ATN_TR_EPSILON,
     ATN_TR_RULE,
     ATN_TR_PRECEDENCE,
+    ATN_TR_SET,
 } from "./runtime/atn.wado";
 use { parse } from "./g4/parser.wado";
 use { assign_atn_call_sites, assign_atn_decisions } from "./ir.wado";
@@ -112,6 +113,7 @@ fn assert_sim_matches_atn(sim: &AtnSim, atn: &Atn) {
             assert sim.tr_prec[base + j] == t.prec;
         }
     }
+    assert sim.set_members == atn.sets, "sets";
 }
 
 test "ATN round-trips through atn_blob_bytes/atn_decode exactly" {
@@ -119,6 +121,44 @@ test "ATN round-trips through atn_blob_bytes/atn_decode exactly" {
     let atn = build_atn(&g);
     let sim = atn_decode(&atn_blob_bytes(&atn));
     assert_sim_matches_atn(&sim, &atn);
+}
+
+global KEYWORD_G4: String = "
+grammar K;
+name : ID | keyword | 'x' ('a' | B) ;
+keyword : 'select' | 'from' | B ;
+B : 'b' ;
+ID : [a-z]+ ;
+";
+
+test "a block of distinct terminals matches them by one set transition" {
+    let g = parse(KEYWORD_G4).unwrap();
+    let atn = build_atn(&g);
+    assert atn.sets.len() == 2;
+    assert atn.sets.iter_ref().all(|set| set.len() == 2 || set.len() == 3);
+    let sets = atn.states.iter_ref().map(|st| st.transitions.iter_ref().filter(|t| t.kind == ATN_TR_SET).count()).sum();
+    assert sets == Option::Some(2);
+    assert_sim_matches_atn(&atn_decode(&atn_blob_bytes(&atn)), &atn);
+}
+
+fn alternatives_g4(count: i32) -> String {
+    let mut g4 = "grammar T;\na : ID ID";
+    for let _ of 1..<count {
+        g4.push_str(" | ID ID");
+    }
+    g4.push_str(" ;\nID : [a-z]+ ;\n");
+    return g4;
+}
+
+test "a decision holds up to one alternative fewer than the failed-alternative offset" {
+    build_atn(&parse(alternatives_g4(1023)).unwrap());
+}
+
+// The simulator marks an alternative a predicate failed by offsetting it, so a
+// decision that wide would read its higher alternatives as failed ones.
+#[expect_trap]
+test "a decision as wide as the failed-alternative offset is refused" {
+    build_atn(&parse(alternatives_g4(1024)).unwrap());
 }
 
 test "ATN has one start/stop per parser rule" {

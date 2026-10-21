@@ -1747,6 +1747,18 @@ pub enum WirInstr {
 }
 
 impl WirInstr {
+    /// True when the branch `body` contains a `cold_path()` marker. Descends
+    /// through transparent grouping (`Block` / `Seq`), so desugarings still
+    /// match, but stops at nested control flow (`If` / `Loop`): a marker inside
+    /// an inner branch belongs to that branch, not this one.
+    pub fn marks_cold_path(body: &[Self]) -> bool {
+        body.iter().any(|instr| match instr {
+            Self::ColdPath => true,
+            Self::Block { body, .. } | Self::Seq(body) => Self::marks_cold_path(body),
+            _ => false,
+        })
+    }
+
     /// Returns true if this instruction always diverges (all execution paths
     /// end with `return` or `unreachable` before producing a value).
     pub fn always_diverges(&self) -> bool {

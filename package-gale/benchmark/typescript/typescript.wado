@@ -16,6 +16,9 @@ fn parse_input() {
     }
 }
 
+// The whole module under the test world's debug allocator takes most of the
+// default 5000ms on its own, and the suite runs files side by side.
+#[timeout_ms(30000)]
 test "input parses" {
     parse_input();
 }

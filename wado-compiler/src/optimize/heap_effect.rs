@@ -8,7 +8,7 @@ use std::sync::{Arc, Mutex};
 use cranelift_entity::EntityRef;
 
 use crate::builtin_facts::{SideEffect, Storage};
-use crate::graph::strongly_connected_components;
+use crate::graph::{DisjointSets, strongly_connected_components};
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::module_source::ModuleSource;
 use crate::nir::{NirFunction, NirUnaryOp};
@@ -840,9 +840,17 @@ struct AccessSite {
 /// One body's objects as a union-find over locals and expressions, where a
 /// class holds what flows together and carries the origins reaching it.
 pub(super) struct HeapFrame {
-    parent: Vec<u32>,
+    classes: DisjointSets,
     prov: Vec<Prov>,
     local_nodes: Vec<u32>,
+    /// Locals whose definition the walk reached. A caller may query a body it
+    /// is midway through rewriting: LICM reads a hoist's local before linking
+    /// the hoist's `let` in.
+    defined: IndexSet<u32>,
+    /// Some local was read with no definition the walk reached. Such a local
+    /// joins the `ELSEWHERE` class, which may then hold an object of any class,
+    /// fresh ones included.
+    partial: bool,
     /// Each parameter's node, in parameter order.
     params: Vec<u32>,
     expr_base: u32,
@@ -888,9 +896,11 @@ impl HeapFrame {
         let expr_count = body.exprs.len();
         let expr_base = 2;
         let mut frame = Self {
-            parent: (0..expr_base + expr_count as u32).collect(),
+            classes: DisjointSets::new(expr_base as usize + expr_count),
             prov: vec![Prov::default(); expr_base as usize + expr_count],
             local_nodes: Vec::new(),
+            defined: IndexSet::default(),
+            partial: false,
             params: Vec::with_capacity(params.len()),
             expr_base,
             expr_count,
@@ -900,7 +910,7 @@ impl HeapFrame {
         };
         frame.prov[ELSEWHERE as usize] = Prov::ELSEWHERE;
         for (k, &local) in params.iter().enumerate() {
-            let n = frame.local_node(local);
+            let n = frame.define_local(local);
             frame.prov[n as usize].join(Prov::param(k));
             frame.params.push(n);
         }
@@ -919,7 +929,7 @@ impl HeapFrame {
                     StmtKind::Let {
                         local_index, value, ..
                     } => {
-                        let l = frame.local_node(*local_index);
+                        let l = frame.define_local(*local_index);
                         frame.unify_op(effects, body, l, *value);
                     }
                     StmtKind::Return { value: Some(v) } => frame.unify_op(effects, body, RET, *v),
@@ -952,35 +962,27 @@ impl HeapFrame {
             self.local_nodes.resize(i + 1, NO_NODE);
         }
         if self.local_nodes[i] == NO_NODE {
-            let n = self.parent.len() as u32;
-            self.parent.push(n);
+            let n = self.classes.push();
             self.prov.push(Prov::default());
             self.local_nodes[i] = n;
         }
         self.local_nodes[i]
     }
 
+    fn define_local(&mut self, local: u32) -> u32 {
+        self.defined.insert(local);
+        self.local_node(local)
+    }
+
     fn expr_node(&self, e: ExprId) -> Option<u32> {
         (e.index() < self.expr_count).then(|| self.expr_base + e.index() as u32)
     }
 
-    fn find(&mut self, mut n: u32) -> u32 {
-        while self.parent[n as usize] != n {
-            let grand = self.parent[self.parent[n as usize] as usize];
-            self.parent[n as usize] = grand;
-            n = grand;
-        }
-        n
-    }
-
     fn unify(&mut self, a: u32, b: u32) {
-        let (ra, rb) = (self.find(a), self.find(b));
-        if ra == rb {
-            return;
+        if let Some((absorbed, kept)) = self.classes.union(b, a) {
+            let absorbed_prov = self.prov[absorbed as usize];
+            self.prov[kept as usize].join(absorbed_prov);
         }
-        let pb = self.prov[rb as usize];
-        self.parent[rb as usize] = ra;
-        self.prov[ra as usize].join(pb);
     }
 
     fn unify_op(&mut self, effects: &HeapEffects, body: &Body, n: u32, op: Operand) {
@@ -1269,7 +1271,8 @@ impl HeapFrame {
         let value_node = self.operand_node(effects, body, value);
         self.unify_nodes(target_node, value_node);
         let place = &body.exprs[target].kind;
-        if let ExprKind::Local { .. } = place {
+        if let ExprKind::Local { index, .. } = place {
+            self.defined.insert(*index);
             return;
         }
         let field = if let ExprKind::FieldAccess { field_index, .. } = place {
@@ -1322,8 +1325,8 @@ impl HeapFrame {
         };
         match &body.pats[pat].kind {
             PatKind::Binding { local_index, .. } => {
+                let l = self.define_local(*local_index);
                 if let OperandNode::Node(n) = scrutinee {
-                    let l = self.local_node(*local_index);
                     self.unify(l, n);
                 }
             }
@@ -1446,14 +1449,18 @@ impl HeapFrame {
     }
 
     fn finish(&mut self) {
-        for n in 0..self.parent.len() as u32 {
-            let r = self.find(n);
-            self.parent[n as usize] = r;
+        for i in 0..self.local_nodes.len() {
+            let n = self.local_nodes[i];
+            if n != NO_NODE && !self.defined.contains(&(i as u32)) {
+                self.unify(n, ELSEWHERE);
+                self.partial = true;
+            }
         }
+        self.classes.flatten();
     }
 
     fn class_prov(&self, n: u32) -> Prov {
-        self.prov[self.parent[n as usize] as usize]
+        self.prov[self.classes.root(n) as usize]
     }
 
     /// The summary this frame's body gives its callers.
@@ -1536,7 +1543,7 @@ impl HeapFrame {
                     return OperandNode::None;
                 }
                 self.expr_node(e).map_or(OperandNode::Unknown, |n| {
-                    OperandNode::Node(self.parent[n as usize])
+                    OperandNode::Node(self.classes.root(n))
                 })
             }
             Operand::Value(v) => {
@@ -1553,9 +1560,9 @@ impl HeapFrame {
                     let root = match source {
                         Some(OpaqueSource::Local(l)) => self.local_root(l),
                         Some(OpaqueSource::Expr(e)) => {
-                            self.expr_node(e).map(|n| self.parent[n as usize])
+                            self.expr_node(e).map(|n| self.classes.root(n))
                         }
-                        None => Some(self.parent[ELSEWHERE as usize]),
+                        None => Some(self.classes.root(ELSEWHERE)),
                     };
                     match root {
                         Some(r) => {
@@ -1576,19 +1583,31 @@ impl HeapFrame {
 
     fn local_root(&self, local: u32) -> Option<u32> {
         let n = *self.local_nodes.get(local as usize)?;
-        (n != NO_NODE).then(|| self.parent[n as usize])
+        (n != NO_NODE).then(|| self.classes.root(n))
     }
 
     /// Whether objects in class `n` may be ones the local's class `h` holds:
-    /// the same class, or two that both reach outside the body.
+    /// the same class, two that both reach outside the body, or either one the
+    /// `ELSEWHERE` class of a [`Self::partial`] frame.
     fn shares(&self, h: Option<u32>, n: OperandNode) -> bool {
         match (h, n) {
             (_, OperandNode::None) => false,
             (None, _) | (_, OperandNode::Unknown) => true,
             (Some(h), OperandNode::Node(n)) => {
-                n == h || (!self.prov[h as usize].is_fresh() && !self.prov[n as usize].is_fresh())
+                let elsewhere = self.classes.root(ELSEWHERE);
+                n == h
+                    || (!self.prov[h as usize].is_fresh() && !self.prov[n as usize].is_fresh())
+                    || (self.partial && (h == elsewhere || n == elsewhere))
             }
         }
+    }
+
+    /// Whether locals `a` and `b` may hold one object.
+    pub(super) fn locals_may_share(&self, a: u32, b: u32) -> bool {
+        let Some(b) = self.local_root(b) else {
+            return true;
+        };
+        self.shares(self.local_root(a), OperandNode::Node(b))
     }
 
     /// Whether `call` may read or write an object of type `key` that the
@@ -1680,7 +1699,7 @@ impl HeapFrame {
         self.accesses.iter().any(|a| {
             a.effect == Effect::Write
                 && a.keys.meets(keys)
-                && self.shares(h, OperandNode::Node(self.parent[a.node as usize]))
+                && self.shares(h, OperandNode::Node(self.classes.root(a.node)))
         }) || self.calls.iter().any(|&call| {
             self.call_may_keys(
                 effects,
@@ -1702,8 +1721,8 @@ impl HeapFrame {
         };
         let prov = self.prov[h as usize];
         !prov.is_fresh()
-            && (h == self.parent[RET as usize]
-                || h == self.parent[ELSEWHERE as usize]
+            && (h == self.classes.root(RET)
+                || h == self.classes.root(ELSEWHERE)
                 || prov.params.count_ones() > 1)
     }
 
@@ -1724,7 +1743,7 @@ impl HeapFrame {
                 && a.keys.contains(key)
                 && a.field.is_none_or(|f| f == field)
                 && !(a.field.is_some() && a.receiver.is_some_and(&own))
-                && self.shares(h, OperandNode::Node(self.parent[a.node as usize]))
+                && self.shares(h, OperandNode::Node(self.classes.root(a.node)))
         })
     }
 

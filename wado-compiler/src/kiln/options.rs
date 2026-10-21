@@ -12,6 +12,7 @@ use crate::ast::Visibility;
 use crate::compiler_host::{Code, Diagnostic, DiagnosticSpan, Severity};
 use crate::hashmap::IndexSet;
 use crate::module_source::ModuleSource;
+use crate::name::to_cm_name;
 use crate::primitive::PrimitiveType;
 use crate::semantics::Semantics;
 use crate::symbol::SymbolKind;
@@ -64,7 +65,9 @@ pub enum OptionsType {
     /// `TreeMap<String, V>` — an object whose keys are the author's own; a
     /// missing field resolves to the empty map, as a `List` does.
     Map(Box<OptionsType>),
-    /// Enum with all-no-payload variants, by name.
+    /// Enum with all-no-payload variants, each by its Component Model name:
+    /// the spelling a WIT-described generator gives it, so a generator takes
+    /// the same values whether it is named by its source or its component.
     Enum {
         name: String,
         variants: Vec<String>,
@@ -462,7 +465,13 @@ fn enum_variants(
         return None;
     };
 
-    Some(enum_decl.cases.iter().map(|c| c.name.clone()).collect())
+    Some(
+        enum_decl
+            .cases
+            .iter()
+            .map(|c| to_cm_name(&c.name))
+            .collect(),
+    )
 }
 
 fn evaluate_literal(
@@ -500,8 +509,9 @@ fn evaluate_literal(
         }
         (TirExprKind::Null, OptionsType::Option(_)) => Some(CanonicalValue::None),
         (TirExprKind::EnumConstruct { case_name, .. }, OptionsType::Enum { variants, .. }) => {
-            if variants.iter().any(|v| v == case_name) {
-                Some(CanonicalValue::Enum(case_name.clone()))
+            let case = to_cm_name(case_name);
+            if variants.contains(&case) {
+                Some(CanonicalValue::Enum(case))
             } else {
                 push_unsupported(
                     diagnostics,

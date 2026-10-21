@@ -244,6 +244,47 @@ You can confirm a rule is ALL(\*)-class with `gale dump` (it prints
 `Ambiguous(...)` for such a decision) and inspect the automaton with
 `gale dump --atn`.
 
+### Choosing the simulator
+
+The static prediction decides what fixed lookahead can. The `atn` option
+chooses who decides the rest: the runtime simulator, which builds the tree
+ANTLR4 builds, or the longest-match scan tournament, which is faster and can
+build a different one.
+
+| `atn`              | A rule's ambiguity  | A group's or a `?` `*` `+`'s ambiguity | A decision only the simulator can make |
+| ------------------ | ------------------- | -------------------------------------- | -------------------------------------- |
+| `"auto"` (default) | simulator           | tournament or a continuation scan      | simulator                              |
+| `"always"`         | simulator           | simulator                              | simulator                              |
+| `"never"`          | tournament          | tournament or a continuation scan      | refused: no parser is built            |
+| `"verify"`         | tournament, checked | tournament, checked                    | simulator                              |
+
+`"verify"` builds the tree `"never"` builds. Where `"auto"` would hand a
+rule's ambiguity to the simulator, or `"always"` a group's, the parser asks the
+simulator as well and panics where its answer differs from the tournament's.
+The lookahead DFA `"auto"` reads there is checked the same way. A `?` `*` `+`
+and a left-recursion loop's suffix are not checked yet, and neither is a
+decision a predicate gates. It is for testing the tournament against the
+simulator over real inputs, not for use.
+
+Under `"auto"`, an ambiguity at a rule's end that no caller continues on also
+stays with the tournament, and a `?` at a rule's end goes to the simulator when
+the rule asks it anyway. A `?` `*` `+` is ambiguous where its body and what
+follows it can start on one token; under `"always"`, one at the end of its
+alternative counts too, since its caller's continuation is not known there. The
+decisions only the simulator can make are the `between` shape above, `??`, a
+non-greedy loop's exit no lookahead locates, and a group's choice between its
+empty alternative and another. A lexer rule the lexer simulator matches is not
+affected by `atn`.
+
+```wado
+use { Parser } from "./Grammar.g4" with {
+    generator: {
+        module: "wado-lang:gale",
+        options: { atn: "never" },
+    },
+};
+```
+
 ## Resilient parsing
 
 A generated parser is **infallible**: it never throws and never bails on a
@@ -369,6 +410,7 @@ wado run package-gale gen --output Grammar_parser.wado Grammar.g4
 # Options:
 #   --output <f>       write the generated parser to <f> instead of stdout
 #   --trace            emit a parser that logs its recursive descent
+#   --atn <mode>       auto (default), always, never or verify (see "Choosing the simulator")
 #   --log-level <lvl>  gale's own threshold: trace, debug, info, warn (default),
 #                      or error. Advisory grammar diagnostics sit at info.
 wado run package-gale gen --trace Grammar.g4

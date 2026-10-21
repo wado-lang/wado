@@ -4821,6 +4821,8 @@ impl<'a> TirUnparser<'a> {
                 self.output.push_str(" as ");
                 self.output.push_str(&self.type_spelling(*target_type));
             }
+            // A move is how the source reads the place, so it has no spelling.
+            TirExprKind::Move { expr: inner } => self.unparse_expr(inner),
             TirExprKind::Call {
                 func,
                 type_args,

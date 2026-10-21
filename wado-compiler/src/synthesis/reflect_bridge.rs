@@ -13,6 +13,7 @@ use crate::hashmap::IndexMap;
 use crate::module_source::ModuleSource;
 use crate::tir::{ResolvedType, StructDef, TirFunction, TypeId};
 
+use super::resource_cleanup;
 use super::traits::{
     REFLECT_MEMBERS_ASSOC, generate_case_bridge_helpers, generate_field_bridge_helpers,
     generate_variant_instance_discriminant_fn,
@@ -26,6 +27,10 @@ pub fn synthesize_monomorphized_reflect_bridges(flat: &mut FlatPackage) {
     let mut generated = Vec::new();
     collect_struct_bridges(flat, &mut generated);
     collect_variant_bridges(flat, &mut generated);
+    // The generators mark moves for drop elaboration, which has already run.
+    for function in &generated {
+        resource_cleanup::strip_moves(&mut function.borrow_mut());
+    }
     flat.functions.extend(generated);
 }
 

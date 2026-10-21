@@ -57,6 +57,7 @@ use crate::build_dep::{GENERATOR_WORLD_SEGMENT, parse_spec, resolve_generator_ve
 use crate::cache::generator_path;
 use crate::compile::{KilnRun, run_nested_pipeline};
 use crate::compiler_host::FilesystemCompilerHost;
+use crate::fingerprint::compiler_digest;
 use crate::kiln_wit::options_descriptor_from_component;
 use crate::oci;
 use crate::run_cache::RunCache;
@@ -264,6 +265,9 @@ impl CliGeneratorProvider {
     fn indexed_identity(&self, module_path: &str, base: &Path) -> Option<IndexedGenerator> {
         let index = GeneratorIndex::load(&self.index_path())?;
         let recorded = index.generators.get(module_path)?;
+        if recorded.compiler != compiler_id() {
+            return None;
+        }
         let mut validated: Vec<(String, [u8; 32])> = Vec::with_capacity(recorded.sources.len());
         for entry in &recorded.sources {
             let abs = base.join(&entry.path);
@@ -516,6 +520,7 @@ impl CliGeneratorProvider {
                         hash: hex32(hash),
                     })
                     .collect(),
+                compiler: compiler_id().to_string(),
             },
         );
 
@@ -751,6 +756,17 @@ struct IndexedGenerator {
     /// appears. Re-hashed on read, so an edit to a transitive import
     /// invalidates the entry.
     sources: Vec<SourceEntry>,
+    /// The `compiler_id` of the `wado` that built the component. Another
+    /// compiler builds other bytes from the same sources, and a fix to a
+    /// miscompile would otherwise never reach the generator.
+    compiler: String,
+}
+
+/// This run's compiler, read once, when the run first resolves a generator.
+static COMPILER_ID: LazyLock<String> = LazyLock::new(|| hex32(&compiler_digest()));
+
+fn compiler_id() -> &'static str {
+    &COMPILER_ID
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -1325,6 +1341,55 @@ export fn generate(req: Request<Options>) -> Result<Response, Error> {\n\
             1,
             "warm on-disk cache must not re-invoke the inner compiler"
         );
+
+        let _ = std::fs::remove_dir_all(&tmp);
+    }
+
+    #[test]
+    fn resolve_under_another_compiler_recompiles() {
+        // A compiler fix must reach a generator built by the compiler it fixed,
+        // though the generator's sources did not move.
+        let tmp = std::env::temp_dir().join(format!(
+            "wado-kiln-provider-resolve-compiler-{}",
+            std::process::id()
+        ));
+        let _ = std::fs::remove_dir_all(&tmp);
+        std::fs::create_dir_all(&tmp).unwrap();
+        std::fs::write(
+            tmp.join("generator.wado"),
+            "\
+use { Request, Response, Error } from \"core:kiln\";\n\
+\n\
+export struct Options {\n\
+    pub verbose: bool,\n\
+}\n\
+\n\
+export fn generate(req: Request<Options>) -> Result<Response, Error> {\n\
+    let _ = req.options.verbose;\n\
+    return Result::Ok(Response { files: [] });\n\
+}\n",
+        )
+        .unwrap();
+        let provider = CliGeneratorProvider::new(tmp.clone());
+        let module = GeneratorModule::LocalPath(InvocationPath::normalize("./generator.wado"));
+        runtime()
+            .block_on(async { provider.resolve(&module).await })
+            .expect("first resolve");
+        assert_eq!(provider.compile_count(), 1);
+
+        let index_path = tmp.join(INDEX_FILE);
+        let index = std::fs::read_to_string(&index_path).unwrap();
+        let built_by = format!("\"compiler\": \"{}\"", compiler_id());
+        assert!(
+            index.contains(&built_by),
+            "the index must record the compiler: {index}"
+        );
+        let another = format!("\"compiler\": \"{}\"", "0".repeat(64));
+        std::fs::write(&index_path, index.replace(&built_by, &another)).unwrap();
+        runtime()
+            .block_on(async { provider.resolve(&module).await })
+            .expect("resolve under another compiler");
+        assert_eq!(provider.compile_count(), 2);
 
         let _ = std::fs::remove_dir_all(&tmp);
     }

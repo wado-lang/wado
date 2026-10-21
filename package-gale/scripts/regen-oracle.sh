@@ -26,9 +26,9 @@ norm() { sed 's/ *<EOF> *//g' | tr '\t\r\n' '   ' | tr -s ' ' | sed 's/^ *//; s/
 esc() { sed 's/\\/\\\\/g; s/"/\\"/g'; }
 
 regen_one() {
-  local key="$1" grammar start module outdir cases
+  local key="$1" grammar start module outdir cases options=""
   case "$key" in
-    sqlite) grammar="SQLite.g4"; start="parse"; module="sqlite"; outdir="./generated/cst_sqlite"; cases="tests/oracle/sqlite/cases.sql" ;;
+    sqlite) grammar="SQLite.g4"; start="parse"; module="sqlite"; outdir="./generated/cst_sqlite"; cases="tests/oracle/sqlite/cases.sql"; options=', options: { atn: "verify" }' ;;
     json)   grammar="JSON.g4";   start="json";  module="json";   outdir="./generated/cst_json";   cases="tests/oracle/json/cases.json" ;;
     *) echo "regen-oracle: unknown grammar key '$key'" >&2; return 1 ;;
   esac
@@ -39,7 +39,7 @@ regen_one() {
   {
     echo 'use { Stdout, println } from "core:cli";'
     echo "use $module from \"./grammars/$grammar\""
-    echo "    with { generator: { module: \"../src/generator.wado\", output_dir: \"$outdir\" } };"
+    echo "    with { generator: { module: \"../src/generator.wado\", output_dir: \"$outdir\"$options } };"
     echo "fn d(input: String) with Stdout { let r = ${module}::parse(&input); println(\`@@@\${${module}::to_string_tree(&r)}\`); }"
     echo 'export fn run() with Stdout {'
     while IFS= read -r line; do
@@ -63,7 +63,7 @@ regen_one() {
     echo
     echo "use $module from \"./grammars/$grammar\""
     echo '    with {'
-    echo "        generator: { module: \"../src/generator.wado\", output_dir: \"$outdir\" },"
+    echo "        generator: { module: \"../src/generator.wado\", output_dir: \"$outdir\"$options },"
     echo '    };'
     echo 'use { normalize_tree } from "./support/tree_compare.wado";'
     echo

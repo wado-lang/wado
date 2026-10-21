@@ -1492,7 +1492,7 @@ impl Parser {
 }
 
 fn _parse_r__inner_alt_0(p: &mut Parser) -> () {
-    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_0, &EXPECTED_0); }
+    if !(kind_set_has(&SYNC_0, p.kinds[p.pos]) || p.kinds[p.pos] >= 8) { builtin::cold_path(); p.sync_enter(&SYNC_0, &EXPECTED_0); }
     let mut opt_enter: bool = false;
     if p.peek_kind() == TK_A {
         opt_enter_scan: {
@@ -1579,7 +1579,7 @@ fn scan_r__alt_2(tokens: &Array<i32>, pos: i32) -> i32 {
 }
 
 fn _parse_r__inner(p: &mut Parser) -> () {
-    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { builtin::cold_path(); p.sync_alts(&SYNC_0, &EXPECTED_0); }
+    if !(kind_set_has(&SYNC_0, p.kinds[p.pos]) || p.kinds[p.pos] >= 8) { builtin::cold_path(); p.sync_alts(&SYNC_0, &EXPECTED_0); }
     let kind = p.peek_kind();
     if true {
         if kind == TK_A {

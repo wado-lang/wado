@@ -296,9 +296,9 @@ fn record_string(fields: &[(String, Val)], name: &str) -> Result<String, Generat
 
 /// Materialize the invocation's validated options into a typed [`Val`], shaped
 /// by the component's own introspected options parameter type — the single
-/// source of truth for widths, enum-vs-string, and field order. The option
-/// values carry raw Wado identifiers, mapped to the component's CM kebab-case
-/// names here.
+/// source of truth for widths, enum-vs-string, and field order. Field names
+/// arrive as raw Wado identifiers and are mapped to the component's CM
+/// kebab-case names here; enum cases arrive already in their CM names.
 fn options_to_val(options: &CanonicalOptions, ty: &Type) -> Result<Val, String> {
     canonical_to_val(&CanonicalValue::Struct(options.values.clone()), ty)
 }
@@ -332,10 +332,8 @@ fn canonical_to_val(v: &CanonicalValue, ty: &Type) -> Result<Val, String> {
             CanonicalValue::String(s) => Val::String(s.clone()),
             _ => return Err(mismatch()),
         },
-        // Enum cases carry raw Wado names; the component enum uses CM
-        // kebab-case case names, so normalize before building the Val.
         Type::Enum(_) => match v {
-            CanonicalValue::Enum(s) => Val::Enum(to_cm_name(s)),
+            CanonicalValue::Enum(s) => Val::Enum(s.clone()),
             _ => return Err(mismatch()),
         },
         Type::Option(o) => match v {
@@ -829,9 +827,9 @@ export fn generate(req: Request<Options>) -> Result<Response, Error> {
         assert_eq!(response.files[0].content, "pub fn x() {}");
     }
 
-    /// The validated options carry raw Wado field/case names and store every
-    /// float as an f64, while the component type the host maps them onto uses
-    /// CM kebab-case names and `float32`. This exercises all three: a
+    /// The validated options carry raw Wado field names, CM case names and
+    /// every float as an f64, while the component type the host maps them onto
+    /// uses CM kebab-case names and `float32`. This exercises all three: a
     /// `snake_case` field (`max_depth`), an `f32` field (`ratio`), and an enum
     /// with a multi-word case (`Mode::HighContrast`). The generator only emits
     /// `ok.wado` when it sees all three option values materialized correctly.
@@ -878,8 +876,8 @@ export fn generate(req: Request<Options>) -> Result<Response, Error> {
             ))
             .expect("generator compiles to a component");
 
-        // Exactly what the driver's validation produces — raw Wado names, an
-        // f64 for the f32 field, the enum by its raw case name.
+        // Exactly what the driver's validation produces — raw Wado field
+        // names, an f64 for the f32 field, the enum by its CM case name.
         let options = CanonicalOptions {
             descriptor: wado_compiler::kiln::OptionsDescriptor::default(),
             values: vec![
@@ -887,7 +885,7 @@ export fn generate(req: Request<Options>) -> Result<Response, Error> {
                 ("ratio".to_string(), CanonicalValue::F64(0.5)),
                 (
                     "mode".to_string(),
-                    CanonicalValue::Enum("HighContrast".to_string()),
+                    CanonicalValue::Enum("high-contrast".to_string()),
                 ),
             ],
         };

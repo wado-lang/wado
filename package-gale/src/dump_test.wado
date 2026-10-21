@@ -509,9 +509,9 @@ A : 'a' ; B : 'b' ;"), "k");
     assert k.contains("Consume(TK_LIT_k)");
 }
 
-test "render_dump says why prediction halted: identical alts, the depth limit, an open-ended alt" {
+test "render_dump says why prediction halted: alts ending together, the depth limit, an open-ended alt" {
     let report = dump_source("grammar D;
-dd : A | A ;
+dd : A | A {p()}? ;
 deep : A (B|C) (B|C) (B|C) (B|C) (B|C) (B|C) D | A (B|C) (B|C) (B|C) (B|C) (B|C) (B|C) E ;
 v : A ~B C | A ~B D ;
 A : 'a' ; B : 'b' ; C : 'c' ; D : 'd' ; E : 'e' ;");
@@ -522,6 +522,14 @@ A : 'a' ; B : 'b' ; C : 'c' ; D : 'd' ; E : 'e' ;");
     assert deep.contains("Ambiguous([alt 0, alt 1]) — branch-depth limit (5) reached: needs unbounded lookahead");
     let v = section_of(&report, "v");
     assert v.contains("Ambiguous([alt 0, alt 1]) — no token named: an alt admits every one (`.` / `~X`)");
+}
+
+test "render_dump names an alternative an earlier one subsumes" {
+    let report = dump_source("grammar D;
+ee : A B? | A ;
+A : 'a' ; B : 'b' ;");
+    let ee = section_of(&report, "ee");
+    assert ee.contains("alt 1 subsumed: an earlier alternative matches all it does, so it is never taken"), ee;
 }
 
 test "the ATN dump names every state and transition kind a grammar builds" {

@@ -53,7 +53,8 @@ fn collect_ref_funcs_instr(instr: &WirInstr, pinned: &mut IndexSet<u32>) {
 }
 
 /// The state a subtree reads or writes: locals and struct fields by name,
-/// the rest of the heap as one region, and a call as any of it.
+/// the rest of the heap as one region, and a call as any of it unless
+/// `CalleeWrites` knows its callee.
 #[derive(Default)]
 pub(super) struct Footprint {
     locals: IndexSet<String>,
@@ -72,21 +73,21 @@ impl Footprint {
     }
 
     pub(super) fn writes(instr: &WirInstr) -> Self {
-        Self::writes_all(std::slice::from_ref(instr))
+        Self::writes_all(std::slice::from_ref(instr), None)
     }
 
-    pub(super) fn writes_all(body: &[WirInstr]) -> Self {
+    /// What `body` writes, with a direct call off a cold path to a function
+    /// `callees` knows writing only the fields it names.
+    pub(super) fn writes_all(body: &[WirInstr], callees: Option<&CalleeWrites>) -> Self {
         let mut footprint = Self::default();
-        for instr in body {
-            footprint.add_writes(instr);
-        }
+        footprint.add_writes_all(body, callees);
         footprint
     }
 
     /// What `instr` itself writes, its operands left out.
-    pub(super) fn writes_of_node(instr: &WirInstr) -> Self {
+    pub(super) fn writes_of_node(instr: &WirInstr, callees: Option<&CalleeWrites>) -> Self {
         let mut footprint = Self::default();
-        footprint.add_node_writes(instr);
+        footprint.add_node_writes(instr, callees);
         footprint
     }
 
@@ -141,13 +142,39 @@ impl Footprint {
         instr.for_each_child(&mut |child| self.add_reads(child));
     }
 
-    fn add_writes(&mut self, instr: &WirInstr) {
-        self.add_node_writes(instr);
-        instr.for_each_child(&mut |child| self.add_writes(child));
+    fn add_writes_all(&mut self, body: &[WirInstr], callees: Option<&CalleeWrites>) {
+        for instr in body {
+            self.add_writes(instr, callees);
+        }
     }
 
-    fn add_node_writes(&mut self, instr: &WirInstr) {
+    fn add_writes(&mut self, instr: &WirInstr, callees: Option<&CalleeWrites>) {
+        self.add_node_writes(instr, callees);
+        if let WirInstr::If {
+            condition,
+            then_body,
+            else_body,
+            ..
+        } = instr
+        {
+            self.add_writes(condition, callees);
+            for arm in std::iter::once(then_body).chain(else_body) {
+                self.add_writes_all(arm, arm_callees(arm, callees));
+            }
+            return;
+        }
+        instr.for_each_child(&mut |child| self.add_writes(child, callees));
+    }
+
+    fn add_node_writes(&mut self, instr: &WirInstr, callees: Option<&CalleeWrites>) {
         self.locals.extend(instr.local_writes().map(str::to_string));
+        if let WirInstr::Call { func_id, .. } = instr
+            && let Some(fields) = callees.and_then(|c| c.of(func_id.index()))
+        {
+            self.fields.extend(fields.iter().cloned());
+            self.heap = true;
+            return;
+        }
         match instr {
             WirInstr::StructSet { field_name, .. } => {
                 self.fields.insert(field_name.clone());
@@ -170,6 +197,129 @@ impl Footprint {
             _ => {}
         }
     }
+}
+
+/// The `CalleeWrites` an arm consults: none in one marked rarely run. Keeping a
+/// load live across a call there takes a callee-saved register, saved and
+/// restored on every entry, to spare one reload. That measured slower
+/// (`.claude/skills/wado-performance/trade-offs.md`).
+pub(super) fn arm_callees<'c>(
+    arm: &[WirInstr],
+    callees: Option<&'c CalleeWrites>,
+) -> Option<&'c CalleeWrites> {
+    callees.filter(|_| !WirInstr::marks_cold_path(arm))
+}
+
+/// The struct fields each defined function may write, its callees' writes
+/// included. A function reaching an import or an indirect call has none: what
+/// it writes is unknown.
+pub(super) struct CalleeWrites {
+    defined_func_base: u32,
+    fields: Vec<Option<IndexSet<String>>>,
+}
+
+impl CalleeWrites {
+    pub(super) fn of_module(module: &WirPackage) -> Self {
+        let mut fields: Vec<Option<IndexSet<String>>> = Vec::with_capacity(module.functions.len());
+        let mut callees: Vec<Vec<usize>> = Vec::with_capacity(module.functions.len());
+        for func in &module.functions {
+            let mut own = Some(IndexSet::default());
+            let mut calls = Vec::new();
+            if let Some(body) = &func.body {
+                for instr in body {
+                    direct_writes(module, instr, &mut own, &mut calls);
+                }
+            } else {
+                own = None;
+            }
+            fields.push(own);
+            callees.push(calls);
+        }
+        let mut callers: Vec<Vec<usize>> = vec![Vec::new(); fields.len()];
+        for (f, calls) in callees.iter_mut().enumerate() {
+            calls.sort_unstable();
+            calls.dedup();
+            calls.retain(|&c| c != f);
+            for &c in calls.iter() {
+                callers[c].push(f);
+            }
+        }
+        let mut pending: Vec<usize> = (0..fields.len()).collect();
+        let mut queued = vec![true; fields.len()];
+        while let Some(f) = pending.pop() {
+            queued[f] = false;
+            if !absorb_callee_writes(&mut fields, f, &callees[f]) {
+                continue;
+            }
+            for &caller in &callers[f] {
+                if !queued[caller] {
+                    queued[caller] = true;
+                    pending.push(caller);
+                }
+            }
+        }
+        Self {
+            defined_func_base: module.defined_func_base,
+            fields,
+        }
+    }
+
+    /// The fields the function `index` names may write, or `None` if unknown.
+    fn of(&self, index: u32) -> Option<&IndexSet<String>> {
+        let position = index.checked_sub(self.defined_func_base)? as usize;
+        self.fields.get(position)?.as_ref()
+    }
+}
+
+/// Extend what `f` writes by what each of `calls` writes, and say whether that
+/// changed it.
+fn absorb_callee_writes(
+    fields: &mut [Option<IndexSet<String>>],
+    f: usize,
+    calls: &[usize],
+) -> bool {
+    let mut changed = false;
+    for &c in calls {
+        let Some(own) = &fields[f] else {
+            return changed;
+        };
+        let Some(written) = &fields[c] else {
+            fields[f] = None;
+            return true;
+        };
+        let missing: Vec<String> = written
+            .iter()
+            .filter(|name| !own.contains(*name))
+            .cloned()
+            .collect();
+        if !missing.is_empty() {
+            fields[f].as_mut().expect("bound above").extend(missing);
+            changed = true;
+        }
+    }
+    changed
+}
+
+fn direct_writes(
+    module: &WirPackage,
+    instr: &WirInstr,
+    own: &mut Option<IndexSet<String>>,
+    calls: &mut Vec<usize>,
+) {
+    match instr {
+        WirInstr::StructSet { field_name, .. } => {
+            if let Some(own) = own {
+                own.insert(field_name.clone());
+            }
+        }
+        WirInstr::Call { func_id, .. } => match module.defined_func_position(func_id.index()) {
+            Some(position) => calls.push(position),
+            None => *own = None,
+        },
+        WirInstr::CallIndirect { .. } | WirInstr::CallRef { .. } => *own = None,
+        _ => {}
+    }
+    instr.for_each_child(&mut |child| direct_writes(module, child, own, calls));
 }
 
 /// True if no node in `instr`'s sub-tree is observable. Pure loads
@@ -366,6 +516,64 @@ pub(super) fn for_each_null_trapping_operand(
         }
         position += 1;
     });
+}
+
+/// True if executing `instr` may branch out of the enclosing block: it
+/// contains a `Br`/`BrIf`/`BrTable` whose target is the block's own label or
+/// any label beyond it. `Return`/`Unreachable` do not count — they never
+/// resume after the block.
+pub(super) fn may_exit_enclosing_block(instr: &WirInstr) -> bool {
+    branches_at_or_beyond(instr, 0)
+}
+
+/// Whether `instr` branches to the label `label_depth` levels out or to any
+/// label beyond it.
+fn branches_at_or_beyond(instr: &WirInstr, label_depth: u32) -> bool {
+    match instr {
+        WirInstr::Br { depth } => *depth >= label_depth,
+        WirInstr::BrIf { depth, condition } => {
+            *depth >= label_depth || branches_at_or_beyond(condition, label_depth)
+        }
+        WirInstr::BrTable {
+            index,
+            targets,
+            default,
+        } => {
+            targets
+                .iter()
+                .chain(std::iter::once(default))
+                .any(|d| *d >= label_depth)
+                || branches_at_or_beyond(index, label_depth)
+        }
+        WirInstr::Block { body, .. } | WirInstr::Loop { body, .. } => body
+            .iter()
+            .any(|child| branches_at_or_beyond(child, label_depth + 1)),
+        WirInstr::If {
+            condition,
+            then_body,
+            else_body,
+            ..
+        } => {
+            branches_at_or_beyond(condition, label_depth)
+                || then_body
+                    .iter()
+                    .any(|child| branches_at_or_beyond(child, label_depth + 1))
+                || else_body
+                    .iter()
+                    .flatten()
+                    .any(|child| branches_at_or_beyond(child, label_depth + 1))
+        }
+        WirInstr::Seq(body) => body
+            .iter()
+            .any(|child| branches_at_or_beyond(child, label_depth)),
+        _ => {
+            let mut found = false;
+            instr.for_each_child(&mut |child| {
+                found = found || branches_at_or_beyond(child, label_depth);
+            });
+            found
+        }
+    }
 }
 
 /// Index of the first non-`Nop` statement at or after `from`.

@@ -1,0 +1,20 @@
+// A generic function that calls itself at a type holding its own type
+// parameter twice doubles the type at every instance. It is refused once the
+// type outgrows a bounded size, before naming an instance takes forever.
+
+fn walk<S>(n: i32, s: S) -> i32 {
+    if n == 0 {
+        return 1;
+    }
+    return walk(n - 1, [s, s]);
+}
+
+export fn run() {
+    assert walk(3, 1) == 1;
+}
+
+__DATA__
+{
+    "compile_error": "expanding_recursion_doubling_refused.wado:5:1: analysis error: 'walk' reaches itself through a type argument built over its own type parameter, so each instance needs a larger one and they never end",
+    "compile_error_codes": ["EXPANDING_RECURSION"]
+}

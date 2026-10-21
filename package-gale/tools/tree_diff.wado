@@ -1,0 +1,305 @@
+//! Lists where two `toStringTree` parse trees disagree: the jar's
+//! (`scripts/antlr4-oracle.sh`) and Gale's. A line diff of the printed trees
+//! counts one misplaced subtree as many hunks, so this compares the trees as
+//! sets of (rule, first token, end token) spans. A divergence is a run of
+//! overlapping spans one side has and the other lacks, reported once with the
+//! outermost differing rule on each side and the tokens it covers. As with
+//! `diff`, it exits 1 where the trees disagree.
+//!
+//! ```sh
+//! wado run package-gale/tools/tree_diff.wado -- jar.tree gale.tree
+//! ```
+
+use { println, eprintln, args, exit, Stdout, Stderr, Environment, Exit } from "core:cli";
+use fs from "core:fs";
+use { Preopens } from "core:fs";
+use { TreeSet } from "core:collections";
+
+struct Span {
+    rule: String,
+    start: i32,
+    end: i32,
+}
+
+struct Tree {
+    leaves: List<String>,
+    spans: List<Span>,
+}
+
+fn is_space(b: u8) -> bool {
+    return b == b' ' || b == b'\n' || b == b'\r' || b == b'\t';
+}
+
+fn is_name_byte(b: u8) -> bool {
+    return b == b'_' || b >= b'a' && b <= b'z' || b >= b'A' && b <= b'Z' || b >= b'0' && b <= b'9';
+}
+
+/// The end of the rule name a node opening at `i` carries, or `None` where the
+/// `(` is a terminal's text. A node prints as `(` and its rule name, then a
+/// space before its first child; a terminal prints behind a space, so a lone
+/// `(` reaches here followed by a space or `)`, and one inside a string
+/// literal (`"(0, 60]"`) by a character no rule name starts with. A string
+/// whose text is `(` and a rule-shaped word, then a space, still reads as a
+/// node, and `parse_tree` panics on the node it leaves unclosed.
+fn rule_name_end(text: &String, i: i32) -> Option<i32> {
+    let n = text.len();
+    let first = i + 1;
+    if first >= n {
+        return null;
+    }
+    let c = text.byte_at(first);
+    if !is_name_byte(c) || c >= b'0' && c <= b'9' {
+        return null;
+    }
+    let mut j = first;
+    while j < n && is_name_byte(text.byte_at(j)) {
+        j += 1;
+    }
+    if j >= n || text.byte_at(j) != b' ' {
+        return null;
+    }
+    return Some(j);
+}
+
+/// A `)` closes a node only right after its last child, since a terminal `)`
+/// is printed behind a space. `<EOF>` is cosmetic (the jar prints it, Gale
+/// does not), so it is dropped. A terminal's own spaces split it into several
+/// leaves, the same way on both sides. Spans are listed in the order their
+/// nodes open, so a node comes before every node inside it.
+fn parse_tree(text: &String) -> Tree {
+    let mut leaves: List<String> = [];
+    let mut spans: List<Span> = [];
+    let mut open: List<i32> = [];
+    let n = text.len();
+    let mut i = 0;
+    // Children are apart by one space, so a second one starts a terminal
+    // whose text is spaces (a template literal's ` `). It ends where a `)`
+    // closes its node, which the `)` cannot tell from the space before it.
+    let mut after_blank_leaf = false;
+    while i < n {
+        let b = text.byte_at(i);
+        if b == b' ' && i > 0 && text.byte_at(i - 1) == b' ' && !after_blank_leaf {
+            while i + 1 < n && text.byte_at(i + 1) == b' ' {
+                i += 1;
+            }
+            leaves.push(" ");
+            after_blank_leaf = true;
+            i += 1;
+            continue;
+        }
+        if is_space(b) {
+            i += 1;
+            continue;
+        }
+        let closes = b == b')' && (after_blank_leaf || !is_space(text.byte_at(i - 1)));
+        after_blank_leaf = false;
+        if b == b'(' && let Some(j) = rule_name_end(text, i) {
+            open.push(spans.len());
+            spans.push(Span {
+                rule: text.substr_bytes(i + 1, j),
+                start: leaves.len(),
+                end: -1,
+            });
+            i = j;
+            continue;
+        }
+        if closes {
+            let Some(index) = open.pop() else {
+                panic(`unbalanced ')' at byte ${i}`);
+            };
+            spans[index].end = leaves.len();
+            i += 1;
+            continue;
+        }
+        let mut j = i + 1;
+        while j < n && !is_space(text.byte_at(j)) && text.byte_at(j) != b')' {
+            j += 1;
+        }
+        let leaf = text.substr_bytes(i, j);
+        if leaf != "<EOF>" {
+            leaves.push(leaf);
+        }
+        i = j;
+    }
+    if let Some(index) = open.last() {
+        panic(`unclosed '(${spans[index].rule}' at leaf ${spans[index].start}`);
+    }
+    return Tree { leaves, spans };
+}
+
+fn span_key(s: &Span) -> String {
+    return `${s.rule}@${s.start}-${s.end}`;
+}
+
+/// The outermost rule each side built over a run of tokens, `None` on the
+/// side whose spans there the other side shares.
+struct Divergence {
+    start: i32,
+    end: i32,
+    jar_rule: Option<String>,
+    gale_rule: Option<String>,
+}
+
+/// The spans of `side` that `other` lacks, tagged with which side has them
+/// and where they open in it.
+fn only_in(side: &Tree, other: &Tree, from_jar: bool) -> List<[Span, bool, i32]> {
+    let mut keys = TreeSet::<String>::new();
+    for let s of &other.spans {
+        keys.insert(span_key(s));
+    }
+    let mut out: List<[Span, bool, i32]> = [];
+    for let order of 0..<side.spans.len() {
+        let s = side.spans[order];
+        if !keys.contains(span_key(&s)) {
+            out.push([s, from_jar, order]);
+        }
+    }
+    return out;
+}
+
+fn divergences(jar: &Tree, gale: &Tree) -> List<Divergence> {
+    let mut all = only_in(jar, gale, true);
+    for let s of only_in(gale, jar, false) {
+        all.push(s);
+    }
+    // Outermost first at each start, so a run's first span on a side is its
+    // outermost one there. Nodes covering the same tokens nest in open order.
+    all.sort_by(|a, b| {
+        if a.0.start != b.0.start {
+            return a.0.start.cmp(&b.0.start);
+        }
+        if a.0.end != b.0.end {
+            return b.0.end.cmp(&a.0.end);
+        }
+        return a.2.cmp(&b.2);
+    });
+    let mut out: List<Divergence> = [];
+    for let [s, from_jar, _] of all {
+        let n = out.len();
+        if n > 0 && s.start < out[n - 1].end {
+            let d = &mut out[n - 1];
+            if s.end > d.end {
+                d.end = s.end;
+            }
+            if from_jar && d.jar_rule matches { None } {
+                d.jar_rule = Some(s.rule);
+            }
+            if !from_jar && d.gale_rule matches { None } {
+                d.gale_rule = Some(s.rule);
+            }
+            continue;
+        }
+        out.push(Divergence {
+            start: s.start,
+            end: s.end,
+            jar_rule: if from_jar { Some(s.rule) } else { null },
+            gale_rule: if from_jar { null } else { Some(s.rule) },
+        });
+    }
+    return out;
+}
+
+/// The first leaf where the two trees cover different tokens.
+fn first_leaf_mismatch(jar: &Tree, gale: &Tree) -> Option<i32> {
+    if jar.leaves == gale.leaves {
+        return null;
+    }
+    let mut at = 0;
+    while at < jar.leaves.len() && at < gale.leaves.len() && jar.leaves[at] == gale.leaves[at] {
+        at += 1;
+    }
+    return Some(at);
+}
+
+fn leaf_or_end(t: &Tree, at: i32) -> String {
+    return if at < t.leaves.len() { `'${t.leaves[at]}'` } else { "the end" };
+}
+
+fn read_tree(path: &String) -> Tree with (Preopens, Stderr, Exit) {
+    let Ok(text) = fs::read_to_string(path) else {
+        eprintln(`tree_diff: cannot read ${path}`);
+        exit(1);
+    };
+    return parse_tree(&text);
+}
+
+export fn run() with (Stdout, Stderr, Environment, Preopens, Exit) {
+    let paths = args();
+    if paths.len() != 2 {
+        eprintln("usage: tree_diff <jar.tree> <gale.tree>");
+        exit(1);
+    }
+    let jar = read_tree(&paths[0]);
+    let gale = read_tree(&paths[1]);
+    // Spans name leaves by position, so past a mismatch they compare nothing.
+    if let Some(at) = first_leaf_mismatch(&jar, &gale) {
+        eprintln(
+            `tree_diff: the trees cover different tokens from leaf ${at}: jar ${leaf_or_end(&jar, at)}, gale ${leaf_or_end(
+                &gale,
+                at,
+            )}`,
+        );
+        exit(1);
+    }
+    let found = divergences(&jar, &gale);
+    for let d of &found {
+        let mut text = "";
+        for let k of d.start..<d.end {
+            if k > d.start {
+                text.push_str(" ");
+            }
+            text.push_str(&jar.leaves[k]);
+        }
+        let shown = text.substr_bytes(0, text.floor_char_boundary(120));
+        println(`[${d.start}] jar:${d.jar_rule.unwrap_or("-")} gale:${d.gale_rule.unwrap_or("-")} | ${shown}`);
+    }
+    println(`${found.len()} divergence(s)`);
+    if !found.is_empty() {
+        exit(1);
+    }
+}
+
+test "a tree splits into leaves and rule spans" {
+    let t = parse_tree(&"(s (e ( (e a) )) ; <EOF>)");
+    assert t.leaves == ["(", "a", ")", ";"] as List<String>;
+    assert t.spans.len() == 3;
+    assert span_key(&t.spans[0]) == "s@0-4";
+    assert span_key(&t.spans[1]) == "e@0-3";
+    assert span_key(&t.spans[2]) == "e@1-2";
+}
+
+test "a paren inside a terminal is text" {
+    let t = parse_tree(&"(s (lit \"within (0, 60]\") (atom () (atom )))");
+    assert t.leaves == ["\"within", "(0,", "60]\"", "(", ")"] as List<String>;
+    assert t.spans.len() == 4;
+}
+
+test "a terminal of spaces is a leaf" {
+    let t = parse_tree(&"(s (atom  ) (atom x) (atom )))");
+    assert t.leaves == [" ", "x", ")"] as List<String>;
+    assert t.spans.len() == 4;
+    assert span_key(&t.spans[1]) == "atom@0-1";
+}
+
+test "a moved subtree is one divergence" {
+    let jar = parse_tree(&"(s (st (ex if (ex a))) (st b))");
+    let gale = parse_tree(&"(s (st if (ex a) (st b)))");
+    let found = divergences(&jar, &gale);
+    assert found.len() == 1;
+    assert found[0].start == 0 && found[0].end == 3;
+    assert found[0].jar_rule == Some("st");
+    assert found[0].gale_rule == Some("st");
+}
+
+test "identical trees agree" {
+    let t = parse_tree(&"(s (e a) ;)");
+    assert first_leaf_mismatch(&t, &t) matches { None };
+    assert divergences(&t, &t).is_empty();
+}
+
+test "trees over different tokens mismatch where they part" {
+    let jar = parse_tree(&"(s (e a) ;)");
+    let gale = parse_tree(&"(s (e a) (e b) ;)");
+    assert first_leaf_mismatch(&jar, &gale) == Some(1);
+    assert first_leaf_mismatch(&jar, &parse_tree(&"(s (e a))")) == Some(1);
+}

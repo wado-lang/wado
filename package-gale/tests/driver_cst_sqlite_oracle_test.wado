@@ -8,7 +8,11 @@
 
 use sqlite from "./grammars/SQLite.g4"
     with {
-        generator: { module: "../src/generator.wado", output_dir: "./generated/cst_sqlite" },
+        generator: {
+            module: "../src/generator.wado",
+            output_dir: "./generated/cst_sqlite",
+            options: { atn: "verify" },
+        },
     };
 use { normalize_tree } from "./support/tree_compare.wado";
 
@@ -16,7 +20,7 @@ fn assert_tree<S: AsStrSlice, S1: AsStrSlice>(input: S, expected: S1) {
     let result = sqlite::parse(input);
     let actual = sqlite::to_string_tree(&result);
     let norm = normalize_tree(expected);
-    assert actual == norm;
+    assert actual == norm, `\ninput:    ${input}\nexpected: ${norm}\nactual:   ${actual}`;
 }
 
 test "oracle: SELECT 1" {
@@ -815,5 +819,19 @@ test "oracle: ROLLBACK TO SAVEPOINT s" {
     assert_tree(
         "ROLLBACK TO SAVEPOINT s",
         "(parse (sql_stmt_list (sql_stmt (rollback_stmt ROLLBACK TO SAVEPOINT (savepoint_name (any_name s))))))",
+    );
+}
+
+test "oracle: SELECT 1; CREATE TABLE t (a INTEGER, PRIMARY KEY (a, b)); SE" {
+    assert_tree(
+        "SELECT 1; CREATE TABLE t (a INTEGER, PRIMARY KEY (a, b)); SELECT 2;",
+        "(parse (sql_stmt_list (sql_stmt (factored_select_stmt (select_core SELECT (result_column (expr (literal_value 1)))))) ; (sql_stmt (create_table_stmt CREATE TABLE (table_name (any_name t)) ( (column_def (column_name (any_name a)) (type_name (name (any_name INTEGER)))) , (table_constraint PRIMARY KEY ( (indexed_column (column_name (any_name a))) , (indexed_column (column_name (any_name b))) ) conflict_clause) ))) ; (sql_stmt (factored_select_stmt (select_core SELECT (result_column (expr (literal_value 2)))))) ;))",
+    );
+}
+
+test "oracle: CREATE TABLE t (a TEXT, b INTEGER REFERENCES u(id), UNIQUE (" {
+    assert_tree(
+        "CREATE TABLE t (a TEXT, b INTEGER REFERENCES u(id), UNIQUE (a, b))",
+        "(parse (sql_stmt_list (sql_stmt (create_table_stmt CREATE TABLE (table_name (any_name t)) ( (column_def (column_name (any_name a)) (type_name (name (any_name TEXT)))) , (column_def (column_name (any_name b)) (type_name (name (any_name INTEGER))) (column_constraint (foreign_key_clause REFERENCES (foreign_table (any_name u)) ( (column_name (any_name id)) )))) , (table_constraint UNIQUE ( (indexed_column (column_name (any_name a))) , (indexed_column (column_name (any_name b))) ) conflict_clause) )))))",
     );
 }

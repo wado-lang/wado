@@ -952,6 +952,25 @@ impl Alternative {
     pub fn new(elements: List<Element>) -> Alternative {
         return Alternative { label: null, options: [], elements };
     }
+
+    /// The predicates at the alternative's left edge, up to its first action
+    /// there: what prediction meets before any token or action.
+    pub fn left_edge_predicates(&self) -> List<AltAction> {
+        let mut out: List<AltAction> = [];
+        for let a of &self.actions {
+            if a.before_index != 0 || a.kind matches { Action } {
+                break;
+            }
+            out.push(*a);
+        }
+        return out;
+    }
+
+    /// Whether an action runs at the left edge, which hides from prediction
+    /// every predicate behind it.
+    pub fn opens_with_action(&self) -> bool {
+        return self.actions.iter_ref().any(|a| a.before_index == 0 && a.kind matches { Action });
+    }
 }
 
 /// Element is a single unit within an alternative.

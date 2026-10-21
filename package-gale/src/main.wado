@@ -10,6 +10,7 @@ use { Grammar } from "./ir.wado";
 use { generate, GenerateOptions, canonicalize_for_analysis, lower_for_analysis } from "./codegen.wado";
 use { parse_highlight_query, HighlightRule } from "./highlight_query.wado";
 use { diagnostic_level } from "./gir.wado";
+use { AtnMode } from "./gen_settings.wado";
 use { Level, event, set_log_level } from "core:log";
 use { render_dump, render_atn_dump } from "./dump.wado";
 use { render_lexer_dump } from "./lexer_dump.wado";
@@ -20,6 +21,7 @@ use { render_lexer_dump } from "./lexer_dump.wado";
 // `name_policy` lower-cases the wire tags (`gen` / `dump`).
 struct GenArgs {
     trace: bool = false,
+    atn: AtnMode = AtnMode::Auto,
     log_level: Option<String> = null,
     output: Option<String> = null,
     /// Highlight query files, each named by its own `--highlights`.
@@ -59,7 +61,7 @@ internal fn gale() -> Result<(), String> with (Stdout, Environment, Preopens) {
     return match parse::<Command>(argv) {
         Ok(Command::Gen(g)) => {
             apply_log_level(&g.log_level)?;
-            cmd_gen(g.grammars, g.highlights, &g.output, g.trace);
+            cmd_gen(g.grammars, g.highlights, &g.output, GenerateOptions { trace: g.trace, atn: g.atn });
         },
         Ok(Command::Dump(d)) => {
             apply_log_level(&d.log_level)?;
@@ -78,8 +80,9 @@ fn command_name(argv: &List<String>) -> String {
     return "gale";
 }
 
-global USAGE: String = "Usage: gale gen [--trace] [--log-level <level>] [--output <file>] [--highlights <query.scm> ...] <grammar.g4> [grammar2.g4 ...]
+global USAGE: String = "Usage: gale gen [--trace] [--atn <mode>] [--log-level <level>] [--output <file>] [--highlights <query.scm> ...] <grammar.g4> [grammar2.g4 ...]
        gale dump [--atn | --lexer] [--log-level <level>] <grammar.g4> [grammar2.g4 ...]
+       <mode> is auto, always, never or verify (default auto)
        <level> is trace, debug, info, warn or error (default warn)";
 
 /// Set the process-wide threshold (`core:log` tier 2) from `--log-level`,
@@ -103,7 +106,7 @@ fn cmd_gen(
     g4_paths: List<String>,
     scm_paths: List<String>,
     output: &Option<String>,
-    trace: bool,
+    options: GenerateOptions,
 ) -> Result<(), String> with (Stdout, Preopens) {
     if g4_paths.is_empty() {
         return Result::Err("gale gen: no grammar files given");
@@ -124,15 +127,20 @@ fn cmd_gen(
         }
         highlight_query = Option::Some(all_rules);
     }
-    let options = GenerateOptions { highlight_query, trace };
+    let options = GenerateOptions { ..options, highlight_query };
 
-    // Every diagnostic is advisory: generation still succeeds, and
-    // `diagnostic_level` decides what a default run shows.
+    // `diagnostic_level` decides what a default run shows, and an `Error` one
+    // means no parser is written.
     let generated = generate(&mut merged, &options);
+    let mut refused = false;
     for let d of &generated.diagnostics {
         if let Some(level) = diagnostic_level(&d.kind) {
             event(level, d.message, { owner: d.owner.label() });
+            refused = refused || level matches { Error };
         }
+    }
+    if refused {
+        return Result::Err("gale gen: no parser written; the errors above say why");
     }
 
     match *output {

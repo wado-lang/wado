@@ -1935,6 +1935,42 @@ fn test_test_tap_recaps_compile_failures_at_end() {
 }
 
 #[test]
+fn test_test_heartbeat_recaps_failed_tests_at_end() {
+    wado_test()
+        .args([
+            "wado-cli/tests/fixtures/test_fail.wado",
+            "wado-cli/tests/fixtures/test_todo_unexpected_pass.wado",
+        ])
+        .assert()
+        .failure()
+        .stdout(
+            predicate::str::is_match(
+                r"(?s)test:    1 passed, 1 failed.*\ntest failures:\n    wado-cli/tests/fixtures/test_fail\.wado :: failing\n\nunexpectedly passed TODO tests:\n    wado-cli/tests/fixtures/test_todo_unexpected_pass\.wado :: passes although marked\n",
+            )
+            .unwrap(),
+        );
+}
+
+#[test]
+fn test_test_tap_recaps_failed_tests_at_end() {
+    wado_test()
+        .args([
+            "--format",
+            "tap",
+            "wado-cli/tests/fixtures/test_fail.wado",
+            "wado-cli/tests/fixtures/test_todo_unexpected_pass.wado",
+        ])
+        .assert()
+        .failure()
+        .stdout(
+            predicate::str::is_match(
+                r"(?s)# \S+ test:    1 passed, 1 failed.*\n# \S+ test failures:\n# \S+     wado-cli/tests/fixtures/test_fail\.wado :: failing\n# \S+ unexpectedly passed TODO tests:\n# \S+     wado-cli/tests/fixtures/test_todo_unexpected_pass\.wado :: passes although marked\n",
+            )
+            .unwrap(),
+        );
+}
+
+#[test]
 fn test_test_no_run_skips_phase_two() {
     // `--no-run` must (a) compile the file successfully — Phase 1 still
     // runs, which is where Kiln caches get refreshed; (b) skip the

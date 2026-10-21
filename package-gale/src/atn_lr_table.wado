@@ -1,0 +1,115 @@
+//! An LR loop's decision, settled per token while the parser is generated.
+//!
+//! The runtime (`atn_lr_loop_decision`) enters the one suffix whose
+//! continuation admits the token and whose precedence the invocation allows,
+//! leaves the loop where none does, and asks the simulator where two suffixes
+//! admit it or a caller's continuation does too. All of that but the caller is
+//! a fact of the token, so the table answers it ahead of time from the same
+//! `AtnSim` the runtime builds. The caller is the parse's FOLLOW mask: where it
+//! does not admit the token, no frame's continuation does, and the loop enters;
+//! where it might, the runtime decides as before.
+
+use { Atn, atn_blob_bytes } from "./atn.wado";
+use { AtnSim, ATN_TR_EPSILON, ATN_TR_PRECEDENCE, atn_decode } from "./runtime/atn.wado";
+use { atn_state_cont_admits, atn_with_lr_tables } from "./runtime/atn_lr.wado";
+use { GrammarAnalysis } from "./grammar_analysis.wado";
+use { CodeWriter, FnSpec, ParamSpec } from "lib:wadopoet";
+
+/// The tokens one suffix alone admits, and that suffix.
+struct LrEnter {
+    alt: i32,
+    prec: i32,
+    tokens: List<i32>,
+}
+
+/// An LR loop decision by token kind `0..kinds`: the exit for a token no
+/// suffix admits.
+pub struct LrTable {
+    kinds: i32,
+    exit: i32,
+    enters: List<LrEnter>,
+    /// The tokens two suffixes or more admit.
+    contested: List<i32>,
+}
+
+/// The `AtnSim` a generated parser decodes from `atn`, with its LR tables.
+internal fn lr_sim(atn: &Atn) -> AtnSim {
+    return atn_with_lr_tables(atn_decode(&atn_blob_bytes(atn)));
+}
+
+/// The table of LR loop decision `decision` over token kinds `0..kinds`.
+internal fn lr_table(sim: &AtnSim, decision: i32, kinds: i32, eof: i32) -> LrTable {
+    let dstate = sim.decision_state[decision];
+    let s = sim.state_tr_start[dstate];
+    let exit = sim.state_tr_count[dstate] - 1;
+    assert sim.tr_kind[s + exit] == ATN_TR_EPSILON, "an LR loop's last edge leaves it";
+    let mut enters: List<LrEnter> = [];
+    let mut contested: List<i32> = [];
+    for let t of 0..<kinds {
+        if t == eof {
+            continue;
+        }
+        let admitting: List<i32> = (0..<exit).filter(
+            |j| sim.tr_kind[s + j] == ATN_TR_PRECEDENCE && atn_state_cont_admits(sim, sim.tr_target[s + j], t, eof),
+        ).collect();
+        if admitting.len() > 1 {
+            contested.push(t);
+        } else if admitting.len() == 1 {
+            let alt = admitting[0];
+            if let Some(i) = enters.iter_ref().position(|e: &LrEnter| e.alt == alt) {
+                enters[i].tokens.push(t);
+            } else {
+                enters.push(LrEnter {
+                    alt,
+                    prec: sim.tr_prec[s + alt],
+                    tokens: [t],
+                });
+            }
+        }
+    }
+    return LrTable { kinds, exit, enters, contested };
+}
+
+/// The function a parser decides LR loop decision `decision` through.
+pub fn lr_decide_fn_name(decision: i32) -> String {
+    return `atn_lr_decide_${decision}`;
+}
+
+/// Emit `lr_decide_fn_name(decision)`. Where `follow`, the parser carries the
+/// FOLLOW runtime, and the function takes the caller's mask; a call that passes
+/// none leaves it unknown, which admits every token.
+pub fn gen_lr_decide_fn(w: &mut CodeWriter, decision: i32, table: &LrTable, analysis: &GrammarAnalysis, follow: bool) {
+    let mut f = FnSpec::new(lr_decide_fn_name(decision));
+    f.add_param("atn", "&mut AtnPredictor");
+    f.add_param("tokens", "&Array<i32>");
+    f.add_param("pos", "i32");
+    f.add_param("min_prec", "i32");
+    if follow {
+        f.add_param_spec(ParamSpec { name: "follow", type_str: "i64", default_value: Option::Some("0") });
+    }
+    f.set_return_type("i32");
+    f.emit_begin(w);
+    // A numeric `type(N)` lexes a kind past the table, which a wildcard suffix
+    // may still take.
+    w.begin(`if pos < tokens.len() && tokens[pos] < ${table.kinds}`);
+    w.begin("match tokens[pos]");
+    for let e of &table.enters {
+        w.begin(`${analysis.token_names_of(&e.tokens).join(" | ")} =>`);
+        w.line(`if min_prec > ${e.prec} { return ${table.exit}; }`);
+        if follow {
+            w.line(`if !follow_admits(tokens, pos, follow, &FOLLOW_SETS, TK_EOF) { return ${e.alt}; }`);
+        }
+        // Only `e.alt` takes the token, so only a caller can contest it.
+        w.line(`return atn_lr_enter_or_ask(&ATN_SIM, atn, ${decision}, ${e.alt}, tokens, pos, TK_EOF, min_prec);`);
+        w.end_with(",");
+    }
+    if !table.contested.is_empty() {
+        w.line(`${analysis.token_names_of(&table.contested).join(" | ")} => {},`);
+    }
+    w.line(`_ => { return ${table.exit}; },`);
+    w.end_with(";");
+    w.end();
+    w.line(`return atn_lr_loop_decision(&ATN_SIM, atn, ${decision}, tokens, pos, TK_EOF, min_prec);`);
+    w.end();
+    w.blank();
+}

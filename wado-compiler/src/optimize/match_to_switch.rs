@@ -26,6 +26,10 @@ const SWITCH_MIN_CASES: usize = 12;
 /// Minimum density (cases / range) for `br_table` to be worthwhile.
 const SWITCH_DENSITY_THRESHOLD: f64 = 0.75;
 
+/// Spans a cascade must test for `br_table` to pay at any density: a parser's
+/// token dispatch walks most of them on its common inputs.
+const SWITCH_LONG_CASCADE_SPANS: usize = 12;
+
 /// Maximum range size for `br_table` (to avoid huge jump tables).
 const SWITCH_MAX_RANGE: i64 = 1024;
 
@@ -318,7 +322,9 @@ fn analyze(scrutinee_type: &ResolvedType, arms: &[ArmData], body: &Body) -> Opti
     if covered < SWITCH_MIN_CASES {
         return None;
     }
-    if (covered as f64) / (range as f64) < SWITCH_DENSITY_THRESHOLD {
+    if (covered as f64) / (range as f64) < SWITCH_DENSITY_THRESHOLD
+        && specs.len() < SWITCH_LONG_CASCADE_SPANS
+    {
         return None;
     }
 
@@ -406,7 +412,7 @@ fn build_switch(
 /// Wrap an arm body in a fresh block holding a single `Expr` statement. A
 /// skeleton body is deep-cloned; a promoted constant operand is immutable and
 /// shareable, so it flows straight into the statement slot.
-fn arm_body_block(engine: &mut Engine, body: Operand, arm_span: Span) -> BlockId {
+pub(super) fn arm_body_block(engine: &mut Engine, body: Operand, arm_span: Span) -> BlockId {
     let (op, span) = match body {
         Operand::Expr(e) => (
             Operand::Expr(engine.clone_expr(e)),

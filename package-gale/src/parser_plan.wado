@@ -55,7 +55,9 @@ pub struct ParserPlan {
     /// `ATN_SIM` carries the LR tables `atn_lr_loop_decision` reads.
     pub needs_lr_atn: bool = false,
     rule_asks_simulator: List<bool> = [],
-    rule_body_predicts: List<bool> = [],
+    /// The rule asks the simulator, or under `atn: "verify"` has it check a
+    /// pick, so its helpers carry what the simulator reads.
+    rule_consults_simulator: List<bool> = [],
     /// A call to the rule can reach one that asks the simulator, so the call
     /// pushes the return state the prediction reads.
     rule_reaches_simulator: List<bool> = [],
@@ -63,10 +65,15 @@ pub struct ParserPlan {
     pub scan_memo: bool = false,
     /// The rule's scan is memoized (`GrammarAnalysis::rule_rescans`).
     rescanned: List<bool> = [],
+    /// The parse runs no action or predicate, which `speculating` skips, so a
+    /// speculative parse is the parse: a loop can parse an iteration and rewind
+    /// it instead of scanning it first.
+    pub speculates: bool = false,
     /// The ATN decision of each rule's LR loop entry, -1 for a rule with none.
     lr_loop_entry_decisions: List<i32> = [],
-    /// The ATN decision of each rule's top-level alternation, which an
-    /// `AtEndConflict` site predicts at; -1 for a single-alt or LR rule.
+    /// The ATN decision of each rule's top-level alternation, which a routed
+    /// `Ambiguous` site predicts at; -1 for a single-alt rule. An LR rule's is
+    /// its atom block's, whose alternatives are the rule's non-LR ones in order.
     atn_rule_body_decisions: List<i32> = [],
     /// By surface call site (`RuleRefElement.atn_call_site`), the ATN return
     /// state a rule call pushes. Empty without the ATN.
@@ -89,9 +96,8 @@ pub struct ParserPlan {
 /// work at every level; `rule_rescans` names the other way a scan doubles. A
 /// scan decides nothing and reads only its arguments, so its answer can be kept
 /// for the parse. A prediction reads the caller stack too, which no key here
-/// holds: the walk hides it, and an answer that needed it is not kept. A
-/// left-recursion loop the simulator decides reads the callers outside that, so
-/// it leaves no memo.
+/// holds: the walk hides it, and an answer that needed it is not kept. The
+/// left-recursion loop's caller check reports the callers it reads the same way.
 pub fn plan_parser(
     grammar: &Grammar,
     lowered: &LoweredGrammar,
@@ -116,12 +122,8 @@ pub fn plan_parser(
     let mut body_decs: List<i32> = [];
     if needs_atn {
         for let mut r = 0; r < rule_count; r += 1 {
-            let lr_dec = lr_loop_entry_decision(atn, r);
-            lr_decs.push(lr_dec);
-            // -1 for LR rules: the atom-block decision's edge indices exclude the
-            // LR alts, so they would not equal the grammar alt indices `_alt_N`
-            // uses (AtEndConflict routing is non-LR only).
-            body_decs.push(if lr_dec >= 0 { -1 } else { rule_body_decision(atn, r) });
+            lr_decs.push(lr_loop_entry_decision(atn, r));
+            body_decs.push(rule_body_decision(atn, r));
         }
     }
     let mut binding_reads: List<Option<List<String>>> = [];
@@ -135,10 +137,13 @@ pub fn plan_parser(
         needs_atn,
         needs_lr_atn: marks.needs_lr_atn,
         rule_asks_simulator: marks.rule_asks_simulator,
-        rule_body_predicts: marks.rule_body_predicts,
+        rule_consults_simulator: (0..<rule_count).map(
+            |r| marks.rule_asks_simulator[r] || marks.rule_checks_simulator[r],
+        ).collect(),
         rule_reaches_simulator: close_over_callers(&analysis.scannable_callees(), marks.rule_asks_simulator),
-        scan_memo: !marks.needs_lr_atn && (rescanned.contains(&true) || any_lr),
+        scan_memo: rescanned.contains(&true) || any_lr,
         rescanned,
+        speculates: !settings.emit_actions || grammar.parser_rules.iter_ref().all(|r| rule_action_bodies(r).is_empty()),
         lr_loop_entry_decisions: lr_decs,
         atn_rule_body_decisions: body_decs,
         atn_call_site_returns: if needs_atn { atn.call_site_returns } else { [] },
@@ -158,7 +163,7 @@ impl ParserPlan {
         let none = List::<bool>::filled(rule_count, false);
         return ParserPlan {
             rule_asks_simulator: none,
-            rule_body_predicts: none,
+            rule_consults_simulator: none,
             rule_reaches_simulator: none,
             rescanned: none,
         };
@@ -180,9 +185,9 @@ impl ParserPlan {
         return self.rule_asks_simulator[rule];
     }
 
-    /// Whether the simulator decides inside rule `rule`'s body.
-    pub fn rule_body_predicts(&self, rule: i32) -> bool {
-        return self.rule_body_predicts[rule];
+    /// Whether rule `rule` asks the simulator or has it check a pick.
+    pub fn rule_consults_simulator(&self, rule: i32) -> bool {
+        return self.rule_consults_simulator[rule];
     }
 
     /// Whether a call to rule `rule` can reach a decision the simulator
@@ -202,7 +207,7 @@ impl ParserPlan {
     }
 
     /// The ATN decision number for `rule`'s top-level alternation, or -1 if
-    /// single-alt / unbuilt. Used to route an `AtEndConflict` site to the simulator.
+    /// single-alt / unbuilt. A routed `Ambiguous` site predicts at it.
     pub fn atn_rule_body_decision(&self, rule: i32) -> i32 {
         return entry_or_none(&self.atn_rule_body_decisions, rule);
     }

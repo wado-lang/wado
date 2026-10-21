@@ -18,36 +18,32 @@ struct core:prelude/types.wado//Box<u8> {  // TypeId(5)
     mut value: u8,
 }
 
-struct core:prelude//$Resource {  // TypeId(6)
-    mut value: i32,
-}
-
-struct core:prelude/string.wado//StrSlice {  // TypeId(7)
+struct core:prelude/string.wado//StrSlice {  // TypeId(6)
     mut repr: ref Array<u8>,
     mut start: i32,
     mut end: i32,
 }
 
-struct core:prelude/string.wado//StrCharIter {  // TypeId(8)
+struct core:prelude/string.wado//StrCharIter {  // TypeId(7)
     mut repr: ref Array<u8>,
     mut used: i32,
     mut byte_index: i32,
 }
 
-array Array<u8> (mut u8);  // TypeId(9)
+array Array<u8> (mut u8);  // TypeId(8)
 
-struct core:prelude/string.wado//String {  // TypeId(10)
+struct core:prelude/string.wado//String {  // TypeId(9)
     mut repr: ref Array<u8>,
     mut used: i32,
 }
 
-struct core:serde//DeserializeError {  // TypeId(11)
+struct core:serde//DeserializeError {  // TypeId(10)
     mut kind: "core:serde//enum:DeserializeErrorKind",
     mut message: ref "core:prelude/string.wado//String",
     mut offset: i64,
 }
 
-struct core:prelude/format.wado//Formatter {  // TypeId(12)
+struct core:prelude/format.wado//Formatter {  // TypeId(11)
     mut fill: char,
     mut align: "core:prelude/format.wado//enum:Alignment",
     mut sign_plus: bool,
@@ -59,11 +55,11 @@ struct core:prelude/format.wado//Formatter {  // TypeId(12)
     mut buf: ref "core:prelude/string.wado//String",
 }
 
-struct core:prelude/intparse.wado//ParseIntError {  // TypeId(13)
+struct core:prelude/intparse.wado//ParseIntError {  // TypeId(12)
     mut kind: "core:prelude/intparse.wado//enum:IntErrorKind",
 }
 
-struct core:json//ScannedNumber {  // TypeId(14)
+struct core:json//ScannedNumber {  // TypeId(13)
     mut neg: bool,
     mut digits: u64,
     mut int_digits: i32,
@@ -76,7 +72,7 @@ struct core:json//ScannedNumber {  // TypeId(14)
     mut mantissa_end: i32,
 }
 
-struct core:json//JsonDeserializer {  // TypeId(15)
+struct core:json//JsonDeserializer {  // TypeId(14)
     mut input: ref "core:prelude/slice.wado//Slice<u8>",
     mut pos: i32,
     mut depth: i32,
@@ -85,401 +81,397 @@ struct core:json//JsonDeserializer {  // TypeId(15)
     mut scratch: ref "core:json//ScannedNumber",
 }
 
-struct tuple//[bool, core:prelude/string.wado/StrSlice] {  // TypeId(16)
+struct tuple//[bool, core:prelude/string.wado/StrSlice] {  // TypeId(15)
     mut 0: bool,
     mut 1: ref "core:prelude/string.wado//StrSlice",
 }
 
-struct serde_json_list_default.wado//S {  // TypeId(17)
+struct serde_json_list_default.wado//S {  // TypeId(16)
     mut tags: ref "core:prelude//List<i32>",
     mut name: ref "core:prelude/string.wado//String",
 }
 
-array Array<i32> (mut i32);  // TypeId(18)
+array Array<i32> (mut i32);  // TypeId(17)
 
-struct core:prelude/slice.wado//Slice<u8> {  // TypeId(19)
+struct core:prelude/slice.wado//Slice<u8> {  // TypeId(18)
     mut repr: ref Array<u8>,
     mut start: i32,
     mut end: i32,
 }
 
-variant core:prelude/types.wado//Option<i32> {  // TypeId(20)
+variant core:prelude/types.wado//Option<i32> {  // TypeId(19)
     None,
     Some(i32),
 }
 
-struct core:prelude/types.wado//Option<i32>::Some {  // TypeId(21)
+struct core:prelude/types.wado//Option<i32>::Some {  // TypeId(20)
     discriminant: i32,
     payload_0: i32,
 }
 
-variant core:prelude/types.wado//Result<&mut core:json/JsonDeserializer,core:serde/DeserializeError> {  // TypeId(22)
+variant core:prelude/types.wado//Result<&mut core:json/JsonDeserializer,core:serde/DeserializeError> {  // TypeId(21)
     Ok(ref "core:json//JsonDeserializer"),
     Err(ref "core:serde//DeserializeError"),
 }
 
-struct core:prelude/types.wado//Result<&mut core:json/JsonDeserializer,core:serde/DeserializeError>::Ok {  // TypeId(23)
+struct core:prelude/types.wado//Result<&mut core:json/JsonDeserializer,core:serde/DeserializeError>::Ok {  // TypeId(22)
     discriminant: i32,
     payload_0: ref "core:json//JsonDeserializer",
 }
 
-struct core:prelude/types.wado//Result<&mut core:json/JsonDeserializer,core:serde/DeserializeError>::Err {  // TypeId(24)
+struct core:prelude/types.wado//Result<&mut core:json/JsonDeserializer,core:serde/DeserializeError>::Err {  // TypeId(23)
     discriminant: i32,
     payload_0: ref "core:serde//DeserializeError",
 }
 
-struct core:prelude//List<i32> {  // TypeId(25)
+struct core:prelude//List<i32> {  // TypeId(24)
     mut repr: ref Array<i32>,
     mut used: i32,
 }
 
-type "functype//mem/realloc" = fn(i32, i32, i32, i32) -> i32;  // TypeId(26)
+type "functype//mem/realloc" = fn(i32, i32, i32, i32) -> i32;  // TypeId(25)
 
-type "functype//wasi/stream-write" = fn(i32, i32, i32) -> i32;  // TypeId(27)
+type "functype//wasi/stream-write" = fn(i32, i32, i32) -> i32;  // TypeId(26)
 
-type "functype//wasi/waitable-join" = fn(i32, i32);  // TypeId(28)
+type "functype//wasi/waitable-join" = fn(i32, i32);  // TypeId(27)
 
-type "functype//wasi/waitable-set-drop" = fn(i32);  // TypeId(29)
+type "functype//wasi/waitable-set-drop" = fn(i32);  // TypeId(28)
 
-type "functype//wasi/waitable-set-new" = fn() -> i32;  // TypeId(30)
+type "functype//wasi/waitable-set-new" = fn() -> i32;  // TypeId(29)
 
-type "functype//wasi/waitable-set-wait" = fn(i32, i32) -> i32;  // TypeId(31)
+type "functype//wasi/waitable-set-wait" = fn(i32, i32) -> i32;  // TypeId(30)
 
-type "functype//wasi/wasi:cli/Stderr::write_via_stream" = fn(i32) -> i32;  // TypeId(32)
+type "functype//wasi/wasi:cli/Stderr::write_via_stream" = fn(i32) -> i32;  // TypeId(31)
 
-type "functype//serde_json_list_default.wado/$test_0_missing_list_string_defaults_materialize" = fn();  // TypeId(33)
+type "functype//serde_json_list_default.wado/$test_0_missing_list_string_defaults_materialize" = fn();  // TypeId(32)
 
-type "functype//serde_json_list_default.wado/$test_1_present_value_overrides_list_default" = fn();  // TypeId(34)
+type "functype//serde_json_list_default.wado/$test_1_present_value_overrides_list_default" = fn();  // TypeId(33)
 
-type "functype//serde_json_list_default.wado/$cm_export__$test_0_missing_list_string_defaults_materialize" = fn();  // TypeId(35)
+type "functype//serde_json_list_default.wado/$cm_export__$test_0_missing_list_string_defaults_materialize" = fn();  // TypeId(34)
 
-type "functype//serde_json_list_default.wado/$cm_export__$test_1_present_value_overrides_list_default" = fn();  // TypeId(36)
+type "functype//serde_json_list_default.wado/$cm_export__$test_1_present_value_overrides_list_default" = fn();  // TypeId(35)
 
-type "functype//serde_json_list_default.wado/$value_copy$core:prelude/slice.wado/Slice<u8>" = fn(ref "core:prelude/slice.wado//Slice<u8>") -> ref "core:prelude/slice.wado//Slice<u8>";  // TypeId(37)
+type "functype//serde_json_list_default.wado/$value_copy$core:prelude/slice.wado/Slice<u8>" = fn(ref "core:prelude/slice.wado//Slice<u8>") -> ref "core:prelude/slice.wado//Slice<u8>";  // TypeId(36)
 
-type "functype//serde_json_list_default.wado/$test_0_missing_list_string_defaults_materialize$cold0" = fn(i32);  // TypeId(38)
+type "functype//serde_json_list_default.wado/$test_0_missing_list_string_defaults_materialize$cold0" = fn(i32);  // TypeId(37)
 
-type "functype//serde_json_list_default.wado/$test_0_missing_list_string_defaults_materialize$cold1$dae[$contract_arg_1]" = fn(i32);  // TypeId(39)
+type "functype//serde_json_list_default.wado/$test_0_missing_list_string_defaults_materialize$cold1$dae[$contract_arg_1]" = fn(i32);  // TypeId(38)
 
-type "functype//serde_json_list_default.wado/$test_0_missing_list_string_defaults_materialize$cold2" = fn(i32);  // TypeId(40)
+type "functype//serde_json_list_default.wado/$test_0_missing_list_string_defaults_materialize$cold2" = fn(i32);  // TypeId(39)
 
-type "functype//serde_json_list_default.wado/$test_0_missing_list_string_defaults_materialize$cold3$dae[$contract_arg_0]" = fn(i32);  // TypeId(41)
+type "functype//serde_json_list_default.wado/$test_0_missing_list_string_defaults_materialize$cold3$dae[$contract_arg_0]" = fn(i32);  // TypeId(40)
 
-type "functype//serde_json_list_default.wado/$test_0_missing_list_string_defaults_materialize$cold4" = fn(i32);  // TypeId(42)
+type "functype//serde_json_list_default.wado/$test_0_missing_list_string_defaults_materialize$cold4" = fn(i32);  // TypeId(41)
 
-type "functype//serde_json_list_default.wado/$test_1_present_value_overrides_list_default$cold0" = fn(i32);  // TypeId(43)
+type "functype//serde_json_list_default.wado/$test_1_present_value_overrides_list_default$cold0" = fn(i32);  // TypeId(42)
 
-type "functype//serde_json_list_default.wado/$test_1_present_value_overrides_list_default$cold1$dae[$contract_arg_0]" = fn(i32);  // TypeId(44)
+type "functype//serde_json_list_default.wado/$test_1_present_value_overrides_list_default$cold1$dae[$contract_arg_0]" = fn(i32);  // TypeId(43)
 
-type "functype//serde_json_list_default.wado/$test_1_present_value_overrides_list_default$cold2" = fn(i32);  // TypeId(45)
+type "functype//serde_json_list_default.wado/$test_1_present_value_overrides_list_default$cold2" = fn(i32);  // TypeId(44)
 
-type "functype//serde_json_list_default.wado/serde_json_list_default.wado/S^core:serde/FieldSchema::lookup$cold0$dae[$key,$contract_arg_5]" = fn(i32);  // TypeId(46)
+type "functype//serde_json_list_default.wado/serde_json_list_default.wado/S^core:serde/FieldSchema::lookup$cold0$dae[$key,$contract_arg_5]" = fn(i32);  // TypeId(45)
 
-type "functype//serde_json_list_default.wado/serde_json_list_default.wado/S^core:serde/FieldSchema::lookup$cold1$dae[$key,$contract_arg_4]" = fn(i32);  // TypeId(47)
+type "functype//serde_json_list_default.wado/serde_json_list_default.wado/S^core:serde/FieldSchema::lookup$cold1$dae[$key,$contract_arg_4]" = fn(i32);  // TypeId(46)
 
-type "functype//serde_json_list_default.wado/serde_json_list_default.wado/S^core:serde/FieldSchema::lookup$cold2$dae[$key,$contract_arg_3]" = fn(i32);  // TypeId(48)
+type "functype//serde_json_list_default.wado/serde_json_list_default.wado/S^core:serde/FieldSchema::lookup$cold2$dae[$key,$contract_arg_3]" = fn(i32);  // TypeId(47)
 
-type "functype//serde_json_list_default.wado/serde_json_list_default.wado/S^core:serde/FieldSchema::lookup$cold3$dae[$key,$contract_arg_2]" = fn(i32);  // TypeId(49)
+type "functype//serde_json_list_default.wado/serde_json_list_default.wado/S^core:serde/FieldSchema::lookup$cold3$dae[$key,$contract_arg_2]" = fn(i32);  // TypeId(48)
 
-type "functype//serde_json_list_default.wado/serde_json_list_default.wado/S^core:serde/FieldSchema::lookup$cold4$dae[$key,$contract_arg_1]" = fn(i32);  // TypeId(50)
+type "functype//serde_json_list_default.wado/serde_json_list_default.wado/S^core:serde/FieldSchema::lookup$cold4$dae[$key,$contract_arg_1]" = fn(i32);  // TypeId(49)
 
-type "functype//serde_json_list_default.wado/serde_json_list_default.wado/S^core:serde/FieldSchema::lookup$cold5$dae[$key,$contract_arg_0]" = fn(i32);  // TypeId(51)
+type "functype//serde_json_list_default.wado/serde_json_list_default.wado/S^core:serde/FieldSchema::lookup$cold5$dae[$key,$contract_arg_0]" = fn(i32);  // TypeId(50)
 
-type "functype//core:json/integer_range_error" = fn(ref "core:prelude/string.wado//String", i64) -> ref "core:serde//DeserializeError";  // TypeId(52)
+type "functype//core:json/integer_range_error" = fn(ref "core:prelude/string.wado//String", i64) -> ref "core:serde//DeserializeError";  // TypeId(51)
 
-type "functype//core:json/integral_digits$sroa[return]" = fn(bool, i32, i64, i32, i32, ref Array<u8>, i32, i32, ref "core:prelude/string.wado//String", i64) -> [i32, ref null "core:prelude/string.wado//String", ref null "core:serde//DeserializeError"];  // TypeId(53)
+type "functype//core:json/integral_digits$sroa[return]" = fn(bool, i32, i64, i32, i32, ref Array<u8>, i32, i32, ref "core:prelude/string.wado//String", i64) -> [i32, ref null "core:prelude/string.wado//String", ref null "core:serde//DeserializeError"];  // TypeId(52)
 
-type "functype//core:prelude/intparse.wado/parse_u64_digits$unchecked$sroa[return]$dae[radix]" = fn(ref Array<u8>, i32, i32) -> [i32, u64, "core:prelude/intparse.wado//enum:IntErrorKind"];  // TypeId(54)
+type "functype//core:prelude/intparse.wado/parse_u64_digits$unchecked$sroa[return]$dae[radix]" = fn(ref Array<u8>, i32, i32) -> [i32, u64, "core:prelude/intparse.wado//enum:IntErrorKind"];  // TypeId(53)
 
-type "functype//core:prelude/intparse.wado/split_sign$sroa[return]" = fn(ref "core:prelude/string.wado//StrSlice") -> [i32, ref null "tuple//[bool, core:prelude/string.wado/StrSlice]", "core:prelude/intparse.wado//enum:IntErrorKind"];  // TypeId(55)
+type "functype//core:prelude/intparse.wado/split_sign$sroa[return]" = fn(ref "core:prelude/string.wado//StrSlice") -> [i32, ref null "tuple//[bool, core:prelude/string.wado/StrSlice]", "core:prelude/intparse.wado//enum:IntErrorKind"];  // TypeId(54)
 
-type "functype//core:prelude/intparse.wado/parse_i64_radix$unchecked$sroa[return]$dae[radix,max,min_abs]" = fn(ref "core:prelude/string.wado//StrSlice") -> [i32, i64, ref null "core:prelude/intparse.wado//ParseIntError"];  // TypeId(56)
+type "functype//core:prelude/intparse.wado/parse_i64_radix$unchecked$sroa[return]$dae[radix,max,min_abs]" = fn(ref "core:prelude/string.wado//StrSlice") -> [i32, i64, ref null "core:prelude/intparse.wado//ParseIntError"];  // TypeId(55)
 
-type "functype//core:prelude/primitive.wado/write_decimal_digits" = fn(ref Array<u8>, i32, u64, i32);  // TypeId(57)
+type "functype//core:prelude/primitive.wado/write_decimal_digits" = fn(ref Array<u8>, i32, u64, i32);  // TypeId(56)
 
-type "functype//core:prelude/primitive.wado/count_digits_u64" = fn(u64) -> i32;  // TypeId(58)
+type "functype//core:prelude/primitive.wado/count_digits_u64" = fn(u64) -> i32;  // TypeId(57)
 
-type "functype//core:prelude/primitive.wado/write_u64_base_digits" = fn(ref Array<u8>, i32, i64, i32, i32, i32, bool);  // TypeId(59)
+type "functype//core:prelude/primitive.wado/write_u64_base_digits" = fn(ref Array<u8>, i32, i64, i32, i32, i32, bool);  // TypeId(58)
 
-type "functype//core:rt/write_string_to_stream$dae[add_newline]" = fn(ref null "core:prelude//$Resource", ref Array<u8>, i32);  // TypeId(60)
+type "functype//core:rt/panic" = fn(ref Array<u8>, i32);  // TypeId(59)
 
-type "functype//core:rt/log_stderr" = fn(ref Array<u8>, i32);  // TypeId(61)
+type "functype//core:rt/unreachable" = fn();  // TypeId(60)
 
-type "functype//core:rt/panic" = fn(ref Array<u8>, i32);  // TypeId(62)
+type "functype//core:rt/cm_stream_write_raw_all_u8" = fn(i32, ref Array<u8>, i32, i32) -> "core:prelude/types.wado//enum:CopyResult";  // TypeId(61)
 
-type "functype//core:rt/unreachable" = fn();  // TypeId(63)
+type "functype//core:prelude/format.wado/core/prelude/format.wado/inspect_text<core:prelude/string.wado/String>" = fn(ref "core:prelude/format.wado//Formatter", ref Array<u8>, i32);  // TypeId(62)
 
-type "functype//core:rt/cm_stream_write_raw_all_u8" = fn(i32, ref Array<u8>, i32, i32) -> "core:prelude/types.wado//enum:CopyResult";  // TypeId(64)
+type "functype//core:json/core/json/parse_integral<i32>$sroa[return]" = fn(bool, i32, i64, i32, i32, ref Array<u8>, i32, i32, ref "core:prelude/string.wado//String", i64) -> [i32, i32, ref null "core:serde//DeserializeError"];  // TypeId(63)
 
-type "functype//core:prelude/format.wado/core/prelude/format.wado/inspect_text<core:prelude/string.wado/String>" = fn(ref "core:prelude/format.wado//Formatter", ref Array<u8>, i32);  // TypeId(65)
+type "functype//core:json/core/json/token_stop_error<core:prelude/string.wado/String>" = fn(i32, i32, ref "core:prelude/string.wado//String") -> ref "core:serde//DeserializeError";  // TypeId(64)
 
-type "functype//core:json/core/json/parse_integral<i32>$sroa[return]" = fn(bool, i32, i64, i32, i32, ref Array<u8>, i32, i32, ref "core:prelude/string.wado//String", i64) -> [i32, i32, ref null "core:serde//DeserializeError"];  // TypeId(66)
+type "functype//core:json/core/json/read_number_text<i32>$sroa[return]" = fn(ref "core:prelude/slice.wado//Slice<u8>", i64) -> [i32, ref null "core:prelude/types.wado//Option<i32>", ref null "core:serde//DeserializeError"];  // TypeId(65)
 
-type "functype//core:json/core/json/token_stop_error<core:prelude/string.wado/String>" = fn(i32, i32, ref "core:prelude/string.wado//String") -> ref "core:serde//DeserializeError";  // TypeId(67)
+type "functype//core:json/core/json/from_bytes<serde_json_list_default.wado/S,core:prelude/bytes.wado/ByteSlice>$sroa[return]$dae[max_depth]" = fn(ref Array<u8>, i32, i32) -> [i32, ref null "serde_json_list_default.wado//S", ref null "core:serde//DeserializeError"];  // TypeId(66)
 
-type "functype//core:json/core/json/read_number_text<i32>$sroa[return]" = fn(ref "core:prelude/slice.wado//Slice<u8>", i64) -> [i32, ref null "core:prelude/types.wado//Option<i32>", ref null "core:serde//DeserializeError"];  // TypeId(68)
+type "functype//core:prelude/array.wado/core/prelude/array.wado/write_seq_inspect<u8>$dae[marker]" = fn(ref Array<u8>, i32, i32, ref "core:prelude/format.wado//Formatter", i32);  // TypeId(67)
 
-type "functype//core:json/core/json/from_bytes<serde_json_list_default.wado/S,core:prelude/bytes.wado/ByteSlice>$sroa[return]$dae[max_depth]" = fn(ref Array<u8>, i32, i32) -> [i32, ref null "serde_json_list_default.wado//S", ref null "core:serde//DeserializeError"];  // TypeId(69)
+type "functype//core:prelude/array.wado/core/prelude/array.wado/write_seq_inspect_alt<u8>$dae[marker]" = fn(ref Array<u8>, i32, i32, ref "core:prelude/format.wado//Formatter", i32);  // TypeId(68)
 
-type "functype//core:prelude/array.wado/core/prelude/array.wado/write_seq_inspect<u8>$dae[marker]" = fn(ref Array<u8>, i32, i32, ref "core:prelude/format.wado//Formatter", i32);  // TypeId(70)
+type "functype//core:json/is_json_ws$contract_report0" = fn(i32, ref "core:prelude/string.wado//String");  // TypeId(69)
 
-type "functype//core:prelude/array.wado/core/prelude/array.wado/write_seq_inspect_alt<u8>$dae[marker]" = fn(ref Array<u8>, i32, i32, ref "core:prelude/format.wado//Formatter", i32);  // TypeId(71)
+type "functype//core:json/core:json/JsonDeserializer::expect_true$contract_report0" = fn(bool, ref "core:json//JsonDeserializer", i32, i32, ref "core:prelude/string.wado//String");  // TypeId(70)
 
-type "functype//core:json/is_json_ws$contract_report0" = fn(i32, ref "core:prelude/string.wado//String");  // TypeId(72)
+type "functype//core:json/core:json/JsonDeserializer::expect_false$contract_report0" = fn(bool, ref "core:json//JsonDeserializer", i32, i32, ref "core:prelude/string.wado//String");  // TypeId(71)
 
-type "functype//core:json/core:json/JsonDeserializer::expect_true$contract_report0" = fn(bool, ref "core:json//JsonDeserializer", i32, i32, ref "core:prelude/string.wado//String");  // TypeId(73)
+type "functype//core:json/core:json/JsonDeserializer::expect_null$contract_report0" = fn(bool, ref "core:json//JsonDeserializer", i32, i32, ref "core:prelude/string.wado//String");  // TypeId(72)
 
-type "functype//core:json/core:json/JsonDeserializer::expect_false$contract_report0" = fn(bool, ref "core:json//JsonDeserializer", i32, i32, ref "core:prelude/string.wado//String");  // TypeId(74)
+type "functype//core:prelude/primitive.wado/char::from_u32$contract_report0" = fn(u32, ref "core:prelude/string.wado//String");  // TypeId(73)
 
-type "functype//core:json/core:json/JsonDeserializer::expect_null$contract_report0" = fn(bool, ref "core:json//JsonDeserializer", i32, i32, ref "core:prelude/string.wado//String");  // TypeId(75)
+type "functype//core:prelude/primitive.wado/char::hex_digit_value$contract_report0" = fn(ref "core:prelude/types.wado//Box<char>", ref "core:prelude/string.wado//String");  // TypeId(74)
 
-type "functype//core:prelude/primitive.wado/char::from_u32$contract_report0" = fn(u32, ref "core:prelude/string.wado//String");  // TypeId(76)
+type "functype//core:prelude/primitive.wado/i32::clamp$contract_report0" = fn(i32, i32, ref "core:prelude/string.wado//String");  // TypeId(75)
 
-type "functype//core:prelude/primitive.wado/char::hex_digit_value$contract_report0" = fn(ref "core:prelude/types.wado//Box<char>", ref "core:prelude/string.wado//String");  // TypeId(77)
+type "functype//core:prelude/string.wado/core:prelude/string.wado/String::set_byte_at$contract_report0" = fn(i32, i32, ref "core:prelude/string.wado//String");  // TypeId(76)
 
-type "functype//core:prelude/primitive.wado/i32::clamp$contract_report0" = fn(i32, i32, ref "core:prelude/string.wado//String");  // TypeId(78)
+type "functype//core:prelude/string.wado/core:prelude/string.wado/StrSlice::byte_at$contract_report0" = fn(i32, i32, ref "core:prelude/string.wado//String");  // TypeId(77)
 
-type "functype//core:prelude/string.wado/core:prelude/string.wado/String::set_byte_at$contract_report0" = fn(i32, i32, ref "core:prelude/string.wado//String");  // TypeId(79)
+type "functype//core:prelude/string.wado/core:prelude/string.wado/StrSlice::slice$contract_report0" = fn(i32, i32, i32, ref "core:prelude/string.wado//String");  // TypeId(78)
 
-type "functype//core:prelude/string.wado/core:prelude/string.wado/StrSlice::byte_at$contract_report0" = fn(i32, i32, ref "core:prelude/string.wado//String");  // TypeId(80)
+type "functype//core:prelude/string.wado/core:prelude/string.wado/StrSlice::slice$contract_report1" = fn(bool, ref "core:prelude/string.wado//StrSlice", i32, i32, ref "core:prelude/string.wado//String");  // TypeId(79)
 
-type "functype//core:prelude/string.wado/core:prelude/string.wado/StrSlice::slice$contract_report0" = fn(i32, i32, i32, ref "core:prelude/string.wado//String");  // TypeId(81)
+type "functype//core:prelude/string.wado/core:prelude/string.wado/StrSlice^core:prelude/string.wado/AsStrSlice::$contract$byte_at$contract_report0" = fn(i32, i32, ref "core:prelude/string.wado//String");  // TypeId(80)
 
-type "functype//core:prelude/string.wado/core:prelude/string.wado/StrSlice::slice$contract_report1" = fn(bool, ref "core:prelude/string.wado//StrSlice", i32, i32, ref "core:prelude/string.wado//String");  // TypeId(82)
+type "functype//core:prelude/list.wado/core:prelude/list.wado/List<i32>^core:prelude/traits.wado/IndexValue<i32>::index_value$contract_report0" = fn(i32, i32, ref "core:prelude/string.wado//String");  // TypeId(81)
 
-type "functype//core:prelude/string.wado/core:prelude/string.wado/StrSlice^core:prelude/string.wado/AsStrSlice::$contract$byte_at$contract_report0" = fn(i32, i32, ref "core:prelude/string.wado//String");  // TypeId(83)
+type "functype//core:prelude/string.wado/core:prelude/string.wado/String::push_bytes<core:prelude/bytes.wado/ByteSlice>$contract_report0" = fn(ref "core:prelude/slice.wado//Slice<u8>", ref "core:prelude/string.wado//String");  // TypeId(82)
 
-type "functype//core:prelude/list.wado/core:prelude/list.wado/List<i32>^core:prelude/traits.wado/IndexValue<i32>::index_value$contract_report0" = fn(i32, i32, ref "core:prelude/string.wado//String");  // TypeId(84)
+type "functype//core:prelude/slice.wado/core:prelude/slice.wado/Slice<u8>^core:prelude/traits.wado/IndexValue<i32>::index_value$contract_report0" = fn(i32, i32, ref "core:prelude/string.wado//String");  // TypeId(83)
 
-type "functype//core:prelude/string.wado/core:prelude/string.wado/String::push_bytes<core:prelude/bytes.wado/ByteSlice>$contract_report0" = fn(ref "core:prelude/slice.wado//Slice<u8>", ref "core:prelude/string.wado//String");  // TypeId(85)
+type "functype//core:json/json_ws_end$cold0" = fn(i32);  // TypeId(84)
 
-type "functype//core:prelude/slice.wado/core:prelude/slice.wado/Slice<u8>^core:prelude/traits.wado/IndexValue<i32>::index_value$contract_report0" = fn(i32, i32, ref "core:prelude/string.wado//String");  // TypeId(86)
+type "functype//core:json/core:json/JsonDeserializer::peek_after_whitespace$cold0$dae[self]" = fn(i32, i32);  // TypeId(85)
 
-type "functype//core:json/json_ws_end$cold0" = fn(i32);  // TypeId(87)
+type "functype//core:json/core:json/JsonDeserializer::peek_after_whitespace$cold1$dae[self]" = fn(i32, i32);  // TypeId(86)
 
-type "functype//core:json/core:json/JsonDeserializer::peek_after_whitespace$cold0$dae[self]" = fn(i32, i32);  // TypeId(88)
+type "functype//core:json/core:json/JsonDeserializer::read_hex4$cold0$dae[self]" = fn(i32, i32);  // TypeId(87)
 
-type "functype//core:json/core:json/JsonDeserializer::peek_after_whitespace$cold1$dae[self]" = fn(i32, i32);  // TypeId(89)
+type "functype//core:json/core:json/JsonDeserializer::read_unicode_escape$cold0$dae[self]" = fn(u32);  // TypeId(88)
 
-type "functype//core:json/core:json/JsonDeserializer::read_hex4$cold0$dae[self]" = fn(i32, i32);  // TypeId(90)
+type "functype//core:json/core:json/JsonDeserializer::read_unicode_escape$cold1$dae[self]" = fn(i32, i32);  // TypeId(89)
 
-type "functype//core:json/core:json/JsonDeserializer::read_unicode_escape$cold0$dae[self]" = fn(u32);  // TypeId(91)
+type "functype//core:json/core:json/JsonDeserializer::expect_true$unchecked$cold0$dae[self]" = fn(i32, i32);  // TypeId(90)
 
-type "functype//core:json/core:json/JsonDeserializer::read_unicode_escape$cold1$dae[self]" = fn(i32, i32);  // TypeId(92)
+type "functype//core:json/core:json/JsonDeserializer::expect_true$unchecked$cold1$dae[self]" = fn(i32, i32);  // TypeId(91)
 
-type "functype//core:json/core:json/JsonDeserializer::expect_true$unchecked$cold0$dae[self]" = fn(i32, i32);  // TypeId(93)
+type "functype//core:json/core:json/JsonDeserializer::expect_true$unchecked$cold2$dae[self]" = fn(i32, i32);  // TypeId(92)
 
-type "functype//core:json/core:json/JsonDeserializer::expect_true$unchecked$cold1$dae[self]" = fn(i32, i32);  // TypeId(94)
+type "functype//core:json/core:json/JsonDeserializer::expect_false$unchecked$cold0$dae[self]" = fn(i32, i32);  // TypeId(93)
 
-type "functype//core:json/core:json/JsonDeserializer::expect_true$unchecked$cold2$dae[self]" = fn(i32, i32);  // TypeId(95)
+type "functype//core:json/core:json/JsonDeserializer::expect_false$unchecked$cold1$dae[self]" = fn(i32, i32);  // TypeId(94)
 
-type "functype//core:json/core:json/JsonDeserializer::expect_false$unchecked$cold0$dae[self]" = fn(i32, i32);  // TypeId(96)
+type "functype//core:json/core:json/JsonDeserializer::expect_false$unchecked$cold2$dae[self]" = fn(i32, i32);  // TypeId(95)
 
-type "functype//core:json/core:json/JsonDeserializer::expect_false$unchecked$cold1$dae[self]" = fn(i32, i32);  // TypeId(97)
+type "functype//core:json/core:json/JsonDeserializer::expect_false$unchecked$cold3$dae[self]" = fn(i32, i32);  // TypeId(96)
 
-type "functype//core:json/core:json/JsonDeserializer::expect_false$unchecked$cold2$dae[self]" = fn(i32, i32);  // TypeId(98)
+type "functype//core:json/core:json/JsonDeserializer::expect_null$unchecked$cold0$dae[self]" = fn(i32, i32);  // TypeId(97)
 
-type "functype//core:json/core:json/JsonDeserializer::expect_false$unchecked$cold3$dae[self]" = fn(i32, i32);  // TypeId(99)
+type "functype//core:json/core:json/JsonDeserializer::expect_null$unchecked$cold1$dae[self]" = fn(i32, i32);  // TypeId(98)
 
-type "functype//core:json/core:json/JsonDeserializer::expect_null$unchecked$cold0$dae[self]" = fn(i32, i32);  // TypeId(100)
+type "functype//core:json/core:json/JsonDeserializer::expect_null$unchecked$cold2$dae[self]" = fn(i32, i32);  // TypeId(99)
 
-type "functype//core:json/core:json/JsonDeserializer::expect_null$unchecked$cold1$dae[self]" = fn(i32, i32);  // TypeId(101)
+type "functype//core:prelude/intparse.wado/split_sign$cold0" = fn(ref "core:prelude/string.wado//StrSlice", i32, i32, bool);  // TypeId(100)
 
-type "functype//core:json/core:json/JsonDeserializer::expect_null$unchecked$cold2$dae[self]" = fn(i32, i32);  // TypeId(102)
+type "functype//core:prelude/intparse.wado/split_sign$cold1$dae[s]" = fn(i32, i32, i32);  // TypeId(101)
 
-type "functype//core:prelude/intparse.wado/split_sign$cold0" = fn(ref "core:prelude/string.wado//StrSlice", i32, i32, bool);  // TypeId(103)
+type "functype//core:prelude/intparse.wado/split_sign$cold2$dae[s,$contract_arg_0]" = fn(i32);  // TypeId(102)
 
-type "functype//core:prelude/intparse.wado/split_sign$cold1$dae[s]" = fn(i32, i32, i32);  // TypeId(104)
+type "functype//core:prelude/string.wado/core:prelude/string.wado/StrCharIter^core:prelude/traits.wado/Iterator::next$cold0$dae[self]" = fn(u32);  // TypeId(103)
 
-type "functype//core:prelude/intparse.wado/split_sign$cold2$dae[s,$contract_arg_0]" = fn(i32);  // TypeId(105)
+type "functype//core:prelude/string.wado/core:prelude/string.wado/String::utf8_valid_prefix$cold0$dae[bytes]" = fn(i32, i32);  // TypeId(104)
 
-type "functype//core:prelude/string.wado/core:prelude/string.wado/StrCharIter^core:prelude/traits.wado/Iterator::next$cold0$dae[self]" = fn(u32);  // TypeId(106)
+type "functype//core:prelude/string.wado/core:prelude/string.wado/String::utf8_valid_prefix$cold1$dae[bytes]" = fn(i32, i32);  // TypeId(105)
 
-type "functype//core:prelude/string.wado/core:prelude/string.wado/String::utf8_valid_prefix$cold0$dae[bytes]" = fn(i32, i32);  // TypeId(107)
+type "functype//core:prelude/string.wado/core:prelude/string.wado/String::utf8_valid_prefix$cold2$dae[bytes]" = fn(i32, i32);  // TypeId(106)
 
-type "functype//core:prelude/string.wado/core:prelude/string.wado/String::utf8_valid_prefix$cold1$dae[bytes]" = fn(i32, i32);  // TypeId(108)
+type "functype//core:prelude/string.wado/core:prelude/string.wado/String::utf8_valid_prefix$cold3$dae[bytes]" = fn(i32, i32);  // TypeId(107)
 
-type "functype//core:prelude/string.wado/core:prelude/string.wado/String::utf8_valid_prefix$cold2$dae[bytes]" = fn(i32, i32);  // TypeId(109)
+type "functype//core:prelude/string.wado/core:prelude/string.wado/String::utf8_valid_prefix$cold4$dae[bytes]" = fn(i32, i32);  // TypeId(108)
 
-type "functype//core:prelude/string.wado/core:prelude/string.wado/String::utf8_valid_prefix$cold3$dae[bytes]" = fn(i32, i32);  // TypeId(110)
+type "functype//core:prelude/string.wado/core:prelude/string.wado/String::utf8_valid_prefix$cold5$dae[bytes]" = fn(i32, i32);  // TypeId(109)
 
-type "functype//core:prelude/string.wado/core:prelude/string.wado/String::utf8_valid_prefix$cold4$dae[bytes]" = fn(i32, i32);  // TypeId(111)
+type "functype//core:prelude/string.wado/core:prelude/string.wado/String::utf8_valid_prefix$cold6$dae[bytes]" = fn(i32, i32);  // TypeId(110)
 
-type "functype//core:prelude/string.wado/core:prelude/string.wado/String::utf8_valid_prefix$cold5$dae[bytes]" = fn(i32, i32);  // TypeId(112)
+type "functype//core:prelude/string.wado/core:prelude/string.wado/String::utf8_valid_prefix$cold7$dae[bytes]" = fn(i32, i32);  // TypeId(111)
 
-type "functype//core:prelude/string.wado/core:prelude/string.wado/String::utf8_valid_prefix$cold6$dae[bytes]" = fn(i32, i32);  // TypeId(113)
+type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::pad<core:prelude/string.wado/String>$cold0$dae[self,content]" = fn(ref "core:prelude/string.wado//StrSlice", i32, i32, bool);  // TypeId(112)
 
-type "functype//core:prelude/string.wado/core:prelude/string.wado/String::utf8_valid_prefix$cold7$dae[bytes]" = fn(i32, i32);  // TypeId(114)
+type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::pad<core:prelude/string.wado/String>$cold1$dae[self,content,$contract_arg_0,$v1]" = fn(ref "core:prelude/string.wado//StrSlice", i32);  // TypeId(113)
 
-type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::pad<core:prelude/string.wado/String>$cold0$dae[self,content]" = fn(ref "core:prelude/string.wado//StrSlice", i32, i32, bool);  // TypeId(115)
+type "functype//core:json/core:json/JsonDeserializer::read_unicode_escape$cold2$sroa[self.pos]" = fn(i32, i32);  // TypeId(114)
 
-type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::pad<core:prelude/string.wado/String>$cold1$dae[self,content,$contract_arg_0,$v1]" = fn(ref "core:prelude/string.wado//StrSlice", i32);  // TypeId(116)
+type "functype//core:json/core:json/JsonDeserializer::read_escape$cold0$sroa[self.pos]" = fn(i32, i32);  // TypeId(115)
 
-type "functype//core:json/core:json/JsonDeserializer::read_unicode_escape$cold2$sroa[self.pos]" = fn(i32, i32);  // TypeId(117)
+type "functype//core:json/core:json/JsonDeserializer::peek$cold0$sroa[self.pos]" = fn(i32, i32);  // TypeId(116)
 
-type "functype//core:json/core:json/JsonDeserializer::read_escape$cold0$sroa[self.pos]" = fn(i32, i32);  // TypeId(118)
+type "functype//core:json/core:json/JsonDeserializer::expect_char_error$cold0$sroa[self.pos]$dae[c]" = fn(i32, i32);  // TypeId(117)
 
-type "functype//core:json/core:json/JsonDeserializer::peek$cold0$sroa[self.pos]" = fn(i32, i32);  // TypeId(119)
+type "functype//core:json/core:json/JsonDeserializer::peek" = fn(ref "core:prelude/slice.wado//Slice<u8>", i32) -> i32;  // TypeId(118)
 
-type "functype//core:json/core:json/JsonDeserializer::expect_char_error$cold0$sroa[self.pos]$dae[c]" = fn(i32, i32);  // TypeId(120)
+type "functype//core:json/core:json/JsonDeserializer::peek_after_whitespace" = fn(ref "core:json//JsonDeserializer") -> i32;  // TypeId(119)
 
-type "functype//core:json/core:json/JsonDeserializer::peek" = fn(ref "core:prelude/slice.wado//Slice<u8>", i32) -> i32;  // TypeId(121)
+type "functype//core:json/core:json/JsonDeserializer::peek_after_whitespace_run" = fn(ref "core:json//JsonDeserializer", i32) -> i32;  // TypeId(120)
 
-type "functype//core:json/core:json/JsonDeserializer::peek_after_whitespace" = fn(ref "core:json//JsonDeserializer") -> i32;  // TypeId(122)
+type "functype//core:json/core:json/JsonDeserializer::expect_char$dae[c]" = fn(ref "core:json//JsonDeserializer") -> ref null "core:serde//DeserializeError";  // TypeId(121)
 
-type "functype//core:json/core:json/JsonDeserializer::peek_after_whitespace_run" = fn(ref "core:json//JsonDeserializer", i32) -> i32;  // TypeId(123)
+type "functype//core:json/core:json/JsonDeserializer::entry_head$sroa[return]$dae[close]" = fn(ref "core:json//JsonDeserializer") -> [i32, bool, ref null "core:serde//DeserializeError"];  // TypeId(122)
 
-type "functype//core:json/core:json/JsonDeserializer::expect_char$dae[c]" = fn(ref "core:json//JsonDeserializer") -> ref null "core:serde//DeserializeError";  // TypeId(124)
+type "functype//core:json/core:json/JsonDeserializer::expect_char_error" = fn(ref "core:prelude/slice.wado//Slice<u8>", i32, i32) -> ref "core:serde//DeserializeError";  // TypeId(123)
 
-type "functype//core:json/core:json/JsonDeserializer::entry_head$sroa[return]$dae[close]" = fn(ref "core:json//JsonDeserializer") -> [i32, bool, ref null "core:serde//DeserializeError"];  // TypeId(125)
+type "functype//core:json/core:json/JsonDeserializer::invalid_utf8_string$dae[self]" = fn(i32) -> ref "core:serde//DeserializeError";  // TypeId(124)
 
-type "functype//core:json/core:json/JsonDeserializer::expect_char_error" = fn(ref "core:prelude/slice.wado//Slice<u8>", i32, i32) -> ref "core:serde//DeserializeError";  // TypeId(126)
+type "functype//core:json/core:json/JsonDeserializer::read_json_string$sroa[return]" = fn(ref "core:json//JsonDeserializer") -> [i32, ref null "core:prelude/string.wado//String", ref null "core:serde//DeserializeError"];  // TypeId(125)
 
-type "functype//core:json/core:json/JsonDeserializer::invalid_utf8_string$dae[self]" = fn(i32) -> ref "core:serde//DeserializeError";  // TypeId(127)
+type "functype//core:json/core:json/JsonDeserializer::read_escape$sroa[return]" = fn(ref "core:json//JsonDeserializer") -> [i32, char, ref null "core:serde//DeserializeError"];  // TypeId(126)
 
-type "functype//core:json/core:json/JsonDeserializer::read_json_string$sroa[return]" = fn(ref "core:json//JsonDeserializer") -> [i32, ref null "core:prelude/string.wado//String", ref null "core:serde//DeserializeError"];  // TypeId(128)
+type "functype//core:json/core:json/JsonDeserializer::read_hex4$sroa[return]" = fn(ref "core:json//JsonDeserializer") -> [i32, u32, ref null "core:serde//DeserializeError"];  // TypeId(127)
 
-type "functype//core:json/core:json/JsonDeserializer::read_escape$sroa[return]" = fn(ref "core:json//JsonDeserializer") -> [i32, char, ref null "core:serde//DeserializeError"];  // TypeId(129)
+type "functype//core:json/core:json/JsonDeserializer::read_unicode_escape$sroa[return]" = fn(ref "core:json//JsonDeserializer") -> [i32, char, ref null "core:serde//DeserializeError"];  // TypeId(128)
 
-type "functype//core:json/core:json/JsonDeserializer::read_hex4$sroa[return]" = fn(ref "core:json//JsonDeserializer") -> [i32, u32, ref null "core:serde//DeserializeError"];  // TypeId(130)
+type "functype//core:json/core:json/JsonDeserializer::scan_number_into" = fn(ref "core:json//JsonDeserializer", i32, ref "core:json//ScannedNumber") -> ref null "core:serde//DeserializeError";  // TypeId(129)
 
-type "functype//core:json/core:json/JsonDeserializer::read_unicode_escape$sroa[return]" = fn(ref "core:json//JsonDeserializer") -> [i32, char, ref null "core:serde//DeserializeError"];  // TypeId(131)
+type "functype//core:json/core:json/JsonDeserializer::parse_i32_with_lead$sroa[return]" = fn(ref "core:json//JsonDeserializer", i32) -> [i32, i32, ref null "core:serde//DeserializeError"];  // TypeId(130)
 
-type "functype//core:json/core:json/JsonDeserializer::scan_number_into" = fn(ref "core:json//JsonDeserializer", i32, ref "core:json//ScannedNumber") -> ref null "core:serde//DeserializeError";  // TypeId(132)
+type "functype//core:json/core:json/JsonDeserializer::skip_string" = fn(ref "core:json//JsonDeserializer") -> ref null "core:serde//DeserializeError";  // TypeId(131)
 
-type "functype//core:json/core:json/JsonDeserializer::parse_i32_with_lead$sroa[return]" = fn(ref "core:json//JsonDeserializer", i32) -> [i32, i32, ref null "core:serde//DeserializeError"];  // TypeId(133)
+type "functype//core:json/core:json/JsonDeserializer::expect_true$unchecked" = fn(ref "core:json//JsonDeserializer") -> ref null "core:serde//DeserializeError";  // TypeId(132)
 
-type "functype//core:json/core:json/JsonDeserializer::skip_string" = fn(ref "core:json//JsonDeserializer") -> ref null "core:serde//DeserializeError";  // TypeId(134)
+type "functype//core:json/core:json/JsonDeserializer::expect_false$unchecked" = fn(ref "core:json//JsonDeserializer") -> ref null "core:serde//DeserializeError";  // TypeId(133)
 
-type "functype//core:json/core:json/JsonDeserializer::expect_true$unchecked" = fn(ref "core:json//JsonDeserializer") -> ref null "core:serde//DeserializeError";  // TypeId(135)
+type "functype//core:json/core:json/JsonDeserializer::expect_null$unchecked" = fn(ref "core:json//JsonDeserializer") -> ref null "core:serde//DeserializeError";  // TypeId(134)
 
-type "functype//core:json/core:json/JsonDeserializer::expect_false$unchecked" = fn(ref "core:json//JsonDeserializer") -> ref null "core:serde//DeserializeError";  // TypeId(136)
+type "functype//core:json/core:json/JsonDeserializer::skip_array_body" = fn(ref "core:json//JsonDeserializer", i32) -> ref null "core:serde//DeserializeError";  // TypeId(135)
 
-type "functype//core:json/core:json/JsonDeserializer::expect_null$unchecked" = fn(ref "core:json//JsonDeserializer") -> ref null "core:serde//DeserializeError";  // TypeId(137)
+type "functype//core:json/core:json/JsonDeserializer::skip_object_body" = fn(ref "core:json//JsonDeserializer", i32) -> ref null "core:serde//DeserializeError";  // TypeId(136)
 
-type "functype//core:json/core:json/JsonDeserializer::skip_array_body" = fn(ref "core:json//JsonDeserializer", i32) -> ref null "core:serde//DeserializeError";  // TypeId(138)
+type "functype//core:json/core:json/JsonDeserializer::skip_value" = fn(ref "core:json//JsonDeserializer", i32) -> ref null "core:serde//DeserializeError";  // TypeId(137)
 
-type "functype//core:json/core:json/JsonDeserializer::skip_object_body" = fn(ref "core:json//JsonDeserializer", i32) -> ref null "core:serde//DeserializeError";  // TypeId(139)
+type "functype//core:json/core:json/JsonDeserializer^core:serde/Deserializer::deserialize_i32$sroa[return]" = fn(ref "core:json//JsonDeserializer") -> [i32, i32, ref null "core:serde//DeserializeError"];  // TypeId(138)
 
-type "functype//core:json/core:json/JsonDeserializer::skip_value" = fn(ref "core:json//JsonDeserializer", i32) -> ref null "core:serde//DeserializeError";  // TypeId(140)
+type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::new" = fn(ref "core:prelude/string.wado//String") -> ref "core:prelude/format.wado//Formatter";  // TypeId(139)
 
-type "functype//core:json/core:json/JsonDeserializer^core:serde/Deserializer::deserialize_i32$sroa[return]" = fn(ref "core:json//JsonDeserializer") -> [i32, i32, ref null "core:serde//DeserializeError"];  // TypeId(141)
+type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::write_indent" = fn(ref "core:prelude/format.wado//Formatter");  // TypeId(140)
 
-type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::new" = fn(ref "core:prelude/string.wado//String") -> ref "core:prelude/format.wado//Formatter";  // TypeId(142)
+type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::write_newline_indent" = fn(ref "core:prelude/format.wado//Formatter");  // TypeId(141)
 
-type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::write_indent" = fn(ref "core:prelude/format.wado//Formatter");  // TypeId(143)
+type "functype//core:prelude/string.wado/core:prelude/string.wado/StrCharIter^core:prelude/traits.wado/Iterator::next$sroa[return]" = fn(ref "core:prelude/string.wado//StrCharIter") -> [i32, char];  // TypeId(142)
 
-type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::write_newline_indent" = fn(ref "core:prelude/format.wado//Formatter");  // TypeId(144)
+type "functype//core:prelude/string.wado/core:prelude/string.wado/String::as_bytes" = fn(ref Array<u8>, i32) -> ref "core:prelude/slice.wado//Slice<u8>";  // TypeId(143)
 
-type "functype//core:prelude/string.wado/core:prelude/string.wado/StrCharIter^core:prelude/traits.wado/Iterator::next$sroa[return]" = fn(ref "core:prelude/string.wado//StrCharIter") -> [i32, char];  // TypeId(145)
+type "functype//core:prelude/string.wado/core:prelude/string.wado/String::realloc_to" = fn(ref "core:prelude/string.wado//String", i32);  // TypeId(144)
 
-type "functype//core:prelude/string.wado/core:prelude/string.wado/String::as_bytes" = fn(ref Array<u8>, i32) -> ref "core:prelude/slice.wado//Slice<u8>";  // TypeId(146)
+type "functype//core:prelude/string.wado/core:prelude/string.wado/String::grow" = fn(ref "core:prelude/string.wado//String", i32);  // TypeId(145)
 
-type "functype//core:prelude/string.wado/core:prelude/string.wado/String::realloc_to" = fn(ref "core:prelude/string.wado//String", i32);  // TypeId(147)
+type "functype//core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit" = fn(ref "core:prelude/string.wado//String", i32) -> i32;  // TypeId(146)
 
-type "functype//core:prelude/string.wado/core:prelude/string.wado/String::grow" = fn(ref "core:prelude/string.wado//String", i32);  // TypeId(148)
+type "functype//core:prelude/string.wado/core:prelude/string.wado/String::push" = fn(ref "core:prelude/string.wado//String", char);  // TypeId(147)
 
-type "functype//core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit" = fn(ref "core:prelude/string.wado//String", i32) -> i32;  // TypeId(149)
+type "functype//core:prelude/string.wado/core:prelude/string.wado/String::push_ascii_byte" = fn(ref "core:prelude/string.wado//String", u8);  // TypeId(148)
 
-type "functype//core:prelude/string.wado/core:prelude/string.wado/String::push" = fn(ref "core:prelude/string.wado//String", char);  // TypeId(150)
+type "functype//core:prelude/string.wado/core:prelude/string.wado/String::utf8_valid_prefix" = fn(ref Array<u8>, i32, i32) -> i32;  // TypeId(149)
 
-type "functype//core:prelude/string.wado/core:prelude/string.wado/String::push_ascii_byte" = fn(ref "core:prelude/string.wado//String", u8);  // TypeId(151)
+type "functype//core:prelude/string.wado/core:prelude/string.wado/String::utf8_sequence_len" = fn(ref Array<u8>, i32, i32, i32, i32) -> i32;  // TypeId(150)
 
-type "functype//core:prelude/string.wado/core:prelude/string.wado/String::utf8_valid_prefix" = fn(ref Array<u8>, i32, i32) -> i32;  // TypeId(152)
+type "functype//core:prelude/string.wado/core:prelude/string.wado/String::is_valid_utf8" = fn(ref "core:prelude/slice.wado//Slice<u8>") -> bool;  // TypeId(151)
 
-type "functype//core:prelude/string.wado/core:prelude/string.wado/String::utf8_sequence_len" = fn(ref Array<u8>, i32, i32, i32, i32) -> i32;  // TypeId(153)
+type "functype//core:prelude/string.wado/core:prelude/string.wado/StrSlice::is_char_boundary" = fn(ref Array<u8>, i32, i32, i32) -> bool;  // TypeId(152)
 
-type "functype//core:prelude/string.wado/core:prelude/string.wado/String::is_valid_utf8" = fn(ref "core:prelude/slice.wado//Slice<u8>") -> bool;  // TypeId(154)
+type "functype//core:prelude/string.wado/core:prelude/string.wado/String^core:prelude/string.wado/AsStrSlice::internal_append_to" = fn(ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String");  // TypeId(153)
 
-type "functype//core:prelude/string.wado/core:prelude/string.wado/StrSlice::is_char_boundary" = fn(ref Array<u8>, i32, i32, i32) -> bool;  // TypeId(155)
+type "functype//core:serde/core:serde/DeserializeError::eof" = fn(i64) -> ref "core:serde//DeserializeError";  // TypeId(154)
 
-type "functype//core:prelude/string.wado/core:prelude/string.wado/String^core:prelude/string.wado/AsStrSlice::internal_append_to" = fn(ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String");  // TypeId(156)
+type "functype//core:serde/core:serde/DeserializeError::trailing" = fn(i64) -> ref "core:serde//DeserializeError";  // TypeId(155)
 
-type "functype//core:serde/core:serde/DeserializeError::eof" = fn(i64) -> ref "core:serde//DeserializeError";  // TypeId(157)
+type "functype//serde_json_list_default.wado/serde_json_list_default.wado/S^core:serde/FieldSchema::lookup$sroa[return]" = fn(ref Array<u8>, i32, i32) -> [i32, i32];  // TypeId(156)
 
-type "functype//core:serde/core:serde/DeserializeError::trailing" = fn(i64) -> ref "core:serde//DeserializeError";  // TypeId(158)
+type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::close_brace<core:prelude/string.wado/String>" = fn(ref "core:prelude/format.wado//Formatter", ref "core:prelude/string.wado//String");  // TypeId(157)
 
-type "functype//serde_json_list_default.wado/serde_json_list_default.wado/S^core:serde/FieldSchema::lookup$sroa[return]" = fn(ref Array<u8>, i32, i32) -> [i32, i32];  // TypeId(159)
+type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::open_brace<core:prelude/string.wado/String>" = fn(ref "core:prelude/format.wado//Formatter", ref "core:prelude/string.wado//String");  // TypeId(158)
 
-type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::close_brace<core:prelude/string.wado/String>" = fn(ref "core:prelude/format.wado//Formatter", ref "core:prelude/string.wado//String");  // TypeId(160)
+type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::pad<core:prelude/string.wado/String>" = fn(ref "core:prelude/format.wado//Formatter", ref Array<u8>, i32);  // TypeId(159)
 
-type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::open_brace<core:prelude/string.wado/String>" = fn(ref "core:prelude/format.wado//Formatter", ref "core:prelude/string.wado//String");  // TypeId(161)
+type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>" = fn(ref "core:prelude/format.wado//Formatter", bool, ref Array<u8>, i32, i32) -> i32;  // TypeId(160)
 
-type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::pad<core:prelude/string.wado/String>" = fn(ref "core:prelude/format.wado//Formatter", ref Array<u8>, i32);  // TypeId(162)
+type "functype//core:json/core:json/JsonDeserializer::quoted_number<i32>$sroa[return]" = fn(ref "core:json//JsonDeserializer") -> [i32, i32, ref null "core:serde//DeserializeError"];  // TypeId(161)
 
-type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>" = fn(ref "core:prelude/format.wado//Formatter", bool, ref Array<u8>, i32, i32) -> i32;  // TypeId(163)
+type "functype//core:prelude/slice.wado/core:prelude/slice.wado/Slice<u8>^core:prelude/traits.wado/IndexValue<i32>::index_value$unchecked" = fn(ref Array<u8>, i32, i32) -> u8;  // TypeId(162)
 
-type "functype//core:json/core:json/JsonDeserializer::quoted_number<i32>$sroa[return]" = fn(ref "core:json//JsonDeserializer") -> [i32, i32, ref null "core:serde//DeserializeError"];  // TypeId(164)
+type "functype//core:prelude/string.wado/&core:prelude/string.wado/String^core:prelude/string.wado/AsStrSlice::internal_append_to" = fn(ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String");  // TypeId(163)
 
-type "functype//core:prelude/slice.wado/core:prelude/slice.wado/Slice<u8>^core:prelude/traits.wado/IndexValue<i32>::index_value$unchecked" = fn(ref Array<u8>, i32, i32) -> u8;  // TypeId(165)
+type "functype//core:prelude/string.wado/core:prelude/string.wado/String::push_bytes$unchecked<core:prelude/bytes.wado/ByteSlice>" = fn(ref "core:prelude/string.wado//String", ref "core:prelude/slice.wado//Slice<u8>");  // TypeId(164)
 
-type "functype//core:prelude/string.wado/&core:prelude/string.wado/String^core:prelude/string.wado/AsStrSlice::internal_append_to" = fn(ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String");  // TypeId(166)
+type "functype//core:prelude/traits.wado/core:prelude/bytes.wado/ByteSlice^core:prelude/traits.wado/Inspect::inspect" = fn(ref "core:prelude/slice.wado//Slice<u8>", ref "core:prelude/format.wado//Formatter");  // TypeId(165)
 
-type "functype//core:prelude/string.wado/core:prelude/string.wado/String::push_bytes$unchecked<core:prelude/bytes.wado/ByteSlice>" = fn(ref "core:prelude/string.wado//String", ref "core:prelude/slice.wado//Slice<u8>");  // TypeId(167)
+type "functype//core:serde/serde_json_list_default.wado/S^core:serde/Deserialize::deserialize<core:json/JsonDeserializer>$sroa[return]" = fn(ref "core:json//JsonDeserializer") -> [i32, ref null "serde_json_list_default.wado//S", ref null "core:serde//DeserializeError"];  // TypeId(166)
 
-type "functype//core:prelude/traits.wado/core:prelude/bytes.wado/ByteSlice^core:prelude/traits.wado/Inspect::inspect" = fn(ref "core:prelude/slice.wado//Slice<u8>", ref "core:prelude/format.wado//Formatter");  // TypeId(168)
+type "functype//core:prelude/slice.wado/core:prelude/slice.wado/Slice<u8>^core:prelude/traits.wado/Inspect::inspect" = fn(ref Array<u8>, i32, i32, ref "core:prelude/format.wado//Formatter");  // TypeId(167)
 
-type "functype//core:serde/serde_json_list_default.wado/S^core:serde/Deserialize::deserialize<core:json/JsonDeserializer>$sroa[return]" = fn(ref "core:json//JsonDeserializer") -> [i32, ref null "serde_json_list_default.wado//S", ref null "core:serde//DeserializeError"];  // TypeId(169)
+type "functype//core:serde/core:serde/DeserializeError::duplicate_field<core:prelude/string.wado/String>" = fn(ref "core:prelude/string.wado//String") -> ref "core:serde//DeserializeError";  // TypeId(168)
 
-type "functype//core:prelude/slice.wado/core:prelude/slice.wado/Slice<u8>^core:prelude/traits.wado/Inspect::inspect" = fn(ref Array<u8>, i32, i32, ref "core:prelude/format.wado//Formatter");  // TypeId(170)
+type "functype//core:serde/core:prelude/list.wado/List<i32>^core:serde/Deserialize::deserialize<core:json/JsonDeserializer>$sroa[return]" = fn(ref "core:json//JsonDeserializer") -> [i32, ref null "core:prelude//List<i32>", ref null "core:serde//DeserializeError"];  // TypeId(169)
 
-type "functype//core:serde/core:serde/DeserializeError::duplicate_field<core:prelude/string.wado/String>" = fn(ref "core:prelude/string.wado//String") -> ref "core:serde//DeserializeError";  // TypeId(171)
+type "functype//core:prelude/list.wado/core:prelude/list.wado/List<i32>::grow" = fn(ref "core:prelude//List<i32>");  // TypeId(170)
 
-type "functype//core:serde/core:prelude/list.wado/List<i32>^core:serde/Deserialize::deserialize<core:json/JsonDeserializer>$sroa[return]" = fn(ref "core:json//JsonDeserializer") -> [i32, ref null "core:prelude//List<i32>", ref null "core:serde//DeserializeError"];  // TypeId(172)
+type "functype//core:json/core:json/JsonDeserializer::key_quote_error$sroa[self.pos]" = fn(i32, i32) -> ref "core:serde//DeserializeError";  // TypeId(171)
 
-type "functype//core:prelude/list.wado/core:prelude/list.wado/List<i32>::grow" = fn(ref "core:prelude//List<i32>");  // TypeId(173)
+type "functype//core:json/core:json/JsonDeserializer::entry_separator_error$sroa[self.pos]" = fn(i32, i32) -> ref "core:serde//DeserializeError";  // TypeId(172)
 
-type "functype//core:json/core:json/JsonDeserializer::key_quote_error$sroa[self.pos]" = fn(i32, i32) -> ref "core:serde//DeserializeError";  // TypeId(174)
+type "functype//core:prelude/primitive.wado/bool::fmt_into$sroa[self.value]" = fn(bool, ref "core:prelude/format.wado//Formatter");  // TypeId(173)
 
-type "functype//core:json/core:json/JsonDeserializer::entry_separator_error$sroa[self.pos]" = fn(i32, i32) -> ref "core:serde//DeserializeError";  // TypeId(175)
+type "functype//core:prelude/primitive.wado/i32::fmt_decimal$sroa[self.value]" = fn(i32, ref "core:prelude/format.wado//Formatter");  // TypeId(174)
 
-type "functype//core:prelude/primitive.wado/bool::fmt_into$sroa[self.value]" = fn(bool, ref "core:prelude/format.wado//Formatter");  // TypeId(176)
+type "functype//core:prelude/primitive.wado/u32::fmt_decimal$sroa[self.value]" = fn(u32, ref "core:prelude/format.wado//Formatter");  // TypeId(175)
 
-type "functype//core:prelude/primitive.wado/i32::fmt_decimal$sroa[self.value]" = fn(i32, ref "core:prelude/format.wado//Formatter");  // TypeId(177)
+type "functype//core:prelude/primitive.wado/char^core:prelude/traits.wado/Display::fmt$sroa[self.value]" = fn(char, ref "core:prelude/format.wado//Formatter");  // TypeId(176)
 
-type "functype//core:prelude/primitive.wado/u32::fmt_decimal$sroa[self.value]" = fn(u32, ref "core:prelude/format.wado//Formatter");  // TypeId(178)
+type "functype//core:prelude/string.wado/core:prelude/string.wado/String^core:prelude/string.wado/AsStrSlice::internal_append_to$spec0" = fn(ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String");  // TypeId(177)
 
-type "functype//core:prelude/primitive.wado/char^core:prelude/traits.wado/Display::fmt$sroa[self.value]" = fn(char, ref "core:prelude/format.wado//Formatter");  // TypeId(179)
+type "functype//core:prelude/string.wado/core:prelude/string.wado/String^core:prelude/string.wado/AsStrSlice::internal_append_to$spec1" = fn(ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String");  // TypeId(178)
 
-type "functype//core:prelude/string.wado/core:prelude/string.wado/String^core:prelude/string.wado/AsStrSlice::internal_append_to$spec0" = fn(ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String");  // TypeId(180)
+type "functype//core:prelude/string.wado/core:prelude/string.wado/String^core:prelude/string.wado/AsStrSlice::internal_append_to$spec2" = fn(ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String");  // TypeId(179)
 
-type "functype//core:prelude/string.wado/core:prelude/string.wado/String^core:prelude/string.wado/AsStrSlice::internal_append_to$spec1" = fn(ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String");  // TypeId(181)
+type "functype//core:prelude/string.wado/core:prelude/string.wado/String^core:prelude/string.wado/AsStrSlice::internal_append_to$spec3" = fn(ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String");  // TypeId(180)
 
-type "functype//core:prelude/string.wado/core:prelude/string.wado/String^core:prelude/string.wado/AsStrSlice::internal_append_to$spec2" = fn(ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String");  // TypeId(182)
+type "functype//core:prelude/string.wado/core:prelude/string.wado/String^core:prelude/string.wado/AsStrSlice::internal_append_to$spec4" = fn(ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String");  // TypeId(181)
 
-type "functype//core:prelude/string.wado/core:prelude/string.wado/String^core:prelude/string.wado/AsStrSlice::internal_append_to$spec3" = fn(ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String");  // TypeId(183)
+type "functype//core:prelude/string.wado/core:prelude/string.wado/String^core:prelude/string.wado/AsStrSlice::internal_append_to$spec5" = fn(ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String");  // TypeId(182)
 
-type "functype//core:prelude/string.wado/core:prelude/string.wado/String^core:prelude/string.wado/AsStrSlice::internal_append_to$spec4" = fn(ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String");  // TypeId(184)
+type "functype//core:prelude/string.wado/core:prelude/string.wado/String^core:prelude/string.wado/AsStrSlice::internal_append_to$spec6" = fn(ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String");  // TypeId(183)
 
-type "functype//core:prelude/string.wado/core:prelude/string.wado/String^core:prelude/string.wado/AsStrSlice::internal_append_to$spec5" = fn(ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String");  // TypeId(185)
+type "functype//core:prelude/string.wado/core:prelude/string.wado/String^core:prelude/string.wado/AsStrSlice::internal_append_to$spec7" = fn(ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String");  // TypeId(184)
 
-type "functype//core:prelude/string.wado/core:prelude/string.wado/String^core:prelude/string.wado/AsStrSlice::internal_append_to$spec6" = fn(ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String");  // TypeId(186)
+type "functype//core:json/core:json/JsonDeserializer::scan_string_run$sroa[self.input]" = fn(ref "core:prelude/slice.wado//Slice<u8>", i32) -> [i32, i32, bool];  // TypeId(185)
 
-type "functype//core:prelude/string.wado/core:prelude/string.wado/String^core:prelude/string.wado/AsStrSlice::internal_append_to$spec7" = fn(ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String");  // TypeId(187)
+type "functype//core:json/core:json/JsonDeserializer::append_scanned_run$sroa[self.input]" = fn(ref Array<u8>, i32, i32, ref "core:prelude/string.wado//String", i32, i32, bool) -> ref null "core:serde//DeserializeError";  // TypeId(186)
 
-type "functype//core:json/core:json/JsonDeserializer::scan_string_run$sroa[self.input]" = fn(ref "core:prelude/slice.wado//Slice<u8>", i32) -> [i32, i32, bool];  // TypeId(188)
+type "functype//core:json/core:json/JsonDeserializer::take_scanned_run$sroa[self.input,return]" = fn(ref Array<u8>, i32, i32, i32, i32, bool) -> [i32, ref null "core:prelude/string.wado//String", ref null "core:serde//DeserializeError"];  // TypeId(187)
 
-type "functype//core:json/core:json/JsonDeserializer::append_scanned_run$sroa[self.input]" = fn(ref Array<u8>, i32, i32, ref "core:prelude/string.wado//String", i32, i32, bool) -> ref null "core:serde//DeserializeError";  // TypeId(189)
+type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$sroa[self.buf]$dae[alt_prefix]" = fn(ref "core:prelude/string.wado//String", bool, i32) -> i32;  // TypeId(188)
 
-type "functype//core:json/core:json/JsonDeserializer::take_scanned_run$sroa[self.input,return]" = fn(ref Array<u8>, i32, i32, i32, i32, bool) -> [i32, ref null "core:prelude/string.wado//String", ref null "core:serde//DeserializeError"];  // TypeId(190)
+type "functype//core:prelude/primitive.wado/u64::fmt_base$sroa[self.value]$spec0$sroa[f.buf]$dae[alt_prefix]" = fn(u64, ref "core:prelude/string.wado//String", i32, bool);  // TypeId(189)
 
-type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$sroa[self.buf]$dae[alt_prefix]" = fn(ref "core:prelude/string.wado//String", bool, i32) -> i32;  // TypeId(191)
+type "functype//wasi/task-return" = fn(i32);  // TypeId(190)
 
-type "functype//core:prelude/primitive.wado/u64::fmt_base$sroa[self.value]$spec0$sroa[f.buf]$dae[alt_prefix]" = fn(u64, ref "core:prelude/string.wado//String", i32, bool);  // TypeId(192)
+type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(191)
 
-type "functype//wasi/task-return" = fn(i32);  // TypeId(193)
+type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(192)
 
-type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(194)
+type "functype//wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code" = fn(i32);  // TypeId(193)
 
-type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(195)
+type "functype//core:json/core:json/JsonStructAccess^core:serde/DeserializeStruct::next_field<serde_json_list_default.wado/S>$sroa[return]" = fn(ref "core:json//JsonDeserializer") -> [i32, i32, i32, ref null "core:serde//DeserializeError"];  // TypeId(194)
 
-type "functype//wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code" = fn(i32);  // TypeId(196)
+type "functype//core:json/core:json/JsonSeqAccess^core:serde/DeserializeSeq::next_element<i32>$sroa[return]" = fn(ref "core:json//JsonDeserializer") -> [i32, i32, i32, ref null "core:serde//DeserializeError"];  // TypeId(195)
 
-type "functype//wasi/stream-drop-readable" = fn(i32);  // TypeId(197)
-
-type "functype//core:json/core:json/JsonStructAccess^core:serde/DeserializeStruct::next_field<serde_json_list_default.wado/S>$sroa[return]" = fn(ref "core:json//JsonDeserializer") -> [i32, i32, i32, ref null "core:serde//DeserializeError"];  // TypeId(198)
-
-type "functype//core:json/core:json/JsonSeqAccess^core:serde/DeserializeSeq::next_element<i32>$sroa[return]" = fn(ref "core:json//JsonDeserializer") -> [i32, i32, i32, ref null "core:serde//DeserializeError"];  // TypeId(199)
+type "functype//core:rt/write_string_to_stream$dae[add_newline]" = fn(i32, ref Array<u8>, i32);  // TypeId(196)
 
 import fn mem/realloc from "mem/realloc";
 import fn wasi/stream-write from "wasi/stream-write";
@@ -493,7 +485,6 @@ import fn wasi/task-return from "wasi/task-return";
 import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 import fn wasi/stream-new from "wasi/stream-new";
 import fn wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code from "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code";
-import fn wasi/stream-drop-readable from "wasi/stream-drop-readable";
 
 global global:serde_json_list_default.wado::$const_obj_16: ref Array<u8> = array.new_fixed<u8>(120);
 global global:serde_json_list_default.wado::$const_obj_17: ref Array<u8> = array.new_fixed<u8>(123, 125);
@@ -1302,45 +1293,27 @@ fn "core:prelude/primitive.wado/write_u64_base_digits"(arr, offset, val_i64, dig
 
 fn "core:rt/write_string_to_stream$dae[add_newline]"(tx, $mv$message$repr, $mv$message$used) {
     let new_repr: ref Array<u8>;
-    let $moved_5: ref null "core:prelude//$Resource";
     builtin::array_copy<u8>(local.tee new_repr(builtin::array_new<u8>($mv$message$used + 1)), 0, $mv$message$repr, 0, $mv$message$used);
     builtin::array_set_u8(new_repr, $mv$message$used, 10);
     drop(block -> "core:prelude/types.wado//enum:CopyResult" {
         let $arg_spill_1: i32;
-        $arg_spill_1 = tx.value;
+        $arg_spill_1 = tx;
         $mv$message$used = $mv$message$used + 1;
         "core:rt/cm_stream_write_raw_all_u8"($arg_spill_1, new_repr, 0, $mv$message$used);
     });
-    "wasi/stream-drop-writable"($moved_5 = tx; tx = ref.null none; $moved_5.value);
-    if ref.is_null(tx) == 0 {
-        "wasi/stream-drop-writable"(tx.value);
-    }
-}
-
-fn "core:rt/log_stderr"($mv$message$repr, $mv$message$used) {
-    let $moved_4: ref null "core:prelude//$Resource";
-    let $moved_5: ref null "core:prelude//$Resource";
-    let $cm_pair_7: i64;
-    let $sroa_$pattern_temp_0_0_9: ref null "core:prelude//$Resource";
-    let $sroa_$pattern_temp_0_1_10: ref null "core:prelude//$Resource";
-    $sroa_$pattern_temp_0_0_9 = struct.new "core:prelude//$Resource" { value: builtin::i32_wrap_i64(local.tee $cm_pair_7("wasi/stream-new"())) };
-    $sroa_$pattern_temp_0_1_10 = struct.new "core:prelude//$Resource" { value: builtin::i32_wrap_i64($cm_pair_7 >> 32_i64) };
-    $moved_4 = struct.new "core:prelude//$Resource" { value: "wasi/wasi:cli/Stderr::write_via_stream"($moved_4 = $sroa_$pattern_temp_0_0_9; $sroa_$pattern_temp_0_0_9 = ref.null none; $moved_4.value) };
-    "core:rt/write_string_to_stream$dae[add_newline]"($moved_5 = $sroa_$pattern_temp_0_1_10; $sroa_$pattern_temp_0_1_10 = ref.null none; $moved_5, $mv$message$repr, $mv$message$used);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"($moved_5 = $moved_4; $moved_4 = ref.null none; $moved_5.value);
-    if ref.is_null($moved_4) == 0 {
-        "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"($moved_4.value);
-    }
-    if ref.is_null($sroa_$pattern_temp_0_1_10) == 0 {
-        "wasi/stream-drop-writable"($sroa_$pattern_temp_0_1_10.value);
-    }
-    if ref.is_null($sroa_$pattern_temp_0_0_9) == 0 {
-        "wasi/stream-drop-readable"($sroa_$pattern_temp_0_0_9.value);
-    }
+    "wasi/stream-drop-writable"($mv$message$used = tx; tx = 0; $mv$message$used);
 }
 
 fn "core:rt/panic"($mv$message$repr, $mv$message$used) {
-    "core:rt/log_stderr"($mv$message$repr, $mv$message$used);
+    let $moved_4: i32;
+    let $cm_pair_7: i64;
+    let $sroa_$pattern_temp_0_0_9: i32;
+    let $sroa_$pattern_temp_0_1_10: i32;
+    $sroa_$pattern_temp_0_0_9 = builtin::i32_wrap_i64(local.tee $cm_pair_7("wasi/stream-new"()));
+    $sroa_$pattern_temp_0_1_10 = builtin::i32_wrap_i64($cm_pair_7 >> 32_i64);
+    $moved_4 = "wasi/wasi:cli/Stderr::write_via_stream"($moved_4 = $sroa_$pattern_temp_0_0_9; $sroa_$pattern_temp_0_0_9 = 0; $moved_4);
+    "core:rt/write_string_to_stream$dae[add_newline]"($sroa_$pattern_temp_0_0_9 = $sroa_$pattern_temp_0_1_10; $sroa_$pattern_temp_0_1_10 = 0; $sroa_$pattern_temp_0_0_9, $mv$message$repr, $mv$message$used);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"($mv$message$used = $moved_4; $moved_4 = 0; $mv$message$used);
     cold_path;
     unreachable;
 }
@@ -1363,17 +1336,17 @@ fn "core:rt/cm_stream_write_raw_all_u8"(handle, $mv$data$repr, $mv$data$start, $
     if local.tee $mv$data$end($mv$data$end - $mv$data$start) == 0 {
         return 0;
     }
-    ptr_15 = builtin::i32_wrap_i64(ptr_15 = "mem/realloc"(0, 0, 1, $mv$data$end); i = 0; b100: block {
-        l101: loop {
-            break_if b100 i >= $mv$data$end;
+    ptr_15 = builtin::i32_wrap_i64(ptr_15 = "mem/realloc"(0, 0, 1, $mv$data$end); i = 0; b96: block {
+        l97: loop {
+            break_if b96 i >= $mv$data$end;
             builtin::store_u8(ptr_15 + i, builtin::array_get_value_u8($mv$data$repr, $mv$data$start + i));
             i = i + 1;
-            continue l101;
+            continue l97;
         };
     }; builtin::i64_extend_i32_u(ptr_15) | (builtin::i64_extend_i32_s($mv$data$end) << 32_i64));
     i = 0;
     block {
-        l103: loop {
+        l99: loop {
             delivered_6 = local.tee written($inline_cm_stream_write_once_4: block -> i32 {
                 $mv$data$start = ptr_15 + i;
                 count_18 = $mv$data$end - i;
@@ -1404,7 +1377,7 @@ fn "core:rt/cm_stream_write_raw_all_u8"(handle, $mv$data$repr, $mv$data$start, $
                 drop("mem/realloc"(ptr_15, $mv$data$end, 1, 0));
                 return $match_scrut_0;
             }
-            continue l103;
+            continue l99;
         };
     };
 }
@@ -1484,15 +1457,15 @@ fn "core:prelude/format.wado/core/prelude/format.wado/inspect_text<core:prelude/
     self_12 = f.buf;
     $mv$text$used = self_11 >= 0;
     $hfs_used_491 = self_12.used;
-    b111: block {
-        l112: loop {
+    b107: block {
+        l108: loop {
             let $mv$$match_10$0: i32;
             let $mv$$match_10$1: char;
             multivalue_bind [$mv$$match_10$0, $mv$$match_10$1] = "core:prelude/string.wado/core:prelude/string.wado/StrCharIter^core:prelude/traits.wado/Iterator::next$sroa[return]"($iter_0);
             if $mv$$match_10$0 == 1 {
                 if select i32($mv$text$used, start_62 >= self_11, 0) {
                     new_used_61 = 1;
-                    break b111;
+                    break b107;
                 }
                 if $mv$$match_10$1 == 34 {
                     if @unlikely(local.tee new_used_91($hfs_used_491 + 1) > builtin::array_len(self_12.repr)) {
@@ -1688,10 +1661,10 @@ fn "core:prelude/format.wado/core/prelude/format.wado/inspect_text<core:prelude/
                 }
                 start_62 = start_62 + 1;
             } else {
-                break b111;
+                break b107;
             }
             self_12.used = $hfs_used_491;
-            continue l112;
+            continue l108;
         };
     };
     if @unlikely(local.tee self_426(local.tee $local_8_8(f.buf).used + 1) > builtin::array_len($local_8_8.repr)) {
@@ -1851,12 +1824,12 @@ fn "core:prelude/array.wado/core/prelude/array.wado/write_seq_inspect<u8>$dae[ma
     shown = 0;
     truncated = 0;
     $licm_arith_29 = limit >= 0;
-    b167: block {
-        l168: loop {
-            break_if b167 start >= end;
+    b163: block {
+        l164: loop {
+            break_if b163 start >= end;
             if select i32($licm_arith_29, shown >= limit, 0) {
                 truncated = 1;
-                break b167;
+                break b163;
             }
             if shown > 0 {
                 self_8 = f.buf;
@@ -1865,7 +1838,7 @@ fn "core:prelude/array.wado/core/prelude/array.wado/write_seq_inspect<u8>$dae[ma
             "core:prelude/primitive.wado/i32::fmt_decimal$sroa[self.value]"(struct.new "core:prelude/types.wado//Box<u8>" { value: builtin::array_get_value<u8>(repr, start) }.value, f);
             shown = shown + 1;
             start = start + 1;
-            continue l168;
+            continue l164;
         };
     };
     if truncated {
@@ -1894,19 +1867,19 @@ fn "core:prelude/array.wado/core/prelude/array.wado/write_seq_inspect_alt<u8>$da
     shown = 0;
     truncated = 0;
     $licm_arith_23 = limit >= 0;
-    b174: block {
-        l175: loop {
-            break_if b174 start >= end;
+    b170: block {
+        l171: loop {
+            break_if b170 start >= end;
             if select i32($licm_arith_23, shown >= limit, 0) {
                 truncated = 1;
-                break b174;
+                break b170;
             }
             "core:prelude/format.wado/core:prelude/format.wado/Formatter::write_newline_indent"(f);
             "core:prelude/primitive.wado/i32::fmt_decimal$sroa[self.value]"(struct.new "core:prelude/types.wado//Box<u8>" { value: builtin::array_get_value<u8>(repr, start) }.value, f);
             "core:prelude/string.wado/core:prelude/string.wado/String::push_ascii_byte"(local.tee self_8(f.buf), 44);
             shown = shown + 1;
             start = start + 1;
-            continue l175;
+            continue l171;
         };
     };
     if truncated {
@@ -3162,11 +3135,11 @@ fn "core:json/core:json/JsonDeserializer::peek_after_whitespace_run"(self, from)
     $licm_repr_106 = $load_0.repr;
     $licm_end_104 = $licm_end_104 - $licm_start_105;
     $hfs_pos_128 = self.pos;
-    b218: block {
-        l219: loop {
+    b214: block {
+        l215: loop {
             if (from + 4) > len {
                 self.pos = $hfs_pos_128;
-                break b218;
+                break b214;
             }
             if @unlikely(((0 <= from) & (from < $licm_end_104)) == 0) {
                 cold_path;
@@ -3261,7 +3234,7 @@ fn "core:json/core:json/JsonDeserializer::peek_after_whitespace_run"(self, from)
                 }
             }
             from = from + 4;
-            continue l219;
+            continue l215;
         };
     };
     $hfs_pos_128 = local.tee $load_0(self.input).end;
@@ -3269,9 +3242,9 @@ fn "core:json/core:json/JsonDeserializer::peek_after_whitespace_run"(self, from)
     $licm_repr_106 = $load_0.repr;
     $hfs_pos_128 = $hfs_pos_128 - $licm_start_105;
     if (len <= $hfs_pos_128) & (from >= 0) {
-        b242: block {
-            l243: loop {
-                break_if b242 from >= len;
+        b238: block {
+            l239: loop {
+                break_if b238 from >= len;
                 if local.tee $licm_end_104(builtin::array_get_value<u8>($licm_repr_106, $licm_start_105 + from)) != 32 {
                     if (if $licm_end_104 > 32 -> i32 {
                         1;
@@ -3287,13 +3260,13 @@ fn "core:json/core:json/JsonDeserializer::peek_after_whitespace_run"(self, from)
                     }
                 }
                 from = from + 1;
-                continue l243;
+                continue l239;
             };
         };
     } else {
-        b248: block {
-            l249: loop {
-                break_if b248 from >= len;
+        b244: block {
+            l245: loop {
+                break_if b244 from >= len;
                 if @unlikely(((0 <= from) & (from < $hfs_pos_128)) == 0) {
                     cold_path;
                     "core:prelude/slice.wado/core:prelude/slice.wado/Slice<u8>^core:prelude/traits.wado/IndexValue<i32>::index_value$contract_report0"(from, $hfs_pos_128, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("core:json:1311"), used: 14 });
@@ -3314,7 +3287,7 @@ fn "core:json/core:json/JsonDeserializer::peek_after_whitespace_run"(self, from)
                     }
                 }
                 from = from + 1;
-                continue l249;
+                continue l245;
             };
         };
     }
@@ -3463,9 +3436,9 @@ fn "core:json/core:json/JsonDeserializer::read_json_string$sroa[return]"(self) {
         unreachable;
     });
     self.pos = quote;
-    b272: block {
-        l273: loop {
-            break_if b272 $mv$prefix$stop != 92;
+    b268: block {
+        l269: loop {
+            break_if b268 $mv$prefix$stop != 92;
             "core:prelude/string.wado/core:prelude/string.wado/String::push"(s_25, multivalue_bind [quote, $mv$prefix$valid, $mv$$vr_19$2] = "core:json/core:json/JsonDeserializer::read_escape$sroa[return]"(self); (if quote == 0 -> char {
                 $mv$prefix$valid;
             } else if @unlikely(quote == 1) -> char {
@@ -3487,7 +3460,7 @@ fn "core:json/core:json/JsonDeserializer::read_json_string$sroa[return]"(self) {
                 return 1, ref.null none, $qm_e_16;
             }
             $mv$prefix$stop = len;
-            continue l273;
+            continue l269;
         };
     };
     if @unlikely($mv$prefix$stop != 34) {
@@ -3567,9 +3540,9 @@ fn "core:json/core:json/JsonDeserializer::read_hex4$sroa[return]"(self) {
     } else {
         0;
     }) {
-        b291: block {
-            l292: loop {
-                break_if b291 i >= 4;
+        b287: block {
+            l288: loop {
+                break_if b287 i >= 4;
                 if @unlikely((if (if (local.tee $cse_63(local.tee c_4($contract_arg_0 = $load_0 + i; builtin::array_get_value<u8>($licm_repr_54, $licm_start_53 + $contract_arg_0))) - 48) <u 10 -> i32 {
                     1;
                 } else {
@@ -3610,13 +3583,13 @@ fn "core:json/core:json/JsonDeserializer::read_hex4$sroa[return]"(self) {
                     unreachable;
                 };
                 i = i + 1;
-                continue l292;
+                continue l288;
             };
         };
     } else {
-        b302: block {
-            l303: loop {
-                break_if b302 i >= 4;
+        b298: block {
+            l299: loop {
+                break_if b298 i >= 4;
                 if @unlikely((if (if (local.tee $cse_63(local.tee c_4($contract_arg_0 = $load_0 + i; if @unlikely(((0 <= $contract_arg_0) & ($contract_arg_0 < $licm_end_52)) == 0) {
                     cold_path;
                     "core:json/core:json/JsonDeserializer::read_hex4$cold0$dae[self]"($contract_arg_0, $licm_end_52);
@@ -3661,7 +3634,7 @@ fn "core:json/core:json/JsonDeserializer::read_hex4$sroa[return]"(self) {
                     unreachable;
                 };
                 i = i + 1;
-                continue l303;
+                continue l299;
             };
         };
     }
@@ -3819,27 +3792,27 @@ fn "core:json/core:json/JsonDeserializer::scan_number_into"(self, lead, out) {
     $licm_repr_212 = input.repr;
     $load_1 = $load_1 - $load_2;
     if (cap <= $load_1) & (pos >= 0) {
-        b339: block {
-            l340: loop {
-                break_if b339 pos >= cap;
-                break_if b339 local.tee d_13(builtin::array_get_value<u8>($licm_repr_212, $load_2 + pos) - 48) >u 9;
+        b335: block {
+            l336: loop {
+                break_if b335 pos >= cap;
+                break_if b335 local.tee d_13(builtin::array_get_value<u8>($licm_repr_212, $load_2 + pos) - 48) >u 9;
                 digits = (digits * 10_i64) + builtin::i64_extend_i32_u(d_13);
                 pos = pos + 1;
-                continue l340;
+                continue l336;
             };
         };
     } else {
-        b341: block {
-            l342: loop {
-                break_if b341 pos >= cap;
-                break_if b341 local.tee d_13(if @unlikely(((0 <= pos) & (pos < $load_1)) == 0) {
+        b337: block {
+            l338: loop {
+                break_if b337 pos >= cap;
+                break_if b337 local.tee d_13(if @unlikely(((0 <= pos) & (pos < $load_1)) == 0) {
                     cold_path;
                     "core:prelude/slice.wado/core:prelude/slice.wado/Slice<u8>^core:prelude/traits.wado/IndexValue<i32>::index_value$contract_report0"(pos, $load_1, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("core:json:1659"), used: 14 });
                     unreachable;
                 }; builtin::array_get_value<u8>($licm_repr_212, $load_2 + pos) - 48) >u 9;
                 digits = (digits * 10_i64) + builtin::i64_extend_i32_u(d_13);
                 pos = pos + 1;
-                continue l342;
+                continue l338;
             };
         };
     }
@@ -3849,9 +3822,9 @@ fn "core:json/core:json/JsonDeserializer::scan_number_into"(self, lead, out) {
         d_13 = input.start;
         $licm_repr_212 = input.repr;
         cap = cap - d_13;
-        b345: block {
-            l346: loop {
-                break_if b345 (if pos < len -> i32 {
+        b341: block {
+            l342: loop {
+                break_if b341 (if pos < len -> i32 {
                     if @unlikely(((0 <= pos) & (pos < cap)) == 0) {
                         cold_path;
                         "core:prelude/slice.wado/core:prelude/slice.wado/Slice<u8>^core:prelude/traits.wado/IndexValue<i32>::index_value$contract_report0"(pos, cap, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("core:json:1668"), used: 14 });
@@ -3870,7 +3843,7 @@ fn "core:json/core:json/JsonDeserializer::scan_number_into"(self, lead, out) {
                     }; builtin::array_get_value<u8>($licm_repr_212, d_13 + pos) != 48;
                 });
                 pos = pos + 1;
-                continue l346;
+                continue l342;
             };
         };
     }
@@ -3889,9 +3862,9 @@ fn "core:json/core:json/JsonDeserializer::scan_number_into"(self, lead, out) {
             if digits == 0_i64 {
                 lead_start = pos;
                 $load_10 = $load_10 - $load_11;
-                b355: block {
-                    l356: loop {
-                        break_if b355 (if pos < len -> i32 {
+                b351: block {
+                    l352: loop {
+                        break_if b351 (if pos < len -> i32 {
                             if @unlikely(((0 <= pos) & (pos < $load_10)) == 0) {
                                 cold_path;
                                 "core:prelude/slice.wado/core:prelude/slice.wado/Slice<u8>^core:prelude/traits.wado/IndexValue<i32>::index_value$contract_report0"(pos, $load_10, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("core:json:1684"), used: 14 });
@@ -3901,7 +3874,7 @@ fn "core:json/core:json/JsonDeserializer::scan_number_into"(self, lead, out) {
                             0;
                         }) == 0;
                         pos = pos + 1;
-                        continue l356;
+                        continue l352;
                     };
                 };
                 $load_2 = pos - lead_start;
@@ -3915,27 +3888,27 @@ fn "core:json/core:json/JsonDeserializer::scan_number_into"(self, lead, out) {
             $licm_repr_212 = input.repr;
             $load_10 = $load_10 - $licm_start_223;
             if (lead_start <= $load_10) & (pos >= 0) {
-                b361: block {
-                    l362: loop {
-                        break_if b361 pos >= lead_start;
-                        break_if b361 local.tee d_23(builtin::array_get_value<u8>($licm_repr_212, $licm_start_223 + pos) - 48) >u 9;
+                b357: block {
+                    l358: loop {
+                        break_if b357 pos >= lead_start;
+                        break_if b357 local.tee d_23(builtin::array_get_value<u8>($licm_repr_212, $licm_start_223 + pos) - 48) >u 9;
                         digits = (digits * 10_i64) + builtin::i64_extend_i32_u(d_23);
                         pos = pos + 1;
-                        continue l362;
+                        continue l358;
                     };
                 };
             } else {
-                b363: block {
-                    l364: loop {
-                        break_if b363 pos >= lead_start;
-                        break_if b363 local.tee d_23(if @unlikely(((0 <= pos) & (pos < $load_10)) == 0) {
+                b359: block {
+                    l360: loop {
+                        break_if b359 pos >= lead_start;
+                        break_if b359 local.tee d_23(if @unlikely(((0 <= pos) & (pos < $load_10)) == 0) {
                             cold_path;
                             "core:prelude/slice.wado/core:prelude/slice.wado/Slice<u8>^core:prelude/traits.wado/IndexValue<i32>::index_value$contract_report0"(pos, $load_10, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("core:json:1695"), used: 14 });
                             unreachable;
                         }; builtin::array_get_value<u8>($licm_repr_212, $licm_start_223 + pos) - 48) >u 9;
                         digits = (digits * 10_i64) + builtin::i64_extend_i32_u(d_23);
                         pos = pos + 1;
-                        continue l364;
+                        continue l360;
                     };
                 };
             }
@@ -3946,9 +3919,9 @@ fn "core:json/core:json/JsonDeserializer::scan_number_into"(self, lead, out) {
                 first = input.start;
                 $licm_repr_212 = input.repr;
                 lead_start = lead_start - first;
-                b367: block {
-                    l368: loop {
-                        break_if b367 (if pos < len -> i32 {
+                b363: block {
+                    l364: loop {
+                        break_if b363 (if pos < len -> i32 {
                             if @unlikely(((0 <= pos) & (pos < lead_start)) == 0) {
                                 cold_path;
                                 "core:prelude/slice.wado/core:prelude/slice.wado/Slice<u8>^core:prelude/traits.wado/IndexValue<i32>::index_value$contract_report0"(pos, lead_start, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("core:json:1705"), used: 14 });
@@ -3967,7 +3940,7 @@ fn "core:json/core:json/JsonDeserializer::scan_number_into"(self, lead, out) {
                             }; builtin::array_get_value<u8>($licm_repr_212, first + pos) != 48;
                         });
                         pos = pos + 1;
-                        continue l368;
+                        continue l364;
                     };
                 };
             }
@@ -4009,10 +3982,10 @@ fn "core:json/core:json/JsonDeserializer::scan_number_into"(self, lead, out) {
             d_23 = pos;
             lead_start = lead_start - first;
             if (len <= lead_start) & (pos >= 0) {
-                b382: block {
-                    l383: loop {
-                        break_if b382 pos >= len;
-                        break_if b382 local.tee $licm_start_223(builtin::array_get_value<u8>($licm_repr_212, first + pos) - 48) >u 9;
+                b378: block {
+                    l379: loop {
+                        break_if b378 pos >= len;
+                        break_if b378 local.tee $licm_start_223(builtin::array_get_value<u8>($licm_repr_212, first + pos) - 48) >u 9;
                         exp = $inline_push_exponent_digit_34: block -> i64 {
                             $load_10 = $licm_start_223;
                             if exp >= 1000000000000000_i64 {
@@ -4021,14 +3994,14 @@ fn "core:json/core:json/JsonDeserializer::scan_number_into"(self, lead, out) {
                             break $inline_push_exponent_digit_34: (exp * 10_i64) + builtin::i64_extend_i32_s($load_10);
                         };
                         pos = pos + 1;
-                        continue l383;
+                        continue l379;
                     };
                 };
             } else {
-                b385: block {
-                    l386: loop {
-                        break_if b385 pos >= len;
-                        break_if b385 local.tee $licm_start_223(if @unlikely(((0 <= pos) & (pos < lead_start)) == 0) {
+                b381: block {
+                    l382: loop {
+                        break_if b381 pos >= len;
+                        break_if b381 local.tee $licm_start_223(if @unlikely(((0 <= pos) & (pos < lead_start)) == 0) {
                             cold_path;
                             "core:prelude/slice.wado/core:prelude/slice.wado/Slice<u8>^core:prelude/traits.wado/IndexValue<i32>::index_value$contract_report0"(pos, lead_start, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("core:json:1739"), used: 14 });
                             unreachable;
@@ -4041,7 +4014,7 @@ fn "core:json/core:json/JsonDeserializer::scan_number_into"(self, lead, out) {
                             break $inline_push_exponent_digit_34: (exp * 10_i64) + builtin::i64_extend_i32_s($load_10);
                         };
                         pos = pos + 1;
-                        continue l386;
+                        continue l382;
                     };
                 };
             }
@@ -4111,7 +4084,7 @@ fn "core:json/core:json/JsonDeserializer::skip_string"(self) {
     self.pos = self.pos + 1;
     $hfs_pos_7 = self.pos;
     block {
-        l396: loop {
+        l392: loop {
             start = $hfs_pos_7;
             let $mv$scan$end: i32;
             let $mv$scan$stop: i32;
@@ -4149,7 +4122,7 @@ fn "core:json/core:json/JsonDeserializer::skip_string"(self) {
                 unreachable;
             }));
             $hfs_pos_7 = self.pos;
-            continue l396;
+            continue l392;
         };
     };
 }
@@ -4271,7 +4244,7 @@ fn "core:json/core:json/JsonDeserializer::skip_array_body"(self, depth) {
     }
     $hfs_pos_9 = self.pos;
     block {
-        l427: loop {
+        l423: loop {
             if @likely(ref.is_null(local.tee $match_5("core:json/core:json/JsonDeserializer::skip_value"(self, depth)))) {
             } else {
                 $qm_e = ref.as_non_null($match_5);
@@ -4296,7 +4269,7 @@ fn "core:json/core:json/JsonDeserializer::skip_array_body"(self, depth) {
                 return $hfs_pos_9 = $av_11, struct.new "core:serde//DeserializeError" { kind: 6, message: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("expected ',' or ']'"), used: 19 }, offset: builtin::i64_extend_i32_s($hfs_pos_9) };
             }
             self.pos = $hfs_pos_9;
-            continue l427;
+            continue l423;
         };
     };
 }
@@ -4315,7 +4288,7 @@ fn "core:json/core:json/JsonDeserializer::skip_object_body"(self, depth) {
     }
     $hfs_pos_18 = self.pos;
     block {
-        l434: loop {
+        l430: loop {
             if @unlikely(local.tee key_lead("core:json/core:json/JsonDeserializer::peek_after_whitespace"(self)) != 34) {
                 cold_path;
                 return ref.as_non_null("core:json/core:json/JsonDeserializer::key_quote_error$sroa[self.pos]"(local.tee $hfs_pos_18(self.pos), key_lead));
@@ -4364,7 +4337,7 @@ fn "core:json/core:json/JsonDeserializer::skip_object_body"(self, depth) {
                 return $hfs_pos_18 = $av_20, struct.new "core:serde//DeserializeError" { kind: 6, message: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("expected ',' or '}'"), used: 19 }, offset: builtin::i64_extend_i32_s($hfs_pos_18) };
             }
             self.pos = $hfs_pos_18;
-            continue l434;
+            continue l430;
         };
     };
 }
@@ -4495,12 +4468,12 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::write_indent"(s
     i = 0;
     $licm_indent_6 = self.indent;
     $licm_buf_7 = self.buf;
-    b462: block {
-        l463: loop {
-            break_if b462 i >= $licm_indent_6;
+    b458: block {
+        l459: loop {
+            break_if b458 i >= $licm_indent_6;
             "core:prelude/string.wado/core:prelude/string.wado/String^core:prelude/string.wado/AsStrSlice::internal_append_to$spec3"(struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(32, 32), used: 2 }, $licm_buf_7);
             i = i + 1;
-            continue l463;
+            continue l459;
         };
     };
 }
@@ -4677,9 +4650,9 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::utf8_valid_prefix"
     i = 0;
     $licm_arith_119 = $mv$bytes$end - $mv$bytes$start;
     $licm_arith_121 = $mv$bytes$end - $mv$bytes$start;
-    b481: block {
-        l482: loop {
-            break_if b481 i >= len;
+    b477: block {
+        l478: loop {
+            break_if b477 i >= len;
             if @unlikely(((0 <= i) & (i < $licm_arith_119)) == 0) {
                 cold_path;
                 "core:prelude/string.wado/core:prelude/string.wado/String::utf8_valid_prefix$cold7$dae[bytes]"(i, $licm_arith_119);
@@ -4687,9 +4660,9 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::utf8_valid_prefix"
             }
             if local.tee b0(builtin::array_get_value<u8>($mv$bytes$repr, $mv$bytes$start + i)) <u 128 {
                 i = i + 1;
-                b485: block {
-                    l486: loop {
-                        break_if b485 (if (i + 4) <= len -> i32 {
+                b481: block {
+                    l482: loop {
+                        break_if b481 (if (i + 4) <= len -> i32 {
                             ((((((if @unlikely(((0 <= i) & (i < $licm_arith_121)) == 0) {
                                 cold_path;
                                 "core:prelude/string.wado/core:prelude/string.wado/String::utf8_valid_prefix$cold6$dae[bytes]"(i, $licm_arith_121);
@@ -4711,10 +4684,10 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::utf8_valid_prefix"
                             0;
                         }) == 0;
                         i = i + 4;
-                        continue l486;
+                        continue l482;
                     };
                 };
-                continue l482;
+                continue l478;
             }
             if (((b0 >=u 225) & (b0 <u 240)) & (b0 != 237)) & ((i + 2) < len) {
                 if (((($contract_arg_3 = i + 1; if @unlikely(((0 <= $contract_arg_3) & ($contract_arg_3 < $licm_arith_119)) == 0) {
@@ -4727,7 +4700,7 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::utf8_valid_prefix"
                     unreachable;
                 }; builtin::array_get_value<u8>($mv$bytes$repr, $mv$bytes$start + $contract_arg_4) ^ 128) & 255)) & 255) <u 64 {
                     i = i + 3;
-                    continue l482;
+                    continue l478;
                 }
             }
             if ((b0 >=u 194) & (b0 <u 224)) & ((i + 1) < len) {
@@ -4737,7 +4710,7 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::utf8_valid_prefix"
                     unreachable;
                 }; builtin::array_get_value<u8>($mv$bytes$repr, $mv$bytes$start + $contract_arg_5) ^ 128) & 255) <u 64 {
                     i = i + 2;
-                    continue l482;
+                    continue l478;
                 }
             }
             if @unlikely(local.tee b0("core:prelude/string.wado/core:prelude/string.wado/String::utf8_sequence_len"($mv$bytes$repr, $mv$bytes$start, $mv$bytes$end, i, len)) <= 0) {
@@ -4745,7 +4718,7 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::utf8_valid_prefix"
                 return select i32(b0 < 0, i, -1 - i);
             }
             i = i + b0;
-            continue l482;
+            continue l478;
         };
     };
     return len;
@@ -5042,16 +5015,16 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::pad<core:prelud
     }
     self_71 = struct.new "core:prelude/string.wado//StrCharIter" { repr: local.tee view_2(struct.new "core:prelude/string.wado//StrSlice" { repr: $mv$content$repr, start: 0, end: $mv$content$used }).repr, used: view_2.end, byte_index: 0 };
     start_65 = 0;
-    b556: block {
-        l557: loop {
+    b552: block {
+        l553: loop {
             let $mv$$local_2$1: char;
             multivalue_bind [new_used_64, $mv$$local_2$1] = "core:prelude/string.wado/core:prelude/string.wado/StrCharIter^core:prelude/traits.wado/Iterator::next$sroa[return]"(self_71);
             if new_used_64 == 1 {
                 start_65 = start_65 + 1;
             } else {
-                break b556;
+                break b552;
             }
-            continue l557;
+            continue l553;
         };
     };
     if start_65 >= local.tee $mv$$local_2$1(self.width) {
@@ -5128,9 +5101,9 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::pad<core:prelud
         self_54 = self.buf;
         start_86 = 0;
         new_used_64 = self_54.used;
-        b571: block {
-            l572: loop {
-                break_if b571 start_86 >= start_65;
+        b567: block {
+            l568: loop {
+                break_if b567 start_86 >= start_65;
                 if @unlikely(local.tee start_161(new_used_64 + 1) > builtin::array_len(self_54.repr)) {
                     cold_path;
                     "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self_54, start_161);
@@ -5147,7 +5120,7 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::pad<core:prelud
                 builtin::array_set_u8(self_54.repr, $v2_13, 48);
                 start_86 = start_86 + 1;
                 self_54.used = new_used_64;
-                continue l572;
+                continue l568;
             };
         };
         self_54 = self.buf;
@@ -5219,12 +5192,12 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::pad<core:prelud
         self_54 = self.buf;
         start_161 = self.fill;
         $mv$$local_2$1 = 0;
-        b585: block {
-            l586: loop {
-                break_if b585 $mv$$local_2$1 >= start_65;
+        b581: block {
+            l582: loop {
+                break_if b581 $mv$$local_2$1 >= start_65;
                 "core:prelude/string.wado/core:prelude/string.wado/String::push"(self_54, start_161);
                 $mv$$local_2$1 = $mv$$local_2$1 + 1;
-                continue l586;
+                continue l582;
             };
         };
     } else if $v2_13 == 1 {
@@ -5233,12 +5206,12 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::pad<core:prelud
         self_54 = self.buf;
         $mv$$local_2$1 = self.fill;
         new_used_64 = 0;
-        b588: block {
-            l589: loop {
-                break_if b588 new_used_64 >= $v2_13;
+        b584: block {
+            l585: loop {
+                break_if b584 new_used_64 >= $v2_13;
                 "core:prelude/string.wado/core:prelude/string.wado/String::push"(self_54, $mv$$local_2$1);
                 new_used_64 = new_used_64 + 1;
-                continue l589;
+                continue l585;
             };
         };
         self_54 = self.buf;
@@ -5255,24 +5228,24 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::pad<core:prelud
         self_54 = self.buf;
         $mv$$local_2$1 = self.fill;
         $v2_13 = 0;
-        b591: block {
-            l592: loop {
-                break_if b591 $v2_13 >= start_161;
+        b587: block {
+            l588: loop {
+                break_if b587 $v2_13 >= start_161;
                 "core:prelude/string.wado/core:prelude/string.wado/String::push"(self_54, $mv$$local_2$1);
                 $v2_13 = $v2_13 + 1;
-                continue l592;
+                continue l588;
             };
         };
     } else {
         self_54 = self.buf;
         start_161 = self.fill;
         $v2_13 = 0;
-        b593: block {
-            l594: loop {
-                break_if b593 $v2_13 >= start_65;
+        b589: block {
+            l590: loop {
+                break_if b589 $v2_13 >= start_65;
                 "core:prelude/string.wado/core:prelude/string.wado/String::push"(self_54, start_161);
                 $v2_13 = $v2_13 + 1;
-                continue l594;
+                continue l590;
             };
         };
         self_54 = self.buf;
@@ -5400,9 +5373,9 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_wri
         self_21 = self.buf;
         new_used_26 = 0;
         $load_2 = self_21.used;
-        b615: block {
-            l616: loop {
-                break_if b615 new_used_26 >= sign_len;
+        b611: block {
+            l612: loop {
+                break_if b611 new_used_26 >= sign_len;
                 if @unlikely(local.tee start_27($load_2 + 1) > builtin::array_len(self_21.repr)) {
                     cold_path;
                     "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self_21, start_27);
@@ -5419,7 +5392,7 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_wri
                 builtin::array_set_u8(self_21.repr, start_450, 48);
                 new_used_26 = new_used_26 + 1;
                 self_21.used = $load_2;
-                continue l616;
+                continue l612;
             };
         };
         if @unlikely(local.tee new_used_26(local.tee self_21(self.buf).used + digit_count) > builtin::array_len(self_21.repr)) {
@@ -5482,12 +5455,12 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_wri
         self_21 = self.buf;
         $load_0 = self.fill;
         new_used_26 = 0;
-        b630: block {
-            l631: loop {
-                break_if b630 new_used_26 >= sign_len;
+        b626: block {
+            l627: loop {
+                break_if b626 new_used_26 >= sign_len;
                 "core:prelude/string.wado/core:prelude/string.wado/String::push"(self_21, $load_0);
                 new_used_26 = new_used_26 + 1;
-                continue l631;
+                continue l627;
             };
         };
         return start_450;
@@ -5497,12 +5470,12 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_wri
         self_21 = self.buf;
         new_used_26 = self.fill;
         $load_0 = 0;
-        b633: block {
-            l634: loop {
-                break_if b633 $load_0 >= $load_2;
+        b629: block {
+            l630: loop {
+                break_if b629 $load_0 >= $load_2;
                 "core:prelude/string.wado/core:prelude/string.wado/String::push"(self_21, new_used_26);
                 $load_0 = $load_0 + 1;
-                continue l634;
+                continue l630;
             };
         };
         if is_negative {
@@ -5556,12 +5529,12 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_wri
         self_21 = self.buf;
         $load_2 = self.fill;
         $load_0 = 0;
-        b644: block {
-            l645: loop {
-                break_if b644 $load_0 >= start_450;
+        b640: block {
+            l641: loop {
+                break_if b640 $load_0 >= start_450;
                 "core:prelude/string.wado/core:prelude/string.wado/String::push"(self_21, $load_2);
                 $load_0 = $load_0 + 1;
-                continue l645;
+                continue l641;
             };
         };
         return new_used_26;
@@ -5569,12 +5542,12 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_wri
         self_21 = self.buf;
         new_used_26 = self.fill;
         start_450 = 0;
-        b646: block {
-            l647: loop {
-                break_if b646 start_450 >= sign_len;
+        b642: block {
+            l643: loop {
+                break_if b642 start_450 >= sign_len;
                 "core:prelude/string.wado/core:prelude/string.wado/String::push"(self_21, new_used_26);
                 start_450 = start_450 + 1;
-                continue l647;
+                continue l643;
             };
         };
         if is_negative {
@@ -5706,14 +5679,11 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::push_bytes$uncheck
 }
 
 fn "core:prelude/traits.wado/core:prelude/bytes.wado/ByteSlice^core:prelude/traits.wado/Inspect::inspect"(self, f) {
-    let self_3: ref "core:prelude/string.wado//String";
-    let other_6: ref "core:prelude/string.wado//String";
+    let $load_3: ref "core:prelude/string.wado//String";
     "core:prelude/slice.wado/core:prelude/slice.wado/Slice<u8>^core:prelude/traits.wado/Inspect::inspect"(self.repr, self.start, self.end, f);
-    self_3 = f.buf;
-    "core:prelude/string.wado/core:prelude/string.wado/String^core:prelude/string.wado/AsStrSlice::internal_append_to$spec5"(local.tee other_6(struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(32, 97, 115, 32), used: 4 }), self_3);
-    self_3 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("ByteSlice"), used: 9 };
-    other_6 = f.buf;
-    "core:prelude/string.wado/&core:prelude/string.wado/String^core:prelude/string.wado/AsStrSlice::internal_append_to"(self_3, other_6);
+    $load_3 = f.buf;
+    "core:prelude/string.wado/core:prelude/string.wado/String^core:prelude/string.wado/AsStrSlice::internal_append_to$spec5"(struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(32, 97, 115, 32), used: 4 }, $load_3);
+    "core:prelude/string.wado/&core:prelude/string.wado/String^core:prelude/string.wado/AsStrSlice::internal_append_to"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("ByteSlice"), used: 9 }, $load_3);
 }
 
 fn "core:serde/serde_json_list_default.wado/S^core:serde/Deserialize::deserialize<core:json/JsonDeserializer>$sroa[return]"(d) {
@@ -5775,8 +5745,8 @@ fn "core:serde/serde_json_list_default.wado/S^core:serde/Deserialize::deserializ
         cold_path;
         return 1, ref.null none, $qm_e_107;
     });
-    b668: block {
-        l669: loop {
+    b664: block {
+        l665: loop {
             let $mv$$vr_51$2: ref null "core:serde//DeserializeError";
             let $vr_payload_0_$mv$$vr_51$1: i32;
             multivalue_bind [depth, max_depth, $vr_payload_0_$mv$$vr_51$1, $mv$$vr_51$2] = "core:json/core:json/JsonStructAccess^core:serde/DeserializeStruct::next_field<serde_json_list_default.wado/S>$sroa[return]"(d);
@@ -5846,9 +5816,9 @@ fn "core:serde/serde_json_list_default.wado/S^core:serde/Deserialize::deserializ
                     }
                 }
             } else {
-                break b668;
+                break b664;
             }
-            continue l669;
+            continue l665;
         };
     };
     $thread_$inline_core_json_JsonDeserializer__close_container_14: block {
@@ -6058,7 +6028,7 @@ fn "core:serde/core:prelude/list.wado/List<i32>^core:serde/Deserialize::deserial
         builtin::array_set<i32>(local.tee items(struct.new "core:prelude//List<i32>" { repr: builtin::array_new<i32>(2), used: 0 }).repr, 0, $vr_payload_0_$mv$$vr_19$1);
         items.used = 1;
         block {
-            l711: loop {
+            l707: loop {
                 multivalue_bind [$vr_payload_0_$mv$$vr_19$1, max_depth, depth, $mv$$vr_19$2] = "core:json/core:json/JsonSeqAccess^core:serde/DeserializeSeq::next_element<i32>$sroa[return]"(d);
                 if $vr_payload_0_$mv$$vr_19$1 == 0 {
                 } else if @unlikely($vr_payload_0_$mv$$vr_19$1 == 1) {
@@ -6095,7 +6065,7 @@ fn "core:serde/core:prelude/list.wado/List<i32>^core:serde/Deserialize::deserial
                     };
                     return 0, items, ref.null none;
                 }
-                continue l711;
+                continue l707;
             };
         };
     } else {
@@ -6325,9 +6295,9 @@ fn "core:json/core:json/JsonDeserializer::scan_string_run$sroa[self.input]"(self
     stop = -1;
     $licm_repr_25 = self.repr;
     $load_0 = $load_0 - $load_1;
-    b736: block {
-        l737: loop {
-            break_if b736 from >= len;
+    b732: block {
+        l733: loop {
+            break_if b732 from >= len;
             if @unlikely(((0 <= from) & (from < $load_0)) == 0) {
                 cold_path;
                 "core:prelude/slice.wado/core:prelude/slice.wado/Slice<u8>^core:prelude/traits.wado/IndexValue<i32>::index_value$contract_report0"(from, $load_0, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("core:json:1409"), used: 14 });
@@ -6336,23 +6306,23 @@ fn "core:json/core:json/JsonDeserializer::scan_string_run$sroa[self.input]"(self
             if (local.tee b(builtin::array_get_value<u8>($licm_repr_25, $load_1 + from)) - 32) <u 96 {
                 if (b == 34) | (b == 92) {
                     stop = b;
-                    break b736;
+                    break b732;
                 }
                 from = from + 1;
-                continue l737;
+                continue l733;
             }
             if b < 32 {
                 stop = b;
-                break b736;
+                break b732;
             }
             if @unlikely(local.tee b("core:prelude/string.wado/core:prelude/string.wado/String::utf8_sequence_len"(self.repr, self.start, self.end, from, len)) <= 0) {
                 cold_path;
                 valid = 0;
                 from = from + 1;
-                continue l737;
+                continue l733;
             }
             from = from + b;
-            continue l737;
+            continue l733;
         };
     };
     return from, stop, valid;

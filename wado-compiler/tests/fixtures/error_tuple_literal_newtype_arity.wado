@@ -1,0 +1,10 @@
+// A tuple literal coerces to a newtype over a tuple only where it fits the
+// base: an arity that differs is a mismatch, not a silent retag.
+type Quad = [u8, u8, u8, u8];
+
+export fn run() {
+    let q: Quad = [1, 2, 3];
+}
+
+__DATA__
+{"compile_error": ":6:19: analysis error: type mismatch: expected 'Quad', found '[i32, i32, i32]'"}

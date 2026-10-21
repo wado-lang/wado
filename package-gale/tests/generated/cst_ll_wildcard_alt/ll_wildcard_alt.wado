@@ -1500,7 +1500,7 @@ fn scan_assign(tokens: &Array<i32>, pos: i32) -> i32 {
 }
 
 fn _parse_a__inner(p: &mut Parser) -> () {
-    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_0, &EXPECTED_0); }
+    if !(kind_set_has(&SYNC_0, p.kinds[p.pos]) || p.kinds[p.pos] >= 7) { builtin::cold_path(); p.sync_enter(&SYNC_0, &EXPECTED_0); }
     let mut _plus_first = true;
     loop {
         if p.recovering { break; }
@@ -1531,6 +1531,22 @@ fn _parse_a__inner(p: &mut Parser) -> () {
             gd_winner = 1;
         }
         if !_plus_first && gd_best <= p.pos { break; }
+        if !_plus_first {
+            if gd_best >= 0 {
+                let rep_reserve_kind = if gd_best < p.kinds.len() { p.kinds[gd_best] } else { TK_EOF };
+                if rep_reserve_kind == TK_EOF {
+                    let mut rep_reserve_ok = false;
+                    rep_reserve: {
+                        let tokens = &p.kinds;
+                        let mut pos: i32 = gd_best;
+                        if pos >= tokens.len() || tokens[pos] != TK_EOF { break rep_reserve; }
+                        pos += 1;
+                        rep_reserve_ok = true;
+                    }
+                    if !rep_reserve_ok { break; }
+                }
+            }
+        }
         if gd_winner < 0 {
             if _plus_first { p.no_viable("no viable alternative", p.peek_span(), &EXPECTED_1); }
             break;
@@ -1542,7 +1558,7 @@ fn _parse_a__inner(p: &mut Parser) -> () {
         } else {
             p.any();
         }
-        if !kind_set_has(&SYNC_2, p.kinds[p.pos]) { builtin::cold_path(); p.sync_back(&SYNC_2, &EXPECTED_2); }
+        if !(kind_set_has(&SYNC_2, p.kinds[p.pos]) || p.kinds[p.pos] >= 7) { builtin::cold_path(); p.sync_back(&SYNC_2, &EXPECTED_2); }
     }
     p.expect(TK_EOF, &EMPTY_SYNC, true);
     return;

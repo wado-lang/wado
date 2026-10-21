@@ -1,0 +1,19 @@
+// A tuple's `t[0]` is its field `t.0`, so reading it by value moves the
+// element out as `t.0` does.
+affine struct Tok {
+    id: i32,
+}
+
+impl Drop for Tok {
+    fn drop(self) {
+    }
+}
+
+test {
+    let t = [Tok { id: 1 }, 2];
+    let a = t[0];
+    let b = t[0];
+}
+
+__DATA__
+{"compile_error": ":15:13: analysis error: affine value `t` used after it was moved (moved at 14:13)"}

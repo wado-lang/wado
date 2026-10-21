@@ -200,6 +200,9 @@ impl StringCollector {
             } => {
                 self.collect_expr(inner);
             }
+            TirExprKind::Move { .. } => {
+                unreachable!("drop elaboration removes every move")
+            }
             TirExprKind::VariadicTupleComprehension { .. } => {
                 unreachable!(
                     "VariadicTupleComprehension should be expanded during monomorphization"

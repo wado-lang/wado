@@ -2267,6 +2267,7 @@ impl FunctionTranslator<'_, '_> {
             TirExprKind::TypePackExpansion { .. } => unreachable!(
                 "TirExprKind::TypePackExpansion should be expanded by monomorphize before lower::translate runs"
             ),
+            TirExprKind::Move { .. } => unreachable!("drop elaboration removes every move"),
             TirExprKind::VariadicTupleComprehension { .. } => unreachable!(
                 "TirExprKind::VariadicTupleComprehension should be expanded by monomorphize before lower::translate runs"
             ),

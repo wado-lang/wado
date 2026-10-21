@@ -1,7 +1,7 @@
 // A field chain read twice with no write between reuses the first read: every
 // `struct.get` costs wasmtime a null check and a load. A write to a field of
-// the same name, or a call, makes the next read load again; a call on a path
-// that never returns does not.
+// the same name, or a call that may write one, makes the next read load again;
+// a call on a path that never returns does not.
 
 use { println, Stdout } from "core:cli";
 
@@ -30,14 +30,15 @@ fn shift(c: &mut Cursor) -> i32 {
 }
 
 #[inline(never)]
-fn opaque(n: i32) -> i32 {
+fn stretch(s: &mut Span, n: i32) -> i32 {
+    s.end = s.end + n;
     return n;
 }
 
 #[inline(never)]
 fn around_call(c: &mut Cursor) -> i32 {
     let a = c.span.end;
-    c.pos = opaque(a);
+    c.pos = stretch(&mut c.span, a);
     return c.pos + c.span.end;
 }
 
@@ -61,12 +62,12 @@ export fn run() with Stdout {
 
 __DATA__
 {
-    "stdout": "704\n11\n20\n20\n",
+    "stdout": "704\n11\n30\n40\n",
     "wir_expect:O2": [
         "w = local.tee $load_0(c.span).end - local.tee $load_2($load_0.start);",
         "return ((w * 100) + $load_2) + c.pos;",
         "return a + $load_0.start;",
-        "return c.pos + c.span.end;",
+        "return c.pos + $load_0.end;",
         "return $load_1 + $load_1;"
     ]
 }
