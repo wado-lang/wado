@@ -1262,15 +1262,12 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                 continue;
             };
             let local = &sem.decls.local;
-            for (def, info) in &local.struct_fields {
-                data.struct_fields.insert(*def, info.clone());
-            }
-            for (def, info) in &local.variant_cases {
-                data.variant_cases.insert(*def, info.clone());
-            }
-            for (def, base) in &local.newtypes {
-                data.newtypes.insert(*def, *base);
-            }
+            let defs = local
+                .struct_fields
+                .keys()
+                .chain(local.variant_cases.keys())
+                .chain(local.newtypes.keys());
+            data.publish(local, defs);
         }
     }
 
@@ -1643,6 +1640,10 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             {
                 reify_eligible.insert(module_source.clone());
             }
+        }
+        let data = Rc::make_mut(&mut state.tysys.data);
+        for sem in state.module_semantics.values() {
+            data.publish(&sem.decls.local, &sem.decls.fn_local_defs);
         }
 
         // `unchecked` reads the callees the body walks settled, so it waits

@@ -45,7 +45,8 @@ impl CtrlFlowCtx<'_> {
     }
 
     fn is_never(&self, expr: &ast::Expr) -> bool {
-        self.type_of(expr) == Some(TypeTable::NEVER)
+        self.type_of(expr)
+            .is_some_and(|t| self.type_table.borrow().is_never(t))
     }
 }
 
@@ -78,6 +79,10 @@ fn stmt_always_exits(ctx: CtrlFlowCtx<'_>, stmt: &ast::Stmt, exit_labels: &[&str
     match stmt {
         ast::Stmt::Return(_) | ast::Stmt::Break(_) | ast::Stmt::Continue(_) => true,
         ast::Stmt::Expr(e) => expr_always_exits_past(ctx, &e.expr, exit_labels),
+        ast::Stmt::Let(l) => l
+            .value
+            .as_ref()
+            .is_some_and(|value| expr_always_exits_past(ctx, value, exit_labels)),
         ast::Stmt::If(if_stmt) => {
             if let Some(else_block) = &if_stmt.else_block {
                 block_always_exits_past(ctx, &if_stmt.then_block, exit_labels)
@@ -89,12 +94,16 @@ fn stmt_always_exits(ctx: CtrlFlowCtx<'_>, stmt: &ast::Stmt, exit_labels: &[&str
         ast::Stmt::Loop(loop_stmt) => !loop_body_can_escape(ctx, &loop_stmt.body, exit_labels),
         // `while true` is the same loop written differently: reify desugars it
         // to `loop { if !true { break } B }`, so only a `break` in `B` ends it.
-        ast::Stmt::While(w) if condition_is_always_true(&w.condition) => {
+        ast::Stmt::While(w) if w.condition.is_always_true() => {
             !loop_body_can_escape(ctx, &w.body, exit_labels)
         }
         // So is a C-style `for` with no condition, or one always true: its
         // `init` and `update` cannot leave it.
-        ast::Stmt::For(f) if f.condition.as_ref().is_none_or(condition_is_always_true) => {
+        ast::Stmt::For(f)
+            if f.condition
+                .as_ref()
+                .is_none_or(ast::Condition::is_always_true) =>
+        {
             !loop_body_can_escape(ctx, &f.body, exit_labels)
         }
         ast::Stmt::LabeledBlock(lb) => {
@@ -113,11 +122,6 @@ fn stmt_always_exits(ctx: CtrlFlowCtx<'_>, stmt: &ast::Stmt, exit_labels: &[&str
         }
         _ => false,
     }
-}
-
-fn condition_is_always_true(condition: &ast::Condition) -> bool {
-    matches!(condition, ast::Condition::Expr(ast::Expr::Literal(lit))
-        if matches!(lit.value, ast::Literal::Bool(true)))
 }
 
 fn expr_always_exits_past(ctx: CtrlFlowCtx<'_>, expr: &ast::Expr, exit_labels: &[&str]) -> bool {

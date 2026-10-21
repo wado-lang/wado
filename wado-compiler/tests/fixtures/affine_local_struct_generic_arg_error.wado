@@ -1,0 +1,23 @@
+// The body walk knows a function-local struct's fields from its declaration
+// on: one holding an affine value is no argument for a parameter that may copy.
+
+affine struct Tok {
+    id: i32,
+}
+
+impl Drop for Tok {
+    fn drop(self) {
+    }
+}
+
+fn id<T>(x: T) -> T {
+    return x;
+}
+
+export fn run() {
+    affine struct Holder { t: Tok }
+    id(Holder { t: Tok { id: 1 } });
+}
+
+__DATA__
+{"compile_error": ":19:5: analysis error: affine type 'Holder' given for 'T', which may be copied; `affine T` would admit it"}

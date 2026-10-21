@@ -1,0 +1,40 @@
+// The statements no path reaches are checked as any others are: a second move
+// there is reported, and so is a local item holding an affine value undeclared.
+
+affine struct Tok {
+    id: i32,
+}
+
+impl Drop for Tok {
+    fn drop(self) {
+    }
+}
+
+fn eat(t: Tok) -> i32 {
+    return t.id;
+}
+
+fn twice(flag: bool) {
+    let u = Tok { id: 1 };
+    if flag {
+        panic("gone");
+        eat(u);
+        eat(u);
+    }
+}
+
+fn item() {
+    return;
+    struct Holder { t: Tok }
+}
+
+export fn run() {
+    twice(false);
+    item();
+}
+
+__DATA__
+{
+    "compile_error": ":22:13: analysis error: affine value `u` used after it was moved (moved at 21:13)",
+    "compile_errors_contains": ["`Holder` holds an affine value in `t`, so it must be declared `affine struct`"]
+}

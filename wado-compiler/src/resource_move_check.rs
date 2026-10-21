@@ -428,6 +428,17 @@ enum LoopHead<'a> {
     Binding(&'a Pattern, Owners),
 }
 
+impl LoopHead<'_> {
+    /// Whether the head never ends the loop, leaving that to a jump.
+    fn is_endless(&self) -> bool {
+        match self {
+            Self::None => true,
+            Self::Condition(condition) => condition.is_always_true(),
+            Self::Binding(..) => false,
+        }
+    }
+}
+
 /// Each moved place, a binding and a field path into it, with where it moved.
 type Moves = IndexMap<(AstId, Vec<String>), Span>;
 
@@ -626,6 +637,23 @@ impl<'a, 'c> MoveWalker<'a, 'c> {
             labels: Vec::new(),
             suppress: 0,
         }
+    }
+
+    /// A walker of a body nested in this one, which sees the state here.
+    fn sub_walker(&mut self) -> MoveWalker<'a, '_> {
+        let mut inner = MoveWalker::new(
+            &mut *self.checker,
+            Rc::clone(&self.modes),
+            self.affine_params.clone(),
+            self.drop_body,
+        );
+        inner.flow.clone_from(&self.flow);
+        inner.guard_bindings.clone_from(&self.guard_bindings);
+        inner.instances.clone_from(&self.instances);
+        inner.ended.clone_from(&self.ended);
+        inner.disturbances.clone_from(&self.disturbances);
+        inner.suppress = self.suppress;
+        inner
     }
 }
 
@@ -1048,19 +1076,8 @@ impl MoveWalker<'_, '_> {
             .filter(|p| self.checker.is_mut_ref_local(p.id))
             .map(|p| (p.id, p.name.clone()))
             .collect();
-        let mut inner = MoveWalker::new(
-            &mut *self.checker,
-            Rc::clone(&self.modes),
-            self.affine_params.clone(),
-            self.drop_body,
-        );
-        inner.flow.clone_from(&self.flow);
-        inner.guard_bindings.clone_from(&self.guard_bindings);
+        let mut inner = self.sub_walker();
         inner.closure_locals = Some(locals);
-        inner.instances.clone_from(&self.instances);
-        inner.ended.clone_from(&self.ended);
-        inner.disturbances.clone_from(&self.disturbances);
-        inner.suppress = self.suppress;
         inner.visit_at(&closure.body);
         if !matches!(closure.body, Expr::Block(_)) {
             inner.refuse_returned(&closure.body);
@@ -1550,13 +1567,35 @@ impl MoveWalker<'_, '_> {
 
     fn visit_block(&mut self, block: &Block) -> bool {
         self.in_scope(|walker| {
-            for stmt in &block.stmts {
-                if walker.visit_stmt(stmt) {
-                    return true;
-                }
+            let mut stmts = block.stmts.iter();
+            let diverged = stmts.by_ref().any(|stmt| walker.visit_stmt(stmt));
+            if diverged {
+                walker.visit_unreachable(|dead| {
+                    for stmt in stmts {
+                        dead.visit_stmt(stmt);
+                    }
+                });
             }
-            false
+            diverged
         })
+    }
+
+    /// Checks code no path reaches, from the state where the path left. What it
+    /// does reaches nothing: `walk` runs a walker of its own, which reports
+    /// into the checker and is dropped, and its jumps land nowhere.
+    fn visit_unreachable(&mut self, walk: impl FnOnce(&mut MoveWalker<'_, '_>)) {
+        let closure_locals = self.closure_locals.clone();
+        let captures = self.captures.clone();
+        let disturbed_captures = self.disturbed_captures.clone();
+        let closure_owners = self.closure_owners.clone();
+        let break_owners = self.break_owners.clone();
+        let mut dead = self.sub_walker();
+        dead.closure_locals = closure_locals;
+        dead.captures = captures;
+        dead.disturbed_captures = disturbed_captures;
+        dead.closure_owners = closure_owners;
+        dead.break_owners = break_owners;
+        walk(&mut dead);
     }
 
     fn visit_stmt(&mut self, stmt: &Stmt) -> bool {
@@ -1574,15 +1613,17 @@ impl MoveWalker<'_, '_> {
                     self.visit_block(eb);
                     self.flow = matched;
                 }
-                match &l.value {
-                    Some(value) => self.bind_to(&l.pattern, value),
-                    None => self.bind_pattern(&l.pattern),
+                if let Some(value) = &l.value {
+                    self.bind_to(&l.pattern, value);
+                    self.is_never(value)
+                } else {
+                    self.bind_pattern(&l.pattern);
+                    false
                 }
-                false
             }
             Stmt::Expr(e) => {
                 self.visit_at(&e.expr);
-                false
+                self.is_never(&e.expr)
             }
             Stmt::Return(r) => {
                 if let Some(value) = &r.value {
@@ -1596,33 +1637,26 @@ impl MoveWalker<'_, '_> {
                 false
             }
             Stmt::If(s) => self.visit_if(&s.condition, &s.then_block, s.else_block.as_ref()),
-            Stmt::While(s) => {
-                self.visit_loop(&LoopHead::Condition(&s.condition), &s.body, None);
-                false
-            }
-            Stmt::Loop(s) => {
-                self.visit_loop(&LoopHead::None, &s.body, None);
-                false
-            }
-            Stmt::For(s) => {
-                self.in_scope(|walker| {
-                    if let Some(init) = &s.init {
-                        walker.visit_stmt(init);
-                    }
-                    let head = match &s.condition {
-                        Some(cond) => LoopHead::Condition(cond),
-                        None => LoopHead::None,
-                    };
-                    walker.visit_loop(&head, &s.body, s.update.as_ref());
-                });
-                false
-            }
+            Stmt::While(s) => self.visit_loop(&LoopHead::Condition(&s.condition), &s.body, None),
+            Stmt::Loop(s) => self.visit_loop(&LoopHead::None, &s.body, None),
+            Stmt::For(s) => self.in_scope(|walker| {
+                let head = match &s.condition {
+                    Some(cond) => LoopHead::Condition(cond),
+                    None => LoopHead::None,
+                };
+                if s.init.as_ref().is_some_and(|init| walker.visit_stmt(init)) {
+                    walker.visit_unreachable(|dead| {
+                        dead.visit_loop(&head, &s.body, s.update.as_ref());
+                    });
+                    return true;
+                }
+                walker.visit_loop(&head, &s.body, s.update.as_ref())
+            }),
             // The loop owns what it walks (WEP: Affine Types).
             Stmt::ForOf(s) => {
                 self.visit_at(&s.iterable);
                 let owners = self.owners_of(&s.iterable);
-                self.visit_loop(&LoopHead::Binding(&s.binding, owners), &s.body, None);
-                false
+                self.visit_loop(&LoopHead::Binding(&s.binding, owners), &s.body, None)
             }
             Stmt::Match(m) => self.visit_match(&m.expr, &m.arms),
             Stmt::Break(b) => {
@@ -1676,9 +1710,10 @@ impl MoveWalker<'_, '_> {
     /// A loop as two iterations: the first records what it moves, and the
     /// second reports what reads a value the first moved. Each iteration runs
     /// the head, the body, then `update`, as a C-style `for` does.
-    /// The loop may also run no iteration, so what it leaves joins the state
-    /// it entered with, and what each `break` carried.
-    fn visit_loop(&mut self, head: &LoopHead, body: &Block, update: Option<&Expr>) {
+    /// A loop whose head can end it may also run no iteration, so it ends
+    /// where its head does, in the state it entered with or any an iteration
+    /// left; every loop ends where each `break` lands.
+    fn visit_loop(&mut self, head: &LoopHead, body: &Block, update: Option<&Expr>) -> bool {
         let entry = self.flow.clone();
         self.loops.push(LoopJumps::default());
         self.suppress += 1;
@@ -1686,10 +1721,19 @@ impl MoveWalker<'_, '_> {
         self.suppress -= 1;
         self.visit_iteration(head, body, update);
         let jumps = self.loops.pop().expect("pushed above");
-        self.flow.merge(entry);
-        if let Some(broken) = jumps.breaks {
-            self.flow.merge(broken);
-        }
+        let end = (!head.is_endless()).then(|| {
+            let mut ended = std::mem::take(&mut self.flow);
+            ended.merge(entry);
+            ended
+        });
+        self.continue_from(end, jumps.breaks)
+    }
+
+    /// Whether `expr` is of type `!`: evaluating it never falls through.
+    fn is_never(&self, expr: &Expr) -> bool {
+        self.sem()
+            .expression_type(expr.id())
+            .is_some_and(|ty| self.sem().types.is_never(ty))
     }
 
     /// The iteration's end is reached by a body that does not diverge and by
@@ -1725,7 +1769,13 @@ impl MoveWalker<'_, '_> {
         self.labels.push((label.to_string(), None));
         let diverged = self.visit_block(block);
         let (_, broken) = self.labels.pop().expect("pushed above");
-        let mut end = (!diverged).then(|| std::mem::take(&mut self.flow));
+        let end = (!diverged).then(|| std::mem::take(&mut self.flow));
+        self.continue_from(end, broken)
+    }
+
+    /// Continues from where the construct falls through, `end`, joined with
+    /// where its `break`s land. Answers whether neither is reached.
+    fn continue_from(&mut self, mut end: Option<Flow>, broken: Option<Flow>) -> bool {
         if let Some(broken) = broken {
             reach(&mut end, broken);
         }
@@ -1773,14 +1823,13 @@ impl MoveWalker<'_, '_> {
             walker.visit_block(then_block)
         });
         let then_flow = std::mem::replace(&mut self.flow, unmatched);
-        let else_div = match else_block {
-            Some(eb) => self.visit_block(eb),
-            None => false,
-        };
-        if !then_div {
-            self.flow.merge(then_flow);
+        let else_div = else_block.is_some_and(|eb| self.visit_block(eb));
+        match (then_div, else_div) {
+            (false, false) => self.flow.merge(then_flow),
+            (false, true) => self.flow = then_flow,
+            (true, _) => {}
         }
-        else_block.is_some() && then_div && else_div
+        then_div && else_div
     }
 
     fn visit_match(&mut self, scrutinee: &Expr, arms: &[ast::MatchArm]) -> bool {
@@ -1819,7 +1868,7 @@ impl MoveWalker<'_, '_> {
             Expr::LabeledBlock(lb) => self.visit_labeled_block(&lb.label, &lb.block),
             other => {
                 self.visit_at(other);
-                false
+                self.is_never(other)
             }
         }
     }
