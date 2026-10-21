@@ -97,15 +97,20 @@ fn traced<S: AsStrSlice>(grammar: S, body: String) -> String {
 
 /// Runs `body` beside the parser `source` and the `items` declared with it.
 fn run_beside(source: String, body: String, items: String = "") -> Output {
+    let out = eval_beside(source, body, items);
+    assert out.status matches { Exited(0) };
+    return out;
+}
+
+/// `run_beside` for a run that may trap.
+fn eval_beside(source: String, body: String, items: String = "") -> Output {
     // The generated source opens with inner attributes, which come first.
-    let out = eval(`${source}
+    return eval(`${source}
 use { println, Stdout } from "core:cli";
 ${items}
 export fn run() with Stdout {
 ${body}}
 `).unwrap();
-    assert out.status matches { Exited(0) };
-    return out;
 }
 
 // `SHOW_FN` and `SHOW_TOKENS_FN` are `"..."` literals, so their holes are the
@@ -746,6 +751,32 @@ test "atn never leaves an ambiguity the simulator decides by default to the tour
     assert !never.diagnostics.iter_ref().any(|d: &Diagnostic| d.kind matches { SimulatorRequired });
 }
 
+// `Z Z X` reads either way. The simulator takes the lower alternative, `b`, and
+// the tournament the longer, `b X`.
+global OPAQUE_CONTINUED_G4: String = "grammar T;
+r : a X* EOF ;
+a : b | b X ;
+b : Z Z ;
+X : 'X' ;
+Z : 'Z' ;
+WS : ' ' -> skip ;
+";
+
+test "atn verify parses as never does and checks each pick against the simulator" {
+    let verify = GenerateOptions { atn: AtnMode::Verify };
+    let never = GenerateOptions { atn: AtnMode::Never };
+    assert parses(OPAQUE_CONTINUED_G4, "r", ["Z Z"], &verify) == parses(OPAQUE_CONTINUED_G4, "r", ["Z Z"], &never);
+    assert parses(OPAQUE_CONTINUED_G4, "r", ["Z Z X"]) == "Z Z X => (r (a (b Z Z)) X)\n";
+    assert parses(OPAQUE_CONTINUED_G4, "r", ["Z Z X"], &never) == "Z Z X => (r (a (b Z Z) X))\n";
+    let out = eval_beside(
+        gen_with(OPAQUE_CONTINUED_G4, &verify).source,
+        wado`show("Z Z X", parse_r("Z Z X"));\n`,
+        SHOW_FN,
+    );
+    assert !out.status matches { Exited(0) };
+    assert out.stderr.contains(" at token 0: the tournament picks 1, the simulator 0");
+}
+
 // `(a | a B)` shares `a`, which hides the deciding token. The tournament takes
 // the longest scan, `a B`, and strands the `B` the rule still owes.
 global GROUP_LONGEST_G4: String = "grammar G;
@@ -763,6 +794,42 @@ test "atn always lets the simulator decide a group" {
     assert always == "a b => (s (a a) b)\na b b => (s (a a) b b)\n";
 }
 
+test "atn verify checks a group's tournament against the simulator" {
+    let verify = GenerateOptions { atn: AtnMode::Verify };
+    assert parses(GROUP_LONGEST_G4, "s", ["a b b"], &verify) == "a b b => (s (a a) b b)\n";
+    let out = eval_beside(gen_with(GROUP_LONGEST_G4, &verify).source, wado`show("a b", parse_s("a b"));\n`, SHOW_FN);
+    assert !out.status matches { Exited(0) };
+    assert out.stderr.contains(" at token 0: the tournament picks 1, the simulator 0");
+}
+
+// The atoms `n …` and `f …` share `any`, and one holds a group tournament, so
+// both checks run in helpers of a left-recursive rule, which read its
+// `min_prec`.
+global LR_GROUP_CHECK_G4: String = "grammar L;
+s : e EOF ;
+e : e '+' e | n (a | a B) | f '(' ')' | INT ;
+n : any ;
+f : any ;
+any : ID | '(' any ')' ;
+a : A+ ;
+A : 'a' ;
+B : 'b' ;
+ID : [x-z]+ ;
+INT : [0-9]+ ;
+WS : ' ' -> skip ;
+";
+
+test "atn verify checks a group inside a left-recursive rule's atom" {
+    let verify = GenerateOptions { atn: AtnMode::Verify };
+    let inputs: List<String> = ["x a b + 1", "1 + y ( )"];
+    assert parses(LR_GROUP_CHECK_G4, "s", inputs, &verify) == parses(
+        LR_GROUP_CHECK_G4,
+        "s",
+        inputs,
+        &GenerateOptions { atn: AtnMode::Never },
+    );
+}
+
 // The atom choice reads past `any`'s nesting, so the simulator owns it, and the
 // LR loop decides through its table.
 global VERIFIED_LR_G4: String = "grammar L;
@@ -778,11 +845,10 @@ INT : [0-9]+ ;
 WS : ' ' -> skip ;
 ";
 
-test "atn verify checks the shortcuts against the simulator and parses as auto does" {
+test "atn verify checks the atom's tournament against the simulator" {
     let verify = GenerateOptions { atn: AtnMode::Verify };
     let source = gen_with(VERIFIED_LR_G4, &verify).source;
     assert source.contains("atn_verified(");
-    assert source.contains("fn atn_lr_decide_");
     assert !gen_source(VERIFIED_LR_G4).contains("atn_verified(");
     let inputs: List<String> = [
         "sel a = 1 ord b", "sel (a) = f() ord b", "sel ((a)) || 1 = (b)", "sel a btw 1 and 2 and b = 3",

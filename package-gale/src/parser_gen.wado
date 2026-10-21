@@ -187,7 +187,7 @@ use {
     kind_bitset_words,
 } from "./kind_set_gen.wado";
 use { group_alt_classes, non_greedy_static_undecided } from "./lower.wado";
-use { ATN_VERIFIED, atn_verified_call, sll_decide_fn_name } from "./atn_sll.wado";
+use { ATN_VERIFIED, AtnPicker, atn_verified_call, sll_decide_fn_name } from "./atn_sll.wado";
 use { lr_decide_fn_name } from "./atn_lr_table.wado";
 
 /// Append the defaulted runtime FOLLOW-continuation argument to a
@@ -4596,7 +4596,7 @@ fn gen_op_inner_for_storable_repeat(
             let Group(g_elem) = peel_labels(elem) else {
                 unreachable();
             };
-            gen_group_shape(w, g_op, g_elem, entry, ctx, name_counts, outer_follow, decided, proven, -1);
+            gen_group_shape(w, g_op, g_elem, entry, ctx, name_counts, outer_follow, decided, proven, GroupAtn::Unasked);
         },
         TransparentGroup => unreachable(),
     }
@@ -5305,13 +5305,33 @@ fn gen_op_group(
     let Group(g_elem) = peel_scalar_label(elem) else {
         unreachable();
     };
-    let atn_dec = ctx.plan.atn_decision_site(g_op.atn_site);
-    gen_group_shape(w, g_op, g_elem, entry, ctx, name_counts, &NO_KINDS, decided, proven, atn_dec);
+    gen_group_shape(w, g_op, g_elem, entry, ctx, name_counts, &NO_KINDS, decided, proven, group_atn(g_op, ctx));
+}
+
+/// What the simulator does at a group's choice among alternatives sharing a
+/// first token, which the tournament settles otherwise.
+variant GroupAtn {
+    Unasked,
+    /// It decides, at this decision.
+    Decides(i32),
+    /// It checks the tournament's pick, at this decision.
+    Checks(i32),
+}
+
+fn group_atn(g_op: &GroupOp, ctx: &EmitContext) -> GroupAtn {
+    let decides = ctx.plan.atn_decision_site(g_op.atn_site);
+    if decides >= 0 {
+        return GroupAtn::Decides(decides);
+    }
+    let checks = ctx.plan.atn_decision_site(g_op.atn_check_site);
+    if checks >= 0 {
+        return GroupAtn::Checks(checks);
+    }
+    return GroupAtn::Unasked;
 }
 
 /// Emit `g_op` by its shape, past the entry. `outer_follow` reaches a nested
-/// non-greedy repeat in a `SingleAlt` body; `atn_dec` is the decision a
-/// tournament asks the simulator, or -1 for none.
+/// non-greedy repeat in a `SingleAlt` body.
 fn gen_group_shape(
     w: &mut CodeWriter,
     g_op: &GroupOp,
@@ -5322,7 +5342,7 @@ fn gen_group_shape(
     outer_follow: &List<i32>,
     decided: Option<String>,
     proven: &List<i32>,
-    atn_dec: i32,
+    atn: GroupAtn,
 ) {
     match &g_op.shape {
         TokenOnly(to) => gen_consume_token_group_op(w, to, &g_elem.alternatives, ctx, name_counts, proven),
@@ -5343,7 +5363,7 @@ fn gen_group_shape(
             ctx,
             name_counts,
             decided,
-            atn_dec,
+            atn,
         ),
         Transparent => {
             // The inner alt is inlined, actions included, so inside a Repeat
@@ -7168,7 +7188,7 @@ fn gen_group_dispatch(
     ctx: &mut EmitContext,
     name_counts: &mut List<[String, i32]>,
     decided: Option<String> = null,
-    atn_dec: i32 = -1,
+    atn: GroupAtn = GroupAtn::Unasked,
 ) {
     if decided matches { Some(_) } {
         assert entry matches { Guaranteed }, "gen_group_dispatch: a decided dispatch commits, so it has no arm left to report or break in";
@@ -7195,7 +7215,7 @@ fn gen_group_dispatch(
             ctx,
             name_counts,
             &NO_KINDS,
-            atn_dec,
+            atn,
         );
         return;
     }
@@ -7239,7 +7259,7 @@ fn gen_group_dispatch(
             ctx,
             name_counts,
             &proven,
-            atn_dec,
+            atn,
         );
         bodies.push(body);
         if g < tested {
@@ -7338,7 +7358,7 @@ fn gen_group_branch_body(
     ctx: &mut EmitContext,
     name_counts: &mut List<[String, i32]>,
     proven: &List<i32> = &NO_KINDS,
-    atn_dec: i32 = -1,
+    atn: GroupAtn = GroupAtn::Unasked,
 ) {
     if group.len() == 1 {
         let alt_index = group[0];
@@ -7359,16 +7379,22 @@ fn gen_group_branch_body(
     // Alternatives sharing a first token are decided by the longest-match
     // tournament, mandatory-heavy first.
     let sorted_group = branch_emit_order(group, alts, ctx);
-    if atn_dec >= 0 {
+    if let Decides(dec) = atn {
         let var = dedup_name("gd_atn", name_counts);
-        w.line(`let ${var} = ${atn_predict_call(atn_dec, "&p.kinds", "p.pos", ctx)};`);
+        w.line(`let ${var} = ${atn_predict_call(dec, "&p.kinds", "p.pos", ctx)};`);
         gen_group_scan_dispatch(w, alts, g_op_alts, g_op_scan_alts, &sorted_group, kind, ctx, name_counts, Option::Some(
             var,
         ));
         return;
     }
     assert group_all_scannable(&sorted_group, alts, ctx);
-    gen_group_scan_dispatch(w, alts, g_op_alts, g_op_scan_alts, &sorted_group, kind, ctx, name_counts);
+    let winner = gen_scan_winner_tournament(w, &sorted_group, g_op_scan_alts, ctx, name_counts);
+    if let Checks(dec) = atn {
+        emit_atn_check(w, &AtnCheck { decision: dec, numbers: sorted_group }, &winner, &sorted_group, ctx);
+    }
+    gen_group_scan_dispatch(w, alts, g_op_alts, g_op_scan_alts, &sorted_group, kind, ctx, name_counts, Option::Some(
+        winner,
+    ));
 }
 
 /// `let _atn_alt`: the simulator's pick at rule-body decision `dec`, with the
@@ -7405,7 +7431,7 @@ fn lr_decision_call<S: AsStrSlice, S1: AsStrSlice>(ctx: &mut EmitContext, decisi
         return call;
     }
     ctx.cursor.note_ref(&ATN_VERIFIED);
-    return atn_verified_call(decision, ctx.atn_arg(), tokens, pos, call);
+    return atn_verified_call(decision, AtnPicker::LrTable, ctx.atn_arg(), tokens, pos, "min_prec", call);
 }
 
 /// The simulator's pick at decision `atn_dec`, over `tokens` at `pos`, with the
@@ -7442,7 +7468,7 @@ fn gen_alt_group(
     ctx: &mut EmitContext,
     name_counts: &mut List<[String, i32]>,
     decided: Option<String>,
-    atn_dec: i32,
+    atn: GroupAtn,
 ) {
     let [kind, field_base] = match &g_op.shape {
         SimpleCst(_) => [GroupBranchKind::RuleRef, group_field_base_name(alts)],
@@ -7463,7 +7489,7 @@ fn gen_alt_group(
         ctx,
         name_counts,
         decided,
-        atn_dec,
+        atn,
     );
 }
 
@@ -7860,6 +7886,7 @@ fn emit_scan_tournament<S: AsStrSlice, S1: AsStrSlice>(
     rule_display: S1,
     ctx: &mut EmitContext,
     fall_through_on_no_match: bool = false,
+    check: &Option<AtnCheck> = &NO_TOURNAMENT_CHECK,
 ) {
     w.line("let _sd_tokens = &p.kinds;");
     w.line("let _sd_pos = p.pos;");
@@ -7908,6 +7935,9 @@ fn emit_scan_tournament<S: AsStrSlice, S1: AsStrSlice>(
         let end_expr = `_sd_p_${idx}`;
         emit_argmax_update(w, &best_p, &best_i, &end_expr, idx);
     }
+    if let Some(c) = check {
+        emit_atn_check(w, c, best_i, sorted_indices, ctx);
+    }
     let guard_pick = fall_through_on_no_match || any_gated;
     if guard_pick {
         w.begin("if _sd_best_i >= 0");
@@ -7916,6 +7946,75 @@ fn emit_scan_tournament<S: AsStrSlice, S1: AsStrSlice>(
     if guard_pick {
         w.end();
     }
+}
+
+/// The simulator decision a static pick is checked against under
+/// `atn: "verify"`, and the number it answers each candidate by, in the
+/// candidates' order.
+struct AtnCheck {
+    decision: i32,
+    numbers: List<i32>,
+}
+
+global NO_TOURNAMENT_CHECK: Option<AtnCheck> = null;
+
+/// The check for the current rule's body decision among `sorted_indices`, or
+/// `null` where a predicate gates one of them: the simulator would need the
+/// gates' verdicts to answer as the parse does.
+fn atn_tournament_check(sorted_indices: &List<i32>, alts: &List<Alternative>, ctx: &mut EmitContext) -> Option<AtnCheck> {
+    if !atn_decision_gates(sorted_indices, alts, ctx, false).is_empty() {
+        return null;
+    }
+    let Some(numbers) = ctx.atn_body_alt_numbers(sorted_indices) else {
+        unreachable();
+    };
+    return Option::Some(
+        AtnCheck { decision: ctx.plan.atn_rule_body_decision(ctx.cursor.current_rule_index()), numbers },
+    );
+}
+
+/// Check the candidate `pick` names, an index into `candidates` or -1 where
+/// none won, against the simulator, and run the decision's lookahead DFA, which
+/// checks its own answers.
+fn emit_atn_check<S: AsStrSlice>(
+    w: &mut CodeWriter,
+    c: &AtnCheck,
+    pick: S,
+    candidates: &List<i32>,
+    ctx: &mut EmitContext,
+) {
+    let prec = atn_prec_arg(ctx);
+    let number = if c.numbers == *candidates {
+        pick.to_string();
+    } else {
+        candidate_number(&pick, candidates, &c.numbers);
+    };
+    ctx.cursor.note_ref(&ATN_VERIFIED);
+    let decide = sll_decide_fn_name(c.decision);
+    ctx.cursor.note_ref(&decide);
+    w.begin(`if ${pick} >= 0`);
+    w.line(`let _ = ${atn_verified_call(
+        c.decision,
+        AtnPicker::Tournament,
+        ctx.atn_arg(),
+        "&p.kinds",
+        "p.pos",
+        &prec,
+        number,
+    )};`);
+    w.line(`let _ = ${decide}(${ctx.atn_arg()}, &p.kinds, p.pos, ${prec});`);
+    w.end();
+}
+
+/// The expression mapping `pick`, one of `candidates`, to the number at the
+/// same position in `numbers`.
+fn candidate_number<S: AsStrSlice>(pick: S, candidates: &List<i32>, numbers: &List<i32>) -> String {
+    let mut out = String::new();
+    for let mut i = 0; i < candidates.len() - 1; i += 1 {
+        out.push_str(`if ${pick} == ${candidates[i]} { ${numbers[i]} } else `);
+    }
+    out.push_str(`{ ${numbers[numbers.len() - 1]} }`);
+    return out;
 }
 
 /// True when every alt in `indices` has a scan helper covering its whole body,
@@ -8079,7 +8178,15 @@ fn gen_prediction_code_inner<S: AsStrSlice, S1: AsStrSlice>(
             let all_scan_full = alts_all_scan_full(&sorted_indices, alts, ctx);
             assert all_scan_full;
             match side {
-                Parse => emit_scan_tournament(w, &sorted_indices, fn_name, rule_display, ctx),
+                Parse => {
+                    let checked = ctx.ambiguous_checked_by_atn(a, rule_display);
+                    let check = if checked {
+                        atn_tournament_check(&sorted_indices, alts, ctx);
+                    } else {
+                        NO_TOURNAMENT_CHECK;
+                    };
+                    emit_scan_tournament(w, &sorted_indices, fn_name, rule_display, ctx, false, &check);
+                },
                 Scan => emit_scan_side_tournament(w, &sorted_indices, ctx, false),
             }
         },

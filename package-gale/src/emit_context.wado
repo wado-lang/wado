@@ -348,7 +348,7 @@ impl EmitContext {
     /// call site.
     pub fn helpers_take_prec(&self) -> bool {
         let idx = self.cursor.current_rule_index();
-        return self.plan.rule_asks_simulator(idx) && self.plan.lr_loop_entry_decision(idx) >= 0;
+        return self.plan.rule_consults_simulator(idx) && self.plan.lr_loop_entry_decision(idx) >= 0;
     }
 
     /// Whether the current rule makes a decision the simulator decides.
@@ -374,6 +374,16 @@ impl EmitContext {
 
     /// Whether an `Ambiguous` node's decision is a runtime-ATN prediction.
     pub fn ambiguous_routes_via_atn<S: AsStrSlice>(&self, a: &AmbiguousNode, rule_name: S) -> bool {
+        return !self.settings.atn.verifies() && self.ambiguous_reaches_atn(a, rule_name);
+    }
+
+    /// Whether the tournament's pick at an `Ambiguous` node is checked against
+    /// the simulator, which `auto` would hand the decision to.
+    pub fn ambiguous_checked_by_atn<S: AsStrSlice>(&self, a: &AmbiguousNode, rule_name: S) -> bool {
+        return self.settings.atn.verifies() && self.ambiguous_reaches_atn(a, rule_name);
+    }
+
+    fn ambiguous_reaches_atn<S: AsStrSlice>(&self, a: &AmbiguousNode, rule_name: S) -> bool {
         return self.plan.needs_atn
             && self.plan.atn_rule_body_decision(self.cursor.current_rule_index()) >= 0
             && self.atn_body_alt_numbers(&a.alts) matches { Some(_) }

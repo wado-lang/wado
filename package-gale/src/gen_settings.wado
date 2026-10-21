@@ -26,9 +26,9 @@ pub enum AtnMode {
     /// Every ambiguity goes to the tournament, and a grammar with a decision
     /// only the simulator can make is refused.
     Never,
-    /// What `Auto` routes to the simulator, but where the parser settles one of
-    /// those decisions without it, it asks the simulator as well and panics
-    /// when the two disagree.
+    /// Parses as `Never` does, and panics where a tournament's pick that `Auto`
+    /// or `Always` hands the simulator differs from the simulator's. A decision
+    /// only the simulator can make goes to it, as under `Auto`.
     Verify,
 }
 

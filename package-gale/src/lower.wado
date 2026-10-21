@@ -2959,7 +2959,21 @@ fn with_group_atn_site(op: Op, g: &GroupElement, ctx: &mut LowerContext) -> Op {
     };
     go.atn_site = group_atn_site(g, &go.scan_group.alt_classes, &go.empty_alt_admits, ctx);
     go.scan_group.atn_site = go.atn_site;
+    if go.atn_site < 0 {
+        go.atn_check_site = group_atn_check_site(g, &go.scan_group.alt_classes, ctx);
+    }
     return Op::Group(go);
+}
+
+/// Under `atn: "verify"`, `g`'s decision site whose simulator checks the
+/// tournament among alternatives sharing a first token, which `always` hands
+/// the simulator. Else -1.
+fn group_atn_check_site(g: &GroupElement, classes: &List<AltClass>, ctx: &mut LowerContext) -> i32 {
+    if !ctx.settings.atn.verifies() || !decision_partition(classes).iter_ref().any(|b| b.alts.len() > 1) {
+        return -1;
+    }
+    ctx.mark_checks_with_simulator();
+    return g.atn_decision;
 }
 
 /// Single-element single-alt: `(e)` lowers to `e` with no struct of
