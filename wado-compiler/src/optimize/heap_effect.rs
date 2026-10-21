@@ -3,7 +3,8 @@
 
 use std::borrow::Cow;
 use std::cell::OnceCell;
-use std::sync::{Arc, Mutex};
+use std::ops::Range;
+use std::sync::{Arc, Mutex, OnceLock};
 
 use cranelift_entity::EntityRef;
 
@@ -11,7 +12,7 @@ use crate::builtin_facts::{SideEffect, Storage};
 use crate::graph::{DisjointSets, strongly_connected_components};
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::module_source::ModuleSource;
-use crate::nir::{NirFunction, NirUnaryOp};
+use crate::nir::{FuncRef, NirFunction, NirUnaryOp};
 use crate::nir_arena::{Body, ExprId, ExprKind, NodeRef, Operand, PatId, PatKind, StmtKind};
 use crate::nir_package::NirPackage;
 use crate::nir_value_graph::{OpaqueSource, ValueId, ValueKind};
@@ -24,7 +25,7 @@ use crate::type_table::{TypeKey, TypeTable};
 use super::arena_query::holds_reference;
 use super::body_memo::BodyMemo;
 use super::gate::FunctionGate;
-use crate::parallel::lock;
+use crate::parallel::{Executor, lock};
 
 /// Where a class's objects may come from: a bit per parameter (the last one
 /// standing for every later one) or a global. None means allocated here.
@@ -226,6 +227,9 @@ pub(super) struct HeapEffectsCache {
     layouts: Layouts,
     functions: BodyMemo<FunctionEntry>,
     summaries: Vec<Summary>,
+    /// Each body's unlinked frame, built by the first summary that needs it
+    /// since the body was last written.
+    frames: Vec<OnceLock<HeapFrame>>,
     /// The join over every closure body, which is what an indirect call runs.
     indirect: Summary,
     /// Filled during a sweep by whichever visit asks first; its values depend
@@ -275,19 +279,27 @@ impl HeapEffectsCache {
             },
         );
         self.summaries.resize_with(len, Summary::default);
+        self.frames.resize_with(len, OnceLock::new);
+        for (frame, _) in self.frames.iter_mut().zip(&edited).filter(|(_, e)| **e) {
+            *frame = OnceLock::new();
+        }
         if edited.contains(&true) {
-            self.solve(project, type_table, &edited, &mut moved);
+            self.solve(&project.functions, type_table, gate.exec(), &edited, &mut moved);
         }
         #[cfg(debug_assertions)]
-        self.assert_one_settled(project, type_table);
+        self.assert_one_settled(&project.functions, type_table);
     }
 
-    /// The least fixpoint over the call graph, one component at a time, callees
-    /// first; a component whose inputs all stand is the fixpoint already.
+    /// The least fixpoint over the call graph, callees first; a component whose
+    /// inputs all stand is the fixpoint already. Components no path joins are
+    /// solved together, and each round re-summarizes every queued node against
+    /// the summaries the round began with, so a round runs in parallel and its
+    /// outcome does not depend on the thread count.
     fn solve(
         &mut self,
-        project: &NirPackage,
+        functions: &[FuncRef],
         type_table: &TypeTable,
+        exec: &Executor,
         edited: &[bool],
         moved: &mut [bool],
     ) {
@@ -308,33 +320,45 @@ impl HeapEffectsCache {
                 }
             }
         }
-        let mut queued = vec![false; successors.len()];
-        for members in &components {
-            let stale = members
+        // A component's depth is one past its deepest callee component's, so
+        // one depth's components reach none of each other.
+        let mut depth = vec![0; components.len()];
+        let mut by_depth: Vec<Vec<usize>> = Vec::new();
+        for (c, members) in components.iter().enumerate() {
+            depth[c] = members
                 .iter()
-                .any(|&n| (n != indirect && edited[n]) || successors[n].iter().any(|&s| moved[s]));
-            if !stale {
-                continue;
+                .flat_map(|&n| &successors[n])
+                .map(|&s| component_of[s])
+                .filter(|&d| d != c)
+                .map(|d| depth[d] + 1)
+                .max()
+                .unwrap_or(0);
+            if by_depth.len() <= depth[c] {
+                by_depth.resize_with(depth[c] + 1, Vec::new);
             }
-            let before: Vec<Summary> = members
+            by_depth[depth[c]].push(c);
+        }
+        let mut queued = vec![false; successors.len()];
+        for level in by_depth {
+            let mut pending: Vec<usize> = level
+                .into_iter()
+                .filter(|&c| {
+                    components[c].iter().any(|&n| {
+                        (n != indirect && edited[n]) || successors[n].iter().any(|&s| moved[s])
+                    })
+                })
+                .flat_map(|c| components[c].iter().copied())
+                .collect();
+            let before: Vec<Summary> = pending
                 .iter()
                 .map(|&n| std::mem::take(self.summary_mut(n)))
                 .collect();
-            for &n in members {
-                queued[n] = true;
-            }
-            // Sweeps in member order, deepest in the walk first, so a callee's
-            // growth reaches its callers within one sweep rather than one
-            // increment at a time.
-            let mut pending = members.len();
-            while pending > 0 {
-                for &n in members {
-                    if !queued[n] {
-                        continue;
-                    }
-                    queued[n] = false;
-                    pending -= 1;
-                    let summary = self.summarize(project, type_table, n);
+            let members = pending.clone();
+            while !pending.is_empty() {
+                let this = &*self;
+                let fresh = exec.map(&pending, |&n| this.summarize(functions, type_table, n));
+                let mut next = Vec::new();
+                for (n, summary) in pending.into_iter().zip(fresh) {
                     if summary == *self.summary_mut(n) {
                         continue;
                     }
@@ -342,12 +366,16 @@ impl HeapEffectsCache {
                     for &m in &callers_within[n] {
                         if !queued[m] {
                             queued[m] = true;
-                            pending += 1;
+                            next.push(m);
                         }
                     }
                 }
+                for &n in &next {
+                    queued[n] = false;
+                }
+                pending = next;
             }
-            for (&n, before) in members.iter().zip(before) {
+            for (n, before) in members.into_iter().zip(before) {
                 moved[n] |= *self.summary_mut(n) != before;
             }
         }
@@ -388,7 +416,7 @@ impl HeapEffectsCache {
     }
 
     /// What node `n` gives its callers, read against the summaries as they stand.
-    fn summarize(&self, project: &NirPackage, type_table: &TypeTable, n: usize) -> Summary {
+    fn summarize(&self, functions: &[FuncRef], type_table: &TypeTable, n: usize) -> Summary {
         let entries = self.functions.facts();
         if n == entries.len() {
             let mut indirect = Summary::default();
@@ -403,10 +431,16 @@ impl HeapEffectsCache {
                     type_table,
                     cache: self,
                 };
-                let f = project.functions[n].borrow();
+                let f = functions[n].borrow();
                 let body = f.body.as_ref().expect("a `Callee::Body` has a body");
-                let params: Vec<u32> = f.params.iter().map(|p| p.local_index).collect();
-                HeapFrame::new(&effects, body, &params).summary(&effects, body)
+                let mut frame = self.frames[n]
+                    .get_or_init(|| {
+                        let params: Vec<u32> = f.params.iter().map(|p| p.local_index).collect();
+                        HeapFrame::unlinked(&effects, body, &params)
+                    })
+                    .clone();
+                frame.link(&effects, body);
+                frame.summary(&effects, body)
             }
             Callee::Builtin(_) | Callee::Opaque { .. } => Summary::default(),
         }
@@ -415,12 +449,12 @@ impl HeapEffectsCache {
     /// A summary the solver left behind a moved callee no longer answers for
     /// its function. One node per refresh, rotating, keeps the check cheap.
     #[cfg(debug_assertions)]
-    fn assert_one_settled(&mut self, project: &NirPackage, type_table: &TypeTable) {
+    fn assert_one_settled(&mut self, functions: &[FuncRef], type_table: &TypeTable) {
         let nodes = self.summaries.len() + 1;
         self.cursor %= nodes;
         let n = self.cursor;
         self.cursor += 1;
-        let summary = self.summarize(project, type_table, n);
+        let summary = self.summarize(functions, type_table, n);
         assert!(
             summary == *self.summary_mut(n),
             "the heap-effect summary of node {n} went stale"
@@ -779,6 +813,7 @@ enum OperandNode {
     Unknown,
 }
 
+#[derive(Clone)]
 enum Keys {
     One(TypeKey),
     Set(Arc<ObjectTypes>),
@@ -828,6 +863,7 @@ pub(super) struct Kept {
 
 /// One read or write of an object: where it happens, through which operand,
 /// and which field, where it names one.
+#[derive(Clone)]
 struct AccessSite {
     effect: Effect,
     node: u32,
@@ -839,6 +875,7 @@ struct AccessSite {
 
 /// One body's objects as a union-find over locals and expressions, where a
 /// class holds what flows together and carries the origins reaching it.
+#[derive(Clone)]
 pub(super) struct HeapFrame {
     classes: DisjointSets,
     prov: Vec<Prov>,
@@ -858,6 +895,9 @@ pub(super) struct HeapFrame {
     /// Accesses to classify once every class is final.
     accesses: Vec<AccessSite>,
     calls: Vec<ExprId>,
+    /// Each call's result node and its span of `call_args`, in `calls` order.
+    call_nodes: Vec<(OperandNode, Range<usize>)>,
+    call_args: Vec<OperandNode>,
     /// Assignment targets: written, not read.
     targets: IndexSet<ExprId>,
 }
@@ -893,6 +933,14 @@ const RET: u32 = 1;
 impl HeapFrame {
     /// The classes of `body`, whose parameters are the locals `params`.
     pub(super) fn new(effects: &HeapEffects, body: &Body, params: &[u32]) -> Self {
+        let mut frame = Self::unlinked(effects, body, params);
+        frame.link(effects, body);
+        frame
+    }
+
+    /// The frame before [`Self::link`]: what the body alone joins, read from
+    /// nothing in the summaries, so it stands as long as the body does.
+    fn unlinked(effects: &HeapEffects, body: &Body, params: &[u32]) -> Self {
         let expr_count = body.exprs.len();
         let expr_base = 2;
         let mut frame = Self {
@@ -906,6 +954,8 @@ impl HeapFrame {
             expr_count,
             accesses: Vec::new(),
             calls: Vec::new(),
+            call_nodes: Vec::new(),
+            call_args: Vec::new(),
             targets: IndexSet::default(),
         };
         frame.prov[ELSEWHERE as usize] = Prov::ELSEWHERE;
@@ -952,8 +1002,16 @@ impl HeapFrame {
         if let Some(tail) = body.block_tail(body.root()) {
             frame.unify_op(effects, body, RET, tail);
         }
-        frame.finish();
         frame
+    }
+
+    /// Join what each call makes share, as its callee answers now, and settle
+    /// the classes.
+    fn link(&mut self, effects: &HeapEffects, body: &Body) {
+        for i in 0..self.calls.len() {
+            self.call_flows(effects, body, i);
+        }
+        self.finish();
     }
 
     fn local_node(&mut self, local: u32) -> u32 {
@@ -1254,8 +1312,14 @@ impl HeapFrame {
                 }
             }
             ExprKind::Call { .. } | ExprKind::IndirectCall { .. } => {
+                let result = self.operand_node(effects, body, Operand::Expr(e));
+                let start = self.call_args.len();
+                for a in call_operands(body, e) {
+                    let n = self.operand_node(effects, body, a);
+                    self.call_args.push(n);
+                }
                 self.calls.push(e);
-                self.call_flows(effects, body, e);
+                self.call_nodes.push((result, start..self.call_args.len()));
             }
             ExprKind::CmRawCall { .. }
             | ExprKind::VariantConstruct { payload: None, .. }
@@ -1379,14 +1443,11 @@ impl HeapFrame {
 
     /// Join what a call makes share: its result with what the callee returns,
     /// and each argument with what the callee stores into it.
-    fn call_flows(&mut self, effects: &HeapEffects, body: &Body, e: ExprId) {
-        let result = self.operand_node(effects, body, Operand::Expr(e));
-        let (target, args) = call_parts(effects, body, e);
-        let nodes: Vec<OperandNode> = args
-            .iter()
-            .map(|&a| self.operand_node(effects, body, a))
-            .collect();
-        match target {
+    fn call_flows(&mut self, effects: &HeapEffects, body: &Body, i: usize) {
+        let e = self.calls[i];
+        let (result, span) = self.call_nodes[i].clone();
+        let nodes = self.call_args[span].to_vec();
+        match call_target(effects, body, e) {
             Target::Summary(s) => {
                 for (j, &n) in nodes.iter().enumerate() {
                     if s.ret.has_param(j) {
@@ -1412,6 +1473,7 @@ impl HeapFrame {
                 }
             }
             Target::Builtin(declaration) => {
+                let args = call_operands(body, e);
                 for r in &declaration.retains {
                     if !effects.retains_reference(body, r, &args) {
                         continue;
@@ -1876,28 +1938,34 @@ impl Target<'_> {
 /// The call's target and its arguments in the callee's parameter order; an
 /// indirect call's closure environment is parameter 0.
 fn call_parts<'s>(effects: &'s HeapEffects, body: &Body, e: ExprId) -> (Target<'s>, Vec<Operand>) {
+    (call_target(effects, body, e), call_operands(body, e))
+}
+
+fn call_target<'s>(effects: &'s HeapEffects, body: &Body, e: ExprId) -> Target<'s> {
+    let cache = effects.cache;
     match &body.exprs[e].kind {
-        ExprKind::Call { func_id, args, .. } => {
-            let cache = effects.cache;
-            let target = match cache
-                .functions
-                .facts()
-                .get(func_id.index())
-                .map(|f| &f.callee)
-            {
-                Some(Callee::Body) => Target::Summary(&cache.summaries[func_id.index()]),
-                Some(Callee::Builtin(declaration)) => Target::Builtin(declaration),
-                Some(&Callee::Opaque { suspends }) => Target::Opaque { suspends },
-                None => Target::Opaque { suspends: true },
-            };
-            (target, args.iter().map(|a| a.expr).collect())
-        }
-        ExprKind::IndirectCall { callee, args } => (
-            Target::Summary(&effects.cache.indirect),
-            std::iter::once(*callee)
-                .chain(args.iter().copied())
-                .collect(),
-        ),
-        other => panic!("call_parts on a non-call {other:?}"),
+        ExprKind::Call { func_id, .. } => match cache
+            .functions
+            .facts()
+            .get(func_id.index())
+            .map(|f| &f.callee)
+        {
+            Some(Callee::Body) => Target::Summary(&cache.summaries[func_id.index()]),
+            Some(Callee::Builtin(declaration)) => Target::Builtin(declaration),
+            Some(&Callee::Opaque { suspends }) => Target::Opaque { suspends },
+            None => Target::Opaque { suspends: true },
+        },
+        ExprKind::IndirectCall { .. } => Target::Summary(&cache.indirect),
+        other => panic!("call_target on a non-call {other:?}"),
+    }
+}
+
+fn call_operands(body: &Body, e: ExprId) -> Vec<Operand> {
+    match &body.exprs[e].kind {
+        ExprKind::Call { args, .. } => args.iter().map(|a| a.expr).collect(),
+        ExprKind::IndirectCall { callee, args } => std::iter::once(*callee)
+            .chain(args.iter().copied())
+            .collect(),
+        other => panic!("call_operands on a non-call {other:?}"),
     }
 }
