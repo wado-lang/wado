@@ -1367,10 +1367,6 @@ internal fn atn_tr_consumes(kind: i32) -> bool {
     return kind == ATN_TR_ATOM || kind == ATN_TR_SET || kind == ATN_TR_NOT_ATOM || kind == ATN_TR_WILDCARD;
 }
 
-internal fn atn_any_takes(sim: &AtnSim, t: i32, eof: i32) -> bool {
-    return t < sim.num_tokens && t != eof;
-}
-
 internal fn atn_set_contains(sim: &AtnSim, set: i32, t: i32) -> bool {
     return t >= 0
         && t < sim.set_words * 64
@@ -2161,9 +2157,9 @@ fn atn_move(sim: &AtnSim, configs: &List<AtnConfig>, token: i32, eof: i32) -> Li
             } else if k == ATN_TR_SET {
                 atn_set_contains(sim, label, token);
             } else if k == ATN_TR_WILDCARD {
-                atn_any_takes(sim, token, eof);
+                token != eof;
             } else if k == ATN_TR_NOT_ATOM {
-                token != label && atn_any_takes(sim, token, eof);
+                token != label && token != eof;
             } else {
                 false;
             };
@@ -2706,7 +2702,7 @@ fn atn_cont_first(sim: &AtnSim, state: i32, walk: &mut AtnContWalk) -> bool {
 
 internal fn atn_state_cont_admits(sim: &AtnSim, state: i32, t: i32, eof: i32) -> bool {
     let any_but = sim.state_cont_any_but[state];
-    if atn_any_takes(sim, t, eof) && (any_but == ATN_CONT_ANY || any_but >= 0 && t != any_but) {
+    if t != eof && (any_but == ATN_CONT_ANY || any_but >= 0 && t != any_but) {
         return true;
     }
     return t < sim.num_tokens && sim.state_cont_first[state * sim.cont_words + t / 64] >> (t % 64) as i64 & 1 != 0;
@@ -5488,7 +5484,7 @@ fn atn_decide_18(atn: &mut AtnPredictor, tokens: &Array<i32>, pos: i32, min_prec
 }
 
 fn atn_lr_decide_7(atn: &mut AtnPredictor, tokens: &Array<i32>, pos: i32, min_prec: i32, follow: i64 = 0) -> i32 {
-    if pos < tokens.len() {
+    if pos < tokens.len() && tokens[pos] < 54 {
         match tokens[pos] {
             TK_LIT_LPAREN => {
                 if min_prec > 14 { return 20; }

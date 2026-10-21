@@ -1165,10 +1165,6 @@ internal fn atn_tr_consumes(kind: i32) -> bool {
     return kind == ATN_TR_ATOM || kind == ATN_TR_SET || kind == ATN_TR_NOT_ATOM || kind == ATN_TR_WILDCARD;
 }
 
-internal fn atn_any_takes(sim: &AtnSim, t: i32, eof: i32) -> bool {
-    return t < sim.num_tokens && t != eof;
-}
-
 internal fn atn_set_contains(sim: &AtnSim, set: i32, t: i32) -> bool {
     return t >= 0
         && t < sim.set_words * 64
@@ -1959,9 +1955,9 @@ fn atn_move(sim: &AtnSim, configs: &List<AtnConfig>, token: i32, eof: i32) -> Li
             } else if k == ATN_TR_SET {
                 atn_set_contains(sim, label, token);
             } else if k == ATN_TR_WILDCARD {
-                atn_any_takes(sim, token, eof);
+                token != eof;
             } else if k == ATN_TR_NOT_ATOM {
-                token != label && atn_any_takes(sim, token, eof);
+                token != label && token != eof;
             } else {
                 false;
             };
@@ -2862,7 +2858,7 @@ impl Parser {
 }
 
 fn _parse_file__inner(p: &mut Parser) -> () {
-    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_0, &EXPECTED_0); }
+    if !(kind_set_has(&SYNC_0, p.kinds[p.pos]) || p.kinds[p.pos] >= 11) { builtin::cold_path(); p.sync_enter(&SYNC_0, &EXPECTED_0); }
     while (!_kind_set_0(p.peek_kind()) || atn_decide_0(&mut p.atn, &p.kinds, p.pos, 0) == 1) {
         p.any();
     }
@@ -2873,7 +2869,7 @@ fn _parse_file__inner(p: &mut Parser) -> () {
         p.site = 0;
         p.atn_ret_pending = 14;
         _parse_constant(p);
-        if !kind_set_has(&SYNC_2, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_2, &EXPECTED_2); }
+        if !(kind_set_has(&SYNC_2, p.kinds[p.pos]) || p.kinds[p.pos] >= 11) { builtin::cold_path(); p.sync_enter(&SYNC_2, &EXPECTED_2); }
         while atn_decide_1(&mut p.atn, &p.kinds, p.pos, 0) == 1 {
             p.any();
         }

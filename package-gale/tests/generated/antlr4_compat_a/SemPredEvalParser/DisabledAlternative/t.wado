@@ -1165,10 +1165,6 @@ internal fn atn_tr_consumes(kind: i32) -> bool {
     return kind == ATN_TR_ATOM || kind == ATN_TR_SET || kind == ATN_TR_NOT_ATOM || kind == ATN_TR_WILDCARD;
 }
 
-internal fn atn_any_takes(sim: &AtnSim, t: i32, eof: i32) -> bool {
-    return t < sim.num_tokens && t != eof;
-}
-
 internal fn atn_set_contains(sim: &AtnSim, set: i32, t: i32) -> bool {
     return t >= 0
         && t < sim.set_words * 64
@@ -1959,9 +1955,9 @@ fn atn_move(sim: &AtnSim, configs: &List<AtnConfig>, token: i32, eof: i32) -> Li
             } else if k == ATN_TR_SET {
                 atn_set_contains(sim, label, token);
             } else if k == ATN_TR_WILDCARD {
-                atn_any_takes(sim, token, eof);
+                token != eof;
             } else if k == ATN_TR_NOT_ATOM {
-                token != label && atn_any_takes(sim, token, eof);
+                token != label && token != eof;
             } else {
                 false;
             };
@@ -2807,7 +2803,7 @@ fn scan_content(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor) -> i32 {
 }
 
 fn _parse_cpp_compilation_unit__inner(p: &mut Parser) -> () {
-    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_0, &EXPECTED_0); }
+    if !(kind_set_has(&SYNC_0, p.kinds[p.pos]) || p.kinds[p.pos] >= 3) { builtin::cold_path(); p.sync_enter(&SYNC_0, &EXPECTED_0); }
     let mut _plus_first = true;
     loop {
         if p.recovering { break; }
@@ -2844,7 +2840,7 @@ fn _parse_cpp_compilation_unit__inner(p: &mut Parser) -> () {
         p.site = 0;
         p.atn_ret_pending = 9;
         _parse_content(p);
-        if !kind_set_has(&SYNC_1, p.kinds[p.pos]) { builtin::cold_path(); p.sync_back(&SYNC_1, &EXPECTED_1); }
+        if !(kind_set_has(&SYNC_1, p.kinds[p.pos]) || p.kinds[p.pos] >= 3) { builtin::cold_path(); p.sync_back(&SYNC_1, &EXPECTED_1); }
     }
     p.expect(TK_EOF, &EMPTY_SYNC, true);
     return;
@@ -2886,7 +2882,7 @@ fn scan_content__alt_1(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor) ->
 }
 
 fn _parse_content__inner(p: &mut Parser) -> () {
-    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { builtin::cold_path(); p.sync_alts(&SYNC_0, &EXPECTED_0); }
+    if !(kind_set_has(&SYNC_0, p.kinds[p.pos]) || p.kinds[p.pos] >= 3) { builtin::cold_path(); p.sync_alts(&SYNC_0, &EXPECTED_0); }
     let kind = p.peek_kind();
     if true {
         if kind == TK_ANY_CHAR {
