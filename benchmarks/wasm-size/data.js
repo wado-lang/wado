@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1792619865237,
+  "lastUpdate": 1792623222573,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -69157,6 +69157,50 @@ window.BENCHMARK_DATA = {
           {
             "name": "sqlite_highlight",
             "value": 276874,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "6284387262bcef9f91dd8264947262da03aa5275",
+          "message": "Merge pull request #2410 from wado-lang/claude/stream-copy-settle\n\nfix(rt): stop the stdlib coverage gate from flaking on stream reads",
+          "timestamp": "2026-10-22T07:30:44+09:00",
+          "tree_id": "ebb558c139886745a70cb5220218d9077faca039",
+          "url": "https://github.com/wado-lang/wado/commit/6284387262bcef9f91dd8264947262da03aa5275"
+        },
+        "date": 1792623222225,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 3053,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 7382,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 19623,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 276881,
             "unit": "bytes"
           }
         ]
