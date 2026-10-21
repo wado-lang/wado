@@ -71,6 +71,14 @@ enum Decidedness {
     Decided,
 }
 
+/// The element types a spread splices into a tuple literal.
+enum SpreadElems {
+    /// One per element of a concrete tuple.
+    Fixed(Vec<TypeId>),
+    /// A count unknown before monomorphization (a pack), or never (an error).
+    Open(Vec<TypeId>),
+}
+
 /// Outcome of trying to derive type arguments for a generic function
 /// reference from an expected `fn(...)` (or `&fn(...)`) type. Distinguishes
 /// the three failure modes the caller treats differently.
@@ -3685,6 +3693,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             return coerced;
         }
 
+        // `[1, 2, 3, 4] as Quad`
+        if let Some(coerced) = self.try_coerce_composite_newtype(&cast.expr, ctx, target_type) {
+            return coerced;
+        }
+
         // `[1, 2] as [i64, i64]`: each element takes the target's own element
         // type, as the annotated form does.
         let has_spread = matches!(&cast.expr, ast::Expr::TupleLiteral(t)
@@ -5043,85 +5056,100 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         ctx: &mut FunctionContext,
         expected_type: Option<TypeId>,
     ) -> TypeId {
-        // When the expected type is a concrete tuple of matching arity and the
-        // literal has no spread elements, propagate per-element expected types
-        // so numeric literals and nested tuples are coerced to the target shape.
-        let expected_elem_types: Option<Vec<TypeId>> = expected_type.and_then(|ty| {
-            let has_spread = tuple_lit
-                .elements
-                .iter()
-                .any(|e| matches!(e, Expr::Spread(..)));
-            if has_spread {
-                return None;
-            }
-            let arity = tuple_lit.elements.len();
-            if let Some(elems) =
-                self.open_shape_at_pending_var(Some(ty), arity, TypeTable::make_tuple)
-            {
-                return Some(elems);
-            }
-            let elems = self.tysys.type_table.borrow().as_tuple(ty)?;
-            if elems.len() != arity {
-                return None;
-            }
-            Some(elems)
-        });
+        // Spreads first: their element counts place every other element, so
+        // each takes its own expected type wherever the spreads are concrete.
+        let spreads: Vec<Option<SpreadElems>> = tuple_lit
+            .elements
+            .iter()
+            .map(|elem| match elem {
+                Expr::Spread(inner, _) => Some(self.resolve_spread_elems(elem, inner, ctx)),
+                _ => None,
+            })
+            .collect();
+        let arity = spreads
+            .iter()
+            .map(|spread| match spread {
+                None => Some(1),
+                Some(SpreadElems::Fixed(elems)) => Some(elems.len()),
+                Some(SpreadElems::Open(_)) => None,
+            })
+            .sum::<Option<usize>>();
+        let expected_elem_types: Option<Vec<TypeId>> = expected_type
+            .zip(arity)
+            .and_then(|(ty, arity)| {
+                if let Some(elems) =
+                    self.open_shape_at_pending_var(Some(ty), arity, TypeTable::make_tuple)
+                {
+                    return Some(elems);
+                }
+                let elems = self.tysys.type_table.borrow().as_tuple(ty)?;
+                (elems.len() == arity).then_some(elems)
+            });
 
-        // Resolve each element for its side effects and collect the element
-        // types so the tuple `TypeId` matches what reify builds.
         // Reify's `reify_tuple_literal` owns the element / spread-expansion /
         // single-evaluation-temporary construction (with its own `ctx`), so
-        // this records only the types + the spread diagnostic.
+        // this records only the types, which match what reify builds.
         let mut elem_types: Vec<TypeId> = Vec::new();
-        for (elem_idx, elem) in tuple_lit.elements.iter().enumerate() {
-            if let Expr::Spread(inner, _span) = elem {
-                let spread_type_id = self.resolve_expr(inner, ctx, None);
-                if self
-                    .tysys
-                    .type_table
-                    .borrow()
-                    .contains_type_pack(spread_type_id)
-                {
-                    // A tuple carrying packs (`[..rest]` where `rest: [..T]`)
-                    // splices its own elements, so each pack lands directly in
-                    // the literal's type and monomorphize expands it there. A
-                    // bare `TypePack` (`[..T::method()]`) is already one.
-                    elem_types.extend(
-                        self.tysys
-                            .type_table
-                            .borrow()
-                            .elem_types_or_self(spread_type_id),
-                    );
-                } else if let Some(mapped) = self.spread_pack_map_type(inner, spread_type_id) {
-                    // Pack-map `..F::method()` whose return type is
-                    // pack-independent: a homogeneous pack of the return type,
-                    // arity `|F|`, expanded at monomorphization.
-                    elem_types.push(mapped);
-                } else {
-                    let spread_elems = self.tysys.type_table.borrow().as_tuple(spread_type_id);
-                    if let Some(inner_elems) = spread_elems {
-                        // A concrete tuple spread expands inline to one element
-                        // per field.
-                        elem_types.extend(inner_elems);
-                    } else {
-                        let _ = self.emit(TypeError::InvalidLiteral {
-                            message: "spread operator `..` can only be used with tuple types"
-                                .to_string(),
-                            span: elem.span(),
-                        });
-                        elem_types.push(spread_type_id);
-                    }
+        for (elem, spread) in tuple_lit.elements.iter().zip(spreads) {
+            match spread {
+                Some(SpreadElems::Fixed(elems) | SpreadElems::Open(elems)) => {
+                    elem_types.extend(elems)
                 }
-            } else {
-                let elem_expected = expected_elem_types.as_ref().map(|v| v[elem_idx]);
-                let resolved = self.resolve_expr(elem, ctx, elem_expected);
-                // A diverging element takes the type the tuple is expected to hold.
-                let diverges = self.tysys.type_table.borrow().is_never(resolved);
-                elem_types.push(elem_expected.filter(|_| diverges).unwrap_or(resolved));
+                None => {
+                    let elem_expected = expected_elem_types
+                        .as_ref()
+                        .map(|expected| expected[elem_types.len()]);
+                    let resolved = self.resolve_expr(elem, ctx, elem_expected);
+                    // A diverging element takes the type the tuple is expected to hold.
+                    let diverges = self.tysys.type_table.borrow().is_never(resolved);
+                    elem_types.push(elem_expected.filter(|_| diverges).unwrap_or(resolved));
+                }
             }
         }
 
         self.tysys.type_table.borrow_mut().make_tuple(elem_types)
+    }
+
+    /// The element types a spread `..inner` splices into a tuple literal.
+    fn resolve_spread_elems(
+        &mut self,
+        spread: &Expr,
+        inner: &Expr,
+        ctx: &mut FunctionContext,
+    ) -> SpreadElems {
+        let spread_type_id = self.resolve_expr(inner, ctx, None);
+        if self
+            .tysys
+            .type_table
+            .borrow()
+            .contains_type_pack(spread_type_id)
+        {
+            // A tuple carrying packs (`[..rest]` where `rest: [..T]`) splices
+            // its own elements, so each pack lands directly in the literal's
+            // type and monomorphize expands it there. A bare `TypePack`
+            // (`[..T::method()]`) is already one.
+            return SpreadElems::Open(
+                self.tysys
+                    .type_table
+                    .borrow()
+                    .elem_types_or_self(spread_type_id),
+            );
+        }
+        if let Some(mapped) = self.spread_pack_map_type(inner, spread_type_id) {
+            // Pack-map `..F::method()` whose return type is pack-independent:
+            // a homogeneous pack of the return type, arity `|F|`, expanded at
+            // monomorphization.
+            return SpreadElems::Open(vec![mapped]);
+        }
+        let spread_elems = self.tysys.type_table.borrow().as_tuple(spread_type_id);
+        let Some(inner_elems) = spread_elems else {
+            let _ = self.emit(TypeError::InvalidLiteral {
+                message: "spread operator `..` can only be used with tuple types".to_string(),
+                span: spread.span(),
+            });
+            return SpreadElems::Open(vec![spread_type_id]);
+        };
+        SpreadElems::Fixed(inner_elems)
     }
 
     /// The `(name, index)` of the type pack a spread operand's static call is

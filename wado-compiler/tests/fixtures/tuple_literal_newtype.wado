@@ -1,14 +1,24 @@
 // A tuple literal coerces to a newtype over a tuple, as a struct literal does
-// to a newtype over a struct: in a `let`, a field, an argument and a return,
-// with each element taking the base's element type.
+// to a newtype over a struct: in a `let`, a field, an argument, a return and a
+// cast, with each element taking the base's element type. A generic newtype
+// takes its arguments from what the literal built.
 use { println, Stdout } from "core:cli";
 
 type Quad = [u8, u8, u8, u8];
 type Wrapped = Quad;
 type Nested = [Quad, i64];
+type Pair<T> = [T, T];
+
+struct Bx<T> {
+    a: T,
+    b: T,
+}
+
+type Boxed<T> = Bx<T>;
 
 struct Holder {
     q: Quad,
+    p: Pair<String>,
 }
 
 fn sum(q: Quad) -> i32 {
@@ -19,13 +29,27 @@ fn loopback() -> Quad {
     return [127, 0, 0, 1];
 }
 
+fn swap<T>(p: Pair<T>) -> Pair<T> {
+    return [p.1, p.0];
+}
+
+fn first<T>(b: Boxed<T>) -> T {
+    return b.a;
+}
+
 export fn run() with Stdout {
     let a: Quad = [255, 0, 0, 1];
-    let h = Holder { q: [10, 0, 0, 2] };
+    let h = Holder { q: [10, 0, 0, 2], p: ["l", "r"] };
     let w: Wrapped = [1, 2, 3, 4];
     let n: Nested = [[5, 6, 7, 8], 9_000_000_000];
     println(`${a.0} ${h.q.3} ${sum([1, 2, 3, 4])} ${loopback().0} ${w.3} ${n.0.1} ${n.1}`);
+
+    let c = [1, 2, 3, 255] as Quad;
+    let pair: [u8, u8] = [9, 8];
+    let s: Quad = [..pair, 255, 7];
+    println(`${c.3} ${s.2} ${swap(["a", "b"]).0} ${first({ a: "x", b: "y" })} ${h.p.1}`);
+    println(`${c == [1, 2, 3, 255] as Quad} ${c < s} ${c:?}`);
 }
 
 __DATA__
-{"stdout": "255 2 10 127 4 6 9000000000\n"}
+{"stdout": "255 2 10 127 4 6 9000000000\n255 255 b x r\ntrue true [1, 2, 3, 255] as Quad\n"}

@@ -743,8 +743,7 @@ impl Semantics {
             CoercionKind::LiteralNewtype => "literal_newtype",
             CoercionKind::BytesNewtype => "bytes_newtype",
             CoercionKind::ClosureToFnNewtype => "closure_to_fn_newtype",
-            CoercionKind::StructNewtype => "struct_newtype",
-            CoercionKind::TupleNewtype => "tuple_newtype",
+            CoercionKind::CompositeNewtype => "composite_newtype",
             CoercionKind::TupleToSequence => "tuple_to_sequence",
             CoercionKind::StructToMap => "struct_to_map",
         };
