@@ -363,6 +363,9 @@ pub struct LeftRecursiveRule {
     /// also flips `ParserPlan.needs_atn`. False for the common LR rule,
     /// whose static `scan_X_lr_*` fast path stays byte-identical.
     pub atn_class: bool = false,
+    /// Under `atn: "verify"`, the simulator checks each pick of the static
+    /// loop, which `auto` would hand it along with the atom choice.
+    pub loop_checked: bool = false,
     /// True when an alternative's mid-operand self-reference climbs a
     /// delimiter the alternative itself needs (`e 'between' e 'and' e`).
     /// ANTLR4 parses that operand as `e[0]` and stops it by prediction; the
@@ -417,6 +420,9 @@ pub struct LrAlt {
     /// only the right-hand side, so emit prepends this decl when
     /// laying out the struct.
     pub prefix_self_ref: FieldDecl,
+    /// The loop-entry decision's edge into this suffix: its index among the
+    /// alternatives with one. -1 for `expr : expr`.
+    pub loop_edge: i32 = -1,
 }
 
 /// The precedence ANTLR4's left-recursion rewrite passes an LR alt's trailing

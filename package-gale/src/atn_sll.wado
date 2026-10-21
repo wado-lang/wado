@@ -886,10 +886,11 @@ pub enum AtnPicker {
     Repeat,
     LookaheadDfa,
     LrTable,
+    LrLoop,
 }
 
 global ATN_PICKERS: List<AtnPicker> = [
-    AtnPicker::Tournament, AtnPicker::Repeat, AtnPicker::LookaheadDfa, AtnPicker::LrTable,
+    AtnPicker::Tournament, AtnPicker::Repeat, AtnPicker::LookaheadDfa, AtnPicker::LrTable, AtnPicker::LrLoop,
 ];
 
 fn atn_picker_name(picker: AtnPicker) -> String {
@@ -898,6 +899,7 @@ fn atn_picker_name(picker: AtnPicker) -> String {
         Repeat => "the repeat",
         LookaheadDfa => "the lookahead DFA",
         LrTable => "the LR table",
+        LrLoop => "the left-recursion loop",
     };
 }
 

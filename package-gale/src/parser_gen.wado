@@ -1114,10 +1114,12 @@ fn gen_scan_lr_call_with_prec<S: AsStrSlice>(
 }
 
 /// The parse loop's branch data: the rule-kind constant its wrap node carries,
-/// and whether the rule's alternatives are labeled.
+/// whether the rule's alternatives are labeled, and the loop-entry decision
+/// the simulator checks each iteration against (-1 for none).
 struct LrParseBranch {
     rk: String,
     labeled: bool,
+    checked_decision: i32,
 }
 
 /// What an LR dispatch branch commits to once its group and token are picked.
@@ -1151,14 +1153,14 @@ fn scan_lr_site<S: AsStrSlice>(fn_name: S) -> LrOverlapSite {
     };
 }
 
-fn parse_lr_site<S: AsStrSlice, S1: AsStrSlice>(scan_fn: S, rk: S1, labeled: bool) -> LrOverlapSite {
+fn parse_lr_site<S: AsStrSlice, S1: AsStrSlice>(scan_fn: S, rk: S1, labeled: bool, checked_decision: i32) -> LrOverlapSite {
     return LrOverlapSite {
         kind_expr: "_sk",
         second_expr: "p.peek_at(1)",
         second_init: "",
         scan_fn: scan_fn.to_string(),
         scan_args: "&p.kinds, p.pos",
-        branch: LrBranch::ParseBody(LrParseBranch { rk: rk.to_string(), labeled: labeled }),
+        branch: LrBranch::ParseBody(LrParseBranch { rk: rk.to_string(), labeled, checked_decision }),
     };
 }
 
@@ -1191,9 +1193,8 @@ fn emit_lr_overlap_branch(
                 w,
                 lr,
                 rule,
-                &b.rk,
+                b,
                 &site.scan_fn,
-                b.labeled,
                 ctx,
                 nc,
                 may_match_empty,
@@ -3032,7 +3033,7 @@ fn gen_parse_fn_named<S: AsStrSlice>(
         w.blank();
         ctx.cursor.set_lr_cont_in_atom(was_in_atom);
 
-        let h_loop_dec = if l.atn_class {
+        let h_loop_dec = if l.atn_class || l.loop_checked {
             ctx.plan.lr_loop_entry_decision(ctx.analysis.rule_index_of(&rule.name));
         } else {
             -1;
@@ -3894,6 +3895,8 @@ fn open_winner_arm<S: AsStrSlice>(w: &mut CodeWriter, winner: S, order: &List<i3
 /// so far in a new same-rule node. Suffix ops append via `gen_ops`; a
 /// self-ref carries its baked `min_prec`. Overlapping suffix groups (needing a
 /// second-token sub-dispatch) reuse the typed dispatch in a later slice.
+/// `loop_dec` is the loop-entry decision, which the simulator makes on an
+/// `atn_class` rule and checks on any other; -1 for neither.
 fn gen_lr_fn<S: AsStrSlice>(
     w: &mut CodeWriter,
     rule: &ParserRule,
@@ -3964,8 +3967,23 @@ fn gen_lr_fn<S: AsStrSlice>(
     w.begin("loop");
     w.line("if p.recovering { break; }");
     w.line("let _sk = p.peek_kind();");
-    emit_lr_group_chain(w, &parse_lr_site(&scan_fn, &rk, labeled), rule, lr_alts, lr_dispatch, ctx, mid_operand_gated);
+    if loop_dec >= 0 {
+        w.line("let _lrc_at = p.pos;");
+    }
+    emit_lr_group_chain(
+        w,
+        &parse_lr_site(&scan_fn, &rk, labeled, loop_dec),
+        rule,
+        lr_alts,
+        lr_dispatch,
+        ctx,
+        mid_operand_gated,
+    );
     w.end();
+    if loop_dec >= 0 {
+        let exit_edge = lr_alts.iter_ref().filter(|a| a.loop_edge >= 0).count();
+        gen_lr_loop_check(w, loop_dec, ctx, "p.pos", exit_edge);
+    }
     emit_lr_after_return(w, rule, emits_vals, ctx);
     end_fn(w, ctx);
     w.blank();
@@ -4047,13 +4065,12 @@ fn gen_lr_fn_atn<S: AsStrSlice>(
 /// So consult the side-effect-free scan twin (`scan_<rule>_lr_<idx>`) and only
 /// commit to the (mutating) suffix parse when the scan confirms it matches —
 /// mirroring the parse side of `gen_lr_fn`.
-fn emit_lr_branch<S: AsStrSlice, S1: AsStrSlice>(
+fn emit_lr_branch<S: AsStrSlice>(
     w: &mut CodeWriter,
     lr: &LrAlt,
     rule: &ParserRule,
-    rk: S,
-    scan_fn: S1,
-    labeled: bool,
+    b: &LrParseBranch,
+    scan_fn: S,
     ctx: &mut EmitContext,
     nc: &mut List<[String, i32]>,
     may_match_empty: bool,
@@ -4091,9 +4108,21 @@ fn emit_lr_branch<S: AsStrSlice, S1: AsStrSlice>(
         w.line("break;");
         w.end();
     }
-    emit_lr_branch_body(w, lr, rule, rk, labeled, ctx, nc, proven_first);
+    emit_lr_branch_body(w, lr, rule, &b.rk, b.labeled, ctx, nc, proven_first);
+    if b.checked_decision >= 0 {
+        assert lr.loop_edge >= 0, "a suffix the loop takes is an edge of its decision";
+        gen_lr_loop_check(w, b.checked_decision, ctx, "_lrc_at", lr.loop_edge);
+    }
     w.else_begin("else");
     w.line("break;");
+    w.end();
+}
+
+/// Check that the loop-entry decision `decision` takes edge `edge` at `at`.
+fn gen_lr_loop_check<S: AsStrSlice>(w: &mut CodeWriter, decision: i32, ctx: &mut EmitContext, at: S, edge: i32) {
+    ctx.cursor.note_ref(&ATN_VERIFIED);
+    w.begin("if !p.recovering");
+    w.line(`let _ = ${atn_verified_call(decision, AtnPicker::LrLoop, ctx.atn_arg(), "&p.kinds", at, "min_prec", `${edge}`)};`);
     w.end();
 }
 

@@ -652,7 +652,7 @@ fn lower_multi_alt_rule(rule: &ParserRule, ctx: &mut LowerContext) -> MultiAltRu
     let dispatch = build_overlap_dispatch(&owner, &rule.alternatives, &all_indices, &classes, ctx);
     // The scan of a rule whose choice the simulator makes consults it as the
     // parse does.
-    if ctx.choice_routes(rule, all_indices, true) {
+    if ctx.choice_route(rule, all_indices, true) matches { Simulator } {
         ctx.mark_asks_simulator("the choice among the alternatives");
     }
     return MultiAltRule {
@@ -714,6 +714,13 @@ fn lower_lr_rule(rule: &ParserRule, ctx: &mut LowerContext) -> LeftRecursiveRule
         lr_alts.push(lower_lr_alt(rule, *lr_idx, own_prec, conflict_min, ctx, &case_names, &alt_gc_starts));
         lr_position += 1;
     }
+    let mut loop_edges = 0;
+    for let a of &mut lr_alts {
+        if !a.suffix.ops.is_empty() {
+            a.loop_edge = loop_edges;
+            loop_edges += 1;
+        }
+    }
 
     // ATN-class detection: the static suffix-first dispatch mis-commits when
     // an atom alt recursively references this rule with a trailing literal
@@ -725,7 +732,8 @@ fn lower_lr_rule(rule: &ParserRule, ctx: &mut LowerContext) -> LeftRecursiveRule
     // suffix the full context gives the caller (`new Map<T>()` in a TypeScript
     // initializer: `()` is the `new`'s, not a call suffix).
     let suffix_classes = lr_suffix_classes(rule, &lr_alts, ctx);
-    let atom_routes = ctx.choice_routes(rule, non_lr_indices, false);
+    let atom_route = ctx.choice_route(rule, non_lr_indices, false);
+    let atom_routes = atom_route matches { Simulator };
     let atn_class = atom_routes
         || lr_rule_is_atn_class(rule, &non_lr_indices, &lr_alts, &suffix_classes, &mut ctx.analysis);
     if atn_class {
@@ -754,6 +762,7 @@ fn lower_lr_rule(rule: &ParserRule, ctx: &mut LowerContext) -> LeftRecursiveRule
         lr_alts,
         lr_dispatch,
         atn_class,
+        loop_checked: !atn_class && atom_route matches { Checked },
         mid_operand_gated,
     };
 }
