@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1792569019020,
+  "lastUpdate": 1792580160777,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -68829,6 +68829,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/4e0326ce6472b39c913603849ce8826c00621f60"
         },
         "date": 1792569018341,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 3053,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 7382,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 19610,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 276874,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "07c1e41047ee0f31f90061c714f8de12354e6652",
+          "message": "Merge pull request #2404 from wado-lang/ccr-5030fbb4-uyx6hd\n\nfix(affine): decide ownership once, so each affine value drops exactly once",
+          "timestamp": "2026-10-21T19:31:30+09:00",
+          "tree_id": "ed82f3ac76227b00ebf657b799999222cf8f130d",
+          "url": "https://github.com/wado-lang/wado/commit/07c1e41047ee0f31f90061c714f8de12354e6652"
+        },
+        "date": 1792580160247,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
