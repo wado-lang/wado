@@ -795,7 +795,8 @@ impl MoveWalker<'_, '_> {
         let Some(via) = self.sem().referenced_symbol(root.id) else {
             return;
         };
-        let path: Vec<String> = self.place_path(expr)
+        let path: Vec<String> = self
+            .place_path(expr)
             .map(|place| place.owned_fields())
             .unwrap_or_default();
         let mut places = vec![(via, path)];

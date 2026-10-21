@@ -1266,12 +1266,12 @@ fn elab_scope(
             if flow == Flow::Normal {
                 let spilled = take_temporaries(cx, first_declared);
                 let drops = drop_lives(&spilled, cx);
-                if stmt_tail != Tail::Discarded {
+                if stmt_tail == Tail::Discarded {
+                    out.extend(drops);
+                } else {
                     // The block's value is this statement's: keep it past the drops.
                     let tail = out.split_off(first_out);
                     out.extend(append_block_drops(tail, drops, cx));
-                } else {
-                    out.extend(drops);
                 }
             }
             let declarations = cx.declarations.split_off(first_declaration);
@@ -1368,12 +1368,7 @@ fn elab_plain_block(block: &mut TirBlock, tail: Tail, cx: &mut Cx) {
 /// Elaborate `block`, the body `target` is reached from. An expanded template
 /// string's block is part of the statement holding the template, as a plain
 /// block is: its temporaries outlive the string it breaks out with.
-fn elab_target_body(
-    block: &mut TirBlock,
-    label: Option<String>,
-    tail: Tail,
-    cx: &mut Cx,
-) -> Flow {
+fn elab_target_body(block: &mut TirBlock, label: Option<String>, tail: Tail, cx: &mut Cx) -> Flow {
     let temporaries = if label.as_deref().is_some_and(is_template_block) {
         TemporaryScope::Enclosing
     } else {
@@ -1606,7 +1601,10 @@ fn elab_expr(expr: &mut TirExpr, consuming: bool, cx: &mut Cx) {
     let mut moving = None;
     match &mut expr.kind {
         TirExprKind::Move { .. } => {
-            assert!(consuming, "a move sits where its value is consumed: {span:?}");
+            assert!(
+                consuming,
+                "a move sits where its value is consumed: {span:?}"
+            );
             unwrap_move(expr);
             take_moved(expr, cx);
         }
@@ -2223,7 +2221,10 @@ fn take_moved(expr: &mut TirExpr, cx: &mut Cx) {
             take_place(expr, cx);
         }
         TirExprKind::VariantPayload { expr: base, .. } => {
-            assert!(is_place(base, cx), "a payload moves out of a place: {span:?}");
+            assert!(
+                is_place(base, cx),
+                "a payload moves out of a place: {span:?}"
+            );
             elab_expr(base, false, cx);
             let place = (**base).clone();
             empty_after(expr, place, cx);
@@ -2261,10 +2262,9 @@ fn take_field(expr: &mut TirExpr, cx: &mut Cx) {
 /// code builds one to run statements ahead of a borrow.
 fn is_temporary(expr: &TirExpr, cx: &Cx) -> bool {
     if let TirExprKind::Block(block) = &expr.kind {
-        return !block
-            .stmts
-            .last()
-            .is_some_and(|stmt| matches!(&stmt.kind, TirStmtKind::Expr(tail) if is_place(tail, cx)));
+        return !block.stmts.last().is_some_and(
+            |stmt| matches!(&stmt.kind, TirStmtKind::Expr(tail) if is_place(tail, cx)),
+        );
     }
     matches!(
         expr.kind,
@@ -2498,7 +2498,11 @@ fn elab_match(scrutinee: &mut TirExpr, arms: &mut [TirMatchArm], cx: &mut Cx) {
     }
     let place = if extracts && cx.carries_resource(scrutinee.type_id) {
         if is_place(scrutinee, cx) {
-            assert!(moved, "a scrutinee a resource moves out of is marked `Move`: {:?}", scrutinee.span);
+            assert!(
+                moved,
+                "a scrutinee a resource moves out of is marked `Move`: {:?}",
+                scrutinee.span
+            );
             elab_expr(scrutinee, false, cx);
             Some((*scrutinee).clone())
         } else if is_temporary(scrutinee, cx) {

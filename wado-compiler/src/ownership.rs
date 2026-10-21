@@ -281,8 +281,7 @@ impl<F: BodyFacts> ModeWalk<'_, F> {
                         Position::Is(operand_mode) => operand_mode,
                         Position::Inherit => mode,
                         Position::Projection
-                            if mode == OperandMode::Consume
-                                && self.facts.is_affine(expr.id()) =>
+                            if mode == OperandMode::Consume && self.facts.is_affine(expr.id()) =>
                         {
                             OperandMode::Consume
                         }

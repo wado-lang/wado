@@ -24,11 +24,11 @@ use crate::lower::contract_checks::is_contract_clause;
 use crate::lower::plan::value_copy::place::{is_source_place, source_place_subscripts_mut};
 use crate::lower::wide_int_literal::{create_conversion, create_literal, method_ref};
 use crate::module_source::ModuleSource;
-use crate::ownership::{self, BodyFacts as _, Modes};
 use crate::name::{
     CONTRACT_CLAUSE_INTRINSIC, CONTRACT_SITE_INTRINSIC, FqTypeName, Receiver, contract_owner_name,
     global_init_function, global_name, unchecked_twin_name,
 };
+use crate::ownership::{self, BodyFacts as _, Modes};
 use crate::symbol::SymbolTable;
 use crate::tir::{
     self as tir, CallArg, GlobalInit, InstancePattern, LetStorage, LocalFrame, ResolvedType,
@@ -480,11 +480,13 @@ impl<H: CompilerHost> ownership::BodyFacts for ReifyFacts<'_, '_, H> {
     }
 
     fn indexes_tuple(&self, base: &ast::Expr) -> bool {
-        self.reify.ann_expression_types(base.id()).is_some_and(|ty| {
-            let tt = self.reify.tysys.type_table.borrow();
-            matches!(tt.get(tt.peel_refs(ty)), ResolvedType::GenericInstance { def, .. }
+        self.reify
+            .ann_expression_types(base.id())
+            .is_some_and(|ty| {
+                let tt = self.reify.tysys.type_table.borrow();
+                matches!(tt.get(tt.peel_refs(ty)), ResolvedType::GenericInstance { def, .. }
                 if tt.is_tuple_def(*def))
-        })
+            })
     }
 
     fn is_affine(&self, expr: AstId) -> bool {
@@ -1325,9 +1327,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         let body = func.body.as_ref().map(|b| {
             let mut affine_params = self.impl_affine_params.clone();
             affine_params.extend(ownership::affine_params(&func.type_params));
-            self.with_body_ownership(b, affine_params, |this| {
-                this.reify_block(b, &mut ctx, None)
-            })
+            self.with_body_ownership(b, affine_params, |this| this.reify_block(b, &mut ctx, None))
         });
 
         // Projected while the type-param scope was alive, so defaults are
@@ -3046,10 +3046,12 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
 
         // `defining_ast_id = None` keeps synthetic locals out of
         // `local_symbols` (LSP hover / go-to-def).
-        let local_ref = (!rereads).then(|| {
+        let local_index =
+            (!rereads).then(|| ctx.add_local(cap_name.clone(), type_id, !hoisted, None));
+        let local_ref = local_index.map(|index| {
             TirExpr::new(
                 TirExprKind::Local {
-                    index: ctx.add_local(cap_name.clone(), type_id, !hoisted, None),
+                    index,
                     name: cap_name.clone(),
                 },
                 type_id,
@@ -3068,14 +3070,11 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 seen_local_index.is_none(),
                 "a conditional slot is never hoisted"
             );
-            let local_ref = local_ref.clone().expect("a hoisted slot is never a place");
-            let TirExprKind::Local { index, .. } = local_ref.kind else {
-                unreachable!("a slot binds a local");
-            };
+            let local_ref = local_ref.expect("a hoisted slot is never a place");
             decls.push(TirStmt::new(
                 TirStmtKind::Let {
                     name: cap_name,
-                    local_index: index,
+                    local_index: local_index.expect("bound with its reference"),
                     is_mut: false,
                     type_id,
                     value: resolved,
@@ -3144,10 +3143,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             .as_mut()
             .expect("reify_assert_capture_ctx survives recursive reify");
         cap_ctx.slots[slot_idx].emitted = true;
-        cap_ctx.slots[slot_idx].local_index = local_ref.map(|local_ref| match local_ref.kind {
-            TirExprKind::Local { index, .. } => index,
-            _ => unreachable!("a slot binds a local"),
-        });
+        cap_ctx.slots[slot_idx].local_index = local_index;
         cap_ctx.slots[slot_idx].type_id = Some(type_id);
         cap_ctx.slots[slot_idx].seen_local_index = seen_local_index;
         cap_ctx.emitted_lets.extend(decls);

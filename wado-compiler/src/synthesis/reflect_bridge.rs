@@ -27,7 +27,7 @@ pub fn synthesize_monomorphized_reflect_bridges(flat: &mut FlatPackage) {
     let mut generated = Vec::new();
     collect_struct_bridges(flat, &mut generated);
     collect_variant_bridges(flat, &mut generated);
-    // Built by the same code as the bridges drop elaboration sees, after it.
+    // The generators mark moves for drop elaboration, which has already run.
     for function in &generated {
         resource_cleanup::strip_moves(&mut function.borrow_mut());
     }
