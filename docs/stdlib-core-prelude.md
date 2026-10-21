@@ -829,7 +829,7 @@ Overlapping windows of `size` consecutive elements.
 
 - `contract size > 0`
 
-### `pub trait AsStrSlice: Eq<String> with ()`
+### `pub trait AsStrSlice: Eq<String> + Display with ()`
 
 Conversion to a `StrSlice` that copies no bytes, so one signature takes an
 owned string, a reference to one, or a view of part of one.
