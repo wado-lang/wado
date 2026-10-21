@@ -118,12 +118,26 @@ in a weaker form:
   backend, so there is no Windows-specific code. The native Windows build does
   not offer spawning, and its error points to WSL2.
 
-Where spawning is not offered, `spawn` answers `unsupported`. A program that
-never spawns is unaffected.
-
 ABI 6 shuts out some current long-term-support kernels. Ubuntu 24.04's general
 availability kernel (6.8) does not qualify; its hardware enablement kernel
 does.
+
+### Two ways to leave it out
+
+A world leaves the interface out by not importing it, as the Kiln generators'
+world does. That is WASI's link-time capability model. The Component Model has
+no optional import yet: a host that does not supply an import refuses to
+instantiate the component, even one that would never spawn. So the `wado` host
+links the interface wherever its world imports it, also under `--deny-process`
+and on a kernel that falls short.
+
+There, the interface answers at run time. `get-availability` returns
+`available`, `not-permitted` (the host denied it) or `unsupported` (the OS
+cannot confine a child), with no side effect. The two refusals call for
+different remedies, a host flag for one and a newer OS for the other, so an
+`option` getter in the style of `wasi:cli`'s `get-terminal-stdin`, which merges
+them into `none`, says too little. `spawn` answers the same two cases as its
+`error-code`.
 
 ### System baseline
 
@@ -186,6 +200,8 @@ interface types {
 
     variant exit-status { exited(u8), signaled(u8), timed-out }
 
+    enum availability { available, not-permitted, unsupported }
+
     enum error-code { not-found, not-permitted, unsupported, resource-exhausted, io }
 
     variant input { null, inherit, piped(stream<u8>) }
@@ -215,8 +231,10 @@ interface types {
 }
 
 interface spawn {
-    use types.{command, spawned, error-code};
+    use types.{availability, command, spawned, error-code};
     use wasi:filesystem/types@0.3.0.{descriptor};
+
+    get-availability: func() -> availability;
 
     spawn: func(cmd: command, cwd: option<borrow<descriptor>>) -> result<spawned, error-code>;
 }
@@ -254,7 +272,9 @@ let mut child = Command::new("wc").stdin_piped().stdout_piped().spawn()?;
 // child.stdin: StreamWritable<u8>, child.stdout: Stream<u8>
 ```
 
-- One effect, `Process`. `spawn`, `output`, `status` and `read` declare it.
+- One effect, `Process`. `spawn`, `output`, `status` and `read` declare it, and
+  so does `process::availability()`, which returns an `Availability` mirroring
+  the WIT enum.
 - `inherit_stdin`, `inherit_stdout`, `inherit_stderr` and `inherit_stdio` also
   declare `Stdin`, `Stdout` and `Stderr`: a guest passes on only a capability
   it holds.
@@ -324,7 +344,8 @@ cannot be taken back.
    Done when the escape tests pass in CI on Linux.
 2. The macOS backend: the SBPL generator and its fuzzer. Done when the escape
    tests pass in CI on macOS.
-3. `wado:process@0.1.0` in the `wado` host: spawning, streams, the timeout and
+3. `wado:process@0.1.0` in the `wado` host: `get-availability`, spawning,
+   streams, the timeout and
    its grace option, killing the process group on drop and on guest exit,
    `--deny-process`, and the refusal of a mapping that is not the same path.
 4. `core:process` in the stdlib: `Command`, `cmd`, `Child`, `output`, `status`
