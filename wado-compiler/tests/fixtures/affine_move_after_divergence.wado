@@ -1,0 +1,63 @@
+// A move in a statement no path reaches takes nothing: the statements after a
+// `return`, a `break` and a `continue`, and after an `if` whose every branch
+// leaves.
+
+use { println, log_stdout, Stdout } from "core:cli";
+
+affine struct Tok {
+    id: i32,
+}
+
+impl Drop for Tok {
+    fn drop(self) {
+        log_stdout(`drop ${self.id}`);
+    }
+}
+
+fn eat(t: Tok) -> i32 {
+    return t.id;
+}
+
+fn after_return(flag: bool) -> i32 {
+    let t = Tok { id: 1 };
+    if flag {
+        return 0;
+        eat(t);
+    }
+    return t.id;
+}
+
+fn after_jumps(flag: bool) -> i32 {
+    let t = Tok { id: 2 };
+    for let mut i = 0; i < 2; i += 1 {
+        if flag {
+            break;
+            eat(t);
+        }
+        continue;
+        eat(t);
+    }
+    return t.id;
+}
+
+fn after_leaving_if(flag: bool) -> i32 {
+    let t = Tok { id: 3 };
+    if flag {
+        if flag {
+            return 0;
+        } else {
+            return 1;
+        }
+        eat(t);
+    }
+    return t.id;
+}
+
+export fn run() with Stdout {
+    println(`${after_return(false)}`);
+    println(`${after_jumps(false)}`);
+    println(`${after_leaving_if(false)}`);
+}
+
+__DATA__
+{"stdout": "drop 1\n1\ndrop 2\n2\ndrop 3\n3\n"}
