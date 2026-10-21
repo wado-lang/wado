@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1792552359624,
+  "lastUpdate": 1792553618956,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -68741,6 +68741,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/e5173d016a4a779e3281b86af632f41717066c0c"
         },
         "date": 1792552359185,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 3053,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 7382,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 19666,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 288548,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "cdc0a5078736b7cd510c2dd3194e1534af05f54d",
+          "message": "Merge pull request #2399 from wado-lang/claude/modest-archimedes-goj2e5\n\nfix(test): end the run by naming every failed test",
+          "timestamp": "2026-10-21T12:07:42+09:00",
+          "tree_id": "c9027205057d947af8889bee1054ee51e3244276",
+          "url": "https://github.com/wado-lang/wado/commit/cdc0a5078736b7cd510c2dd3194e1534af05f54d"
+        },
+        "date": 1792553618362,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
