@@ -1,0 +1,29 @@
+// An adapter forwards its iterator's `Item` (`IterTake<I>::Item = I::Item`).
+// Over `SliceRefIter<T>`, that projection is `&T` whatever `T` is: the impl is
+// chosen by the head alone, so a generic body reads the element's bounds
+// through it.
+trait Named with () {
+    fn name(&self) -> String;
+}
+
+impl Named for i32 {
+    fn name(&self) -> String {
+        return `i${*self}`;
+    }
+}
+
+fn names<T: Named>(values: &List<T>) -> List<String> {
+    return values.into_iter().take(1).map(|x| x.name()).collect();
+}
+
+fn shown<T: Display>(values: &List<T>) -> List<String> {
+    return values.into_iter().take(2).map(|x| `${x}`).collect();
+}
+
+test "a forwarded Item over an open instance" {
+    assert names(&[1, 2]) == ["i1"];
+    assert shown(&[1, 2, 3]) == ["1", "2"];
+}
+
+__DATA__
+{"test": {}}

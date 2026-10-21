@@ -4437,7 +4437,7 @@ impl TypeTable {
                     let answer = *answer;
                     return self.instantiate_family(owning_trait, &assoc_name, answer, &new_args);
                 }
-                if !self.contains_type_param(substituted_base)
+                if self.projection_base_is_rigid(substituted_base)
                     && let Some(resolved) = self.answer_projection(
                         substituted_base,
                         &owning_trait,
@@ -5156,6 +5156,17 @@ impl TypeTable {
                 | ResolvedType::TypePack { .. }
                 | ResolvedType::AssocTypeProjection { .. }
         )
+    }
+
+    /// Whether an impl answering a projection off `base` is chosen by `base`'s
+    /// head alone: `SliceRefIter<T>::Item` is `&T` whatever `T` is.
+    fn projection_base_is_rigid(&self, base: TypeId) -> bool {
+        let head = self.peel_refs(base);
+        !self.receiver_head_awaits_substitution(head)
+            && !matches!(
+                self.get(head),
+                ResolvedType::InferVar(_) | ResolvedType::Unknown | ResolvedType::Error
+            )
     }
 
     /// Whether `id`'s representation is known only once substitution settles
