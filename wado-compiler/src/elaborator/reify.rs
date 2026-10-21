@@ -5558,7 +5558,8 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 },
                 some_type,
                 span,
-            ),
+            )
+            .moved(),
             span,
         };
 
@@ -5658,7 +5659,8 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 },
                 ok_type,
                 span,
-            ),
+            )
+            .moved(),
             span,
         };
 
@@ -5669,7 +5671,8 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             },
             inner_err_type,
             span,
-        );
+        )
+        .moved();
         // `<OuterErr>::from(e)` where an impl converts, or a bound promises
         // one; otherwise the two convert with no impl, and `e` is cast.
         let converted_err = match self.ann_from_call_facts(qm_id) {
