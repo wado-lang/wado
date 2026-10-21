@@ -440,6 +440,18 @@ Found by reading generated code (2026-09), not yet measured on a benchmark:
 - [ ] **A loop-reserve probe can scan to EOF.** After Rust's last `#![..]`, the
   `innerAttribute*` reserve check scans `item* EOF`, the whole file. Two
   tokens (`# !` against `# [`) already decide it.
+- [ ] **`auto` parses Rust and TypeScript slower than `always` (2026-10).**
+  `auto` lets the lookahead DFA, the LR table and the tournament settle what
+  they can and gives the simulator the rest, yet it loses to giving the
+  simulator everything. One run each of `package-gale/benchmark/{rust,typescript}`
+  under each mode, in ms/iter:
+
+  | Grammar    | never | auto | always |
+  | ---------- | ----- | ---- | ------ |
+  | Rust       | 1.83  | 5.50 | 3.86   |
+  | TypeScript | 1.95  | 9.32 | 4.95   |
+
+  SQLite and css3 keep `auto` within a few percent of `always`.
 - [ ] **The lexer ATN re-walks its closure per character.** Rules without
   recursion are regular, so a DFA built lazily per (state set, char class)
   would make an ATN-routed string rule as cheap as a static one.
