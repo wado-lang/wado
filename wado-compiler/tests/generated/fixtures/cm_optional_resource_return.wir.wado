@@ -24,17 +24,17 @@ type "functype//wasi/wasi:demo/Device::adapter" = fn(i32, i32);  // TypeId(5)
 
 type "functype//cm_optional_resource_return.wado/run" = fn();  // TypeId(6)
 
-type "functype//cm_optional_resource_return.wado/$cm_binding__Gfx_get_device" = fn() -> ref null "core:prelude//$Resource";  // TypeId(7)
+type "functype//cm_optional_resource_return.wado/$cm_export__run" = fn();  // TypeId(7)
 
-type "functype//cm_optional_resource_return.wado/$cm_binding__Device_adapter" = fn(ref null "core:prelude//$Resource") -> ref null "core:prelude/types.wado//Option<cm_optional_resource_return.wado/Adapter>";  // TypeId(8)
+type "functype//wasi/resource-drop:cm_optional_resource_return.wado#adapter" = fn(i32);  // TypeId(8)
 
-type "functype//cm_optional_resource_return.wado/$cm_export__run" = fn();  // TypeId(9)
+type "functype//wasi/resource-drop:cm_optional_resource_return.wado#device" = fn(i32);  // TypeId(9)
 
-type "functype//wasi/resource-drop:cm_optional_resource_return.wado#adapter" = fn(i32);  // TypeId(10)
+type "functype//wasi/task-return" = fn(i32);  // TypeId(10)
 
-type "functype//wasi/resource-drop:cm_optional_resource_return.wado#device" = fn(i32);  // TypeId(11)
+type "functype//cm_optional_resource_return.wado/$cm_binding__Gfx_get_device" = fn() -> i32;  // TypeId(11)
 
-type "functype//wasi/task-return" = fn(i32);  // TypeId(12)
+type "functype//cm_optional_resource_return.wado/$cm_binding__Device_adapter" = fn(i32) -> ref null "core:prelude/types.wado//Option<cm_optional_resource_return.wado/Adapter>";  // TypeId(12)
 
 import fn mem/realloc from "mem/realloc";
 import fn wasi/wasi:demo/Gfx::get_device from "wasi/wasi:demo/Gfx::get_device";
@@ -47,7 +47,7 @@ import fn wasi/task-return from "wasi/task-return";
 global global:core:builtin::$unit_case$core:prelude/types.wado//Option<cm_optional_resource_return.wado/Adapter>$0: ref "core:prelude/types.wado//Option<cm_optional_resource_return.wado/Adapter>" = struct.new "core:prelude/types.wado//Option<cm_optional_resource_return.wado/Adapter>" { 0 };
 
 fn "cm_optional_resource_return.wado/run"() with Gfx, Device {
-    let device: ref null "core:prelude//$Resource";
+    let device: i32;
     let $discarded_1: ref null "core:prelude/types.wado//Option<cm_optional_resource_return.wado/Adapter>";
     let $drop_v_2: ref null "core:prelude//$Resource";
     if local.tee $discarded_1("cm_optional_resource_return.wado/$cm_binding__Device_adapter"(local.tee device("cm_optional_resource_return.wado/$cm_binding__Gfx_get_device"()))).discriminant == 0 {
@@ -58,26 +58,25 @@ fn "cm_optional_resource_return.wado/run"() with Gfx, Device {
         $drop_v_2.value = 0;
         "wasi/resource-drop:cm_optional_resource_return.wado#adapter"($cm_handle_2);
     }
-    if ref.is_null(device) == 0 {
-        $cm_handle_2 = device.value;
-        device.value = 0;
+    if (device == 0) == 0 {
+        $cm_handle_2 = device;
+        device = 0;
         "wasi/resource-drop:cm_optional_resource_return.wado#device"($cm_handle_2);
     }
 }
 
 fn "cm_optional_resource_return.wado/$cm_binding__Gfx_get_device"() with Gfx {
-    return struct.new "core:prelude//$Resource" { value: "wasi/wasi:demo/Gfx::get_device"() };
+    return "wasi/wasi:demo/Gfx::get_device"();
 }
 
 fn "cm_optional_resource_return.wado/$cm_binding__Device_adapter"(self) with Device {
     let $outptr: i32;
-    let $disc: i32;
     let $option_result: ref null "core:prelude/types.wado//Option<cm_optional_resource_return.wado/Adapter>";
     $outptr = "mem/realloc"(0, 0, 4, 8);
-    "wasi/wasi:demo/Device::adapter"(self.value, $outptr);
-    $disc = builtin::load_u8($outptr);
+    "wasi/wasi:demo/Device::adapter"(self, $outptr);
+    self = builtin::load_u8($outptr);
     $option_result = global:core:builtin::$unit_case$core:prelude/types.wado//Option<cm_optional_resource_return.wado/Adapter>$0;
-    if $disc != 0 {
+    if self != 0 {
         $option_result = struct.new "core:prelude/types.wado//Option<cm_optional_resource_return.wado/Adapter>::Some" { discriminant: 1, payload_0: struct.new "core:prelude//$Resource" { value: builtin::load_i32($outptr + 4) } };
     }
     drop("mem/realloc"($outptr, 8, 4, 0));

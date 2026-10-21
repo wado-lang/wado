@@ -4,152 +4,132 @@
 
 enum core:prelude/types.wado//enum:CopyResult { Completed = 0, Dropped = 1, Cancelled = 2 };  // TypeId(0)
 
-struct core:prelude//$Resource {  // TypeId(1)
-    mut value: i32,
-}
+array Array<u8> (mut u8);  // TypeId(1)
 
-array Array<u8> (mut u8);  // TypeId(2)
-
-struct core:prelude/string.wado//String {  // TypeId(3)
+struct core:prelude/string.wado//String {  // TypeId(2)
     mut repr: ref Array<u8>,
     mut used: i32,
 }
 
-struct tuple//[i32, i32] {  // TypeId(4)
+struct tuple//[i32, i32] {  // TypeId(3)
     mut 0: i32,
     mut 1: i32,
 }
 
-struct affine_for_of_iterator.wado//$Closure_1 {  // TypeId(5)}
+struct affine_for_of_iterator.wado//$Closure_1 {  // TypeId(4)}
 
-struct affine_for_of_iterator.wado//$Closure_0 {  // TypeId(6)}
+struct affine_for_of_iterator.wado//$Closure_0 {  // TypeId(5)}
 
-struct affine_for_of_iterator.wado//Token {  // TypeId(7)
+struct affine_for_of_iterator.wado//Token {  // TypeId(6)
     mut id: i32,
 }
 
-struct affine_for_of_iterator.wado//Counter {  // TypeId(8)
+struct affine_for_of_iterator.wado//Counter {  // TypeId(7)
     mut n: i32,
     mut token: ref null "affine_for_of_iterator.wado//Token",
 }
 
-struct core:prelude/traits.wado//IterZip<affine_for_of_iterator.wado/Counter,core:prelude/traits.wado/IterStepBy<core:prelude/traits.wado/IterChain<affine_for_of_iterator.wado/Counter,affine_for_of_iterator.wado/Counter>>> {  // TypeId(9)
+struct core:prelude/traits.wado//IterZip<affine_for_of_iterator.wado/Counter,core:prelude/traits.wado/IterStepBy<core:prelude/traits.wado/IterChain<affine_for_of_iterator.wado/Counter,affine_for_of_iterator.wado/Counter>>> {  // TypeId(8)
     mut first: ref null "affine_for_of_iterator.wado//Counter",
     mut second: ref null "core:prelude/traits.wado//IterStepBy<core:prelude/traits.wado/IterChain<affine_for_of_iterator.wado/Counter,affine_for_of_iterator.wado/Counter>>",
 }
 
-struct core:prelude/traits.wado//IterStepBy<core:prelude/traits.wado/IterChain<affine_for_of_iterator.wado/Counter,affine_for_of_iterator.wado/Counter>> {  // TypeId(10)
+struct core:prelude/traits.wado//IterStepBy<core:prelude/traits.wado/IterChain<affine_for_of_iterator.wado/Counter,affine_for_of_iterator.wado/Counter>> {  // TypeId(9)
     mut inner: ref null "core:prelude/traits.wado//IterChain<affine_for_of_iterator.wado/Counter,affine_for_of_iterator.wado/Counter>",
     mut gap: i32,
     mut started: bool,
 }
 
-struct core:prelude/traits.wado//IterChain<affine_for_of_iterator.wado/Counter,affine_for_of_iterator.wado/Counter> {  // TypeId(11)
+struct core:prelude/traits.wado//IterChain<affine_for_of_iterator.wado/Counter,affine_for_of_iterator.wado/Counter> {  // TypeId(10)
     mut first: ref null "affine_for_of_iterator.wado//Counter",
     mut second: ref null "affine_for_of_iterator.wado//Counter",
     mut first_done: bool,
 }
 
-struct core:prelude/traits.wado//IterEnumerate<core:prelude/traits.wado/IterFilter<core:prelude/traits.wado/IterMap<affine_for_of_iterator.wado/Counter,fn mut(i32)->i32>,fn mut(i32)->bool>> {  // TypeId(12)
+struct core:prelude/traits.wado//IterEnumerate<core:prelude/traits.wado/IterFilter<core:prelude/traits.wado/IterMap<affine_for_of_iterator.wado/Counter,fn mut(i32)->i32>,fn mut(i32)->bool>> {  // TypeId(11)
     mut inner: ref null "core:prelude/traits.wado//IterFilter<core:prelude/traits.wado/IterMap<affine_for_of_iterator.wado/Counter,fn mut(i32)->i32>,fn mut(i32)->bool>",
     mut count: i32,
 }
 
-struct core:prelude/traits.wado//IterFilter<core:prelude/traits.wado/IterMap<affine_for_of_iterator.wado/Counter,fn mut(i32)->i32>,fn mut(i32)->bool> {  // TypeId(13)
+struct core:prelude/traits.wado//IterFilter<core:prelude/traits.wado/IterMap<affine_for_of_iterator.wado/Counter,fn mut(i32)->i32>,fn mut(i32)->bool> {  // TypeId(12)
     mut inner: ref null "core:prelude/traits.wado//IterMap<affine_for_of_iterator.wado/Counter,fn mut(i32)->i32>",
     mut pred: ref struct,
 }
 
-struct core:prelude/traits.wado//IterMap<affine_for_of_iterator.wado/Counter,fn mut(i32)->i32> {  // TypeId(14)
+struct core:prelude/traits.wado//IterMap<affine_for_of_iterator.wado/Counter,fn mut(i32)->i32> {  // TypeId(13)
     mut inner: ref null "affine_for_of_iterator.wado//Counter",
     mut f: ref struct,
 }
 
-type "functype/$canonical_closure_fn_0" = fn(ref null struct, i32) -> bool;  // TypeId(15)
+type "functype/$canonical_closure_fn_0" = fn(ref null struct, i32) -> bool;  // TypeId(14)
 
-struct canonical//CanonicalClosure_0 {  // TypeId(16)
+struct canonical//CanonicalClosure_0 {  // TypeId(15)
     env: ref null struct,
     func: ref "functype/$canonical_closure_fn_0",
 }
 
-type "functype/$canonical_closure_fn_1" = fn(ref null struct, i32) -> i32;  // TypeId(17)
+type "functype/$canonical_closure_fn_1" = fn(ref null struct, i32) -> i32;  // TypeId(16)
 
-struct canonical//CanonicalClosure_1 {  // TypeId(18)
+struct canonical//CanonicalClosure_1 {  // TypeId(17)
     env: ref null struct,
     func: ref "functype/$canonical_closure_fn_1",
 }
 
-type "functype//mem/realloc" = fn(i32, i32, i32, i32) -> i32;  // TypeId(19)
+type "functype//mem/realloc" = fn(i32, i32, i32, i32) -> i32;  // TypeId(18)
 
-type "functype//wasi/stream-write" = fn(i32, i32, i32) -> i32;  // TypeId(20)
+type "functype//wasi/stream-write" = fn(i32, i32, i32) -> i32;  // TypeId(19)
 
-type "functype//wasi/waitable-join" = fn(i32, i32);  // TypeId(21)
+type "functype//wasi/waitable-join" = fn(i32, i32);  // TypeId(20)
 
-type "functype//wasi/waitable-set-drop" = fn(i32);  // TypeId(22)
+type "functype//wasi/waitable-set-drop" = fn(i32);  // TypeId(21)
 
-type "functype//wasi/waitable-set-new" = fn() -> i32;  // TypeId(23)
+type "functype//wasi/waitable-set-new" = fn() -> i32;  // TypeId(22)
 
-type "functype//wasi/waitable-set-wait" = fn(i32, i32) -> i32;  // TypeId(24)
+type "functype//wasi/waitable-set-wait" = fn(i32, i32) -> i32;  // TypeId(23)
 
-type "functype//wasi/wasi:cli/Stdout::write_via_stream" = fn(i32) -> i32;  // TypeId(25)
+type "functype//wasi/wasi:cli/Stdout::write_via_stream" = fn(i32) -> i32;  // TypeId(24)
 
-type "functype//affine_for_of_iterator.wado/run" = fn();  // TypeId(26)
+type "functype//affine_for_of_iterator.wado/run" = fn();  // TypeId(25)
 
-type "functype//affine_for_of_iterator.wado/$cm_binding__Stdout_write_via_stream" = fn(ref null "core:prelude//$Resource") -> ref null "core:prelude//$Resource";  // TypeId(27)
+type "functype//affine_for_of_iterator.wado/$cm_export__run" = fn();  // TypeId(26)
 
-type "functype//affine_for_of_iterator.wado/$cm_export__run" = fn();  // TypeId(28)
+type "functype//core:prelude/primitive.wado/write_decimal_digits" = fn(ref Array<u8>, i32, u64, i32);  // TypeId(27)
 
-type "functype//core:cli/println" = fn(ref Array<u8>, i32);  // TypeId(29)
+type "functype//core:prelude/primitive.wado/count_digits_u64" = fn(u64) -> i32;  // TypeId(28)
 
-type "functype//core:prelude/primitive.wado/write_decimal_digits" = fn(ref Array<u8>, i32, u64, i32);  // TypeId(30)
+type "functype//core:rt/unreachable" = fn();  // TypeId(29)
 
-type "functype//core:prelude/primitive.wado/count_digits_u64" = fn(u64) -> i32;  // TypeId(31)
+type "functype//core:rt/cm_stream_write_raw_all_u8" = fn(i32, ref Array<u8>, i32, i32) -> "core:prelude/types.wado//enum:CopyResult";  // TypeId(30)
 
-type "functype//core:rt/write_string_to_stream$dae[add_newline]" = fn(ref null "core:prelude//$Resource", ref Array<u8>, i32);  // TypeId(32)
+type "functype//core:prelude/string.wado/core:prelude/string.wado/String::realloc_to" = fn(ref "core:prelude/string.wado//String", i32);  // TypeId(31)
 
-type "functype//core:rt/unreachable" = fn();  // TypeId(33)
+type "functype//core:prelude/string.wado/core:prelude/string.wado/String::grow" = fn(ref "core:prelude/string.wado//String", i32);  // TypeId(32)
 
-type "functype//core:rt/cm_stream_write_raw_all_u8" = fn(i32, ref Array<u8>, i32, i32) -> "core:prelude/types.wado//enum:CopyResult";  // TypeId(34)
+type "functype//core:prelude/traits.wado/core:prelude/traits.wado/IterZip<affine_for_of_iterator.wado/Counter,core:prelude/traits.wado/IterStepBy<core:prelude/traits.wado/IterChain<affine_for_of_iterator.wado/Counter,affine_for_of_iterator.wado/Counter>>>^core:prelude/traits.wado/Iterator::next" = fn(ref null "core:prelude/traits.wado//IterZip<affine_for_of_iterator.wado/Counter,core:prelude/traits.wado/IterStepBy<core:prelude/traits.wado/IterChain<affine_for_of_iterator.wado/Counter,affine_for_of_iterator.wado/Counter>>>") -> ref null "tuple//[i32, i32]";  // TypeId(33)
 
-type "functype//core:prelude/string.wado/core:prelude/string.wado/String::realloc_to" = fn(ref "core:prelude/string.wado//String", i32);  // TypeId(35)
+type "functype//core:prelude/traits.wado/core:prelude/traits.wado/IterFilter<core:prelude/traits.wado/IterMap<affine_for_of_iterator.wado/Counter,fn mut(i32)->i32>,fn mut(i32)->bool>^core:prelude/traits.wado/Iterator::next$sroa[return]" = fn(ref null "core:prelude/traits.wado//IterFilter<core:prelude/traits.wado/IterMap<affine_for_of_iterator.wado/Counter,fn mut(i32)->i32>,fn mut(i32)->bool>") -> [i32, i32];  // TypeId(34)
 
-type "functype//core:prelude/string.wado/core:prelude/string.wado/String::grow" = fn(ref "core:prelude/string.wado//String", i32);  // TypeId(36)
+type "functype//core:prelude/traits.wado/core:prelude/traits.wado/IterStepBy<core:prelude/traits.wado/IterChain<affine_for_of_iterator.wado/Counter,affine_for_of_iterator.wado/Counter>>^core:prelude/traits.wado/Iterator::next$sroa[return]" = fn(ref null "core:prelude/traits.wado//IterStepBy<core:prelude/traits.wado/IterChain<affine_for_of_iterator.wado/Counter,affine_for_of_iterator.wado/Counter>>") -> [i32, i32];  // TypeId(35)
 
-type "functype//core:prelude/traits.wado/core:prelude/traits.wado/IterZip<affine_for_of_iterator.wado/Counter,core:prelude/traits.wado/IterStepBy<core:prelude/traits.wado/IterChain<affine_for_of_iterator.wado/Counter,affine_for_of_iterator.wado/Counter>>>^core:prelude/traits.wado/Iterator::next" = fn(ref null "core:prelude/traits.wado//IterZip<affine_for_of_iterator.wado/Counter,core:prelude/traits.wado/IterStepBy<core:prelude/traits.wado/IterChain<affine_for_of_iterator.wado/Counter,affine_for_of_iterator.wado/Counter>>>") -> ref null "tuple//[i32, i32]";  // TypeId(37)
+type "functype//core:prelude/traits.wado/core:prelude/traits.wado/IterChain<affine_for_of_iterator.wado/Counter,affine_for_of_iterator.wado/Counter>^core:prelude/traits.wado/Iterator::next$sroa[return]" = fn(ref null "core:prelude/traits.wado//IterChain<affine_for_of_iterator.wado/Counter,affine_for_of_iterator.wado/Counter>") -> [i32, i32];  // TypeId(36)
 
-type "functype//affine_for_of_iterator.wado/affine_for_of_iterator.wado/Counter^core:prelude/traits.wado/Iterator::chain<affine_for_of_iterator.wado/Counter>" = fn(ref null "affine_for_of_iterator.wado//Counter", ref null "affine_for_of_iterator.wado//Counter") -> ref null "core:prelude/traits.wado//IterChain<affine_for_of_iterator.wado/Counter,affine_for_of_iterator.wado/Counter>";  // TypeId(38)
+type "functype//affine_for_of_iterator.wado/affine_for_of_iterator.wado/$Closure_0::$call$dae[self]" = fn(i32) -> i32;  // TypeId(37)
 
-type "functype//affine_for_of_iterator.wado/affine_for_of_iterator.wado/Counter^core:prelude/traits.wado/Iterator::zip<core:prelude/traits.wado/IterStepBy<core:prelude/traits.wado/IterChain<affine_for_of_iterator.wado/Counter,affine_for_of_iterator.wado/Counter>>>" = fn(ref null "affine_for_of_iterator.wado//Counter", ref null "core:prelude/traits.wado//IterStepBy<core:prelude/traits.wado/IterChain<affine_for_of_iterator.wado/Counter,affine_for_of_iterator.wado/Counter>>") -> ref null "core:prelude/traits.wado//IterZip<affine_for_of_iterator.wado/Counter,core:prelude/traits.wado/IterStepBy<core:prelude/traits.wado/IterChain<affine_for_of_iterator.wado/Counter,affine_for_of_iterator.wado/Counter>>>";  // TypeId(39)
+type "functype//affine_for_of_iterator.wado/affine_for_of_iterator.wado/$Closure_1::$call$dae[self]" = fn(i32) -> bool;  // TypeId(38)
 
-type "functype//core:prelude/traits.wado/core:prelude/traits.wado/IterZip<affine_for_of_iterator.wado/Counter,core:prelude/traits.wado/IterStepBy<core:prelude/traits.wado/IterChain<affine_for_of_iterator.wado/Counter,affine_for_of_iterator.wado/Counter>>>^core:prelude/traits.wado/ForOf::start" = fn(ref null "core:prelude/traits.wado//IterZip<affine_for_of_iterator.wado/Counter,core:prelude/traits.wado/IterStepBy<core:prelude/traits.wado/IterChain<affine_for_of_iterator.wado/Counter,affine_for_of_iterator.wado/Counter>>>") -> ref null "core:prelude/traits.wado//IterZip<affine_for_of_iterator.wado/Counter,core:prelude/traits.wado/IterStepBy<core:prelude/traits.wado/IterChain<affine_for_of_iterator.wado/Counter,affine_for_of_iterator.wado/Counter>>>";  // TypeId(40)
+type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$sroa[self.buf]$dae[alt_prefix]" = fn(ref "core:prelude/string.wado//String", bool, i32) -> i32;  // TypeId(39)
 
-type "functype//core:prelude/traits.wado/core:prelude/traits.wado/IterFilter<core:prelude/traits.wado/IterMap<affine_for_of_iterator.wado/Counter,fn mut(i32)->i32>,fn mut(i32)->bool>^core:prelude/traits.wado/Iterator::enumerate" = fn(ref null "core:prelude/traits.wado//IterFilter<core:prelude/traits.wado/IterMap<affine_for_of_iterator.wado/Counter,fn mut(i32)->i32>,fn mut(i32)->bool>") -> ref null "core:prelude/traits.wado//IterEnumerate<core:prelude/traits.wado/IterFilter<core:prelude/traits.wado/IterMap<affine_for_of_iterator.wado/Counter,fn mut(i32)->i32>,fn mut(i32)->bool>>";  // TypeId(41)
+type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(40)
 
-type "functype//core:prelude/traits.wado/core:prelude/traits.wado/IterFilter<core:prelude/traits.wado/IterMap<affine_for_of_iterator.wado/Counter,fn mut(i32)->i32>,fn mut(i32)->bool>^core:prelude/traits.wado/Iterator::next$sroa[return]" = fn(ref null "core:prelude/traits.wado//IterFilter<core:prelude/traits.wado/IterMap<affine_for_of_iterator.wado/Counter,fn mut(i32)->i32>,fn mut(i32)->bool>") -> [i32, i32];  // TypeId(42)
+type "functype//wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code" = fn(i32);  // TypeId(41)
 
-type "functype//core:prelude/traits.wado/core:prelude/traits.wado/IterChain<affine_for_of_iterator.wado/Counter,affine_for_of_iterator.wado/Counter>^core:prelude/traits.wado/Iterator::step_by$unchecked$dae[step]" = fn(ref null "core:prelude/traits.wado//IterChain<affine_for_of_iterator.wado/Counter,affine_for_of_iterator.wado/Counter>") -> ref null "core:prelude/traits.wado//IterStepBy<core:prelude/traits.wado/IterChain<affine_for_of_iterator.wado/Counter,affine_for_of_iterator.wado/Counter>>";  // TypeId(43)
+type "functype//wasi/task-return" = fn(i32);  // TypeId(42)
 
-type "functype//core:prelude/traits.wado/core:prelude/traits.wado/IterStepBy<core:prelude/traits.wado/IterChain<affine_for_of_iterator.wado/Counter,affine_for_of_iterator.wado/Counter>>^core:prelude/traits.wado/Iterator::next$sroa[return]" = fn(ref null "core:prelude/traits.wado//IterStepBy<core:prelude/traits.wado/IterChain<affine_for_of_iterator.wado/Counter,affine_for_of_iterator.wado/Counter>>") -> [i32, i32];  // TypeId(44)
+type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(43)
 
-type "functype//core:prelude/traits.wado/core:prelude/traits.wado/IterChain<affine_for_of_iterator.wado/Counter,affine_for_of_iterator.wado/Counter>^core:prelude/traits.wado/Iterator::next$sroa[return]" = fn(ref null "core:prelude/traits.wado//IterChain<affine_for_of_iterator.wado/Counter,affine_for_of_iterator.wado/Counter>") -> [i32, i32];  // TypeId(45)
+type "functype//affine_for_of_iterator.wado/$cm_binding__Stdout_write_via_stream" = fn(i32) -> i32;  // TypeId(44)
 
-type "functype//affine_for_of_iterator.wado/affine_for_of_iterator.wado/$Closure_0::$call$dae[self]" = fn(i32) -> i32;  // TypeId(46)
-
-type "functype//affine_for_of_iterator.wado/affine_for_of_iterator.wado/$Closure_1::$call$dae[self]" = fn(i32) -> bool;  // TypeId(47)
-
-type "functype//affine_for_of_iterator.wado/core:prelude/traits.wado/IterMap<affine_for_of_iterator.wado/Counter,fn mut(i32)->i32>^core:prelude/traits.wado/Iterator::filter$$Closure_1" = fn(ref null "core:prelude/traits.wado//IterMap<affine_for_of_iterator.wado/Counter,fn mut(i32)->i32>", ref "affine_for_of_iterator.wado//$Closure_1") -> ref null "core:prelude/traits.wado//IterFilter<core:prelude/traits.wado/IterMap<affine_for_of_iterator.wado/Counter,fn mut(i32)->i32>,fn mut(i32)->bool>";  // TypeId(48)
-
-type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$sroa[self.buf]$dae[alt_prefix]" = fn(ref "core:prelude/string.wado//String", bool, i32) -> i32;  // TypeId(49)
-
-type "functype//wasi/task-return" = fn(i32);  // TypeId(50)
-
-type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(51)
-
-type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(52)
-
-type "functype//wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code" = fn(i32);  // TypeId(53)
-
-type "functype//wasi/stream-drop-readable" = fn(i32);  // TypeId(54)
+type "functype//core:rt/write_string_to_stream$dae[add_newline]" = fn(i32, ref Array<u8>, i32);  // TypeId(45)
 
 import fn mem/realloc from "mem/realloc";
 import fn wasi/stream-write from "wasi/stream-write";
@@ -159,11 +139,10 @@ import fn wasi/waitable-set-new from "wasi/waitable-set-new";
 import fn wasi/waitable-set-wait from "wasi/waitable-set-wait";
 import fn wasi/wasi:cli/Stdout::write_via_stream from "wasi/wasi:cli/Stdout::write_via_stream";
 import memory (1) from "mem/memory";
-import fn wasi/task-return from "wasi/task-return";
 import fn wasi/stream-new from "wasi/stream-new";
-import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 import fn wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code from "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code";
-import fn wasi/stream-drop-readable from "wasi/stream-drop-readable";
+import fn wasi/task-return from "wasi/task-return";
+import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 
 global mut global:affine_for_of_iterator.wado::DROPS: i32 = 0;
 global global:affine_for_of_iterator.wado::$const_obj_0: ref Array<u8> = array.new_fixed<u8>(100, 114, 111, 112, 115, 32);
@@ -172,152 +151,166 @@ global global:affine_for_of_iterator.wado::$const_obj_2: ref Array<u8> = array.n
 global global:affine_for_of_iterator.wado::$const_obj_3: ref Array<u8> = array.new_fixed<u8>(58, 32);
 
 fn "affine_for_of_iterator.wado/run"() with Stdout {
-    let $load_14: ref null "core:prelude/traits.wado//IterFilter<core:prelude/traits.wado/IterMap<affine_for_of_iterator.wado/Counter,fn mut(i32)->i32>,fn mut(i32)->bool>";
-    let $load_48: ref null "core:prelude/traits.wado//IterStepBy<core:prelude/traits.wado/IterChain<affine_for_of_iterator.wado/Counter,affine_for_of_iterator.wado/Counter>>";
-    let $iter_2: ref null "core:prelude/traits.wado//IterZip<affine_for_of_iterator.wado/Counter,core:prelude/traits.wado/IterStepBy<core:prelude/traits.wado/IterChain<affine_for_of_iterator.wado/Counter,affine_for_of_iterator.wado/Counter>>>";
-    let $local_11: ref "core:prelude/string.wado//String";
-    let $contract_arg_0: ref null "core:prelude/traits.wado//IterChain<affine_for_of_iterator.wado/Counter,affine_for_of_iterator.wado/Counter>";
     let $match_31: ref null "tuple//[i32, i32]";
     let self_34: ref null "affine_for_of_iterator.wado//Counter";
     let $moved_1_35: ref null "affine_for_of_iterator.wado//Counter";
     let is_negative_47: bool;
-    let abs_val_48: u64;
-    let digit_count_49: i32;
     let x_51: i64;
     let arr: ref Array<u8>;
-    let pos: i32;
-    let t: u64;
     let q: u64;
     let pair: i32;
     let tens: i32;
     let f_65: ref "affine_for_of_iterator.wado//$Closure_0";
-    let $drop_spill_3: ref null "core:prelude/traits.wado//IterMap<affine_for_of_iterator.wado/Counter,fn mut(i32)->i32>";
+    let $drop_spill_3_67: ref null "core:prelude/traits.wado//IterMap<affine_for_of_iterator.wado/Counter,fn mut(i32)->i32>";
     let self_85: ref "core:prelude/string.wado//String";
     let is_negative_106: bool;
+    let abs_val_107: u64;
     let digit_count_108: i32;
     let offset_109: i32;
-    let self_239: ref null "core:prelude/traits.wado//IterEnumerate<core:prelude/traits.wado/IterFilter<core:prelude/traits.wado/IterMap<affine_for_of_iterator.wado/Counter,fn mut(i32)->i32>,fn mut(i32)->bool>>";
-    let $moved_1_240: ref null "core:prelude/traits.wado//IterEnumerate<core:prelude/traits.wado/IterFilter<core:prelude/traits.wado/IterMap<affine_for_of_iterator.wado/Counter,fn mut(i32)->i32>,fn mut(i32)->bool>>";
-    let $moved_4: ref null "affine_for_of_iterator.wado//Counter";
-    let $moved_1_251: ref null "affine_for_of_iterator.wado//Counter";
-    let $sroa_$f_buf_283: ref "core:prelude/string.wado//String";
-    let new_used_343: i32;
-    let start_344: i32;
-    let new_used_398: i32;
-    let start_399: i32;
-    let $av_705: i32;
+    let $moved_4_243: i32;
+    let $moved_6_245: i32;
+    let $cm_pair_7_246: i64;
+    let $moved_3_251: i32;
+    let $moved_1_255: ref null "core:prelude/traits.wado//IterEnumerate<core:prelude/traits.wado/IterFilter<core:prelude/traits.wado/IterMap<affine_for_of_iterator.wado/Counter,fn mut(i32)->i32>,fn mut(i32)->bool>>";
+    let $moved_1_259: ref null "core:prelude/traits.wado//IterFilter<core:prelude/traits.wado/IterMap<affine_for_of_iterator.wado/Counter,fn mut(i32)->i32>,fn mut(i32)->bool>";
+    let pred: ref "affine_for_of_iterator.wado//$Closure_1";
+    let $moved_2_264: ref null "core:prelude/traits.wado//IterMap<affine_for_of_iterator.wado/Counter,fn mut(i32)->i32>";
+    let rx_268: i32;
+    let tx_269: i32;
+    let handle_270: i32;
+    let $moved_4_271: i32;
+    let $moved_5_272: i32;
+    let $moved_6_273: i32;
+    let $cm_pair_7_274: i64;
+    let tx_276: i32;
+    let $moved_3_279: i32;
+    let $sroa_$pattern_temp_0_0_13_280: i32;
+    let $sroa_$pattern_temp_0_1_14_281: i32;
+    let $moved_1_283: ref null "core:prelude/traits.wado//IterZip<affine_for_of_iterator.wado/Counter,core:prelude/traits.wado/IterStepBy<core:prelude/traits.wado/IterChain<affine_for_of_iterator.wado/Counter,affine_for_of_iterator.wado/Counter>>>";
+    let $moved_3_291: ref null "core:prelude/traits.wado//IterStepBy<core:prelude/traits.wado/IterChain<affine_for_of_iterator.wado/Counter,affine_for_of_iterator.wado/Counter>>";
+    let $moved_2_298: ref null "core:prelude/traits.wado//IterChain<affine_for_of_iterator.wado/Counter,affine_for_of_iterator.wado/Counter>";
+    let $drop_spill_3_299: ref null "core:prelude/traits.wado//IterStepBy<core:prelude/traits.wado/IterChain<affine_for_of_iterator.wado/Counter,affine_for_of_iterator.wado/Counter>>";
+    let other_303: ref null "affine_for_of_iterator.wado//Counter";
+    let $moved_2_304: ref null "affine_for_of_iterator.wado//Counter";
+    let $tmpl_buf_377: ref "core:prelude/string.wado//String";
+    let $sroa_$f_buf_396: ref "core:prelude/string.wado//String";
+    let new_used_456: i32;
+    let start_457: i32;
+    let start_512: i32;
+    let $av_818: i32;
     $moved_1_35 = local.tee self_34(struct.new "affine_for_of_iterator.wado//Counter" { n: 0, token: struct.new "affine_for_of_iterator.wado//Token" { id: 1 } });
-    if ref.is_null(local.tee self_34(ref.null none)) == 0 {
-        if ref.is_null(self_34.token) == 0 {
-            global:affine_for_of_iterator.wado::DROPS = global:affine_for_of_iterator.wado::DROPS + 1;
-        }
-        self_34.token = ref.null none;
-    }
-    b2: block {
-        l3: loop {
-            break_if b2 local.tee $av_705($moved_1_35.n) >= 3;
-            $moved_1_35.n = $av_705 + 1;
-            $av_705 = $moved_1_35.n;
-            $local_11 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
-            is_negative_47 = $av_705 < 0;
-            x_51 = builtin::i64_extend_i32_s($av_705);
-            abs_val_48 = select i64(x_51 < 0_i64, 0_i64 - x_51, x_51);
-            digit_count_49 = $inline_count_digits_u64_11: block -> i32 {
-                if abs_val_48 <u 100000_i64 {
-                    if abs_val_48 <u 100_i64 {
-                        if abs_val_48 <u 10_i64 {
+    self_34 = ref.null none;
+    $tmpl_buf_377 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
+    b0: block {
+        l1: loop {
+            break_if b0 local.tee $av_818($moved_1_35.n) >= 3;
+            $moved_1_35.n = $av_818 + 1;
+            $av_818 = $moved_1_35.n;
+            $tmpl_buf_377.used = 0;
+            is_negative_47 = $av_818 < 0;
+            x_51 = builtin::i64_extend_i32_s($av_818);
+            x_51 = select i64(x_51 < 0_i64, 0_i64 - x_51, x_51);
+            $av_818 = $inline_count_digits_u64_11: block -> i32 {
+                if x_51 <u 100000_i64 {
+                    if x_51 <u 100_i64 {
+                        if x_51 <u 10_i64 {
                             break $inline_count_digits_u64_11: 1;
                         }
                         break $inline_count_digits_u64_11: 2;
                     }
-                    if abs_val_48 <u 1000_i64 {
+                    if x_51 <u 1000_i64 {
                         break $inline_count_digits_u64_11: 3;
                     }
-                    if abs_val_48 <u 10000_i64 {
+                    if x_51 <u 10000_i64 {
                         break $inline_count_digits_u64_11: 4;
                     }
                     break $inline_count_digits_u64_11: 5;
                 }
-                if abs_val_48 <u 10000000000_i64 {
-                    if abs_val_48 <u 10000000_i64 {
-                        if abs_val_48 <u 1000000_i64 {
+                if x_51 <u 10000000000_i64 {
+                    if x_51 <u 10000000_i64 {
+                        if x_51 <u 1000000_i64 {
                             break $inline_count_digits_u64_11: 6;
                         }
                         break $inline_count_digits_u64_11: 7;
                     }
-                    if abs_val_48 <u 100000000_i64 {
+                    if x_51 <u 100000000_i64 {
                         break $inline_count_digits_u64_11: 8;
                     }
-                    if abs_val_48 <u 1000000000_i64 {
+                    if x_51 <u 1000000000_i64 {
                         break $inline_count_digits_u64_11: 9;
                     }
                     break $inline_count_digits_u64_11: 10;
                 }
-                if abs_val_48 <u 1000000000000000_i64 {
-                    if abs_val_48 <u 1000000000000_i64 {
-                        if abs_val_48 <u 100000000000_i64 {
+                if x_51 <u 1000000000000000_i64 {
+                    if x_51 <u 1000000000000_i64 {
+                        if x_51 <u 100000000000_i64 {
                             break $inline_count_digits_u64_11: 11;
                         }
                         break $inline_count_digits_u64_11: 12;
                     }
-                    if abs_val_48 <u 10000000000000_i64 {
+                    if x_51 <u 10000000000000_i64 {
                         break $inline_count_digits_u64_11: 13;
                     }
-                    if abs_val_48 <u 100000000000000_i64 {
+                    if x_51 <u 100000000000000_i64 {
                         break $inline_count_digits_u64_11: 14;
                     }
                     break $inline_count_digits_u64_11: 15;
                 }
-                if abs_val_48 <u 100000000000000000_i64 {
-                    if abs_val_48 <u 10000000000000000_i64 {
+                if x_51 <u 100000000000000000_i64 {
+                    if x_51 <u 10000000000000000_i64 {
                         break $inline_count_digits_u64_11: 16;
                     }
                     break $inline_count_digits_u64_11: 17;
                 }
-                if abs_val_48 <u 1000000000000000000_i64 {
+                if x_51 <u 1000000000000000000_i64 {
                     break $inline_count_digits_u64_11: 18;
                 }
-                if abs_val_48 <u -8446744073709551616_i64 {
+                if x_51 <u -8446744073709551616_i64 {
                     break $inline_count_digits_u64_11: 19;
                 }
                 break $inline_count_digits_u64_11: 20;
             };
             if is_negative_47 {
-                if @unlikely(local.tee new_used_343(0 + 1) > builtin::array_len($local_11.repr)) {
+                if @unlikely(local.tee new_used_456($tmpl_buf_377.used + 1) > builtin::array_len($tmpl_buf_377.repr)) {
                     cold_path;
-                    "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_11, new_used_343);
+                    "core:prelude/string.wado/core:prelude/string.wado/String::grow"($tmpl_buf_377, new_used_456);
                 }
-                start_344 = $local_11.used;
-                $local_11.used = new_used_343;
-                builtin::array_set_u8($local_11.repr, start_344, 45);
+                start_457 = $tmpl_buf_377.used;
+                $tmpl_buf_377.used = new_used_456;
+                builtin::array_set_u8($tmpl_buf_377.repr, start_457, 45);
             } else {
             }
-            if @unlikely(local.tee new_used_398($local_11.used + digit_count_49) > builtin::array_len($local_11.repr)) {
+            if @unlikely(local.tee is_negative_47($tmpl_buf_377.used + $av_818) > builtin::array_len($tmpl_buf_377.repr)) {
                 cold_path;
-                "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_11, new_used_398);
+                "core:prelude/string.wado/core:prelude/string.wado/String::grow"($tmpl_buf_377, is_negative_47);
             }
-            start_399 = $local_11.used;
-            $local_11.used = new_used_398;
-            arr = $local_11.repr;
-            pos = start_399 + digit_count_49;
-            t = abs_val_48;
-            b26: block {
-                l27: loop {
-                    break_if b26 (pos - start_399) < 2;
-                    q = t /u 100_i64;
-                    tens = local.tee pair(builtin::i32_wrap_i64(t - (q * 100_i64))) / 10;
-                    builtin::array_set_u8(arr, pos - 1, ((48 + pair) - (tens * 10)) & 255);
-                    builtin::array_set_u8(arr, pos - 2, (48 + tens) & 255);
-                    pos = pos - 2;
-                    t = q;
-                    continue l27;
+            start_512 = $tmpl_buf_377.used;
+            $tmpl_buf_377.used = is_negative_47;
+            arr = $tmpl_buf_377.repr;
+            $av_818 = start_512 + $av_818;
+            b24: block {
+                l25: loop {
+                    break_if b24 ($av_818 - start_512) < 2;
+                    q = x_51 /u 100_i64;
+                    tens = local.tee pair(builtin::i32_wrap_i64(x_51 - (q * 100_i64))) / 10;
+                    builtin::array_set_u8(arr, $av_818 - 1, ((48 + pair) - (tens * 10)) & 255);
+                    builtin::array_set_u8(arr, $av_818 - 2, (48 + tens) & 255);
+                    $av_818 = $av_818 - 2;
+                    x_51 = q;
+                    continue l25;
                 };
             };
-            if pos > start_399 {
-                builtin::array_set_u8(arr, start_399, (48 + builtin::i32_wrap_i64(t %u 10_i64)) & 255);
+            if $av_818 > start_512 {
+                builtin::array_set_u8(arr, start_512, (48 + builtin::i32_wrap_i64(x_51 %u 10_i64)) & 255);
             }
-            "core:cli/println"($local_11.repr, $local_11.used);
-            continue l3;
+            start_512 = builtin::i32_wrap_i64(local.tee $cm_pair_7_246("wasi/stream-new"()));
+            $av_818 = builtin::i32_wrap_i64($cm_pair_7_246 >> 32_i64);
+            start_512 = "affine_for_of_iterator.wado/$cm_binding__Stdout_write_via_stream"($moved_4_243 = start_512; start_512 = 0; $moved_4_243);
+            is_negative_47 = $av_818;
+            $av_818 = 0;
+            "core:rt/write_string_to_stream$dae[add_newline]"($moved_3_251 = is_negative_47; is_negative_47 = 0; $moved_3_251, $tmpl_buf_377.repr, $tmpl_buf_377.used);
+            "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"($moved_6_245 = start_512; start_512 = 0; $moved_6_245);
+            continue l1;
         };
     };
     if ref.is_null($moved_1_35) == 0 {
@@ -328,255 +321,246 @@ fn "affine_for_of_iterator.wado/run"() with Stdout {
     }
     $moved_1_35 = struct.new "affine_for_of_iterator.wado//Counter" { n: 0, token: struct.new "affine_for_of_iterator.wado//Token" { id: 1 } };
     f_65 = struct.new "affine_for_of_iterator.wado//$Closure_0" {  };
-    $drop_spill_3 = struct.new "core:prelude/traits.wado//IterMap<affine_for_of_iterator.wado/Counter,fn mut(i32)->i32>" { inner: self_34 = $moved_1_35; $moved_1_35 = ref.null none; self_34, f: struct.new "canonical//CanonicalClosure_1" { env: f_65, func: ref.func "closure/affine_for_of_iterator.wado/$closure_wrapper_0" } };
-    if ref.is_null($moved_1_35) == 0 {
-        if ref.is_null($moved_1_35.token) == 0 {
-            global:affine_for_of_iterator.wado::DROPS = global:affine_for_of_iterator.wado::DROPS + 1;
-        }
-        $moved_1_35.token = ref.null none;
-    }
-    $moved_1_240 = local.tee self_239("core:prelude/traits.wado/core:prelude/traits.wado/IterFilter<core:prelude/traits.wado/IterMap<affine_for_of_iterator.wado/Counter,fn mut(i32)->i32>,fn mut(i32)->bool>^core:prelude/traits.wado/Iterator::enumerate"("affine_for_of_iterator.wado/core:prelude/traits.wado/IterMap<affine_for_of_iterator.wado/Counter,fn mut(i32)->i32>^core:prelude/traits.wado/Iterator::filter$$Closure_1"($drop_spill_3, struct.new "affine_for_of_iterator.wado//$Closure_1" {  })));
-    if ref.is_null(local.tee self_239(ref.null none)) == 0 {
-        if ref.is_null(local.tee $load_14(self_239.inner)) == 0 {
-            if ref.is_null(local.tee $drop_spill_3($load_14.inner)) == 0 {
-                if ref.is_null(local.tee $moved_1_35($drop_spill_3.inner)) == 0 {
-                    if ref.is_null($moved_1_35.token) == 0 {
-                        global:affine_for_of_iterator.wado::DROPS = global:affine_for_of_iterator.wado::DROPS + 1;
-                    }
-                    $moved_1_35.token = ref.null none;
-                }
-                $drop_spill_3.inner = ref.null none;
-            }
-            self_239.inner.inner = ref.null none;
-        }
-        self_239.inner = ref.null none;
-    }
-    $load_14 = $moved_1_240.inner;
-    b38: block {
-        l39: loop {
+    $drop_spill_3_67 = struct.new "core:prelude/traits.wado//IterMap<affine_for_of_iterator.wado/Counter,fn mut(i32)->i32>" { inner: self_34 = $moved_1_35; $moved_1_35 = ref.null none; self_34, f: struct.new "canonical//CanonicalClosure_1" { env: f_65, func: ref.func "closure/affine_for_of_iterator.wado/$closure_wrapper_0" } };
+    pred = struct.new "affine_for_of_iterator.wado//$Closure_1" {  };
+    $moved_1_255 = struct.new "core:prelude/traits.wado//IterEnumerate<core:prelude/traits.wado/IterFilter<core:prelude/traits.wado/IterMap<affine_for_of_iterator.wado/Counter,fn mut(i32)->i32>,fn mut(i32)->bool>>" { inner: $moved_1_259 = struct.new "core:prelude/traits.wado//IterFilter<core:prelude/traits.wado/IterMap<affine_for_of_iterator.wado/Counter,fn mut(i32)->i32>,fn mut(i32)->bool>" { inner: $moved_2_264 = $drop_spill_3_67; $drop_spill_3_67 = ref.null none; $moved_2_264, pred: struct.new "canonical//CanonicalClosure_0" { env: pred, func: ref.func "closure/affine_for_of_iterator.wado/$closure_wrapper_1" } }; $moved_1_259, count: 0 };
+    $moved_1_259 = $moved_1_255.inner;
+    b29: block {
+        l30: loop {
             if ref.is_null(local.tee $match_31($inline_core_prelude_traits_wado_IterEnumerate_core_prelude_traits_wado_IterFilter_core_prelude_traits_wado_IterMap_affine_for_of_iterator_wado_Counter_fn_mut_i32___i32__fn_mut_i32___bool___core_prelude_traits_wado_Iterator__next_17: block -> ref null "tuple//[i32, i32]" {
-                multivalue_bind [tens, pair] = "core:prelude/traits.wado/core:prelude/traits.wado/IterFilter<core:prelude/traits.wado/IterMap<affine_for_of_iterator.wado/Counter,fn mut(i32)->i32>,fn mut(i32)->bool>^core:prelude/traits.wado/Iterator::next$sroa[return]"($load_14);
-                if tens == 1 {
-                    pos = $moved_1_240.count;
-                    $moved_1_240.count = pos + 1;
-                    break $inline_core_prelude_traits_wado_IterEnumerate_core_prelude_traits_wado_IterFilter_core_prelude_traits_wado_IterMap_affine_for_of_iterator_wado_Counter_fn_mut_i32___i32__fn_mut_i32___bool___core_prelude_traits_wado_Iterator__next_17: struct.new "tuple//[i32, i32]" { 0: pos, 1: pair };
+                multivalue_bind [$moved_6_245, $moved_3_251] = "core:prelude/traits.wado/core:prelude/traits.wado/IterFilter<core:prelude/traits.wado/IterMap<affine_for_of_iterator.wado/Counter,fn mut(i32)->i32>,fn mut(i32)->bool>^core:prelude/traits.wado/Iterator::next$sroa[return]"($moved_1_259);
+                if $moved_6_245 == 1 {
+                    $moved_4_243 = $moved_1_255.count;
+                    $moved_1_255.count = $moved_4_243 + 1;
+                    break $inline_core_prelude_traits_wado_IterEnumerate_core_prelude_traits_wado_IterFilter_core_prelude_traits_wado_IterMap_affine_for_of_iterator_wado_Counter_fn_mut_i32___i32__fn_mut_i32___bool___core_prelude_traits_wado_Iterator__next_17: struct.new "tuple//[i32, i32]" { 0: $moved_4_243, 1: $moved_3_251 };
                 } else {
                 }
                 break $inline_core_prelude_traits_wado_IterEnumerate_core_prelude_traits_wado_IterFilter_core_prelude_traits_wado_IterMap_affine_for_of_iterator_wado_Counter_fn_mut_i32___i32__fn_mut_i32___bool___core_prelude_traits_wado_Iterator__next_17: ref.null none;
             })) == 0 {
-                let $variant_payload_2: ref "tuple//[i32, i32]";
-                start_399 = local.tee $variant_payload_2(ref.as_non_null($match_31)).0;
-                new_used_398 = $variant_payload_2.1;
-                $sroa_$f_buf_283 = local.tee $local_11(struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(34), used: 0 });
-                start_344 = start_399 < 0;
-                new_used_343 = "core:prelude/primitive.wado/count_digits_u64"(local.tee t(q = builtin::i64_extend_i32_s(start_399); select i64(q < 0_i64, 0_i64 - q, q)));
-                digit_count_49 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$sroa[self.buf]$dae[alt_prefix]"($sroa_$f_buf_283, start_344, new_used_343);
-                "core:prelude/primitive.wado/write_decimal_digits"(local.tee self_85($sroa_$f_buf_283).repr, digit_count_49, t, new_used_343);
-                if @unlikely(local.tee is_negative_47($local_11.used + 2) > builtin::array_len($local_11.repr)) {
+                let $variant_payload_1: ref "tuple//[i32, i32]";
+                tens = local.tee $variant_payload_1(ref.as_non_null($match_31)).0;
+                pair = $variant_payload_1.1;
+                $sroa_$f_buf_396 = local.tee $tmpl_buf_377(struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(34), used: 0 });
+                start_457 = tens < 0;
+                new_used_456 = "core:prelude/primitive.wado/count_digits_u64"(local.tee q($cm_pair_7_246 = builtin::i64_extend_i32_s(tens); select i64($cm_pair_7_246 < 0_i64, 0_i64 - $cm_pair_7_246, $cm_pair_7_246)));
+                start_512 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$sroa[self.buf]$dae[alt_prefix]"($sroa_$f_buf_396, start_457, new_used_456);
+                "core:prelude/primitive.wado/write_decimal_digits"(local.tee self_85($sroa_$f_buf_396).repr, start_512, q, new_used_456);
+                if @unlikely(local.tee is_negative_47($tmpl_buf_377.used + 2) > builtin::array_len($tmpl_buf_377.repr)) {
                     cold_path;
-                    "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_11, is_negative_47);
+                    "core:prelude/string.wado/core:prelude/string.wado/String::grow"($tmpl_buf_377, is_negative_47);
                 }
-                $av_705 = $local_11.used;
-                $local_11.used = is_negative_47;
-                builtin::array_copy<u8>($local_11.repr, $av_705, global:affine_for_of_iterator.wado::$const_obj_3, 0, 2);
-                $sroa_$f_buf_283 = $local_11;
-                is_negative_106 = new_used_398 < 0;
-                digit_count_108 = "core:prelude/primitive.wado/count_digits_u64"(local.tee x_51(abs_val_48 = builtin::i64_extend_i32_s(new_used_398); select i64(abs_val_48 < 0_i64, 0_i64 - abs_val_48, abs_val_48)));
-                offset_109 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$sroa[self.buf]$dae[alt_prefix]"($sroa_$f_buf_283, is_negative_106, digit_count_108);
-                "core:prelude/primitive.wado/write_decimal_digits"($sroa_$f_buf_283.repr, offset_109, x_51, digit_count_108);
-                "core:cli/println"($local_11.repr, $local_11.used);
+                $av_818 = $tmpl_buf_377.used;
+                $tmpl_buf_377.used = is_negative_47;
+                builtin::array_copy<u8>($tmpl_buf_377.repr, $av_818, global:affine_for_of_iterator.wado::$const_obj_3, 0, 2);
+                $sroa_$f_buf_396 = $tmpl_buf_377;
+                is_negative_106 = pair < 0;
+                digit_count_108 = "core:prelude/primitive.wado/count_digits_u64"(local.tee abs_val_107(x_51 = builtin::i64_extend_i32_s(pair); select i64(x_51 < 0_i64, 0_i64 - x_51, x_51)));
+                offset_109 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$sroa[self.buf]$dae[alt_prefix]"($sroa_$f_buf_396, is_negative_106, digit_count_108);
+                "core:prelude/primitive.wado/write_decimal_digits"($sroa_$f_buf_396.repr, offset_109, abs_val_107, digit_count_108);
+                $sroa_$pattern_temp_0_0_13_280 = builtin::i32_wrap_i64(local.tee $cm_pair_7_274("wasi/stream-new"()));
+                $sroa_$pattern_temp_0_1_14_281 = builtin::i32_wrap_i64($cm_pair_7_274 >> 32_i64);
+                rx_268 = $sroa_$pattern_temp_0_0_13_280;
+                tx_269 = $sroa_$pattern_temp_0_1_14_281;
+                handle_270 = "affine_for_of_iterator.wado/$cm_binding__Stdout_write_via_stream"($moved_4_271 = rx_268; rx_268 = 0; $moved_4_271);
+                $moved_5_272 = tx_269;
+                tx_269 = 0;
+                "core:rt/write_string_to_stream$dae[add_newline]"($moved_3_279 = local.tee tx_276($moved_5_272); tx_276 = 0; $moved_3_279, $tmpl_buf_377.repr, $tmpl_buf_377.used);
+                "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"($moved_6_273 = handle_270; handle_270 = 0; $moved_6_273);
             } else {
-                break b38;
+                break b29;
             }
-            continue l39;
+            continue l30;
         };
     };
-    if ref.is_null($moved_1_240) == 0 {
-        if ref.is_null(local.tee $load_14($moved_1_240.inner)) == 0 {
-            if ref.is_null(local.tee $drop_spill_3($load_14.inner)) == 0 {
-                if ref.is_null(local.tee $moved_1_35($drop_spill_3.inner)) == 0 {
-                    if ref.is_null($moved_1_35.token) == 0 {
+    if ref.is_null($moved_1_255) == 0 {
+        if ref.is_null(local.tee $moved_1_259($moved_1_255.inner)) == 0 {
+            if ref.is_null(local.tee $moved_2_264($moved_1_259.inner)) == 0 {
+                if ref.is_null(local.tee self_34($moved_2_264.inner)) == 0 {
+                    if ref.is_null(self_34.token) == 0 {
                         global:affine_for_of_iterator.wado::DROPS = global:affine_for_of_iterator.wado::DROPS + 1;
                     }
-                    $moved_1_35.token = ref.null none;
+                    self_34.token = ref.null none;
                 }
-                $drop_spill_3.inner = ref.null none;
+                $moved_2_264.inner = ref.null none;
             }
-            $moved_1_240.inner.inner = ref.null none;
+            $moved_1_255.inner.inner = ref.null none;
         }
-        $moved_1_240.inner = ref.null none;
+        $moved_1_255.inner = ref.null none;
     }
-    $iter_2 = "core:prelude/traits.wado/core:prelude/traits.wado/IterZip<affine_for_of_iterator.wado/Counter,core:prelude/traits.wado/IterStepBy<core:prelude/traits.wado/IterChain<affine_for_of_iterator.wado/Counter,affine_for_of_iterator.wado/Counter>>>^core:prelude/traits.wado/ForOf::start"("affine_for_of_iterator.wado/affine_for_of_iterator.wado/Counter^core:prelude/traits.wado/Iterator::zip<core:prelude/traits.wado/IterStepBy<core:prelude/traits.wado/IterChain<affine_for_of_iterator.wado/Counter,affine_for_of_iterator.wado/Counter>>>"(struct.new "affine_for_of_iterator.wado//Counter" { n: 0, token: struct.new "affine_for_of_iterator.wado//Token" { id: 1 } }, "core:prelude/traits.wado/core:prelude/traits.wado/IterChain<affine_for_of_iterator.wado/Counter,affine_for_of_iterator.wado/Counter>^core:prelude/traits.wado/Iterator::step_by$unchecked$dae[step]"(local.tee $contract_arg_0("affine_for_of_iterator.wado/affine_for_of_iterator.wado/Counter^core:prelude/traits.wado/Iterator::chain<affine_for_of_iterator.wado/Counter>"(struct.new "affine_for_of_iterator.wado//Counter" { n: 0, token: struct.new "affine_for_of_iterator.wado//Token" { id: 1 } }, struct.new "affine_for_of_iterator.wado//Counter" { n: 0, token: struct.new "affine_for_of_iterator.wado//Token" { id: 1 } })))));
-    b48: block {
-        l49: loop {
-            if ref.is_null(local.tee $match_31("core:prelude/traits.wado/core:prelude/traits.wado/IterZip<affine_for_of_iterator.wado/Counter,core:prelude/traits.wado/IterStepBy<core:prelude/traits.wado/IterChain<affine_for_of_iterator.wado/Counter,affine_for_of_iterator.wado/Counter>>>^core:prelude/traits.wado/Iterator::next"($iter_2))) == 0 {
-                offset_109 = local.tee $variant_payload_2(ref.as_non_null($match_31)).0;
-                digit_count_108 = $variant_payload_2.1;
-                $sroa_$f_buf_283 = local.tee self_85(struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(34), used: 0 });
-                is_negative_106 = offset_109 < 0;
-                $av_705 = "core:prelude/primitive.wado/count_digits_u64"(local.tee t(q = builtin::i64_extend_i32_s(offset_109); select i64(q < 0_i64, 0_i64 - q, q)));
-                tens = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$sroa[self.buf]$dae[alt_prefix]"($sroa_$f_buf_283, is_negative_106, $av_705);
-                "core:prelude/primitive.wado/write_decimal_digits"(local.tee $local_11($sroa_$f_buf_283).repr, tens, t, $av_705);
-                if @unlikely(local.tee pair(self_85.used + 2) > builtin::array_len(self_85.repr)) {
+    self_34 = struct.new "affine_for_of_iterator.wado//Counter" { n: 0, token: struct.new "affine_for_of_iterator.wado//Token" { id: 1 } };
+    $moved_1_35 = struct.new "affine_for_of_iterator.wado//Counter" { n: 0, token: struct.new "affine_for_of_iterator.wado//Token" { id: 1 } };
+    other_303 = struct.new "affine_for_of_iterator.wado//Counter" { n: 0, token: struct.new "affine_for_of_iterator.wado//Token" { id: 1 } };
+    $drop_spill_3_299 = struct.new "core:prelude/traits.wado//IterStepBy<core:prelude/traits.wado/IterChain<affine_for_of_iterator.wado/Counter,affine_for_of_iterator.wado/Counter>>" { inner: $moved_2_298 = struct.new "core:prelude/traits.wado//IterChain<affine_for_of_iterator.wado/Counter,affine_for_of_iterator.wado/Counter>" { first: $moved_2_304 = $moved_1_35; $moved_1_35 = ref.null none; $moved_2_304, second: $moved_2_304 = other_303; other_303 = ref.null none; $moved_2_304, first_done: 0 }; $moved_2_298, gap: 1, started: 0 };
+    $moved_1_283 = struct.new "core:prelude/traits.wado//IterZip<affine_for_of_iterator.wado/Counter,core:prelude/traits.wado/IterStepBy<core:prelude/traits.wado/IterChain<affine_for_of_iterator.wado/Counter,affine_for_of_iterator.wado/Counter>>>" { first: $moved_2_304 = self_34; self_34 = ref.null none; $moved_2_304, second: $moved_3_291 = $drop_spill_3_299; $drop_spill_3_299 = ref.null none; $moved_3_291 };
+    b39: block {
+        l40: loop {
+            if ref.is_null(local.tee $match_31("core:prelude/traits.wado/core:prelude/traits.wado/IterZip<affine_for_of_iterator.wado/Counter,core:prelude/traits.wado/IterStepBy<core:prelude/traits.wado/IterChain<affine_for_of_iterator.wado/Counter,affine_for_of_iterator.wado/Counter>>>^core:prelude/traits.wado/Iterator::next"($moved_1_283))) == 0 {
+                $moved_6_273 = local.tee $variant_payload_1(ref.as_non_null($match_31)).0;
+                $moved_3_279 = $variant_payload_1.1;
+                $sroa_$f_buf_396 = local.tee self_85(struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(34), used: 0 });
+                tx_276 = $moved_6_273 < 0;
+                $moved_5_272 = "core:prelude/primitive.wado/count_digits_u64"(local.tee abs_val_107($cm_pair_7_274 = builtin::i64_extend_i32_s($moved_6_273); select i64($cm_pair_7_274 < 0_i64, 0_i64 - $cm_pair_7_274, $cm_pair_7_274)));
+                handle_270 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$sroa[self.buf]$dae[alt_prefix]"($sroa_$f_buf_396, tx_276, $moved_5_272);
+                "core:prelude/primitive.wado/write_decimal_digits"(local.tee $tmpl_buf_377($sroa_$f_buf_396).repr, handle_270, abs_val_107, $moved_5_272);
+                if @unlikely(local.tee $moved_4_271(self_85.used + 2) > builtin::array_len(self_85.repr)) {
                     cold_path;
-                    "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self_85, pair);
+                    "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self_85, $moved_4_271);
                 }
-                pos = self_85.used;
-                self_85.used = pair;
-                builtin::array_copy<u8>(self_85.repr, pos, global:affine_for_of_iterator.wado::$const_obj_2, 0, 2);
-                $sroa_$f_buf_283 = self_85;
-                start_399 = digit_count_108 < 0;
-                new_used_398 = "core:prelude/primitive.wado/count_digits_u64"(local.tee x_51(abs_val_48 = builtin::i64_extend_i32_s(digit_count_108); select i64(abs_val_48 < 0_i64, 0_i64 - abs_val_48, abs_val_48)));
-                start_344 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$sroa[self.buf]$dae[alt_prefix]"($sroa_$f_buf_283, start_399, new_used_398);
-                "core:prelude/primitive.wado/write_decimal_digits"($sroa_$f_buf_283.repr, start_344, x_51, new_used_398);
-                "core:cli/println"(self_85.repr, self_85.used);
+                tx_269 = self_85.used;
+                self_85.used = $moved_4_271;
+                builtin::array_copy<u8>(self_85.repr, tx_269, global:affine_for_of_iterator.wado::$const_obj_2, 0, 2);
+                $sroa_$f_buf_396 = self_85;
+                rx_268 = $moved_3_279 < 0;
+                $sroa_$pattern_temp_0_1_14_281 = "core:prelude/primitive.wado/count_digits_u64"(local.tee $cm_pair_7_246(x_51 = builtin::i64_extend_i32_s($moved_3_279); select i64(x_51 < 0_i64, 0_i64 - x_51, x_51)));
+                $sroa_$pattern_temp_0_0_13_280 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$sroa[self.buf]$dae[alt_prefix]"($sroa_$f_buf_396, rx_268, $sroa_$pattern_temp_0_1_14_281);
+                "core:prelude/primitive.wado/write_decimal_digits"($sroa_$f_buf_396.repr, $sroa_$pattern_temp_0_0_13_280, $cm_pair_7_246, $sroa_$pattern_temp_0_1_14_281);
+                offset_109 = builtin::i32_wrap_i64(local.tee q("wasi/stream-new"()));
+                digit_count_108 = builtin::i32_wrap_i64(q >> 32_i64);
+                is_negative_106 = offset_109;
+                start_512 = digit_count_108;
+                $av_818 = "affine_for_of_iterator.wado/$cm_binding__Stdout_write_via_stream"(is_negative_47 = is_negative_106; is_negative_106 = 0; is_negative_47);
+                $moved_6_245 = start_512;
+                start_512 = 0;
+                "core:rt/write_string_to_stream$dae[add_newline]"($moved_4_243 = local.tee $moved_3_251($moved_6_245); $moved_3_251 = 0; $moved_4_243, self_85.repr, self_85.used);
+                "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(tens = $av_818; $av_818 = 0; tens);
             } else {
-                break b48;
+                break b39;
             }
-            continue l49;
+            continue l40;
         };
     };
-    if ref.is_null($iter_2) == 0 {
-        if ref.is_null(local.tee $moved_1_35($iter_2.first)) == 0 {
-            if ref.is_null($moved_1_35.token) == 0 {
+    if ref.is_null($moved_1_283) == 0 {
+        if ref.is_null(local.tee $moved_2_304($moved_1_283.first)) == 0 {
+            if ref.is_null($moved_2_304.token) == 0 {
                 global:affine_for_of_iterator.wado::DROPS = global:affine_for_of_iterator.wado::DROPS + 1;
             }
-            $moved_1_35.token = ref.null none;
+            $moved_2_304.token = ref.null none;
         }
-        $iter_2.first = ref.null none;
-        if ref.is_null(local.tee $load_48($iter_2.second)) == 0 {
-            if ref.is_null(local.tee $contract_arg_0($load_48.inner)) == 0 {
-                if ref.is_null(local.tee $moved_1_35($contract_arg_0.first)) == 0 {
-                    if ref.is_null($moved_1_35.token) == 0 {
+        $moved_1_283.first = ref.null none;
+        if ref.is_null(local.tee $moved_3_291($moved_1_283.second)) == 0 {
+            if ref.is_null(local.tee $moved_2_298($moved_3_291.inner)) == 0 {
+                if ref.is_null(local.tee $moved_2_304($moved_2_298.first)) == 0 {
+                    if ref.is_null($moved_2_304.token) == 0 {
                         global:affine_for_of_iterator.wado::DROPS = global:affine_for_of_iterator.wado::DROPS + 1;
                     }
-                    $moved_1_35.token = ref.null none;
+                    $moved_2_304.token = ref.null none;
                 }
-                $contract_arg_0.first = ref.null none;
-                if ref.is_null(local.tee $moved_1_35($contract_arg_0.second)) == 0 {
-                    if ref.is_null($moved_1_35.token) == 0 {
+                $moved_2_298.first = ref.null none;
+                if ref.is_null(local.tee $moved_2_304($moved_2_298.second)) == 0 {
+                    if ref.is_null($moved_2_304.token) == 0 {
                         global:affine_for_of_iterator.wado::DROPS = global:affine_for_of_iterator.wado::DROPS + 1;
                     }
-                    $moved_1_35.token = ref.null none;
+                    $moved_2_304.token = ref.null none;
                 }
-                $contract_arg_0.second = ref.null none;
+                $moved_2_298.second = ref.null none;
             }
-            $iter_2.second.inner = ref.null none;
+            $moved_1_283.second.inner = ref.null none;
         }
-        $iter_2.second = ref.null none;
+        $moved_1_283.second = ref.null none;
     }
-    $moved_1_35 = ref.null none;
-    $sroa_$f_buf_283 = local.tee self_85(struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(33), used: 0 });
-    digit_count_108 = local.tee offset_109(self_34 = struct.new "affine_for_of_iterator.wado//Counter" { n: 0, token: struct.new "affine_for_of_iterator.wado//Token" { id: 1 } }; offset_109 = 0; $moved_4 = self_34; self_34 = ref.null none; $moved_1_251 = $moved_4; if ref.is_null(local.tee $moved_4(ref.null none)) == 0 {
-        if ref.is_null($moved_4.token) == 0 {
-            global:affine_for_of_iterator.wado::DROPS = global:affine_for_of_iterator.wado::DROPS + 1;
-        }
-        $moved_4.token = ref.null none;
-    }; b63: block {
-        l64: loop {
-            break_if b63 local.tee digit_count_108($moved_1_251.n) >= 3;
-            $moved_1_251.n = digit_count_108 + 1;
-            offset_109 = offset_109 + $moved_1_251.n;
-            continue l64;
+    $moved_2_304 = ref.null none;
+    $sroa_$f_buf_396 = local.tee self_85(struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(33), used: 0 });
+    $moved_3_279 = local.tee $moved_6_273(self_34 = struct.new "affine_for_of_iterator.wado//Counter" { n: 0, token: struct.new "affine_for_of_iterator.wado//Token" { id: 1 } }; $moved_6_273 = 0; other_303 = self_34; self_34 = ref.null none; self_34 = other_303; other_303 = ref.null none; b52: block {
+        l53: loop {
+            break_if b52 local.tee $moved_3_279(self_34.n) >= 3;
+            self_34.n = $moved_3_279 + 1;
+            $moved_6_273 = $moved_6_273 + self_34.n;
+            continue l53;
         };
-    }; if ref.is_null($moved_1_251) == 0 {
-        if ref.is_null($moved_1_251.token) == 0 {
-            global:affine_for_of_iterator.wado::DROPS = global:affine_for_of_iterator.wado::DROPS + 1;
-        }
-        $moved_1_251.token = ref.null none;
     }; if ref.is_null(self_34) == 0 {
         if ref.is_null(self_34.token) == 0 {
             global:affine_for_of_iterator.wado::DROPS = global:affine_for_of_iterator.wado::DROPS + 1;
         }
         self_34.token = ref.null none;
-    }; offset_109) < 0;
-    offset_109 = "core:prelude/primitive.wado/count_digits_u64"(local.tee q(q = builtin::i64_extend_i32_s(offset_109); select i64(q < 0_i64, 0_i64 - q, q)));
-    digit_count_108 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$sroa[self.buf]$dae[alt_prefix]"($sroa_$f_buf_283, digit_count_108, offset_109);
-    "core:prelude/primitive.wado/write_decimal_digits"(local.tee $local_11($sroa_$f_buf_283).repr, digit_count_108, q, offset_109);
-    if @unlikely(local.tee offset_109(self_85.used + 1) > builtin::array_len(self_85.repr)) {
+    }; $moved_6_273) < 0;
+    $moved_6_273 = "core:prelude/primitive.wado/count_digits_u64"(local.tee $cm_pair_7_274($cm_pair_7_274 = builtin::i64_extend_i32_s($moved_6_273); select i64($cm_pair_7_274 < 0_i64, 0_i64 - $cm_pair_7_274, $cm_pair_7_274)));
+    $moved_3_279 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$sroa[self.buf]$dae[alt_prefix]"($sroa_$f_buf_396, $moved_3_279, $moved_6_273);
+    "core:prelude/primitive.wado/write_decimal_digits"(local.tee $tmpl_buf_377($sroa_$f_buf_396).repr, $moved_3_279, $cm_pair_7_274, $moved_6_273);
+    if @unlikely(local.tee $moved_6_273(self_85.used + 1) > builtin::array_len(self_85.repr)) {
         cold_path;
-        "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self_85, offset_109);
+        "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self_85, $moved_6_273);
     }
-    digit_count_108 = self_85.used;
-    self_85.used = offset_109;
-    builtin::array_copy<u8>(self_85.repr, digit_count_108, global:affine_for_of_iterator.wado::$const_obj_1, 0, 1);
-    $sroa_$f_buf_283 = self_85;
-    offset_109 = local.tee digit_count_108($moved_1_35 = struct.new "affine_for_of_iterator.wado//Counter" { n: 0, token: struct.new "affine_for_of_iterator.wado//Token" { id: 1 } }; digit_count_108 = 0; b70: block {
-        l71: loop {
-            $av_705 = 0;
+    $moved_3_279 = self_85.used;
+    self_85.used = $moved_6_273;
+    builtin::array_copy<u8>(self_85.repr, $moved_3_279, global:affine_for_of_iterator.wado::$const_obj_1, 0, 1);
+    $sroa_$f_buf_396 = self_85;
+    $moved_6_273 = local.tee $moved_3_279($moved_2_304 = struct.new "affine_for_of_iterator.wado//Counter" { n: 0, token: struct.new "affine_for_of_iterator.wado//Token" { id: 1 } }; $moved_3_279 = 0; b57: block {
+        l58: loop {
+            $moved_5_272 = 0;
             $inline_affine_for_of_iterator_wado_Counter_core_prelude_traits_wado_Iterator__next_sroa_return__78: block {
-                if local.tee offset_109($moved_1_35.n) >= 3 {
-                    $av_705 = 0;
+                if local.tee $moved_6_273($moved_2_304.n) >= 3 {
+                    $moved_5_272 = 0;
                     break $inline_affine_for_of_iterator_wado_Counter_core_prelude_traits_wado_Iterator__next_sroa_return__78;
                 }
-                $moved_1_35.n = offset_109 + 1;
-                $av_705 = 1;
+                $moved_2_304.n = $moved_6_273 + 1;
+                $moved_5_272 = 1;
                 break $inline_affine_for_of_iterator_wado_Counter_core_prelude_traits_wado_Iterator__next_sroa_return__78;
             };
-            if local.tee is_negative_106($av_705) == 1 {
-                digit_count_108 = digit_count_108 + 1;
+            if local.tee tx_276($moved_5_272) == 1 {
+                $moved_3_279 = $moved_3_279 + 1;
             } else {
-                break b70;
+                break b57;
             }
-            continue l71;
+            continue l58;
         };
-    }; digit_count_108) < 0;
-    digit_count_108 = "core:prelude/primitive.wado/count_digits_u64"(local.tee q(q = builtin::i64_extend_i32_s(digit_count_108); select i64(q < 0_i64, 0_i64 - q, q)));
-    offset_109 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$sroa[self.buf]$dae[alt_prefix]"($sroa_$f_buf_283, offset_109, digit_count_108);
-    "core:prelude/primitive.wado/write_decimal_digits"($sroa_$f_buf_283.repr, offset_109, q, digit_count_108);
-    "core:cli/println"(self_85.repr, self_85.used);
-    if ref.is_null($moved_1_35) == 0 {
-        if ref.is_null($moved_1_35.token) == 0 {
+    }; $moved_3_279) < 0;
+    $moved_3_279 = "core:prelude/primitive.wado/count_digits_u64"(local.tee $cm_pair_7_274($cm_pair_7_274 = builtin::i64_extend_i32_s($moved_3_279); select i64($cm_pair_7_274 < 0_i64, 0_i64 - $cm_pair_7_274, $cm_pair_7_274)));
+    $moved_6_273 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$sroa[self.buf]$dae[alt_prefix]"($sroa_$f_buf_396, $moved_6_273, $moved_3_279);
+    "core:prelude/primitive.wado/write_decimal_digits"($sroa_$f_buf_396.repr, $moved_6_273, $cm_pair_7_274, $moved_3_279);
+    $moved_3_279 = builtin::i32_wrap_i64(local.tee $cm_pair_7_274("wasi/stream-new"()));
+    $moved_6_273 = builtin::i32_wrap_i64($cm_pair_7_274 >> 32_i64);
+    tx_276 = "affine_for_of_iterator.wado/$cm_binding__Stdout_write_via_stream"(tx_276 = $moved_3_279; $moved_3_279 = 0; tx_276);
+    $moved_3_279 = $moved_6_273;
+    $moved_6_273 = 0;
+    "core:rt/write_string_to_stream$dae[add_newline]"($moved_6_273 = $moved_3_279; $moved_3_279 = 0; $moved_6_273, self_85.repr, self_85.used);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"($moved_6_273 = tx_276; tx_276 = 0; $moved_6_273);
+    if ref.is_null($moved_2_304) == 0 {
+        if ref.is_null($moved_2_304.token) == 0 {
             global:affine_for_of_iterator.wado::DROPS = global:affine_for_of_iterator.wado::DROPS + 1;
         }
-        $moved_1_35.token = ref.null none;
+        $moved_2_304.token = ref.null none;
     }
-    self_34 = local.tee $moved_1_35(struct.new "affine_for_of_iterator.wado//Counter" { n: 0, token: struct.new "affine_for_of_iterator.wado//Token" { id: 1 } });
-    $moved_1_35 = ref.null none;
-    $moved_1_251 = self_34;
-    if ref.is_null(local.tee self_34(ref.null none)) == 0 {
-        if ref.is_null(self_34.token) == 0 {
-            global:affine_for_of_iterator.wado::DROPS = global:affine_for_of_iterator.wado::DROPS + 1;
-        }
-        self_34.token = ref.null none;
-    }
-    b78: block {
-        l79: loop {
-            break_if b78 local.tee digit_count_108($moved_1_251.n) >= 3;
-            $moved_1_251.n = digit_count_108 + 1;
-            break_if b78 $moved_1_251.n == 1;
-            continue l79;
+    self_34 = local.tee $moved_2_304(struct.new "affine_for_of_iterator.wado//Counter" { n: 0, token: struct.new "affine_for_of_iterator.wado//Token" { id: 1 } });
+    $moved_2_304 = ref.null none;
+    $moved_2_304 = self_34;
+    self_34 = ref.null none;
+    b63: block {
+        l64: loop {
+            break_if b63 local.tee $moved_6_273($moved_2_304.n) >= 3;
+            $moved_2_304.n = $moved_6_273 + 1;
+            break_if b63 $moved_2_304.n == 1;
+            continue l64;
         };
     };
-    if ref.is_null($moved_1_251) == 0 {
-        if ref.is_null($moved_1_251.token) == 0 {
+    if ref.is_null($moved_2_304) == 0 {
+        if ref.is_null($moved_2_304.token) == 0 {
             global:affine_for_of_iterator.wado::DROPS = global:affine_for_of_iterator.wado::DROPS + 1;
         }
-        $moved_1_251.token = ref.null none;
+        $moved_2_304.token = ref.null none;
     }
     self_85 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(22), used: 0 };
-    if @unlikely(local.tee digit_count_108(0 + 6) > builtin::array_len(self_85.repr)) {
+    if @unlikely(local.tee $moved_6_273(0 + 6) > builtin::array_len(self_85.repr)) {
         cold_path;
-        "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self_85, digit_count_108);
+        "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self_85, $moved_6_273);
     }
-    offset_109 = self_85.used;
-    self_85.used = digit_count_108;
-    builtin::array_copy<u8>(self_85.repr, offset_109, global:affine_for_of_iterator.wado::$const_obj_0, 0, 6);
-    digit_count_108 = local.tee offset_109(global:affine_for_of_iterator.wado::DROPS) < 0;
-    offset_109 = "core:prelude/primitive.wado/count_digits_u64"(local.tee q(q = builtin::i64_extend_i32_s(offset_109); select i64(q < 0_i64, 0_i64 - q, q)));
-    digit_count_108 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$sroa[self.buf]$dae[alt_prefix]"(self_85, digit_count_108, offset_109);
-    "core:prelude/primitive.wado/write_decimal_digits"(self_85.repr, digit_count_108, q, offset_109);
-    "core:cli/println"(self_85.repr, self_85.used);
-    if ref.is_null($moved_1_35) == 0 {
-        if ref.is_null($moved_1_35.token) == 0 {
-            global:affine_for_of_iterator.wado::DROPS = global:affine_for_of_iterator.wado::DROPS + 1;
-        }
-        $moved_1_35.token = ref.null none;
-    }
+    tx_276 = self_85.used;
+    self_85.used = $moved_6_273;
+    builtin::array_copy<u8>(self_85.repr, tx_276, global:affine_for_of_iterator.wado::$const_obj_0, 0, 6);
+    $moved_6_273 = local.tee tx_276(global:affine_for_of_iterator.wado::DROPS) < 0;
+    tx_276 = "core:prelude/primitive.wado/count_digits_u64"(local.tee $cm_pair_7_274($cm_pair_7_274 = builtin::i64_extend_i32_s(tx_276); select i64($cm_pair_7_274 < 0_i64, 0_i64 - $cm_pair_7_274, $cm_pair_7_274)));
+    $moved_6_273 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$sroa[self.buf]$dae[alt_prefix]"(self_85, $moved_6_273, tx_276);
+    "core:prelude/primitive.wado/write_decimal_digits"(self_85.repr, $moved_6_273, $cm_pair_7_274, tx_276);
+    tx_276 = builtin::i32_wrap_i64(local.tee $cm_pair_7_274("wasi/stream-new"()));
+    $moved_6_273 = builtin::i32_wrap_i64($cm_pair_7_274 >> 32_i64);
+    $moved_3_279 = "affine_for_of_iterator.wado/$cm_binding__Stdout_write_via_stream"($moved_3_279 = tx_276; tx_276 = 0; $moved_3_279);
+    tx_276 = $moved_6_273;
+    $moved_6_273 = 0;
+    "core:rt/write_string_to_stream$dae[add_newline]"($moved_6_273 = tx_276; tx_276 = 0; $moved_6_273, self_85.repr, self_85.used);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"($moved_6_273 = $moved_3_279; $moved_3_279 = 0; $moved_6_273);
 }
 
 fn "affine_for_of_iterator.wado/$cm_binding__Stdout_write_via_stream"(data) with Stdout {
-    return let $cm_handle_2: i32, $cm_handle_2 = data.value, data.value = 0, struct.new "core:prelude//$Resource" { value: "wasi/wasi:cli/Stdout::write_via_stream"($cm_handle_2) };
+    return let $cm_handle_2: i32, $cm_handle_2 = data, data = 0, "wasi/wasi:cli/Stdout::write_via_stream"($cm_handle_2);
 }
 
 fn "affine_for_of_iterator.wado/$cm_export__run"() {
@@ -584,49 +568,21 @@ fn "affine_for_of_iterator.wado/$cm_export__run"() {
     "wasi/task-return"(0);
 }
 
-fn "core:cli/println"($mv$message$repr, $mv$message$used) with Stdout {
-    let $moved_4: ref null "core:prelude//$Resource";
-    let $moved_5: ref null "core:prelude//$Resource";
-    let $cm_pair_7: i64;
-    let $moved_3: ref null "core:prelude//$Resource";
-    let $sroa_$pattern_temp_0_0_13: ref null "core:prelude//$Resource";
-    let $sroa_$pattern_temp_0_1_14: ref null "core:prelude//$Resource";
-    $sroa_$pattern_temp_0_0_13 = struct.new "core:prelude//$Resource" { value: builtin::i32_wrap_i64(local.tee $cm_pair_7("wasi/stream-new"())) };
-    $sroa_$pattern_temp_0_1_14 = struct.new "core:prelude//$Resource" { value: builtin::i32_wrap_i64($cm_pair_7 >> 32_i64) };
-    $moved_4 = "affine_for_of_iterator.wado/$cm_binding__Stdout_write_via_stream"($moved_4 = $sroa_$pattern_temp_0_0_13; $sroa_$pattern_temp_0_0_13 = ref.null none; $moved_4);
-    $moved_5 = $sroa_$pattern_temp_0_1_14;
-    $sroa_$pattern_temp_0_1_14 = ref.null none;
-    "core:rt/write_string_to_stream$dae[add_newline]"($moved_3 = $moved_5; $moved_5 = ref.null none; $moved_3, $mv$message$repr, $mv$message$used);
-    if ref.is_null($moved_5) == 0 {
-        "wasi/stream-drop-writable"($moved_5.value);
-    }
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"($moved_5 = $moved_4; $moved_4 = ref.null none; $moved_5.value);
-    if ref.is_null($moved_4) == 0 {
-        "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"($moved_4.value);
-    }
-    if ref.is_null($sroa_$pattern_temp_0_1_14) == 0 {
-        "wasi/stream-drop-writable"($sroa_$pattern_temp_0_1_14.value);
-    }
-    if ref.is_null($sroa_$pattern_temp_0_0_13) == 0 {
-        "wasi/stream-drop-readable"($sroa_$pattern_temp_0_0_13.value);
-    }
-}
-
 fn "core:prelude/primitive.wado/write_decimal_digits"(arr, offset, val, digit_count) {
     let q: u64;
     let pair: i32;
     let tens: i32;
     digit_count = offset + digit_count;
-    b89: block {
-        l90: loop {
-            break_if b89 (digit_count - offset) < 2;
+    b68: block {
+        l69: loop {
+            break_if b68 (digit_count - offset) < 2;
             q = val /u 100_i64;
             tens = local.tee pair(builtin::i32_wrap_i64(val - (q * 100_i64))) / 10;
             builtin::array_set_u8(arr, digit_count - 1, ((48 + pair) - (tens * 10)) & 255);
             builtin::array_set_u8(arr, digit_count - 2, (48 + tens) & 255);
             digit_count = digit_count - 2;
             val = q;
-            continue l90;
+            continue l69;
         };
     };
     if digit_count > offset {
@@ -697,19 +653,15 @@ fn "core:prelude/primitive.wado/count_digits_u64"(val) {
 
 fn "core:rt/write_string_to_stream$dae[add_newline]"(tx, $mv$message$repr, $mv$message$used) {
     let new_repr: ref Array<u8>;
-    let $moved_5: ref null "core:prelude//$Resource";
     builtin::array_copy<u8>(local.tee new_repr(builtin::array_new<u8>($mv$message$used + 1)), 0, $mv$message$repr, 0, $mv$message$used);
     builtin::array_set_u8(new_repr, $mv$message$used, 10);
     drop(block -> "core:prelude/types.wado//enum:CopyResult" {
         let $arg_spill_1: i32;
-        $arg_spill_1 = tx.value;
+        $arg_spill_1 = tx;
         $mv$message$used = $mv$message$used + 1;
         "core:rt/cm_stream_write_raw_all_u8"($arg_spill_1, new_repr, 0, $mv$message$used);
     });
-    "wasi/stream-drop-writable"($moved_5 = tx; tx = ref.null none; $moved_5.value);
-    if ref.is_null(tx) == 0 {
-        "wasi/stream-drop-writable"(tx.value);
-    }
+    "wasi/stream-drop-writable"($mv$message$used = tx; tx = 0; $mv$message$used);
 }
 
 fn "core:rt/unreachable"() {
@@ -730,17 +682,17 @@ fn "core:rt/cm_stream_write_raw_all_u8"(handle, $mv$data$repr, $mv$data$start, $
     if local.tee $mv$data$end($mv$data$end - $mv$data$start) == 0 {
         return 0;
     }
-    ptr_15 = builtin::i32_wrap_i64(ptr_15 = "mem/realloc"(0, 0, 1, $mv$data$end); i = 0; b114: block {
-        l115: loop {
-            break_if b114 i >= $mv$data$end;
+    ptr_15 = builtin::i32_wrap_i64(ptr_15 = "mem/realloc"(0, 0, 1, $mv$data$end); i = 0; b92: block {
+        l93: loop {
+            break_if b92 i >= $mv$data$end;
             builtin::store_u8(ptr_15 + i, builtin::array_get_value_u8($mv$data$repr, $mv$data$start + i));
             i = i + 1;
-            continue l115;
+            continue l93;
         };
     }; builtin::i64_extend_i32_u(ptr_15) | (builtin::i64_extend_i32_s($mv$data$end) << 32_i64));
     i = 0;
     block {
-        l117: loop {
+        l95: loop {
             delivered_6 = local.tee written($inline_cm_stream_write_once_4: block -> i32 {
                 $mv$data$start = ptr_15 + i;
                 count_18 = $mv$data$end - i;
@@ -771,7 +723,7 @@ fn "core:rt/cm_stream_write_raw_all_u8"(handle, $mv$data$repr, $mv$data$start, $
                 drop("mem/realloc"(ptr_15, $mv$data$end, 1, 0));
                 return $match_scrut_0;
             }
-            continue l117;
+            continue l95;
         };
     };
 }
@@ -810,118 +762,6 @@ fn "core:prelude/traits.wado/core:prelude/traits.wado/IterZip<affine_for_of_iter
     return ref.null none;
 }
 
-fn "affine_for_of_iterator.wado/affine_for_of_iterator.wado/Counter^core:prelude/traits.wado/Iterator::chain<affine_for_of_iterator.wado/Counter>"(self, other) {
-    let $moved_2: ref null "affine_for_of_iterator.wado//Counter";
-    let $drop_spill_4: ref null "core:prelude/traits.wado//IterChain<affine_for_of_iterator.wado/Counter,affine_for_of_iterator.wado/Counter>";
-    $drop_spill_4 = struct.new "core:prelude/traits.wado//IterChain<affine_for_of_iterator.wado/Counter,affine_for_of_iterator.wado/Counter>" { first: $moved_2 = self; self = ref.null none; $moved_2, second: $moved_2 = other; other = ref.null none; $moved_2, first_done: 0 };
-    if ref.is_null(other) == 0 {
-        if ref.is_null(other.token) == 0 {
-            global:affine_for_of_iterator.wado::DROPS = global:affine_for_of_iterator.wado::DROPS + 1;
-        }
-        other.token = ref.null none;
-    }
-    if ref.is_null(self) == 0 {
-        if ref.is_null(self.token) == 0 {
-            global:affine_for_of_iterator.wado::DROPS = global:affine_for_of_iterator.wado::DROPS + 1;
-        }
-        self.token = ref.null none;
-    }
-    return $drop_spill_4;
-}
-
-fn "affine_for_of_iterator.wado/affine_for_of_iterator.wado/Counter^core:prelude/traits.wado/Iterator::zip<core:prelude/traits.wado/IterStepBy<core:prelude/traits.wado/IterChain<affine_for_of_iterator.wado/Counter,affine_for_of_iterator.wado/Counter>>>"(self, other) {
-    let $load_0: ref null "core:prelude/traits.wado//IterChain<affine_for_of_iterator.wado/Counter,affine_for_of_iterator.wado/Counter>";
-    let $moved_2: ref null "affine_for_of_iterator.wado//Counter";
-    let $moved_3: ref null "core:prelude/traits.wado//IterStepBy<core:prelude/traits.wado/IterChain<affine_for_of_iterator.wado/Counter,affine_for_of_iterator.wado/Counter>>";
-    let $drop_spill_4: ref null "core:prelude/traits.wado//IterZip<affine_for_of_iterator.wado/Counter,core:prelude/traits.wado/IterStepBy<core:prelude/traits.wado/IterChain<affine_for_of_iterator.wado/Counter,affine_for_of_iterator.wado/Counter>>>";
-    $drop_spill_4 = struct.new "core:prelude/traits.wado//IterZip<affine_for_of_iterator.wado/Counter,core:prelude/traits.wado/IterStepBy<core:prelude/traits.wado/IterChain<affine_for_of_iterator.wado/Counter,affine_for_of_iterator.wado/Counter>>>" { first: $moved_2 = self; self = ref.null none; $moved_2, second: $moved_3 = other; other = ref.null none; $moved_3 };
-    if ref.is_null(other) == 0 {
-        if ref.is_null(local.tee $load_0(other.inner)) == 0 {
-            if ref.is_null(local.tee $moved_2($load_0.first)) == 0 {
-                if ref.is_null($moved_2.token) == 0 {
-                    global:affine_for_of_iterator.wado::DROPS = global:affine_for_of_iterator.wado::DROPS + 1;
-                }
-                $moved_2.token = ref.null none;
-            }
-            $load_0.first = ref.null none;
-            if ref.is_null(local.tee $moved_2($load_0.second)) == 0 {
-                if ref.is_null($moved_2.token) == 0 {
-                    global:affine_for_of_iterator.wado::DROPS = global:affine_for_of_iterator.wado::DROPS + 1;
-                }
-                $moved_2.token = ref.null none;
-            }
-            $load_0.second = ref.null none;
-        }
-        other.inner = ref.null none;
-    }
-    if ref.is_null(self) == 0 {
-        if ref.is_null(self.token) == 0 {
-            global:affine_for_of_iterator.wado::DROPS = global:affine_for_of_iterator.wado::DROPS + 1;
-        }
-        self.token = ref.null none;
-    }
-    return $drop_spill_4;
-}
-
-fn "core:prelude/traits.wado/core:prelude/traits.wado/IterZip<affine_for_of_iterator.wado/Counter,core:prelude/traits.wado/IterStepBy<core:prelude/traits.wado/IterChain<affine_for_of_iterator.wado/Counter,affine_for_of_iterator.wado/Counter>>>^core:prelude/traits.wado/ForOf::start"(self) {
-    let $load_0: ref null "affine_for_of_iterator.wado//Counter";
-    let $load_2: ref null "core:prelude/traits.wado//IterStepBy<core:prelude/traits.wado/IterChain<affine_for_of_iterator.wado/Counter,affine_for_of_iterator.wado/Counter>>";
-    let $load_3: ref null "core:prelude/traits.wado//IterChain<affine_for_of_iterator.wado/Counter,affine_for_of_iterator.wado/Counter>";
-    let $moved_1: ref null "core:prelude/traits.wado//IterZip<affine_for_of_iterator.wado/Counter,core:prelude/traits.wado/IterStepBy<core:prelude/traits.wado/IterChain<affine_for_of_iterator.wado/Counter,affine_for_of_iterator.wado/Counter>>>";
-    $moved_1 = self;
-    if ref.is_null(local.tee self(ref.null none)) == 0 {
-        if ref.is_null(local.tee $load_0(self.first)) == 0 {
-            if ref.is_null($load_0.token) == 0 {
-                global:affine_for_of_iterator.wado::DROPS = global:affine_for_of_iterator.wado::DROPS + 1;
-            }
-            $load_0.token = ref.null none;
-        }
-        self.first = ref.null none;
-        if ref.is_null(local.tee $load_2(self.second)) == 0 {
-            if ref.is_null(local.tee $load_3($load_2.inner)) == 0 {
-                if ref.is_null(local.tee $load_0($load_3.first)) == 0 {
-                    if ref.is_null($load_0.token) == 0 {
-                        global:affine_for_of_iterator.wado::DROPS = global:affine_for_of_iterator.wado::DROPS + 1;
-                    }
-                    $load_0.token = ref.null none;
-                }
-                $load_3.first = ref.null none;
-                if ref.is_null(local.tee $load_0($load_3.second)) == 0 {
-                    if ref.is_null($load_0.token) == 0 {
-                        global:affine_for_of_iterator.wado::DROPS = global:affine_for_of_iterator.wado::DROPS + 1;
-                    }
-                    $load_0.token = ref.null none;
-                }
-                $load_3.second = ref.null none;
-            }
-            self.second.inner = ref.null none;
-        }
-        self.second = ref.null none;
-    }
-    return $moved_1;
-}
-
-fn "core:prelude/traits.wado/core:prelude/traits.wado/IterFilter<core:prelude/traits.wado/IterMap<affine_for_of_iterator.wado/Counter,fn mut(i32)->i32>,fn mut(i32)->bool>^core:prelude/traits.wado/Iterator::enumerate"(self) {
-    let $load_0: ref null "core:prelude/traits.wado//IterMap<affine_for_of_iterator.wado/Counter,fn mut(i32)->i32>";
-    let $load_1: ref null "affine_for_of_iterator.wado//Counter";
-    let $moved_1: ref null "core:prelude/traits.wado//IterFilter<core:prelude/traits.wado/IterMap<affine_for_of_iterator.wado/Counter,fn mut(i32)->i32>,fn mut(i32)->bool>";
-    let $drop_spill_2: ref null "core:prelude/traits.wado//IterEnumerate<core:prelude/traits.wado/IterFilter<core:prelude/traits.wado/IterMap<affine_for_of_iterator.wado/Counter,fn mut(i32)->i32>,fn mut(i32)->bool>>";
-    $drop_spill_2 = struct.new "core:prelude/traits.wado//IterEnumerate<core:prelude/traits.wado/IterFilter<core:prelude/traits.wado/IterMap<affine_for_of_iterator.wado/Counter,fn mut(i32)->i32>,fn mut(i32)->bool>>" { inner: $moved_1 = self; self = ref.null none; $moved_1, count: 0 };
-    if ref.is_null(self) == 0 {
-        if ref.is_null(local.tee $load_0(self.inner)) == 0 {
-            if ref.is_null(local.tee $load_1($load_0.inner)) == 0 {
-                if ref.is_null($load_1.token) == 0 {
-                    global:affine_for_of_iterator.wado::DROPS = global:affine_for_of_iterator.wado::DROPS + 1;
-                }
-                $load_1.token = ref.null none;
-            }
-            $load_0.inner = ref.null none;
-        }
-        self.inner = ref.null none;
-    }
-    return $drop_spill_2;
-}
-
 fn "core:prelude/traits.wado/core:prelude/traits.wado/IterFilter<core:prelude/traits.wado/IterMap<affine_for_of_iterator.wado/Counter,fn mut(i32)->i32>,fn mut(i32)->bool>^core:prelude/traits.wado/Iterator::next$sroa[return]"(self) {
     let $fused_slot_8: i32;
     let $licm_inner_9: ref null "core:prelude/traits.wado//IterMap<affine_for_of_iterator.wado/Counter,fn mut(i32)->i32>";
@@ -935,7 +775,7 @@ fn "core:prelude/traits.wado/core:prelude/traits.wado/IterFilter<core:prelude/tr
     $licm_f_12 = $licm_inner_9.f;
     $hfs_n_13 = $licm_inner_11.n;
     block {
-        l150: loop {
+        l103: loop {
             $fused_$inline_core_prelude_traits_wado_IterMap_affine_for_of_iterator_wado_Counter_fn_mut_i32___i32__core_prelude_traits_wado_Iterator__next_sroa_return__0: block {
                 $fused_$inline_affine_for_of_iterator_wado_Counter_core_prelude_traits_wado_Iterator__next_sroa_return__1: block {
                     break_if $fused_$inline_affine_for_of_iterator_wado_Counter_core_prelude_traits_wado_Iterator__next_sroa_return__1 $hfs_n_13 >= 3;
@@ -956,33 +796,9 @@ fn "core:prelude/traits.wado/core:prelude/traits.wado/IterFilter<core:prelude/tr
                 $licm_inner_11.n = $hfs_n_13;
                 return 0, 0;
             };
-            continue l150;
+            continue l103;
         };
     };
-}
-
-fn "core:prelude/traits.wado/core:prelude/traits.wado/IterChain<affine_for_of_iterator.wado/Counter,affine_for_of_iterator.wado/Counter>^core:prelude/traits.wado/Iterator::step_by$unchecked$dae[step]"(self) {
-    let $load_0: ref null "affine_for_of_iterator.wado//Counter";
-    let $moved_2: ref null "core:prelude/traits.wado//IterChain<affine_for_of_iterator.wado/Counter,affine_for_of_iterator.wado/Counter>";
-    let $drop_spill_3: ref null "core:prelude/traits.wado//IterStepBy<core:prelude/traits.wado/IterChain<affine_for_of_iterator.wado/Counter,affine_for_of_iterator.wado/Counter>>";
-    $drop_spill_3 = struct.new "core:prelude/traits.wado//IterStepBy<core:prelude/traits.wado/IterChain<affine_for_of_iterator.wado/Counter,affine_for_of_iterator.wado/Counter>>" { inner: $moved_2 = self; self = ref.null none; $moved_2, gap: 1, started: 0 };
-    if ref.is_null(self) == 0 {
-        if ref.is_null(local.tee $load_0(self.first)) == 0 {
-            if ref.is_null($load_0.token) == 0 {
-                global:affine_for_of_iterator.wado::DROPS = global:affine_for_of_iterator.wado::DROPS + 1;
-            }
-            $load_0.token = ref.null none;
-        }
-        self.first = ref.null none;
-        if ref.is_null(local.tee $load_0(self.second)) == 0 {
-            if ref.is_null($load_0.token) == 0 {
-                global:affine_for_of_iterator.wado::DROPS = global:affine_for_of_iterator.wado::DROPS + 1;
-            }
-            $load_0.token = ref.null none;
-        }
-        self.second = ref.null none;
-    }
-    return $drop_spill_3;
 }
 
 fn "core:prelude/traits.wado/core:prelude/traits.wado/IterStepBy<core:prelude/traits.wado/IterChain<affine_for_of_iterator.wado/Counter,affine_for_of_iterator.wado/Counter>>^core:prelude/traits.wado/Iterator::next$sroa[return]"(self) {
@@ -992,8 +808,8 @@ fn "core:prelude/traits.wado/core:prelude/traits.wado/IterStepBy<core:prelude/tr
         block {
             self_1 = self.inner;
             remaining = self.gap;
-            b160: block {
-                l161: loop {
+            b108: block {
+                l109: loop {
                     let $mv$$local_4$0: i32;
                     let $mv$$local_4$1: i32;
                     multivalue_bind [$mv$$local_4$0, $mv$$local_4$1] = "core:prelude/traits.wado/core:prelude/traits.wado/IterChain<affine_for_of_iterator.wado/Counter,affine_for_of_iterator.wado/Counter>^core:prelude/traits.wado/Iterator::next$sroa[return]"(self_1);
@@ -1003,9 +819,9 @@ fn "core:prelude/traits.wado/core:prelude/traits.wado/IterStepBy<core:prelude/tr
                         }
                         remaining = remaining - 1;
                     } else {
-                        break b160;
+                        break b108;
                     }
-                    continue l161;
+                    continue l109;
                 };
             };
             return 0, 0;
@@ -1041,23 +857,6 @@ fn "affine_for_of_iterator.wado/affine_for_of_iterator.wado/$Closure_0::$call$da
 
 fn "affine_for_of_iterator.wado/affine_for_of_iterator.wado/$Closure_1::$call$dae[self]"(x) {
     return x > 10;
-}
-
-fn "affine_for_of_iterator.wado/core:prelude/traits.wado/IterMap<affine_for_of_iterator.wado/Counter,fn mut(i32)->i32>^core:prelude/traits.wado/Iterator::filter$$Closure_1"(self, pred) {
-    let $load_0: ref null "affine_for_of_iterator.wado//Counter";
-    let $moved_2: ref null "core:prelude/traits.wado//IterMap<affine_for_of_iterator.wado/Counter,fn mut(i32)->i32>";
-    let $drop_spill_3: ref null "core:prelude/traits.wado//IterFilter<core:prelude/traits.wado/IterMap<affine_for_of_iterator.wado/Counter,fn mut(i32)->i32>,fn mut(i32)->bool>";
-    $drop_spill_3 = struct.new "core:prelude/traits.wado//IterFilter<core:prelude/traits.wado/IterMap<affine_for_of_iterator.wado/Counter,fn mut(i32)->i32>,fn mut(i32)->bool>" { inner: $moved_2 = self; self = ref.null none; $moved_2, pred: struct.new "canonical//CanonicalClosure_0" { env: pred, func: ref.func "closure/affine_for_of_iterator.wado/$closure_wrapper_1" } };
-    if ref.is_null(self) == 0 {
-        if ref.is_null(local.tee $load_0(self.inner)) == 0 {
-            if ref.is_null($load_0.token) == 0 {
-                global:affine_for_of_iterator.wado::DROPS = global:affine_for_of_iterator.wado::DROPS + 1;
-            }
-            $load_0.token = ref.null none;
-        }
-        self.inner = ref.null none;
-    }
-    return $drop_spill_3;
 }
 
 fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$sroa[self.buf]$dae[alt_prefix]"(self, is_negative, digit_count) {

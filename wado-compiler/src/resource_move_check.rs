@@ -1088,11 +1088,11 @@ impl MoveWalker<'_, '_> {
             self.drop_body,
         );
         inner.flow = self.flow.clone();
-        inner.guard_bindings = self.guard_bindings.clone();
+        inner.guard_bindings.clone_from(&self.guard_bindings);
         inner.closure_locals = Some(locals);
-        inner.instances = self.instances.clone();
-        inner.ended = self.ended.clone();
-        inner.disturbances = self.disturbances.clone();
+        inner.instances.clone_from(&self.instances);
+        inner.ended.clone_from(&self.ended);
+        inner.disturbances.clone_from(&self.disturbances);
         inner.suppress = self.suppress;
         inner.visit_value(&closure.body);
         if !matches!(closure.body, Expr::Block(_)) {
