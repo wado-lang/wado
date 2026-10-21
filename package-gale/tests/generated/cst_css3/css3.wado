@@ -18088,9 +18088,7 @@ fn scan_media(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, follow: i64
     if pos < 0 { return -1; }
     pos = scan_media_query_list(tokens, pos, atn, FOLLOW_MASK_10);
     if pos < 0 { return -1; }
-    atn.stack.push(363);
     pos = scan_group_rule_body(tokens, pos, atn, follow_open_with(follow, follow_open_set(FOLLOW_MASK_9)));
-    atn.stack.pop();
     if pos < 0 { return -1; }
     pos = scan_ws(tokens, pos, atn, follow);
     if pos < 0 { return -1; }
@@ -18325,9 +18323,7 @@ fn scan_page(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, follow: i64 
     if pos < 0 { return -1; }
     if pos < tokens.len() && _kind_set_18(tokens[pos]) {
         let sp = pos;
-        atn.stack.push(474);
         pos = scan_declaration(tokens, pos, atn, 0);
-        atn.stack.pop();
         if pos < 0 { pos = sp; }
     }
     while pos < tokens.len() && tokens[pos] == TK_SemiColon {
@@ -18339,9 +18335,7 @@ fn scan_page(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, follow: i64 
                 if pos < 0 { break sg_32; }
                 if pos < tokens.len() && _kind_set_18(tokens[pos]) {
                     let sp = pos;
-                    atn.stack.push(486);
                     pos = scan_declaration(tokens, pos, atn, follow);
-                    atn.stack.pop();
                     if pos < 0 { pos = sp; }
                 }
                 break sg_32_done;
@@ -19016,9 +19010,7 @@ fn scan_declaration_list(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, 
         if pos < 0 { pos = sp; break; }
         if pos == sp { break; }
     }
-    atn.stack.push(814);
     pos = scan_declaration(tokens, pos, atn, follow_open_with(follow, follow_open_set(FOLLOW_MASK_31)));
-    atn.stack.pop();
     if pos < 0 { return -1; }
     pos = scan_ws(tokens, pos, atn, follow_open_with(follow, follow_open_set(FOLLOW_MASK_6)));
     if pos < 0 { return -1; }
@@ -19031,9 +19023,7 @@ fn scan_declaration_list(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, 
                 if pos < 0 { break sg_45; }
                 if pos < tokens.len() && _kind_set_18(tokens[pos]) {
                     let sp = pos;
-                    atn.stack.push(828);
                     pos = scan_declaration(tokens, pos, atn, follow);
-                    atn.stack.pop();
                     if pos < 0 { pos = sp; }
                     if follow_yields(tokens, sp, follow, &FOLLOW_SETS, TK_EOF) && !follow_resumes(tokens, pos, follow, &FOLLOW_SETS, TK_EOF) {
                         pos = sp;
@@ -19092,17 +19082,13 @@ fn scan_value(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, follow: i64
         let sgk_34 = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
         if _kind_set_29(sgk_34) {
             sg_34_0: {
-                atn.stack.push(863);
                 pos = scan_any_(tokens, pos, atn, follow_open_with(follow, follow_open_set(FOLLOW_MASK_34)));
-                atn.stack.pop();
                 if pos < 0 { break sg_34_0; }
                 break sg_34_done;
             }
         } else if sgk_34 == TK_OpenBrace {
             sg_34_1: {
-                atn.stack.push(865);
                 pos = scan_block(tokens, pos, atn, follow_open_with(follow, follow_open_set(FOLLOW_MASK_34)));
-                atn.stack.pop();
                 if pos < 0 { break sg_34_1; }
                 break sg_34_done;
             }
@@ -19122,17 +19108,13 @@ fn scan_value(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, follow: i64
             let sgk_35 = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
             if _kind_set_29(sgk_35) {
                 sg_35_0: {
-                    atn.stack.push(863);
                     pos = scan_any_(tokens, pos, atn, follow_open_with(follow, follow_open_set(FOLLOW_MASK_34)));
-                    atn.stack.pop();
                     if pos < 0 { break sg_35_0; }
                     break sg_35_done;
                 }
             } else if sgk_35 == TK_OpenBrace {
                 sg_35_1: {
-                    atn.stack.push(865);
                     pos = scan_block(tokens, pos, atn, follow_open_with(follow, follow_open_set(FOLLOW_MASK_34)));
-                    atn.stack.pop();
                     if pos < 0 { break sg_35_1; }
                     break sg_35_done;
                 }
@@ -19526,17 +19508,13 @@ fn scan_any_(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, follow: i64 
                     let sgk_41 = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
                     if _kind_set_29(sgk_41) {
                         sg_41_0: {
-                            atn.stack.push(1060);
                             pos = scan_any_(tokens, pos, atn, 0);
-                            atn.stack.pop();
                             if pos < 0 { break sg_41_0; }
                             break sg_41_done;
                         }
                     } else if _kind_set_86(sgk_41) {
                         sg_41_1: {
-                            atn.stack.push(1062);
                             pos = scan_unused(tokens, pos, atn, 0);
-                            atn.stack.pop();
                             if pos < 0 { break sg_41_1; }
                             break sg_41_done;
                         }
@@ -19565,17 +19543,13 @@ fn scan_any_(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, follow: i64 
                     let sgk_42 = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
                     if _kind_set_29(sgk_42) {
                         sg_42_0: {
-                            atn.stack.push(1077);
                             pos = scan_any_(tokens, pos, atn, 0);
-                            atn.stack.pop();
                             if pos < 0 { break sg_42_0; }
                             break sg_42_done;
                         }
                     } else if _kind_set_86(sgk_42) {
                         sg_42_1: {
-                            atn.stack.push(1079);
                             pos = scan_unused(tokens, pos, atn, 0);
-                            atn.stack.pop();
                             if pos < 0 { break sg_42_1; }
                             break sg_42_done;
                         }
@@ -19604,17 +19578,13 @@ fn scan_any_(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, follow: i64 
                     let sgk_43 = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
                     if _kind_set_29(sgk_43) {
                         sg_43_0: {
-                            atn.stack.push(1094);
                             pos = scan_any_(tokens, pos, atn, 0);
-                            atn.stack.pop();
                             if pos < 0 { break sg_43_0; }
                             break sg_43_done;
                         }
                     } else if _kind_set_86(sgk_43) {
                         sg_43_1: {
-                            atn.stack.push(1096);
                             pos = scan_unused(tokens, pos, atn, 0);
-                            atn.stack.pop();
                             if pos < 0 { break sg_43_1; }
                             break sg_43_done;
                         }
@@ -19643,9 +19613,7 @@ fn scan_at_rule(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, follow: i
     if pos < 0 { return -1; }
     while pos < tokens.len() && _kind_set_29(tokens[pos]) {
         let sp = pos;
-        atn.stack.push(1111);
         pos = scan_any_(tokens, pos, atn, 0);
-        atn.stack.pop();
         if pos < 0 { pos = sp; break; }
         if pos == sp { break; }
     }
@@ -19653,9 +19621,7 @@ fn scan_at_rule(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, follow: i
         let sgk_21 = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
         if sgk_21 == TK_OpenBrace {
             sg_21_0: {
-                atn.stack.push(1116);
                 pos = scan_block(tokens, pos, atn, follow);
-                atn.stack.pop();
                 if pos < 0 { break sg_21_0; }
                 break sg_21_done;
             }
@@ -19678,9 +19644,7 @@ fn scan_unused(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, follow: i6
     let kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
     if kind == TK_OpenBrace {
         try_0: {
-            atn.stack.push(1124);
             pos = scan_block(tokens, pos, atn, follow);
-            atn.stack.pop();
             if pos < 0 { break try_0; }
             return pos;
         }
@@ -19735,9 +19699,7 @@ fn scan_block(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, follow: i64
         if sgk_33 == TK_SemiColon {
             pos = gp_33;
             sg_33_0: {
-                atn.stack.push(1152);
                 pos = scan_declaration_list(tokens, pos, atn, follow_open_with(FOLLOW_MASK_18, follow_open_set(FOLLOW_MASK_38)));
-                atn.stack.pop();
                 if pos < 0 { break sg_33_0; }
                 if pos > sg_33_best { sg_33_best = pos; }
             }
@@ -19751,103 +19713,79 @@ fn scan_block(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, follow: i64
         } else if _kind_set_3(sgk_33) {
             pos = gp_33;
             sg_33_0: {
-                atn.stack.push(1152);
                 pos = scan_declaration_list(tokens, pos, atn, follow_open_with(FOLLOW_MASK_18, follow_open_set(FOLLOW_MASK_38)));
-                atn.stack.pop();
                 if pos < 0 { break sg_33_0; }
                 if pos > sg_33_best { sg_33_best = pos; }
             }
             pos = gp_33;
             sg_33_1: {
-                atn.stack.push(1154);
                 pos = scan_nested_statement(tokens, pos, atn, follow_open_with(FOLLOW_MASK_18, follow_open_set(FOLLOW_MASK_38)));
-                atn.stack.pop();
                 if pos < 0 { break sg_33_1; }
                 if pos > sg_33_best { sg_33_best = pos; }
             }
             pos = gp_33;
             sg_33_2: {
-                atn.stack.push(1156);
                 pos = scan_any_(tokens, pos, atn, follow_open_with(FOLLOW_MASK_18, follow_open_set(FOLLOW_MASK_38)));
-                atn.stack.pop();
                 if pos < 0 { break sg_33_2; }
                 if pos > sg_33_best { sg_33_best = pos; }
             }
         } else if _kind_set_60(sgk_33) {
             pos = gp_33;
             sg_33_0: {
-                atn.stack.push(1152);
                 pos = scan_declaration_list(tokens, pos, atn, follow_open_with(FOLLOW_MASK_18, follow_open_set(FOLLOW_MASK_38)));
-                atn.stack.pop();
                 if pos < 0 { break sg_33_0; }
                 if pos > sg_33_best { sg_33_best = pos; }
             }
         } else if sgk_33 == TK_Multiply {
             pos = gp_33;
             sg_33_0: {
-                atn.stack.push(1152);
                 pos = scan_declaration_list(tokens, pos, atn, follow_open_with(FOLLOW_MASK_18, follow_open_set(FOLLOW_MASK_38)));
-                atn.stack.pop();
                 if pos < 0 { break sg_33_0; }
                 if pos > sg_33_best { sg_33_best = pos; }
             }
             pos = gp_33;
             sg_33_1: {
-                atn.stack.push(1154);
                 pos = scan_nested_statement(tokens, pos, atn, follow_open_with(FOLLOW_MASK_18, follow_open_set(FOLLOW_MASK_38)));
-                atn.stack.pop();
                 if pos < 0 { break sg_33_1; }
                 if pos > sg_33_best { sg_33_best = pos; }
             }
         } else if _kind_set_61(sgk_33) {
             pos = gp_33;
             sg_33_1: {
-                atn.stack.push(1154);
                 pos = scan_nested_statement(tokens, pos, atn, follow_open_with(FOLLOW_MASK_18, follow_open_set(FOLLOW_MASK_38)));
-                atn.stack.pop();
                 if pos < 0 { break sg_33_1; }
                 if pos > sg_33_best { sg_33_best = pos; }
             }
         } else if _kind_set_62(sgk_33) {
             pos = gp_33;
             sg_33_1: {
-                atn.stack.push(1154);
                 pos = scan_nested_statement(tokens, pos, atn, follow_open_with(FOLLOW_MASK_18, follow_open_set(FOLLOW_MASK_38)));
-                atn.stack.pop();
                 if pos < 0 { break sg_33_1; }
                 if pos > sg_33_best { sg_33_best = pos; }
             }
             pos = gp_33;
             sg_33_2: {
-                atn.stack.push(1156);
                 pos = scan_any_(tokens, pos, atn, follow_open_with(FOLLOW_MASK_18, follow_open_set(FOLLOW_MASK_38)));
-                atn.stack.pop();
                 if pos < 0 { break sg_33_2; }
                 if pos > sg_33_best { sg_33_best = pos; }
             }
         } else if sgk_33 == TK_OpenBrace {
             pos = gp_33;
             sg_33_1: {
-                atn.stack.push(1154);
                 pos = scan_nested_statement(tokens, pos, atn, follow_open_with(FOLLOW_MASK_18, follow_open_set(FOLLOW_MASK_38)));
-                atn.stack.pop();
                 if pos < 0 { break sg_33_1; }
                 if pos > sg_33_best { sg_33_best = pos; }
             }
             pos = gp_33;
             sg_33_3: {
-                atn.stack.push(1158);
                 pos = scan_block(tokens, pos, atn, follow_open_with(FOLLOW_MASK_18, follow_open_set(FOLLOW_MASK_38)));
-                atn.stack.pop();
                 if pos < 0 { break sg_33_3; }
                 if pos > sg_33_best { sg_33_best = pos; }
             }
         } else if sgk_33 == TK_AtKeyword {
             pos = gp_33;
             sg_33_1: {
-                atn.stack.push(1154);
                 pos = scan_nested_statement(tokens, pos, atn, follow_open_with(FOLLOW_MASK_18, follow_open_set(FOLLOW_MASK_38)));
-                atn.stack.pop();
                 if pos < 0 { break sg_33_1; }
                 if pos > sg_33_best { sg_33_best = pos; }
             }
@@ -19880,72 +19818,56 @@ fn scan_nested_statement(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, 
     let kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
     if _kind_set_30(kind) {
         try_0: {
-            atn.stack.push(1175);
             pos = scan_ruleset(tokens, pos, atn, follow);
-            atn.stack.pop();
             if pos < 0 { break try_0; }
             return pos;
         }
         return -1;
     } else if kind == TK_Media {
         try_1: {
-            atn.stack.push(1177);
             pos = scan_media(tokens, pos, atn, follow);
-            atn.stack.pop();
             if pos < 0 { break try_1; }
             return pos;
         }
         return -1;
     } else if kind == TK_Page {
         try_2: {
-            atn.stack.push(1179);
             pos = scan_page(tokens, pos, atn, follow);
-            atn.stack.pop();
             if pos < 0 { break try_2; }
             return pos;
         }
         return -1;
     } else if kind == TK_FontFace {
         try_3: {
-            atn.stack.push(1181);
             pos = scan_font_face_rule(tokens, pos, atn, follow);
-            atn.stack.pop();
             if pos < 0 { break try_3; }
             return pos;
         }
         return -1;
     } else if kind == TK_Keyframes {
         try_4: {
-            atn.stack.push(1183);
             pos = scan_keyframes_rule(tokens, pos, atn, follow);
-            atn.stack.pop();
             if pos < 0 { break try_4; }
             return pos;
         }
         return -1;
     } else if kind == TK_Supports {
         try_5: {
-            atn.stack.push(1185);
             pos = scan_supports_rule(tokens, pos, atn, follow);
-            atn.stack.pop();
             if pos < 0 { break try_5; }
             return pos;
         }
         return -1;
     } else if kind == TK_Viewport {
         try_6: {
-            atn.stack.push(1187);
             pos = scan_viewport(tokens, pos, atn, follow);
-            atn.stack.pop();
             if pos < 0 { break try_6; }
             return pos;
         }
         return -1;
     } else if kind == TK_CounterStyle {
         try_7: {
-            atn.stack.push(1189);
             pos = scan_counter_style(tokens, pos, atn, follow);
-            atn.stack.pop();
             if pos < 0 { break try_7; }
             return pos;
         }
@@ -19959,9 +19881,7 @@ fn scan_nested_statement(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, 
         return -1;
     } else if kind == TK_AtKeyword {
         try_9: {
-            atn.stack.push(1193);
             pos = scan_at_rule(tokens, pos, atn, follow);
-            atn.stack.pop();
             if pos < 0 { break try_9; }
             return pos;
         }
@@ -19978,9 +19898,7 @@ fn scan_group_rule_body(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, f
     if pos < 0 { return -1; }
     while pos < tokens.len() && _kind_set_1(tokens[pos]) {
         let sp = pos;
-        atn.stack.push(1203);
         pos = scan_nested_statement(tokens, pos, atn, 0);
-        atn.stack.pop();
         if pos < 0 { pos = sp; break; }
         if pos == sp { break; }
     }
@@ -19997,15 +19915,11 @@ fn scan_supports_rule(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, fol
     pos += 1;
     pos = scan_ws(tokens, pos, atn, FOLLOW_MASK_39);
     if pos < 0 { return -1; }
-    atn.stack.push(1216);
     pos = scan_supports_condition(tokens, pos, atn, 0);
-    atn.stack.pop();
     if pos < 0 { return -1; }
     pos = scan_ws(tokens, pos, atn, FOLLOW_MASK_10);
     if pos < 0 { return -1; }
-    atn.stack.push(1220);
     pos = scan_group_rule_body(tokens, pos, atn, follow);
-    atn.stack.pop();
     if pos < 0 { return -1; }
     return pos;
 }
@@ -20016,9 +19930,7 @@ fn scan_supports_condition(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor
     let kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
     if kind == TK_Not {
         try_0: {
-            atn.stack.push(1224);
             pos = scan_supports_negation(tokens, pos, atn, follow);
-            atn.stack.pop();
             if pos < 0 { break try_0; }
             return pos;
         }
@@ -20026,11 +19938,11 @@ fn scan_supports_condition(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor
     }
     if _kind_set_63(kind) {
         let mut best: i32 = -1;
-        let try_1_end = scan_supports_condition__alt_1(tokens, start, atn, follow);
+        let try_1_end = scan_supports_conjunction(tokens, start, atn, follow);
         if try_1_end > best { best = try_1_end; }
-        let try_2_end = scan_supports_condition__alt_2(tokens, start, atn, follow);
+        let try_2_end = scan_supports_disjunction(tokens, start, atn, follow);
         if try_2_end > best { best = try_2_end; }
-        let try_3_end = scan_supports_condition__alt_3(tokens, start, atn, follow);
+        let try_3_end = scan_supports_condition_in_parens(tokens, start, atn, follow);
         if try_3_end > best { best = try_3_end; }
         if best >= 0 { pos = best; return pos; }
         return -1;
@@ -20047,7 +19959,7 @@ fn scan_supports_condition_in_parens(tokens: &Array<i32>, pos: i32, atn: &mut At
             let mut best: i32 = -1;
             let try_0_end = scan_supports_condition_in_parens__alt_0(tokens, start, atn, follow);
             if try_0_end > best { best = try_0_end; }
-            let try_1_end = scan_supports_condition_in_parens__alt_1(tokens, start, atn, follow);
+            let try_1_end = scan_supports_declaration_condition(tokens, start, atn, follow);
             if try_1_end > best { best = try_1_end; }
             let try_2_end = scan_supports_condition_in_parens__alt_2(tokens, start, atn, follow);
             if try_2_end > best { best = try_2_end; }
@@ -20070,18 +19982,14 @@ fn scan_supports_negation(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor,
     pos += 1;
     pos = scan_ws(tokens, pos, atn, FOLLOW_MASK_41);
     if pos < 0 { return -1; }
-    atn.stack.push(1258);
     pos = scan_supports_condition_in_parens(tokens, pos, atn, follow);
-    atn.stack.pop();
     if pos < 0 { return -1; }
     return pos;
 }
 
 fn scan_supports_conjunction(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, follow: i64 = 0) -> i32 {
     let mut pos = pos;
-    atn.stack.push(1262);
     pos = scan_supports_condition_in_parens(tokens, pos, atn, FOLLOW_MASK_9);
-    atn.stack.pop();
     if pos < 0 { return -1; }
     sg_18_done: {
         sg_18: {
@@ -20099,9 +20007,7 @@ fn scan_supports_conjunction(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredict
             pos += 1;
             pos = scan_ws(tokens, pos, atn, FOLLOW_MASK_41);
             if pos < 0 { break sg_18; }
-            atn.stack.push(1280);
             pos = scan_supports_condition_in_parens(tokens, pos, atn, 0);
-            atn.stack.pop();
             if pos < 0 { break sg_18; }
             break sg_18_done;
         }
@@ -20125,9 +20031,7 @@ fn scan_supports_conjunction(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredict
                 pos += 1;
                 pos = scan_ws(tokens, pos, atn, FOLLOW_MASK_41);
                 if pos < 0 { break sg_19; }
-                atn.stack.push(1280);
                 pos = scan_supports_condition_in_parens(tokens, pos, atn, 0);
-                atn.stack.pop();
                 if pos < 0 { break sg_19; }
                 break sg_19_done;
             }
@@ -20153,9 +20057,7 @@ fn scan_supports_conjunction(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredict
 
 fn scan_supports_disjunction(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, follow: i64 = 0) -> i32 {
     let mut pos = pos;
-    atn.stack.push(1286);
     pos = scan_supports_condition_in_parens(tokens, pos, atn, FOLLOW_MASK_9);
-    atn.stack.pop();
     if pos < 0 { return -1; }
     sg_15_done: {
         sg_15: {
@@ -20173,9 +20075,7 @@ fn scan_supports_disjunction(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredict
             pos += 1;
             pos = scan_ws(tokens, pos, atn, FOLLOW_MASK_41);
             if pos < 0 { break sg_15; }
-            atn.stack.push(1304);
             pos = scan_supports_condition_in_parens(tokens, pos, atn, 0);
-            atn.stack.pop();
             if pos < 0 { break sg_15; }
             break sg_15_done;
         }
@@ -20199,9 +20099,7 @@ fn scan_supports_disjunction(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredict
                 pos += 1;
                 pos = scan_ws(tokens, pos, atn, FOLLOW_MASK_41);
                 if pos < 0 { break sg_16; }
-                atn.stack.push(1304);
                 pos = scan_supports_condition_in_parens(tokens, pos, atn, 0);
-                atn.stack.pop();
                 if pos < 0 { break sg_16; }
                 break sg_16_done;
             }
@@ -20231,9 +20129,7 @@ fn scan_supports_declaration_condition(tokens: &Array<i32>, pos: i32, atn: &mut 
     pos += 1;
     pos = scan_ws(tokens, pos, atn, FOLLOW_MASK_19);
     if pos < 0 { return -1; }
-    atn.stack.push(1314);
     pos = scan_declaration(tokens, pos, atn, follow_then(FOLLOW_MASK_17, 8, follow));
-    atn.stack.pop();
     if pos < 0 { return -1; }
     if pos >= tokens.len() || tokens[pos] != TK_CloseParen { return -1; }
     pos += 1;
@@ -20250,17 +20146,13 @@ fn scan_general_enclosed(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor) 
             let sgk_14 = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
             if _kind_set_29(sgk_14) {
                 sg_14_0: {
-                    atn.stack.push(1328);
                     pos = scan_any_(tokens, pos, atn, 0);
-                    atn.stack.pop();
                     if pos < 0 { break sg_14_0; }
                     break sg_14_done;
                 }
             } else if _kind_set_86(sgk_14) {
                 sg_14_1: {
-                    atn.stack.push(1330);
                     pos = scan_unused(tokens, pos, atn, 0);
-                    atn.stack.pop();
                     if pos < 0 { break sg_14_1; }
                     break sg_14_done;
                 }
@@ -20467,9 +20359,7 @@ fn scan_font_face_rule(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, fo
     if pos < 0 { return -1; }
     if pos < tokens.len() && _kind_set_18(tokens[pos]) {
         let sp = pos;
-        atn.stack.push(1463);
         pos = scan_font_face_declaration(tokens, pos, atn, 0);
-        atn.stack.pop();
         if pos < 0 { pos = sp; }
     }
     while pos < tokens.len() && tokens[pos] == TK_SemiColon {
@@ -20481,9 +20371,7 @@ fn scan_font_face_rule(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, fo
                 if pos < 0 { break sg_31; }
                 if pos < tokens.len() && _kind_set_18(tokens[pos]) {
                     let sp = pos;
-                    atn.stack.push(1475);
                     pos = scan_font_face_declaration(tokens, pos, atn, follow);
-                    atn.stack.pop();
                     if pos < 0 { pos = sp; }
                 }
                 break sg_31_done;
@@ -20536,9 +20424,7 @@ fn scan_keyframes_rule(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, fo
     if pos < 0 { return -1; }
     while pos < tokens.len() && _kind_set_70(tokens[pos]) {
         let sp = pos;
-        atn.stack.push(1520);
         pos = scan_keyframe_block(tokens, pos, atn, follow_or(FOLLOW_MASK_50, 16, FOLLOW_MASK_18));
-        atn.stack.pop();
         if pos < 0 { pos = sp; break; }
         if pos == sp { break; }
     }
@@ -20561,9 +20447,7 @@ fn scan_keyframe_block(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, fo
             if pos < 0 { break sg_29; }
             if pos < tokens.len() && _kind_set_28(tokens[pos]) {
                 let sp = pos;
-                atn.stack.push(1539);
                 pos = scan_declaration_list(tokens, pos, atn, FOLLOW_MASK_18);
-                atn.stack.pop();
                 if pos < 0 { pos = sp; }
             }
             if pos >= tokens.len() || tokens[pos] != TK_CloseBrace { break sg_29; }
@@ -20616,9 +20500,7 @@ fn scan_viewport(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, follow: 
     if pos < 0 { return -1; }
     if pos < tokens.len() && _kind_set_28(tokens[pos]) {
         let sp = pos;
-        atn.stack.push(1580);
         pos = scan_declaration_list(tokens, pos, atn, FOLLOW_MASK_18);
-        atn.stack.pop();
         if pos < 0 { pos = sp; }
     }
     if pos >= tokens.len() || tokens[pos] != TK_CloseBrace { return -1; }
@@ -20644,9 +20526,7 @@ fn scan_counter_style(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, fol
     if pos < 0 { return -1; }
     if pos < tokens.len() && _kind_set_28(tokens[pos]) {
         let sp = pos;
-        atn.stack.push(1602);
         pos = scan_declaration_list(tokens, pos, atn, FOLLOW_MASK_18);
-        atn.stack.pop();
         if pos < 0 { pos = sp; }
     }
     if pos >= tokens.len() || tokens[pos] != TK_CloseBrace { return -1; }
@@ -21017,7 +20897,7 @@ fn _parse_charset__inner(p: &mut Parser, follow: i64 = 0) -> () {
             _sd_best_i = 1;
         }
         if _sd_best_i >= 0 {
-            let _ = atn_verified(12, &mut p.atn, &p.kinds, p.pos, 0, if _sd_best_i == 0 { 0 } else { 1 });
+            let _ = atn_verified(12, &mut p.atn, &p.kinds, p.pos, 0, _sd_best_i);
             let _ = atn_decide_12(&mut p.atn, &p.kinds, p.pos, 0);
         }
         if _sd_best_i == 0 {
@@ -21287,7 +21167,7 @@ fn _parse_imports__inner(p: &mut Parser, follow: i64 = 0) -> () {
             _sd_best_i = 3;
         }
         if _sd_best_i >= 0 {
-            let _ = atn_verified(13, &mut p.atn, &p.kinds, p.pos, 0, if _sd_best_i == 0 { 0 } else if _sd_best_i == 1 { 1 } else if _sd_best_i == 2 { 2 } else { 3 });
+            let _ = atn_verified(13, &mut p.atn, &p.kinds, p.pos, 0, _sd_best_i);
             let _ = atn_decide_13(&mut p.atn, &p.kinds, p.pos, 0);
         }
         if _sd_best_i == 0 {
@@ -21507,7 +21387,7 @@ fn _parse_namespace___inner(p: &mut Parser, follow: i64 = 0) -> () {
             _sd_best_i = 1;
         }
         if _sd_best_i >= 0 {
-            let _ = atn_verified(18, &mut p.atn, &p.kinds, p.pos, 0, if _sd_best_i == 0 { 0 } else { 1 });
+            let _ = atn_verified(18, &mut p.atn, &p.kinds, p.pos, 0, _sd_best_i);
             let _ = atn_decide_18(&mut p.atn, &p.kinds, p.pos, 0);
         }
         if _sd_best_i == 0 {
@@ -22137,6 +22017,10 @@ fn _parse_simple_selector_sequence__inner(p: &mut Parser, follow: i64 = 0) -> ()
             if gd_end_2 > gd_best {
                 gd_best = gd_end_2;
                 gd_winner = 1;
+            }
+            if gd_winner >= 0 {
+                let _ = atn_verified(39, &mut p.atn, &p.kinds, p.pos, 0, gd_winner);
+                let _ = atn_decide_39(&mut p.atn, &p.kinds, p.pos, 0);
             }
             if gd_winner == 0 {
                 p.site = 83;
@@ -22898,9 +22782,7 @@ fn scan_ruleset__alt_0(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, fo
     if pos < 0 { return -1; }
     if pos < tokens.len() && _kind_set_28(tokens[pos]) {
         let sp = pos;
-        atn.stack.push(780);
         pos = scan_declaration_list(tokens, pos, atn, FOLLOW_MASK_18);
-        atn.stack.pop();
         if pos < 0 { pos = sp; }
     }
     if pos >= tokens.len() || tokens[pos] != TK_CloseBrace { return -1; }
@@ -22938,9 +22820,7 @@ fn scan_ruleset__alt_1(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, fo
     let mut pos = pos;
     while pos < tokens.len() && _kind_set_29(tokens[pos]) {
         let sp = pos;
-        atn.stack.push(788);
         pos = scan_any_(tokens, pos, atn, 0);
-        atn.stack.pop();
         if pos < 0 { pos = sp; break; }
         if pos == sp { break; }
     }
@@ -22950,9 +22830,7 @@ fn scan_ruleset__alt_1(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, fo
     if pos < 0 { return -1; }
     if pos < tokens.len() && _kind_set_28(tokens[pos]) {
         let sp = pos;
-        atn.stack.push(797);
         pos = scan_declaration_list(tokens, pos, atn, FOLLOW_MASK_18);
-        atn.stack.pop();
         if pos < 0 { pos = sp; }
     }
     if pos >= tokens.len() || tokens[pos] != TK_CloseBrace { return -1; }
@@ -22980,7 +22858,7 @@ fn _parse_ruleset__inner(p: &mut Parser, follow: i64 = 0) -> () {
                 _sd_best_i = 1;
             }
             if _sd_best_i >= 0 {
-                let _ = atn_verified(59, &mut p.atn, &p.kinds, p.pos, 0, if _sd_best_i == 1 { 1 } else { 0 });
+                let _ = atn_verified(59, &mut p.atn, &p.kinds, p.pos, 0, _sd_best_i);
                 let _ = atn_decide_59(&mut p.atn, &p.kinds, p.pos, 0);
             }
             if _sd_best_i == 1 {
@@ -23050,9 +22928,7 @@ fn _parse_declaration_list__inner(p: &mut Parser, follow: i64 = 0) -> () {
             opt_scan: {
                 let tokens = &p.kinds;
                 let mut pos: i32 = p.pos;
-                p.atn.stack.push(828);
                 pos = scan_declaration(tokens, pos, &mut p.atn, follow);
-                p.atn.stack.pop();
                 if pos < 0 { break opt_scan; }
                 opt_scan_pos = pos;
             }
@@ -23118,7 +22994,19 @@ fn _parse_declaration__inner_alt_0(p: &mut Parser, follow: i64 = 0) -> () {
     p.site = 144;
     p.atn_ret_pending = 839;
     _parse_expr(p, follow_open_with(follow, follow_open_set(FOLLOW_MASK_33)));
-    if atn_decide_67(&mut p.atn, &p.kinds, p.pos, 0) == 0 {
+    let mut opt_enter: bool = p.peek_kind() == TK_Important;
+    if opt_enter && follow_admits(&p.kinds, p.pos, follow, &FOLLOW_SETS, TK_EOF) {
+        let mut opt_scan_pos: i32 = -1;
+        opt_scan: {
+            let tokens = &p.kinds;
+            let mut pos: i32 = p.pos;
+            pos = scan_prio(tokens, pos, &mut p.atn, follow);
+            if pos < 0 { break opt_scan; }
+            opt_scan_pos = pos;
+        }
+        opt_enter = opt_scan_pos >= 0 && (!follow_yields(&p.kinds, p.pos, follow, &FOLLOW_SETS, TK_EOF) || follow_resumes(&p.kinds, opt_scan_pos, follow, &FOLLOW_SETS, TK_EOF));
+    }
+    if opt_enter {
         p.site = 145;
         p.atn_ret_pending = 843;
         _parse_prio(p, follow);
@@ -23136,10 +23024,13 @@ fn scan_declaration__alt_0(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor
     if pos < 0 { return -1; }
     pos = scan_expr(tokens, pos, atn, follow_open_with(follow, follow_open_set(FOLLOW_MASK_33)));
     if pos < 0 { return -1; }
-    if atn_decide_67(atn, tokens, pos, 0) == 0 {
+    if pos < tokens.len() && tokens[pos] == TK_Important {
         let sp = pos;
         pos = scan_prio(tokens, pos, atn, follow);
         if pos < 0 { pos = sp; }
+        if follow_yields(tokens, sp, follow, &FOLLOW_SETS, TK_EOF) && !follow_resumes(tokens, pos, follow, &FOLLOW_SETS, TK_EOF) {
+            pos = sp;
+        }
     }
     return pos;
 }
@@ -23167,11 +23058,7 @@ fn scan_declaration__alt_1(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor
     pos += 1;
     pos = scan_ws(tokens, pos, atn, FOLLOW_MASK_34);
     if pos < 0 { return -1; }
-    atn.stack.push(851);
-    pos = scan_value(tokens, pos, atn, follow);
-    atn.stack.pop();
-    if pos < 0 { return -1; }
-    return pos;
+    return scan_value(tokens, pos, atn, follow);
 }
 
 fn _parse_declaration__inner(p: &mut Parser, follow: i64 = 0) -> () {
@@ -23193,7 +23080,7 @@ fn _parse_declaration__inner(p: &mut Parser, follow: i64 = 0) -> () {
             _sd_best_i = 1;
         }
         if _sd_best_i >= 0 {
-            let _ = atn_verified(66, &mut p.atn, &p.kinds, p.pos, 0, if _sd_best_i == 0 { 0 } else { 1 });
+            let _ = atn_verified(66, &mut p.atn, &p.kinds, p.pos, 0, _sd_best_i);
             let _ = atn_decide_66(&mut p.atn, &p.kinds, p.pos, 0);
         }
         if _sd_best_i == 0 {
@@ -23263,9 +23150,7 @@ fn _parse_value__inner(p: &mut Parser, follow: i64 = 0) -> () {
             gd_scan: {
                 let tokens = &p.kinds;
                 let mut pos: i32 = p.pos;
-                p.atn.stack.push(863);
                 pos = scan_any_(tokens, pos, &mut p.atn, follow);
-                p.atn.stack.pop();
                 if pos < 0 { break gd_scan; }
                 gd_best = pos;
             }
@@ -23274,9 +23159,7 @@ fn _parse_value__inner(p: &mut Parser, follow: i64 = 0) -> () {
             gd_scan_2: {
                 let tokens = &p.kinds;
                 let mut pos: i32 = p.pos;
-                p.atn.stack.push(865);
                 pos = scan_block(tokens, pos, &mut p.atn, follow);
-                p.atn.stack.pop();
                 if pos < 0 { break gd_scan_2; }
                 gd_best = pos;
             }
@@ -24221,9 +24104,7 @@ fn _parse_block__inner(p: &mut Parser, follow: i64 = 0) -> () {
             gd_scan: {
                 let tokens = &p.kinds;
                 let mut pos: i32 = p.pos;
-                p.atn.stack.push(1152);
                 pos = scan_declaration_list(tokens, pos, &mut p.atn, follow);
-                p.atn.stack.pop();
                 if pos < 0 { break gd_scan; }
                 gd_end = pos;
             }
@@ -24250,9 +24131,7 @@ fn _parse_block__inner(p: &mut Parser, follow: i64 = 0) -> () {
             gd_scan_3: {
                 let tokens = &p.kinds;
                 let mut pos: i32 = p.pos;
-                p.atn.stack.push(1152);
                 pos = scan_declaration_list(tokens, pos, &mut p.atn, follow);
-                p.atn.stack.pop();
                 if pos < 0 { break gd_scan_3; }
                 gd_end_3 = pos;
             }
@@ -24264,9 +24143,7 @@ fn _parse_block__inner(p: &mut Parser, follow: i64 = 0) -> () {
             gd_scan_4: {
                 let tokens = &p.kinds;
                 let mut pos: i32 = p.pos;
-                p.atn.stack.push(1154);
                 pos = scan_nested_statement(tokens, pos, &mut p.atn, follow);
-                p.atn.stack.pop();
                 if pos < 0 { break gd_scan_4; }
                 gd_end_4 = pos;
             }
@@ -24278,9 +24155,7 @@ fn _parse_block__inner(p: &mut Parser, follow: i64 = 0) -> () {
             gd_scan_5: {
                 let tokens = &p.kinds;
                 let mut pos: i32 = p.pos;
-                p.atn.stack.push(1156);
                 pos = scan_any_(tokens, pos, &mut p.atn, follow);
-                p.atn.stack.pop();
                 if pos < 0 { break gd_scan_5; }
                 gd_end_5 = pos;
             }
@@ -24293,9 +24168,7 @@ fn _parse_block__inner(p: &mut Parser, follow: i64 = 0) -> () {
             gd_scan_6: {
                 let tokens = &p.kinds;
                 let mut pos: i32 = p.pos;
-                p.atn.stack.push(1152);
                 pos = scan_declaration_list(tokens, pos, &mut p.atn, follow);
-                p.atn.stack.pop();
                 if pos < 0 { break gd_scan_6; }
                 gd_best = pos;
             }
@@ -24304,9 +24177,7 @@ fn _parse_block__inner(p: &mut Parser, follow: i64 = 0) -> () {
             gd_scan_7: {
                 let tokens = &p.kinds;
                 let mut pos: i32 = p.pos;
-                p.atn.stack.push(1152);
                 pos = scan_declaration_list(tokens, pos, &mut p.atn, follow);
-                p.atn.stack.pop();
                 if pos < 0 { break gd_scan_7; }
                 gd_end_6 = pos;
             }
@@ -24318,9 +24189,7 @@ fn _parse_block__inner(p: &mut Parser, follow: i64 = 0) -> () {
             gd_scan_8: {
                 let tokens = &p.kinds;
                 let mut pos: i32 = p.pos;
-                p.atn.stack.push(1154);
                 pos = scan_nested_statement(tokens, pos, &mut p.atn, follow);
-                p.atn.stack.pop();
                 if pos < 0 { break gd_scan_8; }
                 gd_end_7 = pos;
             }
@@ -24333,9 +24202,7 @@ fn _parse_block__inner(p: &mut Parser, follow: i64 = 0) -> () {
             gd_scan_9: {
                 let tokens = &p.kinds;
                 let mut pos: i32 = p.pos;
-                p.atn.stack.push(1154);
                 pos = scan_nested_statement(tokens, pos, &mut p.atn, follow);
-                p.atn.stack.pop();
                 if pos < 0 { break gd_scan_9; }
                 gd_best = pos;
             }
@@ -24344,9 +24211,7 @@ fn _parse_block__inner(p: &mut Parser, follow: i64 = 0) -> () {
             gd_scan_10: {
                 let tokens = &p.kinds;
                 let mut pos: i32 = p.pos;
-                p.atn.stack.push(1154);
                 pos = scan_nested_statement(tokens, pos, &mut p.atn, follow);
-                p.atn.stack.pop();
                 if pos < 0 { break gd_scan_10; }
                 gd_end_8 = pos;
             }
@@ -24358,9 +24223,7 @@ fn _parse_block__inner(p: &mut Parser, follow: i64 = 0) -> () {
             gd_scan_11: {
                 let tokens = &p.kinds;
                 let mut pos: i32 = p.pos;
-                p.atn.stack.push(1156);
                 pos = scan_any_(tokens, pos, &mut p.atn, follow);
-                p.atn.stack.pop();
                 if pos < 0 { break gd_scan_11; }
                 gd_end_9 = pos;
             }
@@ -24373,9 +24236,7 @@ fn _parse_block__inner(p: &mut Parser, follow: i64 = 0) -> () {
             gd_scan_12: {
                 let tokens = &p.kinds;
                 let mut pos: i32 = p.pos;
-                p.atn.stack.push(1154);
                 pos = scan_nested_statement(tokens, pos, &mut p.atn, follow);
-                p.atn.stack.pop();
                 if pos < 0 { break gd_scan_12; }
                 gd_end_10 = pos;
             }
@@ -24387,9 +24248,7 @@ fn _parse_block__inner(p: &mut Parser, follow: i64 = 0) -> () {
             gd_scan_13: {
                 let tokens = &p.kinds;
                 let mut pos: i32 = p.pos;
-                p.atn.stack.push(1158);
                 pos = scan_block(tokens, pos, &mut p.atn, follow);
-                p.atn.stack.pop();
                 if pos < 0 { break gd_scan_13; }
                 gd_end_11 = pos;
             }
@@ -24402,9 +24261,7 @@ fn _parse_block__inner(p: &mut Parser, follow: i64 = 0) -> () {
             gd_scan_14: {
                 let tokens = &p.kinds;
                 let mut pos: i32 = p.pos;
-                p.atn.stack.push(1154);
                 pos = scan_nested_statement(tokens, pos, &mut p.atn, follow);
-                p.atn.stack.pop();
                 if pos < 0 { break gd_scan_14; }
                 gd_end_12 = pos;
             }
@@ -24658,33 +24515,6 @@ fn _parse_supports_rule(p: &mut Parser, follow: i64 = 0) -> () {
     p.sites.pop();
 }
 
-fn scan_supports_condition__alt_1(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, follow: i64 = 0) -> i32 {
-    let mut pos = pos;
-    atn.stack.push(1226);
-    pos = scan_supports_conjunction(tokens, pos, atn, follow);
-    atn.stack.pop();
-    if pos < 0 { return -1; }
-    return pos;
-}
-
-fn scan_supports_condition__alt_2(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, follow: i64 = 0) -> i32 {
-    let mut pos = pos;
-    atn.stack.push(1228);
-    pos = scan_supports_disjunction(tokens, pos, atn, follow);
-    atn.stack.pop();
-    if pos < 0 { return -1; }
-    return pos;
-}
-
-fn scan_supports_condition__alt_3(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, follow: i64 = 0) -> i32 {
-    let mut pos = pos;
-    atn.stack.push(1230);
-    pos = scan_supports_condition_in_parens(tokens, pos, atn, follow);
-    atn.stack.pop();
-    if pos < 0 { return -1; }
-    return pos;
-}
-
 fn _parse_supports_condition__inner(p: &mut Parser, follow: i64 = 0) -> () {
     if !kind_set_has(&SYNC_73, p.kinds[p.pos]) { builtin::cold_path(); p.sync_alts(&SYNC_73, &EXPECTED_73); }
     let kind = p.peek_kind();
@@ -24697,9 +24527,9 @@ fn _parse_supports_condition__inner(p: &mut Parser, follow: i64 = 0) -> () {
     if _kind_set_63(kind) {
         let _sd_tokens = &p.kinds;
         let _sd_pos = p.pos;
-        let _sd_p_1 = scan_supports_condition__alt_1(_sd_tokens, _sd_pos, &mut p.atn, follow);
-        let _sd_p_2 = scan_supports_condition__alt_2(_sd_tokens, _sd_pos, &mut p.atn, follow);
-        let _sd_p_3 = scan_supports_condition__alt_3(_sd_tokens, _sd_pos, &mut p.atn, follow);
+        let _sd_p_1 = scan_supports_conjunction(_sd_tokens, _sd_pos, &mut p.atn, follow);
+        let _sd_p_2 = scan_supports_disjunction(_sd_tokens, _sd_pos, &mut p.atn, follow);
+        let _sd_p_3 = scan_supports_condition_in_parens(_sd_tokens, _sd_pos, &mut p.atn, follow);
         let mut _sd_best_i: i32 = -1;
         let mut _sd_best_p: i32 = -1;
         if _sd_p_1 > _sd_best_p {
@@ -24715,7 +24545,7 @@ fn _parse_supports_condition__inner(p: &mut Parser, follow: i64 = 0) -> () {
             _sd_best_i = 3;
         }
         if _sd_best_i >= 0 {
-            let _ = atn_verified(95, &mut p.atn, &p.kinds, p.pos, 0, if _sd_best_i == 1 { 1 } else if _sd_best_i == 2 { 2 } else { 3 });
+            let _ = atn_verified(95, &mut p.atn, &p.kinds, p.pos, 0, _sd_best_i);
             let _ = atn_decide_95(&mut p.atn, &p.kinds, p.pos, 0);
         }
         if _sd_best_i == 1 {
@@ -24776,9 +24606,7 @@ fn scan_supports_condition_in_parens__alt_0(tokens: &Array<i32>, pos: i32, atn: 
     pos += 1;
     pos = scan_ws(tokens, pos, atn, FOLLOW_MASK_39);
     if pos < 0 { return -1; }
-    atn.stack.push(1238);
     pos = scan_supports_condition(tokens, pos, atn, 0);
-    atn.stack.pop();
     if pos < 0 { return -1; }
     pos = scan_ws(tokens, pos, atn, follow_then(FOLLOW_MASK_17, 8, follow));
     if pos < 0 { return -1; }
@@ -24787,22 +24615,8 @@ fn scan_supports_condition_in_parens__alt_0(tokens: &Array<i32>, pos: i32, atn: 
     return pos;
 }
 
-fn scan_supports_condition_in_parens__alt_1(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, follow: i64 = 0) -> i32 {
-    let mut pos = pos;
-    atn.stack.push(1244);
-    pos = scan_supports_declaration_condition(tokens, pos, atn, follow);
-    atn.stack.pop();
-    if pos < 0 { return -1; }
-    return pos;
-}
-
 fn scan_supports_condition_in_parens__alt_2(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, follow: i64 = 0) -> i32 {
-    let mut pos = pos;
-    atn.stack.push(1246);
-    pos = scan_general_enclosed(tokens, pos, atn);
-    atn.stack.pop();
-    if pos < 0 { return -1; }
-    return pos;
+    return scan_general_enclosed(tokens, pos, atn);
 }
 
 fn _parse_supports_condition_in_parens__inner(p: &mut Parser, follow: i64 = 0) -> () {
@@ -24813,7 +24627,7 @@ fn _parse_supports_condition_in_parens__inner(p: &mut Parser, follow: i64 = 0) -
             let _sd_tokens = &p.kinds;
             let _sd_pos = p.pos;
             let _sd_p_0 = scan_supports_condition_in_parens__alt_0(_sd_tokens, _sd_pos, &mut p.atn, follow);
-            let _sd_p_1 = scan_supports_condition_in_parens__alt_1(_sd_tokens, _sd_pos, &mut p.atn, follow);
+            let _sd_p_1 = scan_supports_declaration_condition(_sd_tokens, _sd_pos, &mut p.atn, follow);
             let _sd_p_2 = scan_supports_condition_in_parens__alt_2(_sd_tokens, _sd_pos, &mut p.atn, follow);
             let mut _sd_best_i: i32 = -1;
             let mut _sd_best_p: i32 = -1;
@@ -24830,7 +24644,7 @@ fn _parse_supports_condition_in_parens__inner(p: &mut Parser, follow: i64 = 0) -
                 _sd_best_i = 2;
             }
             if _sd_best_i >= 0 {
-                let _ = atn_verified(96, &mut p.atn, &p.kinds, p.pos, 0, if _sd_best_i == 0 { 0 } else if _sd_best_i == 1 { 1 } else { 2 });
+                let _ = atn_verified(96, &mut p.atn, &p.kinds, p.pos, 0, _sd_best_i);
                 let _ = atn_decide_96(&mut p.atn, &p.kinds, p.pos, 0);
             }
             if _sd_best_i == 0 {
@@ -24933,9 +24747,7 @@ fn _parse_supports_conjunction__inner(p: &mut Parser, follow: i64 = 0) -> () {
                         pos += 1;
                         pos = scan_ws(tokens, pos, &mut p.atn, FOLLOW_MASK_41);
                         if pos < 0 { break sg_12; }
-                        p.atn.stack.push(1280);
                         pos = scan_supports_condition_in_parens(tokens, pos, &mut p.atn, 0);
-                        p.atn.stack.pop();
                         if pos < 0 { break sg_12; }
                         break sg_12_done;
                     }
@@ -25027,9 +24839,7 @@ fn _parse_supports_disjunction__inner(p: &mut Parser, follow: i64 = 0) -> () {
                         pos += 1;
                         pos = scan_ws(tokens, pos, &mut p.atn, FOLLOW_MASK_41);
                         if pos < 0 { break sg_13; }
-                        p.atn.stack.push(1304);
                         pos = scan_supports_condition_in_parens(tokens, pos, &mut p.atn, 0);
-                        p.atn.stack.pop();
                         if pos < 0 { break sg_13; }
                         break sg_13_done;
                     }
@@ -25609,11 +25419,7 @@ fn scan_font_face_declaration__alt_1(tokens: &Array<i32>, pos: i32, atn: &mut At
     pos += 1;
     pos = scan_ws(tokens, pos, atn, FOLLOW_MASK_34);
     if pos < 0 { return -1; }
-    atn.stack.push(1498);
-    pos = scan_value(tokens, pos, atn, follow);
-    atn.stack.pop();
-    if pos < 0 { return -1; }
-    return pos;
+    return scan_value(tokens, pos, atn, follow);
 }
 
 fn _parse_font_face_declaration__inner(p: &mut Parser, follow: i64 = 0) -> () {
@@ -25635,7 +25441,7 @@ fn _parse_font_face_declaration__inner(p: &mut Parser, follow: i64 = 0) -> () {
             _sd_best_i = 1;
         }
         if _sd_best_i >= 0 {
-            let _ = atn_verified(111, &mut p.atn, &p.kinds, p.pos, 0, if _sd_best_i == 0 { 0 } else { 1 });
+            let _ = atn_verified(111, &mut p.atn, &p.kinds, p.pos, 0, _sd_best_i);
             let _ = atn_decide_111(&mut p.atn, &p.kinds, p.pos, 0);
         }
         if _sd_best_i == 0 {
@@ -27448,6 +27254,71 @@ fn atn_decide_18_8(tokens: &Array<i32>, pos: i32) -> i32 {
     return -1;
 }
 
+fn atn_decide_39(atn: &mut AtnPredictor, tokens: &Array<i32>, pos: i32, min_prec: i32) -> i32 {
+    if pos < tokens.len() {
+        match tokens[pos] {
+            TK_Multiply => {
+                if pos + 1 < tokens.len() {
+                    match tokens[pos + 1] {
+                        TK_OpenBracket | TK_OpenBrace | TK_Colon | TK_Dot | TK_Comment | TK_Space | TK_Hash | TK_Plus | TK_Greater | TK_Comma | TK_Tilde | TK_PseudoNot => {
+                            return atn_verified(39, atn, tokens, pos, min_prec, 1);
+                        },
+                        TK_Pipe => {
+                            let alt = atn_decide_39_5(tokens, pos);
+                            if alt >= 0 { return atn_verified(39, atn, tokens, pos, min_prec, alt); }
+                        },
+                        _ => {},
+                    };
+                }
+            },
+            TK_Pipe => {
+                if pos + 1 < tokens.len() {
+                    match tokens[pos + 1] {
+                        TK_Multiply => {
+                            return atn_verified(39, atn, tokens, pos, min_prec, 1);
+                        },
+                        TK_MediaOnly | TK_Not | TK_And | TK_Or | TK_From | TK_To | TK_Ident => {
+                            return atn_verified(39, atn, tokens, pos, min_prec, 0);
+                        },
+                        _ => {},
+                    };
+                }
+            },
+            TK_MediaOnly | TK_Not | TK_And | TK_Or | TK_From | TK_To | TK_Ident => {
+                if pos + 1 < tokens.len() {
+                    match tokens[pos + 1] {
+                        TK_OpenBracket | TK_OpenBrace | TK_Colon | TK_Dot | TK_Comment | TK_Space | TK_Hash | TK_Plus | TK_Greater | TK_Comma | TK_Tilde | TK_PseudoNot => {
+                            return atn_verified(39, atn, tokens, pos, min_prec, 0);
+                        },
+                        TK_Pipe => {
+                            let alt = atn_decide_39_5(tokens, pos);
+                            if alt >= 0 { return atn_verified(39, atn, tokens, pos, min_prec, alt); }
+                        },
+                        _ => {},
+                    };
+                }
+            },
+            _ => {},
+        };
+    }
+    return atn_predict_once(&ATN_SIM, 39, atn, tokens, pos, TK_EOF, min_prec);
+}
+
+fn atn_decide_39_5(tokens: &Array<i32>, pos: i32) -> i32 {
+    if pos + 2 < tokens.len() {
+        match tokens[pos + 2] {
+            TK_Multiply => {
+                return 1;
+            },
+            TK_MediaOnly | TK_Not | TK_And | TK_Or | TK_From | TK_To | TK_Ident => {
+                return 0;
+            },
+            _ => {},
+        };
+    }
+    return -1;
+}
+
 fn atn_decide_59(atn: &mut AtnPredictor, tokens: &Array<i32>, pos: i32, min_prec: i32) -> i32 {
     if pos < tokens.len() {
         match tokens[pos] {
@@ -28546,21 +28417,6 @@ fn atn_decide_66_10(tokens: &Array<i32>, pos: i32) -> i32 {
         };
     }
     return -1;
-}
-
-fn atn_decide_67(atn: &mut AtnPredictor, tokens: &Array<i32>, pos: i32, min_prec: i32) -> i32 {
-    if pos < tokens.len() && tokens[pos] < 66 {
-        match tokens[pos] {
-            TK_Important => {
-                return atn_verified(67, atn, tokens, pos, min_prec, 0);
-            },
-            TK_CloseBracket | TK_Equal | TK_Divide | TK_Cdo | TK_Cdc | TK_Import | TK_Namespace | TK_Charset | TK_Greater | TK_Comma | TK_Tilde | TK_PrefixMatch | TK_SuffixMatch | TK_SubstringMatch | TK_Calc | TK_DxImageTransform | TK_Var | TK_UnexpectedCharacter | TK_EOF | TK_ERROR => {},
-            _ => {
-                return atn_verified(67, atn, tokens, pos, min_prec, 1);
-            },
-        };
-    }
-    return atn_predict_once(&ATN_SIM, 67, atn, tokens, pos, TK_EOF, min_prec);
 }
 
 fn atn_decide_95(atn: &mut AtnPredictor, tokens: &Array<i32>, pos: i32, min_prec: i32) -> i32 {

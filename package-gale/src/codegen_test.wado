@@ -790,6 +790,13 @@ test "atn always lets the simulator decide a group" {
     assert always == "a b => (s (a a) b)\na b b => (s (a a) b b)\n";
 }
 
+test "atn verify checks a group's tournament against the simulator" {
+    let verify = GenerateOptions { atn: AtnMode::Verify };
+    assert parses(GROUP_LONGEST_G4, "s", ["a b b"], &verify) == "a b b => (s (a a) b b)\n";
+    let out = eval_beside(gen_with(GROUP_LONGEST_G4, &verify).source, wado`show("a b", parse_s("a b"));\n`, SHOW_FN);
+    assert out.stderr.contains("atn verify: decision ");
+}
+
 // The atom choice reads past `any`'s nesting, so the simulator owns it, and the
 // LR loop decides through its table.
 global VERIFIED_LR_G4: String = "grammar L;
@@ -805,11 +812,10 @@ INT : [0-9]+ ;
 WS : ' ' -> skip ;
 ";
 
-test "atn verify checks the shortcuts against the simulator and parses as auto does" {
+test "atn verify checks the atom's tournament against the simulator" {
     let verify = GenerateOptions { atn: AtnMode::Verify };
     let source = gen_with(VERIFIED_LR_G4, &verify).source;
     assert source.contains("atn_verified(");
-    assert source.contains("fn atn_lr_decide_");
     assert !gen_source(VERIFIED_LR_G4).contains("atn_verified(");
     let inputs: List<String> = [
         "sel a = 1 ord b", "sel (a) = f() ord b", "sel ((a)) || 1 = (b)", "sel a btw 1 and 2 and b = 3",

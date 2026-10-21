@@ -7,7 +7,7 @@ use { Alternative, ParserRule } from "./ir.wado";
 use { DiagnosticKind, DiagnosticOwner, Diagnostics, Rule } from "./gir.wado";
 use { RuleOverlap, overlap_groups_of, overlap_routes, rule_overlap_groups } from "./rule_overlap.wado";
 use { GrammarAnalysis } from "./grammar_analysis.wado";
-use { GenSettings } from "./gen_settings.wado";
+use { AtnMode, GenSettings } from "./gen_settings.wado";
 use { RuleFollow } from "./follow_env.wado";
 use { TableRegistry } from "./table_registry.wado";
 use { PredicateSite, alt_has_gate, alt_scan_gate_conditions } from "./gate_conditions.wado";
@@ -35,6 +35,8 @@ pub struct LowerMarks {
     pub follow_forward_edges: List<List<String>>,
     /// The rule makes a decision the simulator decides.
     pub rule_asks_simulator: List<bool>,
+    /// Under `atn: "verify"`, the simulator checks a pick the static path made.
+    pub simulator_checks: bool = false,
     /// The rules whose functions carry the FOLLOW slots, by snake name: the
     /// closure of `rule_reads_follow` over `follow_forward_edges`, settled once
     /// every rule is lowered.
@@ -57,9 +59,10 @@ impl LowerMarks {
         self.rule_asks_simulator[rule] = true;
     }
 
-    /// Whether any decision routes to the runtime ATN simulator.
+    /// Whether any decision routes to the runtime ATN simulator or is checked
+    /// against it.
     pub fn needs_atn(&self) -> bool {
-        return self.rule_asks_simulator.contains(&true);
+        return self.simulator_checks || self.rule_asks_simulator.contains(&true);
     }
 }
 
@@ -142,6 +145,14 @@ impl LowerContext {
         }
     }
 
+    /// Record a pick the static path makes and the simulator checks, which
+    /// routes nothing and so leaves the rule's other decisions as `never` makes
+    /// them.
+    pub fn mark_checks_with_simulator(&mut self) {
+        assert self.settings.atn.verifies(), "only `atn: \"verify\"` checks the static path's picks";
+        self.marks.simulator_checks = true;
+    }
+
     /// Record an ATN-class LR rule: its loop decision reads the LR tables.
     pub fn mark_needs_lr_atn<S: AsStrSlice>(&mut self, what: S) {
         self.marks.needs_lr_atn = true;
@@ -205,10 +216,18 @@ impl LowerContext {
 
     /// Whether the choice among the alternatives `alt_indices` of the rule
     /// being lowered reaches a decision the simulator makes. `multi_alt` is
-    /// as for `rule_overlap::overlap_groups_of`.
+    /// as for `rule_overlap::overlap_groups_of`. Under `atn: "verify"` it never
+    /// does: the tournament makes it, and the simulator checks what `auto`
+    /// would hand it.
     pub fn choice_routes(&mut self, rule: &ParserRule, alt_indices: List<i32>, multi_alt: bool) -> bool {
         let has_gate = |alt: &Alternative| self.alt_has_gate(alt);
         let overlap = overlap_groups_of(rule, alt_indices, multi_alt, &mut self.analysis, &self.follow, has_gate);
-        return overlap_routes(rule, &overlap, &mut self.analysis, &self.follow, self.settings.atn);
+        if !self.settings.atn.verifies() {
+            return overlap_routes(rule, &overlap, &mut self.analysis, &self.follow, self.settings.atn);
+        }
+        if overlap_routes(rule, &overlap, &mut self.analysis, &self.follow, AtnMode::Auto) {
+            self.mark_checks_with_simulator();
+        }
+        return false;
     }
 }
