@@ -294,11 +294,11 @@ ANTLR4-compatible generator, so the head-to-head comparison is against
 algorithm family, both emitting a parser. Throughput is grammar bytes processed
 per second (higher is better).
 
-| Implementation                   |  Throughput |   ms/iter | vs best |
-| -------------------------------- | ----------: | --------: | ------- |
-| Java (ANTLR4)                    | 980.12 KB/s | 43.010 ms | 1.00x   |
-| **Wado** (Gale, 1 GiB heap)      | 518.12 KB/s | 81.361 ms | 1.89x   |
-| **Wado** (Gale, 256 MiB default) | 492.56 KB/s | 85.583 ms | 1.99x   |
+| Implementation                   |  Throughput |    ms/iter | vs best |
+| -------------------------------- | ----------: | ---------: | ------- |
+| Java (ANTLR4)                    | 979.34 KB/s |  43.044 ms | 1.00x   |
+| **Wado** (Gale, 1 GiB heap)      | 102.21 KB/s | 412.424 ms | 9.58x   |
+| **Wado** (Gale, 256 MiB default) |  96.06 KB/s | 438.851 ms | 10.20x  |
 
 Both rows run in-process and warm, emitting a parser and no listeners: Gale a
 Wado recursive-descent one from memory, ANTLR4 Java onto disk.
