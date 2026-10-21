@@ -7,6 +7,7 @@ use crate::ast;
 use crate::compiler_host::CompilerHost;
 use crate::compiler_item::CompilerItem;
 use crate::format_spec::{self, FormatKind};
+use crate::synthesis::template::interpolation_dispatch_type;
 use crate::tir::{ResolvedType, TypeId};
 use crate::token::Span;
 
@@ -27,7 +28,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         template: &ast::TemplateStringExpr,
         ctx: &mut FunctionContext,
     ) -> TypeId {
-        self.resolve_template_parts(template, ctx);
+        if let Some(parts) = self.resolve_template_parts(template, ctx) {
+            for ((ty, spec), expr) in parts.holes.iter().zip(template.interpolations()) {
+                self.check_hole_format_trait(*ty, spec.as_deref(), expr.span());
+            }
+        }
         self.get_string_struct_type()
     }
 
@@ -48,10 +53,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 ast::TemplatePart::Interpolation { expr, format, .. } => {
                     let ty = self.resolve_expr(expr, ctx, None);
                     let ty = self.apply_infer_holes(ty);
-                    let spec = format.as_ref().map(|f| f.spec.clone());
-                    self.check_hole_format_trait(ty, spec.as_deref(), expr.span());
                     segments.push(std::mem::take(&mut pending));
-                    holes.push((ty, spec));
+                    holes.push((ty, format.as_ref().map(|f| f.spec.clone())));
                 }
                 // The gate reify relies on: it decodes these segments with no
                 // diagnostic channel of its own.
@@ -73,7 +76,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
     /// A specifier binds under any tag, whether or not the tag renders the
     /// hole, so the check reads the declared bounds rather than a call.
-    fn check_hole_format_trait(&mut self, hole_type: TypeId, spec: Option<&str>, span: Span) {
+    pub(super) fn check_hole_format_trait(
+        &mut self,
+        hole_type: TypeId,
+        spec: Option<&str>,
+        span: Span,
+    ) {
         // A malformed spec is the parser's to report.
         let kind = match spec.map(format_spec::parse) {
             None => FormatKind::Display,
@@ -84,7 +92,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             return;
         }
         let item = kind.trait_item();
-        let receiver = self.tysys.type_table.borrow().peel_refs(hole_type);
+        let receiver = interpolation_dispatch_type(
+            hole_type,
+            kind,
+            &self.tysys.trait_env,
+            &self.tysys.type_table.borrow(),
+        );
         if matches!(
             self.tysys.type_table.borrow().get(receiver),
             ResolvedType::Error | ResolvedType::Unknown
@@ -93,8 +106,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
         // A variable an enclosing call has yet to answer (a closure parameter
         // typed by the callee's own parameter) has no bounds to read here.
-        let scope_params = self.scope_type_param_ids();
-        if self.is_open_slot(receiver, &scope_params) {
+        if self.tysys.is_unbound_type_param(receiver)
+            && !self.scope_type_param_ids().contains(&receiver)
+        {
             return;
         }
         let trait_ = self

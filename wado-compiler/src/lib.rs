@@ -197,17 +197,24 @@ fn trait_bound_violation_message(
         trait_display,
         ..
     } = violation;
-    let mut msg = format!("type `{type_display}` does not implement trait `{trait_display}`");
     // `display_trait_name` comes from the registry, not a literal.
-    if trait_display == display_trait_name {
-        msg.push_str(MISSING_DISPLAY_HINT);
-    }
-    msg
+    missing_trait_message(
+        type_display,
+        trait_display,
+        trait_display == display_trait_name,
+    )
 }
 
-/// `Display` has a ready `${x:?}` alternative.
-pub(crate) const MISSING_DISPLAY_HINT: &str =
-    "; use `${x:?}` for debug output, or add an `impl Display`";
+/// The one wording of a type lacking a trait a call needs, wherever it is
+/// caught. `Display` has a ready `${x:?}` alternative.
+pub(crate) fn missing_trait_message(type_name: &str, trait_name: &str, is_display: bool) -> String {
+    let hint = if is_display {
+        "; use `${x:?}` for debug output, or add an `impl Display`"
+    } else {
+        ""
+    };
+    format!("type `{type_name}` does not implement trait `{trait_name}`{hint}")
+}
 
 use std::cell::RefCell;
 use std::rc::Rc;

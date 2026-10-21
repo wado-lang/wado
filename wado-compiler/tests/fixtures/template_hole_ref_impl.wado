@@ -1,0 +1,28 @@
+// A hole of type `&R` renders through an impl written on the reference, as a
+// `T: Display` bound accepts `&R` through it. Without one, a reference renders
+// as its referent.
+struct R {
+    x: i32,
+}
+
+impl Display for &R {
+    fn fmt(&self, f: &mut Formatter) {
+        f.write_str(`R(${self.x})`);
+    }
+}
+
+fn show<T: Display>(t: T) -> String {
+    return `${t}`;
+}
+
+test "a reference's own impl renders the hole" {
+    let r = R { x: 1 };
+    let rr = &r;
+    assert `${rr}` == "R(1)";
+    assert show(&r) == "R(1)";
+    let n = 5;
+    assert `${&n}` == "5";
+}
+
+__DATA__
+{"test": {}}

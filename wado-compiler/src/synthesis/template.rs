@@ -56,14 +56,6 @@ pub(super) struct FormatStdlibNames {
     pub formatter_fq: FqTypeName,
     /// In the order [`Align`] names them.
     pub alignment_cases: [EnumCase; 3],
-    /// Keyed by kind: `#` sets a `Formatter` field, it does not pick a trait.
-    traits: Vec<(FormatKind, FormatTrait)>,
-}
-
-#[derive(Clone, Debug)]
-pub(super) struct FormatTrait {
-    pub name: FqTraitName,
-    pub method: String,
 }
 
 #[derive(Clone, Debug)]
@@ -82,14 +74,6 @@ impl FormatStdlibNames {
                 index,
             }
         };
-        let format_trait = |item| FormatTrait {
-            name: items.trait_fq(item),
-            method: items.trait_method_name(item).to_string(),
-        };
-        let traits = FormatKind::ALL
-            .into_iter()
-            .map(|kind| (kind, format_trait(kind.trait_item())))
-            .collect();
         assert_formatter_layout(type_table);
         Self {
             formatter: items.struct_name(CompilerItem::Formatter).to_string(),
@@ -99,18 +83,7 @@ impl FormatStdlibNames {
                 case(CompilerItem::AlignmentCenter),
                 case(CompilerItem::AlignmentRight),
             ],
-            traits,
         }
-    }
-
-    pub fn format_trait(&self, spec: Option<&TemplateFormatSpec>) -> &FormatTrait {
-        let kind = spec.map_or(FormatKind::Display, |spec| spec.kind);
-        &self
-            .traits
-            .iter()
-            .find(|(k, _)| *k == kind)
-            .expect("every format kind names a trait")
-            .1
     }
 
     /// The `Alignment` case for `align`, defaulting to right as the stdlib does.
@@ -302,12 +275,13 @@ fn build_hole_fmt_helper(
                 ),
                 None => f_local(),
             };
+            let dispatch =
+                interpolation_dispatch_type(hole.hole_type, kind, ctx.trait_env, &ctx.tt.borrow());
             let stmts = trait_fmt_call(
-                interpolation_dispatch_type(hole.hole_type, kind, ctx.tt),
+                dispatch,
                 value,
                 formatter,
                 kind,
-                ctx.names.format_trait(hole.spec.as_ref()),
                 span,
                 ctx,
             );
@@ -502,7 +476,6 @@ fn build_template_block(
                 let kind = format_spec
                     .as_ref()
                     .map_or(FormatKind::Display, |spec| spec.kind);
-                let format_trait = ctx.names.format_trait(format_spec.as_ref());
 
                 // A plain `${s}` on a `String` is the buffer append itself.
                 if inner_type == string_type && format_spec.is_none() {
@@ -549,12 +522,13 @@ fn build_template_block(
                     mut_ref_formatter,
                     span,
                 );
+                let dispatch =
+                    interpolation_dispatch_type(resolved.type_id, kind, ctx.trait_env, &tt.borrow());
                 stmts.extend(trait_fmt_call(
-                    interpolation_dispatch_type(resolved.type_id, kind, tt),
+                    dispatch,
                     *resolved,
                     fmt_mut_ref,
                     kind,
-                    format_trait,
                     span,
                     ctx,
                 ));
@@ -807,19 +781,30 @@ fn build_formatter_literal(
     )
 }
 
-/// The type an interpolation dispatches its format trait on. Refs are
-/// irrelevant to which trait renders the value, except under `Inspect`, where
-/// `&x` renders as `&42` through the ref blanket.
-fn interpolation_dispatch_type(
+/// The type an interpolation dispatches its format trait on, which the
+/// elaborator's hole check asks the trait of too. A reference renders as its
+/// referent unless an impl is written on the reference itself; under
+/// `Inspect`, `&x` renders as `&42` through the ref blanket.
+pub(crate) fn interpolation_dispatch_type(
     type_id: TypeId,
     kind: FormatKind,
-    tt: &Rc<RefCell<TypeTable>>,
+    trait_env: &TraitEnv,
+    tt: &TypeTable,
 ) -> TypeId {
     if kind == FormatKind::Inspect {
-        type_id
-    } else {
-        tt.borrow().peel_refs(type_id)
+        return type_id;
     }
+    let trait_ = tt
+        .compiler_items()
+        .trait_def(kind.trait_item())
+        .expect("every format kind names a prelude trait");
+    let mut dispatch = type_id;
+    while let ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) = tt.get(dispatch)
+        && !written_impl_reaches(trait_env, trait_, dispatch, tt)
+    {
+        dispatch = *inner;
+    }
+    dispatch
 }
 
 /// Wrap `expr` in deref operations until its type matches `target_type`.
@@ -866,12 +851,18 @@ fn trait_fmt_call(
     val: TirExpr,
     fmt: TirExpr,
     kind: FormatKind,
-    format_trait: &FormatTrait,
     span: Span,
     ctx: &TemplateCtx,
 ) -> Vec<TirStmt> {
-    let trait_name = &format_trait.name;
-    let method_name = format_trait.method.as_str();
+    let (trait_name, method_name) = {
+        let tt = ctx.tt.borrow();
+        let items = tt.compiler_items();
+        (
+            items.trait_fq(kind.trait_item()),
+            items.trait_method_name(kind.trait_item()).to_string(),
+        )
+    };
+    let (trait_name, method_name) = (&trait_name, method_name.as_str());
     let target = peel_transparent_newtype(type_id, kind, trait_name, ctx);
     let (val, type_id) = if target == type_id {
         (val, type_id)
@@ -958,7 +949,15 @@ fn method_call_info_for_type(
                 template: None,
             }
         }
-        ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => {
+        // An impl written on the reference answers before the blanket does.
+        ResolvedType::Ref(inner) | ResolvedType::MutRef(inner)
+            if !written_impl_reaches(
+                ctx.trait_env,
+                trait_name.called_decl(),
+                type_id,
+                &tt.borrow(),
+            ) =>
+        {
             let ref_kind = RefKind::from_resolved(&resolved).expect("ref classify");
             let (local_name, monomorph_info) = ref_blanket_call(
                 ref_kind,
@@ -1456,6 +1455,10 @@ fn method_name_for_type(
         // A `fn(..)` receiver is named by the type itself, the same spelling
         // its dispatch stubs are registered under.
         ResolvedType::Function { .. } => tt_ref.fn_receiver_name(&resolved),
+        // An impl written for `&X` registers under the reference.
+        ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => tt_ref
+            .fq_base_type_name(inner)
+            .with_reference(RefKind::from_resolved(&resolved).expect("ref classify")),
         _ => tt_ref.fq_base_type_name(type_id),
     };
     let mut info = LocalMethodName::new(head, Some(trait_name.clone()), method_name.to_string());

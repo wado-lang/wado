@@ -6,7 +6,7 @@ use std::ops::{Deref, DerefMut};
 
 use crate::hashmap::{IndexMap, IndexSet};
 
-use crate::MISSING_DISPLAY_HINT;
+use crate::missing_trait_message;
 use crate::analyze::symbol_not_visible_message;
 use crate::ast::{self, AstId, Expr, Visibility};
 use crate::compiler_host::{Code, Diagnostic, DiagnosticSpan, Severity};
@@ -2784,18 +2784,11 @@ impl TypeError {
                 trait_name,
                 is_display,
                 span,
-            } => {
-                let hint = if *is_display {
-                    MISSING_DISPLAY_HINT
-                } else {
-                    ""
-                };
-                (
-                    Code::TraitBoundNotSatisfied,
-                    format!("type `{type_name}` does not implement trait `{trait_name}`{hint}"),
-                    *span,
-                )
-            }
+            } => (
+                Code::TraitBoundNotSatisfied,
+                missing_trait_message(type_name, trait_name, *is_display),
+                *span,
+            ),
             TypeError::AmbiguousLiteralConversion {
                 type_name,
                 count,

@@ -67,18 +67,6 @@ pub enum FormatKind {
 }
 
 impl FormatKind {
-    pub const ALL: [Self; 9] = [
-        Self::Display,
-        Self::Inspect,
-        Self::Binary,
-        Self::Octal,
-        Self::LowerHex,
-        Self::UpperHex,
-        Self::LowerExp,
-        Self::UpperExp,
-        Self::Fixed,
-    ];
-
     /// The trait the value renders through.
     #[must_use]
     pub const fn trait_item(self) -> CompilerItem {

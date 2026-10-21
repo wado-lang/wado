@@ -3275,8 +3275,8 @@ impl TypeTable {
         Some(bounds)
     }
 
-    /// What `<base as owning_trait>::assoc_name<args>` is, for a `base` that
-    /// carries no type parameter, or `None` where nothing binds it.
+    /// What `<base as owning_trait>::assoc_name<args>` is, or `None` where
+    /// nothing binds it.
     pub fn answer_projection(
         &mut self,
         base: TypeId,
