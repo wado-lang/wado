@@ -1912,6 +1912,7 @@ fn scan_repeat_guard_excluding<S: AsStrSlice>(
 /// A loop with nothing to reserve for its alternative — every loop but the
 /// `X* X` shape `RepeatOp.reserve_scan` describes.
 global NO_RESERVE_SCAN: List<ScanElement> = [];
+global NO_RESERVE_ADMITS: Admits = Admits::Untestable;
 global PEEK_KIND: String = "p.peek_kind()";
 
 /// What a repeat's entry or iteration tests on the parse side: the body admits
@@ -2107,7 +2108,7 @@ fn gen_scan_iteration(w: &mut CodeWriter, re: &ScanRepeatElement, admits: &Admit
     }
     gen_scan_iteration_rewind(w, ctx, /*looping=*/ true);
     w.line("if pos == sp { break; }");
-    gen_scan_iteration_duties(w, &re.duties, &admits_kinds(&re.inner_admits), re.kind, ctx);
+    gen_scan_iteration_duties(w, &re.duties, &re.inner_admits, re.kind, ctx);
 }
 
 /// The scan's twin of `gen_iteration_duties`: the one place a scanned iteration
@@ -2115,14 +2116,14 @@ fn gen_scan_iteration(w: &mut CodeWriter, re: &ScanRepeatElement, admits: &Admit
 fn gen_scan_iteration_duties(
     w: &mut CodeWriter,
     duties: &IterationDuties,
-    loop_first: &List<i32>,
+    loop_admits: &Admits,
     kind: RepeatKind,
     ctx: &mut EmitContext,
 )
     contract duties.is_empty() || kind matches { Star | Plus }, "only a loop can starve a suffix or strand a continuation; lowering stamps duties for no other kind"
 {
-    gen_scan_reserve(w, duties, loop_first, ctx);
-    gen_scan_decline_stranded(w, duties, loop_first, ctx);
+    gen_scan_reserve(w, duties, loop_admits, ctx);
+    gen_scan_decline_stranded(w, duties, loop_admits, ctx);
 }
 
 /// Scan-side twin of `gen_rep_decline_stranded`: an iteration that would strand
@@ -2132,7 +2133,7 @@ fn gen_scan_iteration_duties(
 fn gen_scan_decline_stranded(
     w: &mut CodeWriter,
     duties: &IterationDuties,
-    loop_first: &List<i32>,
+    loop_admits: &Admits,
     ctx: &mut EmitContext,
 ) {
     if !duties.decline_stranded {
@@ -2140,7 +2141,7 @@ fn gen_scan_decline_stranded(
     }
     let gc = ctx.cursor.next_scan_group();
     gen_kind_read(w, `dk_${gc}`, "tokens", "pos");
-    let can_continue = `${decline_continue_check(loop_first, duties, `dk_${gc}`, ctx)} || ${decline_ends_input_check(
+    let can_continue = `${decline_continue_check(loop_admits, duties, `dk_${gc}`, ctx)} || ${decline_ends_input_check(
         `dk_${gc}`,
         "tokens",
         "sp",
@@ -2179,12 +2180,12 @@ fn gen_scan_decline_stranded(
 /// iteration that leaves the alternative's mandatory suffix unmatchable is one
 /// the suffix needed for itself, and rewinds. The two must move together, or
 /// the tournament measures a length the parse refuses to consume.
-fn gen_scan_reserve(w: &mut CodeWriter, duties: &IterationDuties, loop_first: &List<i32>, ctx: &mut EmitContext) {
+fn gen_scan_reserve(w: &mut CodeWriter, duties: &IterationDuties, loop_admits: &Admits, ctx: &mut EmitContext) {
     if duties.reserve_scan.is_empty() {
         return;
     }
     let gc = ctx.cursor.next_scan_group();
-    open_reserve_decides(w, `rk_${gc}`, "tokens", "pos", loop_first, ctx);
+    open_reserve_decides(w, `rk_${gc}`, "tokens", "pos", loop_admits, ctx);
     gen_reserve_probe(w, &duties.reserve_scan, `rs_${gc}`, `rs_${gc}_ok`, `rsv_${gc}`, ctx);
     gen_scan_rewind_break(w, ctx, "sp", `!rs_${gc}_ok`);
     w.end();
@@ -4380,7 +4381,7 @@ fn gen_repeat_body(w: &mut CodeWriter, r: &RepeatOp, ctx: &mut EmitContext, nc: 
             }
         }
         assert !r.duties.owes_beyond_reserve(), "gen_repeat_body: a scan-guarded loop owes a duty the guard does not discharge";
-        let scan_pos = gen_rep_scan_guard(w, &r.scan_body, &r.duties, &admits_kinds(&r.body_admits), ctx, nc);
+        let scan_pos = gen_rep_scan_guard(w, &r.scan_body, &r.duties, &r.body_admits, ctx, nc);
         w.line(`if ${scan_pos} < 0 { break; }`);
         gen_op(w, &r.body, ctx, nc);
         gen_loop_back_sync(w, ctx, r);
@@ -6062,14 +6063,13 @@ fn gen_rep_iteration_entry<S: AsStrSlice>(
         w.begin(`if !${plus_flag}`);
     }
     gen_caller_follow_gate(w, rep_op);
-    let body_admits = admits_kinds(&rep_op.body_admits);
-    let scan_pos = gen_rep_scan_guard(w, &rep_op.scan_body, &rep_op.duties, &body_admits, ctx, name_counts);
+    let scan_pos = gen_rep_scan_guard(w, &rep_op.scan_body, &rep_op.duties, &rep_op.body_admits, ctx, name_counts);
     // `Always`, though a `+` has a flag: the whole guard sits inside
     // `if !plus_flag`, which already excluded the mandatory iteration.
     gen_iteration_duties(
         w,
         &rep_op.duties,
-        &body_admits,
+        &rep_op.body_admits,
         &scan_pos,
         &Refusable::Always,
         /*reserve_in_guard=*/ true,
@@ -6139,7 +6139,7 @@ fn gen_rep_speculative_iteration(
     gen_iteration_duties(
         w,
         &rep_op.duties,
-        &admits_kinds(&rep_op.body_admits),
+        &rep_op.body_admits,
         &end,
         &Refusable::Always,
         /*reserve_in_guard=*/ true,
@@ -6201,7 +6201,7 @@ global DECLINE_ASKS_CALLER: bool = true;
 fn gen_rep_decline_stranded<S: AsStrSlice, S1: AsStrSlice>(
     w: &mut CodeWriter,
     duties: &IterationDuties,
-    body_admits: &List<i32>,
+    body_admits: &Admits,
     scan_pos: S,
     ctx: &mut EmitContext,
     nc: &mut List<[String, i32]>,
@@ -6269,7 +6269,7 @@ variant Refusable {
 fn gen_iteration_duties<S: AsStrSlice, S1: AsStrSlice = String>(
     w: &mut CodeWriter,
     duties: &IterationDuties,
-    body_admits: &List<i32>,
+    body_admits: &Admits,
     at: S,
     refusable: &Refusable,
     reserve_in_guard: bool,
@@ -6303,7 +6303,7 @@ fn gen_iteration_duties<S: AsStrSlice, S1: AsStrSlice = String>(
 fn gen_rep_reserve_at<S: AsStrSlice, S1: AsStrSlice>(
     w: &mut CodeWriter,
     duties: &IterationDuties,
-    body_admits: &List<i32>,
+    body_admits: &Admits,
     at: S,
     ctx: &mut EmitContext,
     nc: &mut List<[String, i32]>,
@@ -6506,15 +6506,19 @@ fn decline_ends_input_check<S: AsStrSlice, S1: AsStrSlice, S2: AsStrSlice, S3: A
 /// Whether the token after an iteration lets the walk go on without declining:
 /// another iteration, the continuation, or a viable exit.
 fn decline_continue_check<S: AsStrSlice>(
-    loop_first: &List<i32>,
+    loop_admits: &Admits,
     duties: &IterationDuties,
     subject: S,
     ctx: &mut EmitContext,
 ) -> String {
+    let mut exits = duties.decline_cont_first;
+    dedup_append_arr(&mut exits, &duties.decline_viable);
+    let Kinds(loop_first) = loop_admits else {
+        assert !exits.is_empty(), "a decline is stamped only where the loop's first set overlaps the suffix's or the rule's FOLLOW";
+        return `${repeat_guard_cond(loop_admits, &NO_KINDS, subject, ctx)} || ${ctx.kind_check_str(&exits, subject)}`;
+    };
     let mut kinds = *loop_first;
-    dedup_append_arr(&mut kinds, &duties.decline_cont_first);
-    dedup_append_arr(&mut kinds, &duties.decline_viable);
-    assert !kinds.is_empty(), "a decline is stamped only where the loop's first set overlaps the suffix's or the rule's FOLLOW";
+    dedup_append_arr(&mut kinds, &exits);
     return ctx.kind_check_str(&kinds, subject);
 }
 
@@ -6532,7 +6536,6 @@ fn gen_rep_decided_entry<S: AsStrSlice>(
     // would test, so a predicate the decision already answered is not asked
     // a second time.
     let [winner, best] = gen_group_decide(w, &decision.branches, &g_op.scan_group.alts, ctx, name_counts, false);
-    let body_admits = admits_kinds(&rep_op.body_admits);
     // Every iteration may decline, and one that consumed nothing would come
     // round at the same position forever.
     if plus_flag.is_empty() {
@@ -6544,7 +6547,7 @@ fn gen_rep_decided_entry<S: AsStrSlice>(
     gen_iteration_duties(
         w,
         &rep_op.duties,
-        &body_admits,
+        &rep_op.body_admits,
         &best,
         &refusable,
         /*reserve_in_guard=*/ false,
@@ -6641,7 +6644,7 @@ fn gen_rep_scan_guard(
     w: &mut CodeWriter,
     scan_inner: &ScanElement,
     duties: &IterationDuties,
-    body_admits: &List<i32>,
+    body_admits: &Admits,
     ctx: &mut EmitContext,
     name_counts: &mut List<[String, i32]>,
 ) -> String {
@@ -6688,20 +6691,20 @@ fn open_reserve_decides<S: AsStrSlice, S1: AsStrSlice, S2: AsStrSlice>(
     kind: S,
     stream: S1,
     at: S2,
-    body_admits: &List<i32>,
+    body_admits: &Admits,
     ctx: &mut EmitContext,
 )
-    contract !body_admits.is_empty(), "a reserve is stamped only where the loop's first set overlaps the suffix's"
+    contract !admits_is_untestable(body_admits), "a reserve is stamped only where the loop's first set overlaps the suffix's"
 {
     gen_kind_read(w, kind, stream, at);
-    w.begin(`if ${negate_cond(ctx.kind_check_str(body_admits, kind))}`);
+    w.begin(`if ${negate_cond(repeat_guard_cond(body_admits, &NO_KINDS, kind, ctx))}`);
 }
 
 /// Refuse the iteration whose end starves the alternative's mandatory suffix.
 fn gen_reserve_check<S: AsStrSlice, S1: AsStrSlice>(
     w: &mut CodeWriter,
     reserve: &List<ScanElement>,
-    body_admits: &List<i32>,
+    body_admits: &Admits,
     body_end: S,
     fail: S1,
     ctx: &mut EmitContext,
@@ -6727,7 +6730,7 @@ fn gen_scan_guard_with_prefix<S: AsStrSlice, S1: AsStrSlice>(
     label_prefix: S1,
     require_advance: bool,
     reserve: &List<ScanElement> = &NO_RESERVE_SCAN,
-    body_admits: &List<i32> = &NO_KINDS,
+    body_admits: &Admits = &NO_RESERVE_ADMITS,
 ) -> String {
     let [scan_pos_var, scan_label] = open_scan_block(w, ctx, name_counts, pos_prefix, label_prefix);
     let fail = `break ${scan_label};`;

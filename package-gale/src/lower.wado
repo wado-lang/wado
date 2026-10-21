@@ -143,6 +143,7 @@ use {
     Admits,
     admits_is_everything,
     admits_is_untestable,
+    admits_overlap,
     admits_kinds,
     admits_or_untestable,
     AltClass,
@@ -2289,6 +2290,7 @@ fn rebind_scan_repeat_caller_follow(
     ctx: &mut LowerContext,
     reaches_rule_tail: bool,
     rule_name: &String = &NO_PROBE_RULE,
+    outer_suffix: &List<Element> = &NO_OUTER_SUFFIX,
 ) -> ScanElement {
     if let Repeat(re) = se {
         let caller_follow_second = compute_caller_follow_second(alt_elements, index + 1, ctx);
@@ -2304,6 +2306,7 @@ fn rebind_scan_repeat_caller_follow(
             ctx,
             reaches_rule_tail,
             rule_name,
+            outer_suffix,
         );
         return ScanElement::Repeat(ScanRepeatElement {
             ..re,
@@ -3100,11 +3103,21 @@ fn lower_group_alt<S: AsStrSlice, S1: AsStrSlice>(
                     ctx,
                     false,
                     rule_name,
+                    outer_suffix,
                 ));
                 op = rewrap_op_repeat(op, patched);
             }
             if se_is_repeat {
-                se = rebind_scan_repeat_caller_follow(se, basic_follow, &alt.elements, i, ctx, false);
+                se = rebind_scan_repeat_caller_follow(
+                    se,
+                    basic_follow,
+                    &alt.elements,
+                    i,
+                    ctx,
+                    false,
+                    &NO_PROBE_RULE,
+                    outer_suffix,
+                );
             }
         }
         ops.push(op);
@@ -3399,11 +3412,8 @@ fn lower_simple_cst_alt_call(elem: &Element, counts: &mut List<[String, i32]>) -
 /// — `alt_class`'s answer, never a nullability walk of this site's own. One
 /// with a gateable alt-initial predicate is selected by the predicate instead,
 /// and keeps the unconditional branch the gate hangs on.
-fn alt_earns_group_follow(alt: &Alternative, ctx: &mut LowerContext) -> bool {
-    if ctx.alt_has_gate(alt) {
-        return false;
-    }
-    return alt_class_is_nullable(&alt_class_of(alt, &mut ctx.analysis));
+fn alt_earns_group_follow(alt: &Alternative, class: &AltClass, ctx: &mut LowerContext) -> bool {
+    return !ctx.alt_has_gate(alt) && alt_class_is_nullable(class);
 }
 
 /// The admit set of a group's nullable alternative — `outer_follow`, what
@@ -3419,8 +3429,9 @@ pub fn group_empty_alt_admits(
     if !follow_is_exact || outer_follow.is_empty() {
         return null;
     }
+    let classes = alt_classes_of(alts, &mut ctx.analysis);
     for let mut i = 0; i < alts.len(); i += 1 {
-        if alt_earns_group_follow(&alts[i], ctx) {
+        if alt_earns_group_follow(&alts[i], &classes[i], ctx) {
             return Option::Some(EmptyAltAdmits { alt_index: i, admits: *outer_follow });
         }
     }
@@ -4202,6 +4213,7 @@ fn patch_repeat_op_caller_follow<S: AsStrSlice>(
     ctx: &mut LowerContext,
     reaches_rule_tail: bool,
     rule_name: S,
+    outer_suffix: &List<Element> = &NO_OUTER_SUFFIX,
 ) -> RepeatOp {
     let stamps = lower_repeat_exit_stamps(
         rep_op.non_greedy,
@@ -4215,6 +4227,7 @@ fn patch_repeat_op_caller_follow<S: AsStrSlice>(
         ctx,
         reaches_rule_tail,
         rule_name,
+        outer_suffix,
     );
     return RepeatOp {
         ..*rep_op,
@@ -4286,6 +4299,7 @@ fn lower_repeat_exit_stamps<S: AsStrSlice>(
     ctx: &mut LowerContext,
     reaches_rule_tail: bool,
     rule_name: S,
+    outer_suffix: &List<Element>,
 ) -> RepeatExitStamps {
     let by_atn = non_greedy_exit_by_atn(non_greedy, kind, body_admits);
     let contested = ctx.settings.atn matches { Always }
@@ -4325,12 +4339,13 @@ fn lower_repeat_exit_stamps<S: AsStrSlice>(
         duties: lower_iteration_duties(
             non_greedy,
             kind,
-            &admits_kinds(body_admits),
+            body_admits,
             alt_elements,
             index,
             ctx,
             reaches_rule_tail,
             rule_name,
+            outer_suffix,
         ),
     };
 }
@@ -4344,15 +4359,17 @@ fn lower_repeat_exit_stamps<S: AsStrSlice>(
 fn lower_iteration_duties<S: AsStrSlice>(
     non_greedy: bool,
     kind: RepeatKind,
-    loop_first: &List<i32>,
+    loop_admits: &Admits,
     alt_elements: &List<Element>,
     index: i32,
     ctx: &mut LowerContext,
     reaches_rule_tail: bool,
     rule_name: S,
+    outer_suffix: &List<Element>,
 ) -> IterationDuties {
     let mut duties = IterationDuties {};
-    if let Some(scan) = lower_reserve_scan(non_greedy, kind, loop_first, alt_elements, index, ctx) {
+    let continuation = follow_elements_of(alt_elements, outer_suffix);
+    if let Some(scan) = lower_reserve_scan(non_greedy, kind, loop_admits, &continuation, index, ctx) {
         duties.reserve_scan = scan;
     }
     // No `mark_rule_reads_follow` for the decline: it asks the rule's classical
@@ -4364,7 +4381,7 @@ fn lower_iteration_duties<S: AsStrSlice>(
     if let Some(hit) = lower_decline_scan(
         non_greedy,
         kind,
-        loop_first,
+        loop_admits,
         alt_elements,
         index,
         ctx,
@@ -4381,7 +4398,8 @@ fn lower_iteration_duties<S: AsStrSlice>(
 
 /// The mandatory suffix a loop must leave to its own alternative, as scan
 /// elements. `null` wherever the loop cannot starve it, which is every loop
-/// but the `X* X` shape.
+/// but the `X* X` shape. Inside a group the suffix runs on past the group, so
+/// `( X | .* ) Y` reserves the `Y` too.
 ///
 /// Each condition rules out a reservation that would decide nothing and only
 /// cost a scan: a non-greedy loop already stops at its continuation; a
@@ -4392,7 +4410,7 @@ fn lower_iteration_duties<S: AsStrSlice>(
 fn lower_reserve_scan(
     non_greedy: bool,
     kind: RepeatKind,
-    loop_first: &List<i32>,
+    loop_admits: &Admits,
     alt_elements: &List<Element>,
     index: i32,
     ctx: &mut LowerContext,
@@ -4403,7 +4421,7 @@ fn lower_reserve_scan(
     if index + 1 >= alt_elements.len() || ctx.analysis.tail_is_nullable_deep(alt_elements, index + 1) {
         return null;
     }
-    if !sets_overlap(loop_first, &ctx.analysis.first_of_elements_from(alt_elements, index + 1)) {
+    if !admits_overlap(loop_admits, &ctx.analysis.first_of_elements_from(alt_elements, index + 1)) {
         return null;
     }
     return lower_scan_continuation_elements(alt_elements, index, ctx);
@@ -4437,7 +4455,7 @@ fn lower_reserve_scan(
 fn lower_decline_scan(
     non_greedy: bool,
     kind: RepeatKind,
-    loop_first: &List<i32>,
+    loop_admits: &Admits,
     alt_elements: &List<Element>,
     index: i32,
     ctx: &mut LowerContext,
@@ -4451,7 +4469,7 @@ fn lower_decline_scan(
         return null;
     }
     let suffix_first = ctx.analysis.first_of_elements_from(alt_elements, index + 1);
-    if !sets_overlap(loop_first, &suffix_first) && !sets_overlap(loop_first, rule_follow) {
+    if !admits_overlap(loop_admits, &suffix_first) && !admits_overlap(loop_admits, rule_follow) {
         return null;
     }
     return match lower_scan_continuation_elements(alt_elements, index, ctx) {
@@ -4510,13 +4528,7 @@ fn optional_probe_contested(
     if non_greedy || !kind matches { Optional } || admits_is_untestable(body) {
         return false;
     }
-    if ctx.analysis.elements_reach_open_end(alt_elements, index + 1) {
-        return true;
-    }
-    if admits_is_everything(body) {
-        return !follow.is_empty();
-    }
-    return sets_overlap(&admits_kinds(body), follow);
+    return ctx.analysis.elements_reach_open_end(alt_elements, index + 1) || admits_overlap(body, follow);
 }
 
 /// True iff `elem` is a list-label (`+=`). Used by

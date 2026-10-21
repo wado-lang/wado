@@ -2817,6 +2817,18 @@ fn _parse_cpp_compilation_unit__inner(p: &mut Parser) -> () {
                 p.atn.stack.pop();
                 if pos < 0 { break rep_scan; }
                 if pos <= p.pos { break rep_scan; }
+                let rep_body_end_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
+                if rep_body_end_kind == TK_EOF {
+                    let rep_body_end = pos;
+                    let mut rep_body_end_ok = false;
+                    rep_body_end_scan: {
+                        if pos >= tokens.len() || tokens[pos] != TK_EOF { break rep_body_end_scan; }
+                        pos += 1;
+                        rep_body_end_ok = true;
+                    }
+                    pos = rep_body_end;
+                    if !rep_body_end_ok { break rep_scan; }
+                }
                 rep_scan_pos = pos;
             }
             if rep_scan_pos < 0 {

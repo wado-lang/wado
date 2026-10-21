@@ -39,6 +39,7 @@
 use { Level } from "core:log";
 use { Visibility, GrammarOption, NamedAction, LexerRule, RepeatKind, ActionSource } from "./ir.wado";
 use { LitToken } from "./lexer_gen.wado";
+use { sets_overlap } from "./token_kinds.wado";
 
 // ==========================================================================
 // Top-level
@@ -527,6 +528,16 @@ pub fn admits_kinds(admits: &Admits) -> List<i32> {
     return match admits {
         Kinds(kinds) => *kinds,
         _ => [] as List<i32>,
+    };
+}
+
+/// Whether a token the test admits can also start `kinds`. An untestable arm is
+/// decided by no token, so it shares none.
+pub fn admits_overlap(admits: &Admits, kinds: &List<i32>) -> bool {
+    return match admits {
+        Everything(_) => !kinds.is_empty(),
+        Kinds(own) => sets_overlap(own, kinds),
+        Untestable => false,
     };
 }
 

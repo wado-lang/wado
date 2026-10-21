@@ -1662,6 +1662,32 @@ test "a tournament leaves out an alternative an earlier one subsumes" {
     assert !gen_source(SUBSUMED_ALT_G4).contains("scan_simple("), "ANTLR4 never takes `simple`, so nothing scans it";
 }
 
+// `.*` matches empty, so it subsumes the empty alternative after it.
+global SUBSUMED_EMPTY_ALT_G4: String = "
+grammar T;
+s : ( X | .* | ) Y EOF ;
+X : 'x' ;
+Y : 'y' ;
+WS : ' ' -> skip ;
+";
+
+test "a group's follow set selects no alternative an earlier one subsumes" {
+    let got = parses(SUBSUMED_EMPTY_ALT_G4, "s", ["y", "x y", "x x y"]);
+    assert got == "y => (s y)\nx y => (s x y)\nx x y => (s x x y)\n";
+}
+
+test "a wildcard loop leaves its alternative the token it needs" {
+    let grammar = SUBSUMED_EMPTY_ALT_G4.replace("( X | .* | )", ".*");
+    let got = parses(&grammar, "s", ["y", "x y", "y y"]);
+    assert got == "y => (s y)\nx y => (s x y)\ny y => (s y y)\n";
+}
+
+test "a loop ending a group alternative leaves what follows the group" {
+    let grammar = SUBSUMED_EMPTY_ALT_G4.replace("( X | .* | ) Y", "( X* | Y ) X");
+    let got = parses(&grammar, "s", ["x", "x x x", "y x"]);
+    assert got == "x => (s x)\nx x x => (s x x x)\ny x => (s y x)\n";
+}
+
 global LOOP_ENTERS_WHILE_VIABLE_G4: String = "
 grammar T;
 s : 'fn' ty '{' '}' EOF ;

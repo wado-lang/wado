@@ -1790,6 +1790,21 @@ fn _parse_braced__inner(p: &mut Parser, follow: i64 = 0) -> () {
             }
             if pos < 0 { pos = sp; break; }
             if pos == sp { break; }
+            let rk_2 = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
+            if rk_2 != TK_LIT_COMMA {
+                let rs_2 = pos;
+                let mut rs_2_ok = false;
+                rsv_2: {
+                    if pos < tokens.len() && tokens[pos] == TK_LIT_COMMA {
+                        pos += 1;
+                    }
+                    if pos >= tokens.len() || tokens[pos] != TK_LIT_RBRACE { break rsv_2; }
+                    pos += 1;
+                    rs_2_ok = true;
+                }
+                pos = rs_2;
+                if !rs_2_ok { pos = sp; break; }
+            }
         }
         if pos < tokens.len() && tokens[pos] == TK_LIT_COMMA {
             pos += 1;
@@ -1802,23 +1817,42 @@ fn _parse_braced__inner(p: &mut Parser, follow: i64 = 0) -> () {
         if !kind_set_has(&SYNC_3, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_3, &EXPECTED_3); }
         loop {
             if p.recovering { break; }
-            if p.peek_kind() != TK_LIT_COMMA { break; }
-            let sp_pending = p.pending;
-            let sp_pos = p.pos;
-            let sp_cp = p.b.checkpoint();
-            let sp_outer = p.speculating;
-            p.speculating = true;
+            let mut rep_scan_pos: i32 = -1;
+            rep_scan: {
+                let tokens = &p.kinds;
+                let mut pos: i32 = p.pos;
+                sg_3_done: {
+                    sg_3: {
+                        if pos >= tokens.len() || tokens[pos] != TK_LIT_COMMA { break sg_3; }
+                        pos += 1;
+                        if pos >= tokens.len() || tokens[pos] != TK_IDENT { break sg_3; }
+                        pos += 1;
+                        break sg_3_done;
+                    }
+                    break rep_scan;
+                }
+                if pos <= p.pos { break rep_scan; }
+                let rep_body_end_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
+                if rep_body_end_kind != TK_LIT_COMMA {
+                    let rep_body_end = pos;
+                    let mut rep_body_end_ok = false;
+                    rep_body_end_scan: {
+                        if pos < tokens.len() && tokens[pos] == TK_LIT_COMMA {
+                            pos += 1;
+                        }
+                        if pos >= tokens.len() || tokens[pos] != TK_LIT_RBRACE { break rep_body_end_scan; }
+                        pos += 1;
+                        rep_body_end_ok = true;
+                    }
+                    pos = rep_body_end;
+                    if !rep_body_end_ok { break rep_scan; }
+                }
+                rep_scan_pos = pos;
+            }
+            if rep_scan_pos < 0 { break; }
             p.expect(TK_LIT_COMMA, &SYNC_0, false);
             p.site = 7;
             _parse_arm(p);
-            p.speculating = sp_outer;
-            if p.recovering || p.pos <= sp_pos {
-                p.recovering = false;
-                p.pos = sp_pos;
-                p.b.truncate(sp_cp);
-                p.pending = sp_pending;
-                break;
-            }
             if !kind_set_has(&SYNC_3, p.kinds[p.pos]) { builtin::cold_path(); p.sync_back(&SYNC_3, &EXPECTED_3); }
         }
         if !kind_set_has(&SYNC_3, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_3, &EXPECTED_3); }
