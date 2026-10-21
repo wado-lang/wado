@@ -101,6 +101,8 @@ pub enum CtfeBuiltin {
     /// `ambient_std{out,err}_available`, carrying what
     /// [`NirPackage::ambient_stdio`] answers for its stream.
     AmbientStdio(bool),
+    /// `is_moved`: whether the place it reads holds the `null` a move wrote.
+    IsMoved,
 }
 
 impl CtfeBuiltin {
@@ -121,7 +123,8 @@ impl CtfeBuiltin {
             | Self::FloatIsNan
             | Self::Ieee754Comparison(_)
             | Self::HeapBase(_)
-            | Self::AmbientStdio(_) => false,
+            | Self::AmbientStdio(_)
+            | Self::IsMoved => false,
         }
     }
 }
@@ -304,6 +307,7 @@ pub(crate) fn build_ctfe_builtin_map(project: &NirPackage) -> CtfeBuiltinMap {
             Some("i32_as_char") => CtfeBuiltin::I32AsChar,
             Some("f32_is_nan" | "f64_is_nan") => CtfeBuiltin::FloatIsNan,
             Some("heap_base") => CtfeBuiltin::HeapBase(project.heap_base()),
+            Some("is_moved") => CtfeBuiltin::IsMoved,
             Some(name) if let Some(stream) = AmbientStream::of_availability_builtin(name) => {
                 CtfeBuiltin::AmbientStdio(project.ambient_stdio().writes(stream))
             }

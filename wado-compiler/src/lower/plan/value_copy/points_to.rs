@@ -34,6 +34,7 @@ use super::place::could_write_through;
 use super::{EnvFrame, NEEDS_COPY_DEPTH_LIMIT, resolve_param_in_env};
 use crate::defs::DefId;
 use crate::flat_package::FlatPackage;
+use crate::graph::DisjointSets;
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::module_source::ModuleSource;
 use crate::tir::{
@@ -57,8 +58,8 @@ pub struct PointsTo {
     /// The frame and local each location node is, the inverse of `locals`.
     owners: IndexMap<u32, (Frame, u32)>,
     pts: Vec<LocSet>,
-    /// The node whose entry in `pts` each node's set is.
-    rep: Vec<u32>,
+    /// The node whose entry in `pts` each node's set is, flattened.
+    rep: DisjointSets,
     /// The node the value each call argument hands its callee flows from, and
     /// the argument's span, keyed by the argument expression's address. Valid
     /// while no body is rewritten, as the fold, which computes and reads it,
@@ -90,7 +91,7 @@ fn site_of(sites: &IndexMap<usize, (u32, Span)>, expr: &TirExpr) -> u32 {
 
 impl PointsTo {
     fn set(&self, node: u32) -> &LocSet {
-        &self.pts[self.rep[node as usize] as usize]
+        &self.pts[self.rep.root(node) as usize]
     }
 
     /// The frame of the function `module`/`name`, `None` for one the analysis
@@ -136,7 +137,7 @@ impl PointsTo {
             if written.contains(&loc) || self.global_reach.contains(&loc) {
                 return true;
             }
-            if walked.insert(self.rep[loc as usize]) {
+            if walked.insert(self.rep.root(loc)) {
                 work.extend(self.set(loc).iter());
             }
         }
@@ -176,7 +177,7 @@ impl PointsTo {
         let mut walked: IndexSet<u32> = IndexSet::default();
         let mut work: Vec<u32> = from.into_iter().filter(|l| !known.contains(l)).collect();
         while let Some(loc) = work.pop() {
-            if out.insert(loc) && walked.insert(self.rep[loc as usize]) {
+            if out.insert(loc) && walked.insert(self.rep.root(loc)) {
                 work.extend(self.set(loc).iter().filter(|l| !known.contains(l)));
             }
         }
@@ -415,7 +416,7 @@ struct Graph {
     pts: Vec<LocSet>,
     /// The node each node's set is held at, shared by the nodes merged into
     /// it: a cycle of copies, or a node fed by one copy alone.
-    rep: Vec<u32>,
+    rep: DisjointSets,
     copy_to: Vec<Vec<u32>>,
     /// `loads[n]`: nodes receiving what each location in `pts[n]` holds.
     loads: Vec<Vec<u32>>,
@@ -442,9 +443,8 @@ struct Graph {
 
 impl Graph {
     fn node(&mut self) -> u32 {
-        let id = u32::try_from(self.pts.len()).expect("node count fits u32");
+        let id = self.rep.push();
         self.pts.push(LocSet::default());
-        self.rep.push(id);
         self.copy_to.push(Vec::new());
         self.loads.push(Vec::new());
         self.stores.push(Vec::new());
@@ -498,13 +498,8 @@ impl Graph {
     }
 
     /// The node holding `node`'s set.
-    fn find(&mut self, mut node: u32) -> u32 {
-        while self.rep[node as usize] != node {
-            let parent = self.rep[node as usize];
-            self.rep[node as usize] = self.rep[parent as usize];
-            node = parent;
-        }
-        node
+    fn find(&mut self, node: u32) -> u32 {
+        self.rep.find(node)
     }
 
     fn add(&mut self, node: u32, loc: u32) {
@@ -623,7 +618,7 @@ impl Graph {
     /// Make `root` the node of `member`, leaving `root` to [`Self::settle`].
     fn absorb(&mut self, root: u32, member: u32) {
         let (r, m) = (root as usize, member as usize);
-        self.rep[m] = root;
+        self.rep.link(member, root);
         let pts = std::mem::take(&mut self.pts[m]);
         self.pts[r].union_into(&pts, &mut LocSet::default());
         let copy_to = std::mem::take(&mut self.copy_to[m]);
@@ -925,9 +920,8 @@ pub fn compute(flat: &FlatPackage, fields: &StructFields, functors: &[ClosureFun
     // Code the analysis cannot see may run under any call and write what
     // escaped to it, as any call may write what a global reaches.
     let global_nodes: Vec<u32> = b.globals.values().copied().chain([b.escape]).collect();
-    let rep: Vec<u32> = (0..u32::try_from(b.g.pts.len()).expect("node count fits u32"))
-        .map(|node| b.g.find(node))
-        .collect();
+    let mut rep = std::mem::take(&mut b.g.rep);
+    rep.flatten();
     let pts = std::mem::take(&mut b.g.pts);
     let locals = std::mem::take(&mut b.locals);
     let owners = locals.iter().map(|(&key, &node)| (node, key)).collect();

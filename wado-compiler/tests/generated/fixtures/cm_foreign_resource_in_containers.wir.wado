@@ -71,9 +71,7 @@ type "functype//cm_foreign_resource_in_containers.wado/$cm_binding__User_fill" =
 
 type "functype//cm_foreign_resource_in_containers.wado/$cm_export__run" = fn();  // TypeId(21)
 
-type "functype//wasi/resource-drop:cm_foreign_resource_in_containers.wado#device" = fn(i32);  // TypeId(22)
-
-type "functype//wasi/task-return" = fn(i32);  // TypeId(23)
+type "functype//wasi/task-return" = fn(i32);  // TypeId(22)
 
 import fn mem/realloc from "mem/realloc";
 import fn wasi/wasi:demo/Maker::get_device from "wasi/wasi:demo/Maker::get_device";
@@ -82,7 +80,6 @@ import fn wasi/wasi:demo/User::peek from "wasi/wasi:demo/User::peek";
 import fn wasi/wasi:demo/User::settle from "wasi/wasi:demo/User::settle";
 import fn wasi/wasi:demo/User::fill from "wasi/wasi:demo/User::fill";
 import memory (1) from "mem/memory";
-import fn wasi/resource-drop:cm_foreign_resource_in_containers.wado#device from "wasi/resource-drop:cm_foreign_resource_in_containers.wado#device";
 import fn wasi/task-return from "wasi/task-return";
 
 fn "cm_foreign_resource_in_containers.wado/run"() with Maker, User, Device {
@@ -93,12 +90,6 @@ fn "cm_foreign_resource_in_containers.wado/run"() with Maker, User, Device {
     drop("cm_foreign_resource_in_containers.wado/$cm_binding__User_take"(struct.new "core:prelude/types.wado//Option<cm_foreign_resource_in_containers.wado/Device>::Some" { discriminant: 1, payload_0: $moved_1 = d; d = ref.null none; $moved_1 }));
     drop("cm_foreign_resource_in_containers.wado/$cm_binding__User_settle"(struct.new "core:prelude/types.wado//Result<cm_foreign_resource_in_containers.wado/Device,u32>::Ok" { discriminant: 0, payload_0: "cm_foreign_resource_in_containers.wado/$cm_binding__Maker_get_device"() }));
     drop("cm_foreign_resource_in_containers.wado/$cm_binding__User_fill"(struct.new "cm_foreign_resource_in_containers.wado//Slot" { device: "cm_foreign_resource_in_containers.wado/$cm_binding__Maker_get_device"() }));
-    if ref.is_null(d) == 0 {
-        let $cm_handle_2: i32;
-        $cm_handle_2 = d.value;
-        d.value = 0;
-        "wasi/resource-drop:cm_foreign_resource_in_containers.wado#device"($cm_handle_2);
-    }
 }
 
 fn "cm_foreign_resource_in_containers.wado/$cm_binding__Maker_get_device"() with Maker {

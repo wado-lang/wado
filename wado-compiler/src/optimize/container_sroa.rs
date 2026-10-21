@@ -640,7 +640,8 @@ fn is_storage_builtin(builtin: CtfeBuiltin) -> bool {
         | CtfeBuiltin::FloatIsNan
         | CtfeBuiltin::Ieee754Comparison(_)
         | CtfeBuiltin::HeapBase(_)
-        | CtfeBuiltin::AmbientStdio(_) => false,
+        | CtfeBuiltin::AmbientStdio(_)
+        | CtfeBuiltin::IsMoved => false,
     }
 }
 
