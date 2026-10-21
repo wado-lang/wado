@@ -4858,7 +4858,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             let shape = tt
                 .template_shape_of_type(template_ty)
                 .expect("annotate records a template type for a tagged template");
-            let holes: Vec<TypeId> = shape.holes.iter().map(|h| h.ty).collect();
+            let holes = shape.hole_types();
             // The name the shape was registered under, not the one a message
             // shows: both render the shape, and only the mangle is a key.
             (tt.struct_head_name(*def), holes)

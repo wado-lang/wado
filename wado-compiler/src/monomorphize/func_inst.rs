@@ -12,9 +12,9 @@ use crate::module_source::ModuleSource;
 use crate::name::{FqTypeName, LocalMethodName, Projected, RefKind, mangle_generic_name};
 use crate::tir::{
     CallArg, FunctionKind, FunctionRef, InstantiationKey, LetStorage, MonomorphInfo, ResolvedType,
-    ShapeSubstitution, StructDef, TemplateId, TirBinaryOp, TirBlock, TirExpr, TirExprKind,
-    TirFunction, TirLocal, TirModule, TirParam, TirPattern, TirStmt, TirStmtKind, TirTemplatePart,
-    TirStructField, TirUnaryOp, TypeId, method_param_offset, transpose_tuple_expr,
+    ShapeSubstitution, StructDef, TemplateId, TemplateShape, TirBinaryOp, TirBlock, TirExpr,
+    TirExprKind, TirFunction, TirLocal, TirModule, TirParam, TirPattern, TirStmt, TirStmtKind,
+    TirStructField, TirTemplatePart, TirUnaryOp, TypeId, method_param_offset, transpose_tuple_expr,
 };
 use crate::tir_visitor::{TirMutVisitor, TirRefVisitor};
 use crate::type_table::{AnonStructId, TypeTable};
@@ -4289,7 +4289,7 @@ fn unref_operand(operand: &TirExpr, type_table: &TypeTable) -> TirExpr {
 fn hold_holes_as_shape(fields: &mut [TirStructField], shape_type: TypeId, tt: &mut TypeTable) {
     let Some(holes) = tt
         .template_shape_of_type(shape_type)
-        .map(|shape| shape.holes.iter().map(|hole| hole.ty).collect::<Vec<_>>())
+        .map(TemplateShape::hole_types)
     else {
         return;
     };

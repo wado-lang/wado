@@ -469,6 +469,11 @@ impl TemplateShape {
     pub fn field_name(k: usize) -> String {
         format!("h{k}")
     }
+
+    #[must_use]
+    pub fn hole_types(&self) -> Vec<TypeId> {
+        self.holes.iter().map(|hole| hole.ty).collect()
+    }
 }
 
 /// A written shape a substituted one is made from, and the substitution that

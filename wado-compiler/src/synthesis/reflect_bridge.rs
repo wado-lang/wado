@@ -11,7 +11,7 @@ use std::rc::Rc;
 use crate::flat_package::FlatPackage;
 use crate::hashmap::IndexMap;
 use crate::module_source::ModuleSource;
-use crate::tir::{ResolvedType, StructDef, TirFunction, TypeId};
+use crate::tir::{ResolvedType, StructDef, TemplateShape, TirFunction, TypeId};
 
 use super::resource_cleanup;
 use super::traits::{
@@ -91,7 +91,7 @@ fn collect_struct_bridges(flat: &FlatPackage, generated: &mut Vec<Rc<RefCell<Tir
                 .type_table
                 .borrow()
                 .template_shape(shape)
-                .map(|template| template.holes.iter().map(|hole| hole.ty).collect()),
+                .map(TemplateShape::hole_types),
             StructDef::Decl(_) => None,
         };
         let helpers = match hole_types {

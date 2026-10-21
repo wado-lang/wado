@@ -315,13 +315,7 @@ fn build_hole_fmt_helper(
         param("f", mut_ref_formatter, 2),
     ];
     let locals = locals_from_params(&params);
-    make_synthetic_free_function(
-        helper_name,
-        params,
-        TypeTable::UNIT,
-        body,
-        locals,
-    )
+    make_synthetic_free_function(helper_name, params, TypeTable::UNIT, body, locals)
 }
 
 /// Read-only context shared across all template-expansion helpers.

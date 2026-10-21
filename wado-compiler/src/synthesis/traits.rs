@@ -1586,7 +1586,7 @@ fn generate_template_reflect_impls(
     for target in &targets {
         let span = target.span;
         let receiver = &target.receiver;
-        let hole_types: Vec<TypeId> = target.shape.holes.iter().map(|h| h.ty).collect();
+        let hole_types = target.shape.hole_types();
 
         let (struct_type, member_types, members_tuple_type) = {
             let mut tt = module.type_table.borrow_mut();
