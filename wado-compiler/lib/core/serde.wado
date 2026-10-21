@@ -175,7 +175,7 @@ impl DeserializeError {
     pub fn missing_field<S: AsStrSlice>(name: S) -> DeserializeError {
         return DeserializeError {
             kind: DeserializeErrorKind::MissingField,
-            message: `missing field: ${name}`,
+            message: `missing field: ${name.as_str_slice()}`,
             offset: -1,
         };
     }
@@ -1210,7 +1210,7 @@ impl TextKeyDeserializer {
             Err(e) => {
                 builtin::cold_path();
                 Result::Err(DeserializeError::invalid_value(
-                    `map key "${self.key}" is not a valid ${type_name}: ${e}`,
+                    `map key "${self.key}" is not a valid ${type_name.as_str_slice()}: ${e}`,
                     self.offset,
                 ));
             },
