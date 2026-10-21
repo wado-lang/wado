@@ -952,7 +952,7 @@ impl HeapFrame {
         if let Some(tail) = body.block_tail(body.root()) {
             frame.unify_op(effects, body, RET, tail);
         }
-        frame.classes.flatten();
+        frame.finish();
         frame
     }
 
@@ -1448,7 +1448,6 @@ impl HeapFrame {
         }
     }
 
-<<<<<<< HEAD
     fn finish(&mut self) {
         for i in 0..self.local_nodes.len() {
             let n = self.local_nodes[i];
@@ -1457,22 +1456,9 @@ impl HeapFrame {
                 self.partial = true;
             }
         }
-        for n in 0..self.parent.len() as u32 {
-            let r = self.find(n);
-            self.parent[n as usize] = r;
-        }
+        self.classes.flatten();
     }
 
-||||||| 8d189a3504d
-    fn finish(&mut self) {
-        for n in 0..self.parent.len() as u32 {
-            let r = self.find(n);
-            self.parent[n as usize] = r;
-        }
-    }
-
-=======
->>>>>>> origin/main
     fn class_prov(&self, n: u32) -> Prov {
         self.prov[self.classes.root(n) as usize]
     }
@@ -1608,7 +1594,7 @@ impl HeapFrame {
             (_, OperandNode::None) => false,
             (None, _) | (_, OperandNode::Unknown) => true,
             (Some(h), OperandNode::Node(n)) => {
-                let elsewhere = self.parent[ELSEWHERE as usize];
+                let elsewhere = self.classes.root(ELSEWHERE);
                 n == h
                     || (!self.prov[h as usize].is_fresh() && !self.prov[n as usize].is_fresh())
                     || (self.partial && (h == elsewhere || n == elsewhere))

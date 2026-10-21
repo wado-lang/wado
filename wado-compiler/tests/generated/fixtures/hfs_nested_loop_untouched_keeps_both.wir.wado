@@ -105,25 +105,11 @@ fn "hfs_nested_loop_untouched_keeps_both.wado/run"() with Stdout {
     b0: block {
         l1: loop {
             break_if b0 o >= black_box(3);
-<<<<<<< HEAD
-            sink = sink + $hfs_a_59;
-            $hfs_a_59 = $hfs_a_59 + 1;
-            sink = sink + $hfs_a_59;
-            s.a = $hfs_a_59;
-            sink = sink + "hfs_nested_loop_untouched_keeps_both.wado/peek"(local.tee $load_1(s.a), local.tee $load_2(s.b));
-||||||| 8d189a3504d
-            sink = sink + $hfs_a_59;
-            $hfs_a_59 = $hfs_a_59 + 1;
-            sink = sink + $hfs_a_59;
-            s.a = $hfs_a_59;
-            sink = sink + "hfs_nested_loop_untouched_keeps_both.wado/peek"(s.a, s.b);
-=======
             sink = sink + $hfs_a_74;
             $hfs_a_74 = $hfs_a_74 + 1;
             sink = sink + $hfs_a_74;
             s.a = $hfs_a_74;
-            sink = sink + "hfs_nested_loop_untouched_keeps_both.wado/peek"(s.a, s.b);
->>>>>>> origin/main
+            sink = sink + "hfs_nested_loop_untouched_keeps_both.wado/peek"(local.tee $load_1(s.a), local.tee $load_2(s.b));
             k = 0;
             b2: block {
                 l3: loop {
@@ -138,70 +124,30 @@ fn "hfs_nested_loop_untouched_keeps_both.wado/run"() with Stdout {
             continue l1;
         };
     };
-<<<<<<< HEAD
-    $sroa_$f_buf_56 = local.tee $local_4(struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(33), used: 0 });
-    $load_2 = sink < 0;
-||||||| 8d189a3504d
-    $sroa_$f_buf_56 = local.tee $local_4(struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(33), used: 0 });
-    $hfs_a_59 = sink < 0;
-=======
     $sroa_$f_buf_71 = local.tee $local_4(struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(33), used: 0 });
-    $hfs_a_74 = sink < 0;
->>>>>>> origin/main
+    $load_2 = sink < 0;
     sink = "core:prelude/primitive.wado/count_digits_u64"(local.tee x_18(x_18 = builtin::i64_extend_i32_s(sink); select i64(x_18 < 0_i64, 0_i64 - x_18, x_18)));
-<<<<<<< HEAD
-    $load_2 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$sroa[self.buf]$dae[alt_prefix]"($sroa_$f_buf_56, $load_2, sink);
-    "core:prelude/primitive.wado/write_decimal_digits"($sroa_$f_buf_56.repr, $load_2, x_18, sink);
-||||||| 8d189a3504d
-    $hfs_a_59 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$sroa[self.buf]$dae[alt_prefix]"($sroa_$f_buf_56, $hfs_a_59, sink);
-    "core:prelude/primitive.wado/write_decimal_digits"($sroa_$f_buf_56.repr, $hfs_a_59, x_18, sink);
-=======
-    $hfs_a_74 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$sroa[self.buf]$dae[alt_prefix]"($sroa_$f_buf_71, $hfs_a_74, sink);
-    "core:prelude/primitive.wado/write_decimal_digits"($sroa_$f_buf_71.repr, $hfs_a_74, x_18, sink);
->>>>>>> origin/main
+    $load_2 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$sroa[self.buf]$dae[alt_prefix]"($sroa_$f_buf_71, $load_2, sink);
+    "core:prelude/primitive.wado/write_decimal_digits"($sroa_$f_buf_71.repr, $load_2, x_18, sink);
     if @unlikely(local.tee sink($local_4.used + 1) > builtin::array_len($local_4.repr)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_4, sink);
     }
-<<<<<<< HEAD
     $load_2 = $local_4.used;
-||||||| 8d189a3504d
-    $hfs_a_59 = $local_4.used;
-=======
-    $hfs_a_74 = $local_4.used;
->>>>>>> origin/main
     $local_4.used = sink;
-<<<<<<< HEAD
     builtin::array_copy<u8>($local_4.repr, $load_2, global:hfs_nested_loop_untouched_keeps_both.wado::$const_obj_3, 0, 1);
-    $sroa_$f_buf_56 = $local_4;
+    $sroa_$f_buf_71 = $local_4;
     sink = local.tee $load_2(s.a) < 0;
     $load_2 = "core:prelude/primitive.wado/count_digits_u64"(local.tee x_18(x_18 = builtin::i64_extend_i32_s($load_2); select i64(x_18 < 0_i64, 0_i64 - x_18, x_18)));
-    sink = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$sroa[self.buf]$dae[alt_prefix]"($sroa_$f_buf_56, sink, $load_2);
-    "core:prelude/primitive.wado/write_decimal_digits"($sroa_$f_buf_56.repr, sink, x_18, $load_2);
-    "core:cli/println"($local_4.repr, $local_4.used);
-||||||| 8d189a3504d
-    builtin::array_copy<u8>($local_4.repr, $hfs_a_59, global:hfs_nested_loop_untouched_keeps_both.wado::$const_obj_3, 0, 1);
-    $sroa_$f_buf_56 = $local_4;
-    sink = local.tee $hfs_a_59(s.a) < 0;
-    $hfs_a_59 = "core:prelude/primitive.wado/count_digits_u64"(local.tee x_18(x_18 = builtin::i64_extend_i32_s($hfs_a_59); select i64(x_18 < 0_i64, 0_i64 - x_18, x_18)));
-    sink = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$sroa[self.buf]$dae[alt_prefix]"($sroa_$f_buf_56, sink, $hfs_a_59);
-    "core:prelude/primitive.wado/write_decimal_digits"($sroa_$f_buf_56.repr, sink, x_18, $hfs_a_59);
-    "core:cli/println"($local_4.repr, $local_4.used);
-=======
-    builtin::array_copy<u8>($local_4.repr, $hfs_a_74, global:hfs_nested_loop_untouched_keeps_both.wado::$const_obj_3, 0, 1);
-    $sroa_$f_buf_71 = $local_4;
-    sink = local.tee $hfs_a_74(s.a) < 0;
-    $hfs_a_74 = "core:prelude/primitive.wado/count_digits_u64"(local.tee x_18(x_18 = builtin::i64_extend_i32_s($hfs_a_74); select i64(x_18 < 0_i64, 0_i64 - x_18, x_18)));
-    sink = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$sroa[self.buf]$dae[alt_prefix]"($sroa_$f_buf_71, sink, $hfs_a_74);
-    "core:prelude/primitive.wado/write_decimal_digits"($sroa_$f_buf_71.repr, sink, x_18, $hfs_a_74);
-    $hfs_a_74 = builtin::i32_wrap_i64(local.tee x_18("wasi/stream-new"()));
+    sink = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$sroa[self.buf]$dae[alt_prefix]"($sroa_$f_buf_71, sink, $load_2);
+    "core:prelude/primitive.wado/write_decimal_digits"($sroa_$f_buf_71.repr, sink, x_18, $load_2);
+    $load_2 = builtin::i32_wrap_i64(local.tee x_18("wasi/stream-new"()));
     sink = builtin::i32_wrap_i64(x_18 >> 32_i64);
-    o = "hfs_nested_loop_untouched_keeps_both.wado/$cm_binding__Stdout_write_via_stream"(o = $hfs_a_74; $hfs_a_74 = 0; o);
-    $hfs_a_74 = sink;
+    $load_1 = "hfs_nested_loop_untouched_keeps_both.wado/$cm_binding__Stdout_write_via_stream"($load_1 = $load_2; $load_2 = 0; $load_1);
+    $load_2 = sink;
     sink = 0;
-    "core:rt/write_string_to_stream$dae[add_newline]"(sink = $hfs_a_74; $hfs_a_74 = 0; sink, $local_4.repr, $local_4.used);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(sink = o; o = 0; sink);
->>>>>>> origin/main
+    "core:rt/write_string_to_stream$dae[add_newline]"(sink = $load_2; $load_2 = 0; sink, $local_4.repr, $local_4.used);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(sink = $load_1; $load_1 = 0; sink);
 }
 
 fn "hfs_nested_loop_untouched_keeps_both.wado/$cm_binding__Stdout_write_via_stream"(data) with Stdout {

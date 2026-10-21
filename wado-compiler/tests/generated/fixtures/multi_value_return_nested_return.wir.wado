@@ -76,6 +76,9 @@ import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 global global:multi_value_return_nested_return.wado::$const_obj_3: ref Array<u8> = array.new_fixed<u8>(32);
 
 fn "multi_value_return_nested_return.wado/run"() with Stdout {
+    let $load_4: ref Array<u8>;
+    let $load_8: ref Array<u8>;
+    let $load_12: ref Array<u8>;
     let fb_2: ref "tuple//[i32, i32]";
     let c: i32;
     let d: i32;
@@ -128,8 +131,8 @@ fn "multi_value_return_nested_return.wado/run"() with Stdout {
             is_negative_32 = $sroa_$pattern_temp_0_0_122 < 0;
             $sroa_$pattern_temp_0_0_122 = "core:prelude/primitive.wado/count_digits_u64"(local.tee abs_val_33(x_36 = builtin::i64_extend_i32_s($sroa_$pattern_temp_0_0_122); select i64(x_36 < 0_i64, 0_i64 - x_36, x_36)));
             is_negative_32 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$sroa[self.buf]$dae[alt_prefix]"($tmpl_buf_145, is_negative_32, $sroa_$pattern_temp_0_0_122);
-            "core:prelude/primitive.wado/write_decimal_digits"($tmpl_buf_145.repr, is_negative_32, abs_val_33, $sroa_$pattern_temp_0_0_122);
-            if @unlikely(local.tee $sroa_$pattern_temp_0_0_122($tmpl_buf_145.used + 1) > builtin::array_len($tmpl_buf_145.repr)) {
+            "core:prelude/primitive.wado/write_decimal_digits"(local.tee $load_4($tmpl_buf_145.repr), is_negative_32, abs_val_33, $sroa_$pattern_temp_0_0_122);
+            if @unlikely(local.tee $sroa_$pattern_temp_0_0_122($tmpl_buf_145.used + 1) > builtin::array_len($load_4)) {
                 cold_path;
                 "core:prelude/string.wado/core:prelude/string.wado/String::grow"($tmpl_buf_145, $sroa_$pattern_temp_0_0_122);
             }
@@ -139,8 +142,8 @@ fn "multi_value_return_nested_return.wado/run"() with Stdout {
             is_negative_32 = $sroa_$pattern_temp_0_1_123 < 0;
             $sroa_$pattern_temp_0_1_123 = "core:prelude/primitive.wado/count_digits_u64"(local.tee abs_val_59(x_62 = builtin::i64_extend_i32_s($sroa_$pattern_temp_0_1_123); select i64(x_62 < 0_i64, 0_i64 - x_62, x_62)));
             is_negative_32 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$sroa[self.buf]$dae[alt_prefix]"($tmpl_buf_145, is_negative_32, $sroa_$pattern_temp_0_1_123);
-            "core:prelude/primitive.wado/write_decimal_digits"($tmpl_buf_145.repr, is_negative_32, abs_val_59, $sroa_$pattern_temp_0_1_123);
-            if @unlikely(local.tee $sroa_$pattern_temp_0_1_123($tmpl_buf_145.used + 1) > builtin::array_len($tmpl_buf_145.repr)) {
+            "core:prelude/primitive.wado/write_decimal_digits"(local.tee $load_8($tmpl_buf_145.repr), is_negative_32, abs_val_59, $sroa_$pattern_temp_0_1_123);
+            if @unlikely(local.tee $sroa_$pattern_temp_0_1_123($tmpl_buf_145.used + 1) > builtin::array_len($load_8)) {
                 cold_path;
                 "core:prelude/string.wado/core:prelude/string.wado/String::grow"($tmpl_buf_145, $sroa_$pattern_temp_0_1_123);
             }
@@ -150,8 +153,8 @@ fn "multi_value_return_nested_return.wado/run"() with Stdout {
             is_negative_32 = c < 0;
             c = "core:prelude/primitive.wado/count_digits_u64"(local.tee abs_val_85(x_88 = builtin::i64_extend_i32_s(c); select i64(x_88 < 0_i64, 0_i64 - x_88, x_88)));
             is_negative_32 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$sroa[self.buf]$dae[alt_prefix]"($tmpl_buf_145, is_negative_32, c);
-            "core:prelude/primitive.wado/write_decimal_digits"($tmpl_buf_145.repr, is_negative_32, abs_val_85, c);
-            if @unlikely(local.tee c($tmpl_buf_145.used + 1) > builtin::array_len($tmpl_buf_145.repr)) {
+            "core:prelude/primitive.wado/write_decimal_digits"(local.tee $load_12($tmpl_buf_145.repr), is_negative_32, abs_val_85, c);
+            if @unlikely(local.tee c($tmpl_buf_145.used + 1) > builtin::array_len($load_12)) {
                 cold_path;
                 "core:prelude/string.wado/core:prelude/string.wado/String::grow"($tmpl_buf_145, c);
             }

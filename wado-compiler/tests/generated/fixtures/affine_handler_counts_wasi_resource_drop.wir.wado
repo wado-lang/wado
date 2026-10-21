@@ -294,7 +294,7 @@ global global:affine_handler_counts_wasi_resource_drop.wado::$const_obj_0: ref "
 global global:affine_handler_counts_wasi_resource_drop.wado::$const_obj_1: ref Array<u8> = array.new_fixed<u8>(100, 114, 111, 112, 115, 61);
 
 fn "affine_handler_counts_wasi_resource_drop.wado/run"() with Stdout, Fields {
-    let $load_2: ref Array<u8>;
+    let $load_22: ref Array<u8>;
     let counter: ref "affine_handler_counts_wasi_resource_drop.wado//CountingFields";
     let $local_4: ref "core:prelude/string.wado//String";
     let $save_wasi:http/types.wado/Fields: ref null "affine_handler_counts_wasi_resource_drop.wado//$Dispatch_wasi:http/types.wado/Fields";
@@ -388,30 +388,12 @@ fn "affine_handler_counts_wasi_resource_drop.wado/run"() with Stdout, Fields {
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_4, $cm_handle_3);
     }
     start_23 = $local_4.used;
-<<<<<<< HEAD
-    $local_4.used = new_used_22;
-    builtin::array_copy<u8>(local.tee $load_2($local_4.repr), start_23, global:affine_handler_counts_wasi_resource_drop.wado::$const_obj_0, 0, 6);
-    new_used_22 = local.tee start_23(counter.drops) < 0;
-||||||| 8d189a3504d
-    $local_4.used = new_used_22;
-    builtin::array_copy<u8>($local_4.repr, start_23, global:affine_handler_counts_wasi_resource_drop.wado::$const_obj_0, 0, 6);
-    new_used_22 = local.tee start_23(counter.drops) < 0;
-=======
     $local_4.used = $cm_handle_3;
-    builtin::array_copy<u8>($local_4.repr, start_23, global:affine_handler_counts_wasi_resource_drop.wado::$const_obj_1, 0, 6);
+    builtin::array_copy<u8>(local.tee $load_22($local_4.repr), start_23, global:affine_handler_counts_wasi_resource_drop.wado::$const_obj_1, 0, 6);
     $cm_handle_3 = local.tee start_23(counter.drops) < 0;
->>>>>>> origin/main
     start_23 = "core:prelude/primitive.wado/count_digits_u64"(local.tee x(x = builtin::i64_extend_i32_s(start_23); select i64(x < 0_i64, 0_i64 - x, x)));
-<<<<<<< HEAD
-    if new_used_22 {
-        if @unlikely(local.tee new_used_22($local_4.used + 1) > builtin::array_len($load_2)) {
-||||||| 8d189a3504d
-    if new_used_22 {
-        if @unlikely(local.tee new_used_22($local_4.used + 1) > builtin::array_len($local_4.repr)) {
-=======
     if $cm_handle_3 {
-        if @unlikely(local.tee $cm_handle_3($local_4.used + 1) > builtin::array_len($local_4.repr)) {
->>>>>>> origin/main
+        if @unlikely(local.tee $cm_handle_3($local_4.used + 1) > builtin::array_len($load_22)) {
             cold_path;
             "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_4, $cm_handle_3);
         }
@@ -424,65 +406,6 @@ fn "affine_handler_counts_wasi_resource_drop.wado/run"() with Stdout, Fields {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_4, start_139);
     }
-<<<<<<< HEAD
-    new_used_22 = $local_4.used;
-    $local_4.used = start_76;
-    "core:prelude/primitive.wado/write_decimal_digits"($local_4.repr, new_used_22, x, start_23);
-    "core:cli/println"($local_4.repr, $local_4.used);
-    "affine_handler_counts_wasi_resource_drop.wado/$effect_dispatch__wasi:http/types.wado/Fields__drop"($moved_6 = local.tee explicit("affine_handler_counts_wasi_resource_drop.wado/$effect_dispatch__wasi:http/types.wado/Fields__new"()); explicit = ref.null none; $moved_6);
-    "core:cli/println"(local.tee $load_2(array.new_data<u8>("unhandled drop ok")), 17);
-    if ref.is_null(explicit) == 0 {
-        "affine_handler_counts_wasi_resource_drop.wado/$effect_dispatch__wasi:http/types.wado/Fields__drop"(explicit);
-    }
-}
-
-fn "affine_handler_counts_wasi_resource_drop.wado/$effect_dispatch__wasi:http/types.wado/Fields__new"() {
-    let $saved: ref null "affine_handler_counts_wasi_resource_drop.wado//$Dispatch_wasi:http/types.wado/Fields";
-    let $local_1: ref "affine_handler_counts_wasi_resource_drop.wado//$Dispatch_wasi:http/types.wado/Fields";
-    let $local_2: ref null "core:prelude//$Resource";
-    let $moved_3: ref null "core:prelude//$Resource";
-    if ref.is_null(local.tee $saved(global:affine_handler_counts_wasi_resource_drop.wado::$effect_wasi:http/types.wado/Fields)) == 0 {
-        global:affine_handler_counts_wasi_resource_drop.wado::$effect_wasi:http/types.wado/Fields = local.tee $local_1(ref.as_non_null($saved)).outer;
-        $local_2 = block -> ref null "core:prelude//$Resource" {
-            let $indirect_call_1: ref "canonical//CanonicalClosure_0";
-            call_ref "functype/$canonical_closure_fn_0"($indirect_call_1.func, local.tee $indirect_call_1(ref.cast "canonical//CanonicalClosure_0"($local_1.op_new)).env);
-        };
-        global:affine_handler_counts_wasi_resource_drop.wado::$effect_wasi:http/types.wado/Fields = $saved;
-        $moved_3 = $local_2;
-        if ref.is_null(local.tee $local_2(ref.null none)) == 0 {
-            let $cm_handle_3: i32;
-            $cm_handle_3 = $local_2.value;
-            $local_2.value = 0;
-||||||| 8d189a3504d
-    new_used_22 = $local_4.used;
-    $local_4.used = start_76;
-    "core:prelude/primitive.wado/write_decimal_digits"($local_4.repr, new_used_22, x, start_23);
-    "core:cli/println"($local_4.repr, $local_4.used);
-    "affine_handler_counts_wasi_resource_drop.wado/$effect_dispatch__wasi:http/types.wado/Fields__drop"($moved_6 = local.tee explicit("affine_handler_counts_wasi_resource_drop.wado/$effect_dispatch__wasi:http/types.wado/Fields__new"()); explicit = ref.null none; $moved_6);
-    "core:cli/println"(array.new_data<u8>("unhandled drop ok"), 17);
-    if ref.is_null(explicit) == 0 {
-        "affine_handler_counts_wasi_resource_drop.wado/$effect_dispatch__wasi:http/types.wado/Fields__drop"(explicit);
-    }
-}
-
-fn "affine_handler_counts_wasi_resource_drop.wado/$effect_dispatch__wasi:http/types.wado/Fields__new"() {
-    let $saved: ref null "affine_handler_counts_wasi_resource_drop.wado//$Dispatch_wasi:http/types.wado/Fields";
-    let $local_1: ref "affine_handler_counts_wasi_resource_drop.wado//$Dispatch_wasi:http/types.wado/Fields";
-    let $local_2: ref null "core:prelude//$Resource";
-    let $moved_3: ref null "core:prelude//$Resource";
-    if ref.is_null(local.tee $saved(global:affine_handler_counts_wasi_resource_drop.wado::$effect_wasi:http/types.wado/Fields)) == 0 {
-        global:affine_handler_counts_wasi_resource_drop.wado::$effect_wasi:http/types.wado/Fields = local.tee $local_1(ref.as_non_null($saved)).outer;
-        $local_2 = block -> ref null "core:prelude//$Resource" {
-            let $indirect_call_1: ref "canonical//CanonicalClosure_0";
-            call_ref "functype/$canonical_closure_fn_0"($indirect_call_1.func, local.tee $indirect_call_1(ref.cast "canonical//CanonicalClosure_0"($local_1.op_new)).env);
-        };
-        global:affine_handler_counts_wasi_resource_drop.wado::$effect_wasi:http/types.wado/Fields = $saved;
-        $moved_3 = $local_2;
-        if ref.is_null(local.tee $local_2(ref.null none)) == 0 {
-            let $cm_handle_3: i32;
-            $cm_handle_3 = $local_2.value;
-            $local_2.value = 0;
-=======
     $cm_handle_3 = $local_4.used;
     $local_4.used = start_139;
     "core:prelude/primitive.wado/write_decimal_digits"($local_4.repr, $cm_handle_3, x, start_23);
@@ -526,7 +449,6 @@ fn "affine_handler_counts_wasi_resource_drop.wado/$effect_dispatch__wasi:http/ty
         if ref.is_null($moved_3_41) == 0 {
             $cm_handle_3 = $moved_3_41.value;
             $moved_3_41.value = 0;
->>>>>>> origin/main
             "wasi/resource-drop:wasi/http/types.wado#fields"($cm_handle_3);
         }
     };

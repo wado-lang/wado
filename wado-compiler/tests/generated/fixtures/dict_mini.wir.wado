@@ -248,11 +248,11 @@ fn "dict_mini.wado/run"() with Stdout {
     }
     new_used_43 = $local_4.used;
     $local_4.used = start_44;
-    builtin::array_copy<u8>($local_4.repr, new_used_43, global:dict_mini.wado::$const_obj_6, 0, 6);
+    builtin::array_copy<u8>(local.tee $load_47($local_4.repr), new_used_43, global:dict_mini.wado::$const_obj_6, 0, 6);
     start_44 = local.tee new_used_43($sroa_dict_entries_169.used) < 0;
     new_used_43 = "core:prelude/primitive.wado/count_digits_u64"(local.tee $cm_pair_7_177($cm_pair_7_177 = builtin::i64_extend_i32_s(new_used_43); select i64($cm_pair_7_177 < 0_i64, 0_i64 - $cm_pair_7_177, $cm_pair_7_177)));
     if start_44 {
-        if @unlikely(local.tee start_44($local_4.used + 1) > builtin::array_len($local_4.repr)) {
+        if @unlikely(local.tee start_44($local_4.used + 1) > builtin::array_len($load_47)) {
             cold_path;
             "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_4, start_44);
         }
@@ -267,51 +267,6 @@ fn "dict_mini.wado/run"() with Stdout {
     }
     start_44 = $local_4.used;
     $local_4.used = n_39;
-<<<<<<< HEAD
-    builtin::array_copy<u8>(local.tee $load_47($local_4.repr), start_44, global:dict_mini.wado::$const_obj_5, 0, 6);
-    n_39 = local.tee start_44($sroa_dict_entries_169.used) < 0;
-    start_44 = "core:prelude/primitive.wado/count_digits_u64"(local.tee x(x = builtin::i64_extend_i32_s(start_44); select i64(x < 0_i64, 0_i64 - x, x)));
-    if n_39 {
-        if @unlikely(local.tee n_39($local_4.used + 1) > builtin::array_len($load_47)) {
-            cold_path;
-            "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_4, n_39);
-        }
-        new_used_43 = $local_4.used;
-        $local_4.used = n_39;
-        builtin::array_set_u8($local_4.repr, new_used_43, 45);
-    } else {
-    }
-    if @unlikely(local.tee new_used_43($local_4.used + start_44) > builtin::array_len($local_4.repr)) {
-        cold_path;
-        "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_4, new_used_43);
-    }
-    n_39 = $local_4.used;
-    $local_4.used = new_used_43;
-    "core:prelude/primitive.wado/write_decimal_digits"($local_4.repr, n_39, x, start_44);
-    "core:cli/println"($local_4.repr, $local_4.used);
-||||||| 8d189a3504d
-    builtin::array_copy<u8>($local_4.repr, start_44, global:dict_mini.wado::$const_obj_5, 0, 6);
-    n_39 = local.tee start_44($sroa_dict_entries_169.used) < 0;
-    start_44 = "core:prelude/primitive.wado/count_digits_u64"(local.tee x(x = builtin::i64_extend_i32_s(start_44); select i64(x < 0_i64, 0_i64 - x, x)));
-    if n_39 {
-        if @unlikely(local.tee n_39($local_4.used + 1) > builtin::array_len($local_4.repr)) {
-            cold_path;
-            "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_4, n_39);
-        }
-        new_used_43 = $local_4.used;
-        $local_4.used = n_39;
-        builtin::array_set_u8($local_4.repr, new_used_43, 45);
-    } else {
-    }
-    if @unlikely(local.tee new_used_43($local_4.used + start_44) > builtin::array_len($local_4.repr)) {
-        cold_path;
-        "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_4, new_used_43);
-    }
-    n_39 = $local_4.used;
-    $local_4.used = new_used_43;
-    "core:prelude/primitive.wado/write_decimal_digits"($local_4.repr, n_39, x, start_44);
-    "core:cli/println"($local_4.repr, $local_4.used);
-=======
     "core:prelude/primitive.wado/write_decimal_digits"($local_4.repr, start_44, $cm_pair_7_177, new_used_43);
     new_used_43 = builtin::i32_wrap_i64(local.tee $cm_pair_7_177("wasi/stream-new"()));
     start_44 = builtin::i32_wrap_i64($cm_pair_7_177 >> 32_i64);
@@ -320,16 +275,10 @@ fn "dict_mini.wado/run"() with Stdout {
     start_44 = 0;
     "core:rt/write_string_to_stream$dae[add_newline]"(start_44 = new_used_43; new_used_43 = 0; start_44, $local_4.repr, $local_4.used);
     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(start_44 = n_39; n_39 = 0; start_44);
->>>>>>> origin/main
     if ref.is_null(local.tee $match_13(block -> ref null "core:prelude/string.wado//String" {
         $local_4 = global:dict_mini.wado::$const_obj_5;
         "dict_mini.wado/dict_mini.wado/MiniDict<core:prelude/string.wado/String,core:prelude/string.wado/String>::get$sroa[self.entries]"($sroa_dict_entries_169, $local_4.repr, $local_4.used);
     })) {
-<<<<<<< HEAD
-        "core:cli/println"(local.tee $load_47(array.new_data<u8>("missing key returned None")), 25);
-||||||| 8d189a3504d
-        "core:cli/println"(array.new_data<u8>("missing key returned None"), 25);
-=======
         start_44 = builtin::i32_wrap_i64(local.tee $cm_pair_7_177("wasi/stream-new"()));
         n_39 = builtin::i32_wrap_i64($cm_pair_7_177 >> 32_i64);
         new_used_43 = "dict_mini.wado/$cm_binding__Stdout_write_via_stream"(new_used_43 = start_44; start_44 = 0; new_used_43);
@@ -340,7 +289,6 @@ fn "dict_mini.wado/run"() with Stdout {
         $local_4 = global:dict_mini.wado::$const_obj_4;
         "core:rt/write_string_to_stream$dae[add_newline]"(n_39, $local_4.repr, $local_4.used);
         "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(n_39 = new_used_43; new_used_43 = 0; n_39);
->>>>>>> origin/main
     } else {
     }
 }
