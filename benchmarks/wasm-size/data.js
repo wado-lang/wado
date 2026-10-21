@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1792617639403,
+  "lastUpdate": 1792619865237,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -69093,6 +69093,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/ff03a526e2eb28e7cd89246977ba5cff3bdadfa3"
         },
         "date": 1792617638606,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 3053,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 7382,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 19610,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 276874,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "639cd8488560088978159fee685133c283184d2c",
+          "message": "Merge pull request #2409 from wado-lang/ccr-5030fbb4-uyx6hd\n\nfix(affine): end a path where it diverges, and make local structs affine",
+          "timestamp": "2026-10-22T06:02:39+09:00",
+          "tree_id": "ffa75147af51b193eadd169f05b5077b1ef418f6",
+          "url": "https://github.com/wado-lang/wado/commit/639cd8488560088978159fee685133c283184d2c"
+        },
+        "date": 1792619864089,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
