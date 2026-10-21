@@ -53,10 +53,14 @@ pub(crate) enum LoadEvent {
     Failed { detail: Option<String> },
 }
 
+/// What a streaming reporter names again after the summary: every outcome
+/// that fails the run, so the end of a long log says which one did.
 #[derive(Default)]
 struct FailureRecap {
     compile: Mutex<Vec<(String, Option<String>)>>,
     load: Mutex<Vec<(String, Option<String>)>>,
+    test: Mutex<Vec<(String, Option<String>)>>,
+    todo_resolved: Mutex<Vec<(String, Option<String>)>>,
 }
 
 impl FailureRecap {
@@ -68,20 +72,35 @@ impl FailureRecap {
         lock(&self.load).push((path.to_owned(), detail.map(str::to_owned)));
     }
 
+    /// Names the test only: its message, a backtrace as often as not, is
+    /// already in its own report.
+    fn record_test(&self, result: &TestResult) {
+        let section = match result.outcome {
+            TestOutcome::Fail => &self.test,
+            TestOutcome::TodoResolved => &self.todo_resolved,
+            TestOutcome::Pass | TestOutcome::TodoPending => return,
+        };
+        let name = format!("{} :: {}", result.file_path, result.display_name);
+        lock(section).push((name, None));
+    }
+
     fn lines(&self) -> Vec<String> {
-        let compile = lock(&self.compile);
-        let load = lock(&self.load);
-        let compile_entries: Vec<(&str, Option<&str>)> = compile
-            .iter()
-            .map(|(p, m)| (p.as_str(), m.as_deref()))
-            .collect();
-        let load_entries: Vec<(&str, Option<&str>)> = load
-            .iter()
-            .map(|(p, m)| (p.as_str(), m.as_deref()))
-            .collect();
-        let mut lines = test::failure_recap_lines("compile failures:", &compile_entries);
-        lines.extend(test::failure_recap_lines("load failures:", &load_entries));
-        lines
+        [
+            ("compile failures:", &self.compile),
+            ("load failures:", &self.load),
+            ("test failures:", &self.test),
+            ("unexpectedly passed TODO tests:", &self.todo_resolved),
+        ]
+        .into_iter()
+        .flat_map(|(header, section)| {
+            let section = lock(section);
+            let entries: Vec<(&str, Option<&str>)> = section
+                .iter()
+                .map(|(name, detail)| (name.as_str(), detail.as_deref()))
+                .collect();
+            test::failure_recap_lines(header, &entries)
+        })
+        .collect()
     }
 }
 
@@ -423,6 +442,7 @@ impl TestReporter for HeartbeatReporter {
 
     fn on_test_result(&self, result: &TestResult) {
         self.state.tests_seen.fetch_add(1, Ordering::Relaxed);
+        self.failures.record_test(result);
         // A reading asked for is shown, even where the digest would stay quiet.
         let announce_metered = |label: &str| {
             if result.fuel.is_some() {
@@ -765,6 +785,7 @@ impl TestReporter for TapReporter {
     }
 
     fn on_test_result(&self, result: &TestResult) {
+        self.failures.record_test(result);
         let cost = result.cost();
         let name = &result.display_name;
         let (mut lines, failed) = match result.outcome {
