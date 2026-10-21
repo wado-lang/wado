@@ -107,6 +107,9 @@ enum Position {
     /// What the enclosing position is: a cast and a spread convert for free,
     /// so they move where their result moves.
     Inherit,
+    /// A field's base: taking an affine field takes the aggregate holding it,
+    /// and reading any other field copies it out.
+    Projection,
     /// What the call's dispatch decides: a by-value `self` consumes.
     Receiver,
 }
@@ -277,6 +280,13 @@ impl<F: BodyFacts> ModeWalk<'_, F> {
                     let operand_mode = match position {
                         Position::Is(operand_mode) => operand_mode,
                         Position::Inherit => mode,
+                        Position::Projection
+                            if mode == OperandMode::Consume
+                                && self.facts.is_affine(expr.id()) =>
+                        {
+                            OperandMode::Consume
+                        }
+                        Position::Projection => OperandMode::Borrow,
                         Position::Receiver if self.facts.consumes_receiver(expr.id()) => {
                             OperandMode::Consume
                         }
@@ -321,7 +331,7 @@ fn positions(expr: &Expr) -> Vec<(&Expr, Position)> {
             .chain(c.comparisons.iter().map(|cmp| (&cmp.right, borrow)))
             .collect(),
         Expr::Index(ix) => vec![(&ix.expr, borrow), (&ix.index, borrow)],
-        Expr::FieldAccess(fa) => vec![(&fa.expr, Position::Inherit)],
+        Expr::FieldAccess(fa) => vec![(&fa.expr, Position::Projection)],
         Expr::Cast(c) => vec![(&c.expr, Position::Inherit)],
         Expr::Spread(inner, _) => vec![(&**inner, Position::Inherit)],
         Expr::TryOp(t) => vec![(&t.expr, consume)],
