@@ -4421,8 +4421,6 @@ impl TypeTable {
                 {
                     return self.instantiate_family(owning_trait, &assoc_name, answer, &new_args);
                 }
-                // Substitute the parameter first; only attempt projection
-                // resolution once the underlying type is fully concrete.
                 let substituted_base = self.subst_rec(param_id, leaves);
                 // A projection over a projection is answered by what the base
                 // carries: `IntoIterator::Iter: Iterator<Item = Self::Item>`
