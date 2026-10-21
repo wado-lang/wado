@@ -73,20 +73,36 @@ Copies are as-if ([spec-memory § Value Semantics](./spec-memory.md#value-semant
 The desugaring states the result, not the number of copies. The rest of this
 decision says where the result is guaranteed to come without a copy.
 
-### Locals and fields move
+### Which targets can be one slot
 
-A target that is a local or a field is assigned by the existing ownership
-analysis. The temporaries the desugaring introduces are dead after their one
-read, and each source is overwritten before it is read again. So a
-transposition of locals, of fields, or of a local and a field moves both values.
-That is the analysis already in place, applied to the desugared form.
+Moving instead of copying keeps the desugaring's meaning only while no two
+targets are one slot. Where two are, the desugaring may copy one value into
+both, and moving values cannot produce that result.
+
+A target is _owned_ when it is a local, or a field path from a local, reached
+through no reference and no subscript. Two owned targets that differ as paths
+are never one slot. Any other target may be: `*r`, `r.f` and `self.f` reach
+through a reference, two `&mut` to one value are legal, and two subscripts may
+name one element.
+
+### Owned targets move
+
+A destructuring assignment whose targets are all owned is assigned by the
+existing ownership analysis. The temporaries the desugaring introduces are dead
+after their one read, and each source is overwritten before it is read again.
+So any permutation of owned targets moves its values: a transposition
+(`[a, b] = [b, a]`), a rotation (`[a, b, c] = [b, c, a]`), or one over fields
+(`[s.x, s.y] = [s.y, s.x]`). That is the analysis already in place, applied to
+the desugared form.
 
 ### A transposition within one container is `IndexSwap`
 
-The prelude gains a fifth indexing trait:
+The prelude gains a fifth indexing trait. It is an `affine trait`, as
+`IndexRef`, `IndexRefMut` and `IndexAssign` are, so an impl may take an affine
+element:
 
 ```wado
-pub trait IndexSwap<IndexType> with () {
+pub affine trait IndexSwap<IndexType> with () {
     fn index_swap(&mut self, a: IndexType, b: IndexType);
 }
 ```
@@ -101,27 +117,35 @@ It is that call where all of these hold:
 
 - The right side is a tuple literal whose two elements are the two targets, in
   the other order.
-- `c` names the same container both times. It is a local, a field path from a
-  local (`self.items`), or a dereference of one. A call or any other expression
-  that could yield a different container falls back.
-- Neither index can change when the first element is assigned. A local that is
-  not a target, a literal, a constant, and arithmetic over them all qualify. An
-  index read out of `c` (`c[c[0]]`) does not.
+- `c` is one path written twice: a local, a field path from a local
+  (`self.items`), or a dereference of one. Evaluated once, it names one
+  container whatever references it passes through. A call, or any other
+  expression that could yield a different container, falls back.
+- Neither index can change when the first element is assigned. A literal, a
+  constant, a local the body never takes a reference to, and arithmetic over
+  them qualify. A local with a reference taken does not, since an
+  `index_assign` may write through that reference. Neither does an index read
+  out of `c` (`c[c[0]]`).
 - `c`'s type implements `IndexSwap` at the index type.
 
-The call evaluates `c`, `i` and `j` once each. Where the desugaring is defined,
-an impl must leave the container as the desugaring would. `a == b` is the
-impl's to handle, and `List::swap` already does.
+The call evaluates `c`, `i` and `j` once each. The transposition is recognized
+before the desugared right side is typed. Typing `c[j]` as a read first would
+report a copy of an affine element, so the order matters.
+
+An impl must behave as the desugaring does wherever the desugaring is defined.
+It must leave the container as the desugaring would, `a == b` included, and fail
+where the desugaring fails. The desugaring reads `c[b]` before `c[a]`, so an
+impl checks `b` first, then `a`, each as `IndexValue` checks a read.
 
 The standard containers implement it. Each exchanges the values in place and
 copies nothing:
 
-| Container       | `IndexSwap` | How                                          |
-| --------------- | ----------- | -------------------------------------------- |
-| `List<T>`       | every `T`   | `List::swap`                                 |
-| `Array<T>`      | every `T`   | the same two `array_take`s                   |
-| `HashMap<K, V>` | every `V`   | two lookups, then a swap in the values' list |
-| `TreeMap<K, V>` | every `V`   | two lookups, then a swap in the values' list |
+| Container       | `IndexSwap` | How                                             |
+| --------------- | ----------- | ----------------------------------------------- |
+| `List<T>`       | every `T`   | two `array_take`s, as `List::swap` does         |
+| `Array<T>`      | every `T`   | two `array_take`s                               |
+| `HashMap<K, V>` | every `V`   | two lookups, then two `array_take`s on `values` |
+| `TreeMap<K, V>` | every `V`   | two lookups, then two `array_take`s on `values` |
 
 A map exchanges the values of two existing keys. The keys and their order stay
 as they were. A missing key panics, as a read of `m[k]` does.
@@ -135,38 +159,42 @@ so its impls take a copyable `V`.
 
 ### What is not guaranteed, and why
 
-A rotation (`[a, b, c] = [b, c, a]`) and a transposition across two containers
-(`[xs[i], ys[j]] = [ys[j], xs[i]]`) keep the desugaring's meaning but get no
-copy-free guarantee.
+A destructuring assignment with a target that is not owned keeps the
+desugaring's meaning, but gets no copy-free guarantee unless it is the
+transposition above. That covers a rotation among subscripts, a transposition
+across two containers (`[xs[i], ys[j]] = [ys[j], xs[i]]`), and any permutation
+reached through a reference.
 
-Both would need a container to give up a value and leave its slot empty until
-the value comes back. That breaks the desugaring's meaning when two targets
-turn out to be one slot. In the rotation with `a` and `c` the same slot, the
-desugaring copies one value into two places. Moving values cannot produce that
-result. Two containers cannot be told apart either: two `&mut` to the same
-list are legal, so `xs` and `ys` may be one list.
+Moving values there would need a container to give up a value and leave its
+slot empty until the value comes back, and the targets may be one slot. Two
+containers cannot be told apart either: two `&mut` to the same list are legal,
+so `xs` and `ys` may be one list.
 
 A transposition within one container avoids both problems. With `a == b`, the
 desugaring leaves the container unchanged, and so does a correct `index_swap`.
 The container sees both indices, so it can handle that case itself.
 
-### A fallback that copies is reported
+### A fallback that copies is reported, an affine one is an error
 
 A destructuring assignment that copies a composite value is reported by the
 surviving value-copy remark
 ([WEP: Optimizer Remarks](./wep-2026-06-03-optimizer-remarks.md)). That is the
 remark's purpose, and a copy here is the cost the statement was written to
-avoid. The remark anchors to the statement and adds a note that names the
-cause:
+avoid. The remark covers what it covers elsewhere, the entry package's
+functions. It anchors to the statement and adds a note that names the cause:
 
-- the shape is not a transposition (a rotation, or a right side that is not the
-  targets swapped);
+- a target is not owned, and the statement is not a transposition within one
+  container;
 - the two subscripts name different containers, or a container the compiler
   cannot show to be the same;
 - an index may change when the first element is assigned;
 - the container's type does not implement `IndexSwap`.
 
 A copy of a scalar costs nothing, so it is never reported.
+
+An affine value cannot be copied, so an affine destructuring assignment that
+falls back is not a remark. It is the compile error that copying an affine
+value is, with the same note naming the cause.
 
 ### No new token
 
@@ -181,12 +209,13 @@ well.
 
 - [ ] Parse and type a destructuring assignment, desugar it, and state its
   evaluation order and arity error in fixtures.
-- [ ] Show that a transposition of locals and of fields moves: a fixture whose
-  `wir_expect` finds no value copy.
+- [ ] Show that a permutation of owned targets moves, a rotation included: a
+  fixture whose `wir_expect` finds no value copy.
 - [ ] Add `IndexSwap` to the prelude, with the impls on `List`, `Array`,
   `HashMap` and `TreeMap`.
-- [ ] Recognize the transposition and lower it to `index_swap`, with fixtures
-  for each condition that makes it fall back.
+- [ ] Recognize the transposition before typing the desugared form and lower
+  it to `index_swap`. Fixtures cover each condition that makes it fall back,
+  an affine list, and an out-of-range index failing as the desugaring does.
 - [ ] Extend the surviving value-copy remark with the cause note for a
   destructuring assignment.
 - [ ] Write the rules into `spec-expressions.md` (the assignment) and
