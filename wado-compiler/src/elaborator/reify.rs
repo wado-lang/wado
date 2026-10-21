@@ -2670,7 +2670,9 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 if let Some(facts) = self.ann_sequence_coercions(tuple_lit.id) {
                     return self.reify_sequence_coercion(tuple_lit, facts, ctx, span);
                 }
-                self.reify_tuple_literal(tuple_lit, ctx, recorded_type, span)
+                self.reify_composite_literal(tuple_lit.id, recorded_type, span, |this, ty| {
+                    this.reify_tuple_literal(tuple_lit, ctx, ty, span)
+                })
             }
             ast::Expr::Cast(cast) => {
                 // The cast expression's type is the resolved target type;
@@ -5058,16 +5060,30 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         ctx: &mut FunctionContext,
         recorded_type: TypeId,
     ) -> TirExpr {
+        self.reify_composite_literal(struct_lit.id, recorded_type, struct_lit.span, |this, ty| {
+            this.reify_struct_literal_as(struct_lit, ctx, ty)
+        })
+    }
+
+    /// Build a literal as `recorded_type`, or, where annotate coerced it to a
+    /// newtype over a composite, as that newtype's base retagged.
+    fn reify_composite_literal(
+        &mut self,
+        id: AstId,
+        recorded_type: TypeId,
+        span: Span,
+        build: impl FnOnce(&mut Self, TypeId) -> TirExpr,
+    ) -> TirExpr {
         let Some(newtype) = self
-            .ann_coercions(struct_lit.id)
-            .filter(|choice| choice.kind == CoercionKind::StructNewtype)
+            .ann_coercions(id)
+            .filter(|choice| choice.kind == CoercionKind::CompositeNewtype)
             .map(|choice| choice.target_type)
         else {
-            return self.reify_struct_literal_as(struct_lit, ctx, recorded_type);
+            return build(self, recorded_type);
         };
         let base = self.tysys.type_table.borrow().representation_head(newtype);
-        let built = self.reify_struct_literal_as(struct_lit, ctx, base);
-        cast_to_newtype(built, Some(newtype), struct_lit.span)
+        let built = build(self, base);
+        cast_to_newtype(built, Some(newtype), span)
     }
 
     fn reify_struct_literal_as(

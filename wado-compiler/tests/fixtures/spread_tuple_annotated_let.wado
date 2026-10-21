@@ -19,5 +19,20 @@ test "spread with leading element in a tuple-annotated let" {
     assert ys.2 == true;
 }
 
+test "elements around spreads take the annotation's element types" {
+    let pair: [u8, u8] = [1, 2];
+    let ys: [i64, u8, u8, u8, u8, u8, i64] = [5_000_000_000, ..pair, 255, ..pair, 9_000_000_000];
+    assert ys.0 == 5_000_000_000;
+    assert ys.3 == 255;
+    assert ys.6 == 9_000_000_000;
+}
+
+test "a spread tuple literal takes its slice of the annotation" {
+    let ys: [u8, i64, u8, u8] = [..[255, 5_000_000_000], ..[..[1], 2]];
+    assert ys.0 == 255;
+    assert ys.1 == 5_000_000_000;
+    assert ys.3 == 2;
+}
+
 __DATA__
 {"test": {}}

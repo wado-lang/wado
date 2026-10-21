@@ -7,8 +7,23 @@
 use std::cell::RefCell;
 
 use crate::hashmap::IndexMap;
-use crate::tir::{ResolvedType, TypeId};
+use crate::tir::{InferVarId, ResolvedType, TypeId};
 use crate::type_table::TypeTable;
+
+/// The answers among `bindings` that [`unify`] gave inference variables, keyed
+/// for [`TypeTable::substitute_infer_vars`].
+pub(super) fn infer_var_answers(
+    type_table: &TypeTable,
+    bindings: impl IntoIterator<Item = (TypeId, TypeId)>,
+) -> IndexMap<InferVarId, TypeId> {
+    bindings
+        .into_iter()
+        .filter_map(|(var, answer)| match *type_table.get(var) {
+            ResolvedType::InferVar(id) => Some((id, answer)),
+            _ => None,
+        })
+        .collect()
+}
 
 /// Recursively unify an `expected` type, possibly holding `TypeParam` /
 /// `TypePack` holes, against a concrete `actual`, extending `bindings` with what

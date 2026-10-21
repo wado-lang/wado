@@ -2,7 +2,7 @@
 
 use super::Elaborator;
 use super::call::DefaultWalk;
-use super::infer::unify;
+use super::infer::{infer_var_answers, unify};
 use super::scope::Scope;
 use super::types::{FunctionContext, TypeError};
 use super::tysys::TypeSystem;
@@ -837,14 +837,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let tt = self.tysys.type_table.borrow();
         // A pack's variable is no `InferVar`, and an element hint does not
         // reach a pack's literal anyway.
-        bindings
-            .into_iter()
-            .filter(|&(var, answer)| own_vars.contains(&var) && !tt.contains_infer_var(answer))
-            .filter_map(|(var, answer)| match *tt.get(var) {
-                ResolvedType::InferVar(id) => Some((id, answer)),
-                _ => None,
-            })
-            .collect()
+        infer_var_answers(
+            &tt,
+            bindings
+                .into_iter()
+                .filter(|&(var, answer)| own_vars.contains(&var) && !tt.contains_infer_var(answer)),
+        )
     }
 
     /// The type `arg` is checked against where it is a literal that takes its
@@ -1297,7 +1295,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             return Some(coerced);
         }
 
-        if let Some(coerced) = self.try_coerce_struct_newtype(expr, ctx, target_type) {
+        if let Some(coerced) = self.try_coerce_composite_newtype(expr, ctx, target_type) {
             return Some(coerced);
         }
 
@@ -1341,33 +1339,70 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         });
     }
 
-    /// An unnamed struct literal against a newtype over a struct, built as that
-    /// struct: literal coercion reaches a newtype as it reaches its base. A
-    /// newtype building from pairs itself is a map, which takes the literal.
-    pub(super) fn try_coerce_struct_newtype(
+    /// An unnamed struct literal or a tuple literal against a newtype over a
+    /// struct or a tuple, built as that base: literal coercion reaches a
+    /// newtype as it reaches its base. A newtype building from pairs itself is
+    /// a map, which takes the literal.
+    ///
+    /// Answers the newtype instantiated from what the literal built, so a
+    /// generic one's parameters (`Pair<?T>` from `["a", "b"]`) are settled by
+    /// the call or binding it is checked against.
+    pub(super) fn try_coerce_composite_newtype(
         &mut self,
         expr: &Expr,
         ctx: &mut FunctionContext,
         target_type: TypeId,
     ) -> Option<TypeId> {
-        let Expr::StructLiteral(struct_lit) = expr else {
-            return None;
-        };
         let base = self
             .tysys
             .type_table
             .borrow()
             .newtype_representation(target_type)?;
-        if struct_lit.name.is_some()
-            || self.implicit_struct_target(Some(base)).is_none()
-            || self.is_key_value_literal_target(target_type)
-        {
+        let takes_base = match expr {
+            Expr::StructLiteral(struct_lit) => {
+                struct_lit.name.is_none()
+                    && self.implicit_struct_target(Some(base)).is_some()
+                    && !self.is_key_value_literal_target(target_type)
+            }
+            Expr::TupleLiteral(_) => self.tysys.type_table.borrow().as_tuple(base).is_some(),
+            _ => false,
+        };
+        if !takes_base {
             return None;
         }
-        self.resolve_expr(expr, ctx, Some(base));
-        self.record_coercion(expr.id(), CoercionKind::StructNewtype, target_type);
-        self.record_expression_type(expr.id(), target_type);
-        Some(target_type)
+        // The base only steers the elements, so a literal that cannot be one
+        // (an arity or an element that does not fit) is checked here.
+        let built = self.resolve_expr(expr, ctx, Some(base));
+        if check_assignable(built, base, &self.tysys.type_table.borrow())
+            == TypeCheckResult::Incompatible
+        {
+            let (expected, found) = self
+                .tysys
+                .type_table
+                .borrow()
+                .type_names_for_mismatch(target_type, built);
+            let _ = self.emit(TypeError::TypeMismatch {
+                expected,
+                found,
+                span: expr.span(),
+            });
+        }
+        let coerced = self.instantiate_from_base(target_type, base, built);
+        self.record_coercion(expr.id(), CoercionKind::CompositeNewtype, coerced);
+        self.record_expression_type(expr.id(), coerced);
+        Some(coerced)
+    }
+
+    /// `newtype` with the inference variables its `base` names answered by
+    /// `built`, the value that base was checked against.
+    fn instantiate_from_base(&mut self, newtype: TypeId, base: TypeId, built: TypeId) -> TypeId {
+        let mut bindings = IndexMap::default();
+        unify(&self.tysys.type_table, base, built, &mut bindings);
+        let answers = infer_var_answers(&self.tysys.type_table.borrow(), bindings);
+        self.tysys
+            .type_table
+            .borrow_mut()
+            .substitute_infer_vars(newtype, &answers)
     }
 
     /// Coerce an anonymous struct literal into a type implementing
