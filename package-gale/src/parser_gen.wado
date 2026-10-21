@@ -187,7 +187,7 @@ use {
     kind_bitset_words,
 } from "./kind_set_gen.wado";
 use { group_alt_classes, non_greedy_static_undecided } from "./lower.wado";
-use { ATN_VERIFIED, atn_verified_call, sll_decide_fn_name } from "./atn_sll.wado";
+use { ATN_VERIFIED, AtnPicker, atn_verified_call, sll_decide_fn_name } from "./atn_sll.wado";
 use { lr_decide_fn_name } from "./atn_lr_table.wado";
 
 /// Append the defaulted runtime FOLLOW-continuation argument to a
@@ -7431,7 +7431,7 @@ fn lr_decision_call<S: AsStrSlice, S1: AsStrSlice>(ctx: &mut EmitContext, decisi
         return call;
     }
     ctx.cursor.note_ref(&ATN_VERIFIED);
-    return atn_verified_call(decision, ctx.atn_arg(), tokens, pos, "min_prec", call);
+    return atn_verified_call(decision, AtnPicker::LrTable, ctx.atn_arg(), tokens, pos, "min_prec", call);
 }
 
 /// The simulator's pick at decision `atn_dec`, over `tokens` at `pos`, with the
@@ -7968,13 +7968,21 @@ fn atn_tournament_check(sorted_indices: &List<i32>, alts: &List<Alternative>, ct
     let Some(numbers) = ctx.atn_body_alt_numbers(sorted_indices) else {
         unreachable();
     };
-    return Option::Some(AtnCheck { decision: ctx.plan.atn_rule_body_decision(ctx.cursor.current_rule_index()), numbers });
+    return Option::Some(
+        AtnCheck { decision: ctx.plan.atn_rule_body_decision(ctx.cursor.current_rule_index()), numbers },
+    );
 }
 
 /// Check the candidate `pick` names, an index into `candidates` or -1 where
 /// none won, against the simulator, and run the decision's lookahead DFA, which
 /// checks its own answers.
-fn emit_atn_check<S: AsStrSlice>(w: &mut CodeWriter, c: &AtnCheck, pick: S, candidates: &List<i32>, ctx: &mut EmitContext) {
+fn emit_atn_check<S: AsStrSlice>(
+    w: &mut CodeWriter,
+    c: &AtnCheck,
+    pick: S,
+    candidates: &List<i32>,
+    ctx: &mut EmitContext,
+) {
     let prec = atn_prec_arg(ctx);
     let mut number = pick.to_string();
     if c.numbers != *candidates {
@@ -7988,7 +7996,15 @@ fn emit_atn_check<S: AsStrSlice>(w: &mut CodeWriter, c: &AtnCheck, pick: S, cand
     let decide = sll_decide_fn_name(c.decision);
     ctx.cursor.note_ref(&decide);
     w.begin(`if ${pick} >= 0`);
-    w.line(`let _ = ${atn_verified_call(c.decision, ctx.atn_arg(), "&p.kinds", "p.pos", &prec, number)};`);
+    w.line(`let _ = ${atn_verified_call(
+        c.decision,
+        AtnPicker::Tournament,
+        ctx.atn_arg(),
+        "&p.kinds",
+        "p.pos",
+        &prec,
+        number,
+    )};`);
     w.line(`let _ = ${decide}(${ctx.atn_arg()}, &p.kinds, p.pos, ${prec});`);
     w.end();
 }
@@ -8156,7 +8172,11 @@ fn gen_prediction_code_inner<S: AsStrSlice, S1: AsStrSlice>(
             match side {
                 Parse => {
                     let checked = ctx.ambiguous_checked_by_atn(a, rule_display);
-                    let check = if checked { atn_tournament_check(&sorted_indices, alts, ctx) } else { NO_TOURNAMENT_CHECK };
+                    let check = if checked {
+                        atn_tournament_check(&sorted_indices, alts, ctx);
+                    } else {
+                        NO_TOURNAMENT_CHECK;
+                    };
                     emit_scan_tournament(w, &sorted_indices, fn_name, rule_display, ctx, false, &check);
                 },
                 Scan => emit_scan_side_tournament(w, &sorted_indices, ctx, false),

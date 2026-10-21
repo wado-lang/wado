@@ -768,9 +768,13 @@ test "atn verify parses as never does and checks each pick against the simulator
     assert parses(OPAQUE_CONTINUED_G4, "r", ["Z Z"], &verify) == parses(OPAQUE_CONTINUED_G4, "r", ["Z Z"], &never);
     assert parses(OPAQUE_CONTINUED_G4, "r", ["Z Z X"]) == "Z Z X => (r (a (b Z Z)) X)\n";
     assert parses(OPAQUE_CONTINUED_G4, "r", ["Z Z X"], &never) == "Z Z X => (r (a (b Z Z) X))\n";
-    let out = eval_beside(gen_with(OPAQUE_CONTINUED_G4, &verify).source, wado`show("Z Z X", parse_r("Z Z X"));\n`, SHOW_FN);
+    let out = eval_beside(
+        gen_with(OPAQUE_CONTINUED_G4, &verify).source,
+        wado`show("Z Z X", parse_r("Z Z X"));\n`,
+        SHOW_FN,
+    );
     assert !out.status matches { Exited(0) };
-    assert out.stderr.contains("atn verify: decision ");
+    assert out.stderr.contains(" at token 0: the tournament picks 1, the simulator 0");
 }
 
 // `(a | a B)` shares `a`, which hides the deciding token. The tournament takes
@@ -794,7 +798,7 @@ test "atn verify checks a group's tournament against the simulator" {
     let verify = GenerateOptions { atn: AtnMode::Verify };
     assert parses(GROUP_LONGEST_G4, "s", ["a b b"], &verify) == "a b b => (s (a a) b b)\n";
     let out = eval_beside(gen_with(GROUP_LONGEST_G4, &verify).source, wado`show("a b", parse_s("a b"));\n`, SHOW_FN);
-    assert out.stderr.contains("atn verify: decision ");
+    assert out.stderr.contains(" at token 0: the tournament picks 1, the simulator 0");
 }
 
 // The atom choice reads past `any`'s nesting, so the simulator owns it, and the
