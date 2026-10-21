@@ -1293,6 +1293,14 @@ pub enum TypeError {
         span: Span,
     },
 
+    /// A template hole whose type lacks the trait its specifier selects.
+    TemplateHoleMissingTrait {
+        type_name: String,
+        trait_name: String,
+        is_display: bool,
+        span: Span,
+    },
+
     /// A literal's target type admits more than one `From<Array<…>>`, so the
     /// literal alone does not say which conversion was meant.
     AmbiguousLiteralConversion {
@@ -2770,6 +2778,23 @@ impl TypeError {
                 format!("type '{type_name}' does not implement {trait_name}"),
                 *span,
             ),
+            TypeError::TemplateHoleMissingTrait {
+                type_name,
+                trait_name,
+                is_display,
+                span,
+            } => {
+                let hint = if *is_display {
+                    "; use `${x:?}` for debug output, or add an `impl Display`"
+                } else {
+                    ""
+                };
+                (
+                    Code::TraitBoundNotSatisfied,
+                    format!("type `{type_name}` does not implement trait `{trait_name}`{hint}"),
+                    *span,
+                )
+            }
             TypeError::AmbiguousLiteralConversion {
                 type_name,
                 count,

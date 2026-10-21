@@ -1,0 +1,22 @@
+// A hole's specifier binds under any tag, whether or not the tag renders the
+// hole: this tag never calls `fmt` (WEP 2026-01-10).
+struct Point {
+    x: i32,
+}
+
+fn count<T: ReflectTemplate<Holes = [..V]>, ..V>(t: T) -> i32 {
+    return 0;
+}
+
+export fn run() {
+    let p = Point { x: 1 };
+    let _ = count`${p:?}`;
+    let _ = count`${p}`;
+    let _ = count`${p.x:x} ${p:x}`;
+}
+
+__DATA__
+{
+    "compile_error": ":14:21: error: type `Point` does not implement trait `Display`; use `${x:?}` for debug output, or add an `impl Display`\n:15:30: error: type `Point` does not implement trait `LowerHex`",
+    "compile_error_codes": ["TRAIT_BOUND_NOT_SATISFIED"]
+}

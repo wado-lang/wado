@@ -86,17 +86,10 @@ impl FormatStdlibNames {
             name: items.trait_fq(item),
             method: items.trait_method_name(item).to_string(),
         };
-        let traits = vec![
-            (FormatKind::Display, format_trait(CompilerItem::Display)),
-            (FormatKind::Fixed, format_trait(CompilerItem::Display)),
-            (FormatKind::Inspect, format_trait(CompilerItem::Inspect)),
-            (FormatKind::Binary, format_trait(CompilerItem::Binary)),
-            (FormatKind::Octal, format_trait(CompilerItem::Octal)),
-            (FormatKind::LowerHex, format_trait(CompilerItem::LowerHex)),
-            (FormatKind::UpperHex, format_trait(CompilerItem::UpperHex)),
-            (FormatKind::LowerExp, format_trait(CompilerItem::LowerExp)),
-            (FormatKind::UpperExp, format_trait(CompilerItem::UpperExp)),
-        ];
+        let traits = FormatKind::ALL
+            .into_iter()
+            .map(|kind| (kind, format_trait(kind.trait_item())))
+            .collect();
         assert_formatter_layout(type_table);
         Self {
             formatter: items.struct_name(CompilerItem::Formatter).to_string(),

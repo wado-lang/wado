@@ -5,7 +5,10 @@
 
 use crate::ast;
 use crate::compiler_host::CompilerHost;
-use crate::tir::TypeId;
+use crate::compiler_item::CompilerItem;
+use crate::format_spec::{self, FormatKind};
+use crate::tir::{ResolvedType, TypeId};
+use crate::token::Span;
 
 use super::Elaborator;
 use super::types::{FunctionContext, TypeError};
@@ -44,11 +47,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             match part {
                 ast::TemplatePart::Interpolation { expr, format, .. } => {
                     let ty = self.resolve_expr(expr, ctx, None);
+                    let ty = self.apply_infer_holes(ty);
+                    let spec = format.as_ref().map(|f| f.spec.clone());
+                    self.check_hole_format_trait(ty, spec.as_deref(), expr.span());
                     segments.push(std::mem::take(&mut pending));
-                    holes.push((
-                        self.apply_infer_holes(ty),
-                        format.as_ref().map(|f| f.spec.clone()),
-                    ));
+                    holes.push((ty, spec));
                 }
                 // The gate reify relies on: it decodes these segments with no
                 // diagnostic channel of its own.
@@ -66,5 +69,50 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
         segments.push(pending);
         sound.then_some(TemplateParts { segments, holes })
+    }
+
+    /// A specifier binds under any tag, whether or not the tag renders the
+    /// hole, so the check reads the declared bounds rather than a call.
+    fn check_hole_format_trait(&mut self, hole_type: TypeId, spec: Option<&str>, span: Span) {
+        // A malformed spec is the parser's to report.
+        let kind = match spec.map(format_spec::parse) {
+            None => FormatKind::Display,
+            Some(Ok(spec)) => spec.kind,
+            Some(Err(_)) => return,
+        };
+        if kind == FormatKind::Inspect {
+            return;
+        }
+        let item = kind.trait_item();
+        let receiver = self.tysys.type_table.borrow().peel_refs(hole_type);
+        if matches!(
+            self.tysys.type_table.borrow().get(receiver),
+            ResolvedType::Error | ResolvedType::Unknown
+        ) {
+            return;
+        }
+        let trait_ = self
+            .tysys
+            .compiler_trait(item)
+            .expect("every format kind names a prelude trait");
+        if self
+            .tysys
+            .type_implements_trait(&self.annotate_ctx, &self.type_lookup(), receiver, &trait_)
+        {
+            return;
+        }
+        let (type_name, trait_name) = {
+            let tt = self.tysys.type_table.borrow();
+            (
+                tt.type_name(receiver),
+                tt.compiler_items().trait_name(item).to_string(),
+            )
+        };
+        let _ = self.emit(TypeError::TemplateHoleMissingTrait {
+            type_name,
+            trait_name,
+            is_display: item == CompilerItem::Display,
+            span,
+        });
     }
 }

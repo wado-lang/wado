@@ -604,8 +604,7 @@ synthesis and the fold; then the prelude tags and fixtures.
 ## Roadmap
 
 An untagged template is sugar for `format`, but the compiler still lowers it on
-a path of its own that renders each hole before it evaluates the next, and a
-hole's specifier is checked only where something renders the hole. The items
+a path of its own that renders each hole before it evaluates the next. The items
 below close that, in this order.
 
 - [x] Open anonymous shapes. A shape whose types mention a type parameter of
@@ -641,17 +640,19 @@ below close that, in this order.
   (`anon_struct_type_param_field.wado`). WIR build used to panic on one with
   `unsubstituted TypeParam`.
 
-- [ ] The specifier's trait checked at the template. `resolve_template_parts`
+- [x] The specifier's trait checked at the template. `resolve_template_parts`
   asks `type_implements_trait` for each hole's trait, so the check reads the
-  declared bounds and runs under either form and every tag. Today WIR build
-  catches a concrete hole that lacks the trait only when it finds the call it
-  cannot resolve, and a generic hole only once instantiated.
+  declared bounds and runs under either form and every tag. WIR build used to
+  catch a concrete hole that lacked the trait only when it found the call it
+  could not resolve, and a generic hole only once instantiated.
 
-  Done when `` format`${x}` `` and `` `${x}` `` over `x: X` each compile under
-  `X: Display` and report the same missing-bound error without it, `${x:x}`
-  reports a missing `LowerHex` under `X: Display` alone, a tag that never calls
-  `fmt` rejects a hole lacking its specifier's trait, and every package in the
-  repository, the stdlib included, compiles under the new check.
+  Done: `` `${x}` `` over `x: X` compiles under `X: Display` and reports the
+  missing bound without it, `${x:x}` reports a missing `LowerHex` under
+  `X: Display` alone (`template_hole_trait_bound.wado`,
+  `template_hole_trait_unbounded_error.wado`), and a tag that never calls `fmt`
+  rejects a hole lacking its specifier's trait
+  (`tagged_template_spec_trait_error.wado`). `` format`${x}` `` over `x: X`
+  waits on the next item, which admits a generic hole as a tag's argument.
 
 - [ ] Generic template shapes. `TemplateHoleGeneric` goes, and a template shape
   is open as the first item makes any shape. Each concrete template shape that
@@ -662,7 +663,8 @@ below close that, in this order.
   their bodies call is instantiated in turn.
 
   Done when `` tag`${x}` `` over `x: X` reaches the tag at each instantiation,
-  and a tag's pack bound is checked against the declared bounds.
+  a tag's pack bound is checked against the declared bounds, and
+  `` format`${x}` `` reports the missing bound `` `${x}` `` reports.
 
 - [ ] `format` at the direct lowering's cost. Read off `wado dump -O2`, the
   direct lowering does four things a `format` site does not:

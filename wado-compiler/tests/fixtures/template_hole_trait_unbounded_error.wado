@@ -1,0 +1,18 @@
+// A generic hole lacking its specifier's trait is an error at the hole, not at
+// an instantiation: `X: Display` does not give `${x:x}` its `LowerHex`
+// (WEP 2026-01-10).
+fn show<X>(x: X) -> String {
+    return `${x}`;
+}
+
+fn hex<X: Display>(x: X) -> String {
+    return `${x:x}`;
+}
+
+export fn run() {}
+
+__DATA__
+{
+    "compile_error": ":5:15: error: type `X` does not implement trait `Display`; use `${x:?}` for debug output, or add an `impl Display`\n:9:15: error: type `X` does not implement trait `LowerHex`",
+    "compile_error_codes": ["TRAIT_BOUND_NOT_SATISFIED"]
+}
