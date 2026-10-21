@@ -53,10 +53,15 @@ pub(crate) enum LoadEvent {
     Failed { detail: Option<String> },
 }
 
+/// What a streaming reporter names again at the end of the run: every
+/// compile, load and test outcome that fails it, so the end of a long log
+/// says which one did. Sorted, since outcomes arrive in completion order.
 #[derive(Default)]
 struct FailureRecap {
     compile: Mutex<Vec<(String, Option<String>)>>,
     load: Mutex<Vec<(String, Option<String>)>>,
+    test: Mutex<Vec<String>>,
+    todo_resolved: Mutex<Vec<String>>,
 }
 
 impl FailureRecap {
@@ -68,21 +73,51 @@ impl FailureRecap {
         lock(&self.load).push((path.to_owned(), detail.map(str::to_owned)));
     }
 
+    /// Names the test only: its message, a backtrace as often as not, is
+    /// already in its own report.
+    fn record_test(&self, result: &TestResult) {
+        let section = match result.outcome {
+            TestOutcome::Fail => &self.test,
+            TestOutcome::TodoResolved => &self.todo_resolved,
+            TestOutcome::Pass | TestOutcome::TodoPending => return,
+        };
+        lock(section).push(format!("{} :: {}", result.file_path, result.display_name));
+    }
+
     fn lines(&self) -> Vec<String> {
-        let compile = lock(&self.compile);
-        let load = lock(&self.load);
-        let compile_entries: Vec<(&str, Option<&str>)> = compile
-            .iter()
-            .map(|(p, m)| (p.as_str(), m.as_deref()))
-            .collect();
-        let load_entries: Vec<(&str, Option<&str>)> = load
-            .iter()
-            .map(|(p, m)| (p.as_str(), m.as_deref()))
-            .collect();
-        let mut lines = test::failure_recap_lines("compile failures:", &compile_entries);
-        lines.extend(test::failure_recap_lines("load failures:", &load_entries));
+        let mut lines = recap_section("compile failures:", &self.compile);
+        lines.extend(recap_section("load failures:", &self.load));
+        lines.extend(recap_section("test failures:", &self.test));
+        lines.extend(recap_section(
+            "unexpectedly passed TODO tests:",
+            &self.todo_resolved,
+        ));
         lines
     }
+}
+
+/// A recap entry: what it names, and the detail shown under it.
+trait RecapEntry: Ord {
+    fn entry(&self) -> (&str, Option<&str>);
+}
+
+impl RecapEntry for (String, Option<String>) {
+    fn entry(&self) -> (&str, Option<&str>) {
+        (&self.0, self.1.as_deref())
+    }
+}
+
+impl RecapEntry for String {
+    fn entry(&self) -> (&str, Option<&str>) {
+        (self, None)
+    }
+}
+
+fn recap_section<T: RecapEntry>(header: &str, section: &Mutex<Vec<T>>) -> Vec<String> {
+    let mut section = lock(section);
+    section.sort();
+    let entries: Vec<(&str, Option<&str>)> = section.iter().map(RecapEntry::entry).collect();
+    test::failure_recap_lines(header, &entries)
 }
 
 /// Everything a reporter needs to render one package's final result.
@@ -112,6 +147,8 @@ pub(crate) trait TestReporter: Send + Sync {
     fn on_cached(&self, path: &str, tally: Tally);
     fn on_package_done(&self, args: PackageDoneArgs);
     fn on_run_done(&self, grand: &PackageTotals, multi_pkg: bool, wall: Duration);
+    /// The last output of the run, after every summary.
+    fn on_recap(&self) {}
     /// The `--coverage` summary, after the run is done.
     fn on_coverage(&self, summary: &str) {
         print!("{summary}");
@@ -262,6 +299,9 @@ struct HeartbeatState {
     /// heartbeat loop can restart its wait — avoids printing a near-
     /// duplicate heartbeat right after an event that already reported.
     notify: Notify,
+    /// Held across the ticker's `stop` check and its print, and while
+    /// `stop` is set, so no heartbeat lands inside the final output.
+    printing: Mutex<()>,
     stop: AtomicBool,
 }
 
@@ -334,6 +374,7 @@ impl HeartbeatReporter {
             skip_files: AtomicUsize::new(0),
             pending_tests: Mutex::new(IndexMap::default()),
             notify: Notify::new(),
+            printing: Mutex::new(()),
             stop: AtomicBool::new(false),
         });
 
@@ -347,6 +388,7 @@ impl HeartbeatReporter {
                 // in the meantime — avoids an immediate near-duplicate line.
                 let notified =
                     tokio::time::timeout(HEARTBEAT_INTERVAL, ticker_state.notify.notified()).await;
+                let _printing = lock(&ticker_state.printing);
                 if ticker_state.stop.load(Ordering::Relaxed) {
                     break;
                 }
@@ -423,6 +465,7 @@ impl TestReporter for HeartbeatReporter {
 
     fn on_test_result(&self, result: &TestResult) {
         self.state.tests_seen.fetch_add(1, Ordering::Relaxed);
+        self.failures.record_test(result);
         // A reading asked for is shown, even where the digest would stay quiet.
         let announce_metered = |label: &str| {
             if result.fuel.is_some() {
@@ -491,10 +534,15 @@ impl TestReporter for HeartbeatReporter {
     }
 
     fn on_run_done(&self, grand: &PackageTotals, _multi_pkg: bool, wall: Duration) {
+        let printing = lock(&self.state.printing);
         self.state.stop.store(true, Ordering::Relaxed);
+        drop(printing);
         self.state.notify.notify_one();
         println!();
         test::print_three_axis(grand, Some(&test::format_duration(wall)));
+    }
+
+    fn on_recap(&self) {
         for line in self.failures.lines() {
             println!("{line}");
         }
@@ -765,6 +813,7 @@ impl TestReporter for TapReporter {
     }
 
     fn on_test_result(&self, result: &TestResult) {
+        self.failures.record_test(result);
         let cost = result.cost();
         let name = &result.display_name;
         let (mut lines, failed) = match result.outcome {
@@ -824,6 +873,9 @@ impl TestReporter for TapReporter {
         for line in test::format_three_axis_lines(grand, Some(&wall_str)) {
             self.comment(&line);
         }
+    }
+
+    fn on_recap(&self) {
         for line in self.failures.lines() {
             if !line.is_empty() {
                 self.comment(&line);

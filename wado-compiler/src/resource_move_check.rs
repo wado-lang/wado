@@ -1054,7 +1054,14 @@ impl MoveWalker<'_, '_> {
             self.affine_params.clone(),
             self.drop_body,
         );
+<<<<<<< HEAD
         inner.flow.clone_from(&self.flow);
+||||||| a2a560cdf
+        inner.flow = self.flow.clone();
+        inner.guard_bindings = self.guard_bindings.clone();
+=======
+        inner.flow = self.flow.clone();
+>>>>>>> origin/main
         inner.guard_bindings.clone_from(&self.guard_bindings);
         inner.closure_locals = Some(locals);
         inner.instances.clone_from(&self.instances);

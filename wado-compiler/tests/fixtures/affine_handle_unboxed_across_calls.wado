@@ -1,0 +1,50 @@
+// A resource keeps its bare handle across the calls it moves through: a
+// parameter and a result no reference reaches take the handle, not its
+// `$Resource` box, and so does a place a branch chooses the resource for
+// (WEP: Affine Types). Storing one end in a struct makes it escape, so only that
+// end keeps its box. A labeled block a `break` leaves carrying the resource
+// keeps its box too, as the break's value is no tail the place is joined with.
+
+#[inline(never)]
+fn pick(first: bool, a: StreamWritable<u8>, b: StreamWritable<u8>) -> StreamWritable<u8> {
+    let chosen = if first { a } else { b };
+    return chosen;
+}
+
+#[inline(never)]
+fn pick_by_break(first: bool, a: Stream<u8>, b: Stream<u8>) -> Stream<u8> {
+    let chosen = found: {
+        if first {
+            break found: a;
+        }
+        b
+    };
+    return chosen;
+}
+
+affine struct Holder {
+    rx: Stream<u8>,
+}
+
+test {
+    let [rx_a, tx_a] = Stream::<u8>::new();
+    let [rx_b, tx_b] = Stream::<u8>::new();
+    let tx = pick(builtin::black_box(true), tx_a, tx_b);
+    builtin::drop(tx);
+    let held = Holder { rx: rx_a };
+    assert held.rx.read(1).result == CopyResult::Dropped;
+    let [rx_c, tx_c] = Stream::<u8>::new();
+    builtin::drop(tx_c);
+    let rx = pick_by_break(builtin::black_box(true), rx_b, rx_c);
+    assert rx.read(1).result == CopyResult::Dropped;
+}
+
+__DATA__
+{
+    "test": {},
+    "wir_expect:O2": [
+        "type \"functype//affine_handle_unboxed_across_calls.wado/pick\" = fn(bool, i32, i32) -> i32;",
+        "type \"functype//affine_handle_unboxed_across_calls.wado/pick_by_break\" = fn(bool, ref null \"core:prelude//$Resource\", ref null \"core:prelude//$Resource\") -> ref null \"core:prelude//$Resource\";",
+        "struct.new \"affine_handle_unboxed_across_calls.wado//Holder\" { rx: "
+    ]
+}

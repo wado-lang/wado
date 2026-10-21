@@ -875,6 +875,19 @@ impl<'a> Builder<'a> {
         }
     }
 
+    /// `is_moved(place)` is `true` where the value reaching `place` is the
+    /// `null` a move wrote into it, and `false` where it is the object a struct
+    /// literal built.
+    fn known_moved(&mut self, place: Operand) -> Option<ValueId> {
+        let value = self.walked_value(place)?;
+        let moved = match self.pool.kind(value) {
+            ValueKind::Null => true,
+            _ if self.owned_pointees.contains(&value) => false,
+            _ => return None,
+        };
+        Some(self.pool.bool(moved))
+    }
+
     /// If `recv_expr` is a bare `Local` known to reference a pointee local
     /// (`let r = &v`), return that pointee's current receiver `ValueId` and
     /// root local, so `r.f` forwards from `v`'s field slot. The pointee's slot
@@ -1504,6 +1517,7 @@ impl<'a> Builder<'a> {
                 match (builtin, arg) {
                     (Some(CtfeBuiltin::ArrayNew), Some(len)) => self.allocated_array(expr, len),
                     (Some(CtfeBuiltin::ArrayLen), Some(array)) => self.known_array_len(array),
+                    (Some(CtfeBuiltin::IsMoved), Some(place)) => self.known_moved(place),
                     _ => None,
                 }
             }

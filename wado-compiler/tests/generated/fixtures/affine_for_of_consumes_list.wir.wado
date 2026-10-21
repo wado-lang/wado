@@ -6,18 +6,14 @@ enum core:prelude/format.wado//enum:Alignment { Left = 0, Center = 1, Right = 2 
 
 enum core:prelude/types.wado//enum:CopyResult { Completed = 0, Dropped = 1, Cancelled = 2 };  // TypeId(1)
 
-struct core:prelude//$Resource {  // TypeId(2)
-    mut value: i32,
-}
+array Array<u8> (mut u8);  // TypeId(2)
 
-array Array<u8> (mut u8);  // TypeId(3)
-
-struct core:prelude/string.wado//String {  // TypeId(4)
+struct core:prelude/string.wado//String {  // TypeId(3)
     mut repr: ref Array<u8>,
     mut used: i32,
 }
 
-struct core:prelude/format.wado//Formatter {  // TypeId(5)
+struct core:prelude/format.wado//Formatter {  // TypeId(4)
     mut fill: char,
     mut align: "core:prelude/format.wado//enum:Alignment",
     mut sign_plus: bool,
@@ -29,155 +25,105 @@ struct core:prelude/format.wado//Formatter {  // TypeId(5)
     mut buf: ref "core:prelude/string.wado//String",
 }
 
-struct tuple//[core:prelude/traits.wado/StructField<affine_for_of_consumes_list.wado/Token,i32>] {  // TypeId(6)
-    mut 0: ref "core:prelude/traits.wado//StructField<affine_for_of_consumes_list.wado/Token,i32>",
-}
-
-struct affine_for_of_consumes_list.wado//Token {  // TypeId(7)
+struct affine_for_of_consumes_list.wado//Token {  // TypeId(5)
     mut id: i32,
 }
 
-array Array<affine_for_of_consumes_list.wado/Token> (mut ref null "affine_for_of_consumes_list.wado//Token");  // TypeId(8)
+array Array<affine_for_of_consumes_list.wado/Token> (mut ref null "affine_for_of_consumes_list.wado//Token");  // TypeId(6)
 
-struct core:prelude/traits.wado//StructField<affine_for_of_consumes_list.wado/Token,i32> {  // TypeId(9)
-    mut index: i32,
-    mut field_name: ref "core:prelude/string.wado//String",
-    mut wire_override: ref null "core:prelude/string.wado//String",
-    mut has_default: bool,
-    mut is_secret: bool,
-}
-
-struct core:prelude/list.wado//ListCursor<affine_for_of_consumes_list.wado/Token> {  // TypeId(10)
+struct core:prelude/list.wado//ListCursor<affine_for_of_consumes_list.wado/Token> {  // TypeId(7)
     mut list: ref null "core:prelude//List<affine_for_of_consumes_list.wado/Token>",
     mut at: i32,
 }
 
-variant core:prelude/types.wado//Option<affine_for_of_consumes_list.wado/Token> {  // TypeId(11)
+variant core:prelude/types.wado//Option<affine_for_of_consumes_list.wado/Token> {  // TypeId(8)
     None,
     Some(ref null "affine_for_of_consumes_list.wado//Token"),
 }
 
-struct core:prelude/types.wado//Option<affine_for_of_consumes_list.wado/Token>::Some {  // TypeId(12)
+struct core:prelude/types.wado//Option<affine_for_of_consumes_list.wado/Token>::Some {  // TypeId(9)
     discriminant: i32,
     payload_0: ref null "affine_for_of_consumes_list.wado//Token",
 }
 
-struct core:prelude//List<affine_for_of_consumes_list.wado/Token> {  // TypeId(13)
+struct core:prelude//List<affine_for_of_consumes_list.wado/Token> {  // TypeId(10)
     mut repr: ref "Array<affine_for_of_consumes_list.wado/Token>",
     mut used: i32,
 }
 
-type "functype//mem/realloc" = fn(i32, i32, i32, i32) -> i32;  // TypeId(14)
+type "functype//mem/realloc" = fn(i32, i32, i32, i32) -> i32;  // TypeId(11)
 
-type "functype//wasi/stream-write" = fn(i32, i32, i32) -> i32;  // TypeId(15)
+type "functype//wasi/stream-write" = fn(i32, i32, i32) -> i32;  // TypeId(12)
 
-type "functype//wasi/waitable-join" = fn(i32, i32);  // TypeId(16)
+type "functype//wasi/waitable-join" = fn(i32, i32);  // TypeId(13)
 
-type "functype//wasi/waitable-set-drop" = fn(i32);  // TypeId(17)
+type "functype//wasi/waitable-set-drop" = fn(i32);  // TypeId(14)
 
-type "functype//wasi/waitable-set-new" = fn() -> i32;  // TypeId(18)
+type "functype//wasi/waitable-set-new" = fn() -> i32;  // TypeId(15)
 
-type "functype//wasi/waitable-set-wait" = fn(i32, i32) -> i32;  // TypeId(19)
+type "functype//wasi/waitable-set-wait" = fn(i32, i32) -> i32;  // TypeId(16)
 
-type "functype//wasi/wasi:cli/Stderr::write_via_stream" = fn(i32) -> i32;  // TypeId(20)
+type "functype//wasi/wasi:cli/Stderr::write_via_stream" = fn(i32) -> i32;  // TypeId(17)
 
-type "functype//wasi/wasi:cli/Stdout::write_via_stream" = fn(i32) -> i32;  // TypeId(21)
+type "functype//wasi/wasi:cli/Stdout::write_via_stream" = fn(i32) -> i32;  // TypeId(18)
 
-type "functype//affine_for_of_consumes_list.wado/run" = fn();  // TypeId(22)
+type "functype//affine_for_of_consumes_list.wado/run" = fn();  // TypeId(19)
 
-type "functype//affine_for_of_consumes_list.wado/$drop$core:prelude/list.wado/List<affine_for_of_consumes_list.wado/Token>" = fn(ref null "core:prelude//List<affine_for_of_consumes_list.wado/Token>");  // TypeId(23)
+type "functype//affine_for_of_consumes_list.wado/$drop$core:prelude/list.wado/List<affine_for_of_consumes_list.wado/Token>" = fn(ref null "core:prelude//List<affine_for_of_consumes_list.wado/Token>");  // TypeId(20)
 
-type "functype//affine_for_of_consumes_list.wado/$cm_binding__Stdout_write_via_stream" = fn(ref null "core:prelude//$Resource") -> ref null "core:prelude//$Resource";  // TypeId(24)
+type "functype//affine_for_of_consumes_list.wado/$cm_export__run" = fn();  // TypeId(21)
 
-type "functype//affine_for_of_consumes_list.wado/$cm_export__run" = fn();  // TypeId(25)
+type "functype//affine_for_of_consumes_list.wado/affine_for_of_consumes_list.wado/count<affine_for_of_consumes_list.wado/Token>" = fn(ref null "core:prelude//List<affine_for_of_consumes_list.wado/Token>") -> i32;  // TypeId(22)
 
-type "functype//affine_for_of_consumes_list.wado/affine_for_of_consumes_list.wado/count<affine_for_of_consumes_list.wado/Token>" = fn(ref null "core:prelude//List<affine_for_of_consumes_list.wado/Token>") -> i32;  // TypeId(26)
+type "functype//affine_for_of_consumes_list.wado/run$cold0" = fn();  // TypeId(23)
 
-type "functype//affine_for_of_consumes_list.wado/$drop$Array<affine_for_of_consumes_list.wado/Token>" = fn(ref null "Array<affine_for_of_consumes_list.wado/Token>");  // TypeId(27)
+type "functype//affine_for_of_consumes_list.wado/run$cold1" = fn();  // TypeId(24)
 
-type "functype//affine_for_of_consumes_list.wado/run$cold0" = fn();  // TypeId(28)
+type "functype//affine_for_of_consumes_list.wado/run$cold2" = fn();  // TypeId(25)
 
-type "functype//affine_for_of_consumes_list.wado/run$cold1" = fn();  // TypeId(29)
+type "functype//affine_for_of_consumes_list.wado/run$cold3" = fn(i32);  // TypeId(26)
 
-type "functype//affine_for_of_consumes_list.wado/run$cold2" = fn();  // TypeId(30)
+type "functype//core:prelude/primitive.wado/write_decimal_digits" = fn(ref Array<u8>, i32, u64, i32);  // TypeId(27)
 
-type "functype//affine_for_of_consumes_list.wado/run$cold3" = fn(i32);  // TypeId(31)
+type "functype//core:prelude/primitive.wado/count_digits_u64" = fn(u64) -> i32;  // TypeId(28)
 
-type "functype//core:cli/println" = fn(ref Array<u8>, i32);  // TypeId(32)
+type "functype//core:rt/log_stderr" = fn(ref Array<u8>, i32);  // TypeId(29)
 
-type "functype//core:prelude/primitive.wado/write_decimal_digits" = fn(ref Array<u8>, i32, u64, i32);  // TypeId(33)
+type "functype//core:rt/panic" = fn(ref Array<u8>, i32);  // TypeId(30)
 
-type "functype//core:prelude/primitive.wado/count_digits_u64" = fn(u64) -> i32;  // TypeId(34)
+type "functype//core:rt/unreachable" = fn();  // TypeId(31)
 
-type "functype//core:rt/write_string_to_stream$dae[add_newline]" = fn(ref null "core:prelude//$Resource", ref Array<u8>, i32);  // TypeId(35)
+type "functype//core:rt/cm_stream_write_raw_all_u8" = fn(i32, ref Array<u8>, i32, i32) -> "core:prelude/types.wado//enum:CopyResult";  // TypeId(32)
 
-type "functype//core:rt/log_stderr" = fn(ref Array<u8>, i32);  // TypeId(36)
+type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::new" = fn(ref "core:prelude/string.wado//String") -> ref "core:prelude/format.wado//Formatter";  // TypeId(33)
 
-type "functype//core:rt/panic" = fn(ref Array<u8>, i32);  // TypeId(37)
+type "functype//core:prelude/string.wado/core:prelude/string.wado/String::realloc_to" = fn(ref "core:prelude/string.wado//String", i32);  // TypeId(34)
 
-type "functype//core:rt/unreachable" = fn();  // TypeId(38)
+type "functype//core:prelude/string.wado/core:prelude/string.wado/String::grow" = fn(ref "core:prelude/string.wado//String", i32);  // TypeId(35)
 
-type "functype//core:rt/cm_stream_write_raw_all_u8" = fn(i32, ref Array<u8>, i32, i32) -> "core:prelude/types.wado//enum:CopyResult";  // TypeId(39)
+type "functype//core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit" = fn(ref "core:prelude/string.wado//String", i32) -> i32;  // TypeId(36)
 
-type "functype//core:prelude/array.wado/core/prelude/array.wado/write_seq_inspect<affine_for_of_consumes_list.wado/Token>$dae[start,marker]" = fn(ref null "Array<affine_for_of_consumes_list.wado/Token>", i32, ref "core:prelude/format.wado//Formatter", i32);  // TypeId(40)
+type "functype//core:prelude/string.wado/core:prelude/string.wado/String::push" = fn(ref "core:prelude/string.wado//String", char);  // TypeId(37)
 
-type "functype//core:prelude/array.wado/core/prelude/array.wado/write_seq_inspect_alt<affine_for_of_consumes_list.wado/Token>$dae[start,marker]" = fn(ref null "Array<affine_for_of_consumes_list.wado/Token>", i32, ref "core:prelude/format.wado//Formatter", i32);  // TypeId(41)
+type "functype//core:prelude/string.wado/core:prelude/string.wado/String^core:prelude/string.wado/AsStrSlice::internal_append_to" = fn(ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String");  // TypeId(38)
 
-type "functype//core:prelude/traits.wado/core/prelude/traits.wado/write_struct_head<affine_for_of_consumes_list.wado/Token>$sroa[f.buf]" = fn(ref "core:prelude/string.wado//String");  // TypeId(42)
+type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>" = fn(ref "core:prelude/format.wado//Formatter", bool, ref Array<u8>, i32, i32) -> i32;  // TypeId(39)
 
-type "functype//core:prelude/traits.wado/core/prelude/traits.wado/inspect_struct_alternate<affine_for_of_consumes_list.wado/Token,[i32]>$sroa[v.id]" = fn(i32, ref "core:prelude/format.wado//Formatter");  // TypeId(43)
+type "functype//core:prelude/primitive.wado/i32::fmt_decimal$sroa[self.value]" = fn(i32, ref "core:prelude/format.wado//Formatter");  // TypeId(40)
 
-type "functype//affine_for_of_consumes_list.wado/affine_for_of_consumes_list.wado/Token^core:prelude/traits.wado/ReflectStruct::members" = fn() -> ref "tuple//[core:prelude/traits.wado/StructField<affine_for_of_consumes_list.wado/Token,i32>]";  // TypeId(44)
+type "functype//core:prelude/string.wado/core:prelude/string.wado/String^core:prelude/string.wado/AsStrSlice::internal_append_to$spec3" = fn(ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String");  // TypeId(41)
 
-type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::new" = fn(ref "core:prelude/string.wado//String") -> ref "core:prelude/format.wado//Formatter";  // TypeId(45)
+type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(42)
 
-type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::write_newline_indent" = fn(ref "core:prelude/format.wado//Formatter");  // TypeId(46)
+type "functype//wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code" = fn(i32);  // TypeId(43)
 
-type "functype//core:prelude/string.wado/core:prelude/string.wado/String::realloc_to" = fn(ref "core:prelude/string.wado//String", i32);  // TypeId(47)
+type "functype//wasi/task-return" = fn(i32);  // TypeId(44)
 
-type "functype//core:prelude/string.wado/core:prelude/string.wado/String::grow" = fn(ref "core:prelude/string.wado//String", i32);  // TypeId(48)
+type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(45)
 
-type "functype//core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit" = fn(ref "core:prelude/string.wado//String", i32) -> i32;  // TypeId(49)
+type "functype//affine_for_of_consumes_list.wado/$cm_binding__Stdout_write_via_stream" = fn(i32) -> i32;  // TypeId(46)
 
-type "functype//core:prelude/string.wado/core:prelude/string.wado/String::push" = fn(ref "core:prelude/string.wado//String", char);  // TypeId(50)
-
-type "functype//core:prelude/string.wado/core:prelude/string.wado/String::push_ascii_byte" = fn(ref "core:prelude/string.wado//String", u8);  // TypeId(51)
-
-type "functype//core:prelude/string.wado/core:prelude/string.wado/String^core:prelude/string.wado/AsStrSlice::internal_append_to" = fn(ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String");  // TypeId(52)
-
-type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::close_brace<core:prelude/string.wado/String>" = fn(ref "core:prelude/format.wado//Formatter", ref "core:prelude/string.wado//String");  // TypeId(53)
-
-type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::open_brace<core:prelude/string.wado/String>" = fn(ref "core:prelude/format.wado//Formatter", ref "core:prelude/string.wado//String");  // TypeId(54)
-
-type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>" = fn(ref "core:prelude/format.wado//Formatter", bool, ref Array<u8>, i32, i32) -> i32;  // TypeId(55)
-
-type "functype//core:prelude/list.wado/core:prelude/list.wado/List<affine_for_of_consumes_list.wado/Token>^core:prelude/traits.wado/Inspect::inspect" = fn(ref null "core:prelude//List<affine_for_of_consumes_list.wado/Token>", ref "core:prelude/format.wado//Formatter");  // TypeId(56)
-
-type "functype//core:prelude/list.wado/core:prelude/list.wado/ListCursor<affine_for_of_consumes_list.wado/Token>::next" = fn(ref null "core:prelude/list.wado//ListCursor<affine_for_of_consumes_list.wado/Token>") -> ref null "core:prelude/types.wado//Option<affine_for_of_consumes_list.wado/Token>";  // TypeId(57)
-
-type "functype//core:prelude/string.wado/&core:prelude/string.wado/String^core:prelude/string.wado/AsStrSlice::internal_append_to" = fn(ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String");  // TypeId(58)
-
-type "functype//core:prelude/primitive.wado/i32::fmt_decimal$sroa[self.value]" = fn(i32, ref "core:prelude/format.wado//Formatter");  // TypeId(59)
-
-type "functype//core:prelude/string.wado/core:prelude/string.wado/String^core:prelude/string.wado/AsStrSlice::internal_append_to$spec0" = fn(ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String");  // TypeId(60)
-
-type "functype//core:prelude/string.wado/core:prelude/string.wado/String^core:prelude/string.wado/AsStrSlice::internal_append_to$spec1" = fn(ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String");  // TypeId(61)
-
-type "functype//core:prelude/string.wado/core:prelude/string.wado/String^core:prelude/string.wado/AsStrSlice::internal_append_to$spec2" = fn(ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String");  // TypeId(62)
-
-type "functype//core:prelude/string.wado/core:prelude/string.wado/String^core:prelude/string.wado/AsStrSlice::internal_append_to$spec3" = fn(ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String");  // TypeId(63)
-
-type "functype//core:prelude/traits.wado/affine_for_of_consumes_list.wado/Token^core:prelude/traits.wado/Inspect::inspect$sroa[self.id]" = fn(i32, ref "core:prelude/format.wado//Formatter");  // TypeId(64)
-
-type "functype//wasi/task-return" = fn(i32);  // TypeId(65)
-
-type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(66)
-
-type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(67)
-
-type "functype//wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code" = fn(i32);  // TypeId(68)
-
-type "functype//wasi/stream-drop-readable" = fn(i32);  // TypeId(69)
+type "functype//core:rt/write_string_to_stream$dae[add_newline]" = fn(i32, ref Array<u8>, i32);  // TypeId(47)
 
 import fn mem/realloc from "mem/realloc";
 import fn wasi/stream-write from "wasi/stream-write";
@@ -188,71 +134,68 @@ import fn wasi/waitable-set-wait from "wasi/waitable-set-wait";
 import fn wasi/wasi:cli/Stderr::write_via_stream from "wasi/wasi:cli/Stderr::write_via_stream";
 import fn wasi/wasi:cli/Stdout::write_via_stream from "wasi/wasi:cli/Stdout::write_via_stream";
 import memory (1) from "mem/memory";
-import fn wasi/task-return from "wasi/task-return";
 import fn wasi/stream-new from "wasi/stream-new";
-import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 import fn wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code from "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code";
-import fn wasi/stream-drop-readable from "wasi/stream-drop-readable";
+import fn wasi/task-return from "wasi/task-return";
+import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 
 global mut global:affine_for_of_consumes_list.wado::DROPS: i32 = 0;
-global global:core:prelude/traits.wado::$const_obj_27: ref Array<u8> = array.new_fixed<u8>(125);
-global global:core:prelude/traits.wado::$const_obj_28: ref Array<u8> = array.new_fixed<u8>(32, 32);
-global global:core:prelude/traits.wado::$const_obj_29: ref Array<u8> = array.new_fixed<u8>(44);
-global global:core:prelude/traits.wado::$const_obj_30: ref "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 };
-global global:core:prelude/traits.wado::$const_obj_31: ref Array<u8> = array.new_fixed<u8>(58, 32);
-global global:core:prelude/traits.wado::$const_obj_32: ref "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(105, 100), used: 2 };
-global global:core:prelude/traits.wado::$const_obj_34: ref Array<u8> = array.new_fixed<u8>(123);
-global global:core:prelude/traits.wado::$const_obj_35: ref Array<u8> = array.new_fixed<u8>(32);
-global global:core:prelude/traits.wado::$const_obj_36: ref "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(84, 111, 107, 101, 110), used: 5 };
+global global:affine_for_of_consumes_list.wado::$const_obj_0: ref "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(111, 107), used: 2 };
 global global:core:builtin::$unit_case$core:prelude/types.wado//Option<affine_for_of_consumes_list.wado/Token>$0: ref "core:prelude/types.wado//Option<affine_for_of_consumes_list.wado/Token>" = struct.new "core:prelude/types.wado//Option<affine_for_of_consumes_list.wado/Token>" { 0 };
 
 fn "affine_for_of_consumes_list.wado/run"() with Stdout {
-    let $load_11: ref Array<u8>;
+    let $load_14: ref Array<u8>;
+    let tokens: ref null "core:prelude//List<affine_for_of_consumes_list.wado/Token>";
+    let $iter_0: ref null "core:prelude/list.wado//ListCursor<affine_for_of_consumes_list.wado/Token>";
     let t_3: ref null "affine_for_of_consumes_list.wado//Token";
     let $v0: ref null "core:prelude//List<affine_for_of_consumes_list.wado/Token>";
-    let $local_20: ref "core:prelude/string.wado//String";
     let $local_22: ref "core:prelude/string.wado//String";
     let $local_23: ref "core:prelude/format.wado//Formatter";
     let $moved_26: ref null "core:prelude//List<affine_for_of_consumes_list.wado/Token>";
     let $temp_27: ref null "core:prelude/types.wado//Option<affine_for_of_consumes_list.wado/Token>";
     let $moved_28: ref null "affine_for_of_consumes_list.wado//Token";
     let $match_38: ref null "core:prelude/types.wado//Option<affine_for_of_consumes_list.wado/Token>";
-    let $match_39: ref null "core:prelude/types.wado//Option<affine_for_of_consumes_list.wado/Token>";
     let elements_45: ref null "Array<affine_for_of_consumes_list.wado/Token>";
     let used_46: i32;
     let $moved_2_47: ref null "Array<affine_for_of_consumes_list.wado/Token>";
-    let $drop_spill_3_48: ref null "core:prelude//List<affine_for_of_consumes_list.wado/Token>";
-    let $moved_1_50: ref null "core:prelude//List<affine_for_of_consumes_list.wado/Token>";
-    let $drop_spill_2_51: ref null "core:prelude/list.wado//ListCursor<affine_for_of_consumes_list.wado/Token>";
     let $drop_spill_1: i32;
-    let $moved_1_62: ref null "core:prelude//List<affine_for_of_consumes_list.wado/Token>";
-    let offset_79: i32;
     let f_95: ref "core:prelude/format.wado//Formatter";
     let $sroa_s_repr_123: ref Array<u8>;
+    let item_142: ref null "affine_for_of_consumes_list.wado//Token";
+    let $arg_3_144: i32;
+    let $taken_4_145: ref null "affine_for_of_consumes_list.wado//Token";
+    let $moved_5_146: ref null "affine_for_of_consumes_list.wado//Token";
+    let $drop_spill_6_147: ref null "core:prelude/types.wado//Option<affine_for_of_consumes_list.wado/Token>";
+    let $cm_pair_7: i64;
+    let $licm_used_173: i32;
+    let $hfs_at_178: i32;
     used_46 = builtin::array_len(local.tee elements_45(array.new_fixed<ref null "affine_for_of_consumes_list.wado//Token">(struct.new "affine_for_of_consumes_list.wado//Token" { id: 1 }, struct.new "affine_for_of_consumes_list.wado//Token" { id: 2 }, struct.new "affine_for_of_consumes_list.wado//Token" { id: 3 })));
-    $drop_spill_3_48 = struct.new "core:prelude//List<affine_for_of_consumes_list.wado/Token>" { repr: ref.as_non_null($moved_2_47 = elements_45; elements_45 = ref.null none; $moved_2_47), used: used_46 };
-    if ref.is_null(elements_45) == 0 {
-        "affine_for_of_consumes_list.wado/$drop$Array<affine_for_of_consumes_list.wado/Token>"(elements_45);
-    }
+    tokens = struct.new "core:prelude//List<affine_for_of_consumes_list.wado/Token>" { repr: ref.as_non_null($moved_2_47 = elements_45; elements_45 = ref.null none; $moved_2_47), used: used_46 };
     used_46 = 0;
-    $moved_26 = $drop_spill_3_48;
-    $drop_spill_3_48 = ref.null none;
-    $drop_spill_2_51 = struct.new "core:prelude/list.wado//ListCursor<affine_for_of_consumes_list.wado/Token>" { list: $moved_1_50 = $moved_26; $moved_26 = ref.null none; $moved_1_50, at: 0 };
-    if ref.is_null($moved_26) == 0 {
-        "affine_for_of_consumes_list.wado/$drop$core:prelude/list.wado/List<affine_for_of_consumes_list.wado/Token>"($moved_26);
-    }
-    b2: block {
-        l3: loop {
+    $moved_26 = tokens;
+    tokens = ref.null none;
+    $licm_used_173 = local.tee tokens(local.tee $iter_0(struct.new "core:prelude/list.wado//ListCursor<affine_for_of_consumes_list.wado/Token>" { list: tokens = $moved_26; $moved_26 = ref.null none; tokens, at: 0 }).list).used;
+    $moved_2_47 = tokens.repr;
+    $hfs_at_178 = 0;
+    b0: block {
+        l1: loop {
             $temp_27 = global:core:builtin::$unit_case$core:prelude/types.wado//Option<affine_for_of_consumes_list.wado/Token>$0;
-            if ref.test "core:prelude/types.wado//Option<affine_for_of_consumes_list.wado/Token>::Some"(local.tee $match_38(local.tee $temp_27("core:prelude/list.wado/core:prelude/list.wado/ListCursor<affine_for_of_consumes_list.wado/Token>::next"($drop_spill_2_51)))) {
+            if ref.test "core:prelude/types.wado//Option<affine_for_of_consumes_list.wado/Token>::Some"(local.tee $match_38(local.tee $temp_27($inline_core_prelude_list_wado_ListCursor_affine_for_of_consumes_list_wado_Token___next_1: block -> ref null "core:prelude/types.wado//Option<affine_for_of_consumes_list.wado/Token>" {
+                if $hfs_at_178 >= $licm_used_173 {
+                    break $inline_core_prelude_list_wado_ListCursor_affine_for_of_consumes_list_wado_Token___next_1: global:core:builtin::$unit_case$core:prelude/types.wado//Option<affine_for_of_consumes_list.wado/Token>$0;
+                }
+                $arg_3_144 = $hfs_at_178;
+                $taken_4_145 = builtin::array_get_value<ref null "affine_for_of_consumes_list.wado//Token">($moved_2_47, $arg_3_144);
+                builtin::array_set<ref null "affine_for_of_consumes_list.wado//Token">($moved_2_47, $arg_3_144, ref.null none);
+                item_142 = $taken_4_145;
+                $hfs_at_178 = $hfs_at_178 + 1;
+                break $inline_core_prelude_list_wado_ListCursor_affine_for_of_consumes_list_wado_Token___next_1: local.tee $drop_spill_6_147(struct.new "core:prelude/types.wado//Option<affine_for_of_consumes_list.wado/Token>::Some" { discriminant: 1, payload_0: $moved_5_146 = item_142; item_142 = ref.null none; $moved_5_146 });
+            }))) {
                 t_3 = ref.cast "core:prelude/types.wado//Option<affine_for_of_consumes_list.wado/Token>::Some"($match_38).payload_0;
                 $temp_27 = global:core:builtin::$unit_case$core:prelude/types.wado//Option<affine_for_of_consumes_list.wado/Token>$0;
                 used_46 = used_46 + $moved_28 = t_3; t_3 = ref.null none; $drop_spill_1 = $moved_28.id; if ref.is_null($moved_28) == 0 {
                     global:affine_for_of_consumes_list.wado::DROPS = global:affine_for_of_consumes_list.wado::DROPS + 1;
                 }; $drop_spill_1;
-                if ref.is_null(t_3) == 0 {
-                    global:affine_for_of_consumes_list.wado::DROPS = global:affine_for_of_consumes_list.wado::DROPS + 1;
-                }
             } else {
                 if ref.is_null($temp_27) == 0 {
                     let $match_scrut_1: ref null "core:prelude/types.wado//Option<affine_for_of_consumes_list.wado/Token>";
@@ -262,7 +205,7 @@ fn "affine_for_of_consumes_list.wado/run"() with Stdout {
                         global:affine_for_of_consumes_list.wado::DROPS = global:affine_for_of_consumes_list.wado::DROPS + 1;
                     }
                 }
-                break b2;
+                break b0: $iter_0.at = $hfs_at_178;
             }
             if ref.is_null($temp_27) == 0 {
                 let $match_scrut_2: ref null "core:prelude/types.wado//Option<affine_for_of_consumes_list.wado/Token>";
@@ -272,15 +215,13 @@ fn "affine_for_of_consumes_list.wado/run"() with Stdout {
                     global:affine_for_of_consumes_list.wado::DROPS = global:affine_for_of_consumes_list.wado::DROPS + 1;
                 }
             }
-            continue l3;
+            continue l1;
         };
     };
-    if ref.is_null($drop_spill_2_51) == 0 {
-        if ref.is_null(local.tee $moved_26($drop_spill_2_51.list)) == 0 {
-            "affine_for_of_consumes_list.wado/$drop$core:prelude/list.wado/List<affine_for_of_consumes_list.wado/Token>"($moved_26);
-        }
-        $drop_spill_2_51.list = ref.null none;
+    if ref.is_null(tokens) == 0 {
+        "affine_for_of_consumes_list.wado/$drop$core:prelude/list.wado/List<affine_for_of_consumes_list.wado/Token>"(tokens);
     }
+    $iter_0.list = ref.null none;
     if @unlikely(used_46 != 6) {
         cold_path;
         "affine_for_of_consumes_list.wado/run$cold3"(used_46);
@@ -291,139 +232,131 @@ fn "affine_for_of_consumes_list.wado/run"() with Stdout {
         "affine_for_of_consumes_list.wado/run$cold2"();
         unreachable;
     }
-    used_46 = builtin::array_len(local.tee elements_45(array.new_fixed<ref null "affine_for_of_consumes_list.wado//Token">(struct.new "affine_for_of_consumes_list.wado//Token" { id: 4 }, struct.new "affine_for_of_consumes_list.wado//Token" { id: 5 }, struct.new "affine_for_of_consumes_list.wado//Token" { id: 6 })));
-    $moved_26 = struct.new "core:prelude//List<affine_for_of_consumes_list.wado/Token>" { repr: ref.as_non_null($moved_2_47 = elements_45; elements_45 = ref.null none; $moved_2_47), used: used_46 };
-    if ref.is_null(elements_45) == 0 {
-        "affine_for_of_consumes_list.wado/$drop$Array<affine_for_of_consumes_list.wado/Token>"(elements_45);
-    }
-    $moved_1_50 = $moved_26;
-    $moved_26 = ref.null none;
-    $drop_spill_2_51 = struct.new "core:prelude/list.wado//ListCursor<affine_for_of_consumes_list.wado/Token>" { list: $moved_1_62 = $moved_1_50; $moved_1_50 = ref.null none; $moved_1_62, at: 0 };
-    if ref.is_null($moved_1_50) == 0 {
-        "affine_for_of_consumes_list.wado/$drop$core:prelude/list.wado/List<affine_for_of_consumes_list.wado/Token>"($moved_1_50);
-    }
-    b17: block {
-        l18: loop {
-            $match_38 = global:core:builtin::$unit_case$core:prelude/types.wado//Option<affine_for_of_consumes_list.wado/Token>$0;
-            if ref.test "core:prelude/types.wado//Option<affine_for_of_consumes_list.wado/Token>::Some"(local.tee $match_39(local.tee $match_38("core:prelude/list.wado/core:prelude/list.wado/ListCursor<affine_for_of_consumes_list.wado/Token>::next"($drop_spill_2_51)))) {
-                $moved_28 = ref.cast "core:prelude/types.wado//Option<affine_for_of_consumes_list.wado/Token>::Some"($match_39).payload_0;
-                $match_38 = global:core:builtin::$unit_case$core:prelude/types.wado//Option<affine_for_of_consumes_list.wado/Token>$0;
-                if $moved_28.id == 5 {
-                    if ref.is_null($moved_28) == 0 {
+    used_46 = builtin::array_len(local.tee $moved_2_47(array.new_fixed<ref null "affine_for_of_consumes_list.wado//Token">(struct.new "affine_for_of_consumes_list.wado//Token" { id: 4 }, struct.new "affine_for_of_consumes_list.wado//Token" { id: 5 }, struct.new "affine_for_of_consumes_list.wado//Token" { id: 6 })));
+    $moved_26 = local.tee tokens(struct.new "core:prelude//List<affine_for_of_consumes_list.wado/Token>" { repr: ref.as_non_null(elements_45 = $moved_2_47; $moved_2_47 = ref.null none; elements_45), used: used_46 });
+    tokens = ref.null none;
+    used_46 = local.tee tokens(local.tee $iter_0(struct.new "core:prelude/list.wado//ListCursor<affine_for_of_consumes_list.wado/Token>" { list: tokens = $moved_26; $moved_26 = ref.null none; tokens, at: 0 }).list).used;
+    elements_45 = tokens.repr;
+    $drop_spill_1 = 0;
+    b12: block {
+        l13: loop {
+            $temp_27 = global:core:builtin::$unit_case$core:prelude/types.wado//Option<affine_for_of_consumes_list.wado/Token>$0;
+            if ref.test "core:prelude/types.wado//Option<affine_for_of_consumes_list.wado/Token>::Some"(local.tee $match_38(local.tee $temp_27($inline_core_prelude_list_wado_ListCursor_affine_for_of_consumes_list_wado_Token___next_3: block -> ref null "core:prelude/types.wado//Option<affine_for_of_consumes_list.wado/Token>" {
+                if $drop_spill_1 >= used_46 {
+                    break $inline_core_prelude_list_wado_ListCursor_affine_for_of_consumes_list_wado_Token___next_3: global:core:builtin::$unit_case$core:prelude/types.wado//Option<affine_for_of_consumes_list.wado/Token>$0;
+                }
+                $arg_3_144 = $drop_spill_1;
+                $moved_28 = builtin::array_get_value<ref null "affine_for_of_consumes_list.wado//Token">(elements_45, $arg_3_144);
+                builtin::array_set<ref null "affine_for_of_consumes_list.wado//Token">(elements_45, $arg_3_144, ref.null none);
+                t_3 = $moved_28;
+                $drop_spill_1 = $drop_spill_1 + 1;
+                break $inline_core_prelude_list_wado_ListCursor_affine_for_of_consumes_list_wado_Token___next_3: local.tee $match_scrut_2(struct.new "core:prelude/types.wado//Option<affine_for_of_consumes_list.wado/Token>::Some" { discriminant: 1, payload_0: $moved_5_146 = t_3; t_3 = ref.null none; $moved_5_146 });
+            }))) {
+                item_142 = ref.cast "core:prelude/types.wado//Option<affine_for_of_consumes_list.wado/Token>::Some"($match_38).payload_0;
+                $temp_27 = global:core:builtin::$unit_case$core:prelude/types.wado//Option<affine_for_of_consumes_list.wado/Token>$0;
+                if item_142.id == 5 {
+                    if ref.is_null(item_142) == 0 {
                         global:affine_for_of_consumes_list.wado::DROPS = global:affine_for_of_consumes_list.wado::DROPS + 1;
                     }
-                    if ref.is_null($match_38) == 0 {
-                        if local.tee $match_scrut_2($match_38).discriminant == 0 {
-                        } else {
-                            drop(ref.cast "core:prelude/types.wado//Option<affine_for_of_consumes_list.wado/Token>::Some"($match_scrut_2).payload_0);
-                            global:affine_for_of_consumes_list.wado::DROPS = global:affine_for_of_consumes_list.wado::DROPS + 1;
-                        }
-                    }
-                    break b17;
+                    $iter_0.at = $drop_spill_1;
+                    break b12;
                 }
-                if ref.is_null($moved_28) == 0 {
+                if ref.is_null(item_142) == 0 {
                     global:affine_for_of_consumes_list.wado::DROPS = global:affine_for_of_consumes_list.wado::DROPS + 1;
                 }
             } else {
-                if ref.is_null($match_38) == 0 {
-                    if local.tee $match_scrut_1($match_38).discriminant == 0 {
+                if ref.is_null($temp_27) == 0 {
+                    if local.tee $match_scrut_1($temp_27).discriminant == 0 {
                     } else {
                         drop(ref.cast "core:prelude/types.wado//Option<affine_for_of_consumes_list.wado/Token>::Some"($match_scrut_1).payload_0);
                         global:affine_for_of_consumes_list.wado::DROPS = global:affine_for_of_consumes_list.wado::DROPS + 1;
                     }
                 }
-                break b17;
+                break b12: $iter_0.at = $drop_spill_1;
             }
-            if ref.is_null($match_38) == 0 {
-                if local.tee $temp_27($match_38).discriminant == 0 {
+            if ref.is_null($temp_27) == 0 {
+                if local.tee $drop_spill_6_147($temp_27).discriminant == 0 {
                 } else {
-                    drop(ref.cast "core:prelude/types.wado//Option<affine_for_of_consumes_list.wado/Token>::Some"($temp_27).payload_0);
+                    drop(ref.cast "core:prelude/types.wado//Option<affine_for_of_consumes_list.wado/Token>::Some"($drop_spill_6_147).payload_0);
                     global:affine_for_of_consumes_list.wado::DROPS = global:affine_for_of_consumes_list.wado::DROPS + 1;
                 }
             }
-            continue l18;
+            continue l13;
         };
     };
-    if ref.is_null($drop_spill_2_51) == 0 {
-        if ref.is_null(local.tee $moved_1_50($drop_spill_2_51.list)) == 0 {
-            "affine_for_of_consumes_list.wado/$drop$core:prelude/list.wado/List<affine_for_of_consumes_list.wado/Token>"($moved_1_50);
-        }
-        $drop_spill_2_51.list = ref.null none;
+    if ref.is_null(tokens) == 0 {
+        "affine_for_of_consumes_list.wado/$drop$core:prelude/list.wado/List<affine_for_of_consumes_list.wado/Token>"(tokens);
     }
-    if @unlikely(local.tee used_46(global:affine_for_of_consumes_list.wado::DROPS == 6) == 0) {
+    $iter_0.list = ref.null none;
+    if @unlikely(local.tee $drop_spill_1(global:affine_for_of_consumes_list.wado::DROPS == 6) == 0) {
         cold_path;
         "affine_for_of_consumes_list.wado/run$cold1"();
         unreachable;
     }
-    if @unlikely(local.tee used_46("affine_for_of_consumes_list.wado/affine_for_of_consumes_list.wado/count<affine_for_of_consumes_list.wado/Token>"(used_46 = builtin::array_len(local.tee elements_45(array.new_fixed<ref null "affine_for_of_consumes_list.wado//Token">(struct.new "affine_for_of_consumes_list.wado//Token" { id: 7 }, struct.new "affine_for_of_consumes_list.wado//Token" { id: 8 }))); $moved_1_50 = struct.new "core:prelude//List<affine_for_of_consumes_list.wado/Token>" { repr: ref.as_non_null($moved_2_47 = elements_45; elements_45 = ref.null none; $moved_2_47), used: used_46 }; if ref.is_null(elements_45) == 0 {
-        "affine_for_of_consumes_list.wado/$drop$Array<affine_for_of_consumes_list.wado/Token>"(elements_45);
-    }; if ref.is_null($v0) {
-        $v0 = $moved_1_50;
+    if @unlikely(local.tee $drop_spill_1("affine_for_of_consumes_list.wado/affine_for_of_consumes_list.wado/count<affine_for_of_consumes_list.wado/Token>"($drop_spill_1 = builtin::array_len(local.tee elements_45(array.new_fixed<ref null "affine_for_of_consumes_list.wado//Token">(struct.new "affine_for_of_consumes_list.wado//Token" { id: 7 }, struct.new "affine_for_of_consumes_list.wado//Token" { id: 8 }))); tokens = struct.new "core:prelude//List<affine_for_of_consumes_list.wado/Token>" { repr: ref.as_non_null($moved_2_47 = elements_45; elements_45 = ref.null none; $moved_2_47), used: $drop_spill_1 }; if ref.is_null($v0) {
+        $v0 = tokens;
     } else {
         "affine_for_of_consumes_list.wado/$drop$core:prelude/list.wado/List<affine_for_of_consumes_list.wado/Token>"($v0);
-        $v0.repr = $moved_1_50.repr;
-        $v0.used = $moved_1_50.used;
-    }; $moved_1_50 = $v0; $v0 = ref.null none; $moved_1_50)) != 2) {
+        $v0.repr = tokens.repr;
+        $v0.used = tokens.used;
+    }; tokens = $v0; $v0 = ref.null none; tokens)) != 2) {
         cold_path;
-        $drop_spill_1 = "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"(local.tee $local_22(struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(299), used: 0 }), 60);
-        $load_11 = $local_22.repr;
+        $arg_3_144 = "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"(local.tee $local_22(struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(299), used: 0 }), 60);
+        $load_14 = $local_22.repr;
         $sroa_s_repr_123 = array.new_data<u8>("Assertion failed in ");
-        builtin::array_copy<u8>($load_11, $drop_spill_1, $sroa_s_repr_123, 0, 20);
-        offset_79 = $drop_spill_1 + 20;
+        builtin::array_copy<u8>($load_14, $arg_3_144, $sroa_s_repr_123, 0, 20);
+        used_46 = $arg_3_144 + 20;
         $sroa_s_repr_123 = array.new_fixed<u8>(114, 117, 110);
-        builtin::array_copy<u8>($load_11, offset_79, $sroa_s_repr_123, 0, 3);
-        offset_79 = $drop_spill_1 + 23;
+        builtin::array_copy<u8>($load_14, used_46, $sroa_s_repr_123, 0, 3);
+        used_46 = $arg_3_144 + 23;
         $sroa_s_repr_123 = array.new_fixed<u8>(32, 97, 116, 32);
-        builtin::array_copy<u8>($load_11, offset_79, $sroa_s_repr_123, 0, 4);
-        offset_79 = $drop_spill_1 + 27;
+        builtin::array_copy<u8>($load_14, used_46, $sroa_s_repr_123, 0, 4);
+        used_46 = $arg_3_144 + 27;
         $sroa_s_repr_123 = array.new_data<u8>("affine_for_of_consumes_list.wado");
-        builtin::array_copy<u8>($load_11, offset_79, $sroa_s_repr_123, 0, 32);
-        $drop_spill_1 = $drop_spill_1 + 59;
+        builtin::array_copy<u8>($load_14, used_46, $sroa_s_repr_123, 0, 32);
+        $arg_3_144 = $arg_3_144 + 59;
         $sroa_s_repr_123 = array.new_fixed<u8>(58);
-        builtin::array_copy<u8>($load_11, $drop_spill_1, $sroa_s_repr_123, 0, 1);
+        builtin::array_copy<u8>($load_14, $arg_3_144, $sroa_s_repr_123, 0, 1);
         f_95 = local.tee $local_23("core:prelude/format.wado/core:prelude/format.wado/Formatter::new"($local_22));
         "core:prelude/primitive.wado/i32::fmt_decimal$sroa[self.value]"(49, f_95);
-        $drop_spill_1 = "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"($local_22, 131);
+        $arg_3_144 = "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"($local_22, 131);
         $sroa_s_repr_123 = $local_22.repr;
-        $load_11 = array.new_data<u8>("
+        $load_14 = array.new_data<u8>("
 condition: count([ Token { id: 7 }, Token { id: 8 }, ] as List<Token>) == 2
 ");
-        builtin::array_copy<u8>($sroa_s_repr_123, $drop_spill_1, $load_11, 0, 77);
-        $drop_spill_1 = $drop_spill_1 + 77;
-        $load_11 = array.new_data<u8>("[ Token { id: 7 }, Token { id: 8 }, ] as List<Token>: ");
-        builtin::array_copy<u8>($sroa_s_repr_123, $drop_spill_1, $load_11, 0, 54);
-        "core:prelude/string.wado/core:prelude/string.wado/String^core:prelude/string.wado/AsStrSlice::internal_append_to"(local.tee $local_20((if ref.is_null($v0) -> ref "core:prelude/string.wado//String" {
-            struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("<moved>"), used: 7 };
-        } else {
-            f_95 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::new"(local.tee $local_20(struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 }));
-            "core:prelude/list.wado/core:prelude/list.wado/List<affine_for_of_consumes_list.wado/Token>^core:prelude/traits.wado/Inspect::inspect"($v0, f_95);
-            $local_20;
-        })), $local_22);
-        $drop_spill_1 = "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"($local_22, 62);
-        $load_11 = $local_22.repr;
+        builtin::array_copy<u8>($sroa_s_repr_123, $arg_3_144, $load_14, 0, 77);
+        $arg_3_144 = $arg_3_144 + 77;
+        $load_14 = array.new_data<u8>("[ Token { id: 7 }, Token { id: 8 }, ] as List<Token>: ");
+        builtin::array_copy<u8>($sroa_s_repr_123, $arg_3_144, $load_14, 0, 54);
+        "core:prelude/string.wado/core:prelude/string.wado/String^core:prelude/string.wado/AsStrSlice::internal_append_to"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("<moved>"), used: 7 }, $local_22);
+        $arg_3_144 = "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"($local_22, 62);
+        $load_14 = $local_22.repr;
         $sroa_s_repr_123 = array.new_fixed<u8>(10);
-        builtin::array_copy<u8>($load_11, $drop_spill_1, $sroa_s_repr_123, 0, 1);
-        $drop_spill_1 = $drop_spill_1 + 1;
+        builtin::array_copy<u8>($load_14, $arg_3_144, $sroa_s_repr_123, 0, 1);
+        $arg_3_144 = $arg_3_144 + 1;
         $sroa_s_repr_123 = array.new_data<u8>("count([ Token { id: 7 }, Token { id: 8 }, ] as List<Token>): ");
-        builtin::array_copy<u8>($load_11, $drop_spill_1, $sroa_s_repr_123, 0, 61);
+        builtin::array_copy<u8>($load_14, $arg_3_144, $sroa_s_repr_123, 0, 61);
         $local_23 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::new"($local_22);
-        "core:prelude/primitive.wado/i32::fmt_decimal$sroa[self.value]"(used_46, $local_23);
-        "core:prelude/string.wado/core:prelude/string.wado/String^core:prelude/string.wado/AsStrSlice::internal_append_to$spec3"(local.tee $local_20(struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 }), $local_22);
+        "core:prelude/primitive.wado/i32::fmt_decimal$sroa[self.value]"($drop_spill_1, $local_23);
+        "core:prelude/string.wado/core:prelude/string.wado/String^core:prelude/string.wado/AsStrSlice::internal_append_to$spec3"(struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 }, $local_22);
         "core:rt/panic"($local_22.repr, $local_22.used);
         unreachable;
     }
-    if @unlikely(local.tee used_46(global:affine_for_of_consumes_list.wado::DROPS == 8) == 0) {
+    if @unlikely(local.tee $drop_spill_1(global:affine_for_of_consumes_list.wado::DROPS == 8) == 0) {
         cold_path;
         "affine_for_of_consumes_list.wado/run$cold0"();
         unreachable;
     }
-    "core:cli/println"(local.tee $sroa_s_repr_123(array.new_fixed<u8>(111, 107)), 2);
-    if ref.is_null($moved_26) == 0 {
-        "affine_for_of_consumes_list.wado/$drop$core:prelude/list.wado/List<affine_for_of_consumes_list.wado/Token>"($moved_26);
-    }
-    if ref.is_null($drop_spill_3_48) == 0 {
-        "affine_for_of_consumes_list.wado/$drop$core:prelude/list.wado/List<affine_for_of_consumes_list.wado/Token>"($drop_spill_3_48);
-    }
+    $drop_spill_1 = builtin::i32_wrap_i64(local.tee $cm_pair_7("wasi/stream-new"()));
+    $arg_3_144 = builtin::i32_wrap_i64($cm_pair_7 >> 32_i64);
+    used_46 = "affine_for_of_consumes_list.wado/$cm_binding__Stdout_write_via_stream"(used_46 = $drop_spill_1; $drop_spill_1 = 0; used_46);
+    $drop_spill_1 = $arg_3_144;
+    $arg_3_144 = 0;
+    $arg_3_144 = $drop_spill_1;
+    $drop_spill_1 = 0;
+    $local_22 = global:affine_for_of_consumes_list.wado::$const_obj_0;
+    "core:rt/write_string_to_stream$dae[add_newline]"($arg_3_144, $local_22.repr, $local_22.used);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"($arg_3_144 = used_46; used_46 = 0; $arg_3_144);
 }
 
 fn "affine_for_of_consumes_list.wado/$drop$core:prelude/list.wado/List<affine_for_of_consumes_list.wado/Token>"(value) {
@@ -433,20 +366,20 @@ fn "affine_for_of_consumes_list.wado/$drop$core:prelude/list.wado/List<affine_fo
     $slots_1 = value.repr;
     $end_2 = value.used;
     $index_3 = 0;
-    b39: block {
-        l40: loop {
-            break_if b39 $index_3 >= $end_2;
+    b28: block {
+        l29: loop {
+            break_if b28 $index_3 >= $end_2;
             if ref.is_null(builtin::array_get_value<ref null "affine_for_of_consumes_list.wado//Token">($slots_1, $index_3)) == 0 {
                 global:affine_for_of_consumes_list.wado::DROPS = global:affine_for_of_consumes_list.wado::DROPS + 1;
             }
             $index_3 = $index_3 + 1;
-            continue l40;
+            continue l29;
         };
     };
 }
 
 fn "affine_for_of_consumes_list.wado/$cm_binding__Stdout_write_via_stream"(data) with Stdout {
-    return let $cm_handle_2: i32, $cm_handle_2 = data.value, data.value = 0, struct.new "core:prelude//$Resource" { value: "wasi/wasi:cli/Stdout::write_via_stream"($cm_handle_2) };
+    return let $cm_handle_2: i32, $cm_handle_2 = data, data = 0, "wasi/wasi:cli/Stdout::write_via_stream"($cm_handle_2);
 }
 
 fn "affine_for_of_consumes_list.wado/$cm_export__run"() {
@@ -456,31 +389,41 @@ fn "affine_for_of_consumes_list.wado/$cm_export__run"() {
 
 fn "affine_for_of_consumes_list.wado/affine_for_of_consumes_list.wado/count<affine_for_of_consumes_list.wado/Token>"(items) {
     let n: i32;
-    let item: ref null "affine_for_of_consumes_list.wado//Token";
+    let $iter_0: ref null "core:prelude/list.wado//ListCursor<affine_for_of_consumes_list.wado/Token>";
     let $moved_4: ref null "core:prelude//List<affine_for_of_consumes_list.wado/Token>";
     let $temp_5: ref null "core:prelude/types.wado//Option<affine_for_of_consumes_list.wado/Token>";
     let $match_11: ref null "core:prelude/types.wado//Option<affine_for_of_consumes_list.wado/Token>";
-    let $moved_1: ref null "core:prelude//List<affine_for_of_consumes_list.wado/Token>";
-    let $drop_spill_2: ref null "core:prelude/list.wado//ListCursor<affine_for_of_consumes_list.wado/Token>";
+    let item_20: ref null "affine_for_of_consumes_list.wado//Token";
+    let $arg_3: i32;
+    let $taken_4: ref null "affine_for_of_consumes_list.wado//Token";
+    let $moved_5: ref null "affine_for_of_consumes_list.wado//Token";
+    let $licm_used_28: i32;
+    let $licm_repr_29: ref null "Array<affine_for_of_consumes_list.wado/Token>";
+    let $hfs_at_30: i32;
     n = 0;
     $moved_4 = items;
     items = ref.null none;
-    $drop_spill_2 = struct.new "core:prelude/list.wado//ListCursor<affine_for_of_consumes_list.wado/Token>" { list: $moved_1 = $moved_4; $moved_4 = ref.null none; $moved_1, at: 0 };
-    if ref.is_null($moved_4) == 0 {
-        "affine_for_of_consumes_list.wado/$drop$core:prelude/list.wado/List<affine_for_of_consumes_list.wado/Token>"($moved_4);
-    }
-    b43: block {
-        l44: loop {
+    $licm_used_28 = local.tee items(local.tee $iter_0(struct.new "core:prelude/list.wado//ListCursor<affine_for_of_consumes_list.wado/Token>" { list: items = $moved_4; $moved_4 = ref.null none; items, at: 0 }).list).used;
+    $licm_repr_29 = items.repr;
+    $hfs_at_30 = 0;
+    b31: block {
+        l32: loop {
             $temp_5 = global:core:builtin::$unit_case$core:prelude/types.wado//Option<affine_for_of_consumes_list.wado/Token>$0;
-            if ref.test "core:prelude/types.wado//Option<affine_for_of_consumes_list.wado/Token>::Some"(local.tee $match_11(local.tee $temp_5("core:prelude/list.wado/core:prelude/list.wado/ListCursor<affine_for_of_consumes_list.wado/Token>::next"($drop_spill_2)))) {
-                item = ref.cast "core:prelude/types.wado//Option<affine_for_of_consumes_list.wado/Token>::Some"($match_11).payload_0;
+            if ref.test "core:prelude/types.wado//Option<affine_for_of_consumes_list.wado/Token>::Some"(local.tee $match_11(local.tee $temp_5($inline_core_prelude_list_wado_ListCursor_affine_for_of_consumes_list_wado_Token___next_0: block -> ref null "core:prelude/types.wado//Option<affine_for_of_consumes_list.wado/Token>" {
+                if $hfs_at_30 >= $licm_used_28 {
+                    break $inline_core_prelude_list_wado_ListCursor_affine_for_of_consumes_list_wado_Token___next_0: global:core:builtin::$unit_case$core:prelude/types.wado//Option<affine_for_of_consumes_list.wado/Token>$0;
+                }
+                $arg_3 = $hfs_at_30;
+                $taken_4 = builtin::array_get_value<ref null "affine_for_of_consumes_list.wado//Token">($licm_repr_29, $arg_3);
+                builtin::array_set<ref null "affine_for_of_consumes_list.wado//Token">($licm_repr_29, $arg_3, ref.null none);
+                item_20 = $taken_4;
+                $hfs_at_30 = $hfs_at_30 + 1;
+                break $inline_core_prelude_list_wado_ListCursor_affine_for_of_consumes_list_wado_Token___next_0: struct.new "core:prelude/types.wado//Option<affine_for_of_consumes_list.wado/Token>::Some" { discriminant: 1, payload_0: $moved_5 = item_20; item_20 = ref.null none; $moved_5 };
+            }))) {
+                drop(ref.cast "core:prelude/types.wado//Option<affine_for_of_consumes_list.wado/Token>::Some"($match_11).payload_0);
                 $temp_5 = global:core:builtin::$unit_case$core:prelude/types.wado//Option<affine_for_of_consumes_list.wado/Token>$0;
-                item = ref.null none;
                 global:affine_for_of_consumes_list.wado::DROPS = global:affine_for_of_consumes_list.wado::DROPS + 1;
                 n = n + 1;
-                if ref.is_null(item) == 0 {
-                    global:affine_for_of_consumes_list.wado::DROPS = global:affine_for_of_consumes_list.wado::DROPS + 1;
-                }
             } else {
                 if ref.is_null($temp_5) == 0 {
                     let $match_scrut_1: ref null "core:prelude/types.wado//Option<affine_for_of_consumes_list.wado/Token>";
@@ -490,7 +433,7 @@ fn "affine_for_of_consumes_list.wado/affine_for_of_consumes_list.wado/count<affi
                         global:affine_for_of_consumes_list.wado::DROPS = global:affine_for_of_consumes_list.wado::DROPS + 1;
                     }
                 }
-                break b43;
+                break b31: $iter_0.at = $hfs_at_30;
             }
             if ref.is_null($temp_5) == 0 {
                 let $match_scrut_2: ref null "core:prelude/types.wado//Option<affine_for_of_consumes_list.wado/Token>";
@@ -500,36 +443,14 @@ fn "affine_for_of_consumes_list.wado/affine_for_of_consumes_list.wado/count<affi
                     global:affine_for_of_consumes_list.wado::DROPS = global:affine_for_of_consumes_list.wado::DROPS + 1;
                 }
             }
-            continue l44;
+            continue l32;
         };
     };
-    if ref.is_null($drop_spill_2) == 0 {
-        if ref.is_null(local.tee $moved_4($drop_spill_2.list)) == 0 {
-            "affine_for_of_consumes_list.wado/$drop$core:prelude/list.wado/List<affine_for_of_consumes_list.wado/Token>"($moved_4);
-        }
-        $drop_spill_2.list = ref.null none;
-    }
     if ref.is_null(items) == 0 {
         "affine_for_of_consumes_list.wado/$drop$core:prelude/list.wado/List<affine_for_of_consumes_list.wado/Token>"(items);
     }
+    $iter_0.list = ref.null none;
     return n;
-}
-
-fn "affine_for_of_consumes_list.wado/$drop$Array<affine_for_of_consumes_list.wado/Token>"(value) {
-    let $end_1: i32;
-    let $index_2: i32;
-    $end_1 = builtin::array_len(value);
-    $index_2 = 0;
-    b54: block {
-        l55: loop {
-            break_if b54 $index_2 >= $end_1;
-            if ref.is_null(builtin::array_get_value<ref null "affine_for_of_consumes_list.wado//Token">(value, $index_2)) == 0 {
-                global:affine_for_of_consumes_list.wado::DROPS = global:affine_for_of_consumes_list.wado::DROPS + 1;
-            }
-            $index_2 = $index_2 + 1;
-            continue l55;
-        };
-    };
 }
 
 fn "affine_for_of_consumes_list.wado/run$cold0"() with Stdout {
@@ -700,49 +621,21 @@ condition: sum == 6
     unreachable;
 }
 
-fn "core:cli/println"($mv$message$repr, $mv$message$used) with Stdout {
-    let $moved_4: ref null "core:prelude//$Resource";
-    let $moved_5: ref null "core:prelude//$Resource";
-    let $cm_pair_7: i64;
-    let $moved_3: ref null "core:prelude//$Resource";
-    let $sroa_$pattern_temp_0_0_13: ref null "core:prelude//$Resource";
-    let $sroa_$pattern_temp_0_1_14: ref null "core:prelude//$Resource";
-    $sroa_$pattern_temp_0_0_13 = struct.new "core:prelude//$Resource" { value: builtin::i32_wrap_i64(local.tee $cm_pair_7("wasi/stream-new"())) };
-    $sroa_$pattern_temp_0_1_14 = struct.new "core:prelude//$Resource" { value: builtin::i32_wrap_i64($cm_pair_7 >> 32_i64) };
-    $moved_4 = "affine_for_of_consumes_list.wado/$cm_binding__Stdout_write_via_stream"($moved_4 = $sroa_$pattern_temp_0_0_13; $sroa_$pattern_temp_0_0_13 = ref.null none; $moved_4);
-    $moved_5 = $sroa_$pattern_temp_0_1_14;
-    $sroa_$pattern_temp_0_1_14 = ref.null none;
-    "core:rt/write_string_to_stream$dae[add_newline]"($moved_3 = $moved_5; $moved_5 = ref.null none; $moved_3, $mv$message$repr, $mv$message$used);
-    if ref.is_null($moved_5) == 0 {
-        "wasi/stream-drop-writable"($moved_5.value);
-    }
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"($moved_5 = $moved_4; $moved_4 = ref.null none; $moved_5.value);
-    if ref.is_null($moved_4) == 0 {
-        "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"($moved_4.value);
-    }
-    if ref.is_null($sroa_$pattern_temp_0_1_14) == 0 {
-        "wasi/stream-drop-writable"($sroa_$pattern_temp_0_1_14.value);
-    }
-    if ref.is_null($sroa_$pattern_temp_0_0_13) == 0 {
-        "wasi/stream-drop-readable"($sroa_$pattern_temp_0_0_13.value);
-    }
-}
-
 fn "core:prelude/primitive.wado/write_decimal_digits"(arr, offset, val, digit_count) {
     let q: u64;
     let pair: i32;
     let tens: i32;
     digit_count = offset + digit_count;
-    b61: block {
-        l62: loop {
-            break_if b61 (digit_count - offset) < 2;
+    b40: block {
+        l41: loop {
+            break_if b40 (digit_count - offset) < 2;
             q = val /u 100_i64;
             tens = local.tee pair(builtin::i32_wrap_i64(val - (q * 100_i64))) / 10;
             builtin::array_set_u8(arr, digit_count - 1, ((48 + pair) - (tens * 10)) & 255);
             builtin::array_set_u8(arr, digit_count - 2, (48 + tens) & 255);
             digit_count = digit_count - 2;
             val = q;
-            continue l62;
+            continue l41;
         };
     };
     if digit_count > offset {
@@ -813,41 +706,27 @@ fn "core:prelude/primitive.wado/count_digits_u64"(val) {
 
 fn "core:rt/write_string_to_stream$dae[add_newline]"(tx, $mv$message$repr, $mv$message$used) {
     let new_repr: ref Array<u8>;
-    let $moved_5: ref null "core:prelude//$Resource";
     builtin::array_copy<u8>(local.tee new_repr(builtin::array_new<u8>($mv$message$used + 1)), 0, $mv$message$repr, 0, $mv$message$used);
     builtin::array_set_u8(new_repr, $mv$message$used, 10);
     drop(block -> "core:prelude/types.wado//enum:CopyResult" {
         let $arg_spill_1: i32;
-        $arg_spill_1 = tx.value;
+        $arg_spill_1 = tx;
         $mv$message$used = $mv$message$used + 1;
         "core:rt/cm_stream_write_raw_all_u8"($arg_spill_1, new_repr, 0, $mv$message$used);
     });
-    "wasi/stream-drop-writable"($moved_5 = tx; tx = ref.null none; $moved_5.value);
-    if ref.is_null(tx) == 0 {
-        "wasi/stream-drop-writable"(tx.value);
-    }
+    "wasi/stream-drop-writable"($mv$message$used = tx; tx = 0; $mv$message$used);
 }
 
 fn "core:rt/log_stderr"($mv$message$repr, $mv$message$used) {
-    let $moved_4: ref null "core:prelude//$Resource";
-    let $moved_5: ref null "core:prelude//$Resource";
+    let $moved_4: i32;
     let $cm_pair_7: i64;
-    let $sroa_$pattern_temp_0_0_9: ref null "core:prelude//$Resource";
-    let $sroa_$pattern_temp_0_1_10: ref null "core:prelude//$Resource";
-    $sroa_$pattern_temp_0_0_9 = struct.new "core:prelude//$Resource" { value: builtin::i32_wrap_i64(local.tee $cm_pair_7("wasi/stream-new"())) };
-    $sroa_$pattern_temp_0_1_10 = struct.new "core:prelude//$Resource" { value: builtin::i32_wrap_i64($cm_pair_7 >> 32_i64) };
-    $moved_4 = struct.new "core:prelude//$Resource" { value: "wasi/wasi:cli/Stderr::write_via_stream"($moved_4 = $sroa_$pattern_temp_0_0_9; $sroa_$pattern_temp_0_0_9 = ref.null none; $moved_4.value) };
-    "core:rt/write_string_to_stream$dae[add_newline]"($moved_5 = $sroa_$pattern_temp_0_1_10; $sroa_$pattern_temp_0_1_10 = ref.null none; $moved_5, $mv$message$repr, $mv$message$used);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"($moved_5 = $moved_4; $moved_4 = ref.null none; $moved_5.value);
-    if ref.is_null($moved_4) == 0 {
-        "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"($moved_4.value);
-    }
-    if ref.is_null($sroa_$pattern_temp_0_1_10) == 0 {
-        "wasi/stream-drop-writable"($sroa_$pattern_temp_0_1_10.value);
-    }
-    if ref.is_null($sroa_$pattern_temp_0_0_9) == 0 {
-        "wasi/stream-drop-readable"($sroa_$pattern_temp_0_0_9.value);
-    }
+    let $sroa_$pattern_temp_0_0_9: i32;
+    let $sroa_$pattern_temp_0_1_10: i32;
+    $sroa_$pattern_temp_0_0_9 = builtin::i32_wrap_i64(local.tee $cm_pair_7("wasi/stream-new"()));
+    $sroa_$pattern_temp_0_1_10 = builtin::i32_wrap_i64($cm_pair_7 >> 32_i64);
+    $moved_4 = "wasi/wasi:cli/Stderr::write_via_stream"($moved_4 = $sroa_$pattern_temp_0_0_9; $sroa_$pattern_temp_0_0_9 = 0; $moved_4);
+    "core:rt/write_string_to_stream$dae[add_newline]"($sroa_$pattern_temp_0_0_9 = $sroa_$pattern_temp_0_1_10; $sroa_$pattern_temp_0_1_10 = 0; $sroa_$pattern_temp_0_0_9, $mv$message$repr, $mv$message$used);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"($mv$message$used = $moved_4; $moved_4 = 0; $mv$message$used);
 }
 
 fn "core:rt/panic"($mv$message$repr, $mv$message$used) {
@@ -874,17 +753,17 @@ fn "core:rt/cm_stream_write_raw_all_u8"(handle, $mv$data$repr, $mv$data$start, $
     if local.tee $mv$data$end($mv$data$end - $mv$data$start) == 0 {
         return 0;
     }
-    ptr_15 = builtin::i32_wrap_i64(ptr_15 = "mem/realloc"(0, 0, 1, $mv$data$end); i = 0; b89: block {
-        l90: loop {
-            break_if b89 i >= $mv$data$end;
+    ptr_15 = builtin::i32_wrap_i64(ptr_15 = "mem/realloc"(0, 0, 1, $mv$data$end); i = 0; b64: block {
+        l65: loop {
+            break_if b64 i >= $mv$data$end;
             builtin::store_u8(ptr_15 + i, builtin::array_get_value_u8($mv$data$repr, $mv$data$start + i));
             i = i + 1;
-            continue l90;
+            continue l65;
         };
     }; builtin::i64_extend_i32_u(ptr_15) | (builtin::i64_extend_i32_s($mv$data$end) << 32_i64));
     i = 0;
     block {
-        l92: loop {
+        l67: loop {
             delivered_6 = local.tee written($inline_cm_stream_write_once_4: block -> i32 {
                 $mv$data$start = ptr_15 + i;
                 count_18 = $mv$data$end - i;
@@ -915,256 +794,13 @@ fn "core:rt/cm_stream_write_raw_all_u8"(handle, $mv$data$repr, $mv$data$start, $
                 drop("mem/realloc"(ptr_15, $mv$data$end, 1, 0));
                 return $match_scrut_0;
             }
-            continue l92;
+            continue l67;
         };
     };
-}
-
-fn "core:prelude/array.wado/core/prelude/array.wado/write_seq_inspect<affine_for_of_consumes_list.wado/Token>$dae[start,marker]"(repr, end, f, limit) {
-    let shown: i32;
-    let truncated: bool;
-    let i: i32;
-    let self_7: ref "core:prelude/string.wado//String";
-    let other_12: ref "core:prelude/string.wado//String";
-    let $licm_arith_25: bool;
-    if f.alternate {
-        "core:prelude/array.wado/core/prelude/array.wado/write_seq_inspect_alt<affine_for_of_consumes_list.wado/Token>$dae[start,marker]"(repr, end, f, limit);
-        return;
-    }
-    "core:prelude/string.wado/core:prelude/string.wado/String::push_ascii_byte"(local.tee self_7(f.buf), 91);
-    shown = 0;
-    truncated = 0;
-    i = 0;
-    $licm_arith_25 = limit >= 0;
-    b98: block {
-        l99: loop {
-            break_if b98 i >= end;
-            if select i32($licm_arith_25, shown >= limit, 0) {
-                truncated = 1;
-                break b98;
-            }
-            if shown > 0 {
-                self_7 = f.buf;
-                "core:prelude/string.wado/core:prelude/string.wado/String^core:prelude/string.wado/AsStrSlice::internal_append_to$spec0"(local.tee other_12(struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(44, 32), used: 2 }), self_7);
-            }
-            "core:prelude/traits.wado/affine_for_of_consumes_list.wado/Token^core:prelude/traits.wado/Inspect::inspect$sroa[self.id]"(builtin::array_get_value<ref null "affine_for_of_consumes_list.wado//Token">(repr, i).id, f);
-            shown = shown + 1;
-            i = i + 1;
-            continue l99;
-        };
-    };
-    if truncated {
-        if shown > 0 {
-            other_12 = f.buf;
-            "core:prelude/string.wado/core:prelude/string.wado/String^core:prelude/string.wado/AsStrSlice::internal_append_to$spec1"(local.tee self_7(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>(", ..."), used: 5 }), other_12);
-        } else {
-            other_12 = f.buf;
-            "core:prelude/string.wado/core:prelude/string.wado/String^core:prelude/string.wado/AsStrSlice::internal_append_to$spec2"(local.tee self_7(struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(46, 46, 46), used: 3 }), other_12);
-        }
-    }
-    "core:prelude/string.wado/core:prelude/string.wado/String::push_ascii_byte"(local.tee other_12(f.buf), 93);
-}
-
-fn "core:prelude/array.wado/core/prelude/array.wado/write_seq_inspect_alt<affine_for_of_consumes_list.wado/Token>$dae[start,marker]"(repr, end, f, limit) {
-    let shown: i32;
-    let truncated: bool;
-    let i: i32;
-    let self_7: ref "core:prelude/string.wado//String";
-    let $licm_arith_19: bool;
-    if 0 >= end {
-        self_7 = f.buf;
-        "core:prelude/string.wado/core:prelude/string.wado/String^core:prelude/string.wado/AsStrSlice::internal_append_to$spec0"(struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(91, 93), used: 2 }, self_7);
-        return;
-    }
-    "core:prelude/format.wado/core:prelude/format.wado/Formatter::open_brace<core:prelude/string.wado/String>"(f, struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(91), used: 1 });
-    shown = 0;
-    truncated = 0;
-    i = 0;
-    $licm_arith_19 = limit >= 0;
-    b105: block {
-        l106: loop {
-            break_if b105 i >= end;
-            if select i32($licm_arith_19, shown >= limit, 0) {
-                truncated = 1;
-                break b105;
-            }
-            "core:prelude/format.wado/core:prelude/format.wado/Formatter::write_newline_indent"(f);
-            "core:prelude/traits.wado/affine_for_of_consumes_list.wado/Token^core:prelude/traits.wado/Inspect::inspect$sroa[self.id]"(builtin::array_get_value<ref null "affine_for_of_consumes_list.wado//Token">(repr, i).id, f);
-            "core:prelude/string.wado/core:prelude/string.wado/String::push_ascii_byte"(local.tee self_7(f.buf), 44);
-            shown = shown + 1;
-            i = i + 1;
-            continue l106;
-        };
-    };
-    if truncated {
-        "core:prelude/format.wado/core:prelude/format.wado/Formatter::write_newline_indent"(f);
-        self_7 = f.buf;
-        "core:prelude/string.wado/core:prelude/string.wado/String^core:prelude/string.wado/AsStrSlice::internal_append_to$spec2"(struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(46, 46, 46), used: 3 }, self_7);
-    }
-    "core:prelude/format.wado/core:prelude/format.wado/Formatter::close_brace<core:prelude/string.wado/String>"(f, struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(93), used: 1 });
-}
-
-fn "core:prelude/traits.wado/core/prelude/traits.wado/write_struct_head<affine_for_of_consumes_list.wado/Token>$sroa[f.buf]"(f) {
-    let new_used: i32;
-    let start_20: i32;
-    let $sroa_other_repr_22: ref Array<u8>;
-    "core:prelude/string.wado/&core:prelude/string.wado/String^core:prelude/string.wado/AsStrSlice::internal_append_to"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Token"), used: 5 }, f);
-    $sroa_other_repr_22 = array.new_fixed<u8>(32);
-    if @unlikely(local.tee new_used(f.used + 1) > builtin::array_len(f.repr)) {
-        cold_path;
-        "core:prelude/string.wado/core:prelude/string.wado/String::grow"(f, new_used);
-    }
-    start_20 = f.used;
-    f.used = new_used;
-    builtin::array_copy<u8>(f.repr, start_20, $sroa_other_repr_22, 0, 1);
-}
-
-fn "core:prelude/traits.wado/core/prelude/traits.wado/inspect_struct_alternate<affine_for_of_consumes_list.wado/Token,[i32]>$sroa[v.id]"(v, f) {
-    let f_40: ref "core:prelude/string.wado//String";
-    let new_used_59: i32;
-    let start_60: i32;
-    let new_used_108: i32;
-    let start_109: i32;
-    let x: i64;
-    f_40 = f.buf;
-    "core:prelude/string.wado/&core:prelude/string.wado/String^core:prelude/string.wado/AsStrSlice::internal_append_to"(global:core:prelude/traits.wado::$const_obj_36, f_40);
-    if @unlikely(local.tee new_used_59(f_40.used + 1) > builtin::array_len(f_40.repr)) {
-        cold_path;
-        "core:prelude/string.wado/core:prelude/string.wado/String::grow"(f_40, new_used_59);
-    }
-    start_60 = f_40.used;
-    f_40.used = new_used_59;
-    builtin::array_copy<u8>(f_40.repr, start_60, global:core:prelude/traits.wado::$const_obj_35, 0, 1);
-    if @unlikely(local.tee start_60(local.tee f_40(f.buf).used + 1) > builtin::array_len(f_40.repr)) {
-        cold_path;
-        "core:prelude/string.wado/core:prelude/string.wado/String::grow"(f_40, start_60);
-    }
-    new_used_59 = f_40.used;
-    f_40.used = start_60;
-    builtin::array_copy<u8>(f_40.repr, new_used_59, global:core:prelude/traits.wado::$const_obj_34, 0, 1);
-    f.indent = f.indent + 1;
-    if @unlikely(local.tee new_used_59(local.tee f_40(f.buf).used + 1) > builtin::array_len(f_40.repr)) {
-        cold_path;
-        "core:prelude/string.wado/core:prelude/string.wado/String::grow"(f_40, new_used_59);
-    }
-    start_60 = f_40.used;
-    f_40.used = new_used_59;
-    builtin::array_set_u8(f_40.repr, start_60, 10);
-    start_60 = 0;
-    new_used_59 = f.indent;
-    f_40 = f.buf;
-    b113: block {
-        l114: loop {
-            break_if b113 start_60 >= new_used_59;
-            if @unlikely(local.tee new_used_108(f_40.used + 2) > builtin::array_len(f_40.repr)) {
-                cold_path;
-                "core:prelude/string.wado/core:prelude/string.wado/String::grow"(f_40, new_used_108);
-            }
-            start_109 = f_40.used;
-            f_40.used = new_used_108;
-            builtin::array_copy<u8>(f_40.repr, start_109, global:core:prelude/traits.wado::$const_obj_28, 0, 2);
-            start_60 = start_60 + 1;
-            continue l114;
-        };
-    };
-    f_40 = f.buf;
-    "core:prelude/string.wado/&core:prelude/string.wado/String^core:prelude/string.wado/AsStrSlice::internal_append_to"(global:core:prelude/traits.wado::$const_obj_32, f_40);
-    if @unlikely(local.tee start_60(local.tee f_40(f.buf).used + 2) > builtin::array_len(f_40.repr)) {
-        cold_path;
-        "core:prelude/string.wado/core:prelude/string.wado/String::grow"(f_40, start_60);
-    }
-    new_used_59 = f_40.used;
-    f_40.used = start_60;
-    builtin::array_copy<u8>(f_40.repr, new_used_59, global:core:prelude/traits.wado::$const_obj_31, 0, 2);
-    new_used_59 = v < 0;
-    v = "core:prelude/primitive.wado/count_digits_u64"(local.tee x(x = builtin::i64_extend_i32_s(v); select i64(x < 0_i64, 0_i64 - x, x)));
-    new_used_59 = block -> i32 {
-        f_40 = global:core:prelude/traits.wado::$const_obj_30;
-        "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>"(f, new_used_59, f_40.repr, f_40.used, v);
-    };
-    "core:prelude/primitive.wado/write_decimal_digits"(local.tee f_40(f.buf).repr, new_used_59, x, v);
-    if @unlikely(local.tee v(local.tee f_40(f.buf).used + 1) > builtin::array_len(f_40.repr)) {
-        cold_path;
-        "core:prelude/string.wado/core:prelude/string.wado/String::grow"(f_40, v);
-    }
-    new_used_59 = f_40.used;
-    f_40.used = v;
-    builtin::array_copy<u8>(f_40.repr, new_used_59, global:core:prelude/traits.wado::$const_obj_29, 0, 1);
-    f.indent = f.indent - 1;
-    if @unlikely(local.tee new_used_59(local.tee f_40(f.buf).used + 1) > builtin::array_len(f_40.repr)) {
-        cold_path;
-        "core:prelude/string.wado/core:prelude/string.wado/String::grow"(f_40, new_used_59);
-    }
-    v = f_40.used;
-    f_40.used = new_used_59;
-    builtin::array_set_u8(f_40.repr, v, 10);
-    v = 0;
-    new_used_59 = f.indent;
-    f_40 = f.buf;
-    b120: block {
-        l121: loop {
-            break_if b120 v >= new_used_59;
-            if @unlikely(local.tee start_60(f_40.used + 2) > builtin::array_len(f_40.repr)) {
-                cold_path;
-                "core:prelude/string.wado/core:prelude/string.wado/String::grow"(f_40, start_60);
-            }
-            start_109 = f_40.used;
-            f_40.used = start_60;
-            builtin::array_copy<u8>(f_40.repr, start_109, global:core:prelude/traits.wado::$const_obj_28, 0, 2);
-            v = v + 1;
-            continue l121;
-        };
-    };
-    if @unlikely(local.tee new_used_59(local.tee f_40(f.buf).used + 1) > builtin::array_len(f_40.repr)) {
-        cold_path;
-        "core:prelude/string.wado/core:prelude/string.wado/String::grow"(f_40, new_used_59);
-    }
-    v = f_40.used;
-    f_40.used = new_used_59;
-    builtin::array_copy<u8>(f_40.repr, v, global:core:prelude/traits.wado::$const_obj_27, 0, 1);
-    return;
-}
-
-fn "affine_for_of_consumes_list.wado/affine_for_of_consumes_list.wado/Token^core:prelude/traits.wado/ReflectStruct::members"() {
-    return struct.new "tuple//[core:prelude/traits.wado/StructField<affine_for_of_consumes_list.wado/Token,i32>]" { 0: struct.new "core:prelude/traits.wado//StructField<affine_for_of_consumes_list.wado/Token,i32>" { index: 0, field_name: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(105, 100), used: 2 }, wire_override: ref.null none, has_default: 0, is_secret: 0 } };
 }
 
 fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::new"(buf) {
     return struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: buf };
-}
-
-fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::write_newline_indent"(self) {
-    let self_1: ref "core:prelude/string.wado//String";
-    let new_used_8: i32;
-    let start_9: i32;
-    let new_used_40: i32;
-    let start_41: i32;
-    let $sroa_other_repr_43: ref Array<u8>;
-    if @unlikely(local.tee new_used_8(local.tee self_1(self.buf).used + 1) > builtin::array_len(self_1.repr)) {
-        cold_path;
-        "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self_1, new_used_8);
-    }
-    start_9 = self_1.used;
-    self_1.used = new_used_8;
-    builtin::array_set_u8(self_1.repr, start_9, 10);
-    start_9 = 0;
-    new_used_8 = self.indent;
-    self_1 = self.buf;
-    b125: block {
-        l126: loop {
-            break_if b125 start_9 >= new_used_8;
-            $sroa_other_repr_43 = array.new_fixed<u8>(32, 32);
-            if @unlikely(local.tee new_used_40(self_1.used + 2) > builtin::array_len(self_1.repr)) {
-                cold_path;
-                "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self_1, new_used_40);
-            }
-            start_41 = self_1.used;
-            self_1.used = new_used_40;
-            builtin::array_copy<u8>(self_1.repr, start_41, $sroa_other_repr_43, 0, 2);
-            start_9 = start_9 + 1;
-            continue l126;
-        };
-    };
 }
 
 fn "core:prelude/string.wado/core:prelude/string.wado/String::realloc_to"(self, new_capacity) {
@@ -1238,18 +874,6 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::push"(self, c) {
     };
 }
 
-fn "core:prelude/string.wado/core:prelude/string.wado/String::push_ascii_byte"(self, byte) {
-    let new_used: i32;
-    let start_6: i32;
-    if @unlikely(local.tee new_used(self.used + 1) > builtin::array_len(self.repr)) {
-        cold_path;
-        "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self, new_used);
-    }
-    start_6 = self.used;
-    self.used = new_used;
-    builtin::array_set_u8(self.repr, start_6, byte);
-}
-
 fn "core:prelude/string.wado/core:prelude/string.wado/String^core:prelude/string.wado/AsStrSlice::internal_append_to"(self, out) {
     let n_4: i32;
     let new_used: i32;
@@ -1264,50 +888,6 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String^core:prelude/string
         out.used = new_used;
         builtin::array_copy<u8>(out.repr, start_9, self.repr, 0, n_4);
     };
-}
-
-fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::close_brace<core:prelude/string.wado/String>"(self, close) {
-    let self_7: ref "core:prelude/string.wado//String";
-    let new_used_14: i32;
-    let start_15: i32;
-    let new_used_46: i32;
-    let start_47: i32;
-    let $sroa_other_repr_49: ref Array<u8>;
-    self.indent = self.indent - 1;
-    if @unlikely(local.tee new_used_14(local.tee self_7(self.buf).used + 1) > builtin::array_len(self_7.repr)) {
-        cold_path;
-        "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self_7, new_used_14);
-    }
-    start_15 = self_7.used;
-    self_7.used = new_used_14;
-    builtin::array_set_u8(self_7.repr, start_15, 10);
-    start_15 = 0;
-    new_used_14 = self.indent;
-    self_7 = self.buf;
-    b139: block {
-        l140: loop {
-            break_if b139 start_15 >= new_used_14;
-            $sroa_other_repr_49 = array.new_fixed<u8>(32, 32);
-            if @unlikely(local.tee new_used_46(self_7.used + 2) > builtin::array_len(self_7.repr)) {
-                cold_path;
-                "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self_7, new_used_46);
-            }
-            start_47 = self_7.used;
-            self_7.used = new_used_46;
-            builtin::array_copy<u8>(self_7.repr, start_47, $sroa_other_repr_49, 0, 2);
-            start_15 = start_15 + 1;
-            continue l140;
-        };
-    };
-    self_7 = self.buf;
-    "core:prelude/string.wado/core:prelude/string.wado/String^core:prelude/string.wado/AsStrSlice::internal_append_to"(close, self_7);
-}
-
-fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::open_brace<core:prelude/string.wado/String>"(self, open) {
-    let self_2: ref "core:prelude/string.wado//String";
-    self_2 = self.buf;
-    "core:prelude/string.wado/core:prelude/string.wado/String^core:prelude/string.wado/AsStrSlice::internal_append_to"(open, self_2);
-    self.indent = self.indent + 1;
 }
 
 fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>"(self, is_negative, $mv$alt_prefix$repr, $mv$alt_prefix$used, digit_count) {
@@ -1395,9 +975,9 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_wri
         }
         self_21 = self.buf;
         new_used_26 = 0;
-        b157: block {
-            l158: loop {
-                break_if b157 new_used_26 >= sign_len;
+        b96: block {
+            l97: loop {
+                break_if b96 new_used_26 >= sign_len;
                 if @unlikely(local.tee $load_2(self_21.used + 1) > builtin::array_len(self_21.repr)) {
                     cold_path;
                     "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self_21, $load_2);
@@ -1406,7 +986,7 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_wri
                 self_21.used = $load_2;
                 builtin::array_set_u8(self_21.repr, start_27, 48);
                 new_used_26 = new_used_26 + 1;
-                continue l158;
+                continue l97;
             };
         };
         if @unlikely(local.tee new_used_26(local.tee self_21(self.buf).used + digit_count) > builtin::array_len(self_21.repr)) {
@@ -1457,12 +1037,12 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_wri
         self_21 = self.buf;
         $load_0 = self.fill;
         new_used_26 = 0;
-        b169: block {
-            l170: loop {
-                break_if b169 new_used_26 >= sign_len;
+        b108: block {
+            l109: loop {
+                break_if b108 new_used_26 >= sign_len;
                 "core:prelude/string.wado/core:prelude/string.wado/String::push"(self_21, $load_0);
                 new_used_26 = new_used_26 + 1;
-                continue l170;
+                continue l109;
             };
         };
         return $load_2;
@@ -1472,12 +1052,12 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_wri
         self_21 = self.buf;
         new_used_26 = self.fill;
         $load_0 = 0;
-        b172: block {
-            l173: loop {
-                break_if b172 $load_0 >= start_27;
+        b111: block {
+            l112: loop {
+                break_if b111 $load_0 >= start_27;
                 "core:prelude/string.wado/core:prelude/string.wado/String::push"(self_21, new_used_26);
                 $load_0 = $load_0 + 1;
-                continue l173;
+                continue l112;
             };
         };
         if is_negative {
@@ -1519,12 +1099,12 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_wri
         self_21 = self.buf;
         new_used_26 = self.fill;
         $load_0 = 0;
-        b181: block {
-            l182: loop {
-                break_if b181 $load_0 >= $load_2;
+        b120: block {
+            l121: loop {
+                break_if b120 $load_0 >= $load_2;
                 "core:prelude/string.wado/core:prelude/string.wado/String::push"(self_21, new_used_26);
                 $load_0 = $load_0 + 1;
-                continue l182;
+                continue l121;
             };
         };
         return start_27;
@@ -1532,12 +1112,12 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_wri
         self_21 = self.buf;
         start_27 = self.fill;
         new_used_26 = 0;
-        b183: block {
-            l184: loop {
-                break_if b183 new_used_26 >= sign_len;
+        b122: block {
+            l123: loop {
+                break_if b122 new_used_26 >= sign_len;
                 "core:prelude/string.wado/core:prelude/string.wado/String::push"(self_21, start_27);
                 new_used_26 = new_used_26 + 1;
-                continue l184;
+                continue l123;
             };
         };
         if is_negative {
@@ -1580,52 +1160,6 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_wri
     }
 }
 
-fn "core:prelude/list.wado/core:prelude/list.wado/List<affine_for_of_consumes_list.wado/Token>^core:prelude/traits.wado/Inspect::inspect"(self, f) {
-    let self_2: i32;
-    "core:prelude/array.wado/core/prelude/array.wado/write_seq_inspect<affine_for_of_consumes_list.wado/Token>$dae[start,marker]"(self.repr, self.used, f, $inline_core_prelude_format_wado_Formatter__resolved_seq_limit_sroa_self_precision__0: block -> i32 {
-        if local.tee self_2(f.precision) == -2 {
-            break $inline_core_prelude_format_wado_Formatter__resolved_seq_limit_sroa_self_precision__0: 256;
-        }
-        break $inline_core_prelude_format_wado_Formatter__resolved_seq_limit_sroa_self_precision__0: self_2;
-    });
-}
-
-fn "core:prelude/list.wado/core:prelude/list.wado/ListCursor<affine_for_of_consumes_list.wado/Token>::next"(self) {
-    let $load_0: i32;
-    let $load_1: ref null "core:prelude//List<affine_for_of_consumes_list.wado/Token>";
-    let $arg_2: ref null "Array<affine_for_of_consumes_list.wado/Token>";
-    let $taken_4: ref null "affine_for_of_consumes_list.wado//Token";
-    let $moved_5: ref null "affine_for_of_consumes_list.wado//Token";
-    let $drop_spill_6: ref null "core:prelude/types.wado//Option<affine_for_of_consumes_list.wado/Token>";
-    if local.tee $load_0(self.at) >= local.tee $load_1(self.list).used {
-        return global:core:builtin::$unit_case$core:prelude/types.wado//Option<affine_for_of_consumes_list.wado/Token>$0;
-    }
-    $taken_4 = builtin::array_get_value<ref null "affine_for_of_consumes_list.wado//Token">(local.tee $arg_2($load_1.repr), $load_0);
-    builtin::array_set<ref null "affine_for_of_consumes_list.wado//Token">($arg_2, $load_0, ref.null none);
-    self.at = $load_0 + 1;
-    $drop_spill_6 = struct.new "core:prelude/types.wado//Option<affine_for_of_consumes_list.wado/Token>::Some" { discriminant: 1, payload_0: $moved_5 = $taken_4; $taken_4 = ref.null none; $moved_5 };
-    if ref.is_null($taken_4) == 0 {
-        global:affine_for_of_consumes_list.wado::DROPS = global:affine_for_of_consumes_list.wado::DROPS + 1;
-    }
-    return $drop_spill_6;
-}
-
-fn "core:prelude/string.wado/&core:prelude/string.wado/String^core:prelude/string.wado/AsStrSlice::internal_append_to"(self, out) {
-    let n_6: i32;
-    let new_used: i32;
-    let start_11: i32;
-    $inline_core_prelude_string_wado_String__internal_push_string_1: block {
-        break_if $inline_core_prelude_string_wado_String__internal_push_string_1 local.tee n_6(self.used) == 0;
-        if @unlikely(local.tee new_used(out.used + n_6) > builtin::array_len(out.repr)) {
-            cold_path;
-            "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out, new_used);
-        }
-        start_11 = out.used;
-        out.used = new_used;
-        builtin::array_copy<u8>(out.repr, start_11, self.repr, 0, n_6);
-    };
-}
-
 fn "core:prelude/primitive.wado/i32::fmt_decimal$sroa[self.value]"(self, f) {
     let is_negative: bool;
     let x: i64;
@@ -1639,42 +1173,6 @@ fn "core:prelude/primitive.wado/i32::fmt_decimal$sroa[self.value]"(self, f) {
     "core:prelude/primitive.wado/write_decimal_digits"(f.buf.repr, is_negative, x, self);
 }
 
-fn "core:prelude/string.wado/core:prelude/string.wado/String^core:prelude/string.wado/AsStrSlice::internal_append_to$spec0"(self, out) {
-    let new_used: i32;
-    let start_9: i32;
-    if @unlikely(local.tee new_used(out.used + 2) > builtin::array_len(out.repr)) {
-        cold_path;
-        "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out, new_used);
-    }
-    start_9 = out.used;
-    out.used = new_used;
-    builtin::array_copy<u8>(out.repr, start_9, self.repr, 0, 2);
-}
-
-fn "core:prelude/string.wado/core:prelude/string.wado/String^core:prelude/string.wado/AsStrSlice::internal_append_to$spec1"(self, out) {
-    let new_used: i32;
-    let start_9: i32;
-    if @unlikely(local.tee new_used(out.used + 5) > builtin::array_len(out.repr)) {
-        cold_path;
-        "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out, new_used);
-    }
-    start_9 = out.used;
-    out.used = new_used;
-    builtin::array_copy<u8>(out.repr, start_9, self.repr, 0, 5);
-}
-
-fn "core:prelude/string.wado/core:prelude/string.wado/String^core:prelude/string.wado/AsStrSlice::internal_append_to$spec2"(self, out) {
-    let new_used: i32;
-    let start_9: i32;
-    if @unlikely(local.tee new_used(out.used + 3) > builtin::array_len(out.repr)) {
-        cold_path;
-        "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out, new_used);
-    }
-    start_9 = out.used;
-    out.used = new_used;
-    builtin::array_copy<u8>(out.repr, start_9, self.repr, 0, 3);
-}
-
 fn "core:prelude/string.wado/core:prelude/string.wado/String^core:prelude/string.wado/AsStrSlice::internal_append_to$spec3"(self, out) {
     let new_used: i32;
     let start_9: i32;
@@ -1685,28 +1183,6 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String^core:prelude/string
     start_9 = out.used;
     out.used = new_used;
     builtin::array_copy<u8>(out.repr, start_9, self.repr, 0, 1);
-}
-
-fn "core:prelude/traits.wado/affine_for_of_consumes_list.wado/Token^core:prelude/traits.wado/Inspect::inspect$sroa[self.id]"(self, f) {
-    let field_6: ref "core:prelude/traits.wado//StructField<affine_for_of_consumes_list.wado/Token,i32>";
-    let self_12: ref "core:prelude/string.wado//String";
-    let other_15: ref "core:prelude/string.wado//String";
-    if f.alternate {
-        "core:prelude/traits.wado/core/prelude/traits.wado/inspect_struct_alternate<affine_for_of_consumes_list.wado/Token,[i32]>$sroa[v.id]"(self, f);
-        return;
-    }
-    "core:prelude/traits.wado/core/prelude/traits.wado/write_struct_head<affine_for_of_consumes_list.wado/Token>$sroa[f.buf]"(f.buf);
-    field_6 = "affine_for_of_consumes_list.wado/affine_for_of_consumes_list.wado/Token^core:prelude/traits.wado/ReflectStruct::members"().0;
-    self_12 = f.buf;
-    "core:prelude/string.wado/core:prelude/string.wado/String^core:prelude/string.wado/AsStrSlice::internal_append_to$spec0"(local.tee other_15(struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(123, 32), used: 2 }), self_12);
-    self_12 = field_6.field_name;
-    other_15 = f.buf;
-    "core:prelude/string.wado/&core:prelude/string.wado/String^core:prelude/string.wado/AsStrSlice::internal_append_to"(self_12, other_15);
-    other_15 = f.buf;
-    "core:prelude/string.wado/core:prelude/string.wado/String^core:prelude/string.wado/AsStrSlice::internal_append_to$spec0"(local.tee self_12(struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(58, 32), used: 2 }), other_15);
-    "core:prelude/primitive.wado/i32::fmt_decimal$sroa[self.value]"(self, f);
-    other_15 = f.buf;
-    "core:prelude/string.wado/core:prelude/string.wado/String^core:prelude/string.wado/AsStrSlice::internal_append_to$spec0"(local.tee self_12(struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(32, 125), used: 2 }), other_15);
 }
 
 export fn "affine_for_of_consumes_list.wado/$cm_export__run" as "run"

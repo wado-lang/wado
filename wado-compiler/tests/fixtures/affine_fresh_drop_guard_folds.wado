@@ -1,0 +1,25 @@
+// A place a struct literal just filled and no path emptied holds its object, so
+// the drop guard its scope end tests folds away and the drop runs unguarded
+// (WEP: Affine Types).
+
+use { log_stdout } from "core:cli";
+
+affine struct Tok { n: i32 }
+
+impl Drop for Tok {
+    fn drop(self) {
+        log_stdout(`drop ${self.n}`);
+    }
+}
+
+export fn run() {
+    let t = Tok { n: builtin::black_box(1) };
+    log_stdout(`${t.n}`);
+}
+
+__DATA__
+{
+    "stdout": "1\ndrop 1\n",
+    "wir_scope": "/run\"",
+    "wir_not_expect:O2": ["ref.is_null("]
+}

@@ -8,29 +8,19 @@ struct affine_reference_call_result_unrelated.wado//Tok {  // TypeId(0)
 
 type "functype//mem/realloc" = fn(i32, i32, i32, i32) -> i32;  // TypeId(1)
 
-type "functype//affine_reference_call_result_unrelated.wado/$test_0" = fn();  // TypeId(2)
+type "functype//affine_reference_call_result_unrelated.wado/$cm_export__$test_0" = fn();  // TypeId(2)
 
-type "functype//affine_reference_call_result_unrelated.wado/$cm_export__$test_0" = fn();  // TypeId(3)
-
-type "functype//wasi/task-return" = fn(i32);  // TypeId(4)
+type "functype//wasi/task-return" = fn(i32);  // TypeId(3)
 
 import fn mem/realloc from "mem/realloc";
 import memory (1) from "mem/memory";
 import fn wasi/task-return from "wasi/task-return";
 
-fn "affine_reference_call_result_unrelated.wado/$test_0"() {
-    let t_0: ref null "affine_reference_call_result_unrelated.wado//Tok";
+fn "affine_reference_call_result_unrelated.wado/$cm_export__$test_0"() {
     let $moved_26: ref null "affine_reference_call_result_unrelated.wado//Tok";
-    $moved_26 = local.tee t_0(struct.new "affine_reference_call_result_unrelated.wado//Tok" { id: 1 });
-    t_0 = ref.null none;
+    $moved_26 = struct.new "affine_reference_call_result_unrelated.wado//Tok" { id: 1 };
     if ref.is_null($moved_26) == 0 {
     }
-    if ref.is_null(t_0) == 0 {
-    }
-}
-
-fn "affine_reference_call_result_unrelated.wado/$cm_export__$test_0"() {
-    "affine_reference_call_result_unrelated.wado/$test_0"();
     "wasi/task-return"(0);
 }
 

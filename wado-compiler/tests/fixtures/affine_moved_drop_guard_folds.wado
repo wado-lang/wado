@@ -1,0 +1,22 @@
+// A move empties its place with `null`, so the drop guard a scope end tests on
+// that place folds away: nothing tests a place every path reaching it emptied
+// (WEP: Affine Types). `println` moves both ends of its stream, and with no
+// guard left it is small enough to inline. No reference reaches either end, so
+// each is kept as its bare handle rather than in a `$Resource` box.
+
+use { println, Stdout } from "core:cli";
+
+export fn run() with Stdout {
+    println("hi");
+}
+
+__DATA__
+{
+    "stdout": "hi\n",
+    "wir_scope": "/$cm_export__run\"",
+    "wir_not_expect:O2": [
+        "ref.is_null(",
+        "\"core:cli/println\"(",
+        "struct.new \"core:prelude//$Resource\""
+    ]
+}
