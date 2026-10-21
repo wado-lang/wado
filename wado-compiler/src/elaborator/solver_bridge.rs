@@ -2135,7 +2135,7 @@ impl SolverBridge {
             } => {
                 let shape = *shape;
                 let members: Vec<TypeId> = match table.template_shape(shape) {
-                    Some(template) => template.holes.iter().map(|hole| hole.ty).collect(),
+                    Some(template) => template.hole_types(),
                     None => table
                         .anon_struct_fields(shape)
                         .iter()

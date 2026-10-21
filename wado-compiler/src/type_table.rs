@@ -5068,6 +5068,14 @@ impl TypeTable {
         self.any_type_pack(id, &|_| true)
     }
 
+    /// Whether `id` mentions a `TypePack` anywhere, under any constructor.
+    pub fn mentions_type_pack(&self, id: TypeId) -> bool {
+        match self.get(id) {
+            ResolvedType::TypePack { .. } => true,
+            _ => self.any_constituent(id, &mut |t| self.mentions_type_pack(t)),
+        }
+    }
+
     /// Whether `id` is, or is a tuple spreading, a pack `pred` holds of.
     pub fn any_type_pack(&self, id: TypeId, pred: &impl Fn(TypeId) -> bool) -> bool {
         match self.get(id) {
