@@ -243,8 +243,18 @@ function main(): void {
     );
     process.exit(2);
   }
-  const under = values.under == null ? null : new RegExp(values.under as string);
-  const threadFilter = values.thread == null ? null : new RegExp(values.thread as string);
+  const regexArg = (name: string): RegExp | null => {
+    const pattern = values[name] as string | undefined;
+    if (pattern == null) return null;
+    try {
+      return new RegExp(pattern);
+    } catch (e) {
+      console.error(`argument --${name}: invalid pattern: ${(e as Error).message}`);
+      process.exit(2);
+    }
+  };
+  const under = regexArg("under");
+  const threadFilter = regexArg("thread");
 
   const profilePath = positionals[0];
   const top = parseInt(values.top as string, 10);
@@ -262,6 +272,9 @@ function main(): void {
 
   const symbolicator = detectSymbolicator(symChoice);
   const profile = JSON.parse(readFileSync(profilePath, "utf8"));
+  if (threadFilter != null) {
+    profile.threads = profile.threads.filter((t: any) => threadFilter.test(t.name));
+  }
   const libs = profile.libs;
   const keyname = symbolicate(profile, binary, mainBase, arch, symbolicator);
 
@@ -289,7 +302,6 @@ function main(): void {
     m.set(k, (m.get(k) ?? 0) + w);
 
   for (const thread of profile.threads) {
-    if (threadFilter != null && !threadFilter.test(thread.name)) continue;
     const keys = threadFuncKeys(thread);
     const frFunc = thread.frameTable.func;
     const stFrame = thread.stackTable.frame;
