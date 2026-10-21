@@ -113,14 +113,14 @@ pub trait Reflect with () {
 #[compiler_item("reflect_struct")]
 pub trait ReflectStruct: Reflect with () {
     /// The field types as a tuple `[F_0, F_1, ...]`.
-    type FieldTypes;
+    affine type FieldTypes;
 
     /// The per-field member tuple `[StructField<Self, F_0>, ...]`.
     type Members;
 
     /// The field slots `[Option<F_0>, ...]` — the value-level companion of
     /// `FieldTypes`. A filled slot is one the wire wrote.
-    type FieldSlots;
+    affine type FieldSlots;
 
     /// Returns the per-field members.
     #[compiler_item("reflect_struct_members")]
@@ -181,7 +181,7 @@ pub affine trait Member with () {
 #[compiler_item("reflect_variant")]
 pub trait ReflectVariant: Reflect with () {
     /// The per-case payload tuple `[P_0, P_1, ...]`; unit cases are `()`.
-    type CasePayloads;
+    affine type CasePayloads;
 
     /// The per-case member tuple `[VariantCase<Self, P_0>, ...]`.
     type Members;
@@ -252,7 +252,7 @@ pub trait ReflectFlags: Reflect with () {
 #[compiler_item("reflect_newtype")]
 pub trait ReflectNewtype: Reflect with () {
     /// The type this newtype wraps: `type UserName = String` → `String`.
-    type Base;
+    affine type Base;
 }
 
 /// Compile-time introspection of a tagged template literal's shape. The
@@ -262,7 +262,7 @@ pub trait ReflectNewtype: Reflect with () {
 #[compiler_item("reflect_template")]
 pub trait ReflectTemplate: Reflect with () {
     /// The hole types as a tuple `[V_0, V_1, ...]`.
-    type Holes;
+    affine type Holes;
 
     /// The per-hole member tuple `[TemplateHole<Self, V_0>, ...]`.
     type Members;

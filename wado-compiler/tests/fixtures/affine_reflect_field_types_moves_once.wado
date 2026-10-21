@@ -1,0 +1,26 @@
+// The compiler binds `ReflectStruct::FieldTypes` of an affine struct to a
+// tuple holding its affine fields, so the associated type is declared
+// `affine type` and a body generic over it moves the projection at most once.
+
+affine struct Tok {
+    n: i32,
+}
+
+impl Drop for Tok {
+    fn drop(self) {}
+}
+
+affine struct Holder {
+    t: Tok,
+}
+
+fn dup<affine S: ReflectStruct>(x: S::FieldTypes) -> [S::FieldTypes, S::FieldTypes] {
+    return [x, x];
+}
+
+export fn run() {
+    let pair = dup::<Holder>([Tok { n: 1 }]);
+}
+
+__DATA__
+{"compile_error": ":18:16: analysis error: affine value `x` used after it was moved (moved at 18:13)"}

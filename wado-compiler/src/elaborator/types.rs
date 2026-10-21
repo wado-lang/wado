@@ -2001,7 +2001,7 @@ impl TypeError {
             } => (
                 Code::AffineArgument,
                 format!(
-                    "affine type '{type_name}' bound to '{assoc_name}', which may be copied; `affine type {assoc_name}` would admit it"
+                    "affine type '{type_name}' bound to '{assoc_name}', which may be copied: the trait does not declare it `affine type`"
                 ),
                 *span,
             ),
