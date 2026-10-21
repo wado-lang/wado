@@ -1,0 +1,58 @@
+// A generic body's drops are elaborated per instance, after a `with` block is
+// desugared. Each value the desugaring hands on through a local moves on from
+// it: the do-block's value, an early `return`'s value, and an operation's
+// argument forwarded to the handler.
+
+use { println, log_stdout, Stdout } from "core:cli";
+
+affine struct Tok {
+    id: i32,
+}
+
+impl Drop for Tok {
+    fn drop(self) {
+        log_stdout(`drop ${self.id}`);
+    }
+}
+
+interface Sink {
+    fn put(t: Tok) -> i32;
+}
+
+struct Total {
+    n: i32,
+}
+
+impl Sink for Total {
+    fn put(&mut self, t: Tok) -> i32 {
+        self.n += t.id;
+        resume self.n
+    }
+}
+
+fn value_form<affine T>(x: T) -> T {
+    let mut s = Total { n: 0 };
+    let v = with Sink => &mut s do {
+        Sink::put(Tok { id: 1 });
+        x
+    };
+    return v;
+}
+
+fn early<affine T>(x: T) -> T {
+    let mut s = Total { n: 0 };
+    with Sink => &mut s do {
+        Sink::put(Tok { id: 3 });
+        return x;
+    }
+}
+
+export fn run() with Stdout {
+    let a = value_form(Tok { id: 2 });
+    println(`${a.id}`);
+    let b = early(Tok { id: 4 });
+    println(`${b.id}`);
+}
+
+__DATA__
+{"stdout": "drop 1\n2\ndrop 3\n4\ndrop 4\ndrop 2\n"}
