@@ -14,7 +14,7 @@ use crate::tir::{
     CallArg, FunctionKind, FunctionRef, InstantiationKey, LetStorage, MonomorphInfo, ResolvedType,
     ShapeSubstitution, StructDef, TemplateId, TemplateShape, TirBinaryOp, TirBlock, TirExpr,
     TirExprKind, TirFunction, TirLocal, TirModule, TirParam, TirPattern, TirStmt, TirStmtKind,
-    TirStructField, TirTemplatePart, TirUnaryOp, TypeId, method_param_offset, transpose_tuple_expr,
+    TirTemplatePart, TirUnaryOp, TypeId, hold_hole, method_param_offset, transpose_tuple_expr,
 };
 use crate::tir_visitor::{TirMutVisitor, TirRefVisitor};
 use crate::type_table::{AnonStructId, TypeTable};
@@ -1264,6 +1264,7 @@ impl Monomorphizer {
             .method_info
             .as_ref()
             .map(LocalMethodName::fq_base_struct_name);
+        let mut address_taken_locals = generic.address_taken_locals.clone();
         let body = generic.body.as_ref().map(|b| {
             let mut new_body = b.clone();
             self.substitute_types_in_block(
@@ -1277,6 +1278,11 @@ impl Monomorphizer {
             PackExpansionLocalSplitter {
                 local_count: &mut local_count,
                 locals: &mut locals,
+            }
+            .visit_block(&mut new_body);
+            HoleHolder {
+                tt: type_table,
+                address_taken: &mut address_taken_locals,
             }
             .visit_block(&mut new_body);
             new_body
@@ -1304,7 +1310,7 @@ impl Monomorphizer {
             span: generic.span,
             local_count,
             locals,
-            address_taken_locals: generic.address_taken_locals.clone(),
+            address_taken_locals,
             stores_aliased_locals: generic.stores_aliased_locals.clone(),
             // Scratch local fields - computed by lower phase (after monomorphization)
             is_cm_binding: false,
@@ -2250,7 +2256,7 @@ impl Monomorphizer {
                 fields,
             } => {
                 // First substitute field expressions (which will update expr.type_id)
-                for field in fields.iter_mut() {
+                for field in fields {
                     self.substitute_types_in_expr(
                         &mut field.value,
                         substitution,
@@ -2302,7 +2308,6 @@ impl Monomorphizer {
                     }
                     _ => {}
                 }
-                hold_holes_as_shape(fields, *struct_type, type_table);
             }
             TirExprKind::IndirectCall { callee, args } => {
                 self.substitute_types_in_expr(
@@ -4283,32 +4288,46 @@ fn unref_operand(operand: &TirExpr, type_table: &TypeTable) -> TirExpr {
     expr
 }
 
-/// Hold each hole of a template literal as the concrete shape's field does.
-/// Reify holds a hole of type `X` by `&`, since a reference to a type
-/// parameter does not box. The concrete shape holds a scalar by value.
-fn hold_holes_as_shape(fields: &mut [TirStructField], shape_type: TypeId, tt: &mut TypeTable) {
-    let Some(holes) = tt
-        .template_shape_of_type(shape_type)
-        .map(TemplateShape::hole_types)
-    else {
-        return;
-    };
-    for (field, hole_ty) in fields.iter_mut().zip(holes) {
-        if tt.hole_held_by_ref(hole_ty) {
-            continue;
-        }
-        if let TirExprKind::Unary {
-            op: TirUnaryOp::Ref,
-            expr: inner,
-        } = &field.value.kind
+/// Holds each template literal's holes as its concrete shape does, which reify
+/// left to the instance where the shape was open. A `&` taken of a local
+/// marks it address-taken in the scope that owns it: the function's, or a
+/// closure's own.
+struct HoleHolder<'a> {
+    tt: &'a mut TypeTable,
+    address_taken: &'a mut IndexSet<u32>,
+}
+
+impl TirMutVisitor for HoleHolder<'_> {
+    fn visit_expr(&mut self, expr: &mut TirExpr) {
+        if let TirExprKind::Closure {
+            body,
+            address_taken_locals,
+            ..
+        } = &mut expr.kind
         {
-            field.value = (**inner).clone();
+            HoleHolder {
+                tt: self.tt,
+                address_taken: address_taken_locals,
+            }
+            .visit_expr(body);
+            return;
         }
-        assert_eq!(
-            tt.type_key(field.value.type_id),
-            tt.type_key(hole_ty),
-            "a hole held by value has the hole's type"
-        );
+        self.walk_expr(expr);
+        let TirExprKind::StructLiteral { fields, .. } = &mut expr.kind else {
+            return;
+        };
+        let Some(holes) = self
+            .tt
+            .template_shape_of_type(expr.type_id)
+            .map(TemplateShape::hole_types)
+        else {
+            return;
+        };
+        for (field, hole_ty) in fields.iter_mut().zip(holes) {
+            if let Some(taken) = hold_hole(field, hole_ty, self.tt) {
+                self.address_taken.insert(taken);
+            }
+        }
     }
 }
 

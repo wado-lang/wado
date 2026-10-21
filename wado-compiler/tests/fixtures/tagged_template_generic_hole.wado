@@ -14,6 +14,20 @@ fn count<T: ReflectTemplate<Holes = [..V]>, ..V: Display>(t: T) -> String {
     return out;
 }
 
+// Reads each hole's value through `get`, which groups the holes by type: `X`
+// and `Y` share one group only once both are `i32`.
+fn values<T: ReflectTemplate<Holes = [..V]>, ..V: Display>(t: T) -> String {
+    let mut out = "";
+    for let h of ReflectTemplate::<T>::members() {
+        out.push_str(&`${h.get(&t)};`);
+    }
+    return out;
+}
+
+fn got<X: Display, Y: Display>(x: X, y: Y) -> String {
+    return values`${x}${y}${x}`;
+}
+
 fn wrap<X: Display>(x: X) -> String {
     return count`a${x}b${x:>4}`;
 }
@@ -48,10 +62,12 @@ export fn run() with Stdout {
     println(nested(7));
     println(outer(9 as i64));
     println(specs(255, [1, 2]));
+    println(got(1, 2));
+    println(got("s", 3));
     // The shape `wrap(5)` substitutes to, written: one type, one tag instance.
     let x = 6;
     println(count`a${x}b${x:>4}`);
 }
 
 __DATA__
-{"stdout": "x=5|x=   5|\nx=hi|x=  hi|\nx=1|y=two|1=1|\nx=true|y=c|1=1|\n<3.5>\nx=<7>|x= <7>|\nx=9|x=   9|\n0xff [1, 2] 255\nx=6|x=   6|\n"}
+{"stdout": "x=5|x=   5|\nx=hi|x=  hi|\nx=1|y=two|1=1|\nx=true|y=c|1=1|\n<3.5>\nx=<7>|x= <7>|\nx=9|x=   9|\n0xff [1, 2] 255\n1;2;1;\ns;3;s;\nx=6|x=   6|\n"}

@@ -148,31 +148,42 @@ pub fn synthesize_hole_fmt_helpers(
     tt: &Rc<RefCell<TypeTable>>,
     trait_env: &Arc<TraitEnv>,
 ) {
-    let helpers: Vec<TirFunction> = module
-        .structs
-        .iter()
-        .filter(|s| !matches!(s.def, StructDef::Anon(id) if tt.borrow().anon_shape_is_open(id)))
-        .filter_map(|s| hole_fmt_helper(s, tt, trait_env))
-        .collect();
+    let helpers = hole_fmt_helpers(&module.structs, tt, trait_env);
     module
         .functions
         .extend(helpers.into_iter().map(|f| Rc::new(RefCell::new(f))));
 }
 
-/// `$hole_fmt` for template shape `s`, or `None` where `s` is not one. An open
-/// shape gets none: it holds a hole of type `X` by `&`, and the shape
-/// `X = i32` reaches holds the `i32` by value, so monomorphization builds one
-/// for each concrete shape a substitution reaches.
-pub(crate) fn hole_fmt_helper(
+/// `$hole_fmt` for each closed template shape among `structs`. An open shape
+/// gets none: it holds a hole of type `X` by `&`, and the shape `X = i32`
+/// reaches holds the `i32` by value, so monomorphization builds one for each
+/// concrete shape a substitution reaches.
+pub(crate) fn hole_fmt_helpers(
+    structs: &[TirStruct],
+    tt: &Rc<RefCell<TypeTable>>,
+    trait_env: &Arc<TraitEnv>,
+) -> Vec<TirFunction> {
+    let names = FormatStdlibNames::from_type_table(&tt.borrow());
+    structs
+        .iter()
+        .filter_map(|s| hole_fmt_helper(s, tt, trait_env, &names))
+        .collect()
+}
+
+fn hole_fmt_helper(
     s: &TirStruct,
     tt: &Rc<RefCell<TypeTable>>,
     trait_env: &Arc<TraitEnv>,
+    names: &FormatStdlibNames,
 ) -> Option<TirFunction> {
     let (struct_type, holes) = {
         let table = tt.borrow();
         let StructDef::Anon(id) = s.def else {
             return None;
         };
+        if table.anon_shape_is_open(id) {
+            return None;
+        }
         let shape = table.template_shape(id)?;
         let struct_type = table.find_struct_type(s.def)?;
         let holes: Vec<HoleFmtArm> = shape
@@ -190,12 +201,11 @@ pub(crate) fn hole_fmt_helper(
             .collect();
         (struct_type, holes)
     };
-    let names = FormatStdlibNames::from_type_table(&tt.borrow());
     let ctx = TemplateCtx {
         tt,
         module_src: s.module_source.clone(),
         trait_env,
-        names: &names,
+        names,
     };
     let mut helper = build_hole_fmt_helper(struct_type, &holes, s.span, &ctx);
     helper.module_source = s.module_source.clone();

@@ -662,8 +662,10 @@ below close that, in this order.
   hole of type `X` by `&`, while the shape `X = i32` reaches holds the `i32`
   by value. Substituting into an open shape's field types would therefore
   disagree with the concrete shape's layout. Three things follow.
-  - Monomorphization drops the `&` an instance's template literal takes of a
-    hole that the concrete shape holds by value (`hold_holes_as_shape`).
+  - Only a closed type decides how a hole is held (`tir::hold_hole`). Reify
+    holds the holes of a closed shape's literal, and monomorphization those
+    of an open one once substituted, marking a local it takes `&` of as
+    address-taken.
   - Synthesis gives an open shape no `$hole_fmt` and no `$hole_get`. Their
     bodies read the fields, so neither can be substituted from the open
     shape.
@@ -741,6 +743,11 @@ Three runs:
 | `` format`…` `` | 1.2 to 1.3                       |
 
 ## Known gaps
+
+- A hole whose type mentions a type pack, such as the binding of a
+  `for let v of t` over `t: [..T]`, is rejected
+  (`tagged_template_pack_element_hole_error.wado`). Substituting the pack into
+  the shape spreads the whole pack into the hole's one field.
 
 - A tag that carries a state across holes by scanning the literal segments
   folds to the per-hole decision only while that scan fits the inliner's
