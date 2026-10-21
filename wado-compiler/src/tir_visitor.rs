@@ -136,6 +136,7 @@ pub trait TirMutVisitor {
             }
             TirExprKind::Unary { expr: inner, .. }
             | TirExprKind::Cast { expr: inner, .. }
+            | TirExprKind::Move { expr: inner }
             | TirExprKind::FieldAccess { expr: inner, .. }
             | TirExprKind::TupleSpread { expr: inner }
             | TirExprKind::TupleZip { expr: inner }
@@ -387,6 +388,7 @@ pub trait TirRefVisitor {
             }
             TirExprKind::Unary { expr: inner, .. }
             | TirExprKind::Cast { expr: inner, .. }
+            | TirExprKind::Move { expr: inner }
             | TirExprKind::FieldAccess { expr: inner, .. }
             | TirExprKind::TupleSpread { expr: inner }
             | TirExprKind::TupleZip { expr: inner }
@@ -638,6 +640,7 @@ pub fn opt_walk_expr(visitor: &mut impl TirOptVisitor, expr: &mut TirExpr) -> bo
             call_expr: inner, ..
         }
         | TirExprKind::Cast { expr: inner, .. }
+        | TirExprKind::Move { expr: inner }
         | TirExprKind::VariantTag { expr: inner }
         | TirExprKind::VariantTest { expr: inner, .. }
         | TirExprKind::VariantPayload { expr: inner, .. } => {
@@ -834,6 +837,7 @@ pub fn expr_has_break_to(label: &str, expr: &TirExpr) -> bool {
         }
         TirExprKind::Unary { expr, .. }
         | TirExprKind::Cast { expr, .. }
+        | TirExprKind::Move { expr }
         | TirExprKind::FieldAccess { expr, .. }
         | TirExprKind::TupleSpread { expr }
         | TirExprKind::TupleZip { expr }

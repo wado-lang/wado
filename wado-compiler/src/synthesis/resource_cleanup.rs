@@ -34,7 +34,7 @@ use crate::tir::{
     TirExprKind, TirFunction, TirLocal, TirMatchArm, TirParam, TirPattern, TirStmt, TirStmtKind,
     TirTemplatePart, TirUnaryOp, TypeId,
 };
-use crate::tir_visitor::TirRefVisitor;
+use crate::tir_visitor::{TirMutVisitor, TirRefVisitor};
 use crate::token::Span;
 use crate::type_table::{TypeKey, TypeTable};
 
@@ -694,6 +694,7 @@ fn build_drop_glue(
 /// Elaborate resource drops for a single function body.
 fn elaborate_function(func: &mut TirFunction, resources: Resources, glue: &mut DropGlue) {
     if copied_to_callers(func) {
+        strip_moves(func);
         return;
     }
     let implements_drop = drop_impl_of(func, &resources.tt.borrow()).is_some();
@@ -725,6 +726,7 @@ fn elaborate_function(func: &mut TirFunction, resources: Resources, glue: &mut D
         })
         .collect();
     if owned.is_empty() && !body_has_resource(body, resources) {
+        StripMoves.visit_block(body);
         return;
     }
 
@@ -1213,20 +1215,35 @@ enum TemporaryScope {
     Enclosing,
 }
 
-/// Whether a block producing `type_id` yields its last statement's value.
-fn yields(type_id: TypeId) -> bool {
-    type_id != TypeTable::UNIT && type_id != TypeTable::NEVER
+/// Where a block's last statement's value goes.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Tail {
+    /// Nowhere: it is discarded as any other statement's is.
+    Discarded,
+    /// To what consumes the block.
+    Consumed,
+    /// To a referencing position, which reads the place the block ends in
+    /// (see [`is_temporary`]).
+    Referenced,
+}
+
+/// Where the value of a block producing `type_id` goes when it is consumed.
+fn yields(type_id: TypeId) -> Tail {
+    if type_id == TypeTable::UNIT || type_id == TypeTable::NEVER {
+        Tail::Discarded
+    } else {
+        Tail::Consumed
+    }
 }
 
 /// Elaborate `block` in place as a scope that opens declaring `declared`. Its
 /// locals drop at its end where it falls through, and its temporaries where
-/// `temporaries` says. Unless it `yields`, its last statement's value is
-/// discarded as any other's is.
+/// `temporaries` says. Its last statement's value goes where `tail` says.
 fn elab_scope(
     block: &mut TirBlock,
     declared: Vec<Live>,
     temporaries: TemporaryScope,
-    yields: bool,
+    tail: Tail,
     cx: &mut Cx,
 ) -> Flow {
     cx.open_scope(declared, temporaries);
@@ -1240,16 +1257,16 @@ fn elab_scope(
             out.push(stmt);
             continue;
         }
-        let is_tail = yields && idx == last;
+        let stmt_tail = if idx == last { tail } else { Tail::Discarded };
         let first_declared = cx.scopes.last().expect("pushed above").lives.len();
         let first_out = out.len();
         let first_declaration = cx.declarations.len();
-        flow = elab_stmt(stmt, cx, is_tail, &mut out);
+        flow = elab_stmt(stmt, cx, stmt_tail, &mut out);
         if temporaries == TemporaryScope::Statement {
             if flow == Flow::Normal {
                 let spilled = take_temporaries(cx, first_declared);
                 let drops = drop_lives(&spilled, cx);
-                if is_tail {
+                if stmt_tail != Tail::Discarded {
                     // The block's value is this statement's: keep it past the drops.
                     let tail = out.split_off(first_out);
                     out.extend(append_block_drops(tail, drops, cx));
@@ -1335,8 +1352,8 @@ fn append_expr_drops(expr: &mut TirExpr, drops: Vec<TirStmt>, cx: &mut Cx) {
 }
 
 /// Elaborate a block in place as a fresh nested scope.
-fn elab_block(block: &mut TirBlock, yields: bool, cx: &mut Cx) -> Flow {
-    elab_scope(block, Vec::new(), TemporaryScope::Statement, yields, cx)
+fn elab_block(block: &mut TirBlock, tail: Tail, cx: &mut Cx) -> Flow {
+    elab_scope(block, Vec::new(), TemporaryScope::Statement, tail, cx)
 }
 
 /// Elaborate a plain block expression in place. Nothing can leave it but a
@@ -1344,8 +1361,8 @@ fn elab_block(block: &mut TirBlock, yields: bool, cx: &mut Cx) -> Flow {
 /// holding it, and its temporaries drop when that statement ends. Synthesized
 /// code relies on that: an `assert` captures its operand `f(&t())` as
 /// `f({ $v = &t(); $v })`, so `t()` must outlive the capture's statement.
-fn elab_plain_block(block: &mut TirBlock, yields: bool, cx: &mut Cx) {
-    elab_scope(block, Vec::new(), TemporaryScope::Enclosing, yields, cx);
+fn elab_plain_block(block: &mut TirBlock, tail: Tail, cx: &mut Cx) {
+    elab_scope(block, Vec::new(), TemporaryScope::Enclosing, tail, cx);
 }
 
 /// Elaborate `block`, the body `target` is reached from. An expanded template
@@ -1354,7 +1371,7 @@ fn elab_plain_block(block: &mut TirBlock, yields: bool, cx: &mut Cx) {
 fn elab_target_body(
     block: &mut TirBlock,
     label: Option<String>,
-    yields: bool,
+    tail: Tail,
     cx: &mut Cx,
 ) -> Flow {
     let temporaries = if label.as_deref().is_some_and(is_template_block) {
@@ -1366,14 +1383,14 @@ fn elab_target_body(
         label,
         depth: cx.scopes.len(),
     });
-    let flow = elab_scope(block, Vec::new(), temporaries, yields, cx);
+    let flow = elab_scope(block, Vec::new(), temporaries, tail, cx);
     cx.targets.pop();
     flow
 }
 
 /// Elaborate one statement, appending the result to `out`. Returns whether
 /// control falls through to the next statement.
-fn elab_stmt(stmt: TirStmt, cx: &mut Cx, is_tail: bool, out: &mut Vec<TirStmt>) -> Flow {
+fn elab_stmt(stmt: TirStmt, cx: &mut Cx, tail: Tail, out: &mut Vec<TirStmt>) -> Flow {
     let span = stmt.span;
     match stmt.kind {
         TirStmtKind::Let {
@@ -1420,11 +1437,12 @@ fn elab_stmt(stmt: TirStmt, cx: &mut Cx, is_tail: bool, out: &mut Vec<TirStmt>) 
         }
 
         TirStmtKind::Expr(expr) => {
-            let elaborated = elab_value_expr(expr, cx);
+            let mut elaborated = expr;
+            elab_expr(&mut elaborated, tail != Tail::Referenced, cx);
             // An assignment is typed as the value it stores, which its target
             // now owns: nothing is discarded.
             let discards = !matches!(elaborated.kind, TirExprKind::Assign { .. });
-            if !is_tail && discards && cx.carries_resource(elaborated.type_id) {
+            if tail == Tail::Discarded && discards && cx.carries_resource(elaborated.type_id) {
                 out.extend(drop_discarded(elaborated, cx));
             } else {
                 out.push(TirStmt {
@@ -1458,10 +1476,10 @@ fn elab_stmt(stmt: TirStmt, cx: &mut Cx, is_tail: bool, out: &mut Vec<TirStmt>) 
             else_block,
         } => {
             let condition = elab_value_expr(condition, cx);
-            let then_flow = elab_block(&mut then_block, false, cx);
+            let then_flow = elab_block(&mut then_block, Tail::Discarded, cx);
             let (else_block, else_flow) = match else_block {
                 Some(mut block) => {
-                    let flow = elab_block(&mut block, false, cx);
+                    let flow = elab_block(&mut block, Tail::Discarded, cx);
                     (Some(block), flow)
                 }
                 None => (None, Flow::Normal),
@@ -1478,7 +1496,7 @@ fn elab_stmt(stmt: TirStmt, cx: &mut Cx, is_tail: bool, out: &mut Vec<TirStmt>) 
         }
 
         TirStmtKind::Loop { mut body } => {
-            elab_target_body(&mut body, None, false, cx);
+            elab_target_body(&mut body, None, Tail::Discarded, cx);
             out.push(TirStmt {
                 kind: TirStmtKind::Loop { body },
                 span,
@@ -1487,7 +1505,7 @@ fn elab_stmt(stmt: TirStmt, cx: &mut Cx, is_tail: bool, out: &mut Vec<TirStmt>) 
         }
 
         TirStmtKind::LabeledBlock { label, mut block } => {
-            elab_target_body(&mut block, Some(label.clone()), false, cx);
+            elab_target_body(&mut block, Some(label.clone()), Tail::Discarded, cx);
             out.push(TirStmt {
                 kind: TirStmtKind::LabeledBlock { label, block },
                 span,
@@ -1576,7 +1594,7 @@ fn elab_value_expr(mut expr: TirExpr, cx: &mut Cx) -> TirExpr {
 /// The match is exhaustive so a new `TirExprKind` cannot silently escape
 /// ownership accounting: a missed move drops twice, a missed reference leaks.
 fn elab_expr(expr: &mut TirExpr, consuming: bool, cx: &mut Cx) {
-    if !consuming && is_temporary(&expr.kind) && cx.carries_resource(expr.type_id) {
+    if !consuming && is_temporary(expr, cx) && cx.carries_resource(expr.type_id) {
         elab_expr(expr, true, cx);
         spill_temporary(expr, cx);
         return;
@@ -1587,10 +1605,16 @@ fn elab_expr(expr: &mut TirExpr, consuming: bool, cx: &mut Cx) {
     let mut stores = false;
     let mut moving = None;
     match &mut expr.kind {
+        TirExprKind::Move { .. } => {
+            assert!(consuming, "a move sits where its value is consumed: {span:?}");
+            unwrap_move(expr);
+            take_moved(expr, cx);
+        }
         TirExprKind::Local { .. } => {
-            if consuming && cx.carries_resource(type_id) {
-                take_place(expr, cx);
-            }
+            assert!(
+                !consuming || !cx.carries_resource(type_id),
+                "a place a resource moves out of is marked `Move`: {span:?}"
+            );
         }
 
         TirExprKind::Unary {
@@ -1614,16 +1638,18 @@ fn elab_expr(expr: &mut TirExpr, consuming: bool, cx: &mut Cx) {
         // A payload cannot be emptied on its own, so taking it moves the
         // variant it is read from.
         TirExprKind::VariantPayload { expr: inner, .. } => {
-            if consuming && cx.carries_resource(type_id) && is_place(inner, cx) {
-                elab_expr(inner, false, cx);
-                let place = (**inner).clone();
-                empty_after(expr, place, cx);
-            } else {
-                elab_expr(inner, consuming, cx);
-            }
+            assert!(
+                !consuming || !cx.carries_resource(type_id) || !is_place(inner, cx),
+                "a payload a resource moves out of is marked `Move`: {span:?}"
+            );
+            elab_expr(inner, consuming, cx);
         }
         TirExprKind::FieldAccess { expr: inner, .. } => {
             if consuming && cx.carries_resource(type_id) {
+                assert!(
+                    !is_place(inner, cx),
+                    "a field a resource moves out of is marked `Move`: {span:?}"
+                );
                 take_field(expr, cx);
             } else {
                 // Reading a field that owns nothing leaves the aggregate whole.
@@ -1699,7 +1725,13 @@ fn elab_expr(expr: &mut TirExpr, consuming: bool, cx: &mut Cx) {
             elab_expr(value, true, cx);
         }
 
-        TirExprKind::Block(block) => elab_plain_block(block, yields(type_id), cx),
+        TirExprKind::Block(block) => {
+            let tail = match yields(type_id) {
+                Tail::Consumed if !consuming => Tail::Referenced,
+                tail => tail,
+            };
+            elab_plain_block(block, tail, cx);
+        }
         TirExprKind::LabeledBlock { label, block, .. } => {
             elab_target_body(block, Some(label.clone()), yields(type_id), cx);
         }
@@ -2085,6 +2117,7 @@ fn elab_closure(
     };
     probe.visit_expr(body);
     if owned.is_empty() && !probe.found {
+        StripMoves.visit_expr(body);
         return;
     }
     let mut inner = Cx {
@@ -2142,20 +2175,71 @@ fn empty_after(expr: &mut TirExpr, place: TirExpr, cx: &mut Cx) {
     });
 }
 
-/// Move the affine field `expr` reads out of its aggregate, emptying the field.
-/// An aggregate that is a temporary is spilled first, so its other fields drop
-/// when the statement ends. One read through a reference moves nothing here:
-/// the move check reports it.
+/// Replace the move `expr` with the place it moves out of.
+fn unwrap_move(expr: &mut TirExpr) {
+    let TirExprKind::Move { expr: place } = std::mem::replace(&mut expr.kind, TirExprKind::Unit)
+    else {
+        unreachable!("`unwrap_move` takes a move");
+    };
+    *expr = *place;
+}
+
+/// Remove the moves of `function`, one drop elaboration does not see.
+pub fn strip_moves(function: &mut TirFunction) {
+    if let Some(body) = &mut function.body {
+        StripMoves.visit_block(body);
+    }
+}
+
+/// Remove the moves of a body drop elaboration leaves as it is, one owning no
+/// resource: a move there takes nothing.
+struct StripMoves;
+
+impl TirMutVisitor for StripMoves {
+    fn visit_expr(&mut self, expr: &mut TirExpr) {
+        if matches!(expr.kind, TirExprKind::Move { .. }) {
+            unwrap_move(expr);
+        }
+        self.walk_expr(expr);
+    }
+}
+
+/// Take the value of the place `expr`, which a `Move` marked, emptying the
+/// place. A payload cannot be emptied on its own, so taking it empties the
+/// variant it is read from.
+fn take_moved(expr: &mut TirExpr, cx: &mut Cx) {
+    // An instance whose `affine` parameter is bound to a type holding no
+    // resource has nothing to take.
+    if !cx.carries_resource(expr.type_id) {
+        elab_expr(expr, false, cx);
+        return;
+    }
+    let span = expr.span;
+    match &mut expr.kind {
+        TirExprKind::Local { .. } => take_place(expr, cx),
+        TirExprKind::FieldAccess { expr: base, .. } => {
+            assert!(is_place(base, cx), "a field moves out of a place: {span:?}");
+            elab_expr(base, false, cx);
+            take_place(expr, cx);
+        }
+        TirExprKind::VariantPayload { expr: base, .. } => {
+            assert!(is_place(base, cx), "a payload moves out of a place: {span:?}");
+            elab_expr(base, false, cx);
+            let place = (**base).clone();
+            empty_after(expr, place, cx);
+        }
+        _ => unreachable!("only a place moves: {span:?}"),
+    }
+}
+
+/// Move the affine field `expr` reads out of the aggregate a temporary holds,
+/// spilling it first, so its other fields drop when the statement ends. One
+/// read through a reference moves nothing here: the move check reports it.
 fn take_field(expr: &mut TirExpr, cx: &mut Cx) {
     let TirExprKind::FieldAccess { expr: base, .. } = &mut expr.kind else {
         unreachable!("`take_field` takes a field access");
     };
-    if is_place(base, cx) {
-        elab_expr(base, false, cx);
-        take_place(expr, cx);
-        return;
-    }
-    if is_temporary(&base.kind) {
+    if is_temporary(base, cx) {
         elab_expr(base, true, cx);
         let type_id = base.type_id;
         let (local, name) = spill_as_local(base, cx);
@@ -2171,11 +2255,19 @@ fn take_field(expr: &mut TirExpr, cx: &mut Cx) {
     elab_expr(base, false, cx);
 }
 
-/// Whether evaluating `kind` produces a fresh value rather than reading a
+/// Whether evaluating `expr` produces a fresh value rather than reading a
 /// place. Referencing such a value leaves it with no owner but the statement.
-fn is_temporary(kind: &TirExprKind) -> bool {
+/// A block ending in a place it does not move reads that place: synthesized
+/// code builds one to run statements ahead of a borrow.
+fn is_temporary(expr: &TirExpr, cx: &Cx) -> bool {
+    if let TirExprKind::Block(block) = &expr.kind {
+        return !block
+            .stmts
+            .last()
+            .is_some_and(|stmt| matches!(&stmt.kind, TirStmtKind::Expr(tail) if is_place(tail, cx)));
+    }
     matches!(
-        kind,
+        expr.kind,
         TirExprKind::Call { .. }
             | TirExprKind::CmRawCall { .. }
             | TirExprKind::IndirectCall { .. }
@@ -2183,7 +2275,6 @@ fn is_temporary(kind: &TirExprKind) -> bool {
             | TirExprKind::TupleLiteral { .. }
             | TirExprKind::ArrayLiteral { .. }
             | TirExprKind::VariantConstruct { .. }
-            | TirExprKind::Block(_)
             | TirExprKind::LabeledBlock { .. }
             | TirExprKind::If { .. }
             | TirExprKind::Match { .. }
@@ -2400,11 +2491,17 @@ fn elab_match(scrutinee: &mut TirExpr, arms: &mut [TirMatchArm], cx: &mut Cx) {
         .map(|arm| cx.resources.pattern_bindings(&arm.pattern))
         .collect();
     let extracts = bindings.iter().any(|arm_bindings| !arm_bindings.is_empty());
+    // A moved place stays put until an arm binding out of it is entered.
+    let moved = matches!(scrutinee.kind, TirExprKind::Move { .. });
+    if moved {
+        unwrap_move(scrutinee);
+    }
     let place = if extracts && cx.carries_resource(scrutinee.type_id) {
         if is_place(scrutinee, cx) {
+            assert!(moved, "a scrutinee a resource moves out of is marked `Move`: {:?}", scrutinee.span);
             elab_expr(scrutinee, false, cx);
             Some((*scrutinee).clone())
-        } else if is_temporary(&scrutinee.kind) {
+        } else if is_temporary(scrutinee, cx) {
             elab_expr(scrutinee, true, cx);
             Some(spill_temporary(scrutinee, cx))
         } else {

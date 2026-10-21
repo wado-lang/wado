@@ -773,6 +773,26 @@ impl TirExpr {
             span,
         }
     }
+
+    /// The place `self` moves out of, or `self` where it moves nothing.
+    pub fn unmoved(&self) -> &Self {
+        match &self.kind {
+            TirExprKind::Move { expr } => expr,
+            _ => self,
+        }
+    }
+
+    /// The value of the place `self` names, moved out of it.
+    pub fn moved(self) -> Self {
+        let (type_id, span) = (self.type_id, self.span);
+        Self::new(
+            TirExprKind::Move {
+                expr: Box::new(self),
+            },
+            type_id,
+            span,
+        )
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -987,6 +1007,14 @@ pub enum TirExprKind {
     Cast {
         expr: Box<TirExpr>,
         target_type: TypeId,
+    },
+    /// The affine value of the place `expr` names, moved out of it: the place
+    /// is empty afterwards (WEP: Affine Types). Reify marks the places
+    /// `ownership::Modes::moves` names, and synthesis marks those it moves
+    /// itself. Drop elaboration takes ownership here and nowhere else, then
+    /// removes the node.
+    Move {
+        expr: Box<TirExpr>,
     },
 
     /// Every call: free function (`foo(args)`), static method

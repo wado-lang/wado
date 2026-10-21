@@ -1,0 +1,27 @@
+// An `assert` that borrows a resource behind a short-circuit leaves it owned
+// by its binding: capturing it for the failure message does not take it.
+
+use { Fields, FieldName } from "wasi:http";
+
+fn has_greeting(f: &Fields) -> bool {
+    return f.has("x-greeting" as FieldName);
+}
+
+affine struct Holder {
+    f: Fields,
+}
+
+test {
+    let f = Fields::new();
+    assert builtin::black_box(true) && !has_greeting(&f);
+    assert !has_greeting(&f);
+
+    let h = Holder { f: Fields::new() };
+    assert builtin::black_box(true) && !has_greeting(&h.f);
+    assert !has_greeting(&h.f);
+
+    assert builtin::black_box(true) && !has_greeting(&Fields::new());
+}
+
+__DATA__
+{"test": {}}

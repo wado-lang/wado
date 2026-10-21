@@ -3,14 +3,19 @@
 //! `Semantics` layer, over every module, and needs no instantiation: a generic
 //! body is checked once, with its `affine` parameters affine.
 
+use std::rc::Rc;
+
 use crate::ast::{
     self, AssignExpr, AstId, Block, ClosureExpr, Condition, ConditionElement, Expr, Function,
-    GenericParam, IdentExpr, ImplBlock, Item, Pattern, Stmt, TraitDecl, for_each_pattern_binding,
+    IdentExpr, ImplBlock, Item, Pattern, Stmt, for_each_pattern_binding,
 };
 use crate::compiler_host::{Code, Diagnostic, DiagnosticSpan, Severity};
 use crate::compiler_item::CompilerItem;
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::module_source::ModuleSource;
+use crate::ownership::{
+    self, BodyFacts, Modes, OperandMode, PlacePath, affine_params, trait_scope,
+};
 use crate::semantics::{Destination, Operand, Semantics};
 use crate::symbol::SymbolKind;
 use crate::tir::{ResolvedType, TypeId};
@@ -243,15 +248,6 @@ impl Drops {
     }
 }
 
-/// The names of `params` declared `affine`.
-fn affine_params<'a>(params: impl IntoIterator<Item = &'a GenericParam>) -> Vec<String> {
-    params
-        .into_iter()
-        .filter(|p| p.is_affine)
-        .map(|p| p.name.clone())
-        .collect()
-}
-
 struct Checker<'a> {
     sem: &'a Semantics,
     module: &'a ModuleSource,
@@ -325,7 +321,12 @@ impl Checker<'_> {
         drop_body: bool,
         outside: Vec<(AstId, String)>,
     ) {
-        let mut walker = MoveWalker::new(self, affine_params, drop_body);
+        let facts = SemFacts {
+            sem: self.sem,
+            affine_params: &affine_params,
+        };
+        let modes = ownership::body_modes(body, &facts);
+        let mut walker = MoveWalker::new(self, Rc::new(modes), affine_params, drop_body);
         walker.visit_block(body);
         walker.refuse_escapes(&outside);
     }
@@ -418,14 +419,6 @@ impl Checker<'_> {
 }
 
 /// An `affine trait`'s default bodies are checked with `Self` affine.
-fn trait_scope(t: &TraitDecl) -> Vec<String> {
-    let mut scope = affine_params(&t.type_params);
-    if t.is_affine {
-        scope.push("Self".to_string());
-    }
-    scope
-}
-
 /// What a loop evaluates at the start of each iteration.
 enum LoopHead<'a> {
     None,
@@ -511,20 +504,44 @@ impl Flow {
     }
 }
 
-/// A place a body reads: a binding and the field path into it (`h.f.g`).
-struct PlacePath<'e> {
-    root: &'e IdentExpr,
-    fields: Vec<&'e str>,
+/// What a body's modes read: the types the elaborator recorded, and the body's
+/// `affine` type parameters.
+pub(crate) struct SemFacts<'s> {
+    pub(crate) sem: &'s Semantics,
+    pub(crate) affine_params: &'s [String],
 }
 
-impl PlacePath<'_> {
-    fn owned_fields(&self) -> Vec<String> {
-        self.fields.iter().map(|f| (*f).to_string()).collect()
+impl BodyFacts for SemFacts<'_> {
+    fn consumes_receiver(&self, call: AstId) -> bool {
+        self.sem.method_call_consumes_receiver(call)
+    }
+
+    fn indexes_tuple(&self, base: &Expr) -> bool {
+        self.sem.expression_type(base.id()).is_some_and(|ty| {
+            let types = &self.sem.types;
+            matches!(types.get(types.peel_refs(ty)), ResolvedType::GenericInstance { def, .. }
+                if types.is_tuple_def(*def))
+        })
+    }
+
+    fn is_affine(&self, expr: AstId) -> bool {
+        self.sem
+            .expression_type(expr)
+            .is_some_and(|ty| self.sem.is_affine(ty, self.affine_params))
+    }
+
+    fn names_variable(&self, ident: &IdentExpr) -> bool {
+        self.sem
+            .referenced_symbol(ident.id)
+            .and_then(|def| self.sem.symbol_at(def))
+            .is_some_and(|s| matches!(s.kind, SymbolKind::Variable(_) | SymbolKind::Global(_)))
     }
 }
 
 struct MoveWalker<'a, 'c> {
     checker: &'c mut Checker<'a>,
+    /// The body's modes, which a closure inside it shares.
+    modes: Rc<Modes>,
     affine_params: Vec<String>,
     /// Whether this is a `Drop::drop` body, which may move fields out of `self`.
     drop_body: bool,
@@ -584,9 +601,15 @@ fn reach(point: &mut Option<Flow>, flow: Flow) {
 }
 
 impl<'a, 'c> MoveWalker<'a, 'c> {
-    fn new(checker: &'c mut Checker<'a>, affine_params: Vec<String>, drop_body: bool) -> Self {
+    fn new(
+        checker: &'c mut Checker<'a>,
+        modes: Rc<Modes>,
+        affine_params: Vec<String>,
+        drop_body: bool,
+    ) -> Self {
         MoveWalker {
             checker,
+            modes,
             affine_params,
             drop_body,
             flow: Flow::default(),
@@ -612,14 +635,19 @@ impl MoveWalker<'_, '_> {
         self.checker.sem
     }
 
+    fn facts(&self) -> SemFacts<'_> {
+        SemFacts {
+            sem: self.sem(),
+            affine_params: &self.affine_params,
+        }
+    }
+
     fn is_affine(&self, type_id: TypeId) -> bool {
         self.sem().is_affine(type_id, &self.affine_params)
     }
 
     fn expr_is_affine(&self, id: AstId) -> bool {
-        self.sem()
-            .expression_type(id)
-            .is_some_and(|ty| self.is_affine(ty))
+        self.facts().is_affine(id)
     }
 
     fn report(&mut self, kind: MoveError, span: Span) {
@@ -640,30 +668,15 @@ impl MoveWalker<'_, '_> {
             })
     }
 
-    fn place_path(expr: &Expr) -> Option<PlacePath<'_>> {
-        match expr {
-            Expr::Ident(root) => Some(PlacePath {
-                root,
-                fields: Vec::new(),
-            }),
-            Expr::FieldAccess(fa) => {
-                let mut path = Self::place_path(&fa.expr)?;
-                path.fields.push(&fa.field);
-                Some(path)
-            }
-            _ => None,
-        }
+    fn place_path<'e>(&self, expr: &'e Expr) -> Option<PlacePath<'e>> {
+        ownership::place_path(expr, &self.facts())
     }
 
     /// Whether `expr` is a container's element, or a field of one at any
-    /// depth. A tuple's `t[0]` is its field `t.0`, no element.
+    /// depth.
     fn roots_in_element(&self, expr: &Expr) -> bool {
         match expr {
-            Expr::Index(ix) => !self.sem().expression_type(ix.expr.id()).is_some_and(|ty| {
-                let types = &self.sem().types;
-                matches!(types.get(types.peel_refs(ty)), ResolvedType::GenericInstance { def, .. }
-                    if types.is_tuple_def(*def))
-            }),
+            Expr::Index(ix) => !self.facts().indexes_tuple(&ix.expr),
             Expr::FieldAccess(fa) => self.roots_in_element(&fa.expr),
             _ => false,
         }
@@ -782,7 +795,7 @@ impl MoveWalker<'_, '_> {
         let Some(via) = self.sem().referenced_symbol(root.id) else {
             return;
         };
-        let path: Vec<String> = Self::place_path(expr)
+        let path: Vec<String> = self.place_path(expr)
             .map(|place| place.owned_fields())
             .unwrap_or_default();
         let mut places = vec![(via, path)];
@@ -910,127 +923,34 @@ impl MoveWalker<'_, '_> {
         });
     }
 
-    fn visit_value(&mut self, expr: &Expr) {
-        if let Some(place) = Self::place_path(expr) {
-            if self.expr_is_affine(expr.id()) {
+    /// Visit `expr` in the mode its position has.
+    fn visit_at(&mut self, expr: &Expr) {
+        self.visit(expr, self.modes.of(expr));
+    }
+
+    /// Visit `expr` in a position of `mode`. A place the modes move moves
+    /// unless `mode` reads it, and is read anywhere else; drop elaboration
+    /// takes ownership at the same places.
+    fn visit(&mut self, expr: &Expr, mode: OperandMode) {
+        let consumes = mode == OperandMode::Consume;
+        if let Some(place) = self.place_path(expr) {
+            if consumes && self.modes.moves(expr, &self.facts()) {
                 self.consume(expr, &place);
             } else {
                 self.read(&place);
             }
             return;
         }
-        // An element is read through the container's `&self`, which keeps it.
-        let out_of_reference = match expr {
-            Expr::Unary(u) if u.op == ast::UnaryOp::Deref => Some(&u.expr),
-            Expr::FieldAccess(fa)
-                if self.path_through_reference(expr) || self.roots_in_element(&fa.expr) =>
-            {
-                Some(&fa.expr)
-            }
-            _ if self.roots_in_element(expr) => Some(expr),
-            _ => None,
-        };
-        match out_of_reference {
-            Some(base) if self.expr_is_affine(expr.id()) => {
-                self.visit_expr(base);
-                let type_name = self.type_name_of(expr);
-                self.report(MoveError::MoveOutOfReference { type_name }, expr.span());
-            }
-            _ => self.visit_expr(expr),
-        }
-    }
-
-    fn visit_expr(&mut self, expr: &Expr) {
-        if let Some(place) = Self::place_path(expr) {
-            self.read(&place);
+        if consumes
+            && self.expr_is_affine(expr.id())
+            && let Some(base) = self.out_of_reference(expr)
+        {
+            self.visit(base, OperandMode::Borrow);
+            let type_name = self.type_name_of(expr);
+            self.report(MoveError::MoveOutOfReference { type_name }, expr.span());
             return;
         }
         match expr {
-            Expr::Ident(_) => unreachable!("a place path"),
-            // A field of a temporary, which owns it.
-            Expr::FieldAccess(fa) => self.visit_expr(&fa.expr),
-
-            Expr::Call(call) => {
-                self.visit_expr(&call.callee);
-                for arg in &call.args {
-                    self.visit_value(arg);
-                }
-                self.store_through_call(expr);
-                // A closure writes through to what it captures.
-                if matches!(call.callee, Expr::Ident(_)) {
-                    self.disturb(&call.callee);
-                }
-            }
-            Expr::MethodCall(mc) => {
-                if self.sem().method_call_consumes_receiver(mc.id) {
-                    self.visit_value(&mc.receiver);
-                } else {
-                    self.visit_expr(&mc.receiver);
-                }
-                for arg in &mc.args {
-                    self.visit_value(arg);
-                }
-                self.store_through_call(expr);
-            }
-            Expr::StaticMethodCall(smc) => {
-                for arg in &smc.args {
-                    self.visit_value(arg);
-                }
-                self.store_through_call(expr);
-            }
-
-            Expr::Unary(u) => self.visit_expr(&u.expr),
-            Expr::Binary(b) => {
-                self.visit_expr(&b.left);
-                self.visit_expr(&b.right);
-            }
-            Expr::Assign(a) => self.visit_assign(a),
-            Expr::CompoundAssign(a) => {
-                self.visit_expr(&a.target);
-                self.visit_expr(&a.value);
-            }
-            Expr::Index(ix) => {
-                self.visit_expr(&ix.expr);
-                self.visit_expr(&ix.index);
-            }
-            Expr::Cast(c) => self.visit_expr(&c.expr),
-            Expr::TryOp(t) => self.visit_value(&t.expr),
-
-            Expr::StructLiteral(s) => {
-                if let Some(spread) = s.spreads.first()
-                    && self.implements_drop(expr)
-                {
-                    let type_name = self.type_name_of(expr);
-                    self.report(MoveError::DropSpread { type_name }, spread.expr.span());
-                }
-                for spread in &s.spreads {
-                    self.visit_value(&spread.expr);
-                }
-                for field in &s.fields {
-                    self.visit_value(&field.value);
-                }
-            }
-            Expr::TupleLiteral(t) => {
-                for el in &t.elements {
-                    self.visit_value(el);
-                }
-            }
-            Expr::TupleComprehension(c) => {
-                self.visit_value(&c.iterable);
-                self.visit_value(&c.body);
-            }
-            Expr::TemplateString(ts) => {
-                for expr in ts.interpolations() {
-                    self.visit_expr(expr);
-                }
-            }
-            // A hole is read or referenced where it stands, never moved.
-            Expr::TaggedTemplate(t) => {
-                for expr in t.template.interpolations() {
-                    self.visit_expr(expr);
-                }
-            }
-
             Expr::Block(block) => {
                 self.visit_block(block);
             }
@@ -1047,28 +967,54 @@ impl MoveWalker<'_, '_> {
             Expr::Match(m) => {
                 self.visit_match(&m.expr, &m.arms);
             }
+            Expr::Closure(closure) => self.visit_closure(closure),
+            Expr::Assign(a) => self.visit_assign(a),
+            _ => self.visit_operands(expr),
+        }
+    }
 
-            Expr::WithHandler(w) => {
-                for handler in &w.handlers {
-                    self.visit_expr(&handler.handler);
+    /// The base an affine value read by value from `expr` would leave its
+    /// owner in: a reference, or a container whose `&self` hands out an
+    /// element.
+    fn out_of_reference<'e>(&self, expr: &'e Expr) -> Option<&'e Expr> {
+        match expr {
+            Expr::Unary(u) if u.op == ast::UnaryOp::Deref => Some(&u.expr),
+            Expr::FieldAccess(fa)
+                if self.path_through_reference(expr) || self.roots_in_element(&fa.expr) =>
+            {
+                Some(&fa.expr)
+            }
+            _ if self.roots_in_element(expr) => Some(expr),
+            _ => None,
+        }
+    }
+
+    /// An expression whose children are operands, each visited in the mode of
+    /// its position.
+    fn visit_operands(&mut self, expr: &Expr) {
+        if let Expr::StructLiteral(s) = expr
+            && let Some(spread) = s.spreads.first()
+            && self.implements_drop(expr)
+        {
+            let type_name = self.type_name_of(expr);
+            self.report(MoveError::DropSpread { type_name }, spread.expr.span());
+        }
+        for operand in ownership::operands(expr) {
+            self.visit_at(operand);
+        }
+        match expr {
+            Expr::Call(call) => {
+                self.store_through_call(expr);
+                // A closure writes through to what it captures.
+                if matches!(call.callee, Expr::Ident(_)) {
+                    self.disturb(&call.callee);
                 }
+            }
+            Expr::MethodCall(_) | Expr::StaticMethodCall(_) => self.store_through_call(expr),
+            Expr::WithHandler(w) => {
                 self.visit_block(&w.body);
             }
-            Expr::Range(r) => {
-                self.visit_expr(&r.start);
-                self.visit_expr(&r.end);
-            }
-            Expr::Matches(m) => self.visit_expr(&m.expr),
-            Expr::Spread(inner, _) => self.visit_expr(inner),
-            Expr::ComparisonChain(c) => {
-                self.visit_expr(&c.first);
-                for cmp in &c.comparisons {
-                    self.visit_expr(&cmp.right);
-                }
-            }
-            Expr::Closure(closure) => self.visit_closure(closure),
-
-            Expr::Literal(_) | Expr::Error(_) => {}
+            _ => {}
         }
     }
 
@@ -1084,17 +1030,18 @@ impl MoveWalker<'_, '_> {
             .collect();
         let mut inner = MoveWalker::new(
             &mut *self.checker,
+            Rc::clone(&self.modes),
             self.affine_params.clone(),
             self.drop_body,
         );
-        inner.flow = self.flow.clone();
-        inner.guard_bindings = self.guard_bindings.clone();
+        inner.flow.clone_from(&self.flow);
+        inner.guard_bindings.clone_from(&self.guard_bindings);
         inner.closure_locals = Some(locals);
-        inner.instances = self.instances.clone();
-        inner.ended = self.ended.clone();
-        inner.disturbances = self.disturbances.clone();
+        inner.instances.clone_from(&self.instances);
+        inner.ended.clone_from(&self.ended);
+        inner.disturbances.clone_from(&self.disturbances);
         inner.suppress = self.suppress;
-        inner.visit_value(&closure.body);
+        inner.visit_at(&closure.body);
         if !matches!(closure.body, Expr::Block(_)) {
             inner.refuse_returned(&closure.body);
         }
@@ -1155,7 +1102,7 @@ impl MoveWalker<'_, '_> {
     }
 
     fn visit_assign(&mut self, a: &AssignExpr) {
-        self.visit_value(&a.value);
+        self.visit_at(&a.value);
         let owners = self.owners_of(&a.value);
         match &a.target {
             Expr::Ident(ident) => {
@@ -1169,9 +1116,9 @@ impl MoveWalker<'_, '_> {
                 }
             }
         }
-        match Self::place_path(&a.target) {
+        match self.place_path(&a.target) {
             Some(place) => self.clear_place(&place),
-            None => self.visit_expr(&a.target),
+            None => self.visit_at(&a.target),
         }
     }
 
@@ -1437,11 +1384,11 @@ impl MoveWalker<'_, '_> {
         match expr {
             Expr::Unary(u) if u.op == ast::UnaryOp::Deref => self.owners_of(&u.expr),
             Expr::Index(ix) => self.borrow_owners(&ix.expr, borrow),
-            Expr::FieldAccess(fa) if Self::place_path(expr).is_none() => {
+            Expr::FieldAccess(fa) if self.place_path(expr).is_none() => {
                 self.borrow_owners(&fa.expr, borrow)
             }
             _ => {
-                let Some(place) = Self::place_path(expr) else {
+                let Some(place) = self.place_path(expr) else {
                     return self.owners_of(expr);
                 };
                 let Some(def) = self.sem().referenced_symbol(place.root.id) else {
@@ -1597,7 +1544,7 @@ impl MoveWalker<'_, '_> {
             Stmt::Let(l) => {
                 let before = self.flow.clone();
                 if let Some(value) = &l.value {
-                    self.visit_value(value);
+                    self.visit_at(value);
                 }
                 // A `let ... else` whose pattern fails consumes nothing; its
                 // else block diverges, so the continuation keeps the state
@@ -1614,18 +1561,18 @@ impl MoveWalker<'_, '_> {
                 false
             }
             Stmt::Expr(e) => {
-                self.visit_value(&e.expr);
+                self.visit_at(&e.expr);
                 false
             }
             Stmt::Return(r) => {
                 if let Some(value) = &r.value {
-                    self.visit_value(value);
+                    self.visit_at(value);
                     self.refuse_returned(value);
                 }
                 true
             }
             Stmt::TaskReturn(t) => {
-                self.visit_value(&t.value);
+                self.visit_at(&t.value);
                 false
             }
             Stmt::If(s) => self.visit_if(&s.condition, &s.then_block, s.else_block.as_ref()),
@@ -1652,7 +1599,7 @@ impl MoveWalker<'_, '_> {
             }
             // The loop owns what it walks (WEP: Affine Types).
             Stmt::ForOf(s) => {
-                self.visit_value(&s.iterable);
+                self.visit_at(&s.iterable);
                 let owners = self.owners_of(&s.iterable);
                 self.visit_loop(&LoopHead::Binding(&s.binding, owners), &s.body, None);
                 false
@@ -1660,7 +1607,7 @@ impl MoveWalker<'_, '_> {
             Stmt::Match(m) => self.visit_match(&m.expr, &m.arms),
             Stmt::Break(b) => {
                 if let Some(value) = &b.value {
-                    self.visit_value(value);
+                    self.visit_at(value);
                     if let Some(label) = &b.label {
                         let owners = self.owners_of(value);
                         merge_owners(self.break_owners.entry(label.clone()).or_default(), owners);
@@ -1684,9 +1631,9 @@ impl MoveWalker<'_, '_> {
                 true
             }
             Stmt::Assert(a) => {
-                self.visit_expr(&a.condition);
+                self.visit_at(&a.condition);
                 if let Some(msg) = &a.message {
-                    self.visit_expr(msg);
+                    self.visit_at(msg);
                 }
                 false
             }
@@ -1747,7 +1694,7 @@ impl MoveWalker<'_, '_> {
             }
             walker.flow = end.unwrap_or(start);
             if let Some(update) = update {
-                walker.visit_expr(update);
+                walker.visit_at(update);
             }
         });
     }
@@ -1817,7 +1764,7 @@ impl MoveWalker<'_, '_> {
     }
 
     fn visit_match(&mut self, scrutinee: &Expr, arms: &[ast::MatchArm]) -> bool {
-        self.visit_value(scrutinee);
+        self.visit_at(scrutinee);
         let owners = self.owners_of(scrutinee);
         let base = std::mem::take(&mut self.flow);
         let mut merged = base.clone();
@@ -1832,7 +1779,7 @@ impl MoveWalker<'_, '_> {
                     for_each_pattern_binding(&arm.pattern, &mut |id| {
                         walker.guard_bindings.insert(id);
                     });
-                    walker.visit_expr(guard);
+                    walker.visit_at(guard);
                     walker.guard_bindings = saved;
                 }
                 walker.visit_expr_diverges(&arm.body)
@@ -1851,7 +1798,7 @@ impl MoveWalker<'_, '_> {
             Expr::Block(block) => self.visit_block(block),
             Expr::LabeledBlock(lb) => self.visit_labeled_block(&lb.label, &lb.block),
             other => {
-                self.visit_value(other);
+                self.visit_at(other);
                 false
             }
         }
@@ -1861,15 +1808,15 @@ impl MoveWalker<'_, '_> {
     /// scrutinee and binds its pattern afresh.
     fn visit_condition(&mut self, condition: &Condition) {
         match condition {
-            Condition::Expr(e) => self.visit_expr(e),
+            Condition::Expr(e) => self.visit_at(e),
             Condition::LetChain { elements, .. } => {
                 for element in elements {
                     match element {
                         ConditionElement::Let { pattern, expr, .. } => {
-                            self.visit_value(expr);
+                            self.visit_at(expr);
                             self.bind_to(pattern, expr);
                         }
-                        ConditionElement::Expr(e) => self.visit_expr(e),
+                        ConditionElement::Expr(e) => self.visit_at(e),
                     }
                 }
             }
@@ -1881,13 +1828,15 @@ impl MoveWalker<'_, '_> {
     /// element failed, and then its scrutinee is in a binding.
     fn visit_condition_reading(&mut self, condition: &Condition) {
         match condition {
-            Condition::Expr(e) => self.visit_expr(e),
+            Condition::Expr(e) => self.visit_at(e),
             Condition::LetChain { elements, .. } => {
                 let last = elements.len() - 1;
                 for (i, element) in elements.iter().enumerate() {
                     match element {
-                        ConditionElement::Let { expr, .. } if i < last => self.visit_value(expr),
-                        _ => self.visit_expr(element.expr()),
+                        ConditionElement::Let { expr, .. } if i == last => {
+                            self.visit(expr, OperandMode::Borrow);
+                        }
+                        _ => self.visit_at(element.expr()),
                     }
                 }
             }

@@ -2207,7 +2207,10 @@ impl<'a> PatternLowerer<'a> {
             }
             | TirExprKind::VariantTag { expr: inner }
             | TirExprKind::VariantTest { expr: inner, .. }
-            | TirExprKind::VariantPayload { expr: inner, .. } => {
+            | TirExprKind::VariantPayload { expr: inner, .. }
+            // A generic body's patterns lower before its instance's drops are
+            // elaborated.
+            | TirExprKind::Move { expr: inner } => {
                 self.lower_expr(inner, type_table);
             }
             TirExprKind::VariadicTupleComprehension { .. } => {

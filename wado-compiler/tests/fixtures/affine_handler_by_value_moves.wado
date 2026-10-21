@@ -1,0 +1,35 @@
+// A handler installed by value moves into the `with`, which owns it for the
+// body and drops it after: the binding is empty once the `with` ends.
+affine struct Tok {
+    id: i32,
+}
+
+impl Drop for Tok {
+    fn drop(self) {
+    }
+}
+
+interface Ask {
+    fn ask() -> i32;
+}
+
+affine struct Answer {
+    tok: Tok,
+}
+
+impl Ask for Answer {
+    fn ask(&mut self) -> i32 {
+        resume self.tok.id
+    }
+}
+
+test {
+    let h = Answer { tok: Tok { id: 1 } };
+    with Ask => h do {
+        assert Ask::ask() == 1;
+    }
+    assert h.tok.id == 1;
+}
+
+__DATA__
+{"compile_error": ":31:12: analysis error: affine value `h` used after it was moved (moved at 28:17)"}

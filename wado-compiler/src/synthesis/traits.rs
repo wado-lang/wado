@@ -1195,7 +1195,8 @@ fn generate_struct_from_fields_fn(
                 },
                 f.type_id,
                 span,
-            ),
+            )
+            .moved(),
             field_index: f.index,
         })
         .collect();
@@ -2278,7 +2279,7 @@ fn generate_case_construct_helper(
                     payload: if is_unit_payload {
                         None
                     } else {
-                        Some(Box::new(local_expr(0, "payload", payload_type, span)))
+                        Some(Box::new(local_expr(0, "payload", payload_type, span).moved()))
                     },
                 },
                 variant_type,

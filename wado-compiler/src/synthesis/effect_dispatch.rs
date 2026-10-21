@@ -593,6 +593,7 @@ fn build_dispatch_wrapper_function(
         Some(alloc_local(&mut next_local, &mut locals, return_type))
     };
 
+    // Each branch forwards the parameters once.
     let arg_exprs: Vec<TirExpr> = params
         .iter()
         .map(|p| {
@@ -604,6 +605,7 @@ fn build_dispatch_wrapper_function(
                 p.type_id,
                 span,
             )
+            .moved()
         })
         .collect();
 
@@ -739,7 +741,8 @@ fn build_dispatch_wrapper_function(
             },
             return_type,
             span,
-        );
+        )
+        .moved();
         then_stmts.push(TirStmt::new(
             TirStmtKind::Return {
                 value: Some(result_expr),
@@ -1282,6 +1285,7 @@ fn walk_dispatch_children(expr: &mut TirExpr, env: &DispatchEnv, ctx: &mut Lower
         }
         TirExprKind::Unary { expr, .. }
         | TirExprKind::Cast { expr, .. }
+        | TirExprKind::Move { expr }
         | TirExprKind::FieldAccess { expr, .. }
         | TirExprKind::TupleSpread { expr }
         | TirExprKind::TupleZip { expr }
@@ -1979,6 +1983,7 @@ impl<'a, 'b> RestoreInjector<'a, 'b> {
             }
             TirExprKind::Unary { expr: inner, .. }
             | TirExprKind::Cast { expr: inner, .. }
+            | TirExprKind::Move { expr: inner }
             | TirExprKind::FieldAccess { expr: inner, .. }
             | TirExprKind::TupleSpread { expr: inner }
             | TirExprKind::TupleZip { expr: inner }
@@ -2839,6 +2844,7 @@ fn rewrite_call_children(expr: &mut TirExpr, ctx: &RewriteCtx<'_>) {
         }
         TirExprKind::Unary { expr, .. }
         | TirExprKind::Cast { expr, .. }
+        | TirExprKind::Move { expr }
         | TirExprKind::FieldAccess { expr, .. }
         | TirExprKind::TupleSpread { expr }
         | TirExprKind::TupleZip { expr }
