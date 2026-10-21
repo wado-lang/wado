@@ -4253,6 +4253,7 @@ fn patch_repeat_op_caller_follow<S: AsStrSlice>(
         probe_contested: stamps.probe_contested,
         static_exit_undecided: stamps.static_exit_undecided,
         atn_decides: stamps.atn_decides,
+        atn_checks: stamps.atn_checks,
         atn_asked_kinds: stamps.atn_asked_kinds,
         probe_viable: stamps.probe.viable,
         duties: stamps.duties,
@@ -4266,6 +4267,7 @@ struct RepeatExitStamps {
     probe_contested: bool,
     static_exit_undecided: bool,
     atn_decides: bool,
+    atn_checks: bool,
     atn_asked_kinds: List<i32>,
     duties: IterationDuties,
 }
@@ -4316,12 +4318,17 @@ fn lower_repeat_exit_stamps<S: AsStrSlice>(
     outer_suffix: &List<Element>,
 ) -> RepeatExitStamps {
     let by_atn = non_greedy_exit_by_atn(non_greedy, kind, body_admits);
-    let contested = ctx.settings.atn matches { Always }
+    let contested_somewhere = ctx.settings.atn matches { Always | Verify }
+        && !by_atn
         && repeat_contested(body_admits, caller_follow_first, alt_elements, index, ctx, reaches_rule_tail);
+    let contested = contested_somewhere && ctx.settings.atn matches { Always };
+    let checked = contested_somewhere && ctx.settings.atn.verifies();
     if by_atn {
         ctx.mark_asks_simulator("a non-greedy loop's exit");
     } else if contested {
         ctx.mark_asks_simulator("a repeat whose body and continuation can start on one token");
+    } else if checked {
+        ctx.mark_checks_with_simulator();
     }
     return RepeatExitStamps {
         probe: if by_atn || contested {
@@ -4345,6 +4352,7 @@ fn lower_repeat_exit_stamps<S: AsStrSlice>(
             caller_follow_second,
         ),
         atn_decides: by_atn || contested,
+        atn_checks: checked,
         atn_asked_kinds: if by_atn {
             atn_asked_kinds(&alt_elements[index], caller_follow_first, alt_elements, index, ctx);
         } else {

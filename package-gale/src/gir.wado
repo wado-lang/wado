@@ -1035,6 +1035,9 @@ pub struct RepeatOp {
     /// loop's exit no lookahead locates, or, under `atn: "always"`, any
     /// Repeat whose body and continuation can start on one token.
     pub atn_decides: bool = false,
+    /// Under `atn: "verify"`, the simulator checks whether each iteration
+    /// entered, where `always` would have it decide.
+    pub atn_checks: bool = false,
     /// For a loop the simulator decides, the only tokens it needs asking
     /// about; any other enters. Empty where every token asks.
     pub atn_asked_kinds: List<i32> = [],

@@ -5504,7 +5504,11 @@ fn gen_op_repeat_with_follow_override(
             let enters = atn_enters_cond(ctx, rep_op.atn_decision, rep.non_greedy, "&p.kinds", "p.pos");
             gen_optional_present(w, &rep_op.body, "", &enters, ctx, &NO_KINDS);
         } else {
+            let at = begin_iteration_check(w, rep_op, name_counts, "");
             gen_op_repeat_optional_greedy(w, rep, rep_op, ctx, name_counts, follow);
+            if let Some(at) = at {
+                gen_exit_check_or_entered(w, rep_op, ctx, &at);
+            }
         }
         return;
     }
@@ -5970,17 +5974,21 @@ fn gen_op_repeat_star_plus_greedy(
         let plus_flag = if is_plus { begin_plus_flag(w, name_counts) } else { String::new() };
         w.begin("loop");
         w.line("if p.recovering { break; }");
+        let at = begin_iteration_check(w, rep_op, name_counts, &plus_flag);
         if repeat_speculates(rep_op, inner, is_plus, ctx) {
             gen_rep_speculative_iteration(w, &body, rep_op, inner, ctx, name_counts);
         } else {
             let decided = gen_rep_iteration_entry(w, rep_op, inner, ctx, name_counts, &plus_flag);
             gen_repeat_iteration(w, &body, rep_op, inner, ctx, decided_entry(&decided, &plus_flag), decided);
         }
+        end_iteration_check(w, rep_op, ctx, &at);
     } else if is_plus && body matches { Storable(_) } {
         let plus_flag = begin_plus_flag(w, name_counts);
         w.begin(`while !p.recovering && (${plus_flag} || ${body_guard_cond(rep_op, ctx)})`);
+        let at = begin_iteration_check(w, rep_op, name_counts, &plus_flag);
         gen_iter_caller_follow_gate(w, rep_op, &plus_flag);
         gen_repeat_iteration(w, &body, rep_op, inner, ctx, GroupEntry::Looped(plus_flag));
+        end_iteration_check(w, rep_op, ctx, &at);
     } else {
         if is_plus {
             begin_plus_first_iteration(w, name_counts);
@@ -5989,11 +5997,76 @@ fn gen_op_repeat_star_plus_greedy(
             gen_loop_back_sync(w, ctx, rep_op);
         }
         w.begin(`while !p.recovering && ${and_operand(body_guard_cond(rep_op, ctx))}`);
+        let at = begin_iteration_check(w, rep_op, name_counts, "");
         gen_caller_follow_gate(w, rep_op);
         gen_repeat_iteration(w, &body, rep_op, inner, ctx, looped(), null, &admits_kinds(&rep_op.body_admits));
+        end_iteration_check(w, rep_op, ctx, &at);
     }
     gen_loop_back_sync(w, ctx, rep_op);
     w.end();
+    gen_exit_check(w, rep_op, ctx, "p.pos");
+}
+
+/// Under `atn: "verify"`, where a looped iteration of `rep_op` starts, as the
+/// name of a local holding it, -1 on a `+`'s mandatory first iteration.
+/// `null` where the loop is not checked.
+fn begin_iteration_check<S: AsStrSlice>(
+    w: &mut CodeWriter,
+    rep_op: &RepeatOp,
+    name_counts: &mut List<[String, i32]>,
+    plus_flag: S,
+) -> Option<String> {
+    if !rep_op.atn_checks {
+        return null;
+    }
+    let at = dedup_name("_rc_at", name_counts);
+    if plus_flag.is_empty() {
+        w.line(`let ${at} = p.pos;`);
+    } else {
+        w.line(`let ${at} = if ${plus_flag} { -1 } else { p.pos };`);
+    }
+    return Option::Some(at);
+}
+
+/// Check that the iteration begun at `at` entered, once it has.
+fn end_iteration_check(w: &mut CodeWriter, rep_op: &RepeatOp, ctx: &mut EmitContext, at: &Option<String>) {
+    let Some(at) = at else {
+        return;
+    };
+    w.begin(`if ${at} >= 0 && !p.recovering`);
+    w.line(`let _ = ${repeat_verified_call(rep_op, ctx, at, "0")};`);
+    w.end();
+}
+
+/// Check that `rep_op` exits at `at`, which is where it ended.
+fn gen_exit_check<S: AsStrSlice>(w: &mut CodeWriter, rep_op: &RepeatOp, ctx: &mut EmitContext, at: S) {
+    if !rep_op.atn_checks {
+        return;
+    }
+    w.begin("if !p.recovering");
+    w.line(`let _ = ${repeat_verified_call(rep_op, ctx, at, "1")};`);
+    w.end();
+}
+
+/// Check a `?` that started at `at`: it entered where it consumed a token.
+fn gen_exit_check_or_entered<S: AsStrSlice>(w: &mut CodeWriter, rep_op: &RepeatOp, ctx: &mut EmitContext, at: S) {
+    w.begin("if !p.recovering");
+    w.line(`let _ = ${repeat_verified_call(rep_op, ctx, &at, `if p.pos > ${at} { 0 } else { 1 }`)};`);
+    w.end();
+}
+
+/// The call checking that a greedy `rep_op` takes edge `edge` at `at`:
+/// `build_repeat` orders its edges `[enter=0, exit=1]`.
+fn repeat_verified_call<S: AsStrSlice, S1: AsStrSlice>(
+    rep_op: &RepeatOp,
+    ctx: &mut EmitContext,
+    at: S,
+    edge: S1,
+) -> String {
+    let decision = ctx.plan.atn_decision_site(rep_op.atn_decision);
+    assert decision >= 0, "a checked repeat marked the grammar as needing the ATN, which numbers every repeat's decision";
+    ctx.cursor.note_ref(&ATN_VERIFIED);
+    return atn_verified_call(decision, AtnPicker::Repeat, ctx.atn_arg(), "&p.kinds", at, atn_prec_arg(ctx), edge);
 }
 
 fn begin_plus_flag(w: &mut CodeWriter, name_counts: &mut List<[String, i32]>) -> String {

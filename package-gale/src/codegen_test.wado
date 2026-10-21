@@ -941,6 +941,26 @@ a b a b => (u a b a b)
 ";
 }
 
+test "atn verify checks a contested repeat against the simulator" {
+    let verify = GenerateOptions { atn: AtnMode::Verify };
+    let agreed = parses_each(CONTESTED_REPEATS_G4, [
+        ["s", "a b"],
+        ["s", "a a a b"],
+        ["t", "c d d"],
+    ], &verify);
+    assert agreed == "a b => (s (a a) b)\na a a b => (s (a a) (a a) (a a) b)\nc d d => (t c (c d) (c d))\n";
+    let source = gen_with(CONTESTED_REPEATS_G4, &verify).source;
+    for let [rule, input] of [
+        ["t", "c d d d"],
+        ["u", "a a b"],
+        ["u", "a b a b"],
+    ] {
+        let out = eval_beside(source, wado`show("${input}", parse_${rule}("${input}"));\n`, SHOW_FN);
+        assert !out.status matches { Exited(0) }, input;
+        assert out.stderr.contains(": the repeat picks "), out.stderr;
+    }
+}
+
 test "atn never refuses a decision only the simulator makes" {
     let never = gen_with("grammar T;
 r : A?? A B ;
