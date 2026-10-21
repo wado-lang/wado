@@ -2150,11 +2150,6 @@ fn wrap_async_result(
     )
 }
 
-/// Build the `op_<n>` closure `|<op_params>| $h_<E>.<E>::<op>(<op_params>)` for
-/// one (effect, op, handler-impl) triple. The receiver is a `Capture { index: 0 }`
-/// holding whatever `$h_<E>` holds, which the lower-phase closure pass turns
-/// into a field access on the functor struct. Typed at the call-site type, so an
-/// async operation wraps the result in `$cm_wrap_async__<E>__<op>`.
 /// The arguments an operation's closure hands on: each of its parameters,
 /// moved.
 fn forwarded_args(op: &TirEffectOp, span: Span) -> Vec<CallArg> {
@@ -2178,6 +2173,11 @@ fn forwarded_args(op: &TirEffectOp, span: Span) -> Vec<CallArg> {
         .collect()
 }
 
+/// Build the `op_<n>` closure `|<op_params>| $h_<E>.<E>::<op>(<op_params>)` for
+/// one (effect, op, handler-impl) triple. The receiver is a `Capture { index: 0 }`
+/// holding whatever `$h_<E>` holds, which the lower-phase closure pass turns
+/// into a field access on the functor struct. Typed at the call-site type, so an
+/// async operation wraps the result in `$cm_wrap_async__<E>__<op>`.
 fn build_handler_op_closure(
     op: &TirEffectOp,
     impl_info: &HandlerImplInfo,

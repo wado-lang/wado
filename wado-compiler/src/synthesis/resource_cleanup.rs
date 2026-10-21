@@ -2182,7 +2182,7 @@ fn unwrap_move(expr: &mut TirExpr) {
     *expr = *place;
 }
 
-/// Remove the moves of `function`, one drop elaboration does not see.
+/// Remove the moves of `function`, which no drop elaboration will read.
 pub fn strip_moves(function: &mut TirFunction) {
     if let Some(body) = &mut function.body {
         StripMoves.visit_block(body);
