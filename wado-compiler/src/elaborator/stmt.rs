@@ -1,5 +1,7 @@
 //! Statement resolution (let, return, if, loop, break, continue, etc.).
 
+use std::rc::Rc;
+
 use crate::ast::{
     self, AstId, AstVisitor, Block, BreakStmt, Condition, ConditionElement, Expr, ExprStmt,
     ForOfStmt, ForStmt, IfStmt, Item, LetStmt, Literal, Pattern, ReturnKeyword, ReturnStmt, Stmt,
@@ -161,12 +163,16 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // A local may name one declared after it, or itself, so what the
         // types owe is asked once every local is stated to the solver.
         let ((), held) = self.holding_bounds(|this| this.resolve_local_items(&items));
+        let defs: Vec<DefId> = items
+            .iter()
+            .filter(|item| matches!(item, ast::Item::Struct(_) | ast::Item::Newtype(_)))
+            .map(|item| self.tysys.def_at(item.id()))
+            .collect();
+        // What the rest of the walk asks of them, whether one is affine say,
+        // reads the program's tables.
+        Rc::make_mut(&mut self.tysys.data).publish(&self.sem.decls.local, &defs);
+        self.sem.decls.fn_local_defs.extend(&defs);
         if let Some(solver) = &self.tysys.solver {
-            let defs: Vec<DefId> = items
-                .iter()
-                .filter(|item| matches!(item, ast::Item::Struct(_) | ast::Item::Newtype(_)))
-                .map(|item| self.tysys.def_at(item.id()))
-                .collect();
             solver
                 .borrow_mut()
                 .state_local(&self.tysys, &self.sem.decls.local, &defs);
@@ -295,6 +301,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// declarations are resolved, so a type may name one written later.
     fn declare_local_struct(&mut self, struct_decl: &ast::StructDecl) {
         let def = self.tysys.def_at(struct_decl.id);
+        if struct_decl.is_affine {
+            self.tysys.type_table.borrow_mut().mark_affine_decl(def);
+        }
         // Mirrors `intern_all_decl_types`'s "base entry" for a module-level
         // generic struct: its usage sites mint separate `GenericInstance`
         // TypeIds, and this one exists so `type_id_of_decl` has something to

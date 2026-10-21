@@ -1644,8 +1644,10 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                 reify_eligible.insert(module_source.clone());
             }
         }
-        // The body walk declares the function-local items.
-        Self::publish_data_decls(state, &sorted_sources);
+        let data = Rc::make_mut(&mut state.tysys.data);
+        for sem in state.module_semantics.values() {
+            data.publish(&sem.decls.local, &sem.decls.fn_local_defs);
+        }
 
         // `unchecked` reads the callees the body walks settled, so it waits
         // for every module's walk. Only a clean walk settled them all.
