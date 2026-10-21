@@ -465,7 +465,13 @@ fn enum_variants(
         return None;
     };
 
-    Some(enum_decl.cases.iter().map(|c| to_cm_name(&c.name)).collect())
+    Some(
+        enum_decl
+            .cases
+            .iter()
+            .map(|c| to_cm_name(&c.name))
+            .collect(),
+    )
 }
 
 fn evaluate_literal(
