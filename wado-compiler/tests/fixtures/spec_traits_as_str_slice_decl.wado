@@ -9,11 +9,15 @@ impl Eq<String> for Word {
     fn eq(&self, other: &String) -> bool { return self.text == *other; }
 }
 
+impl Display for Word {
+    fn fmt(&self, f: &mut Formatter) { self.text.fmt(f); }
+}
+
 impl AsStrSlice for Word {
     fn as_str_slice(&self) -> StrSlice { return PreludeAsStrSlice::as_str_slice(&self.text); }
 }
 
-pub trait AsStrSlice: Eq<String> with () {
+pub trait AsStrSlice: Eq<String> + Display with () {
     fn as_str_slice(&self) -> StrSlice;
     // default bodies over the view: len, slice, chars, starts_with, find, …
 }
