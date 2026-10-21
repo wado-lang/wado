@@ -160,7 +160,11 @@ runs, so a typo or a type mismatch is reported on the offending key.
   error.
 - A default is a literal, and a list or map field takes a `[…]` or
   `{ k: v, … }` one.
-- An `enum` option is written as its case name in a string.
+- An `enum` option is written as its case's Component Model name in a string,
+  so `AtnMode::Never` is `"never"` and a case `HighContrast` is
+  `"high-contrast"`. That is the name the generator's WIT gives the case, so a
+  generator takes the same values whether it is named by its source or by its
+  component.
 - A `TreeMap<String, V>` option is written as an object whose keys are the
   author's own. The generator receives it sorted by key.
 

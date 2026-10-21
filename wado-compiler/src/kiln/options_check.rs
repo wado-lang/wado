@@ -188,10 +188,11 @@ fn check_value(
             if variants.contains(&s.value) {
                 Some(CanonicalValue::Enum(s.value.clone()))
             } else {
+                let cases: Vec<String> = variants.iter().map(|v| format!("\"{v}\"")).collect();
                 diagnostics.push(site.error(format!(
-                    "kiln: `{}` expected one of {name}::{{{}}}, got \"{s}\"",
+                    "kiln: `{}` expected one of {} (`{name}`), got \"{s}\"",
                     site.path,
-                    variants.join(", ")
+                    cases.join(", ")
                 )));
                 None
             }
@@ -641,6 +642,41 @@ mod tests {
             d.message
         );
         assert_eq!(at(d), (FILE, 4, 9));
+    }
+
+    #[test]
+    fn enum_value_is_one_of_its_cm_names() {
+        let desc = OptionsDescriptor {
+            fields: vec![field(
+                "atn",
+                OptionsType::Enum {
+                    name: "AtnMode".to_string(),
+                    variants: vec!["auto".to_string(), "never".to_string()],
+                },
+                None,
+            )],
+        };
+        let mut obj = AttrObject::default();
+        obj.insert(
+            "atn".to_string(),
+            entry(AttrValue::string("never".to_string())),
+        );
+        let result = validate(&desc, Some(&AttrValue::Object(obj)), anchor()).unwrap();
+        assert_eq!(
+            result.values,
+            vec![("atn".to_string(), CanonicalValue::Enum("never".to_string()))]
+        );
+
+        let mut obj = AttrObject::default();
+        obj.insert(
+            "atn".to_string(),
+            entry(AttrValue::string("Never".to_string())),
+        );
+        let err = validate(&desc, Some(&AttrValue::Object(obj)), anchor()).unwrap_err();
+        assert_eq!(
+            only(&err).message,
+            "kiln: `options.atn` expected one of \"auto\", \"never\" (`AtnMode`), got \"Never\""
+        );
     }
 
     #[test]
