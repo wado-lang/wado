@@ -246,9 +246,12 @@ Parse 81 SQL statements (13321 bytes). Two parsers are generated from the same
 
 | Implementation      | Throughput |    ms/iter | vs best |
 | ------------------- | ---------: | ---------: | ------- |
-| **Wado** (Gale)     | 19.60 MB/s |   0.679 ms | 1.00x   |
-| Rust (sqlparser-rs) | 12.18 MB/s |   1.093 ms | 1.61x   |
-| Java (ANTLR4)       |  0.11 MB/s | 126.373 ms | 186.12x |
+| **Wado** (Gale)     | 23.22 MB/s |   0.573 ms | 1.00x   |
+| Rust (sqlparser-rs) | 12.20 MB/s |   1.091 ms | 1.90x   |
+| Java (ANTLR4)       |  0.11 MB/s | 124.738 ms | 217.69x |
+
+The Gale parser is generated with `atn: "never"`: every decision is settled by
+generated code, with no ATN simulator at run time.
 
 Java (ANTLR4) is the head-to-head for Gale's generated parser, on the JVM and
 JIT-warmed to steady state, so the gap is algorithmic rather than a warmup
@@ -275,11 +278,13 @@ about what a browser would run.
 
 | Implementation                | Throughput |  ms/iter | vs best |
 | ----------------------------- | ---------: | -------: | ------- |
-| **Gale** (Wado)               | 13.88 MB/s | 0.959 ms | 1.00x   |
-| Prism.js                      | 12.01 MB/s | 1.109 ms | 1.16x   |
-| Lezer (CodeMirror)            |  4.87 MB/s | 2.733 ms | 2.85x   |
-| tree-sitter (Rust native)     |  4.74 MB/s | 2.808 ms | 2.93x   |
-| tree-sitter (web-tree-sitter) |  2.79 MB/s | 4.776 ms | 4.98x   |
+| **Gale** (Wado)               | 15.49 MB/s | 0.860 ms | 1.00x   |
+| Prism.js                      | 11.81 MB/s | 1.128 ms | 1.31x   |
+| Lezer (CodeMirror)            |  4.92 MB/s | 2.705 ms | 3.15x   |
+| tree-sitter (Rust native)     |  4.76 MB/s | 2.801 ms | 3.26x   |
+| tree-sitter (web-tree-sitter) |  2.80 MB/s | 4.749 ms | 5.52x   |
+
+The Gale highlighter's parser is generated with `atn: "never"`, as in SQL Parse.
 
 Every highlighter parses the corpus without errors: a highlighter that gives up
 on a region skips the work of colouring it, so the constructs two of them
@@ -294,14 +299,15 @@ ANTLR4-compatible generator, so the head-to-head comparison is against
 algorithm family, both emitting a parser. Throughput is grammar bytes processed
 per second (higher is better).
 
-| Implementation                   |  Throughput |    ms/iter | vs best |
-| -------------------------------- | ----------: | ---------: | ------- |
-| Java (ANTLR4)                    | 979.34 KB/s |  43.044 ms | 1.00x   |
-| **Wado** (Gale, 1 GiB heap)      | 102.21 KB/s | 412.424 ms | 9.58x   |
-| **Wado** (Gale, 256 MiB default) |  96.06 KB/s | 438.851 ms | 10.20x  |
+| Implementation                   |  Throughput |   ms/iter | vs best |
+| -------------------------------- | ----------: | --------: | ------- |
+| Java (ANTLR4)                    | 963.37 KB/s | 43.758 ms | 1.00x   |
+| **Wado** (Gale, 1 GiB heap)      | 484.25 KB/s | 87.052 ms | 1.99x   |
+| **Wado** (Gale, 256 MiB default) | 469.55 KB/s | 89.777 ms | 2.05x   |
 
 Both rows run in-process and warm, emitting a parser and no listeners: Gale a
-Wado recursive-descent one from memory, ANTLR4 Java onto disk.
+Wado recursive-descent one from memory, ANTLR4 Java onto disk. Gale generates
+with `atn: "never"`, so the parser it emits carries no ATN simulator.
 
 ANTLR4 also re-reads the grammars each iteration; both terms are small next to
 generation. That row needs `java`/`javac` and is skipped without them.
