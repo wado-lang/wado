@@ -1,0 +1,361 @@
+# WEP: `core:process` — Running Host Programs Without Extending Authority
+
+## Context
+
+A Wado program has no way to run another program. A build script, a test that
+calls `git`, a tool that wraps a compiler: each needs one, and each is stuck.
+
+WASI has no process interface moving through its subgroup. Wado is the one to
+propose it, so this WEP designs the WIT as a WASI proposal from the start.
+
+### A child runs outside the Wasm sandbox
+
+A Wasm guest reaches only what its host grants. A native child process reaches
+whatever the user who started the host can reach. Without OS confinement,
+granting spawn grants the user's whole authority. Deno documents its
+`--allow-run` this way: allowing a subprocess is allowing everything, and the
+permission system no longer holds. Node's `--allow-child-process` carries the
+same warning.
+
+### A list of program names is not a boundary
+
+Allowing `git` but not `sh` looks like a limit and is not one. A permitted
+program turns into arbitrary code through its own arguments and environment:
+
+- `git -c core.sshCommand=…`, `git --upload-pack=…`, `GIT_SSH_COMMAND`
+- `LD_PRELOAD`, `DYLD_INSERT_LIBRARIES`
+
+Denylisting these is a race against every program's option parser. The
+boundary has to be the OS confining the child, or an explicit statement that
+the child is fully trusted. An allowlist can only record intent.
+
+## Decision
+
+### The rule: spawning never extends authority
+
+A child is confined to the guest's own grants plus a fixed system baseline. A
+host that cannot confine a child does not offer process spawning at all.
+
+This one rule carries the security model, so the WIT states it as the
+interface's contract. Everything Wado would otherwise manage follows from it and
+is left out:
+
+- No program allowlist and no executable handle: the sandbox decides what may
+  run.
+- No denylist of environment keys: whatever the child runs, it stays inside the
+  guest's grants.
+- No process-specific permission per package. A dependency that spawns is in the
+  same authority class as one that writes files through `Preopens`. Permissions
+  per dependency are a question for effects in general, and belong to a WEP of
+  their own.
+
+### The host sandbox is the last line of defense
+
+`#[ambient]`, `#[benign(E)]` and a user-written `#[cm("…")]` redeclaration can
+each reach `Process` without the effect showing in a signature. Wado does not
+close these. The effect makes intent visible; it is not the security boundary.
+
+The `wado` CLI will also run arbitrary Component Model `.wasm`, including
+untrusted modules that no Wado compiler produced. For those the language is no
+boundary at all, so the host sandbox must hold on its own. Development effort
+goes to the sandbox.
+
+### A sandbox layer of Wado's own in `wado-host`
+
+`wado-host` implements the sandbox itself rather than depending on a crate.
+Three reasons:
+
+- The policy language is small: subtrees with read-only, read-write or execute
+  access, and the network all or none. A general-purpose crate's extra features
+  are attack surface and audit scope Wado does not use.
+- The parent stays unconfined and only the child is confined. A crate built for
+  confining the current process is dangerous here.
+- The candidates (nono, birdcage, wardstone and others) are young or dormant.
+  Depending on one hands the speed of security fixes to someone else.
+
+The policy is the subset both OS mechanisms express exactly, so the two
+backends agree. On Linux it is roughly what Seatbelt provides on macOS:
+
+| To restrict                     | macOS (Seatbelt)                       | Linux                                              |
+| ------------------------------- | -------------------------------------- | -------------------------------------------------- |
+| Read and write, per subtree     | `file-read*` / `file-write*`           | Landlock                                           |
+| Exec, including by a grandchild | `process-exec`                         | Landlock `EXECUTE`                                 |
+| Network                         | `network-outbound` / `network-inbound` | Landlock TCP rules, seccomp for the other families |
+| Signals and abstract sockets    | isolated by default                    | Landlock scopes                                    |
+| Inherited, cannot be lifted     | yes                                    | yes                                                |
+
+On Linux, seccomp covers what Landlock does not: socket families other than TCP,
+and `ptrace`. On macOS, the policy becomes generated SBPL.
+
+A confined child starts through a helper, `wado __sandbox-exec`. The host
+re-executes itself single-threaded, the helper applies the confinement, and then
+it execs the program. The parent `wado` runs wasmtime on several threads, and
+`sandbox_init` allocates, which is unsafe between `fork` and `exec` in a
+multithreaded process.
+
+Writing the sandbox in-house carries two obligations:
+
+- Escape tests run in CI on Linux and on macOS. Each of these must fail: reading
+  a file outside the grants, writing under a read-only subtree, executing a
+  binary outside the grants, executing one through a grandchild, a network
+  connection when the network is not granted, and escaping through a symbolic
+  link or `..`.
+- The SBPL generator is fuzzed. A path holding `"` or `\` that escapes wrongly
+  rewrites the policy itself.
+
+### Where it is offered
+
+The host offers spawning only where the kernel can enforce the rule, and never
+in a weaker form:
+
+- Linux: Landlock ABI 6 or later (kernel 6.12). ABI 6 adds the scopes that
+  isolate signals and abstract UNIX sockets. Without them a child could signal
+  or connect to processes outside its sandbox, which an untrusted module must
+  not do. The host reads the ABI number from `landlock_create_ruleset` rather
+  than the kernel version, which distributions backport against.
+- macOS: Seatbelt.
+- Windows: WSL2 only. Under WSL2, the Linux build of `wado` uses the Linux
+  backend, so there is no Windows-specific code. The native Windows build does
+  not offer spawning, and its error points to WSL2.
+
+Where spawning is not offered, `spawn` answers `unsupported`. A program that
+never spawns is unaffected.
+
+ABI 6 shuts out some current long-term-support kernels. Ubuntu 24.04's general
+availability kernel (6.8) does not qualify; its hardware enablement kernel
+does.
+
+### System baseline
+
+A native program reads paths a Wasm guest never needs: its loader, its shared
+libraries, its locale data. The baseline is that set, and it is the one way a
+child may read more than the guest. It is defined, not open-ended:
+
+| Purpose                         | Linux                                                     | macOS                                       |
+| ------------------------------- | --------------------------------------------------------- | ------------------------------------------- |
+| Loader and shared libraries     | `/lib*`, `/usr/lib*`, `/etc/ld.so.cache`                  | `/usr/lib`, `/System`, the dyld cache       |
+| The program                     | the resolved binary and its install prefix                | the same (`/opt/homebrew/…`, say)           |
+| Name resolution (network only)  | `/etc/resolv.conf`, `hosts`, `nsswitch.conf`, its socket  | `/private/etc/…`, mDNSResponder             |
+| TLS certificates (network only) | `/etc/ssl`, `/etc/pki`                                    | `/private/etc/ssl`, the keychain            |
+| Locale and time zones           | `/usr/share/zoneinfo`, locale data                        | the same                                    |
+| Devices                         | `/dev/null`, `/dev/urandom`, `/dev/tty` when inheriting   | the same                                    |
+| Scratch                         | a private `HOME` and `TMPDIR` per spawn, removed at exit  | the same                                    |
+
+- The baseline is read and execute only. The private `HOME` and `TMPDIR` are the
+  only writable entries.
+- The list is fixed per OS in the host's source. The install prefix is derived
+  from the resolved binary, since a Homebrew or Nix program reads its own
+  prefix.
+- The real `HOME` is never in the baseline. A child sees it only through an
+  explicit grant, so `~/.ssh` stays out of reach by default.
+- Of the UNIX sockets, only the name resolver's is open. A socket such as D-Bus
+  is a path to a privileged service.
+- With the network not granted, the name resolution and TLS rows drop out.
+
+### Grants
+
+- On by default wherever the sandbox works. `--deny-process` turns it off. The
+  sandbox keeps the child within the guest, so an opt-in would protect nothing.
+- `wado run`, `wado test` and `wado serve` all offer it.
+- Kiln generators never do: a generator must be deterministic, and a child is
+  free to read clocks and randomness.
+- The child gets the guest's network grant, all or none. A child finer-grained
+  than its guest would invert the rule.
+- Each directory the guest is granted must map to the same path on the host;
+  otherwise the host refuses to start the program. A guest path that names
+  another host path cannot appear in a child's arguments. `wado run`'s default
+  grant, the current directory as `.`, counts as the same path: the child's
+  working directory is that directory, so a relative path means the same thing
+  on both sides.
+- Files inside a granted directory may be executed, so a binary the project just
+  built can run. This adds no authority, since the child cannot leave the grants
+  either way.
+
+### WIT
+
+The interface ships as `wado:process@0.1.0`, written in the shape a WASI
+proposal takes. Claiming `wasi:` before the subgroup adopts it would promise
+compatibility Wado cannot keep with other hosts. On adoption only the namespace
+changes.
+
+```wit
+package wado:process@0.1.0;
+
+interface types {
+    use wasi:filesystem/types@0.3.0.{descriptor};
+
+    variant exit-status { exited(u8), signaled(u8), timed-out }
+
+    enum error-code { not-found, not-permitted, unsupported, resource-exhausted, io }
+
+    variant input { null, inherit, piped(stream<u8>) }
+    enum output { null, inherit, piped }
+
+    record command {
+        program: string,
+        args: list<string>,
+        env: list<tuple<string, string>>,
+        stdin: input,
+        stdout: output,
+        stderr: output,
+        /// Nanoseconds, as `wasi:clocks` counts a duration.
+        timeout: option<u64>,
+    }
+
+    resource child {
+        kill: func();
+    }
+
+    record spawned {
+        child: child,
+        stdout: option<stream<u8>>,
+        stderr: option<stream<u8>>,
+        exit: future<result<exit-status, error-code>>,
+    }
+}
+
+interface spawn {
+    use types.{command, spawned, error-code};
+    use wasi:filesystem/types@0.3.0.{descriptor};
+
+    spawn: func(cmd: command, cwd: option<borrow<descriptor>>) -> result<spawned, error-code>;
+}
+```
+
+- Dropping a `child` kills its process group. The host kills every child when
+  the guest exits.
+- `exit-status` takes Unix's shape, a `u8`, since Windows runs only under WSL2.
+  `timed-out` is distinct from `signaled(9)`.
+- `cwd` is its own parameter because a record cannot hold a `borrow`. With
+  `none`, the child starts in the directory the host started in.
+- A `program` holding a `/` is a path. Any other is looked up on the host's
+  `PATH`, skipping empty and relative entries, the rule external subcommands
+  already follow. There is no `find-executable`: the sandbox decides what runs,
+  and a name it cannot find is `not-found`.
+- The guest's environment is not passed on. The child gets the baseline
+  variables (`PATH`, its private `HOME` and `TMPDIR`, `LANG` and `LC_*`, and
+  `TERM` only when a stream is inherited) and then the guest's `env`, which
+  overrides them.
+- At the timeout the host sends `SIGTERM` to the process group, then `SIGKILL`
+  after a grace period. The grace is 3 seconds and a host option changes it; the
+  guest does not. The host enforces the timeout, so it holds even while the
+  guest is blocked reading a stream.
+
+### `core:process`
+
+```wado
+use { Command, cmd } from "core:process";
+
+let rev = cmd`git rev-parse ${branch}`.read()?;            // stdout as text; a non-zero exit is an error
+let out = Command::new("cargo").args(["build"]).output()?;  // stdout and stderr, read together
+let status = cmd`make -j${n}`.inherit_stdio().status()?;   // the child writes to the terminal itself
+
+let mut child = Command::new("wc").stdin_piped().stdout_piped().spawn()?;
+// child.stdin: StreamWritable<u8>, child.stdout: Stream<u8>
+```
+
+- One effect, `Process`. `spawn`, `output`, `status` and `read` declare it.
+- `inherit_stdin`, `inherit_stdout`, `inherit_stderr` and `inherit_stdio` also
+  declare `Stdin`, `Stdout` and `Stderr`: a guest passes on only a capability
+  it holds.
+- `output` reads stdout and stderr concurrently, so a child filling one pipe
+  cannot deadlock against a parent reading the other.
+- `Child` is `affine`, and dropping it kills the process. `wait(self)` returns
+  `Result<ExitStatus, ProcessError>`, and `kill(&self)` ends it early. There is
+  no `detach`: the host kills every child when the guest exits anyway.
+- A pipeline passes one child's `stdout` stream to the next one's `stdin`.
+- `Command::timeout(d: Duration)` sets the timeout. There is no default. A child
+  that runs out ends in `ExitStatus::TimedOut`: `output` returns what it read
+  so far along with that status, and `read` fails.
+- Captured output is capped at 64 MiB by default, and
+  `Command::capture_limit(bytes)` changes the cap for both streams. Past it,
+  stderr keeps its tail. Stdout past it is an `OutputTooLarge` error, since
+  output with its middle cut out (JSON, say) is wrong rather than short.
+- `ProcessError { program, kind }` names the program as `FsError` names its
+  path. The kinds are `NotFound`, `NotPermitted`, `Unsupported`,
+  `Io(ErrorCode)`, `Failed(ExitStatus, stderr)` and `OutputTooLarge`. Only
+  `read` returns `Failed`.
+
+### The `cmd` template
+
+`` cmd`…` `` builds an argument vector without a shell, so a hole cannot inject
+an argument:
+
+1. Literal text splits on whitespace, newlines included:
+   `` cmd`git status --short` `` is `["git", "status", "--short"]`.
+2. A hole is exactly one argument, whatever it holds: in
+   `` cmd`git commit -m ${msg}` ``, a `msg` of `"fix the bug"` is the one
+   argument after `-m`.
+3. A `List<String>` hole expands to one argument per element:
+   `` cmd`rm -- ${files}` ``.
+4. Parts with no whitespace between them join into one argument:
+   `` cmd`cp ${src} ${dir}/out.txt` ``.
+
+Literal text must not hold a character a shell would treat specially, since
+here it would mean nothing and the program would read it wrong. Writing
+`` cmd`git commit -m "fix bug"` `` would otherwise pass `"fix` and `bug"` as
+two arguments. Each of these in literal text is a contract violation:
+
+| Kind                      | Characters                                 |
+| ------------------------- | ------------------------------------------ |
+| Quoting and escaping      | `"` `'` `\`                                |
+| Pipes, lists, redirection | `\|` `&` `;` `<` `>`                       |
+| Subshells and groups      | `(` `)` `{` `}`                            |
+| Expansion                 | `$` (other than `${`), `` ` ``, `~`        |
+| Globbing                  | `*` `?` `[` `]`                            |
+| Comments                  | `#`                                        |
+
+A value holding any of them goes through a hole: `` cmd`grep ${"a|b"} log` ``.
+Everything else is allowed, so `--flag=value` and `user@host:path` stay
+literal. Starting strict leaves room to admit a character later; admitting one
+cannot be taken back.
+
+### Deliberate omissions
+
+- A shell API. `sh -c` is a program like any other, confined like any other.
+- `detach`, `find-executable`, a program allowlist and an environment denylist,
+  for the reasons above.
+
+## Roadmap
+
+1. The sandbox layer in `wado-host` with the Linux backend: the policy type, the
+   baseline, Landlock and seccomp, the ABI 6 check, and `wado __sandbox-exec`.
+   Done when the escape tests pass in CI on Linux.
+2. The macOS backend: the SBPL generator and its fuzzer. Done when the escape
+   tests pass in CI on macOS.
+3. `wado:process@0.1.0` in the `wado` host: spawning, streams, the timeout and
+   its grace option, killing the process group on drop and on guest exit,
+   `--deny-process`, and the refusal of a mapping that is not the same path.
+4. `core:process` in the stdlib: `Command`, `cmd`, `Child`, `output`, `status`
+   and `read`, with its stdlib reference and a cheatsheet entry.
+5. Filtering the network per host through a proxy, for the guest and the child
+   together.
+6. WSL2: confirm the Landlock ABI its kernel offers. Done when the escape tests
+   pass under WSL2.
+
+## Known gaps
+
+- The CLI surface is not named: a flag that adds read paths to the baseline (a
+  toolchain under `~/.cargo`, say), a flag that grants the real `HOME`, and the
+  option that sets the grace period.
+- Resources are unlimited. A child can run many children, use memory and CPU
+  without bound, and fork without limit. How many children may run at once,
+  rlimits and cgroups are all open.
+- Landlock does not restrict `stat`. A child on Linux can learn whether a path
+  outside its grants exists, and its metadata, which Seatbelt hides.
+- A guest directory granted under a different host path refuses to start a
+  program that spawns, even where a mount namespace could present the guest's
+  view to the child.
+- No pseudo-terminal: a child that needs one (a full-screen editor) gets the
+  inherited terminal or none.
+
+## Related WEPs
+
+- [`core:fs`](./wep-2026-09-12-core-fs.md) — the preopens whose grants a child
+  inherits.
+- [External Subcommands](./wep-2026-09-19-external-subcommands.md) — the `PATH`
+  rule `program` resolution reuses.
+- [Kiln](./wep-2026-04-12-kiln.md) — the deterministic generators that never
+  spawn.
+- [Affine Types](./wep-2026-10-17-affine-types.md) — the discipline `Child`
+  follows.
