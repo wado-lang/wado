@@ -1,9 +1,8 @@
 //! The stream copy canonicals must carry the `async` option.
 //!
 //! Without it the canonical never hands BLOCKED back to the guest, so the
-//! BLOCKED branch around every stream read and write — and `core:rt`'s
-//! `cm_await_blocked` behind it — is unreachable code shipped in every
-//! component. Runtime fixtures cannot catch the regression: they pass either
+//! BLOCKED branch of `core:rt`'s `cm_await_blocked`, which every stream read
+//! and write settles through, is unreachable code shipped in every component. Runtime fixtures cannot catch the regression: they pass either
 //! way, since the host blocks instead. The option is only observable in the
 //! emitted component.
 //!
