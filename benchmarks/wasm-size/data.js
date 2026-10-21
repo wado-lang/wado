@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1792583462518,
+  "lastUpdate": 1792584557400,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -68961,6 +68961,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/aa7669d7732a4424672dad01023271d7f427359c"
         },
         "date": 1792583461600,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 3053,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 7382,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 19610,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 276874,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "5402cf3671c8aa3ac575cb5590ff6609b579d2c2",
+          "message": "Merge pull request #2406 from wado-lang/claude/gracious-faraday-rjp97k\n\nfeat(template): check a hole's format-specifier trait at the template",
+          "timestamp": "2026-10-21T20:34:48+09:00",
+          "tree_id": "ab541c1d92e545233783b140f1878bbcfc1b3e05",
+          "url": "https://github.com/wado-lang/wado/commit/5402cf3671c8aa3ac575cb5590ff6609b579d2c2"
+        },
+        "date": 1792584556614,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
