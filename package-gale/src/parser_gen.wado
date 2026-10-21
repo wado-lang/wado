@@ -4128,7 +4128,7 @@ fn emit_lr_branch<S: AsStrSlice>(
 fn gen_lr_loop_check<S: AsStrSlice>(w: &mut CodeWriter, decision: i32, ctx: &mut EmitContext, at: S, edge: i32) {
     ctx.cursor.note_ref(&ATN_VERIFIED);
     let call = atn_verified_call(decision, AtnPicker::LrLoop, ctx.atn_arg(), "&p.kinds", at, "min_prec", `${edge}`);
-    gen_verified_check(w, "", &call);
+    gen_verified_check(w, "", [call]);
 }
 
 /// The test on an LR suffix's scan end that stops the loop. A suffix that can
@@ -6071,7 +6071,7 @@ fn end_iteration_check(w: &mut CodeWriter, rep_op: &RepeatOp, ctx: &mut EmitCont
         return;
     };
     let call = repeat_verified_call(rep_op, ctx, at, "0");
-    gen_verified_check(w, `${at} >= 0`, &call);
+    gen_verified_check(w, `${at} >= 0`, [call]);
 }
 
 /// Check that `rep_op` exits at `at`, which is where it ended.
@@ -6080,7 +6080,7 @@ fn gen_exit_check<S: AsStrSlice>(w: &mut CodeWriter, rep_op: &RepeatOp, ctx: &mu
         return;
     }
     let call = repeat_verified_call(rep_op, ctx, at, "1");
-    gen_verified_check(w, "", &call);
+    gen_verified_check(w, "", [call]);
 }
 
 /// Check a `?` that started at `at`: it entered where it consumed a token.
@@ -6089,7 +6089,7 @@ fn gen_exit_check_or_entered(w: &mut CodeWriter, rep_op: &RepeatOp, ctx: &mut Em
         return;
     };
     let call = repeat_verified_call(rep_op, ctx, at, `if p.pos > ${at} { 0 } else { 1 }`);
-    gen_verified_check(w, "", &call);
+    gen_verified_check(w, "", [call]);
 }
 
 /// Whether the simulator checks `rep_op`'s static picks: lowering stamped it,
@@ -6100,12 +6100,14 @@ fn repeat_checked(rep_op: &RepeatOp, ctx: &EmitContext) -> bool {
             && optional_asks_simulator(rep_op.non_greedy, rep_op.atn_decides, rep_op.gate_caller_follow, ctx));
 }
 
-/// Run `ATN_VERIFIED`'s `call` where `guard` holds and the parse is one whose
-/// tree is kept: neither recovering nor about to be rewound.
-fn gen_verified_check<S: AsStrSlice>(w: &mut CodeWriter, guard: S, call: &String) {
+/// Run the `ATN_VERIFIED` checks `calls` where `guard` holds and the parse is
+/// one whose tree is kept: neither recovering nor about to be rewound.
+fn gen_verified_check<S: AsStrSlice>(w: &mut CodeWriter, guard: S, calls: List<String>) {
     let kept = "!p.recovering && !p.speculating";
     w.begin(if guard.is_empty() { `if ${kept}` } else { `if ${guard} && ${kept}` });
-    w.line(`let _ = ${call};`);
+    for let call of calls {
+        w.line(`let _ = ${call};`);
+    }
     w.end();
 }
 
@@ -8119,9 +8121,10 @@ fn emit_atn_check<S: AsStrSlice>(
     ctx.cursor.note_ref(&ATN_VERIFIED);
     let decide = sll_decide_fn_name(c.decision);
     ctx.cursor.note_ref(&decide);
-    let call = atn_verified_call(c.decision, AtnPicker::Tournament, ctx.atn_arg(), "&p.kinds", "p.pos", &prec, number);
-    gen_verified_check(w, `${pick} >= 0`, &call);
-    w.line(`let _ = ${decide}(${ctx.atn_arg()}, &p.kinds, p.pos, ${prec});`);
+    gen_verified_check(w, `${pick} >= 0`, [
+        atn_verified_call(c.decision, AtnPicker::Tournament, ctx.atn_arg(), "&p.kinds", "p.pos", &prec, number),
+        `${decide}(${ctx.atn_arg()}, &p.kinds, p.pos, ${prec})`,
+    ]);
 }
 
 /// The expression mapping `pick`, one of `candidates`, to the number at the
