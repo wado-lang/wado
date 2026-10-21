@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1792546952903,
+  "lastUpdate": 1792552359624,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -68717,6 +68717,50 @@ window.BENCHMARK_DATA = {
           {
             "name": "sqlite_highlight",
             "value": 288768,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "e5173d016a4a779e3281b86af632f41717066c0c",
+          "message": "Merge pull request #2397 from wado-lang/ccr-af62058d-luc7sx\n\nperf(affine): keep a resource no reference reaches as its bare handle",
+          "timestamp": "2026-10-21T11:49:57+09:00",
+          "tree_id": "925df80847d4ec18a2f15e5def57238bb4f59a93",
+          "url": "https://github.com/wado-lang/wado/commit/e5173d016a4a779e3281b86af632f41717066c0c"
+        },
+        "date": 1792552359185,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 3053,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 7382,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 19666,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 288548,
             "unit": "bytes"
           }
         ]
