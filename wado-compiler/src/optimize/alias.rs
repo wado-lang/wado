@@ -1070,7 +1070,8 @@ fn alias_groups_from_edges(edges: Vec<(u32, u32)>) -> AliasGroups {
     // Locals are sparse, so each takes the next node as it is first seen.
     let mut node_of: IndexMap<u32, u32> = IndexMap::default();
     let mut sets = DisjointSets::default();
-    let mut node = |local: u32, sets: &mut DisjointSets| *node_of.entry(local).or_insert_with(|| sets.push());
+    let mut node =
+        |local: u32, sets: &mut DisjointSets| *node_of.entry(local).or_insert_with(|| sets.push());
     for (a, b) in edges {
         let (a, b) = (node(a, &mut sets), node(b, &mut sets));
         sets.union(a, b);
