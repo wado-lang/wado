@@ -3285,6 +3285,9 @@ impl TypeTable {
         assoc_name: &str,
         args: &[TypeId],
     ) -> Option<TypeId> {
+        if !self.projection_base_is_rigid(base) {
+            return None;
+        }
         let family = self.projection_family(base, owning_trait, trait_args, assoc_name)?;
         Some(self.instantiate_family(*owning_trait, assoc_name, family, args))
     }
@@ -4435,8 +4438,7 @@ impl TypeTable {
                     let answer = *answer;
                     return self.instantiate_family(owning_trait, &assoc_name, answer, &new_args);
                 }
-                if self.projection_base_is_rigid(substituted_base)
-                    && let Some(resolved) = self.answer_projection(
+                if let Some(resolved) = self.answer_projection(
                         substituted_base,
                         &owning_trait,
                         new_trait_args.as_deref(),
