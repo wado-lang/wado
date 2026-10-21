@@ -4439,9 +4439,7 @@ fn gen_repeat_body(w: &mut CodeWriter, r: &RepeatOp, ctx: &mut EmitContext, nc: 
     if let Optional = r.kind {
         let at = begin_iteration_check(w, r, nc, "");
         gen_op_optional(w, r, ctx, nc, follow_gate);
-        if let Some(at) = at {
-            gen_exit_check_or_entered(w, r, ctx, &at);
-        }
+        gen_exit_check_or_entered(w, r, ctx, &at);
         return;
     }
     if let Plus = r.kind {
@@ -5554,9 +5552,7 @@ fn gen_op_repeat_with_follow_override(
         } else {
             let at = begin_iteration_check(w, rep_op, name_counts, "");
             gen_op_repeat_optional_greedy(w, rep, rep_op, ctx, name_counts, follow);
-            if let Some(at) = at {
-                gen_exit_check_or_entered(w, rep_op, ctx, &at);
-            }
+            gen_exit_check_or_entered(w, rep_op, ctx, &at);
         }
         return;
     }
@@ -6097,9 +6093,12 @@ fn gen_exit_check<S: AsStrSlice>(w: &mut CodeWriter, rep_op: &RepeatOp, ctx: &mu
 }
 
 /// Check a `?` that started at `at`: it entered where it consumed a token.
-fn gen_exit_check_or_entered<S: AsStrSlice>(w: &mut CodeWriter, rep_op: &RepeatOp, ctx: &mut EmitContext, at: S) {
+fn gen_exit_check_or_entered(w: &mut CodeWriter, rep_op: &RepeatOp, ctx: &mut EmitContext, at: &Option<String>) {
+    let Some(at) = at else {
+        return;
+    };
     w.begin("if !p.recovering");
-    w.line(`let _ = ${repeat_verified_call(rep_op, ctx, &at, `if p.pos > ${at} { 0 } else { 1 }`)};`);
+    w.line(`let _ = ${repeat_verified_call(rep_op, ctx, at, `if p.pos > ${at} { 0 } else { 1 }`)};`);
     w.end();
 }
 
