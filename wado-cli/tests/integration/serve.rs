@@ -261,6 +261,15 @@ fn a_service_has_a_program_name() {
     assert!(body.contains(&expected), "body: {body:?}");
 }
 
+/// A service reaches the host network, as a `wado run` program does.
+#[test]
+fn a_service_may_use_sockets() {
+    let (_guard, port, _stderr) = start_serve("serve_network.wado", &[]);
+    let (status, body) = http_get(port, "/", Duration::from_secs(10));
+    assert_eq!(status, 200);
+    assert!(body.contains("\r\nbound\r\n"), "body: {body:?}");
+}
+
 /// The compiler lowers `ErrorContext` to the Component Model's error-context
 /// builtins, which wasmtime refuses to load unless that feature is enabled.
 #[test]

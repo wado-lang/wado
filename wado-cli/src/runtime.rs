@@ -13,7 +13,7 @@ use wasmtime::{
 };
 use wasmtime_wasi::filesystem::WasiFilesystemCtx;
 use wasmtime_wasi::p2::pipe::MemoryOutputPipe;
-use wasmtime_wasi::{FsPerms, WasiCtx, WasiCtxView, WasiView};
+use wasmtime_wasi::{FsPerms, WasiCtx, WasiCtxBuilder, WasiCtxView, WasiView};
 use wasmtime_wasi_http::{WasiHttpCtx, WasiHttpCtxView, WasiHttpView};
 use wasmtime_wasi_tls::{
     Error as WasiTlsError, TlsProvider, TlsStream, TlsTransport, WasiTlsCtx, WasiTlsCtxBuilder,
@@ -29,6 +29,18 @@ use wado_host::engine::default_config;
 use wado_host::sync::lock;
 use wado_host::timezone::add_to_linker;
 use wado_host::tls_trust::{build_root_cert_store, install_default_crypto_provider};
+
+/// Let `wasi:sockets` and `wasi:tls` reach the host network, as a native tool
+/// can. `run`, `test` and `serve` all grant it. Hermetic test harnesses
+/// (the compiler's `tests/common.rs`) build their own `WasiCtx` without it.
+fn grant_host_network(builder: &mut WasiCtxBuilder) {
+    builder.inherit_network();
+    // wasmtime denies creating a socket by default; `inherit_network`
+    // relaxes only the per-address check that comes after it.
+    builder.allow_tcp(true);
+    builder.allow_udp(true);
+    builder.allow_ip_name_lookup(true);
+}
 
 /// Build a [`WasiTlsCtx`] backed by [`WadoTlsProvider`] so the raw
 /// `wasi:tls` connector and [`WadoHttpHooks`] share the same trust store.
@@ -180,6 +192,7 @@ impl WasiState {
         let mut builder = WasiCtx::builder();
         builder.inherit_stdio();
         builder.args(args);
+        grant_host_network(&mut builder);
         let mut ctx = builder.build();
         // Replace the (empty) filesystem ctx with a clone of the cached one.
         // The clone is cheap: each preopen's underlying `cap_std::fs::Dir`
@@ -226,19 +239,7 @@ impl WasiState {
         for (host_path, guest_path) in preopened_dirs {
             builder.preopened_dir(host_path, guest_path, FsPerms::ReadWrite)?;
         }
-        // `wado run` and `wado test` are invoked directly by the developer,
-        // so mirror native CLI tools by letting `wasi:sockets`/`wasi:tls`
-        // reach the host network. Long-running services go through
-        // [`Self::new_no_inherit_env_with_preopens`], which keeps the
-        // default deny-all stance — operators opt in explicitly there.
-        // Hermetic test harnesses (compiler `tests/common.rs`) build their
-        // own `WasiCtx` and are unaffected.
-        builder.inherit_network();
-        // wasmtime denies creating a socket by default; `inherit_network`
-        // relaxes only the per-address check that comes after it.
-        builder.allow_tcp(true);
-        builder.allow_udp(true);
-        builder.allow_ip_name_lookup(true);
+        grant_host_network(&mut builder);
         let ctx = builder.build();
         let table = ResourceTable::new();
         let http = WasiHttpCtx::new();
